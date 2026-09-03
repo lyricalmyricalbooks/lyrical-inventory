@@ -532,29 +532,29 @@
 </nav>
 <!-- AUTHOR QR CODE PAGE (author view only) -->
 <div class="tab-panel" id="tab-myqr" style="display:none;">
-  <div style="max-width:480px;margin:0 auto;padding:2rem 1rem;text-align:center;">
-    <div id="myqr-book-title" style="font-family:'Playfair Display',serif;font-size:22px;font-weight:600;color:var(--text);margin-bottom:6px;"></div>
-    <div id="myqr-book-meta" style="font-size:12px;color:var(--text3);margin-bottom:2rem;"></div>
+  <div class="author-qr-card">
+    <div id="myqr-book-title" style="font-family:'Playfair Display',serif;font-size:22px;font-weight:600;color:var(--content-primary);margin-bottom:6px;"></div>
+    <div id="myqr-book-meta" class="author-qr-meta"></div>
 
     <!-- QR Code -->
     <div style="display:flex;justify-content:center;margin-bottom:1.5rem;">
-      <div style="background:white;padding:20px;border-radius:var(--r2);display:inline-block;border:1px solid var(--border);box-shadow:var(--shadow2);">
+      <div class="author-qr-plate">
         <div id="author-qr-canvas"></div>
       </div>
     </div>
 
     <!-- Status -->
-    <div id="myqr-status" style="font-size:12px;color:var(--text3);font-family:'DM Mono',monospace;word-break:break-all;margin-bottom:1.5rem;line-height:1.6;"></div>
+    <div id="myqr-status" class="author-qr-status"></div>
 
     <!-- Actions -->
     <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
-      <button class="btn ink" id="myqr-copy-btn" onclick="window.copyAuthorQR()" style="min-width:140px;">Copy link</button>
-      <button class="btn gold" id="myqr-dl-btn" onclick="window.downloadAuthorQR()" style="min-width:140px;">Download QR</button>
+      <button class="btn ink author-qr-btn" id="myqr-copy-btn" onclick="window.copyAuthorQR()">Copy link</button>
+      <button class="btn gold author-qr-btn" id="myqr-dl-btn" onclick="window.downloadAuthorQR()">Download QR</button>
     </div>
 
-    <div style="margin-top:2rem;padding:1.25rem;background:var(--cream2);border-radius:var(--r2);border:1px solid var(--gold-line);text-align:left;">
-      <div style="font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);margin-bottom:8px;">How to use</div>
-      <ul style="font-size:12px;color:var(--text2);line-height:1.9;margin:0;padding-left:1.2rem;">
+    <div class="author-qr-guide">
+      <div class="author-qr-guide-title">How to use</div>
+      <ul>
         <li>Show this QR code to a customer at an event or book fair.</li>
         <li>They scan it with their phone camera and pay directly through Stripe.</li>
         <li>Funds go straight to the publisher — no cash handling needed.</li>
@@ -2327,8 +2327,8 @@
           <button class="dz-remove" type="button" title="Remove file" onclick="tcExpFileClear(event)">×</button>
         </div>
         <div class="tc-receipt-scan-actions">
-          <button class="btn gold outline sm" onclick="openReceiptCameraModal()" id="tc-cam-btn" title="Take a photo of the receipt with your webcam">📷 Camera</button>
-          <button class="btn gold sm" onclick="scanReceiptWithAI()" id="tc-ai-scan-btn" disabled title="Select or capture a receipt first to enable AI scanning">✨ AI Scan</button>
+          <button class="btn gold outline" onclick="openReceiptCameraModal()" id="tc-cam-btn" title="Take a photo of the receipt with your webcam">📷 Camera</button>
+          <button class="btn gold" onclick="scanReceiptWithAI()" id="tc-ai-scan-btn" disabled title="Select or capture a receipt first to enable AI scanning">✨ AI Scan</button>
         </div>
         <div id="tc-exp-file-preview" class="tc-field-hint"></div>
         <div id="tc-exp-storage-row" class="tc-storage-row">
@@ -3365,7 +3365,7 @@
     <div class="pos-layout">
       <div style="display:flex; flex-direction:column; gap:14px; flex:1; min-width:0;">
         <div class="pos-search-wrapper">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8a5815" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);pointer-events:none;"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gold-text)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);pointer-events:none;"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
           <input type="search" id="pos-search-input" placeholder="Search books in POS (press / to focus, Esc to clear)..." oninput="posSearchFilter(this.value)">
         </div>
         <div id="pos-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:1rem;">
@@ -3635,10 +3635,10 @@
 
   <!-- Connected State -->
   <div id="webanalytics-connected-view" style="display:none;">
-    <div class="card" style="margin-bottom: 1.5rem; border-left: 3px solid var(--green); padding: 12px 18px;">
+    <div class="card" style="margin-bottom: 1.5rem; border-left: 3px solid var(--status-positive); padding: 12px 18px;">
       <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
         <div style="display:flex; align-items:center; gap:8px;">
-          <span style="font-size:18px; color:var(--green);">●</span>
+          <span style="font-size:18px; color:var(--status-positive);">●</span>
           <span style="font-weight:600; font-size:13px; color:var(--text);">Live Traffic Dashboard Connected</span>
           <span id="webanalytics-domain-label" style="font-size:11px; color:var(--text2); font-family:'DM Mono',monospace; background:rgba(0,0,0,0.05); padding:2px 6px; border-radius:4px; margin-left:8px;">lyricalmyricalbooks.com</span>
         </div>
@@ -3659,7 +3659,7 @@
         </div>
         <div style="display: flex; align-items: center; gap: 10px;">
           <span id="webanalytics-api-status" style="font-size: 11px; color: var(--text3);"></span>
-          <button class="btn sm" onclick="refreshUmamiStats()" title="Refresh API metrics" style="padding: 4px 10px; font-size: 11px;">↻ Refresh Stats</button>
+          <button class="btn sm" onclick="refreshUmamiStats()" title="Refresh API metrics">↻ Refresh Stats</button>
         </div>
       </div>
 
@@ -3998,16 +3998,25 @@
     <div class="tbl-wrap" style="margin-top:12px;">
       <table class="tbl">
         <thead><tr><th>Date</th><th>Type</th><th class="r">Books</th><th class="r">Actions</th></tr></thead>
-        <tbody id="system-backup-list"><tr><td colspan="4"><div class="empty-state">No system backups yet.</div></td></tr></tbody>
+        <tbody id="system-backup-list">
+          <tr><td colspan="4">
+            <div class="empty-state sys-empty" style="padding:var(--space-5);text-align:center;">
+              <div class="e-icon" aria-hidden="true">💾</div>
+              <strong style="color:var(--on-inverse);font-size:var(--text-sm);">No Cloud Snapshots Saved Yet</strong>
+              <p style="color:var(--on-inverse-2);font-size:var(--text-xs);margin:4px 0 12px;line-height:var(--leading-snug);">Daily Firestore snapshots run automatically in Publisher mode to protect your entire catalog, inventory, and ledgers.</p>
+              <button class="btn gold sm" onclick="createSystemBackupNow()">Create first backup now</button>
+            </div>
+          </td></tr>
+        </tbody>
       </table>
     </div>
   </div>
 
-  <div id="backup-reminder" style="display:none;background:rgba(212,175,55,.1);border:1px solid var(--gold3);border-radius:var(--r2);padding:1.25rem;margin-bottom:1.5rem;align-items:center;gap:16px;">
+  <div id="backup-reminder" style="display:none;background:var(--gold-bg);border:1px solid var(--gold-line);border-radius:var(--r2);padding:1.25rem;margin-bottom:1.5rem;align-items:center;gap:16px;">
     <div style="font-size:24px;">📥</div>
     <div style="flex:1;">
-      <div style="font-weight:700;font-size:14px;color:var(--gold);margin-bottom:4px;">Daily Backup Recommended</div>
-      <div style="font-size:12px;color:var(--text2);line-height:1.5;">It's been over 24 hours since your last local JSON backup. Download a fresh snapshot to keep your data safe on your computer.</div>
+      <div style="font-weight:700;font-size:14px;color:var(--gold-text);margin-bottom:4px;">Daily Backup Recommended</div>
+      <div style="font-size:12px;color:var(--content-secondary);line-height:1.5;">It's been over 24 hours since your last local JSON backup. Download a fresh snapshot to keep your data safe on your computer.</div>
     </div>
     <button class="btn gold sm" onclick="exportToJSON(event)">Download now</button>
   </div>
@@ -4036,7 +4045,7 @@
       <div style="display:flex;flex-direction:column;gap:10px;">
         <div style="font-size:12px;font-weight:700;color:var(--on-inverse);">Restore one book</div>
         <div style="font-size:11px;color:rgba(255,255,255,.62);line-height:1.5;margin-bottom:2px;">Pick the file, then choose a single book. Every other book and all your settings stay untouched. A safety backup is saved first.</div>
-        <label for="import-one-book-file" class="btn sm gold" style="width:100%;text-align:center;cursor:pointer;">Restore one book from file…</label>
+        <label for="import-one-book-file" class="btn sm gold restore-file-btn" style="width:100%;text-align:center;cursor:pointer;">Restore one book from file…</label>
         <input type="file" id="import-one-book-file" accept=".json" style="display:none;" onchange="handleBookRestoreImportFile(event)">
         <div id="import-one-info" style="font-size:11px;color:rgba(255,255,255,.62);text-align:center;">Select a .json backup file</div>
 
@@ -4044,7 +4053,7 @@
 
         <div style="font-size:12px;font-weight:700;color:var(--on-inverse);">Restore everything</div>
         <div style="font-size:11px;color:rgba(255,255,255,.62);line-height:1.5;margin-bottom:2px;"><strong style="color:var(--red-light);">Warning: overwrites your entire database</strong> with the file's contents.</div>
-        <label for="import-file" class="btn sm" style="width:100%;text-align:center;cursor:pointer;background:rgba(255,255,255,.05);color:var(--on-inverse);">Choose file &amp; overwrite all</label>
+        <label for="import-file" class="btn sm restore-file-btn" style="width:100%;text-align:center;cursor:pointer;background:rgba(255,255,255,.05);color:var(--on-inverse);">Choose file &amp; overwrite all</label>
         <input type="file" id="import-file" accept=".json" style="display:none;" onchange="handleBackupImportFile(event)">
         <div id="import-info" style="font-size:11px;color:rgba(255,255,255,.62);text-align:center;">Select a .json backup file</div>
       </div>
@@ -4153,7 +4162,7 @@
 
 <div class="overlay" id="m-bulk-send" style="display:none;"><div class="modal" role="dialog" aria-modal="true">
   <div class="modal-title" role="dialog" aria-modal="true">Bulk send books</div>
-  <div style="font-size:12px;color:var(--text3);margin-bottom:12px;"><span id="bulk-send-stock">0</span> in stock · sending <strong id="bulk-send-total">0</strong> to <strong id="bulk-send-count">0</strong> store(s)</div>
+  <div style="font-size:12px;color:var(--text3);margin-bottom:12px;"><span id="bulk-send-stock" class="mono-num">0</span> in stock · sending <strong id="bulk-send-total" class="mono-num">0</strong> to <strong id="bulk-send-count" class="mono-num">0</strong> store(s)</div>
   <div class="g2" style="margin-bottom:12px;">
     <div class="form-group"><label for="bulk-qty">Qty to each</label><div style="display:flex;gap:6px;"><input id="bulk-qty" type="number" inputmode="numeric" min="0" value="10"><button type="button" class="btn sm" onclick="bulkApplyQty()" title="Set every store to this quantity">Apply to all</button></div></div>
     <div class="form-group"><label for="bulk-date">Date sent</label><input id="bulk-date" type="date"></div>
@@ -4933,17 +4942,17 @@
 <!-- PAYMENT QR MODAL -->
 <div class="overlay" id="m-payment-qr" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:480px;">
   <div class="modal-title" role="dialog" aria-modal="true">Payment QR Code</div>
-  <div style="font-size:12px;color:var(--text3);margin-bottom:1rem;line-height:1.6;">
-    Scan this code to pay for <strong id="qr-book-title" style="color:var(--text);"></strong>.
+  <div style="font-size:12px;color:var(--content-secondary);margin-bottom:1rem;line-height:1.6;">
+    Scan this code to pay for <strong id="qr-book-title" style="color:var(--content-primary);"></strong>.
   </div>
 
   <!-- Manual Price & Currency Override Controls -->
-  <div style="background:rgba(200,145,58,0.08);border:1px solid rgba(200,145,58,0.25);border-radius:var(--r2);padding:12px;margin-bottom:1.25rem;">
-    <div style="font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--gold-text,#8a5815);margin-bottom:8px;">Price & Currency Override</div>
+  <div class="pqr-override-card">
+    <div style="font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--gold-text);margin-bottom:8px;">Price & Currency Override</div>
     <div class="g2" style="margin-bottom:8px;">
       <div class="form-group" style="margin:0;">
         <label for="pqr-currency" style="font-size:11px;">Target Currency</label>
-        <select id="pqr-currency" onchange="updateSingleBookPaymentQR()" style="font-size:12px;padding:5px 8px;">
+        <select id="pqr-currency" class="pqr-select" onchange="updateSingleBookPaymentQR()">
           <option value="CAD">CAD (CA$)</option>
           <option value="USD">USD ($)</option>
           <option value="EUR">EUR (€)</option>
@@ -4953,10 +4962,10 @@
       </div>
       <div class="form-group" style="margin:0;">
         <label for="pqr-override-price" style="font-size:11px;">Override Price</label>
-        <input type="number" step="0.01" min="0" id="pqr-override-price" placeholder="List price" oninput="updateSingleBookPaymentQR()" style="font-size:12px;padding:5px 8px;">
+        <input type="number" step="0.01" min="0" id="pqr-override-price" class="pqr-input tnum" placeholder="List price" oninput="updateSingleBookPaymentQR()">
       </div>
     </div>
-    <button class="btn gold outline" id="pqr-gen-stripe-btn" onclick="generateSingleBookStripeQR()" style="width:100%;font-size:11px;padding:6px 12px;">
+    <button class="btn gold outline pqr-gen-btn" id="pqr-gen-stripe-btn" onclick="generateSingleBookStripeQR()">
       ⚡ Create Stripe Link for Override Price & Currency
     </button>
   </div>
@@ -4966,9 +4975,9 @@
   </div>
   <div class="form-group" style="margin-bottom:1.25rem;">
     <label>Payment Link</label>
-    <div style="display:flex;gap:8px;">
-      <input type="text" id="qr-payment-link" readonly style="flex:1;background:rgba(255,255,255,.05);color:var(--text);font-family:'DM Mono',monospace;font-size:11px;">
-      <button class="btn ink" onclick="copyPaymentLink()" style="flex-shrink:0;">Copy</button>
+    <div class="pqr-link-row">
+      <input type="text" id="qr-payment-link" class="pqr-link-input" readonly>
+      <button class="btn ink pqr-copy-btn" onclick="copyPaymentLink()">Copy</button>
     </div>
   </div>
   <div class="modal-footer" role="dialog" aria-modal="true">
@@ -5036,12 +5045,12 @@
   <div style="font-size:13px;color:var(--text);font-weight:600;margin-bottom:2px;" id="pp-title"></div>
   <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">List price: <span id="pp-list"></span></div>
 
-  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
-    <button type="button" class="btn sm" onclick="posPriceQuick(10)">10% off</button>
-    <button type="button" class="btn sm" onclick="posPriceQuick(20)">20% off</button>
-    <button type="button" class="btn sm" onclick="posPriceQuick(25)">25% off</button>
-    <button type="button" class="btn sm" onclick="posPriceQuick(50)">50% off</button>
-    <button type="button" class="btn sm" onclick="posPriceQuick(100)">Free</button>
+  <div class="pos-discount-grid" role="group" aria-label="Quick discount presets">
+    <button type="button" class="pos-discount-btn" onclick="posPriceQuick(10)"><span class="mono-num">10%</span> off</button>
+    <button type="button" class="pos-discount-btn" onclick="posPriceQuick(20)"><span class="mono-num">20%</span> off</button>
+    <button type="button" class="pos-discount-btn" onclick="posPriceQuick(25)"><span class="mono-num">25%</span> off</button>
+    <button type="button" class="pos-discount-btn" onclick="posPriceQuick(50)"><span class="mono-num">50%</span> off</button>
+    <button type="button" class="pos-discount-btn pos-discount-free" onclick="posPriceQuick(100)">Free</button>
   </div>
 
   <div class="form-group" style="margin-bottom:8px;">
@@ -5064,16 +5073,16 @@
 <!-- POS PAYMENT QR MODAL (exact / discounted amount) -->
 <div class="overlay" id="m-pos-qr" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:380px;">
   <div class="modal-title" role="dialog" aria-modal="true">Scan to pay</div>
-  <div style="text-align:center;margin-bottom:4px;"><span id="pos-qr-amount" style="font-family:'Syne',sans-serif;font-size:26px;font-weight:700;color:var(--green);"></span></div>
-  <div id="pos-qr-sub" style="text-align:center;font-size:12px;color:var(--text3);margin-bottom:14px;"></div>
+  <div style="text-align:center;margin-bottom:4px;"><span id="pos-qr-amount" class="tnum" style="font-family:'Syne',sans-serif;font-size:26px;font-weight:700;color:var(--status-settled, var(--green));"></span></div>
+  <div id="pos-qr-sub" style="text-align:center;font-size:12px;color:var(--content-secondary);margin-bottom:14px;"></div>
   <div style="display:flex;justify-content:center;margin-bottom:1rem;background:white;padding:1.25rem;border-radius:var(--r2);width:max-content;margin-left:auto;margin-right:auto;">
     <div id="pos-qr-canvas"></div>
   </div>
   <div class="form-group" style="margin-bottom:1rem;">
     <label>Payment link</label>
-    <div style="display:flex;gap:8px;">
-      <input type="text" id="pos-qr-link" readonly style="flex:1;background:rgba(255,255,255,.05);color:var(--text);font-family:'DM Mono',monospace;font-size:11px;">
-      <button class="btn ink" onclick="copyPosQRLink()" style="flex-shrink:0;">Copy</button>
+    <div class="pqr-link-row">
+      <input type="text" id="pos-qr-link" class="pqr-link-input" readonly>
+      <button class="btn ink pqr-copy-btn" onclick="copyPosQRLink()">Copy</button>
     </div>
   </div>
   <div class="modal-footer" role="dialog" aria-modal="true">
@@ -5092,13 +5101,19 @@
     </table>
   </div>
   <div class="pos-oversell-note" id="pos-confirm-oversell" role="status" aria-live="polite" hidden></div>
-  <div class="g2">
-    <div style="font-size:12px;color:var(--text3);">Payment method<br><strong id="pos-confirm-payment" style="color:var(--text);font-size:13px;"></strong></div>
-    <div style="font-size:12px;color:var(--text3);">Timestamp<br><strong id="pos-confirm-timestamp" style="color:var(--text);font-size:13px;"></strong></div>
+  <div class="pos-confirm-meta-grid">
+    <div class="pos-confirm-meta-cell">
+      <span class="pos-confirm-meta-label">Payment method</span>
+      <strong id="pos-confirm-payment" class="pos-confirm-meta-val"></strong>
+    </div>
+    <div class="pos-confirm-meta-cell">
+      <span class="pos-confirm-meta-label">Timestamp</span>
+      <strong id="pos-confirm-timestamp" class="pos-confirm-meta-val mono-num"></strong>
+    </div>
   </div>
-  <div style="margin-top:1rem;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.12);display:flex;justify-content:space-between;align-items:center;">
-    <span style="font-size:12px;color:var(--text3);">Total charged</span>
-    <strong id="pos-confirm-total" style="font-size:18px;color:var(--green);"></strong>
+  <div class="pos-confirm-summary-well">
+    <span class="pos-confirm-summary-label">Total charged</span>
+    <strong id="pos-confirm-total" class="pos-confirm-total-val mono-num"></strong>
   </div>
   <div class="modal-footer" role="dialog" aria-modal="true">
     <button class="btn" onclick="attemptCloseModal('pos-sale-confirm')">Cancel</button>
@@ -5274,13 +5289,13 @@
     <p class="lead-note" id="st-modal-sub" style="margin-bottom:14px;">Move physical inventory between publisher warehouse and author.</p>
     
     <div class="st-balance-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
-      <div class="card" style="padding:10px 14px;background:var(--cream2);">
-        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);font-weight:700;">Publisher On-Hand</div>
-        <div id="st-cur-publisher" class="mono-num" style="font-size:22px;font-weight:600;color:var(--gold2);margin-top:2px;">—</div>
+      <div class="st-balance-card">
+        <div class="st-balance-label">Publisher On-Hand</div>
+        <div id="st-cur-publisher" class="st-balance-val gold-val">—</div>
       </div>
-      <div class="card" style="padding:10px 14px;background:var(--cream2);">
-        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);font-weight:700;">Author Held</div>
-        <div id="st-cur-author" class="mono-num" style="font-size:22px;font-weight:600;color:var(--violet, #8b5cf6);margin-top:2px;">—</div>
+      <div class="st-balance-card">
+        <div class="st-balance-label">Author Held</div>
+        <div id="st-cur-author" class="st-balance-val author-val">—</div>
       </div>
     </div>
 
@@ -5293,22 +5308,22 @@
     </div>
 
     <div class="form-group" style="margin-bottom:12px;">
-      <label for="st-qty">Quantity <span id="st-qty-limit-label" class="muted-note" style="font-size:11px;color:var(--text3);"></span></label>
-      <div style="display:flex;gap:6px;align-items:center;">
-        <button type="button" class="btn sm" onclick="stepStockTransfer(-1)">−1</button>
-        <input type="number" id="st-qty" min="1" step="1" inputmode="numeric" value="1" style="flex:1;text-align:center;font-family:'DM Mono',monospace;font-size:16px;font-weight:600;" oninput="onStockTransferQtyChange()">
-        <button type="button" class="btn sm" onclick="stepStockTransfer(1)">+1</button>
-        <button type="button" class="btn sm" onclick="stepStockTransfer(5)">+5</button>
-        <button type="button" class="btn sm" onclick="stepStockTransfer(10)">+10</button>
+      <label for="st-qty">Quantity <span id="st-qty-limit-label" class="muted-note" style="font-size:11px;color:var(--content-muted);"></span></label>
+      <div class="st-stepper-row">
+        <button type="button" class="btn sm st-stepper-btn" onclick="stepStockTransfer(-1)">−1</button>
+        <input type="number" id="st-qty" class="st-qty-input tnum" min="1" step="1" inputmode="numeric" value="1" oninput="onStockTransferQtyChange()">
+        <button type="button" class="btn sm st-stepper-btn" onclick="stepStockTransfer(1)">+1</button>
+        <button type="button" class="btn sm st-stepper-btn" onclick="stepStockTransfer(5)">+5</button>
+        <button type="button" class="btn sm st-stepper-btn" onclick="stepStockTransfer(10)">+10</button>
       </div>
     </div>
 
     <div class="form-group" style="margin-bottom:14px;">
-      <label for="st-note">Transfer Note / Reason <span class="muted-note" style="font-weight:400;font-size:10px;color:var(--text3);">(optional)</span></label>
+      <label for="st-note">Transfer Note / Reason <span class="muted-note" style="font-weight:400;font-size:10px;color:var(--content-muted);">(optional)</span></label>
       <input type="text" id="st-note" placeholder="e.g. Fair copies, Book launch stock">
     </div>
 
-    <div id="st-preview" class="field-note" style="margin-bottom:14px;padding:8px 12px;background:rgba(200,145,58,0.08);border-radius:var(--r2);font-size:12px;color:var(--text2);line-height:1.5;"></div>
+    <div id="st-preview" class="st-preview-box"></div>
 
     <div class="modal-footer" role="dialog" aria-modal="true">
       <button type="button" class="btn" onclick="attemptCloseModal('stock-transfer')">Cancel</button>

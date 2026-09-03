@@ -1959,20 +1959,30 @@ function renderCatalogList() {
   const testBooks = BOOK_LIST.filter(b => b.id.toLowerCase().includes('test') || b.title.toLowerCase().includes('test'));
   const regularBooks = BOOK_LIST.filter(b => !b.id.toLowerCase().includes('test') && !b.title.toLowerCase().includes('test'));
 
-  container.innerHTML = regularBooks.map(b => `
-    <div class="catalog-card">
-       <div style="display:flex;align-items:center;gap:14px;">
-         <div class="catalog-dot" style="background:${b.accent}"></div>
-         <div class="catalog-info">
-           <h4>${escapeHtml(b.title)}</h4>
-           <p><span class="tnum" style="font-family:'DM Mono',monospace;font-size:12px;">${escapeHtml(b.id)}</span> · <strong class="tnum" style="font-family:'DM Mono',monospace;">${b.currency}${b.listPrice}</strong></p>
+  if (regularBooks.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state sys-empty" style="padding:var(--space-6); text-align:center;">
+        <div class="e-icon" aria-hidden="true">📚</div>
+        <strong style="color:var(--content-primary); font-size:var(--text-base);">No Books in Production Catalogue</strong>
+        <p style="color:var(--content-secondary); font-size:var(--text-xs); max-width:440px; margin:var(--space-2) auto var(--space-4); line-height:var(--leading-snug);">Add your titles to establish inventory tracking, sales reporting, and consignment settlement ledgers.</p>
+        <button class="btn gold lg" onclick="openAddBookModal()">+ Add your first book</button>
+      </div>`;
+  } else {
+    container.innerHTML = regularBooks.map(b => `
+      <div class="catalog-card">
+         <div style="display:flex;align-items:center;gap:14px;">
+           <div class="catalog-dot" style="background:${b.accent}"></div>
+           <div class="catalog-info">
+             <h4>${escapeHtml(b.title)}</h4>
+             <p><span class="tnum" style="font-family:'DM Mono',monospace;font-size:12px;">${escapeHtml(b.id)}</span> · <strong class="tnum" style="font-family:'DM Mono',monospace;">${b.currency}${b.listPrice}</strong></p>
+           </div>
          </div>
-       </div>
-       <div class="catalog-actions">
-         <button class="btn sm" onclick="openEditBookModal('${escapeHtml(b.id)}')">Edit</button>
-         <button class="btn sm danger-btn" onclick="deleteBook('${escapeHtml(b.id)}')">Remove</button>
-       </div>
-    </div>`).join('');
+         <div class="catalog-actions">
+           <button class="btn sm" onclick="openEditBookModal('${escapeHtml(b.id)}')">Edit</button>
+           <button class="btn sm danger-btn" onclick="deleteBook('${escapeHtml(b.id)}')">Remove</button>
+         </div>
+      </div>`).join('');
+  }
 
   if (testContainer) {
     if (testBooks.length === 0) {
@@ -6453,7 +6463,7 @@ export function renderHist() {
             <div class="hist-kpi-content">
               <div class="hist-kpi-label">Stock On Hand</div>
               <div class="hist-kpi-val">${onHandCount}</div>
-              <div class="hist-kpi-sub">${printedCount > 0 ? ((onHandCount / printedCount) * 100).toFixed(0) : 0}% available</div>
+              <div class="hist-kpi-sub"><span class="mono-num">${printedCount > 0 ? ((onHandCount / printedCount) * 100).toFixed(0) : 0}%</span> available</div>
             </div>
           </div>
           <div class="hist-kpi-card highlight-green">
@@ -6461,7 +6471,7 @@ export function renderHist() {
             <div class="hist-kpi-content">
               <div class="hist-kpi-label">Distributed & Sold</div>
               <div class="hist-kpi-val">${distributedCount}</div>
-              <div class="hist-kpi-sub">${sellThroughPct}% sell-through rate</div>
+              <div class="hist-kpi-sub"><span class="mono-num">${sellThroughPct}%</span> sell-through rate</div>
             </div>
           </div>
         </div>
@@ -8534,10 +8544,10 @@ function confirmSend() {
 function openBulkSend() {
   const s = getState();
   if (!s.stores.length) { showToast('Add a store first', 'warn'); return; }
-  $('bulk-send-list').innerHTML = s.stores.map(st => `<label style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">
-    <input type="checkbox" class="bulk-send-check" data-sid="${st.id}" onchange="bulkCheckChanged('${st.id}')" style="width:auto;margin:0;">
-    <span style="flex:1;min-width:0;"><span style="font-weight:600;">${escapeHtml(st.name)}</span>${st.city ? `<span style="color:var(--text3);font-size:12px;"> · ${escapeHtml(st.city)}</span>` : ''}<br><span style="color:var(--text3);font-size:11px;">${st.rate}% commission · ${st.outstanding} outstanding</span></span>
-    <input type="number" class="bulk-send-qty" data-sid="${st.id}" min="0" value="0" style="width:64px;" oninput="bulkQtyChanged('${st.id}')">
+  $('bulk-send-list').innerHTML = s.stores.map(st => `<label class="bulk-send-row">
+    <input type="checkbox" class="bulk-send-check" data-sid="${st.id}" onchange="bulkCheckChanged('${st.id}')">
+    <span class="bulk-send-info"><span class="bulk-send-name">${escapeHtml(st.name)}</span>${st.city ? `<span class="bulk-send-city"> · ${escapeHtml(st.city)}</span>` : ''}<br><span class="bulk-send-meta">${st.rate}% commission · <span class="mono-num">${st.outstanding}</span> outstanding</span></span>
+    <input type="number" class="bulk-send-qty" data-sid="${st.id}" min="0" value="0" inputmode="numeric" oninput="bulkQtyChanged('${st.id}')">
   </label>`).join('');
   $('bulk-qty').value = '10';
   $('bulk-date').value = today();
@@ -8587,7 +8597,7 @@ function updateBulkSendSummary() {
   $('bulk-send-total').textContent = total;
   $('bulk-send-count').textContent = count;
   const totEl = $('bulk-send-total');
-  if (totEl) totEl.style.color = total > stock ? '#c0392b' : '';
+  if (totEl) totEl.style.color = total > stock ? 'var(--status-critical)' : '';
 }
 function confirmBulkSend() {
   const s = getState(), book = getBook();
@@ -9239,7 +9249,7 @@ function renderInvoices() {
     const statusCls = inv._overdue ? 'overdue' : (inv.status || 'draft');
     const due = inv.dueDate ? fmtD(inv.dueDate) : '—';
     const stripeChip = isDynamicStripeLink(inv)
-      ? `<span title="Dynamic Stripe Checkout · exact amount" style="display:inline-block;margin-left:6px;background:#0e0c0a;color:#f0c060;font-size:8px;font-weight:700;letter-spacing:.16em;padding:2px 6px;border-radius:99px;">💳 STRIPE</span>`
+      ? `<span title="Dynamic Stripe Checkout · exact amount" style="display:inline-block;margin-left:6px;background:var(--surface-inverse);color:var(--gold-text);font-size:8px;font-weight:700;letter-spacing:.16em;padding:2px 6px;border-radius:99px;">💳 STRIPE</span>`
       : '';
     // Name the other titles on the invoice so a shared one reads as one bill
     // covering several books, not as a stray record filed under the wrong title.
@@ -9255,7 +9265,7 @@ function renderInvoices() {
     // than leaving the whole amount to read as this book's earnings.
     const share = others.length ? invoiceShareForBook(inv, ownerBookId, activeBook, BOOK_LIST) : null;
     const shareLine = share
-      ? `<div class="inv-c-store-meta" style="margin-top:2px;">${escapeHtml(book.title)}'s share: <strong>${fmt(share.total, invCur)}</strong></div>`
+      ? `<div class="inv-c-store-meta" style="margin-top:2px;">${escapeHtml(book.title)}'s share: <strong class="mono-num">${fmt(share.total, invCur)}</strong></div>`
       : '';
     return `<div class="invoice-card">
       <div class="inv-c-num">${escapeHtml(inv.num)}${stripeChip}${sharedChip}</div>
@@ -10012,7 +10022,7 @@ function renderInvoicePaperHTML(inv) {
 
   const dyn = isDynamicStripeLink(inv);
   const testBadge = (dyn && inv.stripe.livemode === false) ? `<span style="display:inline-block;margin-left:8px;background:var(--red-bg);color:var(--red);font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;padding:3px 8px;border-radius:99px;">Test mode</span>` : '';
-  const dynBadge = dyn ? `<div style="display:inline-flex;align-items:center;gap:6px;background:#0e0c0a;color:#f0c060;font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;padding:5px 12px;border-radius:99px;margin-bottom:10px;">✓ Stripe checkout · exact amount${testBadge ? ' ' : ''}${testBadge}</div>` : '';
+  const dynBadge = dyn ? `<div style="display:inline-flex;align-items:center;gap:6px;background:var(--surface-inverse);color:var(--gold-text);font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;padding:5px 12px;border-radius:99px;margin-bottom:10px;">✓ Stripe checkout · exact amount${testBadge ? ' ' : ''}${testBadge}</div>` : '';
   const payCopy = dyn
     ? `Click below to pay <strong>${fmt(inv.total || 0, cur)}</strong> via Stripe Checkout.`
     : `Click below to pay <strong>${fmt(inv.total || 0, cur)}</strong> securely, or scan the QR with your phone.`;
@@ -16092,9 +16102,9 @@ function renderPOS() {
         ? `<div class="pos-card-stock"><span class="pill ${stockView.pill} pos-stock-pill" title="${escapeHtml(stockView.srText)}">${stockView.glyph ? escapeHtml(stockView.glyph) + ' ' : ''}${escapeHtml(stockView.label)}</span></div>`
         : '';
       const editControls = posOnly
-        ? `<div style="display:flex;gap:6px;margin-top:8px;">
-           <button class="btn sm" style="flex:1;font-size:11px;" onclick="openPosBookModal('${idAttr}')" aria-label="Edit or view QR">✎ Edit / QR</button>
-           <button class="btn sm danger-btn" style="font-size:11px;" onclick="removePosBook('${idAttr}')" title="Remove POS-only book" aria-label="Remove POS-only book">✕</button>
+        ? `<div class="pos-card-actions">
+           <button class="btn sm pos-card-btn" onclick="openPosBookModal('${idAttr}')" aria-label="Edit or view QR">✎ Edit / QR</button>
+           <button class="btn sm danger-btn pos-card-btn pos-card-btn-danger" onclick="removePosBook('${idAttr}')" title="Remove POS-only book" aria-label="Remove POS-only book">✕</button>
          </div>`
         : '';
       const isActiveClass = qty > 0 ? ' is-active' : '';
@@ -16110,7 +16120,7 @@ function renderPOS() {
         <div>
           <div class="pos-qty-wrapper">
             <button class="pos-qty-btn" aria-label="Decrease quantity" onclick="posUpdateQty('${idAttr}', -1)">-</button>
-            <span class="pos-qty-val"${qty > 0 ? ' style="color:var(--gold-text,#8a5815);"' : ''}>${qty}</span>
+            <span class="pos-qty-val"${qty > 0 ? ' style="color:var(--gold-text);"' : ''}>${qty}</span>
             <button class="pos-qty-btn" aria-label="Increase quantity" onclick="posUpdateQty('${idAttr}', 1)">+</button>
           </div>
           ${editControls}
@@ -16118,10 +16128,10 @@ function renderPOS() {
       </div>
     `;
     }).join('') + (allowPosOnly && !posSearchQuery ? `
-      <button type="button" class="card pos-card" onclick="openPosBookModal()" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:1.1rem;border:1.5px dashed var(--gold-line);background:transparent;cursor:pointer;color:var(--gold-text,#8a5815);min-height:140px;">
-        <div style="font-size:28px;line-height:1;">＋</div>
-        <div style="font-size:13px;font-weight:700;color:var(--text);">Add POS-only book</div>
-        <div style="font-size:11px;color:var(--text2);text-align:center;">Guest / consignment titles. Stays out of your catalog & ledger.</div>
+      <button type="button" class="card pos-card pos-add-tile" onclick="openPosBookModal()" aria-label="Add POS-only book">
+        <div class="pos-add-tile-icon" aria-hidden="true">＋</div>
+        <div class="pos-add-tile-title">Add POS-only book</div>
+        <div class="pos-add-tile-sub">Guest / consignment titles. Stays out of your catalog &amp; ledger.</div>
       </button>
     ` : '');
   } // end search-filter else
@@ -16485,7 +16495,7 @@ window.posCheckout = function () {
     const adj = row.overridden
       ? ` <span style="font-size:11px;color:var(--gold);">(was ${posFormat(row.listUnit, row.sourceCode)} ea)</span>`
       : '';
-    return `<tr><td>${escapeHtml(row.book.title)}${adj}</td><td class="r">${row.qty}</td><td class="r">${lineDisplay}</td></tr>`;
+    return `<tr><td>${escapeHtml(row.book.title)}${adj}</td><td class="r mono-num">${row.qty}</td><td class="r mono-num">${lineDisplay}</td></tr>`;
   }).join('');
   // Last gate before the stock actually moves — repeat the shortfall here so a
   // seller who built the cart while talking to a customer still sees it.
@@ -19899,10 +19909,30 @@ function renderMailingList() {
           <td>${emailCell}</td>
           <td class="date-cell">${s.added ? fmtD(s.added) : '—'}</td>
           <td><span class="pill gray" style="font-size:10px;">${escapeHtml(s.source || 'Manual')}</span></td>
-          <td><button class="btn sm" onclick="removeFromMailingList('${encodeURIComponent(s.email)}')" title="Remove from mailing list">Remove</button></td>
+          <td><button class="btn sm cust-action-btn" onclick="removeFromMailingList('${encodeURIComponent(s.email)}')" title="Remove from mailing list">Remove</button></td>
         </tr>`;
     }).join('')
-    : `<tr><td colspan="5"><div class="empty-state" style="padding:1.25rem;">Your mailing list is empty. Add someone by hand above, or click <strong>Add all buyers</strong> to pull in everyone we found below.</div></td></tr>`;
+    : `<tr class="sys-empty-row"><td colspan="5">
+        <div class="empty-state sys-empty" style="padding: 2.5rem 1.5rem;">
+          <div class="e-icon" aria-hidden="true">✉️</div>
+          <strong>Your mailing list is empty</strong>
+          <span>Start building your reader list by adding subscribers manually above, or automatically populate it with every customer discovered across your sales channels.</span>
+          <div class="sys-empty-actions" style="margin-top: 1rem; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+            <button class="btn gold lg" onclick="addAllBuyersToMailingList()">↓ Add all discovered buyers</button>
+            <button class="btn lg" onclick="focusMailingListAdd()">＋ Add manually</button>
+          </div>
+        </div>
+      </td></tr>`;
+}
+
+function focusMailingListAdd() {
+  const el = $('ml-add-email') || $('ml-add-name');
+  if (el) {
+    el.focus();
+    if (typeof el.scrollIntoView === 'function') {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
 }
 
 // Email / copy helpers shared by the derived segment and the curated list.
@@ -20500,9 +20530,9 @@ function renderCustomersAudience() {
       const listBtn = sup
         ? ''
         : (onList
-          ? `<button class="btn sm" disabled title="Already on your mailing list" style="opacity:.55;">✓ On list</button>`
-          : `<button class="btn sm gold" onclick="addBuyerToMailingList('${encodeURIComponent(r.email)}')" title="Add to your mailing list">＋ List</button>`);
-      const supBtn = `<button class="btn sm" onclick="toggleCustomerSuppress('${encodeURIComponent(r.email)}')" title="${sup ? 'Allow emailing this buyer again' : 'Exclude from Copy emails & CSV export'}">${sup ? 'Re-subscribe' : 'Unsubscribe'}</button>`;
+          ? `<button class="btn sm cust-action-btn" disabled title="Already on your mailing list" style="opacity:.55;">✓ On list</button>`
+          : `<button class="btn sm gold cust-action-btn" onclick="addBuyerToMailingList('${encodeURIComponent(r.email)}')" title="Add to your mailing list">＋ List</button>`);
+      const supBtn = `<button class="btn sm cust-action-btn" onclick="toggleCustomerSuppress('${encodeURIComponent(r.email)}')" title="${sup ? 'Allow emailing this buyer again' : 'Exclude from Copy emails & CSV export'}">${sup ? 'Re-subscribe' : 'Unsubscribe'}</button>`;
       return `<tr${sup ? ' style="opacity:.55;"' : ''}>
         <td class="lead-cell">${escapeHtml(r.name) || '<span style="color:var(--text4);/* faint-ok: em-dash placeholder */">—</span>'}</td>
         <td>${emailCell}</td>
@@ -20609,33 +20639,41 @@ function updateCampaignModeStatus() {
 
   if (!dot || !text) return;
 
+  if (row) {
+    row.classList.remove('is-mock', 'is-warn', 'is-live');
+  }
+
   if (forceMock) {
-    dot.style.backgroundColor = 'var(--amber)';
+    dot.style.backgroundColor = 'var(--status-active, var(--amber))';
     text.innerHTML = 'Simulation Mode: Emails will be simulated and logged locally';
     if (row) {
-      row.style.background = 'var(--amber-bg)';
-      row.style.borderColor = 'rgba(122,85,0,0.2)';
+      row.classList.add('is-mock');
+      row.style.background = 'var(--surface-sunken)';
+      row.style.borderColor = 'var(--status-active-border, var(--border-default))';
     }
   } else if (isDev && !sheetsUrl) {
-    dot.style.backgroundColor = 'var(--amber)';
+    dot.style.backgroundColor = 'var(--status-active, var(--amber))';
     text.innerHTML = 'Mock Mode: No Google Sheet connected. Emails will be logged locally';
     if (row) {
-      row.style.background = 'var(--amber-bg)';
-      row.style.borderColor = 'rgba(122,85,0,0.2)';
+      row.classList.add('is-mock');
+      row.style.background = 'var(--surface-sunken)';
+      row.style.borderColor = 'var(--status-active-border, var(--border-default))';
     }
   } else if (!sheetsUrl) {
-    dot.style.backgroundColor = 'var(--red)';
+    dot.style.backgroundColor = 'var(--status-critical, var(--red))';
     text.innerHTML = 'Warning: No Google Sheet connected. Sending will fail';
     if (row) {
-      row.style.background = 'var(--red-bg)';
-      row.style.borderColor = 'rgba(149,32,32,0.2)';
+      row.classList.add('is-warn');
+      row.style.background = 'var(--status-critical-bg)';
+      row.style.borderColor = 'var(--status-critical)';
     }
   } else {
-    dot.style.backgroundColor = 'var(--green)';
+    dot.style.backgroundColor = 'var(--status-positive, var(--green))';
     text.innerHTML = `Live Mode: Emails will send via connected Google Sheet (${new URL(sheetsUrl).hostname})`;
     if (row) {
-      row.style.background = 'var(--green-bg)';
-      row.style.borderColor = 'rgba(42,99,72,0.2)';
+      row.classList.add('is-live');
+      row.style.background = 'var(--status-positive-bg)';
+      row.style.borderColor = 'var(--status-positive)';
     }
   }
 }
@@ -21120,12 +21158,19 @@ async function renderCampaigns() {
           <div class="campaign-meta-info">Created: ${fmtD(c.createdAt)} · Target: ${escapeHtml(c.segment)}</div>
         </div>
         <div style="display:flex;gap:6px;">
-          <button class="btn sm" onclick="editCampaignDraft('${c.id}')">Edit</button>
-          <button class="btn sm" onclick="deleteCampaign('${c.id}')">Delete</button>
+          <button class="btn sm cust-action-btn" onclick="editCampaignDraft('${c.id}')">Edit</button>
+          <button class="btn sm cust-action-btn" onclick="deleteCampaign('${c.id}')">Delete</button>
         </div>
       </div>
     `).join('')
-    : '<div class="empty-state" style="padding:1rem;">No saved drafts. Click "Create Campaign" to compose one.</div>';
+    : `<div class="empty-state sys-empty" style="padding:2rem 1.5rem;">
+        <div class="e-icon" aria-hidden="true">📝</div>
+        <strong>No saved drafts</strong>
+        <span>Draft campaigns to announce new book releases, discounts, or author events before sending them out.</span>
+        <div class="sys-empty-actions" style="margin-top:1rem;display:flex;justify-content:center;">
+          <button class="btn gold lg" onclick="openCampaignWizard()">＋ Create Campaign</button>
+        </div>
+      </div>`;
 
   sentList.innerHTML = sent.length
     ? sent.map(c => `
@@ -21144,14 +21189,21 @@ async function renderCampaigns() {
           </div>
           ${c.stats && c.stats.failed ? `
           <div class="campaign-kpi-item">
-            <span style="color:var(--red);">Failed</span>
-            <strong style="color:var(--red);">${c.stats.failed}</strong>
+            <span style="color:var(--status-critical, var(--red));">Failed</span>
+            <strong style="color:var(--status-critical, var(--red));">${c.stats.failed}</strong>
           </div>` : ''}
-          <button class="btn sm" onclick="deleteCampaign('${c.id}')" title="Delete from history" style="margin-left:8px;">✕</button>
+          <button class="btn sm cust-action-btn" onclick="deleteCampaign('${c.id}')" title="Delete from history" style="margin-left:8px;">✕</button>
         </div>
       </div>
     `).join('')
-    : '<div class="empty-state" style="padding:1rem;">No sent campaigns yet.</div>';
+    : `<div class="empty-state sys-empty" style="padding:2rem 1.5rem;">
+        <div class="e-icon" aria-hidden="true">📣</div>
+        <strong>No sent campaigns yet</strong>
+        <span>Broadcast history and delivery statistics will appear here after your first newsletter or announcement send.</span>
+        <div class="sys-empty-actions" style="margin-top:1rem;display:flex;justify-content:center;">
+          <button class="btn gold lg" onclick="openCampaignWizard()">＋ Compose first campaign</button>
+        </div>
+      </div>`;
 }
 
 function filterCustomers(v) { _customerFilter = v || ''; renderCustomers(); }
@@ -22136,7 +22188,7 @@ function exposeLegacyInlineHandlers() {
     setCustomerBookFilter, mailingSubsArray, mailingListHas, loadMailingList, _persistMailingList,
     _mailingUpsert, addManualSubscriber, addBuyerToMailingList, removeFromMailingList,
     _mailingMergeBuyers, addAllBuyersToMailingList, toggleMailingAutoAdd, _mailingAutoSync,
-    renderMailingList, _uniqueMailable, _openGmailBcc, emailCustomerSegment, emailMailingList,
+    renderMailingList, focusMailingListAdd, _uniqueMailable, _openGmailBcc, emailCustomerSegment, emailMailingList,
     copyMailingListEmails, exportMailingListCSV, _loadCustomerStripeCache,
     _saveCustomerStripeCache, _custEmailKey, _custUpsert, _custAddSpend, _custTouchDate,
     buildCustomerList, _custSpendStr, _custApplyFilter, _custMailable, _custSyncBookFilterOptions,
