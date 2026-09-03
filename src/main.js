@@ -8446,7 +8446,17 @@ function addStore() {
 }
 function renderStores() {
   const s = getState(), el = $('stores-list'), book = getBook(), cur = book.currency;
-  if (!s.stores.length) { el.innerHTML = '<div class="empty-state"><div class="e-icon">🏪</div>No stores yet. Add your first consignment account.<div style="margin-top:12px;"><button class="btn gold" onclick="openM(\'add-store\')">+ Add store</button></div></div>'; return; }
+  if (!s.stores.length) {
+    el.innerHTML = `<div class="empty-state sys-empty">
+      <div class="empty-icon" aria-hidden="true">🏪</div>
+      <h3>No consignment stores yet</h3>
+      <p>Track partner bookstores, commission splits, stock shipments, and payment reconciliation all in one ledger.</p>
+      <div class="empty-actions">
+        <button class="btn gold" onclick="openM('add-store')">+ Add consignment store</button>
+      </div>
+    </div>`;
+    return;
+  }
   el.innerHTML = s.stores.map(st => {
     const sp = st.outstanding === 0 && st.sent > 0 ? '<span class="pill gray">Settled</span>' : st.amountOwed > 0 ? '<span class="pill amber">Payment due</span>' : '<span class="pill green">Active</span>';
 
@@ -16251,6 +16261,23 @@ window.posResetPrice = function () {
   showToast('Reset to list price');
 };
 
+// Quick keyboard shortcuts for POS price override modal:
+// '1' -> 10%, '2' -> 20%, '3' -> 25%, '5' -> 50%, '0' -> Free (100%), 'Enter' -> Save
+document.addEventListener('keydown', (e) => {
+  const modal = $('m-pos-price');
+  if (!modal || modal.style.display === 'none') return;
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    window.savePosPrice();
+  } else if (e.target.tagName !== 'INPUT') {
+    if (e.key === '1') { e.preventDefault(); window.posPriceQuick(10); }
+    else if (e.key === '2') { e.preventDefault(); window.posPriceQuick(20); }
+    else if (e.key === '3') { e.preventDefault(); window.posPriceQuick(25); }
+    else if (e.key === '5') { e.preventDefault(); window.posPriceQuick(50); }
+    else if (e.key === '0') { e.preventDefault(); window.posPriceQuick(100); }
+  }
+});
+
 // ── PAYMENT QR FOR THE EXACT (DISCOUNTED) AMOUNT ──
 // Mint a Stripe Payment Link for what the customer actually owes — either the
 // whole sale or a single adjusted line — and show a scannable QR. Needs the
@@ -19867,6 +19894,33 @@ async function addAllBuyersToMailingList() {
   renderMailingList(); renderCustomers(); renderOpenCall();
   showToast(added ? `✓ Added ${added} buyer${added === 1 ? '' : 's'} to your mailing list` : 'All buyers are already on your list');
 }
+
+function exportMailingListCsv() {
+  const subscribers = (MAILING_LIST && MAILING_LIST.subscribers) || [];
+  if (!subscribers.length) {
+    showToast('Mailing list is empty', 'warn');
+    return;
+  }
+  const headers = ['Name', 'Email', 'Source', 'Added'];
+  const rows = subscribers.map(sub => [
+    `"${(sub.name || '').replace(/"/g, '""')}"`,
+    `"${(sub.email || '').replace(/"/g, '""')}"`,
+    `"${(sub.source || 'Manual').replace(/"/g, '""')}"`,
+    `"${(sub.addedAt || '').replace(/"/g, '""')}"`
+  ]);
+  const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `mailing-list-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast(`✓ Exported ${subscribers.length} subscribers to CSV`);
+}
+window.exportMailingListCsv = exportMailingListCsv;
 
 async function toggleMailingAutoAdd(cb) {
   MAILING_LIST.autoAdd = !!(cb && cb.checked);
