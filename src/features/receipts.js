@@ -2855,12 +2855,28 @@ const GEMINI_SINGLE_ATTEMPT_BYTES = 2_000_000;
 const GEMINI_THINKING_READ = 0;
 const GEMINI_THINKING_SORT = 512;
 
-// Not every model in the chain necessarily understands the thinking control,
-// and one that doesn't rejects the entire request over that single field.
-// Losing a scan to a speed knob is a bad trade, so a rejection is remembered
-// here and the request is re-sent without it: the cost is one wasted round-trip
-// per model per session instead of a scan that fails outright.
-const _geminiNoThinking = new Set();
+// How the thinking control is spelled, cheapest-first, ending in not asking at
+// all. Model families disagree: some take a token budget, some take a named
+// level, and one handed a spelling it does not know rejects the WHOLE request
+// with a bare "Request contains an invalid argument" that names no field — so
+// there is nothing in the error to match on and no way to tell the shapes apart
+// except by trying. 'off' is last and always valid: it is the request shape
+// that predates any of this.
+const GEMINI_THINKING_MODES = ['budget', 'level', 'off'];
+
+// What each model turned out to accept, as an index into the list above.
+// Learned once and reused, so the probing costs a round-trip on the first scan
+// of a session rather than on every scan.
+const _geminiThinkingMode = new Map();
+
+// The fragment of generationConfig that carries the control, or null for 'off'.
+function _geminiThinkingPatch(mode, budget) {
+  if (mode === 'budget') return { thinking_config: { thinking_budget: budget } };
+  // 'low' rather than a budget-derived guess: it is the one named level every
+  // family that uses names accepts, and it is still far below the default.
+  if (mode === 'level') return { thinking_config: { thinking_level: 'low' } };
+  return null;
+}
 
 // One rate-limit response means the whole pool should ease off together. Left
 // to themselves, every concurrent scan retries into the same congestion window
@@ -2902,13 +2918,22 @@ async function _callGeminiForReceipts(apiKey, parts, opts = {}) {
   if (schema) generationConfig.response_schema = schema;
   const body = JSON.stringify({
     contents: [{ parts }],
-    generationConfig: { ...generationConfig, thinking_config: { thinking_budget: thinkingBudget } }
+    generationConfig: { ...generationConfig, ..._geminiThinkingPatch('budget', thinkingBudget) }
   });
-  // Only built if some model actually turns the thinking control down, which
-  // is why it is a function and not a second unconditional stringify of the
-  // same multi-megabyte payload.
-  let plain = null;
-  const plainBody = () => (plain || (plain = JSON.stringify({ contents: [{ parts }], generationConfig })));
+  // The other spellings are stringified only if a model actually rejects the
+  // first one — otherwise this would re-serialize the same multi-megabyte
+  // payload two more times on every single scan.
+  const bodyCache = new Map([['budget', body]]);
+  const bodyFor = (mode) => {
+    if (!bodyCache.has(mode)) {
+      const patch = _geminiThinkingPatch(mode, thinkingBudget);
+      bodyCache.set(mode, JSON.stringify({
+        contents: [{ parts }],
+        generationConfig: patch ? { ...generationConfig, ...patch } : generationConfig
+      }));
+    }
+    return bodyCache.get(mode);
+  };
 
   const models = body.length > GEMINI_SINGLE_ATTEMPT_BYTES
     ? GEMINI_RECEIPT_MODELS.slice(0, 1)
@@ -2916,8 +2941,8 @@ async function _callGeminiForReceipts(apiKey, parts, opts = {}) {
 
   let lastErr;
   for (const model of models) {
-    let usingThinking = !_geminiNoThinking.has(model);
-    let sendBody = usingThinking ? body : plainBody();
+    let modeIdx = _geminiThinkingMode.get(model) || 0;
+    let sendBody = bodyFor(GEMINI_THINKING_MODES[modeIdx]);
     try {
       const send = async () => {
         // Nothing goes out while the pool is serving a rate-limit pause.
@@ -2945,6 +2970,26 @@ async function _callGeminiForReceipts(apiKey, parts, opts = {}) {
         if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
         res = await send();
       }
+
+      // Step down the thinking control until the model stops objecting. A 400
+      // raised while one of these fields is attached is NEVER fatal: the
+      // request shape at the bottom of the ladder is the one that worked
+      // before any of this existed, so a speed setting can never be what stops
+      // a receipt being read. Only once it is off does a 400 mean the payload
+      // itself is bad, and the handling below treats it that way.
+      const startMode = modeIdx;
+      while (!res.ok && res.status === 400 && modeIdx < GEMINI_THINKING_MODES.length - 1) {
+        modeIdx++;
+        sendBody = bodyFor(GEMINI_THINKING_MODES[modeIdx]);
+        res = await send();
+      }
+      // Only a mode that actually WORKED is worth remembering. A request the
+      // model still rejects with the control switched off was never about the
+      // control — a corrupt file, say — and recording 'off' for that would
+      // quietly cost every later scan in the session its speed-up to explain a
+      // failure it had nothing to do with.
+      if (res.ok && modeIdx !== startMode) _geminiThinkingMode.set(model, modeIdx);
+
       if (!res.ok) {
         let detail = `HTTP ${res.status} from ${model}`;
         // Escalating to another model only helps when THIS model is the
@@ -2952,7 +2997,6 @@ async function _callGeminiForReceipts(apiKey, parts, opts = {}) {
         // every model, so probing the chain just re-uploads the image twice
         // more before showing the same error.
         let shouldStop = res.status === 400 || res.status === 401 || res.status === 403;
-        let thinkingRejected = false;
         try {
           const err = await res.json();
           if (err?.error?.message) {
@@ -2960,46 +3004,17 @@ async function _callGeminiForReceipts(apiKey, parts, opts = {}) {
             if (res.status === 429 || /prepayment|credits|billing|quota|API key/i.test(detail)) {
               shouldStop = true;
             }
-            // A model that predates the thinking control refuses the request
-            // over that one field. Checked before the fatal classification
-            // below, because it is the one 400 that is worth another attempt.
-            if (res.status === 400 && usingThinking && /thinking/i.test(detail)) {
-              thinkingRejected = true;
-            }
           }
         } catch (_) { }
-        if (thinkingRejected) {
-          _geminiNoThinking.add(model);
-          sendBody = plainBody();
-          res = await send();
-          // Whatever the retry says now replaces the thinking complaint, which
-          // is beside the point once the field is gone. Without this the owner
-          // would be shown a message about a setting they never touched
-          // instead of the real reason the receipt could not be read.
-          if (!res.ok) {
-            detail = `HTTP ${res.status} from ${model}`;
-            shouldStop = res.status === 400 || res.status === 401 || res.status === 403;
-            try {
-              const retryErr = await res.json();
-              if (retryErr?.error?.message) {
-                detail = retryErr.error.message;
-                if (res.status === 429 || /prepayment|credits|billing|quota|API key/i.test(detail)) {
-                  shouldStop = true;
-                }
-              }
-            } catch (_) { }
-          }
-        }
-        if (!res.ok) {
-          lastErr = new Error(detail);
-          // `throw` here lands in this iteration's own catch below, which used
-          // to record it as just another failed model and move on — so the
-          // stop-on-billing/quota check never actually stopped anything and a
-          // dead key still paid to upload the image three times. Mark it so
-          // the catch re-throws instead of swallowing.
-          if (shouldStop) { lastErr.__fatal = true; throw lastErr; }
-          continue;
-        }
+        lastErr = new Error(detail);
+        lastErr.status = res.status;
+        // `throw` here lands in this iteration's own catch below, which used to
+        // record it as just another failed model and move on — so the
+        // stop-on-billing/quota check never actually stopped anything and a
+        // dead key still paid to upload the image three times. Mark it so the
+        // catch re-throws instead of swallowing.
+        if (shouldStop) { lastErr.__fatal = true; throw lastErr; }
+        continue;
       }
       const data = await res.json();
       const cand = data.candidates?.[0];
@@ -3027,6 +3042,40 @@ async function _callGeminiForReceipts(apiKey, parts, opts = {}) {
     }
   }
   throw lastErr || new Error('All Gemini models failed');
+}
+
+// What the reader says when it fails is written for whoever wrote the reader,
+// not for whoever is standing at the till. "Request contains an invalid
+// argument" tells a shop owner nothing about what to do next — and the thing to
+// do next is the whole point of showing an error at all. The raw text still
+// goes to the console for anyone debugging.
+function _friendlyScanError(e) {
+  const raw = String(e?.message || e || '').trim();
+  if (typeof navigator !== 'undefined' && navigator && navigator.onLine === false) {
+    return 'you are offline — reconnect and try again';
+  }
+  if (e?.name === 'AbortError') return 'the scan was stopped';
+  if (/API key|api_key|PERMISSION_DENIED|unregistered|not valid/i.test(raw)) {
+    return 'your AI key was rejected — check it in the Tax Centre config';
+  }
+  if (/quota|rate limit|RESOURCE_EXHAUSTED|prepayment|credits|billing/i.test(raw)) {
+    return 'the reader is over its limit right now — wait a minute and try again';
+  }
+  if (/SAFETY|blocked|RECITATION/i.test(raw)) {
+    return 'the reader refused this file — try a photo of the receipt instead';
+  }
+  if (/invalid argument|INVALID_ARGUMENT|unsupported|cannot be processed|Unable to process/i.test(raw)) {
+    return 'the reader could not open that file — try a photo or a PDF of the receipt';
+  }
+  if (/failed to fetch|network|ENOTFOUND|ECONN/i.test(raw)) {
+    return 'could not reach the reader — check your connection';
+  }
+  if (/too large|payload|exceeds/i.test(raw)) {
+    return 'that file is too big to read — try a photo instead of a scan';
+  }
+  // Nothing recognised: show what came back rather than inventing a cause,
+  // trimmed so a wall of API text cannot push the toast off the screen.
+  return raw ? raw.slice(0, 120) : 'the reader did not say why';
 }
 
 // Structured output beats prompt rules: `enum` stops a near-miss category like
@@ -3441,7 +3490,7 @@ async function _runReceiptScan(cfg) {
       showToast(timedOut ? '⚠ Scan timed out — check your connection and retry' : 'Scan cancelled', 'warn');
     } else {
       console.error('AI Scan Error:', e);
-      showToast(`⚠ AI extraction failed: ${e.message || e}`, 'err', 4200);
+      showToast(`⚠ Could not read that receipt — ${_friendlyScanError(e)}`, 'err', 5200);
     }
   } finally {
     clearTimeout(timer);
@@ -4046,7 +4095,9 @@ async function scanAllBatchExpenses(force) {
     const failed = results.filter(r => r && !r.ok);
     failed.forEach(r => {
       r.item.status = 'failed';
-      r.item.error = (r.error?.message || 'Could not read this one').slice(0, 90);
+      // Shown on the row itself, where there is no room and no console to
+      // fall back on, so it gets the plain-language version too.
+      r.item.error = (r.error ? _friendlyScanError(r.error) : 'Could not read this one').slice(0, 90);
     });
     _repaintBatchExpenseStatuses();
 
@@ -4067,7 +4118,7 @@ async function scanAllBatchExpenses(force) {
       showToast('Scan cancelled', 'warn');
     } else {
       console.error('Batch scan error:', e);
-      showToast(`⚠ AI scan failed: ${e.message || e}`, 'err', 4200);
+      showToast(`⚠ Could not read these receipts — ${_friendlyScanError(e)}`, 'err', 5200);
     }
   } finally {
     _batchScanAbort = null;
@@ -4835,7 +4886,8 @@ async function extractReceiptsFromEmailText() {
   } catch (e) {
     console.error('[email-receipt-import] Gemini failed', e);
     if (wrap) {
-      wrap.innerHTML = `<div style="background:rgba(220,60,60,.08);border:1px solid rgba(220,60,60,.25);border-radius:var(--r2);padding:10px 14px;font-size:12px;color:var(--red);">Extraction failed: ${(e.message || e).toString().replace(/</g, '&lt;')}<br><span style="color:var(--text3);">Verify your Gemini API key and parameters.</span></div>`;
+      console.error('[email-receipt-import] extraction failed', e);
+      wrap.innerHTML = `<div style="background:rgba(220,60,60,.08);border:1px solid rgba(220,60,60,.25);border-radius:var(--r2);padding:10px 14px;font-size:12px;color:var(--red);">Could not read these emails — ${escapeHtml(_friendlyScanError(e))}</div>`;
     }
     showToast('Could not extract receipts', 'err');
   } finally {

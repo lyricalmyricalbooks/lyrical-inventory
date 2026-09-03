@@ -54,7 +54,7 @@ function harness({
       'batchExpenseDestinations', '_batchExpenseDefaultCurrency', '_batchExpenseCategories',
       '_batchExpenseNewRow', '_batchExpenseRow', '_batchExpenseDescription',
       '_batchExpenseDuplicate', 'toggleAllBatchExpenses', 'deselectDuplicateBatchExpenses',
-      '_applyBatchScanResult', '_warmBatchExpenseRates', 'scanAllBatchExpenses',
+      '_applyBatchScanResult', '_warmBatchExpenseRates', 'scanAllBatchExpenses', '_friendlyScanError',
       'submitBatchExpenses', '_postBatchToBusinessLedger', '_postBatchToProjectLedger',
       '_runExtractionPool'
     ],
