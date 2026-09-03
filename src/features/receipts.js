@@ -2128,17 +2128,15 @@ async function readReceiptFiles(files) {
       const txt = await file.text();
       out.push({ kind: 'text', text: parseEmlOrText(txt), name });
     } else {
-      const buf = await new Promise((res, rej) => {
-        const r = new FileReader();
-        r.onload = () => res(r.result);
-        r.onerror = rej;
-        r.readAsDataURL(file);
-      });
-      const base64 = String(buf).split(',')[1] || '';
+      // Same shrink the single-receipt scan does. Attaching four phone photos
+      // here used to send four full-size captures — tens of megabytes, minutes
+      // of upload on a phone — and anything over GEMINI_SINGLE_ATTEMPT_BYTES
+      // silently gave up the model fallback chain on top of that.
+      const upload = await _prepareReceiptUpload(file);
       out.push({
         kind: 'inline',
-        mime: file.type || 'application/octet-stream',
-        base64,
+        mime: upload.mime,
+        base64: upload.base64,
         name
       });
     }
@@ -2848,8 +2846,51 @@ const GEMINI_RECEIPT_MODELS = ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-2
 // megabytes to guess at a model costs far more than surfacing the error.
 const GEMINI_SINGLE_ATTEMPT_BYTES = 2_000_000;
 
+// Flash models reason before answering, and on this job that reasoning is pure
+// latency: one receipt, a fixed schema, nothing to work out beyond reading what
+// is printed on the paper. Capping it is the single biggest cut to scan time.
+// Pulling apart a whole email thread is a real judgement call — how many
+// receipts are in here, which figures belong together — so that path keeps a
+// small allowance rather than none.
+const GEMINI_THINKING_READ = 0;
+const GEMINI_THINKING_SORT = 512;
+
+// Not every model in the chain necessarily understands the thinking control,
+// and one that doesn't rejects the entire request over that single field.
+// Losing a scan to a speed knob is a bad trade, so a rejection is remembered
+// here and the request is re-sent without it: the cost is one wasted round-trip
+// per model per session instead of a scan that fails outright.
+const _geminiNoThinking = new Set();
+
+// One rate-limit response means the whole pool should ease off together. Left
+// to themselves, every concurrent scan retries into the same congestion window
+// that produced the 429 and they all fail again. Holding the pause here —
+// shared, not per-request — is what makes a higher concurrency safe.
+let _geminiCooldownUntil = 0;
+let _geminiCooldownWait = null;
+
+function _geminiNoteThrottle(ms) {
+  const until = Date.now() + ms;
+  // An in-flight, longer pause already covers this one.
+  if (until <= _geminiCooldownUntil) return;
+  _geminiCooldownUntil = until;
+  _geminiCooldownWait = new Promise(r => setTimeout(r, ms));
+}
+
+// Deliberately a stored promise rather than a poll of the clock: every waiting
+// worker awaits the same timer, so nothing spins and nothing can outlive its
+// own cooldown.
+function _geminiAwaitCooldown() {
+  return _geminiCooldownWait || Promise.resolve();
+}
+
 async function _callGeminiForReceipts(apiKey, parts, opts = {}) {
-  const { signal, schema, maxOutputTokens = 8192 } = opts;
+  const {
+    signal,
+    schema,
+    maxOutputTokens = 8192,
+    thinkingBudget = GEMINI_THINKING_READ
+  } = opts;
 
   // Serialize ONCE. This used to sit inside the per-attempt closure, so each
   // model and each retry re-stringified and re-uploaded the entire body.
@@ -2859,7 +2900,15 @@ async function _callGeminiForReceipts(apiKey, parts, opts = {}) {
     maxOutputTokens
   };
   if (schema) generationConfig.response_schema = schema;
-  const body = JSON.stringify({ contents: [{ parts }], generationConfig });
+  const body = JSON.stringify({
+    contents: [{ parts }],
+    generationConfig: { ...generationConfig, thinking_config: { thinking_budget: thinkingBudget } }
+  });
+  // Only built if some model actually turns the thinking control down, which
+  // is why it is a function and not a second unconditional stringify of the
+  // same multi-megabyte payload.
+  let plain = null;
+  const plainBody = () => (plain || (plain = JSON.stringify({ contents: [{ parts }], generationConfig })));
 
   const models = body.length > GEMINI_SINGLE_ATTEMPT_BYTES
     ? GEMINI_RECEIPT_MODELS.slice(0, 1)
@@ -2867,11 +2916,18 @@ async function _callGeminiForReceipts(apiKey, parts, opts = {}) {
 
   let lastErr;
   for (const model of models) {
+    let usingThinking = !_geminiNoThinking.has(model);
+    let sendBody = usingThinking ? body : plainBody();
     try {
-      const send = () => fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal }
-      );
+      const send = async () => {
+        // Nothing goes out while the pool is serving a rate-limit pause.
+        await _geminiAwaitCooldown();
+        if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+        return fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
+          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: sendBody, signal }
+        );
+      };
       let res = await send();
       // Retry transient overload / rate-limit / server errors with exponential
       // backoff. A single flat 800ms retry lands right back inside the same
@@ -2882,7 +2938,10 @@ async function _callGeminiForReceipts(apiKey, parts, opts = {}) {
         const wait = Number.isFinite(retryAfter) && retryAfter > 0
           ? Math.min(retryAfter * 1000, 8000)
           : (700 * Math.pow(2, attempt)) + Math.random() * 400;
-        await new Promise(r => setTimeout(r, wait));
+        // A 429 is the whole pool's problem, so it is published as a shared
+        // pause that send() already waits on. A 5xx is this one request's.
+        if (res.status === 429) _geminiNoteThrottle(wait);
+        else await new Promise(r => setTimeout(r, wait));
         if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
         res = await send();
       }
@@ -2893,6 +2952,7 @@ async function _callGeminiForReceipts(apiKey, parts, opts = {}) {
         // every model, so probing the chain just re-uploads the image twice
         // more before showing the same error.
         let shouldStop = res.status === 400 || res.status === 401 || res.status === 403;
+        let thinkingRejected = false;
         try {
           const err = await res.json();
           if (err?.error?.message) {
@@ -2900,16 +2960,46 @@ async function _callGeminiForReceipts(apiKey, parts, opts = {}) {
             if (res.status === 429 || /prepayment|credits|billing|quota|API key/i.test(detail)) {
               shouldStop = true;
             }
+            // A model that predates the thinking control refuses the request
+            // over that one field. Checked before the fatal classification
+            // below, because it is the one 400 that is worth another attempt.
+            if (res.status === 400 && usingThinking && /thinking/i.test(detail)) {
+              thinkingRejected = true;
+            }
           }
         } catch (_) { }
-        lastErr = new Error(detail);
-        // `throw` here lands in this iteration's own catch below, which used to
-        // record it as just another failed model and move on — so the
-        // stop-on-billing/quota check never actually stopped anything and a
-        // dead key still paid to upload the image three times. Mark it so the
-        // catch re-throws instead of swallowing.
-        if (shouldStop) { lastErr.__fatal = true; throw lastErr; }
-        continue;
+        if (thinkingRejected) {
+          _geminiNoThinking.add(model);
+          sendBody = plainBody();
+          res = await send();
+          // Whatever the retry says now replaces the thinking complaint, which
+          // is beside the point once the field is gone. Without this the owner
+          // would be shown a message about a setting they never touched
+          // instead of the real reason the receipt could not be read.
+          if (!res.ok) {
+            detail = `HTTP ${res.status} from ${model}`;
+            shouldStop = res.status === 400 || res.status === 401 || res.status === 403;
+            try {
+              const retryErr = await res.json();
+              if (retryErr?.error?.message) {
+                detail = retryErr.error.message;
+                if (res.status === 429 || /prepayment|credits|billing|quota|API key/i.test(detail)) {
+                  shouldStop = true;
+                }
+              }
+            } catch (_) { }
+          }
+        }
+        if (!res.ok) {
+          lastErr = new Error(detail);
+          // `throw` here lands in this iteration's own catch below, which used
+          // to record it as just another failed model and move on — so the
+          // stop-on-billing/quota check never actually stopped anything and a
+          // dead key still paid to upload the image three times. Mark it so
+          // the catch re-throws instead of swallowing.
+          if (shouldStop) { lastErr.__fatal = true; throw lastErr; }
+          continue;
+        }
       }
       const data = await res.json();
       const cand = data.candidates?.[0];
@@ -2979,6 +3069,14 @@ const RECEIPT_EXTRACTION_SCHEMA = {
 // 1600px on the long edge keeps receipt text comfortably legible for OCR while
 // typically taking a 6 MB capture under 400 KB.
 const RECEIPT_SCAN_MAX_EDGE = 1600;
+// A till receipt is a long ribbon: capping its 4000px length at the long edge
+// takes the printed text down with it, and a scan of unreadable 6px type costs
+// the same as a good one. Hold the narrow side at a legible width instead and
+// let the strip stay tall.
+const RECEIPT_SCAN_MIN_SHORT_EDGE = 1000;
+// The ceiling that keeps the rule above from ever producing a monster: a very
+// long, very wide scan is downscaled on total area regardless.
+const RECEIPT_SCAN_MAX_PIXELS = 4_000_000;
 const RECEIPT_SCAN_JPEG_QUALITY = 0.82;
 // Under this, re-encoding costs more time than the smaller upload saves.
 const RECEIPT_SCAN_SKIP_DOWNSCALE_BYTES = 220_000;
@@ -3031,7 +3129,17 @@ async function _prepareReceiptUpload(file) {
   let bitmap = null;
   try {
     bitmap = await createImageBitmap(file);
-    const scale = Math.min(1, RECEIPT_SCAN_MAX_EDGE / Math.max(bitmap.width, bitmap.height));
+    const long = Math.max(bitmap.width, bitmap.height);
+    const short = Math.min(bitmap.width, bitmap.height);
+    let scale = Math.min(1, RECEIPT_SCAN_MAX_EDGE / long);
+    // Give the narrow side back its legibility on an elongated receipt. Capped
+    // at 1 either way, so this only ever undoes shrinking — never enlarges a
+    // small photo into a blurry big one.
+    if (short * scale < RECEIPT_SCAN_MIN_SHORT_EDGE) {
+      scale = Math.min(1, RECEIPT_SCAN_MIN_SHORT_EDGE / short);
+    }
+    const area = (long * scale) * (short * scale);
+    if (area > RECEIPT_SCAN_MAX_PIXELS) scale *= Math.sqrt(RECEIPT_SCAN_MAX_PIXELS / area);
     const w = Math.max(1, Math.round(bitmap.width * scale));
     const h = Math.max(1, Math.round(bitmap.height * scale));
     const canvas = document.createElement('canvas');
@@ -3364,10 +3472,16 @@ let _batchExpenseBusy = false;
 
 const BATCH_EXPENSE_CURRENCIES = ['CAD', 'USD', 'EUR', 'GBP', 'AUD', 'MXN', 'JPY', 'CHF'];
 
-// Receipts read in parallel. Three keeps a pile of a dozen moving without
-// tripping Gemini's rate limiter — and a 429 costs more time than it saves,
-// because the retry re-uploads the whole image.
-const BATCH_SCAN_CONCURRENCY = 3;
+// Receipts read in parallel. Three was the safe number back when a rate limit
+// meant every worker independently retried into the same congestion window.
+// _geminiNoteThrottle now pauses the whole pool together on the first 429, so
+// the pile can move faster and still back off as one when it needs to.
+const BATCH_SCAN_CONCURRENCY = 5;
+
+// Emails run slightly narrower than loose receipt photos: each one carries a
+// body and up to several attachments, so the same number of workers is a good
+// deal more in flight at once.
+const EMAIL_EXTRACT_CONCURRENCY = 4;
 
 /** Where a batch can currently be posted, in the order they're offered. */
 function batchExpenseDestinations() {
@@ -4319,6 +4433,51 @@ async function _batchFetchEmailContents(msgIds, signal) {
   }));
 }
 
+// Turn base64 an attachment arrived as back into a File, so the shrink the
+// scanner already has can be pointed at it. Returns null on anything that
+// isn't decodable, and the caller then just uploads what it was given.
+function _base64ToFile(base64, mime, name) {
+  if (typeof atob !== 'function') return null;
+  try {
+    const bin = atob(base64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new File([bytes], name || 'attachment', { type: mime || 'application/octet-stream' });
+  } catch (_) {
+    return null;
+  }
+}
+
+// A receipt photographed and emailed is still a phone photo, and it used to go
+// up to the reader at full size. Shrink it once and hang the smaller copy off
+// the attachment as `scanBase64`.
+//
+// Deliberately NOT written back over `base64`: those original bytes are what
+// _saveDraftReceiptFiles archives into the receipts folder, and the copy the
+// owner keeps for their taxes must stay the document the vendor actually sent —
+// full resolution, original format, matching the filename it is saved under.
+// Only the upload gets the shrunk version.
+async function _shrinkInlineAttachment(f) {
+  if (!f || !f.base64 || f._shrunk) return;
+  f._shrunk = true;
+  if (!/^image\//.test(f.mime || '')) return;
+  // Base64 runs about a third larger than the bytes it encodes, so this skips
+  // decoding a small attachment only to find out it was not worth decoding.
+  if (f.base64.length <= RECEIPT_SCAN_SKIP_DOWNSCALE_BYTES) return;
+  const file = _base64ToFile(f.base64, f.mime, f.name);
+  if (!file || file.size <= RECEIPT_SCAN_SKIP_DOWNSCALE_BYTES) return;
+  try {
+    const upload = await _prepareReceiptUpload(file);
+    if (upload && upload.scaled && upload.base64) {
+      f.scanBase64 = upload.base64;
+      f.scanMime = upload.mime;
+    }
+  } catch (_) {
+    // Leave scanBase64 unset — the upload falls back to the original bytes.
+    // A slow scan beats a failed one.
+  }
+}
+
 // The batch endpoint returns attachment metadata only (no base64) to keep the
 // response small. Fetch bytes for just the attachments actually selected,
 // in parallel, so a deselected multi-MB PDF never crosses the wire at all.
@@ -4339,6 +4498,24 @@ async function _hydrateSelectedAttachmentBytes(msgId, files, signal) {
       // Leave f.base64 unset — the caller filters those out before uploading.
     }
   }));
+}
+
+// How much of one email body is worth sending. The old 80,000-character cap was
+// a fifth of a novel per message: a newsletter-styled receipt carries pages of
+// footer, unsubscribe boilerplate and legal text, and every one of those
+// characters is paid for in reading time on a screen someone is waiting at.
+const EMAIL_SCAN_BODY_HEAD = 18_000;
+// The total is very often the last thing on the page, so the tail is kept
+// rather than truncated away — cutting purely from the front would throw away
+// the one figure the whole scan is for.
+const EMAIL_SCAN_BODY_TAIL = 6_000;
+
+function _trimEmailBodyForScan(body) {
+  const text = String(body || '');
+  if (text.length <= EMAIL_SCAN_BODY_HEAD + EMAIL_SCAN_BODY_TAIL) return text;
+  return text.slice(0, EMAIL_SCAN_BODY_HEAD)
+    + '\n[… middle of this email omitted …]\n'
+    + text.slice(-EMAIL_SCAN_BODY_TAIL);
 }
 
 // Gemini sometimes returns "1,234.56" or "$45.00" despite the NUMBER schema.
@@ -4515,7 +4692,7 @@ async function extractReceiptsFromEmailText() {
     } catch (_) { /* fall back to per-message fetch below */ }
 
     try {
-      await _runExtractionPool(todo, 3, async (msgId) => {
+      await _runExtractionPool(todo, EMAIL_EXTRACT_CONCURRENCY, async (msgId) => {
         let rows;
         if (_emailExtractCache[msgId]) {
           rows = _emailExtractCache[msgId];
@@ -4526,19 +4703,29 @@ async function extractReceiptsFromEmailText() {
           // for just the files actually selected, not everything on the
           // message.
           await _hydrateSelectedAttachmentBytes(msgId, selected, signal);
+          // Shrink whatever arrived at full size. The older per-message
+          // endpoint hands attachment bytes back inline, so hydration never
+          // sees those — without this, only half the Gmail path got smaller.
+          await Promise.all(selected.map(f => _shrinkInlineAttachment(f)));
           const emailParts = [
             { text: prompt },
             {
               text: `--- SUBJECT: "${email.subject}" FROM: ${email.from} DATE: ${email.date} ---\n`
-                + String(email.body || '').slice(0, 80000)
+                + _trimEmailBodyForScan(email.body)
             }
           ];
           for (const f of selected) {
-            if (f && f.base64) emailParts.push({ inline_data: { mime_type: f.mime, data: f.base64 } });
+            if (f && f.base64) {
+              // The shrunk copy when there is one, the original otherwise.
+              emailParts.push({
+                inline_data: { mime_type: f.scanMime || f.mime, data: f.scanBase64 || f.base64 }
+              });
+            }
           }
           const out = await _callGeminiForReceipts(apiKey, emailParts, {
             signal,
-            schema: RECEIPT_EXTRACTION_SCHEMA
+            schema: RECEIPT_EXTRACTION_SCHEMA,
+            thinkingBudget: GEMINI_THINKING_SORT
           });
           if (out.truncated) truncatedAny = true;
           rows = _parseReceiptJson(out.text || '{}').receipts || [];
@@ -4631,7 +4818,10 @@ async function extractReceiptsFromEmailText() {
 
   if (wrap) wrap.innerHTML = `<div style="font-size:12px;color:var(--text3);">Sending content to Gemini AI…</div>`;
   try {
-    const out = await _callGeminiForReceipts(apiKey, parts, { schema: RECEIPT_EXTRACTION_SCHEMA });
+    const out = await _callGeminiForReceipts(apiKey, parts, {
+      schema: RECEIPT_EXTRACTION_SCHEMA,
+      thinkingBudget: GEMINI_THINKING_SORT
+    });
     const parsed = _parseReceiptJson(out?.text || '{}');
     const { drafts, dropped } = _draftsFromReceiptRows(parsed.receipts, '');
 
