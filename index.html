@@ -1917,85 +1917,134 @@
   </div>
 </div></div>
 
-<div class="overlay" id="m-email-receipt-import-modal" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:820px;">
-  <div class="modal-title" role="dialog" aria-modal="true">📧 Import Receipts from Email</div>
+<!-- EMAIL RECEIPT IMPORT MODAL (REDESIGNED) -->
+<div class="overlay" id="m-email-receipt-import-modal" style="display:none;"><div class="modal email-import-modal" role="dialog" aria-modal="true" style="max-width:860px;">
+  <div class="modal-title" role="dialog" aria-modal="true" style="display:flex;justify-content:space-between;align-items:center;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span class="modal-title-badge" aria-hidden="true">📧</span>
+      <div>
+        <span style="font-weight:700;letter-spacing:-0.01em;">Import Receipts from Email</span>
+        <span class="pill green email-connected-pill" id="email-account-pill" style="margin-left:8px;font-size:var(--text-2xs);vertical-align:middle;">● Gmail Connected</span>
+      </div>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="closeEmailReceiptImportModal()" aria-label="Close dialog" title="Close (Esc)">✕</button>
+  </div>
   
-  <!-- Sub-Tabs for Modal -->
-  <div class="modal-tabs" role="dialog" aria-modal="true" style="display:flex;border-bottom:1px solid var(--border);margin-bottom:14px;gap:8px;">
-    <button type="button" class="modal-tab-btn active" id="email-tab-gmail" onclick="switchEmailImportTab('gmail')">📬 Gmail Search</button>
-    <button type="button" class="modal-tab-btn" id="email-tab-manual" onclick="switchEmailImportTab('manual')">📂 Paste &amp; Upload</button>
+  <!-- Sub-Tabs: Apple/Linear-style Segmented Control -->
+  <div class="modal-tabs segmented-control" role="tablist" style="margin-top:14px;margin-bottom:14px;">
+    <button type="button" class="modal-tab-btn active" id="email-tab-gmail" onclick="switchEmailImportTab('gmail')" role="tab" aria-selected="true">
+      <span class="tab-icon">📬</span> Gmail Search
+    </button>
+    <button type="button" class="modal-tab-btn" id="email-tab-manual" onclick="switchEmailImportTab('manual')" role="tab" aria-selected="false">
+      <span class="tab-icon">📂</span> Paste &amp; Upload
+    </button>
   </div>
 
   <!-- Gmail Tab Panel -->
   <div id="email-panel-gmail">
-    <div style="background:rgba(180,140,20,.05);border:1px solid rgba(180,140,20,.15);border-radius:var(--r2);padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--text2);line-height:1.5;">
-      Search and select receipt/invoice emails directly from your Gmail inbox. We will extract content and attachments using Gemini AI.
+    <!-- AI Assistant Banner -->
+    <div class="email-ai-assistant-card">
+      <div class="email-ai-spark">✦</div>
+      <div class="email-ai-copy">
+        <strong>Intelligent Receipt Scanner:</strong> Search and select invoice emails from your connected Gmail. Gemini AI extracts line items, taxes, currencies, and attached PDFs automatically.
+      </div>
     </div>
-    <div style="display:flex;gap:8px;margin-bottom:12px;">
-      <input type="text" id="email-gmail-search-query" style="flex:1;font-size:12px;padding:8px 12px;border:1px solid var(--border);border-radius:var(--r2);color:var(--text);" placeholder="e.g. subject:receipt newer_than:30d">
-      <button type="button" class="btn gold" id="email-gmail-search-btn" onclick="searchGmailEmails()" style="height:36px;padding:0 14px;font-size:12px;white-space:nowrap;">🔍 Search Gmail</button>
+
+    <!-- Search Bar & Query Builder -->
+    <div class="email-search-row">
+      <div class="email-search-input-wrap">
+        <span class="email-search-icon" aria-hidden="true">🔍</span>
+        <input type="text" id="email-gmail-search-query" class="email-search-input" placeholder="Search receipt emails (e.g. Adobe, Canada Post, supplies)..." aria-label="Search Gmail query">
+        <button type="button" class="email-search-clear-btn" id="email-query-clear-btn" onclick="document.getElementById('email-gmail-search-query').value='';document.getElementById('email-gmail-search-query').focus();" title="Clear query">✕</button>
+      </div>
+      <button type="button" class="btn gold email-search-action-btn" id="email-gmail-search-btn" onclick="searchGmailEmails()">Search Inbox</button>
     </div>
-    <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;" id="email-gmail-chips">
-      <!-- loaded via JS -->
+
+    <!-- Advanced Query Disclosure Toggle -->
+    <details class="email-advanced-query-details" style="margin-bottom:12px;">
+      <summary class="email-advanced-query-summary">⚙ Advanced Gmail Search Syntax</summary>
+      <div class="email-advanced-query-body">
+        Use standard Gmail search operators such as <code>newer_than:30d</code>, <code>has:attachment</code>, <code>from:supplier@domain.com</code>, or <code>filename:pdf</code>.
+      </div>
+    </details>
+
+    <!-- Filter Chips -->
+    <div class="email-chips-container" id="email-gmail-chips" role="group" aria-label="Quick search presets">
+      <!-- loaded via JS renderGmailChips() -->
     </div>
-    <div id="email-gmail-list-wrap" style="max-height:min(46vh,480px);overflow-y:auto;overflow-x:hidden;border:1px solid var(--border);border-radius:var(--r2);background:rgba(0,0,0,.01);margin-bottom:14px;">
-      <div class="empty-state" style="padding:30px 20px;font-size:12px;color:var(--text3);text-align:center;">
-        <span style="font-size:24px;display:block;margin-bottom:8px;">📬</span>
-        Click a quick preset or search above to pull recent emails.
+
+    <!-- Results List & Zero State Wrapper -->
+    <div id="email-gmail-list-wrap" class="email-results-viewport" tabindex="0" role="region" aria-label="Gmail search results">
+      <div class="email-zero-state">
+        <div class="email-zero-state-icon" aria-hidden="true">📭</div>
+        <div class="email-zero-state-title">Ready to scan your inbox</div>
+        <div class="email-zero-state-sub">Select a quick preset above (like <b>Past 30 Days</b>) or enter a supplier name to find recent expense receipts.</div>
       </div>
     </div>
   </div>
 
   <!-- Manual Tab Panel -->
   <div id="email-panel-manual" style="display:none;">
-    <div style="background:rgba(180,140,20,.05);border:1px solid rgba(180,140,20,.15);border-radius:var(--r2);padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--text2);line-height:1.5;">
-      Paste raw email content or drag in <code>.eml</code>, <code>.txt</code>, PDF, or image files to extract draft receipts.
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
-      <div class="form-group" style="margin:0;">
-        <label style="font-size:11px;font-weight:600;margin-bottom:4px;display:block;">Paste email text (any format)</label>
-        <textarea id="email-receipt-source" rows="8" style="width:100%;border:1px solid var(--border);border-radius:var(--r2);padding:10px 12px;font-family:'DM Mono',monospace;font-size:12px;line-height:1.55;resize:vertical;box-sizing:border-box;background:rgba(0,0,0,.03);" placeholder="Paste receipt email text here..."></textarea>
+    <div class="email-ai-assistant-card">
+      <div class="email-ai-spark">📄</div>
+      <div class="email-ai-copy">
+        Paste raw email bodies or drop <code>.eml</code>, <code>.txt</code>, PDF invoices, and receipt photos here for direct Gemini extraction.
       </div>
-      <div class="form-group" style="margin:0;">
-        <label style="font-size:11px;font-weight:600;margin-bottom:4px;display:block;">Or attach files (.eml, .txt, .pdf, image)</label>
-        <input type="file" id="email-receipt-files" accept=".eml,.txt,.html,.htm,.pdf,image/*" multiple style="font-size:11px;width:100%;padding:8px;border:1px dashed var(--border);border-radius:var(--r2);background:rgba(0,0,0,.02);">
-        <div id="email-receipt-files-list" style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5;"></div>
+    </div>
+    
+    <div class="email-manual-grid">
+      <div class="form-group email-manual-col">
+        <label for="email-receipt-source" class="email-field-label">Paste Email Text / Receipt Snippet</label>
+        <textarea id="email-receipt-source" rows="8" class="email-paste-textarea" placeholder="Paste order confirmation or forwarded receipt email content here..."></textarea>
+      </div>
+      <div class="form-group email-manual-col">
+        <label for="email-receipt-files" class="email-field-label">Or Drop Receipt Files &amp; PDFs</label>
+        <div class="email-dropzone" id="email-receipt-dropzone" onclick="document.getElementById('email-receipt-files').click()">
+          <input type="file" id="email-receipt-files" accept=".eml,.txt,.html,.htm,.pdf,image/*" multiple style="display:none;">
+          <div class="email-dropzone-icon" aria-hidden="true">📤</div>
+          <div class="email-dropzone-title">Click to browse or drag files here</div>
+          <div class="email-dropzone-sub">Supports .eml, .txt, .pdf, .png, .jpg up to 25 MB</div>
+        </div>
+        <div id="email-receipt-files-list" class="email-files-summary-list"></div>
       </div>
     </div>
   </div>
 
-  <!-- Shared Fallback and Info -->
-  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:14px;padding-top:12px;border-top:1px dashed var(--border);flex-wrap:wrap;">
-    <div style="display:flex;align-items:center;gap:8px;">
-      <label style="font-size:11px;font-weight:600;margin:0;">Set category for selected drafts:</label>
-      <select id="email-receipt-default-cat" style="font-size:12px;width:220px;margin:0;padding:6px 10px;height:auto;">
+  <!-- Progressive Review Toolbar (Appears only when drafts exist) -->
+  <div id="email-receipt-results" style="margin-top:14px;"></div>
+
+  <!-- Shared Fallback Category & Info Bar (Progressive Disclosure) -->
+  <div id="email-bulk-category-bar" class="email-bulk-category-strip" style="display:none;">
+    <div class="email-bulk-cat-controls">
+      <label for="email-receipt-default-cat" class="email-field-label" style="margin:0;">Bulk category:</label>
+      <select id="email-receipt-default-cat" class="email-cat-select">
         <option>Other</option>
-        <option>Software & Subscriptions</option>
-        <option>Marketing & Advertising</option>
-        <option>Printing & Production</option>
-        <option>Editorial & Proofreading</option>
-        <option>Illustration & Photography</option>
-        <option>Rights & Permissions</option>
-        <option>ISBN, Barcodes & Cataloging</option>
-        <option>Shipping & Postage</option>
-        <option>Warehousing & Fulfillment</option>
+        <option>Software &amp; Subscriptions</option>
+        <option>Marketing &amp; Advertising</option>
+        <option>Printing &amp; Production</option>
+        <option>Editorial &amp; Proofreading</option>
+        <option>Illustration &amp; Photography</option>
+        <option>Rights &amp; Permissions</option>
+        <option>ISBN, Barcodes &amp; Cataloging</option>
+        <option>Shipping &amp; Postage</option>
+        <option>Warehousing &amp; Fulfillment</option>
         <option>Packaging Materials</option>
         <option>Office Supplies</option>
-        <option>Travel & Meals</option>
+        <option>Travel &amp; Meals</option>
         <option>Professional Services</option>
         <option>Sales Processing Fees</option>
-        <option>Books, Research & Reference</option>
-        <option>Events & Exhibitions</option>
+        <option>Books, Research &amp; Reference</option>
+        <option>Events &amp; Exhibitions</option>
       </select>
-      <button type="button" class="btn sm" onclick="applyBulkCategoryToEmailDrafts()" title="Apply this category to every currently-selected draft row below">Apply to selected</button>
+      <button type="button" class="btn sm" onclick="applyBulkCategoryToEmailDrafts()" title="Apply this category to all selected rows">Apply to selected</button>
     </div>
-    <div style="font-size:11px;color:var(--text3);">Powered by Gemini · requires API key in Config. Live FX rates fetched automatically.</div>
+    <div class="email-bulk-cat-note">Live FX rates auto-fetched on import · Gemini AI</div>
   </div>
 
-  <div id="email-receipt-results" style="margin-top:14px;"></div>
+  <!-- Modal Sticky Footer -->
   <div class="modal-footer" role="dialog" aria-modal="true">
     <button type="button" class="btn" onclick="closeEmailReceiptImportModal()">Cancel</button>
-    <button type="button" class="btn gold" onclick="extractReceiptsFromEmailText()" id="email-receipt-scan-btn">✨ Extract drafts</button>
+    <button type="button" class="btn gold" onclick="extractReceiptsFromEmailText()" id="email-receipt-scan-btn">✨ Select emails to extract</button>
   </div>
 </div></div>
 

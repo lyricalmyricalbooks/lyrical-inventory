@@ -2156,6 +2156,22 @@ function openEmailReceiptImportModal() {
   _emailAttExcluded = {};
   _emailExtractCache = {};
 
+  // Connection pill status
+  const pill = $('email-account-pill');
+  if (pill) {
+    if (sheetsUrl) {
+      pill.textContent = '● Gmail Connected';
+      pill.className = 'pill green email-connected-pill';
+    } else {
+      pill.textContent = '○ Gmail Not Connected';
+      pill.className = 'pill amber email-connected-pill';
+    }
+  }
+
+  // Progressive category strip begins hidden until drafts exist
+  const bulkCatBar = $('email-bulk-category-bar');
+  if (bulkCatBar) bulkCatBar.style.display = 'none';
+
   // Reset tab to Gmail
   switchEmailImportTab('gmail');
 
@@ -2180,15 +2196,17 @@ function openEmailReceiptImportModal() {
     const listWrap = $('email-gmail-list-wrap');
     if (listWrap) {
       listWrap.innerHTML = `
-        <div class="empty-state" style="padding:30px 20px;font-size:12px;color:var(--text3);text-align:center;">
-          <span style="font-size:24px;display:block;margin-bottom:8px;">📬</span>
-          Click a quick preset or search above to pull recent emails.
+        <div class="email-zero-state">
+          <div class="email-zero-state-icon" aria-hidden="true">📭</div>
+          <div class="email-zero-state-title">Ready to scan your inbox</div>
+          <div class="email-zero-state-sub">Select a quick preset above (like <b>Past 30 Days</b>) or enter a supplier name to find recent expense receipts.</div>
         </div>`;
     }
   }
 
   const fileInput = $('email-receipt-files');
   const list = $('email-receipt-files-list');
+  const dropzone = $('email-receipt-dropzone');
   if (fileInput) {
     fileInput.value = '';
     fileInput.onchange = () => {
@@ -2200,6 +2218,19 @@ function openEmailReceiptImportModal() {
       }
       _updateEmailExtractButtonLabel();
     };
+
+    if (dropzone) {
+      dropzone.ondragover = (e) => { e.preventDefault(); dropzone.style.borderColor = 'var(--gold)'; };
+      dropzone.ondragleave = () => { dropzone.style.borderColor = ''; };
+      dropzone.ondrop = (e) => {
+        e.preventDefault();
+        dropzone.style.borderColor = '';
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+          fileInput.files = e.dataTransfer.files;
+          fileInput.dispatchEvent(new Event('change'));
+        }
+      };
+    }
   }
   const sourceInput = $('email-receipt-source');
   if (sourceInput) sourceInput.oninput = () => _updateEmailExtractButtonLabel();
@@ -2214,6 +2245,8 @@ function closeEmailReceiptImportModal() {
   // Closing the modal must actually stop an in-flight extraction — otherwise
   // it keeps hitting Apps Script and Gemini against a hidden, orphaned UI.
   if (_emailExtractAbort) _emailExtractAbort.abort();
+  const bulkCatBar = $('email-bulk-category-bar');
+  if (bulkCatBar) bulkCatBar.style.display = 'none';
   closeM('email-receipt-import-modal');
 }
 
@@ -2374,11 +2407,11 @@ function switchEmailImportTab(tab) {
 // copy-pasted into both renderGmailChips and applyGmailPresetQuery, so
 // editing one without the other made a chip's label lie about its query.
 const GMAIL_RECEIPT_PRESETS = [
-  { label: 'Past 7 Days', query: 'newer_than:7d -from:me (subject:(receipt OR invoice OR bill OR order OR purchase OR payment) OR "receipt" OR "invoice" OR "payment")' },
-  { label: 'Past 30 Days', query: 'newer_than:30d -from:me (subject:(receipt OR invoice OR bill OR order OR purchase OR payment) OR "receipt" OR "invoice" OR "payment")' },
-  { label: 'With Attachments', query: 'newer_than:30d has:attachment -from:me (receipt OR invoice OR bill)' },
-  { label: 'Invoices / Bills', query: '-from:me (subject:(receipt OR invoice OR bill OR payment OR order OR purchase OR confirmation) OR "receipt" OR "invoice" OR "payment")' },
-  { label: 'Shipping costs', query: '-from:me subject:(shipping OR postage OR label OR shippo OR ups OR fedex OR dhl OR tracking)' }
+  { icon: '🕒', label: 'Past 7 Days', query: 'newer_than:7d -from:me (subject:(receipt OR invoice OR bill OR order OR purchase OR payment) OR "receipt" OR "invoice" OR "payment")' },
+  { icon: '📅', label: 'Past 30 Days', query: 'newer_than:30d -from:me (subject:(receipt OR invoice OR bill OR order OR purchase OR payment) OR "receipt" OR "invoice" OR "payment")' },
+  { icon: '📎', label: 'With Attachments', query: 'newer_than:30d has:attachment -from:me (receipt OR invoice OR bill)' },
+  { icon: '🧾', label: 'Invoices / Bills', query: '-from:me (subject:(receipt OR invoice OR bill OR payment OR order OR purchase OR confirmation) OR "receipt" OR "invoice" OR "payment")' },
+  { icon: '📦', label: 'Shipping costs', query: '-from:me subject:(shipping OR postage OR label OR shippo OR ups OR fedex OR dhl OR tracking)' }
 ];
 let _activeGmailPresetIdx = -1;
 
@@ -2386,7 +2419,7 @@ function renderGmailChips() {
   const chipsContainer = $('email-gmail-chips');
   if (!chipsContainer) return;
   chipsContainer.innerHTML = GMAIL_RECEIPT_PRESETS.map((p, idx) => {
-    return `<button type="button" class="filter-chip${idx === _activeGmailPresetIdx ? ' active' : ''}" onclick="applyGmailPresetQuery(${idx})">${escapeHtml(p.label)}</button>`;
+    return `<button type="button" class="filter-chip${idx === _activeGmailPresetIdx ? ' active' : ''}" onclick="applyGmailPresetQuery(${idx})"><span aria-hidden="true">${p.icon}</span> ${escapeHtml(p.label)}</button>`;
   }).join('');
 }
 
@@ -4646,11 +4679,14 @@ function _expenseHasReceipt(e) {
 
 function renderEmailReceiptDrafts(receipts) {
   const wrap = $('email-receipt-results');
+  const bulkCatBar = $('email-bulk-category-bar');
   if (!wrap) return;
   if (!Array.isArray(receipts) || !receipts.length) {
-    wrap.innerHTML = '<div class="empty-state" style="padding:14px;font-size:12px;color:var(--text3);">No valid receipts found.</div>';
+    wrap.innerHTML = '<div class="empty-state" style="padding:14px;font-size:var(--text-sm);color:var(--text3);">No valid receipts found.</div>';
+    if (bulkCatBar) bulkCatBar.style.display = 'none';
     return;
   }
+  if (bulkCatBar) bulkCatBar.style.display = 'flex';
   const esc = escapeHtml;
   const catOptions = (sel) => EXPENSE_CATEGORIES
     .map(c => `<option${c === sel ? ' selected' : ''}>${esc(c)}</option>`).join('');
@@ -4661,15 +4697,15 @@ function renderEmailReceiptDrafts(receipts) {
 
   wrap.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
-      <div style="font-size:12px;color:var(--text3);">${receipts.length} draft${receipts.length > 1 ? 's' : ''} extracted${dupCount ? ` · <span style="color:var(--amber);">${dupCount} possible duplicate${dupCount > 1 ? 's' : ''}</span>` : ''}. Edit any field, deselect rows you don't want.</div>
+      <div style="font-size:var(--text-sm);color:var(--content-secondary);">${receipts.length} draft${receipts.length > 1 ? 's' : ''} extracted${dupCount ? ` · <span style="color:var(--amber);font-weight:600;">${dupCount} possible duplicate${dupCount > 1 ? 's' : ''}</span>` : ''}. Edit any field, deselect rows you don't want.</div>
       <div style="display:flex;gap:6px;">
         <button class="btn sm" type="button" onclick="toggleAllEmailDrafts(true)">Select all</button>
         <button class="btn sm" type="button" onclick="toggleAllEmailDrafts(false)">Select none</button>
         ${dupCount ? `<button class="btn sm" type="button" onclick="deselectDuplicateEmailDrafts()">Deselect duplicates</button>` : ''}
       </div>
     </div>
-    <div class="tbl-wrap" style="max-height:340px;overflow:auto;border:1px solid var(--border);border-radius:var(--r2);">
-      <table class="tbl" style="font-size:12px;">
+    <div class="tbl-wrap" style="max-height:340px;overflow:auto;border:1px solid var(--border-default);border-radius:var(--r2);">
+      <table class="tbl" style="font-size:var(--text-sm);">
         <thead><tr>
           <th></th><th>Date</th><th>Vendor / Description</th><th>Category</th><th>Ref</th>
           <th class="r" style="min-width:130px;">Amount</th><th></th>
@@ -4680,22 +4716,22 @@ function renderEmailReceiptDrafts(receipts) {
     const lowConf = (r.confidence ?? 1) < 0.5;
     return `<tr data-erd-row="${i}" style="${dup ? 'background:rgba(220,170,40,.06);' : ''}">
             <td><input type="checkbox" data-erd-include="${i}" ${r.include !== false ? 'checked' : ''}></td>
-            <td><input type="date" data-erd-field="date" data-erd-i="${i}" value="${esc(r.date)}" style="font-size:12px;width:130px;"></td>
+            <td><input type="date" data-erd-field="date" data-erd-i="${i}" value="${esc(r.date)}" style="font-size:var(--text-sm);width:130px;font-family:'DM Mono',monospace;font-feature-settings:'tnum' 1;"></td>
             <td>
-              <input type="text" data-erd-field="vendor" data-erd-i="${i}" value="${esc(r.vendor)}" placeholder="Vendor" style="font-size:12px;width:100%;margin-bottom:2px;">
-              <input type="text" data-erd-field="description" data-erd-i="${i}" value="${esc(r.description)}" placeholder="Description" style="font-size:11px;width:100%;color:var(--text2);">
-              ${dup ? `<div style="font-size:10px;color:var(--amber);margin-top:2px;">⚠ matches an existing expense</div>` : ''}
-              ${lowConf ? `<div style="font-size:10px;color:var(--text3);margin-top:2px;">low confidence (${(r.confidence * 100 | 0)}%)</div>` : ''}
+              <input type="text" data-erd-field="vendor" data-erd-i="${i}" value="${esc(r.vendor)}" placeholder="Vendor" style="font-size:var(--text-sm);width:100%;margin-bottom:2px;">
+              <input type="text" data-erd-field="description" data-erd-i="${i}" value="${esc(r.description)}" placeholder="Description" style="font-size:var(--text-xs);width:100%;color:var(--content-secondary);">
+              ${dup ? `<div style="font-size:var(--text-2xs);color:var(--amber);margin-top:2px;font-weight:600;">⚠ matches an existing expense</div>` : ''}
+              ${lowConf ? `<div style="font-size:var(--text-2xs);color:var(--content-muted);margin-top:2px;">low confidence (${(r.confidence * 100 | 0)}%)</div>` : ''}
               ${r.msgId
-        ? `<div style="font-size:10px;color:var(--text3);margin-top:2px;">${(r.selectedAtts && r.selectedAtts.length) ? `📎 ${r.selectedAtts.length} file${r.selectedAtts.length > 1 ? 's' : ''} + email` : `📄 email`} → receipts folder on import</div>`
+        ? `<div style="font-size:var(--text-2xs);color:var(--content-muted);margin-top:2px;">${(r.selectedAtts && r.selectedAtts.length) ? `📎 ${r.selectedAtts.length} file${r.selectedAtts.length > 1 ? 's' : ''} + email` : `📄 email`} → receipts folder on import</div>`
         : ''}
             </td>
-            <td><select data-erd-field="category" data-erd-i="${i}" style="font-size:12px;">${catOptions(r.category)}</select></td>
-            <td><input type="text" data-erd-field="reference" data-erd-i="${i}" value="${esc(r.reference)}" placeholder="—" style="font-size:12px;width:120px;"></td>
+            <td><select data-erd-field="category" data-erd-i="${i}" style="font-size:var(--text-sm);">${catOptions(r.category)}</select></td>
+            <td><input type="text" data-erd-field="reference" data-erd-i="${i}" value="${esc(r.reference)}" placeholder="—" style="font-size:var(--text-sm);width:120px;"></td>
             <td class="r">
               <div style="display:flex;gap:4px;align-items:center;justify-content:flex-end;">
-                <select data-erd-field="currency" data-erd-i="${i}" style="font-size:12px;width:64px;">${curOptions(r.currency)}</select>
-                <input type="number" step="0.01" data-erd-field="amount" data-erd-i="${i}" value="${Number(r.amount).toFixed(2)}" style="font-size:12px;width:90px;text-align:right;">
+                <select data-erd-field="currency" data-erd-i="${i}" style="font-size:var(--text-sm);width:68px;font-family:'DM Mono',monospace;">${curOptions(r.currency)}</select>
+                <input type="number" step="0.01" data-erd-field="amount" data-erd-i="${i}" value="${Number(r.amount).toFixed(2)}" style="font-size:var(--text-sm);width:90px;text-align:right;font-family:'DM Mono',monospace;font-feature-settings:'tnum' 1;">
               </div>
             </td>
             <td>${r.sourceSnippet ? `<button class="btn sm" type="button" title="View source snippet" aria-label="View source snippet" onclick="confirmDialog(${JSON.stringify(r.sourceSnippet)}, {title:'Source snippet', okLabel:'OK', cancelLabel:'Close'})">👁</button>` : ''}</td>
@@ -4705,7 +4741,7 @@ function renderEmailReceiptDrafts(receipts) {
       </table>
     </div>
     <div style="margin-top:10px;display:flex;gap:8px;align-items:center;justify-content:flex-end;">
-      <span style="font-size:11px;color:var(--text3);">FX rates auto-fetched at import</span>
+      <span style="font-size:var(--text-xs);color:var(--content-muted);font-family:'DM Mono',monospace;">FX rates auto-fetched at import</span>
       <button class="btn gold" type="button" onclick="importEmailReceiptDrafts()">Import selected drafts</button>
     </div>
   `;
