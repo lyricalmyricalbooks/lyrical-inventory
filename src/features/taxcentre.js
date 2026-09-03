@@ -2420,7 +2420,6 @@ function _tcRenderStatusHeaders() {
   renderCanadaPostKeySets();
   if ($('tc-cp-test-mode') && TAX_CENTER.settings?.cpTestMode !== undefined) $('tc-cp-test-mode').checked = !!TAX_CENTER.settings.cpTestMode;
   if ($('tc-cp-enabled') && TAX_CENTER.settings?.cpEnabled !== undefined) $('tc-cp-enabled').checked = TAX_CENTER.settings.cpEnabled !== false;
-  if ($('tc-cp-zonos-auto') && TAX_CENTER.settings?.cpZonosAutoGenerate !== undefined) $('tc-cp-zonos-auto').checked = TAX_CENTER.settings.cpZonosAutoGenerate !== false;
   const _cpStatusEl = $('tc-cp-status');
   if (_cpStatusEl && TAX_CENTER.settings?.cpLastTestAt) {
     const last = new Date(TAX_CENTER.settings.cpLastTestAt);
@@ -3734,8 +3733,6 @@ async function saveTaxCenterSettings() {
     }
     TAX_CENTER.settings.cpTestMode = cpTestMode;
     TAX_CENTER.settings.cpEnabled = cpEnabled;
-    const cpZonosAutoGenerate = $('tc-cp-zonos-auto') ? $('tc-cp-zonos-auto').checked : true;
-    TAX_CENTER.settings.cpZonosAutoGenerate = cpZonosAutoGenerate;
 
     await saveTaxCenter();
     // The split is persisted now, so the "your key moved" note has served its
