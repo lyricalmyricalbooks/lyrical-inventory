@@ -1533,7 +1533,13 @@
 <!-- EMAIL RECEIPT IMPORT -->
 <!-- TAX CENTER TRIP DETAIL MODAL -->
 <div class="overlay" id="m-tc-trip-detail" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:980px;">
-  <div class="modal-title" role="dialog" aria-modal="true">Trip: <span id="tc-trip-detail-title"></span></div>
+  <div class="modal-title" role="dialog" aria-modal="true">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">🗺️</span>
+      <span>Trip: <span id="tc-trip-detail-title"></span></span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('tc-trip-detail')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+  </div>
   <div id="tc-trip-detail-summary" style="font-size:13px;color:var(--text2);margin-bottom:14px;"></div>
   <div class="tbl-wrap" style="max-height:60vh;overflow:auto;">
     <table class="tbl">
@@ -1557,7 +1563,13 @@
 
 <!-- PENDING EXPENSE MODAL -->
 <div class="overlay" id="m-tc-pending" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:600px;">
-  <div class="modal-title" role="dialog" aria-modal="true"><span id="tc-pending-heading">Note a pending expense</span></div>
+  <div class="modal-title" role="dialog" aria-modal="true">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">📝</span>
+      <span id="tc-pending-heading">Note a pending expense</span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('tc-pending')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+  </div>
   <div class="tc-trip-form-intro">
     For costs you know are coming but can't log yet. Only the description is required — fill in whatever you have, set a reminder, and confirm it later when the receipt or amount arrives. Pending notes never touch your ledger totals or tax exports.
   </div>
@@ -1634,7 +1646,13 @@
 
 <!-- TAX CENTER NEW / EDIT TRIP MODAL -->
 <div class="overlay" id="m-tc-new-trip" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:600px;">
-  <div class="modal-title" role="dialog" aria-modal="true"><span id="tc-new-trip-heading">Create a business trip</span></div>
+  <div class="modal-title" role="dialog" aria-modal="true">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">✈️</span>
+      <span id="tc-new-trip-heading">Create a business trip</span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('tc-new-trip')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+  </div>
   <div class="tc-trip-form-intro" id="tc-new-trip-intro">
     Name the trip once, then assign expenses to it as you log them. Travel, lodging and meals stay grouped under one deductible event.
   </div>
@@ -1663,7 +1681,7 @@
 
     <div class="form-group">
       <label for="tc-new-trip-budget">Target budget (CAD) <span class="tc-opt">optional</span></label>
-      <input type="number" id="tc-new-trip-budget" min="0" step="0.01" placeholder="0.00">
+      <input type="number" id="tc-new-trip-budget" min="0" step="0.01" placeholder="0.00" class="tnum" style="font-family:'DM Mono',monospace;">
       <div class="tc-field-hint">Drives the progress bar and the over-budget warning on the trip card.</div>
     </div>
 
@@ -1700,7 +1718,13 @@
 
 <!-- TAX CENTER EDIT TRIP MODAL -->
 <div class="overlay" id="m-tc-edit-trip" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:480px;">
-  <div class="modal-title" role="dialog" aria-modal="true">Assign to a trip</div>
+  <div class="modal-title" role="dialog" aria-modal="true">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">🏷️</span>
+      <span>Assign to a trip</span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('tc-edit-trip')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+  </div>
   <div style="font-size:12px;color:var(--text3);margin-bottom:10px;" id="tc-edit-trip-context"></div>
   <div class="form-group">
     <label for="tc-edit-trip-input">Trip name (leave blank to remove)<span class="tip tip-mark" data-tip="Group expenses under a named trip (e.g. a book fair) so you can total travel, lodging and meals per event for your tax records.">?</span></label>
@@ -1720,7 +1744,13 @@
 
 <!-- RECURRING SUBSCRIPTION EDITOR — shared by "+ Add subscription" and row Edit -->
 <div class="overlay" id="m-rec-edit" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:640px;max-height:92vh;overflow-y:auto;">
-  <div class="modal-title" id="rec-edit-title">Add a recurring subscription</div>
+  <div class="modal-title" role="dialog" aria-modal="true">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">🔄</span>
+      <span id="rec-edit-title">Add a recurring subscription</span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('rec-edit')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+  </div>
   <div class="rec-edit-history" id="rec-edit-history"></div>
 
   <div class="g2" style="margin-bottom:12px;">
@@ -1803,7 +1833,13 @@
 
 <!-- TAX CENTER CATEGORY DETAIL MODAL -->
 <div class="overlay" id="m-tc-cat-detail" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:980px;">
-  <div class="modal-title" role="dialog" aria-modal="true">Transactions: <span id="tc-cat-detail-title"></span></div>
+  <div class="modal-title" role="dialog" aria-modal="true">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">📊</span>
+      <span>Transactions: <span id="tc-cat-detail-title"></span></span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('tc-cat-detail')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+  </div>
   <div id="tc-cat-detail-summary" style="font-size:13px;color:var(--text2);margin-bottom:14px;"></div>
   <div class="tbl-wrap" style="max-height:60vh;overflow:auto;">
     <table class="tbl">
@@ -1818,7 +1854,13 @@
 
 <!-- BATCH EXPENSE ENTRY — a whole pile of receipts logged in one pass -->
 <div class="overlay" id="m-batch-expense" style="display:none;"><div class="modal bx-modal" role="dialog" aria-modal="true">
-  <div class="modal-title" role="dialog" aria-modal="true">🧾 Log several expenses at once</div>
+  <div class="modal-title" role="dialog" aria-modal="true">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">🧾</span>
+      <span>Log several expenses at once</span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('batch-expense')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+  </div>
   <div class="bx-dest" id="bx-dest"></div>
 
   <div class="bx-intake">
@@ -1872,7 +1914,13 @@
 
 <!-- TAX SEASON PRE-FLIGHT AUDIT MODAL -->
 <div class="overlay" id="m-tc-preflight" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:680px;">
-  <div class="modal-title">📦 Tax Season Audit Pre-Flight Check</div>
+  <div class="modal-title" role="dialog" aria-modal="true">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">📦</span>
+      <span>Tax Season Audit Pre-Flight Check</span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('tc-preflight')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+  </div>
   <div id="tc-preflight-content" style="margin-top:12px;">
     <!-- Populated by openTaxSeasonPreflightModal() -->
   </div>
@@ -2054,7 +2102,13 @@
 
 <!-- WEBCAM RECEIPT CAPTURE -->
 <div class="overlay" id="m-receipt-camera-modal" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:680px;">
-  <div class="modal-title" role="dialog" aria-modal="true">📷 Capture Receipt</div>
+  <div class="modal-title" role="dialog" aria-modal="true">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">📷</span>
+      <span>Capture Receipt</span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="closeReceiptCameraModal()" aria-label="Close dialog" title="Close (Esc)">✕</button>
+  </div>
   <div style="background:rgba(180,140,20,.08);border:1px solid rgba(180,140,20,.2);border-radius:var(--r2);padding:8px 12px;margin-bottom:12px;font-size:11px;color:var(--text2);line-height:1.5;">
     Hold the receipt flat and well-lit, then snap. The photo will be attached to this expense and saved to your local receipts folder when you log it.
   </div>
@@ -2082,9 +2136,12 @@
 
 <!-- RECEIPT ORGANIZER MODAL -->
 <div class="overlay" id="m-receipt-organizer" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:1000px; width:96vw;">
-  <div class="modal-title" style="display:flex; justify-content:space-between; align-items:center;">
-    <span>🗃 Tidy a folder of receipts</span>
-    <button class="btn tx" onclick="closeReceiptOrganizer()" style="font-size:16px; padding:2px 8px;" aria-label="Close">✕</button>
+  <div class="modal-title" role="dialog" aria-modal="true">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">🗃</span>
+      <span>Tidy a folder of receipts</span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="closeReceiptOrganizer()" aria-label="Close dialog" title="Close (Esc)">✕</button>
   </div>
   <div class="organizer-intro">
     Point this at a folder of receipts and it will work out the date, who it was paid to, the amount and the category for each one — then copy them into a new folder, sorted by year and category and renamed so they sort by date.
@@ -2104,7 +2161,13 @@
 
 <!-- EXPORT RECEIPTS MODAL -->
 <div class="overlay" id="m-export-receipts" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:560px;">
-  <div class="modal-title">⬇ Export receipts</div>
+  <div class="modal-title" role="dialog" aria-modal="true">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">⬇</span>
+      <span>Export receipts</span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="closeExportReceiptsModal()" aria-label="Close dialog" title="Close (Esc)">✕</button>
+  </div>
   <div style="font-size:12px; color:var(--text3); margin-top:-6px; margin-bottom:14px; line-height:1.55;">
     Downloads a zip with every receipt sorted into folders by year and category, named so they sort by date — plus a summary sheet listing every receipt against its expense. Works on any device; nothing needs to be connected.
   </div>
@@ -2121,9 +2184,12 @@
 
 <!-- CLOUD RECEIPTS WAITING MODAL -->
 <div class="overlay" id="m-cloud-receipts" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:860px; width:95vw;">
-  <div class="modal-title" style="display:flex; justify-content:space-between; align-items:center;">
-    <span>☁️ Receipts waiting in the cloud</span>
-    <button class="btn tx" onclick="closeCloudReceiptsModal()" style="font-size:16px; padding:2px 8px;" aria-label="Close">✕</button>
+  <div class="modal-title" role="dialog" aria-modal="true">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">☁️</span>
+      <span>Receipts waiting in the cloud</span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="closeCloudReceiptsModal()" aria-label="Close dialog" title="Close (Esc)">✕</button>
   </div>
   <div style="font-size:12px; color:var(--text3); margin-top:-6px; margin-bottom:14px;">
     <span id="cloud-receipts-count"></span> — these are saved online and open in a new tab. Moving them files each one into your receipts folder by year and category, then clears the cloud copy.
@@ -2137,9 +2203,12 @@
 
 <!-- INVENTORY VALUATION ASSET REPORT MODAL -->
 <div class="overlay" id="m-inventory-valuation-modal" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:960px; width:95vw;">
-  <div class="modal-title" style="display:flex; justify-content:space-between; align-items:center;">
-    <span>📦 Inventory Valuation Asset Report</span>
-    <button class="btn tx" onclick="attemptCloseModal('inventory-valuation-modal')" style="font-size:16px; padding:2px 8px;">✕</button>
+  <div class="modal-title" role="dialog" aria-modal="true">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">📦</span>
+      <span>Inventory Valuation Asset Report</span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('inventory-valuation-modal')" aria-label="Close dialog" title="Close (Esc)">✕</button>
   </div>
   <div style="font-size:12px; color:var(--text3); margin-top:-6px; margin-bottom:16px;">
     Balance Sheet asset audit across warehouse on-hand stock and partner store consignment inventory.
@@ -2203,9 +2272,12 @@
 
 <!-- INVENTORY DEPRECIATION & WRITE-OFF MODAL -->
 <div class="overlay" id="m-inventory-writeoff-modal" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:520px; width:92vw;">
-  <div class="modal-title" style="display:flex; justify-content:space-between; align-items:center;">
-    <span>📉 Inventory Write-Off &amp; Depreciation</span>
-    <button class="btn tx" onclick="attemptCloseModal('inventory-writeoff-modal')" style="font-size:16px; padding:2px 8px;">✕</button>
+  <div class="modal-title" role="dialog" aria-modal="true">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">📉</span>
+      <span>Inventory Write-Off &amp; Depreciation</span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('inventory-writeoff-modal')" aria-label="Close dialog" title="Close (Esc)">✕</button>
   </div>
   <div style="font-size:12px; color:var(--text3); margin-top:-6px; margin-bottom:16px;">
     Deduct damaged, lost, or promotional copies from ending inventory assets to record a deductible tax write-off.
@@ -2213,14 +2285,14 @@
 
   <form id="writeoff-form" onsubmit="event.preventDefault(); submitInventoryWriteOff();">
     <div class="form-group" style="margin-bottom:12px;">
-      <label style="font-size:12px; font-weight:600;">Select Book Title</label>
-      <select id="wo-book-id" class="input" required onchange="onWriteOffBookChange(this.value)" style="width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:6px; background:var(--cream2); color:var(--text1); font-size:13px;"></select>
+      <label for="wo-book-id">Select Book Title</label>
+      <select id="wo-book-id" class="input" required onchange="onWriteOffBookChange(this.value)"></select>
     </div>
 
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
       <div class="form-group">
-        <label style="font-size:12px; font-weight:600;">Write-Off Reason</label>
-        <select id="wo-reason" class="input" required style="width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:6px; background:var(--cream2); color:var(--text1); font-size:13px;">
+        <label for="wo-reason">Write-Off Reason</label>
+        <select id="wo-reason" class="input" required>
           <option value="Damaged in Shipping / Storage">💔 Damaged (Shipping/Storage)</option>
           <option value="Promotional Comp / Review Copy">🎁 Promotional Comp / Press</option>
           <option value="Lost / Missing Audit Deficit">📦 Lost / Missing Audit</option>
@@ -2229,8 +2301,8 @@
       </div>
 
       <div class="form-group">
-        <label style="font-size:12px; font-weight:600;">Quantity (Units)</label>
-        <input type="number" id="wo-qty" class="input" min="1" step="1" value="1" required oninput="recalcWriteOffValue()" style="width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:6px; background:var(--cream2); color:var(--text1); font-size:13px;">
+        <label for="wo-qty">Quantity (Units)</label>
+        <input type="number" id="wo-qty" class="input tnum" min="1" step="1" value="1" required oninput="recalcWriteOffValue()" style="font-family:'DM Mono',monospace;">
       </div>
     </div>
 
@@ -4179,7 +4251,13 @@
 <!-- BIG CARTEL RECIPIENT ADDRESS PREVIEW MODAL -->
 <div class="overlay" id="m-bc-address-preview" style="display:none;">
   <div class="modal" role="dialog" aria-modal="true" style="max-width:480px;">
-    <div class="modal-title" role="dialog" aria-modal="true">📦 Shipping Address Preview</div>
+    <div class="modal-title" role="dialog" aria-modal="true">
+      <div class="modal-title-left">
+        <span class="modal-title-badge" aria-hidden="true">📦</span>
+        <span>Shipping Address Preview</span>
+      </div>
+      <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('bc-address-preview')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+    </div>
     <div style="font-size:12px; color:var(--text3); margin-bottom:1rem;" id="bc-addr-order-subtitle">Order details</div>
 
     <div class="card" style="margin-bottom:1rem; padding:1rem 1.25rem; border-left:3px solid var(--gold-line); background:var(--bg2, var(--cream2));">
@@ -4202,7 +4280,13 @@
 </div>
 
 <div class="overlay" id="m-add-store" style="display:none;"><div class="modal" role="dialog" aria-modal="true">
-  <div class="modal-title" role="dialog" aria-modal="true">Add consignment store</div>
+  <div class="modal-title" role="dialog" aria-modal="true">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">🏪</span>
+      <span>Add consignment store</span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('add-store')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+  </div>
   <div id="add-store-preset-wrap" class="add-store-preset-box" style="display:none;">
     <div class="add-store-preset-header">
       <div class="add-store-preset-label">
@@ -4242,7 +4326,13 @@
 </div></div>
 
 <div class="overlay" id="m-edit-store" style="display:none;"><div class="modal" role="dialog" aria-modal="true">
-  <div class="modal-title" role="dialog" aria-modal="true">Edit consignment store</div>
+  <div class="modal-title" role="dialog" aria-modal="true">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">✏️</span>
+      <span>Edit consignment store</span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('edit-store')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+  </div>
   <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="es-name">Store name *</label><input id="es-name" placeholder="e.g. Libreria Feltrinelli"></div><div class="form-group"><label for="es-contact">Contact person</label><input id="es-contact" placeholder="e.g. Maria Rossi"></div></div>
   <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="es-email">Email</label><input id="es-email" type="email" placeholder="store@email.com"></div><div class="form-group"><label for="es-phone">Phone</label><input id="es-phone" placeholder="e.g. +1 416-539-9595"></div></div>
   <div class="form-group" style="margin-bottom:12px;"><label for="es-address">Street address</label><input id="es-address" placeholder="e.g. 80 Spadina Ave, Suite 205"></div>
@@ -4255,7 +4345,13 @@
 </div></div>
 
 <div class="overlay" id="m-send-books" style="display:none;"><div class="modal" role="dialog" aria-modal="true">
-  <div class="modal-title" role="dialog" aria-modal="true">Send books to <span id="send-sname"></span></div>
+  <div class="modal-title" role="dialog" aria-modal="true">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">📦</span>
+      <span>Send books to <span id="send-sname"></span></span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('send-books')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+  </div>
   <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="send-qty">Qty to send</label><input id="send-qty" type="number" inputmode="numeric" value="10" min="1"></div><div class="form-group"><label for="send-date">Date sent</label><input id="send-date" type="date"></div></div>
   <div class="form-group" style="margin-bottom:12px;"><label for="send-rate">Commission rate (%)</label><input id="send-rate" type="number" inputmode="numeric" value="40" min="0" max="100"></div>
   <div class="form-group"><label for="send-notes">Notes</label><input id="send-notes" placeholder="e.g. delivery ref, batch #"></div>
@@ -4263,7 +4359,13 @@
 </div></div>
 
 <div class="overlay" id="m-bulk-send" style="display:none;"><div class="modal" role="dialog" aria-modal="true">
-  <div class="modal-title" role="dialog" aria-modal="true">Bulk send books</div>
+  <div class="modal-title" role="dialog" aria-modal="true">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">📚</span>
+      <span>Bulk send books</span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('bulk-send')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+  </div>
   <div style="font-size:12px;color:var(--text3);margin-bottom:12px;"><span id="bulk-send-stock" class="mono-num">0</span> in stock · sending <strong id="bulk-send-total" class="mono-num">0</strong> to <strong id="bulk-send-count" class="mono-num">0</strong> store(s)</div>
   <div class="g2" style="margin-bottom:12px;">
     <div class="form-group"><label for="bulk-qty">Qty to each</label><div style="display:flex;gap:6px;"><input id="bulk-qty" type="number" inputmode="numeric" min="0" value="10"><button type="button" class="btn sm" onclick="bulkApplyQty()" title="Set every store to this quantity">Apply to all</button></div></div>
@@ -4278,7 +4380,13 @@
 </div></div>
 
 <div class="overlay" id="m-record-sale" style="display:none;"><div class="modal" role="dialog" aria-modal="true">
-  <div class="modal-title" role="dialog" aria-modal="true">Record sale — <span id="sale-sname"></span></div>
+  <div class="modal-title" role="dialog" aria-modal="true">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">💰</span>
+      <span>Record sale — <span id="sale-sname"></span></span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('record-sale')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+  </div>
   <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="sale-qty">Qty sold by store</label><input id="sale-qty" type="number" inputmode="numeric" value="1" min="1"></div><div class="form-group"><label for="sale-date">Date</label><input id="sale-date" type="date"></div></div>
   <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="sale-price">Sale price per unit</label><div class="price-wrap"><span class="sym" id="sale-sym">€</span><input id="sale-price" type="number" inputmode="decimal" value="40.00" step="0.01"></div></div><div class="form-group"><label for="sale-paid">Payment status</label><select id="sale-paid"><option value="pending">Pending</option><option value="paid">Paid</option></select></div></div>
   <div class="form-group"><label for="sale-notes">Notes</label><input id="sale-notes" placeholder="e.g. invoice ref, reporting period"></div>
@@ -4292,7 +4400,13 @@
 </div></div>
 
 <div class="overlay" id="m-return" style="display:none;"><div class="modal" role="dialog" aria-modal="true">
-  <div class="modal-title" role="dialog" aria-modal="true">Record return — <span id="ret-sname"></span></div>
+  <div class="modal-title" role="dialog" aria-modal="true">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">↩️</span>
+      <span>Record return — <span id="ret-sname"></span></span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('return')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+  </div>
   <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="ret-qty">Qty returned</label><input id="ret-qty" type="number" inputmode="numeric" value="1" min="1"></div><div class="form-group"><label for="ret-date">Date</label><input id="ret-date" type="date"></div></div>
   <div class="form-group"><label for="ret-cond">Condition</label><select id="ret-cond"><option>Good — return to stock</option><option>Damaged — write off</option></select></div>
   <div class="form-group" style="margin-top:12px;"><label for="ret-notes">Notes</label><input id="ret-notes" placeholder="e.g. reason for return"></div>
@@ -4302,7 +4416,13 @@
 
 <!-- EDIT ENTRY MODAL -->
 <div class="overlay" id="m-edit-entry" style="display:none;"><div class="modal edit-modal" role="dialog" aria-modal="true">
-  <div class="modal-title" role="dialog" aria-modal="true" id="edit-modal-title">Edit entry</div>
+  <div class="modal-title" role="dialog" aria-modal="true">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">✏️</span>
+      <span id="edit-modal-title">Edit entry</span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('edit-entry')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+  </div>
   <div class="edit-modal-type" id="edit-modal-type-badge">Order</div>
 
   <!-- ORDER EDIT FIELDS -->
@@ -4360,7 +4480,13 @@
 
 <!-- EXPENSE EDIT MODAL -->
 <div class="overlay" id="m-edit-expense" style="display:none;"><div class="modal edit-modal" role="dialog" aria-modal="true">
-  <div class="modal-title" role="dialog" aria-modal="true" id="edit-exp-modal-title">Edit expense</div>
+  <div class="modal-title" role="dialog" aria-modal="true">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">🧾</span>
+      <span id="edit-exp-modal-title">Edit expense</span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('edit-expense')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+  </div>
   <div class="edit-modal-type" id="edit-exp-modal-type-badge">Business Expense</div>
 
   <div>
@@ -4546,7 +4672,13 @@
 <!-- INVOICE SETTINGS MODAL (publisher branding & defaults) -->
 <!-- ═══════════════════════════════════════════════════════ -->
 <div class="overlay no-print" id="m-invoice-settings" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:560px;">
-  <div class="modal-title" role="dialog" aria-modal="true">Invoice settings</div>
+  <div class="modal-title" role="dialog" aria-modal="true">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">⚙️</span>
+      <span>Invoice settings</span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('invoice-settings')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+  </div>
   <div style="font-size:12px;color:var(--text3);margin-bottom:1.25rem;line-height:1.6;">These details appear on every invoice you generate. Stored locally per browser.</div>
 
   <div class="g2" style="margin-bottom:12px;">
@@ -4604,7 +4736,13 @@
 <!-- SHIPPING LABEL MODAL -->
 <div class="overlay" id="m-shipping-label" style="display:none;">
   <div class="modal" role="dialog" aria-modal="true" style="max-width:540px;">
-    <div class="modal-title" role="dialog" aria-modal="true">📦 Shipping label</div>
+    <div class="modal-title" role="dialog" aria-modal="true">
+      <div class="modal-title-left">
+        <span class="modal-title-badge" aria-hidden="true">🏷️</span>
+        <span>Shipping label</span>
+      </div>
+      <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('shipping-label')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+    </div>
     <div id="shipping-label-order-info" style="font-size:12px;color:var(--text3);margin-bottom:1.25rem;font-family:'DM Mono',monospace;"></div>
 
     <div style="font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);margin-bottom:10px;">Ship to</div>
@@ -4641,7 +4779,13 @@
 <!-- IMPORT MODAL -->
 <div class="overlay" id="m-import" style="display:none;">
   <div class="modal" role="dialog" aria-modal="true" style="max-width:700px;max-height:85vh;display:flex;flex-direction:column;">
-    <div class="modal-title" id="import-modal-title" role="dialog" aria-modal="true">Import order history</div>
+    <div class="modal-title" role="dialog" aria-modal="true">
+      <div class="modal-title-left">
+        <span class="modal-title-badge" aria-hidden="true">📥</span>
+        <span id="import-modal-title">Import order history</span>
+      </div>
+      <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('import')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+    </div>
     <div id="import-summary" style="font-size:13px;color:var(--text2);margin-bottom:1rem;"></div>
     <div style="flex:1;overflow-y:auto;min-height:0;">
       <div class="tbl-wrap" style="margin-bottom:0;">
@@ -4665,7 +4809,13 @@
 <!-- RECOVER A WEBSITE ORDER THE GMAIL SCAN MISSED (from the shipping reconciliation worklist) -->
 <div class="overlay" id="m-recover-website-order" style="display:none;">
   <div class="modal rwo-modal" role="dialog" aria-modal="true" aria-labelledby="rwo-title" style="max-width:640px;max-height:92vh;overflow-y:auto;">
-    <div class="modal-title" id="rwo-title">Add the missing website order</div>
+    <div class="modal-title" role="dialog" aria-modal="true">
+      <div class="modal-title-left">
+        <span class="modal-title-badge" aria-hidden="true">🌐</span>
+        <span id="rwo-title">Add the missing website order</span>
+      </div>
+      <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('recover-website-order')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+    </div>
     <p class="rwo-intro">This label was paid for, but the order behind it never reached the app. Fill in what was sold and it joins your ledger, your stock count and the shipping portal — with this postage linked to it.</p>
     <div class="rwo-postage" id="rwo-postage-summary" role="status"></div>
 
@@ -4729,14 +4879,20 @@
 
 <div class="overlay" id="m-save-book-preset" style="display:none;">
   <div class="modal" role="dialog" aria-modal="true" style="max-width:520px;">
-    <div class="modal-title" role="dialog" aria-modal="true">📦 Save Parcel Specs to Book Preset</div>
+    <div class="modal-title" role="dialog" aria-modal="true">
+      <div class="modal-title-left">
+        <span class="modal-title-badge" aria-hidden="true">📦</span>
+        <span>Save Parcel Specs to Book Preset</span>
+      </div>
+      <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('save-book-preset')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+    </div>
     <div style="font-size:12px; color:var(--text3); margin-bottom:1rem;">
       Save current dimensions, weight, and customs declarations directly onto a catalogue book record. Future shipments for this book will load these specifications automatically.
     </div>
 
     <div class="form-group" style="margin-bottom:1rem;">
       <label for="sbp-target-book" style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--text2); margin-bottom:6px;">Target Catalogue Book</label>
-      <select id="sbp-target-book" style="width:100%; height:40px; font-size:13px;" onchange="renderSaveBookPresetPreview()">
+      <select id="sbp-target-book" onchange="renderSaveBookPresetPreview()">
         <option value="">— Select a catalogue book to update —</option>
       </select>
     </div>
@@ -4909,7 +5065,7 @@
       <button type="button" class="preset-chip-btn" onclick="applyBookParcelPreset('boxset')">📦 Box Set (32×26×8 cm · 2.5kg)</button>
     </div>
 
-    <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:8px; margin-bottom:12px;">
+    <div class="shipping-dims-grid">
       <div class="form-group"><label for="nb-ship-length">Length</label><input id="nb-ship-length" type="number" placeholder="Length" step="0.1" style="font-family:'DM Mono',monospace;"></div>
       <div class="form-group"><label for="nb-ship-width">Width</label><input id="nb-ship-width" type="number" placeholder="Width" step="0.1" style="font-family:'DM Mono',monospace;"></div>
       <div class="form-group"><label for="nb-ship-height">Height</label><input id="nb-ship-height" type="number" placeholder="Height" step="0.1" style="font-family:'DM Mono',monospace;"></div>
@@ -4921,7 +5077,7 @@
         </select>
       </div>
     </div>
-    <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:8px; margin-bottom:6px;">
+    <div class="shipping-weights-grid">
       <div class="form-group" style="margin:0;"><label for="nb-ship-weight">Weight</label><input id="nb-ship-weight" type="number" placeholder="Weight" step="0.01" style="font-family:'DM Mono',monospace;"></div>
       <div class="form-group" style="margin:0;">
         <label for="nb-ship-weight-unit">Weight Unit</label>
@@ -5043,7 +5199,13 @@
 
 <!-- PAYMENT QR MODAL -->
 <div class="overlay" id="m-payment-qr" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:480px;">
-  <div class="modal-title" role="dialog" aria-modal="true">Payment QR Code</div>
+  <div class="modal-title" role="dialog" aria-modal="true">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">💳</span>
+      <span>Payment QR Code</span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('payment-qr')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+  </div>
   <div style="font-size:12px;color:var(--content-secondary);margin-bottom:1rem;line-height:1.6;">
     Scan this code to pay for <strong id="qr-book-title" style="color:var(--content-primary);"></strong>.
   </div>
@@ -5090,7 +5252,13 @@
 
 <!-- POS-ONLY BOOK MODAL (add / edit + instant Stripe link & QR) -->
 <div class="overlay" id="m-pos-book" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:620px;">
-  <div class="modal-title" role="dialog" aria-modal="true" id="pb-modal-title">Add POS-only book</div>
+  <div class="modal-title" role="dialog" aria-modal="true">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">📖</span>
+      <span id="pb-modal-title">Add POS-only book</span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="closePosBookModal()" aria-label="Close dialog" title="Close (Esc)">✕</button>
+  </div>
   <div style="font-size:12px;color:var(--text3);margin-bottom:1rem;line-height:1.55;">
     A quick title for the sales table — guest authors, consignment, one-off stock. It shows up at the Point of Sale, in the printable sales tracker, and on the QR sheet, but <strong>stays out of your catalog, inventory, and financials</strong>.
   </div>
@@ -5143,7 +5311,13 @@
 
 <!-- POS ADJUST PRICE / DISCOUNT MODAL -->
 <div class="overlay" id="m-pos-price" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:420px;">
-  <div class="modal-title" role="dialog" aria-modal="true">Adjust price</div>
+  <div class="modal-title" role="dialog" aria-modal="true">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">🏷️</span>
+      <span>Adjust price</span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('pos-price')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+  </div>
   <div style="font-size:13px;color:var(--text);font-weight:600;margin-bottom:2px;" id="pp-title"></div>
   <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">List price: <span id="pp-list"></span></div>
 
@@ -5174,7 +5348,13 @@
 
 <!-- POS PAYMENT QR MODAL (exact / discounted amount) -->
 <div class="overlay" id="m-pos-qr" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:380px;">
-  <div class="modal-title" role="dialog" aria-modal="true">Scan to pay</div>
+  <div class="modal-title" role="dialog" aria-modal="true">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">📱</span>
+      <span>Scan to pay</span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('pos-qr')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+  </div>
   <div style="text-align:center;margin-bottom:4px;"><span id="pos-qr-amount" class="tnum" style="font-family:'Syne',sans-serif;font-size:26px;font-weight:700;color:var(--status-settled, var(--green));"></span></div>
   <div id="pos-qr-sub" style="text-align:center;font-size:12px;color:var(--content-secondary);margin-bottom:14px;"></div>
   <div style="display:flex;justify-content:center;margin-bottom:1rem;background:white;padding:1.25rem;border-radius:var(--r2);width:max-content;margin-left:auto;margin-right:auto;">
@@ -5194,7 +5374,13 @@
 </div></div>
 
 <div class="overlay" id="m-pos-sale-confirm" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:640px;">
-  <div class="modal-title" role="dialog" aria-modal="true">Confirm Event Sale</div>
+  <div class="modal-title" role="dialog" aria-modal="true">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">✨</span>
+      <span>Confirm Event Sale</span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('pos-sale-confirm')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+  </div>
   <div style="font-size:12px;color:var(--text3);margin-bottom:1rem;">Review the sale details before finalizing. Catalog books deduct inventory immediately; POS-only titles are tallied on the card.</div>
   <div class="tbl-wrap" style="margin-bottom:1rem;">
     <table class="tbl">
@@ -5227,7 +5413,13 @@
 <!-- WHATS NEW / CHANGELOG MODAL -->
 <div class="overlay" id="m-whats-new" style="display:none;z-index:1200;">
   <div class="modal" role="dialog" aria-modal="true" style="max-width:500px;max-height:80vh;display:flex;flex-direction:column;">
-    <div class="modal-title" role="dialog" aria-modal="true">What's New in this Update</div>
+    <div class="modal-title" role="dialog" aria-modal="true">
+      <div class="modal-title-left">
+        <span class="modal-title-badge" aria-hidden="true">✨</span>
+        <span>What's New in this Update</span>
+      </div>
+      <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('whats-new')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+    </div>
     <div style="font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.55;">Showing the recent updates and commits loaded into the app:</div>
     <div id="whats-new-list" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:12px;padding-right:4px;">
       <!-- Populated dynamically -->
@@ -5299,7 +5491,13 @@
      to repair history that was recorded under a previous currency. -->
 <div class="overlay" id="m-currency-change" style="display:none;z-index:1250;">
   <div class="modal" role="dialog" aria-modal="true" style="max-width:640px;">
-    <div class="modal-title" role="dialog" aria-modal="true" id="cc-title">Change book currency</div>
+    <div class="modal-title" role="dialog" aria-modal="true">
+      <div class="modal-title-left">
+        <span class="modal-title-badge" aria-hidden="true">💱</span>
+        <span id="cc-title">Change book currency</span>
+      </div>
+      <button type="button" class="btn tx modal-close-btn" onclick="document.getElementById('cc-cancel')?.click()" aria-label="Close dialog" title="Close (Esc)">✕</button>
+    </div>
     <p class="lead-note" id="cc-intro"></p>
 
     <div class="cc-modes" id="cc-modes">
@@ -5360,7 +5558,13 @@
 
 <div class="overlay" id="m-restore-book" style="display:none;z-index:1200;">
   <div class="modal" role="dialog" aria-modal="true" style="max-width:560px;max-height:85vh;display:flex;flex-direction:column;">
-    <div class="modal-title" role="dialog" aria-modal="true">Restore one book from backup</div>
+    <div class="modal-title" role="dialog" aria-modal="true">
+      <div class="modal-title-left">
+        <span class="modal-title-badge" aria-hidden="true">🔄</span>
+        <span>Restore one book from backup</span>
+      </div>
+      <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('restore-book')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+    </div>
     <div id="restore-book-subtitle" style="font-size:12px;color:var(--text2);line-height:1.55;margin-bottom:4px;"></div>
     <div style="font-size:11px;color:var(--text3);line-height:1.5;margin-bottom:12px;">Pick the book to restore. Only that book's catalog entry, inventory, history and consignment ledger are overwritten from this snapshot — every other book and all your settings stay exactly as they are now.</div>
     <div id="restore-book-list" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:8px;"></div>
@@ -5387,7 +5591,13 @@
 <!-- STOCK TRANSFER MODAL (Publisher to/from Author) -->
 <div class="overlay" id="m-stock-transfer" style="display:none;z-index:1200;">
   <div class="modal" role="dialog" aria-modal="true" style="max-width:480px;">
-    <div class="modal-title" role="dialog" aria-modal="true" id="st-modal-title">Transfer stock</div>
+    <div class="modal-title" role="dialog" aria-modal="true">
+      <div class="modal-title-left">
+        <span class="modal-title-badge" aria-hidden="true">🔁</span>
+        <span id="st-modal-title">Transfer stock</span>
+      </div>
+      <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('stock-transfer')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+    </div>
     <p class="lead-note" id="st-modal-sub" style="margin-bottom:14px;">Move physical inventory between publisher warehouse and author.</p>
     
     <div class="st-balance-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
