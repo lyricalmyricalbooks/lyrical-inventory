@@ -8090,10 +8090,14 @@ function renderShippingAnalysisHub() {
   const shippoExpenses = (TAX_CENTER.businessExpenses || []).filter(isPostageExpense);
   const relevantExpenses = (shipAnalysisBookFilter === 'all')
     ? shippoExpenses
-    : shippoExpenses.filter(e => {
-      const num = normalizeShippingOrderNumber(e.shippingOrderNumber);
-      return num && allOrders.some(o => normalizeShippingOrderNumber(o.num) === num);
-    });
+    : (() => {
+        // ⚡ Bolt Optimization: Use Set instead of Array.prototype.some() for O(1) lookups
+        const validOrderNumbers = new Set(allOrders.map(o => normalizeShippingOrderNumber(o.num)));
+        return shippoExpenses.filter(e => {
+          const num = normalizeShippingOrderNumber(e.shippingOrderNumber);
+          return num && validOrderNumbers.has(num);
+        });
+      })();
 
   // Build the book filter dropdown options
   let bookFilterOptions = `<option value="all" ${shipAnalysisBookFilter === 'all' ? 'selected' : ''}>— All Books —</option>`;
