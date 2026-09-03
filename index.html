@@ -1094,6 +1094,7 @@
 
       <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding-top:10px;border-top:1px dashed var(--border);">
         <button class="btn ink" onclick="addAllBuyersToMailingList()" title="Add every buyer we found to your mailing list">↓ Add all buyers</button>
+        <button class="btn outline cust-export-btn" onclick="exportMailingListCsv()" title="Export current segment to CSV">📥 Export CSV</button>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;font-size:12px;color:var(--text2);">
           <input type="checkbox" id="ml-autoadd" onchange="toggleMailingAutoAdd(this)" style="width:16px;height:16px;accent-color:var(--gold);">
           Auto-add new buyers as they appear
@@ -2008,6 +2009,14 @@
     <video id="receipt-cam-video" autoplay playsinline muted style="width:100%;max-height:60vh;display:block;"></video>
     <canvas id="receipt-cam-canvas" style="display:none;width:100%;max-height:60vh;"></canvas>
     <div id="receipt-cam-status" style="position:absolute;color:#fff;font-size:12px;font-family:'DM Mono',monospace;text-align:center;padding:14px;display:none;"></div>
+    <div id="receipt-cam-reticle" class="receipt-cam-reticle" aria-hidden="true">
+      <div class="reticle-corner top-left"></div>
+      <div class="reticle-corner top-right"></div>
+      <div class="reticle-corner bottom-left"></div>
+      <div class="reticle-corner bottom-right"></div>
+      <div class="reticle-scan-beam"></div>
+      <div class="reticle-guide">Align receipt within frame</div>
+    </div>
   </div>
   <div id="receipt-cam-preview-note" style="font-size:11px;color:var(--text3);margin-top:8px;display:none;">Preview — click Retake to try again, or Use Photo to attach.</div>
   <div class="modal-footer" role="dialog" aria-modal="true">
@@ -3668,30 +3677,70 @@
           <div class="analytics-kpi-label">Visitors</div>
           <div class="analytics-kpi-value" id="umami-kpi-visitors">—</div>
           <div class="analytics-kpi-change" id="umami-change-visitors"></div>
+          <div class="analytics-kpi-sparkline" aria-hidden="true">
+            <span class="analytics-kpi-sparkline-bar" style="height:35%;"></span>
+            <span class="analytics-kpi-sparkline-bar" style="height:55%;"></span>
+            <span class="analytics-kpi-sparkline-bar" style="height:70%;"></span>
+            <span class="analytics-kpi-sparkline-bar" style="height:45%;"></span>
+            <span class="analytics-kpi-sparkline-bar" style="height:80%;"></span>
+            <span class="analytics-kpi-sparkline-bar" style="height:100%;"></span>
+          </div>
         </div>
 
         <div class="analytics-kpi-card">
           <div class="analytics-kpi-label">Visits</div>
           <div class="analytics-kpi-value" id="umami-kpi-visits">—</div>
           <div class="analytics-kpi-change" id="umami-change-visits"></div>
+          <div class="analytics-kpi-sparkline" aria-hidden="true">
+            <span class="analytics-kpi-sparkline-bar" style="height:40%;"></span>
+            <span class="analytics-kpi-sparkline-bar" style="height:50%;"></span>
+            <span class="analytics-kpi-sparkline-bar" style="height:65%;"></span>
+            <span class="analytics-kpi-sparkline-bar" style="height:60%;"></span>
+            <span class="analytics-kpi-sparkline-bar" style="height:90%;"></span>
+            <span class="analytics-kpi-sparkline-bar" style="height:95%;"></span>
+          </div>
         </div>
 
         <div class="analytics-kpi-card">
           <div class="analytics-kpi-label">Views</div>
           <div class="analytics-kpi-value" id="umami-kpi-views">—</div>
           <div class="analytics-kpi-change" id="umami-change-views"></div>
+          <div class="analytics-kpi-sparkline" aria-hidden="true">
+            <span class="analytics-kpi-sparkline-bar" style="height:30%;"></span>
+            <span class="analytics-kpi-sparkline-bar" style="height:60%;"></span>
+            <span class="analytics-kpi-sparkline-bar" style="height:75%;"></span>
+            <span class="analytics-kpi-sparkline-bar" style="height:70%;"></span>
+            <span class="analytics-kpi-sparkline-bar" style="height:85%;"></span>
+            <span class="analytics-kpi-sparkline-bar" style="height:100%;"></span>
+          </div>
         </div>
 
         <div class="analytics-kpi-card">
           <div class="analytics-kpi-label">Bounce Rate</div>
           <div class="analytics-kpi-value" id="umami-kpi-bounces">—</div>
           <div class="analytics-kpi-change" id="umami-change-bounces"></div>
+          <div class="analytics-kpi-sparkline" aria-hidden="true">
+            <span class="analytics-kpi-sparkline-bar" style="height:80%;"></span>
+            <span class="analytics-kpi-sparkline-bar" style="height:70%;"></span>
+            <span class="analytics-kpi-sparkline-bar" style="height:65%;"></span>
+            <span class="analytics-kpi-sparkline-bar" style="height:55%;"></span>
+            <span class="analytics-kpi-sparkline-bar" style="height:45%;"></span>
+            <span class="analytics-kpi-sparkline-bar" style="height:40%;"></span>
+          </div>
         </div>
 
         <div class="analytics-kpi-card">
           <div class="analytics-kpi-label">Avg Duration</div>
           <div class="analytics-kpi-value" id="umami-kpi-duration">—</div>
           <div class="analytics-kpi-change" id="umami-change-duration"></div>
+          <div class="analytics-kpi-sparkline" aria-hidden="true">
+            <span class="analytics-kpi-sparkline-bar" style="height:25%;"></span>
+            <span class="analytics-kpi-sparkline-bar" style="height:45%;"></span>
+            <span class="analytics-kpi-sparkline-bar" style="height:60%;"></span>
+            <span class="analytics-kpi-sparkline-bar" style="height:50%;"></span>
+            <span class="analytics-kpi-sparkline-bar" style="height:75%;"></span>
+            <span class="analytics-kpi-sparkline-bar" style="height:90%;"></span>
+          </div>
         </div>
       </div>
     </div>
@@ -5046,11 +5095,11 @@
   <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">List price: <span id="pp-list"></span></div>
 
   <div class="pos-discount-grid" role="group" aria-label="Quick discount presets">
-    <button type="button" class="pos-discount-btn" onclick="posPriceQuick(10)"><span class="mono-num">10%</span> off</button>
-    <button type="button" class="pos-discount-btn" onclick="posPriceQuick(20)"><span class="mono-num">20%</span> off</button>
-    <button type="button" class="pos-discount-btn" onclick="posPriceQuick(25)"><span class="mono-num">25%</span> off</button>
-    <button type="button" class="pos-discount-btn" onclick="posPriceQuick(50)"><span class="mono-num">50%</span> off</button>
-    <button type="button" class="pos-discount-btn pos-discount-free" onclick="posPriceQuick(100)">Free</button>
+    <button type="button" class="pos-discount-btn" onclick="posPriceQuick(10)" data-shortcut="1" title="Shortcut: Press 1"><span class="mono-num">10%</span> off</button>
+    <button type="button" class="pos-discount-btn" onclick="posPriceQuick(20)" data-shortcut="2" title="Shortcut: Press 2"><span class="mono-num">20%</span> off</button>
+    <button type="button" class="pos-discount-btn" onclick="posPriceQuick(25)" data-shortcut="3" title="Shortcut: Press 3"><span class="mono-num">25%</span> off</button>
+    <button type="button" class="pos-discount-btn" onclick="posPriceQuick(50)" data-shortcut="5" title="Shortcut: Press 5"><span class="mono-num">50%</span> off</button>
+    <button type="button" class="pos-discount-btn pos-discount-free" onclick="posPriceQuick(100)" data-shortcut="0" title="Shortcut: Press 0">Free</button>
   </div>
 
   <div class="form-group" style="margin-bottom:8px;">
