@@ -6170,6 +6170,19 @@ tr.hist-row:hover {
   color: var(--content-primary);
   width: 100%;
 }
+/* `.form-group input,select,textarea` (style.css ~2314) outranks the class-only
+   selector above ((0,1,1) beats (0,1,0)), so the override card's money fields
+   were silently rendering in proportional Syne on a plain form background
+   instead of the tabular DM Mono every other price field in the app uses.
+   Scope under the card to win without touching the select's arrow padding. */
+.pqr-override-card .pqr-select,
+.pqr-override-card .pqr-input {
+  font-family: 'DM Mono', monospace;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  font-variant-numeric: tabular-nums;
+  background: var(--surface-raised);
+  border-radius: var(--r);
+}
 .pqr-gen-btn {
   width: 100%;
   min-height: var(--target-min, 44px);

@@ -77,6 +77,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-09-01 | visual | Order History | Gave the Total column its intended weight instead of a bolder one the digit font fakes and blurs | #695 |
 | 2026-09-02 | visual | Settings — Profit Tiers | Gave the production-cost/revenue/earned strip a card you can actually see in dark mode | #711 |
 | 2026-09-03 | visual | Big Cartel, Shippo linking, Web Analytics | Fixed several cards and panels that had no visible background at all in light mode | #726 |
+| 2026-09-03 | visual | Payment QR modal | Gave the price override fields their intended lined-up numbers and card background back | TBD |
 
 ---
 
