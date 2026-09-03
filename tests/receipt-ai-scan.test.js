@@ -52,7 +52,8 @@ function scanHarness({ reply, prepare, apiKey = 'k-test' } = {}) {
     run: buildHarness({
       names: [
         '_runReceiptScan', '_extractReceiptFromFile', '_applyScanCurrency', '_applyScanCategory',
-        '_buildReceiptScanPrompt', 'RECEIPT_SCAN_SCHEMA', 'RECEIPT_SCAN_TIMEOUT_MS'
+        '_buildReceiptScanPrompt', 'RECEIPT_SCAN_SCHEMA', 'RECEIPT_SCAN_TIMEOUT_MS',
+        '_friendlyScanError'
       ],
       deps: {
         $: id => document.getElementById(id),
@@ -415,7 +416,8 @@ describe('Gemini transport — retry and error classification', () => {
     return buildHarness({
       names: [
         '_callGeminiForReceipts', 'GEMINI_RECEIPT_MODELS', 'GEMINI_SINGLE_ATTEMPT_BYTES',
-        'GEMINI_THINKING_READ', '_geminiNoThinking', '_geminiCooldownUntil',
+        'GEMINI_THINKING_READ', 'GEMINI_THINKING_MODES', '_geminiThinkingMode',
+        '_geminiThinkingPatch', '_geminiCooldownUntil',
         '_geminiCooldownWait', '_geminiNoteThrottle', '_geminiAwaitCooldown'
       ],
       deps: {
@@ -447,12 +449,20 @@ describe('Gemini transport — retry and error classification', () => {
     expect(calls).toBe(1);
   });
 
-  it('does not escalate a malformed-payload rejection either', async () => {
-    let calls = 0;
-    const call = callHarness(async () => { calls++; return res(400, { error: { message: 'Invalid image data' } }); });
+  it('does not escalate a malformed-payload rejection to the other models', async () => {
+    // A 400 is first walked down the thinking-control ladder on THIS model,
+    // because a bare "invalid argument" cannot be told apart from a rejected
+    // speed setting. Once the control is off it is fatal, and the other models
+    // are never asked — that was the point: a bad payload fails identically
+    // everywhere, so probing the chain just paid for the same image twice more.
+    const models = [];
+    const call = callHarness(async (url) => {
+      models.push(String(url).match(/models\/([^:]+):/)[1]);
+      return res(400, { error: { message: 'Invalid image data' } });
+    });
 
     await expect(call('k', [{ text: 'x' }])).rejects.toThrow(/Invalid image/i);
-    expect(calls).toBe(1);
+    expect(new Set(models).size).toBe(1);
   });
 
   it('backs off exponentially across transient overloads', async () => {

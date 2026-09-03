@@ -11,7 +11,8 @@ import { fileURLToPath } from 'node:url';
 
 const TRANSPORT_NAMES = [
   '_callGeminiForReceipts', 'GEMINI_RECEIPT_MODELS', 'GEMINI_SINGLE_ATTEMPT_BYTES',
-  'GEMINI_THINKING_READ', '_geminiNoThinking', '_geminiCooldownUntil',
+  'GEMINI_THINKING_READ', 'GEMINI_THINKING_MODES', '_geminiThinkingMode',
+  '_geminiThinkingPatch', '_geminiCooldownUntil',
   '_geminiCooldownWait', '_geminiNoteThrottle', '_geminiAwaitCooldown'
 ];
 
@@ -61,61 +62,105 @@ describe('Gemini transport — thinking budget', () => {
     expect(sent.generationConfig.thinking_config.thinking_budget).toBe(512);
   });
 
-  it('drops the budget and retries the same model that rejects it', async () => {
-    // A model that does not understand the control refuses the whole request
-    // over that one field. Losing the scan to a speed setting would be a far
-    // worse trade than the wasted round-trip.
+  it('recovers from the bare rejection that broke the scanner in production', async () => {
+    // The reported failure, exactly: a model that will not take a token budget
+    // answers 400 with "Request contains an invalid argument" and names no
+    // field at all. There is nothing in that text to match on, so the fallback
+    // cannot be driven by reading the message — it has to step down and retry
+    // on the status alone.
     const seen = [];
     const call = transport(async (url, init) => {
-      seen.push({ model: String(url).match(/models\/([^:]+):/)[1], body: bodyOf(init) });
-      return seen.length === 1
-        ? res(400, { error: { message: 'thinking_config is not supported for this model' } })
+      const body = bodyOf(init);
+      seen.push({ model: String(url).match(/models\/([^:]+):/)[1], cfg: body.generationConfig.thinking_config });
+      return body.generationConfig.thinking_config?.thinking_budget !== undefined
+        ? res(400, { error: { message: 'Request contains an invalid argument.' } })
         : good;
     });
 
     const out = await call('k', [{ text: 'x' }]);
     expect(out.text).toBe('{"ok":1}');
-    expect(seen).toHaveLength(2);
-    // Same model, second time without the field it objected to.
-    expect(seen[1].model).toBe(seen[0].model);
-    expect(seen[0].body.generationConfig.thinking_config).toBeDefined();
-    expect(seen[1].body.generationConfig.thinking_config).toBeUndefined();
+    // Same model throughout — the image is never re-uploaded to the others.
+    expect(new Set(seen.map(s => s.model)).size).toBe(1);
+    expect(seen[0].cfg).toEqual({ thinking_budget: 0 });
+    expect(seen[1].cfg).toEqual({ thinking_level: 'low' });
   });
 
-  it('remembers the rejection so the next scan does not pay for it again', async () => {
-    const bodies = [];
+  it('falls all the way back to no thinking control at all', async () => {
+    const seen = [];
     const call = transport(async (_url, init) => {
-      bodies.push(bodyOf(init));
-      return bodies.length === 1
-        ? res(400, { error: { message: 'Unknown name "thinking_config"' } })
+      const cfg = bodyOf(init).generationConfig.thinking_config;
+      seen.push(cfg);
+      return cfg ? res(400, { error: { message: 'Request contains an invalid argument.' } }) : good;
+    });
+
+    const out = await call('k', [{ text: 'x' }]);
+    expect(out.text).toBe('{"ok":1}');
+    expect(seen).toHaveLength(3);
+    expect(seen[2]).toBeUndefined(); // the shape that predates the speed-up
+  });
+
+  it('remembers what worked so the next scan goes straight there', async () => {
+    const seen = [];
+    const call = transport(async (_url, init) => {
+      const cfg = bodyOf(init).generationConfig.thinking_config;
+      seen.push(cfg);
+      return cfg?.thinking_budget !== undefined
+        ? res(400, { error: { message: 'Request contains an invalid argument.' } })
         : good;
     });
 
     await call('k', [{ text: 'x' }]);
     await call('k', [{ text: 'y' }]);
-    expect(bodies).toHaveLength(3);
-    // Third call is the second scan — it must not re-probe with the field.
-    expect(bodies[2].generationConfig.thinking_config).toBeUndefined();
+    expect(seen).toHaveLength(3);
+    // Second scan is one call, and it opens at the level that worked.
+    expect(seen[2]).toEqual({ thinking_level: 'low' });
   });
 
-  it('still reports the real failure when the retry fails for its own reason', async () => {
-    // Showing "thinking_config is not supported" to the shop owner would name
-    // a setting they never touched instead of the reason the receipt failed.
+  it('reports the real failure once the control is off and it still fails', async () => {
+    // Showing a complaint about a speed setting would name something the shop
+    // owner never touched instead of the reason the receipt failed.
     const call = transport(async (_url, init) => (
       bodyOf(init).generationConfig.thinking_config
-        ? res(400, { error: { message: 'thinking_config is not supported' } })
+        ? res(400, { error: { message: 'Request contains an invalid argument.' } })
         : res(400, { error: { message: 'Invalid image data' } })
     ));
 
     await expect(call('k', [{ text: 'x' }])).rejects.toThrow(/Invalid image data/);
   });
 
-  it('does not mistake an ordinary bad-payload 400 for a thinking rejection', async () => {
-    let calls = 0;
-    const call = transport(async () => { calls++; return res(400, { error: { message: 'Invalid image data' } }); });
+  it('does not re-upload a bad payload to the other models', async () => {
+    // The ladder is bounded to the one model. A corrupt file must not be paid
+    // for nine times.
+    const models = [];
+    const call = transport(async (url) => {
+      models.push(String(url).match(/models\/([^:]+):/)[1]);
+      return res(400, { error: { message: 'Invalid image data' } });
+    });
 
     await expect(call('k', [{ text: 'x' }])).rejects.toThrow(/Invalid image/i);
-    expect(calls).toBe(1); // still fatal, still one upload
+    expect(new Set(models).size).toBe(1);
+    expect(models).toHaveLength(3); // budget, level, off — then it stops
+  });
+
+  it('does not record a mode when the request failed for its own reason', async () => {
+    // Walking the ladder over a corrupt file must not leave the model marked
+    // as one that cannot think — that would cost every later scan in the
+    // session its speed-up to explain a failure it had nothing to do with.
+    const seen = [];
+    let bad = true;
+    const call = transport(async (_url, init) => {
+      const cfg = bodyOf(init).generationConfig.thinking_config;
+      seen.push(cfg);
+      if (bad) return res(400, { error: { message: 'Invalid image data' } });
+      return good;
+    });
+
+    await expect(call('k', [{ text: 'x' }])).rejects.toThrow(/Invalid image/i);
+    seen.length = 0;
+    bad = false;
+
+    await call('k', [{ text: 'a good one' }]);
+    expect(seen[0]).toEqual({ thinking_budget: 0 }); // still opens at the fastest
   });
 });
 
@@ -451,5 +496,60 @@ describe('Pool width', () => {
       'utf8'
     );
     expect(html).toMatch(/rel="preconnect"[^>]*generativelanguage\.googleapis\.com/);
+  });
+});
+
+describe('Scan errors the shop owner can act on', () => {
+  const friendly = (nav) => buildHarness({
+    names: ['_friendlyScanError'],
+    deps: { navigator: nav === undefined ? { onLine: true } : nav },
+    returns: '_friendlyScanError'
+  });
+
+  it('turns the reader\'s own words into something to actually do', () => {
+    // This is the message that was on screen when the scanner broke. On its
+    // own it tells the owner nothing about the file, the key, or what to try.
+    const out = friendly()(new Error('Request contains an invalid argument.'));
+    expect(out).not.toMatch(/invalid argument/i);
+    expect(out).toMatch(/photo|PDF/i);
+  });
+
+  it('points a rejected key at the setting that fixes it', () => {
+    expect(friendly()(new Error('API key not valid. Please pass a valid API key.')))
+      .toMatch(/key.*config/i);
+  });
+
+  it('tells the owner to wait when the reader is over its limit', () => {
+    expect(friendly()(new Error('Resource has been exhausted (e.g. check quota).')))
+      .toMatch(/wait/i);
+  });
+
+  it('leads with being offline, whatever the underlying error said', () => {
+    // On a market floor with no signal this is the only fact that matters, and
+    // the network error underneath it is usually unreadable anyway.
+    expect(friendly({ onLine: false })(new Error('Failed to fetch')))
+      .toMatch(/offline/i);
+  });
+
+  it('keeps an unrecognised message rather than inventing a cause', () => {
+    expect(friendly()(new Error('Something nobody has seen before')))
+      .toBe('Something nobody has seen before');
+  });
+
+  it('trims a wall of API text so it cannot push the toast off screen', () => {
+    const out = friendly()(new Error('z'.repeat(500)));
+    expect(out.length).toBeLessThanOrEqual(120);
+  });
+
+  it('always says something, even for an error with no message', () => {
+    expect(friendly()(new Error(''))).toBeTruthy();
+    expect(friendly()(undefined)).toBeTruthy();
+  });
+
+  it('is what the scan screens actually show', () => {
+    // The raw message used to go straight into the toast.
+    expect(appSource).not.toContain('AI extraction failed: ${e.message');
+    expect(appSource).not.toContain('AI scan failed: ${e.message');
+    expect(appSource).toContain('_friendlyScanError(e)');
   });
 });
