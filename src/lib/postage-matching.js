@@ -356,7 +356,11 @@ export function suggestPostageMatches(expense = {}, orders = [], opts = {}) {
     .filter(order => !taken.has(clean(order.num || order.orderNum).toUpperCase()))
     .map(order => scorePostageOrderMatch(expense, order, { recipientOverride }))
     .filter(Boolean)
-    .sort((a, b) => b.score - a.score || a.orderDate.localeCompare(b.orderDate))
+    .sort((a, b) => {
+      const diff = b.score - a.score;
+      if (diff !== 0) return diff;
+      return a.orderDate < b.orderDate ? -1 : (a.orderDate > b.orderDate ? 1 : 0);
+    })
     .slice(0, Math.max(1, limit));
 }
 
@@ -405,7 +409,11 @@ export function postageScanCandidates(expenses = [], { includeComplete = false }
     .filter(expense => includeComplete
       || !postageRecipientName(expense)
       || !normalizeTrackingNumber(expense.trackingNumber))
-    .sort((a, b) => clean(a.date).localeCompare(clean(b.date)));
+    .sort((a, b) => {
+      const d1 = clean(a.date);
+      const d2 = clean(b.date);
+      return d1 < d2 ? -1 : (d1 > d2 ? 1 : 0);
+    });
 }
 
 /**
