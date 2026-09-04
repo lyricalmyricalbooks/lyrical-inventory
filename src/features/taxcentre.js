@@ -46,6 +46,7 @@ import {
   resolveLocalReceiptFile,
   saveReceiptBestEffort,
   setPendingWebcamReceipt,
+  _warmGeminiModelCache,
 } from './receipts.js';
 import { openM, closeM, confirmDialog } from '../lib/modal.js';
 import { renderShippingReconciliationWorklist } from './shipping.js';
@@ -3179,6 +3180,10 @@ function tcLightboxNav(dir) {
 
 function renderTaxCenter() {
   if (isAuthor()) return;
+  // The Tax Centre holds the key and the other "AI Scan" button, and opening it
+  // is idle time. Checking here — rather than inside a scan — means a newer
+  // reader is found without anyone ever waiting on the lookup.
+  if (TAX_CENTER?.settings?.geminiKey) _warmGeminiModelCache(TAX_CENTER.settings.geminiKey);
   // Preserve active subtab state
   switchTaxCenterSubTab(activeTaxCenterSubTab);
   // Restore the saved ledger view (year + search + type) before reading the year.

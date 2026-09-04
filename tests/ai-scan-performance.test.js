@@ -12,7 +12,9 @@ import { fileURLToPath } from 'node:url';
 const TRANSPORT_NAMES = [
   '_callGeminiForReceipts', 'GEMINI_RECEIPT_MODELS', 'GEMINI_SINGLE_ATTEMPT_BYTES',
   'GEMINI_THINKING_READ', 'GEMINI_THINKING_MODES', '_geminiThinkingMode',
-  '_geminiThinkingPatch', '_geminiCooldownUntil',
+  '_geminiThinkingPatch', '_geminiCooldownUntil', 'GEMINI_FREE_TIER_MODEL',
+  '_geminiUnavailable', '_geminiModelChain',
+  '_readGeminiModelCache', 'GEMINI_MODEL_CACHE_KEY', 'GEMINI_CHAIN_MAX',
   '_geminiCooldownWait', '_geminiNoteThrottle', '_geminiAwaitCooldown'
 ];
 
@@ -551,5 +553,117 @@ describe('Scan errors the shop owner can act on', () => {
     expect(appSource).not.toContain('AI extraction failed: ${e.message');
     expect(appSource).not.toContain('AI scan failed: ${e.message');
     expect(appSource).toContain('_friendlyScanError(e)');
+  });
+});
+
+describe('Reader chain — newest first, and never one that bills', () => {
+  it('asks the newest reader first and steps down from there', () => {
+    const list = appSource.match(/const GEMINI_RECEIPT_MODELS = \[[^\]]+\];/)[0];
+    expect(list).toContain("'gemini-3.8-flash'");
+    expect(list).toContain("'gemini-3.7-flash'");
+    expect(list).toContain("'gemini-3.6-flash'");
+    expect(list.indexOf('3.8')).toBeLessThan(list.indexOf('3.7'));
+    expect(list.indexOf('3.7')).toBeLessThan(list.indexOf('3.6'));
+  });
+
+  it('has nothing in the chain that would be billed', () => {
+    // Flash and Flash-Lite have a free allowance. Pro and Ultra do not, and one
+    // call to either is charged to whatever card is on the Google account.
+    const list = appSource.match(/const GEMINI_RECEIPT_MODELS = \[[^\]]+\];/)[0];
+    const models = list.match(/'([^']+)'/g).map(m => m.slice(1, -1));
+    expect(models.length).toBeGreaterThan(0);
+    models.forEach(m => {
+      expect(m, `${m} has no free tier`).toMatch(/-flash(-lite)?$/);
+      expect(m).not.toMatch(/pro|ultra/i);
+    });
+  });
+
+  it('refuses to call a billed model even if one reaches the list', async () => {
+    // The list is a constant someone edits by hand. The gate is enforced where
+    // the call is actually made, so an expensive model added by mistake cannot
+    // quietly start costing money.
+    const gate = buildHarness({
+      names: ['GEMINI_FREE_TIER_MODEL'],
+      deps: {},
+      returns: 'GEMINI_FREE_TIER_MODEL'
+    });
+    expect(gate.test('gemini-3.8-flash')).toBe(true);
+    expect(gate.test('gemini-3.8-flash-lite')).toBe(true);
+    expect(gate.test('gemini-3.8-pro')).toBe(false);
+    expect(gate.test('gemini-3.8-ultra')).toBe(false);
+  });
+
+  it('stops the whole chain the moment a reader says it would be billed', async () => {
+    // Walking further down the chain in that state is exactly how something
+    // meant to be free quietly starts spending.
+    const models = [];
+    const call = transport(async (url) => {
+      models.push(String(url).match(/models\/([^:]+):/)[1]);
+      return res(400, { error: { message: 'This model requires a paid tier. Enable billing to continue.' } });
+    });
+
+    await expect(call('k', [{ text: 'x' }])).rejects.toThrow(/paid tier/i);
+    expect(new Set(models).size).toBe(1); // never asked the next reader
+  });
+
+  it('does not keep paying to be told a reader is unavailable', async () => {
+    // A model not yet enabled on the key answers 404. Re-uploading the whole
+    // receipt on every future scan just to hear that again is metered requests
+    // spent for nothing.
+    const models = [];
+    const call = transport(async (url) => {
+      const m = String(url).match(/models\/([^:]+):/)[1];
+      models.push(m);
+      return m.includes('3.8') ? res(404, { error: { message: 'model not found' } }) : good;
+    });
+
+    await call('k', [{ text: 'x' }]);
+    expect(models).toEqual(['gemini-3.8-flash', 'gemini-3.7-flash']);
+
+    models.length = 0;
+    await call('k', [{ text: 'y' }]);
+    expect(models).toEqual(['gemini-3.7-flash']); // straight to the one that works
+  });
+
+  it('tries everything again rather than bricking when all were refused', async () => {
+    // A refusal can be temporary — an outage, a key still propagating. Being
+    // permanently unable to scan would be a far worse outcome than one wasted
+    // request.
+    let refuse = true;
+    const models = [];
+    const call = transport(async (url) => {
+      models.push(String(url).match(/models\/([^:]+):/)[1]);
+      return refuse ? res(404, { error: { message: 'model not found' } }) : good;
+    });
+
+    await expect(call('k', [{ text: 'x' }])).rejects.toBeTruthy();
+    refuse = false;
+    models.length = 0;
+
+    const out = await call('k', [{ text: 'y' }]);
+    expect(out.text).toBe('{"ok":1}');
+    expect(models[0]).toBe('gemini-3.8-flash'); // back to the newest
+  });
+
+  it('names the money in plain words when a reader is not free', () => {
+    const friendly = buildHarness({
+      names: ['_friendlyScanError'],
+      deps: { navigator: { onLine: true } },
+      returns: '_friendlyScanError'
+    });
+    const out = friendly(new Error('This model requires a paid tier.'));
+    expect(out).toMatch(/not free/i);
+    expect(out).toMatch(/nothing was charged/i);
+  });
+
+  it('tells the owner to wait, not to pay, when the free allowance runs out', () => {
+    const friendly = buildHarness({
+      names: ['_friendlyScanError'],
+      deps: { navigator: { onLine: true } },
+      returns: '_friendlyScanError'
+    });
+    const out = friendly(new Error('Resource has been exhausted (e.g. check quota).'));
+    expect(out).toMatch(/free/i);
+    expect(out).toMatch(/wait/i);
   });
 });

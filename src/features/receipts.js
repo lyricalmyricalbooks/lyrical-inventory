@@ -45,6 +45,7 @@ import {
   updateDash,
 } from '../main.js';
 import { escapeHtml } from '../lib/html.js';
+import { GEMINI_FREE_TIER_MODEL, rankFreeGeminiModels } from '../lib/gemini-models.js';
 import { followableUrl } from '../lib/receipt-links.js';
 import { fmt, fmtD, getBookCurrencyCode, normalizeCurrencyCode } from '../lib/money.js';
 import { expenseLedgerTotals, expenseTotalsCopy } from '../lib/expense-totals.js';
@@ -2840,7 +2841,94 @@ function _setEmailAttExcluded(msgId, idx, isExcluded) {
 // Gemini 2.0 Flash and 2.0 Flash-Lite were retired on 2026-06-01 — keeping them
 // in the fallback chain meant every escalation re-uploaded the whole payload to
 // a model that could only fail.
-const GEMINI_RECEIPT_MODELS = ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-2.5-flash'];
+// The floor, newest first: what the scanner uses before it has ever managed to
+// ask Google what exists, and whenever that answer is unavailable — a first
+// run, a machine that is offline, a key too new to list anything. Discovery
+// below replaces this the moment it succeeds, so this list is a starting point
+// rather than the definition of what the scanner can use.
+const GEMINI_RECEIPT_MODELS = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash'];
+
+// Models this key cannot use, learned as we go. Without this the scan pays a
+// full upload and a round-trip to be told so on EVERY scan rather than once a
+// session — and on a free tier those are metered requests spent for nothing.
+const _geminiUnavailable = new Set();
+
+// ── KEEPING UP WITH NEW READERS
+// A newer Flash model used to sit unused until somebody edited the constant
+// above and shipped a release, which for a one-person publisher means never.
+// The models API lists exactly what this key can reach, so the scanner asks
+// once a day and ranks the answer itself.
+const GEMINI_MODEL_CACHE_KEY = 'lm_gemini_models';
+const GEMINI_MODEL_CACHE_MS = 24 * 60 * 60 * 1000;
+// How many readers one scan may ever walk through. Discovery can return a
+// dozen; without a cap, a receipt that fails everywhere would be uploaded a
+// dozen times, and on a free tier that is the whole day's allowance on one bad
+// photo.
+const GEMINI_CHAIN_MAX = 4;
+
+function _readGeminiModelCache() {
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    const saved = JSON.parse(localStorage.getItem(GEMINI_MODEL_CACHE_KEY) || 'null');
+    if (!saved || !Array.isArray(saved.models) || !saved.models.length) return null;
+    return saved;
+  } catch (_) {
+    // A corrupt or unreadable cache is not worth failing a scan over.
+    return null;
+  }
+}
+
+// The chain for this scan. Whatever was discovered comes first; the built-in
+// list fills in behind it, so a short or missing answer still leaves something
+// to try. Capped, and re-filtered for the free tier on the way out — a name
+// that arrived from the network is not trusted any further than one typed by
+// hand.
+function _geminiModelChain() {
+  const discovered = _readGeminiModelCache()?.models || [];
+  return discovered
+    .concat(GEMINI_RECEIPT_MODELS.filter(m => !discovered.includes(m)))
+    .filter(m => GEMINI_FREE_TIER_MODEL.test(m))
+    .slice(0, GEMINI_CHAIN_MAX);
+}
+
+// In-flight discovery, so a pile of receipts scanning at once asks once.
+let _geminiDiscovery = null;
+
+/**
+ * Refresh the list of readers, at most once a day, without ever making anyone
+ * wait for it. Deliberately fire-and-forget: a scan runs on the list it
+ * already has, and a newly released model is picked up by the next one. Making
+ * the owner wait on a metadata call to save a few hundred milliseconds later
+ * would be the wrong way round.
+ */
+function _warmGeminiModelCache(apiKey) {
+  if (!apiKey || typeof fetch !== 'function') return null;
+  if (typeof navigator !== 'undefined' && navigator && navigator.onLine === false) return null;
+  const cached = _readGeminiModelCache();
+  if (cached && Date.now() - Number(cached.at || 0) < GEMINI_MODEL_CACHE_MS) return null;
+  if (_geminiDiscovery) return _geminiDiscovery;
+
+  _geminiDiscovery = (async () => {
+    try {
+      const res = await fetch(
+        'https://generativelanguage.googleapis.com/v1beta/models'
+        + `?key=${encodeURIComponent(apiKey)}&pageSize=200`
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      const ranked = rankFreeGeminiModels(data && data.models);
+      // An empty ranking means the answer was unusable, not that this key has
+      // no readers. Keeping yesterday's list beats replacing it with nothing.
+      if (!ranked.length) return;
+      localStorage.setItem(GEMINI_MODEL_CACHE_KEY, JSON.stringify({ at: Date.now(), models: ranked }));
+    } catch (_) {
+      // Offline, blocked, rate-limited: the built-in list still works.
+    } finally {
+      _geminiDiscovery = null;
+    }
+  })();
+  return _geminiDiscovery;
+}
 
 // Above this serialized size, don't probe the fallback chain — re-uploading
 // megabytes to guess at a model costs far more than surfacing the error.
@@ -2935,9 +3023,19 @@ async function _callGeminiForReceipts(apiKey, parts, opts = {}) {
     return bodyCache.get(mode);
   };
 
+  // The free-tier gate, enforced at the point of use rather than trusted from
+  // the list above: whatever that list ends up saying, a model that would be
+  // billed is never called.
+  const free = _geminiModelChain();
+  if (!free.length) throw new Error('No free-tier reader is configured');
+  // Then skip what this key has already been refused — but never let that
+  // empty the chain, because a refusal that turns out to be temporary must not
+  // leave the scanner permanently unable to try.
+  const reachable = free.filter(m => !_geminiUnavailable.has(m));
+  const chain = reachable.length ? reachable : free;
   const models = body.length > GEMINI_SINGLE_ATTEMPT_BYTES
-    ? GEMINI_RECEIPT_MODELS.slice(0, 1)
-    : GEMINI_RECEIPT_MODELS;
+    ? chain.slice(0, 1)
+    : chain;
 
   let lastErr;
   for (const model of models) {
@@ -2997,11 +3095,19 @@ async function _callGeminiForReceipts(apiKey, parts, opts = {}) {
         // every model, so probing the chain just re-uploads the image twice
         // more before showing the same error.
         let shouldStop = res.status === 400 || res.status === 401 || res.status === 403;
+        // 404 means this key cannot reach that model at all — not enabled on
+        // the account yet, or retired. Worth remembering rather than
+        // re-discovering with a fresh upload on every future scan.
+        if (res.status === 404) _geminiUnavailable.add(model);
         try {
           const err = await res.json();
           if (err?.error?.message) {
             detail = err.error.message;
-            if (res.status === 429 || /prepayment|credits|billing|quota|API key/i.test(detail)) {
+            // Anything that means "this would cost money" stops the whole
+            // chain on the spot. Walking further down it in that state is how
+            // a scanner meant to be free quietly starts spending.
+            if (res.status === 429
+              || /prepayment|credits|billing|quota|API key|paid tier|FAILED_PRECONDITION|payment/i.test(detail)) {
               shouldStop = true;
             }
           }
@@ -3058,8 +3164,11 @@ function _friendlyScanError(e) {
   if (/API key|api_key|PERMISSION_DENIED|unregistered|not valid/i.test(raw)) {
     return 'your AI key was rejected — check it in the Tax Centre config';
   }
-  if (/quota|rate limit|RESOURCE_EXHAUSTED|prepayment|credits|billing/i.test(raw)) {
-    return 'the reader is over its limit right now — wait a minute and try again';
+  if (/paid tier|billing|prepayment|credits|payment|FAILED_PRECONDITION/i.test(raw)) {
+    return 'that reader is not free on your Google account — nothing was charged, but the scan stopped rather than spend';
+  }
+  if (/quota|rate limit|RESOURCE_EXHAUSTED/i.test(raw)) {
+    return 'the free reader is at its limit for now — wait a minute and try again';
   }
   if (/SAFETY|blocked|RECITATION/i.test(raw)) {
     return 'the reader refused this file — try a photo of the receipt instead';
@@ -5452,6 +5561,11 @@ function expenseTotalsFootHtml(totals, showSelectCol) {
 }
 
 function renderExpenses() {
+  // The expense screen is where the single "AI Scan" button lives. Opening it
+  // is the idle moment to find out whether a newer reader has appeared —
+  // deliberately here rather than inside the scan itself, so nobody ever waits
+  // on a housekeeping call to have a receipt read.
+  if (TAX_CENTER?.settings?.geminiKey) _warmGeminiModelCache(TAX_CENTER.settings.geminiKey);
   const s = getState(), book = getBook(), cur = book.currency;
   const expenses = s.expenses || [];
   const body = $('exp-body');
@@ -5756,6 +5870,7 @@ export {
   _isLikelyDuplicateExpense,
   _localReceiptCell,
   _prepareReceiptUpload,
+  _warmGeminiModelCache,
   _receiptMimeFor,
   _runReceiptScan,
   _saveDraftReceiptFiles,
