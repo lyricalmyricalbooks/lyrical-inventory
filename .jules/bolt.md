@@ -26,3 +26,6 @@
 ## 2025-03-02 - O(N) max finding instead of O(N log N) sorting
 **Learning:** Using chained array methods like \`slice().sort((a,b) => ...)[0]\` to find a minimum or maximum element introduces an unnecessary $O(N \log N)$ time complexity and an extra array allocation.
 **Action:** Replace these operations with a single imperative $O(N)$ loop to find the minimum or maximum element. It avoids allocations and is substantially faster.
+## 2024-05-24 - String.prototype.localeCompare on Date Strings
+**Learning:** Using `String.prototype.localeCompare` to sort string dates in ISO-like format is 10x-30x slower in Node.js/V8 than standard equality/inequality operators (`<`, `>`). `localeCompare` evaluates collation and Unicode rules which are entirely unnecessary for strict YYYY-MM-DD or ISO-8601 strings.
+**Action:** Replace `.sort((a,b) => a.date.localeCompare(b.date))` with explicit operator checks (`a.date < b.date ? -1 : ...`) on date strings for safe and massive performance wins in tight loops without sacrificing behavior.
