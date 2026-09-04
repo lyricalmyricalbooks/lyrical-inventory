@@ -78,6 +78,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-09-02 | visual | Settings — Profit Tiers | Gave the production-cost/revenue/earned strip a card you can actually see in dark mode | #711 |
 | 2026-09-03 | visual | Big Cartel, Shippo linking, Web Analytics | Fixed several cards and panels that had no visible background at all in light mode | #726 |
 | 2026-09-03 | visual | Payment QR modal | Gave the price override fields their intended lined-up numbers and card background back | #730 |
+| 2026-09-04 | visual | Connect your Google Sheet | Made the simulated spreadsheet's row numbers actually readable | TBD |
 
 ---
 

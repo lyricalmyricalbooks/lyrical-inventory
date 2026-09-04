@@ -12017,7 +12017,7 @@ function renderMockSpreadsheet() {
   if (!headerRow || !rowsBody || !tabsContainer) return;
 
   // Render headers
-  let headersHtml = `<th style="background:#22222e; color:rgba(255,255,255,0.3); font-weight:normal; text-align:center; padding:6px; border:1px solid rgba(255,255,255,0.08); width:30px; user-select:none;"></th>`;
+  let headersHtml = `<th style="background:#22222e; color:rgba(255,255,255,0.6); font-weight:normal; text-align:center; padding:6px; border:1px solid rgba(255,255,255,0.08); width:30px; user-select:none;"></th>`;
   headers.forEach(h => {
     headersHtml += `<th style="padding:6px 10px; border:1px solid rgba(255,255,255,0.08); background:#22222e; color:rgba(255,255,255,0.7); font-weight:600; text-transform:uppercase; font-size:10px; letter-spacing:0.02em;">${h}</th>`;
   });
@@ -12055,7 +12055,7 @@ function renderMockSpreadsheet() {
   if (rows.length === 0) {
     rowsBody.innerHTML = `
       <tr>
-        <td colspan="${headers.length + 1}" style="text-align:center; padding:48px 24px; color:rgba(255,255,255,0.3); font-style:italic;">
+        <td colspan="${headers.length + 1}" style="text-align:center; padding:48px 24px; color:rgba(255,255,255,0.6); font-style:italic;">
           Spreadsheet tab is empty. Perform a transaction or click "Sync all data" above.
         </td>
       </tr>`;
@@ -12067,7 +12067,7 @@ function renderMockSpreadsheet() {
     const isEven = idx % 2 === 0;
     const rowBg = isEven ? '#15151b' : '#1a1a24';
 
-    let cellsHtml = `<td style="background:#1d1d26; color:rgba(255,255,255,0.3); border:1px solid rgba(255,255,255,0.08); text-align:center; user-select:none; font-family:sans-serif; font-size:10px;">${idx + 1}</td>`;
+    let cellsHtml = `<td style="background:#1d1d26; color:rgba(255,255,255,0.6); border:1px solid rgba(255,255,255,0.08); text-align:center; user-select:none; font-family:sans-serif; font-size:10px;">${idx + 1}</td>`;
 
     for (let c = 1; c < r.length; c++) {
       let val = r[c] ?? '';
