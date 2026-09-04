@@ -417,7 +417,8 @@ describe('Gemini transport — retry and error classification', () => {
       names: [
         '_callGeminiForReceipts', 'GEMINI_RECEIPT_MODELS', 'GEMINI_SINGLE_ATTEMPT_BYTES',
         'GEMINI_THINKING_READ', 'GEMINI_THINKING_MODES', '_geminiThinkingMode',
-        '_geminiThinkingPatch', '_geminiCooldownUntil',
+        '_geminiThinkingPatch', '_geminiCooldownUntil', 'GEMINI_FREE_TIER_MODEL',
+        '_geminiUnavailable',
         '_geminiCooldownWait', '_geminiNoteThrottle', '_geminiAwaitCooldown'
       ],
       deps: {

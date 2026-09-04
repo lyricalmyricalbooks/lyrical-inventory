@@ -2840,7 +2840,22 @@ function _setEmailAttExcluded(msgId, idx, isExcluded) {
 // Gemini 2.0 Flash and 2.0 Flash-Lite were retired on 2026-06-01 — keeping them
 // in the fallback chain meant every escalation re-uploaded the whole payload to
 // a model that could only fail.
-const GEMINI_RECEIPT_MODELS = ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-2.5-flash'];
+// Only a model with a free tier is ever allowed in the chain. Flash and
+// Flash-Lite have one; Pro and Ultra do not, and a single Pro call is billed to
+// whatever card is on the key. Asserted in the suite AND filtered here, so a
+// paid model added by mistake later fails the tests loudly and still cannot be
+// called if it somehow ships.
+const GEMINI_FREE_TIER_MODEL = /-flash(-lite)?$/;
+
+// Newest first. A model this key cannot reach yet answers 404 and the chain
+// simply moves down, so a name that turns out not to exist costs one request,
+// not a broken scanner.
+const GEMINI_RECEIPT_MODELS = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash'];
+
+// Models this key cannot use, learned as we go. Without this the scan pays a
+// full upload and a round-trip to be told so on EVERY scan rather than once a
+// session — and on a free tier those are metered requests spent for nothing.
+const _geminiUnavailable = new Set();
 
 // Above this serialized size, don't probe the fallback chain — re-uploading
 // megabytes to guess at a model costs far more than surfacing the error.
@@ -2935,9 +2950,19 @@ async function _callGeminiForReceipts(apiKey, parts, opts = {}) {
     return bodyCache.get(mode);
   };
 
+  // The free-tier gate, enforced at the point of use rather than trusted from
+  // the list above: whatever that list ends up saying, a model that would be
+  // billed is never called.
+  const free = GEMINI_RECEIPT_MODELS.filter(m => GEMINI_FREE_TIER_MODEL.test(m));
+  if (!free.length) throw new Error('No free-tier reader is configured');
+  // Then skip what this key has already been refused — but never let that
+  // empty the chain, because a refusal that turns out to be temporary must not
+  // leave the scanner permanently unable to try.
+  const reachable = free.filter(m => !_geminiUnavailable.has(m));
+  const chain = reachable.length ? reachable : free;
   const models = body.length > GEMINI_SINGLE_ATTEMPT_BYTES
-    ? GEMINI_RECEIPT_MODELS.slice(0, 1)
-    : GEMINI_RECEIPT_MODELS;
+    ? chain.slice(0, 1)
+    : chain;
 
   let lastErr;
   for (const model of models) {
@@ -2997,11 +3022,19 @@ async function _callGeminiForReceipts(apiKey, parts, opts = {}) {
         // every model, so probing the chain just re-uploads the image twice
         // more before showing the same error.
         let shouldStop = res.status === 400 || res.status === 401 || res.status === 403;
+        // 404 means this key cannot reach that model at all — not enabled on
+        // the account yet, or retired. Worth remembering rather than
+        // re-discovering with a fresh upload on every future scan.
+        if (res.status === 404) _geminiUnavailable.add(model);
         try {
           const err = await res.json();
           if (err?.error?.message) {
             detail = err.error.message;
-            if (res.status === 429 || /prepayment|credits|billing|quota|API key/i.test(detail)) {
+            // Anything that means "this would cost money" stops the whole
+            // chain on the spot. Walking further down it in that state is how
+            // a scanner meant to be free quietly starts spending.
+            if (res.status === 429
+              || /prepayment|credits|billing|quota|API key|paid tier|FAILED_PRECONDITION|payment/i.test(detail)) {
               shouldStop = true;
             }
           }
@@ -3058,8 +3091,11 @@ function _friendlyScanError(e) {
   if (/API key|api_key|PERMISSION_DENIED|unregistered|not valid/i.test(raw)) {
     return 'your AI key was rejected — check it in the Tax Centre config';
   }
-  if (/quota|rate limit|RESOURCE_EXHAUSTED|prepayment|credits|billing/i.test(raw)) {
-    return 'the reader is over its limit right now — wait a minute and try again';
+  if (/paid tier|billing|prepayment|credits|payment|FAILED_PRECONDITION/i.test(raw)) {
+    return 'that reader is not free on your Google account — nothing was charged, but the scan stopped rather than spend';
+  }
+  if (/quota|rate limit|RESOURCE_EXHAUSTED/i.test(raw)) {
+    return 'the free reader is at its limit for now — wait a minute and try again';
   }
   if (/SAFETY|blocked|RECITATION/i.test(raw)) {
     return 'the reader refused this file — try a photo of the receipt instead';
