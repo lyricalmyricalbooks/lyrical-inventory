@@ -32,6 +32,7 @@ export const INTEGRATIONS = Object.freeze({
   bigcartel: { id: 'bigcartel', label: 'Big Cartel' },
   shippo: { id: 'shippo', label: 'Shippo' },
   canadapost: { id: 'canadapost', label: 'Canada Post' },
+  'shipping-email': { id: 'shipping-email', label: 'Shipping email scan' },
 });
 
 const store = () => (typeof localStorage === 'undefined' ? null : localStorage);

@@ -180,8 +180,10 @@ import {
   mergePostageCandidates,
   needsAmount,
   normalizeCanadaPostShipment,
+  normalizeShippingEmail,
   postageCandidateRef,
 } from '../lib/postage-intake.js';
+import { parseShippingEmail, shippingEmailQuery } from '../lib/shipping-email.js';
 import {
   assessLiveShippingReadiness,
   inspectZonosAccountKey,
@@ -1513,7 +1515,7 @@ function writeTrackingBackToOrders(expenses = []) {
 }
 
 /** The card announcing labels bought elsewhere that filed themselves. */
-function showPostageSweepAlert({ filed, linked, blank, needsReview }) {
+function showPostageSweepAlert({ filed, linked, blank, needsReview, source = 'Canada Post' }) {
   const labels = `${filed} label${filed === 1 ? '' : 's'}`;
   const parts = [];
   if (linked > 0) parts.push(`${linked} matched to ${linked === 1 ? 'its order' : 'their orders'}`);
@@ -1521,9 +1523,11 @@ function showPostageSweepAlert({ filed, linked, blank, needsReview }) {
   else if (needsReview > 0) parts.push(`${needsReview} ${needsReview === 1 ? 'needs' : 'need'} you`);
 
   pushAppAlert({
-    id: 'postage-sweep',
+    // Keyed per source, so a Canada Post sweep and an email sweep finding
+    // labels minutes apart do not overwrite each other's news.
+    id: `postage-sweep-${source.replace(/[^a-z]+/gi, '-').toLowerCase()}`,
     icon: '📮',
-    title: `${labels} added from Canada Post`,
+    title: `${labels} added from ${source}`,
     detail: parts.length
       ? `Bought outside the app — ${parts.join(', ')}.`
       : 'Bought outside the app and added to your books.',
@@ -1536,6 +1540,164 @@ function startCanadaPostSweep() {
   if (_cpSweepStarted || typeof window === 'undefined') return;
   _cpSweepStarted = true;
   startWatch(() => { sweepCanadaPostShipments(); }, { intervalMs: CP_SWEEP_INTERVAL_MS });
+}
+
+// ─── The carrier email, for everything Canada Post cannot be asked about ──
+//
+// The sweep above covers labels on the Canada Post account. Another courier's
+// website is not on it, and neither is a Canada Post purchase made outside that
+// customer number. What those leave is an email.
+//
+// This reuses the receipt scanner's Gmail pipeline wholesale — the search, the
+// batched body fetch, both already built and both already talking to an Apps
+// Script endpoint that takes a client-supplied query. Nothing new crosses to
+// the script, so there is no version bump and nothing to redeploy.
+//
+// Reading is deterministic: lib/shipping-email.js finds the tracking number and
+// the labelled total with regexes, and an email it cannot crack is left for the
+// scanner's AI path rather than half-read. That keeps a five-minute background
+// job free of per-email AI cost, makes the same email parse the same way every
+// time, and means no figure in the ledger was ever invented by a model.
+
+const EMAIL_SWEEP_INTERVAL_MS = 30 * 60 * 1000;
+const EMAIL_SWEEP_COLD_START_DAYS = 14;
+const EMAIL_SWEEP_LAST_KEY = 'lm-shipping-email-sweep-last';
+
+let _emailSweepStarted = false;
+let _emailSweeping = false;
+
+function readEmailSweepStamp() {
+  try { return Number(localStorage.getItem(EMAIL_SWEEP_LAST_KEY)) || 0; } catch (_) { return 0; }
+}
+
+function writeEmailSweepStamp(at) {
+  try { localStorage.setItem(EMAIL_SWEEP_LAST_KEY, String(at)); } catch (_) { /* private mode */ }
+}
+
+async function gmailJson(action, params) {
+  const url = `${sheetsUrl}${sheetsUrl.includes('?') ? '&' : '?'}action=${action}&${params}`;
+  const res = await fetch(url, { method: 'GET', mode: 'cors' });
+  if (!res.ok) {
+    const err = new Error(`Gmail search failed (${res.status})`);
+    err.status = res.status;
+    throw err;
+  }
+  const data = await res.json();
+  // Apps Script reports its own failures as HTTP 200 plus {error}, so a bad
+  // query or a stale deployment arrives looking like a success.
+  if (data && data.error) throw new Error(String(data.error));
+  return data || {};
+}
+
+/**
+ * Look for labels a carrier emailed about, and file the ones it can read.
+ *
+ * Only emails carrying a verifiable tracking number are filed, and only ones
+ * not already in the ledger under that number — which is also what stops this
+ * and the Canada Post sweep filing the same Canada Post label twice.
+ */
+async function sweepShippingEmails({ force = false } = {}) {
+  const configured = !!sheetsUrl;
+  const { online, visible } = browserWatchState();
+  const due = force
+    ? configured && online && !_emailSweeping
+    : dueForCheck({
+      lastCheckedAt: readEmailSweepStamp(),
+      now: Date.now(),
+      intervalMs: effectiveInterval(
+        EMAIL_SWEEP_INTERVAL_MS,
+        integrationBackoffMs('shipping-email', EMAIL_SWEEP_INTERVAL_MS),
+      ),
+      online, configured, visible, busy: _emailSweeping,
+    });
+  if (!due) return null;
+
+  _emailSweeping = true;
+  try {
+    const last = readEmailSweepStamp();
+    const since = new Date(last
+      // A day of overlap: an email can arrive between a sweep starting and
+      // finishing, and a duplicate is caught by tracking number anyway whereas
+      // a missed label is silent.
+      ? last - 86400000
+      : Date.now() - EMAIL_SWEEP_COLD_START_DAYS * 86400000).toISOString().slice(0, 10);
+
+    const found = await gmailJson('listReceiptEmails',
+      `limit=25&q=${encodeURIComponent(shippingEmailQuery({ since }))}`);
+    const ids = (found.emails || []).map(email => cpText(email?.id)).filter(Boolean);
+    if (!ids.length) {
+      writeEmailSweepStamp(Date.now());
+      noteIntegrationSuccess('shipping-email');
+      return { filed: 0, linked: 0, blank: 0, stamped: 0 };
+    }
+
+    const bodies = await gmailJson('getEmailContents', `ids=${encodeURIComponent(ids.join(','))}`);
+    const known = new Set((TAX_CENTER.businessExpenses || [])
+      .map(expense => cpText(expense?.ref)).filter(Boolean));
+    const knownOrders = getShippingReconciliationOrders();
+
+    let filed = 0;
+    let blank = 0;
+    (bodies.emails || []).forEach(email => {
+      if (!email) return;
+      const parsed = parseShippingEmail({
+        subject: email.subject || '',
+        body: email.body || email.plainBody || '',
+        date: email.date || '',
+        from: email.from || '',
+      });
+      // Null means no verifiable tracking number — newsletters, delivery
+      // notices, the storefront's own order mail. Left alone rather than filed
+      // half-read; the scanner's AI path is where a stubborn one goes.
+      if (!parsed) return;
+
+      const candidate = normalizeShippingEmail(parsed, { messageId: email.id });
+      const ref = postageCandidateRef(candidate);
+      if (!ref || known.has(ref)) return;
+      known.add(ref);
+
+      const expense = buildPostageExpense(candidate);
+      Object.assign(expense, reconcileShippingExpense({
+        recipientName: expense.recipientName,
+        recipientPostal: expense.recipientPostal,
+        trackingNumber: expense.trackingNumber,
+        date: expense.date,
+      }, knownOrders));
+      if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
+      TAX_CENTER.businessExpenses.unshift(expense);
+      filed++;
+      if (needsAmount(candidate)) blank++;
+    });
+
+    writeEmailSweepStamp(Date.now());
+    noteIntegrationSuccess('shipping-email');
+
+    if (filed) {
+      const linked = applyConfidentShippingLinks();
+      // The tracking number belongs on the order too, not only on the expense.
+      const stamped = writeTrackingBackToOrders(TAX_CENTER.businessExpenses || []);
+      await saveTaxCenter().catch(e => console.warn('Shipping email sweep save failed', e));
+      renderTaxCenter();
+      renderShippingAnalysisHub();
+      showPostageSweepAlert({
+        filed, linked, blank, needsReview: reconciliationBacklog(), source: 'your email',
+      });
+      return { filed, linked, blank, stamped };
+    }
+    return { filed: 0, linked: 0, blank: 0, stamped: 0 };
+  } catch (error) {
+    console.warn('Shipping email sweep failed', error);
+    noteIntegrationFailure('shipping-email', error, { online, configured });
+    return null;
+  } finally {
+    _emailSweeping = false;
+  }
+}
+
+function startShippingEmailSweep() {
+  if (_emailSweepStarted || typeof window === 'undefined') return;
+  _emailSweepStarted = true;
+  startWatch(() => { sweepShippingEmails(); }, { intervalMs: EMAIL_SWEEP_INTERVAL_MS });
 }
 
 const SHIPPO_WATCH_INTERVAL_MS = 5 * 60 * 1000;
@@ -9192,6 +9354,8 @@ export {
   startShippoLabelWatch,
   sweepCanadaPostShipments,
   startCanadaPostSweep,
+  sweepShippingEmails,
+  startShippingEmailSweep,
   reconciliationBacklog,
   applyOrderPrefill,
   applyOrderParcelPlan,

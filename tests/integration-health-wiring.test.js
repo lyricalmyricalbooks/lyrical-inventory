@@ -119,14 +119,14 @@ describe('the mark that outlives the card', () => {
     expect(indexContent).toContain('data-health-badge="bigcartel"');
     // The Tax Centre hosts two shipping services, so one mark stands for both
     // rather than a row of identical dots saying the same thing twice.
-    expect(indexContent).toContain('data-health-badge="shippo,canadapost"');
+    expect(indexContent).toContain('data-health-badge="shippo,canadapost,shipping-email"');
     // Two places each, so it is visible wherever that tab is reached from.
     expect(indexContent.match(/data-health-badge="bigcartel"/g)).toHaveLength(2);
-    expect(indexContent.match(/data-health-badge="shippo,canadapost"/g)).toHaveLength(2);
+    expect(indexContent.match(/data-health-badge="shippo,canadapost,shipping-email"/g)).toHaveLength(2);
   });
 
   it('starts hidden and is announced to a screen reader', () => {
-    expect(indexContent).toMatch(/data-health-badge="shippo,canadapost"[^>]*aria-label="[^"]+"/);
+    expect(indexContent).toMatch(/data-health-badge="shippo,canadapost,shipping-email"[^>]*aria-label="[^"]+"/);
     expect(indexContent).toMatch(/class="health-badge"[^>]*hidden/);
   });
 

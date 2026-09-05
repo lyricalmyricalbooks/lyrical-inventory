@@ -262,6 +262,89 @@ describe('the Canada Post sweep only ever reads', () => {
   });
 
   it('marks the Tax Centre tab for either shipping service', () => {
-    expect(indexContent).toContain('data-health-badge="shippo,canadapost"');
+    expect(indexContent).toContain('data-health-badge="shippo,canadapost,shipping-email"');
+  });
+});
+
+describe('the carrier email sweep, for what Canada Post cannot be asked about', () => {
+  const sweep = appSource.slice(
+    appSource.indexOf('async function sweepShippingEmails'),
+    appSource.indexOf('function startShippingEmailSweep'),
+  );
+
+  it('searches Gmail through the scanner that already exists', () => {
+    // Reusing listReceiptEmails and getEmailContents is what keeps the Apps
+    // Script unchanged: the query comes from the client, so there is no version
+    // bump and nothing for the publisher to redeploy.
+    expect(sweep).toContain("gmailJson('listReceiptEmails'");
+    expect(sweep).toContain("gmailJson('getEmailContents'");
+    expect(sweep).toContain('shippingEmailQuery({ since })');
+  });
+
+  it('treats a script that answers 200 with an error as a failure', () => {
+    // Apps Script reports a bad query or a stale deployment this way, so
+    // without the check a broken scan looks like a scan that found nothing.
+    const json = appSource.slice(
+      appSource.indexOf('async function gmailJson'),
+      appSource.indexOf('async function sweepShippingEmails'),
+    );
+    expect(json).toContain('if (data && data.error) throw new Error(String(data.error));');
+  });
+
+  it('files nothing from an email it could not read', () => {
+    // parseShippingEmail answers null when there is no verifiable tracking
+    // number — a newsletter, a delivery notice, the storefront's own order mail.
+    expect(sweep).toContain('if (!parsed) return;');
+  });
+
+  it('grades each label as it files it, exactly as the Canada Post sweep does', () => {
+    expect(sweep).toContain('reconcileShippingExpense({');
+    expect(sweep).toContain('applyConfidentShippingLinks()');
+    expect(sweep).toContain('writeTrackingBackToOrders(');
+  });
+
+  it('does not file a label the Canada Post sweep already filed', () => {
+    // Both can see the same Canada Post label. The tracking number is the ref
+    // both key on, so whichever arrives second finds it already there.
+    expect(sweep).toContain('known.has(ref)');
+    expect(sweep).toContain('known.add(ref)');
+    expect(sweep).toContain('postageCandidateRef(candidate)');
+  });
+
+  it('overlaps its date window by a day, because a missed email is silent', () => {
+    expect(sweep).toContain('86400000');
+  });
+
+  it('reports its own health under its own name', () => {
+    // Its own name, not Canada Post's: an expired Apps Script deployment and a
+    // refused Canada Post key are different problems with different fixes.
+    expect(sweep).toContain("noteIntegrationSuccess('shipping-email')");
+    expect(sweep).toContain("noteIntegrationFailure('shipping-email', error");
+    expect(sweep).toContain("integrationBackoffMs('shipping-email'");
+  });
+
+  it('says which source the labels came from', () => {
+    // Two sweeps finding labels minutes apart would otherwise overwrite each
+    // other's card, and the publisher would see one number for two events.
+    expect(sweep).toContain("source: 'your email'");
+    const alert = appSource.slice(
+      appSource.indexOf('function showPostageSweepAlert'),
+      appSource.indexOf('function startCanadaPostSweep'),
+    );
+    expect(alert).toContain('id: `postage-sweep-${source.replace(');
+  });
+
+  it('is started at boot and reachable from the Check now button', () => {
+    expect(appSource).toContain('startShippingEmailSweep();');
+    expect(appSource).toContain("if (id === 'shipping-email') return sweepShippingEmails({ force: true });");
+  });
+
+  it('runs through the shared scheduler rather than its own timers', () => {
+    const start = appSource.slice(
+      appSource.indexOf('function startShippingEmailSweep'),
+      appSource.indexOf('const SHIPPO_WATCH_INTERVAL_MS'),
+    );
+    expect(start).toContain('startWatch(');
+    expect(start).toContain('if (_emailSweepStarted');
   });
 });
