@@ -360,6 +360,123 @@ tbody.sys-long-list > tr {
   display: inline-block;
 }
 
+/* ── New-order notification ────────────────────────────────────────────────
+   Sibling of the sync chip and built from the same vocabulary, but it answers a
+   different question: the chip says why the connection is the problem, this says
+   a sale just happened. Top-right, the one corner not already claimed — the
+   toast has bottom-right, the chip has bottom-left — and fixed rather than
+   sticky for the same reason as the chip: it must never disturb --sticky-top or
+   push the page down when it appears.
+
+   Positive rather than warning-toned: a sale is good news, and the amber
+   vocabulary in this app already means "something needs your attention". */
+.new-order-alert {
+  position: fixed;
+  top: var(--space-4);
+  right: var(--space-4);
+  z-index: var(--z-overlay);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  max-width: min(360px, calc(100vw - var(--space-6)));
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-default);
+  border-left-width: 3px;
+  border-left-color: var(--status-positive);
+  border-radius: var(--r2);
+  background: var(--surface-raised);
+  box-shadow: var(--elev-3);
+  animation: new-order-alert-in var(--dur-base) var(--ease-entrance) both;
+}
+/* `hidden` must beat the `display:flex` above, or it is always painted. */
+.new-order-alert[hidden] { display: none; }
+
+.new-order-alert-ico {
+  flex-shrink: 0;
+  font-size: var(--text-md);
+  line-height: var(--leading-tight);
+}
+.new-order-alert-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.new-order-alert-title {
+  font-family: 'Syne', sans-serif;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--content-primary);
+}
+.new-order-alert-detail {
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+  color: var(--content-secondary);
+  text-wrap: pretty;
+}
+.new-order-alert-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.new-order-alert-actions .btn { margin: 0; }
+.new-order-alert-actions [hidden] { display: none !important; }
+
+/* Full target: this is pressed to clear a card that is sitting over the page,
+   often on a phone, and a 20px × is the classic mis-tap. */
+.new-order-alert-close {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--r);
+  background: transparent;
+  color: var(--content-muted);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition:
+    transform var(--dur-fast) var(--ease-standard),
+    background-color var(--dur-fast) var(--ease-standard),
+    color var(--dur-fast) var(--ease-standard);
+}
+.new-order-alert-close::after {
+  content: '';
+  position: absolute;
+  inset: -10px;
+  min-width: var(--target-min);
+  min-height: var(--target-min);
+}
+.new-order-alert-close:hover {
+  background: var(--surface-sunken);
+  border-color: var(--border-default);
+  color: var(--content-primary);
+}
+.new-order-alert-close:active { transform: scale(.975); }
+
+@keyframes new-order-alert-in {
+  from { opacity: 0; transform: translateY(calc(var(--space-2) * -1)); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* On a phone the card spans the width rather than floating in a corner it would
+   otherwise cover half of. */
+@media (max-width: 640px) {
+  .new-order-alert {
+    left: var(--space-3);
+    right: var(--space-3);
+    top: max(var(--space-3), env(safe-area-inset-top));
+    max-width: none;
+  }
+}
+
 @keyframes sync-chip-in {
   from { opacity: 0; transform: translateY(var(--space-2)); }
   to   { opacity: 1; transform: translateY(0); }
@@ -371,6 +488,8 @@ tbody.sys-long-list > tr {
 /* A status indicator must never be the thing that makes someone motion-sick:
    the entrance and the spinner both stop, the message itself does not. */
 @media (prefers-reduced-motion: reduce) {
+  .new-order-alert { animation: none; }
+  .new-order-alert-close:active { transform: none; }
   .sync-chip { animation: none; }
   .sync-chip.is-pending .sync-chip-ico { animation: none; }
   .sync-chip-action:hover,

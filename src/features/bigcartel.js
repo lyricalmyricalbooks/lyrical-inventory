@@ -47,6 +47,13 @@ import {
   shippingPurchaseRowPayload,
 } from './shipping.js';
 import { describeParcelPlan, orderParcelPlan } from '../lib/order-parcel-prefill.js';
+import {
+  describeNewOrders,
+  dueForRefresh,
+  mergeSeenOrders,
+  newOrdersSince,
+  seedSeenOrders,
+} from '../lib/order-watch.js';
 import { escapeHtml } from '../lib/html.js';
 import { resolveCountryCode } from '../lib/countries.js';
 import { fmt, getBookCurrencyCode } from '../lib/money.js';
@@ -1524,6 +1531,10 @@ async function checkBigCartelLedgerGaps({ silent = false } = {}) {
     _bcGapConflicts = findRecoveredOrderConflicts(bcOrders, allWebsiteLedgerEntries());
     writeBcGapCache({ checkedAt: Date.now(), result: _bcGapResult, conflicts: _bcGapConflicts });
 
+    // Every path that talks to the storefront comes through here, so this is
+    // the one place a sale nobody has seen yet can be noticed.
+    announceNewBigCartelOrders(bcOrders);
+
     renderBigCartelLedgerGaps();
     renderBigCartelGapBadge();
     if (!silent) {
@@ -1562,6 +1573,186 @@ async function autoCheckBigCartelLedgerGaps() {
     return;
   }
   await checkBigCartelLedgerGaps({ silent: true });
+}
+
+// ─── Watching for orders that arrive while the app is open ────────────────
+//
+// The storefront check ran once, at boot, and said nothing. That is fine for a
+// tab badge and useless for a sale: a publisher who opens the app at nine and
+// leaves it open all day never hears about the order placed at eleven, and the
+// only evidence when they finally reload is a small number on a tab they had no
+// reason to look at.
+//
+// So the app keeps asking, and when the answer contains a sale it has not seen
+// before it says so out loud. The rules for all of that — what counts as new,
+// when another request is worth making, and what to say — live in
+// lib/order-watch.js, where they can be tested without a browser. What is here
+// is the storage, the timers and the card.
+
+const BC_SEEN_ORDERS_KEY = 'lm-bc-seen-orders';
+const BC_ORDER_WATCH_INTERVAL_MS = 5 * 60 * 1000;
+
+let _bcWatchStarted = false;
+let _bcLastOrderCheckAt = 0;
+let _newOrderAlert = null;
+
+function readSeenOrders() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(BC_SEEN_ORDERS_KEY) || 'null');
+    return Array.isArray(raw) ? raw : null;
+  } catch (e) { return null; }
+}
+
+function writeSeenOrders(nums) {
+  try { localStorage.setItem(BC_SEEN_ORDERS_KEY, JSON.stringify(nums)); } catch (e) { /* storage full or blocked */ }
+}
+
+/**
+ * Notice the sales in this batch that have never been announced, and say so.
+ *
+ * The first run is deliberately silent: with nothing remembered, every order on
+ * the store is "new", and a publisher installing this against three years of
+ * history should be told about their next sale, not woken up by all of them.
+ * That run seeds the list instead, so the very next order is the first thing
+ * this ever mentions.
+ */
+function announceNewBigCartelOrders(bcOrders = []) {
+  const stored = readSeenOrders();
+  const seeded = Array.isArray(stored);
+
+  if (!seeded) {
+    writeSeenOrders(seedSeenOrders(bcOrders));
+    return [];
+  }
+
+  const fresh = newOrdersSince(bcOrders, stored, { seeded: true });
+  if (!fresh.length) return [];
+
+  writeSeenOrders(mergeSeenOrders(stored, fresh.map(entry => entry.num)));
+  showNewOrderAlert(fresh);
+  return fresh;
+}
+
+/**
+ * The card that says a sale came in.
+ *
+ * Deliberately not a toast. A toast is three seconds long and this exists
+ * precisely for the moments nobody was watching the screen — a notification you
+ * have to already be looking at to see is not a notification. It stays until it
+ * is dismissed or acted on.
+ *
+ * A single order gets the shipping button, because one press from here now
+ * records the sale, fills the whole label form and fetches the rates. Several
+ * get the review list instead: there is no single order to ship.
+ */
+function showNewOrderAlert(entries) {
+  const card = $('new-order-alert');
+  if (!card || !entries?.length) return;
+
+  // Orders that arrive in separate batches accumulate rather than replacing one
+  // another — the second sale of the morning must not erase the first before
+  // the publisher has read it.
+  const merged = [...(_newOrderAlert?.entries || [])];
+  entries.forEach(entry => {
+    if (!merged.some(existing => existing.num === entry.num)) merged.push(entry);
+  });
+  _newOrderAlert = { entries: merged };
+
+  const said = describeNewOrders(merged);
+  const title = $('new-order-alert-title');
+  const detail = $('new-order-alert-detail');
+  const ship = $('new-order-alert-ship');
+  const review = $('new-order-alert-review');
+
+  if (title) title.textContent = said.title;
+  if (detail) detail.textContent = said.detail;
+  if (ship) ship.hidden = merged.length !== 1;
+  if (review) review.textContent = merged.length === 1 ? 'Review' : 'Review orders';
+
+  card.hidden = false;
+}
+
+function dismissNewOrderAlert(event) {
+  if (event) event.stopPropagation();
+  _newOrderAlert = null;
+  const card = $('new-order-alert');
+  if (card) card.hidden = true;
+}
+
+/** Ship the one new order straight from the card — the whole flow, one press. */
+function shipNewOrderFromAlert(event) {
+  if (event) event.stopPropagation();
+  const entry = _newOrderAlert?.entries?.[0];
+  dismissNewOrderAlert();
+  if (!entry) return;
+  prefillShippingFromBigCartelOrder(entry.orderId || entry.num.replace(/^#/, ''));
+}
+
+/** Open the storefront tab to work through them. */
+function reviewNewOrdersFromAlert(event) {
+  if (event) event.stopPropagation();
+  dismissNewOrderAlert();
+  switchTab('bigcartel');
+}
+
+/**
+ * Ask the storefront again, but only when it would not be wasted.
+ *
+ * Every gate lives in dueForRefresh(); this supplies the state it judges.
+ * `_bcGapChecking` is passed as `busy` so a poll that lands while the publisher
+ * is mid-check does not queue a second identical request behind it.
+ */
+async function refreshBigCartelOrdersIfDue({ force = false } = {}) {
+  const config = await loadBigCartelConfig().catch(() => null);
+  const ready = bigCartelConfigured(config) && !!sheetsUrl;
+  const due = force
+    ? ready && !_bcGapChecking && (typeof navigator === 'undefined' || navigator.onLine !== false)
+    : dueForRefresh({
+      lastCheckedAt: _bcLastOrderCheckAt,
+      now: Date.now(),
+      intervalMs: BC_ORDER_WATCH_INTERVAL_MS,
+      online: typeof navigator === 'undefined' || navigator.onLine !== false,
+      configured: ready,
+      visible: typeof document === 'undefined' || document.visibilityState !== 'hidden',
+      busy: _bcGapChecking,
+    });
+  if (!due) return false;
+
+  _bcLastOrderCheckAt = Date.now();
+  try {
+    await checkBigCartelLedgerGaps({ silent: true });
+    return true;
+  } catch (error) {
+    // A failed poll is not worth interrupting anyone over; the next one will
+    // try again, and the sync chip already reports a dead connection.
+    console.warn('Big Cartel order watch failed', error);
+    return false;
+  }
+}
+
+/**
+ * Start watching. Three triggers, because a PWA is used in three ways: left
+ * open on a desk (the timer), switched back to from another app (visibility),
+ * and picked up again after the signal came back (online).
+ */
+function startBigCartelOrderWatch() {
+  if (_bcWatchStarted || typeof window === 'undefined') return;
+  _bcWatchStarted = true;
+  // Seeded from when the storefront was actually last asked, not from now: the
+  // boot check is often served from a cache hours old, and starting the clock
+  // here would mean the app opens on a stale answer and sits on it.
+  _bcLastOrderCheckAt = Number(readBcGapCache()?.checkedAt) || 0;
+
+  const poll = () => { refreshBigCartelOrdersIfDue(); };
+
+  poll();
+  window.setInterval(poll, BC_ORDER_WATCH_INTERVAL_MS);
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') poll();
+    });
+  }
+  window.addEventListener('online', poll);
 }
 
 /** The count badge on the Big Cartel tab button and the Website orders strip. */
@@ -2156,6 +2347,13 @@ async function triggerBigCartelShippingSync() {
 }
 export {
   addBigCartelOrderToLedger,
+  announceNewBigCartelOrders,
+  showNewOrderAlert,
+  dismissNewOrderAlert,
+  shipNewOrderFromAlert,
+  reviewNewOrdersFromAlert,
+  refreshBigCartelOrdersIfDue,
+  startBigCartelOrderWatch,
   toggleBigCartelGapPanel,
   undoBigCartelGapDismiss,
   autoCheckBigCartelLedgerGaps,

@@ -332,6 +332,11 @@ import {
   reconcileApplyBigCartel,
   addBigCartelOrderToLedger,
   autoCheckBigCartelLedgerGaps,
+  startBigCartelOrderWatch,
+  refreshBigCartelOrdersIfDue,
+  dismissNewOrderAlert,
+  shipNewOrderFromAlert,
+  reviewNewOrdersFromAlert,
   checkBigCartelLedgerGaps,
   dismissBigCartelGap,
   extractBigCartelAddress,
@@ -14890,7 +14895,11 @@ async function boot(forcedBook) {
         // is comparing against), silent by design, and served from a recent
         // cache when there is one. A website order that never reached the app
         // is invisible everywhere until something goes looking for it.
-        autoCheckBigCartelLedgerGaps().catch(() => { /* offline or not configured */ });
+        autoCheckBigCartelLedgerGaps()
+          // Then keep asking. The boot check alone leaves an app that stays
+          // open all day blind to every sale after the first minute of it.
+          .then(startBigCartelOrderWatch)
+          .catch(() => { /* offline or not configured */ });
       });
       updateRoleToggleButton();
       syncRoleUI();
@@ -22323,6 +22332,10 @@ window.renumberPlaceholderOrder = renumberPlaceholderOrder;
 window.voidPlaceholderDuplicate = voidPlaceholderDuplicate;
 window.renderBigCartelLedgerGaps = renderBigCartelLedgerGaps;
 window.autoCheckBigCartelLedgerGaps = autoCheckBigCartelLedgerGaps;
+window.dismissNewOrderAlert = dismissNewOrderAlert;
+window.shipNewOrderFromAlert = shipNewOrderFromAlert;
+window.reviewNewOrdersFromAlert = reviewNewOrdersFromAlert;
+window.refreshBigCartelOrdersIfDue = refreshBigCartelOrdersIfDue;
 window.switchBigCartelSubTab = switchBigCartelSubTab;
 window.loadBigCartelData = loadBigCartelData;
 window.renderBigCartelTab = renderBigCartelTab;
