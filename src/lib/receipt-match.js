@@ -128,12 +128,17 @@ function dayGap(isoA, isoB) {
  * Amount is weighted highest because it is the least ambiguous signal — two
  * expenses on the same day from the same vendor for different amounts are
  * genuinely different receipts, and the amount is what tells them apart.
+ *
+ * `precomputed` lets `bestMatch()` derive the file's date and amount once per
+ * file instead of once per (file × expense) pair — both only depend on
+ * `fileInfo`, and `amountFromName` compiles a fresh regex on every call, so
+ * scoring against N expenses was redoing the same filename parse N times.
  */
-export function scoreMatch(fileInfo, expense) {
+export function scoreMatch(fileInfo, expense, precomputed = {}) {
   const reasons = [];
   let score = 0;
 
-  const fileDate = fileInfo.date || dateFromName(fileInfo.name);
+  const fileDate = precomputed.fileDate ?? (fileInfo.date || dateFromName(fileInfo.name));
   const gap = dayGap(fileDate, expense.date);
   if (gap !== null) {
     if (gap === 0) { score += 0.35; reasons.push('same date'); }
@@ -141,9 +146,11 @@ export function scoreMatch(fileInfo, expense) {
     else if (gap <= 7) { score += 0.10; reasons.push('same week'); }
   }
 
-  const money = fileInfo.amount != null
-    ? { amount: fileInfo.amount, currency: fileInfo.currency || '' }
-    : amountFromName(fileInfo.name);
+  const money = precomputed.money !== undefined
+    ? precomputed.money
+    : (fileInfo.amount != null
+      ? { amount: fileInfo.amount, currency: fileInfo.currency || '' }
+      : amountFromName(fileInfo.name));
   if (money) {
     const expAmount = Number(expense.origAmount ?? expense.amount);
     if (Number.isFinite(expAmount) && Math.abs(expAmount - money.amount) < 0.01) {
@@ -168,8 +175,16 @@ export function scoreMatch(fileInfo, expense) {
  * coin flip, and the review table should say so rather than pick.
  */
 export function bestMatch(fileInfo, expenses, threshold = CONFIDENCE_THRESHOLD) {
+  // Parse the filename once for the whole expense list, not once per expense
+  // scored (see the note on scoreMatch's `precomputed` param).
+  const precomputed = {
+    fileDate: fileInfo.date || dateFromName(fileInfo.name),
+    money: fileInfo.amount != null
+      ? { amount: fileInfo.amount, currency: fileInfo.currency || '' }
+      : amountFromName(fileInfo.name),
+  };
   const scored = (expenses || [])
-    .map(exp => ({ exp, ...scoreMatch(fileInfo, exp) }))
+    .map(exp => ({ exp, ...scoreMatch(fileInfo, exp, precomputed) }))
     .sort((a, b) => b.score - a.score);
 
   if (!scored.length) return { match: null, score: 0, reasons: [], confident: false, ambiguous: false };

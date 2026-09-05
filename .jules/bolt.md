@@ -26,3 +26,7 @@
 ## 2025-03-02 - O(N) max finding instead of O(N log N) sorting
 **Learning:** Using chained array methods like \`slice().sort((a,b) => ...)[0]\` to find a minimum or maximum element introduces an unnecessary $O(N \log N)$ time complexity and an extra array allocation.
 **Action:** Replace these operations with a single imperative $O(N)$ loop to find the minimum or maximum element. It avoids allocations and is substantially faster.
+
+## 2026-09-05 - Per-expense recompute of per-file data in receipt matching
+**Learning:** `receipt-match.js`'s `bestMatch()` maps every expense through `scoreMatch(fileInfo, exp)`, but `scoreMatch` derived `fileDate`/`money` from `fileInfo.name` fresh on every call — work that only depends on the file, not the expense being scored. `amountFromName` also compiles a new `RegExp` per call, so this was recompiling the same regex against the same filename once per expense (O(files × expenses) regex compiles instead of O(files)). A synthetic benchmark (80 files × 400 expenses) went from ~168ms/run to ~120ms/run (~29% faster) after hoisting.
+**Action:** When a batch scoring/matching function loops a per-item scorer over a candidate list, check whether the scorer recomputes anything derived only from the fixed item (not the candidate) — hoist that into the caller and pass it in, rather than letting it get recomputed once per candidate.
