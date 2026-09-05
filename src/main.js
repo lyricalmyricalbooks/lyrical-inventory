@@ -180,6 +180,7 @@ import {
   refreshUnsavedMarkers,
   validateFields,
 } from './lib/modal.js';
+import { dismissAppAlert } from './lib/app-alert.js';
 import { followableUrl } from './lib/receipt-links.js';
 import {
   PAYMENT_TYPE_DIRECT_TO_ARTIST,
@@ -411,6 +412,9 @@ import {
   onShippoPreFillDestChange,
   onShippoBookPresetChange,
   onShippoAutoQuoteToggle,
+  linkConfidentShippingMatchesNow,
+  openShippingReconciliationFromAlert,
+  startShippoLabelWatch,
   applyOrderPrefill,
   isCanadaPostRate,
   moneyAmount,
@@ -14900,6 +14904,11 @@ async function boot(forcedBook) {
           // open all day blind to every sale after the first minute of it.
           .then(startBigCartelOrderWatch)
           .catch(() => { /* offline or not configured */ });
+        // The other half of the same journey: labels bought on Shippo's own
+        // site, which the app could otherwise only learn about four clicks deep
+        // in the Tax Centre. Started after the books load because linking a
+        // label needs the order history to link it to.
+        startShippoLabelWatch();
       });
       updateRoleToggleButton();
       syncRoleUI();
@@ -22333,6 +22342,9 @@ window.voidPlaceholderDuplicate = voidPlaceholderDuplicate;
 window.renderBigCartelLedgerGaps = renderBigCartelLedgerGaps;
 window.autoCheckBigCartelLedgerGaps = autoCheckBigCartelLedgerGaps;
 window.dismissNewOrderAlert = dismissNewOrderAlert;
+window.dismissAppAlert = dismissAppAlert;
+window.linkConfidentShippingMatchesNow = linkConfidentShippingMatchesNow;
+window.openShippingReconciliationFromAlert = openShippingReconciliationFromAlert;
 window.shipNewOrderFromAlert = shipNewOrderFromAlert;
 window.reviewNewOrdersFromAlert = reviewNewOrdersFromAlert;
 window.refreshBigCartelOrdersIfDue = refreshBigCartelOrdersIfDue;

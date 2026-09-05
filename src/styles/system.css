@@ -370,11 +370,33 @@ tbody.sys-long-list > tr {
 
    Positive rather than warning-toned: a sale is good news, and the amber
    vocabulary in this app already means "something needs your attention". */
-.new-order-alert {
+/* The corner itself. Fixed here rather than on each card so several can stack
+   instead of landing on top of one another — the storefront watch and the label
+   watch both report into it. `pointer-events: none` on the region and `auto` on
+   the cards, or an empty corner would silently eat clicks on whatever is under
+   it. */
+.app-alert-region {
   position: fixed;
   top: var(--space-4);
   right: var(--space-4);
   z-index: var(--z-overlay);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+  pointer-events: none;
+}
+#app-alert-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+#app-alert-stack[hidden] { display: none; }
+
+.app-alert,
+.new-order-alert {
+  pointer-events: auto;
   display: flex;
   align-items: flex-start;
   gap: var(--space-3);
@@ -391,17 +413,20 @@ tbody.sys-long-list > tr {
 /* `hidden` must beat the `display:flex` above, or it is always painted. */
 .new-order-alert[hidden] { display: none; }
 
+.app-alert-ico,
 .new-order-alert-ico {
   flex-shrink: 0;
   font-size: var(--text-md);
   line-height: var(--leading-tight);
 }
+.app-alert-body,
 .new-order-alert-body {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
   min-width: 0;
 }
+.app-alert-title,
 .new-order-alert-title {
   font-family: 'Syne', sans-serif;
   font-size: var(--text-xs);
@@ -410,23 +435,28 @@ tbody.sys-long-list > tr {
   text-transform: uppercase;
   color: var(--content-primary);
 }
+.app-alert-detail,
 .new-order-alert-detail {
   font-size: var(--text-sm);
   line-height: var(--leading-snug);
   color: var(--content-secondary);
   text-wrap: pretty;
 }
+.app-alert-actions,
 .new-order-alert-actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
   margin-top: var(--space-2);
 }
+.app-alert-actions .btn,
 .new-order-alert-actions .btn { margin: 0; }
+.app-alert-actions [hidden],
 .new-order-alert-actions [hidden] { display: none !important; }
 
 /* Full target: this is pressed to clear a card that is sitting over the page,
    often on a phone, and a 20px × is the classic mis-tap. */
+.app-alert-close,
 .new-order-alert-close {
   flex-shrink: 0;
   display: inline-flex;
@@ -447,6 +477,7 @@ tbody.sys-long-list > tr {
     background-color var(--dur-fast) var(--ease-standard),
     color var(--dur-fast) var(--ease-standard);
 }
+.app-alert-close::after,
 .new-order-alert-close::after {
   content: '';
   position: absolute;
@@ -454,11 +485,13 @@ tbody.sys-long-list > tr {
   min-width: var(--target-min);
   min-height: var(--target-min);
 }
+.app-alert-close:hover,
 .new-order-alert-close:hover {
   background: var(--surface-sunken);
   border-color: var(--border-default);
   color: var(--content-primary);
 }
+.app-alert-close:active,
 .new-order-alert-close:active { transform: scale(.975); }
 
 @keyframes new-order-alert-in {
@@ -469,12 +502,15 @@ tbody.sys-long-list > tr {
 /* On a phone the card spans the width rather than floating in a corner it would
    otherwise cover half of. */
 @media (max-width: 640px) {
-  .new-order-alert {
+  .app-alert-region {
     left: var(--space-3);
     right: var(--space-3);
     top: max(var(--space-3), env(safe-area-inset-top));
-    max-width: none;
+    align-items: stretch;
   }
+  #app-alert-stack { align-items: stretch; }
+  .app-alert,
+  .new-order-alert { max-width: none; }
 }
 
 @keyframes sync-chip-in {
@@ -488,7 +524,9 @@ tbody.sys-long-list > tr {
 /* A status indicator must never be the thing that makes someone motion-sick:
    the entrance and the spinner both stop, the message itself does not. */
 @media (prefers-reduced-motion: reduce) {
+  .app-alert,
   .new-order-alert { animation: none; }
+  .app-alert-close:active,
   .new-order-alert-close:active { transform: none; }
   .sync-chip { animation: none; }
   .sync-chip.is-pending .sync-chip-ico { animation: none; }

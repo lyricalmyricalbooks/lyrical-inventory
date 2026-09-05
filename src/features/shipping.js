@@ -40,10 +40,12 @@ import {
   sheetsUrl,
   showToast,
   states,
+  switchTab,
   today,
 } from '../main.js';
 import { renderExpenses, saveReceiptToLocalFile, readShippingFieldsFromReceipt } from './receipts.js';
 import { openM, closeM, confirmDialog, promptDialog, validateFields, clearFieldErrors, fieldError, _prefersReducedMotion } from '../lib/modal.js';
+import { dismissAppAlert, pushAppAlert } from '../lib/app-alert.js';
 import {
   extractBigCartelAddress,
   getBigCartelIncluded,
@@ -51,7 +53,7 @@ import {
   hydrateShippingDestinationPhone,
   bigCartelData,
 } from './bigcartel.js';
-import { renderTaxCenter, saveTaxCenter } from './taxcentre.js';
+import { renderTaxCenter, saveTaxCenter, switchTaxCenterSubTab } from './taxcentre.js';
 import { escapeHtml } from '../lib/html.js';
 import {
   REGION_LABELS,
@@ -94,13 +96,20 @@ import {
 } from '../lib/postage-matching.js';
 import {
   applyShippoExpenseEnrichments,
+  autoLinkConfidentShippingMatches,
   enrichShippoExpense,
+  isUnresolvedShippoPostage,
   linkedShippingSummary,
   normalizeShippingOrderNumber,
   persistManualShippingLink,
   reconcileShippingExpense,
   stageShippoExpenseEnrichment,
+  writeShippingLink,
 } from '../lib/shipping-reconciliation.js';
+import {
+  describeImportedLabels,
+  dueForShippoCheck,
+} from '../lib/shippo-watch.js';
 import {
   describeInvoiceAvailability,
   invoiceIndexByTransaction,
@@ -741,10 +750,7 @@ function renderShippingReconciliationWorklist() {
   }
   if (panel) panel.hidden = false;
   if (openButton) openButton.hidden = true;
-  const expenses = (TAX_CENTER.businessExpenses || []).filter(expense =>
-    String(expense?.ref || '').startsWith('shippo:') &&
-    expense.shippingMatchStatus !== 'matched' && expense.shippingMatchStatus !== 'dismissed'
-  );
+  const expenses = (TAX_CENTER.businessExpenses || []).filter(isUnresolvedShippoPostage);
   const knownOrders = getShippingReconciliationOrders();
   count.textContent = `${expenses.length} to review`;
   if (!expenses.length) {
@@ -807,10 +813,7 @@ function openShippingReconciliation() {
 }
 
 async function clearShippingReconciliationList() {
-  const expenses = (TAX_CENTER.businessExpenses || []).filter(expense =>
-    String(expense?.ref || '').startsWith('shippo:') &&
-    expense.shippingMatchStatus !== 'matched' && expense.shippingMatchStatus !== 'dismissed'
-  );
+  const expenses = (TAX_CENTER.businessExpenses || []).filter(isUnresolvedShippoPostage);
   if (!expenses.length) {
     showToast('The reconciliation list is already clear', 'warn');
     return;
@@ -1022,11 +1025,7 @@ async function saveRecoverWebsiteOrder() {
  */
 async function autoLinkPostageForOrder(order) {
   if (!order || !order.num) return 0;
-  const candidates = (TAX_CENTER.businessExpenses || []).filter(expense =>
-    String(expense?.ref || '').startsWith('shippo:')
-    && expense.shippingMatchStatus !== 'matched'
-    && expense.shippingMatchStatus !== 'dismissed'
-  );
+  const candidates = (TAX_CENTER.businessExpenses || []).filter(isUnresolvedShippoPostage);
   if (!candidates.length) return 0;
 
   let linked = 0;
@@ -1155,12 +1154,211 @@ function applyShippoRefunds(refunds) {
   return added;
 }
 
-async function importShippoShippingFromApi() {
+/** How much postage is still waiting on a person. */
+function reconciliationBacklog() {
+  return (TAX_CENTER.businessExpenses || []).filter(isUnresolvedShippoPostage).length;
+}
+
+/**
+ * Link every label whose order is beyond reasonable doubt, and report how many.
+ *
+ * In-memory only. Both callers save immediately afterwards — the importer once
+ * for everything it wrote, the worklist button once for the batch — and a link
+ * that persisted itself here would turn one write into a dozen.
+ *
+ * Run over the whole ledger rather than one import's batch, because the guard
+ * that matters (no two labels claiming one order) cannot be judged from a batch
+ * alone, and because a label imported last week whose order only turned up
+ * today has exactly as much claim on being linked as one bought a minute ago.
+ */
+function applyConfidentShippingLinks() {
+  const expenses = (TAX_CENTER.businessExpenses || []).filter(isUnresolvedShippoPostage);
+  if (!expenses.length) return 0;
+  const links = autoLinkConfidentShippingMatches(expenses, getShippingReconciliationOrders());
+  links.forEach(({ expense, orderNumber }) => writeShippingLink(expense, orderNumber, 'recipient-auto'));
+  return links.length;
+}
+
+/**
+ * Link the confident matches sitting in the worklist right now.
+ *
+ * The list already had a clear-all, which dismisses rows rather than resolving
+ * them — useful for a backlog of labels that will never have an order, useless
+ * for the ordinary case where most of them plainly do. This is its counterpart:
+ * one press for everything the app would have linked on its own had it been
+ * watching at the time.
+ */
+async function linkConfidentShippingMatchesNow() {
+  const linked = applyConfidentShippingLinks();
+  if (!linked) {
+    showToast('Nothing here is a certain enough match to link on its own', 'warn');
+    return;
+  }
+  try {
+    await saveTaxCenter({ rethrow: true });
+  } catch (error) {
+    console.error('Saving automatic postage links failed', error);
+    showToast('Could not save those links — please try again', 'err');
+    return;
+  }
+  renderTaxCenter();
+  renderShippingAnalysisHub();
+  const left = reconciliationBacklog();
+  showToast(`✓ Linked ${linked} label${linked === 1 ? '' : 's'}${left ? ` — ${left} still need${left === 1 ? 's' : ''} you` : ''}`);
+}
+
+// ─── Watching for labels bought somewhere else ────────────────────────────
+//
+// A label bought on Shippo's website was invisible here until somebody went and
+// fetched it: four clicks into the Tax Centre, then two more per label in the
+// worklist, and nothing anywhere to say there was something to fetch. Postage
+// that is not in the ledger is money missing from the shipping P&L, so the cost
+// of not noticing is real.
+//
+// Same three triggers as the storefront order watch, for the same reasons, and
+// the same gates on when a request would be wasted. The rules live in
+// lib/shippo-watch.js; this is the timer and the card.
+
+const SHIPPO_WATCH_INTERVAL_MS = 5 * 60 * 1000;
+
+let _shippoWatchStarted = false;
+let _shippoLastCheckAt = 0;
+let _shippoChecking = false;
+
+/**
+ * Ask Shippo whether anything new has been bought, and file it if so.
+ *
+ * Reads page one only. Shippo returns transactions newest-first and the
+ * ledger's own refs are the dedupe surface, so in the steady state — nothing
+ * new since last time — this is a single request that writes nothing.
+ */
+async function refreshShippoLabelsIfDue({ force = false } = {}) {
+  const online = typeof navigator === 'undefined' || navigator.onLine !== false;
+  const configured = !!TAX_CENTER.settings?.shippoKey;
+  const due = force
+    ? configured && online && !_shippoChecking
+    : dueForShippoCheck({
+      lastCheckedAt: _shippoLastCheckAt,
+      now: Date.now(),
+      intervalMs: SHIPPO_WATCH_INTERVAL_MS,
+      online,
+      configured,
+      visible: typeof document === 'undefined' || document.visibilityState !== 'hidden',
+      busy: _shippoChecking,
+    });
+  if (!due) return null;
+
+  _shippoChecking = true;
+  _shippoLastCheckAt = Date.now();
+  try {
+    const result = await importShippoShippingFromApi({
+      silent: true, maxPages: 1, skipInvoices: true, skipRefunds: true,
+    });
+    if (result?.imported) showShippoLabelAlert(result);
+    return result;
+  } catch (error) {
+    // A failed check is not worth interrupting anyone over: the next one tries
+    // again, and the sync chip already reports a dead connection.
+    console.warn('Shippo label watch failed', error);
+    return null;
+  } finally {
+    _shippoChecking = false;
+  }
+}
+
+/** The card announcing labels that filed themselves. */
+function showShippoLabelAlert(result) {
+  const said = describeImportedLabels({
+    imported: result?.imported || 0,
+    linked: result?.autoLinked || 0,
+    needsReview: result?.needsReview || 0,
+  });
+  if (!said.count) return;
+  pushAppAlert({
+    id: 'shippo-labels',
+    icon: '🏷️',
+    title: said.title,
+    detail: said.detail,
+    actionLabel: said.needsReview ? 'Review' : '',
+    action: said.needsReview ? 'openShippingReconciliationFromAlert(event)' : '',
+  });
+}
+
+/**
+ * Open the worklist from the card, wherever the publisher happens to be.
+ *
+ * All three steps are needed and none is redundant: the worklist lives inside
+ * the Integrations pane of the Tax Centre, and that pane starts hidden behind
+ * the Ledger one. Revealing the panel without both navigations would "open" it
+ * on a screen nobody is looking at, which is the same as the button doing
+ * nothing.
+ */
+function openShippingReconciliationFromAlert(event) {
+  if (event) event.stopPropagation();
+  dismissAppAlert('shippo-labels');
+  switchTab('taxcentre');
+  switchTaxCenterSubTab('integrations');
+  openShippingReconciliation();
+}
+
+/**
+ * Start watching. Three triggers, because a PWA is used three ways: left open
+ * on a desk (the timer), switched back to from another app (visibility), and
+ * picked up again once the signal returns (online).
+ */
+function startShippoLabelWatch() {
+  if (_shippoWatchStarted || typeof window === 'undefined') return;
+  _shippoWatchStarted = true;
+  // Seeded from the last real import rather than from now, so an app opening
+  // on a week-old answer checks straight away instead of sitting on it.
+  const last = Date.parse(TAX_CENTER.settings?.shippoLastImportAt || '');
+  _shippoLastCheckAt = Number.isFinite(last) ? last : 0;
+
+  const poll = () => { refreshShippoLabelsIfDue(); };
+
+  poll();
+  window.setInterval(poll, SHIPPO_WATCH_INTERVAL_MS);
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') poll();
+    });
+  }
+  window.addEventListener('online', poll);
+}
+
+/**
+ * Bring labels bought outside this app into the ledger.
+ *
+ * One body, two callers. The Tax Centre button runs it the way it always has —
+ * the full sweep, invoices and refunds included, nothing written until the
+ * publisher confirms a summary. The background watch runs the same code with
+ * `{ silent: true, maxPages: 1 }`, which is what makes a label bought on
+ * Shippo's website turn up here on its own instead of waiting four clicks deep
+ * in a screen nobody had a reason to open.
+ *
+ * Two things had to change for the second caller to be possible at all, and
+ * both were latent bugs rather than new requirements: the token was read only
+ * from a DOM input, and `btn.disabled` was written unguarded — so any call made
+ * before the Tax Centre had ever rendered threw on the first line that touched
+ * the page.
+ */
+async function importShippoShippingFromApi({
+  silent = false,
+  maxPages = 200,
+  skipInvoices = false,
+  skipRefunds = false,
+  token: tokenOverride = '',
+} = {}) {
   const keyEl = $('tc-shippo-key');
-  const statusEl = $('tc-shippo-status');
-  const btn = $('tc-shippo-btn');
-  const token = (keyEl?.value || '').trim();
-  if (!token) { showToast('⚠ Enter your Shippo API token first', 'warn'); return; }
+  const statusEl = silent ? null : $('tc-shippo-status');
+  const btn = silent ? null : $('tc-shippo-btn');
+  // The saved key is the fallback, not the input: the watch runs with no Tax
+  // Centre on screen and so no input to read.
+  const token = String(tokenOverride || keyEl?.value || TAX_CENTER.settings?.shippoKey || '').trim();
+  if (!token) {
+    if (!silent) showToast('⚠ Enter your Shippo API token first', 'warn');
+    return null;
+  }
 
   if (!TAX_CENTER.settings) TAX_CENTER.settings = {};
   if (TAX_CENTER.settings.shippoKey !== token) {
@@ -1168,7 +1366,7 @@ async function importShippoShippingFromApi() {
     saveTaxCenter().catch(e => console.warn('Shippo key save failed', e));
   }
 
-  btn.disabled = true;
+  if (btn) btn.disabled = true;
   if (statusEl) statusEl.textContent = 'Fetching Shippo transactions…';
 
   if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
@@ -1195,14 +1393,20 @@ async function importShippoShippingFromApi() {
   // Pull the money records first so each label can be tied to the invoice that
   // billed it. Both are best-effort: an unavailable beta endpoint must not stop
   // the postage import that already worked.
+  // The background check skips both. They are two extra paged sweeps for
+  // reconciliation completeness, not for noticing that a label exists, and
+  // running them every few minutes would turn a one-request check into three.
+  // The Tax Centre sweep still does the whole job.
   if (statusEl) statusEl.textContent = 'Fetching Shippo invoices…';
-  const invoiceResult = await fetchShippoInvoiceItems(token);
+  const invoiceResult = skipInvoices
+    ? { index: new Map(), count: 0, unavailable: '' }
+    : await fetchShippoInvoiceItems(token);
   const invoiceIndex = invoiceResult.index;
   if (statusEl) statusEl.textContent = 'Fetching Shippo refunds…';
-  const refundResult = await fetchShippoRefunds(token);
+  const refundResult = skipRefunds ? { refunds: [] } : await fetchShippoRefunds(token);
 
   try {
-    while (hasMore && page <= 200) {
+    while (hasMore && page <= maxPages) {
       // Shippo list transactions endpoint:
       //   GET /transactions with optional filters (rate, object_status,
       //   tracking_status, page, results). We intentionally avoid status
@@ -1291,7 +1495,12 @@ async function importShippoShippingFromApi() {
       if (statusEl) statusEl.textContent = `Fetched ${imported + skipped} transactions…`;
     }
 
-    if (imported > 0) {
+    // The confirmation is the publisher's gate on writing to their own ledger,
+    // and the background check does not get to skip it by pretending to be one.
+    // It is skipped because there is nobody at the screen to ask, and what it
+    // guards is affordable without asking: only GET requests were made, no money
+    // was spent, and the summary card afterwards reports every line that landed.
+    if (imported > 0 && !silent) {
       // Build a cost breakdown so the confirmation reflects what will actually
       // be written: total CAD, original amounts per currency, and date range.
       const totalCad = pendingExpenses.reduce((s, e) => s + (e.baseAmount || 0), 0);
@@ -1339,15 +1548,32 @@ async function importShippoShippingFromApi() {
     applyShippoExpenseEnrichments(stagedExistingEnrichments);
     if (pendingExpenses.length > 0) TAX_CENTER.businessExpenses.unshift(...pendingExpenses.reverse());
 
+    // Link what is exact enough to link without asking. Runs over the whole
+    // ledger rather than just this batch, because the guard that matters —
+    // no two labels claiming one order — cannot be judged from a batch alone,
+    // and because a label imported last week whose order only arrived today
+    // deserves the same treatment as one that arrived a moment ago.
+    const autoLinked = applyConfidentShippingLinks();
+
     // Cancel out anything Shippo refunded. A refunded label that was imported
     // before the refund happened stayed in the ledger at full price, which
     // overstates postage and understates profit for as long as nobody notices.
     const refundsAdded = applyShippoRefunds(refundResult.refunds);
 
-    TAX_CENTER.settings.shippoImportedObjectIds = Array.from(importedIds).slice(-10000);
-    TAX_CENTER.settings.shippoLastImportAt = new Date().toISOString();
-    await saveTaxCenter();
-    renderTaxCenter();
+    // A check that changed nothing must not write anything. The background
+    // watch runs every few minutes, and the two settings stamps below always
+    // differ from last time — so saving unconditionally would push the whole
+    // tax document to Firestore roughly a hundred times a working day to record
+    // that nothing had happened, costing quota, battery and sync churn for no
+    // information. The manual sweep still always stamps, because a publisher who
+    // pressed the button is owed a "last synced" time either way.
+    const changed = imported > 0 || enrichedCount > 0 || autoLinked > 0 || refundsAdded > 0;
+    if (!silent || changed) {
+      TAX_CENTER.settings.shippoImportedObjectIds = Array.from(importedIds).slice(-10000);
+      TAX_CENTER.settings.shippoLastImportAt = new Date().toISOString();
+      await saveTaxCenter();
+      renderTaxCenter();
+    }
     const dupNote = alreadyImported ? ` ${alreadyImported} already imported.` : '';
     const enrichNote = enrichedCount ? ` ${enrichedCount} existing expense${enrichedCount === 1 ? '' : 's'} reconciled.` : '';
     const contextNote = contextFailureCount ? ` ${contextFailureCount} label${contextFailureCount === 1 ? '' : 's'} still need review because Shippo details could not load.` : '';
@@ -1361,18 +1587,25 @@ async function importShippoShippingFromApi() {
     if (statusEl) statusEl.textContent = imported
       ? `Imported ${imported} new Shippo transactions.${dupNote}${skipped ? ` ${skipped} skipped.` : ''}${totalUsd ? ` USD imported: ${totalUsd.toFixed(2)}.` : ''}${reconciliationNote}`
       : `No new Shippo transactions to import.${dupNote}${skipped ? ` ${skipped} skipped.` : ''}${reconciliationNote}`;
-    showToast(
-      (imported
-        ? `Imported ${imported} new Shippo expense${imported === 1 ? '' : 's'}`
-        : (alreadyImported ? `No new Shippo expenses (${alreadyImported} already imported)` : 'No new Shippo expenses to import')) + reconciliationNote,
-      imported || enrichedCount ? 'ok' : 'warn',
-    );
+    if (!silent) {
+      showToast(
+        (imported
+          ? `Imported ${imported} new Shippo expense${imported === 1 ? '' : 's'}`
+          : (alreadyImported ? `No new Shippo expenses (${alreadyImported} already imported)` : 'No new Shippo expenses to import')) + reconciliationNote,
+        imported || enrichedCount ? 'ok' : 'warn',
+      );
+    }
+    return { imported, alreadyImported, skipped, enrichedCount, autoLinked, needsReview: reconciliationBacklog() };
   } catch (e) {
     console.error(e);
     if (statusEl) statusEl.textContent = `Error: ${e.message || e}`;
-    showToast('⚠ Shippo import failed', 'err');
+    if (!silent) showToast('⚠ Shippo import failed', 'err');
+    // A background check that failed must say so to its caller rather than
+    // resolving as though it found nothing — "nothing new" and "could not ask"
+    // are different answers and only one of them is reassuring.
+    if (silent) throw e;
   } finally {
-    btn.disabled = false;
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -8630,6 +8863,12 @@ export {
   editShippoApiKey,
   onShippoPreFillDestChange,
   onShippoBookPresetChange,
+  applyConfidentShippingLinks,
+  linkConfidentShippingMatchesNow,
+  openShippingReconciliationFromAlert,
+  refreshShippoLabelsIfDue,
+  startShippoLabelWatch,
+  reconciliationBacklog,
   applyOrderPrefill,
   applyOrderParcelPlan,
   autoQuoteEnabled,
