@@ -17,21 +17,27 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const indexContent = fs.readFileSync(path.resolve(__dirname, '../index.html'), 'utf8');
 
 describe('asking Shippo again without being told to', () => {
-  function watchHarness({ key = 'shippo_live_x', online = true, hidden = false, result = { imported: 0 } } = {}) {
-    const seen = { imports: [], alerts: [] };
+  function watchHarness({ key = 'shippo_live_x', online = true, hidden = false, result = { imported: 0 }, backoff = 0 } = {}) {
+    const seen = { imports: [], alerts: [], health: [], intervals: [] };
     const harness = buildHarness({
       names: ['SHIPPO_WATCH_INTERVAL_MS', 'refreshShippoLabelsIfDue'],
       deps: {
         TAX_CENTER: { settings: key ? { shippoKey: key } : {} },
         navigator: { onLine: online },
         document: { visibilityState: hidden ? 'hidden' : 'visible' },
-        dueForShippoCheck: (opts) => opts.configured && opts.online && opts.visible && !opts.busy,
+        dueForShippoCheck: (opts) => {
+          seen.intervals.push(opts.intervalMs);
+          return opts.configured && opts.online && opts.visible && !opts.busy;
+        },
         importShippoShippingFromApi: async (opts) => {
           seen.imports.push(opts);
           if (result instanceof Error) throw result;
           return result;
         },
         showShippoLabelAlert: (r) => { seen.alerts.push(r); },
+        integrationBackoffMs: () => backoff,
+        noteIntegrationSuccess: (id) => { seen.health.push(['ok', id]); },
+        noteIntegrationFailure: (id, error) => { seen.health.push(['fail', id, error.message]); },
         console: { warn() {} },
       },
       moduleState: 'let _shippoLastCheckAt = 0;\nlet _shippoChecking = false;',
@@ -84,6 +90,28 @@ describe('asking Shippo again without being told to', () => {
     const { refreshShippoLabelsIfDue, seen } = watchHarness({ result: new Error('offline') });
     expect(await refreshShippoLabelsIfDue()).toBeNull();
     expect(seen.alerts).toEqual([]);
+  });
+
+  it('records the outcome instead of throwing it away', async () => {
+    // This used to end at console.warn, on the belief that the sync chip
+    // already reported a dead connection — it does not.
+    const ok = watchHarness();
+    await ok.refreshShippoLabelsIfDue();
+    expect(ok.seen.health).toEqual([['ok', 'shippo']]);
+
+    const bad = watchHarness({ result: new Error('Shippo API error 401') });
+    await bad.refreshShippoLabelsIfDue();
+    expect(bad.seen.health).toEqual([['fail', 'shippo', 'Shippo API error 401']]);
+  });
+
+  it('waits longer between checks while Shippo keeps refusing', async () => {
+    const healthy = watchHarness();
+    await healthy.refreshShippoLabelsIfDue();
+    expect(healthy.seen.intervals[0]).toBe(5 * 60 * 1000);
+
+    const failing = watchHarness({ backoff: 40 * 60 * 1000 });
+    await failing.refreshShippoLabelsIfDue();
+    expect(failing.seen.intervals[0]).toBe(40 * 60 * 1000);
   });
 
   it('releases the busy flag after a failure, so the next check can run', async () => {

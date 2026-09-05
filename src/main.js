@@ -181,6 +181,7 @@ import {
   validateFields,
 } from './lib/modal.js';
 import { dismissAppAlert } from './lib/app-alert.js';
+import { renderIntegrationBadges } from './lib/integration-watch.js';
 import { followableUrl } from './lib/receipt-links.js';
 import {
   PAYMENT_TYPE_DIRECT_TO_ARTIST,
@@ -415,6 +416,7 @@ import {
   linkConfidentShippingMatchesNow,
   openShippingReconciliationFromAlert,
   startShippoLabelWatch,
+  refreshShippoLabelsIfDue,
   applyOrderPrefill,
   isCanadaPostRate,
   moneyAmount,
@@ -14909,6 +14911,10 @@ async function boot(forcedBook) {
         // in the Tax Centre. Started after the books load because linking a
         // label needs the order history to link it to.
         startShippoLabelWatch();
+        // A fault recorded before the last reload is still a fault. Painted
+        // here so the mark is on the tab from the first render rather than
+        // only after the next failed check.
+        renderIntegrationBadges();
       });
       updateRoleToggleButton();
       syncRoleUI();
@@ -22343,6 +22349,18 @@ window.renderBigCartelLedgerGaps = renderBigCartelLedgerGaps;
 window.autoCheckBigCartelLedgerGaps = autoCheckBigCartelLedgerGaps;
 window.dismissNewOrderAlert = dismissNewOrderAlert;
 window.dismissAppAlert = dismissAppAlert;
+window.renderIntegrationBadges = renderIntegrationBadges;
+
+/**
+ * The "Check now" button on a health card: ask that service again immediately
+ * rather than waiting out the backoff. Both watches already accept `force`,
+ * which is what skips the interval gate.
+ */
+window.recheckIntegration = (id) => {
+  if (id === 'bigcartel') return refreshBigCartelOrdersIfDue({ force: true });
+  if (id === 'shippo') return refreshShippoLabelsIfDue({ force: true });
+  return undefined;
+};
 window.linkConfidentShippingMatchesNow = linkConfidentShippingMatchesNow;
 window.openShippingReconciliationFromAlert = openShippingReconciliationFromAlert;
 window.shipNewOrderFromAlert = shipNewOrderFromAlert;

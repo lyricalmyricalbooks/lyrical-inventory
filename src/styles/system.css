@@ -499,6 +499,18 @@ tbody.sys-long-list > tr {
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* A fault reads differently from good news. Without this the corner is uniformly
+   positive and the one entry that needs acting on gets skimmed past with the
+   rest. Tones follow sync-status.js: rose for a refused credential, which needs
+   a look; amber for a service that is merely unreachable, which is attention
+   rather than alarm. */
+.app-alert-failed { border-left-color: var(--status-critical); }
+.app-alert-failed .app-alert-ico { color: var(--status-critical); }
+.app-alert-offline { border-left-color: var(--status-active); }
+.app-alert-offline .app-alert-ico { color: var(--status-active); }
+.app-alert-pending { border-left-color: var(--status-info); }
+.app-alert-pending .app-alert-ico { color: var(--status-info); }
+
 /* On a phone the card spans the width rather than floating in a corner it would
    otherwise cover half of. */
 @media (max-width: 640px) {

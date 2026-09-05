@@ -48,6 +48,11 @@ import {
 } from './shipping.js';
 import { describeParcelPlan, orderParcelPlan } from '../lib/order-parcel-prefill.js';
 import {
+  integrationBackoffMs,
+  noteIntegrationFailure,
+  noteIntegrationSuccess,
+} from '../lib/integration-watch.js';
+import {
   describeNewOrders,
   dueForRefresh,
   mergeSeenOrders,
@@ -271,7 +276,11 @@ async function renderBigCartelTab() {
 
   if (config.subdomain && config.username && config.password) {
     updateBigCartelConnectionUI(true, 'Configured (Test to Verify)');
-    $('bc-status-dot').className = 'sync-dot amber'; // override to amber instead of green
+    // Saved but never tested is neither connected nor disconnected. This used
+    // to reach for `sync-dot amber` — a different component's class, plus an
+    // amber modifier that was never written — so it painted plain green and
+    // claimed a connection nobody had verified.
+    $('bc-status-dot').className = 'bc-dot unverified';
   } else {
     updateBigCartelConnectionUI(false, 'Disconnected');
   }
@@ -369,7 +378,13 @@ async function fetchBigCartel(endpoint, accountId = '') {
     } catch (_) {
       // Keep the HTTP status when Big Cartel returns a non-JSON error body.
     }
-    throw new Error(`Big Cartel API returned status ${data.code}${apiError ? `: ${apiError}` : ''}`);
+    // The status travels as a property as well as in the sentence. The proxy
+    // fetches with muteHttpExceptions, so a storefront 401 arrives here intact
+    // as data.code — and without it on the Error, telling "your password
+    // changed" from "you are on a train" would mean reading message text.
+    const bcError = new Error(`Big Cartel API returned status ${data.code}${apiError ? `: ${apiError}` : ''}`);
+    bcError.status = Number(data.code) || 0;
+    throw bcError;
   }
 
   return JSON.parse(data.content);
@@ -1402,6 +1417,11 @@ const BC_GAP_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 let _bcGapResult = null;
 let _bcGapConflicts = { renumber: [], duplicate: [] };
 let _bcGapChecking = false;
+// Whether the most recent check actually reached the storefront. Needed because
+// checkBigCartelLedgerGaps() returns null for a failure and null for "not
+// configured", so its own return value cannot tell the summary line below which
+// happened — and it has been printing "Not checked yet." for both.
+let _bcLastCheckFailed = false;
 
 function readBcGapDismissed() {
   try {
@@ -1513,6 +1533,7 @@ async function checkBigCartelLedgerGaps({ silent = false } = {}) {
   }
 
   _bcGapChecking = true;
+  _bcLastCheckFailed = false;
   const btn = $('bc-gap-check-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
   try {
@@ -1537,6 +1558,7 @@ async function checkBigCartelLedgerGaps({ silent = false } = {}) {
 
     renderBigCartelLedgerGaps();
     renderBigCartelGapBadge();
+    noteIntegrationSuccess('bigcartel');
     if (!silent) {
       const n = pendingGaps(_bcGapResult).length;
       showToast(n
@@ -1546,6 +1568,15 @@ async function checkBigCartelLedgerGaps({ silent = false } = {}) {
     return _bcGapResult;
   } catch (e) {
     console.error('Big Cartel ledger gap check failed:', e);
+    // Recorded, not just logged. This function returns null for a failure and
+    // null for "not configured", so the caller has never been able to tell them
+    // apart — a storefront that stopped answering looked exactly like one that
+    // was switched off, and both looked like a quiet day.
+    _bcLastCheckFailed = true;
+    noteIntegrationFailure('bigcartel', e, {
+      online: typeof navigator === 'undefined' || navigator.onLine !== false,
+      configured: true,
+    });
     if (!silent) showToast('Could not check Big Cartel: ' + e.message, 'err');
     return null;
   } finally {
@@ -1710,7 +1741,12 @@ async function refreshBigCartelOrdersIfDue({ force = false } = {}) {
     : dueForRefresh({
       lastCheckedAt: _bcLastOrderCheckAt,
       now: Date.now(),
-      intervalMs: BC_ORDER_WATCH_INTERVAL_MS,
+      // Widened once the storefront has refused twice running, so a dead
+      // endpoint is not asked every five minutes for the rest of the day.
+      intervalMs: Math.max(
+        BC_ORDER_WATCH_INTERVAL_MS,
+        integrationBackoffMs('bigcartel', BC_ORDER_WATCH_INTERVAL_MS),
+      ),
       online: typeof navigator === 'undefined' || navigator.onLine !== false,
       configured: ready,
       visible: typeof document === 'undefined' || document.visibilityState !== 'hidden',
@@ -1826,7 +1862,15 @@ function renderBigCartelLedgerGaps() {
   const summary = $('bc-gap-summary');
   const list = $('bc-gap-list');
   const repairs = $('bc-gap-repairs');
-  if (summary) summary.textContent = _bcGapResult ? describeGapSummary(_bcGapResult) : 'Not checked yet.';
+  if (summary) {
+    // Three states, not two. A check that could not reach Big Cartel used to
+    // read "Not checked yet." — identical to one that had simply never run —
+    // which is precisely the wrong thing to tell someone whose storefront has
+    // stopped answering.
+    if (_bcGapResult) summary.textContent = describeGapSummary(_bcGapResult);
+    else if (_bcLastCheckFailed) summary.textContent = 'Big Cartel could not be reached, so this list may be out of date.';
+    else summary.textContent = 'Not checked yet.';
+  }
 
   // Rolled up: the summary above still reports the count, so nothing is hidden
   // that needs acting on. Building the rows anyway would mean assembling a book

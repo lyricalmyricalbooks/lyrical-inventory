@@ -12215,6 +12215,11 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 }
 .bc-dot.connected { background: var(--emerald); box-shadow: 0 0 8px var(--emerald); }
 .bc-dot.disconnected { background: var(--rose); box-shadow: 0 0 8px var(--rose); }
+/* Credentials are saved but have never been tested. Amber, because green here
+   claims a working connection nobody has checked — which is exactly what this
+   dot did until now: it asked for `sync-dot amber`, a class that does not
+   exist, and so painted the default emerald. */
+.bc-dot.unverified { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
 
 /* Subtab styling to match global subtabs */
 .bc-sub-nav {
@@ -17059,6 +17064,38 @@ button[onclick="refreshUmamiStats()"]:active {
   padding: 1px 6px;
   vertical-align: middle;
 }
+
+/* The mark that outlives the notification card. Dismissing a card should clear
+   the card, not the problem, so a service that has stopped answering stays
+   flagged on its own tab until a check actually succeeds.
+
+   Same placement, scale and `pill red` as the gap badge above: both mean "look
+   here, something is wrong", and the amber/rose distinction between a refused
+   key and an unreachable service belongs on the card, which has room to explain
+   it. `pill amber` was the first choice and failed the contrast sweep at
+   2.73:1 — its ink and its own background are too close to each other. The two
+   badges stay tellable apart by content: the gap badge counts, this one is a
+   bare "!". */
+.health-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 15px;
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 100px;
+  /* Solid fill rather than the tinted `pill red`: this badge has to sit legibly
+     on the cream tab bar, the dark sidebar AND inside a header button, and the
+     tinted pill's ink-on-own-tint pairing measures 2.91:1 — under AA — in that
+     third context. A solid ground carries its own contrast wherever it lands. */
+  background: var(--red);
+  color: var(--on-inverse);
+  font-size: var(--text-3xs);
+  font-weight: 700;
+  line-height: 1.5;
+  vertical-align: middle;
+}
+.health-badge[hidden] { display: none; }
 
 /* The strip on the Website orders screen. The Gmail scan reports its own status
    a few lines below this; when the storefront disagrees with it, that has to be
