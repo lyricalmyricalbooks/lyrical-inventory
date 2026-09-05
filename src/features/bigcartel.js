@@ -39,17 +39,20 @@ import {
 import { openM, closeM, confirmDialog } from '../lib/modal.js';
 import {
   _shippoDestMasterList,
+  applyOrderPrefill,
   autoLinkPostageForOrder,
   getFallbackShippingPhone,
   getShippingReconciliationOrders,
   renderShippingAnalysisHub,
   shippingPurchaseRowPayload,
 } from './shipping.js';
+import { describeParcelPlan, orderParcelPlan } from '../lib/order-parcel-prefill.js';
 import { escapeHtml } from '../lib/html.js';
 import { resolveCountryCode } from '../lib/countries.js';
 import { fmt, getBookCurrencyCode } from '../lib/money.js';
 import { normalizeShippingOrderNumber } from '../lib/shipping-reconciliation.js';
 import {
+  bigCartelOrderLines,
   bigCartelOrderNumber,
   buildBigCartelOrderEntry,
   describeGapSummary,
@@ -1027,7 +1030,99 @@ function renderBigCartelOrders(orders, included = []) {
   });
 }
 
-function prefillShippingFromBigCartelOrder(orderId) {
+/**
+ * Record a storefront order as a sale, if it is not recorded already.
+ *
+ * Called on the way to buying a label, because that is the moment the order is
+ * demonstrably real and about to leave the building. Every earlier version of
+ * this app left the two halves apart: the sale was recorded in one tab, the
+ * parcel was shipped from another, and an order shipped without ever being
+ * recorded kept its stock on the shelf forever.
+ *
+ * Held to `plan.autoSafe`, so it only ever fires on an order that named one
+ * catalogue title outright. Anything the storefront left ambiguous — a second
+ * title in the same box, an item not in the catalogue, a book deduced from the
+ * amount paid — is left for the review queue on this tab, where the publisher
+ * chooses the book instead of a guess moving stock behind their back.
+ *
+ * Returns why it did or did not act, so the caller's single message can say so.
+ */
+async function recordBigCartelOrderIfMissing(order, plan) {
+  if (!plan || !plan.autoSafe) return { status: 'needs-review' };
+
+  const num = bigCartelOrderNumber(order);
+  if (!num) return { status: 'no-number' };
+  if (bigCartelLedgerNumbers().some(existing => sameOrderNumber(existing, num))) {
+    return { status: 'already-recorded' };
+  }
+
+  // findLedgerGaps is the same reader the review queue uses, run over this one
+  // order. Going through it rather than around it means a cancelled order, or
+  // one already present under a different spelling, is skipped here for exactly
+  // the reasons it is skipped there.
+  const scan = findLedgerGaps([order], getBigCartelIncluded(), {
+    ledgerNumbers: bigCartelLedgerNumbers(),
+    books: BOOKS,
+    dismissedNums: [],
+  });
+  const gap = (scan.missing || [])[0];
+  if (!gap) return { status: 'not-owed' };
+
+  const bookId = plan.presetBookId;
+  if (!bookId || !BOOKS[bookId]) return { status: 'needs-review' };
+
+  const address = extractBigCartelAddress(order, order.id, getBigCartelIncluded());
+  const price = gap.unitPrice != null && gap.unitPrice > 0
+    ? gap.unitPrice
+    : Number(BOOKS[bookId]?.listPrice || 0);
+  const qty = plan.totalQty || gap.qty || 1;
+
+  let entry;
+  try {
+    entry = commitRecoveredWebsiteOrder(bookId, { qty, price }, ({ stockAfter }) =>
+      buildBigCartelOrderEntry(gap, {
+        bookId, qty, price, stockAfter,
+        address: { ...address, email: gap.email || address.email },
+      }));
+  } catch (error) {
+    console.error('Big Cartel order auto-record failed', error);
+    return { status: 'failed' };
+  }
+
+  // The review queue was built before this row existed; drop the order from it
+  // so the badge and the list agree with the ledger.
+  if (_bcGapResult && Array.isArray(_bcGapResult.missing)) {
+    _bcGapResult.missing = _bcGapResult.missing.filter(item => !sameOrderNumber(item.num, num));
+    renderBigCartelLedgerGaps();
+    renderBigCartelGapBadge();
+  }
+  scheduleRender();
+
+  // A label bought before the order was recorded may have been sitting in the
+  // reconciliation worklist with nothing to point at. Failing to link it is not
+  // failing to record the sale, so it never takes the record down with it.
+  let linked = 0;
+  try {
+    linked = await autoLinkPostageForOrder(entry);
+  } catch (error) {
+    console.warn('Postage auto-link after Big Cartel ship failed', error);
+  }
+
+  return { status: 'recorded', entry, qty, linked, bookTitle: BOOKS[bookId].title };
+}
+
+/**
+ * One press: record the sale, fill the whole shipping form from the order, and
+ * fetch the rates.
+ *
+ * This used to fill in the recipient's address and stop, which left the
+ * publisher restating what the order already said — open the package dropdown,
+ * find the book, set the quantity, fix the customs value, press Calculate — and
+ * left the sale itself unrecorded on a separate tab. Now the order answers all
+ * of it. Buying the label is the only thing still asked for, because that is
+ * the only step that spends money.
+ */
+async function prefillShippingFromBigCartelOrder(orderId) {
   const orders = (bigCartelData && bigCartelData.orders && bigCartelData.orders.length > 0)
     ? bigCartelData.orders
     : (loadCachedBigCartelOrders()?.orders || []);
@@ -1077,7 +1172,38 @@ function prefillShippingFromBigCartelOrder(orderId) {
     hydrateShippingDestinationPhone(orderId);
   }
 
-  showToast(`✓ Populated shipping details for Order #${orderId}`);
+  // What the order says is in the box, and how far that lets us go on our own.
+  const parcelLines = bigCartelOrderLines(order, getBigCartelIncluded(), BOOKS);
+  const plan = orderParcelPlan(parcelLines, BOOKS);
+
+  // Record before quoting: the sale is what the label is for, and a rate call
+  // that fails should not be able to leave the sale unrecorded.
+  const recorded = await recordBigCartelOrderIfMissing(order, plan);
+
+  const { quoted } = await applyOrderPrefill({
+    orderNumber: normalizeShippingOrderNumber(orderId),
+    parcelLines,
+  });
+
+  // One message covering everything that happened, rather than a stack of them.
+  const parts = [];
+  if (recorded.status === 'recorded') {
+    parts.push(`recorded ${recorded.qty} × ${recorded.bookTitle}`);
+    if (recorded.linked) {
+      parts.push(`linked ${recorded.linked} label${recorded.linked === 1 ? '' : 's'}`);
+    }
+  }
+  const parcelNote = describeParcelPlan(plan);
+  if (parcelNote) parts.push(parcelNote);
+  if (quoted) parts.push('rates below');
+
+  if (!parts.length) {
+    showToast(`✓ Order #${orderId} — address filled in. Choose the package below.`);
+  } else if (recorded.status === 'needs-review' && !plan.autoSafe) {
+    showToast(`✓ Order #${orderId} — ${parts.join(', ')}. Check the details before buying.`, 'warn', 6000);
+  } else {
+    showToast(`✓ Order #${orderId} — ${parts.join(', ')}`, 'ok', 5000);
+  }
 }
 
 function switchBigCartelSubTab(tabName) {

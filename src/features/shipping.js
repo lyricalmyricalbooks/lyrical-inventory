@@ -69,6 +69,12 @@ import {
   recoveredOrderPrefill,
   validateRecoveredOrder,
 } from '../lib/manual-website-order.js';
+import {
+  describeParcelPlan,
+  orderParcelPlan,
+  parcelLinesFromLedgerEntry,
+} from '../lib/order-parcel-prefill.js';
+import { bigCartelOrderLines } from '../lib/bigcartel-ledger-gap.js';
 import { receiptLinkTarget } from '../lib/receipt-links.js';
 import {
   autoMatchPostage,
@@ -1537,7 +1543,12 @@ function initShippingTab() {
         // customer/shipping_address resources that carry the phone number.
         const addrObj = extractBigCartelAddress(o, o.id, getBigCartelIncluded());
         const opt = document.createElement('option');
-        opt.value = JSON.stringify(addrObj);
+        // What was bought rides along with where it is going, so choosing this
+        // option fills the box as well as the address.
+        opt.value = JSON.stringify({
+          ...addrObj,
+          parcelLines: bigCartelOrderLines(o, getBigCartelIncluded(), BOOKS),
+        });
         opt.textContent = `Order #${o.id} - ${addrObj.name} (${addrObj.city || 'Local'}, ${addrObj.country})`;
         bcGroup.appendChild(opt);
       });
@@ -1588,6 +1599,7 @@ function initShippingTab() {
         const rawPhone = h.shipPhone || h.phone || h.contactPhone || h.buyerPhone || '';
         const addrObj = {
           orderNumber: h.num,
+          parcelLines: parcelLinesFromLedgerEntry(h, h._bookId, BOOKS),
           name: h.shipName,
           company: '',
           phone: getFallbackShippingPhone(rawPhone),
@@ -1635,6 +1647,7 @@ function initShippingTab() {
   renderDestinationVerification();
   bindRateReadinessWatchers();
   renderShippoRateReadiness();
+  setShippoAutoQuote(autoQuoteEnabled());
   loadShippoIncotermPreference($('st-country')?.value || '');
   updateShippoCustomsTotalHint();
   renderShippingAnalysisHub();
@@ -1662,6 +1675,9 @@ function renderCustomShippoDestPicker() {
 
   bcOrders.forEach(o => {
     const addrObj = extractBigCartelAddress(o, o.id, bcIncluded);
+    // The order's books travel with its address, so one pick fills the whole
+    // form rather than just the half of it that says where the parcel goes.
+    const parcelLines = bigCartelOrderLines(o, bcIncluded, BOOKS);
 
     items.push({
       category: 'bc',
@@ -1669,7 +1685,8 @@ function renderCustomShippoDestPicker() {
       icon: '🛒',
       title: `Order #${o.id} · ${addrObj.name}`,
       sub: `${addrObj.street1 ? addrObj.street1 + ', ' : ''}${addrObj.city || 'Local'}${addrObj.state ? ', ' + addrObj.state : ''} ${addrObj.country}`,
-      value: JSON.stringify(addrObj),
+      parcelSummary: describeParcelPlan(orderParcelPlan(parcelLines, BOOKS)),
+      value: JSON.stringify({ ...addrObj, parcelLines }),
       orderNumber: o.id,
       missingPhone: !getFallbackShippingPhone(addrObj.phone),
       searchText: `order #${o.id} ${addrObj.name} ${addrObj.city} ${addrObj.state} ${addrObj.country} ${addrObj.street1}`.toLowerCase()
@@ -1710,8 +1727,10 @@ function renderCustomShippoDestPicker() {
   const recentOrders = typeof getRecentShippingOrders === 'function' ? getRecentShippingOrders() : [];
   recentOrders.slice(0, 20).forEach(h => {
     const rawPhone = h.shipPhone || h.phone || h.contactPhone || h.buyerPhone || '';
+    const parcelLines = parcelLinesFromLedgerEntry(h, h._bookId, BOOKS);
     const addrObj = {
       orderNumber: h.num,
+      parcelLines,
       name: h.shipName,
       company: '',
       phone: getFallbackShippingPhone(rawPhone),
@@ -1730,6 +1749,7 @@ function renderCustomShippoDestPicker() {
       icon: '📦',
       title: `${h.num ? 'Order #' + h.num + ' · ' : ''}${h.shipName}`,
       sub: `${h.shipAddr1 ? h.shipAddr1 + ', ' : ''}${h.shipCity || ''} ${h.shipCountry || ''}`,
+      parcelSummary: describeParcelPlan(orderParcelPlan(parcelLines, BOOKS)),
       value: JSON.stringify(addrObj),
       orderNumber: h.num,
       missingPhone: !getFallbackShippingPhone(addrObj.phone),
@@ -1840,6 +1860,7 @@ function filterShippoDestMenu() {
           <span class="custom-dest-item-badge ${item.category}">${escapeHtml(item.catLabel)}</span>
         </div>
         <div class="custom-dest-item-sub">${escapeHtml(item.sub)}${countryWarning}${phoneWarning}</div>
+        ${item.parcelSummary ? `<div class="custom-dest-item-parcel">📦 ${escapeHtml(item.parcelSummary)}</div>` : ''}
       </div>`;
   }).join('');
 }
@@ -1867,11 +1888,12 @@ function selectShippoDestCustomItem(idx, e) {
   if (icon) icon.textContent = item.icon;
   if (clearBtn) clearBtn.style.display = 'inline-block';
 
-  // Trigger form population
-  onShippoPreFillDestChange();
-
-  // Close dropdown and reset z-indexes
+  // Close the dropdown first: the fill that follows reaches out for rates, and
+  // an open menu sitting over the results for the length of that call reads as
+  // the click not having registered.
   setShippoDestMenuOpenState(false);
+
+  return onShippoPreFillDestChange();
 }
 
 function clearShippoDestSelection(e) {
@@ -1906,19 +1928,25 @@ function clearShippoDestSelection(e) {
   $('st-country').value = 'US';
   onShippoDestCountryChange();
   dismissAddressVerification();
+  renderOrderPrefillSummary(null);
+  renderShippoRateReadiness();
 }
 
 function getRecentShippingOrders() {
   const orders = [];
   const seen = new Set();
-  Object.values(states).forEach(s => {
+  Object.entries(states).forEach(([bookId, s]) => {
     if (s && Array.isArray(s.hist)) {
       s.hist.forEach(h => {
         if (h && h.shipName && h.shipAddr1 && !h.voided) {
           const key = `${h.shipName.trim()}|${h.shipAddr1.trim()}`.toLowerCase();
           if (!seen.has(key)) {
             seen.add(key);
-            orders.push(h);
+            // A history row does not record which book it sold — the book is
+            // the state it is filed under — so the id is carried alongside it
+            // for the parcel prefill. A shallow copy rather than a tag on the
+            // stored row, so nothing here can write into saved ledger state.
+            orders.push({ ...h, _bookId: bookId });
           }
         }
       });
@@ -1974,11 +2002,158 @@ function editShippoApiKey() {
   }
 }
 
-function onShippoPreFillDestChange() {
+// ─── One-touch order → parcel → quote ─────────────────────────────────────
+//
+// A web order already states everything the shipping form asks for. Picking one
+// as the destination used to fill in the address and then leave the publisher
+// to restate the rest by hand: open the package dropdown, find the book, set
+// the quantity, correct the customs value, press Calculate. Every one of those
+// answers was sitting in the order.
+//
+// So the order fills the whole form. The address, the box, the count and the
+// declared value all land together, and — unless the publisher has switched it
+// off — the rates are fetched straight away, so the quotes are on screen by the
+// time they look up. Buying is untouched: that spends real money and stays a
+// deliberate press.
+
+const AUTO_QUOTE_PREF_KEY = 'lm-ship-auto-quote';
+
+/** Whether an order should pull its own rates. On unless switched off. */
+function autoQuoteEnabled() {
+  try { return localStorage.getItem(AUTO_QUOTE_PREF_KEY) !== 'off'; } catch (_) { return true; }
+}
+
+function setShippoAutoQuote(enabled) {
+  try { localStorage.setItem(AUTO_QUOTE_PREF_KEY, enabled ? 'on' : 'off'); } catch (_) { /* private mode */ }
+  const box = $('ship-auto-quote-toggle');
+  if (box) box.checked = enabled;
+}
+
+function onShippoAutoQuoteToggle() {
+  const enabled = !!$('ship-auto-quote-toggle')?.checked;
+  setShippoAutoQuote(enabled);
+  showToast(enabled
+    ? '✓ Orders will fetch their own rates from now on'
+    : '✓ Rates will wait for you to press Calculate');
+}
+
+/**
+ * Write a parcel plan into the box fields.
+ *
+ * The preset supplies the per-copy dimensions, the order supplies the count,
+ * and the two are combined the same way a publisher stacking copies by hand
+ * would: load the box, then scale it. Everything is silent here — the caller
+ * describes the whole prefill in one message.
+ */
+function applyOrderParcelPlan(plan) {
+  if (!plan || !plan.presetBookId || !BOOKS[plan.presetBookId]) return null;
+  const presetSelect = $('ship-preset-book');
+  if (!presetSelect) return null;
+  // The preset list is built from the catalogue; a book missing from it means
+  // the tab has not finished rendering, and writing a value the select cannot
+  // hold would leave the box fields describing nothing.
+  if (!Array.from(presetSelect.options).some(opt => opt.value === plan.presetBookId)) return null;
+
+  presetSelect.value = plan.presetBookId;
+  const source = onShippoBookPresetChange({ silent: true });
+
+  const qtyInput = $('sp-qty');
+  const qty = Math.max(1, plan.totalQty || 1);
+  if (qtyInput) qtyInput.value = String(qty);
+  scaleShippoSpecsForQty(qty);
+
+  const customsValue = $('sp-customs-value');
+  if (customsValue && plan.customsUnitValue > 0) {
+    customsValue.value = plan.customsUnitValue.toFixed(2);
+  }
+  const customsDescription = $('sp-customs-description');
+  if (customsDescription && plan.customsDescription) {
+    customsDescription.value = plan.customsDescription;
+  }
+  updateShippoCustomsTotalHint();
+  renderShippoRateReadiness();
+  return { source, qty };
+}
+
+/**
+ * The line under the pre-fills saying what the order filled in and what still
+ * wants a human eye. It is the receipt for work the publisher did not watch
+ * happen — without it, a box silently sized on the wrong book is invisible.
+ */
+function renderOrderPrefillSummary(state) {
+  const host = $('ship-order-prefill-summary');
+  if (!host) return;
+  if (!state) { host.innerHTML = ''; host.style.display = 'none'; return; }
+
+  const { orderNumber, plan, quoting, presetSource } = state;
+  const pills = [];
+  const label = orderNumber ? `Order ${orderNumber}` : 'Destination';
+
+  if (!plan || !plan.presetBookId) {
+    pills.push('<span class="pill amber">● Pick the package</span>');
+    pills.push('<span class="ship-readiness-note">Address filled in. This order didn’t name a book we recognise, so choose the package yourself.</span>');
+  } else {
+    const warn = plan.confidence !== 'exact' || presetSource === 'generic';
+    pills.push(warn
+      ? '<span class="pill amber">● Check the weight</span>'
+      : '<span class="pill green">✓ Address &amp; package filled in</span>');
+    let note = describeParcelPlan(plan);
+    if (presetSource === 'generic' && plan.confidence === 'exact') {
+      note += ' — no saved box for this book, so a standard one was used';
+    }
+    pills.push(`<span class="ship-readiness-note">${escapeHtml(note)}</span>`);
+  }
+
+  if (quoting) pills.push('<span class="pill">Fetching rates…</span>');
+
+  host.innerHTML = `<span class="ship-prefill-order">${escapeHtml(label)}</span>${pills.join('')}`;
+  host.style.display = 'flex';
+}
+
+/**
+ * Fetch rates now, if the form has everything and the publisher has left the
+ * setting on. Quoting only reads prices, so nothing is spent and nothing is
+ * committed — the worst case is a wasted call, and the best case is that the
+ * rates are already waiting.
+ */
+async function maybeAutoQuoteRates(state) {
+  if (!autoQuoteEnabled()) return false;
+  if (!TAX_CENTER.settings?.shippoKey) return false;
+  if (shippoRateFormState().missing.length) return false;
+  renderOrderPrefillSummary({ ...state, quoting: true });
+  try {
+    await calculateShippoRates();
+  } catch (error) {
+    console.warn('Auto rate quote failed', error);
+  } finally {
+    renderOrderPrefillSummary({ ...state, quoting: false });
+  }
+  return true;
+}
+
+/**
+ * Everything that happens once an order has been chosen as the destination:
+ * the box gets filled from what was bought, the summary line explains it, and
+ * the rates go and fetch themselves.
+ *
+ * Split from onShippoPreFillDestChange so the storefront's "Ship" button can
+ * reach the same finish from its own start.
+ */
+async function applyOrderPrefill({ orderNumber = '', parcelLines = [] } = {}) {
+  const plan = orderParcelPlan(parcelLines, BOOKS);
+  const applied = applyOrderParcelPlan(plan);
+  const state = { orderNumber, plan, presetSource: applied?.source || '', quoting: false };
+  renderOrderPrefillSummary(state);
+  const quoted = await maybeAutoQuoteRates(state);
+  return { plan, applied, quoted };
+}
+
+async function onShippoPreFillDestChange() {
   const select = $('ship-prefill-dest');
   if (!select) return;
   if (!select.value) {
     select.dataset.orderNumber = '';
+    renderOrderPrefillSummary(null);
     return;
   }
 
@@ -2000,13 +2175,30 @@ function onShippoPreFillDestChange() {
     // Fields written in code fire no input event, so the readiness line has to
     // be told the destination just filled itself in.
     renderShippoRateReadiness();
-    showToast('✓ Destination populated');
 
     // Older cached orders were fetched without the contact resources, so the phone
     // can still be missing here — ask Big Cartel for it directly.
     if (!$('st-phone').value && select.dataset.orderNumber) {
       hydrateShippingDestinationPhone(select.dataset.orderNumber);
     }
+
+    // A store address is a destination and nothing more; an order also says
+    // what is in the box, so it fills that in too and goes for the rates.
+    const parcelLines = Array.isArray(addr.parcelLines) ? addr.parcelLines : [];
+    if (!parcelLines.length) {
+      renderOrderPrefillSummary(null);
+      showToast('✓ Destination populated');
+      return;
+    }
+
+    const { plan, quoted } = await applyOrderPrefill({
+      orderNumber: select.dataset.orderNumber || String(addr.orderNumber || ''),
+      parcelLines,
+    });
+    const parcelNote = describeParcelPlan(plan);
+    showToast(parcelNote
+      ? `✓ Address and package ready — ${parcelNote}${quoted ? '. Rates below.' : ''}`
+      : '✓ Destination populated — choose the package below');
   } catch (e) {
     console.error('Failed to parse pre-fill address', e);
   }
@@ -2315,12 +2507,22 @@ function applyVerifiedAddressCorrections() {
   showToast(`✓ Applied Shippo's standardized ${applied.length === 1 ? 'field' : 'fields'}: ${applied.join(', ')}`);
 }
 
-function onShippoBookPresetChange() {
+/**
+ * Load a book's saved box into the parcel fields.
+ *
+ * `silent` is for the automated path: when an order fills the whole form in
+ * one go, this fires alongside the address and the quantity, and three toasts
+ * stacking on top of each other reads as noise rather than confirmation. The
+ * caller then says the one thing worth saying. The return value tells it
+ * whether the box came from real saved dimensions or the generic fallback, so
+ * a guessed weight can still be called out in that single message.
+ */
+function onShippoBookPresetChange({ silent = false } = {}) {
   const select = $('ship-preset-book');
-  if (!select || !select.value) return;
+  if (!select || !select.value) return '';
 
   const book = BOOKS[select.value];
-  if (!book) return;
+  if (!book) return '';
 
   const { specs, source } = resolveBookPresetSpecs(book);
 
@@ -2366,11 +2568,14 @@ function onShippoBookPresetChange() {
   updateShippoCustomsTotalHint();
   renderShippoRateReadiness();
 
-  if (source === 'generic') {
-    showToast(`⚠ ${book.title} has no shipping specs — quoting on generic 10×8×1 in / 1.2 lb. Set its dimensions in the book editor or click "Save to Book Preset".`, 'warn', 6000);
-  } else {
-    showToast(`✓ Package preset loaded: ${book.title}`);
+  if (!silent) {
+    if (source === 'generic') {
+      showToast(`⚠ ${book.title} has no shipping specs — quoting on generic 10×8×1 in / 1.2 lb. Set its dimensions in the book editor or click "Save to Book Preset".`, 'warn', 6000);
+    } else {
+      showToast(`✓ Package preset loaded: ${book.title}`);
+    }
   }
+  return source;
 }
 
 /**
@@ -8351,15 +8556,26 @@ function updateShippoBaseSpecsFromInputs() {
   shippoBaseSpecs.weight = currentWeight / qty;
 }
 
-function onShippoQuantityChange() {
-  const qty = Math.max(1, parseInt($('sp-qty').value) || 1);
-  const scaledHeight = shippoBaseSpecs.height * qty;
-  const scaledWeight = shippoBaseSpecs.weight * qty;
-
-  $('sp-height').value = parseFloat(scaledHeight.toFixed(2));
-  $('sp-weight').value = parseFloat(scaledWeight.toFixed(2));
+/**
+ * Restack the box for `qty` copies: height and weight are per-copy figures held
+ * in shippoBaseSpecs and multiplied here, so the parcel grows with the order.
+ *
+ * Split out of onShippoQuantityChange so the automated prefill can set a
+ * quantity read off an order without also firing the toast that belongs to a
+ * publisher typing in the box themselves.
+ */
+function scaleShippoSpecsForQty(qty) {
+  const copies = Math.max(1, parseInt(qty, 10) || 1);
+  const heightInput = $('sp-height');
+  const weightInput = $('sp-weight');
+  if (heightInput) heightInput.value = parseFloat((shippoBaseSpecs.height * copies).toFixed(2));
+  if (weightInput) weightInput.value = parseFloat((shippoBaseSpecs.weight * copies).toFixed(2));
   updateShippoCustomsTotalHint();
+  return copies;
+}
 
+function onShippoQuantityChange() {
+  const qty = scaleShippoSpecsForQty($('sp-qty')?.value);
   showToast(`✓ Scaled specs for ${qty} ${qty === 1 ? 'copy' : 'copies'}`);
 }
 export {
@@ -8414,6 +8630,13 @@ export {
   editShippoApiKey,
   onShippoPreFillDestChange,
   onShippoBookPresetChange,
+  applyOrderPrefill,
+  applyOrderParcelPlan,
+  autoQuoteEnabled,
+  setShippoAutoQuote,
+  onShippoAutoQuoteToggle,
+  renderOrderPrefillSummary,
+  scaleShippoSpecsForQty,
   openSaveBookPresetModal,
   confirmSaveBookPreset,
   renderSaveBookPresetPreview,

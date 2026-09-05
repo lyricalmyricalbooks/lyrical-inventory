@@ -405,6 +405,8 @@ import {
   editShippoApiKey,
   onShippoPreFillDestChange,
   onShippoBookPresetChange,
+  onShippoAutoQuoteToggle,
+  applyOrderPrefill,
   isCanadaPostRate,
   moneyAmount,
   roundShippingCharge,
@@ -22270,7 +22272,8 @@ function exposeLegacyInlineHandlers() {
     exportCustomersCSV, checkAppUpdate, dismissAppUpdate, fetchRecentChanges, showWhatsNew,
     initStartup, setupGate, renderWebAnalytics, updateModalAccentPreview, normalizeCountryCode,
     getAllStores, getBookPresetSpecs, initShippingTab, getRecentShippingOrders, saveShippoApiKey,
-    editShippoApiKey, onShippoPreFillDestChange, prefillShippingFromBigCartelOrder, onShippoBookPresetChange, isCanadaPostRate,
+    editShippoApiKey, onShippoPreFillDestChange, prefillShippingFromBigCartelOrder, onShippoBookPresetChange,
+    onShippoAutoQuoteToggle, applyOrderPrefill, isCanadaPostRate,
     moneyAmount, roundShippingCharge, buildShippingChargePrediction,
     renderShippingChargePrediction, collectShippoMessages, renderShippoDiagnostics,
     calculateShippoRates, updateShippoBaseSpecsFromInputs, onShippoQuantityChange,
@@ -22341,6 +22344,7 @@ window.filterShippoDestMenu = filterShippoDestMenu;
 window.selectShippoDestCustomItem = selectShippoDestCustomItem;
 window.clearShippoDestSelection = clearShippoDestSelection;
 window.onShippoBookPresetChange = onShippoBookPresetChange;
+window.onShippoAutoQuoteToggle = onShippoAutoQuoteToggle;
 window.openSaveBookPresetModal = openSaveBookPresetModal;
 window.confirmSaveBookPreset = confirmSaveBookPreset;
 window.renderSaveBookPresetPreview = renderSaveBookPresetPreview;
