@@ -41,7 +41,12 @@ function entryHtml(entry) {
   const action = entry.actionLabel && entry.action
     ? `<button type="button" class="btn gold sm" onclick="${escapeHtml(entry.action)}">${escapeHtml(entry.actionLabel)}</button>`
     : '';
-  return `<div class="app-alert" data-alert-id="${escapeHtml(entry.id)}" role="status" aria-live="polite">
+  // Tone is opt-in and defaults to nothing, so every entry written before this
+  // existed keeps the positive styling it was designed with. A fault needs to
+  // look unlike "3 labels imported" at a glance, or the corner reads as
+  // uniformly good news and the one entry that isn't gets skimmed past.
+  const tone = entry.tone ? ` app-alert-${escapeHtml(entry.tone)}` : '';
+  return `<div class="app-alert${tone}" data-alert-id="${escapeHtml(entry.id)}" role="status" aria-live="polite">
       <span class="app-alert-ico" aria-hidden="true">${escapeHtml(entry.icon || '')}</span>
       <div class="app-alert-body">
         <span class="app-alert-title">${escapeHtml(entry.title || '')}</span>
@@ -76,6 +81,7 @@ export function pushAppAlert(entry) {
     icon: entry.icon || '',
     title: entry.title,
     detail: entry.detail || '',
+    tone: entry.tone || '',
     actionLabel: entry.actionLabel || '',
     action: entry.action || '',
   };
@@ -89,6 +95,10 @@ export function pushAppAlert(entry) {
 export function dismissAppAlert(id) {
   const key = String(id || '').trim();
   if (!key) return;
+  const before = _entries.length;
   _entries = _entries.filter(entry => entry.id !== key);
-  renderAppAlerts();
+  // Only repaint when something actually went. Background checks dismiss their
+  // own entry on every successful run, and rebuilding the stack's markup on a
+  // timer would interrupt a press on whichever other card is showing.
+  if (_entries.length !== before) renderAppAlerts();
 }

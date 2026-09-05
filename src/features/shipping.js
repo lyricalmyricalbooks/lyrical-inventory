@@ -47,6 +47,11 @@ import { renderExpenses, saveReceiptToLocalFile, readShippingFieldsFromReceipt }
 import { openM, closeM, confirmDialog, promptDialog, validateFields, clearFieldErrors, fieldError, _prefersReducedMotion } from '../lib/modal.js';
 import { dismissAppAlert, pushAppAlert } from '../lib/app-alert.js';
 import {
+  integrationBackoffMs,
+  noteIntegrationFailure,
+  noteIntegrationSuccess,
+} from '../lib/integration-watch.js';
+import {
   extractBigCartelAddress,
   getBigCartelIncluded,
   loadCachedBigCartelOrders,
@@ -600,7 +605,12 @@ async function openShippoLabel(ref) {
     window.open(url, '_blank', 'noopener');
   } catch (e) {
     console.error('Could not refresh Shippo label', e);
-    showToast(`⚠ Could not get the label from Shippo — ${describeShippoError(e)}`, 'err', 6000);
+    // describeShippoError takes (status, bodyText). Passing the Error itself as
+    // the status produced "Shippo validation failed (Error: Shippo transactions
+    // lookup 401: …)" — the raw throw echoed back at the publisher inside a
+    // sentence about address validation. Now that the throw carries its status,
+    // both arguments can be what the function actually expects.
+    showToast(`⚠ Could not get the label from Shippo — ${describeShippoError(e?.status || 0, e?.message || '')}`, 'err', 6000);
   }
 }
 
@@ -629,7 +639,12 @@ async function fetchShippoTransactionsPageAPI(token, page) {
   });
   if (!resp.ok) {
     const txt = await resp.text().catch(() => '');
-    throw new Error(`Shippo API error ${resp.status}${txt ? `: ${txt.slice(0, 140)}` : ''}`);
+    // Carried as a property too, so a caller can tell a refused token from an
+    // outage without parsing the sentence. `status: 0` is this file's existing
+    // convention for "could not reach it" — see fetchShippoInvoiceItems.
+    const apiError = new Error(`Shippo API error ${resp.status}${txt ? `: ${txt.slice(0, 140)}` : ''}`);
+    apiError.status = resp.status;
+    throw apiError;
   }
   return resp.json();
 }
@@ -698,7 +713,9 @@ async function fetchShippoObject(token, resource, id) {
   });
   if (!resp.ok) {
     const text = await resp.text().catch(() => '');
-    throw new Error(`Shippo ${resource} lookup ${resp.status}${text ? `: ${text.slice(0, 140)}` : ''}`);
+    const lookupError = new Error(`Shippo ${resource} lookup ${resp.status}${text ? `: ${text.slice(0, 140)}` : ''}`);
+    lookupError.status = resp.status;
+    throw lookupError;
   }
   return resp.json();
 }
@@ -1240,7 +1257,9 @@ async function refreshShippoLabelsIfDue({ force = false } = {}) {
     : dueForShippoCheck({
       lastCheckedAt: _shippoLastCheckAt,
       now: Date.now(),
-      intervalMs: SHIPPO_WATCH_INTERVAL_MS,
+      // Widened once Shippo has refused twice running, so a dead endpoint is
+      // not asked every five minutes for the rest of the day.
+      intervalMs: Math.max(SHIPPO_WATCH_INTERVAL_MS, integrationBackoffMs('shippo', SHIPPO_WATCH_INTERVAL_MS)),
       online,
       configured,
       visible: typeof document === 'undefined' || document.visibilityState !== 'hidden',
@@ -1254,12 +1273,19 @@ async function refreshShippoLabelsIfDue({ force = false } = {}) {
     const result = await importShippoShippingFromApi({
       silent: true, maxPages: 1, skipInvoices: true, skipRefunds: true,
     });
+    noteIntegrationSuccess('shippo');
     if (result?.imported) showShippoLabelAlert(result);
     return result;
   } catch (error) {
-    // A failed check is not worth interrupting anyone over: the next one tries
-    // again, and the sync chip already reports a dead connection.
+    // The failure is recorded rather than swallowed. This used to end at
+    // console.warn on the belief that the sync chip already reported a dead
+    // connection — it does not; that chip reports the Firestore write queue,
+    // so a refused Shippo token read exactly like a day with no labels.
     console.warn('Shippo label watch failed', error);
+    noteIntegrationFailure('shippo', error, {
+      online,
+      configured,
+    });
     return null;
   } finally {
     _shippoChecking = false;
@@ -1296,7 +1322,7 @@ function showShippoLabelAlert(result) {
 function openShippingReconciliationFromAlert(event) {
   if (event) event.stopPropagation();
   dismissAppAlert('shippo-labels');
-  switchTab('taxcentre');
+  switchTab('taxcenter');
   switchTaxCenterSubTab('integrations');
   openShippingReconciliation();
 }
