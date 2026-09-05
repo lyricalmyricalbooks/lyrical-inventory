@@ -35,6 +35,10 @@ describe('asking Shippo again without being told to', () => {
           return result;
         },
         showShippoLabelAlert: (r) => { seen.alerts.push(r); },
+        // The real ones, from lib/watch-schedule.js — the shared scheduler both
+        // watches now read their browser state and their interval through.
+        browserWatchState: () => ({ online, visible: !hidden }),
+        effectiveInterval: (base, backoffMs) => Math.max(base, backoffMs || 0),
         integrationBackoffMs: () => backoff,
         noteIntegrationSuccess: (id) => { seen.health.push(['ok', id]); },
         noteIntegrationFailure: (id, error) => { seen.health.push(['fail', id, error.message]); },
@@ -217,13 +221,16 @@ describe('the shared alert corner', () => {
   });
 
   it('checks on a timer, on return, and when the signal comes back', () => {
+    // The three triggers now come from the shared scheduler rather than being
+    // wired here by hand; startWatch is tested directly in
+    // tests/watch-schedule.test.js, and this asserts the watch goes through it.
     const watch = appSource.slice(
       appSource.indexOf('function startShippoLabelWatch'),
       appSource.indexOf('async function importShippoShippingFromApi'),
     );
-    expect(watch).toContain('setInterval(poll, SHIPPO_WATCH_INTERVAL_MS)');
-    expect(watch).toContain('visibilitychange');
-    expect(watch).toContain("addEventListener('online', poll)");
+    expect(watch).toContain('startWatch(');
+    expect(watch).toContain('intervalMs: SHIPPO_WATCH_INTERVAL_MS');
+    // Still guarded, so a second call cannot double every timer and listener.
     expect(watch).toContain('if (_shippoWatchStarted');
   });
 });

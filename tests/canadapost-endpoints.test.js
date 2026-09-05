@@ -12,6 +12,10 @@ import {
   resolveMobo,
   buildCanadaPostEndpoint,
   resolveShipmentEndpoint,
+  resolveListShipmentsEndpoint,
+  resolveShipmentDetailsEndpoint,
+  resolveShipmentReceiptEndpoint,
+  resolveShipmentPriceEndpoint,
   resolveArtifactEndpoint,
   resolveManifestEndpoint,
   resolveCanadaPostScope,
@@ -163,5 +167,71 @@ describe('scope and rate-limit bucket per API', () => {
     expect(resolveCanadaPostProduct(CANADAPOST_SHIPPING_API)).toBe('shipping');
     // A manifest is billed and throttled as part of shipping, not on its own.
     expect(resolveCanadaPostProduct(CANADAPOST_MANIFEST_API)).toBe('shipping');
+  });
+});
+
+// ─── Reading what was bought, rather than buying ──────────────────────────
+// These four are the read half of the Shipping API, added so a label bought on
+// canadapost.ca can be found by the app instead of typed into it. Every one of
+// them is a GET that spends nothing, and the tests below exist as much to hold
+// that line as to check the strings.
+describe('Get Shipments and its detail calls', () => {
+  const base = { baseUrl: 'https://cp.example', customerNumber: '9999999', mobo: '9999999' };
+
+  it('asks the same path Create Shipment writes to', () => {
+    // Same resource, opposite verb — that is the whole shape of this endpoint.
+    expect(resolveListShipmentsEndpoint(base))
+      .toBe(resolveShipmentEndpoint(base));
+  });
+
+  it('carries the date, cap and tracking number the spec defines', () => {
+    const url = resolveListShipmentsEndpoint({ ...base, date: '2026-09-02', limit: 25 });
+    expect(url).toContain('date=20260902');
+    expect(url).toContain('limit=25');
+
+    const byPin = resolveListShipmentsEndpoint({ ...base, trackingPin: 'EE123456789CA' });
+    expect(byPin).toContain('tracking-pin=EE123456789CA');
+  });
+
+  it('drops a date it cannot render in the spec format', () => {
+    // Sent malformed it errors; dropped it falls back to the documented
+    // default of today, which is the safer of the two.
+    const url = resolveListShipmentsEndpoint({ ...base, date: 'last Tuesday' });
+    expect(url).not.toContain('date=');
+  });
+
+  it('holds the cap inside the range the spec allows', () => {
+    expect(resolveListShipmentsEndpoint({ ...base, limit: 500000 })).toContain('limit=99999');
+    expect(resolveListShipmentsEndpoint({ ...base, limit: 0 })).not.toContain('limit=');
+    expect(resolveListShipmentsEndpoint({ ...base, limit: -5 })).not.toContain('limit=');
+  });
+
+  it('builds the three per-shipment reads', () => {
+    const withId = { ...base, shipmentId: 'ship-1' };
+    expect(resolveShipmentDetailsEndpoint(withId)).toContain('/shipments/ship-1/details');
+    expect(resolveShipmentReceiptEndpoint(withId)).toContain('/shipments/ship-1/receipt');
+    expect(resolveShipmentPriceEndpoint(withId)).toContain('/shipments/ship-1/price');
+  });
+
+  it('answers nothing without a customer number or a shipment', () => {
+    expect(resolveListShipmentsEndpoint({ baseUrl: 'https://cp.example' })).toBe('');
+    expect(resolveShipmentDetailsEndpoint({ ...base })).toBe('');
+    expect(resolveShipmentReceiptEndpoint({ ...base, shipmentId: '  ' })).toBe('');
+  });
+
+  it('never points at anything that spends money or commits a batch', () => {
+    // The standing rule is that shipping calls spend real money. These four are
+    // the read half and must stay that way.
+    const urls = [
+      resolveListShipmentsEndpoint({ ...base, date: '2026-09-02' }),
+      resolveShipmentDetailsEndpoint({ ...base, shipmentId: 's1' }),
+      resolveShipmentReceiptEndpoint({ ...base, shipmentId: 's1' }),
+      resolveShipmentPriceEndpoint({ ...base, shipmentId: 's1' }),
+    ];
+    urls.forEach(url => {
+      expect(url).toBeTruthy();
+      expect(url).not.toContain('/manifests');
+      expect(url).not.toContain('/refund');
+    });
   });
 });

@@ -188,9 +188,11 @@ describe('the shipping tab is up to date, and the markup is wired', () => {
       appSource.indexOf('function startBigCartelOrderWatch'),
       appSource.indexOf('/** The count badge on the Big Cartel tab button'),
     );
-    expect(watch).toContain('setInterval(poll, BC_ORDER_WATCH_INTERVAL_MS)');
-    expect(watch).toContain("visibilitychange");
-    expect(watch).toContain("addEventListener('online', poll)");
+    // The three triggers now come from the shared scheduler rather than being
+    // wired here by hand; startWatch is tested directly in
+    // tests/watch-schedule.test.js, and this asserts the watch goes through it.
+    expect(watch).toContain('startWatch(');
+    expect(watch).toContain('intervalMs: BC_ORDER_WATCH_INTERVAL_MS');
     // Guarded, so a second call cannot double every timer and event listener.
     expect(watch).toContain('if (_bcWatchStarted');
   });

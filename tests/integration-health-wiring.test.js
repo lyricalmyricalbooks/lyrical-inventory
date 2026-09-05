@@ -115,17 +115,25 @@ describe('the errors now say why they failed', () => {
 });
 
 describe('the mark that outlives the card', () => {
-  it('is on the navigation for both services', () => {
+  it('is on the navigation for every watched service', () => {
     expect(indexContent).toContain('data-health-badge="bigcartel"');
-    expect(indexContent).toContain('data-health-badge="shippo"');
+    // The Tax Centre hosts two shipping services, so one mark stands for both
+    // rather than a row of identical dots saying the same thing twice.
+    expect(indexContent).toContain('data-health-badge="shippo,canadapost,shipping-email"');
     // Two places each, so it is visible wherever that tab is reached from.
     expect(indexContent.match(/data-health-badge="bigcartel"/g)).toHaveLength(2);
-    expect(indexContent.match(/data-health-badge="shippo"/g)).toHaveLength(2);
+    expect(indexContent.match(/data-health-badge="shippo,canadapost,shipping-email"/g)).toHaveLength(2);
   });
 
   it('starts hidden and is announced to a screen reader', () => {
-    expect(indexContent).toMatch(/data-health-badge="shippo"[^>]*aria-label="[^"]+"/);
+    expect(indexContent).toMatch(/data-health-badge="shippo,canadapost,shipping-email"[^>]*aria-label="[^"]+"/);
     expect(indexContent).toMatch(/class="health-badge"[^>]*hidden/);
+  });
+
+  it('marks the tab when any one of the services it stands for is down', () => {
+    const watchSource = fs.readFileSync(path.resolve(__dirname, '../src/lib/integration-watch.js'), 'utf8');
+    expect(watchSource).toContain(".split(',').map(id => id.trim()).filter(Boolean)");
+    expect(watchSource).toContain('const faulty = ids.filter(id => shouldAnnounceFailure(records[id]));');
   });
 
   it('is painted at startup, so a fault survives a reload', () => {

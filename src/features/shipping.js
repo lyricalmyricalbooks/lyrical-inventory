@@ -104,6 +104,7 @@ import {
   autoLinkConfidentShippingMatches,
   enrichShippoExpense,
   isUnresolvedShippoPostage,
+  needsAmountAttention,
   linkedShippingSummary,
   normalizeShippingOrderNumber,
   persistManualShippingLink,
@@ -115,6 +116,7 @@ import {
   describeImportedLabels,
   dueForShippoCheck,
 } from '../lib/shippo-watch.js';
+import { browserWatchState, dueForCheck, effectiveInterval, startWatch } from '../lib/watch-schedule.js';
 import {
   describeInvoiceAvailability,
   invoiceIndexByTransaction,
@@ -165,7 +167,23 @@ import {
   fetchCanadaPostLabelArtifact,
   resolveCanadaPostCredentials,
   refundCanadaPostShipment,
+  executeCanadaPostProxy,
 } from '../lib/canadapost.js';
+import {
+  resolveListShipmentsEndpoint,
+  resolveShipmentDetailsEndpoint,
+  resolveShipmentPriceEndpoint,
+  resolveShipmentReceiptEndpoint,
+} from '../lib/canadapost-endpoints.js';
+import {
+  buildPostageExpense,
+  mergePostageCandidates,
+  needsAmount,
+  normalizeCanadaPostShipment,
+  normalizeShippingEmail,
+  postageCandidateRef,
+} from '../lib/postage-intake.js';
+import { parseShippingEmail, shippingEmailQuery } from '../lib/shipping-email.js';
 import {
   assessLiveShippingReadiness,
   inspectZonosAccountKey,
@@ -769,7 +787,14 @@ function renderShippingReconciliationWorklist() {
   if (openButton) openButton.hidden = true;
   const expenses = (TAX_CENTER.businessExpenses || []).filter(isUnresolvedShippoPostage);
   const knownOrders = getShippingReconciliationOrders();
-  count.textContent = `${expenses.length} to review`;
+  // Two different kinds of unfinished. A label needing an order is a matching
+  // job; a label needing a figure is a bookkeeping one, and it stays visible
+  // here because the alternative — a silent zero in the postage column — is how
+  // a shipping margin quietly stops being true.
+  const blanks = (TAX_CENTER.businessExpenses || []).filter(needsAmountAttention).length;
+  count.textContent = blanks
+    ? `${expenses.length} to review · ${blanks} needs an amount`
+    : `${expenses.length} to review`;
   if (!expenses.length) {
     list.innerHTML = `<div class="shipping-reconciliation-empty">
       <span class="recon-empty-mark" aria-hidden="true">\u2713</span>
@@ -1236,6 +1261,445 @@ async function linkConfidentShippingMatchesNow() {
 // the same gates on when a request would be wasted. The rules live in
 // lib/shippo-watch.js; this is the timer and the card.
 
+// ─── Canada Post: asking what was bought, rather than being told ──────────
+//
+// A label bought on canadapost.ca used to reach this app only by being typed
+// into it — the amount, the date, the category, then a separate trip to link it
+// to whoever it was posted to. But it was bought on the same business account
+// whose credentials the app already holds, which means the app can simply ask.
+//
+// What comes back is the carrier's own record: `/details` for who it went to,
+// `/receipt` for what was actually charged. Nothing is read off a photograph
+// and nothing is inferred from a rate table, so this is the most trustworthy of
+// the three ways postage reaches the ledger.
+//
+// Two things it deliberately does not do. It never guesses an amount: a
+// contract shipment has no card receipt, and when the price endpoint is also
+// silent the expense is filed with the figure blank and flagged rather than
+// plausible and wrong. And it only ever reads — GET, no create, no void, no
+// manifest transmit — because a Canada Post call that is not a read spends real
+// money, and a background sweep is the last place that should be possible.
+//
+// It also cannot see everything. Get Shipments answers for shipments on this
+// customer number, so a counter purchase paid at a till is not in it. That is
+// not a gap to apologise for; it is why the email path exists beside this one.
+
+const CP_SWEEP_INTERVAL_MS = 30 * 60 * 1000;
+// How far back a sweep reaches when there is no record of a previous one. Long
+// enough to catch the week a publisher installs this, short enough that a first
+// run does not walk the whole account history.
+const CP_SWEEP_COLD_START_DAYS = 14;
+const CP_SWEEP_LIMIT = 50;
+const CP_SWEEP_LAST_KEY = 'lm-cp-sweep-last';
+
+const cpText = (value) => String(value ?? '').trim();
+
+let _cpSweepStarted = false;
+let _cpSweeping = false;
+
+function readCpSweepStamp() {
+  try { return Number(localStorage.getItem(CP_SWEEP_LAST_KEY)) || 0; } catch (_) { return 0; }
+}
+
+function writeCpSweepStamp(at) {
+  try { localStorage.setItem(CP_SWEEP_LAST_KEY, String(at)); } catch (_) { /* private mode */ }
+}
+
+/** `YYYYMMDD`, the only date format Get Shipments accepts. */
+function cpSweepFromDate() {
+  const last = readCpSweepStamp();
+  const from = last
+    // A day of overlap, because a shipment created just before the last sweep
+    // can be dated to it; a duplicate is caught by tracking number anyway,
+    // whereas a missed label is silent.
+    ? new Date(last - 86400000)
+    : new Date(Date.now() - CP_SWEEP_COLD_START_DAYS * 86400000);
+  return from.toISOString().slice(0, 10).replace(/-/g, '');
+}
+
+/** One read through the Canada Post proxy. GET only — no payload, ever. */
+async function cpRead(endpoint, credentials, isTest) {
+  if (!endpoint) return null;
+  const res = await executeCanadaPostProxy({
+    targetEndpoint: endpoint,
+    // No jsonPayload is what makes this a GET, in the proxy and in the backend.
+    jsonPayload: '',
+    apiKey: credentials.apiKey,
+    apiSecret: credentials.apiSecret,
+    customerNumber: credentials.customerNumber,
+    isTest,
+    // Both explicit. `isShipment` is otherwise inferred from the word
+    // "shipments" in the path, which is in every one of these read endpoints —
+    // and with it comes sandbox simulation, which could answer a read with a
+    // fabricated shipment. A read must never invent its own data.
+    isShipment: false,
+    allowSimulation: false,
+    scope: 'shipping',
+  });
+  return res?.json || null;
+}
+
+/** The shipment ids in a Get Shipments response, however it nests them. */
+function cpShipmentIdsFrom(payload) {
+  const links = payload?.shipments?.link || payload?.shipments || payload?.link || [];
+  const list = Array.isArray(links) ? links : [links];
+  return list.map(entry => {
+    // The spec returns each shipment as a link whose href doubles as the Get
+    // Shipment endpoint, so the id is read out of the path rather than expected
+    // as its own field.
+    const href = cpText(entry?.href);
+    const fromHref = href.match(/\/shipments\/([^/?#]+)/);
+    if (fromHref) return fromHref[1];
+    return cpText(entry?.shipmentId || entry?.['shipment-id'] || (typeof entry === 'string' ? entry : ''));
+  }).filter(Boolean);
+}
+
+/**
+ * Ask Canada Post what has been bought since the last time, and file it.
+ *
+ * Returns a count of what landed and what still needs a figure, so the caller
+ * can say so once rather than per shipment.
+ */
+async function sweepCanadaPostShipments({ force = false } = {}) {
+  const settings = TAX_CENTER.settings || {};
+  const credentials = resolveCanadaPostCredentials(settings);
+  const isTest = !!settings.cpTestMode;
+  const configured = !!(credentials.apiKey && credentials.apiSecret && credentials.customerNumber);
+  const { online, visible } = browserWatchState();
+
+  const due = force
+    ? configured && online && !_cpSweeping
+    : dueForCheck({
+      lastCheckedAt: readCpSweepStamp(),
+      now: Date.now(),
+      intervalMs: effectiveInterval(
+        CP_SWEEP_INTERVAL_MS,
+        integrationBackoffMs('canadapost', CP_SWEEP_INTERVAL_MS),
+      ),
+      online, configured, visible, busy: _cpSweeping,
+    });
+  if (!due) return null;
+
+  _cpSweeping = true;
+  try {
+    const listed = await cpRead(resolveListShipmentsEndpoint({
+      customerNumber: credentials.customerNumber,
+      mobo: credentials.customerNumber,
+      date: cpSweepFromDate(),
+      limit: CP_SWEEP_LIMIT,
+    }), credentials, isTest);
+
+    const ids = cpShipmentIdsFrom(listed);
+    const known = new Set((TAX_CENTER.businessExpenses || [])
+      .map(expense => cpText(expense?.ref)).filter(Boolean));
+    const knownOrders = getShippingReconciliationOrders();
+
+    let filed = 0;
+    let blank = 0;
+    for (const shipmentId of ids) {
+      const args = {
+        customerNumber: credentials.customerNumber,
+        mobo: credentials.customerNumber,
+        shipmentId,
+      };
+      // Details first: it carries the tracking number the ref is keyed on, so a
+      // shipment already in the ledger costs one read rather than three.
+      const details = await cpRead(resolveShipmentDetailsEndpoint(args), credentials, isTest);
+      let candidate = normalizeCanadaPostShipment({ shipmentId }, details, {}, {});
+      if (!candidate.trackingNumber || known.has(postageCandidateRef(candidate))) continue;
+
+      const receipt = await cpRead(resolveShipmentReceiptEndpoint(args), credentials, isTest)
+        .catch(() => null);
+      const price = receipt?.ccReceiptDetails
+        ? null
+        : await cpRead(resolveShipmentPriceEndpoint(args), credentials, isTest).catch(() => null);
+      candidate = mergePostageCandidates(
+        candidate,
+        normalizeCanadaPostShipment({ shipmentId }, details, receipt || {}, price || {}),
+      );
+
+      const ref = postageCandidateRef(candidate);
+      if (!ref || known.has(ref)) continue;
+      known.add(ref);
+      if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
+
+      // Graded as it is filed. Without this the expense arrives with no match
+      // status at all, which is neither 'suggested' nor 'matched' — so the
+      // auto-linker would skip it and every one of these would sit in the
+      // worklist waiting for a human, which is the whole thing this is meant to
+      // remove.
+      const expense = buildPostageExpense(candidate);
+      Object.assign(expense, reconcileShippingExpense({
+        recipientName: expense.recipientName,
+        recipientPostal: expense.recipientPostal,
+        trackingNumber: expense.trackingNumber,
+        date: expense.date,
+      }, knownOrders));
+      TAX_CENTER.businessExpenses.unshift(expense);
+      filed++;
+      if (needsAmount(candidate)) blank++;
+    }
+
+    writeCpSweepStamp(Date.now());
+    noteIntegrationSuccess('canadapost');
+
+    if (filed) {
+      const linked = applyConfidentShippingLinks();
+      // The tracking number belongs on the order too, not only on the expense.
+      const stamped = writeTrackingBackToOrders(TAX_CENTER.businessExpenses || []);
+      await saveTaxCenter().catch(e => console.warn('Canada Post sweep save failed', e));
+      renderTaxCenter();
+      renderShippingAnalysisHub();
+      showPostageSweepAlert({ filed, linked, blank, needsReview: reconciliationBacklog() });
+      return { filed, linked, blank, stamped };
+    }
+    return { filed: 0, linked: 0, blank: 0, stamped: 0 };
+  } catch (error) {
+    console.warn('Canada Post shipment sweep failed', error);
+    noteIntegrationFailure('canadapost', error, { online, configured });
+    return null;
+  } finally {
+    _cpSweeping = false;
+  }
+}
+
+/**
+ * Put the tracking number on the order the postage was linked to.
+ *
+ * This is the half of the job that is not bookkeeping. buyCanadaPostLabel and
+ * buyShippoLabel already stamp `trackingNumber` and `shipped` onto the history
+ * row when a label is bought in the app, so an order shipped that way carries
+ * its own tracking. A label bought on canadapost.ca could not — the app never
+ * saw it — and the publisher typed the number onto the order by hand, or more
+ * often did not, and the order sat looking unshipped.
+ *
+ * Now that the postage is linked, the number it carries belongs on the order,
+ * and the "shipped" flag with it.
+ *
+ * Only ever fills a blank. An order that already names a tracking number was
+ * shipped by some route this does not know about, and overwriting that with a
+ * later label's number would replace a true record with a plausible one.
+ */
+function writeTrackingBackToOrders(expenses = []) {
+  let stamped = 0;
+  const wanted = new Map();
+  expenses.forEach(expense => {
+    const orderNumber = normalizeShippingOrderNumber(expense?.shippingOrderNumber);
+    const tracking = cpText(expense?.trackingNumber);
+    if (orderNumber && tracking && expense.shippingMatchStatus === 'matched') {
+      wanted.set(orderNumber, { tracking, date: cpText(expense.date) });
+    }
+  });
+  if (!wanted.size) return 0;
+
+  Object.entries(states).forEach(([bookId, state]) => {
+    if (!state || !Array.isArray(state.hist)) return;
+    let touched = false;
+    state.hist.forEach(entry => {
+      if (!entry || entry.voided) return;
+      const found = wanted.get(normalizeShippingOrderNumber(entry.num));
+      if (!found || cpText(entry.trackingNumber)) return;
+      entry.trackingNumber = found.tracking;
+      if (!entry.shipped) {
+        entry.shipped = true;
+        entry.shippedDate = found.date || entry.shippedDate || today();
+      }
+      touched = true;
+      stamped++;
+    });
+    if (touched) saveState(bookId);
+  });
+
+  if (stamped) renderHist();
+  return stamped;
+}
+
+/** The card announcing labels bought elsewhere that filed themselves. */
+function showPostageSweepAlert({ filed, linked, blank, needsReview, source = 'Canada Post' }) {
+  const labels = `${filed} label${filed === 1 ? '' : 's'}`;
+  const parts = [];
+  if (linked > 0) parts.push(`${linked} matched to ${linked === 1 ? 'its order' : 'their orders'}`);
+  if (blank > 0) parts.push(`${blank} ${blank === 1 ? 'needs' : 'need'} an amount`);
+  else if (needsReview > 0) parts.push(`${needsReview} ${needsReview === 1 ? 'needs' : 'need'} you`);
+
+  pushAppAlert({
+    // Keyed per source, so a Canada Post sweep and an email sweep finding
+    // labels minutes apart do not overwrite each other's news.
+    id: `postage-sweep-${source.replace(/[^a-z]+/gi, '-').toLowerCase()}`,
+    icon: '📮',
+    title: `${labels} added from ${source}`,
+    detail: parts.length
+      ? `Bought outside the app — ${parts.join(', ')}.`
+      : 'Bought outside the app and added to your books.',
+    actionLabel: (blank || needsReview) ? 'Review' : '',
+    action: (blank || needsReview) ? 'openShippingReconciliationFromAlert(event)' : '',
+  });
+}
+
+function startCanadaPostSweep() {
+  if (_cpSweepStarted || typeof window === 'undefined') return;
+  _cpSweepStarted = true;
+  startWatch(() => { sweepCanadaPostShipments(); }, { intervalMs: CP_SWEEP_INTERVAL_MS });
+}
+
+// ─── The carrier email, for everything Canada Post cannot be asked about ──
+//
+// The sweep above covers labels on the Canada Post account. Another courier's
+// website is not on it, and neither is a Canada Post purchase made outside that
+// customer number. What those leave is an email.
+//
+// This reuses the receipt scanner's Gmail pipeline wholesale — the search, the
+// batched body fetch, both already built and both already talking to an Apps
+// Script endpoint that takes a client-supplied query. Nothing new crosses to
+// the script, so there is no version bump and nothing to redeploy.
+//
+// Reading is deterministic: lib/shipping-email.js finds the tracking number and
+// the labelled total with regexes, and an email it cannot crack is left for the
+// scanner's AI path rather than half-read. That keeps a five-minute background
+// job free of per-email AI cost, makes the same email parse the same way every
+// time, and means no figure in the ledger was ever invented by a model.
+
+const EMAIL_SWEEP_INTERVAL_MS = 30 * 60 * 1000;
+const EMAIL_SWEEP_COLD_START_DAYS = 14;
+const EMAIL_SWEEP_LAST_KEY = 'lm-shipping-email-sweep-last';
+
+let _emailSweepStarted = false;
+let _emailSweeping = false;
+
+function readEmailSweepStamp() {
+  try { return Number(localStorage.getItem(EMAIL_SWEEP_LAST_KEY)) || 0; } catch (_) { return 0; }
+}
+
+function writeEmailSweepStamp(at) {
+  try { localStorage.setItem(EMAIL_SWEEP_LAST_KEY, String(at)); } catch (_) { /* private mode */ }
+}
+
+async function gmailJson(action, params) {
+  const url = `${sheetsUrl}${sheetsUrl.includes('?') ? '&' : '?'}action=${action}&${params}`;
+  const res = await fetch(url, { method: 'GET', mode: 'cors' });
+  if (!res.ok) {
+    const err = new Error(`Gmail search failed (${res.status})`);
+    err.status = res.status;
+    throw err;
+  }
+  const data = await res.json();
+  // Apps Script reports its own failures as HTTP 200 plus {error}, so a bad
+  // query or a stale deployment arrives looking like a success.
+  if (data && data.error) throw new Error(String(data.error));
+  return data || {};
+}
+
+/**
+ * Look for labels a carrier emailed about, and file the ones it can read.
+ *
+ * Only emails carrying a verifiable tracking number are filed, and only ones
+ * not already in the ledger under that number — which is also what stops this
+ * and the Canada Post sweep filing the same Canada Post label twice.
+ */
+async function sweepShippingEmails({ force = false } = {}) {
+  const configured = !!sheetsUrl;
+  const { online, visible } = browserWatchState();
+  const due = force
+    ? configured && online && !_emailSweeping
+    : dueForCheck({
+      lastCheckedAt: readEmailSweepStamp(),
+      now: Date.now(),
+      intervalMs: effectiveInterval(
+        EMAIL_SWEEP_INTERVAL_MS,
+        integrationBackoffMs('shipping-email', EMAIL_SWEEP_INTERVAL_MS),
+      ),
+      online, configured, visible, busy: _emailSweeping,
+    });
+  if (!due) return null;
+
+  _emailSweeping = true;
+  try {
+    const last = readEmailSweepStamp();
+    const since = new Date(last
+      // A day of overlap: an email can arrive between a sweep starting and
+      // finishing, and a duplicate is caught by tracking number anyway whereas
+      // a missed label is silent.
+      ? last - 86400000
+      : Date.now() - EMAIL_SWEEP_COLD_START_DAYS * 86400000).toISOString().slice(0, 10);
+
+    const found = await gmailJson('listReceiptEmails',
+      `limit=25&q=${encodeURIComponent(shippingEmailQuery({ since }))}`);
+    const ids = (found.emails || []).map(email => cpText(email?.id)).filter(Boolean);
+    if (!ids.length) {
+      writeEmailSweepStamp(Date.now());
+      noteIntegrationSuccess('shipping-email');
+      return { filed: 0, linked: 0, blank: 0, stamped: 0 };
+    }
+
+    const bodies = await gmailJson('getEmailContents', `ids=${encodeURIComponent(ids.join(','))}`);
+    const known = new Set((TAX_CENTER.businessExpenses || [])
+      .map(expense => cpText(expense?.ref)).filter(Boolean));
+    const knownOrders = getShippingReconciliationOrders();
+
+    let filed = 0;
+    let blank = 0;
+    (bodies.emails || []).forEach(email => {
+      if (!email) return;
+      const parsed = parseShippingEmail({
+        subject: email.subject || '',
+        body: email.body || email.plainBody || '',
+        date: email.date || '',
+        from: email.from || '',
+      });
+      // Null means no verifiable tracking number — newsletters, delivery
+      // notices, the storefront's own order mail. Left alone rather than filed
+      // half-read; the scanner's AI path is where a stubborn one goes.
+      if (!parsed) return;
+
+      const candidate = normalizeShippingEmail(parsed, { messageId: email.id });
+      const ref = postageCandidateRef(candidate);
+      if (!ref || known.has(ref)) return;
+      known.add(ref);
+
+      const expense = buildPostageExpense(candidate);
+      Object.assign(expense, reconcileShippingExpense({
+        recipientName: expense.recipientName,
+        recipientPostal: expense.recipientPostal,
+        trackingNumber: expense.trackingNumber,
+        date: expense.date,
+      }, knownOrders));
+      if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
+      TAX_CENTER.businessExpenses.unshift(expense);
+      filed++;
+      if (needsAmount(candidate)) blank++;
+    });
+
+    writeEmailSweepStamp(Date.now());
+    noteIntegrationSuccess('shipping-email');
+
+    if (filed) {
+      const linked = applyConfidentShippingLinks();
+      // The tracking number belongs on the order too, not only on the expense.
+      const stamped = writeTrackingBackToOrders(TAX_CENTER.businessExpenses || []);
+      await saveTaxCenter().catch(e => console.warn('Shipping email sweep save failed', e));
+      renderTaxCenter();
+      renderShippingAnalysisHub();
+      showPostageSweepAlert({
+        filed, linked, blank, needsReview: reconciliationBacklog(), source: 'your email',
+      });
+      return { filed, linked, blank, stamped };
+    }
+    return { filed: 0, linked: 0, blank: 0, stamped: 0 };
+  } catch (error) {
+    console.warn('Shipping email sweep failed', error);
+    noteIntegrationFailure('shipping-email', error, { online, configured });
+    return null;
+  } finally {
+    _emailSweeping = false;
+  }
+}
+
+function startShippingEmailSweep() {
+  if (_emailSweepStarted || typeof window === 'undefined') return;
+  _emailSweepStarted = true;
+  startWatch(() => { sweepShippingEmails(); }, { intervalMs: EMAIL_SWEEP_INTERVAL_MS });
+}
+
 const SHIPPO_WATCH_INTERVAL_MS = 5 * 60 * 1000;
 
 let _shippoWatchStarted = false;
@@ -1250,7 +1714,7 @@ let _shippoChecking = false;
  * new since last time — this is a single request that writes nothing.
  */
 async function refreshShippoLabelsIfDue({ force = false } = {}) {
-  const online = typeof navigator === 'undefined' || navigator.onLine !== false;
+  const { online, visible } = browserWatchState();
   const configured = !!TAX_CENTER.settings?.shippoKey;
   const due = force
     ? configured && online && !_shippoChecking
@@ -1259,10 +1723,10 @@ async function refreshShippoLabelsIfDue({ force = false } = {}) {
       now: Date.now(),
       // Widened once Shippo has refused twice running, so a dead endpoint is
       // not asked every five minutes for the rest of the day.
-      intervalMs: Math.max(SHIPPO_WATCH_INTERVAL_MS, integrationBackoffMs('shippo', SHIPPO_WATCH_INTERVAL_MS)),
+      intervalMs: effectiveInterval(SHIPPO_WATCH_INTERVAL_MS, integrationBackoffMs('shippo', SHIPPO_WATCH_INTERVAL_MS)),
       online,
       configured,
-      visible: typeof document === 'undefined' || document.visibilityState !== 'hidden',
+      visible,
       busy: _shippoChecking,
     });
   if (!due) return null;
@@ -1340,16 +1804,10 @@ function startShippoLabelWatch() {
   const last = Date.parse(TAX_CENTER.settings?.shippoLastImportAt || '');
   _shippoLastCheckAt = Number.isFinite(last) ? last : 0;
 
-  const poll = () => { refreshShippoLabelsIfDue(); };
-
-  poll();
-  window.setInterval(poll, SHIPPO_WATCH_INTERVAL_MS);
-  if (typeof document !== 'undefined') {
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') poll();
-    });
-  }
-  window.addEventListener('online', poll);
+  // Timer, return-to-app and reconnect, from the shared scheduler rather than
+  // wired by hand here — the same three triggers the storefront watch and the
+  // postage sweep use, so there is one place they can be reasoned about.
+  startWatch(() => { refreshShippoLabelsIfDue(); }, { intervalMs: SHIPPO_WATCH_INTERVAL_MS });
 }
 
 /**
@@ -8894,6 +9352,10 @@ export {
   openShippingReconciliationFromAlert,
   refreshShippoLabelsIfDue,
   startShippoLabelWatch,
+  sweepCanadaPostShipments,
+  startCanadaPostSweep,
+  sweepShippingEmails,
+  startShippingEmailSweep,
   reconciliationBacklog,
   applyOrderPrefill,
   applyOrderParcelPlan,

@@ -31,6 +31,8 @@ import {
 export const INTEGRATIONS = Object.freeze({
   bigcartel: { id: 'bigcartel', label: 'Big Cartel' },
   shippo: { id: 'shippo', label: 'Shippo' },
+  canadapost: { id: 'canadapost', label: 'Canada Post' },
+  'shipping-email': { id: 'shipping-email', label: 'Shipping email scan' },
 });
 
 const store = () => (typeof localStorage === 'undefined' ? null : localStorage);
@@ -55,12 +57,16 @@ export function renderIntegrationBadges() {
   // check, on a five-minute timer, and each service is marked in two places.
   const records = readHealthRecords(store());
   document.querySelectorAll('[data-health-badge]').forEach(node => {
-    const id = node.getAttribute('data-health-badge');
-    const faulty = shouldAnnounceFailure(records[id]);
-    node.hidden = !faulty;
-    if (faulty) {
+    // A comma-separated list, because one tab can host several services — the
+    // Tax Centre holds Shippo and Canada Post both — and a mark per service on
+    // the same button would be a row of identical dots saying one thing.
+    const ids = String(node.getAttribute('data-health-badge') || '')
+      .split(',').map(id => id.trim()).filter(Boolean);
+    const faulty = ids.filter(id => shouldAnnounceFailure(records[id]));
+    node.hidden = !faulty.length;
+    if (faulty.length) {
       node.textContent = '!';
-      node.setAttribute('title', `${labelFor(id)} is not answering — open to see why`);
+      node.setAttribute('title', `${faulty.map(labelFor).join(' and ')} ${faulty.length === 1 ? 'is' : 'are'} not answering — open to see why`);
     }
   });
 }

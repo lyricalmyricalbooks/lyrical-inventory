@@ -416,6 +416,10 @@ import {
   linkConfidentShippingMatchesNow,
   openShippingReconciliationFromAlert,
   startShippoLabelWatch,
+  startCanadaPostSweep,
+  sweepCanadaPostShipments,
+  startShippingEmailSweep,
+  sweepShippingEmails,
   refreshShippoLabelsIfDue,
   applyOrderPrefill,
   isCanadaPostRate,
@@ -14911,6 +14915,12 @@ async function boot(forcedBook) {
         // in the Tax Centre. Started after the books load because linking a
         // label needs the order history to link it to.
         startShippoLabelWatch();
+        // And the third: labels bought on canadapost.ca, which the app can ask
+        // the carrier about directly because it is the same business account.
+        startCanadaPostSweep();
+        // And the fourth: another courier's label, which leaves no API trace
+        // but does leave a confirmation email.
+        startShippingEmailSweep();
         // A fault recorded before the last reload is still a fault. Painted
         // here so the mark is on the tab from the first render rather than
         // only after the next failed check.
@@ -22359,6 +22369,8 @@ window.renderIntegrationBadges = renderIntegrationBadges;
 window.recheckIntegration = (id) => {
   if (id === 'bigcartel') return refreshBigCartelOrdersIfDue({ force: true });
   if (id === 'shippo') return refreshShippoLabelsIfDue({ force: true });
+  if (id === 'canadapost') return sweepCanadaPostShipments({ force: true });
+  if (id === 'shipping-email') return sweepShippingEmails({ force: true });
   return undefined;
 };
 window.linkConfidentShippingMatchesNow = linkConfidentShippingMatchesNow;
