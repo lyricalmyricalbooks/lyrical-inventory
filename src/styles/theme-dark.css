@@ -505,10 +505,9 @@
 .theme-dark .tc-integration-section:hover {
   border-color: var(--border);
 }
-.theme-dark .shipping-reconciliation {
-  background: var(--surface-card);
-  border-color: var(--border);
-}
+/* .shipping-reconciliation itself no longer needs a dark override — its base
+   rule in style.css now uses --surface-card in both themes (it used to be a
+   4% white wash that only read as a card once --surface-card was dark). */
 .theme-dark .shipping-reconciliation-row {
   background: var(--surface-sunken);
   border-color: var(--border2);
