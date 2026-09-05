@@ -23,6 +23,7 @@
 
 import { bigCartelOrderNumber, bigCartelOrderDate } from './bigcartel-ledger-gap.js';
 import { normalizeShippingOrderNumber } from './shipping-reconciliation.js';
+import { dueForCheck } from './watch-schedule.js';
 
 /** How many order numbers to remember. Comfortably more than any store's recent history. */
 const SEEN_LIMIT = 400;
@@ -123,27 +124,17 @@ export function mergeSeenOrders(seenNums = [], announcedNums = []) {
 /**
  * Whether to go and ask the storefront again.
  *
- * Every gate here is a way the request would be wasted or wrong: the app is not
- * set up for it, the device has no connection, nobody is looking at the screen,
- * or the last answer is still fresh. Checking while the tab is hidden is the
- * one worth naming — a backgrounded phone browser throttles timers to minutes
- * anyway, and spending a publisher's mobile data on an answer nobody will read
- * until they open the app is not a trade worth making.
+ * The gates themselves now live in lib/watch-schedule.js, shared with every
+ * other check that runs without being asked. They were written out here first
+ * and then copied verbatim into the Shippo watch; a third copy was about to be
+ * written for the postage sweep, which is the point at which two identical
+ * copies stops being a coincidence.
+ *
+ * The name stays because it reads correctly at its call site and because the
+ * storefront watch is what it belongs to — this is one implementation with two
+ * honest names, not two implementations.
  */
-export function dueForRefresh({
-  lastCheckedAt = 0,
-  now = Date.now(),
-  intervalMs = 0,
-  online = true,
-  configured = true,
-  visible = true,
-  busy = false,
-} = {}) {
-  if (!configured || !online || !visible || busy) return false;
-  if (!(intervalMs > 0)) return false;
-  const last = Number(lastCheckedAt) || 0;
-  return (now - last) >= intervalMs;
-}
+export const dueForRefresh = dueForCheck;
 
 /**
  * What the notification says. Written for the publisher: who bought, and what

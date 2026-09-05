@@ -115,6 +115,7 @@ import {
   describeImportedLabels,
   dueForShippoCheck,
 } from '../lib/shippo-watch.js';
+import { browserWatchState, effectiveInterval, startWatch } from '../lib/watch-schedule.js';
 import {
   describeInvoiceAvailability,
   invoiceIndexByTransaction,
@@ -1250,7 +1251,7 @@ let _shippoChecking = false;
  * new since last time — this is a single request that writes nothing.
  */
 async function refreshShippoLabelsIfDue({ force = false } = {}) {
-  const online = typeof navigator === 'undefined' || navigator.onLine !== false;
+  const { online, visible } = browserWatchState();
   const configured = !!TAX_CENTER.settings?.shippoKey;
   const due = force
     ? configured && online && !_shippoChecking
@@ -1259,10 +1260,10 @@ async function refreshShippoLabelsIfDue({ force = false } = {}) {
       now: Date.now(),
       // Widened once Shippo has refused twice running, so a dead endpoint is
       // not asked every five minutes for the rest of the day.
-      intervalMs: Math.max(SHIPPO_WATCH_INTERVAL_MS, integrationBackoffMs('shippo', SHIPPO_WATCH_INTERVAL_MS)),
+      intervalMs: effectiveInterval(SHIPPO_WATCH_INTERVAL_MS, integrationBackoffMs('shippo', SHIPPO_WATCH_INTERVAL_MS)),
       online,
       configured,
-      visible: typeof document === 'undefined' || document.visibilityState !== 'hidden',
+      visible,
       busy: _shippoChecking,
     });
   if (!due) return null;
@@ -1340,16 +1341,10 @@ function startShippoLabelWatch() {
   const last = Date.parse(TAX_CENTER.settings?.shippoLastImportAt || '');
   _shippoLastCheckAt = Number.isFinite(last) ? last : 0;
 
-  const poll = () => { refreshShippoLabelsIfDue(); };
-
-  poll();
-  window.setInterval(poll, SHIPPO_WATCH_INTERVAL_MS);
-  if (typeof document !== 'undefined') {
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') poll();
-    });
-  }
-  window.addEventListener('online', poll);
+  // Timer, return-to-app and reconnect, from the shared scheduler rather than
+  // wired by hand here — the same three triggers the storefront watch and the
+  // postage sweep use, so there is one place they can be reasoned about.
+  startWatch(() => { refreshShippoLabelsIfDue(); }, { intervalMs: SHIPPO_WATCH_INTERVAL_MS });
 }
 
 /**

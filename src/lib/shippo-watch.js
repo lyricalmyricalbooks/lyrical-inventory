@@ -23,6 +23,8 @@
 // already the authoritative dedupe surface. So a check reads page one and stops
 // the moment every row on it is known — one request, in the steady state.
 
+import { dueForCheck } from './watch-schedule.js';
+
 const clean = (value) => String(value ?? '').trim();
 
 /** The ledger ref a Shippo transaction id becomes. The one dedupe key. */
@@ -73,26 +75,11 @@ export function newShippoTransactions(transactions = [], knownRefs = []) {
 /**
  * Whether to go and ask Shippo again.
  *
- * The same gate shape as order-watch.js's dueForRefresh, and for the same
- * reasons: each condition is a way the request would be wasted or wrong. The
- * hidden-tab gate matters most on a phone, where a backgrounded browser
- * throttles timers to minutes anyway and the answer would go unread until the
- * app is opened.
+ * This was a verbatim copy of order-watch.js's dueForRefresh — same gates, same
+ * reasons, written out twice — and the postage sweep was about to make it three.
+ * Both names now point at the one implementation in lib/watch-schedule.js.
  */
-export function dueForShippoCheck({
-  lastCheckedAt = 0,
-  now = Date.now(),
-  intervalMs = 0,
-  online = true,
-  configured = true,
-  visible = true,
-  busy = false,
-} = {}) {
-  if (!configured || !online || !visible || busy) return false;
-  if (!(intervalMs > 0)) return false;
-  const last = Number(lastCheckedAt) || 0;
-  return (now - last) >= intervalMs;
-}
+export const dueForShippoCheck = dueForCheck;
 
 /**
  * What the summary card says after a check that found something.

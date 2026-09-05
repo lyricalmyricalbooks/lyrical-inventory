@@ -52,6 +52,7 @@ import {
   noteIntegrationFailure,
   noteIntegrationSuccess,
 } from '../lib/integration-watch.js';
+import { browserWatchState, effectiveInterval, startWatch } from '../lib/watch-schedule.js';
 import {
   describeNewOrders,
   dueForRefresh,
@@ -1736,20 +1737,21 @@ function reviewNewOrdersFromAlert(event) {
 async function refreshBigCartelOrdersIfDue({ force = false } = {}) {
   const config = await loadBigCartelConfig().catch(() => null);
   const ready = bigCartelConfigured(config) && !!sheetsUrl;
+  const { online, visible } = browserWatchState();
   const due = force
-    ? ready && !_bcGapChecking && (typeof navigator === 'undefined' || navigator.onLine !== false)
+    ? ready && !_bcGapChecking && online
     : dueForRefresh({
       lastCheckedAt: _bcLastOrderCheckAt,
       now: Date.now(),
       // Widened once the storefront has refused twice running, so a dead
       // endpoint is not asked every five minutes for the rest of the day.
-      intervalMs: Math.max(
+      intervalMs: effectiveInterval(
         BC_ORDER_WATCH_INTERVAL_MS,
         integrationBackoffMs('bigcartel', BC_ORDER_WATCH_INTERVAL_MS),
       ),
-      online: typeof navigator === 'undefined' || navigator.onLine !== false,
+      online,
       configured: ready,
-      visible: typeof document === 'undefined' || document.visibilityState !== 'hidden',
+      visible,
       busy: _bcGapChecking,
     });
   if (!due) return false;
@@ -1779,16 +1781,10 @@ function startBigCartelOrderWatch() {
   // here would mean the app opens on a stale answer and sits on it.
   _bcLastOrderCheckAt = Number(readBcGapCache()?.checkedAt) || 0;
 
-  const poll = () => { refreshBigCartelOrdersIfDue(); };
-
-  poll();
-  window.setInterval(poll, BC_ORDER_WATCH_INTERVAL_MS);
-  if (typeof document !== 'undefined') {
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') poll();
-    });
-  }
-  window.addEventListener('online', poll);
+  // Timer, return-to-app and reconnect, from the shared scheduler rather than
+  // wired by hand here — the same three triggers every other unattended check
+  // uses, so there is one place they can be reasoned about.
+  startWatch(() => { refreshBigCartelOrdersIfDue(); }, { intervalMs: BC_ORDER_WATCH_INTERVAL_MS });
 }
 
 /** The count badge on the Big Cartel tab button and the Website orders strip. */
