@@ -11105,6 +11105,65 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   .ship-readiness { align-items: flex-start; flex-direction: column; gap: var(--space-1); }
 }
 
+/* ─── What an order filled in for you ─────────────────────────────────────
+   The receipt for work the publisher did not watch happen: which order was
+   loaded, what ended up in the box, and whether anything wants a second look.
+   Sits directly under the two pre-fill dropdowns it is explaining. */
+.ship-order-prefill {
+  margin-top: var(--space-3);
+}
+.ship-prefill-order {
+  font-family: 'DM Mono', ui-monospace, monospace;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--content-primary);
+}
+
+/* The opt-out for automatic rate fetching. Deliberately a full-width row with
+   its own explanation rather than a bare checkbox: it changes what happens
+   without being asked, so what it changes has to be readable in place. */
+.ship-auto-quote {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin: var(--space-3) 0 0;
+  padding: 10px 14px;
+  min-height: var(--target-min, 44px);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r2);
+  background: var(--surface-sunken);
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: 0;
+  transition: border-color var(--dur-fast) var(--ease-standard),
+    background-color var(--dur-fast) var(--ease-standard);
+}
+.ship-auto-quote:hover { border-color: var(--border-strong, var(--border2)); }
+.ship-auto-quote:has(input:focus-visible) {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+.ship-auto-quote input {
+  width: auto;
+  margin: 2px 0 0;
+  flex-shrink: 0;
+  accent-color: var(--gold);
+  cursor: pointer;
+}
+.ship-auto-quote-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ship-auto-quote-title {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--content-primary);
+}
+.ship-auto-quote-sub {
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--content-secondary);
+}
+
 /* The label turns with its box, so a flagged field reads as one unit rather
    than a red outline whose caption still looks fine. Colour is only ever the
    second signal here — the inline .field-error message carries the meaning. */
@@ -14268,6 +14327,17 @@ button[onclick="refreshUmamiStats()"]:active {
   font-size: 11px;
   color: var(--text3);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* What is in the parcel, on the row that ships it — so the box being sized on
+   the wrong book is visible before it is chosen, not after the label prints. */
+.custom-dest-item-parcel {
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: var(--leading-snug);
+  color: var(--content-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
 }

@@ -3184,6 +3184,14 @@
             </select>
           </div>
         </div>
+        <div id="ship-order-prefill-summary" class="ship-readiness ship-order-prefill" role="status" aria-live="polite" style="display:none;"></div>
+        <label class="ship-auto-quote" for="ship-auto-quote-toggle">
+          <input type="checkbox" id="ship-auto-quote-toggle" checked onchange="onShippoAutoQuoteToggle()">
+          <span class="ship-auto-quote-copy">
+            <span class="ship-auto-quote-title">Get rates automatically</span>
+            <span class="ship-auto-quote-sub">When you pick an order, its package and rates load without another click. Buying a label is always still up to you.</span>
+          </span>
+        </label>
       </div>
 
       <div class="g2" style="align-items: start; margin-bottom: 1.25rem;">
@@ -5483,6 +5491,30 @@
   </span>
   <button type="button" class="sync-chip-action" id="sync-chip-action" hidden
           onclick="retrySyncNow()">Try again now</button>
+</div>
+
+<!-- New-order notification. Top-right, because the toast owns bottom-right and
+     the sync chip owns bottom-left, and fixed so it survives scrolling without
+     touching --sticky-top. Raised by showNewOrderAlert() in features/bigcartel.js
+     whenever the storefront watch finds a sale the app has not seen before.
+
+     Persistent by design: this exists for the orders that arrive while nobody is
+     looking at the screen, and a notification you have to already be watching to
+     catch would be no notification at all. -->
+<div class="new-order-alert" id="new-order-alert" hidden role="status" aria-live="polite">
+  <span class="new-order-alert-ico" aria-hidden="true">🛒</span>
+  <div class="new-order-alert-body">
+    <span class="new-order-alert-title" id="new-order-alert-title">New order</span>
+    <span class="new-order-alert-detail" id="new-order-alert-detail"></span>
+    <div class="new-order-alert-actions">
+      <button type="button" class="btn gold sm" id="new-order-alert-ship"
+              onclick="shipNewOrderFromAlert(event)">📦 Ship it</button>
+      <button type="button" class="btn sm" id="new-order-alert-review"
+              onclick="reviewNewOrdersFromAlert(event)">Review orders</button>
+    </div>
+  </div>
+  <button type="button" class="new-order-alert-close" id="new-order-alert-close"
+          onclick="dismissNewOrderAlert(event)" aria-label="Dismiss new order notification">✕</button>
 </div>
 
 <!-- Styled confirm dialog (replaces browser confirm/alert) -->
