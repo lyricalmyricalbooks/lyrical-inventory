@@ -3858,6 +3858,10 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .tbl tbody tr:hover .edit-btn{opacity:1;background:var(--cream2);border-color:var(--border);color:var(--text2);}
 .edit-btn:hover{background:var(--gold-bg) !important;border-color:var(--gold-line) !important;color:var(--gold) !important;}
 .edit-btn:active{transform:scale(0.95);}
+/* Base rule hides this at opacity:0 until a row is hovered — a keyboard user
+   who tabs to it without hovering the row lands on a button that renders
+   fully invisible, ring included, since opacity:0 suppresses everything. */
+.edit-btn:focus-visible{opacity:1;background:var(--gold-bg);border-color:var(--gold-line);color:var(--gold);outline:var(--focus-ring-width) solid var(--focus-ring-color);outline-offset:var(--focus-ring-offset);}
 @media (hover: none), (pointer: coarse) {
   .edit-btn{opacity:0.85;background:var(--surface-sunken);border-color:var(--border-subtle);color:var(--content-secondary);}
 }
