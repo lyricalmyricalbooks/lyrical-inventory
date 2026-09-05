@@ -81,7 +81,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-09-04 | visual | Connect your Google Sheet | Made the simulated spreadsheet's row numbers actually readable | #736 |
 | 2026-09-05 | visual | App-wide chrome (tab bar, book switcher, header menus) | Gave the dark navigation bar and dropdown menus back their fill in dark mode | #739 |
 | 2026-09-05 | visual | Tax Centre — Shipping reconciliation | Gave the shipping reconciliation panel a real card background in light mode, not just dark | #740 |
-| 2026-09-05 | visual | POS checkout | Gave the register's cart panel a shadow that still shows once the page goes dark | (pending) |
+| 2026-09-05 | visual | POS checkout | Gave the register's cart panel a shadow that still shows once the page goes dark | #741 |
 
 ---
 
