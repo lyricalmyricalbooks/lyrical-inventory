@@ -2764,10 +2764,11 @@
               <div class="shipping-reconciliation-head">
                 <div class="shipping-reconciliation-headings">
                   <strong id="shipping-reconciliation-title">Shipping reconciliation</strong>
-                  <p>Link paid postage to its website order. Suggested matches always need your confirmation.</p>
+                  <p>Link paid postage to its website order. The app links a label on its own only when the buyer’s email, or their name and postcode together, match one order exactly — everything here is a judgement call it would not make for you.</p>
                 </div>
                 <div class="shipping-reconciliation-actions">
                   <span class="pill gray" id="shipping-reconciliation-count">0 to review</span>
+                  <button class="btn sm gold" id="shipping-reconciliation-autolink" type="button" onclick="linkConfidentShippingMatchesNow()" title="Link every label whose buyer matches one order exactly">Link certain matches</button>
                   <button class="btn sm" id="shipping-reconciliation-clear" type="button" onclick="clearShippingReconciliationList()">Clear list</button>
                   <button class="btn sm" id="shipping-reconciliation-close" type="button" onclick="closeShippingReconciliation()" aria-label="Close shipping reconciliation">Close</button>
                 </div>
@@ -5493,15 +5494,21 @@
           onclick="retrySyncNow()">Try again now</button>
 </div>
 
-<!-- New-order notification. Top-right, because the toast owns bottom-right and
-     the sync chip owns bottom-left, and fixed so it survives scrolling without
-     touching --sticky-top. Raised by showNewOrderAlert() in features/bigcartel.js
-     whenever the storefront watch finds a sale the app has not seen before.
+<!-- The corner where the app reports what happened while nobody was looking.
+     Top-right, because the toast owns bottom-right and the sync chip owns
+     bottom-left, and fixed so it survives scrolling without touching
+     --sticky-top. A region rather than a single card: the storefront watch and
+     the Shippo label watch both have news of this kind, and two cards pinned to
+     one corner would simply sit on top of each other.
 
-     Persistent by design: this exists for the orders that arrive while nobody is
-     looking at the screen, and a notification you have to already be watching to
+     Persistent by design: these exist for the things that happen while nobody is
+     watching the screen, and a notification you must already be looking at to
      catch would be no notification at all. -->
-<div class="new-order-alert" id="new-order-alert" hidden role="status" aria-live="polite">
+<div class="app-alert-region" id="app-alert-region">
+
+<!-- Raised by showNewOrderAlert() in features/bigcartel.js whenever the
+     storefront watch finds a sale the app has not seen before. -->
+<div class="app-alert new-order-alert" id="new-order-alert" hidden role="status" aria-live="polite">
   <span class="new-order-alert-ico" aria-hidden="true">🛒</span>
   <div class="new-order-alert-body">
     <span class="new-order-alert-title" id="new-order-alert-title">New order</span>
@@ -5515,6 +5522,13 @@
   </div>
   <button type="button" class="new-order-alert-close" id="new-order-alert-close"
           onclick="dismissNewOrderAlert(event)" aria-label="Dismiss new order notification">✕</button>
+</div>
+
+<!-- Everything else with news, rendered by lib/app-alert.js. Currently the
+     Shippo label watch; keyed entries, so a check that repeats every few
+     minutes updates what it already said rather than stacking another card. -->
+<div id="app-alert-stack" hidden></div>
+
 </div>
 
 <!-- Styled confirm dialog (replaces browser confirm/alert) -->

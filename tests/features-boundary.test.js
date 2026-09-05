@@ -17,7 +17,15 @@ const MAIN_IMPORT_BUDGET = {
   // now rebuild a website order the Gmail scan missed, and writing one to the
   // ledger touches the applied-ids cache, the scan memory and the Sheets sync —
   // three main.js internals. One name across the seam is cheaper than three.
-  'shipping.js': 24,
+  // 24 -> 25 for switchTab, when labels bought outside the app started
+  // announcing themselves. The notification can appear on any screen and its
+  // Review button has to reach the worklist, which lives two navigations deep
+  // in the Tax Centre; the second of those (switchTaxCenterSubTab) comes from
+  // taxcentre.js and costs nothing here. Without switchTab the panel would be
+  // revealed behind whatever the publisher is actually looking at — a button
+  // that appears to do nothing. No cheaper route exists: app-shell navigation
+  // is main.js's, and nothing already across this seam can perform it.
+  'shipping.js': 25,
   // 16 -> 19 when the storefront became the ledger's reconciliation source.
   // Comparing Big Cartel's orders against the ledger and adding a missing one
   // needs three main.js internals and no more: commitRecoveredWebsiteOrder (the

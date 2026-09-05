@@ -48,7 +48,14 @@ export function reconcileShippingExpense(expense = {}, orders = []) {
 
   const eligible = orders.filter(order => withinShippingWindow(order.date, expense.date));
   const email = normalizeText(expense.recipientEmail);
+  // Which rule found the candidate, not just that one was found. The three
+  // tiers below are not equally trustworthy — an exact email is the buyer's own
+  // address, a fuzzy surname is a guess — and anything deciding to link without
+  // being asked has to be able to tell them apart. Without this they all
+  // reported the same 'recipient' method and were indistinguishable.
+  let tier = '';
   let candidates = email ? eligible.filter(order => normalizeText(order.shipEmail || order.email) === email) : [];
+  if (candidates.length) tier = 'email';
   if (!candidates.length) {
     const name = normalizeText(expense.recipientName);
     const postal = normalizePostal(expense.recipientPostal);
@@ -56,6 +63,7 @@ export function reconcileShippingExpense(expense = {}, orders = []) {
       candidates = eligible.filter(order =>
         normalizeText(order.shipName || order.customer) === name && normalizePostal(order.shipPostal) === postal
       );
+      if (candidates.length) tier = 'name-postal';
     }
     // Fallback: fuzzy name match within 14 days when postal is absent or exact match failed
     if (!candidates.length && name) {
@@ -72,18 +80,46 @@ export function reconcileShippingExpense(expense = {}, orders = []) {
         const threshold = maxLength >= 10 ? 3 : (maxLength >= 6 ? 2 : 1);
         return distance <= threshold;
       });
+      if (candidates.length) tier = 'fuzzy';
     }
   }
 
   const nums = candidates.map(order => normalizeShippingOrderNumber(order.num)).filter(Boolean);
   if (nums.length === 1) {
-    return { shippingSuggestedOrderNumber: nums[0], shippingMatchMethod: 'recipient', shippingMatchStatus: 'suggested' };
+    return {
+      shippingSuggestedOrderNumber: nums[0],
+      shippingMatchMethod: 'recipient',
+      shippingMatchTier: tier,
+      shippingMatchStatus: 'suggested',
+    };
   }
   if (nums.length > 1) {
-    return { shippingCandidateOrderNumbers: nums, shippingMatchMethod: 'recipient', shippingMatchStatus: 'ambiguous' };
+    return {
+      shippingCandidateOrderNumbers: nums,
+      shippingMatchMethod: 'recipient',
+      shippingMatchTier: tier,
+      shippingMatchStatus: 'ambiguous',
+    };
   }
   return { shippingMatchMethod: '', shippingMatchStatus: 'unmatched' };
 }
+
+/**
+ * Postage from Shippo that still has no order behind it.
+ *
+ * The reconciliation worklist, the clear-all action and the auto-linker all ask
+ * this same question, and asked it with three separately-written copies of the
+ * same condition. One name, so a change to what "still needs attention" means
+ * cannot land in two of the three places.
+ */
+export function isUnresolvedShippoPostage(expense) {
+  return String(expense?.ref || '').startsWith('shippo:')
+    && expense?.shippingMatchStatus !== 'matched'
+    && expense?.shippingMatchStatus !== 'dismissed';
+}
+
+/** The candidate rules exact enough to act on without being asked. */
+const CONFIDENT_TIERS = new Set(['email', 'name-postal']);
 
 export function enrichShippoExpense(expense, transaction = {}, shipment = {}, shippoOrder = {}, orders = []) {
   const {
@@ -91,6 +127,7 @@ export function enrichShippoExpense(expense, transaction = {}, shipment = {}, sh
     shippingSuggestedOrderNumber: _shippingSuggestedOrderNumber,
     shippingCandidateOrderNumbers: _shippingCandidateOrderNumbers,
     shippingMatchMethod: _shippingMatchMethod,
+    shippingMatchTier: _shippingMatchTier,
     shippingMatchStatus: _shippingMatchStatus,
     ...accountingFields
   } = expense;
@@ -155,6 +192,7 @@ export function applyShippoExpenseEnrichments(staged = []) {
       'shippingSuggestedOrderNumber',
       'shippingCandidateOrderNumbers',
       'shippingMatchMethod',
+      'shippingMatchTier',
       'shippingMatchStatus',
     ].forEach(key => delete entry.target[key]);
     Object.assign(entry.target, entry.enriched);
@@ -166,19 +204,43 @@ const SHIPPING_LINK_KEYS = [
   'shippingSuggestedOrderNumber',
   'shippingCandidateOrderNumbers',
   'shippingMatchMethod',
+  'shippingMatchTier',
   'shippingMatchStatus',
 ];
 
-export async function persistManualShippingLink(expense, orderNumber, persist) {
+/**
+ * Write a link and persist it, rolling every field back if the save fails.
+ *
+ * `method` defaults to 'manual' because that is what every existing caller
+ * means. The automatic path passes 'recipient-auto' instead, so a link the app
+ * made on its own stays distinguishable from one a person made — worth knowing
+ * later when a payout looks wrong and the question is who decided this.
+ */
+/**
+ * Point one postage expense at one order, in memory.
+ *
+ * Split out so the two callers cannot drift: the worklist's Link button saves
+ * each link on its own and needs the rollback below, while the importer applies
+ * a batch of them and is followed by a single saveTaxCenter() covering
+ * everything it wrote. Same five fields either way — a link that set them
+ * slightly differently depending on who made it would be a bug nobody found
+ * until the shipping P&L disagreed with the worklist.
+ */
+export function writeShippingLink(expense, orderNumber, method = 'manual') {
+  expense.shippingOrderNumber = normalizeShippingOrderNumber(orderNumber);
+  expense.shippingMatchMethod = method;
+  expense.shippingMatchStatus = 'matched';
+  delete expense.shippingSuggestedOrderNumber;
+  delete expense.shippingCandidateOrderNumbers;
+  return expense;
+}
+
+export async function persistManualShippingLink(expense, orderNumber, persist, { method = 'manual' } = {}) {
   const prior = new Map(SHIPPING_LINK_KEYS.map(key => [
     key,
     { present: Object.prototype.hasOwnProperty.call(expense, key), value: expense[key] },
   ]));
-  expense.shippingOrderNumber = normalizeShippingOrderNumber(orderNumber);
-  expense.shippingMatchMethod = 'manual';
-  expense.shippingMatchStatus = 'matched';
-  delete expense.shippingSuggestedOrderNumber;
-  delete expense.shippingCandidateOrderNumbers;
+  writeShippingLink(expense, orderNumber, method);
   try {
     return await persist();
   } catch (error) {
@@ -189,6 +251,51 @@ export async function persistManualShippingLink(expense, orderNumber, persist) {
     });
     throw error;
   }
+}
+
+/**
+ * The postage that can be linked to its order without asking.
+ *
+ * Deliberately a batch function rather than a per-expense one, because the
+ * safety rule that matters cannot be seen from inside a single expense: if two
+ * labels both point at the same order, one of them is wrong, and there is no
+ * way to tell which. Whichever way you guess, a real parcel ends up costed
+ * against a sale it was not for. So neither is linked and both go to the
+ * publisher — the same rule autoMatchPostage() enforces in postage-matching.js
+ * for counter receipts, arrived at there for the same reason.
+ *
+ * The other guard is the tier. Only an exact recipient email, or an exact name
+ * AND postal code together, are acted on. A fuzzy surname within a fortnight is
+ * a good prompt for a human and a bad basis for moving money on its own; it
+ * stays a suggestion.
+ *
+ * Returns the intended links rather than performing them, so the caller decides
+ * how to persist and this stays testable without a ledger.
+ */
+export function autoLinkConfidentShippingMatches(expenses = [], orders = []) {
+  const known = new Set(
+    (Array.isArray(orders) ? orders : [])
+      .map(order => normalizeShippingOrderNumber(order?.num))
+      .filter(Boolean),
+  );
+
+  const proposals = [];
+  (Array.isArray(expenses) ? expenses : []).forEach(expense => {
+    if (!expense || expense.shippingMatchStatus !== 'suggested') return;
+    if (!CONFIDENT_TIERS.has(expense.shippingMatchTier)) return;
+    const orderNumber = normalizeShippingOrderNumber(expense.shippingSuggestedOrderNumber);
+    // An order that is no longer in the ledger — deleted, voided, renumbered —
+    // is not something to link to just because a stale suggestion names it.
+    if (!orderNumber || !known.has(orderNumber)) return;
+    proposals.push({ expense, orderNumber, tier: expense.shippingMatchTier });
+  });
+
+  const wanted = new Map();
+  proposals.forEach(({ orderNumber }) => {
+    wanted.set(orderNumber, (wanted.get(orderNumber) || 0) + 1);
+  });
+
+  return proposals.filter(({ orderNumber }) => wanted.get(orderNumber) === 1);
 }
 
 export function linkedShippingSummary(order = {}, expenses = [], orderRateToBase = 1) {
