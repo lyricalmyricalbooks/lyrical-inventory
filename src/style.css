@@ -13312,12 +13312,15 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   color: var(--text) !important;
 }
 
+/* Themed elevation, not a raw shadow — the same warm-black-on-charcoal bug
+   already fixed on .hist-kpi-card and .catalog-card. At rest this was the one
+   panel on the checkout screen with no visible lift once the page went dark. */
 .pos-cart-panel {
   background: var(--surface-card, #ffffff) !important;
   border: 1px solid var(--gold-line, rgba(200, 145, 58, 0.3)) !important;
   border-radius: 14px !important;
   padding: 1.25rem !important;
-  box-shadow: 0 8px 30px rgba(14, 12, 10, 0.08) !important;
+  box-shadow: var(--elev-3) !important;
 }
 
 /* ─── POS CHECKOUT PANEL — STACK RHYTHM & HIERARCHY ───────────────────────
