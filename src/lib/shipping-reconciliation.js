@@ -1,4 +1,5 @@
 import { roundCents } from './money.js';
+import { normalizeTrackingNumber } from './postage-matching.js';
 
 const ORDER_PATTERN = /#?([A-Z0-9]+-[A-Z0-9-]+)/i;
 const normalizeText = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
@@ -48,14 +49,29 @@ export function reconcileShippingExpense(expense = {}, orders = []) {
 
   const eligible = orders.filter(order => withinShippingWindow(order.date, expense.date));
   const email = normalizeText(expense.recipientEmail);
-  // Which rule found the candidate, not just that one was found. The three
-  // tiers below are not equally trustworthy — an exact email is the buyer's own
-  // address, a fuzzy surname is a guess — and anything deciding to link without
-  // being asked has to be able to tell them apart. Without this they all
-  // reported the same 'recipient' method and were indistinguishable.
+  // Which rule found the candidate, not just that one was found. The tiers
+  // below are not equally trustworthy — a tracking number is an identity, an
+  // exact email is the buyer's own address, a fuzzy surname is a guess — and
+  // anything deciding to link without being asked has to be able to tell them
+  // apart. Without this they all reported the same 'recipient' method and were
+  // indistinguishable.
   let tier = '';
-  let candidates = email ? eligible.filter(order => normalizeText(order.shipEmail || order.email) === email) : [];
-  if (candidates.length) tier = 'email';
+
+  // Tracking number first, and outside the date window on purpose: it is not a
+  // resemblance that a nearby date makes more plausible, it is the same number
+  // the carrier printed on the parcel and the app wrote onto the order. If they
+  // match, that is the parcel, whether it went out the same day or a fortnight
+  // later.
+  const tracking = normalizeTrackingNumber(expense.trackingNumber);
+  let candidates = tracking
+    ? orders.filter(order => normalizeTrackingNumber(order.trackingNumber) === tracking)
+    : [];
+  if (candidates.length) tier = 'tracking';
+
+  if (!candidates.length && email) {
+    candidates = eligible.filter(order => normalizeText(order.shipEmail || order.email) === email);
+    if (candidates.length) tier = 'email';
+  }
   if (!candidates.length) {
     const name = normalizeText(expense.recipientName);
     const postal = normalizePostal(expense.recipientPostal);
@@ -105,21 +121,46 @@ export function reconcileShippingExpense(expense = {}, orders = []) {
 }
 
 /**
- * Postage from Shippo that still has no order behind it.
+ * Postage that still has no order behind it, whoever sold it.
  *
  * The reconciliation worklist, the clear-all action and the auto-linker all ask
  * this same question, and asked it with three separately-written copies of the
  * same condition. One name, so a change to what "still needs attention" means
  * cannot land in two of the three places.
+ *
+ * It used to test `ref.startsWith('shippo:')`, which was true of every postage
+ * expense the app had ever created — and stopped being true the moment labels
+ * bought from Canada Post and other carriers started filing themselves. A
+ * counter receipt awaiting a link appeared in no list at all: not here, not on
+ * the tab badge, nowhere. It is now every unlinked parcel postage row, which is
+ * what the worklist was always for.
+ *
+ * A refund credit is excluded because it reverses a label rather than paying
+ * for one, so it can never be the postage behind an order.
  */
 export function isUnresolvedShippoPostage(expense) {
-  return String(expense?.ref || '').startsWith('shippo:')
-    && expense?.shippingMatchStatus !== 'matched'
+  const ref = String(expense?.ref || '');
+  if (ref.startsWith('shippo-refund:')) return false;
+  const isPostageRef = ref.startsWith('shippo:') || ref.startsWith('postage:') || ref.startsWith('postage-');
+  if (!isPostageRef) return false;
+  return expense?.shippingMatchStatus !== 'matched'
     && expense?.shippingMatchStatus !== 'dismissed';
 }
 
-/** The candidate rules exact enough to act on without being asked. */
-const CONFIDENT_TIERS = new Set(['email', 'name-postal']);
+/** Postage filed with no readable amount — shown, never silently zeroed. */
+export function needsAmountAttention(expense) {
+  return !!expense?.amountUnknown
+    && String(expense?.ref || '').startsWith('postage');
+}
+
+/**
+ * The candidate rules exact enough to act on without being asked.
+ *
+ * `tracking` leads because it is not a resemblance at all: it is the number the
+ * carrier printed on the parcel, matched against the number written onto the
+ * order. The other two are strong inferences; this one is an identity.
+ */
+const CONFIDENT_TIERS = new Set(['tracking', 'email', 'name-postal']);
 
 export function enrichShippoExpense(expense, transaction = {}, shipment = {}, shippoOrder = {}, orders = []) {
   const {

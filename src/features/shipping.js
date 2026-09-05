@@ -104,6 +104,7 @@ import {
   autoLinkConfidentShippingMatches,
   enrichShippoExpense,
   isUnresolvedShippoPostage,
+  needsAmountAttention,
   linkedShippingSummary,
   normalizeShippingOrderNumber,
   persistManualShippingLink,
@@ -784,7 +785,14 @@ function renderShippingReconciliationWorklist() {
   if (openButton) openButton.hidden = true;
   const expenses = (TAX_CENTER.businessExpenses || []).filter(isUnresolvedShippoPostage);
   const knownOrders = getShippingReconciliationOrders();
-  count.textContent = `${expenses.length} to review`;
+  // Two different kinds of unfinished. A label needing an order is a matching
+  // job; a label needing a figure is a bookkeeping one, and it stays visible
+  // here because the alternative — a silent zero in the postage column — is how
+  // a shipping margin quietly stops being true.
+  const blanks = (TAX_CENTER.businessExpenses || []).filter(needsAmountAttention).length;
+  count.textContent = blanks
+    ? `${expenses.length} to review · ${blanks} needs an amount`
+    : `${expenses.length} to review`;
   if (!expenses.length) {
     list.innerHTML = `<div class="shipping-reconciliation-empty">
       <span class="recon-empty-mark" aria-hidden="true">\u2713</span>
@@ -1382,6 +1390,7 @@ async function sweepCanadaPostShipments({ force = false } = {}) {
     const ids = cpShipmentIdsFrom(listed);
     const known = new Set((TAX_CENTER.businessExpenses || [])
       .map(expense => cpText(expense?.ref)).filter(Boolean));
+    const knownOrders = getShippingReconciliationOrders();
 
     let filed = 0;
     let blank = 0;
@@ -1411,7 +1420,20 @@ async function sweepCanadaPostShipments({ force = false } = {}) {
       if (!ref || known.has(ref)) continue;
       known.add(ref);
       if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
-      TAX_CENTER.businessExpenses.unshift(buildPostageExpense(candidate));
+
+      // Graded as it is filed. Without this the expense arrives with no match
+      // status at all, which is neither 'suggested' nor 'matched' — so the
+      // auto-linker would skip it and every one of these would sit in the
+      // worklist waiting for a human, which is the whole thing this is meant to
+      // remove.
+      const expense = buildPostageExpense(candidate);
+      Object.assign(expense, reconcileShippingExpense({
+        recipientName: expense.recipientName,
+        recipientPostal: expense.recipientPostal,
+        trackingNumber: expense.trackingNumber,
+        date: expense.date,
+      }, knownOrders));
+      TAX_CENTER.businessExpenses.unshift(expense);
       filed++;
       if (needsAmount(candidate)) blank++;
     }
@@ -1421,13 +1443,15 @@ async function sweepCanadaPostShipments({ force = false } = {}) {
 
     if (filed) {
       const linked = applyConfidentShippingLinks();
+      // The tracking number belongs on the order too, not only on the expense.
+      const stamped = writeTrackingBackToOrders(TAX_CENTER.businessExpenses || []);
       await saveTaxCenter().catch(e => console.warn('Canada Post sweep save failed', e));
       renderTaxCenter();
       renderShippingAnalysisHub();
       showPostageSweepAlert({ filed, linked, blank, needsReview: reconciliationBacklog() });
-      return { filed, linked, blank };
+      return { filed, linked, blank, stamped };
     }
-    return { filed: 0, linked: 0, blank: 0 };
+    return { filed: 0, linked: 0, blank: 0, stamped: 0 };
   } catch (error) {
     console.warn('Canada Post shipment sweep failed', error);
     noteIntegrationFailure('canadapost', error, { online, configured });
@@ -1435,6 +1459,57 @@ async function sweepCanadaPostShipments({ force = false } = {}) {
   } finally {
     _cpSweeping = false;
   }
+}
+
+/**
+ * Put the tracking number on the order the postage was linked to.
+ *
+ * This is the half of the job that is not bookkeeping. buyCanadaPostLabel and
+ * buyShippoLabel already stamp `trackingNumber` and `shipped` onto the history
+ * row when a label is bought in the app, so an order shipped that way carries
+ * its own tracking. A label bought on canadapost.ca could not — the app never
+ * saw it — and the publisher typed the number onto the order by hand, or more
+ * often did not, and the order sat looking unshipped.
+ *
+ * Now that the postage is linked, the number it carries belongs on the order,
+ * and the "shipped" flag with it.
+ *
+ * Only ever fills a blank. An order that already names a tracking number was
+ * shipped by some route this does not know about, and overwriting that with a
+ * later label's number would replace a true record with a plausible one.
+ */
+function writeTrackingBackToOrders(expenses = []) {
+  let stamped = 0;
+  const wanted = new Map();
+  expenses.forEach(expense => {
+    const orderNumber = normalizeShippingOrderNumber(expense?.shippingOrderNumber);
+    const tracking = cpText(expense?.trackingNumber);
+    if (orderNumber && tracking && expense.shippingMatchStatus === 'matched') {
+      wanted.set(orderNumber, { tracking, date: cpText(expense.date) });
+    }
+  });
+  if (!wanted.size) return 0;
+
+  Object.entries(states).forEach(([bookId, state]) => {
+    if (!state || !Array.isArray(state.hist)) return;
+    let touched = false;
+    state.hist.forEach(entry => {
+      if (!entry || entry.voided) return;
+      const found = wanted.get(normalizeShippingOrderNumber(entry.num));
+      if (!found || cpText(entry.trackingNumber)) return;
+      entry.trackingNumber = found.tracking;
+      if (!entry.shipped) {
+        entry.shipped = true;
+        entry.shippedDate = found.date || entry.shippedDate || today();
+      }
+      touched = true;
+      stamped++;
+    });
+    if (touched) saveState(bookId);
+  });
+
+  if (stamped) renderHist();
+  return stamped;
 }
 
 /** The card announcing labels bought elsewhere that filed themselves. */
