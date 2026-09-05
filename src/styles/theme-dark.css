@@ -51,9 +51,14 @@
   /* INVERSE SURFACES — the header, ink KPI banners, toasts and the publisher
      sidebar. In light mode these are the only dark things on screen; in dark
      mode they go DEEPER than the page so the chrome still reads as a well
-     rather than dissolving into the content area. */
+     rather than dissolving into the content area.
+     --ink2 used to land at #14110e — 1 unit off from --cream (#14110d) — so
+     the tab bar, the book-switcher dropdown, and every other flat panel
+     built on it were the same colour as the page they float over. #0d0a08
+     keeps --ink's own warm ratio (roughly 1 : 0.8 : 0.6), landing it clearly
+     between --ink and --cream instead of on top of the page. */
   --ink: #0a0806;
-  --ink2: #14110e;
+  --ink2: #0d0a08;
   --ink3: #1f1a14;
   --ink4: #2c2519;
 
@@ -156,7 +161,7 @@
     --surface-card: #1a1611;
 
     --ink: #0a0806;
-    --ink2: #14110e;
+    --ink2: #0d0a08;
     --ink3: #1f1a14;
     --ink4: #2c2519;
 

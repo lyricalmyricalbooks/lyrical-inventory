@@ -725,6 +725,26 @@ intentional. If a future change makes it worth reopening, raise it with the user
 silently converging on the written guideline. (Dark mode used to be the second such divergence;
 the user asked for it and it now ships — the row above records what replaced the old ruling.)
 
+### A token scale can collide with itself once both ends go dark
+
+`--ink`/`--ink2`/`--ink3`/`--ink4` is the "permanently dark chrome" scale (header, tab bar, sync
+bar, the book-switcher and header-menu dropdowns, the publisher sidebar menu — all via the
+`--surface-inverse-raised` alias onto `--ink2`). In light mode this scale has the whole distance
+from near-black up to `--cream`'s `#f7f2e9` to climb through, so every step is obviously distinct
+from the page. In dark mode `--cream` itself drops to near-black, and `--ink2` was authored at
+`#14110e` — one RGB unit from `--cream`'s `#14110d`. Every panel built on it (the tab bar, both
+dropdown menus, the sidebar menu) rendered with no visible fill in dark mode: same colour as the
+page underneath, nothing but a shadow and a 4%-opacity hairline. `--ink3`/`--ink4` happened to
+escape this because their light-mode step sizes are big enough to land them *above* `--cream` in
+dark mode instead — fine for their role as hover/active accents inside the chrome, but not a fix
+you can lean on for `--ink2`, which is a flat base fill sitting directly against page content.
+
+The lesson for the next dark-mode token: when a scale's page-relative role flips end for end
+(light mode: light page, dark chrome digs down; dark mode: dark page, chrome has to dig down from
+an already-near-black start), check each step against the *page* token in that theme, not just
+against its neighbours in the same scale. Two tokens can each look internally consistent and still
+land on top of each other. `tests/dark-chrome-ink2-separation.test.js` pins the fix.
+
 ### Working in a themed codebase
 1. **`--cream*` and `--ink*` are surfaces, and both flip.** Text on a permanently dark surface
    (header, KPI banners, toast, sidebar) uses `--on-inverse`; text on a saturated accent fill
