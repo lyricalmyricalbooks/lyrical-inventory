@@ -289,6 +289,7 @@
 
   <nav class="pub-nav" aria-label="Books">
     <button type="button" class="snav" title="Dashboard" onclick="switchTab('dashboard')"><span class="snav-ic">▦</span><span class="snav-label">Dashboard</span></button>
+    <button type="button" class="snav" id="todo-sidebar-btn" title="To-do" onclick="switchTab('todo')"><span class="snav-ic">✅</span><span class="snav-label">To-do</span><span class="nav-badge todo-nav-badge" aria-label="things needing attention" hidden></span></button>
     <button type="button" class="snav" title="Website orders" onclick="switchTab('website')"><span class="snav-ic">🛍</span><span class="snav-label">Website orders</span></button>
     <button type="button" class="snav" title="Manual entry" onclick="switchTab('manual')"><span class="snav-ic">✎</span><span class="snav-label">Manual entry</span></button>
     <button type="button" class="snav" title="Consignment" onclick="switchTab('consignment')"><span class="snav-ic">🏪</span><span class="snav-label">Consignment</span></button>
@@ -406,6 +407,7 @@
   <div class="header-grow" aria-hidden="true"></div>
 
   <div class="header-actions" id="global-actions" style="display:none; align-items:center;">
+    <button class="header-action-btn" onclick="switchTab('todo')" id="todo-tab-btn" title="Things needing your attention">✅ To-do<span class="nav-badge todo-nav-badge" aria-label="things needing attention" hidden></span></button>
     <button class="header-action-btn primary" onclick="switchTab('pos')" id="global-pos-btn" title="Sell books at an event">🛒 Event POS</button>
     <button class="header-action-btn" onclick="switchTab('taxcenter')" id="global-taxcenter-btn" title="Expenses &amp; tax season">⚖️ Tax Centre<span class="health-badge" data-health-badge="shippo,canadapost,shipping-email" aria-label="A shipping service is not answering" hidden></span></button>
 
@@ -580,9 +582,26 @@
   <div id="qr-all-grid" class="qr-grid"></div>
 </div>
 
+<!-- TO-DO (publisher only, reached from the all-books screen) -->
+<div class="tab-panel" id="tab-todo" style="display:none;">
+  <div class="sec-head">
+    <div class="sec-head-titles">
+      <div class="sec-kicker"><span class="sec-kicker-dot"></span>To-do</div>
+      <div class="section-hed sec-head-title">Things worth your attention</div>
+      <p class="section-subcopy">Everything the app can see that still needs entering, fixing or chasing. Items disappear on their own once you've dealt with them — there is nothing to tick off.</p>
+    </div>
+    <div class="sec-head-badges">
+      <span class="pill gold" id="todo-total-chip">—</span>
+    </div>
+  </div>
+  <p class="sr-only" id="todo-status" role="status" aria-live="polite"></p>
+  <div id="todo-groups"></div>
+</div>
+
 <!-- COMBINED OVERVIEW (shown when book = 'all') -->
 <div class="tab-panel active" id="tab-all-overview">
-  <div id="all-pending-approvals-alert" style="display:none; margin-bottom: 1.5rem;"></div>
+  <div class="overview-shell">
+  <div class="overview-main">
 
   <div class="overview-section">
     <div class="sec-head">
@@ -651,6 +670,31 @@
       <tbody id="all-con-body"></tbody></table>
     </div>
   </div>
+
+  </div><!-- /.overview-main -->
+
+  <aside class="overview-rail" aria-label="Notifications and recent activity">
+    <section class="rail-card" id="all-notifications-card">
+      <div class="rail-head">
+        <div class="sec-kicker rail-kicker"><span class="sec-kicker-dot rail-dot"></span>Needs attention</div>
+        <span class="pill amber rail-count" id="all-notif-count" hidden></span>
+      </div>
+      <h3 class="rail-title">Notifications</h3>
+      <!-- Permanent live region: never rebuilt by innerHTML, or it announces nothing. -->
+      <p class="sr-only" id="all-notif-status" role="status" aria-live="polite"></p>
+      <div class="notif-list" id="all-notifications"></div>
+      <button type="button" class="rail-more" id="all-notif-more" onclick="switchTab('todo')" hidden></button>
+    </section>
+
+    <section class="rail-card" id="all-activity-card">
+      <div class="rail-head">
+        <div class="sec-kicker rail-kicker is-quiet"><span class="sec-kicker-dot rail-dot"></span>Recent activity</div>
+      </div>
+      <h3 class="rail-title">What's been happening</h3>
+      <div class="activity-list" id="all-activity"></div>
+    </section>
+  </aside>
+  </div><!-- /.overview-shell -->
 </div>
 
 <!-- DASHBOARD (per book) -->
