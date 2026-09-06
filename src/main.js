@@ -5230,28 +5230,7 @@ export function updateDash() {
   $('d-thresh-sub').textContent = 'threshold: ' + book.threshold + ' units';
   $('d-thresh-label').textContent = 'Alert at ' + book.threshold + ' units';
   animateCountValue('d-stock', s.stock); animateCountValue('h-stock', s.stock);
-  // Surface on-hand drift: if the stored count disagrees with what the records
-  // imply (a sale/return/consignment that didn't update inventory, or an
-  // offline-merge hiccup), nudge toward the one-click repair instead of letting
-  // a silently-wrong number sit on the dashboard. Reconciling on-hand is a
-  // publisher action, so the banner and the repair button stay hidden for
-  // authors — and the banner can be dismissed without forcing a recalculation.
-  const driftBanner = $('d-stock-drift-banner');
-  if (driftBanner) {
-    const derivedOnHand = deriveOnHand(s, book);
-    const sig = `${activeBook}:${s.stock}:${derivedOnHand}`;
-    const show = !isAuthor() && derivedOnHand !== s.stock && _dismissedDriftSig !== sig;
-    if (show) {
-      const diff = derivedOnHand - s.stock;
-      $('d-stock-drift-value').textContent = `${s.stock} on file · ${derivedOnHand} per records (${diff > 0 ? '+' : ''}${diff})`;
-      driftBanner.dataset.sig = sig;
-      driftBanner.style.display = '';
-    } else {
-      driftBanner.style.display = 'none';
-    }
-  }
-  const recalcWrap = $('d-recalc-onhand-wrap');
-  if (recalcWrap) recalcWrap.style.display = isAuthor() ? 'none' : '';
+  renderStockDriftBanner(s, book);
   animateCountValue('d-sold', s.sold);
   const heldGross = heldGrossOf(s);
   const recognizedRev = recognizedRevenueOf(s);
@@ -5292,6 +5271,78 @@ export function updateDash() {
   $('d-low').textContent = s.stock <= book.threshold ? '⚠ Low' : 'OK';
   $('d-low').className = 'kpi-value' + (s.stock <= book.threshold ? ' danger' : '');
   
+  renderStockAllocationBar(s, book, breakdown);
+
+  const al = $('d-alert');
+  if (s.stock <= book.threshold) { al.className = 'stock-alert danger'; al.textContent = '⚠ Below threshold (' + book.threshold + ') — reorder now.'; }
+  else if (s.stock <= book.threshold * 2) { al.className = 'stock-alert warn'; al.textContent = 'Getting low — ' + s.stock + ' units remaining.'; }
+  else { al.className = 'stock-alert ok'; al.textContent = 'Stock is healthy.'; }
+  const chMix = channelMixRows(s.chStats);
+  const chFoot = $('ch-foot');
+  $('ch-body').innerHTML = chMix.rows.length
+    ? chMix.rows.map(r => channelMixRowHtml(r, cur)).join('')
+    : `<tr class="sys-empty-row"><td colspan="5">${channelMixEmptyHtml()}</td></tr>`;
+  if (chFoot) chFoot.innerHTML = chMix.rows.length ? channelMixFootHtml(chMix.totals, cur) : '';
+  $('dash-con-body').innerHTML = s.stores.length ? s.stores.map(st => `<tr><td style="font-weight:600;">${escapeHtml(st.name)}</td><td class="r">${st.sent}</td><td class="r">${st.sold}</td><td class="r">${st.returned}</td><td class="r">${st.outstanding}</td><td>${st.outstanding > 0 ? '<span class="pill amber">Active</span>' : '<span class="pill gray">Settled</span>'}</td></tr>`).join('') : '<tr><td colspan="6"><div class="empty-state" style="padding:1rem;">No consignment accounts.</div></td></tr>';
+  // Show danger zone only for publisher — explicitly hide for authors so it
+  // doesn't linger when switching from publisher into an author view.
+  if (!isAuthor()) {
+    $('danger-zone-sect').style.display = '';
+    $('danger-zone-block').style.display = 'flex';
+  } else {
+    $('danger-zone-sect').style.display = 'none';
+    $('danger-zone-block').style.display = 'none';
+  }
+  // ── EXPENSES SUMMARY (publisher only)
+  if (!isAuthor()) renderExpensesSummaryBlock(s, cur);
+
+  // ── BREAK-EVEN (publisher only)
+  renderBreakEvenBlock(s, book, cur, cost, recognizedRev);
+
+  // ── NET TO PUBLISHER KPI (only shown when profit sharing is configured)
+  if (book.profitTiers && book.profitTiers.length > 0) {
+    const earningsStats = calculateArtistEarnings(activeBook);
+    if (earningsStats && $('d-net-publisher-kpi')) {
+      $('d-net-publisher-kpi').style.display = '';
+      animateCountValue('d-net-publisher', fmtWhole(earningsStats.netPublisher, cur));
+    }
+  } else if ($('d-net-publisher-kpi')) {
+    $('d-net-publisher-kpi').style.display = 'none';
+  }
+
+  // ── PROFIT SHARING BREAKDOWN
+  renderProfitSharingBreakdown(activeBook);
+}
+
+// Surface on-hand drift: if the stored count disagrees with what the records
+// imply (a sale/return/consignment that didn't update inventory, or an
+// offline-merge hiccup), nudge toward the one-click repair instead of letting
+// a silently-wrong number sit on the dashboard. Reconciling on-hand is a
+// publisher action, so the banner and the repair button stay hidden for
+// authors — and the banner can be dismissed without forcing a recalculation.
+function renderStockDriftBanner(s, book) {
+  const driftBanner = $('d-stock-drift-banner');
+  if (driftBanner) {
+    const derivedOnHand = deriveOnHand(s, book);
+    const sig = `${activeBook}:${s.stock}:${derivedOnHand}`;
+    const show = !isAuthor() && derivedOnHand !== s.stock && _dismissedDriftSig !== sig;
+    if (show) {
+      const diff = derivedOnHand - s.stock;
+      $('d-stock-drift-value').textContent = `${s.stock} on file · ${derivedOnHand} per records (${diff > 0 ? '+' : ''}${diff})`;
+      driftBanner.dataset.sig = sig;
+      driftBanner.style.display = '';
+    } else {
+      driftBanner.style.display = 'none';
+    }
+  }
+  const recalcWrap = $('d-recalc-onhand-wrap');
+  if (recalcWrap) recalcWrap.style.display = isAuthor() ? 'none' : '';
+}
+
+// The dashboard stock bar: a single bar for publisher-only stock, or a split
+// publisher/author bar (plus location pills) once some stock is out with the
+// author. Author view always shows the plain unclassified total.
+function renderStockAllocationBar(s, book, breakdown) {
   const pct = Math.max(0, (s.stock / (book.maxPrint || 1)) * 100);
   const barAuthor = $('d-bar-author');
   const pillsEl = $('d-stock-breakdown-pills');
@@ -5329,209 +5380,179 @@ export function updateDash() {
     $('d-bar').style.background = s.stock <= book.threshold ? '#f87171' : (book.accent || 'var(--gold2)');
     $('d-bar-label').textContent = s.stock + ' / ' + book.maxPrint + ' units on hand';
   }
+}
 
-  const al = $('d-alert');
-  if (s.stock <= book.threshold) { al.className = 'stock-alert danger'; al.textContent = '⚠ Below threshold (' + book.threshold + ') — reorder now.'; }
-  else if (s.stock <= book.threshold * 2) { al.className = 'stock-alert warn'; al.textContent = 'Getting low — ' + s.stock + ' units remaining.'; }
-  else { al.className = 'stock-alert ok'; al.textContent = 'Stock is healthy.'; }
-  const chMix = channelMixRows(s.chStats);
-  const chFoot = $('ch-foot');
-  $('ch-body').innerHTML = chMix.rows.length
-    ? chMix.rows.map(r => channelMixRowHtml(r, cur)).join('')
-    : `<tr class="sys-empty-row"><td colspan="5">${channelMixEmptyHtml()}</td></tr>`;
-  if (chFoot) chFoot.innerHTML = chMix.rows.length ? channelMixFootHtml(chMix.totals, cur) : '';
-  $('dash-con-body').innerHTML = s.stores.length ? s.stores.map(st => `<tr><td style="font-weight:600;">${escapeHtml(st.name)}</td><td class="r">${st.sent}</td><td class="r">${st.sold}</td><td class="r">${st.returned}</td><td class="r">${st.outstanding}</td><td>${st.outstanding > 0 ? '<span class="pill amber">Active</span>' : '<span class="pill gray">Settled</span>'}</td></tr>`).join('') : '<tr><td colspan="6"><div class="empty-state" style="padding:1rem;">No consignment accounts.</div></td></tr>';
-  // Show danger zone only for publisher — explicitly hide for authors so it
-  // doesn't linger when switching from publisher into an author view.
-  if (!isAuthor()) {
-    $('danger-zone-sect').style.display = '';
-    $('danger-zone-block').style.display = 'flex';
-  } else {
-    $('danger-zone-sect').style.display = 'none';
-    $('danger-zone-block').style.display = 'none';
-  }
-  // ── EXPENSES SUMMARY (publisher only)
-  if (!isAuthor()) {
-
-    renderPendingExpenses();
-    const expenses = s.expenses || [];
-    const unreceivedExp = [];
-    let expTotal = 0;
-    for (const e of expenses) {
-      if (!e.received && !isGratuityExpense(e)) {
-        unreceivedExp.push(e);
-        expTotal += (e.amount || 0);
-      }
+// Publisher-only KPI tile + detail table for expenses the artist hasn't been
+// reimbursed for yet (gratuities excluded — those never carry a receivable).
+function renderExpensesSummaryBlock(s, cur) {
+  renderPendingExpenses();
+  const expenses = s.expenses || [];
+  const unreceivedExp = [];
+  let expTotal = 0;
+  for (const e of expenses) {
+    if (!e.received && !isGratuityExpense(e)) {
+      unreceivedExp.push(e);
+      expTotal += (e.amount || 0);
     }
-    const expKpi = $('d-expenses-kpi');
-    const expSect = $('d-expenses-sect');
-    if (unreceivedExp.length) {
-      // KPI tile
-      if (expKpi) { expKpi.style.display = ''; }
-      animateCountValue('d-expenses-owed', fmtWhole(expTotal, cur));
-      $('d-expenses-owed-sub').textContent = `${unreceivedExp.length} expense${unreceivedExp.length !== 1 ? 's' : ''} outstanding`;
-      // Detail table — dark banner style
-      if (expSect) {
-        expSect.style.display = '';
-        animateCountValue('d-exp-total', fmtWhole(expTotal, cur));
-        $('d-exp-count').textContent = `${expenses.length} expense${expenses.length !== 1 ? 's' : ''} logged`;
-        $('d-exp-body').innerHTML = unreceivedExp.map(e => `
-          <tr>
-            <td style="padding:6px 0;color:var(--on-inverse-3);white-space:nowrap;">${fmtD(e.date)}</td>
-            <td style="padding:6px 8px;color:rgba(255,255,255,.7);font-weight:500;">${escapeHtml(e.desc)}</td>
-            <td style="padding:6px 8px;"><span style="font-size:10px;background:rgba(255,255,255,.08);color:var(--on-inverse-3);padding:2px 8px;border-radius:100px;">${escapeHtml(e.cat)}</span></td>
-            <td style="padding:6px 8px;color:var(--on-inverse-3);">${escapeHtml(e.ref) || '—'}</td>
-            <td style="padding:6px 0;text-align:right;color:var(--rose-soft);font-weight:500;">${fmt(e.amount, cur)}</td>
-          </tr>`).join('');
-        // Payment button
-        const artistLink = (s.artistPaymentLink || '').trim();
-        const payBtn = $('d-exp-pay-btn');
-        const payHint = $('d-exp-pay-hint');
-        if (payBtn) {
-          if (artistLink) {
-            payBtn.href = artistLink.startsWith('http') ? artistLink : 'https://' + artistLink;
-            payBtn.style.display = '';
-            if (payHint) payHint.textContent = 'Opens payment link in a new tab';
-          } else {
-            payBtn.style.display = 'none';
-            if (payHint) payHint.textContent = 'Artist has not set a payment link yet';
-          }
+  }
+  const expKpi = $('d-expenses-kpi');
+  const expSect = $('d-expenses-sect');
+  if (unreceivedExp.length) {
+    // KPI tile
+    if (expKpi) { expKpi.style.display = ''; }
+    animateCountValue('d-expenses-owed', fmtWhole(expTotal, cur));
+    $('d-expenses-owed-sub').textContent = `${unreceivedExp.length} expense${unreceivedExp.length !== 1 ? 's' : ''} outstanding`;
+    // Detail table — dark banner style
+    if (expSect) {
+      expSect.style.display = '';
+      animateCountValue('d-exp-total', fmtWhole(expTotal, cur));
+      $('d-exp-count').textContent = `${expenses.length} expense${expenses.length !== 1 ? 's' : ''} logged`;
+      $('d-exp-body').innerHTML = unreceivedExp.map(e => `
+        <tr>
+          <td style="padding:6px 0;color:var(--on-inverse-3);white-space:nowrap;">${fmtD(e.date)}</td>
+          <td style="padding:6px 8px;color:rgba(255,255,255,.7);font-weight:500;">${escapeHtml(e.desc)}</td>
+          <td style="padding:6px 8px;"><span style="font-size:10px;background:rgba(255,255,255,.08);color:var(--on-inverse-3);padding:2px 8px;border-radius:100px;">${escapeHtml(e.cat)}</span></td>
+          <td style="padding:6px 8px;color:var(--on-inverse-3);">${escapeHtml(e.ref) || '—'}</td>
+          <td style="padding:6px 0;text-align:right;color:var(--rose-soft);font-weight:500;">${fmt(e.amount, cur)}</td>
+        </tr>`).join('');
+      // Payment button
+      const artistLink = (s.artistPaymentLink || '').trim();
+      const payBtn = $('d-exp-pay-btn');
+      const payHint = $('d-exp-pay-hint');
+      if (payBtn) {
+        if (artistLink) {
+          payBtn.href = artistLink.startsWith('http') ? artistLink : 'https://' + artistLink;
+          payBtn.style.display = '';
+          if (payHint) payHint.textContent = 'Opens payment link in a new tab';
+        } else {
+          payBtn.style.display = 'none';
+          if (payHint) payHint.textContent = 'Artist has not set a payment link yet';
         }
       }
-    } else {
-      if (expKpi) expKpi.style.display = 'none';
-      if (expSect) expSect.style.display = 'none';
-    }
-  }
-
-  // ── BREAK-EVEN (publisher only)
-  if (!isAuthor() && cost > 0) {
-    $('d-breakeven-kpi').style.display = '';
-    $('d-breakeven-block').style.display = '';
-    const be = calculateBreakEven({
-      cost,
-      recognizedRev,
-      listPrice: book.listPrice,
-      sold: s.sold,
-      stock: s.stock,
-      currency: cur
-    });
-
-    $('d-breakeven-val').textContent = be.broken ? '✓ Done' : fmtWhole(be.remaining, cur) + ' to go';
-    $('d-breakeven-val').className = 'kpi-value' + (be.broken ? ' gold' : '');
-    $('d-breakeven-sub').textContent = `of ${fmtWhole(cost, cur)} production cost`;
-    if ($('d-breakeven-kpi')) {
-      $('d-breakeven-kpi').title = be.broken
-        ? 'Production costs fully recovered!'
-        : `${fmt(be.remaining, cur)} remaining (${be.hasListPrice ? `~${be.unitsNeededAtList} units at ${fmt(be.listPrice, cur)} list` : 'list price not set'})`;
-    }
-
-    $('d-be-title').textContent = be.broken ? 'Project has broken even' : 'Not yet broken even';
-    $('d-be-sub').textContent = `Production cost: ${fmt(cost, cur)} · Revenue to date: ${fmt(recognizedRev, cur)}`;
-
-    const bePill = $('d-be-pill');
-    if (bePill) {
-      if (be.broken) {
-        bePill.className = 'pill green';
-        bePill.textContent = '✓ 100% recovered';
-        bePill.style.background = '';
-        bePill.style.color = '';
-      } else {
-        bePill.className = be.isClose ? 'pill amber' : 'pill gold';
-        bePill.textContent = `${be.pctBe.toFixed(1)}% recovered`;
-        bePill.style.background = '';
-        bePill.style.color = '';
-      }
-    }
-
-    $('d-be-bar').style.width = be.pctBe + '%';
-    $('d-be-bar').style.background = be.broken ? '#4ade80' : be.pctBe >= 70 ? '#fb923c' : (book.accent || 'var(--gold2)');
-    $('d-be-bar-label').textContent = `${fmt(recognizedRev, cur)} recovered (${be.pctBe.toFixed(1)}%)`;
-    $('d-be-bar-right').textContent = be.broken ? 'Break-even reached ✓' : `${fmt(be.remaining, cur)} remaining`;
-    const trackEl = $('d-be-bar-track');
-    if (trackEl) {
-      trackEl.title = be.broken ? 'Production costs fully recovered!' : `${fmt(recognizedRev, cur)} of ${fmt(cost, cur)} recovered (${be.pctBe.toFixed(1)}%)`;
-    }
-    const al = $('d-be-alert');
-    if (be.broken) {
-      al.className = 'stock-alert ok';
-      al.textContent = '✓ ' + be.primaryExplanation;
-      al.style.borderLeftColor = '';
-      al.style.background = '';
-      al.style.color = '';
-    } else {
-      al.className = 'stock-alert warn';
-
-      if (be.isClose) {
-        al.style.borderLeftColor = '#fb923c';
-        al.style.background = 'rgba(251, 146, 60, 0.08)';
-        al.style.color = '#fb923c';
-      } else {
-        al.style.borderLeftColor = 'rgba(200, 145, 58, 0.5)';
-        al.style.background = 'rgba(200, 145, 58, 0.08)';
-        al.style.color = 'var(--gold2)';
-      }
-
-      const themeColor = be.isClose ? '#fb923c' : 'var(--gold3)';
-      const themeBg = be.isClose ? 'rgba(251, 146, 60, 0.12)' : 'rgba(200, 145, 58, 0.12)';
-      const themeBorder = be.isClose ? 'rgba(251, 146, 60, 0.25)' : 'rgba(200, 145, 58, 0.25)';
-
-      al.innerHTML = `
-        <div style="display:flex; flex-direction:column; gap:8px; width:100%;">
-          <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; width:100%;">
-            <div style="display:flex; align-items:center; gap:8px;">
-              <span style="font-size:13px; opacity:0.85;">⚠️</span>
-              <span style="font-weight:600; font-family:'Syne', sans-serif;">${be.isClose ? 'Almost broken even:' : 'Not yet broken even:'}</span>
-            </div>
-            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-              <span style="display:inline-flex; align-items:center; gap:6px; background:${themeBg}; border:1px solid ${themeBorder}; color:${themeColor}; font-family:'DM Mono', monospace; font-size:11px; font-weight:700; padding:4px 10px; border-radius:100px; line-height:1;" title="${fmt(be.remaining, cur)} remaining of ${fmt(cost, cur)} production cost">
-                🎯 ${fmt(be.remaining, cur)} remaining
-              </span>
-              <span style="display:inline-flex; align-items:center; gap:6px; background:${themeBg}; border:1px solid ${themeBorder}; color:${themeColor}; font-family:'DM Mono', monospace; font-size:11px; font-weight:700; padding:4px 10px; border-radius:100px; line-height:1;" title="${escapeHtml(be.unitsBadgeTitle)}">
-                ${escapeHtml(be.unitsBadgeText)}
-              </span>
-            </div>
-          </div>
-          <div class="stock-alert-details" style="border-top-color:${themeBorder};">
-            <div style="color:var(--on-inverse-2);">
-              ${be.hasListPrice
-                ? `Requires selling <strong style="color:var(--on-inverse);font-weight:700;">~${be.unitsNeededAtList}</strong> more unit${be.unitsNeededAtList !== 1 ? 's' : ''} at full list price of <strong style="color:var(--on-inverse);font-family:'DM Mono', monospace;font-weight:700;">${fmt(be.listPrice, cur)}</strong> to recover the remaining <strong style="color:var(--on-inverse);font-family:'DM Mono', monospace;font-weight:700;">${fmt(be.remaining, cur)}</strong>.`
-                : `Set a list price in book settings to calculate the units needed to break even.`}
-            </div>
-            ${be.paceNote ? `
-              <div class="stock-alert-note pace" style="color:${be.isClose ? '#fdba74' : 'var(--gold2)'};">
-                <span aria-hidden="true">💡</span>
-                <span style="color:inherit;">${escapeHtml(be.paceNote)}</span>
-              </div>
-            ` : ''}
-            ${be.stockNote ? `
-              <div class="stock-alert-note" style="color:var(--on-inverse-2);">
-                <span aria-hidden="true">📦</span>
-                <span style="color:inherit;">${escapeHtml(be.stockNote)}</span>
-              </div>
-            ` : ''}
-          </div>
-        </div>
-      `;
     }
   } else {
+    if (expKpi) expKpi.style.display = 'none';
+    if (expSect) expSect.style.display = 'none';
+  }
+}
+
+// Publisher-only break-even KPI, progress bar, and status alert. Hidden
+// entirely for authors, and for publishers until a production cost is set.
+function renderBreakEvenBlock(s, book, cur, cost, recognizedRev) {
+  if (isAuthor() || !(cost > 0)) {
     $('d-breakeven-kpi').style.display = 'none';
     $('d-breakeven-block').style.display = 'none';
+    return;
   }
 
-  // ── NET TO PUBLISHER KPI (only shown when profit sharing is configured)
-  if (book.profitTiers && book.profitTiers.length > 0) {
-    const earningsStats = calculateArtistEarnings(activeBook);
-    if (earningsStats && $('d-net-publisher-kpi')) {
-      $('d-net-publisher-kpi').style.display = '';
-      animateCountValue('d-net-publisher', fmtWhole(earningsStats.netPublisher, cur));
+  $('d-breakeven-kpi').style.display = '';
+  $('d-breakeven-block').style.display = '';
+  const be = calculateBreakEven({
+    cost,
+    recognizedRev,
+    listPrice: book.listPrice,
+    sold: s.sold,
+    stock: s.stock,
+    currency: cur
+  });
+
+  $('d-breakeven-val').textContent = be.broken ? '✓ Done' : fmtWhole(be.remaining, cur) + ' to go';
+  $('d-breakeven-val').className = 'kpi-value' + (be.broken ? ' gold' : '');
+  $('d-breakeven-sub').textContent = `of ${fmtWhole(cost, cur)} production cost`;
+  if ($('d-breakeven-kpi')) {
+    $('d-breakeven-kpi').title = be.broken
+      ? 'Production costs fully recovered!'
+      : `${fmt(be.remaining, cur)} remaining (${be.hasListPrice ? `~${be.unitsNeededAtList} units at ${fmt(be.listPrice, cur)} list` : 'list price not set'})`;
+  }
+
+  $('d-be-title').textContent = be.broken ? 'Project has broken even' : 'Not yet broken even';
+  $('d-be-sub').textContent = `Production cost: ${fmt(cost, cur)} · Revenue to date: ${fmt(recognizedRev, cur)}`;
+
+  const bePill = $('d-be-pill');
+  if (bePill) {
+    if (be.broken) {
+      bePill.className = 'pill green';
+      bePill.textContent = '✓ 100% recovered';
+      bePill.style.background = '';
+      bePill.style.color = '';
+    } else {
+      bePill.className = be.isClose ? 'pill amber' : 'pill gold';
+      bePill.textContent = `${be.pctBe.toFixed(1)}% recovered`;
+      bePill.style.background = '';
+      bePill.style.color = '';
     }
-  } else if ($('d-net-publisher-kpi')) {
-    $('d-net-publisher-kpi').style.display = 'none';
   }
 
-  // ── PROFIT SHARING BREAKDOWN
-  renderProfitSharingBreakdown(activeBook);
+  $('d-be-bar').style.width = be.pctBe + '%';
+  $('d-be-bar').style.background = be.broken ? '#4ade80' : be.pctBe >= 70 ? '#fb923c' : (book.accent || 'var(--gold2)');
+  $('d-be-bar-label').textContent = `${fmt(recognizedRev, cur)} recovered (${be.pctBe.toFixed(1)}%)`;
+  $('d-be-bar-right').textContent = be.broken ? 'Break-even reached ✓' : `${fmt(be.remaining, cur)} remaining`;
+  const trackEl = $('d-be-bar-track');
+  if (trackEl) {
+    trackEl.title = be.broken ? 'Production costs fully recovered!' : `${fmt(recognizedRev, cur)} of ${fmt(cost, cur)} recovered (${be.pctBe.toFixed(1)}%)`;
+  }
+  const al = $('d-be-alert');
+  if (be.broken) {
+    al.className = 'stock-alert ok';
+    al.textContent = '✓ ' + be.primaryExplanation;
+    al.style.borderLeftColor = '';
+    al.style.background = '';
+    al.style.color = '';
+  } else {
+    al.className = 'stock-alert warn';
+
+    if (be.isClose) {
+      al.style.borderLeftColor = '#fb923c';
+      al.style.background = 'rgba(251, 146, 60, 0.08)';
+      al.style.color = '#fb923c';
+    } else {
+      al.style.borderLeftColor = 'rgba(200, 145, 58, 0.5)';
+      al.style.background = 'rgba(200, 145, 58, 0.08)';
+      al.style.color = 'var(--gold2)';
+    }
+
+    const themeColor = be.isClose ? '#fb923c' : 'var(--gold3)';
+    const themeBg = be.isClose ? 'rgba(251, 146, 60, 0.12)' : 'rgba(200, 145, 58, 0.12)';
+    const themeBorder = be.isClose ? 'rgba(251, 146, 60, 0.25)' : 'rgba(200, 145, 58, 0.25)';
+
+    al.innerHTML = `
+      <div style="display:flex; flex-direction:column; gap:8px; width:100%;">
+        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; width:100%;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:13px; opacity:0.85;">⚠️</span>
+            <span style="font-weight:600; font-family:'Syne', sans-serif;">${be.isClose ? 'Almost broken even:' : 'Not yet broken even:'}</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <span style="display:inline-flex; align-items:center; gap:6px; background:${themeBg}; border:1px solid ${themeBorder}; color:${themeColor}; font-family:'DM Mono', monospace; font-size:11px; font-weight:700; padding:4px 10px; border-radius:100px; line-height:1;" title="${fmt(be.remaining, cur)} remaining of ${fmt(cost, cur)} production cost">
+              🎯 ${fmt(be.remaining, cur)} remaining
+            </span>
+            <span style="display:inline-flex; align-items:center; gap:6px; background:${themeBg}; border:1px solid ${themeBorder}; color:${themeColor}; font-family:'DM Mono', monospace; font-size:11px; font-weight:700; padding:4px 10px; border-radius:100px; line-height:1;" title="${escapeHtml(be.unitsBadgeTitle)}">
+              ${escapeHtml(be.unitsBadgeText)}
+            </span>
+          </div>
+        </div>
+        <div class="stock-alert-details" style="border-top-color:${themeBorder};">
+          <div style="color:var(--on-inverse-2);">
+            ${be.hasListPrice
+              ? `Requires selling <strong style="color:var(--on-inverse);font-weight:700;">~${be.unitsNeededAtList}</strong> more unit${be.unitsNeededAtList !== 1 ? 's' : ''} at full list price of <strong style="color:var(--on-inverse);font-family:'DM Mono', monospace;font-weight:700;">${fmt(be.listPrice, cur)}</strong> to recover the remaining <strong style="color:var(--on-inverse);font-family:'DM Mono', monospace;font-weight:700;">${fmt(be.remaining, cur)}</strong>.`
+              : `Set a list price in book settings to calculate the units needed to break even.`}
+          </div>
+          ${be.paceNote ? `
+            <div class="stock-alert-note pace" style="color:${be.isClose ? '#fdba74' : 'var(--gold2)'};">
+              <span aria-hidden="true">💡</span>
+              <span style="color:inherit;">${escapeHtml(be.paceNote)}</span>
+            </div>
+          ` : ''}
+          ${be.stockNote ? `
+            <div class="stock-alert-note" style="color:var(--on-inverse-2);">
+              <span aria-hidden="true">📦</span>
+              <span style="color:inherit;">${escapeHtml(be.stockNote)}</span>
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  }
 }
 
 function getProfitTiersHtml(book, stats, cur) {
