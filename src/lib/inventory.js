@@ -120,21 +120,44 @@ export function deduplicateDirectConsignmentSales(s) {
 
   const toRemove = new Set();
 
+  // ⚡ Bolt Optimization: findDuplicate used to re-scan the ENTIRE history array
+  // for every consignment sale (twice — once per pass), an O(hist × consignments)
+  // walk that grows quadratically as a book's order history piles up over its
+  // lifetime. Every eligible Direct-sale candidate matches on `qty` exactly, so
+  // indexing candidates by qty (and by qty+date for pass 1) up front turns each
+  // lookup into a scan of just the entries sharing that qty, instead of the whole
+  // history. Both index passes preserve the original array order, so the "first
+  // match wins" tie-break — and every match condition (qty/price epsilon/date) —
+  // is untouched; only the search space per lookup shrinks.
+  const byQty = new Map(); // qty -> [idx in ascending order]
+  const byQtyDate = new Map(); // qty -> Map(date -> [idx in ascending order])
+  s.hist.forEach((h, idx) => {
+    if (h.consignmentLink || h.gratuity || h.voided) return;
+    const chan = (h.chan && h.chan.trim()) ? h.chan : 'Direct';
+    if (chan !== 'Direct') return;
+    let qtyList = byQty.get(h.qty);
+    if (!qtyList) { qtyList = []; byQty.set(h.qty, qtyList); }
+    qtyList.push(idx);
+    let dateMap = byQtyDate.get(h.qty);
+    if (!dateMap) { dateMap = new Map(); byQtyDate.set(h.qty, dateMap); }
+    let dateList = dateMap.get(h.date);
+    if (!dateList) { dateList = []; dateMap.set(h.date, dateList); }
+    dateList.push(idx);
+  });
+
   // Returns the index of a not-yet-removed unlabeled/Direct duplicate of consignment
   // sale `c`, matching qty AND price. When `requireDate` is true, the date must also
   // match exactly.
-  const findDuplicate = (c, requireDate) => s.hist.findIndex((h, idx) => {
-    if (h.consignmentLink || h.gratuity || h.voided) return false;
-    if (toRemove.has(idx)) return false;
-    const chan = (h.chan && h.chan.trim()) ? h.chan : 'Direct';
-    if (chan !== 'Direct') return false;
-
-    const qtyMatch = h.qty === c.qty;
-    const priceMatch = Math.abs((h.price || 0) - (c.price || 0)) < 0.01;
-    const dateMatch = !requireDate || h.date === c.date;
-
-    return qtyMatch && priceMatch && dateMatch;
-  });
+  const findDuplicate = (c, requireDate) => {
+    const candidates = requireDate
+      ? (byQtyDate.get(c.qty)?.get(c.date) || [])
+      : (byQty.get(c.qty) || []);
+    for (const idx of candidates) {
+      if (toRemove.has(idx)) continue;
+      if (Math.abs((s.hist[idx].price || 0) - (c.price || 0)) < 0.01) return idx;
+    }
+    return -1;
+  };
 
   // Pass 1: prefer an exact same-date duplicate (unchanged behavior).
   const unmatched = [];
