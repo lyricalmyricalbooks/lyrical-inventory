@@ -58,10 +58,27 @@ const num = (v) => Number(v) || 0;
 const intOf = (v) => parseInt(v, 10) || 0;
 const isoToday = () => new Date().toISOString().slice(0, 10);
 
-/** Jump straight to the book's own screen — the place every book gap is fixed. */
+// ── Where a signal gets fixed ──────────────────────────────────────────────
+//
+// Expressed as DATA — `{kind, bookId, tab}` — never as a snippet of JavaScript.
+//
+// The first version of this built strings like `switchBook('hound')` and the
+// renderer dropped them straight into an onclick. That is unsafe in a way that
+// is easy to miss: escapeHtml() keeps a value from breaking out of the
+// ATTRIBUTE, but the browser decodes those entities before the JS engine ever
+// sees the code, so a book id containing a quote would break out of the JS
+// STRING and run. Book ids are free text typed into the Add-book form, so that
+// is reachable. Describing the destination instead means nothing a publisher
+// types can ever become executable.
+
+/** Open a book, optionally landing on one of its tabs. */
 function openBook(bookId, tab) {
-  const jump = `switchBook('${bookId}')`;
-  return tab ? `${jump};setTimeout(()=>switchTab('${tab}'),50)` : jump;
+  return { kind: 'book', bookId, tab: tab || '' };
+}
+
+/** Open a top-level tab that isn't tied to a book. */
+function openTab(tab) {
+  return { kind: 'tab', tab };
 }
 
 // ── Producers ──────────────────────────────────────────────────────────────
@@ -82,7 +99,7 @@ function stockSignals(book, s, out) {
       label: 'Stock running low',
       detail: `${book.title} is down to ${onHand} ${onHand === 1 ? 'copy' : 'copies'}${printed ? ` of ${printed} printed` : ''} — at or below the level you set for reordering.`,
       bookId: book.id,
-      fix: { label: 'Open book', action: openBook(book.id) },
+      fix: { label: 'Open book', ...openBook(book.id) },
     });
   } else if (threshold > 0 && onHand <= threshold * 2) {
     out.push({
@@ -93,7 +110,7 @@ function stockSignals(book, s, out) {
       label: 'Stock getting low',
       detail: `${book.title} has ${onHand} copies left. Worth thinking about the next print run.`,
       bookId: book.id,
-      fix: { label: 'Open book', action: openBook(book.id) },
+      fix: { label: 'Open book', ...openBook(book.id) },
     });
   }
 
@@ -109,7 +126,7 @@ function stockSignals(book, s, out) {
       label: "Stock count doesn't match the records",
       detail: `${book.title} is recorded as ${onHand} on hand, but its sales and shipments add up to ${derived}. One of them needs a look.`,
       bookId: book.id,
-      fix: { label: 'Review', action: openBook(book.id) },
+      fix: { label: 'Review', ...openBook(book.id) },
     });
   }
 }
@@ -136,7 +153,7 @@ function moneySignals(book, s, out, ctx) {
       label: 'A store owes you money',
       detail: `${owingStores} ${owingStores === 1 ? 'store owes' : 'stores owe'} you ${fmt(owed, cur)} for copies of ${book.title} they've sold.`,
       bookId: book.id,
-      fix: { label: 'Open consignment', action: openBook(book.id, 'consignment') },
+      fix: { label: 'Open consignment', ...openBook(book.id, 'consignment') },
     });
   }
 
@@ -159,7 +176,7 @@ function moneySignals(book, s, out, ctx) {
       label: 'Invoice past its due date',
       detail: `${overdue} ${overdue === 1 ? 'invoice' : 'invoices'} for ${book.title} ${overdue === 1 ? 'is' : 'are'} past the date you asked to be paid by.`,
       bookId: book.id,
-      fix: { label: 'Open invoices', action: openBook(book.id, 'consignment') },
+      fix: { label: 'Open invoices', ...openBook(book.id, 'consignment') },
     });
   }
   if (drafts > 0) {
@@ -171,7 +188,7 @@ function moneySignals(book, s, out, ctx) {
       label: 'Invoice never sent',
       detail: `${drafts} ${drafts === 1 ? 'invoice is' : 'invoices are'} still a draft for ${book.title} — nobody has been asked to pay ${drafts === 1 ? 'it' : 'them'} yet.`,
       bookId: book.id,
-      fix: { label: 'Open invoices', action: openBook(book.id, 'consignment') },
+      fix: { label: 'Open invoices', ...openBook(book.id, 'consignment') },
     });
   }
 
@@ -192,7 +209,7 @@ function moneySignals(book, s, out, ctx) {
       label: 'Expenses waiting to be paid back',
       detail: `${owedCount} ${owedCount === 1 ? 'expense' : 'expenses'} on ${book.title} totalling ${fmt(owedToArtist, cur)} ${owedCount === 1 ? 'has' : 'have'} not been reimbursed.`,
       bookId: book.id,
-      fix: { label: 'Open expenses', action: openBook(book.id, 'expenses') },
+      fix: { label: 'Open expenses', ...openBook(book.id, 'expenses') },
     });
   }
 
@@ -208,7 +225,7 @@ function moneySignals(book, s, out, ctx) {
       label: 'Artist has asked to be paid',
       detail: `${book.author || 'The artist'} requested ${fmt(num(latest.amount), latest.currency || cur)} for ${book.title}.`,
       bookId: book.id,
-      fix: { label: 'Open book', action: openBook(book.id) },
+      fix: { label: 'Open book', ...openBook(book.id) },
     });
   }
 }
@@ -223,7 +240,7 @@ function catalogueSignals(book, s, out) {
       label: 'Production cost not entered',
       detail: `${book.title} has no printing cost recorded, so the app can't work out when it has paid for itself or what the artist is owed.`,
       bookId: book.id,
-      fix: { label: 'Add cost', action: openBook(book.id) },
+      fix: { label: 'Add cost', ...openBook(book.id) },
     });
   }
 
@@ -237,7 +254,7 @@ function catalogueSignals(book, s, out) {
       label: 'No ISBN recorded',
       detail: `${book.title} has no ISBN saved. Shops and distributors usually ask for one.`,
       bookId: book.id,
-      fix: { label: 'Open book', action: openBook(book.id) },
+      fix: { label: 'Open book', ...openBook(book.id) },
     });
   }
 
@@ -250,7 +267,7 @@ function catalogueSignals(book, s, out) {
       label: 'No payment link',
       detail: `${book.title} has no payment link, so it can't be sold by QR code at an event.`,
       bookId: book.id,
-      fix: { label: 'Open book', action: openBook(book.id) },
+      fix: { label: 'Open book', ...openBook(book.id) },
     });
   }
 
@@ -265,7 +282,7 @@ function catalogueSignals(book, s, out) {
       label: "Artist's share not set up",
       detail: `Nobody has said how ${book.title}'s takings are split, so the app can't tell you what ${book.author || 'the artist'} has earned.`,
       bookId: book.id,
-      fix: { label: 'Set it up', action: openBook(book.id) },
+      fix: { label: 'Set it up', ...openBook(book.id) },
     });
   }
 
@@ -282,7 +299,7 @@ function catalogueSignals(book, s, out) {
       label: 'Expenses with no receipt',
       detail: `${missing} ${missing === 1 ? 'expense' : 'expenses'} on ${book.title} ${missing === 1 ? 'has' : 'have'} nothing attached to back ${missing === 1 ? 'it' : 'them'} up at tax time.`,
       bookId: book.id,
-      fix: { label: 'Open expenses', action: openBook(book.id, 'expenses') },
+      fix: { label: 'Open expenses', ...openBook(book.id, 'expenses') },
     });
   }
 }
@@ -303,7 +320,7 @@ function setupSignals(ctx, out) {
       icon: '⟲',
       label: 'Google Sheet script is out of date',
       detail: `Your spreadsheet is running an older copy of the connection script (${sheets.deployedVersion} instead of ${sheets.expectedVersion}). Sales may not reach it correctly until it's updated.`,
-      fix: { label: 'Open settings', action: "switchTab('sheets')" },
+      fix: { label: 'Open settings', ...openTab('sheets') },
     });
   } else if (!sheets.connected) {
     out.push({
@@ -313,7 +330,7 @@ function setupSignals(ctx, out) {
       icon: '📊',
       label: 'Google Sheet not connected',
       detail: 'Connecting a spreadsheet gives you a running copy of every sale outside the app.',
-      fix: { label: 'Connect', action: "switchTab('sheets')" },
+      fix: { label: 'Connect', ...openTab('sheets') },
     });
   }
 
@@ -327,7 +344,7 @@ function setupSignals(ctx, out) {
       icon: '⚠',
       label: "Changes haven't saved",
       detail: `${queued || 'Some'} ${queued === 1 ? 'change is' : 'changes are'} stuck and haven't reached the cloud. They're safe on this device in the meantime.`,
-      fix: { label: 'Try again', action: 'retrySyncNow()' },
+      fix: { label: 'Try again', kind: 'retry-sync' },
     });
   } else if (sync.online === false && queued > 0) {
     out.push({
@@ -364,7 +381,7 @@ function setupSignals(ctx, out) {
       label: 'Author submissions waiting for you',
       detail: `${count} ${count === 1 ? 'entry' : 'entries'} from ${sub.bookTitle || 'an author'} ${count === 1 ? 'is' : 'are'} waiting to be approved before ${count === 1 ? 'it counts' : 'they count'} towards your figures.`,
       bookId: sub.bookId,
-      fix: { label: 'Review', action: openBook(sub.bookId, 'history') },
+      fix: { label: 'Review', ...openBook(sub.bookId, 'history') },
     });
   }
 
@@ -380,7 +397,7 @@ function setupSignals(ctx, out) {
       label: 'Contributors waiting on their next step',
       detail: `${waiting} ${waiting === 1 ? 'contributor' : 'contributors'} on ${call.bookTitle || 'an open call'} ${waiting === 1 ? 'is' : 'are'} waiting for you to move ${waiting === 1 ? 'them' : 'them'} along.`,
       bookId: call.bookId,
-      fix: { label: 'Review', action: openBook(call.bookId, 'opencall') },
+      fix: { label: 'Review', ...openBook(call.bookId, 'opencall') },
     });
   }
 }

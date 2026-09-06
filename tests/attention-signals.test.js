@@ -240,7 +240,7 @@ describe('setup signals', () => {
     const result = scan({ ctx: { sync: { online: true, pending: 3, failed: true } } });
     const s = result.signals.find(s => s.id === 'setup-sync-failed');
     expect(s.status).toBe('blocked');
-    expect(s.fix.action).toBe('retrySyncNow()');
+    expect(s.fix.kind).toBe('retry-sync');
   });
 
   it('mentions being offline only when something is actually waiting', () => {
@@ -315,6 +315,31 @@ describe('the result as a whole', () => {
     }
   });
 
+  it('describes where a signal is fixed as data, never as runnable code', () => {
+    // A book id is free text from the Add-book form. If the destination were a
+    // JavaScript string dropped into an onclick, a quote in that id would break
+    // out of it and run — escaping protects the attribute, but the browser
+    // decodes entities before the JS engine ever sees the code.
+    const nasty = "x'); alert(1); //";
+    const result = buildAttentionSignals({
+      books: [{ ...healthyBook, id: nasty, isbn: '—' }],
+      states: { [nasty]: { ...healthyState } },
+      ...healthyContext,
+    });
+    const withFix = result.signals.filter(s => s.fix);
+    expect(withFix.length).toBeGreaterThan(0);
+    for (const signal of withFix) {
+      expect(signal.fix).not.toHaveProperty('action');
+      expect(['book', 'tab', 'retry-sync']).toContain(signal.fix.kind);
+      // The id is never spliced into a call — no code is built here at all.
+      expect(JSON.stringify(signal.fix)).not.toContain('switchBook(');
+      expect(JSON.stringify(signal.fix)).not.toContain('switchTab(');
+    }
+    // It survives verbatim in its own field, which is exactly what proves it
+    // was carried rather than concatenated into anything.
+    expect(withFix.some(s => s.fix.bookId === nasty)).toBe(true);
+  });
+
   it('gives each group a plain-language heading', () => {
     for (const group of SIGNAL_GROUPS) {
       expect(GROUP_LABELS[group]).toBeTruthy();
@@ -349,6 +374,13 @@ describe('wiring', () => {
 
   it('renders the tab when it is opened', () => {
     expect(mainJs).toContain('renderTodoTab');
+  });
+
+  it('routes fix buttons through data attributes, not an onclick', () => {
+    expect(mainJs).toContain('data-fix=');
+    expect(mainJs).toContain("closest?.('[data-fix]')");
+    // The unsafe shape this replaced: a signal's destination inside an onclick.
+    expect(mainJs).not.toMatch(/onclick="\$\{escapeHtml\(sig\.fix/);
   });
 });
 
