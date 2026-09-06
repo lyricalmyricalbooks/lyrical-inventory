@@ -11,6 +11,8 @@ import { calcArtistEarnings, tierEffectiveCap, describePayout } from './lib/earn
 import { calculateBreakEven } from './lib/breakeven.js';
 import { escapeHtml } from './lib/html.js';
 import { describeCustomerFilters, joinFilterLabels } from './lib/customer-segment.js';
+import { buildActivityFeed } from './lib/activity-feed.js';
+import { buildAttentionSignals, SIGNAL_GROUPS, GROUP_LABELS, GROUP_ICONS, isUrgent } from './lib/attention-signals.js';
 import {
   RECEIPT_SCAN_SCHEMA,
   _applyScanCategory,
@@ -2667,6 +2669,10 @@ let notifyUrl = localStorage.getItem('lm-notify-url') || '';
 // in apps-script/Code.gs) whenever Code.gs gains behaviour that needs a fresh
 // deploy — the connection card flags any older deployed version as outdated.
 const EXPECTED_SCRIPT_VERSION = 'v42';
+// What the connected spreadsheet last told us it was running. Null until a
+// version check has actually answered — an unknown version is not a mismatch,
+// so the To-do list stays quiet rather than inventing a problem.
+let _sheetsDeployedVersion = null;
 if (sheetsUrl) {
   const normalizedSavedUrl = normalizeAppsScriptUrl(sheetsUrl);
   if (normalizedSavedUrl && normalizedSavedUrl !== sheetsUrl) {
@@ -3558,7 +3564,11 @@ function syncRoleUI() {
   const shippingTabBtn = $('shipping-tab-btn');
   const bigcartelTabBtn = $('bigcartel-tab-btn');
   const sidebarBigcartelBtn = $('sidebar-bigcartel-btn');
+  const todoTabBtn = $('todo-tab-btn');
+  const todoSidebarBtn = $('todo-sidebar-btn');
 
+  if (todoTabBtn) todoTabBtn.style.display = authorNow ? 'none' : '';
+  if (todoSidebarBtn) todoSidebarBtn.style.display = authorNow ? 'none' : '';
   if (reconcileTabBtn) reconcileTabBtn.style.display = authorNow ? 'none' : '';
   if (opencallTabBtn) opencallTabBtn.style.display = authorNow ? 'none' : '';
   if (websiteTabBtn) websiteTabBtn.style.display = authorNow ? 'none' : '';
@@ -4012,11 +4022,11 @@ const SHELL_TAB_LABELS = {
   pos: 'Event POS', taxcenter: 'Tax Centre', reconcile: 'Payments', qrcodes: 'QR Codes',
   customers: 'Customers', opencall: 'Open Call', sheets: 'Sheets', backups: 'Backups',
   financials: 'Financials', myqr: 'My QR Code', webanalytics: 'Web Analytics', shipping: 'Shipping',
-  bigcartel: 'Big Cartel'
+  bigcartel: 'Big Cartel', todo: 'To-do'
 };
 export function switchTab(name) {
   // publisher-only tabs redirect authors to dashboard
-  if (isAuthor() && (name === 'website' || name === 'backups' || name === 'financials' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes' || name === 'reconcile' || name === 'customers' || name === 'opencall' || name === 'webanalytics' || name === 'shipping' || name === 'bigcartel')) name = 'dashboard';
+  if (isAuthor() && (name === 'website' || name === 'backups' || name === 'financials' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes' || name === 'reconcile' || name === 'customers' || name === 'opencall' || name === 'webanalytics' || name === 'shipping' || name === 'bigcartel' || name === 'todo')) name = 'dashboard';
   // publisher redirected away from author-only myqr tab
   if (!isAuthor() && name === 'myqr') name = 'dashboard';
 
@@ -4087,6 +4097,7 @@ export function switchTab(name) {
   if (name === 'webanalytics') renderWebAnalytics();
   if (name === 'shipping') { initShippingTab(); }
   if (name === 'bigcartel') { renderBigCartelTab(); }
+  if (name === 'todo') renderTodoTab();
 }
 
 function updateHeader() {
@@ -4455,7 +4466,7 @@ function updateAllOverview() {
   }
   renderConsignmentTable();
 
-  renderGlobalPendingAlert();
+  renderOverviewRail();
 }
 
 // Filter & Search state for Combined Consignment Summary
@@ -4886,85 +4897,232 @@ function renderChannelAnalytics() {
   host.innerHTML = toggle + chart + `<div class="ch-book-grid">${cards}</div>`;
 }
 
-// ── BOOK CONTEXT BANNERS
-function renderGlobalPendingAlert() {
-  if (isAuthor()) return;
-  const alertDiv = $('all-pending-approvals-alert');
-  if (!alertDiv) return;
+// ── NOTIFICATIONS, ACTIVITY & THE TO-DO LIST ───────────────────────────────
+//
+// Three surfaces, two derived sources, zero stored state.
+//
+// `buildAttentionSignals()` answers "what needs doing?" and feeds BOTH the
+// notifications rail on the landing page and the To-do tab — deliberately one
+// engine, because two scans would drift and start contradicting each other on
+// the same screen. `buildActivityFeed()` answers the different question of what
+// has already happened.
+//
+// Nothing here writes anything. A signal lives exactly as long as the thing it
+// describes is true, so restocking a book is what clears its low-stock warning.
+// That is why there is no dismiss button and nothing to sync: the panels are
+// always a true picture of right now, including offline.
+//
+// This replaced the old inline "Pending Author Submissions" banner that used to
+// sit at the top of this page. Its two conditions (author submissions, open-call
+// contributors) are now producers inside the signal engine, so the screen has
+// one place that says what needs attention instead of two that could disagree.
 
-  const pendingBooks = [];
-  Object.keys(window.authorSubmissions || {}).forEach(bookId => {
-    const subs = window.authorSubmissions[bookId];
-    const sCount = Object.keys(subs.sales || {}).length;
-    const eCount = Object.keys(subs.expenses || {}).length;
-    if (sCount > 0 || eCount > 0) {
-      pendingBooks.push({ bookId, sCount, eCount, title: BOOKS[bookId]?.title || bookId });
-    }
+/** How many notifications the rail shows before deferring to the To-do tab. */
+const RAIL_NOTIFICATION_LIMIT = 5;
+/** How many past events the rail's activity panel shows. */
+const RAIL_ACTIVITY_LIMIT = 12;
+
+/** The books the publisher actually publishes — test books report nothing. */
+function attentionBooks() {
+  return BOOK_LIST.filter(b => !isTestBook(b));
+}
+
+/**
+ * Everything the pure signal engine cannot work out for itself: the live
+ * connections, the sync queue, and the author-submission inbox.
+ */
+function attentionInput() {
+  const submissions = Object.keys(window.authorSubmissions || {}).map(bookId => {
+    const subs = window.authorSubmissions[bookId] || {};
+    return {
+      bookId,
+      bookTitle: BOOKS[bookId]?.title || bookId,
+      sales: Object.keys(subs.sales || {}).length,
+      expenses: Object.keys(subs.expenses || {}).length,
+    };
   });
 
-  // Open-call contributors with an outstanding next step, grouped by book.
-  const openCallBooks = [];
-  Object.keys(states || {}).forEach(bookId => {
+  const openCall = Object.keys(states || {}).map(bookId => {
     const list = states[bookId]?.openCall;
-    if (!Array.isArray(list) || !list.length) return;
+    if (!Array.isArray(list) || !list.length) return null;
     let waiting = 0;
     for (const c of list) {
       if (OC_STAGES.some(st => !c[st.key])) waiting++;
     }
-    if (waiting > 0) {
-      openCallBooks.push({ bookId, waiting, title: BOOKS[bookId]?.title || bookId });
-    }
+    return waiting > 0 ? { bookId, bookTitle: BOOKS[bookId]?.title || bookId, waiting } : null;
+  }).filter(Boolean);
+
+  return {
+    books: attentionBooks(),
+    states,
+    sheets: {
+      connected: !!sheetsUrl,
+      deployedVersion: _sheetsDeployedVersion,
+      expectedVersion: EXPECTED_SCRIPT_VERSION,
+    },
+    sync: {
+      online: typeof navigator === 'undefined' || navigator.onLine !== false,
+      pending: syncQueue.length,
+      failed: false,
+    },
+    submissions,
+    openCall,
+    today: today(),
+  };
+}
+
+/** One notification card. Tone follows the house amber/red/blue convention. */
+function notificationHtml(sig) {
+  const tone = sig.status === 'blocked' ? 'red' : sig.status === 'warn' ? 'amber' : 'blue';
+  const action = sig.fix
+    ? `<button type="button" class="notif-action" onclick="${escapeHtml(sig.fix.action)}">${escapeHtml(sig.fix.label)} →</button>`
+    : '';
+  return `<div class="notif-item tone-${tone}">
+      <span class="notif-ico" aria-hidden="true">${escapeHtml(sig.icon || '')}</span>
+      <div class="notif-body">
+        <div class="notif-title">${escapeHtml(sig.label || '')}</div>
+        <div class="notif-detail">${escapeHtml(sig.detail || '')}</div>
+        ${action ? `<div class="notif-meta">${action}</div>` : ''}
+      </div>
+    </div>`;
+}
+
+/** One line of history. The amount keeps its own currency — never a total. */
+function activityHtml(ev) {
+  const toneClass = ev.tone === 'pos' ? ' is-pos' : ev.tone === 'neg' ? ' is-neg' : '';
+  const amount = ev.amount
+    ? `<span class="activity-amt${toneClass} mono-num">${escapeHtml(ev.amount)}</span>`
+    : '';
+  const when = webScanRelativeTime(ev.date) || fmtD(ev.date);
+  return `<div class="activity-item">
+      <span class="activity-dot" aria-hidden="true">${escapeHtml(ev.icon || '')}</span>
+      <div class="activity-body">
+        <div class="activity-text">${escapeHtml(ev.text || '')}</div>
+        <div class="activity-side">${amount}<span class="activity-time mono-num">${escapeHtml(when)}</span></div>
+      </div>
+    </div>`;
+}
+
+/**
+ * The count on every nav badge. Urgent only: a badge that counted the whole
+ * to-do list would sit permanently at some large number and stop meaning
+ * anything, which is the failure mode of every notification badge ever built.
+ */
+function updateTodoBadge(result) {
+  const count = result ? result.urgent : 0;
+  document.querySelectorAll('.todo-nav-badge').forEach(el => {
+    el.textContent = count > 99 ? '99+' : String(count);
+    el.hidden = count === 0;
   });
+}
 
-  let html = '';
-  if (pendingBooks.length) {
-    html += `
-      <div style="background:var(--cream3); border:1px solid var(--amber); border-left:4px solid var(--amber); border-radius:var(--r2); padding:1rem;">
-        <div style="font-weight:600; color:var(--text2); margin-bottom:8px; display:flex; align-items:center; gap:8px;">
-          <span class="pill amber">Action Required</span> Pending Author Submissions
-        </div>
-        <div style="font-size:13px; color:var(--text3); margin-bottom:12px;">The following books have new sales or expenses awaiting your approval:</div>
-        <div style="display:flex; flex-direction:column; gap:8px;">
-          ${pendingBooks.map(b => `
-            <div style="display:flex; justify-content:space-between; align-items:center; background:var(--surface-card); padding:8px 12px; border-radius:var(--r1); border:1px solid var(--border);">
-              <div>
-                <strong style="color:var(--text2);">${escapeHtml(b.title)}</strong>
-                <span style="font-size:12px; color:var(--text3); margin-left:8px;">
-                  ${b.sCount ? `${b.sCount} sale(s)` : ''} ${b.sCount && b.eCount ? '·' : ''} ${b.eCount ? `${b.eCount} expense(s)` : ''}
-                </span>
-              </div>
-              <button class="btn sm gold" onclick="switchBook('${b.bookId}'); setTimeout(()=>switchTab('history'), 50);">Review →</button>
-            </div>
-          `).join('')}
-        </div>
-      </div>`;
-  }
-  if (openCallBooks.length) {
-    html += `
-      <div style="background:var(--cream3); border:1px solid var(--gold-line); border-left:4px solid var(--gold); border-radius:var(--r2); padding:1rem; margin-top:${pendingBooks.length ? '12px' : '0'};">
-        <div style="font-weight:600; color:var(--text2); margin-bottom:8px; display:flex; align-items:center; gap:8px;">
-          <span class="pill gold">Open Call</span> Contributors awaiting their next step
-        </div>
-        <div style="display:flex; flex-direction:column; gap:8px;">
-          ${openCallBooks.map(b => `
-            <div style="display:flex; justify-content:space-between; align-items:center; background:var(--surface-card); padding:8px 12px; border-radius:var(--r1); border:1px solid var(--border);">
-              <div>
-                <strong style="color:var(--text2);">${escapeHtml(b.title)}</strong>
-                <span style="font-size:12px; color:var(--text3); margin-left:8px;">${b.waiting} contributor${b.waiting > 1 ? 's' : ''} awaiting next step</span>
-              </div>
-              <button class="btn sm gold" onclick="switchBook('${b.bookId}'); setTimeout(()=>switchTab('opencall'), 50);">Review →</button>
-            </div>
-          `).join('')}
-        </div>
-      </div>`;
+/** The landing page's right-hand rail: what needs doing, and what just happened. */
+function renderOverviewRail() {
+  if (isAuthor()) return;
+  const result = buildAttentionSignals(attentionInput());
+  updateTodoBadge(result);
+
+  const notifHost = $('all-notifications');
+  if (notifHost) {
+    const urgent = result.signals.filter(isUrgent);
+    const shown = urgent.slice(0, RAIL_NOTIFICATION_LIMIT);
+    notifHost.innerHTML = shown.length
+      ? shown.map(notificationHtml).join('')
+      : `<div class="empty-state rail-empty">
+           <div class="e-icon" aria-hidden="true">✓</div>
+           <strong>Nothing needs you right now</strong>
+           <span>Stock, money owed and your connections all look healthy.</span>
+         </div>`;
+
+    const countEl = $('all-notif-count');
+    if (countEl) {
+      countEl.textContent = String(urgent.length);
+      countEl.hidden = urgent.length === 0;
+    }
+    const moreEl = $('all-notif-more');
+    if (moreEl) {
+      const rest = result.total - shown.length;
+      moreEl.hidden = rest <= 0;
+      moreEl.textContent = `${rest} more in your to-do list →`;
+    }
+    // Permanent live region — only its TEXT changes, so screen readers keep it.
+    const statusEl = $('all-notif-status');
+    if (statusEl) {
+      statusEl.textContent = urgent.length
+        ? `${urgent.length} ${urgent.length === 1 ? 'thing needs' : 'things need'} your attention.`
+        : 'Nothing needs your attention.';
+    }
   }
 
-  if (html) {
-    alertDiv.style.display = 'block';
-    alertDiv.innerHTML = html;
-  } else {
-    alertDiv.style.display = 'none';
+  const activityHost = $('all-activity');
+  if (activityHost) {
+    const feed = buildActivityFeed(attentionBooks(), states, { limit: RAIL_ACTIVITY_LIMIT });
+    activityHost.innerHTML = feed.length
+      ? feed.map(activityHtml).join('')
+      : `<div class="empty-state rail-empty">
+           <div class="e-icon" aria-hidden="true">🕘</div>
+           <strong>Nothing has happened yet</strong>
+           <span>Sales, shipments and expenses will show up here as you record them.</span>
+         </div>`;
   }
+}
+
+/** One row of the To-do tab. */
+function todoRowHtml(sig) {
+  const tone = sig.status === 'blocked' ? 'red' : sig.status === 'warn' ? 'amber' : 'gray';
+  const action = sig.fix
+    ? `<button type="button" class="btn sm ghost todo-fix" onclick="${escapeHtml(sig.fix.action)}">${escapeHtml(sig.fix.label)} →</button>`
+    : '';
+  return `<div class="todo-row tone-${tone}">
+      <span class="todo-ico" aria-hidden="true">${escapeHtml(sig.icon || '')}</span>
+      <div class="todo-copy">
+        <div class="todo-label">${escapeHtml(sig.label || '')}</div>
+        <div class="todo-detail">${escapeHtml(sig.detail || '')}</div>
+      </div>
+      ${action}
+    </div>`;
+}
+
+/** The To-do tab: every signal, grouped, with the urgent ones first in each group. */
+function renderTodoTab() {
+  if (isAuthor()) return;
+  const host = $('todo-groups');
+  if (!host) return;
+
+  const result = buildAttentionSignals(attentionInput());
+  updateTodoBadge(result);
+
+  const chip = $('todo-total-chip');
+  if (chip) chip.textContent = result.total === 0 ? 'All clear' : `${result.total} to do`;
+  const statusEl = $('todo-status');
+  if (statusEl) {
+    statusEl.textContent = result.total === 0
+      ? 'Your to-do list is empty.'
+      : `${result.total} ${result.total === 1 ? 'item' : 'items'} on your to-do list, ${result.urgent} needing attention soon.`;
+  }
+
+  if (!result.total) {
+    host.innerHTML = `<div class="empty-state sys-empty">
+        <div class="e-icon" aria-hidden="true">✅</div>
+        <strong>You're all caught up</strong>
+        <span>Every book has its details filled in, nobody owes you money, and your connections are working. Anything new will appear here on its own.</span>
+      </div>`;
+    return;
+  }
+
+  host.innerHTML = SIGNAL_GROUPS.map(group => {
+    const items = result.byGroup[group] || [];
+    if (!items.length) return '';
+    return `<section class="overview-section todo-group">
+        <div class="sec-head is-muted">
+          <div class="sec-head-titles">
+            <div class="sec-kicker"><span class="sec-kicker-dot"></span>${escapeHtml(GROUP_ICONS[group] || '')} ${escapeHtml(GROUP_LABELS[group] || group)}</div>
+          </div>
+          <div class="sec-head-badges"><span class="pill gray">${items.length}</span></div>
+        </div>
+        <div class="todo-list">${items.map(todoRowHtml).join('')}</div>
+      </section>`;
+  }).join('');
 }
 
 // ── BOOK CONTEXT BANNERS
@@ -6087,7 +6245,16 @@ function visibleTabName() {
 
 function renderAll() {
   _revMemo.clear();
-  if (activeBook === 'all') { updateAllOverview(); updateHeader(); return; }
+  if (activeBook === 'all') {
+    // The To-do tab is reached from the all-books screen, so it sits inside this
+    // branch rather than in TAB_RENDERERS below — which never runs while
+    // activeBook is 'all'. Without this it would go stale the moment a sale or a
+    // restock changed the very thing it is reporting on.
+    if (visibleTabName() === 'todo') renderTodoTab();
+    else updateAllOverview();
+    updateHeader();
+    return;
+  }
   // Only the visible tab. This used to rebuild all eight panels on every state
   // change, so recording a sale at a market walked the full history and the
   // full consignment ledger to repaint panels nobody was looking at — on the
@@ -11899,6 +12066,9 @@ async function checkSheetsVersion() {
       const data = await res.json().catch(() => null);
       if (data && data.service && data.service.indexOf('lyrical-sheets-webhook') === 0) {
         const deployedVer = data.scriptVersion || 'unknown';
+        // Remembered so the To-do list and the notifications rail can report an
+        // out-of-date spreadsheet without re-fetching it on every render.
+        _sheetsDeployedVersion = deployedVer;
         if (deployedVer !== EXPECTED_SCRIPT_VERSION) {
           if (versionEl) versionEl.textContent = deployedVer;
           warningEl.style.display = 'block';
@@ -22126,7 +22296,7 @@ function exposeLegacyInlineHandlers() {
     updateRoleToggleButton, updateSubheader, placeKpiStrip, bindKpiResize, syncRoleUI,
     toggleCurrentBookView, updateProfileTabs, selectProfileTab, seedMockTestData, switchBook,
     switchTab, updateHeader, updateAllOverview, renderCustomersStat, channelColor,
-    renderChannelAnalytics, selectAllChCurrency, setChChannelFilter, clearChChannelFilter, setChBookSort, setChBookSearch, renderGlobalPendingAlert, updateContextBanners,
+    renderChannelAnalytics, selectAllChCurrency, setChChannelFilter, clearChChannelFilter, setChBookSort, setChBookSearch, renderOverviewRail, renderTodoTab, updateContextBanners,
     toggleConGroup, toggleConGrouping, toggleAllConGroups, setConStatusFilter, onConSearchInput, clearConSearch, clearConSearchAndFilter, renderConsignmentTable,
     updatePublisherActionBanner, renderBookPendingAlert, heldGrossOf, recognizedRevenueOf,
     dismissStockDrift, updateDash, getProfitTiersHtml, getRevenueProgressHtml, getOwedCardDetails,
