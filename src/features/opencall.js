@@ -1405,12 +1405,18 @@ function renderOpenCall() {
 
   // ── Review inbox: scan findings awaiting the owner's approval ──
   if (activeProj) ocEnsureQueues_(activeProj);
-  // ⚡ Bolt Optimization: Use Set instead of Array.prototype.some() for O(1) lookups
-  const contributorIds = activeProj ? new Set(activeProj.contributors.map(c => c.id)) : new Set();
-  const inboxItems = activeProj ? activeProj.inbox.filter(p => contributorIds.has(p.contributorId)) : [];
+  // ⚡ Bolt Optimization: contributorsById used to be a Set of just the ids, so
+  // the two `.find()` calls below (one per inbox row, one per outbox row) each
+  // re-scanned the whole contributors array to recover the matching contributor
+  // — an O(contributors × (inbox + outbox)) walk that grows with a project's
+  // contributor list. A Map built once (O(contributors)) gives the membership
+  // check AND the contributor lookup itself in O(1), so building the rows below
+  // becomes O(contributors + inbox + outbox) instead.
+  const contributorsById = activeProj ? new Map(activeProj.contributors.map(c => [c.id, c])) : new Map();
+  const inboxItems = activeProj ? activeProj.inbox.filter(p => contributorsById.has(p.contributorId)) : [];
   const inboxTypeLabels = { creditReceived: '✍️ Credit-name reply detected', filesReceived: '📎 High-res files attachment detected', undeliverable: '⚠ Email bounced (undeliverable)' };
   const inboxRows = inboxItems.map(p => {
-    const c = activeProj.contributors.find(x => x.id === p.contributorId);
+    const c = contributorsById.get(p.contributorId);
     const threadLink = p.threadId
       ? `<a class="oc-queue-thread-link" href="https://mail.google.com/mail/u/0/#all/${encodeURIComponent(p.threadId)}" target="_blank" rel="noopener" title="Open the detected email in Gmail">✉ View email ↗</a>`
       : '';
@@ -1440,12 +1446,11 @@ function renderOpenCall() {
     </div>` : '';
 
   // ── Ready-to-send outbox: next-stage emails queued for one approved batch ──
-  // ⚡ Bolt Optimization: Use Set instead of Array.prototype.some() for O(1) lookups
-  const outboxItems = activeProj ? activeProj.outbox.filter(e => contributorIds.has(e.contributorId)) : [];
+  const outboxItems = activeProj ? activeProj.outbox.filter(e => contributorsById.has(e.contributorId)) : [];
   const outboxStageLabels = { cmykSent: 'Request Files', preorderSent: 'Pre-order' };
   const outboxDl = localStorage.getItem('lm-oc-last-deadline') || '';
   const outboxRows = outboxItems.map(e => {
-    const c = activeProj.contributors.find(x => x.id === e.contributorId);
+    const c = contributorsById.get(e.contributorId);
     const tmpl = activeProj.templates ? activeProj.templates[e.stageKey] : null;
     const subjectPreview = tmpl ? ocMergeTemplate(tmpl.subject, c, { project: activeProj.title, date: outboxDl }) : '(no template saved for this stage)';
     const missing = tmpl ? findUnfilledMergeFields((tmpl.subject || '') + '\n' + (tmpl.body || ''), c, { project: activeProj.title, date: outboxDl }) : [];
