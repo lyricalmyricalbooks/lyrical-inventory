@@ -3579,7 +3579,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .order-meta{font-size:12px;color:var(--text3);margin-top:2px;}
 
 /* GOOGLE SHEETS SETUP */
-.sheets-setup{background:var(--surface-card);border-radius:var(--r3);border:1px solid var(--border);padding:1.5rem;margin-bottom:1.5rem;box-shadow:var(--shadow);}
+.sheets-setup{background:var(--surface-card);border-radius:var(--r3);border:1px solid var(--border);border-left:3px solid var(--gold-line);padding:1.5rem;margin-bottom:1.5rem;box-shadow:var(--shadow);}
 .sheets-setup.connected{background:linear-gradient(135deg,#f0fdf6,#fff);border-color:rgba(42,99,72,.2);}
 .sheets-log-tbl{width:100%;border-collapse:separate;border-spacing:0;background:var(--surface-card);border:1px solid var(--border);border-radius:14px;overflow:hidden;font-size:12px;font-family:'DM Mono',monospace;box-shadow:0 10px 24px rgba(20,20,20,.05);}
 .sheets-log-tbl th{text-align:left;padding:10px 12px;font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);border-bottom:1px solid var(--border);background:linear-gradient(180deg,#fff,#faf8f4);} 
