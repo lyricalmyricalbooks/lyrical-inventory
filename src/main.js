@@ -7308,6 +7308,49 @@ function applyAll() {
   if (toApply.length) { renderOrders(); updateDash(); }
 }
 
+// Loosely matches book id/title/author/urlParam tokens inside free-form Gmail
+// text - tolerant of accents and punctuation. Unrelated to (and not a
+// duplicate of) shipping-reconciliation.js's own, stricter normalizeText()
+// used there for exact order/address comparison.
+function normalizeGmailScanText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+// Deliberately falls back to the raw trimmed value (not '') when no
+// #XXX-XXX pattern is found - unlike lib/shipping-reconciliation.js's
+// normalizeShippingOrderNumber(), which returns '' on a miss. Do not
+// consolidate the two: a scanned order needs to keep whatever identifier
+// Gmail gave it so it still shows up in the queue, instead of being
+// silently dropped by the orderNum filter below.
+function normalizeGmailOrderNum(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const hit = raw.match(/#?[a-z0-9]+-[a-z0-9-]+/i);
+  if (hit) {
+    const v = hit[0].toUpperCase();
+    return v.startsWith('#') ? v : `#${v}`;
+  }
+  return raw;
+}
+
+function inferBookIdFromGmailText(value) {
+  const txt = normalizeGmailScanText(value);
+  if (!txt) return null;
+  for (const b of BOOK_LIST) {
+    const tokens = [b.id, b.title, b.urlParam, b.author, ...(b.title || '').split(/\s+/)]
+      .filter(Boolean)
+      .map(v => normalizeGmailScanText(v))
+      .filter(v => v.length >= 4);
+    if (tokens.some(t => t && txt.includes(t))) return b.id;
+  }
+  return null;
+}
+
 async function fetchOrders() {
   const book = getBook();
   const btn = $('scan-btn');
@@ -7330,37 +7373,6 @@ async function fetchOrders() {
   const appliedNums = new Set(mem.appliedNums || []);
   const daysBack = parseInt(localStorage.getItem('lm-scan-days') || '30');
   const sinceDate = new Date(Date.now() - daysBack * 86400000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-
-  const normalizeText = (value) => String(value || '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
-
-  const normalizeOrderNum = (value) => {
-    const raw = String(value || '').trim();
-    if (!raw) return '';
-    const hit = raw.match(/#?[a-z0-9]+-[a-z0-9-]+/i);
-    if (hit) {
-      const v = hit[0].toUpperCase();
-      return v.startsWith('#') ? v : `#${v}`;
-    }
-    return raw;
-  };
-
-  const inferBookIdFromText = (value) => {
-    const txt = normalizeText(value);
-    if (!txt) return null;
-    for (const b of BOOK_LIST) {
-      const tokens = [b.id, b.title, b.urlParam, b.author, ...(b.title || '').split(/\s+/)]
-        .filter(Boolean)
-        .map(v => normalizeText(v))
-        .filter(v => v.length >= 4);
-      if (tokens.some(t => t && txt.includes(t))) return b.id;
-    }
-    return null;
-  };
 
   // A Gmail scan is three retries deep at worst, so it can run for the better
   // part of a minute. Until now the queue kept showing its pre-scan content for
@@ -7407,12 +7419,12 @@ async function fetchOrders() {
 
   // Normalise and enrich
   orders = (parsed.orders || []).map(o => {
-    const orderNum = normalizeOrderNum(o.orderNum || o.number || o.order || o.orderNumber);
+    const orderNum = normalizeGmailOrderNum(o.orderNum || o.number || o.order || o.orderNumber);
     const stableId = String(o.id || orderNum).trim();
     // Use the fetched email body to identify the correct book
     const textBlob = [o.body, o.notes, o.itemTitle, o.title].filter(Boolean).join(' ');
 
-    let resolvedBookId = inferBookIdFromText(textBlob) || inferBookIdFromText(o.orderNum);
+    let resolvedBookId = inferBookIdFromGmailText(textBlob) || inferBookIdFromGmailText(o.orderNum);
     if (!resolvedBookId) {
       resolvedBookId = BOOKS[activeBook] ? activeBook : Object.keys(BOOKS)[0];
     }
