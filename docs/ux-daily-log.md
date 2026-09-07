@@ -83,7 +83,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-09-05 | visual | Tax Centre — Shipping reconciliation | Gave the shipping reconciliation panel a real card background in light mode, not just dark | #740 |
 | 2026-09-05 | visual | POS checkout | Gave the register's cart panel a shadow that still shows once the page goes dark | #741 |
 | 2026-09-06 | visual | Customers — Email Campaigns | Gave each campaign row its own visible tile instead of blending into the card behind it | #750 |
-| 2026-09-07 | visual | Settings — Sheets Connection | Gave the Google Sheets card the same real heading and gold accent its Book Catalog and Profit Tiers neighbours already have | TBD |
+| 2026-09-07 | visual | Settings — Sheets Connection | Gave the Google Sheets card the same real heading and gold accent its Book Catalog and Profit Tiers neighbours already have | #754 |
 
 ---
 
