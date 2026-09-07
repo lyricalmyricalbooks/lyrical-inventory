@@ -47,6 +47,14 @@ Angles worth scanning each time: bug/edge case the change introduced · the next
 - Use a descriptive PR title based on the feature/fix being implemented.
 - **After a PR is merged, start the next change on a brand-new branch and open a new PR** — never push commits onto a merged branch to revive it.
 
+## Code health agent runs
+Scheduled code-health tasks name a specific file/line/issue, but that target can already be fixed by the time the task fires — a prior run, or unrelated later work, resolved it first. The task description is a stale snapshot, not live truth.
+
+- **Verify before concluding an issue is stale.** Read the current code at the cited location and check its history (`git log -S<symbol>`, `git blame`, `git log --all --oneline -S<symbol>`) before deciding the described problem no longer applies. Don't trust the quoted snippet or line number at face value — the file has moved on since the task was written.
+- **Never fabricate a change.** Do not commit, push, or open a PR against an issue that's already fixed just to produce a diff. A commit must reflect a real improvement — churn for its own sake risks introducing bugs in what is a financial ledger app, and wastes reviewer time on a PR with nothing genuine to review.
+- **Don't let a stale target waste the run, though.** If the assigned issue is confirmed already resolved, spend the rest of the run finding a genuinely different code-health issue nearby (same file or module first) and fix that instead, with the same rigor as any other change (assess risk, run tests, open a real PR) — so the run still lands real value instead of ending as a no-op.
+- **Always leave a paper trail.** State plainly, in the PR description (or the session summary if no PR was warranted), which original issue was already resolved and by what commit/PR. That confirms the run wasn't idle, and gives whoever maintains the code-health scanner what they need to dedupe at the source.
+
 ## General Principles
 - Prefer action over investigation when intent is clear.
 - If the user asks for something, assume they know what they want.
