@@ -292,7 +292,7 @@
     <button type="button" class="snav" id="todo-sidebar-btn" title="To-do" onclick="switchTab('todo')"><span class="snav-ic">✅</span><span class="snav-label">To-do</span><span class="nav-badge todo-nav-badge" aria-label="things needing attention" hidden></span></button>
     <button type="button" class="snav" title="Website orders" onclick="switchTab('website')"><span class="snav-ic">🛍</span><span class="snav-label">Website orders</span></button>
     <button type="button" class="snav" title="Manual entry" onclick="switchTab('manual')"><span class="snav-ic">✎</span><span class="snav-label">Manual entry</span></button>
-    <button type="button" class="snav" title="Consignment" onclick="switchTab('consignment')"><span class="snav-ic">🏪</span><span class="snav-label">Consignment</span></button>
+    <button type="button" class="snav" title="Consignment" onclick="switchTab('consignment')"><span class="snav-ic">🏪</span><span class="snav-label">Consignment</span><span class="health-badge" data-health-badge="stripe" aria-label="Stripe is not answering, so invoice payments may be missed" hidden></span></button>
     <button type="button" class="snav" title="History" onclick="switchTab('history')"><span class="snav-ic">🕘</span><span class="snav-label">History</span></button>
     <button type="button" class="snav" title="Expenses" onclick="switchTab('expenses')"><span class="snav-ic">🧾</span><span class="snav-label">Expenses</span></button>
   </nav>
@@ -526,7 +526,7 @@
   <button class="tab-btn active" onclick="switchTab('dashboard')">Dashboard</button>
   <button class="tab-btn" id="website-tab-btn" onclick="switchTab('website')">Website orders</button>
   <button class="tab-btn" onclick="switchTab('manual')">Manual entry</button>
-  <button class="tab-btn" onclick="switchTab('consignment')">Consignment</button>
+  <button class="tab-btn" onclick="switchTab('consignment')">Consignment<span class="health-badge" data-health-badge="stripe" aria-label="Stripe is not answering, so invoice payments may be missed" hidden></span></button>
   <button class="tab-btn" onclick="switchTab('history')">History</button>
   <button class="tab-btn" onclick="switchTab('expenses')">Expenses</button>
   <button class="tab-btn" id="webanalytics-tab-btn" onclick="switchTab('webanalytics')">Web Analytics</button>
