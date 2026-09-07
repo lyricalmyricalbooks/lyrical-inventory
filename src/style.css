@@ -10053,7 +10053,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   container-type: inline-size;
   container-name: us-zonos;
   background: var(--surface-card);
-  border: 1px solid oklch(0.78 0.18 75 / 0.35);
+  border: 1px solid var(--gold-line);
   border-radius: var(--r2);
   padding: var(--space-4) var(--space-5);
   margin-bottom: var(--space-4);
@@ -10064,7 +10064,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 }
 
 .us-zonos-duty-card:hover {
-  border-color: oklch(0.78 0.18 75 / 0.6);
+  border-color: var(--gold);
   box-shadow: var(--elev-hover);
 }
 
@@ -10151,7 +10151,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 }
 
 .us-zonos-hint.is-valid {
-  color: oklch(0.72 0.19 155);
+  color: var(--status-positive);
 }
 
 .us-zonos-input-row {
@@ -10185,7 +10185,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 
 .us-zonos-input:focus {
   border-color: var(--gold);
-  box-shadow: 0 0 0 3px oklch(0.78 0.18 75 / 0.22);
+  box-shadow: var(--focus-ring-halo);
   outline: none;
 }
 
@@ -10205,9 +10205,9 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 }
 
 .us-zonos-char-counter.is-valid {
-  color: oklch(0.72 0.19 155);
-  border-color: oklch(0.72 0.19 155 / 0.4);
-  background: oklch(0.72 0.19 155 / 0.08);
+  color: var(--status-positive);
+  border-color: color-mix(in srgb, var(--status-positive) 40%, transparent);
+  background: var(--status-positive-bg);
 }
 
 .us-zonos-paste-btn {
@@ -10297,8 +10297,8 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   inline-size: 26px;
   block-size: 26px;
   border-radius: 50%;
-  background: oklch(0.78 0.18 75 / 0.18);
-  border: 1px solid oklch(0.78 0.18 75 / 0.45);
+  background: var(--gold-bg);
+  border: 1px solid var(--gold-line);
   color: var(--content-primary);
   font-size: var(--text-xs);
   font-weight: 700;
@@ -10335,8 +10335,8 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   line-height: var(--leading-snug);
   padding: var(--space-3) var(--space-4);
   border-radius: var(--r);
-  background: oklch(0.78 0.18 75 / 0.10);
-  border: 1px solid oklch(0.78 0.18 75 / 0.35);
+  background: var(--gold-bg);
+  border: 1px solid var(--gold-line);
   color: var(--content-secondary);
 }
 
@@ -10347,7 +10347,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 /* A complete id settles the panel: the step it belongs to stops asking for
    attention, so the eye moves on to buying the label. */
 .us-zonos-duty-card:has(.us-zonos-char-counter.is-valid) .us-zonos-step:last-child {
-  border-color: oklch(0.72 0.19 155 / 0.45);
+  border-color: color-mix(in srgb, var(--status-positive) 45%, transparent);
 }
 
 /* Container Queries: component adapts to container size */
