@@ -4971,11 +4971,44 @@ function attentionInput() {
   };
 }
 
+/**
+ * The attributes that make a "fix this" button work.
+ *
+ * The destination travels as DATA and is acted on by the delegated handler
+ * below — it never lands in an onclick. escapeHtml() stops a value breaking out
+ * of an attribute, but the browser decodes those entities before the JS engine
+ * reads the code, so a book id containing a quote in an onclick would break out
+ * of the JS string and run. Book ids are free text from the Add-book form.
+ */
+function fixAttrs(fix) {
+  return `data-fix="${escapeHtml(fix.kind || '')}"`
+    + (fix.bookId ? ` data-fix-book="${escapeHtml(fix.bookId)}"` : '')
+    + (fix.tab ? ` data-fix-tab="${escapeHtml(fix.tab)}"` : '');
+}
+
+/**
+ * Every fix button on both surfaces, handled once. Delegated rather than bound
+ * per render, because both panels are rebuilt wholesale on each repaint and
+ * per-node listeners would accumulate.
+ */
+document.addEventListener('click', (event) => {
+  const btn = event.target.closest?.('[data-fix]');
+  if (!btn) return;
+  const { fix, fixBook = '', fixTab = '' } = btn.dataset;
+  if (fix === 'retry-sync') { retrySyncNow(); return; }
+  if (fix === 'tab' && fixTab) { switchTab(fixTab); return; }
+  if (fix === 'book' && fixBook) {
+    // switchBook first: switchTab alone cannot leave the all-books screen.
+    switchBook(fixBook);
+    if (fixTab) setTimeout(() => switchTab(fixTab), 50);
+  }
+});
+
 /** One notification card. Tone follows the house amber/red/blue convention. */
 function notificationHtml(sig) {
   const tone = sig.status === 'blocked' ? 'red' : sig.status === 'warn' ? 'amber' : 'blue';
   const action = sig.fix
-    ? `<button type="button" class="notif-action" onclick="${escapeHtml(sig.fix.action)}">${escapeHtml(sig.fix.label)} →</button>`
+    ? `<button type="button" class="notif-action" ${fixAttrs(sig.fix)}>${escapeHtml(sig.fix.label)} →</button>`
     : '';
   return `<div class="notif-item tone-${tone}">
       <span class="notif-ico" aria-hidden="true">${escapeHtml(sig.icon || '')}</span>
@@ -5071,7 +5104,7 @@ function renderOverviewRail() {
 function todoRowHtml(sig) {
   const tone = sig.status === 'blocked' ? 'red' : sig.status === 'warn' ? 'amber' : 'gray';
   const action = sig.fix
-    ? `<button type="button" class="btn sm ghost todo-fix" onclick="${escapeHtml(sig.fix.action)}">${escapeHtml(sig.fix.label)} →</button>`
+    ? `<button type="button" class="btn sm ghost todo-fix" ${fixAttrs(sig.fix)}>${escapeHtml(sig.fix.label)} →</button>`
     : '';
   return `<div class="todo-row tone-${tone}">
       <span class="todo-ico" aria-hidden="true">${escapeHtml(sig.icon || '')}</span>
