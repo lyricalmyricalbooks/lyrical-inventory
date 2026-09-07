@@ -48,12 +48,19 @@ Angles worth scanning each time: bug/edge case the change introduced · the next
 - **After a PR is merged, start the next change on a brand-new branch and open a new PR** — never push commits onto a merged branch to revive it.
 
 ## Code health agent runs
-Scheduled code-health tasks name a specific file/line/issue, but that target can already be fixed by the time the task fires — a prior run, or unrelated later work, resolved it first. The task description is a stale snapshot, not live truth.
+Scheduled code-health tasks name a specific file/line/issue, but that target can already be fixed by the time the task fires — a prior run, or unrelated later work, resolved it first. The task description is a stale snapshot, not live truth. A run is only successful when it ends with a real, verified code change on the branch — never with "already fixed, nothing to do."
 
-- **Verify before concluding an issue is stale.** Read the current code at the cited location and check its history (`git log -S<symbol>`, `git blame`, `git log --all --oneline -S<symbol>`) before deciding the described problem no longer applies. Don't trust the quoted snippet or line number at face value — the file has moved on since the task was written.
-- **Never fabricate a change.** Do not commit, push, or open a PR against an issue that's already fixed just to produce a diff. A commit must reflect a real improvement — churn for its own sake risks introducing bugs in what is a financial ledger app, and wastes reviewer time on a PR with nothing genuine to review.
-- **Don't let a stale target waste the run, though.** If the assigned issue is confirmed already resolved, spend the rest of the run finding a genuinely different code-health issue nearby (same file or module first) and fix that instead, with the same rigor as any other change (assess risk, run tests, open a real PR) — so the run still lands real value instead of ending as a no-op.
-- **Always leave a paper trail.** State plainly, in the PR description (or the session summary if no PR was warranted), which original issue was already resolved and by what commit/PR. That confirms the run wasn't idle, and gives whoever maintains the code-health scanner what they need to dedupe at the source.
+**Step 1 — verify, don't trust the snippet.** Before touching anything, confirm the named issue against the live file, not the task's quoted "current code": read the cited location as it stands now, and check history for the named function/symbol (`git log --all --oneline -S<symbol>`, `git blame`). The line number and code excerpt in the task are a snapshot from whenever the task was generated and routinely go stale — never refactor, rename, or "clean up" code by pattern-matching the task's snippet against what's currently there.
+
+**Step 2 — if the named issue is already resolved, do not stop.** Immediately widen the search and fix something real instead, in this priority order, stopping at the first tier that turns up a genuine issue:
+1. The same function's immediate neighbors in the same file (the module the original target lived in).
+2. Other functions in the same file with comparable size/complexity.
+3. A broader scan of the codebase for the same category of issue (duplication, oversized functions, dead code, deprecated usage) if 1–2 turn up nothing.
+Apply the full process (understand → assess risk → plan → implement → verify) to whatever real issue is found, exactly as if it had been the original assignment. Ending a run without a pushed commit is acceptable only when an honest, documented search through all three tiers turns up nothing safe to change — and that dead-end, with what was checked, must be stated explicitly, never left silent.
+
+**Never fabricate a change to satisfy this.** A commit must reflect a real, behavior-preserving improvement — invented churn (renaming things with no ambiguity, wrapping code in needless indirection, reformatting) is not a substitute for finding real work, and risks introducing bugs in what is a financial ledger app. When consolidating apparent duplication, verify the two implementations are actually behaviorally identical (matching inputs and edge cases, not just similar-looking code) before merging them — a near-duplicate with a different fallback or edge case is a correctness bug waiting to happen, not dead code.
+
+**Always leave a paper trail.** State plainly, in the PR description (or the session summary if no PR was warranted), which original issue was already resolved and by what commit/PR, and which real issue was fixed instead. That confirms the run wasn't idle, and gives whoever maintains the code-health scanner what they need to dedupe at the source.
 
 ## General Principles
 - Prefer action over investigation when intent is clear.
