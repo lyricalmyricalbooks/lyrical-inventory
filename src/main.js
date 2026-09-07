@@ -182,8 +182,19 @@ import {
   refreshUnsavedMarkers,
   validateFields,
 } from './lib/modal.js';
-import { dismissAppAlert } from './lib/app-alert.js';
-import { renderIntegrationBadges } from './lib/integration-watch.js';
+import { dismissAppAlert, pushAppAlert } from './lib/app-alert.js';
+import {
+  integrationBackoffMs,
+  noteIntegrationFailure,
+  noteIntegrationSuccess,
+  renderIntegrationBadges,
+} from './lib/integration-watch.js';
+import {
+  browserWatchState,
+  dueForCheck,
+  effectiveInterval,
+  startWatch,
+} from './lib/watch-schedule.js';
 import { followableUrl } from './lib/receipt-links.js';
 import {
   PAYMENT_TYPE_DIRECT_TO_ARTIST,
@@ -203,6 +214,18 @@ import {
   paymentSummary,
 } from './lib/money.js';
 import {
+  buildPartPaymentNote,
+  describeInvoicePaymentReversal,
+  describeInvoicePaymentSweep,
+  invoicePaymentRef,
+  isZeroDecimalCurrency,
+  judgeInvoicePayment,
+  minorToMajor,
+  partPaymentAlreadyNoted,
+  verdictNeedsAttention,
+  verdictSettles,
+} from './lib/invoice-payments.js';
+import {
   THEME_LABELS,
   THEME_PREFERENCES,
   applyThemeToDocument,
@@ -213,7 +236,7 @@ import {
   writeThemePreference,
 } from './lib/theme.js';
 import { initStickyOffset } from './lib/sticky-header.js';
-import { describeSyncStatus } from './lib/sync-status.js';
+import { SYNC_TONES, describeSyncStatus } from './lib/sync-status.js';
 import { sheetLogLabel, sheetLogSummary, sortSheetPayloads } from './lib/sheet-sync.js';
 import {
   QR_PRESET_PRICE_CURRENCIES,
@@ -9349,7 +9372,9 @@ function saveInvoiceSettings() {
 }
 
 // ── STRIPE DYNAMIC PAYMENT LINK (exact-amount Checkout per invoice) ─────
-const _STRIPE_ZERO_DECIMAL_INV = new Set(['BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KMF', 'KRW', 'MGA', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF']);
+// The zero-decimal currency list lives in lib/invoice-payments.js — this file
+// held two byte-identical copies of it and the payment judge needed a third.
+// Getting it wrong is a factor of a hundred, not a rounding error.
 
 async function createStripePaymentLinkForInvoice(invoice) {
   const settings = getInvoiceSettings();
@@ -9360,7 +9385,7 @@ async function createStripePaymentLinkForInvoice(invoice) {
   const book = BOOKS[activeBook] || getBook();
   // prefer the stored ISO code; fall back to symbol→code lookup
   const curCode = (invoice.currencyCode || getBookCurrencyCode({ currency: invoice.currency || book.currency }) || 'EUR').toLowerCase();
-  const isZeroDec = _STRIPE_ZERO_DECIMAL_INV.has(curCode.toUpperCase());
+  const isZeroDec = isZeroDecimalCurrency(curCode);
   const total = Number(invoice.total || 0);
   const amount = isZeroDec ? Math.round(total) : Math.round(total * 100);
   if (amount < 50 && !isZeroDec) throw new Error('Amount too small for Stripe (minimum 0.50)');
@@ -10382,21 +10407,41 @@ function editInvoiceFromView() {
   setTimeout(() => openCreateInvoice(null, currentViewInvoiceId), 60);
 }
 
-async function markInvoicePaidFromView() {
-  if (!currentViewInvoiceId) return;
-  // Settle against the book that holds the invoice: its linked consignment
-  // sales live in that book's ledger, so paying from another title has to reach
-  // the same rows it would have from the title the invoice was written on.
-  const { inv, bookId, s } = invoiceHome(currentViewInvoiceId);
-  const book = BOOKS[bookId] || getBook();
-  if (!inv) return;
-  if (!(await confirmDialog(`Mark ${inv.num} as PAID? This will also mark any linked pending consignment sales as paid.`, { okLabel: 'Mark paid' }))) return;
-  inv.status = 'paid';
-  inv.paidAt = Date.now();
-  inv.paidMethod = isDynamicStripeLink(inv) ? 'Stripe Checkout'
+/** How the invoice was settled, when the caller has nothing better to say. */
+function invoicePaidMethod(inv, book) {
+  return isDynamicStripeLink(inv) ? 'Stripe Checkout'
     : (inv.paymentLink && /buy\.stripe\.com/i.test(inv.paymentLink)) ? 'Stripe'
       : (inv.paymentLink && /paypal/i.test(inv.paymentLink)) ? 'PayPal'
-        : (book.stripeLink ? 'Stripe' : 'Other');
+        : ((book || {}).stripeLink ? 'Stripe' : 'Other');
+}
+
+/**
+ * Mark one invoice paid — the whole write-chain, and nothing else.
+ *
+ * Headless on purpose: no confirm dialog, no `currentViewInvoiceId`, no
+ * re-render, so it can be called for an invoice nobody is looking at. The modal
+ * keeps its confirmation and its refresh and delegates the writes here; the
+ * background Stripe sweep calls the same function.
+ *
+ * That matters more than it looks. There were already two independent writers of
+ * `inv.status = 'paid'` — this path and maybeAutoPayInvoiceForLedger — and a
+ * third by copy-paste is exactly how the invoice and the store's owed balance
+ * quietly stop agreeing with each other. One writer, several callers.
+ *
+ * `chargeId` stamps the Stripe charge that settled it. That stamp is the durable
+ * idempotency marker: the browser's own memory of handled charges is per-device
+ * localStorage, so on a second device it would happily settle the same invoice
+ * again. The invoice travels with the stamp.
+ *
+ * Renders are left to the caller so a sweep settling three invoices repaints
+ * once rather than three times. Returns true when it changed something.
+ */
+function applyInvoicePaid(inv, bookId, s, { method = '', chargeId = '', paidAt = Date.now() } = {}) {
+  if (!inv || !s) return false;
+  inv.status = 'paid';
+  inv.paidAt = paidAt;
+  inv.paidMethod = method || invoicePaidMethod(inv, BOOKS[bookId]);
+  if (chargeId) inv.stripeChargeId = chargeId;
   // best-effort: deactivate the Stripe Payment Link so it can't be paid twice
   if (inv.stripe?.paymentLinkId) deactivateStripePaymentLink(inv.stripe.paymentLinkId);
   // settle any linked pending ledger entries via the canonical helper, so the
@@ -10408,6 +10453,18 @@ async function markInvoicePaidFromView() {
     }
   }
   saveState(bookId);
+  return true;
+}
+
+async function markInvoicePaidFromView() {
+  if (!currentViewInvoiceId) return;
+  // Settle against the book that holds the invoice: its linked consignment
+  // sales live in that book's ledger, so paying from another title has to reach
+  // the same rows it would have from the title the invoice was written on.
+  const { inv, bookId, s } = invoiceHome(currentViewInvoiceId);
+  if (!inv) return;
+  if (!(await confirmDialog(`Mark ${inv.num} as PAID? This will also mark any linked pending consignment sales as paid.`, { okLabel: 'Mark paid' }))) return;
+  applyInvoicePaid(inv, bookId, s);
   renderInvoices();
   renderStores();
   renderLedger();
@@ -15157,6 +15214,10 @@ async function boot(forcedBook) {
         // And the fourth: another courier's label, which leaves no API trace
         // but does leave a confirmation email.
         startShippingEmailSweep();
+        // Money coming in rather than going out: a consignment store paying its
+        // invoice through the Stripe link. Started after the books load because
+        // settling an invoice reaches into its own book's ledger.
+        startStripeInvoiceWatch();
         // A fault recorded before the last reload is still a fault. Painted
         // here so the mark is on the tab from the first render rather than
         // only after the next failed check.
@@ -18721,9 +18782,8 @@ window.downloadFullTaxSeasonExport = function () {
 window.downloadFullTaxSeasonExportDirect = window.downloadFullTaxSeasonExport;
 
 // ── STRIPE FEES BY YEAR
-const _STRIPE_ZERO_DECIMAL = new Set(['BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KMF', 'KRW', 'MGA', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF']);
 function _stripeMinorToMajor(amt, cur) {
-  return _STRIPE_ZERO_DECIMAL.has((cur || '').toUpperCase()) ? amt : amt / 100;
+  return isZeroDecimalCurrency(cur) ? amt : amt / 100;
 }
 
 const _STRIPE_TYPE_LABELS = {
@@ -19301,7 +19361,7 @@ async function _reconPersistKey(key) {
 // Pull recent charges and normalize them. We expand the PaymentIntent so we can
 // read link metadata (book_id/sku) and the richer description that payment
 // links attach to the intent rather than the charge.
-async function fetchStripePaymentsForReconcile(maxPages = 3) {
+async function fetchStripePaymentsForReconcile(maxPages = 3, { since = 0 } = {}) {
   const key = getReconStripeKey();
   if (!key) throw new Error('No Stripe key — paste a restricted/secret key first.');
   if (!/^(rk|sk)_/.test(key)) throw new Error("That doesn't look like a Stripe key (expected rk_… or sk_…).");
@@ -19312,6 +19372,11 @@ async function fetchStripePaymentsForReconcile(maxPages = 3) {
   for (let page = 0; page < maxPages; page++) {
     const params = new URLSearchParams({ limit: '100' });
     params.append('expand[]', 'data.payment_intent');
+    // `since` narrows the window at Stripe's end rather than ours. The manual
+    // worklist wants everything recent and passes nothing; a background poll
+    // running every few minutes would otherwise drag hundreds of charges across
+    // the wire to discover that nothing happened.
+    if (since > 0) params.set('created[gte]', String(Math.floor(since / 1000)));
     if (starting_after) params.set('starting_after', starting_after);
     const resp = await fetch(`https://api.stripe.com/v1/charges?${params.toString()}`, {
       headers: { 'Authorization': 'Bearer ' + key },
@@ -19811,6 +19876,259 @@ function reconcileOpenInvoice(idSafe) {
   setTimeout(() => { try { if (c.inv) viewInvoice(c.inv.id); } catch (_) { } }, 60);
 }
 
+// ─── Consignment invoices that settle themselves ──────────────────────────
+//
+// Everything above is the manual worklist: the publisher opens the tab, the app
+// fetches charges, matches the ones naming an INV-… number, and reconcileOpenInvoice
+// walks her to the invoice so she can click "Mark paid". Every piece of that
+// works. What it never did was act — so an invoice a store paid on Monday sat
+// reading "sent" (and "overdue" by Friday), its linked sales stayed pending, and
+// the store's balance still claimed money it had already handed over.
+//
+// This closes that gap and nothing wider. Only charges that name an invoice are
+// considered; the other kinds the worklist handles write new sales rather than
+// settling a record that already exists, which is a different risk and stays
+// manual. A charge settles an invoice only when it names it AND the figures
+// agree to the cent in the same currency AND the money has not been pulled back
+// — lib/invoice-payments.js holds that judgement and this only carries it out.
+
+const STRIPE_INVOICE_WATCH_INTERVAL_MS = 5 * 60 * 1000;
+const STRIPE_INVOICE_COLD_START_DAYS = 30;
+const STRIPE_INVOICE_LAST_KEY = 'lm-stripe-invoice-sweep-last';
+
+let _stripeInvoiceWatchStarted = false;
+let _stripeInvoiceSweeping = false;
+
+function readStripeInvoiceStamp() {
+  try { return Number(localStorage.getItem(STRIPE_INVOICE_LAST_KEY)) || 0; } catch (_) { return 0; }
+}
+
+function writeStripeInvoiceStamp(at) {
+  try { localStorage.setItem(STRIPE_INVOICE_LAST_KEY, String(at)); } catch (_) { /* private mode */ }
+}
+
+/**
+ * The window to ask Stripe about, with a day of overlap.
+ *
+ * A charge can land between one sweep starting and finishing, and a duplicate
+ * costs nothing — the charge id is stamped on the invoice, so the second sighting
+ * is recognised and ignored — whereas a payment missed in the gap is silent.
+ */
+function stripeInvoiceSweepSince() {
+  const last = readStripeInvoiceStamp();
+  return last
+    ? last - 86400000
+    : Date.now() - STRIPE_INVOICE_COLD_START_DAYS * 86400000;
+}
+
+/**
+ * Find the invoice that says this Stripe charge settled it.
+ *
+ * Needed because classifyStripePayment answers `recorded` for any charge this
+ * device has already handled, and answers it *before* it looks for an invoice
+ * number — so a charge the sweep settled last week comes back classified as
+ * handled, not as an invoice payment. That is right for the settle path (it is
+ * how the same charge stops being settled twice) and wrong for a refund, which
+ * would otherwise be skipped before anyone checked whether the money left.
+ * The stamp on the invoice is the durable record, so it is what gets searched.
+ */
+function _findInvoiceByCharge(chargeId) {
+  const id = String(chargeId || '').trim();
+  if (!id) return null;
+  for (const bookId of Object.keys(states)) {
+    const inv = (states[bookId].invoices || []).find(i => i && i.stripeChargeId === id);
+    if (inv) return { bookId, inv };
+  }
+  return null;
+}
+
+/** Announce a payment that was pulled back after its invoice was settled. */
+function showInvoiceReversalAlert(payment, inv) {
+  const said = describeInvoicePaymentReversal({
+    invoiceNum: inv?.num || '', storeName: inv?.storeName || '',
+  });
+  pushAppAlert({
+    // Keyed per charge, so it cannot be overwritten by a later ordinary sweep
+    // and reads as the different kind of news it is.
+    id: invoicePaymentRef(payment.id) || 'stripe-invoice-reversal',
+    icon: '↩️',
+    title: said.title,
+    detail: said.detail,
+    tone: SYNC_TONES.FAILED,
+    actionLabel: 'Open invoice',
+    action: `openInvoiceFromAlert('${inv?.id || ''}')`,
+  });
+}
+
+/**
+ * The card for invoices that marked themselves paid.
+ *
+ * `totals` maps a currency code to the settled sum in minor units. A figure is
+ * only shown when every invoice settled shares one currency — adding euros to
+ * dollars to reach a single headline number would be inventing a rate.
+ */
+function showInvoicePaymentAlert({ settled, attention, first, totals }) {
+  const codes = [...(totals?.keys() || [])];
+  const amountLabel = codes.length === 1
+    ? fmt(minorToMajor(totals.get(codes[0]), codes[0]), getSym(codes[0]))
+    : '';
+  const said = describeInvoicePaymentSweep({ settled, attention, amountLabel });
+  if (!said) return;
+  pushAppAlert({
+    id: 'stripe-invoice-payments',
+    icon: '💰',
+    title: said.title,
+    detail: said.detail,
+    tone: settled ? '' : SYNC_TONES.PENDING,
+    actionLabel: first ? 'Review' : '',
+    action: first ? `openInvoiceFromAlert('${first}')` : '',
+  });
+}
+
+/** Take the publisher to an invoice from a notification, wherever she is. */
+function openInvoiceFromAlert(invoiceId) {
+  if (!invoiceId) return;
+  const found = invoiceHome(invoiceId);
+  if (!found?.inv) { showToast('That invoice is no longer here', 'warn'); return; }
+  if (typeof switchBook === 'function' && found.bookId) switchBook(found.bookId);
+  switchTab('consignment');
+  setTimeout(() => { try { viewInvoice(invoiceId); } catch (_) { } }, 60);
+}
+
+/**
+ * Ask Stripe whether any open invoice has been paid, and settle the ones that have.
+ *
+ * Returns a count of what happened, so the caller can say it once rather than
+ * per invoice.
+ */
+async function sweepStripeInvoicePayments({ force = false } = {}) {
+  // Publisher only. An author cannot read the Stripe key (the tax settings doc
+  // is publisher-only in the security rules) and must never trigger a global
+  // financial mutation, so for them this would fail on every poll and raise a
+  // health warning about a service they have no way to use.
+  if (!window.IS_PUBLISHER || isAuthor()) return null;
+
+  const configured = !!getReconStripeKey();
+  const { online, visible } = browserWatchState();
+  const due = force
+    ? configured && online && !_stripeInvoiceSweeping
+    : dueForCheck({
+      lastCheckedAt: readStripeInvoiceStamp(),
+      now: Date.now(),
+      intervalMs: effectiveInterval(
+        STRIPE_INVOICE_WATCH_INTERVAL_MS,
+        integrationBackoffMs('stripe', STRIPE_INVOICE_WATCH_INTERVAL_MS),
+      ),
+      online, configured, visible, busy: _stripeInvoiceSweeping,
+    });
+  if (!due) return null;
+
+  _stripeInvoiceSweeping = true;
+  try {
+    // One page behind a date filter: in the steady state this returns nothing.
+    const payments = await fetchStripePaymentsForReconcile(1, { since: stripeInvoiceSweepSince() });
+
+    let settled = 0;
+    let attention = 0;
+    let first = '';
+    const touchedBooks = new Set();
+    const totals = new Map();
+    const recorded = [];
+
+    for (const payment of payments) {
+      // Money that came back is checked first, and without asking the
+      // classifier — it reports a charge this device already handled as
+      // `recorded` before it ever looks for an invoice number, so a refund of a
+      // charge the sweep settled would be skipped here and never mentioned.
+      if (payment.refunded || payment.disputed) {
+        const cited = _findInvoiceByCharge(payment.id);
+        // Only news if this is the charge an invoice says settled it. A refunded
+        // charge that never settled anything is not this feature's business.
+        if (cited?.inv) showInvoiceReversalAlert(payment, cited.inv);
+        continue;
+      }
+
+      // Otherwise the existing classifier owns the matching: the INV-… number in
+      // the intent description, the invoice_num metadata, and its own memory of
+      // charges already handled on this device.
+      const c = classifyStripePayment(payment);
+      if (c.kind !== 'invoice' || !c.inv || !c.bookId) continue;
+
+      const inv = c.inv;
+      const judged = judgeInvoicePayment({ payment, invoice: inv });
+
+      if (verdictNeedsAttention(judged.verdict)) {
+        // Deliberately NOT settled: a store that paid short still owes the
+        // difference, and an invoice marked paid is the app saying it does not.
+        // But the money did arrive, so it is written onto the invoice — both
+        // because the publisher asked for it to be recorded, and because
+        // without a record the next poll would rediscover it and re-raise a card
+        // she had just dismissed, every five minutes, forever.
+        if (partPaymentAlreadyNoted(inv, payment.id)) continue;
+        if (!Array.isArray(inv.stripePartPayments)) inv.stripePartPayments = [];
+        inv.stripePartPayments.push(buildPartPaymentNote({ payment, judged }));
+        saveState(c.bookId);
+        touchedBooks.add(c.bookId);
+        attention++;
+        if (!first) first = inv.id;
+        continue;
+      }
+
+      if (!verdictSettles(judged.verdict)) continue;
+
+      const s = states[c.bookId];
+      if (!s) continue;
+      applyInvoicePaid(inv, c.bookId, s, {
+        method: 'Stripe Checkout',
+        chargeId: payment.id,
+        paidAt: payment.created || Date.now(),
+      });
+      touchedBooks.add(c.bookId);
+      settled++;
+      if (!first) first = inv.id;
+      totals.set(judged.currency, (totals.get(judged.currency) || 0) + judged.paidMinor);
+      recorded.push({ chargeId: payment.id, bookId: c.bookId, num: inv.num });
+    }
+
+    // Remembered the way the manual worklist remembers, so a charge the app
+    // settled does not sit in her review list looking unhandled. Written once
+    // for the sweep rather than per invoice: it is one whole blob in browser
+    // storage, and re-reading and re-writing it inside the loop earns nothing.
+    if (recorded.length) {
+      const mem = getReconMemory();
+      const at = Date.now();
+      recorded.forEach(r => { mem.recorded[r.chargeId] = { bookId: r.bookId, num: r.num, at }; });
+      saveReconMemory(mem);
+    }
+
+    writeStripeInvoiceStamp(Date.now());
+    noteIntegrationSuccess('stripe');
+
+    if (settled || attention) {
+      // Repainted once for the whole sweep, not once per invoice.
+      renderInvoices();
+      renderStores();
+      renderLedger();
+      renderHist();
+      updateDash();
+      showInvoicePaymentAlert({ settled, attention, first, totals });
+    }
+    return { settled, attention, books: touchedBooks.size };
+  } catch (error) {
+    console.warn('Stripe invoice payment sweep failed', error);
+    noteIntegrationFailure('stripe', error, { online, configured });
+    return null;
+  } finally {
+    _stripeInvoiceSweeping = false;
+  }
+}
+
+function startStripeInvoiceWatch() {
+  if (_stripeInvoiceWatchStarted || typeof window === 'undefined') return;
+  _stripeInvoiceWatchStarted = true;
+  startWatch(() => { sweepStripeInvoicePayments(); }, { intervalMs: STRIPE_INVOICE_WATCH_INTERVAL_MS });
+}
+
 function reconcileDismiss(idSafe) {
   const p = _reconFindPayment(idSafe);
   if (!p) return;
@@ -19894,7 +20212,7 @@ async function createStripePaymentLinkForBook(book) {
   if (!/^(rk|sk)_/.test(key)) throw new Error("That doesn't look like a Stripe restricted/secret key (expected rk_… or sk_…).");
 
   const curCode = (getBookCurrencyCode(book) || 'CAD').toLowerCase();
-  const isZeroDec = _STRIPE_ZERO_DECIMAL.has(curCode.toUpperCase());
+  const isZeroDec = isZeroDecimalCurrency(curCode);
   const major = Number(book.listPrice || 0);
   const amount = isZeroDec ? Math.round(major) : Math.round(major * 100);
   if (amount < 50 && !isZeroDec) throw new Error('List price too small for Stripe (minimum 0.50).');
@@ -19956,7 +20274,7 @@ async function createStripePaymentLinkForAmount({ amountMajor, currencyCode, des
   if (!/^(rk|sk)_/.test(key)) throw new Error("That doesn't look like a Stripe restricted/secret key (expected rk_… or sk_…).");
 
   const curCode = (currencyCode || 'CAD').toUpperCase();
-  const isZeroDec = _STRIPE_ZERO_DECIMAL.has(curCode);
+  const isZeroDec = isZeroDecimalCurrency(curCode);
   const major = Number(amountMajor || 0);
   if (!(major > 0)) throw new Error('Nothing to charge — the amount is zero.');
   const amount = isZeroDec ? Math.round(major) : Math.round(major * 100);
@@ -22607,8 +22925,11 @@ window.recheckIntegration = (id) => {
   if (id === 'shippo') return refreshShippoLabelsIfDue({ force: true });
   if (id === 'canadapost') return sweepCanadaPostShipments({ force: true });
   if (id === 'shipping-email') return sweepShippingEmails({ force: true });
+  if (id === 'stripe') return sweepStripeInvoicePayments({ force: true });
   return undefined;
 };
+window.openInvoiceFromAlert = openInvoiceFromAlert;
+window.sweepStripeInvoicePayments = sweepStripeInvoicePayments;
 window.linkConfidentShippingMatchesNow = linkConfidentShippingMatchesNow;
 window.openShippingReconciliationFromAlert = openShippingReconciliationFromAlert;
 window.shipNewOrderFromAlert = shipNewOrderFromAlert;
