@@ -7371,7 +7371,7 @@ function buildShippingPnLHtml(allOrders, relevantExpenses, shippoExpenses, bookF
 
   // ⚡ Bolt Optimization: Pre-compute expenses grouped by order number to avoid O(N*M) lookups
   const shippoExpensesByOrder = new Map();
-  shippoExpenses.forEach(e => {
+  (shippoExpenses || []).forEach(e => {
     if (e.shippingMatchStatus === 'matched') {
       const num = normalizeShippingOrderNumber(e.shippingOrderNumber);
       if (num) {
@@ -7382,7 +7382,7 @@ function buildShippingPnLHtml(allOrders, relevantExpenses, shippoExpenses, bookF
   });
 
   const relevantExpensesByOrder = new Map();
-  relevantExpenses.forEach(e => {
+  (relevantExpenses || []).forEach(e => {
     if (e.shippingMatchStatus === 'matched') {
       const num = normalizeShippingOrderNumber(e.shippingOrderNumber);
       if (num) {
