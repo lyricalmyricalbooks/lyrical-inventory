@@ -21870,7 +21870,18 @@ async function renderCampaigns() {
       </div>`;
 }
 
-function filterCustomers(v) { _customerFilter = v || ''; renderCustomers(); }
+// ⚡ Bolt Optimization: Debounce the buyer-search re-render. Each keystroke was
+// synchronously re-running buildCustomerList() — a full scan of every book's
+// order history, unapplied website orders, and the Stripe pull cache — plus a
+// full innerHTML rebuild of the buyer table. Typing a short name (e.g. "sarah")
+// fired that whole pipeline 5 times; waiting for a short pause in typing runs
+// it once instead, with no change to the final filtered result.
+let _custFilterDebounceTimer = null;
+function filterCustomers(v) {
+  _customerFilter = v || '';
+  clearTimeout(_custFilterDebounceTimer);
+  _custFilterDebounceTimer = setTimeout(renderCustomers, 180);
+}
 
 async function customerPullStripe() {
   const btn = $('cust-stripe-btn');
