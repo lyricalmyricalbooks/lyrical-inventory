@@ -157,6 +157,26 @@ export function collectNativeAmounts(state, book) {
 
   for (const p of (s.artistPayouts || [])) {
     push('payout', `Artist payout ${p.date || ''}`, p, 'amount', p.date);
+    // Same split as a sale: `payment.currency/amount/rate` is the cash that
+    // actually changed hands and is left alone, while convertedTotal is
+    // denominated in the book's currency and has to move with it.
+    if (p.payment && Number(p.payment.convertedTotal)) {
+      push('payout', `Artist payout ${p.date || ''} converted total`, p, 'convertedTotal', p.date, p.payment);
+    }
+  }
+
+  // Outstanding payout requests are quoted in the book's currency too. Missing
+  // them left a pending request showing its old number under the new symbol.
+  // They stamp on `currency` (their own pre-existing field), not `cur` — the
+  // same reason legacy expenses do.
+  for (const r of (s.payoutRequests || [])) {
+    if (r.settled) continue;
+    const rDate = (r.requestedAt || '').slice(0, 10);
+    push('request', `Payout request ${rDate}`, r, 'amount', rDate, null, 'currency');
+    // The paid-to-date baseline this request is measured against. Restated with
+    // it, or "paid since the request" would subtract the old currency's total
+    // from the new one's and never settle.
+    push('request', `Payout request ${rDate} baseline`, r, 'paidAtRequest', rDate, null, 'currency');
   }
 
   // Expenses are normally self-describing (their own `currency` field, set at

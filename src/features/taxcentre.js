@@ -33,7 +33,7 @@ import {
   isTestBook,
   isTestBookId,
   loadTaxCenter,
-  openEditSale,
+  openArtistPayoutEditor,
   saveState,
   showToast,
   states,
@@ -2255,31 +2255,40 @@ function _tcBuildLedger(selectedYear) {
       });
     });
 
-    // Add artist payments
+    // Add artist payments.
+    //
+    // Sourced from `artistPayouts` — the payments the publisher actually
+    // recorded. This previously read `artistTransfers` filtered on a `paid`
+    // flag that nothing ever sets (settlement deletes the transfer instead of
+    // marking it), so no artist payout ever reached the ledger, the CSV or the
+    // "Artist Payouts" KPI, and the row edit/delete paths were unreachable.
     // ⚡ Bolt Optimization: Use imperative loop to avoid array allocation from .filter()
-    if (s.artistTransfers && s.artistTransfers.length > 0) {
-      for (const t of s.artistTransfers) {
-        if (!t.paid) continue;
+    if (s.artistPayouts && s.artistPayouts.length > 0) {
+      for (const p of s.artistPayouts) {
+        if (p.voided) continue;
 
-        const tDate = t.paidDate || t.date || '';
+        const tDate = p.date || '';
         const tYear = tDate ? tDate.substring(0, 4) : '';
         if (selectedYear !== 'all' && tYear !== selectedYear) continue;
 
-        const tBase = (t.total || 0) * hRate;
+        // `amount` is always in the book's own currency; a payout paid in
+        // another currency keeps that cash in `payment` for the audit trail.
+        const pAmount = Number(p.amount) || 0;
+        const pBase = pAmount * hRate;
         allLedger.push({
           date: tDate,
           type: 'Expense',
           desc: `Artist Payout (${b.title})`,
           cat: 'Artist Royalties',
-          ref: t.num,
+          ref: p.method || p.sourceNum || '',
           origCurrency: cur,
-          origAmount: t.total || 0,
-          baseAmount: tBase,
+          origAmount: pAmount,
+          baseAmount: pBase,
           hasRateError: !hRate,
           isIncome: false,
           sourceType: 'artistPayout',
           sourceId: bid,
-          itemId: t.id || t.num
+          itemId: p.id
         });
       }
     }
@@ -3538,24 +3547,19 @@ function _tcBuildCashFlowChart(allLedger, selectedYear, baseCurrency) {
     <div id="tc-cf-chart-detail" class="cf-chart-detail" aria-live="polite"></div>`;
 }
 
-async function openEditArtistPayout(bid, itemId) {
+// Artist payouts are editable in their own right now, so this opens the payout
+// itself on the book's dashboard. It used to search `artistTransfers` — the
+// wrong array, which never matched — and offer to edit the originating sale
+// instead, which could not change the payout at all.
+function openEditArtistPayout(bid, itemId) {
   const s = states[bid];
-  if (!s || !Array.isArray(s.artistTransfers)) return;
-  const t = s.artistTransfers.find(x => String(x.id || x.num) === String(itemId));
-  if (!t) {
+  if (!s || !Array.isArray(s.artistPayouts)) return;
+  const p = s.artistPayouts.find(x => String(x.id) === String(itemId));
+  if (!p) {
     showToast('⚠ Payout record not found', 'err');
     return;
   }
-
-  const proceed = await confirmDialog(
-    `Artist payouts are automatically generated from recorded sales.\n\n` +
-    `To edit the details of this payout (like amount or qty), you should edit the corresponding sale entry (#${t.num}).\n\n` +
-    `Would you like to open the edit screen for sale #${t.num} now?`,
-    { okLabel: 'Edit corresponding sale', cancelLabel: 'Cancel', title: 'Edit Artist Payout' }
-  );
-  if (proceed) {
-    openEditSale(bid, t.num);
-  }
+  openArtistPayoutEditor(bid, itemId);
 }
 
 // Set when a pre-split configuration is moved into one of the two sets, so the
