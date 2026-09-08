@@ -7201,6 +7201,19 @@ function reapplyOne(id) {
   showToast(`✓ ${o.orderNum} updated with receipt totals`, 'ok');
 }
 
+// Shared by applyOne() and commitRecoveredWebsiteOrder(): both decrement stock
+// (clamped at 0), credit sold/revenue, and roll the sale into the Website
+// channel's running stats — identically, just from different qty/price sources.
+function applyWebsiteSaleToState(targetState, qty, price) {
+  targetState.stock = Math.max(0, targetState.stock - qty);
+  targetState.sold += qty;
+  targetState.revenue += qty * price;
+  if (!targetState.chStats['Website']) targetState.chStats['Website'] = { txns: 0, units: 0, revenue: 0 };
+  targetState.chStats['Website'].txns++;
+  targetState.chStats['Website'].units += qty;
+  targetState.chStats['Website'].revenue += qty * price;
+}
+
 export function applyOne(id, { deferRender = false } = {}) {
   const o = orders.find(x => x.id === id);
   if (!o) return;
@@ -7214,13 +7227,7 @@ export function applyOne(id, { deferRender = false } = {}) {
   if (!targetState || !targetBk) { showToast('Cannot find book for this order', 'err'); return; }
   // Use target book's price if not on order
   const price = o.price || targetBk.listPrice;
-  targetState.stock = Math.max(0, targetState.stock - o.qty);
-  targetState.sold += o.qty;
-  targetState.revenue += o.qty * price;
-  if (!targetState.chStats['Website']) targetState.chStats['Website'] = { txns: 0, units: 0, revenue: 0 };
-  targetState.chStats['Website'].txns++;
-  targetState.chStats['Website'].units += o.qty;
-  targetState.chStats['Website'].revenue += o.qty * price;
+  applyWebsiteSaleToState(targetState, o.qty, price);
   const entry = {
     num: o.orderNum, chan: 'Website', qty: o.qty, price, after: targetState.stock,
     notes: 'Big Cartel', date: (o.date && o.date !== '—') ? o.date : today(),
@@ -7288,13 +7295,7 @@ export function commitRecoveredWebsiteOrder(bookId, form, buildEntry) {
   const qty = Math.max(1, Math.floor(Number(form.qty) || 1));
   const price = Number(form.price) || 0;
 
-  targetState.stock = Math.max(0, targetState.stock - qty);
-  targetState.sold += qty;
-  targetState.revenue += qty * price;
-  if (!targetState.chStats['Website']) targetState.chStats['Website'] = { txns: 0, units: 0, revenue: 0 };
-  targetState.chStats['Website'].txns++;
-  targetState.chStats['Website'].units += qty;
-  targetState.chStats['Website'].revenue += qty * price;
+  applyWebsiteSaleToState(targetState, qty, price);
 
   const entry = buildEntry({ stockAfter: targetState.stock });
   targetState.hist.unshift(entry);
