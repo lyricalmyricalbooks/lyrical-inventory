@@ -2517,8 +2517,14 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
    ingestion dialog. Adheres strictly to Linear / Apple HIG segmented control,
    progressive disclosure, and canonical design tokens.
    ═══════════════════════════════════════════════════════════════════════════ */
-.email-import-modal {
-  max-width: 860px;
+/* Two classes deliberately: the base `.modal{max-width:500px}` rule is
+   declared later in this file, so a single-class selector here loses to it
+   and the dialog collapses to 500px. */
+.modal.email-import-modal {
+  /* A little wider than the 860px default: the list carries a sender, a
+     two-line subject, a snippet and an action on one row, and 860px left the
+     subject about six words to work with. */
+  max-width: 940px;
 }
 
 .modal-title-badge {
@@ -2730,7 +2736,12 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 
 /* Results Viewport & Zero State */
 .email-results-viewport {
-  max-height: min(48vh, 480px);
+  /* The cards are taller than the old table rows, so the viewport grows with
+     them — at the old 48vh cap a 900px-tall window showed barely three
+     emails and the list read as "there is nothing here". */
+  container-type: inline-size;
+  container-name: email-results;
+  max-height: min(56vh, 560px);
   overflow-y: auto;
   overflow-x: hidden;
   border: 1px solid var(--border-default);
@@ -2738,6 +2749,9 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   background: var(--surface-raised);
   box-shadow: var(--elev-1);
   margin-bottom: var(--space-3);
+  /* Reserve the scrollbar so the cards do not reflow the moment the list
+     grows past the fold. */
+  scrollbar-gutter: stable;
 }
 
 .email-zero-state {
@@ -4855,115 +4869,270 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   border-bottom-color: var(--gold);
 }
 
-/* Gmail Email List styling */
-.email-list-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
-  /* Fixed layout + <th> widths (set inline per column) is what stops the
-     subject/snippet text from driving the table wider than its wrapper —
-     without it, auto layout gave nowrap cells their full min-content width
-     and forced a horizontal scrollbar inside a modal that should never
-     scroll sideways. */
-  table-layout: fixed;
+/* Gmail result list — one card per email.
+   Replaces the old fixed-column table: its 74px action track clipped the
+   Preview button on every row (`overflow:hidden` on the cell ate the last
+   14px), and single-line nowrap subject + snippet made a dense list of long
+   supplier subjects unreadable. A card sizes its own action, wraps its own
+   text, and gives the whole row as a selection target. */
+.email-card-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
 }
-.email-list-table thead th {
-  padding: 8px 12px;
-  text-align: left;
-  background: var(--ink);
-  color: rgba(255, 255, 255, .45);
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: .1em;
-  border-bottom: 1px solid var(--border);
-  /* Pinned so the select-all checkbox and column labels stay reachable past
-     the first ~4 rows instead of scrolling away with the body. */
+
+.email-card {
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-card);
+  transition: background var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard);
+}
+
+.email-card:last-child {
+  border-bottom: none;
+}
+
+.email-card:hover {
+  background: var(--surface-inset);
+}
+
+.email-card.selected {
+  background: var(--gold-bg);
+  box-shadow: inset 3px 0 0 var(--gold);
+}
+
+.email-card-main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-3);
+  padding: 14px 16px;
+  cursor: pointer;
+}
+
+.email-card-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Fitts's law: the box itself is 16px, the target around it is not. */
+  min-width: 24px;
+  min-height: 24px;
+  margin-top: 1px;
+  cursor: pointer;
+}
+
+.email-card-check input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--gold);
+}
+
+.email-card-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.email-card-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.email-sender {
+  font-weight: 700;
+  font-size: var(--text-xs);
+  color: var(--content-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 34ch;
+}
+
+.email-card-date {
+  font-family: 'DM Mono', monospace;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  font-size: var(--text-2xs);
+  color: var(--content-muted);
+  white-space: nowrap;
+}
+
+.email-card-date::before {
+  content: '·';
+  margin-right: var(--space-2);
+  color: var(--border-default);
+}
+
+.email-card-imported {
+  font-size: var(--text-3xs);
+  padding: 1px 7px;
+}
+
+.email-subject {
+  font-weight: 600;
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+  color: var(--content-primary);
+  /* Two lines, then ellipsis — long "Re[2]: Re[3]: Order #…" subjects stay
+     scannable without any one of them pushing the row to five lines. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.email-snippet {
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--content-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.email-card-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.email-card-att {
+  font-size: var(--text-3xs);
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+
+/* The bug this list was rebuilt around: the action must size itself, never
+   inherit a fixed track it does not fit inside. */
+.email-preview-btn {
+  min-height: 32px;
+  padding: var(--space-2) 14px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.email-card-preview {
+  border-top: 1px dashed var(--border-default);
+  background: var(--surface-sunken);
+}
+
+.email-list-meta-header {
   position: sticky;
   top: 0;
   z-index: 2;
-}
-.email-list-row {
-  border-bottom: 1px solid var(--border2);
-  background: var(--surface-card);
-  transition: background 0.15s ease;
-}
-.email-list-row:hover {
-  background: var(--cream2);
-}
-.email-list-row.selected {
-  background: rgba(200, 145, 58, 0.04);
-}
-.email-list-cell {
-  padding: 8px 12px;
-  vertical-align: middle;
-  overflow: hidden;
-}
-.email-list-meta-header {
-  padding: 7px 12px;
-  font-size: 11px;
-  color: var(--text3);
-  background: var(--cream3);
-  border-bottom: 1px solid var(--border);
+  padding: 10px 16px;
+  font-size: var(--text-xs);
+  color: var(--content-muted);
+  background: var(--surface-sunken);
+  border-bottom: 1px solid var(--border-default);
   display: flex;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--space-3);
   align-items: center;
+  flex-wrap: wrap;
 }
-.email-sender {
-  /* max-width on a <td> is inert in table layout (CSS2.1 §17.5.2); the clamp
-     has to live on this inner element to actually take effect. */
-  max-width: 100%;
+
+.email-select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+  font-weight: 700;
+  font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--content-secondary);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.email-select-all input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--gold);
+}
+
+.email-list-meta-count {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  min-width: 0;
+  margin-right: auto;
+}
+
+.email-list-meta-account {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: 600;
+  max-width: 30ch;
 }
-.email-subject {
-  font-weight: 600;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
+
+.email-list-meta-tally {
+  font-family: 'DM Mono', monospace;
+  font-feature-settings: "tnum" 1, "zero" 1;
   white-space: nowrap;
 }
-.email-from {
-  color: var(--text3);
-  font-size: 11px;
+
+/* Narrow modal (phones): the action drops under the text rather than
+   squeezing the subject into a two-word column. */
+@container email-results (max-width: 460px) {
+  .email-card-main {
+    grid-template-columns: auto minmax(0, 1fr);
+    row-gap: var(--space-2);
+  }
+  .email-card-actions {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
+  .email-sender {
+    max-width: 22ch;
+  }
 }
-.email-snippet {
-  color:var(--text3);
-  font-size: 11px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  /* No max-width: with table-layout:fixed the column width already clamps
-     this, and a fixed 380px here is what used to force the column wider
-     than the modal on its own. */
+
+@media (prefers-reduced-motion: reduce) {
+  .email-card {
+    transition: none;
+  }
 }
 
 /* Email Drawer Preview */
 .email-preview-drawer {
-  background: var(--cream3);
-  border-top: 1px dashed var(--border);
-  padding: 12px;
-  font-size: 11px;
+  padding: 14px 16px;
+  font-size: var(--text-xs);
   animation: slideDown 0.2s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .email-preview-drawer { animation: none; }
 }
 .email-preview-body {
   font-family: 'DM Mono', monospace;
-  background: rgba(0, 0, 0, 0.03);
-  border: 1px solid var(--border2);
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--r);
-  padding: 8px 12px;
-  max-height: 140px;
+  padding: 10px 12px;
+  max-height: 180px;
   overflow-y: auto;
   white-space: pre-wrap;
   /* pre-wrap breaks at spaces but not inside a token — one long tracking URL
-     or invoice link could set the min-content width of this colspan cell
-     and stretch the whole table sideways. */
+     or invoice link could otherwise stretch the card sideways. */
   overflow-wrap: anywhere;
   margin-bottom: 8px;
-  color: var(--text2);
-  line-height: 1.45;
+  color: var(--content-secondary);
+  line-height: var(--leading-normal);
 }
 
 /* Live extraction progress, pinned above the drafts table */
