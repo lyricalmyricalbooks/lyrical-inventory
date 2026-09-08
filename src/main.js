@@ -4229,8 +4229,14 @@ function showCatalogueSkeleton() {
 // ── ALL BOOKS OVERVIEW
 function updateAllOverview() {
   const allBooksVisible = BOOK_LIST.filter(b => !isTestBook(b));
+  renderAllBooksStrips(allBooksVisible);
+  renderCombinedChannelAnalytics(allBooksVisible);
+  renderCombinedConsignmentSummary(allBooksVisible);
+  renderOverviewRail();
+}
 
-  // Book strips
+// Book strips on the combined "All Books" overview.
+function renderAllBooksStrips(allBooksVisible) {
   const list = $('all-books-list');
   // Stamped so showCatalogueSkeleton() can never paint over real content if a
   // later boot step calls it again.
@@ -4353,10 +4359,12 @@ function updateAllOverview() {
     </div>`;
     }).join('');
   }
+}
 
-  // Combined channel analytics — collect structured data grouped by currency so
-  // the view can render visually (stacked bars + per-currency toggle) instead of
-  // one dense, hard-to-scan table.
+// Combined channel analytics on the "All Books" overview — collects structured
+// data grouped by currency so the view can render visually (stacked bars +
+// per-currency toggle) instead of one dense, hard-to-scan table.
+function renderCombinedChannelAnalytics(allBooksVisible) {
   const byCur = {}; // currency -> { books:[...], channelTotals:{chan:{txns,units,revenue,books:Set}} }
   allBooksVisible.forEach(book => {
     const s = states[book.id] || defaultState(book);
@@ -4389,9 +4397,12 @@ function updateAllOverview() {
   const curKeys = Object.keys(byCur);
   if (!curKeys.includes(window._allChCur)) window._allChCur = curKeys[0] || null;
   renderChannelAnalytics();
+}
 
-  // Combined consignment table — data grouped per book so the view can render
-  // either a flat active-first list or collapsible per-book groups (renderConsignmentTable).
+// Combined consignment table + summary stats on the "All Books" overview —
+// data grouped per book so the view can render either a flat active-first
+// list or collapsible per-book groups (renderConsignmentTable).
+function renderCombinedConsignmentSummary(allBooksVisible) {
   const conBookMap = new Map();
   const conTotals = { accounts: 0, active: 0, settled: 0, sent: 0, sold: 0, outstanding: 0 };
   allBooksVisible.forEach(book => {
@@ -4489,8 +4500,6 @@ function updateAllOverview() {
     expandToggle.style.display = window._allConGrouped ? 'inline-flex' : 'none';
   }
   renderConsignmentTable();
-
-  renderOverviewRail();
 }
 
 // Filter & Search state for Combined Consignment Summary
