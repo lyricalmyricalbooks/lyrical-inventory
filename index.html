@@ -824,29 +824,60 @@
     <div class="sect">Pending expense reimbursements</div>
     <div id="d-pending-expenses-list"></div>
   </div>
-  <div class="sect">Sales by channel</div>
-  <div class="tbl-wrap ch-mix-wrap"><table class="tbl ch-mix-tbl"><thead><tr><th>Channel</th><th class="r">Transactions</th><th class="r">Units</th><th class="r">Revenue</th><th class="ch-mix-share-col">Share<span class="ch-mix-col-qualifier"> of revenue</span></th></tr></thead><tbody id="ch-body"></tbody><tfoot id="ch-foot"></tfoot></table></div>
-  <div class="sect">Consignment overview</div>
-  <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Store</th><th class="r">Sent</th><th class="r">Sold</th><th class="r">Returned</th><th class="r">Outstanding</th><th>Status</th></tr></thead><tbody id="dash-con-body"></tbody></table></div>
-  <div class="sect">Inventory</div>
-  <div class="stock-block">
-    <div class="stock-head">
-      <div class="stock-head-titles"><div class="stock-title" id="d-book-title">—</div><div class="stock-author" id="d-book-author">—</div></div>
-      <span class="pill gold" id="d-book-isbn">—</span>
-    </div>
-    <div class="stock-stage">
-      <div class="bar-meta"><span class="bar-meta-lead" id="d-bar-label">— / — on hand</span><span class="bar-meta-note" id="d-thresh-label">Alert at — units</span></div>
-      <div class="bar-track" id="d-bar-track" style="display:flex;overflow:hidden;border-radius:9999px;">
-        <div class="bar-fill" id="d-bar" style="width:100%;background:var(--gold2);transition:width var(--dur-base) var(--ease-entrance);"></div>
-        <div class="bar-fill bar-fill-author" id="d-bar-author" style="width:0%;display:none;background:var(--violet, #8b5cf6);transition:width var(--dur-base) var(--ease-entrance);"></div>
+  <!-- These three sections used to be headed by `.sect` — the same 9px
+       micro-label the "All books" landing screen and the Consignment tab were
+       both pulled off of, because it left the screen the publisher opens for
+       every single book carrying the faintest type in the app. `.sec-head` +
+       `.overview-section` is the same furniture that fixed those two screens;
+       muted here because the KPI grid above already spends this screen's one
+       gold accent on Stock on hand. -->
+  <div class="overview-section">
+    <div class="sec-head is-muted">
+      <div class="sec-head-titles">
+        <div class="sec-kicker"><span class="sec-kicker-dot"></span>Performance</div>
+        <div class="section-hed sec-head-title">Sales by channel</div>
+        <p class="section-subcopy">Where this title's sales are actually coming from.</p>
       </div>
-      <div id="d-stock-breakdown-pills" class="stock-breakdown-pills" style="display:none;"></div>
     </div>
-    <div class="stock-alert ok" id="d-alert">Loading…</div>
-    <div class="stock-actions" id="d-recalc-onhand-wrap">
-      <button type="button" class="btn sm ink" id="d-transfer-stock-btn" onclick="openStockTransferModal()" title="Transfer stock between publisher and author" style="display:none;">⇄ Transfer stock</button>
-      <div style="margin-left:auto;">
-        <button type="button" class="btn sm" onclick="recalcOnHand()" title="Rebuild on-hand from your sales and consignment records — fixes drift after a missed deduction or offline merge">↻ Recalculate on-hand</button>
+    <div class="tbl-wrap ch-mix-wrap"><table class="tbl ch-mix-tbl"><thead><tr><th>Channel</th><th class="r">Transactions</th><th class="r">Units</th><th class="r">Revenue</th><th class="ch-mix-share-col">Share<span class="ch-mix-col-qualifier"> of revenue</span></th></tr></thead><tbody id="ch-body"></tbody><tfoot id="ch-foot"></tfoot></table></div>
+  </div>
+  <div class="overview-section">
+    <div class="sec-head is-muted">
+      <div class="sec-head-titles">
+        <div class="sec-kicker"><span class="sec-kicker-dot"></span>Retail Partners</div>
+        <div class="section-hed sec-head-title">Consignment overview</div>
+        <p class="section-subcopy">What each store holding this title has sold, returned, and still owes.</p>
+      </div>
+    </div>
+    <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Store</th><th class="r">Sent</th><th class="r">Sold</th><th class="r">Returned</th><th class="r">Outstanding</th><th>Status</th></tr></thead><tbody id="dash-con-body"></tbody></table></div>
+  </div>
+  <div class="overview-section">
+    <div class="sec-head is-muted">
+      <div class="sec-head-titles">
+        <div class="sec-kicker"><span class="sec-kicker-dot"></span>Stock</div>
+        <div class="section-hed sec-head-title">Inventory</div>
+        <p class="section-subcopy">How many copies are left, and what's tracked against them.</p>
+      </div>
+    </div>
+    <div class="stock-block">
+      <div class="stock-head">
+        <div class="stock-head-titles"><div class="stock-title" id="d-book-title">—</div><div class="stock-author" id="d-book-author">—</div></div>
+        <span class="pill gold" id="d-book-isbn">—</span>
+      </div>
+      <div class="stock-stage">
+        <div class="bar-meta"><span class="bar-meta-lead" id="d-bar-label">— / — on hand</span><span class="bar-meta-note" id="d-thresh-label">Alert at — units</span></div>
+        <div class="bar-track" id="d-bar-track" style="display:flex;overflow:hidden;border-radius:9999px;">
+          <div class="bar-fill" id="d-bar" style="width:100%;background:var(--gold2);transition:width var(--dur-base) var(--ease-entrance);"></div>
+          <div class="bar-fill bar-fill-author" id="d-bar-author" style="width:0%;display:none;background:var(--violet, #8b5cf6);transition:width var(--dur-base) var(--ease-entrance);"></div>
+        </div>
+        <div id="d-stock-breakdown-pills" class="stock-breakdown-pills" style="display:none;"></div>
+      </div>
+      <div class="stock-alert ok" id="d-alert">Loading…</div>
+      <div class="stock-actions" id="d-recalc-onhand-wrap">
+        <button type="button" class="btn sm ink" id="d-transfer-stock-btn" onclick="openStockTransferModal()" title="Transfer stock between publisher and author" style="display:none;">⇄ Transfer stock</button>
+        <div style="margin-left:auto;">
+          <button type="button" class="btn sm" onclick="recalcOnHand()" title="Rebuild on-hand from your sales and consignment records — fixes drift after a missed deduction or offline merge">↻ Recalculate on-hand</button>
+        </div>
       </div>
     </div>
   </div>
