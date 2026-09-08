@@ -7,7 +7,7 @@ import './style.css';
 import './styles/theme-dark.css';
 import './firebase.js';
 import { registerSW } from 'virtual:pwa-register';
-import { calcArtistEarnings, tierEffectiveCap, describePayout } from './lib/earnings.js';
+import { calcArtistEarnings, tierEffectiveCap, describePayout, payoutRequestCovered } from './lib/earnings.js';
 import { calculateBreakEven } from './lib/breakeven.js';
 import { escapeHtml } from './lib/html.js';
 import { describeCustomerFilters, joinFilterLabels } from './lib/customer-segment.js';
@@ -197,6 +197,7 @@ import {
 } from './lib/watch-schedule.js';
 import { followableUrl } from './lib/receipt-links.js';
 import {
+  CODE_TO_SYMBOL,
   PAYMENT_TYPE_DIRECT_TO_ARTIST,
   buildPaymentMeta,
   cadEquivalentForSale,
@@ -212,6 +213,7 @@ import {
   lightenColor,
   normalizeCurrencyCode,
   paymentSummary,
+  roundCents,
 } from './lib/money.js';
 import {
   buildPartPaymentNote,
@@ -5938,9 +5940,38 @@ function getArtistHeldHtml(stats, cur) {
   return { heldCardHtml, heldNoteHtml, hasHeld };
 }
 
-// The most recent payout request that hasn't been covered by a payout since.
-// A request is "settled" once the publisher records a payout dated on or after
-// it, so the artist isn't left staring at a stale "requested" pill forever.
+// Bring every request's `settled` flag in line with what has actually been paid.
+// Both directions matter: deleting or reducing a payout has to re-open a request
+// it used to cover, or the attention signal would stay silent about money that
+// is owed again. Returns true when anything changed.
+//
+// Nothing wrote this flag before, so the `!r.settled` filters in
+// attention-signals.js and activity-feed.js kept every request alive forever —
+// a request stayed a blocking alert long after it was paid in full.
+function settlePayoutRequests(bookId) {
+  const s = states[bookId];
+  const stats = calculateArtistEarnings(bookId);
+  if (!s || !stats || !Array.isArray(s.payoutRequests)) return false;
+
+  let changed = false;
+  for (const r of s.payoutRequests) {
+    const covered = payoutRequestCovered(r, stats);
+    if (covered && !r.settled) {
+      r.settled = true;
+      r.settledAt = new Date().toISOString();
+      changed = true;
+    } else if (!covered && r.settled) {
+      r.settled = false;
+      delete r.settledAt;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+// The most recent payout request that hasn't been covered by payouts since.
+// Reads the live figures as well as the stored flag so the panel is right the
+// moment a payout is recorded, without waiting on a save to land.
 function pendingPayoutRequest(state, stats) {
   const reqs = (state && state.payoutRequests) || [];
   if (!reqs.length) return null;
@@ -5951,12 +5982,8 @@ function pendingPayoutRequest(state, stats) {
       latest = reqs[i];
     }
   }
-  if (!latest) return null;
-  const settledSince = (stats.payouts || []).some(p => {
-    const paidAt = p.date || '';
-    return paidAt && latest.requestedAt && paidAt >= latest.requestedAt.slice(0, 10);
-  });
-  return settledSince ? null : latest;
+  if (!latest || latest.settled) return null;
+  return payoutRequestCovered(latest, stats) ? null : latest;
 }
 
 // Artist-facing call to action: surfaces the share of profit that's actually
@@ -6014,18 +6041,38 @@ function getPayoutHistoryHtml(stats, bookId, cur) {
     </div>`;
   }
 
+  const book = BOOKS[bookId];
+
   // ⚡ Bolt Optimization: Use string comparison instead of localeCompare for sorting ISO "YYYY-MM-DD" dates
   const rows = payouts.slice().sort((a, b) => { const dA = a.date || ''; const dB = b.date || ''; return dA > dB ? -1 : (dA < dB ? 1 : 0); }).map(p => {
     // ⚡ Bolt Optimization: Use shared escapeHtml to prevent GC pressure from inline object creation during replace operations
-    const meta = [p.method ? escapeHtml(p.method) : '', p.notes ? escapeHtml(p.notes) : ''].filter(Boolean).join(' · ');
+    // A payout handed over in another currency carries the same `payment` meta a
+    // foreign sale does, so the row can show the cash that actually moved
+    // ("Paid USD 50.00 @ 1.3640 → CA$68.20") beside the book-currency figure the
+    // balance is measured in. A same-currency payout would only restate the
+    // amount already shown, so it gets no note at all.
+    const isFxPayout = p.payment
+      && normalizeCurrencyCode(p.payment.currency, '') !== normalizeCurrencyCode(p.cur, bookCurrencyCode(book));
+    const fxNote = isFxPayout ? paymentSummary(p.payment, book, p) : '';
+    const meta = [
+      p.method ? escapeHtml(p.method) : '',
+      p.notes ? escapeHtml(p.notes) : '',
+      fxNote ? escapeHtml(fxNote) : '',
+      p.editedAt ? 'edited' : '',
+    ].filter(Boolean).join(' · ');
+    const pid = escapeHtml(String(p.id));
     return `
         <div class="ps-payout-row">
           <span class="ps-payout-row-main">
             <span class="ps-payout-row-amt">${fmt(parseFloat(p.amount) || 0, cur)}</span>
             <span class="ps-payout-row-meta">${fmtD(p.date) ?? '—'}${meta ? ' · ' + meta : ''}</span>
           </span>
-          <button class="btn tx sm sys-target ps-payout-del"
-            onclick="deleteArtistPayout('${bookId}', ${p.id})" title="Delete this payout" aria-label="Delete payout">✕</button>
+          <span class="ps-payout-row-actions">
+            <button class="btn tx sm sys-target ps-payout-edit"
+              onclick="editArtistPayout('${bookId}', '${pid}')" title="Edit this payout" aria-label="Edit payout">✎</button>
+            <button class="btn tx sm sys-target ps-payout-del"
+              onclick="deleteArtistPayout('${bookId}', '${pid}')" title="Delete this payout" aria-label="Delete payout">✕</button>
+          </span>
         </div>`;
   }).join('');
 
@@ -6063,6 +6110,7 @@ function renderProfitSharingBreakdown(bookId) {
   const { heldCardHtml, heldNoteHtml, hasHeld } = getArtistHeldHtml(stats, cur);
   const payoutRequestHtml = getPayoutRequestHtml(bookId, stats, cur, owed);
   const payoutHistoryHtml = getPayoutHistoryHtml(stats, bookId, cur);
+  const payoutFormHtml = getPayoutFormHtml(bookId, cur, owed);
 
   content.innerHTML = `
     <div class="ps-stat-grid ${hasHeld ? 'cols-4' : 'cols-3'}">
@@ -6097,14 +6145,42 @@ function renderProfitSharingBreakdown(bookId) {
     <div class="ps-payout-section">
       <div class="ps-payout-head">
         <span class="sect sect-inline">Artist Payouts</span>
-        <button class="btn gold" onclick="toggleArtistPayoutForm('${bookId}')">+ Record payout</button>
+        ${payoutFormHtml ? `<button class="btn gold" onclick="toggleArtistPayoutForm('${bookId}')">+ Record payout</button>` : ''}
       </div>
+      ${payoutFormHtml}
+      <div class="ps-payout-list sys-container">
+        ${payoutHistoryHtml}
+      </div>
+    </div>
+  `;
+}
+
+// Recording and editing payouts is a publisher-only action, and not just by
+// convention: `artistPayouts` is absent from the author-writable part list in
+// firestore.rules, and _fbSave commits every dirty part as one batch that
+// Firestore rejects wholesale if any document is denied. An author who used
+// this form would get a permission-denied that saveState treats as retryable
+// and re-queues forever — so the form is never rendered for them at all.
+// Authors still see the full payout history and the request CTA above it.
+function getPayoutFormHtml(bookId, cur, owed) {
+  if (isAuthor()) return '';
+
+  const nativeCode = normalizeCurrencyCode(cur, 'CAD');
+  const curOptions = Object.keys(CODE_TO_SYMBOL).map(code =>
+    `<option value="${code}"${code === nativeCode ? ' selected' : ''}>${getSym(code)} ${code}</option>`
+  ).join('');
+
+  return `
       <div id="artist-payout-form-${bookId}" class="ps-payout-form sys-container" hidden>
         <div class="ps-payout-fields">
           <div class="form-group">
-            <label for="ap-amount-${bookId}">Amount (${cur})</label>
+            <label for="ap-amount-${bookId}">Amount</label>
             <input type="number" id="ap-amount-${bookId}" class="ps-payout-num" step="0.01" min="0" inputmode="decimal"
               placeholder="${owed > 0.01 ? owed.toFixed(2) : '0.00'}" oninput="previewArtistPayout('${bookId}')">
+          </div>
+          <div class="form-group">
+            <label for="ap-cur-${bookId}">Currency</label>
+            <select id="ap-cur-${bookId}" class="ps-payout-num" onchange="onArtistPayoutCurrencyChange('${bookId}')">${curOptions}</select>
           </div>
           <div class="form-group">
             <label for="ap-date-${bookId}">Date</label>
@@ -6119,32 +6195,170 @@ function renderProfitSharingBreakdown(bookId) {
             <input type="text" id="ap-notes-${bookId}" placeholder="Anything worth remembering">
           </div>
         </div>
+        <!-- Shown only while the chosen currency differs from the book's. The rate
+             is fetched live; when the lookup fails the publisher types one here
+             rather than being blocked from recording a payment that did happen. -->
+        <div class="ps-payout-fx" id="ap-fx-row-${bookId}" hidden>
+          <label for="ap-rate-${bookId}">Rate to ${escapeHtml(nativeCode)}</label>
+          <input type="number" id="ap-rate-${bookId}" class="ps-payout-num" step="0.0001" min="0" inputmode="decimal"
+            oninput="previewArtistPayout('${bookId}')">
+          <span class="ps-payout-fx-note" id="ap-fx-note-${bookId}"></span>
+        </div>
         <!-- Live verdict on what the typed amount does to the balance. Announced
              politely so a screen reader hears the overpayment warning too. -->
         <div class="ps-payout-preview" id="ap-preview-${bookId}" role="status" aria-live="polite"></div>
         <div class="ps-payout-actions">
-          <button class="btn gold" onclick="recordArtistPayout('${bookId}')">Save payout</button>
+          <button class="btn gold" id="ap-save-${bookId}" onclick="saveArtistPayout('${bookId}')">Save payout</button>
           ${owed > 0.01 ? `<button class="btn" onclick="fillArtistPayoutFull('${bookId}')">Pay full balance (${fmt(owed, cur)})</button>` : ''}
           <button class="btn tx" onclick="toggleArtistPayoutForm('${bookId}')">Cancel</button>
         </div>
-      </div>
-      <div class="ps-payout-list sys-container">
-        ${payoutHistoryHtml}
-      </div>
-    </div>
-  `;
+      </div>`;
+}
+
+// The payout the form is currently editing, as { bookId, id }, or null when the
+// form is in "record a new one" mode. Only one book's breakdown is ever on
+// screen, so a single slot is enough — but it is keyed by bookId anyway so a
+// book switch mid-edit can't apply one book's edit to another's ledger.
+let _editingPayout = null;
+
+// Point the form at a fresh payout: empty fields, today's date, book currency,
+// and the create-mode button label.
+function resetArtistPayoutForm(bookId) {
+  _editingPayout = null;
+  const book = BOOKS[bookId];
+  const set = (id, value) => { const el = document.getElementById(`${id}-${bookId}`); if (el) el.value = value; };
+  set('ap-amount', '');
+  set('ap-date', today());
+  set('ap-method', '');
+  set('ap-notes', '');
+  set('ap-rate', '');
+  set('ap-cur', bookCurrencyCode(book));
+  const save = document.getElementById(`ap-save-${bookId}`);
+  if (save) save.textContent = 'Save payout';
+  syncArtistPayoutFxRow(bookId);
 }
 
 function toggleArtistPayoutForm(bookId) {
   const form = document.getElementById(`artist-payout-form-${bookId}`);
   if (!form) return;
   form.hidden = !form.hidden;
-  if (form.hidden) return;
+  // Closing it abandons any in-progress edit, so the next open starts clean
+  // rather than silently still pointing at the row that was being edited.
+  if (form.hidden) { resetArtistPayoutForm(bookId); return; }
   // Opening it: state the balance straight away, so the reference figure is on
   // screen before the first keystroke rather than only after one.
   previewArtistPayout(bookId);
   const amount = document.getElementById(`ap-amount-${bookId}`);
   if (amount) amount.focus();
+}
+
+// Load an existing payout back into the form. Works on every payout, including
+// ones generated by a consignment settlement — those are derived from a sale, so
+// editing one is confirmed first and the source sale is named, the same courtesy
+// the Tax Centre's ledger row edit extends.
+async function editArtistPayout(bookId, payoutId) {
+  const s = states[bookId];
+  const book = BOOKS[bookId];
+  if (!s || !book) return;
+  const p = (s.artistPayouts || []).find(x => String(x.id) === String(payoutId));
+  if (!p) { showToast('⚠ Payout record not found', 'err'); return; }
+
+  if (p.sourceNum) {
+    const ok = await confirmDialog(
+      `This payout was created when sale #${p.sourceNum} was settled with the artist, so its amount was worked out from that sale.\n\n` +
+      `Editing it here changes the payout only — the sale itself is left as it is.`,
+      { okLabel: 'Edit anyway', title: 'Edit settled payout' }
+    );
+    if (!ok) return;
+  }
+
+  const form = document.getElementById(`artist-payout-form-${bookId}`);
+  if (!form) return;
+  form.hidden = false;
+  _editingPayout = { bookId, id: String(p.id) };
+
+  const set = (id, value) => { const el = document.getElementById(`${id}-${bookId}`); if (el) el.value = value; };
+  // Show the money as it was actually entered: the foreign cash and its rate
+  // when the payout was made in another currency, otherwise the book figure.
+  const fx = p.payment && normalizeCurrencyCode(p.payment.currency, '') !== bookCurrencyCode(book) ? p.payment : null;
+  set('ap-amount', fx ? Number(fx.amount || 0).toFixed(2) : Number(p.amount || 0).toFixed(2));
+  set('ap-cur', fx ? normalizeCurrencyCode(fx.currency, 'CAD') : normalizeCurrencyCode(p.cur, bookCurrencyCode(book)));
+  set('ap-rate', fx && fx.rate ? String(fx.rate) : '');
+  set('ap-date', p.date || today());
+  set('ap-method', p.method || '');
+  set('ap-notes', p.notes || '');
+
+  const save = document.getElementById(`ap-save-${bookId}`);
+  if (save) save.textContent = 'Update payout';
+  syncArtistPayoutFxRow(bookId);
+  previewArtistPayout(bookId);
+  const amount = document.getElementById(`ap-amount-${bookId}`);
+  if (amount) amount.focus();
+}
+
+// What the form currently describes, resolved into the book's own currency.
+// `nativeAmount` is the figure the balance is measured in and the one stored on
+// the payout; `amount`/`code` are the cash that actually changed hands.
+function readArtistPayoutForm(bookId) {
+  const book = BOOKS[bookId];
+  const native = bookCurrencyCode(book);
+  const amountEl = document.getElementById(`ap-amount-${bookId}`);
+  const curEl = document.getElementById(`ap-cur-${bookId}`);
+  const rateEl = document.getElementById(`ap-rate-${bookId}`);
+  const amount = parseFloat(amountEl ? amountEl.value : '');
+  const code = normalizeCurrencyCode(curEl ? curEl.value : native, native);
+  const isFx = code !== native;
+  const typedRate = parseFloat(rateEl ? rateEl.value : '');
+  const rate = isFx ? (Number.isFinite(typedRate) && typedRate > 0 ? typedRate : 0) : 1;
+  const nativeAmount = Number.isFinite(amount) && rate > 0 ? roundCents(amount * rate) : NaN;
+  return { native, amount, code, isFx, rate, nativeAmount };
+}
+
+// Show the rate row only for a foreign payout, and keep its hint line current.
+function syncArtistPayoutFxRow(bookId) {
+  const row = document.getElementById(`ap-fx-row-${bookId}`);
+  if (!row) return;
+  const { isFx, code, native, amount, rate, nativeAmount } = readArtistPayoutForm(bookId);
+  row.hidden = !isFx;
+  const note = document.getElementById(`ap-fx-note-${bookId}`);
+  if (!note) return;
+  if (!isFx) { note.textContent = ''; return; }
+  if (!(rate > 0)) {
+    note.textContent = `Enter how many ${native} one ${code} is worth.`;
+    return;
+  }
+  const bookCur = (BOOKS[bookId] && BOOKS[bookId].currency) || native;
+  note.textContent = Number.isFinite(amount) && amount > 0
+    ? `${fmt(amount, code)} @ ${rate.toFixed(4)} → ${fmt(nativeAmount, bookCur)}`
+    : `1 ${code} = ${rate.toFixed(4)} ${native}`;
+}
+
+// Currency changed: fetch a live rate for the new pair so the publisher doesn't
+// have to look one up, falling back to the manual rate box when the lookup
+// fails. Kept off the amount field's `oninput` so typing never triggers a fetch.
+async function onArtistPayoutCurrencyChange(bookId) {
+  const rateEl = document.getElementById(`ap-rate-${bookId}`);
+  const { isFx, code, native } = readArtistPayoutForm(bookId);
+  if (rateEl) rateEl.value = '';
+  syncArtistPayoutFxRow(bookId);
+  if (!isFx) { previewArtistPayout(bookId); return; }
+
+  const note = document.getElementById(`ap-fx-note-${bookId}`);
+  if (note) note.textContent = 'Fetching rate…';
+  let rate = 0;
+  try {
+    const res = await fetchLiveRate(code, native);
+    rate = Number(res && res.rate) || 0;
+  } catch { rate = 0; }
+  // The panel can re-render or the currency change again while the rate is in
+  // flight; only apply it if the box is still empty and still on this pair.
+  const now = readArtistPayoutForm(bookId);
+  const liveRateEl = document.getElementById(`ap-rate-${bookId}`);
+  if (rate > 0 && liveRateEl && !liveRateEl.value && now.code === code) {
+    liveRateEl.value = String(roundCents(rate * 10000) / 10000);
+  }
+  syncArtistPayoutFxRow(bookId);
+  previewArtistPayout(bookId);
 }
 
 // Quick-fill the amount with the whole outstanding balance. Goes through here
@@ -6175,8 +6389,27 @@ function previewArtistPayout(bookId) {
   if (!book || !stats) { host.textContent = ''; host.className = 'ps-payout-preview'; return; }
 
   const cur = book.currency;
-  const owed = stats.owedToArtist ?? 0;
-  const v = describePayout(input.value, owed);
+  let owed = stats.owedToArtist ?? 0;
+  syncArtistPayoutFxRow(bookId);
+
+  // While editing, the row being edited is already counted in `owed`. Add it
+  // back so the verdict answers "what will the balance be once this payout is
+  // what I'm now typing", not "…on top of its own previous value".
+  const editing = _editingPayout && _editingPayout.bookId === bookId
+    ? findArtistPayout(bookId, _editingPayout.id)
+    : null;
+  if (editing) owed = roundCents(owed + (parseFloat(editing.amount) || 0));
+
+  // A foreign payout is judged on its book-currency value, since that is what
+  // the balance is denominated in. With no usable rate yet there is nothing to
+  // compare, so say that rather than showing a wrong verdict.
+  const { isFx, rate, nativeAmount } = readArtistPayoutForm(bookId);
+  if (isFx && !(rate > 0)) {
+    host.className = 'ps-payout-preview is-warn';
+    host.textContent = `Enter a conversion rate to see what this is worth in ${cur}.`;
+    return;
+  }
+  const v = describePayout(isFx ? (Number.isFinite(nativeAmount) ? nativeAmount : '') : input.value, owed);
 
   let tone = 'neutral', msg;
   if (v.tone === 'empty' || v.tone === 'invalid') {
@@ -6199,26 +6432,74 @@ function previewArtistPayout(bookId) {
   host.textContent = msg;
 }
 
-async function recordArtistPayout(bookId) {
-  const amountEl = document.getElementById(`ap-amount-${bookId}`);
+/** One payout row by id, tolerant of the numeric ids minted before makeEventId. */
+function findArtistPayout(bookId, payoutId) {
+  const s = states[bookId];
+  if (!s || !Array.isArray(s.artistPayouts)) return null;
+  return s.artistPayouts.find(p => String(p.id) === String(payoutId)) || null;
+}
+
+// Write the form back to the ledger — as a new payout, or over the one being
+// edited. `amount` is always stored in the book's own currency (that is what the
+// balance and every downstream total are denominated in); when the money moved
+// in another currency the cash that actually changed hands is kept alongside it
+// in `payment`, exactly as a foreign sale records it.
+async function saveArtistPayout(bookId) {
+  const book = BOOKS[bookId];
+  const s = states[bookId];
+  if (!book || !s) return;
+
   const dateEl = document.getElementById(`ap-date-${bookId}`);
   const methodEl = document.getElementById(`ap-method-${bookId}`);
   const notesEl = document.getElementById(`ap-notes-${bookId}`);
-  const amount = parseFloat(amountEl.value);
-  if (!amount || amount <= 0) { showToast('⚠ Enter a valid amount', 'warn'); return; }
-  const s = states[bookId];
-  if (!s) return;
+  // The panel can re-render between the click and this handler; bail rather
+  // than throwing on a field that is no longer in the document.
+  if (!dateEl || !methodEl || !notesEl) return;
+
+  const { amount, code, isFx, rate, nativeAmount } = readArtistPayoutForm(bookId);
+  if (!Number.isFinite(amount) || amount <= 0) { showToast('⚠ Enter a valid amount', 'warn'); return; }
+  if (isFx && !(rate > 0)) { showToast('⚠ Enter a conversion rate', 'warn'); return; }
+  if (!Number.isFinite(nativeAmount) || nativeAmount <= 0) { showToast('⚠ Enter a valid amount', 'warn'); return; }
+
   if (!s.artistPayouts) s.artistPayouts = [];
-  s.artistPayouts.push({
-    id: Date.now(),
+  const fields = {
     date: dateEl.value || today(),
-    amount,
+    // Rounded before it is stored: the preview and every total downstream work
+    // in whole cents, so a raw 33.333 here would make the ledger disagree with
+    // the figure the publisher was shown when they saved it.
+    amount: roundCents(nativeAmount),
     method: (methodEl.value || '').trim(),
     notes: (notesEl.value || '').trim(),
-    cur: bookCurrencyCode(BOOKS[bookId])
-  });
+    cur: bookCurrencyCode(book),
+    payment: buildPaymentMeta({
+      book, qty: 1, unitPrice: roundCents(nativeAmount),
+      fxEnabled: isFx, fxCur: code, fxAmt: amount, fxRate: rate,
+    }),
+  };
+
+  const editingId = _editingPayout && _editingPayout.bookId === bookId ? _editingPayout.id : null;
+  const existing = editingId ? findArtistPayout(bookId, editingId) : null;
+  if (editingId && !existing) {
+    // The row went away under us (deleted here, or a sync landed) — don't
+    // silently resurrect it as a new payout.
+    showToast('⚠ That payout no longer exists', 'err');
+    resetArtistPayoutForm(bookId);
+    renderProfitSharingBreakdown(bookId);
+    return;
+  }
+
+  if (existing) {
+    Object.assign(existing, fields, { editedAt: new Date().toISOString() });
+  } else {
+    s.artistPayouts.push({ id: makeEventId(), ...fields });
+  }
+
+  settlePayoutRequests(bookId);
   await saveState(bookId);
-  showToast(`✓ Recorded payout of ${fmt(amount, BOOKS[bookId].currency)}`);
+  showToast(`✓ ${existing ? 'Updated' : 'Recorded'} payout of ${fmt(fields.amount, book.currency)}`);
+  resetArtistPayoutForm(bookId);
+  const form = document.getElementById(`artist-payout-form-${bookId}`);
+  if (form) form.hidden = true;
   renderProfitSharingBreakdown(bookId);
 }
 
@@ -6242,10 +6523,14 @@ async function requestArtistPayout(bookId) {
   if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
 
   const req = {
-    id: Date.now(),
+    id: makeEventId(),
     requestedAt: new Date().toISOString(),
-    amount: owed,
-    currency: cur
+    amount: roundCents(owed),
+    currency: cur,
+    // The lifetime paid-to-artist total as it stands right now. Everything paid
+    // beyond this counts toward covering this request, which is what lets the
+    // request close itself without depending on payout dates.
+    paidAtRequest: roundCents(stats.totalPaidToArtist || 0),
   };
   try {
     if (!s.payoutRequests) s.payoutRequests = [];
@@ -6270,8 +6555,18 @@ async function deleteArtistPayout(bookId, payoutId) {
   if (!(await confirmDialog('Delete this payout record?', { danger: true, okLabel: 'Delete' }))) return;
   const s = states[bookId];
   if (!s || !s.artistPayouts) return;
-  s.artistPayouts = s.artistPayouts.filter(p => p.id !== payoutId);
-  saveState(bookId);
+  // String-compared because ids are now minted by makeEventId, while rows
+  // written before that carry the numeric Date.now() ids.
+  s.artistPayouts = s.artistPayouts.filter(p => String(p.id) !== String(payoutId));
+  // Removing a payout can put a request back into the red, so re-evaluate
+  // before the write rather than leaving a settled flag that no longer holds.
+  settlePayoutRequests(bookId);
+  // Awaited so the toast and the repaint follow a confirmed write, matching
+  // every other mutation in this panel.
+  await saveState(bookId);
+  if (_editingPayout && _editingPayout.bookId === bookId && String(_editingPayout.id) === String(payoutId)) {
+    resetArtistPayoutForm(bookId);
+  }
   showToast('✓ Payout deleted');
   renderProfitSharingBreakdown(bookId);
 }
@@ -6279,7 +6574,9 @@ async function deleteArtistPayout(bookId, payoutId) {
 window.toggleArtistPayoutForm = toggleArtistPayoutForm;
 window.fillArtistPayoutFull = fillArtistPayoutFull;
 window.previewArtistPayout = previewArtistPayout;
-window.recordArtistPayout = recordArtistPayout;
+window.onArtistPayoutCurrencyChange = onArtistPayoutCurrencyChange;
+window.saveArtistPayout = saveArtistPayout;
+window.editArtistPayout = editArtistPayout;
 window.requestArtistPayout = requestArtistPayout;
 window.deleteArtistPayout = deleteArtistPayout;
 
@@ -8246,12 +8543,14 @@ async function settleArtistTransferKeepShare(transferId) {
   if (!s.artistPayouts) s.artistPayouts = [];
   if (share > 0) {
     s.artistPayouts.push({
-      id: Date.now(),
+      id: makeEventId(),
       date: today(),
-      amount: share,
+      amount: roundCents(share),
       method: 'Kept from direct sale',
       notes: `${t.num} — artist retained their share`,
-      cur: bookCurrencyCode(book)
+      cur: bookCurrencyCode(book),
+      // Names the sale this was derived from, so editing it warns first.
+      sourceNum: t.num
     });
   }
 
@@ -8299,12 +8598,14 @@ async function settleArtistTransferKeepAll(transferId) {
   // Record the full gross as a payout — artist held all of it.
   if (!s.artistPayouts) s.artistPayouts = [];
   s.artistPayouts.push({
-    id: Date.now(),
+    id: makeEventId(),
     date: today(),
-    amount: t.total,
+    amount: roundCents(t.total),
     method: 'Kept from direct sale (full)',
     notes: `${t.num} — artist retained full gross; publisher cut forgiven`,
-    cur: bookCurrencyCode(book)
+    cur: bookCurrencyCode(book),
+    // Names the sale this was derived from, so editing it warns first.
+    sourceNum: t.num
   });
 
   s.artistTransfers = s.artistTransfers.filter(x => x.id !== transferId);
@@ -15071,6 +15372,7 @@ function filterArtistEarningsByYear(bookId, year) {
   const tiers = [...(book.profitTiers || [])].sort((a, b) => (a.revenueUpTo || Infinity) - (b.revenueUpTo || Infinity));
   if (tiers.length === 0) return 0;
 
+  const capOf = (t) => tierEffectiveCap(t, book.productionCost);
   const yearStr = String(year);
 
   let yearArtistEarned = 0;
@@ -15088,14 +15390,20 @@ function filterArtistEarningsByYear(bookId, year) {
       if (h.voided || h.gratuity || !(h.qty > 0) || !(h.price > 0)) continue;
 
       const inYear = h.date && h.date.startsWith(yearStr);
-      let revRemaining = h.qty * h.price;
+      let revRemaining = roundCents(h.qty * h.price);
       while (revRemaining > 0.001) {
-        const tier = tiers.find(t => t.revenueUpTo !== null && cumulativeRevenue < t.revenueUpTo) || tiers[tiers.length - 1];
-        const isLastTier = tier === tiers[tiers.length - 1] || tier.revenueUpTo === null;
-        const capacity = isLastTier ? revRemaining : Math.min(revRemaining, tier.revenueUpTo - cumulativeRevenue);
-        if (inYear) yearArtistEarned += capacity * (tier.artistPct / 100);
-        cumulativeRevenue += capacity;
-        revRemaining -= capacity;
+        // Uses the same effective cap as calcArtistEarnings: a "break-even" tier
+        // caps at the book's production cost, not at its own revenueUpTo. Walking
+        // the raw revenueUpTo here (as this did) skipped that cap entirely, so the
+        // Tax Centre's year-end artist share could disagree with the lifetime
+        // figure shown on the dashboard for the very same sales.
+        const tier = tiers.find(t => capOf(t) !== null && cumulativeRevenue < capOf(t)) || tiers[tiers.length - 1];
+        const tCap = capOf(tier);
+        const isLastTier = tier === tiers[tiers.length - 1] || tCap === null;
+        const capacity = isLastTier ? revRemaining : Math.min(revRemaining, tCap - cumulativeRevenue);
+        if (inYear) yearArtistEarned = roundCents(yearArtistEarned + capacity * (tier.artistPct / 100));
+        cumulativeRevenue = roundCents(cumulativeRevenue + capacity);
+        revRemaining = roundCents(revRemaining - capacity);
       }
     }
   }
@@ -15450,9 +15758,13 @@ export async function removeLedgerEntry(type, bid, id) {
       saveState(bid);
     }
   } else if (type === 'artistPayout') {
+    // These ledger rows are built from `artistPayouts` (the recorded payments),
+    // not `artistTransfers` (cash the artist is still holding) — deleting from
+    // the wrong array left the row on screen and removed an unrelated transfer.
     const s = states[bid];
-    if (s && s.artistTransfers) {
-      removeOneByKey(s.artistTransfers, id);
+    if (s && s.artistPayouts) {
+      removeOneByKey(s.artistPayouts, id);
+      settlePayoutRequests(bid);
       saveState(bid);
     }
   } else if (type === 'sale') {
@@ -15586,6 +15898,17 @@ export function openEditSale(bid, itemId) {
   } else {
     showToast('⚠ Sale record not found', 'err');
   }
+}
+
+// Entry point for the Tax Centre's ledger-row edit button. Artist payouts live
+// on the book's dashboard, so this lands the publisher on that panel with the
+// row already loaded into the payout form.
+export function openArtistPayoutEditor(bid, payoutId) {
+  switchBook(bid);
+  switchTab('dashboard');
+  // switchTab repaints the dashboard, which rebuilds the payout form markup —
+  // load the row afterwards or the fields would be wiped by that render.
+  editArtistPayout(bid, payoutId);
 }
 
 export function openEditExpense(type, bid, id) {
@@ -18805,17 +19128,24 @@ window.downloadFullTaxSeasonExport = function () {
       csv += `${e.date},${esc(book.title)},${esc(e.cat)},${esc(e.desc)},${getAmt(e).toFixed(2)},${esc(e.receipt)}\n`;
     });
 
-    // Artist Payouts (Transfers)
-    (s.artistTransfers || []).filter(t => {
+    // Artist Payouts — the payments actually recorded against the book.
+    //
+    // This used to export `artistTransfers`, which is cash the artist has
+    // COLLECTED and is still holding, not money the publisher paid out. Those
+    // rows are also deleted when a transfer is settled, so the export both
+    // named the wrong figure and lost it as soon as it was reconciled.
+    (s.artistPayouts || []).filter(p => {
+      if (p.voided) return false;
       if (isAllTime) return true;
-      return t.date && t.date.startsWith(year);
-    }).forEach(t => {
-      // Use .total for payouts as per state structure; payout totals are in the
-      // book's native currency — convert to CAD to match the column header.
-      const payoutRaw = parseFloat(t.total || t.amount || 0);
+      return p.date && p.date.startsWith(year);
+    }).forEach(p => {
+      // `amount` is in the book's native currency — convert to CAD to match the
+      // column header.
+      const payoutRaw = parseFloat(p.amount || 0);
       flagRateIfMissing(book, cur, rawRate, payoutRaw > 0);
       const payoutCAD = payoutRaw * hRate;
-      csv += `${t.date},${esc(book.title)},"Artist Payout","Transfer to Artist",${payoutCAD.toFixed(2)},""\n`;
+      const desc = p.method || 'Payment to artist';
+      csv += `${p.date},${esc(book.title)},"Artist Payout",${esc(desc)},${payoutCAD.toFixed(2)},""\n`;
     });
   });
 
@@ -22741,7 +23071,7 @@ function exposeLegacyInlineHandlers() {
     updatePublisherActionBanner, renderBookPendingAlert, heldGrossOf, recognizedRevenueOf,
     dismissStockDrift, updateDash, getProfitTiersHtml, getRevenueProgressHtml, getOwedCardDetails,
     getArtistHeldHtml, getPayoutHistoryHtml, renderProfitSharingBreakdown, toggleArtistPayoutForm,
-    recordArtistPayout, deleteArtistPayout, renderAll, renderCurrent, scheduleRender, ocList,
+    saveArtistPayout, editArtistPayout, deleteArtistPayout, renderAll, renderCurrent, scheduleRender, ocList,
     ocBlockedForAuthor_, ocEnsureQueues_, ocQueueNextStep_, ocStamp_, ocUiOpen_, ocToggleSection,
     ocTogglePhotoPick, ocSetSort, ocSetTmplTab, ocUpdateTmplPreview, ocThreadForStage,
     openOcBulkModal, ocBulkModalEscHandler, closeOcBulkModal, renderOcBulkModalContent,

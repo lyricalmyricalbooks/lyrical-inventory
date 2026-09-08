@@ -15592,16 +15592,51 @@ button[onclick="refreshUmamiStats()"]:active {
   color:var(--content-muted);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
-/* Deleting a payout record moves a real balance, so the target is a full 44px
-   (.sys-target) rather than the 20px hit box it used to be. */
-.ps-payout-del{
+/* Edit and delete sit together so the row keeps one action cluster on the
+   right rather than two competing edges. */
+.ps-payout-row-actions{
+  display:flex;align-items:center;gap:var(--space-1);
+  flex-shrink:0;
+}
+/* Editing or deleting a payout record moves a real balance, so both targets are
+   a full 44px (.sys-target) rather than the 20px hit box delete used to be. */
+.ps-payout-del,
+.ps-payout-edit{
   flex-shrink:0;
   color:var(--content-muted);
+}
+.ps-payout-edit:hover{
+  color:var(--status-info);
+  background:var(--status-info-bg);
+  border-color:var(--status-info-bg);
 }
 .ps-payout-del:hover{
   color:var(--status-critical);
   background:var(--status-critical-bg);
   border-color:var(--status-critical-bg);
+}
+/* Conversion rate, shown only when the payout was made in a currency other than
+   the book's own. Sits between the fields and the balance verdict so the reading
+   order is amount → rate → what it does to the balance. */
+.ps-payout-fx{
+  display:flex;align-items:center;gap:var(--space-2);
+  flex-wrap:wrap;
+  margin-top:var(--space-3);
+}
+.ps-payout-fx[hidden]{display:none;}
+.ps-payout-fx label{
+  font-size:var(--text-2xs);
+  font-weight:600;
+  letter-spacing:var(--tracking-caps);
+  text-transform:uppercase;
+  color:var(--content-muted);
+}
+.ps-payout-fx input{max-width:140px;}
+.ps-payout-fx-note{
+  font-family:'DM Mono',monospace;
+  font-feature-settings:"tnum" 1,"zero" 1;
+  font-size:var(--text-2xs);
+  color:var(--content-muted);
 }
 /* Reconciles against the "Paid to artist" card above without adding the rows
    up by hand. */

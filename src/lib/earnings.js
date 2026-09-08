@@ -100,6 +100,29 @@ export function calcArtistEarnings(book, state) {
   };
 }
 
+// Has enough been paid since a payout request was made to cover what it asked
+// for?
+//
+// A request carries `paidAtRequest` — the lifetime paid-to-artist total at the
+// moment it was sent — so "paid since" is a subtraction rather than a guess.
+// The date comparison this replaced asked whether any payout was dated on or
+// after the request's day, which marked a brand-new request settled the instant
+// it was made on a day that already had a payout recorded earlier.
+//
+// Legacy requests written before that stamp existed have nothing to subtract
+// from, so they fall back to the conservative reading: covered once the artist
+// is owed nothing at all.
+export function payoutRequestCovered(req, stats) {
+  if (!req || !stats) return false;
+  const asked = Number(req.amount) || 0;
+  const paidBefore = Number(req.paidAtRequest);
+  if (!Number.isFinite(paidBefore)) return (stats.owedToArtist ?? 0) <= 0.01;
+  const paidSince = roundCents((stats.totalPaidToArtist || 0) - paidBefore);
+  // Same half-cent deadband describePayout uses, so a request is not left open
+  // by a rounding crumb.
+  return paidSince >= asked - 0.005;
+}
+
 // What a payout of `amountRaw` would do to the outstanding balance, worked out
 // BEFORE it is written to the ledger. Pure and currency-format-free: the caller
 // formats `amount` / `remaining` / `over` with its own money helper, so this
