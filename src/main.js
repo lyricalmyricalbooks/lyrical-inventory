@@ -7374,11 +7374,89 @@ function inferBookIdFromGmailText(value) {
   return null;
 }
 
+// Retries the Apps Script Gmail scan up to maxRetries times, reporting each
+// retry via onStatus. Isolated from fetchOrders() so the request/backoff
+// mechanics can be reasoned about (and eventually tested) independently of
+// order parsing and dashboard state.
+async function scanGmailWithRetries(sheetsUrl, daysBack, onStatus, maxRetries = 3) {
+  let attempt = 0;
+  let lastError;
+
+  while (attempt < maxRetries) {
+    attempt++;
+    try {
+      const destUrl = sheetsUrl + (sheetsUrl.includes('?') ? '&' : '?') + 'action=scanGmail&daysBack=' + daysBack;
+      const res = await fetch(destUrl, {
+        method: 'GET',
+        mode: 'cors'
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (!data || !data.ok) throw new Error(data.error || 'Server returned failure');
+      return { parsed: data };
+    } catch (e) {
+      lastError = e;
+      console.warn(`Scan attempt ${attempt} failed:`, e);
+      if (attempt < maxRetries) {
+        onStatus(`Retrying… (${attempt}/${maxRetries})`);
+        await new Promise(res => setTimeout(res, 1200 * attempt));
+      }
+    }
+  }
+  return { lastError };
+}
+
+// Maps one raw Gmail-scanned order into the shape the queue/ledger expect:
+// resolves which book it belongs to, coerces numeric/date fields, and fills
+// in defaults for anything the email parse left out.
+function normalizeGmailOrder(o, book) {
+  const orderNum = normalizeGmailOrderNum(o.orderNum || o.number || o.order || o.orderNumber);
+  const stableId = String(o.id || orderNum).trim();
+  // Use the fetched email body to identify the correct book
+  const textBlob = [o.body, o.notes, o.itemTitle, o.title].filter(Boolean).join(' ');
+
+  let resolvedBookId = inferBookIdFromGmailText(textBlob) || inferBookIdFromGmailText(o.orderNum);
+  if (!resolvedBookId) {
+    resolvedBookId = BOOKS[activeBook] ? activeBook : Object.keys(BOOKS)[0];
+  }
+
+  const qty = Math.max(1, parseInt(o.qty ?? o.quantity ?? 1, 10) || 1);
+  const price = parseFloat(o.price ?? o.unitPrice ?? o.amount ?? 0) || BOOKS[resolvedBookId]?.listPrice || book.listPrice;
+
+  const rawDate = o.date || o.timestamp || o.time || o.orderDate || '';
+  let normalizedDate = '';
+  if (rawDate) {
+    const parsedDt = new Date(rawDate);
+    if (!isNaN(parsedDt.getTime())) {
+      normalizedDate = parsedDt.toISOString().split('T')[0];
+    }
+  }
+
+  return {
+    ...o,
+    id: stableId || `order-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    hasBook: !!resolvedBookId,
+    bookId: resolvedBookId,
+    orderNum,
+    qty,
+    price,
+    shippingPaid: parseFloat(o.shippingPaid ?? o.shipping ?? o.shippingAmount ?? 0) || 0,
+    subtotal: parseFloat(o.subtotal ?? 0) || 0,
+    discountCode: o.discountCode || '',
+    discountAmount: parseFloat(o.discountAmount ?? 0) || 0,
+    merchandisePaid: parseFloat(o.merchandisePaid ?? price * qty) || 0,
+    shippingMethod: o.shippingMethod || '',
+    taxPaid: parseFloat(o.taxPaid ?? 0) || 0,
+    totalPaid: parseFloat(o.totalPaid ?? 0) || 0,
+    discountSource: o.discountSource || '',
+    date: normalizedDate || today()
+  };
+}
+
 async function fetchOrders() {
   const book = getBook();
   const btn = $('scan-btn');
   const log = 'log-web';
-  const MAX_RETRIES = 3;
 
   if (!sheetsUrl) {
     showToast('Connect Google Sheets first to scan Gmail', 'warn');
@@ -7402,32 +7480,7 @@ async function fetchOrders() {
   // all of it, which reads as "nothing happened".
   setWebScanning(true);
   setStatus('Connecting to Google Apps Script…');
-  let attempt = 0;
-  let parsed = null;
-  let lastError;
-
-  while (attempt < MAX_RETRIES) {
-    attempt++;
-    try {
-      const destUrl = sheetsUrl + (sheetsUrl.includes('?') ? '&' : '?') + 'action=scanGmail&daysBack=' + daysBack;
-      const res = await fetch(destUrl, {
-        method: 'GET',
-        mode: 'cors'
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      if (!data || !data.ok) throw new Error(data.error || 'Server returned failure');
-      parsed = data;
-      break;
-    } catch (e) {
-      lastError = e;
-      console.warn(`Scan attempt ${attempt} failed:`, e);
-      if (attempt < MAX_RETRIES) {
-        setStatus(`Retrying… (${attempt}/${MAX_RETRIES})`);
-        await new Promise(res => setTimeout(res, 1200 * attempt));
-      }
-    }
-  }
+  const { parsed, lastError } = await scanGmailWithRetries(sheetsUrl, daysBack, setStatus);
 
   if (!parsed) {
     addLog(log, `❌ Apps Script Scan failed: ${lastError?.message || 'Unknown error'}. Check URL or re-authorize Apps Script.`, 'err');
@@ -7441,49 +7494,7 @@ async function fetchOrders() {
   setStatus('Parsing results…');
 
   // Normalise and enrich
-  orders = (parsed.orders || []).map(o => {
-    const orderNum = normalizeGmailOrderNum(o.orderNum || o.number || o.order || o.orderNumber);
-    const stableId = String(o.id || orderNum).trim();
-    // Use the fetched email body to identify the correct book
-    const textBlob = [o.body, o.notes, o.itemTitle, o.title].filter(Boolean).join(' ');
-
-    let resolvedBookId = inferBookIdFromGmailText(textBlob) || inferBookIdFromGmailText(o.orderNum);
-    if (!resolvedBookId) {
-      resolvedBookId = BOOKS[activeBook] ? activeBook : Object.keys(BOOKS)[0];
-    }
-
-    const qty = Math.max(1, parseInt(o.qty ?? o.quantity ?? 1, 10) || 1);
-    const price = parseFloat(o.price ?? o.unitPrice ?? o.amount ?? 0) || BOOKS[resolvedBookId]?.listPrice || book.listPrice;
-
-    const rawDate = o.date || o.timestamp || o.time || o.orderDate || '';
-    let normalizedDate = '';
-    if (rawDate) {
-      const parsedDt = new Date(rawDate);
-      if (!isNaN(parsedDt.getTime())) {
-        normalizedDate = parsedDt.toISOString().split('T')[0];
-      }
-    }
-
-    return {
-      ...o,
-      id: stableId || `order-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      hasBook: !!resolvedBookId,
-      bookId: resolvedBookId,
-      orderNum,
-      qty,
-      price,
-      shippingPaid: parseFloat(o.shippingPaid ?? o.shipping ?? o.shippingAmount ?? 0) || 0,
-      subtotal: parseFloat(o.subtotal ?? 0) || 0,
-      discountCode: o.discountCode || '',
-      discountAmount: parseFloat(o.discountAmount ?? 0) || 0,
-      merchandisePaid: parseFloat(o.merchandisePaid ?? price * qty) || 0,
-      shippingMethod: o.shippingMethod || '',
-      taxPaid: parseFloat(o.taxPaid ?? 0) || 0,
-      totalPaid: parseFloat(o.totalPaid ?? 0) || 0,
-      discountSource: o.discountSource || '',
-      date: normalizedDate || today()
-    };
-  }).filter(o => o.orderNum);
+  orders = (parsed.orders || []).map(o => normalizeGmailOrder(o, book)).filter(o => o.orderNum);
 
   // Cross-session deduplication
   const allDone = getAllAppliedIds();
