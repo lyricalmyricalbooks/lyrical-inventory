@@ -642,7 +642,7 @@ import { channelMixRows } from './lib/channel-mix.js';
 import { csvCell, toCsv } from './lib/csv.js';
 import { downloadText, downloadCsv } from './lib/download.js';
 import { OC_STAGES } from './lib/opencall.js';
-import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, orderStockPreview, orderStockPreviewCopy, deriveStockBreakdown, transferAuthorStock, deductSaleFromStockBreakdown } from './lib/inventory.js';
+import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, orderStockPreview, orderStockPreviewCopy, deriveStockBreakdown, transferAuthorStock, deductSaleFromStockBreakdown, isVoidStale } from './lib/inventory.js';
 import { posStockView, posOversellSummary } from './lib/pos-stock.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores, consignmentLedgerTotals, storeBalanceSlug, storeBalanceComparison } from './lib/consignment.js';
 import { deriveInvoiceBookIds, invoicesForBook, findInvoiceAcrossBooks, otherBookTitles, lineItemBookId, invoiceBookSplit, invoiceShareForBook, neutralInvoicePrefix, invoiceNumberPrefix, nextInvoiceSeq, buildInvoiceNumber } from './lib/invoices.js';
@@ -6478,6 +6478,12 @@ let _histPageSig = null;
 function showMoreHist() { _histLimit += HIST_PAGE; renderHist(); }
 function showAllHist() { _histLimit = Infinity; renderHist(); }
 
+// A voided row's clock keeps ticking even if nothing else changes, so unlike
+// every other part of this table nothing forces a repaint when one quietly
+// crosses the hide threshold. Kept ticking only while History is the tab on
+// screen and only while a voided row is still waiting to age out.
+let _histVoidSweepTimer = null;
+
 // ── Order History search ───────────────────────────────────────────────────
 // A book at its third print run has hundreds of rows here, paged fifty at a
 // time, and no way to reach one of them except "Show all" and the browser's
@@ -6642,7 +6648,21 @@ export function renderHist() {
   if (histChanFilter && histChanFilter.bookId !== activeBook) histChanFilter = null;
   const chanFilter = histChanFilter ? histChanFilter.chan : null;
 
-  const timeline = buildOrderTimeline(s, book);
+  // A search belongs to the book it was typed on. Carrying it across a book
+  // switch would open the next book on a table that looks empty for no visible
+  // reason.
+  if (_histSearchBook !== activeBook) { _histSearch = ''; _histSearchBook = activeBook; }
+  const searchQuery = _histSearch;
+  const searchOn = historySearchIsActive(searchQuery);
+
+  const fullTimeline = buildOrderTimeline(s, book);
+  // A voided row drops out of the default view once it's stale, so old voids
+  // don't pile up here forever — but a search is a deliberate lookup (an order
+  // number, or even the word "void" itself), so it still runs over every row,
+  // stale or not.
+  const timeline = searchOn
+    ? fullTimeline
+    : fullTimeline.filter(r => !isVoidStale(r.type === 'consign' ? r.e : r.h));
 
   const rows = chanFilter !== null
     ? timeline.filter(r => r.type === 'hist' && (r.h.chan || '') === chanFilter)
@@ -6652,12 +6672,6 @@ export function renderHist() {
   const matchCount = rows.length + pend.length;
   const inScope = [...pend, ...rows];
 
-  // A search belongs to the book it was typed on. Carrying it across a book
-  // switch would open the next book on a table that looks empty for no visible
-  // reason.
-  if (_histSearchBook !== activeBook) { _histSearch = ''; _histSearchBook = activeBook; }
-  const searchQuery = _histSearch;
-  const searchOn = historySearchIsActive(searchQuery);
   // The search runs over rows the channel filter has already narrowed, so the
   // two compose and the status line's count is honest about which slice it is
   // counting. Row descriptors are passed through untouched, so every row keeps
@@ -6829,7 +6843,33 @@ export function renderHist() {
     }).join('') + moreRow
     : searchOn
       ? `<tr class="hist-empty-row"><td colspan="10">${histNoSearchMatchHtml(describedSearch)}</td></tr>`
-      : `<tr class="hist-empty-row"><td colspan="10">${histEmptyStateHtml(chanFilter, timeline.length + pendingSales.length)}</td></tr>`;
+      // Counted off the unfiltered timeline, not the stale-void-hidden one — a
+      // book whose only orders are old voids still has orders on record, so it
+      // must not be told this is a brand-new, never-sold book.
+      : `<tr class="hist-empty-row"><td colspan="10">${histEmptyStateHtml(chanFilter, fullTimeline.length + pendingSales.length)}</td></tr>`;
+
+  // Keep a slow tick running only while a voided row is still waiting to age
+  // out of view AND History is the tab actually on screen — same trick as the
+  // sync chip's "last synced N min ago" (renderSyncChip, above). Nothing else
+  // in the app re-renders History on wall-clock time alone, so without this a
+  // stale row would only disappear whenever some unrelated action happened to
+  // repaint the tab next.
+  clearInterval(_histVoidSweepTimer);
+  _histVoidSweepTimer = null;
+  const hasPendingVoidSweep = fullTimeline.some(r => {
+    const entry = r.type === 'consign' ? r.e : r.h;
+    return entry?.voided && entry.voidedAt && !isVoidStale(entry);
+  });
+  if (hasPendingVoidSweep) {
+    _histVoidSweepTimer = setInterval(() => {
+      if (visibleTabName() !== 'history') {
+        clearInterval(_histVoidSweepTimer);
+        _histVoidSweepTimer = null;
+        return;
+      }
+      renderHist();
+    }, 60_000);
+  }
 }
 
 // ── WEBSITE ORDERS — persistent scan memory
@@ -11563,6 +11603,7 @@ function voidEntry() {
         if (s.chStats[h.chan].txns <= 0) delete s.chStats[h.chan];
       }
       h.voided = true;
+      h.voidedAt = Date.now();
       recomputeAfters(s, book);
       syncHistoryVoidDeletion(h, true);
       showToast('Entry voided — stock & revenue reversed (Sheets row delete queued)', 'warn');
@@ -11578,6 +11619,7 @@ function voidEntry() {
       s.chStats[h.chan].units += h.qty;
       s.chStats[h.chan].revenue += h.qty * h.price;
       h.voided = false;
+      delete h.voidedAt;
       recomputeAfters(s, book);
       syncHistoryVoidDeletion(h, false);
       showToast('Entry unvoided — effects restored (Sheets row restore queued)');
@@ -11596,6 +11638,7 @@ function voidEntry() {
       if (e.type === 'Sale' && st) { st.sold = Math.max(0, st.sold - e.qty); st.outstanding += e.qty; s.sold = Math.max(0, s.sold - e.qty); s.revenue = Math.max(0, s.revenue - e.amountDue); if (e.paid === 'pending') st.amountOwed = Math.max(0, st.amountOwed - e.amountDue); if (s.chStats['Consignment']) { s.chStats['Consignment'].txns = Math.max(0, s.chStats['Consignment'].txns - 1); s.chStats['Consignment'].units = Math.max(0, s.chStats['Consignment'].units - e.qty); s.chStats['Consignment'].revenue = Math.max(0, s.chStats['Consignment'].revenue - e.amountDue); } }
       if (e.type === 'Return' && st) { st.returned = Math.max(0, st.returned - e.qty); st.outstanding += e.qty; if (e.status === 'restocked') s.stock = Math.max(0, s.stock - e.qty); }
       e.voided = true;
+      e.voidedAt = Date.now();
       // Decision #4: keep invoiceId/invoiceNum across the void (so unvoid restores
       // the link) and never auto-un-pay the invoice. maybeAutoPayInvoiceForLedger
       // already excludes voided sales from its "all paid?" check.
@@ -11608,6 +11651,7 @@ function voidEntry() {
       if (e.type === 'Sale' && st) { st.sold += e.qty; st.outstanding = Math.max(0, st.outstanding - e.qty); s.sold += e.qty; s.revenue += e.amountDue; if (e.paid === 'pending') st.amountOwed += e.amountDue; if (!s.chStats['Consignment']) s.chStats['Consignment'] = { txns: 0, units: 0, revenue: 0 }; s.chStats['Consignment'].txns++; s.chStats['Consignment'].units += e.qty; s.chStats['Consignment'].revenue += e.amountDue; }
       if (e.type === 'Return' && st) { st.returned += e.qty; st.outstanding = Math.max(0, st.outstanding - e.qty); if (e.status === 'restocked') s.stock += e.qty; }
       e.voided = false;
+      delete e.voidedAt;
       syncLedgerVoid(e, false);
       showToast('Consignment entry unvoided — effects restored (Sheets row restore queued)');
     }
