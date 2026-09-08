@@ -7368,6 +7368,30 @@ function applySmartShippingRates(region, base, addon) {
 }
 
 function buildShippingPnLHtml(allOrders, relevantExpenses, shippoExpenses, bookFilterOptions, marginFilterOptions, isPub) {
+
+  // ⚡ Bolt Optimization: Pre-compute expenses grouped by order number to avoid O(N*M) lookups
+  const shippoExpensesByOrder = new Map();
+  shippoExpenses.forEach(e => {
+    if (e.shippingMatchStatus === 'matched') {
+      const num = normalizeShippingOrderNumber(e.shippingOrderNumber);
+      if (num) {
+        if (!shippoExpensesByOrder.has(num)) shippoExpensesByOrder.set(num, []);
+        shippoExpensesByOrder.get(num).push(e);
+      }
+    }
+  });
+
+  const relevantExpensesByOrder = new Map();
+  relevantExpenses.forEach(e => {
+    if (e.shippingMatchStatus === 'matched') {
+      const num = normalizeShippingOrderNumber(e.shippingOrderNumber);
+      if (num) {
+        if (!relevantExpensesByOrder.has(num)) relevantExpensesByOrder.set(num, []);
+        relevantExpensesByOrder.get(num).push(e);
+      }
+    }
+  });
+
   // Calculate dynamic counts for Margin Health filters based on active Book Filter (using allOrders)
   let countAll = 0;
   let countLoss = 0;
@@ -7388,9 +7412,7 @@ function buildShippingPnLHtml(allOrders, relevantExpenses, shippoExpenses, bookF
     }
 
     const orderNumber = normalizeShippingOrderNumber(o.num);
-    const linked = orderNumber ? shippoExpenses.filter(e =>
-      e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
-    ) : [];
+    const linked = orderNumber ? (shippoExpensesByOrder.get(orderNumber) || []) : [];
     const hasPostage = linked.length > 0 || !!o.manualPostagePaid;
     if (hasPostage) {
       const postageCostCAD = o.manualPostagePaid
@@ -7417,9 +7439,7 @@ function buildShippingPnLHtml(allOrders, relevantExpenses, shippoExpenses, bookF
       if (shipAnalysisMarginFilter !== 'all') {
         const customerPaidBase = Number(o.shippingPaid) || 0;
         const orderNumber = normalizeShippingOrderNumber(o.num);
-        const linked = orderNumber ? shippoExpenses.filter(e =>
-          e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
-        ) : [];
+        const linked = orderNumber ? (shippoExpensesByOrder.get(orderNumber) || []) : [];
 
         if (shipAnalysisMarginFilter === 'missing') {
           if (customerPaidBase !== 0) return false;
@@ -7440,9 +7460,7 @@ function buildShippingPnLHtml(allOrders, relevantExpenses, shippoExpenses, bookF
       // B. Carrier filter
       if (shipAnalysisCarrierFilter !== 'all') {
         const orderNumber = normalizeShippingOrderNumber(o.num);
-        const linked = orderNumber ? shippoExpenses.filter(e =>
-          e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
-        ) : [];
+        const linked = orderNumber ? (shippoExpensesByOrder.get(orderNumber) || []) : [];
         const carrier = o.manualPostagePaid
           ? 'Manual Override'
           : (linked.length > 0 ? parseCarrierInfo(linked[0].desc).provider : 'Unlinked');
@@ -7475,9 +7493,7 @@ function buildShippingPnLHtml(allOrders, relevantExpenses, shippoExpenses, bookF
     let totalPostageCost = 0;
     kpiOrders.forEach(o => {
       const orderNumber = normalizeShippingOrderNumber(o.num);
-      const linked = orderNumber ? relevantExpenses.filter(e =>
-        e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
-      ) : [];
+      const linked = orderNumber ? (relevantExpensesByOrder.get(orderNumber) || []) : [];
       
       const cost = o.manualPostagePaid
         ? (Number(o.postagePaid) || 0)
@@ -7494,9 +7510,7 @@ function buildShippingPnLHtml(allOrders, relevantExpenses, shippoExpenses, bookF
     kpiOrders.forEach(o => {
       const customerPaidBase = (Number(o.shippingPaid) || 0);
       const orderNumber = normalizeShippingOrderNumber(o.num);
-      const linked = orderNumber ? shippoExpenses.filter(e =>
-        e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
-      ) : [];
+      const linked = orderNumber ? (shippoExpensesByOrder.get(orderNumber) || []) : [];
 
       const hasPostage = linked.length > 0 || !!o.manualPostagePaid;
       if (hasPostage) {
