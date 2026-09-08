@@ -4265,7 +4265,14 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .ch-table{display:flex; flex-direction:column;}
 .ch-row{
   display:grid;
-  grid-template-columns:168px minmax(0,1fr) 52px 122px 132px;
+  /* The bar track grows with the panel but stops at a readable length. Left as
+     a plain 1fr it ran to ~1300px on a wide monitor once the landing screen
+     stopped being capped at 1200px, which pushes each figure so far from the
+     channel it belongs to that the row stops reading as one line — and a bar
+     that long is harder to compare against its neighbours, not easier. The
+     per-book cards below the chart take the remaining width instead; their
+     grid already reflows into more columns on its own. */
+  grid-template-columns:168px minmax(0,46rem) 52px 122px 132px;
   gap:14px; align-items:center; padding:9px 4px;
 }
 .ch-row + .ch-row{border-top:1px solid var(--border2);}
@@ -17221,11 +17228,24 @@ button[onclick="refreshUmamiStats()"]:active {
    narrow viewport — the correct signal, per UX_PATTERNS.md §4. Layout
    containment does not create a scroll container, so sticky headers inside the
    main column still resolve against the page. */
-#tab-all-overview { container-type: inline-size; container-name: overview-page; }
+/* It also fills the window rather than sitting in a fixed 1200px column with the
+   rest of the monitor left blank. `.tab-panel` centres every other screen at
+   1200px, which on a 2560px display meant ~1150px of dead margin and a book
+   strip stuck at 790px whatever you were looking at it on. The padding scales
+   with the viewport so the edges stay comfortable at any size. */
+#tab-all-overview {
+  container-type: inline-size;
+  container-name: overview-page;
+  max-width: none;
+  padding-inline: clamp(1rem, 2vw, 3rem);
+}
 
 .overview-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 322px;
+  /* The rail grows a little with the window but stays a readable column — an
+     activity feed stretched to 800px is harder to scan, not easier. The main
+     column takes every pixel the rail doesn't. */
+  grid-template-columns: minmax(0, 1fr) clamp(300px, 20vw, 380px);
   gap: var(--space-5);
   align-items: start;
 }
@@ -17506,4 +17526,39 @@ button[onclick="refreshUmamiStats()"]:active {
 
 @media (prefers-reduced-motion: reduce) {
   .todo-row:hover { transform: none; }
+}
+
+/* ── The catalogue flows into columns instead of one tall stack ────────────
+   With the screen no longer capped at 1200px, a single column of book strips
+   would just stretch each one wider and leave the same emptiness. A grid uses
+   the width for something instead: more titles visible at once, less scrolling.
+
+   `auto-fit` with a minimum track — rather than a fixed column count at a
+   breakpoint — is what makes this adapt continuously. The browser fits as many
+   columns as the available width allows and shares the remainder out, so a
+   laptop gets one, a wide monitor two, an ultrawide three, with no jumps in
+   between and nothing to maintain per screen size. `min(100%, …)` keeps the
+   track from ever exceeding the container, which is what would otherwise cause
+   an overflow on a narrow phone. */
+#all-books-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 52rem), 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+/* The strips carried their own bottom margin for the old stacked layout; the
+   grid gap owns the spacing now, and leaving both would double it. */
+#all-books-list > .book-strip { margin-bottom: 0; }
+/* An empty or still-loading catalogue reads across the whole grid rather than
+   hiding in the first column with dead space beside it. */
+#all-books-list > .empty-state { grid-column: 1 / -1; }
+
+/* Once strips share a row they cannot hold a 37rem figure rail open, so let it
+   flex down and — on a narrow column — wrap under the title exactly as it
+   already does on a phone. It still never grows past its natural width, so a
+   single full-width strip looks unchanged. */
+#all-books-list .book-strip-kpis {
+  flex: 1 1 22rem;
+  width: auto;
+  max-width: var(--book-kpi-rail-width);
 }
