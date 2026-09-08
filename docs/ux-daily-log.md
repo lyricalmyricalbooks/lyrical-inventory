@@ -84,7 +84,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-09-05 | visual | POS checkout | Gave the register's cart panel a shadow that still shows once the page goes dark | #741 |
 | 2026-09-06 | visual | Customers — Email Campaigns | Gave each campaign row its own visible tile instead of blending into the card behind it | #750 |
 | 2026-09-07 | visual | Tax Centre — Shipping (US customs prepayment) | Made the US customs card's gold border and "valid" checkmarks actually change color in dark mode | #753 |
-| 2026-09-08 | visual | Book dashboard | Gave "Sales by channel", "Consignment overview" and "Inventory" real headings instead of the faintest type in the app | (pending) |
+| 2026-09-08 | visual | Book dashboard | Gave "Sales by channel", "Consignment overview" and "Inventory" real headings instead of the faintest type in the app | #766 |
 
 ---
 
