@@ -1145,11 +1145,28 @@ async function recordBigCartelOrderIfMissing(order, plan) {
  * of it. Buying the label is the only thing still asked for, because that is
  * the only step that spends money.
  */
-async function prefillShippingFromBigCartelOrder(orderId) {
+function findBigCartelOrderById(orderId) {
   const orders = (bigCartelData && bigCartelData.orders && bigCartelData.orders.length > 0)
     ? bigCartelData.orders
     : (loadCachedBigCartelOrders()?.orders || []);
-  const order = orders.find(o => String(o.id) === String(orderId));
+  return orders.find(o => String(o.id) === String(orderId)) || null;
+}
+
+/**
+ * What the order says is in the box, and how far that lets the app go alone.
+ *
+ * Both things that record a sale from an order need the same pair, and they
+ * have to be derived the same way: the plan's `autoSafe` flag is what decides
+ * whether stock may move without a human, so two callers computing it
+ * differently would mean two different answers to the same question.
+ */
+function bigCartelOrderPlan(order) {
+  const parcelLines = bigCartelOrderLines(order, getBigCartelIncluded(), BOOKS);
+  return { parcelLines, plan: orderParcelPlan(parcelLines, BOOKS) };
+}
+
+async function prefillShippingFromBigCartelOrder(orderId) {
+  const order = findBigCartelOrderById(orderId);
   if (!order) {
     showToast('Order details not found', 'err');
     return;
@@ -1196,8 +1213,7 @@ async function prefillShippingFromBigCartelOrder(orderId) {
   }
 
   // What the order says is in the box, and how far that lets us go on our own.
-  const parcelLines = bigCartelOrderLines(order, getBigCartelIncluded(), BOOKS);
-  const plan = orderParcelPlan(parcelLines, BOOKS);
+  const { parcelLines, plan } = bigCartelOrderPlan(order);
 
   // Record before quoting: the sale is what the label is for, and a rate call
   // that fails should not be able to leave the sale unrecorded.
@@ -1694,11 +1710,16 @@ function showNewOrderAlert(entries) {
   const title = $('new-order-alert-title');
   const detail = $('new-order-alert-detail');
   const ship = $('new-order-alert-ship');
+  const record = $('new-order-alert-record');
   const review = $('new-order-alert-review');
 
   if (title) title.textContent = said.title;
   if (detail) detail.textContent = said.detail;
+  // Both single-order actions work on the first entry, so both disappear once
+  // several have stacked up — a button that silently picks one of four orders
+  // to move stock for is worse than no button.
   if (ship) ship.hidden = merged.length !== 1;
+  if (record) record.hidden = merged.length !== 1;
   if (review) review.textContent = merged.length === 1 ? 'Review' : 'Review orders';
 
   card.hidden = false;
@@ -1718,6 +1739,64 @@ function shipNewOrderFromAlert(event) {
   dismissNewOrderAlert();
   if (!entry) return;
   prefillShippingFromBigCartelOrder(entry.orderId || entry.num.replace(/^#/, ''));
+}
+
+/**
+ * Take the stock off the shelf without going near the shipping form.
+ *
+ * "Ship it" already records the sale — it does that before quoting rates, so a
+ * rate call that fails cannot leave the sale unrecorded. But it also switches
+ * to the Shipping tab, fills the whole address form, chases a phone number and
+ * asks the carrier for prices. For an order being fulfilled next week, or handed
+ * over in person, all of that is a detour through a screen built for buying
+ * postage to reach the one step that actually mattered.
+ *
+ * Same guard as every other automatic record: held to `plan.autoSafe`, so stock
+ * only ever moves on an order that named one catalogue title outright. Anything
+ * the storefront left ambiguous goes to the review queue where the publisher
+ * picks the book, rather than a guess moving stock behind their back.
+ */
+async function recordNewOrderFromAlert(event) {
+  if (event) event.stopPropagation();
+  const entry = _newOrderAlert?.entries?.[0];
+  if (!entry) return;
+
+  const order = findBigCartelOrderById(entry.orderId || entry.num.replace(/^#/, ''));
+  if (!order) { showToast('Order details not found', 'err'); return; }
+
+  const { plan } = bigCartelOrderPlan(order);
+  const recorded = await recordBigCartelOrderIfMissing(order, plan);
+
+  // An order the app will not record on its own is the one case worth keeping
+  // the publisher's attention: the card goes, but they land on the queue that
+  // asks which book it was, rather than being told "no" and left where they are.
+  if (recorded.status === 'needs-review') {
+    dismissNewOrderAlert();
+    switchTab('bigcartel');
+    showToast(`${entry.num} needs you to pick the book before it can be recorded.`, 'warn', 6000);
+    return;
+  }
+
+  // Nothing was written and nothing can be, so leave the card up: "Ship it" is
+  // still there, and dismissing would look like the sale had been dealt with.
+  if (recorded.status === 'failed' || recorded.status === 'no-number') {
+    showToast(`Could not record ${entry.num}. Try shipping it instead.`, 'err', 6000);
+    return;
+  }
+
+  dismissNewOrderAlert();
+
+  if (recorded.status === 'recorded') {
+    const linked = recorded.linked
+      ? `, linked ${recorded.linked} label${recorded.linked === 1 ? '' : 's'}`
+      : '';
+    showToast(`✓ Recorded ${recorded.qty} × ${recorded.bookTitle}${linked} — stock updated`, 'ok', 5000);
+    return;
+  }
+
+  // already-recorded / not-owed: the ledger is right either way, and saying so
+  // is better than a silent dismiss that looks like nothing happened.
+  showToast(`${entry.num} was already in your ledger — nothing to record.`);
 }
 
 /** Open the storefront tab to work through them. */
@@ -2390,6 +2469,7 @@ export {
   announceNewBigCartelOrders,
   showNewOrderAlert,
   dismissNewOrderAlert,
+  recordNewOrderFromAlert,
   shipNewOrderFromAlert,
   reviewNewOrdersFromAlert,
   refreshBigCartelOrdersIfDue,

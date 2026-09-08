@@ -362,6 +362,7 @@ import {
   startBigCartelOrderWatch,
   refreshBigCartelOrdersIfDue,
   dismissNewOrderAlert,
+  recordNewOrderFromAlert,
   shipNewOrderFromAlert,
   reviewNewOrdersFromAlert,
   checkBigCartelLedgerGaps,
@@ -22944,6 +22945,7 @@ window.sweepStripeInvoicePayments = sweepStripeInvoicePayments;
 window.linkConfidentShippingMatchesNow = linkConfidentShippingMatchesNow;
 window.openShippingReconciliationFromAlert = openShippingReconciliationFromAlert;
 window.shipNewOrderFromAlert = shipNewOrderFromAlert;
+window.recordNewOrderFromAlert = recordNewOrderFromAlert;
 window.reviewNewOrdersFromAlert = reviewNewOrdersFromAlert;
 window.refreshBigCartelOrdersIfDue = refreshBigCartelOrdersIfDue;
 window.switchBigCartelSubTab = switchBigCartelSubTab;

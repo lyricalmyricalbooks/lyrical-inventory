@@ -91,6 +91,7 @@ describe('the notification card', () => {
       'new-order-alert-title': { textContent: '' },
       'new-order-alert-detail': { textContent: '' },
       'new-order-alert-ship': { hidden: false },
+      'new-order-alert-record': { hidden: false },
       'new-order-alert-review': { textContent: '' },
     };
     const harness = buildHarness({
@@ -117,6 +118,7 @@ describe('the notification card', () => {
     expect(elements['new-order-alert-title'].textContent).toBe('New order');
     expect(elements['new-order-alert-detail'].textContent).toBe('Dana ordered.');
     expect(elements['new-order-alert-ship'].hidden).toBe(false);
+    expect(elements['new-order-alert-record'].hidden).toBe(false);
     expect(elements['new-order-alert-review'].textContent).toBe('Review');
   });
 
@@ -128,6 +130,9 @@ describe('the notification card', () => {
     ]);
 
     expect(elements['new-order-alert-ship'].hidden).toBe(true);
+    // Both single-order actions go, not just one: a Record button that silently
+    // picked one of four orders to move stock for is worse than no button.
+    expect(elements['new-order-alert-record'].hidden).toBe(true);
     expect(elements['new-order-alert-review'].textContent).toBe('Review orders');
   });
 
@@ -199,5 +204,121 @@ describe('the shipping tab is up to date, and the markup is wired', () => {
 
   it('announces from the one place that talks to the storefront', () => {
     expect(appSource).toContain('announceNewBigCartelOrders(bcOrders)');
+  });
+});
+
+describe('recording a fresh order without opening the shipping form', () => {
+  function recordHarness({ order = { id: 'AAAA-1' }, result = { status: 'recorded', qty: 2, bookTitle: 'The Hound', linked: 0 } } = {}) {
+    const calls = { toasts: [], tabs: [], recorded: [], planned: [] };
+    const elements = { 'new-order-alert': { hidden: false } };
+    const harness = buildHarness({
+      names: ['recordNewOrderFromAlert', 'dismissNewOrderAlert'],
+      deps: {
+        $: (id) => elements[id],
+        findBigCartelOrderById: () => order,
+        bigCartelOrderPlan: (o) => { calls.planned.push(o); return { parcelLines: [], plan: { autoSafe: true } }; },
+        recordBigCartelOrderIfMissing: async (o, plan) => { calls.recorded.push({ o, plan }); return result; },
+        switchTab: (tab) => { calls.tabs.push(tab); },
+        showToast: (msg, tone) => { calls.toasts.push({ msg, tone }); },
+      },
+      moduleState: "let _newOrderAlert = { entries: [{ num: '#AAAA-1', orderId: 'AAAA-1', customer: 'Dana' }] };",
+      returns: '{ recordNewOrderFromAlert, dismissNewOrderAlert, alert: () => _newOrderAlert }',
+    });
+    return { ...harness, calls, elements };
+  }
+
+  it('takes the stock off the shelf and closes the card', async () => {
+    const { recordNewOrderFromAlert, calls, elements, alert } = recordHarness();
+    await recordNewOrderFromAlert();
+
+    expect(calls.recorded).toHaveLength(1);
+    expect(calls.toasts[0].msg).toContain('Recorded 2 × The Hound');
+    expect(elements['new-order-alert'].hidden).toBe(true);
+    expect(alert()).toBeNull();
+  });
+
+  it('never goes near the shipping form', async () => {
+    // The entire point of the button. "Ship it" switches tabs, fills an address
+    // form, chases a phone number and quotes postage; an order being fulfilled
+    // next week needs none of that to have its stock come off the shelf.
+    const { recordNewOrderFromAlert, calls } = recordHarness();
+    await recordNewOrderFromAlert();
+
+    expect(calls.tabs).toEqual([]);
+  });
+
+  it('mentions a label it managed to link on the way', async () => {
+    const { recordNewOrderFromAlert, calls } = recordHarness({
+      result: { status: 'recorded', qty: 1, bookTitle: 'The Hound', linked: 1 },
+    });
+    await recordNewOrderFromAlert();
+    expect(calls.toasts[0].msg).toContain('linked 1 label');
+  });
+
+  it('sends an order it will not guess at to the review queue instead', async () => {
+    // Held to the same guard as every other automatic record: one catalogue
+    // title named outright, or a person picks the book.
+    const { recordNewOrderFromAlert, calls, elements } = recordHarness({
+      result: { status: 'needs-review' },
+    });
+    await recordNewOrderFromAlert();
+
+    expect(calls.tabs).toEqual(['bigcartel']);
+    expect(calls.toasts[0].msg).toContain('needs you to pick the book');
+    expect(calls.toasts[0].tone).toBe('warn');
+    expect(elements['new-order-alert'].hidden).toBe(true);
+  });
+
+  it('leaves the card up when nothing could be written', async () => {
+    // Dismissing here would look like the sale had been dealt with, and take
+    // the still-working "Ship it" button away with it.
+    const { recordNewOrderFromAlert, calls, elements } = recordHarness({
+      result: { status: 'failed' },
+    });
+    await recordNewOrderFromAlert();
+
+    expect(elements['new-order-alert'].hidden).toBe(false);
+    expect(calls.toasts[0].tone).toBe('err');
+    expect(calls.toasts[0].msg).toContain('Try shipping it instead');
+  });
+
+  it('says so plainly when the ledger already had it', async () => {
+    for (const status of ['already-recorded', 'not-owed']) {
+      const { recordNewOrderFromAlert, calls, elements } = recordHarness({ result: { status } });
+      await recordNewOrderFromAlert();
+      expect(calls.toasts[0].msg).toContain('already in your ledger');
+      expect(elements['new-order-alert'].hidden).toBe(true);
+    }
+  });
+
+  it('does not record twice from one press when the order cannot be found', async () => {
+    const { recordNewOrderFromAlert, calls, elements } = recordHarness({ order: null });
+    await recordNewOrderFromAlert();
+
+    expect(calls.recorded).toEqual([]);
+    expect(calls.toasts[0].tone).toBe('err');
+    // Card stays: "Ship it" can still fetch the order the long way round.
+    expect(elements['new-order-alert'].hidden).toBe(false);
+  });
+
+  it('derives the plan the same way the shipping path does', () => {
+    // Both callers ask bigCartelOrderPlan, so plan.autoSafe — the flag deciding
+    // whether stock may move unattended — cannot mean two different things.
+    const record = appSource.slice(
+      appSource.indexOf('async function recordNewOrderFromAlert'),
+      appSource.indexOf('/** Open the storefront tab to work through them. */'),
+    );
+    expect(record.length).toBeGreaterThan(200);
+    expect(record).toContain('bigCartelOrderPlan(order)');
+    expect(record).toContain('recordBigCartelOrderIfMissing(order, plan)');
+    // It must not reach the shipping prefill, which is the detour it replaces.
+    expect(record).not.toContain('prefillShippingFromBigCartelOrder');
+    expect(record).not.toContain("switchTab('shipping')");
+  });
+
+  it('is on the card and reachable from it', () => {
+    expect(indexContent).toContain('id="new-order-alert-record"');
+    expect(indexContent).toContain('onclick="recordNewOrderFromAlert(event)"');
+    expect(appSource).toContain('window.recordNewOrderFromAlert = recordNewOrderFromAlert;');
   });
 });
