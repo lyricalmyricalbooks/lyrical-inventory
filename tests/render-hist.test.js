@@ -4,7 +4,7 @@ import { buildHarness } from './helpers/extract-decl.js';
 import { escapeHtml } from '../src/lib/html.js';
 import { fmt, fmtD, getSym, normalizeCurrencyCode, paymentSummary } from '../src/lib/money.js';
 import { bookCurrencyCode, detectCurrencyMismatch } from '../src/lib/currency-migration.js';
-import { buildOrderTimeline, inventoryBreakdown } from '../src/lib/inventory.js';
+import { buildOrderTimeline, inventoryBreakdown, isVoidStale } from '../src/lib/inventory.js';
 import { reconcileConsignmentMirrors } from '../src/lib/consignment.js';
 import { linkedShippingSummary } from '../src/lib/shipping-reconciliation.js';
 import { filterHistoryRows, historySearchIsActive, describeHistorySearch } from '../src/lib/order-history-search.js';
@@ -39,7 +39,7 @@ function makeHarness({ state, book = BOOK, isPublisher = true, submissions = {} 
   return buildHarness({
     names: [
       'CHANNEL_COLORS', '_CHAN_FALLBACK', 'HIST_PAGE', 'HIST_SEARCH_MIN',
-      'channelColor', 'chanLabel',
+      'channelColor', 'chanLabel', 'visibleTabName',
       'renderConsignHistRow', 'renderOrderShippingSummary',
       'renderHistSearchBar', 'histNoSearchMatchHtml',
       'histEmptyStateHtml', 'renderHist',
@@ -55,7 +55,7 @@ function makeHarness({ state, book = BOOK, isPublisher = true, submissions = {} 
       // The real implementations — this is the logic worth exercising.
       escapeHtml, fmt, fmtD, getSym, normalizeCurrencyCode, paymentSummary,
       bookCurrencyCode, detectCurrencyMismatch,
-      buildOrderTimeline, inventoryBreakdown,
+      buildOrderTimeline, inventoryBreakdown, isVoidStale,
       reconcileConsignmentMirrors, linkedShippingSummary,
       filterHistoryRows, historySearchIsActive, describeHistorySearch,
     },
@@ -65,6 +65,7 @@ function makeHarness({ state, book = BOOK, isPublisher = true, submissions = {} 
       let _histPageSig = null;
       let _histSearch = '';
       let _histSearchBook = null;
+      let _histVoidSweepTimer = null;
     `,
     returns: `{
       renderHist,
@@ -144,11 +145,11 @@ describe('renderHist — order rows', () => {
     expect(cells(r[1])[2]).toBe('-10');   // left on-hand for the store
   });
 
-  it('marks a voided row and drops its negative sign', () => {
+  it('marks a freshly voided row and drops its negative sign', () => {
     const h = makeHarness({
       state: {
         stock: 100,
-        hist: [{ num: '1001', chan: 'Direct', qty: 3, price: 20, date: '2026-07-20', voided: true }],
+        hist: [{ num: '1001', chan: 'Direct', qty: 3, price: 20, date: '2026-07-20', voided: true, voidedAt: Date.now() }],
         ledger: [], stores: [],
       },
     });
@@ -158,6 +159,44 @@ describe('renderHist — order rows', () => {
     expect(r.className).toContain('voided');
     expect(r.textContent).toContain('Void');
     expect(cells(r)[2]).toBe('3');   // not '-3' — a void didn't move stock
+  });
+
+  it('drops a voided row from the default list once it is stale', () => {
+    // No voidedAt at all reads as "voided before this feature existed" —
+    // treated as stale immediately rather than lingering forever.
+    const legacyVoid = { num: '1001', chan: 'Direct', qty: 3, price: 20, date: '2026-07-20', voided: true };
+    const staleVoid = { num: '1002', chan: 'Direct', qty: 1, price: 20, date: '2026-07-21', voided: true, voidedAt: Date.now() - 90 * 60 * 1000 };
+    const liveSale = { num: '1003', chan: 'Direct', qty: 1, price: 20, date: '2026-07-22' };
+    const h = makeHarness({
+      state: { stock: 100, hist: [legacyVoid, staleVoid, liveSale], ledger: [], stores: [] },
+    });
+    h.renderHist();
+
+    const r = rows();
+    expect(r).toHaveLength(1);
+    expect(r[0].textContent).toContain('1003');
+  });
+
+  it('still shows a voided row that has not aged past the grace period yet', () => {
+    const recentVoid = { num: '1001', chan: 'Direct', qty: 3, price: 20, date: '2026-07-20', voided: true, voidedAt: Date.now() - 5 * 60 * 1000 };
+    const h = makeHarness({ state: { stock: 100, hist: [recentVoid], ledger: [], stores: [] } });
+    h.renderHist();
+
+    expect(rows()).toHaveLength(1);
+    expect(rows()[0].className).toContain('voided');
+  });
+
+  it('still finds a stale voided row when actively searched for', () => {
+    const legacyVoid = { num: 'MAN-9001', chan: 'Direct', qty: 3, price: 20, date: '2026-07-20', voided: true };
+    const liveSale = { num: 'MAN-9002', chan: 'Direct', qty: 1, price: 20, date: '2026-07-22' };
+    const h = makeHarness({ state: { stock: 100, hist: [legacyVoid, liveSale], ledger: [], stores: [] } });
+    h.setSearch('9001');
+    h.renderHist();
+
+    const r = rows();
+    expect(r).toHaveLength(1);
+    expect(r[0].textContent).toContain('9001');
+    expect(r[0].className).toContain('voided');
   });
 
   it('shows an empty state rather than a blank table when there are no orders', () => {

@@ -68,6 +68,24 @@ function rowStockDelta(r) {
   return -(h.qty || 0);
 }
 
+// How long a voided row stays visible in the History list before it's swept
+// out of the default view to cut clutter. Voided rows already contribute zero
+// to every stock/revenue calculation above — this only controls when the row
+// itself stops being shown; the underlying record is never touched.
+export const VOID_HIDE_AFTER_MS = 60 * 60 * 1000; // ~1 hour
+
+// Whether a voided entry is old enough to disappear from the default History
+// view. `now` is injectable (mirrors isLabelUrlExpired in shippo-invoices.js)
+// so this stays a pure, easily-testable function. An entry voided before this
+// field existed has no `voidedAt` at all — treated as stale immediately,
+// since there's no way to know how long ago it happened and it's safe to
+// assume it wasn't just now.
+export function isVoidStale(entry, now = Date.now()) {
+  if (!entry || !entry.voided) return false;
+  if (!entry.voidedAt) return true;
+  return now - entry.voidedAt > VOID_HIDE_AFTER_MS;
+}
+
 // Build the full stock timeline for the History view: every direct sale (from
 // history) plus every consignment shipment/return (from the ledger), sorted
 // newest→oldest, each tagged with a running `_after` = on-hand immediately after
