@@ -3574,43 +3574,22 @@ function syncRoleUI() {
   placeKpiStrip();
   bindKpiResize();
 
-  const websiteTabBtn = $('website-tab-btn');
-  const financialsTabBtn = $('financials-tab-btn');
-  const taxcenterTabBtn = $('global-taxcenter-btn');
+  // Publisher-only chrome: hidden in author view, shown (with its normal
+  // display value) in publisher view.
+  const PUBLISHER_ONLY_IDS = [
+    'todo-tab-btn', 'todo-sidebar-btn', 'reconcile-tab-btn', 'opencall-tab-btn',
+    'website-tab-btn', 'financials-tab-btn', 'global-taxcenter-btn', 'global-sheets-btn',
+    'global-backups-btn', 'd-qr-btn', 'qrcodes-tab-btn', 'webanalytics-tab-btn',
+    'sidebar-webanalytics-btn', 'shipping-tab-btn', 'bigcartel-tab-btn', 'sidebar-bigcartel-btn',
+  ];
+  for (const id of PUBLISHER_ONLY_IDS) {
+    const el = $(id);
+    if (el) el.style.display = authorNow ? 'none' : '';
+  }
   const globalActions = $('global-actions');
-  const sheetsTabBtn = $('global-sheets-btn');
-  const backupsTabBtn = $('global-backups-btn');
-  const qrBtn = $('d-qr-btn');
-  const qrcodesTabBtn = $('qrcodes-tab-btn');
-  const myqrTabBtn = $('myqr-tab-btn');
-  const reconcileTabBtn = $('reconcile-tab-btn');
-  const opencallTabBtn = $('opencall-tab-btn');
-  const webanalyticsTabBtn = $('webanalytics-tab-btn');
-  const sidebarWebanalyticsBtn = $('sidebar-webanalytics-btn');
-  const shippingTabBtn = $('shipping-tab-btn');
-  const bigcartelTabBtn = $('bigcartel-tab-btn');
-  const sidebarBigcartelBtn = $('sidebar-bigcartel-btn');
-  const todoTabBtn = $('todo-tab-btn');
-  const todoSidebarBtn = $('todo-sidebar-btn');
-
-  if (todoTabBtn) todoTabBtn.style.display = authorNow ? 'none' : '';
-  if (todoSidebarBtn) todoSidebarBtn.style.display = authorNow ? 'none' : '';
-  if (reconcileTabBtn) reconcileTabBtn.style.display = authorNow ? 'none' : '';
-  if (opencallTabBtn) opencallTabBtn.style.display = authorNow ? 'none' : '';
-  if (websiteTabBtn) websiteTabBtn.style.display = authorNow ? 'none' : '';
-  if (financialsTabBtn) financialsTabBtn.style.display = authorNow ? 'none' : '';
   if (globalActions) globalActions.style.display = authorNow ? 'none' : 'flex';
-  if (taxcenterTabBtn) taxcenterTabBtn.style.display = authorNow ? 'none' : '';
-  if (sheetsTabBtn) sheetsTabBtn.style.display = authorNow ? 'none' : '';
-  if (backupsTabBtn) backupsTabBtn.style.display = authorNow ? 'none' : '';
-  if (qrBtn) qrBtn.style.display = authorNow ? 'none' : '';
-  if (qrcodesTabBtn) qrcodesTabBtn.style.display = authorNow ? 'none' : '';
-  if (webanalyticsTabBtn) webanalyticsTabBtn.style.display = authorNow ? 'none' : '';
-  if (sidebarWebanalyticsBtn) sidebarWebanalyticsBtn.style.display = authorNow ? 'none' : '';
-  if (shippingTabBtn) shippingTabBtn.style.display = authorNow ? 'none' : '';
-  if (bigcartelTabBtn) bigcartelTabBtn.style.display = authorNow ? 'none' : '';
-  if (sidebarBigcartelBtn) sidebarBigcartelBtn.style.display = authorNow ? 'none' : '';
   // myqr tab is AUTHOR-only
+  const myqrTabBtn = $('myqr-tab-btn');
   if (myqrTabBtn) myqrTabBtn.style.display = authorNow ? '' : 'none';
 
   const wm = $('author-watermark');
