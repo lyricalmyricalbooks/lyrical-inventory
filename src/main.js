@@ -6911,6 +6911,117 @@ function histEmptyStateHtml(chanFilter, totalCount) {
 // No currency parameter on purpose: customer-paid shipping is natively CAD
 // and must never be FX-converted, so this formats as CAD unconditionally.
 
+// Highlights the active channel filter above the table, with a one-click way
+// back to the unfiltered view. Self-contained like renderHistSearchBar above.
+function renderHistFilterBar(chanFilter, matchCount) {
+  const filterBar = $('hist-filter-bar');
+  if (!filterBar) return;
+  if (chanFilter !== null) {
+    filterBar.style.display = '';
+    filterBar.innerHTML = `<div class="hist-filter-chip"><span class="ch-dot" style="background:${channelColor(chanFilter)}"></span>Showing <strong>${escapeHtml(chanLabel(chanFilter))}</strong> orders · ${matchCount} found<button onclick="clearHistChanFilter()" title="Clear filter" aria-label="Clear filter">✕ Clear</button></div>`;
+  } else {
+    filterBar.style.display = 'none';
+    filterBar.innerHTML = '';
+  }
+}
+
+// Printed / on-hand / distributed KPI strip above the table. Reads off
+// `inScope`, not the searched set: the three figures describe the whole print
+// run, so a search that matches nothing must not make the book's
+// reconciliation strip vanish as though the stock went with it.
+function renderHistReconciliationPanel(s, book, chanFilter, inScope, bookCode) {
+  const recon = $('hist-recon');
+  if (!recon) return;
+  // Read off `inScope`, not the searched set: the three figures describe the
+  // whole print run, so a search that matches nothing must not make the
+  // book's reconciliation strip vanish as though the stock went with it.
+  if (chanFilter === null && inScope.length) {
+    const bd = inventoryBreakdown(s, book);
+    const printedCount = bd.printed || 0;
+    const onHandCount = bd.onHand || 0;
+    const distributedCount = printedCount - onHandCount;
+    const sellThroughPct = printedCount > 0 ? ((distributedCount / printedCount) * 100).toFixed(1) : '0.0';
+
+    const warn = bd.unaccounted
+      ? `<div style="font-size:11px; font-weight:700; color:var(--red); margin-top:6px;">⚠️ ${Math.abs(bd.unaccounted)} unaccounted copies in reconciliation</div>`
+      : '';
+
+    // History stranded in a previous currency makes every total below it a
+    // sum of two different currencies. Surface it where the numbers are read,
+    // with the one-click way out.
+    const mm = detectCurrencyMismatch(s, book);
+    const mmNoun = mm.source === 'payment' ? 'sale' : 'amount';
+    const curWarn = mm.mismatched
+      ? `<div class="hist-currency-warn">
+           <span><strong>${mm.mismatched} ${escapeHtml(mmNoun)}${mm.mismatched === 1 ? '' : 's'}</strong> ${mm.mismatched === 1 ? 'was' : 'were'} recorded in ${escapeHtml(mm.code)}, but this book is now priced in ${escapeHtml(bookCode)} — so those figures are being shown and summed as ${escapeHtml(bookCode)} without ever being converted.</span>
+           <button class="btn sm" onclick="restateBookCurrency()">Restate into ${escapeHtml(bookCode)}</button>
+         </div>`
+      : '';
+
+    recon.style.display = '';
+    recon.innerHTML = `
+      <div class="hist-kpi-container">
+        <div class="hist-kpi-card">
+          <div class="hist-kpi-icon" aria-hidden="true">🖨️</div>
+          <div class="hist-kpi-content">
+            <div class="hist-kpi-label">Total Printed</div>
+            <div class="hist-kpi-val">${printedCount}</div>
+            <div class="hist-kpi-sub">Print Run Edition</div>
+          </div>
+        </div>
+        <div class="hist-kpi-card highlight-gold is-lead">
+          <div class="hist-kpi-icon" aria-hidden="true">📚</div>
+          <div class="hist-kpi-content">
+            <div class="hist-kpi-label">Stock On Hand</div>
+            <div class="hist-kpi-val">${onHandCount}</div>
+            <div class="hist-kpi-sub"><span class="mono-num">${printedCount > 0 ? ((onHandCount / printedCount) * 100).toFixed(0) : 0}%</span> available</div>
+          </div>
+        </div>
+        <div class="hist-kpi-card highlight-green">
+          <div class="hist-kpi-icon" aria-hidden="true">🚚</div>
+          <div class="hist-kpi-content">
+            <div class="hist-kpi-label">Distributed & Sold</div>
+            <div class="hist-kpi-val">${distributedCount}</div>
+            <div class="hist-kpi-sub"><span class="mono-num">${sellThroughPct}%</span> sell-through rate</div>
+          </div>
+        </div>
+      </div>
+      <div class="hist-progress-bar-wrap" title="${onHandCount} on hand of ${printedCount} printed (${sellThroughPct}% distributed)">
+        <div class="hist-progress-bar-fill" style="width: ${Math.min(100, Math.max(0, sellThroughPct))}%;"></div>
+      </div>
+      ${warn}
+      ${curWarn}
+    `;
+  } else {
+    recon.style.display = 'none';
+    recon.innerHTML = '';
+  }
+}
+
+// Keeps a slow tick running only while a voided row is still waiting to age
+// out of view AND History is the tab actually on screen — same trick as the
+// sync chip's "last synced N min ago" (renderSyncChip, above). Nothing else
+// in the app re-renders History on wall-clock time alone, so without this a
+// stale row would only disappear whenever some unrelated action happened to
+// repaint the tab next.
+function scheduleHistVoidSweep(fullTimeline) {
+  clearInterval(_histVoidSweepTimer);
+  _histVoidSweepTimer = null;
+  const hasPendingVoidSweep = fullTimeline.some(r => {
+    const entry = r.type === 'consign' ? r.e : r.h;
+    return entry?.voided && entry.voidedAt && !isVoidStale(entry);
+  });
+  if (!hasPendingVoidSweep) return;
+  _histVoidSweepTimer = setInterval(() => {
+    if (visibleTabName() !== 'history') {
+      clearInterval(_histVoidSweepTimer);
+      _histVoidSweepTimer = null;
+      return;
+    }
+    renderHist();
+  }, 60_000);
+}
+
 export function renderHist() {
   const s = getState(), book = getBook(), cur = book.currency;
   const bookCode = bookCurrencyCode(book);
@@ -6969,84 +7080,8 @@ export function renderHist() {
     query: searchQuery,
   });
 
-  const filterBar = $('hist-filter-bar');
-  if (filterBar) {
-    if (chanFilter !== null) {
-      filterBar.style.display = '';
-      filterBar.innerHTML = `<div class="hist-filter-chip"><span class="ch-dot" style="background:${channelColor(chanFilter)}"></span>Showing <strong>${escapeHtml(chanLabel(chanFilter))}</strong> orders · ${matchCount} found<button onclick="clearHistChanFilter()" title="Clear filter" aria-label="Clear filter">✕ Clear</button></div>`;
-    } else {
-      filterBar.style.display = 'none';
-      filterBar.innerHTML = '';
-    }
-  }
-
-  const recon = $('hist-recon');
-  if (recon) {
-    // Read off `inScope`, not the searched set: the three figures describe the
-    // whole print run, so a search that matches nothing must not make the
-    // book's reconciliation strip vanish as though the stock went with it.
-    if (chanFilter === null && inScope.length) {
-      const bd = inventoryBreakdown(s, book);
-      const printedCount = bd.printed || 0;
-      const onHandCount = bd.onHand || 0;
-      const distributedCount = printedCount - onHandCount;
-      const sellThroughPct = printedCount > 0 ? ((distributedCount / printedCount) * 100).toFixed(1) : '0.0';
-
-      const warn = bd.unaccounted
-        ? `<div style="font-size:11px; font-weight:700; color:var(--red); margin-top:6px;">⚠️ ${Math.abs(bd.unaccounted)} unaccounted copies in reconciliation</div>`
-        : '';
-
-      // History stranded in a previous currency makes every total below it a
-      // sum of two different currencies. Surface it where the numbers are read,
-      // with the one-click way out.
-      const mm = detectCurrencyMismatch(s, book);
-      const mmNoun = mm.source === 'payment' ? 'sale' : 'amount';
-      const curWarn = mm.mismatched
-        ? `<div class="hist-currency-warn">
-             <span><strong>${mm.mismatched} ${escapeHtml(mmNoun)}${mm.mismatched === 1 ? '' : 's'}</strong> ${mm.mismatched === 1 ? 'was' : 'were'} recorded in ${escapeHtml(mm.code)}, but this book is now priced in ${escapeHtml(bookCode)} — so those figures are being shown and summed as ${escapeHtml(bookCode)} without ever being converted.</span>
-             <button class="btn sm" onclick="restateBookCurrency()">Restate into ${escapeHtml(bookCode)}</button>
-           </div>`
-        : '';
-
-      recon.style.display = '';
-      recon.innerHTML = `
-        <div class="hist-kpi-container">
-          <div class="hist-kpi-card">
-            <div class="hist-kpi-icon" aria-hidden="true">🖨️</div>
-            <div class="hist-kpi-content">
-              <div class="hist-kpi-label">Total Printed</div>
-              <div class="hist-kpi-val">${printedCount}</div>
-              <div class="hist-kpi-sub">Print Run Edition</div>
-            </div>
-          </div>
-          <div class="hist-kpi-card highlight-gold is-lead">
-            <div class="hist-kpi-icon" aria-hidden="true">📚</div>
-            <div class="hist-kpi-content">
-              <div class="hist-kpi-label">Stock On Hand</div>
-              <div class="hist-kpi-val">${onHandCount}</div>
-              <div class="hist-kpi-sub"><span class="mono-num">${printedCount > 0 ? ((onHandCount / printedCount) * 100).toFixed(0) : 0}%</span> available</div>
-            </div>
-          </div>
-          <div class="hist-kpi-card highlight-green">
-            <div class="hist-kpi-icon" aria-hidden="true">🚚</div>
-            <div class="hist-kpi-content">
-              <div class="hist-kpi-label">Distributed & Sold</div>
-              <div class="hist-kpi-val">${distributedCount}</div>
-              <div class="hist-kpi-sub"><span class="mono-num">${sellThroughPct}%</span> sell-through rate</div>
-            </div>
-          </div>
-        </div>
-        <div class="hist-progress-bar-wrap" title="${onHandCount} on hand of ${printedCount} printed (${sellThroughPct}% distributed)">
-          <div class="hist-progress-bar-fill" style="width: ${Math.min(100, Math.max(0, sellThroughPct))}%;"></div>
-        </div>
-        ${warn}
-        ${curWarn}
-      `;
-    } else {
-      recon.style.display = 'none';
-      recon.innerHTML = '';
-    }
-  }
+  renderHistFilterBar(chanFilter, matchCount);
+  renderHistReconciliationPanel(s, book, chanFilter, inScope, bookCode);
 
   const formatChannelBadge = (chanName) => {
     if (!chanName) return '<span class="ch-badge">—</span>';
@@ -7125,28 +7160,7 @@ export function renderHist() {
       // must not be told this is a brand-new, never-sold book.
       : `<tr class="hist-empty-row"><td colspan="10">${histEmptyStateHtml(chanFilter, fullTimeline.length + pendingSales.length)}</td></tr>`;
 
-  // Keep a slow tick running only while a voided row is still waiting to age
-  // out of view AND History is the tab actually on screen — same trick as the
-  // sync chip's "last synced N min ago" (renderSyncChip, above). Nothing else
-  // in the app re-renders History on wall-clock time alone, so without this a
-  // stale row would only disappear whenever some unrelated action happened to
-  // repaint the tab next.
-  clearInterval(_histVoidSweepTimer);
-  _histVoidSweepTimer = null;
-  const hasPendingVoidSweep = fullTimeline.some(r => {
-    const entry = r.type === 'consign' ? r.e : r.h;
-    return entry?.voided && entry.voidedAt && !isVoidStale(entry);
-  });
-  if (hasPendingVoidSweep) {
-    _histVoidSweepTimer = setInterval(() => {
-      if (visibleTabName() !== 'history') {
-        clearInterval(_histVoidSweepTimer);
-        _histVoidSweepTimer = null;
-        return;
-      }
-      renderHist();
-    }, 60_000);
-  }
+  scheduleHistVoidSweep(fullTimeline);
 }
 
 // ── WEBSITE ORDERS — persistent scan memory
