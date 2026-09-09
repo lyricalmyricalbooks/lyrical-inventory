@@ -262,7 +262,7 @@ describe('the Canada Post sweep only ever reads', () => {
   });
 
   it('marks the Tax Centre tab for either shipping service', () => {
-    expect(indexContent).toContain('data-health-badge="shippo,canadapost,shipping-email"');
+    expect(indexContent).toContain('data-health-badge="shippo,canadapost,shipping-email,stripe-fees"');
   });
 });
 
