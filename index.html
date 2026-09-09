@@ -4640,12 +4640,44 @@
 <div class="overlay no-print" id="m-invoice-edit" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:780px;max-height:92vh;overflow-y:auto;">
   <div class="modal-title" role="dialog" aria-modal="true" id="inv-edit-title">New invoice</div>
 
+  <!-- Who the bill is addressed to: a consignment store from the shop list, or
+       a person typed in by hand (a reader, a school, a festival). -->
+  <div class="inv-billto-switch">
+    <div class="modal-tabs segmented-control" role="tablist" aria-label="Who this invoice bills">
+      <button type="button" class="modal-tab-btn active" id="inv-billto-tab-store" role="tab" aria-selected="true" aria-controls="inv-billto-store-group" onclick="setInvoiceBillToMode('store')"><span class="tab-icon">🏬</span> Store</button>
+      <button type="button" class="modal-tab-btn" id="inv-billto-tab-person" role="tab" aria-selected="false" aria-controls="inv-billto-person-group" onclick="setInvoiceBillToMode('person')"><span class="tab-icon">👤</span> Person</button>
+    </div>
+    <div class="inv-billto-hint" id="inv-billto-hint">Pick a consignment store you already work with.</div>
+  </div>
+  <input type="hidden" id="inv-billto-mode" value="store">
+
   <div class="g2" style="margin-bottom:12px;">
-    <div class="form-group"><label for="inv-store">Bill to (store)</label>
+    <div class="form-group" id="inv-billto-store-group"><label for="inv-store">Bill to (store)</label>
       <select id="inv-store" onchange="onInvoiceStoreChange()"><option value="">— Select store —</option></select>
       <div id="inv-store-preview" class="inv-store-preview"></div>
     </div>
+    <div class="form-group" id="inv-billto-person-group" hidden><label for="inv-person-name">Bill to (name) *</label>
+      <input id="inv-person-name" type="text" autocomplete="off" placeholder="e.g. Maria Rossi — or Roncalli High School">
+    </div>
     <div class="form-group"><label for="inv-num">Invoice number</label><input id="inv-num" type="text" placeholder="auto"></div>
+  </div>
+
+  <!-- Contact and address for a hand-typed recipient. Everything here is
+       optional and prints on the invoice exactly where a store's details do. -->
+  <div id="inv-person-details" hidden>
+    <div class="g2" style="margin-bottom:12px;">
+      <div class="form-group"><label for="inv-person-email">Email</label><input id="inv-person-email" type="email" autocomplete="off" placeholder="name@email.com"></div>
+      <div class="form-group"><label for="inv-person-phone">Phone</label><input id="inv-person-phone" type="tel" autocomplete="off" placeholder="e.g. +1 416-539-9595"></div>
+    </div>
+    <div class="form-group" style="margin-bottom:12px;"><label for="inv-person-address">Street address</label><input id="inv-person-address" type="text" autocomplete="off" placeholder="e.g. 80 Spadina Ave, Suite 205"></div>
+    <div class="g2" style="margin-bottom:12px;">
+      <div class="form-group"><label for="inv-person-city">City</label><input id="inv-person-city" type="text" autocomplete="off" placeholder="e.g. Milan"></div>
+      <div class="form-group"><label for="inv-person-region">State / Province</label><input id="inv-person-region" type="text" autocomplete="off" placeholder="e.g. ON"></div>
+    </div>
+    <div class="g2" style="margin-bottom:12px;">
+      <div class="form-group"><label for="inv-person-postal">Postal / ZIP code</label><input id="inv-person-postal" type="text" autocomplete="off" placeholder="e.g. M5V 2J4"></div>
+      <div class="form-group"><label for="inv-person-country">Country</label><input id="inv-person-country" type="text" autocomplete="off" placeholder="e.g. Canada"></div>
+    </div>
   </div>
 
   <div class="g2" style="margin-bottom:12px;">
@@ -4673,7 +4705,7 @@
 
   <div class="form-group" style="margin-bottom:8px;">
     <label>Line items <button class="btn sm" type="button" onclick="addInvoiceItem()" style="margin-left:8px;">+ Add line</button>
-      <button class="btn sm ink" type="button" onclick="prefillFromPendingSales()" style="margin-left:4px;" title="Pull all unpaid consignment sales for the selected store">⚡ Import pending sales</button>
+      <button class="btn sm ink" type="button" id="inv-import-pending-btn" onclick="prefillFromPendingSales()" style="margin-left:4px;" title="Pull all unpaid consignment sales for the selected store">⚡ Import pending sales</button>
     </label>
   </div>
   <div class="tbl-wrap" style="margin-bottom:8px;">

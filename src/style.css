@@ -17381,6 +17381,29 @@ button[onclick="refreshUmamiStats()"]:active {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   INVOICE MODAL — store / person bill-to switch
+   An invoice usually bills a consignment store, but a direct sale to a reader,
+   a school or a festival has no store record to pick. The segmented control
+   swaps which recipient form is shown; the hint under it says, in the
+   publisher's words, what the chosen side expects.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.inv-billto-switch {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3);
+}
+
+.inv-billto-hint {
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--content-muted);
+  flex: 1 1 190px;
+  min-width: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    LANDING RAIL — NOTIFICATIONS, RECENT ACTIVITY & THE TO-DO LIST
    ───────────────────────────────────────────────────────────────────────────
    The all-books screen keeps its three sections in the main column and gains a

@@ -647,7 +647,7 @@ import { OC_STAGES } from './lib/opencall.js';
 import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, orderStockPreview, orderStockPreviewCopy, deriveStockBreakdown, transferAuthorStock, deductSaleFromStockBreakdown, isVoidStale } from './lib/inventory.js';
 import { posStockView, posOversellSummary } from './lib/pos-stock.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores, consignmentLedgerTotals, storeBalanceSlug, storeBalanceComparison } from './lib/consignment.js';
-import { deriveInvoiceBookIds, invoicesForBook, findInvoiceAcrossBooks, otherBookTitles, lineItemBookId, invoiceBookSplit, invoiceShareForBook, neutralInvoicePrefix, invoiceNumberPrefix, nextInvoiceSeq, buildInvoiceNumber } from './lib/invoices.js';
+import { deriveInvoiceBookIds, invoicesForBook, findInvoiceAcrossBooks, otherBookTitles, lineItemBookId, invoiceBookSplit, invoiceShareForBook, neutralInvoicePrefix, invoiceNumberPrefix, nextInvoiceSeq, buildInvoiceNumber, BILL_TO_STORE, BILL_TO_PERSON, invoiceBillToMode, billToPayload, billToPersonFrom } from './lib/invoices.js';
 import { LEDGER_TYPE_FILTERS, emptyLedgerFilter, ledgerFilterIsActive, ledgerStoreOptions, filterLedgerEntries, ledgerTypeCounts, describeLedgerFilter, ledgerTotalsScope } from './lib/consignment-ledger-filter.js';
 import { filterHistoryRows, historySearchIsActive, describeHistorySearch } from './lib/order-history-search.js';
 import { resolveCountryCode } from './lib/countries.js';
@@ -9866,7 +9866,7 @@ function renderInvoices() {
   summary.textContent = `${invs.length} total · ${fmt(outstanding, cur)} outstanding · ${fmt(paid, cur)} collected${drafts ? ` · ${drafts} draft${drafts > 1 ? 's' : ''}` : ''}${shared ? ` · ${shared} shared with another title` : ''}`;
 
   if (!invs.length) {
-    list.innerHTML = '<div class="empty-state"><div class="e-icon">📄</div>No invoices yet. Click <strong>+ New invoice</strong> to bill a consignment store.<div style="margin-top:12px;"><button class="btn gold" onclick="openCreateInvoice()">+ New invoice</button></div></div>';
+    list.innerHTML = '<div class="empty-state"><div class="e-icon">📄</div>No invoices yet. Click <strong>+ New invoice</strong> to bill a consignment store — or anyone else who owes you.<div style="margin-top:12px;"><button class="btn gold" onclick="openCreateInvoice()">+ New invoice</button></div></div>';
     return;
   }
 
@@ -9893,8 +9893,13 @@ function renderInvoices() {
     const shareLine = share
       ? `<div class="inv-c-store-meta" style="margin-top:2px;">${escapeHtml(book.title)}'s share: <strong class="mono-num">${fmt(share.total, invCur)}</strong></div>`
       : '';
+    // Say when a bill went to somebody who isn't a consignment store, so a
+    // direct sale isn't read as a shop that owes money on the shelf.
+    const personChip = invoiceBillToMode(inv) === BILL_TO_PERSON
+      ? `<span class="chip-status gray" title="Billed to a person, not a consignment store" style="margin-left:6px;font-size:9px;">\u{1F464} Person</span>`
+      : '';
     return `<div class="invoice-card">
-      <div class="inv-c-num">${escapeHtml(inv.num)}${stripeChip}${sharedChip}</div>
+      <div class="inv-c-num">${escapeHtml(inv.num)}${stripeChip}${personChip}${sharedChip}</div>
       <div class="inv-c-store">${escapeHtml(inv.storeName) || '—'}<div class="inv-c-store-meta">${[inv.storeEmail, inv.storeCity].filter(Boolean).map(escapeHtml).join(' · ') || '—'}</div>${shareLine}</div>
       <div class="inv-c-cell">Issued<strong>${fmtD(inv.date)}</strong></div>
       <div class="inv-c-cell">Due<strong>${due}</strong></div>
@@ -9939,7 +9944,13 @@ function openCreateInvoice(storeId, editingId) {
     for (const it of items) it.bookId = lineItemBookId(it, ownerBookId, invoiceBookOptions());
     invoiceCtx = { editingId, ownerBookId, items };
     $('inv-edit-title').textContent = `Edit ${inv.num}`;
-    sel.value = inv.storeId || '';
+    // Reopen the invoice on the side it was written on: a bill addressed to a
+    // person by hand must come back as those typed-in details, not as an empty
+    // store picker that silently drops the recipient on the next save.
+    const mode = invoiceBillToMode(inv);
+    fillInvoicePersonForm(mode === BILL_TO_PERSON ? billToPersonFrom(inv) : null);
+    setInvoiceBillToMode(mode, { silent: true });
+    sel.value = mode === BILL_TO_PERSON ? '' : (inv.storeId || '');
     $('inv-num').value = inv.num || '';
     $('inv-date').value = inv.date || today();
     $('inv-due').value = inv.dueDate || '';
@@ -9970,6 +9981,10 @@ function openCreateInvoice(storeId, editingId) {
   } else {
     invoiceCtx = { editingId: null, ownerBookId, items: [] };
     $('inv-edit-title').textContent = 'New invoice';
+    // A fresh invoice starts on the common case — billing a store — with the
+    // hand-typed fields wiped so nothing carries over from the last one.
+    fillInvoicePersonForm(null);
+    setInvoiceBillToMode(BILL_TO_STORE, { silent: true });
     sel.value = storeId ? String(storeId) : '';
     // Starts on this book's own numbering; refreshAutoInvoiceNumber moves it to
     // the neutral prefix if a second title is added before the invoice is saved.
@@ -10049,6 +10064,91 @@ function refreshAutoInvoiceNumber() {
   if (next === el.value.trim()) return;
   el.value = next;
   invoiceCtx.autoNum = next;
+}
+
+// ── who the invoice bills ───────────────────────────────────────────────
+// The editor addresses a bill either to a consignment store already on the
+// shop list, or to a person typed in by hand. Both write the same recipient
+// fields, so everything downstream — the invoice list, the printed page, the
+// emailed copy, the PDF — is unchanged by which side was used.
+const INV_PERSON_FIELDS = ['name', 'email', 'phone', 'address', 'city', 'region', 'postal', 'country'];
+
+function currentInvoiceBillToMode() {
+  const el = $('inv-billto-mode');
+  return invoiceBillToMode({ billTo: el ? el.value : BILL_TO_STORE });
+}
+
+// Read the hand-typed recipient out of the form.
+function readInvoicePersonForm() {
+  const out = {};
+  for (const f of INV_PERSON_FIELDS) {
+    const el = $('inv-person-' + f);
+    out[f] = el ? el.value : '';
+  }
+  return out;
+}
+
+// Put a recipient back into the form — on reopening a hand-typed invoice, and
+// with a blank one when a new invoice starts.
+function fillInvoicePersonForm(person) {
+  const p = person || {};
+  for (const f of INV_PERSON_FIELDS) {
+    const el = $('inv-person-' + f);
+    if (el) el.value = p[f] || '';
+  }
+}
+
+function setInvoiceBillToMode(mode, { silent = false } = {}) {
+  const next = invoiceBillToMode({ billTo: mode });
+  const hidden = $('inv-billto-mode');
+  if (hidden) hidden.value = next;
+  const person = next === BILL_TO_PERSON;
+
+  const storeGroup = $('inv-billto-store-group');
+  const personGroup = $('inv-billto-person-group');
+  const personDetails = $('inv-person-details');
+  if (storeGroup) storeGroup.hidden = person;
+  if (personGroup) personGroup.hidden = !person;
+  if (personDetails) personDetails.hidden = !person;
+
+  for (const [id, on] of [['inv-billto-tab-store', !person], ['inv-billto-tab-person', person]]) {
+    const btn = $(id);
+    if (!btn) continue;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-selected', on ? 'true' : 'false');
+  }
+
+  const hint = $('inv-billto-hint');
+  if (hint) {
+    hint.textContent = person
+      ? 'Type the buyer\u2019s details by hand — nothing is added to your store list.'
+      : 'Pick a consignment store you already work with.';
+  }
+
+  // Importing unpaid consignment sales only means anything for a store: a
+  // hand-typed buyer has no ledger of shipments and sales behind them.
+  const importBtn = $('inv-import-pending-btn');
+  if (importBtn) {
+    importBtn.disabled = person;
+    importBtn.title = person
+      ? 'Only for consignment stores — a hand-typed buyer has no pending sales to pull.'
+      : 'Pull all unpaid consignment sales for the selected store';
+  }
+
+  // Leaving store mode clears the store selection and its details card, so a
+  // half-chosen store can't quietly end up on a bill addressed to a person.
+  if (person) {
+    const sel = $('inv-store');
+    if (sel) sel.value = '';
+    const preview = $('inv-store-preview');
+    if (preview) { preview.style.display = 'none'; preview.innerHTML = ''; }
+  }
+
+  if (!silent) {
+    const focusEl = person ? $('inv-person-name') : $('inv-store');
+    if (focusEl) { try { focusEl.focus(); } catch { /* focus is a nicety, never a blocker */ } }
+    refreshUnsavedMarkers();
+  }
 }
 
 function onInvoiceStoreChange() {
@@ -10250,6 +10350,12 @@ function prefillFromPendingSales(forceStoreId) {
   // opened from another title, its store and ledger both live in the owner.
   const ownerBookId = (invoiceCtx && invoiceCtx.ownerBookId) || activeBook;
   const s = states[ownerBookId] || getState(), book = BOOKS[ownerBookId] || getBook();
+  // Pending sales come out of a store's consignment ledger, so there is nothing
+  // to pull for a bill addressed to a person typed in by hand.
+  if (currentInvoiceBillToMode() === BILL_TO_PERSON) {
+    showToast('Pending sales only apply to consignment stores', 'warn');
+    return;
+  }
   const storeId = forceStoreId ? Number(forceStoreId) : Number($('inv-store').value);
   if (!storeId) { showToast('Pick a store first', 'warn'); return; }
   $('inv-store').value = String(storeId);
@@ -10284,11 +10390,24 @@ function saveInvoice(status) {
   // instead of pushing a duplicate into the book being viewed.
   const ownerBookId = (invoiceCtx && invoiceCtx.ownerBookId) || activeBook;
   const s = states[ownerBookId] || getState(), book = BOOKS[ownerBookId] || getBook();
-  const storeId = Number($('inv-store').value);
-  if (!storeId) { showToast('Choose a store to bill', 'err'); return; }
+  // Either a store off the shop list or a recipient typed in by hand — both end
+  // up in the same recipient fields, so only the check differs.
+  const billToMode = currentInvoiceBillToMode();
+  let store = null, person = null;
+  if (billToMode === BILL_TO_PERSON) {
+    person = readInvoicePersonForm();
+    if (!String(person.name || '').trim()) {
+      showToast('Enter the name this invoice is billed to', 'err');
+      fieldError('inv-person-name', 'Who is this bill for?');
+      return;
+    }
+  } else {
+    const storeId = Number($('inv-store').value);
+    if (!storeId) { showToast('Choose a store to bill', 'err'); return; }
+    store = (s.stores || []).find(st => st.id === storeId);
+    if (!store) { showToast('Store not found', 'err'); return; }
+  }
   if (!invoiceCtx.items.length) { showToast('Add at least one line item', 'err'); return; }
-  const store = (s.stores || []).find(st => st.id === storeId);
-  if (!store) { showToast('Store not found', 'err'); return; }
 
   const totals = recalcInvoiceTotals();
   if (totals.total <= 0) { showToast('Invoice total must be greater than zero', 'err'); return; }
@@ -10305,7 +10424,8 @@ function saveInvoice(status) {
 
   const payload = {
     id: invoiceCtx.editingId || ('inv-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7)),
-    num, storeId, storeName: store.name, storeEmail: store.email || '', storeCity: store.city || '', storeContact: store.contact || '', storePhone: store.phone || '', storeAddress: store.address || '', storeRegion: store.region || '', storePostal: store.postal || '', storeCountry: store.country || '',
+    num,
+    ...billToPayload(billToMode, { store, person }),
     date, dueDate,
     items: invoiceCtx.items.map(it => ({ description: it.description || '', qty: parseFloat(it.qty) || 0, unitPrice: parseFloat(it.unitPrice) || 0, _ledgerId: it._ledgerId || null, bookId: it.bookId || null })),
     subtotal: totals.subtotal,
@@ -22389,7 +22509,7 @@ Object.assign(window, {
   // Invoices
   renderInvoices, openCreateInvoice, viewInvoice,
   addInvoiceItem, removeInvoiceItem, updateInvoiceItem,
-  onInvoiceStoreChange, prefillFromPendingSales, recalcInvoiceTotals,
+  onInvoiceStoreChange, setInvoiceBillToMode, prefillFromPendingSales, recalcInvoiceTotals,
   saveInvoice, deleteInvoice, editInvoiceFromView, markInvoicePaidFromView,
   printInvoice, copyInvoicePayLink, emailInvoice, downloadInvoiceHTML, downloadInvoicePDF,
   openInvoiceTemplateSettings, saveInvoiceSettings,
