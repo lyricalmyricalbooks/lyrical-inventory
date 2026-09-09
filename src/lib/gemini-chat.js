@@ -137,7 +137,7 @@ async function callModel(model, apiKey, body, { fetchImpl, signal }) {
  * spending two more metered requests to be told the same thing twice.
  */
 async function askChain(apiKey, body, opts) {
-  const free = _geminiModelChain();
+  const free = _geminiModelChain(apiKey);
   if (!free.length) throw new Error('No free-tier model is available for this key');
   const reachable = free.filter(m => !_geminiUnavailable.has(m));
   const chain = reachable.length ? reachable : free;

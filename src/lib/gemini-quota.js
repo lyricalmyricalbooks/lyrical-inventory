@@ -53,11 +53,44 @@ const GEMINI_MODEL_CACHE_MS = 24 * 60 * 60 * 1000;
 // photo.
 const GEMINI_CHAIN_MAX = 4;
 
-function _readGeminiModelCache() {
+/**
+ * A short, non-reversible fingerprint of a key.
+ *
+ * Only ever used to notice that the key CHANGED. Deliberately not the key
+ * itself and not recoverable from this, because it sits in localStorage next to
+ * the cache — knowing two keys differ is all this needs to do.
+ */
+function _geminiKeyId(apiKey) {
+  const s = String(apiKey || '');
+  if (!s) return '';
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16);
+}
+
+/**
+ * The models a previous discovery found, if they were found by THIS key.
+ *
+ * The key matters. A list discovered by one key says nothing about what another
+ * can reach: two keys can sit in different Google Cloud projects with different
+ * models enabled. Without this check, swapping a key left the old key's list in
+ * the browser for a full day, and every scan in that day kept trying models the
+ * new key had no access to — which surfaces as a run of failures that look like
+ * the new key being broken rather than the cache being stale.
+ *
+ * A cache written before this check existed carries no key id, so it does not
+ * match any key and is discarded once. That costs one metadata call and is the
+ * correct answer for it, because there is no way to tell which key wrote it.
+ */
+function _readGeminiModelCache(apiKey) {
   try {
     if (typeof localStorage === 'undefined') return null;
     const saved = JSON.parse(localStorage.getItem(GEMINI_MODEL_CACHE_KEY) || 'null');
     if (!saved || !Array.isArray(saved.models) || !saved.models.length) return null;
+    if (apiKey && saved.keyId !== _geminiKeyId(apiKey)) return null;
     return saved;
   } catch (_) {
     // A corrupt or unreadable cache is not worth failing a scan over.
@@ -70,8 +103,8 @@ function _readGeminiModelCache() {
 // to try. Capped, and re-filtered for the free tier on the way out — a name
 // that arrived from the network is not trusted any further than one typed by
 // hand.
-export function _geminiModelChain() {
-  const discovered = _readGeminiModelCache()?.models || [];
+export function _geminiModelChain(apiKey) {
+  const discovered = _readGeminiModelCache(apiKey)?.models || [];
   return discovered
     .concat(GEMINI_RECEIPT_MODELS.filter(m => !discovered.includes(m)))
     .filter(m => GEMINI_FREE_TIER_MODEL.test(m))
@@ -91,7 +124,7 @@ let _geminiDiscovery = null;
 export function _warmGeminiModelCache(apiKey) {
   if (!apiKey || typeof fetch !== 'function') return null;
   if (typeof navigator !== 'undefined' && navigator && navigator.onLine === false) return null;
-  const cached = _readGeminiModelCache();
+  const cached = _readGeminiModelCache(apiKey);
   if (cached && Date.now() - Number(cached.at || 0) < GEMINI_MODEL_CACHE_MS) return null;
   if (_geminiDiscovery) return _geminiDiscovery;
 
@@ -107,7 +140,9 @@ export function _warmGeminiModelCache(apiKey) {
       // An empty ranking means the answer was unusable, not that this key has
       // no readers. Keeping yesterday's list beats replacing it with nothing.
       if (!ranked.length) return;
-      localStorage.setItem(GEMINI_MODEL_CACHE_KEY, JSON.stringify({ at: Date.now(), models: ranked }));
+      localStorage.setItem(GEMINI_MODEL_CACHE_KEY, JSON.stringify({
+        at: Date.now(), models: ranked, keyId: _geminiKeyId(apiKey),
+      }));
     } catch (_) {
       // Offline, blocked, rate-limited: the built-in list still works.
     } finally {
@@ -153,11 +188,20 @@ export function _friendlyScanError(e) {
   if (/API key|api_key|PERMISSION_DENIED|unregistered|not valid/i.test(raw)) {
     return 'your AI key was rejected — check it in the Tax Centre config';
   }
-  if (/paid tier|billing|prepayment|credits|payment|FAILED_PRECONDITION/i.test(raw)) {
-    return 'that reader is not free on your Google account — nothing was charged, but the scan stopped rather than spend';
-  }
-  if (/quota|rate limit|RESOURCE_EXHAUSTED/i.test(raw)) {
+  // Rate limit BEFORE billing, and this order is load-bearing. Google's
+  // free-tier 429 reads "You exceeded your current quota, please check your
+  // plan and billing details" — it contains the word "billing", so a bare
+  // /billing/ test above this line caught every ordinary rate limit and told
+  // the publisher their account was no longer free. That is the same words
+  // they would see if they really had lost free access, so there was no way to
+  // tell the two apart, and hitting a limit looked like losing the free tier.
+  if (/quota|rate limit|rate-limit|RESOURCE_EXHAUSTED|too many requests/i.test(raw)) {
     return 'the free reader is at its limit for now — wait a minute and try again';
+  }
+  // Only phrases that mean the request itself is not free. "billing" on its own
+  // is not one of them, for the reason above.
+  if (/paid tier|enable billing|billing account|billing is (?:not )?enabled|prepayment|credits|payment method|FAILED_PRECONDITION|free tier is not available/i.test(raw)) {
+    return 'that reader is not free on your Google account — nothing was charged, but the scan stopped rather than spend';
   }
   if (/SAFETY|blocked|RECITATION/i.test(raw)) {
     return 'the reader refused this file — try a photo of the receipt instead';
