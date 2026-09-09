@@ -103,21 +103,26 @@ describe('running a question', () => {
     expect(out.text).toBe('Sorry, let me try again.');
   });
 
-  it('lifts a staged correction out for the publisher to approve', async () => {
+  it('lifts a staged batch of changes out for the publisher to approve', async () => {
     const ctx = {
-      books: {}, states: {},
-      taxCenter: { businessExpenses: [{ id: 'b1', desc: 'Train', cat: 'travel', amount: 12, currency: 'CAD' }] },
+      books: { hound: { title: 'The Hound', isbn: '—' } },
+      states: { hound: { hist: [], ledger: [], expenses: [], stores: [], chStats: {} } },
+      taxCenter: {},
     };
     const fetchImpl = vi.fn()
       .mockResolvedValueOnce(reply([{
-        functionCall: { name: 'proposeCorrection', args: { kind: 'recategorizeExpense', expenseId: 'b1', value: 'Travel & Meals' } },
+        functionCall: {
+          name: 'proposeEdits',
+          args: { summary: 'Add ISBNs', edits: [{ target: 'book', id: 'hound', field: 'isbn', value: '9780306406157' }] },
+        },
       }]))
       .mockResolvedValueOnce(reply([{ text: 'I have put one change up for you.' }]));
     const out = await runIntelTurn({ apiKey: 'k', userText: 'x', tools: TOOLS, ctx, fetchImpl });
+
     expect(out.proposals).toHaveLength(1);
-    expect(out.proposals[0]).toMatchObject({ before: 'travel', after: 'Travel & Meals' });
+    expect(out.proposals[0].items[0]).toMatchObject({ field: 'isbn', afterText: '9780306406157' });
     // Still nothing written.
-    expect(ctx.taxCenter.businessExpenses[0].cat).toBe('travel');
+    expect(ctx.books.hound.isbn).toBe('—');
   });
 });
 

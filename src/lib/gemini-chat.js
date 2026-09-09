@@ -241,11 +241,12 @@ export async function runIntelTurn({
     for (const call of calls) {
       const result = runIntelTool(call.name, call.args, ctx);
       toolCalls.push({ name: call.name, args: call.args });
-      // A staged correction is lifted out for the panel to render as an
+      // A staged batch of changes is lifted out for the panel to render as an
       // approve-or-dismiss card. It is still handed back to the model too, so
-      // it can describe in words what it has put in front of the publisher.
-      if (call.name === 'proposeCorrection' && result && result.ok && result.proposal) {
-        proposals.push(result.proposal);
+      // it can describe in words what it has put in front of the publisher —
+      // including anything that could not be staged and why.
+      if (call.name === 'proposeEdits' && result && result.ok && result.batch) {
+        proposals.push(result.batch);
       }
       responses.push({ functionResponse: { name: call.name, response: { result } } });
     }

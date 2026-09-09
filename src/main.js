@@ -397,6 +397,7 @@ import {
   renderIntel,
   sendIntelMessage,
   stopIntelTurn,
+  toggleIntelEdit,
 } from './features/intel.js';
 import {
   getShippingReconciliationOrders,
@@ -23711,6 +23712,7 @@ function exposeLegacyInlineHandlers() {
   Object.assign(window, {
     acceptIntelDisclosure, applyIntelProposal, askIntelStarter, clearIntelThread,
     dismissIntelProposal, intelComposerKey, renderIntel, sendIntelMessage, stopIntelTurn,
+    toggleIntelEdit,
     revealUpdatingScreen, hideUpdatePrompt, bindUpdatePromptInteractions, isTestBook, isTestBookId,
     ownersFromBooks, saveCatalogWithDeletions, loadCatalog, syncCatalog, switchBookModalTab,
     stepBookModal, updateBookModalFinancials, onBookTitleInput, selectBookAccentPreset, onCustomAccentInput, applyBookParcelPreset,

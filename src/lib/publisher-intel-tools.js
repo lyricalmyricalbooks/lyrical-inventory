@@ -26,6 +26,12 @@ import { calculateBreakEven } from './breakeven.js';
 import { channelMixRows } from './channel-mix.js';
 import { filterHistoryRows } from './order-history-search.js';
 import { getBookCurrencyCode, normalizeCurrencyCode, roundCents } from './money.js';
+import {
+  WRITABLE_FIELDS,
+  WRITE_TARGETS,
+  fieldsForTarget,
+  prepareFieldValue,
+} from './intel-write-registry.js';
 
 // How many individual rows any one tool may hand back.
 //
@@ -41,6 +47,14 @@ export const MAX_TOOL_ROWS = 200;
 // render as "In Person" there, and a fair or market sale lands under one of
 // them.
 export const IN_PERSON_CHANNELS = ['POS', 'Fair', 'Event', 'In Person'];
+
+// How many changes may be put up for approval at once.
+//
+// High enough for a real job — ISBNs for a whole catalogue, a year's expenses
+// recategorised — and low enough that the approval card stays something a
+// person actually reads rather than scrolls past and waves through. A larger
+// job comes back as several batches, which is also how it should be reviewed.
+export const MAX_EDITS_PER_BATCH = 40;
 
 const str = (v) => (typeof v === 'string' ? v : v == null ? '' : String(v));
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
@@ -600,7 +614,7 @@ function findAnomalies(args = {}, ctx = {}) {
       add('category-alias', 'medium', r,
         `Filed as "${r.storedCategory}", which is another spelling of "${r.category}". `
         + 'Reports fold it correctly, but the stored value is inconsistent.',
-        { kind: 'recategorizeExpense', value: r.category });
+        { target: r.scope === 'business' ? 'businessExpense' : 'bookExpense', field: 'category', value: r.category });
     }
     if (r.rateMissing) {
       add('missing-exchange-rate', 'high', r,
@@ -638,81 +652,195 @@ function findAnomalies(args = {}, ctx = {}) {
     byKind: findings.reduce((acc, f) => { acc[f.kind] = (acc[f.kind] || 0) + 1; return acc; }, {}),
     ...capRows(findings),
     appAttentionSignals: signals.slice(0, 40),
-    note: 'Every finding is a checked rule, not a judgement. A category-alias finding can be fixed with '
-      + 'proposeCorrection; the publisher still has to approve it before anything is written.',
+    note: 'Every finding is a checked rule, not a judgement. Where a finding carries a suggestedFix you can '
+      + 'stage it with proposeEdits, using the expenseId as the id; the publisher still approves it before '
+      + 'anything is written.',
   };
 }
 
-// ── PROPOSING A CORRECTION ───────────────────────────────────────────────────
+// ── PROPOSING CHANGES ────────────────────────────────────────────────────────
 //
-// This writes NOTHING. It confirms the row exists, works out what the change
-// would actually be, and hands back a description of it. The panel renders that
-// as a card, the publisher approves it, and the panel performs the write
-// through the same save path the Expenses screen uses — offline queue, merge
-// and all. Keeping the write out of here is what makes the whole tool surface
-// safe to hand to a model.
+// This writes NOTHING. It resolves each record, works out what the change would
+// actually be, and hands back a description of it. The panel renders that as a
+// card the publisher approves, and the write then goes through the app's
+// ordinary save path — offline queue, three-way merge and all.
+//
+// Keeping the write out of here is the whole safety argument. What the model can
+// ask for is bounded by intel-write-registry.js: it can change any field listed
+// there and nothing else, so a hallucinated property name is a rejected edit
+// with a reason rather than a junk key quietly added to a record.
+//
+// A batch is partially acceptable on purpose. Twelve ISBNs where one has a bad
+// check digit should stage the eleven good ones and report the twelfth, because
+// the alternative — refusing all twelve — means the publisher does the whole job
+// by hand over one typo.
 
-const PROPOSAL_KINDS = ['recategorizeExpense', 'setExpenseTrip'];
-
-function findExpenseById(ctx, scope, bookId, id) {
+/** Locate the record an edit names, across every family the registry covers. */
+function resolveRecord(ctx, target, id, bookId) {
   const wanted = str(id);
   if (!wanted) return null;
-  if (scope !== 'book') {
+
+  if (target === 'book') {
+    const book = (ctx.books || {})[wanted];
+    return book ? { record: book, bookId: wanted, label: str(book.title) || wanted } : null;
+  }
+
+  if (target === 'businessExpense') {
     const hit = (ctx.taxCenter?.businessExpenses || []).find(e => e && str(e.id) === wanted);
-    if (hit) return { expense: hit, scope: 'business', bookId: null };
+    return hit ? { record: hit, bookId: null, label: str(hit.desc) || `expense ${wanted}` } : null;
   }
-  if (scope !== 'business') {
+
+  if (target === 'bookExpense' || target === 'store') {
+    const list = target === 'store' ? 'stores' : 'expenses';
     for (const [id2, book] of selectedBooks(ctx, bookId)) {
-      const hit = (stateFor(ctx, id2)?.expenses || []).find(e => e && str(e.id) === wanted);
-      if (hit) return { expense: hit, scope: 'book', bookId: id2, bookTitle: str(book.title) };
+      const hit = (stateFor(ctx, id2)?.[list] || []).find(e => e && str(e.id) === wanted);
+      if (hit) {
+        return {
+          record: hit, bookId: id2,
+          label: (target === 'store' ? str(hit.name) : str(hit.desc)) || wanted,
+          bookTitle: str(book.title),
+        };
+      }
     }
+    return null;
   }
+
+  if (target === 'tripBudget') {
+    // A budget is a value on a map rather than a record, so the trip name is
+    // the id and one that has never had a budget is still a valid target.
+    const budgets = ctx.taxCenter?.tripBudgets || {};
+    const known = Object.prototype.hasOwnProperty.call(budgets, wanted)
+      || Object.prototype.hasOwnProperty.call(ctx.tripsSummary || {}, wanted);
+    return known ? { record: budgets, bookId: null, label: wanted, mapKey: wanted } : null;
+  }
+
   return null;
 }
 
-function proposeCorrection(args = {}, ctx = {}) {
-  const kind = str(args.kind);
-  if (!PROPOSAL_KINDS.includes(kind)) {
-    return { ok: false, error: `Unknown correction "${kind}". Only ${PROPOSAL_KINDS.join(' and ')} can be proposed.` };
-  }
-  const found = findExpenseById(ctx, str(args.scope) || 'any', args.bookId, args.expenseId);
-  if (!found) {
-    return { ok: false, error: `No expense with id "${str(args.expenseId)}" exists, so nothing can be changed.` };
-  }
+/**
+ * Changing what an expense cost, or what currency it was in, invalidates the
+ * Canadian figure stamped on it when it was written.
+ *
+ * Leaving a stale one behind is the worst outcome available here: every report
+ * reads `baseAmount` in preference to the native amount, so the edit would look
+ * applied on the expense screen and change nothing in the totals. Where the rate
+ * is still known the figure is recomputed; where the currency itself changed
+ * there is no rate to reuse, so it is cleared and flagged, which surfaces the
+ * row in findAnomalies until somebody supplies a rate.
+ */
+function currencySideEffect(record, spec, value) {
+  if (spec.key !== 'amount' && spec.key !== 'currency') return null;
+  if (record.baseAmount == null) return null;
 
-  const { expense, scope, bookId, bookTitle } = found;
-  const field = kind === 'recategorizeExpense' ? 'cat' : 'trip';
-  const before = str(expense[field]);
-  let after = str(args.value).trim();
-
-  if (kind === 'recategorizeExpense') {
-    if (!after) return { ok: false, error: 'A category is required.' };
-    after = canonicalExpenseCategory(after, 'Other');
-    const known = ctx.expenseCategories;
-    if (Array.isArray(known) && known.length && !known.includes(after)) {
-      return { ok: false, error: `"${after}" is not one of this app's expense categories.` };
+  if (spec.key === 'amount') {
+    const rate = Number(record.fxRate);
+    if (Number.isFinite(rate) && rate > 0) {
+      return { patch: { baseAmount: roundCents(value * rate) }, note: 'its Canadian figure is recalculated at the rate already recorded' };
     }
+    return { patch: { baseAmount: roundCents(value) }, note: 'its Canadian figure follows the new amount' };
   }
-  if (before === after) {
-    return { ok: false, error: 'That is already the stored value, so there is nothing to change.' };
+  return {
+    patch: { baseAmount: null, fxMissing: true },
+    note: 'its Canadian figure is cleared, because the old one was for the previous currency — it will show as needing an exchange rate',
+  };
+}
+
+function proposeEdits(args = {}, ctx = {}) {
+  const requested = Array.isArray(args.edits) ? args.edits : [];
+  if (!requested.length) {
+    return { ok: false, error: 'No changes were given. Each change needs a record, a field and a new value.' };
+  }
+  if (requested.length > MAX_EDITS_PER_BATCH) {
+    return { ok: false, error: `That is ${requested.length} changes at once; ${MAX_EDITS_PER_BATCH} is the most that can be put up for approval in one go.` };
+  }
+
+  const items = [];
+  const rejected = [];
+  const seen = new Set();
+
+  requested.forEach((edit, i) => {
+    const at = `change ${i + 1}`;
+    const target = str(edit && edit.target);
+    if (!WRITE_TARGETS[target]) {
+      rejected.push({ at, reason: `"${target}" is not a kind of record this app can change. Use one of: ${Object.keys(WRITE_TARGETS).join(', ')}.` });
+      return;
+    }
+    const found = resolveRecord(ctx, target, edit.id, edit.bookId);
+    if (!found) {
+      rejected.push({ at, reason: `No ${WRITE_TARGETS[target].label.toLowerCase()} with id "${str(edit.id)}" exists, so nothing can be changed.` });
+      return;
+    }
+    const prepared = prepareFieldValue(target, edit.field, edit.value, ctx);
+    if (!prepared.ok) { rejected.push({ at, reason: prepared.error }); return; }
+
+    const { value, spec } = prepared;
+    // One field on one record, once per batch. Two edits to the same field
+    // would apply in array order and silently discard the first.
+    const slot = `${target}|${found.bookId || ''}|${str(edit.id)}|${spec.key || 'value'}`;
+    if (seen.has(slot)) {
+      rejected.push({ at, reason: `${spec.label} on "${found.label}" is already being changed by an earlier item in this batch.` });
+      return;
+    }
+    seen.add(slot);
+
+    const before = spec.key === null ? found.record[found.mapKey] : found.record[spec.key];
+    if (String(before ?? '') === String(value ?? '')) {
+      rejected.push({ at, reason: `${spec.label} on "${found.label}" is already "${spec.format(value)}", so there is nothing to change.` });
+      return;
+    }
+
+    const side = (target === 'businessExpense' || target === 'bookExpense')
+      ? currencySideEffect(found.record, spec, value)
+      : null;
+
+    items.push({
+      ref: `e${items.length + 1}`,
+      target, id: str(edit.id), bookId: found.bookId, mapKey: found.mapKey || null,
+      record: found.label, book: found.bookTitle || null,
+      field: spec.key, fieldName: str(edit.field).replace(/^.*\./, ''), fieldLabel: spec.label,
+      risk: spec.risk,
+      before: before ?? null, beforeText: spec.format(before),
+      after: value, afterText: spec.format(value),
+      ...(side ? { sideEffect: side.note, sidePatch: side.patch } : {}),
+      reason: str(edit.reason),
+    });
+  });
+
+  if (!items.length) {
+    return { ok: false, error: 'None of those changes could be made.', rejected };
+  }
+
+  const moneyEdits = items.filter(it => it.risk === 'money');
+  const warnings = [];
+
+  // The two shares are what an author is paid out of a sale. Changing one and
+  // not the other leaves a split that no longer adds up, and nothing downstream
+  // would complain — it would just pay the wrong amount from then on.
+  for (const it of items.filter(x => x.target === 'book' && (x.field === 'pubGratuity' || x.field === 'authorGratuity'))) {
+    const book = (ctx.books || {})[it.id] || {};
+    const other = it.field === 'pubGratuity' ? 'authorGratuity' : 'pubGratuity';
+    const pairEdit = items.find(x => x.target === 'book' && x.id === it.id && x.field === other);
+    const total = num(it.after) + num(pairEdit ? pairEdit.after : book[other]);
+    if (Math.round(total) !== 100) {
+      warnings.push(`On "${it.record}" the publisher and author shares would add up to ${Math.round(total)}%, not 100%.`);
+    }
   }
 
   return {
     ok: true,
-    proposal: {
-      kind, field, scope, bookId: bookId || null, book: bookTitle || null,
-      expenseId: str(expense.id),
-      description: str(expense.desc),
-      date: str(expense.date),
-      amount: roundCents(num(expense.amount)),
-      currency: normalizeCurrencyCode(expense.currency, 'CAD'),
-      before: before || null,
-      after,
-      reason: str(args.reason),
+    batch: {
+      summary: str(args.summary),
+      items,
+      rejected,
+      moneyEditCount: moneyEdits.length,
+      warnings: [...new Set(warnings)],
     },
-    note: 'Nothing has been changed. This is shown to the publisher for approval.',
+    note: 'Nothing has been changed yet. These are shown to the publisher as a list they approve or dismiss, '
+      + 'and they can untick any single one before approving.'
+      + (rejected.length ? ` ${rejected.length} could not be staged — tell the publisher which and why.` : ''),
   };
 }
+
 
 // ── THE TOOL SURFACE HANDED TO THE MODEL ─────────────────────────────────────
 //
@@ -721,6 +849,18 @@ function proposeCorrection(args = {}, ctx = {}) {
 // specific to this business — that consignment revenue is the publisher's cut,
 // that an "event" is assembled rather than stored — the description says so,
 // since a wrong assumption there produces a confident wrong answer.
+
+// Built from the registry rather than written out here, so the list the model is
+// given and the list the code enforces cannot drift apart — a field added to one
+// is a field added to both.
+const WRITABLE_TARGET_SUMMARY = Object.entries(WRITE_TARGETS)
+  .map(([target, meta]) => `- ${target} (${meta.label}): ${fieldsForTarget(target).join(', ')}`)
+  .join('\n');
+
+// Which of those change money rather than wording, so the panel can say so.
+export const MONEY_FIELDS = Object.entries(WRITABLE_FIELDS)
+  .filter(([, spec]) => spec.risk === 'money')
+  .map(([name]) => name);
 
 const DATE = { type: 'STRING', description: 'A date as YYYY-MM-DD.' };
 const BOOK_ID = { type: 'STRING', description: 'Restrict to one book by its id. Omit for every book.' };
@@ -831,28 +971,50 @@ export const INTEL_TOOL_SCHEMAS = [
     },
   },
   {
-    name: 'proposeCorrection',
+    name: 'proposeEdits',
     description:
-      'Stage a correction to ONE expense for the publisher to approve. This does not change anything — it '
-      + 'checks the change is possible and shows it to them as an approve-or-dismiss card. Only ever propose a '
-      + 'correction you can point at a findAnomalies result for, and propose each one separately.',
+      'Change information in the publisher\'s records — one field, or many at once. This does NOT write '
+      + 'anything: each change is checked and then shown to the publisher as a list they approve, dismiss, or '
+      + 'untick item by item. Use it whenever they ask you to set, add, correct or fill in information, for '
+      + 'example handing you a list of ISBNs to put on their books.\n\n'
+      + 'Get the record ids from the read tools first — queryCatalog gives bookId, queryExpenses gives each '
+      + 'expense an id. Put every change from one request in a single call so the publisher approves it once.\n\n'
+      + 'What can be changed, by kind of record:\n'
+      + WRITABLE_TARGET_SUMMARY
+      + '\n\nAnything else, including an author\'s email or password, cannot be changed here and never should be — '
+      + 'say so plainly if asked. Values are given as text and converted for you, so "CA$1,299.00" is a fine price. '
+      + 'An ISBN is checked against its own check digit and a wrong one is refused, so pass it exactly as given to you.',
     parameters: {
       type: 'OBJECT',
       properties: {
-        kind: { type: 'STRING', description: 'Either "recategorizeExpense" or "setExpenseTrip".' },
-        scope: { type: 'STRING', description: '"business" or "book", from the finding.' },
-        bookId: BOOK_ID,
-        expenseId: { type: 'STRING', description: 'The id of the expense to change.' },
-        value: { type: 'STRING', description: 'The category or trip name it should have instead.' },
-        reason: { type: 'STRING', description: 'One short sentence the publisher will read explaining why.' },
+        summary: {
+          type: 'STRING',
+          description: 'One short line the publisher reads above the list, e.g. "Add ISBNs to four books".',
+        },
+        edits: {
+          type: 'ARRAY',
+          description: 'The changes to stage. Each one names a record, a field and the new value.',
+          items: {
+            type: 'OBJECT',
+            properties: {
+              target: { type: 'STRING', description: `The kind of record: ${Object.keys(WRITE_TARGETS).join(', ')}.` },
+              id: { type: 'STRING', description: 'The record\'s id — a bookId, an expense id, a shop id, or a trip name for a budget.' },
+              bookId: { type: 'STRING', description: 'Which book the expense or shop belongs to. Helps find it faster; optional.' },
+              field: { type: 'STRING', description: 'The field to change, named as the read tools name it, e.g. isbn or listPrice.' },
+              value: { type: 'STRING', description: 'The new value, as text.' },
+              reason: { type: 'STRING', description: 'One short phrase the publisher reads explaining this one change.' },
+            },
+            required: ['target', 'id', 'field', 'value'],
+          },
+        },
       },
-      required: ['kind', 'expenseId', 'value'],
+      required: ['edits'],
     },
   },
 ];
 
 const HANDLERS = {
-  queryLedger, querySales, queryExpenses, queryEvents, queryCatalog, findAnomalies, proposeCorrection,
+  queryLedger, querySales, queryExpenses, queryEvents, queryCatalog, findAnomalies, proposeEdits,
 };
 
 export const INTEL_TOOL_NAMES = Object.keys(HANDLERS);
