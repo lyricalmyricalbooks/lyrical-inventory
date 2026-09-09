@@ -2969,7 +2969,7 @@ async function _callGeminiForReceipts(apiKey, parts, opts = {}) {
   // The free-tier gate, enforced at the point of use rather than trusted from
   // the list above: whatever that list ends up saying, a model that would be
   // billed is never called.
-  const free = _geminiModelChain();
+  const free = _geminiModelChain(apiKey);
   if (!free.length) throw new Error('No free-tier reader is configured');
   // Then skip what this key has already been refused — but never let that
   // empty the chain, because a refusal that turns out to be temporary must not

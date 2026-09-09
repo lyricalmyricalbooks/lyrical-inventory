@@ -95,6 +95,9 @@ describe('Remembering what Google offers', () => {
     const h = buildHarness({
       names: [
         '_warmGeminiModelCache', '_readGeminiModelCache', '_geminiModelChain',
+        // The cache is scoped to the key that discovered it, so the fingerprint
+        // helper has to come across with the functions that use it.
+        '_geminiKeyId',
         'GEMINI_MODEL_CACHE_KEY', 'GEMINI_MODEL_CACHE_MS', 'GEMINI_CHAIN_MAX',
         'GEMINI_RECEIPT_MODELS', 'GEMINI_FREE_TIER_MODEL', '_geminiDiscovery'
       ],

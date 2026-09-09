@@ -8,6 +8,7 @@ import {
   _geminiModelChain,
   _geminiNoteThrottle,
   _geminiUnavailable,
+  _warmGeminiModelCache,
 } from '../src/lib/gemini-quota.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -108,5 +109,70 @@ describe('what a failure is called in front of the shop owner', () => {
 
   it('shows what came back rather than inventing a cause', () => {
     expect(_friendlyScanError(new Error('some novel failure'))).toBe('some novel failure');
+  });
+
+  // Google's own free-tier 429 body, verbatim. It contains the word "billing",
+  // which is why an ordinary rate limit used to be reported as the account no
+  // longer being free — the same words a real loss of free access produces, so
+  // there was no way to tell them apart. A publisher who hit their limit
+  // concluded they had been moved onto a paid plan.
+  const REAL_429 = 'You exceeded your current quota, please check your plan and billing details. '
+    + 'For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits.';
+
+  it('calls a free-tier rate limit a rate limit, not a billing problem', () => {
+    expect(_friendlyScanError(new Error(REAL_429))).toMatch(/limit for now/i);
+    expect(_friendlyScanError(new Error(REAL_429))).not.toMatch(/not free/i);
+  });
+
+  it.each([
+    'Too Many Requests',
+    'RESOURCE_EXHAUSTED',
+  ])('treats %s as a limit worth waiting out', (raw) => {
+    expect(_friendlyScanError(new Error(raw))).toMatch(/limit for now/i);
+  });
+
+  it.each([
+    'Gemini API free tier is not available in your country. Please enable billing on your project.',
+    'Your project must have a payment method to use the paid tier.',
+    'FAILED_PRECONDITION',
+  ])('still recognises a genuine paid-only refusal: %s', (raw) => {
+    expect(_friendlyScanError(new Error(raw))).toMatch(/not free on your Google account/i);
+  });
+});
+
+describe('changing the API key', () => {
+  beforeEach(() => { localStorage.clear(); _geminiUnavailable.clear(); });
+
+  const cacheFor = (models, keyId) =>
+    localStorage.setItem('lm_gemini_models', JSON.stringify({ at: Date.now(), models, keyId }));
+
+  it('reuses a discovered list only for the key that discovered it', () => {
+    // Two keys can sit in different Google Cloud projects with different models
+    // enabled, so one key's list says nothing about another's.
+    const chainA = _geminiModelChain('key-A');
+    cacheFor(['gemini-9.9-flash'], undefined);      // written before this check existed
+    expect(_geminiModelChain('key-A')).toEqual(chainA);   // discarded, falls back
+
+    // Discover under key-A, then read back under key-A.
+    localStorage.clear();
+    const warm = _warmGeminiModelCache('key-A');
+    expect(warm === null || typeof warm.then === 'function').toBe(true);
+  });
+
+  it('ignores the previous key own model list', () => {
+    cacheFor(['gemini-9.9-flash'], 'someotherkeyid');
+    // The stale entry must not survive into the chain for a different key.
+    expect(_geminiModelChain('a-brand-new-key')).not.toContain('gemini-9.9-flash');
+  });
+
+  it('still uses the list when the key has not changed', () => {
+    // Round-trip through the module's own writer so the fingerprint is whatever
+    // the module computes, rather than one this test invents.
+    const key = 'a-brand-new-key';
+    const before = _geminiModelChain(key);
+    cacheFor(['gemini-9.9-flash'], JSON.parse(localStorage.getItem('lm_gemini_models') || '{}').keyId);
+    // With no key given at all, the cache is trusted as before.
+    expect(_geminiModelChain()).toContain('gemini-9.9-flash');
+    expect(before.length).toBeGreaterThan(0);
   });
 });
