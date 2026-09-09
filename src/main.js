@@ -7530,6 +7530,19 @@ function applyWebsiteSaleToState(targetState, qty, price) {
   targetState.chStats['Website'].revenue += qty * price;
 }
 
+// Shared by applyOne() and commitRecoveredWebsiteOrder(): both record the
+// order number as seen in scan memory and un-cancel it if it was previously
+// marked cancelled. Does not call saveScanMemory() — the caller does that
+// once it's finished mutating mem.
+function recordOrderNumApplied(mem, orderNum, { touchLastScan = false } = {}) {
+  if (!mem.appliedNums) mem.appliedNums = [];
+  if (!mem.appliedNums.includes(orderNum)) mem.appliedNums.push(orderNum);
+  if (mem.cancelledNums) {
+    mem.cancelledNums = mem.cancelledNums.filter(num => num !== orderNum);
+  }
+  if (touchLastScan) mem.lastScan = new Date().toISOString();
+}
+
 export function applyOne(id, { deferRender = false } = {}) {
   const o = orders.find(x => x.id === id);
   if (!o) return;
@@ -7570,13 +7583,7 @@ export function applyOne(id, { deferRender = false } = {}) {
   _appliedIdsCache = null;
   // Save scan memory — record this order num as seen
   const mem = getScanMemory();
-  if (!mem.appliedNums) mem.appliedNums = [];
-  if (!mem.appliedNums.includes(o.orderNum)) mem.appliedNums.push(o.orderNum);
-  // Also remove from cancelledNums if it was cancelled
-  if (mem.cancelledNums) {
-    mem.cancelledNums = mem.cancelledNums.filter(num => num !== o.orderNum);
-  }
-  mem.lastScan = new Date().toISOString();
+  recordOrderNumApplied(mem, o.orderNum, { touchLastScan: true });
   saveScanMemory(mem);
   syncToSheets({ type: 'order', book: targetBk.title, date: entry.date, num: o.orderNum, chan: 'Website', qty: o.qty, price, total: o.qty * price, stockAfter: targetState.stock, notes: 'Big Cartel', sheetsId: entry.sheetsId, currency: getBookCurrencyCode(targetBk) });
   if (entry.shippingPaid > 0) {
@@ -7620,9 +7627,7 @@ export function commitRecoveredWebsiteOrder(bookId, form, buildEntry) {
   // Record the number as seen so a later Gmail scan that finally turns up the
   // original confirmation email doesn't offer it as a new order to apply.
   const mem = getScanMemory();
-  if (!mem.appliedNums) mem.appliedNums = [];
-  if (!mem.appliedNums.includes(entry.num)) mem.appliedNums.push(entry.num);
-  if (mem.cancelledNums) mem.cancelledNums = mem.cancelledNums.filter(num => num !== entry.num);
+  recordOrderNumApplied(mem, entry.num);
   saveScanMemory(mem);
 
   syncToSheets({
