@@ -648,7 +648,7 @@ import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirect
 import { posStockView, posOversellSummary } from './lib/pos-stock.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores, consignmentLedgerTotals, storeBalanceSlug, storeBalanceComparison } from './lib/consignment.js';
 import { deriveInvoiceBookIds, invoicesForBook, findInvoiceAcrossBooks, otherBookTitles, lineItemBookId, invoiceBookSplit, invoiceShareForBook, neutralInvoicePrefix, invoiceNumberPrefix, nextInvoiceSeq, buildInvoiceNumber, BILL_TO_STORE, BILL_TO_PERSON, invoiceBillToMode, billToPayload, billToPersonFrom } from './lib/invoices.js';
-import { reminderSettings, reminderBlockReason, invoiceReminderState, dueForReminder, buildReminderEmail, canSendNow, daysLate, describeReminderSweep, describeReminderArming } from './lib/payment-reminders.js';
+import { reminderSettings, reminderBlockReason, invoiceReminderState, dueForReminder, dueForReminderTomorrow, buildReminderEmail, canSendNow, daysLate, describeReminderSweep, describeReminderArming, describeReminderNotice, sampleReminderInvoice } from './lib/payment-reminders.js';
 import { LEDGER_TYPE_FILTERS, emptyLedgerFilter, ledgerFilterIsActive, ledgerStoreOptions, filterLedgerEntries, ledgerTypeCounts, describeLedgerFilter, ledgerTotalsScope } from './lib/consignment-ledger-filter.js';
 import { filterHistoryRows, historySearchIsActive, describeHistorySearch } from './lib/order-history-search.js';
 import { resolveCountryCode } from './lib/countries.js';
@@ -20887,10 +20887,223 @@ async function sweepPaymentReminders() {
   return { sent, failed };
 }
 
+// ── THE DAY BEFORE ──────────────────────────────────────────────────────────
+//
+// The sweep above only knows about money that arrived through the payment link.
+// A shop that paid by bank transfer, or handed cash over at a fair, is still
+// "sent" here until it is marked paid — and would be chased for money already
+// handed over. So before any of that happens, say who is about to be chased
+// while there is still a day to stop it.
+
+const REMINDER_NOTICE_KEY = 'lm-invoice-reminder-notice';
+
+/** Has the heads-up already been given today, from this browser? */
+function reminderNoticeShownToday() {
+  try { return localStorage.getItem(REMINDER_NOTICE_KEY) === today(); }
+  catch (_) { return false; }
+}
+
+function markReminderNoticeShown() {
+  try { localStorage.setItem(REMINDER_NOTICE_KEY, today()); }
+  catch (_) { /* private mode — a repeated card is the harmless failure here */ }
+}
+
+/** Everything across every book that tomorrow's sweep would chase. */
+function invoicesDueTomorrow(days) {
+  const out = [];
+  for (const bookId of Object.keys(states || {})) {
+    if (isTestBookId(bookId)) continue;
+    for (const inv of dueForReminderTomorrow((states[bookId] || {}).invoices || [], { today: today(), days })) {
+      out.push({ bookId, inv });
+    }
+  }
+  out.sort((a, b) => String(a.inv.dueDate || '').localeCompare(String(b.inv.dueDate || '')));
+  return out;
+}
+
+/**
+ * The morning heads-up.
+ *
+ * Runs whatever the hour, unlike the sweep: this sends nothing, and the whole
+ * point is that it is waiting before the 9am send window opens. Once per
+ * calendar day, so an app left open all day doesn't repaint it hourly.
+ */
+function noticeUpcomingReminders() {
+  const cfg = reminderSettings(getInvoiceSettings());
+  // A warning about automatic chasing is noise when nothing will be sent.
+  if (!cfg.auto) return null;
+  if (reminderNoticeShownToday()) return null;
+
+  const batch = invoicesDueTomorrow(cfg.days);
+  if (!batch.length) return null;
+
+  const said = describeReminderNotice({ count: batch.length });
+  if (!said) return null;
+  pushAppAlert({
+    id: 'invoice-reminders-tomorrow',
+    icon: '📋',
+    title: said.title,
+    detail: said.detail,
+    tone: SYNC_TONES.PENDING,
+    actionLabel: 'Review them',
+    action: 'openReminderReview()',
+  });
+  markReminderNoticeShown();
+  return { count: batch.length };
+}
+
+// ── THE REVIEW LIST ─────────────────────────────────────────────────────────
+// Who is about to be chased, with the two ways out of it: this one already
+// paid, or this one has promised a date. Both call the existing behaviour —
+// there is exactly one writer of `inv.status = 'paid'` in this app and this
+// list must not become the second.
+
+function openReminderReview() {
+  renderReminderReview();
+  openM('reminder-review');
+}
+
+function renderReminderReview() {
+  const host = $('reminder-review-body');
+  if (!host) return;
+  const cfg = reminderSettings(getInvoiceSettings());
+  const batch = invoicesDueTomorrow(cfg.days);
+  const count = $('reminder-review-count');
+
+  if (!batch.length) {
+    if (count) count.textContent = 'Nothing waiting';
+    host.innerHTML = `<div class="empty-state"><div class="e-icon">✅</div>Nothing to review — everyone due a reminder is squared away.<div style="margin-top:8px;font-size:12px;color:var(--text3);">Invoices appear here the day before the app would chase them.</div></div>`;
+    return;
+  }
+
+  if (count) count.textContent = `${batch.length} invoice${batch.length === 1 ? '' : 's'} · chased tomorrow`;
+  const manyBooks = new Set(batch.map(r => r.bookId)).size > 1;
+  host.innerHTML = `<div class="tbl-wrap"><table class="tbl" style="font-size:12px;">
+    <thead><tr><th>Customer</th><th>Invoice</th><th class="r">Amount</th><th class="r">Late</th><th></th></tr></thead>
+    <tbody>${batch.map(({ bookId, inv }) => {
+    const late = daysLate(inv, today());
+    const book = BOOKS[bookId];
+    return `<tr>
+        <td style="font-weight:600;">${escapeHtml(inv.storeName) || '—'}<div style="font-size:11px;color:var(--text3);font-weight:400;">${escapeHtml(inv.storeEmail) || 'no email'}${manyBooks && book ? ' · ' + escapeHtml(book.title) : ''}</div></td>
+        <td class="mono-num" style="font-size:11px;">${escapeHtml(inv.num)}<div style="font-size:11px;color:var(--text3);">due ${escapeHtml(fmtD(inv.dueDate))}</div></td>
+        <td class="r mono-num" style="font-weight:600;">${escapeHtml(invoiceAmountLabel(inv))}</td>
+        <td class="r"><span class="pill amber">● ${late || 0}d</span></td>
+        <td style="white-space:nowrap;text-align:right;">
+          <button class="btn sm gold" onclick="reminderReviewMarkPaid('${escapeHtml(inv.id)}')" title="They already paid — settle it and send nothing">✓ Paid</button>
+          <button class="btn sm" style="margin-left:4px;" onclick="reminderReviewHoldOff('${escapeHtml(inv.id)}')" title="They told you when they'll pay — hold off until then">📅 Hold off</button>
+        </td>
+      </tr>`;
+  }).join('')}</tbody>
+  </table></div>`;
+}
+
+/** Settle one from the list — the same write-chain the invoice view uses. */
+async function reminderReviewMarkPaid(id) {
+  const { inv, bookId, s } = invoiceHome(id);
+  if (!inv) return;
+  if (!(await confirmDialog(
+    `Mark ${inv.num} as PAID? ${inv.storeName || 'They'} will not be chased, and any linked pending consignment sales are marked paid too.`,
+    { okLabel: 'Mark paid' },
+  ))) return;
+  applyInvoicePaid(inv, bookId, s);
+  renderReminderReview();
+  renderInvoices();
+  renderStores();
+  renderLedger();
+  renderHist();
+  updateDash();
+  showToast(`✓ ${inv.num} marked paid`);
+}
+
+/** Hold off on one from the list, on a date they gave you. */
+async function reminderReviewHoldOff(id) {
+  const { inv, bookId } = invoiceHome(id);
+  if (!inv) return;
+  const suggested = inv.remindAfter || (() => {
+    const d = new Date(); d.setDate(d.getDate() + 14);
+    return d.toISOString().split('T')[0];
+  })();
+  const picked = await promptDialog(
+    `When did ${inv.storeName || 'they'} say they would pay ${inv.num}? No reminder goes out before then.`,
+    suggested,
+    { title: 'Promised to pay', okLabel: 'Save date', inputType: 'date' },
+  );
+  if (picked === null) return;
+  const value = String(picked).trim();
+  if (value && !/^\d{4}-\d{2}-\d{2}$/.test(value)) { showToast('That is not a date I can read', 'warn'); return; }
+  inv.remindAfter = value;
+  saveState(bookId);
+  renderReminderReview();
+  renderInvoices();
+  showToast(value ? `✓ Holding off on ${inv.num} until ${fmtD(value)}` : `✓ ${inv.num} is back in the chasing list`);
+}
+
+/**
+ * Send the reminder to yourself.
+ *
+ * Reads the settings out of the FORM rather than out of storage, so the wording
+ * can be tweaked and re-tested without saving first — the point is to read what
+ * a customer would receive before any customer does.
+ *
+ * Writes nothing at all: no reminder logged, no daily count, no state saved. A
+ * test is not a chase, and an invoice borrowed as the sample must not fall out
+ * of the queue because it was previewed.
+ */
+async function sendTestReminderEmail() {
+  if (!sheetsUrl) { showToast('Connect your Google Sheet first — that is what sends the mail', 'warn'); return; }
+
+  const stored = getInvoiceSettings();
+  const cfg = reminderSettings({
+    remindAuto: true,
+    remindDays: $('ivs-remind-days') ? $('ivs-remind-days').value : stored.remindDays,
+    remindMsg: $('ivs-remind-msg') ? $('ivs-remind-msg').value : stored.remindMsg,
+  });
+
+  let to = ($('ivs-email') ? $('ivs-email').value : stored.email || '').trim();
+  if (!to) {
+    const asked = await promptDialog(
+      'Where should the test go? Nobody else receives it.',
+      '',
+      { title: 'Send me a test reminder', okLabel: 'Send', placeholder: 'you@email.com', inputType: 'email' },
+    );
+    if (asked === null) return;
+    to = String(asked).trim();
+  }
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) { showToast('That does not look like an email address', 'warn'); return; }
+
+  // A real late invoice reads more honestly than a made-up one; the sample is
+  // only there so the button still works before anything is overdue.
+  const real = invoicesAwaitingReminder(cfg.days, 1)[0]
+    || invoicesDueTomorrow(cfg.days)[0]
+    || null;
+  const inv = real ? real.inv : sampleReminderInvoice({ today: today(), days: cfg.days });
+  // Works for the sample too: with no id to locate, invoiceOwnerBook falls back
+  // to the book on screen, so the amount reads in the currency she works in.
+  const amountLabel = invoiceAmountLabel(inv);
+
+  const mail = buildReminderEmail(inv, {
+    settings: cfg,
+    payLink: real ? (effectivePaymentLink(inv) || '') : 'https://buy.stripe.com/example',
+    today: today(),
+    publisher: ($('ivs-name') ? $('ivs-name').value : stored.name) || 'Lyricalmyrical Books',
+    amountLabel,
+  });
+
+  showToast('Sending your test reminder…');
+  try {
+    await sendSingleEmailViaBackend(to, `[TEST] ${mail.subject}`, mail.text, stored.email || '', mail.html);
+    showToast(`✓ Test reminder sent to ${to}${real ? '' : ' (using a sample invoice)'}`, 'ok', 5000);
+  } catch (error) {
+    showToast(`Could not send the test: ${String((error && error.message) || error)}`, 'err', 5000);
+  }
+}
+
 function startPaymentReminderWatch() {
   if (_reminderWatchStarted || typeof window === 'undefined') return;
   _reminderWatchStarted = true;
-  startWatch(() => { sweepPaymentReminders(); }, { intervalMs: REMINDER_WATCH_INTERVAL_MS });
+  // The heads-up first: it sends nothing, runs at any hour, and its whole
+  // purpose is to be waiting before the sweep's send window opens.
+  startWatch(() => { noticeUpcomingReminders(); sweepPaymentReminders(); }, { intervalMs: REMINDER_WATCH_INTERVAL_MS });
 }
 
 /** Chase this invoice now, whatever the automatic setting says. */
@@ -22844,6 +23057,7 @@ Object.assign(window, {
   onInvoiceStoreChange, setInvoiceBillToMode, prefillFromPendingSales, recalcInvoiceTotals,
   saveInvoice, deleteInvoice, editInvoiceFromView, markInvoicePaidFromView,
   remindInvoiceFromView, snoozeInvoiceFromView,
+  openReminderReview, reminderReviewMarkPaid, reminderReviewHoldOff, sendTestReminderEmail,
   printInvoice, copyInvoicePayLink, emailInvoice, downloadInvoiceHTML, downloadInvoicePDF,
   openInvoiceTemplateSettings, saveInvoiceSettings,
   regenerateStripeLinkFromView, onInvoiceCurrencyChange,

@@ -4874,11 +4874,44 @@
     <div class="form-group" style="margin-bottom:0;"><label for="ivs-remind-msg">Your message (the invoice number, amount and pay link are added for you)</label>
       <textarea id="ivs-remind-msg" rows="2" placeholder="Just a gentle nudge in case this one slipped through…"></textarea>
     </div>
+    <div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <button class="btn sm ink" type="button" id="ivs-remind-test" onclick="sendTestReminderEmail()">✉ Send me a test reminder</button>
+      <div style="font-size:10px;color:var(--text3);line-height:1.5;flex:1 1 200px;min-width:0;">
+        Emails a real reminder to you, using the wording above even before you save it — so you can read exactly what a customer gets. Its subject is marked <strong>[TEST]</strong>, and no invoice is touched or counted as chased.
+      </div>
+    </div>
   </div>
 
   <div class="modal-footer" role="dialog" aria-modal="true">
     <button class="btn" onclick="attemptCloseModal('invoice-settings')">Cancel</button>
     <button class="btn gold" onclick="saveInvoiceSettings()">Save settings</button>
+  </div>
+</div></div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- WHO GETS CHASED TOMORROW                               -->
+<!-- The day-before review: the app only sees money that     -->
+<!-- came through the payment link, so this is the chance to -->
+<!-- clear anyone who paid by transfer or cash before a      -->
+<!-- reminder goes out to them.                              -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="overlay no-print" id="m-reminder-review" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:680px;">
+  <div class="modal-title" role="dialog" aria-modal="true">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">📋</span>
+      <span>Chased tomorrow</span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('reminder-review')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+  </div>
+  <div style="font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.6;">
+    These customers get an automatic reminder tomorrow. If any of them have already paid you by bank transfer or in cash, mark them paid now and nothing is sent.
+    <div id="reminder-review-count" style="margin-top:6px;font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--text3);"></div>
+  </div>
+
+  <div id="reminder-review-body"></div>
+
+  <div class="modal-footer" role="dialog" aria-modal="true">
+    <button class="btn" onclick="attemptCloseModal('reminder-review')">Close</button>
   </div>
 </div></div>
 
