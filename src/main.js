@@ -228,6 +228,13 @@ import {
   verdictSettles,
 } from './lib/invoice-payments.js';
 import {
+  STRIPE_FEE_INTERVAL_MS,
+  describeFeeSweep,
+  dueForFeeSweep,
+  feeSweepFromYear,
+  startOfYear,
+} from './lib/stripe-fee-schedule.js';
+import {
   THEME_LABELS,
   THEME_PREFERENCES,
   applyThemeToDocument,
@@ -15810,6 +15817,9 @@ async function boot(forcedBook) {
         // invoice through the Stripe link. Started after the books load because
         // settling an invoice reaches into its own book's ledger.
         startStripeInvoiceWatch();
+        // And the money Stripe keeps: its processing fees, filed every fortnight
+        // and whenever a year has ended since the last run.
+        startStripeFeeWatch();
         // And the other direction: money that hasn't come in. Started after the
         // Stripe watch so an invoice that was paid through its link is settled
         // before anybody gets chased for it.
@@ -19444,13 +19454,18 @@ function _stripeFmtMoney(amt, cur) {
   return `${sign}${cur ? cur + ' ' : ''}${abs.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-async function fetchStripeTransactions(key, onProgress) {
+async function fetchStripeTransactions(key, onProgress, { since = 0 } = {}) {
   const allTxns = [];
   let count = 0;
   let starting_after = null;
 
   while (true) {
     const params = new URLSearchParams({ limit: '100' });
+    // The manual tool asks for every transaction the account has ever had and
+    // passes nothing here. A job running on its own only ever rewrites the
+    // years it is allowed to touch, so it bounds the window to those — the
+    // difference between a handful of requests and every page since day one.
+    if (since > 0) params.set('created[gte]', String(Math.floor(since / 1000)));
     if (starting_after) params.set('starting_after', starting_after);
     const resp = await fetch(`https://api.stripe.com/v1/balance_transactions?${params.toString()}`, {
       headers: { 'Authorization': 'Bearer ' + key }
@@ -19718,21 +19733,22 @@ async function fetchStripeFeesByYear() {
 // year+currency, categorized as "Sales Processing Fees" and converted to CAD at
 // the year-end rate. Idempotent: re-running upserts by ref "stripe-fees:<yr>:<cur>"
 // so the current year's running total is refreshed without duplicating.
-async function insertStripeFeesIntoLedger() {
-  let rows = window._stripeFeesLedgerData || [];
-  if (!rows.length) { showToast('Run "Fetch fees" first.', 'warn'); return; }
+//
+// Split into three because the fortnightly background job needs the middle two
+// without the first: planning is where the money is worked out, writing is
+// where it lands, and the interactive wrapper is the confirmation dialog and
+// the DOM around them. One planner and one writer, two callers.
 
-  // Optional year filter so the user can insert just one year at a time.
-  const yearSel = document.getElementById('stripe-fees-year');
-  const yearFilter = yearSel && yearSel.value !== 'all' ? Number(yearSel.value) : null;
-  if (yearFilter != null) rows = rows.filter(r => r.year === yearFilter);
+/**
+ * Work out the ledger rows a set of aggregated Stripe years should produce.
+ *
+ * Async because the currency conversion is fetched: a closed year is converted
+ * at ITS year-end rate, a year still running at today's. That distinction is
+ * the whole reason a year has to be re-filed once it ends.
+ */
+async function planStripeFeeRows(rows, { now = Date.now() } = {}) {
+  const currentYear = new Date(now).getFullYear();
 
-  if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
-  if (!TAX_CENTER.settings) TAX_CENTER.settings = {};
-  const currentYear = new Date().getFullYear();
-
-  // CAD rate for a year+currency: year-end rate for closed years, today's for the
-  // current (still-accruing) year, with live then cached fallbacks.
   const rateFor = async (cur, year) => {
     if (cur === 'CAD') return 1;
     const fxDate = year < currentYear ? `${year}-12-31` : today();
@@ -19775,6 +19791,56 @@ async function insertStripeFeesIntoLedger() {
       });
     }
   }
+  return planned;
+}
+
+/**
+ * File planned fee rows into the ledger, upserting by ref.
+ *
+ * Deliberately does NOT save or re-render: the caller decides, so a background
+ * run that plans nothing never touches the tax document. saveTaxCenter()
+ * serialises the whole ledger, and calling it on an idle poll is the defect
+ * this app has already shipped once.
+ */
+function writeStripeFeeRows(planned) {
+  if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
+  if (!TAX_CENTER.settings) TAX_CENTER.settings = {};
+
+  const byRef = new Map((TAX_CENTER.businessExpenses || [])
+    .filter(e => e && typeof e.ref === 'string' && (e.ref.startsWith('stripe-fees:') || e.ref.startsWith('stripe-billing:')))
+    .map(e => [e.ref, e]));
+
+  let inserted = 0, updated = 0;
+  for (const p of planned) {
+    const existing = byRef.get(p.ref);
+    if (existing) {
+      Object.assign(existing, {
+        desc: p.desc, cat: p.cat, currency: p.currency, amount: p.amount,
+        origCurrency: p.origCurrency, origAmount: p.origAmount,
+        fxRate: p.fxRate, baseAmount: p.baseAmount, date: p.date,
+      });
+      updated++;
+    } else {
+      const { year: _y, ...rest } = p;
+      TAX_CENTER.businessExpenses.unshift({ id: Date.now() + inserted + 1, ...rest, receipt: '', trip: '' });
+      inserted++;
+    }
+  }
+  const totalCad = planned.reduce((s, p) => s + (p.baseAmount || 0), 0);
+  if (inserted || updated) TAX_CENTER.settings.stripeFeesLastImportAt = new Date().toISOString();
+  return { inserted, updated, totalCad };
+}
+
+async function insertStripeFeesIntoLedger() {
+  let rows = window._stripeFeesLedgerData || [];
+  if (!rows.length) { showToast('Run "Fetch fees" first.', 'warn'); return; }
+
+  // Optional year filter so the user can insert just one year at a time.
+  const yearSel = document.getElementById('stripe-fees-year');
+  const yearFilter = yearSel && yearSel.value !== 'all' ? Number(yearSel.value) : null;
+  if (yearFilter != null) rows = rows.filter(r => r.year === yearFilter);
+
+  const planned = await planStripeFeeRows(rows);
   if (!planned.length) { showToast('No Stripe fees to insert for that selection.', 'warn'); return; }
 
   const byRef = new Map((TAX_CENTER.businessExpenses || [])
@@ -19797,29 +19863,130 @@ async function insertStripeFeesIntoLedger() {
   );
   if (!accept) { showToast('Stripe fee insertion cancelled', 'warn'); return; }
 
-  let inserted = 0, updated = 0;
-  for (const p of planned) {
-    const existing = byRef.get(p.ref);
-    if (existing) {
-      Object.assign(existing, {
-        desc: p.desc, cat: p.cat, currency: p.currency, amount: p.amount,
-        origCurrency: p.origCurrency, origAmount: p.origAmount,
-        fxRate: p.fxRate, baseAmount: p.baseAmount, date: p.date,
-      });
-      updated++;
-    } else {
-      const { year: _y, ...rest } = p;
-      TAX_CENTER.businessExpenses.unshift({ id: Date.now() + inserted + 1, ...rest, receipt: '', trip: '' });
-      inserted++;
-    }
-  }
-
-  TAX_CENTER.settings.stripeFeesLastImportAt = new Date().toISOString();
+  const { inserted, updated } = writeStripeFeeRows(planned);
   await saveTaxCenter();
   renderTaxCenter();
   showToast(`✓ Stripe fees: ${inserted} added${updated ? `, ${updated} updated` : ''}`, 'ok');
   const statusEl = document.getElementById('stripe-fees-status');
   if (statusEl) statusEl.innerHTML += `<br><span style="color:var(--green);">Ledger updated: ${inserted} added${updated ? `, ${updated} updated` : ''} (${totalCad.toFixed(2)} CAD).</span>`;
+}
+
+// ─── Stripe fees, filed on a fortnightly clock ────────────────────────────
+//
+// Everything above is the manual tool: paste a key, press Fetch, press Insert,
+// confirm a dialog. It works, and it only ever happens when the publisher
+// remembers — which for a figure that matters once a year, at tax time, means
+// the year's card fees are usually months out of date and last year's were
+// never closed off at all.
+//
+// Two obligations, both in lib/stripe-fee-schedule.js: every fortnight, and
+// whenever a calendar year has ended since the last run. The second is not
+// "run on the 31st of December" — a web page cannot run on a day nobody opens
+// it. It is "never let a year end without a run covering it", which the filing
+// code turns into the thing that actually matters: a closed year is re-dated to
+// the 31st and re-converted at that day's exchange rate, instead of keeping
+// whatever mid-December date and rate it happened to be filed with.
+
+const STRIPE_FEE_LAST_KEY = 'lm-stripe-fee-sweep-last';
+
+let _stripeFeeWatchStarted = false;
+let _stripeFeeSweeping = false;
+
+function readStripeFeeStamp() {
+  try { return Number(localStorage.getItem(STRIPE_FEE_LAST_KEY)) || 0; } catch (_) { return 0; }
+}
+
+function writeStripeFeeStamp(at) {
+  // Browser storage, deliberately, not the tax document: this is written on
+  // every run including the ones that file nothing, and saveTaxCenter()
+  // serialises the whole ledger. TAX_CENTER keeps stripeFeesLastImportAt, which
+  // records the last time money actually moved.
+  try { localStorage.setItem(STRIPE_FEE_LAST_KEY, String(at)); } catch (_) { /* private mode */ }
+}
+
+/** The card announcing fees that filed themselves. */
+function showStripeFeeAlert(said) {
+  if (!said) return;
+  pushAppAlert({
+    id: 'stripe-fee-sweep',
+    icon: said.yearEnd ? '📅' : '💳',
+    title: said.title,
+    detail: said.detail,
+    tone: '',
+    actionLabel: 'Open Tax Centre',
+    action: "switchTab('taxcenter')",
+  });
+}
+
+/**
+ * Ask Stripe what its fees came to, and file them.
+ *
+ * Returns what it filed, or null when it was not due or could not run.
+ */
+async function sweepStripeFees({ force = false } = {}) {
+  // Publisher only: the Stripe key is publisher-only in the security rules, and
+  // an author must never trigger a write to the shared ledger.
+  if (!window.IS_PUBLISHER || isAuthor()) return null;
+
+  const key = getReconStripeKey();
+  const configured = !!key && /^(rk|sk)_/.test(key);
+  const { online, visible } = browserWatchState();
+  const lastRunAt = readStripeFeeStamp();
+  const now = Date.now();
+
+  const owed = dueForFeeSweep({
+    lastRunAt,
+    now,
+    intervalMs: effectiveInterval(
+      STRIPE_FEE_INTERVAL_MS,
+      integrationBackoffMs('stripe-fees', STRIPE_FEE_INTERVAL_MS),
+    ),
+  });
+  // The schedule says whether a run is owed; the gates say whether it can
+  // happen at all. A year-end run that is owed while the laptop is shut is
+  // still owed when it opens — which is the whole point of the boundary rule.
+  const gatesOk = configured && online && !_stripeFeeSweeping && (force || visible);
+  if (!gatesOk || (!force && !owed.due)) return null;
+
+  _stripeFeeSweeping = true;
+  try {
+    const fromYear = feeSweepFromYear({ lastRunAt, now });
+    const txns = await fetchStripeTransactions(key, null, { since: startOfYear(fromYear) });
+    const { ledgerData } = aggregateStripeTransactions(txns);
+
+    // Only the years this run is entitled to rewrite. Anything older was closed
+    // and filed already, and a background job is for keeping the books current,
+    // not for quietly restating history.
+    const rows = (ledgerData || []).filter(r => r.year >= fromYear);
+    const planned = await planStripeFeeRows(rows, { now });
+
+    writeStripeFeeStamp(Date.now());
+    noteIntegrationSuccess('stripe-fees');
+    if (!planned.length) return { inserted: 0, updated: 0, totalCad: 0 };
+
+    const result = writeStripeFeeRows(planned);
+    if (result.inserted || result.updated) {
+      await saveTaxCenter().catch(e => console.warn('Stripe fee sweep save failed', e));
+      renderTaxCenter();
+      showStripeFeeAlert(describeFeeSweep({ ...result, reason: force ? 'interval' : owed.reason }));
+    }
+    return result;
+  } catch (error) {
+    console.warn('Stripe fee sweep failed', error);
+    noteIntegrationFailure('stripe-fees', error, { online, configured });
+    return null;
+  } finally {
+    _stripeFeeSweeping = false;
+  }
+}
+
+function startStripeFeeWatch() {
+  if (_stripeFeeWatchStarted || typeof window === 'undefined') return;
+  _stripeFeeWatchStarted = true;
+  // Polled hourly rather than fortnightly: the schedule itself decides what is
+  // owed, and a fortnightly timer would sail straight past the 31st of December
+  // on a laptop that was shut for the holidays.
+  startWatch(() => { sweepStripeFees(); }, { intervalMs: 60 * 60 * 1000 });
 }
 
 // Compare what Stripe says you collected (gross customer payments, converted to
@@ -23998,10 +24165,12 @@ window.recheckIntegration = (id) => {
   if (id === 'canadapost') return sweepCanadaPostShipments({ force: true });
   if (id === 'shipping-email') return sweepShippingEmails({ force: true });
   if (id === 'stripe') return sweepStripeInvoicePayments({ force: true });
+  if (id === 'stripe-fees') return sweepStripeFees({ force: true });
   return undefined;
 };
 window.openInvoiceFromAlert = openInvoiceFromAlert;
 window.sweepStripeInvoicePayments = sweepStripeInvoicePayments;
+window.sweepStripeFees = sweepStripeFees;
 window.linkConfidentShippingMatchesNow = linkConfidentShippingMatchesNow;
 window.openShippingReconciliationFromAlert = openShippingReconciliationFromAlert;
 window.shipNewOrderFromAlert = shipNewOrderFromAlert;
