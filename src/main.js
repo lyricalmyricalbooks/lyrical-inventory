@@ -648,6 +648,7 @@ import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirect
 import { posStockView, posOversellSummary } from './lib/pos-stock.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores, consignmentLedgerTotals, storeBalanceSlug, storeBalanceComparison } from './lib/consignment.js';
 import { deriveInvoiceBookIds, invoicesForBook, findInvoiceAcrossBooks, otherBookTitles, lineItemBookId, invoiceBookSplit, invoiceShareForBook, neutralInvoicePrefix, invoiceNumberPrefix, nextInvoiceSeq, buildInvoiceNumber, BILL_TO_STORE, BILL_TO_PERSON, invoiceBillToMode, billToPayload, billToPersonFrom } from './lib/invoices.js';
+import { reminderSettings, reminderBlockReason, invoiceReminderState, dueForReminder, buildReminderEmail, canSendNow, daysLate, describeReminderSweep, describeReminderArming } from './lib/payment-reminders.js';
 import { LEDGER_TYPE_FILTERS, emptyLedgerFilter, ledgerFilterIsActive, ledgerStoreOptions, filterLedgerEntries, ledgerTypeCounts, describeLedgerFilter, ledgerTotalsScope } from './lib/consignment-ledger-filter.js';
 import { filterHistoryRows, historySearchIsActive, describeHistorySearch } from './lib/order-history-search.js';
 import { resolveCountryCode } from './lib/countries.js';
@@ -9698,9 +9699,35 @@ function openInvoiceTemplateSettings() {
   if ($('ivs-stripe-key')) $('ivs-stripe-key').value = s.stripeKey || '';
   if ($('ivs-stripe-auto')) $('ivs-stripe-auto').checked = s.stripeAuto !== false; // default ON
   if ($('ivs-stripe-test')) $('ivs-stripe-test').checked = !!s.stripeTest;
+  // Reminders are off until the publisher deliberately arms them — this one
+  // sends email to customers, so it must never arrive switched on.
+  const rem = reminderSettings(s);
+  if ($('ivs-remind-auto')) $('ivs-remind-auto').checked = rem.auto;
+  if ($('ivs-remind-days')) $('ivs-remind-days').value = String(rem.days);
+  if ($('ivs-remind-msg')) $('ivs-remind-msg').value = rem.message;
   openM('invoice-settings');
 }
-function saveInvoiceSettings() {
+async function saveInvoiceSettings() {
+  const prev = reminderSettings(getInvoiceSettings());
+  const wantsAuto = $('ivs-remind-auto') ? !!$('ivs-remind-auto').checked : false;
+  const next = reminderSettings({
+    remindAuto: wantsAuto,
+    remindDays: $('ivs-remind-days') ? $('ivs-remind-days').value : '',
+    remindMsg: $('ivs-remind-msg') ? $('ivs-remind-msg').value : '',
+  });
+
+  // Switching this on is the one setting here that reaches other people. Say
+  // how many customers hear from you as a result BEFORE saving it, because the
+  // answer on a shop with a year of unpaid invoices on file is not "none".
+  if (next.auto && !prev.auto) {
+    const pending = invoicesAwaitingReminder(next.days).length;
+    const ok = await confirmDialog(
+      describeReminderArming({ count: pending, days: next.days }),
+      { okLabel: pending ? `Yes, chase ${pending}` : 'Turn on', title: 'Automatic reminders' },
+    );
+    if (!ok) { if ($('ivs-remind-auto')) $('ivs-remind-auto').checked = false; return; }
+  }
+
   saveInvoiceSettingsObj({
     name: $('ivs-name').value.trim(),
     email: $('ivs-email').value.trim(),
@@ -9713,9 +9740,16 @@ function saveInvoiceSettings() {
     stripeKey: $('ivs-stripe-key') ? $('ivs-stripe-key').value.trim() : '',
     stripeAuto: $('ivs-stripe-auto') ? !!$('ivs-stripe-auto').checked : true,
     stripeTest: $('ivs-stripe-test') ? !!$('ivs-stripe-test').checked : false,
+    remindAuto: next.auto,
+    remindDays: next.days,
+    remindMsg: next.message,
   });
   closeM('invoice-settings');
   showToast('✓ Invoice settings saved');
+  // Don't make the publisher wait an hour to see the thing they just switched
+  // on do something. Nothing is sent outside the weekday daytime window either
+  // way — the sweep decides that, not this call.
+  if (next.auto && !prev.auto) sweepPaymentReminders();
 }
 
 // ── STRIPE DYNAMIC PAYMENT LINK (exact-amount Checkout per invoice) ─────
@@ -9903,8 +9937,22 @@ function renderInvoices() {
     const personChip = invoiceBillToMode(inv) === BILL_TO_PERSON
       ? `<span class="chip-status gray" title="Billed to a person, not a consignment store" style="margin-left:6px;font-size:9px;">\u{1F464} Person</span>`
       : '';
+    // What has been said to this customer about this bill, where the bill is
+    // listed — so a reminder is never sent twice by hand, and a promise to pay
+    // is visible without opening anything.
+    const remState = invoiceReminderState(inv);
+    const isSettled = inv.status === 'paid' || inv.status === 'cancelled';
+    let chaseChip = '';
+    if (!isSettled && remState.snoozedUntil && today() <= remState.snoozedUntil) {
+      chaseChip = `<span class="chip-status gray" title="They said they would pay by then — no reminder goes out before it" style="margin-left:6px;font-size:9px;">\u{1F4C5} Promised ${escapeHtml(fmtD(remState.snoozedUntil))}</span>`;
+    } else if (!isSettled && remState.lastStatus === 'failed') {
+      chaseChip = `<span class="chip-status red" title="The reminder email did not go out — open the invoice to try again" style="margin-left:6px;font-size:9px;">\u{23F0} Reminder failed</span>`;
+    } else if (remState.count) {
+      const when = remState.lastAt ? fmtD(new Date(remState.lastAt).toISOString().slice(0, 10)) : '';
+      chaseChip = `<span class="chip-status gray" title="A payment reminder was emailed to this customer" style="margin-left:6px;font-size:9px;">\u{23F0} Chased${when ? ' ' + escapeHtml(when) : ''}</span>`;
+    }
     return `<div class="invoice-card">
-      <div class="inv-c-num">${escapeHtml(inv.num)}${stripeChip}${personChip}${sharedChip}</div>
+      <div class="inv-c-num">${escapeHtml(inv.num)}${stripeChip}${personChip}${chaseChip}${sharedChip}</div>
       <div class="inv-c-store">${escapeHtml(inv.storeName) || '—'}<div class="inv-c-store-meta">${[inv.storeEmail, inv.storeCity].filter(Boolean).map(escapeHtml).join(' · ') || '—'}</div>${shareLine}</div>
       <div class="inv-c-cell">Issued<strong>${fmtD(inv.date)}</strong></div>
       <div class="inv-c-cell">Due<strong>${due}</strong></div>
@@ -10467,6 +10515,11 @@ function saveInvoice(status) {
       oldLedgerIds = (old.items || []).map(it => it._ledgerId).filter(Boolean);
       payload.paidAt = old.paidAt || null;
       payload.paidMethod = old.paidMethod || null;
+      // What was already said to this customer, and any date they promised to
+      // pay by. Editing an invoice must not wipe the chase history — losing it
+      // would let the same bill be chased a second time as if for the first.
+      if (Array.isArray(old.reminders) && old.reminders.length) payload.reminders = old.reminders;
+      if (old.remindAfter) payload.remindAfter = old.remindAfter;
       // preserve Stripe link only if amount/currency unchanged
       const amountChanged = (Number(old.total || 0).toFixed(2) !== Number(payload.total || 0).toFixed(2))
         || (old.currency !== payload.currency);
@@ -10651,7 +10704,7 @@ function viewInvoice(id) {
   if (!inv) { showToast('Invoice not found', 'err'); return; }
   currentViewInvoiceId = id;
   renderInvoiceSplitPanel(inv, home.bookId);
-  $('invoice-print-area').innerHTML = renderInvoicePaperHTML(inv);
+  $('invoice-print-area').innerHTML = renderInvoicePaperHTML(inv, { showChase: true });
   // Paid invoices show a non-clickable "✓ Paid" badge; unpaid ones keep the
   // clickable gold "✓ Mark paid" action. (Same element is reused across
   // invoices, so set the full state both ways.)
@@ -10674,6 +10727,19 @@ function viewInvoice(id) {
       mp.style.cursor = '';
       mp.style.opacity = '';
     }
+  }
+  // Chasing somebody for a bill they have already settled is the one mistake
+  // this whole feature must never make — so on a paid or withdrawn invoice the
+  // reminder actions are not merely discouraged, they are gone.
+  const settled = inv.status === 'paid' || inv.status === 'cancelled';
+  for (const id of ['inv-remind-btn', 'inv-snooze-btn']) {
+    const btn = $(id);
+    if (btn) btn.style.display = settled ? 'none' : '';
+  }
+  const remindBtn = $('inv-remind-btn');
+  if (remindBtn && !settled) {
+    const chased = invoiceReminderState(inv).count;
+    remindBtn.textContent = chased ? '⏰ Remind again' : '⏰ Remind now';
   }
   openM('invoice-view');
   // Render QR if QRCode library is available
@@ -10738,7 +10804,11 @@ function effectivePaymentLink(inv) {
 
 function isDynamicStripeLink(inv) { return !!(inv && inv.stripe && inv.stripe.url); }
 
-function renderInvoicePaperHTML(inv) {
+// `showChase` is the publisher's own view of the invoice. The same paper is
+// also what gets downloaded, printed and emailed to the customer, and how many
+// times you have chased them is not something to hand them a note about — so it
+// is opt-in, and only the on-screen preview opts in.
+function renderInvoicePaperHTML(inv, { showChase = false } = {}) {
   const settings = getInvoiceSettings();
   // The issuing book, so a shared invoice prints the same document whichever
   // title it was opened from rather than picking up the viewer's accent.
@@ -10767,6 +10837,22 @@ function renderInvoicePaperHTML(inv) {
   ].filter(Boolean).join(' · ') || 'See payment instructions below';
 
   const settlesLine = '';
+
+  // The chase record, shown where the invoice is read.
+  const chase = invoiceReminderState(inv);
+  const chaseNote = (() => {
+    if (!showChase) return '';
+    if (inv.status === 'paid' || inv.status === 'cancelled') return '';
+    if (chase.snoozedUntil && today() <= chase.snoozedUntil) {
+      return `<div class="inv-meta-sub no-print" style="margin-top:4px;">📅 Promised to pay by ${escapeHTML(fmtD(chase.snoozedUntil))}</div>`;
+    }
+    if (chase.lastStatus === 'failed') {
+      return `<div class="inv-meta-sub no-print" style="margin-top:4px;">⏰ The last reminder could not be sent</div>`;
+    }
+    if (!chase.count) return '';
+    const when = chase.lastAt ? fmtD(new Date(chase.lastAt).toISOString().slice(0, 10)) : '';
+    return `<div class="inv-meta-sub no-print" style="margin-top:4px;">⏰ Reminded ${chase.count === 1 ? 'once' : `${chase.count} times`}${when ? `, last on ${escapeHTML(when)}` : ''}</div>`;
+  })();
   const divergedNote = inv.ledgerDivergedAt
     ? `<div class="inv-meta-sub" style="margin-top:6px;color:var(--red);font-weight:600;">⚠ ledger changed since invoiced — reopen to re-import amounts</div>`
     : '';
@@ -10840,6 +10926,7 @@ function renderInvoicePaperHTML(inv) {
         <strong style="color:${statusCls === 'paid' ? '#1d7a4a' : '#0e0c0a'};font-size:18px;">${fmt(inv.total || 0, cur)}</strong>
         <div class="inv-meta-sub">${(inv.items || []).reduce((a, i) => a + (i.qty || 0), 0)} item${(inv.items || []).reduce((a, i) => a + (i.qty || 0), 0) === 1 ? '' : 's'}</div>
         ${settlesLine}
+        ${chaseNote}
         ${divergedNote}
       </div>
     </section>
@@ -15696,6 +15783,10 @@ async function boot(forcedBook) {
         // invoice through the Stripe link. Started after the books load because
         // settling an invoice reaches into its own book's ledger.
         startStripeInvoiceWatch();
+        // And the other direction: money that hasn't come in. Started after the
+        // Stripe watch so an invoice that was paid through its link is settled
+        // before anybody gets chased for it.
+        startPaymentReminderWatch();
         // A fault recorded before the last reload is still a fault. Painted
         // here so the mark is on the tab from the first render rather than
         // only after the next failed check.
@@ -20629,6 +20720,228 @@ function startStripeInvoiceWatch() {
   startWatch(() => { sweepStripeInvoicePayments(); }, { intervalMs: STRIPE_INVOICE_WATCH_INTERVAL_MS });
 }
 
+// ── CHASING A LATE INVOICE ──────────────────────────────────────────────────
+//
+// The counterpart to the sweep above: that one notices money arriving, this one
+// notices it not arriving. When an invoice is more days past due than the
+// publisher chose, the customer gets one polite email with a link to pay it.
+//
+// Deliberately started AFTER the Stripe sweep at boot, and it re-reads each
+// invoice's status the moment before sending: chasing somebody for an invoice
+// they paid an hour ago is worse than not chasing them at all.
+//
+// Every judgement — who qualifies, what it says, whether now is a decent hour —
+// lives in lib/payment-reminders.js. This is the part that can't be unit tested
+// because it touches the network and the store, so it is kept to the wiring.
+
+const REMINDER_WATCH_INTERVAL_MS = 60 * 60 * 1000;
+/** Sends per run, and per day. A mistake that mails five people is survivable. */
+const REMINDER_MAX_PER_RUN = 5;
+const REMINDER_MAX_PER_DAY = 20;
+const REMINDER_DAY_KEY = 'lm-invoice-reminder-day';
+
+let _reminderWatchStarted = false;
+let _reminderSweeping = false;
+
+/** How many were sent today, from this browser. Resets when the date changes. */
+function reminderDayCount() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(REMINDER_DAY_KEY) || '{}');
+    return raw && raw.day === today() ? (Number(raw.count) || 0) : 0;
+  } catch (_) { return 0; }
+}
+
+function bumpReminderDayCount(by = 1) {
+  try {
+    localStorage.setItem(REMINDER_DAY_KEY, JSON.stringify({ day: today(), count: reminderDayCount() + by }));
+  } catch (_) { /* private mode — the per-invoice log is the real guard */ }
+}
+
+/**
+ * Every invoice across every book that would be chased right now.
+ *
+ * Used both by the sweep and by the confirmation shown when the feature is
+ * switched on, so the number the publisher is warned about is the number that
+ * actually goes out.
+ */
+function invoicesAwaitingReminder(days, max = 0) {
+  const out = [];
+  for (const bookId of Object.keys(states || {})) {
+    if (isTestBookId(bookId)) continue;
+    const due = dueForReminder((states[bookId] || {}).invoices || [], { today: today(), days, max: 0 });
+    for (const inv of due) out.push({ bookId, inv });
+  }
+  out.sort((a, b) => String(a.inv.dueDate || '').localeCompare(String(b.inv.dueDate || '')));
+  return max > 0 ? out.slice(0, max) : out;
+}
+
+/** The amount owed, formatted in the invoice's own currency. */
+function invoiceAmountLabel(inv) {
+  const book = invoiceOwnerBook(inv);
+  return fmt(inv.total || 0, inv.currency || (book && book.currency) || '');
+}
+
+/**
+ * Send one reminder and write down that it happened.
+ *
+ * Stamped BEFORE the network call, deliberately. Two devices with the app open
+ * would otherwise both find the same invoice unchased and both email it; a
+ * stamp that lands first means the second one sees `already-chased`. The cost
+ * of that order is a reminder recorded as `failed` when the send throws, which
+ * shows on the invoice and can be retried by hand — much the better failure.
+ */
+async function sendInvoiceReminder(inv, bookId, { kind = 'auto' } = {}) {
+  const s = states[bookId];
+  if (!s || !inv) return { ok: false, error: 'missing invoice' };
+  const to = String(inv.storeEmail || '').trim();
+  if (!to) return { ok: false, error: 'no email address' };
+
+  const entry = { at: Date.now(), kind, to, status: 'sending', error: '' };
+  inv.reminders = Array.isArray(inv.reminders) ? inv.reminders : [];
+  inv.reminders.push(entry);
+  saveState(bookId);
+
+  const settings = getInvoiceSettings();
+  const mail = buildReminderEmail(inv, {
+    settings: reminderSettings(settings),
+    payLink: effectivePaymentLink(inv) || '',
+    today: today(),
+    publisher: settings.name || 'Lyricalmyrical Books',
+    amountLabel: invoiceAmountLabel(inv),
+  });
+
+  try {
+    await sendSingleEmailViaBackend(to, mail.subject, mail.text, settings.email || '', mail.html);
+    entry.status = 'sent';
+    bumpReminderDayCount(1);
+    saveState(bookId);
+    return { ok: true };
+  } catch (error) {
+    entry.status = 'failed';
+    entry.error = String((error && error.message) || error || 'send failed').slice(0, 200);
+    saveState(bookId);
+    return { ok: false, error: entry.error };
+  }
+}
+
+async function sweepPaymentReminders() {
+  if (_reminderSweeping) return null;
+  const cfg = reminderSettings(getInvoiceSettings());
+  if (!cfg.auto) return null;
+  // The mail leaves through the connected Apps Script; without it there is
+  // nothing to send with, and the publisher already gets told the sheet is
+  // disconnected elsewhere.
+  if (!sheetsUrl) return null;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return null;
+  if (!canSendNow(new Date())) return null;
+
+  const remainingToday = REMINDER_MAX_PER_DAY - reminderDayCount();
+  if (remainingToday <= 0) return null;
+
+  const batch = invoicesAwaitingReminder(cfg.days, Math.min(REMINDER_MAX_PER_RUN, remainingToday));
+  if (!batch.length) return null;
+
+  _reminderSweeping = true;
+  let sent = 0, failed = 0;
+  try {
+    for (const { bookId, inv } of batch) {
+      // Re-asked immediately before sending: the Stripe sweep runs on its own
+      // clock and may have settled this very invoice since the batch was built.
+      if (reminderBlockReason(inv, { today: today(), days: cfg.days })) continue;
+      const res = await sendInvoiceReminder(inv, bookId, { kind: 'auto' });
+      if (res.ok) sent++; else failed++;
+    }
+  } finally {
+    _reminderSweeping = false;
+  }
+
+  if (sent || failed) {
+    const said = describeReminderSweep({ sent, failed });
+    if (said) {
+      pushAppAlert({
+        id: 'invoice-reminders',
+        icon: '⏰',
+        title: said.title,
+        detail: said.detail,
+        tone: said.needsReview ? SYNC_TONES.FAILED : '',
+        actionLabel: 'Open invoices',
+        action: 'switchTab(\'consignment\')',
+      });
+    }
+    renderInvoices();
+  }
+  return { sent, failed };
+}
+
+function startPaymentReminderWatch() {
+  if (_reminderWatchStarted || typeof window === 'undefined') return;
+  _reminderWatchStarted = true;
+  startWatch(() => { sweepPaymentReminders(); }, { intervalMs: REMINDER_WATCH_INTERVAL_MS });
+}
+
+/** Chase this invoice now, whatever the automatic setting says. */
+async function remindInvoiceFromView() {
+  if (!currentViewInvoiceId) return;
+  const { inv, bookId } = invoiceHome(currentViewInvoiceId);
+  if (!inv) return;
+  // Belt and braces with the hidden buttons above: this is callable from the
+  // console and from a stale modal, and the cost of getting it wrong is an
+  // email chasing a customer who already paid.
+  if (inv.status === 'paid') { showToast(`${inv.num} is already paid — nothing to chase`, 'warn'); return; }
+  if (inv.status === 'cancelled') { showToast(`${inv.num} was cancelled — nothing to chase`, 'warn'); return; }
+  const to = String(inv.storeEmail || '').trim();
+  if (!to) { showToast('No email address on this invoice — add one to remind them', 'warn'); return; }
+  if (!sheetsUrl) { showToast('Connect your Google Sheet first — that is what sends the mail', 'warn'); return; }
+
+  const state = invoiceReminderState(inv);
+  const already = state.count
+    ? `You have already reminded them ${state.count === 1 ? 'once' : `${state.count} times`}. `
+    : '';
+  const late = daysLate(inv, today());
+  const lateSaid = late ? `${late} day${late === 1 ? '' : 's'} past due. ` : '';
+  if (!(await confirmDialog(
+    `${lateSaid}${already}Email ${to} a reminder about ${inv.num}, with a link to pay it?`,
+    { okLabel: 'Send reminder', title: 'Remind this customer' },
+  ))) return;
+
+  showToast('Sending reminder…');
+  const res = await sendInvoiceReminder(inv, bookId, { kind: 'manual' });
+  renderInvoices();
+  viewInvoice(currentViewInvoiceId);
+  if (res.ok) showToast(`✓ Reminder sent to ${to}`);
+  else showToast(`Reminder failed: ${res.error}`, 'err', 5000);
+}
+
+/**
+ * "They said they'd pay on the 15th" — hold off until then.
+ *
+ * Worth its own control rather than switching the whole feature off: the
+ * customer who answered you is exactly the one who should stop being chased,
+ * and everybody else should carry on being chased.
+ */
+async function snoozeInvoiceFromView() {
+  if (!currentViewInvoiceId) return;
+  const { inv, bookId } = invoiceHome(currentViewInvoiceId);
+  if (!inv) return;
+  const suggested = inv.remindAfter || (() => {
+    const d = new Date(); d.setDate(d.getDate() + 14);
+    return d.toISOString().split('T')[0];
+  })();
+  const picked = await promptDialog(
+    `When did ${inv.storeName || 'they'} say they would pay ${inv.num}? No reminder goes out before then. Clear the date to start chasing again.`,
+    suggested,
+    { title: 'Promised to pay', okLabel: 'Save date', inputType: 'date' },
+  );
+  if (picked === null) return;
+  const value = String(picked).trim();
+  if (value && !/^\d{4}-\d{2}-\d{2}$/.test(value)) { showToast('That is not a date I can read', 'warn'); return; }
+  inv.remindAfter = value;
+  saveState(bookId);
+  renderInvoices();
+  viewInvoice(currentViewInvoiceId);
+  showToast(value ? `✓ Holding off on ${inv.num} until ${fmtD(value)}` : `✓ ${inv.num} is back in the chasing list`);
+}
+
 function reconcileDismiss(idSafe) {
   const p = _reconFindPayment(idSafe);
   if (!p) return;
@@ -22516,6 +22829,7 @@ Object.assign(window, {
   addInvoiceItem, removeInvoiceItem, updateInvoiceItem,
   onInvoiceStoreChange, setInvoiceBillToMode, prefillFromPendingSales, recalcInvoiceTotals,
   saveInvoice, deleteInvoice, editInvoiceFromView, markInvoicePaidFromView,
+  remindInvoiceFromView, snoozeInvoiceFromView,
   printInvoice, copyInvoicePayLink, emailInvoice, downloadInvoiceHTML, downloadInvoicePDF,
   openInvoiceTemplateSettings, saveInvoiceSettings,
   regenerateStripeLinkFromView, onInvoiceCurrencyChange,
