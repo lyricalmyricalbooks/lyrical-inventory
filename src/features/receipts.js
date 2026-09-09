@@ -2585,41 +2585,53 @@ function renderGmailEmailsList() {
   );
 
   const esc = escapeHtml;
+  // One card per email, not a fixed-column table row. The table put every
+  // action into a 74px track and clipped anything wider — the Preview button
+  // lost its last 14px on every row — and it forced subject and snippet onto
+  // one truncated line each. A card lets the action size itself and gives the
+  // text two lines to breathe.
   const rowsHtml = _gmailEmailsFetched.map((email) => {
     const dateStr = new Date(email.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' });
     const attNames = Array.isArray(email.attachmentNames) ? email.attachmentNames : [];
     const attachmentBadge = email.hasAttachments
-      ? `<span class="pill gray" style="font-size:10px;padding:1px 6px;" title="${esc(attNames.join(', '))}">📎 ${email.attachmentCount}</span>`
-      : '—';
+      ? `<span class="pill gray email-card-att" title="${esc(attNames.join(', ')) || 'Attachments'}">📎 ${email.attachmentCount}</span>`
+      : '';
 
     const fromParts = (email.from || '').match(/^(.*?)\s*<.*>$/);
     const cleanFrom = fromParts ? fromParts[1].replace(/['"]/g, '').trim() : (email.from || 'Unknown');
     const isChecked = _gmailSelectedIds.has(email.id);
     const isImported = importedMsgIds.has(email.id);
+    const subject = email.subject || '(No subject)';
 
     return `
-      <tr class="email-list-row${isChecked ? ' selected' : ''}" id="email-row-${email.id}">
-        <td class="email-list-cell" style="width:36px;text-align:center;">
-          <input type="checkbox" class="gmail-email-cb" data-msg-id="${email.id}" ${isChecked ? 'checked' : ''} onchange="toggleEmailRowSelection('${email.id}', this.checked)">
-        </td>
-        <td class="email-list-cell" style="white-space:nowrap;color:var(--text3);font-size:11px;">${dateStr}</td>
-        <td class="email-list-cell"><div class="email-sender" title="${esc(email.from || '')}">${esc(cleanFrom)}</div></td>
-        <td class="email-list-cell">
-          <div class="email-subject">${esc(email.subject || '(No subject)')}${isImported ? ' <span class="pill green" style="font-size:9px;padding:1px 5px;">imported</span>' : ''}</div>
-          <div class="email-snippet" title="${esc(email.snippet || '')}">${esc(email.snippet || '')}</div>
-        </td>
-        <td class="email-list-cell" style="text-align:center;">${attachmentBadge}</td>
-        <td class="email-list-cell" style="text-align:center;">
-          <button type="button" class="btn sm" id="email-preview-btn-${email.id}" onclick="toggleEmailPreview('${email.id}')">Preview</button>
-        </td>
-      </tr>
-      <tr id="email-preview-row-${email.id}" style="display:none;background:var(--cream3);">
-        <td colspan="6" class="email-list-cell" style="padding:0;">
+      <li class="email-card${isChecked ? ' selected' : ''}" id="email-row-${email.id}">
+        <div class="email-card-main">
+          <label class="email-card-check" title="Select this email">
+            <input type="checkbox" class="gmail-email-cb" data-msg-id="${email.id}" ${isChecked ? 'checked' : ''}
+              aria-label="Select email: ${esc(subject)}"
+              onchange="toggleEmailRowSelection('${email.id}', this.checked)">
+          </label>
+          <div class="email-card-body">
+            <div class="email-card-meta">
+              <span class="email-sender" title="${esc(email.from || '')}">${esc(cleanFrom)}</span>
+              <span class="email-card-date">${esc(dateStr)}</span>
+              ${isImported ? '<span class="pill green email-card-imported">✓ imported</span>' : ''}
+            </div>
+            <div class="email-subject">${esc(subject)}</div>
+            ${email.snippet ? `<div class="email-snippet">${esc(email.snippet)}</div>` : ''}
+          </div>
+          <div class="email-card-actions">
+            ${attachmentBadge}
+            <button type="button" class="btn sm email-preview-btn" id="email-preview-btn-${email.id}"
+              onclick="toggleEmailPreview('${email.id}')">Preview</button>
+          </div>
+        </div>
+        <div class="email-card-preview" id="email-preview-row-${email.id}" style="display:none;">
           <div class="email-preview-drawer" id="email-preview-drawer-${email.id}">
             <!-- populated dynamically -->
           </div>
-        </td>
-      </tr>
+        </div>
+      </li>
     `;
   }).join('');
 
@@ -2627,13 +2639,18 @@ function renderGmailEmailsList() {
   const shown = _gmailEmailsFetched.length;
   const moreNote = (typeof meta.threadsFound === 'number' && meta.threadsFound > shown) ? ` of ${meta.threadsFound} matched` : '';
   const skippedNote = meta.skipped ? ` · ${meta.skipped} unreadable` : '';
+  const allSelected = shown > 0 && _gmailEmailsFetched.every(e => _gmailSelectedIds.has(e.id));
   const metaHeader = `
     <div class="email-list-meta-header">
-      <span>✓ Searched ${meta.account ? `<b>${escapeHtml(meta.account)}</b>` : 'Gmail'}</span>
-      <span style="white-space:nowrap;display:flex;align-items:center;gap:8px;">
-        ${shown} shown${moreNote}${skippedNote}
-        <button type="button" class="btn sm" onclick="searchGmailEmails()" title="Re-run this search to catch anything new">↻ Refresh</button>
+      <label class="email-select-all" title="Select every email in this list">
+        <input type="checkbox" id="gmail-email-select-all" ${allSelected ? 'checked' : ''} onchange="toggleAllGmailSelections(this.checked)">
+        <span>Select all</span>
+      </label>
+      <span class="email-list-meta-count">
+        <span class="email-list-meta-account">✓ ${meta.account ? `<b>${escapeHtml(meta.account)}</b>` : 'Gmail'}</span>
+        <span class="email-list-meta-tally">${shown} shown${moreNote}${skippedNote}</span>
       </span>
+      <button type="button" class="btn sm" onclick="searchGmailEmails()" title="Re-run this search to catch anything new">↻ Refresh</button>
     </div>`;
 
   // Preserve scroll position across the rebuild — otherwise every checkbox
@@ -2643,22 +2660,27 @@ function renderGmailEmailsList() {
 
   listWrap.innerHTML = `
     ${metaHeader}
-    <table class="email-list-table">
-      <thead>
-        <tr>
-          <th style="width:36px;"><input type="checkbox" id="gmail-email-select-all" onchange="toggleAllGmailSelections(this.checked)"></th>
-          <th style="width:64px;">Date</th>
-          <th style="width:20%;">Sender</th>
-          <th>Subject</th>
-          <th style="width:56px;text-align:center;">Files</th>
-          <th style="width:74px;text-align:center;">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rowsHtml}
-      </tbody>
-    </table>
+    <ul class="email-card-list" id="email-card-list">
+      ${rowsHtml}
+    </ul>
   `;
+
+  // Fitts's law: the whole card is the selection target, not just a 14px
+  // checkbox. Delegated so it survives every re-render, and it stands aside
+  // for the controls inside the card (Preview, the checkbox itself, links in
+  // an open drawer) and for anyone selecting text to copy an order number.
+  const cardList = $('email-card-list');
+  if (cardList) {
+    cardList.addEventListener('click', (ev) => {
+      if (ev.target.closest('button, a, input, label, .email-card-preview')) return;
+      if (String(window.getSelection?.() || '').length) return;
+      const card = ev.target.closest('.email-card');
+      const cb = card?.querySelector('.gmail-email-cb');
+      if (!cb) return;
+      cb.checked = !cb.checked;
+      toggleEmailRowSelection(cb.getAttribute('data-msg-id'), cb.checked);
+    });
+  }
   listWrap.scrollTop = prevScroll;
   _updateEmailExtractButtonLabel();
 }
@@ -2668,7 +2690,26 @@ function toggleEmailRowSelection(msgId, isChecked) {
   else _gmailSelectedIds.delete(msgId);
   const row = $('email-row-' + msgId);
   if (row) row.classList.toggle('selected', isChecked);
+  // Matched in JS rather than through an attribute selector: a Gmail message
+  // id is opaque, and one stray quote in it would break the selector.
+  const cb = Array.from(document.querySelectorAll('.gmail-email-cb'))
+    .find(el => el.getAttribute('data-msg-id') === msgId);
+  if (cb) cb.checked = isChecked;
+  _syncGmailSelectAllBox();
   _updateEmailExtractButtonLabel();
+}
+
+// Keeps the header's select-all box honest about the rows below it: ticked
+// when every email is selected, indeterminate on a partial selection. Without
+// it the box stays ticked after one row is unticked, and the next click on it
+// clears the whole list instead of selecting it.
+function _syncGmailSelectAllBox() {
+  const all = $('gmail-email-select-all');
+  if (!all) return;
+  const total = _gmailEmailsFetched.length;
+  const picked = _gmailEmailsFetched.filter(e => _gmailSelectedIds.has(e.id)).length;
+  all.checked = total > 0 && picked === total;
+  all.indeterminate = picked > 0 && picked < total;
 }
 
 function toggleAllGmailSelections(isChecked) {
