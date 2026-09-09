@@ -2686,17 +2686,24 @@ function renderGmailEmailsList() {
 }
 
 function toggleEmailRowSelection(msgId, isChecked) {
+  _applyEmailRowSelection(msgId, isChecked);
+  _syncGmailSelectAllBox();
+  _updateEmailExtractButtonLabel();
+}
+
+// The per-row half of a selection change, without the two list-wide passes.
+// Bulk callers do the whole list first and settle the header once.
+function _applyEmailRowSelection(msgId, isChecked) {
   if (isChecked) _gmailSelectedIds.add(msgId);
   else _gmailSelectedIds.delete(msgId);
   const row = $('email-row-' + msgId);
   if (row) row.classList.toggle('selected', isChecked);
-  // Matched in JS rather than through an attribute selector: a Gmail message
-  // id is opaque, and one stray quote in it would break the selector.
-  const cb = Array.from(document.querySelectorAll('.gmail-email-cb'))
-    .find(el => el.getAttribute('data-msg-id') === msgId);
+  // The row's own checkbox, found through the row rather than a document-wide
+  // query: a Gmail message id is opaque, so an attribute selector built from
+  // it would break on one stray quote, and scanning every checkbox to find one
+  // row made a select-all quadratic.
+  const cb = row ? row.querySelector('.gmail-email-cb') : null;
   if (cb) cb.checked = isChecked;
-  _syncGmailSelectAllBox();
-  _updateEmailExtractButtonLabel();
 }
 
 // Keeps the header's select-all box honest about the rows below it: ticked
@@ -2713,12 +2720,14 @@ function _syncGmailSelectAllBox() {
 }
 
 function toggleAllGmailSelections(isChecked) {
-  const checkboxes = document.querySelectorAll('.gmail-email-cb');
-  checkboxes.forEach(cb => {
+  // One pass over the rows, then one header sync and one button update — not
+  // a full re-scan of the list per row.
+  document.querySelectorAll('.gmail-email-cb').forEach(cb => {
     cb.checked = isChecked;
-    const msgId = cb.getAttribute('data-msg-id');
-    toggleEmailRowSelection(msgId, isChecked);
+    _applyEmailRowSelection(cb.getAttribute('data-msg-id'), isChecked);
   });
+  _syncGmailSelectAllBox();
+  _updateEmailExtractButtonLabel();
 }
 
 // Keeps the shared footer button honest about which tab's data it will act
@@ -5049,19 +5058,35 @@ async function extractReceiptsFromEmailText() {
 // The existing expense a draft would duplicate (same date, amount, currency),
 // or null. Used both to flag duplicates and to attach receipt files to an
 // already-imported expense that has none yet.
-function _findDuplicateExpense(draft) {
-  const list = TAX_CENTER.businessExpenses || [];
-  const a = Number(draft.amount).toFixed(2);
-  const cur = String(draft.currency || 'CAD').toUpperCase();
-  return list.find(e =>
-    e.date === draft.date &&
-    Number(e.amount).toFixed(2) === a &&
-    (e.currency || 'CAD').toUpperCase() === cur
-  ) || null;
+// The currencies a draft row can be switched to. Module scope so the option
+// markup is built from one list rather than re-declared per render.
+const DRAFT_CURRENCIES = ['CAD', 'USD', 'EUR', 'GBP', 'AUD', 'JPY', 'MXN', 'CHF', 'SEK', 'NOK', 'DKK'];
+
+function _duplicateExpenseKey(date, amount, currency) {
+  return `${date}|${Number(amount).toFixed(2)}|${String(currency || 'CAD').toUpperCase()}`;
 }
 
-function _isLikelyDuplicateExpense(draft) {
-  return !!_findDuplicateExpense(draft);
+// One pass over the ledger, keyed by the same date+amount+currency triple the
+// linear scan compared. Rebuilt per render rather than cached: the drafts
+// screen is opened against whatever the ledger holds right now.
+function _buildDuplicateExpenseIndex() {
+  const index = new Map();
+  for (const e of (TAX_CENTER.businessExpenses || [])) {
+    const key = _duplicateExpenseKey(e.date, e.amount, e.currency);
+    if (!index.has(key)) index.set(key, e);
+  }
+  return index;
+}
+
+function _findDuplicateExpense(draft, index) {
+  const key = _duplicateExpenseKey(draft.date, draft.amount, draft.currency);
+  if (index) return index.get(key) || null;
+  const list = TAX_CENTER.businessExpenses || [];
+  return list.find(e => _duplicateExpenseKey(e.date, e.amount, e.currency) === key) || null;
+}
+
+function _isLikelyDuplicateExpense(draft, index) {
+  return !!_findDuplicateExpense(draft, index);
 }
 
 // True when an expense already has at least one viewable receipt on file.
@@ -5080,12 +5105,18 @@ function renderEmailReceiptDrafts(receipts) {
   }
   if (bulkCatBar) bulkCatBar.style.display = 'flex';
   const esc = escapeHtml;
-  const catOptions = (sel) => EXPENSE_CATEGORIES
-    .map(c => `<option${c === sel ? ' selected' : ''}>${esc(c)}</option>`).join('');
-  const curOptions = (sel) => ['CAD', 'USD', 'EUR', 'GBP', 'AUD', 'JPY', 'MXN', 'CHF', 'SEK', 'NOK', 'DKK']
-    .map(c => `<option${c === sel ? ' selected' : ''}>${esc(c)}</option>`).join('');
+  // The two option lists are identical on every row — build each once and set
+  // the chosen value on the element afterwards, instead of re-serialising 28
+  // <option>s per draft. Twelve drafts used to mean 336 option strings.
+  const catOptionsHtml = EXPENSE_CATEGORIES.map(c => `<option>${esc(c)}</option>`).join('');
+  const curOptionsHtml = DRAFT_CURRENCIES.map(c => `<option>${esc(c)}</option>`).join('');
 
-  const dupCount = receipts.filter(r => _isLikelyDuplicateExpense(r)).length;
+  // One index over the ledger for the whole render. Duplicate state used to be
+  // recomputed by a full scan of every expense, twice per draft — once for the
+  // header count and once for the row.
+  const dupIndex = _buildDuplicateExpenseIndex();
+  const dupByRow = receipts.map(r => _isLikelyDuplicateExpense(r, dupIndex));
+  const dupCount = dupByRow.filter(Boolean).length;
 
   wrap.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
@@ -5096,19 +5127,19 @@ function renderEmailReceiptDrafts(receipts) {
         ${dupCount ? `<button class="btn sm" type="button" onclick="deselectDuplicateEmailDrafts()">Deselect duplicates</button>` : ''}
       </div>
     </div>
-    <div class="tbl-wrap" style="max-height:340px;overflow:auto;border:1px solid var(--border-default);border-radius:var(--r2);">
-      <table class="tbl" style="font-size:var(--text-sm);">
+    <div class="tbl-wrap erd-table-wrap">
+      <table class="tbl erd-table">
         <thead><tr>
           <th></th><th>Date</th><th>Vendor / Description</th><th>Category</th><th>Ref</th>
           <th class="r" style="min-width:130px;">Amount</th><th></th>
         </tr></thead>
         <tbody>
         ${receipts.map((r, i) => {
-    const dup = _isLikelyDuplicateExpense(r);
+    const dup = dupByRow[i];
     const lowConf = (r.confidence ?? 1) < 0.5;
     return `<tr data-erd-row="${i}" style="${dup ? 'background:rgba(220,170,40,.06);' : ''}">
             <td><input type="checkbox" data-erd-include="${i}" ${r.include !== false ? 'checked' : ''}></td>
-            <td><input type="date" data-erd-field="date" data-erd-i="${i}" value="${esc(r.date)}" style="font-size:var(--text-sm);width:130px;font-family:'DM Mono',monospace;font-feature-settings:'tnum' 1;"></td>
+            <td><input type="date" data-erd-field="date" data-erd-i="${i}" value="${esc(r.date)}" style="font-size:var(--text-sm);font-family:'DM Mono',monospace;font-feature-settings:'tnum' 1;"></td>
             <td>
               <input type="text" data-erd-field="vendor" data-erd-i="${i}" value="${esc(r.vendor)}" placeholder="Vendor" style="font-size:var(--text-sm);width:100%;margin-bottom:2px;">
               <input type="text" data-erd-field="description" data-erd-i="${i}" value="${esc(r.description)}" placeholder="Description" style="font-size:var(--text-xs);width:100%;color:var(--content-secondary);">
@@ -5118,12 +5149,12 @@ function renderEmailReceiptDrafts(receipts) {
         ? `<div style="font-size:var(--text-2xs);color:var(--content-muted);margin-top:2px;">${(r.selectedAtts && r.selectedAtts.length) ? `📎 ${r.selectedAtts.length} file${r.selectedAtts.length > 1 ? 's' : ''} + email` : `📄 email`} → receipts folder on import</div>`
         : ''}
             </td>
-            <td><select data-erd-field="category" data-erd-i="${i}" style="font-size:var(--text-sm);">${catOptions(r.category)}</select></td>
-            <td><input type="text" data-erd-field="reference" data-erd-i="${i}" value="${esc(r.reference)}" placeholder="—" style="font-size:var(--text-sm);width:120px;"></td>
+            <td><select data-erd-field="category" data-erd-i="${i}" style="font-size:var(--text-sm);">${catOptionsHtml}</select></td>
+            <td><input type="text" data-erd-field="reference" data-erd-i="${i}" value="${esc(r.reference)}" placeholder="—" style="font-size:var(--text-sm);"></td>
             <td class="r">
               <div style="display:flex;gap:4px;align-items:center;justify-content:flex-end;">
-                <select data-erd-field="currency" data-erd-i="${i}" style="font-size:var(--text-sm);width:68px;font-family:'DM Mono',monospace;">${curOptions(r.currency)}</select>
-                <input type="number" step="0.01" data-erd-field="amount" data-erd-i="${i}" value="${Number(r.amount).toFixed(2)}" style="font-size:var(--text-sm);width:90px;text-align:right;font-family:'DM Mono',monospace;font-feature-settings:'tnum' 1;">
+                <select data-erd-field="currency" data-erd-i="${i}" style="font-size:var(--text-sm);font-family:'DM Mono',monospace;">${curOptionsHtml}</select>
+                <input type="number" step="0.01" data-erd-field="amount" data-erd-i="${i}" value="${Number(r.amount).toFixed(2)}" style="font-size:var(--text-sm);text-align:right;font-family:'DM Mono',monospace;font-feature-settings:'tnum' 1;">
               </div>
             </td>
             <td>${r.sourceSnippet ? `<button class="btn sm" type="button" title="View source snippet" aria-label="View source snippet" onclick="confirmDialog(${JSON.stringify(r.sourceSnippet)}, {title:'Source snippet', okLabel:'OK', cancelLabel:'Close'})">👁</button>` : ''}</td>
@@ -5138,24 +5169,42 @@ function renderEmailReceiptDrafts(receipts) {
     </div>
   `;
 
-  // Wire up edits → in-memory store
-  wrap.querySelectorAll('[data-erd-field]').forEach(el => {
-    el.addEventListener('change', () => {
-      const i = Number(el.getAttribute('data-erd-i'));
-      const f = el.getAttribute('data-erd-field');
-      if (!_emailReceiptDrafts[i]) return;
-      let v = el.value;
-      if (f === 'amount') v = Number(v) || 0;
-      if (f === 'currency') v = String(v).toUpperCase();
-      if (f === 'date') v = normalizeReceiptDate(v) || v;
-      _emailReceiptDrafts[i][f] = v;
-    });
+  // Selects carry the shared option markup, so their current value is applied
+  // here rather than baked into the string.
+  wrap.querySelectorAll('select[data-erd-field]').forEach(sel => {
+    const i = Number(sel.getAttribute('data-erd-i'));
+    const r = receipts[i];
+    if (!r) return;
+    sel.value = sel.getAttribute('data-erd-field') === 'category' ? r.category : r.currency;
+    // An unrecognised value leaves selectedIndex at -1, which paints an empty
+    // control; fall back to the first option, as the old markup did.
+    if (sel.selectedIndex < 0) sel.selectedIndex = 0;
   });
-  wrap.querySelectorAll('[data-erd-include]').forEach(cb => {
-    cb.addEventListener('change', () => {
-      const i = Number(cb.getAttribute('data-erd-include'));
-      if (_emailReceiptDrafts[i]) _emailReceiptDrafts[i].include = !!cb.checked;
-    });
+
+  // One delegated listener for the whole table instead of two per field. A
+  // twelve-draft table was wiring up ~84 listeners on every re-render. Guarded
+  // because `wrap` itself survives the innerHTML replacement — an unguarded
+  // addEventListener here would stack a fresh copy on every render.
+  if (wrap.dataset.erdWired === '1') return;
+  wrap.dataset.erdWired = '1';
+  wrap.addEventListener('change', (ev) => {
+    const el = ev.target;
+    if (!el || !el.getAttribute) return;
+    const includeAttr = el.getAttribute('data-erd-include');
+    if (includeAttr !== null) {
+      const i = Number(includeAttr);
+      if (_emailReceiptDrafts[i]) _emailReceiptDrafts[i].include = !!el.checked;
+      return;
+    }
+    const f = el.getAttribute('data-erd-field');
+    if (!f) return;
+    const i = Number(el.getAttribute('data-erd-i'));
+    if (!_emailReceiptDrafts[i]) return;
+    let v = el.value;
+    if (f === 'amount') v = Number(v) || 0;
+    if (f === 'currency') v = String(v).toUpperCase();
+    if (f === 'date') v = normalizeReceiptDate(v) || v;
+    _emailReceiptDrafts[i][f] = v;
   });
 }
 
@@ -5169,8 +5218,9 @@ function toggleAllEmailDrafts(on) {
 // hunting each ⚠ row individually.
 function deselectDuplicateEmailDrafts() {
   let n = 0;
+  const dupIndex = _buildDuplicateExpenseIndex();
   _emailReceiptDrafts.forEach((d, i) => {
-    if (_isLikelyDuplicateExpense(d)) {
+    if (_isLikelyDuplicateExpense(d, dupIndex)) {
       d.include = false;
       n++;
       const cb = document.querySelector(`[data-erd-include="${i}"]`);

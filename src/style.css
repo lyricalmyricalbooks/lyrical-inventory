@@ -3660,7 +3660,17 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 }
 
 /* MODALS */
-.overlay{position:fixed;inset:0;background:rgba(14,12,10,.65);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:200;animation:overlayIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);}
+/* No backdrop-filter here, deliberately. A full-viewport blur behind a dialog
+   is re-rasterised on EVERY frame that any content above it paints, so it was
+   charged to scrolling the dialog, to each keystroke in a field, and to the
+   open animation. Measured on a 4x-throttled CPU with the receipts dialog:
+   55ms per frame while scrolling the email list (~18fps) and 79ms per
+   keystroke, against 17ms and 12ms with the blur gone — and no compositing
+   trick recovers it (contain:paint, will-change, isolation, a separate scrim
+   layer and a smaller radius were all measured, all unchanged). Depth is
+   carried by a layered scrim instead: a flat wash plus a vignette that falls
+   off toward the edges, which composites once and costs nothing per frame. */
+.overlay{position:fixed;inset:0;background:radial-gradient(120% 90% at 50% 45%,rgba(14,12,10,.58),rgba(14,12,10,.78) 70%,rgba(8,7,6,.86));display:flex;align-items:center;justify-content:center;z-index:200;animation:overlayIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);}
 /* max-height/overflow used to be set ONLY inside the <=768px media query, so
    a modal whose content stacks tall on desktop (long forms, a rendered
    drafts table) had no scroll container at all — content below the fold was
@@ -5133,6 +5143,72 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   margin-bottom: 8px;
   color: var(--content-secondary);
   line-height: var(--leading-normal);
+}
+
+/* Extracted-drafts table.
+   No inner scroller and no fixed pixel widths, deliberately. The table used to
+   sit in its own 340px scroll box inside the dialog's scroll box, so the wheel
+   changed meaning depending on which few hundred pixels the pointer happened
+   to be over — and the fixed-width date/ref/amount controls added up to more
+   than the dialog, so it also carried a horizontal scrollbar. It now flows in
+   the dialog's single scroll region, and the controls shrink to fit. */
+.erd-table-wrap {
+  margin-bottom: 0;
+  border-color: var(--border-default);
+  overflow: visible;
+}
+
+.erd-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.erd-table th,
+.erd-table td {
+  padding: 9px 10px;
+}
+
+/* Explicit proportions: with table-layout:fixed and no widths every column
+   gets an equal share, which starved the vendor/description column while the
+   currency and the eye button sat in space they never needed. */
+.erd-table th:nth-child(1) { width: 34px; padding-right: 0; }
+.erd-table th:nth-child(2) { width: 124px; }
+.erd-table th:nth-child(3) { width: auto; }
+.erd-table th:nth-child(4) { width: 17%; }
+.erd-table th:nth-child(5) { width: 14%; }
+.erd-table th:nth-child(6) { width: 172px; }
+.erd-table th:nth-child(7) { width: 40px; padding-left: 0; }
+
+.erd-table td:nth-child(1) { padding-right: 0; }
+.erd-table td:nth-child(7) { padding-left: 0; }
+
+.erd-table input,
+.erd-table select {
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.erd-table input[type="text"],
+.erd-table input[type="date"],
+.erd-table input[type="number"],
+.erd-table select {
+  width: 100%;
+}
+
+.erd-table td.r > div {
+  flex-wrap: nowrap;
+}
+
+/* The currency picker sizes to its content; the figure takes the rest. */
+.erd-table td.r select {
+  width: auto;
+  flex: 0 0 auto;
+}
+
+.erd-table td.r input[type="number"] {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 /* Live extraction progress, pinned above the drafts table */
@@ -12046,19 +12122,20 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 }
 
 /* Shippo Manual Link Modal */
+/* Same scrim treatment as .overlay, and for the same measured reason. This
+   one additionally ANIMATED the blur radius open, which meant a full-viewport
+   re-blur on every frame of the entrance. */
 .manual-link-backdrop {
   position: fixed; inset: 0;
-  background: rgba(10, 10, 12, 0.65);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: radial-gradient(120% 90% at 50% 45%, rgba(10, 10, 12, .60), rgba(10, 10, 12, .80) 70%, rgba(6, 6, 8, .88));
   z-index: 9000;
   display: flex; align-items: center; justify-content: center;
   animation: modalFadeIn 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
 @keyframes modalFadeIn {
-  from { opacity: 0; backdrop-filter: blur(0); }
-  to { opacity: 1; backdrop-filter: blur(8px); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .manual-link-modal {
