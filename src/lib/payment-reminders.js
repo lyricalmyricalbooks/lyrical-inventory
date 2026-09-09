@@ -256,3 +256,77 @@ export function describeReminderArming({ count = 0, days = REMINDER_DEFAULTS.day
   }
   return `Chase late invoices automatically? ${count} invoice${count === 1 ? ' is' : 's are'} already more than ${window} past due, so ${count === 1 ? 'that customer' : 'those customers'} will be emailed shortly. After that, each invoice gets one reminder as it falls due.`;
 }
+
+// ── THE DAY BEFORE ──────────────────────────────────────────────────────────
+//
+// The app only learns about money that arrives through the payment link. A shop
+// that paid by bank transfer, or handed over cash at a fair, is still "sent"
+// here until the publisher marks it paid — and would be chased for money it has
+// already handed over. That email is the one this feature must never send.
+//
+// So: say who is about to be chased while there is still a day to stop it.
+
+/** The day after a 'YYYY-MM-DD' date. UTC, like daysBetween. */
+export function nextDay(iso) {
+  if (!isIsoDate(iso)) return '';
+  const t = Date.parse(`${str(iso)}T00:00:00Z`);
+  if (Number.isNaN(t)) return '';
+  return new Date(t + 86400000).toISOString().slice(0, 10);
+}
+
+/**
+ * The invoices that will be chased tomorrow — blocked today, clear tomorrow.
+ *
+ * Deliberately phrased against reminderBlockReason instead of re-deriving "due
+ * date plus threshold". Every route into the queue is then covered for free —
+ * the threshold being crossed tonight, a promised-to-pay date lapsing at
+ * midnight — and the warning cannot drift from what the sweep will actually do,
+ * which is the whole reason both go through one function.
+ */
+export function dueForReminderTomorrow(invoices, { today, days } = {}) {
+  const tomorrow = nextDay(today);
+  if (!tomorrow) return [];
+  const out = [];
+  for (const inv of (invoices || [])) {
+    if (!reminderBlockReason(inv, { today, days })) continue;          // already in today's queue
+    if (reminderBlockReason(inv, { today: tomorrow, days })) continue; // still blocked tomorrow
+    out.push(inv);
+  }
+  out.sort((a, b) => str(a.dueDate).localeCompare(str(b.dueDate)));
+  return out;
+}
+
+/** The heads-up card. Null at zero — silence is the normal morning. */
+export function describeReminderNotice({ count = 0 } = {}) {
+  if (!count) return null;
+  return {
+    title: `${count} invoice${count === 1 ? '' : 's'} will be chased tomorrow`,
+    detail: count === 1
+      ? 'If they have already paid you outside the app, mark it paid now and no reminder goes out.'
+      : 'If any of them have already paid you outside the app, mark them paid now and no reminder goes out.',
+  };
+}
+
+/**
+ * A stand-in invoice for the test email.
+ *
+ * The point of the test is to read what a customer receives BEFORE arming the
+ * feature — which is exactly when there may be nothing late on file to build it
+ * from. Dated past the threshold so it reads like a real reminder.
+ */
+export function sampleReminderInvoice({ today, days = REMINDER_DEFAULTS.days } = {}) {
+  const due = isIsoDate(today)
+    ? new Date(Date.parse(`${str(today)}T00:00:00Z`) - (Number(days) + 3) * 86400000).toISOString().slice(0, 10)
+    : '';
+  return {
+    id: 'inv-sample',
+    num: 'INV-SAMPLE-0001',
+    status: 'sent',
+    dueDate: due,
+    storeName: 'The Corner Bookshop',
+    storeContact: '',
+    storeEmail: 'shop@example.com',
+    total: 120,
+    _sample: true,
+  };
+}

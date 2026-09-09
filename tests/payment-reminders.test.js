@@ -7,6 +7,10 @@ import {
   canSendNow,
   daysBetween,
   daysLate,
+  describeReminderNotice,
+  dueForReminderTomorrow,
+  nextDay,
+  sampleReminderInvoice,
   describeReminderArming,
   describeReminderSweep,
   dueForReminder,
@@ -280,5 +284,121 @@ describe('daysLate', () => {
     expect(daysLate(lateInvoice(), TODAY)).toBe(19);
     expect(daysLate(lateInvoice({ dueDate: '2026-10-01' }), TODAY)).toBeNull();
     expect(daysLate(lateInvoice({ dueDate: '' }), TODAY)).toBeNull();
+  });
+});
+
+// ── the day before ──────────────────────────────────────────────────────
+// The app only sees money that arrives through the payment link. Everything
+// below exists so a customer who paid by bank transfer or in cash can be
+// caught before the reminder goes out to them.
+
+describe('nextDay', () => {
+  it('steps one calendar day', () => {
+    expect(nextDay('2026-09-20')).toBe('2026-09-21');
+  });
+
+  it('crosses a month, a year and a leap day', () => {
+    expect(nextDay('2026-09-30')).toBe('2026-10-01');
+    expect(nextDay('2026-12-31')).toBe('2027-01-01');
+    expect(nextDay('2028-02-28')).toBe('2028-02-29');
+  });
+
+  it('answers empty for anything that is not a date', () => {
+    expect(nextDay('')).toBe('');
+    expect(nextDay('tomorrow')).toBe('');
+  });
+});
+
+describe('dueForReminderTomorrow', () => {
+  const opts = { today: TODAY, days: 7 };
+  const at = (dueDate, over = {}) => lateInvoice({ dueDate, ...over });
+
+  it('warns the day before the threshold is crossed', () => {
+    // Due 2026-09-13 is exactly 7 days late today: not chased today, chased
+    // tomorrow when it reaches 8.
+    const list = dueForReminderTomorrow([at('2026-09-13')], opts);
+    expect(list.map(i => i.dueDate)).toEqual(['2026-09-13']);
+  });
+
+  it('says nothing about one already in today’s queue', () => {
+    // Chased today, so a "tomorrow" warning would be too late to be useful.
+    expect(dueForReminderTomorrow([at('2026-09-12')], opts)).toEqual([]);
+  });
+
+  it('says nothing about one still too new tomorrow', () => {
+    expect(dueForReminderTomorrow([at('2026-09-14')], opts)).toEqual([]);
+  });
+
+  it('warns when a promised-to-pay date lapses overnight', () => {
+    // The other way into the queue: long overdue, but held off until today.
+    const promised = at('2026-08-01', { remindAfter: TODAY });
+    expect(dueForReminderTomorrow([promised], opts).length).toBe(1);
+  });
+
+  it('stays quiet on a promise that still has days to run', () => {
+    expect(dueForReminderTomorrow([at('2026-08-01', { remindAfter: '2026-09-30' })], opts)).toEqual([]);
+  });
+
+  it('never warns about an invoice that will never be chased', () => {
+    const never = [
+      at('2026-09-13', { status: 'paid' }),
+      at('2026-09-13', { status: 'cancelled' }),
+      at('2026-09-13', { status: 'draft' }),
+      at('2026-09-13', { storeEmail: '' }),
+      at('2026-09-13', { reminders: [{ at: 1, status: 'sent' }] }),
+    ];
+    expect(dueForReminderTomorrow(never, opts)).toEqual([]);
+  });
+
+  it('puts the oldest debt first, and copes with nothing at all', () => {
+    const list = dueForReminderTomorrow([at('2026-09-13'), at('2026-09-13', { dueDate: '2026-08-01', remindAfter: TODAY })], opts);
+    expect(list[0].dueDate).toBe('2026-08-01');
+    expect(dueForReminderTomorrow([], opts)).toEqual([]);
+    expect(dueForReminderTomorrow(undefined, opts)).toEqual([]);
+    expect(dueForReminderTomorrow([at('2026-09-13')], { today: 'soon', days: 7 })).toEqual([]);
+  });
+
+  it('agrees with the sweep — what it warns about today is chased tomorrow', () => {
+    // The two must never disagree; that is why both go through one function.
+    const inv = at('2026-09-13');
+    expect(dueForReminderTomorrow([inv], opts).length).toBe(1);
+    expect(dueForReminder([inv], { today: nextDay(TODAY), days: 7, max: 0 }).length).toBe(1);
+  });
+});
+
+describe('describeReminderNotice', () => {
+  it('stays silent on a normal morning', () => {
+    expect(describeReminderNotice({ count: 0 })).toBeNull();
+    expect(describeReminderNotice()).toBeNull();
+  });
+
+  it('counts, and says what to do about it', () => {
+    expect(describeReminderNotice({ count: 1 }).title).toBe('1 invoice will be chased tomorrow');
+    expect(describeReminderNotice({ count: 3 }).title).toBe('3 invoices will be chased tomorrow');
+    expect(describeReminderNotice({ count: 3 }).detail).toContain('mark them paid');
+  });
+});
+
+describe('sampleReminderInvoice', () => {
+  it('is late enough to read like a real reminder', () => {
+    const sample = sampleReminderInvoice({ today: TODAY, days: 7 });
+    expect(reminderBlockReason(sample, { today: TODAY, days: 7 })).toBeNull();
+    expect(daysLate(sample, TODAY)).toBe(10);
+  });
+
+  it('follows the publisher’s own threshold', () => {
+    const sample = sampleReminderInvoice({ today: TODAY, days: 30 });
+    expect(reminderBlockReason(sample, { today: TODAY, days: 30 })).toBeNull();
+  });
+
+  it('is marked as a sample, so nothing mistakes it for a real invoice', () => {
+    expect(sampleReminderInvoice({ today: TODAY })._sample).toBe(true);
+  });
+
+  it('builds a readable email', () => {
+    const sample = sampleReminderInvoice({ today: TODAY, days: 7 });
+    const mail = buildReminderEmail(sample, { settings: reminderSettings({}), today: TODAY, amountLabel: 'CA$120.00' });
+    expect(mail.subject).toContain('INV-SAMPLE-0001');
+    expect(mail.text).toContain('The Corner Bookshop');
   });
 });

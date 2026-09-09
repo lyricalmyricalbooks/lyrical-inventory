@@ -224,3 +224,129 @@ describe('the chase record survives an edit', () => {
     expect(extractDecl('invoicePaperBodyWithQR', mainJs)).toContain('renderInvoicePaperHTML(inv);');
   });
 });
+
+// ── the day-before heads-up, and the test send ──────────────────────────
+// Both exist to keep a reminder from reaching somebody it shouldn't: one
+// catches a customer who paid outside the app, the other lets the publisher
+// read the mail before any customer does.
+
+describe('the day-before heads-up', () => {
+  const notice = () => extractDecl('noticeUpcomingReminders', mainJs);
+
+  it('says nothing unless automatic chasing is on', () => {
+    // A warning about a machine that isn't running is noise.
+    expect(notice()).toContain('if (!cfg.auto) return null;');
+  });
+
+  it('is NOT held back by the send window', () => {
+    // It sends nothing, and its whole purpose is to be waiting before the 9am
+    // window opens — gating it on canSendNow would defeat the feature.
+    expect(notice()).not.toContain('canSendNow');
+  });
+
+  it('appears once a day, on its own stamp', () => {
+    expect(notice()).toContain('if (reminderNoticeShownToday()) return null;');
+    expect(notice()).toContain('markReminderNoticeShown()');
+    // A separate key from the send counter: one counts emails, one marks a day.
+    expect(mainJs).toContain("const REMINDER_NOTICE_KEY = 'lm-invoice-reminder-notice';");
+    expect(mainJs).toContain("const REMINDER_DAY_KEY = 'lm-invoice-reminder-day';");
+  });
+
+  it('offers a way to act, not just a number', () => {
+    expect(notice()).toContain("actionLabel: 'Review them'");
+    expect(notice()).toContain("action: 'openReminderReview()'");
+  });
+
+  it('runs before the sweep on every tick', () => {
+    const watch = extractDecl('startPaymentReminderWatch', mainJs);
+    const noticeAt = watch.indexOf('noticeUpcomingReminders()');
+    const sweepAt = watch.indexOf('sweepPaymentReminders()');
+    expect(noticeAt).toBeGreaterThan(-1);
+    expect(sweepAt).toBeGreaterThan(noticeAt);
+  });
+
+  it('asks the shared helper what tomorrow holds', () => {
+    // Never re-derives "due date plus threshold": the warning and the sweep
+    // must not be able to disagree about who gets chased.
+    expect(extractDecl('invoicesDueTomorrow', mainJs)).toContain('dueForReminderTomorrow(');
+    expect(extractDecl('invoicesDueTomorrow', mainJs)).toContain('isTestBookId(bookId)');
+  });
+});
+
+describe('the review list', () => {
+  it('settles through the one existing writer, never its own', () => {
+    // There is exactly one writer of inv.status = 'paid' in this app.
+    const fn = extractDecl('reminderReviewMarkPaid', mainJs);
+    expect(fn).toContain('applyInvoicePaid(inv, bookId, s)');
+    expect(fn).not.toContain("inv.status = 'paid'");
+  });
+
+  it('confirms before touching the ledger', () => {
+    expect(extractDecl('reminderReviewMarkPaid', mainJs)).toContain('confirmDialog(');
+  });
+
+  it('repaints everything a settled invoice touches', () => {
+    const fn = extractDecl('reminderReviewMarkPaid', mainJs);
+    for (const call of ['renderReminderReview()', 'renderInvoices()', 'renderLedger()', 'updateDash()']) {
+      expect(fn).toContain(call);
+    }
+  });
+
+  it('holds off on the date they gave, and can be cleared', () => {
+    const fn = extractDecl('reminderReviewHoldOff', mainJs);
+    expect(fn).toContain("inputType: 'date'");
+    expect(fn).toContain('inv.remindAfter = value;');
+    expect(fn).toContain('back in the chasing list');
+  });
+
+  it('never leaves a blank panel behind', () => {
+    expect(extractDecl('renderReminderReview', mainJs)).toContain('empty-state');
+  });
+
+  it('has somewhere to render, reachable from the card', () => {
+    expect(indexHtml).toContain('id="m-reminder-review"');
+    expect(indexHtml).toContain('id="reminder-review-body"');
+    expect(mainJs).toContain('openReminderReview, reminderReviewMarkPaid, reminderReviewHoldOff, sendTestReminderEmail,');
+  });
+});
+
+describe('the test reminder', () => {
+  const fn = () => extractDecl('sendTestReminderEmail', mainJs);
+
+  it('writes absolutely nothing', () => {
+    // A test is not a chase: an invoice borrowed as the sample must not fall
+    // out of the queue, and the day's send count must not move.
+    const body = fn();
+    expect(body).not.toContain('reminders.push');
+    expect(body).not.toContain('bumpReminderDayCount');
+    expect(body).not.toContain('saveState');
+  });
+
+  it('uses the wording currently typed, saved or not', () => {
+    expect(fn()).toContain("$('ivs-remind-msg') ? $('ivs-remind-msg').value");
+    expect(fn()).toContain("$('ivs-remind-days') ? $('ivs-remind-days').value");
+  });
+
+  it('marks the subject so a stray forward never reads as a real chase', () => {
+    expect(fn()).toContain('`[TEST] ${mail.subject}`');
+  });
+
+  it('falls back to a sample so it works before anything is overdue', () => {
+    expect(fn()).toContain('sampleReminderInvoice({ today: today(), days: cfg.days })');
+  });
+
+  it('asks where to send when no address is on file', () => {
+    expect(fn()).toContain('promptDialog(');
+    expect(fn()).toContain('Nobody else receives it.');
+  });
+
+  it('needs the sheet connected, and reports a failure', () => {
+    expect(fn()).toContain('if (!sheetsUrl)');
+    expect(fn()).toContain('Could not send the test');
+  });
+
+  it('is offered in the settings form, with what it does spelled out', () => {
+    expect(indexHtml).toContain('onclick="sendTestReminderEmail()"');
+    expect(indexHtml).toContain('no invoice is touched or counted as chased');
+  });
+});
