@@ -17,6 +17,7 @@ import {
   TAX_CENTER,
   attentionInput,
   isAuthor,
+  saveCatalogWithDeletions,
   recognizedRevenueOf,
   saveState,
   showToast,
@@ -127,7 +128,8 @@ function systemInstruction() {
     '- A consignment sale earns the publisher a cut after the shop\'s commission, not the shelf price. The tools already report the cut; do not recalculate it.',
     '- When you give a total, say what it covers and over what dates. If a result says it was truncated, say how many rows it actually matched.',
     '- To find things filed wrongly, call findAnomalies. Report exactly what it returns. Never decide for yourself that something looks miscategorised.',
-    '- You may stage a fix with proposeCorrection, one expense per call, and only for something findAnomalies reported. It changes nothing — the publisher sees it as a card and decides. Tell them you have put it there for approval.',
+    '- To change or fill in information, use proposeEdits. It changes nothing on its own: the publisher sees the list, can untick any row, and decides. Put every change from one request in a single call, look up the record ids with the read tools first, and tell them plainly what you have put up for approval and what you could not stage and why.',
+    '- Never claim you have changed something. You stage changes; the publisher applies them.',
     '',
     'Write the way you would speak to the shop owner: short, concrete, no jargon, no code, no field names. Lead with the answer, then the couple of numbers behind it. Plain sentences and short bullet lists only.',
   ].join('\n');
@@ -173,7 +175,7 @@ const TOOL_LABELS = {
   queryEvents: 'fairs and trips',
   queryCatalog: 'the catalogue and stock',
   findAnomalies: 'record checks',
-  proposeCorrection: 'a suggested fix',
+  proposeEdits: 'changes for you to approve',
 };
 
 function intelMessageHtml(msg) {
@@ -183,32 +185,72 @@ function intelMessageHtml(msg) {
       <div class="intel-msg-who">${mine ? 'You' : 'Your books'}</div>
       <div class="intel-msg-body">${body}</div>
       ${mine ? '' : toolTrace(msg.tools)}
-      ${(msg.proposals || []).map(id => intelProposalHtml(INTEL_PROPOSALS.get(id))).join('')}
+      ${(msg.proposals || []).map(id => intelBatchHtml(INTEL_PROPOSALS.get(id))).join('')}
     </article>`;
 }
 
-function intelProposalHtml(p) {
-  if (!p) return '';
-  const where = p.scope === 'business' ? 'Business expenses' : (p.book || 'Book expenses');
-  const settled = p.status === 'applied' || p.status === 'dismissed';
-  const field = p.field === 'cat' ? 'Category' : 'Trip';
-  return `<div class="intel-proposal ${settled ? 'is-settled' : ''}" data-proposal="${escapeHtml(p.id)}">
+/**
+ * A staged batch of changes, awaiting a yes or a no.
+ *
+ * Every row is shown with what it is now and what it would become, because the
+ * publisher approving this has to be able to check the work — an assistant that
+ * says "I have updated four books" and shows nothing is asking to be trusted
+ * rather than read. Rows can be unticked individually: on a batch of twelve
+ * ISBNs, one wrong entry should cost that one row, not the whole job.
+ */
+function intelBatchHtml(b) {
+  if (!b) return '';
+  const settled = b.status === 'applied' || b.status === 'dismissed';
+  const live = b.items.filter(it => !b.skipped.includes(it.ref));
+  const money = live.filter(it => it.risk === 'money').length;
+
+  const pill = b.status === 'applied'
+    ? '<span class="pill green">✓ Done</span>'
+    : b.status === 'dismissed'
+      ? '<span class="pill gray">✕ Left alone</span>'
+      : `<span class="pill amber">● ${live.length} ${live.length === 1 ? 'change needs' : 'changes need'} your OK</span>`;
+
+  const rows = b.items.map(it => {
+    const off = b.skipped.includes(it.ref);
+    const applied = b.status === 'applied' && !off;
+    return `<tr class="intel-edit ${off ? 'is-off' : ''}">
+        <td class="intel-edit-tick">${settled
+          ? (applied ? '<span aria-label="changed">✓</span>' : '<span aria-label="not changed">—</span>')
+          : `<button type="button" class="intel-tick ${off ? '' : 'is-on'}" role="switch" aria-checked="${off ? 'false' : 'true'}"
+               aria-label="Include this change" onclick="toggleIntelEdit('${escapeHtml(b.id)}','${escapeHtml(it.ref)}')">${off ? '' : '✓'}</button>`}</td>
+        <td class="intel-edit-what">
+          <span class="intel-edit-record">${escapeHtml(it.record)}</span>
+          <span class="intel-edit-field">${escapeHtml(it.fieldLabel)}${it.risk === 'money' ? ' <span class="intel-money-flag" title="This one changes money">$</span>' : ''}</span>
+          ${it.book ? `<span class="intel-edit-book">${escapeHtml(it.book)}</span>` : ''}
+        </td>
+        <td class="intel-edit-was intel-fig">${escapeHtml(it.beforeText)}</td>
+        <td class="intel-edit-now intel-fig"><strong>${escapeHtml(it.afterText)}</strong></td>
+      </tr>
+      ${it.sideEffect || it.reason ? `<tr class="intel-edit-note ${off ? 'is-off' : ''}"><td></td><td colspan="3">
+        ${it.reason ? escapeHtml(it.reason) : ''}${it.reason && it.sideEffect ? ' · ' : ''}${it.sideEffect ? `Also, ${escapeHtml(it.sideEffect)}.` : ''}
+      </td></tr>` : ''}`;
+  }).join('');
+
+  return `<div class="intel-proposal ${settled ? 'is-settled' : ''}" data-proposal="${escapeHtml(b.id)}">
       <div class="intel-proposal-head">
-        <span class="pill ${p.status === 'applied' ? 'green' : p.status === 'dismissed' ? 'gray' : 'amber'}">
-          ${p.status === 'applied' ? '✓ Changed' : p.status === 'dismissed' ? '✕ Left alone' : '● Needs your OK'}
-        </span>
-        <strong>${escapeHtml(p.description || 'This expense')}</strong>
+        ${pill}
+        <strong>${escapeHtml(b.summary || 'Changes to your records')}</strong>
       </div>
-      <dl class="intel-proposal-diff">
-        <dt>Where</dt><dd>${escapeHtml(where)} · ${escapeHtml(p.date || 'no date')}</dd>
-        <dt>Amount</dt><dd class="intel-fig">${escapeHtml(p.currency || '')} ${Number(p.amount || 0).toFixed(2)}</dd>
-        <dt>${escapeHtml(field)} now</dt><dd>${escapeHtml(p.before || '—')}</dd>
-        <dt>Change to</dt><dd><strong>${escapeHtml(p.after || '')}</strong></dd>
-      </dl>
-      ${p.reason ? `<p class="intel-proposal-why">${escapeHtml(p.reason)}</p>` : ''}
+
+      <table class="intel-edits"><tbody>${rows}</tbody></table>
+
+      ${money && !settled ? `<p class="intel-proposal-warn">${money === 1 ? 'One of these changes' : `${money} of these changes`} affects money — prices, shares, amounts or a shop's commission. Worth a second look.</p>` : ''}
+      ${(b.warnings || []).map(w => `<p class="intel-proposal-warn">${escapeHtml(w)}</p>`).join('')}
+      ${(b.rejected || []).length ? `<details class="intel-rejected">
+        <summary>${b.rejected.length} could not be prepared</summary>
+        <ul>${b.rejected.map(r => `<li>${escapeHtml(r.reason)}</li>`).join('')}</ul>
+      </details>` : ''}
+
       ${settled ? '' : `<div class="intel-proposal-actions">
-        <button type="button" class="btn gold sm sys-target" onclick="applyIntelProposal('${escapeHtml(p.id)}')">Make this change</button>
-        <button type="button" class="btn ghost sm sys-target" onclick="dismissIntelProposal('${escapeHtml(p.id)}')">Leave it as it is</button>
+        <button type="button" class="btn gold sm sys-target" onclick="applyIntelProposal('${escapeHtml(b.id)}')" ${live.length ? '' : 'disabled'}>
+          ${live.length === 1 ? 'Make this change' : `Make these ${live.length} changes`}
+        </button>
+        <button type="button" class="btn ghost sm sys-target" onclick="dismissIntelProposal('${escapeHtml(b.id)}')">Leave everything as it is</button>
       </div>`}
     </div>`;
 }
@@ -353,9 +395,11 @@ async function sendIntelMessage() {
     });
 
     const ids = [];
-    for (const p of out.proposals) {
-      const id = `p${++proposalSeq}`;
-      INTEL_PROPOSALS.set(id, { ...p, id, status: 'open' });
+    for (const batch of out.proposals) {
+      const id = `b${++proposalSeq}`;
+      // `skipped` is the publisher's own unticking and lives with the batch, so
+      // it survives a re-render and a reload the way the batch itself does.
+      INTEL_PROPOSALS.set(id, { ...batch, id, status: 'open', skipped: [] });
       ids.push(id);
     }
 
@@ -369,8 +413,9 @@ async function sendIntelMessage() {
       proposals: ids,
     });
     INTEL_HISTORY = out.history.slice(-HISTORY_LIMIT);
-    setIntelStatus(ids.length
-      ? `Answered, with ${ids.length} suggested ${ids.length === 1 ? 'change' : 'changes'} for you to approve.`
+    const staged = out.proposals.reduce((n, b) => n + (b.items ? b.items.length : 0), 0);
+    setIntelStatus(staged
+      ? `Answered, with ${staged} ${staged === 1 ? 'change' : 'changes'} for you to approve.`
       : 'Answered.');
   } catch (e) {
     if (e && e.name === 'AbortError') {
@@ -417,77 +462,152 @@ function acceptIntelDisclosure() {
   $i('intel-input')?.focus();
 }
 
-// ── APPROVING A CHANGE ───────────────────────────────────────────────────────
+// ── APPROVING CHANGES ────────────────────────────────────────────────────────
+
+/** Untick one row without touching the rest of the batch. */
+function toggleIntelEdit(batchId, ref) {
+  const b = INTEL_PROPOSALS.get(batchId);
+  if (!b || b.status !== 'open' || isAuthor()) return;
+  const at = b.skipped.indexOf(ref);
+  if (at === -1) b.skipped.push(ref); else b.skipped.splice(at, 1);
+  saveIntelThread();
+  renderIntel();
+}
+
+/** Where a record family's changes get saved, and under which key. */
+function saveGroupFor(item) {
+  const t = item.target;
+  if (t === 'book') return { kind: 'catalog', key: 'catalog' };
+  if (t === 'businessExpense' || t === 'tripBudget') return { kind: 'taxCenter', key: 'taxCenter' };
+  return { kind: 'bookState', key: `book:${item.bookId}`, bookId: item.bookId };
+}
 
 /**
- * Apply one staged correction.
+ * Find the live record an item names, right now.
  *
- * The write deliberately goes through saveTaxCenter()/saveState() rather than
- * touching Firestore: those are what carry the offline queue and the three-way
- * merge, so a change approved on a train lands the same way one approved at a
- * desk does. The record is re-found by id at this moment rather than trusted
- * from when it was staged — the thread survives a reload, and the row could
- * have been edited or removed in between.
+ * Deliberately re-resolved at apply time rather than held from when the batch
+ * was staged: the thread survives a reload, so a change can outlive the record
+ * it describes, and the publisher may have edited the same row on another
+ * screen in between. Anything that has gone is reported and skipped rather than
+ * recreated.
  */
-async function applyIntelProposal(id) {
-  const p = INTEL_PROPOSALS.get(id);
-  if (!p || p.status !== 'open' || isAuthor()) return;
+function liveRecordFor(item) {
+  if (item.target === 'book') return BOOKS[item.id] || null;
+  if (item.target === 'businessExpense') {
+    return (TAX_CENTER.businessExpenses || []).find(e => e && String(e.id) === String(item.id)) || null;
+  }
+  if (item.target === 'tripBudget') {
+    if (!TAX_CENTER.tripBudgets || typeof TAX_CENTER.tripBudgets !== 'object') TAX_CENTER.tripBudgets = {};
+    return TAX_CENTER.tripBudgets;
+  }
+  const list = item.target === 'store'
+    ? (states[item.bookId]?.stores || [])
+    : (states[item.bookId]?.expenses || []);
+  return list.find(e => e && String(e.id) === String(item.id)) || null;
+}
 
-  const field = p.field === 'cat' ? 'category' : 'trip';
+/**
+ * Apply every ticked change in a batch.
+ *
+ * Two things this does that a naive loop would not. It saves ONCE per record
+ * family rather than once per change — twenty ISBNs are one catalogue write,
+ * not twenty — because each save is a network round trip and a merge, and doing
+ * it twenty times is both slow and twenty chances to half-finish. And it applies
+ * every change in memory first, then saves: if a save fails, the whole family's
+ * changes fail together and are reported together, rather than leaving the
+ * publisher guessing which half of a batch landed.
+ */
+async function applyIntelProposal(batchId) {
+  const b = INTEL_PROPOSALS.get(batchId);
+  if (!b || b.status !== 'open' || isAuthor()) return;
+
+  const live = b.items.filter(it => !b.skipped.includes(it.ref));
+  if (!live.length) return;
+
+  const money = live.filter(it => it.risk === 'money');
   const ok = await confirmDialog(
-    `This edits a record in your books. You can change it back any time from the Expenses screen.`,
+    `This edits ${live.length === 1 ? 'a record' : 'records'} in your books. You can change ${live.length === 1 ? 'it' : 'them'} back any time from the screen ${live.length === 1 ? 'it lives' : 'they live'} on.`
+    + (money.length ? `\n\n${money.length === 1 ? 'One change affects' : `${money.length} changes affect`} money — prices, shares, amounts or a shop's commission.` : ''),
     {
-      title: `Change the ${field} on this expense?`,
-      okLabel: 'Make the change',
-      // The facts go in the aligned rows rather than the sentence, so the one
-      // thing worth checking — what it is now, what it becomes — is the easiest
-      // thing on the dialog to read.
-      details: [
-        ['Expense', p.description || '—'],
-        ['Where', p.scope === 'business' ? 'Business expenses' : (p.book || 'Book expenses')],
-        ['Date', p.date || '—'],
-        ['Amount', `${p.currency || ''} ${Number(p.amount || 0).toFixed(2)}`.trim()],
-        [`${field === 'category' ? 'Category' : 'Trip'} now`, p.before || '—'],
-        ['Change to', p.after || '—'],
-      ],
+      title: live.length === 1 ? 'Make this change?' : `Make these ${live.length} changes?`,
+      okLabel: live.length === 1 ? 'Make the change' : 'Make them all',
+      danger: money.length > 0,
+      // The facts go in aligned rows rather than a sentence, so what actually
+      // changes is the easiest thing on the dialog to read. Capped, because a
+      // dialog nobody can scroll to the bottom of is not a confirmation.
+      details: live.slice(0, 12).map(it => [
+        `${it.record} · ${it.fieldLabel}`,
+        `${it.beforeText} → ${it.afterText}`,
+      ]).concat(live.length > 12 ? [['…and more', `${live.length - 12} further changes`]] : []),
     }
   );
   if (!ok) return;
 
-  try {
-    const list = p.scope === 'business'
-      ? (TAX_CENTER.businessExpenses || [])
-      : (states[p.bookId]?.expenses || []);
-    const target = list.find(e => e && String(e.id) === String(p.expenseId));
-    if (!target) {
-      showToast('That expense is no longer there, so nothing was changed', 'warn', 4200);
-      p.status = 'dismissed'; saveIntelThread(); renderIntel();
-      return;
-    }
-    target[p.field] = p.after;
-
-    if (p.scope === 'business') await saveTaxCenter({ rethrow: true });
-    else await saveState(p.bookId);
-
-    p.status = 'applied';
-    showToast(`Changed to “${p.after}”`, 'ok', 3200);
-    setIntelStatus(`Changed to ${p.after}.`);
-  } catch (e) {
-    console.error('Could not apply correction', e);
-    showToast('Could not save that change — it has been left as it was', 'err', 5000);
-    return;
-  } finally {
-    saveIntelThread();
-    renderIntel();
+  const groups = new Map();
+  const missing = [];
+  for (const it of live) {
+    const rec = liveRecordFor(it);
+    if (!rec) { missing.push(it); continue; }
+    const g = saveGroupFor(it);
+    const bucket = groups.get(g.key) || { ...g, items: [] };
+    bucket.items.push({ item: it, rec });
+    groups.set(g.key, bucket);
   }
+
+  // Everything in memory first, so a failed save fails a whole family together.
+  for (const g of groups.values()) {
+    for (const { item, rec } of g.items) {
+      if (item.target === 'tripBudget') rec[item.mapKey || item.id] = item.after;
+      else rec[item.field] = item.after;
+      if (item.sidePatch) Object.assign(rec, item.sidePatch);
+    }
+  }
+
+  const failed = [];
+  let saved = 0;
+  for (const g of groups.values()) {
+    try {
+      if (g.kind === 'catalog') await saveCatalogWithDeletions();
+      else if (g.kind === 'taxCenter') await saveTaxCenter({ rethrow: true });
+      else await saveState(g.bookId);
+      saved += g.items.length;
+    } catch (e) {
+      console.error('Could not save changes for', g.key, e);
+      failed.push(g);
+    }
+  }
+
+  if (failed.length) {
+    const n = failed.reduce((t, g) => t + g.items.length, 0);
+    showToast(`${n} ${n === 1 ? 'change' : 'changes'} could not be saved — they are queued and will retry`, 'warn', 5200);
+  }
+  if (missing.length) {
+    showToast(`${missing.length} ${missing.length === 1 ? 'record was' : 'records were'} no longer there, so ${missing.length === 1 ? 'it was' : 'they were'} skipped`, 'warn', 5000);
+  }
+  if (saved && !failed.length) {
+    showToast(`${saved} ${saved === 1 ? 'change' : 'changes'} saved`, 'ok', 3200);
+  }
+
+  b.status = 'applied';
+  b.skipped = [...b.skipped, ...missing.map(it => it.ref)];
+  setIntelStatus(`${saved} of ${live.length} ${live.length === 1 ? 'change' : 'changes'} saved.`);
+  saveIntelThread();
+  renderIntel();
+
+  // Every other screen rebuilds when it is navigated to, so the only one that
+  // can be left showing a stale figure is the dashboard, which is also the one
+  // most likely to be behind this panel.
+  try {
+    if (typeof window.updateDash === 'function') window.updateDash();
+  } catch (_) { /* a refresh that fails must not undo a save that worked */ }
 }
 
-function dismissIntelProposal(id) {
-  const p = INTEL_PROPOSALS.get(id);
-  if (!p || p.status !== 'open') return;
-  p.status = 'dismissed';
+function dismissIntelProposal(batchId) {
+  const b = INTEL_PROPOSALS.get(batchId);
+  if (!b || b.status !== 'open') return;
+  b.status = 'dismissed';
   saveIntelThread();
-  setIntelStatus('Left as it is.');
+  setIntelStatus('Left as they are.');
   renderIntel();
 }
 
@@ -500,6 +620,7 @@ export {
   askIntelStarter,
   clearIntelThread,
   dismissIntelProposal,
+  intelBatchHtml,
   intelComposerKey,
   intelContext,
   intelText,
@@ -507,4 +628,5 @@ export {
   sendIntelMessage,
   stopIntelTurn,
   systemInstruction,
+  toggleIntelEdit,
 };

@@ -18039,3 +18039,89 @@ button[onclick="refreshUmamiStats()"]:active {
 #intel-stop[hidden],
 #intel-disclosure[hidden],
 .intel-notice[hidden] { display: none; }
+
+/* ── Intelligence: a staged batch of changes ────────────────────────────────
+   The old card described one correction as a definition list. A batch needs a
+   table, because the question the publisher is answering changed: not "is this
+   right?" but "which of these are right?" — and that is a scanning job, so the
+   old and new values have to line up in columns. */
+
+.intel-edits {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-xs);
+}
+.intel-edits td {
+  padding: var(--space-2) var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+  vertical-align: top;
+}
+.intel-edits tr:first-child td { border-top: 0; }
+
+/* A row the publisher has unticked stays visible and legible — greying it out
+   into unreadability would hide what they are choosing not to do. */
+.intel-edit.is-off .intel-edit-what,
+.intel-edit.is-off .intel-edit-was,
+.intel-edit.is-off .intel-edit-now { opacity: 0.45; text-decoration: line-through; }
+.intel-edit-note.is-off { display: none; }
+
+.intel-edit-tick { width: 2.25rem; }
+.intel-tick {
+  width: 22px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--r);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-page);
+  color: var(--on-accent);
+  font-size: 12px; line-height: 1; cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-standard),
+              border-color var(--dur-fast) var(--ease-standard),
+              transform var(--dur-fast) var(--ease-spring);
+  /* Fitts's law says a 22px box is a small target, so the hit area is padded
+     out to a comfortable one without the tick itself growing. */
+  box-shadow: 0 0 0 8px transparent;
+}
+.intel-tick.is-on { background: var(--gold); border-color: var(--gold); }
+.intel-tick:hover { transform: translateY(-1px); }
+.intel-tick:active { transform: scale(0.94); }
+
+.intel-edit-what { display: flex; flex-direction: column; gap: 2px; }
+.intel-edit-record { color: var(--content-primary); font-weight: 600; }
+.intel-edit-field { color: var(--content-secondary); }
+.intel-edit-book { color: var(--content-muted); font-size: var(--text-3xs); }
+.intel-money-flag {
+  display: inline-block;
+  min-width: 15px; text-align: center;
+  border-radius: var(--r);
+  background: var(--status-active);
+  color: var(--on-status);
+  font-size: var(--text-3xs); font-weight: 700;
+}
+.intel-edit-was { color: var(--content-muted); text-align: right; white-space: nowrap; }
+.intel-edit-now { color: var(--content-primary); text-align: right; white-space: nowrap; }
+.intel-edit-note td { color: var(--content-muted); font-size: var(--text-3xs); border-top: 0; padding-top: 0; }
+
+.intel-proposal-warn {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--r2);
+  background: var(--status-active-bg);
+  color: var(--content-secondary);
+  font-size: var(--text-xs);
+  box-shadow: inset 3px 0 0 var(--status-active);
+}
+.intel-rejected { font-size: var(--text-xs); color: var(--content-secondary); }
+.intel-rejected summary { cursor: pointer; color: var(--content-muted); }
+.intel-rejected ul { margin: var(--space-2) 0 0; padding-left: var(--space-4); display: flex; flex-direction: column; gap: 4px; }
+
+@container (max-width: 34rem) {
+  /* Stack the before/after under the record rather than letting three columns
+     crush the names into one word per line. */
+  .intel-edits, .intel-edits tbody, .intel-edits tr, .intel-edits td { display: block; width: auto; }
+  .intel-edit { position: relative; padding-left: 2.25rem; border-top: 1px solid var(--border-subtle); }
+  .intel-edits td { border-top: 0; padding: 2px 0; }
+  .intel-edit-tick { position: absolute; left: 0; top: var(--space-2); }
+  .intel-edit-was, .intel-edit-now { text-align: left; }
+  .intel-edit-was::before { content: 'Now: '; color: var(--content-muted); }
+  .intel-edit-now::before { content: 'Becomes: '; color: var(--content-muted); }
+}

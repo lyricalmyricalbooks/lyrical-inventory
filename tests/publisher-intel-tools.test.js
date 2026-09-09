@@ -3,6 +3,7 @@ import {
   INTEL_TOOL_NAMES,
   INTEL_TOOL_SCHEMAS,
   IN_PERSON_CHANNELS,
+  MAX_EDITS_PER_BATCH,
   MAX_TOOL_ROWS,
   runIntelTool,
 } from '../src/lib/publisher-intel-tools.js';
@@ -230,7 +231,7 @@ describe('findAnomalies', () => {
     expect(out.byKind['category-alias']).toBe(2);        // "travel" and "Events"
     expect(out.byKind['missing-exchange-rate']).toBe(1);
     const alias = out.rows.find(r => r.kind === 'category-alias' && r.expenseId === 'b1');
-    expect(alias.suggestedFix).toEqual({ kind: 'recategorizeExpense', value: 'Travel & Meals' });
+    expect(alias.suggestedFix).toEqual({ target: 'businessExpense', field: 'category', value: 'Travel & Meals' });
   });
 
   it('spots one cost entered twice', () => {
@@ -245,37 +246,162 @@ describe('findAnomalies', () => {
   });
 });
 
-describe('proposeCorrection', () => {
-  const propose = (args, ctx = fixture()) => runIntelTool('proposeCorrection', args, ctx);
+describe('proposeEdits', () => {
+  const propose = (edits, ctx = fixture(), summary = 'test') =>
+    runIntelTool('proposeEdits', { summary, edits }, ctx);
 
-  it('describes the change without making it', () => {
+  it('stages a change without making it', () => {
     const ctx = fixture();
-    const out = propose({ kind: 'recategorizeExpense', expenseId: 'b1', value: 'Travel & Meals' }, ctx);
+    const out = propose([{ target: 'businessExpense', id: 'b1', field: 'category', value: 'Travel & Meals' }], ctx);
     expect(out.ok).toBe(true);
-    expect(out.proposal).toMatchObject({ before: 'travel', after: 'Travel & Meals', field: 'cat', scope: 'business' });
+    expect(out.batch.items[0]).toMatchObject({
+      target: 'businessExpense', field: 'cat', beforeText: 'travel', afterText: 'Travel & Meals', risk: 'descriptive',
+    });
     // Nothing was written. This is the whole safety argument for the feature.
     expect(ctx.taxCenter.businessExpenses.find(e => e.id === 'b1').cat).toBe('travel');
   });
 
-  it('refuses a change to a row that is not there', () => {
-    expect(propose({ kind: 'recategorizeExpense', expenseId: 'nope', value: 'Other' }).ok).toBe(false);
+  it('puts ISBNs on books, which is the job it was widened for', () => {
+    const ctx = fixture();
+    ctx.books.other = book({ title: 'Other' });
+    ctx.states.other = { hist: [], ledger: [], expenses: [], stores: [], chStats: {} };
+    const out = propose([
+      { target: 'book', id: 'hound', field: 'isbn', value: '978-0-306-40615-7' },
+      { target: 'book', id: 'other', field: 'isbn', value: '0306406152' },
+    ], ctx);
+    expect(out.batch.items).toHaveLength(2);
+    expect(out.batch.items.map(i => i.afterText)).toEqual(['978-0-306-40615-7', '0306406152']);
+    expect(ctx.books.hound.isbn).toBeUndefined();
+  });
+
+  it('refuses an ISBN whose check digit does not match', () => {
+    // A transposed digit is the realistic failure here, and it is invisible
+    // until a shop cannot order the book.
+    const out = propose([{ target: 'book', id: 'hound', field: 'isbn', value: '978-0-306-40615-6' }]);
+    expect(out.ok).toBe(false);
+    expect(out.rejected[0].reason).toMatch(/check digit/i);
+  });
+
+  it('stages the good rows and reports the bad ones, rather than refusing everything', () => {
+    // Twelve ISBNs with one typo must not cost the other eleven.
+    const out = propose([
+      { target: 'book', id: 'hound', field: 'isbn', value: '9780306406157' },
+      { target: 'book', id: 'ghost', field: 'isbn', value: '9780306406157' },
+      { target: 'book', id: 'hound', field: 'listPrice', value: 'not a number' },
+    ]);
+    expect(out.ok).toBe(true);
+    expect(out.batch.items).toHaveLength(1);
+    expect(out.batch.rejected).toHaveLength(2);
+    expect(out.batch.rejected[0].reason).toMatch(/no book with id "ghost"/i);
+  });
+
+  it('accepts a value written the way a person would write it', () => {
+    const out = propose([{ target: 'book', id: 'hound', field: 'listPrice', value: 'CA$1,299.00' }]);
+    expect(out.batch.items[0].after).toBe(1299);
+  });
+
+  it('will not touch a field that decides who can read a book', () => {
+    // The author email builds the ownership map the security rules read, so it
+    // is an access boundary rather than a data field.
+    for (const field of ['authorEmail', 'authorPassword']) {
+      const out = propose([{ target: 'book', id: 'hound', field, value: 'someone@example.com' }]);
+      expect(out.ok).toBe(false);
+      expect(out.rejected[0].reason).toMatch(/is not something that can be changed/i);
+    }
+  });
+
+  it('marks the changes that move money', () => {
+    const out = propose([
+      { target: 'book', id: 'hound', field: 'isbn', value: '9780306406157' },
+      { target: 'book', id: 'hound', field: 'listPrice', value: '30' },
+    ]);
+    expect(out.batch.moneyEditCount).toBe(1);
+    expect(out.batch.items.find(i => i.field === 'listPrice').risk).toBe('money');
+    expect(out.batch.items.find(i => i.field === 'isbn').risk).toBe('descriptive');
+  });
+
+  it('warns when the publisher and author shares would stop adding up', () => {
+    // Nothing downstream would complain; it would just pay the wrong amount.
+    const out = propose([{ target: 'book', id: 'hound', field: 'publisherSplitPct', value: '70' }]);
+    expect(out.batch.warnings[0]).toMatch(/110%/);
+  });
+
+  it('does not warn when both halves of the split move together', () => {
+    const out = propose([
+      { target: 'book', id: 'hound', field: 'publisherSplitPct', value: '70' },
+      { target: 'book', id: 'hound', field: 'authorSplitPct', value: '30' },
+    ]);
+    expect(out.batch.warnings).toEqual([]);
+  });
+
+  it('recalculates the Canadian figure when an amount changes', () => {
+    // Every report reads the stamped figure in preference to the native one, so
+    // a stale one would look applied on screen and change nothing in the totals.
+    const ctx = fixture();
+    ctx.taxCenter.businessExpenses[0].fxRate = 1;
+    const out = propose([{ target: 'businessExpense', id: 'b1', field: 'amount', value: '150' }], ctx);
+    expect(out.batch.items[0].sidePatch).toEqual({ baseAmount: 150 });
+  });
+
+  it('clears the Canadian figure when the currency itself changes', () => {
+    const ctx = fixture();
+    ctx.taxCenter.businessExpenses[0].currency = 'CAD';
+    const out = propose([{ target: 'businessExpense', id: 'b1', field: 'currency', value: 'USD' }], ctx);
+    expect(out.batch.items[0].sidePatch).toEqual({ baseAmount: null, fxMissing: true });
+    expect(out.batch.items[0].sideEffect).toMatch(/exchange rate/i);
+  });
+
+  it('reaches shops and trip budgets too, not only books and expenses', () => {
+    const ctx = fixture();
+    ctx.states.hound.stores = [{ id: 's1', name: 'Bookshop', rate: 40 }];
+    const out = propose([
+      { target: 'store', id: 's1', bookId: 'hound', field: 'commissionPct', value: '45' },
+      { target: 'tripBudget', id: 'Toronto Word Fair', field: 'amount', value: '500' },
+    ], ctx);
+    expect(out.batch.items.map(i => i.target)).toEqual(['store', 'tripBudget']);
+    expect(ctx.states.hound.stores[0].rate).toBe(40);
+    expect(ctx.taxCenter.tripBudgets['Toronto Word Fair']).toBe(400);
+  });
+
+  it('refuses a change that would change nothing', () => {
+    const out = propose([{ target: 'businessExpense', id: 'b1', field: 'trip', value: 'Toronto Word Fair' }]);
+    expect(out.ok).toBe(false);
+    expect(out.rejected[0].reason).toMatch(/nothing to change/i);
+  });
+
+  it('refuses two edits to the same field in one batch', () => {
+    // They would apply in array order and the first would vanish silently.
+    const out = propose([
+      { target: 'book', id: 'hound', field: 'isbn', value: '9780306406157' },
+      { target: 'book', id: 'hound', field: 'isbn', value: '0306406152' },
+    ]);
+    expect(out.batch.items).toHaveLength(1);
+    expect(out.batch.rejected[0].reason).toMatch(/already being changed/i);
   });
 
   it('refuses a category this app does not have', () => {
     const ctx = fixture();
     ctx.expenseCategories = ['Travel & Meals', 'Other'];
-    const out = propose({ kind: 'recategorizeExpense', expenseId: 'b1', value: 'Yacht Hire' }, ctx);
+    const out = propose([{ target: 'businessExpense', id: 'b1', field: 'category', value: 'Yacht Hire' }], ctx);
     expect(out.ok).toBe(false);
-    expect(out.error).toMatch(/not one of this app/i);
+    expect(out.rejected[0].reason).toMatch(/not one of this app/i);
   });
 
-  it('refuses anything but the two reversible corrections', () => {
-    const out = propose({ kind: 'voidExpense', expenseId: 'b1', value: 'x' });
+  it('refuses a kind of record it has no business writing to', () => {
+    const out = propose([{ target: 'ledgerRow', id: '1', field: 'amount', value: '5' }]);
     expect(out.ok).toBe(false);
-    expect(out.error).toMatch(/recategorizeExpense and setExpenseTrip/);
+    expect(out.rejected[0].reason).toMatch(/not a kind of record/i);
   });
 
-  it('refuses a change that would change nothing', () => {
-    expect(propose({ kind: 'setExpenseTrip', expenseId: 'b1', value: 'Toronto Word Fair' }).ok).toBe(false);
+  it('caps how much can be put up for approval at once', () => {
+    const many = Array.from({ length: MAX_EDITS_PER_BATCH + 1 }, () => (
+      { target: 'book', id: 'hound', field: 'isbn', value: '9780306406157' }
+    ));
+    expect(propose(many).ok).toBe(false);
+    expect(propose(many).error).toMatch(/most that can be put up/i);
+  });
+
+  it('says so plainly when handed nothing to do', () => {
+    expect(propose([]).error).toMatch(/no changes were given/i);
   });
 });

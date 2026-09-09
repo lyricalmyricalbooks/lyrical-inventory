@@ -71,45 +71,80 @@ describe('saying what an answer was worked out from', () => {
 
 // ── The approve-or-dismiss card ─────────────────────────────────────────────
 
-describe('a staged correction on screen', () => {
-  const intelProposalHtml = buildHarness({
-    names: ['intelProposalHtml'], deps: { escapeHtml }, returns: 'intelProposalHtml',
+describe('a staged batch on screen', () => {
+  const intelBatchHtml = buildHarness({
+    names: ['intelBatchHtml'], deps: { escapeHtml }, returns: 'intelBatchHtml',
   });
-  const proposal = (over = {}) => ({
-    id: 'p1', kind: 'recategorizeExpense', field: 'cat', scope: 'business',
-    expenseId: 'b1', description: 'Train to Toronto', date: '2026-06-13',
-    amount: 120, currency: 'CAD', before: 'travel', after: 'Travel & Meals',
-    reason: 'Same category under an older name.', status: 'open', ...over,
-  });
-
-  it('shows what it is now and what it would become', () => {
-    const html = intelProposalHtml(proposal());
-    expect(html).toContain('travel');
-    expect(html).toContain('Travel &amp; Meals');
-    expect(html).toContain('Needs your OK');
+  const batch = (over = {}) => ({
+    id: 'b1', summary: 'Add ISBNs to two books', status: 'open', skipped: [],
+    rejected: [], warnings: [], moneyEditCount: 0,
+    items: [
+      { ref: 'e1', target: 'book', id: 'hound', record: 'The Hound', fieldLabel: 'ISBN',
+        risk: 'descriptive', beforeText: '—', afterText: '978-0-306-40615-7', reason: 'from the printer' },
+      { ref: 'e2', target: 'book', id: 'altrove', record: 'Un Fantastico Altrove', fieldLabel: 'List price',
+        risk: 'money', beforeText: '40', afterText: '45' },
+    ],
+    ...over,
   });
 
-  it('offers both a yes and a no while it is still open', () => {
-    const html = intelProposalHtml(proposal());
-    expect(html).toContain('applyIntelProposal');
-    expect(html).toContain('dismissIntelProposal');
+  it('shows every row with what it is now and what it becomes', () => {
+    const html = intelBatchHtml(batch());
+    expect(html).toContain('The Hound');
+    expect(html).toContain('978-0-306-40615-7');
+    expect(html).toContain('Un Fantastico Altrove');
+    expect(html).toContain('2 changes need your OK');
   });
 
-  it('stops offering either once it has been settled', () => {
+  it('lets a single row be unticked without losing the rest', () => {
+    const html = intelBatchHtml(batch());
+    expect(html).toContain("toggleIntelEdit('b1','e1')");
+    const one = intelBatchHtml(batch({ skipped: ['e1'] }));
+    expect(one).toContain('1 change needs your OK');
+    expect(one).toContain('Make this change');
+  });
+
+  it('cannot be approved once every row is unticked', () => {
+    expect(intelBatchHtml(batch({ skipped: ['e1', 'e2'] }))).toContain('disabled');
+  });
+
+  it('calls out the changes that move money', () => {
+    const html = intelBatchHtml(batch());
+    expect(html).toMatch(/affects money/i);
+    expect(html).toContain('intel-money-flag');
+  });
+
+  it('surfaces a warning the tool raised rather than burying it', () => {
+    const html = intelBatchHtml(batch({ warnings: ['Shares would add up to 110%, not 100%.'] }));
+    expect(html).toContain('110%');
+  });
+
+  it('shows what could not be prepared, and why', () => {
+    const html = intelBatchHtml(batch({ rejected: [{ at: 'change 3', reason: 'its check digit does not match' }] }));
+    expect(html).toContain('1 could not be prepared');
+    expect(html).toContain('check digit');
+  });
+
+  it('stops offering the buttons once it is settled', () => {
     for (const status of ['applied', 'dismissed']) {
-      const html = intelProposalHtml(proposal({ status }));
+      const html = intelBatchHtml(batch({ status }));
       expect(html).not.toContain('applyIntelProposal');
-      expect(html).not.toContain('dismissIntelProposal');
+      expect(html).not.toContain('toggleIntelEdit');
     }
   });
 
-  it('escapes a description that came back from the model', () => {
-    const html = intelProposalHtml(proposal({ description: '<img src=x onerror=1>' }));
+  it('escapes anything that came back from the model', () => {
+    const html = intelBatchHtml(batch({
+      summary: '<img src=x onerror=1>',
+      items: [{ ref: 'e1', target: 'book', id: 'h', record: '<script>bad()</script>', fieldLabel: 'ISBN',
+        risk: 'descriptive', beforeText: '—', afterText: '<b>x</b>' }],
+    }));
     expect(html).not.toContain('<img');
+    expect(html).not.toContain('<script');
+    expect(html).not.toContain('<b>x</b>');
   });
 
-  it('sets money in tabular figures so a column of them lines up', () => {
-    expect(intelProposalHtml(proposal())).toContain('intel-fig');
+  it('sets values in tabular figures so a column of them lines up', () => {
+    expect(intelBatchHtml(batch())).toContain('intel-fig');
     expect(fs.readFileSync(path.join(root, 'src/style.css'), 'utf8'))
       .toMatch(/\.intel-fig\s*\{[^}]*tnum/);
   });
@@ -139,105 +174,158 @@ describe('when a question cannot be asked', () => {
 
 // ── Approving a change actually writes, and writes the right way ────────────
 
-describe('approving a correction', () => {
-  function harness({ confirm = true, author = false } = {}) {
-    const TAX_CENTER = { businessExpenses: [{ id: 'b1', desc: 'Train', cat: 'travel', amount: 120, currency: 'CAD' }] };
-    const states = { hound: { expenses: [{ id: 'e1', desc: 'Table fee', cat: 'Events', amount: 150, currency: 'CAD' }] } };
-    const saveTaxCenter = vi.fn().mockResolvedValue(undefined);
-    const saveState = vi.fn().mockResolvedValue(undefined);
-    const showToast = vi.fn();
-    const INTEL_PROPOSALS = new Map();
+describe('approving a batch of changes', () => {
+  function harness({ confirm = true, author = false, failSave = null } = {}) {
+    const BOOKS = { hound: { title: 'The Hound', isbn: '—', listPrice: 65 }, other: { title: 'Other', isbn: '—' } };
+    const TAX_CENTER = {
+      businessExpenses: [{ id: 'b1', desc: 'Train', cat: 'travel', amount: 120, currency: 'CAD', baseAmount: 120 }],
+      tripBudgets: { 'Toronto Word Fair': 400 },
+    };
+    const states = {
+      hound: { expenses: [{ id: 'e1', desc: 'Table fee', cat: 'Events' }], stores: [{ id: 's1', name: 'Bookshop', rate: 40 }] },
+    };
+    const mk = (name) => {
+      const fn = vi.fn().mockResolvedValue(undefined);
+      if (failSave === name) fn.mockRejectedValue(new Error('offline'));
+      return fn;
+    };
     const deps = {
-      INTEL_PROPOSALS, TAX_CENTER, states, saveTaxCenter, saveState, showToast,
+      INTEL_PROPOSALS: new Map(), BOOKS, TAX_CENTER, states,
+      saveCatalogWithDeletions: mk('catalog'),
+      saveTaxCenter: mk('taxCenter'),
+      saveState: mk('bookState'),
+      showToast: vi.fn(),
       isAuthor: () => author,
       confirmDialog: vi.fn().mockResolvedValue(confirm),
       setIntelStatus: vi.fn(), saveIntelThread: vi.fn(), renderIntel: vi.fn(),
       console: { error: vi.fn() },
+      window: {},
     };
-    const applyIntelProposal = buildHarness({
-      names: ['applyIntelProposal'], deps, returns: 'applyIntelProposal',
+    const api = buildHarness({
+      names: ['saveGroupFor', 'liveRecordFor', 'applyIntelProposal', 'toggleIntelEdit'],
+      deps,
+      returns: '({ apply: applyIntelProposal, toggle: toggleIntelEdit })',
     });
-    return { applyIntelProposal, ...deps };
+    return { ...api, ...deps };
   }
 
-  const businessProposal = {
-    id: 'p1', field: 'cat', scope: 'business', expenseId: 'b1',
-    description: 'Train', date: '2026-06-13', amount: 120, currency: 'CAD',
-    before: 'travel', after: 'Travel & Meals', status: 'open',
-  };
+  const item = (over = {}) => ({
+    ref: 'e1', target: 'book', id: 'hound', bookId: 'hound', record: 'The Hound',
+    field: 'isbn', fieldLabel: 'ISBN', risk: 'descriptive',
+    beforeText: '—', afterText: '9780306406157', after: '9780306406157', ...over,
+  });
+  const batch = (items) => ({ id: 'b1', summary: 's', status: 'open', skipped: [], items, rejected: [], warnings: [] });
 
   it('asks first, then writes through the app own save path', async () => {
     const h = harness();
-    h.INTEL_PROPOSALS.set('p1', { ...businessProposal });
-    await h.applyIntelProposal('p1');
+    h.INTEL_PROPOSALS.set('b1', batch([item()]));
+    await h.apply('b1');
 
     expect(h.confirmDialog).toHaveBeenCalled();
-    expect(h.TAX_CENTER.businessExpenses[0].cat).toBe('Travel & Meals');
-    // saveTaxCenter carries the offline queue and the three-way merge. Writing
-    // to Firestore directly would skip both.
-    expect(h.saveTaxCenter).toHaveBeenCalledWith({ rethrow: true });
-    expect(h.INTEL_PROPOSALS.get('p1').status).toBe('applied');
+    expect(h.BOOKS.hound.isbn).toBe('9780306406157');
+    // The catalogue save is what carries the ownership map and the merge.
+    expect(h.saveCatalogWithDeletions).toHaveBeenCalledTimes(1);
+    expect(h.INTEL_PROPOSALS.get('b1').status).toBe('applied');
+  });
+
+  it('saves once per kind of record, not once per change', async () => {
+    // Twenty ISBNs is one catalogue write. Doing it twenty times is twenty
+    // round trips and twenty chances to half-finish.
+    const h = harness();
+    h.INTEL_PROPOSALS.set('b1', batch([
+      item({ ref: 'e1', id: 'hound' }),
+      item({ ref: 'e2', id: 'other', record: 'Other', after: '0306406152' }),
+      item({ ref: 'e3', target: 'businessExpense', id: 'b1', field: 'cat', after: 'Travel & Meals' }),
+      item({ ref: 'e4', target: 'bookExpense', id: 'e1', bookId: 'hound', field: 'cat', after: 'Events & Exhibitions' }),
+      item({ ref: 'e5', target: 'store', id: 's1', bookId: 'hound', field: 'rate', after: 45 }),
+    ]));
+    await h.apply('b1');
+
+    expect(h.saveCatalogWithDeletions).toHaveBeenCalledTimes(1);
+    expect(h.saveTaxCenter).toHaveBeenCalledTimes(1);
+    // Both the book expense and the shop live on the same book's state.
+    expect(h.saveState).toHaveBeenCalledTimes(1);
+    expect(h.saveState).toHaveBeenCalledWith('hound');
+    expect(h.states.hound.stores[0].rate).toBe(45);
+  });
+
+  it('writes a trip budget onto the map rather than into a record', async () => {
+    const h = harness();
+    h.INTEL_PROPOSALS.set('b1', batch([
+      item({ target: 'tripBudget', id: 'Toronto Word Fair', mapKey: 'Toronto Word Fair', field: null, after: 500 }),
+    ]));
+    await h.apply('b1');
+    expect(h.TAX_CENTER.tripBudgets['Toronto Word Fair']).toBe(500);
+    expect(h.saveTaxCenter).toHaveBeenCalledTimes(1);
+  });
+
+  it('applies the side effect alongside the change it belongs to', async () => {
+    const h = harness();
+    h.INTEL_PROPOSALS.set('b1', batch([
+      item({ target: 'businessExpense', id: 'b1', field: 'currency', after: 'USD',
+        sidePatch: { baseAmount: null, fxMissing: true } }),
+    ]));
+    await h.apply('b1');
+    const e = h.TAX_CENTER.businessExpenses[0];
+    expect(e.currency).toBe('USD');
+    // A stale Canadian figure would look applied on screen and be wrong in
+    // every total, so it is cleared and flagged instead.
+    expect(e.baseAmount).toBeNull();
+    expect(e.fxMissing).toBe(true);
+  });
+
+  it('leaves out a row the publisher unticked', async () => {
+    const h = harness();
+    h.INTEL_PROPOSALS.set('b1', batch([item({ ref: 'e1' }), item({ ref: 'e2', id: 'other', record: 'Other' })]));
+    h.toggle('b1', 'e2');
+    await h.apply('b1');
+
+    expect(h.BOOKS.hound.isbn).toBe('9780306406157');
+    expect(h.BOOKS.other.isbn).toBe('—');
   });
 
   it('changes nothing when the publisher says no', async () => {
     const h = harness({ confirm: false });
-    h.INTEL_PROPOSALS.set('p1', { ...businessProposal });
-    await h.applyIntelProposal('p1');
+    h.INTEL_PROPOSALS.set('b1', batch([item()]));
+    await h.apply('b1');
 
-    expect(h.TAX_CENTER.businessExpenses[0].cat).toBe('travel');
-    expect(h.saveTaxCenter).not.toHaveBeenCalled();
-    expect(h.INTEL_PROPOSALS.get('p1').status).toBe('open');
+    expect(h.BOOKS.hound.isbn).toBe('—');
+    expect(h.saveCatalogWithDeletions).not.toHaveBeenCalled();
+    expect(h.INTEL_PROPOSALS.get('b1').status).toBe('open');
   });
 
-  it('saves a book expense against its own book', async () => {
+  it('skips a record that has gone rather than recreating it', async () => {
+    // The thread survives a reload, so a staged change can outlive its record.
     const h = harness();
-    h.INTEL_PROPOSALS.set('p2', {
-      ...businessProposal, id: 'p2', scope: 'book', bookId: 'hound', expenseId: 'e1',
-      before: 'Events', after: 'Events & Exhibitions',
-    });
-    await h.applyIntelProposal('p2');
+    h.INTEL_PROPOSALS.set('b1', batch([item({ id: 'vanished' })]));
+    await h.apply('b1');
 
-    expect(h.states.hound.expenses[0].cat).toBe('Events & Exhibitions');
-    expect(h.saveState).toHaveBeenCalledWith('hound');
-    expect(h.saveTaxCenter).not.toHaveBeenCalled();
-  });
-
-  it('re-finds the row now rather than trusting where it was', async () => {
-    // The thread survives a reload, so a staged change can outlive the record
-    // it describes. Applying one against a row that has gone must not throw.
-    const h = harness();
-    h.INTEL_PROPOSALS.set('p1', { ...businessProposal, expenseId: 'vanished' });
-    await h.applyIntelProposal('p1');
-
-    expect(h.saveTaxCenter).not.toHaveBeenCalled();
+    expect(h.saveCatalogWithDeletions).not.toHaveBeenCalled();
     expect(h.showToast).toHaveBeenCalledWith(expect.stringMatching(/no longer there/i), 'warn', expect.any(Number));
-    expect(h.INTEL_PROPOSALS.get('p1').status).toBe('dismissed');
+  });
+
+  it('reports a failed save instead of claiming it worked', async () => {
+    const h = harness({ failSave: 'catalog' });
+    h.INTEL_PROPOSALS.set('b1', batch([item()]));
+    await h.apply('b1');
+
+    expect(h.showToast).toHaveBeenCalledWith(expect.stringMatching(/could not be saved/i), 'warn', expect.any(Number));
+    expect(h.showToast).not.toHaveBeenCalledWith(expect.stringMatching(/saved$/), 'ok', expect.any(Number));
   });
 
   it('refuses outright in an author session', async () => {
     const h = harness({ author: true });
-    h.INTEL_PROPOSALS.set('p1', { ...businessProposal });
-    await h.applyIntelProposal('p1');
-
+    h.INTEL_PROPOSALS.set('b1', batch([item()]));
+    await h.apply('b1');
     expect(h.confirmDialog).not.toHaveBeenCalled();
-    expect(h.TAX_CENTER.businessExpenses[0].cat).toBe('travel');
+    expect(h.BOOKS.hound.isbn).toBe('—');
   });
 
   it('cannot be applied twice', async () => {
     const h = harness();
-    h.INTEL_PROPOSALS.set('p1', { ...businessProposal, status: 'applied' });
-    await h.applyIntelProposal('p1');
+    h.INTEL_PROPOSALS.set('b1', { ...batch([item()]), status: 'applied' });
+    await h.apply('b1');
     expect(h.confirmDialog).not.toHaveBeenCalled();
-  });
-
-  it('leaves the card open when the save fails, so nothing is silently lost', async () => {
-    const h = harness();
-    h.saveTaxCenter.mockRejectedValueOnce(new Error('offline'));
-    h.INTEL_PROPOSALS.set('p1', { ...businessProposal });
-    await h.applyIntelProposal('p1');
-
-    expect(h.INTEL_PROPOSALS.get('p1').status).toBe('open');
-    expect(h.showToast).toHaveBeenCalledWith(expect.stringMatching(/could not save/i), 'err', expect.any(Number));
   });
 });
 
