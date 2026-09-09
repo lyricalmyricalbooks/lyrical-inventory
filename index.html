@@ -4783,6 +4783,8 @@
       <button class="btn ink" id="inv-pdf-btn" onclick="downloadInvoicePDF()" title="Download a ready-to-send PDF — no print dialog">⬇ PDF</button>
       <button class="btn ink" onclick="downloadInvoiceHTML()" title="Download the invoice as an HTML file">⬇ HTML</button>
       <button class="btn ink" onclick="printInvoice()">🖨 Print</button>
+      <button class="btn ink" id="inv-remind-btn" onclick="remindInvoiceFromView()" title="Email this customer a reminder with a link to pay">⏰ Remind now</button>
+      <button class="btn ink" id="inv-snooze-btn" onclick="snoozeInvoiceFromView()" title="They told you when they'll pay — hold off chasing until then">📅 Promised to pay</button>
       <button class="btn gold" id="inv-mark-paid-btn" onclick="markInvoicePaidFromView()">✓ Mark paid</button>
       <button class="btn" onclick="attemptCloseModal('invoice-view')">Close</button>
     </div>
@@ -4850,6 +4852,27 @@
           <input id="ivs-stripe-test" type="checkbox" style="margin:0;"> Test mode badge
         </label>
       </div>
+    </div>
+  </div>
+
+  <div style="border-top:1px solid var(--border);margin:18px 0 12px;padding-top:14px;">
+    <div style="font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Payment reminders</div>
+    <div style="font-size:11px;color:var(--text3);line-height:1.6;margin-bottom:10px;">
+      When an invoice goes past its due date, the app can email the customer a polite reminder with a link to pay —
+      so you never have to write the awkward follow-up. Each invoice is chased <strong>once</strong>, on a weekday between 9am and 6pm,
+      and never after you mark it paid. Needs your Google Sheet connected, since that is what sends the mail.
+    </div>
+    <div class="form-group" style="margin-bottom:8px;">
+      <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2);font-weight:500;text-transform:none;letter-spacing:0;">
+        <input id="ivs-remind-auto" type="checkbox" style="margin:0;"> Chase late invoices for me
+      </label>
+    </div>
+    <div class="form-group" style="margin-bottom:8px;"><label for="ivs-remind-days">Send the reminder this many days past due</label>
+      <input id="ivs-remind-days" type="number" inputmode="numeric" min="1" max="180" step="1" placeholder="7">
+      <div style="font-size:10px;color:var(--text3);margin-top:4px;">A reminder goes out the day after this many days have passed.</div>
+    </div>
+    <div class="form-group" style="margin-bottom:0;"><label for="ivs-remind-msg">Your message (the invoice number, amount and pay link are added for you)</label>
+      <textarea id="ivs-remind-msg" rows="2" placeholder="Just a gentle nudge in case this one slipped through…"></textarea>
     </div>
   </div>
 
