@@ -299,6 +299,7 @@
 
   <div class="o3-grouplabel">Tools</div>
   <nav class="pub-nav" aria-label="Tools">
+    <button type="button" class="snav" title="Intelligence" onclick="switchTab('intel')"><span class="snav-ic">💬</span><span class="snav-label">Intelligence</span></button>
     <button type="button" class="snav" title="Event POS" onclick="switchTab('pos')"><span class="snav-ic">🛒</span><span class="snav-label">Event POS</span></button>
     <button type="button" class="snav" title="Tax Centre" onclick="switchTab('taxcenter')"><span class="snav-ic">⚖️</span><span class="snav-label">Tax Centre</span><span class="health-badge" data-health-badge="shippo,canadapost,shipping-email" aria-label="A shipping service is not answering" hidden></span></button>
 
@@ -596,6 +597,49 @@
   </div>
   <p class="sr-only" id="todo-status" role="status" aria-live="polite"></p>
   <div id="todo-groups"></div>
+</div>
+
+<!-- INTELLIGENCE (publisher only; switchTab redirects authors away) -->
+<div class="tab-panel" id="tab-intel" style="display:none;">
+  <div class="sec-head">
+    <div class="sec-head-titles">
+      <div class="sec-kicker"><span class="sec-kicker-dot"></span>Intelligence</div>
+      <div class="section-hed sec-head-title">Ask your books</div>
+      <p class="section-subcopy">Sales, costs, fairs, stock, or anything that looks filed wrong. Every answer is worked out from your own records, and each one says what it looked at.</p>
+    </div>
+    <div class="sec-head-badges">
+      <button type="button" class="btn ghost sm sys-target" id="intel-clear" onclick="clearIntelThread()" hidden>Clear conversation</button>
+    </div>
+  </div>
+
+  <div class="intel-disclosure" id="intel-disclosure" hidden>
+    <div class="intel-disclosure-ic" aria-hidden="true">🔒</div>
+    <div class="intel-disclosure-body">
+      <strong>Before you start — where your figures go</strong>
+      <p>To answer a question, this screen sends the rows it needs — your sales, costs and takings — to Google's Gemini service, using the key you saved in the Tax Centre. Nothing goes anywhere until you ask something, and only you can open this screen.</p>
+      <button type="button" class="btn gold sm sys-target" onclick="acceptIntelDisclosure()">I understand</button>
+    </div>
+  </div>
+
+  <p class="intel-notice" id="intel-notice" hidden></p>
+  <p class="sr-only" id="intel-status" role="status" aria-live="polite"></p>
+
+  <div class="intel-panel sys-container">
+    <div class="intel-thread sys-long-list" id="intel-thread"></div>
+
+    <!-- Permanent markup. renderIntel() only ever enables or disables this;
+         rebuilding it would drop the caret out of a half-typed question. -->
+    <div class="intel-composer" id="intel-composer">
+      <label class="sr-only" for="intel-input">Your question</label>
+      <textarea id="intel-input" class="intel-input" rows="2" placeholder="Ask about sales, costs, a fair, or anything that looks wrong&hellip;" onkeydown="intelComposerKey(event)"></textarea>
+      <div class="intel-composer-actions">
+        <button type="button" class="btn ghost sm sys-target" id="intel-stop" onclick="stopIntelTurn()" hidden>Stop</button>
+        <button type="button" class="btn gold sys-target" id="intel-send" onclick="sendIntelMessage()">Ask</button>
+      </div>
+    </div>
+
+    <p class="intel-foot">Worked out from your own records. Worth checking a figure against the screen it came from before you act on it.</p>
+  </div>
 </div>
 
 <!-- COMBINED OVERVIEW (shown when book = 'all') -->
