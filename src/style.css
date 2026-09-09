@@ -17831,3 +17831,211 @@ button[onclick="refreshUmamiStats()"]:active {
   width: auto;
   max-width: var(--book-kpi-rail-width);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   INTELLIGENCE PANEL
+   Ask-your-books chat. Built on the canonical semantic surfaces so it flips
+   with theme-dark.css like the rest of the app — no colour here is defined
+   only inside a media query, and none of it is OKLCH: UX_PATTERNS.md records
+   the decision not to migrate this stylesheet piecemeal.
+
+   The column uses the two-gap stage rhythm: --space-5 BETWEEN stages (thread,
+   composer, footnote) and --space-2 within one, so the grouping reads without
+   a border anywhere.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.intel-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+/* Where your figures go — shown once, before the first question. */
+.intel-disclosure {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r3);
+  padding: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+.intel-disclosure-ic { font-size: 20px; line-height: 1.2; flex: 0 0 auto; }
+.intel-disclosure-body { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.intel-disclosure-body strong { color: var(--content-primary); font-size: var(--text-sm); }
+.intel-disclosure-body p { margin: 0; color: var(--content-secondary); font-size: var(--text-xs); line-height: var(--leading-normal); }
+.intel-disclosure-body .btn { align-self: flex-start; }
+
+/* Why the composer is unavailable: no key, or no connection. */
+.intel-notice {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--status-info-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r2);
+  color: var(--content-secondary);
+  font-size: var(--text-xs);
+}
+
+.intel-thread {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-height: 220px;
+  max-height: min(60vh, 640px);
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding-right: var(--space-2);
+}
+
+.intel-msg { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.intel-msg-who {
+  font-size: var(--text-3xs);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--content-muted);
+}
+.intel-msg-body {
+  border-radius: var(--r3);
+  padding: var(--space-3) var(--space-4);
+  line-height: var(--leading-normal);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+/* The publisher's own question sits inset, the answer raised — so a glance
+   down the thread separates what was asked from what came back without
+   relying on colour alone. */
+.intel-msg.is-you .intel-msg-body {
+  background: var(--surface-inset);
+  color: var(--content-primary);
+  align-self: flex-end;
+  max-width: 46rem;
+}
+.intel-msg.is-you .intel-msg-who { align-self: flex-end; }
+.intel-msg.is-app .intel-msg-body {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  color: var(--content-primary);
+  box-shadow: var(--elev-1);
+}
+.intel-msg-body code {
+  font-family: 'DM Mono', monospace;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  font-size: 0.94em;
+}
+.intel-msg.is-thinking .intel-msg-body { display: flex; flex-direction: column; gap: var(--space-2); }
+
+/* What the answer was worked out from. */
+.intel-trace {
+  font-size: var(--text-3xs);
+  color: var(--content-muted);
+  letter-spacing: var(--tracking-label);
+}
+
+/* A staged correction, awaiting a yes or a no. */
+.intel-proposal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r3);
+  padding: var(--space-4);
+  /* A left inset rather than a tinted fill: the wash costs the figures their
+     contrast, which UX_PATTERNS.md measured at 4.25:1. */
+  box-shadow: inset 3px 0 0 var(--status-active);
+}
+.intel-proposal.is-settled { box-shadow: inset 3px 0 0 var(--border-strong); opacity: 0.82; }
+.intel-proposal-head { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.intel-proposal-head strong { color: var(--content-primary); font-size: var(--text-sm); }
+.intel-proposal-diff {
+  display: grid;
+  grid-template-columns: minmax(6rem, auto) 1fr;
+  gap: var(--space-1) var(--space-3);
+  margin: 0;
+  font-size: var(--text-xs);
+}
+.intel-proposal-diff dt { color: var(--content-muted); }
+.intel-proposal-diff dd { margin: 0; color: var(--content-secondary); }
+.intel-proposal-diff dd strong { color: var(--content-primary); }
+.intel-fig {
+  font-family: 'DM Mono', monospace;
+  font-feature-settings: "tnum" 1, "zero" 1;
+}
+.intel-proposal-why { margin: 0; font-size: var(--text-xs); color: var(--content-secondary); font-style: italic; }
+.intel-proposal-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+
+/* Nothing asked yet. */
+.intel-empty .intel-starters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: center;
+  margin-top: var(--space-3);
+}
+.intel-starter { text-transform: none; letter-spacing: 0; }
+
+.intel-composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r3);
+  padding: var(--space-3);
+  transition: border-color var(--dur-fast) var(--ease-standard),
+              box-shadow var(--dur-fast) var(--ease-standard);
+}
+/* Parent-aware focus, so the whole composer lifts rather than just the field. */
+.intel-composer:has(.intel-input:focus-visible),
+.intel-composer:has(.intel-input:focus) {
+  border-color: var(--border-strong);
+  box-shadow: var(--elev-2);
+}
+.intel-input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--content-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  resize: none;
+  min-height: 2.75rem;
+  max-height: 12rem;
+  outline: none;
+}
+.intel-input::placeholder { color: var(--content-faint); }
+.intel-input:disabled { color: var(--content-muted); cursor: not-allowed; }
+.intel-composer-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
+
+.intel-foot {
+  margin: 0;
+  font-size: var(--text-3xs);
+  color: var(--content-muted);
+  line-height: var(--leading-normal);
+}
+
+/* Container query, not a viewport one: the panel narrows inside the app shell
+   long before the window does. */
+@container (max-width: 34rem) {
+  .intel-msg.is-you .intel-msg-body { max-width: 100%; }
+  .intel-proposal-diff { grid-template-columns: 1fr; gap: 0; }
+  .intel-proposal-diff dt { margin-top: var(--space-2); }
+  .intel-composer-actions { justify-content: stretch; }
+  .intel-composer-actions .btn { flex: 1 1 auto; }
+}
+
+/* `hidden` is a UA-stylesheet rule, so any component that sets its own
+   `display` silently beats it: .btn is inline-flex and .intel-disclosure is
+   flex, so both stayed on screen when renderIntel() hid them — the Stop button
+   sat there permanently and the privacy note never went away once accepted.
+   The app already handles this per component (.fk-sheet[hidden],
+   .ps-payout-form[hidden], .oc-collapse-body[hidden]); this follows that rather
+   than adding a global rule that would change every button in the app. */
+#intel-clear[hidden],
+#intel-stop[hidden],
+#intel-disclosure[hidden],
+.intel-notice[hidden] { display: none; }

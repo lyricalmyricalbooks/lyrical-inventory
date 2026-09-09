@@ -388,6 +388,17 @@ import {
   voidPlaceholderDuplicate,
 } from './features/bigcartel.js';
 import {
+  acceptIntelDisclosure,
+  applyIntelProposal,
+  askIntelStarter,
+  clearIntelThread,
+  dismissIntelProposal,
+  intelComposerKey,
+  renderIntel,
+  sendIntelMessage,
+  stopIntelTurn,
+} from './features/intel.js';
+import {
   getShippingReconciliationOrders,
   renderOrderShippingSummary,
   backfillShipping,
@@ -4028,11 +4039,11 @@ const SHELL_TAB_LABELS = {
   pos: 'Event POS', taxcenter: 'Tax Centre', reconcile: 'Payments', qrcodes: 'QR Codes',
   customers: 'Customers', opencall: 'Open Call', sheets: 'Sheets', backups: 'Backups',
   financials: 'Financials', myqr: 'My QR Code', webanalytics: 'Web Analytics', shipping: 'Shipping',
-  bigcartel: 'Big Cartel', todo: 'To-do'
+  bigcartel: 'Big Cartel', todo: 'To-do', intel: 'Intelligence'
 };
 export function switchTab(name) {
   // publisher-only tabs redirect authors to dashboard
-  if (isAuthor() && (name === 'website' || name === 'backups' || name === 'financials' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes' || name === 'reconcile' || name === 'customers' || name === 'opencall' || name === 'webanalytics' || name === 'shipping' || name === 'bigcartel' || name === 'todo')) name = 'dashboard';
+  if (isAuthor() && (name === 'website' || name === 'backups' || name === 'financials' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes' || name === 'reconcile' || name === 'customers' || name === 'opencall' || name === 'webanalytics' || name === 'shipping' || name === 'bigcartel' || name === 'todo' || name === 'intel')) name = 'dashboard';
   // publisher redirected away from author-only myqr tab
   if (!isAuthor() && name === 'myqr') name = 'dashboard';
 
@@ -4104,6 +4115,7 @@ export function switchTab(name) {
   if (name === 'shipping') { initShippingTab(); }
   if (name === 'bigcartel') { renderBigCartelTab(); }
   if (name === 'todo') renderTodoTab();
+  if (name === 'intel') renderIntel();
 }
 
 function updateHeader() {
@@ -4946,7 +4958,7 @@ function attentionBooks() {
  * Everything the pure signal engine cannot work out for itself: the live
  * connections, the sync queue, and the author-submission inbox.
  */
-function attentionInput() {
+export function attentionInput() {
   const submissions = Object.keys(window.authorSubmissions || {}).map(bookId => {
     const subs = window.authorSubmissions[bookId] || {};
     return {
@@ -5330,7 +5342,7 @@ function heldGrossOf(s) {
 // Cleared at the start of every renderAll() so the cache is per-render-cycle
 // and can never return a value stale from a previous state mutation.
 let _revMemo = new Map();
-function recognizedRevenueOf(s) {
+export function recognizedRevenueOf(s) {
   if (_revMemo.has(s)) return _revMemo.get(s);
   const v = (s.revenue || 0) + heldGrossOf(s);
   _revMemo.set(s, v);
@@ -23465,7 +23477,12 @@ document.addEventListener('click', (e) => {
 // rendered templates intentionally use compact inline handlers; keep those
 // legacy entry points available so every visible button can invoke its action.
 function exposeLegacyInlineHandlers() {
+  // The Intelligence panel's buttons are rendered from template strings, so
+  // every one of its handlers has to be reachable off window at click time.
+  // Its names lead the list below.
   Object.assign(window, {
+    acceptIntelDisclosure, applyIntelProposal, askIntelStarter, clearIntelThread,
+    dismissIntelProposal, intelComposerKey, renderIntel, sendIntelMessage, stopIntelTurn,
     revealUpdatingScreen, hideUpdatePrompt, bindUpdatePromptInteractions, isTestBook, isTestBookId,
     ownersFromBooks, saveCatalogWithDeletions, loadCatalog, syncCatalog, switchBookModalTab,
     stepBookModal, updateBookModalFinancials, onBookTitleInput, selectBookAccentPreset, onCustomAccentInput, applyBookParcelPreset,
