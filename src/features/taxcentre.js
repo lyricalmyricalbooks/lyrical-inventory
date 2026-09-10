@@ -56,6 +56,11 @@ import { downloadCsv } from '../lib/download.js';
 import { fmt, getSym, getBookCurrencyCode, roundCents } from '../lib/money.js';
 import { reconcileConsignmentMirrors } from '../lib/consignment.js';
 import { buildCashFlowBuckets, cashFlowDelta, computeCashFlowMetrics } from '../lib/cashflow.js';
+import {
+  DEFAULT_SNOOZE_DAYS,
+  findDeductionGaps,
+  snoozeUntil,
+} from '../lib/deduction-gaps.js';
 import { canonicalExpenseCategory } from '../lib/expense-categories.js';
 import { receiptOwners, summarizeReceiptStorage, isReceiptExemptExpense } from '../lib/receipt-storage.js';
 import { testZonosConnection } from '../lib/zonos.js';
@@ -2658,9 +2663,130 @@ function _tcRenderReceiptStorage() {
 
 let activeTaxCenterSubTab = 'ledger';
 
+
+// ── COSTS WITH NO RECORD ─────────────────────────────────────────────────────
+//
+// The panel behind the "Missing Costs" sub-tab. The finding logic is all in
+// src/lib/deduction-gaps.js and is pure; this only assembles what it needs,
+// draws the result, and remembers what the publisher said about each item.
+//
+// Deliberately worded throughout as a gap in the RECORDS, never as tax advice.
+// Whether a cost can be claimed depends on where they file and is an
+// accountant's question; whether they took four hundred dollars at a fair and
+// logged no costs for it is a fact about this database.
+
+function _dedNotes() {
+  if (!TAX_CENTER.deductionNotes || typeof TAX_CENTER.deductionNotes !== 'object') {
+    TAX_CENTER.deductionNotes = {};
+  }
+  return TAX_CENTER.deductionNotes;
+}
+
+function _dedContext() {
+  let tripsSummary = {};
+  try { tripsSummary = _tcGetTripsSummaryAll() || {}; } catch (_) { tripsSummary = {}; }
+  return { books: BOOKS, states, taxCenter: TAX_CENTER, tripsSummary };
+}
+
+/** One gap, as a card the publisher can act on or put off. */
+function _dedGapHtml(gap, cur) {
+  const amount = gap.estimate == null
+    ? '<span class="ded-amount is-unknown" title="Not enough history to estimate">&mdash;</span>'
+    : `<span class="ded-amount intel-fig">${escapeHtml(cur)} ${gap.estimate.toFixed(2)}</span>`;
+  return `<div class="ded-gap card">
+      <div class="ded-gap-top">
+        <div class="ded-gap-head">
+          <strong class="ded-gap-title">${escapeHtml(gap.title)}</strong>
+          <span class="pill gray">${escapeHtml(gap.category)}</span>
+        </div>
+        ${amount}
+      </div>
+      <p class="ded-gap-detail">${escapeHtml(gap.detail)}</p>
+      ${gap.estimateBasis ? `<p class="ded-gap-basis">Estimated from ${escapeHtml(gap.estimateBasis)}.</p>` : ''}
+      <p class="ded-gap-prompt">${escapeHtml(gap.prompt)}</p>
+      <div class="ded-gap-actions">
+        <button type="button" class="btn gold sm sys-target" onclick="switchTaxCenterSubTab('ledger')">Add the cost</button>
+        <button type="button" class="btn ghost sm sys-target" onclick="snoozeDeductionGap('${escapeHtml(gap.id)}')">Remind me later</button>
+        <button type="button" class="btn ghost sm sys-target" onclick="dismissDeductionGap('${escapeHtml(gap.id)}')">Not a cost I have</button>
+      </div>
+    </div>`;
+}
+
+function renderDeductionGaps() {
+  const host = $('tc-deductions-body');
+  if (!host || isAuthor()) return;
+
+  const out = findDeductionGaps(_dedContext());
+  const cur = TAX_CENTER.settings?.baseCurrency || 'CAD';
+
+  const total = $('tc-deductions-total');
+  if (total) {
+    total.textContent = out.totalEstimate > 0 ? `${cur} ${out.totalEstimate.toFixed(2)}` : '—';
+  }
+  const status = $('tc-deductions-status');
+  if (status) {
+    status.textContent = out.gaps.length
+      ? `${out.gaps.length} ${out.gaps.length === 1 ? 'gap' : 'gaps'} found in your records.`
+      : 'Nothing missing that this can see.';
+  }
+
+  const hiddenNote = out.hidden
+    ? `<p class="ded-hidden">${out.hidden} ${out.hidden === 1 ? 'item is' : 'items are'} put off or dismissed.
+         <button type="button" class="btn ghost sm sys-target" onclick="restoreDeductionGaps()">Show them again</button></p>`
+    : '';
+
+  if (!out.gaps.length) {
+    host.innerHTML = `<div class="empty-state sys-empty">
+        <div class="e-icon" aria-hidden="true">🔎</div>
+        <strong>Nothing obviously missing</strong>
+        <span>Every fair with takings has costs against it, and the regular ones are all present.
+          This checks again whenever you open it, so it will catch the next gap as it appears.</span>
+      </div>${hiddenNote}`;
+    return;
+  }
+
+  host.innerHTML = out.gaps.map(g => _dedGapHtml(g, cur)).join('') + hiddenNote;
+}
+
+async function _dedSaveNote(id, note, message) {
+  _dedNotes()[String(id)] = note;
+  try {
+    await saveTaxCenter({ rethrow: true });
+    showToast(message, 'ok', 2800);
+  } catch (e) {
+    console.error('Could not save that', e);
+    showToast('Could not save that — it is queued and will retry', 'warn', 4200);
+  }
+  renderDeductionGaps();
+}
+
+/**
+ * Put an item off rather than making it a thing to deal with now.
+ *
+ * The whole point of a year-round check is that it does not demand everything
+ * at once. Without this the same finding reappears on every visit and the panel
+ * becomes something to scroll past.
+ */
+function snoozeDeductionGap(id) {
+  return _dedSaveNote(
+    id,
+    { status: 'snoozed', until: snoozeUntil(DEFAULT_SNOOZE_DAYS), at: new Date().toISOString() },
+    `Put off for ${DEFAULT_SNOOZE_DAYS} days`
+  );
+}
+
+function dismissDeductionGap(id) {
+  return _dedSaveNote(id, { status: 'dismissed', at: new Date().toISOString() }, 'Left out from now on');
+}
+
+function restoreDeductionGaps() {
+  TAX_CENTER.deductionNotes = {};
+  return _dedSaveNote('__none__', undefined, 'Showing everything again');
+}
+
 function switchTaxCenterSubTab(subTabName) {
   activeTaxCenterSubTab = subTabName || 'ledger';
-  const subTabs = ['ledger', 'receipts', 'integrations'];
+  const subTabs = ['ledger', 'receipts', 'deductions', 'integrations'];
   subTabs.forEach(tab => {
     const btn = document.getElementById('btn-tctab-' + tab);
     const sec = document.getElementById('tc-sec-' + tab);
@@ -2678,6 +2804,7 @@ function switchTaxCenterSubTab(subTabName) {
       }
     }
   });
+  if (activeTaxCenterSubTab === 'deductions') renderDeductionGaps();
   if (activeTaxCenterSubTab === 'receipts') {
     if (_tcVaultViewMode === 'gallery') {
       _tcRenderReceiptGallery();
@@ -2688,7 +2815,7 @@ function switchTaxCenterSubTab(subTabName) {
 }
 
 function tcSubNavKeydown(e) {
-  const subTabs = ['ledger', 'receipts', 'integrations'];
+  const subTabs = ['ledger', 'receipts', 'deductions', 'integrations'];
   const currentIdx = subTabs.indexOf(activeTaxCenterSubTab);
   if (currentIdx === -1) return;
 
@@ -4577,8 +4704,12 @@ export {
   saveNewTrip,
   savePendingExpense,
   saveRecurringEditor,
+  dismissDeductionGap,
+  renderDeductionGaps,
+  restoreDeductionGaps,
   saveTaxCenter,
   saveTaxCenterSettings,
+  snoozeDeductionGap,
   testZonosConnectionHandler,
   testCanadaPostConnectionHandler,
   diagnoseCanadaPostHandler,

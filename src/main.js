@@ -363,6 +363,10 @@ import {
   tcYearChange,
   toggleRecurringPause,
   updateRecurringPreview,
+  dismissDeductionGap,
+  renderDeductionGaps,
+  restoreDeductionGaps,
+  snoozeDeductionGap,
 } from './features/taxcentre.js';
 import {
   reconcileApplyBigCartel,
@@ -23879,6 +23883,7 @@ function exposeLegacyInlineHandlers() {
   Object.assign(window, {
     acceptIntelDisclosure, applyIntelProposal, askIntelStarter, clearIntelThread,
     dismissIntelProposal, intelComposerKey, renderIntel, sendIntelMessage, stopIntelTurn,
+    dismissDeductionGap, renderDeductionGaps, restoreDeductionGaps, snoozeDeductionGap,
     toggleIntelEdit,
     revealUpdatingScreen, hideUpdatePrompt, bindUpdatePromptInteractions, isTestBook, isTestBookId,
     ownersFromBooks, saveCatalogWithDeletions, loadCatalog, syncCatalog, switchBookModalTab,

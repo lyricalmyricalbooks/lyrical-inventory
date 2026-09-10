@@ -20,6 +20,7 @@
 // save path.
 
 import { canonicalExpenseCategory } from './expense-categories.js';
+import { findDeductionGaps as scanDeductionGaps } from './deduction-gaps.js';
 import { expenseLedgerTotals } from './expense-totals.js';
 import { deriveOnHand, deriveStockBreakdown, inventoryBreakdown } from './inventory.js';
 import { calculateBreakEven } from './breakeven.js';
@@ -842,6 +843,32 @@ function proposeEdits(args = {}, ctx = {}) {
 }
 
 
+// ── COSTS WITH NO RECORD ─────────────────────────────────────────────────────
+
+/**
+ * Wrap the deduction-gap scan so the panel can be asked "what am I missing?".
+ *
+ * Same arrangement as findAnomalies: the finding is a checked rule and the
+ * model only explains it. The difference is what is being checked — findAnomalies
+ * looks at rows that exist and asks whether they are right, this looks at
+ * activity that costs money and asks whether the cost is there at all.
+ */
+function findMissingCosts(args = {}, ctx = {}) {
+  const out = scanDeductionGaps({ ...ctx, today: str(args.today) || undefined });
+  const rows = out.gaps.map(g => ({
+    id: g.id, kind: g.kind, category: g.category,
+    title: g.title, detail: g.detail,
+    likelyAmount: g.estimate, amountBasis: g.estimateBasis,
+    evidence: g.evidence, suggestion: g.prompt,
+  }));
+  return {
+    ...capRows(rows),
+    totalLikelyAmount: out.totalEstimate,
+    snoozedOrDismissed: out.hidden,
+    note: out.note + ' Report these as gaps in the records, never as tax advice, and never say a cost is claimable.',
+  };
+}
+
 // ── THE TOOL SURFACE HANDED TO THE MODEL ─────────────────────────────────────
 //
 // Descriptions are written for a reader who knows nothing about this codebase,
@@ -971,6 +998,25 @@ export const INTEL_TOOL_SCHEMAS = [
     },
   },
   {
+    name: 'findMissingCosts',
+    description:
+      'Find money the business almost certainly spent and never recorded — a table paid for in cash at a fair, '
+      + 'postage bought over a counter, a subscription that went out on a month with no entry. It works by looking '
+      + 'for activity that costs money and checking whether the matching cost is there: a fair with takings and no '
+      + 'expenses did not happen for free.\n\n'
+      + 'Every finding is a checked rule about the publisher\'s own records, and every amount is the middle of what '
+      + 'THEY have spent on comparable things before — never an industry figure. Report exactly what comes back.\n\n'
+      + 'This is not tax advice and must never be presented as any. Do not say a cost is deductible, claimable or '
+      + 'worth a refund, and do not estimate tax saved; whether something can be claimed is their accountant\'s call. '
+      + 'Say what is missing from the records and what it is likely to have cost.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        today: { type: 'STRING', description: 'Treat this date as today, as YYYY-MM-DD. Rarely needed.' },
+      },
+    },
+  },
+  {
     name: 'proposeEdits',
     description:
       'Change information in the publisher\'s records — one field, or many at once. This does NOT write '
@@ -1014,7 +1060,8 @@ export const INTEL_TOOL_SCHEMAS = [
 ];
 
 const HANDLERS = {
-  queryLedger, querySales, queryExpenses, queryEvents, queryCatalog, findAnomalies, proposeEdits,
+  queryLedger, querySales, queryExpenses, queryEvents, queryCatalog, findAnomalies, findMissingCosts,
+  proposeEdits,
 };
 
 export const INTEL_TOOL_NAMES = Object.keys(HANDLERS);
