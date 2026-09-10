@@ -8289,6 +8289,69 @@ function phint() {
   h.className = 'hint-text' + (notes.length && !copy.note ? ' amber' : '');
   h.textContent = notes.join(' · ');
 }
+// Resolves the price/fx-note/payment-meta for a manual sale in one place.
+// Returns null when the price is in a foreign currency but no exchange rate
+// has been entered yet — the caller treats that as a validation failure.
+function resolveManualSalePricing(book, qty, rawPrice, cur) {
+  const native = getBookCurrencyCode(book);
+  const isForeignCurrency = cur !== 'BOOK' && cur !== native;
+  if (!isForeignCurrency) {
+    return { price: rawPrice, fxNote: '', payment: buildPaymentMeta({ book, qty, unitPrice: rawPrice }) };
+  }
+  if (!_manualFxRate) return null;
+  const price = rawPrice * _manualFxRate;
+  const fxNote = `Paid ${cur} ${rawPrice.toFixed(2)} @ ${_manualFxRate.toFixed(4)}`;
+  const payment = buildPaymentMeta({ book, qty, unitPrice: price, fxEnabled: true, fxCur: cur, fxAmt: rawPrice, fxRate: _manualFxRate });
+  return { price, fxNote, payment };
+}
+
+// Author queue route for submitManual(): submits the sale for publisher
+// approval instead of recording it directly.
+async function submitManualAuthorRoute(entryPayload, directToArtist, book, num, qty, price, paymentType) {
+  try {
+    await window._fbSubmitActivity(activeBook, 'sales', entryPayload);
+    addLog('log-manual', `${num}: -${qty} @ ${fmt(price, book.currency)} — (Submitted)`, 'warn');
+    const isArtistPayment = directToArtist;
+    const notifyKind = isArtistPayment ? 'Artist Payment Approval' : 'Sale';
+    const baseSummary = `${num}: -${qty} @ ${fmt(price, book.currency)}${paymentType ? ' · ' + paymentType : ''}`;
+    const notifySummary = isArtistPayment
+      ? `ACTION REQUIRED — artist payment of ${fmt(qty * price, book.currency)} awaiting your approval. ${baseSummary}`
+      : baseSummary;
+    notifyPublisherSubmission(notifyKind, entryPayload, notifySummary);
+
+    if (isArtistPayment) {
+      showToast('⏳ Order submitted — you will owe a transfer to the publisher upon approval', 'warn');
+    } else {
+      showToast('✓ Order submitted for approval');
+    }
+
+    // Update UI so the "Amount Owed" banner updates immediately
+    updateDash();
+
+  } catch (e) {
+    console.error("Submission error:", e);
+    reportClientError('submit-sale-failed', e && e.message, { stack: e && e.stack });
+    showToast(isPermissionDenied(e)
+      ? '⚠ Permission denied — this book is not linked to your account. Nothing was submitted.'
+      : '⚠ Could not submit the order — nothing was recorded. Check your connection and try again.', 'err', 6000);
+  }
+}
+
+// Publisher direct route for submitManual(): records the sale straight into
+// the ledger (or the artist-transfer queue) instead of going through approval.
+function submitManualPublisherRoute(directToArtist, num, chan, qty, price, book, fullNotes, fxNote, payment) {
+  if (directToArtist) {
+    recordOrderPendingTransfer(num, chan, qty, price, fullNotes, payment);
+    addLog('log-manual', `${num}: -${qty} @ ${fmt(price, book.currency)} — ⏳ awaiting artist transfer`, 'warn');
+    showToast('⏳ Order logged — awaiting artist transfer to publisher');
+  } else {
+    recordOrder(num, chan, qty, price, fullNotes, payment);
+    addLog('log-manual', `${num}: -${qty} @ ${fmt(price, book.currency)}${fxNote ? ' (' + fxNote + ')' : ''} → ${getState().stock} remaining`, 'ok');
+    if (getState().stock <= book.threshold) addLog('log-manual', '⚠ Below threshold!', 'warn');
+    showToast('✓ Order saved · syncing to Sheets…');
+  }
+}
+
 async function submitManual(ev) {
   return withButtonLoading(ev, 'Saving…', async () => {
     const book = getBook(), qty = parseInt($('m-qty').value) || 1;
@@ -8303,26 +8366,14 @@ async function submitManual(ev) {
     }
     $('m-payment-type').style.borderColor = '';
 
-    let price = rawPrice;
-    let fxNote = '';
-    let payment = null;
-
     const cur = $('m-price-cur').value;
-    const native = getBookCurrencyCode(book);
-    const isForeignCurrency = cur !== 'BOOK' && cur !== native;
-
-    if (isForeignCurrency) {
-      if (!_manualFxRate) {
-        showToast('⚠ Enter an exchange rate to convert this currency', 'warn');
-        if ($('m-manual-rate')) $('m-manual-rate').focus();
-        return;
-      }
-      price = rawPrice * _manualFxRate;
-      fxNote = `Paid ${cur} ${rawPrice.toFixed(2)} @ ${_manualFxRate.toFixed(4)}`;
-      payment = buildPaymentMeta({ book, qty, unitPrice: price, fxEnabled: true, fxCur: cur, fxAmt: rawPrice, fxRate: _manualFxRate });
-    } else {
-      payment = buildPaymentMeta({ book, qty, unitPrice: price });
+    const pricing = resolveManualSalePricing(book, qty, rawPrice, cur);
+    if (!pricing) {
+      showToast('⚠ Enter an exchange rate to convert this currency', 'warn');
+      if ($('m-manual-rate')) $('m-manual-rate').focus();
+      return;
     }
+    const { price, fxNote, payment } = pricing;
 
     const fullNotes = [notes, fxNote, paymentType].filter(Boolean).join(' · ');
 
@@ -8332,46 +8383,9 @@ async function submitManual(ev) {
     const entryPayload = { num, chan, qty, price, notes: fullNotes, payment, paymentType, directToArtist, date: today(), id: Date.now() };
 
     if (isAuthor()) {
-      // Author queue route
-      try {
-        await window._fbSubmitActivity(activeBook, 'sales', entryPayload);
-        addLog('log-manual', `${num}: -${qty} @ ${fmt(price, book.currency)} — (Submitted)`, 'warn');
-        const isArtistPayment = directToArtist;
-        const notifyKind = isArtistPayment ? 'Artist Payment Approval' : 'Sale';
-        const baseSummary = `${num}: -${qty} @ ${fmt(price, book.currency)}${paymentType ? ' · ' + paymentType : ''}`;
-        const notifySummary = isArtistPayment
-          ? `ACTION REQUIRED — artist payment of ${fmt(qty * price, book.currency)} awaiting your approval. ${baseSummary}`
-          : baseSummary;
-        notifyPublisherSubmission(notifyKind, entryPayload, notifySummary);
-
-        if (isArtistPayment) {
-          showToast('⏳ Order submitted — you will owe a transfer to the publisher upon approval', 'warn');
-        } else {
-          showToast('✓ Order submitted for approval');
-        }
-
-        // Update UI so the "Amount Owed" banner updates immediately
-        updateDash();
-
-      } catch (e) {
-        console.error("Submission error:", e);
-        reportClientError('submit-sale-failed', e && e.message, { stack: e && e.stack });
-        showToast(isPermissionDenied(e)
-          ? '⚠ Permission denied — this book is not linked to your account. Nothing was submitted.'
-          : '⚠ Could not submit the order — nothing was recorded. Check your connection and try again.', 'err', 6000);
-      }
+      await submitManualAuthorRoute(entryPayload, directToArtist, book, num, qty, price, paymentType);
     } else {
-      // Publisher direct route
-      if (directToArtist) {
-        recordOrderPendingTransfer(num, chan, qty, price, fullNotes, payment);
-        addLog('log-manual', `${num}: -${qty} @ ${fmt(price, book.currency)} — ⏳ awaiting artist transfer`, 'warn');
-        showToast('⏳ Order logged — awaiting artist transfer to publisher');
-      } else {
-        recordOrder(num, chan, qty, price, fullNotes, payment);
-        addLog('log-manual', `${num}: -${qty} @ ${fmt(price, book.currency)}${fxNote ? ' (' + fxNote + ')' : ''} → ${getState().stock} remaining`, 'ok');
-        if (getState().stock <= book.threshold) addLog('log-manual', '⚠ Below threshold!', 'warn');
-        showToast('✓ Order saved · syncing to Sheets…');
-      }
+      submitManualPublisherRoute(directToArtist, num, chan, qty, price, book, fullNotes, fxNote, payment);
     }
 
     $('m-num').value = ''; $('m-qty').value = '1';
