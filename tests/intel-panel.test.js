@@ -154,7 +154,10 @@ describe('a staged batch on screen', () => {
 
 describe('when a question cannot be asked', () => {
   const blocker = (TAX_CENTER, onLine = true) => buildHarness({
-    names: ['intelBlocker'], deps: { TAX_CENTER, navigator: { onLine } }, returns: 'intelBlocker',
+    // intelBlocker now consults backupProvider(), so it has to come across too.
+    names: ['backupProvider', 'intelBlocker'],
+    deps: { TAX_CENTER, navigator: { onLine } },
+    returns: 'intelBlocker',
   })();
 
   it('points at the Tax Centre when no key is set', () => {
@@ -326,6 +329,121 @@ describe('approving a batch of changes', () => {
     h.INTEL_PROPOSALS.set('b1', { ...batch([item()]), status: 'applied' });
     await h.apply('b1');
     expect(h.confirmDialog).not.toHaveBeenCalled();
+  });
+});
+
+// ── Falling back to the second provider ─────────────────────────────────────
+
+describe('when Google will not answer', () => {
+  function harness({ gemini = null, backup = null, geminiKey = 'g', backupKey = 'b', backupModel = 'vendor/m:free' } = {}) {
+    const TAX_CENTER = { settings: { geminiKey, openRouterKey: backupKey, openRouterModel: backupModel } };
+    const runIntelTurn = vi.fn(gemini || (async () => ({ text: 'from google', via: undefined, toolCalls: [], proposals: [], history: [] })));
+    const runOpenRouterTurn = vi.fn(backup || (async () => ({ text: 'from backup', via: 'openrouter', model: backupModel, toolCalls: [], proposals: [], history: [] })));
+    const deps = {
+      TAX_CENTER, runIntelTurn, runOpenRouterTurn,
+      INTEL_HISTORY: [], INTEL_TOOL_SCHEMAS: [],
+      intelContext: () => ({}), systemInstruction: () => 'sys',
+      intelAbort: { signal: undefined },
+      setIntelStatus: vi.fn(),
+      friendlyChatError: (e) => `google: ${e.message}`,
+      friendlyOpenRouterError: (e) => `backup: ${e.message}`,
+      console: { warn: vi.fn() },
+    };
+    const ask = buildHarness({
+      names: ['backupProvider', 'askWithFallback'], deps, returns: 'askWithFallback',
+    });
+    return { ask, ...deps };
+  }
+
+  it('uses Google when Google works, and does not touch the backup', async () => {
+    const h = harness();
+    expect((await h.ask('q')).text).toBe('from google');
+    expect(h.runOpenRouterTurn).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['the allowance is used up', 'quota exceeded'],
+    ['the key was rotated', 'Request had invalid authentication credentials'],
+    ['the service is down', 'HTTP 503'],
+    ['the project is misconfigured', 'SERVICE_DISABLED'],
+  ])('falls back when %s', async (_label, message) => {
+    // A backup that only covers an exhausted allowance is a backup that is
+    // missing whenever it is actually needed.
+    const h = harness({ gemini: async () => { throw new Error(message); } });
+    expect((await h.ask('q')).text).toBe('from backup');
+    expect(h.runOpenRouterTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes the same conversation and tools to whichever answers', async () => {
+    const h = harness({ gemini: async () => { throw new Error('down'); } });
+    await h.ask('what did I sell?');
+    const [geminiArgs] = h.runIntelTurn.mock.calls[0];
+    const [backupArgs] = h.runOpenRouterTurn.mock.calls[0];
+    expect(backupArgs.userText).toBe(geminiArgs.userText);
+    expect(backupArgs.systemInstruction).toBe(geminiArgs.systemInstruction);
+    expect(backupArgs.model).toBe('vendor/m:free');
+  });
+
+  it('never falls back on a cancel', async () => {
+    // The publisher pressed stop. Quietly asking somebody else instead is the
+    // opposite of what that means.
+    const abort = Object.assign(new Error('Aborted'), { name: 'AbortError' });
+    const h = harness({ gemini: async () => { throw abort; } });
+    await expect(h.ask('q')).rejects.toThrow(/Abort/);
+    expect(h.runOpenRouterTurn).not.toHaveBeenCalled();
+  });
+
+  it('reports both failures when neither can answer', async () => {
+    const h = harness({
+      gemini: async () => { throw new Error('quota exceeded'); },
+      backup: async () => { throw new Error('out of credits'); },
+    });
+    await expect(h.ask('q')).rejects.toThrow(/google: quota exceeded.*backup: out of credits/);
+  });
+
+  it('re-raises Google own error when no backup is configured', async () => {
+    const h = harness({ gemini: async () => { throw new Error('quota exceeded'); }, backupKey: '' });
+    await expect(h.ask('q')).rejects.toThrow(/quota exceeded/);
+    expect(h.runOpenRouterTurn).not.toHaveBeenCalled();
+  });
+
+  it('needs both the key and the model before it will use the backup', async () => {
+    for (const missing of [{ backupKey: '' }, { backupModel: '' }]) {
+      const h = harness({ gemini: async () => { throw new Error('down'); }, ...missing });
+      await expect(h.ask('q')).rejects.toThrow(/down/);
+      expect(h.runOpenRouterTurn).not.toHaveBeenCalled();
+    }
+  });
+
+  it('goes straight to the backup when there is no Google key at all', async () => {
+    const h = harness({ geminiKey: '' });
+    expect((await h.ask('q')).text).toBe('from backup');
+    expect(h.runIntelTurn).not.toHaveBeenCalled();
+  });
+
+  it('says it is switching, rather than looking stuck', async () => {
+    const h = harness({ gemini: async () => { throw new Error('down'); } });
+    await h.ask('q');
+    expect(h.setIntelStatus).toHaveBeenCalledWith(expect.stringMatching(/backup/i));
+  });
+});
+
+describe('the composer with only a backup key', () => {
+  const blocker = (settings, onLine = true) => buildHarness({
+    names: ['backupProvider', 'intelBlocker'],
+    deps: { TAX_CENTER: { settings }, navigator: { onLine } },
+    returns: 'intelBlocker',
+  })();
+
+  it('lets the panel work on the backup alone', () => {
+    // Requiring Google would lock the publisher out in exactly the situation
+    // the backup exists for.
+    expect(blocker({ openRouterKey: 'b', openRouterModel: 'm' })).toBe('');
+  });
+
+  it('still asks for a key when neither is set up', () => {
+    expect(blocker({})).toMatch(/Add your AI key/i);
+    expect(blocker({ openRouterKey: 'b' })).toMatch(/Add your AI key/i);
   });
 });
 

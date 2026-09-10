@@ -18125,3 +18125,22 @@ button[onclick="refreshUmamiStats()"]:active {
   .intel-edit-was::before { content: 'Now: '; color: var(--content-muted); }
   .intel-edit-now::before { content: 'Becomes: '; color: var(--content-muted); }
 }
+
+/* ── Intelligence: the backup provider ──────────────────────────────────────
+   The panel can fall back to a second AI service when Google will not answer.
+   Two small pieces of chrome go with that: marking the setting as optional, so
+   nobody thinks the panel needs it, and marking an answer that came from the
+   backup, because a figure from a different model deserves to be identifiable
+   rather than blending in with the rest. */
+
+.tc-form-optional {
+  color: var(--content-muted);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.intel-via {
+  color: var(--status-active);
+  font-style: italic;
+}

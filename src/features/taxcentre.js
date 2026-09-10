@@ -2383,6 +2383,8 @@ function wireIntegrationStatusPills() {
 
 function _tcRenderStatusHeaders() {
   if ($('tc-api-key') && TAX_CENTER.settings?.geminiKey) $('tc-api-key').value = TAX_CENTER.settings.geminiKey;
+  if ($('tc-backup-key') && TAX_CENTER.settings?.openRouterKey) $('tc-backup-key').value = TAX_CENTER.settings.openRouterKey;
+  if ($('tc-backup-model') && TAX_CENTER.settings?.openRouterModel) $('tc-backup-model').value = TAX_CENTER.settings.openRouterModel;
   if ($('stripe-fees-key') && TAX_CENTER.settings?.stripeKey) $('stripe-fees-key').value = TAX_CENTER.settings.stripeKey;
   const _stripeStatusEl = $('stripe-fees-status');
   if (_stripeStatusEl && !_stripeStatusEl.textContent && TAX_CENTER.settings?.stripeFeesLastImportAt) {
@@ -3701,6 +3703,8 @@ async function saveTaxCenterSettings() {
   if (btn) { btn.textContent = 'Saving...'; btn.disabled = true; }
 
   const geminiKey = $('tc-api-key')?.value.trim() || '';
+  const openRouterKey = readCredentialField('tc-backup-key');
+  const openRouterModel = $('tc-backup-model')?.value.trim();
   const zonosApiKey = readCredentialField('tc-zonos-key');
   const zonosAccountKey = readCredentialField('tc-zonos-account-key');
   const zonosEnabled = $('tc-zonos-enabled') ? $('tc-zonos-enabled').checked : true;
@@ -3725,6 +3729,8 @@ async function saveTaxCenterSettings() {
     // undefined means the box was never populated from settings, so the stored
     // value stands; '' means it was deliberately emptied and must be cleared.
     const put = (key, value) => { if (value !== undefined) TAX_CENTER.settings[key] = value; };
+    put('openRouterKey', openRouterKey);
+    put('openRouterModel', openRouterModel);
     put('zonosApiKey', zonosApiKey);
     put('zonosAccountKey', zonosAccountKey);
     TAX_CENTER.settings.zonosEnabled = zonosEnabled;

@@ -2838,6 +2838,16 @@
                 <div class="tc-form-hint">Paste the key from Google AI Studio. It is stored on your own account, never shared.</div>
               </div>
               <div class="tc-form-group">
+                <label class="tc-form-label" for="tc-backup-key">Backup AI Key <span class="tc-form-optional">(optional)</span></label>
+                <input type="password" id="tc-backup-key" class="tc-form-input" placeholder="OpenRouter key (sk-or-v1-…)…" autocomplete="off">
+                <div class="tc-form-hint">Used by the Intelligence panel only, and only when Google will not answer &mdash; whether that is a used-up allowance, a rejected key or an outage. Receipt scanning always uses Google.</div>
+              </div>
+              <div class="tc-form-group">
+                <label class="tc-form-label" for="tc-backup-model">Backup Model</label>
+                <input type="text" id="tc-backup-model" class="tc-form-input" placeholder="e.g. vendor/model-name:free" autocomplete="off" spellcheck="false">
+                <div class="tc-form-hint">The exact model name as your backup provider lists it. Both this and the key are needed before the backup will be used.</div>
+              </div>
+              <div class="tc-form-group">
                 <label class="tc-form-label" for="tc-base-cur">Base Currency</label>
                 <select id="tc-base-cur" class="tc-form-select" onchange="saveTaxCenterSettings()" disabled>
                   <option value="CAD">CAD (Default)</option>
