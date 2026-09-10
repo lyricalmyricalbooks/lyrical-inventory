@@ -185,8 +185,26 @@ export function _friendlyScanError(e) {
     return 'you are offline — reconnect and try again';
   }
   if (e?.name === 'AbortError') return 'the scan was stopped';
+  // Google has two quite different ways of saying "this key is no good", and
+  // they need two different things from the publisher.
+  //
+  // UNAUTHENTICATED — "Request had invalid authentication credentials. Expected
+  // OAuth 2 access token, login cookie or other valid authentication
+  // credential" — is what comes back when the key does not authenticate at all:
+  // it was deleted or rotated in AI Studio and this app still holds the old
+  // one, or it carries website restrictions that do not list this app. Neither
+  // is fixed by "check your key", so the message names both.
+  if (/UNAUTHENTICATED|invalid authentication credentials|Expected OAuth 2/i.test(raw)) {
+    return 'Google would not accept that key — if you made a new one, paste it into the Tax Centre config; '
+      + 'if the key has website restrictions, they have to allow this app';
+  }
   if (/API key|api_key|PERMISSION_DENIED|unregistered|not valid/i.test(raw)) {
     return 'your AI key was rejected — check it in the Tax Centre config';
+  }
+  // The key is fine but the API it needs was never switched on for its project.
+  // A different fix again, and one nothing else here would hint at.
+  if (/SERVICE_DISABLED|has not been used in project|API has not been enabled|is disabled/i.test(raw)) {
+    return 'the AI service is not switched on for that key\'s Google project — enable the Generative Language API for it';
   }
   // Rate limit BEFORE billing, and this order is load-bearing. Google's
   // free-tier 429 reads "You exceeded your current quota, please check your
@@ -216,6 +234,22 @@ export function _friendlyScanError(e) {
     return 'that file is too big to read — try a photo instead of a scan';
   }
   // Nothing recognised: show what came back rather than inventing a cause,
-  // trimmed so a wall of API text cannot push the toast off the screen.
-  return raw ? raw.slice(0, 120) : 'the reader did not say why';
+  // trimmed so a wall of API text cannot push the toast off the screen. Cut at
+  // a space rather than mid-character-count — "other valid authenticatio" reads
+  // as the app having broken, which is a worse first impression than a slightly
+  // shorter sentence.
+  if (!raw) return 'the reader did not say why';
+  // How much raw API text a toast can hold without pushing itself off screen.
+  // Kept local: several suites lift this function on its own, and a top-level
+  // constant would have to be lifted alongside it everywhere.
+  const LIMIT = 120;
+  if (raw.length <= LIMIT) return raw;
+  // One character of the budget belongs to the ellipsis, so the whole string
+  // still fits the limit the toast was sized against.
+  const cut = raw.slice(0, LIMIT - 1);
+  const lastSpace = cut.lastIndexOf(' ');
+  // Only back up to a word boundary if one is reasonably near the end —
+  // otherwise a single very long token would cut the message to nothing.
+  const body = lastSpace > 60 ? cut.slice(0, lastSpace) : cut;
+  return `${body.replace(/[.,;:]$/, '')}…`;
 }

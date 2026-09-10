@@ -140,6 +140,63 @@ describe('what a failure is called in front of the shop owner', () => {
   });
 });
 
+describe('the two ways Google says a key is no good', () => {
+  // Verbatim, because the wording is the only thing distinguishing these and a
+  // paraphrase would not have caught that none of them matched.
+  const UNAUTHENTICATED = 'Request had invalid authentication credentials. Expected OAuth 2 access token, '
+    + 'login cookie or other valid authentication credential. See '
+    + 'https://developers.google.com/identity/sign-in/web/devconsole-project.';
+
+  it('explains a key Google will not authenticate at all', () => {
+    // This one used to match nothing and fall through to raw API text, cut
+    // mid-word — which reads as the app being broken rather than the key being
+    // rotated or restricted.
+    const out = _friendlyScanError(new Error(UNAUTHENTICATED));
+    expect(out).toMatch(/would not accept that key/i);
+    expect(out).toMatch(/Tax Centre/);
+    expect(out).toMatch(/restrictions/i);
+    expect(out).not.toMatch(/OAuth/);
+  });
+
+  it('keeps the plainly-wrong-key case separate, because the fix differs', () => {
+    expect(_friendlyScanError(new Error('API key not valid. Please pass a valid API key.')))
+      .toMatch(/rejected — check it in the Tax Centre/i);
+  });
+
+  it('names the switched-off-API case, which nothing else would hint at', () => {
+    const out = _friendlyScanError(new Error(
+      'Generative Language API has not been used in project 12345 before or it is disabled.'
+    ));
+    expect(out).toMatch(/not switched on/i);
+    expect(out).toMatch(/Generative Language API/);
+  });
+
+  it('does not mistake an auth failure for a rate limit or a billing problem', () => {
+    const out = _friendlyScanError(new Error(UNAUTHENTICATED));
+    expect(out).not.toMatch(/limit for now/i);
+    expect(out).not.toMatch(/not free/i);
+  });
+});
+
+describe('an error nobody anticipated', () => {
+  it('is shown rather than replaced with an invented cause', () => {
+    expect(_friendlyScanError(new Error('short novel failure'))).toBe('short novel failure');
+  });
+
+  it('is cut at a word, not mid-word', () => {
+    // The publisher saw "...other valid authenticatio", which looks like the
+    // app truncating itself into nonsense.
+    const long = 'Something went wrong in a way this app has never seen before and the explanation '
+      + 'runs on well past the point where a toast can reasonably hold it all';
+    const out = _friendlyScanError(new Error(long));
+    expect(out.length).toBeLessThanOrEqual(120);
+    expect(out.endsWith('…')).toBe(true);
+    // Whatever it ends on is a whole word from the original.
+    const lastWord = out.slice(0, -1).trim().split(' ').pop();
+    expect(long.split(' ')).toContain(lastWord);
+  });
+});
+
 describe('changing the API key', () => {
   beforeEach(() => { localStorage.clear(); _geminiUnavailable.clear(); });
 
