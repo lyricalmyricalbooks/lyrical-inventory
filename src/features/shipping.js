@@ -7486,43 +7486,56 @@ function buildShippingPnLHtml(allOrders, relevantExpenses, shippoExpenses, bookF
       return true;
     });
 
-    const totalShippingIncome = kpiOrders.reduce((sum, o) => {
-      return sum + (Number(o.shippingPaid) || 0);
-    }, 0);
-
+    // ⚡ Bolt Optimization: Loop Fusion
+    // Combined multiple passes over kpiOrders into a single imperative loop
+    // to calculate totalShippingIncome, totalPostageCost, and markup stats simultaneously,
+    // avoiding multiple intermediate closures and reduce operations.
+    let totalShippingIncome = 0;
     let totalPostageCost = 0;
-    kpiOrders.forEach(o => {
+    let totalMarkupSum = 0;
+    let markupCount = 0;
+
+    for (const o of kpiOrders) {
+      const customerPaidBase = Number(o.shippingPaid) || 0;
+      totalShippingIncome += customerPaidBase;
+
       const orderNumber = normalizeShippingOrderNumber(o.num);
-      const linked = orderNumber ? (relevantExpensesByOrder.get(orderNumber) || []) : [];
-      
-      const cost = o.manualPostagePaid
-        ? (Number(o.postagePaid) || 0)
-        : linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
-      totalPostageCost += cost;
-    });
+
+      // Calculate postage cost (relevant expenses)
+      const linkedRelevant = orderNumber ? (relevantExpensesByOrder.get(orderNumber) || []) : [];
+      let costRelevant = 0;
+      if (o.manualPostagePaid) {
+        costRelevant = Number(o.postagePaid) || 0;
+      } else {
+        for (const e of linkedRelevant) {
+          costRelevant += (Number(e.baseAmount) || Number(e.amount) || 0);
+        }
+      }
+      totalPostageCost += costRelevant;
+
+      // Calculate markup (shippo expenses)
+      const linkedShippo = orderNumber ? (shippoExpensesByOrder.get(orderNumber) || []) : [];
+      const hasPostageShippo = linkedShippo.length > 0 || !!o.manualPostagePaid;
+      if (hasPostageShippo) {
+        let costShippo = 0;
+        if (o.manualPostagePaid) {
+          costShippo = Number(o.postagePaid) || 0;
+        } else {
+          for (const e of linkedShippo) {
+            costShippo += (Number(e.baseAmount) || Number(e.amount) || 0);
+          }
+        }
+        if (costShippo > 0) {
+          totalMarkupSum += ((customerPaidBase - costShippo) / costShippo) * 100;
+          markupCount++;
+        }
+      }
+    }
 
     const netMargin = totalShippingIncome - totalPostageCost;
     const marginClass = netMargin > 0 ? 'positive' : netMargin < 0 ? 'negative' : 'neutral';
 
     // Average markup calculation on linked orders
-    let totalMarkupSum = 0;
-    let markupCount = 0;
-    kpiOrders.forEach(o => {
-      const customerPaidBase = (Number(o.shippingPaid) || 0);
-      const orderNumber = normalizeShippingOrderNumber(o.num);
-      const linked = orderNumber ? (shippoExpensesByOrder.get(orderNumber) || []) : [];
-
-      const hasPostage = linked.length > 0 || !!o.manualPostagePaid;
-      if (hasPostage) {
-        const cost = o.manualPostagePaid
-          ? (Number(o.postagePaid) || 0)
-          : linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
-        if (cost > 0) {
-          totalMarkupSum += ((customerPaidBase - cost) / cost) * 100;
-          markupCount++;
-        }
-      }
-    });
     const avgMarkup = markupCount > 0 ? (totalMarkupSum / markupCount) : 0;
     const avgMarkupText = markupCount > 0 ? `${avgMarkup > 0 ? '+' : ''}${avgMarkup.toFixed(1)}%` : '—';
 
