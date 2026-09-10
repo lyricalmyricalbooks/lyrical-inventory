@@ -2468,6 +2468,7 @@
   <div class="settings-sub-nav tc-sub-nav" role="tablist" aria-label="Tax Centre Navigation" onkeydown="tcSubNavKeydown(event)">
     <button class="settings-sub-tab active" id="btn-tctab-ledger" role="tab" aria-selected="true" aria-controls="tc-sec-ledger" tabindex="0" onclick="switchTaxCenterSubTab('ledger')">📊 Expenses &amp; Ledger</button>
     <button class="settings-sub-tab" id="btn-tctab-receipts" role="tab" aria-selected="false" aria-controls="tc-sec-receipts" tabindex="-1" onclick="switchTaxCenterSubTab('receipts')">🗂️ Receipts Vault</button>
+    <button class="settings-sub-tab" id="btn-tctab-deductions" role="tab" aria-selected="false" aria-controls="tc-sec-deductions" tabindex="-1" onclick="switchTaxCenterSubTab('deductions')">🔎 Missing Costs</button>
     <button class="settings-sub-tab" id="btn-tctab-integrations" role="tab" aria-selected="false" aria-controls="tc-sec-integrations" tabindex="-1" onclick="switchTaxCenterSubTab('integrations')">🔌 Integrations &amp; APIs</button>
   </div>
 
@@ -2803,6 +2804,24 @@
   </div> <!-- /#tc-sec-receipts -->
 
   <!-- 3. INTEGRATIONS & APIS SECTION -->
+  <!-- MISSING COSTS — costs the business had with no record of them.
+       Findings are gaps in the publisher's own records, never tax advice. -->
+  <div id="tc-sec-deductions" role="tabpanel" aria-labelledby="btn-tctab-deductions" style="display:none;">
+    <div class="sec-head">
+      <div class="sec-head-titles">
+        <div class="sec-kicker"><span class="sec-kicker-dot"></span>Missing Costs</div>
+        <div class="section-hed sec-head-title">Money you spent and never wrote down</div>
+        <p class="section-subcopy">This looks for things that cost money &mdash; a fair you sold at, books you posted, a subscription that went out &mdash; and checks whether the cost is in your records. A table paid for in cash leaves no trace anywhere else.</p>
+      </div>
+      <div class="sec-head-badges">
+        <span class="pill gold intel-fig" id="tc-deductions-total">&mdash;</span>
+      </div>
+    </div>
+    <p class="sr-only" id="tc-deductions-status" role="status" aria-live="polite"></p>
+    <div class="ded-list" id="tc-deductions-body"></div>
+    <p class="ded-foot">Amounts are the middle of what you have spent on similar things before, not an industry figure. Whether a cost can be claimed on a return is a question for your accountant &mdash; this only tells you what is missing from your own books.</p>
+  </div>
+
   <div id="tc-sec-integrations" class="tc-section settings-section" role="tabpanel" aria-labelledby="btn-tctab-integrations" style="display:none;">
     <!-- INTEGRATIONS & API SERVICES -->
     <div class="card tc-integrations-card">
