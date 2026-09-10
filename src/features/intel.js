@@ -28,6 +28,7 @@ import { confirmDialog } from '../lib/modal.js';
 import { buildAttentionSignals } from '../lib/attention-signals.js';
 import { INTEL_TOOL_SCHEMAS } from '../lib/publisher-intel-tools.js';
 import { friendlyChatError, runIntelTurn } from '../lib/gemini-chat.js';
+import { friendlyOpenRouterError, runOpenRouterTurn } from '../lib/openrouter-chat.js';
 import { EXPENSE_CATEGORIES } from './receipts.js';
 import { _tcBuildLedger, _tcGetTripsSummaryAll, saveTaxCenter } from './taxcentre.js';
 
@@ -162,10 +163,13 @@ function intelText(raw) {
  * says "you made $4,120 at the fairs" is worth exactly as much as the reader's
  * confidence that it looked rather than guessed.
  */
-function toolTrace(names) {
-  if (!names || !names.length) return '';
+function toolTrace(names, msg) {
+  const backup = msg && msg.via === 'backup'
+    ? `<span class="intel-via">answered by your backup model${msg.viaModel ? ` (${escapeHtml(msg.viaModel)})` : ''}</span>`
+    : '';
+  if (!names || !names.length) return backup ? `<div class="intel-trace">${backup}</div>` : '';
   const label = [...new Set(names)].map(n => TOOL_LABELS[n] || n).join(', ');
-  return `<div class="intel-trace">Checked: ${escapeHtml(label)}</div>`;
+  return `<div class="intel-trace">Checked: ${escapeHtml(label)}${backup ? ` · ${backup}` : ''}</div>`;
 }
 
 const TOOL_LABELS = {
@@ -184,7 +188,7 @@ function intelMessageHtml(msg) {
   return `<article class="intel-msg ${mine ? 'is-you' : 'is-app'}">
       <div class="intel-msg-who">${mine ? 'You' : 'Your books'}</div>
       <div class="intel-msg-body">${body}</div>
-      ${mine ? '' : toolTrace(msg.tools)}
+      ${mine ? '' : toolTrace(msg.tools, msg)}
       ${(msg.proposals || []).map(id => intelBatchHtml(INTEL_PROPOSALS.get(id))).join('')}
     </article>`;
 }
@@ -285,8 +289,18 @@ function intelPendingHtml() {
 }
 
 /** Why the composer is unavailable right now, or '' when it is fine. */
+/** The backup provider, when both halves of it have been filled in. */
+function backupProvider() {
+  const key = TAX_CENTER?.settings?.openRouterKey;
+  const model = TAX_CENTER?.settings?.openRouterModel;
+  return (key && model) ? { key, model } : null;
+}
+
 function intelBlocker() {
-  if (!TAX_CENTER?.settings?.geminiKey) {
+  // Either provider is enough to answer a question. Requiring Google here would
+  // mean a publisher whose Google key has been rotated or restricted cannot use
+  // the panel at all, which is the exact situation the backup exists for.
+  if (!TAX_CENTER?.settings?.geminiKey && !backupProvider()) {
     return 'Add your AI key in the Tax Centre settings and this panel can start answering questions.';
   }
   if (typeof navigator !== 'undefined' && navigator && navigator.onLine === false) {
@@ -363,6 +377,56 @@ function askIntelStarter(btn) {
   sendIntelMessage();
 }
 
+/**
+ * Ask Google; if Google will not answer, ask the backup.
+ *
+ * Falls back on ANY Google failure, not only an exhausted allowance. A rotated
+ * key, a restricted key, a switched-off API and an outage all leave the
+ * publisher equally unable to ask a question, and a backup that only covers one
+ * of those is a backup that is missing whenever it is actually needed.
+ *
+ * A cancel is never a failure to fall back from: the publisher pressed stop, and
+ * quietly asking somebody else instead is the opposite of what that means.
+ */
+async function askWithFallback(question) {
+  const shared = {
+    history: INTEL_HISTORY,
+    userText: question,
+    tools: INTEL_TOOL_SCHEMAS,
+    ctx: intelContext(),
+    systemInstruction: systemInstruction(),
+    signal: intelAbort.signal,
+  };
+  const backup = backupProvider();
+
+  if (TAX_CENTER?.settings?.geminiKey) {
+    try {
+      return await runIntelTurn({ apiKey: TAX_CENTER.settings.geminiKey, ...shared });
+    } catch (e) {
+      if (e && e.name === 'AbortError') throw e;
+      if (!backup) throw e;
+      console.warn('Intelligence: Google failed, trying the backup model —', e && e.message);
+      setIntelStatus('Google could not answer — asking the backup model…');
+      try {
+        return await runOpenRouterTurn({ apiKey: backup.key, model: backup.model, ...shared });
+      } catch (backupErr) {
+        if (backupErr && backupErr.name === 'AbortError') throw backupErr;
+        // Both failed. Report both, because "it did not work" without saying
+        // which half broke leaves nothing to act on.
+        const combined = new Error(
+          `${friendlyChatError(e)} — and the backup could not either: ${friendlyOpenRouterError(backupErr)}`
+        );
+        combined.__alreadyFriendly = true;
+        throw combined;
+      }
+    }
+  }
+
+  // No Google key at all: the backup is not a fallback, it is the only option.
+  if (!backup) throw new Error('No AI key is set');
+  return runOpenRouterTurn({ apiKey: backup.key, model: backup.model, ...shared });
+}
+
 async function sendIntelMessage() {
   if (intelPending || isAuthor()) return;
   const input = $i('intel-input');
@@ -384,15 +448,7 @@ async function sendIntelMessage() {
   renderIntel();
 
   try {
-    const out = await runIntelTurn({
-      apiKey: TAX_CENTER.settings.geminiKey,
-      history: INTEL_HISTORY,
-      userText: question,
-      tools: INTEL_TOOL_SCHEMAS,
-      ctx: intelContext(),
-      systemInstruction: systemInstruction(),
-      signal: intelAbort.signal,
-    });
+    const out = await askWithFallback(question);
 
     const ids = [];
     for (const batch of out.proposals) {
@@ -411,6 +467,10 @@ async function sendIntelMessage() {
       role: 'app', text, at: Date.now(),
       tools: out.toolCalls.map(c => c.name),
       proposals: ids,
+      // Only recorded when the backup answered. A figure from the backup model
+      // and a figure from Google are not equally trustworthy, and the publisher
+      // is entitled to know which one they are reading.
+      ...(out.via === 'openrouter' ? { via: 'backup', viaModel: String(out.model || '') } : {}),
     });
     INTEL_HISTORY = out.history.slice(-HISTORY_LIMIT);
     const staged = out.proposals.reduce((n, b) => n + (b.items ? b.items.length : 0), 0);
@@ -424,7 +484,7 @@ async function sendIntelMessage() {
       console.error('Intelligence turn failed', e);
       INTEL_MESSAGES.push({
         role: 'app', at: Date.now(), tools: [],
-        text: `I could not answer that — ${friendlyChatError(e)}.`,
+        text: `I could not answer that — ${e?.__alreadyFriendly ? e.message : friendlyChatError(e)}.`,
       });
       setIntelStatus('That question could not be answered.');
     }
@@ -616,6 +676,8 @@ loadIntelThread();
 export {
   INTEL_PROPOSALS,
   acceptIntelDisclosure,
+  askWithFallback,
+  backupProvider,
   applyIntelProposal,
   askIntelStarter,
   clearIntelThread,
