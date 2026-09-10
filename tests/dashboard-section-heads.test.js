@@ -19,43 +19,47 @@ function dashboardPanel() {
   return html.slice(start, end);
 }
 
-test('sales by channel, consignment overview and inventory share the section-head pattern', () => {
+test('sales by channel, consignment overview, inventory and break-even share the section-head pattern', () => {
   const panel = dashboardPanel();
 
   // This is the screen the publisher opens for every single book. It used to
-  // head its three main report sections with `.sect` — the same 9px
-  // micro-label the "All books" landing screen and the Consignment tab were
-  // both pulled off of for exactly this reason. None of the three may fall
-  // back to it.
+  // head its report sections with `.sect` — the same 9px micro-label the
+  // "All books" landing screen and the Consignment tab were both pulled off
+  // of for exactly this reason. Break-even tracker was the one section that
+  // still fell back to it after the other three were fixed (it sits one
+  // section lower, so it read as already handled). None of the four may
+  // fall back to it.
   expect(panel).not.toMatch(/class="sect">Sales by channel</);
   expect(panel).not.toMatch(/class="sect">Consignment overview</);
   expect(panel).not.toMatch(/class="sect">Inventory</);
+  expect(panel).not.toMatch(/class="sect">Break-even tracker</);
 
   const serifHeads = panel.match(/class="section-hed sec-head-title"/g) || [];
-  expect(serifHeads).toHaveLength(3);
+  expect(serifHeads).toHaveLength(4);
   expect(panel).toMatch(/class="section-hed sec-head-title">Sales by channel</);
   expect(panel).toMatch(/class="section-hed sec-head-title">Consignment overview</);
   expect(panel).toMatch(/class="section-hed sec-head-title">Inventory</);
+  expect(panel).toMatch(/class="section-hed sec-head-title">Break-even tracker</);
 
   // Each head carries a kicker with its dot, and a line of subcopy.
-  expect(panel.match(/class="sec-kicker"/g) || []).toHaveLength(3);
-  expect(panel.match(/class="sec-kicker-dot"/g) || []).toHaveLength(3);
-  expect(panel.match(/class="section-subcopy"/g) || []).toHaveLength(3);
+  expect(panel.match(/class="sec-kicker"/g) || []).toHaveLength(4);
+  expect(panel.match(/class="sec-kicker-dot"/g) || []).toHaveLength(4);
+  expect(panel.match(/class="section-subcopy"/g) || []).toHaveLength(4);
 });
 
-test('gold stays spent once on this screen — all three new heads are muted', () => {
+test('gold stays spent once on this screen — all four heads are muted', () => {
   const panel = dashboardPanel();
   // The KPI grid above already spends this screen's one gold accent on
   // "Stock on hand" (`.kpi.is-lead`). A second gold kicker here would compete
-  // with it, so every new head takes the neutral slate.
+  // with it, so every head takes the neutral slate.
   const heads = panel.match(/<div class="sec-head(?: is-muted)?">/g) || [];
-  expect(heads).toHaveLength(3);
+  expect(heads).toHaveLength(4);
   expect(heads.every(h => h.includes('is-muted'))).toBe(true);
 });
 
 test('each section is its own overview-section, so the gap comes from one shared rhythm', () => {
   const panel = dashboardPanel();
-  expect(panel.match(/class="overview-section"/g) || []).toHaveLength(3);
+  expect(panel.match(/class="overview-section"/g) || []).toHaveLength(4);
 });
 
 test('the tables and stock block keep their real ids and structure under the new heads', () => {
