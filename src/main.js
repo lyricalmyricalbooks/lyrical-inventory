@@ -19570,7 +19570,7 @@ function renderStripeFeesCards(data, byYearCurAll) {
           <div style="display:flex;flex-wrap:wrap;gap:1.5rem;align-items:flex-end;">
             <div style="flex:2;min-width:240px;">
               <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.12em;margin-bottom:4px;">Stripe fees on your sales</div>
-              <div style="font-family:'DM Mono',monospace;font-size:32px;font-weight:500;color:var(--red);line-height:1;">${_stripeFmtMoney(fee, cur)}</div>
+              <div style="font-family:'DM Mono',monospace;font-size:var(--text-3xl);font-weight:500;color:var(--red);line-height:1;">${_stripeFmtMoney(fee, cur)}</div>
               <div style="font-size:13px;color:var(--text2);margin-top:8px;line-height:1.5;">
                 on <strong>${_stripeFmtMoney(gross, cur)}</strong> across <strong>${salesAgg.count}</strong> customer ${salesAgg.count === 1 ? 'payment' : 'payments'}<br>
                 You received <strong style="color:var(--green);">${_stripeFmtMoney(net, cur)}</strong> net into your Stripe balance
@@ -19578,7 +19578,7 @@ function renderStripeFeesCards(data, byYearCurAll) {
             </div>
             <div style="flex:1;min-width:120px;text-align:right;">
               <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.12em;margin-bottom:4px;">Effective rate</div>
-              <div style="font-family:'DM Mono',monospace;font-size:32px;font-weight:500;color:var(--gold);line-height:1;">${pct.toFixed(2)}%</div>
+              <div style="font-family:'DM Mono',monospace;font-size:var(--text-lg);font-weight:500;color:var(--gold-text);line-height:1;">${pct.toFixed(2)}%</div>
               <div style="font-size:11px;color:var(--text3);margin-top:8px;">of gross sales</div>
             </div>
           </div>`;

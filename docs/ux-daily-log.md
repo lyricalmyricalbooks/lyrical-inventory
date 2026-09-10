@@ -85,6 +85,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-09-06 | visual | Customers — Email Campaigns | Gave each campaign row its own visible tile instead of blending into the card behind it | #750 |
 | 2026-09-07 | visual | Tax Centre — Shipping (US customs prepayment) | Made the US customs card's gold border and "valid" checkmarks actually change color in dark mode | #753 |
 | 2026-09-08 | visual | Book dashboard | Gave "Sales by channel", "Consignment overview" and "Inventory" real headings instead of the faintest type in the app | #766 |
+| 2026-09-10 | visual | Tax Centre — Stripe fees | Made the fee total lead its card and fixed the effective-rate figure's color so it's actually readable in daylight | #787 |
 
 ---
 
