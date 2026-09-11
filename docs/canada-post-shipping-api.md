@@ -213,6 +213,31 @@ there, never from memory. Points that cost a refused shipment if missed:
   Both are declared properties, so sending both is spec-valid; neither can be
   rejected as unknown. Picking one is a silent gamble — an unrecognised name is
   dropped with no error, the label prints, and the duty is simply never prepaid.
+- **Who mints the Declaration ID.** Canada Post's integration guide is explicit
+  that with a Zonos **Verified Account**, *Canada Post* generates it — the app
+  must not, and there is no pre-purchase call to make:
+
+  > 1. You create a shipment as per your normal process.
+  > 2. Canada Post generates a Declaration ID.
+  > 3. Canada Post links the Declaration ID to your shipment's tracking number.
+  > 4. Canada Post issues a shipping label.
+  > 5. Using the tracking number and data shared from Canada Post, Zonos pays
+  >    CBP directly for the shipment.
+  > 6. Zonos invoices you for the duties associated with the tracking number.
+
+  The whole integration is the account key on the request header —
+  `X-CPC-Zonos-Key` — which the guide gives verbatim as
+  `X-CPC-Zonos-Key=xxxxxxxxxxx`. Never mint an id via Zonos'
+  `declarationCreateWorkflow` and send that instead: that mutation belongs to
+  Zonos' Landed Cost / Checkout product, and a self-minted id sent on the
+  request overrides the one Canada Post links to the tracking number — the link
+  that *is* the proof of prepayment.
+- `customs.usdeclarationid` is therefore for the OTHER route only: no account
+  key, and the declaration bought by hand in the Zonos Prepay app. Both routes
+  are legitimate; the account key is the one Canada Post recommends.
+- Billing, per the same guide: Zonos invoices after U.S. Customs clears the
+  parcel, so there is a lag; a label created but never dispatched is **not**
+  charged; a CBP reassessment appears as a "CBP adjustment" on a later invoice.
 - The response is **not** documented to echo `customs` back, so a created
   shipment that returns no declaration is the ordinary case, not a failure.
   Treat it as a three-state signal (`issued` / `sent` / `missing`), the same way

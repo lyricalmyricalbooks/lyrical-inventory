@@ -322,6 +322,10 @@ export function promptDialog(message, defaultValue = '', opts = {}) {
   if (titleEl) titleEl.textContent = opts.title || 'Enter a value';
   ok.textContent = opts.okLabel || 'OK';
   cancel.textContent = opts.cancelLabel || 'Cancel';
+  // A date, a number or a time is worth asking for with the control built for
+  // it — a native picker beats making someone type 2026-09-20 correctly. Reset
+  // on the way out, since the one input element is shared by every caller.
+  input.type = opts.inputType || 'text';
   input.value = String(defaultValue ?? '');
   input.placeholder = opts.placeholder || '';
 
@@ -329,6 +333,7 @@ export function promptDialog(message, defaultValue = '', opts = {}) {
     const cleanup = (result) => {
       overlay.removeEventListener('modal-close', onCloseEvent);
       closeM('prompt');
+      input.type = 'text';
       ok.removeEventListener('click', onOk);
       cancel.removeEventListener('click', onCancel);
       input.removeEventListener('keydown', onKey);

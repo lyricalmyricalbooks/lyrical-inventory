@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { appSource } from './helpers/extract-decl.js';
+import { appSource, buildHarness } from './helpers/extract-decl.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -103,7 +103,45 @@ describe('Customs declared-total hint', () => {
   it('is wired to the quantity and value inputs in index.html', () => {
     expect(indexContent).toContain('id="sp-customs-total"');
     expect(indexContent).toContain('oninput="updateShippoCustomsTotalHint()"');
-    expect(appSource).toMatch(/updateShippoCustomsTotalHint\(\);[\r\n]+  showToast\(`✓ Scaled specs/);
+    expect(indexContent).toContain('oninput="onShippoQuantityChange()"');
+  });
+
+  // Typing a new quantity has to move the box and the declared total together.
+  // They are written by two different functions, so nothing but running them
+  // proves the second still happens — a publisher who bumps an order to three
+  // copies and declares the value of one is under-declaring at the border.
+  it('restacks the box and the declared total from one quantity change', () => {
+    const toasts = [];
+    const elements = {
+      'sp-qty': { value: '3' },
+      'sp-height': { value: '1' },
+      'sp-weight': { value: '1.2' },
+      'sp-customs-value': { value: '25' },
+      'sp-customs-total': { textContent: '' },
+    };
+    const harness = buildHarness({
+      names: ['scaleShippoSpecsForQty', 'updateShippoCustomsTotalHint', 'onShippoQuantityChange'],
+      deps: {
+        $: (id) => elements[id],
+        showToast: (msg) => toasts.push(msg),
+      },
+      moduleState: "let shippoBaseSpecs = { height: 1, weight: 1.2 };",
+      returns: '{ onShippoQuantityChange, scaleShippoSpecsForQty }',
+    });
+
+    harness.onShippoQuantityChange();
+    expect(elements['sp-height'].value).toBe(3);
+    expect(elements['sp-weight'].value).toBe(3.6);
+    expect(elements['sp-customs-total'].textContent).toBe('Declared to customs: 3 × 25.00 = 75.00 CAD');
+    expect(toasts).toEqual(['✓ Scaled specs for 3 copies']);
+
+    // The automated path sets the same quantity without the toast, because the
+    // order that triggered it says everything in one message of its own.
+    elements['sp-qty'].value = '2';
+    harness.scaleShippoSpecsForQty(2);
+    expect(elements['sp-weight'].value).toBe(2.4);
+    expect(elements['sp-customs-total'].textContent).toBe('Declared to customs: 2 × 25.00 = 50.00 CAD');
+    expect(toasts).toHaveLength(1);
   });
 });
 

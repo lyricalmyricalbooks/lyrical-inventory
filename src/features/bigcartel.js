@@ -39,17 +39,33 @@ import {
 import { openM, closeM, confirmDialog } from '../lib/modal.js';
 import {
   _shippoDestMasterList,
+  applyOrderPrefill,
   autoLinkPostageForOrder,
   getFallbackShippingPhone,
   getShippingReconciliationOrders,
   renderShippingAnalysisHub,
   shippingPurchaseRowPayload,
 } from './shipping.js';
+import { describeParcelPlan, orderParcelPlan } from '../lib/order-parcel-prefill.js';
+import {
+  integrationBackoffMs,
+  noteIntegrationFailure,
+  noteIntegrationSuccess,
+} from '../lib/integration-watch.js';
+import { browserWatchState, effectiveInterval, startWatch } from '../lib/watch-schedule.js';
+import {
+  describeNewOrders,
+  dueForRefresh,
+  mergeSeenOrders,
+  newOrdersSince,
+  seedSeenOrders,
+} from '../lib/order-watch.js';
 import { escapeHtml } from '../lib/html.js';
 import { resolveCountryCode } from '../lib/countries.js';
 import { fmt, getBookCurrencyCode } from '../lib/money.js';
 import { normalizeShippingOrderNumber } from '../lib/shipping-reconciliation.js';
 import {
+  bigCartelOrderLines,
   bigCartelOrderNumber,
   buildBigCartelOrderEntry,
   describeGapSummary,
@@ -261,7 +277,11 @@ async function renderBigCartelTab() {
 
   if (config.subdomain && config.username && config.password) {
     updateBigCartelConnectionUI(true, 'Configured (Test to Verify)');
-    $('bc-status-dot').className = 'sync-dot amber'; // override to amber instead of green
+    // Saved but never tested is neither connected nor disconnected. This used
+    // to reach for `sync-dot amber` — a different component's class, plus an
+    // amber modifier that was never written — so it painted plain green and
+    // claimed a connection nobody had verified.
+    $('bc-status-dot').className = 'bc-dot unverified';
   } else {
     updateBigCartelConnectionUI(false, 'Disconnected');
   }
@@ -359,7 +379,13 @@ async function fetchBigCartel(endpoint, accountId = '') {
     } catch (_) {
       // Keep the HTTP status when Big Cartel returns a non-JSON error body.
     }
-    throw new Error(`Big Cartel API returned status ${data.code}${apiError ? `: ${apiError}` : ''}`);
+    // The status travels as a property as well as in the sentence. The proxy
+    // fetches with muteHttpExceptions, so a storefront 401 arrives here intact
+    // as data.code — and without it on the Error, telling "your password
+    // changed" from "you are on a train" would mean reading message text.
+    const bcError = new Error(`Big Cartel API returned status ${data.code}${apiError ? `: ${apiError}` : ''}`);
+    bcError.status = Number(data.code) || 0;
+    throw bcError;
   }
 
   return JSON.parse(data.content);
@@ -1027,11 +1053,120 @@ function renderBigCartelOrders(orders, included = []) {
   });
 }
 
-function prefillShippingFromBigCartelOrder(orderId) {
+/**
+ * Record a storefront order as a sale, if it is not recorded already.
+ *
+ * Called on the way to buying a label, because that is the moment the order is
+ * demonstrably real and about to leave the building. Every earlier version of
+ * this app left the two halves apart: the sale was recorded in one tab, the
+ * parcel was shipped from another, and an order shipped without ever being
+ * recorded kept its stock on the shelf forever.
+ *
+ * Held to `plan.autoSafe`, so it only ever fires on an order that named one
+ * catalogue title outright. Anything the storefront left ambiguous — a second
+ * title in the same box, an item not in the catalogue, a book deduced from the
+ * amount paid — is left for the review queue on this tab, where the publisher
+ * chooses the book instead of a guess moving stock behind their back.
+ *
+ * Returns why it did or did not act, so the caller's single message can say so.
+ */
+async function recordBigCartelOrderIfMissing(order, plan) {
+  if (!plan || !plan.autoSafe) return { status: 'needs-review' };
+
+  const num = bigCartelOrderNumber(order);
+  if (!num) return { status: 'no-number' };
+  if (bigCartelLedgerNumbers().some(existing => sameOrderNumber(existing, num))) {
+    return { status: 'already-recorded' };
+  }
+
+  // findLedgerGaps is the same reader the review queue uses, run over this one
+  // order. Going through it rather than around it means a cancelled order, or
+  // one already present under a different spelling, is skipped here for exactly
+  // the reasons it is skipped there.
+  const scan = findLedgerGaps([order], getBigCartelIncluded(), {
+    ledgerNumbers: bigCartelLedgerNumbers(),
+    books: BOOKS,
+    dismissedNums: [],
+  });
+  const gap = (scan.missing || [])[0];
+  if (!gap) return { status: 'not-owed' };
+
+  const bookId = plan.presetBookId;
+  if (!bookId || !BOOKS[bookId]) return { status: 'needs-review' };
+
+  const address = extractBigCartelAddress(order, order.id, getBigCartelIncluded());
+  const price = gap.unitPrice != null && gap.unitPrice > 0
+    ? gap.unitPrice
+    : Number(BOOKS[bookId]?.listPrice || 0);
+  const qty = plan.totalQty || gap.qty || 1;
+
+  let entry;
+  try {
+    entry = commitRecoveredWebsiteOrder(bookId, { qty, price }, ({ stockAfter }) =>
+      buildBigCartelOrderEntry(gap, {
+        bookId, qty, price, stockAfter,
+        address: { ...address, email: gap.email || address.email },
+      }));
+  } catch (error) {
+    console.error('Big Cartel order auto-record failed', error);
+    return { status: 'failed' };
+  }
+
+  // The review queue was built before this row existed; drop the order from it
+  // so the badge and the list agree with the ledger.
+  if (_bcGapResult && Array.isArray(_bcGapResult.missing)) {
+    _bcGapResult.missing = _bcGapResult.missing.filter(item => !sameOrderNumber(item.num, num));
+    renderBigCartelLedgerGaps();
+    renderBigCartelGapBadge();
+  }
+  scheduleRender();
+
+  // A label bought before the order was recorded may have been sitting in the
+  // reconciliation worklist with nothing to point at. Failing to link it is not
+  // failing to record the sale, so it never takes the record down with it.
+  let linked = 0;
+  try {
+    linked = await autoLinkPostageForOrder(entry);
+  } catch (error) {
+    console.warn('Postage auto-link after Big Cartel ship failed', error);
+  }
+
+  return { status: 'recorded', entry, qty, linked, bookTitle: BOOKS[bookId].title };
+}
+
+/**
+ * One press: record the sale, fill the whole shipping form from the order, and
+ * fetch the rates.
+ *
+ * This used to fill in the recipient's address and stop, which left the
+ * publisher restating what the order already said — open the package dropdown,
+ * find the book, set the quantity, fix the customs value, press Calculate — and
+ * left the sale itself unrecorded on a separate tab. Now the order answers all
+ * of it. Buying the label is the only thing still asked for, because that is
+ * the only step that spends money.
+ */
+function findBigCartelOrderById(orderId) {
   const orders = (bigCartelData && bigCartelData.orders && bigCartelData.orders.length > 0)
     ? bigCartelData.orders
     : (loadCachedBigCartelOrders()?.orders || []);
-  const order = orders.find(o => String(o.id) === String(orderId));
+  return orders.find(o => String(o.id) === String(orderId)) || null;
+}
+
+/**
+ * What the order says is in the box, and how far that lets the app go alone.
+ *
+ * Both things that record a sale from an order need the same pair, and they
+ * have to be derived the same way: the plan's `autoSafe` flag is what decides
+ * whether stock may move without a human, so two callers computing it
+ * differently would mean two different answers to the same question.
+ */
+function bigCartelOrderPlan(order) {
+  const parcelLines = bigCartelOrderLines(order, getBigCartelIncluded(), BOOKS);
+  return { parcelLines, plan: orderParcelPlan(parcelLines, BOOKS) };
+}
+
+async function prefillShippingFromBigCartelOrder(orderId) {
+  const order = findBigCartelOrderById(orderId);
   if (!order) {
     showToast('Order details not found', 'err');
     return;
@@ -1077,7 +1212,37 @@ function prefillShippingFromBigCartelOrder(orderId) {
     hydrateShippingDestinationPhone(orderId);
   }
 
-  showToast(`✓ Populated shipping details for Order #${orderId}`);
+  // What the order says is in the box, and how far that lets us go on our own.
+  const { parcelLines, plan } = bigCartelOrderPlan(order);
+
+  // Record before quoting: the sale is what the label is for, and a rate call
+  // that fails should not be able to leave the sale unrecorded.
+  const recorded = await recordBigCartelOrderIfMissing(order, plan);
+
+  const { quoted } = await applyOrderPrefill({
+    orderNumber: normalizeShippingOrderNumber(orderId),
+    parcelLines,
+  });
+
+  // One message covering everything that happened, rather than a stack of them.
+  const parts = [];
+  if (recorded.status === 'recorded') {
+    parts.push(`recorded ${recorded.qty} × ${recorded.bookTitle}`);
+    if (recorded.linked) {
+      parts.push(`linked ${recorded.linked} label${recorded.linked === 1 ? '' : 's'}`);
+    }
+  }
+  const parcelNote = describeParcelPlan(plan);
+  if (parcelNote) parts.push(parcelNote);
+  if (quoted) parts.push('rates below');
+
+  if (!parts.length) {
+    showToast(`✓ Order #${orderId} — address filled in. Choose the package below.`);
+  } else if (recorded.status === 'needs-review' && !plan.autoSafe) {
+    showToast(`✓ Order #${orderId} — ${parts.join(', ')}. Check the details before buying.`, 'warn', 6000);
+  } else {
+    showToast(`✓ Order #${orderId} — ${parts.join(', ')}`, 'ok', 5000);
+  }
 }
 
 function switchBigCartelSubTab(tabName) {
@@ -1269,6 +1434,11 @@ const BC_GAP_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 let _bcGapResult = null;
 let _bcGapConflicts = { renumber: [], duplicate: [] };
 let _bcGapChecking = false;
+// Whether the most recent check actually reached the storefront. Needed because
+// checkBigCartelLedgerGaps() returns null for a failure and null for "not
+// configured", so its own return value cannot tell the summary line below which
+// happened — and it has been printing "Not checked yet." for both.
+let _bcLastCheckFailed = false;
 
 function readBcGapDismissed() {
   try {
@@ -1380,6 +1550,7 @@ async function checkBigCartelLedgerGaps({ silent = false } = {}) {
   }
 
   _bcGapChecking = true;
+  _bcLastCheckFailed = false;
   const btn = $('bc-gap-check-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
   try {
@@ -1398,8 +1569,13 @@ async function checkBigCartelLedgerGaps({ silent = false } = {}) {
     _bcGapConflicts = findRecoveredOrderConflicts(bcOrders, allWebsiteLedgerEntries());
     writeBcGapCache({ checkedAt: Date.now(), result: _bcGapResult, conflicts: _bcGapConflicts });
 
+    // Every path that talks to the storefront comes through here, so this is
+    // the one place a sale nobody has seen yet can be noticed.
+    announceNewBigCartelOrders(bcOrders);
+
     renderBigCartelLedgerGaps();
     renderBigCartelGapBadge();
+    noteIntegrationSuccess('bigcartel');
     if (!silent) {
       const n = pendingGaps(_bcGapResult).length;
       showToast(n
@@ -1409,6 +1585,15 @@ async function checkBigCartelLedgerGaps({ silent = false } = {}) {
     return _bcGapResult;
   } catch (e) {
     console.error('Big Cartel ledger gap check failed:', e);
+    // Recorded, not just logged. This function returns null for a failure and
+    // null for "not configured", so the caller has never been able to tell them
+    // apart — a storefront that stopped answering looked exactly like one that
+    // was switched off, and both looked like a quiet day.
+    _bcLastCheckFailed = true;
+    noteIntegrationFailure('bigcartel', e, {
+      online: typeof navigator === 'undefined' || navigator.onLine !== false,
+      configured: true,
+    });
     if (!silent) showToast('Could not check Big Cartel: ' + e.message, 'err');
     return null;
   } finally {
@@ -1436,6 +1621,249 @@ async function autoCheckBigCartelLedgerGaps() {
     return;
   }
   await checkBigCartelLedgerGaps({ silent: true });
+}
+
+// ─── Watching for orders that arrive while the app is open ────────────────
+//
+// The storefront check ran once, at boot, and said nothing. That is fine for a
+// tab badge and useless for a sale: a publisher who opens the app at nine and
+// leaves it open all day never hears about the order placed at eleven, and the
+// only evidence when they finally reload is a small number on a tab they had no
+// reason to look at.
+//
+// So the app keeps asking, and when the answer contains a sale it has not seen
+// before it says so out loud. The rules for all of that — what counts as new,
+// when another request is worth making, and what to say — live in
+// lib/order-watch.js, where they can be tested without a browser. What is here
+// is the storage, the timers and the card.
+
+const BC_SEEN_ORDERS_KEY = 'lm-bc-seen-orders';
+const BC_ORDER_WATCH_INTERVAL_MS = 5 * 60 * 1000;
+
+let _bcWatchStarted = false;
+let _bcLastOrderCheckAt = 0;
+let _newOrderAlert = null;
+
+function readSeenOrders() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(BC_SEEN_ORDERS_KEY) || 'null');
+    return Array.isArray(raw) ? raw : null;
+  } catch (e) { return null; }
+}
+
+function writeSeenOrders(nums) {
+  try { localStorage.setItem(BC_SEEN_ORDERS_KEY, JSON.stringify(nums)); } catch (e) { /* storage full or blocked */ }
+}
+
+/**
+ * Notice the sales in this batch that have never been announced, and say so.
+ *
+ * The first run is deliberately silent: with nothing remembered, every order on
+ * the store is "new", and a publisher installing this against three years of
+ * history should be told about their next sale, not woken up by all of them.
+ * That run seeds the list instead, so the very next order is the first thing
+ * this ever mentions.
+ */
+function announceNewBigCartelOrders(bcOrders = []) {
+  const stored = readSeenOrders();
+  const seeded = Array.isArray(stored);
+
+  if (!seeded) {
+    writeSeenOrders(seedSeenOrders(bcOrders));
+    return [];
+  }
+
+  const fresh = newOrdersSince(bcOrders, stored, { seeded: true });
+  if (!fresh.length) return [];
+
+  writeSeenOrders(mergeSeenOrders(stored, fresh.map(entry => entry.num)));
+  showNewOrderAlert(fresh);
+  return fresh;
+}
+
+/**
+ * The card that says a sale came in.
+ *
+ * Deliberately not a toast. A toast is three seconds long and this exists
+ * precisely for the moments nobody was watching the screen — a notification you
+ * have to already be looking at to see is not a notification. It stays until it
+ * is dismissed or acted on.
+ *
+ * A single order gets the shipping button, because one press from here now
+ * records the sale, fills the whole label form and fetches the rates. Several
+ * get the review list instead: there is no single order to ship.
+ */
+function showNewOrderAlert(entries) {
+  const card = $('new-order-alert');
+  if (!card || !entries?.length) return;
+
+  // Orders that arrive in separate batches accumulate rather than replacing one
+  // another — the second sale of the morning must not erase the first before
+  // the publisher has read it.
+  const merged = [...(_newOrderAlert?.entries || [])];
+  entries.forEach(entry => {
+    if (!merged.some(existing => existing.num === entry.num)) merged.push(entry);
+  });
+  _newOrderAlert = { entries: merged };
+
+  const said = describeNewOrders(merged);
+  const title = $('new-order-alert-title');
+  const detail = $('new-order-alert-detail');
+  const ship = $('new-order-alert-ship');
+  const record = $('new-order-alert-record');
+  const review = $('new-order-alert-review');
+
+  if (title) title.textContent = said.title;
+  if (detail) detail.textContent = said.detail;
+  // Both single-order actions work on the first entry, so both disappear once
+  // several have stacked up — a button that silently picks one of four orders
+  // to move stock for is worse than no button.
+  if (ship) ship.hidden = merged.length !== 1;
+  if (record) record.hidden = merged.length !== 1;
+  if (review) review.textContent = merged.length === 1 ? 'Review' : 'Review orders';
+
+  card.hidden = false;
+}
+
+function dismissNewOrderAlert(event) {
+  if (event) event.stopPropagation();
+  _newOrderAlert = null;
+  const card = $('new-order-alert');
+  if (card) card.hidden = true;
+}
+
+/** Ship the one new order straight from the card — the whole flow, one press. */
+function shipNewOrderFromAlert(event) {
+  if (event) event.stopPropagation();
+  const entry = _newOrderAlert?.entries?.[0];
+  dismissNewOrderAlert();
+  if (!entry) return;
+  prefillShippingFromBigCartelOrder(entry.orderId || entry.num.replace(/^#/, ''));
+}
+
+/**
+ * Take the stock off the shelf without going near the shipping form.
+ *
+ * "Ship it" already records the sale — it does that before quoting rates, so a
+ * rate call that fails cannot leave the sale unrecorded. But it also switches
+ * to the Shipping tab, fills the whole address form, chases a phone number and
+ * asks the carrier for prices. For an order being fulfilled next week, or handed
+ * over in person, all of that is a detour through a screen built for buying
+ * postage to reach the one step that actually mattered.
+ *
+ * Same guard as every other automatic record: held to `plan.autoSafe`, so stock
+ * only ever moves on an order that named one catalogue title outright. Anything
+ * the storefront left ambiguous goes to the review queue where the publisher
+ * picks the book, rather than a guess moving stock behind their back.
+ */
+async function recordNewOrderFromAlert(event) {
+  if (event) event.stopPropagation();
+  const entry = _newOrderAlert?.entries?.[0];
+  if (!entry) return;
+
+  const order = findBigCartelOrderById(entry.orderId || entry.num.replace(/^#/, ''));
+  if (!order) { showToast('Order details not found', 'err'); return; }
+
+  const { plan } = bigCartelOrderPlan(order);
+  const recorded = await recordBigCartelOrderIfMissing(order, plan);
+
+  // An order the app will not record on its own is the one case worth keeping
+  // the publisher's attention: the card goes, but they land on the queue that
+  // asks which book it was, rather than being told "no" and left where they are.
+  if (recorded.status === 'needs-review') {
+    dismissNewOrderAlert();
+    switchTab('bigcartel');
+    showToast(`${entry.num} needs you to pick the book before it can be recorded.`, 'warn', 6000);
+    return;
+  }
+
+  // Nothing was written and nothing can be, so leave the card up: "Ship it" is
+  // still there, and dismissing would look like the sale had been dealt with.
+  if (recorded.status === 'failed' || recorded.status === 'no-number') {
+    showToast(`Could not record ${entry.num}. Try shipping it instead.`, 'err', 6000);
+    return;
+  }
+
+  dismissNewOrderAlert();
+
+  if (recorded.status === 'recorded') {
+    const linked = recorded.linked
+      ? `, linked ${recorded.linked} label${recorded.linked === 1 ? '' : 's'}`
+      : '';
+    showToast(`✓ Recorded ${recorded.qty} × ${recorded.bookTitle}${linked} — stock updated`, 'ok', 5000);
+    return;
+  }
+
+  // already-recorded / not-owed: the ledger is right either way, and saying so
+  // is better than a silent dismiss that looks like nothing happened.
+  showToast(`${entry.num} was already in your ledger — nothing to record.`);
+}
+
+/** Open the storefront tab to work through them. */
+function reviewNewOrdersFromAlert(event) {
+  if (event) event.stopPropagation();
+  dismissNewOrderAlert();
+  switchTab('bigcartel');
+}
+
+/**
+ * Ask the storefront again, but only when it would not be wasted.
+ *
+ * Every gate lives in dueForRefresh(); this supplies the state it judges.
+ * `_bcGapChecking` is passed as `busy` so a poll that lands while the publisher
+ * is mid-check does not queue a second identical request behind it.
+ */
+async function refreshBigCartelOrdersIfDue({ force = false } = {}) {
+  const config = await loadBigCartelConfig().catch(() => null);
+  const ready = bigCartelConfigured(config) && !!sheetsUrl;
+  const { online, visible } = browserWatchState();
+  const due = force
+    ? ready && !_bcGapChecking && online
+    : dueForRefresh({
+      lastCheckedAt: _bcLastOrderCheckAt,
+      now: Date.now(),
+      // Widened once the storefront has refused twice running, so a dead
+      // endpoint is not asked every five minutes for the rest of the day.
+      intervalMs: effectiveInterval(
+        BC_ORDER_WATCH_INTERVAL_MS,
+        integrationBackoffMs('bigcartel', BC_ORDER_WATCH_INTERVAL_MS),
+      ),
+      online,
+      configured: ready,
+      visible,
+      busy: _bcGapChecking,
+    });
+  if (!due) return false;
+
+  _bcLastOrderCheckAt = Date.now();
+  try {
+    await checkBigCartelLedgerGaps({ silent: true });
+    return true;
+  } catch (error) {
+    // A failed poll is not worth interrupting anyone over; the next one will
+    // try again, and the sync chip already reports a dead connection.
+    console.warn('Big Cartel order watch failed', error);
+    return false;
+  }
+}
+
+/**
+ * Start watching. Three triggers, because a PWA is used in three ways: left
+ * open on a desk (the timer), switched back to from another app (visibility),
+ * and picked up again after the signal came back (online).
+ */
+function startBigCartelOrderWatch() {
+  if (_bcWatchStarted || typeof window === 'undefined') return;
+  _bcWatchStarted = true;
+  // Seeded from when the storefront was actually last asked, not from now: the
+  // boot check is often served from a cache hours old, and starting the clock
+  // here would mean the app opens on a stale answer and sits on it.
+  _bcLastOrderCheckAt = Number(readBcGapCache()?.checkedAt) || 0;
+
+  // Timer, return-to-app and reconnect, from the shared scheduler rather than
+  // wired by hand here — the same three triggers every other unattended check
+  // uses, so there is one place they can be reasoned about.
+  startWatch(() => { refreshBigCartelOrdersIfDue(); }, { intervalMs: BC_ORDER_WATCH_INTERVAL_MS });
 }
 
 /** The count badge on the Big Cartel tab button and the Website orders strip. */
@@ -1509,7 +1937,15 @@ function renderBigCartelLedgerGaps() {
   const summary = $('bc-gap-summary');
   const list = $('bc-gap-list');
   const repairs = $('bc-gap-repairs');
-  if (summary) summary.textContent = _bcGapResult ? describeGapSummary(_bcGapResult) : 'Not checked yet.';
+  if (summary) {
+    // Three states, not two. A check that could not reach Big Cartel used to
+    // read "Not checked yet." — identical to one that had simply never run —
+    // which is precisely the wrong thing to tell someone whose storefront has
+    // stopped answering.
+    if (_bcGapResult) summary.textContent = describeGapSummary(_bcGapResult);
+    else if (_bcLastCheckFailed) summary.textContent = 'Big Cartel could not be reached, so this list may be out of date.';
+    else summary.textContent = 'Not checked yet.';
+  }
 
   // Rolled up: the summary above still reports the count, so nothing is hidden
   // that needs acting on. Building the rows anyway would mean assembling a book
@@ -2030,6 +2466,14 @@ async function triggerBigCartelShippingSync() {
 }
 export {
   addBigCartelOrderToLedger,
+  announceNewBigCartelOrders,
+  showNewOrderAlert,
+  dismissNewOrderAlert,
+  recordNewOrderFromAlert,
+  shipNewOrderFromAlert,
+  reviewNewOrdersFromAlert,
+  refreshBigCartelOrdersIfDue,
+  startBigCartelOrderWatch,
   toggleBigCartelGapPanel,
   undoBigCartelGapDismiss,
   autoCheckBigCartelLedgerGaps,

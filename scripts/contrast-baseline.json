@@ -98,20 +98,6 @@
           "count": 2
         },
         {
-          "key": "#64646d::#22222e",
-          "textColor": "rgba(255,255,255,0.3)",
-          "bgColor": "#22222e",
-          "ratio": 2.69,
-          "count": 1
-        },
-        {
-          "key": "#616167::#1d1d26",
-          "textColor": "rgba(255,255,255,0.3)",
-          "bgColor": "#1d1d26",
-          "ratio": 2.71,
-          "count": 1
-        },
-        {
           "key": "#c8913a::#ffffff",
           "textColor": "var(--gold)",
           "bgColor": "(inherited)",
@@ -170,22 +156,7 @@
       ]
     },
     "dark": {
-      "accepted": [
-        {
-          "key": "#64646d::#22222e",
-          "textColor": "rgba(255,255,255,0.3)",
-          "bgColor": "#22222e",
-          "ratio": 2.69,
-          "count": 1
-        },
-        {
-          "key": "#616167::#1d1d26",
-          "textColor": "rgba(255,255,255,0.3)",
-          "bgColor": "#1d1d26",
-          "ratio": 2.71,
-          "count": 1
-        }
-      ]
+      "accepted": []
     }
   }
 }

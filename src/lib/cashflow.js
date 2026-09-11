@@ -3,7 +3,7 @@
 // Kept DOM- and Firestore-free so the headline metrics, period-over-period
 // deltas and the monthly mini-chart can be unit-tested without a browser.
 // The iteration logic here mirrors renderTaxCenter()'s ledger build exactly —
-// same filters (voided / artistPending sales, paid artist transfers, stored
+// same filters (voided / artistPending sales, recorded artist payouts, stored
 // baseAmount preference) — so the numbers can never drift from the ledger.
 
 import { getBookCurrencyCode, roundCents } from './money.js';
@@ -64,11 +64,19 @@ export function computeCashFlowMetrics(sources, yearFilter) {
       operatingExpenses += eBase;
     });
 
-    // Paid artist payouts — tracked separately (NOT operating expenses).
-    (s.artistTransfers || []).filter((t) => t.paid).forEach((t) => {
-      const tDate = t.paidDate || t.date || '';
-      if (!inYear(tDate, yearFilter)) return;
-      artistPayouts += (t.total || 0) * hRate;
+    // Artist payouts — tracked separately (NOT operating expenses).
+    //
+    // Read from `artistPayouts`, the payments actually recorded against the
+    // book. This used to read `artistTransfers` filtered on a `paid` flag that
+    // nothing in the app ever writes — settlement deletes the transfer rather
+    // than marking it — so the total was always zero and every real payout was
+    // invisible to the Tax Centre and these KPIs.
+    (s.artistPayouts || []).forEach((p) => {
+      if (p.voided) return;
+      if (!inYear(p.date, yearFilter)) return;
+      // `amount` is denominated in the book's own currency (a payout made in
+      // another currency stores the foreign cash under `payment`).
+      artistPayouts += (Number(p.amount) || 0) * hRate;
     });
   });
 

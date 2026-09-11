@@ -40,10 +40,17 @@ import {
   sheetsUrl,
   showToast,
   states,
+  switchTab,
   today,
 } from '../main.js';
 import { renderExpenses, saveReceiptToLocalFile, readShippingFieldsFromReceipt } from './receipts.js';
 import { openM, closeM, confirmDialog, promptDialog, validateFields, clearFieldErrors, fieldError, _prefersReducedMotion } from '../lib/modal.js';
+import { dismissAppAlert, pushAppAlert } from '../lib/app-alert.js';
+import {
+  integrationBackoffMs,
+  noteIntegrationFailure,
+  noteIntegrationSuccess,
+} from '../lib/integration-watch.js';
 import {
   extractBigCartelAddress,
   getBigCartelIncluded,
@@ -51,7 +58,7 @@ import {
   hydrateShippingDestinationPhone,
   bigCartelData,
 } from './bigcartel.js';
-import { renderTaxCenter, saveTaxCenter } from './taxcentre.js';
+import { renderTaxCenter, saveTaxCenter, switchTaxCenterSubTab } from './taxcentre.js';
 import { escapeHtml } from '../lib/html.js';
 import {
   REGION_LABELS,
@@ -69,6 +76,12 @@ import {
   recoveredOrderPrefill,
   validateRecoveredOrder,
 } from '../lib/manual-website-order.js';
+import {
+  describeParcelPlan,
+  orderParcelPlan,
+  parcelLinesFromLedgerEntry,
+} from '../lib/order-parcel-prefill.js';
+import { bigCartelOrderLines } from '../lib/bigcartel-ledger-gap.js';
 import { receiptLinkTarget } from '../lib/receipt-links.js';
 import {
   autoMatchPostage,
@@ -88,13 +101,22 @@ import {
 } from '../lib/postage-matching.js';
 import {
   applyShippoExpenseEnrichments,
+  autoLinkConfidentShippingMatches,
   enrichShippoExpense,
+  isUnresolvedShippoPostage,
+  needsAmountAttention,
   linkedShippingSummary,
   normalizeShippingOrderNumber,
   persistManualShippingLink,
   reconcileShippingExpense,
   stageShippoExpenseEnrichment,
+  writeShippingLink,
 } from '../lib/shipping-reconciliation.js';
+import {
+  describeImportedLabels,
+  dueForShippoCheck,
+} from '../lib/shippo-watch.js';
+import { browserWatchState, dueForCheck, effectiveInterval, startWatch } from '../lib/watch-schedule.js';
 import {
   describeInvoiceAvailability,
   invoiceIndexByTransaction,
@@ -124,7 +146,6 @@ import {
 } from '../lib/address-verification.js';
 import {
   calculateZonosLandedCost,
-  createZonosDeclaration,
   estimateOfflineLandedCost,
   resolveDutyPrepaymentRoute,
   buildZonosPrepayDeepLink,
@@ -146,7 +167,23 @@ import {
   fetchCanadaPostLabelArtifact,
   resolveCanadaPostCredentials,
   refundCanadaPostShipment,
+  executeCanadaPostProxy,
 } from '../lib/canadapost.js';
+import {
+  resolveListShipmentsEndpoint,
+  resolveShipmentDetailsEndpoint,
+  resolveShipmentPriceEndpoint,
+  resolveShipmentReceiptEndpoint,
+} from '../lib/canadapost-endpoints.js';
+import {
+  buildPostageExpense,
+  mergePostageCandidates,
+  needsAmount,
+  normalizeCanadaPostShipment,
+  normalizeShippingEmail,
+  postageCandidateRef,
+} from '../lib/postage-intake.js';
+import { parseShippingEmail, shippingEmailQuery } from '../lib/shipping-email.js';
 import {
   assessLiveShippingReadiness,
   inspectZonosAccountKey,
@@ -586,7 +623,12 @@ async function openShippoLabel(ref) {
     window.open(url, '_blank', 'noopener');
   } catch (e) {
     console.error('Could not refresh Shippo label', e);
-    showToast(`⚠ Could not get the label from Shippo — ${describeShippoError(e)}`, 'err', 6000);
+    // describeShippoError takes (status, bodyText). Passing the Error itself as
+    // the status produced "Shippo validation failed (Error: Shippo transactions
+    // lookup 401: …)" — the raw throw echoed back at the publisher inside a
+    // sentence about address validation. Now that the throw carries its status,
+    // both arguments can be what the function actually expects.
+    showToast(`⚠ Could not get the label from Shippo — ${describeShippoError(e?.status || 0, e?.message || '')}`, 'err', 6000);
   }
 }
 
@@ -615,7 +657,12 @@ async function fetchShippoTransactionsPageAPI(token, page) {
   });
   if (!resp.ok) {
     const txt = await resp.text().catch(() => '');
-    throw new Error(`Shippo API error ${resp.status}${txt ? `: ${txt.slice(0, 140)}` : ''}`);
+    // Carried as a property too, so a caller can tell a refused token from an
+    // outage without parsing the sentence. `status: 0` is this file's existing
+    // convention for "could not reach it" — see fetchShippoInvoiceItems.
+    const apiError = new Error(`Shippo API error ${resp.status}${txt ? `: ${txt.slice(0, 140)}` : ''}`);
+    apiError.status = resp.status;
+    throw apiError;
   }
   return resp.json();
 }
@@ -684,7 +731,9 @@ async function fetchShippoObject(token, resource, id) {
   });
   if (!resp.ok) {
     const text = await resp.text().catch(() => '');
-    throw new Error(`Shippo ${resource} lookup ${resp.status}${text ? `: ${text.slice(0, 140)}` : ''}`);
+    const lookupError = new Error(`Shippo ${resource} lookup ${resp.status}${text ? `: ${text.slice(0, 140)}` : ''}`);
+    lookupError.status = resp.status;
+    throw lookupError;
   }
   return resp.json();
 }
@@ -736,12 +785,16 @@ function renderShippingReconciliationWorklist() {
   }
   if (panel) panel.hidden = false;
   if (openButton) openButton.hidden = true;
-  const expenses = (TAX_CENTER.businessExpenses || []).filter(expense =>
-    String(expense?.ref || '').startsWith('shippo:') &&
-    expense.shippingMatchStatus !== 'matched' && expense.shippingMatchStatus !== 'dismissed'
-  );
+  const expenses = (TAX_CENTER.businessExpenses || []).filter(isUnresolvedShippoPostage);
   const knownOrders = getShippingReconciliationOrders();
-  count.textContent = `${expenses.length} to review`;
+  // Two different kinds of unfinished. A label needing an order is a matching
+  // job; a label needing a figure is a bookkeeping one, and it stays visible
+  // here because the alternative — a silent zero in the postage column — is how
+  // a shipping margin quietly stops being true.
+  const blanks = (TAX_CENTER.businessExpenses || []).filter(needsAmountAttention).length;
+  count.textContent = blanks
+    ? `${expenses.length} to review · ${blanks} needs an amount`
+    : `${expenses.length} to review`;
   if (!expenses.length) {
     list.innerHTML = `<div class="shipping-reconciliation-empty">
       <span class="recon-empty-mark" aria-hidden="true">\u2713</span>
@@ -802,10 +855,7 @@ function openShippingReconciliation() {
 }
 
 async function clearShippingReconciliationList() {
-  const expenses = (TAX_CENTER.businessExpenses || []).filter(expense =>
-    String(expense?.ref || '').startsWith('shippo:') &&
-    expense.shippingMatchStatus !== 'matched' && expense.shippingMatchStatus !== 'dismissed'
-  );
+  const expenses = (TAX_CENTER.businessExpenses || []).filter(isUnresolvedShippoPostage);
   if (!expenses.length) {
     showToast('The reconciliation list is already clear', 'warn');
     return;
@@ -1017,11 +1067,7 @@ async function saveRecoverWebsiteOrder() {
  */
 async function autoLinkPostageForOrder(order) {
   if (!order || !order.num) return 0;
-  const candidates = (TAX_CENTER.businessExpenses || []).filter(expense =>
-    String(expense?.ref || '').startsWith('shippo:')
-    && expense.shippingMatchStatus !== 'matched'
-    && expense.shippingMatchStatus !== 'dismissed'
-  );
+  const candidates = (TAX_CENTER.businessExpenses || []).filter(isUnresolvedShippoPostage);
   if (!candidates.length) return 0;
 
   let linked = 0;
@@ -1150,12 +1196,653 @@ function applyShippoRefunds(refunds) {
   return added;
 }
 
-async function importShippoShippingFromApi() {
+/** How much postage is still waiting on a person. */
+function reconciliationBacklog() {
+  return (TAX_CENTER.businessExpenses || []).filter(isUnresolvedShippoPostage).length;
+}
+
+/**
+ * Link every label whose order is beyond reasonable doubt, and report how many.
+ *
+ * In-memory only. Both callers save immediately afterwards — the importer once
+ * for everything it wrote, the worklist button once for the batch — and a link
+ * that persisted itself here would turn one write into a dozen.
+ *
+ * Run over the whole ledger rather than one import's batch, because the guard
+ * that matters (no two labels claiming one order) cannot be judged from a batch
+ * alone, and because a label imported last week whose order only turned up
+ * today has exactly as much claim on being linked as one bought a minute ago.
+ */
+function applyConfidentShippingLinks() {
+  const expenses = (TAX_CENTER.businessExpenses || []).filter(isUnresolvedShippoPostage);
+  if (!expenses.length) return 0;
+  const links = autoLinkConfidentShippingMatches(expenses, getShippingReconciliationOrders());
+  links.forEach(({ expense, orderNumber }) => writeShippingLink(expense, orderNumber, 'recipient-auto'));
+  return links.length;
+}
+
+/**
+ * Link the confident matches sitting in the worklist right now.
+ *
+ * The list already had a clear-all, which dismisses rows rather than resolving
+ * them — useful for a backlog of labels that will never have an order, useless
+ * for the ordinary case where most of them plainly do. This is its counterpart:
+ * one press for everything the app would have linked on its own had it been
+ * watching at the time.
+ */
+async function linkConfidentShippingMatchesNow() {
+  const linked = applyConfidentShippingLinks();
+  if (!linked) {
+    showToast('Nothing here is a certain enough match to link on its own', 'warn');
+    return;
+  }
+  try {
+    await saveTaxCenter({ rethrow: true });
+  } catch (error) {
+    console.error('Saving automatic postage links failed', error);
+    showToast('Could not save those links — please try again', 'err');
+    return;
+  }
+  renderTaxCenter();
+  renderShippingAnalysisHub();
+  const left = reconciliationBacklog();
+  showToast(`✓ Linked ${linked} label${linked === 1 ? '' : 's'}${left ? ` — ${left} still need${left === 1 ? 's' : ''} you` : ''}`);
+}
+
+// ─── Watching for labels bought somewhere else ────────────────────────────
+//
+// A label bought on Shippo's website was invisible here until somebody went and
+// fetched it: four clicks into the Tax Centre, then two more per label in the
+// worklist, and nothing anywhere to say there was something to fetch. Postage
+// that is not in the ledger is money missing from the shipping P&L, so the cost
+// of not noticing is real.
+//
+// Same three triggers as the storefront order watch, for the same reasons, and
+// the same gates on when a request would be wasted. The rules live in
+// lib/shippo-watch.js; this is the timer and the card.
+
+// ─── Canada Post: asking what was bought, rather than being told ──────────
+//
+// A label bought on canadapost.ca used to reach this app only by being typed
+// into it — the amount, the date, the category, then a separate trip to link it
+// to whoever it was posted to. But it was bought on the same business account
+// whose credentials the app already holds, which means the app can simply ask.
+//
+// What comes back is the carrier's own record: `/details` for who it went to,
+// `/receipt` for what was actually charged. Nothing is read off a photograph
+// and nothing is inferred from a rate table, so this is the most trustworthy of
+// the three ways postage reaches the ledger.
+//
+// Two things it deliberately does not do. It never guesses an amount: a
+// contract shipment has no card receipt, and when the price endpoint is also
+// silent the expense is filed with the figure blank and flagged rather than
+// plausible and wrong. And it only ever reads — GET, no create, no void, no
+// manifest transmit — because a Canada Post call that is not a read spends real
+// money, and a background sweep is the last place that should be possible.
+//
+// It also cannot see everything. Get Shipments answers for shipments on this
+// customer number, so a counter purchase paid at a till is not in it. That is
+// not a gap to apologise for; it is why the email path exists beside this one.
+
+const CP_SWEEP_INTERVAL_MS = 30 * 60 * 1000;
+// How far back a sweep reaches when there is no record of a previous one. Long
+// enough to catch the week a publisher installs this, short enough that a first
+// run does not walk the whole account history.
+const CP_SWEEP_COLD_START_DAYS = 14;
+const CP_SWEEP_LIMIT = 50;
+const CP_SWEEP_LAST_KEY = 'lm-cp-sweep-last';
+
+const cpText = (value) => String(value ?? '').trim();
+
+let _cpSweepStarted = false;
+let _cpSweeping = false;
+
+function readCpSweepStamp() {
+  try { return Number(localStorage.getItem(CP_SWEEP_LAST_KEY)) || 0; } catch (_) { return 0; }
+}
+
+function writeCpSweepStamp(at) {
+  try { localStorage.setItem(CP_SWEEP_LAST_KEY, String(at)); } catch (_) { /* private mode */ }
+}
+
+/** `YYYYMMDD`, the only date format Get Shipments accepts. */
+function cpSweepFromDate() {
+  const last = readCpSweepStamp();
+  const from = last
+    // A day of overlap, because a shipment created just before the last sweep
+    // can be dated to it; a duplicate is caught by tracking number anyway,
+    // whereas a missed label is silent.
+    ? new Date(last - 86400000)
+    : new Date(Date.now() - CP_SWEEP_COLD_START_DAYS * 86400000);
+  return from.toISOString().slice(0, 10).replace(/-/g, '');
+}
+
+/** One read through the Canada Post proxy. GET only — no payload, ever. */
+async function cpRead(endpoint, credentials, isTest) {
+  if (!endpoint) return null;
+  const res = await executeCanadaPostProxy({
+    targetEndpoint: endpoint,
+    // No jsonPayload is what makes this a GET, in the proxy and in the backend.
+    jsonPayload: '',
+    apiKey: credentials.apiKey,
+    apiSecret: credentials.apiSecret,
+    customerNumber: credentials.customerNumber,
+    isTest,
+    // Both explicit. `isShipment` is otherwise inferred from the word
+    // "shipments" in the path, which is in every one of these read endpoints —
+    // and with it comes sandbox simulation, which could answer a read with a
+    // fabricated shipment. A read must never invent its own data.
+    isShipment: false,
+    allowSimulation: false,
+    scope: 'shipping',
+  });
+  return res?.json || null;
+}
+
+/** The shipment ids in a Get Shipments response, however it nests them. */
+function cpShipmentIdsFrom(payload) {
+  const links = payload?.shipments?.link || payload?.shipments || payload?.link || [];
+  const list = Array.isArray(links) ? links : [links];
+  return list.map(entry => {
+    // The spec returns each shipment as a link whose href doubles as the Get
+    // Shipment endpoint, so the id is read out of the path rather than expected
+    // as its own field.
+    const href = cpText(entry?.href);
+    const fromHref = href.match(/\/shipments\/([^/?#]+)/);
+    if (fromHref) return fromHref[1];
+    return cpText(entry?.shipmentId || entry?.['shipment-id'] || (typeof entry === 'string' ? entry : ''));
+  }).filter(Boolean);
+}
+
+/**
+ * Ask Canada Post what has been bought since the last time, and file it.
+ *
+ * Returns a count of what landed and what still needs a figure, so the caller
+ * can say so once rather than per shipment.
+ */
+async function sweepCanadaPostShipments({ force = false } = {}) {
+  const settings = TAX_CENTER.settings || {};
+  const credentials = resolveCanadaPostCredentials(settings);
+  const isTest = !!settings.cpTestMode;
+  const configured = !!(credentials.apiKey && credentials.apiSecret && credentials.customerNumber);
+  const { online, visible } = browserWatchState();
+
+  const due = force
+    ? configured && online && !_cpSweeping
+    : dueForCheck({
+      lastCheckedAt: readCpSweepStamp(),
+      now: Date.now(),
+      intervalMs: effectiveInterval(
+        CP_SWEEP_INTERVAL_MS,
+        integrationBackoffMs('canadapost', CP_SWEEP_INTERVAL_MS),
+      ),
+      online, configured, visible, busy: _cpSweeping,
+    });
+  if (!due) return null;
+
+  _cpSweeping = true;
+  try {
+    const listed = await cpRead(resolveListShipmentsEndpoint({
+      customerNumber: credentials.customerNumber,
+      mobo: credentials.customerNumber,
+      date: cpSweepFromDate(),
+      limit: CP_SWEEP_LIMIT,
+    }), credentials, isTest);
+
+    const ids = cpShipmentIdsFrom(listed);
+    const known = new Set((TAX_CENTER.businessExpenses || [])
+      .map(expense => cpText(expense?.ref)).filter(Boolean));
+    const knownOrders = getShippingReconciliationOrders();
+
+    let filed = 0;
+    let blank = 0;
+    for (const shipmentId of ids) {
+      const args = {
+        customerNumber: credentials.customerNumber,
+        mobo: credentials.customerNumber,
+        shipmentId,
+      };
+      // Details first: it carries the tracking number the ref is keyed on, so a
+      // shipment already in the ledger costs one read rather than three.
+      const details = await cpRead(resolveShipmentDetailsEndpoint(args), credentials, isTest);
+      let candidate = normalizeCanadaPostShipment({ shipmentId }, details, {}, {});
+      if (!candidate.trackingNumber || known.has(postageCandidateRef(candidate))) continue;
+
+      const receipt = await cpRead(resolveShipmentReceiptEndpoint(args), credentials, isTest)
+        .catch(() => null);
+      const price = receipt?.ccReceiptDetails
+        ? null
+        : await cpRead(resolveShipmentPriceEndpoint(args), credentials, isTest).catch(() => null);
+      candidate = mergePostageCandidates(
+        candidate,
+        normalizeCanadaPostShipment({ shipmentId }, details, receipt || {}, price || {}),
+      );
+
+      const ref = postageCandidateRef(candidate);
+      if (!ref || known.has(ref)) continue;
+      known.add(ref);
+      if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
+
+      // Graded as it is filed. Without this the expense arrives with no match
+      // status at all, which is neither 'suggested' nor 'matched' — so the
+      // auto-linker would skip it and every one of these would sit in the
+      // worklist waiting for a human, which is the whole thing this is meant to
+      // remove.
+      const expense = buildPostageExpense(candidate);
+      Object.assign(expense, reconcileShippingExpense({
+        recipientName: expense.recipientName,
+        recipientPostal: expense.recipientPostal,
+        trackingNumber: expense.trackingNumber,
+        date: expense.date,
+      }, knownOrders));
+      TAX_CENTER.businessExpenses.unshift(expense);
+      filed++;
+      if (needsAmount(candidate)) blank++;
+    }
+
+    writeCpSweepStamp(Date.now());
+    noteIntegrationSuccess('canadapost');
+
+    if (filed) {
+      const linked = applyConfidentShippingLinks();
+      // The tracking number belongs on the order too, not only on the expense.
+      const stamped = writeTrackingBackToOrders(TAX_CENTER.businessExpenses || []);
+      await saveTaxCenter().catch(e => console.warn('Canada Post sweep save failed', e));
+      renderTaxCenter();
+      renderShippingAnalysisHub();
+      showPostageSweepAlert({ filed, linked, blank, needsReview: reconciliationBacklog() });
+      return { filed, linked, blank, stamped };
+    }
+    return { filed: 0, linked: 0, blank: 0, stamped: 0 };
+  } catch (error) {
+    console.warn('Canada Post shipment sweep failed', error);
+    noteIntegrationFailure('canadapost', error, { online, configured });
+    return null;
+  } finally {
+    _cpSweeping = false;
+  }
+}
+
+/**
+ * Put the tracking number on the order the postage was linked to.
+ *
+ * This is the half of the job that is not bookkeeping. buyCanadaPostLabel and
+ * buyShippoLabel already stamp `trackingNumber` and `shipped` onto the history
+ * row when a label is bought in the app, so an order shipped that way carries
+ * its own tracking. A label bought on canadapost.ca could not — the app never
+ * saw it — and the publisher typed the number onto the order by hand, or more
+ * often did not, and the order sat looking unshipped.
+ *
+ * Now that the postage is linked, the number it carries belongs on the order,
+ * and the "shipped" flag with it.
+ *
+ * Only ever fills a blank. An order that already names a tracking number was
+ * shipped by some route this does not know about, and overwriting that with a
+ * later label's number would replace a true record with a plausible one.
+ */
+function writeTrackingBackToOrders(expenses = []) {
+  let stamped = 0;
+  const wanted = new Map();
+  expenses.forEach(expense => {
+    const orderNumber = normalizeShippingOrderNumber(expense?.shippingOrderNumber);
+    const tracking = cpText(expense?.trackingNumber);
+    if (orderNumber && tracking && expense.shippingMatchStatus === 'matched') {
+      wanted.set(orderNumber, { tracking, date: cpText(expense.date) });
+    }
+  });
+  if (!wanted.size) return 0;
+
+  Object.entries(states).forEach(([bookId, state]) => {
+    if (!state || !Array.isArray(state.hist)) return;
+    let touched = false;
+    state.hist.forEach(entry => {
+      if (!entry || entry.voided) return;
+      const found = wanted.get(normalizeShippingOrderNumber(entry.num));
+      if (!found || cpText(entry.trackingNumber)) return;
+      entry.trackingNumber = found.tracking;
+      if (!entry.shipped) {
+        entry.shipped = true;
+        entry.shippedDate = found.date || entry.shippedDate || today();
+      }
+      touched = true;
+      stamped++;
+    });
+    if (touched) saveState(bookId);
+  });
+
+  if (stamped) renderHist();
+  return stamped;
+}
+
+/** The card announcing labels bought elsewhere that filed themselves. */
+function showPostageSweepAlert({ filed, linked, blank, needsReview, source = 'Canada Post' }) {
+  const labels = `${filed} label${filed === 1 ? '' : 's'}`;
+  const parts = [];
+  if (linked > 0) parts.push(`${linked} matched to ${linked === 1 ? 'its order' : 'their orders'}`);
+  if (blank > 0) parts.push(`${blank} ${blank === 1 ? 'needs' : 'need'} an amount`);
+  else if (needsReview > 0) parts.push(`${needsReview} ${needsReview === 1 ? 'needs' : 'need'} you`);
+
+  pushAppAlert({
+    // Keyed per source, so a Canada Post sweep and an email sweep finding
+    // labels minutes apart do not overwrite each other's news.
+    id: `postage-sweep-${source.replace(/[^a-z]+/gi, '-').toLowerCase()}`,
+    icon: '📮',
+    title: `${labels} added from ${source}`,
+    detail: parts.length
+      ? `Bought outside the app — ${parts.join(', ')}.`
+      : 'Bought outside the app and added to your books.',
+    actionLabel: (blank || needsReview) ? 'Review' : '',
+    action: (blank || needsReview) ? 'openShippingReconciliationFromAlert(event)' : '',
+  });
+}
+
+function startCanadaPostSweep() {
+  if (_cpSweepStarted || typeof window === 'undefined') return;
+  _cpSweepStarted = true;
+  startWatch(() => { sweepCanadaPostShipments(); }, { intervalMs: CP_SWEEP_INTERVAL_MS });
+}
+
+// ─── The carrier email, for everything Canada Post cannot be asked about ──
+//
+// The sweep above covers labels on the Canada Post account. Another courier's
+// website is not on it, and neither is a Canada Post purchase made outside that
+// customer number. What those leave is an email.
+//
+// This reuses the receipt scanner's Gmail pipeline wholesale — the search, the
+// batched body fetch, both already built and both already talking to an Apps
+// Script endpoint that takes a client-supplied query. Nothing new crosses to
+// the script, so there is no version bump and nothing to redeploy.
+//
+// Reading is deterministic: lib/shipping-email.js finds the tracking number and
+// the labelled total with regexes, and an email it cannot crack is left for the
+// scanner's AI path rather than half-read. That keeps a five-minute background
+// job free of per-email AI cost, makes the same email parse the same way every
+// time, and means no figure in the ledger was ever invented by a model.
+
+const EMAIL_SWEEP_INTERVAL_MS = 30 * 60 * 1000;
+const EMAIL_SWEEP_COLD_START_DAYS = 14;
+const EMAIL_SWEEP_LAST_KEY = 'lm-shipping-email-sweep-last';
+
+let _emailSweepStarted = false;
+let _emailSweeping = false;
+
+function readEmailSweepStamp() {
+  try { return Number(localStorage.getItem(EMAIL_SWEEP_LAST_KEY)) || 0; } catch (_) { return 0; }
+}
+
+function writeEmailSweepStamp(at) {
+  try { localStorage.setItem(EMAIL_SWEEP_LAST_KEY, String(at)); } catch (_) { /* private mode */ }
+}
+
+async function gmailJson(action, params) {
+  const url = `${sheetsUrl}${sheetsUrl.includes('?') ? '&' : '?'}action=${action}&${params}`;
+  const res = await fetch(url, { method: 'GET', mode: 'cors' });
+  if (!res.ok) {
+    const err = new Error(`Gmail search failed (${res.status})`);
+    err.status = res.status;
+    throw err;
+  }
+  const data = await res.json();
+  // Apps Script reports its own failures as HTTP 200 plus {error}, so a bad
+  // query or a stale deployment arrives looking like a success.
+  if (data && data.error) throw new Error(String(data.error));
+  return data || {};
+}
+
+/**
+ * Look for labels a carrier emailed about, and file the ones it can read.
+ *
+ * Only emails carrying a verifiable tracking number are filed, and only ones
+ * not already in the ledger under that number — which is also what stops this
+ * and the Canada Post sweep filing the same Canada Post label twice.
+ */
+async function sweepShippingEmails({ force = false } = {}) {
+  const configured = !!sheetsUrl;
+  const { online, visible } = browserWatchState();
+  const due = force
+    ? configured && online && !_emailSweeping
+    : dueForCheck({
+      lastCheckedAt: readEmailSweepStamp(),
+      now: Date.now(),
+      intervalMs: effectiveInterval(
+        EMAIL_SWEEP_INTERVAL_MS,
+        integrationBackoffMs('shipping-email', EMAIL_SWEEP_INTERVAL_MS),
+      ),
+      online, configured, visible, busy: _emailSweeping,
+    });
+  if (!due) return null;
+
+  _emailSweeping = true;
+  try {
+    const last = readEmailSweepStamp();
+    const since = new Date(last
+      // A day of overlap: an email can arrive between a sweep starting and
+      // finishing, and a duplicate is caught by tracking number anyway whereas
+      // a missed label is silent.
+      ? last - 86400000
+      : Date.now() - EMAIL_SWEEP_COLD_START_DAYS * 86400000).toISOString().slice(0, 10);
+
+    const found = await gmailJson('listReceiptEmails',
+      `limit=25&q=${encodeURIComponent(shippingEmailQuery({ since }))}`);
+    const ids = (found.emails || []).map(email => cpText(email?.id)).filter(Boolean);
+    if (!ids.length) {
+      writeEmailSweepStamp(Date.now());
+      noteIntegrationSuccess('shipping-email');
+      return { filed: 0, linked: 0, blank: 0, stamped: 0 };
+    }
+
+    const bodies = await gmailJson('getEmailContents', `ids=${encodeURIComponent(ids.join(','))}`);
+    const known = new Set((TAX_CENTER.businessExpenses || [])
+      .map(expense => cpText(expense?.ref)).filter(Boolean));
+    const knownOrders = getShippingReconciliationOrders();
+
+    let filed = 0;
+    let blank = 0;
+    (bodies.emails || []).forEach(email => {
+      if (!email) return;
+      const parsed = parseShippingEmail({
+        subject: email.subject || '',
+        body: email.body || email.plainBody || '',
+        date: email.date || '',
+        from: email.from || '',
+      });
+      // Null means no verifiable tracking number — newsletters, delivery
+      // notices, the storefront's own order mail. Left alone rather than filed
+      // half-read; the scanner's AI path is where a stubborn one goes.
+      if (!parsed) return;
+
+      const candidate = normalizeShippingEmail(parsed, { messageId: email.id });
+      const ref = postageCandidateRef(candidate);
+      if (!ref || known.has(ref)) return;
+      known.add(ref);
+
+      const expense = buildPostageExpense(candidate);
+      Object.assign(expense, reconcileShippingExpense({
+        recipientName: expense.recipientName,
+        recipientPostal: expense.recipientPostal,
+        trackingNumber: expense.trackingNumber,
+        date: expense.date,
+      }, knownOrders));
+      if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
+      TAX_CENTER.businessExpenses.unshift(expense);
+      filed++;
+      if (needsAmount(candidate)) blank++;
+    });
+
+    writeEmailSweepStamp(Date.now());
+    noteIntegrationSuccess('shipping-email');
+
+    if (filed) {
+      const linked = applyConfidentShippingLinks();
+      // The tracking number belongs on the order too, not only on the expense.
+      const stamped = writeTrackingBackToOrders(TAX_CENTER.businessExpenses || []);
+      await saveTaxCenter().catch(e => console.warn('Shipping email sweep save failed', e));
+      renderTaxCenter();
+      renderShippingAnalysisHub();
+      showPostageSweepAlert({
+        filed, linked, blank, needsReview: reconciliationBacklog(), source: 'your email',
+      });
+      return { filed, linked, blank, stamped };
+    }
+    return { filed: 0, linked: 0, blank: 0, stamped: 0 };
+  } catch (error) {
+    console.warn('Shipping email sweep failed', error);
+    noteIntegrationFailure('shipping-email', error, { online, configured });
+    return null;
+  } finally {
+    _emailSweeping = false;
+  }
+}
+
+function startShippingEmailSweep() {
+  if (_emailSweepStarted || typeof window === 'undefined') return;
+  _emailSweepStarted = true;
+  startWatch(() => { sweepShippingEmails(); }, { intervalMs: EMAIL_SWEEP_INTERVAL_MS });
+}
+
+const SHIPPO_WATCH_INTERVAL_MS = 5 * 60 * 1000;
+
+let _shippoWatchStarted = false;
+let _shippoLastCheckAt = 0;
+let _shippoChecking = false;
+
+/**
+ * Ask Shippo whether anything new has been bought, and file it if so.
+ *
+ * Reads page one only. Shippo returns transactions newest-first and the
+ * ledger's own refs are the dedupe surface, so in the steady state — nothing
+ * new since last time — this is a single request that writes nothing.
+ */
+async function refreshShippoLabelsIfDue({ force = false } = {}) {
+  const { online, visible } = browserWatchState();
+  const configured = !!TAX_CENTER.settings?.shippoKey;
+  const due = force
+    ? configured && online && !_shippoChecking
+    : dueForShippoCheck({
+      lastCheckedAt: _shippoLastCheckAt,
+      now: Date.now(),
+      // Widened once Shippo has refused twice running, so a dead endpoint is
+      // not asked every five minutes for the rest of the day.
+      intervalMs: effectiveInterval(SHIPPO_WATCH_INTERVAL_MS, integrationBackoffMs('shippo', SHIPPO_WATCH_INTERVAL_MS)),
+      online,
+      configured,
+      visible,
+      busy: _shippoChecking,
+    });
+  if (!due) return null;
+
+  _shippoChecking = true;
+  _shippoLastCheckAt = Date.now();
+  try {
+    const result = await importShippoShippingFromApi({
+      silent: true, maxPages: 1, skipInvoices: true, skipRefunds: true,
+    });
+    noteIntegrationSuccess('shippo');
+    if (result?.imported) showShippoLabelAlert(result);
+    return result;
+  } catch (error) {
+    // The failure is recorded rather than swallowed. This used to end at
+    // console.warn on the belief that the sync chip already reported a dead
+    // connection — it does not; that chip reports the Firestore write queue,
+    // so a refused Shippo token read exactly like a day with no labels.
+    console.warn('Shippo label watch failed', error);
+    noteIntegrationFailure('shippo', error, {
+      online,
+      configured,
+    });
+    return null;
+  } finally {
+    _shippoChecking = false;
+  }
+}
+
+/** The card announcing labels that filed themselves. */
+function showShippoLabelAlert(result) {
+  const said = describeImportedLabels({
+    imported: result?.imported || 0,
+    linked: result?.autoLinked || 0,
+    needsReview: result?.needsReview || 0,
+  });
+  if (!said.count) return;
+  pushAppAlert({
+    id: 'shippo-labels',
+    icon: '🏷️',
+    title: said.title,
+    detail: said.detail,
+    actionLabel: said.needsReview ? 'Review' : '',
+    action: said.needsReview ? 'openShippingReconciliationFromAlert(event)' : '',
+  });
+}
+
+/**
+ * Open the worklist from the card, wherever the publisher happens to be.
+ *
+ * All three steps are needed and none is redundant: the worklist lives inside
+ * the Integrations pane of the Tax Centre, and that pane starts hidden behind
+ * the Ledger one. Revealing the panel without both navigations would "open" it
+ * on a screen nobody is looking at, which is the same as the button doing
+ * nothing.
+ */
+function openShippingReconciliationFromAlert(event) {
+  if (event) event.stopPropagation();
+  dismissAppAlert('shippo-labels');
+  switchTab('taxcenter');
+  switchTaxCenterSubTab('integrations');
+  openShippingReconciliation();
+}
+
+/**
+ * Start watching. Three triggers, because a PWA is used three ways: left open
+ * on a desk (the timer), switched back to from another app (visibility), and
+ * picked up again once the signal returns (online).
+ */
+function startShippoLabelWatch() {
+  if (_shippoWatchStarted || typeof window === 'undefined') return;
+  _shippoWatchStarted = true;
+  // Seeded from the last real import rather than from now, so an app opening
+  // on a week-old answer checks straight away instead of sitting on it.
+  const last = Date.parse(TAX_CENTER.settings?.shippoLastImportAt || '');
+  _shippoLastCheckAt = Number.isFinite(last) ? last : 0;
+
+  // Timer, return-to-app and reconnect, from the shared scheduler rather than
+  // wired by hand here — the same three triggers the storefront watch and the
+  // postage sweep use, so there is one place they can be reasoned about.
+  startWatch(() => { refreshShippoLabelsIfDue(); }, { intervalMs: SHIPPO_WATCH_INTERVAL_MS });
+}
+
+/**
+ * Bring labels bought outside this app into the ledger.
+ *
+ * One body, two callers. The Tax Centre button runs it the way it always has —
+ * the full sweep, invoices and refunds included, nothing written until the
+ * publisher confirms a summary. The background watch runs the same code with
+ * `{ silent: true, maxPages: 1 }`, which is what makes a label bought on
+ * Shippo's website turn up here on its own instead of waiting four clicks deep
+ * in a screen nobody had a reason to open.
+ *
+ * Two things had to change for the second caller to be possible at all, and
+ * both were latent bugs rather than new requirements: the token was read only
+ * from a DOM input, and `btn.disabled` was written unguarded — so any call made
+ * before the Tax Centre had ever rendered threw on the first line that touched
+ * the page.
+ */
+async function importShippoShippingFromApi({
+  silent = false,
+  maxPages = 200,
+  skipInvoices = false,
+  skipRefunds = false,
+  token: tokenOverride = '',
+} = {}) {
   const keyEl = $('tc-shippo-key');
-  const statusEl = $('tc-shippo-status');
-  const btn = $('tc-shippo-btn');
-  const token = (keyEl?.value || '').trim();
-  if (!token) { showToast('⚠ Enter your Shippo API token first', 'warn'); return; }
+  const statusEl = silent ? null : $('tc-shippo-status');
+  const btn = silent ? null : $('tc-shippo-btn');
+  // The saved key is the fallback, not the input: the watch runs with no Tax
+  // Centre on screen and so no input to read.
+  const token = String(tokenOverride || keyEl?.value || TAX_CENTER.settings?.shippoKey || '').trim();
+  if (!token) {
+    if (!silent) showToast('⚠ Enter your Shippo API token first', 'warn');
+    return null;
+  }
 
   if (!TAX_CENTER.settings) TAX_CENTER.settings = {};
   if (TAX_CENTER.settings.shippoKey !== token) {
@@ -1163,7 +1850,7 @@ async function importShippoShippingFromApi() {
     saveTaxCenter().catch(e => console.warn('Shippo key save failed', e));
   }
 
-  btn.disabled = true;
+  if (btn) btn.disabled = true;
   if (statusEl) statusEl.textContent = 'Fetching Shippo transactions…';
 
   if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
@@ -1190,14 +1877,20 @@ async function importShippoShippingFromApi() {
   // Pull the money records first so each label can be tied to the invoice that
   // billed it. Both are best-effort: an unavailable beta endpoint must not stop
   // the postage import that already worked.
+  // The background check skips both. They are two extra paged sweeps for
+  // reconciliation completeness, not for noticing that a label exists, and
+  // running them every few minutes would turn a one-request check into three.
+  // The Tax Centre sweep still does the whole job.
   if (statusEl) statusEl.textContent = 'Fetching Shippo invoices…';
-  const invoiceResult = await fetchShippoInvoiceItems(token);
+  const invoiceResult = skipInvoices
+    ? { index: new Map(), count: 0, unavailable: '' }
+    : await fetchShippoInvoiceItems(token);
   const invoiceIndex = invoiceResult.index;
   if (statusEl) statusEl.textContent = 'Fetching Shippo refunds…';
-  const refundResult = await fetchShippoRefunds(token);
+  const refundResult = skipRefunds ? { refunds: [] } : await fetchShippoRefunds(token);
 
   try {
-    while (hasMore && page <= 200) {
+    while (hasMore && page <= maxPages) {
       // Shippo list transactions endpoint:
       //   GET /transactions with optional filters (rate, object_status,
       //   tracking_status, page, results). We intentionally avoid status
@@ -1286,7 +1979,12 @@ async function importShippoShippingFromApi() {
       if (statusEl) statusEl.textContent = `Fetched ${imported + skipped} transactions…`;
     }
 
-    if (imported > 0) {
+    // The confirmation is the publisher's gate on writing to their own ledger,
+    // and the background check does not get to skip it by pretending to be one.
+    // It is skipped because there is nobody at the screen to ask, and what it
+    // guards is affordable without asking: only GET requests were made, no money
+    // was spent, and the summary card afterwards reports every line that landed.
+    if (imported > 0 && !silent) {
       // Build a cost breakdown so the confirmation reflects what will actually
       // be written: total CAD, original amounts per currency, and date range.
       const totalCad = pendingExpenses.reduce((s, e) => s + (e.baseAmount || 0), 0);
@@ -1334,15 +2032,32 @@ async function importShippoShippingFromApi() {
     applyShippoExpenseEnrichments(stagedExistingEnrichments);
     if (pendingExpenses.length > 0) TAX_CENTER.businessExpenses.unshift(...pendingExpenses.reverse());
 
+    // Link what is exact enough to link without asking. Runs over the whole
+    // ledger rather than just this batch, because the guard that matters —
+    // no two labels claiming one order — cannot be judged from a batch alone,
+    // and because a label imported last week whose order only arrived today
+    // deserves the same treatment as one that arrived a moment ago.
+    const autoLinked = applyConfidentShippingLinks();
+
     // Cancel out anything Shippo refunded. A refunded label that was imported
     // before the refund happened stayed in the ledger at full price, which
     // overstates postage and understates profit for as long as nobody notices.
     const refundsAdded = applyShippoRefunds(refundResult.refunds);
 
-    TAX_CENTER.settings.shippoImportedObjectIds = Array.from(importedIds).slice(-10000);
-    TAX_CENTER.settings.shippoLastImportAt = new Date().toISOString();
-    await saveTaxCenter();
-    renderTaxCenter();
+    // A check that changed nothing must not write anything. The background
+    // watch runs every few minutes, and the two settings stamps below always
+    // differ from last time — so saving unconditionally would push the whole
+    // tax document to Firestore roughly a hundred times a working day to record
+    // that nothing had happened, costing quota, battery and sync churn for no
+    // information. The manual sweep still always stamps, because a publisher who
+    // pressed the button is owed a "last synced" time either way.
+    const changed = imported > 0 || enrichedCount > 0 || autoLinked > 0 || refundsAdded > 0;
+    if (!silent || changed) {
+      TAX_CENTER.settings.shippoImportedObjectIds = Array.from(importedIds).slice(-10000);
+      TAX_CENTER.settings.shippoLastImportAt = new Date().toISOString();
+      await saveTaxCenter();
+      renderTaxCenter();
+    }
     const dupNote = alreadyImported ? ` ${alreadyImported} already imported.` : '';
     const enrichNote = enrichedCount ? ` ${enrichedCount} existing expense${enrichedCount === 1 ? '' : 's'} reconciled.` : '';
     const contextNote = contextFailureCount ? ` ${contextFailureCount} label${contextFailureCount === 1 ? '' : 's'} still need review because Shippo details could not load.` : '';
@@ -1356,18 +2071,25 @@ async function importShippoShippingFromApi() {
     if (statusEl) statusEl.textContent = imported
       ? `Imported ${imported} new Shippo transactions.${dupNote}${skipped ? ` ${skipped} skipped.` : ''}${totalUsd ? ` USD imported: ${totalUsd.toFixed(2)}.` : ''}${reconciliationNote}`
       : `No new Shippo transactions to import.${dupNote}${skipped ? ` ${skipped} skipped.` : ''}${reconciliationNote}`;
-    showToast(
-      (imported
-        ? `Imported ${imported} new Shippo expense${imported === 1 ? '' : 's'}`
-        : (alreadyImported ? `No new Shippo expenses (${alreadyImported} already imported)` : 'No new Shippo expenses to import')) + reconciliationNote,
-      imported || enrichedCount ? 'ok' : 'warn',
-    );
+    if (!silent) {
+      showToast(
+        (imported
+          ? `Imported ${imported} new Shippo expense${imported === 1 ? '' : 's'}`
+          : (alreadyImported ? `No new Shippo expenses (${alreadyImported} already imported)` : 'No new Shippo expenses to import')) + reconciliationNote,
+        imported || enrichedCount ? 'ok' : 'warn',
+      );
+    }
+    return { imported, alreadyImported, skipped, enrichedCount, autoLinked, needsReview: reconciliationBacklog() };
   } catch (e) {
     console.error(e);
     if (statusEl) statusEl.textContent = `Error: ${e.message || e}`;
-    showToast('⚠ Shippo import failed', 'err');
+    if (!silent) showToast('⚠ Shippo import failed', 'err');
+    // A background check that failed must say so to its caller rather than
+    // resolving as though it found nothing — "nothing new" and "could not ask"
+    // are different answers and only one of them is reassuring.
+    if (silent) throw e;
   } finally {
-    btn.disabled = false;
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -1538,7 +2260,12 @@ function initShippingTab() {
         // customer/shipping_address resources that carry the phone number.
         const addrObj = extractBigCartelAddress(o, o.id, getBigCartelIncluded());
         const opt = document.createElement('option');
-        opt.value = JSON.stringify(addrObj);
+        // What was bought rides along with where it is going, so choosing this
+        // option fills the box as well as the address.
+        opt.value = JSON.stringify({
+          ...addrObj,
+          parcelLines: bigCartelOrderLines(o, getBigCartelIncluded(), BOOKS),
+        });
         opt.textContent = `Order #${o.id} - ${addrObj.name} (${addrObj.city || 'Local'}, ${addrObj.country})`;
         bcGroup.appendChild(opt);
       });
@@ -1589,6 +2316,7 @@ function initShippingTab() {
         const rawPhone = h.shipPhone || h.phone || h.contactPhone || h.buyerPhone || '';
         const addrObj = {
           orderNumber: h.num,
+          parcelLines: parcelLinesFromLedgerEntry(h, h._bookId, BOOKS),
           name: h.shipName,
           company: '',
           phone: getFallbackShippingPhone(rawPhone),
@@ -1636,6 +2364,7 @@ function initShippingTab() {
   renderDestinationVerification();
   bindRateReadinessWatchers();
   renderShippoRateReadiness();
+  setShippoAutoQuote(autoQuoteEnabled());
   loadShippoIncotermPreference($('st-country')?.value || '');
   updateShippoCustomsTotalHint();
   renderShippingAnalysisHub();
@@ -1663,6 +2392,9 @@ function renderCustomShippoDestPicker() {
 
   bcOrders.forEach(o => {
     const addrObj = extractBigCartelAddress(o, o.id, bcIncluded);
+    // The order's books travel with its address, so one pick fills the whole
+    // form rather than just the half of it that says where the parcel goes.
+    const parcelLines = bigCartelOrderLines(o, bcIncluded, BOOKS);
 
     items.push({
       category: 'bc',
@@ -1670,7 +2402,8 @@ function renderCustomShippoDestPicker() {
       icon: '🛒',
       title: `Order #${o.id} · ${addrObj.name}`,
       sub: `${addrObj.street1 ? addrObj.street1 + ', ' : ''}${addrObj.city || 'Local'}${addrObj.state ? ', ' + addrObj.state : ''} ${addrObj.country}`,
-      value: JSON.stringify(addrObj),
+      parcelSummary: describeParcelPlan(orderParcelPlan(parcelLines, BOOKS)),
+      value: JSON.stringify({ ...addrObj, parcelLines }),
       orderNumber: o.id,
       missingPhone: !getFallbackShippingPhone(addrObj.phone),
       searchText: `order #${o.id} ${addrObj.name} ${addrObj.city} ${addrObj.state} ${addrObj.country} ${addrObj.street1}`.toLowerCase()
@@ -1711,8 +2444,10 @@ function renderCustomShippoDestPicker() {
   const recentOrders = typeof getRecentShippingOrders === 'function' ? getRecentShippingOrders() : [];
   recentOrders.slice(0, 20).forEach(h => {
     const rawPhone = h.shipPhone || h.phone || h.contactPhone || h.buyerPhone || '';
+    const parcelLines = parcelLinesFromLedgerEntry(h, h._bookId, BOOKS);
     const addrObj = {
       orderNumber: h.num,
+      parcelLines,
       name: h.shipName,
       company: '',
       phone: getFallbackShippingPhone(rawPhone),
@@ -1731,6 +2466,7 @@ function renderCustomShippoDestPicker() {
       icon: '📦',
       title: `${h.num ? 'Order #' + h.num + ' · ' : ''}${h.shipName}`,
       sub: `${h.shipAddr1 ? h.shipAddr1 + ', ' : ''}${h.shipCity || ''} ${h.shipCountry || ''}`,
+      parcelSummary: describeParcelPlan(orderParcelPlan(parcelLines, BOOKS)),
       value: JSON.stringify(addrObj),
       orderNumber: h.num,
       missingPhone: !getFallbackShippingPhone(addrObj.phone),
@@ -1841,6 +2577,7 @@ function filterShippoDestMenu() {
           <span class="custom-dest-item-badge ${item.category}">${escapeHtml(item.catLabel)}</span>
         </div>
         <div class="custom-dest-item-sub">${escapeHtml(item.sub)}${countryWarning}${phoneWarning}</div>
+        ${item.parcelSummary ? `<div class="custom-dest-item-parcel">📦 ${escapeHtml(item.parcelSummary)}</div>` : ''}
       </div>`;
   }).join('');
 }
@@ -1868,11 +2605,12 @@ function selectShippoDestCustomItem(idx, e) {
   if (icon) icon.textContent = item.icon;
   if (clearBtn) clearBtn.style.display = 'inline-block';
 
-  // Trigger form population
-  onShippoPreFillDestChange();
-
-  // Close dropdown and reset z-indexes
+  // Close the dropdown first: the fill that follows reaches out for rates, and
+  // an open menu sitting over the results for the length of that call reads as
+  // the click not having registered.
   setShippoDestMenuOpenState(false);
+
+  return onShippoPreFillDestChange();
 }
 
 function clearShippoDestSelection(e) {
@@ -1907,19 +2645,25 @@ function clearShippoDestSelection(e) {
   $('st-country').value = 'US';
   onShippoDestCountryChange();
   dismissAddressVerification();
+  renderOrderPrefillSummary(null);
+  renderShippoRateReadiness();
 }
 
 function getRecentShippingOrders() {
   const orders = [];
   const seen = new Set();
-  Object.values(states).forEach(s => {
+  Object.entries(states).forEach(([bookId, s]) => {
     if (s && Array.isArray(s.hist)) {
       s.hist.forEach(h => {
         if (h && h.shipName && h.shipAddr1 && !h.voided) {
           const key = `${h.shipName.trim()}|${h.shipAddr1.trim()}`.toLowerCase();
           if (!seen.has(key)) {
             seen.add(key);
-            orders.push(h);
+            // A history row does not record which book it sold — the book is
+            // the state it is filed under — so the id is carried alongside it
+            // for the parcel prefill. A shallow copy rather than a tag on the
+            // stored row, so nothing here can write into saved ledger state.
+            orders.push({ ...h, _bookId: bookId });
           }
         }
       });
@@ -1975,11 +2719,158 @@ function editShippoApiKey() {
   }
 }
 
-function onShippoPreFillDestChange() {
+// ─── One-touch order → parcel → quote ─────────────────────────────────────
+//
+// A web order already states everything the shipping form asks for. Picking one
+// as the destination used to fill in the address and then leave the publisher
+// to restate the rest by hand: open the package dropdown, find the book, set
+// the quantity, correct the customs value, press Calculate. Every one of those
+// answers was sitting in the order.
+//
+// So the order fills the whole form. The address, the box, the count and the
+// declared value all land together, and — unless the publisher has switched it
+// off — the rates are fetched straight away, so the quotes are on screen by the
+// time they look up. Buying is untouched: that spends real money and stays a
+// deliberate press.
+
+const AUTO_QUOTE_PREF_KEY = 'lm-ship-auto-quote';
+
+/** Whether an order should pull its own rates. On unless switched off. */
+function autoQuoteEnabled() {
+  try { return localStorage.getItem(AUTO_QUOTE_PREF_KEY) !== 'off'; } catch (_) { return true; }
+}
+
+function setShippoAutoQuote(enabled) {
+  try { localStorage.setItem(AUTO_QUOTE_PREF_KEY, enabled ? 'on' : 'off'); } catch (_) { /* private mode */ }
+  const box = $('ship-auto-quote-toggle');
+  if (box) box.checked = enabled;
+}
+
+function onShippoAutoQuoteToggle() {
+  const enabled = !!$('ship-auto-quote-toggle')?.checked;
+  setShippoAutoQuote(enabled);
+  showToast(enabled
+    ? '✓ Orders will fetch their own rates from now on'
+    : '✓ Rates will wait for you to press Calculate');
+}
+
+/**
+ * Write a parcel plan into the box fields.
+ *
+ * The preset supplies the per-copy dimensions, the order supplies the count,
+ * and the two are combined the same way a publisher stacking copies by hand
+ * would: load the box, then scale it. Everything is silent here — the caller
+ * describes the whole prefill in one message.
+ */
+function applyOrderParcelPlan(plan) {
+  if (!plan || !plan.presetBookId || !BOOKS[plan.presetBookId]) return null;
+  const presetSelect = $('ship-preset-book');
+  if (!presetSelect) return null;
+  // The preset list is built from the catalogue; a book missing from it means
+  // the tab has not finished rendering, and writing a value the select cannot
+  // hold would leave the box fields describing nothing.
+  if (!Array.from(presetSelect.options).some(opt => opt.value === plan.presetBookId)) return null;
+
+  presetSelect.value = plan.presetBookId;
+  const source = onShippoBookPresetChange({ silent: true });
+
+  const qtyInput = $('sp-qty');
+  const qty = Math.max(1, plan.totalQty || 1);
+  if (qtyInput) qtyInput.value = String(qty);
+  scaleShippoSpecsForQty(qty);
+
+  const customsValue = $('sp-customs-value');
+  if (customsValue && plan.customsUnitValue > 0) {
+    customsValue.value = plan.customsUnitValue.toFixed(2);
+  }
+  const customsDescription = $('sp-customs-description');
+  if (customsDescription && plan.customsDescription) {
+    customsDescription.value = plan.customsDescription;
+  }
+  updateShippoCustomsTotalHint();
+  renderShippoRateReadiness();
+  return { source, qty };
+}
+
+/**
+ * The line under the pre-fills saying what the order filled in and what still
+ * wants a human eye. It is the receipt for work the publisher did not watch
+ * happen — without it, a box silently sized on the wrong book is invisible.
+ */
+function renderOrderPrefillSummary(state) {
+  const host = $('ship-order-prefill-summary');
+  if (!host) return;
+  if (!state) { host.innerHTML = ''; host.style.display = 'none'; return; }
+
+  const { orderNumber, plan, quoting, presetSource } = state;
+  const pills = [];
+  const label = orderNumber ? `Order ${orderNumber}` : 'Destination';
+
+  if (!plan || !plan.presetBookId) {
+    pills.push('<span class="pill amber">● Pick the package</span>');
+    pills.push('<span class="ship-readiness-note">Address filled in. This order didn’t name a book we recognise, so choose the package yourself.</span>');
+  } else {
+    const warn = plan.confidence !== 'exact' || presetSource === 'generic';
+    pills.push(warn
+      ? '<span class="pill amber">● Check the weight</span>'
+      : '<span class="pill green">✓ Address &amp; package filled in</span>');
+    let note = describeParcelPlan(plan);
+    if (presetSource === 'generic' && plan.confidence === 'exact') {
+      note += ' — no saved box for this book, so a standard one was used';
+    }
+    pills.push(`<span class="ship-readiness-note">${escapeHtml(note)}</span>`);
+  }
+
+  if (quoting) pills.push('<span class="pill">Fetching rates…</span>');
+
+  host.innerHTML = `<span class="ship-prefill-order">${escapeHtml(label)}</span>${pills.join('')}`;
+  host.style.display = 'flex';
+}
+
+/**
+ * Fetch rates now, if the form has everything and the publisher has left the
+ * setting on. Quoting only reads prices, so nothing is spent and nothing is
+ * committed — the worst case is a wasted call, and the best case is that the
+ * rates are already waiting.
+ */
+async function maybeAutoQuoteRates(state) {
+  if (!autoQuoteEnabled()) return false;
+  if (!TAX_CENTER.settings?.shippoKey) return false;
+  if (shippoRateFormState().missing.length) return false;
+  renderOrderPrefillSummary({ ...state, quoting: true });
+  try {
+    await calculateShippoRates();
+  } catch (error) {
+    console.warn('Auto rate quote failed', error);
+  } finally {
+    renderOrderPrefillSummary({ ...state, quoting: false });
+  }
+  return true;
+}
+
+/**
+ * Everything that happens once an order has been chosen as the destination:
+ * the box gets filled from what was bought, the summary line explains it, and
+ * the rates go and fetch themselves.
+ *
+ * Split from onShippoPreFillDestChange so the storefront's "Ship" button can
+ * reach the same finish from its own start.
+ */
+async function applyOrderPrefill({ orderNumber = '', parcelLines = [] } = {}) {
+  const plan = orderParcelPlan(parcelLines, BOOKS);
+  const applied = applyOrderParcelPlan(plan);
+  const state = { orderNumber, plan, presetSource: applied?.source || '', quoting: false };
+  renderOrderPrefillSummary(state);
+  const quoted = await maybeAutoQuoteRates(state);
+  return { plan, applied, quoted };
+}
+
+async function onShippoPreFillDestChange() {
   const select = $('ship-prefill-dest');
   if (!select) return;
   if (!select.value) {
     select.dataset.orderNumber = '';
+    renderOrderPrefillSummary(null);
     return;
   }
 
@@ -2001,13 +2892,30 @@ function onShippoPreFillDestChange() {
     // Fields written in code fire no input event, so the readiness line has to
     // be told the destination just filled itself in.
     renderShippoRateReadiness();
-    showToast('✓ Destination populated');
 
     // Older cached orders were fetched without the contact resources, so the phone
     // can still be missing here — ask Big Cartel for it directly.
     if (!$('st-phone').value && select.dataset.orderNumber) {
       hydrateShippingDestinationPhone(select.dataset.orderNumber);
     }
+
+    // A store address is a destination and nothing more; an order also says
+    // what is in the box, so it fills that in too and goes for the rates.
+    const parcelLines = Array.isArray(addr.parcelLines) ? addr.parcelLines : [];
+    if (!parcelLines.length) {
+      renderOrderPrefillSummary(null);
+      showToast('✓ Destination populated');
+      return;
+    }
+
+    const { plan, quoted } = await applyOrderPrefill({
+      orderNumber: select.dataset.orderNumber || String(addr.orderNumber || ''),
+      parcelLines,
+    });
+    const parcelNote = describeParcelPlan(plan);
+    showToast(parcelNote
+      ? `✓ Address and package ready — ${parcelNote}${quoted ? '. Rates below.' : ''}`
+      : '✓ Destination populated — choose the package below');
   } catch (e) {
     console.error('Failed to parse pre-fill address', e);
   }
@@ -2316,12 +3224,22 @@ function applyVerifiedAddressCorrections() {
   showToast(`✓ Applied Shippo's standardized ${applied.length === 1 ? 'field' : 'fields'}: ${applied.join(', ')}`);
 }
 
-function onShippoBookPresetChange() {
+/**
+ * Load a book's saved box into the parcel fields.
+ *
+ * `silent` is for the automated path: when an order fills the whole form in
+ * one go, this fires alongside the address and the quantity, and three toasts
+ * stacking on top of each other reads as noise rather than confirmation. The
+ * caller then says the one thing worth saying. The return value tells it
+ * whether the box came from real saved dimensions or the generic fallback, so
+ * a guessed weight can still be called out in that single message.
+ */
+function onShippoBookPresetChange({ silent = false } = {}) {
   const select = $('ship-preset-book');
-  if (!select || !select.value) return;
+  if (!select || !select.value) return '';
 
   const book = BOOKS[select.value];
-  if (!book) return;
+  if (!book) return '';
 
   const { specs, source } = resolveBookPresetSpecs(book);
 
@@ -2367,11 +3285,14 @@ function onShippoBookPresetChange() {
   updateShippoCustomsTotalHint();
   renderShippoRateReadiness();
 
-  if (source === 'generic') {
-    showToast(`⚠ ${book.title} has no shipping specs — quoting on generic 10×8×1 in / 1.2 lb. Set its dimensions in the book editor or click "Save to Book Preset".`, 'warn', 6000);
-  } else {
-    showToast(`✓ Package preset loaded: ${book.title}`);
+  if (!silent) {
+    if (source === 'generic') {
+      showToast(`⚠ ${book.title} has no shipping specs — quoting on generic 10×8×1 in / 1.2 lb. Set its dimensions in the book editor or click "Save to Book Preset".`, 'warn', 6000);
+    } else {
+      showToast(`✓ Package preset loaded: ${book.title}`);
+    }
   }
+  return source;
 }
 
 /**
@@ -2660,10 +3581,6 @@ function onShippoDestCountryChange() {
   if (usCard) {
     if (stCountryCode === 'US') {
       usCard.style.display = 'block';
-      const declIdInput = $('sp-zonos-declaration-id');
-      if (declIdInput && !declIdInput.value && TAX_CENTER.settings?.cpZonosAutoGenerate !== false) {
-        autoGenerateZonosDeclarationHandler({ silent: true }).catch(() => {});
-      }
     } else {
       usCard.style.display = 'none';
     }
@@ -2694,19 +3611,26 @@ function onZonosDeclarationIdInput(val) {
 
   if (pill) {
     if (isValid) {
+      // "Format OK", not "Ready". Nothing here has spoken to Zonos: this check
+      // counts 13 characters, and thirteen characters typed at random pass it
+      // exactly as well as a real declaration does. Calling that "Ready" told
+      // the owner the duty was sorted when all that was known was the shape of
+      // the code, and a mistyped one fails silently at the border weeks later.
       pill.className = 'pill green';
-      pill.textContent = '✓ Declaration ID Ready';
+      pill.textContent = '✓ Format OK';
     } else if (formatted.length > 0) {
       pill.className = 'pill amber';
-      pill.textContent = `${formatted.length}/13 Characters`;
+      pill.textContent = `● ${formatted.length}/13 Characters`;
     } else {
       pill.className = 'pill amber';
-      pill.textContent = 'Declaration Required';
+      pill.textContent = '● Declaration Required';
     }
   }
 
   if (hint) {
-    hint.textContent = isValid ? 'Valid 13-character code' : '13 alphanumeric characters required';
+    hint.textContent = isValid
+      ? 'Right shape — but only Zonos knows if it is real and paid. Paste it from your Prepay order history rather than typing it.'
+      : '13 alphanumeric characters required';
     hint.classList.toggle('is-valid', isValid);
     hint.style.color = isValid ? 'var(--green)' : 'var(--text3)';
   }
@@ -2925,185 +3849,6 @@ async function checkCanadaPostAccountAndPinHandler() {
       btn.innerHTML = oldText;
     }
   }
-}
-
-/**
- * Render an explicit failure state when Zonos does not issue a Declaration ID.
- * A Declaration ID is the customs identifier Canada Post forwards to U.S. CBP, so an
- * unissued one is left blank rather than filled with a locally invented code.
- */
-function renderZonosDeclarationFailure(hint, reason, silent) {
-  const input = $('sp-zonos-declaration-id');
-  if (input) {
-    input.value = '';
-    onZonosDeclarationIdInput('');
-  }
-  if (hint) {
-    hint.style.display = 'block';
-    hint.innerHTML = `
-      <div style="display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;">
-        <span style="font-size:15px;line-height:1.2;">📋</span>
-        <div style="flex:1;min-width:200px;">
-          <strong>A Declaration ID has to be paid for</strong>
-          <div style="font-size:10px;color:var(--text3);margin-top:3px;">${escapeHtml(reason)}</div>
-          <div style="font-size:10px;color:var(--text3);margin-top:5px;line-height:1.5;">
-            <strong>To do it by hand:</strong> open the Zonos Prepay app, pay the duty for this parcel, and paste the
-            13-character ID it gives you into the box above.<br>
-            <strong>To have it happen automatically:</strong> set up a Zonos Verified Account, then save its Account Key
-            in Tax Centre → Zonos. After that Canada Post issues the ID itself every time you buy a label.
-          </div>
-        </div>
-      </div>
-    `;
-  }
-  if (!silent) showToast('⚠ Zonos did not issue a Declaration ID — see the note under the button', 'warn');
-}
-
-/**
- * Explain — and where possible arrange — how this parcel's U.S. duty gets prepaid.
- *
- * This replaces a button that promised to "auto-generate" a Declaration ID by
- * calling Zonos' declarationCreateWorkflow. That mutation belongs to the Landed
- * Cost / Checkout product and has no authority to issue a Canada Post
- * prepayment declaration, so the call never produced one. A Declaration ID is
- * proof that duty has been paid, so it cannot be conjured before payment: either
- * a Verified Account pays it automatically at label time, or it is bought by
- * hand in the Prepay app.
- */
-async function autoGenerateZonosDeclarationHandler({ silent = false } = {}) {
-  const hint = $('zonos-auto-result-hint');
-  const route = currentDutyPrepaymentRoute();
-
-  if (route.route === 'not-required') {
-    if (!silent) showToast('U.S. duty prepayment only applies to parcels going to the United States', 'ok');
-    return route;
-  }
-
-  if (route.route === 'manual') {
-    if (hint) {
-      hint.style.display = 'block';
-      hint.innerHTML = `
-        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-          <strong style="color:var(--green);">✓ Declaration ID ready:</strong>
-          <span class="tnum" style="font-weight:700;letter-spacing:0.5px;font-family:'DM Mono',monospace;font-size:13px;">${escapeHtml(route.declarationId)}</span>
-        </div>
-        <div style="font-size:10px;color:var(--text3);margin-top:4px;">It will be sent with the label and printed in the customs header.</div>
-      `;
-    }
-    if (!silent) showToast('✓ Declaration ID already entered', 'ok');
-    return route;
-  }
-
-  // Offline-first check: inform user clearly rather than failing on an unhandled network error
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-    if (hint) {
-      hint.className = 'us-zonos-result-hint is-warn';
-      hint.style.display = 'block';
-      hint.innerHTML = `
-        <div style="display:flex;align-items:flex-start;gap:8px;">
-          <span style="font-size:16px;" aria-hidden="true">📡</span>
-          <div>
-            <strong>Offline Mode — Auto-generation unavailable</strong>
-            <div style="font-size:11px;color:var(--text3);margin-top:2px;">
-              Generating a new Declaration ID requires an active internet connection. You can paste an existing 13-character ID from your Zonos Prepay app or history while offline.
-            </div>
-          </div>
-        </div>
-      `;
-    }
-    if (!silent) showToast('⚠ Offline: Auto-generation requires internet connection', 'warn');
-    return { route: 'offline', summary: 'Offline mode — manual entry required' };
-  }
-
-  if (route.route === 'verified' || getZonosAccountKey()) {
-    const zKey = getZonosAccountKey();
-    if (!silent) showToast('⏳ Contacting Zonos API to generate Declaration ID...', 'ok');
-    try {
-      const declResult = await createZonosDeclaration({
-        apiKey: zKey,
-        origin: {
-          postalCode: $('sf-zip')?.value || 'M6G 3H1',
-          province: $('sf-state')?.value || 'ON',
-          countryCode: 'CA'
-        },
-        destination: {
-          street: ($('st-street1')?.value || $('st-street')?.value || '').trim(),
-          city: $('st-city')?.value?.trim() || '',
-          state: $('st-state')?.value?.trim() || '',
-          postalCode: $('st-zip')?.value?.trim() || '',
-          countryCode: 'US'
-        },
-        items: [
-          {
-            description: $('sp-customs-description')?.value || 'Printed books',
-            hsCode: $('sp-customs-hs')?.value || '4901.99',
-            amount: parseFloat(String($('sp-customs-value')?.value || '25').replace(/[^0-9.]/g, '') || '25'),
-            quantity: Math.max(1, parseInt($('sp-qty')?.value, 10) || 1),
-            countryOfOrigin: 'CA'
-          }
-        ],
-        parcel: {
-          length: parseFloat($('sp-length')?.value) || 20,
-          width: parseFloat($('sp-width')?.value) || 15,
-          height: parseFloat($('sp-height')?.value) || 2,
-          weight: parseFloat($('sp-weight')?.value) || 0.5,
-          dimUnit: $('sp-dim-unit')?.value || 'cm',
-          weightUnit: $('sp-weight-unit')?.value || 'kg'
-        },
-        shippingRate: {
-          amount: parseFloat($('sp-customs-value')?.value || '15'),
-          currency: 'CAD',
-          serviceLevel: 'Tracked Packet USA'
-        },
-        currency: 'CAD'
-      });
-
-      if (declResult && declResult.ok && declResult.declarationId) {
-        const declInput = $('sp-zonos-declaration-id');
-        if (declInput) {
-          declInput.value = declResult.declarationId;
-          onZonosDeclarationIdInput(declResult.declarationId);
-        }
-        if (hint) {
-          hint.style.display = 'block';
-          hint.innerHTML = `
-            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-              <strong style="color:var(--green);">✓ Zonos Declaration ID generated:</strong>
-              <span class="tnum" style="font-weight:700;letter-spacing:0.5px;font-family:'DM Mono',monospace;font-size:13px;">${escapeHtml(declResult.declarationId)}</span>
-            </div>
-            <div style="font-size:10px;color:var(--text3);margin-top:4px;">Prepaid via Zonos · It will be stamped onto your Canada Post customs declaration.</div>
-          `;
-        }
-        if (!silent) showToast(`✓ Zonos Declaration ID created: ${declResult.declarationId}`, 'ok');
-        return {
-          ...route,
-          route: 'manual',
-          declarationId: declResult.declarationId
-        };
-      }
-    } catch (zErr) {
-      console.warn('Zonos automated declaration generation note:', zErr);
-    }
-
-    if (hint) {
-      hint.style.display = 'block';
-      hint.innerHTML = `
-        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-          <span style="font-size:14px;">⚡</span>
-          <strong style="color:var(--green);">Zonos Verified Account connected</strong>
-        </div>
-        <div style="font-size:10px;color:var(--text3);margin-top:4px;line-height:1.5;">
-          Canada Post will issue the Declaration ID when you buy the label and bill the duty
-          to your Zonos account — it will appear on the label and against the order automatically.
-        </div>
-      `;
-    }
-    if (!silent) showToast('✓ Verified Account will supply the Declaration ID at purchase', 'ok');
-    return route;
-  }
-
-  renderZonosDeclarationFailure(hint, route.summary, silent);
-  return route;
 }
 
 /**
@@ -4204,108 +4949,87 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
     return;
   }
 
-  // U.S. duty prepayment. If a Zonos account key is available, automatically mint
-  // the Declaration ID via Zonos API; otherwise use what is entered or carrier-verified.
+  // U.S. duty prepayment, in the order Canada Post documents it.
+  //
+  // With a Zonos VERIFIED ACCOUNT, the app does NOT create the declaration.
+  // Canada Post's own integration guide is explicit about who mints it:
+  //
+  //   1. You create a shipment as per your normal process.
+  //   2. Canada Post generates a Declaration ID.
+  //   3. Canada Post links the Declaration ID to your shipment's tracking number.
+  //   4. Canada Post issues a shipping label.
+  //   5. Zonos pays CBP directly, using the tracking number and the data Canada
+  //      Post shares with them.
+  //   6. Zonos invoices you for the duty.
+  //
+  // All the account key does is ride along on the request header
+  // (`X-CPC-Zonos-Key`), which buyCanadaPostLabel already sends. That is the
+  // whole integration.
+  //
+  // This used to call Zonos' declarationCreateWorkflow whenever an account key
+  // was present, and put whatever came back into the Canada Post request. That
+  // was wrong twice over: that mutation belongs to Zonos' Landed Cost/Checkout
+  // product rather than to Canada Post's prepayment declaration, and even if it
+  // had returned something, sending a self-minted id would override the one
+  // Canada Post is supposed to generate and link to the tracking number — the
+  // link that is the actual proof of prepayment. So with an account key we send
+  // the key and nothing else, and read back the id Canada Post issues.
   let declarationId = ($('sp-zonos-declaration-id')?.value || '').trim();
 
-  if (stCountryCode === 'US' && !declarationId) {
-    const zKey = getZonosAccountKey();
-    if (zKey) {
-      try {
-        const declResult = await createZonosDeclaration({
-          apiKey: zKey,
-          origin: {
-            postalCode: sfZip,
-            province: sfProv,
-            countryCode: 'CA'
-          },
-          destination: {
-            street: stAddr,
-            city: stCity,
-            state: stState,
-            postalCode: stZip,
-            countryCode: 'US'
-          },
-          items: [
-            {
-              description: $('sp-customs-description')?.value || 'Printed books',
-              hsCode: $('sp-customs-hs')?.value || '4901.99',
-              amount: parseFloat(String($('sp-customs-value')?.value || '25').replace(/[^0-9.]/g, '') || '25'),
-              quantity: Math.max(1, parseInt($('sp-qty')?.value, 10) || 1),
-              countryOfOrigin: 'CA'
-            }
-          ],
-          parcel: {
-            length: lengthCm,
-            width: widthCm,
-            height: heightCm,
-            weight: weightKg,
-            dimUnit: 'cm',
-            weightUnit: 'kg'
-          },
-          shippingRate: {
-            amount: quotedPrice,
-            currency: 'CAD',
-            serviceLevel: serviceName
-          },
-          currency: 'CAD'
-        });
-
-        if (declResult && declResult.ok && declResult.declarationId) {
-          declarationId = declResult.declarationId;
-          const declInput = $('sp-zonos-declaration-id');
-          if (declInput) {
-            declInput.value = declarationId;
-            onZonosDeclarationIdInput(declarationId);
-          }
-          showToast(`✓ Zonos Declaration ID created: ${declarationId}`, 'ok');
-        }
-      } catch (zErr) {
-        console.warn('Auto Zonos declaration note:', zErr);
-      }
-    }
-  }
-
   const dutyRoute = currentDutyPrepaymentRoute();
-  const strictPrepay = TAX_CENTER.settings?.requireZonosUsPrepay !== false;
+  // A U.S. label cannot be bought without a Declaration ID entered by hand.
+  //
+  // Absolute, by the shop owner's instruction: no Verified Account bypass, no
+  // settings toggle, no "carry on anyway". All three escape hatches that used
+  // to sit here are gone, and that is the point — each one ended with a parcel
+  // crossing the border with the duty unpaid, which the shop only finds out
+  // about weeks later when the customer is billed at their door.
+  //
+  // The check is on the FORMAT, not merely on the field being non-empty. A
+  // half-typed code is not a declaration: letting eight characters through
+  // would buy a label carrying an id Canada Post can match to nothing, which
+  // is the same outcome as sending none, minus the warning.
+  declarationId = formatDeclarationId(declarationId);
 
-  if (stCountryCode === 'US' && !declarationId && dutyRoute.route !== 'verified') {
-    if (strictPrepay) {
-      showToast('🚫 US label purchase blocked: Strict Zonos Duty Prepayment is enabled.', 'err');
-      if (typeof confirmDialog === 'function') {
-        const openTc = await confirmDialog(
-          'Strict Zonos Prepayment is enabled in Tax Centre to prevent unpaid customs duties from being charged to your US customers.\n\n'
-          + 'To purchase this Canada Post label:\n'
-          + '1. Click "⚡ Auto-Generate Zonos Declaration" or "Buy in Zonos Prepay App" on the Shipping screen to attach a 13-character Declaration ID.\n'
-          + '2. Or connect your Zonos Verified Account Key in Tax Centre → Zonos.\n\n'
-          + '(If you intentionally want to allow DDU shipments without prepaid duty, uncheck "Require Zonos Declaration ID for all US shipments" in Tax Centre → Zonos).',
-          {
-            title: '🚫 Zonos Declaration ID Required for U.S. Shipment',
-            okLabel: 'Open Tax Centre',
-            cancelLabel: 'Close'
-          }
-        );
-        if (openTc && typeof window !== 'undefined' && typeof window.switchTab === 'function') {
-          window.switchTab('taxcentre');
-        }
-      }
-      return;
-    }
+  if (stCountryCode === 'US' && !validateDeclarationId(declarationId)) {
+    const partial = declarationId.length > 0;
+    showToast(partial
+      ? `🚫 That Declaration ID is only ${declarationId.length} of 13 characters`
+      : '🚫 A U.S. parcel needs a Zonos Declaration ID before you can buy the label', 'err');
 
-    const proceed = await confirmDialog(
-      'Canada Post needs a 13-character Declaration ID proving the U.S. duty is prepaid, '
-      + 'and one has to be paid for before it exists.\n\n'
-      + 'Buy it now: open the Zonos Prepay app, pay the duty, and paste the ID in before buying the label.\n\n'
-      + 'Or set it up once: save a Zonos Verified Account Key in Tax Centre → Zonos and Canada Post will issue '
-      + 'the ID automatically from then on.\n\n'
-      + 'You can also carry on without one — the parcel ships with duty unpaid and the recipient settles it on delivery.',
+    const openPrepay = typeof confirmDialog === 'function' && await confirmDialog(
+      (partial
+        ? `The Declaration ID box has ${declarationId.length} of the 13 characters it needs, so it is not a complete ID yet.\n\n`
+        : 'This parcel is going to the United States, and U.S. customs requires the duty to be paid before it crosses the border.\n\n')
+      + 'What to do:\n'
+      + '1. Open the Zonos Prepay app and buy the declaration for this parcel.\n'
+      + '2. Copy the 13-character Declaration ID it gives you.\n'
+      + '3. Paste it into the Declaration ID box on this screen.\n'
+      + '4. Then buy the label.\n\n'
+      + 'The order matters: the ID has to be on the form BEFORE you buy, because it is sent to '
+      + 'Canada Post as part of the label request. Pasting it afterwards links nothing.\n\n'
+      + 'Each declaration covers one parcel only — do not reuse one from an earlier order.',
       {
-        title: 'No prepaid U.S. duty for this parcel',
-        okLabel: 'Carry on without prepaid duty',
-        cancelLabel: 'Go back'
+        title: 'Declaration ID required before buying this label',
+        okLabel: 'Open Zonos Prepay',
+        cancelLabel: 'Close'
       }
     );
-    if (!proceed) return;
+
+    if (openPrepay && typeof window !== 'undefined' && typeof window.open === 'function') {
+      try { window.open(buildZonosPrepayDeepLink(), '_blank', 'noopener'); } catch (_) {}
+    }
+
+    // Put the cursor where the work is, rather than leaving them to hunt for
+    // the box the dialog just described.
+    const declInput = $('sp-zonos-declaration-id');
+    if (declInput && typeof declInput.focus === 'function') {
+      try {
+        declInput.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        declInput.focus();
+      } catch (_) {}
+    }
+    return;
   }
 
   // Everything that decides whether this is the right thing to spend money on:
@@ -4566,18 +5290,64 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
                 </div>
               </div>
             ` : ''}
-            ${declarationId ? `
-              <div style="margin-top:12px;padding:10px 14px;background:var(--surface-card);border:1px solid var(--border);border-radius:var(--r);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-                <div style="display:flex;align-items:center;gap:8px;">
-                  <span style="font-size:16px;">🇺🇸</span>
-                  <div>
-                    <div style="font-size:10px;text-transform:uppercase;color:var(--text3);font-weight:700;">Zonos US Duty Declaration ID</div>
-                    <div class="tnum" style="font-size:13px;font-weight:700;color:var(--green);letter-spacing:1px;">${escapeHtml(declarationId)}</div>
-                  </div>
+            ${declarationId && isSim ? `
+              <div style="margin-top:12px;padding:10px 14px;background:var(--surface-card);border:1px solid var(--border);border-radius:var(--r);font-size:11px;color:var(--text3);line-height:1.5;">
+                <strong style="font-size:12px;color:var(--text);">Practice run — nothing was linked.</strong><br>
+                Declaration <span class="tnum" style="font-weight:700;">${escapeHtml(declarationId)}</span> was not
+                spent and no real parcel exists. Do not take this to the counter.
+              </div>
+            ` : ''}
+            ${declarationId && !isSim ? `
+              <div style="margin-top:12px;padding:14px;background:var(--surface-card);border:1px solid var(--green);border-radius:var(--r);">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                  <span style="font-size:18px;" aria-hidden="true">🇺🇸</span>
+                  <strong style="font-size:13px;color:var(--green);">U.S. duty is prepaid and attached to this parcel</strong>
                 </div>
-                <button class="btn sm tag cp-label-action-btn" type="button" onclick="navigator.clipboard.writeText('${escapeHtml(declarationId)}');showToast('✓ Copied Zonos Declaration ID');" style="min-height:36px;padding:6px 12px;">
-                  📋 Copy Declaration ID
-                </button>
+
+                <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:11px;margin-bottom:10px;">
+                  <span style="color:var(--text3);">Declaration ID</span>
+                  <span class="tnum" style="font-weight:700;color:var(--text);letter-spacing:1px;">${escapeHtml(declarationId)}</span>
+                  <span style="color:var(--text3);">Tracking number</span>
+                  <span class="tnum" style="font-weight:700;color:var(--text);letter-spacing:1px;">${escapeHtml(result.trackingPin || '—')}</span>
+                </div>
+
+                <div style="font-size:11px;color:var(--text3);line-height:1.6;">
+                  ${result.declarationSignal === 'issued' ? `
+                    Canada Post returned this Declaration ID with the label, which means it has recorded
+                    the duty against this parcel.
+                  ` : `
+                    This Declaration ID was sent with the label request and Canada Post accepted the
+                    shipment and issued the tracking number above. Canada Post requires a valid
+                    declaration on U.S. parcels, so an accepted shipment is one it could match.
+                  `}
+                </div>
+
+                <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text3);line-height:1.6;">
+                  <strong style="color:var(--text);font-size:12px;">Before the counter:</strong>
+                  <div style="margin-top:4px;">1. Print this label and tape it to the parcel.</div>
+                  ${result.manifestRequired ? `
+                    <div style="margin-top:2px;">2. Send the manifest — see the note above. Handing the parcel over without it earns a surcharge.</div>
+                    <div style="margin-top:2px;">3. Hand it in. The duty is already paid, so nothing is owed at the counter.</div>
+                  ` : `
+                    <div style="margin-top:2px;">2. Hand it in. No manifest is needed, and the duty is already paid, so nothing is owed at the counter.</div>
+                  `}
+                </div>
+
+                <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text3);line-height:1.6;">
+                  <strong style="color:var(--text);font-size:12px;">Want it confirmed by Zonos?</strong>
+                  Open your Prepay order history — <span class="tnum" style="font-weight:700;">${escapeHtml(result.trackingPin || 'the tracking number')}</span>
+                  should now be showing beside declaration <span class="tnum" style="font-weight:700;">${escapeHtml(declarationId)}</span>.
+                  That pairing is Zonos confirming it too, and it is the only check that does not rely on this app.
+                </div>
+
+                <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+                  <button class="btn sm tag cp-label-action-btn" type="button" onclick="navigator.clipboard.writeText('${escapeHtml(declarationId)}');showToast('✓ Copied Declaration ID');" style="min-height:36px;padding:6px 12px;">
+                    📋 Copy Declaration ID
+                  </button>
+                  <button class="btn sm tag cp-label-action-btn" type="button" onclick="openZonosPrepayAppHandler()" style="min-height:36px;padding:6px 12px;">
+                    🔎 Check it in Zonos Prepay
+                  </button>
+                </div>
               </div>
             ` : ''}
             ${result.declarationSignal === 'missing' && !isSim ? `
@@ -6598,6 +7368,30 @@ function applySmartShippingRates(region, base, addon) {
 }
 
 function buildShippingPnLHtml(allOrders, relevantExpenses, shippoExpenses, bookFilterOptions, marginFilterOptions, isPub) {
+
+  // ⚡ Bolt Optimization: Pre-compute expenses grouped by order number to avoid O(N*M) lookups
+  const shippoExpensesByOrder = new Map();
+  (shippoExpenses || []).forEach(e => {
+    if (e.shippingMatchStatus === 'matched') {
+      const num = normalizeShippingOrderNumber(e.shippingOrderNumber);
+      if (num) {
+        if (!shippoExpensesByOrder.has(num)) shippoExpensesByOrder.set(num, []);
+        shippoExpensesByOrder.get(num).push(e);
+      }
+    }
+  });
+
+  const relevantExpensesByOrder = new Map();
+  (relevantExpenses || []).forEach(e => {
+    if (e.shippingMatchStatus === 'matched') {
+      const num = normalizeShippingOrderNumber(e.shippingOrderNumber);
+      if (num) {
+        if (!relevantExpensesByOrder.has(num)) relevantExpensesByOrder.set(num, []);
+        relevantExpensesByOrder.get(num).push(e);
+      }
+    }
+  });
+
   // Calculate dynamic counts for Margin Health filters based on active Book Filter (using allOrders)
   let countAll = 0;
   let countLoss = 0;
@@ -6618,9 +7412,7 @@ function buildShippingPnLHtml(allOrders, relevantExpenses, shippoExpenses, bookF
     }
 
     const orderNumber = normalizeShippingOrderNumber(o.num);
-    const linked = orderNumber ? shippoExpenses.filter(e =>
-      e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
-    ) : [];
+    const linked = orderNumber ? (shippoExpensesByOrder.get(orderNumber) || []) : [];
     const hasPostage = linked.length > 0 || !!o.manualPostagePaid;
     if (hasPostage) {
       const postageCostCAD = o.manualPostagePaid
@@ -6647,9 +7439,7 @@ function buildShippingPnLHtml(allOrders, relevantExpenses, shippoExpenses, bookF
       if (shipAnalysisMarginFilter !== 'all') {
         const customerPaidBase = Number(o.shippingPaid) || 0;
         const orderNumber = normalizeShippingOrderNumber(o.num);
-        const linked = orderNumber ? shippoExpenses.filter(e =>
-          e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
-        ) : [];
+        const linked = orderNumber ? (shippoExpensesByOrder.get(orderNumber) || []) : [];
 
         if (shipAnalysisMarginFilter === 'missing') {
           if (customerPaidBase !== 0) return false;
@@ -6670,9 +7460,7 @@ function buildShippingPnLHtml(allOrders, relevantExpenses, shippoExpenses, bookF
       // B. Carrier filter
       if (shipAnalysisCarrierFilter !== 'all') {
         const orderNumber = normalizeShippingOrderNumber(o.num);
-        const linked = orderNumber ? shippoExpenses.filter(e =>
-          e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
-        ) : [];
+        const linked = orderNumber ? (shippoExpensesByOrder.get(orderNumber) || []) : [];
         const carrier = o.manualPostagePaid
           ? 'Manual Override'
           : (linked.length > 0 ? parseCarrierInfo(linked[0].desc).provider : 'Unlinked');
@@ -6698,47 +7486,56 @@ function buildShippingPnLHtml(allOrders, relevantExpenses, shippoExpenses, bookF
       return true;
     });
 
-    const totalShippingIncome = kpiOrders.reduce((sum, o) => {
-      return sum + (Number(o.shippingPaid) || 0);
-    }, 0);
-
+    // ⚡ Bolt Optimization: Loop Fusion
+    // Combined multiple passes over kpiOrders into a single imperative loop
+    // to calculate totalShippingIncome, totalPostageCost, and markup stats simultaneously,
+    // avoiding multiple intermediate closures and reduce operations.
+    let totalShippingIncome = 0;
     let totalPostageCost = 0;
-    kpiOrders.forEach(o => {
+    let totalMarkupSum = 0;
+    let markupCount = 0;
+
+    for (const o of kpiOrders) {
+      const customerPaidBase = Number(o.shippingPaid) || 0;
+      totalShippingIncome += customerPaidBase;
+
       const orderNumber = normalizeShippingOrderNumber(o.num);
-      const linked = orderNumber ? relevantExpenses.filter(e =>
-        e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
-      ) : [];
-      
-      const cost = o.manualPostagePaid
-        ? (Number(o.postagePaid) || 0)
-        : linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
-      totalPostageCost += cost;
-    });
+
+      // Calculate postage cost (relevant expenses)
+      const linkedRelevant = orderNumber ? (relevantExpensesByOrder.get(orderNumber) || []) : [];
+      let costRelevant = 0;
+      if (o.manualPostagePaid) {
+        costRelevant = Number(o.postagePaid) || 0;
+      } else {
+        for (const e of linkedRelevant) {
+          costRelevant += (Number(e.baseAmount) || Number(e.amount) || 0);
+        }
+      }
+      totalPostageCost += costRelevant;
+
+      // Calculate markup (shippo expenses)
+      const linkedShippo = orderNumber ? (shippoExpensesByOrder.get(orderNumber) || []) : [];
+      const hasPostageShippo = linkedShippo.length > 0 || !!o.manualPostagePaid;
+      if (hasPostageShippo) {
+        let costShippo = 0;
+        if (o.manualPostagePaid) {
+          costShippo = Number(o.postagePaid) || 0;
+        } else {
+          for (const e of linkedShippo) {
+            costShippo += (Number(e.baseAmount) || Number(e.amount) || 0);
+          }
+        }
+        if (costShippo > 0) {
+          totalMarkupSum += ((customerPaidBase - costShippo) / costShippo) * 100;
+          markupCount++;
+        }
+      }
+    }
 
     const netMargin = totalShippingIncome - totalPostageCost;
     const marginClass = netMargin > 0 ? 'positive' : netMargin < 0 ? 'negative' : 'neutral';
 
     // Average markup calculation on linked orders
-    let totalMarkupSum = 0;
-    let markupCount = 0;
-    kpiOrders.forEach(o => {
-      const customerPaidBase = (Number(o.shippingPaid) || 0);
-      const orderNumber = normalizeShippingOrderNumber(o.num);
-      const linked = orderNumber ? shippoExpenses.filter(e =>
-        e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
-      ) : [];
-
-      const hasPostage = linked.length > 0 || !!o.manualPostagePaid;
-      if (hasPostage) {
-        const cost = o.manualPostagePaid
-          ? (Number(o.postagePaid) || 0)
-          : linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
-        if (cost > 0) {
-          totalMarkupSum += ((customerPaidBase - cost) / cost) * 100;
-          markupCount++;
-        }
-      }
-    });
     const avgMarkup = markupCount > 0 ? (totalMarkupSum / markupCount) : 0;
     const avgMarkupText = markupCount > 0 ? `${avgMarkup > 0 ? '+' : ''}${avgMarkup.toFixed(1)}%` : '—';
 
@@ -7091,15 +7888,30 @@ function buildShippingWeightBandHtml(allOrders, shippoExpenses) {
     'Over 2 kg': { count: 0, totalCost: 0, totalRevenue: 0 }
   };
 
+  // ⚡ Bolt Optimization: this ran BOOK_LIST.find() and a shippoExpenses.filter()
+  // (each re-normalizing every expense's order number) once PER ORDER, i.e.
+  // O(orders × books + orders × expenses). Both allOrders and shippoExpenses cover
+  // the shop's full history and only grow over time, so building a book-by-id Map
+  // and a matched-expenses-by-order-number Map once up front turns this into a
+  // single O(orders + books + expenses) pass with O(1) lookups per order.
+  const bookById = new Map(BOOK_LIST.map(b => [b.id, b]));
+  const matchedExpensesByOrderNumber = new Map();
+  for (const e of shippoExpenses) {
+    if (e.shippingMatchStatus !== 'matched') continue;
+    const num = normalizeShippingOrderNumber(e.shippingOrderNumber);
+    if (!num) continue;
+    const bucket = matchedExpensesByOrderNumber.get(num);
+    if (bucket) bucket.push(e);
+    else matchedExpensesByOrderNumber.set(num, [e]);
+  }
+
   allOrders.forEach(o => {
     if (o.excludeFromShipping) return;
-    const book = BOOK_LIST.find(b => b.id === o.bookId);
+    const book = bookById.get(o.bookId);
     const weightKg = getWeightInKg(o.qty || 1, book);
 
     const orderNumber = normalizeShippingOrderNumber(o.num);
-    const linked = orderNumber ? shippoExpenses.filter(e =>
-      e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
-    ) : [];
+    const linked = orderNumber ? (matchedExpensesByOrderNumber.get(orderNumber) || []) : [];
 
     const hasPostage = linked.length > 0 || !!o.manualPostagePaid;
     if (hasPostage) {
@@ -8503,15 +9315,26 @@ function updateShippoBaseSpecsFromInputs() {
   shippoBaseSpecs.weight = currentWeight / qty;
 }
 
-function onShippoQuantityChange() {
-  const qty = Math.max(1, parseInt($('sp-qty').value) || 1);
-  const scaledHeight = shippoBaseSpecs.height * qty;
-  const scaledWeight = shippoBaseSpecs.weight * qty;
-
-  $('sp-height').value = parseFloat(scaledHeight.toFixed(2));
-  $('sp-weight').value = parseFloat(scaledWeight.toFixed(2));
+/**
+ * Restack the box for `qty` copies: height and weight are per-copy figures held
+ * in shippoBaseSpecs and multiplied here, so the parcel grows with the order.
+ *
+ * Split out of onShippoQuantityChange so the automated prefill can set a
+ * quantity read off an order without also firing the toast that belongs to a
+ * publisher typing in the box themselves.
+ */
+function scaleShippoSpecsForQty(qty) {
+  const copies = Math.max(1, parseInt(qty, 10) || 1);
+  const heightInput = $('sp-height');
+  const weightInput = $('sp-weight');
+  if (heightInput) heightInput.value = parseFloat((shippoBaseSpecs.height * copies).toFixed(2));
+  if (weightInput) weightInput.value = parseFloat((shippoBaseSpecs.weight * copies).toFixed(2));
   updateShippoCustomsTotalHint();
+  return copies;
+}
 
+function onShippoQuantityChange() {
+  const qty = scaleShippoSpecsForQty($('sp-qty')?.value);
   showToast(`✓ Scaled specs for ${qty} ${qty === 1 ? 'copy' : 'copies'}`);
 }
 export {
@@ -8566,6 +9389,23 @@ export {
   editShippoApiKey,
   onShippoPreFillDestChange,
   onShippoBookPresetChange,
+  applyConfidentShippingLinks,
+  linkConfidentShippingMatchesNow,
+  openShippingReconciliationFromAlert,
+  refreshShippoLabelsIfDue,
+  startShippoLabelWatch,
+  sweepCanadaPostShipments,
+  startCanadaPostSweep,
+  sweepShippingEmails,
+  startShippingEmailSweep,
+  reconciliationBacklog,
+  applyOrderPrefill,
+  applyOrderParcelPlan,
+  autoQuoteEnabled,
+  setShippoAutoQuote,
+  onShippoAutoQuoteToggle,
+  renderOrderPrefillSummary,
+  scaleShippoSpecsForQty,
   openSaveBookPresetModal,
   confirmSaveBookPreset,
   renderSaveBookPresetPreview,
@@ -8594,7 +9434,6 @@ export {
   renderZonosDutyCard,
   onZonosDeclarationIdInput,
   pasteZonosDeclarationId,
-  autoGenerateZonosDeclarationHandler,
   checkCanadaPostAccountAndPinHandler,
   verifyShippedTrackingPinsHandler,
   showArchivedCanadaPostLabels,

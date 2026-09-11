@@ -125,13 +125,102 @@ describe('record-payout form wiring', () => {
     expect(styleCss).toMatch(/\.ps-payout-num\{[^}]*tnum/);
   });
 
-  it('leaves the save path untouched', () => {
-    // This is a styling and feedback change; the write itself must still read
-    // the same four fields and persist through the same offline-safe path.
-    const fn = mainJs.match(/async function recordArtistPayout\([\s\S]*?\n\}/)[0];
-    expect(fn).toContain('ap-amount-');
+  it('persists through the same offline-safe path', () => {
+    const fn = mainJs.match(/async function saveArtistPayout\([\s\S]*?\n\}/)[0];
     expect(fn).toContain('s.artistPayouts.push');
     expect(fn).toContain('await saveState(bookId)');
+  });
+
+  it('rounds the stored amount to whole cents', () => {
+    // The preview rounds, so storing the raw input would put 33.333 in the
+    // ledger under a "Records $33.33" confirmation.
+    const fn = mainJs.match(/async function saveArtistPayout\([\s\S]*?\n\}/)[0];
+    expect(fn).toContain('amount: roundCents(nativeAmount)');
+  });
+
+  it('guards its field reads instead of dereferencing them blind', () => {
+    const fn = mainJs.match(/async function saveArtistPayout\([\s\S]*?\n\}/)[0];
+    expect(fn).toContain('if (!dateEl || !methodEl || !notesEl) return;');
+  });
+
+  it('re-checks the request lifecycle whenever a payout is written', () => {
+    const fn = mainJs.match(/async function saveArtistPayout\([\s\S]*?\n\}/)[0];
+    expect(fn).toContain('settlePayoutRequests(bookId)');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Editing an existing payout, and recording one in another currency.
+// ---------------------------------------------------------------------------
+describe('payout editing', () => {
+  it('exposes the edit handler to the inline onclick', () => {
+    expect(mainJs).toContain('window.editArtistPayout = editArtistPayout;');
+    expect(mainJs).toContain('window.saveArtistPayout = saveArtistPayout;');
+  });
+
+  it('loads an existing row back into the same form', () => {
+    const fn = mainJs.match(/async function editArtistPayout\([\s\S]*?\n\}/)[0];
+    expect(fn).toContain("set('ap-amount'");
+    expect(fn).toContain("set('ap-date'");
+    expect(fn).toContain("set('ap-method'");
+    expect(fn).toContain("set('ap-notes'");
+    expect(fn).toContain("save.textContent = 'Update payout'");
+  });
+
+  it('warns before editing a payout derived from a settled sale', () => {
+    const fn = mainJs.match(/async function editArtistPayout\([\s\S]*?\n\}/)[0];
+    expect(fn).toContain('p.sourceNum');
+    expect(fn).toContain('confirmDialog');
+  });
+
+  it('updates in place rather than appending a second row', () => {
+    const fn = mainJs.match(/async function saveArtistPayout\([\s\S]*?\n\}/)[0];
+    expect(fn).toContain('Object.assign(existing, fields');
+    expect(fn).toContain('editedAt');
+  });
+
+  it('refuses to resurrect a payout that was deleted mid-edit', () => {
+    const fn = mainJs.match(/async function saveArtistPayout\([\s\S]*?\n\}/)[0];
+    expect(fn).toContain('That payout no longer exists');
+  });
+
+  it('matches ids as strings so pre-makeEventId rows still resolve', () => {
+    const fn = mainJs.match(/function findArtistPayout\([\s\S]*?\n\}/)[0];
+    expect(fn).toContain('String(p.id) === String(payoutId)');
+    const del = mainJs.match(/async function deleteArtistPayout\([\s\S]*?\n\}/)[0];
+    expect(del).toContain('String(p.id) !== String(payoutId)');
+  });
+
+  it('awaits the save before confirming a delete', () => {
+    const del = mainJs.match(/async function deleteArtistPayout\([\s\S]*?\n\}/)[0];
+    expect(del).toContain('await saveState(bookId)');
+  });
+
+  it('offers a currency selector and a rate row', () => {
+    expect(mainJs).toContain('<label for="ap-cur-${bookId}">Currency</label>');
+    expect(mainJs).toMatch(/id="ap-fx-row-\$\{bookId\}"/);
+    expect(mainJs).toContain('<label for="ap-rate-${bookId}">');
+  });
+
+  it('stores the book-currency figure and keeps the foreign cash beside it', () => {
+    const fn = mainJs.match(/async function saveArtistPayout\([\s\S]*?\n\}/)[0];
+    // Same shape a foreign sale uses, so the migration and the row summary
+    // already know how to read it.
+    expect(fn).toContain('payment: buildPaymentMeta({');
+    expect(fn).toContain('fxEnabled: isFx');
+  });
+
+  it('will not save a foreign payout without a rate', () => {
+    const fn = mainJs.match(/async function saveArtistPayout\([\s\S]*?\n\}/)[0];
+    expect(fn).toContain('if (isFx && !(rate > 0))');
+  });
+
+  it('never renders the record/edit form for an author', () => {
+    // artistPayouts is not author-writable in firestore.rules, and _fbSave
+    // commits every dirty part as one batch — an author using this form would
+    // queue a permission-denied write forever.
+    const fn = mainJs.match(/function getPayoutFormHtml\([\s\S]*?\n\}/)[0];
+    expect(fn).toContain('if (isAuthor()) return');
   });
 });
 

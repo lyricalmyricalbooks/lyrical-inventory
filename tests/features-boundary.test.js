@@ -17,7 +17,15 @@ const MAIN_IMPORT_BUDGET = {
   // now rebuild a website order the Gmail scan missed, and writing one to the
   // ledger touches the applied-ids cache, the scan memory and the Sheets sync —
   // three main.js internals. One name across the seam is cheaper than three.
-  'shipping.js': 24,
+  // 24 -> 25 for switchTab, when labels bought outside the app started
+  // announcing themselves. The notification can appear on any screen and its
+  // Review button has to reach the worklist, which lives two navigations deep
+  // in the Tax Centre; the second of those (switchTaxCenterSubTab) comes from
+  // taxcentre.js and costs nothing here. Without switchTab the panel would be
+  // revealed behind whatever the publisher is actually looking at — a button
+  // that appears to do nothing. No cheaper route exists: app-shell navigation
+  // is main.js's, and nothing already across this seam can perform it.
+  'shipping.js': 25,
   // 16 -> 19 when the storefront became the ledger's reconciliation source.
   // Comparing Big Cartel's orders against the ledger and adding a missing one
   // needs three main.js internals and no more: commitRecoveredWebsiteOrder (the
@@ -159,6 +167,22 @@ describe('feature module boundary', () => {
   });
 });
 
+// The floor below asks "is this module a real cluster, or a stray function or
+// two that should have stayed in main.js?" — a fair question of the five
+// modules that were CARVED OUT of main.js, which each moved a large,
+// long-established surface.
+//
+// intel.js was never in main.js. It was written as a feature module from the
+// start, which is what this architecture wants, and its whole surface is one
+// panel: render it, ask it something, approve or dismiss what it suggests.
+// Holding it to a floor sized for a carve-out would only be satisfiable by
+// exporting internals nothing calls, which makes the export block a worse
+// description of the module rather than a better one. So it gets its own floor,
+// still high enough that the module cannot quietly decay into a stray helper.
+const MIN_EXPORTS = {
+  'intel.js': 12,
+};
+
 describe('feature modules are the only home of what they own', () => {
   featureFiles.forEach(file => {
     describe(`src/features/${file}`, () => {
@@ -169,7 +193,7 @@ describe('feature modules are the only home of what they own', () => {
         : [];
 
       it('exports the cluster it was carved out for', () => {
-        expect(exported.length).toBeGreaterThan(20);
+        expect(exported.length).toBeGreaterThanOrEqual(MIN_EXPORTS[file] ?? 21);
       });
 
       it('no longer declares those functions in main.js', () => {

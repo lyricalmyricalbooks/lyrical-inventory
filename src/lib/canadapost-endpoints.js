@@ -60,6 +60,13 @@ export const CANADAPOST_SHIPPING_ROOT = `${CANADAPOST_API_ROOT}/shipping/v1`;
 
 export const CANADAPOST_SHIPPING_API = {
   createShipmentPath: `${CANADAPOST_SHIPPING_ROOT}/{mailedBy}/{mobo}/shipments`,
+  // Get Shipments — the same path as create, read rather than written
+  // (`get` at docs/shipping-api-openapi.yaml:3727, alongside the `post` at :15).
+  // Query parameters the spec defines there: `date` (YYYYMMDD, where the search
+  // starts), `limit` (newest first, default 100), `tracking-pin`, `request-id`
+  // and `no-manifest`. It answers only for shipments on this `mailedBy`
+  // customer number, so a label bought at a post-office counter is not in it.
+  listShipmentsPath: `${CANADAPOST_SHIPPING_ROOT}/{mailedBy}/{mobo}/shipments`,
   getShipmentPath: `${CANADAPOST_SHIPPING_ROOT}/{mailedBy}/{mobo}/shipments/{shipmentId}`,
   shipmentPricePath: `${CANADAPOST_SHIPPING_ROOT}/{mailedBy}/{mobo}/shipments/{shipmentId}/price`,
   shipmentDetailsPath: `${CANADAPOST_SHIPPING_ROOT}/{mailedBy}/{mobo}/shipments/{shipmentId}/details`,
@@ -183,6 +190,92 @@ export function resolveShipmentEndpoint({
     path: config.createShipmentPath,
     mailedBy: customerNumber,
     mobo
+  });
+}
+
+/**
+ * Get Shipments — asking Canada Post what was bought on this account.
+ *
+ * The counterpart to Create Shipment and the opposite in every way that
+ * matters: same path, `GET`, and it spends nothing. It exists so a label bought
+ * on canadapost.ca can be found by the app rather than typed into it.
+ *
+ * `date` is where the search starts (YYYYMMDD) and `limit` caps it newest-first.
+ * `trackingPin` narrows to one shipment, which is what turns a tracking number
+ * read off an email into the carrier's own authoritative record.
+ *
+ * Only shipments on this `mailedBy` customer number are visible, so a
+ * post-office counter purchase will not be among them. That is not a failure to
+ * handle — it is why the email path exists alongside this one.
+ */
+export function resolveListShipmentsEndpoint({
+  baseUrl = '',
+  customerNumber = '',
+  mobo = '',
+  date = '',
+  limit = 0,
+  trackingPin = '',
+  config = CANADAPOST_SHIPPING_API
+} = {}) {
+  if (!String(customerNumber || '').trim()) return '';
+  const url = buildCanadaPostEndpoint({
+    baseUrl,
+    path: config.listShipmentsPath,
+    mailedBy: customerNumber,
+    mobo
+  });
+  if (!url) return '';
+
+  const query = [];
+  const day = String(date || '').replace(/\D/g, '');
+  // The spec's own format. A malformed date is dropped rather than sent, so the
+  // call falls back to the documented default (today) instead of erroring.
+  if (/^\d{8}$/.test(day)) query.push(`date=${day}`);
+  const cap = Math.floor(Number(limit) || 0);
+  if (cap > 0) query.push(`limit=${Math.min(cap, 99999)}`);
+  const pin = String(trackingPin || '').trim();
+  if (pin) query.push(`tracking-pin=${encodeURIComponent(pin)}`);
+
+  return query.length ? `${url}?${query.join('&')}` : url;
+}
+
+/** One shipment's details — who it was addressed to. Read-only. */
+export function resolveShipmentDetailsEndpoint({
+  baseUrl = '', customerNumber = '', mobo = '', shipmentId = '',
+  config = CANADAPOST_SHIPPING_API
+} = {}) {
+  if (!String(customerNumber || '').trim() || !String(shipmentId || '').trim()) return '';
+  return buildCanadaPostEndpoint({
+    baseUrl, path: config.shipmentDetailsPath, mailedBy: customerNumber, mobo, shipmentId
+  });
+}
+
+/**
+ * One shipment's card receipt — what was actually charged. Read-only.
+ *
+ * The spec is explicit that this covers a shipment "paid by credit card and did
+ * not require a manifest", so a contract shipment has no receipt here and the
+ * price endpoint below is the fallback. Neither answering means the amount is
+ * left blank rather than guessed.
+ */
+export function resolveShipmentReceiptEndpoint({
+  baseUrl = '', customerNumber = '', mobo = '', shipmentId = '',
+  config = CANADAPOST_SHIPPING_API
+} = {}) {
+  if (!String(customerNumber || '').trim() || !String(shipmentId || '').trim()) return '';
+  return buildCanadaPostEndpoint({
+    baseUrl, path: config.shipmentReceiptPath, mailedBy: customerNumber, mobo, shipmentId
+  });
+}
+
+/** One shipment's price — the fallback when there is no card receipt. Read-only. */
+export function resolveShipmentPriceEndpoint({
+  baseUrl = '', customerNumber = '', mobo = '', shipmentId = '',
+  config = CANADAPOST_SHIPPING_API
+} = {}) {
+  if (!String(customerNumber || '').trim() || !String(shipmentId || '').trim()) return '';
+  return buildCanadaPostEndpoint({
+    baseUrl, path: config.shipmentPricePath, mailedBy: customerNumber, mobo, shipmentId
   });
 }
 

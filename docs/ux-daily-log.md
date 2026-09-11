@@ -78,6 +78,16 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-09-02 | visual | Settings — Profit Tiers | Gave the production-cost/revenue/earned strip a card you can actually see in dark mode | #711 |
 | 2026-09-03 | visual | Big Cartel, Shippo linking, Web Analytics | Fixed several cards and panels that had no visible background at all in light mode | #726 |
 | 2026-09-03 | visual | Payment QR modal | Gave the price override fields their intended lined-up numbers and card background back | #730 |
+| 2026-09-04 | visual | Connect your Google Sheet | Made the simulated spreadsheet's row numbers actually readable | #736 |
+| 2026-09-05 | visual | App-wide chrome (tab bar, book switcher, header menus) | Gave the dark navigation bar and dropdown menus back their fill in dark mode | #739 |
+| 2026-09-05 | visual | Tax Centre — Shipping reconciliation | Gave the shipping reconciliation panel a real card background in light mode, not just dark | #740 |
+| 2026-09-05 | visual | POS checkout | Gave the register's cart panel a shadow that still shows once the page goes dark | #741 |
+| 2026-09-06 | visual | Customers — Email Campaigns | Gave each campaign row its own visible tile instead of blending into the card behind it | #750 |
+| 2026-09-07 | visual | Tax Centre — Shipping (US customs prepayment) | Made the US customs card's gold border and "valid" checkmarks actually change color in dark mode | #753 |
+| 2026-09-08 | visual | Book dashboard | Gave "Sales by channel", "Consignment overview" and "Inventory" real headings instead of the faintest type in the app | #766 |
+| 2026-09-10 | visual | Book dashboard | Gave the Break-even tracker a real heading like its dashboard siblings, instead of the faintest type in the app | #786 |
+| 2026-09-11 | visual | Book dashboard | Gave the Profit Sharing Breakdown card a real heading like its dashboard siblings, instead of the faintest type in the app | #794 |
+| 2026-09-11 | visual | Consignment ledger | Made the book/store jump links in the ledger table show a visible focus ring when tabbed to | #795 |
 
 ---
 

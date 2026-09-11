@@ -255,3 +255,94 @@ export function buildInvoiceNumber(prefix, year, seq) {
   return `INV-${prefix}-${year}-${String(seq).padStart(3, '0')}`;
 }
 
+
+// ── Who the invoice bills ────────────────────────────────────────────────
+// Most invoices go to a consignment store picked from the shop list, but some
+// go to somebody who is not a store at all — a reader buying direct, a school,
+// a festival organiser. Both end up written into the SAME flattened `store*`
+// fields, so the invoice list, the printed invoice, the email and the PDF keep
+// working untouched; `billTo` is what records which of the two the publisher
+// actually chose, so re-opening the invoice reopens the right form.
+export const BILL_TO_STORE = 'store';
+export const BILL_TO_PERSON = 'person';
+
+// Which mode an invoice was written in. Stamped on new invoices; inferred for
+// ones written before this existed, which always had a store id because a store
+// was the only thing an invoice could be addressed to.
+export function invoiceBillToMode(inv) {
+  const raw = String((inv && inv.billTo) || '').trim().toLowerCase();
+  if (raw === BILL_TO_PERSON || raw === BILL_TO_STORE) return raw;
+  if (inv && !inv.storeId && String(inv.storeName || '').trim()) return BILL_TO_PERSON;
+  return BILL_TO_STORE;
+}
+
+const trimmed = v => String(v ?? '').trim();
+
+// A hand-typed recipient, tidied: every field trimmed, nothing undefined. The
+// name is the only required part — an invoice with no name on it is not a bill.
+export function normalizeBillToPerson(fields) {
+  const f = fields || {};
+  return {
+    name: trimmed(f.name),
+    email: trimmed(f.email),
+    phone: trimmed(f.phone),
+    address: trimmed(f.address),
+    city: trimmed(f.city),
+    region: trimmed(f.region),
+    postal: trimmed(f.postal),
+    country: trimmed(f.country),
+  };
+}
+
+// The recipient block of an invoice payload, for either mode. Written as one
+// helper so a store invoice and a hand-typed one can never drift into carrying
+// different field names — everything downstream reads these keys and nothing
+// else, and a person's own name is the contact, so `storeContact` stays empty
+// rather than printing the same name twice on the invoice.
+export function billToPayload(mode, { store, person } = {}) {
+  if (invoiceBillToMode({ billTo: mode }) === BILL_TO_PERSON) {
+    const p = normalizeBillToPerson(person);
+    return {
+      billTo: BILL_TO_PERSON,
+      storeId: null,
+      storeName: p.name,
+      storeEmail: p.email,
+      storeCity: p.city,
+      storeContact: '',
+      storePhone: p.phone,
+      storeAddress: p.address,
+      storeRegion: p.region,
+      storePostal: p.postal,
+      storeCountry: p.country,
+    };
+  }
+  const st = store || {};
+  return {
+    billTo: BILL_TO_STORE,
+    storeId: st.id ?? null,
+    storeName: st.name || '',
+    storeEmail: st.email || '',
+    storeCity: st.city || '',
+    storeContact: st.contact || '',
+    storePhone: st.phone || '',
+    storeAddress: st.address || '',
+    storeRegion: st.region || '',
+    storePostal: st.postal || '',
+    storeCountry: st.country || '',
+  };
+}
+
+// The recipient of a saved invoice, back in the shape the person form takes —
+// what re-opening a hand-typed invoice fills its fields from.
+export function billToPersonFrom(inv) {
+  return normalizeBillToPerson({
+    name: (inv && inv.storeName) || '',
+    email: (inv && inv.storeEmail) || '',
+    phone: (inv && inv.storePhone) || '',
+    address: (inv && inv.storeAddress) || '',
+    city: (inv && inv.storeCity) || '',
+    region: (inv && inv.storeRegion) || '',
+    postal: (inv && inv.storePostal) || '',
+    country: (inv && inv.storeCountry) || '',
+  });
+}

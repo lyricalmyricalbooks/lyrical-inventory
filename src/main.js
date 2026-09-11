@@ -7,10 +7,12 @@ import './style.css';
 import './styles/theme-dark.css';
 import './firebase.js';
 import { registerSW } from 'virtual:pwa-register';
-import { calcArtistEarnings, tierEffectiveCap, describePayout } from './lib/earnings.js';
+import { calcArtistEarnings, tierEffectiveCap, describePayout, payoutRequestCovered } from './lib/earnings.js';
 import { calculateBreakEven } from './lib/breakeven.js';
 import { escapeHtml } from './lib/html.js';
 import { describeCustomerFilters, joinFilterLabels } from './lib/customer-segment.js';
+import { buildActivityFeed } from './lib/activity-feed.js';
+import { buildAttentionSignals, SIGNAL_GROUPS, GROUP_LABELS, GROUP_ICONS, isUrgent } from './lib/attention-signals.js';
 import {
   RECEIPT_SCAN_SCHEMA,
   _applyScanCategory,
@@ -180,8 +182,22 @@ import {
   refreshUnsavedMarkers,
   validateFields,
 } from './lib/modal.js';
+import { dismissAppAlert, pushAppAlert } from './lib/app-alert.js';
+import {
+  integrationBackoffMs,
+  noteIntegrationFailure,
+  noteIntegrationSuccess,
+  renderIntegrationBadges,
+} from './lib/integration-watch.js';
+import {
+  browserWatchState,
+  dueForCheck,
+  effectiveInterval,
+  startWatch,
+} from './lib/watch-schedule.js';
 import { followableUrl } from './lib/receipt-links.js';
 import {
+  CODE_TO_SYMBOL,
   PAYMENT_TYPE_DIRECT_TO_ARTIST,
   buildPaymentMeta,
   cadEquivalentForSale,
@@ -197,7 +213,27 @@ import {
   lightenColor,
   normalizeCurrencyCode,
   paymentSummary,
+  roundCents,
 } from './lib/money.js';
+import {
+  buildPartPaymentNote,
+  describeInvoicePaymentReversal,
+  describeInvoicePaymentSweep,
+  invoicePaymentRef,
+  isZeroDecimalCurrency,
+  judgeInvoicePayment,
+  minorToMajor,
+  partPaymentAlreadyNoted,
+  verdictNeedsAttention,
+  verdictSettles,
+} from './lib/invoice-payments.js';
+import {
+  STRIPE_FEE_INTERVAL_MS,
+  describeFeeSweep,
+  dueForFeeSweep,
+  feeSweepFromYear,
+  startOfYear,
+} from './lib/stripe-fee-schedule.js';
 import {
   THEME_LABELS,
   THEME_PREFERENCES,
@@ -209,7 +245,7 @@ import {
   writeThemePreference,
 } from './lib/theme.js';
 import { initStickyOffset } from './lib/sticky-header.js';
-import { describeSyncStatus } from './lib/sync-status.js';
+import { SYNC_TONES, describeSyncStatus } from './lib/sync-status.js';
 import { sheetLogLabel, sheetLogSummary, sortSheetPayloads } from './lib/sheet-sync.js';
 import {
   QR_PRESET_PRICE_CURRENCIES,
@@ -327,11 +363,21 @@ import {
   tcYearChange,
   toggleRecurringPause,
   updateRecurringPreview,
+  dismissDeductionGap,
+  renderDeductionGaps,
+  restoreDeductionGaps,
+  snoozeDeductionGap,
 } from './features/taxcentre.js';
 import {
   reconcileApplyBigCartel,
   addBigCartelOrderToLedger,
   autoCheckBigCartelLedgerGaps,
+  startBigCartelOrderWatch,
+  refreshBigCartelOrdersIfDue,
+  dismissNewOrderAlert,
+  recordNewOrderFromAlert,
+  shipNewOrderFromAlert,
+  reviewNewOrdersFromAlert,
   checkBigCartelLedgerGaps,
   dismissBigCartelGap,
   extractBigCartelAddress,
@@ -352,6 +398,18 @@ import {
   undoBigCartelGapDismiss,
   voidPlaceholderDuplicate,
 } from './features/bigcartel.js';
+import {
+  acceptIntelDisclosure,
+  applyIntelProposal,
+  askIntelStarter,
+  clearIntelThread,
+  dismissIntelProposal,
+  intelComposerKey,
+  renderIntel,
+  sendIntelMessage,
+  stopIntelTurn,
+  toggleIntelEdit,
+} from './features/intel.js';
 import {
   getShippingReconciliationOrders,
   renderOrderShippingSummary,
@@ -405,6 +463,16 @@ import {
   editShippoApiKey,
   onShippoPreFillDestChange,
   onShippoBookPresetChange,
+  onShippoAutoQuoteToggle,
+  linkConfidentShippingMatchesNow,
+  openShippingReconciliationFromAlert,
+  startShippoLabelWatch,
+  startCanadaPostSweep,
+  sweepCanadaPostShipments,
+  startShippingEmailSweep,
+  sweepShippingEmails,
+  refreshShippoLabelsIfDue,
+  applyOrderPrefill,
   isCanadaPostRate,
   moneyAmount,
   roundShippingCharge,
@@ -422,7 +490,6 @@ import {
   renderZonosDutyCard,
   onZonosDeclarationIdInput,
   pasteZonosDeclarationId,
-  autoGenerateZonosDeclarationHandler,
   checkCanadaPostAccountAndPinHandler,
   verifyShippedTrackingPinsHandler,
   showArchivedCanadaPostLabels,
@@ -600,10 +667,11 @@ import { channelMixRows } from './lib/channel-mix.js';
 import { csvCell, toCsv } from './lib/csv.js';
 import { downloadText, downloadCsv } from './lib/download.js';
 import { OC_STAGES } from './lib/opencall.js';
-import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, orderStockPreview, orderStockPreviewCopy, deriveStockBreakdown, transferAuthorStock, deductSaleFromStockBreakdown } from './lib/inventory.js';
+import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, orderStockPreview, orderStockPreviewCopy, deriveStockBreakdown, transferAuthorStock, deductSaleFromStockBreakdown, isVoidStale } from './lib/inventory.js';
 import { posStockView, posOversellSummary } from './lib/pos-stock.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores, consignmentLedgerTotals, storeBalanceSlug, storeBalanceComparison } from './lib/consignment.js';
-import { deriveInvoiceBookIds, invoicesForBook, findInvoiceAcrossBooks, otherBookTitles, lineItemBookId, invoiceBookSplit, invoiceShareForBook, neutralInvoicePrefix, invoiceNumberPrefix, nextInvoiceSeq, buildInvoiceNumber } from './lib/invoices.js';
+import { deriveInvoiceBookIds, invoicesForBook, findInvoiceAcrossBooks, otherBookTitles, lineItemBookId, invoiceBookSplit, invoiceShareForBook, neutralInvoicePrefix, invoiceNumberPrefix, nextInvoiceSeq, buildInvoiceNumber, BILL_TO_STORE, BILL_TO_PERSON, invoiceBillToMode, billToPayload, billToPersonFrom } from './lib/invoices.js';
+import { reminderSettings, reminderBlockReason, invoiceReminderState, dueForReminder, dueForReminderTomorrow, buildReminderEmail, canSendNow, daysLate, describeReminderSweep, describeReminderArming, describeReminderNotice, sampleReminderInvoice } from './lib/payment-reminders.js';
 import { LEDGER_TYPE_FILTERS, emptyLedgerFilter, ledgerFilterIsActive, ledgerStoreOptions, filterLedgerEntries, ledgerTypeCounts, describeLedgerFilter, ledgerTotalsScope } from './lib/consignment-ledger-filter.js';
 import { filterHistoryRows, historySearchIsActive, describeHistorySearch } from './lib/order-history-search.js';
 import { resolveCountryCode } from './lib/countries.js';
@@ -2651,6 +2719,10 @@ let notifyUrl = localStorage.getItem('lm-notify-url') || '';
 // in apps-script/Code.gs) whenever Code.gs gains behaviour that needs a fresh
 // deploy — the connection card flags any older deployed version as outdated.
 const EXPECTED_SCRIPT_VERSION = 'v42';
+// What the connected spreadsheet last told us it was running. Null until a
+// version check has actually answered — an unknown version is not a mismatch,
+// so the To-do list stays quiet rather than inventing a problem.
+let _sheetsDeployedVersion = null;
 if (sheetsUrl) {
   const normalizedSavedUrl = normalizeAppsScriptUrl(sheetsUrl);
   if (normalizedSavedUrl && normalizedSavedUrl !== sheetsUrl) {
@@ -3526,39 +3598,22 @@ function syncRoleUI() {
   placeKpiStrip();
   bindKpiResize();
 
-  const websiteTabBtn = $('website-tab-btn');
-  const financialsTabBtn = $('financials-tab-btn');
-  const taxcenterTabBtn = $('global-taxcenter-btn');
+  // Publisher-only chrome: hidden in author view, shown (with its normal
+  // display value) in publisher view.
+  const PUBLISHER_ONLY_IDS = [
+    'todo-tab-btn', 'todo-sidebar-btn', 'reconcile-tab-btn', 'opencall-tab-btn',
+    'website-tab-btn', 'financials-tab-btn', 'global-taxcenter-btn', 'global-sheets-btn',
+    'global-backups-btn', 'd-qr-btn', 'qrcodes-tab-btn', 'webanalytics-tab-btn',
+    'sidebar-webanalytics-btn', 'shipping-tab-btn', 'bigcartel-tab-btn', 'sidebar-bigcartel-btn',
+  ];
+  for (const id of PUBLISHER_ONLY_IDS) {
+    const el = $(id);
+    if (el) el.style.display = authorNow ? 'none' : '';
+  }
   const globalActions = $('global-actions');
-  const sheetsTabBtn = $('global-sheets-btn');
-  const backupsTabBtn = $('global-backups-btn');
-  const qrBtn = $('d-qr-btn');
-  const qrcodesTabBtn = $('qrcodes-tab-btn');
-  const myqrTabBtn = $('myqr-tab-btn');
-  const reconcileTabBtn = $('reconcile-tab-btn');
-  const opencallTabBtn = $('opencall-tab-btn');
-  const webanalyticsTabBtn = $('webanalytics-tab-btn');
-  const sidebarWebanalyticsBtn = $('sidebar-webanalytics-btn');
-  const shippingTabBtn = $('shipping-tab-btn');
-  const bigcartelTabBtn = $('bigcartel-tab-btn');
-  const sidebarBigcartelBtn = $('sidebar-bigcartel-btn');
-
-  if (reconcileTabBtn) reconcileTabBtn.style.display = authorNow ? 'none' : '';
-  if (opencallTabBtn) opencallTabBtn.style.display = authorNow ? 'none' : '';
-  if (websiteTabBtn) websiteTabBtn.style.display = authorNow ? 'none' : '';
-  if (financialsTabBtn) financialsTabBtn.style.display = authorNow ? 'none' : '';
   if (globalActions) globalActions.style.display = authorNow ? 'none' : 'flex';
-  if (taxcenterTabBtn) taxcenterTabBtn.style.display = authorNow ? 'none' : '';
-  if (sheetsTabBtn) sheetsTabBtn.style.display = authorNow ? 'none' : '';
-  if (backupsTabBtn) backupsTabBtn.style.display = authorNow ? 'none' : '';
-  if (qrBtn) qrBtn.style.display = authorNow ? 'none' : '';
-  if (qrcodesTabBtn) qrcodesTabBtn.style.display = authorNow ? 'none' : '';
-  if (webanalyticsTabBtn) webanalyticsTabBtn.style.display = authorNow ? 'none' : '';
-  if (sidebarWebanalyticsBtn) sidebarWebanalyticsBtn.style.display = authorNow ? 'none' : '';
-  if (shippingTabBtn) shippingTabBtn.style.display = authorNow ? 'none' : '';
-  if (bigcartelTabBtn) bigcartelTabBtn.style.display = authorNow ? 'none' : '';
-  if (sidebarBigcartelBtn) sidebarBigcartelBtn.style.display = authorNow ? 'none' : '';
   // myqr tab is AUTHOR-only
+  const myqrTabBtn = $('myqr-tab-btn');
   if (myqrTabBtn) myqrTabBtn.style.display = authorNow ? '' : 'none';
 
   const wm = $('author-watermark');
@@ -3996,11 +4051,11 @@ const SHELL_TAB_LABELS = {
   pos: 'Event POS', taxcenter: 'Tax Centre', reconcile: 'Payments', qrcodes: 'QR Codes',
   customers: 'Customers', opencall: 'Open Call', sheets: 'Sheets', backups: 'Backups',
   financials: 'Financials', myqr: 'My QR Code', webanalytics: 'Web Analytics', shipping: 'Shipping',
-  bigcartel: 'Big Cartel'
+  bigcartel: 'Big Cartel', todo: 'To-do', intel: 'Intelligence'
 };
 export function switchTab(name) {
   // publisher-only tabs redirect authors to dashboard
-  if (isAuthor() && (name === 'website' || name === 'backups' || name === 'financials' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes' || name === 'reconcile' || name === 'customers' || name === 'opencall' || name === 'webanalytics' || name === 'shipping' || name === 'bigcartel')) name = 'dashboard';
+  if (isAuthor() && (name === 'website' || name === 'backups' || name === 'financials' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes' || name === 'reconcile' || name === 'customers' || name === 'opencall' || name === 'webanalytics' || name === 'shipping' || name === 'bigcartel' || name === 'todo' || name === 'intel')) name = 'dashboard';
   // publisher redirected away from author-only myqr tab
   if (!isAuthor() && name === 'myqr') name = 'dashboard';
 
@@ -4071,6 +4126,8 @@ export function switchTab(name) {
   if (name === 'webanalytics') renderWebAnalytics();
   if (name === 'shipping') { initShippingTab(); }
   if (name === 'bigcartel') { renderBigCartelTab(); }
+  if (name === 'todo') renderTodoTab();
+  if (name === 'intel') renderIntel();
 }
 
 function updateHeader() {
@@ -4178,8 +4235,14 @@ function showCatalogueSkeleton() {
 // ── ALL BOOKS OVERVIEW
 function updateAllOverview() {
   const allBooksVisible = BOOK_LIST.filter(b => !isTestBook(b));
+  renderAllBooksStrips(allBooksVisible);
+  renderCombinedChannelAnalytics(allBooksVisible);
+  renderCombinedConsignmentSummary(allBooksVisible);
+  renderOverviewRail();
+}
 
-  // Book strips
+// Book strips on the combined "All Books" overview.
+function renderAllBooksStrips(allBooksVisible) {
   const list = $('all-books-list');
   // Stamped so showCatalogueSkeleton() can never paint over real content if a
   // later boot step calls it again.
@@ -4302,10 +4365,12 @@ function updateAllOverview() {
     </div>`;
     }).join('');
   }
+}
 
-  // Combined channel analytics — collect structured data grouped by currency so
-  // the view can render visually (stacked bars + per-currency toggle) instead of
-  // one dense, hard-to-scan table.
+// Combined channel analytics on the "All Books" overview — collects structured
+// data grouped by currency so the view can render visually (stacked bars +
+// per-currency toggle) instead of one dense, hard-to-scan table.
+function renderCombinedChannelAnalytics(allBooksVisible) {
   const byCur = {}; // currency -> { books:[...], channelTotals:{chan:{txns,units,revenue,books:Set}} }
   allBooksVisible.forEach(book => {
     const s = states[book.id] || defaultState(book);
@@ -4338,9 +4403,12 @@ function updateAllOverview() {
   const curKeys = Object.keys(byCur);
   if (!curKeys.includes(window._allChCur)) window._allChCur = curKeys[0] || null;
   renderChannelAnalytics();
+}
 
-  // Combined consignment table — data grouped per book so the view can render
-  // either a flat active-first list or collapsible per-book groups (renderConsignmentTable).
+// Combined consignment table + summary stats on the "All Books" overview —
+// data grouped per book so the view can render either a flat active-first
+// list or collapsible per-book groups (renderConsignmentTable).
+function renderCombinedConsignmentSummary(allBooksVisible) {
   const conBookMap = new Map();
   const conTotals = { accounts: 0, active: 0, settled: 0, sent: 0, sold: 0, outstanding: 0 };
   allBooksVisible.forEach(book => {
@@ -4438,8 +4506,6 @@ function updateAllOverview() {
     expandToggle.style.display = window._allConGrouped ? 'inline-flex' : 'none';
   }
   renderConsignmentTable();
-
-  renderGlobalPendingAlert();
 }
 
 // Filter & Search state for Combined Consignment Summary
@@ -4870,85 +4936,265 @@ function renderChannelAnalytics() {
   host.innerHTML = toggle + chart + `<div class="ch-book-grid">${cards}</div>`;
 }
 
-// ── BOOK CONTEXT BANNERS
-function renderGlobalPendingAlert() {
-  if (isAuthor()) return;
-  const alertDiv = $('all-pending-approvals-alert');
-  if (!alertDiv) return;
+// ── NOTIFICATIONS, ACTIVITY & THE TO-DO LIST ───────────────────────────────
+//
+// Three surfaces, two derived sources, zero stored state.
+//
+// `buildAttentionSignals()` answers "what needs doing?" and feeds BOTH the
+// notifications rail on the landing page and the To-do tab — deliberately one
+// engine, because two scans would drift and start contradicting each other on
+// the same screen. `buildActivityFeed()` answers the different question of what
+// has already happened.
+//
+// Nothing here writes anything. A signal lives exactly as long as the thing it
+// describes is true, so restocking a book is what clears its low-stock warning.
+// That is why there is no dismiss button and nothing to sync: the panels are
+// always a true picture of right now, including offline.
+//
+// This replaced the old inline "Pending Author Submissions" banner that used to
+// sit at the top of this page. Its two conditions (author submissions, open-call
+// contributors) are now producers inside the signal engine, so the screen has
+// one place that says what needs attention instead of two that could disagree.
 
-  const pendingBooks = [];
-  Object.keys(window.authorSubmissions || {}).forEach(bookId => {
-    const subs = window.authorSubmissions[bookId];
-    const sCount = Object.keys(subs.sales || {}).length;
-    const eCount = Object.keys(subs.expenses || {}).length;
-    if (sCount > 0 || eCount > 0) {
-      pendingBooks.push({ bookId, sCount, eCount, title: BOOKS[bookId]?.title || bookId });
-    }
+/** How many notifications the rail shows before deferring to the To-do tab. */
+const RAIL_NOTIFICATION_LIMIT = 5;
+/** How many past events the rail's activity panel shows. */
+const RAIL_ACTIVITY_LIMIT = 12;
+
+/** The books the publisher actually publishes — test books report nothing. */
+function attentionBooks() {
+  return BOOK_LIST.filter(b => !isTestBook(b));
+}
+
+/**
+ * Everything the pure signal engine cannot work out for itself: the live
+ * connections, the sync queue, and the author-submission inbox.
+ */
+export function attentionInput() {
+  const submissions = Object.keys(window.authorSubmissions || {}).map(bookId => {
+    const subs = window.authorSubmissions[bookId] || {};
+    return {
+      bookId,
+      bookTitle: BOOKS[bookId]?.title || bookId,
+      sales: Object.keys(subs.sales || {}).length,
+      expenses: Object.keys(subs.expenses || {}).length,
+    };
   });
 
-  // Open-call contributors with an outstanding next step, grouped by book.
-  const openCallBooks = [];
-  Object.keys(states || {}).forEach(bookId => {
+  const openCall = Object.keys(states || {}).map(bookId => {
     const list = states[bookId]?.openCall;
-    if (!Array.isArray(list) || !list.length) return;
+    if (!Array.isArray(list) || !list.length) return null;
     let waiting = 0;
     for (const c of list) {
       if (OC_STAGES.some(st => !c[st.key])) waiting++;
     }
-    if (waiting > 0) {
-      openCallBooks.push({ bookId, waiting, title: BOOKS[bookId]?.title || bookId });
-    }
+    return waiting > 0 ? { bookId, bookTitle: BOOKS[bookId]?.title || bookId, waiting } : null;
+  }).filter(Boolean);
+
+  return {
+    books: attentionBooks(),
+    states,
+    sheets: {
+      connected: !!sheetsUrl,
+      deployedVersion: _sheetsDeployedVersion,
+      expectedVersion: EXPECTED_SCRIPT_VERSION,
+    },
+    sync: {
+      online: typeof navigator === 'undefined' || navigator.onLine !== false,
+      pending: syncQueue.length,
+      failed: false,
+    },
+    submissions,
+    openCall,
+    today: today(),
+  };
+}
+
+/**
+ * The attributes that make a "fix this" button work.
+ *
+ * The destination travels as DATA and is acted on by the delegated handler
+ * below — it never lands in an onclick. escapeHtml() stops a value breaking out
+ * of an attribute, but the browser decodes those entities before the JS engine
+ * reads the code, so a book id containing a quote in an onclick would break out
+ * of the JS string and run. Book ids are free text from the Add-book form.
+ */
+function fixAttrs(fix) {
+  return `data-fix="${escapeHtml(fix.kind || '')}"`
+    + (fix.bookId ? ` data-fix-book="${escapeHtml(fix.bookId)}"` : '')
+    + (fix.tab ? ` data-fix-tab="${escapeHtml(fix.tab)}"` : '');
+}
+
+/**
+ * Every fix button on both surfaces, handled once. Delegated rather than bound
+ * per render, because both panels are rebuilt wholesale on each repaint and
+ * per-node listeners would accumulate.
+ */
+document.addEventListener('click', (event) => {
+  const btn = event.target.closest?.('[data-fix]');
+  if (!btn) return;
+  const { fix, fixBook = '', fixTab = '' } = btn.dataset;
+  if (fix === 'retry-sync') { retrySyncNow(); return; }
+  if (fix === 'tab' && fixTab) { switchTab(fixTab); return; }
+  if (fix === 'book' && fixBook) {
+    // switchBook first: switchTab alone cannot leave the all-books screen.
+    switchBook(fixBook);
+    if (fixTab) setTimeout(() => switchTab(fixTab), 50);
+  }
+});
+
+/** One notification card. Tone follows the house amber/red/blue convention. */
+function notificationHtml(sig) {
+  const tone = sig.status === 'blocked' ? 'red' : sig.status === 'warn' ? 'amber' : 'blue';
+  const action = sig.fix
+    ? `<button type="button" class="notif-action" ${fixAttrs(sig.fix)}>${escapeHtml(sig.fix.label)} →</button>`
+    : '';
+  return `<div class="notif-item tone-${tone}">
+      <span class="notif-ico" aria-hidden="true">${escapeHtml(sig.icon || '')}</span>
+      <div class="notif-body">
+        <div class="notif-title">${escapeHtml(sig.label || '')}</div>
+        <div class="notif-detail">${escapeHtml(sig.detail || '')}</div>
+        ${action ? `<div class="notif-meta">${action}</div>` : ''}
+      </div>
+    </div>`;
+}
+
+/** One line of history. The amount keeps its own currency — never a total. */
+function activityHtml(ev) {
+  const toneClass = ev.tone === 'pos' ? ' is-pos' : ev.tone === 'neg' ? ' is-neg' : '';
+  const amount = ev.amount
+    ? `<span class="activity-amt${toneClass} mono-num">${escapeHtml(ev.amount)}</span>`
+    : '';
+  const when = webScanRelativeTime(ev.date) || fmtD(ev.date);
+  return `<div class="activity-item">
+      <span class="activity-dot" aria-hidden="true">${escapeHtml(ev.icon || '')}</span>
+      <div class="activity-body">
+        <div class="activity-text">${escapeHtml(ev.text || '')}</div>
+        <div class="activity-side">${amount}<span class="activity-time mono-num">${escapeHtml(when)}</span></div>
+      </div>
+    </div>`;
+}
+
+/**
+ * The count on every nav badge. Urgent only: a badge that counted the whole
+ * to-do list would sit permanently at some large number and stop meaning
+ * anything, which is the failure mode of every notification badge ever built.
+ */
+function updateTodoBadge(result) {
+  const count = result ? result.urgent : 0;
+  document.querySelectorAll('.todo-nav-badge').forEach(el => {
+    el.textContent = count > 99 ? '99+' : String(count);
+    el.hidden = count === 0;
   });
+}
 
-  let html = '';
-  if (pendingBooks.length) {
-    html += `
-      <div style="background:var(--cream3); border:1px solid var(--amber); border-left:4px solid var(--amber); border-radius:var(--r2); padding:1rem;">
-        <div style="font-weight:600; color:var(--text2); margin-bottom:8px; display:flex; align-items:center; gap:8px;">
-          <span class="pill amber">Action Required</span> Pending Author Submissions
-        </div>
-        <div style="font-size:13px; color:var(--text3); margin-bottom:12px;">The following books have new sales or expenses awaiting your approval:</div>
-        <div style="display:flex; flex-direction:column; gap:8px;">
-          ${pendingBooks.map(b => `
-            <div style="display:flex; justify-content:space-between; align-items:center; background:var(--surface-card); padding:8px 12px; border-radius:var(--r1); border:1px solid var(--border);">
-              <div>
-                <strong style="color:var(--text2);">${escapeHtml(b.title)}</strong>
-                <span style="font-size:12px; color:var(--text3); margin-left:8px;">
-                  ${b.sCount ? `${b.sCount} sale(s)` : ''} ${b.sCount && b.eCount ? '·' : ''} ${b.eCount ? `${b.eCount} expense(s)` : ''}
-                </span>
-              </div>
-              <button class="btn sm gold" onclick="switchBook('${b.bookId}'); setTimeout(()=>switchTab('history'), 50);">Review →</button>
-            </div>
-          `).join('')}
-        </div>
-      </div>`;
-  }
-  if (openCallBooks.length) {
-    html += `
-      <div style="background:var(--cream3); border:1px solid var(--gold-line); border-left:4px solid var(--gold); border-radius:var(--r2); padding:1rem; margin-top:${pendingBooks.length ? '12px' : '0'};">
-        <div style="font-weight:600; color:var(--text2); margin-bottom:8px; display:flex; align-items:center; gap:8px;">
-          <span class="pill gold">Open Call</span> Contributors awaiting their next step
-        </div>
-        <div style="display:flex; flex-direction:column; gap:8px;">
-          ${openCallBooks.map(b => `
-            <div style="display:flex; justify-content:space-between; align-items:center; background:var(--surface-card); padding:8px 12px; border-radius:var(--r1); border:1px solid var(--border);">
-              <div>
-                <strong style="color:var(--text2);">${escapeHtml(b.title)}</strong>
-                <span style="font-size:12px; color:var(--text3); margin-left:8px;">${b.waiting} contributor${b.waiting > 1 ? 's' : ''} awaiting next step</span>
-              </div>
-              <button class="btn sm gold" onclick="switchBook('${b.bookId}'); setTimeout(()=>switchTab('opencall'), 50);">Review →</button>
-            </div>
-          `).join('')}
-        </div>
-      </div>`;
+/** The landing page's right-hand rail: what needs doing, and what just happened. */
+function renderOverviewRail() {
+  if (isAuthor()) return;
+  const result = buildAttentionSignals(attentionInput());
+  updateTodoBadge(result);
+
+  const notifHost = $('all-notifications');
+  if (notifHost) {
+    const urgent = result.signals.filter(isUrgent);
+    const shown = urgent.slice(0, RAIL_NOTIFICATION_LIMIT);
+    notifHost.innerHTML = shown.length
+      ? shown.map(notificationHtml).join('')
+      : `<div class="empty-state rail-empty">
+           <div class="e-icon" aria-hidden="true">✓</div>
+           <strong>Nothing needs you right now</strong>
+           <span>Stock, money owed and your connections all look healthy.</span>
+         </div>`;
+
+    const countEl = $('all-notif-count');
+    if (countEl) {
+      countEl.textContent = String(urgent.length);
+      countEl.hidden = urgent.length === 0;
+    }
+    const moreEl = $('all-notif-more');
+    if (moreEl) {
+      const rest = result.total - shown.length;
+      moreEl.hidden = rest <= 0;
+      moreEl.textContent = `${rest} more in your to-do list →`;
+    }
+    // Permanent live region — only its TEXT changes, so screen readers keep it.
+    const statusEl = $('all-notif-status');
+    if (statusEl) {
+      statusEl.textContent = urgent.length
+        ? `${urgent.length} ${urgent.length === 1 ? 'thing needs' : 'things need'} your attention.`
+        : 'Nothing needs your attention.';
+    }
   }
 
-  if (html) {
-    alertDiv.style.display = 'block';
-    alertDiv.innerHTML = html;
-  } else {
-    alertDiv.style.display = 'none';
+  const activityHost = $('all-activity');
+  if (activityHost) {
+    const feed = buildActivityFeed(attentionBooks(), states, { limit: RAIL_ACTIVITY_LIMIT });
+    activityHost.innerHTML = feed.length
+      ? feed.map(activityHtml).join('')
+      : `<div class="empty-state rail-empty">
+           <div class="e-icon" aria-hidden="true">🕘</div>
+           <strong>Nothing has happened yet</strong>
+           <span>Sales, shipments and expenses will show up here as you record them.</span>
+         </div>`;
   }
+}
+
+/** One row of the To-do tab. */
+function todoRowHtml(sig) {
+  const tone = sig.status === 'blocked' ? 'red' : sig.status === 'warn' ? 'amber' : 'gray';
+  const action = sig.fix
+    ? `<button type="button" class="btn sm ghost todo-fix" ${fixAttrs(sig.fix)}>${escapeHtml(sig.fix.label)} →</button>`
+    : '';
+  return `<div class="todo-row tone-${tone}">
+      <span class="todo-ico" aria-hidden="true">${escapeHtml(sig.icon || '')}</span>
+      <div class="todo-copy">
+        <div class="todo-label">${escapeHtml(sig.label || '')}</div>
+        <div class="todo-detail">${escapeHtml(sig.detail || '')}</div>
+      </div>
+      ${action}
+    </div>`;
+}
+
+/** The To-do tab: every signal, grouped, with the urgent ones first in each group. */
+function renderTodoTab() {
+  if (isAuthor()) return;
+  const host = $('todo-groups');
+  if (!host) return;
+
+  const result = buildAttentionSignals(attentionInput());
+  updateTodoBadge(result);
+
+  const chip = $('todo-total-chip');
+  if (chip) chip.textContent = result.total === 0 ? 'All clear' : `${result.total} to do`;
+  const statusEl = $('todo-status');
+  if (statusEl) {
+    statusEl.textContent = result.total === 0
+      ? 'Your to-do list is empty.'
+      : `${result.total} ${result.total === 1 ? 'item' : 'items'} on your to-do list, ${result.urgent} needing attention soon.`;
+  }
+
+  if (!result.total) {
+    host.innerHTML = `<div class="empty-state sys-empty">
+        <div class="e-icon" aria-hidden="true">✅</div>
+        <strong>You're all caught up</strong>
+        <span>Every book has its details filled in, nobody owes you money, and your connections are working. Anything new will appear here on its own.</span>
+      </div>`;
+    return;
+  }
+
+  host.innerHTML = SIGNAL_GROUPS.map(group => {
+    const items = result.byGroup[group] || [];
+    if (!items.length) return '';
+    return `<section class="overview-section todo-group">
+        <div class="sec-head is-muted">
+          <div class="sec-head-titles">
+            <div class="sec-kicker"><span class="sec-kicker-dot"></span>${escapeHtml(GROUP_ICONS[group] || '')} ${escapeHtml(GROUP_LABELS[group] || group)}</div>
+          </div>
+          <div class="sec-head-badges"><span class="pill gray">${items.length}</span></div>
+        </div>
+        <div class="todo-list">${items.map(todoRowHtml).join('')}</div>
+      </section>`;
+  }).join('');
 }
 
 // ── BOOK CONTEXT BANNERS
@@ -5108,7 +5354,7 @@ function heldGrossOf(s) {
 // Cleared at the start of every renderAll() so the cache is per-render-cycle
 // and can never return a value stale from a previous state mutation.
 let _revMemo = new Map();
-function recognizedRevenueOf(s) {
+export function recognizedRevenueOf(s) {
   if (_revMemo.has(s)) return _revMemo.get(s);
   const v = (s.revenue || 0) + heldGrossOf(s);
   _revMemo.set(s, v);
@@ -5231,28 +5477,7 @@ export function updateDash() {
   $('d-thresh-sub').textContent = 'threshold: ' + book.threshold + ' units';
   $('d-thresh-label').textContent = 'Alert at ' + book.threshold + ' units';
   animateCountValue('d-stock', s.stock); animateCountValue('h-stock', s.stock);
-  // Surface on-hand drift: if the stored count disagrees with what the records
-  // imply (a sale/return/consignment that didn't update inventory, or an
-  // offline-merge hiccup), nudge toward the one-click repair instead of letting
-  // a silently-wrong number sit on the dashboard. Reconciling on-hand is a
-  // publisher action, so the banner and the repair button stay hidden for
-  // authors — and the banner can be dismissed without forcing a recalculation.
-  const driftBanner = $('d-stock-drift-banner');
-  if (driftBanner) {
-    const derivedOnHand = deriveOnHand(s, book);
-    const sig = `${activeBook}:${s.stock}:${derivedOnHand}`;
-    const show = !isAuthor() && derivedOnHand !== s.stock && _dismissedDriftSig !== sig;
-    if (show) {
-      const diff = derivedOnHand - s.stock;
-      $('d-stock-drift-value').textContent = `${s.stock} on file · ${derivedOnHand} per records (${diff > 0 ? '+' : ''}${diff})`;
-      driftBanner.dataset.sig = sig;
-      driftBanner.style.display = '';
-    } else {
-      driftBanner.style.display = 'none';
-    }
-  }
-  const recalcWrap = $('d-recalc-onhand-wrap');
-  if (recalcWrap) recalcWrap.style.display = isAuthor() ? 'none' : '';
+  renderStockDriftBanner(s, book);
   animateCountValue('d-sold', s.sold);
   const heldGross = heldGrossOf(s);
   const recognizedRev = recognizedRevenueOf(s);
@@ -5293,6 +5518,78 @@ export function updateDash() {
   $('d-low').textContent = s.stock <= book.threshold ? '⚠ Low' : 'OK';
   $('d-low').className = 'kpi-value' + (s.stock <= book.threshold ? ' danger' : '');
   
+  renderStockAllocationBar(s, book, breakdown);
+
+  const al = $('d-alert');
+  if (s.stock <= book.threshold) { al.className = 'stock-alert danger'; al.textContent = '⚠ Below threshold (' + book.threshold + ') — reorder now.'; }
+  else if (s.stock <= book.threshold * 2) { al.className = 'stock-alert warn'; al.textContent = 'Getting low — ' + s.stock + ' units remaining.'; }
+  else { al.className = 'stock-alert ok'; al.textContent = 'Stock is healthy.'; }
+  const chMix = channelMixRows(s.chStats);
+  const chFoot = $('ch-foot');
+  $('ch-body').innerHTML = chMix.rows.length
+    ? chMix.rows.map(r => channelMixRowHtml(r, cur)).join('')
+    : `<tr class="sys-empty-row"><td colspan="5">${channelMixEmptyHtml()}</td></tr>`;
+  if (chFoot) chFoot.innerHTML = chMix.rows.length ? channelMixFootHtml(chMix.totals, cur) : '';
+  $('dash-con-body').innerHTML = s.stores.length ? s.stores.map(st => `<tr><td style="font-weight:600;">${escapeHtml(st.name)}</td><td class="r">${st.sent}</td><td class="r">${st.sold}</td><td class="r">${st.returned}</td><td class="r">${st.outstanding}</td><td>${st.outstanding > 0 ? '<span class="pill amber">Active</span>' : '<span class="pill gray">Settled</span>'}</td></tr>`).join('') : '<tr><td colspan="6"><div class="empty-state" style="padding:1rem;">No consignment accounts.</div></td></tr>';
+  // Show danger zone only for publisher — explicitly hide for authors so it
+  // doesn't linger when switching from publisher into an author view.
+  if (!isAuthor()) {
+    $('danger-zone-sect').style.display = '';
+    $('danger-zone-block').style.display = 'flex';
+  } else {
+    $('danger-zone-sect').style.display = 'none';
+    $('danger-zone-block').style.display = 'none';
+  }
+  // ── EXPENSES SUMMARY (publisher only)
+  if (!isAuthor()) renderExpensesSummaryBlock(s, cur);
+
+  // ── BREAK-EVEN (publisher only)
+  renderBreakEvenBlock(s, book, cur, cost, recognizedRev);
+
+  // ── NET TO PUBLISHER KPI (only shown when profit sharing is configured)
+  if (book.profitTiers && book.profitTiers.length > 0) {
+    const earningsStats = calculateArtistEarnings(activeBook);
+    if (earningsStats && $('d-net-publisher-kpi')) {
+      $('d-net-publisher-kpi').style.display = '';
+      animateCountValue('d-net-publisher', fmtWhole(earningsStats.netPublisher, cur));
+    }
+  } else if ($('d-net-publisher-kpi')) {
+    $('d-net-publisher-kpi').style.display = 'none';
+  }
+
+  // ── PROFIT SHARING BREAKDOWN
+  renderProfitSharingBreakdown(activeBook);
+}
+
+// Surface on-hand drift: if the stored count disagrees with what the records
+// imply (a sale/return/consignment that didn't update inventory, or an
+// offline-merge hiccup), nudge toward the one-click repair instead of letting
+// a silently-wrong number sit on the dashboard. Reconciling on-hand is a
+// publisher action, so the banner and the repair button stay hidden for
+// authors — and the banner can be dismissed without forcing a recalculation.
+function renderStockDriftBanner(s, book) {
+  const driftBanner = $('d-stock-drift-banner');
+  if (driftBanner) {
+    const derivedOnHand = deriveOnHand(s, book);
+    const sig = `${activeBook}:${s.stock}:${derivedOnHand}`;
+    const show = !isAuthor() && derivedOnHand !== s.stock && _dismissedDriftSig !== sig;
+    if (show) {
+      const diff = derivedOnHand - s.stock;
+      $('d-stock-drift-value').textContent = `${s.stock} on file · ${derivedOnHand} per records (${diff > 0 ? '+' : ''}${diff})`;
+      driftBanner.dataset.sig = sig;
+      driftBanner.style.display = '';
+    } else {
+      driftBanner.style.display = 'none';
+    }
+  }
+  const recalcWrap = $('d-recalc-onhand-wrap');
+  if (recalcWrap) recalcWrap.style.display = isAuthor() ? 'none' : '';
+}
+
+// The dashboard stock bar: a single bar for publisher-only stock, or a split
+// publisher/author bar (plus location pills) once some stock is out with the
+// author. Author view always shows the plain unclassified total.
+function renderStockAllocationBar(s, book, breakdown) {
   const pct = Math.max(0, (s.stock / (book.maxPrint || 1)) * 100);
   const barAuthor = $('d-bar-author');
   const pillsEl = $('d-stock-breakdown-pills');
@@ -5330,209 +5627,179 @@ export function updateDash() {
     $('d-bar').style.background = s.stock <= book.threshold ? '#f87171' : (book.accent || 'var(--gold2)');
     $('d-bar-label').textContent = s.stock + ' / ' + book.maxPrint + ' units on hand';
   }
+}
 
-  const al = $('d-alert');
-  if (s.stock <= book.threshold) { al.className = 'stock-alert danger'; al.textContent = '⚠ Below threshold (' + book.threshold + ') — reorder now.'; }
-  else if (s.stock <= book.threshold * 2) { al.className = 'stock-alert warn'; al.textContent = 'Getting low — ' + s.stock + ' units remaining.'; }
-  else { al.className = 'stock-alert ok'; al.textContent = 'Stock is healthy.'; }
-  const chMix = channelMixRows(s.chStats);
-  const chFoot = $('ch-foot');
-  $('ch-body').innerHTML = chMix.rows.length
-    ? chMix.rows.map(r => channelMixRowHtml(r, cur)).join('')
-    : `<tr class="sys-empty-row"><td colspan="5">${channelMixEmptyHtml()}</td></tr>`;
-  if (chFoot) chFoot.innerHTML = chMix.rows.length ? channelMixFootHtml(chMix.totals, cur) : '';
-  $('dash-con-body').innerHTML = s.stores.length ? s.stores.map(st => `<tr><td style="font-weight:600;">${escapeHtml(st.name)}</td><td class="r">${st.sent}</td><td class="r">${st.sold}</td><td class="r">${st.returned}</td><td class="r">${st.outstanding}</td><td>${st.outstanding > 0 ? '<span class="pill amber">Active</span>' : '<span class="pill gray">Settled</span>'}</td></tr>`).join('') : '<tr><td colspan="6"><div class="empty-state" style="padding:1rem;">No consignment accounts.</div></td></tr>';
-  // Show danger zone only for publisher — explicitly hide for authors so it
-  // doesn't linger when switching from publisher into an author view.
-  if (!isAuthor()) {
-    $('danger-zone-sect').style.display = '';
-    $('danger-zone-block').style.display = 'flex';
-  } else {
-    $('danger-zone-sect').style.display = 'none';
-    $('danger-zone-block').style.display = 'none';
-  }
-  // ── EXPENSES SUMMARY (publisher only)
-  if (!isAuthor()) {
-
-    renderPendingExpenses();
-    const expenses = s.expenses || [];
-    const unreceivedExp = [];
-    let expTotal = 0;
-    for (const e of expenses) {
-      if (!e.received && !isGratuityExpense(e)) {
-        unreceivedExp.push(e);
-        expTotal += (e.amount || 0);
-      }
+// Publisher-only KPI tile + detail table for expenses the artist hasn't been
+// reimbursed for yet (gratuities excluded — those never carry a receivable).
+function renderExpensesSummaryBlock(s, cur) {
+  renderPendingExpenses();
+  const expenses = s.expenses || [];
+  const unreceivedExp = [];
+  let expTotal = 0;
+  for (const e of expenses) {
+    if (!e.received && !isGratuityExpense(e)) {
+      unreceivedExp.push(e);
+      expTotal += (e.amount || 0);
     }
-    const expKpi = $('d-expenses-kpi');
-    const expSect = $('d-expenses-sect');
-    if (unreceivedExp.length) {
-      // KPI tile
-      if (expKpi) { expKpi.style.display = ''; }
-      animateCountValue('d-expenses-owed', fmtWhole(expTotal, cur));
-      $('d-expenses-owed-sub').textContent = `${unreceivedExp.length} expense${unreceivedExp.length !== 1 ? 's' : ''} outstanding`;
-      // Detail table — dark banner style
-      if (expSect) {
-        expSect.style.display = '';
-        animateCountValue('d-exp-total', fmtWhole(expTotal, cur));
-        $('d-exp-count').textContent = `${expenses.length} expense${expenses.length !== 1 ? 's' : ''} logged`;
-        $('d-exp-body').innerHTML = unreceivedExp.map(e => `
-          <tr>
-            <td style="padding:6px 0;color:var(--on-inverse-3);white-space:nowrap;">${fmtD(e.date)}</td>
-            <td style="padding:6px 8px;color:rgba(255,255,255,.7);font-weight:500;">${escapeHtml(e.desc)}</td>
-            <td style="padding:6px 8px;"><span style="font-size:10px;background:rgba(255,255,255,.08);color:var(--on-inverse-3);padding:2px 8px;border-radius:100px;">${escapeHtml(e.cat)}</span></td>
-            <td style="padding:6px 8px;color:var(--on-inverse-3);">${escapeHtml(e.ref) || '—'}</td>
-            <td style="padding:6px 0;text-align:right;color:var(--rose-soft);font-weight:500;">${fmt(e.amount, cur)}</td>
-          </tr>`).join('');
-        // Payment button
-        const artistLink = (s.artistPaymentLink || '').trim();
-        const payBtn = $('d-exp-pay-btn');
-        const payHint = $('d-exp-pay-hint');
-        if (payBtn) {
-          if (artistLink) {
-            payBtn.href = artistLink.startsWith('http') ? artistLink : 'https://' + artistLink;
-            payBtn.style.display = '';
-            if (payHint) payHint.textContent = 'Opens payment link in a new tab';
-          } else {
-            payBtn.style.display = 'none';
-            if (payHint) payHint.textContent = 'Artist has not set a payment link yet';
-          }
+  }
+  const expKpi = $('d-expenses-kpi');
+  const expSect = $('d-expenses-sect');
+  if (unreceivedExp.length) {
+    // KPI tile
+    if (expKpi) { expKpi.style.display = ''; }
+    animateCountValue('d-expenses-owed', fmtWhole(expTotal, cur));
+    $('d-expenses-owed-sub').textContent = `${unreceivedExp.length} expense${unreceivedExp.length !== 1 ? 's' : ''} outstanding`;
+    // Detail table — dark banner style
+    if (expSect) {
+      expSect.style.display = '';
+      animateCountValue('d-exp-total', fmtWhole(expTotal, cur));
+      $('d-exp-count').textContent = `${expenses.length} expense${expenses.length !== 1 ? 's' : ''} logged`;
+      $('d-exp-body').innerHTML = unreceivedExp.map(e => `
+        <tr>
+          <td style="padding:6px 0;color:var(--on-inverse-3);white-space:nowrap;">${fmtD(e.date)}</td>
+          <td style="padding:6px 8px;color:rgba(255,255,255,.7);font-weight:500;">${escapeHtml(e.desc)}</td>
+          <td style="padding:6px 8px;"><span style="font-size:10px;background:rgba(255,255,255,.08);color:var(--on-inverse-3);padding:2px 8px;border-radius:100px;">${escapeHtml(e.cat)}</span></td>
+          <td style="padding:6px 8px;color:var(--on-inverse-3);">${escapeHtml(e.ref) || '—'}</td>
+          <td style="padding:6px 0;text-align:right;color:var(--rose-soft);font-weight:500;">${fmt(e.amount, cur)}</td>
+        </tr>`).join('');
+      // Payment button
+      const artistLink = (s.artistPaymentLink || '').trim();
+      const payBtn = $('d-exp-pay-btn');
+      const payHint = $('d-exp-pay-hint');
+      if (payBtn) {
+        if (artistLink) {
+          payBtn.href = artistLink.startsWith('http') ? artistLink : 'https://' + artistLink;
+          payBtn.style.display = '';
+          if (payHint) payHint.textContent = 'Opens payment link in a new tab';
+        } else {
+          payBtn.style.display = 'none';
+          if (payHint) payHint.textContent = 'Artist has not set a payment link yet';
         }
       }
-    } else {
-      if (expKpi) expKpi.style.display = 'none';
-      if (expSect) expSect.style.display = 'none';
-    }
-  }
-
-  // ── BREAK-EVEN (publisher only)
-  if (!isAuthor() && cost > 0) {
-    $('d-breakeven-kpi').style.display = '';
-    $('d-breakeven-block').style.display = '';
-    const be = calculateBreakEven({
-      cost,
-      recognizedRev,
-      listPrice: book.listPrice,
-      sold: s.sold,
-      stock: s.stock,
-      currency: cur
-    });
-
-    $('d-breakeven-val').textContent = be.broken ? '✓ Done' : fmtWhole(be.remaining, cur) + ' to go';
-    $('d-breakeven-val').className = 'kpi-value' + (be.broken ? ' gold' : '');
-    $('d-breakeven-sub').textContent = `of ${fmtWhole(cost, cur)} production cost`;
-    if ($('d-breakeven-kpi')) {
-      $('d-breakeven-kpi').title = be.broken
-        ? 'Production costs fully recovered!'
-        : `${fmt(be.remaining, cur)} remaining (${be.hasListPrice ? `~${be.unitsNeededAtList} units at ${fmt(be.listPrice, cur)} list` : 'list price not set'})`;
-    }
-
-    $('d-be-title').textContent = be.broken ? 'Project has broken even' : 'Not yet broken even';
-    $('d-be-sub').textContent = `Production cost: ${fmt(cost, cur)} · Revenue to date: ${fmt(recognizedRev, cur)}`;
-
-    const bePill = $('d-be-pill');
-    if (bePill) {
-      if (be.broken) {
-        bePill.className = 'pill green';
-        bePill.textContent = '✓ 100% recovered';
-        bePill.style.background = '';
-        bePill.style.color = '';
-      } else {
-        bePill.className = be.isClose ? 'pill amber' : 'pill gold';
-        bePill.textContent = `${be.pctBe.toFixed(1)}% recovered`;
-        bePill.style.background = '';
-        bePill.style.color = '';
-      }
-    }
-
-    $('d-be-bar').style.width = be.pctBe + '%';
-    $('d-be-bar').style.background = be.broken ? '#4ade80' : be.pctBe >= 70 ? '#fb923c' : (book.accent || 'var(--gold2)');
-    $('d-be-bar-label').textContent = `${fmt(recognizedRev, cur)} recovered (${be.pctBe.toFixed(1)}%)`;
-    $('d-be-bar-right').textContent = be.broken ? 'Break-even reached ✓' : `${fmt(be.remaining, cur)} remaining`;
-    const trackEl = $('d-be-bar-track');
-    if (trackEl) {
-      trackEl.title = be.broken ? 'Production costs fully recovered!' : `${fmt(recognizedRev, cur)} of ${fmt(cost, cur)} recovered (${be.pctBe.toFixed(1)}%)`;
-    }
-    const al = $('d-be-alert');
-    if (be.broken) {
-      al.className = 'stock-alert ok';
-      al.textContent = '✓ ' + be.primaryExplanation;
-      al.style.borderLeftColor = '';
-      al.style.background = '';
-      al.style.color = '';
-    } else {
-      al.className = 'stock-alert warn';
-
-      if (be.isClose) {
-        al.style.borderLeftColor = '#fb923c';
-        al.style.background = 'rgba(251, 146, 60, 0.08)';
-        al.style.color = '#fb923c';
-      } else {
-        al.style.borderLeftColor = 'rgba(200, 145, 58, 0.5)';
-        al.style.background = 'rgba(200, 145, 58, 0.08)';
-        al.style.color = 'var(--gold2)';
-      }
-
-      const themeColor = be.isClose ? '#fb923c' : 'var(--gold3)';
-      const themeBg = be.isClose ? 'rgba(251, 146, 60, 0.12)' : 'rgba(200, 145, 58, 0.12)';
-      const themeBorder = be.isClose ? 'rgba(251, 146, 60, 0.25)' : 'rgba(200, 145, 58, 0.25)';
-
-      al.innerHTML = `
-        <div style="display:flex; flex-direction:column; gap:8px; width:100%;">
-          <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; width:100%;">
-            <div style="display:flex; align-items:center; gap:8px;">
-              <span style="font-size:13px; opacity:0.85;">⚠️</span>
-              <span style="font-weight:600; font-family:'Syne', sans-serif;">${be.isClose ? 'Almost broken even:' : 'Not yet broken even:'}</span>
-            </div>
-            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-              <span style="display:inline-flex; align-items:center; gap:6px; background:${themeBg}; border:1px solid ${themeBorder}; color:${themeColor}; font-family:'DM Mono', monospace; font-size:11px; font-weight:700; padding:4px 10px; border-radius:100px; line-height:1;" title="${fmt(be.remaining, cur)} remaining of ${fmt(cost, cur)} production cost">
-                🎯 ${fmt(be.remaining, cur)} remaining
-              </span>
-              <span style="display:inline-flex; align-items:center; gap:6px; background:${themeBg}; border:1px solid ${themeBorder}; color:${themeColor}; font-family:'DM Mono', monospace; font-size:11px; font-weight:700; padding:4px 10px; border-radius:100px; line-height:1;" title="${escapeHtml(be.unitsBadgeTitle)}">
-                ${escapeHtml(be.unitsBadgeText)}
-              </span>
-            </div>
-          </div>
-          <div class="stock-alert-details" style="border-top-color:${themeBorder};">
-            <div style="color:var(--on-inverse-2);">
-              ${be.hasListPrice
-                ? `Requires selling <strong style="color:var(--on-inverse);font-weight:700;">~${be.unitsNeededAtList}</strong> more unit${be.unitsNeededAtList !== 1 ? 's' : ''} at full list price of <strong style="color:var(--on-inverse);font-family:'DM Mono', monospace;font-weight:700;">${fmt(be.listPrice, cur)}</strong> to recover the remaining <strong style="color:var(--on-inverse);font-family:'DM Mono', monospace;font-weight:700;">${fmt(be.remaining, cur)}</strong>.`
-                : `Set a list price in book settings to calculate the units needed to break even.`}
-            </div>
-            ${be.paceNote ? `
-              <div class="stock-alert-note pace" style="color:${be.isClose ? '#fdba74' : 'var(--gold2)'};">
-                <span aria-hidden="true">💡</span>
-                <span style="color:inherit;">${escapeHtml(be.paceNote)}</span>
-              </div>
-            ` : ''}
-            ${be.stockNote ? `
-              <div class="stock-alert-note" style="color:var(--on-inverse-2);">
-                <span aria-hidden="true">📦</span>
-                <span style="color:inherit;">${escapeHtml(be.stockNote)}</span>
-              </div>
-            ` : ''}
-          </div>
-        </div>
-      `;
     }
   } else {
+    if (expKpi) expKpi.style.display = 'none';
+    if (expSect) expSect.style.display = 'none';
+  }
+}
+
+// Publisher-only break-even KPI, progress bar, and status alert. Hidden
+// entirely for authors, and for publishers until a production cost is set.
+function renderBreakEvenBlock(s, book, cur, cost, recognizedRev) {
+  if (isAuthor() || !(cost > 0)) {
     $('d-breakeven-kpi').style.display = 'none';
     $('d-breakeven-block').style.display = 'none';
+    return;
   }
 
-  // ── NET TO PUBLISHER KPI (only shown when profit sharing is configured)
-  if (book.profitTiers && book.profitTiers.length > 0) {
-    const earningsStats = calculateArtistEarnings(activeBook);
-    if (earningsStats && $('d-net-publisher-kpi')) {
-      $('d-net-publisher-kpi').style.display = '';
-      animateCountValue('d-net-publisher', fmtWhole(earningsStats.netPublisher, cur));
+  $('d-breakeven-kpi').style.display = '';
+  $('d-breakeven-block').style.display = '';
+  const be = calculateBreakEven({
+    cost,
+    recognizedRev,
+    listPrice: book.listPrice,
+    sold: s.sold,
+    stock: s.stock,
+    currency: cur
+  });
+
+  $('d-breakeven-val').textContent = be.broken ? '✓ Done' : fmtWhole(be.remaining, cur) + ' to go';
+  $('d-breakeven-val').className = 'kpi-value' + (be.broken ? ' gold' : '');
+  $('d-breakeven-sub').textContent = `of ${fmtWhole(cost, cur)} production cost`;
+  if ($('d-breakeven-kpi')) {
+    $('d-breakeven-kpi').title = be.broken
+      ? 'Production costs fully recovered!'
+      : `${fmt(be.remaining, cur)} remaining (${be.hasListPrice ? `~${be.unitsNeededAtList} units at ${fmt(be.listPrice, cur)} list` : 'list price not set'})`;
+  }
+
+  $('d-be-title').textContent = be.broken ? 'Project has broken even' : 'Not yet broken even';
+  $('d-be-sub').textContent = `Production cost: ${fmt(cost, cur)} · Revenue to date: ${fmt(recognizedRev, cur)}`;
+
+  const bePill = $('d-be-pill');
+  if (bePill) {
+    if (be.broken) {
+      bePill.className = 'pill green';
+      bePill.textContent = '✓ 100% recovered';
+      bePill.style.background = '';
+      bePill.style.color = '';
+    } else {
+      bePill.className = be.isClose ? 'pill amber' : 'pill gold';
+      bePill.textContent = `${be.pctBe.toFixed(1)}% recovered`;
+      bePill.style.background = '';
+      bePill.style.color = '';
     }
-  } else if ($('d-net-publisher-kpi')) {
-    $('d-net-publisher-kpi').style.display = 'none';
   }
 
-  // ── PROFIT SHARING BREAKDOWN
-  renderProfitSharingBreakdown(activeBook);
+  $('d-be-bar').style.width = be.pctBe + '%';
+  $('d-be-bar').style.background = be.broken ? '#4ade80' : be.pctBe >= 70 ? '#fb923c' : (book.accent || 'var(--gold2)');
+  $('d-be-bar-label').textContent = `${fmt(recognizedRev, cur)} recovered (${be.pctBe.toFixed(1)}%)`;
+  $('d-be-bar-right').textContent = be.broken ? 'Break-even reached ✓' : `${fmt(be.remaining, cur)} remaining`;
+  const trackEl = $('d-be-bar-track');
+  if (trackEl) {
+    trackEl.title = be.broken ? 'Production costs fully recovered!' : `${fmt(recognizedRev, cur)} of ${fmt(cost, cur)} recovered (${be.pctBe.toFixed(1)}%)`;
+  }
+  const al = $('d-be-alert');
+  if (be.broken) {
+    al.className = 'stock-alert ok';
+    al.textContent = '✓ ' + be.primaryExplanation;
+    al.style.borderLeftColor = '';
+    al.style.background = '';
+    al.style.color = '';
+  } else {
+    al.className = 'stock-alert warn';
+
+    if (be.isClose) {
+      al.style.borderLeftColor = '#fb923c';
+      al.style.background = 'rgba(251, 146, 60, 0.08)';
+      al.style.color = '#fb923c';
+    } else {
+      al.style.borderLeftColor = 'rgba(200, 145, 58, 0.5)';
+      al.style.background = 'rgba(200, 145, 58, 0.08)';
+      al.style.color = 'var(--gold2)';
+    }
+
+    const themeColor = be.isClose ? '#fb923c' : 'var(--gold3)';
+    const themeBg = be.isClose ? 'rgba(251, 146, 60, 0.12)' : 'rgba(200, 145, 58, 0.12)';
+    const themeBorder = be.isClose ? 'rgba(251, 146, 60, 0.25)' : 'rgba(200, 145, 58, 0.25)';
+
+    al.innerHTML = `
+      <div style="display:flex; flex-direction:column; gap:8px; width:100%;">
+        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; width:100%;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:13px; opacity:0.85;">⚠️</span>
+            <span style="font-weight:600; font-family:'Syne', sans-serif;">${be.isClose ? 'Almost broken even:' : 'Not yet broken even:'}</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <span style="display:inline-flex; align-items:center; gap:6px; background:${themeBg}; border:1px solid ${themeBorder}; color:${themeColor}; font-family:'DM Mono', monospace; font-size:11px; font-weight:700; padding:4px 10px; border-radius:100px; line-height:1;" title="${fmt(be.remaining, cur)} remaining of ${fmt(cost, cur)} production cost">
+              🎯 ${fmt(be.remaining, cur)} remaining
+            </span>
+            <span style="display:inline-flex; align-items:center; gap:6px; background:${themeBg}; border:1px solid ${themeBorder}; color:${themeColor}; font-family:'DM Mono', monospace; font-size:11px; font-weight:700; padding:4px 10px; border-radius:100px; line-height:1;" title="${escapeHtml(be.unitsBadgeTitle)}">
+              ${escapeHtml(be.unitsBadgeText)}
+            </span>
+          </div>
+        </div>
+        <div class="stock-alert-details" style="border-top-color:${themeBorder};">
+          <div style="color:var(--on-inverse-2);">
+            ${be.hasListPrice
+              ? `Requires selling <strong style="color:var(--on-inverse);font-weight:700;">~${be.unitsNeededAtList}</strong> more unit${be.unitsNeededAtList !== 1 ? 's' : ''} at full list price of <strong style="color:var(--on-inverse);font-family:'DM Mono', monospace;font-weight:700;">${fmt(be.listPrice, cur)}</strong> to recover the remaining <strong style="color:var(--on-inverse);font-family:'DM Mono', monospace;font-weight:700;">${fmt(be.remaining, cur)}</strong>.`
+              : `Set a list price in book settings to calculate the units needed to break even.`}
+          </div>
+          ${be.paceNote ? `
+            <div class="stock-alert-note pace" style="color:${be.isClose ? '#fdba74' : 'var(--gold2)'};">
+              <span aria-hidden="true">💡</span>
+              <span style="color:inherit;">${escapeHtml(be.paceNote)}</span>
+            </div>
+          ` : ''}
+          ${be.stockNote ? `
+            <div class="stock-alert-note" style="color:var(--on-inverse-2);">
+              <span aria-hidden="true">📦</span>
+              <span style="color:inherit;">${escapeHtml(be.stockNote)}</span>
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  }
 }
 
 function getProfitTiersHtml(book, stats, cur) {
@@ -5677,9 +5944,38 @@ function getArtistHeldHtml(stats, cur) {
   return { heldCardHtml, heldNoteHtml, hasHeld };
 }
 
-// The most recent payout request that hasn't been covered by a payout since.
-// A request is "settled" once the publisher records a payout dated on or after
-// it, so the artist isn't left staring at a stale "requested" pill forever.
+// Bring every request's `settled` flag in line with what has actually been paid.
+// Both directions matter: deleting or reducing a payout has to re-open a request
+// it used to cover, or the attention signal would stay silent about money that
+// is owed again. Returns true when anything changed.
+//
+// Nothing wrote this flag before, so the `!r.settled` filters in
+// attention-signals.js and activity-feed.js kept every request alive forever —
+// a request stayed a blocking alert long after it was paid in full.
+function settlePayoutRequests(bookId) {
+  const s = states[bookId];
+  const stats = calculateArtistEarnings(bookId);
+  if (!s || !stats || !Array.isArray(s.payoutRequests)) return false;
+
+  let changed = false;
+  for (const r of s.payoutRequests) {
+    const covered = payoutRequestCovered(r, stats);
+    if (covered && !r.settled) {
+      r.settled = true;
+      r.settledAt = new Date().toISOString();
+      changed = true;
+    } else if (!covered && r.settled) {
+      r.settled = false;
+      delete r.settledAt;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+// The most recent payout request that hasn't been covered by payouts since.
+// Reads the live figures as well as the stored flag so the panel is right the
+// moment a payout is recorded, without waiting on a save to land.
 function pendingPayoutRequest(state, stats) {
   const reqs = (state && state.payoutRequests) || [];
   if (!reqs.length) return null;
@@ -5690,12 +5986,8 @@ function pendingPayoutRequest(state, stats) {
       latest = reqs[i];
     }
   }
-  if (!latest) return null;
-  const settledSince = (stats.payouts || []).some(p => {
-    const paidAt = p.date || '';
-    return paidAt && latest.requestedAt && paidAt >= latest.requestedAt.slice(0, 10);
-  });
-  return settledSince ? null : latest;
+  if (!latest || latest.settled) return null;
+  return payoutRequestCovered(latest, stats) ? null : latest;
 }
 
 // Artist-facing call to action: surfaces the share of profit that's actually
@@ -5753,18 +6045,38 @@ function getPayoutHistoryHtml(stats, bookId, cur) {
     </div>`;
   }
 
+  const book = BOOKS[bookId];
+
   // ⚡ Bolt Optimization: Use string comparison instead of localeCompare for sorting ISO "YYYY-MM-DD" dates
   const rows = payouts.slice().sort((a, b) => { const dA = a.date || ''; const dB = b.date || ''; return dA > dB ? -1 : (dA < dB ? 1 : 0); }).map(p => {
     // ⚡ Bolt Optimization: Use shared escapeHtml to prevent GC pressure from inline object creation during replace operations
-    const meta = [p.method ? escapeHtml(p.method) : '', p.notes ? escapeHtml(p.notes) : ''].filter(Boolean).join(' · ');
+    // A payout handed over in another currency carries the same `payment` meta a
+    // foreign sale does, so the row can show the cash that actually moved
+    // ("Paid USD 50.00 @ 1.3640 → CA$68.20") beside the book-currency figure the
+    // balance is measured in. A same-currency payout would only restate the
+    // amount already shown, so it gets no note at all.
+    const isFxPayout = p.payment
+      && normalizeCurrencyCode(p.payment.currency, '') !== normalizeCurrencyCode(p.cur, bookCurrencyCode(book));
+    const fxNote = isFxPayout ? paymentSummary(p.payment, book, p) : '';
+    const meta = [
+      p.method ? escapeHtml(p.method) : '',
+      p.notes ? escapeHtml(p.notes) : '',
+      fxNote ? escapeHtml(fxNote) : '',
+      p.editedAt ? 'edited' : '',
+    ].filter(Boolean).join(' · ');
+    const pid = escapeHtml(String(p.id));
     return `
         <div class="ps-payout-row">
           <span class="ps-payout-row-main">
             <span class="ps-payout-row-amt">${fmt(parseFloat(p.amount) || 0, cur)}</span>
             <span class="ps-payout-row-meta">${fmtD(p.date) ?? '—'}${meta ? ' · ' + meta : ''}</span>
           </span>
-          <button class="btn tx sm sys-target ps-payout-del"
-            onclick="deleteArtistPayout('${bookId}', ${p.id})" title="Delete this payout" aria-label="Delete payout">✕</button>
+          <span class="ps-payout-row-actions">
+            <button class="btn tx sm sys-target ps-payout-edit"
+              onclick="editArtistPayout('${bookId}', '${pid}')" title="Edit this payout" aria-label="Edit payout">✎</button>
+            <button class="btn tx sm sys-target ps-payout-del"
+              onclick="deleteArtistPayout('${bookId}', '${pid}')" title="Delete this payout" aria-label="Delete payout">✕</button>
+          </span>
         </div>`;
   }).join('');
 
@@ -5802,6 +6114,7 @@ function renderProfitSharingBreakdown(bookId) {
   const { heldCardHtml, heldNoteHtml, hasHeld } = getArtistHeldHtml(stats, cur);
   const payoutRequestHtml = getPayoutRequestHtml(bookId, stats, cur, owed);
   const payoutHistoryHtml = getPayoutHistoryHtml(stats, bookId, cur);
+  const payoutFormHtml = getPayoutFormHtml(bookId, cur, owed);
 
   content.innerHTML = `
     <div class="ps-stat-grid ${hasHeld ? 'cols-4' : 'cols-3'}">
@@ -5836,14 +6149,42 @@ function renderProfitSharingBreakdown(bookId) {
     <div class="ps-payout-section">
       <div class="ps-payout-head">
         <span class="sect sect-inline">Artist Payouts</span>
-        <button class="btn gold" onclick="toggleArtistPayoutForm('${bookId}')">+ Record payout</button>
+        ${payoutFormHtml ? `<button class="btn gold" onclick="toggleArtistPayoutForm('${bookId}')">+ Record payout</button>` : ''}
       </div>
+      ${payoutFormHtml}
+      <div class="ps-payout-list sys-container">
+        ${payoutHistoryHtml}
+      </div>
+    </div>
+  `;
+}
+
+// Recording and editing payouts is a publisher-only action, and not just by
+// convention: `artistPayouts` is absent from the author-writable part list in
+// firestore.rules, and _fbSave commits every dirty part as one batch that
+// Firestore rejects wholesale if any document is denied. An author who used
+// this form would get a permission-denied that saveState treats as retryable
+// and re-queues forever — so the form is never rendered for them at all.
+// Authors still see the full payout history and the request CTA above it.
+function getPayoutFormHtml(bookId, cur, owed) {
+  if (isAuthor()) return '';
+
+  const nativeCode = normalizeCurrencyCode(cur, 'CAD');
+  const curOptions = Object.keys(CODE_TO_SYMBOL).map(code =>
+    `<option value="${code}"${code === nativeCode ? ' selected' : ''}>${getSym(code)} ${code}</option>`
+  ).join('');
+
+  return `
       <div id="artist-payout-form-${bookId}" class="ps-payout-form sys-container" hidden>
         <div class="ps-payout-fields">
           <div class="form-group">
-            <label for="ap-amount-${bookId}">Amount (${cur})</label>
+            <label for="ap-amount-${bookId}">Amount</label>
             <input type="number" id="ap-amount-${bookId}" class="ps-payout-num" step="0.01" min="0" inputmode="decimal"
               placeholder="${owed > 0.01 ? owed.toFixed(2) : '0.00'}" oninput="previewArtistPayout('${bookId}')">
+          </div>
+          <div class="form-group">
+            <label for="ap-cur-${bookId}">Currency</label>
+            <select id="ap-cur-${bookId}" class="ps-payout-num" onchange="onArtistPayoutCurrencyChange('${bookId}')">${curOptions}</select>
           </div>
           <div class="form-group">
             <label for="ap-date-${bookId}">Date</label>
@@ -5858,32 +6199,170 @@ function renderProfitSharingBreakdown(bookId) {
             <input type="text" id="ap-notes-${bookId}" placeholder="Anything worth remembering">
           </div>
         </div>
+        <!-- Shown only while the chosen currency differs from the book's. The rate
+             is fetched live; when the lookup fails the publisher types one here
+             rather than being blocked from recording a payment that did happen. -->
+        <div class="ps-payout-fx" id="ap-fx-row-${bookId}" hidden>
+          <label for="ap-rate-${bookId}">Rate to ${escapeHtml(nativeCode)}</label>
+          <input type="number" id="ap-rate-${bookId}" class="ps-payout-num" step="0.0001" min="0" inputmode="decimal"
+            oninput="previewArtistPayout('${bookId}')">
+          <span class="ps-payout-fx-note" id="ap-fx-note-${bookId}"></span>
+        </div>
         <!-- Live verdict on what the typed amount does to the balance. Announced
              politely so a screen reader hears the overpayment warning too. -->
         <div class="ps-payout-preview" id="ap-preview-${bookId}" role="status" aria-live="polite"></div>
         <div class="ps-payout-actions">
-          <button class="btn gold" onclick="recordArtistPayout('${bookId}')">Save payout</button>
+          <button class="btn gold" id="ap-save-${bookId}" onclick="saveArtistPayout('${bookId}')">Save payout</button>
           ${owed > 0.01 ? `<button class="btn" onclick="fillArtistPayoutFull('${bookId}')">Pay full balance (${fmt(owed, cur)})</button>` : ''}
           <button class="btn tx" onclick="toggleArtistPayoutForm('${bookId}')">Cancel</button>
         </div>
-      </div>
-      <div class="ps-payout-list sys-container">
-        ${payoutHistoryHtml}
-      </div>
-    </div>
-  `;
+      </div>`;
+}
+
+// The payout the form is currently editing, as { bookId, id }, or null when the
+// form is in "record a new one" mode. Only one book's breakdown is ever on
+// screen, so a single slot is enough — but it is keyed by bookId anyway so a
+// book switch mid-edit can't apply one book's edit to another's ledger.
+let _editingPayout = null;
+
+// Point the form at a fresh payout: empty fields, today's date, book currency,
+// and the create-mode button label.
+function resetArtistPayoutForm(bookId) {
+  _editingPayout = null;
+  const book = BOOKS[bookId];
+  const set = (id, value) => { const el = document.getElementById(`${id}-${bookId}`); if (el) el.value = value; };
+  set('ap-amount', '');
+  set('ap-date', today());
+  set('ap-method', '');
+  set('ap-notes', '');
+  set('ap-rate', '');
+  set('ap-cur', bookCurrencyCode(book));
+  const save = document.getElementById(`ap-save-${bookId}`);
+  if (save) save.textContent = 'Save payout';
+  syncArtistPayoutFxRow(bookId);
 }
 
 function toggleArtistPayoutForm(bookId) {
   const form = document.getElementById(`artist-payout-form-${bookId}`);
   if (!form) return;
   form.hidden = !form.hidden;
-  if (form.hidden) return;
+  // Closing it abandons any in-progress edit, so the next open starts clean
+  // rather than silently still pointing at the row that was being edited.
+  if (form.hidden) { resetArtistPayoutForm(bookId); return; }
   // Opening it: state the balance straight away, so the reference figure is on
   // screen before the first keystroke rather than only after one.
   previewArtistPayout(bookId);
   const amount = document.getElementById(`ap-amount-${bookId}`);
   if (amount) amount.focus();
+}
+
+// Load an existing payout back into the form. Works on every payout, including
+// ones generated by a consignment settlement — those are derived from a sale, so
+// editing one is confirmed first and the source sale is named, the same courtesy
+// the Tax Centre's ledger row edit extends.
+async function editArtistPayout(bookId, payoutId) {
+  const s = states[bookId];
+  const book = BOOKS[bookId];
+  if (!s || !book) return;
+  const p = (s.artistPayouts || []).find(x => String(x.id) === String(payoutId));
+  if (!p) { showToast('⚠ Payout record not found', 'err'); return; }
+
+  if (p.sourceNum) {
+    const ok = await confirmDialog(
+      `This payout was created when sale #${p.sourceNum} was settled with the artist, so its amount was worked out from that sale.\n\n` +
+      `Editing it here changes the payout only — the sale itself is left as it is.`,
+      { okLabel: 'Edit anyway', title: 'Edit settled payout' }
+    );
+    if (!ok) return;
+  }
+
+  const form = document.getElementById(`artist-payout-form-${bookId}`);
+  if (!form) return;
+  form.hidden = false;
+  _editingPayout = { bookId, id: String(p.id) };
+
+  const set = (id, value) => { const el = document.getElementById(`${id}-${bookId}`); if (el) el.value = value; };
+  // Show the money as it was actually entered: the foreign cash and its rate
+  // when the payout was made in another currency, otherwise the book figure.
+  const fx = p.payment && normalizeCurrencyCode(p.payment.currency, '') !== bookCurrencyCode(book) ? p.payment : null;
+  set('ap-amount', fx ? Number(fx.amount || 0).toFixed(2) : Number(p.amount || 0).toFixed(2));
+  set('ap-cur', fx ? normalizeCurrencyCode(fx.currency, 'CAD') : normalizeCurrencyCode(p.cur, bookCurrencyCode(book)));
+  set('ap-rate', fx && fx.rate ? String(fx.rate) : '');
+  set('ap-date', p.date || today());
+  set('ap-method', p.method || '');
+  set('ap-notes', p.notes || '');
+
+  const save = document.getElementById(`ap-save-${bookId}`);
+  if (save) save.textContent = 'Update payout';
+  syncArtistPayoutFxRow(bookId);
+  previewArtistPayout(bookId);
+  const amount = document.getElementById(`ap-amount-${bookId}`);
+  if (amount) amount.focus();
+}
+
+// What the form currently describes, resolved into the book's own currency.
+// `nativeAmount` is the figure the balance is measured in and the one stored on
+// the payout; `amount`/`code` are the cash that actually changed hands.
+function readArtistPayoutForm(bookId) {
+  const book = BOOKS[bookId];
+  const native = bookCurrencyCode(book);
+  const amountEl = document.getElementById(`ap-amount-${bookId}`);
+  const curEl = document.getElementById(`ap-cur-${bookId}`);
+  const rateEl = document.getElementById(`ap-rate-${bookId}`);
+  const amount = parseFloat(amountEl ? amountEl.value : '');
+  const code = normalizeCurrencyCode(curEl ? curEl.value : native, native);
+  const isFx = code !== native;
+  const typedRate = parseFloat(rateEl ? rateEl.value : '');
+  const rate = isFx ? (Number.isFinite(typedRate) && typedRate > 0 ? typedRate : 0) : 1;
+  const nativeAmount = Number.isFinite(amount) && rate > 0 ? roundCents(amount * rate) : NaN;
+  return { native, amount, code, isFx, rate, nativeAmount };
+}
+
+// Show the rate row only for a foreign payout, and keep its hint line current.
+function syncArtistPayoutFxRow(bookId) {
+  const row = document.getElementById(`ap-fx-row-${bookId}`);
+  if (!row) return;
+  const { isFx, code, native, amount, rate, nativeAmount } = readArtistPayoutForm(bookId);
+  row.hidden = !isFx;
+  const note = document.getElementById(`ap-fx-note-${bookId}`);
+  if (!note) return;
+  if (!isFx) { note.textContent = ''; return; }
+  if (!(rate > 0)) {
+    note.textContent = `Enter how many ${native} one ${code} is worth.`;
+    return;
+  }
+  const bookCur = (BOOKS[bookId] && BOOKS[bookId].currency) || native;
+  note.textContent = Number.isFinite(amount) && amount > 0
+    ? `${fmt(amount, code)} @ ${rate.toFixed(4)} → ${fmt(nativeAmount, bookCur)}`
+    : `1 ${code} = ${rate.toFixed(4)} ${native}`;
+}
+
+// Currency changed: fetch a live rate for the new pair so the publisher doesn't
+// have to look one up, falling back to the manual rate box when the lookup
+// fails. Kept off the amount field's `oninput` so typing never triggers a fetch.
+async function onArtistPayoutCurrencyChange(bookId) {
+  const rateEl = document.getElementById(`ap-rate-${bookId}`);
+  const { isFx, code, native } = readArtistPayoutForm(bookId);
+  if (rateEl) rateEl.value = '';
+  syncArtistPayoutFxRow(bookId);
+  if (!isFx) { previewArtistPayout(bookId); return; }
+
+  const note = document.getElementById(`ap-fx-note-${bookId}`);
+  if (note) note.textContent = 'Fetching rate…';
+  let rate = 0;
+  try {
+    const res = await fetchLiveRate(code, native);
+    rate = Number(res && res.rate) || 0;
+  } catch { rate = 0; }
+  // The panel can re-render or the currency change again while the rate is in
+  // flight; only apply it if the box is still empty and still on this pair.
+  const now = readArtistPayoutForm(bookId);
+  const liveRateEl = document.getElementById(`ap-rate-${bookId}`);
+  if (rate > 0 && liveRateEl && !liveRateEl.value && now.code === code) {
+    liveRateEl.value = String(roundCents(rate * 10000) / 10000);
+  }
+  syncArtistPayoutFxRow(bookId);
+  previewArtistPayout(bookId);
 }
 
 // Quick-fill the amount with the whole outstanding balance. Goes through here
@@ -5914,8 +6393,27 @@ function previewArtistPayout(bookId) {
   if (!book || !stats) { host.textContent = ''; host.className = 'ps-payout-preview'; return; }
 
   const cur = book.currency;
-  const owed = stats.owedToArtist ?? 0;
-  const v = describePayout(input.value, owed);
+  let owed = stats.owedToArtist ?? 0;
+  syncArtistPayoutFxRow(bookId);
+
+  // While editing, the row being edited is already counted in `owed`. Add it
+  // back so the verdict answers "what will the balance be once this payout is
+  // what I'm now typing", not "…on top of its own previous value".
+  const editing = _editingPayout && _editingPayout.bookId === bookId
+    ? findArtistPayout(bookId, _editingPayout.id)
+    : null;
+  if (editing) owed = roundCents(owed + (parseFloat(editing.amount) || 0));
+
+  // A foreign payout is judged on its book-currency value, since that is what
+  // the balance is denominated in. With no usable rate yet there is nothing to
+  // compare, so say that rather than showing a wrong verdict.
+  const { isFx, rate, nativeAmount } = readArtistPayoutForm(bookId);
+  if (isFx && !(rate > 0)) {
+    host.className = 'ps-payout-preview is-warn';
+    host.textContent = `Enter a conversion rate to see what this is worth in ${cur}.`;
+    return;
+  }
+  const v = describePayout(isFx ? (Number.isFinite(nativeAmount) ? nativeAmount : '') : input.value, owed);
 
   let tone = 'neutral', msg;
   if (v.tone === 'empty' || v.tone === 'invalid') {
@@ -5938,26 +6436,74 @@ function previewArtistPayout(bookId) {
   host.textContent = msg;
 }
 
-async function recordArtistPayout(bookId) {
-  const amountEl = document.getElementById(`ap-amount-${bookId}`);
+/** One payout row by id, tolerant of the numeric ids minted before makeEventId. */
+function findArtistPayout(bookId, payoutId) {
+  const s = states[bookId];
+  if (!s || !Array.isArray(s.artistPayouts)) return null;
+  return s.artistPayouts.find(p => String(p.id) === String(payoutId)) || null;
+}
+
+// Write the form back to the ledger — as a new payout, or over the one being
+// edited. `amount` is always stored in the book's own currency (that is what the
+// balance and every downstream total are denominated in); when the money moved
+// in another currency the cash that actually changed hands is kept alongside it
+// in `payment`, exactly as a foreign sale records it.
+async function saveArtistPayout(bookId) {
+  const book = BOOKS[bookId];
+  const s = states[bookId];
+  if (!book || !s) return;
+
   const dateEl = document.getElementById(`ap-date-${bookId}`);
   const methodEl = document.getElementById(`ap-method-${bookId}`);
   const notesEl = document.getElementById(`ap-notes-${bookId}`);
-  const amount = parseFloat(amountEl.value);
-  if (!amount || amount <= 0) { showToast('⚠ Enter a valid amount', 'warn'); return; }
-  const s = states[bookId];
-  if (!s) return;
+  // The panel can re-render between the click and this handler; bail rather
+  // than throwing on a field that is no longer in the document.
+  if (!dateEl || !methodEl || !notesEl) return;
+
+  const { amount, code, isFx, rate, nativeAmount } = readArtistPayoutForm(bookId);
+  if (!Number.isFinite(amount) || amount <= 0) { showToast('⚠ Enter a valid amount', 'warn'); return; }
+  if (isFx && !(rate > 0)) { showToast('⚠ Enter a conversion rate', 'warn'); return; }
+  if (!Number.isFinite(nativeAmount) || nativeAmount <= 0) { showToast('⚠ Enter a valid amount', 'warn'); return; }
+
   if (!s.artistPayouts) s.artistPayouts = [];
-  s.artistPayouts.push({
-    id: Date.now(),
+  const fields = {
     date: dateEl.value || today(),
-    amount,
+    // Rounded before it is stored: the preview and every total downstream work
+    // in whole cents, so a raw 33.333 here would make the ledger disagree with
+    // the figure the publisher was shown when they saved it.
+    amount: roundCents(nativeAmount),
     method: (methodEl.value || '').trim(),
     notes: (notesEl.value || '').trim(),
-    cur: bookCurrencyCode(BOOKS[bookId])
-  });
+    cur: bookCurrencyCode(book),
+    payment: buildPaymentMeta({
+      book, qty: 1, unitPrice: roundCents(nativeAmount),
+      fxEnabled: isFx, fxCur: code, fxAmt: amount, fxRate: rate,
+    }),
+  };
+
+  const editingId = _editingPayout && _editingPayout.bookId === bookId ? _editingPayout.id : null;
+  const existing = editingId ? findArtistPayout(bookId, editingId) : null;
+  if (editingId && !existing) {
+    // The row went away under us (deleted here, or a sync landed) — don't
+    // silently resurrect it as a new payout.
+    showToast('⚠ That payout no longer exists', 'err');
+    resetArtistPayoutForm(bookId);
+    renderProfitSharingBreakdown(bookId);
+    return;
+  }
+
+  if (existing) {
+    Object.assign(existing, fields, { editedAt: new Date().toISOString() });
+  } else {
+    s.artistPayouts.push({ id: makeEventId(), ...fields });
+  }
+
+  settlePayoutRequests(bookId);
   await saveState(bookId);
-  showToast(`✓ Recorded payout of ${fmt(amount, BOOKS[bookId].currency)}`);
+  showToast(`✓ ${existing ? 'Updated' : 'Recorded'} payout of ${fmt(fields.amount, book.currency)}`);
+  resetArtistPayoutForm(bookId);
+  const form = document.getElementById(`artist-payout-form-${bookId}`);
+  if (form) form.hidden = true;
   renderProfitSharingBreakdown(bookId);
 }
 
@@ -5981,10 +6527,14 @@ async function requestArtistPayout(bookId) {
   if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
 
   const req = {
-    id: Date.now(),
+    id: makeEventId(),
     requestedAt: new Date().toISOString(),
-    amount: owed,
-    currency: cur
+    amount: roundCents(owed),
+    currency: cur,
+    // The lifetime paid-to-artist total as it stands right now. Everything paid
+    // beyond this counts toward covering this request, which is what lets the
+    // request close itself without depending on payout dates.
+    paidAtRequest: roundCents(stats.totalPaidToArtist || 0),
   };
   try {
     if (!s.payoutRequests) s.payoutRequests = [];
@@ -6009,8 +6559,18 @@ async function deleteArtistPayout(bookId, payoutId) {
   if (!(await confirmDialog('Delete this payout record?', { danger: true, okLabel: 'Delete' }))) return;
   const s = states[bookId];
   if (!s || !s.artistPayouts) return;
-  s.artistPayouts = s.artistPayouts.filter(p => p.id !== payoutId);
-  saveState(bookId);
+  // String-compared because ids are now minted by makeEventId, while rows
+  // written before that carry the numeric Date.now() ids.
+  s.artistPayouts = s.artistPayouts.filter(p => String(p.id) !== String(payoutId));
+  // Removing a payout can put a request back into the red, so re-evaluate
+  // before the write rather than leaving a settled flag that no longer holds.
+  settlePayoutRequests(bookId);
+  // Awaited so the toast and the repaint follow a confirmed write, matching
+  // every other mutation in this panel.
+  await saveState(bookId);
+  if (_editingPayout && _editingPayout.bookId === bookId && String(_editingPayout.id) === String(payoutId)) {
+    resetArtistPayoutForm(bookId);
+  }
   showToast('✓ Payout deleted');
   renderProfitSharingBreakdown(bookId);
 }
@@ -6018,7 +6578,9 @@ async function deleteArtistPayout(bookId, payoutId) {
 window.toggleArtistPayoutForm = toggleArtistPayoutForm;
 window.fillArtistPayoutFull = fillArtistPayoutFull;
 window.previewArtistPayout = previewArtistPayout;
-window.recordArtistPayout = recordArtistPayout;
+window.onArtistPayoutCurrencyChange = onArtistPayoutCurrencyChange;
+window.saveArtistPayout = saveArtistPayout;
+window.editArtistPayout = editArtistPayout;
 window.requestArtistPayout = requestArtistPayout;
 window.deleteArtistPayout = deleteArtistPayout;
 
@@ -6050,7 +6612,16 @@ function visibleTabName() {
 
 function renderAll() {
   _revMemo.clear();
-  if (activeBook === 'all') { updateAllOverview(); updateHeader(); return; }
+  if (activeBook === 'all') {
+    // The To-do tab is reached from the all-books screen, so it sits inside this
+    // branch rather than in TAB_RENDERERS below — which never runs while
+    // activeBook is 'all'. Without this it would go stale the moment a sale or a
+    // restock changed the very thing it is reporting on.
+    if (visibleTabName() === 'todo') renderTodoTab();
+    else updateAllOverview();
+    updateHeader();
+    return;
+  }
   // Only the visible tab. This used to rebuild all eight panels on every state
   // change, so recording a sale at a market walked the full history and the
   // full consignment ledger to repaint panels nobody was looking at — on the
@@ -6208,6 +6779,12 @@ let _histPageSig = null;
 function showMoreHist() { _histLimit += HIST_PAGE; renderHist(); }
 function showAllHist() { _histLimit = Infinity; renderHist(); }
 
+// A voided row's clock keeps ticking even if nothing else changes, so unlike
+// every other part of this table nothing forces a repaint when one quietly
+// crosses the hide threshold. Kept ticking only while History is the tab on
+// screen and only while a voided row is still waiting to age out.
+let _histVoidSweepTimer = null;
+
 // ── Order History search ───────────────────────────────────────────────────
 // A book at its third print run has hundreds of rows here, paged fifty at a
 // time, and no way to reach one of them except "Show all" and the browser's
@@ -6358,6 +6935,172 @@ function histEmptyStateHtml(chanFilter, totalCount) {
 // No currency parameter on purpose: customer-paid shipping is natively CAD
 // and must never be FX-converted, so this formats as CAD unconditionally.
 
+// Highlights the active channel filter above the table, with a one-click way
+// back to the unfiltered view. Self-contained like renderHistSearchBar above.
+function renderHistFilterBar(chanFilter, matchCount) {
+  const filterBar = $('hist-filter-bar');
+  if (!filterBar) return;
+  if (chanFilter !== null) {
+    filterBar.style.display = '';
+    filterBar.innerHTML = `<div class="hist-filter-chip"><span class="ch-dot" style="background:${channelColor(chanFilter)}"></span>Showing <strong>${escapeHtml(chanLabel(chanFilter))}</strong> orders · ${matchCount} found<button onclick="clearHistChanFilter()" title="Clear filter" aria-label="Clear filter">✕ Clear</button></div>`;
+  } else {
+    filterBar.style.display = 'none';
+    filterBar.innerHTML = '';
+  }
+}
+
+// Printed / on-hand / distributed KPI strip above the table. Reads off
+// `inScope`, not the searched set: the three figures describe the whole print
+// run, so a search that matches nothing must not make the book's
+// reconciliation strip vanish as though the stock went with it.
+function renderHistReconciliationPanel(s, book, chanFilter, inScope, bookCode) {
+  const recon = $('hist-recon');
+  if (!recon) return;
+  // Read off `inScope`, not the searched set: the three figures describe the
+  // whole print run, so a search that matches nothing must not make the
+  // book's reconciliation strip vanish as though the stock went with it.
+  if (chanFilter === null && inScope.length) {
+    const bd = inventoryBreakdown(s, book);
+    const printedCount = bd.printed || 0;
+    const onHandCount = bd.onHand || 0;
+    const distributedCount = printedCount - onHandCount;
+    const sellThroughPct = printedCount > 0 ? ((distributedCount / printedCount) * 100).toFixed(1) : '0.0';
+
+    const warn = bd.unaccounted
+      ? `<div style="font-size:11px; font-weight:700; color:var(--red); margin-top:6px;">⚠️ ${Math.abs(bd.unaccounted)} unaccounted copies in reconciliation</div>`
+      : '';
+
+    // History stranded in a previous currency makes every total below it a
+    // sum of two different currencies. Surface it where the numbers are read,
+    // with the one-click way out.
+    const mm = detectCurrencyMismatch(s, book);
+    const mmNoun = mm.source === 'payment' ? 'sale' : 'amount';
+    const curWarn = mm.mismatched
+      ? `<div class="hist-currency-warn">
+           <span><strong>${mm.mismatched} ${escapeHtml(mmNoun)}${mm.mismatched === 1 ? '' : 's'}</strong> ${mm.mismatched === 1 ? 'was' : 'were'} recorded in ${escapeHtml(mm.code)}, but this book is now priced in ${escapeHtml(bookCode)} — so those figures are being shown and summed as ${escapeHtml(bookCode)} without ever being converted.</span>
+           <button class="btn sm" onclick="restateBookCurrency()">Restate into ${escapeHtml(bookCode)}</button>
+         </div>`
+      : '';
+
+    recon.style.display = '';
+    recon.innerHTML = `
+      <div class="hist-kpi-container">
+        <div class="hist-kpi-card">
+          <div class="hist-kpi-icon" aria-hidden="true">🖨️</div>
+          <div class="hist-kpi-content">
+            <div class="hist-kpi-label">Total Printed</div>
+            <div class="hist-kpi-val">${printedCount}</div>
+            <div class="hist-kpi-sub">Print Run Edition</div>
+          </div>
+        </div>
+        <div class="hist-kpi-card highlight-gold is-lead">
+          <div class="hist-kpi-icon" aria-hidden="true">📚</div>
+          <div class="hist-kpi-content">
+            <div class="hist-kpi-label">Stock On Hand</div>
+            <div class="hist-kpi-val">${onHandCount}</div>
+            <div class="hist-kpi-sub"><span class="mono-num">${printedCount > 0 ? ((onHandCount / printedCount) * 100).toFixed(0) : 0}%</span> available</div>
+          </div>
+        </div>
+        <div class="hist-kpi-card highlight-green">
+          <div class="hist-kpi-icon" aria-hidden="true">🚚</div>
+          <div class="hist-kpi-content">
+            <div class="hist-kpi-label">Distributed & Sold</div>
+            <div class="hist-kpi-val">${distributedCount}</div>
+            <div class="hist-kpi-sub"><span class="mono-num">${sellThroughPct}%</span> sell-through rate</div>
+          </div>
+        </div>
+      </div>
+      <div class="hist-progress-bar-wrap" title="${onHandCount} on hand of ${printedCount} printed (${sellThroughPct}% distributed)">
+        <div class="hist-progress-bar-fill" style="width: ${Math.min(100, Math.max(0, sellThroughPct))}%;"></div>
+      </div>
+      ${warn}
+      ${curWarn}
+    `;
+  } else {
+    recon.style.display = 'none';
+    recon.innerHTML = '';
+  }
+}
+
+// Keeps a slow tick running only while a voided row is still waiting to age
+// out of view AND History is the tab actually on screen — same trick as the
+// sync chip's "last synced N min ago" (renderSyncChip, above). Nothing else
+// in the app re-renders History on wall-clock time alone, so without this a
+// stale row would only disappear whenever some unrelated action happened to
+// repaint the tab next.
+function scheduleHistVoidSweep(fullTimeline) {
+  clearInterval(_histVoidSweepTimer);
+  _histVoidSweepTimer = null;
+  const hasPendingVoidSweep = fullTimeline.some(r => {
+    const entry = r.type === 'consign' ? r.e : r.h;
+    return entry?.voided && entry.voidedAt && !isVoidStale(entry);
+  });
+  if (!hasPendingVoidSweep) return;
+  _histVoidSweepTimer = setInterval(() => {
+    if (visibleTabName() !== 'history') {
+      clearInterval(_histVoidSweepTimer);
+      _histVoidSweepTimer = null;
+      return;
+    }
+    renderHist();
+  }, 60_000);
+}
+
+// One row of the Order History table: a pending artist submission awaiting
+// publisher approval, or a settled sale/void. Split out of renderHist() so
+// that function reads as "gather rows, then render them" instead of burying
+// this row-by-row branching (pending vs. gratuity vs. foreign-currency vs.
+// shipped-website-order) inside the .map() call.
+function renderHistRowHtml(row, { cur, bookCode, book, formatChannelBadge }) {
+  if (row.type === 'consign') return renderConsignHistRow(row.e, row._after ?? row.after ?? '—');
+  const h = row.h, i = row.i;
+  if (h.pendingAuth) {
+    const actionCell = window.IS_PUBLISHER
+      ? `<div class="approval-actions"><button class="appr-btn approve" onclick="approveSubmission('sales', '${h._subKey}')" aria-label="Approve submission"><span class="ico">✓</span>Approve</button><button class="appr-btn reject" onclick="rejectSubmission('sales', '${h._subKey}')" title="Reject submission" aria-label="Reject submission">✕</button></div>`
+      : `<span class="chip-status amber">Awaiting Publisher</span>`;
+    return `<tr class="hist-row" style="opacity:0.8;background:var(--amber-bg);"><td class="mono mono-num">${escapeHtml(h.num)}</td><td>${formatChannelBadge(h.chan)} <span class="chip-status amber">Submitted</span></td><td class="r mono-num">-${h.qty}</td><td class="r mono-num">${fmt(h.price, cur)}</td><td class="r mono-num money-cell">${fmt(h.qty * h.price, cur)}</td><td class="r mono-num">?</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(h.notes) || '—'}</td><td style="font-size:12px;color:var(--text3);"><span class="chip-status gray">Artist</span></td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)}</td><td>${actionCell}</td></tr>`;
+  }
+  const voided = h.voided ? ' voided' : '';
+  const voidPill = h.voided ? '<span class="void-badge">Void</span>' : '';
+  const editBtn = `<button class="edit-btn" onclick="openEditHist(${i})" title="Edit entry" aria-label="Edit entry">✎</button>`;
+  const isGrat = h.gratuity || h.chan === 'Gratuity';
+  const isPending = h.artistPending;
+
+  const chanCell = isGrat ? `<span class="chip-status violet">🎁 Gratuity</span>` : isPending ? `${formatChannelBadge(h.chan)} <span class="chip-status amber">⏳ pending</span>` : formatChannelBadge(h.chan);
+  // A row's amounts belong to the currency it was RECORDED in, not the one
+  // the book carries today. Formatting a €32 sale with the book's current
+  // CA$ makes it read as CA$32 — same digits, ~50% wrong. Rows stamped with
+  // another currency render in that currency and get a badge, so stranded
+  // history is visible instead of silently mixed into CAD totals.
+  const rowCode = h.cur ? normalizeCurrencyCode(h.cur, bookCode) : bookCode;
+  const rowCur = rowCode === bookCode ? cur : getSym(rowCode);
+  const foreignPill = rowCode !== bookCode
+    ? ` <span class="chip-status amber" title="Recorded in ${escapeHtml(rowCode)} — not yet restated into ${escapeHtml(bookCode)}">${escapeHtml(rowCode)}</span>`
+    : '';
+  const priceCell = isGrat ? '<span style="color:var(--text3);font-size:11px;">gifted</span>' : fmt(h.price, rowCur) + foreignPill;
+  const totalCell = isGrat ? '—' : isPending ? `<span style="color:var(--amber);">${fmt(h.qty * h.price, rowCur)}</span>` : fmt(h.qty * h.price, rowCur);
+  const rowStyle = isGrat ? ' style="font-style:italic;"' : isPending ? ' style="background:var(--amber-bg);"' : '';
+  const isWebsite = (h.chan === 'Website' || h.chan === 'Big Cartel') && !isGrat && !h.voided;
+  const labelBtn = isWebsite
+    ? (h.shipped
+      ? `<button class="btn-hist-action shipped" onclick="openLabelModal(${i})" title="Shipped${h.shippedDate ? ' on ' + fmtD(h.shippedDate) : ''}">✓ Shipped</button>`
+      : `<button class="btn-hist-action ship" onclick="openLabelModal(${i})" title="Print shipping label">📦 Ship</button>`)
+    : '';
+
+  const paymentInfo = paymentSummary(h.payment, book, h);
+  const shippingInfo = isWebsite ? renderOrderShippingSummary(h) : '';
+  const notesText = escapeHtml(h.notes) || '—';
+  const notesCell = [
+    notesText,
+    paymentInfo ? `<span style="font-size:11px;color:var(--text3);">${escapeHtml(paymentInfo)}</span>` : '',
+    shippingInfo,
+  ].filter(Boolean).join('<br>');
+  const enteredBy = h.enteredBy || (h.artistPending ? 'Artist' : 'Publisher');
+  const enteredByPill = `<span class="chip-status gray">${escapeHtml(enteredBy)}</span>`;
+  const stockAfterVal = row._after ?? row.after ?? '—';
+  return `<tr class="hist-row ${voided}"${rowStyle}><td class="mono mono-num">${escapeHtml(h.num)}${editBtn}</td><td>${chanCell}</td><td class="r mono-num">${h.voided ? '' : '-'}${h.qty}</td><td class="r mono-num">${priceCell}</td><td class="r mono-num money-cell">${totalCell}</td><td class="r mono-num">${stockAfterVal}</td><td style="font-size:12px;color:var(--text3);">${notesCell || '—'}</td><td style="font-size:12px;color:var(--text3);">${enteredByPill}</td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)} ${voidPill}</td><td>${labelBtn}</td></tr>`;
+}
+
 export function renderHist() {
   const s = getState(), book = getBook(), cur = book.currency;
   const bookCode = bookCurrencyCode(book);
@@ -6372,7 +7115,21 @@ export function renderHist() {
   if (histChanFilter && histChanFilter.bookId !== activeBook) histChanFilter = null;
   const chanFilter = histChanFilter ? histChanFilter.chan : null;
 
-  const timeline = buildOrderTimeline(s, book);
+  // A search belongs to the book it was typed on. Carrying it across a book
+  // switch would open the next book on a table that looks empty for no visible
+  // reason.
+  if (_histSearchBook !== activeBook) { _histSearch = ''; _histSearchBook = activeBook; }
+  const searchQuery = _histSearch;
+  const searchOn = historySearchIsActive(searchQuery);
+
+  const fullTimeline = buildOrderTimeline(s, book);
+  // A voided row drops out of the default view once it's stale, so old voids
+  // don't pile up here forever — but a search is a deliberate lookup (an order
+  // number, or even the word "void" itself), so it still runs over every row,
+  // stale or not.
+  const timeline = searchOn
+    ? fullTimeline
+    : fullTimeline.filter(r => !isVoidStale(r.type === 'consign' ? r.e : r.h));
 
   const rows = chanFilter !== null
     ? timeline.filter(r => r.type === 'hist' && (r.h.chan || '') === chanFilter)
@@ -6382,12 +7139,6 @@ export function renderHist() {
   const matchCount = rows.length + pend.length;
   const inScope = [...pend, ...rows];
 
-  // A search belongs to the book it was typed on. Carrying it across a book
-  // switch would open the next book on a table that looks empty for no visible
-  // reason.
-  if (_histSearchBook !== activeBook) { _histSearch = ''; _histSearchBook = activeBook; }
-  const searchQuery = _histSearch;
-  const searchOn = historySearchIsActive(searchQuery);
   // The search runs over rows the channel filter has already narrowed, so the
   // two compose and the status line's count is honest about which slice it is
   // counting. Row descriptors are passed through untouched, so every row keeps
@@ -6408,84 +7159,8 @@ export function renderHist() {
     query: searchQuery,
   });
 
-  const filterBar = $('hist-filter-bar');
-  if (filterBar) {
-    if (chanFilter !== null) {
-      filterBar.style.display = '';
-      filterBar.innerHTML = `<div class="hist-filter-chip"><span class="ch-dot" style="background:${channelColor(chanFilter)}"></span>Showing <strong>${escapeHtml(chanLabel(chanFilter))}</strong> orders · ${matchCount} found<button onclick="clearHistChanFilter()" title="Clear filter" aria-label="Clear filter">✕ Clear</button></div>`;
-    } else {
-      filterBar.style.display = 'none';
-      filterBar.innerHTML = '';
-    }
-  }
-
-  const recon = $('hist-recon');
-  if (recon) {
-    // Read off `inScope`, not the searched set: the three figures describe the
-    // whole print run, so a search that matches nothing must not make the
-    // book's reconciliation strip vanish as though the stock went with it.
-    if (chanFilter === null && inScope.length) {
-      const bd = inventoryBreakdown(s, book);
-      const printedCount = bd.printed || 0;
-      const onHandCount = bd.onHand || 0;
-      const distributedCount = printedCount - onHandCount;
-      const sellThroughPct = printedCount > 0 ? ((distributedCount / printedCount) * 100).toFixed(1) : '0.0';
-
-      const warn = bd.unaccounted
-        ? `<div style="font-size:11px; font-weight:700; color:var(--red); margin-top:6px;">⚠️ ${Math.abs(bd.unaccounted)} unaccounted copies in reconciliation</div>`
-        : '';
-
-      // History stranded in a previous currency makes every total below it a
-      // sum of two different currencies. Surface it where the numbers are read,
-      // with the one-click way out.
-      const mm = detectCurrencyMismatch(s, book);
-      const mmNoun = mm.source === 'payment' ? 'sale' : 'amount';
-      const curWarn = mm.mismatched
-        ? `<div class="hist-currency-warn">
-             <span><strong>${mm.mismatched} ${escapeHtml(mmNoun)}${mm.mismatched === 1 ? '' : 's'}</strong> ${mm.mismatched === 1 ? 'was' : 'were'} recorded in ${escapeHtml(mm.code)}, but this book is now priced in ${escapeHtml(bookCode)} — so those figures are being shown and summed as ${escapeHtml(bookCode)} without ever being converted.</span>
-             <button class="btn sm" onclick="restateBookCurrency()">Restate into ${escapeHtml(bookCode)}</button>
-           </div>`
-        : '';
-
-      recon.style.display = '';
-      recon.innerHTML = `
-        <div class="hist-kpi-container">
-          <div class="hist-kpi-card">
-            <div class="hist-kpi-icon" aria-hidden="true">🖨️</div>
-            <div class="hist-kpi-content">
-              <div class="hist-kpi-label">Total Printed</div>
-              <div class="hist-kpi-val">${printedCount}</div>
-              <div class="hist-kpi-sub">Print Run Edition</div>
-            </div>
-          </div>
-          <div class="hist-kpi-card highlight-gold is-lead">
-            <div class="hist-kpi-icon" aria-hidden="true">📚</div>
-            <div class="hist-kpi-content">
-              <div class="hist-kpi-label">Stock On Hand</div>
-              <div class="hist-kpi-val">${onHandCount}</div>
-              <div class="hist-kpi-sub"><span class="mono-num">${printedCount > 0 ? ((onHandCount / printedCount) * 100).toFixed(0) : 0}%</span> available</div>
-            </div>
-          </div>
-          <div class="hist-kpi-card highlight-green">
-            <div class="hist-kpi-icon" aria-hidden="true">🚚</div>
-            <div class="hist-kpi-content">
-              <div class="hist-kpi-label">Distributed & Sold</div>
-              <div class="hist-kpi-val">${distributedCount}</div>
-              <div class="hist-kpi-sub"><span class="mono-num">${sellThroughPct}%</span> sell-through rate</div>
-            </div>
-          </div>
-        </div>
-        <div class="hist-progress-bar-wrap" title="${onHandCount} on hand of ${printedCount} printed (${sellThroughPct}% distributed)">
-          <div class="hist-progress-bar-fill" style="width: ${Math.min(100, Math.max(0, sellThroughPct))}%;"></div>
-        </div>
-        ${warn}
-        ${curWarn}
-      `;
-    } else {
-      recon.style.display = 'none';
-      recon.innerHTML = '';
-    }
-  }
+  renderHistFilterBar(chanFilter, matchCount);
+  renderHistReconciliationPanel(s, book, chanFilter, inScope, bookCode);
 
   const formatChannelBadge = (chanName) => {
     if (!chanName) return '<span class="ch-badge">—</span>';
@@ -6508,58 +7183,15 @@ export function renderHist() {
     : '';
 
   $('hist-body').innerHTML = combined.length
-    ? shownRows.map((row) => {
-      if (row.type === 'consign') return renderConsignHistRow(row.e, row._after ?? row.after ?? '—');
-      const h = row.h, i = row.i;
-      if (h.pendingAuth) {
-        const actionCell = window.IS_PUBLISHER
-          ? `<div class="approval-actions"><button class="appr-btn approve" onclick="approveSubmission('sales', '${h._subKey}')" aria-label="Approve submission"><span class="ico">✓</span>Approve</button><button class="appr-btn reject" onclick="rejectSubmission('sales', '${h._subKey}')" title="Reject submission" aria-label="Reject submission">✕</button></div>`
-          : `<span class="chip-status amber">Awaiting Publisher</span>`;
-        return `<tr class="hist-row" style="opacity:0.8;background:var(--amber-bg);"><td class="mono mono-num">${escapeHtml(h.num)}</td><td>${formatChannelBadge(h.chan)} <span class="chip-status amber">Submitted</span></td><td class="r mono-num">-${h.qty}</td><td class="r mono-num">${fmt(h.price, cur)}</td><td class="r mono-num money-cell">${fmt(h.qty * h.price, cur)}</td><td class="r mono-num">?</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(h.notes) || '—'}</td><td style="font-size:12px;color:var(--text3);"><span class="chip-status gray">Artist</span></td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)}</td><td>${actionCell}</td></tr>`;
-      }
-      const voided = h.voided ? ' voided' : '';
-      const voidPill = h.voided ? '<span class="void-badge">Void</span>' : '';
-      const editBtn = `<button class="edit-btn" onclick="openEditHist(${i})" title="Edit entry" aria-label="Edit entry">✎</button>`;
-      const isGrat = h.gratuity || h.chan === 'Gratuity';
-      const isPending = h.artistPending;
-      
-      const chanCell = isGrat ? `<span class="chip-status violet">🎁 Gratuity</span>` : isPending ? `${formatChannelBadge(h.chan)} <span class="chip-status amber">⏳ pending</span>` : formatChannelBadge(h.chan);
-      // A row's amounts belong to the currency it was RECORDED in, not the one
-      // the book carries today. Formatting a €32 sale with the book's current
-      // CA$ makes it read as CA$32 — same digits, ~50% wrong. Rows stamped with
-      // another currency render in that currency and get a badge, so stranded
-      // history is visible instead of silently mixed into CAD totals.
-      const rowCode = h.cur ? normalizeCurrencyCode(h.cur, bookCode) : bookCode;
-      const rowCur = rowCode === bookCode ? cur : getSym(rowCode);
-      const foreignPill = rowCode !== bookCode
-        ? ` <span class="chip-status amber" title="Recorded in ${escapeHtml(rowCode)} — not yet restated into ${escapeHtml(bookCode)}">${escapeHtml(rowCode)}</span>`
-        : '';
-      const priceCell = isGrat ? '<span style="color:var(--text3);font-size:11px;">gifted</span>' : fmt(h.price, rowCur) + foreignPill;
-      const totalCell = isGrat ? '—' : isPending ? `<span style="color:var(--amber);">${fmt(h.qty * h.price, rowCur)}</span>` : fmt(h.qty * h.price, rowCur);
-      const rowStyle = isGrat ? ' style="font-style:italic;"' : isPending ? ' style="background:var(--amber-bg);"' : '';
-      const isWebsite = (h.chan === 'Website' || h.chan === 'Big Cartel') && !isGrat && !h.voided;
-      const labelBtn = isWebsite
-        ? (h.shipped
-          ? `<button class="btn-hist-action shipped" onclick="openLabelModal(${i})" title="Shipped${h.shippedDate ? ' on ' + fmtD(h.shippedDate) : ''}">✓ Shipped</button>`
-          : `<button class="btn-hist-action ship" onclick="openLabelModal(${i})" title="Print shipping label">📦 Ship</button>`)
-        : '';
-
-      const paymentInfo = paymentSummary(h.payment, book, h);
-      const shippingInfo = isWebsite ? renderOrderShippingSummary(h) : '';
-      const notesText = escapeHtml(h.notes) || '—';
-      const notesCell = [
-        notesText,
-        paymentInfo ? `<span style="font-size:11px;color:var(--text3);">${escapeHtml(paymentInfo)}</span>` : '',
-        shippingInfo,
-      ].filter(Boolean).join('<br>');
-      const enteredBy = h.enteredBy || (h.artistPending ? 'Artist' : 'Publisher');
-      const enteredByPill = `<span class="chip-status gray">${escapeHtml(enteredBy)}</span>`;
-      const stockAfterVal = row._after ?? row.after ?? '—';
-      return `<tr class="hist-row ${voided}"${rowStyle}><td class="mono mono-num">${escapeHtml(h.num)}${editBtn}</td><td>${chanCell}</td><td class="r mono-num">${h.voided ? '' : '-'}${h.qty}</td><td class="r mono-num">${priceCell}</td><td class="r mono-num money-cell">${totalCell}</td><td class="r mono-num">${stockAfterVal}</td><td style="font-size:12px;color:var(--text3);">${notesCell || '—'}</td><td style="font-size:12px;color:var(--text3);">${enteredByPill}</td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)} ${voidPill}</td><td>${labelBtn}</td></tr>`;
-    }).join('') + moreRow
+    ? shownRows.map((row) => renderHistRowHtml(row, { cur, bookCode, book, formatChannelBadge })).join('') + moreRow
     : searchOn
       ? `<tr class="hist-empty-row"><td colspan="10">${histNoSearchMatchHtml(describedSearch)}</td></tr>`
-      : `<tr class="hist-empty-row"><td colspan="10">${histEmptyStateHtml(chanFilter, timeline.length + pendingSales.length)}</td></tr>`;
+      // Counted off the unfiltered timeline, not the stale-void-hidden one — a
+      // book whose only orders are old voids still has orders on record, so it
+      // must not be told this is a brand-new, never-sold book.
+      : `<tr class="hist-empty-row"><td colspan="10">${histEmptyStateHtml(chanFilter, fullTimeline.length + pendingSales.length)}</td></tr>`;
+
+  scheduleHistVoidSweep(fullTimeline);
 }
 
 // ── WEBSITE ORDERS — persistent scan memory
@@ -6931,6 +7563,32 @@ function reapplyOne(id) {
   showToast(`✓ ${o.orderNum} updated with receipt totals`, 'ok');
 }
 
+// Shared by applyOne() and commitRecoveredWebsiteOrder(): both decrement stock
+// (clamped at 0), credit sold/revenue, and roll the sale into the Website
+// channel's running stats — identically, just from different qty/price sources.
+function applyWebsiteSaleToState(targetState, qty, price) {
+  targetState.stock = Math.max(0, targetState.stock - qty);
+  targetState.sold += qty;
+  targetState.revenue += qty * price;
+  if (!targetState.chStats['Website']) targetState.chStats['Website'] = { txns: 0, units: 0, revenue: 0 };
+  targetState.chStats['Website'].txns++;
+  targetState.chStats['Website'].units += qty;
+  targetState.chStats['Website'].revenue += qty * price;
+}
+
+// Shared by applyOne() and commitRecoveredWebsiteOrder(): both record the
+// order number as seen in scan memory and un-cancel it if it was previously
+// marked cancelled. Does not call saveScanMemory() — the caller does that
+// once it's finished mutating mem.
+function recordOrderNumApplied(mem, orderNum, { touchLastScan = false } = {}) {
+  if (!mem.appliedNums) mem.appliedNums = [];
+  if (!mem.appliedNums.includes(orderNum)) mem.appliedNums.push(orderNum);
+  if (mem.cancelledNums) {
+    mem.cancelledNums = mem.cancelledNums.filter(num => num !== orderNum);
+  }
+  if (touchLastScan) mem.lastScan = new Date().toISOString();
+}
+
 export function applyOne(id, { deferRender = false } = {}) {
   const o = orders.find(x => x.id === id);
   if (!o) return;
@@ -6944,13 +7602,7 @@ export function applyOne(id, { deferRender = false } = {}) {
   if (!targetState || !targetBk) { showToast('Cannot find book for this order', 'err'); return; }
   // Use target book's price if not on order
   const price = o.price || targetBk.listPrice;
-  targetState.stock = Math.max(0, targetState.stock - o.qty);
-  targetState.sold += o.qty;
-  targetState.revenue += o.qty * price;
-  if (!targetState.chStats['Website']) targetState.chStats['Website'] = { txns: 0, units: 0, revenue: 0 };
-  targetState.chStats['Website'].txns++;
-  targetState.chStats['Website'].units += o.qty;
-  targetState.chStats['Website'].revenue += o.qty * price;
+  applyWebsiteSaleToState(targetState, o.qty, price);
   const entry = {
     num: o.orderNum, chan: 'Website', qty: o.qty, price, after: targetState.stock,
     notes: 'Big Cartel', date: (o.date && o.date !== '—') ? o.date : today(),
@@ -6977,13 +7629,7 @@ export function applyOne(id, { deferRender = false } = {}) {
   _appliedIdsCache = null;
   // Save scan memory — record this order num as seen
   const mem = getScanMemory();
-  if (!mem.appliedNums) mem.appliedNums = [];
-  if (!mem.appliedNums.includes(o.orderNum)) mem.appliedNums.push(o.orderNum);
-  // Also remove from cancelledNums if it was cancelled
-  if (mem.cancelledNums) {
-    mem.cancelledNums = mem.cancelledNums.filter(num => num !== o.orderNum);
-  }
-  mem.lastScan = new Date().toISOString();
+  recordOrderNumApplied(mem, o.orderNum, { touchLastScan: true });
   saveScanMemory(mem);
   syncToSheets({ type: 'order', book: targetBk.title, date: entry.date, num: o.orderNum, chan: 'Website', qty: o.qty, price, total: o.qty * price, stockAfter: targetState.stock, notes: 'Big Cartel', sheetsId: entry.sheetsId, currency: getBookCurrencyCode(targetBk) });
   if (entry.shippingPaid > 0) {
@@ -7018,13 +7664,7 @@ export function commitRecoveredWebsiteOrder(bookId, form, buildEntry) {
   const qty = Math.max(1, Math.floor(Number(form.qty) || 1));
   const price = Number(form.price) || 0;
 
-  targetState.stock = Math.max(0, targetState.stock - qty);
-  targetState.sold += qty;
-  targetState.revenue += qty * price;
-  if (!targetState.chStats['Website']) targetState.chStats['Website'] = { txns: 0, units: 0, revenue: 0 };
-  targetState.chStats['Website'].txns++;
-  targetState.chStats['Website'].units += qty;
-  targetState.chStats['Website'].revenue += qty * price;
+  applyWebsiteSaleToState(targetState, qty, price);
 
   const entry = buildEntry({ stockAfter: targetState.stock });
   targetState.hist.unshift(entry);
@@ -7033,9 +7673,7 @@ export function commitRecoveredWebsiteOrder(bookId, form, buildEntry) {
   // Record the number as seen so a later Gmail scan that finally turns up the
   // original confirmation email doesn't offer it as a new order to apply.
   const mem = getScanMemory();
-  if (!mem.appliedNums) mem.appliedNums = [];
-  if (!mem.appliedNums.includes(entry.num)) mem.appliedNums.push(entry.num);
-  if (mem.cancelledNums) mem.cancelledNums = mem.cancelledNums.filter(num => num !== entry.num);
+  recordOrderNumApplied(mem, entry.num);
   saveScanMemory(mem);
 
   syncToSheets({
@@ -7071,11 +7709,132 @@ function applyAll() {
   if (toApply.length) { renderOrders(); updateDash(); }
 }
 
+// Loosely matches book id/title/author/urlParam tokens inside free-form Gmail
+// text - tolerant of accents and punctuation. Unrelated to (and not a
+// duplicate of) shipping-reconciliation.js's own, stricter normalizeText()
+// used there for exact order/address comparison.
+function normalizeGmailScanText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+// Deliberately falls back to the raw trimmed value (not '') when no
+// #XXX-XXX pattern is found - unlike lib/shipping-reconciliation.js's
+// normalizeShippingOrderNumber(), which returns '' on a miss. Do not
+// consolidate the two: a scanned order needs to keep whatever identifier
+// Gmail gave it so it still shows up in the queue, instead of being
+// silently dropped by the orderNum filter below.
+function normalizeGmailOrderNum(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const hit = raw.match(/#?[a-z0-9]+-[a-z0-9-]+/i);
+  if (hit) {
+    const v = hit[0].toUpperCase();
+    return v.startsWith('#') ? v : `#${v}`;
+  }
+  return raw;
+}
+
+function inferBookIdFromGmailText(value) {
+  const txt = normalizeGmailScanText(value);
+  if (!txt) return null;
+  for (const b of BOOK_LIST) {
+    const tokens = [b.id, b.title, b.urlParam, b.author, ...(b.title || '').split(/\s+/)]
+      .filter(Boolean)
+      .map(v => normalizeGmailScanText(v))
+      .filter(v => v.length >= 4);
+    if (tokens.some(t => t && txt.includes(t))) return b.id;
+  }
+  return null;
+}
+
+// Retries the Apps Script Gmail scan up to maxRetries times, reporting each
+// retry via onStatus. Isolated from fetchOrders() so the request/backoff
+// mechanics can be reasoned about (and eventually tested) independently of
+// order parsing and dashboard state.
+async function scanGmailWithRetries(sheetsUrl, daysBack, onStatus, maxRetries = 3) {
+  let attempt = 0;
+  let lastError;
+
+  while (attempt < maxRetries) {
+    attempt++;
+    try {
+      const destUrl = sheetsUrl + (sheetsUrl.includes('?') ? '&' : '?') + 'action=scanGmail&daysBack=' + daysBack;
+      const res = await fetch(destUrl, {
+        method: 'GET',
+        mode: 'cors'
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (!data || !data.ok) throw new Error(data.error || 'Server returned failure');
+      return { parsed: data };
+    } catch (e) {
+      lastError = e;
+      console.warn(`Scan attempt ${attempt} failed:`, e);
+      if (attempt < maxRetries) {
+        onStatus(`Retrying… (${attempt}/${maxRetries})`);
+        await new Promise(res => setTimeout(res, 1200 * attempt));
+      }
+    }
+  }
+  return { lastError };
+}
+
+// Maps one raw Gmail-scanned order into the shape the queue/ledger expect:
+// resolves which book it belongs to, coerces numeric/date fields, and fills
+// in defaults for anything the email parse left out.
+function normalizeGmailOrder(o, book) {
+  const orderNum = normalizeGmailOrderNum(o.orderNum || o.number || o.order || o.orderNumber);
+  const stableId = String(o.id || orderNum).trim();
+  // Use the fetched email body to identify the correct book
+  const textBlob = [o.body, o.notes, o.itemTitle, o.title].filter(Boolean).join(' ');
+
+  let resolvedBookId = inferBookIdFromGmailText(textBlob) || inferBookIdFromGmailText(o.orderNum);
+  if (!resolvedBookId) {
+    resolvedBookId = BOOKS[activeBook] ? activeBook : Object.keys(BOOKS)[0];
+  }
+
+  const qty = Math.max(1, parseInt(o.qty ?? o.quantity ?? 1, 10) || 1);
+  const price = parseFloat(o.price ?? o.unitPrice ?? o.amount ?? 0) || BOOKS[resolvedBookId]?.listPrice || book.listPrice;
+
+  const rawDate = o.date || o.timestamp || o.time || o.orderDate || '';
+  let normalizedDate = '';
+  if (rawDate) {
+    const parsedDt = new Date(rawDate);
+    if (!isNaN(parsedDt.getTime())) {
+      normalizedDate = parsedDt.toISOString().split('T')[0];
+    }
+  }
+
+  return {
+    ...o,
+    id: stableId || `order-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    hasBook: !!resolvedBookId,
+    bookId: resolvedBookId,
+    orderNum,
+    qty,
+    price,
+    shippingPaid: parseFloat(o.shippingPaid ?? o.shipping ?? o.shippingAmount ?? 0) || 0,
+    subtotal: parseFloat(o.subtotal ?? 0) || 0,
+    discountCode: o.discountCode || '',
+    discountAmount: parseFloat(o.discountAmount ?? 0) || 0,
+    merchandisePaid: parseFloat(o.merchandisePaid ?? price * qty) || 0,
+    shippingMethod: o.shippingMethod || '',
+    taxPaid: parseFloat(o.taxPaid ?? 0) || 0,
+    totalPaid: parseFloat(o.totalPaid ?? 0) || 0,
+    discountSource: o.discountSource || '',
+    date: normalizedDate || today()
+  };
+}
+
 async function fetchOrders() {
   const book = getBook();
   const btn = $('scan-btn');
   const log = 'log-web';
-  const MAX_RETRIES = 3;
 
   if (!sheetsUrl) {
     showToast('Connect Google Sheets first to scan Gmail', 'warn');
@@ -7094,68 +7853,12 @@ async function fetchOrders() {
   const daysBack = parseInt(localStorage.getItem('lm-scan-days') || '30');
   const sinceDate = new Date(Date.now() - daysBack * 86400000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
-  const normalizeText = (value) => String(value || '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
-
-  const normalizeOrderNum = (value) => {
-    const raw = String(value || '').trim();
-    if (!raw) return '';
-    const hit = raw.match(/#?[a-z0-9]+-[a-z0-9-]+/i);
-    if (hit) {
-      const v = hit[0].toUpperCase();
-      return v.startsWith('#') ? v : `#${v}`;
-    }
-    return raw;
-  };
-
-  const inferBookIdFromText = (value) => {
-    const txt = normalizeText(value);
-    if (!txt) return null;
-    for (const b of BOOK_LIST) {
-      const tokens = [b.id, b.title, b.urlParam, b.author, ...(b.title || '').split(/\s+/)]
-        .filter(Boolean)
-        .map(v => normalizeText(v))
-        .filter(v => v.length >= 4);
-      if (tokens.some(t => t && txt.includes(t))) return b.id;
-    }
-    return null;
-  };
-
   // A Gmail scan is three retries deep at worst, so it can run for the better
   // part of a minute. Until now the queue kept showing its pre-scan content for
   // all of it, which reads as "nothing happened".
   setWebScanning(true);
   setStatus('Connecting to Google Apps Script…');
-  let attempt = 0;
-  let parsed = null;
-  let lastError;
-
-  while (attempt < MAX_RETRIES) {
-    attempt++;
-    try {
-      const destUrl = sheetsUrl + (sheetsUrl.includes('?') ? '&' : '?') + 'action=scanGmail&daysBack=' + daysBack;
-      const res = await fetch(destUrl, {
-        method: 'GET',
-        mode: 'cors'
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      if (!data || !data.ok) throw new Error(data.error || 'Server returned failure');
-      parsed = data;
-      break;
-    } catch (e) {
-      lastError = e;
-      console.warn(`Scan attempt ${attempt} failed:`, e);
-      if (attempt < MAX_RETRIES) {
-        setStatus(`Retrying… (${attempt}/${MAX_RETRIES})`);
-        await new Promise(res => setTimeout(res, 1200 * attempt));
-      }
-    }
-  }
+  const { parsed, lastError } = await scanGmailWithRetries(sheetsUrl, daysBack, setStatus);
 
   if (!parsed) {
     addLog(log, `❌ Apps Script Scan failed: ${lastError?.message || 'Unknown error'}. Check URL or re-authorize Apps Script.`, 'err');
@@ -7169,49 +7872,7 @@ async function fetchOrders() {
   setStatus('Parsing results…');
 
   // Normalise and enrich
-  orders = (parsed.orders || []).map(o => {
-    const orderNum = normalizeOrderNum(o.orderNum || o.number || o.order || o.orderNumber);
-    const stableId = String(o.id || orderNum).trim();
-    // Use the fetched email body to identify the correct book
-    const textBlob = [o.body, o.notes, o.itemTitle, o.title].filter(Boolean).join(' ');
-
-    let resolvedBookId = inferBookIdFromText(textBlob) || inferBookIdFromText(o.orderNum);
-    if (!resolvedBookId) {
-      resolvedBookId = BOOKS[activeBook] ? activeBook : Object.keys(BOOKS)[0];
-    }
-
-    const qty = Math.max(1, parseInt(o.qty ?? o.quantity ?? 1, 10) || 1);
-    const price = parseFloat(o.price ?? o.unitPrice ?? o.amount ?? 0) || BOOKS[resolvedBookId]?.listPrice || book.listPrice;
-
-    const rawDate = o.date || o.timestamp || o.time || o.orderDate || '';
-    let normalizedDate = '';
-    if (rawDate) {
-      const parsedDt = new Date(rawDate);
-      if (!isNaN(parsedDt.getTime())) {
-        normalizedDate = parsedDt.toISOString().split('T')[0];
-      }
-    }
-
-    return {
-      ...o,
-      id: stableId || `order-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      hasBook: !!resolvedBookId,
-      bookId: resolvedBookId,
-      orderNum,
-      qty,
-      price,
-      shippingPaid: parseFloat(o.shippingPaid ?? o.shipping ?? o.shippingAmount ?? 0) || 0,
-      subtotal: parseFloat(o.subtotal ?? 0) || 0,
-      discountCode: o.discountCode || '',
-      discountAmount: parseFloat(o.discountAmount ?? 0) || 0,
-      merchandisePaid: parseFloat(o.merchandisePaid ?? price * qty) || 0,
-      shippingMethod: o.shippingMethod || '',
-      taxPaid: parseFloat(o.taxPaid ?? 0) || 0,
-      totalPaid: parseFloat(o.totalPaid ?? 0) || 0,
-      discountSource: o.discountSource || '',
-      date: normalizedDate || today()
-    };
-  }).filter(o => o.orderNum);
+  orders = (parsed.orders || []).map(o => normalizeGmailOrder(o, book)).filter(o => o.orderNum);
 
   // Cross-session deduplication
   const allDone = getAllAppliedIds();
@@ -7639,6 +8300,69 @@ function phint() {
   h.className = 'hint-text' + (notes.length && !copy.note ? ' amber' : '');
   h.textContent = notes.join(' · ');
 }
+// Resolves the price/fx-note/payment-meta for a manual sale in one place.
+// Returns null when the price is in a foreign currency but no exchange rate
+// has been entered yet — the caller treats that as a validation failure.
+function resolveManualSalePricing(book, qty, rawPrice, cur) {
+  const native = getBookCurrencyCode(book);
+  const isForeignCurrency = cur !== 'BOOK' && cur !== native;
+  if (!isForeignCurrency) {
+    return { price: rawPrice, fxNote: '', payment: buildPaymentMeta({ book, qty, unitPrice: rawPrice }) };
+  }
+  if (!_manualFxRate) return null;
+  const price = rawPrice * _manualFxRate;
+  const fxNote = `Paid ${cur} ${rawPrice.toFixed(2)} @ ${_manualFxRate.toFixed(4)}`;
+  const payment = buildPaymentMeta({ book, qty, unitPrice: price, fxEnabled: true, fxCur: cur, fxAmt: rawPrice, fxRate: _manualFxRate });
+  return { price, fxNote, payment };
+}
+
+// Author queue route for submitManual(): submits the sale for publisher
+// approval instead of recording it directly.
+async function submitManualAuthorRoute(entryPayload, directToArtist, book, num, qty, price, paymentType) {
+  try {
+    await window._fbSubmitActivity(activeBook, 'sales', entryPayload);
+    addLog('log-manual', `${num}: -${qty} @ ${fmt(price, book.currency)} — (Submitted)`, 'warn');
+    const isArtistPayment = directToArtist;
+    const notifyKind = isArtistPayment ? 'Artist Payment Approval' : 'Sale';
+    const baseSummary = `${num}: -${qty} @ ${fmt(price, book.currency)}${paymentType ? ' · ' + paymentType : ''}`;
+    const notifySummary = isArtistPayment
+      ? `ACTION REQUIRED — artist payment of ${fmt(qty * price, book.currency)} awaiting your approval. ${baseSummary}`
+      : baseSummary;
+    notifyPublisherSubmission(notifyKind, entryPayload, notifySummary);
+
+    if (isArtistPayment) {
+      showToast('⏳ Order submitted — you will owe a transfer to the publisher upon approval', 'warn');
+    } else {
+      showToast('✓ Order submitted for approval');
+    }
+
+    // Update UI so the "Amount Owed" banner updates immediately
+    updateDash();
+
+  } catch (e) {
+    console.error("Submission error:", e);
+    reportClientError('submit-sale-failed', e && e.message, { stack: e && e.stack });
+    showToast(isPermissionDenied(e)
+      ? '⚠ Permission denied — this book is not linked to your account. Nothing was submitted.'
+      : '⚠ Could not submit the order — nothing was recorded. Check your connection and try again.', 'err', 6000);
+  }
+}
+
+// Publisher direct route for submitManual(): records the sale straight into
+// the ledger (or the artist-transfer queue) instead of going through approval.
+function submitManualPublisherRoute(directToArtist, num, chan, qty, price, book, fullNotes, fxNote, payment) {
+  if (directToArtist) {
+    recordOrderPendingTransfer(num, chan, qty, price, fullNotes, payment);
+    addLog('log-manual', `${num}: -${qty} @ ${fmt(price, book.currency)} — ⏳ awaiting artist transfer`, 'warn');
+    showToast('⏳ Order logged — awaiting artist transfer to publisher');
+  } else {
+    recordOrder(num, chan, qty, price, fullNotes, payment);
+    addLog('log-manual', `${num}: -${qty} @ ${fmt(price, book.currency)}${fxNote ? ' (' + fxNote + ')' : ''} → ${getState().stock} remaining`, 'ok');
+    if (getState().stock <= book.threshold) addLog('log-manual', '⚠ Below threshold!', 'warn');
+    showToast('✓ Order saved · syncing to Sheets…');
+  }
+}
+
 async function submitManual(ev) {
   return withButtonLoading(ev, 'Saving…', async () => {
     const book = getBook(), qty = parseInt($('m-qty').value) || 1;
@@ -7653,26 +8377,14 @@ async function submitManual(ev) {
     }
     $('m-payment-type').style.borderColor = '';
 
-    let price = rawPrice;
-    let fxNote = '';
-    let payment = null;
-
     const cur = $('m-price-cur').value;
-    const native = getBookCurrencyCode(book);
-    const isForeignCurrency = cur !== 'BOOK' && cur !== native;
-
-    if (isForeignCurrency) {
-      if (!_manualFxRate) {
-        showToast('⚠ Enter an exchange rate to convert this currency', 'warn');
-        if ($('m-manual-rate')) $('m-manual-rate').focus();
-        return;
-      }
-      price = rawPrice * _manualFxRate;
-      fxNote = `Paid ${cur} ${rawPrice.toFixed(2)} @ ${_manualFxRate.toFixed(4)}`;
-      payment = buildPaymentMeta({ book, qty, unitPrice: price, fxEnabled: true, fxCur: cur, fxAmt: rawPrice, fxRate: _manualFxRate });
-    } else {
-      payment = buildPaymentMeta({ book, qty, unitPrice: price });
+    const pricing = resolveManualSalePricing(book, qty, rawPrice, cur);
+    if (!pricing) {
+      showToast('⚠ Enter an exchange rate to convert this currency', 'warn');
+      if ($('m-manual-rate')) $('m-manual-rate').focus();
+      return;
     }
+    const { price, fxNote, payment } = pricing;
 
     const fullNotes = [notes, fxNote, paymentType].filter(Boolean).join(' · ');
 
@@ -7682,46 +8394,9 @@ async function submitManual(ev) {
     const entryPayload = { num, chan, qty, price, notes: fullNotes, payment, paymentType, directToArtist, date: today(), id: Date.now() };
 
     if (isAuthor()) {
-      // Author queue route
-      try {
-        await window._fbSubmitActivity(activeBook, 'sales', entryPayload);
-        addLog('log-manual', `${num}: -${qty} @ ${fmt(price, book.currency)} — (Submitted)`, 'warn');
-        const isArtistPayment = directToArtist;
-        const notifyKind = isArtistPayment ? 'Artist Payment Approval' : 'Sale';
-        const baseSummary = `${num}: -${qty} @ ${fmt(price, book.currency)}${paymentType ? ' · ' + paymentType : ''}`;
-        const notifySummary = isArtistPayment
-          ? `ACTION REQUIRED — artist payment of ${fmt(qty * price, book.currency)} awaiting your approval. ${baseSummary}`
-          : baseSummary;
-        notifyPublisherSubmission(notifyKind, entryPayload, notifySummary);
-
-        if (isArtistPayment) {
-          showToast('⏳ Order submitted — you will owe a transfer to the publisher upon approval', 'warn');
-        } else {
-          showToast('✓ Order submitted for approval');
-        }
-
-        // Update UI so the "Amount Owed" banner updates immediately
-        updateDash();
-
-      } catch (e) {
-        console.error("Submission error:", e);
-        reportClientError('submit-sale-failed', e && e.message, { stack: e && e.stack });
-        showToast(isPermissionDenied(e)
-          ? '⚠ Permission denied — this book is not linked to your account. Nothing was submitted.'
-          : '⚠ Could not submit the order — nothing was recorded. Check your connection and try again.', 'err', 6000);
-      }
+      await submitManualAuthorRoute(entryPayload, directToArtist, book, num, qty, price, paymentType);
     } else {
-      // Publisher direct route
-      if (directToArtist) {
-        recordOrderPendingTransfer(num, chan, qty, price, fullNotes, payment);
-        addLog('log-manual', `${num}: -${qty} @ ${fmt(price, book.currency)} — ⏳ awaiting artist transfer`, 'warn');
-        showToast('⏳ Order logged — awaiting artist transfer to publisher');
-      } else {
-        recordOrder(num, chan, qty, price, fullNotes, payment);
-        addLog('log-manual', `${num}: -${qty} @ ${fmt(price, book.currency)}${fxNote ? ' (' + fxNote + ')' : ''} → ${getState().stock} remaining`, 'ok');
-        if (getState().stock <= book.threshold) addLog('log-manual', '⚠ Below threshold!', 'warn');
-        showToast('✓ Order saved · syncing to Sheets…');
-      }
+      submitManualPublisherRoute(directToArtist, num, chan, qty, price, book, fullNotes, fxNote, payment);
     }
 
     $('m-num').value = ''; $('m-qty').value = '1';
@@ -7912,12 +8587,14 @@ async function settleArtistTransferKeepShare(transferId) {
   if (!s.artistPayouts) s.artistPayouts = [];
   if (share > 0) {
     s.artistPayouts.push({
-      id: Date.now(),
+      id: makeEventId(),
       date: today(),
-      amount: share,
+      amount: roundCents(share),
       method: 'Kept from direct sale',
       notes: `${t.num} — artist retained their share`,
-      cur: bookCurrencyCode(book)
+      cur: bookCurrencyCode(book),
+      // Names the sale this was derived from, so editing it warns first.
+      sourceNum: t.num
     });
   }
 
@@ -7965,12 +8642,14 @@ async function settleArtistTransferKeepAll(transferId) {
   // Record the full gross as a payout — artist held all of it.
   if (!s.artistPayouts) s.artistPayouts = [];
   s.artistPayouts.push({
-    id: Date.now(),
+    id: makeEventId(),
     date: today(),
-    amount: t.total,
+    amount: roundCents(t.total),
     method: 'Kept from direct sale (full)',
     notes: `${t.num} — artist retained full gross; publisher cut forgiven`,
-    cur: bookCurrencyCode(book)
+    cur: bookCurrencyCode(book),
+    // Names the sale this was derived from, so editing it warns first.
+    sourceNum: t.num
   });
 
   s.artistTransfers = s.artistTransfers.filter(x => x.id !== transferId);
@@ -9079,9 +9758,35 @@ function openInvoiceTemplateSettings() {
   if ($('ivs-stripe-key')) $('ivs-stripe-key').value = s.stripeKey || '';
   if ($('ivs-stripe-auto')) $('ivs-stripe-auto').checked = s.stripeAuto !== false; // default ON
   if ($('ivs-stripe-test')) $('ivs-stripe-test').checked = !!s.stripeTest;
+  // Reminders are off until the publisher deliberately arms them — this one
+  // sends email to customers, so it must never arrive switched on.
+  const rem = reminderSettings(s);
+  if ($('ivs-remind-auto')) $('ivs-remind-auto').checked = rem.auto;
+  if ($('ivs-remind-days')) $('ivs-remind-days').value = String(rem.days);
+  if ($('ivs-remind-msg')) $('ivs-remind-msg').value = rem.message;
   openM('invoice-settings');
 }
-function saveInvoiceSettings() {
+async function saveInvoiceSettings() {
+  const prev = reminderSettings(getInvoiceSettings());
+  const wantsAuto = $('ivs-remind-auto') ? !!$('ivs-remind-auto').checked : false;
+  const next = reminderSettings({
+    remindAuto: wantsAuto,
+    remindDays: $('ivs-remind-days') ? $('ivs-remind-days').value : '',
+    remindMsg: $('ivs-remind-msg') ? $('ivs-remind-msg').value : '',
+  });
+
+  // Switching this on is the one setting here that reaches other people. Say
+  // how many customers hear from you as a result BEFORE saving it, because the
+  // answer on a shop with a year of unpaid invoices on file is not "none".
+  if (next.auto && !prev.auto) {
+    const pending = invoicesAwaitingReminder(next.days).length;
+    const ok = await confirmDialog(
+      describeReminderArming({ count: pending, days: next.days }),
+      { okLabel: pending ? `Yes, chase ${pending}` : 'Turn on', title: 'Automatic reminders' },
+    );
+    if (!ok) { if ($('ivs-remind-auto')) $('ivs-remind-auto').checked = false; return; }
+  }
+
   saveInvoiceSettingsObj({
     name: $('ivs-name').value.trim(),
     email: $('ivs-email').value.trim(),
@@ -9094,13 +9799,22 @@ function saveInvoiceSettings() {
     stripeKey: $('ivs-stripe-key') ? $('ivs-stripe-key').value.trim() : '',
     stripeAuto: $('ivs-stripe-auto') ? !!$('ivs-stripe-auto').checked : true,
     stripeTest: $('ivs-stripe-test') ? !!$('ivs-stripe-test').checked : false,
+    remindAuto: next.auto,
+    remindDays: next.days,
+    remindMsg: next.message,
   });
   closeM('invoice-settings');
   showToast('✓ Invoice settings saved');
+  // Don't make the publisher wait an hour to see the thing they just switched
+  // on do something. Nothing is sent outside the weekday daytime window either
+  // way — the sweep decides that, not this call.
+  if (next.auto && !prev.auto) sweepPaymentReminders();
 }
 
 // ── STRIPE DYNAMIC PAYMENT LINK (exact-amount Checkout per invoice) ─────
-const _STRIPE_ZERO_DECIMAL_INV = new Set(['BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KMF', 'KRW', 'MGA', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF']);
+// The zero-decimal currency list lives in lib/invoice-payments.js — this file
+// held two byte-identical copies of it and the payment judge needed a third.
+// Getting it wrong is a factor of a hundred, not a rounding error.
 
 async function createStripePaymentLinkForInvoice(invoice) {
   const settings = getInvoiceSettings();
@@ -9111,7 +9825,7 @@ async function createStripePaymentLinkForInvoice(invoice) {
   const book = BOOKS[activeBook] || getBook();
   // prefer the stored ISO code; fall back to symbol→code lookup
   const curCode = (invoice.currencyCode || getBookCurrencyCode({ currency: invoice.currency || book.currency }) || 'EUR').toLowerCase();
-  const isZeroDec = _STRIPE_ZERO_DECIMAL_INV.has(curCode.toUpperCase());
+  const isZeroDec = isZeroDecimalCurrency(curCode);
   const total = Number(invoice.total || 0);
   const amount = isZeroDec ? Math.round(total) : Math.round(total * 100);
   if (amount < 50 && !isZeroDec) throw new Error('Amount too small for Stripe (minimum 0.50)');
@@ -9250,7 +9964,7 @@ function renderInvoices() {
   summary.textContent = `${invs.length} total · ${fmt(outstanding, cur)} outstanding · ${fmt(paid, cur)} collected${drafts ? ` · ${drafts} draft${drafts > 1 ? 's' : ''}` : ''}${shared ? ` · ${shared} shared with another title` : ''}`;
 
   if (!invs.length) {
-    list.innerHTML = '<div class="empty-state"><div class="e-icon">📄</div>No invoices yet. Click <strong>+ New invoice</strong> to bill a consignment store.<div style="margin-top:12px;"><button class="btn gold" onclick="openCreateInvoice()">+ New invoice</button></div></div>';
+    list.innerHTML = '<div class="empty-state"><div class="e-icon">📄</div>No invoices yet. Click <strong>+ New invoice</strong> to bill a consignment store — or anyone else who owes you.<div style="margin-top:12px;"><button class="btn gold" onclick="openCreateInvoice()">+ New invoice</button></div></div>';
     return;
   }
 
@@ -9277,8 +9991,27 @@ function renderInvoices() {
     const shareLine = share
       ? `<div class="inv-c-store-meta" style="margin-top:2px;">${escapeHtml(book.title)}'s share: <strong class="mono-num">${fmt(share.total, invCur)}</strong></div>`
       : '';
+    // Say when a bill went to somebody who isn't a consignment store, so a
+    // direct sale isn't read as a shop that owes money on the shelf.
+    const personChip = invoiceBillToMode(inv) === BILL_TO_PERSON
+      ? `<span class="chip-status gray" title="Billed to a person, not a consignment store" style="margin-left:6px;font-size:9px;">\u{1F464} Person</span>`
+      : '';
+    // What has been said to this customer about this bill, where the bill is
+    // listed — so a reminder is never sent twice by hand, and a promise to pay
+    // is visible without opening anything.
+    const remState = invoiceReminderState(inv);
+    const isSettled = inv.status === 'paid' || inv.status === 'cancelled';
+    let chaseChip = '';
+    if (!isSettled && remState.snoozedUntil && today() <= remState.snoozedUntil) {
+      chaseChip = `<span class="chip-status gray" title="They said they would pay by then — no reminder goes out before it" style="margin-left:6px;font-size:9px;">\u{1F4C5} Promised ${escapeHtml(fmtD(remState.snoozedUntil))}</span>`;
+    } else if (!isSettled && remState.lastStatus === 'failed') {
+      chaseChip = `<span class="chip-status red" title="The reminder email did not go out — open the invoice to try again" style="margin-left:6px;font-size:9px;">\u{23F0} Reminder failed</span>`;
+    } else if (remState.count) {
+      const when = remState.lastAt ? fmtD(new Date(remState.lastAt).toISOString().slice(0, 10)) : '';
+      chaseChip = `<span class="chip-status gray" title="A payment reminder was emailed to this customer" style="margin-left:6px;font-size:9px;">\u{23F0} Chased${when ? ' ' + escapeHtml(when) : ''}</span>`;
+    }
     return `<div class="invoice-card">
-      <div class="inv-c-num">${escapeHtml(inv.num)}${stripeChip}${sharedChip}</div>
+      <div class="inv-c-num">${escapeHtml(inv.num)}${stripeChip}${personChip}${chaseChip}${sharedChip}</div>
       <div class="inv-c-store">${escapeHtml(inv.storeName) || '—'}<div class="inv-c-store-meta">${[inv.storeEmail, inv.storeCity].filter(Boolean).map(escapeHtml).join(' · ') || '—'}</div>${shareLine}</div>
       <div class="inv-c-cell">Issued<strong>${fmtD(inv.date)}</strong></div>
       <div class="inv-c-cell">Due<strong>${due}</strong></div>
@@ -9323,7 +10056,13 @@ function openCreateInvoice(storeId, editingId) {
     for (const it of items) it.bookId = lineItemBookId(it, ownerBookId, invoiceBookOptions());
     invoiceCtx = { editingId, ownerBookId, items };
     $('inv-edit-title').textContent = `Edit ${inv.num}`;
-    sel.value = inv.storeId || '';
+    // Reopen the invoice on the side it was written on: a bill addressed to a
+    // person by hand must come back as those typed-in details, not as an empty
+    // store picker that silently drops the recipient on the next save.
+    const mode = invoiceBillToMode(inv);
+    fillInvoicePersonForm(mode === BILL_TO_PERSON ? billToPersonFrom(inv) : null);
+    setInvoiceBillToMode(mode, { silent: true });
+    sel.value = mode === BILL_TO_PERSON ? '' : (inv.storeId || '');
     $('inv-num').value = inv.num || '';
     $('inv-date').value = inv.date || today();
     $('inv-due').value = inv.dueDate || '';
@@ -9354,6 +10093,10 @@ function openCreateInvoice(storeId, editingId) {
   } else {
     invoiceCtx = { editingId: null, ownerBookId, items: [] };
     $('inv-edit-title').textContent = 'New invoice';
+    // A fresh invoice starts on the common case — billing a store — with the
+    // hand-typed fields wiped so nothing carries over from the last one.
+    fillInvoicePersonForm(null);
+    setInvoiceBillToMode(BILL_TO_STORE, { silent: true });
     sel.value = storeId ? String(storeId) : '';
     // Starts on this book's own numbering; refreshAutoInvoiceNumber moves it to
     // the neutral prefix if a second title is added before the invoice is saved.
@@ -9433,6 +10176,91 @@ function refreshAutoInvoiceNumber() {
   if (next === el.value.trim()) return;
   el.value = next;
   invoiceCtx.autoNum = next;
+}
+
+// ── who the invoice bills ───────────────────────────────────────────────
+// The editor addresses a bill either to a consignment store already on the
+// shop list, or to a person typed in by hand. Both write the same recipient
+// fields, so everything downstream — the invoice list, the printed page, the
+// emailed copy, the PDF — is unchanged by which side was used.
+const INV_PERSON_FIELDS = ['name', 'email', 'phone', 'address', 'city', 'region', 'postal', 'country'];
+
+function currentInvoiceBillToMode() {
+  const el = $('inv-billto-mode');
+  return invoiceBillToMode({ billTo: el ? el.value : BILL_TO_STORE });
+}
+
+// Read the hand-typed recipient out of the form.
+function readInvoicePersonForm() {
+  const out = {};
+  for (const f of INV_PERSON_FIELDS) {
+    const el = $('inv-person-' + f);
+    out[f] = el ? el.value : '';
+  }
+  return out;
+}
+
+// Put a recipient back into the form — on reopening a hand-typed invoice, and
+// with a blank one when a new invoice starts.
+function fillInvoicePersonForm(person) {
+  const p = person || {};
+  for (const f of INV_PERSON_FIELDS) {
+    const el = $('inv-person-' + f);
+    if (el) el.value = p[f] || '';
+  }
+}
+
+function setInvoiceBillToMode(mode, { silent = false } = {}) {
+  const next = invoiceBillToMode({ billTo: mode });
+  const hidden = $('inv-billto-mode');
+  if (hidden) hidden.value = next;
+  const person = next === BILL_TO_PERSON;
+
+  const storeGroup = $('inv-billto-store-group');
+  const personGroup = $('inv-billto-person-group');
+  const personDetails = $('inv-person-details');
+  if (storeGroup) storeGroup.hidden = person;
+  if (personGroup) personGroup.hidden = !person;
+  if (personDetails) personDetails.hidden = !person;
+
+  for (const [id, on] of [['inv-billto-tab-store', !person], ['inv-billto-tab-person', person]]) {
+    const btn = $(id);
+    if (!btn) continue;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-selected', on ? 'true' : 'false');
+  }
+
+  const hint = $('inv-billto-hint');
+  if (hint) {
+    hint.textContent = person
+      ? 'Type the buyer\u2019s details by hand — nothing is added to your store list.'
+      : 'Pick a consignment store you already work with.';
+  }
+
+  // Importing unpaid consignment sales only means anything for a store: a
+  // hand-typed buyer has no ledger of shipments and sales behind them.
+  const importBtn = $('inv-import-pending-btn');
+  if (importBtn) {
+    importBtn.disabled = person;
+    importBtn.title = person
+      ? 'Only for consignment stores — a hand-typed buyer has no pending sales to pull.'
+      : 'Pull all unpaid consignment sales for the selected store';
+  }
+
+  // Leaving store mode clears the store selection and its details card, so a
+  // half-chosen store can't quietly end up on a bill addressed to a person.
+  if (person) {
+    const sel = $('inv-store');
+    if (sel) sel.value = '';
+    const preview = $('inv-store-preview');
+    if (preview) { preview.style.display = 'none'; preview.innerHTML = ''; }
+  }
+
+  if (!silent) {
+    const focusEl = person ? $('inv-person-name') : $('inv-store');
+    if (focusEl) { try { focusEl.focus(); } catch { /* focus is a nicety, never a blocker */ } }
+    refreshUnsavedMarkers();
+  }
 }
 
 function onInvoiceStoreChange() {
@@ -9634,6 +10462,12 @@ function prefillFromPendingSales(forceStoreId) {
   // opened from another title, its store and ledger both live in the owner.
   const ownerBookId = (invoiceCtx && invoiceCtx.ownerBookId) || activeBook;
   const s = states[ownerBookId] || getState(), book = BOOKS[ownerBookId] || getBook();
+  // Pending sales come out of a store's consignment ledger, so there is nothing
+  // to pull for a bill addressed to a person typed in by hand.
+  if (currentInvoiceBillToMode() === BILL_TO_PERSON) {
+    showToast('Pending sales only apply to consignment stores', 'warn');
+    return;
+  }
   const storeId = forceStoreId ? Number(forceStoreId) : Number($('inv-store').value);
   if (!storeId) { showToast('Pick a store first', 'warn'); return; }
   $('inv-store').value = String(storeId);
@@ -9668,11 +10502,24 @@ function saveInvoice(status) {
   // instead of pushing a duplicate into the book being viewed.
   const ownerBookId = (invoiceCtx && invoiceCtx.ownerBookId) || activeBook;
   const s = states[ownerBookId] || getState(), book = BOOKS[ownerBookId] || getBook();
-  const storeId = Number($('inv-store').value);
-  if (!storeId) { showToast('Choose a store to bill', 'err'); return; }
+  // Either a store off the shop list or a recipient typed in by hand — both end
+  // up in the same recipient fields, so only the check differs.
+  const billToMode = currentInvoiceBillToMode();
+  let store = null, person = null;
+  if (billToMode === BILL_TO_PERSON) {
+    person = readInvoicePersonForm();
+    if (!String(person.name || '').trim()) {
+      showToast('Enter the name this invoice is billed to', 'err');
+      fieldError('inv-person-name', 'Who is this bill for?');
+      return;
+    }
+  } else {
+    const storeId = Number($('inv-store').value);
+    if (!storeId) { showToast('Choose a store to bill', 'err'); return; }
+    store = (s.stores || []).find(st => st.id === storeId);
+    if (!store) { showToast('Store not found', 'err'); return; }
+  }
   if (!invoiceCtx.items.length) { showToast('Add at least one line item', 'err'); return; }
-  const store = (s.stores || []).find(st => st.id === storeId);
-  if (!store) { showToast('Store not found', 'err'); return; }
 
   const totals = recalcInvoiceTotals();
   if (totals.total <= 0) { showToast('Invoice total must be greater than zero', 'err'); return; }
@@ -9689,7 +10536,8 @@ function saveInvoice(status) {
 
   const payload = {
     id: invoiceCtx.editingId || ('inv-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7)),
-    num, storeId, storeName: store.name, storeEmail: store.email || '', storeCity: store.city || '', storeContact: store.contact || '', storePhone: store.phone || '', storeAddress: store.address || '', storeRegion: store.region || '', storePostal: store.postal || '', storeCountry: store.country || '',
+    num,
+    ...billToPayload(billToMode, { store, person }),
     date, dueDate,
     items: invoiceCtx.items.map(it => ({ description: it.description || '', qty: parseFloat(it.qty) || 0, unitPrice: parseFloat(it.unitPrice) || 0, _ledgerId: it._ledgerId || null, bookId: it.bookId || null })),
     subtotal: totals.subtotal,
@@ -9726,6 +10574,11 @@ function saveInvoice(status) {
       oldLedgerIds = (old.items || []).map(it => it._ledgerId).filter(Boolean);
       payload.paidAt = old.paidAt || null;
       payload.paidMethod = old.paidMethod || null;
+      // What was already said to this customer, and any date they promised to
+      // pay by. Editing an invoice must not wipe the chase history — losing it
+      // would let the same bill be chased a second time as if for the first.
+      if (Array.isArray(old.reminders) && old.reminders.length) payload.reminders = old.reminders;
+      if (old.remindAfter) payload.remindAfter = old.remindAfter;
       // preserve Stripe link only if amount/currency unchanged
       const amountChanged = (Number(old.total || 0).toFixed(2) !== Number(payload.total || 0).toFixed(2))
         || (old.currency !== payload.currency);
@@ -9910,7 +10763,7 @@ function viewInvoice(id) {
   if (!inv) { showToast('Invoice not found', 'err'); return; }
   currentViewInvoiceId = id;
   renderInvoiceSplitPanel(inv, home.bookId);
-  $('invoice-print-area').innerHTML = renderInvoicePaperHTML(inv);
+  $('invoice-print-area').innerHTML = renderInvoicePaperHTML(inv, { showChase: true });
   // Paid invoices show a non-clickable "✓ Paid" badge; unpaid ones keep the
   // clickable gold "✓ Mark paid" action. (Same element is reused across
   // invoices, so set the full state both ways.)
@@ -9933,6 +10786,19 @@ function viewInvoice(id) {
       mp.style.cursor = '';
       mp.style.opacity = '';
     }
+  }
+  // Chasing somebody for a bill they have already settled is the one mistake
+  // this whole feature must never make — so on a paid or withdrawn invoice the
+  // reminder actions are not merely discouraged, they are gone.
+  const settled = inv.status === 'paid' || inv.status === 'cancelled';
+  for (const id of ['inv-remind-btn', 'inv-snooze-btn']) {
+    const btn = $(id);
+    if (btn) btn.style.display = settled ? 'none' : '';
+  }
+  const remindBtn = $('inv-remind-btn');
+  if (remindBtn && !settled) {
+    const chased = invoiceReminderState(inv).count;
+    remindBtn.textContent = chased ? '⏰ Remind again' : '⏰ Remind now';
   }
   openM('invoice-view');
   // Render QR if QRCode library is available
@@ -9997,7 +10863,11 @@ function effectivePaymentLink(inv) {
 
 function isDynamicStripeLink(inv) { return !!(inv && inv.stripe && inv.stripe.url); }
 
-function renderInvoicePaperHTML(inv) {
+// `showChase` is the publisher's own view of the invoice. The same paper is
+// also what gets downloaded, printed and emailed to the customer, and how many
+// times you have chased them is not something to hand them a note about — so it
+// is opt-in, and only the on-screen preview opts in.
+function renderInvoicePaperHTML(inv, { showChase = false } = {}) {
   const settings = getInvoiceSettings();
   // The issuing book, so a shared invoice prints the same document whichever
   // title it was opened from rather than picking up the viewer's accent.
@@ -10026,6 +10896,22 @@ function renderInvoicePaperHTML(inv) {
   ].filter(Boolean).join(' · ') || 'See payment instructions below';
 
   const settlesLine = '';
+
+  // The chase record, shown where the invoice is read.
+  const chase = invoiceReminderState(inv);
+  const chaseNote = (() => {
+    if (!showChase) return '';
+    if (inv.status === 'paid' || inv.status === 'cancelled') return '';
+    if (chase.snoozedUntil && today() <= chase.snoozedUntil) {
+      return `<div class="inv-meta-sub no-print" style="margin-top:4px;">📅 Promised to pay by ${escapeHTML(fmtD(chase.snoozedUntil))}</div>`;
+    }
+    if (chase.lastStatus === 'failed') {
+      return `<div class="inv-meta-sub no-print" style="margin-top:4px;">⏰ The last reminder could not be sent</div>`;
+    }
+    if (!chase.count) return '';
+    const when = chase.lastAt ? fmtD(new Date(chase.lastAt).toISOString().slice(0, 10)) : '';
+    return `<div class="inv-meta-sub no-print" style="margin-top:4px;">⏰ Reminded ${chase.count === 1 ? 'once' : `${chase.count} times`}${when ? `, last on ${escapeHTML(when)}` : ''}</div>`;
+  })();
   const divergedNote = inv.ledgerDivergedAt
     ? `<div class="inv-meta-sub" style="margin-top:6px;color:var(--red);font-weight:600;">⚠ ledger changed since invoiced — reopen to re-import amounts</div>`
     : '';
@@ -10099,6 +10985,7 @@ function renderInvoicePaperHTML(inv) {
         <strong style="color:${statusCls === 'paid' ? '#1d7a4a' : '#0e0c0a'};font-size:18px;">${fmt(inv.total || 0, cur)}</strong>
         <div class="inv-meta-sub">${(inv.items || []).reduce((a, i) => a + (i.qty || 0), 0)} item${(inv.items || []).reduce((a, i) => a + (i.qty || 0), 0) === 1 ? '' : 's'}</div>
         ${settlesLine}
+        ${chaseNote}
         ${divergedNote}
       </div>
     </section>
@@ -10133,21 +11020,41 @@ function editInvoiceFromView() {
   setTimeout(() => openCreateInvoice(null, currentViewInvoiceId), 60);
 }
 
-async function markInvoicePaidFromView() {
-  if (!currentViewInvoiceId) return;
-  // Settle against the book that holds the invoice: its linked consignment
-  // sales live in that book's ledger, so paying from another title has to reach
-  // the same rows it would have from the title the invoice was written on.
-  const { inv, bookId, s } = invoiceHome(currentViewInvoiceId);
-  const book = BOOKS[bookId] || getBook();
-  if (!inv) return;
-  if (!(await confirmDialog(`Mark ${inv.num} as PAID? This will also mark any linked pending consignment sales as paid.`, { okLabel: 'Mark paid' }))) return;
-  inv.status = 'paid';
-  inv.paidAt = Date.now();
-  inv.paidMethod = isDynamicStripeLink(inv) ? 'Stripe Checkout'
+/** How the invoice was settled, when the caller has nothing better to say. */
+function invoicePaidMethod(inv, book) {
+  return isDynamicStripeLink(inv) ? 'Stripe Checkout'
     : (inv.paymentLink && /buy\.stripe\.com/i.test(inv.paymentLink)) ? 'Stripe'
       : (inv.paymentLink && /paypal/i.test(inv.paymentLink)) ? 'PayPal'
-        : (book.stripeLink ? 'Stripe' : 'Other');
+        : ((book || {}).stripeLink ? 'Stripe' : 'Other');
+}
+
+/**
+ * Mark one invoice paid — the whole write-chain, and nothing else.
+ *
+ * Headless on purpose: no confirm dialog, no `currentViewInvoiceId`, no
+ * re-render, so it can be called for an invoice nobody is looking at. The modal
+ * keeps its confirmation and its refresh and delegates the writes here; the
+ * background Stripe sweep calls the same function.
+ *
+ * That matters more than it looks. There were already two independent writers of
+ * `inv.status = 'paid'` — this path and maybeAutoPayInvoiceForLedger — and a
+ * third by copy-paste is exactly how the invoice and the store's owed balance
+ * quietly stop agreeing with each other. One writer, several callers.
+ *
+ * `chargeId` stamps the Stripe charge that settled it. That stamp is the durable
+ * idempotency marker: the browser's own memory of handled charges is per-device
+ * localStorage, so on a second device it would happily settle the same invoice
+ * again. The invoice travels with the stamp.
+ *
+ * Renders are left to the caller so a sweep settling three invoices repaints
+ * once rather than three times. Returns true when it changed something.
+ */
+function applyInvoicePaid(inv, bookId, s, { method = '', chargeId = '', paidAt = Date.now() } = {}) {
+  if (!inv || !s) return false;
+  inv.status = 'paid';
+  inv.paidAt = paidAt;
+  inv.paidMethod = method || invoicePaidMethod(inv, BOOKS[bookId]);
+  if (chargeId) inv.stripeChargeId = chargeId;
   // best-effort: deactivate the Stripe Payment Link so it can't be paid twice
   if (inv.stripe?.paymentLinkId) deactivateStripePaymentLink(inv.stripe.paymentLinkId);
   // settle any linked pending ledger entries via the canonical helper, so the
@@ -10159,6 +11066,18 @@ async function markInvoicePaidFromView() {
     }
   }
   saveState(bookId);
+  return true;
+}
+
+async function markInvoicePaidFromView() {
+  if (!currentViewInvoiceId) return;
+  // Settle against the book that holds the invoice: its linked consignment
+  // sales live in that book's ledger, so paying from another title has to reach
+  // the same rows it would have from the title the invoice was written on.
+  const { inv, bookId, s } = invoiceHome(currentViewInvoiceId);
+  if (!inv) return;
+  if (!(await confirmDialog(`Mark ${inv.num} as PAID? This will also mark any linked pending consignment sales as paid.`, { okLabel: 'Mark paid' }))) return;
+  applyInvoicePaid(inv, bookId, s);
   renderInvoices();
   renderStores();
   renderLedger();
@@ -11236,6 +12155,7 @@ function voidEntry() {
         if (s.chStats[h.chan].txns <= 0) delete s.chStats[h.chan];
       }
       h.voided = true;
+      h.voidedAt = Date.now();
       recomputeAfters(s, book);
       syncHistoryVoidDeletion(h, true);
       showToast('Entry voided — stock & revenue reversed (Sheets row delete queued)', 'warn');
@@ -11251,6 +12171,7 @@ function voidEntry() {
       s.chStats[h.chan].units += h.qty;
       s.chStats[h.chan].revenue += h.qty * h.price;
       h.voided = false;
+      delete h.voidedAt;
       recomputeAfters(s, book);
       syncHistoryVoidDeletion(h, false);
       showToast('Entry unvoided — effects restored (Sheets row restore queued)');
@@ -11269,6 +12190,7 @@ function voidEntry() {
       if (e.type === 'Sale' && st) { st.sold = Math.max(0, st.sold - e.qty); st.outstanding += e.qty; s.sold = Math.max(0, s.sold - e.qty); s.revenue = Math.max(0, s.revenue - e.amountDue); if (e.paid === 'pending') st.amountOwed = Math.max(0, st.amountOwed - e.amountDue); if (s.chStats['Consignment']) { s.chStats['Consignment'].txns = Math.max(0, s.chStats['Consignment'].txns - 1); s.chStats['Consignment'].units = Math.max(0, s.chStats['Consignment'].units - e.qty); s.chStats['Consignment'].revenue = Math.max(0, s.chStats['Consignment'].revenue - e.amountDue); } }
       if (e.type === 'Return' && st) { st.returned = Math.max(0, st.returned - e.qty); st.outstanding += e.qty; if (e.status === 'restocked') s.stock = Math.max(0, s.stock - e.qty); }
       e.voided = true;
+      e.voidedAt = Date.now();
       // Decision #4: keep invoiceId/invoiceNum across the void (so unvoid restores
       // the link) and never auto-un-pay the invoice. maybeAutoPayInvoiceForLedger
       // already excludes voided sales from its "all paid?" check.
@@ -11281,6 +12203,7 @@ function voidEntry() {
       if (e.type === 'Sale' && st) { st.sold += e.qty; st.outstanding = Math.max(0, st.outstanding - e.qty); s.sold += e.qty; s.revenue += e.amountDue; if (e.paid === 'pending') st.amountOwed += e.amountDue; if (!s.chStats['Consignment']) s.chStats['Consignment'] = { txns: 0, units: 0, revenue: 0 }; s.chStats['Consignment'].txns++; s.chStats['Consignment'].units += e.qty; s.chStats['Consignment'].revenue += e.amountDue; }
       if (e.type === 'Return' && st) { st.returned += e.qty; st.outstanding = Math.max(0, st.outstanding - e.qty); if (e.status === 'restocked') s.stock += e.qty; }
       e.voided = false;
+      delete e.voidedAt;
       syncLedgerVoid(e, false);
       showToast('Consignment entry unvoided — effects restored (Sheets row restore queued)');
     }
@@ -11862,6 +12785,9 @@ async function checkSheetsVersion() {
       const data = await res.json().catch(() => null);
       if (data && data.service && data.service.indexOf('lyrical-sheets-webhook') === 0) {
         const deployedVer = data.scriptVersion || 'unknown';
+        // Remembered so the To-do list and the notifications rail can report an
+        // out-of-date spreadsheet without re-fetching it on every render.
+        _sheetsDeployedVersion = deployedVer;
         if (deployedVer !== EXPECTED_SCRIPT_VERSION) {
           if (versionEl) versionEl.textContent = deployedVer;
           warningEl.style.display = 'block';
@@ -12018,7 +12944,7 @@ function renderMockSpreadsheet() {
   if (!headerRow || !rowsBody || !tabsContainer) return;
 
   // Render headers
-  let headersHtml = `<th style="background:#22222e; color:rgba(255,255,255,0.3); font-weight:normal; text-align:center; padding:6px; border:1px solid rgba(255,255,255,0.08); width:30px; user-select:none;"></th>`;
+  let headersHtml = `<th style="background:#22222e; color:rgba(255,255,255,0.6); font-weight:normal; text-align:center; padding:6px; border:1px solid rgba(255,255,255,0.08); width:30px; user-select:none;"></th>`;
   headers.forEach(h => {
     headersHtml += `<th style="padding:6px 10px; border:1px solid rgba(255,255,255,0.08); background:#22222e; color:rgba(255,255,255,0.7); font-weight:600; text-transform:uppercase; font-size:10px; letter-spacing:0.02em;">${h}</th>`;
   });
@@ -12056,7 +12982,7 @@ function renderMockSpreadsheet() {
   if (rows.length === 0) {
     rowsBody.innerHTML = `
       <tr>
-        <td colspan="${headers.length + 1}" style="text-align:center; padding:48px 24px; color:rgba(255,255,255,0.3); font-style:italic;">
+        <td colspan="${headers.length + 1}" style="text-align:center; padding:48px 24px; color:rgba(255,255,255,0.6); font-style:italic;">
           Spreadsheet tab is empty. Perform a transaction or click "Sync all data" above.
         </td>
       </tr>`;
@@ -12068,7 +12994,7 @@ function renderMockSpreadsheet() {
     const isEven = idx % 2 === 0;
     const rowBg = isEven ? '#15151b' : '#1a1a24';
 
-    let cellsHtml = `<td style="background:#1d1d26; color:rgba(255,255,255,0.3); border:1px solid rgba(255,255,255,0.08); text-align:center; user-select:none; font-family:sans-serif; font-size:10px;">${idx + 1}</td>`;
+    let cellsHtml = `<td style="background:#1d1d26; color:rgba(255,255,255,0.6); border:1px solid rgba(255,255,255,0.08); text-align:center; user-select:none; font-family:sans-serif; font-size:10px;">${idx + 1}</td>`;
 
     for (let c = 1; c < r.length; c++) {
       let val = r[c] ?? '';
@@ -14696,6 +15622,7 @@ function filterArtistEarningsByYear(bookId, year) {
   const tiers = [...(book.profitTiers || [])].sort((a, b) => (a.revenueUpTo || Infinity) - (b.revenueUpTo || Infinity));
   if (tiers.length === 0) return 0;
 
+  const capOf = (t) => tierEffectiveCap(t, book.productionCost);
   const yearStr = String(year);
 
   let yearArtistEarned = 0;
@@ -14713,14 +15640,20 @@ function filterArtistEarningsByYear(bookId, year) {
       if (h.voided || h.gratuity || !(h.qty > 0) || !(h.price > 0)) continue;
 
       const inYear = h.date && h.date.startsWith(yearStr);
-      let revRemaining = h.qty * h.price;
+      let revRemaining = roundCents(h.qty * h.price);
       while (revRemaining > 0.001) {
-        const tier = tiers.find(t => t.revenueUpTo !== null && cumulativeRevenue < t.revenueUpTo) || tiers[tiers.length - 1];
-        const isLastTier = tier === tiers[tiers.length - 1] || tier.revenueUpTo === null;
-        const capacity = isLastTier ? revRemaining : Math.min(revRemaining, tier.revenueUpTo - cumulativeRevenue);
-        if (inYear) yearArtistEarned += capacity * (tier.artistPct / 100);
-        cumulativeRevenue += capacity;
-        revRemaining -= capacity;
+        // Uses the same effective cap as calcArtistEarnings: a "break-even" tier
+        // caps at the book's production cost, not at its own revenueUpTo. Walking
+        // the raw revenueUpTo here (as this did) skipped that cap entirely, so the
+        // Tax Centre's year-end artist share could disagree with the lifetime
+        // figure shown on the dashboard for the very same sales.
+        const tier = tiers.find(t => capOf(t) !== null && cumulativeRevenue < capOf(t)) || tiers[tiers.length - 1];
+        const tCap = capOf(tier);
+        const isLastTier = tier === tiers[tiers.length - 1] || tCap === null;
+        const capacity = isLastTier ? revRemaining : Math.min(revRemaining, tCap - cumulativeRevenue);
+        if (inYear) yearArtistEarned = roundCents(yearArtistEarned + capacity * (tier.artistPct / 100));
+        cumulativeRevenue = roundCents(cumulativeRevenue + capacity);
+        revRemaining = roundCents(revRemaining - capacity);
       }
     }
   }
@@ -14889,7 +15822,37 @@ async function boot(forcedBook) {
         // is comparing against), silent by design, and served from a recent
         // cache when there is one. A website order that never reached the app
         // is invisible everywhere until something goes looking for it.
-        autoCheckBigCartelLedgerGaps().catch(() => { /* offline or not configured */ });
+        autoCheckBigCartelLedgerGaps()
+          // Then keep asking. The boot check alone leaves an app that stays
+          // open all day blind to every sale after the first minute of it.
+          .then(startBigCartelOrderWatch)
+          .catch(() => { /* offline or not configured */ });
+        // The other half of the same journey: labels bought on Shippo's own
+        // site, which the app could otherwise only learn about four clicks deep
+        // in the Tax Centre. Started after the books load because linking a
+        // label needs the order history to link it to.
+        startShippoLabelWatch();
+        // And the third: labels bought on canadapost.ca, which the app can ask
+        // the carrier about directly because it is the same business account.
+        startCanadaPostSweep();
+        // And the fourth: another courier's label, which leaves no API trace
+        // but does leave a confirmation email.
+        startShippingEmailSweep();
+        // Money coming in rather than going out: a consignment store paying its
+        // invoice through the Stripe link. Started after the books load because
+        // settling an invoice reaches into its own book's ledger.
+        startStripeInvoiceWatch();
+        // And the money Stripe keeps: its processing fees, filed every fortnight
+        // and whenever a year has ended since the last run.
+        startStripeFeeWatch();
+        // And the other direction: money that hasn't come in. Started after the
+        // Stripe watch so an invoice that was paid through its link is settled
+        // before anybody gets chased for it.
+        startPaymentReminderWatch();
+        // A fault recorded before the last reload is still a fault. Painted
+        // here so the mark is on the tab from the first render rather than
+        // only after the next failed check.
+        renderIntegrationBadges();
       });
       updateRoleToggleButton();
       syncRoleUI();
@@ -15052,9 +16015,13 @@ export async function removeLedgerEntry(type, bid, id) {
       saveState(bid);
     }
   } else if (type === 'artistPayout') {
+    // These ledger rows are built from `artistPayouts` (the recorded payments),
+    // not `artistTransfers` (cash the artist is still holding) — deleting from
+    // the wrong array left the row on screen and removed an unrelated transfer.
     const s = states[bid];
-    if (s && s.artistTransfers) {
-      removeOneByKey(s.artistTransfers, id);
+    if (s && s.artistPayouts) {
+      removeOneByKey(s.artistPayouts, id);
+      settlePayoutRequests(bid);
       saveState(bid);
     }
   } else if (type === 'sale') {
@@ -15188,6 +16155,17 @@ export function openEditSale(bid, itemId) {
   } else {
     showToast('⚠ Sale record not found', 'err');
   }
+}
+
+// Entry point for the Tax Centre's ledger-row edit button. Artist payouts live
+// on the book's dashboard, so this lands the publisher on that panel with the
+// row already loaded into the payout form.
+export function openArtistPayoutEditor(bid, payoutId) {
+  switchBook(bid);
+  switchTab('dashboard');
+  // switchTab repaints the dashboard, which rebuilds the payout form markup —
+  // load the row afterwards or the fields would be wiped by that render.
+  editArtistPayout(bid, payoutId);
 }
 
 export function openEditExpense(type, bid, id) {
@@ -18663,17 +19641,24 @@ window.downloadFullTaxSeasonExport = function () {
       csv += `${e.date},${esc(book.title)},${esc(e.cat)},${esc(e.desc)},${getAmt(e).toFixed(2)},${esc(e.receipt)}\n`;
     });
 
-    // Artist Payouts (Transfers)
-    (s.artistTransfers || []).filter(t => {
+    // Artist Payouts — the payments actually recorded against the book.
+    //
+    // This used to export `artistTransfers`, which is cash the artist has
+    // COLLECTED and is still holding, not money the publisher paid out. Those
+    // rows are also deleted when a transfer is settled, so the export both
+    // named the wrong figure and lost it as soon as it was reconciled.
+    (s.artistPayouts || []).filter(p => {
+      if (p.voided) return false;
       if (isAllTime) return true;
-      return t.date && t.date.startsWith(year);
-    }).forEach(t => {
-      // Use .total for payouts as per state structure; payout totals are in the
-      // book's native currency — convert to CAD to match the column header.
-      const payoutRaw = parseFloat(t.total || t.amount || 0);
+      return p.date && p.date.startsWith(year);
+    }).forEach(p => {
+      // `amount` is in the book's native currency — convert to CAD to match the
+      // column header.
+      const payoutRaw = parseFloat(p.amount || 0);
       flagRateIfMissing(book, cur, rawRate, payoutRaw > 0);
       const payoutCAD = payoutRaw * hRate;
-      csv += `${t.date},${esc(book.title)},"Artist Payout","Transfer to Artist",${payoutCAD.toFixed(2)},""\n`;
+      const desc = p.method || 'Payment to artist';
+      csv += `${p.date},${esc(book.title)},"Artist Payout",${esc(desc)},${payoutCAD.toFixed(2)},""\n`;
     });
   });
 
@@ -18706,9 +19691,8 @@ window.downloadFullTaxSeasonExport = function () {
 window.downloadFullTaxSeasonExportDirect = window.downloadFullTaxSeasonExport;
 
 // ── STRIPE FEES BY YEAR
-const _STRIPE_ZERO_DECIMAL = new Set(['BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KMF', 'KRW', 'MGA', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF']);
 function _stripeMinorToMajor(amt, cur) {
-  return _STRIPE_ZERO_DECIMAL.has((cur || '').toUpperCase()) ? amt : amt / 100;
+  return isZeroDecimalCurrency(cur) ? amt : amt / 100;
 }
 
 const _STRIPE_TYPE_LABELS = {
@@ -18751,13 +19735,18 @@ function _stripeFmtMoney(amt, cur) {
   return `${sign}${cur ? cur + ' ' : ''}${abs.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-async function fetchStripeTransactions(key, onProgress) {
+async function fetchStripeTransactions(key, onProgress, { since = 0 } = {}) {
   const allTxns = [];
   let count = 0;
   let starting_after = null;
 
   while (true) {
     const params = new URLSearchParams({ limit: '100' });
+    // The manual tool asks for every transaction the account has ever had and
+    // passes nothing here. A job running on its own only ever rewrites the
+    // years it is allowed to touch, so it bounds the window to those — the
+    // difference between a handful of requests and every page since day one.
+    if (since > 0) params.set('created[gte]', String(Math.floor(since / 1000)));
     if (starting_after) params.set('starting_after', starting_after);
     const resp = await fetch(`https://api.stripe.com/v1/balance_transactions?${params.toString()}`, {
       headers: { 'Authorization': 'Bearer ' + key }
@@ -19025,21 +20014,22 @@ async function fetchStripeFeesByYear() {
 // year+currency, categorized as "Sales Processing Fees" and converted to CAD at
 // the year-end rate. Idempotent: re-running upserts by ref "stripe-fees:<yr>:<cur>"
 // so the current year's running total is refreshed without duplicating.
-async function insertStripeFeesIntoLedger() {
-  let rows = window._stripeFeesLedgerData || [];
-  if (!rows.length) { showToast('Run "Fetch fees" first.', 'warn'); return; }
+//
+// Split into three because the fortnightly background job needs the middle two
+// without the first: planning is where the money is worked out, writing is
+// where it lands, and the interactive wrapper is the confirmation dialog and
+// the DOM around them. One planner and one writer, two callers.
 
-  // Optional year filter so the user can insert just one year at a time.
-  const yearSel = document.getElementById('stripe-fees-year');
-  const yearFilter = yearSel && yearSel.value !== 'all' ? Number(yearSel.value) : null;
-  if (yearFilter != null) rows = rows.filter(r => r.year === yearFilter);
+/**
+ * Work out the ledger rows a set of aggregated Stripe years should produce.
+ *
+ * Async because the currency conversion is fetched: a closed year is converted
+ * at ITS year-end rate, a year still running at today's. That distinction is
+ * the whole reason a year has to be re-filed once it ends.
+ */
+async function planStripeFeeRows(rows, { now = Date.now() } = {}) {
+  const currentYear = new Date(now).getFullYear();
 
-  if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
-  if (!TAX_CENTER.settings) TAX_CENTER.settings = {};
-  const currentYear = new Date().getFullYear();
-
-  // CAD rate for a year+currency: year-end rate for closed years, today's for the
-  // current (still-accruing) year, with live then cached fallbacks.
   const rateFor = async (cur, year) => {
     if (cur === 'CAD') return 1;
     const fxDate = year < currentYear ? `${year}-12-31` : today();
@@ -19082,6 +20072,56 @@ async function insertStripeFeesIntoLedger() {
       });
     }
   }
+  return planned;
+}
+
+/**
+ * File planned fee rows into the ledger, upserting by ref.
+ *
+ * Deliberately does NOT save or re-render: the caller decides, so a background
+ * run that plans nothing never touches the tax document. saveTaxCenter()
+ * serialises the whole ledger, and calling it on an idle poll is the defect
+ * this app has already shipped once.
+ */
+function writeStripeFeeRows(planned) {
+  if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
+  if (!TAX_CENTER.settings) TAX_CENTER.settings = {};
+
+  const byRef = new Map((TAX_CENTER.businessExpenses || [])
+    .filter(e => e && typeof e.ref === 'string' && (e.ref.startsWith('stripe-fees:') || e.ref.startsWith('stripe-billing:')))
+    .map(e => [e.ref, e]));
+
+  let inserted = 0, updated = 0;
+  for (const p of planned) {
+    const existing = byRef.get(p.ref);
+    if (existing) {
+      Object.assign(existing, {
+        desc: p.desc, cat: p.cat, currency: p.currency, amount: p.amount,
+        origCurrency: p.origCurrency, origAmount: p.origAmount,
+        fxRate: p.fxRate, baseAmount: p.baseAmount, date: p.date,
+      });
+      updated++;
+    } else {
+      const { year: _y, ...rest } = p;
+      TAX_CENTER.businessExpenses.unshift({ id: Date.now() + inserted + 1, ...rest, receipt: '', trip: '' });
+      inserted++;
+    }
+  }
+  const totalCad = planned.reduce((s, p) => s + (p.baseAmount || 0), 0);
+  if (inserted || updated) TAX_CENTER.settings.stripeFeesLastImportAt = new Date().toISOString();
+  return { inserted, updated, totalCad };
+}
+
+async function insertStripeFeesIntoLedger() {
+  let rows = window._stripeFeesLedgerData || [];
+  if (!rows.length) { showToast('Run "Fetch fees" first.', 'warn'); return; }
+
+  // Optional year filter so the user can insert just one year at a time.
+  const yearSel = document.getElementById('stripe-fees-year');
+  const yearFilter = yearSel && yearSel.value !== 'all' ? Number(yearSel.value) : null;
+  if (yearFilter != null) rows = rows.filter(r => r.year === yearFilter);
+
+  const planned = await planStripeFeeRows(rows);
   if (!planned.length) { showToast('No Stripe fees to insert for that selection.', 'warn'); return; }
 
   const byRef = new Map((TAX_CENTER.businessExpenses || [])
@@ -19104,29 +20144,130 @@ async function insertStripeFeesIntoLedger() {
   );
   if (!accept) { showToast('Stripe fee insertion cancelled', 'warn'); return; }
 
-  let inserted = 0, updated = 0;
-  for (const p of planned) {
-    const existing = byRef.get(p.ref);
-    if (existing) {
-      Object.assign(existing, {
-        desc: p.desc, cat: p.cat, currency: p.currency, amount: p.amount,
-        origCurrency: p.origCurrency, origAmount: p.origAmount,
-        fxRate: p.fxRate, baseAmount: p.baseAmount, date: p.date,
-      });
-      updated++;
-    } else {
-      const { year: _y, ...rest } = p;
-      TAX_CENTER.businessExpenses.unshift({ id: Date.now() + inserted + 1, ...rest, receipt: '', trip: '' });
-      inserted++;
-    }
-  }
-
-  TAX_CENTER.settings.stripeFeesLastImportAt = new Date().toISOString();
+  const { inserted, updated } = writeStripeFeeRows(planned);
   await saveTaxCenter();
   renderTaxCenter();
   showToast(`✓ Stripe fees: ${inserted} added${updated ? `, ${updated} updated` : ''}`, 'ok');
   const statusEl = document.getElementById('stripe-fees-status');
   if (statusEl) statusEl.innerHTML += `<br><span style="color:var(--green);">Ledger updated: ${inserted} added${updated ? `, ${updated} updated` : ''} (${totalCad.toFixed(2)} CAD).</span>`;
+}
+
+// ─── Stripe fees, filed on a fortnightly clock ────────────────────────────
+//
+// Everything above is the manual tool: paste a key, press Fetch, press Insert,
+// confirm a dialog. It works, and it only ever happens when the publisher
+// remembers — which for a figure that matters once a year, at tax time, means
+// the year's card fees are usually months out of date and last year's were
+// never closed off at all.
+//
+// Two obligations, both in lib/stripe-fee-schedule.js: every fortnight, and
+// whenever a calendar year has ended since the last run. The second is not
+// "run on the 31st of December" — a web page cannot run on a day nobody opens
+// it. It is "never let a year end without a run covering it", which the filing
+// code turns into the thing that actually matters: a closed year is re-dated to
+// the 31st and re-converted at that day's exchange rate, instead of keeping
+// whatever mid-December date and rate it happened to be filed with.
+
+const STRIPE_FEE_LAST_KEY = 'lm-stripe-fee-sweep-last';
+
+let _stripeFeeWatchStarted = false;
+let _stripeFeeSweeping = false;
+
+function readStripeFeeStamp() {
+  try { return Number(localStorage.getItem(STRIPE_FEE_LAST_KEY)) || 0; } catch (_) { return 0; }
+}
+
+function writeStripeFeeStamp(at) {
+  // Browser storage, deliberately, not the tax document: this is written on
+  // every run including the ones that file nothing, and saveTaxCenter()
+  // serialises the whole ledger. TAX_CENTER keeps stripeFeesLastImportAt, which
+  // records the last time money actually moved.
+  try { localStorage.setItem(STRIPE_FEE_LAST_KEY, String(at)); } catch (_) { /* private mode */ }
+}
+
+/** The card announcing fees that filed themselves. */
+function showStripeFeeAlert(said) {
+  if (!said) return;
+  pushAppAlert({
+    id: 'stripe-fee-sweep',
+    icon: said.yearEnd ? '📅' : '💳',
+    title: said.title,
+    detail: said.detail,
+    tone: '',
+    actionLabel: 'Open Tax Centre',
+    action: "switchTab('taxcenter')",
+  });
+}
+
+/**
+ * Ask Stripe what its fees came to, and file them.
+ *
+ * Returns what it filed, or null when it was not due or could not run.
+ */
+async function sweepStripeFees({ force = false } = {}) {
+  // Publisher only: the Stripe key is publisher-only in the security rules, and
+  // an author must never trigger a write to the shared ledger.
+  if (!window.IS_PUBLISHER || isAuthor()) return null;
+
+  const key = getReconStripeKey();
+  const configured = !!key && /^(rk|sk)_/.test(key);
+  const { online, visible } = browserWatchState();
+  const lastRunAt = readStripeFeeStamp();
+  const now = Date.now();
+
+  const owed = dueForFeeSweep({
+    lastRunAt,
+    now,
+    intervalMs: effectiveInterval(
+      STRIPE_FEE_INTERVAL_MS,
+      integrationBackoffMs('stripe-fees', STRIPE_FEE_INTERVAL_MS),
+    ),
+  });
+  // The schedule says whether a run is owed; the gates say whether it can
+  // happen at all. A year-end run that is owed while the laptop is shut is
+  // still owed when it opens — which is the whole point of the boundary rule.
+  const gatesOk = configured && online && !_stripeFeeSweeping && (force || visible);
+  if (!gatesOk || (!force && !owed.due)) return null;
+
+  _stripeFeeSweeping = true;
+  try {
+    const fromYear = feeSweepFromYear({ lastRunAt, now });
+    const txns = await fetchStripeTransactions(key, null, { since: startOfYear(fromYear) });
+    const { ledgerData } = aggregateStripeTransactions(txns);
+
+    // Only the years this run is entitled to rewrite. Anything older was closed
+    // and filed already, and a background job is for keeping the books current,
+    // not for quietly restating history.
+    const rows = (ledgerData || []).filter(r => r.year >= fromYear);
+    const planned = await planStripeFeeRows(rows, { now });
+
+    writeStripeFeeStamp(Date.now());
+    noteIntegrationSuccess('stripe-fees');
+    if (!planned.length) return { inserted: 0, updated: 0, totalCad: 0 };
+
+    const result = writeStripeFeeRows(planned);
+    if (result.inserted || result.updated) {
+      await saveTaxCenter().catch(e => console.warn('Stripe fee sweep save failed', e));
+      renderTaxCenter();
+      showStripeFeeAlert(describeFeeSweep({ ...result, reason: force ? 'interval' : owed.reason }));
+    }
+    return result;
+  } catch (error) {
+    console.warn('Stripe fee sweep failed', error);
+    noteIntegrationFailure('stripe-fees', error, { online, configured });
+    return null;
+  } finally {
+    _stripeFeeSweeping = false;
+  }
+}
+
+function startStripeFeeWatch() {
+  if (_stripeFeeWatchStarted || typeof window === 'undefined') return;
+  _stripeFeeWatchStarted = true;
+  // Polled hourly rather than fortnightly: the schedule itself decides what is
+  // owed, and a fortnightly timer would sail straight past the 31st of December
+  // on a laptop that was shut for the holidays.
+  startWatch(() => { sweepStripeFees(); }, { intervalMs: 60 * 60 * 1000 });
 }
 
 // Compare what Stripe says you collected (gross customer payments, converted to
@@ -19286,7 +20427,7 @@ async function _reconPersistKey(key) {
 // Pull recent charges and normalize them. We expand the PaymentIntent so we can
 // read link metadata (book_id/sku) and the richer description that payment
 // links attach to the intent rather than the charge.
-async function fetchStripePaymentsForReconcile(maxPages = 3) {
+async function fetchStripePaymentsForReconcile(maxPages = 3, { since = 0 } = {}) {
   const key = getReconStripeKey();
   if (!key) throw new Error('No Stripe key — paste a restricted/secret key first.');
   if (!/^(rk|sk)_/.test(key)) throw new Error("That doesn't look like a Stripe key (expected rk_… or sk_…).");
@@ -19297,6 +20438,11 @@ async function fetchStripePaymentsForReconcile(maxPages = 3) {
   for (let page = 0; page < maxPages; page++) {
     const params = new URLSearchParams({ limit: '100' });
     params.append('expand[]', 'data.payment_intent');
+    // `since` narrows the window at Stripe's end rather than ours. The manual
+    // worklist wants everything recent and passes nothing; a background poll
+    // running every few minutes would otherwise drag hundreds of charges across
+    // the wire to discover that nothing happened.
+    if (since > 0) params.set('created[gte]', String(Math.floor(since / 1000)));
     if (starting_after) params.set('starting_after', starting_after);
     const resp = await fetch(`https://api.stripe.com/v1/charges?${params.toString()}`, {
       headers: { 'Authorization': 'Bearer ' + key },
@@ -19796,6 +20942,694 @@ function reconcileOpenInvoice(idSafe) {
   setTimeout(() => { try { if (c.inv) viewInvoice(c.inv.id); } catch (_) { } }, 60);
 }
 
+// ─── Consignment invoices that settle themselves ──────────────────────────
+//
+// Everything above is the manual worklist: the publisher opens the tab, the app
+// fetches charges, matches the ones naming an INV-… number, and reconcileOpenInvoice
+// walks her to the invoice so she can click "Mark paid". Every piece of that
+// works. What it never did was act — so an invoice a store paid on Monday sat
+// reading "sent" (and "overdue" by Friday), its linked sales stayed pending, and
+// the store's balance still claimed money it had already handed over.
+//
+// This closes that gap and nothing wider. Only charges that name an invoice are
+// considered; the other kinds the worklist handles write new sales rather than
+// settling a record that already exists, which is a different risk and stays
+// manual. A charge settles an invoice only when it names it AND the figures
+// agree to the cent in the same currency AND the money has not been pulled back
+// — lib/invoice-payments.js holds that judgement and this only carries it out.
+
+const STRIPE_INVOICE_WATCH_INTERVAL_MS = 5 * 60 * 1000;
+const STRIPE_INVOICE_COLD_START_DAYS = 30;
+const STRIPE_INVOICE_LAST_KEY = 'lm-stripe-invoice-sweep-last';
+
+let _stripeInvoiceWatchStarted = false;
+let _stripeInvoiceSweeping = false;
+
+function readStripeInvoiceStamp() {
+  try { return Number(localStorage.getItem(STRIPE_INVOICE_LAST_KEY)) || 0; } catch (_) { return 0; }
+}
+
+function writeStripeInvoiceStamp(at) {
+  try { localStorage.setItem(STRIPE_INVOICE_LAST_KEY, String(at)); } catch (_) { /* private mode */ }
+}
+
+/**
+ * The window to ask Stripe about, with a day of overlap.
+ *
+ * A charge can land between one sweep starting and finishing, and a duplicate
+ * costs nothing — the charge id is stamped on the invoice, so the second sighting
+ * is recognised and ignored — whereas a payment missed in the gap is silent.
+ */
+function stripeInvoiceSweepSince() {
+  const last = readStripeInvoiceStamp();
+  return last
+    ? last - 86400000
+    : Date.now() - STRIPE_INVOICE_COLD_START_DAYS * 86400000;
+}
+
+/**
+ * Find the invoice that says this Stripe charge settled it.
+ *
+ * Needed because classifyStripePayment answers `recorded` for any charge this
+ * device has already handled, and answers it *before* it looks for an invoice
+ * number — so a charge the sweep settled last week comes back classified as
+ * handled, not as an invoice payment. That is right for the settle path (it is
+ * how the same charge stops being settled twice) and wrong for a refund, which
+ * would otherwise be skipped before anyone checked whether the money left.
+ * The stamp on the invoice is the durable record, so it is what gets searched.
+ */
+function _findInvoiceByCharge(chargeId) {
+  const id = String(chargeId || '').trim();
+  if (!id) return null;
+  for (const bookId of Object.keys(states)) {
+    const inv = (states[bookId].invoices || []).find(i => i && i.stripeChargeId === id);
+    if (inv) return { bookId, inv };
+  }
+  return null;
+}
+
+/** Announce a payment that was pulled back after its invoice was settled. */
+function showInvoiceReversalAlert(payment, inv) {
+  const said = describeInvoicePaymentReversal({
+    invoiceNum: inv?.num || '', storeName: inv?.storeName || '',
+  });
+  pushAppAlert({
+    // Keyed per charge, so it cannot be overwritten by a later ordinary sweep
+    // and reads as the different kind of news it is.
+    id: invoicePaymentRef(payment.id) || 'stripe-invoice-reversal',
+    icon: '↩️',
+    title: said.title,
+    detail: said.detail,
+    tone: SYNC_TONES.FAILED,
+    actionLabel: 'Open invoice',
+    action: `openInvoiceFromAlert('${inv?.id || ''}')`,
+  });
+}
+
+/**
+ * The card for invoices that marked themselves paid.
+ *
+ * `totals` maps a currency code to the settled sum in minor units. A figure is
+ * only shown when every invoice settled shares one currency — adding euros to
+ * dollars to reach a single headline number would be inventing a rate.
+ */
+function showInvoicePaymentAlert({ settled, attention, first, totals }) {
+  const codes = [...(totals?.keys() || [])];
+  const amountLabel = codes.length === 1
+    ? fmt(minorToMajor(totals.get(codes[0]), codes[0]), getSym(codes[0]))
+    : '';
+  const said = describeInvoicePaymentSweep({ settled, attention, amountLabel });
+  if (!said) return;
+  pushAppAlert({
+    id: 'stripe-invoice-payments',
+    icon: '💰',
+    title: said.title,
+    detail: said.detail,
+    tone: settled ? '' : SYNC_TONES.PENDING,
+    actionLabel: first ? 'Review' : '',
+    action: first ? `openInvoiceFromAlert('${first}')` : '',
+  });
+}
+
+/** Take the publisher to an invoice from a notification, wherever she is. */
+function openInvoiceFromAlert(invoiceId) {
+  if (!invoiceId) return;
+  const found = invoiceHome(invoiceId);
+  if (!found?.inv) { showToast('That invoice is no longer here', 'warn'); return; }
+  if (typeof switchBook === 'function' && found.bookId) switchBook(found.bookId);
+  switchTab('consignment');
+  setTimeout(() => { try { viewInvoice(invoiceId); } catch (_) { } }, 60);
+}
+
+/**
+ * Ask Stripe whether any open invoice has been paid, and settle the ones that have.
+ *
+ * Returns a count of what happened, so the caller can say it once rather than
+ * per invoice.
+ */
+async function sweepStripeInvoicePayments({ force = false } = {}) {
+  // Publisher only. An author cannot read the Stripe key (the tax settings doc
+  // is publisher-only in the security rules) and must never trigger a global
+  // financial mutation, so for them this would fail on every poll and raise a
+  // health warning about a service they have no way to use.
+  if (!window.IS_PUBLISHER || isAuthor()) return null;
+
+  const configured = !!getReconStripeKey();
+  const { online, visible } = browserWatchState();
+  const due = force
+    ? configured && online && !_stripeInvoiceSweeping
+    : dueForCheck({
+      lastCheckedAt: readStripeInvoiceStamp(),
+      now: Date.now(),
+      intervalMs: effectiveInterval(
+        STRIPE_INVOICE_WATCH_INTERVAL_MS,
+        integrationBackoffMs('stripe', STRIPE_INVOICE_WATCH_INTERVAL_MS),
+      ),
+      online, configured, visible, busy: _stripeInvoiceSweeping,
+    });
+  if (!due) return null;
+
+  _stripeInvoiceSweeping = true;
+  try {
+    // One page behind a date filter: in the steady state this returns nothing.
+    const payments = await fetchStripePaymentsForReconcile(1, { since: stripeInvoiceSweepSince() });
+
+    let settled = 0;
+    let attention = 0;
+    let first = '';
+    const touchedBooks = new Set();
+    const totals = new Map();
+    const recorded = [];
+
+    for (const payment of payments) {
+      // Money that came back is checked first, and without asking the
+      // classifier — it reports a charge this device already handled as
+      // `recorded` before it ever looks for an invoice number, so a refund of a
+      // charge the sweep settled would be skipped here and never mentioned.
+      if (payment.refunded || payment.disputed) {
+        const cited = _findInvoiceByCharge(payment.id);
+        // Only news if this is the charge an invoice says settled it. A refunded
+        // charge that never settled anything is not this feature's business.
+        if (cited?.inv) showInvoiceReversalAlert(payment, cited.inv);
+        continue;
+      }
+
+      // Otherwise the existing classifier owns the matching: the INV-… number in
+      // the intent description, the invoice_num metadata, and its own memory of
+      // charges already handled on this device.
+      const c = classifyStripePayment(payment);
+      if (c.kind !== 'invoice' || !c.inv || !c.bookId) continue;
+
+      const inv = c.inv;
+      const judged = judgeInvoicePayment({ payment, invoice: inv });
+
+      if (verdictNeedsAttention(judged.verdict)) {
+        // Deliberately NOT settled: a store that paid short still owes the
+        // difference, and an invoice marked paid is the app saying it does not.
+        // But the money did arrive, so it is written onto the invoice — both
+        // because the publisher asked for it to be recorded, and because
+        // without a record the next poll would rediscover it and re-raise a card
+        // she had just dismissed, every five minutes, forever.
+        if (partPaymentAlreadyNoted(inv, payment.id)) continue;
+        if (!Array.isArray(inv.stripePartPayments)) inv.stripePartPayments = [];
+        inv.stripePartPayments.push(buildPartPaymentNote({ payment, judged }));
+        saveState(c.bookId);
+        touchedBooks.add(c.bookId);
+        attention++;
+        if (!first) first = inv.id;
+        continue;
+      }
+
+      if (!verdictSettles(judged.verdict)) continue;
+
+      const s = states[c.bookId];
+      if (!s) continue;
+      applyInvoicePaid(inv, c.bookId, s, {
+        method: 'Stripe Checkout',
+        chargeId: payment.id,
+        paidAt: payment.created || Date.now(),
+      });
+      touchedBooks.add(c.bookId);
+      settled++;
+      if (!first) first = inv.id;
+      totals.set(judged.currency, (totals.get(judged.currency) || 0) + judged.paidMinor);
+      recorded.push({ chargeId: payment.id, bookId: c.bookId, num: inv.num });
+    }
+
+    // Remembered the way the manual worklist remembers, so a charge the app
+    // settled does not sit in her review list looking unhandled. Written once
+    // for the sweep rather than per invoice: it is one whole blob in browser
+    // storage, and re-reading and re-writing it inside the loop earns nothing.
+    if (recorded.length) {
+      const mem = getReconMemory();
+      const at = Date.now();
+      recorded.forEach(r => { mem.recorded[r.chargeId] = { bookId: r.bookId, num: r.num, at }; });
+      saveReconMemory(mem);
+    }
+
+    writeStripeInvoiceStamp(Date.now());
+    noteIntegrationSuccess('stripe');
+
+    if (settled || attention) {
+      // Repainted once for the whole sweep, not once per invoice.
+      renderInvoices();
+      renderStores();
+      renderLedger();
+      renderHist();
+      updateDash();
+      showInvoicePaymentAlert({ settled, attention, first, totals });
+    }
+    return { settled, attention, books: touchedBooks.size };
+  } catch (error) {
+    console.warn('Stripe invoice payment sweep failed', error);
+    noteIntegrationFailure('stripe', error, { online, configured });
+    return null;
+  } finally {
+    _stripeInvoiceSweeping = false;
+  }
+}
+
+function startStripeInvoiceWatch() {
+  if (_stripeInvoiceWatchStarted || typeof window === 'undefined') return;
+  _stripeInvoiceWatchStarted = true;
+  startWatch(() => { sweepStripeInvoicePayments(); }, { intervalMs: STRIPE_INVOICE_WATCH_INTERVAL_MS });
+}
+
+// ── CHASING A LATE INVOICE ──────────────────────────────────────────────────
+//
+// The counterpart to the sweep above: that one notices money arriving, this one
+// notices it not arriving. When an invoice is more days past due than the
+// publisher chose, the customer gets one polite email with a link to pay it.
+//
+// Deliberately started AFTER the Stripe sweep at boot, and it re-reads each
+// invoice's status the moment before sending: chasing somebody for an invoice
+// they paid an hour ago is worse than not chasing them at all.
+//
+// Every judgement — who qualifies, what it says, whether now is a decent hour —
+// lives in lib/payment-reminders.js. This is the part that can't be unit tested
+// because it touches the network and the store, so it is kept to the wiring.
+
+const REMINDER_WATCH_INTERVAL_MS = 60 * 60 * 1000;
+/** Sends per run, and per day. A mistake that mails five people is survivable. */
+const REMINDER_MAX_PER_RUN = 5;
+const REMINDER_MAX_PER_DAY = 20;
+const REMINDER_DAY_KEY = 'lm-invoice-reminder-day';
+
+let _reminderWatchStarted = false;
+let _reminderSweeping = false;
+
+/** How many were sent today, from this browser. Resets when the date changes. */
+function reminderDayCount() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(REMINDER_DAY_KEY) || '{}');
+    return raw && raw.day === today() ? (Number(raw.count) || 0) : 0;
+  } catch (_) { return 0; }
+}
+
+function bumpReminderDayCount(by = 1) {
+  try {
+    localStorage.setItem(REMINDER_DAY_KEY, JSON.stringify({ day: today(), count: reminderDayCount() + by }));
+  } catch (_) { /* private mode — the per-invoice log is the real guard */ }
+}
+
+/**
+ * Every invoice across every book that would be chased right now.
+ *
+ * Used both by the sweep and by the confirmation shown when the feature is
+ * switched on, so the number the publisher is warned about is the number that
+ * actually goes out.
+ */
+function invoicesAwaitingReminder(days, max = 0) {
+  const out = [];
+  for (const bookId of Object.keys(states || {})) {
+    if (isTestBookId(bookId)) continue;
+    const due = dueForReminder((states[bookId] || {}).invoices || [], { today: today(), days, max: 0 });
+    for (const inv of due) out.push({ bookId, inv });
+  }
+  out.sort((a, b) => String(a.inv.dueDate || '').localeCompare(String(b.inv.dueDate || '')));
+  return max > 0 ? out.slice(0, max) : out;
+}
+
+/** The amount owed, formatted in the invoice's own currency. */
+function invoiceAmountLabel(inv) {
+  const book = invoiceOwnerBook(inv);
+  return fmt(inv.total || 0, inv.currency || (book && book.currency) || '');
+}
+
+/**
+ * Send one reminder and write down that it happened.
+ *
+ * Stamped BEFORE the network call, deliberately. Two devices with the app open
+ * would otherwise both find the same invoice unchased and both email it; a
+ * stamp that lands first means the second one sees `already-chased`. The cost
+ * of that order is a reminder recorded as `failed` when the send throws, which
+ * shows on the invoice and can be retried by hand — much the better failure.
+ */
+async function sendInvoiceReminder(inv, bookId, { kind = 'auto' } = {}) {
+  const s = states[bookId];
+  if (!s || !inv) return { ok: false, error: 'missing invoice' };
+  const to = String(inv.storeEmail || '').trim();
+  if (!to) return { ok: false, error: 'no email address' };
+
+  const entry = { at: Date.now(), kind, to, status: 'sending', error: '' };
+  inv.reminders = Array.isArray(inv.reminders) ? inv.reminders : [];
+  inv.reminders.push(entry);
+  saveState(bookId);
+
+  const settings = getInvoiceSettings();
+  const mail = buildReminderEmail(inv, {
+    settings: reminderSettings(settings),
+    payLink: effectivePaymentLink(inv) || '',
+    today: today(),
+    publisher: settings.name || 'Lyricalmyrical Books',
+    amountLabel: invoiceAmountLabel(inv),
+  });
+
+  try {
+    await sendSingleEmailViaBackend(to, mail.subject, mail.text, settings.email || '', mail.html);
+    entry.status = 'sent';
+    bumpReminderDayCount(1);
+    saveState(bookId);
+    return { ok: true };
+  } catch (error) {
+    entry.status = 'failed';
+    entry.error = String((error && error.message) || error || 'send failed').slice(0, 200);
+    saveState(bookId);
+    return { ok: false, error: entry.error };
+  }
+}
+
+async function sweepPaymentReminders() {
+  if (_reminderSweeping) return null;
+  const cfg = reminderSettings(getInvoiceSettings());
+  if (!cfg.auto) return null;
+  // The mail leaves through the connected Apps Script; without it there is
+  // nothing to send with, and the publisher already gets told the sheet is
+  // disconnected elsewhere.
+  if (!sheetsUrl) return null;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return null;
+  if (!canSendNow(new Date())) return null;
+
+  const remainingToday = REMINDER_MAX_PER_DAY - reminderDayCount();
+  if (remainingToday <= 0) return null;
+
+  const batch = invoicesAwaitingReminder(cfg.days, Math.min(REMINDER_MAX_PER_RUN, remainingToday));
+  if (!batch.length) return null;
+
+  _reminderSweeping = true;
+  let sent = 0, failed = 0;
+  try {
+    for (const { bookId, inv } of batch) {
+      // Re-asked immediately before sending: the Stripe sweep runs on its own
+      // clock and may have settled this very invoice since the batch was built.
+      if (reminderBlockReason(inv, { today: today(), days: cfg.days })) continue;
+      const res = await sendInvoiceReminder(inv, bookId, { kind: 'auto' });
+      if (res.ok) sent++; else failed++;
+    }
+  } finally {
+    _reminderSweeping = false;
+  }
+
+  if (sent || failed) {
+    const said = describeReminderSweep({ sent, failed });
+    if (said) {
+      pushAppAlert({
+        id: 'invoice-reminders',
+        icon: '⏰',
+        title: said.title,
+        detail: said.detail,
+        tone: said.needsReview ? SYNC_TONES.FAILED : '',
+        actionLabel: 'Open invoices',
+        action: 'switchTab(\'consignment\')',
+      });
+    }
+    renderInvoices();
+  }
+  return { sent, failed };
+}
+
+// ── THE DAY BEFORE ──────────────────────────────────────────────────────────
+//
+// The sweep above only knows about money that arrived through the payment link.
+// A shop that paid by bank transfer, or handed cash over at a fair, is still
+// "sent" here until it is marked paid — and would be chased for money already
+// handed over. So before any of that happens, say who is about to be chased
+// while there is still a day to stop it.
+
+const REMINDER_NOTICE_KEY = 'lm-invoice-reminder-notice';
+
+/** Has the heads-up already been given today, from this browser? */
+function reminderNoticeShownToday() {
+  try { return localStorage.getItem(REMINDER_NOTICE_KEY) === today(); }
+  catch (_) { return false; }
+}
+
+function markReminderNoticeShown() {
+  try { localStorage.setItem(REMINDER_NOTICE_KEY, today()); }
+  catch (_) { /* private mode — a repeated card is the harmless failure here */ }
+}
+
+/** Everything across every book that tomorrow's sweep would chase. */
+function invoicesDueTomorrow(days) {
+  const out = [];
+  for (const bookId of Object.keys(states || {})) {
+    if (isTestBookId(bookId)) continue;
+    for (const inv of dueForReminderTomorrow((states[bookId] || {}).invoices || [], { today: today(), days })) {
+      out.push({ bookId, inv });
+    }
+  }
+  out.sort((a, b) => String(a.inv.dueDate || '').localeCompare(String(b.inv.dueDate || '')));
+  return out;
+}
+
+/**
+ * The morning heads-up.
+ *
+ * Runs whatever the hour, unlike the sweep: this sends nothing, and the whole
+ * point is that it is waiting before the 9am send window opens. Once per
+ * calendar day, so an app left open all day doesn't repaint it hourly.
+ */
+function noticeUpcomingReminders() {
+  const cfg = reminderSettings(getInvoiceSettings());
+  // A warning about automatic chasing is noise when nothing will be sent.
+  if (!cfg.auto) return null;
+  if (reminderNoticeShownToday()) return null;
+
+  const batch = invoicesDueTomorrow(cfg.days);
+  if (!batch.length) return null;
+
+  const said = describeReminderNotice({ count: batch.length });
+  if (!said) return null;
+  pushAppAlert({
+    id: 'invoice-reminders-tomorrow',
+    icon: '📋',
+    title: said.title,
+    detail: said.detail,
+    tone: SYNC_TONES.PENDING,
+    actionLabel: 'Review them',
+    action: 'openReminderReview()',
+  });
+  markReminderNoticeShown();
+  return { count: batch.length };
+}
+
+// ── THE REVIEW LIST ─────────────────────────────────────────────────────────
+// Who is about to be chased, with the two ways out of it: this one already
+// paid, or this one has promised a date. Both call the existing behaviour —
+// there is exactly one writer of `inv.status = 'paid'` in this app and this
+// list must not become the second.
+
+function openReminderReview() {
+  renderReminderReview();
+  openM('reminder-review');
+}
+
+function renderReminderReview() {
+  const host = $('reminder-review-body');
+  if (!host) return;
+  const cfg = reminderSettings(getInvoiceSettings());
+  const batch = invoicesDueTomorrow(cfg.days);
+  const count = $('reminder-review-count');
+
+  if (!batch.length) {
+    if (count) count.textContent = 'Nothing waiting';
+    host.innerHTML = `<div class="empty-state"><div class="e-icon">✅</div>Nothing to review — everyone due a reminder is squared away.<div style="margin-top:8px;font-size:12px;color:var(--text3);">Invoices appear here the day before the app would chase them.</div></div>`;
+    return;
+  }
+
+  if (count) count.textContent = `${batch.length} invoice${batch.length === 1 ? '' : 's'} · chased tomorrow`;
+  const manyBooks = new Set(batch.map(r => r.bookId)).size > 1;
+  host.innerHTML = `<div class="tbl-wrap"><table class="tbl" style="font-size:12px;">
+    <thead><tr><th>Customer</th><th>Invoice</th><th class="r">Amount</th><th class="r">Late</th><th></th></tr></thead>
+    <tbody>${batch.map(({ bookId, inv }) => {
+    const late = daysLate(inv, today());
+    const book = BOOKS[bookId];
+    return `<tr>
+        <td style="font-weight:600;">${escapeHtml(inv.storeName) || '—'}<div style="font-size:11px;color:var(--text3);font-weight:400;">${escapeHtml(inv.storeEmail) || 'no email'}${manyBooks && book ? ' · ' + escapeHtml(book.title) : ''}</div></td>
+        <td class="mono-num" style="font-size:11px;">${escapeHtml(inv.num)}<div style="font-size:11px;color:var(--text3);">due ${escapeHtml(fmtD(inv.dueDate))}</div></td>
+        <td class="r mono-num" style="font-weight:600;">${escapeHtml(invoiceAmountLabel(inv))}</td>
+        <td class="r"><span class="pill amber">● ${late || 0}d</span></td>
+        <td style="white-space:nowrap;text-align:right;">
+          <button class="btn sm gold" onclick="reminderReviewMarkPaid('${escapeHtml(inv.id)}')" title="They already paid — settle it and send nothing">✓ Paid</button>
+          <button class="btn sm" style="margin-left:4px;" onclick="reminderReviewHoldOff('${escapeHtml(inv.id)}')" title="They told you when they'll pay — hold off until then">📅 Hold off</button>
+        </td>
+      </tr>`;
+  }).join('')}</tbody>
+  </table></div>`;
+}
+
+/** Settle one from the list — the same write-chain the invoice view uses. */
+async function reminderReviewMarkPaid(id) {
+  const { inv, bookId, s } = invoiceHome(id);
+  if (!inv) return;
+  if (!(await confirmDialog(
+    `Mark ${inv.num} as PAID? ${inv.storeName || 'They'} will not be chased, and any linked pending consignment sales are marked paid too.`,
+    { okLabel: 'Mark paid' },
+  ))) return;
+  applyInvoicePaid(inv, bookId, s);
+  renderReminderReview();
+  renderInvoices();
+  renderStores();
+  renderLedger();
+  renderHist();
+  updateDash();
+  showToast(`✓ ${inv.num} marked paid`);
+}
+
+/** Hold off on one from the list, on a date they gave you. */
+async function reminderReviewHoldOff(id) {
+  const { inv, bookId } = invoiceHome(id);
+  if (!inv) return;
+  const suggested = inv.remindAfter || (() => {
+    const d = new Date(); d.setDate(d.getDate() + 14);
+    return d.toISOString().split('T')[0];
+  })();
+  const picked = await promptDialog(
+    `When did ${inv.storeName || 'they'} say they would pay ${inv.num}? No reminder goes out before then.`,
+    suggested,
+    { title: 'Promised to pay', okLabel: 'Save date', inputType: 'date' },
+  );
+  if (picked === null) return;
+  const value = String(picked).trim();
+  if (value && !/^\d{4}-\d{2}-\d{2}$/.test(value)) { showToast('That is not a date I can read', 'warn'); return; }
+  inv.remindAfter = value;
+  saveState(bookId);
+  renderReminderReview();
+  renderInvoices();
+  showToast(value ? `✓ Holding off on ${inv.num} until ${fmtD(value)}` : `✓ ${inv.num} is back in the chasing list`);
+}
+
+/**
+ * Send the reminder to yourself.
+ *
+ * Reads the settings out of the FORM rather than out of storage, so the wording
+ * can be tweaked and re-tested without saving first — the point is to read what
+ * a customer would receive before any customer does.
+ *
+ * Writes nothing at all: no reminder logged, no daily count, no state saved. A
+ * test is not a chase, and an invoice borrowed as the sample must not fall out
+ * of the queue because it was previewed.
+ */
+async function sendTestReminderEmail() {
+  if (!sheetsUrl) { showToast('Connect your Google Sheet first — that is what sends the mail', 'warn'); return; }
+
+  const stored = getInvoiceSettings();
+  const cfg = reminderSettings({
+    remindAuto: true,
+    remindDays: $('ivs-remind-days') ? $('ivs-remind-days').value : stored.remindDays,
+    remindMsg: $('ivs-remind-msg') ? $('ivs-remind-msg').value : stored.remindMsg,
+  });
+
+  let to = ($('ivs-email') ? $('ivs-email').value : stored.email || '').trim();
+  if (!to) {
+    const asked = await promptDialog(
+      'Where should the test go? Nobody else receives it.',
+      '',
+      { title: 'Send me a test reminder', okLabel: 'Send', placeholder: 'you@email.com', inputType: 'email' },
+    );
+    if (asked === null) return;
+    to = String(asked).trim();
+  }
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) { showToast('That does not look like an email address', 'warn'); return; }
+
+  // A real late invoice reads more honestly than a made-up one; the sample is
+  // only there so the button still works before anything is overdue.
+  const real = invoicesAwaitingReminder(cfg.days, 1)[0]
+    || invoicesDueTomorrow(cfg.days)[0]
+    || null;
+  const inv = real ? real.inv : sampleReminderInvoice({ today: today(), days: cfg.days });
+  // Works for the sample too: with no id to locate, invoiceOwnerBook falls back
+  // to the book on screen, so the amount reads in the currency she works in.
+  const amountLabel = invoiceAmountLabel(inv);
+
+  const mail = buildReminderEmail(inv, {
+    settings: cfg,
+    payLink: real ? (effectivePaymentLink(inv) || '') : 'https://buy.stripe.com/example',
+    today: today(),
+    publisher: ($('ivs-name') ? $('ivs-name').value : stored.name) || 'Lyricalmyrical Books',
+    amountLabel,
+  });
+
+  showToast('Sending your test reminder…');
+  try {
+    await sendSingleEmailViaBackend(to, `[TEST] ${mail.subject}`, mail.text, stored.email || '', mail.html);
+    showToast(`✓ Test reminder sent to ${to}${real ? '' : ' (using a sample invoice)'}`, 'ok', 5000);
+  } catch (error) {
+    showToast(`Could not send the test: ${String((error && error.message) || error)}`, 'err', 5000);
+  }
+}
+
+function startPaymentReminderWatch() {
+  if (_reminderWatchStarted || typeof window === 'undefined') return;
+  _reminderWatchStarted = true;
+  // The heads-up first: it sends nothing, runs at any hour, and its whole
+  // purpose is to be waiting before the sweep's send window opens.
+  startWatch(() => { noticeUpcomingReminders(); sweepPaymentReminders(); }, { intervalMs: REMINDER_WATCH_INTERVAL_MS });
+}
+
+/** Chase this invoice now, whatever the automatic setting says. */
+async function remindInvoiceFromView() {
+  if (!currentViewInvoiceId) return;
+  const { inv, bookId } = invoiceHome(currentViewInvoiceId);
+  if (!inv) return;
+  // Belt and braces with the hidden buttons above: this is callable from the
+  // console and from a stale modal, and the cost of getting it wrong is an
+  // email chasing a customer who already paid.
+  if (inv.status === 'paid') { showToast(`${inv.num} is already paid — nothing to chase`, 'warn'); return; }
+  if (inv.status === 'cancelled') { showToast(`${inv.num} was cancelled — nothing to chase`, 'warn'); return; }
+  const to = String(inv.storeEmail || '').trim();
+  if (!to) { showToast('No email address on this invoice — add one to remind them', 'warn'); return; }
+  if (!sheetsUrl) { showToast('Connect your Google Sheet first — that is what sends the mail', 'warn'); return; }
+
+  const state = invoiceReminderState(inv);
+  const already = state.count
+    ? `You have already reminded them ${state.count === 1 ? 'once' : `${state.count} times`}. `
+    : '';
+  const late = daysLate(inv, today());
+  const lateSaid = late ? `${late} day${late === 1 ? '' : 's'} past due. ` : '';
+  if (!(await confirmDialog(
+    `${lateSaid}${already}Email ${to} a reminder about ${inv.num}, with a link to pay it?`,
+    { okLabel: 'Send reminder', title: 'Remind this customer' },
+  ))) return;
+
+  showToast('Sending reminder…');
+  const res = await sendInvoiceReminder(inv, bookId, { kind: 'manual' });
+  renderInvoices();
+  viewInvoice(currentViewInvoiceId);
+  if (res.ok) showToast(`✓ Reminder sent to ${to}`);
+  else showToast(`Reminder failed: ${res.error}`, 'err', 5000);
+}
+
+/**
+ * "They said they'd pay on the 15th" — hold off until then.
+ *
+ * Worth its own control rather than switching the whole feature off: the
+ * customer who answered you is exactly the one who should stop being chased,
+ * and everybody else should carry on being chased.
+ */
+async function snoozeInvoiceFromView() {
+  if (!currentViewInvoiceId) return;
+  const { inv, bookId } = invoiceHome(currentViewInvoiceId);
+  if (!inv) return;
+  const suggested = inv.remindAfter || (() => {
+    const d = new Date(); d.setDate(d.getDate() + 14);
+    return d.toISOString().split('T')[0];
+  })();
+  const picked = await promptDialog(
+    `When did ${inv.storeName || 'they'} say they would pay ${inv.num}? No reminder goes out before then. Clear the date to start chasing again.`,
+    suggested,
+    { title: 'Promised to pay', okLabel: 'Save date', inputType: 'date' },
+  );
+  if (picked === null) return;
+  const value = String(picked).trim();
+  if (value && !/^\d{4}-\d{2}-\d{2}$/.test(value)) { showToast('That is not a date I can read', 'warn'); return; }
+  inv.remindAfter = value;
+  saveState(bookId);
+  renderInvoices();
+  viewInvoice(currentViewInvoiceId);
+  showToast(value ? `✓ Holding off on ${inv.num} until ${fmtD(value)}` : `✓ ${inv.num} is back in the chasing list`);
+}
+
 function reconcileDismiss(idSafe) {
   const p = _reconFindPayment(idSafe);
   if (!p) return;
@@ -19879,7 +21713,7 @@ async function createStripePaymentLinkForBook(book) {
   if (!/^(rk|sk)_/.test(key)) throw new Error("That doesn't look like a Stripe restricted/secret key (expected rk_… or sk_…).");
 
   const curCode = (getBookCurrencyCode(book) || 'CAD').toLowerCase();
-  const isZeroDec = _STRIPE_ZERO_DECIMAL.has(curCode.toUpperCase());
+  const isZeroDec = isZeroDecimalCurrency(curCode);
   const major = Number(book.listPrice || 0);
   const amount = isZeroDec ? Math.round(major) : Math.round(major * 100);
   if (amount < 50 && !isZeroDec) throw new Error('List price too small for Stripe (minimum 0.50).');
@@ -19941,7 +21775,7 @@ async function createStripePaymentLinkForAmount({ amountMajor, currencyCode, des
   if (!/^(rk|sk)_/.test(key)) throw new Error("That doesn't look like a Stripe restricted/secret key (expected rk_… or sk_…).");
 
   const curCode = (currencyCode || 'CAD').toUpperCase();
-  const isZeroDec = _STRIPE_ZERO_DECIMAL.has(curCode);
+  const isZeroDec = isZeroDecimalCurrency(curCode);
   const major = Number(amountMajor || 0);
   if (!(major > 0)) throw new Error('Nothing to charge — the amount is zero.');
   const amount = isZeroDec ? Math.round(major) : Math.round(major * 100);
@@ -21516,7 +23350,18 @@ async function renderCampaigns() {
       </div>`;
 }
 
-function filterCustomers(v) { _customerFilter = v || ''; renderCustomers(); }
+// ⚡ Bolt Optimization: Debounce the buyer-search re-render. Each keystroke was
+// synchronously re-running buildCustomerList() — a full scan of every book's
+// order history, unapplied website orders, and the Stripe pull cache — plus a
+// full innerHTML rebuild of the buyer table. Typing a short name (e.g. "sarah")
+// fired that whole pipeline 5 times; waiting for a short pause in typing runs
+// it once instead, with no change to the final filtered result.
+let _custFilterDebounceTimer = null;
+function filterCustomers(v) {
+  _customerFilter = v || '';
+  clearTimeout(_custFilterDebounceTimer);
+  _custFilterDebounceTimer = setTimeout(renderCustomers, 180);
+}
 
 async function customerPullStripe() {
   const btn = $('cust-stripe-btn');
@@ -21670,8 +23515,10 @@ Object.assign(window, {
   // Invoices
   renderInvoices, openCreateInvoice, viewInvoice,
   addInvoiceItem, removeInvoiceItem, updateInvoiceItem,
-  onInvoiceStoreChange, prefillFromPendingSales, recalcInvoiceTotals,
+  onInvoiceStoreChange, setInvoiceBillToMode, prefillFromPendingSales, recalcInvoiceTotals,
   saveInvoice, deleteInvoice, editInvoiceFromView, markInvoicePaidFromView,
+  remindInvoiceFromView, snoozeInvoiceFromView,
+  openReminderReview, reminderReviewMarkPaid, reminderReviewHoldOff, sendTestReminderEmail,
   printInvoice, copyInvoicePayLink, emailInvoice, downloadInvoiceHTML, downloadInvoicePDF,
   openInvoiceTemplateSettings, saveInvoiceSettings,
   regenerateStripeLinkFromView, onInvoiceCurrencyChange,
@@ -22307,7 +24154,14 @@ document.addEventListener('click', (e) => {
 // rendered templates intentionally use compact inline handlers; keep those
 // legacy entry points available so every visible button can invoke its action.
 function exposeLegacyInlineHandlers() {
+  // The Intelligence panel's buttons are rendered from template strings, so
+  // every one of its handlers has to be reachable off window at click time.
+  // Its names lead the list below.
   Object.assign(window, {
+    acceptIntelDisclosure, applyIntelProposal, askIntelStarter, clearIntelThread,
+    dismissIntelProposal, intelComposerKey, renderIntel, sendIntelMessage, stopIntelTurn,
+    dismissDeductionGap, renderDeductionGaps, restoreDeductionGaps, snoozeDeductionGap,
+    toggleIntelEdit,
     revealUpdatingScreen, hideUpdatePrompt, bindUpdatePromptInteractions, isTestBook, isTestBookId,
     ownersFromBooks, saveCatalogWithDeletions, loadCatalog, syncCatalog, switchBookModalTab,
     stepBookModal, updateBookModalFinancials, onBookTitleInput, selectBookAccentPreset, onCustomAccentInput, applyBookParcelPreset,
@@ -22326,12 +24180,12 @@ function exposeLegacyInlineHandlers() {
     updateRoleToggleButton, updateSubheader, placeKpiStrip, bindKpiResize, syncRoleUI,
     toggleCurrentBookView, updateProfileTabs, selectProfileTab, seedMockTestData, switchBook,
     switchTab, updateHeader, updateAllOverview, renderCustomersStat, channelColor,
-    renderChannelAnalytics, selectAllChCurrency, setChChannelFilter, clearChChannelFilter, setChBookSort, setChBookSearch, renderGlobalPendingAlert, updateContextBanners,
+    renderChannelAnalytics, selectAllChCurrency, setChChannelFilter, clearChChannelFilter, setChBookSort, setChBookSearch, renderOverviewRail, renderTodoTab, updateContextBanners,
     toggleConGroup, toggleConGrouping, toggleAllConGroups, setConStatusFilter, onConSearchInput, clearConSearch, clearConSearchAndFilter, renderConsignmentTable,
     updatePublisherActionBanner, renderBookPendingAlert, heldGrossOf, recognizedRevenueOf,
     dismissStockDrift, updateDash, getProfitTiersHtml, getRevenueProgressHtml, getOwedCardDetails,
     getArtistHeldHtml, getPayoutHistoryHtml, renderProfitSharingBreakdown, toggleArtistPayoutForm,
-    recordArtistPayout, deleteArtistPayout, renderAll, renderCurrent, scheduleRender, ocList,
+    saveArtistPayout, editArtistPayout, deleteArtistPayout, renderAll, renderCurrent, scheduleRender, ocList,
     ocBlockedForAuthor_, ocEnsureQueues_, ocQueueNextStep_, ocStamp_, ocUiOpen_, ocToggleSection,
     ocTogglePhotoPick, ocSetSort, ocSetTmplTab, ocUpdateTmplPreview, ocThreadForStage,
     openOcBulkModal, ocBulkModalEscHandler, closeOcBulkModal, renderOcBulkModalContent,
@@ -22527,7 +24381,8 @@ function exposeLegacyInlineHandlers() {
     exportCustomersCSV, checkAppUpdate, dismissAppUpdate, fetchRecentChanges, showWhatsNew,
     initStartup, setupGate, renderWebAnalytics, updateModalAccentPreview, normalizeCountryCode,
     getAllStores, getBookPresetSpecs, initShippingTab, getRecentShippingOrders, saveShippoApiKey,
-    editShippoApiKey, onShippoPreFillDestChange, prefillShippingFromBigCartelOrder, onShippoBookPresetChange, isCanadaPostRate,
+    editShippoApiKey, onShippoPreFillDestChange, prefillShippingFromBigCartelOrder, onShippoBookPresetChange,
+    onShippoAutoQuoteToggle, applyOrderPrefill, isCanadaPostRate,
     moneyAmount, roundShippingCharge, buildShippingChargePrediction,
     renderShippingChargePrediction, collectShippoMessages, renderShippoDiagnostics,
     calculateShippoRates, updateShippoBaseSpecsFromInputs, onShippoQuantityChange,
@@ -22577,6 +24432,33 @@ window.renumberPlaceholderOrder = renumberPlaceholderOrder;
 window.voidPlaceholderDuplicate = voidPlaceholderDuplicate;
 window.renderBigCartelLedgerGaps = renderBigCartelLedgerGaps;
 window.autoCheckBigCartelLedgerGaps = autoCheckBigCartelLedgerGaps;
+window.dismissNewOrderAlert = dismissNewOrderAlert;
+window.dismissAppAlert = dismissAppAlert;
+window.renderIntegrationBadges = renderIntegrationBadges;
+
+/**
+ * The "Check now" button on a health card: ask that service again immediately
+ * rather than waiting out the backoff. Both watches already accept `force`,
+ * which is what skips the interval gate.
+ */
+window.recheckIntegration = (id) => {
+  if (id === 'bigcartel') return refreshBigCartelOrdersIfDue({ force: true });
+  if (id === 'shippo') return refreshShippoLabelsIfDue({ force: true });
+  if (id === 'canadapost') return sweepCanadaPostShipments({ force: true });
+  if (id === 'shipping-email') return sweepShippingEmails({ force: true });
+  if (id === 'stripe') return sweepStripeInvoicePayments({ force: true });
+  if (id === 'stripe-fees') return sweepStripeFees({ force: true });
+  return undefined;
+};
+window.openInvoiceFromAlert = openInvoiceFromAlert;
+window.sweepStripeInvoicePayments = sweepStripeInvoicePayments;
+window.sweepStripeFees = sweepStripeFees;
+window.linkConfidentShippingMatchesNow = linkConfidentShippingMatchesNow;
+window.openShippingReconciliationFromAlert = openShippingReconciliationFromAlert;
+window.shipNewOrderFromAlert = shipNewOrderFromAlert;
+window.recordNewOrderFromAlert = recordNewOrderFromAlert;
+window.reviewNewOrdersFromAlert = reviewNewOrdersFromAlert;
+window.refreshBigCartelOrdersIfDue = refreshBigCartelOrdersIfDue;
 window.switchBigCartelSubTab = switchBigCartelSubTab;
 window.loadBigCartelData = loadBigCartelData;
 window.renderBigCartelTab = renderBigCartelTab;
@@ -22598,6 +24480,7 @@ window.filterShippoDestMenu = filterShippoDestMenu;
 window.selectShippoDestCustomItem = selectShippoDestCustomItem;
 window.clearShippoDestSelection = clearShippoDestSelection;
 window.onShippoBookPresetChange = onShippoBookPresetChange;
+window.onShippoAutoQuoteToggle = onShippoAutoQuoteToggle;
 window.openSaveBookPresetModal = openSaveBookPresetModal;
 window.confirmSaveBookPreset = confirmSaveBookPreset;
 window.renderSaveBookPresetPreview = renderSaveBookPresetPreview;
@@ -22612,7 +24495,6 @@ window.calculateZonosDutiesHandler = calculateZonosDutiesHandler;
 window.testZonosConnectionHandler = testZonosConnectionHandler;
 window.onZonosDeclarationIdInput = onZonosDeclarationIdInput;
 window.pasteZonosDeclarationId = pasteZonosDeclarationId;
-window.autoGenerateZonosDeclarationHandler = autoGenerateZonosDeclarationHandler;
 window.checkCanadaPostAccountAndPinHandler = checkCanadaPostAccountAndPinHandler;
 window.verifyShippedTrackingPinsHandler = verifyShippedTrackingPinsHandler;
 window.showArchivedCanadaPostLabels = showArchivedCanadaPostLabels;

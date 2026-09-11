@@ -356,7 +356,9 @@ export function suggestPostageMatches(expense = {}, orders = [], opts = {}) {
     .filter(order => !taken.has(clean(order.num || order.orderNum).toUpperCase()))
     .map(order => scorePostageOrderMatch(expense, order, { recipientOverride }))
     .filter(Boolean)
-    .sort((a, b) => b.score - a.score || a.orderDate.localeCompare(b.orderDate))
+    // ⚡ Bolt Optimization: orderDate is an ISO "YYYY-MM-DD" string, so plain
+    // string inequality sorts it correctly without locale-aware comparison overhead.
+    .sort((a, b) => b.score - a.score || (a.orderDate < b.orderDate ? -1 : (a.orderDate > b.orderDate ? 1 : 0)))
     .slice(0, Math.max(1, limit));
 }
 
@@ -405,7 +407,9 @@ export function postageScanCandidates(expenses = [], { includeComplete = false }
     .filter(expense => includeComplete
       || !postageRecipientName(expense)
       || !normalizeTrackingNumber(expense.trackingNumber))
-    .sort((a, b) => clean(a.date).localeCompare(clean(b.date)));
+    // ⚡ Bolt Optimization: expense.date is an ISO "YYYY-MM-DD" string, so plain
+    // string inequality sorts it correctly without locale-aware comparison overhead.
+    .sort((a, b) => { const dA = clean(a.date), dB = clean(b.date); return dA < dB ? -1 : (dA > dB ? 1 : 0); });
 }
 
 /**

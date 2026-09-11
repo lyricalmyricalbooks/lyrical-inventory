@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory } from '../src/lib/inventory.js';
+import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, isVoidStale, VOID_HIDE_AFTER_MS } from '../src/lib/inventory.js';
 
 const book = (maxPrint = 100) => ({ maxPrint });
 const sale = (qty, extra = {}) => ({ qty, ...extra });
@@ -336,5 +336,34 @@ describe('recalculateBookStatsFromHistory', () => {
     expect(s.sold).toBe(2);
     expect(s.revenue).toBe(0); // 0*10 + 2*0 + 0*0
     expect(s.chStats.Manual).toEqual({ txns: 3, units: 2, revenue: 0 });
+  });
+});
+
+describe('isVoidStale', () => {
+  const NOW = 1_700_000_000_000;
+
+  it('is never stale when the entry is not voided', () => {
+    expect(isVoidStale({ voided: false, voidedAt: NOW - VOID_HIDE_AFTER_MS * 10 }, NOW)).toBe(false);
+  });
+
+  it('treats a voided entry with no recorded void time as stale (pre-feature legacy data)', () => {
+    expect(isVoidStale({ voided: true }, NOW)).toBe(true);
+  });
+
+  it('is not stale within the grace period', () => {
+    expect(isVoidStale({ voided: true, voidedAt: NOW - 30 * 60 * 1000 }, NOW)).toBe(false);
+  });
+
+  it('is not stale exactly at the threshold', () => {
+    expect(isVoidStale({ voided: true, voidedAt: NOW - VOID_HIDE_AFTER_MS }, NOW)).toBe(false);
+  });
+
+  it('is stale once past the grace period', () => {
+    expect(isVoidStale({ voided: true, voidedAt: NOW - 90 * 60 * 1000 }, NOW)).toBe(true);
+  });
+
+  it('defaults `now` to the current time when not provided', () => {
+    expect(isVoidStale({ voided: true, voidedAt: Date.now() })).toBe(false);
+    expect(isVoidStale({ voided: true, voidedAt: Date.now() - VOID_HIDE_AFTER_MS * 2 })).toBe(true);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calcArtistEarnings, tierEffectiveCap } from '../src/lib/earnings.js';
+import { calcArtistEarnings, tierEffectiveCap, payoutRequestCovered } from '../src/lib/earnings.js';
 
 const tier = (label, revenueUpTo, artistPct) => ({ label, revenueUpTo, artistPct });
 const sale = (qty, price, extra = {}) => ({ qty, price, ...extra });
@@ -146,5 +146,45 @@ describe('calcArtistEarnings', () => {
     expect(cents(r.totalPaidToArtist)).toBeLessThan(1e-6);
     // 0.1 + 0.2 must be exactly 0.3, not 0.30000000000000004.
     expect(r.totalPaidToArtist).toBe(0.3);
+  });
+});
+
+describe('payoutRequestCovered', () => {
+  const stats = (totalPaidToArtist, owedToArtist = 0) => ({ totalPaidToArtist, owedToArtist });
+
+  it('is not covered until enough has been paid since the request', () => {
+    const req = { amount: 100, paidAtRequest: 40 };
+    expect(payoutRequestCovered(req, stats(40))).toBe(false);   // nothing paid since
+    expect(payoutRequestCovered(req, stats(100))).toBe(false);  // 60 of the 100
+    expect(payoutRequestCovered(req, stats(140))).toBe(true);   // exactly 100
+    expect(payoutRequestCovered(req, stats(200))).toBe(true);   // more than asked
+  });
+
+  it('does not settle a fresh request just because a payout exists already', () => {
+    // The regression this replaced: settlement was "is any payout dated on or
+    // after the request's day". A payout recorded earlier the same day made a
+    // brand-new request read as settled the moment it was sent.
+    const req = { amount: 250, paidAtRequest: 900 };
+    expect(payoutRequestCovered(req, stats(900))).toBe(false);
+  });
+
+  it('tolerates a rounding crumb rather than leaving a request open', () => {
+    const req = { amount: 100, paidAtRequest: 0 };
+    expect(payoutRequestCovered(req, stats(99.996))).toBe(true);
+    expect(payoutRequestCovered(req, stats(99.98))).toBe(false);
+  });
+
+  it('falls back to a cleared balance for requests with no baseline', () => {
+    // Legacy rows written before paidAtRequest existed have nothing to
+    // subtract from, so they only close once nothing at all is owed.
+    const legacy = { amount: 100 };
+    expect(payoutRequestCovered(legacy, stats(500, 12))).toBe(false);
+    expect(payoutRequestCovered(legacy, stats(500, 0))).toBe(true);
+    expect(payoutRequestCovered(legacy, stats(500, 0.004))).toBe(true);
+  });
+
+  it('is never covered without a request or stats', () => {
+    expect(payoutRequestCovered(null, stats(10))).toBe(false);
+    expect(payoutRequestCovered({ amount: 1 }, null)).toBe(false);
   });
 });

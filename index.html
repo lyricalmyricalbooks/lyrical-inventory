@@ -289,17 +289,19 @@
 
   <nav class="pub-nav" aria-label="Books">
     <button type="button" class="snav" title="Dashboard" onclick="switchTab('dashboard')"><span class="snav-ic">▦</span><span class="snav-label">Dashboard</span></button>
+    <button type="button" class="snav" id="todo-sidebar-btn" title="To-do" onclick="switchTab('todo')"><span class="snav-ic">✅</span><span class="snav-label">To-do</span><span class="nav-badge todo-nav-badge" aria-label="things needing attention" hidden></span></button>
     <button type="button" class="snav" title="Website orders" onclick="switchTab('website')"><span class="snav-ic">🛍</span><span class="snav-label">Website orders</span></button>
     <button type="button" class="snav" title="Manual entry" onclick="switchTab('manual')"><span class="snav-ic">✎</span><span class="snav-label">Manual entry</span></button>
-    <button type="button" class="snav" title="Consignment" onclick="switchTab('consignment')"><span class="snav-ic">🏪</span><span class="snav-label">Consignment</span></button>
+    <button type="button" class="snav" title="Consignment" onclick="switchTab('consignment')"><span class="snav-ic">🏪</span><span class="snav-label">Consignment</span><span class="health-badge" data-health-badge="stripe" aria-label="Stripe is not answering, so invoice payments may be missed" hidden></span></button>
     <button type="button" class="snav" title="History" onclick="switchTab('history')"><span class="snav-ic">🕘</span><span class="snav-label">History</span></button>
     <button type="button" class="snav" title="Expenses" onclick="switchTab('expenses')"><span class="snav-ic">🧾</span><span class="snav-label">Expenses</span></button>
   </nav>
 
   <div class="o3-grouplabel">Tools</div>
   <nav class="pub-nav" aria-label="Tools">
+    <button type="button" class="snav" title="Intelligence" onclick="switchTab('intel')"><span class="snav-ic">💬</span><span class="snav-label">Intelligence</span></button>
     <button type="button" class="snav" title="Event POS" onclick="switchTab('pos')"><span class="snav-ic">🛒</span><span class="snav-label">Event POS</span></button>
-    <button type="button" class="snav" title="Tax Centre" onclick="switchTab('taxcenter')"><span class="snav-ic">⚖️</span><span class="snav-label">Tax Centre</span></button>
+    <button type="button" class="snav" title="Tax Centre" onclick="switchTab('taxcenter')"><span class="snav-ic">⚖️</span><span class="snav-label">Tax Centre</span><span class="health-badge" data-health-badge="shippo,canadapost,shipping-email,stripe-fees" aria-label="A shipping service is not answering" hidden></span></button>
 
     <div class="o3-subgrouplabel">Money</div>
     <button type="button" class="snav" title="Payments" onclick="switchTab('reconcile')"><span class="snav-ic">💳</span><span class="snav-label">Payments</span></button>
@@ -313,7 +315,7 @@
     <div class="o3-subgrouplabel">Data</div>
     <button type="button" class="snav" title="Shipping" onclick="switchTab('shipping')"><span class="snav-ic">📦</span><span class="snav-label">Shipping</span></button>
     <button type="button" class="snav" title="Sheets" onclick="switchTab('sheets')"><span class="snav-ic">⚙️</span><span class="snav-label">Sheets</span></button>
-    <button type="button" class="snav" id="sidebar-bigcartel-btn" title="Big Cartel" onclick="switchTab('bigcartel')"><span class="snav-ic">🏪</span><span class="snav-label">Big Cartel</span><span class="bc-gap-badge pill red" aria-label="orders missing from your ledger" hidden></span></button>
+    <button type="button" class="snav" id="sidebar-bigcartel-btn" title="Big Cartel" onclick="switchTab('bigcartel')"><span class="snav-ic">🏪</span><span class="snav-label">Big Cartel</span><span class="bc-gap-badge pill red" aria-label="orders missing from your ledger" hidden></span><span class="health-badge" data-health-badge="bigcartel" aria-label="Big Cartel is not answering" hidden></span></button>
     <button type="button" class="snav" title="Backups" onclick="switchTab('backups')"><span class="snav-ic">💾</span><span class="snav-label">Backups</span></button>
   </nav>
 
@@ -406,8 +408,9 @@
   <div class="header-grow" aria-hidden="true"></div>
 
   <div class="header-actions" id="global-actions" style="display:none; align-items:center;">
+    <button class="header-action-btn" onclick="switchTab('todo')" id="todo-tab-btn" title="Things needing your attention">✅ To-do<span class="nav-badge todo-nav-badge" aria-label="things needing attention" hidden></span></button>
     <button class="header-action-btn primary" onclick="switchTab('pos')" id="global-pos-btn" title="Sell books at an event">🛒 Event POS</button>
-    <button class="header-action-btn" onclick="switchTab('taxcenter')" id="global-taxcenter-btn" title="Expenses &amp; tax season">⚖️ Tax Centre</button>
+    <button class="header-action-btn" onclick="switchTab('taxcenter')" id="global-taxcenter-btn" title="Expenses &amp; tax season">⚖️ Tax Centre<span class="health-badge" data-health-badge="shippo,canadapost,shipping-email,stripe-fees" aria-label="A shipping service is not answering" hidden></span></button>
 
     <!-- MONEY -->
     <div class="header-menu" id="hmenu-money">
@@ -524,13 +527,13 @@
   <button class="tab-btn active" onclick="switchTab('dashboard')">Dashboard</button>
   <button class="tab-btn" id="website-tab-btn" onclick="switchTab('website')">Website orders</button>
   <button class="tab-btn" onclick="switchTab('manual')">Manual entry</button>
-  <button class="tab-btn" onclick="switchTab('consignment')">Consignment</button>
+  <button class="tab-btn" onclick="switchTab('consignment')">Consignment<span class="health-badge" data-health-badge="stripe" aria-label="Stripe is not answering, so invoice payments may be missed" hidden></span></button>
   <button class="tab-btn" onclick="switchTab('history')">History</button>
   <button class="tab-btn" onclick="switchTab('expenses')">Expenses</button>
   <button class="tab-btn" id="webanalytics-tab-btn" onclick="switchTab('webanalytics')">Web Analytics</button>
   <button class="tab-btn" onclick="switchTab('myqr')" id="myqr-tab-btn" style="display:none;">📲 My QR Code</button>
   <button class="tab-btn" id="shipping-tab-btn" onclick="switchTab('shipping')">📦 Shipping Rates</button>
-  <button class="tab-btn" id="bigcartel-tab-btn" onclick="switchTab('bigcartel')">Big Cartel<span class="bc-gap-badge pill red" aria-label="orders missing from your ledger" hidden></span></button>
+  <button class="tab-btn" id="bigcartel-tab-btn" onclick="switchTab('bigcartel')">Big Cartel<span class="bc-gap-badge pill red" aria-label="orders missing from your ledger" hidden></span><span class="health-badge" data-health-badge="bigcartel" aria-label="Big Cartel is not answering" hidden></span></button>
   <span class="tab-author" id="tab-author"></span>
   <span class="tab-updated" id="tab-updated"></span>
 </nav>
@@ -580,9 +583,69 @@
   <div id="qr-all-grid" class="qr-grid"></div>
 </div>
 
+<!-- TO-DO (publisher only, reached from the all-books screen) -->
+<div class="tab-panel" id="tab-todo" style="display:none;">
+  <div class="sec-head">
+    <div class="sec-head-titles">
+      <div class="sec-kicker"><span class="sec-kicker-dot"></span>To-do</div>
+      <div class="section-hed sec-head-title">Things worth your attention</div>
+      <p class="section-subcopy">Everything the app can see that still needs entering, fixing or chasing. Items disappear on their own once you've dealt with them — there is nothing to tick off.</p>
+    </div>
+    <div class="sec-head-badges">
+      <span class="pill gold" id="todo-total-chip">—</span>
+    </div>
+  </div>
+  <p class="sr-only" id="todo-status" role="status" aria-live="polite"></p>
+  <div id="todo-groups"></div>
+</div>
+
+<!-- INTELLIGENCE (publisher only; switchTab redirects authors away) -->
+<div class="tab-panel" id="tab-intel" style="display:none;">
+  <div class="sec-head">
+    <div class="sec-head-titles">
+      <div class="sec-kicker"><span class="sec-kicker-dot"></span>Intelligence</div>
+      <div class="section-hed sec-head-title">Ask your books</div>
+      <p class="section-subcopy">Sales, costs, fairs, stock, or anything that looks filed wrong. Every answer is worked out from your own records, and each one says what it looked at.</p>
+    </div>
+    <div class="sec-head-badges">
+      <button type="button" class="btn ghost sm sys-target" id="intel-clear" onclick="clearIntelThread()" hidden>Clear conversation</button>
+    </div>
+  </div>
+
+  <div class="intel-disclosure" id="intel-disclosure" hidden>
+    <div class="intel-disclosure-ic" aria-hidden="true">🔒</div>
+    <div class="intel-disclosure-body">
+      <strong>Before you start — where your figures go</strong>
+      <p>To answer a question, this screen sends the rows it needs — your sales, costs and takings — to Google's Gemini service, using the key you saved in the Tax Centre. Nothing goes anywhere until you ask something, and only you can open this screen.</p>
+      <button type="button" class="btn gold sm sys-target" onclick="acceptIntelDisclosure()">I understand</button>
+    </div>
+  </div>
+
+  <p class="intel-notice" id="intel-notice" hidden></p>
+  <p class="sr-only" id="intel-status" role="status" aria-live="polite"></p>
+
+  <div class="intel-panel sys-container">
+    <div class="intel-thread sys-long-list" id="intel-thread"></div>
+
+    <!-- Permanent markup. renderIntel() only ever enables or disables this;
+         rebuilding it would drop the caret out of a half-typed question. -->
+    <div class="intel-composer" id="intel-composer">
+      <label class="sr-only" for="intel-input">Your question</label>
+      <textarea id="intel-input" class="intel-input" rows="2" placeholder="Ask about sales, costs, a fair, or anything that looks wrong&hellip;" onkeydown="intelComposerKey(event)"></textarea>
+      <div class="intel-composer-actions">
+        <button type="button" class="btn ghost sm sys-target" id="intel-stop" onclick="stopIntelTurn()" hidden>Stop</button>
+        <button type="button" class="btn gold sys-target" id="intel-send" onclick="sendIntelMessage()">Ask</button>
+      </div>
+    </div>
+
+    <p class="intel-foot">Worked out from your own records. Worth checking a figure against the screen it came from before you act on it.</p>
+  </div>
+</div>
+
 <!-- COMBINED OVERVIEW (shown when book = 'all') -->
 <div class="tab-panel active" id="tab-all-overview">
-  <div id="all-pending-approvals-alert" style="display:none; margin-bottom: 1.5rem;"></div>
+  <div class="overview-shell">
+  <div class="overview-main">
 
   <div class="overview-section">
     <div class="sec-head">
@@ -651,6 +714,31 @@
       <tbody id="all-con-body"></tbody></table>
     </div>
   </div>
+
+  </div><!-- /.overview-main -->
+
+  <aside class="overview-rail" aria-label="Notifications and recent activity">
+    <section class="rail-card" id="all-notifications-card">
+      <div class="rail-head">
+        <div class="sec-kicker rail-kicker"><span class="sec-kicker-dot rail-dot"></span>Needs attention</div>
+        <span class="pill amber rail-count" id="all-notif-count" hidden></span>
+      </div>
+      <h3 class="rail-title">Notifications</h3>
+      <!-- Permanent live region: never rebuilt by innerHTML, or it announces nothing. -->
+      <p class="sr-only" id="all-notif-status" role="status" aria-live="polite"></p>
+      <div class="notif-list" id="all-notifications"></div>
+      <button type="button" class="rail-more" id="all-notif-more" onclick="switchTab('todo')" hidden></button>
+    </section>
+
+    <section class="rail-card" id="all-activity-card">
+      <div class="rail-head">
+        <div class="sec-kicker rail-kicker is-quiet"><span class="sec-kicker-dot rail-dot"></span>Recent activity</div>
+      </div>
+      <h3 class="rail-title">What's been happening</h3>
+      <div class="activity-list" id="all-activity"></div>
+    </section>
+  </aside>
+  </div><!-- /.overview-shell -->
 </div>
 
 <!-- DASHBOARD (per book) -->
@@ -767,7 +855,13 @@
   </details>
   <!-- PROFIT SHARING BREAKDOWN -->
   <div id="d-profit-sharing-block" class="card" style="margin-bottom:1.5rem; border-left:4px solid var(--book-accent); display:none;">
-    <div class="sect" style="margin-bottom:1rem;">Profit Sharing Breakdown</div>
+    <div class="sec-head ps-block-head is-muted">
+      <div class="sec-head-titles">
+        <div class="sec-kicker"><span class="sec-kicker-dot"></span>Revenue Split</div>
+        <div class="section-hed sec-head-title">Profit Sharing Breakdown</div>
+        <p class="section-subcopy">How this title's revenue splits between the artist and the press.</p>
+      </div>
+    </div>
     <div id="ps-dash-content">
       <!-- Populated by JS -->
     </div>
@@ -780,34 +874,71 @@
     <div class="sect">Pending expense reimbursements</div>
     <div id="d-pending-expenses-list"></div>
   </div>
-  <div class="sect">Sales by channel</div>
-  <div class="tbl-wrap ch-mix-wrap"><table class="tbl ch-mix-tbl"><thead><tr><th>Channel</th><th class="r">Transactions</th><th class="r">Units</th><th class="r">Revenue</th><th class="ch-mix-share-col">Share<span class="ch-mix-col-qualifier"> of revenue</span></th></tr></thead><tbody id="ch-body"></tbody><tfoot id="ch-foot"></tfoot></table></div>
-  <div class="sect">Consignment overview</div>
-  <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Store</th><th class="r">Sent</th><th class="r">Sold</th><th class="r">Returned</th><th class="r">Outstanding</th><th>Status</th></tr></thead><tbody id="dash-con-body"></tbody></table></div>
-  <div class="sect">Inventory</div>
-  <div class="stock-block">
-    <div class="stock-head">
-      <div class="stock-head-titles"><div class="stock-title" id="d-book-title">—</div><div class="stock-author" id="d-book-author">—</div></div>
-      <span class="pill gold" id="d-book-isbn">—</span>
-    </div>
-    <div class="stock-stage">
-      <div class="bar-meta"><span class="bar-meta-lead" id="d-bar-label">— / — on hand</span><span class="bar-meta-note" id="d-thresh-label">Alert at — units</span></div>
-      <div class="bar-track" id="d-bar-track" style="display:flex;overflow:hidden;border-radius:9999px;">
-        <div class="bar-fill" id="d-bar" style="width:100%;background:var(--gold2);transition:width var(--dur-base) var(--ease-entrance);"></div>
-        <div class="bar-fill bar-fill-author" id="d-bar-author" style="width:0%;display:none;background:var(--violet, #8b5cf6);transition:width var(--dur-base) var(--ease-entrance);"></div>
+  <!-- These three sections used to be headed by `.sect` — the same 9px
+       micro-label the "All books" landing screen and the Consignment tab were
+       both pulled off of, because it left the screen the publisher opens for
+       every single book carrying the faintest type in the app. `.sec-head` +
+       `.overview-section` is the same furniture that fixed those two screens;
+       muted here because the KPI grid above already spends this screen's one
+       gold accent on Stock on hand. -->
+  <div class="overview-section">
+    <div class="sec-head is-muted">
+      <div class="sec-head-titles">
+        <div class="sec-kicker"><span class="sec-kicker-dot"></span>Performance</div>
+        <div class="section-hed sec-head-title">Sales by channel</div>
+        <p class="section-subcopy">Where this title's sales are actually coming from.</p>
       </div>
-      <div id="d-stock-breakdown-pills" class="stock-breakdown-pills" style="display:none;"></div>
     </div>
-    <div class="stock-alert ok" id="d-alert">Loading…</div>
-    <div class="stock-actions" id="d-recalc-onhand-wrap">
-      <button type="button" class="btn sm ink" id="d-transfer-stock-btn" onclick="openStockTransferModal()" title="Transfer stock between publisher and author" style="display:none;">⇄ Transfer stock</button>
-      <div style="margin-left:auto;">
-        <button type="button" class="btn sm" onclick="recalcOnHand()" title="Rebuild on-hand from your sales and consignment records — fixes drift after a missed deduction or offline merge">↻ Recalculate on-hand</button>
+    <div class="tbl-wrap ch-mix-wrap"><table class="tbl ch-mix-tbl"><thead><tr><th>Channel</th><th class="r">Transactions</th><th class="r">Units</th><th class="r">Revenue</th><th class="ch-mix-share-col">Share<span class="ch-mix-col-qualifier"> of revenue</span></th></tr></thead><tbody id="ch-body"></tbody><tfoot id="ch-foot"></tfoot></table></div>
+  </div>
+  <div class="overview-section">
+    <div class="sec-head is-muted">
+      <div class="sec-head-titles">
+        <div class="sec-kicker"><span class="sec-kicker-dot"></span>Retail Partners</div>
+        <div class="section-hed sec-head-title">Consignment overview</div>
+        <p class="section-subcopy">What each store holding this title has sold, returned, and still owes.</p>
+      </div>
+    </div>
+    <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Store</th><th class="r">Sent</th><th class="r">Sold</th><th class="r">Returned</th><th class="r">Outstanding</th><th>Status</th></tr></thead><tbody id="dash-con-body"></tbody></table></div>
+  </div>
+  <div class="overview-section">
+    <div class="sec-head is-muted">
+      <div class="sec-head-titles">
+        <div class="sec-kicker"><span class="sec-kicker-dot"></span>Stock</div>
+        <div class="section-hed sec-head-title">Inventory</div>
+        <p class="section-subcopy">How many copies are left, and what's tracked against them.</p>
+      </div>
+    </div>
+    <div class="stock-block">
+      <div class="stock-head">
+        <div class="stock-head-titles"><div class="stock-title" id="d-book-title">—</div><div class="stock-author" id="d-book-author">—</div></div>
+        <span class="pill gold" id="d-book-isbn">—</span>
+      </div>
+      <div class="stock-stage">
+        <div class="bar-meta"><span class="bar-meta-lead" id="d-bar-label">— / — on hand</span><span class="bar-meta-note" id="d-thresh-label">Alert at — units</span></div>
+        <div class="bar-track" id="d-bar-track" style="display:flex;overflow:hidden;border-radius:9999px;">
+          <div class="bar-fill" id="d-bar" style="width:100%;background:var(--gold2);transition:width var(--dur-base) var(--ease-entrance);"></div>
+          <div class="bar-fill bar-fill-author" id="d-bar-author" style="width:0%;display:none;background:var(--violet, #8b5cf6);transition:width var(--dur-base) var(--ease-entrance);"></div>
+        </div>
+        <div id="d-stock-breakdown-pills" class="stock-breakdown-pills" style="display:none;"></div>
+      </div>
+      <div class="stock-alert ok" id="d-alert">Loading…</div>
+      <div class="stock-actions" id="d-recalc-onhand-wrap">
+        <button type="button" class="btn sm ink" id="d-transfer-stock-btn" onclick="openStockTransferModal()" title="Transfer stock between publisher and author" style="display:none;">⇄ Transfer stock</button>
+        <div style="margin-left:auto;">
+          <button type="button" class="btn sm" onclick="recalcOnHand()" title="Rebuild on-hand from your sales and consignment records — fixes drift after a missed deduction or offline merge">↻ Recalculate on-hand</button>
+        </div>
       </div>
     </div>
   </div>
-  <div id="d-breakeven-block" style="display:none;">
-    <div class="sect">Break-even tracker</div>
+  <div class="overview-section" id="d-breakeven-block" style="display:none;">
+    <div class="sec-head is-muted">
+      <div class="sec-head-titles">
+        <div class="sec-kicker"><span class="sec-kicker-dot"></span>Production</div>
+        <div class="section-hed sec-head-title">Break-even tracker</div>
+        <p class="section-subcopy">How much of what this title cost to make has come back in revenue.</p>
+      </div>
+    </div>
     <div class="stock-block">
       <div class="stock-head">
         <div class="stock-head-titles">
@@ -1621,7 +1752,7 @@
       <div class="tc-trip-picker-wrapper">
         <div class="tc-trip-input-container">
           <input type="text" id="tc-pending-trip" autocomplete="off" placeholder="e.g. Toronto Book Fair · Oct 2025" onfocus="tcOpenTripDropdown('tc-pending-trip')" oninput="tcFilterTripDropdown('tc-pending-trip')">
-          <button class="tc-trip-dropdown-btn" type="button" onclick="tcToggleTripDropdown('tc-pending-trip')" tabindex="-1">▼</button>
+          <button class="tc-trip-dropdown-btn" type="button" onclick="tcToggleTripDropdown('tc-pending-trip')" tabindex="-1" aria-label="Show trip suggestions" aria-expanded="false">▼</button>
           <div id="tc-pending-trip-menu" class="tc-trip-dropdown-menu"></div>
         </div>
       </div>
@@ -1731,7 +1862,7 @@
     <div class="tc-trip-picker-wrapper">
       <div class="tc-trip-input-container">
         <input type="text" id="tc-edit-trip-input" autocomplete="off" placeholder="e.g. Toronto Book Fair · Oct 2025" onfocus="tcOpenTripDropdown('tc-edit-trip-input')" oninput="tcFilterTripDropdown('tc-edit-trip-input')">
-        <button class="tc-trip-dropdown-btn" type="button" onclick="tcToggleTripDropdown('tc-edit-trip-input')" tabindex="-1">▼</button>
+        <button class="tc-trip-dropdown-btn" type="button" onclick="tcToggleTripDropdown('tc-edit-trip-input')" tabindex="-1" aria-label="Show trip suggestions" aria-expanded="false">▼</button>
         <div id="tc-edit-trip-input-menu" class="tc-trip-dropdown-menu"></div>
       </div>
     </div>
@@ -1970,7 +2101,7 @@
 </div></div>
 
 <!-- EMAIL RECEIPT IMPORT MODAL (REDESIGNED) -->
-<div class="overlay" id="m-email-receipt-import-modal" style="display:none;"><div class="modal email-import-modal" role="dialog" aria-modal="true" style="max-width:860px;">
+<div class="overlay" id="m-email-receipt-import-modal" style="display:none;"><div class="modal email-import-modal" role="dialog" aria-modal="true">
   <div class="modal-title" role="dialog" aria-modal="true" style="display:flex;justify-content:space-between;align-items:center;">
     <div style="display:flex;align-items:center;gap:10px;">
       <span class="modal-title-badge" aria-hidden="true">📧</span>
@@ -2343,6 +2474,7 @@
   <div class="settings-sub-nav tc-sub-nav" role="tablist" aria-label="Tax Centre Navigation" onkeydown="tcSubNavKeydown(event)">
     <button class="settings-sub-tab active" id="btn-tctab-ledger" role="tab" aria-selected="true" aria-controls="tc-sec-ledger" tabindex="0" onclick="switchTaxCenterSubTab('ledger')">📊 Expenses &amp; Ledger</button>
     <button class="settings-sub-tab" id="btn-tctab-receipts" role="tab" aria-selected="false" aria-controls="tc-sec-receipts" tabindex="-1" onclick="switchTaxCenterSubTab('receipts')">🗂️ Receipts Vault</button>
+    <button class="settings-sub-tab" id="btn-tctab-deductions" role="tab" aria-selected="false" aria-controls="tc-sec-deductions" tabindex="-1" onclick="switchTaxCenterSubTab('deductions')">🔎 Missing Costs</button>
     <button class="settings-sub-tab" id="btn-tctab-integrations" role="tab" aria-selected="false" aria-controls="tc-sec-integrations" tabindex="-1" onclick="switchTaxCenterSubTab('integrations')">🔌 Integrations &amp; APIs</button>
   </div>
 
@@ -2476,7 +2608,7 @@
         <div id="tc-trip-quick-chips" class="tc-trip-quick-chips"></div>
         <div class="tc-trip-input-container">
           <input type="text" id="tc-exp-trip" autocomplete="off" placeholder="e.g. Toronto Book Fair · Oct 2025" onfocus="tcOpenTripDropdown('tc-exp-trip')" oninput="tcFilterTripDropdown('tc-exp-trip')">
-          <button class="tc-trip-dropdown-btn" type="button" onclick="tcToggleTripDropdown('tc-exp-trip')" tabindex="-1">▼</button>
+          <button class="tc-trip-dropdown-btn" type="button" onclick="tcToggleTripDropdown('tc-exp-trip')" tabindex="-1" aria-label="Show trip suggestions" aria-expanded="false">▼</button>
           <div id="tc-exp-trip-menu" class="tc-trip-dropdown-menu"></div>
         </div>
         <div id="tc-trip-selected-preview" style="display:none;"></div>
@@ -2678,6 +2810,24 @@
   </div> <!-- /#tc-sec-receipts -->
 
   <!-- 3. INTEGRATIONS & APIS SECTION -->
+  <!-- MISSING COSTS — costs the business had with no record of them.
+       Findings are gaps in the publisher's own records, never tax advice. -->
+  <div id="tc-sec-deductions" role="tabpanel" aria-labelledby="btn-tctab-deductions" style="display:none;">
+    <div class="sec-head">
+      <div class="sec-head-titles">
+        <div class="sec-kicker"><span class="sec-kicker-dot"></span>Missing Costs</div>
+        <div class="section-hed sec-head-title">Money you spent and never wrote down</div>
+        <p class="section-subcopy">This looks for things that cost money &mdash; a fair you sold at, books you posted, a subscription that went out &mdash; and checks whether the cost is in your records. A table paid for in cash leaves no trace anywhere else.</p>
+      </div>
+      <div class="sec-head-badges">
+        <span class="pill gold intel-fig" id="tc-deductions-total">&mdash;</span>
+      </div>
+    </div>
+    <p class="sr-only" id="tc-deductions-status" role="status" aria-live="polite"></p>
+    <div class="ded-list" id="tc-deductions-body"></div>
+    <p class="ded-foot">Amounts are the middle of what you have spent on similar things before, not an industry figure. Whether a cost can be claimed on a return is a question for your accountant &mdash; this only tells you what is missing from your own books.</p>
+  </div>
+
   <div id="tc-sec-integrations" class="tc-section settings-section" role="tabpanel" aria-labelledby="btn-tctab-integrations" style="display:none;">
     <!-- INTEGRATIONS & API SERVICES -->
     <div class="card tc-integrations-card">
@@ -2717,6 +2867,16 @@
                 <label class="tc-form-label" for="tc-api-key">Gemini API Key</label>
                 <input type="password" id="tc-api-key" class="tc-form-input" placeholder="AI Studio key (AI_KEY)…" autocomplete="off">
                 <div class="tc-form-hint">Paste the key from Google AI Studio. It is stored on your own account, never shared.</div>
+              </div>
+              <div class="tc-form-group">
+                <label class="tc-form-label" for="tc-backup-key">Backup AI Key <span class="tc-form-optional">(optional)</span></label>
+                <input type="password" id="tc-backup-key" class="tc-form-input" placeholder="OpenRouter key (sk-or-v1-…)…" autocomplete="off">
+                <div class="tc-form-hint">Used by the Intelligence panel only, and only when Google will not answer &mdash; whether that is a used-up allowance, a rejected key or an outage. Receipt scanning always uses Google.</div>
+              </div>
+              <div class="tc-form-group">
+                <label class="tc-form-label" for="tc-backup-model">Backup Model</label>
+                <input type="text" id="tc-backup-model" class="tc-form-input" placeholder="e.g. vendor/model-name:free" autocomplete="off" spellcheck="false">
+                <div class="tc-form-hint">The exact model name as your backup provider lists it. Both this and the key are needed before the backup will be used.</div>
               </div>
               <div class="tc-form-group">
                 <label class="tc-form-label" for="tc-base-cur">Base Currency</label>
@@ -2764,10 +2924,11 @@
               <div class="shipping-reconciliation-head">
                 <div class="shipping-reconciliation-headings">
                   <strong id="shipping-reconciliation-title">Shipping reconciliation</strong>
-                  <p>Link paid postage to its website order. Suggested matches always need your confirmation.</p>
+                  <p>Link paid postage to its website order. The app links a label on its own only when the buyer’s email, or their name and postcode together, match one order exactly — everything here is a judgement call it would not make for you.</p>
                 </div>
                 <div class="shipping-reconciliation-actions">
                   <span class="pill gray" id="shipping-reconciliation-count">0 to review</span>
+                  <button class="btn sm gold" id="shipping-reconciliation-autolink" type="button" onclick="linkConfidentShippingMatchesNow()" title="Link every label whose buyer matches one order exactly">Link certain matches</button>
                   <button class="btn sm" id="shipping-reconciliation-clear" type="button" onclick="clearShippingReconciliationList()">Clear list</button>
                   <button class="btn sm" id="shipping-reconciliation-close" type="button" onclick="closeShippingReconciliation()" aria-label="Close shipping reconciliation">Close</button>
                 </div>
@@ -2911,10 +3072,6 @@
               <label class="tc-toggle-wrap" title="Switches which of the two sets above every rate and label uses. Canada Post serves test and live from the same address, so the key is the only thing that decides.">
                 <input type="checkbox" id="tc-cp-test-mode" onchange="renderCanadaPostKeySets()">
                 <span>Sandbox keys (test account)</span>
-              </label>
-              <label class="tc-toggle-wrap" title="When the destination is set to the United States, check the duty position straight away instead of waiting to be asked">
-                <input type="checkbox" id="tc-cp-zonos-auto" checked>
-                <span>Check U.S. duty automatically</span>
               </label>
             </div>
             <div class="tc-form-actions-row">
@@ -3188,6 +3345,14 @@
             </select>
           </div>
         </div>
+        <div id="ship-order-prefill-summary" class="ship-readiness ship-order-prefill" role="status" aria-live="polite" style="display:none;"></div>
+        <label class="ship-auto-quote" for="ship-auto-quote-toggle">
+          <input type="checkbox" id="ship-auto-quote-toggle" checked onchange="onShippoAutoQuoteToggle()">
+          <span class="ship-auto-quote-copy">
+            <span class="ship-auto-quote-title">Get rates automatically</span>
+            <span class="ship-auto-quote-sub">When you pick an order, its package and rates load without another click. Buying a label is always still up to you.</span>
+          </span>
+        </label>
       </div>
 
       <div class="g2" style="align-items: start; margin-bottom: 1.25rem;">
@@ -3333,55 +3498,69 @@
             <div class="us-zonos-title-group">
               <span class="us-zonos-flag-icon" aria-hidden="true">🇺🇸</span>
               <div>
-                <strong class="us-zonos-title">US Duty Prepayment (Zonos Mandate)</strong>
-                <div class="us-zonos-subtitle">Required by Canada Post for all U.S.-bound parcels</div>
+                <strong class="us-zonos-title">U.S. duty prepayment</strong>
+                <div class="us-zonos-subtitle">Required on every parcel going to the United States</div>
               </div>
             </div>
             <div class="us-zonos-status-group">
-              <span id="us-zonos-status-pill" class="pill amber">Declaration Required</span>
+              <span id="us-zonos-status-pill" class="pill amber">● Declaration Required</span>
             </div>
           </div>
 
           <div class="us-zonos-info-box">
             <div class="us-zonos-info-lead">
-              Canada Post needs a <strong>13-character Declaration ID</strong> proving U.S. duty is prepaid before it will accept the parcel. Printed books (<span class="tnum">HS 4901</span>) carry no duty, but the declaration is still required.
+              Canada Post will not sell you a U.S. label without a <strong>13-character Declaration ID</strong> proving the duty is prepaid.
             </div>
             <div class="us-zonos-info-sub">
-              Either connect a <strong>Zonos Verified Account</strong> once for automatic creation, or generate/paste each declaration below.
+              Printed books (<span class="tnum">HS 4901</span>) carry no duty, so the amount is usually zero — the declaration is still required.
             </div>
           </div>
 
-          <div class="us-zonos-field-section">
-            <div class="form-group" style="margin-bottom:0;">
-              <label class="us-zonos-input-label" for="sp-zonos-declaration-id">
-                <span>Zonos Declaration ID (13 characters)</span>
-                <span id="zonos-decl-validation-hint" class="us-zonos-hint">13 alphanumeric characters required</span>
-              </label>
-              <div class="us-zonos-input-row">
-                <div class="us-zonos-input-wrapper">
-                  <input type="text" id="sp-zonos-declaration-id" class="us-zonos-input" maxlength="13" placeholder="e.g. 0rd4dpkrvc1y9" autocomplete="off" spellcheck="false" oninput="onZonosDeclarationIdInput(this.value)">
-                  <span id="us-zonos-char-counter" class="us-zonos-char-counter tnum" aria-live="polite">0/13</span>
+          <ol class="us-zonos-steps">
+            <li class="us-zonos-step">
+              <span class="us-zonos-step-num tnum" aria-hidden="true">1</span>
+              <div class="us-zonos-step-body">
+                <div class="us-zonos-step-title">Buy the declaration for this parcel</div>
+                <div class="us-zonos-step-text">Opens the Zonos Prepay app with this parcel's details ready to paste. Pay there, then copy the Declaration ID it gives you.</div>
+                <div class="us-zonos-actions">
+                  <button class="btn sm gold us-zonos-action-btn" id="sp-open-zonos-prepay-btn" type="button" onclick="openZonosPrepayAppHandler()" title="Open the Zonos Prepay app to buy a declaration — parcel details are copied ready to paste">
+                    <span aria-hidden="true">📱</span>
+                    <span>Open Zonos Prepay</span>
+                  </button>
                 </div>
-                <button class="btn sm tag us-zonos-paste-btn" type="button" onclick="pasteZonosDeclarationId()" title="Paste Declaration ID from clipboard">
-                  <span aria-hidden="true">📋</span>
-                  <span>Paste</span>
-                </button>
               </div>
-            </div>
+            </li>
 
-            <div class="us-zonos-actions">
-              <button class="btn sm gold us-zonos-action-btn" id="sp-auto-gen-zonos-btn" type="button" onclick="autoGenerateZonosDeclarationHandler()" title="Generate and attach the 13-character Zonos Declaration ID automatically via Zonos API">
-                <span aria-hidden="true">⚡</span>
-                <span>Auto-Generate Declaration</span>
-              </button>
-              <button class="btn sm outline us-zonos-action-btn" id="sp-open-zonos-prepay-btn" type="button" onclick="openZonosPrepayAppHandler()" title="Open the Zonos Prepay app to buy a declaration — parcel details are copied ready to paste">
-                <span aria-hidden="true">📱</span>
-                <span>Buy in Zonos Prepay App</span>
-              </button>
-            </div>
+            <li class="us-zonos-step">
+              <span class="us-zonos-step-num tnum" aria-hidden="true">2</span>
+              <div class="us-zonos-step-body">
+                <div class="us-zonos-step-title">Paste the Declaration ID here</div>
+                <div class="us-zonos-step-text">It has to be on this form <strong>before</strong> you buy the label — it travels with the label request. Pasting it afterwards links nothing.</div>
+                <div class="form-group" style="margin-bottom:0;">
+                  <label class="us-zonos-input-label" for="sp-zonos-declaration-id">
+                    <span>Declaration ID</span>
+                    <span id="zonos-decl-validation-hint" class="us-zonos-hint">13 alphanumeric characters required</span>
+                  </label>
+                  <div class="us-zonos-input-row">
+                    <div class="us-zonos-input-wrapper">
+                      <input type="text" id="sp-zonos-declaration-id" class="us-zonos-input" maxlength="13" placeholder="e.g. 0rd4dpkrvc1y9" autocomplete="off" spellcheck="false" oninput="onZonosDeclarationIdInput(this.value)">
+                      <span id="us-zonos-char-counter" class="us-zonos-char-counter tnum" aria-live="polite">0/13</span>
+                    </div>
+                    <button class="btn sm tag us-zonos-paste-btn" type="button" onclick="pasteZonosDeclarationId()" title="Paste Declaration ID from clipboard">
+                      <span aria-hidden="true">📋</span>
+                      <span>Paste</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </li>
+          </ol>
+
+          <div class="us-zonos-note">
+            <span aria-hidden="true">⚠</span>
+            <span><strong>One declaration covers one parcel.</strong> Never reuse an ID from an earlier order — the second parcel's duty would go unpaid and your customer gets billed at the door.</span>
           </div>
 
-          <div id="zonos-auto-result-hint" class="us-zonos-result-hint" style="display:none;" role="status"></div>
         </div>
 
         <div class="shipping-predictor-settings">
@@ -4518,7 +4697,7 @@
       <div class="tc-trip-picker-wrapper">
         <div class="tc-trip-input-container">
           <input id="edit-exp-trip" type="text" autocomplete="off" placeholder="e.g. Toronto Book Fair · Oct 2025" onfocus="tcOpenTripDropdown('edit-exp-trip')" oninput="tcFilterTripDropdown('edit-exp-trip')">
-          <button class="tc-trip-dropdown-btn" type="button" onclick="tcToggleTripDropdown('edit-exp-trip')" tabindex="-1">▼</button>
+          <button class="tc-trip-dropdown-btn" type="button" onclick="tcToggleTripDropdown('edit-exp-trip')" tabindex="-1" aria-label="Show trip suggestions" aria-expanded="false">▼</button>
           <div id="edit-exp-trip-menu" class="tc-trip-dropdown-menu"></div>
         </div>
       </div>
@@ -4546,12 +4725,44 @@
 <div class="overlay no-print" id="m-invoice-edit" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:780px;max-height:92vh;overflow-y:auto;">
   <div class="modal-title" role="dialog" aria-modal="true" id="inv-edit-title">New invoice</div>
 
+  <!-- Who the bill is addressed to: a consignment store from the shop list, or
+       a person typed in by hand (a reader, a school, a festival). -->
+  <div class="inv-billto-switch">
+    <div class="modal-tabs segmented-control" role="tablist" aria-label="Who this invoice bills">
+      <button type="button" class="modal-tab-btn active" id="inv-billto-tab-store" role="tab" aria-selected="true" aria-controls="inv-billto-store-group" onclick="setInvoiceBillToMode('store')"><span class="tab-icon">🏬</span> Store</button>
+      <button type="button" class="modal-tab-btn" id="inv-billto-tab-person" role="tab" aria-selected="false" aria-controls="inv-billto-person-group" onclick="setInvoiceBillToMode('person')"><span class="tab-icon">👤</span> Person</button>
+    </div>
+    <div class="inv-billto-hint" id="inv-billto-hint">Pick a consignment store you already work with.</div>
+  </div>
+  <input type="hidden" id="inv-billto-mode" value="store">
+
   <div class="g2" style="margin-bottom:12px;">
-    <div class="form-group"><label for="inv-store">Bill to (store)</label>
+    <div class="form-group" id="inv-billto-store-group"><label for="inv-store">Bill to (store)</label>
       <select id="inv-store" onchange="onInvoiceStoreChange()"><option value="">— Select store —</option></select>
       <div id="inv-store-preview" class="inv-store-preview"></div>
     </div>
+    <div class="form-group" id="inv-billto-person-group" hidden><label for="inv-person-name">Bill to (name) *</label>
+      <input id="inv-person-name" type="text" autocomplete="off" placeholder="e.g. Maria Rossi — or Roncalli High School">
+    </div>
     <div class="form-group"><label for="inv-num">Invoice number</label><input id="inv-num" type="text" placeholder="auto"></div>
+  </div>
+
+  <!-- Contact and address for a hand-typed recipient. Everything here is
+       optional and prints on the invoice exactly where a store's details do. -->
+  <div id="inv-person-details" hidden>
+    <div class="g2" style="margin-bottom:12px;">
+      <div class="form-group"><label for="inv-person-email">Email</label><input id="inv-person-email" type="email" autocomplete="off" placeholder="name@email.com"></div>
+      <div class="form-group"><label for="inv-person-phone">Phone</label><input id="inv-person-phone" type="tel" autocomplete="off" placeholder="e.g. +1 416-539-9595"></div>
+    </div>
+    <div class="form-group" style="margin-bottom:12px;"><label for="inv-person-address">Street address</label><input id="inv-person-address" type="text" autocomplete="off" placeholder="e.g. 80 Spadina Ave, Suite 205"></div>
+    <div class="g2" style="margin-bottom:12px;">
+      <div class="form-group"><label for="inv-person-city">City</label><input id="inv-person-city" type="text" autocomplete="off" placeholder="e.g. Milan"></div>
+      <div class="form-group"><label for="inv-person-region">State / Province</label><input id="inv-person-region" type="text" autocomplete="off" placeholder="e.g. ON"></div>
+    </div>
+    <div class="g2" style="margin-bottom:12px;">
+      <div class="form-group"><label for="inv-person-postal">Postal / ZIP code</label><input id="inv-person-postal" type="text" autocomplete="off" placeholder="e.g. M5V 2J4"></div>
+      <div class="form-group"><label for="inv-person-country">Country</label><input id="inv-person-country" type="text" autocomplete="off" placeholder="e.g. Canada"></div>
+    </div>
   </div>
 
   <div class="g2" style="margin-bottom:12px;">
@@ -4579,7 +4790,7 @@
 
   <div class="form-group" style="margin-bottom:8px;">
     <label>Line items <button class="btn sm" type="button" onclick="addInvoiceItem()" style="margin-left:8px;">+ Add line</button>
-      <button class="btn sm ink" type="button" onclick="prefillFromPendingSales()" style="margin-left:4px;" title="Pull all unpaid consignment sales for the selected store">⚡ Import pending sales</button>
+      <button class="btn sm ink" type="button" id="inv-import-pending-btn" onclick="prefillFromPendingSales()" style="margin-left:4px;" title="Pull all unpaid consignment sales for the selected store">⚡ Import pending sales</button>
     </label>
   </div>
   <div class="tbl-wrap" style="margin-bottom:8px;">
@@ -4657,6 +4868,8 @@
       <button class="btn ink" id="inv-pdf-btn" onclick="downloadInvoicePDF()" title="Download a ready-to-send PDF — no print dialog">⬇ PDF</button>
       <button class="btn ink" onclick="downloadInvoiceHTML()" title="Download the invoice as an HTML file">⬇ HTML</button>
       <button class="btn ink" onclick="printInvoice()">🖨 Print</button>
+      <button class="btn ink" id="inv-remind-btn" onclick="remindInvoiceFromView()" title="Email this customer a reminder with a link to pay">⏰ Remind now</button>
+      <button class="btn ink" id="inv-snooze-btn" onclick="snoozeInvoiceFromView()" title="They told you when they'll pay — hold off chasing until then">📅 Promised to pay</button>
       <button class="btn gold" id="inv-mark-paid-btn" onclick="markInvoicePaidFromView()">✓ Mark paid</button>
       <button class="btn" onclick="attemptCloseModal('invoice-view')">Close</button>
     </div>
@@ -4727,9 +4940,63 @@
     </div>
   </div>
 
+  <div style="border-top:1px solid var(--border);margin:18px 0 12px;padding-top:14px;">
+    <div style="font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Payment reminders</div>
+    <div style="font-size:11px;color:var(--text3);line-height:1.6;margin-bottom:10px;">
+      When an invoice goes past its due date, the app can email the customer a polite reminder with a link to pay —
+      so you never have to write the awkward follow-up. Each invoice is chased <strong>once</strong>, on a weekday between 9am and 6pm,
+      and never after you mark it paid. Needs your Google Sheet connected, since that is what sends the mail.
+    </div>
+    <div class="form-group" style="margin-bottom:8px;">
+      <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2);font-weight:500;text-transform:none;letter-spacing:0;">
+        <input id="ivs-remind-auto" type="checkbox" style="margin:0;"> Chase late invoices for me
+      </label>
+    </div>
+    <div class="form-group" style="margin-bottom:8px;"><label for="ivs-remind-days">Send the reminder this many days past due</label>
+      <input id="ivs-remind-days" type="number" inputmode="numeric" min="1" max="180" step="1" placeholder="7">
+      <div style="font-size:10px;color:var(--text3);margin-top:4px;">A reminder goes out the day after this many days have passed.</div>
+    </div>
+    <div class="form-group" style="margin-bottom:0;"><label for="ivs-remind-msg">Your message (the invoice number, amount and pay link are added for you)</label>
+      <textarea id="ivs-remind-msg" rows="2" placeholder="Just a gentle nudge in case this one slipped through…"></textarea>
+    </div>
+    <div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <button class="btn sm ink" type="button" id="ivs-remind-test" onclick="sendTestReminderEmail()">✉ Send me a test reminder</button>
+      <div style="font-size:10px;color:var(--text3);line-height:1.5;flex:1 1 200px;min-width:0;">
+        Emails a real reminder to you, using the wording above even before you save it — so you can read exactly what a customer gets. Its subject is marked <strong>[TEST]</strong>, and no invoice is touched or counted as chased.
+      </div>
+    </div>
+  </div>
+
   <div class="modal-footer" role="dialog" aria-modal="true">
     <button class="btn" onclick="attemptCloseModal('invoice-settings')">Cancel</button>
     <button class="btn gold" onclick="saveInvoiceSettings()">Save settings</button>
+  </div>
+</div></div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- WHO GETS CHASED TOMORROW                               -->
+<!-- The day-before review: the app only sees money that     -->
+<!-- came through the payment link, so this is the chance to -->
+<!-- clear anyone who paid by transfer or cash before a      -->
+<!-- reminder goes out to them.                              -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="overlay no-print" id="m-reminder-review" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:680px;">
+  <div class="modal-title" role="dialog" aria-modal="true">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">📋</span>
+      <span>Chased tomorrow</span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('reminder-review')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+  </div>
+  <div style="font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.6;">
+    These customers get an automatic reminder tomorrow. If any of them have already paid you by bank transfer or in cash, mark them paid now and nothing is sent.
+    <div id="reminder-review-count" style="margin-top:6px;font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--text3);"></div>
+  </div>
+
+  <div id="reminder-review-body"></div>
+
+  <div class="modal-footer" role="dialog" aria-modal="true">
+    <button class="btn" onclick="attemptCloseModal('reminder-review')">Close</button>
   </div>
 </div></div>
 
@@ -5473,6 +5740,45 @@
   </span>
   <button type="button" class="sync-chip-action" id="sync-chip-action" hidden
           onclick="retrySyncNow()">Try again now</button>
+</div>
+
+<!-- The corner where the app reports what happened while nobody was looking.
+     Top-right, because the toast owns bottom-right and the sync chip owns
+     bottom-left, and fixed so it survives scrolling without touching
+     --sticky-top. A region rather than a single card: the storefront watch and
+     the Shippo label watch both have news of this kind, and two cards pinned to
+     one corner would simply sit on top of each other.
+
+     Persistent by design: these exist for the things that happen while nobody is
+     watching the screen, and a notification you must already be looking at to
+     catch would be no notification at all. -->
+<div class="app-alert-region" id="app-alert-region">
+
+<!-- Raised by showNewOrderAlert() in features/bigcartel.js whenever the
+     storefront watch finds a sale the app has not seen before. -->
+<div class="app-alert new-order-alert" id="new-order-alert" hidden role="status" aria-live="polite">
+  <span class="new-order-alert-ico" aria-hidden="true">🛒</span>
+  <div class="new-order-alert-body">
+    <span class="new-order-alert-title" id="new-order-alert-title">New order</span>
+    <span class="new-order-alert-detail" id="new-order-alert-detail"></span>
+    <div class="new-order-alert-actions">
+      <button type="button" class="btn gold sm" id="new-order-alert-ship"
+              onclick="shipNewOrderFromAlert(event)">📦 Ship it</button>
+      <button type="button" class="btn sm" id="new-order-alert-record"
+              onclick="recordNewOrderFromAlert(event)">Record it</button>
+      <button type="button" class="btn sm" id="new-order-alert-review"
+              onclick="reviewNewOrdersFromAlert(event)">Review orders</button>
+    </div>
+  </div>
+  <button type="button" class="new-order-alert-close" id="new-order-alert-close"
+          onclick="dismissNewOrderAlert(event)" aria-label="Dismiss new order notification">✕</button>
+</div>
+
+<!-- Everything else with news, rendered by lib/app-alert.js. Currently the
+     Shippo label watch; keyed entries, so a check that repeats every few
+     minutes updates what it already said rather than stacking another card. -->
+<div id="app-alert-stack" hidden></div>
+
 </div>
 
 <!-- Styled confirm dialog (replaces browser confirm/alert) -->

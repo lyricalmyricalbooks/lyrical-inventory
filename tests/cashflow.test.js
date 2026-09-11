@@ -25,9 +25,16 @@ const states = {
       { id: 'e1', date: '2025-02-01', amount: 8, currency: 'CAD', baseAmount: 8 },
       { id: 'e2', date: '2024-02-01', amount: 4, currency: 'CAD', baseAmount: 4 },
     ],
+    // Recorded payouts — the payments actually made to the artist. `amount` is
+    // always in the book's own currency.
+    artistPayouts: [
+      { id: 'p1', date: '2025-05-01', amount: 12 },                 // 12 CAD payout
+      { id: 'p2', date: '2025-05-01', amount: 99, voided: true },   // voided -> skipped
+      { id: 'p3', date: '2024-05-01', amount: 7 },                  // prior year
+    ],
+    // Cash the artist is still holding: never a payout, in any year.
     artistTransfers: [
-      { id: 't1', paid: true, paidDate: '2025-05-01', total: 12 }, // 12 CAD payout
-      { id: 't2', paid: false, paidDate: '2025-05-01', total: 99 }, // unpaid -> skipped
+      { id: 't1', date: '2025-05-01', total: 55 },
     ],
   },
   b2: {
@@ -58,7 +65,9 @@ describe('computeCashFlowMetrics', () => {
     expect(m.grossSales).toBeCloseTo(182, 5);
     // Operating expenses: 8 (e1) + 13 (e3) + 50 (be1) = 71  (NO payouts)
     expect(m.operatingExpenses).toBeCloseTo(71, 5);
-    // Artist payouts tracked separately: 12 (t1 only, t2 unpaid)
+    // Artist payouts tracked separately: 12 (p1 only — p2 voided, p3 prior
+    // year). The 55 sitting in artistTransfers is cash the artist is holding,
+    // not a payment made, so it must never land here.
     expect(m.artistPayouts).toBeCloseTo(12, 5);
     // Sale rows counted: s1, s3(voided still a row), s5 = 3 (s4 artistPending skipped)
     expect(m.txnCount).toBe(3);
@@ -70,7 +79,7 @@ describe('computeCashFlowMetrics', () => {
     const m = computeCashFlowMetrics(sources, '2024');
     expect(m.grossSales).toBeCloseTo(10, 5);
     expect(m.operatingExpenses).toBeCloseTo(4, 5);
-    expect(m.artistPayouts).toBe(0);
+    expect(m.artistPayouts).toBeCloseTo(7, 5); // p3
     expect(m.txnCount).toBe(1);
   });
 
@@ -80,7 +89,38 @@ describe('computeCashFlowMetrics', () => {
     expect(m.grossSales).toBeCloseTo(192, 5);
     // 8 + 4 + 13 + 50 + 5 = 80
     expect(m.operatingExpenses).toBeCloseTo(80, 5);
-    expect(m.artistPayouts).toBeCloseTo(12, 5);
+    expect(m.artistPayouts).toBeCloseTo(19, 5); // p1 + p3
+  });
+
+  it('reads payouts from artistPayouts, never from held artist transfers', () => {
+    // Regression guard. This total used to be built from
+    // artistTransfers.filter(t => t.paid) — a flag nothing in the app ever
+    // writes — so every real payout was invisible and the figure was always 0.
+    const heldOnly = {
+      ...sources,
+      states: { b1: { artistTransfers: [{ id: 't9', date: '2025-01-01', total: 500, paid: true }] } },
+      books: { b1: books.b1 },
+    };
+    expect(computeCashFlowMetrics(heldOnly, 'all').artistPayouts).toBe(0);
+
+    const paidOnly = {
+      ...sources,
+      states: { b1: { artistPayouts: [{ id: 'p9', date: '2025-01-01', amount: 42 }] } },
+      books: { b1: books.b1 },
+    };
+    expect(computeCashFlowMetrics(paidOnly, 'all').artistPayouts).toBeCloseTo(42, 5);
+  });
+
+  it('converts a payout on a foreign-currency book at the book rate', () => {
+    // `amount` is denominated in the book's own currency, so a USD book's
+    // payout converts once via that book's rate — the foreign cash handed over
+    // lives in `payment` and is not what totals read.
+    const usd = {
+      ...sources,
+      states: { b2: { artistPayouts: [{ id: 'p10', date: '2025-01-01', amount: 100 }] } },
+      books: { b2: books.b2 },
+    };
+    expect(computeCashFlowMetrics(usd, 'all').artistPayouts).toBeCloseTo(130, 5);
   });
 
   it('tolerates missing state / empty sources', () => {

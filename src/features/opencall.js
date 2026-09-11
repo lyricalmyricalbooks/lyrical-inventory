@@ -258,7 +258,7 @@ function renderOcBulkModalContent(retryMode = false) {
 
   modal.innerHTML = `
     <div class="card" style="width:94%;max-width:660px;max-height:90vh;overflow-y:auto;background:var(--card-bg, #fff);border:1px solid var(--border);border-radius:var(--r3);padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);position:relative;" onclick="event.stopPropagation()">
-      <button onclick="closeOcBulkModal()" style="position:absolute;top:15px;right:15px;background:transparent;border:none;color:var(--text3);font-size:18px;cursor:pointer;line-height:1;">✕</button>
+      <button type="button" class="modal-close-btn" onclick="closeOcBulkModal()" style="position:absolute;top:15px;right:15px;" aria-label="Close dialog" title="Close (Esc)">✕</button>
       
       <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--gold-text);margin-bottom:4px;">✉ Send Bulk Pipeline Emails</div>
       <div style="font-size:12px;color:var(--text3);margin-bottom:18px;">Personalize and send stage emails to selected contributors.</div>
@@ -642,7 +642,7 @@ function renderOcBulkRemoveModalContent() {
 
   modal.innerHTML = `
     <div class="card" style="width:94%;max-width:500px;max-height:90vh;overflow-y:auto;background:var(--card-bg, #fff);border:1px solid var(--border);border-radius:var(--r3);padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);position:relative;" onclick="event.stopPropagation()">
-      <button onclick="closeOcBulkRemoveModal()" style="position:absolute;top:15px;right:15px;background:transparent;border:none;color:var(--text3);font-size:18px;cursor:pointer;line-height:1;">✕</button>
+      <button type="button" class="modal-close-btn" onclick="closeOcBulkRemoveModal()" style="position:absolute;top:15px;right:15px;" aria-label="Close dialog" title="Close (Esc)">✕</button>
       
       <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--red);margin-bottom:4px;">✕ Bulk Remove Contributors</div>
       <div style="font-size:12px;color:var(--text3);margin-bottom:18px;">Select contributors to remove from the "${escapeHtml(proj.title)}" open call.</div>
@@ -1405,12 +1405,18 @@ function renderOpenCall() {
 
   // ── Review inbox: scan findings awaiting the owner's approval ──
   if (activeProj) ocEnsureQueues_(activeProj);
-  // ⚡ Bolt Optimization: Use Set instead of Array.prototype.some() for O(1) lookups
-  const contributorIds = activeProj ? new Set(activeProj.contributors.map(c => c.id)) : new Set();
-  const inboxItems = activeProj ? activeProj.inbox.filter(p => contributorIds.has(p.contributorId)) : [];
+  // ⚡ Bolt Optimization: contributorsById used to be a Set of just the ids, so
+  // the two `.find()` calls below (one per inbox row, one per outbox row) each
+  // re-scanned the whole contributors array to recover the matching contributor
+  // — an O(contributors × (inbox + outbox)) walk that grows with a project's
+  // contributor list. A Map built once (O(contributors)) gives the membership
+  // check AND the contributor lookup itself in O(1), so building the rows below
+  // becomes O(contributors + inbox + outbox) instead.
+  const contributorsById = activeProj ? new Map(activeProj.contributors.map(c => [c.id, c])) : new Map();
+  const inboxItems = activeProj ? activeProj.inbox.filter(p => contributorsById.has(p.contributorId)) : [];
   const inboxTypeLabels = { creditReceived: '✍️ Credit-name reply detected', filesReceived: '📎 High-res files attachment detected', undeliverable: '⚠ Email bounced (undeliverable)' };
   const inboxRows = inboxItems.map(p => {
-    const c = activeProj.contributors.find(x => x.id === p.contributorId);
+    const c = contributorsById.get(p.contributorId);
     const threadLink = p.threadId
       ? `<a class="oc-queue-thread-link" href="https://mail.google.com/mail/u/0/#all/${encodeURIComponent(p.threadId)}" target="_blank" rel="noopener" title="Open the detected email in Gmail">✉ View email ↗</a>`
       : '';
@@ -1440,12 +1446,11 @@ function renderOpenCall() {
     </div>` : '';
 
   // ── Ready-to-send outbox: next-stage emails queued for one approved batch ──
-  // ⚡ Bolt Optimization: Use Set instead of Array.prototype.some() for O(1) lookups
-  const outboxItems = activeProj ? activeProj.outbox.filter(e => contributorIds.has(e.contributorId)) : [];
+  const outboxItems = activeProj ? activeProj.outbox.filter(e => contributorsById.has(e.contributorId)) : [];
   const outboxStageLabels = { cmykSent: 'Request Files', preorderSent: 'Pre-order' };
   const outboxDl = localStorage.getItem('lm-oc-last-deadline') || '';
   const outboxRows = outboxItems.map(e => {
-    const c = activeProj.contributors.find(x => x.id === e.contributorId);
+    const c = contributorsById.get(e.contributorId);
     const tmpl = activeProj.templates ? activeProj.templates[e.stageKey] : null;
     const subjectPreview = tmpl ? ocMergeTemplate(tmpl.subject, c, { project: activeProj.title, date: outboxDl }) : '(no template saved for this stage)';
     const missing = tmpl ? findUnfilledMergeFields((tmpl.subject || '') + '\n' + (tmpl.body || ''), c, { project: activeProj.title, date: outboxDl }) : [];
@@ -2482,7 +2487,7 @@ function openOcEmailPreviewModal(cId, stageKey, subject, body, c) {
     <div class="card" style="max-width:650px;width:90%;margin:0 auto;display:flex;flex-direction:column;box-shadow:var(--shadow2);border:1px solid var(--border);">
       <div class="row-between" style="border-bottom:1px solid var(--border);padding:14px 20px;background:var(--cream2);">
         <div style="font-family:'Playfair Display',serif;font-size:16px;font-weight:700;color:var(--gold-text);">✉ Review Email to ${escapeHtml(c.name)}</div>
-        <button class="btn sm" onclick="closeOcEmailPreviewModal()" style="padding:4px 8px;font-size:12px;">✕</button>
+        <button type="button" class="btn sm" onclick="closeOcEmailPreviewModal()" style="padding:4px 8px;font-size:12px;" aria-label="Close dialog" title="Close (Esc)">✕</button>
       </div>
       
       <div style="padding:20px;display:flex;flex-direction:column;gap:12px;max-height:60vh;overflow-y:auto;">
@@ -2755,7 +2760,7 @@ function renderOcImportGmailModal() {
 
   modal.innerHTML = `
     <div class="card" style="width:94%;max-width:620px;max-height:90vh;overflow-y:auto;padding:24px;position:relative;" onclick="event.stopPropagation()">
-      <button onclick="closeOcImportGmailModal()" style="position:absolute;top:15px;right:15px;background:transparent;border:none;color:var(--text3);font-size:18px;cursor:pointer;">✕</button>
+      <button type="button" class="modal-close-btn" onclick="closeOcImportGmailModal()" style="position:absolute;top:15px;right:15px;" aria-label="Close dialog" title="Close (Esc)">✕</button>
       <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--gold-text);margin-bottom:4px;">📨 Import Submissions from Gmail</div>
       <div style="font-size:12px;color:var(--text3);margin-bottom:16px;">Find the artists' original submission emails and add them as contributors — each one's thread is captured so every stage email replies into it.</div>
 
@@ -3036,7 +3041,7 @@ function renderOcEditModalContent(cId) {
 
   modal.innerHTML = `
     <div class="card" style="width:94%;max-width:500px;background:var(--card-bg, #fff);border:1px solid var(--border);border-radius:var(--r3);padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);position:relative;" onclick="event.stopPropagation()">
-      <button onclick="closeOcEditModal()" style="position:absolute;top:15px;right:15px;background:transparent;border:none;color:var(--text3);font-size:18px;cursor:pointer;line-height:1;">✕</button>
+      <button type="button" class="modal-close-btn" onclick="closeOcEditModal()" style="position:absolute;top:15px;right:15px;" aria-label="Close dialog" title="Close (Esc)">✕</button>
       
       <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--gold-text);margin-bottom:4px;">✎ Edit Contributor</div>
       <div style="font-size:12px;color:var(--text3);margin-bottom:18px;">Update artist details and internal notes.</div>

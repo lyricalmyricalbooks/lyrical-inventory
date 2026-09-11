@@ -2311,11 +2311,18 @@ tr.hist-row:hover {
 /* CARDS */
 .card{background:var(--surface-raised);border-radius:var(--r3);border:1px solid var(--border-default);padding:1.4rem;margin-bottom:1.1rem;box-shadow:var(--elev-2);}
 .form-group label{display:block;font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);margin-bottom:6px;}
-.form-group input,select,.form-group select,.form-group textarea{width:100%;padding:var(--space-2) var(--space-3);font-size:var(--text-sm);font-family:'Syne',sans-serif;border:1px solid var(--border-default);border-radius:var(--r2);background:var(--surface-raised);color:var(--content-primary);transition:border-color var(--dur-fast) var(--ease-standard),box-shadow var(--dur-fast) var(--ease-standard),background-color var(--dur-fast) var(--ease-standard);outline:none;touch-action:manipulation;}
+/* Dropdowns are styled app-wide on purpose (the unified dropdown redesign), so the
+   bare `select` leads the list rather than hiding mid-way through a set of
+   .form-group selectors — buried there it read as a typo and cost a CI run.
+   Every <select> gets this treatment wherever it sits; the .form-group entries
+   extend the same look to text inputs and textareas inside a form group. */
+select,
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:var(--space-2) var(--space-3);font-size:var(--text-sm);font-family:'Syne',sans-serif;border:1px solid var(--border-default);border-radius:var(--r2);background:var(--surface-raised);color:var(--content-primary);transition:border-color var(--dur-fast) var(--ease-standard),box-shadow var(--dur-fast) var(--ease-standard),background-color var(--dur-fast) var(--ease-standard);outline:none;touch-action:manipulation;}
 select,.form-group select{appearance:none;-webkit-appearance:none;background-image:var(--select-arrow);background-repeat:no-repeat;background-position:right 12px center;background-size:14px;padding-right:34px;cursor:pointer;text-overflow:ellipsis;white-space:nowrap;min-height:38px;}
 select:hover,.form-group select:hover{border-color:var(--gold-line);background-color:var(--surface-sunken);}
 select:disabled,.form-group select:disabled{opacity:.5;cursor:not-allowed;background-color:var(--surface-sunken);}
-.form-group input:focus,select:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--gold);box-shadow:var(--focus-ring-halo);}
+select:focus,
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--gold);box-shadow:var(--focus-ring-halo);}
 select:focus,.form-group select:focus{background-image:var(--select-arrow-gold);}
 option,optgroup{background-color:var(--surface-raised);color:var(--content-primary);}
 .tbl select,select.select-sm{min-height:28px;height:28px;padding:2px 24px 2px 8px;font-size:var(--text-xs);background-position:right 8px center;background-size:11px;}
@@ -2510,8 +2517,14 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
    ingestion dialog. Adheres strictly to Linear / Apple HIG segmented control,
    progressive disclosure, and canonical design tokens.
    ═══════════════════════════════════════════════════════════════════════════ */
-.email-import-modal {
-  max-width: 860px;
+/* Two classes deliberately: the base `.modal{max-width:500px}` rule is
+   declared later in this file, so a single-class selector here loses to it
+   and the dialog collapses to 500px. */
+.modal.email-import-modal {
+  /* A little wider than the 860px default: the list carries a sender, a
+     two-line subject, a snippet and an action on one row, and 860px left the
+     subject about six words to work with. */
+  max-width: 940px;
 }
 
 .modal-title-badge {
@@ -2723,7 +2736,12 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 
 /* Results Viewport & Zero State */
 .email-results-viewport {
-  max-height: min(48vh, 480px);
+  /* The cards are taller than the old table rows, so the viewport grows with
+     them — at the old 48vh cap a 900px-tall window showed barely three
+     emails and the list read as "there is nothing here". */
+  container-type: inline-size;
+  container-name: email-results;
+  max-height: min(56vh, 560px);
   overflow-y: auto;
   overflow-x: hidden;
   border: 1px solid var(--border-default);
@@ -2731,6 +2749,9 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   background: var(--surface-raised);
   box-shadow: var(--elev-1);
   margin-bottom: var(--space-3);
+  /* Reserve the scrollbar so the cards do not reflow the moment the list
+     grows past the fold. */
+  scrollbar-gutter: stable;
 }
 
 .email-zero-state {
@@ -3639,7 +3660,17 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 }
 
 /* MODALS */
-.overlay{position:fixed;inset:0;background:rgba(14,12,10,.65);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:200;animation:overlayIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);}
+/* No backdrop-filter here, deliberately. A full-viewport blur behind a dialog
+   is re-rasterised on EVERY frame that any content above it paints, so it was
+   charged to scrolling the dialog, to each keystroke in a field, and to the
+   open animation. Measured on a 4x-throttled CPU with the receipts dialog:
+   55ms per frame while scrolling the email list (~18fps) and 79ms per
+   keystroke, against 17ms and 12ms with the blur gone — and no compositing
+   trick recovers it (contain:paint, will-change, isolation, a separate scrim
+   layer and a smaller radius were all measured, all unchanged). Depth is
+   carried by a layered scrim instead: a flat wash plus a vignette that falls
+   off toward the edges, which composites once and costs nothing per frame. */
+.overlay{position:fixed;inset:0;background:radial-gradient(120% 90% at 50% 45%,rgba(14,12,10,.58),rgba(14,12,10,.78) 70%,rgba(8,7,6,.86));display:flex;align-items:center;justify-content:center;z-index:200;animation:overlayIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);}
 /* max-height/overflow used to be set ONLY inside the <=768px media query, so
    a modal whose content stacks tall on desktop (long forms, a rendered
    drafts table) had no scroll container at all — content below the fold was
@@ -4258,7 +4289,14 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .ch-table{display:flex; flex-direction:column;}
 .ch-row{
   display:grid;
-  grid-template-columns:168px minmax(0,1fr) 52px 122px 132px;
+  /* The bar track grows with the panel but stops at a readable length. Left as
+     a plain 1fr it ran to ~1300px on a wide monitor once the landing screen
+     stopped being capped at 1200px, which pushes each figure so far from the
+     channel it belongs to that the row stops reading as one line — and a bar
+     that long is harder to compare against its neighbours, not easier. The
+     per-book cards below the chart take the remaining width instead; their
+     grid already reflows into more columns on its own. */
+  grid-template-columns:168px minmax(0,46rem) 52px 122px 132px;
   gap:14px; align-items:center; padding:9px 4px;
 }
 .ch-row + .ch-row{border-top:1px solid var(--border2);}
@@ -4841,115 +4879,336 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   border-bottom-color: var(--gold);
 }
 
-/* Gmail Email List styling */
-.email-list-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
-  /* Fixed layout + <th> widths (set inline per column) is what stops the
-     subject/snippet text from driving the table wider than its wrapper —
-     without it, auto layout gave nowrap cells their full min-content width
-     and forced a horizontal scrollbar inside a modal that should never
-     scroll sideways. */
-  table-layout: fixed;
+/* Gmail result list — one card per email.
+   Replaces the old fixed-column table: its 74px action track clipped the
+   Preview button on every row (`overflow:hidden` on the cell ate the last
+   14px), and single-line nowrap subject + snippet made a dense list of long
+   supplier subjects unreadable. A card sizes its own action, wraps its own
+   text, and gives the whole row as a selection target. */
+.email-card-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
 }
-.email-list-table thead th {
-  padding: 8px 12px;
-  text-align: left;
-  background: var(--ink);
-  color: rgba(255, 255, 255, .45);
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: .1em;
-  border-bottom: 1px solid var(--border);
-  /* Pinned so the select-all checkbox and column labels stay reachable past
-     the first ~4 rows instead of scrolling away with the body. */
+
+.email-card {
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-card);
+  transition: background var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard);
+}
+
+.email-card:last-child {
+  border-bottom: none;
+}
+
+.email-card:hover {
+  background: var(--surface-inset);
+}
+
+.email-card.selected {
+  background: var(--gold-bg);
+  box-shadow: inset 3px 0 0 var(--gold);
+}
+
+.email-card-main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-3);
+  padding: 14px 16px;
+  cursor: pointer;
+}
+
+.email-card-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Fitts's law: the box itself is 16px, the target around it is not. */
+  min-width: 24px;
+  min-height: 24px;
+  margin-top: 1px;
+  cursor: pointer;
+}
+
+.email-card-check input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--gold);
+}
+
+.email-card-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.email-card-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.email-sender {
+  font-weight: 700;
+  font-size: var(--text-xs);
+  color: var(--content-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 34ch;
+}
+
+.email-card-date {
+  font-family: 'DM Mono', monospace;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  font-size: var(--text-2xs);
+  color: var(--content-muted);
+  white-space: nowrap;
+}
+
+.email-card-date::before {
+  content: '·';
+  margin-right: var(--space-2);
+  color: var(--border-default);
+}
+
+.email-card-imported {
+  font-size: var(--text-3xs);
+  padding: 1px 7px;
+}
+
+.email-subject {
+  font-weight: 600;
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+  color: var(--content-primary);
+  /* Two lines, then ellipsis — long "Re[2]: Re[3]: Order #…" subjects stay
+     scannable without any one of them pushing the row to five lines. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.email-snippet {
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--content-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.email-card-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.email-card-att {
+  font-size: var(--text-3xs);
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+
+/* The bug this list was rebuilt around: the action must size itself, never
+   inherit a fixed track it does not fit inside. */
+.email-preview-btn {
+  min-height: 32px;
+  padding: var(--space-2) 14px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.email-card-preview {
+  border-top: 1px dashed var(--border-default);
+  background: var(--surface-sunken);
+}
+
+.email-list-meta-header {
   position: sticky;
   top: 0;
   z-index: 2;
-}
-.email-list-row {
-  border-bottom: 1px solid var(--border2);
-  background: var(--surface-card);
-  transition: background 0.15s ease;
-}
-.email-list-row:hover {
-  background: var(--cream2);
-}
-.email-list-row.selected {
-  background: rgba(200, 145, 58, 0.04);
-}
-.email-list-cell {
-  padding: 8px 12px;
-  vertical-align: middle;
-  overflow: hidden;
-}
-.email-list-meta-header {
-  padding: 7px 12px;
-  font-size: 11px;
-  color: var(--text3);
-  background: var(--cream3);
-  border-bottom: 1px solid var(--border);
+  padding: 10px 16px;
+  font-size: var(--text-xs);
+  color: var(--content-muted);
+  background: var(--surface-sunken);
+  border-bottom: 1px solid var(--border-default);
   display: flex;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--space-3);
   align-items: center;
+  flex-wrap: wrap;
 }
-.email-sender {
-  /* max-width on a <td> is inert in table layout (CSS2.1 §17.5.2); the clamp
-     has to live on this inner element to actually take effect. */
-  max-width: 100%;
+
+.email-select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+  font-weight: 700;
+  font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--content-secondary);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.email-select-all input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--gold);
+}
+
+.email-list-meta-count {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  min-width: 0;
+  margin-right: auto;
+}
+
+.email-list-meta-account {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: 600;
+  max-width: 30ch;
 }
-.email-subject {
-  font-weight: 600;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
+
+.email-list-meta-tally {
+  font-family: 'DM Mono', monospace;
+  font-feature-settings: "tnum" 1, "zero" 1;
   white-space: nowrap;
 }
-.email-from {
-  color: var(--text3);
-  font-size: 11px;
+
+/* Narrow modal (phones): the action drops under the text rather than
+   squeezing the subject into a two-word column. */
+@container email-results (max-width: 460px) {
+  .email-card-main {
+    grid-template-columns: auto minmax(0, 1fr);
+    row-gap: var(--space-2);
+  }
+  .email-card-actions {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
+  .email-sender {
+    max-width: 22ch;
+  }
 }
-.email-snippet {
-  color:var(--text3);
-  font-size: 11px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  /* No max-width: with table-layout:fixed the column width already clamps
-     this, and a fixed 380px here is what used to force the column wider
-     than the modal on its own. */
+
+@media (prefers-reduced-motion: reduce) {
+  .email-card {
+    transition: none;
+  }
 }
 
 /* Email Drawer Preview */
 .email-preview-drawer {
-  background: var(--cream3);
-  border-top: 1px dashed var(--border);
-  padding: 12px;
-  font-size: 11px;
+  padding: 14px 16px;
+  font-size: var(--text-xs);
   animation: slideDown 0.2s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .email-preview-drawer { animation: none; }
 }
 .email-preview-body {
   font-family: 'DM Mono', monospace;
-  background: rgba(0, 0, 0, 0.03);
-  border: 1px solid var(--border2);
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--r);
-  padding: 8px 12px;
-  max-height: 140px;
+  padding: 10px 12px;
+  max-height: 180px;
   overflow-y: auto;
   white-space: pre-wrap;
   /* pre-wrap breaks at spaces but not inside a token — one long tracking URL
-     or invoice link could set the min-content width of this colspan cell
-     and stretch the whole table sideways. */
+     or invoice link could otherwise stretch the card sideways. */
   overflow-wrap: anywhere;
   margin-bottom: 8px;
-  color: var(--text2);
-  line-height: 1.45;
+  color: var(--content-secondary);
+  line-height: var(--leading-normal);
+}
+
+/* Extracted-drafts table.
+   No inner scroller and no fixed pixel widths, deliberately. The table used to
+   sit in its own 340px scroll box inside the dialog's scroll box, so the wheel
+   changed meaning depending on which few hundred pixels the pointer happened
+   to be over — and the fixed-width date/ref/amount controls added up to more
+   than the dialog, so it also carried a horizontal scrollbar. It now flows in
+   the dialog's single scroll region, and the controls shrink to fit. */
+.erd-table-wrap {
+  margin-bottom: 0;
+  border-color: var(--border-default);
+  overflow: visible;
+}
+
+.erd-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.erd-table th,
+.erd-table td {
+  padding: 9px 10px;
+}
+
+/* Explicit proportions: with table-layout:fixed and no widths every column
+   gets an equal share, which starved the vendor/description column while the
+   currency and the eye button sat in space they never needed. */
+.erd-table th:nth-child(1) { width: 34px; padding-right: 0; }
+.erd-table th:nth-child(2) { width: 124px; }
+.erd-table th:nth-child(3) { width: auto; }
+.erd-table th:nth-child(4) { width: 17%; }
+.erd-table th:nth-child(5) { width: 14%; }
+.erd-table th:nth-child(6) { width: 172px; }
+.erd-table th:nth-child(7) { width: 40px; padding-left: 0; }
+
+.erd-table td:nth-child(1) { padding-right: 0; }
+.erd-table td:nth-child(7) { padding-left: 0; }
+
+.erd-table input,
+.erd-table select {
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.erd-table input[type="text"],
+.erd-table input[type="date"],
+.erd-table input[type="number"],
+.erd-table select {
+  width: 100%;
+}
+
+.erd-table td.r > div {
+  flex-wrap: nowrap;
+}
+
+/* The currency picker sizes to its content; the figure takes the rest. */
+.erd-table td.r select {
+  width: auto;
+  flex: 0 0 auto;
+}
+
+.erd-table td.r input[type="number"] {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 /* Live extraction progress, pinned above the drafts table */
@@ -5278,7 +5537,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .shipping-money.margin.positive{color:var(--green);background:var(--green-bg);border-color:rgba(42,99,72,.24);}
 .shipping-money.margin.negative{color:var(--red);background:var(--red-bg);border-color:rgba(154,55,47,.24);}
 .shipping-money.margin.neutral{color:var(--text3);}
-.shipping-reconciliation{margin-top:var(--space-3);padding:var(--space-4);border:1px solid var(--border);border-radius:var(--r2);background:rgba(255,255,255,.04);}
+.shipping-reconciliation{margin-top:var(--space-3);padding:var(--space-4);border:1px solid var(--border);border-radius:var(--r2);background:var(--surface-card);}
 .shipping-reconciliation-head{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-3);margin-bottom:var(--space-3);}
 .shipping-reconciliation-head p{margin:.25rem 0 0;font-size:11px;line-height:1.5;color:var(--text3);}
 .shipping-reconciliation-row{display:grid;grid-template-columns:minmax(190px,1fr) auto minmax(220px,1fr) auto;align-items:center;gap:var(--space-3);padding:var(--space-3) 0;border-top:1px solid var(--border2);}
@@ -5452,11 +5711,13 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .all-consignment-table .tbl tbody tr.is-active td:first-child{box-shadow:inset 3px 0 0 var(--gold2); /* token-ok */}
 .all-consignment-table .tbl tbody tr.is-settled td{color:var(--text2);}
 .con-row-book-title{display:inline-flex;align-items:center;gap:8px;cursor:pointer;transition:color var(--dur-fast) var(--ease-standard);}
-.con-row-book-title:hover{color:var(--gold2);}
+.con-row-book-title:hover,.con-row-book-title:focus-visible{color:var(--gold2);}
+.con-row-book-title:focus-visible{outline:var(--focus-ring-width) solid var(--focus-ring-color);outline-offset:var(--focus-ring-offset);border-radius:var(--r);}
 .con-book-title-text{font-weight:700;color:var(--text);}
 .store-name-cell{color:var(--text);font-weight:600;font-size:var(--text-base);}
 .store-jump-link{cursor:pointer;transition:color var(--dur-fast) var(--ease-standard);}
-.store-jump-link:hover{color:var(--gold2);text-underline-offset:3px;text-decoration:underline;}
+.store-jump-link:hover,.store-jump-link:focus-visible{color:var(--gold2);text-underline-offset:3px;text-decoration:underline;}
+.store-jump-link:focus-visible{outline:var(--focus-ring-width) solid var(--focus-ring-color);outline-offset:var(--focus-ring-offset);border-radius:var(--r);}
 .outstanding-cell{font-weight:700;}
 .con-outstanding-badge{display:inline-block;font-family:'DM Mono',monospace;font-weight:700;font-size:var(--text-sm);padding:2px 7px;border-radius:6px;background:var(--amber-bg,rgba(227,174,91,.15));color:var(--amber);border:1px solid rgba(227,174,91,.25);}
 .con-zero-muted{color:var(--text3);font-weight:500;}
@@ -6945,16 +7206,16 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   justify-content: space-between;
   align-items: center;
   padding: var(--space-3) var(--space-4);
-  background: var(--card-bg, #fff);
-  border: 1px solid var(--border2);
+  background: var(--surface-inset);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--r2);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  box-shadow: var(--elev-1);
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .campaign-row:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 12px rgba(0,0,0,0.05);
-  border-color: rgba(200, 145, 58, 0.2);
+  box-shadow: var(--elev-2);
+  border-color: var(--gold-line);
 }
 
 .campaign-info {
@@ -10046,7 +10307,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   container-type: inline-size;
   container-name: us-zonos;
   background: var(--surface-card);
-  border: 1px solid oklch(0.78 0.18 75 / 0.35);
+  border: 1px solid var(--gold-line);
   border-radius: var(--r2);
   padding: var(--space-4) var(--space-5);
   margin-bottom: var(--space-4);
@@ -10057,7 +10318,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 }
 
 .us-zonos-duty-card:hover {
-  border-color: oklch(0.78 0.18 75 / 0.6);
+  border-color: var(--gold);
   box-shadow: var(--elev-hover);
 }
 
@@ -10144,7 +10405,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 }
 
 .us-zonos-hint.is-valid {
-  color: oklch(0.72 0.19 155);
+  color: var(--status-positive);
 }
 
 .us-zonos-input-row {
@@ -10178,7 +10439,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 
 .us-zonos-input:focus {
   border-color: var(--gold);
-  box-shadow: 0 0 0 3px oklch(0.78 0.18 75 / 0.22);
+  box-shadow: var(--focus-ring-halo);
   outline: none;
 }
 
@@ -10198,9 +10459,9 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 }
 
 .us-zonos-char-counter.is-valid {
-  color: oklch(0.72 0.19 155);
-  border-color: oklch(0.72 0.19 155 / 0.4);
-  background: oklch(0.72 0.19 155 / 0.08);
+  color: var(--status-positive);
+  border-color: color-mix(in srgb, var(--status-positive) 40%, transparent);
+  background: var(--status-positive-bg);
 }
 
 .us-zonos-paste-btn {
@@ -10258,21 +10519,89 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   transform: scale(0.975);
 }
 
-.us-zonos-result-hint {
-  font-size: var(--text-xs);
-  line-height: var(--leading-snug);
-  margin-top: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--r);
-  background: oklch(0.72 0.19 155 / 0.10);
-  border: 1px solid oklch(0.72 0.19 155 / 0.35);
-  color: var(--content-primary);
-  animation: fadeIn var(--dur-base) var(--ease-entrance);
+/* Numbered workflow: buy the declaration, then paste it. The order is the whole
+   point of the panel — the id has to be on the form before the label is bought —
+   so the steps are a real <ol> with visible numerals rather than stacked boxes. */
+.us-zonos-steps {
+  list-style: none;
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  counter-reset: none;
 }
 
-.us-zonos-result-hint.is-warn {
-  background: oklch(0.78 0.18 75 / 0.10);
-  border-color: oklch(0.78 0.18 75 / 0.35);
+.us-zonos-step {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-3);
+  align-items: start;
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r);
+  transition: border-color var(--dur-base) var(--ease-standard);
+}
+
+.us-zonos-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 26px;
+  block-size: 26px;
+  border-radius: 50%;
+  background: var(--gold-bg);
+  border: 1px solid var(--gold-line);
+  color: var(--content-primary);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.us-zonos-step-body {
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.us-zonos-step-title {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--content-primary);
+  line-height: var(--leading-snug);
+}
+
+.us-zonos-step-text {
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--content-secondary);
+}
+
+/* The reuse warning. Amber, not red: nothing has gone wrong yet — this is the
+   mistake the owner is most likely to make, stated before they make it. */
+.us-zonos-note {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--r);
+  background: var(--gold-bg);
+  border: 1px solid var(--gold-line);
+  color: var(--content-secondary);
+}
+
+.us-zonos-note strong {
+  color: var(--content-primary);
+}
+
+/* A complete id settles the panel: the step it belongs to stops asking for
+   attention, so the eye moves on to buying the label. */
+.us-zonos-duty-card:has(.us-zonos-char-counter.is-valid) .us-zonos-step:last-child {
+  border-color: color-mix(in srgb, var(--status-positive) 45%, transparent);
 }
 
 /* Container Queries: component adapts to container size */
@@ -10289,6 +10618,16 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   .us-zonos-action-btn {
     width: 100%;
     min-width: 0;
+  }
+  .us-zonos-step {
+    padding: var(--space-3);
+    gap: var(--space-2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .us-zonos-step {
+    transition: none;
   }
 }
 
@@ -11020,6 +11359,65 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   .ship-readiness { align-items: flex-start; flex-direction: column; gap: var(--space-1); }
 }
 
+/* ─── What an order filled in for you ─────────────────────────────────────
+   The receipt for work the publisher did not watch happen: which order was
+   loaded, what ended up in the box, and whether anything wants a second look.
+   Sits directly under the two pre-fill dropdowns it is explaining. */
+.ship-order-prefill {
+  margin-top: var(--space-3);
+}
+.ship-prefill-order {
+  font-family: 'DM Mono', ui-monospace, monospace;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--content-primary);
+}
+
+/* The opt-out for automatic rate fetching. Deliberately a full-width row with
+   its own explanation rather than a bare checkbox: it changes what happens
+   without being asked, so what it changes has to be readable in place. */
+.ship-auto-quote {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin: var(--space-3) 0 0;
+  padding: 10px 14px;
+  min-height: var(--target-min, 44px);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r2);
+  background: var(--surface-sunken);
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: 0;
+  transition: border-color var(--dur-fast) var(--ease-standard),
+    background-color var(--dur-fast) var(--ease-standard);
+}
+.ship-auto-quote:hover { border-color: var(--border-strong, var(--border2)); }
+.ship-auto-quote:has(input:focus-visible) {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+.ship-auto-quote input {
+  width: auto;
+  margin: 2px 0 0;
+  flex-shrink: 0;
+  accent-color: var(--gold);
+  cursor: pointer;
+}
+.ship-auto-quote-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ship-auto-quote-title {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--content-primary);
+}
+.ship-auto-quote-sub {
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--content-secondary);
+}
+
 /* The label turns with its box, so a flagged field reads as one unit rather
    than a red outline whose caption still looks fine. Colour is only ever the
    second signal here — the inline .field-error message carries the meaning. */
@@ -11726,19 +12124,20 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 }
 
 /* Shippo Manual Link Modal */
+/* Same scrim treatment as .overlay, and for the same measured reason. This
+   one additionally ANIMATED the blur radius open, which meant a full-viewport
+   re-blur on every frame of the entrance. */
 .manual-link-backdrop {
   position: fixed; inset: 0;
-  background: rgba(10, 10, 12, 0.65);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: radial-gradient(120% 90% at 50% 45%, rgba(10, 10, 12, .60), rgba(10, 10, 12, .80) 70%, rgba(6, 6, 8, .88));
   z-index: 9000;
   display: flex; align-items: center; justify-content: center;
   animation: modalFadeIn 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
 @keyframes modalFadeIn {
-  from { opacity: 0; backdrop-filter: blur(0); }
-  to { opacity: 1; backdrop-filter: blur(8px); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .manual-link-modal {
@@ -12071,6 +12470,11 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 }
 .bc-dot.connected { background: var(--emerald); box-shadow: 0 0 8px var(--emerald); }
 .bc-dot.disconnected { background: var(--rose); box-shadow: 0 0 8px var(--rose); }
+/* Credentials are saved but have never been tested. Amber, because green here
+   claims a working connection nobody has checked — which is exactly what this
+   dot did until now: it asked for `sync-dot amber`, a class that does not
+   exist, and so painted the default emerald. */
+.bc-dot.unverified { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
 
 /* Subtab styling to match global subtabs */
 .bc-sub-nav {
@@ -12355,6 +12759,13 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
    `.overview-section`, so the shared `@container overview-sec` stack rule
    never fires and the title needs its own wrap. */
 .cat-settings-head {
+  flex-wrap: wrap;
+}
+
+/* Profit Sharing Breakdown dashboard card: same off-container case as
+   `.cat-settings-head` above — the head sits directly in `#d-profit-sharing-block`
+   (a `.card`), not an `.overview-section`. */
+.ps-block-head {
   flex-wrap: wrap;
 }
 
@@ -13227,12 +13638,15 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   color: var(--text) !important;
 }
 
+/* Themed elevation, not a raw shadow — the same warm-black-on-charcoal bug
+   already fixed on .hist-kpi-card and .catalog-card. At rest this was the one
+   panel on the checkout screen with no visible lift once the page went dark. */
 .pos-cart-panel {
   background: var(--surface-card, #ffffff) !important;
   border: 1px solid var(--gold-line, rgba(200, 145, 58, 0.3)) !important;
   border-radius: 14px !important;
   padding: 1.25rem !important;
-  box-shadow: 0 8px 30px rgba(14, 12, 10, 0.08) !important;
+  box-shadow: var(--elev-3) !important;
 }
 
 /* ─── POS CHECKOUT PANEL — STACK RHYTHM & HIERARCHY ───────────────────────
@@ -14180,6 +14594,17 @@ button[onclick="refreshUmamiStats()"]:active {
   font-size: 11px;
   color: var(--text3);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* What is in the parcel, on the row that ships it — so the box being sized on
+   the wrong book is visible before it is chosen, not after the label prints. */
+.custom-dest-item-parcel {
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: var(--leading-snug);
+  color: var(--content-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -15429,16 +15854,51 @@ button[onclick="refreshUmamiStats()"]:active {
   color:var(--content-muted);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
-/* Deleting a payout record moves a real balance, so the target is a full 44px
-   (.sys-target) rather than the 20px hit box it used to be. */
-.ps-payout-del{
+/* Edit and delete sit together so the row keeps one action cluster on the
+   right rather than two competing edges. */
+.ps-payout-row-actions{
+  display:flex;align-items:center;gap:var(--space-1);
+  flex-shrink:0;
+}
+/* Editing or deleting a payout record moves a real balance, so both targets are
+   a full 44px (.sys-target) rather than the 20px hit box delete used to be. */
+.ps-payout-del,
+.ps-payout-edit{
   flex-shrink:0;
   color:var(--content-muted);
+}
+.ps-payout-edit:hover{
+  color:var(--status-info);
+  background:var(--status-info-bg);
+  border-color:var(--status-info-bg);
 }
 .ps-payout-del:hover{
   color:var(--status-critical);
   background:var(--status-critical-bg);
   border-color:var(--status-critical-bg);
+}
+/* Conversion rate, shown only when the payout was made in a currency other than
+   the book's own. Sits between the fields and the balance verdict so the reading
+   order is amount → rate → what it does to the balance. */
+.ps-payout-fx{
+  display:flex;align-items:center;gap:var(--space-2);
+  flex-wrap:wrap;
+  margin-top:var(--space-3);
+}
+.ps-payout-fx[hidden]{display:none;}
+.ps-payout-fx label{
+  font-size:var(--text-2xs);
+  font-weight:600;
+  letter-spacing:var(--tracking-caps);
+  text-transform:uppercase;
+  color:var(--content-muted);
+}
+.ps-payout-fx input{max-width:140px;}
+.ps-payout-fx-note{
+  font-family:'DM Mono',monospace;
+  font-feature-settings:"tnum" 1,"zero" 1;
+  font-size:var(--text-2xs);
+  color:var(--content-muted);
 }
 /* Reconciles against the "Paid to artist" card above without adding the rows
    up by hand. */
@@ -16902,6 +17362,38 @@ button[onclick="refreshUmamiStats()"]:active {
   vertical-align: middle;
 }
 
+/* The mark that outlives the notification card. Dismissing a card should clear
+   the card, not the problem, so a service that has stopped answering stays
+   flagged on its own tab until a check actually succeeds.
+
+   Same placement, scale and `pill red` as the gap badge above: both mean "look
+   here, something is wrong", and the amber/rose distinction between a refused
+   key and an unreachable service belongs on the card, which has room to explain
+   it. `pill amber` was the first choice and failed the contrast sweep at
+   2.73:1 — its ink and its own background are too close to each other. The two
+   badges stay tellable apart by content: the gap badge counts, this one is a
+   bare "!". */
+.health-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 15px;
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 100px;
+  /* Solid fill rather than the tinted `pill red`: this badge has to sit legibly
+     on the cream tab bar, the dark sidebar AND inside a header button, and the
+     tinted pill's ink-on-own-tint pairing measures 2.91:1 — under AA — in that
+     third context. A solid ground carries its own contrast wherever it lands. */
+  background: var(--red);
+  color: var(--on-inverse);
+  font-size: var(--text-3xs);
+  font-weight: 700;
+  line-height: 1.5;
+  vertical-align: middle;
+}
+.health-badge[hidden] { display: none; }
+
 /* The strip on the Website orders screen. The Gmail scan reports its own status
    a few lines below this; when the storefront disagrees with it, that has to be
    visible at the same glance rather than one tab away. */
@@ -16972,4 +17464,738 @@ button[onclick="refreshUmamiStats()"]:active {
   text-transform: uppercase;
   color: var(--content-muted);
   margin-right: var(--space-1);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   INVOICE MODAL — store / person bill-to switch
+   An invoice usually bills a consignment store, but a direct sale to a reader,
+   a school or a festival has no store record to pick. The segmented control
+   swaps which recipient form is shown; the hint under it says, in the
+   publisher's words, what the chosen side expects.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.inv-billto-switch {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3);
+}
+
+.inv-billto-hint {
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--content-muted);
+  flex: 1 1 190px;
+  min-width: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LANDING RAIL — NOTIFICATIONS, RECENT ACTIVITY & THE TO-DO LIST
+   ───────────────────────────────────────────────────────────────────────────
+   The all-books screen keeps its three sections in the main column and gains a
+   rail beside them. Everything below is painted from derived data (see
+   lib/attention-signals.js and lib/activity-feed.js) — there is no stored
+   read/dismissed state, so these rules only ever describe "right now".
+
+   Alert tone follows the house language rather than inventing a new one: the
+   3px coloured LEFT border is what .app-alert and .sync-chip already use for
+   exactly this job. Stat tiles are the ones that take a bottom accent.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* The page is its own container so the rail collapses on a narrow PANEL, not a
+   narrow viewport — the correct signal, per UX_PATTERNS.md §4. Layout
+   containment does not create a scroll container, so sticky headers inside the
+   main column still resolve against the page. */
+/* It also fills the window rather than sitting in a fixed 1200px column with the
+   rest of the monitor left blank. `.tab-panel` centres every other screen at
+   1200px, which on a 2560px display meant ~1150px of dead margin and a book
+   strip stuck at 790px whatever you were looking at it on. The padding scales
+   with the viewport so the edges stay comfortable at any size. */
+#tab-all-overview {
+  container-type: inline-size;
+  container-name: overview-page;
+  max-width: none;
+  padding-inline: clamp(1rem, 2vw, 3rem);
+}
+
+.overview-shell {
+  display: grid;
+  /* The rail grows a little with the window but stays a readable column — an
+     activity feed stretched to 800px is harder to scan, not easier. The main
+     column takes every pixel the rail doesn't. */
+  grid-template-columns: minmax(0, 1fr) clamp(300px, 20vw, 380px);
+  gap: var(--space-5);
+  align-items: start;
+}
+.overview-main { min-width: 0; }
+.overview-rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+@container overview-page (max-width: 900px) {
+  .overview-shell { grid-template-columns: 1fr; }
+}
+
+.rail-card {
+  background: var(--surface-raised);
+  border: 1px solid var(--border2);
+  border-radius: var(--r3);
+  box-shadow: var(--elev-1);
+  padding: var(--space-4) var(--space-4) var(--space-3);
+}
+.rail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.rail-kicker { margin-bottom: 0; }
+.rail-kicker.is-quiet { --sec-accent: var(--slate); }
+.rail-title {
+  font-family: 'Playfair Display', serif;
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--content-primary);
+  margin: var(--space-1) 0 var(--space-3);
+}
+.rail-count { flex: none; }
+.rail-count[hidden] { display: none; }
+
+/* Deliberately a link, not a button fill: it is a way through to the full list,
+   not the action the card is about. */
+.rail-more {
+  display: block;
+  width: 100%;
+  margin-top: var(--space-3);
+  padding: var(--space-2);
+  border: none;
+  border-top: 1px solid var(--border2);
+  background: none;
+  color: var(--gold-text);
+  font-family: 'Syne', sans-serif;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 0 0 var(--r2) var(--r2);
+  transition: color var(--dur-fast) var(--ease-standard);
+}
+.rail-more:hover { text-decoration: underline; }
+.rail-more[hidden] { display: none; }
+
+/* A rail panel is narrow, so the full .sys-empty treatment would crowd it —
+   this is the same idea at panel scale. */
+.rail-empty {
+  padding: var(--space-4) var(--space-2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  text-align: center;
+}
+.rail-empty .e-icon { font-size: var(--text-xl); opacity: .55; }
+.rail-empty strong {
+  font-family: 'Playfair Display', serif;
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--content-primary);
+}
+.rail-empty span { font-size: var(--text-sm); color: var(--content-muted); line-height: var(--leading-snug); }
+
+/* ── Notifications ───────────────────────────────────────────────────────── */
+.notif-list { display: flex; flex-direction: column; gap: var(--space-2); }
+
+.notif-item {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border2);
+  border-left: 3px solid var(--status-neutral);
+  border-radius: var(--r2);
+  background: var(--surface-sunken);
+}
+.notif-item.tone-red { border-left-color: var(--status-critical); }
+.notif-item.tone-amber { border-left-color: var(--status-active); }
+.notif-item.tone-blue { border-left-color: var(--status-info); }
+
+.notif-ico {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r);
+  font-size: var(--text-sm);
+  background: var(--surface-inset);
+}
+.tone-red .notif-ico { background: var(--status-critical-bg); color: var(--status-critical); }
+.tone-amber .notif-ico { background: var(--status-active-bg); color: var(--status-active); }
+.tone-blue .notif-ico { background: var(--status-info-bg); color: var(--status-info); }
+
+.notif-body { min-width: 0; flex: 1; }
+.notif-title {
+  font-family: 'Syne', sans-serif;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--content-primary);
+}
+.notif-detail {
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+  color: var(--content-secondary);
+  text-wrap: pretty;
+}
+.notif-meta { margin-top: var(--space-2); }
+.notif-action {
+  position: relative;
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--gold-text);
+  font-family: 'Syne', sans-serif;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  cursor: pointer;
+}
+/* Small text link, full-size tap target — the hit area grows, the ink doesn't. */
+.notif-action::after {
+  content: '';
+  position: absolute;
+  inset: -11px -8px;
+}
+.notif-action:hover { text-decoration: underline; }
+
+/* ── Recent activity ─────────────────────────────────────────────────────── */
+.activity-list {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+/* The thread the dots hang on. Inset so it runs through the dot centres. */
+.activity-list::before {
+  content: '';
+  position: absolute;
+  left: 13px;
+  top: 14px;
+  bottom: 14px;
+  width: 1px;
+  background: var(--border);
+}
+.activity-list:has(.rail-empty)::before { display: none; }
+
+.activity-item {
+  position: relative;
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  /* A shop with years of records can run long; skip what is off-screen. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 46px;
+}
+.activity-dot {
+  position: relative;
+  z-index: var(--z-base);
+  flex: none;
+  width: 27px;
+  height: 27px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--surface-inset);
+  border: 1px solid var(--border2);
+  font-size: var(--text-sm);
+}
+.activity-body {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.activity-text {
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+  color: var(--content-secondary);
+  text-wrap: pretty;
+}
+.activity-side {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+.activity-amt {
+  font-family: 'DM Mono', monospace;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--content-primary);
+}
+.activity-amt.is-pos { color: var(--status-positive); }
+.activity-amt.is-neg { color: var(--status-critical); }
+.activity-time {
+  font-family: 'DM Mono', monospace;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-3xs);
+  color: var(--content-muted);
+  white-space: nowrap;
+}
+
+/* ── The To-do tab ───────────────────────────────────────────────────────── */
+.todo-group:last-child { margin-bottom: 0; }
+.todo-list { display: flex; flex-direction: column; gap: var(--space-2); }
+
+.todo-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-raised);
+  border: 1px solid var(--border2);
+  border-left: 3px solid var(--status-neutral);
+  border-radius: var(--r2);
+  box-shadow: var(--elev-1);
+  transition:
+    transform var(--dur-base) var(--ease-entrance),
+    box-shadow var(--dur-base) var(--ease-entrance);
+}
+.todo-row:hover { transform: translateY(-2px); box-shadow: var(--elev-hover); }
+.todo-row.tone-red { border-left-color: var(--status-critical); }
+.todo-row.tone-amber { border-left-color: var(--status-active); }
+.todo-row.tone-gray { border-left-color: var(--cream4); }
+
+.todo-ico {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r2);
+  background: var(--surface-inset);
+  font-size: var(--text-base);
+}
+.todo-copy { flex: 1; min-width: 0; }
+.todo-label {
+  font-family: 'Syne', sans-serif;
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--content-primary);
+}
+.todo-detail {
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+  color: var(--content-secondary);
+  text-wrap: pretty;
+}
+.todo-fix { flex: none; align-self: center; }
+
+.todo-nav-badge[hidden] { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .todo-row:hover { transform: none; }
+}
+
+/* ── The catalogue flows into columns instead of one tall stack ────────────
+   With the screen no longer capped at 1200px, a single column of book strips
+   would just stretch each one wider and leave the same emptiness. A grid uses
+   the width for something instead: more titles visible at once, less scrolling.
+
+   `auto-fit` with a minimum track — rather than a fixed column count at a
+   breakpoint — is what makes this adapt continuously. The browser fits as many
+   columns as the available width allows and shares the remainder out, so a
+   laptop gets one, a wide monitor two, an ultrawide three, with no jumps in
+   between and nothing to maintain per screen size. `min(100%, …)` keeps the
+   track from ever exceeding the container, which is what would otherwise cause
+   an overflow on a narrow phone. */
+#all-books-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 52rem), 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+/* The strips carried their own bottom margin for the old stacked layout; the
+   grid gap owns the spacing now, and leaving both would double it. */
+#all-books-list > .book-strip { margin-bottom: 0; }
+/* An empty or still-loading catalogue reads across the whole grid rather than
+   hiding in the first column with dead space beside it. */
+#all-books-list > .empty-state { grid-column: 1 / -1; }
+
+/* Once strips share a row they cannot hold a 37rem figure rail open, so let it
+   flex down and — on a narrow column — wrap under the title exactly as it
+   already does on a phone. It still never grows past its natural width, so a
+   single full-width strip looks unchanged. */
+#all-books-list .book-strip-kpis {
+  flex: 1 1 22rem;
+  width: auto;
+  max-width: var(--book-kpi-rail-width);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   INTELLIGENCE PANEL
+   Ask-your-books chat. Built on the canonical semantic surfaces so it flips
+   with theme-dark.css like the rest of the app — no colour here is defined
+   only inside a media query, and none of it is OKLCH: UX_PATTERNS.md records
+   the decision not to migrate this stylesheet piecemeal.
+
+   The column uses the two-gap stage rhythm: --space-5 BETWEEN stages (thread,
+   composer, footnote) and --space-2 within one, so the grouping reads without
+   a border anywhere.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.intel-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+/* Where your figures go — shown once, before the first question. */
+.intel-disclosure {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r3);
+  padding: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+.intel-disclosure-ic { font-size: 20px; line-height: 1.2; flex: 0 0 auto; }
+.intel-disclosure-body { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.intel-disclosure-body strong { color: var(--content-primary); font-size: var(--text-sm); }
+.intel-disclosure-body p { margin: 0; color: var(--content-secondary); font-size: var(--text-xs); line-height: var(--leading-normal); }
+.intel-disclosure-body .btn { align-self: flex-start; }
+
+/* Why the composer is unavailable: no key, or no connection. */
+.intel-notice {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--status-info-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r2);
+  color: var(--content-secondary);
+  font-size: var(--text-xs);
+}
+
+.intel-thread {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-height: 220px;
+  max-height: min(60vh, 640px);
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding-right: var(--space-2);
+}
+
+.intel-msg { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.intel-msg-who {
+  font-size: var(--text-3xs);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--content-muted);
+}
+.intel-msg-body {
+  border-radius: var(--r3);
+  padding: var(--space-3) var(--space-4);
+  line-height: var(--leading-normal);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+/* The publisher's own question sits inset, the answer raised — so a glance
+   down the thread separates what was asked from what came back without
+   relying on colour alone. */
+.intel-msg.is-you .intel-msg-body {
+  background: var(--surface-inset);
+  color: var(--content-primary);
+  align-self: flex-end;
+  max-width: 46rem;
+}
+.intel-msg.is-you .intel-msg-who { align-self: flex-end; }
+.intel-msg.is-app .intel-msg-body {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  color: var(--content-primary);
+  box-shadow: var(--elev-1);
+}
+.intel-msg-body code {
+  font-family: 'DM Mono', monospace;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  font-size: 0.94em;
+}
+.intel-msg.is-thinking .intel-msg-body { display: flex; flex-direction: column; gap: var(--space-2); }
+
+/* What the answer was worked out from. */
+.intel-trace {
+  font-size: var(--text-3xs);
+  color: var(--content-muted);
+  letter-spacing: var(--tracking-label);
+}
+
+/* A staged correction, awaiting a yes or a no. */
+.intel-proposal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r3);
+  padding: var(--space-4);
+  /* A left inset rather than a tinted fill: the wash costs the figures their
+     contrast, which UX_PATTERNS.md measured at 4.25:1. */
+  box-shadow: inset 3px 0 0 var(--status-active);
+}
+.intel-proposal.is-settled { box-shadow: inset 3px 0 0 var(--border-strong); opacity: 0.82; }
+.intel-proposal-head { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.intel-proposal-head strong { color: var(--content-primary); font-size: var(--text-sm); }
+.intel-proposal-diff {
+  display: grid;
+  grid-template-columns: minmax(6rem, auto) 1fr;
+  gap: var(--space-1) var(--space-3);
+  margin: 0;
+  font-size: var(--text-xs);
+}
+.intel-proposal-diff dt { color: var(--content-muted); }
+.intel-proposal-diff dd { margin: 0; color: var(--content-secondary); }
+.intel-proposal-diff dd strong { color: var(--content-primary); }
+.intel-fig {
+  font-family: 'DM Mono', monospace;
+  font-feature-settings: "tnum" 1, "zero" 1;
+}
+.intel-proposal-why { margin: 0; font-size: var(--text-xs); color: var(--content-secondary); font-style: italic; }
+.intel-proposal-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+
+/* Nothing asked yet. */
+.intel-empty .intel-starters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: center;
+  margin-top: var(--space-3);
+}
+.intel-starter { text-transform: none; letter-spacing: 0; }
+
+.intel-composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r3);
+  padding: var(--space-3);
+  transition: border-color var(--dur-fast) var(--ease-standard),
+              box-shadow var(--dur-fast) var(--ease-standard);
+}
+/* Parent-aware focus, so the whole composer lifts rather than just the field. */
+.intel-composer:has(.intel-input:focus-visible),
+.intel-composer:has(.intel-input:focus) {
+  border-color: var(--border-strong);
+  box-shadow: var(--elev-2);
+}
+.intel-input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--content-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  resize: none;
+  min-height: 2.75rem;
+  max-height: 12rem;
+  outline: none;
+}
+.intel-input::placeholder { color: var(--content-faint); }
+.intel-input:disabled { color: var(--content-muted); cursor: not-allowed; }
+.intel-composer-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
+
+.intel-foot {
+  margin: 0;
+  font-size: var(--text-3xs);
+  color: var(--content-muted);
+  line-height: var(--leading-normal);
+}
+
+/* Container query, not a viewport one: the panel narrows inside the app shell
+   long before the window does. */
+@container (max-width: 34rem) {
+  .intel-msg.is-you .intel-msg-body { max-width: 100%; }
+  .intel-proposal-diff { grid-template-columns: 1fr; gap: 0; }
+  .intel-proposal-diff dt { margin-top: var(--space-2); }
+  .intel-composer-actions { justify-content: stretch; }
+  .intel-composer-actions .btn { flex: 1 1 auto; }
+}
+
+/* `hidden` is a UA-stylesheet rule, so any component that sets its own
+   `display` silently beats it: .btn is inline-flex and .intel-disclosure is
+   flex, so both stayed on screen when renderIntel() hid them — the Stop button
+   sat there permanently and the privacy note never went away once accepted.
+   The app already handles this per component (.fk-sheet[hidden],
+   .ps-payout-form[hidden], .oc-collapse-body[hidden]); this follows that rather
+   than adding a global rule that would change every button in the app. */
+#intel-clear[hidden],
+#intel-stop[hidden],
+#intel-disclosure[hidden],
+.intel-notice[hidden] { display: none; }
+
+/* ── Intelligence: a staged batch of changes ────────────────────────────────
+   The old card described one correction as a definition list. A batch needs a
+   table, because the question the publisher is answering changed: not "is this
+   right?" but "which of these are right?" — and that is a scanning job, so the
+   old and new values have to line up in columns. */
+
+.intel-edits {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-xs);
+}
+.intel-edits td {
+  padding: var(--space-2) var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+  vertical-align: top;
+}
+.intel-edits tr:first-child td { border-top: 0; }
+
+/* A row the publisher has unticked stays visible and legible — greying it out
+   into unreadability would hide what they are choosing not to do. */
+.intel-edit.is-off .intel-edit-what,
+.intel-edit.is-off .intel-edit-was,
+.intel-edit.is-off .intel-edit-now { opacity: 0.45; text-decoration: line-through; }
+.intel-edit-note.is-off { display: none; }
+
+.intel-edit-tick { width: 2.25rem; }
+.intel-tick {
+  width: 22px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--r);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-page);
+  color: var(--on-accent);
+  font-size: 12px; line-height: 1; cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-standard),
+              border-color var(--dur-fast) var(--ease-standard),
+              transform var(--dur-fast) var(--ease-spring);
+  /* Fitts's law says a 22px box is a small target, so the hit area is padded
+     out to a comfortable one without the tick itself growing. */
+  box-shadow: 0 0 0 8px transparent;
+}
+.intel-tick.is-on { background: var(--gold); border-color: var(--gold); }
+.intel-tick:hover { transform: translateY(-1px); }
+.intel-tick:active { transform: scale(0.94); }
+
+.intel-edit-what { display: flex; flex-direction: column; gap: 2px; }
+.intel-edit-record { color: var(--content-primary); font-weight: 600; }
+.intel-edit-field { color: var(--content-secondary); }
+.intel-edit-book { color: var(--content-muted); font-size: var(--text-3xs); }
+.intel-money-flag {
+  display: inline-block;
+  min-width: 15px; text-align: center;
+  border-radius: var(--r);
+  background: var(--status-active);
+  color: var(--on-status);
+  font-size: var(--text-3xs); font-weight: 700;
+}
+.intel-edit-was { color: var(--content-muted); text-align: right; white-space: nowrap; }
+.intel-edit-now { color: var(--content-primary); text-align: right; white-space: nowrap; }
+.intel-edit-note td { color: var(--content-muted); font-size: var(--text-3xs); border-top: 0; padding-top: 0; }
+
+.intel-proposal-warn {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--r2);
+  background: var(--status-active-bg);
+  color: var(--content-secondary);
+  font-size: var(--text-xs);
+  box-shadow: inset 3px 0 0 var(--status-active);
+}
+.intel-rejected { font-size: var(--text-xs); color: var(--content-secondary); }
+.intel-rejected summary { cursor: pointer; color: var(--content-muted); }
+.intel-rejected ul { margin: var(--space-2) 0 0; padding-left: var(--space-4); display: flex; flex-direction: column; gap: 4px; }
+
+@container (max-width: 34rem) {
+  /* Stack the before/after under the record rather than letting three columns
+     crush the names into one word per line. */
+  .intel-edits, .intel-edits tbody, .intel-edits tr, .intel-edits td { display: block; width: auto; }
+  .intel-edit { position: relative; padding-left: 2.25rem; border-top: 1px solid var(--border-subtle); }
+  .intel-edits td { border-top: 0; padding: 2px 0; }
+  .intel-edit-tick { position: absolute; left: 0; top: var(--space-2); }
+  .intel-edit-was, .intel-edit-now { text-align: left; }
+  .intel-edit-was::before { content: 'Now: '; color: var(--content-muted); }
+  .intel-edit-now::before { content: 'Becomes: '; color: var(--content-muted); }
+}
+
+/* ── Intelligence: the backup provider ──────────────────────────────────────
+   The panel can fall back to a second AI service when Google will not answer.
+   Two small pieces of chrome go with that: marking the setting as optional, so
+   nobody thinks the panel needs it, and marking an answer that came from the
+   backup, because a figure from a different model deserves to be identifiable
+   rather than blending in with the rest. */
+
+.tc-form-optional {
+  color: var(--content-muted);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.intel-via {
+  color: var(--status-active);
+  font-style: italic;
+}
+
+/* ── Missing Costs ──────────────────────────────────────────────────────────
+   Costs the business had with no record of them. Each card is one gap: what
+   is missing, what it is likely to have cost, and three ways to respond —
+   log it, put it off, or say it does not apply. The third and second matter
+   as much as the first: a list that only accepts "done" is a list that grows
+   until it is ignored. */
+
+.ded-list { display: flex; flex-direction: column; gap: var(--space-4); }
+
+.ded-gap { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-4); }
+.ded-gap-top { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+.ded-gap-head { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; min-width: 0; }
+.ded-gap-title { color: var(--content-primary); font-size: var(--text-sm); }
+
+.ded-amount {
+  color: var(--gold-text);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  white-space: nowrap;
+}
+/* An unknown amount reads as absent rather than as zero — the app has no
+   history to estimate from, which is different from "this is worth nothing". */
+.ded-amount.is-unknown { color: var(--content-faint); font-weight: 400; }
+
+.ded-gap-detail { margin: 0; color: var(--content-secondary); font-size: var(--text-xs); line-height: var(--leading-normal); }
+.ded-gap-basis { margin: 0; color: var(--content-muted); font-size: var(--text-3xs); font-style: italic; }
+.ded-gap-prompt { margin: 0; color: var(--content-primary); font-size: var(--text-xs); font-weight: 500; }
+.ded-gap-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-1); }
+
+.ded-hidden {
+  margin: var(--space-2) 0 0;
+  display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
+  color: var(--content-muted); font-size: var(--text-xs);
+}
+.ded-foot {
+  margin: var(--space-4) 0 0;
+  color: var(--content-muted);
+  font-size: var(--text-3xs);
+  line-height: var(--leading-normal);
+}
+
+@container (max-width: 34rem) {
+  .ded-gap-top { flex-direction: column; }
+  .ded-gap-actions .btn { flex: 1 1 auto; }
 }
