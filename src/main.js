@@ -17036,8 +17036,6 @@ export function switchPOSSubTab(subTabName) {
   }
 
   if (activePOSSubTab === 'fairkit') {
-    const dateInput = document.getElementById('st-date');
-    if (dateInput && !dateInput.value) dateInput.value = today();
     salesTrackerFairPresets = loadStPresets(_stPresetStore());
     qrFairPresets = loadQrPresets(_qrPresetStore());
     renderFairKitBookList();
@@ -17059,8 +17057,6 @@ export function fairKitSearchFilter(query) {
 window.fairKitSearchFilter = fairKitSearchFilter;
 
 window.openFairKitModal = function () {
-  const dateInput = document.getElementById('st-date');
-  if (dateInput && !dateInput.value) dateInput.value = today();
   salesTrackerFairPresets = loadStPresets(_stPresetStore());
   qrFairPresets = loadQrPresets(_qrPresetStore());
   renderFairKitBookList();
@@ -17208,43 +17204,155 @@ function printSalesTracker(opts = {}) {
     `;
   }).join('');
 
+  const numBooks = selectedBooks.length;
+  const visualRows = numBooks * (includeNotes ? 2 : 1);
+
+  let rowHeight = 56;
+  let priceRowHeight = 28;
+  let thHeight = 32;
+  let titleFontSize = '11.5pt';
+  let authorFontSize = '9pt';
+  let packedFontSize = '8.5pt';
+  let thFontSize = '11pt';
+  let metaFontSize = '12pt';
+  let metaGap = '36px';
+  let grandBoxW = '110px';
+  let grandBoxH = '44px';
+  let grandLabelFontSize = '14pt';
+  let grandMarginTop = '18px';
+
+  if (visualRows === 1) {
+    rowHeight = 220;
+    thHeight = 44;
+    titleFontSize = '18pt';
+    authorFontSize = '12.5pt';
+    packedFontSize = '11.5pt';
+    thFontSize = '13pt';
+    metaFontSize = '13.5pt';
+    metaGap = '48px';
+    grandBoxW = '140px';
+    grandBoxH = '56px';
+    grandLabelFontSize = '16pt';
+    grandMarginTop = '28px';
+  } else if (visualRows === 2) {
+    rowHeight = 150;
+    priceRowHeight = 50;
+    thHeight = 40;
+    titleFontSize = '15pt';
+    authorFontSize = '11pt';
+    packedFontSize = '10.5pt';
+    thFontSize = '12pt';
+    metaFontSize = '13pt';
+    metaGap = '42px';
+    grandBoxW = '130px';
+    grandBoxH = '50px';
+    grandLabelFontSize = '15pt';
+    grandMarginTop = '24px';
+  } else if (visualRows <= 4) {
+    rowHeight = 100;
+    priceRowHeight = 38;
+    thHeight = 36;
+    titleFontSize = '13.5pt';
+    authorFontSize = '10pt';
+    packedFontSize = '9.5pt';
+    thFontSize = '11.5pt';
+    metaFontSize = '12.5pt';
+    metaGap = '38px';
+    grandBoxW = '120px';
+    grandBoxH = '46px';
+    grandLabelFontSize = '14.5pt';
+    grandMarginTop = '20px';
+  } else if (visualRows <= 6) {
+    rowHeight = 75;
+    priceRowHeight = 32;
+    thHeight = 32;
+    titleFontSize = '12pt';
+    authorFontSize = '9.5pt';
+    packedFontSize = '9pt';
+    thFontSize = '11pt';
+  } else if (visualRows <= 9) {
+    rowHeight = 56;
+    priceRowHeight = 28;
+    thHeight = 32;
+    titleFontSize = '11.5pt';
+    authorFontSize = '9pt';
+    packedFontSize = '8.5pt';
+    thFontSize = '11pt';
+  } else if (visualRows <= 14) {
+    rowHeight = 42;
+    priceRowHeight = 24;
+    thHeight = 28;
+    titleFontSize = '10.5pt';
+    authorFontSize = '8.5pt';
+    packedFontSize = '8pt';
+    thFontSize = '10pt';
+    grandBoxW = '100px';
+    grandBoxH = '38px';
+    grandLabelFontSize = '13pt';
+    grandMarginTop = '14px';
+  } else {
+    rowHeight = 32;
+    priceRowHeight = 20;
+    thHeight = 24;
+    titleFontSize = '9.5pt';
+    authorFontSize = '8pt';
+    packedFontSize = '7.5pt';
+    thFontSize = '9.5pt';
+    grandBoxW = '90px';
+    grandBoxH = '32px';
+    grandLabelFontSize = '12pt';
+    grandMarginTop = '10px';
+  }
+
+  const effectiveTallyRowHeight = includeNotes ? Math.max(32, Math.round(rowHeight * 0.95)) : rowHeight;
+  const effectivePriceRowHeight = priceRowHeight;
+
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
     <title>Book Sales Tracker${eventName ? ' — ' + escapeHtml(eventName) : ''}</title>
     <style>
       @page { size: letter landscape; margin: 0.4in; }
       * { box-sizing: border-box; }
       html, body { background: #fff; color: #111; margin: 0; padding: 0; }
-      body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif; padding: 0.2in; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+        padding: 0.2in;
+        min-height: calc(100vh - 0.4in);
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+      }
       .header { text-align: center; margin-bottom: 14px; }
       .header h1 { margin: 0; font-size: 26pt; font-weight: 800; letter-spacing: -.01em; }
-      .meta { display: flex; gap: 36px; margin-bottom: 12px; font-size: 12pt; }
-      .meta-row { flex: 1; display: flex; align-items: baseline; gap: 8px; border-bottom: 1.5px solid #111; padding-bottom: 4px; }
+      .meta { display: flex; gap: ${metaGap}; margin-bottom: 12px; font-size: ${metaFontSize}; }
+      .meta-row { flex: 1; display: flex; align-items: baseline; gap: 8px; border-bottom: 1.5px solid #111; padding-bottom: 4px; min-height: 1.4em; }
       .meta-row .label { font-weight: 800; }
-      .meta-row .value { flex: 1; font-weight: 500; }
+      .meta-row .value { flex: 1; font-weight: 500; min-height: 1.2em; }
       table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-      th, td { border: 1.2px solid #111; padding: 0; height: 56px; }
-      thead th { background: #e8e8e8; font-size: 11pt; font-weight: 800; text-align: center; height: 32px; padding: 4px; }
+      th, td { border: 1.2px solid #111; padding: 0; }
+      thead th { background: #e8e8e8; font-size: ${thFontSize}; font-weight: 800; text-align: center; height: ${thHeight}px; padding: 4px; }
       thead th.title-col { text-align: left; padding-left: 10px; width: 22%; }
       thead th.total-col { background: #f4e4b8; width: 80px; }
       td.title { padding: 8px 10px; vertical-align: middle; }
-      td.title .title-name { font-weight: 700; font-size: 11.5pt; line-height: 1.2; }
-      td.title .title-meta { font-size: 9pt; color: #555; margin-top: 2px; }
-      td.title .title-packed { font-size: 8.5pt; font-weight: 700; color: #8a5815; margin-top: 2px; }
-      td.tally { background: #fff; }
-      td.total { background: #fdf0c8; }
-      td.price-paid { background: #fafafa; height: 28px; font-size: 9pt; color: #666; text-align: center; vertical-align: middle; }
+      td.title .title-name { font-weight: 700; font-size: ${titleFontSize}; line-height: 1.2; }
+      td.title .title-meta { font-size: ${authorFontSize}; color: #555; margin-top: 2px; }
+      td.title .title-packed { font-size: ${packedFontSize}; font-weight: 700; color: #8a5815; margin-top: 2px; }
+      td.tally { background: #fff; height: ${effectiveTallyRowHeight}px; }
+      td.total { background: #fdf0c8; height: ${effectiveTallyRowHeight}px; }
+      td.price-paid { background: #fafafa; height: ${effectivePriceRowHeight}px; font-size: 9pt; color: #666; text-align: center; vertical-align: middle; }
       tr.price-row td.price-paid::before { content: "${currencySymbol} ___"; color: #bbb; font-size: 8pt; }
       tfoot td { border: none; padding-top: 14px; }
-      .grand-row { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 18px; }
-      .grand-label { font-size: 14pt; font-weight: 800; }
-      .grand-box { width: 110px; height: 44px; border: 1.5px solid #111; background: #fdf0c8; }
-      @media print { body { padding: 0; } }
+      .grand-row { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: ${grandMarginTop}; }
+      .grand-label { font-size: ${grandLabelFontSize}; font-weight: 800; }
+      .grand-box { width: ${grandBoxW}; height: ${grandBoxH}; border: 1.5px solid #111; background: #fdf0c8; }
+      @media print {
+        body { padding: 0; min-height: 100%; }
+      }
     </style>
     </head><body>
       <div class="header"><h1>Book Sales Tracker</h1></div>
       <div class="meta">
-        <div class="meta-row"><span class="label">Event:</span><span class="value">${escapeHtml(eventName)}</span></div>
-        <div class="meta-row"><span class="label">Date:</span><span class="value">${escapeHtml(dateLabel)}</span></div>
+        <div class="meta-row"><span class="label">Event:</span><span class="value">${eventName ? escapeHtml(eventName) : '&nbsp;'}</span></div>
+        <div class="meta-row"><span class="label">Date:</span><span class="value">${dateLabel ? escapeHtml(dateLabel) : '&nbsp;'}</span></div>
         ${totalPacked > 0 ? `<div class="meta-row"><span class="label">Packed:</span><span class="value">${totalPacked} book${totalPacked === 1 ? '' : 's'}</span></div>` : ''}
       </div>
       <table>
@@ -17618,37 +17726,144 @@ async function printPaymentQRCodes(opts = {}) {
   if (fitOnePage && count > 8 && cols < 4) {
     effectiveCols = 4;
   }
+  // Cap effectiveCols at count so a single book or small batch doesn't get squished into thin columns
+  effectiveCols = Math.min(effectiveCols, Math.max(1, count));
+  const rowCount = Math.ceil(count / effectiveCols);
 
-  let headerPadding = '40px 32px 24px';
+  let headerPadding = '32px 28px 20px';
+  let brandFontSize = fitOnePage ? '1.8rem' : '2.2rem';
+  let taglineFontSize = '0.6rem';
   let cardPadding = '24px 18px 20px';
+  let cardMaxWidth = 'none';
+  let cardNumSize = '0.5rem';
+  let cardNumMargin = '8px';
   let qrFrameSize = '140px';
   let qrRenderSize = 120;
+  let cornerBracketSize = '6px';
+  let cornerBracketWidth = '1px';
   let titleFontSize = '1.05rem';
+  let authorFontSize = '0.68rem';
+  let priceThFontSize = '0.5rem';
   let priceTdPadding = '4px 0';
+  let priceCurFontSize = '0.58rem';
+  let priceValFontSize = '0.8rem';
+  let urlFontSize = '0.48rem';
 
-  if (fitOnePage || count > 6) {
-    if (count <= 6) {
-      headerPadding = '16px 20px 10px';
-      cardPadding = '14px 12px 10px';
-      qrFrameSize = '112px';
-      qrRenderSize = 94;
-      titleFontSize = '0.95rem';
-      priceTdPadding = '2px 0';
-    } else if (count <= 9) {
-      headerPadding = '12px 18px 8px';
-      cardPadding = '10px 8px 8px';
-      qrFrameSize = '94px';
-      qrRenderSize = 78;
-      titleFontSize = '0.88rem';
-      priceTdPadding = '2px 0';
-    } else {
-      headerPadding = '8px 14px 4px';
-      cardPadding = '8px 6px 6px';
-      qrFrameSize = '80px';
-      qrRenderSize = 64;
-      titleFontSize = '0.8rem';
-      priceTdPadding = '1px 0';
-    }
+  if (count === 1) {
+    // Single QR showcase / stall sign poster
+    headerPadding = '32px 32px 18px';
+    brandFontSize = '2.6rem';
+    taglineFontSize = '0.72rem';
+    cardPadding = '44px 36px 36px';
+    cardMaxWidth = '580px';
+    cardNumSize = '0.72rem';
+    cardNumMargin = '14px';
+    qrFrameSize = '280px';
+    qrRenderSize = 250;
+    cornerBracketSize = '12px';
+    cornerBracketWidth = '2px';
+    titleFontSize = '2.1rem';
+    authorFontSize = '0.95rem';
+    priceThFontSize = '0.65rem';
+    priceTdPadding = '8px 4px';
+    priceCurFontSize = '0.82rem';
+    priceValFontSize = '1.35rem';
+    urlFontSize = '0.56rem';
+  } else if (count === 2 || (rowCount === 1 && effectiveCols === 2)) {
+    // Pair of books in a single row
+    headerPadding = '24px 24px 14px';
+    brandFontSize = '2.2rem';
+    taglineFontSize = '0.65rem';
+    cardPadding = '30px 22px 24px';
+    cardNumSize = '0.62rem';
+    cardNumMargin = '10px';
+    qrFrameSize = '210px';
+    qrRenderSize = 185;
+    cornerBracketSize = '10px';
+    cornerBracketWidth = '1.5px';
+    titleFontSize = '1.5rem';
+    authorFontSize = '0.82rem';
+    priceThFontSize = '0.58rem';
+    priceTdPadding = '6px 2px';
+    priceCurFontSize = '0.72rem';
+    priceValFontSize = '1.1rem';
+    urlFontSize = '0.5rem';
+  } else if (count === 3 || (rowCount === 1 && effectiveCols === 3)) {
+    // Trio in a single row
+    headerPadding = '20px 20px 12px';
+    brandFontSize = '2.0rem';
+    taglineFontSize = '0.62rem';
+    cardPadding = '22px 18px 18px';
+    cardNumSize = '0.55rem';
+    cardNumMargin = '8px';
+    qrFrameSize = '160px';
+    qrRenderSize = 140;
+    cornerBracketSize = '8px';
+    cornerBracketWidth = '1.2px';
+    titleFontSize = '1.25rem';
+    authorFontSize = '0.72rem';
+    priceThFontSize = '0.54rem';
+    priceTdPadding = '5px 0';
+    priceCurFontSize = '0.65rem';
+    priceValFontSize = '0.98rem';
+    urlFontSize = '0.48rem';
+  } else if (rowCount === 2) {
+    // 2 rows (4-6 books)
+    headerPadding = '16px 20px 10px';
+    brandFontSize = '1.9rem';
+    taglineFontSize = '0.6rem';
+    cardPadding = '16px 14px 14px';
+    cardNumSize = '0.5rem';
+    cardNumMargin = '6px';
+    qrFrameSize = '126px';
+    qrRenderSize = 108;
+    cornerBracketSize = '7px';
+    cornerBracketWidth = '1px';
+    titleFontSize = '1.05rem';
+    authorFontSize = '0.65rem';
+    priceThFontSize = '0.5rem';
+    priceTdPadding = '3px 0';
+    priceCurFontSize = '0.58rem';
+    priceValFontSize = '0.85rem';
+    urlFontSize = '0.46rem';
+  } else if (rowCount === 3) {
+    // 3 rows (7-9 books)
+    headerPadding = '12px 16px 8px';
+    brandFontSize = '1.7rem';
+    taglineFontSize = '0.55rem';
+    cardPadding = '10px 8px 8px';
+    cardNumSize = '0.48rem';
+    cardNumMargin = '4px';
+    qrFrameSize = '96px';
+    qrRenderSize = 80;
+    cornerBracketSize = '6px';
+    cornerBracketWidth = '1px';
+    titleFontSize = '0.9rem';
+    authorFontSize = '0.58rem';
+    priceThFontSize = '0.48rem';
+    priceTdPadding = '2px 0';
+    priceCurFontSize = '0.54rem';
+    priceValFontSize = '0.78rem';
+    urlFontSize = '0.44rem';
+  } else {
+    // 4+ rows (10+ books or dense fit-one-page)
+    headerPadding = '8px 14px 4px';
+    brandFontSize = '1.5rem';
+    taglineFontSize = '0.52rem';
+    cardPadding = '8px 6px 6px';
+    cardNumSize = '0.45rem';
+    cardNumMargin = '3px';
+    qrFrameSize = '78px';
+    qrRenderSize = 64;
+    cornerBracketSize = '5px';
+    cornerBracketWidth = '1px';
+    titleFontSize = '0.8rem';
+    authorFontSize = '0.52rem';
+    priceThFontSize = '0.46rem';
+    priceTdPadding = '1px 0';
+    priceCurFontSize = '0.5rem';
+    priceValFontSize = '0.72rem';
+    urlFontSize = '0.42rem';
   }
 
   const cardsHtml = booksData.map((book, i) => {
@@ -17664,11 +17879,13 @@ async function printPaymentQRCodes(opts = {}) {
         <tbody>${priceRows}</tbody>
       </table>
     ` : '';
+    const authorLine = book.author ? `<div class="card-author">${escapeHtml(book.author)}</div>` : '';
     return `
       <div class="card">
         <div class="card-num">${String(i + 1).padStart(2, '0')}</div>
         <div class="qr-frame"><div id="qr-${i}" data-url="${escapeHtml(book.url)}"></div></div>
         <div class="card-title">${escapeHtml(book.title)}</div>
+        ${authorLine}
         ${pricesTable}
         <div class="card-url">${escapeHtml(book.url)}</div>
       </div>
@@ -17690,48 +17907,82 @@ async function printPaymentQRCodes(opts = {}) {
     --accent: #8b6f47;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--paper); font-family: 'Jost', sans-serif; font-weight: 300; color: var(--ink); }
+  html, body {
+    height: 100%;
+    min-height: 100vh;
+    background: var(--paper);
+    font-family: 'Jost', sans-serif;
+    font-weight: 300;
+    color: var(--ink);
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
 
-  .header { text-align: center; padding: ${headerPadding}; border-bottom: 1px solid var(--rule); }
+  .header { text-align: center; padding: ${headerPadding}; border-bottom: 1px solid var(--rule); flex-shrink: 0; }
   .header::before { content: ''; display: block; width: 32px; height: 1px; background: var(--accent); margin: 0 auto 10px; }
-  .brand { font-family: 'Cormorant Garamond', serif; font-size: ${fitOnePage ? '1.8rem' : '2.2rem'}; font-weight: 300; letter-spacing: 0.12em; line-height: 1; }
+  .brand { font-family: 'Cormorant Garamond', serif; font-size: ${brandFontSize}; font-weight: 300; letter-spacing: 0.12em; line-height: 1; }
   .brand em { font-style: italic; }
-  .tagline { margin-top: 6px; font-size: 0.6rem; letter-spacing: 0.24em; text-transform: uppercase; color: var(--accent); }
+  .tagline { margin-top: 6px; font-size: ${taglineFontSize}; letter-spacing: 0.24em; text-transform: uppercase; color: var(--accent); }
   .date-line { margin-top: 4px; font-size: 0.55rem; letter-spacing: 0.16em; text-transform: uppercase; color: #aaa; }
 
-  .grid { display: flex; flex-wrap: wrap; justify-content: center; }
+  .page-main {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+  }
+
+  .grid {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: stretch;
+    width: 100%;
+    ${cardMaxWidth !== 'none' ? `max-width: ${cardMaxWidth};` : ''}
+  }
 
   .card {
     width: calc(100% / ${effectiveCols});
-    padding: ${cardPadding}; border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule);
+    padding: ${cardPadding};
+    border-right: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    ${count === 1 ? 'border-left: 1px solid var(--rule); border-top: 1px solid var(--rule);' : ''}
     display: flex; flex-direction: column; align-items: center; position: relative;
     page-break-inside: avoid; break-inside: avoid;
+    ${count <= 2 ? 'box-shadow: 0 4px 18px rgba(0,0,0,0.03);' : ''}
   }
   .card:nth-child(${effectiveCols}n) { border-right: none; }
-  .card::before, .card::after { content: ''; position: absolute; width: 6px; height: 6px; border-color: var(--accent); border-style: solid; opacity: 0.35; }
-  .card::before { top: 6px; left: 6px; border-width: 1px 0 0 1px; }
-  .card::after  { bottom: 6px; right: 6px; border-width: 0 1px 1px 0; }
+  ${count === 1 ? '.card { border-right: 1px solid var(--rule) !important; }' : ''}
+  .card::before, .card::after { content: ''; position: absolute; width: ${cornerBracketSize}; height: ${cornerBracketSize}; border-color: var(--accent); border-style: solid; opacity: 0.35; }
+  .card::before { top: 6px; left: 6px; border-width: ${cornerBracketWidth} 0 0 ${cornerBracketWidth}; }
+  .card::after  { bottom: 6px; right: 6px; border-width: 0 ${cornerBracketWidth} ${cornerBracketWidth} 0; }
 
-  .card-num { font-size: 0.5rem; letter-spacing: 0.2em; color: var(--accent); text-transform: uppercase; margin-bottom: 8px; font-weight: 400; }
+  .card-num { font-size: ${cardNumSize}; letter-spacing: 0.2em; color: var(--accent); text-transform: uppercase; margin-bottom: ${cardNumMargin}; font-weight: 400; }
 
   .qr-frame { width: ${qrFrameSize}; height: ${qrFrameSize}; padding: 6px; background: #fff; border: 1px solid var(--rule); display: flex; align-items: center; justify-content: center; margin-bottom: 10px; flex-shrink: 0; }
 
-  .card-title { font-family: 'Cormorant Garamond', serif; font-size: ${titleFontSize}; font-style: italic; font-weight: 400; text-align: center; line-height: 1.25; margin-bottom: 8px; }
+  .card-title { font-family: 'Cormorant Garamond', serif; font-size: ${titleFontSize}; font-style: italic; font-weight: 400; text-align: center; line-height: 1.25; margin-bottom: 4px; }
+  .card-author { font-size: ${authorFontSize}; color: #777; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 8px; text-align: center; }
 
   .prices { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
   .prices thead tr { border-bottom: 1px solid var(--rule); }
-  .prices thead th { font-size: 0.5rem; font-weight: 400; letter-spacing: 0.18em; text-transform: uppercase; color: #aaa; padding: 0 0 3px; text-align: left; }
+  .prices thead th { font-size: ${priceThFontSize}; font-weight: 400; letter-spacing: 0.18em; text-transform: uppercase; color: #aaa; padding: 0 0 3px; text-align: left; }
   .prices thead th:last-child { text-align: right; }
   .prices tbody tr { border-bottom: 1px solid #f0ebe3; }
   .prices tbody tr:last-child { border-bottom: none; }
-  .prices tbody td { font-size: 0.65rem; padding: ${priceTdPadding}; color: var(--ink); letter-spacing: 0.04em; }
-  .prices tbody td:first-child { color: var(--accent); font-size: 0.58rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 400; }
-  .prices tbody td:last-child { text-align: right; font-family: 'Cormorant Garamond', serif; font-size: 0.8rem; }
+  .prices tbody td { font-size: ${priceCurFontSize}; padding: ${priceTdPadding}; color: var(--ink); letter-spacing: 0.04em; }
+  .prices tbody td:first-child { color: var(--accent); font-size: ${priceCurFontSize}; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 400; }
+  .prices tbody td:last-child { text-align: right; font-family: 'Cormorant Garamond', serif; font-size: ${priceValFontSize}; }
   .prices .base-price td:first-child { color: var(--ink); }
 
-  .card-url { font-size: 0.48rem; color: #c0b8ae; word-break: break-all; text-align: center; margin-top: 4px; line-height: 1.4; }
+  .card-url { font-size: ${urlFontSize}; color: #c0b8ae; word-break: break-all; text-align: center; margin-top: 4px; line-height: 1.4; }
 
-  .footer { border-top: 1px solid var(--rule); padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; }
+  .footer { border-top: 1px solid var(--rule); padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; margin-top: auto; }
   .footer-brand { font-family: 'Cormorant Garamond', serif; font-size: 0.78rem; font-style: italic; color: #aaa; letter-spacing: 0.08em; }
   .footer-note { font-size: 0.55rem; letter-spacing: 0.12em; text-transform: uppercase; color: #bbb; }
 
@@ -17743,8 +17994,11 @@ async function printPaymentQRCodes(opts = {}) {
     @page { size: portrait; margin: ${fitOnePage ? '0.1in' : '0.25in'}; }
     html, body {
       background: white !important;
-      ${fitOnePage ? 'height: 100vh; max-height: 100vh; overflow: hidden !important;' : ''}
+      height: 100%;
+      min-height: 100vh;
+      ${fitOnePage ? 'max-height: 100vh; overflow: hidden !important;' : ''}
     }
+    .page-main { flex: 1; }
     .print-bar { display: none !important; }
   }
 </style>
@@ -17757,7 +18011,9 @@ async function printPaymentQRCodes(opts = {}) {
   <div class="date-line" id="date-line"></div>
 </header>
 
-<div class="grid">${cardsHtml}</div>
+<main class="page-main">
+  <div class="grid">${cardsHtml}</div>
+</main>
 
 <footer class="footer">
   <span class="footer-brand">Lyricalmyrical Books</span>

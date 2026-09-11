@@ -2840,7 +2840,7 @@ function _setEmailAttExcluded(msgId, idx, isExcluded) {
 // Gemini 2.0 Flash and 2.0 Flash-Lite were retired on 2026-06-01 — keeping them
 // in the fallback chain meant every escalation re-uploaded the whole payload to
 // a model that could only fail.
-const GEMINI_RECEIPT_MODELS = ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-2.5-flash'];
+const GEMINI_RECEIPT_MODELS = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-2.5-flash'];
 
 // Above this serialized size, don't probe the fallback chain — re-uploading
 // megabytes to guess at a model costs far more than surfacing the error.
