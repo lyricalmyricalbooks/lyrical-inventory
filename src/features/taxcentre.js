@@ -1133,11 +1133,15 @@ function tcOpenTripDropdown(inputId) {
   tcFilterTripDropdown(inputId);
   const menu = $(`${inputId}-menu`);
   if (menu) menu.classList.add('is-open');
+  const btn = menu?.previousElementSibling;
+  if (btn?.classList.contains('tc-trip-dropdown-btn')) btn.setAttribute('aria-expanded', 'true');
 }
 
 function tcCloseTripDropdown(inputId) {
   const menu = $(`${inputId}-menu`);
   if (menu) menu.classList.remove('is-open');
+  const btn = menu?.previousElementSibling;
+  if (btn?.classList.contains('tc-trip-dropdown-btn')) btn.setAttribute('aria-expanded', 'false');
 }
 
 function tcToggleTripDropdown(inputId) {
