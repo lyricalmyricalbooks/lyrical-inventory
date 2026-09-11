@@ -19,7 +19,7 @@ test('payment QR override fields keep their tabular mono treatment over .form-gr
   expect(override[1]).toMatch(/font-variant-numeric:\s*tabular-nums;/);
   expect(override[1]).toMatch(/background:\s*var\(--surface-raised\);/);
 
-  const formGroupRule = styles.match(/\.form-group input,\.form-group select,\.form-group textarea\{([\s\S]*?)\}/);
+  const formGroupRule = styles.match(/\.form-group input,(?:select,)?\.form-group select,\.form-group textarea\{([\s\S]*?)\}/);
   expect(formGroupRule).not.toBeNull();
   // Sanity check the premise still holds: the generic rule really does set a
   // conflicting proportional font, so the override above is doing real work.

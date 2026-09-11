@@ -2892,6 +2892,7 @@ function _setEmailAttExcluded(msgId, idx, isExcluded) {
   else _emailAttExcluded[msgId].delete(idx);
 }
 
+
 // Above this serialized size, don't probe the fallback chain — re-uploading
 // megabytes to guess at a model costs far more than surfacing the error.
 const GEMINI_SINGLE_ATTEMPT_BYTES = 2_000_000;
