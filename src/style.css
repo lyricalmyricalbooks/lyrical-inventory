@@ -12762,6 +12762,13 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   flex-wrap: wrap;
 }
 
+/* Profit Sharing Breakdown dashboard card: same off-container case as
+   `.cat-settings-head` above — the head sits directly in `#d-profit-sharing-block`
+   (a `.card`), not an `.overview-section`. */
+.ps-block-head {
+  flex-wrap: wrap;
+}
+
 .tc-trips-view-toggle,
 .tc-vault-view-switch {
   display: inline-flex;

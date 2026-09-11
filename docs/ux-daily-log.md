@@ -86,6 +86,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-09-07 | visual | Tax Centre — Shipping (US customs prepayment) | Made the US customs card's gold border and "valid" checkmarks actually change color in dark mode | #753 |
 | 2026-09-08 | visual | Book dashboard | Gave "Sales by channel", "Consignment overview" and "Inventory" real headings instead of the faintest type in the app | #766 |
 | 2026-09-10 | visual | Book dashboard | Gave the Break-even tracker a real heading like its dashboard siblings, instead of the faintest type in the app | #786 |
+| 2026-09-11 | visual | Book dashboard | Gave the Profit Sharing Breakdown card a real heading like its dashboard siblings, instead of the faintest type in the app | #794 |
 | 2026-09-11 | visual | Consignment ledger | Made the book/store jump links in the ledger table show a visible focus ring when tabbed to | #795 |
 
 ---
