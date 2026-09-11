@@ -7046,6 +7046,61 @@ function scheduleHistVoidSweep(fullTimeline) {
   }, 60_000);
 }
 
+// One row of the Order History table: a pending artist submission awaiting
+// publisher approval, or a settled sale/void. Split out of renderHist() so
+// that function reads as "gather rows, then render them" instead of burying
+// this row-by-row branching (pending vs. gratuity vs. foreign-currency vs.
+// shipped-website-order) inside the .map() call.
+function renderHistRowHtml(row, { cur, bookCode, book, formatChannelBadge }) {
+  if (row.type === 'consign') return renderConsignHistRow(row.e, row._after ?? row.after ?? '—');
+  const h = row.h, i = row.i;
+  if (h.pendingAuth) {
+    const actionCell = window.IS_PUBLISHER
+      ? `<div class="approval-actions"><button class="appr-btn approve" onclick="approveSubmission('sales', '${h._subKey}')" aria-label="Approve submission"><span class="ico">✓</span>Approve</button><button class="appr-btn reject" onclick="rejectSubmission('sales', '${h._subKey}')" title="Reject submission" aria-label="Reject submission">✕</button></div>`
+      : `<span class="chip-status amber">Awaiting Publisher</span>`;
+    return `<tr class="hist-row" style="opacity:0.8;background:var(--amber-bg);"><td class="mono mono-num">${escapeHtml(h.num)}</td><td>${formatChannelBadge(h.chan)} <span class="chip-status amber">Submitted</span></td><td class="r mono-num">-${h.qty}</td><td class="r mono-num">${fmt(h.price, cur)}</td><td class="r mono-num money-cell">${fmt(h.qty * h.price, cur)}</td><td class="r mono-num">?</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(h.notes) || '—'}</td><td style="font-size:12px;color:var(--text3);"><span class="chip-status gray">Artist</span></td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)}</td><td>${actionCell}</td></tr>`;
+  }
+  const voided = h.voided ? ' voided' : '';
+  const voidPill = h.voided ? '<span class="void-badge">Void</span>' : '';
+  const editBtn = `<button class="edit-btn" onclick="openEditHist(${i})" title="Edit entry" aria-label="Edit entry">✎</button>`;
+  const isGrat = h.gratuity || h.chan === 'Gratuity';
+  const isPending = h.artistPending;
+
+  const chanCell = isGrat ? `<span class="chip-status violet">🎁 Gratuity</span>` : isPending ? `${formatChannelBadge(h.chan)} <span class="chip-status amber">⏳ pending</span>` : formatChannelBadge(h.chan);
+  // A row's amounts belong to the currency it was RECORDED in, not the one
+  // the book carries today. Formatting a €32 sale with the book's current
+  // CA$ makes it read as CA$32 — same digits, ~50% wrong. Rows stamped with
+  // another currency render in that currency and get a badge, so stranded
+  // history is visible instead of silently mixed into CAD totals.
+  const rowCode = h.cur ? normalizeCurrencyCode(h.cur, bookCode) : bookCode;
+  const rowCur = rowCode === bookCode ? cur : getSym(rowCode);
+  const foreignPill = rowCode !== bookCode
+    ? ` <span class="chip-status amber" title="Recorded in ${escapeHtml(rowCode)} — not yet restated into ${escapeHtml(bookCode)}">${escapeHtml(rowCode)}</span>`
+    : '';
+  const priceCell = isGrat ? '<span style="color:var(--text3);font-size:11px;">gifted</span>' : fmt(h.price, rowCur) + foreignPill;
+  const totalCell = isGrat ? '—' : isPending ? `<span style="color:var(--amber);">${fmt(h.qty * h.price, rowCur)}</span>` : fmt(h.qty * h.price, rowCur);
+  const rowStyle = isGrat ? ' style="font-style:italic;"' : isPending ? ' style="background:var(--amber-bg);"' : '';
+  const isWebsite = (h.chan === 'Website' || h.chan === 'Big Cartel') && !isGrat && !h.voided;
+  const labelBtn = isWebsite
+    ? (h.shipped
+      ? `<button class="btn-hist-action shipped" onclick="openLabelModal(${i})" title="Shipped${h.shippedDate ? ' on ' + fmtD(h.shippedDate) : ''}">✓ Shipped</button>`
+      : `<button class="btn-hist-action ship" onclick="openLabelModal(${i})" title="Print shipping label">📦 Ship</button>`)
+    : '';
+
+  const paymentInfo = paymentSummary(h.payment, book, h);
+  const shippingInfo = isWebsite ? renderOrderShippingSummary(h) : '';
+  const notesText = escapeHtml(h.notes) || '—';
+  const notesCell = [
+    notesText,
+    paymentInfo ? `<span style="font-size:11px;color:var(--text3);">${escapeHtml(paymentInfo)}</span>` : '',
+    shippingInfo,
+  ].filter(Boolean).join('<br>');
+  const enteredBy = h.enteredBy || (h.artistPending ? 'Artist' : 'Publisher');
+  const enteredByPill = `<span class="chip-status gray">${escapeHtml(enteredBy)}</span>`;
+  const stockAfterVal = row._after ?? row.after ?? '—';
+  return `<tr class="hist-row ${voided}"${rowStyle}><td class="mono mono-num">${escapeHtml(h.num)}${editBtn}</td><td>${chanCell}</td><td class="r mono-num">${h.voided ? '' : '-'}${h.qty}</td><td class="r mono-num">${priceCell}</td><td class="r mono-num money-cell">${totalCell}</td><td class="r mono-num">${stockAfterVal}</td><td style="font-size:12px;color:var(--text3);">${notesCell || '—'}</td><td style="font-size:12px;color:var(--text3);">${enteredByPill}</td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)} ${voidPill}</td><td>${labelBtn}</td></tr>`;
+}
+
 export function renderHist() {
   const s = getState(), book = getBook(), cur = book.currency;
   const bookCode = bookCurrencyCode(book);
@@ -7128,55 +7183,7 @@ export function renderHist() {
     : '';
 
   $('hist-body').innerHTML = combined.length
-    ? shownRows.map((row) => {
-      if (row.type === 'consign') return renderConsignHistRow(row.e, row._after ?? row.after ?? '—');
-      const h = row.h, i = row.i;
-      if (h.pendingAuth) {
-        const actionCell = window.IS_PUBLISHER
-          ? `<div class="approval-actions"><button class="appr-btn approve" onclick="approveSubmission('sales', '${h._subKey}')" aria-label="Approve submission"><span class="ico">✓</span>Approve</button><button class="appr-btn reject" onclick="rejectSubmission('sales', '${h._subKey}')" title="Reject submission" aria-label="Reject submission">✕</button></div>`
-          : `<span class="chip-status amber">Awaiting Publisher</span>`;
-        return `<tr class="hist-row" style="opacity:0.8;background:var(--amber-bg);"><td class="mono mono-num">${escapeHtml(h.num)}</td><td>${formatChannelBadge(h.chan)} <span class="chip-status amber">Submitted</span></td><td class="r mono-num">-${h.qty}</td><td class="r mono-num">${fmt(h.price, cur)}</td><td class="r mono-num money-cell">${fmt(h.qty * h.price, cur)}</td><td class="r mono-num">?</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(h.notes) || '—'}</td><td style="font-size:12px;color:var(--text3);"><span class="chip-status gray">Artist</span></td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)}</td><td>${actionCell}</td></tr>`;
-      }
-      const voided = h.voided ? ' voided' : '';
-      const voidPill = h.voided ? '<span class="void-badge">Void</span>' : '';
-      const editBtn = `<button class="edit-btn" onclick="openEditHist(${i})" title="Edit entry" aria-label="Edit entry">✎</button>`;
-      const isGrat = h.gratuity || h.chan === 'Gratuity';
-      const isPending = h.artistPending;
-      
-      const chanCell = isGrat ? `<span class="chip-status violet">🎁 Gratuity</span>` : isPending ? `${formatChannelBadge(h.chan)} <span class="chip-status amber">⏳ pending</span>` : formatChannelBadge(h.chan);
-      // A row's amounts belong to the currency it was RECORDED in, not the one
-      // the book carries today. Formatting a €32 sale with the book's current
-      // CA$ makes it read as CA$32 — same digits, ~50% wrong. Rows stamped with
-      // another currency render in that currency and get a badge, so stranded
-      // history is visible instead of silently mixed into CAD totals.
-      const rowCode = h.cur ? normalizeCurrencyCode(h.cur, bookCode) : bookCode;
-      const rowCur = rowCode === bookCode ? cur : getSym(rowCode);
-      const foreignPill = rowCode !== bookCode
-        ? ` <span class="chip-status amber" title="Recorded in ${escapeHtml(rowCode)} — not yet restated into ${escapeHtml(bookCode)}">${escapeHtml(rowCode)}</span>`
-        : '';
-      const priceCell = isGrat ? '<span style="color:var(--text3);font-size:11px;">gifted</span>' : fmt(h.price, rowCur) + foreignPill;
-      const totalCell = isGrat ? '—' : isPending ? `<span style="color:var(--amber);">${fmt(h.qty * h.price, rowCur)}</span>` : fmt(h.qty * h.price, rowCur);
-      const rowStyle = isGrat ? ' style="font-style:italic;"' : isPending ? ' style="background:var(--amber-bg);"' : '';
-      const isWebsite = (h.chan === 'Website' || h.chan === 'Big Cartel') && !isGrat && !h.voided;
-      const labelBtn = isWebsite
-        ? (h.shipped
-          ? `<button class="btn-hist-action shipped" onclick="openLabelModal(${i})" title="Shipped${h.shippedDate ? ' on ' + fmtD(h.shippedDate) : ''}">✓ Shipped</button>`
-          : `<button class="btn-hist-action ship" onclick="openLabelModal(${i})" title="Print shipping label">📦 Ship</button>`)
-        : '';
-
-      const paymentInfo = paymentSummary(h.payment, book, h);
-      const shippingInfo = isWebsite ? renderOrderShippingSummary(h) : '';
-      const notesText = escapeHtml(h.notes) || '—';
-      const notesCell = [
-        notesText,
-        paymentInfo ? `<span style="font-size:11px;color:var(--text3);">${escapeHtml(paymentInfo)}</span>` : '',
-        shippingInfo,
-      ].filter(Boolean).join('<br>');
-      const enteredBy = h.enteredBy || (h.artistPending ? 'Artist' : 'Publisher');
-      const enteredByPill = `<span class="chip-status gray">${escapeHtml(enteredBy)}</span>`;
-      const stockAfterVal = row._after ?? row.after ?? '—';
-      return `<tr class="hist-row ${voided}"${rowStyle}><td class="mono mono-num">${escapeHtml(h.num)}${editBtn}</td><td>${chanCell}</td><td class="r mono-num">${h.voided ? '' : '-'}${h.qty}</td><td class="r mono-num">${priceCell}</td><td class="r mono-num money-cell">${totalCell}</td><td class="r mono-num">${stockAfterVal}</td><td style="font-size:12px;color:var(--text3);">${notesCell || '—'}</td><td style="font-size:12px;color:var(--text3);">${enteredByPill}</td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)} ${voidPill}</td><td>${labelBtn}</td></tr>`;
-    }).join('') + moreRow
+    ? shownRows.map((row) => renderHistRowHtml(row, { cur, bookCode, book, formatChannelBadge })).join('') + moreRow
     : searchOn
       ? `<tr class="hist-empty-row"><td colspan="10">${histNoSearchMatchHtml(describedSearch)}</td></tr>`
       // Counted off the unfiltered timeline, not the stale-void-hidden one — a

@@ -43,7 +43,8 @@ function makeHarness({ state, book = BOOK, isPublisher = true, submissions = {} 
       'renderConsignHistRow', 'renderOrderShippingSummary',
       'renderHistSearchBar', 'histNoSearchMatchHtml',
       'histEmptyStateHtml', 'renderHistFilterBar',
-      'renderHistReconciliationPanel', 'scheduleHistVoidSweep', 'renderHist',
+      'renderHistReconciliationPanel', 'scheduleHistVoidSweep',
+      'renderHistRowHtml', 'renderHist',
     ],
     deps: {
       // Ambient state renderHist reads out of module scope.
