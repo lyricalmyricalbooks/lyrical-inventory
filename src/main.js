@@ -10869,6 +10869,14 @@ function isDynamicStripeLink(inv) { return !!(inv && inv.stripe && inv.stripe.ur
 // is opt-in, and only the on-screen preview opts in.
 function renderInvoicePaperHTML(inv, { showChase = false } = {}) {
   const settings = getInvoiceSettings();
+
+  // ⚡ Bolt: Imperative loop instead of .reduce() avoids array allocations in rendering functions
+  let totalItems = 0;
+  if (inv.items) {
+    for (let i = 0; i < inv.items.length; i++) {
+      totalItems += (inv.items[i].qty || 0);
+    }
+  }
   // The issuing book, so a shared invoice prints the same document whichever
   // title it was opened from rather than picking up the viewer's accent.
   const book = invoiceOwnerBook(inv);
@@ -10983,7 +10991,7 @@ function renderInvoicePaperHTML(inv, { showChase = false } = {}) {
       <div>
         <label>Amount due</label>
         <strong style="color:${statusCls === 'paid' ? '#1d7a4a' : '#0e0c0a'};font-size:18px;">${fmt(inv.total || 0, cur)}</strong>
-        <div class="inv-meta-sub">${(inv.items || []).reduce((a, i) => a + (i.qty || 0), 0)} item${(inv.items || []).reduce((a, i) => a + (i.qty || 0), 0) === 1 ? '' : 's'}</div>
+        <div class="inv-meta-sub">${totalItems} item${totalItems === 1 ? '' : 's'}</div>
         ${settlesLine}
         ${chaseNote}
         ${divergedNote}
