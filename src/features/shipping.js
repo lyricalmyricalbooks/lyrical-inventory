@@ -7888,15 +7888,30 @@ function buildShippingWeightBandHtml(allOrders, shippoExpenses) {
     'Over 2 kg': { count: 0, totalCost: 0, totalRevenue: 0 }
   };
 
+  // ⚡ Bolt Optimization: this ran BOOK_LIST.find() and a shippoExpenses.filter()
+  // (each re-normalizing every expense's order number) once PER ORDER, i.e.
+  // O(orders × books + orders × expenses). Both allOrders and shippoExpenses cover
+  // the shop's full history and only grow over time, so building a book-by-id Map
+  // and a matched-expenses-by-order-number Map once up front turns this into a
+  // single O(orders + books + expenses) pass with O(1) lookups per order.
+  const bookById = new Map(BOOK_LIST.map(b => [b.id, b]));
+  const matchedExpensesByOrderNumber = new Map();
+  for (const e of shippoExpenses) {
+    if (e.shippingMatchStatus !== 'matched') continue;
+    const num = normalizeShippingOrderNumber(e.shippingOrderNumber);
+    if (!num) continue;
+    const bucket = matchedExpensesByOrderNumber.get(num);
+    if (bucket) bucket.push(e);
+    else matchedExpensesByOrderNumber.set(num, [e]);
+  }
+
   allOrders.forEach(o => {
     if (o.excludeFromShipping) return;
-    const book = BOOK_LIST.find(b => b.id === o.bookId);
+    const book = bookById.get(o.bookId);
     const weightKg = getWeightInKg(o.qty || 1, book);
 
     const orderNumber = normalizeShippingOrderNumber(o.num);
-    const linked = orderNumber ? shippoExpenses.filter(e =>
-      e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
-    ) : [];
+    const linked = orderNumber ? (matchedExpensesByOrderNumber.get(orderNumber) || []) : [];
 
     const hasPostage = linked.length > 0 || !!o.manualPostagePaid;
     if (hasPostage) {
