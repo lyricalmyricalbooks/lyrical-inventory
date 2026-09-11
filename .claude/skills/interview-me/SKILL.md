@@ -65,6 +65,53 @@ into questions on the wrong subject.
    what held up under pressure, what didn't, and the two or three sharpest gaps a real
    interviewer/reviewer/critic would exploit. Be specific and direct; this is the payoff of
    the exercise, so don't soften it into generic encouragement.
+6. **Hand back a ready-to-use prompt.** Immediately after the debrief, output the filled-in
+   template from "Final output" below. The interview's real product isn't just the
+   assessment — it's that the grilling forced the vague parts of the job, the reasons behind
+   it, the boundaries, and the finish line into the open. Capture that now, while it's fresh,
+   as a prompt the user can hand to someone (or something, like another Claude session) to
+   actually execute.
+
+## Final output
+
+Close every interview by producing this exact template, filled in from what the grilling
+surfaced — not from what the user first said, since that's usually the vaguer, pre-interview
+version. If the interview left a section genuinely unresolved, say so in the template
+(`[still unclear: ...]`) rather than inventing an answer; a gap that survived questioning is
+useful information, not something to paper over.
+
+```
+THE JOB
+[What you want done, as an outcome, not as steps. One or two sentences.]
+
+THE WHY
+I'm working on [the larger task] for [who it's for]. They need [what the output enables].
+
+THE GUARDRAILS
+- Only touch [the scope]. Leave everything else alone.
+- [Anything that must not change, be sent, or be deleted.]
+- Make routine judgment calls yourself. Ask me only if the answer would change the whole result.
+
+DONE MEANS
+- [How we both know it's finished: the exit criteria.]
+- Keep the deliverable to [size: sections, word count, or "as short as covers the substance"].
+- When you finish, tell me where the result is and give me [3] short bullets on what you did. Nothing more.
+```
+
+Fill each bracket with specifics pulled from the interview, not restated boilerplate:
+- **THE JOB** — the outcome the user actually defended under pressure, stated as a result,
+  not a process. If the interview revealed they were originally describing steps rather than
+  an outcome, fix that here.
+- **THE WHY** — the real motivating context that came out during questioning (who it's for,
+  what breaks or what's needed if it's missing) — often sharper than however they framed it
+  at the start.
+- **THE GUARDRAILS** — boundaries the interview exposed as load-bearing: scope the user got
+  defensive about protecting, things they said must not change, and a clear steer that small
+  calls should be made autonomously rather than kicked back. If nothing specific surfaced,
+  write a sensible default rather than leaving it empty.
+- **DONE MEANS** — the exit criteria the user could (or couldn't) articulate when pressed,
+  plus a concrete size/length constraint and a short final-report format so the eventual
+  executor doesn't over-deliver or go silent.
 
 ## What not to do
 
