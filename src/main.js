@@ -1046,11 +1046,9 @@ function onCustomAccentInput(color) {
   const swatches = document.querySelectorAll('#nb-accent-swatches .accent-swatch-btn');
   swatches.forEach(btn => {
     const bg = btn.style.backgroundColor;
-    if (bg && (bg.toLowerCase() === color.toLowerCase() || rgbToHex(bg).toLowerCase() === color.toLowerCase())) {
-      btn.classList.add('active');
-    } else {
-      btn.classList.remove('active');
-    }
+    const isSelected = !!bg && (bg.toLowerCase() === color.toLowerCase() || rgbToHex(bg).toLowerCase() === color.toLowerCase());
+    btn.classList.toggle('active', isSelected);
+    btn.setAttribute('aria-pressed', String(isSelected));
   });
 
   const accentInput = $('nb-accent');
