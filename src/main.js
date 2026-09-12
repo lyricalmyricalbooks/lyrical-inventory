@@ -18601,6 +18601,164 @@ function _fkOpenQrPrintWindow() {
   return win;
 }
 
+// Card / QR typography and spacing scale down as more books are packed onto
+// one sheet. Pulled out of printPaymentQRCodes() as a pure lookup so that
+// function's own logic (selecting books, pricing them, building the HTML)
+// isn't buried under this six-way branch.
+function computeQrSheetLayoutSizes(count, rowCount, effectiveCols, fitOnePage) {
+  const sizes = {
+    headerPadding: '32px 28px 20px',
+    brandFontSize: fitOnePage ? '1.8rem' : '2.2rem',
+    taglineFontSize: '0.6rem',
+    cardPadding: '24px 18px 20px',
+    cardMaxWidth: 'none',
+    cardNumSize: '0.5rem',
+    cardNumMargin: '8px',
+    qrFrameSize: '140px',
+    qrRenderSize: 120,
+    cornerBracketSize: '6px',
+    cornerBracketWidth: '1px',
+    titleFontSize: '1.05rem',
+    authorFontSize: '0.68rem',
+    priceThFontSize: '0.5rem',
+    priceTdPadding: '4px 0',
+    priceCurFontSize: '0.58rem',
+    priceValFontSize: '0.8rem',
+    urlFontSize: '0.48rem',
+  };
+
+  if (count === 1) {
+    // Single QR showcase / stall sign poster
+    Object.assign(sizes, {
+      headerPadding: '32px 32px 18px',
+      brandFontSize: '2.6rem',
+      taglineFontSize: '0.72rem',
+      cardPadding: '44px 36px 36px',
+      cardMaxWidth: '580px',
+      cardNumSize: '0.72rem',
+      cardNumMargin: '14px',
+      qrFrameSize: '280px',
+      qrRenderSize: 250,
+      cornerBracketSize: '12px',
+      cornerBracketWidth: '2px',
+      titleFontSize: '2.1rem',
+      authorFontSize: '0.95rem',
+      priceThFontSize: '0.65rem',
+      priceTdPadding: '8px 4px',
+      priceCurFontSize: '0.82rem',
+      priceValFontSize: '1.35rem',
+      urlFontSize: '0.56rem',
+    });
+  } else if (count === 2 || (rowCount === 1 && effectiveCols === 2)) {
+    // Pair of books in a single row
+    Object.assign(sizes, {
+      headerPadding: '24px 24px 14px',
+      brandFontSize: '2.2rem',
+      taglineFontSize: '0.65rem',
+      cardPadding: '30px 22px 24px',
+      cardNumSize: '0.62rem',
+      cardNumMargin: '10px',
+      qrFrameSize: '210px',
+      qrRenderSize: 185,
+      cornerBracketSize: '10px',
+      cornerBracketWidth: '1.5px',
+      titleFontSize: '1.5rem',
+      authorFontSize: '0.82rem',
+      priceThFontSize: '0.58rem',
+      priceTdPadding: '6px 2px',
+      priceCurFontSize: '0.72rem',
+      priceValFontSize: '1.1rem',
+      urlFontSize: '0.5rem',
+    });
+  } else if (count === 3 || (rowCount === 1 && effectiveCols === 3)) {
+    // Trio in a single row
+    Object.assign(sizes, {
+      headerPadding: '20px 20px 12px',
+      brandFontSize: '2.0rem',
+      taglineFontSize: '0.62rem',
+      cardPadding: '22px 18px 18px',
+      cardNumSize: '0.55rem',
+      cardNumMargin: '8px',
+      qrFrameSize: '160px',
+      qrRenderSize: 140,
+      cornerBracketSize: '8px',
+      cornerBracketWidth: '1.2px',
+      titleFontSize: '1.25rem',
+      authorFontSize: '0.72rem',
+      priceThFontSize: '0.54rem',
+      priceTdPadding: '5px 0',
+      priceCurFontSize: '0.65rem',
+      priceValFontSize: '0.98rem',
+      urlFontSize: '0.48rem',
+    });
+  } else if (rowCount === 2) {
+    // 2 rows (4-6 books)
+    Object.assign(sizes, {
+      headerPadding: '16px 20px 10px',
+      brandFontSize: '1.9rem',
+      taglineFontSize: '0.6rem',
+      cardPadding: '16px 14px 14px',
+      cardNumSize: '0.5rem',
+      cardNumMargin: '6px',
+      qrFrameSize: '126px',
+      qrRenderSize: 108,
+      cornerBracketSize: '7px',
+      cornerBracketWidth: '1px',
+      titleFontSize: '1.05rem',
+      authorFontSize: '0.65rem',
+      priceThFontSize: '0.5rem',
+      priceTdPadding: '3px 0',
+      priceCurFontSize: '0.58rem',
+      priceValFontSize: '0.85rem',
+      urlFontSize: '0.46rem',
+    });
+  } else if (rowCount === 3) {
+    // 3 rows (7-9 books)
+    Object.assign(sizes, {
+      headerPadding: '12px 16px 8px',
+      brandFontSize: '1.7rem',
+      taglineFontSize: '0.55rem',
+      cardPadding: '10px 8px 8px',
+      cardNumSize: '0.48rem',
+      cardNumMargin: '4px',
+      qrFrameSize: '96px',
+      qrRenderSize: 80,
+      cornerBracketSize: '6px',
+      cornerBracketWidth: '1px',
+      titleFontSize: '0.9rem',
+      authorFontSize: '0.58rem',
+      priceThFontSize: '0.48rem',
+      priceTdPadding: '2px 0',
+      priceCurFontSize: '0.54rem',
+      priceValFontSize: '0.78rem',
+      urlFontSize: '0.44rem',
+    });
+  } else {
+    // 4+ rows (10+ books or dense fit-one-page)
+    Object.assign(sizes, {
+      headerPadding: '8px 14px 4px',
+      brandFontSize: '1.5rem',
+      taglineFontSize: '0.52rem',
+      cardPadding: '8px 6px 6px',
+      cardNumSize: '0.45rem',
+      cardNumMargin: '3px',
+      qrFrameSize: '78px',
+      qrRenderSize: 64,
+      cornerBracketSize: '5px',
+      cornerBracketWidth: '1px',
+      titleFontSize: '0.8rem',
+      authorFontSize: '0.52rem',
+      priceThFontSize: '0.46rem',
+      priceTdPadding: '1px 0',
+      priceCurFontSize: '0.5rem',
+      priceValFontSize: '0.72rem',
+      urlFontSize: '0.42rem',
+    });
+  }
+
+  return sizes;
+}
+
 async function printPaymentQRCodes(opts = {}) {
   const closeModal = opts.closeModal !== false;
   const cols = Math.max(1, Math.min(6, parseInt(document.getElementById('qrp-cols').value, 10) || 3));
@@ -18708,141 +18866,11 @@ async function printPaymentQRCodes(opts = {}) {
   effectiveCols = Math.min(effectiveCols, Math.max(1, count));
   const rowCount = Math.ceil(count / effectiveCols);
 
-  let headerPadding = '32px 28px 20px';
-  let brandFontSize = fitOnePage ? '1.8rem' : '2.2rem';
-  let taglineFontSize = '0.6rem';
-  let cardPadding = '24px 18px 20px';
-  let cardMaxWidth = 'none';
-  let cardNumSize = '0.5rem';
-  let cardNumMargin = '8px';
-  let qrFrameSize = '140px';
-  let qrRenderSize = 120;
-  let cornerBracketSize = '6px';
-  let cornerBracketWidth = '1px';
-  let titleFontSize = '1.05rem';
-  let authorFontSize = '0.68rem';
-  let priceThFontSize = '0.5rem';
-  let priceTdPadding = '4px 0';
-  let priceCurFontSize = '0.58rem';
-  let priceValFontSize = '0.8rem';
-  let urlFontSize = '0.48rem';
-
-  if (count === 1) {
-    // Single QR showcase / stall sign poster
-    headerPadding = '32px 32px 18px';
-    brandFontSize = '2.6rem';
-    taglineFontSize = '0.72rem';
-    cardPadding = '44px 36px 36px';
-    cardMaxWidth = '580px';
-    cardNumSize = '0.72rem';
-    cardNumMargin = '14px';
-    qrFrameSize = '280px';
-    qrRenderSize = 250;
-    cornerBracketSize = '12px';
-    cornerBracketWidth = '2px';
-    titleFontSize = '2.1rem';
-    authorFontSize = '0.95rem';
-    priceThFontSize = '0.65rem';
-    priceTdPadding = '8px 4px';
-    priceCurFontSize = '0.82rem';
-    priceValFontSize = '1.35rem';
-    urlFontSize = '0.56rem';
-  } else if (count === 2 || (rowCount === 1 && effectiveCols === 2)) {
-    // Pair of books in a single row
-    headerPadding = '24px 24px 14px';
-    brandFontSize = '2.2rem';
-    taglineFontSize = '0.65rem';
-    cardPadding = '30px 22px 24px';
-    cardNumSize = '0.62rem';
-    cardNumMargin = '10px';
-    qrFrameSize = '210px';
-    qrRenderSize = 185;
-    cornerBracketSize = '10px';
-    cornerBracketWidth = '1.5px';
-    titleFontSize = '1.5rem';
-    authorFontSize = '0.82rem';
-    priceThFontSize = '0.58rem';
-    priceTdPadding = '6px 2px';
-    priceCurFontSize = '0.72rem';
-    priceValFontSize = '1.1rem';
-    urlFontSize = '0.5rem';
-  } else if (count === 3 || (rowCount === 1 && effectiveCols === 3)) {
-    // Trio in a single row
-    headerPadding = '20px 20px 12px';
-    brandFontSize = '2.0rem';
-    taglineFontSize = '0.62rem';
-    cardPadding = '22px 18px 18px';
-    cardNumSize = '0.55rem';
-    cardNumMargin = '8px';
-    qrFrameSize = '160px';
-    qrRenderSize = 140;
-    cornerBracketSize = '8px';
-    cornerBracketWidth = '1.2px';
-    titleFontSize = '1.25rem';
-    authorFontSize = '0.72rem';
-    priceThFontSize = '0.54rem';
-    priceTdPadding = '5px 0';
-    priceCurFontSize = '0.65rem';
-    priceValFontSize = '0.98rem';
-    urlFontSize = '0.48rem';
-  } else if (rowCount === 2) {
-    // 2 rows (4-6 books)
-    headerPadding = '16px 20px 10px';
-    brandFontSize = '1.9rem';
-    taglineFontSize = '0.6rem';
-    cardPadding = '16px 14px 14px';
-    cardNumSize = '0.5rem';
-    cardNumMargin = '6px';
-    qrFrameSize = '126px';
-    qrRenderSize = 108;
-    cornerBracketSize = '7px';
-    cornerBracketWidth = '1px';
-    titleFontSize = '1.05rem';
-    authorFontSize = '0.65rem';
-    priceThFontSize = '0.5rem';
-    priceTdPadding = '3px 0';
-    priceCurFontSize = '0.58rem';
-    priceValFontSize = '0.85rem';
-    urlFontSize = '0.46rem';
-  } else if (rowCount === 3) {
-    // 3 rows (7-9 books)
-    headerPadding = '12px 16px 8px';
-    brandFontSize = '1.7rem';
-    taglineFontSize = '0.55rem';
-    cardPadding = '10px 8px 8px';
-    cardNumSize = '0.48rem';
-    cardNumMargin = '4px';
-    qrFrameSize = '96px';
-    qrRenderSize = 80;
-    cornerBracketSize = '6px';
-    cornerBracketWidth = '1px';
-    titleFontSize = '0.9rem';
-    authorFontSize = '0.58rem';
-    priceThFontSize = '0.48rem';
-    priceTdPadding = '2px 0';
-    priceCurFontSize = '0.54rem';
-    priceValFontSize = '0.78rem';
-    urlFontSize = '0.44rem';
-  } else {
-    // 4+ rows (10+ books or dense fit-one-page)
-    headerPadding = '8px 14px 4px';
-    brandFontSize = '1.5rem';
-    taglineFontSize = '0.52rem';
-    cardPadding = '8px 6px 6px';
-    cardNumSize = '0.45rem';
-    cardNumMargin = '3px';
-    qrFrameSize = '78px';
-    qrRenderSize = 64;
-    cornerBracketSize = '5px';
-    cornerBracketWidth = '1px';
-    titleFontSize = '0.8rem';
-    authorFontSize = '0.52rem';
-    priceThFontSize = '0.46rem';
-    priceTdPadding = '1px 0';
-    priceCurFontSize = '0.5rem';
-    priceValFontSize = '0.72rem';
-    urlFontSize = '0.42rem';
-  }
+  const {
+    headerPadding, brandFontSize, taglineFontSize, cardPadding, cardMaxWidth, cardNumSize, cardNumMargin,
+    qrFrameSize, qrRenderSize, cornerBracketSize, cornerBracketWidth, titleFontSize, authorFontSize,
+    priceThFontSize, priceTdPadding, priceCurFontSize, priceValFontSize, urlFontSize,
+  } = computeQrSheetLayoutSizes(count, rowCount, effectiveCols, fitOnePage);
 
   const cardsHtml = booksData.map((book, i) => {
     const priceRows = book.prices.map((p) => `
