@@ -866,21 +866,33 @@
       <!-- Populated by JS -->
     </div>
   </div>
-  <div id="artist-transfers-sect" style="display:none;">
-    <div class="sect">Pending artist transfers</div>
-    <div id="artist-transfers-list"></div>
-  </div>
-  <div id="d-pending-expenses-sect" style="display:none;">
-    <div class="sect">Pending expense reimbursements</div>
-    <div id="d-pending-expenses-list"></div>
-  </div>
-  <!-- These three sections used to be headed by `.sect` — the same 9px
-       micro-label the "All books" landing screen and the Consignment tab were
-       both pulled off of, because it left the screen the publisher opens for
-       every single book carrying the faintest type in the app. `.sec-head` +
+  <!-- These sections used to be headed by `.sect` — the same 9px micro-label
+       the "All books" landing screen and the Consignment tab were both pulled
+       off of, because it left the screen the publisher opens for every single
+       book carrying the faintest type in the app. `.sec-head` +
        `.overview-section` is the same furniture that fixed those two screens;
        muted here because the KPI grid above already spends this screen's one
        gold accent on Stock on hand. -->
+  <div id="artist-transfers-sect" class="overview-section" style="display:none;">
+    <div class="sec-head is-muted">
+      <div class="sec-head-titles">
+        <div class="sec-kicker"><span class="sec-kicker-dot"></span>Payouts</div>
+        <div class="section-hed sec-head-title">Pending artist transfers</div>
+        <p class="section-subcopy">Sales already collected where the artist's share hasn't been sent yet.</p>
+      </div>
+    </div>
+    <div id="artist-transfers-list"></div>
+  </div>
+  <div id="d-pending-expenses-sect" class="overview-section" style="display:none;">
+    <div class="sec-head is-muted">
+      <div class="sec-head-titles">
+        <div class="sec-kicker"><span class="sec-kicker-dot"></span>Reimbursements</div>
+        <div class="section-hed sec-head-title">Pending expense reimbursements</div>
+        <p class="section-subcopy">Expenses the artist covered that haven't been paid back yet.</p>
+      </div>
+    </div>
+    <div id="d-pending-expenses-list"></div>
+  </div>
   <div class="overview-section">
     <div class="sec-head is-muted">
       <div class="sec-head-titles">
