@@ -12,41 +12,7 @@ describe('Fair Print Kit — Adaptive Space and Sizing', () => {
 
       expect(body).toContain('const rowCount = Math.ceil(count / effectiveCols);');
       expect(body).toContain('effectiveCols = Math.min(effectiveCols, Math.max(1, count));');
-    });
-
-    it('defines large showcase dimensions for a single QR card (count === 1)', () => {
-      const fn = mainJs.slice(mainJs.indexOf('async function printPaymentQRCodes('));
-      const body = fn.slice(0, fn.indexOf('\nwindow.printPaymentQRCodes ='));
-
-      expect(body).toMatch(/count === 1\s*\)\s*\{[\s\S]*?qrFrameSize = '280px';/);
-      expect(body).toMatch(/count === 1\s*\)\s*\{[\s\S]*?qrRenderSize = 250;/);
-      expect(body).toMatch(/count === 1\s*\)\s*\{[\s\S]*?titleFontSize = '2.1rem';/);
-      expect(body).toMatch(/count === 1\s*\)\s*\{[\s\S]*?cardMaxWidth = '580px';/);
-      expect(body).toMatch(/count === 1\s*\)\s*\{[\s\S]*?cornerBracketSize = '12px';/);
-    });
-
-    it('gradually scales dimensions for 2 cards and 3 cards in a single row', () => {
-      const fn = mainJs.slice(mainJs.indexOf('async function printPaymentQRCodes('));
-      const body = fn.slice(0, fn.indexOf('\nwindow.printPaymentQRCodes ='));
-
-      // 2 cards
-      expect(body).toMatch(/count === 2[\s\S]*?qrFrameSize = '210px';/);
-      expect(body).toMatch(/count === 2[\s\S]*?qrRenderSize = 185;/);
-      expect(body).toMatch(/count === 2[\s\S]*?titleFontSize = '1.5rem';/);
-
-      // 3 cards
-      expect(body).toMatch(/count === 3[\s\S]*?qrFrameSize = '160px';/);
-      expect(body).toMatch(/count === 3[\s\S]*?qrRenderSize = 140;/);
-      expect(body).toMatch(/count === 3[\s\S]*?titleFontSize = '1.25rem';/);
-    });
-
-    it('contracts to compact dimensions for dense multi-row layouts', () => {
-      const fn = mainJs.slice(mainJs.indexOf('async function printPaymentQRCodes('));
-      const body = fn.slice(0, fn.indexOf('\nwindow.printPaymentQRCodes ='));
-
-      expect(body).toMatch(/rowCount === 2[\s\S]*?qrFrameSize = '126px';/);
-      expect(body).toMatch(/rowCount === 3[\s\S]*?qrFrameSize = '96px';/);
-      expect(body).toMatch(/qrFrameSize = '78px';[\s\S]*?qrRenderSize = 64;/);
+      expect(body).toContain('computeQrSheetLayoutSizes(count, rowCount, effectiveCols, fitOnePage)');
     });
 
     it('renders author line when book has author', () => {
@@ -65,6 +31,37 @@ describe('Fair Print Kit — Adaptive Space and Sizing', () => {
       expect(body).toContain('min-height: 100vh;');
       expect(body).toContain('justify-content: space-between;');
       expect(body).toContain('margin-top: auto;');
+    });
+  });
+
+  describe('QR sheet card sizing (computeQrSheetLayoutSizes)', () => {
+    const fn = mainJs.slice(mainJs.indexOf('function computeQrSheetLayoutSizes('));
+    const body = fn.slice(0, fn.indexOf('\nasync function printPaymentQRCodes('));
+
+    it('defines large showcase dimensions for a single QR card (count === 1)', () => {
+      expect(body).toMatch(/count === 1\)\s*\{[\s\S]*?qrFrameSize: '280px',/);
+      expect(body).toMatch(/count === 1\)\s*\{[\s\S]*?qrRenderSize: 250,/);
+      expect(body).toMatch(/count === 1\)\s*\{[\s\S]*?titleFontSize: '2.1rem',/);
+      expect(body).toMatch(/count === 1\)\s*\{[\s\S]*?cardMaxWidth: '580px',/);
+      expect(body).toMatch(/count === 1\)\s*\{[\s\S]*?cornerBracketSize: '12px',/);
+    });
+
+    it('gradually scales dimensions for 2 cards and 3 cards in a single row', () => {
+      // 2 cards
+      expect(body).toMatch(/count === 2[\s\S]*?qrFrameSize: '210px',/);
+      expect(body).toMatch(/count === 2[\s\S]*?qrRenderSize: 185,/);
+      expect(body).toMatch(/count === 2[\s\S]*?titleFontSize: '1.5rem',/);
+
+      // 3 cards
+      expect(body).toMatch(/count === 3[\s\S]*?qrFrameSize: '160px',/);
+      expect(body).toMatch(/count === 3[\s\S]*?qrRenderSize: 140,/);
+      expect(body).toMatch(/count === 3[\s\S]*?titleFontSize: '1.25rem',/);
+    });
+
+    it('contracts to compact dimensions for dense multi-row layouts', () => {
+      expect(body).toMatch(/rowCount === 2[\s\S]*?qrFrameSize: '126px',/);
+      expect(body).toMatch(/rowCount === 3[\s\S]*?qrFrameSize: '96px',/);
+      expect(body).toMatch(/qrFrameSize: '78px',[\s\S]*?qrRenderSize: 64,/);
     });
   });
 
