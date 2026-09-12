@@ -10399,14 +10399,19 @@ function renderInvoiceBooksHint() {
 export function escapeHTML(s) { return escapeHtml(s); }
 
 function onDiscountTypeChange() {
+  // ⚡ Bolt Optimization: Calculate subtotal once upfront using imperative loop to avoid multiple reduce calls and array allocations
+  let subtotal = 0;
+  for (const it of invoiceCtx.items) {
+    subtotal += (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0);
+  }
+
   const type = $('inv-discount-type').value;
   if (type === 'percent') {
     $('inv-discount-flat-wrap').style.display = 'none';
     $('inv-discount-percent-wrap').style.display = 'flex';
     $('inv-discount-label-text').textContent = 'Discount (percent, optional)';
     // Convert current flat value to percent of subtotal (best effort)
-    const subtotal = invoiceCtx.items.reduce((a, it) => a + (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0), 0);
-    const flatVal = parseFloat($('inv-discount').value) || 0;
+        const flatVal = parseFloat($('inv-discount').value) || 0;
     if (subtotal > 0 && flatVal > 0) {
       $('inv-discount-percent').value = parseFloat(((flatVal / subtotal) * 100).toFixed(2));
     } else {
@@ -10417,8 +10422,7 @@ function onDiscountTypeChange() {
     $('inv-discount-percent-wrap').style.display = 'none';
     $('inv-discount-label-text').textContent = 'Discount (flat, optional)';
     // Convert current percent value to flat amount (best effort)
-    const subtotal = invoiceCtx.items.reduce((a, it) => a + (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0), 0);
-    const percentVal = parseFloat($('inv-discount-percent').value) || 0;
+        const percentVal = parseFloat($('inv-discount-percent').value) || 0;
     if (subtotal > 0 && percentVal > 0) {
       $('inv-discount').value = parseFloat(((subtotal * percentVal) / 100).toFixed(2));
     } else {
@@ -10430,7 +10434,11 @@ function onDiscountTypeChange() {
 
 function recalcInvoiceTotals() {
   const cur = getSym(getInvoiceCurrency());
-  const subtotal = invoiceCtx.items.reduce((a, it) => a + (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0), 0);
+  // ⚡ Bolt Optimization: Replace reduce with imperative loop to avoid array method allocations on hot paths
+  let subtotal = 0;
+  for (const it of invoiceCtx.items) {
+    subtotal += (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0);
+  }
   
   const type = $('inv-discount-type') ? $('inv-discount-type').value : 'flat';
   let discount = 0;
@@ -10893,6 +10901,9 @@ function renderInvoicePaperHTML(inv, { showChase = false } = {}) {
     settings.bank ? 'Bank transfer' : null,
   ].filter(Boolean).join(' · ') || 'See payment instructions below';
 
+  // ⚡ Bolt Optimization: Calculate total item quantity upfront using a single imperative loop instead of two separate reduce calls in the template literal
+  let totalQty = 0;
+  for (const it of (inv.items || [])) totalQty += (it.qty || 0);
   const settlesLine = '';
 
   // The chase record, shown where the invoice is read.
@@ -10981,7 +10992,7 @@ function renderInvoicePaperHTML(inv, { showChase = false } = {}) {
       <div>
         <label>Amount due</label>
         <strong style="color:${statusCls === 'paid' ? '#1d7a4a' : '#0e0c0a'};font-size:18px;">${fmt(inv.total || 0, cur)}</strong>
-        <div class="inv-meta-sub">${(inv.items || []).reduce((a, i) => a + (i.qty || 0), 0)} item${(inv.items || []).reduce((a, i) => a + (i.qty || 0), 0) === 1 ? '' : 's'}</div>
+        <div class="inv-meta-sub">${totalQty} item${totalQty === 1 ? '' : 's'}</div>
         ${settlesLine}
         ${chaseNote}
         ${divergedNote}
