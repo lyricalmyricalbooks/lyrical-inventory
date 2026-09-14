@@ -156,6 +156,10 @@ import {
   useReceiptPhoto,
   viewLocalReceipt,
   voidExpense,
+  dismissEmailReceiptDraft,
+  openReceiptSweepReviewFromAlert,
+  startReceiptEmailSweep,
+  sweepReceiptEmails,
 } from './features/receipts.js';
 import {
   appendCurrencyLog,
@@ -15858,6 +15862,11 @@ async function boot(forcedBook) {
         // Stripe watch so an invoice that was paid through its link is settled
         // before anybody gets chased for it.
         startPaymentReminderWatch();
+        // The receipt inbox scanning itself, rather than waiting for the
+        // publisher to open the modal and press Extract. Everything it finds
+        // still lands in that same review table, checked or not — nothing is
+        // filed until she looks at it.
+        startReceiptEmailSweep();
         // A fault recorded before the last reload is still a fault. Painted
         // here so the mark is on the tab from the first render rather than
         // only after the next failed check.
@@ -24485,11 +24494,15 @@ window.recheckIntegration = (id) => {
   if (id === 'shipping-email') return sweepShippingEmails({ force: true });
   if (id === 'stripe') return sweepStripeInvoicePayments({ force: true });
   if (id === 'stripe-fees') return sweepStripeFees({ force: true });
+  if (id === 'receipt-scan') return sweepReceiptEmails({ force: true });
   return undefined;
 };
+window.openReceiptSweepReviewFromAlert = openReceiptSweepReviewFromAlert;
+window.dismissEmailReceiptDraft = dismissEmailReceiptDraft;
 window.openInvoiceFromAlert = openInvoiceFromAlert;
 window.sweepStripeInvoicePayments = sweepStripeInvoicePayments;
 window.sweepStripeFees = sweepStripeFees;
+window.sweepReceiptEmails = sweepReceiptEmails;
 window.linkConfidentShippingMatchesNow = linkConfidentShippingMatchesNow;
 window.openShippingReconciliationFromAlert = openShippingReconciliationFromAlert;
 window.shipNewOrderFromAlert = shipNewOrderFromAlert;
