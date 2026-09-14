@@ -35,6 +35,7 @@ export const INTEGRATIONS = Object.freeze({
   'shipping-email': { id: 'shipping-email', label: 'Shipping email scan' },
   stripe: { id: 'stripe', label: 'Stripe' },
   'stripe-fees': { id: 'stripe-fees', label: 'Stripe fees' },
+  'receipt-scan': { id: 'receipt-scan', label: 'Receipt inbox scan' },
 });
 
 const store = () => (typeof localStorage === 'undefined' ? null : localStorage);
