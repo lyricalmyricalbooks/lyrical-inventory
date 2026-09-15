@@ -434,13 +434,17 @@ function missingPostage(ctx) {
  */
 function missingProductionCosts(ctx) {
   const printing = allExpenses(ctx).filter(e => e._cat === 'Printing & Production');
+  // ⚡ Bolt Optimization: a single pass over printing expenses to build a
+  // membership Set, instead of re-filtering the whole list once per book
+  // (O(printing + books) instead of O(printing × books) — this loop only
+  // ever needs to know whether a book has ANY printing expense).
+  const bookIdsWithPrinting = new Set(printing.map(e => e._bookId));
   const gaps = [];
 
   for (const [bookId, book] of Object.entries(ctx.books || {})) {
     if (num(book?.maxPrint) <= 0) continue;
     if (num(book?.productionCost) > 0) continue;      // recorded on the book itself
-    const forBook = printing.filter(e => e._bookId === bookId);
-    if (forBook.length) continue;
+    if (bookIdsWithPrinting.has(bookId)) continue;
 
     gaps.push({
       id: `no-production-cost:${bookId}`,

@@ -37,10 +37,12 @@ describe('the request that goes on the wire', () => {
     expect(body.systemInstruction.parts[0].text).toBe('never guess');
   });
 
-  it('leaves thinking at the model default', () => {
-    // The receipt reader caps thinking to zero because reading a printed total
-    // is not a reasoning task. Working out a margin is one.
-    expect(JSON.stringify(buildChatRequest({ contents: [], tools: TOOLS }))).not.toContain('thinking');
+  it('uses low thinking and a concise answer budget for a fast chat turn', () => {
+    // If this regresses to the provider defaults, straightforward bookkeeping
+    // questions spend unnecessary time and tokens before the answer appears.
+    const body = buildChatRequest({ contents: [], tools: TOOLS });
+    expect(body.generationConfig.thinkingConfig).toEqual({ thinkingLevel: 'low' });
+    expect(body.generationConfig.maxOutputTokens).toBe(1200);
   });
 
   it('sends a tool result back as a role Gemini accepts', () => {

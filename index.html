@@ -604,8 +604,8 @@
   <div class="sec-head">
     <div class="sec-head-titles">
       <div class="sec-kicker"><span class="sec-kicker-dot"></span>Intelligence</div>
-      <div class="section-hed sec-head-title">Ask your books</div>
-      <p class="section-subcopy">Sales, costs, fairs, stock, or anything that looks filed wrong. Every answer is worked out from your own records, and each one says what it looked at.</p>
+      <div class="section-hed sec-head-title">Your books, in conversation</div>
+      <p class="section-subcopy">Clear answers from your own records, with every figure traced back to what it checked.</p>
     </div>
     <div class="sec-head-badges">
       <button type="button" class="btn ghost sm sys-target" id="intel-clear" onclick="clearIntelThread()" hidden>Clear conversation</button>
@@ -625,20 +625,21 @@
   <p class="sr-only" id="intel-status" role="status" aria-live="polite"></p>
 
   <div class="intel-panel sys-container">
-    <div class="intel-thread sys-long-list" id="intel-thread"></div>
+    <div class="intel-thread sys-long-list" id="intel-thread" aria-label="Intelligence conversation"></div>
 
     <!-- Permanent markup. renderIntel() only ever enables or disables this;
          rebuilding it would drop the caret out of a half-typed question. -->
     <div class="intel-composer" id="intel-composer">
       <label class="sr-only" for="intel-input">Your question</label>
-      <textarea id="intel-input" class="intel-input" rows="2" placeholder="Ask about sales, costs, a fair, or anything that looks wrong&hellip;" onkeydown="intelComposerKey(event)"></textarea>
+      <textarea id="intel-input" class="intel-input" rows="1" placeholder="Message Intelligence&hellip;" onkeydown="intelComposerKey(event)"></textarea>
       <div class="intel-composer-actions">
+        <span class="intel-composer-hint">Enter to send · Shift + Enter for a new line</span>
         <button type="button" class="btn ghost sm sys-target" id="intel-stop" onclick="stopIntelTurn()" hidden>Stop</button>
-        <button type="button" class="btn gold sys-target" id="intel-send" onclick="sendIntelMessage()">Ask</button>
+        <button type="button" class="btn gold sys-target intel-send" id="intel-send" onclick="sendIntelMessage()" aria-label="Send question"><span aria-hidden="true">↑</span><span class="sr-only">Send</span></button>
       </div>
     </div>
 
-    <p class="intel-foot">Worked out from your own records. Worth checking a figure against the screen it came from before you act on it.</p>
+    <p class="intel-foot">Intelligence can make suggestions, but you always approve changes before anything is saved.</p>
   </div>
 </div>
 
@@ -3326,14 +3327,14 @@
               <span id="ship-dest-count-badge" style="font-size:10px;color:var(--text3);font-weight:500;"></span>
             </div>
             <div id="custom-ship-dest-wrapper" class="custom-dest-wrapper">
-              <div id="custom-ship-dest-trigger" class="custom-dest-trigger" onclick="toggleShippoDestDropdown(event)" tabindex="0">
+              <div id="custom-ship-dest-trigger" class="custom-dest-trigger" onclick="toggleShippoDestDropdown(event)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleShippoDestDropdown(event);}" tabindex="0" role="button" aria-haspopup="listbox" aria-expanded="false" aria-label="Search or select a destination">
                 <div style="display:flex;align-items:center;gap:8px;overflow:hidden;width:100%;">
-                  <span id="custom-ship-dest-icon" style="font-size:14px;color:var(--text3);flex-shrink:0;">🔍</span>
+                  <span id="custom-ship-dest-icon" style="font-size:14px;color:var(--text3);flex-shrink:0;" aria-hidden="true">🔍</span>
                   <span id="custom-ship-dest-label" style="font-size:13px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;">— Search or select an address —</span>
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-                  <span id="custom-ship-dest-clear" style="display:none;font-size:12px;color:var(--text3);padding:2px 5px;cursor:pointer;border-radius:4px;" onclick="clearShippoDestSelection(event)">✕</span>
-                  <span id="custom-ship-dest-arrow" style="font-size:10px;color:var(--text3);transition:transform 0.2s;">▼</span>
+                  <span id="custom-ship-dest-clear" style="display:none;font-size:12px;color:var(--text3);padding:2px 5px;cursor:pointer;border-radius:4px;" onclick="clearShippoDestSelection(event)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();clearShippoDestSelection(event);}" tabindex="0" role="button" aria-label="Clear selected destination">✕</span>
+                  <span id="custom-ship-dest-arrow" style="font-size:10px;color:var(--text3);transition:transform 0.2s;" aria-hidden="true">▼</span>
                 </div>
               </div>
               <div id="custom-ship-dest-menu" class="custom-dest-menu" style="display:none;" onclick="event.stopPropagation()">

@@ -39,6 +39,8 @@ const healthyContext = {
   sync: { online: true, pending: 0, failed: false },
   integrations: [],
   submissions: [],
+  taxCenter: { businessExpenses: [], recurring: [], settings: { baseCurrency: 'CAD' } },
+  tripsSummary: {},
   today: '2026-03-10',
 };
 
@@ -142,6 +144,19 @@ describe('money signals', () => {
 
   it('does not call an invoice overdue before its due date', () => {
     const result = scan({ state: { invoices: [{ id: 1, status: 'sent', dueDate: '2026-03-20' }] } });
+    expect(ids(result)).not.toContain('money-invoice-overdue:hound');
+    expect(ids(result)).not.toContain('money-invoice-no-due-date:hound');
+  });
+
+  it('flags a sent invoice with no due date, since nothing else can say it is late', () => {
+    // A due date is optional on the invoice form — this used to be the one
+    // invoice state that produced no signal at all: not a draft, and never
+    // "overdue" because that comparison needs a dueDate to compare against.
+    const result = scan({ state: { invoices: [{ id: 1, status: 'sent' }] } });
+    const nod = result.signals.find(s => s.id === 'money-invoice-no-due-date:hound');
+    expect(nod).toBeTruthy();
+    expect(nod.status).toBe('warn');
+    expect(isUrgent(nod)).toBe(true);
     expect(ids(result)).not.toContain('money-invoice-overdue:hound');
   });
 
@@ -266,6 +281,53 @@ describe('setup signals', () => {
     const result = scan({ ctx: { submissions: [{ bookId: 'hound', sales: 0, expenses: 0 }] } });
     expect(ids(result)).not.toContain('setup-submissions:hound');
   });
+
+  it('flags a recurring cost with no usable start date', () => {
+    const result = scan({ ctx: { taxCenter: { recurring: [{ desc: 'Legacy sub' }] } } });
+    const sig = result.signals.find(s => s.id === 'setup-recurring-invalid');
+    expect(sig).toBeTruthy();
+    expect(sig.status).toBe('warn');
+    expect(sig.fix.kind).toBe('taxcenter');
+  });
+
+  it('says nothing about a subscription with a real start date', () => {
+    const result = scan({
+      ctx: { taxCenter: { recurring: [{ desc: 'Hosting', startDate: '2026-01-01', frequency: 'monthly', amount: 10 }] } },
+    });
+    expect(ids(result)).not.toContain('setup-recurring-invalid');
+  });
+});
+
+describe('missing costs, surfaced on the to-do list', () => {
+  // The same scan behind the Missing Costs tab (src/lib/deduction-gaps.js),
+  // reused here rather than duplicated — one gap is enough to prove the two
+  // cannot disagree, since the underlying scan already has its own tests.
+  it('surfaces the scan as one summary item, not one per gap', () => {
+    const result = scan({ book: { productionCost: 0 } });
+    const sig = result.signals.find(s => s.id === 'money-missing-costs');
+    expect(sig).toBeTruthy();
+    expect(sig.status).toBe('info');
+    expect(sig.detail).toContain('The Hound');
+    expect(sig.fix.kind).toBe('taxcenter');
+    expect(sig.fix.tab).toBe('deductions');
+  });
+
+  it('says nothing when the scan finds nothing', () => {
+    expect(ids(scan())).not.toContain('money-missing-costs');
+  });
+
+  it('never so much as mentions tax advice, matching the scan it wraps', () => {
+    const result = scan({ book: { productionCost: 0 } });
+    const sig = result.signals.find(s => s.id === 'money-missing-costs');
+    const text = sig.detail.toLowerCase();
+    for (const word of ['deduct', 'claimable', 'write-off', 'refund']) {
+      expect(text, `mentions "${word}"`).not.toContain(word);
+    }
+  });
+
+  it('survives a missing tax centre rather than losing every other signal', () => {
+    expect(() => scan({ book: { productionCost: 0 }, ctx: { taxCenter: undefined } })).not.toThrow();
+  });
 });
 
 describe('the result as a whole', () => {
@@ -330,7 +392,7 @@ describe('the result as a whole', () => {
     expect(withFix.length).toBeGreaterThan(0);
     for (const signal of withFix) {
       expect(signal.fix).not.toHaveProperty('action');
-      expect(['book', 'tab', 'retry-sync']).toContain(signal.fix.kind);
+      expect(['book', 'tab', 'retry-sync', 'taxcenter']).toContain(signal.fix.kind);
       // The id is never spliced into a call — no code is built here at all.
       expect(JSON.stringify(signal.fix)).not.toContain('switchBook(');
       expect(JSON.stringify(signal.fix)).not.toContain('switchTab(');
@@ -355,6 +417,16 @@ describe('wiring', () => {
   it('is imported and used by main.js', () => {
     expect(mainJs).toContain("from './lib/attention-signals.js'");
     expect(mainJs).toContain('buildAttentionSignals');
+  });
+
+  it('feeds the tax centre state into the scan, so Missing Costs and recurring can be checked', () => {
+    expect(mainJs).toContain('taxCenter: TAX_CENTER');
+    expect(mainJs).toContain('tripsSummary:');
+  });
+
+  it('knows how to open the Tax Centre for a "taxcenter"-kind fix', () => {
+    expect(mainJs).toContain("fix === 'taxcenter'");
+    expect(mainJs).toContain("switchTab('taxcenter')");
   });
 
   it('paints a notifications panel on the landing page', () => {
