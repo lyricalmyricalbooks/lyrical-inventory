@@ -1,6 +1,6 @@
 import { escapeHtml as esc } from '../lib/html.js';
 import { receiptQuery, normalizeFoundReceipt, receiptProblems, receiptReviewStatus, receiptMoney, RECEIPT_STATUSES } from '../lib/receipt-finder.js';
-import { createReceiptFinderClient, extractFoundReceipts, decodeGmailBase64 } from '../lib/receipt-finder-client.js';
+import { createReceiptFinderClient, extractFoundReceipts, decodeGmailBase64, checkReceiptFinderService, FINDER_ENDPOINT_PATTERN } from '../lib/receipt-finder-client.js';
 import { createReceiptFinderStore } from '../lib/receipt-finder-store.js';
 import { flushReceiptOutbox } from '../lib/receipt-finder-outbox.js';
 import { downloadBlob } from '../lib/download.js';
@@ -80,8 +80,12 @@ async function mountReceiptFinder(element, dependencies) {
     <details class="finder-setup"><summary>Finder setup</summary><div class="form-group">
       <label for="finder-endpoint">Receipt AI deployment URL</label><input type="url" id="finder-endpoint" value="${esc(state.endpoint)}" placeholder="https://script.google.com/macros/s/…/exec">
       <p>Use the separate Receipt Finder Apps Script deployment. Its AI key stays in Script Properties. Gmail access is read-only and lasts for this session.</p>
-      <button class="btn" type="button" data-action="save-setup">Save setup</button>
-      <button class="btn" type="button" data-action="forget">Clear saved finder data</button>
+      <div class="finder-toolbar">
+        <button class="btn" type="button" data-action="save-setup">Save setup</button>
+        <button class="btn" type="button" data-action="check-setup">Test connection</button>
+        <button class="btn" type="button" data-action="forget">Clear saved finder data</button>
+      </div>
+      <div class="finder-check" data-finder-check role="status" aria-live="polite"></div>
     </div></details>
     <div class="finder-filters">
       <div class="form-group finder-query"><label for="finder-query">Keywords or Gmail search</label><input type="search" id="finder-query" placeholder="Invoices, receipts, orders…"></div>
@@ -275,8 +279,9 @@ async function onClick(event) {
         await persist(); renderConnection(); announce(`Connected to ${state.account} with read-only access.`); break;
       case 'save-setup':
         state.endpoint = host.querySelector('#finder-endpoint').value.trim();
-        if (!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(state.endpoint)) throw new Error('Enter a valid Apps Script deployment URL');
-        await persist(); announce('Finder setup saved.'); break;
+        if (!FINDER_ENDPOINT_PATTERN.test(state.endpoint)) throw new Error('Enter a valid Apps Script deployment URL');
+        await persist(); announce('Finder setup saved.'); await runSetupCheck(); break;
+      case 'check-setup': await runSetupCheck(); break;
       case 'scan': await scan(false); break;
       case 'next': await scan(true); break;
       case 'cancel': controller?.abort(); break;
@@ -293,6 +298,34 @@ async function onClick(event) {
         announce('Saved finder drafts and source copies removed from this device. This cannot be undone here.'); break;
     }
   } catch (error) { report(error); }
+}
+
+// Reads the deployment's own setup report so a missing key is named here,
+// before a scan spends Gmail requests and paid AI calls on every email.
+async function runSetupCheck() {
+  const panel = host?.querySelector('[data-finder-check]');
+  const button = host?.querySelector('[data-action="check-setup"]');
+  if (!panel) return;
+  const endpoint = host.querySelector('#finder-endpoint').value.trim() || state.endpoint;
+  if (button) button.disabled = true;
+  panel.className = 'finder-check';
+  panel.innerHTML = '<div class="skeleton-line"></div>';
+  try {
+    const result = await checkReceiptFinderService({ endpoint });
+    const pill = { ready: 'green', warn: 'amber', error: 'red' }[result.level];
+    const glyph = { ready: '✓', warn: '●', error: '✕' }[result.level];
+    const label = { ready: 'Ready', warn: 'Almost ready', error: 'Not ready' }[result.level];
+    panel.className = `finder-check is-${result.level}`;
+    panel.innerHTML = `<p><span class="pill ${pill}">${glyph} ${label}</span> ${esc(result.headline)}</p>`
+      + (result.steps.length ? `<ol>${result.steps.map(step => `<li>${esc(step)}</li>`).join('')}</ol>` : '');
+    announce(result.level === 'ready' ? 'Receipt service is set up and ready to scan.' : `Receipt service is not ready yet. ${result.headline}`);
+  } catch (error) {
+    if (error.name === 'AbortError') { panel.replaceChildren(); return; }
+    panel.className = 'finder-check is-error';
+    panel.innerHTML = `<p><span class="pill red">✕ Not ready</span> ${esc(error.message)}</p>`;
+  } finally {
+    if (button) button.disabled = false;
+  }
 }
 
 async function readCandidate(id, signal) {

@@ -5,6 +5,16 @@
 .finder-head p, .finder-setup p, [data-finder-status] { color:var(--content-secondary); font-size:var(--text-sm); line-height:1.6; }
 .finder-setup { margin-block:var(--space-4); }
 .finder-setup summary { cursor:pointer; padding-block:var(--space-3); }
+.finder-check:empty { display:none; }
+.finder-check { margin-block:var(--space-3); padding:var(--space-4); background:var(--surface-sunken); border:1px solid var(--border);
+  border-inline-start:3px solid var(--border); border-radius:var(--r2); display:grid; gap:var(--space-2); }
+.finder-check.is-ready { border-inline-start-color:var(--green); }
+.finder-check.is-warn { border-inline-start-color:var(--amber); }
+.finder-check.is-error { border-inline-start-color:var(--red); }
+.finder-check p { margin:0; display:flex; gap:var(--space-2); align-items:center; flex-wrap:wrap; color:var(--content-primary); }
+.finder-check ol { margin:0; padding-inline-start:var(--space-5); display:grid; gap:var(--space-2);
+  color:var(--content-secondary); font-size:var(--text-sm); line-height:1.6; }
+.finder-check .skeleton-line { height:20px; }
 .finder-filters, .finder-edit-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:var(--space-3); }
 .finder-query { grid-column:span 2; }
 .finder-filters .form-group { margin:0; }

@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { normalizeFoundReceipt } from '../src/lib/receipt-finder.js';
 
-const mocks = vi.hoisted(() => ({ saved: null, save: vi.fn(), load: vi.fn(), clear: vi.fn(), extract: vi.fn(), list: vi.fn(), message: vi.fn() }));
+const mocks = vi.hoisted(() => ({ saved: null, save: vi.fn(), load: vi.fn(), clear: vi.fn(), extract: vi.fn(), list: vi.fn(), message: vi.fn(), check: vi.fn() }));
 vi.mock('../src/lib/receipt-finder-store.js', () => ({ createReceiptFinderStore: () => ({
   load: mocks.load, save: mocks.save, clear: mocks.clear,
 }) }));
@@ -10,6 +10,8 @@ vi.mock('../src/lib/receipt-finder-client.js', () => ({
   createReceiptFinderClient: () => ({ profile: async () => ({ emailAddress: 'publisher@example.com' }),
     list: mocks.list, message: mocks.message, attachment: async (_id, file) => file }),
   extractFoundReceipts: mocks.extract, decodeGmailBase64: () => new Uint8Array(),
+  checkReceiptFinderService: mocks.check,
+  FINDER_ENDPOINT_PATTERN: /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/,
 }));
 
 const source = { id: 'm1', account: 'publisher@example.com', body: 'Original invoice evidence', from: 'Printer', subject: 'Invoice #123', fileParts: [] };
@@ -26,6 +28,7 @@ beforeEach(() => {
   mocks.list.mockResolvedValue({ messages: [{ id: 'm2' }] });
   mocks.message.mockResolvedValue({ ...source, id: 'm2', subject: 'Receipt notice' });
   mocks.extract.mockResolvedValue({ receipts: [{ vendor: 'Courier', amount: 10, currency: 'CAD', date: '2026-09-01', confidence: 0.9 }] });
+  mocks.check.mockResolvedValue({ level: 'ready', headline: 'Ready to scan using gemini-2.5-flash.', steps: [] });
   document.body.innerHTML = '<span id="email-account-pill"></span><div id="email-panel-gmail"></div>';
   Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
   deps = { user: () => ({ uid: 'publisher', getIdToken: async () => 'id-token' }), publisher: () => true,
@@ -90,6 +93,24 @@ describe('receipt finder UI', () => {
     await mount();
     expect(document.querySelectorAll('img,script')).toHaveLength(0);
     expect(document.querySelector('.finder-email').textContent).toContain('<script>');
+  });
+  it('names the missing setup steps without starting a scan', async () => {
+    mocks.check.mockResolvedValue({ level: 'error', headline: 'One thing is still missing.',
+      steps: ['Add GEMINI_API_KEY — a Gemini key restricted to the Generative Language API — in the script’s Script Properties. It never goes into this app.'] });
+    await mount();
+    document.querySelector('[data-action="check-setup"]').click(); await settle();
+    const panel = document.querySelector('[data-finder-check]');
+    expect(panel.className).toContain('is-error');
+    expect(panel.textContent).toContain('GEMINI_API_KEY');
+    expect(panel.querySelector('.pill.red')).not.toBeNull();
+    expect(mocks.list).not.toHaveBeenCalled();
+  });
+  it('confirms a ready deployment after saving the address', async () => {
+    await mount();
+    document.querySelector('[data-action="save-setup"]').click(); await settle();
+    expect(mocks.check).toHaveBeenCalledWith({ endpoint: 'https://script.google.com/macros/s/test/exec' });
+    expect(document.querySelector('[data-finder-check]').className).toContain('is-ready');
+    expect(document.querySelector('[data-finder-status]').textContent).toContain('ready to scan');
   });
   it('clears mailbox content immediately on sign-out', async () => {
     await mount();
