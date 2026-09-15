@@ -83,11 +83,12 @@ export function buildChatRequest({ contents, tools, systemInstruction }) {
   const body = {
     contents,
     generationConfig: {
-      // Low, not zero: these answers are about money and should not vary run to
-      // run, but zero makes a model that has painted itself into a corner
-      // repeat the same bad tool call forever.
+      // Keep bookkeeping questions quick and economical. The model still has
+      // to obtain every figure through a tool; low thinking is enough to pick
+      // that tool without paying the default latency for a deep reasoning run.
       temperature: 0.2,
-      maxOutputTokens: 4096,
+      maxOutputTokens: 1200,
+      thinkingConfig: { thinkingLevel: 'low' },
     },
   };
   if (systemInstruction) body.systemInstruction = { parts: [{ text: systemInstruction }] };
