@@ -636,7 +636,7 @@ tr.hist-row:hover {
    accessible clicks/taps); the three segments share it, so each is a
    full-height target. */
 .theme-seg-row{
-  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:5px 10px;
   padding:7px 11px;
 }
 .theme-seg-row .tsr-label{
@@ -647,7 +647,9 @@ tr.hist-row:hover {
   letter-spacing:.02em;color:var(--on-inverse);white-space:nowrap;
 }
 .theme-seg-row .tsr-sub{
-  font-size:var(--text-2xs);color:var(--on-inverse-3);letter-spacing:.01em;white-space:nowrap;
+  /* Wraps to its own line under .tsr-title, rather than the row overflowing
+     into the segmented control, once the row is too narrow for both. */
+  font-size:var(--text-2xs);color:var(--on-inverse-3);letter-spacing:.01em;
 }
 .theme-seg{
   display:inline-flex;align-items:stretch;flex-shrink:0;
