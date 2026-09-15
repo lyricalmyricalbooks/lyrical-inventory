@@ -1,55 +1,41 @@
 ---
 name: ux-designer
-description: State-of-the-Art Design Engineering & Elite UX/UI Architecture system. Employs OKLCH perceptual color, CSS Anchor Positioning, Popover API, field-sizing, APCA contrast, Container Queries, Subgrid, View Transitions, spring physics, and cognitive ergonomics to craft world-class, accessible, and high-converting web interfaces.
+description: UX/UI design reference for this codebase. OKLCH color, modern CSS platform primitives (Anchor Positioning, Popover API, field-sizing, Container Queries, Subgrid, View Transitions), spring-based motion, and accessibility patterns — offered as a toolbox to draw from, not a checklist to satisfy.
 ---
 
-# State-of-the-Art UX/UI Design Engineering (/ux-designer)
+# UX/UI Design Reference (/ux-designer)
 
-Apply this skill whenever building, auditing, polishing, or refactoring user interfaces across this project.
+Reach for this when building, auditing, polishing, or refactoring user interfaces in this project. It's a reference of patterns and conventions that have worked well here, not a gate every change has to clear — use judgment about how much of it applies to the change in front of you.
 
----
-
-## 0. Non-Negotiable Core Architectural Invariants
-
-Every user-facing interface, component, or style change in this codebase MUST uphold these core invariants:
-
-1. **Vanilla JS & Zero Runtime Dependencies:**
-   - No React, Vue, Svelte, or external UI runtimes.
-   - Leverage modern **native browser platform primitives** (CSS Anchor Positioning, native `<dialog>` and `popover="auto"`, `field-sizing: content`, `content-visibility: auto`, `inert`) instead of bloated JavaScript libraries.
-   - Vite is a thin bundler and must stay thin.
-
-2. **Canonical Semantic Surfaces Only (MANDATORY):**
-   - **NEVER** invent or reference undefined tokens such as `var(--surface)`, `var(--surface2)`, `var(--surface3)`, `var(--surface4)`, or `var(--card)`.
-   - Use **ONLY** canonical defined tokens from `src/styles/system.css`:
-     - `var(--surface-page)`: Modal containers, drawers, and page backgrounds.
-     - `var(--surface-raised)`: Elevated cards, active stepper tabs, input wells.
-     - `var(--surface-sunken)`: Recessed segmented control strips, calculator wells, preset bars.
-     - `var(--surface-inset)`: Inner badges, step number circles, chip pills.
-     - `var(--surface-inverse)` / `var(--surface-inverse-raised)`: Fixed dark chrome.
-
-3. **Modal Shell Scroll Architecture (MANDATORY):**
-   - **NEVER** add vertical padding (`padding: 24px ... !important` or `padding-top/bottom`) to `.modal` sub-classes.
-   - `.modal` MUST keep `padding: 0 var(--space-6)` with `overflow: auto`.
-   - Pinned headers (`.modal-title`) and footers (`.modal-footer`) own top/bottom block padding and hairline gradient scrims (`.modal-title::after`, `.modal-footer::before`). Ad-hoc vertical padding destroys the scroll seam.
-
-4. **Steppers & Form Contrast:**
-   - Inactive tabs must use `var(--content-secondary)` on `var(--surface-sunken)` with `var(--surface-inset)` step circles.
-   - Active tabs must use `var(--surface-raised)` with `var(--content-primary)` and `box-shadow: var(--elev-1)`.
-   - Never use `--text3` for interactive control labels or metadata sub-headers.
-
-5. **Financial & Data Engineering Invariants:**
-   - **Tabular Figures (`tnum`):** All monetary figures, quantities, stock balances, and timestamps must use monospace tabular numbers (`font-feature-settings: "tnum" 1, "zero" 1` or `font-family: 'DM Mono', monospace`) for vertical decimal alignment.
-   - **Right Alignment:** All currency figures and tabular numerical amounts must be aligned to the right.
-   - **Decouple Styling from Data Pipelines:** DO NOT rewrite, simplify, or refactor underlying data aggregation functions (`buildOrderTimeline`, `deriveOnHand`, `inventoryBreakdown`). Keep data assembly 100% intact; modify ONLY CSS tokens, HTML wrapper classes, badge elements, and subtext formatting.
-   - **Defensive Fallbacks:** Always wrap dynamic template outputs with nullish coalescing (`${row.after ?? row._after ?? '—'}`) to prevent `'undefined'` text rendering.
-   - **Shipping Fees Currency Invariant:** All customer shipping values are natively in CAD and must NEVER undergo FX rate conversion.
+A few things in here are real constraints rather than style preferences (marked below), because getting them wrong causes an actual bug or harms someone's ability to use the app, not just a visual inconsistency. Everything else is "here's the house convention, and why it tends to hold up" — deviate when the situation calls for it.
 
 ---
 
-## 1. Perceptual Color Science & Visual Engine (OKLCH, P3 Gamut & APCA)
+## 0. A few things worth holding to
 
-### A. Perceptually Uniform Color Architecture (OKLCH)
-Never rely on RGB or legacy HSL where hue shifts distort perceived luminance. Use **OKLCH** (`oklch(L C H / alpha)`) for mathematically uniform perceptual lightness across light/dark themes:
+Most of this file is optional taste; these aren't, because the failure mode is a real bug rather than an aesthetic one:
+
+1. **Vanilla JS, no runtime dependencies.** No React/Vue/Svelte. Reach for native platform primitives (CSS Anchor Positioning, `<dialog>`, `popover="auto"`, `field-sizing: content`, `content-visibility: auto`, `inert`) before adding a JS library. Vite stays a thin bundler.
+
+2. **Use the surface tokens that are actually defined** (`--surface-page`, `--surface-raised`, `--surface-sunken`, `--surface-inset`, `--surface-inverse` / `--surface-inverse-raised` in `src/styles/system.css`) rather than inventing a new one (`--surface2`, `--card`, etc.). An undefined token silently falls back to nothing, which is how a card has gone invisible before — see `UX_PATTERNS.md` for the specifics of which token fits which surface.
+
+3. **`.modal` owns `padding: 0 var(--space-6)` only** — no vertical padding on modal sub-classes. Pinned headers/footers (`.modal-title`, `.modal-footer`) own the top/bottom padding and their own gradient scrims. Adding padding directly to `.modal` breaks the pinned-scroll seam; `UX_PATTERNS.md` has the full mechanics if you're touching this.
+
+4. **Financial and data-integrity rules** (these protect against a wrong number reaching a customer or a ledger, not just a look-and-feel issue):
+   - Money, quantities, and timestamps read better in tabular figures (`font-feature-settings: "tnum" 1` or `'DM Mono'`), right-aligned — but the number itself must come from the existing calculation, never recomputed for display.
+   - Don't rewrite or simplify the underlying data-assembly functions (`buildOrderTimeline`, `deriveOnHand`, `inventoryBreakdown`, etc.) while doing a styling pass — style the output, leave the pipeline alone.
+   - Wrap dynamic template output defensively (`${row.after ?? row._after ?? '—'}`) so a missing field renders a dash, not the literal text `undefined`.
+   - Customer-paid shipping is natively CAD and must never go through FX conversion — this one has its own invariant documented in the ledger-auditor skill.
+
+5. **Touch targets ≥ 44×44px.** This is Fitts's-law-as-accessibility: below this, misclicks during a checkout or ledger edit turn into real mistakes, not just annoyance. Pad the hit area even if the visible glyph is smaller.
+
+Section 6 below (contrast, focus visibility, reduced motion, live regions) is the same category — real accessibility requirements, not style choices.
+
+---
+
+## 1. Color — OKLCH as the house convention
+
+The palette here is built in **OKLCH** (`oklch(L C H / alpha)`) rather than RGB/HSL, because lightness stays perceptually consistent across hues — useful for a UI that has to work in both light and dark mode. If you're adding new color, reaching for OKLCH keeps it consistent with what's already there:
 
 ```css
 :root {
@@ -65,11 +51,11 @@ Never rely on RGB or legacy HSL where hue shifts distort perceived luminance. Us
   --border-active: oklch(1 0 0 / 0.16);
   --border-glow: oklch(0.65 0.24 270 / 0.35);
 
-  /* Semantic Intent Tokens (High Perceptual Uniformity) */
+  /* Semantic Intent Tokens */
   --brand-primary: oklch(0.62 0.22 265);
   --brand-accent: oklch(0.68 0.24 300);
   --brand-glow: oklch(0.62 0.22 265 / 0.25);
-  
+
   --success: oklch(0.72 0.19 155);
   --success-bg: oklch(0.72 0.19 155 / 0.12);
   --warning: oklch(0.78 0.18 75);
@@ -77,38 +63,33 @@ Never rely on RGB or legacy HSL where hue shifts distort perceived luminance. Us
   --danger: oklch(0.65 0.22 25);
   --danger-bg: oklch(0.65 0.22 25 / 0.12);
 
-  /* Text Contrast Hierarchy (APCA & WCAG 2.2 AAA Compliant) */
+  /* Text hierarchy */
   --text-primary: oklch(0.98 0.005 260);
   --text-secondary: oklch(0.78 0.015 260);
   --text-muted: oklch(0.58 0.02 260);
 }
 ```
 
-### B. WCAG 3.0 APCA (Accessible Perceptual Contrast Algorithm)
-Legacy WCAG 2.x 4.5:1 ratios fail human visual perception on saturated hues and dark backgrounds. Apply the **APCA Lightness Contrast ($L_c$)** model:
-- **$L_c \ge 90$**: Mandatory for fine print, secondary labels, and monospace tabular data (< 14px or font-weight < 400).
-- **$L_c \ge 75$**: Minimum threshold for standard body copy (16px regular / 14px medium).
-- **$L_c \ge 60$**: Minimum for prominent section headers (> 24px regular / > 18px bold) and primary interactive button labels.
-- **$L_c \ge 45$**: Minimum for non-text icons, active border boundaries, or decorative graphical chips. Never render content under $L_c 30$.
+### Contrast: APCA over flat WCAG 2.x ratios
 
-### C. Relative Color Blending & Dynamic Theming (`color-mix` & `light-dark`)
-Use modern CSS color functions to dynamically derive hover states and theme variants without repetitive class overrides:
+The plain 4.5:1 WCAG 2.x ratio undersells how hard some saturated-hue/dark-background pairings actually are to read. If you're choosing text color against a busy background, the APCA lightness-contrast model ($L_c$) is a better gut check than the flat ratio — rough targets that have worked here: fine print/tabular data around $L_c \ge 90$, body copy around $L_c \ge 75$, headers and button labels around $L_c \ge 60$, icons/borders around $L_c \ge 45$. These are guidelines to sanity-check against, not a gate — the real accessibility floor is WCAG (§6).
+
+### `color-mix` / `light-dark()` for hover states and theming
+
 ```css
 :root {
   color-scheme: light dark;
-
-  /* Native light-dark() declarative mapping */
   --surface-primary: light-dark(var(--surface-page), oklch(0.14 0.02 260));
   --text-primary: light-dark(oklch(0.18 0.02 260), oklch(0.98 0.005 260));
-
-  /* Dynamic alpha-tinting via color-mix */
   --brand-surface-tint: color-mix(in oklab, var(--brand-primary) 12%, transparent);
   --brand-hover-border: color-mix(in oklch, var(--brand-primary) 80%, white);
 }
 ```
 
-### D. Apple & Linear Surface Aesthetics: Glassmorphism & Inset Edges
-Combine hardware-accelerated backdrop filters, linear top-edge internal highlights, and ambient border glows:
+### Glass / elevated surfaces
+
+A pattern that's read well for elevated panels — backdrop blur, a subtle top-edge highlight, layered shadow instead of one hard one:
+
 ```css
 .glass-panel {
   background: var(--surface-glass);
@@ -118,23 +99,20 @@ Combine hardware-accelerated backdrop filters, linear top-edge internal highligh
   box-shadow:
     0 1px 2px oklch(0 0 0 / 0.12),
     0 8px 24px -4px oklch(0 0 0 / 0.25),
-    inset 0 1px 0 oklch(1 0 0 / 0.10); /* Crisp top-edge light catch */
+    inset 0 1px 0 oklch(1 0 0 / 0.10);
 }
 ```
 
 ---
 
-## 2. Modern CSS Specifications & Platform Primitives (2025/2026)
+## 2. Platform primitives worth reaching for before a JS library
 
-### A. CSS Anchor Positioning
-Anchor tooltips, popovers, and contextual action menus directly to trigger elements without fragile JavaScript bounding box calculations or external positioning libraries:
+These native CSS/HTML features cover most of what a UI library would otherwise be pulled in for — worth checking before adding a dependency.
+
+**CSS Anchor Positioning** — anchor a popover/tooltip to its trigger without a JS positioning library:
 ```css
-/* Anchor target element */
-.action-trigger {
-  anchor-name: --action-menu-anchor;
-}
+.action-trigger { anchor-name: --action-menu-anchor; }
 
-/* Positioned dropdown/menu */
 .action-popover {
   position: fixed;
   position-anchor: --action-menu-anchor;
@@ -144,273 +122,138 @@ Anchor tooltips, popovers, and contextual action menus directly to trigger eleme
   margin-top: 4px;
 }
 
-@position-try --flip-inline {
-  left: auto;
-  right: anchor(end);
-}
+@position-try --flip-inline { left: auto; right: anchor(end); }
 ```
 
-### B. Native Auto-Expanding Fields (`field-sizing: content`)
-Replace bulky JavaScript `input` listeners and `scrollHeight` hacks with native browser field auto-sizing:
+**`field-sizing: content`** — auto-expanding textareas without a `scrollHeight` listener:
 ```css
-textarea.auto-expanding-input {
-  field-sizing: content;
-  min-height: 2.5lh;
-  max-height: 12lh;
-}
+textarea.auto-expanding-input { field-sizing: content; min-height: 2.5lh; max-height: 12lh; }
 ```
 
-### C. Native Popover API & `<dialog>` with Discrete Transitions
-Use the native HTML top-layer to prevent z-index wars and handle light-dismiss natively:
+**Native `popover="auto"` / `<dialog>`** — avoids z-index wars and gets light-dismiss for free:
 ```html
 <button popovertarget="order-filter-menu" class="btn btn-secondary">Filter</button>
-<div id="order-filter-menu" popover="auto" class="filter-popover">
-  <!-- Content -->
-</div>
+<div id="order-filter-menu" popover="auto" class="filter-popover"><!-- Content --></div>
 ```
-Animate entry and exit smoothly using `@starting-style` and discrete transition behaviors:
+Entry/exit animation via `@starting-style`:
 ```css
 [popover] {
   opacity: 0;
   transform: translateY(-8px) scale(0.96);
-  transition:
-    opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1),
-    transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
-    display 0.2s allow-discrete,
-    overlay 0.2s allow-discrete;
+  transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    display 0.2s allow-discrete, overlay 0.2s allow-discrete;
 }
-
-[popover]:popover-open {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-}
-
-@starting-style {
-  [popover]:popover-open {
-    opacity: 0;
-    transform: translateY(-8px) scale(0.96);
-  }
-}
+[popover]:popover-open { opacity: 1; transform: translateY(0) scale(1); }
+@starting-style { [popover]:popover-open { opacity: 0; transform: translateY(-8px) scale(0.96); } }
 ```
 
-### D. Background Lockdown with the `inert` Attribute
-Lock interaction, focus traversal, and assistive technology for inactive background DOM trees when presenting modals or slide-overs:
+**`inert`** — locks focus/interaction on the background while a modal is open:
 ```javascript
 function openModal(dialogEl) {
   document.getElementById('main-content').inert = true;
   dialogEl.showModal();
 }
-
 function closeModal(dialogEl) {
   dialogEl.close();
   document.getElementById('main-content').inert = false;
 }
 ```
 
-### E. Zero-Dependency High-Density Rendering (`content-visibility`)
-Keep dense inventory tables, ledger grids, and transaction timelines scrolling at 60/120fps by skipping layout and paint passes for off-screen rows:
+**`content-visibility: auto`** — keeps a long ledger/inventory table scrolling smoothly by skipping paint work for off-screen rows:
 ```css
-.ledger-table tbody tr {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 44px;
-}
+.ledger-table tbody tr { content-visibility: auto; contain-intrinsic-size: auto 44px; }
 ```
 
-### F. Container Queries & Subgrid Alignment
-Components must adapt to their immediate parent container rather than viewport dimensions:
+**Container Queries + Subgrid** — components that adapt to their own container, and rows that align across separate card wrappers:
 ```css
-.catalog-grid {
-  container-type: inline-size;
-  container-name: catalog;
-}
-
+.catalog-grid { container-type: inline-size; container-name: catalog; }
 @container catalog (min-width: 520px) {
-  .book-card {
-    display: grid;
-    grid-template-columns: 120px 1fr auto;
-    gap: 1.25rem;
-  }
+  .book-card { display: grid; grid-template-columns: 120px 1fr auto; gap: 1.25rem; }
 }
-
-/* CSS Subgrid: align row items across separate card wrappers */
-.card-subgrid {
-  display: grid;
-  grid-template-columns: subgrid;
-  grid-column: 1 / -1;
-  align-items: center;
-}
+.card-subgrid { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; align-items: center; }
 ```
 
-### G. Fluid Typography & Balanced Text Wrapping
-Avoid awkward orphan words and uneven headline wraps:
+**Fluid type + balanced wrapping** — avoids orphan words on headlines:
 ```css
-.section-headline {
-  font-size: clamp(1.25rem, 1rem + 1.2cqi, 2rem);
-  text-wrap: balance;
-}
-
-.section-summary {
-  font-size: clamp(0.875rem, 0.8rem + 0.4cqi, 1.0625rem);
-  line-height: 1.55;
-  text-wrap: pretty;
-}
+.section-headline { font-size: clamp(1.25rem, 1rem + 1.2cqi, 2rem); text-wrap: balance; }
+.section-summary { font-size: clamp(0.875rem, 0.8rem + 0.4cqi, 1.0625rem); line-height: 1.55; text-wrap: pretty; }
 ```
 
 ---
 
-## 3. Liquid Motion, Spring Kinetics & Micro-Interactions
+## 3. Motion
 
-### A. Physics-Based Damped Spring Curves
-Avoid mechanical linear or generic cubic-bezier transitions. Damped spring kinetics model physical mass and velocity:
-- **Stiffness ($k$):** $280\text{–}350$ (immediate response upon actuation).
-- **Damping ($d$):** $28\text{–}35$ (critical damping eliminates endless wobble while preserving natural settlement).
-- **Mass ($m$):** $1.0$.
+Spring-feeling easing reads better than linear or generic cubic-bezier transitions for hover/press feedback:
 
-CSS Spring Token Architecture:
 ```css
 :root {
   --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
   --ease-out: cubic-bezier(0, 0, 0.2, 1);
 }
-
 .interactive-target {
-  transition:
-    transform 0.2s var(--ease-spring),
-    box-shadow 0.25s var(--ease-spring),
-    background-color 0.15s var(--ease-out);
+  transition: transform 0.2s var(--ease-spring), box-shadow 0.25s var(--ease-spring), background-color 0.15s var(--ease-out);
 }
-
-.interactive-target:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px -4px var(--brand-glow);
-}
-
-.interactive-target:active {
-  transform: scale(0.975);
-}
+.interactive-target:hover { transform: translateY(-2px); box-shadow: 0 8px 24px -4px var(--brand-glow); }
+.interactive-target:active { transform: scale(0.975); }
 ```
 
-### B. View Transitions API (`document.startViewTransition`)
-Provide seamless, native-app morphing transitions during tab switches, list filtering, and detail expansions:
+`document.startViewTransition()` gives smooth native-feeling morphs on tab switches and filtering, with a plain fallback when unsupported:
 ```javascript
 function switchView(updateDomCallback) {
-  if (!document.startViewTransition) {
-    updateDomCallback();
-    return;
-  }
-  document.startViewTransition(() => {
-    updateDomCallback();
-  });
+  if (!document.startViewTransition) { updateDomCallback(); return; }
+  document.startViewTransition(() => updateDomCallback());
 }
 ```
+Note: View Transitions are available as a helper but intentionally unwired in most of the app right now — check `UX_PATTERNS.md` before calling it on something new.
 
-### C. Optimistic UI & Transactional States (The Linear Model)
-1. **Synchronous Mutation:** Mutate UI state immediately on user click/tap before sending the asynchronous network payload.
-2. **Transient Affordance:** Render a discrete mutation indicator (e.g. subtle 75% opacity, trailing pulse tick) without locking the screen.
-3. **Reconciliation & Rollback:** On API error, roll back the local change with a gentle micro-shake animation and trigger an actionable toast with a "Retry" CTA.
+**Optimistic UI** for mutations tends to feel much faster than it measures: update the UI on click, show a light pending affordance, roll back with a toast + retry on error rather than blocking the screen until the network responds.
 
-### D. Zero-CLS Skeleton Shimmer Loaders
-- Never use generic spinner GIFs or full-card pulsing blocks.
-- Mirror exact geometric heights and border-radiuses with an animated horizontal gradient shimmer.
-- Set explicit `min-height` on containers to ensure **Cumulative Layout Shift (CLS) = 0** when data resolves.
-
-### E. Semantic Multi-Tier Haptic Feedback
-On mobile/touch devices, provide tactile feedback matching the interaction tier:
-- **Selection / Tick (10ms):** Stepper increment, segmented notch switch.
-- **Commit / Action (20ms):** Primary button press, modal confirm.
-- **Success (Crescendo Double-Tap):** Checkout completion, successful cloud sync.
-- **Error (Triple Sharp Pulse):** Validation failure, destructive action warning.
+**Loading states**: a shimmer that mirrors the real content's geometry (height, radius) reads better than a spinner, and holding `min-height` keeps layout from jumping when data arrives.
 
 ---
 
-## 4. Cognitive Ergonomics & High-Velocity Interaction
+## 4. Interaction details that tend to matter
 
-### A. Keyboard-First Ergonomics
-- **Command Palette (`Cmd/Ctrl + K`):** Quick jump to any book, partner, invoice, or setting.
-- **Roving `tabindex` vs `aria-activedescendant`:**
-  - Use roving `tabindex` on button strips, segmented tabs, and tables (`tabindex="0"` on selected item, `-1` on siblings).
-  - Use `aria-activedescendant` on search inputs and command palettes to keep focus in the text field while navigating suggestions.
-
-### B. Form Validation Ergonomics: "Reward Early, Punish Late"
-1. **Initial Input:** NEVER display validation error messages while the user is actively typing in a clean field.
-2. **On Blur (First Pass):** Validate upon blur. If invalid, display a clear, conversational error message adjacent to the field.
-3. **On Input (Fix Pass):** As soon as an invalid field becomes valid during typing, **immediately clear the error state** to provide instant reassurance.
-
-### C. Touch Target Geometry & Slop Heuristics
-- **Minimum Interactive Bounds:** $\ge 44\text{px} \times 44\text{px}$ for all touch targets (even if visible graphic is 24px, expand the click area with hit-slop padding or pseudo-elements).
-- **Touch Slop Threshold (8–10px):** Prevent accidental button clicks when a user begins a swipe or scroll gesture. Use `touch-action: pan-y`.
-- **Mobile Thumb Zone:** Anchor primary actions and key CTAs in the bottom 35% of handheld viewports. Keep destructive actions in high-friction secondary positions.
-
-### D. Form Labeling & Input Modes
-- **Persistent Top-Aligned Labels:** Always place labels 4–6px above the field. NEVER use floating labels (they drop below legible font sizes and vanish when filled).
-- **Explicit Input Modes:**
-  - Currency / Monetary: `<input type="text" inputmode="decimal" pattern="[0-9]*" autocomplete="off">`
-  - Quantities / Integers: `<input type="text" inputmode="numeric" pattern="[0-9]*">`
-  - Email: `<input type="email" inputmode="email" autocomplete="email" autocapitalize="none">`
+- **Keyboard:** roving `tabindex` on button strips/tabs/table rows (`0` on the selected item, `-1` on siblings); `aria-activedescendant` for search/command-palette inputs so focus stays in the text field while navigating suggestions.
+- **Form validation timing:** avoid showing an error while someone is still typing into a fresh field; validate on blur; clear the error the moment the field becomes valid again during a fix. Getting this backwards (erroring mid-type) is a common source of "the form feels broken" reports.
+- **Touch target size** — see §0.5, this one's a real rule, not a preference.
+- **Labels:** persistent, top-aligned, 4–6px above the field reads more reliably than a floating label (which tends to drop below legible size once filled).
+- **Input modes:** match the keyboard to the data — `inputmode="decimal"` for currency, `inputmode="numeric"` for quantities, `type="email"` for email.
 
 ---
 
-## 5. Modal, Dialog & Sheet Architecture
+## 5. Modals, dialogs, sheets
 
-### A. Pinned Seams & Gradient Scrims
-When modal content scrolls inside a dialog, hard-clipped borders cut text characters abruptly. Prevent this with 12–16px vertical gradient scrims that smoothly fade text into the pinned header and footer:
+A scrolling modal body needs a gradient scrim under the pinned header/footer, or text gets hard-clipped at the seam:
 ```css
-.modal-header {
-  position: sticky;
-  top: 0;
-  background: var(--surface-page);
-  border-bottom: 1px solid var(--border-subtle);
-  z-index: 2;
-}
-
+.modal-header { position: sticky; top: 0; background: var(--surface-page); border-bottom: 1px solid var(--border-subtle); z-index: 2; }
 .modal-header::after {
-  content: '';
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  height: 14px;
-  background: linear-gradient(to bottom, var(--surface-page), transparent);
-  pointer-events: none;
+  content: ''; position: absolute; top: 100%; left: 0; right: 0; height: 14px;
+  background: linear-gradient(to bottom, var(--surface-page), transparent); pointer-events: none;
 }
 ```
 
-### B. 6-Point Focus Management Lifecycle
-Every dialog implementation must execute this 6-point lifecycle:
-1. **Origin Storage:** Record `document.activeElement` before launching the modal.
-2. **Initial Placement:** Shift focus to the primary interactive element (or modal title for sensitive forms).
-3. **Focus Trapping:** Confine Tab / Shift+Tab cycles within the active dialog using native `<dialog>.showModal()` or `inert`.
-4. **Scroll Lock Stability:** Prevent horizontal page shifts by setting `scrollbar-gutter: stable` on the document root.
-5. **Escape & Light Dismiss:** Support the Esc key and backdrop clicks for dismissal.
-6. **Focus Restoration:** Return focus cleanly to the original invoking element upon closing.
+Focus handling that's worked well for dialogs here: remember what was focused before opening, move focus into the dialog on open, trap Tab/Shift+Tab inside it (native `<dialog>.showModal()` or `inert` does most of this for you), support Esc and backdrop-click to dismiss, and restore focus on close. `scrollbar-gutter: stable` on the root avoids a horizontal shift when the scrollbar appears/disappears.
 
-### C. Responsive Bottom-Sheet Morphing
-- **Desktop (≥ 768px):** Centered modal dialog with backdrop blur.
-- **Mobile (< 768px):** Auto-morph into a bottom sheet anchored to the bottom edge with `padding-bottom: env(safe-area-inset-bottom)` and drag-down-to-dismiss gesture handling.
+On narrow viewports (< 768px), morphing into a bottom sheet (`padding-bottom: env(safe-area-inset-bottom)`, drag-to-dismiss) tends to feel more native than a centered dialog shrunk down.
 
 ---
 
-## 6. Accessibility Engineering (WCAG 2.2 & ARIA APG)
+## 6. Accessibility — these are real requirements, not style choices
 
-### A. Double-Ring Focus Indicator (WCAG 2.2 Success Criterion 2.4.12)
-Ensure high-contrast visibility on both dark and light backgrounds without obscuring content:
+Getting these wrong excludes someone from using the app, so treat this section differently from the "house convention" material above it.
+
+**Focus visibility** (WCAG 2.2 SC 2.4.12) — a double-ring keeps the indicator visible on both light and dark surfaces:
 ```css
-:focus-visible {
-  outline: 2px solid var(--brand-primary);
-  outline-offset: 2px;
-  box-shadow: 0 0 0 4px var(--surface-page);
-}
+:focus-visible { outline: 2px solid var(--brand-primary); outline-offset: 2px; box-shadow: 0 0 0 4px var(--surface-page); }
 ```
 
-### B. Non-Obscured Focus (WCAG 2.2 Criterion 2.4.11)
-When an element receives keyboard focus, it must never be hidden behind sticky headers, footers, or floating action bars. Use `scroll-padding-top` and `scroll-padding-bottom` on scrollable containers.
+**Non-obscured focus** (WCAG 2.2 SC 2.4.11) — a focused element must not end up hidden behind a sticky header/footer; `scroll-padding-top`/`scroll-padding-bottom` on the scroll container handles this.
 
-### C. Permanent Live Regions
-Screen reader announcements (`aria-live="polite"` or `"assertive"`) must use a permanent DOM element created at initial application render. Never destroy and rebuild live containers via `innerHTML`, as this breaks mutation listeners in assistive software.
+**Live regions** — create `aria-live="polite"`/`"assertive"` containers once at initial render and update their contents; destroying and rebuilding them via `innerHTML` breaks the mutation listener assistive tech relies on.
 
-### D. Reduced Motion Support
-Respect user preferences instantly:
+**Reduced motion** — respect it without exception:
 ```css
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -424,19 +267,18 @@ Respect user preferences instantly:
 
 ---
 
-## 7. Comprehensive 12-Point SOTA Verification Matrix
+## 7. A quick self-check, when it's worth running
 
-Before delivering ANY user-facing modification, verify all 12 criteria:
+Not a gate to clear on every change — but for something that touches a lot of surface area (a new screen, a significant redesign of an existing one), these are the questions worth asking before calling it done:
 
-- [ ] **1. Aesthetic Polish:** Does the interface reflect elite standards (Linear/Vercel/Apple) with crisp borders, subtle glassmorphism, and balanced visual hierarchy?
-- [ ] **2. APCA & WCAG Contrast:** Do body text ($L_c \ge 75$), fine tabular digits ($L_c \ge 90$), and controls ($L_c \ge 60$) meet APCA standards?
-- [ ] **3. Canonical Semantic Surfaces:** Are surfaces strictly using `--surface-page`, `--surface-raised`, `--surface-sunken`, `--surface-inset`, or `--surface-inverse`?
-- [ ] **4. Modal Shell Architecture:** Does `.modal` preserve `padding: 0 var(--space-6)` with pinned header/footer gradient scrims and zero vertical modal padding?
-- [ ] **5. Touch Target Bounding Box:** Are all interactive targets $\ge 44\text{px} \times 44\text{px}$ with generous hit padding?
-- [ ] **6. Responsive Fluidity:** Does layout adapt across mobile (375px), tablet (768px), and widescreen containers using Container Queries?
-- [ ] **7. Tabular Figures & Right Alignment:** Are all prices, quantities, and balances formatted with `tnum` / `DM Mono` and right-aligned?
-- [ ] **8. Keyboard & Focus Lifecycle:** Does Tab navigation work cleanly with high-visibility double-ring focus outlines and 6-point modal focus trapping?
-- [ ] **9. Form Validation Ergonomics:** Is the "Reward Early, Punish Late" timing respected, with persistent top-aligned labels and appropriate `inputmode`?
-- [ ] **10. Micro-Interactions & Spring Kinetics:** Do buttons and cards feature natural spring hover, active (`scale(0.975)`), and zero-CLS loading skeletons?
-- [ ] **11. Motion Accessibility:** Does the interface respect `@media (prefers-reduced-motion: reduce)` with instant transitions?
-- [ ] **12. Data Pipeline Integrity:** Are all existing financial amounts, state handlers, and calculation pipelines 100% preserved?
+- Does text meet a real contrast standard, not just "looks fine to me"?
+- Are surfaces using the defined tokens rather than a new one?
+- If this touched a modal, is the padding/scrim structure still intact?
+- Are touch targets ≥ 44px?
+- Does it hold together on mobile, tablet, and wide layouts?
+- Do money/quantity columns use tabular figures and right alignment?
+- Does keyboard navigation and focus visibility work?
+- Does `prefers-reduced-motion` still get respected?
+- Are the underlying data/calculation functions untouched?
+
+If most of these don't apply to what you're doing (a copy tweak, a one-off internal tool screen), skip the checklist — it's here for when it's useful, not as paperwork.
