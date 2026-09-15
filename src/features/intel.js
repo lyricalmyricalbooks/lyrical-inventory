@@ -182,14 +182,33 @@ const TOOL_LABELS = {
   proposeEdits: 'changes for you to approve',
 };
 
-function intelMessageHtml(msg) {
+/**
+ * A failed turn gets its own card — a rose accent and a "Try again" button —
+ * instead of reading as an ordinary answer. The question that failed travels
+ * with it via a data attribute rather than a JS string literal, so an
+ * apostrophe or quote in what the publisher typed can never break the button.
+ */
+function intelErrorHtml(msg) {
+  return `<div class="intel-error">
+      <div class="intel-error-body">${intelText(msg.text)}</div>
+      <button type="button" class="btn gold sm sys-target" data-question="${escapeHtml(msg.question || '')}"
+        onclick="retryIntelQuestion(this.dataset.question)" ${msg.question ? '' : 'disabled'}>Try again</button>
+    </div>`;
+}
+
+function intelMessageHtml(msg, i) {
   const mine = msg.role === 'you';
+  const isError = !mine && msg.isError;
   const body = mine ? escapeHtml(msg.text) : intelText(msg.text);
-  return `<article class="intel-msg ${mine ? 'is-you' : 'is-app'}">
+  return `<article class="intel-msg ${mine ? 'is-you' : 'is-app'}${isError ? ' is-error' : ''}" id="intel-msg-${i}">
+      ${mine ? '' : '<div class="intel-msg-avatar" aria-hidden="true">L</div>'}
       <div class="intel-msg-content">
         <div class="intel-msg-who">${mine ? 'You' : 'Lyricalmyrical Intelligence'}</div>
-        <div class="intel-msg-body">${body}</div>
+        ${isError ? intelErrorHtml(msg) : `<div class="intel-msg-body">${body}</div>
         ${mine ? '' : toolTrace(msg.tools, msg)}
+        ${mine ? '' : `<div class="intel-msg-actions">
+          <button type="button" class="intel-msg-action" onclick="copyIntelAnswer(this)" aria-label="Copy this answer" title="Copy">⧉</button>
+        </div>`}`}
         ${(msg.proposals || []).map(id => intelBatchHtml(INTEL_PROPOSALS.get(id))).join('')}
       </div>
     </article>`;
@@ -273,14 +292,45 @@ function intelEmptyHtml() {
       <div class="intel-empty-mark" aria-hidden="true">✦</div>
       <strong>What would you like to understand?</strong>
       <span>Ask about sales, costs, fairs, stock, or something that looks wrong. Answers are grounded in your own records.</span>
-      <div class="intel-starters">
-        ${STARTERS.map(q => `<button type="button" class="btn ghost sm sys-target intel-starter" onclick="askIntelStarter(this)">${escapeHtml(q)}</button>`).join('')}
-      </div>
     </div>`;
+}
+
+/**
+ * The left rail: the same starter questions every time, plus a jump-list back
+ * to whatever the publisher has already asked in this conversation.
+ *
+ * This is deliberately not a list of separate past conversations — the thread
+ * is one ongoing conversation (THREAD_KEY holds exactly one), so "already
+ * asked" jumps to where that question sits in the scrollback rather than
+ * pretending to reopen a different chat.
+ */
+function intelRailHtml() {
+  const quick = STARTERS
+    .map(q => `<button type="button" class="intel-rail-btn sys-target" onclick="askIntelStarter(this)">${escapeHtml(q)}</button>`)
+    .join('');
+
+  const asked = [];
+  INTEL_MESSAGES.forEach((m, i) => { if (m.role === 'you' && m.text) asked.push({ text: m.text, i }); });
+  const recent = asked.length > 1
+    ? asked.slice(-8).reverse()
+      .map(({ text, i }) => `<button type="button" class="intel-rail-btn intel-rail-recent sys-target" data-target="intel-msg-${i}"
+          onclick="scrollToIntelMessage(this.dataset.target)" title="${escapeHtml(text)}">${escapeHtml(text)}</button>`)
+      .join('')
+    : '';
+
+  return `<div class="intel-rail-group">
+      <h3 class="intel-rail-heading">Quick asks</h3>
+      ${quick}
+    </div>
+    ${recent ? `<div class="intel-rail-group">
+      <h3 class="intel-rail-heading">Already asked</h3>
+      ${recent}
+    </div>` : ''}`;
 }
 
 function intelPendingHtml() {
   return `<article class="intel-msg is-app is-thinking" aria-hidden="true">
+      <div class="intel-msg-avatar">L</div>
       <div class="intel-msg-content">
         <div class="intel-msg-who">Lyricalmyrical Intelligence</div>
         <div class="intel-msg-body">
@@ -316,7 +366,10 @@ function intelBlocker() {
 function renderIntel() {
   const thread = $i('intel-thread');
   if (!thread) return;
-  if (isAuthor()) { thread.innerHTML = ''; return; }
+  if (isAuthor()) { thread.innerHTML = ''; const rail = $i('intel-rail'); if (rail) rail.innerHTML = ''; return; }
+
+  const rail = $i('intel-rail');
+  if (rail) rail.innerHTML = intelRailHtml();
 
   const gate = $i('intel-disclosure');
   if (gate) gate.hidden = disclosureAccepted();
@@ -487,7 +540,7 @@ async function sendIntelMessage() {
     } else {
       console.error('Intelligence turn failed', e);
       INTEL_MESSAGES.push({
-        role: 'app', at: Date.now(), tools: [],
+        role: 'app', at: Date.now(), tools: [], isError: true, question,
         text: `I could not answer that — ${e?.__alreadyFriendly ? e.message : friendlyChatError(e)}.`,
       });
       setIntelStatus('That question could not be answered.');
@@ -498,6 +551,37 @@ async function sendIntelMessage() {
     saveIntelThread();
     renderIntel();
   }
+}
+
+/** Re-asks a failed question exactly as it was typed, as a new turn. */
+function retryIntelQuestion(question) {
+  if (!question || intelPending || isAuthor()) return;
+  const input = $i('intel-input');
+  if (!input) return;
+  input.value = question;
+  sendIntelMessage();
+}
+
+/** Copies one answer's plain text — never its markup — to the clipboard. */
+async function copyIntelAnswer(btn) {
+  const body = btn?.closest('.intel-msg-content')?.querySelector('.intel-msg-body');
+  const text = body ? body.textContent.trim() : '';
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast('Copied to your clipboard', 'ok', 1800);
+  } catch (_) {
+    showToast('Could not copy — your browser blocked it', 'warn', 3200);
+  }
+}
+
+/** Jumps back to an earlier question in this same conversation and gives it a beat of highlight. */
+function scrollToIntelMessage(id) {
+  const el = id && document.getElementById(id);
+  if (!el) return;
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  el.classList.add('intel-msg-flash');
+  setTimeout(() => el.classList.remove('intel-msg-flash'), 1400);
 }
 
 function stopIntelTurn() {
@@ -685,12 +769,15 @@ export {
   applyIntelProposal,
   askIntelStarter,
   clearIntelThread,
+  copyIntelAnswer,
   dismissIntelProposal,
   intelBatchHtml,
   intelComposerKey,
   intelContext,
   intelText,
   renderIntel,
+  retryIntelQuestion,
+  scrollToIntelMessage,
   sendIntelMessage,
   stopIntelTurn,
   systemInstruction,
