@@ -169,15 +169,65 @@ describe('what the publisher can do by hand', () => {
   it('offers a reminder and a promised-to-pay date on the invoice', () => {
     expect(indexHtml).toContain('onclick="remindInvoiceFromView()"');
     expect(indexHtml).toContain('onclick="snoozeInvoiceFromView()"');
-    expect(mainJs).toContain('remindInvoiceFromView, snoozeInvoiceFromView,');
+    expect(mainJs).toContain('remindInvoiceFromView, remindInvoiceFromList, snoozeInvoiceFromView,');
   });
 
   it('confirms before a manual reminder leaves, naming the recipient', () => {
-    const fn = extractDecl('remindInvoiceFromView', mainJs);
+    const fn = extractDecl('chaseInvoiceNow', mainJs);
     expect(fn).toContain('confirmDialog(');
     expect(fn).toContain('a link to pay it?');
     // Chasing somebody twice by hand is allowed, but never by accident.
     expect(fn).toContain('You have already reminded them');
+  });
+
+  it('has exactly one by-hand chase path, used by both buttons', () => {
+    // Two copies of the guards would eventually differ, and the way they
+    // would differ is an email chasing somebody who already paid.
+    for (const caller of ['remindInvoiceFromView', 'remindInvoiceFromList']) {
+      expect(extractDecl(caller, mainJs), `${caller} should go through chaseInvoiceNow`)
+        .toContain('chaseInvoiceNow(id)');
+    }
+    for (const guard of ["inv.status === 'paid'", "inv.status === 'cancelled'", 'if (!sheetsUrl)', 'No email address on this invoice']) {
+      expect(extractDecl('chaseInvoiceNow', mainJs)).toContain(guard);
+    }
+  });
+
+  it('warns when the bill being chased is not late, or was promised', () => {
+    const fn = extractDecl('chaseInvoiceNow', mainJs);
+    // One press from the list can reach a bill nobody is owed money on yet.
+    expect(fn).toContain('Not due until');
+    expect(fn).toContain('They promised to pay by');
+    expect(fn).toContain("inv.status === 'draft'");
+  });
+});
+
+describe('chasing straight from the invoice list', () => {
+  const row = () => extractDecl('renderInvoices', mainJs);
+
+  it('puts a reminder button on every unpaid invoice row', () => {
+    expect(row()).toContain('remindInvoiceFromList(');
+    // Only bills that have actually been sent — a draft has billed nobody.
+    expect(row()).toContain("inv.status === 'sent'");
+    expect(mainJs).toContain('remindInvoiceFromView, remindInvoiceFromList, snoozeInvoiceFromView,');
+  });
+
+  it('says so rather than going missing when there is no address to chase', () => {
+    expect(row()).toContain('No email address on this invoice — add one and you can chase it from here');
+    expect(row()).toContain('disabled');
+  });
+
+  it('reads as a repeat when they have already been chased', () => {
+    expect(row()).toContain('Chase again');
+  });
+
+  it('goes quiet while it sends, so the row is not pressed twice', () => {
+    const fn = extractDecl('remindInvoiceFromList', mainJs);
+    expect(fn).toContain('btn.disabled = true');
+    expect(fn).toContain('Sending…');
+    // And comes back if the chase never happened — a declined confirmation
+    // must not leave a permanently dead button on the row.
+    expect(fn).toContain('finally');
+    expect(fn).toContain('still.disabled = false');
   });
 
   it('picks the promised date with a date control, not free text', () => {
@@ -331,8 +381,41 @@ describe('the test reminder', () => {
     expect(fn()).toContain('`[TEST] ${mail.subject}`');
   });
 
-  it('falls back to a sample so it works before anything is overdue', () => {
+  it('builds from a real outstanding invoice before inventing one', () => {
+    // The point of the test send is to read what a customer will receive —
+    // live store, live amount, live pay link — so the invented sample is the
+    // last resort, not the answer whenever nothing is past due yet.
+    const body = fn();
+    const realAt = body.indexOf('invoicesChaseable()[0]');
+    const sampleAt = body.indexOf('sampleReminderInvoice(');
+    expect(realAt).toBeGreaterThan(-1);
+    expect(sampleAt).toBeGreaterThan(realAt);
+    expect(body).toContain('invoicesAwaitingReminder(cfg.days, 1)[0]');
+    expect(body).toContain('invoicesDueTomorrow(cfg.days)[0]');
+  });
+
+  it('never dresses a real invoice in the example payment link', () => {
+    const body = fn();
+    expect(body).toContain("const livePayLink = real ? (effectivePaymentLink(inv) || '') : 'https://buy.stripe.com/example';");
+    expect(body).toContain('payLink: livePayLink,');
+    // And says so when the real bill turns out to have no link at all.
+    expect(body).toContain('has no payment link');
+  });
+
+  it('names the invoice it was built from, so live details can be checked', () => {
+    expect(fn()).toContain('reads as ${inv.num}');
+  });
+
+  it('falls back to a sample so it works before anything is outstanding', () => {
     expect(fn()).toContain('sampleReminderInvoice({ today: today(), days: cfg.days })');
+  });
+
+  it('only offers unpaid, emailable bills as the sample', () => {
+    const pick = extractDecl('invoicesChaseable', mainJs);
+    expect(pick).toContain("inv.status !== 'sent'");
+    expect(pick).toContain('inv.storeEmail');
+    // Never a demo book's fixture invoice.
+    expect(pick).toContain('isTestBookId(bookId)');
   });
 
   it('asks where to send when no address is on file', () => {

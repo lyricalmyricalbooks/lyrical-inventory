@@ -147,7 +147,10 @@
      clear AA as text on the card surface in either theme. */
   .invoice-card .inv-c-cell.amt strong{font-size:var(--text-lg);color:var(--gold-text);letter-spacing:var(--tracking-tight);white-space:nowrap;}
   .invoice-card .inv-c-actions{display:flex;flex-direction:column;align-items:stretch;gap:var(--space-1);}
-  .invoice-card .inv-c-btns{display:flex;gap:var(--space-1);justify-content:flex-end;}
+  /* Wraps: an unpaid row carries a third button (Remind), and a narrow column
+     must drop it to a second line rather than squeeze all three below the
+     44px touch target. */
+  .invoice-card .inv-c-btns{display:flex;gap:var(--space-1);justify-content:flex-end;flex-wrap:wrap;}
   .invoice-card .inv-c-btns .btn{min-height:var(--target-min);padding:8px 14px;font-size:var(--text-xs);transition:transform var(--dur-fast) var(--ease-spring);}
   .invoice-card .inv-c-btns .btn:active{transform:scale(0.96);}
   /* Status pill — a themed sibling of .invoice-paper's print-only version above,
@@ -163,7 +166,11 @@
        away from the column of left-aligned labels above it. */
     .invoice-card{grid-template-columns:1fr;gap:var(--space-2);}
     .invoice-card .inv-c-cell.amt{text-align:left;padding-right:0;}
-    .invoice-card .inv-c-actions{flex-direction:row;align-items:center;justify-content:space-between;}
+    /* Stacked, the status and its three buttons share one line until they
+       can't — then the buttons drop below the pill at full touch size rather
+       than shrinking to fit beside it. */
+    .invoice-card .inv-c-actions{flex-direction:row;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-2);}
+    .invoice-card .inv-c-btns{flex:1 1 auto;}
   }
   .inv-item-row td{padding:6px 4px;}
   .inv-item-row input{width:100%;padding:6px 8px;font-size:12px;border:1px solid var(--border);border-radius:var(--r);background:transparent;color:var(--text);}
@@ -4986,7 +4993,7 @@
     <div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
       <button class="btn sm ink" type="button" id="ivs-remind-test" onclick="sendTestReminderEmail()">✉ Send me a test reminder</button>
       <div style="font-size:10px;color:var(--text3);line-height:1.5;flex:1 1 200px;min-width:0;">
-        Emails a real reminder to you, using the wording above even before you save it — so you can read exactly what a customer gets. Its subject is marked <strong>[TEST]</strong>, and no invoice is touched or counted as chased.
+        Emails a real reminder to you, using the wording above even before you save it — built from a <strong>real outstanding invoice</strong> where you have one, so the customer, the amount, the pay link and the attached PDF are the live ones. Its subject is marked <strong>[TEST]</strong>, and no invoice is touched or counted as chased.
       </div>
     </div>
   </div>

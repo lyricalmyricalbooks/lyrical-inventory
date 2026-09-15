@@ -10111,6 +10111,18 @@ function renderInvoices() {
       const when = remState.lastAt ? fmtD(new Date(remState.lastAt).toISOString().slice(0, 10)) : '';
       chaseChip = `<span class="chip-status gray" title="A payment reminder was emailed to this customer" style="margin-left:6px;font-size:9px;">\u{23F0} Chased${when ? ' ' + escapeHtml(when) : ''}</span>`;
     }
+    // Chasing from the list, where the unpaid bills already are. The invoice
+    // view has had this button for a while, but getting to it means opening
+    // the one row you were already looking at — so the follow-up for a bill
+    // that has gone quiet is one press from the list it is listed on.
+    // Drafts are excluded deliberately: nobody has been billed yet, so there
+    // is nothing to chase them about.
+    const chaseEmail = String(inv.storeEmail || '').trim();
+    const chaseBtn = inv.status === 'sent'
+      ? (chaseEmail
+        ? `<button class="btn sm gold" id="inv-chase-${escapeHtml(inv.id)}" onclick="remindInvoiceFromList('${inv.id}')" title="Email ${escapeHtml(chaseEmail)} a follow-up about ${escapeHtml(inv.num)}, with a link to pay it">⏰ ${remState.count ? 'Chase again' : 'Remind'}</button>`
+        : `<button class="btn sm" disabled title="No email address on this invoice — add one and you can chase it from here">⏰ Remind</button>`)
+      : '';
     return `<div class="invoice-card">
       <div class="inv-c-num">${escapeHtml(inv.num)}${stripeChip}${personChip}${chaseChip}${sharedChip}</div>
       <div class="inv-c-store">${escapeHtml(inv.storeName) || '—'}<div class="inv-c-store-meta">${[inv.storeEmail, inv.storeCity].filter(Boolean).map(escapeHtml).join(' · ') || '—'}</div>${shareLine}</div>
@@ -10120,6 +10132,7 @@ function renderInvoices() {
       <div class="inv-c-actions">
         <span class="inv-status ${statusCls}">${statusLabel}</span>
         <div class="inv-c-btns">
+          ${chaseBtn}
           <button class="btn sm" onclick="viewInvoice('${inv.id}')">View</button>
           <button class="btn sm ink" onclick="openCreateInvoice(null,'${inv.id}')">Edit</button>
         </div>
@@ -21443,6 +21456,29 @@ function bumpReminderDayCount(by = 1) {
  * switched on, so the number the publisher is warned about is the number that
  * actually goes out.
  */
+/**
+ * Every unpaid bill that could be chased by hand, soonest-due first.
+ *
+ * Wider than invoicesAwaitingReminder on purpose: that one answers "who does
+ * the automatic sweep owe an email to today", which is nobody at all until
+ * something is past its due date. This one answers "which real bill is
+ * outstanding" — what the test email needs so it reads with a live customer,
+ * a live amount and a live payment link rather than a made-up one.
+ */
+function invoicesChaseable() {
+  const out = [];
+  for (const bookId of Object.keys(states || {})) {
+    if (isTestBookId(bookId)) continue;
+    for (const inv of ((states[bookId] || {}).invoices || [])) {
+      if (!inv || inv.status !== 'sent') continue;
+      if (!String(inv.storeEmail || '').trim()) continue;
+      out.push({ bookId, inv });
+    }
+  }
+  out.sort((a, b) => String(a.inv.dueDate || '').localeCompare(String(b.inv.dueDate || '')));
+  return out;
+}
+
 function invoicesAwaitingReminder(days, max = 0) {
   const out = [];
   for (const bookId of Object.keys(states || {})) {
@@ -21740,10 +21776,15 @@ async function sendTestReminderEmail() {
   }
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) { showToast('That does not look like an email address', 'warn'); return; }
 
-  // A real late invoice reads more honestly than a made-up one; the sample is
-  // only there so the button still works before anything is overdue.
+  // The whole point of the test is to read what a customer will receive, so it
+  // is built from a real outstanding bill wherever one exists — real store,
+  // real amount, real payment link, real PDF. Preference order is how close
+  // the invoice is to actually being chased: already due a reminder, chased
+  // tomorrow, then any bill still waiting to be paid. The invented sample is
+  // the last resort, for a fresh app with nothing outstanding on file.
   const real = invoicesAwaitingReminder(cfg.days, 1)[0]
     || invoicesDueTomorrow(cfg.days)[0]
+    || invoicesChaseable()[0]
     || null;
   const inv = real ? real.inv : sampleReminderInvoice({ today: today(), days: cfg.days });
   // Works for the sample too: with no id to locate, invoiceOwnerBook falls back
@@ -21751,9 +21792,14 @@ async function sendTestReminderEmail() {
   const amountLabel = invoiceAmountLabel(inv);
 
   const attachment = await buildInvoicePdfAttachment(inv);
+  // A real invoice carries its own live link and nothing else will do — an
+  // example link pasted into a real bill's email is precisely the thing this
+  // test exists to catch. If it comes back empty, the test still goes out and
+  // says so, because that missing link is the finding.
+  const livePayLink = real ? (effectivePaymentLink(inv) || '') : 'https://buy.stripe.com/example';
   const mail = buildReminderEmail(inv, {
     settings: cfg,
-    payLink: real ? (effectivePaymentLink(inv) || '') : 'https://buy.stripe.com/example',
+    payLink: livePayLink,
     publisher: ($('ivs-name') ? $('ivs-name').value : stored.name) || 'Lyricalmyrical Books',
     amountLabel,
     attached: !!attachment,
@@ -21762,7 +21808,12 @@ async function sendTestReminderEmail() {
   showToast('Sending your test reminder…');
   try {
     await sendSingleEmailViaBackend(to, `[TEST] ${mail.subject}`, mail.text, stored.email || '', mail.html, null, false, attachment ? [attachment] : null);
-    showToast(`✓ Test reminder sent to ${to}${real ? '' : ' (using a sample invoice)'}`, 'ok', 5000);
+    // Name the bill it was built from: the publisher asked for this to read
+    // with live details, so say which live details arrived.
+    const said = real
+      ? `reads as ${inv.num} for ${inv.storeName || 'that customer'}${livePayLink ? '' : ' — but that invoice has no payment link, so the email has nothing to pay with'}`
+      : 'using a sample invoice — nothing is outstanding to build it from';
+    showToast(`✓ Test reminder sent to ${to} — ${said}`, livePayLink || !real ? 'ok' : 'warn', 7000);
   } catch (error) {
     showToast(`Could not send the test: ${String((error && error.message) || error)}`, 'err', 5000);
   }
@@ -21776,19 +21827,28 @@ function startPaymentReminderWatch() {
   startWatch(() => { noticeUpcomingReminders(); sweepPaymentReminders(); }, { intervalMs: REMINDER_WATCH_INTERVAL_MS });
 }
 
-/** Chase this invoice now, whatever the automatic setting says. */
-async function remindInvoiceFromView() {
-  if (!currentViewInvoiceId) return;
-  const { inv, bookId } = invoiceHome(currentViewInvoiceId);
-  if (!inv) return;
+/**
+ * Chase one invoice now, whatever the automatic setting says.
+ *
+ * The single by-hand chase path in this app. Both the button on the open
+ * invoice and the one-click button on each unpaid row come through here, so a
+ * reminder sent from the list passes exactly the same guards — already paid,
+ * cancelled, no email, no sheet — and is logged exactly the same way as one
+ * sent from the invoice itself. Two copies of this would eventually differ,
+ * and the way they would differ is an email chasing somebody who already paid.
+ */
+async function chaseInvoiceNow(id) {
+  const { inv, bookId } = invoiceHome(id);
+  if (!inv) return { ok: false, error: 'missing invoice' };
   // Belt and braces with the hidden buttons above: this is callable from the
   // console and from a stale modal, and the cost of getting it wrong is an
   // email chasing a customer who already paid.
-  if (inv.status === 'paid') { showToast(`${inv.num} is already paid — nothing to chase`, 'warn'); return; }
-  if (inv.status === 'cancelled') { showToast(`${inv.num} was cancelled — nothing to chase`, 'warn'); return; }
+  if (inv.status === 'paid') { showToast(`${inv.num} is already paid — nothing to chase`, 'warn'); return { ok: false, error: 'already paid' }; }
+  if (inv.status === 'cancelled') { showToast(`${inv.num} was cancelled — nothing to chase`, 'warn'); return { ok: false, error: 'cancelled' }; }
+  if (inv.status === 'draft') { showToast(`${inv.num} has not been sent yet — send it before chasing it`, 'warn'); return { ok: false, error: 'draft' }; }
   const to = String(inv.storeEmail || '').trim();
-  if (!to) { showToast('No email address on this invoice — add one to remind them', 'warn'); return; }
-  if (!sheetsUrl) { showToast('Connect your Google Sheet first — that is what sends the mail', 'warn'); return; }
+  if (!to) { showToast('No email address on this invoice — add one to remind them', 'warn'); return { ok: false, error: 'no email address' }; }
+  if (!sheetsUrl) { showToast('Connect your Google Sheet first — that is what sends the mail', 'warn'); return { ok: false, error: 'sheet not connected' }; }
 
   const state = invoiceReminderState(inv);
   const already = state.count
@@ -21796,17 +21856,55 @@ async function remindInvoiceFromView() {
     : '';
   const late = daysLate(inv, today());
   const lateSaid = late ? `${late} day${late === 1 ? '' : 's'} past due. ` : '';
+  // From the list this is one press away from a bill that isn't late yet, or
+  // one somebody has already promised to pay — both are the publisher's call
+  // to make, but neither should be made without being told.
+  const earlySaid = (!late && inv.dueDate && inv.dueDate > today()) ? `Not due until ${fmtD(inv.dueDate)}. ` : '';
+  const promisedSaid = (state.snoozedUntil && today() <= state.snoozedUntil)
+    ? `They promised to pay by ${fmtD(state.snoozedUntil)}. `
+    : '';
   if (!(await confirmDialog(
-    `${lateSaid}${already}Email ${to} a reminder about ${inv.num}, with a link to pay it?`,
+    `${lateSaid}${earlySaid}${promisedSaid}${already}Email ${to} a reminder about ${inv.num}, with a link to pay it?`,
     { okLabel: 'Send reminder', title: 'Remind this customer' },
-  ))) return;
+  ))) return { ok: false, error: 'cancelled by user' };
 
   showToast('Sending reminder…');
   const res = await sendInvoiceReminder(inv, bookId, { kind: 'manual' });
   renderInvoices();
-  viewInvoice(currentViewInvoiceId);
   if (res.ok) showToast(`✓ Reminder sent to ${to}`);
   else showToast(`Reminder failed: ${res.error}`, 'err', 5000);
+  return res;
+}
+
+/** Chase the invoice that is open on screen. */
+async function remindInvoiceFromView() {
+  if (!currentViewInvoiceId) return;
+  const id = currentViewInvoiceId;
+  await chaseInvoiceNow(id);
+  // Repaint the invoice only if it is still the one on screen — the send is
+  // slow enough for the publisher to have moved on to another bill.
+  if (currentViewInvoiceId === id) viewInvoice(id);
+}
+
+/**
+ * Chase straight from the invoice list — one press per unpaid bill.
+ *
+ * The pressed button goes quiet for the duration: the send takes a couple of
+ * seconds through the sheet, and without this the row looks untouched, which
+ * invites a second press and a second email to the same customer.
+ */
+async function remindInvoiceFromList(id) {
+  const btn = $(`inv-chase-${id}`);
+  const label = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Sending…'; }
+  try {
+    await chaseInvoiceNow(id);
+  } finally {
+    // renderInvoices() usually replaces the row outright; this only matters
+    // when the chase stopped before it (declined, or a guard said no).
+    const still = $(`inv-chase-${id}`);
+    if (still && still === btn) { still.disabled = false; still.textContent = label; }
+  }
 }
 
 /**
@@ -23733,7 +23831,7 @@ Object.assign(window, {
   addInvoiceItem, removeInvoiceItem, updateInvoiceItem,
   onInvoiceStoreChange, setInvoiceBillToMode, prefillFromPendingSales, recalcInvoiceTotals,
   saveInvoice, deleteInvoice, editInvoiceFromView, markInvoicePaidFromView,
-  remindInvoiceFromView, snoozeInvoiceFromView,
+  remindInvoiceFromView, remindInvoiceFromList, snoozeInvoiceFromView,
   openReminderReview, reminderReviewMarkPaid, reminderReviewHoldOff, sendTestReminderEmail,
   printInvoice, copyInvoicePayLink, emailInvoice, downloadInvoiceHTML, downloadInvoicePDF,
   openInvoiceTemplateSettings, saveInvoiceSettings,
