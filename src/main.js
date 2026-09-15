@@ -21110,6 +21110,7 @@ export function renderReconcile() {
 
   reconRenderKeyRow();
   renderPaymentConfig();
+  renderStripePaidNotifyToggle();
 
   const mem = getReconMemory();
   const lastSyncEl = document.getElementById('recon-last-sync');
@@ -21277,9 +21278,85 @@ function reconcileOpenInvoice(idSafe) {
 const STRIPE_INVOICE_WATCH_INTERVAL_MS = 5 * 60 * 1000;
 const STRIPE_INVOICE_COLD_START_DAYS = 30;
 const STRIPE_INVOICE_LAST_KEY = 'lm-stripe-invoice-sweep-last';
+const STRIPE_PAID_NOTIFY_KEY = 'lm-stripe-paid-notify';
 
 let _stripeInvoiceWatchStarted = false;
 let _stripeInvoiceSweeping = false;
+
+/** Whether she has opted in to a device notification when the sweep settles something. */
+function stripePaidNotifyEnabled() {
+  try { return localStorage.getItem(STRIPE_PAID_NOTIFY_KEY) === '1'; } catch (_) { return false; }
+}
+
+/**
+ * Reflect the saved preference (and whatever the browser's permission actually
+ * is right now — she may have revoked it outside the app) on the checkbox.
+ * Called on boot and whenever the Payments tab renders, so the switch never
+ * shows "on" when a notification could not actually reach her.
+ */
+function renderStripePaidNotifyToggle() {
+  const cb = document.getElementById('stripe-paid-notify-cb');
+  if (!cb) return;
+  const supported = typeof Notification !== 'undefined';
+  cb.disabled = !supported;
+  cb.checked = supported && stripePaidNotifyEnabled() && Notification.permission === 'granted';
+  const note = document.getElementById('stripe-paid-notify-note');
+  if (note) {
+    note.textContent = !supported
+      ? 'Not supported in this browser.'
+      : Notification.permission === 'denied'
+        ? 'Blocked — allow notifications for this site in your browser settings, then try again.'
+        : 'Puts a notification on this device the moment a Stripe payment settles an invoice — even if this tab is in the background.';
+  }
+}
+
+/** The switch in the Payments tab that turns the device notification on/off. */
+async function toggleStripePaidNotify() {
+  const cb = document.getElementById('stripe-paid-notify-cb');
+  if (!cb) return;
+  if (!cb.checked) {
+    try { localStorage.setItem(STRIPE_PAID_NOTIFY_KEY, '0'); } catch (_) { /* private mode */ }
+    return;
+  }
+  if (typeof Notification === 'undefined') {
+    cb.checked = false;
+    showToast('This browser does not support notifications', 'warn');
+    return;
+  }
+  const permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
+  if (permission !== 'granted') {
+    cb.checked = false;
+    showToast('Notifications were blocked — nothing will be sent to this device', 'warn');
+    renderStripePaidNotifyToggle();
+    return;
+  }
+  try { localStorage.setItem(STRIPE_PAID_NOTIFY_KEY, '1'); } catch (_) { /* private mode */ }
+  showToast('✓ You’ll be notified on this device when an invoice is paid');
+}
+
+/**
+ * Put the same news the in-app card shows onto the device itself.
+ *
+ * Best-effort and silent on failure: a browser that blocks or does not support
+ * `Notification` must not interrupt the sweep that pays for itself in the
+ * ledger regardless of whether anyone is watching.
+ */
+function notifyDeviceInvoicePayment(said, firstInvoiceId) {
+  if (!said || !stripePaidNotifyEnabled()) return;
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+  try {
+    const n = new Notification(said.title, {
+      body: said.detail,
+      icon: '/pwa-192x192.png',
+      tag: 'lm-stripe-invoice-payments',
+    });
+    n.onclick = () => {
+      try { window.focus(); } catch (_) { /* not focusable from here in every browser */ }
+      if (firstInvoiceId) openInvoiceFromAlert(firstInvoiceId);
+      n.close();
+    };
+  } catch (_) { /* unsupported context (e.g. iOS Safari outside an installed PWA) */ }
+}
 
 function readStripeInvoiceStamp() {
   try { return Number(localStorage.getItem(STRIPE_INVOICE_LAST_KEY)) || 0; } catch (_) { return 0; }
@@ -21365,6 +21442,7 @@ function showInvoicePaymentAlert({ settled, attention, first, totals }) {
     actionLabel: first ? 'Review' : '',
     action: first ? `openInvoiceFromAlert('${first}')` : '',
   });
+  notifyDeviceInvoicePayment(said, first);
 }
 
 /** Take the publisher to an invoice from a notification, wherever she is. */
@@ -23872,6 +23950,7 @@ Object.assign(window, {
   fetchStripeFeesByYear, downloadStripeFeesAuditCSV, clearStoredStripeKey, insertStripeFeesIntoLedger, reconcileStripeAgainstSales,
   reconcileSync, renderReconcile, reconcileRecordSale, reconcileApplyBigCartel, reconcileOpenInvoice, reconcileDismiss, reconcileUndo,
   reconOnFilter, reconSetCurrency, reconClearFilters, reconEditKey, reconRecordGroup, reconDismissGroup, reconDismissAllShown,
+  toggleStripePaidNotify,
   generateBookStripeLink,
   logout, switchTab, toggleBookDropdown, toggleHeaderMenu, closeHeaderMenus, toggleSideAccount, switchBook, forceSync, recalcOnHand, dismissStockDrift,
   showMoreHist, showAllHist,

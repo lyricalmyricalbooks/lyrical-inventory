@@ -1068,6 +1068,10 @@
   <div id="recon-keyrow" style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
     <input type="password" id="recon-key" placeholder="rk_live_… or sk_live_… (reused from Tax Centre / Invoices if already saved)" style="flex:1;" autocomplete="off">
   </div>
+  <label class="toggle-row" id="stripe-paid-notify-wrap" style="margin-bottom:14px;">
+    <span class="switch"><input type="checkbox" id="stripe-paid-notify-cb" onchange="toggleStripePaidNotify()"><span class="track"></span></span>
+    <span><span class="toggle-title">Notify me on this device when an invoice is paid</span><span class="field-note" id="stripe-paid-notify-note" style="display:block;margin-top:2px;"></span></span>
+  </label>
   <div id="recon-status" style="font-size:12px;color:var(--text3);margin-bottom:8px;min-height:16px;"></div>
   <div id="recon-toolbar" class="recon-toolbar" style="display:none;">
     <input type="search" id="recon-search" class="recon-search" placeholder="Search name, email, note, amount…" autocomplete="off" oninput="reconOnFilter()">
