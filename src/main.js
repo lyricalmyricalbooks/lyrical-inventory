@@ -11077,7 +11077,7 @@ function renderInvoicePaperHTML(inv, { showChase = false } = {}) {
     <p class="inv-pay-fallback">Send an Interac e-Transfer to: <strong>${escapeHTML(payUrl)}</strong></p>`) : '';
 
   const payBlock = payUrl ? `
-    <section class="inv-pay" style="--book-accent:${accent};">
+    <section class="inv-pay"${payHref ? ` data-pdf-link="${escapeHTML(payHref)}"` : ''} style="--book-accent:${accent};">
       <div class="inv-pay-info">
         ${dynBadge}
         <h3>Pay this invoice</h3>
@@ -11665,6 +11665,13 @@ function invoicePdfLinkRects(paperEl) {
     if (!box.width || !box.height) continue;
     out.push({ x: box.left - base.left, y: box.top - base.top, w: box.width, h: box.height, url });
   }
+  // Biggest first, so a broad catch-all region (the whole pay box) is laid
+  // down before the precise targets inside it (the button, the QR). Where two
+  // annotations overlap, a reader generally takes the later one, and the
+  // specific one is the one whose tooltip and highlight should win. They point
+  // at the same page either way, so the worst case is cosmetic — but only if
+  // the order is deliberate rather than however the markup happened to nest.
+  out.sort((a, b) => (b.w * b.h) - (a.w * a.h));
   return out;
 }
 
