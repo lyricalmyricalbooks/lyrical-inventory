@@ -2838,6 +2838,17 @@
     <p class="sr-only" id="tc-deductions-status" role="status" aria-live="polite"></p>
     <div class="ded-list" id="tc-deductions-body"></div>
     <p class="ded-foot">Amounts are the middle of what you have spent on similar things before, not an industry figure. Whether a cost can be claimed on a return is a question for your accountant &mdash; this only tells you what is missing from your own books.</p>
+
+    <!-- POSSIBLE MISCATEGORIZATIONS — is a recorded cost filed under the right
+         name, judged only against how this business has filed similar wording
+         before. Logic lives in src/lib/category-fit.js. -->
+    <div class="ded-subsec-head">
+      <div class="sec-kicker"><span class="sec-kicker-dot"></span>Possible Miscategorizations</div>
+      <span class="pill gray intel-fig" id="tc-catcheck-total">&mdash;</span>
+    </div>
+    <p class="section-subcopy">This checks each expense's own wording against how you've filed similar wording before &mdash; never against an outside idea of what a category should mean. A word you've used nine times under one category and once under another is worth a second look.</p>
+    <p class="sr-only" id="tc-catcheck-status" role="status" aria-live="polite"></p>
+    <div class="ded-list" id="tc-catcheck-body"></div>
   </div>
 
   <div id="tc-sec-integrations" class="tc-section settings-section" role="tabpanel" aria-labelledby="btn-tctab-integrations" style="display:none;">

@@ -77,6 +77,11 @@ function median(values) {
   return nums.length % 2 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2;
 }
 
+/** How spread out a set of values is around its own median, in the same units. */
+function medianAbsoluteDeviation(values, mid = median(values)) {
+  return median(values.map(v => Math.abs(v - mid)));
+}
+
 /**
  * Every expense the business has, in one list, with its category folded onto
  * the canonical name so "Postage" and "Shipping & Postage" count as one thing.
@@ -217,10 +222,14 @@ function eventsWithoutTravel(ctx) {
  * otherwise steady run is far likelier to be an unlogged payment than a month
  * off, and this is the pattern a person is least able to spot by eye.
  */
-function missingMonths(ctx) {
+/**
+ * Every category's monthly totals, built once and shared by every detector
+ * that reasons about a category's spend over time — so a busy ledger is
+ * walked once, not once per detector.
+ */
+function categoryMonthBuckets(ctx) {
   const expenses = allExpenses(ctx).filter(e => str(e.date));
   const byCategory = new Map();
-
   for (const e of expenses) {
     const month = str(e.date).slice(0, 7);
     if (!month) continue;
@@ -229,9 +238,12 @@ function missingMonths(ctx) {
     bucket.amounts.push(amountOf(e));
     byCategory.set(e._cat, bucket);
   }
+  return byCategory;
+}
 
+function missingMonths(ctx) {
   const gaps = [];
-  for (const [category, bucket] of byCategory) {
+  for (const [category, bucket] of categoryMonthBuckets(ctx)) {
     const months = [...bucket.months.keys()].sort();
     // Needs a real run before an absence means anything. Four separate months
     // is the point at which "most months" is a fair description.
@@ -277,6 +289,65 @@ function monthsBetween(first, last) {
     if (m > 12) { m = 1; y += 1; }
   }
   return out;
+}
+
+/**
+ * A steady category present every month, but recorded well under its usual
+ * amount in one of them.
+ *
+ * `missingMonths` only ever fires on a month with NOTHING recorded — it has
+ * no way to notice a month that has something, just not enough of it. A
+ * partial payment, a subscription billed at a prorated rate, or a second
+ * cost from the same month that never got entered all look identical from
+ * here: the category is present, and unusually light. Only a category that
+ * behaves like a steady recurring cost is judged this way — one whose own
+ * history already swings widely makes "unusually low" meaningless, so a
+ * lumpy cost like a print run is left to the detector built for it.
+ */
+function categorySpendDip(ctx) {
+  const gaps = [];
+  for (const [category, bucket] of categoryMonthBuckets(ctx)) {
+    const months = [...bucket.months.keys()].sort();
+    if (months.length < 5) continue; // needs a real run, and a month to hold out as "typical"
+    const expected = monthsBetween(months[0], months[months.length - 1]);
+    if (bucket.months.size / expected.length < 0.66) continue; // steady presence, not seasonal
+
+    // The most recently recorded month is often still open, so a light month
+    // there is not evidence of anything — only a month with a full period
+    // behind it is judged.
+    const judgeable = months.slice(0, -1);
+
+    for (const month of judgeable) {
+      const amount = bucket.months.get(month);
+      const others = judgeable.filter(m => m !== month).map(m => bucket.months.get(m));
+      if (others.length < 3) continue;
+      const typical = median(others);
+      if (typical < MIN_GAP_AMOUNT * 3) continue; // too small a baseline to call anything a dip
+
+      const mad = medianAbsoluteDeviation(others, typical);
+      if (mad > typical * 0.4) continue; // this category is naturally lumpy, not steady — a dip proves nothing here
+
+      if (amount >= typical * 0.5) continue; // not enough of a drop to be worth a question
+      const typicalR = roundCents(typical);
+      const shortfall = roundCents(typical - amount);
+      if (shortfall < MIN_GAP_AMOUNT) continue;
+
+      gaps.push({
+        id: `spend-dip:${category}:${month}`,
+        kind: 'category-spend-dip',
+        category,
+        title: `${category} dropped in ${monthName(month, true)}`,
+        detail: `You typically record about ${typicalR.toFixed(2)} a month in ${category.toLowerCase()}, `
+          + `but ${monthName(month, true)} only has ${roundCents(amount).toFixed(2)}. That is enough of a drop that a `
+          + 'second cost from that month may be missing, rather than the category actually having cost less.',
+        estimate: shortfall,
+        estimateBasis: `the typical ${typicalR.toFixed(2)} a month for this category, minus what is already recorded`,
+        evidence: { month, recorded: roundCents(amount), typical: typicalR },
+        prompt: `Is there another ${category.toLowerCase()} cost from ${monthName(month, true)} you haven't logged yet?`,
+      });
+    }
+  }
+  return gaps;
 }
 
 /**
@@ -417,6 +488,7 @@ const DETECTORS = [
   eventsWithoutCosts,
   eventsWithoutTravel,
   missingMonths,
+  categorySpendDip,
   missingProcessingFees,
   missingPostage,
   missingProductionCosts,
