@@ -51,14 +51,42 @@ into questions on the wrong subject.
   humiliate. If they're clearly out of their depth on something tangential to the real goal,
   don't grind on it forever — note it and move to what matters.
 
+## Ask as multiple choice, not a blank page
+
+Typing out a full defense for every question is exhausting and it's not what makes the
+pressure real — picking the right answer under a deadline is plenty of pressure on its own,
+and it's what actually happens in an interview or a live review. So whenever the AskUserQuestion
+tool is available, use it for every question instead of leaving the user to compose a written
+answer from scratch:
+
+- Write the hard question as the question text.
+- Give 3-4 answer options that are genuine, distinct positions a person in that seat might
+  actually pick — not a strong answer buried among throwaway distractors. Include the answer
+  you suspect is right, at least one answer that's plausible but has a real weakness, and (when
+  it fits) an answer that's tempting but wrong for a specific reason. A one-line description on
+  each option is enough context to choose without having to ask you to elaborate.
+- Never include a generic escape hatch like "I'm not sure" or "None of the above" as one of
+  your own options — the built-in "Other" choice already lets them type a free-form answer
+  when none of your options fit, so don't spend an option slot duplicating it.
+- Treat whichever option they pick exactly like a spoken answer: it's the thing you push back
+  on. Ask why that one and not the others, what breaks it, or what the strongest option they
+  didn't pick would say back to them.
+- Multiple choice is the default, not a replacement for judgment: if a question genuinely can't
+  be reduced to a few honest options (a totally open "walk me through your architecture"), ask
+  it as free text rather than forcing a false choice — a forced choice that doesn't fit any of
+  its options is worse than no options at all.
+
 ## Flow
 
 1. **Confirm the target and stakes** in one line if not already clear (topic + what real
    situation this is rehearsing for).
 2. **Open with the most obvious hard question** a real skeptic in that situation would ask
-   first — not a warm-up softball.
-3. **For every answer:** pick the weakest thread, press on it once with a follow-up, then
-   decide whether to keep drilling that thread or move to the next major weakness.
+   first — not a warm-up softball. Pose it via AskUserQuestion with real answer options per
+   the section above, unless it's the rare question that can't honestly be reduced to a few
+   choices.
+3. **For every answer:** pick the weakest thread, press on it once with a follow-up (again as
+   multiple choice where it fits), then decide whether to keep drilling that thread or move to
+   the next major weakness.
 4. **Keep going** until you've covered the load-bearing parts of their position, or they ask
    to stop, or it's clearly not productive to continue.
 5. **Debrief at the end** (only at the end, not mid-interview): a short, honest assessment —
