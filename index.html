@@ -3326,14 +3326,14 @@
               <span id="ship-dest-count-badge" style="font-size:10px;color:var(--text3);font-weight:500;"></span>
             </div>
             <div id="custom-ship-dest-wrapper" class="custom-dest-wrapper">
-              <div id="custom-ship-dest-trigger" class="custom-dest-trigger" onclick="toggleShippoDestDropdown(event)" tabindex="0">
+              <div id="custom-ship-dest-trigger" class="custom-dest-trigger" onclick="toggleShippoDestDropdown(event)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleShippoDestDropdown(event);}" tabindex="0" role="button" aria-haspopup="listbox" aria-expanded="false" aria-label="Search or select a destination">
                 <div style="display:flex;align-items:center;gap:8px;overflow:hidden;width:100%;">
-                  <span id="custom-ship-dest-icon" style="font-size:14px;color:var(--text3);flex-shrink:0;">🔍</span>
+                  <span id="custom-ship-dest-icon" style="font-size:14px;color:var(--text3);flex-shrink:0;" aria-hidden="true">🔍</span>
                   <span id="custom-ship-dest-label" style="font-size:13px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;">— Search or select an address —</span>
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-                  <span id="custom-ship-dest-clear" style="display:none;font-size:12px;color:var(--text3);padding:2px 5px;cursor:pointer;border-radius:4px;" onclick="clearShippoDestSelection(event)">✕</span>
-                  <span id="custom-ship-dest-arrow" style="font-size:10px;color:var(--text3);transition:transform 0.2s;">▼</span>
+                  <span id="custom-ship-dest-clear" style="display:none;font-size:12px;color:var(--text3);padding:2px 5px;cursor:pointer;border-radius:4px;" onclick="clearShippoDestSelection(event)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();clearShippoDestSelection(event);}" tabindex="0" role="button" aria-label="Clear selected destination">✕</span>
+                  <span id="custom-ship-dest-arrow" style="font-size:10px;color:var(--text3);transition:transform 0.2s;" aria-hidden="true">▼</span>
                 </div>
               </div>
               <div id="custom-ship-dest-menu" class="custom-dest-menu" style="display:none;" onclick="event.stopPropagation()">
