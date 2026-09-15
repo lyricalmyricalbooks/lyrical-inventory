@@ -28,6 +28,8 @@ import { deriveOnHand } from './inventory.js';
 import { calcArtistEarnings } from './earnings.js';
 import { expenseMissingReceipt } from './receipt-storage.js';
 import { fmt, getBookCurrencyCode } from './money.js';
+import { findDeductionGaps } from './deduction-gaps.js';
+import { recurringStatus } from './recurring.js';
 
 /** The four buckets the To-do tab groups by, in display order. */
 export const SIGNAL_GROUPS = ['stock', 'money', 'catalogue', 'setup'];
@@ -79,6 +81,11 @@ function openBook(bookId, tab) {
 /** Open a top-level tab that isn't tied to a book. */
 function openTab(tab) {
   return { kind: 'tab', tab };
+}
+
+/** Open the Tax Centre, optionally landing on one of its own sub-tabs. */
+function openTaxCenter(subTab) {
+  return { kind: 'taxcenter', tab: subTab || '' };
 }
 
 // ── Producers ──────────────────────────────────────────────────────────────
@@ -157,15 +164,26 @@ function moneySignals(book, s, out, ctx) {
     });
   }
 
-  // Overdue and unsent invoices.
+  // Overdue invoices, unsent drafts, and invoices sent with nothing telling
+  // the app when to expect payment. A due date is optional on the invoice
+  // form, so "sent, no due date" is a real and fairly common state — and
+  // previously an invisible one: it is neither a draft nor ever "overdue" by
+  // the comparison below (that needs a dueDate to compare against), so an
+  // invoice sent and sitting unpaid indefinitely, with no due date set,
+  // never produced a signal at all.
   const today = ctx.today;
   let overdue = 0;
+  let noDueDate = 0;
   let drafts = 0;
   for (const inv of (s.invoices || [])) {
     if (!inv) continue;
     const status = inv.status || 'draft';
-    if (status === 'sent' && inv.dueDate && inv.dueDate < today) overdue++;
-    else if (status === 'draft') drafts++;
+    if (status === 'sent') {
+      if (inv.dueDate) { if (inv.dueDate < today) overdue++; }
+      else noDueDate++;
+    } else if (status === 'draft') {
+      drafts++;
+    }
   }
   if (overdue > 0) {
     out.push({
@@ -175,6 +193,18 @@ function moneySignals(book, s, out, ctx) {
       icon: '📄',
       label: 'Invoice past its due date',
       detail: `${overdue} ${overdue === 1 ? 'invoice' : 'invoices'} for ${book.title} ${overdue === 1 ? 'is' : 'are'} past the date you asked to be paid by.`,
+      bookId: book.id,
+      fix: { label: 'Open invoices', ...openBook(book.id, 'consignment') },
+    });
+  }
+  if (noDueDate > 0) {
+    out.push({
+      id: `money-invoice-no-due-date:${book.id}`,
+      group: 'money',
+      status: 'warn',
+      icon: '📤',
+      label: 'Invoice sent, no due date set',
+      detail: `${noDueDate} ${noDueDate === 1 ? 'invoice was' : 'invoices were'} sent for ${book.title} with no due date, so nothing here can say when it is overdue — only that it hasn't been marked paid yet.`,
       bookId: book.id,
       fix: { label: 'Open invoices', ...openBook(book.id, 'consignment') },
     });
@@ -403,6 +433,61 @@ function setupSignals(ctx, out) {
 }
 
 /**
+ * Money spent that never made it into the books — the same scan behind the
+ * Missing Costs tab, reused rather than duplicated so the two cannot
+ * disagree about what is missing. One summary signal, not one per gap: the
+ * detail panel is where somebody works through a list like that, not a
+ * to-do row they skim past.
+ */
+function missingCostsSignals(ctx, out) {
+  let scan;
+  try {
+    scan = findDeductionGaps({
+      books: ctx.booksById || {},
+      states: ctx.states || {},
+      taxCenter: ctx.taxCenter,
+      tripsSummary: ctx.tripsSummary || {},
+      today: ctx.today,
+    });
+  } catch (_) {
+    return; // a malformed shape here must not cost every other signal
+  }
+  if (!scan || !scan.gaps || !scan.gaps.length) return;
+
+  const n = scan.gaps.length;
+  const cur = ctx.taxCenter?.settings?.baseCurrency || 'CAD';
+  const amountNote = scan.totalEstimate > 0 ? ` — worth about ${fmt(scan.totalEstimate, cur)} of what you have spent on similar things before` : '';
+  out.push({
+    id: 'money-missing-costs',
+    group: 'money',
+    status: 'info',
+    icon: '🔎',
+    label: n === 1 ? 'A cost may be missing from your records' : `${n} costs may be missing from your records`,
+    detail: `${scan.gaps[0].title}${n > 1 ? `, and ${n - 1} more` : ''}${amountNote}. Not tax advice — just gaps between what you did and what you logged.`,
+    fix: { label: 'Review', ...openTaxCenter('deductions') },
+  });
+}
+
+/** A recurring cost with no usable start date — a legacy row nothing can schedule. */
+function recurringSignals(ctx, out) {
+  let invalid = 0;
+  for (const sub of (ctx.taxCenter?.recurring || [])) {
+    if (sub && recurringStatus(sub) === 'invalid') invalid++;
+  }
+  if (invalid > 0) {
+    out.push({
+      id: 'setup-recurring-invalid',
+      group: 'setup',
+      status: 'warn',
+      icon: '🔁',
+      label: invalid === 1 ? 'A recurring cost needs a start date' : `${invalid} recurring costs need a start date`,
+      detail: `${invalid} ${invalid === 1 ? 'subscription is' : 'subscriptions are'} missing a usable start date, so nothing can say when it should next post to the ledger.`,
+      fix: { label: 'Review', ...openTaxCenter('ledger') },
+    });
+  }
+}
+
+/**
  * Everything that wants the publisher's attention right now.
  *
  * @param {Object} input
@@ -412,6 +497,8 @@ function setupSignals(ctx, out) {
  * @param {Object} [input.sync]       `{online, pending, failed}`
  * @param {Array}  [input.integrations] `[{id, label, failing, detail}]`
  * @param {Array}  [input.submissions]  `[{bookId, bookTitle, sales, expenses}]`
+ * @param {Object} [input.taxCenter]   the tax centre's own state — business expenses, recurring costs, settings
+ * @param {Object} [input.tripsSummary] declared trips/events, keyed by name — same shape the Missing Costs scan already uses
  * @param {string} [input.today]      'YYYY-MM-DD', for invoice due dates
  * @returns {{signals: Array, total: number, urgent: number, byGroup: Object}}
  *          `signals` is sorted most urgent first. A shop with nothing to do
@@ -425,18 +512,24 @@ export function buildAttentionSignals(input = {}) {
     integrations: input.integrations,
     submissions: input.submissions,
     openCall: input.openCall,
+    taxCenter: input.taxCenter,
+    tripsSummary: input.tripsSummary,
   };
   const states = input.states || {};
+  const booksById = {};
   const signals = [];
 
   for (const book of (input.books || [])) {
     if (!book || !book.id) continue;
+    booksById[book.id] = book;
     const s = states[book.id] || {};
     stockSignals(book, s, signals);
     moneySignals(book, s, signals, ctx);
     catalogueSignals(book, s, signals);
   }
   setupSignals(ctx, signals);
+  missingCostsSignals({ ...ctx, states, booksById }, signals);
+  recurringSignals(ctx, signals);
 
   // Most urgent first; within a severity keep collection order, which groups a
   // book's own signals together rather than interleaving the whole catalogue.

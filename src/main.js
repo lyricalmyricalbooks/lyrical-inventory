@@ -5012,6 +5012,8 @@ export function attentionInput() {
     },
     submissions,
     openCall,
+    taxCenter: TAX_CENTER,
+    tripsSummary: (() => { try { return _tcGetTripsSummaryAll() || {}; } catch (_) { return {}; } })(),
     today: today(),
   };
 }
@@ -5120,6 +5122,11 @@ document.addEventListener('click', (event) => {
     // switchBook first: switchTab alone cannot leave the all-books screen.
     switchBook(fixBook);
     if (fixTab) setTimeout(() => switchTab(fixTab), 50);
+    return;
+  }
+  if (fix === 'taxcenter') {
+    switchTab('taxcenter');
+    if (fixTab) setTimeout(() => switchTaxCenterSubTab(fixTab), 50);
   }
 });
 
