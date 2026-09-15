@@ -92,17 +92,3 @@ Apply the full process (understand → assess risk → plan → implement → ve
 > from the portal's guides or the downloaded OpenAPI spec.
 > Full standing rules: [docs/canada-post-rating-api.md](docs/canada-post-rating-api.md)
 > (rates) and [docs/canada-post-shipping-api.md](docs/canada-post-shipping-api.md) (labels).
-
-## App Overview & Architecture
-
-Lyrical Inventory is a Progressive Web App (PWA) designed for Lyricalmyrical Books to manage book catalogs, sales inventory, consignment partners, invoices, expenses, and in-person checkouts (POS).
-
-### Key Modules & Capabilities
-
-| Module | Purpose | Key Details |
-| :--- | :--- | :--- |
-| **Catalog & Stock** | Book inventory management | Tracks list price, native currency, print runs, and stock statuses (`on-hand`, `consigned`, `sold`, etc.) |
-| **Consignment** | Store partnership ledger | Handles store commissions, shipments, returns, sales, invoice drafts, and artist payout settlements |
-| **POS Checkout** | In-person & online sales | Checkout panel supporting multi-currency totals, FX rate conversion, and Stripe QR codes |
-| **Order History** | Timeline & stock auditing | Filterable, paginated transaction lists matching direct sales against ledger records |
-| **Tax & Expenses** | Cash flow & operations | Tracks operating costs, business trips, subscription schedules, and receipt OCR scans via Gemini API |
