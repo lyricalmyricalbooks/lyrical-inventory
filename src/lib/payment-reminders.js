@@ -19,6 +19,8 @@
 //     button and the count shown when the feature is switched on all ask the
 //     same function, so what the owner is told matches what actually happens.
 
+import { BILL_TO_PERSON } from './invoices.js';
+
 /** What the settings mean before the publisher has touched them. */
 export const REMINDER_DEFAULTS = {
   auto: false,
@@ -166,6 +168,43 @@ const esc = (s) => str(s)
   .replace(/"/g, '&quot;');
 
 /**
+ * The first word of a person's name, for a greeting that reads like it was
+ * written by a person rather than typed off an invoice — "Hi Paolo," not
+ * "Hi Paolo Santalucia,". Skips a one-word title ("Dr.", "Mr.", "Ms.") ahead
+ * of a name that has more after it, so "Dr. Santalucia" still greets as
+ * "Dr. Santalucia" rather than the unreadable "Dr.". A single-word name comes
+ * back unchanged — there is nothing shorter to take.
+ */
+function firstNameOf(name) {
+  const parts = str(name).split(/\s+/).filter(Boolean);
+  if (!parts.length) return '';
+  const skipTitle = parts.length > 1 && /^[A-Za-z]{1,4}\.$/.test(parts[0]);
+  return skipTitle ? `${parts[0]} ${parts[1]}` : parts[0];
+}
+
+/**
+ * Who the reminder greets, by first name where the recipient is a person.
+ *
+ * `storeContact` is always a person — a name typed in specifically as who to
+ * write to — so it is shortened outright. `storeName` is shortened only when
+ * `billTo` explicitly says the invoice was addressed to a person: billed to a
+ * store, `storeName` holds a business name, and "Hi The," out of "The Corner
+ * Bookshop" would be worse than the long form it replaced. The explicit stamp
+ * only — not invoiceBillToMode's fallback for invoices written before it
+ * existed — because that fallback infers "person" from a missing store id
+ * alone, which a hand-built invoice object (a test fixture, an import) can
+ * trip purely by omitting a field that was never relevant to it.
+ */
+function greetingName(inv) {
+  const contact = str(inv && inv.storeContact);
+  if (contact) return firstNameOf(contact) || contact;
+  const name = str(inv && inv.storeName);
+  const billTo = str(inv && inv.billTo).toLowerCase();
+  if (name && billTo === BILL_TO_PERSON) return firstNameOf(name) || name;
+  return name || 'there';
+}
+
+/**
  * The reminder itself.
  *
  * Written to be read on a phone in ten seconds: who it is from, which invoice,
@@ -194,7 +233,7 @@ const esc = (s) => str(s)
 export function buildReminderEmail(inv, { settings, payLink = '', publisher = '', amountLabel = '', attached = true } = {}) {
   const cfg = settings && settings.days !== undefined ? settings : reminderSettings(settings);
   const num = str(inv && inv.num) || 'your invoice';
-  const who = str(inv && inv.storeContact) || str(inv && inv.storeName) || 'there';
+  const who = greetingName(inv);
   const from = str(publisher) || 'Lyricalmyrical Books';
   const amount = str(amountLabel);
   const isStripeLink = /buy\.stripe\.com/i.test(payLink);
