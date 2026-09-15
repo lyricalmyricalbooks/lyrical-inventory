@@ -38,9 +38,9 @@ const DISCLOSURE_KEY = 'lm_intel_disclosure_v1';
 // How much of the conversation is carried forward. Every earlier turn is
 // re-sent on each question, tool results and all, so an unbounded thread would
 // grow the request until it either costs the whole free-tier allowance or is
-// refused outright. Twelve entries is roughly six exchanges — enough for
-// "and what about last year?" to still make sense.
-const HISTORY_LIMIT = 12;
+// refused outright. Eight entries is four exchanges: enough for a natural
+// follow-up, while keeping every new question prompt lean and responsive.
+const HISTORY_LIMIT = 8;
 
 // Displayed messages, and the Gemini turns behind them. Kept apart on purpose:
 // the transcript is what the publisher reads, the history is what the model is
@@ -186,10 +186,12 @@ function intelMessageHtml(msg) {
   const mine = msg.role === 'you';
   const body = mine ? escapeHtml(msg.text) : intelText(msg.text);
   return `<article class="intel-msg ${mine ? 'is-you' : 'is-app'}">
-      <div class="intel-msg-who">${mine ? 'You' : 'Your books'}</div>
-      <div class="intel-msg-body">${body}</div>
-      ${mine ? '' : toolTrace(msg.tools, msg)}
-      ${(msg.proposals || []).map(id => intelBatchHtml(INTEL_PROPOSALS.get(id))).join('')}
+      <div class="intel-msg-content">
+        <div class="intel-msg-who">${mine ? 'You' : 'Lyricalmyrical Intelligence'}</div>
+        <div class="intel-msg-body">${body}</div>
+        ${mine ? '' : toolTrace(msg.tools, msg)}
+        ${(msg.proposals || []).map(id => intelBatchHtml(INTEL_PROPOSALS.get(id))).join('')}
+      </div>
     </article>`;
 }
 
@@ -268,9 +270,9 @@ const STARTERS = [
 
 function intelEmptyHtml() {
   return `<div class="empty-state sys-empty intel-empty">
-      <div class="e-icon" aria-hidden="true">💬</div>
-      <strong>Ask your books anything</strong>
-      <span>Questions about sales, costs, fairs, stock or anything that looks wrong. Every answer is worked out from your own records — nothing is guessed.</span>
+      <div class="intel-empty-mark" aria-hidden="true">✦</div>
+      <strong>What would you like to understand?</strong>
+      <span>Ask about sales, costs, fairs, stock, or something that looks wrong. Answers are grounded in your own records.</span>
       <div class="intel-starters">
         ${STARTERS.map(q => `<button type="button" class="btn ghost sm sys-target intel-starter" onclick="askIntelStarter(this)">${escapeHtml(q)}</button>`).join('')}
       </div>
@@ -279,11 +281,13 @@ function intelEmptyHtml() {
 
 function intelPendingHtml() {
   return `<article class="intel-msg is-app is-thinking" aria-hidden="true">
-      <div class="intel-msg-who">Your books</div>
-      <div class="intel-msg-body">
-        <div class="skeleton-line" style="width:82%"></div>
-        <div class="skeleton-line" style="width:64%"></div>
-        <div class="skeleton-line" style="width:71%"></div>
+      <div class="intel-msg-content">
+        <div class="intel-msg-who">Lyricalmyrical Intelligence</div>
+        <div class="intel-msg-body">
+          <div class="skeleton-line" style="width:82%"></div>
+          <div class="skeleton-line" style="width:64%"></div>
+          <div class="skeleton-line" style="width:71%"></div>
+        </div>
       </div>
     </article>`;
 }
