@@ -171,6 +171,40 @@ describe('what gets measured on the paper', () => {
   it('skips anything with no box on the page', () => {
     expect(fn()).toContain('if (!box.width || !box.height) continue;');
   });
+
+  it('lays the big catch-all region down before the precise targets inside it', () => {
+    // The pay box, the button and the QR overlap. Where two annotations cover
+    // the same spot a reader generally takes the later one, and the specific
+    // one is the one whose highlight should win — so the order has to be
+    // deliberate rather than however the markup happened to nest.
+    expect(fn()).toContain('out.sort((a, b) => (b.w * b.h) - (a.w * a.h));');
+  });
+});
+
+describe('the pay box as a whole', () => {
+  const paper = () => extractDecl('renderInvoicePaperHTML', mainJs);
+
+  it('is tappable end to end, not just on the button glyphs', () => {
+    // A customer aiming at "Pay CA$60.00" on a phone should not have to hit
+    // the text itself — the whole panel is what reads as the thing to press.
+    expect(paper()).toContain('<section class="inv-pay"${payHref ? ` data-pdf-link="${escapeHTML(payHref)}"` : \'\'}');
+  });
+
+  it('is not a link when there is nowhere to send them', () => {
+    // An Interac e-Transfer address renders the same panel with no payHref:
+    // an address to send money TO is not somewhere to be sent on tapping.
+    const fn = paper();
+    const at = fn.indexOf('data-pdf-link="${escapeHTML(payHref)}"');
+    expect(at).toBeGreaterThan(-1);
+    expect(fn.slice(at - 40, at)).toContain('payHref ?');
+  });
+
+  it('still keeps the button and the QR as their own targets', () => {
+    // The catch-all is a safety net, not a replacement: a reader that shows a
+    // tooltip should show it on the button a customer aimed at.
+    expect(paper()).toContain('<a class="pay-btn"');
+    expect(extractDecl('qrLinkAttr', mainJs)).toContain('data-pdf-link=');
+  });
 });
 
 describe('the QR code in an emailed invoice', () => {
