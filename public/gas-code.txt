@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v42)
+/* Lyricalmyrical Inventory — Unified Backend (v43)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:
@@ -165,6 +165,13 @@
  *      readable message when the script is not bound to a spreadsheet at all.
  *      Bump flags v41-and-older as outdated: on those deployments no sheet
  *      write can succeed.
+ *  41. v43: sendcampaignemail can carry one file attachment (`attachments`:
+ *      [{filename, mimeType, base64}]), delivered via GmailApp/MailApp or the
+ *      configured third-party provider (Resend, Brevo, SendGrid, Mailgun,
+ *      Postmark — each in its own attachment shape). Powers the invoice PDF
+ *      now attached to payment reminder emails, in place of the pay button
+ *      that used to be in the email body. Bump flags v42-and-older as
+ *      outdated so the publisher redeploys.
  */
 
 const HEADERS = [
@@ -213,8 +220,8 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v42',
-    scriptVersion: 'v42',
+    service: 'lyrical-sheets-webhook-v43',
+    scriptVersion: 'v43',
     capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, canadaPostRefund: true, graphicalEmails: true, authorPaymentEmails: true, dateOrderedRows: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
@@ -1026,6 +1033,24 @@ function doPost(e) {
         const threadId = clean_(d.threadId);
         const captureThread = d.captureThread === true || d.captureThread === 'true';
 
+        // Optional file(s) to attach — currently just the invoice PDF on a
+        // payment reminder. Each entry is {filename, mimeType, base64} from
+        // the client; decoded once here so every send path below (Gmail
+        // reply, Gmail new thread, and every provider inside sendMail_) can
+        // just pass blobs along. A malformed entry must not sink the whole
+        // email, so a decode failure quietly drops that one attachment.
+        const blobs = [];
+        (Array.isArray(d.attachments) ? d.attachments : []).forEach(function (a) {
+          if (!a || !a.base64 || !a.filename) return;
+          try {
+            blobs.push(Utilities.newBlob(
+              Utilities.base64Decode(a.base64),
+              a.mimeType || 'application/octet-stream',
+              a.filename
+            ));
+          } catch (blobErr) { /* skip this one attachment, send the email anyway */ }
+        });
+
         // Optional custom "send as" identity. fromAlias is only honored when it
         // is a verified Gmail alias on this account (Gmail Settings → Accounts →
         // "Send mail as") — otherwise Gmail rejects it, so we fall back to the
@@ -1047,6 +1072,7 @@ function doPost(e) {
             if (replyTo) opts.replyTo = replyTo;
             if (fromAlias) opts.from = fromAlias;
             if (fromName) opts.name = fromName;
+            if (blobs.length) opts.attachments = blobs;
             thread.reply(body, opts);
             return jsonOut_({ ok: true, emailed: true, via: 'gmail-thread-reply', threadId: threadId });
           }
@@ -1064,6 +1090,7 @@ function doPost(e) {
           if (replyTo) draftOpts.replyTo = replyTo;
           if (fromAlias) draftOpts.from = fromAlias;
           if (fromName) draftOpts.name = fromName;
+          if (blobs.length) draftOpts.attachments = blobs;
           const sentMsg = GmailApp.createDraft(to, subject, body, draftOpts).send();
           const newThreadId = sentMsg.getThread().getId();
           return jsonOut_({ ok: true, emailed: true, via: 'gmail-new-thread', threadId: newThreadId });
@@ -1072,6 +1099,7 @@ function doPost(e) {
         const opts = { to: to, subject: subject, body: body };
         if (htmlBody) opts.htmlBody = htmlBody;
         if (replyTo) opts.replyTo = replyTo;
+        if (blobs.length) opts.attachments = blobs;
         const sent = sendMail_(opts);
         return jsonOut_({ ok: true, emailed: true, via: sent.provider });
       } catch (err) {
@@ -2860,6 +2888,10 @@ function sendMail_(opts) {
   const subject = String(opts.subject || '');
   const body = String(opts.body || '');
   const htmlBody = String(opts.htmlBody || '').trim();
+  // Blob[] — decoded once by the caller (sendcampaignemail), from the client's
+  // {filename, mimeType, base64}. Currently always at most one (the invoice
+  // PDF on a payment reminder).
+  const attachments = Array.isArray(opts.attachments) ? opts.attachments : [];
 
   // No provider configured → preserve the original MailApp behavior. This still
   // sends from the script owner's Gmail; only the display name is app-branded.
@@ -2867,9 +2899,23 @@ function sendMail_(opts) {
     const mailOpts = { to: to, subject: subject, body: body, name: fromName };
     if (replyTo) mailOpts.replyTo = replyTo;
     if (htmlBody) mailOpts.htmlBody = htmlBody;
+    if (attachments.length) mailOpts.attachments = attachments;
     MailApp.sendEmail(mailOpts);
     return { provider: 'mailapp' };
   }
+
+  // Every JSON-API provider below wants the same base64 bytes; only the field
+  // names differ per API (confirmed against each provider's own reference —
+  // Resend `attachments:[{content,filename}]`, Brevo `attachment:[{content,name}]`,
+  // SendGrid `attachments:[{content,filename,type,disposition}]`, Postmark
+  // `Attachments:[{Name,Content,ContentType}]`). Encoded once here.
+  const attachmentsB64 = attachments.map(function (blob) {
+    return {
+      base64: Utilities.base64Encode(blob.getBytes()),
+      filename: blob.getName() || 'attachment',
+      contentType: blob.getContentType() || 'application/octet-stream'
+    };
+  });
 
   const fromHeader = fromName ? (fromName + ' <' + fromEmail + '>') : fromEmail;
   let url, params;
@@ -2879,6 +2925,9 @@ function sendMail_(opts) {
     const payload = { from: fromHeader, to: [to], subject: subject, text: body };
     if (htmlBody) payload.html = htmlBody;
     if (replyTo) payload.reply_to = replyTo;
+    if (attachmentsB64.length) {
+      payload.attachments = attachmentsB64.map(function (a) { return { content: a.base64, filename: a.filename }; });
+    }
     params = {
       method: 'post', contentType: 'application/json',
       headers: { Authorization: 'Bearer ' + apiKey },
@@ -2893,6 +2942,9 @@ function sendMail_(opts) {
     };
     if (htmlBody) payload.htmlContent = htmlBody;
     if (replyTo) payload.replyTo = { email: replyTo };
+    if (attachmentsB64.length) {
+      payload.attachment = attachmentsB64.map(function (a) { return { content: a.base64, name: a.filename }; });
+    }
     params = {
       method: 'post', contentType: 'application/json',
       headers: { 'api-key': apiKey, accept: 'application/json' },
@@ -2911,6 +2963,11 @@ function sendMail_(opts) {
       payload.content.push({ type: 'text/html', value: htmlBody });
     }
     if (replyTo) payload.reply_to = { email: replyTo };
+    if (attachmentsB64.length) {
+      payload.attachments = attachmentsB64.map(function (a) {
+        return { content: a.base64, filename: a.filename, type: a.contentType, disposition: 'attachment' };
+      });
+    }
     params = {
       method: 'post', contentType: 'application/json',
       headers: { Authorization: 'Bearer ' + apiKey },
@@ -2926,6 +2983,12 @@ function sendMail_(opts) {
     const form = { from: fromHeader, to: to, subject: subject, text: body };
     if (htmlBody) form.html = htmlBody;
     if (replyTo) form['h:Reply-To'] = replyTo;
+    // Mailgun's own field for a file is 'attachment', sent as multipart/form-data
+    // — which UrlFetchApp switches to automatically the moment any payload value
+    // is a Blob (no contentType needs setting). Only the first is sent: a plain
+    // form-data object can't repeat one field name for several files the way a
+    // raw multipart request could, and every current caller sends at most one.
+    if (attachments.length) form.attachment = attachments[0];
     params = {
       method: 'post',
       headers: { Authorization: 'Basic ' + Utilities.base64Encode('api:' + apiKey) },
@@ -2940,6 +3003,11 @@ function sendMail_(opts) {
     };
     if (htmlBody) payload.HtmlBody = htmlBody;
     if (replyTo) payload.ReplyTo = replyTo;
+    if (attachmentsB64.length) {
+      payload.Attachments = attachmentsB64.map(function (a) {
+        return { Name: a.filename, Content: a.base64, ContentType: a.contentType };
+      });
+    }
     params = {
       method: 'post', contentType: 'application/json',
       headers: { 'X-Postmark-Server-Token': apiKey, Accept: 'application/json' },
