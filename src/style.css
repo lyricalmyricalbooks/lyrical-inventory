@@ -17896,7 +17896,6 @@ button[onclick="refreshUmamiStats()"]:active {
 .intel-panel {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
   min-width: 0;
   container-type: inline-size;
   background: var(--surface-page);
@@ -17904,6 +17903,57 @@ button[onclick="refreshUmamiStats()"]:active {
   border-radius: var(--r3);
   box-shadow: var(--elev-1), inset 0 1px 0 var(--surface-raised);
   overflow: clip;
+}
+
+/* Rail (quick asks + a jump-list back to earlier questions) beside the
+   conversation itself. Only one conversation is ever kept (THREAD_KEY), so
+   the rail jumps within it rather than pretending to switch between chats. */
+.intel-layout {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+}
+.intel-rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  flex: 0 0 13rem;
+  width: 13rem;
+  min-width: 0;
+  padding: var(--space-4) 0 var(--space-4) var(--space-4);
+  overflow-y: auto;
+}
+.intel-rail:empty { display: none; }
+.intel-rail-heading {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-3xs);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+.intel-rail-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  white-space: normal;
+  letter-spacing: 0;
+  text-transform: none;
+  border-radius: var(--r2);
+  border: 1px solid transparent;
+  background: none;
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-2);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  cursor: pointer;
+}
+.intel-rail-btn:last-child { margin-bottom: 0; }
+.intel-rail-recent { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.intel-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 0;
 }
 
 /* Where your figures go — shown once, before the first question. */
@@ -18027,14 +18077,8 @@ button[onclick="refreshUmamiStats()"]:active {
 .intel-proposal-why { margin: 0; font-size: var(--text-xs); color: var(--content-secondary); font-style: italic; }
 .intel-proposal-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 
-/* Nothing asked yet. */
-.intel-empty .intel-starters {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-2);
-  width: min(100%, 42rem);
-  margin-top: var(--space-4);
-}
+/* Nothing asked yet. The starter questions themselves now live in the rail
+   (.intel-rail-btn), so this is just the welcome. */
 .intel-empty { min-height: 100%; justify-content: center; }
 .intel-empty-mark {
   display: grid;
@@ -18045,17 +18089,6 @@ button[onclick="refreshUmamiStats()"]:active {
   background: var(--surface-inset);
   color: var(--gold);
   font-size: var(--text-lg);
-}
-.intel-starter {
-  min-height: 4.5rem;
-  padding: var(--space-3) var(--space-4);
-  justify-content: flex-start;
-  text-align: left;
-  text-transform: none;
-  letter-spacing: 0;
-  white-space: normal;
-  background: var(--surface-raised);
-  border-color: var(--border-subtle);
 }
 
 .intel-composer {
@@ -18148,25 +18181,87 @@ button[onclick="refreshUmamiStats()"]:active {
 .intel-msg.is-you .intel-msg-body {
   box-shadow: inset 0 1px 0 var(--surface-raised);
 }
+.intel-msg.is-app { gap: var(--space-3); }
 .intel-msg.is-app .intel-msg-body {
   border-left: 2px solid var(--gold);
   border-radius: 0;
   padding: var(--space-1) 0 var(--space-1) var(--space-4);
   color: var(--content-on-inverse);
 }
-.intel-empty.sys-empty {
-  border-color: var(--surface-inverse-raised);
-  background: var(--surface-inverse-raised);
+/* The assistant's mark — same gold-on-ink treatment as the header's own
+   brand mark, so it stays legible on the inverse surface in both themes. */
+.intel-msg-avatar {
+  flex: 0 0 auto;
+  width: 1.75rem;
+  height: 1.75rem;
+  margin-top: 2px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(150deg, var(--gold2), var(--gold));
+  color: var(--ink);
+  font-family: 'Playfair Display', serif;
+  font-weight: 700;
+  font-size: 0.8rem;
 }
-.intel-empty.sys-empty > strong { color: var(--content-on-inverse); }
-.intel-empty.sys-empty > span { color: var(--content-on-inverse); opacity: 0.68; }
-.intel-empty-mark { background: var(--surface-inverse); }
-.intel-starter {
-  background: var(--surface-inverse);
-  border-color: var(--surface-inverse-raised);
+/* Hover-revealed rather than hidden outright: opacity, not display, so a
+   keyboard user tabbing to the button still finds it. */
+.intel-msg-actions { display: flex; gap: var(--space-1); margin-top: var(--space-2); opacity: 0.55; }
+.intel-msg.is-app:hover .intel-msg-actions,
+.intel-msg-actions:focus-within { opacity: 1; }
+.intel-msg-action {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--r);
+  background: none;
+  color: var(--content-on-inverse);
+  font-size: 13px;
+  cursor: pointer;
+  /* Same padded-hit-area trick as .intel-tick: a comfortable tap target
+     without the icon itself growing. */
+  box-shadow: 0 0 0 8px transparent;
+}
+.intel-msg-action:hover,
+.intel-msg-action:focus-visible { background: var(--surface-inverse-raised); color: var(--gold3); }
+
+/* A failed turn. Left accent is --rose, not --red: --red/--red-bg are tuned
+   for the page surface and flip with the theme, while this card sits on the
+   permanently-dark ink surface — the same reason the toast's own error state
+   reaches for --rose rather than --red. */
+.intel-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-left: 2px solid var(--rose);
+  background: var(--surface-inverse-raised);
+  border-radius: 0 var(--r2) var(--r2) 0;
+}
+.intel-error-body { color: var(--content-on-inverse); font-size: var(--text-sm); line-height: var(--leading-normal); }
+
+/* A beat of highlight when the rail jumps back to an earlier question. */
+.intel-msg-flash .intel-msg-body,
+.intel-msg-flash .intel-error {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+  border-radius: var(--r2);
+  transition: outline-color 0.4s var(--ease-standard);
+}
+
+.intel-rail { border-right: 1px solid var(--surface-inverse-raised); }
+.intel-rail-heading { color: var(--content-on-inverse); opacity: 0.55; }
+.intel-rail-btn {
+  background: var(--surface-inverse-raised);
+  border-color: transparent;
   color: var(--content-on-inverse);
 }
-.intel-starter:hover { border-color: var(--gold); background: var(--surface-inverse); }
+.intel-rail-btn:hover,
+.intel-rail-btn:focus-visible { border-color: var(--gold); color: var(--gold3); }
 .intel-composer {
   background: var(--surface-inverse-raised);
   border-color: var(--surface-inverse-raised);
@@ -18183,7 +18278,31 @@ button[onclick="refreshUmamiStats()"]:active {
 .intel-foot { color: var(--content-on-inverse); opacity: 0.62; }
 
 /* Container query, not a viewport one: the panel narrows inside the app shell
-   long before the window does. */
+   long before the window does. Below this width the rail becomes a
+   horizontal strip above the conversation instead of disappearing —
+   quick asks and the jump-list stay reachable on a phone. */
+@container (max-width: 40rem) {
+  .intel-layout { flex-direction: column; }
+  .intel-rail {
+    flex-direction: row;
+    width: auto;
+    flex: 0 0 auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--surface-inverse-raised);
+    padding: var(--space-3) var(--space-4) var(--space-3);
+    overflow-x: auto;
+    overflow-y: visible;
+  }
+  .intel-rail-group { flex: 0 0 auto; display: flex; flex-direction: column; }
+  .intel-rail-heading { white-space: nowrap; }
+  .intel-rail-btn {
+    display: inline-block;
+    width: auto;
+    max-width: 16rem;
+    white-space: nowrap;
+    margin: 0 var(--space-2) 0 0;
+  }
+}
 @container (max-width: 34rem) {
   .intel-thread { min-height: 22rem; padding: var(--space-4); }
   .intel-msg-content { max-width: 100%; }
@@ -18192,7 +18311,6 @@ button[onclick="refreshUmamiStats()"]:active {
   .intel-composer { margin: 0 var(--space-2) var(--space-2); }
   .intel-composer-hint { display: none; }
   .intel-composer-actions .btn:not(.intel-send) { flex: 1 1 auto; }
-  .intel-empty .intel-starters { grid-template-columns: 1fr; }
 }
 
 /* `hidden` is a UA-stylesheet rule, so any component that sets its own

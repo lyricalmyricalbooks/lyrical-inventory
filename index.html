@@ -632,21 +632,27 @@
   <p class="sr-only" id="intel-status" role="status" aria-live="polite"></p>
 
   <div class="intel-panel sys-container">
-    <div class="intel-thread sys-long-list" id="intel-thread" aria-label="Intelligence conversation"></div>
+    <div class="intel-layout">
+      <aside class="intel-rail" id="intel-rail" aria-label="Quick asks and previous questions"></aside>
 
-    <!-- Permanent markup. renderIntel() only ever enables or disables this;
-         rebuilding it would drop the caret out of a half-typed question. -->
-    <div class="intel-composer" id="intel-composer">
-      <label class="sr-only" for="intel-input">Your question</label>
-      <textarea id="intel-input" class="intel-input" rows="1" placeholder="Message Intelligence&hellip;" onkeydown="intelComposerKey(event)"></textarea>
-      <div class="intel-composer-actions">
-        <span class="intel-composer-hint">Enter to send · Shift + Enter for a new line</span>
-        <button type="button" class="btn ghost sm sys-target" id="intel-stop" onclick="stopIntelTurn()" hidden>Stop</button>
-        <button type="button" class="btn gold sys-target intel-send" id="intel-send" onclick="sendIntelMessage()" aria-label="Send question"><span aria-hidden="true">↑</span><span class="sr-only">Send</span></button>
+      <div class="intel-main">
+        <div class="intel-thread sys-long-list" id="intel-thread" aria-label="Intelligence conversation"></div>
+
+        <!-- Permanent markup. renderIntel() only ever enables or disables this;
+             rebuilding it would drop the caret out of a half-typed question. -->
+        <div class="intel-composer" id="intel-composer">
+          <label class="sr-only" for="intel-input">Your question</label>
+          <textarea id="intel-input" class="intel-input" rows="1" placeholder="Message Intelligence&hellip;" onkeydown="intelComposerKey(event)"></textarea>
+          <div class="intel-composer-actions">
+            <span class="intel-composer-hint">Enter to send · Shift + Enter for a new line</span>
+            <button type="button" class="btn ghost sm sys-target" id="intel-stop" onclick="stopIntelTurn()" hidden>Stop</button>
+            <button type="button" class="btn gold sys-target intel-send" id="intel-send" onclick="sendIntelMessage()" aria-label="Send question"><span aria-hidden="true">↑</span><span class="sr-only">Send</span></button>
+          </div>
+        </div>
+
+        <p class="intel-foot">Intelligence can make suggestions, but you always approve changes before anything is saved.</p>
       </div>
     </div>
-
-    <p class="intel-foot">Intelligence can make suggestions, but you always approve changes before anything is saved.</p>
   </div>
 </div>
 

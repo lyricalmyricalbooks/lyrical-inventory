@@ -408,9 +408,12 @@ import {
   applyIntelProposal,
   askIntelStarter,
   clearIntelThread,
+  copyIntelAnswer,
   dismissIntelProposal,
   intelComposerKey,
   renderIntel,
+  retryIntelQuestion,
+  scrollToIntelMessage,
   sendIntelMessage,
   stopIntelTurn,
   toggleIntelEdit,
@@ -24562,7 +24565,8 @@ function exposeLegacyInlineHandlers() {
   // Its names lead the list below.
   Object.assign(window, {
     acceptIntelDisclosure, applyIntelProposal, askIntelStarter, clearIntelThread,
-    dismissIntelProposal, intelComposerKey, renderIntel, sendIntelMessage, stopIntelTurn,
+    copyIntelAnswer, dismissIntelProposal, intelComposerKey, renderIntel, retryIntelQuestion,
+    scrollToIntelMessage, sendIntelMessage, stopIntelTurn,
     dismissDeductionGap, renderDeductionGaps, restoreDeductionGaps, snoozeDeductionGap,
     toggleIntelEdit,
     revealUpdatingScreen, hideUpdatePrompt, bindUpdatePromptInteractions, isTestBook, isTestBookId,
