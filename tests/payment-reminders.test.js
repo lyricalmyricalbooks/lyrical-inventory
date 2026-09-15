@@ -278,6 +278,61 @@ describe('buildReminderEmail', () => {
     expect(withContact.text.startsWith('Hi Ana,')).toBe(true);
   });
 
+  it('greets a named contact by first name only', () => {
+    // A contact is always typed in as a person to write to — "Hi Ana Reyes,"
+    // reads like a form letter where "Hi Ana," reads like an email.
+    const email = buildReminderEmail(lateInvoice({ storeContact: 'Ana Reyes' }), { settings });
+    expect(email.text.startsWith('Hi Ana,')).toBe(true);
+    expect(email.html).toContain('<p>Hi Ana,</p>');
+  });
+
+  it('greets an invoice billed to a person by their first name', () => {
+    // billTo: 'person' is exactly what saveInvoice stamps on every invoice
+    // written through the "bill a person, not a store" form.
+    const paolo = buildReminderEmail(
+      lateInvoice({ billTo: 'person', storeId: null, storeName: 'Paolo Santalucia', storeContact: '' }),
+      { settings },
+    );
+    expect(paolo.text.startsWith('Hi Paolo,')).toBe(true);
+    expect(paolo.html).toContain('<p>Hi Paolo,</p>');
+  });
+
+  it('keeps a shop’s full name — it is a business, not a person to shorten', () => {
+    // Billed to a store: storeName is "Casa Bosques", not somebody's name, and
+    // "Hi Casa," would be a name this customer does not have.
+    const shop = buildReminderEmail(lateInvoice({ billTo: 'store', storeName: 'The Corner Bookshop' }), { settings });
+    expect(shop.text.startsWith('Hi The Corner Bookshop,')).toBe(true);
+  });
+
+  it('does not shorten a shop’s name just because it lacks a store id', () => {
+    // A hand-built invoice (an import, an older test fixture) can easily omit
+    // storeId without meaning "this is a person" — only the explicit billTo
+    // stamp says that, never a missing field guessed at.
+    const noId = buildReminderEmail(lateInvoice({ storeId: undefined, storeName: 'Casa Bosques' }), { settings });
+    expect(noId.text.startsWith('Hi Casa Bosques,')).toBe(true);
+  });
+
+  it('keeps a title ahead of a shortened name readable', () => {
+    const withTitle = buildReminderEmail(
+      lateInvoice({ billTo: 'person', storeName: 'Dr. Jane Smith', storeContact: '' }),
+      { settings },
+    );
+    expect(withTitle.text.startsWith('Hi Dr. Jane,')).toBe(true);
+  });
+
+  it('leaves a one-word name exactly as it is', () => {
+    const oneWord = buildReminderEmail(
+      lateInvoice({ billTo: 'person', storeName: 'Cher', storeContact: '' }),
+      { settings },
+    );
+    expect(oneWord.text.startsWith('Hi Cher,')).toBe(true);
+  });
+
+  it('the sample invoice used before anything is on file still reads as a shop', () => {
+    const sample = buildReminderEmail(sampleReminderInvoice({ today: '2026-09-20' }), { settings });
+    expect(sample.text.startsWith('Hi The Corner Bookshop,')).toBe(true);
+  });
+
   it('still reads properly with no payment link to offer', () => {
     const plain = buildReminderEmail(lateInvoice(), { settings, amountLabel: 'CA$180.00' });
     expect(plain.text).not.toContain('Pay online');
