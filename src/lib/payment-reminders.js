@@ -169,46 +169,60 @@ const esc = (s) => str(s)
  * The reminder itself.
  *
  * Written to be read on a phone in ten seconds: who it is from, which invoice,
- * how much, how late, and a way to pay it — in that order, before any prose.
- * The publisher's own message follows, so the tone is theirs rather than mine.
+ * how much, that the invoice is attached, and a way to pay it — in that order,
+ * before any prose. The publisher's own message follows, so the tone is
+ * theirs rather than mine.
+ *
+ * Deliberately says nothing about HOW late the invoice is — the attached PDF
+ * already carries the due date, and restating "N days ago" in the chasing
+ * email reads as a machine counting rather than a person following up.
+ *
+ * There is no styled "Pay" button: a button that only works when the mail
+ * client renders the HTML alternative is one more thing that can go missing,
+ * where a plain link in a sentence always reads. `payLink` is named for
+ * Stripe only when it demonstrably is one — a book can just as well be set up
+ * for PayPal or an Interac e-transfer address, and telling a customer "the
+ * Stripe link" when it isn't would simply be wrong.
  *
  * `amountLabel` is passed in already formatted. Currency formatting lives in
  * money.js and depends on the book; this module should not be picking symbols.
+ *
+ * `attached` says whether a PDF actually made it onto this email — building
+ * one can fail (a canvas-rendering edge case), and the email must never claim
+ * an attachment that isn't there.
  */
-export function buildReminderEmail(inv, { settings, payLink = '', today, publisher = '', amountLabel = '' } = {}) {
+export function buildReminderEmail(inv, { settings, payLink = '', publisher = '', amountLabel = '', attached = true } = {}) {
   const cfg = settings && settings.days !== undefined ? settings : reminderSettings(settings);
   const num = str(inv && inv.num) || 'your invoice';
   const who = str(inv && inv.storeContact) || str(inv && inv.storeName) || 'there';
   const from = str(publisher) || 'Lyricalmyrical Books';
-  const late = daysLate(inv, today);
   const amount = str(amountLabel);
-  const due = str(inv && inv.dueDate);
-
-  const lateLine = late
-    ? `It was due on ${due} — ${late} day${late === 1 ? '' : 's'} ago.`
-    : `It was due on ${due}.`;
+  const isStripeLink = /buy\.stripe\.com/i.test(payLink);
+  const payWord = isStripeLink ? 'Stripe' : 'payment';
 
   const subject = `Reminder: invoice ${num}${amount ? ` — ${amount} outstanding` : ''}`;
 
-  const text = [
+  const attachedLine = attached ? `I've attached the invoice for your records.` : '';
+  const payLead = payLink ? `You can pay using the ${payWord} link below:` : '';
+
+  // Built as whole paragraphs, not individual lines: the pay-link paragraph
+  // either appears complete (its lead sentence and the link together) or not
+  // at all, and every paragraph gets exactly one blank line around it —
+  // joining line-by-line and filtering out blanks would just as easily eat
+  // the deliberate spacing between paragraphs that ARE there.
+  const paragraphs = [
     `Hi ${who},`,
-    ``,
-    `A quick reminder about invoice ${num}${amount ? ` for ${amount}` : ''}.`,
-    lateLine,
-    ``,
-    payLink ? `Pay online: ${payLink}` : '',
-    payLink ? `` : '',
+    `A quick reminder about invoice ${num}${amount ? ` for ${amount}` : ''}.${attachedLine ? ` ${attachedLine}` : ''}`,
+    payLink ? `${payLead}\n${payLink}` : '',
     cfg.message,
-    ``,
-    `Thank you,`,
-    from,
-  ].filter(line => line !== null).join('\n');
+    `Thank you,\n${from}`,
+  ].filter(Boolean);
+  const text = paragraphs.join('\n\n');
 
   const html = `<div style="font-family:Georgia,'Times New Roman',serif;font-size:15px;line-height:1.6;color:#2a2520;max-width:520px;">
   <p>Hi ${esc(who)},</p>
-  <p>A quick reminder about invoice <strong>${esc(num)}</strong>${amount ? ` for <strong>${esc(amount)}</strong>` : ''}.<br>
-  <span style="color:#756e64;">${esc(lateLine)}</span></p>
-  ${payLink ? `<p style="margin:22px 0;"><a href="${esc(payLink)}" style="background:#0e0c0a;color:#f7f3ec;text-decoration:none;padding:12px 22px;border-radius:8px;display:inline-block;font-family:Helvetica,Arial,sans-serif;font-size:14px;font-weight:700;">Pay invoice ${esc(num)}</a></p>` : ''}
+  <p>A quick reminder about invoice <strong>${esc(num)}</strong>${amount ? ` for <strong>${esc(amount)}</strong>` : ''}.${attachedLine ? ` ${esc(attachedLine)}` : ''}</p>
+  ${payLink ? `<p>${esc(payLead)}<br><a href="${esc(payLink)}">${esc(payLink)}</a></p>` : ''}
   <p>${esc(cfg.message)}</p>
   <p style="margin-top:22px;">Thank you,<br>${esc(from)}</p>
 </div>`;
