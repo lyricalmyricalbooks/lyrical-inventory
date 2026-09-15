@@ -5072,19 +5072,34 @@ function restoreDismissedTodoSignals() {
 function visibleAttentionResult() {
   const raw = buildAttentionSignals(attentionInput());
   const dismissed = getDismissedTodoSignals();
-  const hiddenCount = raw.signals.reduce((n, s) => n + (dismissed[s.id] ? 1 : 0), 0);
+
+  // ⚡ Bolt Optimization: Optimize hiddenCount check
+  let hiddenCount = 0;
+  for (const s of raw.signals) {
+    if (dismissed[s.id]) hiddenCount++;
+  }
+
   if (!hiddenCount) return { ...raw, hiddenCount: 0 };
 
-  const signals = raw.signals.filter(s => !dismissed[s.id]);
+  // ⚡ Bolt Optimization: Loop fusion - Combine .filter() and grouping into a single pass
+  let urgent = 0;
+  const signals = [];
   const byGroup = {};
   for (const group of SIGNAL_GROUPS) byGroup[group] = [];
-  for (const s of signals) if (byGroup[s.group]) byGroup[s.group].push(s);
+
+  for (const s of raw.signals) {
+    if (!dismissed[s.id]) {
+      signals.push(s);
+      if (byGroup[s.group]) byGroup[s.group].push(s);
+      if (isUrgent(s)) urgent++;
+    }
+  }
 
   return {
     signals,
     byGroup,
     total: signals.length,
-    urgent: signals.filter(isUrgent).length,
+    urgent,
     hiddenCount,
   };
 }
