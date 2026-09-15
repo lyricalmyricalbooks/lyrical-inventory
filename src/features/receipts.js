@@ -114,6 +114,30 @@ import {
   vendorFrom,
 } from '../lib/receipt-naming.js';
 import { isExpiringLabelUrl, isLabelUrlExpired, shippoTxIdFromRef } from '../lib/shippo-invoices.js';
+import { mountReceiptFinder, startReceiptFinder, stopReceiptFinder } from './receipt-finder.js';
+
+function receiptFinderDependencies() {
+  return {
+    user: () => window._fbAuth?.currentUser,
+    publisher: () => !!window.IS_PUBLISHER && !isAuthor(),
+    expenses: () => TAX_CENTER.businessExpenses || [],
+    categories: EXPENSE_CATEGORIES, inferCategory: inferReceiptCategory,
+    toast: showToast, confirm: confirmDialog,
+    upload: (file, path) => window._fbUploadReceipt(file, path),
+    commit: (expense, draft) => window._fbCommitFoundReceipt(expense, draft),
+    rate: async currency => {
+      const base = (TAX_CENTER.settings?.baseCurrency || 'CAD').toUpperCase();
+      if (currency === base) return 1;
+      const result = await fetchLiveRate(currency, base);
+      return result?.rate || null;
+    },
+    accept: expense => {
+      if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
+      if (!TAX_CENTER.businessExpenses.some(row => row.id === expense.id)) TAX_CENTER.businessExpenses.unshift(expense);
+      renderTaxCenter();
+    },
+  };
+}
 
 // IndexedDB names for the folder handle and the on-device receipt cache.
 // They moved out of main.js with this domain; nothing else uses them.
@@ -2171,6 +2195,7 @@ async function readReceiptFiles(files) {
 }
 
 function openEmailReceiptImportModal() {
+  if (!window.IS_PUBLISHER || isAuthor()) { showToast('Publisher access required', 'warn'); return; }
   openM('email-receipt-import-modal');
   if ($('email-receipt-results')) $('email-receipt-results').innerHTML = '';
   // Reopening starts a fresh hand-driven review — but a row an automated
@@ -2269,12 +2294,17 @@ function openEmailReceiptImportModal() {
 
   // Surface anything the Gmail add-on has pushed in as ready-to-edit drafts.
   loadGmailInboxDrafts();
+  mountReceiptFinder($('email-panel-gmail'), receiptFinderDependencies()).catch(error => {
+    console.error('[receipt-finder] Could not open', error);
+    showToast('Could not open saved receipts: ' + error.message, 'err');
+  });
 }
 
 function closeEmailReceiptImportModal() {
   // Closing the modal must actually stop an in-flight extraction — otherwise
   // it keeps hitting Apps Script and Gemini against a hidden, orphaned UI.
   if (_emailExtractAbort) _emailExtractAbort.abort();
+  stopReceiptFinder();
   const bulkCatBar = $('email-bulk-category-bar');
   if (bulkCatBar) bulkCatBar.style.display = 'none';
   closeM('email-receipt-import-modal');
@@ -2284,6 +2314,9 @@ function closeEmailReceiptImportModal() {
 // The add-on writes draft expenses to Firestore `emailReceiptInbox`; we watch
 // that collection live and feed items into the existing review/import flow.
 function startEmailInboxWatcher() {
+  if (window.IS_PUBLISHER && !isAuthor()) {
+    startReceiptFinder(receiptFinderDependencies()).catch(error => console.error('[receipt-finder] Could not restore outbox', error));
+  }
   if (isAuthor() || typeof window._fbWatchEmailInbox !== 'function') return;
   window._fbWatchEmailInbox(items => {
     _emailInboxItems = Array.isArray(items) ? items : [];
@@ -2418,6 +2451,11 @@ function switchEmailImportTab(tab) {
   const tabManual = $('email-tab-manual');
   const panelGmail = $('email-panel-gmail');
   const panelManual = $('email-panel-manual');
+  tabGmail?.setAttribute('aria-selected', String(tab === 'gmail'));
+  tabManual?.setAttribute('aria-selected', String(tab !== 'gmail'));
+  if ($('email-receipt-results')) $('email-receipt-results').hidden = tab === 'gmail';
+  if ($('email-bulk-category-bar')) $('email-bulk-category-bar').hidden = tab === 'gmail';
+  if ($('email-receipt-scan-btn')) $('email-receipt-scan-btn').hidden = tab === 'gmail';
   if (tab === 'gmail') {
     tabGmail?.classList.add('active');
     tabManual?.classList.remove('active');
