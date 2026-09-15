@@ -89,7 +89,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-09-11 | visual | Book dashboard | Gave the Profit Sharing Breakdown card a real heading like its dashboard siblings, instead of the faintest type in the app | #794 |
 | 2026-09-11 | visual | Consignment ledger | Made the book/store jump links in the ledger table show a visible focus ring when tabbed to | #795 |
 | 2026-09-12 | visual | Book dashboard | Gave "Pending artist transfers" and "Pending expense reimbursements" real headings like their dashboard siblings, instead of the faintest type in the app | #802 |
-| 2026-09-15 | visual | Book dashboard — payment banners | Made the small "opens payment link" / "no payment link yet" note under Send Payment actually readable, instead of nearly invisible | TBD |
+| 2026-09-15 | visual | Book dashboard — payment banners | Made the small "opens payment link" / "no payment link yet" note under Send Payment actually readable, instead of nearly invisible | #817 |
 
 ---
 
