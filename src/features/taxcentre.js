@@ -59,8 +59,10 @@ import { buildCashFlowBuckets, cashFlowDelta, computeCashFlowMetrics } from '../
 import {
   DEFAULT_SNOOZE_DAYS,
   findDeductionGaps,
+  gapNoteState,
   snoozeUntil,
 } from '../lib/deduction-gaps.js';
+import { findCategoryMismatches } from '../lib/category-fit.js';
 import { canonicalExpenseCategory } from '../lib/expense-categories.js';
 import { receiptOwners, summarizeReceiptStorage, isReceiptExemptExpense } from '../lib/receipt-storage.js';
 import { testZonosConnection } from '../lib/zonos.js';
@@ -2719,6 +2721,7 @@ function _dedGapHtml(gap, cur) {
 function renderDeductionGaps() {
   const host = $('tc-deductions-body');
   if (!host || isAuthor()) return;
+  renderCategoryMismatches();
 
   const out = findDeductionGaps(_dedContext());
   const cur = TAX_CENTER.settings?.baseCurrency || 'CAD';
@@ -2750,6 +2753,80 @@ function renderDeductionGaps() {
   }
 
   host.innerHTML = out.gaps.map(g => _dedGapHtml(g, cur)).join('') + hiddenNote;
+}
+
+// ── POSSIBLE MISCATEGORIZATIONS ──────────────────────────────────────────────
+//
+// A different question from the gaps above: not "is a cost missing" but "is a
+// cost filed under the right name". The finding logic lives in
+// src/lib/category-fit.js and is pure and deliberately not a classifier — it
+// only points out where an expense's own wording contradicts how this
+// business has filed that same wording everywhere else. Shares the same
+// put-off/dismiss notes as the gaps above, so an id namespace ("cat-mismatch:")
+// keeps the two from ever colliding in TAX_CENTER.deductionNotes.
+
+/** One possible miscategorization, as a card the publisher can fix or dismiss. */
+function _catMismatchHtml(f, cur) {
+  const q = (v) => escapeHtml(String(v)).replace(/'/g, '&#39;');
+  return `<div class="ded-gap card">
+      <div class="ded-gap-top">
+        <div class="ded-gap-head">
+          <strong class="ded-gap-title">${escapeHtml(f.title)}</strong>
+          <span class="pill gray">${escapeHtml(f.currentCategory)} → ${escapeHtml(f.suggestedCategory)}</span>
+        </div>
+        <span class="ded-amount intel-fig">${escapeHtml(cur)} ${f.amount.toFixed(2)}</span>
+      </div>
+      <p class="ded-gap-detail">${escapeHtml(f.detail)}</p>
+      <p class="ded-gap-prompt">${escapeHtml(f.prompt)}</p>
+      <div class="ded-gap-actions">
+        ${f.scope === 'business'
+          ? `<button type="button" class="btn gold sm sys-target" onclick="changeExpenseCategory('${q(f.expenseId)}', '${q(f.suggestedCategory)}');renderDeductionGaps()">Move to ${escapeHtml(f.suggestedCategory)}</button>`
+          : `<button type="button" class="btn gold sm sys-target" onclick="openEditExpense('bookExpense', '${q(f.bookId || '')}', '${q(f.expenseId)}')">Review — move to ${escapeHtml(f.suggestedCategory)}</button>`}
+        <button type="button" class="btn ghost sm sys-target" onclick="snoozeDeductionGap('${q(f.id)}')">Remind me later</button>
+        <button type="button" class="btn ghost sm sys-target" onclick="dismissDeductionGap('${q(f.id)}')">Not a mistake</button>
+      </div>
+    </div>`;
+}
+
+function renderCategoryMismatches() {
+  const host = $('tc-catcheck-body');
+  if (!host || isAuthor()) return;
+
+  const notes = _dedNotes();
+  const todayStr = today();
+  let hidden = 0;
+  const findings = findCategoryMismatches(_dedContext()).filter(f => {
+    if (gapNoteState(notes[f.id], todayStr) === 'open') return true;
+    hidden += 1;
+    return false;
+  });
+  const cur = TAX_CENTER.settings?.baseCurrency || 'CAD';
+
+  const total = $('tc-catcheck-total');
+  if (total) total.textContent = findings.length ? String(findings.length) : '—';
+  const status = $('tc-catcheck-status');
+  if (status) {
+    status.textContent = findings.length
+      ? `${findings.length} possible ${findings.length === 1 ? 'miscategorization' : 'miscategorizations'} found.`
+      : 'Nothing looks miscategorized.';
+  }
+
+  const hiddenNote = hidden
+    ? `<p class="ded-hidden">${hidden} ${hidden === 1 ? 'item is' : 'items are'} put off or dismissed.
+         <button type="button" class="btn ghost sm sys-target" onclick="restoreDeductionGaps()">Show them again</button></p>`
+    : '';
+
+  if (!findings.length) {
+    host.innerHTML = `<div class="empty-state sys-empty">
+        <div class="e-icon" aria-hidden="true">🏷️</div>
+        <strong>Nothing looks out of place</strong>
+        <span>Every expense's wording matches how you've filed similar wording before.
+          This needs a real history to check against, so it says more once you have a few months of entries.</span>
+      </div>${hiddenNote}`;
+    return;
+  }
+
+  host.innerHTML = findings.map(f => _catMismatchHtml(f, cur)).join('') + hiddenNote;
 }
 
 async function _dedSaveNote(id, note, message) {

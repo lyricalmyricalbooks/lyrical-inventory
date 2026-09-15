@@ -17,7 +17,6 @@ If an area of focus was given, use it to steer the choice in step 3: $ARGUMENTS
 Read these first, every run:
 
 - [CLAUDE.md](../../CLAUDE.md)
-- [.agents/AGENTS.md](../../.agents/AGENTS.md)
 - [.agents/UX_PATTERNS.md](../../.agents/UX_PATTERNS.md)
 - [.agents/skills/ux-designer/SKILL.md](../../.agents/skills/ux-designer/SKILL.md)
 
@@ -27,10 +26,11 @@ several of the choices in this codebase look like bugs if you don't know the his
 scheduled run that "fixes" one of them is doing damage, not polish.
 
 > [!IMPORTANT]
-> **Precedence.** Where this file, `CLAUDE.md`/`AGENTS.md`, and `UX_PATTERNS.md` disagree,
-> **`UX_PATTERNS.md` wins.** It records what was decided against live specimens in this codebase;
-> the others state general principles. Reopening one of its rulings is a product decision to raise
-> with the user, never something a run decides for itself.
+> **Precedence.** Where this file, `CLAUDE.md`/`.agents/skills/ux-designer/SKILL.md`, and
+> `UX_PATTERNS.md` disagree, **`UX_PATTERNS.md` wins.** It records what was decided against
+> live specimens in this codebase; the others state general principles. Reopening one of its
+> rulings is a product decision to raise with the user, never something a run decides for
+> itself.
 
 Reuse the classes and tokens already proven in `UX_PATTERNS.md` before inventing anything new.
 Extend an existing pattern (a modifier class, a new `.pill` color) rather than creating a

@@ -159,6 +159,48 @@ describe('a regular cost that skipped a month', () => {
   });
 });
 
+describe('a steady cost that dipped instead of disappearing', () => {
+  // Seven months so one can be held out as "the current, still-open one" and
+  // six remain as history — missingMonths cannot see this at all, because
+  // every one of these months has SOMETHING recorded.
+  const steady = (amounts) => amounts.map((amt, i) => expense({
+    id: `d${i}`, cat: 'Software & Subscriptions', amount: amt, baseAmount: amt,
+    date: `2026-${String(i + 1).padStart(2, '0')}-05`,
+  }));
+
+  it('is found when a steady category is recorded at a fraction of its usual amount', () => {
+    const ctx = fixture({ taxCenter: { businessExpenses: steady([30, 30, 5, 30, 30, 30, 30]) } });
+    const gap = findDeductionGaps(ctx).gaps.find(g => g.kind === 'category-spend-dip');
+    expect(gap).toBeDefined();
+    expect(gap.evidence.month).toBe('2026-03');
+    expect(gap.evidence.recorded).toBe(5);
+    expect(gap.evidence.typical).toBe(30);
+    expect(gap.estimate).toBe(25);
+    expect(gap.category).toBe('Software & Subscriptions');
+  });
+
+  it('ignores the most recently recorded month, which may simply still be open', () => {
+    const ctx = fixture({ taxCenter: { businessExpenses: steady([30, 30, 30, 30, 30, 30, 4]) } });
+    expect(kinds(ctx)).not.toContain('category-spend-dip');
+  });
+
+  it('leaves a naturally lumpy category alone, where "low" is not unusual', () => {
+    const ctx = fixture({ taxCenter: { businessExpenses: steady([400, 10, 250, 15, 300, 20, 200]) } });
+    expect(kinds(ctx)).not.toContain('category-spend-dip');
+  });
+
+  it('needs a real run before a low month means anything', () => {
+    const ctx = fixture({ taxCenter: { businessExpenses: steady([30, 30, 5]) } });
+    expect(kinds(ctx)).not.toContain('category-spend-dip');
+  });
+
+  it('is not fooled by a merely small drop', () => {
+    // 24 against a typical 30 is a fifth down, not a missing top-up.
+    const ctx = fixture({ taxCenter: { businessExpenses: steady([30, 30, 24, 30, 30, 30, 30]) } });
+    expect(kinds(ctx)).not.toContain('category-spend-dip');
+  });
+});
+
 describe('costs the app can infer from what it shipped and sold', () => {
   it('notices online sales with no processing fee ever recorded', () => {
     const ctx = fixture({
