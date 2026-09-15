@@ -49,6 +49,8 @@ const MAIN_IMPORT_BUDGET = {
   // ledger itself has moved in — renderExpenses stopped crossing, but the form
   // it came with needs the book/state helpers in its place.
   'receipts.js': 24,
+  // Composed by receipts.js with injected adapters; no main.js cycle at all.
+  'receipt-finder.js': 0,
 };
 
 const featureFiles = fs.existsSync(featureDir)
@@ -151,8 +153,8 @@ describe('feature module boundary', () => {
 
       it('keeps its dependency on main.js within its recorded budget', () => {
         const m = src.match(/import\s*\{([^}]*)\}\s*from\s*'\.\.\/main\.js'/);
-        expect(m).not.toBeNull();
-        const names = m[1].split(',').map(s => s.trim()).filter(Boolean);
+        if (MAIN_IMPORT_BUDGET[file] !== 0) expect(m).not.toBeNull();
+        const names = m ? m[1].split(',').map(s => s.trim()).filter(Boolean) : [];
         // Not a style rule: this number is the actual seam between the feature
         // and the rest of the app. Budgets are per module and set at the count
         // the extraction achieved, so the check catches coupling *growing*
@@ -181,6 +183,7 @@ describe('feature module boundary', () => {
 // still high enough that the module cannot quietly decay into a stray helper.
 const MIN_EXPORTS = {
   'intel.js': 12,
+  'receipt-finder.js': 4,
 };
 
 describe('feature modules are the only home of what they own', () => {
@@ -208,8 +211,13 @@ describe('feature modules are the only home of what they own', () => {
         // exposeLegacyInlineHandlers lists handlers as shorthand properties, so
         // a name main.js references but never imported is a build error. This
         // guards the inverse: that the import block is real and non-empty.
-        const m = mainJs.match(
-          new RegExp(`import\\s*\\{([^}]*)\\}\\s*from\\s*'\\./features/${file.replace('.', '\\.')}'`));
+        // New composed features may belong to another feature rather than
+        // main.js. Check the actual owner without introducing a needless cycle.
+        const owner = file === 'receipt-finder.js'
+          ? fs.readFileSync(path.join(featureDir, 'receipts.js'), 'utf8') : mainJs;
+        const prefix = file === 'receipt-finder.js' ? './' : './features/';
+        const m = owner.match(
+          new RegExp(`import\\s*\\{([^}]*)\\}\\s*from\\s*'${prefix}${file.replace('.', '\\.')}'`));
         expect(m).not.toBeNull();
         const imported = m[1].split(',').map(s => s.trim()).filter(Boolean);
         expect(imported.length).toBeGreaterThan(0);

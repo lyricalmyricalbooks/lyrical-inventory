@@ -1,8 +1,9 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, onValue, get, push, remove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getAuth, signInWithPopup, reauthenticateWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getStorage, ref as sRef, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, setDoc, getDoc, getDocs, getDocFromServer, collection, onSnapshot, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, setDoc, getDoc, getDocs, getDocFromServer, collection, onSnapshot, deleteDoc, writeBatch, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { receiptDuplicate } from './lib/receipt-finder.js';
 import { ALL_PARTS, LIST_PARTS, assembleParts, emptyPart, splitState, stitchState, mergePart } from './lib/merge-state.js';
 
 const firebaseConfig = {
@@ -150,6 +151,39 @@ window._fbDeleteReceipt = async (url) => {
 window._fbSignInWithGoogle = () => signInWithPopup(auth, googleProvider);
 window._fbSignOut = () => signOut(auth);
 window._fbOnAuthStateChanged = (cb) => onAuthStateChanged(auth, cb);
+
+// Gmail permission is incremental, separate from normal app sign-in. The
+// returned access token lives only in the finder closure, never in storage.
+window._fbConnectReceiptGmail = async () => {
+  if (!auth.currentUser || !window.IS_PUBLISHER) throw new Error('Sign in as publisher first');
+  const provider = new GoogleAuthProvider();
+  provider.addScope('https://www.googleapis.com/auth/gmail.readonly');
+  provider.setCustomParameters({ login_hint: auth.currentUser.email, prompt: 'consent' });
+  const result = await reauthenticateWithPopup(auth.currentUser, provider);
+  const credential = GoogleAuthProvider.credentialFromResult(result);
+  if (!credential?.accessToken) throw new Error('Google did not grant Gmail access');
+  return credential.accessToken;
+};
+
+// Append against the latest global ledger, atomically. The finder outbox
+// handles offline retry; an imported receipt is acknowledged only after commit.
+window._fbCommitFoundReceipt = async (expense, draft) => {
+  if (!auth.currentUser || !window.IS_PUBLISHER) throw new Error('Publisher access required');
+  if (!window._useFirestoreGlobal()) throw new Error('Enable global Firestore storage before importing receipts');
+  return runTransaction(fs, async transaction => {
+    const target = doc(fs, 'settings', 'taxCenter');
+    const snapshot = await transaction.get(target);
+    if (!snapshot.exists()) throw new Error('Save Tax Centre settings to Firestore before importing receipts');
+    const current = JSON.parse(snapshot.data().data);
+    const expenses = current.businessExpenses || [];
+    const duplicate = receiptDuplicate(draft, expenses);
+    if (!duplicate) {
+      current.businessExpenses = [expense, ...expenses];
+      transaction.set(target, { data: JSON.stringify(current), ts: Date.now() });
+    }
+    return { expense: duplicate || expense, duplicate: !!duplicate };
+  });
+};
 
 // ─────────────────────────────────────────────
 // PER-BOOK DATA

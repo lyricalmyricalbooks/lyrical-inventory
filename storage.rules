@@ -33,15 +33,30 @@ service firebase.storage {
     // and the app stores those URLs in book state. Anyone holding such a URL can
     // still fetch that one file without passing these rules — tightening `read`
     // stops path enumeration and un-tokenised access, not links already issued.
+    // Original email text is evidence too. This exception is publisher-only
+    // and scoped to finder imports; it does not broaden author uploads.
+    match /receipts/email-imports/{allPaths=**} {
+      allow read, delete: if isPublisher();
+      allow write: if isPublisher()
+        && request.resource.size < 15 * 1024 * 1024
+        && request.resource.contentType.matches('text/plain|image/.*|application/pdf');
+    }
     match /receipts/{bookId}/{allPaths=**} {
-      allow read: if isPublisher() || isBookAuthor(bookId);
+      // Storage rules OR permissions from every matching block. Exclude the
+      // reserved email-import namespace here so its publisher-only policy
+      // above cannot be widened if a catalog book is ever named
+      // "email-imports".
+      allow read: if bookId != 'email-imports'
+        && (isPublisher() || isBookAuthor(bookId));
       // Writes stay constrained to reasonably sized images/PDFs so the bucket
       // can't be used as free file storage or filled with junk that runs up
       // egress/storage costs.
-      allow write: if (isPublisher() || isBookAuthor(bookId))
+      allow write: if bookId != 'email-imports'
+        && (isPublisher() || isBookAuthor(bookId))
         && request.resource.size < 15 * 1024 * 1024
         && request.resource.contentType.matches('image/.*|application/pdf');
-      allow delete: if isPublisher() || isBookAuthor(bookId);
+      allow delete: if bookId != 'email-imports'
+        && (isPublisher() || isBookAuthor(bookId));
     }
   }
 }
