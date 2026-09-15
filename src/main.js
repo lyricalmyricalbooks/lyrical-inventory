@@ -4948,10 +4948,14 @@ function renderChannelAnalytics() {
 // the same screen. `buildActivityFeed()` answers the different question of what
 // has already happened.
 //
-// Nothing here writes anything. A signal lives exactly as long as the thing it
-// describes is true, so restocking a book is what clears its low-stock warning.
-// That is why there is no dismiss button and nothing to sync: the panels are
-// always a true picture of right now, including offline.
+// The engine itself still writes nothing: a signal lives exactly as long as
+// the thing it describes is true, so restocking a book is what clears its
+// low-stock warning. The one thing layered on top is dismissal — "not
+// relevant to me", never "done" — kept out of the engine and out of Firestore
+// in a small local map (see getDismissedTodoSignals below), the same
+// device-only home the receipt vault's own dismissed-notice list already uses
+// for this same kind of decision. It never claims the underlying thing is
+// fixed, and it works offline because there is nothing to sync.
 //
 // This replaced the old inline "Pending Author Submissions" banner that used to
 // sit at the top of this page. Its two conditions (author submissions, open-call
@@ -5012,6 +5016,77 @@ export function attentionInput() {
   };
 }
 
+// ── Dismissing a to-do item ─────────────────────────────────────────────────
+//
+// Some signals genuinely never apply to a given shop — a chapbook that will
+// never carry an ISBN, a title only ever sold in person that has no need of a
+// QR payment link. Forcing those to sit at the top of the list forever is how
+// a to-do list teaches people to stop reading it. Dismissal says "not this
+// one", stored by the signal's own id so it survives a rescan; it says nothing
+// about whether the underlying thing changed, so it is never confused with the
+// engine's own self-clearing behaviour above.
+const TODO_DISMISSED_KEY = 'lm-dismissed-todo-signals';
+
+function getDismissedTodoSignals() {
+  try {
+    return JSON.parse(localStorage.getItem(TODO_DISMISSED_KEY) || '{}');
+  } catch (_) {
+    return {};
+  }
+}
+
+function dismissTodoSignal(id) {
+  if (!id) return;
+  try {
+    const map = getDismissedTodoSignals();
+    map[id] = true;
+    localStorage.setItem(TODO_DISMISSED_KEY, JSON.stringify(map));
+  } catch (e) {
+    console.error('Could not dismiss that', e);
+  }
+  renderTodoTab();
+  renderOverviewRail();
+  showToast('Dismissed — restore it anytime from the bottom of the list', 'ok', 3200);
+}
+
+function restoreDismissedTodoSignals() {
+  try {
+    localStorage.removeItem(TODO_DISMISSED_KEY);
+  } catch (e) {
+    console.error('Could not restore dismissed items', e);
+  }
+  renderTodoTab();
+  renderOverviewRail();
+  showToast('✓ Dismissed items are back', 'ok', 3000);
+}
+
+/**
+ * What buildAttentionSignals() sees minus what the publisher has already said
+ * is not relevant to them. The rail and the To-do tab both read this rather
+ * than the raw engine output, for the same reason they share one engine in
+ * the first place: two different-looking counts on the same screen teach
+ * people to trust neither.
+ */
+function visibleAttentionResult() {
+  const raw = buildAttentionSignals(attentionInput());
+  const dismissed = getDismissedTodoSignals();
+  const hiddenCount = raw.signals.reduce((n, s) => n + (dismissed[s.id] ? 1 : 0), 0);
+  if (!hiddenCount) return { ...raw, hiddenCount: 0 };
+
+  const signals = raw.signals.filter(s => !dismissed[s.id]);
+  const byGroup = {};
+  for (const group of SIGNAL_GROUPS) byGroup[group] = [];
+  for (const s of signals) if (byGroup[s.group]) byGroup[s.group].push(s);
+
+  return {
+    signals,
+    byGroup,
+    total: signals.length,
+    urgent: signals.filter(isUrgent).length,
+    hiddenCount,
+  };
+}
+
 /**
  * The attributes that make a "fix this" button work.
  *
@@ -5033,6 +5108,9 @@ function fixAttrs(fix) {
  * per-node listeners would accumulate.
  */
 document.addEventListener('click', (event) => {
+  const dismissBtn = event.target.closest?.('[data-dismiss-signal]');
+  if (dismissBtn) { dismissTodoSignal(dismissBtn.dataset.dismissSignal); return; }
+
   const btn = event.target.closest?.('[data-fix]');
   if (!btn) return;
   const { fix, fixBook = '', fixTab = '' } = btn.dataset;
@@ -5093,7 +5171,7 @@ function updateTodoBadge(result) {
 /** The landing page's right-hand rail: what needs doing, and what just happened. */
 function renderOverviewRail() {
   if (isAuthor()) return;
-  const result = buildAttentionSignals(attentionInput());
+  const result = visibleAttentionResult();
   updateTodoBadge(result);
 
   const notifHost = $('all-notifications');
@@ -5147,13 +5225,22 @@ function todoRowHtml(sig) {
   const action = sig.fix
     ? `<button type="button" class="btn sm ghost todo-fix" ${fixAttrs(sig.fix)}>${escapeHtml(sig.fix.label)} →</button>`
     : '';
+  // The signal's id can embed a book id, which is free text a publisher typed
+  // into the Add-book form and may contain a quote — exactly why fixAttrs
+  // above carries its destination as data rather than a JS-string argument.
+  // The same reasoning applies here: escapeHtml() only protects the ATTRIBUTE,
+  // so the id travels as a data-attribute for the delegated handler to read,
+  // never spliced into an onclick string.
   return `<div class="todo-row tone-${tone}">
       <span class="todo-ico" aria-hidden="true">${escapeHtml(sig.icon || '')}</span>
       <div class="todo-copy">
         <div class="todo-label">${escapeHtml(sig.label || '')}</div>
         <div class="todo-detail">${escapeHtml(sig.detail || '')}</div>
       </div>
-      ${action}
+      <div class="todo-row-actions">
+        ${action}
+        <button type="button" class="todo-dismiss" data-dismiss-signal="${escapeHtml(sig.id || '')}" title="Not relevant — dismiss" aria-label="Dismiss: ${escapeHtml(sig.label || 'this item')}">✕</button>
+      </div>
     </div>`;
 }
 
@@ -5163,7 +5250,7 @@ function renderTodoTab() {
   const host = $('todo-groups');
   if (!host) return;
 
-  const result = buildAttentionSignals(attentionInput());
+  const result = visibleAttentionResult();
   updateTodoBadge(result);
 
   const chip = $('todo-total-chip');
@@ -5175,12 +5262,17 @@ function renderTodoTab() {
       : `${result.total} ${result.total === 1 ? 'item' : 'items'} on your to-do list, ${result.urgent} needing attention soon.`;
   }
 
+  const hiddenNote = result.hiddenCount
+    ? `<p class="todo-hidden">${result.hiddenCount} ${result.hiddenCount === 1 ? 'item is' : 'items are'} dismissed.
+         <button type="button" class="btn ghost sm" onclick="restoreDismissedTodoSignals()">Show them again</button></p>`
+    : '';
+
   if (!result.total) {
     host.innerHTML = `<div class="empty-state sys-empty">
         <div class="e-icon" aria-hidden="true">✅</div>
         <strong>You're all caught up</strong>
         <span>Every book has its details filled in, nobody owes you money, and your connections are working. Anything new will appear here on its own.</span>
-      </div>`;
+      </div>${hiddenNote}`;
     return;
   }
 
@@ -5196,7 +5288,7 @@ function renderTodoTab() {
         </div>
         <div class="todo-list">${items.map(todoRowHtml).join('')}</div>
       </section>`;
-  }).join('');
+  }).join('') + hiddenNote;
 }
 
 // ── BOOK CONTEXT BANNERS
@@ -24227,6 +24319,7 @@ function exposeLegacyInlineHandlers() {
     toggleCurrentBookView, updateProfileTabs, selectProfileTab, seedMockTestData, switchBook,
     switchTab, updateHeader, updateAllOverview, renderCustomersStat, channelColor,
     renderChannelAnalytics, selectAllChCurrency, setChChannelFilter, clearChChannelFilter, setChBookSort, setChBookSearch, renderOverviewRail, renderTodoTab, updateContextBanners,
+    restoreDismissedTodoSignals,
     toggleConGroup, toggleConGrouping, toggleAllConGroups, setConStatusFilter, onConSearchInput, clearConSearch, clearConSearchAndFilter, renderConsignmentTable,
     updatePublisherActionBanner, renderBookPendingAlert, heldGrossOf, recognizedRevenueOf,
     dismissStockDrift, updateDash, getProfitTiersHtml, getRevenueProgressHtml, getOwedCardDetails,
