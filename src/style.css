@@ -17856,8 +17856,14 @@ button[onclick="refreshUmamiStats()"]:active {
 .intel-panel {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-3);
   min-width: 0;
+  container-type: inline-size;
+  background: var(--surface-page);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r3);
+  box-shadow: var(--elev-1), inset 0 1px 0 var(--surface-raised);
+  overflow: clip;
 }
 
 /* Where your figures go — shown once, before the first question. */
@@ -17891,15 +17897,19 @@ button[onclick="refreshUmamiStats()"]:active {
 .intel-thread {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
-  min-height: 220px;
-  max-height: min(60vh, 640px);
+  gap: var(--space-5);
+  min-height: 26rem;
+  max-height: min(64vh, 46rem);
   overflow-y: auto;
   scrollbar-gutter: stable;
-  padding-right: var(--space-2);
+  scroll-padding: var(--space-5);
+  padding: var(--space-5);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 42rem;
 }
 
-.intel-msg { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.intel-msg { display: flex; min-width: 0; }
+.intel-msg-content { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; max-width: min(46rem, 86%); }
 .intel-msg-who {
   font-size: var(--text-3xs);
   letter-spacing: var(--tracking-caps);
@@ -17907,27 +17917,27 @@ button[onclick="refreshUmamiStats()"]:active {
   color: var(--content-muted);
 }
 .intel-msg-body {
-  border-radius: var(--r3);
+  border-radius: var(--r2);
   padding: var(--space-3) var(--space-4);
   line-height: var(--leading-normal);
   font-size: var(--text-sm);
   overflow-wrap: anywhere;
 }
-/* The publisher's own question sits inset, the answer raised — so a glance
-   down the thread separates what was asked from what came back without
-   relying on colour alone. */
+/* A restrained version of the familiar chat pattern: questions are compact
+   bubbles, while answers sit openly on the page so figures and approvals are
+   easier to scan. */
 .intel-msg.is-you .intel-msg-body {
   background: var(--surface-inset);
   color: var(--content-primary);
-  align-self: flex-end;
-  max-width: 46rem;
 }
-.intel-msg.is-you .intel-msg-who { align-self: flex-end; }
+.intel-msg.is-you { justify-content: flex-end; }
+.intel-msg.is-you .intel-msg-content { align-items: flex-end; }
 .intel-msg.is-app .intel-msg-body {
-  background: var(--surface-raised);
-  border: 1px solid var(--border-subtle);
+  background: transparent;
+  border: 0;
+  padding: 0;
   color: var(--content-primary);
-  box-shadow: var(--elev-1);
+  box-shadow: none;
 }
 .intel-msg-body code {
   font-family: 'DM Mono', monospace;
@@ -17941,6 +17951,7 @@ button[onclick="refreshUmamiStats()"]:active {
   font-size: var(--text-3xs);
   color: var(--content-muted);
   letter-spacing: var(--tracking-label);
+  padding-top: var(--space-1);
 }
 
 /* A staged correction, awaiting a yes or a no. */
@@ -17978,21 +17989,43 @@ button[onclick="refreshUmamiStats()"]:active {
 
 /* Nothing asked yet. */
 .intel-empty .intel-starters {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-2);
-  justify-content: center;
-  margin-top: var(--space-3);
+  width: min(100%, 42rem);
+  margin-top: var(--space-4);
 }
-.intel-starter { text-transform: none; letter-spacing: 0; }
+.intel-empty { min-height: 100%; justify-content: center; }
+.intel-empty-mark {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  background: var(--surface-inset);
+  color: var(--gold);
+  font-size: var(--text-lg);
+}
+.intel-starter {
+  min-height: 4.5rem;
+  padding: var(--space-3) var(--space-4);
+  justify-content: flex-start;
+  text-align: left;
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: normal;
+  background: var(--surface-raised);
+  border-color: var(--border-subtle);
+}
 
 .intel-composer {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  margin: 0 var(--space-3) var(--space-3);
   background: var(--surface-raised);
   border: 1px solid var(--border-default);
-  border-radius: var(--r3);
+  border-radius: var(--r4);
   padding: var(--space-3);
   transition: border-color var(--dur-fast) var(--ease-standard),
               box-shadow var(--dur-fast) var(--ease-standard);
@@ -18012,16 +18045,28 @@ button[onclick="refreshUmamiStats()"]:active {
   font-size: var(--text-sm);
   line-height: var(--leading-normal);
   resize: none;
-  min-height: 2.75rem;
+  field-sizing: content;
+  min-height: 2.5rem;
   max-height: 12rem;
   outline: none;
 }
 .intel-input::placeholder { color: var(--content-faint); }
 .intel-input:disabled { color: var(--content-muted); cursor: not-allowed; }
-.intel-composer-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
+.intel-composer-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); }
+.intel-composer-hint { margin-right: auto; color: var(--content-muted); font-size: var(--text-3xs); }
+.intel-send {
+  width: 2.75rem;
+  min-width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border-radius: 50%;
+  font-size: var(--text-lg);
+  line-height: 1;
+}
+.intel-send span[aria-hidden="true"] { transform: translateY(-1px); }
 
 .intel-foot {
-  margin: 0;
+  margin: 0 var(--space-5) var(--space-4);
   font-size: var(--text-3xs);
   color: var(--content-muted);
   line-height: var(--leading-normal);
@@ -18030,11 +18075,14 @@ button[onclick="refreshUmamiStats()"]:active {
 /* Container query, not a viewport one: the panel narrows inside the app shell
    long before the window does. */
 @container (max-width: 34rem) {
-  .intel-msg.is-you .intel-msg-body { max-width: 100%; }
+  .intel-thread { min-height: 22rem; padding: var(--space-4); }
+  .intel-msg-content { max-width: 100%; }
   .intel-proposal-diff { grid-template-columns: 1fr; gap: 0; }
   .intel-proposal-diff dt { margin-top: var(--space-2); }
-  .intel-composer-actions { justify-content: stretch; }
-  .intel-composer-actions .btn { flex: 1 1 auto; }
+  .intel-composer { margin: 0 var(--space-2) var(--space-2); }
+  .intel-composer-hint { display: none; }
+  .intel-composer-actions .btn:not(.intel-send) { flex: 1 1 auto; }
+  .intel-empty .intel-starters { grid-template-columns: 1fr; }
 }
 
 /* `hidden` is a UA-stylesheet rule, so any component that sets its own
