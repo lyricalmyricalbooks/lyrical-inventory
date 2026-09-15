@@ -18072,6 +18072,76 @@ button[onclick="refreshUmamiStats()"]:active {
   line-height: var(--leading-normal);
 }
 
+/* ── Intelligence: high-contrast studio mode ───────────────────────────────
+   A conversation needs a deliberate reading plane. The former raised-on-page
+   treatment made the shell, messages and composer visually merge together in
+   the light theme; this gives the chat a deep canvas, pale question bubbles,
+   and gold only where an eye needs to land. */
+#tab-intel .sec-head {
+  margin-bottom: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--surface-inverse-raised);
+  border-radius: var(--r3);
+  background: var(--surface-inverse);
+  box-shadow: var(--elev-2);
+}
+#tab-intel .sec-kicker,
+#tab-intel .section-subcopy { color: var(--content-on-inverse); }
+#tab-intel .sec-kicker { opacity: 0.72; }
+#tab-intel .sec-head-title { color: var(--content-on-inverse); }
+#tab-intel #intel-clear {
+  border-color: var(--gold);
+  background: var(--gold);
+  color: var(--on-accent);
+}
+.intel-panel {
+  background: var(--surface-inverse);
+  border-color: var(--surface-inverse-raised);
+  box-shadow: var(--elev-3), inset 0 1px 0 var(--surface-inverse-raised);
+}
+.intel-thread { background: var(--surface-inverse); }
+.intel-msg-who,
+.intel-trace {
+  color: var(--content-on-inverse);
+  opacity: 0.62;
+}
+.intel-msg.is-you .intel-msg-body {
+  box-shadow: inset 0 1px 0 var(--surface-raised);
+}
+.intel-msg.is-app .intel-msg-body {
+  border-left: 2px solid var(--gold);
+  border-radius: 0;
+  padding: var(--space-1) 0 var(--space-1) var(--space-4);
+  color: var(--content-on-inverse);
+}
+.intel-empty.sys-empty {
+  border-color: var(--surface-inverse-raised);
+  background: var(--surface-inverse-raised);
+}
+.intel-empty.sys-empty > strong { color: var(--content-on-inverse); }
+.intel-empty.sys-empty > span { color: var(--content-on-inverse); opacity: 0.68; }
+.intel-empty-mark { background: var(--surface-inverse); }
+.intel-starter {
+  background: var(--surface-inverse);
+  border-color: var(--surface-inverse-raised);
+  color: var(--content-on-inverse);
+}
+.intel-starter:hover { border-color: var(--gold); background: var(--surface-inverse); }
+.intel-composer {
+  background: var(--surface-inverse-raised);
+  border-color: var(--surface-inverse-raised);
+}
+.intel-composer:has(.intel-input:focus-visible),
+.intel-composer:has(.intel-input:focus) {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-bg), var(--elev-2);
+}
+.intel-input { color: var(--content-on-inverse); }
+.intel-input::placeholder { color: var(--content-on-inverse); opacity: 0.48; }
+.intel-input:disabled { color: var(--content-on-inverse); opacity: 0.48; }
+.intel-composer-hint,
+.intel-foot { color: var(--content-on-inverse); opacity: 0.62; }
+
 /* Container query, not a viewport one: the panel narrows inside the app shell
    long before the window does. */
 @container (max-width: 34rem) {
