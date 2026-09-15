@@ -156,6 +156,10 @@ import {
   useReceiptPhoto,
   viewLocalReceipt,
   voidExpense,
+  dismissEmailReceiptDraft,
+  openReceiptSweepReviewFromAlert,
+  startReceiptEmailSweep,
+  sweepReceiptEmails,
 } from './features/receipts.js';
 import {
   appendCurrencyLog,
@@ -2716,7 +2720,7 @@ let notifyUrl = localStorage.getItem('lm-notify-url') || '';
 // The Apps Script `scriptVersion` the client expects. Bump this (and the value
 // in apps-script/Code.gs) whenever Code.gs gains behaviour that needs a fresh
 // deploy — the connection card flags any older deployed version as outdated.
-const EXPECTED_SCRIPT_VERSION = 'v42';
+const EXPECTED_SCRIPT_VERSION = 'v43';
 // What the connected spreadsheet last told us it was running. Null until a
 // version check has actually answered — an unknown version is not a mismatch,
 // so the To-do list stays quiet rather than inventing a problem.
@@ -4944,10 +4948,14 @@ function renderChannelAnalytics() {
 // the same screen. `buildActivityFeed()` answers the different question of what
 // has already happened.
 //
-// Nothing here writes anything. A signal lives exactly as long as the thing it
-// describes is true, so restocking a book is what clears its low-stock warning.
-// That is why there is no dismiss button and nothing to sync: the panels are
-// always a true picture of right now, including offline.
+// The engine itself still writes nothing: a signal lives exactly as long as
+// the thing it describes is true, so restocking a book is what clears its
+// low-stock warning. The one thing layered on top is dismissal — "not
+// relevant to me", never "done" — kept out of the engine and out of Firestore
+// in a small local map (see getDismissedTodoSignals below), the same
+// device-only home the receipt vault's own dismissed-notice list already uses
+// for this same kind of decision. It never claims the underlying thing is
+// fixed, and it works offline because there is nothing to sync.
 //
 // This replaced the old inline "Pending Author Submissions" banner that used to
 // sit at the top of this page. Its two conditions (author submissions, open-call
@@ -5004,7 +5012,80 @@ export function attentionInput() {
     },
     submissions,
     openCall,
+    taxCenter: TAX_CENTER,
+    tripsSummary: (() => { try { return _tcGetTripsSummaryAll() || {}; } catch (_) { return {}; } })(),
     today: today(),
+  };
+}
+
+// ── Dismissing a to-do item ─────────────────────────────────────────────────
+//
+// Some signals genuinely never apply to a given shop — a chapbook that will
+// never carry an ISBN, a title only ever sold in person that has no need of a
+// QR payment link. Forcing those to sit at the top of the list forever is how
+// a to-do list teaches people to stop reading it. Dismissal says "not this
+// one", stored by the signal's own id so it survives a rescan; it says nothing
+// about whether the underlying thing changed, so it is never confused with the
+// engine's own self-clearing behaviour above.
+const TODO_DISMISSED_KEY = 'lm-dismissed-todo-signals';
+
+function getDismissedTodoSignals() {
+  try {
+    return JSON.parse(localStorage.getItem(TODO_DISMISSED_KEY) || '{}');
+  } catch (_) {
+    return {};
+  }
+}
+
+function dismissTodoSignal(id) {
+  if (!id) return;
+  try {
+    const map = getDismissedTodoSignals();
+    map[id] = true;
+    localStorage.setItem(TODO_DISMISSED_KEY, JSON.stringify(map));
+  } catch (e) {
+    console.error('Could not dismiss that', e);
+  }
+  renderTodoTab();
+  renderOverviewRail();
+  showToast('Dismissed — restore it anytime from the bottom of the list', 'ok', 3200);
+}
+
+function restoreDismissedTodoSignals() {
+  try {
+    localStorage.removeItem(TODO_DISMISSED_KEY);
+  } catch (e) {
+    console.error('Could not restore dismissed items', e);
+  }
+  renderTodoTab();
+  renderOverviewRail();
+  showToast('✓ Dismissed items are back', 'ok', 3000);
+}
+
+/**
+ * What buildAttentionSignals() sees minus what the publisher has already said
+ * is not relevant to them. The rail and the To-do tab both read this rather
+ * than the raw engine output, for the same reason they share one engine in
+ * the first place: two different-looking counts on the same screen teach
+ * people to trust neither.
+ */
+function visibleAttentionResult() {
+  const raw = buildAttentionSignals(attentionInput());
+  const dismissed = getDismissedTodoSignals();
+  const hiddenCount = raw.signals.reduce((n, s) => n + (dismissed[s.id] ? 1 : 0), 0);
+  if (!hiddenCount) return { ...raw, hiddenCount: 0 };
+
+  const signals = raw.signals.filter(s => !dismissed[s.id]);
+  const byGroup = {};
+  for (const group of SIGNAL_GROUPS) byGroup[group] = [];
+  for (const s of signals) if (byGroup[s.group]) byGroup[s.group].push(s);
+
+  return {
+    signals,
+    byGroup,
+    total: signals.length,
+    urgent: signals.filter(isUrgent).length,
+    hiddenCount,
   };
 }
 
@@ -5029,6 +5110,9 @@ function fixAttrs(fix) {
  * per-node listeners would accumulate.
  */
 document.addEventListener('click', (event) => {
+  const dismissBtn = event.target.closest?.('[data-dismiss-signal]');
+  if (dismissBtn) { dismissTodoSignal(dismissBtn.dataset.dismissSignal); return; }
+
   const btn = event.target.closest?.('[data-fix]');
   if (!btn) return;
   const { fix, fixBook = '', fixTab = '' } = btn.dataset;
@@ -5038,6 +5122,11 @@ document.addEventListener('click', (event) => {
     // switchBook first: switchTab alone cannot leave the all-books screen.
     switchBook(fixBook);
     if (fixTab) setTimeout(() => switchTab(fixTab), 50);
+    return;
+  }
+  if (fix === 'taxcenter') {
+    switchTab('taxcenter');
+    if (fixTab) setTimeout(() => switchTaxCenterSubTab(fixTab), 50);
   }
 });
 
@@ -5089,7 +5178,7 @@ function updateTodoBadge(result) {
 /** The landing page's right-hand rail: what needs doing, and what just happened. */
 function renderOverviewRail() {
   if (isAuthor()) return;
-  const result = buildAttentionSignals(attentionInput());
+  const result = visibleAttentionResult();
   updateTodoBadge(result);
 
   const notifHost = $('all-notifications');
@@ -5143,13 +5232,22 @@ function todoRowHtml(sig) {
   const action = sig.fix
     ? `<button type="button" class="btn sm ghost todo-fix" ${fixAttrs(sig.fix)}>${escapeHtml(sig.fix.label)} →</button>`
     : '';
+  // The signal's id can embed a book id, which is free text a publisher typed
+  // into the Add-book form and may contain a quote — exactly why fixAttrs
+  // above carries its destination as data rather than a JS-string argument.
+  // The same reasoning applies here: escapeHtml() only protects the ATTRIBUTE,
+  // so the id travels as a data-attribute for the delegated handler to read,
+  // never spliced into an onclick string.
   return `<div class="todo-row tone-${tone}">
       <span class="todo-ico" aria-hidden="true">${escapeHtml(sig.icon || '')}</span>
       <div class="todo-copy">
         <div class="todo-label">${escapeHtml(sig.label || '')}</div>
         <div class="todo-detail">${escapeHtml(sig.detail || '')}</div>
       </div>
-      ${action}
+      <div class="todo-row-actions">
+        ${action}
+        <button type="button" class="todo-dismiss" data-dismiss-signal="${escapeHtml(sig.id || '')}" title="Not relevant — dismiss" aria-label="Dismiss: ${escapeHtml(sig.label || 'this item')}">✕</button>
+      </div>
     </div>`;
 }
 
@@ -5159,7 +5257,7 @@ function renderTodoTab() {
   const host = $('todo-groups');
   if (!host) return;
 
-  const result = buildAttentionSignals(attentionInput());
+  const result = visibleAttentionResult();
   updateTodoBadge(result);
 
   const chip = $('todo-total-chip');
@@ -5171,12 +5269,17 @@ function renderTodoTab() {
       : `${result.total} ${result.total === 1 ? 'item' : 'items'} on your to-do list, ${result.urgent} needing attention soon.`;
   }
 
+  const hiddenNote = result.hiddenCount
+    ? `<p class="todo-hidden">${result.hiddenCount} ${result.hiddenCount === 1 ? 'item is' : 'items are'} dismissed.
+         <button type="button" class="btn ghost sm" onclick="restoreDismissedTodoSignals()">Show them again</button></p>`
+    : '';
+
   if (!result.total) {
     host.innerHTML = `<div class="empty-state sys-empty">
         <div class="e-icon" aria-hidden="true">✅</div>
         <strong>You're all caught up</strong>
         <span>Every book has its details filled in, nobody owes you money, and your connections are working. Anything new will appear here on its own.</span>
-      </div>`;
+      </div>${hiddenNote}`;
     return;
   }
 
@@ -5192,7 +5295,7 @@ function renderTodoTab() {
         </div>
         <div class="todo-list">${items.map(todoRowHtml).join('')}</div>
       </section>`;
-  }).join('');
+  }).join('') + hiddenNote;
 }
 
 // ── BOOK CONTEXT BANNERS
@@ -11345,6 +11448,33 @@ function invoicePaperBodyWithQR(inv) {
   return bodyInner;
 }
 
+// The invoice paper's inner HTML with its OWN QR drawn in, for the invoices
+// with nobody looking at them — a reminder sent from the background sweep, or
+// a test-send, has no open invoice view to borrow a live canvas from the way
+// invoicePaperBodyWithQR does. Mirrors the QR draw in viewInvoice() (the QRCode
+// library, not a live view) into a detached node instead.
+function invoicePaperBodyWithHeadlessQR(inv) {
+  let bodyInner = renderInvoicePaperHTML(inv);
+  const payUrl = effectivePaymentLink(inv);
+  if (!payUrl || typeof QRCode === 'undefined') return bodyInner;
+  let qrHolder;
+  try {
+    qrHolder = document.createElement('div');
+    qrHolder.style.cssText = 'position:fixed;left:-9999px;top:0;';
+    document.body.appendChild(qrHolder);
+    new QRCode(qrHolder, { text: payUrl, width: 104, height: 104, colorDark: '#0e0c0a', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+    const canvas = qrHolder.querySelector('canvas');
+    if (canvas) {
+      bodyInner = bodyInner.replace(
+        '<div class="inv-qr"></div>',
+        `<div class="inv-qr"><img src="${canvas.toDataURL('image/png')}" width="104" height="104" alt="Scan to pay" style="display:block;"></div>`
+      );
+    }
+  } catch (e) { /* the PDF still carries the link as text — the QR is a nicety */ }
+  finally { if (qrHolder) { try { qrHolder.remove(); } catch (e) { } } }
+  return bodyInner;
+}
+
 // Builds a fully self-contained invoice document with the Stripe pay link embedded
 // (clickable button + scannable QR + plain-text URL) that survives PDF export and
 // email-client styling — so the link is never dropped when the invoice is sent.
@@ -11459,28 +11589,22 @@ export async function ensurePdfJs() {
   return window.pdfjsLib;
 }
 
-// One-click, true PDF download — no browser print dialog. The invoice is
-// rendered into an off-screen node inside THIS document so the app's already
-// loaded fonts apply (correct typography even offline), rasterized with
-// html2canvas, then placed into an A4 jsPDF and saved as <invoice>.pdf. Falls
-// back to the print/Save-as-PDF flow if the libraries can't be loaded.
-async function downloadInvoicePDF() {
-  if (!currentViewInvoiceId) return;
-  const inv = invoiceHome(currentViewInvoiceId).inv;
-  if (!inv) return;
-  const btn = $('inv-pdf-btn');
-  const prevLabel = btn ? btn.textContent : '';
-  if (btn) { btn.disabled = true; btn.textContent = '… Building PDF'; }
+// The shared core of every invoice PDF this app produces: render `bodyInner`
+// (the invoice paper's HTML, QR already burned in one way or another) into an
+// off-screen node inside THIS document so the app's already-loaded fonts apply
+// (correct typography even offline), rasterize with html2canvas, and place the
+// result into an A4 jsPDF — paginated if the invoice is tall enough to need
+// it. Returns the unsaved jsPDF instance; what happens to it (saved to disk,
+// or read back out as base64 for an email attachment) is the caller's job.
+async function buildInvoiceJsPdf(bodyInner) {
+  await ensurePdfLibs();
 
-  let holder;
+  const holder = document.createElement('div');
+  holder.setAttribute('aria-hidden', 'true');
+  holder.style.cssText = 'position:fixed;left:-9999px;top:0;width:780px;background:#fff;';
+  holder.innerHTML = `<div class="invoice-paper" style="box-shadow:none;border-radius:0;max-width:none;">${bodyInner}</div>`;
+  document.body.appendChild(holder);
   try {
-    await ensurePdfLibs();
-
-    holder = document.createElement('div');
-    holder.setAttribute('aria-hidden', 'true');
-    holder.style.cssText = 'position:fixed;left:-9999px;top:0;width:780px;background:#fff;';
-    holder.innerHTML = `<div class="invoice-paper" style="box-shadow:none;border-radius:0;max-width:none;">${invoicePaperBodyWithQR(inv)}</div>`;
-    document.body.appendChild(holder);
     try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (e) { }
 
     const canvas = await window.html2canvas(holder.firstElementChild, {
@@ -11513,6 +11637,45 @@ async function downloadInvoicePDF() {
       }
     }
 
+    return pdf;
+  } finally {
+    holder.remove();
+  }
+}
+
+/**
+ * The invoice PDF, headless — built the same way as a downloaded PDF, but for
+ * an invoice nobody has open: a reminder sent from the background sweep, or
+ * the settings "send me a test reminder" button, both fire for an invoice
+ * that may not be the one on screen. Returns `{ filename, mimeType, base64 }`,
+ * or null on any failure — best-effort, since a reminder should still reach
+ * the customer with its payment link even if the PDF render fails.
+ */
+async function buildInvoicePdfAttachment(inv) {
+  try {
+    const pdf = await buildInvoiceJsPdf(invoicePaperBodyWithHeadlessQR(inv));
+    const dataUri = pdf.output('datauristring');
+    const base64 = dataUri.split(',')[1] || '';
+    if (!base64) return null;
+    return { filename: `${inv.num || 'invoice'}.pdf`, mimeType: 'application/pdf', base64 };
+  } catch (e) {
+    console.warn('Could not build the invoice PDF for a reminder email', e);
+    return null;
+  }
+}
+
+// One-click, true PDF download — no browser print dialog. Falls back to the
+// print/Save-as-PDF flow if the libraries can't be loaded.
+async function downloadInvoicePDF() {
+  if (!currentViewInvoiceId) return;
+  const inv = invoiceHome(currentViewInvoiceId).inv;
+  if (!inv) return;
+  const btn = $('inv-pdf-btn');
+  const prevLabel = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '… Building PDF'; }
+
+  try {
+    const pdf = await buildInvoiceJsPdf(invoicePaperBodyWithQR(inv));
     pdf.save(`${inv.num || 'invoice'}.pdf`);
     showToast('✓ PDF downloaded');
   } catch (e) {
@@ -11520,7 +11683,6 @@ async function downloadInvoicePDF() {
     showToast('Could not build the PDF — opening the print dialog instead.', 'warn');
     printInvoice();
   } finally {
-    if (holder) { try { holder.remove(); } catch (e) { } }
     if (btn) { btn.disabled = false; btn.textContent = prevLabel; }
   }
 }
@@ -15858,6 +16020,11 @@ async function boot(forcedBook) {
         // Stripe watch so an invoice that was paid through its link is settled
         // before anybody gets chased for it.
         startPaymentReminderWatch();
+        // The receipt inbox scanning itself, rather than waiting for the
+        // publisher to open the modal and press Extract. Everything it finds
+        // still lands in that same review table, checked or not — nothing is
+        // filed until she looks at it.
+        startReceiptEmailSweep();
         // A fault recorded before the last reload is still a fault. Painted
         // here so the mark is on the tab from the first render rather than
         // only after the next failed check.
@@ -21314,16 +21481,20 @@ async function sendInvoiceReminder(inv, bookId, { kind = 'auto' } = {}) {
   saveState(bookId);
 
   const settings = getInvoiceSettings();
+  // Built before the email copy, so the copy can say "I've attached the
+  // invoice" only when one genuinely made it — a render failure must not stop
+  // the reminder going out, just stop it claiming an attachment it lacks.
+  const attachment = await buildInvoicePdfAttachment(inv);
   const mail = buildReminderEmail(inv, {
     settings: reminderSettings(settings),
     payLink: effectivePaymentLink(inv) || '',
-    today: today(),
     publisher: settings.name || 'Lyricalmyrical Books',
     amountLabel: invoiceAmountLabel(inv),
+    attached: !!attachment,
   });
 
   try {
-    await sendSingleEmailViaBackend(to, mail.subject, mail.text, settings.email || '', mail.html);
+    await sendSingleEmailViaBackend(to, mail.subject, mail.text, settings.email || '', mail.html, null, false, attachment ? [attachment] : null);
     entry.status = 'sent';
     bumpReminderDayCount(1);
     saveState(bookId);
@@ -21579,17 +21750,18 @@ async function sendTestReminderEmail() {
   // to the book on screen, so the amount reads in the currency she works in.
   const amountLabel = invoiceAmountLabel(inv);
 
+  const attachment = await buildInvoicePdfAttachment(inv);
   const mail = buildReminderEmail(inv, {
     settings: cfg,
     payLink: real ? (effectivePaymentLink(inv) || '') : 'https://buy.stripe.com/example',
-    today: today(),
     publisher: ($('ivs-name') ? $('ivs-name').value : stored.name) || 'Lyricalmyrical Books',
     amountLabel,
+    attached: !!attachment,
   });
 
   showToast('Sending your test reminder…');
   try {
-    await sendSingleEmailViaBackend(to, `[TEST] ${mail.subject}`, mail.text, stored.email || '', mail.html);
+    await sendSingleEmailViaBackend(to, `[TEST] ${mail.subject}`, mail.text, stored.email || '', mail.html, null, false, attachment ? [attachment] : null);
     showToast(`✓ Test reminder sent to ${to}${real ? '' : ' (using a sample invoice)'}`, 'ok', 5000);
   } catch (error) {
     showToast(`Could not send the test: ${String((error && error.message) || error)}`, 'err', 5000);
@@ -23006,7 +23178,7 @@ async function deleteCampaign(id) {
   showToast('Campaign deleted');
 }
 
-export async function sendSingleEmailViaBackend(to, subject, body, replyTo, htmlBody = null, threadId = null, captureThread = false) {
+export async function sendSingleEmailViaBackend(to, subject, body, replyTo, htmlBody = null, threadId = null, captureThread = false, attachments = null) {
   const useResend = localStorage.getItem('lm-oc-use-resend') === 'true';
   const resendKey = localStorage.getItem('lm-resend-api-key') || '';
   const resendFrom = localStorage.getItem('lm-resend-from') || '';
@@ -23081,7 +23253,14 @@ export async function sendSingleEmailViaBackend(to, subject, body, replyTo, html
     const payload = {
       version: 2,
       action: 'sendcampaignemail',
-      payload: { to, subject, body: finalPlainBody, htmlBody: finalHtmlBody, replyTo, threadId, captureThread, fromAlias, fromName }
+      payload: {
+        to, subject, body: finalPlainBody, htmlBody: finalHtmlBody, replyTo, threadId, captureThread, fromAlias, fromName,
+        // A file (currently just the invoice PDF on a payment reminder) to
+        // attach — [{filename, mimeType, base64}]. Only the real Apps Script
+        // path knows how to attach it (v43+); the local mock backend above
+        // never sends real mail, so there's nothing worth wiring it into there.
+        attachments: attachments && attachments.length ? attachments : undefined,
+      }
     };
     const res = await fetch(sheetsUrl, {
       method: 'POST',
@@ -24218,6 +24397,7 @@ function exposeLegacyInlineHandlers() {
     toggleCurrentBookView, updateProfileTabs, selectProfileTab, seedMockTestData, switchBook,
     switchTab, updateHeader, updateAllOverview, renderCustomersStat, channelColor,
     renderChannelAnalytics, selectAllChCurrency, setChChannelFilter, clearChChannelFilter, setChBookSort, setChBookSearch, renderOverviewRail, renderTodoTab, updateContextBanners,
+    restoreDismissedTodoSignals,
     toggleConGroup, toggleConGrouping, toggleAllConGroups, setConStatusFilter, onConSearchInput, clearConSearch, clearConSearchAndFilter, renderConsignmentTable,
     updatePublisherActionBanner, renderBookPendingAlert, heldGrossOf, recognizedRevenueOf,
     dismissStockDrift, updateDash, getProfitTiersHtml, getRevenueProgressHtml, getOwedCardDetails,
@@ -24485,11 +24665,15 @@ window.recheckIntegration = (id) => {
   if (id === 'shipping-email') return sweepShippingEmails({ force: true });
   if (id === 'stripe') return sweepStripeInvoicePayments({ force: true });
   if (id === 'stripe-fees') return sweepStripeFees({ force: true });
+  if (id === 'receipt-scan') return sweepReceiptEmails({ force: true });
   return undefined;
 };
+window.openReceiptSweepReviewFromAlert = openReceiptSweepReviewFromAlert;
+window.dismissEmailReceiptDraft = dismissEmailReceiptDraft;
 window.openInvoiceFromAlert = openInvoiceFromAlert;
 window.sweepStripeInvoicePayments = sweepStripeInvoicePayments;
 window.sweepStripeFees = sweepStripeFees;
+window.sweepReceiptEmails = sweepReceiptEmails;
 window.linkConfidentShippingMatchesNow = linkConfidentShippingMatchesNow;
 window.openShippingReconciliationFromAlert = openShippingReconciliationFromAlert;
 window.shipNewOrderFromAlert = shipNewOrderFromAlert;

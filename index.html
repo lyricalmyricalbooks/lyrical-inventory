@@ -301,7 +301,7 @@
   <nav class="pub-nav" aria-label="Tools">
     <button type="button" class="snav" title="Intelligence" onclick="switchTab('intel')"><span class="snav-ic">💬</span><span class="snav-label">Intelligence</span></button>
     <button type="button" class="snav" title="Event POS" onclick="switchTab('pos')"><span class="snav-ic">🛒</span><span class="snav-label">Event POS</span></button>
-    <button type="button" class="snav" title="Tax Centre" onclick="switchTab('taxcenter')"><span class="snav-ic">⚖️</span><span class="snav-label">Tax Centre</span><span class="health-badge" data-health-badge="shippo,canadapost,shipping-email,stripe-fees" aria-label="A shipping service is not answering" hidden></span></button>
+    <button type="button" class="snav" title="Tax Centre" onclick="switchTab('taxcenter')"><span class="snav-ic">⚖️</span><span class="snav-label">Tax Centre</span><span class="health-badge" data-health-badge="shippo,canadapost,shipping-email,stripe-fees,receipt-scan" aria-label="A shipping service is not answering" hidden></span></button>
 
     <div class="o3-subgrouplabel">Money</div>
     <button type="button" class="snav" title="Payments" onclick="switchTab('reconcile')"><span class="snav-ic">💳</span><span class="snav-label">Payments</span></button>
@@ -410,7 +410,7 @@
   <div class="header-actions" id="global-actions" style="display:none; align-items:center;">
     <button class="header-action-btn" onclick="switchTab('todo')" id="todo-tab-btn" title="Things needing your attention">✅ To-do<span class="nav-badge todo-nav-badge" aria-label="things needing attention" hidden></span></button>
     <button class="header-action-btn primary" onclick="switchTab('pos')" id="global-pos-btn" title="Sell books at an event">🛒 Event POS</button>
-    <button class="header-action-btn" onclick="switchTab('taxcenter')" id="global-taxcenter-btn" title="Expenses &amp; tax season">⚖️ Tax Centre<span class="health-badge" data-health-badge="shippo,canadapost,shipping-email,stripe-fees" aria-label="A shipping service is not answering" hidden></span></button>
+    <button class="header-action-btn" onclick="switchTab('taxcenter')" id="global-taxcenter-btn" title="Expenses &amp; tax season">⚖️ Tax Centre<span class="health-badge" data-health-badge="shippo,canadapost,shipping-email,stripe-fees,receipt-scan" aria-label="A shipping service is not answering" hidden></span></button>
 
     <!-- MONEY -->
     <div class="header-menu" id="hmenu-money">
@@ -589,7 +589,7 @@
     <div class="sec-head-titles">
       <div class="sec-kicker"><span class="sec-kicker-dot"></span>To-do</div>
       <div class="section-hed sec-head-title">Things worth your attention</div>
-      <p class="section-subcopy">Everything the app can see that still needs entering, fixing or chasing. Items disappear on their own once you've dealt with them — there is nothing to tick off.</p>
+      <p class="section-subcopy">Everything the app can see that still needs entering, fixing or chasing. Items disappear on their own once you've dealt with them — there is nothing to tick off. If one doesn't apply to you, dismiss it with the ✕.</p>
     </div>
     <div class="sec-head-badges">
       <span class="pill gold" id="todo-total-chip">—</span>
@@ -604,8 +604,8 @@
   <div class="sec-head">
     <div class="sec-head-titles">
       <div class="sec-kicker"><span class="sec-kicker-dot"></span>Intelligence</div>
-      <div class="section-hed sec-head-title">Ask your books</div>
-      <p class="section-subcopy">Sales, costs, fairs, stock, or anything that looks filed wrong. Every answer is worked out from your own records, and each one says what it looked at.</p>
+      <div class="section-hed sec-head-title">Your books, in conversation</div>
+      <p class="section-subcopy">Clear answers from your own records, with every figure traced back to what it checked.</p>
     </div>
     <div class="sec-head-badges">
       <button type="button" class="btn ghost sm sys-target" id="intel-clear" onclick="clearIntelThread()" hidden>Clear conversation</button>
@@ -625,20 +625,21 @@
   <p class="sr-only" id="intel-status" role="status" aria-live="polite"></p>
 
   <div class="intel-panel sys-container">
-    <div class="intel-thread sys-long-list" id="intel-thread"></div>
+    <div class="intel-thread sys-long-list" id="intel-thread" aria-label="Intelligence conversation"></div>
 
     <!-- Permanent markup. renderIntel() only ever enables or disables this;
          rebuilding it would drop the caret out of a half-typed question. -->
     <div class="intel-composer" id="intel-composer">
       <label class="sr-only" for="intel-input">Your question</label>
-      <textarea id="intel-input" class="intel-input" rows="2" placeholder="Ask about sales, costs, a fair, or anything that looks wrong&hellip;" onkeydown="intelComposerKey(event)"></textarea>
+      <textarea id="intel-input" class="intel-input" rows="1" placeholder="Message Intelligence&hellip;" onkeydown="intelComposerKey(event)"></textarea>
       <div class="intel-composer-actions">
+        <span class="intel-composer-hint">Enter to send · Shift + Enter for a new line</span>
         <button type="button" class="btn ghost sm sys-target" id="intel-stop" onclick="stopIntelTurn()" hidden>Stop</button>
-        <button type="button" class="btn gold sys-target" id="intel-send" onclick="sendIntelMessage()">Ask</button>
+        <button type="button" class="btn gold sys-target intel-send" id="intel-send" onclick="sendIntelMessage()" aria-label="Send question"><span aria-hidden="true">↑</span><span class="sr-only">Send</span></button>
       </div>
     </div>
 
-    <p class="intel-foot">Worked out from your own records. Worth checking a figure against the screen it came from before you act on it.</p>
+    <p class="intel-foot">Intelligence can make suggestions, but you always approve changes before anything is saved.</p>
   </div>
 </div>
 
@@ -2838,6 +2839,17 @@
     <p class="sr-only" id="tc-deductions-status" role="status" aria-live="polite"></p>
     <div class="ded-list" id="tc-deductions-body"></div>
     <p class="ded-foot">Amounts are the middle of what you have spent on similar things before, not an industry figure. Whether a cost can be claimed on a return is a question for your accountant &mdash; this only tells you what is missing from your own books.</p>
+
+    <!-- POSSIBLE MISCATEGORIZATIONS — is a recorded cost filed under the right
+         name, judged only against how this business has filed similar wording
+         before. Logic lives in src/lib/category-fit.js. -->
+    <div class="ded-subsec-head">
+      <div class="sec-kicker"><span class="sec-kicker-dot"></span>Possible Miscategorizations</div>
+      <span class="pill gray intel-fig" id="tc-catcheck-total">&mdash;</span>
+    </div>
+    <p class="section-subcopy">This checks each expense's own wording against how you've filed similar wording before &mdash; never against an outside idea of what a category should mean. A word you've used nine times under one category and once under another is worth a second look.</p>
+    <p class="sr-only" id="tc-catcheck-status" role="status" aria-live="polite"></p>
+    <div class="ded-list" id="tc-catcheck-body"></div>
   </div>
 
   <div id="tc-sec-integrations" class="tc-section settings-section" role="tabpanel" aria-labelledby="btn-tctab-integrations" style="display:none;">
@@ -3315,14 +3327,14 @@
               <span id="ship-dest-count-badge" style="font-size:10px;color:var(--text3);font-weight:500;"></span>
             </div>
             <div id="custom-ship-dest-wrapper" class="custom-dest-wrapper">
-              <div id="custom-ship-dest-trigger" class="custom-dest-trigger" onclick="toggleShippoDestDropdown(event)" tabindex="0">
+              <div id="custom-ship-dest-trigger" class="custom-dest-trigger" onclick="toggleShippoDestDropdown(event)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleShippoDestDropdown(event);}" tabindex="0" role="button" aria-haspopup="listbox" aria-expanded="false" aria-label="Search or select a destination">
                 <div style="display:flex;align-items:center;gap:8px;overflow:hidden;width:100%;">
-                  <span id="custom-ship-dest-icon" style="font-size:14px;color:var(--text3);flex-shrink:0;">🔍</span>
+                  <span id="custom-ship-dest-icon" style="font-size:14px;color:var(--text3);flex-shrink:0;" aria-hidden="true">🔍</span>
                   <span id="custom-ship-dest-label" style="font-size:13px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;">— Search or select an address —</span>
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-                  <span id="custom-ship-dest-clear" style="display:none;font-size:12px;color:var(--text3);padding:2px 5px;cursor:pointer;border-radius:4px;" onclick="clearShippoDestSelection(event)">✕</span>
-                  <span id="custom-ship-dest-arrow" style="font-size:10px;color:var(--text3);transition:transform 0.2s;">▼</span>
+                  <span id="custom-ship-dest-clear" style="display:none;font-size:12px;color:var(--text3);padding:2px 5px;cursor:pointer;border-radius:4px;" onclick="clearShippoDestSelection(event)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();clearShippoDestSelection(event);}" tabindex="0" role="button" aria-label="Clear selected destination">✕</span>
+                  <span id="custom-ship-dest-arrow" style="font-size:10px;color:var(--text3);transition:transform 0.2s;" aria-hidden="true">▼</span>
                 </div>
               </div>
               <div id="custom-ship-dest-menu" class="custom-dest-menu" style="display:none;" onclick="event.stopPropagation()">

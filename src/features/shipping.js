@@ -2491,7 +2491,10 @@ function setShippoDestMenuOpenState(isOpen) {
 
   if (isOpen) {
     if (menu) menu.style.display = 'flex';
-    if (trigger) trigger.classList.add('active');
+    if (trigger) {
+      trigger.classList.add('active');
+      trigger.setAttribute('aria-expanded', 'true');
+    }
     if (arrow) arrow.style.transform = 'rotate(180deg)';
     if (card) {
       card.style.position = 'relative';
@@ -2502,7 +2505,10 @@ function setShippoDestMenuOpenState(isOpen) {
     if (searchInput) searchInput.focus();
   } else {
     if (menu) menu.style.display = 'none';
-    if (trigger) trigger.classList.remove('active');
+    if (trigger) {
+      trigger.classList.remove('active');
+      trigger.setAttribute('aria-expanded', 'false');
+    }
     if (arrow) arrow.style.transform = 'rotate(0deg)';
     if (card) card.style.zIndex = '10';
     if (wrapper) wrapper.style.zIndex = '1000';

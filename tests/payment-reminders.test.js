@@ -214,7 +214,6 @@ describe('buildReminderEmail', () => {
   const built = () => buildReminderEmail(lateInvoice(), {
     settings,
     payLink: 'https://buy.stripe.com/test_abc',
-    today: TODAY,
     publisher: 'Lyricalmyrical Books',
     amountLabel: 'CA$180.00',
   });
@@ -224,13 +223,48 @@ describe('buildReminderEmail', () => {
     expect(built().subject).toContain('CA$180.00');
   });
 
-  it('says how late it is, in days', () => {
-    expect(built().text).toContain('19 days ago');
+  it('never says how late the invoice is — the attached PDF already does', () => {
+    const mail = built();
+    expect(mail.text).not.toContain('days ago');
+    expect(mail.text).not.toContain('It was due on');
+    expect(mail.html).not.toContain('days ago');
+    expect(mail.html).not.toContain('It was due on');
   });
 
-  it('leads with a way to pay, in both the plain and the styled copy', () => {
-    expect(built().text).toContain('https://buy.stripe.com/test_abc');
-    expect(built().html).toContain('href="https://buy.stripe.com/test_abc"');
+  it('mentions the attached invoice', () => {
+    const mail = built();
+    expect(mail.text).toContain("I've attached the invoice");
+    expect(mail.html).toContain("I've attached the invoice");
+  });
+
+  it('says nothing was attached when the PDF could not be built', () => {
+    const mail = buildReminderEmail(lateInvoice(), {
+      settings, payLink: 'https://buy.stripe.com/test_abc', amountLabel: 'CA$180.00', attached: false,
+    });
+    expect(mail.text).not.toContain('attached');
+    expect(mail.html).not.toContain('attached');
+    // The pay link is the instruction that actually matters, and still shows.
+    expect(mail.text).toContain('https://buy.stripe.com/test_abc');
+  });
+
+  it('leads with the pay link as plain text, never a styled button', () => {
+    const mail = built();
+    expect(mail.text).toContain('https://buy.stripe.com/test_abc');
+    expect(mail.html).toContain('href="https://buy.stripe.com/test_abc"');
+    // No more black "Pay invoice" button.
+    expect(mail.html).not.toContain('Pay invoice');
+    expect(mail.html).not.toContain('background:#0e0c0a');
+  });
+
+  it('calls it the Stripe link only when the link actually is one', () => {
+    const stripe = built();
+    expect(stripe.text).toContain('using the Stripe link');
+
+    const paypal = buildReminderEmail(lateInvoice(), {
+      settings, payLink: 'https://paypal.me/lyricalmyrical/180', amountLabel: 'CA$180.00',
+    });
+    expect(paypal.text).toContain('using the payment link');
+    expect(paypal.text).not.toContain('Stripe');
   });
 
   it('carries the publisher’s own wording', () => {
@@ -240,19 +274,22 @@ describe('buildReminderEmail', () => {
 
   it('greets the named contact, and the shop when there is no contact', () => {
     expect(built().text.startsWith('Hi Casa Bosques,')).toBe(true);
-    const withContact = buildReminderEmail(lateInvoice({ storeContact: 'Ana' }), { settings, today: TODAY });
+    const withContact = buildReminderEmail(lateInvoice({ storeContact: 'Ana' }), { settings });
     expect(withContact.text.startsWith('Hi Ana,')).toBe(true);
   });
 
   it('still reads properly with no payment link to offer', () => {
-    const plain = buildReminderEmail(lateInvoice(), { settings, today: TODAY, amountLabel: 'CA$180.00' });
+    const plain = buildReminderEmail(lateInvoice(), { settings, amountLabel: 'CA$180.00' });
     expect(plain.text).not.toContain('Pay online');
+    expect(plain.text).not.toContain('pay using');
     expect(plain.html).not.toContain('<a href');
     expect(plain.text).toContain('INV-ALTROV-2026-004');
+    // Still says the invoice is attached even with nothing to pay online.
+    expect(plain.text).toContain("I've attached the invoice");
   });
 
   it('escapes a customer name that contains markup', () => {
-    const nasty = buildReminderEmail(lateInvoice({ storeName: '<script>alert(1)</script>' }), { settings, today: TODAY });
+    const nasty = buildReminderEmail(lateInvoice({ storeName: '<script>alert(1)</script>' }), { settings });
     expect(nasty.html).not.toContain('<script>');
     expect(nasty.html).toContain('&lt;script&gt;');
   });

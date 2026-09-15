@@ -3,6 +3,7 @@ import fs from 'fs';
 // Receipt import moved to src/features/receipts.js. These assertions are about
 // the behaviour, not which file holds it, so they read the whole app source.
 import { appSource } from './helpers/extract-decl.js';
+import { needsReceiptAmount, receiptDraftRef } from '../src/lib/receipt-drafts.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -106,9 +107,12 @@ describe('Receipt import performance & correctness fixes', () => {
     });
   });
 
-  describe('_draftsFromReceiptRows — reports drops instead of silently discarding', () => {
+  describe('_draftsFromReceiptRows — keeps and flags instead of silently discarding', () => {
     // Depends on EXPENSE_CATEGORIES, inferReceiptCategory, normalizeReceiptDate,
-    // today, _parseReceiptAmount, _selectedFileParts, _emailContentCache.
+    // today, _parseReceiptAmount, _selectedFileParts, _emailContentCache, plus
+    // needsReceiptAmount/receiptDraftRef from lib/receipt-drafts.js — a real ES
+    // module, so those two are injected as function params rather than spliced
+    // in as source text.
     const catMatch = mainContent.match(/const EXPENSE_CATEGORIES = \[[\s\S]+?\];/);
     const inferMatch = mainContent.match(/function inferReceiptCategory\([^)]*\)\s*\{[\s\S]+?\n\}/);
     const normDateSrc = extractFn('normalizeReceiptDate');
@@ -130,26 +134,42 @@ describe('Receipt import performance & correctness fixes', () => {
       ${fnSrc}
       return _draftsFromReceiptRows;
     `;
-    const _draftsFromReceiptRows = new Function(harness)();
+    const _draftsFromReceiptRows = new Function('needsReceiptAmount', 'receiptDraftRef', harness)(
+      needsReceiptAmount, receiptDraftRef
+    );
 
-    it('keeps a well-formed row', () => {
-      const { drafts, dropped } = _draftsFromReceiptRows(
-        [{ vendor: 'Acme', date: '2026-01-01', amount: 42, currency: 'CAD', category: 'Other' }], ''
+    it('keeps a well-formed row, priced and unflagged', () => {
+      const { drafts, flagged } = _draftsFromReceiptRows(
+        [{ vendor: 'Acme', date: '2026-01-01', amount: 42, currency: 'CAD', category: 'Other' }], 'msg-1'
       );
       expect(drafts).toHaveLength(1);
-      expect(dropped).toBe(0);
-      expect(drafts[0].amount).toBe(42);
+      expect(flagged).toBe(0);
+      expect(drafts[0]).toMatchObject({ amount: 42, amountUnknown: false, include: true, ref: 'receipt-email:msg-1' });
     });
 
-    it('drops a row with an unusable amount and reports the count — never silently', () => {
-      const { drafts, dropped } = _draftsFromReceiptRows(
+    it('keeps a row with no usable amount — flagged, unchecked, never dropped', () => {
+      // This is the property the whole feature rests on: a receipt Gemini
+      // couldn't price used to vanish with no trace. It has to survive so the
+      // publisher can see it and decide, the same as a Canada Post label
+      // filed with a blank amount.
+      const { drafts, flagged } = _draftsFromReceiptRows(
         [
           { vendor: 'Good', date: '2026-01-01', amount: 10, currency: 'CAD' },
           { vendor: 'Bad', date: '2026-01-01', amount: 'free lunch', currency: 'CAD' }
-        ], ''
+        ], 'msg-2'
       );
-      expect(drafts).toHaveLength(1);
-      expect(dropped).toBe(1);
+      expect(drafts).toHaveLength(2);
+      expect(flagged).toBe(1);
+      expect(drafts[1]).toMatchObject({
+        vendor: 'Bad', amount: 0, amountUnknown: true, include: false, ref: 'receipt-email:msg-2:1',
+      });
+    });
+
+    it('gives a single-receipt email the plain ref, not the indexed form', () => {
+      const { drafts } = _draftsFromReceiptRows(
+        [{ vendor: 'Bad', date: '2026-01-01', amount: 0, currency: 'CAD' }], 'msg-3'
+      );
+      expect(drafts[0].ref).toBe('receipt-email:msg-3');
     });
 
     it('reroutes a category outside EXPENSE_CATEGORIES instead of accepting it silently', () => {

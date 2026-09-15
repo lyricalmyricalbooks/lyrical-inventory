@@ -350,3 +350,89 @@ describe('the test reminder', () => {
     expect(indexHtml).toContain('no invoice is touched or counted as chased');
   });
 });
+
+describe('the invoice PDF attached to a reminder', () => {
+  it('shares one PDF builder with the download button, rather than a second copy of the rasterizing logic', () => {
+    // downloadInvoicePDF must still end by SAVING a file, never by reading one
+    // back out as base64 — that would mean the two paths had drifted apart.
+    const download = extractDecl('downloadInvoicePDF', mainJs);
+    expect(download).toContain('buildInvoiceJsPdf(invoicePaperBodyWithQR(inv))');
+    expect(download).toContain('pdf.save(');
+    expect(download).not.toContain('.output(');
+
+    const attach = extractDecl('buildInvoicePdfAttachment', mainJs);
+    expect(attach).toContain('buildInvoiceJsPdf(invoicePaperBodyWithHeadlessQR(inv))');
+    expect(attach).toContain("pdf.output('datauristring')");
+  });
+
+  it('draws its own QR instead of relying on a view nobody has open', () => {
+    // A reminder from the background sweep, or a test-send, has no open
+    // invoice view to borrow a live QR canvas from the way the download
+    // button's invoicePaperBodyWithQR does.
+    const headless = extractDecl('invoicePaperBodyWithHeadlessQR', mainJs);
+    expect(headless).toContain('new QRCode(qrHolder');
+    expect(headless).not.toContain('#invoice-print-area');
+  });
+
+  it('is best-effort — a render failure returns null rather than throwing', () => {
+    expect(extractDecl('buildInvoicePdfAttachment', mainJs)).toContain('return null;');
+  });
+
+  it('is built before the email copy, and told to the copy honestly', () => {
+    // The wording must never claim an attachment that failed to build.
+    for (const fnName of ['sendInvoiceReminder', 'sendTestReminderEmail']) {
+      const fn = extractDecl(fnName, mainJs);
+      const builtAt = fn.indexOf('buildInvoicePdfAttachment(inv)');
+      const mailAt = fn.indexOf('buildReminderEmail(inv,');
+      expect(builtAt, `${fnName} should build the attachment`).toBeGreaterThan(-1);
+      expect(mailAt).toBeGreaterThan(builtAt);
+      expect(fn).toContain('attached: !!attachment');
+    }
+  });
+
+  it('hands the built attachment to the actual send call', () => {
+    for (const fnName of ['sendInvoiceReminder', 'sendTestReminderEmail']) {
+      expect(extractDecl(fnName, mainJs)).toContain('attachment ? [attachment] : null');
+    }
+  });
+
+  it('sendSingleEmailViaBackend threads attachments into the real send, not the local mock', () => {
+    const fn = extractDecl('sendSingleEmailViaBackend', mainJs);
+    expect(fn).toContain('attachments = null');
+    expect(fn).toContain('attachments: attachments && attachments.length ? attachments : undefined');
+  });
+});
+
+describe('Apps Script attachment support (v43)', () => {
+  const gas = readFileSync(path.join(__dirname, '../apps-script/Code.gs'), 'utf8');
+
+  it('decodes the client’s attachment into a Blob without sinking the email on a bad one', () => {
+    expect(gas).toContain("Utilities.newBlob(");
+    expect(gas).toContain('Utilities.base64Decode(a.base64)');
+  });
+
+  it('reaches every Gmail send path: thread reply, new thread, and the default sendMail_ call', () => {
+    expect(gas).toContain('if (blobs.length) opts.attachments = blobs;');
+    expect(gas).toContain('if (blobs.length) draftOpts.attachments = blobs;');
+  });
+
+  it('reaches every third-party provider in its own confirmed shape', () => {
+    expect(gas).toContain('payload.attachments = attachmentsB64.map(function (a) { return { content: a.base64, filename: a.filename }; });'); // Resend
+    expect(gas).toContain('payload.attachment = attachmentsB64.map(function (a) { return { content: a.base64, name: a.filename }; });'); // Brevo — singular field name
+    expect(gas).toContain("disposition: 'attachment'"); // SendGrid
+    expect(gas).toContain('Name: a.filename, Content: a.base64, ContentType: a.contentType'); // Postmark
+    expect(gas).toContain('form.attachment = attachments[0];'); // Mailgun — multipart via a Blob value
+  });
+
+  it('bumped the version in lockstep: Code.gs, main.js and the changelog all agree', () => {
+    expect(gas).toContain("scriptVersion: 'v43'");
+    expect(gas).toContain("service: 'lyrical-sheets-webhook-v43'");
+    expect(mainJs).toContain("const EXPECTED_SCRIPT_VERSION = 'v43';");
+    expect(gas).toMatch(/v43:[\s\S]{0,400}attachment/);
+  });
+
+  it('public/gas-code.txt is byte-for-byte the deployed script', () => {
+    const published = readFileSync(path.join(__dirname, '../public/gas-code.txt'), 'utf8');
+    expect(published).toBe(gas);
+  });
+});

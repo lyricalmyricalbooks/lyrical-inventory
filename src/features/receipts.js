@@ -54,6 +54,24 @@ import {
   _warmGeminiModelCache,
 } from '../lib/gemini-quota.js';
 import { followableUrl } from '../lib/receipt-links.js';
+import {
+  mergeReceiptDrafts,
+  needsReceiptAmount,
+  receiptDraftRef,
+  receiptSweepWindowStart,
+} from '../lib/receipt-drafts.js';
+import { dismissAppAlert, pushAppAlert } from '../lib/app-alert.js';
+import {
+  integrationBackoffMs,
+  noteIntegrationFailure,
+  noteIntegrationSuccess,
+} from '../lib/integration-watch.js';
+import {
+  browserWatchState,
+  dueForCheck,
+  effectiveInterval,
+  startWatch,
+} from '../lib/watch-schedule.js';
 import { fmt, fmtD, getBookCurrencyCode, normalizeCurrencyCode } from '../lib/money.js';
 import { expenseLedgerTotals, expenseTotalsCopy } from '../lib/expense-totals.js';
 import { closeM, confirmDialog, openM } from '../lib/modal.js';
@@ -2180,7 +2198,13 @@ function openEmailReceiptImportModal() {
   if (!window.IS_PUBLISHER || isAuthor()) { showToast('Publisher access required', 'warn'); return; }
   openM('email-receipt-import-modal');
   if ($('email-receipt-results')) $('email-receipt-results').innerHTML = '';
-  _emailReceiptDrafts = [];
+  // Reopening starts a fresh hand-driven review — but a row an automated
+  // source already found (the background sweep, or the Gmail add-on's live
+  // feed) is not that: it's unreviewed work sitting in the background, and
+  // the whole point of scanning automatically is that it survives the owner
+  // not having the modal open when it was found.
+  _emailReceiptDrafts = _emailReceiptDrafts.filter(d => d._inboxId || d._fromSweep);
+  if (_emailReceiptDrafts.length) renderEmailReceiptDrafts(_emailReceiptDrafts);
   _activeEmailImportTab = 'gmail';
   _gmailSelectedIds = new Set();
   _activeGmailPresetIdx = -1;
@@ -2313,10 +2337,21 @@ function startEmailInboxWatcher() {
   });
 }
 
+// One count on the "Import from Email" button covers both auto sources — the
+// Gmail add-on's staged queue and the background sweep's own finds — rather
+// than two competing numbers on the same button.
 function updateEmailInboxBadge() {
   const badge = $('email-inbox-badge');
   if (!badge) return;
-  const n = _emailInboxItems.length;
+  const sweepDrafts = (_emailReceiptDrafts || []).filter(d => d._fromSweep).length;
+  // A sweep-found draft lives only in memory, so right after a reload — before
+  // the next tick repopulates the real drafts — there is nothing in
+  // _emailReceiptDrafts to count yet. The persisted pending list from before
+  // the reload is the best available stand-in until then: a fault recorded
+  // before the last reload is still a fault, painted here the same way
+  // renderIntegrationBadges() already does for the health marks.
+  const persistedPending = sweepDrafts ? 0 : readReceiptSweepPending().length;
+  const n = _emailInboxItems.length + sweepDrafts + persistedPending;
   badge.textContent = n ? String(n) : '';
   badge.style.display = n ? '' : 'none';
 }
@@ -2343,41 +2378,29 @@ function _inboxItemToDraft(item) {
   };
 }
 
-// Load add-on receipts into the import modal's draft table (with a banner).
-// A live Firestore snapshot calls this on every change to the inbox queue —
-// including while the user is mid-review of a Gemini extraction. It used to
-// unconditionally overwrite _emailReceiptDrafts, silently discarding any
-// edits to a batch that didn't come from the inbox queue.
-function loadGmailInboxDrafts(force) {
+// A hand-driven review sitting in the table right now — a row that came from
+// neither the Gmail add-on's live feed nor the background sweep, so it can
+// only be there because the owner ran an extraction herself. Both auto
+// sources gate their own live re-render on this, so neither one yanks focus
+// or a half-typed edit out from under her.
+function _emailDraftsHaveManualReview() {
+  return _emailReceiptDrafts.some(d => !d._inboxId && !d._fromSweep);
+}
+
+// Fold add-on receipts into the import modal's draft table. A live Firestore
+// snapshot calls this on every change to the inbox queue — including while
+// the owner is mid-review of a Gemini extraction. This used to unconditionally
+// overwrite _emailReceiptDrafts, silently discarding any edits to a batch that
+// didn't come from the inbox queue; merging instead of replacing makes that
+// destructive case impossible, so the banner that used to defer to it is gone.
+function loadGmailInboxDrafts() {
   if (!_emailInboxItems.length) return;
-
-  const hasUnsavedReview = !force && _emailReceiptDrafts.length > 0
-    && _emailReceiptDrafts.some(d => !d._inboxId);
-  if (hasUnsavedReview) {
-    const wrap = $('email-receipt-results');
-    if (wrap && !wrap.querySelector('[data-inbox-pending-banner]')) {
-      const n = _emailInboxItems.length;
-      const banner = document.createElement('div');
-      banner.setAttribute('data-inbox-pending-banner', '1');
-      banner.className = 'email-extract-summary';
-      banner.innerHTML = `📥 ${n} new receipt${n > 1 ? 's' : ''} arrived from the Gmail add-on — `
-        + `<button type="button" class="btn sm" onclick="loadGmailInboxDrafts(true)">Load them</button> (replaces the drafts below)`;
-      wrap.prepend(banner);
-    }
-    return;
+  _emailReceiptDrafts = mergeReceiptDrafts(_emailReceiptDrafts, _emailInboxItems.map(_inboxItemToDraft));
+  const modal = $('m-email-receipt-import-modal');
+  if (modal && modal.style.display !== 'none' && !_emailDraftsHaveManualReview()) {
+    renderEmailReceiptDrafts(_emailReceiptDrafts);
   }
-
-  _emailReceiptDrafts = _emailInboxItems.map(_inboxItemToDraft);
-  renderEmailReceiptDrafts(_emailReceiptDrafts);
-  const wrap = $('email-receipt-results');
-  if (wrap && !wrap.querySelector('[data-inbox-banner]')) {
-    const banner = document.createElement('div');
-    banner.setAttribute('data-inbox-banner', '1');
-    banner.style.cssText = 'background:rgba(40,140,90,.08);border:1px solid rgba(40,140,90,.25);border-radius:var(--r2);padding:8px 12px;margin-bottom:10px;font-size:12px;color:var(--text2);line-height:1.5;';
-    const n = _emailInboxItems.length;
-    banner.innerHTML = `📥 <b>${n}</b> receipt${n > 1 ? 's' : ''} sent from the Gmail add-on. Review below and import — each imported row is cleared from the queue.`;
-    wrap.prepend(banner);
-  }
+  updateEmailInboxBadge();
 }
 
 // Pull the receipt file(s) the Gmail add-on staged in Firebase Storage into the
@@ -4473,7 +4496,7 @@ Rules:
 6. category must be one of: ${allowedCats}. Use "Other" only if nothing fits.
 7. confidence is 0.0–1.0 reflecting how sure you are this is a real receipt.
 8. If an attachment is a PDF/image of a receipt, extract from it directly.
-9. Do not invent data. If amount/currency/date cannot be determined, omit the row entirely.
+9. Never omit a row because one field is unclear. If you cannot confidently determine the total amount, still return the row with your best reading of vendor, date and category, set amount to 0, and set confidence below 0.3. Only omit a row entirely when the email describes no purchase, payment or charge at all.
 10. sourceSnippet is <= 240 chars of the original line(s) that justify the row.
 If this email contains no purchase at all, return {"receipts":[]}.`;
 }
@@ -4645,34 +4668,45 @@ function _parseReceiptJson(text) {
   }
 }
 
-// Map raw Gemini rows onto editable drafts, reporting what was unusable
-// instead of silently discarding it.
+// Map raw Gemini rows onto editable drafts. Nothing is discarded any more —
+// a row Gemini couldn't price keeps its place, flagged and unchecked, the
+// same "read confidently or leave it blank and flag it" rule postage-intake.js
+// already enforces for shipping labels. A receipt that silently vanished
+// because one field was unclear is indistinguishable from a receipt that was
+// never scanned at all; this way the owner sees it and decides.
 function _draftsFromReceiptRows(rows, msgId) {
+  const list = Array.isArray(rows) ? rows : [];
   const drafts = [];
-  let dropped = 0;
-  for (const r of (rows || [])) {
-    const amount = _parseReceiptAmount(r.amount);
-    const currency = String(r.currency || 'CAD').toUpperCase().slice(0, 3);
-    if (!amount || !currency) { dropped++; continue; }
+  let flagged = 0;
+  list.forEach((r, i) => {
+    const parsedAmount = _parseReceiptAmount(r.amount);
+    const amountUnknown = needsReceiptAmount({ amount: parsedAmount });
     const email = msgId ? _emailContentCache[msgId] : null;
-    drafts.push({
+    const draft = {
       vendor: String(r.vendor || '').trim(),
       description: String(r.description || r.vendor || 'Receipt').trim(),
       date: normalizeReceiptDate(r.date) || today(),
-      amount,
-      currency,
+      amount: amountUnknown ? 0 : parsedAmount,
+      amountUnknown,
+      currency: String(r.currency || 'CAD').toUpperCase().slice(0, 3),
       reference: String(r.reference || '').trim(),
       category: EXPENSE_CATEGORIES.includes(r.category)
         ? r.category
         : inferReceiptCategory(r.vendor, r.description),
       sourceSnippet: String(r.sourceSnippet || '').slice(0, 240),
       confidence: Number(r.confidence || 0.7),
-      include: true,
+      // An unpriced row must be a deliberate checkbox, never an automatic
+      // import — the whole point of flagging it instead of dropping it.
+      include: !amountUnknown,
       msgId: msgId || '',
+      rowIndex: i,
       selectedAtts: (msgId && email) ? _selectedFileParts(msgId, email) : []
-    });
-  }
-  return { drafts, dropped };
+    };
+    draft.ref = receiptDraftRef(draft, { totalForMsg: list.length });
+    drafts.push(draft);
+    if (amountUnknown) flagged++;
+  });
+  return { drafts, flagged };
 }
 
 // Live progress panel pinned above the drafts table, with a Cancel that works.
@@ -4705,14 +4739,14 @@ function cancelEmailReceiptExtraction() {
 }
 
 // One-line accounting of what happened, shown above the drafts table so a
-// partial batch failure or a silently-dropped row is never invisible.
-function _renderExtractSummary({ total, failures, alreadyImported, droppedRows, truncated }) {
+// partial batch failure or a row that needs a figure is never invisible.
+function _renderExtractSummary({ total, failures, alreadyImported, flaggedRows, truncated }) {
   const wrap = $('email-receipt-results');
   if (!wrap) return;
   const bits = [];
   if (alreadyImported) bits.push(`${alreadyImported} already imported, skipped`);
   if (failures && failures.length) bits.push(`${failures.length} of ${total} couldn't be read — <button type="button" class="btn sm" onclick="retryFailedEmailExtractions()">Retry</button>`);
-  if (droppedRows) bits.push(`${droppedRows} row${droppedRows > 1 ? 's' : ''} had no usable amount/currency and were skipped`);
+  if (flaggedRows) bits.push(`${flaggedRows} row${flaggedRows > 1 ? 's' : ''} need${flaggedRows > 1 ? '' : 's'} an amount before importing`);
   if (truncated) bits.push(`a response was truncated — some receipts on a busy email may be missing`);
   if (!bits.length) return;
   const banner = document.createElement('div');
@@ -4781,7 +4815,7 @@ async function extractReceiptsFromEmailText() {
     const collected = [];
     const failures = [];
     let completed = 0;
-    let droppedRows = 0;
+    let flaggedRows = 0;
     let truncatedAny = false;
     _renderExtractProgress({ completed: 0, total: todo.length, found: 0 });
 
@@ -4837,8 +4871,8 @@ async function extractReceiptsFromEmailText() {
           _emailExtractCache[msgId] = rows;
         }
 
-        const { drafts, dropped } = _draftsFromReceiptRows(rows, msgId);
-        droppedRows += dropped;
+        const { drafts, flagged } = _draftsFromReceiptRows(rows, msgId);
+        flaggedRows += flagged;
         collected.push(...drafts);
         completed++;
         // Rows land as they arrive instead of after the whole batch.
@@ -4873,7 +4907,7 @@ async function extractReceiptsFromEmailText() {
       found: collected.length,
       failures,
       alreadyImported,
-      droppedRows,
+      flaggedRows,
       truncated: truncatedAny
     });
 
@@ -4928,14 +4962,14 @@ async function extractReceiptsFromEmailText() {
       thinkingBudget: GEMINI_THINKING_SORT
     });
     const parsed = _parseReceiptJson(out?.text || '{}');
-    const { drafts, dropped } = _draftsFromReceiptRows(parsed.receipts, '');
+    const { drafts, flagged } = _draftsFromReceiptRows(parsed.receipts, '');
 
     _emailReceiptDrafts = drafts;
     renderEmailReceiptDrafts(drafts);
     if (!drafts.length) {
       showToast('No receipts detected — check your pasted text or files.', 'warn');
     } else {
-      showToast(`✓ Found ${drafts.length} receipt${drafts.length > 1 ? 's' : ''}${dropped ? ` (${dropped} row${dropped > 1 ? 's' : ''} unreadable, skipped)` : ''}`);
+      showToast(`✓ Found ${drafts.length} receipt${drafts.length > 1 ? 's' : ''}${flagged ? ` (${flagged} need${flagged > 1 ? '' : 's'} an amount)` : ''}`);
     }
   } catch (e) {
     console.error('[email-receipt-import] Gemini failed', e);
@@ -4974,6 +5008,12 @@ function _buildDuplicateExpenseIndex() {
 }
 
 function _findDuplicateExpense(draft, index) {
+  // An unpriced draft's amount is a placeholder, not a real figure — two
+  // different unread receipts from the same day would otherwise share a key
+  // and read as duplicates of each other. At import time that would merge one
+  // receipt's file onto the other's expense row instead of filing its own,
+  // silently dropping a receipt rather than merely flagging it.
+  if (draft?.amountUnknown) return null;
   const key = _duplicateExpenseKey(draft.date, draft.amount, draft.currency);
   if (index) return index.get(key) || null;
   const list = TAX_CENTER.businessExpenses || [];
@@ -5039,6 +5079,7 @@ function renderEmailReceiptDrafts(receipts) {
               <input type="text" data-erd-field="vendor" data-erd-i="${i}" value="${esc(r.vendor)}" placeholder="Vendor" style="font-size:var(--text-sm);width:100%;margin-bottom:2px;">
               <input type="text" data-erd-field="description" data-erd-i="${i}" value="${esc(r.description)}" placeholder="Description" style="font-size:var(--text-xs);width:100%;color:var(--content-secondary);">
               ${dup ? `<div style="font-size:var(--text-2xs);color:var(--amber);margin-top:2px;font-weight:600;">⚠ matches an existing expense</div>` : ''}
+              ${r.amountUnknown ? `<div style="font-size:var(--text-2xs);color:var(--amber);margin-top:2px;font-weight:600;">⚠ no confident amount — check before importing</div>` : ''}
               ${lowConf ? `<div style="font-size:var(--text-2xs);color:var(--content-muted);margin-top:2px;">low confidence (${(r.confidence * 100 | 0)}%)</div>` : ''}
               ${r.msgId
         ? `<div style="font-size:var(--text-2xs);color:var(--content-muted);margin-top:2px;">${(r.selectedAtts && r.selectedAtts.length) ? `📎 ${r.selectedAtts.length} file${r.selectedAtts.length > 1 ? 's' : ''} + email` : `📄 email`} → receipts folder on import</div>`
@@ -5049,10 +5090,13 @@ function renderEmailReceiptDrafts(receipts) {
             <td class="r">
               <div style="display:flex;gap:4px;align-items:center;justify-content:flex-end;">
                 <select data-erd-field="currency" data-erd-i="${i}" style="font-size:var(--text-sm);font-family:'DM Mono',monospace;">${curOptionsHtml}</select>
-                <input type="number" step="0.01" data-erd-field="amount" data-erd-i="${i}" value="${Number(r.amount).toFixed(2)}" style="font-size:var(--text-sm);text-align:right;font-family:'DM Mono',monospace;font-feature-settings:'tnum' 1;">
+                <input type="number" step="0.01" data-erd-field="amount" data-erd-i="${i}" value="${r.amountUnknown ? '' : Number(r.amount).toFixed(2)}" placeholder="${r.amountUnknown ? 'amount?' : ''}" style="font-size:var(--text-sm);text-align:right;font-family:'DM Mono',monospace;font-feature-settings:'tnum' 1;${r.amountUnknown ? 'border-color:var(--amber);' : ''}">
               </div>
             </td>
-            <td>${r.sourceSnippet ? `<button class="btn sm" type="button" title="View source snippet" aria-label="View source snippet" onclick="confirmDialog(${JSON.stringify(r.sourceSnippet)}, {title:'Source snippet', okLabel:'OK', cancelLabel:'Close'})">👁</button>` : ''}</td>
+            <td>
+              ${r.sourceSnippet ? `<button class="btn sm" type="button" title="View source snippet" aria-label="View source snippet" onclick="confirmDialog(${JSON.stringify(r.sourceSnippet)}, {title:'Source snippet', okLabel:'OK', cancelLabel:'Close'})">👁</button>` : ''}
+              ${(r._fromSweep || r._inboxId) ? `<button class="btn sm" type="button" title="Not a receipt — remove it" aria-label="Not a receipt — remove it" onclick="dismissEmailReceiptDraft(${i})">✕</button>` : ''}
+            </td>
           </tr>`;
   }).join('')}
         </tbody>
@@ -5100,6 +5144,12 @@ function renderEmailReceiptDrafts(receipts) {
     if (f === 'currency') v = String(v).toUpperCase();
     if (f === 'date') v = normalizeReceiptDate(v) || v;
     _emailReceiptDrafts[i][f] = v;
+    if (f === 'amount') {
+      // A hand-typed figure resolves the flag the same way a confident Gemini
+      // read would have — re-derived from the live value rather than just
+      // cleared, so blanking the field back out puts the warning back too.
+      _emailReceiptDrafts[i].amountUnknown = needsReceiptAmount(_emailReceiptDrafts[i]);
+    }
   });
 }
 
@@ -5230,13 +5280,18 @@ async function importEmailReceiptDrafts() {
     await Promise.all(neededCurrencies.map(c => fetchLiveRate(c, baseCurUp).catch(() => null)));
   }
 
-  let imported = 0, skippedDup = 0, relinked = 0;
+  let imported = 0, skippedDup = 0, relinked = 0, importedNeedsAmount = 0;
   let draftIdx = 0;
   const gmailSavedByMsg = {}; // msgId → [saved local:// paths] for that email
   for (const item of drafts) {
     const currency = (item.currency || baseCur).toUpperCase();
     const amount = Number(item.amount || 0);
-    if (!amount) continue;
+    // A checked row with no amount is a deliberate choice — the publisher
+    // owns filing it and pricing it later, the same way a Canada Post label
+    // filed with a blank amount gets flagged rather than skipped. Silently
+    // no-op'ing here would be the exact "vanished with no trace" failure this
+    // whole change exists to remove, just relocated from extraction to import.
+    if (!amount && !item.amountUnknown) continue;
 
     // If this draft matches an existing expense that already has a receipt,
     // there's nothing to do. If it matches one that has NO receipt yet, fall
@@ -5282,12 +5337,15 @@ async function importEmailReceiptDrafts() {
       cat: EXPENSE_CATEGORIES.includes(item.category) ? item.category : fallbackCat,
       currency,
       amount,
+      amountUnknown: !!item.amountUnknown,
       origCurrency: currency,
       origAmount: amount,
       fxRate,
       baseAmount: amount * fxRate,
       date: item.date || today(),
-      ref: item.reference || 'email-import',
+      // The stable receipt-email:<id> ref computed at extraction time, not
+      // Gemini's free-text reference guess — see receipt-drafts.js.
+      ref: item.ref || item.reference || 'email-import',
       receipt: receiptPath,
       receiptFiles,
       emailMsgId: item.msgId || '',
@@ -5296,6 +5354,7 @@ async function importEmailReceiptDrafts() {
       importedAt: new Date().toISOString()
     });
     imported++;
+    if (item.amountUnknown) importedNeedsAmount++;
   }
 
   await saveTaxCenter();
@@ -5308,19 +5367,259 @@ async function importEmailReceiptDrafts() {
     // ⚡ Bolt Optimization: Replace O(N) Array.includes with O(1) Set.has inside filter loop
     const inboxIdsSet = new Set(inboxIds);
     _emailInboxItems = _emailInboxItems.filter(i => !inboxIdsSet.has(i._inboxId));
-    updateEmailInboxBadge();
   }
+
+  // Every processed row — imported, relinked, or skipped as a settled
+  // duplicate — is done with, whichever source found it. Left in place, a
+  // just-imported sweep-found row would sit in _emailReceiptDrafts as a stale
+  // duplicate of the real ledger entry the next time the modal opens, since
+  // reopening now preserves auto-sourced rows instead of clearing everything.
+  const processed = new Set(drafts);
+  _emailReceiptDrafts = _emailReceiptDrafts.filter(d => !processed.has(d));
+  _clearResolvedSweepPending(drafts);
+  updateEmailInboxBadge();
 
   if (typeof renderTaxCenter === 'function') renderTaxCenter();
 
   const msgParts = [];
   if (imported) msgParts.push(`✓ Imported ${imported} expense${imported > 1 ? 's' : ''}`);
+  if (importedNeedsAmount) msgParts.push(`${importedNeedsAmount} need${importedNeedsAmount > 1 ? '' : 's'} an amount`);
   if (relinked) msgParts.push(`📎 ${relinked} receipt${relinked > 1 ? 's' : ''} linked to existing`);
   if (skippedDup) msgParts.push(`${skippedDup} duplicate${skippedDup > 1 ? 's' : ''} skipped`);
   showToast(msgParts.join(' · ') || 'Nothing imported', (imported || relinked) ? 'ok' : 'warn');
 
   if (imported || relinked) closeEmailReceiptImportModal();
   else if (btn) { btn.disabled = false; btn.textContent = 'Import selected drafts'; }
+}
+
+// ── The receipt inbox scans itself ──────────────────────────────────────
+//
+// Everything above is the manual path: open the modal, search, check boxes,
+// press Extract. Every piece of it already works — reading a receipt's PDF or
+// image with Gemini's document vision, grading it with a confidence score,
+// landing it in an editable table before a cent reaches the ledger. What it
+// never had was anyone to press the button.
+//
+// This runs that same pipeline on a timer instead. It is deliberately not
+// given more trust than the manual path has: a found receipt lands in the
+// same drafts table, checked or not, and nothing is filed until the owner
+// looks at it and imports it herself — a receipt's category is a judgement
+// call across eighteen buckets, not the one-right-answer a shipping label is,
+// and that is not something to automate past a human.
+
+const RECEIPT_SWEEP_INTERVAL_MS = 30 * 60 * 1000;
+const RECEIPT_SWEEP_COLD_START_DAYS = 14;
+const RECEIPT_SWEEP_LIST_LIMIT = 25;
+const RECEIPT_SWEEP_EXTRACT_CAP = 8;
+const RECEIPT_SWEEP_LAST_KEY = 'lm-receipt-sweep-last';
+const RECEIPT_SWEEP_PENDING_KEY = 'lm-receipt-sweep-pending';
+
+let _receiptSweepStarted = false;
+let _receiptSweeping = false;
+
+function readReceiptSweepStamp() {
+  try { return Number(localStorage.getItem(RECEIPT_SWEEP_LAST_KEY)) || 0; } catch (_) { return 0; }
+}
+function writeReceiptSweepStamp(at) {
+  try { localStorage.setItem(RECEIPT_SWEEP_LAST_KEY, String(at)); } catch (_) { /* private mode */ }
+}
+
+// Every message the sweep has drafted at least one row from that is not yet
+// imported or dismissed. This is what receiptSweepWindowStart reads to make
+// sure the search window never closes past a receipt still waiting for
+// review — the drafts themselves live only in memory, so this persisted list
+// is the one thing standing between a reload and losing one for good.
+function readReceiptSweepPending() {
+  try { return JSON.parse(localStorage.getItem(RECEIPT_SWEEP_PENDING_KEY) || '[]'); } catch (_) { return []; }
+}
+function writeReceiptSweepPending(list) {
+  try { localStorage.setItem(RECEIPT_SWEEP_PENDING_KEY, JSON.stringify(list || [])); } catch (_) { /* private mode */ }
+}
+
+// Drop every resolved draft's msgId from the pending list, once anything has
+// happened to it that the sweep no longer needs to remember — imported,
+// relinked, skipped as a settled duplicate, or dismissed outright.
+function _clearResolvedSweepPending(resolvedDrafts) {
+  const resolvedMsgIds = new Set((resolvedDrafts || []).map(d => d.msgId).filter(Boolean));
+  if (!resolvedMsgIds.size) return;
+  const remaining = readReceiptSweepPending().filter(p => !resolvedMsgIds.has(p.msgId));
+  writeReceiptSweepPending(remaining);
+}
+
+// The "Past 30 Days" preset, dated to the sweep's own window instead of a
+// fixed 30 days. Kept as a mechanical swap of the one clause that changes —
+// same senders, same subject terms, same -from:me — rather than a new query,
+// the same way the shipping-email sweep dates its own preset.
+function _receiptSweepQuery(sinceMs) {
+  const preset = GMAIL_RECEIPT_PRESETS[1].query;
+  const d = new Date(sinceMs);
+  const day = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+  return preset.replace('newer_than:30d', `after:${day}`);
+}
+
+/** Take the owner straight to the now-populated review table from the card. */
+function openReceiptSweepReviewFromAlert(event) {
+  if (event) event.stopPropagation();
+  dismissAppAlert('receipt-sweep');
+  openEmailReceiptImportModal();
+}
+
+/**
+ * A row the owner decided doesn't belong here — a false positive, or a
+ * receipt she isn't ready to price. Without this, an auto-sourced row has no
+ * way to leave the table short of eventually being imported, and a broader,
+ * noisier inbox search than the shipping sweeps run means more chances for
+ * something irrelevant to show up. One click and it's gone for good, not
+ * back on the next run.
+ */
+function dismissEmailReceiptDraft(i) {
+  const draft = _emailReceiptDrafts[i];
+  if (!draft) return;
+  _emailReceiptDrafts.splice(i, 1);
+  if (draft._inboxId && typeof window._fbDeleteInboxItem === 'function') {
+    window._fbDeleteInboxItem(draft._inboxId);
+    _emailInboxItems = _emailInboxItems.filter(it => it._inboxId !== draft._inboxId);
+  }
+  _clearResolvedSweepPending([draft]);
+  renderEmailReceiptDrafts(_emailReceiptDrafts);
+  updateEmailInboxBadge();
+}
+
+/** The card for a run that found something. */
+function _showReceiptSweepAlert(foundDrafts) {
+  const flagged = foundDrafts.filter(d => d.amountUnknown).length;
+  const n = foundDrafts.length;
+  pushAppAlert({
+    id: 'receipt-sweep',
+    icon: '🧾',
+    title: `${n} new receipt${n === 1 ? '' : 's'} found in your inbox`,
+    detail: flagged
+      ? `Waiting for you to review — ${flagged} need${flagged === 1 ? 's' : ''} an amount.`
+      : 'Waiting for you to review.',
+    actionLabel: 'Review',
+    action: 'openReceiptSweepReviewFromAlert(event)',
+  });
+}
+
+/**
+ * Ask Gmail whether anything receipt-shaped has arrived, and draft what it
+ * finds — never file it. Runs the exact extraction pipeline the manual
+ * "Extract" button runs: same search family, same Gemini call, same schema.
+ *
+ * Returns a count of what happened, so the caller (or a test) can see it
+ * without re-deriving it from module state.
+ */
+async function sweepReceiptEmails({ force = false } = {}) {
+  const apiKey = TAX_CENTER.settings?.geminiKey;
+  const configured = !!(sheetsUrl && apiKey);
+  const { online, visible } = browserWatchState();
+  const due = force
+    ? configured && online && !_receiptSweeping
+    : dueForCheck({
+      lastCheckedAt: readReceiptSweepStamp(),
+      now: Date.now(),
+      intervalMs: effectiveInterval(
+        RECEIPT_SWEEP_INTERVAL_MS,
+        integrationBackoffMs('receipt-scan', RECEIPT_SWEEP_INTERVAL_MS),
+      ),
+      online, configured, visible, busy: _receiptSweeping,
+    });
+  if (!due) return null;
+
+  _receiptSweeping = true;
+  try {
+    const pending = readReceiptSweepPending();
+    const since = receiptSweepWindowStart({
+      lastStamp: readReceiptSweepStamp(),
+      pendingFoundAts: pending.map(p => p.foundAt),
+      coldStartDays: RECEIPT_SWEEP_COLD_START_DAYS,
+    });
+
+    const listUrl = sheetsUrl + (sheetsUrl.includes('?') ? '&' : '?')
+      + 'action=listReceiptEmails&limit=' + RECEIPT_SWEEP_LIST_LIMIT
+      + '&q=' + encodeURIComponent(_receiptSweepQuery(since));
+    const listRes = await fetch(listUrl, { method: 'GET', mode: 'cors' });
+    if (!listRes.ok) throw new Error(`HTTP ${listRes.status}`);
+    const listData = await listRes.json();
+    if (!listData || !listData.ok) throw new Error(listData?.error || 'Gmail search failed');
+
+    const importedMsgIds = new Set(
+      (TAX_CENTER.businessExpenses || []).map(e => e.emailMsgId).filter(Boolean)
+    );
+    const alreadyDrafted = new Set(_emailReceiptDrafts.map(d => d.msgId).filter(Boolean));
+    const todo = (listData.emails || [])
+      .map(e => e.id)
+      .filter(id => id && !importedMsgIds.has(id) && !alreadyDrafted.has(id))
+      .slice(0, RECEIPT_SWEEP_EXTRACT_CAP);
+
+    const foundDrafts = [];
+    const newPendingEntries = [];
+    if (todo.length) {
+      const prompt = _buildReceiptPrompt();
+      try {
+        const caps = await fetchSheetsCapabilities();
+        if (caps && caps.batchEmailContent) await _batchFetchEmailContents(todo);
+      } catch (_) { /* fall back to per-message fetch below */ }
+
+      await _runExtractionPool(todo, EMAIL_EXTRACT_CONCURRENCY, async (msgId) => {
+        const email = await _fetchEmailContent(msgId);
+        const selected = _selectedFileParts(msgId, email);
+        await _hydrateSelectedAttachmentBytes(msgId, selected);
+        await Promise.all(selected.map(f => _shrinkInlineAttachment(f)));
+        const emailParts = [
+          { text: prompt },
+          {
+            text: `--- SUBJECT: "${email.subject}" FROM: ${email.from} DATE: ${email.date} ---\n`
+              + _trimEmailBodyForScan(email.body)
+          }
+        ];
+        for (const f of selected) {
+          if (f && f.base64) {
+            emailParts.push({ inline_data: { mime_type: f.scanMime || f.mime, data: f.scanBase64 || f.base64 } });
+          }
+        }
+        const out = await _callGeminiForReceipts(apiKey, emailParts, {
+          schema: RECEIPT_EXTRACTION_SCHEMA,
+          thinkingBudget: GEMINI_THINKING_SORT,
+        });
+        const rows = _parseReceiptJson(out.text || '{}').receipts || [];
+        const { drafts } = _draftsFromReceiptRows(rows, msgId);
+        if (drafts.length) {
+          foundDrafts.push(...drafts.map(d => ({ ...d, _fromSweep: true })));
+          newPendingEntries.push({ msgId, foundAt: Date.now() });
+        }
+        return drafts;
+      });
+    }
+
+    if (foundDrafts.length) {
+      _emailReceiptDrafts = mergeReceiptDrafts(_emailReceiptDrafts, foundDrafts);
+      writeReceiptSweepPending([...pending, ...newPendingEntries]);
+      const modal = $('m-email-receipt-import-modal');
+      if (modal && modal.style.display !== 'none' && !_emailDraftsHaveManualReview()) {
+        renderEmailReceiptDrafts(_emailReceiptDrafts);
+      }
+      updateEmailInboxBadge();
+      _showReceiptSweepAlert(foundDrafts);
+    }
+
+    writeReceiptSweepStamp(Date.now());
+    noteIntegrationSuccess('receipt-scan');
+    return { found: foundDrafts.length, flagged: foundDrafts.filter(d => d.amountUnknown).length };
+  } catch (error) {
+    console.warn('Receipt inbox sweep failed', error);
+    noteIntegrationFailure('receipt-scan', error, { online, configured });
+    return null;
+  } finally {
+    _receiptSweeping = false;
+  }
+}
+
+function startReceiptEmailSweep() {
+  if (_receiptSweepStarted || typeof window === 'undefined') return;
+  _receiptSweepStarted = true;
+  updateEmailInboxBadge(); // paint the persisted pending count before the first tick
+  startWatch(() => { sweepReceiptEmails(); }, { intervalMs: RECEIPT_SWEEP_INTERVAL_MS });
 }
 
 // ── EXPENSE FORM & LEDGER ───────────────────────────────────────────────
@@ -5983,4 +6282,8 @@ export {
   useReceiptPhoto,
   viewLocalReceipt,
   voidExpense,
+  dismissEmailReceiptDraft,
+  openReceiptSweepReviewFromAlert,
+  startReceiptEmailSweep,
+  sweepReceiptEmails,
 };
