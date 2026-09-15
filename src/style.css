@@ -18197,6 +18197,17 @@ button[onclick="refreshUmamiStats()"]:active {
   line-height: var(--leading-normal);
 }
 
+/* A second, smaller heading inside the same section — for Possible
+   Miscategorizations, which answers a different question ("is this filed
+   right") than the gaps above it ("is this here at all") and reads best as
+   its own block rather than folded into the same list. */
+.ded-subsec-head {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  margin: var(--space-6) 0 var(--space-1);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+}
+
 @container (max-width: 34rem) {
   .ded-gap-top { flex-direction: column; }
   .ded-gap-actions .btn { flex: 1 1 auto; }
