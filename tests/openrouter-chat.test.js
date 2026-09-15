@@ -201,6 +201,22 @@ describe('what a backup failure is called', () => {
     expect(friendlyOpenRouterError(Object.assign(new Error(msg), { status }))).toMatch(expected);
   });
 
+  it('tells a key hitting its own spend cap apart from a bad key', () => {
+    // A key with its own configured limit rejects the same way an invalid key
+    // does — same status shape — but "check the key" sends the publisher to
+    // fix the wrong thing. The cap's own wording ("Key limit exceeded") must
+    // win over the generic 401/403 case, not get swallowed by it.
+    const e = Object.assign(new Error('Key limit exceeded'), { status: 403 });
+    expect(friendlyOpenRouterError(e)).toMatch(/spending cap/i);
+    expect(friendlyOpenRouterError(e)).not.toMatch(/backup key was rejected/i);
+  });
+
+  it('never lets "Rate limit exceeded" fall into the key-limit case', () => {
+    const e = Object.assign(new Error('Rate limit exceeded'), { status: 429 });
+    expect(friendlyOpenRouterError(e)).toMatch(/at its limit too/i);
+    expect(friendlyOpenRouterError(e)).not.toMatch(/spending cap/i);
+  });
+
   it('does not invent a cause for something it has not seen', () => {
     expect(friendlyOpenRouterError(new Error('something odd'))).toBe('something odd');
   });
