@@ -50,3 +50,6 @@
 ## 2025-03-05 - Hoist Duplicate Reduce Calls in Template Literals
 **Learning:** Calculating aggregate values (like `subtotal` or `totalQty`) multiple times inside template literals using `.reduce()` creates unnecessary array passes and garbage collection overhead. In functions like `renderInvoicePaperHTML` and `onDiscountTypeChange`, replacing redundant `.reduce()` calls with a single upfront imperative loop significantly improves parsing and rendering speeds.
 **Action:** When a calculation is duplicated (e.g., inside conditional string logic like checking for plurals), hoist it into a single upfront variable using an imperative loop instead of chaining multiple `.reduce()` calls.
+## 2024-09-15 - [Loop Fusion in visibleAttentionResult]
+**Learning:** In highly trafficked arrays like `signals`, chained declarative operations (`reduce`, `filter`, array allocations inside `map`) can add measurable overhead. In `visibleAttentionResult()` of `src/main.js`, combining array operations and conditionals into a single imperative loop eliminated multiple intermediate array allocations and resulted in a noticeable speedup.
+**Action:** Implement a unified loop inside `visibleAttentionResult()` that merges `.reduce()` accumulation for `hiddenCount`, `.filter()` logic for keeping valid signals, array construction, and `.filter(isUrgent).length` checks.
