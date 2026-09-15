@@ -1,8 +1,39 @@
-/* Standalone Receipt Finder service v1. Deploy in its OWN Apps Script project.
+var RECEIPT_SCRIPT_VERSION = 'v2';
+
+/* Standalone Receipt Finder service. Deploy in its OWN Apps Script project.
  * Script Properties: FIREBASE_WEB_API_KEY, PUBLISHER_UID, GEMINI_API_KEY,
  * GEMINI_MODEL (optional, defaults to gemini-2.5-flash).
  * No Gmail scope, refresh token, or mailbox access is held by this service.
+ *
+ * Version history
+ * v2 - doGet returns a setup report (service name, version, which Script
+ *      Properties are present) so the app can verify a deployment before a
+ *      scan spends Gmail and AI calls. Values are never echoed back.
+ * v1 - doPost extraction: Firebase publisher check, attachment allow-list,
+ *      per-minute rate limit, Gemini structured output.
  */
+function doGet() {
+  var props = PropertiesService.getScriptProperties();
+  var model = props.getProperty('GEMINI_MODEL') || 'gemini-2.5-flash';
+  var validModel = /^[a-zA-Z0-9.-]+$/.test(model);
+  // This endpoint is reachable without sign-in, so it reports only whether each
+  // setting exists. Never return a key, a UID, or any part of their values.
+  var configured = {
+    firebaseWebApiKey: !!props.getProperty('FIREBASE_WEB_API_KEY'),
+    publisherUid: !!props.getProperty('PUBLISHER_UID'),
+    geminiApiKey: !!props.getProperty('GEMINI_API_KEY'),
+    model: validModel,
+  };
+  return receiptJson_({
+    ok: true,
+    service: 'lyrical-receipt-finder',
+    scriptVersion: RECEIPT_SCRIPT_VERSION,
+    configured: configured,
+    ready: configured.firebaseWebApiKey && configured.publisherUid && configured.geminiApiKey && validModel,
+    model: validModel ? model : '',
+  });
+}
+
 function doPost(e) {
   try {
     var raw = e && e.postData && e.postData.contents;

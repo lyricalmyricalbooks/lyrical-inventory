@@ -33,7 +33,22 @@ links. Existing Paste & Upload and Gmail add-on intake remain separate flows.
    settings there before importing. Existing receipt image/PDF access rules stay
    in effect.
 6. Open Import Receipts from Email → Finder setup, save the deployment URL, then
-   Connect Gmail. Scan a small date range first and compare results with originals.
+   press **Test connection**. The service answers a `GET` with its own setup report
+   (`service`, `scriptVersion`, and a boolean per Script Property — never a value),
+   so a missing key, an unredeployed script, or the Sheets URL pasted in by mistake
+   is named before any scan spends Gmail requests or AI credits. Anyone can reach
+   this report, which is why it reports presence only.
+7. Once the check reads Ready, Connect Gmail. Scan a small date range first and
+   compare results with originals.
+
+### Keeping the service version in step
+
+`RECEIPT_SCRIPT_VERSION` in `apps-script/receipt-finder/Code.gs` and
+`EXPECTED_FINDER_VERSION` in `src/lib/receipt-finder-client.js` move together
+whenever the service's behaviour changes, with a line in the version-history block
+atop `Code.gs`. A deployment left on an older version is reported as needing a
+redeploy rather than failing mid-scan. This service versions independently of the
+Sheets backend, which keeps its own `scriptVersion`/`EXPECTED_SCRIPT_VERSION` pair.
 
 ## Behaviour and data
 

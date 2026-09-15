@@ -75,3 +75,52 @@ export async function extractFoundReceipts({ endpoint, idToken, email, signal, f
   if (!Array.isArray(data.receipts)) throw new Error('Receipt AI returned an invalid response. Retry this email.');
   return data;
 }
+
+export const FINDER_ENDPOINT_PATTERN = /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/;
+export const EXPECTED_FINDER_VERSION = 'v2';
+
+const SETUP_STEPS = {
+  firebaseWebApiKey: 'Add FIREBASE_WEB_API_KEY — this project’s Firebase web API key — in the script’s Script Properties.',
+  publisherUid: 'Add PUBLISHER_UID — the publisher’s Firebase sign-in ID — in the script’s Script Properties.',
+  geminiApiKey: 'Add GEMINI_API_KEY — a Gemini key restricted to the Generative Language API — in the script’s Script Properties. It never goes into this app.',
+  model: 'Fix GEMINI_MODEL: it must be a plain model name such as gemini-2.5-flash, or removed to use the default.',
+};
+
+// Plain-language reading of the service's own setup report. Kept free of fetch
+// and DOM so the wording can be tested directly.
+export function describeFinderSetup(report) {
+  if (!report || report.service !== 'lyrical-receipt-finder') {
+    const sheets = typeof report?.service === 'string' && report.service.startsWith('lyrical-sheets-webhook');
+    return { level: 'error',
+      headline: sheets ? 'That is the Google Sheet script, not the receipt finder.' : 'That address did not answer as the receipt finder service.',
+      steps: [sheets
+        ? 'Deploy the two files in apps-script/receipt-finder as a separate Apps Script project and paste that deployment address here.'
+        : 'Check that the address ends in /exec and that the deployment runs as you, with access set to Anyone.'] };
+  }
+  const steps = Object.keys(SETUP_STEPS).filter(key => !report.configured?.[key]).map(key => SETUP_STEPS[key]);
+  if (report.scriptVersion !== EXPECTED_FINDER_VERSION) {
+    steps.push(`This deployment is running ${report.scriptVersion || 'an older version'} and the app expects ${EXPECTED_FINDER_VERSION}. Paste the latest script in and deploy a new version.`);
+  }
+  if (!steps.length) return { level: 'ready', headline: `Ready to scan using ${report.model || 'the default model'}.`, steps: [] };
+  const missing = steps.length === 1 ? 'One thing is still missing.' : `${steps.length} things are still missing.`;
+  return { level: report.ready ? 'warn' : 'error', headline: missing, steps };
+}
+
+export async function checkReceiptFinderService({ endpoint, fetchImpl = fetch, signal }) {
+  if (!FINDER_ENDPOINT_PATTERN.test(endpoint || '')) {
+    return { level: 'error', headline: 'Save a deployment address first.',
+      steps: ['It looks like https://script.google.com/macros/s/…/exec — copy it from the Apps Script deployment.'] };
+  }
+  let report;
+  try {
+    const res = await fetchImpl(endpoint, { method: 'GET', signal, redirect: 'follow' });
+    if (!res.ok) throw new Error(String(res.status));
+    report = await res.json();
+  } catch (error) {
+    if (error?.name === 'AbortError') throw error;
+    return { level: 'error', headline: 'The receipt service did not answer.',
+      steps: ['Open the address in a browser tab. If it asks you to sign in, redeploy the web app with access set to Anyone and executing as you.',
+        'If nothing loads at all, check that the deployment is still active and that you are online.'] };
+  }
+  return describeFinderSetup(report);
+}
