@@ -428,6 +428,60 @@ describe('when Google will not answer', () => {
   });
 });
 
+// ── A manual pick is a promise kept ──────────────────────────────────────────
+
+describe('when the publisher picks a model themselves', () => {
+  function harness({ gemini = null, backup = null, geminiKey = 'g', backupKey = 'b', backupModel = 'vendor/m:free' } = {}) {
+    const TAX_CENTER = { settings: { geminiKey, openRouterKey: backupKey, openRouterModel: backupModel } };
+    const runIntelTurn = vi.fn(gemini || (async () => ({ text: 'from google', via: undefined, toolCalls: [], proposals: [], history: [] })));
+    const runOpenRouterTurn = vi.fn(backup || (async () => ({ text: 'from backup', via: 'openrouter', model: backupModel, toolCalls: [], proposals: [], history: [] })));
+    const deps = {
+      TAX_CENTER, runIntelTurn, runOpenRouterTurn,
+      INTEL_HISTORY: [], INTEL_TOOL_SCHEMAS: [],
+      intelContext: () => ({}), systemInstruction: () => 'sys',
+      intelAbort: { signal: undefined },
+      setIntelStatus: vi.fn(),
+      friendlyChatError: (e) => `google: ${e.message}`,
+      friendlyOpenRouterError: (e) => `backup: ${e.message}`,
+      console: { warn: vi.fn() },
+    };
+    const ask = buildHarness({
+      names: ['backupProvider', 'askWithFallback'], deps, returns: 'askWithFallback',
+    });
+    return { ask, ...deps };
+  }
+
+  it('never asks Google when pinned to the backup', async () => {
+    const h = harness();
+    expect((await h.ask('q', 'backup')).text).toBe('from backup');
+    expect(h.runIntelTurn).not.toHaveBeenCalled();
+  });
+
+  it('fails outright when pinned to Google and Google fails, even with a backup configured', async () => {
+    const h = harness({ gemini: async () => { throw new Error('down'); } });
+    await expect(h.ask('q', 'gemini')).rejects.toThrow(/down/);
+    expect(h.runOpenRouterTurn).not.toHaveBeenCalled();
+  });
+
+  it('tags a backup-only failure for the backup-specific error wording', async () => {
+    const h = harness({ backup: async () => { throw new Error('bad key'); } });
+    await expect(h.ask('q', 'backup')).rejects.toMatchObject({ __viaOpenRouter: true });
+  });
+
+  it('never tags a cancel while pinned to the backup', async () => {
+    const abort = Object.assign(new Error('Aborted'), { name: 'AbortError' });
+    const h = harness({ backup: async () => { throw abort; } });
+    await expect(h.ask('q', 'backup')).rejects.not.toMatchObject({ __viaOpenRouter: true });
+  });
+
+  it('degrades a stale pin to auto instead of refusing to answer', async () => {
+    // The publisher picked the backup, then removed its key — the pin
+    // shouldn't survive its own provider disappearing.
+    const h = harness({ backupKey: '' });
+    expect((await h.ask('q', 'backup')).text).toBe('from google');
+  });
+});
+
 describe('the composer with only a backup key', () => {
   const blocker = (settings, onLine = true) => buildHarness({
     names: ['backupProvider', 'intelBlocker'],

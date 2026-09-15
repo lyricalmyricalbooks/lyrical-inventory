@@ -18167,6 +18167,47 @@ button[onclick="refreshUmamiStats()"]:active {
   background: var(--gold);
   color: var(--on-accent);
 }
+/* Which model answers. Empty (and collapsed) whenever there's nothing to
+   switch to — a lone Gemini key needs no picker. */
+.intel-model-switch {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--surface-inverse-raised);
+  border: 1px solid var(--surface-inverse-raised);
+}
+.intel-model-switch:empty { display: none; }
+.intel-model-pill {
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-family: 'Syne', sans-serif;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--content-on-inverse);
+  opacity: 0.62;
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  /* Padded hit area rather than a literal 44px box — same trick as
+     .intel-tick — so three pills side by side stay pocket-sized. */
+  box-shadow: 0 0 0 6px transparent;
+}
+.intel-model-pill:hover { opacity: 0.85; }
+.intel-model-pill.is-active {
+  background: linear-gradient(135deg, var(--gold2), var(--gold));
+  color: var(--ink);
+  opacity: 1;
+}
+/* #tab-intel's head isn't inside an .overview-section, so it doesn't pick up
+   the @container overview-sec stacking every other section head gets. That
+   went unnoticed while its badge slot was just one usually-hidden button;
+   the model switch is permanent and wide enough to squeeze the title into a
+   one-word-per-line wrap at phone width without its own stacking rule. */
+@media (max-width: 640px) {
+  #tab-intel .sec-head { flex-direction: column; align-items: stretch; }
+}
 .intel-panel {
   background: var(--surface-inverse);
   border-color: var(--surface-inverse-raised);

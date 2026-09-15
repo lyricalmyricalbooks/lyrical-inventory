@@ -34,6 +34,7 @@ import { _tcBuildLedger, _tcGetTripsSummaryAll, saveTaxCenter } from './taxcentr
 
 const THREAD_KEY = 'lm_intel_thread';
 const DISCLOSURE_KEY = 'lm_intel_disclosure_v1';
+const PROVIDER_KEY = 'lm_intel_provider';
 
 // How much of the conversation is carried forward. Every earlier turn is
 // re-sent on each question, tool results and all, so an unbounded thread would
@@ -87,6 +88,24 @@ function saveIntelThread() {
 
 function disclosureAccepted() {
   try { return localStorage.getItem(DISCLOSURE_KEY) === 'yes'; } catch (_) { return false; }
+}
+
+/**
+ * Which model the publisher wants answering: 'auto' (Gemini, falling back to
+ * the backup on its own — the long-standing behaviour), or a manual pin to
+ * one or the other. A value naming a provider that isn't configured anymore
+ * is treated as 'auto' rather than refusing to answer.
+ */
+function intelProviderPref() {
+  try {
+    const v = localStorage.getItem(PROVIDER_KEY);
+    return v === 'gemini' || v === 'backup' ? v : 'auto';
+  } catch (_) { return 'auto'; }
+}
+
+function setIntelProviderPref(value) {
+  try { localStorage.setItem(PROVIDER_KEY, value === 'gemini' || value === 'backup' ? value : 'auto'); } catch (_) { /* still works this session */ }
+  renderIntel();
 }
 
 // ── THE CONTEXT THE TOOLS READ ───────────────────────────────────────────────
@@ -363,13 +382,39 @@ function intelBlocker() {
   return '';
 }
 
+/**
+ * The model picker, shown only when there's an actual choice to make — a
+ * lone Gemini key has nothing to switch to. Auto is the long-standing
+ * behaviour (Gemini, then the backup on failure); the other two pin every
+ * question to one model until the publisher picks something else.
+ */
+function intelModelSwitchHtml() {
+  const backup = backupProvider();
+  if (!backup || !TAX_CENTER?.settings?.geminiKey) return '';
+  const pref = intelProviderPref();
+  const backupLabel = backup.model.length > 20 ? `${backup.model.slice(0, 19)}…` : backup.model;
+  const pill = (value, text, title) => `<button type="button" class="intel-model-pill ${pref === value ? 'is-active' : ''}"
+      role="radio" aria-checked="${pref === value}" title="${escapeHtml(title)}" onclick="setIntelProviderPref('${value}')">${escapeHtml(text)}</button>`;
+  return pill('auto', 'Auto', 'Ask Gemini, and switch to your backup automatically if Gemini can’t answer')
+    + pill('gemini', 'Gemini', 'Always ask Gemini')
+    + pill('backup', backupLabel, `Always ask your backup model (${backup.model})`);
+}
+
 function renderIntel() {
   const thread = $i('intel-thread');
   if (!thread) return;
-  if (isAuthor()) { thread.innerHTML = ''; const rail = $i('intel-rail'); if (rail) rail.innerHTML = ''; return; }
+  if (isAuthor()) {
+    thread.innerHTML = '';
+    const rail = $i('intel-rail'); if (rail) rail.innerHTML = '';
+    const modelSwitch = $i('intel-model-switch'); if (modelSwitch) modelSwitch.innerHTML = '';
+    return;
+  }
 
   const rail = $i('intel-rail');
   if (rail) rail.innerHTML = intelRailHtml();
+
+  const modelSwitch = $i('intel-model-switch');
+  if (modelSwitch) modelSwitch.innerHTML = intelModelSwitchHtml();
 
   const gate = $i('intel-disclosure');
   if (gate) gate.hidden = disclosureAccepted();
@@ -435,17 +480,24 @@ function askIntelStarter(btn) {
 }
 
 /**
- * Ask Google; if Google will not answer, ask the backup.
+ * Ask whichever model the publisher's picked (pref: 'auto' | 'gemini' |
+ * 'backup' — the caller reads this from intelProviderPref()), or, on
+ * 'auto', ask Google and only fall back to the backup if Google won't answer.
  *
- * Falls back on ANY Google failure, not only an exhausted allowance. A rotated
- * key, a restricted key, a switched-off API and an outage all leave the
- * publisher equally unable to ask a question, and a backup that only covers one
- * of those is a backup that is missing whenever it is actually needed.
+ * On auto, this falls back on ANY Google failure, not only an exhausted
+ * allowance. A rotated key, a restricted key, a switched-off API and an
+ * outage all leave the publisher equally unable to ask a question, and a
+ * backup that only covers one of those is a backup that is missing whenever
+ * it is actually needed.
+ *
+ * A manual pick is a promise kept, not a preference: 'gemini' or 'backup'
+ * means exactly that model answers or the question fails — silently trying
+ * the other one would make the switcher a suggestion instead of a choice.
  *
  * A cancel is never a failure to fall back from: the publisher pressed stop, and
  * quietly asking somebody else instead is the opposite of what that means.
  */
-async function askWithFallback(question) {
+async function askWithFallback(question, pref = 'auto') {
   const shared = {
     history: INTEL_HISTORY,
     userText: question,
@@ -455,13 +507,32 @@ async function askWithFallback(question) {
     signal: intelAbort.signal,
   };
   const backup = backupProvider();
+  const hasGemini = !!TAX_CENTER?.settings?.geminiKey;
 
-  if (TAX_CENTER?.settings?.geminiKey) {
+  // A pin to a provider that's no longer configured (key removed since the
+  // publisher chose it) degrades to auto rather than refusing to answer.
+  if (pref === 'backup' && !backup) pref = 'auto';
+  if (pref === 'gemini' && !hasGemini) pref = 'auto';
+
+  // A failure here is tagged so the caller reaches for friendlyOpenRouterError
+  // instead of the Gemini-specific friendlyChatError — an OpenRouter 401 read
+  // through Gemini's own error patterns falls through to raw API text instead
+  // of "the backup key was rejected".
+  if (pref === 'backup') {
+    try {
+      return await runOpenRouterTurn({ apiKey: backup.key, model: backup.model, ...shared });
+    } catch (e) {
+      if (e && e.name !== 'AbortError') e.__viaOpenRouter = true;
+      throw e;
+    }
+  }
+
+  if (hasGemini) {
     try {
       return await runIntelTurn({ apiKey: TAX_CENTER.settings.geminiKey, ...shared });
     } catch (e) {
       if (e && e.name === 'AbortError') throw e;
-      if (!backup) throw e;
+      if (pref === 'gemini' || !backup) throw e;
       console.warn('Intelligence: Google failed, trying the backup model —', e && e.message);
       setIntelStatus('Google could not answer — asking the backup model…');
       try {
@@ -481,7 +552,12 @@ async function askWithFallback(question) {
 
   // No Google key at all: the backup is not a fallback, it is the only option.
   if (!backup) throw new Error('No AI key is set');
-  return runOpenRouterTurn({ apiKey: backup.key, model: backup.model, ...shared });
+  try {
+    return await runOpenRouterTurn({ apiKey: backup.key, model: backup.model, ...shared });
+  } catch (e) {
+    if (e && e.name !== 'AbortError') e.__viaOpenRouter = true;
+    throw e;
+  }
 }
 
 async function sendIntelMessage() {
@@ -505,7 +581,7 @@ async function sendIntelMessage() {
   renderIntel();
 
   try {
-    const out = await askWithFallback(question);
+    const out = await askWithFallback(question, intelProviderPref());
 
     const ids = [];
     for (const batch of out.proposals) {
@@ -539,9 +615,10 @@ async function sendIntelMessage() {
       setIntelStatus('Stopped.');
     } else {
       console.error('Intelligence turn failed', e);
+      const friendly = e?.__alreadyFriendly ? e.message : (e?.__viaOpenRouter ? friendlyOpenRouterError(e) : friendlyChatError(e));
       INTEL_MESSAGES.push({
         role: 'app', at: Date.now(), tools: [], isError: true, question,
-        text: `I could not answer that — ${e?.__alreadyFriendly ? e.message : friendlyChatError(e)}.`,
+        text: `I could not answer that — ${friendly}.`,
       });
       setIntelStatus('That question could not be answered.');
     }
@@ -779,6 +856,7 @@ export {
   retryIntelQuestion,
   scrollToIntelMessage,
   sendIntelMessage,
+  setIntelProviderPref,
   stopIntelTurn,
   systemInstruction,
   toggleIntelEdit,
