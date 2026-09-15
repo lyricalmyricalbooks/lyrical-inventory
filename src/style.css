@@ -1959,7 +1959,7 @@ tr.hist-row:hover {
 .metric-banner-actions{display:flex;flex-direction:column;gap:8px;align-items:flex-end;}
 .metric-banner-cta,.metric-banner-link{display:inline-flex;align-items:center;gap:8px;padding:13px 24px;background:var(--gold);color:var(--ink);font-family:'Syne',sans-serif;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;border-radius:var(--r2);border:none;cursor:pointer;text-decoration:none;transition:background .15s;}
 .metric-banner-cta:hover,.metric-banner-link:hover{background:var(--gold2);}
-.metric-banner-hint{font-size:10px;color:rgba(255,255,255,.2);text-align:right;}
+.metric-banner-hint{font-size:10px;color:var(--on-inverse-3);text-align:right;}
 .metric-banner-table-wrap,.metric-banner-items{margin-top:1.25rem;padding-top:1.25rem;border-top:1px solid rgba(255,255,255,.07);}
 .metric-banner-items{display:flex;flex-direction:column;gap:8px;}
 .metric-banner-table{width:100%;border-collapse:collapse;font-size:12px;font-family:'DM Mono',monospace;}
