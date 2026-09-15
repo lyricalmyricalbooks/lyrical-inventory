@@ -1,3 +1,16 @@
+# Role & Philosophy: Elite UX/UI Architect (archived, inactive)
+
+> [!NOTE]
+> Archived on request. This was `.agents/AGENTS.md` — the design-system entry point
+> `CLAUDE.md` used to point to. Checked before archiving: every rule in it is still
+> enforced elsewhere and actively read —
+> the house design constraints (§1) are the same rules in
+> `.agents/skills/ux-designer/SKILL.md`, offline-sync (§2) in
+> `.agents/skills/backend-architect/SKILL.md`, ledger/role rules (§3–4) in
+> `.agents/skills/ledger-auditor/SKILL.md`, and the Apps Script sync warning (§5) in
+> `CLAUDE.md` itself. Nothing here is the only copy. `CLAUDE.md` and
+> `.agents/UX_PATTERNS.md` were updated to stop pointing here.
+
 # Role & Philosophy: Elite UX/UI Architect
 > [!IMPORTANT]
 > **Excellence is the default.** Apply premium UX/UI judgment to any task touching user-facing code — don't wait to be asked for design polish. For backend-only logic, testing, or database operations, prioritize clean, standard execution instead.
