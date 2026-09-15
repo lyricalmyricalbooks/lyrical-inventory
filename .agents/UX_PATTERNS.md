@@ -1,10 +1,11 @@
 # UX Component Patterns — reuse before inventing
 
 > [!NOTE]
-> This is the concrete companion to `.agents/AGENTS.md`. AGENTS.md sets the *principles*
-> (shadows, motion curves, Fitts's/Hick's law, mandatory checklist). This file maps those
-> principles to the **actual classes and snippets already proven in this codebase**, so new
-> UI converges on one system instead of drifting toward one-off CSS every session.
+> This is the concrete companion to `.agents/skills/ux-designer/SKILL.md`. That file sets
+> the *principles* (shadows, motion curves, Fitts's/Hick's law, mandatory checklist). This
+> file maps those principles to the **actual classes and snippets already proven in this
+> codebase**, so new UI converges on one system instead of drifting toward one-off CSS every
+> session.
 >
 > **Rule of thumb:** before writing a new class for a button, pill, table, dropdown, or empty
 > state, grep `src/style.css` for the patterns below. Extend an existing one (a modifier class,

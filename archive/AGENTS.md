@@ -1,4 +1,14 @@
-# AGENTS.md — lyrical-inventory
+# AGENTS.md — lyrical-inventory (archived, inactive)
+
+> [!NOTE]
+> Archived on request. This file used to sit at the repo root, where any AI
+> coding tool that follows the `AGENTS.md` convention (this project also
+> references an "Antigravity IDE agent selector" below) would auto-read it —
+> giving it a second, slightly different set of instructions running
+> alongside `CLAUDE.md` (e.g. a different "Next moves" suggestion count).
+> Moved here so nothing picks it up automatically. `CLAUDE.md` is this
+> project's one active instruction file; `.agents/AGENTS.md` (a different
+> file, still active) is the design-system reference it points to.
 
 ## Quick Commands
 - **Dev (All):** `npm run dev:all` (Starts Vite frontend + Node.js backend)

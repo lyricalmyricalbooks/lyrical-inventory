@@ -68,7 +68,7 @@ Apply the full process (understand → assess risk → plan → implement → ve
 - Only ask clarifying questions if the request is genuinely ambiguous.
 
 ## Customizations & Style Guidelines
-- **Strict Guidelines:** Always adhere to the premium UX/UI, offline-first sync, financial ledger precision, role-based security, and spreadsheet integration rules defined in [.agents/AGENTS.md](.agents/AGENTS.md) and [.agents/skills/ux-designer/SKILL.md](.agents/skills/ux-designer/SKILL.md).
+- **Strict Guidelines:** Always adhere to the premium UX/UI rules in [.agents/skills/ux-designer/SKILL.md](.agents/skills/ux-designer/SKILL.md), the offline-first sync rules in [.agents/skills/backend-architect/SKILL.md](.agents/skills/backend-architect/SKILL.md), and the financial ledger precision and role-based security rules in [.agents/skills/ledger-auditor/SKILL.md](.agents/skills/ledger-auditor/SKILL.md).
 - **Pattern Reference:** Before writing a new list, dropdown, button, pill, table, or empty state, read [.agents/UX_PATTERNS.md](.agents/UX_PATTERNS.md) to reuse existing classes and design patterns before inventing new ones.
 
 ## Canada Post shipping integration
