@@ -382,6 +382,18 @@ describe('wiring', () => {
     // The unsafe shape this replaced: a signal's destination inside an onclick.
     expect(mainJs).not.toMatch(/onclick="\$\{escapeHtml\(sig\.fix/);
   });
+
+  it('lets a signal be dismissed, routed the same safe way as the fix button', () => {
+    expect(mainJs).toContain('data-dismiss-signal=');
+    expect(mainJs).toContain("closest?.('[data-dismiss-signal]')");
+    // A signal id can embed a free-text book id — never splice it into an onclick.
+    expect(mainJs).not.toMatch(/onclick="[^"]*dismissTodoSignal/);
+  });
+
+  it('keeps a way to bring dismissed items back', () => {
+    expect(mainJs).toContain('function restoreDismissedTodoSignals');
+    expect(mainJs).toContain('restoreDismissedTodoSignals()');
+  });
 });
 
 describe('styling', () => {
@@ -390,6 +402,10 @@ describe('styling', () => {
   it('styles the notification and activity panels', () => {
     expect(css).toContain('.notif-item');
     expect(css).toContain('.activity-item');
+  });
+
+  it('styles the dismiss control', () => {
+    expect(css).toContain('.todo-dismiss');
   });
 
   it('uses canonical surface tokens rather than inventing new ones', () => {

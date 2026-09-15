@@ -17800,9 +17800,47 @@ button[onclick="refreshUmamiStats()"]:active {
   color: var(--content-secondary);
   text-wrap: pretty;
 }
-.todo-fix { flex: none; align-self: center; }
+.todo-row-actions { flex: none; align-self: center; display: flex; align-items: center; gap: var(--space-2); }
+.todo-fix { flex: none; }
+
+/* A quiet "not for me" — distinct from the fix button so a stray tap can't be
+   mistaken for taking care of the thing. Only appears on hover/focus so a
+   healthy-looking row doesn't read as cluttered with an ✕ sitting on it. */
+.todo-dismiss {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--r2);
+  background: transparent;
+  color: var(--content-faint);
+  font-size: var(--text-sm);
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-entrance), background var(--dur-base) var(--ease-entrance), color var(--dur-base) var(--ease-entrance);
+}
+.todo-row:hover .todo-dismiss,
+.todo-dismiss:focus-visible {
+  opacity: 1;
+}
+.todo-dismiss:hover { background: var(--surface-inset); color: var(--content-secondary); }
+
+.todo-hidden {
+  margin: var(--space-3) 0 0;
+  display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
+  color: var(--content-muted); font-size: var(--text-xs);
+}
 
 .todo-nav-badge[hidden] { display: none; }
+
+@media (hover: none) {
+  /* No hover on touch — the dismiss control has to be visible to be reachable. */
+  .todo-dismiss { opacity: 1; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .todo-row:hover { transform: none; }
