@@ -68,7 +68,8 @@ Apply the full process (understand → assess risk → plan → implement → ve
 - Only ask clarifying questions if the request is genuinely ambiguous.
 
 ## Customizations & Style Guidelines
-- **Strict Guidelines:** Always adhere to the premium UX/UI rules in [.agents/skills/ux-designer/SKILL.md](.agents/skills/ux-designer/SKILL.md), the offline-first sync rules in [.agents/skills/backend-architect/SKILL.md](.agents/skills/backend-architect/SKILL.md), and the financial ledger precision and role-based security rules in [.agents/skills/ledger-auditor/SKILL.md](.agents/skills/ledger-auditor/SKILL.md).
+- **UX comes with the code, not after it.** A code change isn't done when it's functionally correct if it touches something a user sees or interacts with — a screen, a form, a list, a modal, a new state. Look at what the change touched and apply what's relevant from [.agents/skills/ux-designer/SKILL.md](.agents/skills/ux-designer/SKILL.md) (spacing, empty/loading states, contrast, touch targets, etc.) as part of the same change, without being asked separately for "design polish." Backend-only, test-only, or database-only work is exempt — don't invent a UI concern where there isn't one.
+- **Guidelines:** the premium UX/UI rules live in [.agents/skills/ux-designer/SKILL.md](.agents/skills/ux-designer/SKILL.md), the offline-first sync rules in [.agents/skills/backend-architect/SKILL.md](.agents/skills/backend-architect/SKILL.md), and the financial ledger precision and role-based security rules in [.agents/skills/ledger-auditor/SKILL.md](.agents/skills/ledger-auditor/SKILL.md).
 - **Pattern Reference:** Before writing a new list, dropdown, button, pill, table, or empty state, read [.agents/UX_PATTERNS.md](.agents/UX_PATTERNS.md) to reuse existing classes and design patterns before inventing new ones.
 
 ## Canada Post shipping integration
