@@ -200,6 +200,7 @@ import {
   startWatch,
 } from './lib/watch-schedule.js';
 import { followableUrl } from './lib/receipt-links.js';
+import { pdfLinkPlacements, pdfSafeLinkUrl } from './lib/pdf-links.js';
 import {
   CODE_TO_SYMBOL,
   PAYMENT_TYPE_DIRECT_TO_ARTIST,
@@ -11462,14 +11463,31 @@ function collectInvoicePaperCss() {
 // Returns the invoice paper's inner HTML with the live QR (drawn to a <canvas>
 // at view time) inlined as a PNG <img>, so it survives outside the live preview
 // (standalone file, print window, or rasterized PDF).
+/**
+ * The QR box's tappable-in-a-PDF attribute, or nothing.
+ *
+ * Only ever a real, followable payment page: an Interac e-Transfer "link" is
+ * an email address, and the QR for one is an instruction to send money from
+ * your banking app, not somewhere to be sent on tapping.
+ */
+function qrLinkAttr(inv) {
+  const url = pdfSafeLinkUrl(followableUrl(effectivePaymentLink(inv)));
+  return url ? ` data-pdf-link="${escapeHTML(url)}"` : '';
+}
+
 function invoicePaperBodyWithQR(inv) {
   let bodyInner = renderInvoicePaperHTML(inv);
   const liveQr = document.querySelector('#invoice-print-area .inv-qr canvas');
   if (liveQr) {
     try {
+      // data-pdf-link, not an href: this is a picture of a link, and wrapping
+      // it in an anchor would change how the paper prints and emails. The PDF
+      // builder reads the attribute and lays a tappable rectangle over the
+      // code, so a customer reading on a phone — the one device that cannot
+      // scan its own screen — can still get to the payment page.
       bodyInner = bodyInner.replace(
         '<div class="inv-qr"></div>',
-        `<div class="inv-qr"><img src="${liveQr.toDataURL('image/png')}" width="104" height="104" alt="Scan to pay" style="display:block;"></div>`
+        `<div class="inv-qr"${qrLinkAttr(inv)}><img src="${liveQr.toDataURL('image/png')}" width="104" height="104" alt="Scan to pay" style="display:block;"></div>`
       );
     } catch (e) { }
   }
@@ -11495,7 +11513,7 @@ function invoicePaperBodyWithHeadlessQR(inv) {
     if (canvas) {
       bodyInner = bodyInner.replace(
         '<div class="inv-qr"></div>',
-        `<div class="inv-qr"><img src="${canvas.toDataURL('image/png')}" width="104" height="104" alt="Scan to pay" style="display:block;"></div>`
+        `<div class="inv-qr"${qrLinkAttr(inv)}><img src="${canvas.toDataURL('image/png')}" width="104" height="104" alt="Scan to pay" style="display:block;"></div>`
       );
     }
   } catch (e) { /* the PDF still carries the link as text — the QR is a nicety */ }
@@ -11624,6 +11642,32 @@ export async function ensurePdfJs() {
 // result into an A4 jsPDF — paginated if the invoice is tall enough to need
 // it. Returns the unsaved jsPDF instance; what happens to it (saved to disk,
 // or read back out as base64 for an email attachment) is the caller's job.
+/**
+ * Every link on the paper, measured while it is still real HTML.
+ *
+ * Has to run before html2canvas: once the paper is a photograph there is
+ * nothing left to measure. Positions come back relative to the paper's own
+ * top-left corner, so they survive the holder being parked off-screen.
+ *
+ * The QR box carries its URL on a data attribute rather than an href — it is a
+ * picture of a link, not a link — so that tapping the QR on a phone screen
+ * does what pointing a camera at it would.
+ */
+function invoicePdfLinkRects(paperEl) {
+  const out = [];
+  if (!paperEl || typeof paperEl.getBoundingClientRect !== 'function') return out;
+  const base = paperEl.getBoundingClientRect();
+  const nodes = paperEl.querySelectorAll('a[href], [data-pdf-link]');
+  for (const el of nodes) {
+    const url = pdfSafeLinkUrl(el.getAttribute('data-pdf-link') || el.getAttribute('href'));
+    if (!url) continue;
+    const box = el.getBoundingClientRect();
+    if (!box.width || !box.height) continue;
+    out.push({ x: box.left - base.left, y: box.top - base.top, w: box.width, h: box.height, url });
+  }
+  return out;
+}
+
 async function buildInvoiceJsPdf(bodyInner) {
   await ensurePdfLibs();
 
@@ -11635,7 +11679,14 @@ async function buildInvoiceJsPdf(bodyInner) {
   try {
     try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (e) { }
 
-    const canvas = await window.html2canvas(holder.firstElementChild, {
+    const paper = holder.firstElementChild;
+    // Measured before the photograph is taken, and after the fonts have
+    // settled — a link measured against a fallback font sits over the wrong
+    // words once the real one loads and reflows the line.
+    const paperWidth = paper.getBoundingClientRect().width;
+    const linkRects = invoicePdfLinkRects(paper);
+
+    const canvas = await window.html2canvas(paper, {
       scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false
     });
 
@@ -11663,6 +11714,29 @@ async function buildInvoiceJsPdf(bodyInner) {
         pdf.addImage(imgData, 'PNG', margin, position, imgW, imgH);
         heightLeft -= contentH;
       }
+    }
+
+    // The image is a picture of the paper, links and all — flat, unselectable
+    // and untappable. Lay the real links back over it as PDF annotations, so
+    // the Pay button and the written-out URL do on the emailed invoice what
+    // they do on screen. Scale is points-per-CSS-pixel of the paper itself,
+    // which is independent of how sharp the photograph above is.
+    const linkScale = paperWidth > 0 ? imgW / paperWidth : 0;
+    const placements = pdfLinkPlacements(linkRects, {
+      scale: linkScale,
+      margin,
+      contentHeight: contentH,
+      pageCount: pdf.internal.getNumberOfPages(),
+    });
+    if (placements.length) {
+      const lastPage = pdf.internal.getNumberOfPages();
+      for (const spot of placements) {
+        pdf.setPage(spot.page);
+        pdf.link(spot.x, spot.y, spot.w, spot.h, { url: spot.url });
+      }
+      // Leave the cursor where the drawing left it, rather than on whichever
+      // page happened to carry the last link.
+      pdf.setPage(lastPage);
     }
 
     return pdf;
