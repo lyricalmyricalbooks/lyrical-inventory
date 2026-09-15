@@ -415,6 +415,7 @@ import {
   retryIntelQuestion,
   scrollToIntelMessage,
   sendIntelMessage,
+  setIntelProviderPref,
   stopIntelTurn,
   toggleIntelEdit,
 } from './features/intel.js';
@@ -24652,7 +24653,7 @@ function exposeLegacyInlineHandlers() {
   Object.assign(window, {
     acceptIntelDisclosure, applyIntelProposal, askIntelStarter, clearIntelThread,
     copyIntelAnswer, dismissIntelProposal, intelComposerKey, renderIntel, retryIntelQuestion,
-    scrollToIntelMessage, sendIntelMessage, stopIntelTurn,
+    scrollToIntelMessage, sendIntelMessage, setIntelProviderPref, stopIntelTurn,
     dismissDeductionGap, renderDeductionGaps, restoreDeductionGaps, snoozeDeductionGap,
     toggleIntelEdit,
     revealUpdatingScreen, hideUpdatePrompt, bindUpdatePromptInteractions, isTestBook, isTestBookId,
