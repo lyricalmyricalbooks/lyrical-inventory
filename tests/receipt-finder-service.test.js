@@ -117,9 +117,39 @@ describe('receipt finder setup guidance', () => {
     expect(result.level).toBe('warn');
     expect(result.steps[0]).toContain('deploy a new version');
   });
-  it('recognises the Google Sheet script pasted in by mistake', () => {
-    expect(describeFinderSetup({ service: 'lyrical-sheets-webhook-v43', scriptVersion: 'v43' }))
-      .toMatchObject({ level: 'error', headline: 'That is the Google Sheet script, not the receipt finder.' });
+  it('accepts the connected Google Sheet script as the receipt reader', () => {
+    // The second deployment is gone: the Sheet script the app already uses is
+    // now the intended service, so it must read as ready rather than as the
+    // wrong address pasted in by mistake.
+    expect(describeFinderSetup({ service: 'lyrical-sheets-webhook-v44', scriptVersion: 'v44',
+      capabilities: { receiptExtraction: true },
+      receiptAi: { geminiApiKey: true, model: true, publisherCheck: true, modelName: 'gemini-2.5-flash' } }))
+      .toMatchObject({ level: 'ready', steps: [] });
+  });
+  it('names the one missing key on an otherwise ready Google Sheet script', () => {
+    const result = describeFinderSetup({ service: 'lyrical-sheets-webhook-v44', scriptVersion: 'v44',
+      capabilities: { receiptExtraction: true }, receiptAi: { geminiApiKey: false, model: true } });
+    expect(result.level).toBe('error');
+    expect(result.steps).toHaveLength(1);
+    expect(result.steps[0]).toContain('GEMINI_API_KEY');
+  });
+  it('tells the publisher to redeploy a Google Sheet script that predates receipt reading', () => {
+    // Scanning against one of these would fall through to its row-writing path
+    // and append junk to the spreadsheet, so this must never read as ready.
+    const result = describeFinderSetup({ service: 'lyrical-sheets-webhook-v43', scriptVersion: 'v43',
+      capabilities: { batchEmailContent: true } });
+    expect(result.level).toBe('error');
+    expect(result.headline).toContain('too old');
+    expect(result.steps.join(' ')).toContain('v44');
+  });
+  it('explains an older standalone Receipt Finder deployment instead of disowning it', () => {
+    // The first deployments answered to a different service name and none of
+    // the fields the app reads, so the setup check told the publisher the
+    // address was wrong — about the very address it had asked them to paste.
+    const result = describeFinderSetup({ service: 'lyricalmyrical-receipt-finder', version: 2 });
+    expect(result.level).toBe('error');
+    expect(result.headline).toContain('older Receipt Finder script');
+    expect(result.steps.join(' ')).toContain('no longer need a second script');
   });
   it('confirms a ready deployment', () => {
     expect(describeFinderSetup({ service: 'lyrical-receipt-finder', scriptVersion: EXPECTED_FINDER_VERSION, model: 'gemini-2.5-flash',
