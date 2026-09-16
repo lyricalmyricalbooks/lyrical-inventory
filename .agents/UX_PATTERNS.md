@@ -180,6 +180,35 @@ on a light card means fighting every property back with an inline override, one 
 
 ---
 
+## Permanently-dark banner tables — `.metric-banner-table`
+
+The dashboard's "Expenses owed to artist" banner (`.metric-banner-danger`, a fixed dark card that
+does not flip with the theme — same family as `.hs-label`/`.hs-val`) used to build its table's
+row markup entirely from inline styles in `main.js`: date and amount cells were flush-padded to
+the banner edge while the middle three columns carried `padding:6px 8px`, there was no `<thead>`,
+and the category tag was a one-off inline-styled span duplicating `.pill`/`.chip-status`. Four
+rules now hold it together:
+- **A static `<thead>` lives in the markup, not the renderer.** The column set doesn't change per
+  render, so the header row is plain HTML in `index.html`; only `<tbody>` is re-rendered.
+- **One padding rule for every cell, with edge alignment as an override, not a per-cell guess.**
+  `.metric-banner-table tbody td{padding:7px 8px}` is the rule; `:first-child`/`:last-child`
+  zero out the side that touches the banner's own edge. Never hand-pick a cell's padding in JS.
+- **A row divider and hover, like every other list in the app.** `border-top` on `tbody tr` (not
+  `border-bottom`, so the last row doesn't carry a trailing hairline) plus a hover tint — this
+  table had neither, so several rows of expenses ran together into one dark block.
+- **`.metric-banner-cat` is `.chip-status`'s sibling for this surface.** `.chip-status`'s tones are
+  tuned against `--surface-card`; reusing it directly on a fixed `var(--ink)` fill would fight the
+  same low-alpha-on-dark problem the flagged-tile accent-bar rule above exists to avoid. Match the
+  banner's own established tone family (`rgba(255,255,255,.08)` fill, `--on-inverse-3` text —
+  already used for this banner's other muted text) instead of pulling in a themed component that
+  wasn't designed for a permanently-dark plate.
+
+The sibling author-facing banner (`#arb-items` in `renderArtistReimburseBanner`) shows the same
+data as a flex list of rows rather than a `<table>`, so this fix doesn't reach it — worth revisiting
+with the same four rules if that surface is touched next.
+
+---
+
 ## Tables / lists — `.tbl`
 Base: `.tbl` (`style.css:1540`) — dark header (`.tbl thead{background:var(--ink)}`), uppercase
 9px th labels at `.14em` tracking, 13px body, right-aligned numeric columns via `th.r`/`td.r`

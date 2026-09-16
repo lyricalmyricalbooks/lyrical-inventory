@@ -5777,11 +5777,11 @@ function renderExpensesSummaryBlock(s, cur) {
       $('d-exp-count').textContent = `${expenses.length} expense${expenses.length !== 1 ? 's' : ''} logged`;
       $('d-exp-body').innerHTML = unreceivedExp.map(e => `
         <tr>
-          <td style="padding:6px 0;color:var(--on-inverse-3);white-space:nowrap;">${fmtD(e.date)}</td>
-          <td style="padding:6px 8px;color:rgba(255,255,255,.7);font-weight:500;">${escapeHtml(e.desc)}</td>
-          <td style="padding:6px 8px;"><span style="font-size:10px;background:rgba(255,255,255,.08);color:var(--on-inverse-3);padding:2px 8px;border-radius:100px;">${escapeHtml(e.cat)}</span></td>
-          <td style="padding:6px 8px;color:var(--on-inverse-3);">${escapeHtml(e.ref) || '—'}</td>
-          <td style="padding:6px 0;text-align:right;color:var(--rose-soft);font-weight:500;">${fmt(e.amount, cur)}</td>
+          <td>${fmtD(e.date)}</td>
+          <td class="mb-desc">${escapeHtml(e.desc)}</td>
+          <td><span class="metric-banner-cat">${escapeHtml(e.cat)}</span></td>
+          <td>${escapeHtml(e.ref) || '—'}</td>
+          <td class="mb-amt">${fmt(e.amount, cur)}</td>
         </tr>`).join('');
       // Payment button
       const artistLink = (s.artistPaymentLink || '').trim();

@@ -1986,6 +1986,23 @@ tr.hist-row:hover {
 .metric-banner-table-wrap,.metric-banner-items{margin-top:1.25rem;padding-top:1.25rem;border-top:1px solid rgba(255,255,255,.07);}
 .metric-banner-items{display:flex;flex-direction:column;gap:8px;}
 .metric-banner-table{width:100%;border-collapse:collapse;font-size:12px;font-family:'DM Mono',monospace;}
+/* Column labels + a real row rhythm — this table used to have every cell's
+   padding hand-picked in JS (flush edges on date/amount, 8px elsewhere), no
+   header, and no row divider, so a multi-row expense list ran together into
+   one dark block. One rule per role now, shared with any other banner table
+   that adopts this markup. */
+.metric-banner-table thead th{padding:0 8px 8px;font-family:'Syne',sans-serif;font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.4);text-align:left;border-bottom:1px solid rgba(255,255,255,.08);}
+.metric-banner-table thead th:first-child,.metric-banner-table tbody td:first-child{padding-left:0;white-space:nowrap;}
+.metric-banner-table thead th.r,.metric-banner-table tbody td:last-child{padding-right:0;text-align:right;}
+.metric-banner-table tbody tr{border-top:1px solid rgba(255,255,255,.06);}
+.metric-banner-table tbody tr:first-child{border-top:none;}
+.metric-banner-table tbody tr:hover td{background:rgba(255,255,255,.03);}
+.metric-banner-table tbody td{padding:7px 8px;color:var(--on-inverse-3);}
+.metric-banner-table .mb-desc{color:var(--on-inverse-2);font-weight:500;}
+.metric-banner-table .mb-amt{color:var(--rose-soft);font-weight:500;white-space:nowrap;}
+/* A themed sibling of .chip-status, tuned for this banner's permanently-dark
+   fill rather than the light/dark surface pair .chip-status themes against. */
+.metric-banner-cat{display:inline-flex;align-items:center;font-size:10px;font-weight:600;background:rgba(255,255,255,.08);color:var(--on-inverse-3);padding:2px 8px;border-radius:99px;white-space:nowrap;}
 .metric-banner-danger{border-color:rgba(149,32,32,.35);}
 .metric-banner-danger .metric-banner-overlay{background:radial-gradient(ellipse at top right,rgba(149,32,32,.08),transparent 60%);}
 .metric-banner-gold{border-color:rgba(200,145,58,.3);}
