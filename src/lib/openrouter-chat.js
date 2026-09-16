@@ -284,6 +284,15 @@ export function friendlyOpenRouterError(e) {
   if (typeof navigator !== 'undefined' && navigator && navigator.onLine === false) {
     return 'you are offline — reconnect and try again';
   }
+  // OpenRouter keys can carry their own spend cap, separate from the account's
+  // balance. Hitting it comes back looking just like a bad key — same shape of
+  // rejection — but "check the key" sends the publisher to fix the wrong
+  // thing. Checked before the generic 401/403 case below, and narrowly enough
+  // ("key limit", not bare "limit") that it never catches the unrelated
+  // "Rate limit exceeded" 429 text just below it.
+  if (/key limit/i.test(raw)) {
+    return 'the backup key has hit the spending cap you set for it on OpenRouter — raise or remove that limit, or wait for it to reset';
+  }
   // The model name is typed by hand, so a wrong one is the likeliest mistake
   // here and deserves to be named rather than shown as a bare 404.
   if (status === 404 || /no (?:such )?model|model not found|not a valid model/i.test(raw)) {
