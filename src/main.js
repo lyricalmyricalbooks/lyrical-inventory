@@ -11957,156 +11957,163 @@ function openEditLedger(idx) {
   openM('edit-entry');
 }
 
+function saveHistEntryEdit(s, book) {
+  const old = editCtx.snapshot;
+  const h = s.hist[editCtx.idx];
+  const newQty = parseInt($('edit-qty').value) || old.qty;
+  const newPrice = parseFloat($('edit-price').value) || old.price;
+  const newChan = $('edit-chan').value;
+  const newNum = $('edit-num').value.trim() || old.num;
+  const newDate = $('edit-date').value || old.date;
+  const newNotes = $('edit-notes').value.trim();
+
+  if (!h.voided) {
+    // Reverse old effect
+    s.stock += old.qty;
+    s.sold -= old.qty;
+    s.revenue -= old.qty * old.price;
+    if (s.chStats[old.chan]) {
+      s.chStats[old.chan].txns--;
+      s.chStats[old.chan].units -= old.qty;
+      s.chStats[old.chan].revenue -= old.qty * old.price;
+      if (s.chStats[old.chan].txns <= 0) delete s.chStats[old.chan];
+    }
+    // Apply new effect
+    s.stock = Math.max(0, s.stock - newQty);
+    s.sold += newQty;
+    s.revenue += newQty * newPrice;
+    if (!s.chStats[newChan]) s.chStats[newChan] = { txns: 0, units: 0, revenue: 0 };
+    s.chStats[newChan].txns++;
+    s.chStats[newChan].units += newQty;
+    s.chStats[newChan].revenue += newQty * newPrice;
+  }
+
+  // Update the record
+  h.num = newNum; h.chan = newChan; h.qty = newQty; h.price = newPrice;
+  h.date = newDate; h.notes = newNotes;
+  h.edited = true;
+
+  // Sync edit to sheets. Skip consignment-mirrored hist entries: the matching
+  // ledger row is the canonical record and would just overwrite this write.
+  if (sheetsUrl && !h.consignmentLink) {
+    if (h.voided) {
+      // A voided entry has no row in the sheet — remove any match, don't re-add.
+      syncHistoryVoidDeletion(h, true);
+    } else {
+      const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
+      const totalNative = h.qty * h.price;
+      const cadEquiv = cadEquivalentForSale({ nativeCurrency: nativeCur, totalNative, payment: h.payment });
+      syncToSheets({
+        type: 'order', book: book.title,
+        date: h.date, num: h.num, chan: h.chan,
+        qty: h.qty, price: h.price, total: totalNative,
+        stockAfter: h.after, notes: h.notes,
+        sheetsId: h.sheetsId || '',
+        currency: nativeCur,
+        paymentCurrency: normalizeCurrencyCode(h.payment?.currency || nativeCur, 'CAD'),
+        paymentAmount: h.payment?.amount ?? totalNative,
+        paymentRate: h.payment?.rate ?? '',
+        convertedTotal: cadEquiv,
+        enteredBy: h.enteredBy || '',
+        status: 'OK'
+      });
+    }
+  }
+}
+
+// Ledger entry edit (date, qty, rate, notes). Quantity changes are
+// reconciled against on-hand stock and the store's counters so the
+// ledger, the store card, and inventory never drift apart.
+function saveLedgerEntryEdit(s, book) {
+  const e = s.ledger[editCtx.idx];
+  // Resolve the History mirror FIRST: for a legacy pair whose sheetsIds were
+  // split, the only join left is the row's shape (store + date + qty + due),
+  // and the edit below is about to change exactly those fields.
+  const mirror = histMirrorForLedger(s, e);
+  e.date = $('edit-l-date').value || e.date;
+  e.notes = $('edit-l-notes').value.trim();
+  // qty and rate — update display only, reverse/reapply amountDue if sale
+  const newQty = parseInt($('edit-l-qty').value) || e.qty;
+  const newRate = parseFloat($('edit-l-rate').value) || e.rate;
+  if (e.type === 'Shipment' && !e.voided) {
+    // A shipment removed e.qty from on-hand. Re-shipping more (or fewer)
+    // books must move on-hand the same way the original Send did — without
+    // this, editing a shipment's quantity left inventory stuck at the old
+    // number while the store card showed the new "sent"/"outstanding".
+    const delta = newQty - e.qty;
+    s.stock = Math.max(0, s.stock - delta);
+    const st = s.stores.find(x => x.id === e.storeId);
+    if (st) { st.sent = Math.max(0, st.sent + delta); st.outstanding = Math.max(0, st.outstanding + delta); }
+  } else if (e.type === 'Return' && !e.voided) {
+    // Good returns come back into on-hand; written-off returns don't.
+    const delta = newQty - e.qty;
+    const st = s.stores.find(x => x.id === e.storeId);
+    if (st) { st.returned = Math.max(0, st.returned + delta); st.outstanding = Math.max(0, st.outstanding - delta); }
+    if (e.status === 'restocked') s.stock = Math.max(0, s.stock + delta);
+  }
+  if (e.type === 'Sale' && !e.voided) {
+    // Find the store and adjust owed
+    const st = getState().stores.find(st => st.id === e.storeId);
+    if (st) {
+      const oldDue = e.amountDue;
+      // Prefer the price the user typed in the edit modal; otherwise estimate
+      // it from the old amountDue so quantity/rate-only edits behave as before.
+      const derivedPrice = oldDue > 0 ? (oldDue / (e.qty * (1 - e.rate / 100))) : book.listPrice;
+      const typedPrice = parseFloat($('edit-l-price') ? $('edit-l-price').value : '');
+      const salePrice = (!isNaN(typedPrice) && typedPrice > 0) ? typedPrice : derivedPrice;
+      const newDue = newQty * salePrice * (1 - newRate / 100);
+      if (e.paid === 'pending' && st) {
+        st.amountOwed = Math.max(0, st.amountOwed - oldDue + newDue);
+      }
+      s.revenue = Math.max(0, s.revenue - oldDue + newDue);
+      if (s.chStats['Consignment']) {
+        s.chStats['Consignment'].revenue = Math.max(0, s.chStats['Consignment'].revenue - oldDue + newDue);
+        s.chStats['Consignment'].units += (newQty - e.qty);
+      }
+      st.sold += (newQty - e.qty);
+      e.amountDue = newDue;
+    }
+    // Decision #2: editing a billed sale must NOT rewrite the invoice. Keep the
+    // link, flag the invoice as diverged (its view shows a "ledger changed since
+    // invoiced" note), and tell the user which invoice this sale sits on.
+    if (e.invoiceId) {
+      const inv = (s.invoices || []).find(i => i.id === e.invoiceId);
+      if (inv) inv.ledgerDivergedAt = Date.now();
+      showToast(`This sale is on invoice ${e.invoiceNum || ''} — reopen it to re-import the new amount.`, 'warn', 4500);
+    }
+  }
+  e.qty = newQty;
+  e.rate = newRate;
+  e.edited = true;
+
+  // Carry the corrected figures onto the History mirror. That mirror — not
+  // the ledger row — is what the Tax Center ledger, its Excel export and the
+  // tax report CSV read, so skipping this leaves the sale showing its old
+  // amount everywhere outside the Consignment tab.
+  syncHistMirrorFromLedger(s, e, mirror);
+
+  // Sync ledger edit to sheets. A voided entry is removed; otherwise upsert.
+  if (sheetsUrl && e.sheetsId) {
+    if (e.voided) {
+      syncLedgerVoid(e, true);
+    } else {
+      syncToSheets(consignmentSyncPayload(book, e));
+    }
+  } else if (sheetsUrl) {
+    // No stable id means there's no row we can safely target: writing one
+    // would append a duplicate instead of replacing the original. Say so,
+    // rather than letting the sheet keep the old amount with no warning.
+    showToast('Saved here, but this older entry has no link to your Google Sheet — run "Repair legacy rows" on the Sheets tab to update it there.', 'warn', 6000);
+  }
+}
+
 function saveEntryEdit() {
   if (!editCtx) return;
   const s = getState(), book = getBook();
   if (editCtx.kind === 'hist') {
-    const old = editCtx.snapshot;
-    const h = s.hist[editCtx.idx];
-    const newQty = parseInt($('edit-qty').value) || old.qty;
-    const newPrice = parseFloat($('edit-price').value) || old.price;
-    const newChan = $('edit-chan').value;
-    const newNum = $('edit-num').value.trim() || old.num;
-    const newDate = $('edit-date').value || old.date;
-    const newNotes = $('edit-notes').value.trim();
-
-    if (!h.voided) {
-      // Reverse old effect
-      s.stock += old.qty;
-      s.sold -= old.qty;
-      s.revenue -= old.qty * old.price;
-      if (s.chStats[old.chan]) {
-        s.chStats[old.chan].txns--;
-        s.chStats[old.chan].units -= old.qty;
-        s.chStats[old.chan].revenue -= old.qty * old.price;
-        if (s.chStats[old.chan].txns <= 0) delete s.chStats[old.chan];
-      }
-      // Apply new effect
-      s.stock = Math.max(0, s.stock - newQty);
-      s.sold += newQty;
-      s.revenue += newQty * newPrice;
-      if (!s.chStats[newChan]) s.chStats[newChan] = { txns: 0, units: 0, revenue: 0 };
-      s.chStats[newChan].txns++;
-      s.chStats[newChan].units += newQty;
-      s.chStats[newChan].revenue += newQty * newPrice;
-    }
-
-    // Update the record
-    h.num = newNum; h.chan = newChan; h.qty = newQty; h.price = newPrice;
-    h.date = newDate; h.notes = newNotes;
-    h.edited = true;
-
-    // Sync edit to sheets. Skip consignment-mirrored hist entries: the matching
-    // ledger row is the canonical record and would just overwrite this write.
-    if (sheetsUrl && !h.consignmentLink) {
-      if (h.voided) {
-        // A voided entry has no row in the sheet — remove any match, don't re-add.
-        syncHistoryVoidDeletion(h, true);
-      } else {
-        const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
-        const totalNative = h.qty * h.price;
-        const cadEquiv = cadEquivalentForSale({ nativeCurrency: nativeCur, totalNative, payment: h.payment });
-        syncToSheets({
-          type: 'order', book: book.title,
-          date: h.date, num: h.num, chan: h.chan,
-          qty: h.qty, price: h.price, total: totalNative,
-          stockAfter: h.after, notes: h.notes,
-          sheetsId: h.sheetsId || '',
-          currency: nativeCur,
-          paymentCurrency: normalizeCurrencyCode(h.payment?.currency || nativeCur, 'CAD'),
-          paymentAmount: h.payment?.amount ?? totalNative,
-          paymentRate: h.payment?.rate ?? '',
-          convertedTotal: cadEquiv,
-          enteredBy: h.enteredBy || '',
-          status: 'OK'
-        });
-      }
-    }
-
+    saveHistEntryEdit(s, book);
   } else {
-    // Ledger entry edit (date, qty, rate, notes). Quantity changes are
-    // reconciled against on-hand stock and the store's counters so the
-    // ledger, the store card, and inventory never drift apart.
-    const e = s.ledger[editCtx.idx];
-    // Resolve the History mirror FIRST: for a legacy pair whose sheetsIds were
-    // split, the only join left is the row's shape (store + date + qty + due),
-    // and the edit below is about to change exactly those fields.
-    const mirror = histMirrorForLedger(s, e);
-    e.date = $('edit-l-date').value || e.date;
-    e.notes = $('edit-l-notes').value.trim();
-    // qty and rate — update display only, reverse/reapply amountDue if sale
-    const newQty = parseInt($('edit-l-qty').value) || e.qty;
-    const newRate = parseFloat($('edit-l-rate').value) || e.rate;
-    if (e.type === 'Shipment' && !e.voided) {
-      // A shipment removed e.qty from on-hand. Re-shipping more (or fewer)
-      // books must move on-hand the same way the original Send did — without
-      // this, editing a shipment's quantity left inventory stuck at the old
-      // number while the store card showed the new "sent"/"outstanding".
-      const delta = newQty - e.qty;
-      s.stock = Math.max(0, s.stock - delta);
-      const st = s.stores.find(x => x.id === e.storeId);
-      if (st) { st.sent = Math.max(0, st.sent + delta); st.outstanding = Math.max(0, st.outstanding + delta); }
-    } else if (e.type === 'Return' && !e.voided) {
-      // Good returns come back into on-hand; written-off returns don't.
-      const delta = newQty - e.qty;
-      const st = s.stores.find(x => x.id === e.storeId);
-      if (st) { st.returned = Math.max(0, st.returned + delta); st.outstanding = Math.max(0, st.outstanding - delta); }
-      if (e.status === 'restocked') s.stock = Math.max(0, s.stock + delta);
-    }
-    if (e.type === 'Sale' && !e.voided) {
-      // Find the store and adjust owed
-      const st = getState().stores.find(st => st.id === e.storeId);
-      if (st) {
-        const oldDue = e.amountDue;
-        // Prefer the price the user typed in the edit modal; otherwise estimate
-        // it from the old amountDue so quantity/rate-only edits behave as before.
-        const derivedPrice = oldDue > 0 ? (oldDue / (e.qty * (1 - e.rate / 100))) : book.listPrice;
-        const typedPrice = parseFloat($('edit-l-price') ? $('edit-l-price').value : '');
-        const salePrice = (!isNaN(typedPrice) && typedPrice > 0) ? typedPrice : derivedPrice;
-        const newDue = newQty * salePrice * (1 - newRate / 100);
-        if (e.paid === 'pending' && st) {
-          st.amountOwed = Math.max(0, st.amountOwed - oldDue + newDue);
-        }
-        s.revenue = Math.max(0, s.revenue - oldDue + newDue);
-        if (s.chStats['Consignment']) {
-          s.chStats['Consignment'].revenue = Math.max(0, s.chStats['Consignment'].revenue - oldDue + newDue);
-          s.chStats['Consignment'].units += (newQty - e.qty);
-        }
-        st.sold += (newQty - e.qty);
-        e.amountDue = newDue;
-      }
-      // Decision #2: editing a billed sale must NOT rewrite the invoice. Keep the
-      // link, flag the invoice as diverged (its view shows a "ledger changed since
-      // invoiced" note), and tell the user which invoice this sale sits on.
-      if (e.invoiceId) {
-        const inv = (s.invoices || []).find(i => i.id === e.invoiceId);
-        if (inv) inv.ledgerDivergedAt = Date.now();
-        showToast(`This sale is on invoice ${e.invoiceNum || ''} — reopen it to re-import the new amount.`, 'warn', 4500);
-      }
-    }
-    e.qty = newQty;
-    e.rate = newRate;
-    e.edited = true;
-
-    // Carry the corrected figures onto the History mirror. That mirror — not
-    // the ledger row — is what the Tax Center ledger, its Excel export and the
-    // tax report CSV read, so skipping this leaves the sale showing its old
-    // amount everywhere outside the Consignment tab.
-    syncHistMirrorFromLedger(s, e, mirror);
-
-    // Sync ledger edit to sheets. A voided entry is removed; otherwise upsert.
-    if (sheetsUrl && e.sheetsId) {
-      if (e.voided) {
-        syncLedgerVoid(e, true);
-      } else {
-        syncToSheets(consignmentSyncPayload(book, e));
-      }
-    } else if (sheetsUrl) {
-      // No stable id means there's no row we can safely target: writing one
-      // would append a duplicate instead of replacing the original. Say so,
-      // rather than letting the sheet keep the old amount with no warning.
-      showToast('Saved here, but this older entry has no link to your Google Sheet — run "Repair legacy rows" on the Sheets tab to update it there.', 'warn', 6000);
-    }
+    saveLedgerEntryEdit(s, book);
   }
 
   recomputeAfters(s, book);
