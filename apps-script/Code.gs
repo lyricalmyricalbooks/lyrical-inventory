@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v44)
+/* Lyricalmyrical Inventory — Unified Backend (v45)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:
@@ -181,6 +181,13 @@
  *      exist, never their values) so the app can name a missing key before a
  *      scan spends Gmail requests and paid AI calls. Bump flags v43-and-older
  *      as outdated so the publisher redeploys.
+ *  43. v45: 'testreceiptai' makes one tiny Gemini call and reports the status
+ *      it came back with, so the app can tell a key Google actually accepts
+ *      from one that merely exists. v44's setup check only proved the Script
+ *      Property was filled in, and reported Ready for a rejected key — the
+ *      publisher then met the failure one email at a time, worded as a passing
+ *      outage. Only the status is returned, never the upstream body. Bump
+ *      flags v44-and-older as outdated so the publisher redeploys.
  */
 
 const HEADERS = [
@@ -235,9 +242,9 @@ function doGet(e) {
   const receiptModel = receiptProps.getProperty('GEMINI_MODEL') || 'gemini-2.5-flash';
   const receiptModelValid = /^[a-zA-Z0-9.-]+$/.test(receiptModel);
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v44',
-    scriptVersion: 'v44',
-    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, canadaPostRefund: true, graphicalEmails: true, authorPaymentEmails: true, dateOrderedRows: true, receiptExtraction: true },
+    service: 'lyrical-sheets-webhook-v45',
+    scriptVersion: 'v45',
+    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, canadaPostRefund: true, graphicalEmails: true, authorPaymentEmails: true, dateOrderedRows: true, receiptExtraction: true, receiptSelfTest: true },
     receiptAi: {
       geminiApiKey: !!receiptProps.getProperty('GEMINI_API_KEY'),
       model: receiptModelValid,
@@ -693,6 +700,13 @@ function doPost(e) {
     // Receipt Finder deployment without duplicating the megabyte file array.
     if (action === 'extractreceipt') {
       return extractReceipt_(payload);
+    }
+
+    // Proves the AI key actually works, rather than merely existing. Without
+    // this the setup check reports Ready for a key Google refuses, and the
+    // publisher only finds out one failed email at a time.
+    if (action === 'testreceiptai') {
+      return testReceiptAi_(payload);
     }
 
     // ── Proxy Canada Post Web Services API request (bypasses browser CORS) ──
@@ -2593,6 +2607,40 @@ function extractReceipt_(input) {
     // Never echo upstream bodies or tokens: they can contain personal data.
     const allowed = /^(Receipt |Sign in|Publisher |Invalid |Too many|Unsupported |AI )/.test(error.message || '');
     return jsonOut_({ ok: false, error: allowed ? error.message : 'Receipt extraction failed. Check setup and retry.' });
+  }
+}
+
+function testReceiptAi_(input) {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const aiKey = props.getProperty('GEMINI_API_KEY');
+    if (!aiKey) throw new Error('Receipt AI setup is incomplete: add GEMINI_API_KEY in Script Properties');
+
+    const authKey = props.getProperty('FIREBASE_WEB_API_KEY');
+    const publisher = props.getProperty('PUBLISHER_UID');
+    if (authKey && publisher) {
+      if (typeof input.idToken !== 'string' || input.idToken.length > 10000) throw new Error('Sign in again');
+      const authRes = UrlFetchApp.fetch('https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=' + encodeURIComponent(authKey), {
+        method: 'post', contentType: 'application/json',
+        payload: JSON.stringify({ idToken: input.idToken }), muteHttpExceptions: true
+      });
+      if (authRes.getResponseCode() !== 200) throw new Error('Sign in again');
+      const users = JSON.parse(authRes.getContentText()).users || [];
+      if (users.length !== 1 || users[0].localId !== publisher || users[0].disabled) throw new Error('Publisher access required');
+    }
+
+    // The smallest call that still exercises the key end to end.
+    const model = receiptModelChain_(props.getProperty('GEMINI_MODEL'))[0];
+    const response = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', {
+      method: 'post', contentType: 'application/json', headers: { 'x-goog-api-key': aiKey }, muteHttpExceptions: true,
+      payload: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'ping' }] }], generationConfig: { maxOutputTokens: 1 } })
+    });
+    // Report the status only. The body can carry key fragments and account
+    // details, and this endpoint is reachable by anyone holding the address.
+    return jsonOut_({ ok: true, aiStatus: response.getResponseCode(), aiOk: response.getResponseCode() === 200, model: model });
+  } catch (error) {
+    const allowed = /^(Receipt |Sign in|Publisher |Invalid )/.test(error.message || '');
+    return jsonOut_({ ok: false, error: allowed ? error.message : 'Receipt AI test failed. Check setup and retry.' });
   }
 }
 

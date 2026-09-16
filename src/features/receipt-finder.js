@@ -1,6 +1,6 @@
 import { escapeHtml as esc } from '../lib/html.js';
 import { receiptQuery, normalizeFoundReceipt, receiptProblems, receiptReviewStatus, receiptMoney, RECEIPT_STATUSES } from '../lib/receipt-finder.js';
-import { createReceiptFinderClient, extractFoundReceipts, decodeGmailBase64, checkReceiptFinderService, FINDER_ENDPOINT_PATTERN } from '../lib/receipt-finder-client.js';
+import { createReceiptFinderClient, extractFoundReceipts, decodeGmailBase64, checkReceiptFinderService, testReceiptAiService, describeAiTest, FINDER_ENDPOINT_PATTERN } from '../lib/receipt-finder-client.js';
 import { createReceiptFinderStore } from '../lib/receipt-finder-store.js';
 import { flushReceiptOutbox } from '../lib/receipt-finder-outbox.js';
 import { downloadBlob } from '../lib/download.js';
@@ -126,6 +126,11 @@ async function restoreToken() {
 async function startReceiptFinder(dependencies) {
   deps = dependencies;
   const nextUid = deps.user()?.uid || '';
+  // An empty user here means "not resolved yet", not "signed out" — this runs
+  // on every modal open and on every book reload, and treating a momentary gap
+  // as a sign-out aborted whatever scan was running and wiped the mailbox view.
+  // Real sign-out arrives on the auth callback below, which still clears both.
+  if (!nextUid && uid) return;
   if (nextUid !== uid) {
     controller?.abort(); accessToken = ''; tokenExpiresAt = 0; state = emptyState(); uid = nextUid;
     serviceReadyFor = ''; host?.replaceChildren(); host = null;
@@ -322,12 +327,19 @@ function renderProgress() {
 }
 
 function renderAlert(counts) {
-  const failures = Object.values(state.scans).filter(scan => scan.error).length;
+  const failed = Object.values(state.scans).filter(scan => scan.error);
+  const failures = failed.length;
   const alert = host.querySelector('[data-finder-alert]');
   if (failures) {
+    // Naming the reason here is the whole point. Saying only "could not be
+    // read" and putting the cause in a collapsed list below the results left
+    // the publisher staring at a count with no way to know what to do — and
+    // the most common cause, a rejected AI key, is something only they can fix.
+    const reasons = [...new Set(failed.map(scan => scan.error))];
     alert.className = 'finder-alert is-warn';
     alert.innerHTML = `<span class="pill amber">● ${failures} to retry</span>
-      <p>${failures === 1 ? 'One email' : `${failures} emails`} could not be read. Everything else was saved — the list under your receipts says what happened to each one.</p>
+      <p>${failures === 1 ? 'One email' : `${failures} emails`} could not be read.
+        ${esc(reasons[0])}${reasons.length > 1 ? ` (and ${reasons.length - 1} other reason${reasons.length === 2 ? '' : 's'} — see the list below)` : ''}</p>
       <button type="button" class="btn sm" data-action="retry-failed">Try those again</button>
       <button type="button" class="btn sm" data-action="clear-failures">Clear these</button>`;
   } else if (counts.queued) {
@@ -366,7 +378,7 @@ function render() {
       ? drafts.map(draft => renderDraft(draft, openIds.has(draft.id))).join('')
       : renderEmpty();
     const errors = Object.entries(state.scans).filter(([, scan]) => scan.error);
-    host.querySelector('[data-finder-errors]').innerHTML = errors.length ? `<details class="finder-errors"><summary>${errors.length} email${errors.length === 1 ? '' : 's'} need another attempt</summary>${errors.map(([key, scan]) => `<p>${esc(scan.subject || key)} — ${esc(scan.error)} <button type="button" class="btn sm" data-retry-email="${esc(key)}">Retry email</button></p>`).join('')}</details>` : '';
+    host.querySelector('[data-finder-errors]').innerHTML = errors.length ? `<details class="finder-errors" open><summary>${errors.length} email${errors.length === 1 ? '' : 's'} need another attempt</summary>${errors.map(([key, scan]) => `<p>${esc(scan.subject || key)} — ${esc(scan.error)} <button type="button" class="btn sm" data-retry-email="${esc(key)}">Retry email</button></p>`).join('')}</details>` : '';
     const ready = drafts.filter(draft => statusOf(draft) === 'ready');
     const all = host.querySelector('[data-select-all]');
     all.checked = ready.length > 0 && ready.every(draft => draft.selected);
@@ -620,7 +632,19 @@ async function runSetupCheck() {
   panel.className = 'finder-check';
   panel.innerHTML = '<div class="skeleton-line"></div>';
   try {
-    const result = await checkReceiptFinderService({ endpoint });
+    let result = await checkReceiptFinderService({ endpoint });
+    // Settings being present is not the same as them working. When the
+    // deployment can prove it, make it actually call Gemini once — a key Google
+    // refuses used to report Ready here and then fail one email at a time.
+    if (result.level === 'ready' && result.report?.capabilities?.receiptSelfTest) {
+      panel.innerHTML = '<div class="skeleton-line"></div>';
+      try {
+        result = describeAiTest(await testReceiptAiService({ endpoint, idToken: await deps.user().getIdToken() }));
+      } catch (error) {
+        if (error.name === 'AbortError') throw error;
+        result = { level: 'error', headline: error.message, steps: ['Check that you are online and that the deployment is still active.'] };
+      }
+    }
     paintSetupCheck(result);
     if (result.level === 'ready') { serviceReadyFor = endpoint; await dropFailuresFromOtherService(endpoint); }
     announce(result.level === 'ready' ? 'Receipt service is set up and ready to scan.' : `Receipt service is not ready yet. ${result.headline}`);
@@ -660,7 +684,14 @@ async function ensureServiceReady() {
   if (!endpoint) throw new Error('Connect your Google Sheet first — the finder reads receipts through that same script.');
   if (serviceReadyFor === endpoint) return endpoint;
   announce('Checking your receipt reading service…');
-  const result = await checkReceiptFinderService({ endpoint });
+  let result = await checkReceiptFinderService({ endpoint });
+  // Prove the key before spending a single Gmail read on it. Checking only that
+  // the setting exists is what let a scan work through a mailbox failing every
+  // email in turn against a key Google was never going to accept. One tiny call,
+  // then cached for the rest of the session by serviceReadyFor.
+  if (result.level === 'ready' && result.report?.capabilities?.receiptSelfTest) {
+    result = describeAiTest(await testReceiptAiService({ endpoint, idToken: await deps.user().getIdToken() }));
+  }
   paintSetupCheck(result);
   render();
   if (result.level !== 'ready') throw new Error(`${result.headline} ${result.steps[0] || ''}`.trim());

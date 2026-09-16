@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { normalizeFoundReceipt } from '../src/lib/receipt-finder.js';
 
 const mocks = vi.hoisted(() => ({ saved: null, token: null, save: vi.fn(), load: vi.fn(), clear: vi.fn(),
-  loadToken: vi.fn(), saveToken: vi.fn(), clearToken: vi.fn(),
+  loadToken: vi.fn(), saveToken: vi.fn(), clearToken: vi.fn(), aiTest: vi.fn(),
   extract: vi.fn(), list: vi.fn(), message: vi.fn(), check: vi.fn() }));
 vi.mock('../src/lib/receipt-finder-store.js', () => ({ createReceiptFinderStore: () => ({
   load: mocks.load, save: mocks.save, clear: mocks.clear,
@@ -14,6 +14,10 @@ vi.mock('../src/lib/receipt-finder-client.js', () => ({
     list: mocks.list, message: mocks.message, attachment: async (_id, file) => file }),
   extractFoundReceipts: mocks.extract, decodeGmailBase64: () => new Uint8Array(),
   checkReceiptFinderService: mocks.check,
+  testReceiptAiService: mocks.aiTest,
+  describeAiTest: result => result.aiOk
+    ? { level: 'ready', headline: 'Google accepted the key.', steps: [] }
+    : { level: 'error', headline: 'Google would not accept the AI key in your script.', steps: ['Use a key that starts with AIza.'] },
   FINDER_ENDPOINT_PATTERN: /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/,
 }));
 
@@ -32,6 +36,7 @@ beforeEach(() => {
   mocks.message.mockResolvedValue({ ...source, id: 'm2', subject: 'Receipt notice' });
   mocks.extract.mockResolvedValue({ receipts: [{ vendor: 'Courier', amount: 10, currency: 'CAD', date: '2026-09-01', confidence: 0.9 }] });
   mocks.check.mockResolvedValue({ level: 'ready', headline: 'Ready to scan using gemini-2.5-flash.', steps: [] });
+  mocks.aiTest.mockResolvedValue({ ok: true, aiOk: true, aiStatus: 200, model: 'gemini-2.5-flash' });
   mocks.token = null;
   mocks.loadToken.mockImplementation(async () => mocks.token);
   mocks.saveToken.mockImplementation(async (_uid, value) => { mocks.token = structuredClone(value); });
@@ -287,6 +292,68 @@ describe('receipt finder UI', () => {
     expect(mocks.saved.scans['publisher@example.com:old1']).toBeUndefined();
     expect(document.querySelector('[data-finder-alert]').textContent).toBe('');
     expect(mocks.extract).not.toHaveBeenCalled();
+  });
+  it('refuses to call a key Ready when Google turns it down', async () => {
+    // The publisher had a filled-in GEMINI_API_KEY and a setup check that said
+    // Ready, while every scanned email failed. Presence is not acceptance.
+    mocks.check.mockResolvedValue({ level: 'ready', headline: 'Ready.', steps: [],
+      report: { capabilities: { receiptExtraction: true, receiptSelfTest: true } } });
+    mocks.aiTest.mockResolvedValue({ ok: true, aiOk: false, aiStatus: 403 });
+    await mount();
+    document.querySelector('[data-action="check-setup"]').click(); await settle();
+    expect(mocks.aiTest).toHaveBeenCalled();
+    const panel = document.querySelector('[data-finder-check]');
+    expect(panel.className).toContain('is-error');
+    expect(panel.textContent).toContain('would not accept');
+    expect(document.querySelector('[data-finder-gate]').hidden).toBe(false);
+  });
+  it('skips the live key test on a deployment too old to offer it', async () => {
+    mocks.check.mockResolvedValue({ level: 'ready', headline: 'Ready.', steps: [],
+      report: { capabilities: { receiptExtraction: true } } });
+    await mount();
+    document.querySelector('[data-action="check-setup"]').click(); await settle();
+    expect(mocks.aiTest).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-finder-check]').className).toContain('is-ready');
+  });
+  it('names why an email could not be read, in the alert itself', async () => {
+    // The count alone was useless: the cause sat in a collapsed list below the
+    // results, and the most common cause is something only the owner can fix.
+    mocks.saved.scans = {
+      'publisher@example.com:a': { error: 'Google would not accept the AI key in your script.', subject: 'One' },
+      'publisher@example.com:b': { error: 'Google would not accept the AI key in your script.', subject: 'Two' },
+    };
+    await mount();
+    const alert = document.querySelector('[data-finder-alert]');
+    expect(alert.textContent).toContain('2 emails could not be read');
+    expect(alert.textContent).toContain('would not accept the AI key');
+    // One shared cause must not be reported as several.
+    expect(alert.textContent).not.toContain('other reason');
+    expect(document.querySelector('.finder-errors').open).toBe(true);
+  });
+  it('a momentary gap in the signed-in user does not kill a running scan', async () => {
+    // startReceiptFinder runs on every modal open and every book reload. It
+    // treated an unresolved user as a sign-out, aborting the scan and wiping
+    // the mailbox view; real sign-out still arrives on the auth callback.
+    const module = await mount();
+    const before = document.getElementById('email-panel-gmail').innerHTML;
+    deps.user = () => undefined;
+    await module.startReceiptFinder(deps);
+    expect(document.getElementById('email-panel-gmail').innerHTML).toBe(before);
+    expect(document.querySelector('[data-draft]')).not.toBeNull();
+  });
+  it('will not spend a Gmail read on a key Google has already refused', async () => {
+    // Otherwise a scan works through the whole mailbox failing every email in
+    // turn against a key that was never going to be accepted.
+    mocks.check.mockResolvedValue({ level: 'ready', headline: 'Ready.', steps: [],
+      report: { capabilities: { receiptExtraction: true, receiptSelfTest: true } } });
+    mocks.aiTest.mockResolvedValue({ ok: true, aiOk: false, aiStatus: 401 });
+    await mount();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="connect"]').click(); await settle();
+    document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
+    expect(mocks.list).not.toHaveBeenCalled();
+    expect(mocks.extract).not.toHaveBeenCalled();
+    expect(deps.toast).toHaveBeenCalledWith(expect.stringContaining('would not accept'), 'err');
   });
   it('clears mailbox content immediately on sign-out', async () => {
     await mount();
