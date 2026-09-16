@@ -90,7 +90,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-09-11 | visual | Consignment ledger | Made the book/store jump links in the ledger table show a visible focus ring when tabbed to | #795 |
 | 2026-09-12 | visual | Book dashboard | Gave "Pending artist transfers" and "Pending expense reimbursements" real headings like their dashboard siblings, instead of the faintest type in the app | #802 |
 | 2026-09-15 | visual | Book dashboard — payment banners | Made the small "opens payment link" / "no payment link yet" note under Send Payment actually readable, instead of nearly invisible | #817 |
-| 2026-09-16 | visual | Invoices list | Gave the invoice-row badges (Stripe, shared, person, chase) one matching shape, and fixed a failed-reminder badge that had no color at all | TBD |
+| 2026-09-16 | visual | Invoices list | Gave the invoice-row badges (Stripe, shared, person, chase) one matching shape, and fixed a failed-reminder badge that had no color at all | #839 |
 
 ---
 
