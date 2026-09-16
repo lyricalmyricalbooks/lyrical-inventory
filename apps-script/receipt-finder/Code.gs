@@ -2,7 +2,8 @@ var RECEIPT_SCRIPT_VERSION = 'v2';
 
 /* Standalone Receipt Finder service. Deploy in its OWN Apps Script project.
  * Script Properties: FIREBASE_WEB_API_KEY, PUBLISHER_UID, GEMINI_API_KEY,
- * GEMINI_MODEL (optional, defaults to gemini-2.5-flash).
+ * GEMINI_MODEL (optional primary model; defaults to gemini-2.5-flash and
+ * falls back across supported Flash models when that primary is unavailable).
  * No Gmail scope, refresh token, or mailbox access is held by this service.
  *
  * Version history
@@ -87,16 +88,11 @@ function doPost(e) {
       + 'Return JSON {receipts:[{vendor,description,reference,date,dueDate,currency,amount,subtotal,tax,shipping,category,paymentStatus,documentType,confidence,sourceSnippet,lineItems:[{description,quantity,unitPrice,amount}]}]}. '
       + 'paymentStatus is paid, unpaid, unknown or refunded. sourceSnippet quotes up to 500 characters of evidence. '
       + 'If there is no actual financial document return {receipts:[]}. No prose or markdown.';
-    var model = props.getProperty('GEMINI_MODEL') || 'gemini-2.5-flash';
-    if (!/^[a-zA-Z0-9.-]+$/.test(model)) throw new Error('Invalid receipt model setting');
-    var response = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', {
-      method: 'post', contentType: 'application/json', headers: { 'x-goog-api-key': aiKey }, muteHttpExceptions: true,
-      payload: JSON.stringify({ systemInstruction: { parts: [{ text: prompt }] },
-        contents: [{ role: 'user', parts: [{ text: JSON.stringify({ subject: String(email.subject || '').slice(0, 1000),
-          from: String(email.from || '').slice(0, 1000), date: String(email.date || '').slice(0, 200), body: email.body }) }].concat(files) }],
-        generationConfig: { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 8192 } }),
-    });
-    if (response.getResponseCode() !== 200) throw new Error('Receipt AI is unavailable (' + response.getResponseCode() + '). Retry later.');
+    var aiPayload = JSON.stringify({ systemInstruction: { parts: [{ text: prompt }] },
+      contents: [{ role: 'user', parts: [{ text: JSON.stringify({ subject: String(email.subject || '').slice(0, 1000),
+        from: String(email.from || '').slice(0, 1000), date: String(email.date || '').slice(0, 200), body: email.body }) }].concat(files) }],
+      generationConfig: { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 8192 } });
+    var response = receiptAiResponse_(receiptModelChain_(props.getProperty('GEMINI_MODEL')), aiKey, aiPayload);
     var result = JSON.parse(response.getContentText());
     var candidate = (result.candidates || [])[0];
     if (!candidate || candidate.finishReason !== 'STOP') throw new Error('AI could not finish this email. Review it manually or retry.');
@@ -114,4 +110,36 @@ function doPost(e) {
 
 function receiptJson_(value) {
   return ContentService.createTextOutput(JSON.stringify(value)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function receiptModelChain_(configuredModel) {
+  var primary = configuredModel || 'gemini-2.5-flash';
+  if (!/^[a-zA-Z0-9.-]+$/.test(primary)) throw new Error('Invalid receipt model setting');
+  var candidates = [primary, 'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash'];
+  var models = [];
+  candidates.forEach(function (model) {
+    if (models.indexOf(model) === -1) models.push(model);
+  });
+  return models;
+}
+
+function receiptAiResponse_(models, aiKey, payload) {
+  var lastStatus = 0;
+  for (var i = 0; i < models.length; i++) {
+    var response = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + models[i] + ':generateContent', {
+      method: 'post', contentType: 'application/json', headers: { 'x-goog-api-key': aiKey }, muteHttpExceptions: true, payload: payload,
+    });
+    var status = response.getResponseCode();
+    if (status === 200) return response;
+    lastStatus = status;
+    if (i === models.length - 1 || !receiptCanFallback_(status)) break;
+    // A 429 or service error may be account-wide. One alternate model is a
+    // useful escape hatch; probing the entire chain would make a quota pause worse.
+    if (status !== 404 && i >= 1) break;
+  }
+  throw new Error('Receipt AI is unavailable (' + lastStatus + '). Retry later.');
+}
+
+function receiptCanFallback_(status) {
+  return status === 404 || status === 429 || (status >= 500 && status < 600);
 }
