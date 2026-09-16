@@ -341,6 +341,20 @@ describe('receipt finder UI', () => {
     expect(document.getElementById('email-panel-gmail').innerHTML).toBe(before);
     expect(document.querySelector('[data-draft]')).not.toBeNull();
   });
+  it('will not spend a Gmail read on a key Google has already refused', async () => {
+    // Otherwise a scan works through the whole mailbox failing every email in
+    // turn against a key that was never going to be accepted.
+    mocks.check.mockResolvedValue({ level: 'ready', headline: 'Ready.', steps: [],
+      report: { capabilities: { receiptExtraction: true, receiptSelfTest: true } } });
+    mocks.aiTest.mockResolvedValue({ ok: true, aiOk: false, aiStatus: 401 });
+    await mount();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="connect"]').click(); await settle();
+    document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
+    expect(mocks.list).not.toHaveBeenCalled();
+    expect(mocks.extract).not.toHaveBeenCalled();
+    expect(deps.toast).toHaveBeenCalledWith(expect.stringContaining('would not accept'), 'err');
+  });
   it('clears mailbox content immediately on sign-out', async () => {
     await mount();
     const callback = window._fbOnAuthStateChanged.mock.calls[0][0];

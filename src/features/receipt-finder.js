@@ -684,7 +684,14 @@ async function ensureServiceReady() {
   if (!endpoint) throw new Error('Connect your Google Sheet first — the finder reads receipts through that same script.');
   if (serviceReadyFor === endpoint) return endpoint;
   announce('Checking your receipt reading service…');
-  const result = await checkReceiptFinderService({ endpoint });
+  let result = await checkReceiptFinderService({ endpoint });
+  // Prove the key before spending a single Gmail read on it. Checking only that
+  // the setting exists is what let a scan work through a mailbox failing every
+  // email in turn against a key Google was never going to accept. One tiny call,
+  // then cached for the rest of the session by serviceReadyFor.
+  if (result.level === 'ready' && result.report?.capabilities?.receiptSelfTest) {
+    result = describeAiTest(await testReceiptAiService({ endpoint, idToken: await deps.user().getIdToken() }));
+  }
   paintSetupCheck(result);
   render();
   if (result.level !== 'ready') throw new Error(`${result.headline} ${result.steps[0] || ''}`.trim());
