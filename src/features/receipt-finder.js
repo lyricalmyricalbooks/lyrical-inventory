@@ -7,7 +7,7 @@ import { downloadBlob } from '../lib/download.js';
 import '../styles/receipt-finder.css';
 
 const LABELS = { all: 'All', ready: 'Ready', review: 'Needs review', duplicate: 'Duplicates', queued: 'Pending import', imported: 'Imported', ignored: 'Dismissed' };
-const emptyState = () => ({ drafts: [], emails: {}, scans: {}, endpoint: '', account: '', lastScan: '', pageToken: '', lastQuery: '' });
+const emptyState = () => ({ drafts: [], emails: {}, scans: {}, endpoint: '', account: '', lastScan: '', pageToken: '', lastQuery: '', lastEndpoint: '' });
 
 // Emails are read a few at a time rather than one after another. The AI call
 // dominates each one, so this is the difference between a scan that takes a
@@ -19,7 +19,7 @@ const RENDER_INTERVAL_MS = 200;
 let deps, host, state = emptyState(), uid = '', accessToken = '', tokenExpiresAt = 0;
 let controller = null, busy = false, flushing = false, scanTotal = 0, scanDone = 0;
 let filter = 'all', resultQuery = '', saveChain = Promise.resolve(), saveScheduled = false;
-let initialized = false, restore = Promise.resolve(), serviceReadyFor = '';
+let initialized = false, restore = Promise.resolve(), serviceReadyFor = '', serviceProblem = null;
 let statusCache = null, cachedExpenses = null, renderTimer = 0;
 const store = createReceiptFinderStore();
 const client = createReceiptFinderClient({ token: () => accessToken, onExpired: () => { forgetToken().catch(() => {}); } });
@@ -282,6 +282,17 @@ function gateSteps() {
   }
   if (!activeEndpoint()) {
     steps.push({ title: 'Connect your Google Sheet', body: 'The finder reads receipts through the same Google script that syncs your sheet. Set that up once in the “Connect your Google Sheet” tab and this step disappears.' });
+  } else if (serviceProblem) {
+    // A saved address that the app cannot read blocks every scan. Telling the
+    // publisher to "clear this address" while the field itself sits inside a
+    // collapsed disclosure is not an instruction anyone can act on — so the
+    // problem, and the button that fixes it, belong here at the top.
+    const canFallBack = serviceProblem.fix === 'use-sheets' && state.endpoint && !!deps?.service?.();
+    steps.push({ title: serviceProblem.headline,
+      body: canFallBack
+        ? 'You no longer need a separate script for this. Switch to the Google Sheet script you have already connected and this goes away.'
+        : (serviceProblem.steps[0] || 'Open Advanced below to check the receipt reading service.'),
+      action: canFallBack ? 'use-sheets' : '', cta: 'Use my Google Sheet script' });
   }
   return steps;
 }
@@ -317,7 +328,8 @@ function renderAlert(counts) {
     alert.className = 'finder-alert is-warn';
     alert.innerHTML = `<span class="pill amber">● ${failures} to retry</span>
       <p>${failures === 1 ? 'One email' : `${failures} emails`} could not be read. Everything else was saved — the list under your receipts says what happened to each one.</p>
-      <button type="button" class="btn sm" data-action="retry-failed">Try those again</button>`;
+      <button type="button" class="btn sm" data-action="retry-failed">Try those again</button>
+      <button type="button" class="btn sm" data-action="clear-failures">Clear these</button>`;
   } else if (counts.queued) {
     alert.className = 'finder-alert is-info';
     alert.innerHTML = `<span class="pill amber">● ${counts.queued} waiting</span>
@@ -512,6 +524,8 @@ async function onClick(event) {
         serviceReadyFor = '';
         await persist(); announce(state.endpoint ? 'Separate deployment address saved.' : 'Using your connected Google Sheet script.'); await runSetupCheck(); break;
       case 'check-setup': await runSetupCheck(); break;
+      case 'use-sheets': await useSheetsScript(); break;
+      case 'clear-failures': await clearRecordedFailures(); break;
       case 'scan': await scan(false); break;
       case 'next': await scan(true); break;
       case 'cancel': controller?.abort(); break;
@@ -555,15 +569,43 @@ async function toggleConnection() {
   announce(`Connected to ${state.account} with read-only access. You will stay connected on this device.`);
 }
 
+// Drops the saved separate deployment address so the finder falls back to the
+// Google Sheet script. This is the whole remedy for a publisher still pointed
+// at the retired standalone Receipt Finder.
+async function useSheetsScript() {
+  const sheets = deps?.service?.();
+  if (!sheets) throw new Error('Connect your Google Sheet first, in the “Connect your Google Sheet” tab.');
+  state.endpoint = '';
+  serviceReadyFor = ''; serviceProblem = null;
+  const field = host?.querySelector('#finder-endpoint');
+  if (field) field.value = '';
+  await persist();
+  announce('Now using your Google Sheet script to read receipts.');
+  await runSetupCheck();
+  render();
+}
+
+async function clearRecordedFailures() {
+  let dropped = 0;
+  for (const [key, scan] of Object.entries(state.scans)) {
+    if (scan.error) { delete state.scans[key]; dropped++; }
+  }
+  await persist(); render();
+  announce(dropped ? `Cleared ${dropped} earlier failure${dropped === 1 ? '' : 's'}. Those emails will be read again on the next scan.` : 'There were no failures to clear.');
+}
+
 function paintSetupCheck(result) {
+  serviceProblem = result.level === 'ready' ? null : result;
   const panel = host?.querySelector('[data-finder-check]');
   if (!panel) return;
   const pill = { ready: 'green', warn: 'amber', error: 'red' }[result.level];
   const glyph = { ready: '✓', warn: '●', error: '✕' }[result.level];
   const label = { ready: 'Ready', warn: 'Almost ready', error: 'Not ready' }[result.level];
+  const canFallBack = result.fix === 'use-sheets' && state.endpoint && !!deps?.service?.();
   panel.className = `finder-check is-${result.level}`;
   panel.innerHTML = `<p><span class="pill ${pill}">${glyph} ${label}</span> ${esc(result.headline)}</p>`
-    + (result.steps.length ? `<ol>${result.steps.map(step => `<li>${esc(step)}</li>`).join('')}</ol>` : '');
+    + (result.steps.length ? `<ol>${result.steps.map(step => `<li>${esc(step)}</li>`).join('')}</ol>` : '')
+    + (canFallBack ? '<div class="finder-toolbar"><button type="button" class="btn gold sm" data-action="use-sheets">Use my Google Sheet script</button></div>' : '');
 }
 
 // Reads the deployment's own setup report so a missing key is named here,
@@ -580,20 +622,39 @@ async function runSetupCheck() {
   try {
     const result = await checkReceiptFinderService({ endpoint });
     paintSetupCheck(result);
-    if (result.level === 'ready') serviceReadyFor = endpoint;
+    if (result.level === 'ready') { serviceReadyFor = endpoint; await dropFailuresFromOtherService(endpoint); }
     announce(result.level === 'ready' ? 'Receipt service is set up and ready to scan.' : `Receipt service is not ready yet. ${result.headline}`);
   } catch (error) {
     if (error.name === 'AbortError') { panel.replaceChildren(); return; }
+    serviceProblem = { level: 'error', headline: error.message, steps: [] };
     panel.className = 'finder-check is-error';
     panel.innerHTML = `<p><span class="pill red">✕ Not ready</span> ${esc(error.message)}</p>`;
   } finally {
     if (button) button.disabled = false;
+    // The gate at the top mirrors this panel, so it has to be repainted too —
+    // the panel itself lives inside a disclosure the publisher may never open.
+    render();
   }
 }
 
 // An unknown action on an older Google Sheet deployment falls through to its
 // row-writing path, which would append junk to the publisher's spreadsheet. The
 // deployment has to confirm it can read receipts before a single email is sent.
+// Per-email failures belong to whichever service produced them. Once the
+// publisher switches services, those failures say nothing about the new one —
+// leaving them on screen turns a solved problem into a standing alarm, and
+// leaving them in the record stops the emails being read again.
+async function dropFailuresFromOtherService(endpoint) {
+  if (state.lastEndpoint === endpoint) return;
+  let dropped = 0;
+  for (const [key, scan] of Object.entries(state.scans)) {
+    if (scan.error && scan.endpoint !== endpoint) { delete state.scans[key]; dropped++; }
+  }
+  state.lastEndpoint = endpoint;
+  await persist();
+  if (dropped) render();
+}
+
 async function ensureServiceReady() {
   const endpoint = activeEndpoint();
   if (!endpoint) throw new Error('Connect your Google Sheet first — the finder reads receipts through that same script.');
@@ -601,8 +662,10 @@ async function ensureServiceReady() {
   announce('Checking your receipt reading service…');
   const result = await checkReceiptFinderService({ endpoint });
   paintSetupCheck(result);
+  render();
   if (result.level !== 'ready') throw new Error(`${result.headline} ${result.steps[0] || ''}`.trim());
   serviceReadyFor = endpoint;
+  await dropFailuresFromOtherService(endpoint);
   return endpoint;
 }
 
@@ -636,7 +699,7 @@ async function readCandidate(id, signal, endpoint) {
     await persist();
   } catch (error) {
     if (error.name === 'AbortError' || !active() || uid !== owner) throw error;
-    state.scans[key] = { error: error.message, subject: email?.subject || id };
+    state.scans[key] = { error: error.message, subject: email?.subject || id, endpoint };
     await persist();
   }
   scanDone++;
