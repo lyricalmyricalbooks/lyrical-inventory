@@ -10094,13 +10094,13 @@ function renderInvoices() {
     const statusCls = inv._overdue ? 'overdue' : (inv.status || 'draft');
     const due = inv.dueDate ? fmtD(inv.dueDate) : '—';
     const stripeChip = isDynamicStripeLink(inv)
-      ? `<span title="Dynamic Stripe Checkout · exact amount" style="display:inline-block;margin-left:6px;background:var(--surface-inverse);color:var(--gold-text);font-size:8px;font-weight:700;letter-spacing:.16em;padding:2px 6px;border-radius:99px;">💳 STRIPE</span>`
+      ? `<span class="chip-status gold sm" title="Dynamic Stripe Checkout · exact amount">💳 Stripe</span>`
       : '';
     // Name the other titles on the invoice so a shared one reads as one bill
     // covering several books, not as a stray record filed under the wrong title.
     const others = otherBookTitles(inv, ownerBookId, activeBook, BOOK_LIST);
     const sharedChip = others.length
-      ? `<span class="chip-status gray" title="This invoice also bills: ${escapeHtml(others.join(', '))}" style="margin-left:6px;font-size:9px;">＋ ${escapeHtml(others.join(' · '))}</span>`
+      ? `<span class="chip-status gray sm" title="This invoice also bills: ${escapeHtml(others.join(', '))}">＋ ${escapeHtml(others.join(' · '))}</span>`
       : '';
     // An invoice carries its own currency, and a shared one may well be priced
     // in a different one than the book being viewed — show what it actually bills.
@@ -10115,7 +10115,7 @@ function renderInvoices() {
     // Say when a bill went to somebody who isn't a consignment store, so a
     // direct sale isn't read as a shop that owes money on the shelf.
     const personChip = invoiceBillToMode(inv) === BILL_TO_PERSON
-      ? `<span class="chip-status gray" title="Billed to a person, not a consignment store" style="margin-left:6px;font-size:9px;">\u{1F464} Person</span>`
+      ? `<span class="chip-status gray sm" title="Billed to a person, not a consignment store">\u{1F464} Person</span>`
       : '';
     // What has been said to this customer about this bill, where the bill is
     // listed — so a reminder is never sent twice by hand, and a promise to pay
@@ -10124,12 +10124,12 @@ function renderInvoices() {
     const isSettled = inv.status === 'paid' || inv.status === 'cancelled';
     let chaseChip = '';
     if (!isSettled && remState.snoozedUntil && today() <= remState.snoozedUntil) {
-      chaseChip = `<span class="chip-status gray" title="They said they would pay by then — no reminder goes out before it" style="margin-left:6px;font-size:9px;">\u{1F4C5} Promised ${escapeHtml(fmtD(remState.snoozedUntil))}</span>`;
+      chaseChip = `<span class="chip-status gray sm" title="They said they would pay by then — no reminder goes out before it">\u{1F4C5} Promised ${escapeHtml(fmtD(remState.snoozedUntil))}</span>`;
     } else if (!isSettled && remState.lastStatus === 'failed') {
-      chaseChip = `<span class="chip-status red" title="The reminder email did not go out — open the invoice to try again" style="margin-left:6px;font-size:9px;">\u{23F0} Reminder failed</span>`;
+      chaseChip = `<span class="chip-status red sm" title="The reminder email did not go out — open the invoice to try again">\u{23F0} Reminder failed</span>`;
     } else if (remState.count) {
       const when = remState.lastAt ? fmtD(new Date(remState.lastAt).toISOString().slice(0, 10)) : '';
-      chaseChip = `<span class="chip-status gray" title="A payment reminder was emailed to this customer" style="margin-left:6px;font-size:9px;">\u{23F0} Chased${when ? ' ' + escapeHtml(when) : ''}</span>`;
+      chaseChip = `<span class="chip-status gray sm" title="A payment reminder was emailed to this customer">\u{23F0} Chased${when ? ' ' + escapeHtml(when) : ''}</span>`;
     }
     // Chasing from the list, where the unpaid bills already are. The invoice
     // view has had this button for a while, but getting to it means opening

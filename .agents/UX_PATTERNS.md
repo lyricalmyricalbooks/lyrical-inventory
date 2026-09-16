@@ -36,6 +36,26 @@ see `.tbl tbody tr:hover .edit-btn` (`style.css:1821`) for the reveal-on-hover c
 ---
 
 ## Status & count badges — `.pill`
+
+### A smaller sibling family — `.chip-status`
+`.chip-status` (`style.css:315`) is the compact inline badge used for
+meta-annotations riding next to a piece of content (an invoice number, a
+history row's channel) rather than standing alone as a status column —
+`.emerald` `.amber` `.violet` `.gray` `.red` `.gold`. Two rules worth keeping:
+- **Every tone the code reaches for needs a rule, or it's invisible.** The
+  `.red` tone was used in `main.js` (a failed reminder chip on the Invoices
+  list) for a long time with no matching CSS rule at all — it rendered with
+  none of its siblings' background, border or color, so a real payment-chasing
+  failure looked identical to plain text. Add a tone here the moment code
+  reaches for `.chip-status.<new-color>`; don't assume an existing sibling
+  class covers it.
+- **Reach for `.chip-status.sm` instead of an inline `font-size` override**
+  when a chip needs to sit smaller alongside other text — a run of chips each
+  hand-picking its own `style="font-size:9px"` (or, worse, opting out of
+  `.chip-status` entirely for a fully bespoke pill) is how one invoice row
+  ended up with three different badge shapes side by side. `.sm` keeps the
+  same shape at a smaller size so a row of chips still reads as one family.
+
 Base: `.pill` (`style.css:1569`) — full-pill radius, 11px, always paired with a semantic color modifier: `.green` `.amber` `.red` `.gray` `.blue` `.gold`.
 
 Convention: **amber = active/needs-attention, green = settled/good, gray = neutral/inert,

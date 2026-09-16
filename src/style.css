@@ -348,6 +348,29 @@ tr.hist-row:hover {
   border: 1px solid rgba(100, 116, 139, 0.2);
 }
 
+.chip-status.red {
+  background: var(--status-critical-bg);
+  color: var(--status-critical);
+  border: 1px solid color-mix(in srgb, var(--status-critical) 35%, transparent);
+}
+
+.chip-status.gold {
+  background: var(--gold-bg);
+  color: var(--gold-text);
+  border: 1px solid var(--gold-line);
+}
+
+/* Compact variant for chips riding alongside other text (an invoice number, a
+   row label) rather than standing alone — same shape as .chip-status, just
+   scaled down, so a run of them reads as one family instead of each having
+   picked its own ad hoc font-size. */
+.chip-status.sm {
+  height: 18px;
+  padding: 1px 6px;
+  gap: 3px;
+  font-size: 9px;
+}
+
 .subtext-mute {
   font-size: 11px;
   color: var(--text3);
