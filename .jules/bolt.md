@@ -53,3 +53,7 @@
 ## 2024-09-15 - [Loop Fusion in visibleAttentionResult]
 **Learning:** In highly trafficked arrays like `signals`, chained declarative operations (`reduce`, `filter`, array allocations inside `map`) can add measurable overhead. In `visibleAttentionResult()` of `src/main.js`, combining array operations and conditionals into a single imperative loop eliminated multiple intermediate array allocations and resulted in a noticeable speedup.
 **Action:** Implement a unified loop inside `visibleAttentionResult()` that merges `.reduce()` accumulation for `hiddenCount`, `.filter()` logic for keeping valid signals, array construction, and `.filter(isUrgent).length` checks.
+
+## 2024-03-05 - Loop Fusion in Tax Centre Category Breakdown
+**Learning:** `_tcRenderCategoryPanel` in `src/features/taxcentre.js` chained multiple array traversals: first filtering `allLedger` for non-income entries, then looping with `forEach` to aggregate into `catSummary`, and finally doing two `.reduce()` calls to compute totals. This created overhead from allocating the intermediate `expenses` array and O(N) traversals across an unbounded ledger dataset. Fusing these into a single imperative loop tracking both the categorised buckets and grand totals skips those allocations and runs the loop exactly once.
+**Action:** When filtering a dataset and computing multiple separate aggregated totals simultaneously, use a single combined imperative `for` loop (loop fusion) rather than multiple chained `.filter().reduce()` passes.

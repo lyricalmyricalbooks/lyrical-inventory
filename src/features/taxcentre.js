@@ -890,15 +890,24 @@ function _tcRenderCategoryPanel(allLedger, baseCurrency) {
   const catBody = $('tc-category-body');
   const catFoot = $('tc-category-foot');
   if (catBody) {
-    const expenses = allLedger.filter(item => !item.isIncome);
     const catSummary = {};
-    expenses.forEach(ex => {
-      const c = ex.cat || 'Uncategorized';
-      if (!catSummary[c]) catSummary[c] = { total: 0, count: 0, items: [] };
-      catSummary[c].total += ex.baseAmount;
-      catSummary[c].count++;
-      catSummary[c].items.push(ex);
-    });
+    let grandTotal = 0;
+    let totalTxns = 0;
+
+    // ⚡ Bolt Optimization: Loop fusion - Combine the `.filter()` check and `.reduce()` accumulation into a single imperative loop.
+    for (let i = 0; i < allLedger.length; i++) {
+      const ex = allLedger[i];
+      if (!ex.isIncome) {
+        const c = ex.cat || 'Uncategorized';
+        if (!catSummary[c]) catSummary[c] = { total: 0, count: 0, items: [] };
+        catSummary[c].total += ex.baseAmount;
+        catSummary[c].count++;
+        catSummary[c].items.push(ex);
+
+        grandTotal += ex.baseAmount;
+        totalTxns++;
+      }
+    }
     const catList = Object.keys(catSummary).map(c => ({ name: c, ...catSummary[c] })).sort((a, b) => b.total - a.total);
 
     // Stash by index so the detail modal can read transactions without escaping issues.
@@ -906,9 +915,6 @@ function _tcRenderCategoryPanel(allLedger, baseCurrency) {
       baseCurrency,
       byName: catSummary
     };
-
-    const grandTotal = catList.reduce((sum, c) => sum + c.total, 0);
-    const totalTxns = catList.reduce((sum, c) => sum + c.count, 0);
 
     catBody.innerHTML = catList.map((c, i) => {
       const pct = grandTotal > 0 ? (c.total / grandTotal) * 100 : 0;
