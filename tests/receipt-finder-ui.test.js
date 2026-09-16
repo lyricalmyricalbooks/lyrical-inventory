@@ -2,9 +2,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { normalizeFoundReceipt } from '../src/lib/receipt-finder.js';
 
-const mocks = vi.hoisted(() => ({ saved: null, save: vi.fn(), load: vi.fn(), clear: vi.fn(), extract: vi.fn(), list: vi.fn(), message: vi.fn(), check: vi.fn() }));
+const mocks = vi.hoisted(() => ({ saved: null, token: null, save: vi.fn(), load: vi.fn(), clear: vi.fn(),
+  loadToken: vi.fn(), saveToken: vi.fn(), clearToken: vi.fn(),
+  extract: vi.fn(), list: vi.fn(), message: vi.fn(), check: vi.fn() }));
 vi.mock('../src/lib/receipt-finder-store.js', () => ({ createReceiptFinderStore: () => ({
   load: mocks.load, save: mocks.save, clear: mocks.clear,
+  loadToken: mocks.loadToken, saveToken: mocks.saveToken, clearToken: mocks.clearToken,
 }) }));
 vi.mock('../src/lib/receipt-finder-client.js', () => ({
   createReceiptFinderClient: () => ({ profile: async () => ({ emailAddress: 'publisher@example.com' }),
@@ -29,12 +32,16 @@ beforeEach(() => {
   mocks.message.mockResolvedValue({ ...source, id: 'm2', subject: 'Receipt notice' });
   mocks.extract.mockResolvedValue({ receipts: [{ vendor: 'Courier', amount: 10, currency: 'CAD', date: '2026-09-01', confidence: 0.9 }] });
   mocks.check.mockResolvedValue({ level: 'ready', headline: 'Ready to scan using gemini-2.5-flash.', steps: [] });
+  mocks.token = null;
+  mocks.loadToken.mockImplementation(async () => mocks.token);
+  mocks.saveToken.mockImplementation(async (_uid, value) => { mocks.token = structuredClone(value); });
+  mocks.clearToken.mockImplementation(async () => { mocks.token = null; });
   document.body.innerHTML = '<span id="email-account-pill"></span><div id="email-panel-gmail"></div>';
   Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
   deps = { user: () => ({ uid: 'publisher', getIdToken: async () => 'id-token' }), publisher: () => true,
     categories: ['Other'], inferCategory: () => 'Other', expenses: () => [], toast: vi.fn(), confirm: async () => true,
     upload: vi.fn(), commit: vi.fn(), accept: vi.fn(), rate: async () => 1 };
-  window._fbConnectReceiptGmail = vi.fn(async () => 'access-token');
+  window._fbConnectReceiptGmail = vi.fn(async () => ({ token: 'access-token', expiresAt: Date.now() + 3300000 }));
   window._fbOnAuthStateChanged = vi.fn();
 });
 const settle = () => new Promise(resolve => setTimeout(resolve, 20));
@@ -65,7 +72,7 @@ describe('receipt finder UI', () => {
   it('filters without losing saved drafts or changing their real identities', async () => {
     await mount();
     document.querySelector('[data-status="ready"]').click();
-    expect(document.querySelector('[data-finder-list]').textContent).toContain('No receipts match');
+    expect(document.querySelector('[data-finder-list]').textContent).toContain('Nothing matches this view');
     document.querySelector('[data-status="review"]').click();
     expect(document.querySelector('[data-draft]').dataset.draft).toBe('publisher@example.com:m1:0');
   });
@@ -111,6 +118,114 @@ describe('receipt finder UI', () => {
     expect(mocks.check).toHaveBeenCalledWith({ endpoint: 'https://script.google.com/macros/s/test/exec' });
     expect(document.querySelector('[data-finder-check]').className).toContain('is-ready');
     expect(document.querySelector('[data-finder-status]').textContent).toContain('ready to scan');
+  });
+  it('reuses a saved Gmail connection instead of asking for access again', async () => {
+    // The connection used to live only in memory, and Google was asked to
+    // re-run its full consent screen every time, so the publisher had to
+    // grant Gmail access on every single visit.
+    mocks.token = { token: 'saved-token', expiresAt: Date.now() + 600000, account: 'publisher@example.com' };
+    await mount();
+    expect(window._fbConnectReceiptGmail).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-action="connect"]').textContent).toBe('Disconnect Gmail');
+    expect(document.getElementById('email-account-pill').textContent).toContain('publisher@example.com');
+  });
+  it('treats an expired saved connection as disconnected and discards it', async () => {
+    mocks.token = { token: 'stale-token', expiresAt: Date.now() - 1000, account: 'publisher@example.com' };
+    await mount();
+    expect(mocks.clearToken).toHaveBeenCalledWith('publisher');
+    expect(document.querySelector('[data-action="connect"]').textContent).toContain('Reconnect');
+    expect(document.querySelector('[data-conn-note]').textContent).toContain('run out');
+  });
+  it('remembers the connection it just made, with its expiry', async () => {
+    await mount();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="connect"]').click(); await settle();
+    expect(mocks.token).toMatchObject({ token: 'access-token', account: 'publisher@example.com' });
+    expect(mocks.token.expiresAt).toBeGreaterThan(Date.now());
+  });
+  it('drops the saved connection on disconnect and on sign-out', async () => {
+    mocks.token = { token: 'saved-token', expiresAt: Date.now() + 600000, account: 'publisher@example.com' };
+    await mount();
+    document.querySelector('[data-action="connect"]').click(); await settle();
+    expect(mocks.token).toBeNull();
+    mocks.token = { token: 'saved-token', expiresAt: Date.now() + 600000, account: 'publisher@example.com' };
+    window._fbOnAuthStateChanged.mock.calls[0][0](null); await settle();
+    expect(mocks.token).toBeNull();
+  });
+  it('refuses to scan through a deployment that cannot read receipts', async () => {
+    // An unknown action on an older Google Sheet script falls through to its
+    // row-writing path, so scanning against one would append junk rows to the
+    // publisher's spreadsheet. No email may be sent until it says it can read.
+    mocks.check.mockResolvedValue({ level: 'error', headline: 'Your Google Sheet script is too old to read receipts.',
+      steps: ['Copy the script shown in the Connect your Google Sheet tab and deploy a new version.'] });
+    await mount();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="connect"]').click(); await settle();
+    document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
+    expect(mocks.list).not.toHaveBeenCalled();
+    expect(mocks.extract).not.toHaveBeenCalled();
+    expect(deps.toast).toHaveBeenCalledWith(expect.stringContaining('too old'), 'err');
+  });
+  it('falls back to the connected Google Sheet script when no address is saved', async () => {
+    mocks.saved.endpoint = '';
+    deps.service = () => 'https://script.google.com/macros/s/sheets/exec';
+    await mount();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="connect"]').click(); await settle();
+    document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
+    expect(mocks.check).toHaveBeenCalledWith({ endpoint: 'https://script.google.com/macros/s/sheets/exec' });
+    expect(mocks.extract.mock.calls[0][0].endpoint).toBe('https://script.google.com/macros/s/sheets/exec');
+  });
+  it('reads candidate emails in parallel rather than one after another', async () => {
+    mocks.list.mockResolvedValue({ messages: [{ id: 'a' }, { id: 'b' }, { id: 'c' }] });
+    mocks.message.mockImplementation(async id => ({ ...source, id, subject: 'Receipt ' + id }));
+    let open = 0, peak = 0;
+    mocks.extract.mockImplementation(async () => {
+      peak = Math.max(peak, ++open);
+      await new Promise(resolve => setTimeout(resolve, 5));
+      open--;
+      return { receipts: [] };
+    });
+    await mount();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="connect"]').click(); await settle();
+    document.querySelector('[data-action="scan"]').click();
+    await new Promise(resolve => setTimeout(resolve, 120));
+    expect(mocks.extract).toHaveBeenCalledTimes(3);
+    expect(peak).toBeGreaterThan(1);
+  });
+  it('does not keep the saved copy of an email that held no receipt', async () => {
+    // Every scanned email's body and attachment bytes used to be kept forever,
+    // so the saved mailbox — and therefore every later save — grew with each
+    // scan of an ordinary inbox, whether or not anything was found.
+    mocks.extract.mockResolvedValue({ receipts: [] });
+    await mount();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="connect"]').click(); await settle();
+    document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
+    expect(mocks.saved.scans['publisher@example.com:m2'].done).toBe(true);
+    expect(mocks.saved.emails['publisher@example.com:m2']).toBeUndefined();
+    expect(mocks.saved.emails['publisher@example.com:m1']).toBeDefined();
+  });
+  it('says plainly when a search matched no mail at all', async () => {
+    mocks.list.mockResolvedValue({ messages: [] });
+    await mount();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="connect"]').click(); await settle();
+    document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
+    expect(document.querySelector('[data-finder-status]').textContent).toContain('No emails matched');
+    expect(mocks.extract).not.toHaveBeenCalled();
+  });
+  it('surfaces unreadable emails as an alert rather than only a collapsed list', async () => {
+    await mount();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    mocks.extract.mockRejectedValue(new Error('Receipt AI is unavailable'));
+    document.querySelector('[data-action="connect"]').click(); await settle();
+    document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
+    const alert = document.querySelector('[data-finder-alert]');
+    expect(alert.className).toContain('is-warn');
+    expect(alert.textContent).toContain('could not be read');
+    expect(alert.querySelector('[data-action="retry-failed"]')).not.toBeNull();
   });
   it('clears mailbox content immediately on sign-out', async () => {
     await mount();
