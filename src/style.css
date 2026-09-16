@@ -1984,7 +1984,21 @@ tr.hist-row:hover {
 .metric-banner-cta:hover,.metric-banner-link:hover{background:var(--gold2);}
 .metric-banner-hint{font-size:10px;color:var(--on-inverse-3);text-align:right;}
 .metric-banner-table-wrap,.metric-banner-items{margin-top:1.25rem;padding-top:1.25rem;border-top:1px solid rgba(255,255,255,.07);}
-.metric-banner-items{display:flex;flex-direction:column;gap:8px;}
+.metric-banner-items{display:flex;flex-direction:column;}
+/* Shared row for a .metric-banner-items list (the artist reimbursement and
+   pending-transfer summaries) — both used to hand-roll this exact flex row
+   with its own inline styles per render, with no divider between entries so
+   several lines ran together, and a raw hex literal in place of the emerald
+   token. One row rule now; the amount's colour comes from the banner's own
+   tone class, matching its headline figure's tone rather than a hardcoded
+   value. */
+.metric-banner-items .mbi-row{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:7px 0;border-top:1px solid rgba(255,255,255,.06);}
+.metric-banner-items .mbi-row:first-child{padding-top:0;border-top:none;}
+.metric-banner-items .mbi-row.is-pending{opacity:.6;}
+.metric-banner-items .mbi-desc{font-family:'DM Mono',monospace;font-size:var(--text-xs);color:var(--on-inverse-3);}
+.metric-banner-items .mbi-amt{font-family:'DM Mono',monospace;font-size:var(--text-base);font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.metric-banner-green .mbi-amt{color:var(--emerald-soft);}
+.metric-banner-gold .mbi-amt{color:var(--gold2);}
 .metric-banner-table{width:100%;border-collapse:collapse;font-size:12px;font-family:'DM Mono',monospace;}
 /* Column labels + a real row rhythm — this table used to have every cell's
    padding hand-picked in JS (flush edges on date/amount, 8px elsewhere), no

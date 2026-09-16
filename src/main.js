@@ -8228,11 +8228,9 @@ function renderArtistReimburseBanner() {
   $('arb-detail').textContent = `${received.length} expense${received.length !== 1 ? 's' : ''} marked as received by publisher`;
   $('arb-hint').textContent = 'These expenses have been settled';
   $('arb-items').innerHTML = received.map(e => `
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
-      <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--on-inverse-3);">
-        ${escapeHtml(e.desc)} · ${fmtD(e.date)} · <span style="font-size:9px;background:rgba(255,255,255,.08);padding:1px 6px;border-radius:100px;">${escapeHtml(e.cat)}</span>
-      </div>
-      <div style="font-family:'DM Mono',monospace;font-size:13px;color:#6ee7a8;font-weight:500;">${fmt(e.amount, cur)}</div>
+    <div class="mbi-row">
+      <div class="mbi-desc">${escapeHtml(e.desc)} · ${fmtD(e.date)} · <span class="metric-banner-cat">${escapeHtml(e.cat)}</span></div>
+      <div class="mbi-amt">${fmt(e.amount, cur)}</div>
     </div>`).join('');
 }
 
@@ -8834,11 +8832,9 @@ function renderArtistTransfers() {
         $('apb-link-hint').textContent = 'Payment link not set — contact your publisher';
       }
       $('apb-transfers').innerHTML = transfers.map(t => `
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap; opacity: ${t.status === 'pending' ? '.6' : '1'}">
-          <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--on-inverse-3);">
-            ${escapeHtml(t.num)} · ${fmtD(t.date)} · ${t.qty}× ${t.status === 'pending' ? ' (Pending Approval)' : ''}
-          </div>
-          <div style="font-family:'DM Mono',monospace;font-size:13px;color:var(--gold2);font-weight:500;">${fmt(t.total, cur)}</div>
+        <div class="mbi-row${t.status === 'pending' ? ' is-pending' : ''}">
+          <div class="mbi-desc">${escapeHtml(t.num)} · ${fmtD(t.date)} · ${t.qty}× ${t.status === 'pending' ? ' (Pending Approval)' : ''}</div>
+          <div class="mbi-amt">${fmt(t.total, cur)}</div>
         </div>`).join('');
     } else {
       banner.style.display = 'none';

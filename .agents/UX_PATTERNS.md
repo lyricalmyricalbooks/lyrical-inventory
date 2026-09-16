@@ -203,9 +203,14 @@ rules now hold it together:
   already used for this banner's other muted text) instead of pulling in a themed component that
   wasn't designed for a permanently-dark plate.
 
-The sibling author-facing banner (`#arb-items` in `renderArtistReimburseBanner`) shows the same
-data as a flex list of rows rather than a `<table>`, so this fix doesn't reach it — worth revisiting
-with the same four rules if that surface is touched next.
+The sibling author-facing banners (`#arb-items` in `renderArtistReimburseBanner`, `#apb-transfers`
+in the publisher-owed transfer summary) show the same kind of data as a flex list of rows rather
+than a `<table>`, so this fix didn't originally reach them — now fixed with the equivalent row
+convention: `.metric-banner-items .mbi-row` (divider + padding, no more relying on the parent's
+flex `gap`), `.mbi-desc`/`.mbi-amt` for the two cells, and the amount's colour keyed off the
+banner's own tone class (`.metric-banner-green .mbi-amt` / `.metric-banner-gold .mbi-amt`) rather
+than a value hardcoded per call site. Reuse `.metric-banner-cat` for any tag inside one of these
+rows — it's the same tone family as `.mbi-desc`, not `.chip-status`.
 
 ---
 
