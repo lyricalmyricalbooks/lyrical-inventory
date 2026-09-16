@@ -348,6 +348,29 @@ tr.hist-row:hover {
   border: 1px solid rgba(100, 116, 139, 0.2);
 }
 
+.chip-status.red {
+  background: var(--status-critical-bg);
+  color: var(--status-critical);
+  border: 1px solid color-mix(in srgb, var(--status-critical) 35%, transparent);
+}
+
+.chip-status.gold {
+  background: var(--gold-bg);
+  color: var(--gold-text);
+  border: 1px solid var(--gold-line);
+}
+
+/* Compact variant for chips riding alongside other text (an invoice number, a
+   row label) rather than standing alone — same shape as .chip-status, just
+   scaled down, so a run of them reads as one family instead of each having
+   picked its own ad hoc font-size. */
+.chip-status.sm {
+  height: 18px;
+  padding: 1px 6px;
+  gap: 3px;
+  font-size: 9px;
+}
+
 .subtext-mute {
   font-size: 11px;
   color: var(--text3);
@@ -1961,8 +1984,39 @@ tr.hist-row:hover {
 .metric-banner-cta:hover,.metric-banner-link:hover{background:var(--gold2);}
 .metric-banner-hint{font-size:10px;color:var(--on-inverse-3);text-align:right;}
 .metric-banner-table-wrap,.metric-banner-items{margin-top:1.25rem;padding-top:1.25rem;border-top:1px solid rgba(255,255,255,.07);}
-.metric-banner-items{display:flex;flex-direction:column;gap:8px;}
+.metric-banner-items{display:flex;flex-direction:column;}
+/* Shared row for a .metric-banner-items list (the artist reimbursement and
+   pending-transfer summaries) — both used to hand-roll this exact flex row
+   with its own inline styles per render, with no divider between entries so
+   several lines ran together, and a raw hex literal in place of the emerald
+   token. One row rule now; the amount's colour comes from the banner's own
+   tone class, matching its headline figure's tone rather than a hardcoded
+   value. */
+.metric-banner-items .mbi-row{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:7px 0;border-top:1px solid rgba(255,255,255,.06);}
+.metric-banner-items .mbi-row:first-child{padding-top:0;border-top:none;}
+.metric-banner-items .mbi-row.is-pending{opacity:.6;}
+.metric-banner-items .mbi-desc{font-family:'DM Mono',monospace;font-size:var(--text-xs);color:var(--on-inverse-3);}
+.metric-banner-items .mbi-amt{font-family:'DM Mono',monospace;font-size:var(--text-base);font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.metric-banner-green .mbi-amt{color:var(--emerald-soft);}
+.metric-banner-gold .mbi-amt{color:var(--gold2);}
 .metric-banner-table{width:100%;border-collapse:collapse;font-size:12px;font-family:'DM Mono',monospace;}
+/* Column labels + a real row rhythm — this table used to have every cell's
+   padding hand-picked in JS (flush edges on date/amount, 8px elsewhere), no
+   header, and no row divider, so a multi-row expense list ran together into
+   one dark block. One rule per role now, shared with any other banner table
+   that adopts this markup. */
+.metric-banner-table thead th{padding:0 8px 8px;font-family:'Syne',sans-serif;font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.4);text-align:left;border-bottom:1px solid rgba(255,255,255,.08);}
+.metric-banner-table thead th:first-child,.metric-banner-table tbody td:first-child{padding-left:0;white-space:nowrap;}
+.metric-banner-table thead th.r,.metric-banner-table tbody td:last-child{padding-right:0;text-align:right;}
+.metric-banner-table tbody tr{border-top:1px solid rgba(255,255,255,.06);}
+.metric-banner-table tbody tr:first-child{border-top:none;}
+.metric-banner-table tbody tr:hover td{background:rgba(255,255,255,.03);}
+.metric-banner-table tbody td{padding:7px 8px;color:var(--on-inverse-3);}
+.metric-banner-table .mb-desc{color:var(--on-inverse-2);font-weight:500;}
+.metric-banner-table .mb-amt{color:var(--rose-soft);font-weight:500;white-space:nowrap;}
+/* A themed sibling of .chip-status, tuned for this banner's permanently-dark
+   fill rather than the light/dark surface pair .chip-status themes against. */
+.metric-banner-cat{display:inline-flex;align-items:center;font-size:10px;font-weight:600;background:rgba(255,255,255,.08);color:var(--on-inverse-3);padding:2px 8px;border-radius:99px;white-space:nowrap;}
 .metric-banner-danger{border-color:rgba(149,32,32,.35);}
 .metric-banner-danger .metric-banner-overlay{background:radial-gradient(ellipse at top right,rgba(149,32,32,.08),transparent 60%);}
 .metric-banner-gold{border-color:rgba(200,145,58,.3);}

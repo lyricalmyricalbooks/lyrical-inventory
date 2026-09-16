@@ -36,6 +36,26 @@ see `.tbl tbody tr:hover .edit-btn` (`style.css:1821`) for the reveal-on-hover c
 ---
 
 ## Status & count badges — `.pill`
+
+### A smaller sibling family — `.chip-status`
+`.chip-status` (`style.css:315`) is the compact inline badge used for
+meta-annotations riding next to a piece of content (an invoice number, a
+history row's channel) rather than standing alone as a status column —
+`.emerald` `.amber` `.violet` `.gray` `.red` `.gold`. Two rules worth keeping:
+- **Every tone the code reaches for needs a rule, or it's invisible.** The
+  `.red` tone was used in `main.js` (a failed reminder chip on the Invoices
+  list) for a long time with no matching CSS rule at all — it rendered with
+  none of its siblings' background, border or color, so a real payment-chasing
+  failure looked identical to plain text. Add a tone here the moment code
+  reaches for `.chip-status.<new-color>`; don't assume an existing sibling
+  class covers it.
+- **Reach for `.chip-status.sm` instead of an inline `font-size` override**
+  when a chip needs to sit smaller alongside other text — a run of chips each
+  hand-picking its own `style="font-size:9px"` (or, worse, opting out of
+  `.chip-status` entirely for a fully bespoke pill) is how one invoice row
+  ended up with three different badge shapes side by side. `.sm` keeps the
+  same shape at a smaller size so a row of chips still reads as one family.
+
 Base: `.pill` (`style.css:1569`) — full-pill radius, 11px, always paired with a semantic color modifier: `.green` `.amber` `.red` `.gray` `.blue` `.gold`.
 
 Convention: **amber = active/needs-attention, green = settled/good, gray = neutral/inert,
@@ -157,6 +177,40 @@ enough for a card that's merely reporting, or every card ends up looking flagged
 are. **Never reuse `.hs-label`/`.hs-val`** for a card like this — that pair is built for the app
 header's permanently-dark strip (`rgba(255,255,255,.34)` label, fixed `--gold3` figure) and using it
 on a light card means fighting every property back with an inline override, one per card.
+
+---
+
+## Permanently-dark banner tables — `.metric-banner-table`
+
+The dashboard's "Expenses owed to artist" banner (`.metric-banner-danger`, a fixed dark card that
+does not flip with the theme — same family as `.hs-label`/`.hs-val`) used to build its table's
+row markup entirely from inline styles in `main.js`: date and amount cells were flush-padded to
+the banner edge while the middle three columns carried `padding:6px 8px`, there was no `<thead>`,
+and the category tag was a one-off inline-styled span duplicating `.pill`/`.chip-status`. Four
+rules now hold it together:
+- **A static `<thead>` lives in the markup, not the renderer.** The column set doesn't change per
+  render, so the header row is plain HTML in `index.html`; only `<tbody>` is re-rendered.
+- **One padding rule for every cell, with edge alignment as an override, not a per-cell guess.**
+  `.metric-banner-table tbody td{padding:7px 8px}` is the rule; `:first-child`/`:last-child`
+  zero out the side that touches the banner's own edge. Never hand-pick a cell's padding in JS.
+- **A row divider and hover, like every other list in the app.** `border-top` on `tbody tr` (not
+  `border-bottom`, so the last row doesn't carry a trailing hairline) plus a hover tint — this
+  table had neither, so several rows of expenses ran together into one dark block.
+- **`.metric-banner-cat` is `.chip-status`'s sibling for this surface.** `.chip-status`'s tones are
+  tuned against `--surface-card`; reusing it directly on a fixed `var(--ink)` fill would fight the
+  same low-alpha-on-dark problem the flagged-tile accent-bar rule above exists to avoid. Match the
+  banner's own established tone family (`rgba(255,255,255,.08)` fill, `--on-inverse-3` text —
+  already used for this banner's other muted text) instead of pulling in a themed component that
+  wasn't designed for a permanently-dark plate.
+
+The sibling author-facing banners (`#arb-items` in `renderArtistReimburseBanner`, `#apb-transfers`
+in the publisher-owed transfer summary) show the same kind of data as a flex list of rows rather
+than a `<table>`, so this fix didn't originally reach them — now fixed with the equivalent row
+convention: `.metric-banner-items .mbi-row` (divider + padding, no more relying on the parent's
+flex `gap`), `.mbi-desc`/`.mbi-amt` for the two cells, and the amount's colour keyed off the
+banner's own tone class (`.metric-banner-green .mbi-amt` / `.metric-banner-gold .mbi-amt`) rather
+than a value hardcoded per call site. Reuse `.metric-banner-cat` for any tag inside one of these
+rows — it's the same tone family as `.mbi-desc`, not `.chip-status`.
 
 ---
 

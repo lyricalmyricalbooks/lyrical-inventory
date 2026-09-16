@@ -173,13 +173,15 @@ export function describeFinderSetup(report) {
   // with a different service name and none of the fields the app reads. Say so
   // instead of claiming the address is wrong, which is what it used to do.
   if (/receipt[-_]?finder/i.test(service)) {
-    return { level: 'error', headline: 'This is an older Receipt Finder script the app can no longer read.',
-      steps: ['You no longer need a second script. Clear this address to use the Google Sheet script you have already connected.',
+    return { level: 'error', fix: 'use-sheets',
+      headline: 'This is an older Receipt Finder script the app can no longer read.',
+      steps: ['You no longer need a second script — switch to the Google Sheet script you have already connected.',
         'If you would rather keep this separate deployment, paste in the current Receipt Finder script and deploy a new version.'] };
   }
 
-  return { level: 'error', headline: 'That address did not answer as one of this app’s scripts.',
-    steps: ['Check that the address ends in /exec and that the deployment runs as you, with access set to Anyone.'] };
+  return { level: 'error', fix: 'use-sheets', headline: 'That address did not answer as one of this app’s scripts.',
+    steps: ['Check that the address ends in /exec and that the deployment runs as you, with access set to Anyone.',
+      'Or switch to the Google Sheet script you have already connected, which can read receipts on its own.'] };
 }
 
 export async function checkReceiptFinderService({ endpoint, fetchImpl = fetch, signal }) {
@@ -194,7 +196,7 @@ export async function checkReceiptFinderService({ endpoint, fetchImpl = fetch, s
     report = await res.json();
   } catch (error) {
     if (error?.name === 'AbortError') throw error;
-    return { level: 'error', headline: 'The script did not answer.',
+    return { level: 'error', fix: 'use-sheets', headline: 'The script did not answer.',
       steps: ['Open the address in a browser tab. If it asks you to sign in, redeploy the web app with access set to Anyone and executing as you.',
         'If nothing loads at all, check that the deployment is still active and that you are online.'] };
   }
