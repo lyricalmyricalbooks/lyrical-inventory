@@ -180,6 +180,7 @@ export function _geminiAwaitCooldown() {
 // do next is the whole point of showing an error at all. The raw text still
 // goes to the console for anyone debugging.
 export function _friendlyScanError(e) {
+  if (e?.__alreadyFriendly) return e.message;
   const raw = String(e?.message || e || '').trim();
   if (typeof navigator !== 'undefined' && navigator && navigator.onLine === false) {
     return 'you are offline — reconnect and try again';

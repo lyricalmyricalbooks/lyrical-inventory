@@ -362,11 +362,11 @@ function intelPendingHtml() {
 }
 
 /** Why the composer is unavailable right now, or '' when it is fine. */
-/** The backup provider, when both halves of it have been filled in. */
+/** A saved key is enough; a custom model is optional. */
 function backupProvider() {
-  const key = TAX_CENTER?.settings?.openRouterKey;
-  const model = TAX_CENTER?.settings?.openRouterModel;
-  return (key && model) ? { key, model } : null;
+  const key = TAX_CENTER?.settings?.openRouterKey?.trim();
+  const model = TAX_CENTER?.settings?.openRouterModel?.trim() || 'openrouter/free';
+  return key ? { key, model } : null;
 }
 
 function intelBlocker() {

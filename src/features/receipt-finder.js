@@ -79,7 +79,7 @@ async function mountReceiptFinder(element, dependencies) {
       <button type="button" class="btn" data-action="connect">Connect Gmail</button></div>
     <details class="finder-setup"><summary>Finder setup</summary><div class="form-group">
       <label for="finder-endpoint">Receipt AI deployment URL</label><input type="url" id="finder-endpoint" value="${esc(state.endpoint)}" placeholder="https://script.google.com/macros/s/…/exec">
-      <p>Use the separate Receipt Finder Apps Script deployment. Its AI key stays in Script Properties. Gmail access is read-only and lasts for this session.</p>
+      <p>Uses your saved app AI keys: Gemini first, then OpenRouter if Gemini cannot answer. A separate Receipt Finder Apps Script deployment is optional when app AI keys are saved. Gmail access is read-only and lasts for this session.</p>
       <div class="finder-toolbar">
         <button class="btn" type="button" data-action="save-setup">Save setup</button>
         <button class="btn" type="button" data-action="check-setup">Test connection</button>
@@ -279,7 +279,7 @@ async function onClick(event) {
         await persist(); renderConnection(); announce(`Connected to ${state.account} with read-only access.`); break;
       case 'save-setup':
         state.endpoint = host.querySelector('#finder-endpoint').value.trim();
-        if (!FINDER_ENDPOINT_PATTERN.test(state.endpoint)) throw new Error('Enter a valid Apps Script deployment URL');
+        if ((!state.endpoint && !deps.hasAppAi?.()) || (state.endpoint && !FINDER_ENDPOINT_PATTERN.test(state.endpoint))) throw new Error('Enter a valid Apps Script deployment URL');
         await persist(); announce('Finder setup saved.'); await runSetupCheck(); break;
       case 'check-setup': await runSetupCheck(); break;
       case 'scan': await scan(false); break;
@@ -311,7 +311,9 @@ async function runSetupCheck() {
   panel.className = 'finder-check';
   panel.innerHTML = '<div class="skeleton-line"></div>';
   try {
-    const result = await checkReceiptFinderService({ endpoint });
+    const result = deps.hasAppAi?.()
+      ? { level: 'ready', headline: 'App AI keys are saved. Scans use Gemini first, then OpenRouter. Provider access is checked when you scan.', steps: [] }
+      : await checkReceiptFinderService({ endpoint });
     const pill = { ready: 'green', warn: 'amber', error: 'red' }[result.level];
     const glyph = { ready: '✓', warn: '●', error: '✕' }[result.level];
     const label = { ready: 'Ready', warn: 'Almost ready', error: 'Not ready' }[result.level];
@@ -338,7 +340,10 @@ async function readCandidate(id, signal) {
     if (signal.aborted || !active() || owner !== uid) throw new DOMException('Stopped', 'AbortError');
     state.emails[key] = email;
     await persist(); // Source bytes must survive before the AI result does.
-    const result = await extractFoundReceipts({ endpoint: state.endpoint, idToken: await deps.user().getIdToken(), email, signal });
+    const useAppAi = deps.hasAppAi?.();
+    const result = await extractFoundReceipts({ endpoint: state.endpoint,
+      idToken: useAppAi ? undefined : await deps.user().getIdToken(), email, signal,
+      readAi: useAppAi ? deps.readAi : undefined });
     if (signal.aborted || !active() || owner !== uid) throw new DOMException('Stopped', 'AbortError');
     result.receipts.forEach((raw, index) => {
       const draft = normalizeFoundReceipt(raw, email, index);
@@ -358,7 +363,7 @@ async function readCandidate(id, signal) {
 async function scan(nextPage) {
   if (busy) return;
   if (!accessToken) throw new Error('Connect Gmail first');
-  if (!state.endpoint) throw new Error('Open Finder setup and save the receipt AI deployment URL');
+  if (!state.endpoint && !deps.hasAppAi?.()) throw new Error('Save a Gemini or OpenRouter key in Tax Centre config, or set the receipt AI deployment URL');
   if (!navigator.onLine) throw new Error('Reconnect to scan Gmail. Saved receipts are available offline.');
   const value = id => host.querySelector('#' + id).value;
   if (value('finder-from') && value('finder-to') && value('finder-from') > value('finder-to')) throw new Error('From date must be before the end date');

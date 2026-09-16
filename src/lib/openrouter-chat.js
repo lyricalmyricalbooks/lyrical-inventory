@@ -31,6 +31,8 @@ import { runIntelTool } from './publisher-intel-tools.js';
 
 export const OPENROUTER_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
 
+export const DEFAULT_OPENROUTER_MODEL = 'openrouter/free';
+
 /** Matches gemini-chat.js, for the reason given on MAX_TOOL_ROUNDS there. */
 export const MAX_TOOL_ROUNDS = 6;
 
@@ -232,6 +234,9 @@ export async function runOpenRouterTurn({
     }
 
     const data = await res.json();
+    if (data?.error) {
+      throw Object.assign(new Error(data.error.message || 'The backup provider failed'), { status: Number(data.error.code) });
+    }
     const msg = data?.choices?.[0]?.message;
     if (!msg) throw new Error('The backup model returned nothing');
 
@@ -241,7 +246,7 @@ export async function runOpenRouterTurn({
       contents.push({ role: 'model', parts: [{ text }] });
       return {
         text, history: contents, toolCalls, proposals,
-        model, via: 'openrouter', rounds: round, hitRoundCap: false,
+        model: data.model || model, via: 'openrouter', rounds: round, hitRoundCap: false,
         truncated: data?.choices?.[0]?.finish_reason === 'length',
       };
     }
@@ -274,6 +279,48 @@ export async function runOpenRouterTurn({
     text: '', history: contents, toolCalls, proposals,
     model, via: 'openrouter', rounds: maxRounds, hitRoundCap: true, truncated: false,
   };
+}
+
+/** Read structured text, images or PDFs using the same saved backup as chat. */
+export async function runOpenRouterRead({
+  apiKey, model = DEFAULT_OPENROUTER_MODEL, parts = [], schema,
+  maxOutputTokens = 8192, signal, fetchImpl = fetch,
+} = {}) {
+  if (!apiKey?.trim()) throw new Error('No backup AI key is set');
+  const content = parts.map(part => {
+    if (typeof part.text === 'string') return { type: 'text', text: part.text };
+    const file = part.inline_data || part.inlineData;
+    const mime = file?.mime_type || file?.mimeType;
+    if (!file?.data || !mime) throw new Error('The backup reader cannot open this attachment');
+    const url = `data:${mime};base64,${file.data}`;
+    if (mime.startsWith('image/')) return { type: 'image_url', image_url: { url } };
+    if (mime === 'application/pdf') return { type: 'file', file: { filename: 'document.pdf', file_data: url } };
+    throw new Error('The backup reader supports photos and PDF files');
+  });
+  const body = {
+    model: model?.trim() || DEFAULT_OPENROUTER_MODEL,
+    messages: [{ role: 'user', content }],
+    temperature: 0.1, max_tokens: maxOutputTokens,
+    response_format: schema
+      ? { type: 'json_schema', json_schema: { name: 'receipt', schema: toJsonSchema(schema) } }
+      : { type: 'json_object' },
+    provider: { require_parameters: true },
+  };
+  if (content.some(part => part.type === 'file')) {
+    body.plugins = [{ id: 'file-parser', pdf: { engine: 'cloudflare-ai' } }];
+  }
+  const res = await callOnce(body, apiKey.trim(), { fetchImpl, signal });
+  const data = await res.json();
+  if (!res.ok || data?.error) {
+    throw Object.assign(new Error(data?.error?.message || `HTTP ${res.status} from OpenRouter`), { status: Number(data?.error?.code) || res.status });
+  }
+  const choice = data?.choices?.[0];
+  if (choice?.finish_reason && !['stop', 'length'].includes(choice.finish_reason)) {
+    throw new Error(`The backup reader stopped early (${choice.finish_reason})`);
+  }
+  const text = choice?.message?.content?.trim();
+  if (!text) throw new Error('The backup reader returned nothing');
+  return { text, truncated: choice.finish_reason === 'length', model: data.model || body.model, via: 'openrouter' };
 }
 
 /** Plain wording for a backup-provider failure, matching the Google path's tone. */

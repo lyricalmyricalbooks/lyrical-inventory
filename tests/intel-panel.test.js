@@ -407,12 +407,10 @@ describe('when Google will not answer', () => {
     expect(h.runOpenRouterTurn).not.toHaveBeenCalled();
   });
 
-  it('needs both the key and the model before it will use the backup', async () => {
-    for (const missing of [{ backupKey: '' }, { backupModel: '' }]) {
-      const h = harness({ gemini: async () => { throw new Error('down'); }, ...missing });
-      await expect(h.ask('q')).rejects.toThrow(/down/);
-      expect(h.runOpenRouterTurn).not.toHaveBeenCalled();
-    }
+  it('uses a default model when only the backup key is saved', async () => {
+    const h = harness({ gemini: async () => { throw new Error('quota exceeded'); }, backupModel: '' });
+    expect((await h.ask('q')).text).toBe('from backup');
+    expect(h.runOpenRouterTurn).toHaveBeenCalledWith(expect.objectContaining({ model: 'openrouter/free' }));
   });
 
   it('goes straight to the backup when there is no Google key at all', async () => {
@@ -497,7 +495,7 @@ describe('the composer with only a backup key', () => {
 
   it('still asks for a key when neither is set up', () => {
     expect(blocker({})).toMatch(/Add your AI key/i);
-    expect(blocker({ openRouterKey: 'b' })).toMatch(/Add your AI key/i);
+    expect(blocker({ openRouterKey: 'b' })).toBe('');
   });
 });
 

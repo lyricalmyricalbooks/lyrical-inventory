@@ -119,3 +119,17 @@ describe('receipt finder UI', () => {
     expect(document.getElementById('email-panel-gmail').textContent).toBe('');
   });
 });
+
+describe('receipt finder with app AI keys', () => {
+  it('scans without a script URL and passes the shared reader', async () => {
+    mocks.saved.endpoint = '';
+    deps.hasAppAi = () => true;
+    deps.readAi = vi.fn();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    await mount();
+    document.querySelector('[data-action="connect"]').click(); await settle();
+    document.querySelector('[data-action="scan"]').click(); await settle();
+    expect(mocks.extract).toHaveBeenCalledWith(expect.objectContaining({ readAi: deps.readAi, idToken: undefined }));
+    expect(mocks.saved.scans['publisher@example.com:m2'].done).toBe(true);
+  });
+});

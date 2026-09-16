@@ -61,7 +61,7 @@ function scanHarness({ reply, prepare, apiKey = 'k-test' } = {}) {
         TAX_CENTER: { settings: { geminiKey: apiKey } },
         EXPENSE_CATEGORIES: CATS,
         _prepareReceiptUpload: prepare || (async () => ({ mime: 'image/jpeg', base64: 'AAAA', scaled: true })),
-        _callGeminiForReceipts: async (key, parts, opts) => {
+        _callAiForReceipts: async (key, parts, opts) => {
           calls.push({ key, parts, opts });
           return typeof reply === 'function' ? reply({ key, parts, opts }) : reply;
         },
