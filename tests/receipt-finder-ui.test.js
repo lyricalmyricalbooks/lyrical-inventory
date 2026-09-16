@@ -227,6 +227,67 @@ describe('receipt finder UI', () => {
     expect(alert.textContent).toContain('could not be read');
     expect(alert.querySelector('[data-action="retry-failed"]')).not.toBeNull();
   });
+  it('offers a one-click switch when the saved address is a retired Receipt Finder', async () => {
+    // Reported from the field: the publisher had done everything asked of them,
+    // but a saved standalone address still won over the connected Sheet script.
+    // The app told them to "clear this address" while the only field that does
+    // it sat inside a collapsed disclosure, with no button anywhere.
+    deps.service = () => 'https://script.google.com/macros/s/sheets/exec';
+    mocks.check.mockResolvedValue({ level: 'error', fix: 'use-sheets',
+      headline: 'This is an older Receipt Finder script the app can no longer read.',
+      steps: ['You no longer need a second script — switch to the Google Sheet script you have already connected.'] });
+    await mount();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="connect"]').click(); await settle();
+    document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
+    // The problem, and its remedy, must be at the top of the panel — not only
+    // in the status line and the collapsed Advanced section.
+    const gate = document.querySelector('[data-finder-gate]');
+    expect(gate.hidden).toBe(false);
+    expect(gate.textContent).toContain('older Receipt Finder script');
+    const fix = gate.querySelector('[data-action="use-sheets"]');
+    expect(fix).not.toBeNull();
+
+    mocks.check.mockResolvedValue({ level: 'ready', headline: 'Ready to scan.', steps: [] });
+    fix.click(); await settle();
+    expect(mocks.saved.endpoint).toBe('');
+    expect(mocks.check).toHaveBeenLastCalledWith({ endpoint: 'https://script.google.com/macros/s/sheets/exec' });
+    expect(document.querySelector('[data-finder-gate]').hidden).toBe(true);
+  });
+  it('does not offer the switch when there is no Google Sheet script to switch to', async () => {
+    deps.service = () => '';
+    mocks.check.mockResolvedValue({ level: 'error', fix: 'use-sheets', headline: 'The script did not answer.', steps: ['Check the address.'] });
+    await mount();
+    document.querySelector('[data-action="check-setup"]').click(); await settle();
+    expect(document.querySelector('[data-action="use-sheets"]')).toBeNull();
+    expect(document.querySelector('[data-finder-gate]').textContent).toContain('Check the address.');
+  });
+  it('discards failures recorded against a service that is no longer in use', async () => {
+    // 75 failures from the retired deployment were still on screen after the
+    // switch, as a standing alarm about a service the app no longer calls.
+    mocks.saved.scans = {
+      'publisher@example.com:old1': { error: 'Receipt extraction failed', subject: 'One', endpoint: 'https://script.google.com/macros/s/old/exec' },
+      'publisher@example.com:old2': { error: 'Receipt extraction failed', subject: 'Two' },
+      'publisher@example.com:kept': { done: true, subject: 'Read fine', count: 0 },
+    };
+    await mount();
+    expect(document.querySelector('[data-finder-alert]').textContent).toContain('2 emails');
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="connect"]').click(); await settle();
+    document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
+    expect(mocks.saved.scans['publisher@example.com:old1']).toBeUndefined();
+    expect(mocks.saved.scans['publisher@example.com:old2']).toBeUndefined();
+    // A successfully read email is not a failure and survives the switch.
+    expect(mocks.saved.scans['publisher@example.com:kept'].done).toBe(true);
+  });
+  it('lets the publisher clear old failures without retrying them', async () => {
+    mocks.saved.scans = { 'publisher@example.com:old1': { error: 'Receipt extraction failed', subject: 'One' } };
+    await mount();
+    document.querySelector('[data-action="clear-failures"]').click(); await settle();
+    expect(mocks.saved.scans['publisher@example.com:old1']).toBeUndefined();
+    expect(document.querySelector('[data-finder-alert]').textContent).toBe('');
+    expect(mocks.extract).not.toHaveBeenCalled();
+  });
   it('clears mailbox content immediately on sign-out', async () => {
     await mount();
     const callback = window._fbOnAuthStateChanged.mock.calls[0][0];
