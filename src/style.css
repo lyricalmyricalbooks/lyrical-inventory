@@ -7018,6 +7018,19 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   transform: translateX(18px);
 }
 
+/* The real checkbox is visually hidden at zero size, so the app-wide
+   :focus-visible rule in system.css would ring an invisible 0x0 point
+   instead of the switch a keyboard user actually sees. Move the ring onto
+   the track sibling instead. */
+.pm-switch input:focus-visible {
+  outline: none;
+}
+
+.pm-switch input:focus-visible + .pm-track {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
 /* ─── NATIVE EMAIL CAMPAIGN & SEGMENT SYSTEM ──────────────────────── */
 .cust-filter-grid {
   display: grid;
