@@ -22,7 +22,9 @@ links. Existing Paste & Upload and Gmail add-on intake remain separate flows.
    - `FIREBASE_WEB_API_KEY`: the web API key for this Firebase project.
    - `PUBLISHER_UID`: the publisher's exact Firebase Authentication UID.
    - `GEMINI_API_KEY`: a Gemini API key, restricted to the Generative Language API.
-   - `GEMINI_MODEL`: optional model ID; default `gemini-2.5-flash`.
+   - `GEMINI_MODEL`: optional primary model ID; default `gemini-2.5-flash`.
+     If it is unavailable, the service tries the supported Flash fallback chain
+     (`gemini-3.8-flash`, `gemini-3.7-flash`, then `gemini-3.6-flash`).
    The Gemini key never goes into the app, its settings, or its source files.
 4. Deploy as a web app, executing as the owner, accessible to Anyone. Each POST
    validates a Firebase ID token using Firebase's accounts lookup endpoint and
