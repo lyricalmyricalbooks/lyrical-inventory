@@ -2,6 +2,13 @@ import { mergeFinderSnapshot } from './receipt-finder.js';
 
 // Dedicated, account-scoped outbox: the existing book queue cannot store global
 // expenses or attachment bytes. Commit transaction completion before saying saved.
+//
+// The Gmail token lives under its own key rather than inside the snapshot, for
+// two reasons: signing out must be able to drop the token without touching
+// saved drafts, and a draft edit must not rewrite the token record (or the
+// token record the megabytes of saved mail) on every keystroke.
+const tokenKey = uid => `${uid}::gmail-token`;
+
 export function createReceiptFinderStore(indexedDB = globalThis.indexedDB) {
   async function transaction(uid, mode, action) {
     if (!uid) throw new Error('Sign in to access saved receipts');
@@ -26,5 +33,8 @@ export function createReceiptFinderStore(indexedDB = globalThis.indexedDB) {
       return request;
     }),
     clear: uid => transaction(uid, 'readwrite', (store, key) => store.delete(key)),
+    loadToken: uid => transaction(uid, 'readonly', (store, key) => store.get(tokenKey(key))),
+    saveToken: (uid, value) => transaction(uid, 'readwrite', (store, key) => store.put(value, tokenKey(key))),
+    clearToken: uid => transaction(uid, 'readwrite', (store, key) => store.delete(tokenKey(key))),
   };
 }

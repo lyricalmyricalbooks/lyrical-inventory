@@ -508,10 +508,13 @@ describe('Apps Script attachment support (v43)', () => {
   });
 
   it('bumped the version in lockstep: Code.gs, main.js and the changelog all agree', () => {
-    expect(gas).toContain("scriptVersion: 'v43'");
-    expect(gas).toContain("service: 'lyrical-sheets-webhook-v43'");
-    expect(mainJs).toContain("const EXPECTED_SCRIPT_VERSION = 'v43';");
+    // v44 folded receipt reading in; the three places still have to move
+    // together, and v43's own changelog entry stays put as history.
+    expect(gas).toContain("scriptVersion: 'v44'");
+    expect(gas).toContain("service: 'lyrical-sheets-webhook-v44'");
+    expect(mainJs).toContain("const EXPECTED_SCRIPT_VERSION = 'v44';");
     expect(gas).toMatch(/v43:[\s\S]{0,400}attachment/);
+    expect(gas).toMatch(/v44:[\s\S]{0,400}extractreceipt/);
   });
 
   it('public/gas-code.txt is byte-for-byte the deployed script', () => {

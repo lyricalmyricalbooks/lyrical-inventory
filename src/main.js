@@ -2725,7 +2725,7 @@ let notifyUrl = localStorage.getItem('lm-notify-url') || '';
 // The Apps Script `scriptVersion` the client expects. Bump this (and the value
 // in apps-script/Code.gs) whenever Code.gs gains behaviour that needs a fresh
 // deploy — the connection card flags any older deployed version as outdated.
-const EXPECTED_SCRIPT_VERSION = 'v43';
+const EXPECTED_SCRIPT_VERSION = 'v44';
 // What the connected spreadsheet last told us it was running. Null until a
 // version check has actually answered — an unknown version is not a mismatch,
 // so the To-do list stays quiet rather than inventing a problem.
@@ -5777,11 +5777,11 @@ function renderExpensesSummaryBlock(s, cur) {
       $('d-exp-count').textContent = `${expenses.length} expense${expenses.length !== 1 ? 's' : ''} logged`;
       $('d-exp-body').innerHTML = unreceivedExp.map(e => `
         <tr>
-          <td style="padding:6px 0;color:var(--on-inverse-3);white-space:nowrap;">${fmtD(e.date)}</td>
-          <td style="padding:6px 8px;color:rgba(255,255,255,.7);font-weight:500;">${escapeHtml(e.desc)}</td>
-          <td style="padding:6px 8px;"><span style="font-size:10px;background:rgba(255,255,255,.08);color:var(--on-inverse-3);padding:2px 8px;border-radius:100px;">${escapeHtml(e.cat)}</span></td>
-          <td style="padding:6px 8px;color:var(--on-inverse-3);">${escapeHtml(e.ref) || '—'}</td>
-          <td style="padding:6px 0;text-align:right;color:var(--rose-soft);font-weight:500;">${fmt(e.amount, cur)}</td>
+          <td>${fmtD(e.date)}</td>
+          <td class="mb-desc">${escapeHtml(e.desc)}</td>
+          <td><span class="metric-banner-cat">${escapeHtml(e.cat)}</span></td>
+          <td>${escapeHtml(e.ref) || '—'}</td>
+          <td class="mb-amt">${fmt(e.amount, cur)}</td>
         </tr>`).join('');
       // Payment button
       const artistLink = (s.artistPaymentLink || '').trim();
@@ -8228,11 +8228,9 @@ function renderArtistReimburseBanner() {
   $('arb-detail').textContent = `${received.length} expense${received.length !== 1 ? 's' : ''} marked as received by publisher`;
   $('arb-hint').textContent = 'These expenses have been settled';
   $('arb-items').innerHTML = received.map(e => `
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
-      <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--on-inverse-3);">
-        ${escapeHtml(e.desc)} · ${fmtD(e.date)} · <span style="font-size:9px;background:rgba(255,255,255,.08);padding:1px 6px;border-radius:100px;">${escapeHtml(e.cat)}</span>
-      </div>
-      <div style="font-family:'DM Mono',monospace;font-size:13px;color:#6ee7a8;font-weight:500;">${fmt(e.amount, cur)}</div>
+    <div class="mbi-row">
+      <div class="mbi-desc">${escapeHtml(e.desc)} · ${fmtD(e.date)} · <span class="metric-banner-cat">${escapeHtml(e.cat)}</span></div>
+      <div class="mbi-amt">${fmt(e.amount, cur)}</div>
     </div>`).join('');
 }
 
@@ -8834,11 +8832,9 @@ function renderArtistTransfers() {
         $('apb-link-hint').textContent = 'Payment link not set — contact your publisher';
       }
       $('apb-transfers').innerHTML = transfers.map(t => `
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap; opacity: ${t.status === 'pending' ? '.6' : '1'}">
-          <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--on-inverse-3);">
-            ${escapeHtml(t.num)} · ${fmtD(t.date)} · ${t.qty}× ${t.status === 'pending' ? ' (Pending Approval)' : ''}
-          </div>
-          <div style="font-family:'DM Mono',monospace;font-size:13px;color:var(--gold2);font-weight:500;">${fmt(t.total, cur)}</div>
+        <div class="mbi-row${t.status === 'pending' ? ' is-pending' : ''}">
+          <div class="mbi-desc">${escapeHtml(t.num)} · ${fmtD(t.date)} · ${t.qty}× ${t.status === 'pending' ? ' (Pending Approval)' : ''}</div>
+          <div class="mbi-amt">${fmt(t.total, cur)}</div>
         </div>`).join('');
     } else {
       banner.style.display = 'none';
@@ -10094,13 +10090,13 @@ function renderInvoices() {
     const statusCls = inv._overdue ? 'overdue' : (inv.status || 'draft');
     const due = inv.dueDate ? fmtD(inv.dueDate) : '—';
     const stripeChip = isDynamicStripeLink(inv)
-      ? `<span title="Dynamic Stripe Checkout · exact amount" style="display:inline-block;margin-left:6px;background:var(--surface-inverse);color:var(--gold-text);font-size:8px;font-weight:700;letter-spacing:.16em;padding:2px 6px;border-radius:99px;">💳 STRIPE</span>`
+      ? `<span class="chip-status gold sm" title="Dynamic Stripe Checkout · exact amount">💳 Stripe</span>`
       : '';
     // Name the other titles on the invoice so a shared one reads as one bill
     // covering several books, not as a stray record filed under the wrong title.
     const others = otherBookTitles(inv, ownerBookId, activeBook, BOOK_LIST);
     const sharedChip = others.length
-      ? `<span class="chip-status gray" title="This invoice also bills: ${escapeHtml(others.join(', '))}" style="margin-left:6px;font-size:9px;">＋ ${escapeHtml(others.join(' · '))}</span>`
+      ? `<span class="chip-status gray sm" title="This invoice also bills: ${escapeHtml(others.join(', '))}">＋ ${escapeHtml(others.join(' · '))}</span>`
       : '';
     // An invoice carries its own currency, and a shared one may well be priced
     // in a different one than the book being viewed — show what it actually bills.
@@ -10115,7 +10111,7 @@ function renderInvoices() {
     // Say when a bill went to somebody who isn't a consignment store, so a
     // direct sale isn't read as a shop that owes money on the shelf.
     const personChip = invoiceBillToMode(inv) === BILL_TO_PERSON
-      ? `<span class="chip-status gray" title="Billed to a person, not a consignment store" style="margin-left:6px;font-size:9px;">\u{1F464} Person</span>`
+      ? `<span class="chip-status gray sm" title="Billed to a person, not a consignment store">\u{1F464} Person</span>`
       : '';
     // What has been said to this customer about this bill, where the bill is
     // listed — so a reminder is never sent twice by hand, and a promise to pay
@@ -10124,12 +10120,12 @@ function renderInvoices() {
     const isSettled = inv.status === 'paid' || inv.status === 'cancelled';
     let chaseChip = '';
     if (!isSettled && remState.snoozedUntil && today() <= remState.snoozedUntil) {
-      chaseChip = `<span class="chip-status gray" title="They said they would pay by then — no reminder goes out before it" style="margin-left:6px;font-size:9px;">\u{1F4C5} Promised ${escapeHtml(fmtD(remState.snoozedUntil))}</span>`;
+      chaseChip = `<span class="chip-status gray sm" title="They said they would pay by then — no reminder goes out before it">\u{1F4C5} Promised ${escapeHtml(fmtD(remState.snoozedUntil))}</span>`;
     } else if (!isSettled && remState.lastStatus === 'failed') {
-      chaseChip = `<span class="chip-status red" title="The reminder email did not go out — open the invoice to try again" style="margin-left:6px;font-size:9px;">\u{23F0} Reminder failed</span>`;
+      chaseChip = `<span class="chip-status red sm" title="The reminder email did not go out — open the invoice to try again">\u{23F0} Reminder failed</span>`;
     } else if (remState.count) {
       const when = remState.lastAt ? fmtD(new Date(remState.lastAt).toISOString().slice(0, 10)) : '';
-      chaseChip = `<span class="chip-status gray" title="A payment reminder was emailed to this customer" style="margin-left:6px;font-size:9px;">\u{23F0} Chased${when ? ' ' + escapeHtml(when) : ''}</span>`;
+      chaseChip = `<span class="chip-status gray sm" title="A payment reminder was emailed to this customer">\u{23F0} Chased${when ? ' ' + escapeHtml(when) : ''}</span>`;
     }
     // Chasing from the list, where the unpaid bills already are. The invoice
     // view has had this button for a while, but getting to it means opening
