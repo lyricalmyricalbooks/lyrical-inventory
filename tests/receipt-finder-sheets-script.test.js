@@ -103,6 +103,46 @@ describe('unified Google Sheet script: receipt extraction (v44)', () => {
     expect(describeFinderSetup(report)).toMatchObject({ level: 'ready' });
   });
 
+  it('proves the key works, reporting the status Google actually returned', () => {
+    const { ctx, fetch } = sandbox();
+    const result = ctx.doPost({ postData: { contents: JSON.stringify({ version: 2, action: 'testReceiptAi', idToken: 'id' }) } });
+    expect(result).toMatchObject({ ok: true, aiOk: true, aiStatus: 200 });
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toContain('generativelanguage.googleapis.com');
+    expect(options.headers['x-goog-api-key']).toBe('server-secret');
+    // One token is enough to find out whether the key is accepted.
+    expect(JSON.parse(options.payload).generationConfig.maxOutputTokens).toBe(1);
+  });
+
+  it('never returns the upstream body, which can carry key fragments', () => {
+    const ctx = vm.createContext({
+      PropertiesService: { getScriptProperties: () => ({ getProperty: key => ({ GEMINI_API_KEY: 'server-secret' })[key] ?? null }) },
+      UrlFetchApp: { fetch: () => ({ getResponseCode: () => 403,
+        getContentText: () => JSON.stringify({ error: { message: 'API key not valid: server-secret', status: 'PERMISSION_DENIED' } }) }) },
+      LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
+      CacheService: { getScriptCache: () => ({ get: () => null, put() {} }) },
+      SpreadsheetApp: { getActiveSpreadsheet: () => ({ getName: () => 'Ledger' }) },
+      ContentService: { MimeType: { JSON: 'json' }, createTextOutput: text => ({ setMimeType: () => JSON.parse(text) }) },
+      console,
+    });
+    vm.runInContext(source, ctx);
+    const result = ctx.doPost({ postData: { contents: JSON.stringify({ version: 2, action: 'testReceiptAi', idToken: 'id' }) } });
+    expect(result).toMatchObject({ ok: true, aiOk: false, aiStatus: 403 });
+    expect(JSON.stringify(result)).not.toContain('server-secret');
+    expect(JSON.stringify(result)).not.toContain('PERMISSION_DENIED');
+  });
+
+  it('names the missing key when the test cannot even run', () => {
+    const { ctx, fetch } = sandbox({ properties: { GEMINI_API_KEY: undefined } });
+    expect(ctx.doPost({ postData: { contents: JSON.stringify({ version: 2, action: 'testReceiptAi', idToken: 'id' }) } }))
+      .toMatchObject({ ok: false, error: expect.stringContaining('GEMINI_API_KEY') });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('advertises the self-test so the app only offers it where it exists', () => {
+    expect(sandbox().ctx.doGet({ parameter: {} }).capabilities.receiptSelfTest).toBe(true);
+  });
+
   it('reports a missing key as not-ready instead of letting a scan start', () => {
     const report = sandbox({ properties: { GEMINI_API_KEY: undefined } }).ctx.doGet({ parameter: {} });
     expect(report.receiptAi.geminiApiKey).toBe(false);

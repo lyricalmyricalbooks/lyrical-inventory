@@ -508,11 +508,17 @@ describe('Apps Script attachment support (v43)', () => {
   });
 
   it('bumped the version in lockstep: Code.gs, main.js and the changelog all agree', () => {
-    // v44 folded receipt reading in; the three places still have to move
-    // together, and v43's own changelog entry stays put as history.
-    expect(gas).toContain("scriptVersion: 'v44'");
-    expect(gas).toContain("service: 'lyrical-sheets-webhook-v44'");
-    expect(mainJs).toContain("const EXPECTED_SCRIPT_VERSION = 'v44';");
+    // Derived rather than pinned: the point of this guard is that the four
+    // places move TOGETHER, not that they sit on any particular number. Pinning
+    // it meant every bump failed here first and got edited to match, which is
+    // exactly the rubber-stamp the guard exists to prevent.
+    const version = gas.match(/scriptVersion: '(v\d+)'/)?.[1];
+    expect(version, 'Code.gs must declare a scriptVersion').toBeTruthy();
+    expect(gas).toContain(`service: 'lyrical-sheets-webhook-${version}'`);
+    expect(mainJs).toContain(`const EXPECTED_SCRIPT_VERSION = '${version}';`);
+    // The bump must bring its own changelog entry, not inherit an older one.
+    expect(gas).toMatch(new RegExp(`\\*\\s+\\d+\\. ${version}:`));
+    // Earlier entries stay put as history.
     expect(gas).toMatch(/v43:[\s\S]{0,400}attachment/);
     expect(gas).toMatch(/v44:[\s\S]{0,400}extractreceipt/);
   });

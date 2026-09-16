@@ -95,7 +95,7 @@ export function createReceiptFinderClient({ token, fetchImpl = fetch, onExpired 
 
 export const FINDER_ENDPOINT_PATTERN = /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/;
 export const EXPECTED_FINDER_VERSION = 'v2';
-export const EXPECTED_SHEETS_VERSION = 'v44';
+export const EXPECTED_SHEETS_VERSION = 'v45';
 const MAX_AI_FILES = 20;
 const MAX_AI_PAYLOAD = 18 * 1024 * 1024;
 
@@ -105,6 +105,24 @@ const MAX_AI_PAYLOAD = 18 * 1024 * 1024;
 // Keeping the heavy `files` array at one level means neither shape doubles it.
 export function receiptRequestBody({ idToken, email, files }) {
   return JSON.stringify({ version: 2, action: 'extractReceipt', idToken, email, files });
+}
+
+// The script reports an upstream refusal as "Receipt AI is unavailable (401).
+// Retry later." — which reads as a passing outage and sends the publisher off to
+// wait, when a 400/401/403 is a key problem that waiting never fixes. The status
+// is the one piece of real diagnosis available, so say what it actually means.
+const AI_STATUS_HELP = {
+  400: 'The AI service rejected the request. This usually means GEMINI_API_KEY in your Google Sheet script is not a Gemini API key — a key for the Generative Language API starts with “AIza”.',
+  401: 'Google would not accept the AI key saved in your Google Sheet script. Replace GEMINI_API_KEY in its Script Properties with a Gemini API key from Google AI Studio (it starts with “AIza”).',
+  403: 'Google refused the AI key saved in your Google Sheet script. Either the key is restricted, or the Generative Language API is not enabled on the project that issued it.',
+  429: 'Google is rate-limiting the AI key right now, or its free allowance is used up for the moment. This one really does clear on its own — wait a few minutes and scan again.',
+};
+
+export function friendlyReceiptAiError(message) {
+  const status = Number(/^Receipt AI is unavailable \((\d{3})\)/.exec(String(message || ''))?.[1]);
+  if (AI_STATUS_HELP[status]) return AI_STATUS_HELP[status];
+  if (status >= 500) return 'Google’s AI service had a problem of its own. Waiting a few minutes and scanning again usually clears it.';
+  return message;
 }
 
 export async function extractFoundReceipts({ endpoint, idToken, email, signal, fetchImpl = fetch }) {
@@ -121,7 +139,7 @@ export async function extractFoundReceipts({ endpoint, idToken, email, signal, f
   const res = await fetchImpl(endpoint, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, body, signal, redirect: 'follow' });
   if (!res.ok) throw new Error(`Receipt AI request failed (${res.status})`);
   const data = await res.json();
-  if (!data.ok) throw new Error(data.error || 'Receipt AI could not read this email');
+  if (!data.ok) throw new Error(friendlyReceiptAiError(data.error) || 'Receipt AI could not read this email');
   if (!Array.isArray(data.receipts)) throw new Error('Receipt AI returned an invalid response. Retry this email.');
   return data;
 }
@@ -182,6 +200,30 @@ export function describeFinderSetup(report) {
   return { level: 'error', fix: 'use-sheets', headline: 'That address did not answer as one of this app’s scripts.',
     steps: ['Check that the address ends in /exec and that the deployment runs as you, with access set to Anyone.',
       'Or switch to the Google Sheet script you have already connected, which can read receipts on its own.'] };
+}
+
+// Asks the deployment to actually call Gemini once. `idToken` is only needed
+// when the publisher turned on the optional publisher check.
+export async function testReceiptAiService({ endpoint, idToken = '', fetchImpl = fetch, signal }) {
+  const res = await fetchImpl(endpoint, {
+    method: 'POST', headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+    body: JSON.stringify({ version: 2, action: 'testReceiptAi', idToken }), signal, redirect: 'follow',
+  });
+  if (!res.ok) throw new Error(`The script did not answer the test (${res.status}).`);
+  return res.json();
+}
+
+// Turns that live result into the same shape the setup panel already renders.
+export function describeAiTest(result) {
+  if (!result?.ok) {
+    return { level: 'error', headline: result?.error || 'The AI test did not run.',
+      steps: ['Redeploy your Google Sheet script as a new version, then test again.'] };
+  }
+  if (result.aiOk) {
+    return { level: 'ready', headline: `Ready to scan using ${result.model || 'the default model'}. Google accepted the key.`, steps: [] };
+  }
+  const help = friendlyReceiptAiError(`Receipt AI is unavailable (${result.aiStatus}).`);
+  return { level: 'error', headline: 'Google would not accept the AI key in your script.', steps: [help] };
 }
 
 export async function checkReceiptFinderService({ endpoint, fetchImpl = fetch, signal }) {

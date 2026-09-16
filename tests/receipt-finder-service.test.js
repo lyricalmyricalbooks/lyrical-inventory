@@ -2,7 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
-import { describeFinderSetup, checkReceiptFinderService, EXPECTED_FINDER_VERSION } from '../src/lib/receipt-finder-client.js';
+import { describeFinderSetup, checkReceiptFinderService, describeAiTest, friendlyReceiptAiError,
+  EXPECTED_FINDER_VERSION, EXPECTED_SHEETS_VERSION } from '../src/lib/receipt-finder-client.js';
 
 const source = fs.readFileSync(path.resolve('apps-script/receipt-finder/Code.gs'), 'utf8');
 function service({
@@ -140,7 +141,7 @@ describe('receipt finder setup guidance', () => {
       capabilities: { batchEmailContent: true } });
     expect(result.level).toBe('error');
     expect(result.headline).toContain('too old');
-    expect(result.steps.join(' ')).toContain('v44');
+    expect(result.steps.join(' ')).toContain(EXPECTED_SHEETS_VERSION);
   });
   it('explains an older standalone Receipt Finder deployment instead of disowning it', () => {
     // The first deployments answered to a different service name and none of
@@ -174,5 +175,45 @@ describe('receipt finder setup guidance', () => {
     const result = await checkReceiptFinderService({ endpoint: 'https://script.google.com/macros/s/abc/exec', fetchImpl });
     expect(result.level).toBe('ready');
     expect(fetchImpl.mock.calls[0][1].method).toBe('GET');
+  });
+});
+
+describe('telling a working AI key from one that merely exists', () => {
+  it('reports a key Google accepts as ready', () => {
+    expect(describeAiTest({ ok: true, aiOk: true, aiStatus: 200, model: 'gemini-2.5-flash' }))
+      .toMatchObject({ level: 'ready', steps: [] });
+  });
+
+  it('calls a refused key what it is, instead of Ready', () => {
+    // The whole reason this exists: the old check only proved the Script
+    // Property was filled in, so a key Google refuses reported Ready and the
+    // publisher met the failure one email at a time.
+    for (const status of [400, 401, 403]) {
+      const result = describeAiTest({ ok: true, aiOk: false, aiStatus: status });
+      expect(result.level).toBe('error');
+      expect(result.headline).toContain('would not accept');
+      expect(result.steps[0]).toMatch(/AIza|Generative Language API/);
+    }
+  });
+
+  it('does not tell the publisher to wait out a problem that waiting cannot fix', () => {
+    // "Retry later" is the script's wording for every upstream refusal, and it
+    // is wrong advice for a key problem.
+    expect(friendlyReceiptAiError('Receipt AI is unavailable (401). Retry later.')).not.toContain('Retry later');
+    expect(friendlyReceiptAiError('Receipt AI is unavailable (401). Retry later.')).toContain('AIza');
+  });
+
+  it('still says wait when waiting is genuinely the answer', () => {
+    expect(friendlyReceiptAiError('Receipt AI is unavailable (429). Retry later.')).toContain('wait');
+    expect(friendlyReceiptAiError('Receipt AI is unavailable (503). Retry later.')).toContain('few minutes');
+  });
+
+  it('passes through a message that is not an upstream status', () => {
+    expect(friendlyReceiptAiError('Publisher access required')).toBe('Publisher access required');
+  });
+
+  it('surfaces a script too old to self-test rather than claiming the key is bad', () => {
+    expect(describeAiTest({ ok: false, error: 'Receipt AI test failed. Check setup and retry.' }))
+      .toMatchObject({ level: 'error' });
   });
 });
