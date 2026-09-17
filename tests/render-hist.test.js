@@ -38,7 +38,7 @@ function mountDom() {
 function makeHarness({ state, book = BOOK, isPublisher = true, submissions = {} } = {}) {
   return buildHarness({
     names: [
-      'CHANNEL_COLORS', '_CHAN_FALLBACK', 'HIST_PAGE', 'HIST_SEARCH_MIN',
+      'CHANNEL_COLORS', 'CHAN_OTHER', 'HIST_PAGE', 'HIST_SEARCH_MIN',
       'channelColor', 'chanLabel', 'visibleTabName',
       'renderConsignHistRow', 'renderOrderShippingSummary',
       'renderHistSearchBar', 'histNoSearchMatchHtml',

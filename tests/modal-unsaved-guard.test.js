@@ -163,7 +163,7 @@ describe('the flag is styled to the house status convention', () => {
   });
 
   it('keeps monospace figures and the shared pill radius', () => {
-    expect(block).toContain("'DM Mono'");
+    expect(block).toContain("var(--font-mono)");
     expect(block).toContain('border-radius:var(--r-pill)');
   });
 });

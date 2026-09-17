@@ -53,16 +53,16 @@ describe('Challenger 1 Adversarial Suite: Touch Target Verification (>= 44px)', 
 
 describe('Challenger 1 Adversarial Suite: Monospace Tabular Figures Verification', () => {
   const tabularChecks = [
-    { name: 'POS Discount Buttons', regex: /\.pos-discount-btn \.mono-num\s*\{[^}]*font-family:\s*'DM Mono'/ },
-    { name: 'POS Confirm Total Value', regex: /\.pos-confirm-total-val\s*\{[^}]*font-family:\s*'DM Mono'/ },
-    { name: 'Order History KPI Values', regex: /\.hist-kpi-val\s*\{[^}]*font-family:\s*'DM Mono'/ },
-    { name: 'Bulk Send Quantity Input', regex: /\.bulk-send-qty\s*\{[^}]*font-family:\s*'DM Mono'/ },
-    { name: 'Cash Flow Stat Deltas', regex: /\.cf-stat-delta\s*\{[^}]*font-family:\s*'DM Mono'/ },
+    { name: 'POS Discount Buttons', regex: /\.pos-discount-btn \.mono-num\s*\{[^}]*font-family:\s*var\(--font-mono\)/ },
+    { name: 'POS Confirm Total Value', regex: /\.pos-confirm-total-val\s*\{[^}]*font-family:\s*var\(--font-mono\)/ },
+    { name: 'Order History KPI Values', regex: /\.hist-kpi-val\s*\{[^}]*font-family:\s*var\(--font-mono\)/ },
+    { name: 'Bulk Send Quantity Input', regex: /\.bulk-send-qty\s*\{[^}]*font-family:\s*var\(--font-mono\)/ },
+    { name: 'Cash Flow Stat Deltas', regex: /\.cf-stat-delta\s*\{[^}]*font-family:\s*var\(--font-mono\)/ },
     { name: 'Customer & Mailing List Number Cells', regex: /#cust-body td\.r,\s*#cust-body \.money-cell,\s*#cust-body \.date-cell/ },
-    { name: 'Web Analytics KPI Values', regex: /\.analytics-kpi-value\s*\{[^}]*font-family:\s*'DM Mono'/ },
-    { name: 'Payment QR Amount / Inputs', regex: /\.pqr-input\s*\{[^}]*font-family:\s*'DM Mono'/ },
+    { name: 'Web Analytics KPI Values', regex: /\.analytics-kpi-value\s*\{[^}]*font-family:\s*var\(--font-mono\)/ },
+    { name: 'Payment QR Amount / Inputs', regex: /\.pqr-input\s*\{[^}]*font-family:\s*var\(--font-mono\)/ },
     { name: 'Book Strip KPI Figures', regex: /\.bsk-val\s*\{[^}]*font-feature-settings:\s*"tnum"\s*1/ },
-    { name: 'Stock Transfer Balance Values', regex: /\.st-balance-val\s*\{[^}]*font-family:\s*'DM Mono'/ }
+    { name: 'Stock Transfer Balance Values', regex: /\.st-balance-val\s*\{[^}]*font-family:\s*var\(--font-mono\)/ }
   ];
 
   tabularChecks.forEach(({ name, regex }) => {

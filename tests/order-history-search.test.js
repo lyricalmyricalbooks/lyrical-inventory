@@ -244,7 +244,7 @@ describe('the search box styling', () => {
 
   it('gets a full touch target and matches the picker beside it', () => {
     expect(block).toMatch(/min-height:\s*var\(--target-min\)/);
-    expect(block).toMatch(/font-family:\s*'DM Mono', monospace/);
+    expect(block).toMatch(/font-family:\s*var\(--font-mono\)/);
   });
 
   it('has hover and focus-visible feedback', () => {
