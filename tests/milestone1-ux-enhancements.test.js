@@ -99,9 +99,11 @@ describe('Milestone 1 — Feature 7: Consignment Store Card Action Strip Touch E
 });
 
 describe('Milestone 1 — Feature 8: Consignment Invoices Hierarchy & Semantic Badges', () => {
-  it('replaces raw hex in Stripe badge with canonical tokens and formats share metadata with tabular figures', () => {
-    // main.js checks
-    expect(mainJs).toMatch(/stripeChip = isDynamicStripeLink\(inv\)\s*\?\s*`<span[^>]*background:var\(--surface-inverse\);color:var\(--gold-text\);/);
+  it('renders the Stripe badge as a themed chip-status tone and formats share metadata with tabular figures', () => {
+    // main.js checks — the badge now reuses the shared .chip-status family
+    // (see tests/invoice-chip-consistency.test.js) instead of a bespoke
+    // inline-styled pill, but still carries no raw hex of its own.
+    expect(mainJs).toMatch(/stripeChip = isDynamicStripeLink\(inv\)\s*\?\s*`<span class="chip-status gold sm"/);
     expect(mainJs).toMatch(/<strong class="mono-num">\$\{fmt\(share\.total, invCur\)\}<\/strong>/);
   });
 });

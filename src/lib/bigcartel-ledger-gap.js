@@ -86,6 +86,30 @@ function catalogList(books) {
   return Object.values(books || {}).filter(book => book && book.id);
 }
 
+// ⚡ Bolt Optimization: resolveBookIdByTitle() is called once per storefront
+// line item (bigCartelOrderLines -> pushItem), and callers loop it over every
+// order in a Big Cartel pull (findMissingBigCartelOrders, the custom Shippo
+// destination picker). It used to rebuild the normalized+sorted candidate
+// list from the whole catalog on every single call, an O(orders * items *
+// books log books) cost for what only ever depends on the catalog. `BOOKS` is
+// always reassigned to a new object on mutation (never edited in place, see
+// main.js), so caching the derived list keyed on that object reference is
+// safe: a genuinely changed catalog naturally misses and recomputes.
+const catalogCandidatesCache = new WeakMap();
+
+function catalogCandidates(books) {
+  if (books && typeof books === 'object' && catalogCandidatesCache.has(books)) {
+    return catalogCandidatesCache.get(books);
+  }
+  const candidates = catalogList(books)
+    .map(book => ({ id: book.id, title: normalizeText(book.title) }))
+    .filter(entry => entry.title);
+  // Longest title first, so "The Hound of Heaven" wins over "The Hound".
+  candidates.sort((a, b) => b.title.length - a.title.length);
+  if (books && typeof books === 'object') catalogCandidatesCache.set(books, candidates);
+  return candidates;
+}
+
 /**
  * Which catalog book a storefront product name refers to, or '' when none.
  *
@@ -98,11 +122,7 @@ function catalogList(books) {
 export function resolveBookIdByTitle(name, books) {
   const needle = normalizeText(name);
   if (!needle) return '';
-  const candidates = catalogList(books)
-    .map(book => ({ id: book.id, title: normalizeText(book.title) }))
-    .filter(entry => entry.title);
-  // Longest title first, so "The Hound of Heaven" wins over "The Hound".
-  candidates.sort((a, b) => b.title.length - a.title.length);
+  const candidates = catalogCandidates(books);
   const exact = candidates.find(entry => entry.title === needle);
   if (exact) return exact.id;
   const contained = candidates.find(entry => needle.includes(entry.title));

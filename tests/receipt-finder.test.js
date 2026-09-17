@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { receiptQuery, receiptMoney, receiptDate, normalizeFoundReceipt, receiptProblems, receiptDuplicate, receiptReviewStatus, receiptExpense, mergeFinderSnapshot } from '../src/lib/receipt-finder.js';
-import { createReceiptFinderClient, extractFoundReceipts, decodeGmailBase64 } from '../src/lib/receipt-finder-client.js';
+import { createReceiptFinderClient, extractFoundReceipts, decodeGmailBase64, gmailMessage } from '../src/lib/receipt-finder-client.js';
 import { flushReceiptOutbox } from '../src/lib/receipt-finder-outbox.js';
 
 const email = { id: 'mail1', account: 'publisher@example.com', fileParts: [{ attachmentId: 'pdf1' }] };
@@ -80,17 +80,63 @@ describe('read-only Gmail and protected extraction', () => {
     const client = createReceiptFinderClient({ token: () => 'expired', fetchImpl: async () => ({ status: 401, ok: false }), onExpired });
     await expect(client.profile()).rejects.toThrow('Reconnect'); expect(onExpired).toHaveBeenCalledOnce();
   });
-  it('rejects oversized and missing attachment bytes', async () => {
+  it('skips an unusable attachment instead of failing the whole email', async () => {
+    // One 15 MB scan, or one attachment Gmail will not hand over, used to throw
+    // and take the email's body and its other (perfectly readable) invoices
+    // down with it. The file is marked and the rest of the email goes on.
     const client = createReceiptFinderClient({ token: () => 'token', fetchImpl: vi.fn() });
-    await expect(client.attachment('id', { name: 'big.pdf', size: 13000000 })).rejects.toThrow('12 MB');
-    await expect(client.attachment('id', { name: 'missing.pdf' })).rejects.toThrow('Could not download');
+    const big = await client.attachment('id', { name: 'big.pdf', size: 13000000 });
+    expect(big.base64).toBe(''); expect(big.skipped).toContain('12 MB');
+    const missing = await client.attachment('id', { name: 'missing.pdf' });
+    expect(missing.skipped).toContain('Could not download');
   });
   it('decodes Gmail base64url correctly', () => {
     expect([...decodeGmailBase64('-_8')]).toEqual([251, 255]);
   });
+  it('keeps an inline PDF invoice but drops an inline signature logo', () => {
+    // Several suppliers send the invoice as `Content-Disposition: inline`.
+    // Dropping every inline part left those emails with nothing to read.
+    const inline = name => ({ name: 'Content-Disposition', value: `inline; filename="${name}"` });
+    const parsed = gmailMessage({ id: 'm', payload: { headers: [], parts: [
+      { filename: 'invoice.pdf', mimeType: 'application/pdf', headers: [inline('invoice.pdf')], body: { attachmentId: 'a1', size: 10 } },
+      { filename: 'logo.png', mimeType: 'image/png', headers: [inline('logo.png')], body: { attachmentId: 'a2', size: 10 } },
+    ] } }, 'p@example.com');
+    expect(parsed.fileParts.map(file => file.name)).toEqual(['invoice.pdf']);
+  });
+  it('leaves out an attachment type the AI service would reject the whole email over', () => {
+    // The service accepts PDFs and a fixed set of image types. One GIF used to
+    // make it refuse the email, losing the real PDF invoice alongside it.
+    const parsed = gmailMessage({ id: 'm', payload: { headers: [], parts: [
+      { filename: 'invoice.pdf', mimeType: 'application/pdf', body: { attachmentId: 'a1', size: 10 } },
+      { filename: 'banner.gif', mimeType: 'image/gif', body: { attachmentId: 'a2', size: 10 } },
+      { filename: 'scan.jpg', mimeType: 'image/jpeg; name="scan.jpg"', body: { attachmentId: 'a3', size: 10 } },
+    ] } }, 'p@example.com');
+    expect(parsed.fileParts.map(file => file.name)).toEqual(['invoice.pdf', 'scan.jpg']);
+    expect(parsed.fileParts[1].mime).toBe('image/jpeg');
+  });
+  it('pads base64url bytes into the form the script’s allow-list accepts', async () => {
+    const allowList = /^[A-Za-z0-9+/]*={0,2}$/;
+    const fetchImpl = vi.fn(async () => ({ ok: true, json: async () => ({ ok: true, receipts: [] }) }));
+    await extractFoundReceipts({ endpoint: 'https://script.google.com/macros/s/test/exec', idToken: 'id', fetchImpl,
+      email: { ...email, body: 'receipt', fileParts: [{ name: 'a.pdf', mime: 'application/pdf', base64: 'ab-_cd' }] } });
+    const sent = JSON.parse(fetchImpl.mock.calls[0][1].body);
+    expect(sent.files[0].inlineData.data).toMatch(allowList);
+    expect(sent.files[0].inlineData.data).toBe('ab+/cd==');
+  });
+  it('sends one body both the Sheet script and an older standalone deployment can read', async () => {
+    const fetchImpl = vi.fn(async () => ({ ok: true, json: async () => ({ ok: true, receipts: [] }) }));
+    await extractFoundReceipts({ endpoint: 'https://script.google.com/macros/s/test/exec', idToken: 'id', fetchImpl,
+      email: { ...email, body: 'receipt', fileParts: [] } });
+    const sent = JSON.parse(fetchImpl.mock.calls[0][1].body);
+    // The Sheet script routes on `action`; the standalone one reads the same
+    // fields straight off the top level. Nesting them would double the files.
+    expect(sent).toMatchObject({ version: 2, action: 'extractReceipt', idToken: 'id' });
+    expect(sent.email.body).toBe('receipt');
+    expect(sent.payload).toBeUndefined();
+  });
   it('rejects non-Apps Script extraction URLs before sending an ID token', async () => {
     const fetchImpl = vi.fn();
-    await expect(extractFoundReceipts({ endpoint: 'https://attacker.example', idToken: 'id', email, fetchImpl })).rejects.toThrow('deployment URL');
+    await expect(extractFoundReceipts({ endpoint: 'https://attacker.example', idToken: 'id', email, fetchImpl })).rejects.toThrow('Google Sheet script');
     expect(fetchImpl).not.toHaveBeenCalled();
   });
   it('retains malformed AI responses as failures, not empty successful scans', async () => {

@@ -2,7 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
-import { describeFinderSetup, checkReceiptFinderService, EXPECTED_FINDER_VERSION } from '../src/lib/receipt-finder-client.js';
+import { describeFinderSetup, checkReceiptFinderService, describeAiTest, friendlyReceiptAiError,
+  EXPECTED_FINDER_VERSION, EXPECTED_SHEETS_VERSION } from '../src/lib/receipt-finder-client.js';
 
 const source = fs.readFileSync(path.resolve('apps-script/receipt-finder/Code.gs'), 'utf8');
 function service({
@@ -117,9 +118,39 @@ describe('receipt finder setup guidance', () => {
     expect(result.level).toBe('warn');
     expect(result.steps[0]).toContain('deploy a new version');
   });
-  it('recognises the Google Sheet script pasted in by mistake', () => {
-    expect(describeFinderSetup({ service: 'lyrical-sheets-webhook-v43', scriptVersion: 'v43' }))
-      .toMatchObject({ level: 'error', headline: 'That is the Google Sheet script, not the receipt finder.' });
+  it('accepts the connected Google Sheet script as the receipt reader', () => {
+    // The second deployment is gone: the Sheet script the app already uses is
+    // now the intended service, so it must read as ready rather than as the
+    // wrong address pasted in by mistake.
+    expect(describeFinderSetup({ service: 'lyrical-sheets-webhook-v44', scriptVersion: 'v44',
+      capabilities: { receiptExtraction: true },
+      receiptAi: { geminiApiKey: true, model: true, publisherCheck: true, modelName: 'gemini-2.5-flash' } }))
+      .toMatchObject({ level: 'ready', steps: [] });
+  });
+  it('names the one missing key on an otherwise ready Google Sheet script', () => {
+    const result = describeFinderSetup({ service: 'lyrical-sheets-webhook-v44', scriptVersion: 'v44',
+      capabilities: { receiptExtraction: true }, receiptAi: { geminiApiKey: false, model: true } });
+    expect(result.level).toBe('error');
+    expect(result.steps).toHaveLength(1);
+    expect(result.steps[0]).toContain('GEMINI_API_KEY');
+  });
+  it('tells the publisher to redeploy a Google Sheet script that predates receipt reading', () => {
+    // Scanning against one of these would fall through to its row-writing path
+    // and append junk to the spreadsheet, so this must never read as ready.
+    const result = describeFinderSetup({ service: 'lyrical-sheets-webhook-v43', scriptVersion: 'v43',
+      capabilities: { batchEmailContent: true } });
+    expect(result.level).toBe('error');
+    expect(result.headline).toContain('too old');
+    expect(result.steps.join(' ')).toContain(EXPECTED_SHEETS_VERSION);
+  });
+  it('explains an older standalone Receipt Finder deployment instead of disowning it', () => {
+    // The first deployments answered to a different service name and none of
+    // the fields the app reads, so the setup check told the publisher the
+    // address was wrong — about the very address it had asked them to paste.
+    const result = describeFinderSetup({ service: 'lyricalmyrical-receipt-finder', version: 2 });
+    expect(result.level).toBe('error');
+    expect(result.headline).toContain('older Receipt Finder script');
+    expect(result.steps.join(' ')).toContain('no longer need a second script');
   });
   it('confirms a ready deployment', () => {
     expect(describeFinderSetup({ service: 'lyrical-receipt-finder', scriptVersion: EXPECTED_FINDER_VERSION, model: 'gemini-2.5-flash',
@@ -144,5 +175,45 @@ describe('receipt finder setup guidance', () => {
     const result = await checkReceiptFinderService({ endpoint: 'https://script.google.com/macros/s/abc/exec', fetchImpl });
     expect(result.level).toBe('ready');
     expect(fetchImpl.mock.calls[0][1].method).toBe('GET');
+  });
+});
+
+describe('telling a working AI key from one that merely exists', () => {
+  it('reports a key Google accepts as ready', () => {
+    expect(describeAiTest({ ok: true, aiOk: true, aiStatus: 200, model: 'gemini-2.5-flash' }))
+      .toMatchObject({ level: 'ready', steps: [] });
+  });
+
+  it('calls a refused key what it is, instead of Ready', () => {
+    // The whole reason this exists: the old check only proved the Script
+    // Property was filled in, so a key Google refuses reported Ready and the
+    // publisher met the failure one email at a time.
+    for (const status of [400, 401, 403]) {
+      const result = describeAiTest({ ok: true, aiOk: false, aiStatus: status });
+      expect(result.level).toBe('error');
+      expect(result.headline).toContain('would not accept');
+      expect(result.steps[0]).toMatch(/AIza|Generative Language API/);
+    }
+  });
+
+  it('does not tell the publisher to wait out a problem that waiting cannot fix', () => {
+    // "Retry later" is the script's wording for every upstream refusal, and it
+    // is wrong advice for a key problem.
+    expect(friendlyReceiptAiError('Receipt AI is unavailable (401). Retry later.')).not.toContain('Retry later');
+    expect(friendlyReceiptAiError('Receipt AI is unavailable (401). Retry later.')).toContain('AIza');
+  });
+
+  it('still says wait when waiting is genuinely the answer', () => {
+    expect(friendlyReceiptAiError('Receipt AI is unavailable (429). Retry later.')).toContain('wait');
+    expect(friendlyReceiptAiError('Receipt AI is unavailable (503). Retry later.')).toContain('few minutes');
+  });
+
+  it('passes through a message that is not an upstream status', () => {
+    expect(friendlyReceiptAiError('Publisher access required')).toBe('Publisher access required');
+  });
+
+  it('surfaces a script too old to self-test rather than claiming the key is bad', () => {
+    expect(describeAiTest({ ok: false, error: 'Receipt AI test failed. Check setup and retry.' }))
+      .toMatchObject({ level: 'error' });
   });
 });

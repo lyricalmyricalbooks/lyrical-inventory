@@ -152,17 +152,29 @@ window._fbSignInWithGoogle = () => signInWithPopup(auth, googleProvider);
 window._fbSignOut = () => signOut(auth);
 window._fbOnAuthStateChanged = (cb) => onAuthStateChanged(auth, cb);
 
-// Gmail permission is incremental, separate from normal app sign-in. The
-// returned access token lives only in the finder closure, never in storage.
+// Gmail permission is incremental, separate from normal app sign-in.
+//
+// `prompt: 'consent'` used to be forced here, which made Google re-run the full
+// consent screen on every single connect — the reason the publisher had to
+// grant Gmail access again every time they opened the finder. Google only
+// prompts when a scope has not been granted yet, so dropping it turns a repeat
+// connect into a popup that opens and closes on its own.
+//
+// Returns the expiry alongside the token so the caller can reuse a live token
+// and reconnect exactly once it has actually lapsed, rather than guessing.
 window._fbConnectReceiptGmail = async () => {
   if (!auth.currentUser || !window.IS_PUBLISHER) throw new Error('Sign in as publisher first');
   const provider = new GoogleAuthProvider();
   provider.addScope('https://www.googleapis.com/auth/gmail.readonly');
-  provider.setCustomParameters({ login_hint: auth.currentUser.email, prompt: 'consent' });
+  provider.setCustomParameters({ login_hint: auth.currentUser.email });
   const result = await reauthenticateWithPopup(auth.currentUser, provider);
   const credential = GoogleAuthProvider.credentialFromResult(result);
   if (!credential?.accessToken) throw new Error('Google did not grant Gmail access');
-  return credential.accessToken;
+  // Google's tokens last an hour. Expire ours a few minutes early so a scan
+  // never starts on a token that dies halfway through it.
+  const seconds = Number(result?._tokenResponse?.oauthExpireIn);
+  const lifetime = Number.isFinite(seconds) && seconds > 0 ? seconds : 3600;
+  return { token: credential.accessToken, expiresAt: Date.now() + Math.max(60, lifetime - 300) * 1000 };
 };
 
 // Append against the latest global ledger, atomically. The finder outbox

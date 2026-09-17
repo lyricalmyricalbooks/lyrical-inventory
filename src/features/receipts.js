@@ -121,6 +121,10 @@ function receiptFinderDependencies() {
   return {
     user: () => window._fbAuth?.currentUser,
     publisher: () => !!window.IS_PUBLISHER && !isAuthor(),
+    // Receipt reading runs through the same Apps Script deployment that syncs
+    // the Google Sheet, so there is no second address for the publisher to
+    // deploy, paste and keep up to date.
+    service: () => sheetsUrl,
     expenses: () => TAX_CENTER.businessExpenses || [],
     hasAppAi: () => !!(TAX_CENTER.settings?.geminiKey || TAX_CENTER.settings?.openRouterKey?.trim()),
     readAi: (parts, opts) => _callAiForReceipts(TAX_CENTER.settings?.geminiKey, parts, opts),
@@ -2214,16 +2218,14 @@ function openEmailReceiptImportModal() {
   _emailAttExcluded = {};
   _emailExtractCache = {};
 
-  // Connection pill status
+  // Connection pill status. A saved Google Sheet address says nothing about
+  // whether Gmail itself is connected, so claiming "Gmail Connected" off the
+  // back of it was simply wrong. Start neutral; the finder sets the real state
+  // from the live Gmail token as soon as it mounts, a few lines below.
   const pill = $('email-account-pill');
   if (pill) {
-    if (sheetsUrl) {
-      pill.textContent = '● Gmail Connected';
-      pill.className = 'pill green email-connected-pill';
-    } else {
-      pill.textContent = '○ Gmail Not Connected';
-      pill.className = 'pill amber email-connected-pill';
-    }
+    pill.textContent = '○ Checking Gmail…';
+    pill.className = 'pill gray email-connected-pill';
   }
 
   // Progressive category strip begins hidden until drafts exist
@@ -2233,34 +2235,12 @@ function openEmailReceiptImportModal() {
   // Reset tab to Gmail
   switchEmailImportTab('gmail');
 
-  // Render Preset chips
-  renderGmailChips();
-
-  // Set default search query
-  const queryInput = $('email-gmail-search-query');
-  if (queryInput) {
-    queryInput.value = 'newer_than:30d (subject:(receipt OR invoice OR bill OR order OR purchase OR payment) OR "receipt" OR "invoice" OR "payment")';
-    // Enter-to-search: previously the only way to run a hand-edited query was
-    // to click the Search button — the field itself did nothing on Enter.
-    queryInput.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); searchGmailEmails(); } };
-  }
-
-  // Msg ids are immutable, so a previous search's results and downloaded
-  // content are never stale — re-render them instead of paying for the whole
-  // search + content fetch again every time the modal is reopened.
-  if (_gmailEmailsFetched.length) {
-    renderGmailEmailsList();
-  } else {
-    const listWrap = $('email-gmail-list-wrap');
-    if (listWrap) {
-      listWrap.innerHTML = `
-        <div class="email-zero-state">
-          <div class="email-zero-state-icon" aria-hidden="true">📭</div>
-          <div class="email-zero-state-title">Ready to scan your inbox</div>
-          <div class="email-zero-state-sub">Select a quick preset above (like <b>Past 30 Days</b>) or enter a supplier name to find recent expense receipts.</div>
-        </div>`;
-    }
-  }
+  // The preset chips, the default query and the results list all render into
+  // #email-panel-gmail, which mountReceiptFinder() replaces wholesale a few
+  // lines below — so building them here was work done and thrown away on every
+  // single open, including a re-render of every previously fetched email. The
+  // finder owns that panel now; these render paths stay for the tab's other
+  // callers but are no longer run on open.
 
   const fileInput = $('email-receipt-files');
   const list = $('email-receipt-files-list');
