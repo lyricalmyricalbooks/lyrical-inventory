@@ -6560,11 +6560,11 @@ function renderPostageMatchWorklist() {
   // guess about whether pressing it is worth the wait or the API allowance.
   const scanAllBtn = $('postage-match-scan-all');
   if (scanAllBtn && !_postageBatchScan) {
-    const scanCount = TAX_CENTER.settings?.geminiKey ? postageScanCandidates(expenses).length : 0;
+    const scanCount = (TAX_CENTER.settings?.geminiKey || TAX_CENTER.settings?.openRouterKey?.trim()) ? postageScanCandidates(expenses).length : 0;
     scanAllBtn.disabled = scanCount === 0;
     scanAllBtn.textContent = scanCount
       ? `Read ${scanCount} receipt${scanCount === 1 ? '' : 's'}`
-      : (TAX_CENTER.settings?.geminiKey ? 'Nothing left to read' : 'Add a Gemini key to read receipts');
+      : ((TAX_CENTER.settings?.geminiKey || TAX_CENTER.settings?.openRouterKey?.trim()) ? 'Nothing left to read' : 'Add an AI key to read receipts');
   }
 
   if (!expenses.length) {
@@ -6578,7 +6578,7 @@ function renderPostageMatchWorklist() {
     return;
   }
 
-  const canScan = !!(TAX_CENTER.settings?.geminiKey);
+  const canScan = !!(TAX_CENTER.settings?.geminiKey || TAX_CENTER.settings?.openRouterKey?.trim());
 
   host.innerHTML = expenses.map(expense => {
     const key = postageExpenseKey(expense);
@@ -6967,8 +6967,8 @@ async function scanAllPostageReceipts() {
     showToast('Stopping after the receipt being read now…');
     return;
   }
-  if (!TAX_CENTER.settings?.geminiKey) {
-    showToast('Add your Gemini API key in the Tax Centre config to read receipts', 'warn', 4200);
+  if (!TAX_CENTER.settings?.geminiKey && !TAX_CENTER.settings?.openRouterKey?.trim()) {
+    showToast('Add your Gemini or OpenRouter key in the Tax Centre config to read receipts', 'warn', 4200);
     return;
   }
 

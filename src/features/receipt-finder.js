@@ -220,6 +220,7 @@ async function mountReceiptFinder(element, dependencies) {
       <p>The finder reads receipts through the same Google Sheet script this app already uses. Leave the box below empty unless you run a separate Receipt Finder deployment.</p>
       <label for="finder-endpoint">Separate deployment address (optional)</label>
       <input type="url" id="finder-endpoint" value="${esc(state.endpoint)}" placeholder="https://script.google.com/macros/s/…/exec">
+      <p>Uses your saved app AI keys first, then the optional separate deployment. Gmail access is read-only and lasts for this session.</p>
       <div class="finder-toolbar">
         <button class="btn" type="button" data-action="save-setup">Save address</button>
         <button class="btn" type="button" data-action="check-setup">Test connection</button>
@@ -632,6 +633,12 @@ async function runSetupCheck() {
   panel.className = 'finder-check';
   panel.innerHTML = '<div class="skeleton-line"></div>';
   try {
+    if (deps.hasAppAi?.() && !endpoint) {
+      const result = { level: 'ready', headline: 'App AI keys are saved. Scans use Gemini first, then OpenRouter.', steps: [] };
+      paintSetupCheck(result);
+      announce('App AI keys are saved and ready to scan.');
+      return;
+    }
     let result = await checkReceiptFinderService({ endpoint });
     // Settings being present is not the same as them working. When the
     // deployment can prove it, make it actually call Gemini once — a key Google
@@ -681,6 +688,11 @@ async function dropFailuresFromOtherService(endpoint) {
 
 async function ensureServiceReady() {
   const endpoint = activeEndpoint();
+  if (!endpoint && deps.hasAppAi?.()) {
+    serviceReadyFor = 'app-ai';
+    paintSetupCheck({ level: 'ready', headline: 'App AI keys are saved. Scans use Gemini first, then OpenRouter.', steps: [] });
+    return '';
+  }
   if (!endpoint) throw new Error('Connect your Google Sheet first — the finder reads receipts through that same script.');
   if (serviceReadyFor === endpoint) return endpoint;
   announce('Checking your receipt reading service…');
@@ -714,7 +726,10 @@ async function readCandidate(id, signal, endpoint) {
     if (signal.aborted || !active() || owner !== uid) throw new DOMException('Stopped', 'AbortError');
     state.emails[key] = email;
     await persist(); // Source bytes must survive before the AI result does.
-    const result = await extractFoundReceipts({ endpoint, idToken: await deps.user().getIdToken(), email, signal });
+    const useAppAi = deps.hasAppAi?.();
+    const result = await extractFoundReceipts({ endpoint,
+      idToken: useAppAi ? undefined : await deps.user().getIdToken(), email, signal,
+      readAi: useAppAi ? deps.readAi : undefined });
     if (signal.aborted || !active() || owner !== uid) throw new DOMException('Stopped', 'AbortError');
     result.receipts.forEach((raw, index) => {
       const draft = normalizeFoundReceipt(raw, email, index);
@@ -753,6 +768,7 @@ async function runPool(items, limit, worker) {
 async function scan(nextPage) {
   if (busy) return;
   if (!tokenLive()) throw new Error(state.account ? 'Reconnect Gmail to scan — it only takes a click.' : 'Connect Gmail first');
+  if (!state.endpoint && !deps.hasAppAi?.() && !deps.service?.()) throw new Error('Save an AI key or connect your Google Sheet script before scanning');
   if (!navigator.onLine) throw new Error('Reconnect to scan Gmail. Saved receipts are available offline.');
   const value = id => host.querySelector('#' + id).value;
   if (value('finder-from') && value('finder-to') && value('finder-from') > value('finder-to')) throw new Error('From date must be before the end date');

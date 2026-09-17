@@ -2347,7 +2347,7 @@ function _tcBuildLedger(selectedYear) {
    wired up without opening five panels. Derived from the fields on screen,
    so it stays true the moment a key is typed, saved or cleared. */
 const INTEGRATION_PILL_SPECS = [
-  { key: 'gemini', fields: ['tc-api-key'] },
+  { key: 'gemini', fields: ['tc-api-key', 'tc-backup-key'] },
   { key: 'shippo', fields: ['tc-shippo-key'] },
   { key: 'zonos', fields: ['tc-zonos-key'], toggle: 'tc-zonos-enabled' },
   { key: 'canadapost', fields: ['tc-cp-live-key', 'tc-cp-live-secret', 'tc-cp-test-key', 'tc-cp-test-secret'], toggle: 'tc-cp-enabled', requireAll: false },
@@ -2394,7 +2394,7 @@ function wireIntegrationStatusPills() {
 
 function _tcRenderStatusHeaders() {
   if ($('tc-api-key') && TAX_CENTER.settings?.geminiKey) $('tc-api-key').value = TAX_CENTER.settings.geminiKey;
-  if ($('tc-backup-key') && TAX_CENTER.settings?.openRouterKey) $('tc-backup-key').value = TAX_CENTER.settings.openRouterKey;
+  hydrateCredentialField('tc-backup-key', TAX_CENTER.settings?.openRouterKey);
   if ($('tc-backup-model') && TAX_CENTER.settings?.openRouterModel) $('tc-backup-model').value = TAX_CENTER.settings.openRouterModel;
   if ($('stripe-fees-key') && TAX_CENTER.settings?.stripeKey) $('stripe-fees-key').value = TAX_CENTER.settings.stripeKey;
   const _stripeStatusEl = $('stripe-fees-status');

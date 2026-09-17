@@ -2903,8 +2903,8 @@
             <div class="tc-service-header-left">
               <div class="tc-service-badge badge-gemini" aria-hidden="true">♊</div>
               <div class="tc-service-meta">
-                <strong class="tc-service-title">Gemini AI Assistant</strong>
-                <div class="tc-service-desc">Used to analyze and automatically categorize receipt photos during upload.</div>
+                <strong class="tc-service-title">AI Assistant</strong>
+                <div class="tc-service-desc">Gemini first, with OpenRouter backup for chat, receipts, invoices and email.</div>
               </div>
             </div>
             <div class="tc-service-header-right">
@@ -2922,12 +2922,12 @@
               <div class="tc-form-group">
                 <label class="tc-form-label" for="tc-backup-key">Backup AI Key <span class="tc-form-optional">(optional)</span></label>
                 <input type="password" id="tc-backup-key" class="tc-form-input" placeholder="OpenRouter key (sk-or-v1-…)…" autocomplete="off">
-                <div class="tc-form-hint">Used by the Intelligence panel only, and only when Google will not answer &mdash; whether that is a used-up allowance, a rejected key or an outage. Receipt scanning always uses Google.</div>
+                <div class="tc-form-hint">Save your OpenRouter key here once. Intelligence chat, receipt and invoice scans, email extraction and postage readers use it automatically when Gemini cannot answer or runs out of quota. The key is saved in your app account settings.</div>
               </div>
               <div class="tc-form-group">
                 <label class="tc-form-label" for="tc-backup-model">Backup Model</label>
-                <input type="text" id="tc-backup-model" class="tc-form-input" placeholder="e.g. vendor/model-name:free" autocomplete="off" spellcheck="false">
-                <div class="tc-form-hint">The exact model name as your backup provider lists it. Both this and the key are needed before the backup will be used.</div>
+                <input type="text" id="tc-backup-model" class="tc-form-input" placeholder="openrouter/free (automatic default)" autocomplete="off" spellcheck="false">
+                <div class="tc-form-hint">Optional. Leave blank to select an available free model automatically. A custom OpenRouter model uses that model’s pricing and must support tools for chat, and images and structured output for scans. Keep Intelligence on Auto for automatic fallback.</div>
               </div>
               <div class="tc-form-group">
                 <label class="tc-form-label" for="tc-base-cur">Base Currency</label>

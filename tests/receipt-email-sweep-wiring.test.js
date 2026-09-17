@@ -38,7 +38,7 @@ describe('the receipt sweep never files anything, it only drafts', () => {
   });
 
   it('runs the same extraction pipeline the manual Extract button runs', () => {
-    expect(sweep).toContain('_callGeminiForReceipts(');
+    expect(sweep).toContain('_callAiForReceipts(');
     expect(sweep).toContain('RECEIPT_EXTRACTION_SCHEMA');
     expect(sweep).toContain('_draftsFromReceiptRows(');
     expect(sweep).toContain('_buildReceiptPrompt()');
