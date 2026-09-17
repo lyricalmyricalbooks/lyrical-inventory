@@ -17358,7 +17358,7 @@ function renderPOS() {
     (b.author || '').toLowerCase().includes(posSearchQuery)
   );
   if (!booksArr.length && posSearchQuery) {
-    grid.innerHTML = `<div style="grid-column:1/-1;padding:32px;text-align:center;color:var(--text3);font-size:13px;">No books match <strong style="color:var(--on-inverse);">&ldquo;${escapeHtml(posSearchQuery)}&rdquo;</strong>.<br><span style="font-size:11px;">Press <kbd style="background:rgba(255,255,255,.1);padding:2px 6px;border-radius:4px;">Esc</kbd> to clear.</span></div>`;
+    grid.innerHTML = `<div class="pos-search-empty">No books match <strong>&ldquo;${escapeHtml(posSearchQuery)}&rdquo;</strong>.<span class="pos-search-empty-hint">Press <kbd>Esc</kbd> to clear.</span></div>`;
   } else {
     grid.innerHTML = booksArr.map((book) => {
       const qty = posCart[book.id] || 0;
