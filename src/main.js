@@ -18396,87 +18396,9 @@ window.salesTrackerRemoveCustom = function (idx) {
 // Returns true once the sheet is on its way to a print window, false if it
 // bailed — printFairKit() needs to know, so a tally sheet that never opened
 // doesn't leave a stray blank QR window behind it.
-function printSalesTracker(opts = {}) {
-  const closeModal = opts.closeModal !== false;
-  const eventName = (document.getElementById('st-event').value || '').trim();
-  const dateValue = (document.getElementById('st-date').value || '').trim();
-  let cols = parseInt(document.getElementById('st-cols').value, 10);
-  if (!cols || cols < 1) cols = 10;
-  if (cols > 30) cols = 30;
-
-  const currencyCode = document.getElementById('st-currency').value || 'EUR';
-  const currencySymbol = codeToSymbol(currencyCode);
-
-  const selected = Array.from(document.querySelectorAll('.st-book-check'))
-    .filter((el) => el.checked)
-    .map((el) => ({ kind: el.dataset.kind, value: el.value }));
-
-  if (!selected.length) {
-    showToast('Select at least one book to include', 'warn');
-    return false;
-  }
-
-  const includeNotes = !!document.getElementById('st-notes').checked;
-
-  const dateLabel = dateValue
-    ? new Date(dateValue + 'T00:00:00').toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
-    : '';
-
-  const colHeaders = Array.from({ length: cols }, (_, i) => `<th class="num">${i + 1}</th>`).join('');
-
-  const selectedBooks = selected.map((sel) => {
-    if (sel.kind === 'custom') {
-      const cb = salesTrackerCustomBooks[parseInt(sel.value, 10)];
-      if (!cb) return null;
-      return { title: cb.title, author: cb.author || '', qty: Number(cb.qty) || 0 };
-    }
-    const book = posResolveBook(sel.value);
-    if (!book) return null;
-    return { title: book.title, author: book.author || '', qty: Number(salesTrackerQtyBrought[sel.value]) || 0 };
-  }).filter(Boolean);
-
-  // ⚡ Bolt: Imperative loops instead of .reduce() avoid array allocations in rendering functions
-  let totalPacked = 0;
-  for (const b of selectedBooks) {
-    totalPacked += b.qty;
-  }
-
-  const bookRows = selectedBooks.map(({ title, author, qty }) => {
-    const packedNote = qty > 0 ? `<div class="title-packed">Packed: ${qty}</div>` : '';
-    const tallyCells = Array.from({ length: cols }, () => '<td class="tally"></td>').join('');
-    if (includeNotes) {
-      const priceCells = Array.from({ length: cols }, () => '<td class="price-paid"></td>').join('');
-      return `
-        <tr>
-          <td class="title" rowspan="2">
-            <div class="title-name">${escapeHtml(title)}</div>
-            ${author ? `<div class="title-meta">${escapeHtml(author)}</div>` : ''}
-            ${packedNote}
-          </td>
-          ${tallyCells}
-          <td class="total" rowspan="2"></td>
-        </tr>
-        <tr class="price-row">
-          ${priceCells}
-        </tr>
-      `;
-    }
-    return `
-      <tr>
-        <td class="title">
-          <div class="title-name">${escapeHtml(title)}</div>
-          ${author ? `<div class="title-meta">${escapeHtml(author)}</div>` : ''}
-          ${packedNote}
-        </td>
-        ${tallyCells}
-        <td class="total"></td>
-      </tr>
-    `;
-  }).join('');
-
-  const numBooks = selectedBooks.length;
-  const visualRows = numBooks * (includeNotes ? 2 : 1);
-
+// Same shape as computeQrSheetLayoutSizes() below: a pure lookup from row
+// count to the font/spacing tier that keeps the printed sheet on one page.
+function computeSalesTrackerLayoutSizes(visualRows, includeNotes) {
   let rowHeight = 56;
   let priceRowHeight = 28;
   let thHeight = 32;
@@ -18574,8 +18496,100 @@ function printSalesTracker(opts = {}) {
     grandMarginTop = '10px';
   }
 
-  const effectiveTallyRowHeight = includeNotes ? Math.max(32, Math.round(rowHeight * 0.95)) : rowHeight;
-  const effectivePriceRowHeight = priceRowHeight;
+  return {
+    rowHeight, priceRowHeight, thHeight, titleFontSize, authorFontSize, packedFontSize,
+    thFontSize, metaFontSize, metaGap, grandBoxW, grandBoxH, grandLabelFontSize, grandMarginTop,
+    effectiveTallyRowHeight: includeNotes ? Math.max(32, Math.round(rowHeight * 0.95)) : rowHeight,
+    effectivePriceRowHeight: priceRowHeight,
+  };
+}
+
+function printSalesTracker(opts = {}) {
+  const closeModal = opts.closeModal !== false;
+  const eventName = (document.getElementById('st-event').value || '').trim();
+  const dateValue = (document.getElementById('st-date').value || '').trim();
+  let cols = parseInt(document.getElementById('st-cols').value, 10);
+  if (!cols || cols < 1) cols = 10;
+  if (cols > 30) cols = 30;
+
+  const currencyCode = document.getElementById('st-currency').value || 'EUR';
+  const currencySymbol = codeToSymbol(currencyCode);
+
+  const selected = Array.from(document.querySelectorAll('.st-book-check'))
+    .filter((el) => el.checked)
+    .map((el) => ({ kind: el.dataset.kind, value: el.value }));
+
+  if (!selected.length) {
+    showToast('Select at least one book to include', 'warn');
+    return false;
+  }
+
+  const includeNotes = !!document.getElementById('st-notes').checked;
+
+  const dateLabel = dateValue
+    ? new Date(dateValue + 'T00:00:00').toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
+    : '';
+
+  const colHeaders = Array.from({ length: cols }, (_, i) => `<th class="num">${i + 1}</th>`).join('');
+
+  const selectedBooks = selected.map((sel) => {
+    if (sel.kind === 'custom') {
+      const cb = salesTrackerCustomBooks[parseInt(sel.value, 10)];
+      if (!cb) return null;
+      return { title: cb.title, author: cb.author || '', qty: Number(cb.qty) || 0 };
+    }
+    const book = posResolveBook(sel.value);
+    if (!book) return null;
+    return { title: book.title, author: book.author || '', qty: Number(salesTrackerQtyBrought[sel.value]) || 0 };
+  }).filter(Boolean);
+
+  // ⚡ Bolt: Imperative loops instead of .reduce() avoid array allocations in rendering functions
+  let totalPacked = 0;
+  for (const b of selectedBooks) {
+    totalPacked += b.qty;
+  }
+
+  const bookRows = selectedBooks.map(({ title, author, qty }) => {
+    const packedNote = qty > 0 ? `<div class="title-packed">Packed: ${qty}</div>` : '';
+    const tallyCells = Array.from({ length: cols }, () => '<td class="tally"></td>').join('');
+    if (includeNotes) {
+      const priceCells = Array.from({ length: cols }, () => '<td class="price-paid"></td>').join('');
+      return `
+        <tr>
+          <td class="title" rowspan="2">
+            <div class="title-name">${escapeHtml(title)}</div>
+            ${author ? `<div class="title-meta">${escapeHtml(author)}</div>` : ''}
+            ${packedNote}
+          </td>
+          ${tallyCells}
+          <td class="total" rowspan="2"></td>
+        </tr>
+        <tr class="price-row">
+          ${priceCells}
+        </tr>
+      `;
+    }
+    return `
+      <tr>
+        <td class="title">
+          <div class="title-name">${escapeHtml(title)}</div>
+          ${author ? `<div class="title-meta">${escapeHtml(author)}</div>` : ''}
+          ${packedNote}
+        </td>
+        ${tallyCells}
+        <td class="total"></td>
+      </tr>
+    `;
+  }).join('');
+
+  const numBooks = selectedBooks.length;
+  const visualRows = numBooks * (includeNotes ? 2 : 1);
+
+  const {
+    thHeight, titleFontSize, authorFontSize, packedFontSize,
+    thFontSize, metaFontSize, metaGap, grandBoxW, grandBoxH, grandLabelFontSize, grandMarginTop,
+    effectiveTallyRowHeight, effectivePriceRowHeight,
+  } = computeSalesTrackerLayoutSizes(visualRows, includeNotes);
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
     <title>Book Sales Tracker${eventName ? ' — ' + escapeHtml(eventName) : ''}</title>
