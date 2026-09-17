@@ -66,6 +66,7 @@ import { findCategoryMismatches } from '../lib/category-fit.js';
 import { canonicalExpenseCategory } from '../lib/expense-categories.js';
 import { receiptOwners, summarizeReceiptStorage, isReceiptExemptExpense } from '../lib/receipt-storage.js';
 import { testZonosConnection } from '../lib/zonos.js';
+import { friendlyOpenRouterError, testOpenRouterConnection } from '../lib/openrouter-chat.js';
 import { testCanadaPostConnection, validateCanadaPostAccount, isValidCustomerNumber, getSavedSheetsUrl, diagnoseCanadaPostConnection, inspectCanadaPostCredentials, resolveCanadaPostCredentials, migrateCanadaPostCredentials, readCanadaPostCredentialSet, credentialSetIsConfigured, CANADAPOST_CREDENTIAL_FIELDS } from '../lib/canadapost.js';
 import {
   RECURRING_FREQUENCIES,
@@ -3909,6 +3910,41 @@ function readCredentialField(id) {
   return el.value.trim();
 }
 
+async function testOpenRouterConnectionFromSettings() {
+  const btn = $('tc-test-backup-btn');
+  const status = $('tc-backup-test-status');
+  const apiKey = readCredentialField('tc-backup-key');
+  const oldText = btn?.textContent || 'Test OpenRouter';
+  if (!apiKey) {
+    if (status) status.textContent = 'Paste an OpenRouter key first.';
+    showToast('Paste an OpenRouter key first', 'warn');
+    return false;
+  }
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Testing…'; }
+  if (status) status.textContent = 'Checking the key with OpenRouter…';
+  try {
+    const result = await testOpenRouterConnection({
+      apiKey,
+      model: $('tc-backup-model')?.value.trim() || undefined,
+    });
+    const rawRemaining = result.account?.limit_remaining;
+    const remaining = Number(rawRemaining);
+    const allowance = rawRemaining != null && Number.isFinite(remaining) ? ` · ${remaining.toFixed(2)} credits remaining` : '';
+    const model = result.model ? ` via ${result.model}` : '';
+    if (status) status.textContent = `Connected to OpenRouter${model}${allowance}.`;
+    showToast('✓ OpenRouter connected', 'ok');
+    return true;
+  } catch (error) {
+    const message = friendlyOpenRouterError(error);
+    if (status) status.textContent = `Could not connect: ${message}`;
+    showToast(`OpenRouter: ${message}`, 'err', 6000);
+    return false;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = oldText; }
+  }
+}
+
 async function saveTaxCenterSettings() {
   const btn = $('tc-save-config-btn') || $('tc-save-zonos-btn') || $('tc-save-cp-btn');
   const oldText = btn ? btn.textContent : 'Save Config';
@@ -4794,6 +4830,7 @@ export {
   restoreDeductionGaps,
   saveTaxCenter,
   saveTaxCenterSettings,
+  testOpenRouterConnectionFromSettings,
   snoozeDeductionGap,
   testZonosConnectionHandler,
   testCanadaPostConnectionHandler,
