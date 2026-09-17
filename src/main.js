@@ -1188,8 +1188,8 @@ function resetBookForm() {
   $('nb-price').value = '40';
   $('nb-cur').value = '€';
   $('nb-thresh').value = '10';
-  $('nb-accent').value = '#c8913a';
-  onCustomAccentInput('#c8913a');
+  $('nb-accent').value = '#E8402A';
+  onCustomAccentInput('#E8402A');
   $('nb-pw').value = '';
   $('nb-prod').value = '0';
   if ($('nb-pub-grat')) $('nb-pub-grat').value = '0';
@@ -1231,8 +1231,8 @@ function openEditBookModal(id) {
   $('nb-price').value = book.listPrice ?? 40;
   $('nb-cur').value = book.currency || '€';
   $('nb-thresh').value = book.threshold ?? 10;
-  $('nb-accent').value = book.accent || '#c8913a';
-  onCustomAccentInput(book.accent || '#c8913a');
+  $('nb-accent').value = book.accent || '#E8402A';
+  onCustomAccentInput(book.accent || '#E8402A');
   $('nb-pw').value = book.authorEmail || '';
   $('nb-prod').value = book.productionCost ?? 0;
   if ($('nb-pub-grat')) $('nb-pub-grat').value = book.pubGratuity ?? 0;
@@ -5875,7 +5875,7 @@ function renderBreakEvenBlock(s, book, cur, cost, recognizedRev) {
       al.style.background = 'rgba(251, 146, 60, 0.08)';
       al.style.color = '#fb923c';
     } else {
-      al.style.borderLeftColor = 'rgba(200, 145, 58, 0.5)';
+      al.style.borderLeftColor = 'rgba(232,  64,  42, 0.5)';
       al.style.background = 'rgba(200, 145, 58, 0.08)';
       al.style.color = 'var(--gold2)';
     }
@@ -5998,7 +5998,7 @@ function getRevenueProgressHtml(stats, tiers, nextTier, effectiveCap, cur) {
       <div style="margin-top:1rem; padding:12px; background:var(--ink); border-radius:var(--r2); border:1px solid rgba(255,255,255,.05);">
         <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
           <span style="font-size:10px; text-transform:uppercase; color:rgba(255,255,255,.58); letter-spacing:.1em;">Revenue Progress</span>
-          <span style="font-size:11px; color:var(--gold2); font-family:'DM Mono',monospace;">${fmt(revenueLeft, cur)} ${label}</span>
+          <span style="font-size:11px; color:var(--gold3); font-family:'DM Mono',monospace;">${fmt(revenueLeft, cur)} ${label}</span>
         </div>
         <div class="bar-track" style="height:5px; margin-bottom:0;">
           <div class="bar-fill" style="width:${pct}%; height:5px; border-radius:100px;"></div>
@@ -16386,7 +16386,7 @@ function renderEditExpenseReceipts() {
     return `<div style="display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,0.05);padding:4px 8px;border-radius:4px;border:1px solid rgba(255,255,255,0.1);margin-bottom:4px;">
       <span style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px;" title="${escapeHtml(name)}">📄 ${viewLink}</span>
       <div style="display:flex;gap:4px;">
-        <button class="btn tx" type="button" onclick="relinkEditExpenseReceipt(${idx})" style="padding:2px 6px;font-size:10px;color:var(--gold);" title="Change or edit this receipt link">✏️ Relink</button>
+        <button class="btn tx" type="button" onclick="relinkEditExpenseReceipt(${idx})" style="padding:2px 6px;font-size:10px;color:var(--gold-text);" title="Change or edit this receipt link">✏️ Relink</button>
         <button class="btn tx" type="button" onclick="removeEditExpenseReceipt(${idx})" style="padding:2px 6px;font-size:10px;color:var(--red);" title="Remove receipt attachment">Remove</button>
       </div>
     </div>`;

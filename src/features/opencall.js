@@ -951,7 +951,7 @@ function renderOpenCall() {
                     <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="ocToggleColorPalette('fore')" title="Text Color" style="font-weight:bold;color:#c5a880;">A</button>
                     <div id="oc-forecolor-palette" class="oc-color-palette">
                       <div class="oc-color-swatch" style="background:#0e0c0a;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#0e0c0a')"></div>
-                      <div class="oc-color-swatch" style="background:#c8913a;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#c8913a')"></div>
+                      <div class="oc-color-swatch" style="background:#E8402A;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#E8402A')"></div>
                       <div class="oc-color-swatch" style="background:#e52e2e;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#e52e2e')"></div>
                       <div class="oc-color-swatch" style="background:#1e40af;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#1e40af')"></div>
                       <div class="oc-color-swatch" style="background:#047857;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#047857')"></div>
@@ -971,7 +971,7 @@ function renderOpenCall() {
                       <div class="oc-color-swatch" style="background:#fbcfe8;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#fbcfe8')"></div>
                       <div class="oc-color-swatch" style="background:#fed7aa;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#fed7aa')"></div>
                       <div class="oc-color-swatch" style="background:#ddd6fe;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#ddd6fe')"></div>
-                      <div class="oc-color-swatch" style="background:#c8913a;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#c8913a')"></div>
+                      <div class="oc-color-swatch" style="background:#E8402A;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#E8402A')"></div>
                       <div class="oc-color-swatch" style="background:#e52e2e;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#e52e2e')"></div>
                       <div class="oc-color-swatch" style="background:#e5ddd0;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#e5ddd0')"></div>
                       <div class="oc-color-swatch" style="background:transparent;border:1px dashed #ccc;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', 'transparent')"></div>
@@ -2400,7 +2400,7 @@ function handleOcCsvDragOver(e) {
   e.preventDefault();
   e.stopPropagation();
   e.currentTarget.style.borderColor = 'var(--gold)';
-  e.currentTarget.style.background = 'rgba(200, 145, 58, 0.06)';
+  e.currentTarget.style.background = 'rgba(232,  64,  42, 0.06)';
 }
 
 function handleOcCsvDragLeave(e) {

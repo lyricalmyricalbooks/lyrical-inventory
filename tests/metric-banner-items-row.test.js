@@ -14,7 +14,7 @@ const mainJs = readFileSync(path.join(__dirname, '../src/main.js'), 'utf8');
 test('metric-banner-items rows get a divider instead of running together', () => {
   const rowRule = styles.match(/\.metric-banner-items \.mbi-row\s*\{([\s\S]*?)\n\}/);
   expect(rowRule).not.toBeNull();
-  expect(rowRule[1]).toMatch(/border-top:\s*1px solid/);
+  expect(rowRule[1]).toMatch(/border-top:\s*var\(--stroke-hair\) solid/);
 
   const firstRule = styles.match(/\.metric-banner-items \.mbi-row:first-child\s*\{([\s\S]*?)\n\}/);
   expect(firstRule).not.toBeNull();

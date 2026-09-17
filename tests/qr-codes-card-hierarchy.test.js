@@ -41,7 +41,7 @@ test('QR card block establishes the surface, radius and hover lift on tokens', (
   expect(decl).toMatch(/background:\s*var\(--surface-inverse-raised\)/);
   // Radius, border and shadow all come off tokens — no ad-hoc values that
   // would silently show up on the token ratchet.
-  expect(decl).toMatch(/border:\s*1px solid var\(--border-default\)/);
+  expect(decl).toMatch(/border:\s*var\(--stroke-hair\) solid var\(--border-default\)/);
   expect(decl).toMatch(/border-radius:\s*var\(--r3\)/);
   expect(decl).toMatch(/box-shadow:\s*var\(--elev-2\)/);
 

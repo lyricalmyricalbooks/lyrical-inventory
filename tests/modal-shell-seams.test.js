@@ -49,8 +49,8 @@ test('a dialog missing a header or footer gets that padding back', () => {
 
 test('both pinned edges carry an opaque fill, a hairline and a z-index', () => {
   for (const [selector, edge, seam] of [
-    ['.modal-title', /top:\s*0;/, /border-bottom:\s*1px solid var\(--border-default\);/],
-    ['.modal-footer', /bottom:\s*0;/, /border-top:\s*1px solid var\(--border-default\);/],
+    ['.modal-title', /top:\s*0;/, /border-bottom:\s*var\(--stroke-hair\) solid var\(--border-default\);/],
+    ['.modal-footer', /bottom:\s*0;/, /border-top:\s*var\(--stroke-hair\) solid var\(--border-default\);/],
   ]) {
     const block = rule(selector);
     expect(block, selector).toMatch(/position:\s*sticky;/);

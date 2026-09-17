@@ -44,13 +44,21 @@
   /* ── ELEVATION ───────────────────────────────────────────────────────────
      Replaces 139 ad-hoc box-shadows. Multi-layered per AGENTS.md §1 —
      a tight contact shadow plus a soft ambient one. */
+  /* Riso Press has no blur. Depth is a flat block of ink offset down-right,
+     the way a second pass through the press lands slightly off-register.
+     The scale is by OFFSET and OPACITY, not by softness — .18 for a resting
+     row, full ink for anything that floats above the page.
+     These six values are what re-shape 103 call sites at once, which is why
+     no rule should ever write its own box-shadow. */
   --elev-0: none;
-  --elev-1: 0 1px 2px rgba(14, 12, 10, .05), 0 1px 3px rgba(14, 12, 10, .04);
-  --elev-2: 0 2px 4px rgba(14, 12, 10, .05), 0 4px 12px rgba(14, 12, 10, .07);
-  --elev-3: 0 4px 8px rgba(14, 12, 10, .05), 0 12px 28px rgba(14, 12, 10, .10);
-  --elev-4: 0 8px 16px rgba(14, 12, 10, .06), 0 24px 60px rgba(14, 12, 10, .16);
-  /* Lift applied on hover — pair with --elev-2/3, never with a raw shadow */
-  --elev-hover: 0 6px 14px rgba(14, 12, 10, .07), 0 16px 36px rgba(14, 12, 10, .11);
+  --elev-1: 2px 2px 0 rgba(16, 15, 13, .18);
+  --elev-2: 3px 3px 0 rgba(16, 15, 13, .30);
+  --elev-3: 4px 4px 0 var(--rule-ink);
+  --elev-4: 6px 6px 0 var(--rule-ink);
+  /* Lift applied on hover — pair with --elev-2/3, never with a raw shadow.
+     The shadow GROWS on hover while the element lifts, so the two read as
+     one movement rather than the element sliding out from under its ink. */
+  --elev-hover: 5px 5px 0 var(--rule-ink);
 
   /* ── MOTION ──────────────────────────────────────────────────────────────
      Replaces 8 bespoke curves. Any transition written with these tokens
@@ -84,7 +92,7 @@
   --focus-ring-width: 2px;
   --focus-ring-color: var(--gold);
   --focus-ring-offset: 2px;
-  --focus-ring-halo: 0 0 0 4px rgba(200, 145, 58, .18);
+  --focus-ring-halo: 0 0 0 4px rgba(232, 64, 42, .22);
 
   /* ── SEMANTIC SURFACES & CONTENT ─────────────────────────────────────────
      Aliases over the existing palette. These exist so components stop
@@ -106,9 +114,14 @@
      would turn every "light text on an ink panel" into dark-on-dark. */
   --content-on-inverse: var(--on-inverse);
 
+  /* Two weights, and the difference is the whole "bold chrome, calm data"
+     split. --border-subtle/--border-default are hairlines for table rows,
+     form fields and dividers. --border-strong is the 2px ink outline that
+     makes a card, button or KPI tile look printed. Never reach for
+     --border-strong inside a long list. */
   --border-subtle: var(--border2);
   --border-default: var(--border);
-  --border-strong: var(--cream4);
+  --border-strong: var(--rule-ink);
 
   /* Status roles — always reach for these over the raw colour tokens so the
      amber=active / green=settled / red=error convention stays enforceable. */

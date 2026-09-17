@@ -26,7 +26,7 @@ describe('contrastRatio', () => {
 describe('makeColorResolver', () => {
   it('resolves var() chains, hex, rgba, and named colors from :root', () => {
     const resolve = makeColorResolver(cssVars);
-    expect(resolve('var(--cream)')).toEqual({ r: 0xf7, g: 0xf2, b: 0xe9, a: 1 });
+    expect(resolve('var(--cream)')).toEqual({ r: 0xfa, g: 0xf6, b: 0xec, a: 1 });
     expect(resolve('#fff')).toEqual({ r: 255, g: 255, b: 255, a: 1 });
     expect(resolve('rgba(255,255,255,.5)')).toEqual({ r: 255, g: 255, b: 255, a: 0.5 });
     expect(resolve('white')).toEqual({ r: 255, g: 255, b: 255, a: 1 });
@@ -94,11 +94,11 @@ describe('dark palette resolution', () => {
     const darkVars = parseDarkVars(css, darkCss);
     const resolve = makeColorResolver(darkVars);
     // Re-pointed by the dark block.
-    expect(resolve('var(--cream)')).toEqual({ r: 0x14, g: 0x11, b: 0x0d, a: 1 });
+    expect(resolve('var(--cream)')).toEqual({ r: 0x14, g: 0x12, b: 0x0f, a: 1 });
     // NOT re-pointed — must still resolve, inherited from the light :root.
     // If the overlay were replaced by a straight read of the dark block, these
     // would come back null and every check touching them would silently skip.
-    expect(resolve('var(--on-inverse)')).toEqual({ r: 0xf7, g: 0xf2, b: 0xe9, a: 1 });
+    expect(resolve('var(--on-inverse)')).toEqual({ r: 0xfa, g: 0xf6, b: 0xec, a: 1 });
     expect(resolve('var(--on-accent)')).toEqual({ r: 255, g: 255, b: 255, a: 1 });
   });
 
@@ -309,7 +309,7 @@ describe('contrast baseline', () => {
   // light one) but is indistinguishable from a sweep that silently resolves
   // nothing. Mutating a dark token must break it.
   it('the dark sweep actually reads the dark palette', () => {
-    const broken = darkCss.replace('--text3: #9d9382;', '--text3: #2a2620;');
+    const broken = darkCss.replace('--text3: #9A9182;', '--text3: #2a2620;');
     expect(broken, 'anchor moved — update this mutation').not.toBe(darkCss);
     const findings = findLowContrastText(html, paletteFor('dark', css, broken));
     expect(findings.length).toBeGreaterThan(50);

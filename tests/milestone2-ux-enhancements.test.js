@@ -185,7 +185,7 @@ describe('Milestone 2 UX Enhancements (Features 10–17)', () => {
       expect(kpiChange).not.toBeNull();
       expect(kpiChange[1]).toMatch(/font-family:\s*'DM Mono',\s*monospace/);
       expect(kpiChange[1]).toMatch(/font-feature-settings:\s*"tnum"\s*1/);
-      expect(kpiChange[1]).toMatch(/border-radius:\s*999px/);
+      expect(kpiChange[1]).toMatch(/border-radius:\s*var\(--r-pill\)/);
     });
   });
 
