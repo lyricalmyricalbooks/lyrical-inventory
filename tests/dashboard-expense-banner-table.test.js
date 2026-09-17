@@ -27,7 +27,7 @@ test('expense-owed rows share one padding rhythm and a row divider, not per-cell
 
   const dividerRule = styles.match(/\.metric-banner-table tbody tr\s*\{([\s\S]*?)\n\}/);
   expect(dividerRule).not.toBeNull();
-  expect(dividerRule[1]).toMatch(/border-top:\s*1px solid/);
+  expect(dividerRule[1]).toMatch(/border-top:\s*var\(--stroke-hair\) solid/);
 
   const hoverRule = styles.match(/\.metric-banner-table tbody tr:hover td\s*\{([\s\S]*?)\n\}/);
   expect(hoverRule).not.toBeNull();
@@ -44,7 +44,7 @@ test('expense-owed rows share one padding rhythm and a row divider, not per-cell
 test('the category tag reuses one themed pill class instead of a hand-rolled inline badge', () => {
   const rule = styles.match(/\.metric-banner-cat\s*\{([\s\S]*?)\n\}/);
   expect(rule).not.toBeNull();
-  expect(rule[1]).toMatch(/border-radius:\s*99px/);
+  expect(rule[1]).toMatch(/border-radius:\s*var\(--r-pill\)/);
 
   const rowTemplate = mainJs.match(/\$\('d-exp-body'\)\.innerHTML = unreceivedExp\.map\(e => `([\s\S]*?)`\)\.join/);
   expect(rowTemplate[1]).toContain('class="metric-banner-cat"');

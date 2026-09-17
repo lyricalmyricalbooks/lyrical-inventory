@@ -17,7 +17,7 @@ test('invoice store-details preview reads as a filled card, not a translucent-wh
   // Themed surface tokens, not the dark-backdrop-only translucent white that
   // made the panel invisible on the modal's cream surface.
   expect(previewRule[1]).toMatch(/background:\s*var\(--surface-sunken\);/);
-  expect(previewRule[1]).toMatch(/border:\s*1px solid var\(--border-default\);/);
+  expect(previewRule[1]).toMatch(/border:\s*var\(--stroke-hair\) solid var\(--border-default\);/);
   expect(previewRule[1]).not.toMatch(/rgba\(255,\s*255,\s*255/);
 
   // Each field label steps down to a muted micro-label so the block reads as

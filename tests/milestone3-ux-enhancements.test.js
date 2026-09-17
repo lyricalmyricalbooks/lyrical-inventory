@@ -13,7 +13,7 @@ describe('Milestone 3 UX Enhancements (Features 18–25)', () => {
     it('implements dedicated class .pqr-override-card with canonical sunken surface and gold line', () => {
       expect(html).toContain('class="pqr-override-card"');
       expect(css).toMatch(/\.pqr-override-card\s*\{[^}]*background:\s*var\(--surface-sunken\)/);
-      expect(css).toMatch(/\.pqr-override-card\s*\{[^}]*border:\s*1px solid var\(--gold-line\)/);
+      expect(css).toMatch(/\.pqr-override-card\s*\{[^}]*border:\s*var\(--stroke-hair\) solid var\(--gold-line\)/);
     });
 
     it('enforces >= 44px touch targets on override controls and copy payment links', () => {
@@ -75,7 +75,7 @@ describe('Milestone 3 UX Enhancements (Features 18–25)', () => {
 
     it('styles "How to use" guide with canonical sunken surface and gold border', () => {
       expect(css).toMatch(/\.author-qr-guide\s*\{[^}]*background:\s*var\(--surface-sunken\)/);
-      expect(css).toMatch(/\.author-qr-guide\s*\{[^}]*border:\s*1px solid var\(--gold-line\)/);
+      expect(css).toMatch(/\.author-qr-guide\s*\{[^}]*border:\s*var\(--stroke-hair\) solid var\(--gold-line\)/);
     });
   });
 
@@ -112,7 +112,7 @@ describe('Milestone 3 UX Enhancements (Features 18–25)', () => {
 
     it('upgrades .catalog-card to canonical var(--surface-raised) token', () => {
       expect(css).toMatch(/\.catalog-card\s*\{[^}]*background:\s*var\(--surface-raised\)/);
-      expect(css).toMatch(/\.catalog-card\s*\{[^}]*border:\s*1px solid var\(--border-default\)/);
+      expect(css).toMatch(/\.catalog-card\s*\{[^}]*border:\s*var\(--stroke-hair\) solid var\(--border-default\)/);
     });
   });
 
@@ -151,7 +151,7 @@ describe('Milestone 3 UX Enhancements (Features 18–25)', () => {
     it('styles transfer preview box with canonical surface sunken and gold border', () => {
       expect(html).toContain('id="st-preview" class="st-preview-box"');
       expect(css).toMatch(/\.st-preview-box\s*\{[^}]*background:\s*var\(--surface-sunken\)/);
-      expect(css).toMatch(/\.st-preview-box\s*\{[^}]*border:\s*1px solid var\(--gold-line\)/);
+      expect(css).toMatch(/\.st-preview-box\s*\{[^}]*border:\s*var\(--stroke-hair\) solid var\(--gold-line\)/);
     });
   });
 

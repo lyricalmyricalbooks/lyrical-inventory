@@ -48,7 +48,7 @@ test('store card spacing comes off the shared scale, not ad-hoc px', () => {
   const rawLengths = storeBlock
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/inset 3px 0 0/g, '')
-    .replace(/\b1px solid\b/g, '')
+    .replace(/(?:1px|var\(--stroke-hair\)) solid/g, '')
     .match(/\b\d+(\.\d+)?(px|rem|em)\b/g);
   expect(rawLengths).toBeNull();
 });

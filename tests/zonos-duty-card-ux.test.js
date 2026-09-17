@@ -32,7 +32,7 @@ describe('US Zonos Duty Prepayment Card UX/UI Compliance', () => {
     const block = styleCss.slice(styleCss.indexOf('.us-zonos-duty-card {'), styleCss.indexOf('@container us-zonos'));
     expect(block).not.toMatch(/oklch\(/);
 
-    expect(styleCss).toMatch(/\.us-zonos-duty-card\s*\{[^}]*border:\s*1px solid var\(--gold-line\);/);
+    expect(styleCss).toMatch(/\.us-zonos-duty-card\s*\{[^}]*border:\s*var\(--stroke-hair\) solid var\(--gold-line\);/);
     expect(styleCss).toMatch(/\.us-zonos-duty-card:hover\s*\{[^}]*border-color:\s*var\(--gold\);/);
     expect(styleCss).toMatch(/\.us-zonos-input:focus\s*\{[^}]*box-shadow:\s*var\(--focus-ring-halo\);/);
     expect(styleCss).toMatch(/\.us-zonos-hint\.is-valid\s*\{[^}]*color:\s*var\(--status-positive\);/);

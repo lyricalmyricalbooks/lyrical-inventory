@@ -34,7 +34,7 @@ test('.tc-vault-view-btn.active carries a real raised look, shared with the trip
 
   // The track needs a visible background/border so the two states have a rail to sit on.
   expect(trackRule[1]).toMatch(/background:\s*var\(--cream2/);
-  expect(trackRule[1]).toMatch(/border:\s*1px solid var\(--gold-line/);
+  expect(trackRule[1]).toMatch(/border:\s*var\(--stroke-hair\) solid var\(--gold-line/);
 
   // The active tab has to actually look different from the resting one.
   expect(activeRule[1]).toMatch(/background:\s*var\(--surface-card\)/);
