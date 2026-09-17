@@ -17,7 +17,7 @@ import { fmt } from '../src/lib/money.js';
 
 function makeHarness({ data, cur = 'CA$' } = {}) {
   return buildHarness({
-    names: ['CHANNEL_COLORS', '_CHAN_FALLBACK', 'channelColor', 'chanLabel', 'renderChannelAnalytics'],
+    names: ['CHANNEL_COLORS', 'CHAN_OTHER', 'channelColor', 'chanLabel', 'renderChannelAnalytics'],
     deps: {
       $: (id) => document.getElementById(id),
       escapeHtml,
