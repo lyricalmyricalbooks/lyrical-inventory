@@ -726,6 +726,8 @@ export const DOCUMENT_BUILDERS = new Set([
   '_fkOpenQrPrintWindow',         // the QR sheet's print window while it loads
   'renderOpenCall',               // fixed-dark diagnostics console
   'sendNextCampaignEmail',        // fixed-dark send log
+  'buildStandaloneInvoiceHTML',   // downloaded/printed invoice — its own document, no :root
+  'buildInvoiceJsPdf',            // off-screen holder rasterised into the invoice PDF
 ]);
 
 /** Nearest preceding top-level declaration name, for attributing a fragment. */

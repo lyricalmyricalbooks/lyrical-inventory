@@ -266,8 +266,14 @@ describe('rendered HTML carries no theme-blind dark text', () => {
   });
 
   it('keeps the allowlist to real document and console builders', () => {
-    // If this grows, something is being excused rather than fixed.
-    expect(DOCUMENT_BUILDERS.size).toBeLessThanOrEqual(14);
+    // If this grows, something is being excused rather than fixed. Raised from
+    // 14 to 15 for the two invoice builders: the Riso colour sweep tokenised
+    // their backgrounds, which broke them in opposite ways — the standalone
+    // download writes its own document with no :root, so the token resolved to
+    // nothing, while the PDF holder sits in the app page and resolved to the
+    // DARK card, baking a dark ground into a printed invoice. Both are real
+    // documents, which is what this list is for.
+    expect(DOCUMENT_BUILDERS.size).toBeLessThanOrEqual(15);
     expect(DOCUMENT_BUILDERS.has('buildInvoiceEmailHTML')).toBe(true);
   });
 });

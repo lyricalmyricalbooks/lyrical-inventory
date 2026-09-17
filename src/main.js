@@ -11563,12 +11563,12 @@ function buildStandaloneInvoiceHTML(inv) {
     *{box-sizing:border-box;}
     html,body{margin:0;padding:0;}
     body{background:#f0ece4;padding:40px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;}
-    .invoice-paper{background:#fff;}
+    .invoice-paper{background:#fff;} /* token-ok: standalone document, no :root loaded */
     ${collectInvoicePaperCss()}
     .invoice-paper .inv-pay{display:flex !important;}
     @page{margin:0.4in !important;}
     @media print{
-      html,body{background:#fff !important;margin:0 !important;padding:0 !important;}
+      html,body{background:#fff !important;margin:0 !important;padding:0 !important;} /* token-ok: standalone document */
       body{padding:0 !important;}
       .invoice-paper{
         box-shadow:none !important;
@@ -11706,7 +11706,7 @@ async function buildInvoiceJsPdf(bodyInner) {
 
   const holder = document.createElement('div');
   holder.setAttribute('aria-hidden', 'true');
-  holder.style.cssText = 'position:fixed;left:-9999px;top:0;width:780px;background:#fff;';
+  holder.style.cssText = 'position:fixed;left:-9999px;top:0;width:780px;background:#fff;'; /* token-ok: rasterised into a printed PDF — must not follow the theme */
   holder.innerHTML = `<div class="invoice-paper" style="box-shadow:none;border-radius:0;max-width:none;">${bodyInner}</div>`;
   document.body.appendChild(holder);
   try {
@@ -13322,9 +13322,9 @@ function renderMockSpreadsheet() {
 
       if (c === 11) {
         if (/VOID|CANCEL/i.test(String(val))) {
-          style += ` color:#ef4444; font-weight:bold;`;
+          style += ` color:var(--rose); font-weight:bold;`;
         } else if (/OK/i.test(String(val))) {
-          style += ` color:#10b981;`;
+          style += ` color:var(--emerald);`;
         }
       }
 
@@ -13334,8 +13334,8 @@ function renderMockSpreadsheet() {
 
       if (c === 3) {
         if (val === 'Shipment') style += ` color:#3b82f6;`;
-        else if (val === 'Sale' || val === 'Order') style += ` color:#10b981;`;
-        else if (val === 'Return') style += ` color:#f59e0b;`;
+        else if (val === 'Sale' || val === 'Order') style += ` color:var(--emerald);`;
+        else if (val === 'Return') style += ` color:var(--orange);`;
       }
 
       cellsHtml += `<td style="${style}">${escapeHtml(String(val))}</td>`;

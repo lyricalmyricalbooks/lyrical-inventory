@@ -12,8 +12,8 @@
   "limits": {
     "raw-hex": 140,
     "raw-zindex": 40,
-    "raw-font-size": 372,
-    "raw-easing": 83,
+    "raw-font-size": 99,
+    "raw-easing": 0,
     "raw-shadow": 12
   }
 }

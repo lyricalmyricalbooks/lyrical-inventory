@@ -340,7 +340,7 @@ function renderOcBulkModalContent(retryMode = false) {
         <div style="width:100%;background:rgba(255,255,255,0.06);height:8px;border-radius:var(--r);overflow:hidden;border:var(--stroke-hair) solid var(--border);">
           <div id="oc-bulk-progress-fill" style="width:0%;background:linear-gradient(90deg, var(--gold), var(--gold2));height:100%;transition:width 0.3s ease;"></div>
         </div>
-        <div id="oc-bulk-console" style="font-family:var(--font-mono);font-size:11px;background:#111;color:#a9ffaf;padding:10px;border-radius:var(--r);max-height:120px;overflow-y:auto;margin-top:10px;border:var(--stroke-hair) solid #2a2a2a;line-height:1.5;"></div>
+        <div id="oc-bulk-console" style="font-family:var(--font-mono);font-size:11px;background:var(--ink);color:#a9ffaf;padding:10px;border-radius:var(--r);max-height:120px;overflow-y:auto;margin-top:10px;border:var(--stroke-hair) solid #2a2a2a;line-height:1.5;"></div>
       </div>
       
       <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;" id="oc-bulk-actions">

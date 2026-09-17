@@ -485,7 +485,7 @@ function printShippingLabel() {
   const styles = `
     @page { margin: 0; size: 4in 6in; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { background: #fff; color: #111; }
+    html, body { background:var(--surface-card); color:var(--text); }
     body {
       font-family:var(--font-ui);
       -webkit-font-smoothing: antialiased;
@@ -494,13 +494,13 @@ function printShippingLabel() {
     .label {
       width: 4in; height: 6in;
       display: flex; flex-direction: column;
-      color: #111;
+      color:var(--text);
     }
 
     .kicker {
       font-size: 7pt; font-weight: 800;
       letter-spacing: .22em; text-transform: uppercase;
-      color: #111; margin-bottom: 8px;
+      color:var(--text); margin-bottom: 8px;
       padding-bottom: 4px;
       border-bottom: 1.5px solid #111;
     }
@@ -514,7 +514,7 @@ function printShippingLabel() {
       letter-spacing: -.01em; line-height: 1.1;
       margin-bottom: 8px;
     }
-    .to-lines { font-size: 12pt; line-height: 1.38; color: #111; }
+    .to-lines { font-size: 12pt; line-height: 1.38; color:var(--text); }
     .to-country {
       margin-top: 8px;
       font-size: 13pt; font-weight: 800;
@@ -8392,7 +8392,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
       if (isSuggested) {
         const suggestedItem = suggested[0];
         linkBtn = `
-          <button class="btn sm" onclick="confirmSuggestedShippoLink('${escapeHtml(o.num)}', '${escapeHtml(postageExpenseKey(suggestedItem))}')" style="font-size:10px; padding:3px 8px; background:var(--shipping-pnl-success); border-color:var(--shipping-pnl-success); color:#fff;">
+          <button class="btn sm" onclick="confirmSuggestedShippoLink('${escapeHtml(o.num)}', '${escapeHtml(postageExpenseKey(suggestedItem))}')" style="font-size:10px; padding:3px 8px; background:var(--shipping-pnl-success); border-color:var(--shipping-pnl-success); color:var(--on-accent);">
             Confirm Match
           </button>`;
       }
