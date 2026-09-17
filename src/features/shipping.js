@@ -247,7 +247,7 @@ function renderOrderShippingSummary(order) {
   }
   const declId = order.declarationId || order.zonosDeclarationId || '';
   if (declId) {
-    parts.push(`<span class="zonos-decl-tag" style="font-family:var(--font-mono);font-size:11px;color:var(--green);background:rgba(46,125,50,0.08);padding:2px 6px;border-radius:4px;border:1px solid rgba(46,125,50,0.2);display:inline-flex;align-items:center;gap:4px;">Decl ID: <strong>${escapeHtml(declId)}</strong> <button type="button" onclick="navigator.clipboard.writeText('${escapeHtml(declId)}');showToast('✓ Copied Declaration ID');" style="background:none;border:none;cursor:pointer;padding:0 2px;font-size:11px;" title="Copy Declaration ID">📋</button></span>`);
+    parts.push(`<span class="zonos-decl-tag" style="font-family:var(--font-mono);font-size:11px;color:var(--green);background:rgba(46,125,50,0.08);padding:2px 6px;border-radius:var(--r);border:var(--stroke-hair) solid rgba(46,125,50,0.2);display:inline-flex;align-items:center;gap:4px;">Decl ID: <strong>${escapeHtml(declId)}</strong> <button type="button" onclick="navigator.clipboard.writeText('${escapeHtml(declId)}');showToast('✓ Copied Declaration ID');" style="background:none;border:none;cursor:pointer;padding:0 2px;font-size:11px;" title="Copy Declaration ID">📋</button></span>`);
   }
   return parts.length ? `<span class="subtext-mute">${parts.join(' · ')}</span>` : '';
 }
@@ -523,7 +523,7 @@ function printShippingLabel() {
 
     .from {
       padding: 0.18in 0.3in 0.28in;
-      border-top: 1px solid #111;
+      border-top:var(--stroke-hair) solid #111;
     }
     .from .kicker { border-bottom: none; padding-bottom: 0; margin-bottom: 4px; color: #666; }
     .from-lines { font-size: 8.5pt; line-height: 1.45; color: #444; }
@@ -3346,7 +3346,7 @@ function renderSaveBookPresetPreview() {
     : '';
 
   preview.innerHTML = `
-    <div class="sbp-spec-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;background:var(--surface-card);border:1px solid var(--border);border-radius:var(--r2);padding:10px 12px;">
+    <div class="sbp-spec-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;background:var(--surface-card);border:var(--stroke-hair) solid var(--border);border-radius:var(--r2);padding:10px 12px;">
       <div class="sbp-spec-item" style="display:flex;flex-direction:column;gap:2px;">
         <label style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">Dimensions (Per Copy)</label>
         <span style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--text);">${length} × ${width} × ${formattedHeight} ${dimUnit}</span>
@@ -3367,7 +3367,7 @@ function renderSaveBookPresetPreview() {
         <label style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">Default Incoterm</label>
         <span style="font-size:12px;font-weight:600;color:var(--text);">${escapeHtml(incoterm || 'Auto')}</span>
       </div>
-      <div class="sbp-spec-item" style="grid-column:1 / -1;display:flex;flex-direction:column;gap:2px;border-top:1px solid rgba(255,255,255,0.06);padding-top:6px;margin-top:2px;">
+      <div class="sbp-spec-item" style="grid-column:1 / -1;display:flex;flex-direction:column;gap:2px;border-top:var(--stroke-hair) solid rgba(255,255,255,0.06);padding-top:6px;margin-top:2px;">
         <label style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">Customs Description</label>
         <span style="font-size:12px;color:var(--text2);font-weight:500;">${escapeHtml(customsDesc || 'Printed books')}</span>
       </div>
@@ -3752,7 +3752,7 @@ function renderTrackingAuditResult(out, verdicts, summary) {
         : 'color:var(--text3);';
     const mark = v.status === 'missing' ? '✕' : v.status === 'verified' ? '✓' : '—';
     return `
-      <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;padding:5px 0;border-top:1px solid var(--border-subtle,var(--border));">
+      <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;padding:5px 0;border-top:var(--stroke-hair) solid var(--border-subtle,var(--border));">
         <span style="${tone}font-weight:700;">${mark}</span>
         <span class="tnum" style="font-family:var(--font-mono);font-size:11px;">${escapeHtml(v.pin)}</span>
         ${v.orderNum ? `<span style="font-size:11px;color:var(--text3);">${escapeHtml(v.orderNum)}</span>` : ''}
@@ -4450,7 +4450,7 @@ function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, isDisable
   const isUsBound = String(stCountryCode || '').toUpperCase() === 'US';
 
   const retailNote = usedRetailFallback ? `
-    <div class="cp-rate-note" style="margin-bottom:12px;padding:10px 14px;background:var(--surface-sunken);border:1px solid var(--border);border-radius:var(--r);font-size:12px;color:var(--text2);line-height:1.5;">
+    <div class="cp-rate-note" style="margin-bottom:12px;padding:10px 14px;background:var(--surface-sunken);border:var(--stroke-hair) solid var(--border);border-radius:var(--r);font-size:12px;color:var(--text2);line-height:1.5;">
       <div style="display:flex;align-items:center;gap:6px;font-weight:700;color:var(--text);margin-bottom:2px;">
         <span>🛒</span>
         <span>Showing Canada Post Published Retail (Counter) Rates</span>
@@ -4571,7 +4571,7 @@ function showArchivedCanadaPostLabels() {
   }
 
   const rows = labels.map(l => `
-    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--border-subtle,var(--border));">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;border-top:var(--stroke-hair) solid var(--border-subtle,var(--border));">
       <span class="tnum" style="font-family:var(--font-mono);font-size:11px;">${escapeHtml(l.trackingPin || l.pin)}</span>
       ${l.orderNum ? `<span style="font-size:11px;color:var(--text3);">${escapeHtml(l.orderNum)}</span>` : ''}
       ${l.destinationName ? `<span style="font-size:11px;color:var(--text3);">→ ${escapeHtml(l.destinationName)}${l.destinationCountry ? ` (${escapeHtml(l.destinationCountry)})` : ''}</span>` : ''}
@@ -4648,7 +4648,7 @@ async function showCanadaPostLabelModal(shipmentContext) {
         </div>
         <div class="cp-label-modal-body">
           <div id="cp-label-preview-container" class="cp-label-preview-container">
-            <div class="skeleton-line" style="height:420px;border-radius:6px;"></div>
+            <div class="skeleton-line" style="height:420px;border-radius:var(--r);"></div>
           </div>
         </div>
         <div class="cp-label-modal-footer">
@@ -5248,7 +5248,7 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
         labelPanel.innerHTML = `
           <div class="cp-purchased-panel"${isSim ? ' style="border-color:var(--amber,var(--border));"' : ''}>
             ${isSim ? `
-              <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;padding:10px 14px;background:var(--surface-card);border:1px solid var(--amber,var(--border));border-radius:var(--r);">
+              <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;padding:10px 14px;background:var(--surface-card);border:var(--stroke-hair) solid var(--amber,var(--border));border-radius:var(--r);">
                 <span style="font-size:18px;line-height:1.1;" aria-hidden="true">🧪</span>
                 <div style="font-size:11px;color:var(--text3);line-height:1.5;">
                   <strong style="font-size:12px;color:var(--text);">This was a test run — nothing was bought and nothing was charged.</strong><br>
@@ -5281,7 +5281,7 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
               </div>
             </div>
             ${result.manifestRequired && !isSim ? `
-              <div style="margin-top:12px;padding:12px 14px;background:var(--surface-card);border:1px solid var(--amber,var(--border));border-radius:var(--r);display:flex;align-items:flex-start;gap:10px;">
+              <div style="margin-top:12px;padding:12px 14px;background:var(--surface-card);border:var(--stroke-hair) solid var(--amber,var(--border));border-radius:var(--r);display:flex;align-items:flex-start;gap:10px;">
                 <span style="font-size:18px;line-height:1.1;" aria-hidden="true">📋</span>
                 <div style="font-size:11px;color:var(--text3);line-height:1.5;">
                   ${result.manifestSignal === 'unknown' ? `
@@ -5297,14 +5297,14 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
               </div>
             ` : ''}
             ${declarationId && isSim ? `
-              <div style="margin-top:12px;padding:10px 14px;background:var(--surface-card);border:1px solid var(--border);border-radius:var(--r);font-size:11px;color:var(--text3);line-height:1.5;">
+              <div style="margin-top:12px;padding:10px 14px;background:var(--surface-card);border:var(--stroke-hair) solid var(--border);border-radius:var(--r);font-size:11px;color:var(--text3);line-height:1.5;">
                 <strong style="font-size:12px;color:var(--text);">Practice run — nothing was linked.</strong><br>
                 Declaration <span class="tnum" style="font-weight:700;">${escapeHtml(declarationId)}</span> was not
                 spent and no real parcel exists. Do not take this to the counter.
               </div>
             ` : ''}
             ${declarationId && !isSim ? `
-              <div style="margin-top:12px;padding:14px;background:var(--surface-card);border:1px solid var(--green);border-radius:var(--r);">
+              <div style="margin-top:12px;padding:14px;background:var(--surface-card);border:var(--stroke-hair) solid var(--green);border-radius:var(--r);">
                 <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
                   <span style="font-size:18px;" aria-hidden="true">🇺🇸</span>
                   <strong style="font-size:13px;color:var(--green);">U.S. duty is prepaid and attached to this parcel</strong>
@@ -5328,7 +5328,7 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
                   `}
                 </div>
 
-                <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text3);line-height:1.6;">
+                <div style="margin-top:10px;padding-top:10px;border-top:var(--stroke-hair) solid var(--border);font-size:11px;color:var(--text3);line-height:1.6;">
                   <strong style="color:var(--text);font-size:12px;">Before the counter:</strong>
                   <div style="margin-top:4px;">1. Print this label and tape it to the parcel.</div>
                   ${result.manifestRequired ? `
@@ -5339,7 +5339,7 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
                   `}
                 </div>
 
-                <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text3);line-height:1.6;">
+                <div style="margin-top:10px;padding-top:10px;border-top:var(--stroke-hair) solid var(--border);font-size:11px;color:var(--text3);line-height:1.6;">
                   <strong style="color:var(--text);font-size:12px;">Want it confirmed by Zonos?</strong>
                   Open your Prepay order history — <span class="tnum" style="font-weight:700;">${escapeHtml(result.trackingPin || 'the tracking number')}</span>
                   should now be showing beside declaration <span class="tnum" style="font-weight:700;">${escapeHtml(declarationId)}</span>.
@@ -5357,7 +5357,7 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
               </div>
             ` : ''}
             ${result.declarationSignal === 'missing' && !isSim ? `
-              <div style="margin-top:12px;padding:12px 14px;background:var(--surface-card);border:1px solid var(--red,var(--border));border-radius:var(--r);display:flex;align-items:flex-start;gap:10px;">
+              <div style="margin-top:12px;padding:12px 14px;background:var(--surface-card);border:var(--stroke-hair) solid var(--red,var(--border));border-radius:var(--r);display:flex;align-items:flex-start;gap:10px;">
                 <span style="font-size:18px;line-height:1.1;" aria-hidden="true">🇺🇸</span>
                 <div style="font-size:11px;color:var(--text3);line-height:1.5;">
                   <strong style="font-size:12px;color:var(--text);">This U.S. parcel has no duty declaration, so the duty is not paid.</strong><br>
@@ -7567,7 +7567,7 @@ function buildShippingPnLHtml(allOrders, relevantExpenses, shippoExpenses, bookF
           </div>
           <div style="display:flex; flex-direction:column; align-items:flex-end; gap:8px;">
             <div style="display:flex; align-items:center; gap:8px;">
-              <button class="btn sm gold" id="ship-bc-sync-btn" onclick="triggerBigCartelShippingSync()" style="height:38px; padding:0 16px; display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; border-radius:99px; border:1px solid rgba(232, 64, 42,0.3); background:var(--gold-bg); color:var(--gold-text); cursor:pointer; transition:all 0.2s;">
+              <button class="btn sm gold" id="ship-bc-sync-btn" onclick="triggerBigCartelShippingSync()" style="height:38px; padding:0 16px; display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; border-radius:var(--r-pill); border:var(--stroke-hair) solid rgba(232, 64, 42,0.3); background:var(--gold-bg); color:var(--gold-text); cursor:pointer; transition:all 0.2s;">
                 <span>🔄</span> Sync Big Cartel Shipping
               </button>
               <a class="shipping-pnl-action" href="#shipping-pnl-ledger">Review reconciliation</a>
@@ -8492,7 +8492,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
     }
 
     paginationHtml = `
-      <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-top:1px solid var(--border); font-size:12px; color:var(--text3); flex-wrap:wrap; gap:12px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-top:var(--stroke-hair) solid var(--border); font-size:12px; color:var(--text3); flex-wrap:wrap; gap:12px;">
         <div>Showing ${startIndex + 1} - ${endIndex} of ${totalOrders} orders</div>
         <div style="display:flex; gap:4px; align-items:center;">
           <button class="btn sm" onclick="changeShipAnalysisPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>Prev</button>
@@ -8506,11 +8506,11 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
   const ledgerTableHtml = ledgerRowsHtml
     ? `
       <div class="shipping-pnl-table-wrap">
-        <div id="ship-analysis-batch-actions" style="display:none; padding:8px 12px; background:var(--card-bg); border-bottom:1px solid var(--border); align-items:center; justify-content:space-between; gap:12px;">
+        <div id="ship-analysis-batch-actions" style="display:none; padding:8px 12px; background:var(--card-bg); border-bottom:var(--stroke-hair) solid var(--border); align-items:center; justify-content:space-between; gap:12px;">
           <span style="font-size:12px; font-weight:600; color:var(--text);"><span id="ship-analysis-batch-count">0</span> orders selected</span>
           <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
             <button class="btn sm" id="ship-analysis-batch-verify" onclick="batchVerifyLedgerAddresses()" title="Check every selected address with Shippo">⌖ Verify addresses</button>
-            <button class="btn sm ghost" onclick="batchDismissShippingAnalysisOrders()" style="color:var(--text3); border:1px solid var(--border);">✕ Dismiss Selected</button>
+            <button class="btn sm ghost" onclick="batchDismissShippingAnalysisOrders()" style="color:var(--text3); border:var(--stroke-hair) solid var(--border);">✕ Dismiss Selected</button>
           </div>
         </div>
         <table class="shipping-pnl-ledger-table">
@@ -8571,7 +8571,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
         <div class="shipping-active-filters-badges">
           ${filterBadges}
         </div>
-        <button class="btn sm ghost" onclick="clearAllShipAnalysisFilters()" style="color:var(--red); font-size:11px; padding:2px 8px; border:1px solid var(--red); border-radius:var(--r2); background:transparent; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px; margin-left:auto;">
+        <button class="btn sm ghost" onclick="clearAllShipAnalysisFilters()" style="color:var(--red); font-size:11px; padding:2px 8px; border:var(--stroke-hair) solid var(--red); border-radius:var(--r2); background:transparent; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px; margin-left:auto;">
           ✕ Clear All
         </button>
       </div>
@@ -8611,14 +8611,14 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
     const recoAddon = data.recoAddon;
 
     let statusBadgeHtml = '';
-    let borderStyle = 'border: 1px solid var(--border);';
+    let borderStyle = 'border:var(--stroke-hair) solid var(--border);';
     if (data.N === 0) {
-      statusBadgeHtml = `<span style="background:rgba(107,102,94,0.08); color:var(--text3); font-size:10px; font-weight:700; padding:2px 8px; border-radius:99px; border:1px solid rgba(107,102,94,0.15);">Default</span>`;
+      statusBadgeHtml = `<span style="background:rgba(107,102,94,0.08); color:var(--text3); font-size:10px; font-weight:700; padding:2px 8px; border-radius:var(--r-pill); border:var(--stroke-hair) solid rgba(107,102,94,0.15);">Default</span>`;
     } else if (currentBase < recoBase) {
-      statusBadgeHtml = `<span style="background:rgba(201,75,50,0.08); color:var(--red); font-size:10px; font-weight:700; padding:2px 8px; border-radius:99px; border:1px solid rgba(201,75,50,0.15);">⚠️ Undercharged</span>`;
-      borderStyle = 'border: 1px solid rgba(201,75,50,0.3); box-shadow: 0 4px 15px rgba(201,75,50,0.04);';
+      statusBadgeHtml = `<span style="background:rgba(201,75,50,0.08); color:var(--red); font-size:10px; font-weight:700; padding:2px 8px; border-radius:var(--r-pill); border:var(--stroke-hair) solid rgba(201,75,50,0.15);">⚠️ Undercharged</span>`;
+      borderStyle = 'border:var(--stroke-hair) solid rgba(201,75,50,0.3); box-shadow:var(--elev-3);';
     } else {
-      statusBadgeHtml = `<span style="background:rgba(29,122,74,0.08); color:var(--green); font-size:10px; font-weight:700; padding:2px 8px; border-radius:99px; border:1px solid rgba(29,122,74,0.15);">✓ Optimized</span>`;
+      statusBadgeHtml = `<span style="background:rgba(29,122,74,0.08); color:var(--green); font-size:10px; font-weight:700; padding:2px 8px; border-radius:var(--r-pill); border:var(--stroke-hair) solid rgba(29,122,74,0.15);">✓ Optimized</span>`;
     }
 
     const confidenceColor = data.confidence === 'High' ? '#1d7a4a' : data.confidence === 'Medium' ? 'var(--gold-text)' : '#6b665e';
@@ -8635,7 +8635,7 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
             ${statusBadgeHtml}
           </div>
 
-          <div style="background:var(--surface-card); border:1px solid var(--border); border-radius:var(--r); padding:10px 12px; margin-bottom:14px; box-shadow:inset 0 1px 3px rgba(0,0,0,0.02);">
+          <div style="background:var(--surface-card); border:var(--stroke-hair) solid var(--border); border-radius:var(--r); padding:10px 12px; margin-bottom:14px; box-shadow:inset 0 1px 3px rgba(0,0,0,0.02);">
             <label style="font-size:9px; font-weight:700; letter-spacing: 0.05em; text-transform:uppercase; color:var(--text3); display:block; margin-bottom:4px;">Recommended Rate</label>
             <div style="display:flex; justify-content:space-between; align-items:baseline;">
               <span style="font-size:18px; font-weight:800; color:var(--gold-text);">$${recoBase.toFixed(2)} <span style="font-size:10px; font-weight:400; color:var(--text3);">base</span></span>
@@ -8644,15 +8644,15 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
           </div>
 
           <div style="font-size:11px; color:var(--text3); margin-bottom:16px; line-height:1.7;">
-            <div style="display:flex; justify-content:space-between; border-bottom:1px dashed rgba(0,0,0,0.04); padding-bottom:3px;">
+            <div style="display:flex; justify-content:space-between; border-bottom:var(--stroke-hair) dashed rgba(0,0,0,0.04); padding-bottom:3px;">
               <span>Confidence:</span>
               <span style="font-weight:700; color:${confidenceColor};">${data.confidence}</span>
             </div>
-            <div style="display:flex; justify-content:space-between; border-bottom:1px dashed rgba(0,0,0,0.04); padding-bottom:3px; margin-top:3px;">
+            <div style="display:flex; justify-content:space-between; border-bottom:var(--stroke-hair) dashed rgba(0,0,0,0.04); padding-bottom:3px; margin-top:3px;">
               <span>Historical labels:</span>
               <strong style="color:var(--text);">${data.N}</strong>
             </div>
-            <div style="display:flex; justify-content:space-between; border-bottom:1px dashed rgba(0,0,0,0.04); padding-bottom:3px; margin-top:3px;">
+            <div style="display:flex; justify-content:space-between; border-bottom:var(--stroke-hair) dashed rgba(0,0,0,0.04); padding-bottom:3px; margin-top:3px;">
               <span>Avg postage cost:</span>
               <strong style="color:var(--text);">${avgCostStr}</strong>
             </div>
@@ -8663,24 +8663,24 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
           </div>
         </div>
 
-        <div style="border-top:1px solid var(--border); padding-top:12px; margin-top:auto;">
+        <div style="border-top:var(--stroke-hair) solid var(--border); padding-top:12px; margin-top:auto;">
           <label style="font-size:9px; font-weight:700; letter-spacing: 0.05em; text-transform:uppercase; color:var(--text3); display:block; margin-bottom:8px;">Current Store Setup</label>
           <div style="display:flex; gap:6px; align-items:center; margin-bottom:10px;">
             <div style="flex:1;">
               <span style="font-size:9px; color:var(--text2); display:block; margin-bottom:2px;">Base ($)</span>
               <input type="number" step="0.50" min="0" value="${currentBase.toFixed(2)}" 
                 onblur="updateManualShippingRates('${meta.key}', 'base', this.value)"
-                style="width:100%; padding:6px 8px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); text-align:right; font-family:var(--font-mono); outline:none;" />
+                style="width:100%; padding:6px 8px; font-size:12px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); text-align:right; font-family:var(--font-mono); outline:none;" />
             </div>
             <div style="flex:1;">
               <span style="font-size:9px; color:var(--text2); display:block; margin-bottom:2px;">Add-on ($)</span>
               <input type="number" step="0.50" min="0" value="${currentAddon.toFixed(2)}" 
                 onblur="updateManualShippingRates('${meta.key}', 'addon', this.value)"
-                style="width:100%; padding:6px 8px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); text-align:right; font-family:var(--font-mono); outline:none;" />
+                style="width:100%; padding:6px 8px; font-size:12px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); text-align:right; font-family:var(--font-mono); outline:none;" />
             </div>
           </div>
           <button class="btn sm ghost" onclick="applySmartShippingRates('${meta.key}', ${recoBase}, ${recoAddon})" 
-            style="width:100%; font-size:10px; padding:4px; border-radius:var(--r); text-align:center; font-weight:600; display:flex; align-items:center; justify-content:center; gap:4px; height:28px; border:1px dashed var(--border); cursor:pointer;">
+            style="width:100%; font-size:10px; padding:4px; border-radius:var(--r); text-align:center; font-weight:600; display:flex; align-items:center; justify-content:center; gap:4px; height:28px; border:var(--stroke-hair) dashed var(--border); cursor:pointer;">
             ⚡ Apply Recommended
           </button>
         </div>
@@ -8714,7 +8714,7 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
   }
 
   const sandboxHtml = `
-    <section class="shipping-reco-container" style="background:var(--cream2); border:1px solid var(--border); border-radius:var(--r3); padding:20px; margin:0 20px 20px 20px; box-shadow:0 4px 15px rgba(0,0,0,0.02);">
+    <section class="shipping-reco-container" style="background:var(--cream2); border:var(--stroke-hair) solid var(--border); border-radius:var(--r3); padding:20px; margin:0 20px 20px 20px; box-shadow:var(--elev-3);">
       <h3 style="font-family:var(--font-ui); font-size:18px; color:var(--text); margin:0 0 6px; font-weight:700;">
         🧪 Live Rate Simulation Sandbox
       </h3>
@@ -8727,7 +8727,7 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
         <div style="display:flex; flex-direction:column; gap:12px;">
           <div class="form-group" style="margin:0;">
             <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">Select Book</label>
-            <select id="sim-book-select" onchange="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; font-weight:600; cursor:pointer;">
+            <select id="sim-book-select" onchange="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; font-weight:600; cursor:pointer;">
               ${bookOptionsHtml}
             </select>
           </div>
@@ -8735,11 +8735,11 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
           <div style="display:flex; gap:12px;">
             <div class="form-group" style="flex:1; margin:0;">
               <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">Quantity</label>
-              <input type="number" id="sim-qty-input" value="1" min="1" max="100" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; text-align:right; font-family:var(--font-mono);" />
+              <input type="number" id="sim-qty-input" value="1" min="1" max="100" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; text-align:right; font-family:var(--font-mono);" />
             </div>
             <div class="form-group" style="flex:1; margin:0;">
               <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">Destination</label>
-              <select id="sim-region-select" onchange="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; font-weight:600; cursor:pointer;">
+              <select id="sim-region-select" onchange="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; font-weight:600; cursor:pointer;">
                 <option value="ON">Ontario 🍁</option>
                 <option value="CA">Rest of Canada 🇨🇦</option>
                 <option value="US">United States 🇺🇸</option>
@@ -8751,7 +8751,7 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
           <div style="display:flex; gap:12px;">
             <div class="form-group" style="flex:1; margin:0;">
               <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">Packaging Tare</label>
-              <select id="sim-tare-select" onchange="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; font-weight:600; cursor:pointer;">
+              <select id="sim-tare-select" onchange="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; font-weight:600; cursor:pointer;">
                 <option value="0">None (0 g)</option>
                 <option value="0.05" selected>Bubble Mailer (+50 g)</option>
                 <option value="0.15">Cardboard Box (+150 g)</option>
@@ -8762,7 +8762,7 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
               <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">
                 Manual Weight <span style="font-weight:400; text-transform:none; color:var(--text3);">(kg)</span>
               </label>
-              <input type="number" id="sim-weight-override" placeholder="Auto-calculated" step="0.05" min="0" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; text-align:right; font-family:var(--font-mono);" />
+              <input type="number" id="sim-weight-override" placeholder="Auto-calculated" step="0.05" min="0" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; text-align:right; font-family:var(--font-mono);" />
             </div>
           </div>
 
@@ -8770,12 +8770,12 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
             <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">
               Custom Postage Override <span style="font-weight:400; text-transform:none; color:var(--text3);">(optional)</span>
             </label>
-            <input type="number" id="sim-postage-override" placeholder="Use default band fallback" step="0.50" min="0" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; text-align:right; font-family:var(--font-mono);" />
+            <input type="number" id="sim-postage-override" placeholder="Use default band fallback" step="0.50" min="0" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; text-align:right; font-family:var(--font-mono);" />
           </div>
         </div>
 
         <!-- Results -->
-        <div id="sim-results-panel" style="background:var(--surface-card); border:1px solid var(--border); border-radius:var(--r2); padding:16px; min-height:190px; display:flex; flex-direction:column; justify-content:space-between; box-shadow:0 4px 10px rgba(0,0,0,0.01);">
+        <div id="sim-results-panel" style="background:var(--surface-card); border:var(--stroke-hair) solid var(--border); border-radius:var(--r2); padding:16px; min-height:190px; display:flex; flex-direction:column; justify-content:space-between; box-shadow:var(--elev-2);">
           <!-- Will be populated dynamically via updateShippingSimulation() -->
         </div>
       </div>
@@ -8792,7 +8792,7 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
         <span class="shipping-pnl-disclosure">Show analysis ▼</span>
       </summary>
 
-      <section class="shipping-reco-container" style="background:var(--surface-card); border:1px solid var(--border); border-radius:var(--r3); padding:20px; margin:20px; box-shadow:0 8px 30px rgba(0,0,0,0.04);">
+      <section class="shipping-reco-container" style="background:var(--surface-card); border:var(--stroke-hair) solid var(--border); border-radius:var(--r3); padding:20px; margin:20px; box-shadow:var(--elev-4);">
         <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:18px; flex-wrap:wrap; gap:12px;">
           <div>
             <h3 style="font-family:var(--font-display); font-size:20px; color:var(--text); margin:0; display:flex; align-items:center; gap:8px; font-weight:700;">
@@ -8802,10 +8802,10 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
               ${explanationText}
             </p>
           </div>
-          <div style="background:var(--cream2); padding:8px 12px; border-radius:var(--r2); border:1px solid var(--border); font-size:11px; color:var(--text2); display:flex; align-items:center; gap:12px; font-weight:600; flex-wrap:wrap;">
+          <div style="background:var(--cream2); padding:8px 12px; border-radius:var(--r2); border:var(--stroke-hair) solid var(--border); font-size:11px; color:var(--text2); display:flex; align-items:center; gap:12px; font-weight:600; flex-wrap:wrap;">
             <div style="display:flex; align-items:center; gap:4px;">
               <span style="font-size:13px;">⚖️</span> Weight Profile:
-              <select id="ship-reco-weight-select" onchange="onShipRecoWeightSelectChange(this.value)" style="padding:4px 8px; font-size:11px; border:1px solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; font-weight:600; cursor:pointer; margin-left:4px;">
+              <select id="ship-reco-weight-select" onchange="onShipRecoWeightSelectChange(this.value)" style="padding:4px 8px; font-size:11px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; font-weight:600; cursor:pointer; margin-left:4px;">
                 <option value="default" ${weightOverride === 'default' ? 'selected' : ''}>Book Weight (${bookWeightKg.toFixed(2)} kg)</option>
                 <option value="under_0.5" ${weightOverride === 'under_0.5' ? 'selected' : ''}>Under 0.5 kg (0.3 kg)</option>
                 <option value="0.5_1" ${weightOverride === '0.5_1' ? 'selected' : ''}>0.5 - 1 kg (0.8 kg)</option>
@@ -8815,25 +8815,25 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
               </select>
               <input id="ship-reco-custom-weight-input" type="number" step="0.1" min="0.01" value="${!['default','under_0.5','0.5_1','1_2','over_2'].includes(weightOverride) ? parseFloat(weightOverride).toFixed(2) : bookWeightKg.toFixed(2)}" 
                 onchange="onShipRecoCustomWeightChange(this.value)"
-                style="display:${!['default','under_0.5','0.5_1','1_2','over_2'].includes(weightOverride) ? 'inline-block' : 'none'}; width:60px; padding:3px 6px; font-size:11px; border:1px solid var(--border); border-radius:var(--r); text-align:right; font-family:var(--font-mono); outline:none; margin-left:4px;" />
+                style="display:${!['default','under_0.5','0.5_1','1_2','over_2'].includes(weightOverride) ? 'inline-block' : 'none'}; width:60px; padding:3px 6px; font-size:11px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r); text-align:right; font-family:var(--font-mono); outline:none; margin-left:4px;" />
               <span style="font-size:11px; color:var(--text3); font-weight:400; margin-left:4px;">(${recoData.bandName})</span>
             </div>
             
-            <div style="border-left:1px solid var(--border); height:16px;"></div>
+            <div style="border-left:var(--stroke-hair) solid var(--border); height:16px;"></div>
             
             <div style="display:flex; align-items:center; gap:4px;">
               <span style="font-size:13px;">⚙️</span> Methodology:
-              <select id="ship-reco-mode-select" onchange="onShipRecoModeChange(this.value)" style="padding:4px 8px; font-size:11px; border:1px solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; font-weight:600; cursor:pointer; margin-left:4px;">
+              <select id="ship-reco-mode-select" onchange="onShipRecoModeChange(this.value)" style="padding:4px 8px; font-size:11px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; font-weight:600; cursor:pointer; margin-left:4px;">
                 <option value="blended" ${recoMode === 'blended' ? 'selected' : ''}>Blended (History + CP)</option>
                 <option value="cpost" ${recoMode === 'cpost' ? 'selected' : ''}>Canada Post Only</option>
               </select>
             </div>
 
-            <div style="border-left:1px solid var(--border); height:16px;"></div>
+            <div style="border-left:var(--stroke-hair) solid var(--border); height:16px;"></div>
 
             <div style="display:flex; align-items:center; gap:4px; opacity:${recoMode === 'cpost' ? '0.5' : '1'};">
               <span style="font-size:13px;">🎯</span> Risk Profile:
-              <select id="ship-reco-percentile-select" onchange="onShipRecoPercentileChange(this.value)" ${recoMode === 'cpost' ? 'disabled' : ''} style="padding:4px 8px; font-size:11px; border:1px solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; font-weight:600; cursor:${recoMode === 'cpost' ? 'not-allowed' : 'pointer'}; margin-left:4px;">
+              <select id="ship-reco-percentile-select" onchange="onShipRecoPercentileChange(this.value)" ${recoMode === 'cpost' ? 'disabled' : ''} style="padding:4px 8px; font-size:11px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; font-weight:600; cursor:${recoMode === 'cpost' ? 'not-allowed' : 'pointer'}; margin-left:4px;">
                 <option value="90" ${recoPercentile === 90 ? 'selected' : ''}>Conservative (90th %)</option>
                 <option value="75" ${recoPercentile === 75 ? 'selected' : ''}>Balanced (75th %)</option>
                 <option value="50" ${recoPercentile === 50 ? 'selected' : ''}>Aggressive (50th %)</option>
@@ -9049,24 +9049,24 @@ function updateShippingSimulation() {
     <div style="display:flex; flex-direction:column; gap:12px; height:100%; justify-content:space-between;">
       <div>
         <!-- Billed Weight & Band Meta Bar -->
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; border-bottom:1px solid var(--border); padding-bottom:6px; flex-wrap:wrap; gap:6px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; border-bottom:var(--stroke-hair) solid var(--border); padding-bottom:6px; flex-wrap:wrap; gap:6px;">
           <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
             <span style="font-size:10px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:0.04em;">Canada Post Billed Weight</span>
-            <span style="background:var(--cream2); border:1px solid var(--border); border-radius:99px; padding:2px 8px; font-size:10px; font-weight:700; color:var(--text2);">🏷️ Band: ${weightBandLabel}</span>
+            <span style="background:var(--cream2); border:var(--stroke-hair) solid var(--border); border-radius:var(--r-pill); padding:2px 8px; font-size:10px; font-weight:700; color:var(--text2);">🏷️ Band: ${weightBandLabel}</span>
             ${isVolumetricBilled
-              ? `<span style="background:rgba(232, 64, 42,0.15); border:1px solid var(--gold-line); border-radius:99px; padding:2px 8px; font-size:10px; font-weight:700; color:var(--gold);" title="Volumetric weight exceeds actual weight (L x W x H / 5000)">📐 Volumetric Billed (${volumetricWeightKg.toFixed(2)} kg)</span>`
-              : `<span style="background:rgba(0,120,60,0.08); border:1px solid rgba(0,120,60,0.2); border-radius:99px; padding:2px 8px; font-size:10px; font-weight:700; color:var(--green);">⚖️ Actual Weight</span>`
+              ? `<span style="background:rgba(232, 64, 42,0.15); border:var(--stroke-hair) solid var(--gold-line); border-radius:var(--r-pill); padding:2px 8px; font-size:10px; font-weight:700; color:var(--gold);" title="Volumetric weight exceeds actual weight (L x W x H / 5000)">📐 Volumetric Billed (${volumetricWeightKg.toFixed(2)} kg)</span>`
+              : `<span style="background:rgba(0,120,60,0.08); border:var(--stroke-hair) solid rgba(0,120,60,0.2); border-radius:var(--r-pill); padding:2px 8px; font-size:10px; font-weight:700; color:var(--green);">⚖️ Actual Weight</span>`
             }
           </div>
           <span style="font-family:var(--font-mono); font-size:12px; font-weight:700; color:var(--text);">${billedWeightKg.toFixed(3)} kg (${billedWeightLbs.toFixed(2)} lbs)</span>
         </div>
 
         <!-- HERO CARD: Est. Postage Cost (Primary Focal Point) -->
-        <div style="background:linear-gradient(135deg, rgba(26,77,46,0.07), rgba(26,77,46,0.02)); border:1.5px solid var(--green); border-radius:var(--r2); padding:16px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 2px 8px rgba(0,0,0,0.02);">
+        <div style="background:linear-gradient(135deg, rgba(26,77,46,0.07), rgba(26,77,46,0.02)); border:1.5px solid var(--green); border-radius:var(--r2); padding:16px; display:flex; justify-content:space-between; align-items:center; box-shadow:var(--elev-2);">
           <div>
             <div style="display:flex; align-items:center; gap:6px; margin-bottom:2px;">
               <span style="font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:0.06em; color:var(--green);">Est. Postage Cost (${region})</span>
-              <span style="background:rgba(26,77,46,0.1); color:var(--green); font-size:9px; font-weight:700; padding:1px 6px; border-radius:99px;">🚚 Tracked</span>
+              <span style="background:rgba(26,77,46,0.1); color:var(--green); font-size:9px; font-weight:700; padding:1px 6px; border-radius:var(--r-pill);">🚚 Tracked</span>
             </div>
             <div style="font-family:var(--font-mono); font-size:26px; font-weight:800; color:var(--text); line-height:1.1;">
               ${formatCcy(postageCost)}

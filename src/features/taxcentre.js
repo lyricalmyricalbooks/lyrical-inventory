@@ -738,8 +738,8 @@ function _tcRenderLedgerPagination(filteredLedger, pageStart, totalPages) {
     } else {
       const from = filteredLedger.length ? pageStart + 1 : 0;
       const to = Math.min(pageStart + TC_LEDGER_PAGE_SIZE, filteredLedger.length);
-      const btnStyle = 'padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid var(--border);background:var(--cream2);color:var(--text);';
-      const activeBtnStyle = 'padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid var(--gold);background:var(--gold);color:var(--ink);font-weight:600;';
+      const btnStyle = 'padding:4px 12px;border-radius:var(--r);font-size:12px;cursor:pointer;border:var(--stroke-hair) solid var(--border);background:var(--cream2);color:var(--text);';
+      const activeBtnStyle = 'padding:4px 12px;border-radius:var(--r);font-size:12px;cursor:pointer;border:var(--stroke-hair) solid var(--gold);background:var(--gold);color:var(--ink);font-weight:600;';
       // Show at most 7 page buttons around current page
       const maxBtns = 7;
       let startBtn = Math.max(0, _tcLedgerPage - Math.floor(maxBtns / 2));
@@ -778,7 +778,7 @@ function _tcRenderLedgerFilterChip() {
     const q = _tcLedgerSearch.trim();
     if (q) parts.push(`“${escapeHtml(q)}”`);
     filterChip.innerHTML = parts.length
-      ? `<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;background:var(--gold-bg);color:var(--gold);border:1px solid var(--gold-line);border-radius:14px;padding:3px 6px 3px 12px;">Filtered: ${parts.join(' · ')}<button onclick="tcClearLedgerFilters()" title="Clear filters" aria-label="Clear filters" style="border:none;background:transparent;color:inherit;cursor:pointer;font-size:14px;line-height:1;padding:0 4px;">✕</button></span>`
+      ? `<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;background:var(--gold-bg);color:var(--gold);border:var(--stroke-hair) solid var(--gold-line);border-radius:var(--r);padding:3px 6px 3px 12px;">Filtered: ${parts.join(' · ')}<button onclick="tcClearLedgerFilters()" title="Clear filters" aria-label="Clear filters" style="border:none;background:transparent;color:inherit;cursor:pointer;font-size:14px;line-height:1;padding:0 4px;">✕</button></span>`
       : '';
   }
 }
@@ -798,7 +798,7 @@ function _tcRenderLedgerFoot(filteredLedger, baseCurrency) {
       const netColor = fNet >= 0 ? 'var(--green)' : 'var(--red)';
       footEl.innerHTML = `
         <tr>
-          <td colspan="8" style="padding:10px 12px;background:var(--cream2);border-top:2px solid var(--gold-line);">
+          <td colspan="8" style="padding:10px 12px;background:var(--cream2);border-top:var(--stroke) solid var(--gold-line);">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;font-size:13px;">
               <span style="color:var(--text3);">${filteredLedger.length} ${filteredLedger.length === 1 ? 'entry' : 'entries'}${(_tcLedgerSearch.trim() || _tcLedgerType !== 'all') ? ' (filtered)' : ''}</span>
               <div style="display:flex;gap:18px;flex-wrap:wrap;" class="num">
@@ -2098,8 +2098,8 @@ function _tcRenderTripsPanel(selectedYear, baseCurrency) {
               <div style="display:flex;justify-content:space-between;margin-bottom:3px;font-weight:600;color:${isOver ? 'var(--red, #a63a2b)' : 'var(--text2)'};">
                 <span>${badgeText}</span>
               </div>
-              <div style="height:5px;background:var(--cream3, #e5ddd0);border-radius:3px;overflow:hidden;">
-                <div style="height:100%;width:${pct}%;background:${barColor};border-radius:3px;transition:width 0.3s ease;"></div>
+              <div style="height:5px;background:var(--cream3, #e5ddd0);border-radius:var(--r);overflow:hidden;">
+                <div style="height:100%;width:${pct}%;background:${barColor};border-radius:var(--r);transition:width 0.3s ease;"></div>
               </div>
             </div>
           `;
@@ -2966,17 +2966,17 @@ function openTaxSeasonPreflightModal() {
   const container = $('tc-preflight-content');
   if (container) {
     container.innerHTML = `
-      <div style="background:var(--surface-sunken);border:1px solid var(--border-default);border-radius:var(--r2);padding:14px 16px;margin-bottom:14px;">
+      <div style="background:var(--surface-sunken);border:var(--stroke-hair) solid var(--border-default);border-radius:var(--r2);padding:14px 16px;margin-bottom:14px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
           <div>
             <span style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text3);font-weight:700;">Tax Reporting Period</span>
             <div style="font-size:16px;font-weight:700;color:var(--text1);">${isAllTime ? 'All Time (Full Historical Export)' : `Calendar Year ${escapeHtml(year)}`}</div>
           </div>
-          <div style="font-family:var(--font-ui);font-size:13px;font-weight:700;color:${scoreColor};background:var(--cream2);border:1px solid ${scoreColor};padding:4px 12px;border-radius:99px;">
+          <div style="font-family:var(--font-ui);font-size:13px;font-weight:700;color:${scoreColor};background:var(--cream2);border:var(--stroke-hair) solid ${scoreColor};padding:4px 12px;border-radius:var(--r-pill);">
             ${scoreBadge}
           </div>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;font-size:12px;padding-top:10px;border-top:1px solid var(--border-subtle);">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;font-size:12px;padding-top:10px;border-top:var(--stroke-hair) solid var(--border-subtle);">
           <div><span style="color:var(--text3);">Gross Sales:</span><br><strong style="color:var(--green);font-family:var(--font-mono);">+${fmt(totalGrossSales, baseCurrency)}</strong></div>
           <div><span style="color:var(--text3);">Operating Exp:</span><br><strong style="color:var(--red);font-family:var(--font-mono);">-${fmt(totalOperatingExpenses, baseCurrency)}</strong></div>
           <div><span style="color:var(--text3);">Net Cash Flow:</span><br><strong style="color:var(--gold);font-family:var(--font-mono);">${fmt(totalGrossSales - totalOperatingExpenses, baseCurrency)}</strong></div>
@@ -2984,7 +2984,7 @@ function openTaxSeasonPreflightModal() {
       </div>
 
       <div class="tc-preflight-checklist" style="display:flex;flex-direction:column;gap:10px;">
-        <div class="tc-preflight-item" style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:var(--r2);background:${hasRateErrors ? 'rgba(180,40,40,.08)' : 'var(--cream2)'};border:1px solid ${hasRateErrors ? 'var(--red)' : 'var(--border)'};">
+        <div class="tc-preflight-item" style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:var(--r2);background:${hasRateErrors ? 'rgba(180,40,40,.08)' : 'var(--cream2)'};border:var(--stroke-hair) solid ${hasRateErrors ? 'var(--red)' : 'var(--border)'};">
           <span style="font-size:16px;line-height:1.2;">${hasRateErrors ? '⚠️' : '✓'}</span>
           <div style="flex:1;font-size:12px;">
             <strong>${hasRateErrors ? 'Foreign Currency Exchange Rates Incomplete' : 'Foreign Currency Rates Verified'}</strong>
@@ -2992,7 +2992,7 @@ function openTaxSeasonPreflightModal() {
           </div>
         </div>
 
-        <div class="tc-preflight-item" style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:var(--r2);background:${missingReceipts > 0 ? 'rgba(180,120,20,.08)' : 'var(--cream2)'};border:1px solid ${missingReceipts > 0 ? 'var(--amber)' : 'var(--border)'};">
+        <div class="tc-preflight-item" style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:var(--r2);background:${missingReceipts > 0 ? 'rgba(180,120,20,.08)' : 'var(--cream2)'};border:var(--stroke-hair) solid ${missingReceipts > 0 ? 'var(--amber)' : 'var(--border)'};">
           <span style="font-size:16px;line-height:1.2;">${missingReceipts > 0 ? '⚠️' : '✓'}</span>
           <div style="flex:1;font-size:12px;">
             <strong>${missingReceipts > 0 ? `${missingReceipts} expense(s) without attached receipts` : 'All eligible expenses have proof-of-payment attached'}</strong>
@@ -3001,7 +3001,7 @@ function openTaxSeasonPreflightModal() {
           ${missingReceipts > 0 ? `<button class="btn sm tag" onclick="tcJumpToFixPreflightIssues()" type="button" style="white-space:nowrap;">Inspect →</button>` : ''}
         </div>
 
-        <div class="tc-preflight-item" style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:var(--r2);background:${pendingInYear > 0 ? 'var(--gold-bg)' : 'var(--cream2)'};border:1px solid ${pendingInYear > 0 ? 'var(--gold-line)' : 'var(--border)'};">
+        <div class="tc-preflight-item" style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:var(--r2);background:${pendingInYear > 0 ? 'var(--gold-bg)' : 'var(--cream2)'};border:var(--stroke-hair) solid ${pendingInYear > 0 ? 'var(--gold-line)' : 'var(--border)'};">
           <span style="font-size:16px;line-height:1.2;">${pendingInYear > 0 ? 'ℹ️' : '✓'}</span>
           <div style="flex:1;font-size:12px;">
             <strong>${pendingInYear > 0 ? `${pendingInYear} pending expense note(s) in review` : 'No unconfirmed pending notes'}</strong>
@@ -4081,7 +4081,7 @@ async function diagnoseCanadaPostHandler() {
   const inspection = inspectCanadaPostCredentials({ apiKey, apiSecret, customerNumber });
   if (inspection.findings.length && statusEl) {
     statusEl.innerHTML = `
-      <div style="padding:10px 12px;background:rgba(245,158,11,0.08);border-left:3px solid var(--amber);border-radius:var(--r);font-size:11.5px;color:var(--text2);line-height:1.55;">
+      <div style="padding:10px 12px;background:rgba(245,158,11,0.08);border-left:var(--stroke) solid var(--amber);border-radius:var(--r);font-size:11.5px;color:var(--text2);line-height:1.55;">
         <strong>Found a problem with what is typed in:</strong>
         <ul style="margin:6px 0 0;padding-left:18px;">
           ${inspection.findings.map(f => `<li>${escapeHtml(f)}</li>`).join('')}
@@ -4127,7 +4127,7 @@ async function diagnoseCanadaPostHandler() {
 
     if (statusEl) {
       statusEl.innerHTML = `
-        <div style="padding:10px 12px;background:${tone.bg};border-left:3px solid ${tone.border};border-radius:var(--r);font-size:11.5px;color:var(--text2);line-height:1.55;">
+        <div style="padding:10px 12px;background:${tone.bg};border-left:var(--stroke) solid ${tone.border};border-radius:var(--r);font-size:11.5px;color:var(--text2);line-height:1.55;">
           <strong style="color:${tone.label};">${escapeHtml(result.headline)}</strong>
           ${findings}
           ${steps}
@@ -4180,7 +4180,7 @@ async function testCanadaPostConnectionHandler() {
   if (!sheetsUrl && isOnlineWeb) {
     if (statusEl) {
       statusEl.innerHTML = `
-        <div style="padding:10px 12px;background:rgba(245,158,11,0.08);border-left:3px solid var(--amber);border-radius:var(--r);font-size:11.5px;color:var(--text2);line-height:1.5;">
+        <div style="padding:10px 12px;background:rgba(245,158,11,0.08);border-left:var(--stroke) solid var(--amber);border-radius:var(--r);font-size:11.5px;color:var(--text2);line-height:1.5;">
           <strong>Setup Required: Google Sheets Web App Connection</strong><br>
           Canada Post Web Services does not permit direct cross-origin requests from web browsers. Requests must be securely routed through your Google Sheet backend.<br>
           <div style="margin-top:6px;">
@@ -4251,7 +4251,7 @@ async function testCanadaPostConnectionHandler() {
         // authentication method from the shape of the key and gave up before
         // it ever reached Canada Post.
         extraHint = `
-          <div style="margin-top:6px;padding:8px 10px;background:rgba(245,158,11,0.08);border-left:3px solid var(--amber);border-radius:var(--r);font-size:11px;color:var(--text2);line-height:1.45;">
+          <div style="margin-top:6px;padding:8px 10px;background:rgba(245,158,11,0.08);border-left:var(--stroke) solid var(--amber);border-radius:var(--r);font-size:11px;color:var(--text2);line-height:1.45;">
             <strong>Your Google Sheet script is out of date.</strong><br>
             This error comes from the connection script itself, not from Canada Post — an older version misread your API key and stopped before contacting them.
             Open <strong>Settings ➔ Connect your Google Sheet</strong>, copy the latest script and redeploy it, then test again — the card there shows which version you are running.
@@ -4259,7 +4259,7 @@ async function testCanadaPostConnectionHandler() {
         `;
       } else if (isAuthFail) {
         extraHint = `
-          <div style="margin-top:6px;padding:8px 10px;background:rgba(239,68,68,0.08);border-left:3px solid var(--rose);border-radius:var(--r);font-size:11px;color:var(--text2);line-height:1.45;">
+          <div style="margin-top:6px;padding:8px 10px;background:rgba(239,68,68,0.08);border-left:var(--stroke) solid var(--rose);border-radius:var(--r);font-size:11px;color:var(--text2);line-height:1.45;">
             <strong>Canada Post refused this key and password.</strong><br>
             • Development / test keys only work with the <strong>Sandbox Environment</strong> toggle <strong>ON</strong>; production keys only work with it <strong>OFF</strong>. Try flipping it.<br>
             • The password must be the <strong>API password</strong> from the Canada Post Developer Program — not the password you sign in to canadapost.ca with.<br>
@@ -4268,14 +4268,14 @@ async function testCanadaPostConnectionHandler() {
         `;
       } else if (isEntitlement) {
         extraHint = `
-          <div style="margin-top:6px;padding:8px 10px;background:rgba(239,68,68,0.08);border-left:3px solid var(--rose);border-radius:var(--r);font-size:11px;color:var(--text2);line-height:1.45;">
+          <div style="margin-top:6px;padding:8px 10px;background:rgba(239,68,68,0.08);border-left:var(--stroke) solid var(--rose);border-radius:var(--r);font-size:11px;color:var(--text2);line-height:1.45;">
             <strong>The key is valid but this account cannot quote rates.</strong><br>
             Sign in to the Canada Post Developer Program and confirm the account has the Rating and Shipping services enabled, and that customer number <span class="tnum">${escapeHtml(customerNumber || '—')}</span> belongs to it.
           </div>
         `;
       } else if (isCors) {
         extraHint = `
-          <div style="margin-top:6px;padding:8px 10px;background:rgba(245,158,11,0.08);border-left:3px solid var(--amber);border-radius:var(--r);font-size:11px;color:var(--text2);line-height:1.45;">
+          <div style="margin-top:6px;padding:8px 10px;background:rgba(245,158,11,0.08);border-left:var(--stroke) solid var(--amber);border-radius:var(--r);font-size:11px;color:var(--text2);line-height:1.45;">
             <strong>Google Sheet Webhook Required:</strong><br>
             Canada Post API blocks direct browser calls due to browser CORS policies. Please go to <strong>Settings ➔ Connect your Google Sheet</strong> and paste your Apps Script URL so requests can be proxied.
           </div>

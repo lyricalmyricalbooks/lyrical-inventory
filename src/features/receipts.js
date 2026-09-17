@@ -2910,9 +2910,9 @@ function renderEmailPreviewContent(msgId, container) {
     }).join('');
 
     attachmentsHtml = `
-      <div style="margin-top:10px;border-top:1px dashed var(--border);padding-top:8px;">
+      <div style="margin-top:10px;border-top:var(--stroke-hair) dashed var(--border);padding-top:8px;">
         <div style="font-weight:700;font-size:11px;margin-bottom:6px;color:var(--text2);">Include attachments in AI Scan (${email.fileParts.length}):</div>
-        <div style="background:var(--surface-card);padding:6px 12px;border:1px solid var(--border2);border-radius:var(--r);max-height:100px;overflow-y:auto;">
+        <div style="background:var(--surface-card);padding:6px 12px;border:var(--stroke-hair) solid var(--border2);border-radius:var(--r);max-height:100px;overflow-y:auto;">
           ${listItems}
         </div>
       </div>
@@ -4949,7 +4949,7 @@ async function extractReceiptsFromEmailText() {
     } catch (e) {
       console.error('[email-receipt-import] file read failed', e);
       if (wrap) {
-        wrap.innerHTML = `<div style="background:rgba(220,60,60,.08);border:1px solid rgba(220,60,60,.25);border-radius:var(--r2);padding:10px 14px;font-size:12px;color:var(--red);">File read failed: ${(e.message || e).toString().replace(/</g, '&lt;')}</div>`;
+        wrap.innerHTML = `<div style="background:rgba(220,60,60,.08);border:var(--stroke-hair) solid rgba(220,60,60,.25);border-radius:var(--r2);padding:10px 14px;font-size:12px;color:var(--red);">File read failed: ${(e.message || e).toString().replace(/</g, '&lt;')}</div>`;
       }
       showToast('Could not read files', 'err');
       if (btn) btn.disabled = false;
@@ -4978,7 +4978,7 @@ async function extractReceiptsFromEmailText() {
     console.error('[email-receipt-import] Gemini failed', e);
     if (wrap) {
       console.error('[email-receipt-import] extraction failed', e);
-      wrap.innerHTML = `<div style="background:rgba(220,60,60,.08);border:1px solid rgba(220,60,60,.25);border-radius:var(--r2);padding:10px 14px;font-size:12px;color:var(--red);">Could not read these emails — ${escapeHtml(_friendlyScanError(e))}</div>`;
+      wrap.innerHTML = `<div style="background:rgba(220,60,60,.08);border:var(--stroke-hair) solid rgba(220,60,60,.25);border-radius:var(--r2);padding:10px 14px;font-size:12px;color:var(--red);">Could not read these emails — ${escapeHtml(_friendlyScanError(e))}</div>`;
     }
     showToast('Could not extract receipts', 'err');
   } finally {

@@ -510,7 +510,7 @@ async function loadBigCartelData() {
           <td><div class="skeleton-line" style="height:14px;width:50px;"></div></td>
           <td><div class="skeleton-line" style="height:14px;width:60px;"></div></td>
           <td><div class="skeleton-line" style="height:14px;width:60px;"></div></td>
-          <td><div class="skeleton-line" style="height:20px;width:75px;border-radius:100px;"></div></td>
+          <td><div class="skeleton-line" style="height:20px;width:75px;border-radius:var(--r-pill);"></div></td>
           <td><div class="skeleton-line" style="height:32px;width:90px;border-radius:var(--r);"></div></td>
         </tr>
       `).join('');
@@ -663,7 +663,7 @@ function renderBigCartelProducts(products, included = []) {
           <span class="${statusClass}">${statusLabel}</span>
         </div>
         <div class="bc-price">$${price} CAD</div>
-        <div style="border-top:1px dashed var(--border); padding-top:6px; margin-top:4px;">
+        <div style="border-top:var(--stroke-hair) dashed var(--border); padding-top:6px; margin-top:4px;">
           <div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text3); margin-bottom:4px;">Pricing & Options</div>
           ${optionsListHtml}
         </div>

@@ -169,7 +169,7 @@ describe('Milestone 3 UX Enhancements (Features 18–25)', () => {
     });
 
     it('styles backup reminder banner with canonical gold background and gold line tokens', () => {
-      expect(html).toContain('id="backup-reminder" style="display:none;background:var(--gold-bg);border:1px solid var(--gold-line)');
+      expect(html).toContain('id="backup-reminder" style="display:none;background:var(--gold-bg);border:var(--stroke-hair) solid var(--gold-line)');
     });
 
     it('enforces 44px touch targets and spring active scaling across m-confirm and m-prompt dialogs', () => {

@@ -202,7 +202,7 @@ describe('Milestone 2 UX Enhancements (Features 10–17)', () => {
     });
 
     test('connected card status uses canonical --status-positive token', () => {
-      expect(markup).toMatch(/border-left:\s*3px solid var\(--status-positive\);/);
+      expect(markup).toMatch(/border-left:\s*var\(--stroke\) solid var\(--status-positive\);/);
       expect(markup).toMatch(/<span style="font-size:18px; color:var\(--status-positive\);">●<\/span>/);
       expect(markup).toMatch(/<button class="btn sm" onclick="refreshUmamiStats\(\)" title="Refresh API metrics">/);
     });
