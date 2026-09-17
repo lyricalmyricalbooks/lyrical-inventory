@@ -2923,6 +2923,10 @@
                 <label class="tc-form-label" for="tc-backup-key">Backup AI Key <span class="tc-form-optional">(optional)</span></label>
                 <input type="password" id="tc-backup-key" class="tc-form-input" placeholder="OpenRouter key (sk-or-v1-…)…" autocomplete="off">
                 <div class="tc-form-hint">Save your OpenRouter key here once. Intelligence chat, receipt and invoice scans, email extraction and postage readers use it automatically when Gemini cannot answer or runs out of quota. The key is saved in your app account settings.</div>
+                <div class="tc-form-actions-row">
+                  <button type="button" id="tc-test-backup-btn" class="btn sm" onclick="testOpenRouterConnectionFromSettings()">Test OpenRouter</button>
+                </div>
+                <div id="tc-backup-test-status" class="tc-form-hint" role="status" aria-live="polite">Tests your key and sends one tiny request through the selected model, or OpenRouter’s free router when the model is blank.</div>
               </div>
               <div class="tc-form-group">
                 <label class="tc-form-label" for="tc-backup-model">Backup Model</label>

@@ -30,6 +30,7 @@
 import { runIntelTool } from './publisher-intel-tools.js';
 
 export const OPENROUTER_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
+export const OPENROUTER_KEY_ENDPOINT = 'https://openrouter.ai/api/v1/key';
 
 export const DEFAULT_OPENROUTER_MODEL = 'openrouter/free';
 
@@ -41,6 +42,72 @@ const TYPE_MAP = {
   OBJECT: 'object', STRING: 'string', NUMBER: 'number',
   BOOLEAN: 'boolean', ARRAY: 'array', INTEGER: 'integer',
 };
+
+/**
+ * Headers shared by every OpenRouter request.
+ *
+ * `HTTP-Referer` and `X-OpenRouter-Title` are the application-attribution
+ * headers documented by OpenRouter. They are optional for authentication, but
+ * sending the documented names makes requests identifiable in the key's
+ * activity page and avoids the old, unsupported `X-Title` spelling.
+ */
+function openRouterHeaders(apiKey) {
+  const headers = {
+    Authorization: `Bearer ${String(apiKey || '').trim()}`,
+    'X-OpenRouter-Title': 'Lyrical Inventory',
+  };
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    headers['HTTP-Referer'] = window.location.origin;
+  }
+  return headers;
+}
+
+/** Validate a saved key, then make the smallest practical model request. */
+export async function testOpenRouterConnection({
+  apiKey,
+  model = DEFAULT_OPENROUTER_MODEL,
+  fetchImpl = (typeof fetch === 'function' ? fetch.bind(globalThis) : null),
+  signal,
+} = {}) {
+  const key = String(apiKey || '').trim();
+  if (!key) throw new Error('No backup AI key is set');
+  if (typeof fetchImpl !== 'function') throw new Error('No way to reach the network');
+
+  const res = await fetchImpl(OPENROUTER_KEY_ENDPOINT, {
+    method: 'GET',
+    headers: openRouterHeaders(key),
+    signal,
+  });
+  const data = await readOpenRouterResponse(res);
+  if (!res.ok || data?.error) {
+    const error = data?.error;
+    const message = (typeof error === 'string' ? error : error?.message) || `HTTP ${res.status} from OpenRouter`;
+    throw Object.assign(new Error(message), { status: Number(error?.code) || res.status });
+  }
+
+  // Authentication alone does not prove that the free router can currently
+  // select a model. A tiny completion tests the same endpoint the app uses,
+  // without tools or attachments narrowing the provider pool.
+  const smoke = await callOnce({
+    model: model?.trim() || DEFAULT_OPENROUTER_MODEL,
+    messages: [{ role: 'user', content: 'Reply only with OK.' }],
+    temperature: 0,
+    max_tokens: 4,
+  }, key, { fetchImpl, signal });
+  const smokeData = await readOpenRouterResponse(smoke);
+  if (!smoke.ok || smokeData?.error) {
+    const error = smokeData?.error;
+    const message = (typeof error === 'string' ? error : error?.message) || `HTTP ${smoke.status} from OpenRouter`;
+    throw Object.assign(new Error(message), { status: Number(error?.code) || smoke.status });
+  }
+  if (!smokeData?.choices?.[0]?.message) throw new Error('OpenRouter connected, but the free model returned nothing');
+  return { account: data?.data || data || {}, model: smokeData.model || model || DEFAULT_OPENROUTER_MODEL };
+}
+
+/** Keep gateway HTML/empty responses from hiding the useful HTTP status. */
+async function readOpenRouterResponse(res) {
+  try { return await res.json(); } catch (_) { return null; }
+}
 
 /**
  * Rewrite one Gemini parameter schema as plain JSON Schema.
@@ -160,10 +227,7 @@ async function callOnce(body, apiKey, { fetchImpl, signal }) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-        // OpenRouter asks callers to identify themselves. Harmless, and it
-        // makes the usage dashboard legible when something is spending.
-        'X-Title': 'Lyrical Inventory',
+        ...openRouterHeaders(apiKey),
       },
       body: JSON.stringify(body),
       signal,
@@ -200,7 +264,7 @@ export async function runOpenRouterTurn({
   signal,
   maxRounds = MAX_TOOL_ROUNDS,
 } = {}) {
-  if (!apiKey) throw new Error('No backup AI key is set');
+  if (!apiKey?.trim()) throw new Error('No backup AI key is set');
   if (!model) throw new Error('No backup model is set');
   if (typeof fetchImpl !== 'function') throw new Error('No way to reach the network');
 
@@ -221,19 +285,17 @@ export async function runOpenRouterTurn({
     };
     if (openAITools.length) { body.tools = openAITools; body.tool_choice = 'auto'; }
 
-    const res = await callOnce(body, apiKey, { fetchImpl, signal });
+    const res = await callOnce(body, apiKey.trim(), { fetchImpl, signal });
     if (!res.ok) {
       let detail = `HTTP ${res.status}`;
-      try {
-        const err = await res.json();
-        if (err?.error?.message) detail = err.error.message;
-      } catch (_) { /* a body that isn't JSON tells us nothing extra */ }
+      const err = await readOpenRouterResponse(res);
+      if (err?.error?.message) detail = err.error.message;
       const e = new Error(detail);
       e.status = res.status;
       throw e;
     }
 
-    const data = await res.json();
+    const data = await readOpenRouterResponse(res);
     if (data?.error) {
       throw Object.assign(new Error(data.error.message || 'The backup provider failed'), { status: Number(data.error.code) });
     }
@@ -310,7 +372,7 @@ export async function runOpenRouterRead({
     body.plugins = [{ id: 'file-parser', pdf: { engine: 'cloudflare-ai' } }];
   }
   const res = await callOnce(body, apiKey.trim(), { fetchImpl, signal });
-  const data = await res.json();
+  const data = await readOpenRouterResponse(res);
   if (!res.ok || data?.error) {
     throw Object.assign(new Error(data?.error?.message || `HTTP ${res.status} from OpenRouter`), { status: Number(data?.error?.code) || res.status });
   }
@@ -342,6 +404,9 @@ export function friendlyOpenRouterError(e) {
   }
   // The model name is typed by hand, so a wrong one is the likeliest mistake
   // here and deserves to be named rather than shown as a bare 404.
+  if (/no endpoints found|no available providers?|provider.*(?:unavailable|support)/i.test(raw)) {
+    return 'no OpenRouter provider currently supports everything this request needs — retry, or choose a compatible model in the Tax Centre config';
+  }
   if (status === 404 || /no (?:such )?model|model not found|not a valid model/i.test(raw)) {
     return 'the backup service does not have a model by that name — check the model name in the Tax Centre config';
   }
