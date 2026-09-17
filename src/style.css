@@ -14038,6 +14038,36 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   color: var(--content-secondary);
 }
 
+/* The search box's zero-results state, sibling to .pos-cart-empty above —
+   same card-less, icon-free treatment so both of the register's empty states
+   read as one family. Was hand-styled inline with `color:var(--on-inverse)`
+   on the quoted search term, which is identical to `--cream` in light mode:
+   on this screen's plain page background the term rendered invisible. */
+.pos-search-empty {
+  grid-column: 1 / -1;
+  padding: 2rem 1rem;
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--content-muted);
+}
+.pos-search-empty strong {
+  color: var(--content-primary);
+}
+.pos-search-empty-hint {
+  display: block;
+  margin-top: .3rem;
+  font-size: var(--text-2xs);
+}
+.pos-search-empty kbd {
+  font-family: 'DM Mono', monospace;
+  font-size: var(--text-2xs);
+  padding: 1px 5px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r);
+  background: var(--surface-sunken);
+  color: var(--content-secondary);
+}
+
 /* POS Quick Discount Preset Grid (Adjust Price Modal) */
 .pos-discount-grid {
   display: grid;
