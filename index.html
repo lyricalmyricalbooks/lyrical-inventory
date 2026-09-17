@@ -64,58 +64,76 @@
 
 <style>
   /* ─── INVOICE PAPER (sharp, printable) ─────────────────────────────── */
+  /* Riso Press, printed. Colours stay hardcoded and fonts are named outright
+     rather than taken from tokens: this sheet is rendered into a print window
+     and a PDF, where the app's variables may not travel with it, and where a
+     theme flip must never reach it — a customer's invoice looks the same
+     whatever mode the publisher happens to be in. */
   .invoice-paper{
-    background:#fff;color:#1a1814;
+    background:#fff;color:#100F0D;
     width:100%;max-width:780px;margin:0 auto;
-    border-radius:var(--r);
-    box-shadow:var(--elev-4);
-    padding:48px 56px;font-family:var(--font-ui);
+    border-radius:0;
+    border:2px solid #100F0D;
+    box-shadow:6px 6px 0 rgba(16,15,13,.18);
+    padding:48px 56px;font-family:'Archivo','Helvetica Neue',sans-serif;
     line-height:1.5;letter-spacing:.005em;
     position:relative;overflow:hidden;
   }
+  /* A flat bar of ink across the head, not a gradient — riso prints one flat
+     pass of colour at a time. --book-accent lets a book carry its own. */
   .invoice-paper::before{
-    content:"";position:absolute;left:0;top:0;height:6px;width:100%;
-    background:linear-gradient(90deg, var(--book-accent, #E8402A), #FF6B55 65%, #FFB3A6);
+    content:"";position:absolute;left:0;top:0;height:10px;width:100%;
+    background:var(--book-accent, #E8402A);
   }
   .invoice-paper .inv-head{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;margin-bottom:32px;flex-wrap:wrap;}
   .invoice-paper .inv-brand{flex:1;min-width:240px;}
-  .invoice-paper .inv-brand h1{font-family:'Playfair Display',serif;font-weight:700;font-size:28px;color:#0e0c0a;margin:0 0 4px;letter-spacing:.005em;}
-  .invoice-paper .inv-brand .inv-sub{font-size:12px;color:#6b665e;letter-spacing:.04em;}
-  .invoice-paper .inv-brand .inv-addr{font-size:11px;color:#8a847a;margin-top:10px;line-height:1.55;white-space:pre-wrap;}
+  .invoice-paper .inv-brand h1{font-family:'Anton',Impact,sans-serif;font-weight:400;font-size:32px;color:#100F0D;margin:0 0 4px;letter-spacing:.01em;text-transform:uppercase;line-height:1.05;}
+  .invoice-paper .inv-brand .inv-sub{font-size:12px;color:#3E3A34;letter-spacing:.04em;font-weight:600;}
+  .invoice-paper .inv-brand .inv-addr{font-size:11px;color:#6B655B;margin-top:10px;line-height:1.55;white-space:pre-wrap;}
   .invoice-paper .inv-id{text-align:right;}
-  .invoice-paper .inv-id .inv-word{font-family:'Playfair Display',serif;font-size:22px;color:#c8913a;letter-spacing:.18em;text-transform:uppercase;font-weight:600;margin-bottom:6px;}
-  .invoice-paper .inv-id .inv-num{font-family:'DM Mono',monospace;font-size:13px;color:#1a1814;font-weight:600;}
-  .invoice-paper .inv-status{display:inline-block;margin-top:8px;font-size:9px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;padding:5px 12px;border-radius:99px;}
-  .invoice-paper .inv-status.draft{background:#e9e6e0;color:#6b665e;}
-  .invoice-paper .inv-status.sent{background:#ebf2ff;color:#1d4cb3;}
-  .invoice-paper .inv-status.paid{background:#e0f5ea;color:#1d7a4a;}
-  .invoice-paper .inv-status.overdue{background:#fde6e0;color:#a13a1b;}
-  .invoice-paper .inv-status.cancelled{background:#eee;color:#5a544c;text-decoration:line-through;}
+  .invoice-paper .inv-id .inv-word{font-family:'Anton',Impact,sans-serif;font-size:26px;color:#B4271A;letter-spacing:.14em;text-transform:uppercase;font-weight:400;margin-bottom:6px;}
+  .invoice-paper .inv-id .inv-num{font-family:'DM Mono',monospace;font-size:13px;color:#100F0D;font-weight:600;}
+  /* Status keeps its lozenge — that shape is how you tell it from a heading at
+     a glance — but takes the ink outline and a flat fill. Every pairing below
+     is ink on its own fill, so it survives a black-and-white printer. */
+  .invoice-paper .inv-status{display:inline-block;margin-top:8px;font-size:9px;font-weight:800;letter-spacing:.22em;text-transform:uppercase;padding:5px 12px;border-radius:999px;border:2px solid #100F0D;}
+  .invoice-paper .inv-status.draft{background:#F0E9DA;color:#100F0D;}
+  .invoice-paper .inv-status.sent{background:#DEE4FD;color:#1B3FE0;}
+  .invoice-paper .inv-status.paid{background:#12A06A;color:#100F0D;}
+  .invoice-paper .inv-status.overdue{background:#E8402A;color:#100F0D;}
+  .invoice-paper .inv-status.cancelled{background:#E7E0CE;color:#3E3A34;text-decoration:line-through;}
 
-  .invoice-paper .inv-meta-grid{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:18px;padding:18px 0;border-top:1px solid #eee5d5;border-bottom:1px solid #eee5d5;margin-bottom:24px;}
-  .invoice-paper .inv-meta-grid label{font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:#a8a094;display:block;margin-bottom:6px;}
-  .invoice-paper .inv-meta-grid strong{font-size:13px;color:#1a1814;display:block;line-height:1.45;}
-  .invoice-paper .inv-meta-grid .inv-meta-sub{font-size:11px;color:#6b665e;margin-top:2px;line-height:1.45;white-space:pre-wrap;}
+  .invoice-paper .inv-meta-grid{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:18px;padding:18px 0;border-top:2px solid #100F0D;border-bottom:2px solid #100F0D;margin-bottom:24px;}
+  .invoice-paper .inv-meta-grid label{font-size:9px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:#6B655B;display:block;margin-bottom:6px;}
+  .invoice-paper .inv-meta-grid strong{font-size:13px;color:#100F0D;display:block;line-height:1.45;font-weight:700;}
+  .invoice-paper .inv-meta-grid .inv-meta-sub{font-size:11px;color:#3E3A34;margin-top:2px;line-height:1.45;white-space:pre-wrap;}
 
+  /* Bold chrome, calm data — the same split the app uses. The head is a solid
+     bar of ink; the lines below it stay hairline so a long invoice reads. */
   .invoice-paper .inv-items{width:100%;border-collapse:collapse;margin-bottom:18px;}
-  .invoice-paper .inv-items th{font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#a8a094;text-align:left;padding:0 12px 10px;border-bottom:1px solid #eee5d5;}
+  .invoice-paper .inv-items th{font-size:9px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#FAF6EC;background:#100F0D;text-align:left;padding:9px 12px;border-bottom:none;}
   .invoice-paper .inv-items th.r,.invoice-paper .inv-items td.r{text-align:right;}
-  .invoice-paper .inv-items td{font-size:13px;padding:14px 12px;border-bottom:1px solid #f5f1e6;color:#1a1814;vertical-align:top;}
+  .invoice-paper .inv-items td{font-size:13px;padding:14px 12px;border-bottom:1px solid #DED6C4;color:#100F0D;vertical-align:top;}
   .invoice-paper .inv-items td.r{font-family:'DM Mono',monospace;}
-  .invoice-paper .inv-items tr:last-child td{border-bottom:none;}
+  .invoice-paper .inv-items tr:last-child td{border-bottom:2px solid #100F0D;}
 
   .invoice-paper .inv-totals{margin-left:auto;width:280px;font-size:13px;margin-bottom:32px;}
-  .invoice-paper .inv-totals .tr{display:flex;justify-content:space-between;padding:6px 12px;color:#4a443c;}
+  .invoice-paper .inv-totals .tr{display:flex;justify-content:space-between;padding:6px 12px;color:#3E3A34;font-weight:600;}
   .invoice-paper .inv-totals .tr .val{font-family:'DM Mono',monospace;}
-  .invoice-paper .inv-totals .grand{margin-top:8px;padding:14px 12px;background:#0e0c0a;color:#f7f2e9;border-radius:6px;font-size:16px;font-weight:700;letter-spacing:.04em;}
-  .invoice-paper .inv-totals .grand .val{color:#f0c060;font-size:18px;}
+  /* The amount owed is the one thing that must survive a bad printer, so it
+     is a solid ink block with the figure in flare on top of it. */
+  .invoice-paper .inv-totals .grand{margin-top:8px;padding:14px 12px;background:#100F0D;color:#FAF6EC;border-radius:0;font-size:16px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;}
+  .invoice-paper .inv-totals .grand .val{color:#FF8A78;font-size:20px;font-family:'DM Mono',monospace;}
 
-  .invoice-paper .inv-pay{background:#faf6ec;border:1px solid #eee5d5;border-radius:8px;padding:20px 22px;margin-bottom:24px;display:flex;gap:20px;align-items:center;flex-wrap:wrap;}
+  .invoice-paper .inv-pay{background:#FAF6EC;border:2px solid #100F0D;border-radius:0;padding:20px 22px;margin-bottom:24px;display:flex;gap:20px;align-items:center;flex-wrap:wrap;}
   .invoice-paper .inv-pay .inv-pay-info{flex:1;min-width:220px;}
-  .invoice-paper .inv-pay .inv-pay-info h3{font-family:'Playfair Display',serif;font-size:16px;color:#0e0c0a;margin:0 0 6px;}
-  .invoice-paper .inv-pay .inv-pay-info p{font-size:12px;color:#6b665e;margin:0 0 10px;line-height:1.55;}
-  .invoice-paper .inv-pay .pay-btn{display:inline-block;background:#0e0c0a;color:#f0c060;padding:10px 22px;border-radius:99px;font-family:'Syne',sans-serif;font-weight:700;font-size:12px;letter-spacing:.16em;text-transform:uppercase;text-decoration:none;border:none;}
-  .invoice-paper .inv-pay .pay-btn:hover{background:#1c1917;}
+  .invoice-paper .inv-pay .inv-pay-info h3{font-family:'Anton',Impact,sans-serif;font-weight:400;font-size:19px;color:#100F0D;margin:0 0 6px;text-transform:uppercase;letter-spacing:.01em;}
+  .invoice-paper .inv-pay .inv-pay-info p{font-size:12px;color:#3E3A34;margin:0 0 10px;line-height:1.55;}
+  /* Ink on flare, not flare on ink: this is the button a shop taps to pay, so
+     it takes the loudest treatment the palette has, and ink-on-flare is the
+     readable direction (4.74:1) — the reverse is not. */
+  .invoice-paper .inv-pay .pay-btn{display:inline-block;background:#E8402A;color:#100F0D;padding:12px 24px;border-radius:0;border:2px solid #100F0D;box-shadow:4px 4px 0 #100F0D;font-family:'Archivo','Helvetica Neue',sans-serif;font-weight:800;font-size:12px;letter-spacing:.16em;text-transform:uppercase;text-decoration:none;}
+  .invoice-paper .inv-pay .pay-btn:hover{background:#FF6B55;}
   .invoice-paper .inv-pay .pay-methods{font-size:10px;color:#a8a094;margin-top:8px;letter-spacing:.04em;}
   .invoice-paper .inv-pay .inv-qr{background:#fff;padding:10px;border-radius:4px;border:1px solid #eee5d5;}
   .invoice-paper .inv-pay .inv-qr canvas, .invoice-paper .inv-pay .inv-qr img{display:block;}
