@@ -95,7 +95,7 @@ export function createReceiptFinderClient({ token, fetchImpl = fetch, onExpired 
 
 export const FINDER_ENDPOINT_PATTERN = /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/;
 export const EXPECTED_FINDER_VERSION = 'v2';
-export const EXPECTED_SHEETS_VERSION = 'v45';
+export const EXPECTED_SHEETS_VERSION = 'v46';
 const MAX_AI_FILES = 20;
 const MAX_AI_PAYLOAD = 18 * 1024 * 1024;
 
@@ -198,6 +198,31 @@ export async function extractFoundReceipts({ endpoint, idToken, email, signal, f
   if (!data.ok) throw new Error(friendlyReceiptAiError(data.error) || 'Receipt AI could not read this email');
   if (!Array.isArray(data.receipts)) throw new Error('Receipt AI returned an invalid response. Retry this email.');
   return data;
+}
+
+// The daily sweep's trigger lives in the publisher's own Apps Script, so the
+// app only ever asks it to arm, disarm or report itself.
+export async function receiptDailySchedule({ endpoint, op = 'status', enabled, hour = 5, fetchImpl = fetch, signal }) {
+  if (!FINDER_ENDPOINT_PATTERN.test(endpoint || '')) throw new Error('Connect your Google Sheet script first');
+  const res = await fetchImpl(endpoint, {
+    method: 'POST', headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+    body: JSON.stringify({ version: 2, action: 'receiptDailySchedule', payload: { op, enabled, hour } }),
+    signal, redirect: 'follow',
+  });
+  if (!res.ok) throw new Error(`The script did not answer (${res.status}).`);
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || 'Could not change the daily scan.');
+  return data;
+}
+
+// Plain reading of the daily sweep's own report, for the line under the switch.
+export function describeDailySweep(state) {
+  if (!state?.enabled) return 'Off. Receipts are only found when you scan by hand.';
+  const hour = state.hour ?? 5;
+  const at = `Runs every day at ${(hour % 12) || 12}${hour < 12 ? 'am' : 'pm'}, reading the previous day only.`;
+  if (state.lastResult) return `${at} Last run: ${state.lastResult}`;
+  if (state.lastRun) return `${at} Last run ${new Date(state.lastRun).toLocaleString()}.`;
+  return `${at} It has not run yet.`;
 }
 
 const SETUP_STEPS = {

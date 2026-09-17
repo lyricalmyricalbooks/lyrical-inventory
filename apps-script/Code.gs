@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v45)
+/* Lyricalmyrical Inventory — Unified Backend (v46)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:
@@ -188,6 +188,17 @@
  *      publisher then met the failure one email at a time, worded as a passing
  *      outage. Only the status is returned, never the upstream body. Bump
  *      flags v44-and-older as outdated so the publisher redeploys.
+ *  44. v46: 'receiptDailyScan' reads yesterday's mail for receipts on a daily
+ *      time-driven trigger and writes what it finds to the app's Firestore
+ *      inbox, where the existing review screen already picks it up. The browser
+ *      could never do this — it needs the app open and a Gmail token good for
+ *      an hour — so a scheduled scan has to live in the publisher's own
+ *      account. Deliberately one day at a time, capped at 20 messages: a narrow
+ *      window is what keeps this inside Gemini's free allowance, and a wide one
+ *      is what exhausts it. 'receiptdailyschedule' installs, removes and reports
+ *      the trigger; a run that meets a spent allowance stops and leaves its
+ *      watermark, so the rest of the window is read next time rather than
+ *      skipped. Bump flags v45-and-older as outdated so the publisher redeploys.
  */
 
 const HEADERS = [
@@ -242,15 +253,16 @@ function doGet(e) {
   const receiptModel = receiptProps.getProperty('GEMINI_MODEL') || 'gemini-2.5-flash';
   const receiptModelValid = /^[a-zA-Z0-9.-]+$/.test(receiptModel);
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v45',
-    scriptVersion: 'v45',
-    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, canadaPostRefund: true, graphicalEmails: true, authorPaymentEmails: true, dateOrderedRows: true, receiptExtraction: true, receiptSelfTest: true },
+    service: 'lyrical-sheets-webhook-v46',
+    scriptVersion: 'v46',
+    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, canadaPostRefund: true, graphicalEmails: true, authorPaymentEmails: true, dateOrderedRows: true, receiptExtraction: true, receiptSelfTest: true, receiptDailySweep: true },
     receiptAi: {
       geminiApiKey: !!receiptProps.getProperty('GEMINI_API_KEY'),
       model: receiptModelValid,
       publisherCheck: !!(receiptProps.getProperty('FIREBASE_WEB_API_KEY') && receiptProps.getProperty('PUBLISHER_UID')),
       modelName: receiptModelValid ? receiptModel : ''
     },
+    receiptDaily: receiptDailyState_(receiptProps),
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
 }
@@ -707,6 +719,11 @@ function doPost(e) {
     // publisher only finds out one failed email at a time.
     if (action === 'testreceiptai') {
       return testReceiptAi_(payload);
+    }
+
+    // Install / remove / inspect the daily receipt sweep's trigger.
+    if (action === 'receiptdailyschedule') {
+      return receiptDailySchedule_(payload.payload || {});
     }
 
     // ── Proxy Canada Post Web Services API request (bypasses browser CORS) ──
@@ -2689,6 +2706,246 @@ function receiptAiResponse_(models, aiKey, payload) {
 
 function receiptCanFallback_(status) {
   return status === 404 || status === 429 || (status >= 500 && status < 600);
+}
+
+// ─────────────────────────────────────────────────────────────
+// DAILY RECEIPT SWEEP (v46)
+//
+// Reads yesterday's mail for receipts once a day, on a time-driven trigger, and
+// writes what it finds to the app's Firestore inbox. The browser cannot do this
+// — a scan needs the app open, and a Gmail token that lasts an hour — so the
+// only place a 5am run can live is here, in the publisher's own Google account.
+//
+// Deliberately small: one day's mail is a handful of messages, which is what
+// keeps the whole thing inside Gemini's free allowance. A scan of a wide date
+// range is what exhausts it.
+// ─────────────────────────────────────────────────────────────
+var RECEIPT_DAILY_QUERY = '(receipt OR invoice OR bill OR purchase OR payment OR shipping OR order) -in:trash -in:spam -from:me';
+var RECEIPT_DAILY_MAX_MESSAGES = 20;  // hard ceiling on AI calls per run
+var RECEIPT_DAILY_MAX_DAYS = 7;       // catch up after missed runs, but never more
+
+// Which days still need reading, as Gmail date operators. Pure string maths so
+// it can be tested without Apps Script: `before` is exclusive in Gmail, so
+// passing today covers through yesterday 23:59 and never reads a part-finished
+// day twice.
+function receiptDailyWindow_(lastDay, todayDay, maxDays) {
+  var day = function (text) { return new Date(text + 'T12:00:00Z'); };
+  var text = function (date) { return date.toISOString().slice(0, 10); };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(todayDay)) return null;
+  var today = day(todayDay);
+  var earliest = new Date(today.getTime() - maxDays * 86400000);
+  var start;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(lastDay || ''))) {
+    start = new Date(day(lastDay).getTime() + 86400000);
+    if (start.getTime() < earliest.getTime()) start = earliest;
+  } else {
+    // First ever run reads yesterday only, never a backlog nobody asked for.
+    start = new Date(today.getTime() - 86400000);
+  }
+  if (start.getTime() >= today.getTime()) return null;
+  return {
+    after: text(start).replace(/-/g, '/'),
+    before: todayDay.replace(/-/g, '/'),
+    startDay: text(start),
+    throughDay: text(new Date(today.getTime() - 86400000))
+  };
+}
+
+function receiptDayString_(date) {
+  return Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+}
+
+function receiptDailyNote_(props, text) {
+  props.setProperty('RECEIPT_DAILY_STATUS', JSON.stringify({ at: new Date().toISOString(), text: text }));
+}
+
+/** The trigger target. Never throws: a trigger that throws just emails a stack trace. */
+function receiptDailyScan() {
+  var props = PropertiesService.getScriptProperties();
+  try {
+    var aiKey = props.getProperty('GEMINI_API_KEY');
+    if (!aiKey) { receiptDailyNote_(props, 'Add GEMINI_API_KEY in Script Properties to turn the daily scan on.'); return; }
+
+    var todayDay = receiptDayString_(new Date());
+    var win = receiptDailyWindow_(props.getProperty('RECEIPT_DAILY_LAST_DAY') || '', todayDay, RECEIPT_DAILY_MAX_DAYS);
+    if (!win) { receiptDailyNote_(props, 'Already up to date — nothing new to read.'); return; }
+
+    var threads = GmailApp.search(RECEIPT_DAILY_QUERY + ' after:' + win.after + ' before:' + win.before, 0, RECEIPT_DAILY_MAX_MESSAGES);
+    var grouped = GmailApp.getMessagesForThreads(threads);
+    var from = new Date(win.startDay + 'T00:00:00');
+    var until = new Date(win.before.replace(/\//g, '-') + 'T00:00:00');
+    var messages = [];
+    for (var t = 0; t < grouped.length; t++) {
+      for (var m = 0; m < grouped[t].length; m++) {
+        // A thread matches on any message, so its older replies come back too.
+        var when = grouped[t][m].getDate();
+        if (when >= from && when < until) messages.push(grouped[t][m]);
+      }
+    }
+    messages = messages.slice(0, RECEIPT_DAILY_MAX_MESSAGES);
+
+    var found = 0;
+    var read = 0;
+    for (var i = 0; i < messages.length; i++) {
+      var outcome = receiptDailyReadOne_(messages[i], aiKey, props);
+      if (outcome.halt) {
+        // Out of allowance. Stop and leave the watermark where it is, so the
+        // rest of the window is read on the next run instead of being skipped.
+        receiptDailyNote_(props, 'Stopped early: ' + outcome.halt + ' Read ' + read + ', found ' + found + '.');
+        return;
+      }
+      read++;
+      found += outcome.found;
+    }
+
+    props.setProperty('RECEIPT_DAILY_LAST_DAY', win.throughDay);
+    props.setProperty('RECEIPT_DAILY_LAST_RUN', new Date().toISOString());
+    receiptDailyNote_(props, 'Read ' + read + ' email' + (read === 1 ? '' : 's') + ' from ' + win.startDay +
+      ' to ' + win.throughDay + ', found ' + found + ' receipt' + (found === 1 ? '' : 's') + '.');
+  } catch (error) {
+    receiptDailyNote_(props, 'Failed: ' + (error && error.message ? error.message : error));
+  }
+}
+
+/** One message. Returns {found, halt} — `halt` set when the whole run should stop. */
+function receiptDailyReadOne_(message, aiKey, props) {
+  try {
+    var files = [];
+    var attachments = message.getAttachments({ includeInlineImages: false, includeAttachments: true });
+    for (var a = 0; a < attachments.length && files.length < 10; a++) {
+      var type = String(attachments[a].getContentType() || '').split(';')[0].toLowerCase();
+      if (!/^(application\/pdf|image\/(jpeg|png|webp|heic|heif))$/.test(type)) continue;
+      if (attachments[a].getSize() > 12 * 1024 * 1024) continue;
+      files.push({ inlineData: { mimeType: type, data: Utilities.base64Encode(attachments[a].getBytes()) } });
+    }
+
+    var body = String(message.getPlainBody() || '').slice(0, 24000);
+    var aiPayload = JSON.stringify({
+      systemInstruction: { parts: [{ text: receiptPrompt_() }] },
+      contents: [{ role: 'user', parts: [{ text: JSON.stringify({
+        subject: String(message.getSubject() || '').slice(0, 1000),
+        from: String(message.getFrom() || '').slice(0, 1000),
+        date: String(message.getDate()), body: body
+      }) }].concat(files) }],
+      generationConfig: { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 8192 }
+    });
+
+    var response = receiptAiResponse_(receiptModelChain_(props.getProperty('GEMINI_MODEL')), aiKey, aiPayload);
+    var result = JSON.parse(response.getContentText());
+    var candidate = (result.candidates || [])[0];
+    if (!candidate || candidate.finishReason !== 'STOP') return { found: 0 };
+    var parts = (candidate.content.parts || []).filter(function (p) { return !p.thought && p.text; });
+    var receipts = JSON.parse(parts.map(function (p) { return p.text; }).join('')).receipts || [];
+
+    var links = [];
+    // Present only when the Gmail add-on file is in this project. The daily scan
+    // must still work without it, so the receipt keeps its Gmail link either way.
+    if (files.length && typeof uploadReceiptFiles_ === 'function') {
+      try { links = uploadReceiptFiles_(message) || []; } catch (_) { links = []; }
+    }
+
+    var written = 0;
+    for (var r = 0; r < receipts.length && r < 20; r++) {
+      receiptInboxWrite_(receiptDailyDraft_(receipts[r], message, links, r));
+      written++;
+    }
+    return { found: written };
+  } catch (error) {
+    var text = String(error && error.message ? error.message : error);
+    // Allowance and key problems repeat on every remaining message, so there is
+    // nothing to gain — and allowance to lose — by carrying on.
+    if (/unavailable \((429|400|401|403)\)/.test(text)) return { found: 0, halt: text };
+    return { found: 0 };
+  }
+}
+
+/** Shape the app's inbox already understands, from one extracted receipt. */
+function receiptDailyDraft_(row, message, links, index) {
+  var amount = Number(row.amount);
+  return {
+    vendor: String(row.vendor || '').slice(0, 250),
+    description: String(row.description || row.vendor || 'Email receipt').slice(0, 500),
+    amount: isNaN(amount) ? 0 : amount,
+    currency: /^[A-Za-z]{3}$/.test(String(row.currency || '')) ? String(row.currency).toUpperCase() : 'CAD',
+    date: /^\d{4}-\d{2}-\d{2}$/.test(String(row.date || '')) ? row.date : receiptDayString_(message.getDate()),
+    reference: String(row.reference || '').slice(0, 200),
+    category: String(row.category || 'Other'),
+    sourceSnippet: String(row.sourceSnippet || '').slice(0, 500),
+    confidence: typeof row.confidence === 'number' ? row.confidence : 0,
+    receipt: links[0] || '',
+    receiptUrls: links,
+    gmailMessageId: message.getId() + (index ? '-' + index : ''),
+    source: 'daily-sweep'
+  };
+}
+
+/**
+ * Upsert one inbox document, keyed on the Gmail message id so a re-run
+ * overwrites rather than queueing the same expense twice.
+ *
+ * Kept here rather than shared with the add-on's copy on purpose: the publisher
+ * pastes this one file in from the app, and the daily scan has to work whether
+ * or not the add-on file was ever added to the project.
+ */
+function receiptInboxWrite_(draft) {
+  var projectId = PropertiesService.getScriptProperties().getProperty('FIREBASE_PROJECT_ID') || 'lyricalmyrical-37c46';
+  var docId = 'sweep_' + String(draft.gmailMessageId || Date.now()).replace(/[^A-Za-z0-9_-]/g, '_');
+  var url = 'https://firestore.googleapis.com/v1/projects/' + projectId +
+    '/databases/(default)/documents/emailReceiptInbox/' + docId;
+  var res = UrlFetchApp.fetch(url, {
+    method: 'patch', contentType: 'application/json',
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+    payload: JSON.stringify({ fields: {
+      data: { stringValue: JSON.stringify(draft) },
+      ts: { integerValue: String(Date.now()) },
+      source: { stringValue: 'daily-sweep' }
+    } }),
+    muteHttpExceptions: true
+  });
+  var code = res.getResponseCode();
+  if (code < 200 || code >= 300) throw new Error('Firestore HTTP ' + code);
+}
+
+function receiptDailySchedule_(input) {
+  try {
+    var props = PropertiesService.getScriptProperties();
+    var op = String(input.op || 'status');
+    if (op === 'set') {
+      var triggers = ScriptApp.getProjectTriggers();
+      for (var i = 0; i < triggers.length; i++) {
+        if (triggers[i].getHandlerFunction() === 'receiptDailyScan') ScriptApp.deleteTrigger(triggers[i]);
+      }
+      var enabled = input.enabled === true || input.enabled === 'true';
+      var hour = parseInt(input.hour, 10);
+      if (isNaN(hour) || hour < 0 || hour > 23) hour = 5;
+      if (enabled) ScriptApp.newTrigger('receiptDailyScan').timeBased().atHour(hour).everyDays(1).create();
+      props.setProperty('RECEIPT_DAILY_HOUR', String(hour));
+      return jsonOut_(receiptDailyState_(props));
+    }
+    return jsonOut_(receiptDailyState_(props));
+  } catch (error) {
+    return jsonOut_({ ok: false, error: 'Receipt schedule failed: ' + (error && error.message ? error.message : error) });
+  }
+}
+
+/** The installed trigger is the source of truth for whether it is on. */
+function receiptDailyState_(props) {
+  var armed = false;
+  var hour = parseInt(props.getProperty('RECEIPT_DAILY_HOUR') || '5', 10);
+  try {
+    var triggers = ScriptApp.getProjectTriggers();
+    for (var i = 0; i < triggers.length; i++) {
+      if (triggers[i].getHandlerFunction() === 'receiptDailyScan') armed = true;
+    }
+  } catch (_) { /* no trigger access yet */ }
+  var status = {};
+  try { status = JSON.parse(props.getProperty('RECEIPT_DAILY_STATUS') || '{}'); } catch (_) { status = {}; }
+  return {
+    ok: true, enabled: armed, hour: isNaN(hour) ? 5 : hour,
+    lastRun: props.getProperty('RECEIPT_DAILY_LAST_RUN') || '',
+    throughDay: props.getProperty('RECEIPT_DAILY_LAST_DAY') || '',
+    lastResult: status.text || ''
+  };
 }
 
 function jsonOut_(obj) {

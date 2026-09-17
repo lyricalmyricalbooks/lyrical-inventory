@@ -1,6 +1,6 @@
 import { escapeHtml as esc } from '../lib/html.js';
 import { receiptQuery, normalizeFoundReceipt, receiptProblems, receiptReviewStatus, receiptMoney, RECEIPT_STATUSES } from '../lib/receipt-finder.js';
-import { createReceiptFinderClient, extractFoundReceipts, decodeGmailBase64, checkReceiptFinderService, testReceiptAiService, describeAiTest, systemicReceiptFailure, FINDER_ENDPOINT_PATTERN } from '../lib/receipt-finder-client.js';
+import { createReceiptFinderClient, extractFoundReceipts, decodeGmailBase64, checkReceiptFinderService, testReceiptAiService, describeAiTest, systemicReceiptFailure, receiptDailySchedule, describeDailySweep, FINDER_ENDPOINT_PATTERN } from '../lib/receipt-finder-client.js';
 import { createReceiptFinderStore } from '../lib/receipt-finder-store.js';
 import { flushReceiptOutbox } from '../lib/receipt-finder-outbox.js';
 import { downloadBlob } from '../lib/download.js';
@@ -20,7 +20,7 @@ let deps, host, state = emptyState(), uid = '', accessToken = '', tokenExpiresAt
 let controller = null, busy = false, flushing = false, scanTotal = 0, scanDone = 0;
 let filter = 'all', resultQuery = '', saveChain = Promise.resolve(), saveScheduled = false;
 let initialized = false, restore = Promise.resolve(), serviceReadyFor = '', serviceProblem = null;
-let statusCache = null, cachedExpenses = null, renderTimer = 0, haltReason = '';
+let statusCache = null, cachedExpenses = null, renderTimer = 0, haltReason = '', dailySweep = null;
 const store = createReceiptFinderStore();
 const client = createReceiptFinderClient({ token: () => accessToken, onExpired: () => { forgetToken().catch(() => {}); } });
 const active = () => uid && deps?.user()?.uid === uid && deps.publisher();
@@ -209,6 +209,10 @@ async function mountReceiptFinder(element, dependencies) {
         <button type="button" class="btn" data-action="cancel" hidden>Stop scan</button>
         <span class="finder-run-hint">Reads up to 25 messages at a time.</span>
       </div>
+      <div class="finder-auto">
+        <label class="finder-select"><input type="checkbox" data-daily-toggle> Find receipts automatically, every morning</label>
+        <span class="finder-auto-note" data-daily-note>Checking…</span>
+      </div>
       <div class="finder-progress" data-finder-progress hidden>
         <div class="finder-progress-track"><div class="finder-progress-fill" data-progress-fill style="width:0%"></div></div>
         <span class="finder-progress-text" data-progress-text></span>
@@ -313,6 +317,20 @@ function renderGate() {
       ${step.action ? `<button type="button" class="btn gold sm" data-action="${esc(step.action)}">${esc(step.cta)}</button>` : ''}</li>`).join('')}</ol>`;
 }
 
+function renderDailySweep() {
+  const toggle = host.querySelector('[data-daily-toggle]');
+  const note = host.querySelector('[data-daily-note]');
+  if (!toggle || !note) return;
+  const wrap = toggle.closest('.finder-auto');
+  // Only offered where the deployment can actually run it — an older script has
+  // no trigger to arm, and a dead switch is worse than no switch.
+  if (!dailySweep) { if (wrap) wrap.hidden = true; return; }
+  if (wrap) wrap.hidden = false;
+  toggle.checked = !!dailySweep.enabled;
+  toggle.disabled = busy;
+  note.textContent = describeDailySweep(dailySweep);
+}
+
 function renderProgress() {
   const wrap = host.querySelector('[data-finder-progress]');
   wrap.hidden = !busy || !scanTotal;
@@ -359,6 +377,7 @@ function render() {
   try {
     renderConnection();
     renderGate();
+    renderDailySweep();
     renderProgress();
     const counts = Object.fromEntries(RECEIPT_STATUSES.map(status => [status, 0]));
     state.drafts.forEach(draft => { counts.all++; counts[statusOf(draft)]++; });
@@ -455,6 +474,7 @@ async function onChange(event) {
   try {
     if (!active()) return;
     const el = event.target;
+    if (el.hasAttribute('data-daily-toggle')) { await setDailySweep(el.checked); return; }
     if (el.hasAttribute('data-select-all')) {
       withStatusCache(() => visibleDrafts().forEach(draft => {
         if (statusOf(draft) === 'ready') { draft.selected = el.checked; draft.updatedAt = Date.now(); }
@@ -585,6 +605,25 @@ async function toggleConnection() {
 // Drops the saved separate deployment address so the finder falls back to the
 // Google Sheet script. This is the whole remedy for a publisher still pointed
 // at the retired standalone Receipt Finder.
+// The trigger lives in the publisher's Apps Script, so its own answer is the
+// only truthful source for whether the daily scan is armed.
+async function loadDailySweep(endpoint, report) {
+  if (report && !report.capabilities?.receiptDailySweep) { dailySweep = null; return; }
+  try {
+    dailySweep = await receiptDailySchedule({ endpoint, op: 'status' });
+  } catch { dailySweep = null; }
+}
+
+async function setDailySweep(enabled) {
+  const endpoint = activeEndpoint();
+  if (!endpoint) throw new Error('Connect your Google Sheet script first');
+  dailySweep = await receiptDailySchedule({ endpoint, op: 'set', enabled, hour: dailySweep?.hour ?? 5 });
+  render();
+  announce(enabled
+    ? 'The daily scan is on. It reads the previous day’s mail each morning and leaves anything it finds here for you to review.'
+    : 'The daily scan is off. Receipts are only found when you scan by hand.');
+}
+
 async function useSheetsScript() {
   const sheets = deps?.service?.();
   if (!sheets) throw new Error('Connect your Google Sheet first, in the “Connect your Google Sheet” tab.');
@@ -712,6 +751,7 @@ async function ensureServiceReady() {
   if (result.level !== 'ready' && result.blocksScan !== false) throw new Error(`${result.headline} ${result.steps[0] || ''}`.trim());
   serviceReadyFor = endpoint;
   await dropFailuresFromOtherService(endpoint);
+  await loadDailySweep(endpoint, result.report);
   return endpoint;
 }
 

@@ -149,3 +149,190 @@ describe('unified Google Sheet script: receipt extraction (v44)', () => {
     expect(describeFinderSetup(report).level).toBe('error');
   });
 });
+
+// ── Daily receipt sweep (v46) ──────────────────────────────────────────────
+// The trigger runs unattended in the publisher's own account, so a mistake here
+// silently loses receipts or silently burns the AI allowance. Both are worked
+// against the real Code.gs.
+function sweepCtx({ properties = {}, messages = [], aiStatus = 200, receipts = [], triggers = [] } = {}) {
+  const props = { GEMINI_API_KEY: 'server-secret', ...properties };
+  const written = [];
+  const created = [];
+  const aiCalls = [];
+  const ctx = vm.createContext({
+    PropertiesService: { getScriptProperties: () => ({
+      getProperty: key => (key in props ? props[key] : null),
+      setProperty: (key, value) => { props[key] = value; },
+    }) },
+    UrlFetchApp: { fetch: (url, options) => {
+      if (String(url).includes('firestore.googleapis.com')) {
+        written.push({ url: String(url), body: JSON.parse(options.payload) });
+        return { getResponseCode: () => 200, getContentText: () => '{}' };
+      }
+      aiCalls.push(String(url));
+      return { getResponseCode: () => aiStatus,
+        getContentText: () => JSON.stringify({ candidates: [{ finishReason: 'STOP',
+          content: { parts: [{ text: JSON.stringify({ receipts }) }] } }] }) };
+    } },
+    GmailApp: {
+      search: () => [messages],
+      getMessagesForThreads: threads => threads,
+    },
+    ScriptApp: {
+      getOAuthToken: () => 'owner-token',
+      getProjectTriggers: () => triggers,
+      deleteTrigger: t => { triggers.splice(triggers.indexOf(t), 1); },
+      newTrigger: name => ({ timeBased: () => ({ atHour: hour => ({ everyDays: () => ({
+        create: () => { created.push({ name, hour }); triggers.push({ getHandlerFunction: () => name }); } }) }) }) }),
+    },
+    Utilities: {
+      formatDate: date => date.toISOString().slice(0, 10),
+      base64Encode: () => 'AAAA',
+    },
+    Session: { getScriptTimeZone: () => 'UTC' },
+    LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
+    CacheService: { getScriptCache: () => ({ get: () => null, put() {} }) },
+    SpreadsheetApp: { getActiveSpreadsheet: () => ({ getName: () => 'Ledger' }) },
+    ContentService: { MimeType: { JSON: 'json' }, createTextOutput: text => ({ setMimeType: () => JSON.parse(text) }) },
+    console,
+  });
+  vm.runInContext(source, ctx);
+  return { ctx, props, written, created, aiCalls, triggers };
+}
+
+function mailMessage(when, { subject = 'Invoice 9', attachments = [] } = {}) {
+  return {
+    getDate: () => new Date(when),
+    getSubject: () => subject,
+    getFrom: () => 'supplier@example.com',
+    getPlainBody: () => 'Total $42.00',
+    getId: () => 'msg-' + when,
+    getAttachments: () => attachments,
+  };
+}
+
+describe('daily receipt sweep window', () => {
+  it('reads yesterday only on a first run, never a backlog nobody asked for', () => {
+    const { ctx } = sweepCtx();
+    expect(ctx.receiptDailyWindow_('', '2026-09-17', 7))
+      .toMatchObject({ after: '2026/09/16', before: '2026/09/17', throughDay: '2026-09-16' });
+  });
+
+  it('catches up the days a missed run skipped', () => {
+    const { ctx } = sweepCtx();
+    expect(ctx.receiptDailyWindow_('2026-09-13', '2026-09-17', 7))
+      .toMatchObject({ after: '2026/09/14', before: '2026/09/17' });
+  });
+
+  it('never reaches further back than the cap, however long it has been off', () => {
+    const { ctx } = sweepCtx();
+    expect(ctx.receiptDailyWindow_('2025-01-01', '2026-09-17', 7).after).toBe('2026/09/10');
+  });
+
+  it('does nothing when yesterday has already been read', () => {
+    const { ctx } = sweepCtx();
+    expect(ctx.receiptDailyWindow_('2026-09-16', '2026-09-17', 7)).toBeNull();
+  });
+
+  it('stops before today, so a part-finished day is never counted as read', () => {
+    const { ctx } = sweepCtx();
+    // `before` is exclusive in Gmail: today's date covers through yesterday
+    // 23:59 and leaves today to tomorrow's run.
+    const win = ctx.receiptDailyWindow_('', '2026-09-17', 7);
+    expect(win.before).toBe('2026/09/17');
+    expect(win.throughDay).toBe('2026-09-16');
+  });
+});
+
+describe('daily receipt sweep run', () => {
+  it('files what it finds into the inbox the app already watches', () => {
+    const { ctx, props, written } = sweepCtx({
+      messages: [mailMessage('2026-09-16T10:00:00Z')],
+      receipts: [{ vendor: 'Printer', amount: 42, currency: 'CAD', date: '2026-09-16', confidence: 0.9 }],
+      properties: { RECEIPT_DAILY_LAST_DAY: '2026-09-15' },
+    });
+    ctx.receiptDailyScan();
+    expect(written).toHaveLength(1);
+    expect(written[0].url).toContain('/emailReceiptInbox/');
+    const draft = JSON.parse(written[0].body.fields.data.stringValue);
+    expect(draft).toMatchObject({ vendor: 'Printer', amount: 42, currency: 'CAD', source: 'daily-sweep' });
+    // Advancing the watermark is what stops tomorrow re-reading today's mail.
+    expect(props.RECEIPT_DAILY_LAST_DAY).toBeTruthy();
+  });
+
+  it('ignores a thread’s older replies that fall outside the window', () => {
+    const { ctx, aiCalls } = sweepCtx({
+      // A thread matches on any message, so Gmail hands back the whole thread.
+      messages: [mailMessage('2026-09-16T10:00:00Z'), mailMessage('2026-01-04T10:00:00Z')],
+      receipts: [],
+      properties: { RECEIPT_DAILY_LAST_DAY: '2026-09-15' },
+    });
+    ctx.receiptDailyScan();
+    expect(aiCalls).toHaveLength(1);
+  });
+
+  it('stops on a spent allowance and leaves the watermark where it was', () => {
+    // Otherwise the day is marked read while none of it actually was, and
+    // those receipts are never looked at again.
+    const { ctx, props, written } = sweepCtx({
+      messages: [mailMessage('2026-09-16T10:00:00Z'), mailMessage('2026-09-16T11:00:00Z')],
+      aiStatus: 429,
+      properties: { RECEIPT_DAILY_LAST_DAY: '2026-09-15' },
+    });
+    ctx.receiptDailyScan();
+    expect(written).toHaveLength(0);
+    expect(props.RECEIPT_DAILY_LAST_DAY).toBe('2026-09-15');
+    expect(JSON.parse(props.RECEIPT_DAILY_STATUS).text).toMatch(/Stopped early/);
+  });
+
+  it('says what to do instead of failing silently when the key is missing', () => {
+    const { ctx, props, aiCalls } = sweepCtx({ properties: { GEMINI_API_KEY: undefined } });
+    ctx.receiptDailyScan();
+    expect(aiCalls).toHaveLength(0);
+    expect(JSON.parse(props.RECEIPT_DAILY_STATUS).text).toContain('GEMINI_API_KEY');
+  });
+
+  it('never throws out of the trigger, whatever Gmail does', () => {
+    const { ctx, props } = sweepCtx();
+    ctx.GmailApp.search = () => { throw new Error('Gmail unavailable'); };
+    expect(() => ctx.receiptDailyScan()).not.toThrow();
+    expect(JSON.parse(props.RECEIPT_DAILY_STATUS).text).toContain('Failed');
+  });
+});
+
+describe('daily receipt sweep schedule', () => {
+  const call = (ctx, payload) => ctx.doPost({ postData: { contents: JSON.stringify({ version: 2, action: 'receiptDailySchedule', payload }) } });
+
+  it('arms the trigger at the hour asked for', () => {
+    const { ctx, created } = sweepCtx();
+    expect(call(ctx, { op: 'set', enabled: true, hour: 5 })).toMatchObject({ ok: true, enabled: true, hour: 5 });
+    expect(created).toEqual([{ name: 'receiptDailyScan', hour: 5 }]);
+  });
+
+  it('replaces rather than stacks a second trigger', () => {
+    const { ctx, created, triggers } = sweepCtx();
+    call(ctx, { op: 'set', enabled: true, hour: 5 });
+    call(ctx, { op: 'set', enabled: true, hour: 7 });
+    expect(created).toHaveLength(2);
+    expect(triggers).toHaveLength(1);
+  });
+
+  it('turns it off, and reports the installed trigger as the truth', () => {
+    const { ctx, triggers } = sweepCtx();
+    call(ctx, { op: 'set', enabled: true, hour: 5 });
+    expect(call(ctx, { op: 'status' }).enabled).toBe(true);
+    call(ctx, { op: 'set', enabled: false });
+    expect(triggers).toHaveLength(0);
+    expect(call(ctx, { op: 'status' }).enabled).toBe(false);
+  });
+
+  it('refuses a nonsense hour instead of creating a trigger at one', () => {
+    const { ctx, created } = sweepCtx();
+    call(ctx, { op: 'set', enabled: true, hour: 99 });
+    expect(created[0].hour).toBe(5);
+  });
+
+  it('advertises itself so the app only offers the switch where it works', () => {
+    expect(sweepCtx().ctx.doGet({ parameter: {} }).capabilities.receiptDailySweep).toBe(true);
+  });
+});
