@@ -35,6 +35,14 @@
 .finder-run-hint { color:var(--content-muted); font-size:var(--text-xs); }
 [data-finder-status] { margin:var(--space-3) 0 0; }
 
+/* The daily-scan switch sits with the search controls, where scanning is
+   already the subject, and separated by a rule so it reads as a standing
+   setting rather than part of this one search. */
+.finder-auto { display:flex; flex-wrap:wrap; align-items:center; gap:var(--space-2) var(--space-3);
+  margin-top:var(--space-4); padding-top:var(--space-4); border-top:1px solid var(--border-default); }
+.finder-auto[hidden] { display:none; }
+.finder-auto-note { color:var(--content-secondary); font-size:var(--text-sm); line-height:1.6; flex:1; min-width:220px; }
+
 /* Determinate progress — a scan reads a known number of emails, so a real bar
    beats a spinner that says nothing about how much is left. */
 .finder-progress { display:flex; align-items:center; gap:var(--space-3); margin-top:var(--space-3); }

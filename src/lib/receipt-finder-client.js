@@ -95,7 +95,7 @@ export function createReceiptFinderClient({ token, fetchImpl = fetch, onExpired 
 
 export const FINDER_ENDPOINT_PATTERN = /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/;
 export const EXPECTED_FINDER_VERSION = 'v2';
-export const EXPECTED_SHEETS_VERSION = 'v45';
+export const EXPECTED_SHEETS_VERSION = 'v46';
 const MAX_AI_FILES = 20;
 const MAX_AI_PAYLOAD = 18 * 1024 * 1024;
 
@@ -111,18 +111,55 @@ export function receiptRequestBody({ idToken, email, files }) {
 // Retry later." — which reads as a passing outage and sends the publisher off to
 // wait, when a 400/401/403 is a key problem that waiting never fixes. The status
 // is the one piece of real diagnosis available, so say what it actually means.
-const AI_STATUS_HELP = {
-  400: 'The AI service rejected the request. This usually means GEMINI_API_KEY in your Google Sheet script is not a Gemini API key — a key for the Generative Language API starts with “AIza”.',
-  401: 'Google would not accept the AI key saved in your Google Sheet script. Replace GEMINI_API_KEY in its Script Properties with a Gemini API key from Google AI Studio (it starts with “AIza”).',
-  403: 'Google refused the AI key saved in your Google Sheet script. Either the key is restricted, or the Generative Language API is not enabled on the project that issued it.',
-  429: 'Google is rate-limiting the AI key right now, or its free allowance is used up for the moment. This one really does clear on its own — wait a few minutes and scan again.',
+// A refusal from Google is one of three different problems, and they need
+// three different answers. Collapsing them into one message produced a screen
+// that said "Google would not accept the AI key" directly above "this clears on
+// its own, wait a few minutes" — two contradictory diagnoses of the same event.
+//
+// blocksScan marks the kind where every remaining email will fail identically
+// for a reason the publisher must go and fix, so there is no point starting.
+const AI_FAILURES = {
+  key: {
+    headline: 'Google would not accept the AI key in your script.',
+    blocksScan: true,
+    400: 'The AI service rejected the request. This usually means GEMINI_API_KEY in your Google Sheet script is not a Gemini API key — a key for the Generative Language API starts with “AIza”.',
+    401: 'Google would not accept the AI key saved in your Google Sheet script. Replace GEMINI_API_KEY in its Script Properties with a Gemini API key from Google AI Studio (it starts with “AIza”).',
+    403: 'Google refused the AI key saved in your Google Sheet script. Either the key is restricted, or the Generative Language API is not enabled on the project that issued it.',
+  },
+  quota: {
+    headline: 'Google’s AI allowance for your key is used up for now.',
+    blocksScan: false,
+    429: 'Google is rate-limiting your AI key, or its allowance is spent for the moment. Nothing is wrong with your setup. Wait a few minutes and scan again — or, if it keeps happening, turn on billing for the Google project that issued the key so it is not on the free allowance.',
+  },
+  service: {
+    headline: 'Google’s AI service is having a problem of its own.',
+    blocksScan: false,
+    default: 'This is at Google’s end, not in your setup. Waiting a few minutes and scanning again usually clears it.',
+  },
 };
 
+export function receiptAiStatus(message) {
+  return Number(/Receipt AI is unavailable \((\d{3})\)/.exec(String(message || ''))?.[1]) || 0;
+}
+
+export function classifyReceiptAiFailure(status) {
+  const kind = AI_FAILURES.key[status] ? 'key' : status === 429 ? 'quota' : status >= 500 ? 'service' : '';
+  if (!kind) return null;
+  const entry = AI_FAILURES[kind];
+  return { kind, headline: entry.headline, blocksScan: entry.blocksScan, help: entry[status] || entry.default };
+}
+
 export function friendlyReceiptAiError(message) {
-  const status = Number(/^Receipt AI is unavailable \((\d{3})\)/.exec(String(message || ''))?.[1]);
-  if (AI_STATUS_HELP[status]) return AI_STATUS_HELP[status];
-  if (status >= 500) return 'Google’s AI service had a problem of its own. Waiting a few minutes and scanning again usually clears it.';
-  return message;
+  return classifyReceiptAiFailure(receiptAiStatus(message))?.help || message;
+}
+
+// Non-null when a failure will repeat identically on every remaining email, so
+// the scan can stop at the first one instead of working through the mailbox
+// collecting the same complaint — which is how one exhausted allowance turned
+// into 77 failed emails and 77 more requests spent against it.
+export function systemicReceiptFailure(message) {
+  const failure = classifyReceiptAiFailure(receiptAiStatus(message));
+  return failure ? `${failure.headline} ${failure.help}` : null;
 }
 
 export async function extractFoundReceipts({ endpoint, idToken, email, signal, fetchImpl = fetch, readAi }) {
@@ -161,6 +198,31 @@ export async function extractFoundReceipts({ endpoint, idToken, email, signal, f
   if (!data.ok) throw new Error(friendlyReceiptAiError(data.error) || 'Receipt AI could not read this email');
   if (!Array.isArray(data.receipts)) throw new Error('Receipt AI returned an invalid response. Retry this email.');
   return data;
+}
+
+// The daily sweep's trigger lives in the publisher's own Apps Script, so the
+// app only ever asks it to arm, disarm or report itself.
+export async function receiptDailySchedule({ endpoint, op = 'status', enabled, hour = 5, fetchImpl = fetch, signal }) {
+  if (!FINDER_ENDPOINT_PATTERN.test(endpoint || '')) throw new Error('Connect your Google Sheet script first');
+  const res = await fetchImpl(endpoint, {
+    method: 'POST', headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+    body: JSON.stringify({ version: 2, action: 'receiptDailySchedule', payload: { op, enabled, hour } }),
+    signal, redirect: 'follow',
+  });
+  if (!res.ok) throw new Error(`The script did not answer (${res.status}).`);
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || 'Could not change the daily scan.');
+  return data;
+}
+
+// Plain reading of the daily sweep's own report, for the line under the switch.
+export function describeDailySweep(state) {
+  if (!state?.enabled) return 'Off. Receipts are only found when you scan by hand.';
+  const hour = state.hour ?? 5;
+  const at = `Runs every day at ${(hour % 12) || 12}${hour < 12 ? 'am' : 'pm'}, reading the previous day only.`;
+  if (state.lastResult) return `${at} Last run: ${state.lastResult}`;
+  if (state.lastRun) return `${at} Last run ${new Date(state.lastRun).toLocaleString()}.`;
+  return `${at} It has not run yet.`;
 }
 
 const SETUP_STEPS = {
@@ -241,8 +303,15 @@ export function describeAiTest(result) {
   if (result.aiOk) {
     return { level: 'ready', headline: `Ready to scan using ${result.model || 'the default model'}. Google accepted the key.`, steps: [] };
   }
-  const help = friendlyReceiptAiError(`Receipt AI is unavailable (${result.aiStatus}).`);
-  return { level: 'error', headline: 'Google would not accept the AI key in your script.', steps: [help] };
+  const failure = classifyReceiptAiFailure(result.aiStatus);
+  if (!failure) {
+    return { level: 'error', headline: `Google answered the test with an error (${result.aiStatus}).`,
+      steps: ['Try the test again in a few minutes. If it keeps happening, check the key in your script’s Script Properties.'] };
+  }
+  // Only a key problem is the publisher's to fix before scanning. A spent
+  // allowance or an outage at Google's end is a wait, not a misconfiguration,
+  // and must not be reported as a rejected key or block the button.
+  return { level: failure.blocksScan ? 'error' : 'warn', headline: failure.headline, steps: [failure.help], blocksScan: failure.blocksScan };
 }
 
 export async function checkReceiptFinderService({ endpoint, fetchImpl = fetch, signal }) {

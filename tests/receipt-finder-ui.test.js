@@ -17,7 +17,11 @@ vi.mock('../src/lib/receipt-finder-client.js', () => ({
   testReceiptAiService: mocks.aiTest,
   describeAiTest: result => result.aiOk
     ? { level: 'ready', headline: 'Google accepted the key.', steps: [] }
-    : { level: 'error', headline: 'Google would not accept the AI key in your script.', steps: ['Use a key that starts with AIza.'] },
+    : result.aiStatus === 429
+      ? { level: 'warn', headline: 'Google’s AI allowance for your key is used up for now.', steps: ['Wait a few minutes.'], blocksScan: false }
+      : { level: 'error', headline: 'Google would not accept the AI key in your script.', steps: ['Use a key that starts with AIza.'], blocksScan: true },
+  systemicReceiptFailure: message => /\(429\)/.test(message)
+    ? 'Google’s AI allowance for your key is used up for now. Wait a few minutes.' : null,
   FINDER_ENDPOINT_PATTERN: /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/,
 }));
 
@@ -354,6 +358,37 @@ describe('receipt finder UI', () => {
     expect(mocks.list).not.toHaveBeenCalled();
     expect(mocks.extract).not.toHaveBeenCalled();
     expect(deps.toast).toHaveBeenCalledWith(expect.stringContaining('would not accept'), 'err');
+  });
+  it('stops at the first spent-allowance failure instead of spending more on it', async () => {
+    // One exhausted allowance became 77 failed emails and 77 more requests
+    // against it, every one of which was always going to fail the same way.
+    mocks.list.mockResolvedValue({ messages: [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }] });
+    mocks.message.mockImplementation(async id => ({ ...source, id, subject: 'Receipt ' + id }));
+    mocks.extract.mockRejectedValue(new Error('Receipt AI is unavailable (429). Retry later.'));
+    await mount();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="connect"]').click(); await settle();
+    document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
+    // Concurrency means a few may already be in flight, but it must not work
+    // through the whole batch.
+    expect(mocks.extract.mock.calls.length).toBeLessThan(4);
+    const status = document.querySelector('[data-finder-status]').textContent;
+    expect(status).toContain('nothing more was spent');
+    expect(status).toMatch(/allowance/i);
+  });
+  it('lets a scan start while rate-limited, since that clears by itself', async () => {
+    // A spent allowance is a wait, not a misconfiguration — gating the button
+    // on it would leave the publisher unable to try at all.
+    mocks.check.mockResolvedValue({ level: 'ready', headline: 'Ready.', steps: [],
+      report: { capabilities: { receiptExtraction: true, receiptSelfTest: true } } });
+    mocks.aiTest.mockResolvedValue({ ok: true, aiOk: false, aiStatus: 429 });
+    await mount();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="connect"]').click(); await settle();
+    document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
+    expect(mocks.list).toHaveBeenCalled();
+    const gate = document.querySelector('[data-finder-gate]').textContent;
+    expect(gate).not.toMatch(/would not accept/);
   });
   it('clears mailbox content immediately on sign-out', async () => {
     await mount();
