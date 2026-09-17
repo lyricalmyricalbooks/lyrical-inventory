@@ -165,7 +165,10 @@ function sweepCtx({ properties = {}, messages = [], aiStatus = 200, receipts = [
       setProperty: (key, value) => { props[key] = value; },
     }) },
     UrlFetchApp: { fetch: (url, options) => {
-      if (String(url).includes('firestore.googleapis.com')) {
+      // Matched on the prefix, not a substring: a host name can appear anywhere
+      // in a URL, so `includes` would route an arbitrary host to the Firestore
+      // branch. CodeQL flags exactly this, and it is right to.
+      if (String(url).startsWith('https://firestore.googleapis.com/')) {
         written.push({ url: String(url), body: JSON.parse(options.payload) });
         return { getResponseCode: () => 200, getContentText: () => '{}' };
       }
