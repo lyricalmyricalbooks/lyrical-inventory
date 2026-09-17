@@ -113,15 +113,15 @@ describe('Challenger 2 Empirical Verification: Modal Shell Scroll Architecture',
 
 describe('Challenger 2 Empirical Verification: Monospace Tabular Figures (`tnum` / DM Mono)', () => {
   const tnumRules = [
-    { name: 'POS Quick Discount .mono-num', regex: /\.pos-discount-btn \.mono-num\s*\{[^}]*font-family:\s*'DM Mono'/ },
-    { name: 'POS Confirm Total', regex: /\.pos-confirm-total-val\s*\{[^}]*font-family:\s*'DM Mono'/ },
-    { name: 'Order History KPI Values', regex: /\.hist-kpi-val\s*\{[^}]*font-family:\s*'DM Mono'/ },
-    { name: 'Consignment Bulk Send Qty', regex: /\.bulk-send-qty\s*\{[^}]*font-family:\s*'DM Mono'/ },
-    { name: 'Cash Flow Stat Delta', regex: /\.cf-stat-delta\s*\{[^}]*font-family:\s*'DM Mono'/ },
-    { name: 'Cash Flow Totals', regex: /\.cf-detail-totals span\s*\{[^}]*font-family:\s*'DM Mono'/ },
+    { name: 'POS Quick Discount .mono-num', regex: /\.pos-discount-btn \.mono-num\s*\{[^}]*font-family:\s*var\(--font-mono\)/ },
+    { name: 'POS Confirm Total', regex: /\.pos-confirm-total-val\s*\{[^}]*font-family:\s*var\(--font-mono\)/ },
+    { name: 'Order History KPI Values', regex: /\.hist-kpi-val\s*\{[^}]*font-family:\s*var\(--font-mono\)/ },
+    { name: 'Consignment Bulk Send Qty', regex: /\.bulk-send-qty\s*\{[^}]*font-family:\s*var\(--font-mono\)/ },
+    { name: 'Cash Flow Stat Delta', regex: /\.cf-stat-delta\s*\{[^}]*font-family:\s*var\(--font-mono\)/ },
+    { name: 'Cash Flow Totals', regex: /\.cf-detail-totals span\s*\{[^}]*font-family:\s*var\(--font-mono\)/ },
     { name: 'Customer & Mailing List Number Cells', regex: /#cust-body td\.r,\s*#cust-body \.money-cell/ },
-    { name: 'Web Analytics KPI Changes', regex: /\.analytics-kpi-change\s*\{[^}]*font-family:\s*'DM Mono'/ },
-    { name: 'Payment QR Custom Input', regex: /\.pqr-input\s*\{[^}]*font-family:\s*'DM Mono'/ },
+    { name: 'Web Analytics KPI Changes', regex: /\.analytics-kpi-change\s*\{[^}]*font-family:\s*var\(--font-mono\)/ },
+    { name: 'Payment QR Custom Input', regex: /\.pqr-input\s*\{[^}]*font-family:\s*var\(--font-mono\)/ },
     { name: 'Book Strip KPIs', regex: /\.bsk-val\s*\{[^}]*font-feature-settings:\s*"tnum"\s*1/ },
   ];
 

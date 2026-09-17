@@ -260,7 +260,7 @@ function renderOcBulkModalContent(retryMode = false) {
     <div class="card" style="width:94%;max-width:660px;max-height:90vh;overflow-y:auto;background:var(--card-bg, #fff);border:1px solid var(--border);border-radius:var(--r3);padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);position:relative;" onclick="event.stopPropagation()">
       <button type="button" class="modal-close-btn" onclick="closeOcBulkModal()" style="position:absolute;top:15px;right:15px;" aria-label="Close dialog" title="Close (Esc)">✕</button>
       
-      <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--gold-text);margin-bottom:4px;">✉ Send Bulk Pipeline Emails</div>
+      <div style="font-family:var(--font-display);font-size:20px;font-weight:700;color:var(--gold-text);margin-bottom:4px;">✉ Send Bulk Pipeline Emails</div>
       <div style="font-size:12px;color:var(--text3);margin-bottom:18px;">Personalize and send stage emails to selected contributors.</div>
 
       <!-- Stage + Re-send Row -->
@@ -340,7 +340,7 @@ function renderOcBulkModalContent(retryMode = false) {
         <div style="width:100%;background:rgba(255,255,255,0.06);height:8px;border-radius:4px;overflow:hidden;border:1px solid var(--border);">
           <div id="oc-bulk-progress-fill" style="width:0%;background:linear-gradient(90deg, var(--gold), var(--gold2));height:100%;transition:width 0.3s ease;"></div>
         </div>
-        <div id="oc-bulk-console" style="font-family:'DM Mono',monospace;font-size:11px;background:#111;color:#a9ffaf;padding:10px;border-radius:6px;max-height:120px;overflow-y:auto;margin-top:10px;border:1px solid #2a2a2a;line-height:1.5;"></div>
+        <div id="oc-bulk-console" style="font-family:var(--font-mono);font-size:11px;background:#111;color:#a9ffaf;padding:10px;border-radius:6px;max-height:120px;overflow-y:auto;margin-top:10px;border:1px solid #2a2a2a;line-height:1.5;"></div>
       </div>
       
       <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;" id="oc-bulk-actions">
@@ -644,7 +644,7 @@ function renderOcBulkRemoveModalContent() {
     <div class="card" style="width:94%;max-width:500px;max-height:90vh;overflow-y:auto;background:var(--card-bg, #fff);border:1px solid var(--border);border-radius:var(--r3);padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);position:relative;" onclick="event.stopPropagation()">
       <button type="button" class="modal-close-btn" onclick="closeOcBulkRemoveModal()" style="position:absolute;top:15px;right:15px;" aria-label="Close dialog" title="Close (Esc)">✕</button>
       
-      <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--red);margin-bottom:4px;">✕ Bulk Remove Contributors</div>
+      <div style="font-family:var(--font-display);font-size:20px;font-weight:700;color:var(--red);margin-bottom:4px;">✕ Bulk Remove Contributors</div>
       <div style="font-size:12px;color:var(--text3);margin-bottom:18px;">Select contributors to remove from the "${escapeHtml(proj.title)}" open call.</div>
 
       <!-- Search Box inside Modal -->
@@ -2761,7 +2761,7 @@ function renderOcImportGmailModal() {
   modal.innerHTML = `
     <div class="card" style="width:94%;max-width:620px;max-height:90vh;overflow-y:auto;padding:24px;position:relative;" onclick="event.stopPropagation()">
       <button type="button" class="modal-close-btn" onclick="closeOcImportGmailModal()" style="position:absolute;top:15px;right:15px;" aria-label="Close dialog" title="Close (Esc)">✕</button>
-      <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--gold-text);margin-bottom:4px;">📨 Import Submissions from Gmail</div>
+      <div style="font-family:var(--font-display);font-size:20px;font-weight:700;color:var(--gold-text);margin-bottom:4px;">📨 Import Submissions from Gmail</div>
       <div style="font-size:12px;color:var(--text3);margin-bottom:16px;">Find the artists' original submission emails and add them as contributors — each one's thread is captured so every stage email replies into it.</div>
 
       <label style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;display:block;margin-bottom:4px;">Gmail search</label>
@@ -3043,7 +3043,7 @@ function renderOcEditModalContent(cId) {
     <div class="card" style="width:94%;max-width:500px;background:var(--card-bg, #fff);border:1px solid var(--border);border-radius:var(--r3);padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);position:relative;" onclick="event.stopPropagation()">
       <button type="button" class="modal-close-btn" onclick="closeOcEditModal()" style="position:absolute;top:15px;right:15px;" aria-label="Close dialog" title="Close (Esc)">✕</button>
       
-      <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--gold-text);margin-bottom:4px;">✎ Edit Contributor</div>
+      <div style="font-family:var(--font-display);font-size:20px;font-weight:700;color:var(--gold-text);margin-bottom:4px;">✎ Edit Contributor</div>
       <div style="font-size:12px;color:var(--text3);margin-bottom:18px;">Update artist details and internal notes.</div>
       
       <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px;">

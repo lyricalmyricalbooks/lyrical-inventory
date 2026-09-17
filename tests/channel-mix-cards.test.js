@@ -66,7 +66,7 @@ test('legend figures share one set of column edges down each card', () => {
 test('the card total is not asked for a DM Mono weight the app never loads', () => {
   // DM Mono ships at 400/500 only; 600 was synthesised into faux-bold.
   const total = block('.ch-book-total');
-  expect(total).toMatch(/font-family:\s*'DM Mono'/);
+  expect(total).toMatch(/font-family:\s*var\(--font-mono\)/);
   expect(total).toMatch(/font-weight:\s*500/);
 });
 

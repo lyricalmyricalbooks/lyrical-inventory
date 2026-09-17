@@ -15,7 +15,7 @@ test('payment QR override fields keep their tabular mono treatment over .form-gr
   const override = styles.match(/\.pqr-override-card \.pqr-select,\s*\n\.pqr-override-card \.pqr-input \{([\s\S]*?)\n\}/);
 
   expect(override).not.toBeNull();
-  expect(override[1]).toMatch(/font-family:\s*'DM Mono',\s*monospace;/);
+  expect(override[1]).toMatch(/font-family:\s*var\(--font-mono\);/);
   expect(override[1]).toMatch(/font-variant-numeric:\s*tabular-nums;/);
   expect(override[1]).toMatch(/background:\s*var\(--surface-raised\);/);
 
@@ -23,5 +23,5 @@ test('payment QR override fields keep their tabular mono treatment over .form-gr
   expect(formGroupRule).not.toBeNull();
   // Sanity check the premise still holds: the generic rule really does set a
   // conflicting proportional font, so the override above is doing real work.
-  expect(formGroupRule[1]).toMatch(/font-family:'Syne',sans-serif;/);
+  expect(formGroupRule[1]).toMatch(/font-family:var\(--font-ui\);/);
 });

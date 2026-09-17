@@ -29,7 +29,7 @@ test('the invoice total leads its row instead of tying with the dates beside it'
   expect(figure).toMatch(/font-size:\s*var\(--text-base\)/);
 
   // Money stays mono so digits keep tabular alignment down the stack.
-  expect(figure).toMatch(/font-family:\s*'DM Mono',\s*monospace/);
+  expect(figure).toMatch(/font-family:\s*var\(--font-mono\)/);
   // An 18px figure must not wrap its own column.
   expect(amount).toMatch(/white-space:\s*nowrap/);
 });
@@ -58,7 +58,7 @@ test('invoice totals share one right edge so a column of them can be compared', 
 test('invoice captions sit on the Syne micro-label scale, a step below their figures', () => {
   const caption = rule('.invoice-card .inv-c-cell');
 
-  expect(caption).toMatch(/font-family:\s*'Syne',\s*sans-serif/);
+  expect(caption).toMatch(/font-family:\s*var\(--font-ui\)/);
   expect(caption).toMatch(/font-size:\s*var\(--text-3xs\)/);
   expect(caption).toMatch(/text-transform:\s*uppercase/);
   expect(caption).toMatch(/letter-spacing:\s*var\(--tracking-caps\)/);

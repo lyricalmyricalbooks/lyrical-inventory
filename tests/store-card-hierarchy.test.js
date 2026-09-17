@@ -63,7 +63,7 @@ test('a long money figure wraps inside its tile instead of widening the card', (
 
 test('store figures are tabular so the tiles do not jitter as counts change', () => {
   const val = block('\\.sk-v');
-  expect(val).toMatch(/font-family:\s*'DM Mono',monospace;/);
+  expect(val).toMatch(/font-family:\s*var\(--font-mono\);/);
   expect(val).toMatch(/font-feature-settings:\s*"tnum" 1,"zero" 1;/);
   expect(val).toMatch(/font-variant-numeric:\s*tabular-nums;/);
 });

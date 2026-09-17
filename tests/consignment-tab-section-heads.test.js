@@ -96,7 +96,7 @@ test('a head badge slot wraps rather than crushing its titles', () => {
 test('a figure riding in a head is mono and tabular, like every other number', () => {
   const note = styles.match(/\.sec-head-note\{([^}]*)\}/);
   expect(note).not.toBeNull();
-  expect(note[1]).toMatch(/font-family:'DM Mono',monospace;/);
+  expect(note[1]).toMatch(/font-family:var\(--font-mono\);/);
   expect(note[1]).toMatch(/font-variant-numeric:tabular-nums;/);
   expect(note[1]).toMatch(/font-feature-settings:"tnum" 1,"zero" 1;/);
   // A themed token, not the inline `--text3` literal it replaced.

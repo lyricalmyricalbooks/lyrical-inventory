@@ -58,7 +58,7 @@ describe('Ten App-Wide UX Enhancements Suite (/ux-designer)', () => {
   describe('6. Order History: Search Filter Clear Button 44px Fitts Target', () => {
     it('enforces var(--target-min) and DM Mono typography on .ledger-filter-row > .btn', () => {
       expect(styleCss).toMatch(/\.ledger-filter-row > \.btn\s*\{[^}]*min-height:\s*var\(--target-min\);/);
-      expect(styleCss).toMatch(/\.ledger-filter-row > \.btn\s*\{[^}]*font-family:\s*'DM Mono', monospace;/);
+      expect(styleCss).toMatch(/\.ledger-filter-row > \.btn\s*\{[^}]*font-family:\s*var\(--font-mono\);/);
       expect(styleCss).toMatch(/\.ledger-filter-row > \.btn:active\s*\{[^}]*transform:\s*scale\(0\.96\);/);
     });
   });
@@ -103,7 +103,7 @@ describe('Ten App-Wide UX Enhancements Suite (/ux-designer)', () => {
     });
 
     it('formats .count-pill with DM Mono and tabular figures (tnum)', () => {
-      expect(styleCss).toMatch(/\.tc-trip-chip \.count-pill\s*\{[^}]*font-family:\s*'DM Mono', monospace;/);
+      expect(styleCss).toMatch(/\.tc-trip-chip \.count-pill\s*\{[^}]*font-family:\s*var\(--font-mono\);/);
       expect(styleCss).toMatch(/\.tc-trip-chip \.count-pill\s*\{[^}]*font-feature-settings:\s*'tnum' 1, 'zero' 1;/);
     });
   });

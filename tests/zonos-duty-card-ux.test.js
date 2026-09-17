@@ -40,7 +40,7 @@ describe('US Zonos Duty Prepayment Card UX/UI Compliance', () => {
   });
 
   it('formats character count and code inputs with DM Mono tabular figures', () => {
-    expect(styleCss).toMatch(/\.us-zonos-input\s*\{[^}]*font-family:\s*'DM Mono',\s*monospace;/);
+    expect(styleCss).toMatch(/\.us-zonos-input\s*\{[^}]*font-family:\s*var\(--font-mono\);/);
     expect(styleCss).toMatch(/\.us-zonos-char-counter\s*\{[^}]*font-feature-settings:\s*"tnum" 1,\s*"zero" 1;/);
   });
 

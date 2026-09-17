@@ -1529,7 +1529,7 @@ function renderProdCostCalcList() {
           <div class="tcc-row-badges">
             <span class="tcc-badge-cat">${escapeHtml(exp.category || 'General')}</span>
             ${bookBadge}
-            <span style="font-size:var(--text-3xs);color:var(--text3);font-family:'DM Mono',monospace;">${escapeHtml(exp.date || '—')}</span>
+            <span style="font-size:var(--text-3xs);color:var(--text3);font-family:var(--font-mono);">${escapeHtml(exp.date || '—')}</span>
           </div>
           <div class="tcc-row-desc">${escapeHtml(exp.desc)}</div>
           ${exp.vendor ? `<div class="tcc-row-sub">Vendor: ${escapeHtml(exp.vendor)}</div>` : ''}
@@ -2050,7 +2050,7 @@ function renderCatalogList() {
            <div class="catalog-dot" style="background:${b.accent}"></div>
            <div class="catalog-info">
              <h4>${escapeHtml(b.title)}</h4>
-             <p><span class="tnum" style="font-family:'DM Mono',monospace;font-size:12px;">${escapeHtml(b.id)}</span> · <strong class="tnum" style="font-family:'DM Mono',monospace;">${b.currency}${b.listPrice}</strong></p>
+             <p><span class="tnum" style="font-family:var(--font-mono);font-size:12px;">${escapeHtml(b.id)}</span> · <strong class="tnum" style="font-family:var(--font-mono);">${b.currency}${b.listPrice}</strong></p>
            </div>
          </div>
          <div class="catalog-actions">
@@ -2075,7 +2075,7 @@ function renderCatalogList() {
              <div class="catalog-dot" style="background:${b.accent}"></div>
              <div class="catalog-info">
                <h4>${escapeHtml(b.title)}</h4>
-               <p><span class="tnum" style="font-family:'DM Mono',monospace;font-size:12px;">${escapeHtml(b.id)}</span> · <strong class="tnum" style="font-family:'DM Mono',monospace;">${b.currency}${b.listPrice}</strong></p>
+               <p><span class="tnum" style="font-family:var(--font-mono);font-size:12px;">${escapeHtml(b.id)}</span> · <strong class="tnum" style="font-family:var(--font-mono);">${b.currency}${b.listPrice}</strong></p>
              </div>
            </div>
            <div class="catalog-actions">
@@ -5889,13 +5889,13 @@ function renderBreakEvenBlock(s, book, cur, cost, recognizedRev) {
         <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; width:100%;">
           <div style="display:flex; align-items:center; gap:8px;">
             <span style="font-size:13px; opacity:0.85;">⚠️</span>
-            <span style="font-weight:600; font-family:'Syne', sans-serif;">${be.isClose ? 'Almost broken even:' : 'Not yet broken even:'}</span>
+            <span style="font-weight:600; font-family:var(--font-ui);">${be.isClose ? 'Almost broken even:' : 'Not yet broken even:'}</span>
           </div>
           <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-            <span style="display:inline-flex; align-items:center; gap:6px; background:${themeBg}; border:1px solid ${themeBorder}; color:${themeColor}; font-family:'DM Mono', monospace; font-size:11px; font-weight:700; padding:4px 10px; border-radius:100px; line-height:1;" title="${fmt(be.remaining, cur)} remaining of ${fmt(cost, cur)} production cost">
+            <span style="display:inline-flex; align-items:center; gap:6px; background:${themeBg}; border:1px solid ${themeBorder}; color:${themeColor}; font-family:var(--font-mono); font-size:11px; font-weight:700; padding:4px 10px; border-radius:100px; line-height:1;" title="${fmt(be.remaining, cur)} remaining of ${fmt(cost, cur)} production cost">
               🎯 ${fmt(be.remaining, cur)} remaining
             </span>
-            <span style="display:inline-flex; align-items:center; gap:6px; background:${themeBg}; border:1px solid ${themeBorder}; color:${themeColor}; font-family:'DM Mono', monospace; font-size:11px; font-weight:700; padding:4px 10px; border-radius:100px; line-height:1;" title="${escapeHtml(be.unitsBadgeTitle)}">
+            <span style="display:inline-flex; align-items:center; gap:6px; background:${themeBg}; border:1px solid ${themeBorder}; color:${themeColor}; font-family:var(--font-mono); font-size:11px; font-weight:700; padding:4px 10px; border-radius:100px; line-height:1;" title="${escapeHtml(be.unitsBadgeTitle)}">
               ${escapeHtml(be.unitsBadgeText)}
             </span>
           </div>
@@ -5903,7 +5903,7 @@ function renderBreakEvenBlock(s, book, cur, cost, recognizedRev) {
         <div class="stock-alert-details" style="border-top-color:${themeBorder};">
           <div style="color:var(--on-inverse-2);">
             ${be.hasListPrice
-              ? `Requires selling <strong style="color:var(--on-inverse);font-weight:700;">~${be.unitsNeededAtList}</strong> more unit${be.unitsNeededAtList !== 1 ? 's' : ''} at full list price of <strong style="color:var(--on-inverse);font-family:'DM Mono', monospace;font-weight:700;">${fmt(be.listPrice, cur)}</strong> to recover the remaining <strong style="color:var(--on-inverse);font-family:'DM Mono', monospace;font-weight:700;">${fmt(be.remaining, cur)}</strong>.`
+              ? `Requires selling <strong style="color:var(--on-inverse);font-weight:700;">~${be.unitsNeededAtList}</strong> more unit${be.unitsNeededAtList !== 1 ? 's' : ''} at full list price of <strong style="color:var(--on-inverse);font-family:var(--font-mono);font-weight:700;">${fmt(be.listPrice, cur)}</strong> to recover the remaining <strong style="color:var(--on-inverse);font-family:var(--font-mono);font-weight:700;">${fmt(be.remaining, cur)}</strong>.`
               : `Set a list price in book settings to calculate the units needed to break even.`}
           </div>
           ${be.paceNote ? `
@@ -5974,8 +5974,8 @@ function getProfitTiersHtml(book, stats, cur) {
           <span style="color:${iconColor}; font-size:11px; width:12px; display:inline-block; text-align:center;">${icon}</span>
           <span>${t.label}<br><span style="font-size:10px;opacity:.55;font-weight:400;">${threshold}</span></span>
         </span>
-        <span style="text-align:right; font-family:'DM Mono',monospace; font-size:11px; opacity:.75;" title="Revenue captured in this tier">${tierCapText}</span>
-        <span style="text-align:right; font-family:'DM Mono',monospace; color:${earned > 0 ? 'var(--green)' : 'var(--text3)'};" title="Artist payout earned in this tier">${fmt(earned, cur)}</span>
+        <span style="text-align:right; font-family:var(--font-mono); font-size:11px; opacity:.75;" title="Revenue captured in this tier">${tierCapText}</span>
+        <span style="text-align:right; font-family:var(--font-mono); color:${earned > 0 ? 'var(--green)' : 'var(--text3)'};" title="Artist payout earned in this tier">${fmt(earned, cur)}</span>
         <span style="text-align:right; color:${isActive ? 'var(--gold2)' : 'var(--text3)'};">${t.artistPct}%</span>
       </div>
     `;
@@ -5998,7 +5998,7 @@ function getRevenueProgressHtml(stats, tiers, nextTier, effectiveCap, cur) {
       <div style="margin-top:1rem; padding:12px; background:var(--ink); border-radius:var(--r2); border:1px solid rgba(255,255,255,.05);">
         <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
           <span style="font-size:10px; text-transform:uppercase; color:rgba(255,255,255,.58); letter-spacing:.1em;">Revenue Progress</span>
-          <span style="font-size:11px; color:var(--gold3); font-family:'DM Mono',monospace;">${fmt(revenueLeft, cur)} ${label}</span>
+          <span style="font-size:11px; color:var(--gold3); font-family:var(--font-mono);">${fmt(revenueLeft, cur)} ${label}</span>
         </div>
         <div class="bar-track" style="height:5px; margin-bottom:0;">
           <div class="bar-fill" style="width:${pct}%; height:5px; border-radius:100px;"></div>
@@ -8850,7 +8850,7 @@ function renderArtistTransfers() {
   const fullPayLink = payLink.startsWith('http') ? payLink : payLink ? 'https://' + payLink : '';
   const payHtml = fullPayLink
     ? `<a href="${fullPayLink}" target="_blank" class="btn sm" style="text-decoration:none;background:var(--green-bg);color:var(--green);border-color:rgba(42,99,72,.2);">↗ Payment link</a>`
-    : `<span style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;">No payment link set</span>`;
+    : `<span style="font-size:10px;color:var(--text3);font-family:var(--font-mono);">No payment link set</span>`;
 
   list.innerHTML = transfers.map(t => `
     <div class="pending-card${t.status === 'pending' ? ' is-pending' : ''}">
@@ -8901,7 +8901,7 @@ function renderPendingExpenses() {
   const fullLink = artistLink ? (artistLink.startsWith('http') ? artistLink : 'https://' + artistLink) : '';
   const payHtml = fullLink
     ? `<a href="${fullLink}" target="_blank" class="btn sm" style="text-decoration:none;background:var(--green-bg);color:var(--green);border-color:rgba(42,99,72,.2);">↗ Payment link</a>`
-    : `<span style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;">No payment link set</span>`;
+    : `<span style="font-size:10px;color:var(--text3);font-family:var(--font-mono);">No payment link set</span>`;
   list.innerHTML = pending.map(e => `
     <div class="pending-card">
       <div>
@@ -14519,7 +14519,7 @@ function renderSystemBackups() {
     <tr>
       <td class="tnum">${new Date(b.createdAt).toLocaleString()}</td>
       <td><span class="pill ${b.type === 'manual' ? 'gold' : 'gray'}">${b.type === 'manual' ? 'Manual' : 'Auto daily'}</span></td>
-      <td class="r tnum" style="font-family:'DM Mono',monospace;font-weight:600;">${b.bookCount ?? Object.keys(b.snapshot?.BOOKS || {}).length}</td>
+      <td class="r tnum" style="font-family:var(--font-mono);font-weight:600;">${b.bookCount ?? Object.keys(b.snapshot?.BOOKS || {}).length}</td>
       <td class="r" style="white-space:nowrap;">
         <button class="btn sm outline" onclick="restoreBookFromBackup('${b.id}')" style="min-height:var(--target-min);margin-right:4px;" title="Restore just one book from this snapshot — leaves your other books untouched">Restore 1 book</button>
         <button class="btn sm danger-btn" onclick="restoreSystemBackup('${b.id}')" style="min-height:var(--target-min);" title="Restore the ENTIRE database from this snapshot — overwrites everything">Restore all</button>
@@ -14530,7 +14530,7 @@ function renderSystemBackups() {
   if (totalPages > 1) {
     html += `<tr><td colspan="4" style="text-align:center;padding:1rem;background:rgba(0,0,0,.15);">
       <button class="btn sm" onclick="gotoSysBackupPage(-1)" ${_sysBackupPage === 0 ? 'disabled' : ''}>← Prev</button>
-      <span style="margin:0 15px;font-size:12px;color:var(--text2);font-family:'DM Mono',monospace;">Page ${_sysBackupPage + 1} of ${totalPages}</span>
+      <span style="margin:0 15px;font-size:12px;color:var(--text2);font-family:var(--font-mono);">Page ${_sysBackupPage + 1} of ${totalPages}</span>
       <button class="btn sm" onclick="gotoSysBackupPage(1)" ${_sysBackupPage === totalPages - 1 ? 'disabled' : ''}>Next →</button>
     </td></tr>`;
   }
@@ -15562,7 +15562,7 @@ function renderProfitTierList() {
     threshWrap.appendChild(threshLbl);
     if (isLast) {
       const pill = document.createElement('div');
-      pill.style.cssText = 'height:44px;display:flex;align-items:center;gap:6px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:600;color:var(--gold);';
+      pill.style.cssText = 'height:44px;display:flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:12px;font-weight:600;color:var(--gold);';
       pill.innerHTML = '<span style="font-size:16px;">∞</span> No ceiling';
       threshWrap.appendChild(pill);
     } else {
@@ -15700,8 +15700,8 @@ function psRenderSummary(book, cur, productionCost) {
     const cTxt = c != null ? `up to ${fmt(c, cur)}` : 'no ceiling';
     return `<div class="preview-table-row">
         <span>${label} <span style="color:var(--text3); font-size:10px;">· ${cTxt} · ${parseFloat(t.artistPct) || 0}%</span></span>
-        <span style="font-family:'DM Mono',monospace;color:rgba(255,255,255,0.6);" title="Revenue falling in this stage">${fmt(r.revenue, cur)}</span>
-        <span style="font-family:'DM Mono',monospace;color:var(--gold3);" title="Artist earns from this stage">${fmt(r.artist, cur)}</span>
+        <span style="font-family:var(--font-mono);color:rgba(255,255,255,0.6);" title="Revenue falling in this stage">${fmt(r.revenue, cur)}</span>
+        <span style="font-family:var(--font-mono);color:var(--gold3);" title="Artist earns from this stage">${fmt(r.artist, cur)}</span>
       </div>`;
   }).join('');
 
@@ -15712,7 +15712,7 @@ function psRenderSummary(book, cur, productionCost) {
         <div class="settings-metric-label" style="color:rgba(255,255,255,.5);">Earnings split simulator</div>
         <div style="display:flex;align-items:center;gap:8px;">
           <span style="font-size:11px;color:rgba(255,255,255,.55);">If gross revenue is</span>
-          <input id="ps-sim-input" type="number" value="${gross}" style="width:120px;padding:6px 10px;font-size:13px;font-family:'DM Mono',monospace;border:1px solid rgba(255,255,255,.14);border-radius:var(--r);background:rgba(255,255,255,.06);color:var(--on-inverse);outline:none;">
+          <input id="ps-sim-input" type="number" value="${gross}" style="width:120px;padding:6px 10px;font-size:13px;font-family:var(--font-mono);border:1px solid rgba(255,255,255,.14);border-radius:var(--r);background:rgba(255,255,255,.06);color:var(--on-inverse);outline:none;">
           <span style="font-size:11px;color:rgba(255,255,255,.55);">${escapeHtml(cur)}</span>
         </div>
       </div>
@@ -15720,8 +15720,8 @@ function psRenderSummary(book, cur, productionCost) {
         <div class="preview-bar-fill" style="width:${Math.max(0, Math.min(100, artistPct))}%;"></div>
       </div>
       <div class="preview-summary-values">
-        <span style="color:var(--gold3);font-family:'DM Mono',monospace;">Artist ${fmt(sim.totalArtist, cur)} <span style="opacity:.65;">(${artistPct.toFixed(1)}%)</span></span>
-        <span style="color:rgba(255,255,255,.7);font-family:'DM Mono',monospace;">Publisher ${fmt(sim.publisher, cur)}</span>
+        <span style="color:var(--gold3);font-family:var(--font-mono);">Artist ${fmt(sim.totalArtist, cur)} <span style="opacity:.65;">(${artistPct.toFixed(1)}%)</span></span>
+        <span style="color:rgba(255,255,255,.7);font-family:var(--font-mono);">Publisher ${fmt(sim.publisher, cur)}</span>
       </div>
       <div class="preview-table">
         <div class="preview-table-header">
@@ -19756,10 +19756,10 @@ function openInventoryValuationModal() {
           <td class="r" style="font-weight:600;">${item.stockOnHand}</td>
           <td class="r">${storePill}</td>
           <td class="r" style="font-weight:700; color:var(--gold);">${item.totalUnsold}</td>
-          <td class="r" style="font-family:'DM Mono',monospace;">${curSym}${item.unitCost.toFixed(2)}</td>
-          <td class="r" style="font-family:'DM Mono',monospace;">${curSym}${item.listPrice.toFixed(2)}</td>
-          <td class="r" style="font-family:'DM Mono',monospace; font-weight:600; color:var(--gold);">$${item.totalCostCAD.toFixed(2)}</td>
-          <td class="r" style="font-family:'DM Mono',monospace; font-weight:600; color:var(--green);">$${item.totalRetailCAD.toFixed(2)}</td>
+          <td class="r" style="font-family:var(--font-mono);">${curSym}${item.unitCost.toFixed(2)}</td>
+          <td class="r" style="font-family:var(--font-mono);">${curSym}${item.listPrice.toFixed(2)}</td>
+          <td class="r" style="font-family:var(--font-mono); font-weight:600; color:var(--gold);">$${item.totalCostCAD.toFixed(2)}</td>
+          <td class="r" style="font-family:var(--font-mono); font-weight:600; color:var(--green);">$${item.totalRetailCAD.toFixed(2)}</td>
         </tr>
       `;
     }).join('');
@@ -20172,7 +20172,7 @@ function renderStripeFeesCards(data, byYearCurAll) {
           <div style="display:flex;flex-wrap:wrap;gap:1.5rem;align-items:flex-end;">
             <div style="flex:2;min-width:240px;">
               <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.12em;margin-bottom:4px;">Stripe fees on your sales</div>
-              <div style="font-family:'DM Mono',monospace;font-size:32px;font-weight:500;color:var(--red);line-height:1;">${_stripeFmtMoney(fee, cur)}</div>
+              <div style="font-family:var(--font-mono);font-size:32px;font-weight:500;color:var(--red);line-height:1;">${_stripeFmtMoney(fee, cur)}</div>
               <div style="font-size:13px;color:var(--text2);margin-top:8px;line-height:1.5;">
                 on <strong>${_stripeFmtMoney(gross, cur)}</strong> across <strong>${salesAgg.count}</strong> customer ${salesAgg.count === 1 ? 'payment' : 'payments'}<br>
                 You received <strong style="color:var(--green);">${_stripeFmtMoney(net, cur)}</strong> net into your Stripe balance
@@ -20180,7 +20180,7 @@ function renderStripeFeesCards(data, byYearCurAll) {
             </div>
             <div style="flex:1;min-width:120px;text-align:right;">
               <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.12em;margin-bottom:4px;">Effective rate</div>
-              <div style="font-family:'DM Mono',monospace;font-size:32px;font-weight:500;color:var(--gold);line-height:1;">${pct.toFixed(2)}%</div>
+              <div style="font-family:var(--font-mono);font-size:32px;font-weight:500;color:var(--gold);line-height:1;">${pct.toFixed(2)}%</div>
               <div style="font-size:11px;color:var(--text3);margin-top:8px;">of gross sales</div>
             </div>
           </div>`;
@@ -20225,7 +20225,7 @@ function renderStripeFeesCards(data, byYearCurAll) {
       cards.push(`
         <div class="card" style="margin-bottom:1rem;padding:1.25rem 1.4rem;">
           <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:10px;">
-            <div style="font-family:'Playfair Display',serif;font-size:22px;color:var(--text);">${year}</div>
+            <div style="font-family:var(--font-display);font-size:22px;color:var(--text);">${year}</div>
             <span class="pill gold">${cur}</span>
           </div>
           ${headline}
@@ -20640,16 +20640,16 @@ async function reconcileStripeAgainstSales() {
     const diffColor = aligned ? 'var(--green)' : 'var(--amber)';
     return `<tr>
       <td>${y}</td>
-      <td class="r" style="font-family:'DM Mono',monospace;">${fmtCad(stripe)}</td>
-      <td class="r" style="font-family:'DM Mono',monospace;">${fmtCad(recorded)}</td>
-      <td class="r" style="font-family:'DM Mono',monospace;color:${diffColor};">${diff >= 0 ? '+' : ''}${fmtCad(diff)}</td>
+      <td class="r" style="font-family:var(--font-mono);">${fmtCad(stripe)}</td>
+      <td class="r" style="font-family:var(--font-mono);">${fmtCad(recorded)}</td>
+      <td class="r" style="font-family:var(--font-mono);color:${diffColor};">${diff >= 0 ? '+' : ''}${fmtCad(diff)}</td>
       <td class="r">${aligned ? '<span class="pill green" style="font-size:10px;">✓ Aligned</span>' : '<span class="pill" style="font-size:10px;background:var(--amber);color:var(--on-status);">Review</span>'}</td>
     </tr>`;
   }).join('');
 
   if (wrap) wrap.innerHTML = `
     <div class="card" style="margin-bottom:1rem;padding:1.1rem 1.3rem;">
-      <div style="font-family:'Playfair Display',serif;font-size:16px;margin-bottom:8px;">Reconciliation — Stripe vs recorded sales</div>
+      <div style="font-family:var(--font-ui);font-size:16px;margin-bottom:8px;">Reconciliation — Stripe vs recorded sales</div>
       <div class="tbl-wrap">
         <table class="tbl">
           <thead><tr><th>Year</th><th class="r">Stripe collected (CAD)</th><th class="r">Recorded sales (CAD)</th><th class="r">Difference</th><th class="r">Status</th></tr></thead>
@@ -20962,7 +20962,7 @@ function reconRenderKeyRow(forceEdit) {
   if (!row) return;
   const saved = (TAX_CENTER?.settings?.stripeKey || getInvoiceSettings().stripeKey || '').trim();
   if (saved && !forceEdit && !row.dataset.editing) {
-    row.innerHTML = `<span style="font-size:12px;color:var(--text2);">🔒 Stripe key saved <span style="font-family:'DM Mono',monospace;color:var(--text3);">••••${escapeHtml(saved.slice(-4))}</span></span>
+    row.innerHTML = `<span style="font-size:12px;color:var(--text2);">🔒 Stripe key saved <span style="font-family:var(--font-mono);color:var(--text3);">••••${escapeHtml(saved.slice(-4))}</span></span>
       <button class="btn tag sm" onclick="reconEditKey()">Change</button>`;
   } else {
     row.innerHTML = `<input type="password" id="recon-key" placeholder="rk_live_… or sk_live_… (reused from Tax Centre / Invoices if already saved)" style="flex:1;" autocomplete="off" value="${escapeHtml(saved)}">`;
@@ -21016,7 +21016,7 @@ const _RECON_SORTERS = {
 
 // ── Card fragments shared by single + grouped rendering
 function _reconAmountBadge(p) {
-  return `<span style="font-family:'DM Mono',monospace;font-weight:600;font-size:16px;">${_stripeFmtMoney(p.amount, p.currency)}</span>`;
+  return `<span style="font-family:var(--font-mono);font-weight:600;font-size:16px;">${_stripeFmtMoney(p.amount, p.currency)}</span>`;
 }
 function _reconMeta(p) {
   const who = [p.customer, p.email].filter(Boolean).join(' · ') || '—';
@@ -21207,7 +21207,7 @@ export function renderReconcile() {
   if (!matched.length) { matchedEl.innerHTML = ''; return; }
   const rows = matched.map(({ p, label, tone, note }) => `<tr>
     <td style="white-space:nowrap;">${escapeHtml(p.date)}</td>
-    <td class="r" style="font-family:'DM Mono',monospace;white-space:nowrap;">${_stripeFmtMoney(p.amount, p.currency)}</td>
+    <td class="r" style="font-family:var(--font-mono);white-space:nowrap;">${_stripeFmtMoney(p.amount, p.currency)}</td>
     <td>${escapeHtml([p.customer, p.email].filter(Boolean).join(' · ') || p.description || '—')}</td>
     <td><span class="pill ${tone}" style="font-size:10px;">${label}</span> <span style="font-size:11px;color:var(--text3);">${escapeHtml(note)}</span></td>
     <td class="r">${getReconMemory().recorded[p.id] || getReconMemory().dismissed[p.id] ? `<button class="btn tag sm" onclick="reconcileUndo('${p.id.replace(/[^A-Za-z0-9_]/g, '')}')">Undo</button>` : ''}</td>
@@ -24133,10 +24133,10 @@ async function showWhatsNew(event) {
       return `
         <div class="commit-item" onclick="window.open('https://github.com/lyricalmyricalbooks/lyrical-inventory/commit/${c.fullSha}', '_blank')" title="Click to view commit details on GitHub">
           <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--gold-text);font-weight:600;">sha: ${c.sha} ↗</span>
+            <span style="font-family:var(--font-mono);font-size:11px;color:var(--gold-text);font-weight:600;">sha: ${c.sha} ↗</span>
             <span style="font-size:10px;color:var(--text3);">${dateStr}</span>
           </div>
-          <div style="font-size:12.5px;color:var(--text);white-space:pre-wrap;line-height:1.45;font-family:'Syne',sans-serif;font-weight:500;">${cleanMsg}</div>
+          <div style="font-size:12.5px;color:var(--text);white-space:pre-wrap;line-height:1.45;font-family:var(--font-ui);font-weight:500;">${cleanMsg}</div>
         </div>`;
     }).join('');
   } catch (err) {

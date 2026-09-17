@@ -58,12 +58,14 @@ test('QR card block establishes the surface, radius and hover lift on tokens', (
   expect(hoverRule[1]).toMatch(/transform:\s*translateY\(-2px\)/);
 });
 
-test('title leads the card in Playfair, price is mono/tabular', () => {
+test('title leads the card in the interface face, price is mono/tabular', () => {
   const titleRule = styles.match(/\.qr-card-title\s*\{([\s\S]*?)\n\}/);
   expect(titleRule, '.qr-card-title rule').not.toBeNull();
-  // Playfair on the title is what makes it the entry point — Syne 13px at
-  // the same weight as the price is what the old cards looked like.
-  expect(titleRule[1]).toMatch(/font-family:\s*'Playfair Display'/);
+  // The title carries the interface face at 15px against the price's mono;
+  // two different faces is what makes the title the entry point rather than
+  // a fourth equal line. (Riso Press retired the serif: --font-display is
+  // Anton, which is a display face and belongs at 20px and up, not here.)
+  expect(titleRule[1]).toMatch(/font-family:\s*var\(--font-ui\)/);
   expect(titleRule[1]).toMatch(/font-size:\s*var\(--text-md\)/);
   // On a permanently dark card, text goes on --on-inverse — never
   // color:var(--cream) (tests/theme.test.js would fail on it).
@@ -74,7 +76,7 @@ test('title leads the card in Playfair, price is mono/tabular', () => {
   // Price is the second focal point — DM Mono + tabular figures so a column
   // of cards lines its digits up rather than jittering as a currency prefix
   // widens. --gold-text (not --gold) because the card is a text surface.
-  expect(priceRule[1]).toMatch(/font-family:\s*'DM Mono'/);
+  expect(priceRule[1]).toMatch(/font-family:\s*var\(--font-mono\)/);
   expect(priceRule[1]).toMatch(/font-feature-settings:\s*"tnum" 1,\s*"zero" 1/);
   expect(priceRule[1]).toMatch(/font-variant-numeric:\s*tabular-nums/);
   expect(priceRule[1]).toMatch(/color:\s*var\(--gold-text\)/);

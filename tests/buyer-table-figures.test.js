@@ -40,7 +40,7 @@ test('wide-table column roles keep their figure treatment', () => {
 
   // Dates read left-aligned like text but with mono digits, so a column of them
   // lines up instead of wandering.
-  expect(date[1]).toMatch(/font-family:\s*'DM Mono',\s*monospace;/);
+  expect(date[1]).toMatch(/font-family:\s*var\(--font-mono\);/);
   expect(date[1]).toMatch(/white-space:\s*nowrap;/);
 
   // Free text between the figures recedes and is width-capped, so one buyer

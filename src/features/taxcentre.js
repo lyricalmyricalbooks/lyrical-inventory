@@ -2972,14 +2972,14 @@ function openTaxSeasonPreflightModal() {
             <span style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text3);font-weight:700;">Tax Reporting Period</span>
             <div style="font-size:16px;font-weight:700;color:var(--text1);">${isAllTime ? 'All Time (Full Historical Export)' : `Calendar Year ${escapeHtml(year)}`}</div>
           </div>
-          <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:${scoreColor};background:var(--cream2);border:1px solid ${scoreColor};padding:4px 12px;border-radius:99px;">
+          <div style="font-family:var(--font-ui);font-size:13px;font-weight:700;color:${scoreColor};background:var(--cream2);border:1px solid ${scoreColor};padding:4px 12px;border-radius:99px;">
             ${scoreBadge}
           </div>
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;font-size:12px;padding-top:10px;border-top:1px solid var(--border-subtle);">
-          <div><span style="color:var(--text3);">Gross Sales:</span><br><strong style="color:var(--green);font-family:'DM Mono',monospace;">+${fmt(totalGrossSales, baseCurrency)}</strong></div>
-          <div><span style="color:var(--text3);">Operating Exp:</span><br><strong style="color:var(--red);font-family:'DM Mono',monospace;">-${fmt(totalOperatingExpenses, baseCurrency)}</strong></div>
-          <div><span style="color:var(--text3);">Net Cash Flow:</span><br><strong style="color:var(--gold);font-family:'DM Mono',monospace;">${fmt(totalGrossSales - totalOperatingExpenses, baseCurrency)}</strong></div>
+          <div><span style="color:var(--text3);">Gross Sales:</span><br><strong style="color:var(--green);font-family:var(--font-mono);">+${fmt(totalGrossSales, baseCurrency)}</strong></div>
+          <div><span style="color:var(--text3);">Operating Exp:</span><br><strong style="color:var(--red);font-family:var(--font-mono);">-${fmt(totalOperatingExpenses, baseCurrency)}</strong></div>
+          <div><span style="color:var(--text3);">Net Cash Flow:</span><br><strong style="color:var(--gold);font-family:var(--font-mono);">${fmt(totalGrossSales - totalOperatingExpenses, baseCurrency)}</strong></div>
         </div>
       </div>
 
@@ -3226,7 +3226,7 @@ function _tcRenderReceiptGallery() {
           <span>Showing ${pageStart + 1}–${Math.min(pageStart + TC_GALLERY_PAGE_SIZE, filtered.length)} of ${filtered.length} receipts</span>
           <div style="display:flex;gap:6px;">
             <button class="btn sm" type="button" onclick="setTcGalleryPage(${_tcGalleryPage - 1})" ${_tcGalleryPage === 0 ? 'disabled' : ''}>‹ Prev</button>
-            <span style="padding:4px 8px;font-family:'DM Mono',monospace;">${_tcGalleryPage + 1} / ${totalPages}</span>
+            <span style="padding:4px 8px;font-family:var(--font-mono);">${_tcGalleryPage + 1} / ${totalPages}</span>
             <button class="btn sm" type="button" onclick="setTcGalleryPage(${_tcGalleryPage + 1})" ${_tcGalleryPage === totalPages - 1 ? 'disabled' : ''}>Next ›</button>
           </div>
         </div>
@@ -3276,7 +3276,7 @@ async function _tcRenderLightboxContent() {
     metaEl.innerHTML = `
       <span>📅 ${escapeHtml(item.date || '—')}</span> &nbsp;·&nbsp;
       <span>🏷️ ${escapeHtml(item.cat || '')}</span> &nbsp;·&nbsp;
-      <strong style="color:var(--red);font-family:'DM Mono',monospace;">-${fmt(item.amount, item.currency || 'CAD')}</strong>
+      <strong style="color:var(--red);font-family:var(--font-mono);">-${fmt(item.amount, item.currency || 'CAD')}</strong>
     `;
   }
   if (counterEl) counterEl.textContent = `${index + 1} / ${items.length}`;
@@ -4218,7 +4218,7 @@ async function testCanadaPostConnectionHandler() {
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             <span style="color:var(--green);font-weight:600;">✓ Connected to Canada Post! (${result.servicesCount} services quoted)</span>
             ${modePill}
-            <span class="tnum" style="color:var(--text3);font-size:10px;font-family:'DM Mono',monospace;">${escapeHtml(audit.environment.hostname)}</span>
+            <span class="tnum" style="color:var(--text3);font-size:10px;font-family:var(--font-mono);">${escapeHtml(audit.environment.hostname)}</span>
             <span style="color:var(--text3);font-size:10px;">(${new Date().toLocaleTimeString()})</span>
           </div>
           <div style="color:var(--text3);font-size:10px;margin-top:3px;">Labels will be billed to customer number <span class="tnum">${escapeHtml(audit.customerNumber || '—')}</span>.</div>

@@ -19,7 +19,7 @@ describe('Milestone 1 — Feature 1: POS Quick Discount Grid', () => {
     // CSS checks
     expect(styleCss).toMatch(/\.pos-discount-btn\s*\{[^}]*min-height:\s*var\(--target-min\)/);
     expect(styleCss).toMatch(/\.pos-discount-btn\s*\{[^}]*var\(--ease-spring\)/);
-    expect(styleCss).toMatch(/\.pos-discount-btn \.mono-num\s*\{[^}]*font-family:\s*'DM Mono'/);
+    expect(styleCss).toMatch(/\.pos-discount-btn \.mono-num\s*\{[^}]*font-family:\s*var\(--font-mono\)/);
     expect(styleCss).toMatch(/\.pos-discount-btn:active\s*\{[^}]*transform:\s*scale\(0\.97\)/);
   });
 });
@@ -52,7 +52,7 @@ describe('Milestone 1 — Feature 3: POS Sale Confirmation Monospace & Receipt S
 
     // CSS checks
     expect(styleCss).toMatch(/\.pos-confirm-summary-well\s*\{[^}]*background:\s*var\(--surface-sunken\)/);
-    expect(styleCss).toMatch(/\.pos-confirm-total-val\s*\{[^}]*font-family:\s*'DM Mono'/);
+    expect(styleCss).toMatch(/\.pos-confirm-total-val\s*\{[^}]*font-family:\s*var\(--font-mono\)/);
     expect(styleCss).toMatch(/\.pos-confirm-total-val\s*\{[^}]*font-feature-settings:\s*"tnum" 1/);
 
     // main.js checks
@@ -82,7 +82,7 @@ describe('Milestone 1 — Feature 5: Order History Inline Edit Button Touch Slop
 
 describe('Milestone 1 — Feature 6: Order History Reconciliation KPI Monospace & Restate Callout', () => {
   it('applies DM Mono / tnum tabular formatting and canonical surface tokens on currency warn callout', () => {
-    expect(styleCss).toMatch(/\.hist-kpi-val\s*\{[^}]*font-family:\s*'DM Mono'/);
+    expect(styleCss).toMatch(/\.hist-kpi-val\s*\{[^}]*font-family:\s*var\(--font-mono\)/);
     expect(styleCss).toMatch(/\.hist-kpi-val\s*\{[^}]*font-feature-settings:\s*"tnum" 1/);
     expect(styleCss).toMatch(/\.hist-currency-warn\s*\{[^}]*background:\s*var\(--status-active-bg\)/);
     expect(styleCss).toMatch(/\.hist-currency-warn \.btn\s*\{[^}]*min-height:\s*var\(--target-min\)/);
@@ -119,7 +119,7 @@ describe('Milestone 1 — Feature 9: Consignment Bulk Send Modal Inputs & Overst
     // CSS checks
     expect(styleCss).toMatch(/\.bulk-send-row\s*\{[^}]*min-height:\s*var\(--target-min\)/);
     expect(styleCss).toMatch(/\.bulk-send-qty\s*\{[^}]*min-height:\s*var\(--target-min\)/);
-    expect(styleCss).toMatch(/\.bulk-send-qty\s*\{[^}]*font-family:\s*'DM Mono'/);
+    expect(styleCss).toMatch(/\.bulk-send-qty\s*\{[^}]*font-family:\s*var\(--font-mono\)/);
     expect(styleCss).toMatch(/\.bulk-send-qty\s*\{[^}]*font-feature-settings:\s*"tnum" 1/);
   });
 });
