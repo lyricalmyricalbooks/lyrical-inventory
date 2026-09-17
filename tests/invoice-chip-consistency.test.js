@@ -34,7 +34,7 @@ test('the dynamic-Stripe-link chip is a themed chip-status tone, not a bespoke p
 test('invoice-row meta chips share one compact size instead of each picking its own font-size', () => {
   const smRule = styles.match(/\.chip-status\.sm\s*\{([\s\S]*?)\n\}/);
   expect(smRule).not.toBeNull();
-  expect(smRule[1]).toMatch(/font-size:\s*9px/);
+  expect(smRule[1]).toMatch(/font-size:\s*var\(--text-3xs\)/);
 
   // The invoice-list chip builders (shared/person/promised/chased/failed) used to
   // hand-pick `style="margin-left:6px;font-size:9px;"` per chip — now they all
