@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
 import { describeFinderSetup, checkReceiptFinderService, describeAiTest, friendlyReceiptAiError,
-  EXPECTED_FINDER_VERSION, EXPECTED_SHEETS_VERSION } from '../src/lib/receipt-finder-client.js';
+  systemicReceiptFailure, EXPECTED_FINDER_VERSION, EXPECTED_SHEETS_VERSION } from '../src/lib/receipt-finder-client.js';
 
 const source = fs.readFileSync(path.resolve('apps-script/receipt-finder/Code.gs'), 'utf8');
 function service({
@@ -204,8 +204,41 @@ describe('telling a working AI key from one that merely exists', () => {
   });
 
   it('still says wait when waiting is genuinely the answer', () => {
-    expect(friendlyReceiptAiError('Receipt AI is unavailable (429). Retry later.')).toContain('wait');
+    expect(friendlyReceiptAiError('Receipt AI is unavailable (429). Retry later.')).toMatch(/wait/i);
     expect(friendlyReceiptAiError('Receipt AI is unavailable (503). Retry later.')).toContain('few minutes');
+  });
+
+  it('does not call a spent allowance a rejected key', () => {
+    // Reported from a screenshot: the panel read "Google would not accept the
+    // AI key in your script" directly above "this clears on its own, wait a few
+    // minutes" — two contradictory diagnoses of one 429.
+    const quota = describeAiTest({ ok: true, aiOk: false, aiStatus: 429 });
+    expect(quota.headline).not.toMatch(/would not accept/);
+    expect(quota.headline).toMatch(/allowance/i);
+    expect(quota.level).toBe('warn');
+    expect(quota.blocksScan).toBe(false);
+    expect(quota.steps[0]).toMatch(/nothing is wrong with your setup/i);
+  });
+
+  it('separates a key the publisher must fix from a wait they cannot', () => {
+    expect(describeAiTest({ ok: true, aiOk: false, aiStatus: 401 }).blocksScan).toBe(true);
+    expect(describeAiTest({ ok: true, aiOk: false, aiStatus: 503 }).blocksScan).toBe(false);
+    expect(describeAiTest({ ok: true, aiOk: false, aiStatus: 503 }).headline).toMatch(/Google’s AI service/);
+  });
+
+  it('flags a failure that repeats on every email, and only that', () => {
+    expect(systemicReceiptFailure('Receipt AI is unavailable (429). Retry later.')).toMatch(/allowance/i);
+    expect(systemicReceiptFailure('Receipt AI is unavailable (401). Retry later.')).toMatch(/would not accept/);
+    // A problem with one particular email is not a reason to stop the scan.
+    expect(systemicReceiptFailure('This email is too large for AI extraction.')).toBeNull();
+    expect(systemicReceiptFailure('Could not download invoice.pdf')).toBeNull();
+  });
+
+  it('does not guess at a status it has no advice for', () => {
+    const odd = describeAiTest({ ok: true, aiOk: false, aiStatus: 418 });
+    expect(odd.level).toBe('error');
+    expect(odd.headline).toContain('418');
+    expect(odd.headline).not.toMatch(/would not accept|allowance/);
   });
 
   it('passes through a message that is not an upstream status', () => {

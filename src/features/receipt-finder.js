@@ -1,6 +1,6 @@
 import { escapeHtml as esc } from '../lib/html.js';
 import { receiptQuery, normalizeFoundReceipt, receiptProblems, receiptReviewStatus, receiptMoney, RECEIPT_STATUSES } from '../lib/receipt-finder.js';
-import { createReceiptFinderClient, extractFoundReceipts, decodeGmailBase64, checkReceiptFinderService, testReceiptAiService, describeAiTest, FINDER_ENDPOINT_PATTERN } from '../lib/receipt-finder-client.js';
+import { createReceiptFinderClient, extractFoundReceipts, decodeGmailBase64, checkReceiptFinderService, testReceiptAiService, describeAiTest, systemicReceiptFailure, FINDER_ENDPOINT_PATTERN } from '../lib/receipt-finder-client.js';
 import { createReceiptFinderStore } from '../lib/receipt-finder-store.js';
 import { flushReceiptOutbox } from '../lib/receipt-finder-outbox.js';
 import { downloadBlob } from '../lib/download.js';
@@ -20,7 +20,7 @@ let deps, host, state = emptyState(), uid = '', accessToken = '', tokenExpiresAt
 let controller = null, busy = false, flushing = false, scanTotal = 0, scanDone = 0;
 let filter = 'all', resultQuery = '', saveChain = Promise.resolve(), saveScheduled = false;
 let initialized = false, restore = Promise.resolve(), serviceReadyFor = '', serviceProblem = null;
-let statusCache = null, cachedExpenses = null, renderTimer = 0;
+let statusCache = null, cachedExpenses = null, renderTimer = 0, haltReason = '';
 const store = createReceiptFinderStore();
 const client = createReceiptFinderClient({ token: () => accessToken, onExpired: () => { forgetToken().catch(() => {}); } });
 const active = () => uid && deps?.user()?.uid === uid && deps.publisher();
@@ -706,7 +706,10 @@ async function ensureServiceReady() {
   }
   paintSetupCheck(result);
   render();
-  if (result.level !== 'ready') throw new Error(`${result.headline} ${result.steps[0] || ''}`.trim());
+  // Only a problem the publisher has to go and fix stops the scan. A spent
+  // allowance clears by itself, so letting them try costs one request and may
+  // well work; the scan halts on its own at the first refusal either way.
+  if (result.level !== 'ready' && result.blocksScan !== false) throw new Error(`${result.headline} ${result.steps[0] || ''}`.trim());
   serviceReadyFor = endpoint;
   await dropFailuresFromOtherService(endpoint);
   return endpoint;
@@ -747,6 +750,10 @@ async function readCandidate(id, signal, endpoint) {
     if (error.name === 'AbortError' || !active() || uid !== owner) throw error;
     state.scans[key] = { error: error.message, subject: email?.subject || id, endpoint };
     await persist();
+    // Every remaining email would fail the same way and spend another request
+    // doing it. One exhausted allowance used to become 77 failed emails.
+    const systemic = systemicReceiptFailure(error.message);
+    if (systemic) { haltReason = systemic; controller?.abort(); }
   }
   scanDone++;
   scheduleRender();
@@ -778,7 +785,7 @@ async function scan(nextPage) {
   // Claimed before the capability check, which is a network round trip: a
   // second click during it would otherwise start a second scan.
   busy = true; controller = new AbortController(); const signal = controller.signal;
-  scanTotal = 0; scanDone = 0;
+  scanTotal = 0; scanDone = 0; haltReason = '';
   const before = state.drafts.length;
   const failedBefore = Object.values(state.scans).filter(item => item.error).length;
   render();
@@ -807,8 +814,11 @@ async function scan(nextPage) {
       state.pageToken ? 'There are more emails to check — use “Scan next 25 emails”.' : '',
     ].filter(Boolean).join(' '));
   } catch (error) {
-    if (error.name === 'AbortError') announce('Scan stopped. Everything already read has been saved; scan again to carry on.');
-    else throw error;
+    if (error.name === 'AbortError') {
+      announce(haltReason
+        ? `Scan stopped after the first failure, so nothing more was spent on it. ${haltReason}`
+        : 'Scan stopped. Everything already read has been saved; scan again to carry on.');
+    } else throw error;
   } finally { busy = false; controller = null; scanTotal = 0; scanDone = 0; render(); }
 }
 
