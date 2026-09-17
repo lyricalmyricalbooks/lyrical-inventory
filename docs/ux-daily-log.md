@@ -93,6 +93,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-09-16 | visual | Invoices list | Gave the invoice-row badges (Stripe, shared, person, chase) one matching shape, and fixed a failed-reminder badge that had no color at all | #839 |
 | 2026-09-16 | visual | Dashboard — expenses owed to artist | Gave the expense table real column headers, an even row rhythm and a themed category tag, instead of hand-picked padding per cell and no header at all | #839 |
 | 2026-09-16 | visual | Dashboard — artist reimbursement & pending-transfer banners | Gave both author-facing money summaries a shared row divider and tag style instead of two copies of the same hand-rolled row, and swapped a raw hex for the emerald token | #839 |
+| 2026-09-17 | visual | Event POS — search with no matches | Fixed the register's "no books match" message so the search term you typed is actually visible instead of blending into the background | #TBD |
 
 ---
 
