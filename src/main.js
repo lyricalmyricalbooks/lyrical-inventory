@@ -11563,12 +11563,12 @@ function buildStandaloneInvoiceHTML(inv) {
     *{box-sizing:border-box;}
     html,body{margin:0;padding:0;}
     body{background:#f0ece4;padding:40px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;}
-    .invoice-paper{background:var(--surface-card);}
+    .invoice-paper{background:#fff;} /* token-ok: standalone document, no :root loaded */
     ${collectInvoicePaperCss()}
     .invoice-paper .inv-pay{display:flex !important;}
     @page{margin:0.4in !important;}
     @media print{
-      html,body{background:var(--surface-card) !important;margin:0 !important;padding:0 !important;}
+      html,body{background:#fff !important;margin:0 !important;padding:0 !important;} /* token-ok: standalone document */
       body{padding:0 !important;}
       .invoice-paper{
         box-shadow:none !important;
@@ -11706,7 +11706,7 @@ async function buildInvoiceJsPdf(bodyInner) {
 
   const holder = document.createElement('div');
   holder.setAttribute('aria-hidden', 'true');
-  holder.style.cssText = 'position:fixed;left:-9999px;top:0;width:780px;background:var(--surface-card);';
+  holder.style.cssText = 'position:fixed;left:-9999px;top:0;width:780px;background:#fff;'; /* token-ok: rasterised into a printed PDF — must not follow the theme */
   holder.innerHTML = `<div class="invoice-paper" style="box-shadow:none;border-radius:0;max-width:none;">${bodyInner}</div>`;
   document.body.appendChild(holder);
   try {
