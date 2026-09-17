@@ -170,7 +170,7 @@ function tcExpenseRowDragOver(e, row) {
   e.stopPropagation();
   if (row) {
     row.style.outline = '2px dashed var(--gold)';
-    row.style.background = 'rgba(200, 145, 58, 0.12)';
+    row.style.background = 'rgba(232,  64,  42, 0.12)';
   }
 }
 
@@ -977,7 +977,7 @@ function tcSetTripsView(mode) {
 }
 
 const TC_TRIP_CAT_COLORS = {
-  'Travel & Transit': 'var(--gold, #c8913a)',
+  'Travel & Transit': 'var(--gold, #E8402A)',
   'Lodging & Hotel': '#6366f1',
   'Meals & Entertainment': '#f43f5e',
   'Booths & Fairs': '#14b8a6',
@@ -1906,7 +1906,7 @@ async function exportTripPDF(tripName) {
     html, body { background: #fff; color: #14110e; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 10.5pt; line-height: 1.45; }
     .head { border-bottom: 2px solid #14110e; padding-bottom: 12px; margin-bottom: 18px; }
-    .eyebrow { font-size: 8.5pt; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; color: #8a5815; }
+    .eyebrow { font-size: 8.5pt; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; color: #B4271A; }
     h1 { margin: 6px 0 2px; font-size: 21pt; font-weight: 800; letter-spacing: -.01em; }
     .sub { font-size: 9.5pt; color: #6b635c; }
     .totals { display: flex; align-items: baseline; gap: 12px; margin: 16px 0 6px; }
@@ -1915,7 +1915,7 @@ async function exportTripPDF(tripName) {
     .budget { display: inline-block; font-size: 9.5pt; font-weight: 700; padding: 4px 10px; border-radius: 999px; margin-bottom: 14px; }
     .budget.under { background: #e7f4ea; color: #1f6b36; }
     .budget.over { background: #fbe9e6; color: #97281a; }
-    h2 { font-size: 11pt; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #8a5815; margin: 22px 0 8px; }
+    h2 { font-size: 11pt; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #B4271A; margin: 22px 0 8px; }
     table { width: 100%; border-collapse: collapse; }
     th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #e3ddd3; vertical-align: top; }
     thead th { font-size: 8.5pt; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #6b635c; border-bottom: 1.5px solid #14110e; }
@@ -1923,7 +1923,7 @@ async function exportTripPDF(tripName) {
     td.empty { text-align: center; color: #6b635c; font-style: italic; }
     tfoot td { font-weight: 800; border-top: 1.5px solid #14110e; border-bottom: none; }
     .meta th { width: 34%; font-weight: 700; color: #6b635c; }
-    .notes { margin-top: 10px; padding: 10px 12px; background: #faf7f1; border-left: 3px solid #c8913a; font-size: 9.5pt; }
+    .notes { margin-top: 10px; padding: 10px 12px; background: #faf7f1; border-left: 3px solid #E8402A; font-size: 9.5pt; }
     .thumbs { display: flex; flex-wrap: wrap; gap: 10px; }
     .thumb { margin: 0; width: 30%; }
     .thumb img { width: 100%; border: 1px solid #e3ddd3; border-radius: 4px; }
@@ -2084,7 +2084,7 @@ function _tcRenderTripsPanel(selectedYear, baseCurrency) {
         if (targetBudget > 0) {
           const pct = Math.min(100, Math.round((t.total / targetBudget) * 100));
           const isOver = t.total > targetBudget;
-          const barColor = isOver ? 'var(--red, #a63a2b)' : pct > 85 ? 'var(--gold2, #e5a93f)' : 'var(--green-light, #3ba75c)';
+          const barColor = isOver ? 'var(--red, #a63a2b)' : pct > 85 ? 'var(--gold2, #FF6B55)' : 'var(--green-light, #3ba75c)';
           const badgeText = isOver
             ? `⚠️ OVER BUDGET (+${fmt(t.total - targetBudget, baseCurrency)})`
             : `🎯 ${pct}% of ${fmt(targetBudget, baseCurrency)} budget`;
@@ -2121,7 +2121,7 @@ function _tcRenderTripsPanel(selectedYear, baseCurrency) {
             </div>
             <div class="tc-trip-card-foot">
               <span style="color:var(--text3);font-size:11px;">Click to view expenses & breakdown</span>
-              <span style="color:var(--gold-text, #8a5815);font-weight:700;">View Details &rarr;</span>
+              <span style="color:var(--gold-text, #B4271A);font-weight:700;">View Details &rarr;</span>
             </div>
           </div>
         `;

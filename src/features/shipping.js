@@ -3357,7 +3357,7 @@ function renderSaveBookPresetPreview() {
       </div>
       <div class="sbp-spec-item" style="display:flex;flex-direction:column;gap:2px;">
         <label style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">Customs Value (CAD)</label>
-        <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:700;color:var(--gold);">${customsVal ? customsVal.toFixed(2) + ' CAD' : '—'}</span>
+        <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:700;color:var(--gold-text);">${customsVal ? customsVal.toFixed(2) + ' CAD' : '—'}</span>
       </div>
       <div class="sbp-spec-item" style="display:flex;flex-direction:column;gap:2px;">
         <label style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">HS Tariff Code</label>
@@ -7567,7 +7567,7 @@ function buildShippingPnLHtml(allOrders, relevantExpenses, shippoExpenses, bookF
           </div>
           <div style="display:flex; flex-direction:column; align-items:flex-end; gap:8px;">
             <div style="display:flex; align-items:center; gap:8px;">
-              <button class="btn sm gold" id="ship-bc-sync-btn" onclick="triggerBigCartelShippingSync()" style="height:38px; padding:0 16px; display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; border-radius:99px; border:1px solid rgba(200,145,58,0.3); background:var(--gold-bg); color:var(--gold-text); cursor:pointer; transition:all 0.2s;">
+              <button class="btn sm gold" id="ship-bc-sync-btn" onclick="triggerBigCartelShippingSync()" style="height:38px; padding:0 16px; display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; border-radius:99px; border:1px solid rgba(232, 64, 42,0.3); background:var(--gold-bg); color:var(--gold-text); cursor:pointer; transition:all 0.2s;">
                 <span>🔄</span> Sync Big Cartel Shipping
               </button>
               <a class="shipping-pnl-action" href="#shipping-pnl-ledger">Review reconciliation</a>
@@ -9054,7 +9054,7 @@ function updateShippingSimulation() {
             <span style="font-size:10px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:0.04em;">Canada Post Billed Weight</span>
             <span style="background:var(--cream2); border:1px solid var(--border); border-radius:99px; padding:2px 8px; font-size:10px; font-weight:700; color:var(--text2);">🏷️ Band: ${weightBandLabel}</span>
             ${isVolumetricBilled
-              ? `<span style="background:rgba(200,145,58,0.15); border:1px solid var(--gold-line); border-radius:99px; padding:2px 8px; font-size:10px; font-weight:700; color:var(--gold);" title="Volumetric weight exceeds actual weight (L x W x H / 5000)">📐 Volumetric Billed (${volumetricWeightKg.toFixed(2)} kg)</span>`
+              ? `<span style="background:rgba(232, 64, 42,0.15); border:1px solid var(--gold-line); border-radius:99px; padding:2px 8px; font-size:10px; font-weight:700; color:var(--gold);" title="Volumetric weight exceeds actual weight (L x W x H / 5000)">📐 Volumetric Billed (${volumetricWeightKg.toFixed(2)} kg)</span>`
               : `<span style="background:rgba(0,120,60,0.08); border:1px solid rgba(0,120,60,0.2); border-radius:99px; padding:2px 8px; font-size:10px; font-weight:700; color:var(--green);">⚖️ Actual Weight</span>`
             }
           </div>

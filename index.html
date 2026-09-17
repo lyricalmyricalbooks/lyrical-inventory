@@ -20,13 +20,17 @@
      owner taps "AI Scan" and waits. Opening the socket while the app boots
      takes the handshake off the front of every scan. -->
 <link rel="preconnect" href="https://generativelanguage.googleapis.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Mono:wght@400;500&family=Syne:wght@400;500;600;700&family=Anton&family=Archivo:wght@500;600;700;800;900&family=Permanent+Marker&display=swap" rel="stylesheet">
+<!-- Riso Press: Anton for display, Archivo for interface, DM Mono for every
+     figure, Permanent Marker for the one hand-drawn accent on the login
+     poster. Playfair Display and Syne were dropped in the redesign, so this
+     request is smaller than the one it replaced. -->
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;700;800;900&family=DM+Mono:wght@400;500&family=Permanent+Marker&display=swap" rel="stylesheet">
 <link rel="icon" href="/favicon.ico" sizes="48x48">
 <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lyricalmyrical Inventory">
-<meta name="theme-color" content="#0e0c0a">
+<meta name="theme-color" content="#100F0D">
 
 <!-- THEME BOOTSTRAP — must run before first paint, and before the module
      bundle loads, or a publisher on dark gets a full-screen cream flash on
@@ -49,10 +53,10 @@
       root.classList.toggle('theme-light', !dark);
       if (dark) {
         var meta = document.querySelector('meta[name="theme-color"]');
-        if (meta) meta.setAttribute('content', '#0a0806');
+        if (meta) meta.setAttribute('content', '#060504');
         // The stylesheet has not loaded yet, so paint the page colour on the
         // root element directly — this is the pixel the flash would show.
-        root.style.backgroundColor = '#14110d';
+        root.style.backgroundColor = '#14120F';
       }
     } catch (e) { /* appearance is never worth blocking boot over */ }
   })();
@@ -493,7 +497,7 @@
           <div class="acct-status-row">
             <span class="sync-time" id="sync-time"></span>
             <span class="sheets-badge off" id="sheets-badge">📊 Sheets: not set up</span>
-            <a id="sheets-open-link" href="#" target="_blank" style="display:none;font-family:'DM Mono',monospace;font-size:10px;color:var(--gold2);text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">↗ Open</a>
+            <a id="sheets-open-link" href="#" target="_blank" style="display:none;font-family:'DM Mono',monospace;font-size:10px;color:var(--gold3);text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">↗ Open</a>
           </div>
           <span class="author-watermark" id="author-watermark" style="display:none;"></span>
         </div>
@@ -981,7 +985,7 @@
           <div class="stock-title" id="d-be-title">—</div>
           <div class="stock-author" id="d-be-sub">—</div>
         </div>
-        <span class="pill" id="d-be-pill" style="background:rgba(200,145,58,.15);color:var(--gold2);">—</span>
+        <span class="pill" id="d-be-pill" style="background:var(--gold-bg);color:var(--gold-text);">—</span>
       </div>
       <div class="stock-stage">
         <div class="bar-meta"><span class="bar-meta-lead" id="d-be-bar-label">—</span><span class="bar-meta-note" id="d-be-bar-right">—</span></div>
@@ -1392,7 +1396,7 @@
       <div class="form-group"><label for="m-num">Order #</label><input type="text" id="m-num" placeholder="optional"></div>
       <div class="form-group"><label for="m-qty">Qty</label><input type="number" inputmode="numeric" id="m-qty" value="1" min="1" oninput="phint()"></div>
       <div class="form-group">
-        <label id="m-price-label">Price paid <span id="m-fx-inline-result" style="display:none;color:var(--gold);font-weight:600;margin-left:8px;"></span></label>
+        <label id="m-price-label">Price paid <span id="m-fx-inline-result" style="display:none;color:var(--gold-text);font-weight:600;margin-left:8px;"></span></label>
         <div class="price-inline">
           <select id="m-price-cur" onchange="onManualCurrencyChange()">
             <option value="BOOK">Book currency</option>
@@ -1492,7 +1496,7 @@
         <input type="number" inputmode="decimal" id="g-exp-val" step="0.01" placeholder="0.00" oninput="updateGratuityExpenseHint()">
       </div>
       <div class="form-group" style="display:flex; flex-direction:column; justify-content:center;">
-        <span class="field-note">Will add a <strong id="g-exp-total" style="color:var(--gold);">0.00</strong> expense to this project's ledger.</span>
+        <span class="field-note">Will add a <strong id="g-exp-total" style="color:var(--gold-text);">0.00</strong> expense to this project's ledger.</span>
       </div>
       <div class="form-group"></div>
     </div>
@@ -1647,7 +1651,7 @@
         </div>
         <div class="g2">
           <div class="form-group amount-field">
-            <label>Amount <span id="exp-fx-inline-result" style="display:none;color:var(--gold);font-weight:600;margin-left:8px;"></span></label>
+            <label>Amount <span id="exp-fx-inline-result" style="display:none;color:var(--gold-text);font-weight:600;margin-left:8px;"></span></label>
             <div class="price-inline">
               <select id="exp-cur" onchange="onExpenseCurrencyChange()">
                 <option value="CAD">CAD</option>
@@ -3219,7 +3223,7 @@
 
   <!-- Store Details (initially hidden) -->
   <div id="bc-store-card" class="card" style="display:none; margin-bottom:1.5rem; border-left:3px solid var(--gold-line);">
-    <div style="font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--gold); margin-bottom:12px; display:flex; align-items:center; gap:6px;">
+    <div style="font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--gold-text); margin-bottom:12px; display:flex; align-items:center; gap:6px;">
       <span>🔌</span> Connected Store Info
     </div>
     <div class="bc-details-grid">
@@ -3241,7 +3245,7 @@
       </div>
     </div>
     <div style="font-size:11px; color:var(--text3); display:flex; align-items:center; gap:4px;">
-      Store Link: <a id="bc-store-url" href="#" target="_blank" style="color:var(--gold); font-weight:600; text-decoration:none; display:inline-flex; align-items:center; gap:3px;">— <span style="font-size:9px;">↗</span></a>
+      Store Link: <a id="bc-store-url" href="#" target="_blank" style="color:var(--gold-text); font-weight:600; text-decoration:none; display:inline-flex; align-items:center; gap:3px;">— <span style="font-size:9px;">↗</span></a>
     </div>
   </div>
 
@@ -3643,7 +3647,7 @@
         <div id="ship-rate-readiness" class="ship-readiness" role="status" aria-live="polite"></div>
 
         <div class="ship-actions-container" style="margin-top:1rem;display:flex;flex-direction:column;gap:10px;">
-          <button class="btn gold" id="ship-calc-main-btn" style="width:100%;height:46px;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 2px 8px rgba(200,145,58,0.25);" onclick="calculateShippoRates()">
+          <button class="btn gold" id="ship-calc-main-btn" style="width:100%;height:46px;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 2px 8px rgba(232, 64, 42,0.25);" onclick="calculateShippoRates()">
             <span>⚡</span>
             <span>Calculate Shipping Rates &amp; Prediction</span>
           </button>
@@ -4114,7 +4118,7 @@
         <p style="font-size:13px; color:var(--text3); line-height:1.6; max-width:480px; margin:0 auto;">Connect an external analytics dashboard (like Umami, Plausible, or any shared iframe report) to track visits, referrer paths, and checkout conversions directly from this panel.</p>
       </div>
 
-      <div style="background:rgba(200,145,58,.04); border:1px solid rgba(200,145,58,.15); padding:1.5rem; border-radius:var(--r2); margin-bottom:2rem;">
+      <div style="background:rgba(232, 64, 42,.04); border:1px solid rgba(232, 64, 42,.15); padding:1.5rem; border-radius:var(--r2); margin-bottom:2rem;">
         <div class="form-group" style="margin-bottom:1.25rem;">
           <label for="webanalytics-url-input" style="font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:var(--text2); display:block; margin-bottom:6px;">Shareable Dashboard URL</label>
           <input type="url" id="webanalytics-url-input" placeholder="https://cloud.umami.is/share/... ">
@@ -4225,7 +4229,7 @@
       </div>
 
       <!-- Connection Inputs at the Top -->
-      <div style="background:rgba(200,145,58,.05); border:1px solid rgba(200,145,58,.15); padding:1.25rem; border-radius:var(--r2); display:flex; flex-direction:column; gap:12px; margin-bottom:1.5rem;">
+      <div style="background:rgba(232, 64, 42,.05); border:1px solid rgba(232, 64, 42,.15); padding:1.25rem; border-radius:var(--r2); display:flex; flex-direction:column; gap:12px; margin-bottom:1.5rem;">
         <div class="form-group" style="margin:0;">
           <label for="sheets-url-input" style="font-size:9px; font-weight:700; color:var(--text2);">Web App URL *</label>
           <input type="url" id="sheets-url-input" placeholder="https://script.google.com/macros/s/…/exec">
@@ -4250,13 +4254,13 @@
             <div style="width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--gold3);font-family:'DM Mono',monospace;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">1</div>
             <div>
               <div style="font-weight:700;font-size:13px;margin-bottom:4px;">Create a Google Sheet → Extensions → Apps Script</div>
-              <div style="font-size:12px;color:var(--text3);">Go to <a href="https://sheets.new" target="_blank" style="color:var(--gold);">sheets.new</a>, then Extensions → Apps Script.</div>
+              <div style="font-size:12px;color:var(--text3);">Go to <a href="https://sheets.new" target="_blank" style="color:var(--gold-text);">sheets.new</a>, then Extensions → Apps Script.</div>
             </div>
           </div>
           <div style="display:flex;gap:14px;align-items:flex-start;">
             <div style="width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--gold3);font-family:'DM Mono',monospace;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">2</div>
             <div style="flex:1;">
-              <div style="font-weight:700;font-size:13px;margin-bottom:8px;">Paste this code exactly → Deploy → <span style="color:var(--gold);">New deployment</span> → Web App → Execute as: Me → Who has access: Anyone</div>
+              <div style="font-weight:700;font-size:13px;margin-bottom:8px;">Paste this code exactly → Deploy → <span style="color:var(--gold-text);">New deployment</span> → Web App → Execute as: Me → Who has access: Anyone</div>
               <div style="font-size:11.5px;color:var(--on-status);background:var(--red);padding:6px 10px;border-radius:4px;margin-bottom:8px;font-weight:600;line-height:1.4;">⚠ Every code change needs a NEW deployment — not "Manage deployments". Copy the new URL each time.</div>
               <div class="gas-code-container">
                 <div class="gas-code-header">
@@ -4297,7 +4301,7 @@
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem; flex-wrap:wrap; gap:10px;">
         <div>
           <div style="display:flex; align-items:center; gap:8px;">
-            <div style="font-family:'Playfair Display',serif; font-size:18px; font-weight:700; color:var(--gold2);">📊 Google Sheets Sandbox Simulator</div>
+            <div style="font-family:'Playfair Display',serif; font-size:18px; font-weight:700; color:var(--gold3);">📊 Google Sheets Sandbox Simulator</div>
             <span style="background:linear-gradient(135deg, #a78bfa, #8b5cf6); color:white; font-size:9px; font-weight:700; padding:2px 8px; border-radius:10px; text-transform:uppercase; letter-spacing:0.05em; display:inline-block;">Test Mode Active</span>
           </div>
           <div style="font-size:12px; color:rgba(255,255,255,0.7); margin-top:4px; line-height:1.5;">
@@ -4456,7 +4460,7 @@
         <div style="border-top:1px solid rgba(255,255,255,.08);margin:8px 0 4px;"></div>
 
         <div style="font-size:12px;font-weight:700;color:var(--on-inverse);">Restore everything</div>
-        <div style="font-size:11px;color:rgba(255,255,255,.62);line-height:1.5;margin-bottom:2px;"><strong style="color:var(--red-light);">Warning: overwrites your entire database</strong> with the file's contents.</div>
+        <div style="font-size:11px;color:rgba(255,255,255,.62);line-height:1.5;margin-bottom:2px;"><strong style="color:var(--rose-soft);">Warning: overwrites your entire database</strong> with the file's contents.</div>
         <label for="import-file" class="btn sm restore-file-btn" style="width:100%;text-align:center;cursor:pointer;background:rgba(255,255,255,.05);color:var(--on-inverse);">Choose file &amp; overwrite all</label>
         <input type="file" id="import-file" accept=".json" style="display:none;" onchange="handleBackupImportFile(event)">
         <div id="import-info" style="font-size:11px;color:rgba(255,255,255,.62);text-align:center;">Select a .json backup file</div>
@@ -4690,7 +4694,7 @@
 
   <!-- KEPT-ALL RECONCILE ZONE (direct-to-artist) -->
   <div class="void-zone" id="edit-settle-zone" style="display:none;border-color:var(--gold-line);background:var(--gold-bg);">
-    <div class="void-zone-title" style="color:var(--gold2);">Artist forwarded the full transfer?</div>
+    <div class="void-zone-title" style="color:var(--gold-text);">Artist forwarded the full transfer?</div>
     <div class="void-zone-body" id="edit-settle-body"></div>
     <button class="btn gold" id="edit-settle-btn" onclick="convertKeptAllToReceived()">Record full transfer received</button>
   </div>
@@ -4879,7 +4883,7 @@
     <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:4px;"><span>Subtotal</span><span id="inv-sub-val" style="font-family:'DM Mono',monospace;font-weight:600;">—</span></div>
     <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:4px;"><span>Discount</span><span id="inv-disc-val" style="font-family:'DM Mono',monospace;font-weight:600;">—</span></div>
     <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:4px;"><span>Tax</span><span id="inv-tax-val" style="font-family:'DM Mono',monospace;font-weight:600;">—</span></div>
-    <div style="display:flex;justify-content:space-between;font-size:14px;color:var(--text);border-top:1px solid var(--border);padding-top:6px;margin-top:4px;font-weight:700;"><span>TOTAL</span><span id="inv-total-val" style="font-family:'DM Mono',monospace;color:var(--gold);font-size:18px;">—</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:14px;color:var(--text);border-top:1px solid var(--border);padding-top:6px;margin-top:4px;font-weight:700;"><span>TOTAL</span><span id="inv-total-val" style="font-family:'DM Mono',monospace;color:var(--gold-text);font-size:18px;">—</span></div>
   </div>
 
   <div class="form-group" style="margin-bottom:12px;">
@@ -4971,7 +4975,7 @@
     <div style="font-size:11px;color:var(--text3);line-height:1.6;margin-bottom:10px;">
       Paste a Stripe <strong>Restricted Key</strong> with write permissions on <em>Products</em>, <em>Prices</em>, and <em>Payment Links</em>.
       When you finalize an invoice, the app auto-creates a Stripe Payment Link with the <strong>exact amount owed</strong> — so a store can never accidentally pay the wrong quarter.
-      <a href="https://dashboard.stripe.com/apikeys/create?name=Lyrical%20Inv%20Pay%20Links&permissions[]=rak_payment_link_write&permissions[]=rak_product_write&permissions[]=rak_plan_write&permissions[]=rak_payment_links_write&permissions[]=rak_prices_write&permissions[]=rak_products_write" target="_blank" style="color:var(--gold);">Create a restricted key →</a>
+      <a href="https://dashboard.stripe.com/apikeys/create?name=Lyrical%20Inv%20Pay%20Links&permissions[]=rak_payment_link_write&permissions[]=rak_product_write&permissions[]=rak_plan_write&permissions[]=rak_payment_links_write&permissions[]=rak_prices_write&permissions[]=rak_products_write" target="_blank" style="color:var(--gold-text);">Create a restricted key →</a>
     </div>
     <div class="form-group" style="margin-bottom:8px;"><label for="ivs-stripe-key">Stripe Restricted Key</label>
       <input id="ivs-stripe-key" type="password" placeholder="rk_live_… or rk_test_…" autocomplete="off">
@@ -5284,7 +5288,7 @@
         <label for="nb-accent">Project Accent Theme</label>
         <div class="accent-picker-wrap">
           <div class="accent-swatches" id="nb-accent-swatches">
-            <button type="button" class="accent-swatch-btn" style="background:#c8913a;" onclick="selectBookAccentPreset('#c8913a')" title="Lyrical Gold" aria-label="Lyrical Gold accent color" aria-pressed="false"></button>
+            <button type="button" class="accent-swatch-btn" style="background:#E8402A;" onclick="selectBookAccentPreset('#E8402A')" title="Lyrical Gold" aria-label="Lyrical Gold accent color" aria-pressed="false"></button>
             <button type="button" class="accent-swatch-btn" style="background:#10b981;" onclick="selectBookAccentPreset('#10b981')" title="Emerald" aria-label="Emerald accent color" aria-pressed="false"></button>
             <button type="button" class="accent-swatch-btn" style="background:#6366f1;" onclick="selectBookAccentPreset('#6366f1')" title="Indigo" aria-label="Indigo accent color" aria-pressed="false"></button>
             <button type="button" class="accent-swatch-btn" style="background:#f43f5e;" onclick="selectBookAccentPreset('#f43f5e')" title="Rose / Crimson" aria-label="Rose / Crimson accent color" aria-pressed="false"></button>
@@ -5294,8 +5298,8 @@
             <button type="button" class="accent-swatch-btn" style="background:#64748b;" onclick="selectBookAccentPreset('#64748b')" title="Slate Neutral" aria-label="Slate Neutral accent color" aria-pressed="false"></button>
           </div>
           <div class="accent-custom-picker">
-            <input id="nb-accent" type="color" value="#c8913a" oninput="onCustomAccentInput(this.value)">
-            <span class="accent-hex-display" id="nb-accent-hex">#c8913a</span>
+            <input id="nb-accent" type="color" value="#E8402A" oninput="onCustomAccentInput(this.value)">
+            <span class="accent-hex-display" id="nb-accent-hex">#E8402A</span>
           </div>
         </div>
       </div>
@@ -5365,7 +5369,7 @@
         <button type="button" class="btn gold sm" id="nb-gen-stripe-btn" onclick="generateBookStripeLink()" style="white-space:nowrap;">⚡ Generate SKU link</button>
       </div>
       <div style="font-size:11px;color:var(--text3);line-height:1.45;">
-        Paste from your <a href="https://dashboard.stripe.com/payment-links" target="_blank" style="color:var(--gold);">Stripe Dashboard</a> or click <strong>Generate SKU link</strong> to create an auto-tagged payment link.
+        Paste from your <a href="https://dashboard.stripe.com/payment-links" target="_blank" style="color:var(--gold-text);">Stripe Dashboard</a> or click <strong>Generate SKU link</strong> to create an auto-tagged payment link.
       </div>
     </div>
 
@@ -5596,7 +5600,7 @@
       </select>
     </div>
   </div>
-  <div class="form-group" style="margin-bottom:12px;"><label for="pb-accent">Accent Color</label><input id="pb-accent" type="color" value="#c8913a"></div>
+  <div class="form-group" style="margin-bottom:12px;"><label for="pb-accent">Accent Color</label><input id="pb-accent" type="color" value="#E8402A"></div>
 
   <div class="form-group" style="margin-bottom:12px;">
     <label>Stripe Payment Link <span style="font-weight:400;font-size:10px;color:var(--text3);">(used for the QR code)</span></label>
@@ -5605,7 +5609,7 @@
       <button type="button" class="btn gold sm" id="pb-gen-stripe-btn" onclick="generatePosBookStripeLink()" style="white-space:nowrap;">⚡ Generate Stripe link</button>
     </div>
     <div style="font-size:11px;color:var(--text3);margin-top:5px;line-height:1.5;">
-      Paste a link from your <a href="https://dashboard.stripe.com/payment-links" target="_blank" style="color:var(--gold);">Stripe Dashboard</a>, or click <strong>Generate Stripe link</strong> to mint one at this price instantly (needs your Stripe restricted key saved in the Payments tab or Invoice Settings).
+      Paste a link from your <a href="https://dashboard.stripe.com/payment-links" target="_blank" style="color:var(--gold-text);">Stripe Dashboard</a>, or click <strong>Generate Stripe link</strong> to mint one at this price instantly (needs your Stripe restricted key saved in the Payments tab or Invoice Settings).
     </div>
   </div>
 
