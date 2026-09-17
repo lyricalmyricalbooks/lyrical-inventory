@@ -63,7 +63,10 @@ test('the strip sits on the shared type and spacing scale', () => {
 
   const card = block('.hist-kpi-card');
   expect(card).toMatch(/padding:\s*var\(--space-4\)\s+18px;/);
-  expect(card).toMatch(/box-shadow:\s*var\(--elev-1\);/);
+  // --elev-2, matching .card: a headline figure is bold chrome under Riso
+  // Press, so it carries the same 2px ink frame and hard offset as the panels
+  // around it. --elev-1 is the resting level for rows, not for a stat card.
+  expect(card).toMatch(/box-shadow:\s*var\(--elev-2\);/);
 });
 
 test('the strip narrows via a container query on its own wrapper', () => {
