@@ -73,9 +73,16 @@ describe('Fair Print Kit — Adaptive Space and Sizing', () => {
       expect(body).toContain('const visualRows = numBooks * (includeNotes ? 2 : 1);');
     });
 
-    it('provides expansive 220px tall row height and 18pt title for a single book row', () => {
+    it('delegates row/font sizing to computeSalesTrackerLayoutSizes', () => {
       const fn = mainJs.slice(mainJs.indexOf('function printSalesTracker('));
       const body = fn.slice(0, fn.indexOf('\nwindow.printSalesTracker ='));
+
+      expect(body).toContain('computeSalesTrackerLayoutSizes(visualRows, includeNotes)');
+    });
+
+    it('provides expansive 220px tall row height and 18pt title for a single book row', () => {
+      const fn = mainJs.slice(mainJs.indexOf('function computeSalesTrackerLayoutSizes('));
+      const body = fn.slice(0, fn.indexOf('\nfunction printSalesTracker('));
 
       expect(body).toMatch(/visualRows === 1\s*\)\s*\{[\s\S]*?rowHeight = 220;/);
       expect(body).toMatch(/visualRows === 1\s*\)\s*\{[\s\S]*?titleFontSize = '18pt';/);
@@ -85,8 +92,8 @@ describe('Fair Print Kit — Adaptive Space and Sizing', () => {
     });
 
     it('adaptively scales row heights down across 2, 4, 6, 9, and 15+ rows', () => {
-      const fn = mainJs.slice(mainJs.indexOf('function printSalesTracker('));
-      const body = fn.slice(0, fn.indexOf('\nwindow.printSalesTracker ='));
+      const fn = mainJs.slice(mainJs.indexOf('function computeSalesTrackerLayoutSizes('));
+      const body = fn.slice(0, fn.indexOf('\nfunction printSalesTracker('));
 
       expect(body).toMatch(/visualRows === 2\s*\)\s*\{[\s\S]*?rowHeight = 150;/);
       expect(body).toMatch(/visualRows <= 4\s*\)\s*\{[\s\S]*?rowHeight = 100;/);
