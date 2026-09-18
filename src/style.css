@@ -6893,12 +6893,13 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
     display:none;position:absolute;left:0;right:0;bottom:calc(100% + 8px);
     background:var(--ink2,#1c1917);border:var(--stroke-hair) solid rgba(255,255,255,.12);
     border-radius:var(--r2);box-shadow:var(--elev-4);
-    padding:6px;z-index:300;
+    box-sizing:border-box;overflow:hidden;padding:6px;z-index:300;
   }
   .pub-shell .pub-side-foot.open .pub-side-menu{display:block;}
+  .pub-shell .pub-side-foot.open .pub-side-trigger{background:rgba(255,255,255,.07);}
   .pub-shell .pub-side-item{
     display:flex;align-items:center;gap:11px;width:100%;
-    padding:9px 10px;border:none;border-radius:var(--r);
+    min-height:44px;padding:8px 10px;border:none;border-radius:var(--r);
     background:transparent;color:var(--on-inverse);text-decoration:none;
     font-family:var(--font-ui);font-size:12.5px;font-weight:600;
     text-align:left;cursor:pointer;
@@ -6907,6 +6908,10 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   .pub-shell .pub-side-item.danger{color:var(--rose-mist);}
   .pub-shell .pub-side-ico{width:18px;text-align:center;opacity:.8;flex-shrink:0;}
   .pub-shell .pub-side-msep{height:1px;background:rgba(255,255,255,.08);margin:6px 4px;}
+  .pub-shell .theme-seg-row{display:block;padding:8px 6px 10px;}
+  .pub-shell .theme-seg-row .tsr-label{margin-bottom:7px;}
+  .pub-shell .theme-seg{display:flex;width:100%;min-width:0;}
+  .pub-shell .theme-seg-opt{flex:1 1 0;min-width:0;padding:0 4px;gap:4px;}
   /* App last-updated stamp at the very bottom of the sidebar (publisher only). */
   .pub-shell .pub-side-updated{font-family:var(--font-mono);font-size:var(--text-3xs);letter-spacing:.06em;color:rgba(255,255,255,.28);text-align:center;padding:8px 4px 2px;}
 
