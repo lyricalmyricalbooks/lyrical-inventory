@@ -48,7 +48,7 @@ test('store card spacing comes off the shared scale, not ad-hoc px', () => {
   const rawLengths = storeBlock
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/inset 3px 0 0/g, '')
-    .replace(/\b1px solid\b/g, '')
+    .replace(/(?:1px|var\(--stroke-hair\)) solid/g, '')
     .match(/\b\d+(\.\d+)?(px|rem|em)\b/g);
   expect(rawLengths).toBeNull();
 });
@@ -63,7 +63,7 @@ test('a long money figure wraps inside its tile instead of widening the card', (
 
 test('store figures are tabular so the tiles do not jitter as counts change', () => {
   const val = block('\\.sk-v');
-  expect(val).toMatch(/font-family:\s*'DM Mono',monospace;/);
+  expect(val).toMatch(/font-family:\s*var\(--font-mono\);/);
   expect(val).toMatch(/font-feature-settings:\s*"tnum" 1,"zero" 1;/);
   expect(val).toMatch(/font-variant-numeric:\s*tabular-nums;/);
 });

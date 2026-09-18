@@ -3,6 +3,7 @@ import {
   MAX_TOOL_ROUNDS,
   friendlyOpenRouterError,
   runOpenRouterTurn,
+  testOpenRouterConnection,
   toJsonSchema,
   toOpenAIMessages,
   toOpenAITools,
@@ -128,7 +129,15 @@ describe('running a question against the backup', () => {
     await runOpenRouterTurn({ apiKey: 'secret', model: 'vendor/m:free', userText: 'x', ctx: CTX, fetchImpl });
     const [, init] = fetchImpl.mock.calls[0];
     expect(init.headers.Authorization).toBe('Bearer secret');
+    expect(init.headers['X-OpenRouter-Title']).toBe('Lyrical Inventory');
+    expect(init.headers).not.toHaveProperty('X-Title');
     expect(JSON.parse(init.body).model).toBe('vendor/m:free');
+  });
+
+  it('trims pasted whitespace from the bearer credential', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(reply({ role: 'assistant', content: 'ok' }));
+    await runOpenRouterTurn({ apiKey: '  secret\n', model: 'vendor/m:free', userText: 'x', ctx: CTX, fetchImpl });
+    expect(fetchImpl.mock.calls[0][1].headers.Authorization).toBe('Bearer secret');
   });
 
   it('recovers when the model sends arguments that are not valid JSON', async () => {
@@ -186,11 +195,60 @@ describe('running a question against the backup', () => {
   });
 });
 
+describe('checking the saved backup credential', () => {
+  it('validates the key and then proves the selected model can answer', async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce({
+      ok: true, status: 200, json: async () => ({ data: { label: 'Lyrical' } }),
+    }).mockResolvedValueOnce({
+      ok: true, status: 200,
+      json: async () => ({ model: 'free/model', choices: [{ message: { role: 'assistant', content: 'OK' } }] }),
+    });
+    await expect(testOpenRouterConnection({ apiKey: ' key ', fetchImpl }))
+      .resolves.toEqual({ account: { label: 'Lyrical' }, model: 'free/model' });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'https://openrouter.ai/api/v1/key',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({
+          Authorization: 'Bearer key',
+          'X-OpenRouter-Title': 'Lyrical Inventory',
+        }),
+      }),
+    );
+    expect(fetchImpl.mock.calls[1][0]).toBe('https://openrouter.ai/api/v1/chat/completions');
+    expect(JSON.parse(fetchImpl.mock.calls[1][1].body)).toMatchObject({
+      model: 'openrouter/free', max_tokens: 4,
+    });
+  });
+
+  it('preserves provider status and error text for the settings diagnosis', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: false, status: 401,
+      json: async () => ({ error: { code: 401, message: 'No auth credentials found' } }),
+    });
+    await expect(testOpenRouterConnection({ apiKey: 'bad', fetchImpl }))
+      .rejects.toMatchObject({ status: 401, message: 'No auth credentials found' });
+  });
+
+  it('reports an HTTP failure even when the gateway body is not JSON', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: false, status: 503, json: async () => { throw new SyntaxError('not JSON'); },
+    });
+    await expect(testOpenRouterConnection({ apiKey: 'key', fetchImpl }))
+      .rejects.toMatchObject({ status: 503, message: 'HTTP 503 from OpenRouter' });
+  });
+});
+
 describe('what a backup failure is called', () => {
   it('names a wrong model name, which is the likeliest mistake here', () => {
     // The model is typed by hand into a settings box.
-    const e = Object.assign(new Error('No endpoints found for vendor/typo'), { status: 404 });
+    const e = Object.assign(new Error('Model not found: vendor/typo'), { status: 404 });
     expect(friendlyOpenRouterError(e)).toMatch(/does not have a model by that name/i);
+  });
+
+  it('distinguishes an unavailable compatible provider from a misspelled model', () => {
+    const e = Object.assign(new Error('No endpoints found that support the requested parameters'), { status: 404 });
+    expect(friendlyOpenRouterError(e)).toMatch(/provider currently supports/i);
   });
 
   it.each([

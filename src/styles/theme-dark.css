@@ -42,11 +42,11 @@
   /* SURFACES — page → sunken → inset, warm charcoal rather than neutral grey.
      Steps are ~4-6% apart in luminance: enough to separate a card from the
      page without the "floating grey slab" look. */
-  --cream: #14110d;
-  --cream2: #1c1813;
-  --cream3: #262119;
-  --cream4: #342d22;
-  --surface-card: #1a1611;
+  --cream: #14120F;
+  --cream2: #1D1A16;
+  --cream3: #272319;
+  --cream4: #362F22;
+  --surface-card: #1A1713;
 
   /* INVERSE SURFACES — the header, ink KPI banners, toasts and the publisher
      sidebar. In light mode these are the only dark things on screen; in dark
@@ -57,26 +57,26 @@
      built on it were the same colour as the page they float over. #0d0a08
      keeps --ink's own warm ratio (roughly 1 : 0.8 : 0.6), landing it clearly
      between --ink and --cream instead of on top of the page. */
-  --ink: #0a0806;
-  --ink2: #0d0a08;
-  --ink3: #1f1a14;
-  --ink4: #2c2519;
+  --ink: #060504;
+  --ink2: #0D0B09;
+  --ink3: #1F1B16;
+  --ink4: #2E281E;
 
   /* CONTENT — warm off-white, never pure #fff (pure white on near-black
      vibrates and is fatiguing at book-fair brightness). */
-  --text: #f4efe3;
-  --text2: #c8bfae;
-  --text3: #9d9382;
-  --text4: #736a5b;
+  --text: #FAF6EC;
+  --text2: #C9C0AF;
+  --text3: #9A9182;
+  --text4: #6E6557;
 
   /* GOLD — the brand accent. Lifted ~2 steps because #c8913a sits at 3.1:1 on
      this page colour; these clear AA as label and link text. */
-  --gold: #dda548;
-  --gold2: #edb85c;
-  --gold3: #f6d391;
-  --gold-text: #f2cd85;
-  --gold-bg: rgba(221, 165, 72, .14);
-  --gold-line: rgba(221, 165, 72, .32);
+  --gold: #FF6B55;
+  --gold2: #FF8A78;
+  --gold3: #FFB3A6;
+  --gold-text: #FFA294;
+  --gold-bg: rgba(255, 107, 85, .16);
+  --gold-line: rgba(255, 107, 85, .38);
   /* A dark wash on a dark card is no trough at all — this is the one that
      makes the catalogue's stock and break-even bars readable at night. */
   --track-bg: rgba(255, 255, 255, .13);
@@ -84,41 +84,42 @@
   /* STATUS — the light theme's deep, low-luminance status colours are text on
      a pale tint. That inverts here: the tint stays low-alpha (so it composites
      dark) and the ink becomes the light element. */
-  --green: #5fcf90;
-  --green-light: #86e5ad;
-  --green-bg: rgba(95, 207, 144, .14);
-  --red: #f2907f;
-  --red-light: #ffa596;
-  --red-bg: rgba(242, 144, 127, .15);
-  --amber: #e3ae5b;
-  --amber-bg: rgba(227, 174, 91, .15);
-  --blue: #93bff2;
-  --blue-bg: rgba(147, 191, 242, .16);
+  --green: #3DD98E;
+  --green-light: #6FE0AE;
+  --green-bg: rgba(61, 217, 142, .16);
+  --red: #FF8A78;
+  --red-light: #FFB3A6;
+  --red-bg: rgba(255, 138, 120, .16);
+  --amber: #FFC93C;
+  --amber-bg: rgba(255, 201, 60, .16);
+  --blue: #8FA9FF;
+  --blue-bg: rgba(143, 169, 255, .16);
 
   /* ACCENT FAMILIES — same roles as light, re-pointed. `-deep`/`-ink` were the
      "dark ink on a pale tint" members, so they become the LIGHTEST members
      here; `-bright`/`-soft` were already tuned for ink surfaces and barely
      move. `--rose-pale` is a destructive-hover FILL, so it becomes a tint. */
-  --emerald: #34d399;
-  --emerald-deep: #6ee7b7;
-  --emerald-soft: #86efac;
-  --emerald-bright: #4ade80;
-  --rose: #f87171;
-  --rose-deep: #fca5a5;
-  --rose-soft: #fca5a5;
-  --rose-mist: #f8a4a4;
-  --rose-pale: rgba(248, 113, 113, .22);
-  --orange: #fca55c;
-  --orange-deep: #fbbf6b;
-  --orange-ink: #f5cb8e;
-  --violet: #a78bfa;
-  --violet-deep: #c9b8fd;
-  --violet-soft: #c4b5fd;
-  --slate: #a9b7c9;
+  --emerald: #3DD98E;
+  --emerald-deep: #6FE0AE;
+  --emerald-soft: #86EFAC;
+  --emerald-bright: #4ADE80;
+  --rose: #FF8A78;
+  --rose-deep: #FFB3A6;
+  --rose-soft: #FFB3A6;
+  --rose-mist: #FFB3A6;
+  --rose-pale: rgba(255, 138, 120, .22);
+  --orange: #FF9E5C;
+  --orange-deep: #FF9E5C;
+  --orange-ink: #FFC08E;
+  --violet: #A18CFF;
+  --violet-deep: #A18CFF;
+  --violet-soft: #C4B5FD;
+  --slate: #A8A49C;
 
   /* BORDERS — hairlines have to invert or they read as gouges in the surface. */
-  --border: rgba(247, 242, 233, .12);
-  --border2: rgba(247, 242, 233, .07);
+  --border: rgba(250, 246, 236, .16);
+  --border2: rgba(250, 246, 236, .09);
+  --rule-ink: #FAF6EC;
 
   /* --green/--red/--amber are light inks here, so a solid status fill needs a
      DARK label. (--on-accent stays white: it is only used on fills that do not
@@ -128,24 +129,24 @@
   /* Tokens that only ever existed as var(--x, #fallback) fallbacks in
      style.css. Defining them here is what makes those ~30 call sites follow
      the theme; light mode still resolves to its inline fallback. */
-  --card-bg: #1a1611;
-  --bg2: #1a1611;
-  --input-bg: #15120e;
+  --card-bg: #1A1713;
+  --bg2: #1A1713;
+  --input-bg: #17140F;
   --shadow-high: var(--elev-4);
 
   /* The shared select chevron bakes its stroke colour into a data URI, so it
      needs its own dark copy (%239d9382 = --text3, %23dda548 = --gold). */
-  --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239d9382' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-  --select-arrow-gold: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23dda548' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239A9182' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  --select-arrow-gold: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23FF6B55' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 
   /* ELEVATION — a warm-grey shadow is invisible on near-black. Depth on dark
      comes from a much darker, wider shadow plus the surface step above. */
-  --elev-1: 0 1px 2px rgba(0, 0, 0, .44), 0 1px 3px rgba(0, 0, 0, .32);
-  --elev-2: 0 2px 4px rgba(0, 0, 0, .44), 0 4px 12px rgba(0, 0, 0, .38);
-  --elev-3: 0 4px 8px rgba(0, 0, 0, .46), 0 12px 28px rgba(0, 0, 0, .48);
-  --elev-4: 0 8px 16px rgba(0, 0, 0, .48), 0 24px 60px rgba(0, 0, 0, .60);
-  --elev-hover: 0 6px 14px rgba(0, 0, 0, .46), 0 16px 36px rgba(0, 0, 0, .52);
-  --focus-ring-halo: 0 0 0 4px rgba(221, 165, 72, .28);
+  --elev-1: 2px 2px 0 rgba(250, 246, 236, .08);
+  --elev-2: 3px 3px 0 rgba(250, 246, 236, .13);
+  --elev-3: 4px 4px 0 rgba(250, 246, 236, .20);
+  --elev-4: 6px 6px 0 rgba(250, 246, 236, .26);
+  --elev-hover: 5px 5px 0 rgba(250, 246, 236, .30);
+  --focus-ring-halo: 0 0 0 4px rgba(255, 107, 85, .30);
 }
 }
 
@@ -154,79 +155,80 @@
   :root:not([data-theme="light"]) {
     color-scheme: dark;
 
-    --cream: #14110d;
-    --cream2: #1c1813;
-    --cream3: #262119;
-    --cream4: #342d22;
-    --surface-card: #1a1611;
+    --cream: #14120F;
+    --cream2: #1D1A16;
+    --cream3: #272319;
+    --cream4: #362F22;
+    --surface-card: #1A1713;
 
-    --ink: #0a0806;
-    --ink2: #0d0a08;
-    --ink3: #1f1a14;
-    --ink4: #2c2519;
+    --ink: #060504;
+    --ink2: #0D0B09;
+    --ink3: #1F1B16;
+    --ink4: #2E281E;
 
-    --text: #f4efe3;
-    --text2: #c8bfae;
-    --text3: #9d9382;
-    --text4: #736a5b;
+    --text: #FAF6EC;
+    --text2: #C9C0AF;
+    --text3: #9A9182;
+    --text4: #6E6557;
 
-    --gold: #dda548;
-    --gold2: #edb85c;
-    --gold3: #f6d391;
-    --gold-text: #f2cd85;
-    --gold-bg: rgba(221, 165, 72, .14);
-    --gold-line: rgba(221, 165, 72, .32);
+    --gold: #FF6B55;
+    --gold2: #FF8A78;
+    --gold3: #FFB3A6;
+    --gold-text: #FFA294;
+    --gold-bg: rgba(255, 107, 85, .16);
+    --gold-line: rgba(255, 107, 85, .38);
     /* A dark wash on a dark card is no trough at all — this is the one that
        makes the catalogue's stock and break-even bars readable at night. */
     --track-bg: rgba(255, 255, 255, .13);
 
-    --green: #5fcf90;
-    --green-light: #86e5ad;
-    --green-bg: rgba(95, 207, 144, .14);
-    --red: #f2907f;
-    --red-light: #ffa596;
-    --red-bg: rgba(242, 144, 127, .15);
-    --amber: #e3ae5b;
-    --amber-bg: rgba(227, 174, 91, .15);
-    --blue: #93bff2;
-    --blue-bg: rgba(147, 191, 242, .16);
+    --green: #3DD98E;
+    --green-light: #6FE0AE;
+    --green-bg: rgba(61, 217, 142, .16);
+    --red: #FF8A78;
+    --red-light: #FFB3A6;
+    --red-bg: rgba(255, 138, 120, .16);
+    --amber: #FFC93C;
+    --amber-bg: rgba(255, 201, 60, .16);
+    --blue: #8FA9FF;
+    --blue-bg: rgba(143, 169, 255, .16);
 
-    --emerald: #34d399;
-    --emerald-deep: #6ee7b7;
-    --emerald-soft: #86efac;
-    --emerald-bright: #4ade80;
-    --rose: #f87171;
-    --rose-deep: #fca5a5;
-    --rose-soft: #fca5a5;
-    --rose-mist: #f8a4a4;
-    --rose-pale: rgba(248, 113, 113, .22);
-    --orange: #fca55c;
-    --orange-deep: #fbbf6b;
-    --orange-ink: #f5cb8e;
-    --violet: #a78bfa;
-    --violet-deep: #c9b8fd;
-    --violet-soft: #c4b5fd;
-    --slate: #a9b7c9;
+    --emerald: #3DD98E;
+    --emerald-deep: #6FE0AE;
+    --emerald-soft: #86EFAC;
+    --emerald-bright: #4ADE80;
+    --rose: #FF8A78;
+    --rose-deep: #FFB3A6;
+    --rose-soft: #FFB3A6;
+    --rose-mist: #FFB3A6;
+    --rose-pale: rgba(255, 138, 120, .22);
+    --orange: #FF9E5C;
+    --orange-deep: #FF9E5C;
+    --orange-ink: #FFC08E;
+    --violet: #A18CFF;
+    --violet-deep: #A18CFF;
+    --violet-soft: #C4B5FD;
+    --slate: #A8A49C;
 
-    --border: rgba(247, 242, 233, .12);
-    --border2: rgba(247, 242, 233, .07);
+    --border: rgba(250, 246, 236, .16);
+    --border2: rgba(250, 246, 236, .09);
+    --rule-ink: #FAF6EC;
 
     --on-status: var(--ink);
 
-    --card-bg: #1a1611;
-    --bg2: #1a1611;
-    --input-bg: #15120e;
+    --card-bg: #1A1713;
+    --bg2: #1A1713;
+    --input-bg: #17140F;
     --shadow-high: var(--elev-4);
 
-    --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239d9382' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-    --select-arrow-gold: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23dda548' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239A9182' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    --select-arrow-gold: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23FF6B55' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 
-    --elev-1: 0 1px 2px rgba(0, 0, 0, .44), 0 1px 3px rgba(0, 0, 0, .32);
-    --elev-2: 0 2px 4px rgba(0, 0, 0, .44), 0 4px 12px rgba(0, 0, 0, .38);
-    --elev-3: 0 4px 8px rgba(0, 0, 0, .46), 0 12px 28px rgba(0, 0, 0, .48);
-    --elev-4: 0 8px 16px rgba(0, 0, 0, .48), 0 24px 60px rgba(0, 0, 0, .60);
-    --elev-hover: 0 6px 14px rgba(0, 0, 0, .46), 0 16px 36px rgba(0, 0, 0, .52);
-    --focus-ring-halo: 0 0 0 4px rgba(221, 165, 72, .28);
+    --elev-1: 2px 2px 0 rgba(250, 246, 236, .08);
+    --elev-2: 3px 3px 0 rgba(250, 246, 236, .13);
+    --elev-3: 4px 4px 0 rgba(250, 246, 236, .20);
+    --elev-4: 6px 6px 0 rgba(250, 246, 236, .26);
+    --elev-hover: 5px 5px 0 rgba(250, 246, 236, .30);
+    --focus-ring-halo: 0 0 0 4px rgba(255, 107, 85, .30);
   }
 }
 

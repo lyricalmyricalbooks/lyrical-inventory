@@ -15,5 +15,5 @@ test('Customers filter panel fills with a real themed surface, not an undefined 
   // its fill in both themes — assert the real, themed token instead.
   expect(filterGrid[1]).toMatch(/background:\s*var\(--surface-sunken\);/);
   expect(filterGrid[1]).not.toMatch(/--cream-bg/);
-  expect(filterGrid[1]).toMatch(/border:\s*1px solid var\(--border-subtle\);/);
+  expect(filterGrid[1]).toMatch(/border:\s*var\(--stroke-hair\) solid var\(--border-subtle\);/);
 });

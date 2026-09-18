@@ -48,7 +48,7 @@ describe('5 High-Impact UX Improvements Suite', () => {
 
     it('uses canonical surface tokens and tabular figures on trip cards', () => {
       expect(styleCss).toMatch(/\.tc-trip-card\s*\{[^}]*background:\s*var\(--surface-card\)/);
-      expect(styleCss).toMatch(/\.tc-trip-card-total\s*\{[^}]*font-family:\s*'DM Mono'/);
+      expect(styleCss).toMatch(/\.tc-trip-card-total\s*\{[^}]*font-family:\s*var\(--font-mono\)/);
       expect(styleCss).toContain('.tc-trip-empty-state');
     });
 
@@ -66,8 +66,8 @@ describe('5 High-Impact UX Improvements Suite', () => {
     });
 
     it('enforces tabular monospace figures on address comparison lines', () => {
-      expect(styleCss).toMatch(/\.addr-verify-from\s*\{[^}]*font-family:\s*'DM Mono'/);
-      expect(styleCss).toMatch(/\.addr-verify-to\s*\{[^}]*font-family:\s*'DM Mono'/);
+      expect(styleCss).toMatch(/\.addr-verify-from\s*\{[^}]*font-family:\s*var\(--font-mono\)/);
+      expect(styleCss).toMatch(/\.addr-verify-to\s*\{[^}]*font-family:\s*var\(--font-mono\)/);
     });
   });
 

@@ -53,6 +53,6 @@ describe('Email Receipt Import Modal UX Redesign Verification', () => {
   });
 
   it('enforces tabular figures and monospace numbers in draft review rows', () => {
-    expect(receiptsJs).toContain("font-family:'DM Mono',monospace;font-feature-settings:'tnum' 1;");
+    expect(receiptsJs).toContain("font-family:var(--font-mono);font-feature-settings:'tnum' 1;");
   });
 });

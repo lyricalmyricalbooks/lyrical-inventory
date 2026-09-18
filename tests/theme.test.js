@@ -240,7 +240,7 @@ describe('--cream is never used as a text colour', () => {
   });
 
   it('defines --on-inverse and --on-accent as theme-stable', () => {
-    expect(styleCss).toMatch(/--on-inverse:\s*#f7f2e9/);
+    expect(styleCss).toMatch(/--on-inverse:\s*#FAF6EC/i);
     expect(styleCss).toMatch(/--on-accent:\s*#fff/);
     // Theme-stable means the dark block must NOT redefine them.
     expect(darkCss).not.toMatch(/--on-inverse\s*:/);
@@ -435,7 +435,7 @@ describe('dark palette contrast (WCAG AA)', () => {
     ['--text3 on inset', 'var(--text3)', rgb('var(--cream3)')],
     ['--gold on page', 'var(--gold)', rgb(PAGE)],
     ['--gold3 on ink', 'var(--gold3)', rgb(INK)],
-    ['--on-inverse on ink', '#f7f2e9', rgb(INK)],
+    ['--on-inverse on ink', '#FAF6EC', rgb(INK)],
     ['--green on --green-bg', 'var(--green)', over('var(--green-bg)', CARD)],
     ['--red on --red-bg', 'var(--red)', over('var(--red-bg)', CARD)],
     ['--amber on --amber-bg', 'var(--amber)', over('var(--amber-bg)', CARD)],

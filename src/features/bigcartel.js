@@ -510,7 +510,7 @@ async function loadBigCartelData() {
           <td><div class="skeleton-line" style="height:14px;width:50px;"></div></td>
           <td><div class="skeleton-line" style="height:14px;width:60px;"></div></td>
           <td><div class="skeleton-line" style="height:14px;width:60px;"></div></td>
-          <td><div class="skeleton-line" style="height:20px;width:75px;border-radius:100px;"></div></td>
+          <td><div class="skeleton-line" style="height:20px;width:75px;border-radius:var(--r-pill);"></div></td>
           <td><div class="skeleton-line" style="height:32px;width:90px;border-radius:var(--r);"></div></td>
         </tr>
       `).join('');
@@ -640,7 +640,7 @@ function renderBigCartelProducts(products, included = []) {
             hasStockTracking = true;
           }
           optionsListHtml += `
-            <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text2); margin-top:2px; font-family:'DM Mono', monospace;">
+            <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text2); margin-top:2px; font-family:var(--font-mono);">
               <span>${escapeHTML(opt.name || 'Default')}</span>
               <span>$${price} (Stock: ${quantity} | Sold: ${sold})</span>
             </div>
@@ -663,7 +663,7 @@ function renderBigCartelProducts(products, included = []) {
           <span class="${statusClass}">${statusLabel}</span>
         </div>
         <div class="bc-price">$${price} CAD</div>
-        <div style="border-top:1px dashed var(--border); padding-top:6px; margin-top:4px;">
+        <div style="border-top:var(--stroke-hair) dashed var(--border); padding-top:6px; margin-top:4px;">
           <div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text3); margin-bottom:4px;">Pricing & Options</div>
           ${optionsListHtml}
         </div>
@@ -1032,13 +1032,13 @@ function renderBigCartelOrders(orders, included = []) {
 
     const row = document.createElement('tr');
     row.innerHTML = `
-      <td style="font-family:'DM Mono', monospace; font-size:11px;">#${escapeHTML(o.id)}</td>
+      <td style="font-family:var(--font-mono); font-size:11px;">#${escapeHTML(o.id)}</td>
       <td>${dateStr}</td>
       <td style="font-weight:600;"><a class="bc-customer-link" onclick="openBigCartelAddressPreview('${o.id}')" title="Click to view full shipping address">${escapeHTML(customer)}</a>${email ? `<br><span style="font-size:11px; color:var(--text3); font-weight:normal;">${escapeHTML(email)}</span>` : ''}</td>
       <td style="font-size:12px; line-height:1.45;">${itemsHtml}</td>
-      <td class="r" style="font-family:'DM Mono', monospace;">$${tax}</td>
-      <td class="r" style="font-family:'DM Mono', monospace;">$${shipping}</td>
-      <td class="r" style="font-family:'DM Mono', monospace; font-weight:700; color:var(--gold);">$${total}</td>
+      <td class="r" style="font-family:var(--font-mono);">$${tax}</td>
+      <td class="r" style="font-family:var(--font-mono);">$${shipping}</td>
+      <td class="r" style="font-family:var(--font-mono); font-weight:700; color:var(--gold);">$${total}</td>
       <td><span class="${statusPill}" style="font-size:10px; padding:3px 8px;">${attr.status || 'unknown'}</span></td>
       <td class="r" style="white-space:nowrap;">
         <button class="btn sm" onclick="copyBigCartelOrderAddress('${o.id}')" title="Copy recipient shipping address to clipboard" style="margin-right:4px;">

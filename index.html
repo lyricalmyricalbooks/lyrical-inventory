@@ -20,13 +20,17 @@
      owner taps "AI Scan" and waits. Opening the socket while the app boots
      takes the handshake off the front of every scan. -->
 <link rel="preconnect" href="https://generativelanguage.googleapis.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Mono:wght@400;500&family=Syne:wght@400;500;600;700&family=Anton&family=Archivo:wght@500;600;700;800;900&family=Permanent+Marker&display=swap" rel="stylesheet">
+<!-- Riso Press: Anton for display, Archivo for interface, DM Mono for every
+     figure, Permanent Marker for the one hand-drawn accent on the login
+     poster. Playfair Display and Syne were dropped in the redesign, so this
+     request is smaller than the one it replaced. -->
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;700;800;900&family=DM+Mono:wght@400;500&family=Permanent+Marker&display=swap" rel="stylesheet">
 <link rel="icon" href="/favicon.ico" sizes="48x48">
 <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lyricalmyrical Inventory">
-<meta name="theme-color" content="#0e0c0a">
+<meta name="theme-color" content="#100F0D">
 
 <!-- THEME BOOTSTRAP — must run before first paint, and before the module
      bundle loads, or a publisher on dark gets a full-screen cream flash on
@@ -49,10 +53,10 @@
       root.classList.toggle('theme-light', !dark);
       if (dark) {
         var meta = document.querySelector('meta[name="theme-color"]');
-        if (meta) meta.setAttribute('content', '#0a0806');
+        if (meta) meta.setAttribute('content', '#060504');
         // The stylesheet has not loaded yet, so paint the page colour on the
         // root element directly — this is the pixel the flash would show.
-        root.style.backgroundColor = '#14110d';
+        root.style.backgroundColor = '#14120F';
       }
     } catch (e) { /* appearance is never worth blocking boot over */ }
   })();
@@ -60,58 +64,76 @@
 
 <style>
   /* ─── INVOICE PAPER (sharp, printable) ─────────────────────────────── */
+  /* Riso Press, printed. Colours stay hardcoded and fonts are named outright
+     rather than taken from tokens: this sheet is rendered into a print window
+     and a PDF, where the app's variables may not travel with it, and where a
+     theme flip must never reach it — a customer's invoice looks the same
+     whatever mode the publisher happens to be in. */
   .invoice-paper{
-    background:#fff;color:#1a1814;
+    background:var(--surface-card);color:var(--text);
     width:100%;max-width:780px;margin:0 auto;
-    border-radius:6px;
-    box-shadow:0 14px 40px rgba(0,0,0,.18), 0 2px 6px rgba(0,0,0,.08);
-    padding:48px 56px;font-family:'Syne',sans-serif;
+    border-radius:0;
+    border:2px solid #100F0D;
+    box-shadow:6px 6px 0 rgba(16,15,13,.18);
+    padding:48px 56px;font-family:'Archivo','Helvetica Neue',sans-serif;
     line-height:1.5;letter-spacing:.005em;
     position:relative;overflow:hidden;
   }
+  /* A flat bar of ink across the head, not a gradient — riso prints one flat
+     pass of colour at a time. --book-accent lets a book carry its own. */
   .invoice-paper::before{
-    content:"";position:absolute;left:0;top:0;height:6px;width:100%;
-    background:linear-gradient(90deg, var(--book-accent, #c8913a), #e5a93f 65%, #f0c060);
+    content:"";position:absolute;left:0;top:0;height:10px;width:100%;
+    background:var(--book-accent, #E8402A);
   }
   .invoice-paper .inv-head{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;margin-bottom:32px;flex-wrap:wrap;}
   .invoice-paper .inv-brand{flex:1;min-width:240px;}
-  .invoice-paper .inv-brand h1{font-family:'Playfair Display',serif;font-weight:700;font-size:28px;color:#0e0c0a;margin:0 0 4px;letter-spacing:.005em;}
-  .invoice-paper .inv-brand .inv-sub{font-size:12px;color:#6b665e;letter-spacing:.04em;}
-  .invoice-paper .inv-brand .inv-addr{font-size:11px;color:#8a847a;margin-top:10px;line-height:1.55;white-space:pre-wrap;}
+  .invoice-paper .inv-brand h1{font-family:'Anton',Impact,sans-serif;font-weight:400;font-size:32px;color:#100F0D;margin:0 0 4px;letter-spacing:.01em;text-transform:uppercase;line-height:1.05;}
+  .invoice-paper .inv-brand .inv-sub{font-size:12px;color:#3E3A34;letter-spacing:.04em;font-weight:600;}
+  .invoice-paper .inv-brand .inv-addr{font-size:11px;color:#6B655B;margin-top:10px;line-height:1.55;white-space:pre-wrap;}
   .invoice-paper .inv-id{text-align:right;}
-  .invoice-paper .inv-id .inv-word{font-family:'Playfair Display',serif;font-size:22px;color:#c8913a;letter-spacing:.18em;text-transform:uppercase;font-weight:600;margin-bottom:6px;}
-  .invoice-paper .inv-id .inv-num{font-family:'DM Mono',monospace;font-size:13px;color:#1a1814;font-weight:600;}
-  .invoice-paper .inv-status{display:inline-block;margin-top:8px;font-size:9px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;padding:5px 12px;border-radius:99px;}
-  .invoice-paper .inv-status.draft{background:#e9e6e0;color:#6b665e;}
-  .invoice-paper .inv-status.sent{background:#ebf2ff;color:#1d4cb3;}
-  .invoice-paper .inv-status.paid{background:#e0f5ea;color:#1d7a4a;}
-  .invoice-paper .inv-status.overdue{background:#fde6e0;color:#a13a1b;}
-  .invoice-paper .inv-status.cancelled{background:#eee;color:#5a544c;text-decoration:line-through;}
+  .invoice-paper .inv-id .inv-word{font-family:'Anton',Impact,sans-serif;font-size:26px;color:#B4271A;letter-spacing:.14em;text-transform:uppercase;font-weight:400;margin-bottom:6px;}
+  .invoice-paper .inv-id .inv-num{font-family:'DM Mono',monospace;font-size:13px;color:#100F0D;font-weight:600;}
+  /* Status keeps its lozenge — that shape is how you tell it from a heading at
+     a glance — but takes the ink outline and a flat fill. Every pairing below
+     is ink on its own fill, so it survives a black-and-white printer. */
+  .invoice-paper .inv-status{display:inline-block;margin-top:8px;font-size:9px;font-weight:800;letter-spacing:.22em;text-transform:uppercase;padding:5px 12px;border-radius:999px;border:2px solid #100F0D;}
+  .invoice-paper .inv-status.draft{background:#F0E9DA;color:#100F0D;}
+  .invoice-paper .inv-status.sent{background:#DEE4FD;color:#1B3FE0;}
+  .invoice-paper .inv-status.paid{background:#12A06A;color:#100F0D;}
+  .invoice-paper .inv-status.overdue{background:#E8402A;color:#100F0D;}
+  .invoice-paper .inv-status.cancelled{background:#E7E0CE;color:#3E3A34;text-decoration:line-through;}
 
-  .invoice-paper .inv-meta-grid{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:18px;padding:18px 0;border-top:1px solid #eee5d5;border-bottom:1px solid #eee5d5;margin-bottom:24px;}
-  .invoice-paper .inv-meta-grid label{font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:#a8a094;display:block;margin-bottom:6px;}
-  .invoice-paper .inv-meta-grid strong{font-size:13px;color:#1a1814;display:block;line-height:1.45;}
-  .invoice-paper .inv-meta-grid .inv-meta-sub{font-size:11px;color:#6b665e;margin-top:2px;line-height:1.45;white-space:pre-wrap;}
+  .invoice-paper .inv-meta-grid{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:18px;padding:18px 0;border-top:2px solid #100F0D;border-bottom:2px solid #100F0D;margin-bottom:24px;}
+  .invoice-paper .inv-meta-grid label{font-size:9px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:#6B655B;display:block;margin-bottom:6px;}
+  .invoice-paper .inv-meta-grid strong{font-size:13px;color:#100F0D;display:block;line-height:1.45;font-weight:700;}
+  .invoice-paper .inv-meta-grid .inv-meta-sub{font-size:11px;color:#3E3A34;margin-top:2px;line-height:1.45;white-space:pre-wrap;}
 
+  /* Bold chrome, calm data — the same split the app uses. The head is a solid
+     bar of ink; the lines below it stay hairline so a long invoice reads. */
   .invoice-paper .inv-items{width:100%;border-collapse:collapse;margin-bottom:18px;}
-  .invoice-paper .inv-items th{font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#a8a094;text-align:left;padding:0 12px 10px;border-bottom:1px solid #eee5d5;}
+  .invoice-paper .inv-items th{font-size:9px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#FAF6EC;background:#100F0D;text-align:left;padding:9px 12px;border-bottom:none;}
   .invoice-paper .inv-items th.r,.invoice-paper .inv-items td.r{text-align:right;}
-  .invoice-paper .inv-items td{font-size:13px;padding:14px 12px;border-bottom:1px solid #f5f1e6;color:#1a1814;vertical-align:top;}
+  .invoice-paper .inv-items td{font-size:13px;padding:14px 12px;border-bottom:1px solid #DED6C4;color:#100F0D;vertical-align:top;}
   .invoice-paper .inv-items td.r{font-family:'DM Mono',monospace;}
-  .invoice-paper .inv-items tr:last-child td{border-bottom:none;}
+  .invoice-paper .inv-items tr:last-child td{border-bottom:2px solid #100F0D;}
 
   .invoice-paper .inv-totals{margin-left:auto;width:280px;font-size:13px;margin-bottom:32px;}
-  .invoice-paper .inv-totals .tr{display:flex;justify-content:space-between;padding:6px 12px;color:#4a443c;}
+  .invoice-paper .inv-totals .tr{display:flex;justify-content:space-between;padding:6px 12px;color:#3E3A34;font-weight:600;}
   .invoice-paper .inv-totals .tr .val{font-family:'DM Mono',monospace;}
-  .invoice-paper .inv-totals .grand{margin-top:8px;padding:14px 12px;background:#0e0c0a;color:#f7f2e9;border-radius:6px;font-size:16px;font-weight:700;letter-spacing:.04em;}
-  .invoice-paper .inv-totals .grand .val{color:#f0c060;font-size:18px;}
+  /* The amount owed is the one thing that must survive a bad printer, so it
+     is a solid ink block with the figure in flare on top of it. */
+  .invoice-paper .inv-totals .grand{margin-top:8px;padding:14px 12px;background:#100F0D;color:#FAF6EC;border-radius:0;font-size:16px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;}
+  .invoice-paper .inv-totals .grand .val{color:#FF8A78;font-size:20px;font-family:'DM Mono',monospace;}
 
-  .invoice-paper .inv-pay{background:#faf6ec;border:1px solid #eee5d5;border-radius:8px;padding:20px 22px;margin-bottom:24px;display:flex;gap:20px;align-items:center;flex-wrap:wrap;}
+  .invoice-paper .inv-pay{background:#FAF6EC;border:2px solid #100F0D;border-radius:0;padding:20px 22px;margin-bottom:24px;display:flex;gap:20px;align-items:center;flex-wrap:wrap;}
   .invoice-paper .inv-pay .inv-pay-info{flex:1;min-width:220px;}
-  .invoice-paper .inv-pay .inv-pay-info h3{font-family:'Playfair Display',serif;font-size:16px;color:#0e0c0a;margin:0 0 6px;}
-  .invoice-paper .inv-pay .inv-pay-info p{font-size:12px;color:#6b665e;margin:0 0 10px;line-height:1.55;}
-  .invoice-paper .inv-pay .pay-btn{display:inline-block;background:#0e0c0a;color:#f0c060;padding:10px 22px;border-radius:99px;font-family:'Syne',sans-serif;font-weight:700;font-size:12px;letter-spacing:.16em;text-transform:uppercase;text-decoration:none;border:none;}
-  .invoice-paper .inv-pay .pay-btn:hover{background:#1c1917;}
+  .invoice-paper .inv-pay .inv-pay-info h3{font-family:'Anton',Impact,sans-serif;font-weight:400;font-size:19px;color:#100F0D;margin:0 0 6px;text-transform:uppercase;letter-spacing:.01em;}
+  .invoice-paper .inv-pay .inv-pay-info p{font-size:12px;color:#3E3A34;margin:0 0 10px;line-height:1.55;}
+  /* Ink on flare, not flare on ink: this is the button a shop taps to pay, so
+     it takes the loudest treatment the palette has, and ink-on-flare is the
+     readable direction (4.74:1) — the reverse is not. */
+  .invoice-paper .inv-pay .pay-btn{display:inline-block;background:#E8402A;color:#100F0D;padding:12px 24px;border-radius:0;border:2px solid #100F0D;box-shadow:4px 4px 0 #100F0D;font-family:'Archivo','Helvetica Neue',sans-serif;font-weight:800;font-size:12px;letter-spacing:.16em;text-transform:uppercase;text-decoration:none;}
+  .invoice-paper .inv-pay .pay-btn:hover{background:#FF6B55;}
   .invoice-paper .inv-pay .pay-methods{font-size:10px;color:#a8a094;margin-top:8px;letter-spacing:.04em;}
   .invoice-paper .inv-pay .inv-qr{background:#fff;padding:10px;border-radius:4px;border:1px solid #eee5d5;}
   .invoice-paper .inv-pay .inv-qr canvas, .invoice-paper .inv-pay .inv-qr img{display:block;}
@@ -130,15 +152,15 @@
      eye instead of read one by one. The three captions sit on the house Syne
      micro-label scale, which puts a real step between a label and its own
      figure — at the old body size the two read as a single run of text. */
-  .invoice-card{background:var(--surface-card);border-radius:var(--r2);border:1px solid var(--border);padding:var(--space-4) var(--space-5);margin-bottom:var(--space-3);display:grid;grid-template-columns:auto minmax(0,1.6fr) 1fr 1fr minmax(124px,1fr) auto;gap:var(--space-4);align-items:center;box-shadow:var(--elev-1);transition:border-color var(--dur-fast) var(--ease-standard),box-shadow var(--dur-fast) var(--ease-standard),transform var(--dur-fast) var(--ease-standard);}
+  .invoice-card{background:var(--surface-card);border-radius:var(--r2);border:var(--stroke-hair) solid var(--border);padding:var(--space-4) var(--space-5);margin-bottom:var(--space-3);display:grid;grid-template-columns:auto minmax(0,1.6fr) 1fr 1fr minmax(124px,1fr) auto;gap:var(--space-4);align-items:center;box-shadow:var(--elev-1);transition:border-color var(--dur-fast) var(--ease-standard),box-shadow var(--dur-fast) var(--ease-standard),transform var(--dur-fast) var(--ease-standard);}
   .invoice-card:hover{border-color:var(--gold-line);box-shadow:var(--elev-hover);transform:translateY(-1px);}
-  .invoice-card .inv-c-num{font-family:'DM Mono',monospace;font-size:var(--text-xs);color:var(--text2);font-weight:600;display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-1);}
+  .invoice-card .inv-c-num{font-family:var(--font-mono);font-size:var(--text-xs);color:var(--text2);font-weight:600;display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-1);}
   .invoice-card .inv-c-store{font-weight:700;color:var(--text);font-size:var(--text-base);min-width:0;}
   .invoice-card .inv-c-store .inv-c-store-meta{font-weight:400;font-size:var(--text-xs);color:var(--text3);margin-top:2px;}
-  .invoice-card .inv-c-cell{font-family:'Syne',sans-serif;font-size:var(--text-3xs);font-weight:700;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text3);min-width:0;}
+  .invoice-card .inv-c-cell{font-family:var(--font-ui);font-size:var(--text-3xs);font-weight:700;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text3);min-width:0;}
   /* The figure resets the caption's caps/tracking — a date or an amount must
      not inherit the label's letter-spacing. */
-  .invoice-card .inv-c-cell strong{display:block;font-family:'DM Mono',monospace;color:var(--text);font-weight:600;font-size:var(--text-base);letter-spacing:0;text-transform:none;margin-top:var(--space-1);}
+  .invoice-card .inv-c-cell strong{display:block;font-family:var(--font-mono);color:var(--text);font-weight:600;font-size:var(--text-base);letter-spacing:0;text-transform:none;margin-top:var(--space-1);}
   /* One step more gutter than the grid's own gap: at --text-lg the figure is
      the heaviest thing on the row, and butted straight against the status pill
      it reads as one cluster with the controls rather than as the row's answer. */
@@ -155,7 +177,7 @@
   .invoice-card .inv-c-btns .btn:active{transform:scale(0.96);}
   /* Status pill — a themed sibling of .invoice-paper's print-only version above,
      so the printed invoice stays fixed-light while this list row follows dark mode. */
-  .invoice-card .inv-status{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;padding:4px 10px;border-radius:99px;text-align:center;}
+  .invoice-card .inv-status{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;padding:4px 10px;border-radius:var(--r-pill);text-align:center;}
   .invoice-card .inv-status.draft{background:var(--status-neutral-bg);color:var(--status-neutral);}
   .invoice-card .inv-status.sent{background:var(--status-info-bg);color:var(--status-info);}
   .invoice-card .inv-status.paid{background:var(--status-positive-bg);color:var(--status-positive);}
@@ -173,10 +195,10 @@
     .invoice-card .inv-c-btns{flex:1 1 auto;}
   }
   .inv-item-row td{padding:6px 4px;}
-  .inv-item-row input{width:100%;padding:6px 8px;font-size:12px;border:1px solid var(--border);border-radius:var(--r);background:transparent;color:var(--text);}
-  .inv-item-row input[type=number]{font-family:'DM Mono',monospace;text-align:right;}
-  .inv-item-row .inv-item-book{width:100%;padding:6px 8px;font-size:12px;border:1px solid var(--border);border-radius:var(--r);background:transparent;color:var(--text);height:auto;margin:0;}
-  .inv-item-row .inv-item-amt{display:block;text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:var(--text);padding:7px 6px;}
+  .inv-item-row input{width:100%;padding:6px 8px;font-size:12px;border:var(--stroke-hair) solid var(--border);border-radius:var(--r);background:transparent;color:var(--text);}
+  .inv-item-row input[type=number]{font-family:var(--font-mono);text-align:right;}
+  .inv-item-row .inv-item-book{width:100%;padding:6px 8px;font-size:12px;border:var(--stroke-hair) solid var(--border);border-radius:var(--r);background:transparent;color:var(--text);height:auto;margin:0;}
+  .inv-item-row .inv-item-amt{display:block;text-align:right;font-family:var(--font-mono);font-size:12px;color:var(--text);padding:7px 6px;}
   .inv-item-row .inv-item-remove{
     background:transparent;border:none;color:var(--content-muted);cursor:pointer;font-size:16px;line-height:1;
     min-width:36px;min-height:36px;border-radius:var(--r);display:inline-flex;align-items:center;justify-content:center;
@@ -188,10 +210,10 @@
 
   /* ─── PRINT ─────────────────────────────────────────────────────────── */
   @media print {
-    body{background:#fff !important;margin:0 !important;padding:0 !important;}
+    body{background:var(--surface-card) !important;margin:0 !important;padding:0 !important;}
     body > *:not(#m-invoice-view){display:none !important;}
-    #m-invoice-view{position:static !important;background:#fff !important;display:block !important;backdrop-filter:none !important;}
-    #m-invoice-view .modal{box-shadow:none !important;background:#fff !important;max-width:none !important;max-height:none !important;padding:0 !important;border:none !important;border-radius:0 !important;}
+    #m-invoice-view{position:static !important;background:var(--surface-card) !important;display:block !important;backdrop-filter:none !important;}
+    #m-invoice-view .modal{box-shadow:none !important;background:var(--surface-card) !important;max-width:none !important;max-height:none !important;padding:0 !important;border:none !important;border-radius:0 !important;}
     .no-print{display:none !important;}
     #invoice-print-area{box-shadow:none !important;border-radius:0 !important;padding:0 !important;max-width:none !important;}
     @page{margin:0.4in !important;}
@@ -235,7 +257,7 @@
     <div>Myrical</div>
     <div class="pw-logo-outline">Books</div>
   </div>
-  <div style="font-family:'Syne',sans-serif; font-size:11px; text-transform:uppercase; letter-spacing:0.18em; color:var(--gold3); animation: pulse-glow 2s infinite ease-in-out;">Connecting to database…</div>
+  <div style="font-family:var(--font-ui); font-size:11px; text-transform:uppercase; letter-spacing:0.18em; color:var(--gold3); animation: pulse-glow 2s infinite ease-in-out;">Connecting to database…</div>
 </div>
 
 <!-- PASSWORD GATE (publisher only — hidden in author mode) -->
@@ -493,7 +515,7 @@
           <div class="acct-status-row">
             <span class="sync-time" id="sync-time"></span>
             <span class="sheets-badge off" id="sheets-badge">📊 Sheets: not set up</span>
-            <a id="sheets-open-link" href="#" target="_blank" style="display:none;font-family:'DM Mono',monospace;font-size:10px;color:var(--gold2);text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">↗ Open</a>
+            <a id="sheets-open-link" href="#" target="_blank" style="display:none;font-family:var(--font-mono);font-size:10px;color:var(--gold3);text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">↗ Open</a>
           </div>
           <span class="author-watermark" id="author-watermark" style="display:none;"></span>
         </div>
@@ -547,7 +569,7 @@
 <!-- AUTHOR QR CODE PAGE (author view only) -->
 <div class="tab-panel" id="tab-myqr" style="display:none;">
   <div class="author-qr-card">
-    <div id="myqr-book-title" style="font-family:'Playfair Display',serif;font-size:22px;font-weight:600;color:var(--content-primary);margin-bottom:6px;"></div>
+    <div id="myqr-book-title" style="font-family:var(--font-display);font-size:22px;font-weight:600;color:var(--content-primary);margin-bottom:6px;"></div>
     <div id="myqr-book-meta" class="author-qr-meta"></div>
 
     <!-- QR Code -->
@@ -802,7 +824,7 @@
     <div style="display:flex;align-items:center;gap:12px;">
       <button class="btn gold sm" id="d-email-artist-btn" onclick="emailArtistForPayment()" style="font-size:11px;display:none;">✉ Email artist for payment</button>
       <button class="btn gold sm" id="d-qr-btn" onclick="openPaymentQRModal()" style="font-size:11px;">Payment QR Code</button>
-      <button class="btn sm" id="d-seed-test-btn" onclick="seedMockTestData()" style="font-size:11px;display:none;background:linear-gradient(135deg,#a78bfa,#8b5cf6);color:#ffffff;border:none;box-shadow:0 2px 8px rgba(139,92,246,0.3);">🧪 Seed Mock Test Data</button>
+      <button class="btn sm" id="d-seed-test-btn" onclick="seedMockTestData()" style="font-size:11px;display:none;background:linear-gradient(135deg,#a78bfa,#8b5cf6);color:var(--on-accent);border:none;box-shadow:var(--elev-2);">🧪 Seed Mock Test Data</button>
       <span id="d-notify-status" class="pill gray" style="font-size:10px;display:none;" title="Whether artist submissions can email you for approval"></span>
       <div class="dash-context-meta">Dashboard overview</div>
     </div>
@@ -878,7 +900,7 @@
     </div>
   </details>
   <!-- PROFIT SHARING BREAKDOWN -->
-  <div id="d-profit-sharing-block" class="card" style="margin-bottom:1.5rem; border-left:4px solid var(--book-accent); display:none;">
+  <div id="d-profit-sharing-block" class="card" style="margin-bottom:1.5rem; border-left:var(--stroke) solid var(--book-accent); display:none;">
     <div class="sec-head ps-block-head is-muted">
       <div class="sec-head-titles">
         <div class="sec-kicker"><span class="sec-kicker-dot"></span>Revenue Split</div>
@@ -952,7 +974,7 @@
       </div>
       <div class="stock-stage">
         <div class="bar-meta"><span class="bar-meta-lead" id="d-bar-label">— / — on hand</span><span class="bar-meta-note" id="d-thresh-label">Alert at — units</span></div>
-        <div class="bar-track" id="d-bar-track" style="display:flex;overflow:hidden;border-radius:9999px;">
+        <div class="bar-track" id="d-bar-track" style="display:flex;overflow:hidden;border-radius:var(--r-pill);">
           <div class="bar-fill" id="d-bar" style="width:100%;background:var(--gold2);transition:width var(--dur-base) var(--ease-entrance);"></div>
           <div class="bar-fill bar-fill-author" id="d-bar-author" style="width:0%;display:none;background:var(--violet, #8b5cf6);transition:width var(--dur-base) var(--ease-entrance);"></div>
         </div>
@@ -981,7 +1003,7 @@
           <div class="stock-title" id="d-be-title">—</div>
           <div class="stock-author" id="d-be-sub">—</div>
         </div>
-        <span class="pill" id="d-be-pill" style="background:rgba(200,145,58,.15);color:var(--gold2);">—</span>
+        <span class="pill" id="d-be-pill" style="background:var(--gold-bg);color:var(--gold-text);">—</span>
       </div>
       <div class="stock-stage">
         <div class="bar-meta"><span class="bar-meta-lead" id="d-be-bar-label">—</span><span class="bar-meta-note" id="d-be-bar-right">—</span></div>
@@ -997,16 +1019,16 @@
   </div>
 
   <div class="sect" id="danger-zone-sect" style="display:none;">Danger zone</div>
-  <div id="danger-zone-block" style="display:none;background:var(--surface-card);border-radius:var(--r3);border:1px solid var(--border);padding:1.25rem;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:1.25rem;">
+  <div id="danger-zone-block" style="display:none;background:var(--surface-card);border-radius:var(--r3);border:var(--stroke-hair) solid var(--border);padding:1.25rem;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:1.25rem;">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;">
       <div style="flex:1;min-width:200px;"><div style="font-weight:700;font-size:13px;margin-bottom:3px;">Reset all sales data for this book</div><div style="font-size:12px;color:var(--text3);">Clears orders, history and consignment for this book only. Your Google Sheet is untouched.</div></div>
       <button class="btn danger-btn" onclick="resetBookData()">⚠ Reset book data</button>
     </div>
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;padding-top:1.25rem;border-top:1px solid var(--border);">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;padding-top:1.25rem;border-top:var(--stroke-hair) solid var(--border);">
       <div style="flex:1;min-width:200px;"><div style="font-weight:700;font-size:13px;margin-bottom:3px;">Backfill past gratuity expenses</div><div style="font-size:12px;color:var(--text3);">Automatically creates expense ledger entries for any past gratuities that weren't expensed, using the book's current production cost.</div></div>
       <button class="btn outline" onclick="backfillGratuityExpenses()">Backfill past gratuities</button>
     </div>
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;padding-top:1.25rem;border-top:1px solid var(--border);">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;padding-top:1.25rem;border-top:var(--stroke-hair) solid var(--border);">
       <div style="flex:1;min-width:200px;"><div style="font-weight:700;font-size:13px;margin-bottom:3px;">Restore book data from Google Sheets</div><div style="font-size:12px;color:var(--text3);">Pulls all sales and consignment records for this book from your connected Google Sheet. <strong style="color:var(--amber);">Warning: This will overwrite the local sales, history, and consignment records for this book.</strong></div></div>
       <button class="btn gold outline" id="d-restore-sheets-btn" onclick="restoreBookDataFromSheets()">Sync from Google Sheet</button>
     </div>
@@ -1142,7 +1164,7 @@
           </div>
         </div>
       </div>
-      <div class="card-actions" style="margin-top:1.5rem; padding-top:1rem; border-top:1px dashed var(--border); display:flex; justify-content:flex-end;">
+      <div class="card-actions" style="margin-top:1.5rem; padding-top:1rem; border-top:var(--stroke-hair) dashed var(--border); display:flex; justify-content:flex-end;">
         <button class="btn gold lg" onclick="savePaymentConfig()">Save Payment Methods</button>
       </div>
     </div>
@@ -1168,7 +1190,7 @@
     <!-- DISCOVERED BUYERS -->
     <div class="row-between" style="align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:1rem;">
       <div>
-        <div style="font-family:'Playfair Display',serif;font-size:17px;font-weight:700;">All Discovered Buyers</div>
+        <div style="font-family:var(--font-ui);font-size:17px;font-weight:700;">All Discovered Buyers</div>
         <div style="font-size:12px;color:var(--text3);max-width:560px;line-height:1.5;margin-top:2px;">Everyone who has purchased from you across your channels (Website, POS, Stripe, Consignment).</div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
@@ -1244,10 +1266,10 @@
     <div id="customer-audience-summary" style="margin-bottom:1.5rem;"></div>
 
     <!-- CURATED MAILING LIST -->
-    <div class="card" style="border-left:3px solid var(--gold-line);margin-bottom:1.75rem;">
+    <div class="card" style="border-left:var(--stroke) solid var(--gold-line);margin-bottom:1.75rem;">
       <div class="row-between" style="align-items:flex-start;gap:12px;flex-wrap:wrap;">
         <div>
-          <div style="font-family:'Playfair Display',serif;font-size:17px;font-weight:700;">Curated Mailing List</div>
+          <div style="font-family:var(--font-ui);font-size:17px;font-weight:700;">Curated Mailing List</div>
           <div id="ml-count" style="font-size:12px;color:var(--text3);margin-top:2px;">0 subscribers</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
@@ -1267,7 +1289,7 @@
         <button class="btn gold" style="min-height:var(--target-min);padding:8px 18px;" onclick="addManualSubscriber()">＋ Add</button>
       </div>
 
-      <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding-top:10px;border-top:1px dashed var(--border);">
+      <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding-top:10px;border-top:var(--stroke-hair) dashed var(--border);">
         <button class="btn ink" onclick="addAllBuyersToMailingList()" title="Add every buyer we found to your mailing list">↓ Add all buyers</button>
         <button class="btn outline cust-export-btn" onclick="exportMailingListCsv()" title="Export current segment to CSV">📥 Export CSV</button>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;font-size:12px;color:var(--text2);">
@@ -1287,16 +1309,16 @@
   <div id="cust-sec-campaign" class="customers-section" style="display:none;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap;gap:10px;">
       <div>
-        <div style="font-family:'Playfair Display',serif;font-size:18px;font-weight:700;">Campaigns &amp; Newsletters</div>
+        <div style="font-family:var(--font-ui);font-size:18px;font-weight:700;">Campaigns &amp; Newsletters</div>
         <div style="font-size:12px;color:var(--text3);margin-top:2px;">Design and broadcast custom email newsletters to your segments.</div>
       </div>
       <button class="btn gold lg" onclick="openCampaignWizard()">＋ Create Campaign</button>
     </div>
 
     <!-- CAMPAIGN WIZARD (Initially hidden) -->
-    <div class="card" id="campaign-wizard-card" style="border-left:3px solid var(--gold);margin-bottom:1.75rem;display:none;">
+    <div class="card" id="campaign-wizard-card" style="border-left:var(--stroke) solid var(--gold);margin-bottom:1.75rem;display:none;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.25rem;">
-        <div style="font-family:'Playfair Display',serif;font-size:16px;font-weight:700;" id="campaign-wizard-title">New Email Campaign</div>
+        <div style="font-family:var(--font-ui);font-size:16px;font-weight:700;" id="campaign-wizard-title">New Email Campaign</div>
         <button class="btn sm" onclick="closeCampaignWizard()">✕ Cancel</button>
       </div>
 
@@ -1327,7 +1349,7 @@
         <div>
           <div class="form-group" style="margin:0;">
             <label for="c-body">Message Body (HTML or Plain Text)</label>
-            <textarea id="c-body" rows="14" placeholder="Dear {{name}},&#10;&#10;We are thrilled to announce..." style="width:100%;font-family:'DM Mono',monospace;font-size:13px;line-height:1.5;padding:10px;" oninput="updateCampaignPreview()"></textarea>
+            <textarea id="c-body" rows="14" placeholder="Dear {{name}},&#10;&#10;We are thrilled to announce..." style="width:100%;font-family:var(--font-mono);font-size:13px;line-height:1.5;padding:10px;" oninput="updateCampaignPreview()"></textarea>
             <div class="helper-btn-group">
               <button class="helper-tag-btn" onclick="insertTemplateTag('{{name}}')" title="Inserts recipient's full name (or 'Customer' if blank)">＋ {{name}}</button>
               <button class="helper-tag-btn" onclick="insertTemplateTag('{{email}}')" title="Inserts recipient's email address">＋ {{email}}</button>
@@ -1344,18 +1366,18 @@
       </div>
 
       <!-- Campaign Sending Mode Status & Simulation Toggle -->
-      <div class="campaign-mode-row" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--cream2);border:1px solid var(--border);border-radius:var(--r2);margin-top:16px;margin-bottom:8px;transition:all 0.25s ease;">
+      <div class="campaign-mode-row" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--cream2);border:var(--stroke-hair) solid var(--border);border-radius:var(--r2);margin-top:16px;margin-bottom:8px;transition:all 0.25s ease;">
         <div style="display:flex;align-items:center;gap:8px;">
           <span id="c-mode-indicator-dot" style="width:8px;height:8px;border-radius:50%;background:var(--red);display:inline-block;transition:all 0.2s;"></span>
           <span id="c-mode-indicator-text" style="font-size:12px;font-weight:600;color:var(--text2);transition:all 0.2s;">Loading mode...</span>
         </div>
-        <label style="display:flex;align-items:center;gap:8px;margin:0;font-size:12px;color:var(--text2);cursor:pointer;user-select:none;padding:4px 8px;border-radius:4px;transition:background 0.2s;">
+        <label style="display:flex;align-items:center;gap:8px;margin:0;font-size:12px;color:var(--text2);cursor:pointer;user-select:none;padding:4px 8px;border-radius:var(--r);transition:background 0.2s;">
           <input type="checkbox" id="c-force-mock" onchange="onForceMockChange()" style="width:auto;margin:0;cursor:pointer;">
           <span>Simulate send (mock)</span>
         </label>
       </div>
 
-      <div style="margin-top:1.5rem;padding-top:1.25rem;border-top:1px dashed var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+      <div style="margin-top:1.5rem;padding-top:1.25rem;border-top:var(--stroke-hair) dashed var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
         <div style="display:flex;gap:8px;align-items:center;">
           <input type="email" id="c-test-email" placeholder="test-recipient@example.com" style="width:200px;">
           <button class="btn" onclick="sendTestEmailCampaign()">Send Test Email</button>
@@ -1369,12 +1391,12 @@
 
     <!-- CAMPAIGNS LISTS -->
     <div class="card" style="margin-bottom:1.5rem;">
-      <div style="font-family:'Playfair Display',serif;font-size:15px;font-weight:700;margin-bottom:10px;border-bottom:1px dashed var(--border);padding-bottom:6px;">Campaign Drafts</div>
+      <div style="font-family:var(--font-ui);font-size:15px;font-weight:700;margin-bottom:10px;border-bottom:var(--stroke-hair) dashed var(--border);padding-bottom:6px;">Campaign Drafts</div>
       <div id="campaign-drafts-list" class="campaign-card-list"></div>
     </div>
 
     <div class="card">
-      <div style="font-family:'Playfair Display',serif;font-size:15px;font-weight:700;margin-bottom:10px;border-bottom:1px dashed var(--border);padding-bottom:6px;">Sent Campaign History</div>
+      <div style="font-family:var(--font-ui);font-size:15px;font-weight:700;margin-bottom:10px;border-bottom:var(--stroke-hair) dashed var(--border);padding-bottom:6px;">Sent Campaign History</div>
       <div id="campaign-sent-list" class="campaign-card-list"></div>
     </div>
   </div>
@@ -1392,7 +1414,7 @@
       <div class="form-group"><label for="m-num">Order #</label><input type="text" id="m-num" placeholder="optional"></div>
       <div class="form-group"><label for="m-qty">Qty</label><input type="number" inputmode="numeric" id="m-qty" value="1" min="1" oninput="phint()"></div>
       <div class="form-group">
-        <label id="m-price-label">Price paid <span id="m-fx-inline-result" style="display:none;color:var(--gold);font-weight:600;margin-left:8px;"></span></label>
+        <label id="m-price-label">Price paid <span id="m-fx-inline-result" style="display:none;color:var(--gold-text);font-weight:600;margin-left:8px;"></span></label>
         <div class="price-inline">
           <select id="m-price-cur" onchange="onManualCurrencyChange()">
             <option value="BOOK">Book currency</option>
@@ -1465,7 +1487,7 @@
   <div class="divider" style="margin-top:1.5rem;"></div>
   <div class="section-hed" style="margin-bottom:.2rem;margin-top:1.5rem;">Log a gratuity <span class="muted-note">(gifted / complimentary)</span></div>
   <p class="lead-note">Gratuity books reduce stock but are <strong>not</strong> counted as revenue or sold units.</p>
-  <div class="card" style="border-left:3px solid var(--gold-line);">
+  <div class="card" style="border-left:var(--stroke) solid var(--gold-line);">
     <div class="g3">
       <div class="form-group"><label for="g-ref">Recipient / Ref</label><input type="text" id="g-ref" placeholder="e.g. reviewer, press"></div>
       <div class="form-group"><label for="g-qty">Qty</label><input type="number" inputmode="numeric" id="g-qty" value="1" min="1" oninput="updateGratuityExpenseHint()"></div>
@@ -1486,13 +1508,13 @@
       <span class="switch"><input type="checkbox" id="g-expense-cb" onchange="toggleGratuityExpense()"><span class="track"></span></span>
       <span><span class="toggle-title">Expense this gratuity</span><span class="field-note" style="display:block;margin-top:2px;">Add the cost of these copies to this project's ledger.</span></span>
     </label>
-    <div id="g-expense-fields" class="g3" style="display:none; margin-top:14px; padding-top:14px; border-top:1px dashed var(--border);">
+    <div id="g-expense-fields" class="g3" style="display:none; margin-top:14px; padding-top:14px; border-top:var(--stroke-hair) dashed var(--border);">
       <div class="form-group">
         <label for="g-exp-val">Expense value (per book)</label>
         <input type="number" inputmode="decimal" id="g-exp-val" step="0.01" placeholder="0.00" oninput="updateGratuityExpenseHint()">
       </div>
       <div class="form-group" style="display:flex; flex-direction:column; justify-content:center;">
-        <span class="field-note">Will add a <strong id="g-exp-total" style="color:var(--gold);">0.00</strong> expense to this project's ledger.</span>
+        <span class="field-note">Will add a <strong id="g-exp-total" style="color:var(--gold-text);">0.00</strong> expense to this project's ledger.</span>
       </div>
       <div class="form-group"></div>
     </div>
@@ -1625,10 +1647,10 @@
   </div>
 
   <!-- ARTIST PAYMENT LINK (author mode only) -->
-  <div id="artist-payment-link-card" style="display:none;margin-bottom:1.5rem;background:var(--ink);border-radius:var(--r3);border:1px solid rgba(255,255,255,.08);padding:1.25rem 1.5rem;">
+  <div id="artist-payment-link-card" style="display:none;margin-bottom:1.5rem;background:var(--ink);border-radius:var(--r3);border:var(--stroke-hair) solid rgba(255,255,255,.08);padding:1.25rem 1.5rem;">
     <div style="font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--on-inverse-3);margin-bottom:8px;">Your payment link</div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-      <input type="text" id="artist-pay-link-input" placeholder="https://paypal.me/yourname or your Interac email" style="flex:1;min-width:220px;padding:9px 13px;font-size:13px;font-family:'Syne',sans-serif;border:1px solid rgba(255,255,255,.12);border-radius:var(--r2);background:rgba(255,255,255,.07);color:var(--on-inverse);outline:none;">
+      <input type="text" id="artist-pay-link-input" placeholder="https://paypal.me/yourname or your Interac email" style="flex:1;min-width:220px;padding:9px 13px;font-size:13px;font-family:var(--font-ui);border:var(--stroke-hair) solid rgba(255,255,255,.12);border-radius:var(--r2);background:rgba(255,255,255,.07);color:var(--on-inverse);outline:none;">
       <button class="btn gold" onclick="saveArtistPaymentLink()">Save</button>
     </div>
     <div style="font-size:11px;color:var(--on-inverse-2);margin-top:8px;">When the publisher approves a reimbursement, they'll use this link to pay you.</div>
@@ -1647,7 +1669,7 @@
         </div>
         <div class="g2">
           <div class="form-group amount-field">
-            <label>Amount <span id="exp-fx-inline-result" style="display:none;color:var(--gold);font-weight:600;margin-left:8px;"></span></label>
+            <label>Amount <span id="exp-fx-inline-result" style="display:none;color:var(--gold-text);font-weight:600;margin-left:8px;"></span></label>
             <div class="price-inline">
               <select id="exp-cur" onchange="onExpenseCurrencyChange()">
                 <option value="CAD">CAD</option>
@@ -1852,7 +1874,7 @@
 
     <div class="form-group">
       <label for="tc-new-trip-budget">Target budget (CAD) <span class="tc-opt">optional</span></label>
-      <input type="number" id="tc-new-trip-budget" min="0" step="0.01" placeholder="0.00" class="tnum" style="font-family:'DM Mono',monospace;">
+      <input type="number" id="tc-new-trip-budget" min="0" step="0.01" placeholder="0.00" class="tnum" style="font-family:var(--font-mono);">
       <div class="tc-field-hint">Drives the progress bar and the over-budget warning on the trip card.</div>
     </div>
 
@@ -2106,9 +2128,9 @@
 
 <!-- TAX CENTER RECEIPT LIGHTBOX MODAL -->
 <div class="overlay" id="m-tc-receipt-lightbox" style="display:none;"><div class="modal tc-lightbox-modal" role="dialog" aria-modal="true" style="max-width:960px;width:95vw;max-height:90vh;display:flex;flex-direction:column;">
-  <div class="tc-lightbox-header" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--border);margin-bottom:12px;flex-wrap:wrap;">
+  <div class="tc-lightbox-header" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding-bottom:12px;border-bottom:var(--stroke-hair) solid var(--border);margin-bottom:12px;flex-wrap:wrap;">
     <div>
-      <div class="tc-lightbox-title" id="tc-lightbox-title" style="font-family:'Playfair Display',serif;font-size:18px;font-weight:700;color:var(--content-primary);">Receipt Preview</div>
+      <div class="tc-lightbox-title" id="tc-lightbox-title" style="font-family:var(--font-ui);font-size:18px;font-weight:700;color:var(--content-primary);">Receipt Preview</div>
       <div class="tc-lightbox-meta" id="tc-lightbox-meta" style="font-size:12px;color:var(--content-secondary);margin-top:3px;"></div>
     </div>
     <div class="tc-lightbox-actions" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
@@ -2122,8 +2144,8 @@
   </div>
   <div class="tc-lightbox-body" id="tc-lightbox-body" style="flex:1;min-height:360px;max-height:60vh;overflow:auto;display:flex;align-items:center;justify-content:center;background:var(--surface-sunken);border-radius:var(--r2);padding:16px;position:relative;">
     <div class="tc-lightbox-viewport" id="tc-lightbox-viewport" style="display:flex;align-items:center;justify-content:center;transition:transform 0.2s ease;">
-      <img id="tc-lightbox-img" src="" alt="Receipt preview" style="max-width:100%;max-height:56vh;object-fit:contain;border-radius:4px;box-shadow:var(--elev-2);display:none;">
-      <canvas id="tc-lightbox-canvas" style="max-width:100%;max-height:56vh;border-radius:4px;box-shadow:var(--elev-2);display:none;"></canvas>
+      <img id="tc-lightbox-img" src="" alt="Receipt preview" style="max-width:100%;max-height:56vh;object-fit:contain;border-radius:var(--r);box-shadow:var(--elev-2);display:none;">
+      <canvas id="tc-lightbox-canvas" style="max-width:100%;max-height:56vh;border-radius:var(--r);box-shadow:var(--elev-2);display:none;"></canvas>
       <div id="tc-lightbox-loading" class="empty-state" style="padding:40px 20px;">
         <div class="e-icon">⏳</div>
         <div>Loading receipt preview…</div>
@@ -2133,7 +2155,7 @@
   <div class="tc-lightbox-footer" style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;flex-wrap:wrap;gap:8px;">
     <div class="tc-lightbox-nav" style="display:flex;align-items:center;gap:8px;">
       <button class="btn sm" type="button" id="tc-lightbox-prev-btn" onclick="tcLightboxNav(-1)">‹ Previous</button>
-      <span id="tc-lightbox-counter" style="font-size:12px;color:var(--text3);font-family:'DM Mono',monospace;min-width:60px;text-align:center;"></span>
+      <span id="tc-lightbox-counter" style="font-size:12px;color:var(--text3);font-family:var(--font-mono);min-width:60px;text-align:center;"></span>
       <button class="btn sm" type="button" id="tc-lightbox-next-btn" onclick="tcLightboxNav(1)">Next ›</button>
     </div>
     <button class="btn" type="button" onclick="attemptCloseModal('tc-receipt-lightbox')">Close</button>
@@ -2280,13 +2302,13 @@
     </div>
     <button type="button" class="btn tx modal-close-btn" onclick="closeReceiptCameraModal()" aria-label="Close dialog" title="Close (Esc)">✕</button>
   </div>
-  <div style="background:rgba(180,140,20,.08);border:1px solid rgba(180,140,20,.2);border-radius:var(--r2);padding:8px 12px;margin-bottom:12px;font-size:11px;color:var(--text2);line-height:1.5;">
+  <div style="background:rgba(180,140,20,.08);border:var(--stroke-hair) solid rgba(180,140,20,.2);border-radius:var(--r2);padding:8px 12px;margin-bottom:12px;font-size:11px;color:var(--text2);line-height:1.5;">
     Hold the receipt flat and well-lit, then snap. The photo will be attached to this expense and saved to your local receipts folder when you log it.
   </div>
-  <div id="receipt-cam-stage" style="position:relative;background:#000;border-radius:var(--r2);overflow:hidden;min-height:280px;display:flex;align-items:center;justify-content:center;">
+  <div id="receipt-cam-stage" style="position:relative;background:var(--ink);border-radius:var(--r2);overflow:hidden;min-height:280px;display:flex;align-items:center;justify-content:center;">
     <video id="receipt-cam-video" autoplay playsinline muted style="width:100%;max-height:60vh;display:block;"></video>
     <canvas id="receipt-cam-canvas" style="display:none;width:100%;max-height:60vh;"></canvas>
-    <div id="receipt-cam-status" style="position:absolute;color:#fff;font-size:12px;font-family:'DM Mono',monospace;text-align:center;padding:14px;display:none;"></div>
+    <div id="receipt-cam-status" style="position:absolute;color:var(--on-accent);font-size:12px;font-family:var(--font-mono);text-align:center;padding:14px;display:none;"></div>
     <div id="receipt-cam-reticle" class="receipt-cam-reticle" aria-hidden="true">
       <div class="reticle-corner top-left"></div>
       <div class="reticle-corner top-right"></div>
@@ -2387,30 +2409,30 @@
 
   <!-- Summary KPI Cards -->
   <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px; margin-bottom:20px;">
-    <div style="background:var(--cream2); border:1px solid var(--gold-line); border-radius:10px; padding:12px 16px;">
+    <div style="background:var(--cream2); border:var(--stroke-hair) solid var(--gold-line); border-radius:var(--r); padding:12px 16px;">
       <div style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); letter-spacing:.05em;">Total Cost Basis (Asset)</div>
-      <div id="iv-stat-cost-cad" style="font-family:'DM Mono',monospace; font-size:22px; font-weight:700; color:var(--gold); margin:4px 0;">$0.00 CAD</div>
+      <div id="iv-stat-cost-cad" style="font-family:var(--font-mono); font-size:22px; font-weight:700; color:var(--gold); margin:4px 0;">$0.00 CAD</div>
       <div style="font-size:10px; color:var(--text3);">Balance Sheet Asset Value</div>
     </div>
-    <div style="background:var(--cream2); border:1px solid var(--border); border-radius:10px; padding:12px 16px;">
+    <div style="background:var(--cream2); border:var(--stroke-hair) solid var(--border); border-radius:var(--r); padding:12px 16px;">
       <div style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); letter-spacing:.05em;">Total Retail MSRP Value</div>
-      <div id="iv-stat-retail-cad" style="font-family:'DM Mono',monospace; font-size:22px; font-weight:700; color:var(--green); margin:4px 0;">$0.00 CAD</div>
+      <div id="iv-stat-retail-cad" style="font-family:var(--font-mono); font-size:22px; font-weight:700; color:var(--green); margin:4px 0;">$0.00 CAD</div>
       <div style="font-size:10px; color:var(--text3);">Potential Unsold Retail Value</div>
     </div>
-    <div style="background:var(--cream2); border:1px solid var(--border); border-radius:10px; padding:12px 16px;">
+    <div style="background:var(--cream2); border:var(--stroke-hair) solid var(--border); border-radius:var(--r); padding:12px 16px;">
       <div style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); letter-spacing:.05em;">Unsold Inventory Units</div>
-      <div id="iv-stat-unsold-units" style="font-family:'DM Mono',monospace; font-size:22px; font-weight:700; color:var(--text1); margin:4px 0;">0 units</div>
+      <div id="iv-stat-unsold-units" style="font-family:var(--font-mono); font-size:22px; font-weight:700; color:var(--text1); margin:4px 0;">0 units</div>
       <div id="iv-stat-unsold-sub" style="font-size:10px; color:var(--text3);">0 On-Hand · 0 Consigned</div>
     </div>
-    <div style="background:var(--cream2); border:1px solid var(--border); border-radius:10px; padding:12px 16px;">
+    <div style="background:var(--cream2); border:var(--stroke-hair) solid var(--border); border-radius:var(--r); padding:12px 16px;">
       <div style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); letter-spacing:.05em;">Weighted Profit Margin</div>
-      <div id="iv-stat-margin-pct" style="font-family:'DM Mono',monospace; font-size:22px; font-weight:700; color:var(--gold); margin:4px 0;">0%</div>
+      <div id="iv-stat-margin-pct" style="font-family:var(--font-mono); font-size:22px; font-weight:700; color:var(--gold); margin:4px 0;">0%</div>
       <div id="iv-stat-margin-sub" style="font-size:10px; color:var(--text3);">$0.00 CAD Total Potential Profit</div>
     </div>
   </div>
 
   <!-- Book Asset Table -->
-  <div class="tbl-wrap" style="max-height:55vh; overflow-y:auto; border:1px solid var(--border); border-radius:8px;">
+  <div class="tbl-wrap" style="max-height:55vh; overflow-y:auto; border:var(--stroke-hair) solid var(--border); border-radius:var(--r);">
     <table class="tbl" style="width:100%; font-size:12px;">
       <thead>
         <tr>
@@ -2473,18 +2495,18 @@
 
       <div class="form-group">
         <label for="wo-qty">Quantity (Units)</label>
-        <input type="number" id="wo-qty" class="input tnum" min="1" step="1" value="1" required oninput="recalcWriteOffValue()" style="font-family:'DM Mono',monospace;">
+        <input type="number" id="wo-qty" class="input tnum" min="1" step="1" value="1" required oninput="recalcWriteOffValue()" style="font-family:var(--font-mono);">
       </div>
     </div>
 
-    <div style="background:var(--cream2); border:1px solid var(--gold-line); border-radius:8px; padding:10px 12px; margin-bottom:14px; font-size:12px;">
+    <div style="background:var(--cream2); border:var(--stroke-hair) solid var(--gold-line); border-radius:var(--r); padding:10px 12px; margin-bottom:14px; font-size:12px;">
       <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
         <span style="color:var(--text3);">Unit Cost Basis:</span>
-        <strong id="wo-unit-cost" style="font-family:'DM Mono',monospace;">$0.00 CAD</strong>
+        <strong id="wo-unit-cost" style="font-family:var(--font-mono);">$0.00 CAD</strong>
       </div>
       <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
         <span style="color:var(--text3);">Total Tax Write-Off Deduction:</span>
-        <strong id="wo-total-deduction" style="font-family:'DM Mono',monospace; color:var(--red); font-size:14px;">$0.00 CAD</strong>
+        <strong id="wo-total-deduction" style="font-family:var(--font-mono); color:var(--red); font-size:14px;">$0.00 CAD</strong>
       </div>
       <div style="font-size:10px; color:var(--text3); line-height:1.4;">
         * Reductions are logged directly in the Tax Centre as a non-cash inventory expense deduction.
@@ -2493,7 +2515,7 @@
 
     <div class="form-group" style="margin-bottom:16px;">
       <label style="font-size:12px; font-weight:600;">Audit Notes / Details (Optional)</label>
-      <input type="text" id="wo-notes" placeholder="e.g. 3 copies water damaged during spring warehouse transit" style="width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:6px; background:var(--cream2); color:var(--text1); font-size:13px;">
+      <input type="text" id="wo-notes" placeholder="e.g. 3 copies water damaged during spring warehouse transit" style="width:100%; padding:8px 10px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--cream2); color:var(--text1); font-size:13px;">
     </div>
 
     <div class="modal-footer" style="justify-content:flex-end;">
@@ -2520,7 +2542,7 @@
 
   <!-- 1. EXPENSES & LEDGER SECTION -->
   <div id="tc-sec-ledger" class="tc-section settings-section" role="tabpanel" aria-labelledby="btn-tctab-ledger">
-    <div class="card cf-card" style="margin-bottom:1.5rem;border-left:3px solid var(--gold-line);">
+    <div class="card cf-card" style="margin-bottom:1.5rem;border-left:var(--stroke) solid var(--gold-line);">
     <div class="cf-head">
         <div class="cf-head-left">
             <span class="cf-title">Cash Flow Summary</span>
@@ -2658,7 +2680,7 @@
       <button class="btn gold" style="width:100%;height:48px;font-size:15px;font-weight:600;letter-spacing:.02em;" onclick="submitTaxExpense()" id="tc-submit-exp-btn">Log Business Expense</button>
       <div style="margin-top:8px;text-align:center;display:flex;gap:6px;justify-content:center;flex-wrap:wrap;">
         <button class="btn tx" style="font-size:12px;padding:4px 12px;color:var(--text3);" onclick="openBatchExpenseModal('business')" title="Drop in a whole pile of receipts, scan them together and log them in one pass">🧾 Log several at once</button>
-        <button class="btn tx" style="font-size:12px;padding:4px 12px;color:var(--text3);" onclick="openEmailReceiptImportModal()" title="Import expenses from forwarded receipt emails">📧 Import from Email instead<span id="email-inbox-badge" style="display:none;background:#c79a3a;color:#1a1206;border-radius:10px;padding:0 6px;font-size:10px;font-weight:700;margin-left:6px;vertical-align:middle;"></span></button>
+        <button class="btn tx" style="font-size:12px;padding:4px 12px;color:var(--text3);" onclick="openEmailReceiptImportModal()" title="Import expenses from forwarded receipt emails">📧 Import from Email instead<span id="email-inbox-badge" style="display:none;background:#c79a3a;color:#1a1206;border-radius:var(--r);padding:0 6px;font-size:10px;font-weight:700;margin-left:6px;vertical-align:middle;"></span></button>
       </div>
     </div>
   </div>
@@ -2735,7 +2757,7 @@
   <div class="row-between" style="margin-top:1.5rem;margin-bottom:12px;">
     <div class="section-hed">Master Ledger (Sales + Expenses)</div>
     <div style="display:flex;gap:10px;align-items:center;">
-      <select id="tc-year-ledger" class="btn tag" aria-label="Filter ledger by year" onchange="tcYearChange(this.value)" style="background:var(--cream2); border:1px solid var(--gold-line); color:var(--text); cursor:pointer;">
+      <select id="tc-year-ledger" class="btn tag" aria-label="Filter ledger by year" onchange="tcYearChange(this.value)" style="background:var(--cream2); border:var(--stroke-hair) solid var(--gold-line); color:var(--text); cursor:pointer;">
         <option value="all">All Time</option>
         <option value="2026">2026</option>
         <option value="2025">2025</option>
@@ -2923,6 +2945,10 @@
                 <label class="tc-form-label" for="tc-backup-key">Backup AI Key <span class="tc-form-optional">(optional)</span></label>
                 <input type="password" id="tc-backup-key" class="tc-form-input" placeholder="OpenRouter key (sk-or-v1-…)…" autocomplete="off">
                 <div class="tc-form-hint">Save your OpenRouter key here once. Intelligence chat, receipt and invoice scans, email extraction and postage readers use it automatically when Gemini cannot answer or runs out of quota. The key is saved in your app account settings.</div>
+                <div class="tc-form-actions-row">
+                  <button type="button" id="tc-test-backup-btn" class="btn sm" onclick="testOpenRouterConnectionFromSettings()">Test OpenRouter</button>
+                </div>
+                <div id="tc-backup-test-status" class="tc-form-hint" role="status" aria-live="polite">Tests your key and sends one tiny request through the selected model, or OpenRouter’s free router when the model is blank.</div>
               </div>
               <div class="tc-form-group">
                 <label class="tc-form-label" for="tc-backup-model">Backup Model</label>
@@ -3200,15 +3226,15 @@
     <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:12px; align-items:flex-end;">
       <div class="form-group" style="margin:0;">
         <label for="bc-subdomain">Store Subdomain</label>
-        <input type="text" id="bc-subdomain" placeholder="my-store-name" style="padding:6px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r2); background:var(--cream); outline:none;">
+        <input type="text" id="bc-subdomain" placeholder="my-store-name" style="padding:6px 12px; font-size:12px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r2); background:var(--cream); outline:none;">
       </div>
       <div class="form-group" style="margin:0;">
         <label for="bc-username">API Username / Login</label>
-        <input type="text" id="bc-username" placeholder="Subdomain or Username" style="padding:6px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r2); background:var(--cream); outline:none;">
+        <input type="text" id="bc-username" placeholder="Subdomain or Username" style="padding:6px 12px; font-size:12px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r2); background:var(--cream); outline:none;">
       </div>
       <div class="form-group" style="margin:0;">
         <label for="bc-password">API Password / Token</label>
-        <input type="password" id="bc-password" placeholder="••••••••••••••••" style="padding:6px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r2); background:var(--cream); outline:none;">
+        <input type="password" id="bc-password" placeholder="••••••••••••••••" style="padding:6px 12px; font-size:12px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r2); background:var(--cream); outline:none;">
       </div>
       <div style="display:flex; gap:8px;">
         <button id="bc-test-btn" class="btn sm" onclick="testBigCartelConnection()" style="flex:1;">Test Connection</button>
@@ -3218,8 +3244,8 @@
   </div>
 
   <!-- Store Details (initially hidden) -->
-  <div id="bc-store-card" class="card" style="display:none; margin-bottom:1.5rem; border-left:3px solid var(--gold-line);">
-    <div style="font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--gold); margin-bottom:12px; display:flex; align-items:center; gap:6px;">
+  <div id="bc-store-card" class="card" style="display:none; margin-bottom:1.5rem; border-left:var(--stroke) solid var(--gold-line);">
+    <div style="font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--gold-text); margin-bottom:12px; display:flex; align-items:center; gap:6px;">
       <span>🔌</span> Connected Store Info
     </div>
     <div class="bc-details-grid">
@@ -3241,7 +3267,7 @@
       </div>
     </div>
     <div style="font-size:11px; color:var(--text3); display:flex; align-items:center; gap:4px;">
-      Store Link: <a id="bc-store-url" href="#" target="_blank" style="color:var(--gold); font-weight:600; text-decoration:none; display:inline-flex; align-items:center; gap:3px;">— <span style="font-size:9px;">↗</span></a>
+      Store Link: <a id="bc-store-url" href="#" target="_blank" style="color:var(--gold-text); font-weight:600; text-decoration:none; display:inline-flex; align-items:center; gap:3px;">— <span style="font-size:9px;">↗</span></a>
     </div>
   </div>
 
@@ -3331,11 +3357,11 @@
         <span style="font-size:13px; font-weight:600; color:var(--text2);" id="ship-key-status-text">Shippo API Key Required</span>
       </div>
       <div id="ship-key-setup-group" style="display:flex; gap:8px; align-items:center;">
-        <input type="password" id="ship-api-key-input" placeholder="shippo_live_..." style="padding:6px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r2); background:var(--cream); width:280px; font-family:'DM Mono',monospace; outline:none;">
+        <input type="password" id="ship-api-key-input" placeholder="shippo_live_..." style="padding:6px 12px; font-size:12px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r2); background:var(--cream); width:280px; font-family:var(--font-mono); outline:none;">
         <button class="btn gold sm" onclick="saveShippoApiKey()">Save Key</button>
       </div>
       <div id="ship-key-active-group" style="display:none; gap:8px; align-items:center;">
-        <span style="font-size:11px; font-family:'DM Mono',monospace; color:var(--text3);" id="ship-key-masked">••••••••••••••••</span>
+        <span style="font-size:11px; font-family:var(--font-mono); color:var(--text3);" id="ship-key-masked">••••••••••••••••</span>
         <button class="btn sm" onclick="editShippoApiKey()">Change Key</button>
       </div>
     </div>
@@ -3360,7 +3386,7 @@
                   <span id="custom-ship-dest-label" style="font-size:13px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;">— Search or select an address —</span>
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-                  <span id="custom-ship-dest-clear" style="display:none;font-size:12px;color:var(--text3);padding:2px 5px;cursor:pointer;border-radius:4px;" onclick="clearShippoDestSelection(event)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();clearShippoDestSelection(event);}" tabindex="0" role="button" aria-label="Clear selected destination">✕</span>
+                  <span id="custom-ship-dest-clear" style="display:none;font-size:12px;color:var(--text3);padding:2px 5px;cursor:pointer;border-radius:var(--r);" onclick="clearShippoDestSelection(event)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();clearShippoDestSelection(event);}" tabindex="0" role="button" aria-label="Clear selected destination">✕</span>
                   <span id="custom-ship-dest-arrow" style="font-size:10px;color:var(--text3);transition:transform 0.2s;" aria-hidden="true">▼</span>
                 </div>
               </div>
@@ -3643,7 +3669,7 @@
         <div id="ship-rate-readiness" class="ship-readiness" role="status" aria-live="polite"></div>
 
         <div class="ship-actions-container" style="margin-top:1rem;display:flex;flex-direction:column;gap:10px;">
-          <button class="btn gold" id="ship-calc-main-btn" style="width:100%;height:46px;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 2px 8px rgba(200,145,58,0.25);" onclick="calculateShippoRates()">
+          <button class="btn gold" id="ship-calc-main-btn" style="width:100%;height:46px;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:var(--elev-2);" onclick="calculateShippoRates()">
             <span>⚡</span>
             <span>Calculate Shipping Rates &amp; Prediction</span>
           </button>
@@ -3667,7 +3693,7 @@
     <!-- Results Side -->
     <div class="shipping-results-container">
       <div class="card" style="min-height:300px; height:100%; display:flex; flex-direction:column;">
-        <div id="canadapost-rates-card" class="canadapost-rates-card card" style="display:none; margin-bottom:12px; background:var(--surface-card); border:1px solid var(--border); border-radius:var(--r2); padding:12px 14px;"></div>
+        <div id="canadapost-rates-card" class="canadapost-rates-card card" style="display:none; margin-bottom:12px; background:var(--surface-card); border:var(--stroke-hair) solid var(--border); border-radius:var(--r2); padding:12px 14px;"></div>
         <div id="zonos-duty-card" class="zonos-duty-card" style="display:none; margin-bottom:12px;"></div>
         <div style="font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:12px;">Customer Charge Prediction</div>
         <div id="ship-prediction-card" class="shipping-prediction-card" style="display:none;"></div>
@@ -3692,7 +3718,7 @@
     </div>
   </div>
 
-  <hr style="margin: 2.5rem 0; border: none; border-top: 1px solid var(--border);">
+  <hr style="margin: 2.5rem 0; border: none; border-top:var(--stroke-hair) solid var(--border);">
 
   <div id="ship-analysis-hub"></div>
 </div>
@@ -3999,12 +4025,12 @@
 
   <!-- Connected State -->
   <div id="webanalytics-connected-view" style="display:none;">
-    <div class="card" style="margin-bottom: 1.5rem; border-left: 3px solid var(--status-positive); padding: 12px 18px;">
+    <div class="card" style="margin-bottom: 1.5rem; border-left:var(--stroke) solid var(--status-positive); padding: 12px 18px;">
       <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
         <div style="display:flex; align-items:center; gap:8px;">
           <span style="font-size:18px; color:var(--status-positive);">●</span>
           <span style="font-weight:600; font-size:13px; color:var(--text);">Live Traffic Dashboard Connected</span>
-          <span id="webanalytics-domain-label" style="font-size:11px; color:var(--text2); font-family:'DM Mono',monospace; background:rgba(0,0,0,0.05); padding:2px 6px; border-radius:4px; margin-left:8px;">lyricalmyricalbooks.com</span>
+          <span id="webanalytics-domain-label" style="font-size:11px; color:var(--text2); font-family:var(--font-mono); background:rgba(0,0,0,0.05); padding:2px 6px; border-radius:var(--r); margin-left:8px;">lyricalmyricalbooks.com</span>
         </div>
         <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
           <a id="webanalytics-external-link" href="#" target="_blank" class="btn sm" style="text-decoration:none;">↗ Open Dashboard</a>
@@ -4019,7 +4045,7 @@
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 8px;">
         <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text2); display: flex; align-items: center; gap: 6px;">
           <span>⚡ Real-Time Overview</span>
-          <span style="font-size: 10px; font-weight: 500; background: var(--bg2, var(--cream2)); border: 1px solid var(--border); padding: 2px 8px; border-radius: 12px; color: var(--text3);" id="webanalytics-timeframe-tag">Last 24 Hours</span>
+          <span style="font-size: 10px; font-weight: 500; background: var(--bg2, var(--cream2)); border:var(--stroke-hair) solid var(--border); padding: 2px 8px; border-radius:var(--r); color: var(--text3);" id="webanalytics-timeframe-tag">Last 24 Hours</span>
         </div>
         <div style="display: flex; align-items: center; gap: 10px;">
           <span id="webanalytics-api-status" style="font-size: 11px; color: var(--text3);"></span>
@@ -4100,7 +4126,7 @@
       </div>
     </div>
 
-    <div class="analytics-iframe-container" style="position:relative; width:100%; border-radius:var(--r2); border:1px solid var(--border); overflow:hidden; background:var(--ink2); box-shadow:0 8px 32px rgba(0,0,0,.4);">
+    <div class="analytics-iframe-container" style="position:relative; width:100%; border-radius:var(--r2); border:var(--stroke-hair) solid var(--border); overflow:hidden; background:var(--ink2); box-shadow:var(--elev-4);">
       <iframe id="webanalytics-iframe" src="" frameborder="0" width="100%" height="700px" style="display:block; background:transparent;"></iframe>
     </div>
   </div>
@@ -4110,11 +4136,11 @@
     <div class="card" style="max-width:680px; margin: 2rem auto; padding: 3rem 2rem;">
       <div style="text-align:center; margin-bottom:2rem;">
         <div style="font-size:48px; margin-bottom:1rem;">📈</div>
-        <h2 style="font-family:'Playfair Display',serif; font-size:24px; color:var(--text); margin:0 0 8px;">Monitor Website Traffic in Real-Time</h2>
+        <h2 style="font-family:var(--font-display); font-size:24px; color:var(--text); margin:0 0 8px;">Monitor Website Traffic in Real-Time</h2>
         <p style="font-size:13px; color:var(--text3); line-height:1.6; max-width:480px; margin:0 auto;">Connect an external analytics dashboard (like Umami, Plausible, or any shared iframe report) to track visits, referrer paths, and checkout conversions directly from this panel.</p>
       </div>
 
-      <div style="background:rgba(200,145,58,.04); border:1px solid rgba(200,145,58,.15); padding:1.5rem; border-radius:var(--r2); margin-bottom:2rem;">
+      <div style="background:rgba(232, 64, 42,.04); border:var(--stroke-hair) solid rgba(232, 64, 42,.15); padding:1.5rem; border-radius:var(--r2); margin-bottom:2rem;">
         <div class="form-group" style="margin-bottom:1.25rem;">
           <label for="webanalytics-url-input" style="font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:var(--text2); display:block; margin-bottom:6px;">Shareable Dashboard URL</label>
           <input type="url" id="webanalytics-url-input" placeholder="https://cloud.umami.is/share/... ">
@@ -4124,7 +4150,7 @@
         </button>
       </div>
 
-      <div style="border-top:1px dashed var(--border); padding-top:1.5rem;">
+      <div style="border-top:var(--stroke-hair) dashed var(--border); padding-top:1.5rem;">
         <div style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:12px; letter-spacing:0.05em;">How to get your share URL:</div>
         <ul style="font-size:12px; color:var(--text3); line-height:1.8; margin:0; padding-left:1.25rem; display:flex; flex-direction:column; gap:8px;">
           <li><b>Umami:</b> Go to your Umami Dashboard → Settings → Websites → Edit → Share. Enable the share link and copy the generated URL.</li>
@@ -4152,7 +4178,7 @@
   <!-- 1. BOOK CATALOG SECTION -->
   <div id="settings-sec-catalog" class="settings-section">
     <!-- BOOK CATALOG SETTINGS -->
-    <div class="card" style="margin-bottom:1.5rem;border-left:3px solid var(--gold-line);">
+    <div class="card" style="margin-bottom:1.5rem;border-left:var(--stroke) solid var(--gold-line);">
       <div class="sec-head cat-settings-head">
         <div class="sec-head-titles">
           <div class="sec-kicker"><span class="sec-kicker-dot"></span>Library Settings</div>
@@ -4167,7 +4193,7 @@
     </div>
 
     <!-- TEST BOOK CATALOG SETTINGS -->
-    <div class="card" style="margin-bottom:1.5rem;border-left:3px solid var(--gold-line);">
+    <div class="card" style="margin-bottom:1.5rem;border-left:var(--stroke) solid var(--gold-line);">
       <div class="sec-head cat-settings-head is-muted">
         <div class="sec-head-titles">
           <div class="sec-kicker"><span class="sec-kicker-dot"></span>Sandbox</div>
@@ -4175,7 +4201,7 @@
           <p class="section-subcopy">Manage test books in an isolated sandbox environment. Test book activity is strictly blocked from syncing to Google Sheets and excluded from financial ledgers.</p>
         </div>
         <div class="sec-head-badges">
-          <span style="font-size:10px;font-family:sans-serif;background:rgba(109,40,217,0.1);color:var(--violet-deep);padding:2px 8px;border-radius:12px;font-weight:600;letter-spacing:0.5px;border:1px solid rgba(109,40,217,0.25);">ISOLATED TEST SANDBOX</span>
+          <span style="font-size:10px;font-family:sans-serif;background:rgba(109,40,217,0.1);color:var(--violet-deep);padding:2px 8px;border-radius:var(--r);font-weight:600;letter-spacing:0.5px;border:var(--stroke-hair) solid rgba(109,40,217,0.25);">ISOLATED TEST SANDBOX</span>
         </div>
       </div>
       <div id="test-catalog-list" style="display:flex;flex-direction:column;gap:12px;"></div>
@@ -4185,11 +4211,11 @@
   <!-- 2. PROFIT SHARING SECTION -->
   <div id="settings-sec-profit" class="settings-section" style="display:none;">
     <!-- PROFIT SHARING SETTINGS (publisher only) -->
-    <div class="card" id="profit-sharing-settings-card" style="margin-bottom:1.5rem;border-left:3px solid var(--gold-line); display:none;">
+    <div class="card" id="profit-sharing-settings-card" style="margin-bottom:1.5rem;border-left:var(--stroke) solid var(--gold-line); display:none;">
       <div style="margin-bottom:1.1rem;">
         <div style="display:flex;align-items:center;gap:9px;margin-bottom:5px;">
           <span style="font-size:19px;line-height:1;">🎚️</span>
-          <div style="font-family:'Playfair Display',serif;font-size:17px;">Dynamic Profit Sharing</div>
+          <div style="font-family:var(--font-ui);font-size:17px;">Dynamic Profit Sharing</div>
         </div>
         <div style="font-size:12px;color:var(--text3);line-height:1.6;max-width:760px;">Define payout tiers based on <b>production cost recovery</b>. Artists earn a lower % while costs are being recovered, and a higher % once break-even is reached. Tiers trigger at cumulative gross revenue thresholds — not units sold.</div>
       </div>
@@ -4208,7 +4234,7 @@
       <div id="ps-summary"></div>
 
       <!-- Actions (revealed once a book is selected) -->
-      <div id="ps-actions" style="display:none;gap:10px;align-items:center;flex-wrap:wrap;margin-top:1.25rem;padding-top:1.1rem;border-top:1px dashed var(--border);">
+      <div id="ps-actions" style="display:none;gap:10px;align-items:center;flex-wrap:wrap;margin-top:1.25rem;padding-top:1.1rem;border-top:var(--stroke-hair) dashed var(--border);">
          <button class="btn sm" onclick="addProfitTier()">+ Add Tier</button>
          <button class="btn gold" onclick="saveProfitTiers()">Save Profit Tiers</button>
          <span id="ps-save-indicator" class="save-indicator">Syncing...</span>
@@ -4220,12 +4246,12 @@
   <div id="settings-sec-sync" class="settings-section" style="display:none;">
     <div class="sheets-setup" id="sheets-setup-card">
       <div style="margin-bottom:1.5rem;">
-        <div style="font-family:'Playfair Display',serif;font-size:18px;margin-bottom:8px;">Connect Google Sheets</div>
+        <div style="font-family:var(--font-ui);font-size:18px;margin-bottom:8px;">Connect Google Sheets</div>
         <div style="font-size:13px;color:var(--text2);line-height:1.7;">Uses a Google Apps Script webhook — paste your Web App URL once and every order syncs automatically. One connection covers all books.</div>
       </div>
 
       <!-- Connection Inputs at the Top -->
-      <div style="background:rgba(200,145,58,.05); border:1px solid rgba(200,145,58,.15); padding:1.25rem; border-radius:var(--r2); display:flex; flex-direction:column; gap:12px; margin-bottom:1.5rem;">
+      <div style="background:rgba(232, 64, 42,.05); border:var(--stroke-hair) solid rgba(232, 64, 42,.15); padding:1.25rem; border-radius:var(--r2); display:flex; flex-direction:column; gap:12px; margin-bottom:1.5rem;">
         <div class="form-group" style="margin:0;">
           <label for="sheets-url-input" style="font-size:9px; font-weight:700; color:var(--text2);">Web App URL *</label>
           <input type="url" id="sheets-url-input" placeholder="https://script.google.com/macros/s/…/exec">
@@ -4240,24 +4266,24 @@
       </div>
 
       <!-- Collapsible Setup Instructions -->
-      <details class="sheets-instructions-details" style="border:1px solid var(--border); border-radius:var(--r2); padding:14px; background:rgba(0,0,0,.02);">
+      <details class="sheets-instructions-details" style="border:var(--stroke-hair) solid var(--border); border-radius:var(--r2); padding:14px; background:rgba(0,0,0,.02);">
         <summary style="cursor:pointer; font-weight:700; font-size:13px; color:var(--text2); display:flex; align-items:center; justify-content:space-between; list-style:none;">
           <span style="display:flex; align-items:center; gap:8px;">📋 <span>Setup Instructions &amp; Google Apps Script Code</span></span>
           <span style="font-size:10px; color:var(--text3); font-weight:400;">Click to toggle</span>
         </summary>
-        <div style="margin-top:14px; display:flex; flex-direction:column; gap:18px; border-top:1px dashed var(--border); padding-top:14px;">
+        <div style="margin-top:14px; display:flex; flex-direction:column; gap:18px; border-top:var(--stroke-hair) dashed var(--border); padding-top:14px;">
           <div style="display:flex;gap:14px;align-items:flex-start;">
-            <div style="width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--gold3);font-family:'DM Mono',monospace;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">1</div>
+            <div style="width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--gold3);font-family:var(--font-mono);font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">1</div>
             <div>
               <div style="font-weight:700;font-size:13px;margin-bottom:4px;">Create a Google Sheet → Extensions → Apps Script</div>
-              <div style="font-size:12px;color:var(--text3);">Go to <a href="https://sheets.new" target="_blank" style="color:var(--gold);">sheets.new</a>, then Extensions → Apps Script.</div>
+              <div style="font-size:12px;color:var(--text3);">Go to <a href="https://sheets.new" target="_blank" style="color:var(--gold-text);">sheets.new</a>, then Extensions → Apps Script.</div>
             </div>
           </div>
           <div style="display:flex;gap:14px;align-items:flex-start;">
-            <div style="width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--gold3);font-family:'DM Mono',monospace;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">2</div>
+            <div style="width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--gold3);font-family:var(--font-mono);font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">2</div>
             <div style="flex:1;">
-              <div style="font-weight:700;font-size:13px;margin-bottom:8px;">Paste this code exactly → Deploy → <span style="color:var(--gold);">New deployment</span> → Web App → Execute as: Me → Who has access: Anyone</div>
-              <div style="font-size:11.5px;color:var(--on-status);background:var(--red);padding:6px 10px;border-radius:4px;margin-bottom:8px;font-weight:600;line-height:1.4;">⚠ Every code change needs a NEW deployment — not "Manage deployments". Copy the new URL each time.</div>
+              <div style="font-weight:700;font-size:13px;margin-bottom:8px;">Paste this code exactly → Deploy → <span style="color:var(--gold-text);">New deployment</span> → Web App → Execute as: Me → Who has access: Anyone</div>
+              <div style="font-size:11.5px;color:var(--on-status);background:var(--red);padding:6px 10px;border-radius:var(--r);margin-bottom:8px;font-weight:600;line-height:1.4;">⚠ Every code change needs a NEW deployment — not "Manage deployments". Copy the new URL each time.</div>
               <div class="gas-code-container">
                 <div class="gas-code-header">
                   <div class="gas-code-header-left">
@@ -4272,7 +4298,7 @@
                 <pre id="gas-code" class="gas-code-pre">Loading the latest backend code…</pre>
               </div>
               <div style="font-size:12px;color:var(--text3);margin-top:10px;line-height:1.6;">This <span id="gas-script-ver">v29</span> script syncs inventory events, scans Big Cartel order emails, and captures customer-paid shipping as separate Sheets rows for later shipping/postage analysis.</div>
-              <details style="margin-top:12px;font-size:12px;color:var(--text3);line-height:1.6;border-top:1px dashed var(--border);padding-top:10px;">
+              <details style="margin-top:12px;font-size:12px;color:var(--text3);line-height:1.6;border-top:var(--stroke-hair) dashed var(--border);padding-top:10px;">
                 <summary style="cursor:pointer;font-weight:700;color:var(--text2);">Optional: send "Email artist for payment" from the app, not your Gmail</summary>
                 <div style="margin-top:8px;">
                   By default this email sends from the Google account that owns the script (your Gmail). To make it come from a neutral address instead, sign up for a transactional email provider — <b>Resend, Brevo, SendGrid, Mailgun,</b> or <b>Postmark</b> — and verify a sender address. Then in the Apps Script editor open <b>Project Settings → Script properties</b> and add:
@@ -4293,12 +4319,12 @@
     </div>
 
     <!-- MOCK SPREADSHEET SIMULATOR (TEST PROFILE) -->
-    <div class="sheets-setup" id="sheets-simulated-card" style="display:none; background:var(--ink2); border:1px solid var(--border); padding:1.5rem; border-radius:var(--r3); margin-bottom:1.5rem;">
+    <div class="sheets-setup" id="sheets-simulated-card" style="display:none; background:var(--ink2); border:var(--stroke-hair) solid var(--border); padding:1.5rem; border-radius:var(--r3); margin-bottom:1.5rem;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem; flex-wrap:wrap; gap:10px;">
         <div>
           <div style="display:flex; align-items:center; gap:8px;">
-            <div style="font-family:'Playfair Display',serif; font-size:18px; font-weight:700; color:var(--gold2);">📊 Google Sheets Sandbox Simulator</div>
-            <span style="background:linear-gradient(135deg, #a78bfa, #8b5cf6); color:white; font-size:9px; font-weight:700; padding:2px 8px; border-radius:10px; text-transform:uppercase; letter-spacing:0.05em; display:inline-block;">Test Mode Active</span>
+            <div style="font-family:var(--font-ui); font-size:18px; font-weight:700; color:var(--gold3);">📊 Google Sheets Sandbox Simulator</div>
+            <span style="background:linear-gradient(135deg, #a78bfa, #8b5cf6); color:white; font-size:9px; font-weight:700; padding:2px 8px; border-radius:var(--r); text-transform:uppercase; letter-spacing:0.05em; display:inline-block;">Test Mode Active</span>
           </div>
           <div style="font-size:12px; color:rgba(255,255,255,0.7); margin-top:4px; line-height:1.5;">
             Simulating synchronization in real-time. Transactions logged in the Test Profile are captured here in-memory.
@@ -4307,14 +4333,14 @@
         <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
           <button class="btn sm gold" id="sim-push-all-btn" onclick="pushAllToSheets()">Sync all data</button>
           <button class="btn sm" id="sim-backfill-btn" onclick="backfillAndResync()">Repair legacy rows</button>
-          <button class="btn sm danger-btn" onclick="clearSimulatedSheet()" title="Wipe simulated spreadsheet data" style="background:#ca1e1e; border-color:#ca1e1e; color:white;">Clear Sheet</button>
+          <button class="btn sm danger-btn" onclick="clearSimulatedSheet()" title="Wipe simulated spreadsheet data" style="background:var(--red); border-color:var(--red); color:var(--on-status);">Clear Sheet</button>
         </div>
       </div>
 
       <!-- Simulated Google Sheet Container -->
       <div class="mock-sheets-viewport">
         <!-- Sheet Toolbar / Info Bar -->
-        <div style="background:#1d1d26; border-bottom:1px solid rgba(255,255,255,0.08); padding:6px 12px; display:flex; align-items:center; justify-content:space-between; font-size:11px; color:rgba(255,255,255,0.6);">
+        <div style="background:#1d1d26; border-bottom:var(--stroke-hair) solid rgba(255,255,255,0.08); padding:6px 12px; display:flex; align-items:center; justify-content:space-between; font-size:11px; color:rgba(255,255,255,0.6);">
           <div style="display:flex; align-items:center; gap:10px;">
             <span style="font-weight:600; color:#34d399;">● Connected (Simulated)</span>
             <span style="opacity:0.5;">|</span>
@@ -4338,7 +4364,7 @@
         </div>
 
         <!-- Sheet Tabs Selector at the Bottom -->
-        <div style="background:#1d1d26; border-top:1px solid rgba(255,255,255,0.08); padding:4px; display:flex; align-items:center; gap:2px; font-size:11px;" id="sim-sheet-tabs">
+        <div style="background:#1d1d26; border-top:var(--stroke-hair) solid rgba(255,255,255,0.08); padding:4px; display:flex; align-items:center; gap:2px; font-size:11px;" id="sim-sheet-tabs">
           <!-- Tabs will be injected dynamically -->
         </div>
       </div>
@@ -4364,7 +4390,7 @@
         </div>
         
         <!-- FULL SYNC SECTION -->
-        <div style="margin-top:1.5rem;padding-top:1.5rem;border-top:1px solid rgba(42,99,72,.1);">
+        <div style="margin-top:1.5rem;padding-top:1.5rem;border-top:var(--stroke-hair) solid rgba(42,99,72,.1);">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
             <div>
               <div style="font-weight:700;font-size:13px;color:var(--text2);">Sync all existing records</div>
@@ -4390,7 +4416,7 @@
   </div>
 </div>
 <div class="tab-panel" id="tab-backups" style="color:var(--on-inverse);/* contrast-ok: default text colour for the dark ink cards inside this panel */">
-  <div class="sheets-setup" style="background:var(--ink2);border:1px solid var(--border);padding:1.25rem;border-radius:var(--r3);margin-bottom:1rem;">
+  <div class="sheets-setup" style="background:var(--ink2);border:var(--stroke-hair) solid var(--border);padding:1.25rem;border-radius:var(--r3);margin-bottom:1rem;">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
       <div>
         <div style="font-weight:700;font-size:14px;color:var(--gold3);margin-bottom:4px;">System backups (daily, automatic)</div>
@@ -4416,7 +4442,7 @@
     </div>
   </div>
 
-  <div id="backup-reminder" style="display:none;background:var(--gold-bg);border:1px solid var(--gold-line);border-radius:var(--r2);padding:1.25rem;margin-bottom:1.5rem;align-items:center;gap:16px;">
+  <div id="backup-reminder" style="display:none;background:var(--gold-bg);border:var(--stroke-hair) solid var(--gold-line);border-radius:var(--r2);padding:1.25rem;margin-bottom:1.5rem;align-items:center;gap:16px;">
     <div style="font-size:24px;">📥</div>
     <div style="flex:1;">
       <div style="font-weight:700;font-size:14px;color:var(--gold-text);margin-bottom:4px;">Daily Backup Recommended</div>
@@ -4426,10 +4452,10 @@
   </div>
 
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px;">
-    <div class="sheets-setup" style="background:var(--ink2);border:1px solid var(--border);padding:1.5rem;border-radius:var(--r3);">
+    <div class="sheets-setup" style="background:var(--ink2);border:var(--stroke-hair) solid var(--border);padding:1.5rem;border-radius:var(--r3);">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem;">
-        <div style="width:36px;height:36px;border-radius:10px;background:rgba(212,175,55,.1);color:var(--gold3);display:flex;align-items:center;justify-content:center;font-size:18px;">💾</div>
-        <h3 style="margin:0;font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:var(--on-inverse);">JSON Snapshot</h3>
+        <div style="width:36px;height:36px;border-radius:var(--r);background:rgba(212,175,55,.1);color:var(--gold3);display:flex;align-items:center;justify-content:center;font-size:18px;">💾</div>
+        <h3 style="margin:0;font-family:var(--font-ui);font-size:16px;font-weight:700;color:var(--on-inverse);">JSON Snapshot</h3>
       </div>
       <p style="font-size:12px;color:rgba(255,255,255,.74);line-height:1.6;margin-bottom:1.25rem;">Download a complete backup of your entire database (Catalog, Inventory, History, and Settings). This file can be used to restore your app at any time.</p>
       <div style="display:flex;flex-direction:column;gap:12px;">
@@ -4440,10 +4466,10 @@
       </div>
     </div>
 
-    <div class="sheets-setup" style="background:var(--ink2);border:1px solid var(--border);padding:1.5rem;border-radius:var(--r3);">
+    <div class="sheets-setup" style="background:var(--ink2);border:var(--stroke-hair) solid var(--border);padding:1.5rem;border-radius:var(--r3);">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem;">
-        <div style="width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,.05);color:var(--on-inverse);display:flex;align-items:center;justify-content:center;font-size:18px;">📤</div>
-        <h3 style="margin:0;font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:var(--on-inverse);">Restore from Backup</h3>
+        <div style="width:36px;height:36px;border-radius:var(--r);background:rgba(255,255,255,.05);color:var(--on-inverse);display:flex;align-items:center;justify-content:center;font-size:18px;">📤</div>
+        <h3 style="margin:0;font-family:var(--font-ui);font-size:16px;font-weight:700;color:var(--on-inverse);">Restore from Backup</h3>
       </div>
       <p style="font-size:12px;color:rgba(255,255,255,.74);line-height:1.6;margin-bottom:1.25rem;">Upload a previously downloaded JSON snapshot from your computer to restore your data.</p>
       <div style="display:flex;flex-direction:column;gap:10px;">
@@ -4453,20 +4479,20 @@
         <input type="file" id="import-one-book-file" accept=".json" style="display:none;" onchange="handleBookRestoreImportFile(event)">
         <div id="import-one-info" style="font-size:11px;color:rgba(255,255,255,.62);text-align:center;">Select a .json backup file</div>
 
-        <div style="border-top:1px solid rgba(255,255,255,.08);margin:8px 0 4px;"></div>
+        <div style="border-top:var(--stroke-hair) solid rgba(255,255,255,.08);margin:8px 0 4px;"></div>
 
         <div style="font-size:12px;font-weight:700;color:var(--on-inverse);">Restore everything</div>
-        <div style="font-size:11px;color:rgba(255,255,255,.62);line-height:1.5;margin-bottom:2px;"><strong style="color:var(--red-light);">Warning: overwrites your entire database</strong> with the file's contents.</div>
+        <div style="font-size:11px;color:rgba(255,255,255,.62);line-height:1.5;margin-bottom:2px;"><strong style="color:var(--rose-soft);">Warning: overwrites your entire database</strong> with the file's contents.</div>
         <label for="import-file" class="btn sm restore-file-btn" style="width:100%;text-align:center;cursor:pointer;background:rgba(255,255,255,.05);color:var(--on-inverse);">Choose file &amp; overwrite all</label>
         <input type="file" id="import-file" accept=".json" style="display:none;" onchange="handleBackupImportFile(event)">
         <div id="import-info" style="font-size:11px;color:rgba(255,255,255,.62);text-align:center;">Select a .json backup file</div>
       </div>
     </div>
 
-    <div class="sheets-setup" style="background:var(--ink2);border:1px solid var(--border);padding:1.5rem;border-radius:var(--r3);">
+    <div class="sheets-setup" style="background:var(--ink2);border:var(--stroke-hair) solid var(--border);padding:1.5rem;border-radius:var(--r3);">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem;">
-        <div style="width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,.05);color:var(--on-inverse);display:flex;align-items:center;justify-content:center;font-size:18px;">📊</div>
-        <h3 style="margin:0;font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:var(--on-inverse);">CSV Export</h3>
+        <div style="width:36px;height:36px;border-radius:var(--r);background:rgba(255,255,255,.05);color:var(--on-inverse);display:flex;align-items:center;justify-content:center;font-size:18px;">📊</div>
+        <h3 style="margin:0;font-family:var(--font-ui);font-size:16px;font-weight:700;color:var(--on-inverse);">CSV Export</h3>
       </div>
       <p style="font-size:12px;color:rgba(255,255,255,.74);line-height:1.6;margin-bottom:1.5rem;">Download all historical records (Sales, Consignments, and Expenses) as a flat CSV file for use in spreadsheet software.</p>
       <button class="btn sm" style="width:100%;background:transparent;border-color:rgba(255,255,255,.3);color:var(--on-inverse);" onclick="exportAllToCSV()">Download CSV Report</button>
@@ -4490,10 +4516,10 @@
     </div>
     <div style="font-size:12px; color:var(--text3); margin-bottom:1rem;" id="bc-addr-order-subtitle">Order details</div>
 
-    <div class="card" style="margin-bottom:1rem; padding:1rem 1.25rem; border-left:3px solid var(--gold-line); background:var(--bg2, var(--cream2));">
+    <div class="card" style="margin-bottom:1rem; padding:1rem 1.25rem; border-left:var(--stroke) solid var(--gold-line); background:var(--bg2, var(--cream2));">
       <div style="font-size:15px; font-weight:700; color:var(--text); margin-bottom:8px;" id="bc-addr-name">—</div>
       <div style="font-size:13px; color:var(--text2); line-height:1.6;" id="bc-addr-lines">—</div>
-      <div style="font-size:12px; color:var(--text3); margin-top:10px; border-top:1px dashed var(--border); padding-top:8px; display:flex; flex-direction:column; gap:4px;">
+      <div style="font-size:12px; color:var(--text3); margin-top:10px; border-top:var(--stroke-hair) dashed var(--border); padding-top:8px; display:flex; flex-direction:column; gap:4px;">
         <div id="bc-addr-phone">Phone: —</div>
         <div id="bc-addr-email">Email: —</div>
       </div>
@@ -4605,7 +4631,7 @@
     <div class="form-group"><label for="bulk-rate">Commission override (%)<span class="tip tip-mark" data-tip="Leave blank to use each store's own commission rate.">?</span></label><input id="bulk-rate" type="number" inputmode="numeric" min="0" max="100" placeholder="store default"></div>
     <div class="form-group"><label for="bulk-notes">Notes (all)</label><input id="bulk-notes" placeholder="e.g. spring launch batch"></div>
   </div>
-  <div id="bulk-send-list" style="max-height:260px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:2px 12px;margin-bottom:6px;"></div>
+  <div id="bulk-send-list" style="max-height:260px;overflow:auto;border:var(--stroke-hair) solid var(--border);border-radius:var(--r);padding:2px 12px;margin-bottom:6px;"></div>
   <div class="modal-footer" role="dialog" aria-modal="true"><button class="btn" onclick="attemptCloseModal('bulk-send')">Cancel</button><button class="btn gold" onclick="confirmBulkSend()">Send books</button></div>
 </div></div>
 
@@ -4690,7 +4716,7 @@
 
   <!-- KEPT-ALL RECONCILE ZONE (direct-to-artist) -->
   <div class="void-zone" id="edit-settle-zone" style="display:none;border-color:var(--gold-line);background:var(--gold-bg);">
-    <div class="void-zone-title" style="color:var(--gold2);">Artist forwarded the full transfer?</div>
+    <div class="void-zone-title" style="color:var(--gold-text);">Artist forwarded the full transfer?</div>
     <div class="void-zone-body" id="edit-settle-body"></div>
     <button class="btn gold" id="edit-settle-btn" onclick="convertKeptAllToReceived()">Record full transfer received</button>
   </div>
@@ -4856,7 +4882,7 @@
     <div class="form-group">
       <label style="display:flex; justify-content:space-between; align-items:center; width:100%;">
         <span id="inv-discount-label-text">Discount (flat, optional)</span>
-        <select id="inv-discount-type" style="width:auto; padding:2px 8px; font-size:11px; height:24px; margin:0; border-radius:4px;" onchange="onDiscountTypeChange()">
+        <select id="inv-discount-type" style="width:auto; padding:2px 8px; font-size:11px; height:24px; margin:0; border-radius:var(--r);" onchange="onDiscountTypeChange()">
           <option value="flat">Flat Amount</option>
           <option value="percent">Percentage (%)</option>
         </select>
@@ -4876,10 +4902,10 @@
   </div>
 
   <div style="background:var(--cream2);border-radius:var(--r2);padding:12px 16px;margin-bottom:14px;">
-    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:4px;"><span>Subtotal</span><span id="inv-sub-val" style="font-family:'DM Mono',monospace;font-weight:600;">—</span></div>
-    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:4px;"><span>Discount</span><span id="inv-disc-val" style="font-family:'DM Mono',monospace;font-weight:600;">—</span></div>
-    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:4px;"><span>Tax</span><span id="inv-tax-val" style="font-family:'DM Mono',monospace;font-weight:600;">—</span></div>
-    <div style="display:flex;justify-content:space-between;font-size:14px;color:var(--text);border-top:1px solid var(--border);padding-top:6px;margin-top:4px;font-weight:700;"><span>TOTAL</span><span id="inv-total-val" style="font-family:'DM Mono',monospace;color:var(--gold);font-size:18px;">—</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:4px;"><span>Subtotal</span><span id="inv-sub-val" style="font-family:var(--font-mono);font-weight:600;">—</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:4px;"><span>Discount</span><span id="inv-disc-val" style="font-family:var(--font-mono);font-weight:600;">—</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:4px;"><span>Tax</span><span id="inv-tax-val" style="font-family:var(--font-mono);font-weight:600;">—</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:14px;color:var(--text);border-top:var(--stroke-hair) solid var(--border);padding-top:6px;margin-top:4px;font-weight:700;"><span>TOTAL</span><span id="inv-total-val" style="font-family:var(--font-mono);color:var(--gold-text);font-size:18px;">—</span></div>
   </div>
 
   <div class="form-group" style="margin-bottom:12px;">
@@ -4910,7 +4936,7 @@
 <div class="overlay" id="m-invoice-view" style="display:none;"><div class="modal invoice-view-modal" role="dialog" aria-modal="true" style="max-width:880px;max-height:94vh;overflow:hidden;padding:0;background:var(--cream2);">
 
   <div class="no-print" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:14px 22px;background:var(--ink);color:var(--on-inverse);border-radius:var(--r3) var(--r3) 0 0;flex-wrap:wrap;">
-    <div style="font-family:'Playfair Display',serif;font-size:15px;">Invoice preview</div>
+    <div style="font-family:var(--font-ui);font-size:15px;">Invoice preview</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <button class="btn ink" onclick="editInvoiceFromView()">✎ Edit</button>
       <button class="btn ink" onclick="emailInvoice()">✉ Email</button>
@@ -4966,12 +4992,12 @@
     <textarea id="ivs-bank" rows="2" placeholder="IBAN IT60 X054 2811 1010 0000 0123 456&#10;BIC ABCDITMM"></textarea>
   </div>
 
-  <div style="border-top:1px solid var(--border);margin:18px 0 12px;padding-top:14px;">
+  <div style="border-top:var(--stroke-hair) solid var(--border);margin:18px 0 12px;padding-top:14px;">
     <div style="font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Stripe Checkout (dynamic amounts)</div>
     <div style="font-size:11px;color:var(--text3);line-height:1.6;margin-bottom:10px;">
       Paste a Stripe <strong>Restricted Key</strong> with write permissions on <em>Products</em>, <em>Prices</em>, and <em>Payment Links</em>.
       When you finalize an invoice, the app auto-creates a Stripe Payment Link with the <strong>exact amount owed</strong> — so a store can never accidentally pay the wrong quarter.
-      <a href="https://dashboard.stripe.com/apikeys/create?name=Lyrical%20Inv%20Pay%20Links&permissions[]=rak_payment_link_write&permissions[]=rak_product_write&permissions[]=rak_plan_write&permissions[]=rak_payment_links_write&permissions[]=rak_prices_write&permissions[]=rak_products_write" target="_blank" style="color:var(--gold);">Create a restricted key →</a>
+      <a href="https://dashboard.stripe.com/apikeys/create?name=Lyrical%20Inv%20Pay%20Links&permissions[]=rak_payment_link_write&permissions[]=rak_product_write&permissions[]=rak_plan_write&permissions[]=rak_payment_links_write&permissions[]=rak_prices_write&permissions[]=rak_products_write" target="_blank" style="color:var(--gold-text);">Create a restricted key →</a>
     </div>
     <div class="form-group" style="margin-bottom:8px;"><label for="ivs-stripe-key">Stripe Restricted Key</label>
       <input id="ivs-stripe-key" type="password" placeholder="rk_live_… or rk_test_…" autocomplete="off">
@@ -4991,7 +5017,7 @@
     </div>
   </div>
 
-  <div style="border-top:1px solid var(--border);margin:18px 0 12px;padding-top:14px;">
+  <div style="border-top:var(--stroke-hair) solid var(--border);margin:18px 0 12px;padding-top:14px;">
     <div style="font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Payment reminders</div>
     <div style="font-size:11px;color:var(--text3);line-height:1.6;margin-bottom:10px;">
       When an invoice goes past its due date, the app can email the customer a polite reminder with a link to pay —
@@ -5061,7 +5087,7 @@
       </div>
       <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('shipping-label')" aria-label="Close dialog" title="Close (Esc)">✕</button>
     </div>
-    <div id="shipping-label-order-info" style="font-size:12px;color:var(--text3);margin-bottom:1.25rem;font-family:'DM Mono',monospace;"></div>
+    <div id="shipping-label-order-info" style="font-size:12px;color:var(--text3);margin-bottom:1.25rem;font-family:var(--font-mono);"></div>
 
     <div style="font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);margin-bottom:10px;">Ship to</div>
     <div class="g2" style="margin-bottom:10px;">
@@ -5084,7 +5110,7 @@
       </div>
     </div>
 
-    <div id="sl-shipped-status" style="display:none;font-size:12px;margin-bottom:12px;padding:8px 12px;border-radius:6px;background:var(--green-bg);color:var(--green);border:1px solid var(--green-bg);"></div>
+    <div id="sl-shipped-status" style="display:none;font-size:12px;margin-bottom:12px;padding:8px 12px;border-radius:var(--r);background:var(--green-bg);color:var(--green);border:var(--stroke-hair) solid var(--green-bg);"></div>
 
     <div class="modal-footer" role="dialog" aria-modal="true">
       <button class="btn" onclick="attemptCloseModal('shipping-label')">Cancel</button>
@@ -5113,7 +5139,7 @@
         </table>
       </div>
     </div>
-    <div id="import-warning-box" style="margin-top:1rem;padding:10px 14px;background:var(--amber-bg);border-radius:var(--r2);border-left:3px solid var(--amber);font-size:12px;color:var(--amber);">
+    <div id="import-warning-box" style="margin-top:1rem;padding:10px 14px;background:var(--amber-bg);border-radius:var(--r2);border-left:var(--stroke) solid var(--amber);font-size:12px;color:var(--amber);">
       ⚠ This will <strong>add</strong> these rows to the current book's history. It will not overwrite existing data. Stock and revenue will be recalculated.
     </div>
     <div class="modal-footer" role="dialog" aria-modal="true">
@@ -5261,7 +5287,7 @@
       <div class="form-group">
         <label for="nb-id">Book ID (URL safe) * <span style="font-weight:400;font-size:10px;color:var(--text3);">(Permanent database slug)</span></label>
         <div style="position:relative;">
-          <input id="nb-id" placeholder="e.g. collective-photobook" style="font-family:'DM Mono',monospace;font-size:12.5px;">
+          <input id="nb-id" placeholder="e.g. collective-photobook" style="font-family:var(--font-mono);font-size:12.5px;">
         </div>
       </div>
       <div class="form-group">
@@ -5276,7 +5302,7 @@
       </div>
       <div class="form-group">
         <label for="nb-isbn">ISBN-13</label>
-        <input id="nb-isbn" placeholder="978-X-XXXX-XXXX-X or —" style="font-family:'DM Mono',monospace;">
+        <input id="nb-isbn" placeholder="978-X-XXXX-XXXX-X or —" style="font-family:var(--font-mono);">
       </div>
     </div>
     <div class="g2" style="margin-bottom:12px;">
@@ -5284,25 +5310,25 @@
         <label for="nb-accent">Project Accent Theme</label>
         <div class="accent-picker-wrap">
           <div class="accent-swatches" id="nb-accent-swatches">
-            <button type="button" class="accent-swatch-btn" style="background:#c8913a;" onclick="selectBookAccentPreset('#c8913a')" title="Lyrical Gold" aria-label="Lyrical Gold accent color" aria-pressed="false"></button>
-            <button type="button" class="accent-swatch-btn" style="background:#10b981;" onclick="selectBookAccentPreset('#10b981')" title="Emerald" aria-label="Emerald accent color" aria-pressed="false"></button>
-            <button type="button" class="accent-swatch-btn" style="background:#6366f1;" onclick="selectBookAccentPreset('#6366f1')" title="Indigo" aria-label="Indigo accent color" aria-pressed="false"></button>
-            <button type="button" class="accent-swatch-btn" style="background:#f43f5e;" onclick="selectBookAccentPreset('#f43f5e')" title="Rose / Crimson" aria-label="Rose / Crimson accent color" aria-pressed="false"></button>
-            <button type="button" class="accent-swatch-btn" style="background:#f59e0b;" onclick="selectBookAccentPreset('#f59e0b')" title="Warm Amber" aria-label="Warm Amber accent color" aria-pressed="false"></button>
-            <button type="button" class="accent-swatch-btn" style="background:#8b5cf6;" onclick="selectBookAccentPreset('#8b5cf6')" title="Amethyst / Velvet" aria-label="Amethyst / Velvet accent color" aria-pressed="false"></button>
-            <button type="button" class="accent-swatch-btn" style="background:#0ea5e9;" onclick="selectBookAccentPreset('#0ea5e9')" title="Sky" aria-label="Sky accent color" aria-pressed="false"></button>
-            <button type="button" class="accent-swatch-btn" style="background:#64748b;" onclick="selectBookAccentPreset('#64748b')" title="Slate Neutral" aria-label="Slate Neutral accent color" aria-pressed="false"></button>
+            <button type="button" class="accent-swatch-btn" style="background:var(--gold);" onclick="selectBookAccentPreset('#E8402A')" title="Lyrical Gold" aria-label="Lyrical Gold accent color" aria-pressed="false"></button>
+            <button type="button" class="accent-swatch-btn" style="background:var(--emerald);" onclick="selectBookAccentPreset('#10b981')" title="Emerald" aria-label="Emerald accent color" aria-pressed="false"></button>
+            <button type="button" class="accent-swatch-btn" style="background:var(--violet);" onclick="selectBookAccentPreset('#6366f1')" title="Indigo" aria-label="Indigo accent color" aria-pressed="false"></button>
+            <button type="button" class="accent-swatch-btn" style="background:var(--rose);" onclick="selectBookAccentPreset('#f43f5e')" title="Rose / Crimson" aria-label="Rose / Crimson accent color" aria-pressed="false"></button>
+            <button type="button" class="accent-swatch-btn" style="background:var(--orange);" onclick="selectBookAccentPreset('#f59e0b')" title="Warm Amber" aria-label="Warm Amber accent color" aria-pressed="false"></button>
+            <button type="button" class="accent-swatch-btn" style="background:var(--violet);" onclick="selectBookAccentPreset('#8b5cf6')" title="Amethyst / Velvet" aria-label="Amethyst / Velvet accent color" aria-pressed="false"></button>
+            <button type="button" class="accent-swatch-btn" style="background:var(--blue);" onclick="selectBookAccentPreset('#0ea5e9')" title="Sky" aria-label="Sky accent color" aria-pressed="false"></button>
+            <button type="button" class="accent-swatch-btn" style="background:var(--slate);" onclick="selectBookAccentPreset('#64748b')" title="Slate Neutral" aria-label="Slate Neutral accent color" aria-pressed="false"></button>
           </div>
           <div class="accent-custom-picker">
-            <input id="nb-accent" type="color" value="#c8913a" oninput="onCustomAccentInput(this.value)">
-            <span class="accent-hex-display" id="nb-accent-hex">#c8913a</span>
+            <input id="nb-accent" type="color" value="#E8402A" oninput="onCustomAccentInput(this.value)">
+            <span class="accent-hex-display" id="nb-accent-hex">#E8402A</span>
           </div>
         </div>
       </div>
       <div class="form-group">
         <label for="nb-thresh">Low Stock Alert Threshold</label>
         <div style="display:flex;align-items:center;gap:6px;">
-          <input id="nb-thresh" type="number" inputmode="numeric" value="10" min="0" style="font-family:'DM Mono',monospace;">
+          <input id="nb-thresh" type="number" inputmode="numeric" value="10" min="0" style="font-family:var(--font-mono);">
           <span style="font-size:11px;color:var(--text3);white-space:nowrap;">copies remaining</span>
         </div>
       </div>
@@ -5351,26 +5377,26 @@
       </div>
       <div class="form-group">
         <label for="nb-max">Print Run Edition Size</label>
-        <input id="nb-max" type="number" inputmode="numeric" value="100" min="1" oninput="updateBookModalFinancials()" style="font-family:'DM Mono',monospace;">
+        <input id="nb-max" type="number" inputmode="numeric" value="100" min="1" oninput="updateBookModalFinancials()" style="font-family:var(--font-mono);">
       </div>
     </div>
     <div class="form-group" style="margin-bottom:12px;">
       <label for="nb-price">Retail List Price</label>
-      <input id="nb-price" type="number" step="0.01" inputmode="decimal" value="40" min="0" oninput="updateBookModalFinancials()" style="font-family:'DM Mono',monospace;">
+      <input id="nb-price" type="number" step="0.01" inputmode="decimal" value="40" min="0" oninput="updateBookModalFinancials()" style="font-family:var(--font-mono);">
     </div>
     <div class="form-group" style="margin-top:4px;margin-bottom:14px;">
       <label>Stripe Direct Payment Link <span style="font-weight:400;font-size:10px;color:var(--text3);">(Embedded in QR Codes &amp; POS)</span></label>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">
-        <input type="url" id="nb-paylink" placeholder="https://buy.stripe.com/…" style="flex:1;font-family:'DM Mono',monospace;font-size:12px;">
+        <input type="url" id="nb-paylink" placeholder="https://buy.stripe.com/…" style="flex:1;font-family:var(--font-mono);font-size:12px;">
         <button type="button" class="btn gold sm" id="nb-gen-stripe-btn" onclick="generateBookStripeLink()" style="white-space:nowrap;">⚡ Generate SKU link</button>
       </div>
       <div style="font-size:11px;color:var(--text3);line-height:1.45;">
-        Paste from your <a href="https://dashboard.stripe.com/payment-links" target="_blank" style="color:var(--gold);">Stripe Dashboard</a> or click <strong>Generate SKU link</strong> to create an auto-tagged payment link.
+        Paste from your <a href="https://dashboard.stripe.com/payment-links" target="_blank" style="color:var(--gold-text);">Stripe Dashboard</a> or click <strong>Generate SKU link</strong> to create an auto-tagged payment link.
       </div>
     </div>
 
     <!-- Default Shipping Specs (for Shippo & Canada Post Calculator) -->
-    <div style="font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-top:16px; margin-bottom:8px; border-top:1px solid var(--border); padding-top:12px;">
+    <div style="font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-top:16px; margin-bottom:8px; border-top:var(--stroke-hair) solid var(--border); padding-top:12px;">
       Default Shipping Specs (for Canada Post &amp; Shippo)
     </div>
     
@@ -5384,9 +5410,9 @@
     </div>
 
     <div class="shipping-dims-grid">
-      <div class="form-group"><label for="nb-ship-length">Length</label><input id="nb-ship-length" type="number" placeholder="Length" step="0.1" style="font-family:'DM Mono',monospace;"></div>
-      <div class="form-group"><label for="nb-ship-width">Width</label><input id="nb-ship-width" type="number" placeholder="Width" step="0.1" style="font-family:'DM Mono',monospace;"></div>
-      <div class="form-group"><label for="nb-ship-height">Height</label><input id="nb-ship-height" type="number" placeholder="Height" step="0.1" style="font-family:'DM Mono',monospace;"></div>
+      <div class="form-group"><label for="nb-ship-length">Length</label><input id="nb-ship-length" type="number" placeholder="Length" step="0.1" style="font-family:var(--font-mono);"></div>
+      <div class="form-group"><label for="nb-ship-width">Width</label><input id="nb-ship-width" type="number" placeholder="Width" step="0.1" style="font-family:var(--font-mono);"></div>
+      <div class="form-group"><label for="nb-ship-height">Height</label><input id="nb-ship-height" type="number" placeholder="Height" step="0.1" style="font-family:var(--font-mono);"></div>
       <div class="form-group">
         <label for="nb-ship-dim-unit">Dim. Unit</label>
         <select id="nb-ship-dim-unit">
@@ -5396,7 +5422,7 @@
       </div>
     </div>
     <div class="shipping-weights-grid">
-      <div class="form-group" style="margin:0;"><label for="nb-ship-weight">Weight</label><input id="nb-ship-weight" type="number" placeholder="Weight" step="0.01" style="font-family:'DM Mono',monospace;"></div>
+      <div class="form-group" style="margin:0;"><label for="nb-ship-weight">Weight</label><input id="nb-ship-weight" type="number" placeholder="Weight" step="0.01" style="font-family:var(--font-mono);"></div>
       <div class="form-group" style="margin:0;">
         <label for="nb-ship-weight-unit">Weight Unit</label>
         <select id="nb-ship-weight-unit">
@@ -5406,7 +5432,7 @@
           <option value="oz">Ounces (oz)</option>
         </select>
       </div>
-      <div class="form-group" style="margin:0;"><label for="nb-ship-hs">HS Tariff Code</label><input id="nb-ship-hs" type="text" placeholder="e.g. 490199" value="490199" style="font-family:'DM Mono',monospace;"></div>
+      <div class="form-group" style="margin:0;"><label for="nb-ship-hs">HS Tariff Code</label><input id="nb-ship-hs" type="text" placeholder="e.g. 490199" value="490199" style="font-family:var(--font-mono);"></div>
     </div>
   </div>
 
@@ -5419,14 +5445,14 @@
           <span>🔍</span><span>Sum from Tax Centre</span>
         </button>
       </div>
-      <input id="nb-prod" type="number" step="0.01" inputmode="decimal" value="0" min="0" oninput="updateBookModalFinancials()" style="font-family:'DM Mono',monospace;">
+      <input id="nb-prod" type="number" step="0.01" inputmode="decimal" value="0" min="0" oninput="updateBookModalFinancials()" style="font-family:var(--font-mono);">
       <div class="book-modal-callout" style="margin-top:6px;">
         💡 <strong>Publisher Recovery:</strong> This manufacturing cost sets the first 100% publisher recovery tier before artist profit splits begin.
       </div>
     </div>
     <div class="form-group" style="margin-bottom:12px;">
       <label for="nb-payment-link">Publisher Payment Link <span style="font-weight:400;font-size:10px;color:var(--text3);">(For Artist Dues / Balance Settlement)</span></label>
-      <input type="url" id="nb-payment-link" placeholder="https://paypal.me/lyricalmyricalbooks or email@interac.ca" style="font-family:'DM Mono',monospace;font-size:12px;">
+      <input type="url" id="nb-payment-link" placeholder="https://paypal.me/lyricalmyricalbooks or email@interac.ca" style="font-family:var(--font-mono);font-size:12px;">
       <div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.45;">
         When the artist owes the publisher money (e.g. negative balance from shipping/advances), this payment link appears in their private author portal.
       </div>
@@ -5434,18 +5460,18 @@
     <div class="g2" style="margin-bottom:12px;">
       <div class="form-group">
         <label for="nb-pub-grat">Publisher Gratuity Copies</label>
-        <input id="nb-pub-grat" type="number" inputmode="numeric" min="0" value="0" style="font-family:'DM Mono',monospace;">
+        <input id="nb-pub-grat" type="number" inputmode="numeric" min="0" value="0" style="font-family:var(--font-mono);">
         <span style="font-size:10.5px;color:var(--text3);">Archive &amp; promotional copies</span>
       </div>
       <div class="form-group">
         <label for="nb-author-grat">Author Gratuity Copies</label>
-        <input id="nb-author-grat" type="number" inputmode="numeric" min="0" value="0" style="font-family:'DM Mono',monospace;">
+        <input id="nb-author-grat" type="number" inputmode="numeric" min="0" value="0" style="font-family:var(--font-mono);">
         <span style="font-size:10.5px;color:var(--text3);">Contractual complimentary copies</span>
       </div>
     </div>
     <div class="form-group" style="margin-bottom:6px;">
       <label for="nb-author-stock">Author-Held Stock <span style="font-weight:400;font-size:10px;color:var(--text3);">(Physical Copies with Author)</span></label>
-      <input id="nb-author-stock" type="number" inputmode="numeric" min="0" value="0" placeholder="0" style="font-family:'DM Mono',monospace;">
+      <input id="nb-author-stock" type="number" inputmode="numeric" min="0" value="0" placeholder="0" style="font-family:var(--font-mono);">
       <div class="book-modal-callout" style="margin-top:6px;">
         📦 Physical copies currently in the author's hands for their own events. Automatically deducted from available publisher warehouse stock.
       </div>
@@ -5596,7 +5622,7 @@
       </select>
     </div>
   </div>
-  <div class="form-group" style="margin-bottom:12px;"><label for="pb-accent">Accent Color</label><input id="pb-accent" type="color" value="#c8913a"></div>
+  <div class="form-group" style="margin-bottom:12px;"><label for="pb-accent">Accent Color</label><input id="pb-accent" type="color" value="#E8402A"></div>
 
   <div class="form-group" style="margin-bottom:12px;">
     <label>Stripe Payment Link <span style="font-weight:400;font-size:10px;color:var(--text3);">(used for the QR code)</span></label>
@@ -5605,7 +5631,7 @@
       <button type="button" class="btn gold sm" id="pb-gen-stripe-btn" onclick="generatePosBookStripeLink()" style="white-space:nowrap;">⚡ Generate Stripe link</button>
     </div>
     <div style="font-size:11px;color:var(--text3);margin-top:5px;line-height:1.5;">
-      Paste a link from your <a href="https://dashboard.stripe.com/payment-links" target="_blank" style="color:var(--gold);">Stripe Dashboard</a>, or click <strong>Generate Stripe link</strong> to mint one at this price instantly (needs your Stripe restricted key saved in the Payments tab or Invoice Settings).
+      Paste a link from your <a href="https://dashboard.stripe.com/payment-links" target="_blank" style="color:var(--gold-text);">Stripe Dashboard</a>, or click <strong>Generate Stripe link</strong> to mint one at this price instantly (needs your Stripe restricted key saved in the Payments tab or Invoice Settings).
     </div>
   </div>
 
@@ -5650,7 +5676,7 @@
   <div class="form-group" style="margin-bottom:8px;">
     <label for="pp-price">Custom price</label>
     <div style="display:flex;align-items:center;gap:8px;">
-      <span id="pp-cur-sym" style="font-family:'DM Mono',monospace;font-size:15px;color:var(--text2);"></span>
+      <span id="pp-cur-sym" style="font-family:var(--font-mono);font-size:15px;color:var(--text2);"></span>
       <input id="pp-price" type="number" step="0.01" min="0" inputmode="decimal" style="flex:1;" oninput="posPricePreview()">
     </div>
     <div style="font-size:11px;color:var(--text3);margin-top:4px;">In the book's own currency — the cart converts it for you.</div>
@@ -5673,7 +5699,7 @@
     </div>
     <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('pos-qr')" aria-label="Close dialog" title="Close (Esc)">✕</button>
   </div>
-  <div style="text-align:center;margin-bottom:4px;"><span id="pos-qr-amount" class="tnum" style="font-family:'Syne',sans-serif;font-size:26px;font-weight:700;color:var(--status-settled, var(--green));"></span></div>
+  <div style="text-align:center;margin-bottom:4px;"><span id="pos-qr-amount" class="tnum" style="font-family:var(--font-ui);font-size:26px;font-weight:700;color:var(--status-settled, var(--green));"></span></div>
   <div id="pos-qr-sub" style="text-align:center;font-size:12px;color:var(--content-secondary);margin-bottom:14px;"></div>
   <div style="display:flex;justify-content:center;margin-bottom:1rem;background:white;padding:1.25rem;border-radius:var(--r2);width:max-content;margin-left:auto;margin-right:auto;">
     <div id="pos-qr-canvas"></div>
@@ -5934,7 +5960,7 @@
 <!-- Campaign Email Sending Progress Overlay -->
 <div class="send-overlay" id="c-send-overlay">
   <div class="send-modal">
-    <div style="font-family:'Playfair Display',serif;font-size:18px;font-weight:700;margin-bottom:6px;">Sending Campaign</div>
+    <div style="font-family:var(--font-ui);font-size:18px;font-weight:700;margin-bottom:6px;">Sending Campaign</div>
     <div id="c-send-progress-text" style="font-size:13px;color:var(--text2);">Preparing email delivery...</div>
     <div class="send-progress-track">
       <div class="send-progress-fill" id="c-send-progress-fill"></div>

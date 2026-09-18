@@ -16,7 +16,7 @@ describe('App-Wide 5 UX Enhancements Suite (Round Two — /ux-designer)', () => 
     });
 
     it('enforces spring hover and active scaling on the clear button', () => {
-      expect(styleCss).toMatch(/\.hist-filter-chip button\s*\{[^}]*font-family:\s*'DM Mono', monospace;/);
+      expect(styleCss).toMatch(/\.hist-filter-chip button\s*\{[^}]*font-family:\s*var\(--font-mono\);/);
       expect(styleCss).toMatch(/\.hist-filter-chip button:hover\s*\{[^}]*transform:\s*translateY\(-1px\);/);
       expect(styleCss).toMatch(/\.hist-filter-chip button:active\s*\{[^}]*transform:\s*scale\(0\.96\);/);
       expect(styleCss).toMatch(/\.hist-filter-chip button:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--gold\);/);
@@ -66,7 +66,7 @@ describe('App-Wide 5 UX Enhancements Suite (Round Two — /ux-designer)', () => 
     });
 
     it('formats store balance table cells with DM Mono tabular figures', () => {
-      expect(styleCss).toMatch(/\.store-balance-tbl th,\s*\.store-balance-tbl td\s*\{[^}]*font-family:\s*'DM Mono',monospace;/);
+      expect(styleCss).toMatch(/\.store-balance-tbl th,\s*\.store-balance-tbl td\s*\{[^}]*font-family:\s*var\(--font-mono\);/);
       expect(styleCss).toMatch(/\.store-balance-tbl th,\s*\.store-balance-tbl td\s*\{[^}]*font-feature-settings:\s*'tnum' 1, 'zero' 1;/);
     });
   });

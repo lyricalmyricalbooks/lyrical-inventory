@@ -32,7 +32,7 @@ test('checkout panel spaces its stages further apart than the rows inside one', 
 
 test('the sale total is a tabular mono figure, not proportional heading type', () => {
   const total = lastBlock('.pos-checkout-total');
-  expect(total).toMatch(/font-family:\s*'DM Mono',\s*monospace;/);
+  expect(total).toMatch(/font-family:\s*var\(--font-mono\);/);
   expect(total).toMatch(/font-variant-numeric:\s*tabular-nums;/);
   expect(total).toMatch(/font-feature-settings:\s*"tnum"\s*1,\s*"zero"\s*1;/);
   // Leads the panel on size, and wraps instead of overflowing when FX rates

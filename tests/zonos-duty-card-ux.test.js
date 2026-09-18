@@ -32,7 +32,7 @@ describe('US Zonos Duty Prepayment Card UX/UI Compliance', () => {
     const block = styleCss.slice(styleCss.indexOf('.us-zonos-duty-card {'), styleCss.indexOf('@container us-zonos'));
     expect(block).not.toMatch(/oklch\(/);
 
-    expect(styleCss).toMatch(/\.us-zonos-duty-card\s*\{[^}]*border:\s*1px solid var\(--gold-line\);/);
+    expect(styleCss).toMatch(/\.us-zonos-duty-card\s*\{[^}]*border:\s*var\(--stroke-hair\) solid var\(--gold-line\);/);
     expect(styleCss).toMatch(/\.us-zonos-duty-card:hover\s*\{[^}]*border-color:\s*var\(--gold\);/);
     expect(styleCss).toMatch(/\.us-zonos-input:focus\s*\{[^}]*box-shadow:\s*var\(--focus-ring-halo\);/);
     expect(styleCss).toMatch(/\.us-zonos-hint\.is-valid\s*\{[^}]*color:\s*var\(--status-positive\);/);
@@ -40,7 +40,7 @@ describe('US Zonos Duty Prepayment Card UX/UI Compliance', () => {
   });
 
   it('formats character count and code inputs with DM Mono tabular figures', () => {
-    expect(styleCss).toMatch(/\.us-zonos-input\s*\{[^}]*font-family:\s*'DM Mono',\s*monospace;/);
+    expect(styleCss).toMatch(/\.us-zonos-input\s*\{[^}]*font-family:\s*var\(--font-mono\);/);
     expect(styleCss).toMatch(/\.us-zonos-char-counter\s*\{[^}]*font-feature-settings:\s*"tnum" 1,\s*"zero" 1;/);
   });
 

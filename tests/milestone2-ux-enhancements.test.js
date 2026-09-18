@@ -75,7 +75,7 @@ describe('Milestone 2 UX Enhancements (Features 10–17)', () => {
     test('.cf-stat-delta enforces DM Mono and tabular figures', () => {
       const deltaRule = styles.match(/\.cf-stat-delta\s*\{([\s\S]*?)\}/);
       expect(deltaRule).not.toBeNull();
-      expect(deltaRule[1]).toMatch(/font-family:\s*'DM Mono',\s*monospace/);
+      expect(deltaRule[1]).toMatch(/font-family:\s*var\(--font-mono\)/);
       expect(deltaRule[1]).toMatch(/font-feature-settings:\s*"tnum"\s*1/);
     });
 
@@ -83,7 +83,7 @@ describe('Milestone 2 UX Enhancements (Features 10–17)', () => {
       const totalsRule = styles.match(/\.cf-detail-totals span\s*\{([\s\S]*?)\}/);
       expect(totalsRule).not.toBeNull();
       expect(totalsRule[1]).toMatch(/var\(--surface-raised/);
-      expect(totalsRule[1]).toMatch(/font-family:\s*'DM Mono',\s*monospace/);
+      expect(totalsRule[1]).toMatch(/font-family:\s*var\(--font-mono\)/);
       expect(totalsRule[1]).toMatch(/font-feature-settings:\s*"tnum"\s*1/);
     });
 
@@ -115,7 +115,7 @@ describe('Milestone 2 UX Enhancements (Features 10–17)', () => {
     test('customer table numeric and date cells enforce monospace tabular figures', () => {
       const numCells = styles.match(/#cust-body td\.r,\s*#cust-body \.money-cell,\s*#cust-body \.date-cell,\s*#ml-body td\.r,\s*#ml-body \.date-cell\s*\{([\s\S]*?)\}/);
       expect(numCells).not.toBeNull();
-      expect(numCells[1]).toMatch(/font-family:\s*'DM Mono',\s*monospace/);
+      expect(numCells[1]).toMatch(/font-family:\s*var\(--font-mono\)/);
       expect(numCells[1]).toMatch(/font-feature-settings:\s*"tnum"\s*1/);
     });
 
@@ -183,9 +183,9 @@ describe('Milestone 2 UX Enhancements (Features 10–17)', () => {
     test('.analytics-kpi-change percentage chips use DM Mono and tabular figures', () => {
       const kpiChange = styles.match(/\.analytics-kpi-change\s*\{([\s\S]*?)\}/);
       expect(kpiChange).not.toBeNull();
-      expect(kpiChange[1]).toMatch(/font-family:\s*'DM Mono',\s*monospace/);
+      expect(kpiChange[1]).toMatch(/font-family:\s*var\(--font-mono\)/);
       expect(kpiChange[1]).toMatch(/font-feature-settings:\s*"tnum"\s*1/);
-      expect(kpiChange[1]).toMatch(/border-radius:\s*999px/);
+      expect(kpiChange[1]).toMatch(/border-radius:\s*var\(--r-pill\)/);
     });
   });
 
@@ -202,7 +202,7 @@ describe('Milestone 2 UX Enhancements (Features 10–17)', () => {
     });
 
     test('connected card status uses canonical --status-positive token', () => {
-      expect(markup).toMatch(/border-left:\s*3px solid var\(--status-positive\);/);
+      expect(markup).toMatch(/border-left:\s*var\(--stroke\) solid var\(--status-positive\);/);
       expect(markup).toMatch(/<span style="font-size:18px; color:var\(--status-positive\);">●<\/span>/);
       expect(markup).toMatch(/<button class="btn sm" onclick="refreshUmamiStats\(\)" title="Refresh API metrics">/);
     });

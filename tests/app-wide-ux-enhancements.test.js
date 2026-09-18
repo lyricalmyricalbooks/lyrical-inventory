@@ -31,7 +31,7 @@ describe('App-Wide 5 UX Enhancements Suite (/ux-designer)', () => {
 
     it('formats backup timestamps and book counts with tabular monospace figures (tnum)', () => {
       expect(mainJs).toContain('<td class="tnum">${new Date(b.createdAt).toLocaleString()}</td>');
-      expect(mainJs).toContain('<td class="r tnum" style="font-family:\'DM Mono\',monospace;font-weight:600;">');
+      expect(mainJs).toContain('<td class="r tnum" style="font-family:var(--font-mono);font-weight:600;">');
     });
   });
 
@@ -74,7 +74,7 @@ describe('App-Wide 5 UX Enhancements Suite (/ux-designer)', () => {
     });
 
     it('formats book prices and IDs with tabular monospace DM Mono figures and adds test books empty state', () => {
-      expect(mainJs).toContain('class="tnum" style="font-family:\'DM Mono\',monospace;font-size:12px;"');
+      expect(mainJs).toContain('class="tnum" style="font-family:var(--font-mono);font-size:12px;"');
       expect(mainJs).toContain('No Test Books Found');
     });
   });

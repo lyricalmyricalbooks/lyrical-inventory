@@ -243,7 +243,12 @@ const CLASS_TEXT_TOKENS = {
 // badge-style components that pair a background and a text colour together.
 const CLASS_PAIRS = {
   pill: {
-    gold: { background: 'var(--gold-bg)', color: 'var(--gold)' },
+    // --gold-text, not --gold: `.pill.gold` in src/style.css has always used the
+    // ink, and this table said the fill. Under the old palette the two were
+    // close enough that the sweep still landed near the true ratio; once Riso
+    // split fill from ink they diverged by 2 stops and this started reporting
+    // failures for a colour the app never renders. Keep it matched to the rule.
+    gold: { background: 'var(--gold-bg)', color: 'var(--gold-text)' },
     green: { background: 'var(--green-bg)', color: 'var(--green)' },
     amber: { background: 'var(--amber-bg)', color: 'var(--amber)' },
     red: { background: 'var(--red-bg)', color: 'var(--red)' },
@@ -721,6 +726,8 @@ export const DOCUMENT_BUILDERS = new Set([
   '_fkOpenQrPrintWindow',         // the QR sheet's print window while it loads
   'renderOpenCall',               // fixed-dark diagnostics console
   'sendNextCampaignEmail',        // fixed-dark send log
+  'buildStandaloneInvoiceHTML',   // downloaded/printed invoice — its own document, no :root
+  'buildInvoiceJsPdf',            // off-screen holder rasterised into the invoice PDF
 ]);
 
 /** Nearest preceding top-level declaration name, for attributing a fragment. */

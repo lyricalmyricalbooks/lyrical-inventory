@@ -19,7 +19,7 @@ describe('10 Additional UX/UI Improvements Suite (/ux-designer)', () => {
     });
 
     it('styles .pos-discount-btn[data-shortcut]::after with DM Mono and surface-inset', () => {
-      expect(styleCss).toMatch(/\.pos-discount-btn\[data-shortcut\]::after\s*\{[^}]*font-family:\s*'DM Mono'/);
+      expect(styleCss).toMatch(/\.pos-discount-btn\[data-shortcut\]::after\s*\{[^}]*font-family:\s*var\(--font-mono\)/);
       expect(styleCss).toMatch(/\.pos-discount-btn\[data-shortcut\]::after\s*\{[^}]*background:\s*var\(--surface-inset\)/);
     });
 
@@ -104,7 +104,7 @@ describe('10 Additional UX/UI Improvements Suite (/ux-designer)', () => {
 
   describe('9. Order History: Filter Chip Count Badge Monospace Typography', () => {
     it('formats .ledger-chip-count with DM Mono, tnum, and surface-inset', () => {
-      expect(styleCss).toMatch(/\.ledger-chip-count\s*\{[^}]*font-family:\s*'DM Mono'/);
+      expect(styleCss).toMatch(/\.ledger-chip-count\s*\{[^}]*font-family:\s*var\(--font-mono\)/);
       expect(styleCss).toMatch(/\.ledger-chip-count\s*\{[^}]*font-feature-settings:\s*"tnum" 1/);
       expect(styleCss).toMatch(/\.ledger-chip-count\s*\{[^}]*background:\s*var\(--surface-inset\)/);
     });

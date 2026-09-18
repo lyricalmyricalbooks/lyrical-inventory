@@ -270,9 +270,9 @@ const MIN_DAYS_AFTER_ORDER = -3;
  * Returns null when the pair cannot match at all.
  */
 export function scorePostageOrderMatch(expense = {}, order = {}, opts = {}) {
-  const { recipientOverride = '' } = opts;
-  const receipt = personNameParts(recipientOverride || postageRecipientName(expense));
-  const customer = personNameParts(order.shipName || order.customer || order.name);
+  const { recipientOverride = '', customerParts, receiptParts } = opts;
+  const receipt = receiptParts || personNameParts(recipientOverride || postageRecipientName(expense));
+  const customer = customerParts || personNameParts(order.shipName || order.customer || order.name);
   if (!receipt.last || !customer.last) return null;
 
   const gap = daysAfterOrder(order.date, expense.date);
@@ -342,6 +342,23 @@ function titleCase(value) {
   return text ? text[0].toUpperCase() + text.slice(1) : '';
 }
 
+// Per-`orders`-array cache of each order's parsed customer name, so scoring
+// many expenses against the same order list parses each order's name once
+// rather than once per expense. Safe because a genuinely changed order list
+// is always a new array here (see getShippingReconciliationOrders()), never
+// mutated in place, so a stale cache entry can never be read back.
+const ORDER_NAME_PARTS_CACHE = new WeakMap();
+
+function customerNamePartsByOrder(orders) {
+  let cached = ORDER_NAME_PARTS_CACHE.get(orders);
+  if (!cached) {
+    cached = new Map();
+    orders.forEach(order => cached.set(order, personNameParts(order.shipName || order.customer || order.name)));
+    ORDER_NAME_PARTS_CACHE.set(orders, cached);
+  }
+  return cached;
+}
+
 /**
  * Ranked order candidates for one postage receipt, best first.
  *
@@ -352,9 +369,20 @@ function titleCase(value) {
 export function suggestPostageMatches(expense = {}, orders = [], opts = {}) {
   const { takenOrderNumbers = [], recipientOverride = '', limit = 5 } = opts;
   const taken = new Set(takenOrderNumbers.map(value => clean(value).toUpperCase()));
+  // ⚡ Bolt Optimization: an order's parsed customer name depends only on the
+  // order, not the expense being scored, but autoMatchPostage() and the
+  // postage worklist render both call this once per expense against the same
+  // `orders` array. Caching per order (keyed on the array's identity, which
+  // getShippingReconciliationOrders() always rebuilds fresh rather than
+  // mutating) turns an O(orders * expenses) re-parse into O(orders) total.
+  const nameParts = customerNamePartsByOrder(orders);
+  // The receipt's own name parts likewise depend only on this expense, not on
+  // the order being scored against it — parse it once here rather than once
+  // per order inside the loop below.
+  const receiptParts = personNameParts(recipientOverride || postageRecipientName(expense));
   return orders
     .filter(order => !taken.has(clean(order.num || order.orderNum).toUpperCase()))
-    .map(order => scorePostageOrderMatch(expense, order, { recipientOverride }))
+    .map(order => scorePostageOrderMatch(expense, order, { recipientOverride, customerParts: nameParts.get(order), receiptParts }))
     .filter(Boolean)
     // ⚡ Bolt Optimization: orderDate is an ISO "YYYY-MM-DD" string, so plain
     // string inequality sorts it correctly without locale-aware comparison overhead.

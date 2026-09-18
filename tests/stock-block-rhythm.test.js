@@ -41,7 +41,7 @@ test('the on-hand reading leads the panel and sits above the bar it explains', (
   const note = rule('.bar-meta-note');
 
   // Figure tier: mono, tabular, and two steps above the note beside it.
-  expect(lead).toMatch(/font-family:\s*'DM Mono',monospace/);
+  expect(lead).toMatch(/font-family:\s*var\(--font-mono\)/);
   expect(lead).toMatch(/font-size:\s*var\(--text-xl\)/);
   expect(lead).toMatch(/font-variant-numeric:\s*tabular-nums/);
   expect(lead).toMatch(/font-feature-settings:\s*'tnum' 1,'zero' 1/);
@@ -50,7 +50,7 @@ test('the on-hand reading leads the panel and sits above the bar it explains', (
   expect(lead).toMatch(/font-weight:\s*500/);
 
   expect(note).toMatch(/font-size:\s*var\(--text-xs\)/);
-  expect(note).toMatch(/font-family:\s*'DM Mono',monospace/);
+  expect(note).toMatch(/font-family:\s*var\(--font-mono\)/);
 
   // Reading first, bar second — in both panels.
   for (const [labelId, trackId] of [

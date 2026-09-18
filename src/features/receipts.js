@@ -2904,15 +2904,15 @@ function renderEmailPreviewContent(msgId, container) {
       return `
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:4px 0;padding:2px 0;">
           <input type="checkbox" class="email-att-cb-${msgId}" data-idx="${idx}" ${isChecked ? 'checked' : ''} onchange="_setEmailAttExcluded('${msgId}', ${idx}, !this.checked)" style="width:14px;height:14px;">
-          <span style="font-family:'DM Mono',monospace;font-size:11px;">${icon} ${esc(f.name)} <span style="opacity:.6;font-size:10px;">(${typeLabel})</span></span>
+          <span style="font-family:var(--font-mono);font-size:11px;">${icon} ${esc(f.name)} <span style="opacity:.6;font-size:10px;">(${typeLabel})</span></span>
         </label>
       `;
     }).join('');
 
     attachmentsHtml = `
-      <div style="margin-top:10px;border-top:1px dashed var(--border);padding-top:8px;">
+      <div style="margin-top:10px;border-top:var(--stroke-hair) dashed var(--border);padding-top:8px;">
         <div style="font-weight:700;font-size:11px;margin-bottom:6px;color:var(--text2);">Include attachments in AI Scan (${email.fileParts.length}):</div>
-        <div style="background:var(--surface-card);padding:6px 12px;border:1px solid var(--border2);border-radius:var(--r);max-height:100px;overflow-y:auto;">
+        <div style="background:var(--surface-card);padding:6px 12px;border:var(--stroke-hair) solid var(--border2);border-radius:var(--r);max-height:100px;overflow-y:auto;">
           ${listItems}
         </div>
       </div>
@@ -4949,7 +4949,7 @@ async function extractReceiptsFromEmailText() {
     } catch (e) {
       console.error('[email-receipt-import] file read failed', e);
       if (wrap) {
-        wrap.innerHTML = `<div style="background:rgba(220,60,60,.08);border:1px solid rgba(220,60,60,.25);border-radius:var(--r2);padding:10px 14px;font-size:12px;color:var(--red);">File read failed: ${(e.message || e).toString().replace(/</g, '&lt;')}</div>`;
+        wrap.innerHTML = `<div style="background:rgba(220,60,60,.08);border:var(--stroke-hair) solid rgba(220,60,60,.25);border-radius:var(--r2);padding:10px 14px;font-size:12px;color:var(--red);">File read failed: ${(e.message || e).toString().replace(/</g, '&lt;')}</div>`;
       }
       showToast('Could not read files', 'err');
       if (btn) btn.disabled = false;
@@ -4978,7 +4978,7 @@ async function extractReceiptsFromEmailText() {
     console.error('[email-receipt-import] Gemini failed', e);
     if (wrap) {
       console.error('[email-receipt-import] extraction failed', e);
-      wrap.innerHTML = `<div style="background:rgba(220,60,60,.08);border:1px solid rgba(220,60,60,.25);border-radius:var(--r2);padding:10px 14px;font-size:12px;color:var(--red);">Could not read these emails — ${escapeHtml(_friendlyScanError(e))}</div>`;
+      wrap.innerHTML = `<div style="background:rgba(220,60,60,.08);border:var(--stroke-hair) solid rgba(220,60,60,.25);border-radius:var(--r2);padding:10px 14px;font-size:12px;color:var(--red);">Could not read these emails — ${escapeHtml(_friendlyScanError(e))}</div>`;
     }
     showToast('Could not extract receipts', 'err');
   } finally {
@@ -5077,7 +5077,7 @@ function renderEmailReceiptDrafts(receipts) {
     const lowConf = (r.confidence ?? 1) < 0.5;
     return `<tr data-erd-row="${i}" style="${dup ? 'background:rgba(220,170,40,.06);' : ''}">
             <td><input type="checkbox" data-erd-include="${i}" ${r.include !== false ? 'checked' : ''}></td>
-            <td><input type="date" data-erd-field="date" data-erd-i="${i}" value="${esc(r.date)}" style="font-size:var(--text-sm);font-family:'DM Mono',monospace;font-feature-settings:'tnum' 1;"></td>
+            <td><input type="date" data-erd-field="date" data-erd-i="${i}" value="${esc(r.date)}" style="font-size:var(--text-sm);font-family:var(--font-mono);font-feature-settings:'tnum' 1;"></td>
             <td>
               <input type="text" data-erd-field="vendor" data-erd-i="${i}" value="${esc(r.vendor)}" placeholder="Vendor" style="font-size:var(--text-sm);width:100%;margin-bottom:2px;">
               <input type="text" data-erd-field="description" data-erd-i="${i}" value="${esc(r.description)}" placeholder="Description" style="font-size:var(--text-xs);width:100%;color:var(--content-secondary);">
@@ -5092,8 +5092,8 @@ function renderEmailReceiptDrafts(receipts) {
             <td><input type="text" data-erd-field="reference" data-erd-i="${i}" value="${esc(r.reference)}" placeholder="—" style="font-size:var(--text-sm);"></td>
             <td class="r">
               <div style="display:flex;gap:4px;align-items:center;justify-content:flex-end;">
-                <select data-erd-field="currency" data-erd-i="${i}" style="font-size:var(--text-sm);font-family:'DM Mono',monospace;">${curOptionsHtml}</select>
-                <input type="number" step="0.01" data-erd-field="amount" data-erd-i="${i}" value="${r.amountUnknown ? '' : Number(r.amount).toFixed(2)}" placeholder="${r.amountUnknown ? 'amount?' : ''}" style="font-size:var(--text-sm);text-align:right;font-family:'DM Mono',monospace;font-feature-settings:'tnum' 1;${r.amountUnknown ? 'border-color:var(--amber);' : ''}">
+                <select data-erd-field="currency" data-erd-i="${i}" style="font-size:var(--text-sm);font-family:var(--font-mono);">${curOptionsHtml}</select>
+                <input type="number" step="0.01" data-erd-field="amount" data-erd-i="${i}" value="${r.amountUnknown ? '' : Number(r.amount).toFixed(2)}" placeholder="${r.amountUnknown ? 'amount?' : ''}" style="font-size:var(--text-sm);text-align:right;font-family:var(--font-mono);font-feature-settings:'tnum' 1;${r.amountUnknown ? 'border-color:var(--amber);' : ''}">
               </div>
             </td>
             <td>
@@ -5106,7 +5106,7 @@ function renderEmailReceiptDrafts(receipts) {
       </table>
     </div>
     <div style="margin-top:10px;display:flex;gap:8px;align-items:center;justify-content:flex-end;">
-      <span style="font-size:var(--text-xs);color:var(--content-muted);font-family:'DM Mono',monospace;">FX rates auto-fetched at import</span>
+      <span style="font-size:var(--text-xs);color:var(--content-muted);font-family:var(--font-mono);">FX rates auto-fetched at import</span>
       <button class="btn gold" type="button" onclick="importEmailReceiptDrafts()">Import selected drafts</button>
     </div>
   `;
@@ -6003,8 +6003,8 @@ function renderExpenses() {
       <td><span class="pill gray" style="font-size:10px;">${escapeHtml(e.cat)}</span></td>
       <td class="mono" style="font-size:11px;color:var(--text3);">${escapeHtml(e.ref) || '—'}</td>
       <td>${receiptCell}</td>
-      <td class="r" style="color:${isSettledReimbursable ? 'var(--text4)' : 'var(--red)'};font-family:'DM Mono',monospace;">${fmt(e.amount, eCur)}</td>
-      ${window.IS_PUBLISHER ? `<td class="r" style="font-family:'DM Mono',monospace;color:var(--text3);"${baseAmountTitle ? ` title="${baseAmountTitle}"` : ''}>${baseAmountText}</td>` : ''}
+      <td class="r" style="color:${isSettledReimbursable ? 'var(--text4)' : 'var(--red)'};font-family:var(--font-mono);">${fmt(e.amount, eCur)}</td>
+      ${window.IS_PUBLISHER ? `<td class="r" style="font-family:var(--font-mono);color:var(--text3);"${baseAmountTitle ? ` title="${baseAmountTitle}"` : ''}>${baseAmountText}</td>` : ''}
       <td>${statusCell}</td>
       <td>${actionCell}</td>
     </tr>`;

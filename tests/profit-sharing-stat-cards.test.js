@@ -20,7 +20,7 @@ test('profit sharing stat cards use the shared stat-card anatomy, not the header
   expect(label[1]).toMatch(/font-weight:\s*800/);
 
   // Figure is DM Mono with tabular numerals, at the stat-card figure step.
-  expect(val[1]).toMatch(/font-family:\s*'DM Mono',\s*monospace/);
+  expect(val[1]).toMatch(/font-family:\s*var\(--font-mono\)/);
   expect(val[1]).toMatch(/font-size:\s*var\(--text-xl\)/);
   expect(val[1]).toMatch(/font-feature-settings:\s*"tnum"\s*1/);
 

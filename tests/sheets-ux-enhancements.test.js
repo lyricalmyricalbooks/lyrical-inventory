@@ -54,7 +54,7 @@ describe('Sheets UX Enhancements (#4 & #7)', () => {
 
     it('formats sync-stats with DM Mono and tabular figures', () => {
       expect(styleCss).toContain('.sync-stats');
-      expect(styleCss).toContain("font-family: 'DM Mono'");
+      expect(styleCss).toContain("font-family:var(--font-mono)");
       expect(styleCss).toContain('"tnum" 1');
     });
   });
