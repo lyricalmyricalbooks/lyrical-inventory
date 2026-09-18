@@ -2872,7 +2872,7 @@ function restoreDeductionGaps() {
 
 function switchTaxCenterSubTab(subTabName) {
   activeTaxCenterSubTab = subTabName || 'ledger';
-  const subTabs = ['ledger', 'receipts', 'deductions', 'integrations'];
+  const subTabs = ['ledger', 'receipts', 'deductions', 'integrations', 'email-import'];
   subTabs.forEach(tab => {
     const btn = document.getElementById('btn-tctab-' + tab);
     const sec = document.getElementById('tc-sec-' + tab);
@@ -2901,7 +2901,7 @@ function switchTaxCenterSubTab(subTabName) {
 }
 
 function tcSubNavKeydown(e) {
-  const subTabs = ['ledger', 'receipts', 'deductions', 'integrations'];
+  const subTabs = ['ledger', 'receipts', 'deductions', 'integrations', 'email-import'];
   const currentIdx = subTabs.indexOf(activeTaxCenterSubTab);
   if (currentIdx === -1) return;
 

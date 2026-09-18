@@ -2164,19 +2164,23 @@
 
 <!-- EMAIL RECEIPT IMPORT MODAL (REDESIGNED) -->
 <div class="overlay" id="m-email-receipt-import-modal" style="display:none;"><div class="modal email-import-modal" role="dialog" aria-modal="true">
-  <div class="modal-title" role="dialog" aria-modal="true" style="display:flex;justify-content:space-between;align-items:center;">
-    <div style="display:flex;align-items:center;gap:10px;">
+  <div class="modal-title email-import-header" role="dialog" aria-modal="true">
+    <div class="email-import-heading">
       <span class="modal-title-badge" aria-hidden="true">📧</span>
-      <div>
-        <span style="font-weight:700;letter-spacing:-0.01em;">Import Receipts from Email</span>
-        <span class="pill green email-connected-pill" id="email-account-pill" style="margin-left:8px;font-size:var(--text-2xs);vertical-align:middle;">● Gmail Connected</span>
+      <div class="email-import-heading-copy">
+        <span class="email-import-title">Import receipts from email</span>
+        <span class="email-import-subtitle">Find the proof, check the details, file it once.</span>
       </div>
+      <span class="pill green email-connected-pill" id="email-account-pill">● Gmail Connected</span>
     </div>
-    <button type="button" class="btn tx modal-close-btn" onclick="closeEmailReceiptImportModal()" aria-label="Close dialog" title="Close (Esc)">✕</button>
+    <div class="email-import-header-actions">
+      <span class="email-import-step-label">Step 1 of 2 · Find receipts</span>
+      <button type="button" class="btn tx modal-close-btn" onclick="closeEmailReceiptImportModal()" aria-label="Close dialog" title="Close (Esc)">✕</button>
+    </div>
   </div>
   
   <!-- Sub-Tabs: Apple/Linear-style Segmented Control -->
-  <div class="modal-tabs segmented-control" role="tablist" style="margin-top:14px;margin-bottom:14px;">
+  <div class="modal-tabs segmented-control" role="tablist">
     <button type="button" class="modal-tab-btn active" id="email-tab-gmail" onclick="switchEmailImportTab('gmail')" role="tab" aria-selected="true">
       <span class="tab-icon">📬</span> Gmail Finder
     </button>
@@ -2538,6 +2542,7 @@
     <button class="settings-sub-tab" id="btn-tctab-receipts" role="tab" aria-selected="false" aria-controls="tc-sec-receipts" tabindex="-1" onclick="switchTaxCenterSubTab('receipts')">🗂️ Receipts Vault</button>
     <button class="settings-sub-tab" id="btn-tctab-deductions" role="tab" aria-selected="false" aria-controls="tc-sec-deductions" tabindex="-1" onclick="switchTaxCenterSubTab('deductions')">🔎 Missing Costs</button>
     <button class="settings-sub-tab" id="btn-tctab-integrations" role="tab" aria-selected="false" aria-controls="tc-sec-integrations" tabindex="-1" onclick="switchTaxCenterSubTab('integrations')">🔌 Integrations &amp; APIs</button>
+    <button class="settings-sub-tab tc-email-import-tab" id="btn-tctab-email-import" role="tab" aria-selected="false" aria-controls="tc-sec-email-import" tabindex="-1" onclick="switchTaxCenterSubTab('email-import')">📧 Email Receipt Import<span id="email-inbox-badge" class="tc-email-import-badge" style="display:none;"></span></button>
   </div>
 
   <!-- 1. EXPENSES & LEDGER SECTION -->
@@ -2680,7 +2685,6 @@
       <button class="btn gold" style="width:100%;height:48px;font-size:15px;font-weight:600;letter-spacing:.02em;" onclick="submitTaxExpense()" id="tc-submit-exp-btn">Log Business Expense</button>
       <div style="margin-top:8px;text-align:center;display:flex;gap:6px;justify-content:center;flex-wrap:wrap;">
         <button class="btn tx" style="font-size:12px;padding:4px 12px;color:var(--text3);" onclick="openBatchExpenseModal('business')" title="Drop in a whole pile of receipts, scan them together and log them in one pass">🧾 Log several at once</button>
-        <button class="btn tx" style="font-size:12px;padding:4px 12px;color:var(--text3);" onclick="openEmailReceiptImportModal()" title="Import expenses from forwarded receipt emails">📧 Import from Email instead<span id="email-inbox-badge" style="display:none;background:#c79a3a;color:#1a1206;border-radius:var(--r);padding:0 6px;font-size:10px;font-weight:700;margin-left:6px;vertical-align:middle;"></span></button>
       </div>
     </div>
   </div>
@@ -2870,6 +2874,23 @@
       </div>
     </div>
   </div> <!-- /#tc-sec-receipts -->
+
+  <!-- EMAIL RECEIPT IMPORT SECTION -->
+  <div id="tc-sec-email-import" class="tc-section settings-section" role="tabpanel" aria-labelledby="btn-tctab-email-import" style="display:none;">
+    <section class="tc-email-import-hero" aria-labelledby="tc-email-import-title">
+      <div class="tc-email-import-hero-copy">
+        <span class="tc-email-import-kicker">Receipt inbox</span>
+        <h2 id="tc-email-import-title">Turn forwarded receipts into clean expenses.</h2>
+        <p>Search your connected Gmail or paste a receipt directly. Review the extracted details before anything reaches the Tax Centre ledger.</p>
+        <div class="tc-email-import-trust"><span class="tc-email-import-trust-dot"></span>Read-only Gmail access · You approve every import</div>
+      </div>
+      <div class="tc-email-import-hero-action">
+        <div class="tc-email-import-icon" aria-hidden="true">✉</div>
+        <button class="btn gold tc-email-import-launch" type="button" onclick="openEmailReceiptImportModal()">Open email importer <span aria-hidden="true">↗</span></button>
+        <span class="tc-email-import-hint">Find, review, then file</span>
+      </div>
+    </section>
+  </div> <!-- /#tc-sec-email-import -->
 
   <!-- 3. INTEGRATIONS & APIS SECTION -->
   <!-- MISSING COSTS — costs the business had with no record of them.
