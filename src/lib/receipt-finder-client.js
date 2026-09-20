@@ -124,6 +124,7 @@ const AI_FAILURES = {
     blocksScan: true,
     400: 'The AI service rejected the request. This usually means GEMINI_API_KEY in your Google Sheet script is not a Gemini API key — a key for the Generative Language API starts with “AIza”.',
     401: 'Google would not accept the AI key saved in your Google Sheet script. Replace GEMINI_API_KEY in its Script Properties with a Gemini API key from Google AI Studio (it starts with “AIza”).',
+    402: 'The Gemini key in your Google Sheet script has run out of prepaid credit. Waiting will not fix it. Either: (a) create a free new key at aistudio.google.com in a fresh project and update GEMINI_API_KEY in your Script Properties, or (b) add a Gemini or OpenRouter key directly in the Tax Centre settings — the app will use that key instead.',
     403: 'Google refused the AI key saved in your Google Sheet script. Either the key is restricted, or the Generative Language API is not enabled on the project that issued it.',
   },
   quota: {

@@ -719,6 +719,18 @@ async function runSetupCheck() {
         result = { level: 'error', headline: error.message, steps: ['Check that you are online and that the deployment is still active.'] };
       }
     }
+    // If the script's AI key is broken (402, 401, 403…) but the user has
+    // working in-app keys, report a warning rather than a hard failure —
+    // the app will use the in-app key automatically when scanning.
+    if (result.blocksScan && deps.hasAppAi?.()) {
+      serviceReadyFor = 'app-ai';
+      paintSetupCheck({ level: 'warn',
+        headline: 'Script AI key problem — scanning will use your in-app AI key instead.',
+        steps: [result.steps?.[0] || result.headline] });
+      announce('Script AI key has a problem, but your in-app AI key will be used for scanning.');
+      await dropFailuresFromOtherService(endpoint);
+      return;
+    }
     paintSetupCheck(result);
     if (result.level === 'ready') { serviceReadyFor = endpoint; await dropFailuresFromOtherService(endpoint); }
     announce(result.level === 'ready' ? 'Receipt service is set up and ready to scan.' : `Receipt service is not ready yet. ${result.headline}`);
@@ -761,7 +773,7 @@ async function ensureServiceReady() {
     return '';
   }
   if (!endpoint) throw new Error('Connect your Google Sheet first — the finder reads receipts through that same script.');
-  if (serviceReadyFor === endpoint) return endpoint;
+  if (serviceReadyFor === endpoint || serviceReadyFor === 'app-ai') return endpoint;
   announce('Checking your receipt reading service…');
   let result = await checkReceiptFinderService({ endpoint });
   // Prove the key before spending a single Gmail read on it. Checking only that
@@ -770,6 +782,20 @@ async function ensureServiceReady() {
   // then cached for the rest of the session by serviceReadyFor.
   if (result.level === 'ready' && result.report?.capabilities?.receiptSelfTest) {
     result = describeAiTest(await testReceiptAiService({ endpoint, idToken: await deps.user().getIdToken() }));
+  }
+  // If the script's AI key is blocking (e.g. 402 depleted credits, 401 bad key)
+  // but the user has working in-app AI keys, silently fall back to those rather
+  // than throwing. The script is still used for email fetching; only the AI
+  // extraction step moves client-side.
+  if (result.blocksScan && deps.hasAppAi?.()) {
+    serviceReadyFor = 'app-ai';
+    paintSetupCheck({ level: 'warn',
+      headline: 'Script AI key problem — using your in-app AI key instead.',
+      steps: [result.steps?.[0] || result.headline] });
+    render();
+    await dropFailuresFromOtherService(endpoint);
+    await loadDailySweep(endpoint, result.report);
+    return endpoint;
   }
   paintSetupCheck(result);
   render();
