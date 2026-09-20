@@ -91,7 +91,11 @@ function renderConnection() {
     pill.className = `pill ${tokenLive() ? 'green' : 'gray'} email-connected-pill`;
   }
   const button = host?.querySelector('[data-action="connect"]');
-  if (button) { button.textContent = connectionLabel(); button.disabled = busy; }
+  if (button) {
+    button.textContent = connectionLabel();
+    button.disabled = busy;
+    button.className = tokenLive() ? 'btn sm ink finder-conn-btn' : 'btn sm gold finder-conn-btn';
+  }
   const note = host?.querySelector('[data-conn-note]');
   if (note) {
     note.textContent = tokenLive()
@@ -170,44 +174,47 @@ async function mountReceiptFinder(element, dependencies) {
   host = element;
   host.removeEventListener('click', onClick);
   host.removeEventListener('change', onChange);
+  host.removeEventListener('keydown', onKeyDown);
   const from = new Date(); from.setDate(from.getDate() - 30);
   host.innerHTML = `
     <div class="finder-head">
       <div class="finder-head-text">
-        <h3 class="section-hed">Find the receipts. Keep the records.</h3>
-        <p>Scan Gmail, check the details, then file them into Business Expenses. Only the messages you scan are sent to your own Google script to be read.</p>
+        <h4 class="finder-subhead">Scan your mailbox for receipts and line items</h4>
+        <p class="finder-subcopy">Search Gmail, check extracted details, and file directly into Business Expenses. Read-only access.</p>
       </div>
       <div class="finder-conn">
         <span class="pill gray" data-conn-pill>○ Not connected</span>
-        <button type="button" class="btn gold" data-action="connect">Connect Gmail</button>
+        <button type="button" class="btn sm gold finder-conn-btn" data-action="connect">Connect Gmail</button>
       </div>
     </div>
     <p class="finder-conn-note" data-conn-note></p>
     <div class="finder-gate" data-finder-gate hidden></div>
     <section class="finder-search" aria-label="Search your mailbox">
-      <div class="finder-presets" role="group" aria-label="Quick filters">
-        <button type="button" class="filter-chip" data-preset="7">🕒 Past 7 days</button>
-        <button type="button" class="filter-chip" data-preset="30">📅 Past 30 days</button>
-        <button type="button" class="filter-chip" data-preset="90">🗓️ Past 3 months</button>
-        <span class="finder-presets-sep" aria-hidden="true"></span>
-        <button type="button" class="filter-chip" data-toggle="attachments" aria-pressed="false">📎 With attachments</button>
-        <button type="button" class="filter-chip" data-toggle="invoices" aria-pressed="false">🧾 Invoices &amp; bills</button>
-        <button type="button" class="filter-chip" data-toggle="shipping" aria-pressed="false">📦 Shipping costs</button>
-      </div>
       <div class="finder-filters">
         <div class="form-group finder-query"><label for="finder-query">Keywords or Gmail search</label>
           <input type="search" id="finder-query" placeholder="Invoices, receipts, orders…"></div>
-        <div class="form-group"><label for="finder-sender">Sender / vendor email</label>
+        <div class="form-group finder-sender"><label for="finder-sender">Sender / vendor email</label>
           <input type="text" id="finder-sender" inputmode="email" placeholder="supplier@example.com"></div>
-        <div class="form-group"><label for="finder-from">From date</label>
+        <div class="form-group finder-date-from"><label for="finder-from">From date</label>
           <input type="date" id="finder-from" value="${from.toISOString().slice(0, 10)}"></div>
-        <div class="form-group"><label for="finder-to">Through date</label>
+        <div class="form-group finder-date-to"><label for="finder-to">Through date</label>
           <input type="date" id="finder-to"></div>
       </div>
-      <div class="finder-run">
-        <button type="button" class="btn gold lg" data-action="scan">Find invoices &amp; receipts</button>
-        <button type="button" class="btn" data-action="cancel" hidden>Stop scan</button>
-        <span class="finder-run-hint">Reads up to 25 messages at a time.</span>
+      <div class="finder-search-tools">
+        <div class="finder-presets" role="group" aria-label="Quick filters">
+          <button type="button" class="filter-chip" data-preset="7">🕒 Past 7 days</button>
+          <button type="button" class="filter-chip" data-preset="30">📅 Past 30 days</button>
+          <button type="button" class="filter-chip" data-preset="90">🗓️ Past 3 months</button>
+          <span class="finder-presets-sep" aria-hidden="true"></span>
+          <button type="button" class="filter-chip" data-toggle="attachments" aria-pressed="false">📎 With attachments</button>
+          <button type="button" class="filter-chip" data-toggle="invoices" aria-pressed="false">🧾 Invoices &amp; bills</button>
+          <button type="button" class="filter-chip" data-toggle="shipping" aria-pressed="false">📦 Shipping costs</button>
+        </div>
+        <div class="finder-run">
+          <button type="button" class="btn gold lg" data-action="scan">Find invoices &amp; receipts</button>
+          <button type="button" class="btn" data-action="cancel" hidden>Stop scan</button>
+          <span class="finder-run-hint">Reads up to 25 messages at a time.</span>
+        </div>
       </div>
       <div class="finder-auto">
         <label class="finder-select"><input type="checkbox" data-daily-toggle> Find receipts automatically, every morning</label>
@@ -248,6 +255,7 @@ async function mountReceiptFinder(element, dependencies) {
     </div>`;
   host.addEventListener('click', onClick);
   host.addEventListener('change', onChange);
+  host.addEventListener('keydown', onKeyDown);
   host.querySelector('[data-result-search]').addEventListener('input', event => {
     resultQuery = event.target.value.toLowerCase(); render();
   });
@@ -386,7 +394,7 @@ function render() {
       ['ready', '✓', 'Ready to import', 'Checked and good to file', true],
       ['review', '👀', 'Needs your review', 'Missing or uncertain details', false],
       ['imported', '📁', 'Filed in expenses', 'Already in Business Expenses', false],
-    ].map(([key, icon, label, sub, lead]) => `<div class="finder-stat${lead ? ' is-lead' : ''} tone-${key}">
+    ].map(([key, icon, label, sub, lead]) => `<div class="finder-stat${lead ? ' is-lead' : ''} tone-${key}${filter === key ? ' is-active-filter' : ''}" data-status="${key}" role="button" tabindex="0" title="Filter by ${label}">
         <div class="finder-stat-icon" aria-hidden="true">${icon}</div>
         <div class="finder-stat-body"><span class="finder-stat-label">${label}</span>
           <strong class="finder-stat-val">${counts[key]}</strong>
@@ -518,7 +526,27 @@ function applyPreset(days) {
   host.querySelector('#finder-to').value = '';
 }
 
+async function onKeyDown(event) {
+  if (event.key === 'Enter' || event.key === ' ') {
+    const stat = event.target.closest('.finder-stat[data-status]');
+    if (stat) {
+      event.preventDefault();
+      filter = stat.dataset.status;
+      render();
+    }
+  }
+}
+
 async function onClick(event) {
+  const statCard = event.target.closest('.finder-stat[data-status]');
+  if (statCard) {
+    try {
+      if (!active()) throw new Error('Publisher access required');
+      filter = statCard.dataset.status;
+      render();
+      return;
+    } catch (error) { report(error); return; }
+  }
   const button = event.target.closest('button');
   if (!button) return;
   try {
