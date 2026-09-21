@@ -6778,9 +6778,12 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   border:var(--stroke-hair) solid rgba(255, 255, 255, 0.08);
   border-radius: var(--r3);
   overflow: hidden;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  /* The inset hairline stays: it is the top highlight on a dark console, which
+     no elevation token carries. The blur that used to sit here did nothing at
+     all — this background is opaque, so there was never anything to see
+     through it, only a compositing layer to pay for. */
+  box-shadow: var(--elev-3), inset 0 1px 0 rgba(255, 255, 255, 0.06);
   margin-top: var(--space-3);
-  backdrop-filter: blur(16px);
 }
 .gas-code-header {
   background: var(--surface-inverse-raised);
@@ -7086,13 +7089,15 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 
 /* ── Accepted Payment Methods Config (AGENTS.md styled) ──────────────── */
 .payment-methods-card {
-  /* .82, not the original .65: at .65 this composited too light for the
-     gold3/on-inverse-2 text inside it to clear AA — see .pm-toggle-desc and
-     .payment-methods-title below. Verified against both the light page
-     (#f7f2e9) and the dark one (#14110d): comfortably dark in both. */
-  background: rgba(28, 25, 23, 0.82) !important;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  /* Opaque, where this used to be 82% over a blur. The translucency existed to
+     be dark enough for the gold3/on-inverse-2 text inside to clear AA (see
+     .pm-toggle-desc and .payment-methods-title below) — but it made that
+     depend on whatever sat behind the card, and on the cream page it was
+     lifting to about #44413D, a mid grey rather than ink.
+     --ink2 is the token the app's other permanently-dark cards already use, so
+     this now matches them; it reads darker than before on the light page, and
+     the text on it only gains contrast. */
+  background: var(--ink2) !important;
   border:var(--stroke-hair) solid rgba(255, 255, 255, 0.08) !important;
   box-shadow:var(--elev-2);
   transition: all 0.3s var(--ease-standard) !important;
@@ -14701,12 +14706,13 @@ button[onclick="refreshUmamiStats()"]:active {
   left: 0;
   right: 0;
   z-index: 99999 !important;
+  /* Opaque in both themes (#ffffff light, --card-bg dark), so the blur that
+     was here rendered nothing and cost a layer. */
   background: var(--card-bg, #ffffff);
   border:var(--stroke-hair) solid var(--border);
   border-radius: var(--r2);
   box-shadow:var(--elev-1);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+
   padding: 10px;
   max-height: 380px;
   display: flex;
