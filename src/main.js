@@ -3610,7 +3610,7 @@ function syncRoleUI() {
   // display value) in publisher view.
   const PUBLISHER_ONLY_IDS = [
     'todo-tab-btn', 'todo-sidebar-btn', 'reconcile-tab-btn', 'opencall-tab-btn',
-    'website-tab-btn', 'financials-tab-btn', 'global-taxcenter-btn', 'global-sheets-btn',
+    'website-tab-btn', 'global-taxcenter-btn', 'global-sheets-btn',
     'global-backups-btn', 'd-qr-btn', 'qrcodes-tab-btn', 'webanalytics-tab-btn',
     'sidebar-webanalytics-btn', 'shipping-tab-btn', 'bigcartel-tab-btn', 'sidebar-bigcartel-btn',
   ];
@@ -3634,7 +3634,6 @@ function syncRoleUI() {
 
   // When switching TO author view — redirect away from publisher-only tabs
   const publisherOnlyActive = $('tab-website')?.classList.contains('active')
-    || $('tab-financials')?.classList.contains('active')
     || $('tab-taxcenter')?.classList.contains('active')
     || $('tab-sheets')?.classList.contains('active')
     || $('tab-backups')?.classList.contains('active')
@@ -4058,12 +4057,12 @@ const SHELL_TAB_LABELS = {
   consignment: 'Consignment', history: 'History', expenses: 'Expenses',
   pos: 'Event POS', taxcenter: 'Tax Centre', reconcile: 'Payments', qrcodes: 'QR Codes',
   customers: 'Customers', opencall: 'Open Call', sheets: 'Sheets', backups: 'Backups',
-  financials: 'Financials', myqr: 'My QR Code', webanalytics: 'Web Analytics', shipping: 'Shipping',
+  myqr: 'My QR Code', webanalytics: 'Web Analytics', shipping: 'Shipping',
   bigcartel: 'Big Cartel', todo: 'To-do', intel: 'Intelligence'
 };
 export function switchTab(name) {
   // publisher-only tabs redirect authors to dashboard
-  if (isAuthor() && (name === 'website' || name === 'backups' || name === 'financials' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes' || name === 'reconcile' || name === 'customers' || name === 'opencall' || name === 'webanalytics' || name === 'shipping' || name === 'bigcartel' || name === 'todo' || name === 'intel')) name = 'dashboard';
+  if (isAuthor() && (name === 'website' || name === 'backups' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes' || name === 'reconcile' || name === 'customers' || name === 'opencall' || name === 'webanalytics' || name === 'shipping' || name === 'bigcartel' || name === 'todo' || name === 'intel')) name = 'dashboard';
   // publisher redirected away from author-only myqr tab
   if (!isAuthor() && name === 'myqr') name = 'dashboard';
 
@@ -4125,7 +4124,6 @@ export function switchTab(name) {
   if (name === 'opencall') renderOpenCall();
   if (name === 'reconcile') renderReconcile();
   if (name === 'customers') renderCustomers();
-  if (name === 'financials') renderFinancials();
   if (name === 'taxcenter') renderTaxCenter();
   if (name === 'sheets') { loadGasCode(); renderSheetsLog(); renderProfitSettings(); switchSettingsSubTab(activeSettingsSubTab); if (typeof updateSheetsTabUI === 'function') updateSheetsTabUI(); }
   if (name === 'qrcodes') renderAllQRCodes();
@@ -15974,51 +15972,6 @@ function filterArtistEarningsByYear(bookId, year) {
   return yearArtistEarned;
 }
 
-function renderFinancials() {
-  if (isAuthor()) return;
-  const yearStr = $('fin-year-selector').value;
-  const year = parseInt(yearStr);
-  const fin = calculateFinancials(year);
-  const cur = getBook().currency || '€';
-
-  $('fin-rev').textContent = fmt(fin.revenue, cur);
-  $('fin-cogs').textContent = fmt(fin.cogs, cur);
-  $('fin-exp').textContent = fmt(fin.opex + fin.shares, cur);
-
-  const totalExpCount = Object.values(fin.expCats).reduce((a, c) => a + c.count, 0);
-  let subText = `${totalExpCount} expense${totalExpCount !== 1 ? 's' : ''} logged`;
-  if (fin.missingReceiptsCount > 0) {
-    subText += ` · <span style="color:var(--red);font-weight:600;">${fin.missingReceiptsCount} missing receipt${fin.missingReceiptsCount !== 1 ? 's' : ''}</span>`;
-  }
-  $('fin-exp-sub').innerHTML = subText;
-  $('fin-profit').textContent = fmt(fin.profit, cur);
-
-  const expBody = $('fin-exp-body');
-  if (expBody) {
-    const sortedCats = Object.entries(fin.expCats).sort((a, b) => b[1].total - a[1].total);
-    expBody.innerHTML = sortedCats.map(([cat, val]) => `
-      <tr>
-        <td style="font-weight:600; display:flex; align-items:center;">${cat} ${val.missingReceipts ? `<span class="pill red" style="margin-left:8px;">${val.missingReceipts} missing</span>` : ''}</td>
-        <td class="r">${val.count} txn</td>
-        <td class="r" style="font-weight:700; color:var(--red);">${fmt(val.total, cur)}</td>
-      </tr>
-    `).join('') || '<tr><td colspan="3"><div class="empty-state">No expenses for this period.</div></td></tr>';
-  }
-
-  const booksBody = $('fin-books-body');
-  if (booksBody) {
-    booksBody.innerHTML = fin.bookStats.map(bs => `
-      <tr>
-        <td style="font-weight:600;">${escapeHtml(bs.title)}</td>
-        <td class="r">${bs.units}</td>
-        <td class="r">${fmt(bs.revenue, cur)}</td>
-        <td class="r">${fmt(bs.unitCost, cur)}</td>
-        <td class="r">${fmt(bs.cogs, cur)}</td>
-        <td class="r" style="font-weight:700; color:${bs.net > 0 ? 'var(--green)' : 'var(--text)'};">${fmt(bs.net, cur)}</td>
-      </tr>
-    `).join('') || '<tr><td colspan="6"><div class="empty-state">No data available.</div></td></tr>';
-  }
-}
 
 // ── GOOGLE AUTHENTICATION
 window.tryGoogleLogin = async function () {
@@ -16063,9 +16016,8 @@ function showApp(role, bookId) {
     style.textContent = '#sheets-open-link{display:none!important;}#side-sheets-open{display:none!important;}#open-sheet-link{display:none!important;}#d-breakeven-kpi{display:none!important;}#d-breakeven-block{display:none!important;}#d-reimburse-sect{display:none!important;}#d-expenses-sect{display:none!important;}#d-expenses-kpi{display:none!important;}#d-reimburse-kpi{display:none!important;}#danger-zone-sect{display:none!important;}#danger-zone-block{display:none!important;}#import-btn{display:none!important;}#tab-all-overview{display:none!important;}#backups-tab-btn{display:none!important;}#exp-ai-btn{display:none!important;}';
     document.head.appendChild(style);
   } else {
-    // Publisher — show import button and financials tab
+    // Publisher — show the import button
     const importBtn = $('import-btn'); if (importBtn) importBtn.style.display = '';
-    const finBtn = $('financials-tab-btn'); if (finBtn) finBtn.style.display = '';
     const websiteTabBtn = $('website-tab-btn'); if (websiteTabBtn) websiteTabBtn.style.display = '';
     const backupsBtn = $('backups-tab-btn'); if (backupsBtn) backupsBtn.style.display = '';
   }
@@ -24021,7 +23973,7 @@ Object.assign(window, {
   saveArtistPaymentLink, markArtistTransferReceived, settleArtistTransferKeepShare, settleArtistTransferKeepAll, markExpenseReceived,
   submitExpense, voidExpense, toggleExpenseReceiptFilter, toggleExpenseReimburseSelect, requestBulkReimbursement, markPaid, markHistoryConsignmentPaid, removeStore, addProfitTier, removeProfitTier,
   saveProfitTiers, renderProfitSettings, updateProfitTierField, renderProfitTierList,
-  renderFinancials, downloadTaxReport, createSystemBackupNow, restoreSystemBackup, restoreBookFromBackup, applyBookRestore, gotoSysBackupPage, handleBackupImportFile, handleBookRestoreImportFile,
+  downloadTaxReport, createSystemBackupNow, restoreSystemBackup, restoreBookFromBackup, applyBookRestore, gotoSysBackupPage, handleBackupImportFile, handleBookRestoreImportFile,
   chooseBackupFolder, exportToJSON, exportAllToCSV,
   submitTaxExpense, importShippoShippingFromApi, openShippoLabel, removeRecurring, downloadTaxLedgerCSV, renderTaxCenter,
   openRecurringEditor, saveRecurringEditor, updateRecurringPreview, toggleRecurringPause,
@@ -24833,7 +24785,7 @@ function exposeLegacyInlineHandlers() {
     switchSettingsSubTab, renderProfitSettings, psSimulateSplit, renderProfitTierList,
     psApplyTemplate, psRenderSummary, addProfitTier, removeProfitTier, updateProfitTierField,
     saveProfitTiers, calculateArtistEarnings, calculateFinancials, filterArtistEarningsByYear,
-    renderFinancials, downloadTaxReport, logout, showApp, boot, changeExpenseCategory,
+    downloadTaxReport, logout, showApp, boot, changeExpenseCategory,
     _tcSaveLedgerPrefs, _tcRestoreLedgerPrefs, setTcLedgerPage, tcLedgerSearchInput,
     tcLedgerTypeFilter, tcYearChange, tcLedgerYearChange, tcClearLedgerFilters,
     _tcApplyLedgerFilter, renderTaxCenter, _tcSvgEsc, _tcDeltaChip, _tcRenderCashFlowSummary,
