@@ -98,6 +98,9 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-09-17 | visual | Printed invoice | Redesigned the invoice sheet to match the new look, and kept it deliberately fixed so it prints the same whatever theme you are using | #853 |
 | 2026-09-21 | visual | Whole app — leftovers from the repaint | Swept the values the repaint missed: shadows that were still soft, and colours still keyed to the previous palette. Hover effects on the book cards now show up in night mode for the first time | #861 |
 | 2026-09-21 | visual | Shipping — manual link dialog, sending overlay, updating screen | Three windows had been built their own way and missed the repaint. The updating screen was still glowing in the old brand gold | #861 |
+| 2026-09-21 | visual | Whole app — each screen's own pieces | Flattened the last faded panels, including two table headers, and squared the register's rounded corners so it matches everything else | #862 |
+| 2026-09-21 | fix | Add-a-store banner, consignment balances popup, shipping rate rows | Three things were quietly not working: the "store connected" banner had no background at all, the balances popup opened with nothing dimmed behind it, and hovering a shipping rate highlighted nothing | #862 |
+| 2026-09-21 | perf | Shipping label window, sending overlay | Removed a blur effect that was redrawing the whole screen on every keystroke while you filled in a shipping label | #862 |
 
 ---
 

@@ -21,22 +21,38 @@ Waves 0 and 1 are **done and merged to `main`**. Everything since sits on this b
 | — Printed invoice | Full Riso redesign of the invoice sheet | ✅ merged (PR #853) |
 | 3 — shape/motion/type/colour sweeps | radii, borders, shadows, fonts, easing, font-size, inline colours → tokens | ✅ merged (PR #854) |
 | — residue sweeps | old-ink `rgba()`, blurred shadows, markup font sizes, retired brand colours, the three bespoke dialogs | ✅ **on this branch** (PR #861) |
-| 2 — per-screen passes | The seven screen streams (A–G) | ❌ **not started** |
+| 2 — per-screen passes | Each screen's own components: gradients flattened, the register squared, panel glass removed | ✅ **on this branch** (PR #862) |
 | 4 — manual pass, log, dead tab | `ux-daily-log.md` ✅ · chart palette validated ✅ · **manual pass still outstanding** · dead `financials` tab deferred | ⚠️ mostly done |
 
 ### What is genuinely left
 
 1. **The manual pass** — all 21 tabs, light and dark, at three widths, triggering the states
    static review misses (empty, loading, toast, offline chip, failed-sync row). Nothing
-   automated substitutes for it.
-2. **The per-screen streams** (§4c), which are polish rather than repaint: the palette, shape,
-   type and elevation now reach every screen through tokens.
-3. **The dead `financials` tab**, deliberately deferred to its own change.
+   automated substitutes for it. **This is the only substantial item outstanding.**
+2. **The dead `financials` tab**, deliberately deferred to its own change.
+3. Three judgement calls left open on purpose, each noted where it lives: the Open Call
+   sidebar's glass (at 4.5% surface opacity the blur is doing nearly all the work, so
+   flattening it is a visible decision about that screen), the Open Call avatar's gloss, and
+   the two brand marks that keep a gradient (the header logo tile and the account avatar).
+
+### What the per-screen pass found, beyond styling
+
+Worth knowing, because none of it was visible to any sweep:
+
+- **Eleven `var()` references named tokens that do not exist.** A missing custom property makes
+  the whole declaration invalid, so those rules never applied: a success banner rendering
+  transparent with inherited text, a popover with no scrim, a dead hover state, and a radius
+  asking for `--shipping-pnl-r` when the family defines `--shipping-pnl-radius`.
+  `tests/no-undefined-tokens.test.js` now checks every reference resolves.
+- **A measured performance decision that lived only in a comment** — no full-viewport
+  `backdrop-filter` (55ms/frame and 79ms/keystroke when measured) — had been missed twice.
+  `tests/no-fullviewport-blur.test.js` enforces it now.
+- **Two blurs rendered nothing at all**, sitting behind fully opaque backgrounds.
 
 ### Gate status as of writing
 
 `npm run lint` ✅ · `check-tokens` ✅ · `check-contrast` ✅ (light: 1 accepted, dark: ok) ·
-`npx vitest run` ✅ 4261 tests · `npm run build` ✅
+`npx vitest run` ✅ 4268 tests · `npm run build` ✅
 
 ---
 
@@ -176,7 +192,7 @@ is where a redesign half-lands.
   dispatch, but `#tab-financials` does not exist and `renderFinancials()` would throw. ~9
   references. It deserves its own change, not a drive-by deletion inside a redesign PR.
 - Ratchet: after the sweeps, lower the limits with `node scripts/check-tokens.mjs --write-baseline`.
-  **Only ever to lower them.** Now: raw-hex 138 · raw-zindex 40 · raw-font-size 99 ·
+  **Only ever to lower them.** Now: raw-hex 131 · raw-zindex 40 · raw-font-size 99 ·
   raw-easing 0 · raw-shadow 6 (was 140 / 40 / 99 / 0 / 12).
 
 ---
