@@ -2702,7 +2702,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 
 .tc-email-import-tab{position:relative;}
 .tc-email-import-badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;margin-left:7px;padding:0 5px;border-radius:var(--r-pill);background:var(--amber-bg);color:var(--amber);font-family:var(--font-mono);font-size:var(--text-3xs);font-weight:700;vertical-align:middle;}
-.tc-email-import-hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(240px,320px);gap:var(--space-6);align-items:stretch;margin-bottom:var(--space-5);padding:clamp(24px,4vw,48px);border:var(--stroke) solid var(--rule-ink);border-radius:var(--r3);background:linear-gradient(135deg,var(--surface-raised),var(--surface-sunken));box-shadow:var(--elev-3);overflow:hidden;}
+.tc-email-import-hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(240px,320px);gap:var(--space-6);align-items:stretch;margin-bottom:var(--space-5);padding:clamp(24px,4vw,48px);border:var(--stroke) solid var(--rule-ink);border-radius:var(--r3);background:var(--surface-raised);box-shadow:var(--elev-3);overflow:hidden;}
 .tc-email-import-hero-copy{max-width:650px;}
 .tc-email-import-kicker{display:block;margin-bottom:var(--space-2);color:var(--gold-text);font-family:var(--font-mono);font-size:var(--text-3xs);font-weight:700;letter-spacing:.14em;text-transform:uppercase;}
 .tc-email-import-hero h2{max-width:13ch;margin:0;color:var(--content-primary);font-family:var(--font-display);font-size:clamp(2rem,5vw,4rem);line-height:.92;letter-spacing:.01em;text-wrap:balance;}
@@ -3793,9 +3793,9 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 
 /* GOOGLE SHEETS SETUP */
 .sheets-setup{background:var(--surface-card);border-radius:var(--r3);border:var(--stroke-hair) solid var(--border);padding:1.5rem;margin-bottom:1.5rem;box-shadow:var(--shadow);}
-.sheets-setup.connected{background:linear-gradient(135deg,#f0fdf6,#fff);border-color:rgba(42,99,72,.2);}
+.sheets-setup.connected{background:var(--status-positive-bg);border-color:var(--status-positive);}
 .sheets-log-tbl{width:100%;border-collapse:separate;border-spacing:0;background:var(--surface-card);border:var(--stroke-hair) solid var(--border);border-radius:var(--r);overflow:hidden;font-size:var(--text-sm);font-family:var(--font-mono);box-shadow:var(--elev-3);}
-.sheets-log-tbl th{text-align:left;padding:10px 12px;font-size:var(--text-3xs);font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);border-bottom:var(--stroke-hair) solid var(--border);background:linear-gradient(180deg,#fff,#faf8f4);} 
+.sheets-log-tbl th{text-align:left;padding:10px 12px;font-size:var(--text-3xs);font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);border-bottom:var(--stroke-hair) solid var(--border);background:var(--surface-sunken);} 
 .sheets-log-tbl td{padding:7px 12px;border-bottom:var(--stroke-hair) solid var(--border2);vertical-align:middle;}
 .sheets-log-tbl tr:last-child td{border-bottom:none;}
 .log-status{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px;}
@@ -5629,7 +5629,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 
 /* WEBSITE ORDERS EXPERIENCE */
 .web-orders-shell{display:flex;flex-direction:column;gap:1rem;}
-.web-orders-hero{position:relative;overflow:hidden;display:flex;align-items:flex-end;justify-content:space-between;gap:1.5rem;padding:1.55rem;border:var(--stroke-hair) solid rgba(16,15,13,.08);border-radius:var(--r);background:linear-gradient(135deg,#fffaf0 0%,#f3eadb 48%,#efe3d0 100%);box-shadow:var(--elev-4);}
+.web-orders-hero{position:relative;overflow:hidden;display:flex;align-items:flex-end;justify-content:space-between;gap:1.5rem;padding:1.55rem;border:var(--stroke-hair) solid rgba(16,15,13,.08);border-radius:var(--r);background:var(--cream2);box-shadow:var(--elev-4);}
 .web-orders-hero::before{content:'';position:absolute;right:-70px;top:-90px;width:260px;height:260px;border-radius:50%;background:radial-gradient(circle,rgba(232, 64, 42,.26),transparent 66%);pointer-events:none;}
 .web-orders-hero::after{content:'✉';position:absolute;right:2.2rem;bottom:.6rem;font-size:92px;line-height:1;color:rgba(232, 64, 42,.11);transform:rotate(-10deg);pointer-events:none;}
 .web-orders-copy{position:relative;max-width:680px;z-index:1;}
@@ -5715,11 +5715,11 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .sk-ord-actions{height:27px;width:150px;border-radius:var(--r2);margin-bottom:0;flex:0 0 auto;}
 
 .orders-list{min-height:230px;}
-.web-empty{display:flex;min-height:230px;flex-direction:column;align-items:center;justify-content:center;gap:.6rem;border:var(--stroke-hair) dashed rgba(232, 64, 42,.32);border-radius:var(--r);background:linear-gradient(180deg,rgba(255,255,255,.46),rgba(255,255,255,.18));}
+.web-empty{display:flex;min-height:230px;flex-direction:column;align-items:center;justify-content:center;gap:.6rem;border:var(--stroke-hair) dashed rgba(232, 64, 42,.32);border-radius:var(--r);background:var(--surface-sunken);}
 .web-empty .e-icon{width:54px;height:54px;display:flex;align-items:center;justify-content:center;margin:0;border-radius:var(--r);background:rgba(232, 64, 42,.12);opacity:1;font-size:27px;box-shadow:inset 0 0 0 1px rgba(232, 64, 42,.12);}
 .web-empty strong{font-family:var(--font-display);font-size:20px;font-weight:600;color:var(--text);}
 .web-empty span{max-width:440px;font-size:var(--text-base);line-height:1.55;color:var(--text3);}
-.web-empty.success{border-color:rgba(42,99,72,.24);background:linear-gradient(180deg,rgba(240,253,246,.82),rgba(255,255,255,.25));}
+.web-empty.success{border-color:var(--status-positive);background:var(--status-positive-bg);}
 .apply-all-cta{width:100%;justify-content:center;min-height:48px;margin-top:0;box-shadow:var(--elev-3);}
 .order-card{border-left-width:4px;border-radius:var(--r);padding:1rem 1.1rem;transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease;}
 .order-card:hover{transform:translateY(-2px);border-color:rgba(232, 64, 42,.25);box-shadow:var(--elev-4);}
@@ -5903,7 +5903,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 
 /* Table Styling & Hierarchy */
 .all-consignment-table{margin-bottom:0;box-shadow:var(--elev-1);border:var(--stroke-hair) solid var(--border2);border-radius:var(--r2);overflow:hidden;background:var(--surface-card);}
-.all-consignment-table .tbl thead{background:linear-gradient(90deg,var(--ink),var(--ink3));}
+.all-consignment-table .tbl thead{background:var(--surface-inverse);}
 .all-consignment-table .tbl th{padding-top:13px;padding-bottom:13px;color:rgba(255,255,255,.65);font-size:var(--text-3xs);letter-spacing:var(--tracking-label);}
 .all-consignment-table .tbl td{padding-top:13px;padding-bottom:13px;vertical-align:middle;}
 .all-consignment-table .tbl tbody tr{transition:background-color var(--dur-fast) var(--ease-standard);}
@@ -6080,7 +6080,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   background:rgba(255,255,255,.72);
   box-shadow:var(--elev-1);
 }
-.audience-stat.focus{background:linear-gradient(180deg,rgba(232, 64, 42,.14),rgba(255,255,255,.78));border-color:rgba(232, 64, 42,.22);}
+.audience-stat.focus{background:var(--gold-bg);border-color:var(--gold-line);}
 .audience-stat span{display:block;font-size:var(--text-3xs);font-weight:800;letter-spacing:.15em;text-transform:uppercase;color:var(--text3);margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .audience-stat strong{display:block;font-family:var(--font-mono);font-size:28px;font-weight:600;line-height:1;color:var(--gold2);}
 .audience-stat em{display:block;margin-top:8px;font-style:normal;font-size:var(--text-xs);line-height:1.35;color:var(--text3);}
@@ -7474,11 +7474,12 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .send-overlay {
   position: fixed;
   inset: 0;
-  /* The ink scrim the rest of the app's dialogs use, rather than flat black.
-     The blur stays: unlike a normal dialog this one means "the app is busy,
-     don't touch it", and softening what is behind it is how it says so. */
+  /* The ink scrim the rest of the app's dialogs use, rather than flat black,
+     and no blur. It did carry one, to say "the app is busy" — but a send
+     animates a progress state above this element, so a full-viewport
+     backdrop-filter re-rasterised the whole screen on every frame of the very
+     operation it was meant to report. See the note above .overlay. */
   background: radial-gradient(120% 90% at 50% 45%, rgba(16, 15, 13, .58), rgba(16, 15, 13, .78) 70%, rgba(9, 9, 8, .86));
-  backdrop-filter: blur(8px);
   display: grid;
   place-items: center;
   z-index: 9999;
@@ -11105,9 +11106,12 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .cp-label-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  /* The layered scrim, not a blur. A full-viewport backdrop-filter is
+     re-rasterised on every frame anything above it paints — measured on the
+     receipts dialog at 79ms per keystroke against 12ms without it (see the
+     note above .overlay). This dialog has a form in it, so it was paying that
+     on every character typed into a shipping label. */
+  background: radial-gradient(120% 90% at 50% 45%, rgba(16, 15, 13, .58), rgba(16, 15, 13, .78) 70%, rgba(9, 9, 8, .86));
   display: flex;
   align-items: center;
   justify-content: center;
