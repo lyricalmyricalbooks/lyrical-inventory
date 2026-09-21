@@ -6048,8 +6048,8 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   border:var(--stroke-hair) solid rgba(232, 64, 42,.22);
   border-radius:var(--r3);
   background:
-    radial-gradient(circle at 8% 0%, rgba(229,169,63,.22), transparent 34%),
-    linear-gradient(135deg, #fff 0%, rgba(247,242,233,.96) 100%);
+    radial-gradient(circle at 8% 0%, rgba(255,107,85,.22), transparent 34%),
+    linear-gradient(135deg, #fff 0%, rgba(250,246,236,.96) 100%);
   box-shadow:var(--elev-4);
 }
 .audience-summary-card::after{
@@ -6913,7 +6913,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   .pub-shell .snav{
     display:flex;align-items:center;gap:11px;width:100%;
     padding:9px 11px;border:none;border-radius:var(--r2);
-    background:transparent;color:rgba(247,242,233,.78);
+    background:transparent;color:rgba(250,246,236,.78);
     font-family:var(--font-ui);font-size:12.5px;font-weight:600;
     text-align:left;cursor:pointer;transition:background .15s,color .15s;
   }
@@ -7310,14 +7310,14 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   margin-top: 4px;
   display: inline-block;
   cursor: pointer;
-  background: rgba(229, 169, 63, 0.1);
+  background: rgba(255, 107, 85, 0.1);
   padding: 2px 8px;
   border-radius:var(--r);
-  border:var(--stroke-hair) dashed rgba(229, 169, 63, 0.3);
+  border:var(--stroke-hair) dashed rgba(255, 107, 85, 0.3);
   transition: all 0.2s;
 }
 .email-suggest-correction:hover {
-  background: rgba(229, 169, 63, 0.2);
+  background: rgba(255, 107, 85, 0.2);
   transform: translateY(-0.5px);
 }
 
@@ -7474,7 +7474,10 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .send-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  /* The ink scrim the rest of the app's dialogs use, rather than flat black.
+     The blur stays: unlike a normal dialog this one means "the app is busy,
+     don't touch it", and softening what is behind it is how it says so. */
+  background: radial-gradient(120% 90% at 50% 45%, rgba(16, 15, 13, .58), rgba(16, 15, 13, .78) 70%, rgba(9, 9, 8, .86));
   backdrop-filter: blur(8px);
   display: grid;
   place-items: center;
@@ -7632,7 +7635,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .oc-layout a[href^="mailto:"]:hover {
   color: var(--gold2);
   border-bottom-color: var(--gold2);
-  text-shadow: 0 0 1px rgba(229, 169, 63, 0.1);
+  text-shadow: 0 0 1px rgba(255, 107, 85, 0.1);
 }
 
 /* Premium Buttons within Open Call */
@@ -9227,7 +9230,6 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
    PUBLISHER UPDATE INDICATOR
    ========================================== */
 .pub-side-updated-container {
-  --update-accent: #c4a15a;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -9239,9 +9241,9 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   appearance: none;
   width: 100%;
   min-height: 44px;
-  border:var(--stroke-hair) solid rgba(196, 161, 90, 0.14);
+  border:var(--stroke-hair) solid rgba(232, 64, 42, 0.14);
   border-radius:var(--r);
-  background: linear-gradient(135deg, rgba(255,255,255,.035), rgba(196,161,90,.045));
+  background: linear-gradient(135deg, rgba(255,255,255,.035), rgba(232, 64, 42,.045));
   color: rgba(255, 255, 255, 0.48);
   cursor: pointer;
   font-family:var(--font-mono);
@@ -9256,8 +9258,8 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 
 .pub-shell .pub-side-updated:hover,
 .pub-shell .pub-side-updated:focus-visible {
-  border-color: rgba(196, 161, 90, 0.42);
-  background: linear-gradient(135deg, rgba(255,255,255,.075), rgba(196,161,90,.12));
+  border-color: rgba(232, 64, 42, 0.42);
+  background: linear-gradient(135deg, rgba(255,255,255,.075), rgba(232, 64, 42,.12));
   color: rgba(255, 255, 255, 0.86);
   box-shadow:var(--elev-1);
   outline: none;
@@ -10164,7 +10166,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 }
 .pwa-prompt:hover,
 .pwa-prompt:focus-visible {
-  border-color: rgba(196, 161, 90, .36);
+  border-color: rgba(232, 64, 42, .36);
   outline: none;
   transform: translateY(-2px) scale(1.01);
 }
@@ -10342,7 +10344,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   border-top:var(--stroke-hair) solid var(--border);
 }
 .shipping-prediction-card {
-  background: linear-gradient(135deg, rgba(232, 64, 42,.14), rgba(30,86,49,.08));
+  background: linear-gradient(135deg, rgba(232, 64, 42,.14), rgba(10,107,71,.08));
   border:var(--stroke-hair) solid var(--gold-line);
   border-radius: var(--r2);
   padding: 14px 16px;
@@ -10453,7 +10455,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   gap: 2px;
 }
 .zonos-metric-box.highlighted {
-  background: linear-gradient(135deg, rgba(232, 64, 42,.12), rgba(30,86,49,.1));
+  background: linear-gradient(135deg, rgba(232, 64, 42,.12), rgba(10,107,71,.1));
   border-color: var(--gold-line);
 }
 .zonos-metric-box label {
@@ -11965,7 +11967,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   opacity: 0;
   visibility: hidden;
   background:
-    radial-gradient(circle at 50% 38%, rgba(196, 161, 90, .18), transparent 34%),
+    radial-gradient(circle at 50% 38%, rgba(232, 64, 42, .18), transparent 34%),
     radial-gradient(circle at 18% 82%, rgba(167, 139, 250, .13), transparent 28%),
     linear-gradient(145deg, rgba(16, 15, 13, .98), rgba(26, 23, 20, .98));
   backdrop-filter: blur(18px);
@@ -11976,7 +11978,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   content: '';
   position: absolute;
   inset: -20%;
-  background: conic-gradient(from 180deg, transparent, rgba(196, 161, 90, .10), transparent, rgba(167, 139, 250, .08), transparent);
+  background: conic-gradient(from 180deg, transparent, rgba(232, 64, 42, .10), transparent, rgba(167, 139, 250, .08), transparent);
   animation: update-aurora 5s linear infinite;
 }
 
@@ -12007,7 +12009,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   font-size:var(--text-sm);
   letter-spacing: .18em;
   text-transform: uppercase;
-  text-shadow: 0 0 28px rgba(196, 161, 90, .38);
+  text-shadow: 0 0 28px rgba(232, 64, 42, .38);
 }
 
 .updating-screen-copy {
@@ -12021,11 +12023,11 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .updating-screen-orbit {
   width: 38px;
   height: 38px;
-  border:var(--stroke-hair) solid rgba(196, 161, 90, .18);
+  border:var(--stroke-hair) solid rgba(232, 64, 42, .18);
   border-top-color: var(--gold);
   border-right-color: rgba(167, 139, 250, .74);
   border-radius:var(--r-pill);
-  box-shadow: 0 0 24px rgba(196, 161, 90, .22), inset 0 0 18px rgba(167, 139, 250, .10);
+  box-shadow: 0 0 24px rgba(232, 64, 42, .22), inset 0 0 18px rgba(167, 139, 250, .10);
   animation: pwa-spin .9s linear infinite;
 }
 
@@ -12082,7 +12084,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   background: var(--oc-surface-strong) !important;
 }
 .oc-project-card::before {
-  background: radial-gradient(circle at top left, rgba(229, 169, 63, 0.22), transparent 58%);
+  background: radial-gradient(circle at top left, rgba(255, 107, 85, 0.22), transparent 58%);
 }
 .oc-hero {
   align-items: stretch;
@@ -12091,8 +12093,8 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   border:var(--stroke-hair) solid var(--oc-hairline);
   border-radius:var(--r);
   background:
-    radial-gradient(circle at 12% 12%, rgba(229, 169, 63, 0.22), transparent 32%),
-    linear-gradient(135deg, rgba(255,255,255,0.9), rgba(247,242,233,0.72));
+    radial-gradient(circle at 12% 12%, rgba(255, 107, 85, 0.22), transparent 32%),
+    linear-gradient(135deg, rgba(255,255,255,0.9), rgba(250,246,236,0.72));
   box-shadow: var(--oc-shadow-soft);
 }
 .oc-hero-text {
@@ -12185,7 +12187,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   font-size:var(--text-base);
 }
 .oc-status-strip {
-  background: rgba(247, 242, 233, 0.58);
+  background: rgba(250, 246, 236, 0.58);
   border:var(--stroke-hair) solid rgba(122, 85, 0, 0.1);
   border-radius:var(--r);
   padding: 18px;
@@ -12226,7 +12228,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .oc-step:focus-visible,
 .oc-add-photo-trigger:focus-visible,
 .oc-photo-pick:focus-visible {
-  outline: 3px solid rgba(229, 169, 63, 0.38);
+  outline: 3px solid rgba(255, 107, 85, 0.38);
   outline-offset: 2px;
 }
 .oc-editor-container,
@@ -12249,7 +12251,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 }
 .oc-empty-state {
   border-style: dashed !important;
-  background: radial-gradient(circle at center 16%, rgba(229, 169, 63, 0.15), transparent 32%), rgba(255,255,255,0.7) !important;
+  background: radial-gradient(circle at center 16%, rgba(255, 107, 85, 0.15), transparent 32%), rgba(255,255,255,0.7) !important;
 }
 .oc-empty-icon {
   font-size: 48px;
@@ -12335,7 +12337,11 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
    re-blur on every frame of the entrance. */
 .manual-link-backdrop {
   position: fixed; inset: 0;
-  background: radial-gradient(120% 90% at 50% 45%, rgba(10, 10, 12, .60), rgba(10, 10, 12, .80) 70%, rgba(6, 6, 8, .88));
+  /* The same scrim .overlay paints. This dialog is built in JS rather than
+     declared in index.html, so it never inherited the shared shell and kept a
+     bluish near-black of its own — visibly a different dialog from every other
+     one in the app, on the same screen as them. */
+  background: radial-gradient(120% 90% at 50% 45%, rgba(16, 15, 13, .58), rgba(16, 15, 13, .78) 70%, rgba(9, 9, 8, .86));
   z-index: 9000;
   display: flex; align-items: center; justify-content: center;
   animation: modalFadeIn 0.25s var(--ease-standard) forwards;
@@ -12347,13 +12353,16 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 }
 
 .manual-link-modal {
-  background: var(--card-bg, #fff);
-  border:var(--stroke-hair) solid color-mix(in srgb, var(--border) 60%, transparent);
-  border-radius:var(--r);
+  /* Matches .modal: the ink stroke, the squared corner and the hard offset.
+     --surface-page flips on its own, which is why .modal carries no dark
+     override and this no longer needs one either. */
+  background: var(--surface-page);
+  border:var(--stroke) solid var(--rule-ink);
+  border-radius:var(--r3);
   width: min(720px, 95vw);
   max-height: 85vh;
   display: flex; flex-direction: column;
-  box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.05) inset;
+  box-shadow: var(--elev-4);
   overflow: hidden;
   transform: scale(0.97) translateY(10px);
   animation: modalScaleUp 0.35s var(--ease-spring) forwards;
@@ -12361,12 +12370,6 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 
 @keyframes modalScaleUp {
   to { transform: scale(1) translateY(0); }
-}
-
-/* Legacy `.dark` hooks predate the theme layer; initTheme() puts `.theme-dark`
-   on <html>, so they are re-pointed rather than left as dead selectors. */
-.theme-dark .manual-link-modal {
-  background: var(--surface-card);
 }
 
 .manual-link-header {

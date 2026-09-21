@@ -5901,13 +5901,13 @@ function renderBreakEvenBlock(s, book, cur, cost, recognizedRev) {
       al.style.color = '#fb923c';
     } else {
       al.style.borderLeftColor = 'rgba(232,  64,  42, 0.5)';
-      al.style.background = 'rgba(200, 145, 58, 0.08)';
+      al.style.background = 'rgba(232, 64, 42, 0.08)';
       al.style.color = 'var(--gold2)';
     }
 
     const themeColor = be.isClose ? '#fb923c' : 'var(--gold3)';
-    const themeBg = be.isClose ? 'rgba(251, 146, 60, 0.12)' : 'rgba(200, 145, 58, 0.12)';
-    const themeBorder = be.isClose ? 'rgba(251, 146, 60, 0.25)' : 'rgba(200, 145, 58, 0.25)';
+    const themeBg = be.isClose ? 'rgba(251, 146, 60, 0.12)' : 'rgba(232, 64, 42, 0.12)';
+    const themeBorder = be.isClose ? 'rgba(251, 146, 60, 0.25)' : 'rgba(232, 64, 42, 0.25)';
 
     al.innerHTML = `
       <div style="display:flex; flex-direction:column; gap:8px; width:100%;">
@@ -15752,7 +15752,7 @@ function psRenderSummary(book, cur, productionCost) {
         <div class="preview-table-header">
           <span>Stage</span><span>Revenue</span><span>Artist</span>
         </div>
-        <div style="color:rgba(247,242,233,.85);">${tierRowsHtml || '<div style="font-size:var(--text-xs);color:rgba(255,255,255,.4);padding:6px 0;">Enter a revenue figure to preview the split.</div>'}</div>
+        <div style="color:rgba(250,246,236,.85);">${tierRowsHtml || '<div style="font-size:var(--text-xs);color:rgba(255,255,255,.4);padding:6px 0;">Enter a revenue figure to preview the split.</div>'}</div>
       </div>
     </div>`;
 
@@ -20233,7 +20233,7 @@ function renderStripeFeesCards(data, byYearCurAll) {
         const gross = _stripeMinorToMajor(salesAgg.gross, cur);
         const fee = _stripeMinorToMajor(salesAgg.fee, cur);
         const net = _stripeMinorToMajor(salesAgg.net, cur);
-        detailRows.push(`<tr style="background:rgba(200,145,58,.06);">
+        detailRows.push(`<tr style="background:rgba(232,64,42,.06);">
           <td><strong>Customer payments</strong><div style="font-size:var(--text-2xs);color:var(--text3);">charge · payment</div></td>
           <td class="r">${salesAgg.count}</td>
           <td class="r">${_stripeFmtMoney(gross, '')}</td>
