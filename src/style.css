@@ -2755,8 +2755,8 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   display: inline-flex;
   background: var(--surface-inset);
   padding: 3px;
-  border-radius:var(--r-pill);
-  border:var(--stroke-hair) solid var(--border-subtle);
+  border-radius:var(--r2);
+  border:var(--stroke) solid var(--rule-ink);
   gap: 2px;
 }
 
@@ -2770,7 +2770,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
   padding: var(--space-1) var(--space-4);
-  border-radius:var(--r-pill);
+  border-radius:var(--r2);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -2786,6 +2786,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   background: var(--surface-raised);
   color: var(--content-primary);
   box-shadow: var(--elev-1);
+  border:var(--stroke-hair) solid var(--rule-ink);
 }
 
 /* AI Assistant Callout Card */
@@ -5070,13 +5071,13 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   letter-spacing: .05em;
   padding: 8px 16px 10px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: color var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard);
 }
 .modal-tab-btn:hover {
   color: var(--text2);
 }
 .modal-tab-btn.active {
-  color: var(--gold);
+  color: var(--gold-text);
   border-bottom-color: var(--gold);
 }
 
@@ -9591,7 +9592,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   background: var(--surface-sunken);
   padding: 4px;
   border-radius: var(--r2);
-  border:var(--stroke-hair) solid var(--border-default);
+  border:var(--stroke) solid var(--rule-ink);
 }
 
 .book-modal-stepper .modal-tab-btn {
@@ -9619,7 +9620,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .book-modal-stepper .modal-tab-btn.active {
   background: var(--surface-raised) !important;
   color: var(--content-primary) !important;
-  border-color: var(--border-default) !important;
+  border-color: var(--rule-ink) !important;
   box-shadow: var(--elev-1) !important;
   font-weight: 700 !important;
 }
@@ -9627,7 +9628,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .book-modal-stepper .tab-step-num {
   width: 20px;
   height: 20px;
-  border-radius: 50%;
+  border-radius: var(--r);
   background: var(--surface-inset);
   color: var(--content-primary);
   display: inline-flex;
@@ -12712,13 +12713,13 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   padding: 8px 16px;
   cursor: pointer;
   border-bottom: 2px solid transparent;
-  transition: all 0.2s ease;
+  transition: color var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard);
 }
 .bc-sub-tab:hover {
   color: var(--text2);
 }
 .bc-sub-tab.active {
-  color: var(--gold);
+  color: var(--gold-text);
   border-bottom-color: var(--gold);
 }
 

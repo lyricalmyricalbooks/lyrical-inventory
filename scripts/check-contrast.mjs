@@ -238,6 +238,19 @@ const CLASS_TEXT_TOKENS = {
     base: 'var(--on-inverse)',
     modifiers: { gold: 'var(--gold3)', green: 'var(--emerald-soft)', danger: 'var(--rose-soft)' },
   },
+  // Tab strips. The sweep had no idea these existed, which is how the Big
+  // Cartel sub-tab shipped with its selected label on --gold — the FILL, at
+  // 3.74:1 against the page. The ink grade is 5.99:1 light and 9.66:1 dark.
+  // Both entries name the ACTIVE colour, since an unselected tab is muted
+  // secondary text that the generic pass already covers.
+  'bc-sub-tab': {
+    base: 'var(--text3)',
+    modifiers: { active: 'var(--gold-text)' },
+  },
+  'modal-tab-btn': {
+    base: 'var(--text3)',
+    modifiers: { active: 'var(--gold-text)' },
+  },
 };
 
 // className -> { modifierClass -> {background, color} }, for self-contained
