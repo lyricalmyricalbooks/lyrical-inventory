@@ -640,7 +640,7 @@ function renderBigCartelProducts(products, included = []) {
             hasStockTracking = true;
           }
           optionsListHtml += `
-            <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text2); margin-top:2px; font-family:var(--font-mono);">
+            <div style="display:flex; justify-content:space-between; font-size:var(--text-xs); color:var(--text2); margin-top:2px; font-family:var(--font-mono);">
               <span>${escapeHTML(opt.name || 'Default')}</span>
               <span>$${price} (Stock: ${quantity} | Sold: ${sold})</span>
             </div>
@@ -664,10 +664,10 @@ function renderBigCartelProducts(products, included = []) {
         </div>
         <div class="bc-price">$${price} CAD</div>
         <div style="border-top:var(--stroke-hair) dashed var(--border); padding-top:6px; margin-top:4px;">
-          <div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text3); margin-bottom:4px;">Pricing & Options</div>
+          <div style="font-size:var(--text-2xs); font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text3); margin-bottom:4px;">Pricing & Options</div>
           ${optionsListHtml}
         </div>
-        <div class="bc-meta-row" style="margin-top:10px; font-size:11px;">
+        <div class="bc-meta-row" style="margin-top:10px; font-size:var(--text-xs);">
           <span>Category: ${escapeHTML((attr.category_names && attr.category_names[0]) || 'Books')}</span>
           <span>Stock: ${hasStockTracking ? totalStock : '∞'}</span>
         </div>
@@ -1032,14 +1032,14 @@ function renderBigCartelOrders(orders, included = []) {
 
     const row = document.createElement('tr');
     row.innerHTML = `
-      <td style="font-family:var(--font-mono); font-size:11px;">#${escapeHTML(o.id)}</td>
+      <td style="font-family:var(--font-mono); font-size:var(--text-xs);">#${escapeHTML(o.id)}</td>
       <td>${dateStr}</td>
-      <td style="font-weight:600;"><a class="bc-customer-link" onclick="openBigCartelAddressPreview('${o.id}')" title="Click to view full shipping address">${escapeHTML(customer)}</a>${email ? `<br><span style="font-size:11px; color:var(--text3); font-weight:normal;">${escapeHTML(email)}</span>` : ''}</td>
-      <td style="font-size:12px; line-height:1.45;">${itemsHtml}</td>
+      <td style="font-weight:600;"><a class="bc-customer-link" onclick="openBigCartelAddressPreview('${o.id}')" title="Click to view full shipping address">${escapeHTML(customer)}</a>${email ? `<br><span style="font-size:var(--text-xs); color:var(--text3); font-weight:normal;">${escapeHTML(email)}</span>` : ''}</td>
+      <td style="font-size:var(--text-sm); line-height:1.45;">${itemsHtml}</td>
       <td class="r" style="font-family:var(--font-mono);">$${tax}</td>
       <td class="r" style="font-family:var(--font-mono);">$${shipping}</td>
       <td class="r" style="font-family:var(--font-mono); font-weight:700; color:var(--gold);">$${total}</td>
-      <td><span class="${statusPill}" style="font-size:10px; padding:3px 8px;">${attr.status || 'unknown'}</span></td>
+      <td><span class="${statusPill}" style="font-size:var(--text-2xs); padding:3px 8px;">${attr.status || 'unknown'}</span></td>
       <td class="r" style="white-space:nowrap;">
         <button class="btn sm" onclick="copyBigCartelOrderAddress('${o.id}')" title="Copy recipient shipping address to clipboard" style="margin-right:4px;">
           📋 Copy
@@ -1963,7 +1963,7 @@ function renderBigCartelLedgerGaps() {
       : `<div class="empty-state" style="padding:1.5rem;">
            <div class="e-icon">✓</div>
            Every Big Cartel order is recorded in your ledger.
-           <div style="font-size:11px;color:var(--text3);margin-top:6px;">Nothing to add. Run the check again after your next sale.</div>
+           <div style="font-size:var(--text-xs);color:var(--text3);margin-top:6px;">Nothing to add. Run the check again after your next sale.</div>
          </div>`;
   }
 
@@ -2004,8 +2004,8 @@ function gapRowHtml(gap) {
   // A book resolved from the price rather than the product name is a guess, and
   // a guess that moves stock has to say so before it is accepted.
   const guess = gap.confidence === 'price'
-    ? '<span class="pill amber" style="font-size:10px;">Book guessed from price — check it</span>'
-    : (gap.confidence === 'none' ? '<span class="pill red" style="font-size:10px;">Pick the book</span>' : '');
+    ? '<span class="pill amber" style="font-size:var(--text-2xs);">Book guessed from price — check it</span>'
+    : (gap.confidence === 'none' ? '<span class="pill red" style="font-size:var(--text-2xs);">Pick the book</span>' : '');
   // The dismiss is a corner ✕ rather than a labelled button, and it does not ask
   // for confirmation. Clearing a backlog of old sales the publisher already
   // entered by hand means pressing it dozens of times in a row; a dialog each

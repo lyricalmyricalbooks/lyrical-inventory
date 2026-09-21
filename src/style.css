@@ -899,7 +899,7 @@ tr.hist-row:hover {
 }
 
 .filter-segmented-pill:hover {
-  background: rgba(14, 12, 10, 0.04);
+  background: rgba(16, 15, 13, 0.04);
 }
 
 .filter-segmented-pill.active {
@@ -937,13 +937,13 @@ tr.hist-row:hover {
   font-family:var(--font-mono);
   font-weight: 600;
   border-radius:var(--r-pill);
-  background: rgba(14, 12, 10, 0.06);
+  background: rgba(16, 15, 13, 0.06);
   color: var(--text2);
   transition: all 0.25s var(--ease-standard);
 }
 
 .filter-segmented-pill:hover .filter-pill-badge {
-  background: rgba(14, 12, 10, 0.1);
+  background: rgba(16, 15, 13, 0.1);
 }
 
 .filter-segmented-pill.active .filter-pill-badge {
@@ -1700,7 +1700,7 @@ tr.hist-row:hover {
 }
 .book-strip:hover {
   border-color: var(--accent-color, var(--gold));
-  box-shadow: 0 10px 24px var(--accent-color-bg, rgba(14, 12, 10, 0.08)), 0 2px 4px rgba(14, 12, 10, 0.02);
+  box-shadow: var(--elev-hover);
   transform: translateY(-2px);
 }
 .book-strip::before {
@@ -1724,7 +1724,10 @@ tr.hist-row:hover {
   transform-style: preserve-3d;
   flex-shrink: 0;
   border-radius: 2px 4px 4px 2px;
-  box-shadow: 0 4px 12px var(--accent-color-bg, rgba(14, 12, 10, 0.15));
+  /* Deliberately blurred, unlike the rest of the app: this draws a physical
+     book at an angle, and a hard Riso offset would read as UI elevation on
+     what is meant to look like an object. token-ok */
+  box-shadow: 0 4px 12px var(--accent-color-bg, rgba(16, 15, 13, 0.15));
   transition: transform 0.3s var(--ease-standard), box-shadow 0.3s;
   transform: rotateY(-18deg) rotateX(3deg);
   background: var(--accent-color);
@@ -1732,7 +1735,7 @@ tr.hist-row:hover {
 }
 .book-strip:hover .book-cover-3d {
   transform: rotateY(-8deg) rotateX(1deg) scale(1.06);
-  box-shadow: 0 10px 20px var(--accent-color-bg, rgba(14, 12, 10, 0.25));
+  box-shadow: 0 10px 20px var(--accent-color-bg, rgba(16, 15, 13, 0.25));
 }
 .book-cover-spine {
   position: absolute;
@@ -1918,7 +1921,7 @@ tr.hist-row:hover {
 .book-strip .btn.gold.manage-btn:hover {
   transform: scale(1.03) translateY(-1px);
   filter: brightness(1.08) !important;
-  box-shadow: 0 6px 16px var(--accent-color-bg, rgba(14, 12, 10, 0.12)), 0 2px 4px rgba(14, 12, 10, 0.04) !important;
+  box-shadow: var(--elev-hover) !important;
 }
 
 .book-strip .btn.gold.manage-btn:active {
@@ -3866,7 +3869,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
    layer and a smaller radius were all measured, all unchanged). Depth is
    carried by a layered scrim instead: a flat wash plus a vignette that falls
    off toward the edges, which composites once and costs nothing per frame. */
-.overlay{position:fixed;inset:0;background:radial-gradient(120% 90% at 50% 45%,rgba(14,12,10,.58),rgba(14,12,10,.78) 70%,rgba(8,7,6,.86));display:flex;align-items:center;justify-content:center;z-index:200;animation:overlayIn 0.3s var(--ease-entrance);}
+.overlay{position:fixed;inset:0;background:radial-gradient(120% 90% at 50% 45%,rgba(16,15,13,.58),rgba(16,15,13,.78) 70%,rgba(9,9,8,.86));display:flex;align-items:center;justify-content:center;z-index:200;animation:overlayIn 0.3s var(--ease-entrance);}
 /* max-height/overflow used to be set ONLY inside the <=768px media query, so
    a modal whose content stacks tall on desktop (long forms, a rendered
    drafts table) had no scroll container at all — content below the fold was
@@ -5592,7 +5595,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .cf-chart-base{stroke:var(--border);stroke-width:1;}
 .cf-chart-axis{font-family:var(--font-mono);font-size:var(--text-xs);fill:var(--text3);}
 .cf-chart-bar{cursor:pointer;transition:opacity .15s ease,filter .15s ease;outline:none;}
-.cf-chart-bar:hover,.cf-chart-bar:focus{opacity:.82;filter:drop-shadow(0 2px 4px rgba(14,12,10,.18));}
+.cf-chart-bar:hover,.cf-chart-bar:focus{opacity:.82;filter:drop-shadow(0 2px 4px rgba(16,15,13,.18));}
 .cf-chart-bar:focus-visible{stroke:var(--gold);stroke-width:2;}
 .cf-chart-detail{margin-top:10px;}
 .cf-chart-hint{font-size:var(--text-sm);color:var(--text3);background:var(--cream);border:var(--stroke-hair) dashed var(--border);border-radius:var(--r2);padding:10px 12px;}
@@ -5626,7 +5629,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 
 /* WEBSITE ORDERS EXPERIENCE */
 .web-orders-shell{display:flex;flex-direction:column;gap:1rem;}
-.web-orders-hero{position:relative;overflow:hidden;display:flex;align-items:flex-end;justify-content:space-between;gap:1.5rem;padding:1.55rem;border:var(--stroke-hair) solid rgba(14,12,10,.08);border-radius:var(--r);background:linear-gradient(135deg,#fffaf0 0%,#f3eadb 48%,#efe3d0 100%);box-shadow:var(--elev-4);}
+.web-orders-hero{position:relative;overflow:hidden;display:flex;align-items:flex-end;justify-content:space-between;gap:1.5rem;padding:1.55rem;border:var(--stroke-hair) solid rgba(16,15,13,.08);border-radius:var(--r);background:linear-gradient(135deg,#fffaf0 0%,#f3eadb 48%,#efe3d0 100%);box-shadow:var(--elev-4);}
 .web-orders-hero::before{content:'';position:absolute;right:-70px;top:-90px;width:260px;height:260px;border-radius:50%;background:radial-gradient(circle,rgba(232, 64, 42,.26),transparent 66%);pointer-events:none;}
 .web-orders-hero::after{content:'✉';position:absolute;right:2.2rem;bottom:.6rem;font-size:92px;line-height:1;color:rgba(232, 64, 42,.11);transform:rotate(-10deg);pointer-events:none;}
 .web-orders-copy{position:relative;max-width:680px;z-index:1;}
@@ -5904,7 +5907,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .all-consignment-table .tbl th{padding-top:13px;padding-bottom:13px;color:rgba(255,255,255,.65);font-size:var(--text-3xs);letter-spacing:var(--tracking-label);}
 .all-consignment-table .tbl td{padding-top:13px;padding-bottom:13px;vertical-align:middle;}
 .all-consignment-table .tbl tbody tr{transition:background-color var(--dur-fast) var(--ease-standard);}
-.all-consignment-table .tbl tbody tr:nth-child(even){background:rgba(14,12,10,.015);}
+.all-consignment-table .tbl tbody tr:nth-child(even){background:rgba(16,15,13,.015);}
 .all-consignment-table .tbl tbody tr:hover{background:var(--gold-bg,rgba(212,168,74,.08));}
 .all-consignment-table .tbl tbody tr.is-active td:first-child{box-shadow:inset 3px 0 0 var(--gold2); /* token-ok */}
 .all-consignment-table .tbl tbody tr.is-settled td{color:var(--text2);}
@@ -5976,7 +5979,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 }
 
 /* Grouped Table Rows */
-.all-consignment-table .tbl tbody tr.con-group-row{cursor:pointer;background:var(--cream2,rgba(14,12,10,.03));border-top:var(--stroke-hair) solid var(--border2);border-bottom:var(--stroke-hair) solid var(--border2);}
+.all-consignment-table .tbl tbody tr.con-group-row{cursor:pointer;background:var(--cream2,rgba(16,15,13,.03));border-top:var(--stroke-hair) solid var(--border2);border-bottom:var(--stroke-hair) solid var(--border2);}
 .all-consignment-table .tbl tbody tr.con-group-row:hover{background:var(--gold-bg,rgba(212,168,74,.1));}
 .all-consignment-table .tbl tbody tr.con-group-row:focus-visible{outline:var(--focus-ring-width) solid var(--focus-ring-color);outline-offset:-2px;}
 .con-group-lead-cell{padding-top:14px !important;padding-bottom:14px !important;}
@@ -5996,8 +5999,8 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .con-group-jump-btn:hover{background:var(--gold-bg);border-color:var(--gold);}
 
 /* Nested store rows under group accordion */
-.all-consignment-table .tbl tbody tr.con-nested-row{background:rgba(14,12,10,.012);}
-.all-consignment-table .tbl tbody tr.con-nested-row:nth-child(even){background:rgba(14,12,10,.024);}
+.all-consignment-table .tbl tbody tr.con-nested-row{background:rgba(16,15,13,.012);}
+.all-consignment-table .tbl tbody tr.con-nested-row:nth-child(even){background:rgba(16,15,13,.024);}
 .con-nested-store-cell{position:relative;padding-left:32px !important;}
 .con-tree-guide{
   position:absolute;left:14px;top:50%;width:10px;height:10px;
@@ -6045,8 +6048,8 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   border:var(--stroke-hair) solid rgba(232, 64, 42,.22);
   border-radius:var(--r3);
   background:
-    radial-gradient(circle at 8% 0%, rgba(229,169,63,.22), transparent 34%),
-    linear-gradient(135deg, #fff 0%, rgba(247,242,233,.96) 100%);
+    radial-gradient(circle at 8% 0%, rgba(255,107,85,.22), transparent 34%),
+    linear-gradient(135deg, #fff 0%, rgba(250,246,236,.96) 100%);
   box-shadow:var(--elev-4);
 }
 .audience-summary-card::after{
@@ -6910,7 +6913,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   .pub-shell .snav{
     display:flex;align-items:center;gap:11px;width:100%;
     padding:9px 11px;border:none;border-radius:var(--r2);
-    background:transparent;color:rgba(247,242,233,.78);
+    background:transparent;color:rgba(250,246,236,.78);
     font-family:var(--font-ui);font-size:12.5px;font-weight:600;
     text-align:left;cursor:pointer;transition:background .15s,color .15s;
   }
@@ -7307,14 +7310,14 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   margin-top: 4px;
   display: inline-block;
   cursor: pointer;
-  background: rgba(229, 169, 63, 0.1);
+  background: rgba(255, 107, 85, 0.1);
   padding: 2px 8px;
   border-radius:var(--r);
-  border:var(--stroke-hair) dashed rgba(229, 169, 63, 0.3);
+  border:var(--stroke-hair) dashed rgba(255, 107, 85, 0.3);
   transition: all 0.2s;
 }
 .email-suggest-correction:hover {
-  background: rgba(229, 169, 63, 0.2);
+  background: rgba(255, 107, 85, 0.2);
   transform: translateY(-0.5px);
 }
 
@@ -7471,7 +7474,10 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .send-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  /* The ink scrim the rest of the app's dialogs use, rather than flat black.
+     The blur stays: unlike a normal dialog this one means "the app is busy,
+     don't touch it", and softening what is behind it is how it says so. */
+  background: radial-gradient(120% 90% at 50% 45%, rgba(16, 15, 13, .58), rgba(16, 15, 13, .78) 70%, rgba(9, 9, 8, .86));
   backdrop-filter: blur(8px);
   display: grid;
   place-items: center;
@@ -7584,7 +7590,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   width: 100%;
   outline: none;
   transition: all 0.2s var(--ease-standard);
-  box-shadow: inset 0 1px 2px rgba(14, 12, 10, 0.03);
+  box-shadow: inset 0 1px 2px rgba(16, 15, 13, 0.03);
 }
 
 .oc-layout input:hover,
@@ -7599,7 +7605,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .oc-layout textarea:focus {
   border-color: var(--gold);
   background: var(--surface-card);
-  box-shadow: 0 0 0 3px rgba(232,  64,  42, 0.18), inset 0 1px 2px rgba(14, 12, 10, 0.02);
+  box-shadow: 0 0 0 3px rgba(232,  64,  42, 0.18), inset 0 1px 2px rgba(16, 15, 13, 0.02);
 }
 
 /* Specific select dropdown arrow styling */
@@ -7629,7 +7635,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .oc-layout a[href^="mailto:"]:hover {
   color: var(--gold2);
   border-bottom-color: var(--gold2);
-  text-shadow: 0 0 1px rgba(229, 169, 63, 0.1);
+  text-shadow: 0 0 1px rgba(255, 107, 85, 0.1);
 }
 
 /* Premium Buttons within Open Call */
@@ -9029,7 +9035,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   font-family:var(--font-ui);
   background: var(--input-bg, #ffffff);
   color: var(--text, #0e0c0a);
-  border:var(--stroke-hair) solid var(--border, rgba(14,12,10,.15));
+  border:var(--stroke-hair) solid var(--border, rgba(16,15,13,.15));
   border-radius: 8px 8px 0 0; /* rounded top only, bottom is flush with toolbar */
   box-sizing: border-box;
   overflow-y: auto;
@@ -9224,7 +9230,6 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
    PUBLISHER UPDATE INDICATOR
    ========================================== */
 .pub-side-updated-container {
-  --update-accent: #c4a15a;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -9236,9 +9241,9 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   appearance: none;
   width: 100%;
   min-height: 44px;
-  border:var(--stroke-hair) solid rgba(196, 161, 90, 0.14);
+  border:var(--stroke-hair) solid rgba(232, 64, 42, 0.14);
   border-radius:var(--r);
-  background: linear-gradient(135deg, rgba(255,255,255,.035), rgba(196,161,90,.045));
+  background: linear-gradient(135deg, rgba(255,255,255,.035), rgba(232, 64, 42,.045));
   color: rgba(255, 255, 255, 0.48);
   cursor: pointer;
   font-family:var(--font-mono);
@@ -9253,8 +9258,8 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 
 .pub-shell .pub-side-updated:hover,
 .pub-shell .pub-side-updated:focus-visible {
-  border-color: rgba(196, 161, 90, 0.42);
-  background: linear-gradient(135deg, rgba(255,255,255,.075), rgba(196,161,90,.12));
+  border-color: rgba(232, 64, 42, 0.42);
+  background: linear-gradient(135deg, rgba(255,255,255,.075), rgba(232, 64, 42,.12));
   color: rgba(255, 255, 255, 0.86);
   box-shadow:var(--elev-1);
   outline: none;
@@ -9392,7 +9397,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .tab-panel .btn.gold:hover {
   transform: scale(1.03) translateY(-1px);
   filter: brightness(1.08) !important;
-  box-shadow: 0 6px 16px var(--book-accent-bg, rgba(14, 12, 10, 0.12)), 0 2px 4px rgba(14, 12, 10, 0.04) !important;
+  box-shadow: var(--elev-hover) !important;
   color: var(--book-accent-contrast, var(--ink)) !important;
 }
 
@@ -9462,7 +9467,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 }
 .tab-panel .kpi:hover {
   transform: translateY(-2px) !important;
-  box-shadow: 0 8px 24px var(--book-accent-bg, rgba(0, 0, 0, .2)) !important;
+  box-shadow: var(--elev-hover) !important;
 }
 
 .tab-panel .card {
@@ -9471,7 +9476,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .tab-panel .card:hover {
   border-color: var(--book-accent, var(--border)) !important;
   transform: translateY(-2px);
-  box-shadow: 0 10px 24px var(--book-accent-bg, rgba(14, 12, 10, 0.06)) !important;
+  box-shadow: var(--elev-hover) !important;
 }
 
 /* Real-time Accent Picker Preview style overrides inside modals */
@@ -9488,7 +9493,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 }
 .modal .btn.gold:hover {
   filter: brightness(1.08) !important;
-  box-shadow: 0 4px 12px var(--local-accent-bg) !important;
+  box-shadow: var(--elev-hover) !important;
   color: var(--local-accent-contrast) !important;
 }
 
@@ -10161,7 +10166,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 }
 .pwa-prompt:hover,
 .pwa-prompt:focus-visible {
-  border-color: rgba(196, 161, 90, .36);
+  border-color: rgba(232, 64, 42, .36);
   outline: none;
   transform: translateY(-2px) scale(1.01);
 }
@@ -10339,7 +10344,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   border-top:var(--stroke-hair) solid var(--border);
 }
 .shipping-prediction-card {
-  background: linear-gradient(135deg, rgba(232, 64, 42,.14), rgba(30,86,49,.08));
+  background: linear-gradient(135deg, rgba(232, 64, 42,.14), rgba(10,107,71,.08));
   border:var(--stroke-hair) solid var(--gold-line);
   border-radius: var(--r2);
   padding: 14px 16px;
@@ -10450,7 +10455,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   gap: 2px;
 }
 .zonos-metric-box.highlighted {
-  background: linear-gradient(135deg, rgba(232, 64, 42,.12), rgba(30,86,49,.1));
+  background: linear-gradient(135deg, rgba(232, 64, 42,.12), rgba(10,107,71,.1));
   border-color: var(--gold-line);
 }
 .zonos-metric-box label {
@@ -11962,9 +11967,9 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   opacity: 0;
   visibility: hidden;
   background:
-    radial-gradient(circle at 50% 38%, rgba(196, 161, 90, .18), transparent 34%),
+    radial-gradient(circle at 50% 38%, rgba(232, 64, 42, .18), transparent 34%),
     radial-gradient(circle at 18% 82%, rgba(167, 139, 250, .13), transparent 28%),
-    linear-gradient(145deg, rgba(14, 12, 10, .98), rgba(26, 23, 20, .98));
+    linear-gradient(145deg, rgba(16, 15, 13, .98), rgba(26, 23, 20, .98));
   backdrop-filter: blur(18px);
   transition: opacity .52s var(--ease-entrance), visibility .52s var(--ease-entrance);
 }
@@ -11973,7 +11978,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   content: '';
   position: absolute;
   inset: -20%;
-  background: conic-gradient(from 180deg, transparent, rgba(196, 161, 90, .10), transparent, rgba(167, 139, 250, .08), transparent);
+  background: conic-gradient(from 180deg, transparent, rgba(232, 64, 42, .10), transparent, rgba(167, 139, 250, .08), transparent);
   animation: update-aurora 5s linear infinite;
 }
 
@@ -12004,7 +12009,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   font-size:var(--text-sm);
   letter-spacing: .18em;
   text-transform: uppercase;
-  text-shadow: 0 0 28px rgba(196, 161, 90, .38);
+  text-shadow: 0 0 28px rgba(232, 64, 42, .38);
 }
 
 .updating-screen-copy {
@@ -12018,11 +12023,11 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .updating-screen-orbit {
   width: 38px;
   height: 38px;
-  border:var(--stroke-hair) solid rgba(196, 161, 90, .18);
+  border:var(--stroke-hair) solid rgba(232, 64, 42, .18);
   border-top-color: var(--gold);
   border-right-color: rgba(167, 139, 250, .74);
   border-radius:var(--r-pill);
-  box-shadow: 0 0 24px rgba(196, 161, 90, .22), inset 0 0 18px rgba(167, 139, 250, .10);
+  box-shadow: 0 0 24px rgba(232, 64, 42, .22), inset 0 0 18px rgba(167, 139, 250, .10);
   animation: pwa-spin .9s linear infinite;
 }
 
@@ -12079,7 +12084,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   background: var(--oc-surface-strong) !important;
 }
 .oc-project-card::before {
-  background: radial-gradient(circle at top left, rgba(229, 169, 63, 0.22), transparent 58%);
+  background: radial-gradient(circle at top left, rgba(255, 107, 85, 0.22), transparent 58%);
 }
 .oc-hero {
   align-items: stretch;
@@ -12088,8 +12093,8 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   border:var(--stroke-hair) solid var(--oc-hairline);
   border-radius:var(--r);
   background:
-    radial-gradient(circle at 12% 12%, rgba(229, 169, 63, 0.22), transparent 32%),
-    linear-gradient(135deg, rgba(255,255,255,0.9), rgba(247,242,233,0.72));
+    radial-gradient(circle at 12% 12%, rgba(255, 107, 85, 0.22), transparent 32%),
+    linear-gradient(135deg, rgba(255,255,255,0.9), rgba(250,246,236,0.72));
   box-shadow: var(--oc-shadow-soft);
 }
 .oc-hero-text {
@@ -12182,7 +12187,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   font-size:var(--text-base);
 }
 .oc-status-strip {
-  background: rgba(247, 242, 233, 0.58);
+  background: rgba(250, 246, 236, 0.58);
   border:var(--stroke-hair) solid rgba(122, 85, 0, 0.1);
   border-radius:var(--r);
   padding: 18px;
@@ -12223,7 +12228,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .oc-step:focus-visible,
 .oc-add-photo-trigger:focus-visible,
 .oc-photo-pick:focus-visible {
-  outline: 3px solid rgba(229, 169, 63, 0.38);
+  outline: 3px solid rgba(255, 107, 85, 0.38);
   outline-offset: 2px;
 }
 .oc-editor-container,
@@ -12246,7 +12251,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 }
 .oc-empty-state {
   border-style: dashed !important;
-  background: radial-gradient(circle at center 16%, rgba(229, 169, 63, 0.15), transparent 32%), rgba(255,255,255,0.7) !important;
+  background: radial-gradient(circle at center 16%, rgba(255, 107, 85, 0.15), transparent 32%), rgba(255,255,255,0.7) !important;
 }
 .oc-empty-icon {
   font-size: 48px;
@@ -12332,7 +12337,11 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
    re-blur on every frame of the entrance. */
 .manual-link-backdrop {
   position: fixed; inset: 0;
-  background: radial-gradient(120% 90% at 50% 45%, rgba(10, 10, 12, .60), rgba(10, 10, 12, .80) 70%, rgba(6, 6, 8, .88));
+  /* The same scrim .overlay paints. This dialog is built in JS rather than
+     declared in index.html, so it never inherited the shared shell and kept a
+     bluish near-black of its own — visibly a different dialog from every other
+     one in the app, on the same screen as them. */
+  background: radial-gradient(120% 90% at 50% 45%, rgba(16, 15, 13, .58), rgba(16, 15, 13, .78) 70%, rgba(9, 9, 8, .86));
   z-index: 9000;
   display: flex; align-items: center; justify-content: center;
   animation: modalFadeIn 0.25s var(--ease-standard) forwards;
@@ -12344,13 +12353,16 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 }
 
 .manual-link-modal {
-  background: var(--card-bg, #fff);
-  border:var(--stroke-hair) solid color-mix(in srgb, var(--border) 60%, transparent);
-  border-radius:var(--r);
+  /* Matches .modal: the ink stroke, the squared corner and the hard offset.
+     --surface-page flips on its own, which is why .modal carries no dark
+     override and this no longer needs one either. */
+  background: var(--surface-page);
+  border:var(--stroke) solid var(--rule-ink);
+  border-radius:var(--r3);
   width: min(720px, 95vw);
   max-height: 85vh;
   display: flex; flex-direction: column;
-  box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.05) inset;
+  box-shadow: var(--elev-4);
   overflow: hidden;
   transform: scale(0.97) translateY(10px);
   animation: modalScaleUp 0.35s var(--ease-spring) forwards;
@@ -12358,12 +12370,6 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 
 @keyframes modalScaleUp {
   to { transform: scale(1) translateY(0); }
-}
-
-/* Legacy `.dark` hooks predate the theme layer; initTheme() puts `.theme-dark`
-   on <html>, so they are re-pointed rather than left as dead selectors. */
-.theme-dark .manual-link-modal {
-  background: var(--surface-card);
 }
 
 .manual-link-header {
@@ -12447,7 +12453,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 }
 .manual-link-btn:hover {
   background: var(--gold); color: var(--on-accent);
-  box-shadow: 0 4px 10px color-mix(in srgb, var(--gold) 30%, transparent);
+  box-shadow: var(--elev-hover);
 }
 .theme-dark .manual-link-btn:hover {
   /* The gold fill is repeated from the base rule rather than inherited, so
@@ -12885,7 +12891,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 
 .tc-trip-option-count {
   background: var(--cream2, #efe9dc) !important;
-  border:var(--stroke-hair) solid rgba(14, 12, 10, 0.08) !important;
+  border:var(--stroke-hair) solid rgba(16, 15, 13, 0.08) !important;
   padding: 2px 7px;
   border-radius:var(--r);
   color: var(--text2) !important;
@@ -13173,16 +13179,16 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 
 .tc-trip-stat-card {
   background: var(--surface-card, #ffffff) !important;
-  border:var(--stroke-hair) solid var(--border, rgba(14, 12, 10, 0.09)) !important;
+  border:var(--stroke-hair) solid var(--border, rgba(16, 15, 13, 0.09)) !important;
   border-radius:var(--r);
   padding: 12px 16px;
-  box-shadow: var(--shadow, 0 2px 8px rgba(14, 12, 10, 0.06)) !important;
+  box-shadow: var(--shadow) !important;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .tc-trip-stat-card:hover {
   transform: translateY(-1px);
-  box-shadow: var(--shadow2, 0 6px 20px rgba(14, 12, 10, 0.1)) !important;
+  box-shadow: var(--shadow2) !important;
 }
 
 .tc-trip-stat-val {
@@ -13677,7 +13683,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   align-items: center;
   justify-content: space-between;
   padding-top: 12px;
-  border-top:var(--stroke-hair) solid var(--border2, rgba(14, 12, 10, 0.06)) !important;
+  border-top:var(--stroke-hair) solid var(--border2, rgba(16, 15, 13, 0.06)) !important;
   font-size:var(--text-sm);
   color: var(--text3, #665c54) !important;
 }
@@ -13715,7 +13721,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 
 .pos-card {
   background: var(--surface-card, #ffffff) !important;
-  border:var(--stroke-hair) solid var(--border, rgba(14, 12, 10, 0.09)) !important;
+  border:var(--stroke-hair) solid var(--border, rgba(16, 15, 13, 0.09)) !important;
   border-radius: 12px !important;
   padding: 1.2rem !important;
   display: flex !important;
@@ -15251,7 +15257,7 @@ button[onclick="refreshUmamiStats()"]:active {
   background: var(--surface-card);
   color: var(--text);
   border-color: var(--gold-line);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06), inset 0 0 0 1px var(--gold-line);
+  box-shadow: var(--elev-1), inset 0 0 0 1px var(--gold-line);
 }
 .pos-subtab-btn svg {
   flex: none;
@@ -15381,7 +15387,7 @@ button[onclick="refreshUmamiStats()"]:active {
   box-shadow:var(--elev-4);
 }
 .fk-pop:popover-open{display:flex;}
-.fk-pop::backdrop{background:rgba(14,12,10,.34);backdrop-filter:blur(3px) saturate(120%);}
+.fk-pop::backdrop{background:rgba(16,15,13,.34);backdrop-filter:blur(3px) saturate(120%);}
 .fk-pop-head{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);}
 .fk-pop-head .fk-eyebrow{margin-bottom:0;}
 .fk-pop-close{
