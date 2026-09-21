@@ -19,22 +19,24 @@ Waves 0 and 1 are **done and merged to `main`**. Everything since sits on this b
 | 0 — Foundation | Palette, both `:root` blocks merged, night mode rebuilt, fonts, 117 stale gold literals | ✅ merged (PR #850, #852) |
 | 1 — Component kit | `.btn` `.card` `.pill` `.kpi` `.modal` `.tbl-wrap` `.sec-head` `.snav` etc. onto the ink stroke + hard offsets | ✅ merged |
 | — Printed invoice | Full Riso redesign of the invoice sheet | ✅ merged (PR #853) |
-| 3 — shape/motion/type/colour sweeps | radii, borders, shadows, fonts, easing, font-size, inline colours → tokens | ⚠️ **partly done — this branch** |
+| 3 — shape/motion/type/colour sweeps | radii, borders, shadows, fonts, easing, font-size, inline colours → tokens | ✅ merged (PR #854) |
+| — residue sweeps | old-ink `rgba()`, blurred shadows, markup font sizes, retired brand colours, the three bespoke dialogs | ✅ **on this branch** (PR #861) |
 | 2 — per-screen passes | The seven screen streams (A–G) | ❌ **not started** |
-| 4 — manual pass, log, dead tab | Both themes × 3 widths, `ux-daily-log.md`, dead `financials` tab | ❌ **not started** |
+| 4 — manual pass, log, dead tab | `ux-daily-log.md` ✅ · chart palette validated ✅ · **manual pass still outstanding** · dead `financials` tab deferred | ⚠️ mostly done |
 
-**Unmerged commits on this branch (2, both green):**
+### What is genuinely left
 
-- `2a09ad7` Put motion and type on tokens so reduced-motion actually works
-- `4f9842c` Put inline colour values onto tokens so the theme reaches them
-
-There is a **third commit pending** (the invoice-document fix in §3) that was not yet made when
-this was written — check `git log` before assuming.
+1. **The manual pass** — all 21 tabs, light and dark, at three widths, triggering the states
+   static review misses (empty, loading, toast, offline chip, failed-sync row). Nothing
+   automated substitutes for it.
+2. **The per-screen streams** (§4c), which are polish rather than repaint: the palette, shape,
+   type and elevation now reach every screen through tokens.
+3. **The dead `financials` tab**, deliberately deferred to its own change.
 
 ### Gate status as of writing
 
 `npm run lint` ✅ · `check-tokens` ✅ · `check-contrast` ✅ (light: 1 accepted, dark: ok) ·
-`npx vitest run` ✅ 4247 tests · `npm run build` ✅
+`npx vitest run` ✅ 4261 tests · `npm run build` ✅
 
 ---
 
@@ -160,20 +162,40 @@ is where a redesign half-lands.
 ### 4d. Wave 4 — verification and cleanup
 
 - Manual pass: all 21 tabs + the all-books overview, light and dark, at desktop / tablet / phone.
-- `renderChannelAnalytics` draws to `<canvas>` — **invisible to the contrast sweep**, so its
-  colours must be checked by eye in both themes.
-- `docs/ux-daily-log.md` has **no entry for any of this yet** (0 mentions of the redesign).
+  **This is the one substantial item still outstanding** — everything below it is done.
+- ~~`renderChannelAnalytics` draws to `<canvas>`~~ — **this was wrong.** It builds ordinary
+  markup (`.ch-table` / `.ch-row` divs), touches no canvas, and is therefore swept like
+  everything else. The only canvases in the app handle receipt photos. Its palette was validated
+  rather than eyeballed: the Okabe-Ito set passes every check on the light page, and passes
+  CVD separation and contrast on dark while sitting outside the validator's preferred dark
+  lightness band — it is accessible in both, but has never been re-stepped for dark. Doing that
+  means a theme-aware palette in JS, which is a feature, not a sweep. `tests/channel-chart-palette.test.js`
+  pins the set and the direct labels that let three below-3:1 hues be legal at all.
+- ~~`docs/ux-daily-log.md` has no entry~~ — added.
 - The dead `financials` tab: it is in `SHELL_TAB_LABELS`, `PUBLISHER_ONLY_IDS` and the render
   dispatch, but `#tab-financials` does not exist and `renderFinancials()` would throw. ~9
   references. It deserves its own change, not a drive-by deletion inside a redesign PR.
 - Ratchet: after the sweeps, lower the limits with `node scripts/check-tokens.mjs --write-baseline`.
-  **Only ever to lower them.** Current: raw-hex 140 · raw-zindex 40 · raw-font-size 99 ·
-  raw-easing 0 · raw-shadow 12.
+  **Only ever to lower them.** Now: raw-hex 138 · raw-zindex 40 · raw-font-size 99 ·
+  raw-easing 0 · raw-shadow 6 (was 140 / 40 / 99 / 0 / 12).
 
 ---
 
 ## 5. Landmines — the things that have already caused a wasted cycle
 
+0. **A sweep only ever finds the shape it was written to match — and that has been the single
+   biggest source of missed work here, three times over.** The colour sweeps matched
+   `property:#hex`, so every `rgba()` spelling of a colour was invisible to all of them: the ink
+   (28 sites, including the scrim behind every dialog), then the whole retired brand palette
+   (49 more), then a gold declared local to a component rather than in `:root`. The shadow sweep
+   required a `px` on the first value, so `0 4px 12px` read as two-valued and was skipped — and
+   that same bug was then re-introduced in the grep used to scope the follow-up. The type sweep
+   only read `src/style.css`, leaving 709 sizes in the markup.
+   **Before trusting a sweep's count, check what its pattern cannot see.** A useful cross-check:
+   enumerate every distinct colour triplet in the stylesheets and compare it against the live
+   palette, rather than searching for the values you already suspect. Two gradients were found
+   carrying the new flare beside an old green in the same declaration, which no targeted search
+   would have surfaced.
 1. **Never reformat `src/style.css`.** Tests anchor on exact whitespace (`/^\.btn\{/m`) and one on
    a byte-exact minified rule. A formatter over that file breaks tests that have nothing to do
    with your change.
