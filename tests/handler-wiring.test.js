@@ -157,25 +157,10 @@ function definedNames(source) {
   return names;
 }
 
-// Handlers that are known to be dead right now. Everything here is a button or
-// field the user can reach that does nothing when used.
-//
-// The "Write-Off Stock" modal (index.html ~1486-1550) is fully built — book
-// picker, reason, quantity, computed value, notes — but src/main.js contains no
-// write-off code whatsoever, so all four of its handlers are missing. Wiring it
-// up is a product decision, not a mechanical fix: it has to be settled whether
-// a write-off deducts from stock, posts a history row, and books a tax-centre
-// expense at cost basis. Until that's decided the modal should either be
-// implemented or hidden — leaving it reachable and inert is the worst option.
-//
-// This list must stay exact: implementing one of these without removing it here
-// fails the test below, so the list can't quietly rot.
-const KNOWN_DEAD_HANDLERS = [
-  'onWriteOffBookChange',
-  'openInventoryWriteOffModal',
-  'recalcWriteOffValue',
-  'submitInventoryWriteOff',
-];
+// Keep this explicit so any temporarily accepted dead control remains visible
+// in review. Inventory adjustment handlers were removed from this list when
+// the Section 10 valuation and disposal workflows were implemented.
+const KNOWN_DEAD_HANDLERS = [];
 
 const exposed = exposedNames(mainJs);
 const defined = union(definedNames);

@@ -181,6 +181,19 @@ describe('computeCashFlowMetrics', () => {
     };
     expect(computeCashFlowMetrics(custom, '2025').operatingExpenses).toBe(0);
   });
+
+  it('excludes non-cash inventory valuation adjustments from cash expenses', () => {
+    const custom = {
+      books: {}, states: {}, fxRateCache,
+      taxCenter: {
+        businessExpenses: [
+          { date: '2025-12-31', baseAmount: 900, nonCash: true, affectsCashFlow: false },
+          { date: '2025-12-31', baseAmount: 25 },
+        ],
+      },
+    };
+    expect(computeCashFlowMetrics(custom, '2025').operatingExpenses).toBe(25);
+  });
 });
 
 describe('cashFlowDelta', () => {
@@ -216,6 +229,7 @@ describe('buildCashFlowBuckets', () => {
     { date: '2025-03-20', baseAmount: 8, isIncome: false, sourceType: 'bookExpense' },
     { date: '2025-05-01', baseAmount: 12, isIncome: false, sourceType: 'artistPayout' }, // excluded
     { date: '2024-11-01', baseAmount: 10, isIncome: true, sourceType: 'sale' },
+    { date: '2025-03-31', baseAmount: 90, isIncome: false, sourceType: 'businessExpense', affectsCashFlow: false },
   ];
 
   it('produces 12 month buckets for a single year and excludes artist payouts', () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, isVoidStale, VOID_HIDE_AFTER_MS } from '../src/lib/inventory.js';
+import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, recordInventoryDisposal, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, isVoidStale, VOID_HIDE_AFTER_MS } from '../src/lib/inventory.js';
 
 const book = (maxPrint = 100) => ({ maxPrint });
 const sale = (qty, extra = {}) => ({ qty, ...extra });
@@ -48,6 +48,15 @@ describe('deriveOnHand', () => {
     });
     // 100 − 10 shipped + 3 restocked (written-off copies stay gone) = 93
     expect(deriveOnHand(s, book(100))).toBe(93);
+  });
+
+  it('subtracts a physical inventory disposal from on-hand stock', () => {
+    const s = state();
+    recordInventoryDisposal(s, {
+      id: 'disp_1', date: '2026-12-31', qty: 4,
+      reason: 'Water damaged', notes: 'Destroyed after count',
+    });
+    expect(deriveOnHand(s, book(100))).toBe(96);
   });
 
   it('combines direct sales, consignment movement, and returns', () => {
@@ -167,6 +176,18 @@ describe('inventoryBreakdown', () => {
       writtenOff: 0,
       unaccounted: 0,
     });
+  });
+
+  it('accounts for physical disposals as written-off inventory', () => {
+    const s = state();
+    recordInventoryDisposal(s, {
+      id: 'disp_1', date: '2026-12-31', qty: 4,
+      reason: 'Water damaged', notes: '',
+    });
+    const bd = inventoryBreakdown(s, book(100));
+    expect(bd.onHand).toBe(96);
+    expect(bd.writtenOff).toBe(4);
+    expect(bd.unaccounted).toBe(0);
   });
 
   it('flags an unaccounted gap when the baseline cannot explain the records', () => {

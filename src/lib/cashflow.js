@@ -83,6 +83,7 @@ export function computeCashFlowMetrics(sources, yearFilter) {
   // General business expenses (operating).
   (taxCenter.businessExpenses || []).forEach((e) => {
     if (!inYear(e.date, yearFilter)) return;
+    if (e.affectsCashFlow === false) return;
     const eCur = e.currency || 'CAD';
     const eBase = e.baseAmount != null
       ? e.baseAmount
@@ -132,6 +133,7 @@ export function buildCashFlowBuckets(ledger, yearFilter) {
 
   (ledger || []).forEach((item) => {
     if (item.sourceType === 'artistPayout') return; // excluded from opex
+    if (item.affectsCashFlow === false) return; // non-cash tax/accounting adjustment
     // When charting a single year, ignore any stray out-of-year rows so the
     // axis stays the 12 seeded months (the production ledger is already
     // year-filtered, but keep the helper robust for direct callers/tests).
