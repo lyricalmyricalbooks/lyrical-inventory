@@ -222,6 +222,7 @@ import {
   getBookCurrencyCode,
   getContrastColor,
   getContrastSafeText,
+  getPaperSafeText,
   getSym,
   hexToRgba,
   isDirectToArtistSale,
@@ -2944,6 +2945,11 @@ renderSyncChip();
  * card. This one always runs the ink-safe half of getContrastSafeText(),
  * regardless of theme, so it stays correct without needing to know which
  * elements are asking for it.
+ *
+ * --book-accent-text-on-paper is the third: night mode's cards, tables and
+ * modals are light "paper" on the dark page, so the dark-tuned
+ * --book-accent-text is exactly wrong inside them. theme-dark.css swaps it in
+ * for --book-accent-text inside every paper object.
  */
 function applyBookAccentTokens(bookId) {
   const root = document.documentElement;
@@ -2955,6 +2961,9 @@ function applyBookAccentTokens(bookId) {
     root.style.setProperty('--book-accent-text', 'var(--gold-text)');
     root.style.setProperty('--book-accent-text-on-ink', 'var(--gold3)');
     root.style.setProperty('--book-accent-contrast', 'var(--ink)');
+    // No cover colour to derive from: the paper objects fall back to their own
+    // --gold-text (see PAPER SCOPE in theme-dark.css).
+    root.style.removeProperty('--book-accent-text-on-paper');
     return;
   }
   root.style.setProperty('--book-accent', book.accent);
@@ -2962,6 +2971,7 @@ function applyBookAccentTokens(bookId) {
   root.style.setProperty('--book-accent-light', lightenColor(book.accent, 0.25));
   root.style.setProperty('--book-accent-text', getContrastSafeText(book.accent, resolvedTheme === 'dark'));
   root.style.setProperty('--book-accent-text-on-ink', getContrastSafeText(book.accent, true));
+  root.style.setProperty('--book-accent-text-on-paper', getPaperSafeText(book.accent));
   root.style.setProperty('--book-accent-contrast', getContrastColor(book.accent));
 }
 

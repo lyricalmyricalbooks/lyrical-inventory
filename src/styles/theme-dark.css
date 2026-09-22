@@ -79,7 +79,10 @@
   --paper3: #DED4BA;
   --on-paper: #100F0D;
   --on-paper2: #4A443C;
-  --on-paper3: #756B5B;
+  /* Light mode's own --text3, like --on-paper is its --ink. The first value
+     (#756B5B) sat at 4.44:1 on --paper and 3.9:1 on --paper2 — every caption,
+     form label and table date on a night-mode card, just under the floor. */
+  --on-paper3: #5F5950;
 
   /* GOLD — the brand accent. Lifted ~2 steps because #c8913a sits at 3.1:1 on
      this page colour; these clear AA as label and link text. */
@@ -188,7 +191,7 @@
     --paper3: #DED4BA;
     --on-paper: #100F0D;
     --on-paper2: #4A443C;
-    --on-paper3: #756B5B;
+    --on-paper3: #5F5950;
 
     --gold: #FF6B55;
     --gold2: #FF8A78;
@@ -283,7 +286,23 @@
 
 /* Checkboxes, radios and range thumbs render in the UA accent unless told
    otherwise — a stab of Chrome blue in an otherwise gold-and-cream app. */
-.theme-dark { accent-color: var(--gold); }
+.theme-dark {
+  accent-color: var(--gold);
+
+  /* STICKER FILLS — the bright status hues, captured HERE, at the page.
+     A custom property that references another is resolved where it is
+     declared and inherited as the finished colour, so these keep the dark
+     palette's bright values everywhere below — including inside a paper
+     object, which re-points --green/--red/--amber/--blue to their dark
+     light-theme inks (see "PAPER SCOPE" further down). A solid pill or the
+     red danger button reads those as a FILL with ink on top, and a dark
+     green fill under ink text is exactly the failure paper exists to fix. */
+  --sticker-green: var(--green);
+  --sticker-amber: var(--amber);
+  --sticker-red: var(--red);
+  --sticker-red-hover: var(--red-light);
+  --sticker-blue: var(--blue);
+}
 
 /* A floor for controls that never got a component class. `:where()` carries no
    specificity, so this is (0,1,0) — every real rule in style.css still wins,
@@ -368,14 +387,19 @@
   background: linear-gradient(180deg, rgba(221, 165, 72, .18), rgba(250, 246, 236, .03));
 }
 .theme-dark .oc-hero-stat { background: rgba(250, 246, 236, .05); }
-.theme-dark .oc-funnel-seg { background: rgba(250, 246, 236, .04); }
+/* Sits inside a paper card, where a light wash is no step at all. */
+.theme-dark .oc-funnel-seg { background: var(--surface-sunken); }
+/* Both are `.card`s, so Press Proof hands their text the paper inks — these
+   two washes kept them dark underneath, and a contributor's name, email and
+   pipeline all landed ink-on-charcoal. They are paper like every other card
+   now; the light theme's own white-to-white fade becomes paper to paper2. */
 .theme-dark .oc-contributor-card {
-  background: linear-gradient(180deg, rgba(250, 246, 236, .055), rgba(250, 246, 236, .025)) !important;
+  background: linear-gradient(180deg, var(--paper), var(--paper2)) !important;
 }
 .theme-dark .oc-empty-state {
   background:
-    radial-gradient(circle at center 16%, rgba(255, 107, 85, .16), transparent 32%),
-    rgba(250, 246, 236, .03) !important;
+    radial-gradient(circle at center 16%, rgba(232, 64, 42, .12), transparent 32%),
+    var(--paper) !important;
 }
 /* The active POS book card: gold wash into the card fill. The white stop is
    opaque here, so it has to become the dark card colour, not a light wash. */
@@ -391,15 +415,21 @@
    sitting on them inherited the mismatch (the destructive buttons composited
    their red tint over white and landed at 1.38:1).
 
-   Alphas are much lower than the light theme's .78/.94: those are "paper on
-   paper", where here the same number would be a floodlight. */
+   The cards were first re-pointed to low-alpha light washes, which predates
+   Press Proof. Once every `.card` took paper INKS, those washes left the
+   project header, summary, add-contributor and collapsible cards as ink text
+   on a charcoal plate — "Open Call Portal" measured 1.17:1. The cards are
+   paper now, like the rest of the app; --oc-hairline stays a light rule
+   because the hero it also draws sits on the black page, and cards get their
+   own dark rule just below. */
 .theme-dark #opencall-body {
-  --oc-surface: rgba(250, 246, 236, .045);
-  --oc-surface-strong: rgba(250, 246, 236, .06);
+  --oc-surface: var(--paper);
+  --oc-surface-strong: var(--paper);
   --oc-hairline: rgba(250, 246, 236, .12);
   --oc-shadow-soft: var(--elev-2);
   --oc-shadow-lift: var(--elev-hover);
 }
+.theme-dark #opencall-body .card { --oc-hairline: var(--border2); }
 
 /* Baked gradients and washes in the same layer that no token reaches. */
 .theme-dark .oc-hero {
@@ -410,9 +440,10 @@
 .theme-dark .oc-project-card::before {
   background: radial-gradient(circle at top left, rgba(255, 107, 85, .16), transparent 58%);
 }
+/* Inside the (now paper) contributor card — a recessed tray, not a wash. */
 .theme-dark .oc-status-strip {
-  background: rgba(250, 246, 236, .04);
-  border-color: rgba(250, 246, 236, .10);
+  background: var(--surface-sunken);
+  border-color: var(--border2);
 }
 
 /* ── One-off literals with no token home ─────────────────────────────────── */
@@ -437,6 +468,23 @@
 }
 
 .theme-dark .custom-dest-item-badge.stores { color: var(--blue); }
+
+/* Open Call's own stylesheet writes several labels in the flare FILLS
+   (--gold, --gold2): a contributor's email link, the "+ Add" photo link, the
+   active pipeline step, photo chips, the credit index and a note's lead-in.
+   Its cards are paper now, and as text on paper those measured 1.7–2.4:1.
+   --gold-text is the ink grade (the light theme's, inside every paper
+   object). The photo chip's remove button keeps its own hover colour. */
+.theme-dark #opencall-body .card :is(.oc-email-row a, .oc-add-photo-trigger,
+  .oc-step.active .oc-step-label, .oc-photo-chip, .oc-photo-chip-remove:not(:hover),
+  .oc-credit-index, .oc-note strong) {
+  color: var(--gold-text);
+}
+
+/* The QR frame stays white in both themes (phones scan it), so the "QR
+   library not ready" / "no link" note inside it needs paper's ink, not the
+   page's light --text3 (3.1:1 on white). */
+.theme-dark .qr-frame-message { color: var(--on-paper3); }
 
 .theme-dark .bsk-val.warn,
 .theme-dark .sk-v.warn { color: var(--orange); }
@@ -624,18 +672,21 @@
 }
 .theme-dark .btn.ink:hover { background: var(--paper2); }
 .theme-dark .btn.danger-btn {
-  background: var(--red);
+  background: var(--sticker-red);
   color: var(--on-paper);
   border-color: var(--on-paper);
 }
-.theme-dark .btn.danger-btn:hover { background: var(--red-light); }
+.theme-dark .btn.danger-btn:hover { background: var(--sticker-red-hover); }
 
 /* Solid stickers, not a tinted wash — a translucent pill over the void
-   just goes murky again, the same failure this whole pass exists to fix. */
-.theme-dark .pill.green { background: var(--green); color: var(--on-paper); }
-.theme-dark .pill.amber { background: var(--amber); color: var(--on-paper); }
-.theme-dark .pill.red   { background: var(--red);   color: var(--on-paper); }
-.theme-dark .pill.blue  { background: var(--blue);  color: var(--on-paper); }
+   just goes murky again, the same failure this whole pass exists to fix.
+   The fills are the page-level --sticker-* copies, not --green/--amber/…
+   themselves: those turn back into dark text-grade inks inside a paper
+   object, and a pill sitting in a table row would go ink-on-dark-green. */
+.theme-dark .pill.green { background: var(--sticker-green); color: var(--on-paper); }
+.theme-dark .pill.amber { background: var(--sticker-amber); color: var(--on-paper); }
+.theme-dark .pill.red   { background: var(--sticker-red);   color: var(--on-paper); }
+.theme-dark .pill.blue  { background: var(--sticker-blue);  color: var(--on-paper); }
 .theme-dark .pill.gray  { background: var(--paper2); color: var(--on-paper2); border-color: var(--on-paper2); }
 .theme-dark .pill.gold  { background: var(--gold);  color: var(--on-paper); border-color: var(--on-paper); }
 
@@ -733,8 +784,159 @@
   --border: rgba(16, 15, 13, .26);
   --border2: rgba(16, 15, 13, .12);
   --rule-ink: var(--on-paper);
+  /* In light mode the wrap is transparent and the cream page shows through
+     wherever a row doesn't paint — a <tfoot>, a row faded with opacity. On
+     the black desk that same gap showed black: the Tax Centre category
+     footer went ink-on-black, and a reimbursed expense row (50% opacity)
+     turned a muddy grey. The wrap is paper, so what shows through is paper. */
+  background: var(--paper);
   box-shadow: 4px 4px 0 var(--gold);
 }
+
+/* ── PAPER SCOPE — the complete ink set every paper object needs ────────────
+   The per-object rules above each re-declared the SURFACE and TEXT tokens
+   their own components happened to read, and each one missed a different
+   subset: .tbl-wrap never got --content-secondary/-muted or --surface-page,
+   the stat group never got --cream*, and none of them got the status and
+   accent inks. Those stayed the dark palette's LIGHT values, so on a paper
+   card every "money in" figure, overdue badge, category link and channel tag
+   was pale-on-pale — the Tax Centre ledger's amounts at 1.4:1, the "Stock is
+   healthy" note at 1.4:1, a "Required" tag at 1.8:1.
+
+   One rule, one list, every paper object. The inks go back to the LIGHT
+   theme's own values (byte-identical to style.css's :root, same as the
+   .kpi block above, which was the one object that already did this).
+   Deliberately NOT here: --gold/--gold2/--gold3, the flare FILLS — each
+   object's own offset shadow reads var(--gold) on itself, so re-pointing
+   them would re-tint every card's registration fringe.
+
+   Aliases declared on :root in system.css (--status-*, --border-subtle, …)
+   are listed too: a custom property that references another is resolved
+   where it is declared, so :root's copy still carries the dark value and
+   only a local re-declaration picks up the paper one. */
+.theme-dark :is(.card, .modal, .tbl-wrap, .kpi, .metric-banner, .stock-block,
+  .payment-methods-card) {
+  /* A paper object is a LIGHT surface, so the browser's own chrome inside it
+     — a date field's calendar glyph, checkboxes, scrollbars, a bare link —
+     draws in its light style too, not the pale dark-scheme one. */
+  color-scheme: light;
+
+  /* surfaces */
+  --cream: var(--paper);
+  --cream2: var(--paper2);
+  --cream3: var(--paper3);
+  --cream4: var(--paper3);
+  --surface-card: var(--paper);
+  --surface-page: var(--paper);
+  --surface-raised: var(--paper);
+  --surface-sunken: var(--paper2);
+  --surface-inset: var(--paper2);
+  --card-bg: var(--paper);
+  --bg2: var(--paper);
+  --input-bg: var(--paper);
+
+  /* text */
+  --text: var(--on-paper);
+  --text2: var(--on-paper2);
+  --text3: var(--on-paper3);
+  --text4: var(--on-paper3);
+  --content-primary: var(--on-paper);
+  --content-secondary: var(--on-paper2);
+  --content-muted: var(--on-paper3);
+  --content-faint: var(--on-paper3);
+
+  /* rules */
+  --border: rgba(16, 15, 13, .26);
+  --border2: rgba(16, 15, 13, .12);
+  --rule-ink: var(--on-paper);
+  --border-subtle: var(--border2);
+  --border-default: var(--border);
+  --border-strong: var(--rule-ink);
+  --track-bg: rgba(16, 15, 13, .12);
+
+  /* status inks + tints, back to the light palette's pairings */
+  --gold-text: #B4271A; /* token-ok: the LIGHT :root's own value, restored on a paper object */
+  --gold-bg: rgba(232, 64, 42, .1);
+  --gold-line: rgba(232, 64, 42, .45);
+  --green: #0A6B47; /* token-ok: the LIGHT :root's own value, restored on a paper object */
+  --green-light: #12A06A; /* token-ok: the LIGHT :root's own value, restored on a paper object */
+  --green-bg: rgba(18, 160, 106, .12);
+  --red: #B4271A; /* token-ok: the LIGHT :root's own value, restored on a paper object */
+  --red-light: #E8402A; /* token-ok: the LIGHT :root's own value, restored on a paper object */
+  --red-bg: rgba(232, 64, 42, .1);
+  --amber: #6B4600; /* token-ok: the LIGHT :root's own value, restored on a paper object */
+  --amber-bg: rgba(255, 201, 60, .3);
+  --blue: #1B3FE0; /* token-ok: the LIGHT :root's own value, restored on a paper object */
+  --blue-bg: #DEE4FD; /* token-ok: the LIGHT :root's own value, restored on a paper object */
+  /* A light-theme status FILL takes white, not ink (dark green under ink
+     text is 3:1). The page-level --on-status is ink for the bright fills. */
+  --on-status: #fff; /* token-ok: the LIGHT :root's own value, restored on a paper object */
+
+  /* accent families — the text-grade members only; -soft/-bright/-mist were
+     always the "reads on ink" members and stay as they are */
+  --emerald: #12A06A; /* token-ok: the LIGHT :root's own value, restored on a paper object */
+  --emerald-deep: #0A6B47; /* token-ok: the LIGHT :root's own value, restored on a paper object */
+  --rose: #E8402A; /* token-ok: the LIGHT :root's own value, restored on a paper object */
+  --rose-deep: #B4271A; /* token-ok: the LIGHT :root's own value, restored on a paper object */
+  --rose-pale: #FFD2C9; /* token-ok: the LIGHT :root's own value, restored on a paper object */
+  /* The one ink that is NOT light's own value: light's --orange-deep is tuned
+     for white table rows and lands at 4.3:1 on paper, which is darker. Its
+     sibling --orange-ink is the next step down the same family (6.5:1). */
+  --orange-deep: var(--orange-ink);
+  --orange-ink: #8A3D12; /* token-ok: the LIGHT :root's own value, restored on a paper object */
+  --violet: #6B4FE8; /* token-ok: the LIGHT :root's own value, restored on a paper object */
+  --violet-deep: #4A2FC4; /* token-ok: the LIGHT :root's own value, restored on a paper object */
+  --slate: #4A4A52; /* token-ok: the LIGHT :root's own value, restored on a paper object */
+
+  /* semantic aliases (system.css :root) — re-resolved against the above */
+  --status-active: var(--amber);
+  --status-active-bg: var(--amber-bg);
+  --status-positive: var(--green);
+  --status-positive-bg: var(--green-bg);
+  --status-critical: var(--red);
+  --status-critical-bg: var(--red-bg);
+  --status-info: var(--blue);
+  --status-info-bg: var(--blue-bg);
+  --status-neutral: var(--text3);
+  --status-neutral-bg: var(--cream3);
+
+  /* The book's cover colour as TEXT. The page-level --book-accent-text is
+     lifted to read on the black desk; on paper that lifted value measured
+     1.4:1. applyBookAccentTokens() sets a paper-safe copy; with no book
+     selected the fallback resolves here, to the paper --gold-text above. */
+  --book-accent-text: var(--book-accent-text-on-paper, var(--gold-text));
+  /* Section kickers default to the flare FILL (2.4:1 as paper text). */
+  --sec-accent: var(--gold-text);
+  /* The page-level ring is the flare fill: 2.6:1 on paper, under the 3:1 a
+     focus indicator needs. */
+  --focus-ring-color: var(--gold-text);
+  /* The page-level chevron is baked in --text3's dark value. This is the
+     light theme's own copy, stroke %235F5950. */
+  --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235F5950' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+/* A .btn is a paper object too (see .theme-dark .btn below), so its face
+   needs the same inks: a ghost "✕ Dismiss" in --text3 read 2.6:1 on it, an
+   outline "Attach" or a tag in --gold-text 1.6:1. Only buttons whose face
+   really IS paper, though — one with an inline background (transparent over
+   a dark order card, say) keeps the page's light inks, or its label would go
+   ink-on-charcoal. The focus ring is left alone: a button's ring is drawn out
+   on the black desk, where the page-level flare is the one that reads. */
+.theme-dark .btn:not([style*="background"]) {
+  --text: var(--on-paper);
+  --text2: var(--on-paper2);
+  --text3: var(--on-paper3);
+  --text4: var(--on-paper3);
+  --content-primary: var(--on-paper);
+  --content-secondary: var(--on-paper2);
+  --content-muted: var(--on-paper3);
+  --gold-text: #B4271A; /* token-ok: the LIGHT :root's own value, restored on a paper object */
+  --green: #0A6B47; /* token-ok: the LIGHT :root's own value, restored on a paper object */
+  --red: #B4271A; /* token-ok: the LIGHT :root's own value, restored on a paper object */
+  --amber: #6B4600; /* token-ok: the LIGHT :root's own value, restored on a paper object */
+  --blue: #1B3FE0; /* token-ok: the LIGHT :root's own value, restored on a paper object */
+}
+
 /* .tbl thead stays on --surface-inverse (always ink) — a dark header bar
    already read correctly against a light table body before this pass,
    and reads the same way now, so nothing about it needed to change. */

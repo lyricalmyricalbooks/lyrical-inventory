@@ -84,13 +84,19 @@ describe('Press Proof — the new paper tokens are defined and correct', () => {
     expect(contrastRatio(rgb(fg), bg)).toBeGreaterThanOrEqual(4.5);
   });
 
-  it('--on-paper3 is a muted caption grade, not body copy — matches --text3\'s own precedent', () => {
-    // Sits a hair under 4.5:1, same situation as the app's existing --text3
-    // on --surface-card (also ~4.48:1) — reserved for captions and small
-    // labels, never for anything read as a sentence.
-    const ratio = contrastRatio(rgb('var(--on-paper3)'), rgb('var(--paper)'));
-    expect(ratio).toBeGreaterThanOrEqual(4.4);
-    expect(ratio).toBeLessThan(4.5);
+  it('--on-paper3 is light mode\'s own --text3, and clears AA on every paper step', () => {
+    // It first shipped at #756B5B, pinned here as "a hair under 4.5:1, like
+    // --text3 on --surface-card". That precedent did not hold — light --text3
+    // is ~6.4:1 on its page — and the value was the ink for every caption,
+    // form label, table date and empty-state line on a night-mode card: 4.44:1
+    // on --paper and 3.9:1 in the recessed --paper2 trays (the POS checkout,
+    // a form's summary strip). Mirroring light's --text3 is the same move as
+    // --on-paper mirroring --ink.
+    const lightText3 = styleCss.match(/:root\s*\{[\s\S]*?--text3:\s*(#[0-9A-Fa-f]{6})/)[1];
+    expect(darkCss.match(/--on-paper3:\s*(#[0-9A-Fa-f]{6})/)[1].toUpperCase()).toBe(lightText3.toUpperCase());
+    for (const surface of ['var(--paper)', 'var(--paper2)', 'var(--paper3)']) {
+      expect(contrastRatio(rgb('var(--on-paper3)'), rgb(surface)), surface).toBeGreaterThanOrEqual(4.5);
+    }
   });
 
   it('paper reads as a genuinely different object from the black page behind it', () => {

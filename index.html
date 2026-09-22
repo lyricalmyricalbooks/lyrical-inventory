@@ -2285,6 +2285,11 @@
     </table>
   </div>
 
+  <!-- This wrapper went missing in a merge, and its two closing tags then
+       closed the dialog one level too far out — ending #pw-app early and
+       leaving every panel below (Tax Centre, POS, Shipping, Settings…) outside
+       the app column, sliding under the sidebar. -->
+  <div class="modal-footer" style="justify-content:space-between;flex-wrap:wrap;">
     <div style="display:flex; gap:8px; align-items:center;">
       <button type="button" class="btn tag" onclick="openInventoryWriteOffModal()" style="color:var(--red); border-color:var(--border);" title="Document a Section 10 valuation or physical inventory disposal">📉 Adjust Inventory</button>
       <div style="font-size:var(--text-xs); color:var(--text3);">* FX conversion rates applied automatically to non-CAD currencies.</div>

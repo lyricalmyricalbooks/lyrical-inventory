@@ -1193,7 +1193,7 @@ tr.hist-row:hover {
 #ship-analysis-hub .shipping-pnl-section-header h3 {
   margin: 0;
   color: var(--shipping-pnl-ink);
-  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-family: var(--font-display);
   font-weight: 600;
   letter-spacing: -0.025em;
 }
