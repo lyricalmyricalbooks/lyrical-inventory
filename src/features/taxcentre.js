@@ -2871,6 +2871,7 @@ function restoreDeductionGaps() {
 }
 
 function switchTaxCenterSubTab(subTabName) {
+  const leavingEmailImport = activeTaxCenterSubTab === 'email-import' && subTabName !== 'email-import';
   activeTaxCenterSubTab = subTabName || 'ledger';
   const subTabs = ['ledger', 'receipts', 'deductions', 'integrations', 'email-import'];
   subTabs.forEach(tab => {
@@ -2898,6 +2899,10 @@ function switchTaxCenterSubTab(subTabName) {
       _tcRenderReceiptStorage();
     }
   }
+  // Navigating away must actually stop an in-flight Gmail search/extraction,
+  // the same cleanup that used to fire when the old dialog was dismissed —
+  // otherwise it keeps running against a tab the owner can no longer see.
+  if (leavingEmailImport) window.closeEmailReceiptImportModal();
   if (activeTaxCenterSubTab === 'email-import') window.openEmailReceiptImportModal();
 }
 

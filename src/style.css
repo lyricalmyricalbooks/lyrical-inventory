@@ -2667,75 +2667,30 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   EMAIL RECEIPT IMPORT MODAL — state-of-the-art Gmail scan and manual receipt
-   ingestion dialog. Adheres strictly to Linear / Apple HIG segmented control,
-   progressive disclosure, and canonical design tokens.
+   EMAIL RECEIPT IMPORT — Gmail scan and manual receipt ingestion. Lives as a
+   normal Tax Centre sub-page (see .tc-integrations-card, whose header and
+   card chrome this reuses) rather than a floating dialog, so finding and
+   reviewing receipts happens on the same screen as everything else here.
+   Adheres strictly to Linear / Apple HIG segmented control, progressive
+   disclosure, and canonical design tokens.
    ═══════════════════════════════════════════════════════════════════════════ */
-/* Two classes deliberately: the base `.modal{max-width:500px}` rule is
-   declared later in this file, so a single-class selector here loses to it
-   and the dialog collapses to 500px. */
-.modal.email-import-modal {
-  /* Generous widescreen workspace: provides comfortable breathing room for
-     multi-column draft reviews, inline editing, and filter consoles. */
-  max-width: min(1280px, 94vw);
-  width: 94vw;
-  height: min(92vh, 920px);
-  max-height: 92vh;
-  display: flex;
-  flex-direction: column;
-  overflow:hidden;
-}
-
-.email-import-modal #email-panel-gmail,
-.email-import-modal #email-panel-manual,
-.email-import-modal #email-panel-direct {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-bottom: var(--space-4);
-  scrollbar-gutter: stable;
-}
-
-.email-import-header{
-  position:sticky;
-  top:0;
-  z-index:var(--z-raised);
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:var(--space-4);
-  margin-bottom:0;
-  background:var(--surface-page);
-  border-bottom:var(--stroke-hair) solid var(--border-subtle);
-}
-.email-import-heading{display:flex;align-items:center;gap:var(--space-3);min-width:0;}
-.email-import-heading-copy{display:flex;flex-direction:column;gap:3px;min-width:0;}
-.email-import-title{font-family:var(--font-display);font-size:clamp(1.3rem,2vw,1.8rem);line-height:1;color:var(--content-primary);letter-spacing:.01em;text-wrap:balance;}
-.email-import-subtitle{font-size:var(--text-xs);color:var(--content-muted);line-height:1.35;}
-.email-connected-pill{white-space:nowrap;}
-.email-import-header-actions{display:flex;align-items:center;gap:var(--space-3);flex-shrink:0;}
-.email-import-step-label{font-family:var(--font-mono);font-size:var(--text-3xs);letter-spacing:.08em;text-transform:uppercase;color:var(--content-muted);white-space:nowrap;}
-.email-import-modal .modal-tabs{width:100%;margin:var(--space-4) 0;}
-.email-import-modal .modal-tab-btn{flex:1;justify-content:center;min-height:44px;}
+.email-import-workspace .modal-tabs{width:100%;margin:var(--space-2) 0 0;}
+.email-import-workspace .modal-tab-btn{flex:1;justify-content:center;min-height:44px;}
+.email-connected-pill{white-space:nowrap;margin-left:auto;align-self:center;}
 .email-no-ai-tag{display:inline-flex;align-items:center;margin-left:var(--space-1);padding:2px 6px;border-radius:var(--r-pill);background:var(--green-bg);color:var(--green);font-family:var(--font-mono);font-size:var(--text-3xs);letter-spacing:.04em;}
-.email-import-modal .email-ai-assistant-card{margin-bottom:var(--space-4);padding:var(--space-4);}
-.email-import-modal .email-direct-import-card{border-color:var(--green);background:var(--green-bg);}
-.email-import-modal .email-search-row{padding:var(--space-3);border:var(--stroke-hair) solid var(--border-subtle);border-radius:var(--r2);background:var(--surface-sunken);}
-.email-import-modal .email-results-viewport{min-height:280px;border:var(--stroke-hair) solid var(--border-subtle);border-radius:var(--r2);background:var(--surface-raised);}
-.email-import-modal .modal-footer{position:sticky;bottom:0;z-index:var(--z-raised);margin-top:var(--space-4);background:var(--surface-page);border-top:var(--stroke-hair) solid var(--border-subtle);}
+.email-import-workspace .email-ai-assistant-card{margin-bottom:var(--space-4);padding:var(--space-4);}
+.email-import-workspace .email-direct-import-card{border-color:var(--green);background:var(--green-bg);}
+.email-import-workspace .email-search-row{padding:var(--space-3);border:var(--stroke-hair) solid var(--border-subtle);border-radius:var(--r2);background:var(--surface-sunken);}
+/* .email-results-viewport already bounds itself to a sensible internal scroll
+   height (min(56vh,560px)) — that holds on a normal page just as it did in
+   the old dialog, so nothing extra is needed here. */
 
 .tc-email-import-tab{position:relative;}
 .tc-email-import-badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;margin-left:7px;padding:0 5px;border-radius:var(--r-pill);background:var(--amber-bg);color:var(--amber);font-family:var(--font-mono);font-size:var(--text-3xs);font-weight:700;vertical-align:middle;}
 
 @media (max-width: 768px){
-  .modal.email-import-modal{width:100%;max-width:none;max-height:100dvh;border-radius:var(--r3) var(--r3) 0 0;}
-  .email-import-header{align-items:flex-start;}
-  .email-import-modal .modal-tabs{overflow-x:auto;scroll-snap-type:x proximity;}
-  .email-import-modal .modal-tab-btn{flex:0 0 auto;scroll-snap-align:start;}
-  .email-import-step-label{display:none;}
-  .email-import-heading{align-items:flex-start;}
-  .email-import-connected-pill{display:none;}
+  .email-import-workspace .modal-tabs{overflow-x:auto;scroll-snap-type:x proximity;}
+  .email-import-workspace .modal-tab-btn{flex:0 0 auto;scroll-snap-align:start;}
 }
 
 .modal-title-badge {

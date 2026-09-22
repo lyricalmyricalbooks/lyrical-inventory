@@ -2323,10 +2323,19 @@ function startEmailInboxWatcher() {
     }
     _emailInboxSeen = ids;
     updateEmailInboxBadge();
-    // If the import modal is already open, refresh the loaded drafts live.
-    const modal = $('m-email-receipt-import-modal');
-    if (modal && modal.style.display !== 'none') loadGmailInboxDrafts();
+    // If the owner is already looking at the Email Receipt Import tab, refresh
+    // the loaded drafts live.
+    if (_emailImportTabVisible()) loadGmailInboxDrafts();
   });
+}
+
+// The Email Receipt Import page no longer hides itself when the owner
+// switches to a different Tax Centre sub-tab (it's an inline page now, not a
+// dialog that gets dismissed) — so the section's own display, not the
+// workspace div inside it, is what says whether the owner is looking at it.
+function _emailImportTabVisible() {
+  const sec = $('tc-sec-email-import');
+  return !!sec && sec.style.display !== 'none';
 }
 
 // One count on the "Import from Email" button covers both auto sources — the
@@ -2388,8 +2397,7 @@ function _emailDraftsHaveManualReview() {
 function loadGmailInboxDrafts() {
   if (!_emailInboxItems.length) return;
   _emailReceiptDrafts = mergeReceiptDrafts(_emailReceiptDrafts, _emailInboxItems.map(_inboxItemToDraft));
-  const modal = $('m-email-receipt-import-modal');
-  if (modal && modal.style.display !== 'none' && !_emailDraftsHaveManualReview()) {
+  if (_emailImportTabVisible() && !_emailDraftsHaveManualReview()) {
     renderEmailReceiptDrafts(_emailReceiptDrafts);
   }
   updateEmailInboxBadge();
@@ -5846,8 +5854,7 @@ async function sweepReceiptEmails({ force = false } = {}) {
     if (foundDrafts.length) {
       _emailReceiptDrafts = mergeReceiptDrafts(_emailReceiptDrafts, foundDrafts);
       writeReceiptSweepPending([...pending, ...newPendingEntries]);
-      const modal = $('m-email-receipt-import-modal');
-      if (modal && modal.style.display !== 'none' && !_emailDraftsHaveManualReview()) {
+      if (_emailImportTabVisible() && !_emailDraftsHaveManualReview()) {
         renderEmailReceiptDrafts(_emailReceiptDrafts);
       }
       updateEmailInboxBadge();

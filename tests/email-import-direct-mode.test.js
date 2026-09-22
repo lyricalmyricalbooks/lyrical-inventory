@@ -8,16 +8,18 @@ const html = readFileSync(path.join(root, 'index.html'), 'utf8');
 const styles = readFileSync(path.join(root, 'src/style.css'), 'utf8');
 const receipts = readFileSync(path.join(root, 'src/features/receipts.js'), 'utf8');
 
-test('email importer has a separate Gmail no-AI mode and a scrollable modal', () => {
+test('email importer has a separate Gmail no-AI mode and a scrollable results list', () => {
   expect(html).toMatch(/id="email-tab-direct"[\s\S]*?Gmail Import/);
   expect(html).toMatch(/id="email-panel-direct"/);
   expect(html).toMatch(/No AI reads this mail/);
   expect(html).toMatch(/handleEmailImportPrimaryAction\(\)/);
 
-  const modalRule = styles.match(/\.modal\.email-import-modal\s*\{([\s\S]*?)\n\}/)?.[1] || '';
-  expect(modalRule).toMatch(/display:\s*flex/);
-  expect(modalRule).toMatch(/overflow:\s*hidden/);
-  expect(styles).toMatch(/\.email-import-modal #email-panel-gmail,[\s\S]*?\.email-import-modal #email-panel-manual,[\s\S]*?\.email-import-modal #email-panel-direct\s*\{[\s\S]*?overflow-y:\s*auto/);
+  // Lives inline in its Tax Centre sub-tab now, not a floating dialog — the
+  // results list still bounds itself to a sensible scroll height so a long
+  // Gmail search doesn't push the primary action off the screen.
+  const resultsRule = styles.match(/^\.email-results-viewport \{([\s\S]*?)\n\}/m)?.[1] || '';
+  expect(resultsRule).toMatch(/overflow-y:\s*auto/);
+  expect(resultsRule).toMatch(/max-height:/);
 });
 
 test('direct Gmail import archives originals without using the AI extraction path', () => {
