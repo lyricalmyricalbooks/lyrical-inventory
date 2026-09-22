@@ -27,10 +27,12 @@ describe('backup AI requests', () => {
 });
 
 describe('receipt fallback', () => {
-  function reader(primary, settings = { geminiKey: 'g', openRouterKey: 'b' }) {
+  function reader(primary, settings = { geminiKey: 'g', openRouterKey: 'b' }, { resting = false } = {}) {
     const backup = vi.fn(async () => ({ text: '{"total":12}', via: 'openrouter' }));
-    const call = buildHarness({ names: ['_callAiForReceipts'], deps: { TAX_CENTER: { settings }, _callGeminiForReceipts: primary, runOpenRouterRead: backup, friendlyOpenRouterError: router.friendlyOpenRouterError }, returns: '_callAiForReceipts' });
-    return { call, backup };
+    const noteSpent = vi.fn();
+    const call = buildHarness({ names: ['_callAiForReceipts'], deps: { TAX_CENTER: { settings }, _callGeminiForReceipts: primary, runOpenRouterRead: backup, friendlyOpenRouterError: router.friendlyOpenRouterError,
+      _geminiResting: () => resting, _geminiNoteSpent: noteSpent }, returns: '_callAiForReceipts' });
+    return { call, backup, noteSpent };
   }
   it('retries the same receipt with the saved backup after quota exhaustion', async () => {
     const h = reader(async () => { throw Object.assign(new Error('Quota exceeded'), { status: 429 }); });
@@ -47,6 +49,23 @@ describe('receipt fallback', () => {
     const h = reader(async () => { throw new DOMException('Stopped', 'AbortError'); });
     await expect(h.call('g', [])).rejects.toMatchObject({ name: 'AbortError' });
     expect(h.backup).not.toHaveBeenCalled();
+  });
+  it('records the failure, so the next receipt can skip a spent allowance', async () => {
+    const quota = Object.assign(new Error('Quota exceeded'), { status: 429 });
+    const h = reader(async () => { throw quota; });
+    await h.call('g', []);
+    expect(h.noteSpent).toHaveBeenCalledWith(quota);
+  });
+  it('goes straight to the backup while Google’s allowance is known to be spent', async () => {
+    const primary = vi.fn();
+    const h = reader(primary, undefined, { resting: true });
+    expect((await h.call('g', [])).via).toBe('openrouter');
+    expect(primary).not.toHaveBeenCalled();
+  });
+  it('still asks Google while resting when no backup is saved', async () => {
+    const primary = vi.fn(async () => ({ text: 'primary' }));
+    const h = reader(primary, { geminiKey: 'g' }, { resting: true });
+    expect((await h.call('g', [])).text).toBe('primary');
   });
   it('works with a backup key alone', async () => {
     const primary = vi.fn();
@@ -83,6 +102,7 @@ describe('provider boundary integration', () => {
       deps: { TAX_CENTER: { settings: { openRouterKey: 'backup-test-key' } },
         fetch: fetchImpl, DOMException, _geminiModelChain: () => ['gemini-test'],
         _geminiUnavailable: new Set(), _geminiAwaitCooldown: async () => {}, _geminiNoteThrottle: () => {},
+        _geminiResting: () => false, _geminiNoteSpent: () => 0,
         runOpenRouterRead: args => router.runOpenRouterRead({ ...args, fetchImpl }), friendlyOpenRouterError: router.friendlyOpenRouterError },
       returns: '_callAiForReceipts',
     });

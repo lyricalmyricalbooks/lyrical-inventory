@@ -49,7 +49,9 @@ import {
   _friendlyScanError,
   _geminiAwaitCooldown,
   _geminiModelChain,
+  _geminiNoteSpent,
   _geminiNoteThrottle,
+  _geminiResting,
   _geminiUnavailable,
   _warmGeminiModelCache,
 } from '../lib/gemini-quota.js';
@@ -3148,14 +3150,20 @@ function _geminiThinkingPatch(mode, budget) {
 // All app receipt readers use Gemini first, then the saved OpenRouter backup.
 // Accepts Gemini-style `parts` (e.g. `{ text }` and `{ inline_data: { mime_type, data } }`).
 // Runs directly from the browser using the publisher's saved keys.
+//
+// Once Google's allowance is known to be spent, a publisher with a backup skips
+// straight to it (see _geminiResting in gemini-quota.js) instead of paying three
+// refused requests and a few seconds of backoff on every receipt in a batch.
 async function _callAiForReceipts(apiKey, parts, opts = {}) {
   if (opts.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
   const key = TAX_CENTER.settings?.openRouterKey?.trim();
-  if (apiKey) {
+  if (apiKey && !(key && _geminiResting())) {
     try {
       return await _callGeminiForReceipts(apiKey, parts, opts);
     } catch (error) {
-      if (error?.name === 'AbortError' || !key) throw error;
+      if (error?.name === 'AbortError') throw error;
+      _geminiNoteSpent(error);
+      if (!key) throw error;
     }
   }
   if (!key) throw new Error('Add a Gemini or OpenRouter key in the Tax Centre config');
@@ -3281,8 +3289,12 @@ async function _callGeminiForReceipts(apiKey, parts, opts = {}) {
         // the account yet, or retired. Worth remembering rather than
         // re-discovering with a fresh upload on every future scan.
         if (res.status === 404) _geminiUnavailable.add(model);
+        let details;
         try {
           const err = await res.json();
+          // Kept for _geminiSpentFor(): the quota id is what tells a spent
+          // day's allowance apart from a one-minute rate limit.
+          details = err?.error?.details;
           if (err?.error?.message) {
             detail = err.error.message;
             // Anything that means "this would cost money" stops the whole
@@ -3296,6 +3308,7 @@ async function _callGeminiForReceipts(apiKey, parts, opts = {}) {
         } catch (_) { }
         lastErr = new Error(detail);
         lastErr.status = res.status;
+        if (Array.isArray(details)) lastErr.details = details;
         // `throw` here lands in this iteration's own catch below, which used to
         // record it as just another failed model and move on — so the
         // stop-on-billing/quota check never actually stopped anything and a

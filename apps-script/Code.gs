@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v46)
+/* Lyricalmyrical Inventory — Unified Backend (v47)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:
@@ -199,6 +199,17 @@
  *      the trigger; a run that meets a spent allowance stops and leaves its
  *      watermark, so the rest of the window is read next time rather than
  *      skipped. Bump flags v45-and-older as outdated so the publisher redeploys.
+ *  45. v47: receipt reading falls back to OpenRouter when Gemini cannot answer —
+ *      a spent daily allowance, depleted credit, a refused key or an outage.
+ *      The daily sweep uses the OpenRouter key the publisher already saved in
+ *      the app's Tax Centre settings (read from Firestore with the owner's own
+ *      token, like the inbox writes), or an OPENROUTER_API_KEY Script Property
+ *      when one is set; 'extractreceipt' uses the Script Property only, because
+ *      anyone holding the deployment address can call it. Once Gemini refuses
+ *      in a run, the rest of that run goes straight to the backup. The daily
+ *      status says how many emails the backup read. Adds the receiptBackupAi
+ *      capability. Bump flags v46-and-older as outdated so the publisher
+ *      redeploys.
  */
 
 const HEADERS = [
@@ -253,9 +264,9 @@ function doGet(e) {
   const receiptModel = receiptProps.getProperty('GEMINI_MODEL') || 'gemini-2.5-flash';
   const receiptModelValid = /^[a-zA-Z0-9.-]+$/.test(receiptModel);
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v46',
-    scriptVersion: 'v46',
-    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, canadaPostRefund: true, graphicalEmails: true, authorPaymentEmails: true, dateOrderedRows: true, receiptExtraction: true, receiptSelfTest: true, receiptDailySweep: true },
+    service: 'lyrical-sheets-webhook-v47',
+    scriptVersion: 'v47',
+    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, canadaPostRefund: true, graphicalEmails: true, authorPaymentEmails: true, dateOrderedRows: true, receiptExtraction: true, receiptSelfTest: true, receiptDailySweep: true, receiptBackupAi: true },
     receiptAi: {
       geminiApiKey: !!receiptProps.getProperty('GEMINI_API_KEY'),
       model: receiptModelValid,
@@ -2600,23 +2611,20 @@ function extractReceipt_(input) {
       cache.put(key, String(count + 1), 120);
     } finally { lock.releaseLock(); }
 
-    const aiPayload = JSON.stringify({
-      systemInstruction: { parts: [{ text: receiptPrompt_() }] },
-      contents: [{ role: 'user', parts: [{ text: JSON.stringify({
+    // Only the Script Property backup here, never the key saved in the app:
+    // this action answers anyone holding the deployment address, and must not
+    // become a way to spend the publisher's backup allowance.
+    const read = receiptAiRead_(props, aiKey, {
+      userText: JSON.stringify({
         subject: String(email.subject || '').slice(0, 1000),
         from: String(email.from || '').slice(0, 1000),
         date: String(email.date || '').slice(0, 200),
         body: email.body
-      }) }].concat(files) }],
-      generationConfig: { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 8192 }
-    });
-    const response = receiptAiResponse_(receiptModelChain_(props.getProperty('GEMINI_MODEL')), aiKey, aiPayload);
-    const result = JSON.parse(response.getContentText());
-    const candidate = (result.candidates || [])[0];
-    if (!candidate || candidate.finishReason !== 'STOP') throw new Error('AI could not finish this email. Review it manually or retry.');
-    const text = (candidate.content.parts || []).filter(function (p) { return !p.thought && p.text; })
-      .map(function (p) { return p.text; }).join('');
-    const extracted = JSON.parse(text);
+      }),
+      files: files
+    }, { allowAppSettings: false });
+    if (!read.finished) throw new Error('AI could not finish this email. Review it manually or retry.');
+    const extracted = JSON.parse(read.text);
     if (!Array.isArray(extracted.receipts) || extracted.receipts.length > 100
       || extracted.receipts.some(function (r) { return !r || typeof r !== 'object' || Array.isArray(r); })) throw new Error('AI returned invalid receipt data');
     return jsonOut_({ ok: true, receipts: extracted.receipts });
@@ -2709,6 +2717,138 @@ function receiptCanFallback_(status) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// RECEIPT AI BACKUP (v47) — OpenRouter, when Gemini will not answer.
+//
+// The app already falls back to the publisher's OpenRouter key when Gemini's
+// allowance runs out. The daily sweep runs here, with no browser, so it needs
+// its own copy of that behaviour — otherwise the one scan that runs unattended
+// is the one that stops the day Gemini runs out.
+//
+// The key is never returned in any response, and upstream bodies are never
+// echoed: only a status number reaches an error message.
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Read one email: Gemini first, then the backup. Returns {text, finished, via}.
+ * `ai` is per-run state: {allowAppSettings, backup, geminiSpent, backupReads}.
+ */
+function receiptAiRead_(props, aiKey, request, ai) {
+  var geminiError = null;
+  if (aiKey && !ai.geminiSpent) {
+    try {
+      var response = receiptAiResponse_(receiptModelChain_(props.getProperty('GEMINI_MODEL')), aiKey, JSON.stringify({
+        systemInstruction: { parts: [{ text: receiptPrompt_() }] },
+        contents: [{ role: 'user', parts: [{ text: request.userText }].concat(request.files) }],
+        generationConfig: { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 8192 }
+      }));
+      var result = JSON.parse(response.getContentText());
+      var candidate = (result.candidates || [])[0];
+      if (!candidate || candidate.finishReason !== 'STOP') return { text: '', finished: false, via: 'gemini' };
+      var text = (candidate.content.parts || []).filter(function (p) { return !p.thought && p.text; })
+        .map(function (p) { return p.text; }).join('');
+      return { text: text, finished: true, via: 'gemini' };
+    } catch (error) {
+      geminiError = error;
+    }
+  }
+
+  if (ai.backup === undefined) ai.backup = receiptBackupKey_(props, ai.allowAppSettings);
+  if (!ai.backup) throw geminiError || new Error('Receipt AI setup is incomplete: add GEMINI_API_KEY in Script Properties');
+  // A spent allowance or a refused key repeats on every email in the run.
+  if (geminiError && /unavailable \((400|401|402|403|429)\)/.test(geminiError.message || '')) ai.geminiSpent = true;
+  try {
+    var answer = receiptBackupRead_(ai.backup, request);
+    ai.backupReads = (ai.backupReads || 0) + 1;
+    return answer;
+  } catch (backupError) {
+    // Gemini's status leads, so the app and the daily halt still read it; the
+    // backup's own status follows in the same "unavailable (NNN)" form.
+    throw new Error((geminiError ? geminiError.message + ' ' : 'Receipt AI is unavailable. ') + backupError.message);
+  }
+}
+
+/**
+ * The backup key: an OPENROUTER_API_KEY Script Property when one is set, else
+ * (only when `allowAppSettings`) the key saved in the app's Tax Centre
+ * settings. Returns {key, model} or null.
+ */
+function receiptBackupKey_(props, allowAppSettings) {
+  var key = String(props.getProperty('OPENROUTER_API_KEY') || '').trim();
+  var model = String(props.getProperty('OPENROUTER_MODEL') || '').trim();
+  if (!key && allowAppSettings) {
+    var saved = receiptAppBackupSettings_(props);
+    key = saved.key || '';
+    if (!model) model = saved.model || '';
+  }
+  if (!key) return null;
+  // A model name goes into a request body, never a URL, but it is still only
+  // accepted in the shape OpenRouter uses (vendor/model:variant).
+  if (!/^[A-Za-z0-9._:\/~-]{1,120}$/.test(model)) model = 'openrouter/free';
+  return { key: key, model: model };
+}
+
+/** The backup key and model saved in the app, read with the owner's own token. */
+function receiptAppBackupSettings_(props) {
+  try {
+    var projectId = props.getProperty('FIREBASE_PROJECT_ID') || 'lyricalmyrical-37c46';
+    var res = UrlFetchApp.fetch('https://firestore.googleapis.com/v1/projects/' + projectId +
+      '/databases/(default)/documents/settings/taxCenter', {
+      method: 'get', headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true
+    });
+    if (res.getResponseCode() !== 200) return {};
+    var doc = JSON.parse(res.getContentText());
+    var data = JSON.parse(((doc.fields || {}).data || {}).stringValue || '{}');
+    var settings = (data && data.settings) || {};
+    return { key: String(settings.openRouterKey || '').trim(), model: String(settings.openRouterModel || '').trim() };
+  } catch (_) {
+    return {};
+  }
+}
+
+/** One OpenRouter request, in the OpenAI shape it speaks. Returns {text, finished, via}. */
+function receiptBackupRead_(backup, request) {
+  var content = [{ type: 'text', text: request.userText }];
+  var hasPdf = false;
+  (request.files || []).forEach(function (file) {
+    var part = file.inlineData;
+    var url = 'data:' + part.mimeType + ';base64,' + part.data;
+    if (part.mimeType === 'application/pdf') {
+      hasPdf = true;
+      content.push({ type: 'file', file: { filename: 'document.pdf', file_data: url } });
+    } else {
+      content.push({ type: 'image_url', image_url: { url: url } });
+    }
+  });
+  var body = {
+    model: backup.model,
+    messages: [{ role: 'system', content: receiptPrompt_() }, { role: 'user', content: content }],
+    temperature: 0, max_tokens: 8192,
+    response_format: { type: 'json_object' },
+    // Only a model that can honour the JSON format; a free router would
+    // otherwise pick one that answers in prose.
+    provider: { require_parameters: true }
+  };
+  // OpenRouter's free PDF reader, for models that cannot open a PDF themselves.
+  if (hasPdf) body.plugins = [{ id: 'file-parser', pdf: { engine: 'cloudflare-ai' } }];
+  var response = UrlFetchApp.fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+    headers: { Authorization: 'Bearer ' + backup.key, 'X-OpenRouter-Title': 'Lyrical Inventory' },
+    payload: JSON.stringify(body)
+  });
+  var status = response.getResponseCode();
+  var data = null;
+  try { data = JSON.parse(response.getContentText()); } catch (_) { data = null; }
+  // OpenRouter can report a failure inside a 200.
+  if (status === 200 && (!data || data.error)) status = Number(data && data.error && data.error.code) || 502;
+  if (status !== 200) throw new Error('The OpenRouter backup is unavailable (' + status + ') too.');
+  var choice = (data.choices || [])[0];
+  var text = choice && choice.message && typeof choice.message.content === 'string' ? choice.message.content.trim() : '';
+  // Some models still wrap JSON in a ```json fence despite the format asked for.
+  text = text.replace(/^```(?:json)?\s*/i, '').replace(/```$/, '').trim();
+  return { text: text, finished: !!text && choice.finish_reason === 'stop', via: 'openrouter' };
+}
+
+// ─────────────────────────────────────────────────────────────
 // DAILY RECEIPT SWEEP (v46)
 //
 // Reads yesterday's mail for receipts once a day, on a time-driven trigger, and
@@ -2786,12 +2926,18 @@ function receiptDailyScan() {
 
     var found = 0;
     var read = 0;
+    // Shared across the run: the backup key is looked up once, and once Gemini
+    // has refused, the remaining emails go straight to the backup.
+    var ai = { allowAppSettings: true, backupReads: 0 };
     for (var i = 0; i < messages.length; i++) {
-      var outcome = receiptDailyReadOne_(messages[i], aiKey, props);
+      var outcome = receiptDailyReadOne_(messages[i], aiKey, props, ai);
       if (outcome.halt) {
         // Out of allowance. Stop and leave the watermark where it is, so the
         // rest of the window is read on the next run instead of being skipped.
-        receiptDailyNote_(props, 'Stopped early: ' + outcome.halt + ' Read ' + read + ', found ' + found + '.');
+        var hint = ai.backup === null
+          ? ' Save an OpenRouter backup key in the app’s Tax Centre settings and the daily scan will use it when Gemini runs out.'
+          : '';
+        receiptDailyNote_(props, 'Stopped early: ' + outcome.halt + ' Read ' + read + ', found ' + found + '.' + hint);
         return;
       }
       read++;
@@ -2801,14 +2947,15 @@ function receiptDailyScan() {
     props.setProperty('RECEIPT_DAILY_LAST_DAY', win.throughDay);
     props.setProperty('RECEIPT_DAILY_LAST_RUN', new Date().toISOString());
     receiptDailyNote_(props, 'Read ' + read + ' email' + (read === 1 ? '' : 's') + ' from ' + win.startDay +
-      ' to ' + win.throughDay + ', found ' + found + ' receipt' + (found === 1 ? '' : 's') + '.');
+      ' to ' + win.throughDay + ', found ' + found + ' receipt' + (found === 1 ? '' : 's') + '.' +
+      (ai.backupReads ? ' Gemini could not answer, so your OpenRouter backup read ' + ai.backupReads + ' of them.' : ''));
   } catch (error) {
     receiptDailyNote_(props, 'Failed: ' + (error && error.message ? error.message : error));
   }
 }
 
 /** One message. Returns {found, halt} — `halt` set when the whole run should stop. */
-function receiptDailyReadOne_(message, aiKey, props) {
+function receiptDailyReadOne_(message, aiKey, props, ai) {
   try {
     var files = [];
     var attachments = message.getAttachments({ includeInlineImages: false, includeAttachments: true });
@@ -2820,22 +2967,16 @@ function receiptDailyReadOne_(message, aiKey, props) {
     }
 
     var body = String(message.getPlainBody() || '').slice(0, 24000);
-    var aiPayload = JSON.stringify({
-      systemInstruction: { parts: [{ text: receiptPrompt_() }] },
-      contents: [{ role: 'user', parts: [{ text: JSON.stringify({
+    var read = receiptAiRead_(props, aiKey, {
+      userText: JSON.stringify({
         subject: String(message.getSubject() || '').slice(0, 1000),
         from: String(message.getFrom() || '').slice(0, 1000),
         date: String(message.getDate()), body: body
-      }) }].concat(files) }],
-      generationConfig: { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 8192 }
-    });
-
-    var response = receiptAiResponse_(receiptModelChain_(props.getProperty('GEMINI_MODEL')), aiKey, aiPayload);
-    var result = JSON.parse(response.getContentText());
-    var candidate = (result.candidates || [])[0];
-    if (!candidate || candidate.finishReason !== 'STOP') return { found: 0 };
-    var parts = (candidate.content.parts || []).filter(function (p) { return !p.thought && p.text; });
-    var receipts = JSON.parse(parts.map(function (p) { return p.text; }).join('')).receipts || [];
+      }),
+      files: files
+    }, ai || { allowAppSettings: true, backupReads: 0 });
+    if (!read.finished) return { found: 0 };
+    var receipts = JSON.parse(read.text).receipts || [];
 
     var links = [];
     // Present only when the Gmail add-on file is in this project. The daily scan
@@ -2854,7 +2995,7 @@ function receiptDailyReadOne_(message, aiKey, props) {
     var text = String(error && error.message ? error.message : error);
     // Allowance and key problems repeat on every remaining message, so there is
     // nothing to gain — and allowance to lose — by carrying on.
-    if (/unavailable \((429|400|401|403)\)/.test(text)) return { found: 0, halt: text };
+    if (/unavailable \((429|400|401|402|403)\)/.test(text)) return { found: 0, halt: text };
     return { found: 0 };
   }
 }

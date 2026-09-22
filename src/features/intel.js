@@ -28,7 +28,9 @@ import { confirmDialog } from '../lib/modal.js';
 import { buildAttentionSignals } from '../lib/attention-signals.js';
 import { INTEL_TOOL_SCHEMAS } from '../lib/publisher-intel-tools.js';
 import { friendlyChatError, runIntelTurn } from '../lib/gemini-chat.js';
+import { _geminiNoteSpent, _geminiResting } from '../lib/gemini-quota.js';
 import { friendlyOpenRouterError, runOpenRouterTurn } from '../lib/openrouter-chat.js';
+import { closeIntelExchange, trimIntelHistory } from '../lib/intel-history.js';
 import { EXPENSE_CATEGORIES } from './receipts.js';
 import { _tcBuildLedger, _tcGetTripsSummaryAll, saveTaxCenter } from './taxcentre.js';
 
@@ -39,8 +41,10 @@ const PROVIDER_KEY = 'lm_intel_provider';
 // How much of the conversation is carried forward. Every earlier turn is
 // re-sent on each question, tool results and all, so an unbounded thread would
 // grow the request until it either costs the whole free-tier allowance or is
-// refused outright. Eight entries is four exchanges: enough for a natural
-// follow-up, while keeping every new question prompt lean and responsive.
+// refused outright. Eight turns holds up to four plain exchanges, fewer when an
+// answer needed lookups: enough for a natural follow-up, while keeping every
+// new question lean. The cut is only ever made where a question starts — see
+// src/lib/intel-history.js for why a cut anywhere else breaks both providers.
 const HISTORY_LIMIT = 8;
 
 // Displayed messages, and the Gemini turns behind them. Kept apart on purpose:
@@ -62,7 +66,9 @@ function loadIntelThread() {
     const saved = JSON.parse(localStorage.getItem(THREAD_KEY) || 'null');
     if (!saved) return;
     INTEL_MESSAGES = Array.isArray(saved.messages) ? saved.messages : [];
-    INTEL_HISTORY = Array.isArray(saved.history) ? saved.history : [];
+    // Re-trimmed on the way in: a thread saved before trimming respected
+    // question boundaries may start halfway through a tool exchange.
+    INTEL_HISTORY = trimIntelHistory(saved.history, HISTORY_LIMIT);
     for (const p of (Array.isArray(saved.proposals) ? saved.proposals : [])) {
       if (p && p.id) INTEL_PROPOSALS.set(p.id, p);
     }
@@ -77,7 +83,7 @@ function saveIntelThread() {
   try {
     localStorage.setItem(THREAD_KEY, JSON.stringify({
       messages: INTEL_MESSAGES.slice(-40),
-      history: INTEL_HISTORY.slice(-HISTORY_LIMIT),
+      history: trimIntelHistory(INTEL_HISTORY, HISTORY_LIMIT),
       proposals: [...INTEL_PROPOSALS.values()].slice(-20),
     }));
   } catch (_) {
@@ -518,7 +524,13 @@ async function askWithFallback(question, pref = 'auto') {
   // instead of the Gemini-specific friendlyChatError — an OpenRouter 401 read
   // through Gemini's own error patterns falls through to raw API text instead
   // of "the backup key was rejected".
-  if (pref === 'backup') {
+  // On auto, a Google allowance already known to be spent (by this panel or by
+  // a receipt scan — the account is shared) is not asked again until it resets:
+  // it would only refuse, after a few seconds of backoff, before the backup
+  // got the question anyway.
+  const googleSpent = pref === 'auto' && hasGemini && !!backup && _geminiResting();
+  if (pref === 'backup' || googleSpent) {
+    if (googleSpent) setIntelStatus('Google’s allowance is used up for now — asking your backup model…');
     try {
       return await runOpenRouterTurn({ apiKey: backup.key, model: backup.model, ...shared });
     } catch (e) {
@@ -532,6 +544,7 @@ async function askWithFallback(question, pref = 'auto') {
       return await runIntelTurn({ apiKey: TAX_CENTER.settings.geminiKey, ...shared });
     } catch (e) {
       if (e && e.name === 'AbortError') throw e;
+      _geminiNoteSpent(e);
       if (pref === 'gemini' || !backup) throw e;
       console.warn('Intelligence: Google failed, trying the backup model —', e && e.message);
       setIntelStatus('Google could not answer — asking the backup model…');
@@ -605,7 +618,11 @@ async function sendIntelMessage() {
       // is entitled to know which one they are reading.
       ...(out.via === 'openrouter' ? { via: 'backup', viaModel: String(out.model || '') } : {}),
     });
-    INTEL_HISTORY = out.history.slice(-HISTORY_LIMIT);
+    // The stored history always ends with the words the publisher actually saw,
+    // and is only ever cut where a question starts: a cut between a tool call
+    // and its result is refused outright by Google AND by the backup, which
+    // used to make the next follow-up fail on both.
+    INTEL_HISTORY = trimIntelHistory(closeIntelExchange(out.history, text), HISTORY_LIMIT);
     const staged = out.proposals.reduce((n, b) => n + (b.items ? b.items.length : 0), 0);
     setIntelStatus(staged
       ? `Answered, with ${staged} ${staged === 1 ? 'change' : 'changes'} for you to approve.`

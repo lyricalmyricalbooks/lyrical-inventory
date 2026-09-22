@@ -335,12 +335,13 @@ describe('approving a batch of changes', () => {
 // ── Falling back to the second provider ─────────────────────────────────────
 
 describe('when Google will not answer', () => {
-  function harness({ gemini = null, backup = null, geminiKey = 'g', backupKey = 'b', backupModel = 'vendor/m:free' } = {}) {
+  function harness({ gemini = null, backup = null, geminiKey = 'g', backupKey = 'b', backupModel = 'vendor/m:free', resting = false } = {}) {
     const TAX_CENTER = { settings: { geminiKey, openRouterKey: backupKey, openRouterModel: backupModel } };
     const runIntelTurn = vi.fn(gemini || (async () => ({ text: 'from google', via: undefined, toolCalls: [], proposals: [], history: [] })));
     const runOpenRouterTurn = vi.fn(backup || (async () => ({ text: 'from backup', via: 'openrouter', model: backupModel, toolCalls: [], proposals: [], history: [] })));
     const deps = {
       TAX_CENTER, runIntelTurn, runOpenRouterTurn,
+      _geminiResting: () => resting, _geminiNoteSpent: vi.fn(),
       INTEL_HISTORY: [], INTEL_TOOL_SCHEMAS: [],
       intelContext: () => ({}), systemInstruction: () => 'sys',
       intelAbort: { signal: undefined },
@@ -424,17 +425,44 @@ describe('when Google will not answer', () => {
     await h.ask('q');
     expect(h.setIntelStatus).toHaveBeenCalledWith(expect.stringMatching(/backup/i));
   });
+
+  it('records a Google failure so other AI tools can skip a spent allowance', async () => {
+    const quota = Object.assign(new Error('quota exceeded'), { status: 429 });
+    const h = harness({ gemini: async () => { throw quota; } });
+    await h.ask('q');
+    expect(h._geminiNoteSpent).toHaveBeenCalledWith(quota);
+  });
+
+  it('goes straight to the backup while Google’s allowance is known to be spent', async () => {
+    // Asking again would only be refused, after seconds of backoff, before the
+    // backup got the question anyway.
+    const h = harness({ resting: true });
+    expect((await h.ask('q')).text).toBe('from backup');
+    expect(h.runIntelTurn).not.toHaveBeenCalled();
+    expect(h.setIntelStatus).toHaveBeenCalledWith(expect.stringMatching(/used up/i));
+  });
+
+  it('still asks Google while resting when there is no backup to go to', async () => {
+    const h = harness({ resting: true, backupKey: '' });
+    expect((await h.ask('q')).text).toBe('from google');
+  });
+
+  it('tags a failure of the skip-ahead backup for the backup wording', async () => {
+    const h = harness({ resting: true, backup: async () => { throw new Error('bad key'); } });
+    await expect(h.ask('q')).rejects.toMatchObject({ __viaOpenRouter: true });
+  });
 });
 
 // ── A manual pick is a promise kept ──────────────────────────────────────────
 
 describe('when the publisher picks a model themselves', () => {
-  function harness({ gemini = null, backup = null, geminiKey = 'g', backupKey = 'b', backupModel = 'vendor/m:free' } = {}) {
+  function harness({ gemini = null, backup = null, geminiKey = 'g', backupKey = 'b', backupModel = 'vendor/m:free', resting = false } = {}) {
     const TAX_CENTER = { settings: { geminiKey, openRouterKey: backupKey, openRouterModel: backupModel } };
     const runIntelTurn = vi.fn(gemini || (async () => ({ text: 'from google', via: undefined, toolCalls: [], proposals: [], history: [] })));
     const runOpenRouterTurn = vi.fn(backup || (async () => ({ text: 'from backup', via: 'openrouter', model: backupModel, toolCalls: [], proposals: [], history: [] })));
     const deps = {
       TAX_CENTER, runIntelTurn, runOpenRouterTurn,
+      _geminiResting: () => resting, _geminiNoteSpent: vi.fn(),
       INTEL_HISTORY: [], INTEL_TOOL_SCHEMAS: [],
       intelContext: () => ({}), systemInstruction: () => 'sys',
       intelAbort: { signal: undefined },
@@ -453,6 +481,12 @@ describe('when the publisher picks a model themselves', () => {
     const h = harness();
     expect((await h.ask('q', 'backup')).text).toBe('from backup');
     expect(h.runIntelTurn).not.toHaveBeenCalled();
+  });
+
+  it('still asks Google when pinned to it, even while its allowance is spent', async () => {
+    const h = harness({ resting: true });
+    expect((await h.ask('q', 'gemini')).text).toBe('from google');
+    expect(h.runOpenRouterTurn).not.toHaveBeenCalled();
   });
 
   it('fails outright when pinned to Google and Google fails, even with a backup configured', async () => {
