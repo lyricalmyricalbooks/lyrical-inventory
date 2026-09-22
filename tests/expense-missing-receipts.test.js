@@ -89,7 +89,7 @@ describe('expense ledger — missing receipt affordances', () => {
 
   it('gives dates and refs tabular figures so the column reads as a column', () => {
     expect(receipts).toContain('<td class="mono" style="color:var(--text3);">${fmtD(e.date) ?? \'—\'}</td>');
-    expect(receipts).toContain('<td class="mono" style="font-size:11px;color:var(--text3);">${escapeHtml(e.ref) || \'—\'}</td>');
+    expect(receipts).toContain('<td class="mono" style="font-size:var(--text-xs);color:var(--text3);">${escapeHtml(e.ref) || \'—\'}</td>');
   });
 });
 

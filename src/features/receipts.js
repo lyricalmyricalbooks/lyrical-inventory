@@ -816,13 +816,13 @@ function _localReceiptCell(item) {
     : (item.receipt ? [item.receipt] : []);
   if (!files.length) {
     if (isGratuityExpense(item)) {
-      return '<span class="pill gray" style="font-size:10px;" title="Gifted / promotional author copy (receipt exempt)">Gratuity copy</span>';
+      return '<span class="pill gray" style="font-size:var(--text-2xs);" title="Gifted / promotional author copy (receipt exempt)">Gratuity copy</span>';
     }
     if (isRentExpense(item)) {
-      return '<span class="pill gray" style="font-size:10px;" title="Rent / lease payment (receipt exempt — documented via tenancy lease & bank statement)">Lease record</span>';
+      return '<span class="pill gray" style="font-size:var(--text-2xs);" title="Rent / lease payment (receipt exempt — documented via tenancy lease & bank statement)">Lease record</span>';
     }
     if (item.sourceType === 'businessExpense' || item.sourceType === 'bookExpense') {
-      return `<button class="btn sm outline" type="button" onclick="attachReceiptToExpenseRow('${item.sourceType || ''}', '${item.sourceId || ''}', '${item.itemId || ''}')" style="font-size:10px;padding:1px 6px;color:var(--gold-text);" title="Attach receipt file">📎 Attach</button>`;
+      return `<button class="btn sm outline" type="button" onclick="attachReceiptToExpenseRow('${item.sourceType || ''}', '${item.sourceId || ''}', '${item.itemId || ''}')" style="font-size:var(--text-2xs);padding:1px 6px;color:var(--gold-text);" title="Attach receipt file">📎 Attach</button>`;
     }
     return '';
   }
@@ -2521,7 +2521,7 @@ async function searchGmailEmails() {
     listWrap.innerHTML = `
       <div style="padding:40px 20px;text-align:center;">
         <div class="spinner" style="width:20px;height:20px;margin-bottom:12px;"></div>
-        <div style="font-size:12px;color:var(--text3);">Searching Gmail inbox (Apps Script)…</div>
+        <div style="font-size:var(--text-sm);color:var(--text3);">Searching Gmail inbox (Apps Script)…</div>
       </div>`;
   }
 
@@ -2561,7 +2561,7 @@ async function searchGmailEmails() {
           listWrap.innerHTML = `
             <div style="padding:40px 20px;text-align:center;">
               <div class="spinner" style="width:20px;height:20px;margin-bottom:12px;"></div>
-              <div style="font-size:12px;color:var(--text3);">Retrying… (${attempt}/${MAX_RETRIES})</div>
+              <div style="font-size:var(--text-sm);color:var(--text3);">Retrying… (${attempt}/${MAX_RETRIES})</div>
             </div>`;
         }
         await new Promise(r => setTimeout(r, 600));
@@ -2597,7 +2597,7 @@ async function searchGmailEmails() {
       listWrap.innerHTML = `
         <div class="empty-state" style="padding:20px;color:var(--red);">
           ❌ Search failed: ${escapeHtml(msg)}<br>
-          <span style="font-size:11px;color:var(--text3);margin-top:6px;display:block;">${hint}</span>
+          <span style="font-size:var(--text-xs);color:var(--text3);margin-top:6px;display:block;">${hint}</span>
         </div>`;
     }
     showToast(isNetwork ? 'Gmail search failed: Re-deploy Apps Script' : 'Gmail search failed', 'err');
@@ -2630,11 +2630,11 @@ function renderGmailEmailsList() {
           Otherwise widen the window (try the <b>Past 30 Days</b> chip) or simplify the query.`;
     const q = meta.query ? escapeHtml(meta.query) : '';
     listWrap.innerHTML = `
-      <div class="empty-state" style="padding:26px 20px;font-size:12px;color:var(--text3);text-align:center;line-height:1.6;">
+      <div class="empty-state" style="padding:26px 20px;font-size:var(--text-sm);color:var(--text3);text-align:center;line-height:1.6;">
         <span style="font-size:24px;display:block;margin-bottom:8px;">📭</span>
         ${acctLine}
-        <span style="font-size:11px;display:block;margin-top:8px;">${hint}</span>
-        ${q ? `<code style="font-size:10px;display:block;margin-top:8px;word-break:break-all;">${q}</code>` : ''}
+        <span style="font-size:var(--text-xs);display:block;margin-top:8px;">${hint}</span>
+        ${q ? `<code style="font-size:var(--text-2xs);display:block;margin-top:8px;word-break:break-all;">${q}</code>` : ''}
       </div>`;
     return;
   }
@@ -2981,7 +2981,7 @@ async function toggleEmailPreview(msgId) {
       drawer.innerHTML = `
         <div style="padding:16px;text-align:center;">
           <div class="spinner" style="width:14px;height:14px;margin-bottom:6px;"></div>
-          <div style="font-size:11px;color:var(--text3);">Fetching email contents &amp; attachments…</div>
+          <div style="font-size:var(--text-xs);color:var(--text3);">Fetching email contents &amp; attachments…</div>
         </div>`;
 
       try {
@@ -2995,7 +2995,7 @@ async function toggleEmailPreview(msgId) {
         renderEmailPreviewContent(msgId, drawer);
       } catch (err) {
         console.error('[toggleEmailPreview]', err);
-        drawer.innerHTML = `<div style="padding:12px;color:var(--red);font-size:11px;">Error loading content: ${escapeHtml(err.message || err)}</div>`;
+        drawer.innerHTML = `<div style="padding:12px;color:var(--red);font-size:var(--text-xs);">Error loading content: ${escapeHtml(err.message || err)}</div>`;
       }
     } else if (drawer) {
       renderEmailPreviewContent(msgId, drawer);
@@ -3068,26 +3068,26 @@ function renderEmailPreviewContent(msgId, container) {
       return `
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:4px 0;padding:2px 0;">
           <input type="checkbox" class="email-att-cb-${msgId}" data-idx="${idx}" ${isChecked ? 'checked' : ''} onchange="_setEmailAttExcluded('${msgId}', ${idx}, !this.checked)" style="width:14px;height:14px;">
-          <span style="font-family:var(--font-mono);font-size:11px;">${icon} ${esc(f.name)} <span style="opacity:.6;font-size:10px;">(${typeLabel})</span></span>
+          <span style="font-family:var(--font-mono);font-size:var(--text-xs);">${icon} ${esc(f.name)} <span style="opacity:.6;font-size:var(--text-2xs);">(${typeLabel})</span></span>
         </label>
       `;
     }).join('');
 
     attachmentsHtml = `
       <div style="margin-top:10px;border-top:var(--stroke-hair) dashed var(--border);padding-top:8px;">
-        <div style="font-weight:700;font-size:11px;margin-bottom:6px;color:var(--text2);">Include attachments in AI Scan (${email.fileParts.length}):</div>
+        <div style="font-weight:700;font-size:var(--text-xs);margin-bottom:6px;color:var(--text2);">Include attachments in AI Scan (${email.fileParts.length}):</div>
         <div style="background:var(--surface-card);padding:6px 12px;border:var(--stroke-hair) solid var(--border2);border-radius:var(--r);max-height:100px;overflow-y:auto;">
           ${listItems}
         </div>
       </div>
     `;
   } else {
-    attachmentsHtml = `<div style="margin-top:6px;font-size:10px;color:var(--text3);font-style:italic;">No PDF or image attachments found.</div>`;
+    attachmentsHtml = `<div style="margin-top:6px;font-size:var(--text-2xs);color:var(--text3);font-style:italic;">No PDF or image attachments found.</div>`;
   }
 
   container.innerHTML = `
     <div style="display:flex;flex-direction:column;gap:4px;">
-      <div style="font-weight:700;font-size:11px;color:var(--text2);margin-bottom:4px;">Email Body Preview:</div>
+      <div style="font-weight:700;font-size:var(--text-xs);color:var(--text2);margin-bottom:4px;">Email Body Preview:</div>
       <div class="email-preview-body">${esc(truncatedBody)}</div>
       ${attachmentsHtml}
     </div>
@@ -5097,7 +5097,7 @@ async function extractReceiptsFromEmailText() {
 
     if (btn) btn.disabled = true;
     btn.textContent = 'Extracting…';
-    if (wrap) wrap.innerHTML = `<div style="font-size:12px;color:var(--text3);">Reading attachments and querying Gemini…</div>`;
+    if (wrap) wrap.innerHTML = `<div style="font-size:var(--text-sm);color:var(--text3);">Reading attachments and querying Gemini…</div>`;
 
     try {
       const fileParts = await readReceiptFiles(files);
@@ -5113,7 +5113,7 @@ async function extractReceiptsFromEmailText() {
     } catch (e) {
       console.error('[email-receipt-import] file read failed', e);
       if (wrap) {
-        wrap.innerHTML = `<div style="background:rgba(220,60,60,.08);border:var(--stroke-hair) solid rgba(220,60,60,.25);border-radius:var(--r2);padding:10px 14px;font-size:12px;color:var(--red);">File read failed: ${(e.message || e).toString().replace(/</g, '&lt;')}</div>`;
+        wrap.innerHTML = `<div style="background:rgba(220,60,60,.08);border:var(--stroke-hair) solid rgba(220,60,60,.25);border-radius:var(--r2);padding:10px 14px;font-size:var(--text-sm);color:var(--red);">File read failed: ${(e.message || e).toString().replace(/</g, '&lt;')}</div>`;
       }
       showToast('Could not read files', 'err');
       if (btn) btn.disabled = false;
@@ -5122,7 +5122,7 @@ async function extractReceiptsFromEmailText() {
     }
   }
 
-  if (wrap) wrap.innerHTML = `<div style="font-size:12px;color:var(--text3);">Sending content to Gemini AI…</div>`;
+  if (wrap) wrap.innerHTML = `<div style="font-size:var(--text-sm);color:var(--text3);">Sending content to Gemini AI…</div>`;
   try {
     const out = await _callAiForReceipts(apiKey, parts, {
       schema: RECEIPT_EXTRACTION_SCHEMA,
@@ -5142,7 +5142,7 @@ async function extractReceiptsFromEmailText() {
     console.error('[email-receipt-import] Gemini failed', e);
     if (wrap) {
       console.error('[email-receipt-import] extraction failed', e);
-      wrap.innerHTML = `<div style="background:rgba(220,60,60,.08);border:var(--stroke-hair) solid rgba(220,60,60,.25);border-radius:var(--r2);padding:10px 14px;font-size:12px;color:var(--red);">Could not read these emails — ${escapeHtml(_friendlyScanError(e))}</div>`;
+      wrap.innerHTML = `<div style="background:rgba(220,60,60,.08);border:var(--stroke-hair) solid rgba(220,60,60,.25);border-radius:var(--r2);padding:10px 14px;font-size:var(--text-sm);color:var(--red);">Could not read these emails — ${escapeHtml(_friendlyScanError(e))}</div>`;
     }
     showToast('Could not extract receipts', 'err');
   } finally {
@@ -6162,13 +6162,13 @@ function renderExpenses() {
     if (e.pendingAuth) {
       const actionCell = window.IS_PUBLISHER
         ? `<div class="approval-actions"><button class="appr-btn approve" onclick="approveSubmission('expenses', '${e._subKey}')" aria-label="Approve submission"><span class="ico">✓</span>Approve</button><button class="appr-btn reject" onclick="rejectSubmission('expenses', '${e._subKey}')" title="Reject submission" aria-label="Reject submission">✕</button></div>`
-        : `<span style="font-size:10px;color:var(--amber);">Awaiting Publisher</span>`;
+        : `<span style="font-size:var(--text-2xs);color:var(--amber);">Awaiting Publisher</span>`;
       return `<tr style="opacity:0.8;background:var(--amber-bg);">
         ${showSelectCol ? '<td></td>' : ''}
         <td class="mono" style="color:var(--text3);">${fmtD(e.date) ?? '—'}</td>
         <td style="font-weight:600;">${escapeHtml(e.desc)}</td>
-        <td><span class="pill gray" style="font-size:10px;">${escapeHtml(e.cat)}</span></td>
-        <td class="mono" style="font-size:11px;color:var(--text3);">${escapeHtml(e.ref) || '—'}</td>
+        <td><span class="pill gray" style="font-size:var(--text-2xs);">${escapeHtml(e.cat)}</span></td>
+        <td class="mono" style="font-size:var(--text-xs);color:var(--text3);">${escapeHtml(e.ref) || '—'}</td>
         <td>—</td>
         <td class="r" style="font-weight:600;">${fmt(e.amount, e.currency)}</td>
         ${window.IS_PUBLISHER ? '<td class="r">—</td>' : ''}
@@ -6179,36 +6179,36 @@ function renderExpenses() {
 
     const isGratuity = isGratuityExpense(e);
     const statusCell = isGratuity
-      ? '<span class="pill gray" style="font-size:10px;" title="Gifted-copy cost — publisher absorbed, not reimbursed to author">Publisher expense</span>'
+      ? '<span class="pill gray" style="font-size:var(--text-2xs);" title="Gifted-copy cost — publisher absorbed, not reimbursed to author">Publisher expense</span>'
       : e.received
-        ? '<span class="pill green" style="font-size:10px;">✓ Received</span>'
-        : '<span style="font-size:11px;color:var(--text3);">Pending</span>';
+        ? '<span class="pill green" style="font-size:var(--text-2xs);">✓ Received</span>'
+        : '<span style="font-size:var(--text-xs);color:var(--text3);">Pending</span>';
     const actionCell = (!e.received && !isAuthor() && !isGratuity)
       ? `<button class="edit-btn" onclick="voidExpense(${e.id})" title="Remove" aria-label="Remove" style="opacity:1;color:var(--red);">✕</button>` : '';
     const baseReceiptLink = e.receipt ? (
       e.receipt.startsWith('local://')
-        ? `<a href="#" onclick="event.preventDefault(); viewLocalReceipt('${escapeHtml(e.receipt.replace('local://', ''))}')" style="font-size:11px;color:var(--gold);text-decoration:underline;">View Local</a>`
+        ? `<a href="#" onclick="event.preventDefault(); viewLocalReceipt('${escapeHtml(e.receipt.replace('local://', ''))}')" style="font-size:var(--text-xs);color:var(--gold);text-decoration:underline;">View Local</a>`
         : (followableUrl(e.receipt)
-          ? `<a href="${escapeHtml(followableUrl(e.receipt))}" target="_blank" rel="noopener" style="font-size:11px;color:var(--gold);">View</a>`
+          ? `<a href="${escapeHtml(followableUrl(e.receipt))}" target="_blank" rel="noopener" style="font-size:var(--text-xs);color:var(--gold);">View</a>`
           // Not local and not a followable address — a link here would look
           // ordinary and do nothing, which is how the shipping ledger's dead
           // reference link went unnoticed for so long.
-          : `<span class="pill gray" style="font-size:10px;" title="This receipt reference cannot be opened">Unopenable ref</span>`)
+          : `<span class="pill gray" style="font-size:var(--text-2xs);" title="This receipt reference cannot be opened">Unopenable ref</span>`)
     ) : isGratuity
-      ? `<span class="pill gray" style="font-size:10px;" title="Gifted / promotional author copy (receipt exempt)">Gratuity copy</span>`
+      ? `<span class="pill gray" style="font-size:var(--text-2xs);" title="Gifted / promotional author copy (receipt exempt)">Gratuity copy</span>`
       : isRentExpense(e)
-        ? `<span class="pill gray" style="font-size:10px;" title="Rent / lease payment (receipt exempt — verified via lease agreement & bank record)">Lease record</span>`
+        ? `<span class="pill gray" style="font-size:var(--text-2xs);" title="Rent / lease payment (receipt exempt — verified via lease agreement & bank record)">Lease record</span>`
         // A gap in the paper trail is the one thing on this row that costs money
         // later, so it gets the same amber needs-attention pill the rest of the
         // app uses — not the faintest text in the row, which is what it was.
         : expenseMissingReceipt(e)
-          ? `<span class="pill amber" style="font-size:10px;" title="No receipt attached — this is the expense an accountant will ask you to produce at tax time">⚠ No receipt</span>`
-          : `<span class="pill gray" style="font-size:10px;" title="Backed by the reference in the Ref column">Ref on file</span>`;
+          ? `<span class="pill amber" style="font-size:var(--text-2xs);" title="No receipt attached — this is the expense an accountant will ask you to produce at tax time">⚠ No receipt</span>`
+          : `<span class="pill gray" style="font-size:var(--text-2xs);" title="Backed by the reference in the Ref column">Ref on file</span>`;
     // A tracking URL can arrive straight from a carrier API response, so it is
     // external text reaching an href — allow-listed and escaped like any other.
     const trackHref = followableUrl(e.trackingUrl);
     const trackLink = trackHref
-      ? ` <a href="${escapeHtml(trackHref)}" target="_blank" rel="noopener" style="font-size:11px;color:var(--text3);" title="Track shipment">· Track</a>`
+      ? ` <a href="${escapeHtml(trackHref)}" target="_blank" rel="noopener" style="font-size:var(--text-xs);color:var(--text3);" title="Track shipment">· Track</a>`
       : '';
     const receiptCell = baseReceiptLink + trackLink;
 
@@ -6248,8 +6248,8 @@ function renderExpenses() {
       ${selectCell}
       <td class="mono" style="color:var(--text3);">${fmtD(e.date) ?? '—'}</td>
       <td style="font-weight:600;">${escapeHtml(e.desc)}</td>
-      <td><span class="pill gray" style="font-size:10px;">${escapeHtml(e.cat)}</span></td>
-      <td class="mono" style="font-size:11px;color:var(--text3);">${escapeHtml(e.ref) || '—'}</td>
+      <td><span class="pill gray" style="font-size:var(--text-2xs);">${escapeHtml(e.cat)}</span></td>
+      <td class="mono" style="font-size:var(--text-xs);color:var(--text3);">${escapeHtml(e.ref) || '—'}</td>
       <td>${receiptCell}</td>
       <td class="r" style="color:${isSettledReimbursable ? 'var(--text4)' : 'var(--red)'};font-family:var(--font-mono);">${fmt(e.amount, eCur)}</td>
       ${window.IS_PUBLISHER ? `<td class="r" style="font-family:var(--font-mono);color:var(--text3);"${baseAmountTitle ? ` title="${baseAmountTitle}"` : ''}>${baseAmountText}</td>` : ''}

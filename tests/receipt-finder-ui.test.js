@@ -390,6 +390,17 @@ describe('receipt finder UI', () => {
     const gate = document.querySelector('[data-finder-gate]').textContent;
     expect(gate).not.toMatch(/would not accept/);
   });
+  it('filters drafts when clicking summary KPI cards', async () => {
+    await mount();
+    const readyCard = document.querySelector('.finder-stat[data-status="ready"]');
+    expect(readyCard).not.toBeNull();
+    readyCard.click();
+    expect(document.querySelector('[data-finder-list]').textContent).toContain('Nothing matches this view');
+    const reviewCard = document.querySelector('.finder-stat[data-status="review"]');
+    expect(reviewCard).not.toBeNull();
+    reviewCard.click();
+    expect(document.querySelector('[data-draft]').dataset.draft).toBe('publisher@example.com:m1:0');
+  });
   it('clears mailbox content immediately on sign-out', async () => {
     await mount();
     const callback = window._fbOnAuthStateChanged.mock.calls[0][0];

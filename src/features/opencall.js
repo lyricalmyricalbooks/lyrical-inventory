@@ -229,17 +229,17 @@ function renderOcBulkModalContent(retryMode = false) {
 
   const listHtml = eligible.length > 0
     ? `<div style="display:flex;gap:6px;margin-bottom:8px;">
-        <button type="button" style="font-size:10px;padding:2px 8px;background:transparent;border:var(--stroke-hair) solid var(--border);color:var(--text3);border-radius:var(--r);cursor:pointer;" onclick="ocBulkSelectAll(true)">Select All</button>
-        <button type="button" style="font-size:10px;padding:2px 8px;background:transparent;border:var(--stroke-hair) solid var(--border);color:var(--text3);border-radius:var(--r);cursor:pointer;" onclick="ocBulkSelectAll(false)">Deselect All</button>
-        <span style="font-size:10px;color:var(--text3);margin-left:auto;align-self:center;" id="oc-bulk-recipient-count">${eligible.length} recipient${eligible.length !== 1 ? 's' : ''}</span>
+        <button type="button" style="font-size:var(--text-2xs);padding:2px 8px;background:transparent;border:var(--stroke-hair) solid var(--border);color:var(--text3);border-radius:var(--r);cursor:pointer;" onclick="ocBulkSelectAll(true)">Select All</button>
+        <button type="button" style="font-size:var(--text-2xs);padding:2px 8px;background:transparent;border:var(--stroke-hair) solid var(--border);color:var(--text3);border-radius:var(--r);cursor:pointer;" onclick="ocBulkSelectAll(false)">Deselect All</button>
+        <span style="font-size:var(--text-2xs);color:var(--text3);margin-left:auto;align-self:center;" id="oc-bulk-recipient-count">${eligible.length} recipient${eligible.length !== 1 ? 's' : ''}</span>
       </div>` +
     eligible.map(c => `
-        <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);cursor:pointer;padding:4px 0;border-radius:var(--r);transition:background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
+        <label style="display:flex;align-items:center;gap:8px;font-size:var(--text-sm);color:var(--text);cursor:pointer;padding:4px 0;border-radius:var(--r);transition:background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
           <input type="checkbox" class="oc-bulk-recipient-check" value="${c.id}" checked style="margin:0;cursor:pointer;" onchange="ocBulkUpdateCount()">
           <span><strong>${escapeHtml(c.name || 'Unnamed')}</strong> <span style="color:var(--text3);">(${escapeHtml(c.email)})</span></span>
         </label>
       `).join('')
-    : '<div style="font-size:12px;color:var(--text3);font-style:italic;padding:10px 0;">No eligible contributors found for this stage.</div>';
+    : '<div style="font-size:var(--text-sm);color:var(--text3);font-style:italic;padding:10px 0;">No eligible contributors found for this stage.</div>';
 
   const tmpl = proj.templates ? proj.templates[stage] : null;
   const dl = localStorage.getItem('lm-oc-last-deadline') || 'July 15th';
@@ -261,23 +261,23 @@ function renderOcBulkModalContent(retryMode = false) {
       <button type="button" class="modal-close-btn" onclick="closeOcBulkModal()" style="position:absolute;top:15px;right:15px;" aria-label="Close dialog" title="Close (Esc)">✕</button>
       
       <div style="font-family:var(--font-display);font-size:20px;font-weight:700;color:var(--gold-text);margin-bottom:4px;">✉ Send Bulk Pipeline Emails</div>
-      <div style="font-size:12px;color:var(--text3);margin-bottom:18px;">Personalize and send stage emails to selected contributors.</div>
+      <div style="font-size:var(--text-sm);color:var(--text3);margin-bottom:18px;">Personalize and send stage emails to selected contributors.</div>
 
       <!-- Stage + Re-send Row -->
       <div style="display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:end;margin-bottom:14px;">
         <div>
-          <label style="font-size:11px;color:var(--text3);font-weight:600;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.04em;">Pipeline Stage</label>
-          <select id="oc-bulk-stage" onchange="onOcBulkStageChange(this.value)" style="width:100%;padding:8px 12px;font-size:13px;background:var(--input-bg);color:var(--text);border:var(--stroke-hair) solid var(--border);border-radius:var(--r);">
+          <label style="font-size:var(--text-xs);color:var(--text3);font-weight:600;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.04em;">Pipeline Stage</label>
+          <select id="oc-bulk-stage" onchange="onOcBulkStageChange(this.value)" style="width:100%;padding:8px 12px;font-size:var(--text-base);background:var(--input-bg);color:var(--text);border:var(--stroke-hair) solid var(--border);border-radius:var(--r);">
             <option value="selectionSent" ${stage === 'selectionSent' ? 'selected' : ''}>Stage 1 — Selection Notice</option>
             <option value="cmykSent" ${stage === 'cmykSent' ? 'selected' : ''}>Stage 2 — Request Files (CMYK)</option>
             <option value="preorderSent" ${stage === 'preorderSent' ? 'selected' : ''}>Stage 3 — Pre-order Launch Info</option>
           </select>
         </div>
-        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer;white-space:nowrap;padding-bottom:4px;" title="Also show contributors who already received this stage email">
+        <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-sm);color:var(--text2);cursor:pointer;white-space:nowrap;padding-bottom:4px;" title="Also show contributors who already received this stage email">
           <input type="checkbox" id="oc-bulk-resend-toggle" onchange="renderOcBulkModalContent()" style="cursor:pointer;">
           Re-send mode
         </label>
-        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer;white-space:nowrap;padding-bottom:4px;" title="Simulate sending without actually delivering any emails">
+        <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-sm);color:var(--text2);cursor:pointer;white-space:nowrap;padding-bottom:4px;" title="Simulate sending without actually delivering any emails">
           <input type="checkbox" id="oc-bulk-simulate-toggle" style="cursor:pointer;">
           Simulate (Dry Run)
         </label>
@@ -285,7 +285,7 @@ function renderOcBulkModalContent(retryMode = false) {
 
       <!-- Recipients -->
       <div style="margin-bottom:14px;">
-        <div style="font-size:11px;color:var(--text3);font-weight:600;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em;">Recipients</div>
+        <div style="font-size:var(--text-xs);color:var(--text3);font-weight:600;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em;">Recipients</div>
         <div id="oc-bulk-recipients" style="max-height:170px;overflow-y:auto;border:var(--stroke-hair) solid var(--border);border-radius:var(--r);padding:10px;background:var(--input-bg);display:flex;flex-direction:column;gap:2px;">
           ${listHtml}
         </div>
@@ -294,16 +294,16 @@ function renderOcBulkModalContent(retryMode = false) {
       <!-- Reply-To, Delay & Deadline Row -->
       <div style="display:grid;grid-template-columns:1fr 120px 140px;gap:12px;align-items:end;margin-bottom:14px;">
         <div>
-          <label style="font-size:11px;color:var(--text3);font-weight:600;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.04em;">Reply-To (optional)</label>
-          <input id="oc-bulk-replyto" type="email" placeholder="e.g. hello@lyricalmyricalbooks.com" style="width:100%;padding:8px 12px;font-size:12px;background:var(--input-bg);color:var(--text);border:var(--stroke-hair) solid var(--border);border-radius:var(--r);box-sizing:border-box;">
+          <label style="font-size:var(--text-xs);color:var(--text3);font-weight:600;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.04em;">Reply-To (optional)</label>
+          <input id="oc-bulk-replyto" type="email" placeholder="e.g. hello@lyricalmyricalbooks.com" style="width:100%;padding:8px 12px;font-size:var(--text-sm);background:var(--input-bg);color:var(--text);border:var(--stroke-hair) solid var(--border);border-radius:var(--r);box-sizing:border-box;">
         </div>
         <div>
-          <label style="font-size:11px;color:var(--text3);font-weight:600;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.04em;">Deadline ({{date}})</label>
-          <input id="oc-bulk-deadline" type="text" placeholder="e.g. July 15th" value="${escapeHtml(dl)}" oninput="localStorage.setItem('lm-oc-last-deadline', this.value); ocUpdateBulkPreview();" style="width:100%;padding:8px 12px;font-size:12px;background:var(--input-bg);color:var(--text);border:var(--stroke-hair) solid var(--border);border-radius:var(--r);box-sizing:border-box;">
+          <label style="font-size:var(--text-xs);color:var(--text3);font-weight:600;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.04em;">Deadline ({{date}})</label>
+          <input id="oc-bulk-deadline" type="text" placeholder="e.g. July 15th" value="${escapeHtml(dl)}" oninput="localStorage.setItem('lm-oc-last-deadline', this.value); ocUpdateBulkPreview();" style="width:100%;padding:8px 12px;font-size:var(--text-sm);background:var(--input-bg);color:var(--text);border:var(--stroke-hair) solid var(--border);border-radius:var(--r);box-sizing:border-box;">
         </div>
         <div>
-          <label style="font-size:11px;color:var(--text3);font-weight:600;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.04em;">Delay</label>
-          <select id="oc-bulk-delay" style="width:100%;padding:8px 10px;font-size:12px;background:var(--input-bg);color:var(--text);border:var(--stroke-hair) solid var(--border);border-radius:var(--r);">
+          <label style="font-size:var(--text-xs);color:var(--text3);font-weight:600;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.04em;">Delay</label>
+          <select id="oc-bulk-delay" style="width:100%;padding:8px 10px;font-size:var(--text-sm);background:var(--input-bg);color:var(--text);border:var(--stroke-hair) solid var(--border);border-radius:var(--r);">
             <option value="0">No delay</option>
             <option value="1000" selected>1s between sends</option>
             <option value="2000">2s between sends</option>
@@ -314,33 +314,33 @@ function renderOcBulkModalContent(retryMode = false) {
 
       <!-- Template Preview -->
       <div style="margin-bottom:14px;border:var(--stroke-hair) solid var(--border);border-radius:var(--r);overflow:hidden;">
-        <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;color:var(--text3);padding:8px 12px;background:rgba(255,255,255,0.03);border-bottom:var(--stroke-hair) solid var(--border);">Template Preview (sample data)</div>
+        <div style="font-size:var(--text-2xs);text-transform:uppercase;letter-spacing:0.06em;font-weight:700;color:var(--text3);padding:8px 12px;background:rgba(255,255,255,0.03);border-bottom:var(--stroke-hair) solid var(--border);">Template Preview (sample data)</div>
         <div style="padding:12px;max-height:120px;overflow-y:auto;">
-          <div id="oc-bulk-preview-sub-container" style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px;">Subject: ${escapeHtml(previewSub)}</div>
-          <div id="oc-bulk-preview-body-container" style="font-size:11px;color:var(--text2);line-height:1.6;white-space:pre-wrap;">${previewBody}</div>
+          <div id="oc-bulk-preview-sub-container" style="font-size:var(--text-sm);font-weight:700;color:var(--text);margin-bottom:6px;">Subject: ${escapeHtml(previewSub)}</div>
+          <div id="oc-bulk-preview-body-container" style="font-size:var(--text-xs);color:var(--text2);line-height:1.6;white-space:pre-wrap;">${previewBody}</div>
         </div>
         <div style="padding:8px 12px;border-top:var(--stroke-hair) solid var(--border);background:rgba(255,255,255,0.02);">
-          <span style="font-size:10px;color:var(--text3);">Tokens: <code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:var(--r);font-size:10px;">{{name}}</code> <code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:var(--r);font-size:10px;">{{photo}}</code> <code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:var(--r);font-size:10px;">{{creditName}}</code> <code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:var(--r);font-size:10px;">{{project}}</code> <code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:var(--r);font-size:10px;">{{date}}</code> — replace with per-contributor data</span>
+          <span style="font-size:var(--text-2xs);color:var(--text3);">Tokens: <code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:var(--r);font-size:var(--text-2xs);">{{name}}</code> <code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:var(--r);font-size:var(--text-2xs);">{{photo}}</code> <code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:var(--r);font-size:var(--text-2xs);">{{creditName}}</code> <code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:var(--r);font-size:var(--text-2xs);">{{project}}</code> <code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:var(--r);font-size:var(--text-2xs);">{{date}}</code> — replace with per-contributor data</span>
         </div>
       </div>
 
       <!-- Test Email -->
       <div style="margin-bottom:16px;padding:10px 12px;background:rgba(255,255,255,0.02);border:var(--stroke-hair) dashed var(--border);border-radius:var(--r);display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        <span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Test Send</span>
-        <input id="oc-bulk-test-email" type="email" placeholder="your@email.com" style="flex:1;min-width:140px;padding:6px 10px;font-size:12px;background:var(--input-bg);color:var(--text);border:var(--stroke-hair) solid var(--border);border-radius:var(--r);">
+        <span style="font-size:var(--text-xs);color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Test Send</span>
+        <input id="oc-bulk-test-email" type="email" placeholder="your@email.com" style="flex:1;min-width:140px;padding:6px 10px;font-size:var(--text-sm);background:var(--input-bg);color:var(--text);border:var(--stroke-hair) solid var(--border);border-radius:var(--r);">
         <button class="btn sm" onclick="sendOcBulkTestEmail()" ${tmpl ? '' : 'disabled'} title="Send the template to yourself using sample data">📨 Send Test</button>
       </div>
 
       <!-- Progress Bar (Initially Hidden) -->
       <div id="oc-bulk-progress-container" style="display:none;margin-bottom:16px;">
-        <div class="row-between" style="font-size:12px;color:var(--text2);margin-bottom:6px;">
+        <div class="row-between" style="font-size:var(--text-sm);color:var(--text2);margin-bottom:6px;">
           <span id="oc-bulk-progress-text">Sending emails...</span>
           <strong id="oc-bulk-progress-pct">0%</strong>
         </div>
         <div style="width:100%;background:rgba(255,255,255,0.06);height:8px;border-radius:var(--r);overflow:hidden;border:var(--stroke-hair) solid var(--border);">
           <div id="oc-bulk-progress-fill" style="width:0%;background:linear-gradient(90deg, var(--gold), var(--gold2));height:100%;transition:width 0.3s ease;"></div>
         </div>
-        <div id="oc-bulk-console" style="font-family:var(--font-mono);font-size:11px;background:var(--ink);color:#a9ffaf;padding:10px;border-radius:var(--r);max-height:120px;overflow-y:auto;margin-top:10px;border:var(--stroke-hair) solid #2a2a2a;line-height:1.5;"></div>
+        <div id="oc-bulk-console" style="font-family:var(--font-mono);font-size:var(--text-xs);background:var(--ink);color:#a9ffaf;padding:10px;border-radius:var(--r);max-height:120px;overflow-y:auto;margin-top:10px;border:var(--stroke-hair) solid #2a2a2a;line-height:1.5;"></div>
       </div>
       
       <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;" id="oc-bulk-actions">
@@ -626,31 +626,31 @@ function renderOcBulkRemoveModalContent() {
 
   const listHtml = eligible.length > 0
     ? `<div style="display:flex;gap:6px;margin-bottom:8px;">
-        <button type="button" style="font-size:10px;padding:2px 8px;background:transparent;border:var(--stroke-hair) solid var(--border);color:var(--text3);border-radius:var(--r);cursor:pointer;" onclick="ocBulkRemoveSelectAll(true)">Select All</button>
-        <button type="button" style="font-size:10px;padding:2px 8px;background:transparent;border:var(--stroke-hair) solid var(--border);color:var(--text3);border-radius:var(--r);cursor:pointer;" onclick="ocBulkRemoveSelectAll(false)">Deselect All</button>
-        <span style="font-size:10px;color:var(--text3);margin-left:auto;align-self:center;" id="oc-bulk-remove-count">0 selected</span>
+        <button type="button" style="font-size:var(--text-2xs);padding:2px 8px;background:transparent;border:var(--stroke-hair) solid var(--border);color:var(--text3);border-radius:var(--r);cursor:pointer;" onclick="ocBulkRemoveSelectAll(true)">Select All</button>
+        <button type="button" style="font-size:var(--text-2xs);padding:2px 8px;background:transparent;border:var(--stroke-hair) solid var(--border);color:var(--text3);border-radius:var(--r);cursor:pointer;" onclick="ocBulkRemoveSelectAll(false)">Deselect All</button>
+        <span style="font-size:var(--text-2xs);color:var(--text3);margin-left:auto;align-self:center;" id="oc-bulk-remove-count">0 selected</span>
       </div>
       <div id="oc-bulk-remove-list" style="max-height:300px;overflow-y:auto;border:var(--stroke-hair) solid var(--border);border-radius:var(--r);padding:10px;background:var(--input-bg);display:flex;flex-direction:column;gap:2px;">
       ` +
     eligible.map(c => `
-        <label class="oc-bulk-remove-item" data-name="${escapeHtml((c.name || '').toLowerCase())}" data-email="${escapeHtml((c.email || '').toLowerCase())}" style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);cursor:pointer;padding:4px 0;border-radius:var(--r);transition:background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
+        <label class="oc-bulk-remove-item" data-name="${escapeHtml((c.name || '').toLowerCase())}" data-email="${escapeHtml((c.email || '').toLowerCase())}" style="display:flex;align-items:center;gap:8px;font-size:var(--text-sm);color:var(--text);cursor:pointer;padding:4px 0;border-radius:var(--r);transition:background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
           <input type="checkbox" class="oc-bulk-remove-check" value="${c.id}" style="margin:0;cursor:pointer;" onchange="ocBulkRemoveUpdateCount()">
           <span><strong>${escapeHtml(c.name || 'Unnamed')}</strong> <span style="color:var(--text3);">(${escapeHtml(c.email || 'no email')})</span></span>
         </label>
       `).join('') + `</div>`
-    : '<div style="font-size:12px;color:var(--text3);font-style:italic;padding:10px 0;">No contributors found in this project.</div>';
+    : '<div style="font-size:var(--text-sm);color:var(--text3);font-style:italic;padding:10px 0;">No contributors found in this project.</div>';
 
   modal.innerHTML = `
     <div class="card" style="width:94%;max-width:500px;max-height:90vh;overflow-y:auto;background:var(--card-bg, #fff);border:var(--stroke-hair) solid var(--border);border-radius:var(--r3);padding:24px;box-shadow:var(--elev-4);position:relative;" onclick="event.stopPropagation()">
       <button type="button" class="modal-close-btn" onclick="closeOcBulkRemoveModal()" style="position:absolute;top:15px;right:15px;" aria-label="Close dialog" title="Close (Esc)">✕</button>
       
       <div style="font-family:var(--font-display);font-size:20px;font-weight:700;color:var(--red);margin-bottom:4px;">✕ Bulk Remove Contributors</div>
-      <div style="font-size:12px;color:var(--text3);margin-bottom:18px;">Select contributors to remove from the "${escapeHtml(proj.title)}" open call.</div>
+      <div style="font-size:var(--text-sm);color:var(--text3);margin-bottom:18px;">Select contributors to remove from the "${escapeHtml(proj.title)}" open call.</div>
 
       <!-- Search Box inside Modal -->
       ${eligible.length > 0 ? `
       <div style="margin-bottom:12px;">
-        <input type="search" id="oc-bulk-remove-search" placeholder="Filter list by name or email..." oninput="ocBulkRemoveFilter(this.value)" style="width:100%;padding:8px 12px;font-size:13px;background:var(--input-bg);color:var(--text);border:var(--stroke-hair) solid var(--border);border-radius:var(--r);box-sizing:border-box;">
+        <input type="search" id="oc-bulk-remove-search" placeholder="Filter list by name or email..." oninput="ocBulkRemoveFilter(this.value)" style="width:100%;padding:8px 12px;font-size:var(--text-base);background:var(--input-bg);color:var(--text);border:var(--stroke-hair) solid var(--border);border-radius:var(--r);box-sizing:border-box;">
       </div>
       ` : ''}
 
@@ -2742,32 +2742,32 @@ function renderOcImportGmailModal() {
     ? `<div style="display:flex;gap:6px;margin:10px 0 6px;">
          <button type="button" class="btn sm" onclick="ocImportGmailSelectAll(true)">Select All</button>
          <button type="button" class="btn sm" onclick="ocImportGmailSelectAll(false)">Deselect All</button>
-         <span style="font-size:11px;color:var(--text3);margin-left:auto;align-self:center;">${_ocSubmissionResults.length} found</span>
+         <span style="font-size:var(--text-xs);color:var(--text3);margin-left:auto;align-self:center;">${_ocSubmissionResults.length} found</span>
        </div>` +
     _ocSubmissionResults.map((s, idx) => {
       const n = (s.photos || []).length;
       const list = n ? ': ' + escapeHtml(s.photos.slice(0, 5).join(', ')) + (n > 5 ? ' …' : '') : '';
       return `
-        <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;color:var(--text);cursor:pointer;padding:6px 4px;border-bottom:var(--stroke-hair) solid var(--border);">
+        <label style="display:flex;align-items:flex-start;gap:8px;font-size:var(--text-sm);color:var(--text);cursor:pointer;padding:6px 4px;border-bottom:var(--stroke-hair) solid var(--border);">
           <input type="checkbox" class="oc-sub-check" value="${idx}" checked style="margin-top:2px;cursor:pointer;">
           <span style="flex:1;">
             <strong>${escapeHtml(s.name || '—')}</strong> <span style="color:var(--text3);">&lt;${escapeHtml(s.email)}&gt;</span><br>
-            <span style="color:var(--text3);font-size:11px;">${n} attachment${n === 1 ? '' : 's'}${list}</span>
+            <span style="color:var(--text3);font-size:var(--text-xs);">${n} attachment${n === 1 ? '' : 's'}${list}</span>
           </span>
         </label>`;
     }).join('')
-    : '<div style="font-size:12px;color:var(--text3);font-style:italic;padding:10px 0;">Run a search to find submission emails. New contributors are matched by sender; anyone already in this project is skipped.</div>';
+    : '<div style="font-size:var(--text-sm);color:var(--text3);font-style:italic;padding:10px 0;">Run a search to find submission emails. New contributors are matched by sender; anyone already in this project is skipped.</div>';
 
   modal.innerHTML = `
     <div class="card" style="width:94%;max-width:620px;max-height:90vh;overflow-y:auto;padding:24px;position:relative;" onclick="event.stopPropagation()">
       <button type="button" class="modal-close-btn" onclick="closeOcImportGmailModal()" style="position:absolute;top:15px;right:15px;" aria-label="Close dialog" title="Close (Esc)">✕</button>
       <div style="font-family:var(--font-display);font-size:20px;font-weight:700;color:var(--gold-text);margin-bottom:4px;">📨 Import Submissions from Gmail</div>
-      <div style="font-size:12px;color:var(--text3);margin-bottom:16px;">Find the artists' original submission emails and add them as contributors — each one's thread is captured so every stage email replies into it.</div>
+      <div style="font-size:var(--text-sm);color:var(--text3);margin-bottom:16px;">Find the artists' original submission emails and add them as contributors — each one's thread is captured so every stage email replies into it.</div>
 
-      <label style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;display:block;margin-bottom:4px;">Gmail search</label>
-      <input id="oc-sub-query" value="${escapeHtml(lastQuery)}" placeholder='e.g. label:open-call  or  subject:"open call submission"' style="width:100%;box-sizing:border-box;font-family:monospace;font-size:12px;padding:9px 11px;">
+      <label style="font-size:var(--text-2xs);color:var(--text3);font-weight:600;text-transform:uppercase;display:block;margin-bottom:4px;">Gmail search</label>
+      <input id="oc-sub-query" value="${escapeHtml(lastQuery)}" placeholder='e.g. label:open-call  or  subject:"open call submission"' style="width:100%;box-sizing:border-box;font-family:monospace;font-size:var(--text-sm);padding:9px 11px;">
       <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;">
-        <select id="oc-sub-days" style="font-size:12px;">
+        <select id="oc-sub-days" style="font-size:var(--text-sm);">
           <option value="30" ${lastDays === '30' ? 'selected' : ''}>Last 30 days</option>
           <option value="60" ${lastDays === '60' ? 'selected' : ''}>Last 60 days</option>
           <option value="120" ${lastDays === '120' ? 'selected' : ''}>Last 120 days</option>
@@ -2974,7 +2974,7 @@ async function ocToggleInlineThread(cId, threadId, title) {
       const dateStr = formatDateTime(msg.date);
       return `
         <div style="margin-bottom:12px;border-bottom:var(--stroke-hair) solid rgba(255,255,255,0.05);padding-bottom:8px;${idx === data.messages.length - 1 ? 'border-bottom:none;margin-bottom:0;padding-bottom:0;' : ''}">
-          <div class="row-between" style="font-size:11px;color:var(--text3);margin-bottom:4px;">
+          <div class="row-between" style="font-size:var(--text-xs);color:var(--text3);margin-bottom:4px;">
             <strong style="${isMe ? 'color:var(--gold2);' : ''}">${escapeHtml(msg.from)}</strong>
             <span>${dateStr}</span>
           </div>
@@ -2982,7 +2982,7 @@ async function ocToggleInlineThread(cId, threadId, title) {
           ${msg.attachments && msg.attachments.length > 0 ? `
             <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">
               ${msg.attachments.map(att => `
-                <button type="button" class="pill gray" style="font-size:10px;padding:2px 6px;background:rgba(255,255,255,0.05);border:var(--stroke-hair) solid rgba(255,255,255,0.1);color:var(--text2);cursor:pointer;display:inline-flex;align-items:center;gap:4px;" onclick="downloadOcAttachment('${msg.id}', '${escapeHtml(att.name)}', this)" title="Click to download attachment">
+                <button type="button" class="pill gray" style="font-size:var(--text-2xs);padding:2px 6px;background:rgba(255,255,255,0.05);border:var(--stroke-hair) solid rgba(255,255,255,0.1);color:var(--text2);cursor:pointer;display:inline-flex;align-items:center;gap:4px;" onclick="downloadOcAttachment('${msg.id}', '${escapeHtml(att.name)}', this)" title="Click to download attachment">
                   📎 ${escapeHtml(att.name)} (${Math.round(att.size / 1024)} KB)
                 </button>
               `).join('')}
@@ -2993,8 +2993,8 @@ async function ocToggleInlineThread(cId, threadId, title) {
 
     container.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:var(--stroke-hair) solid var(--border);padding-bottom:6px;margin-bottom:10px;">
-        <strong style="color:var(--gold2);text-transform:uppercase;font-size:10px;letter-spacing:0.05em;">✉ ${title} Preview</strong>
-        <button class="btn sm" onclick="document.getElementById('oc-inline-thread-${cId}').style.display='none'" style="padding:0 8px;height:20px;font-size:10px;margin:0;">Hide</button>
+        <strong style="color:var(--gold2);text-transform:uppercase;font-size:var(--text-2xs);letter-spacing:0.05em;">✉ ${title} Preview</strong>
+        <button class="btn sm" onclick="document.getElementById('oc-inline-thread-${cId}').style.display='none'" style="padding:0 8px;height:20px;font-size:var(--text-2xs);margin:0;">Hide</button>
       </div>
       <div style="display:flex;flex-direction:column;gap:12px;">
         ${msgsHtml}
@@ -3044,37 +3044,37 @@ function renderOcEditModalContent(cId) {
       <button type="button" class="modal-close-btn" onclick="closeOcEditModal()" style="position:absolute;top:15px;right:15px;" aria-label="Close dialog" title="Close (Esc)">✕</button>
       
       <div style="font-family:var(--font-display);font-size:20px;font-weight:700;color:var(--gold-text);margin-bottom:4px;">✎ Edit Contributor</div>
-      <div style="font-size:12px;color:var(--text3);margin-bottom:18px;">Update artist details and internal notes.</div>
+      <div style="font-size:var(--text-sm);color:var(--text3);margin-bottom:18px;">Update artist details and internal notes.</div>
       
       <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px;">
         <div>
-          <label style="font-size:11px;color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.04em;">Artist Name</label>
-          <input id="oc-edit-name" type="text" value="${escapeHtml(c.name || '')}" style="width:100%;padding:8px 12px;font-size:13px;background:var(--input-bg);color:var(--text);border:var(--stroke-hair) solid var(--border);border-radius:var(--r);box-sizing:border-box;">
+          <label style="font-size:var(--text-xs);color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.04em;">Artist Name</label>
+          <input id="oc-edit-name" type="text" value="${escapeHtml(c.name || '')}" style="width:100%;padding:8px 12px;font-size:var(--text-base);background:var(--input-bg);color:var(--text);border:var(--stroke-hair) solid var(--border);border-radius:var(--r);box-sizing:border-box;">
         </div>
         
         <div>
-          <label style="font-size:11px;color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.04em;">Email Address</label>
-          <input id="oc-edit-email" type="email" value="${escapeHtml(c.email || '')}" style="width:100%;padding:8px 12px;font-size:13px;background:var(--input-bg);color:var(--text);border:var(--stroke-hair) solid var(--border);border-radius:var(--r);box-sizing:border-box;">
+          <label style="font-size:var(--text-xs);color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.04em;">Email Address</label>
+          <input id="oc-edit-email" type="email" value="${escapeHtml(c.email || '')}" style="width:100%;padding:8px 12px;font-size:var(--text-base);background:var(--input-bg);color:var(--text);border:var(--stroke-hair) solid var(--border);border-radius:var(--r);box-sizing:border-box;">
         </div>
         
         <div>
-          <label style="font-size:11px;color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.04em;">Credit Name (For credits index)</label>
-          <input id="oc-edit-creditname" type="text" value="${escapeHtml(c.creditName || '')}" placeholder="e.g. ${escapeHtml(c.name || '')}" style="width:100%;padding:8px 12px;font-size:13px;background:var(--input-bg);color:var(--text);border:var(--stroke-hair) solid var(--border);border-radius:var(--r);box-sizing:border-box;">
+          <label style="font-size:var(--text-xs);color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.04em;">Credit Name (For credits index)</label>
+          <input id="oc-edit-creditname" type="text" value="${escapeHtml(c.creditName || '')}" placeholder="e.g. ${escapeHtml(c.name || '')}" style="width:100%;padding:8px 12px;font-size:var(--text-base);background:var(--input-bg);color:var(--text);border:var(--stroke-hair) solid var(--border);border-radius:var(--r);box-sizing:border-box;">
         </div>
         
         <div>
-          <label style="font-size:11px;color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.04em;">Photos (comma-separated list)</label>
-          <input id="oc-edit-photos" type="text" value="${escapeHtml((c.photos || []).join(', '))}" placeholder="e.g. photo1.jpg, photo2.jpg" style="width:100%;padding:8px 12px;font-size:13px;background:var(--input-bg);color:var(--text);border:var(--stroke-hair) solid var(--border);border-radius:var(--r);box-sizing:border-box;">
+          <label style="font-size:var(--text-xs);color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.04em;">Photos (comma-separated list)</label>
+          <input id="oc-edit-photos" type="text" value="${escapeHtml((c.photos || []).join(', '))}" placeholder="e.g. photo1.jpg, photo2.jpg" style="width:100%;padding:8px 12px;font-size:var(--text-base);background:var(--input-bg);color:var(--text);border:var(--stroke-hair) solid var(--border);border-radius:var(--r);box-sizing:border-box;">
         </div>
         
         <div>
-          <label style="font-size:11px;color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.04em;">Internal Notes</label>
-          <textarea id="oc-edit-notes" rows="3" style="width:100%;padding:8px 12px;font-size:13px;background:var(--input-bg);color:var(--text);border:var(--stroke-hair) solid var(--border);border-radius:var(--r);box-sizing:border-box;font-family:inherit;resize:vertical;">${escapeHtml(c.notes || '')}</textarea>
+          <label style="font-size:var(--text-xs);color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.04em;">Internal Notes</label>
+          <textarea id="oc-edit-notes" rows="3" style="width:100%;padding:8px 12px;font-size:var(--text-base);background:var(--input-bg);color:var(--text);border:var(--stroke-hair) solid var(--border);border-radius:var(--r);box-sizing:border-box;font-family:inherit;resize:vertical;">${escapeHtml(c.notes || '')}</textarea>
         </div>
         
         <div>
-          <label style="font-size:11px;color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.04em;">Gmail Thread ID (For replying/tracking)</label>
-          <input id="oc-edit-threadid" type="text" value="${escapeHtml(c.gmailThreadId || '')}" placeholder="e.g. 18f8c4a9d7e3b2a1" style="width:100%;padding:8px 12px;font-size:13px;background:var(--input-bg);color:var(--text);border:var(--stroke-hair) solid var(--border);border-radius:var(--r);box-sizing:border-box;font-family:monospace;">
+          <label style="font-size:var(--text-xs);color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.04em;">Gmail Thread ID (For replying/tracking)</label>
+          <input id="oc-edit-threadid" type="text" value="${escapeHtml(c.gmailThreadId || '')}" placeholder="e.g. 18f8c4a9d7e3b2a1" style="width:100%;padding:8px 12px;font-size:var(--text-base);background:var(--input-bg);color:var(--text);border:var(--stroke-hair) solid var(--border);border-radius:var(--r);box-sizing:border-box;font-family:monospace;">
         </div>
       </div>
       

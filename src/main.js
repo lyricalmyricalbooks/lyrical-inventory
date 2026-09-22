@@ -2059,7 +2059,7 @@ function renderCatalogList() {
            <div class="catalog-dot" style="background:${b.accent}"></div>
            <div class="catalog-info">
              <h4>${escapeHtml(b.title)}</h4>
-             <p><span class="tnum" style="font-family:var(--font-mono);font-size:12px;">${escapeHtml(b.id)}</span> · <strong class="tnum" style="font-family:var(--font-mono);">${b.currency}${b.listPrice}</strong></p>
+             <p><span class="tnum" style="font-family:var(--font-mono);font-size:var(--text-sm);">${escapeHtml(b.id)}</span> · <strong class="tnum" style="font-family:var(--font-mono);">${b.currency}${b.listPrice}</strong></p>
            </div>
          </div>
          <div class="catalog-actions">
@@ -2084,7 +2084,7 @@ function renderCatalogList() {
              <div class="catalog-dot" style="background:${b.accent}"></div>
              <div class="catalog-info">
                <h4>${escapeHtml(b.title)}</h4>
-               <p><span class="tnum" style="font-family:var(--font-mono);font-size:12px;">${escapeHtml(b.id)}</span> · <strong class="tnum" style="font-family:var(--font-mono);">${b.currency}${b.listPrice}</strong></p>
+               <p><span class="tnum" style="font-family:var(--font-mono);font-size:var(--text-sm);">${escapeHtml(b.id)}</span> · <strong class="tnum" style="font-family:var(--font-mono);">${b.currency}${b.listPrice}</strong></p>
              </div>
            </div>
            <div class="catalog-actions">
@@ -3619,7 +3619,7 @@ function syncRoleUI() {
   // display value) in publisher view.
   const PUBLISHER_ONLY_IDS = [
     'todo-tab-btn', 'todo-sidebar-btn', 'reconcile-tab-btn', 'opencall-tab-btn',
-    'website-tab-btn', 'financials-tab-btn', 'global-taxcenter-btn', 'global-sheets-btn',
+    'website-tab-btn', 'global-taxcenter-btn', 'global-sheets-btn',
     'global-backups-btn', 'd-qr-btn', 'qrcodes-tab-btn', 'webanalytics-tab-btn',
     'sidebar-webanalytics-btn', 'shipping-tab-btn', 'bigcartel-tab-btn', 'sidebar-bigcartel-btn',
   ];
@@ -3643,7 +3643,6 @@ function syncRoleUI() {
 
   // When switching TO author view — redirect away from publisher-only tabs
   const publisherOnlyActive = $('tab-website')?.classList.contains('active')
-    || $('tab-financials')?.classList.contains('active')
     || $('tab-taxcenter')?.classList.contains('active')
     || $('tab-sheets')?.classList.contains('active')
     || $('tab-backups')?.classList.contains('active')
@@ -4067,12 +4066,12 @@ const SHELL_TAB_LABELS = {
   consignment: 'Consignment', history: 'History', expenses: 'Expenses',
   pos: 'Event POS', taxcenter: 'Tax Centre', reconcile: 'Payments', qrcodes: 'QR Codes',
   customers: 'Customers', opencall: 'Open Call', sheets: 'Sheets', backups: 'Backups',
-  financials: 'Financials', myqr: 'My QR Code', webanalytics: 'Web Analytics', shipping: 'Shipping',
+  myqr: 'My QR Code', webanalytics: 'Web Analytics', shipping: 'Shipping',
   bigcartel: 'Big Cartel', todo: 'To-do', intel: 'Intelligence'
 };
 export function switchTab(name) {
   // publisher-only tabs redirect authors to dashboard
-  if (isAuthor() && (name === 'website' || name === 'backups' || name === 'financials' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes' || name === 'reconcile' || name === 'customers' || name === 'opencall' || name === 'webanalytics' || name === 'shipping' || name === 'bigcartel' || name === 'todo' || name === 'intel')) name = 'dashboard';
+  if (isAuthor() && (name === 'website' || name === 'backups' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes' || name === 'reconcile' || name === 'customers' || name === 'opencall' || name === 'webanalytics' || name === 'shipping' || name === 'bigcartel' || name === 'todo' || name === 'intel')) name = 'dashboard';
   // publisher redirected away from author-only myqr tab
   if (!isAuthor() && name === 'myqr') name = 'dashboard';
 
@@ -4134,7 +4133,6 @@ export function switchTab(name) {
   if (name === 'opencall') renderOpenCall();
   if (name === 'reconcile') renderReconcile();
   if (name === 'customers') renderCustomers();
-  if (name === 'financials') renderFinancials();
   if (name === 'taxcenter') renderTaxCenter();
   if (name === 'sheets') { loadGasCode(); renderSheetsLog(); renderProfitSettings(); switchSettingsSubTab(activeSettingsSubTab); if (typeof updateSheetsTabUI === 'function') updateSheetsTabUI(); }
   if (name === 'qrcodes') renderAllQRCodes();
@@ -5485,7 +5483,7 @@ function renderBookPendingAlert() {
           <div style="font-weight:600; color:var(--text2); margin-bottom:4px; display:flex; align-items:center; gap:8px;">
             <span class="pill amber">Pending</span> Author Submissions
           </div>
-          <div style="font-size:12px; color:var(--text3);">There are entries from the author waiting for your approval.</div>
+          <div style="font-size:var(--text-sm); color:var(--text3);">There are entries from the author waiting for your approval.</div>
         </div>
         <div>
           ${contentHtml}
@@ -5910,26 +5908,26 @@ function renderBreakEvenBlock(s, book, cur, cost, recognizedRev) {
       al.style.color = '#fb923c';
     } else {
       al.style.borderLeftColor = 'rgba(232,  64,  42, 0.5)';
-      al.style.background = 'rgba(200, 145, 58, 0.08)';
+      al.style.background = 'rgba(232, 64, 42, 0.08)';
       al.style.color = 'var(--gold2)';
     }
 
     const themeColor = be.isClose ? '#fb923c' : 'var(--gold3)';
-    const themeBg = be.isClose ? 'rgba(251, 146, 60, 0.12)' : 'rgba(200, 145, 58, 0.12)';
-    const themeBorder = be.isClose ? 'rgba(251, 146, 60, 0.25)' : 'rgba(200, 145, 58, 0.25)';
+    const themeBg = be.isClose ? 'rgba(251, 146, 60, 0.12)' : 'rgba(232, 64, 42, 0.12)';
+    const themeBorder = be.isClose ? 'rgba(251, 146, 60, 0.25)' : 'rgba(232, 64, 42, 0.25)';
 
     al.innerHTML = `
       <div style="display:flex; flex-direction:column; gap:8px; width:100%;">
         <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; width:100%;">
           <div style="display:flex; align-items:center; gap:8px;">
-            <span style="font-size:13px; opacity:0.85;">⚠️</span>
+            <span style="font-size:var(--text-base); opacity:0.85;">⚠️</span>
             <span style="font-weight:600; font-family:var(--font-ui);">${be.isClose ? 'Almost broken even:' : 'Not yet broken even:'}</span>
           </div>
           <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-            <span style="display:inline-flex; align-items:center; gap:6px; background:${themeBg}; border:var(--stroke-hair) solid ${themeBorder}; color:${themeColor}; font-family:var(--font-mono); font-size:11px; font-weight:700; padding:4px 10px; border-radius:var(--r-pill); line-height:1;" title="${fmt(be.remaining, cur)} remaining of ${fmt(cost, cur)} production cost">
+            <span style="display:inline-flex; align-items:center; gap:6px; background:${themeBg}; border:var(--stroke-hair) solid ${themeBorder}; color:${themeColor}; font-family:var(--font-mono); font-size:var(--text-xs); font-weight:700; padding:4px 10px; border-radius:var(--r-pill); line-height:1;" title="${fmt(be.remaining, cur)} remaining of ${fmt(cost, cur)} production cost">
               🎯 ${fmt(be.remaining, cur)} remaining
             </span>
-            <span style="display:inline-flex; align-items:center; gap:6px; background:${themeBg}; border:var(--stroke-hair) solid ${themeBorder}; color:${themeColor}; font-family:var(--font-mono); font-size:11px; font-weight:700; padding:4px 10px; border-radius:var(--r-pill); line-height:1;" title="${escapeHtml(be.unitsBadgeTitle)}">
+            <span style="display:inline-flex; align-items:center; gap:6px; background:${themeBg}; border:var(--stroke-hair) solid ${themeBorder}; color:${themeColor}; font-family:var(--font-mono); font-size:var(--text-xs); font-weight:700; padding:4px 10px; border-radius:var(--r-pill); line-height:1;" title="${escapeHtml(be.unitsBadgeTitle)}">
               ${escapeHtml(be.unitsBadgeText)}
             </span>
           </div>
@@ -6005,10 +6003,10 @@ function getProfitTiersHtml(book, stats, cur) {
         background:${isActive ? 'rgba(212,175,55,.08)' : 'transparent'};
         border-left:var(--stroke) solid ${isCompleted ? 'var(--green)' : isActive ? 'var(--gold2)' : 'transparent'};">
         <span style="display:flex; align-items:center; gap:8px;">
-          <span style="color:${iconColor}; font-size:11px; width:12px; display:inline-block; text-align:center;">${icon}</span>
-          <span>${t.label}<br><span style="font-size:10px;opacity:.55;font-weight:400;">${threshold}</span></span>
+          <span style="color:${iconColor}; font-size:var(--text-xs); width:12px; display:inline-block; text-align:center;">${icon}</span>
+          <span>${t.label}<br><span style="font-size:var(--text-2xs);opacity:.55;font-weight:400;">${threshold}</span></span>
         </span>
-        <span style="text-align:right; font-family:var(--font-mono); font-size:11px; opacity:.75;" title="Revenue captured in this tier">${tierCapText}</span>
+        <span style="text-align:right; font-family:var(--font-mono); font-size:var(--text-xs); opacity:.75;" title="Revenue captured in this tier">${tierCapText}</span>
         <span style="text-align:right; font-family:var(--font-mono); color:${earned > 0 ? 'var(--green)' : 'var(--text3)'};" title="Artist payout earned in this tier">${fmt(earned, cur)}</span>
         <span style="text-align:right; color:${isActive ? 'var(--gold2)' : 'var(--text3)'};">${t.artistPct}%</span>
       </div>
@@ -6031,19 +6029,19 @@ function getRevenueProgressHtml(stats, tiers, nextTier, effectiveCap, cur) {
     progressHtml = `
       <div style="margin-top:1rem; padding:12px; background:var(--ink); border-radius:var(--r2); border:var(--stroke-hair) solid rgba(255,255,255,.05);">
         <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-          <span style="font-size:10px; text-transform:uppercase; color:rgba(255,255,255,.58); letter-spacing:.1em;">Revenue Progress</span>
-          <span style="font-size:11px; color:var(--gold3); font-family:var(--font-mono);">${fmt(revenueLeft, cur)} ${label}</span>
+          <span style="font-size:var(--text-2xs); text-transform:uppercase; color:rgba(255,255,255,.58); letter-spacing:.1em;">Revenue Progress</span>
+          <span style="font-size:var(--text-xs); color:var(--gold3); font-family:var(--font-mono);">${fmt(revenueLeft, cur)} ${label}</span>
         </div>
         <div class="bar-track" style="height:5px; margin-bottom:0;">
           <div class="bar-fill" style="width:${pct}%; height:5px; border-radius:var(--r-pill);"></div>
         </div>
-        <div style="font-size:10px;color:rgba(255,255,255,.62);margin-top:6px;">${fmt(stats.cumulativeRevenue, cur)} of ${fmt(target, cur)} to reach ${enterTier ? enterTier.label : 'next tier'}</div>
+        <div style="font-size:var(--text-2xs);color:rgba(255,255,255,.62);margin-top:6px;">${fmt(stats.cumulativeRevenue, cur)} of ${fmt(target, cur)} to reach ${enterTier ? enterTier.label : 'next tier'}</div>
       </div>
     `;
   } else {
     // Already in the final (unlimited) tier
     progressHtml = `
-      <div style="margin-top:1rem; padding:10px 14px; background:rgba(74,222,128,.08); border-radius:var(--r2); border:var(--stroke-hair) solid rgba(74,222,128,.2); font-size:12px; color:var(--green);">
+      <div style="margin-top:1rem; padding:10px 14px; background:rgba(74,222,128,.08); border-radius:var(--r2); border:var(--stroke-hair) solid rgba(74,222,128,.2); font-size:var(--text-sm); color:var(--green);">
         ✓ Production costs recovered — now in post break-even tier
       </div>
     `;
@@ -6090,7 +6088,7 @@ function getArtistHeldHtml(stats, cur) {
       </div>` : '';
 
   const heldNoteHtml = hasHeld ? `
-    <div style="font-size:11px; color:var(--text3); margin:-0.75rem 0 1.25rem; line-height:1.5; padding:8px 10px; background:var(--cream2); border-radius:var(--r2);">
+    <div style="font-size:var(--text-xs); color:var(--text3); margin:-0.75rem 0 1.25rem; line-height:1.5; padding:8px 10px; background:var(--cream2); border-radius:var(--r2);">
       The artist collected <strong>${fmt(stats.heldByArtistGross, cur)}</strong> directly and hasn't forwarded it yet —
       <strong>${fmt(stats.heldByArtistShare, cur)}</strong> is their own share (so they've effectively taken that much of their earnings),
       and the remaining <strong>${fmt(stats.publisherCutHeldByArtist, cur)}</strong> is your cut to collect back from them.
@@ -6163,15 +6161,15 @@ function getPayoutRequestHtml(bookId, stats, cur, owed) {
         background:var(--gold-bg); border:var(--stroke-hair) solid var(--gold-line); border-left:var(--stroke) solid var(--gold);
         border-radius:var(--r2); padding:12px 14px; margin-bottom:1.25rem;">
         <div>
-          <div style="font-weight:600; color:var(--text2); font-size:13px;">The artist requested a payout of ${fmt(pending.amount, cur)}</div>
-          <div style="font-size:11px; color:var(--text3); margin-top:2px;">Requested ${escapeHtml(pending.requestedAt ? pending.requestedAt.slice(0, 10) : '—')} · ${fmt(owed, cur)} currently owed</div>
+          <div style="font-weight:600; color:var(--text2); font-size:var(--text-base);">The artist requested a payout of ${fmt(pending.amount, cur)}</div>
+          <div style="font-size:var(--text-xs); color:var(--text3); margin-top:2px;">Requested ${escapeHtml(pending.requestedAt ? pending.requestedAt.slice(0, 10) : '—')} · ${fmt(owed, cur)} currently owed</div>
         </div>
         <button class="btn gold" onclick="toggleArtistPayoutForm('${bookId}')">Record payout</button>
       </div>`;
   }
 
   const pendingHtml = pending ? `
-        <div style="font-size:11px; color:var(--text3); margin-top:6px;">
+        <div style="font-size:var(--text-xs); color:var(--text3); margin-top:6px;">
           ✓ You requested ${fmt(pending.amount, cur)} on ${escapeHtml(pending.requestedAt ? pending.requestedAt.slice(0, 10) : '—')} — the publisher has been notified.
         </div>` : '';
 
@@ -6182,9 +6180,9 @@ function getPayoutRequestHtml(bookId, stats, cur, owed) {
         <div>
           <div class="hs-label" style="color:var(--text3);">Available to request</div>
           <div class="hs-val" style="color:var(--gold-text); font-size:24px; font-weight:700;">${fmt(owed, cur)}</div>
-          <div style="font-size:11px; color:var(--text3); margin-top:2px;">your share of profit, not yet paid out</div>
+          <div style="font-size:var(--text-xs); color:var(--text3); margin-top:2px;">your share of profit, not yet paid out</div>
         </div>
-        <button class="btn gold" id="request-payout-btn-${bookId}" style="padding:10px 18px; font-size:12px;"
+        <button class="btn gold" id="request-payout-btn-${bookId}" style="padding:10px 18px; font-size:var(--text-sm);"
           onclick="requestArtistPayout('${bookId}')">${pending ? 'Send reminder' : 'Request payout'}</button>
       </div>
       ${pendingHtml}
@@ -6296,7 +6294,7 @@ function renderProfitSharingBreakdown(bookId) {
     <div style="margin-bottom:1rem;">
        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
          <span class="sect sect-inline">Payout Tiers</span>
-         <span style="font-size:11px; color:var(--text3);">Publisher keeps: <strong style="color:var(--text); font-size:13px;">${fmt(stats.netPublisher, cur)}</strong></span>
+         <span style="font-size:var(--text-xs); color:var(--text3);">Publisher keeps: <strong style="color:var(--text); font-size:var(--text-base);">${fmt(stats.netPublisher, cur)}</strong></span>
        </div>
        ${tierHeader}
        ${tierHtml}
@@ -6798,7 +6796,7 @@ function renderCurrent() {
   if (fsBtn && activeBook && activeBook !== 'all') {
     const isFS = window._useFirestoreForBook(activeBook);
     if (isFS) {
-      fsBtn.innerHTML = '✓ Using Firestore<br><span style="font-size:10px;font-weight:normal">Click to fallback to old Database</span>';
+      fsBtn.innerHTML = '✓ Using Firestore<br><span style="font-size:var(--text-2xs);font-weight:normal">Click to fallback to old Database</span>';
       fsBtn.className = 'btn';
       fsBtn.style.background = '#e8f5e9';
       fsBtn.style.color = '#2e7d32';
@@ -7026,22 +7024,22 @@ function renderConsignHistRow(e, after) {
   const restocked = e.type === 'Return' && e.status === 'restocked';
   let badge, qtyCell, label;
   if (e.type === 'Shipment') {
-    badge = `<span class="ch-badge ch-store" style="font-size:10px;"><span class="ch-icon">📦</span> Consignment</span> → ${store}`;
+    badge = `<span class="ch-badge ch-store" style="font-size:var(--text-2xs);"><span class="ch-icon">📦</span> Consignment</span> → ${store}`;
     qtyCell = `-${e.qty}`;            // left your on-hand for the store
     label = 'SENT';
   } else if (restocked) {
-    badge = `<span class="ch-badge ch-pos" style="font-size:10px;"><span class="ch-icon">↩</span> Consignment return</span> ← ${store}`;
+    badge = `<span class="ch-badge ch-pos" style="font-size:var(--text-2xs);"><span class="ch-icon">↩</span> Consignment return</span> ← ${store}`;
     qtyCell = `+${e.qty}`;            // came back into on-hand
     label = 'RETURN';
   } else {
-    badge = `<span class="chip-status amber" style="font-size:10px;">↩ Return · written off</span> ← ${store}`;
+    badge = `<span class="chip-status amber" style="font-size:var(--text-2xs);">↩ Return · written off</span> ← ${store}`;
     qtyCell = '0';                    // off the store's books, not back on your shelf
     label = 'RETURN';
   }
   const voided = e.voided ? ' voided' : '';
   const voidPill = e.voided ? '<span class="void-badge">Void</span>' : '';
   const manageBtn = `<button class="edit-btn" onclick="switchTab('consignment')" title="Manage in the Consignment tab" aria-label="Manage in Consignment">→</button>`;
-  return `<tr class="hist-row ${voided}"><td class="mono mono-num" style="color:var(--text3);">${label}</td><td>${badge}</td><td class="r mono-num">${e.voided ? '' : qtyCell}</td><td class="r mono-num"><span style="color:var(--text4);font-size:11px;/* faint-ok: em-dash placeholder */">—</span></td><td class="r mono-num"><span style="color:var(--text4);font-size:11px;/* faint-ok: em-dash placeholder */">—</span></td><td class="r mono-num">${after}</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(e.notes) || '—'}</td><td style="font-size:12px;color:var(--text3);"><span class="chip-status gray">Consignment</span></td><td style="font-size:12px;color:var(--text3);">${fmtD(e.date)} ${voidPill}</td><td>${manageBtn}</td></tr>`;
+  return `<tr class="hist-row ${voided}"><td class="mono mono-num" style="color:var(--text3);">${label}</td><td>${badge}</td><td class="r mono-num">${e.voided ? '' : qtyCell}</td><td class="r mono-num"><span style="color:var(--text4);font-size:var(--text-xs);/* faint-ok: em-dash placeholder */">—</span></td><td class="r mono-num"><span style="color:var(--text4);font-size:var(--text-xs);/* faint-ok: em-dash placeholder */">—</span></td><td class="r mono-num">${after}</td><td style="font-size:var(--text-sm);color:var(--text3);">${escapeHtml(e.notes) || '—'}</td><td style="font-size:var(--text-sm);color:var(--text3);"><span class="chip-status gray">Consignment</span></td><td style="font-size:var(--text-sm);color:var(--text3);">${fmtD(e.date)} ${voidPill}</td><td>${manageBtn}</td></tr>`;
 }
 
 // Order History is a whole tab, not a nested list, so an empty one gets the
@@ -7123,7 +7121,7 @@ function renderHistReconciliationPanel(s, book, chanFilter, inScope, bookCode) {
     const sellThroughPct = printedCount > 0 ? ((distributedCount / printedCount) * 100).toFixed(1) : '0.0';
 
     const warn = bd.unaccounted
-      ? `<div style="font-size:11px; font-weight:700; color:var(--red); margin-top:6px;">⚠️ ${Math.abs(bd.unaccounted)} unaccounted copies in reconciliation</div>`
+      ? `<div style="font-size:var(--text-xs); font-weight:700; color:var(--red); margin-top:6px;">⚠️ ${Math.abs(bd.unaccounted)} unaccounted copies in reconciliation</div>`
       : '';
 
     // History stranded in a previous currency makes every total below it a
@@ -7214,7 +7212,7 @@ function renderHistRowHtml(row, { cur, bookCode, book, formatChannelBadge }) {
     const actionCell = window.IS_PUBLISHER
       ? `<div class="approval-actions"><button class="appr-btn approve" onclick="approveSubmission('sales', '${h._subKey}')" aria-label="Approve submission"><span class="ico">✓</span>Approve</button><button class="appr-btn reject" onclick="rejectSubmission('sales', '${h._subKey}')" title="Reject submission" aria-label="Reject submission">✕</button></div>`
       : `<span class="chip-status amber">Awaiting Publisher</span>`;
-    return `<tr class="hist-row" style="opacity:0.8;background:var(--amber-bg);"><td class="mono mono-num">${escapeHtml(h.num)}</td><td>${formatChannelBadge(h.chan)} <span class="chip-status amber">Submitted</span></td><td class="r mono-num">-${h.qty}</td><td class="r mono-num">${fmt(h.price, cur)}</td><td class="r mono-num money-cell">${fmt(h.qty * h.price, cur)}</td><td class="r mono-num">?</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(h.notes) || '—'}</td><td style="font-size:12px;color:var(--text3);"><span class="chip-status gray">Artist</span></td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)}</td><td>${actionCell}</td></tr>`;
+    return `<tr class="hist-row" style="opacity:0.8;background:var(--amber-bg);"><td class="mono mono-num">${escapeHtml(h.num)}</td><td>${formatChannelBadge(h.chan)} <span class="chip-status amber">Submitted</span></td><td class="r mono-num">-${h.qty}</td><td class="r mono-num">${fmt(h.price, cur)}</td><td class="r mono-num money-cell">${fmt(h.qty * h.price, cur)}</td><td class="r mono-num">?</td><td style="font-size:var(--text-sm);color:var(--text3);">${escapeHtml(h.notes) || '—'}</td><td style="font-size:var(--text-sm);color:var(--text3);"><span class="chip-status gray">Artist</span></td><td style="font-size:var(--text-sm);color:var(--text3);">${fmtD(h.date)}</td><td>${actionCell}</td></tr>`;
   }
   const voided = h.voided ? ' voided' : '';
   const voidPill = h.voided ? '<span class="void-badge">Void</span>' : '';
@@ -7233,7 +7231,7 @@ function renderHistRowHtml(row, { cur, bookCode, book, formatChannelBadge }) {
   const foreignPill = rowCode !== bookCode
     ? ` <span class="chip-status amber" title="Recorded in ${escapeHtml(rowCode)} — not yet restated into ${escapeHtml(bookCode)}">${escapeHtml(rowCode)}</span>`
     : '';
-  const priceCell = isGrat ? '<span style="color:var(--text3);font-size:11px;">gifted</span>' : fmt(h.price, rowCur) + foreignPill;
+  const priceCell = isGrat ? '<span style="color:var(--text3);font-size:var(--text-xs);">gifted</span>' : fmt(h.price, rowCur) + foreignPill;
   const totalCell = isGrat ? '—' : isPending ? `<span style="color:var(--amber);">${fmt(h.qty * h.price, rowCur)}</span>` : fmt(h.qty * h.price, rowCur);
   const rowStyle = isGrat ? ' style="font-style:italic;"' : isPending ? ' style="background:var(--amber-bg);"' : '';
   const isWebsite = (h.chan === 'Website' || h.chan === 'Big Cartel') && !isGrat && !h.voided;
@@ -7248,13 +7246,13 @@ function renderHistRowHtml(row, { cur, bookCode, book, formatChannelBadge }) {
   const notesText = escapeHtml(h.notes) || '—';
   const notesCell = [
     notesText,
-    paymentInfo ? `<span style="font-size:11px;color:var(--text3);">${escapeHtml(paymentInfo)}</span>` : '',
+    paymentInfo ? `<span style="font-size:var(--text-xs);color:var(--text3);">${escapeHtml(paymentInfo)}</span>` : '',
     shippingInfo,
   ].filter(Boolean).join('<br>');
   const enteredBy = h.enteredBy || (h.artistPending ? 'Artist' : 'Publisher');
   const enteredByPill = `<span class="chip-status gray">${escapeHtml(enteredBy)}</span>`;
   const stockAfterVal = row._after ?? row.after ?? '—';
-  return `<tr class="hist-row ${voided}"${rowStyle}><td class="mono mono-num">${escapeHtml(h.num)}${editBtn}</td><td>${chanCell}</td><td class="r mono-num">${h.voided ? '' : '-'}${h.qty}</td><td class="r mono-num">${priceCell}</td><td class="r mono-num money-cell">${totalCell}</td><td class="r mono-num">${stockAfterVal}</td><td style="font-size:12px;color:var(--text3);">${notesCell || '—'}</td><td style="font-size:12px;color:var(--text3);">${enteredByPill}</td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)} ${voidPill}</td><td>${labelBtn}</td></tr>`;
+  return `<tr class="hist-row ${voided}"${rowStyle}><td class="mono mono-num">${escapeHtml(h.num)}${editBtn}</td><td>${chanCell}</td><td class="r mono-num">${h.voided ? '' : '-'}${h.qty}</td><td class="r mono-num">${priceCell}</td><td class="r mono-num money-cell">${totalCell}</td><td class="r mono-num">${stockAfterVal}</td><td style="font-size:var(--text-sm);color:var(--text3);">${notesCell || '—'}</td><td style="font-size:var(--text-sm);color:var(--text3);">${enteredByPill}</td><td style="font-size:var(--text-sm);color:var(--text3);">${fmtD(h.date)} ${voidPill}</td><td>${labelBtn}</td></tr>`;
 }
 
 export function renderHist() {
@@ -7335,7 +7333,7 @@ export function renderHist() {
   const shownRows = combined.slice(0, _histLimit);
   const moreCount = combined.length - shownRows.length;
   const moreRow = moreCount > 0
-    ? `<tr class="hist-more-row"><td colspan="10" style="text-align:center;padding:.9rem;"><button class="btn sm" onclick="showMoreHist()">Show ${Math.min(HIST_PAGE, moreCount)} more</button> <button class="btn sm" onclick="showAllHist()">Show all ${combined.length}</button> <span style="color:var(--text3);font-size:12px;margin-left:8px;">showing ${shownRows.length} of ${combined.length}</span></td></tr>`
+    ? `<tr class="hist-more-row"><td colspan="10" style="text-align:center;padding:.9rem;"><button class="btn sm" onclick="showMoreHist()">Show ${Math.min(HIST_PAGE, moreCount)} more</button> <button class="btn sm" onclick="showAllHist()">Show all ${combined.length}</button> <span style="color:var(--text3);font-size:var(--text-sm);margin-left:8px;">showing ${shownRows.length} of ${combined.length}</span></td></tr>`
     : '';
 
   $('hist-body').innerHTML = combined.length
@@ -7548,20 +7546,20 @@ export function renderOrders() {
     const cancelled = isCancelled(o);
     const addrParts = [o.shipAddr1, o.shipCity, o.shipProvince, o.shipCountry].filter(Boolean);
     const addrLine = addrParts.length
-      ? `<div style="font-size:11px;color:var(--text3);margin-top:4px;">📦 ${addrParts.join(', ')}</div>`
+      ? `<div style="font-size:var(--text-xs);color:var(--text3);margin-top:4px;">📦 ${addrParts.join(', ')}</div>`
       : '';
     const listPrice = BOOKS[o.bookId]?.listPrice || book.listPrice;
     const listCur = BOOKS[o.bookId]?.currency || cur;
     const priceMismatch = !done && !cancelled && o.price && Math.abs(o.price - listPrice) > 0.5;
     const priceWarn = priceMismatch
-      ? `<span style="font-size:10px;color:var(--amber);margin-left:6px;">⚠ paid ${listCur}${o.price} (list ${listCur}${listPrice})</span>`
+      ? `<span style="font-size:var(--text-2xs);color:var(--amber);margin-left:6px;">⚠ paid ${listCur}${o.price} (list ${listCur}${listPrice})</span>`
       : '';
     const shippingBadge = renderOrderShippingSummary(o);
     const bookLabel = o.bookId && BOOKS[o.bookId]
-      ? `<span style="font-size:10px;background:${BOOKS[o.bookId].accent}22;color:${BOOKS[o.bookId].accent};border-radius:var(--r-pill);padding:2px 8px;margin-right:6px;">${escapeHtml(BOOKS[o.bookId].title)}</span>`
+      ? `<span style="font-size:var(--text-2xs);background:${BOOKS[o.bookId].accent}22;color:${BOOKS[o.bookId].accent};border-radius:var(--r-pill);padding:2px 8px;margin-right:6px;">${escapeHtml(BOOKS[o.bookId].title)}</span>`
       : '';
     const viewEmailBtn = o.id
-      ? `<a href="https://mail.google.com/mail/u/0/#all/${o.id}" target="_blank" class="btn sm" style="font-size:10px;opacity:.7;">📧 View</a>`
+      ? `<a href="https://mail.google.com/mail/u/0/#all/${o.id}" target="_blank" class="btn sm" style="font-size:var(--text-2xs);opacity:.7;">📧 View</a>`
       : '';
 
     let cardClass = 'order-card';
@@ -8348,13 +8346,13 @@ function handleImportFile(event) {
       $('import-preview-body').innerHTML = _importRows.map(r => `
         <tr>
           <td class="mono">${escapeHtml(r.num)}</td>
-          <td style="font-size:12px;color:var(--text3);">${fmtD(r.date)}</td>
+          <td style="font-size:var(--text-sm);color:var(--text3);">${fmtD(r.date)}</td>
           <td>${escapeHtml(r.chan)}</td>
           <td class="r">${r.qty}</td>
           <td class="r">${book.currency}${r.price.toFixed(2)}</td>
           <td class="r" style="font-weight:600;">${book.currency}${(r.qty * r.price).toFixed(2)}</td>
-          <td style="font-size:11px;color:var(--text3);">${escapeHtml(r.notes) || '—'}</td>
-          <td><span class="pill blue" style="font-size:10px;">New</span></td>
+          <td style="font-size:var(--text-xs);color:var(--text3);">${escapeHtml(r.notes) || '—'}</td>
+          <td><span class="pill blue" style="font-size:var(--text-2xs);">New</span></td>
         </tr>`).join('');
       openM('import');
     } catch (err) {
@@ -8884,7 +8882,7 @@ function renderArtistTransfers() {
   const fullPayLink = payLink.startsWith('http') ? payLink : payLink ? 'https://' + payLink : '';
   const payHtml = fullPayLink
     ? `<a href="${fullPayLink}" target="_blank" class="btn sm" style="text-decoration:none;background:var(--green-bg);color:var(--green);border-color:rgba(42,99,72,.2);">↗ Payment link</a>`
-    : `<span style="font-size:10px;color:var(--text3);font-family:var(--font-mono);">No payment link set</span>`;
+    : `<span style="font-size:var(--text-2xs);color:var(--text3);font-family:var(--font-mono);">No payment link set</span>`;
 
   list.innerHTML = transfers.map(t => `
     <div class="pending-card${t.status === 'pending' ? ' is-pending' : ''}">
@@ -8892,7 +8890,7 @@ function renderArtistTransfers() {
         <div class="pending-card-head">
           <span class="pill amber">⏳ Awaiting transfer</span>
           <span class="pending-card-num">${escapeHtml(t.num)}</span>
-          ${t.status === 'pending' ? `<span class="pill gray" style="font-size:10px;">Pending Approval</span>` : ''}
+          ${t.status === 'pending' ? `<span class="pill gray" style="font-size:var(--text-2xs);">Pending Approval</span>` : ''}
         </div>
         <div class="pending-card-meta">${fmtD(t.date)} · ${t.chan} · ${t.qty}× · <strong class="pending-card-highlight">${fmt(t.total, cur)} held</strong></div>
         <div class="pending-card-note">${escapeHtml(t.notes) || '—'}</div>
@@ -8935,7 +8933,7 @@ function renderPendingExpenses() {
   const fullLink = artistLink ? (artistLink.startsWith('http') ? artistLink : 'https://' + artistLink) : '';
   const payHtml = fullLink
     ? `<a href="${fullLink}" target="_blank" class="btn sm" style="text-decoration:none;background:var(--green-bg);color:var(--green);border-color:rgba(42,99,72,.2);">↗ Payment link</a>`
-    : `<span style="font-size:10px;color:var(--text3);font-family:var(--font-mono);">No payment link set</span>`;
+    : `<span style="font-size:var(--text-2xs);color:var(--text3);font-family:var(--font-mono);">No payment link set</span>`;
   list.innerHTML = pending.map(e => `
     <div class="pending-card">
       <div>
@@ -9564,7 +9562,7 @@ function maybeAutoPayInvoiceForLedger(s, e) {
 // unlinked. Reused by the ledger and history renderers. viewInvoice is global.
 function invoiceBadgeHTML(invoiceId, invoiceNum) {
   if (!invoiceId || !invoiceNum) return '';
-  return `<button class="pill gray" style="font-size:10px;cursor:pointer;margin-left:6px;" onclick="viewInvoice('${invoiceId}')">🧾 ${escapeHtml(invoiceNum)}</button>`;
+  return `<button class="pill gray" style="font-size:var(--text-2xs);cursor:pointer;margin-left:6px;" onclick="viewInvoice('${invoiceId}')">🧾 ${escapeHtml(invoiceNum)}</button>`;
 }
 
 function markPaid(lid) {
@@ -9846,7 +9844,7 @@ function renderLedger() {
     const editBtn = `<button class="edit-btn" onclick="openEditLedger(${i})" title="Edit entry" aria-label="Edit entry">✎</button>`;
     // Cross-link Sale rows back to the invoice that bills them (absent id → '').
     const invBadge = e.type === 'Sale' ? invoiceBadgeHTML(e.invoiceId, e.invoiceNum) : '';
-    html += `<tr class="${voided}"><td class="mono-num" style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td><td style="font-weight:600;">${escapeHtml(e.storeName)}${editBtn}</td><td>${escapeHtml(e.type)}</td><td class="r">${e.qty}</td><td class="r">${e.type === 'Sale' ? e.rate + '%' : '—'}</td><td class="r" style="font-weight:600;">${e.amountDue > 0 ? fmt(e.amountDue, ledgerCur(e)) : '—'}</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(e.notes) || '—'}</td><td>${pill(e)}${e.status === 'pending' && !e.voided ? ` <button class="btn sm" style="margin-left:6px;" onclick="markPaid(${e.id})">Mark paid</button>` : ''}${invBadge}</td></tr>`;
+    html += `<tr class="${voided}"><td class="mono-num" style="font-size:var(--text-sm);color:var(--text3);">${fmtD(e.date)}</td><td style="font-weight:600;">${escapeHtml(e.storeName)}${editBtn}</td><td>${escapeHtml(e.type)}</td><td class="r">${e.qty}</td><td class="r">${e.type === 'Sale' ? e.rate + '%' : '—'}</td><td class="r" style="font-weight:600;">${e.amountDue > 0 ? fmt(e.amountDue, ledgerCur(e)) : '—'}</td><td style="font-size:var(--text-sm);color:var(--text3);">${escapeHtml(e.notes) || '—'}</td><td>${pill(e)}${e.status === 'pending' && !e.voided ? ` <button class="btn sm" style="margin-left:6px;" onclick="markPaid(${e.id})">Mark paid</button>` : ''}${invBadge}</td></tr>`;
   }
   b.innerHTML = html;
   if (foot) foot.innerHTML = consignmentLedgerFootHtml(consignmentLedgerTotals(matched, ledgerBookCode), ledgerTotalsScope(filter, storeName));
@@ -10518,7 +10516,7 @@ function invoiceBookOptions() {
 function renderInvoiceItems() {
   const body = $('inv-items-body'), cur = getSym(getInvoiceCurrency());
   if (!invoiceCtx.items.length) {
-    body.innerHTML = `<tr><td colspan="6" style="font-size:12px;color:var(--text3);padding:14px;text-align:center;">No line items. Click <strong>+ Add line</strong>.</td></tr>`;
+    body.innerHTML = `<tr><td colspan="6" style="font-size:var(--text-sm);color:var(--text3);padding:14px;text-align:center;">No line items. Click <strong>+ Add line</strong>.</td></tr>`;
     renderInvoiceBooksHint();
     return;
   }
@@ -10912,19 +10910,19 @@ function renderInvoiceSplitPanel(inv, ownerBookId) {
 
   const cur = inv.currency || (BOOKS[ownerBookId] || getBook()).currency;
   const rows = split.map(r => `<div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:var(--stroke-hair) solid var(--line);">
-      <span style="color:var(--text2);">${escapeHtml(r.title)}<span style="color:var(--text3);font-size:11px;margin-left:6px;">${Math.round(r.share * 100)}%</span></span>
+      <span style="color:var(--text2);">${escapeHtml(r.title)}<span style="color:var(--text3);font-size:var(--text-xs);margin-left:6px;">${Math.round(r.share * 100)}%</span></span>
       <span class="mono-num" style="font-weight:600;white-space:nowrap;">${fmt(r.total, cur)}</span>
     </div>`).join('');
 
   el.style.display = '';
   el.innerHTML = `<div style="background:var(--cream);border:var(--stroke-hair) solid var(--line);border-radius:var(--r3);padding:14px 18px;margin-bottom:18px;">
-      <div style="font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">What each title earned on this invoice</div>
+      <div style="font-size:var(--text-2xs);font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">What each title earned on this invoice</div>
       ${rows}
       <div style="display:flex;justify-content:space-between;gap:12px;padding:8px 0 0;">
-        <span style="color:var(--text3);font-size:12px;">Invoice total</span>
+        <span style="color:var(--text3);font-size:var(--text-sm);">Invoice total</span>
         <span class="mono-num" style="font-weight:700;white-space:nowrap;">${fmt(inv.total || 0, cur)}</span>
       </div>
-      <div style="font-size:11px;color:var(--text3);line-height:1.6;margin-top:8px;">Any discount and tax are shared out in proportion to each title's lines, so these add up to the invoice total. Not shown on the copy the shop receives.</div>
+      <div style="font-size:var(--text-xs);color:var(--text3);line-height:1.6;margin-top:8px;">Any discount and tax are shared out in proportion to each title's lines, so these add up to the invoice total. Not shown on the copy the shop receives.</div>
     </div>`;
 }
 
@@ -11093,8 +11091,8 @@ function renderInvoicePaperHTML(inv, { showChase = false } = {}) {
     : '';
 
   const dyn = isDynamicStripeLink(inv);
-  const testBadge = (dyn && inv.stripe.livemode === false) ? `<span style="display:inline-block;margin-left:8px;background:var(--red-bg);color:var(--red);font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;padding:3px 8px;border-radius:var(--r-pill);">Test mode</span>` : '';
-  const dynBadge = dyn ? `<div style="display:inline-flex;align-items:center;gap:6px;background:var(--surface-inverse);color:var(--gold-text);font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;padding:5px 12px;border-radius:var(--r-pill);margin-bottom:10px;">✓ Stripe checkout · exact amount${testBadge ? ' ' : ''}${testBadge}</div>` : '';
+  const testBadge = (dyn && inv.stripe.livemode === false) ? `<span style="display:inline-block;margin-left:8px;background:var(--red-bg);color:var(--red);font-size:var(--text-3xs);font-weight:700;letter-spacing:.16em;text-transform:uppercase;padding:3px 8px;border-radius:var(--r-pill);">Test mode</span>` : '';
+  const dynBadge = dyn ? `<div style="display:inline-flex;align-items:center;gap:6px;background:var(--surface-inverse);color:var(--gold-text);font-size:var(--text-3xs);font-weight:700;letter-spacing:.18em;text-transform:uppercase;padding:5px 12px;border-radius:var(--r-pill);margin-bottom:10px;">✓ Stripe checkout · exact amount${testBadge ? ' ' : ''}${testBadge}</div>` : '';
   const payCopy = dyn
     ? `Click below to pay <strong>${fmt(inv.total || 0, cur)}</strong> via Stripe Checkout.`
     : `Click below to pay <strong>${fmt(inv.total || 0, cur)}</strong> securely, or scan the QR with your phone.`;
@@ -11158,7 +11156,7 @@ function renderInvoicePaperHTML(inv, { showChase = false } = {}) {
       </div>
       <div>
         <label>Amount due</label>
-        <strong style="color:${statusCls === 'paid' ? '#1d7a4a' : '#0e0c0a'};font-size:18px;">${fmt(inv.total || 0, cur)}</strong>
+        <strong style="color:${statusCls === 'paid' ? '#1d7a4a' : '#0e0c0a'};font-size:var(--text-lg);">${fmt(inv.total || 0, cur)}</strong>
         <div class="inv-meta-sub">${totalQty} item${totalQty === 1 ? '' : 's'}</div>
         ${settlesLine}
         ${chaseNote}
@@ -12678,22 +12676,22 @@ async function restoreBookDataFromSheets() {
       const isDuplicate = duplicateIds.has(r._eventId || r['Event/Num']);
 
       let badge = type === 'order'
-        ? '<span class="pill green" style="font-size:10px;">Direct</span>'
-        : `<span class="pill ${status === 'pending' ? 'amber' : 'blue'}" style="font-size:10px;">Consign: ${r['Event/Num']}</span>`;
+        ? '<span class="pill green" style="font-size:var(--text-2xs);">Direct</span>'
+        : `<span class="pill ${status === 'pending' ? 'amber' : 'blue'}" style="font-size:var(--text-2xs);">Consign: ${r['Event/Num']}</span>`;
 
       if (isDuplicate) {
-        badge += ' <span class="pill red" style="font-size:10px;margin-left:4px;" title="Duplicate record found in the sheet. Only the last occurrence will be kept.">⚠️ Duplicate</span>';
+        badge += ' <span class="pill red" style="font-size:var(--text-2xs);margin-left:4px;" title="Duplicate record found in the sheet. Only the last occurrence will be kept.">⚠️ Duplicate</span>';
       }
 
       return `
         <tr style="${isDuplicate ? 'background:rgba(255,107,107,0.05);' : ''}">
           <td class="mono">${escapeHtml(eventNum)}</td>
-          <td style="font-size:12px;color:var(--text3);">${fmtD(date)}</td>
+          <td style="font-size:var(--text-sm);color:var(--text3);">${fmtD(date)}</td>
           <td>${escapeHtml(chan)}</td>
           <td class="r">${qty}</td>
           <td class="r">${book.currency}${price.toFixed(2)}</td>
           <td class="r" style="font-weight:600;">${book.currency}${total.toFixed(2)}</td>
-          <td style="font-size:11px;color:var(--text3);">${escapeHtml(notes)}</td>
+          <td style="font-size:var(--text-xs);color:var(--text3);">${escapeHtml(notes)}</td>
           <td>${badge}</td>
         </tr>`;
     }).join('');
@@ -13268,7 +13266,7 @@ function renderMockSpreadsheet() {
   // Render headers
   let headersHtml = `<th style="background:#22222e; color:rgba(255,255,255,0.6); font-weight:normal; text-align:center; padding:6px; border:var(--stroke-hair) solid rgba(255,255,255,0.08); width:30px; user-select:none;"></th>`;
   headers.forEach(h => {
-    headersHtml += `<th style="padding:6px 10px; border:var(--stroke-hair) solid rgba(255,255,255,0.08); background:#22222e; color:rgba(255,255,255,0.7); font-weight:600; text-transform:uppercase; font-size:10px; letter-spacing:0.02em;">${h}</th>`;
+    headersHtml += `<th style="padding:6px 10px; border:var(--stroke-hair) solid rgba(255,255,255,0.08); background:#22222e; color:rgba(255,255,255,0.7); font-weight:600; text-transform:uppercase; font-size:var(--text-2xs); letter-spacing:0.02em;">${h}</th>`;
   });
   headerRow.innerHTML = headersHtml;
 
@@ -13316,7 +13314,7 @@ function renderMockSpreadsheet() {
     const isEven = idx % 2 === 0;
     const rowBg = isEven ? '#15151b' : '#1a1a24';
 
-    let cellsHtml = `<td style="background:#1d1d26; color:rgba(255,255,255,0.6); border:var(--stroke-hair) solid rgba(255,255,255,0.08); text-align:center; user-select:none; font-family:sans-serif; font-size:10px;">${idx + 1}</td>`;
+    let cellsHtml = `<td style="background:#1d1d26; color:rgba(255,255,255,0.6); border:var(--stroke-hair) solid rgba(255,255,255,0.08); text-align:center; user-select:none; font-family:sans-serif; font-size:var(--text-2xs);">${idx + 1}</td>`;
 
     for (let c = 1; c < r.length; c++) {
       let val = r[c] ?? '';
@@ -14564,7 +14562,7 @@ function renderSystemBackups() {
   if (totalPages > 1) {
     html += `<tr><td colspan="4" style="text-align:center;padding:1rem;background:rgba(0,0,0,.15);">
       <button class="btn sm" onclick="gotoSysBackupPage(-1)" ${_sysBackupPage === 0 ? 'disabled' : ''}>← Prev</button>
-      <span style="margin:0 15px;font-size:12px;color:var(--text2);font-family:var(--font-mono);">Page ${_sysBackupPage + 1} of ${totalPages}</span>
+      <span style="margin:0 15px;font-size:var(--text-sm);color:var(--text2);font-family:var(--font-mono);">Page ${_sysBackupPage + 1} of ${totalPages}</span>
       <button class="btn sm" onclick="gotoSysBackupPage(1)" ${_sysBackupPage === totalPages - 1 ? 'disabled' : ''}>Next →</button>
     </td></tr>`;
   }
@@ -14833,8 +14831,8 @@ function renderBookRestorePicker() {
     const { s, missing, rank } = meta[bid];
     const empty = rank === 2;
     const badge = missing
-      ? '<span class="pill green" style="font-size:10px;">Missing · will be re-added</span>'
-      : '<span class="pill amber" style="font-size:10px;">In catalog · will be overwritten</span>';
+      ? '<span class="pill green" style="font-size:var(--text-2xs);">Missing · will be re-added</span>'
+      : '<span class="pill amber" style="font-size:var(--text-2xs);">In catalog · will be overwritten</span>';
     const stat = empty
       ? '<span style="color:var(--text3);">No recorded activity in this snapshot</span>'
       : `<strong style="color:var(--on-inverse);">${escapeHtml(_restoreStatLine(s))}</strong>`;
@@ -14842,9 +14840,9 @@ function renderBookRestorePicker() {
       <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border:var(--stroke-hair) solid var(--border);border-radius:var(--r2);background:rgba(255,255,255,.03);${empty ? 'opacity:.5;' : ''}">
         <div style="width:8px;height:8px;border-radius:50%;background:${book.accent || 'var(--gold3)'};flex-shrink:0;"></div>
         <div style="flex:1;min-width:0;">
-          <div style="font-weight:700;font-size:13px;color:var(--on-inverse);">${escapeHtml(book.title || bid)}</div>
-          <div style="font-size:12px;margin-top:2px;">${stat}</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:3px;">${escapeHtml(book.author || '—')} · ${badge}</div>
+          <div style="font-weight:700;font-size:var(--text-base);color:var(--on-inverse);">${escapeHtml(book.title || bid)}</div>
+          <div style="font-size:var(--text-sm);margin-top:2px;">${stat}</div>
+          <div style="font-size:var(--text-xs);color:var(--text3);margin-top:3px;">${escapeHtml(book.author || '—')} · ${badge}</div>
         </div>
         <button class="btn gold sm" onclick="applyBookRestore('${bid}')">Restore</button>
       </div>`;
@@ -15097,8 +15095,8 @@ function _renderProductionCostFields() {
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
       <div style="display:flex;align-items:center;gap:8px;min-width:220px;">
         <div style="width:8px;height:8px;border-radius:50%;background:${book.accent};flex-shrink:0;"></div>
-        <span style="font-size:13px;font-weight:600;color:var(--text);">${escapeHtml(book.title)}</span>
-        <span style="font-size:11px;color:var(--text3);">${book.currency}</span>
+        <span style="font-size:var(--text-base);font-weight:600;color:var(--text);">${escapeHtml(book.title)}</span>
+        <span style="font-size:var(--text-xs);color:var(--text3);">${book.currency}</span>
       </div>
       <div class="form-group" style="flex:1;margin:0;">
         <div class="price-wrap">
@@ -15162,7 +15160,7 @@ function _renderPaymentLinkFields() {
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
       <div style="display:flex;align-items:center;gap:8px;min-width:200px;">
         <div style="width:8px;height:8px;border-radius:50%;background:${book.accent};flex-shrink:0;"></div>
-        <span style="font-size:13px;font-weight:600;color:var(--text);">${escapeHtml(book.title)}</span>
+        <span style="font-size:var(--text-base);font-weight:600;color:var(--text);">${escapeHtml(book.title)}</span>
       </div>
       <div class="form-group" style="flex:1;margin:0;">
         <input type="text" id="pl-${book.id}" value="${book.paymentLink || ''}" placeholder="https://paypal.me/… or email@interac.ca">
@@ -15477,7 +15475,7 @@ function renderProfitTierList() {
       <div class="empty-state" style="padding:2.5rem 1rem;">
         <div class="e-icon">📊</div>
         <div style="font-weight:600;color:var(--text2);margin-bottom:.35rem;">Choose a book to manage its profit tiers</div>
-        <div style="font-size:12px;max-width:460px;margin:0 auto;line-height:1.6;">Pick a title from the dropdown above, then set the share an artist earns at each stage of recovering production costs.</div>
+        <div style="font-size:var(--text-sm);max-width:460px;margin:0 auto;line-height:1.6;">Pick a title from the dropdown above, then set the share an artist earns at each stage of recovering production costs.</div>
       </div>`;
     return;
   }
@@ -15497,11 +15495,11 @@ function renderProfitTierList() {
       <div style="text-align:center;padding:2rem 1.25rem;border:var(--stroke-hair) dashed var(--gold-line);border-radius:var(--r2);background:var(--cream2);">
         <div style="font-size:30px;opacity:.55;margin-bottom:.5rem;">🎚️</div>
         <div style="font-weight:600;color:var(--text2);margin-bottom:.4rem;">No tiers defined yet</div>
-        <div style="font-size:12px;color:var(--text3);max-width:480px;margin:0 auto 1.1rem;line-height:1.6;">
+        <div style="font-size:var(--text-sm);color:var(--text3);max-width:480px;margin:0 auto 1.1rem;line-height:1.6;">
           Start with the recommended two-stage model: a lower share until <b>${pcText}</b> is recovered, then a higher share once you break even. You can fine-tune every number afterward.
         </div>
         <button class="btn gold" id="ps-quickstart-btn">✨ Use recommended template</button>
-        <div style="font-size:11px;color:var(--text3);margin-top:.85rem;">…or build it up one stage at a time with <b>+ Add Tier</b> below.</div>
+        <div style="font-size:var(--text-xs);color:var(--text3);margin-top:.85rem;">…or build it up one stage at a time with <b>+ Add Tier</b> below.</div>
       </div>`;
     const qs = $('ps-quickstart-btn');
     if (qs) qs.addEventListener('click', psApplyTemplate);
@@ -15708,14 +15706,14 @@ function psRenderSummary(book, cur, productionCost) {
 
   const validationHtml = warnings.length
     ? `<div class="alert-card">
-         <span style="font-size:18px;line-height:1;margin-top:2px;">⚠️</span>
+         <span style="font-size:var(--text-lg);line-height:1;margin-top:2px;">⚠️</span>
          <div>
            <b style="font-weight:700;">Check these settings:</b>
            <ul>${warnings.map(w => `<li>${w}</li>`).join('')}</ul>
          </div>
        </div>`
     : `<div class="alert-card success">
-         <span style="font-size:18px;line-height:1;">✓</span>
+         <span style="font-size:var(--text-lg);line-height:1;">✓</span>
          <div>Tiers look consistent.</div>
        </div>`;
 
@@ -15733,7 +15731,7 @@ function psRenderSummary(book, cur, productionCost) {
     const label = escapeHtml(t.label || `Stage ${i + 1}`);
     const cTxt = c != null ? `up to ${fmt(c, cur)}` : 'no ceiling';
     return `<div class="preview-table-row">
-        <span>${label} <span style="color:var(--text3); font-size:10px;">· ${cTxt} · ${parseFloat(t.artistPct) || 0}%</span></span>
+        <span>${label} <span style="color:var(--text3); font-size:var(--text-2xs);">· ${cTxt} · ${parseFloat(t.artistPct) || 0}%</span></span>
         <span style="font-family:var(--font-mono);color:rgba(255,255,255,0.6);" title="Revenue falling in this stage">${fmt(r.revenue, cur)}</span>
         <span style="font-family:var(--font-mono);color:var(--gold3);" title="Artist earns from this stage">${fmt(r.artist, cur)}</span>
       </div>`;
@@ -15745,9 +15743,9 @@ function psRenderSummary(book, cur, productionCost) {
       <div class="preview-title-row">
         <div class="settings-metric-label" style="color:rgba(255,255,255,.5);">Earnings split simulator</div>
         <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font-size:11px;color:rgba(255,255,255,.55);">If gross revenue is</span>
-          <input id="ps-sim-input" type="number" value="${gross}" style="width:120px;padding:6px 10px;font-size:13px;font-family:var(--font-mono);border:var(--stroke-hair) solid rgba(255,255,255,.14);border-radius:var(--r);background:rgba(255,255,255,.06);color:var(--on-inverse);outline:none;">
-          <span style="font-size:11px;color:rgba(255,255,255,.55);">${escapeHtml(cur)}</span>
+          <span style="font-size:var(--text-xs);color:rgba(255,255,255,.55);">If gross revenue is</span>
+          <input id="ps-sim-input" type="number" value="${gross}" style="width:120px;padding:6px 10px;font-size:var(--text-base);font-family:var(--font-mono);border:var(--stroke-hair) solid rgba(255,255,255,.14);border-radius:var(--r);background:rgba(255,255,255,.06);color:var(--on-inverse);outline:none;">
+          <span style="font-size:var(--text-xs);color:rgba(255,255,255,.55);">${escapeHtml(cur)}</span>
         </div>
       </div>
       <div class="preview-bar">
@@ -15761,7 +15759,7 @@ function psRenderSummary(book, cur, productionCost) {
         <div class="preview-table-header">
           <span>Stage</span><span>Revenue</span><span>Artist</span>
         </div>
-        <div style="color:rgba(247,242,233,.85);">${tierRowsHtml || '<div style="font-size:11px;color:rgba(255,255,255,.4);padding:6px 0;">Enter a revenue figure to preview the split.</div>'}</div>
+        <div style="color:rgba(250,246,236,.85);">${tierRowsHtml || '<div style="font-size:var(--text-xs);color:rgba(255,255,255,.4);padding:6px 0;">Enter a revenue figure to preview the split.</div>'}</div>
       </div>
     </div>`;
 
@@ -15983,51 +15981,6 @@ function filterArtistEarningsByYear(bookId, year) {
   return yearArtistEarned;
 }
 
-function renderFinancials() {
-  if (isAuthor()) return;
-  const yearStr = $('fin-year-selector').value;
-  const year = parseInt(yearStr);
-  const fin = calculateFinancials(year);
-  const cur = getBook().currency || '€';
-
-  $('fin-rev').textContent = fmt(fin.revenue, cur);
-  $('fin-cogs').textContent = fmt(fin.cogs, cur);
-  $('fin-exp').textContent = fmt(fin.opex + fin.shares, cur);
-
-  const totalExpCount = Object.values(fin.expCats).reduce((a, c) => a + c.count, 0);
-  let subText = `${totalExpCount} expense${totalExpCount !== 1 ? 's' : ''} logged`;
-  if (fin.missingReceiptsCount > 0) {
-    subText += ` · <span style="color:var(--red);font-weight:600;">${fin.missingReceiptsCount} missing receipt${fin.missingReceiptsCount !== 1 ? 's' : ''}</span>`;
-  }
-  $('fin-exp-sub').innerHTML = subText;
-  $('fin-profit').textContent = fmt(fin.profit, cur);
-
-  const expBody = $('fin-exp-body');
-  if (expBody) {
-    const sortedCats = Object.entries(fin.expCats).sort((a, b) => b[1].total - a[1].total);
-    expBody.innerHTML = sortedCats.map(([cat, val]) => `
-      <tr>
-        <td style="font-weight:600; display:flex; align-items:center;">${cat} ${val.missingReceipts ? `<span class="pill red" style="margin-left:8px;">${val.missingReceipts} missing</span>` : ''}</td>
-        <td class="r">${val.count} txn</td>
-        <td class="r" style="font-weight:700; color:var(--red);">${fmt(val.total, cur)}</td>
-      </tr>
-    `).join('') || '<tr><td colspan="3"><div class="empty-state">No expenses for this period.</div></td></tr>';
-  }
-
-  const booksBody = $('fin-books-body');
-  if (booksBody) {
-    booksBody.innerHTML = fin.bookStats.map(bs => `
-      <tr>
-        <td style="font-weight:600;">${escapeHtml(bs.title)}</td>
-        <td class="r">${bs.units}</td>
-        <td class="r">${fmt(bs.revenue, cur)}</td>
-        <td class="r">${fmt(bs.unitCost, cur)}</td>
-        <td class="r">${fmt(bs.cogs, cur)}</td>
-        <td class="r" style="font-weight:700; color:${bs.net > 0 ? 'var(--green)' : 'var(--text)'};">${fmt(bs.net, cur)}</td>
-      </tr>
-    `).join('') || '<tr><td colspan="6"><div class="empty-state">No data available.</div></td></tr>';
-  }
-}
 
 // ── GOOGLE AUTHENTICATION
 window.tryGoogleLogin = async function () {
@@ -16072,9 +16025,8 @@ function showApp(role, bookId) {
     style.textContent = '#sheets-open-link{display:none!important;}#side-sheets-open{display:none!important;}#open-sheet-link{display:none!important;}#d-breakeven-kpi{display:none!important;}#d-breakeven-block{display:none!important;}#d-reimburse-sect{display:none!important;}#d-expenses-sect{display:none!important;}#d-expenses-kpi{display:none!important;}#d-reimburse-kpi{display:none!important;}#danger-zone-sect{display:none!important;}#danger-zone-block{display:none!important;}#import-btn{display:none!important;}#tab-all-overview{display:none!important;}#backups-tab-btn{display:none!important;}#exp-ai-btn{display:none!important;}';
     document.head.appendChild(style);
   } else {
-    // Publisher — show import button and financials tab
+    // Publisher — show the import button
     const importBtn = $('import-btn'); if (importBtn) importBtn.style.display = '';
-    const finBtn = $('financials-tab-btn'); if (finBtn) finBtn.style.display = '';
     const websiteTabBtn = $('website-tab-btn'); if (websiteTabBtn) websiteTabBtn.style.display = '';
     const backupsBtn = $('backups-tab-btn'); if (backupsBtn) backupsBtn.style.display = '';
   }
@@ -16395,7 +16347,7 @@ function renderEditExpenseReceipts() {
   const container = $('edit-exp-receipts-preview');
   if (!container || !_editingExpense) return;
   if (!_editingExpense.files.length) {
-    container.innerHTML = '<span style="color:var(--text3);font-size:11px;">No receipts attached</span>';
+    container.innerHTML = '<span style="color:var(--text3);font-size:var(--text-xs);">No receipts attached</span>';
     return;
   }
 
@@ -16418,10 +16370,10 @@ function renderEditExpenseReceipts() {
         : `<span title="This receipt reference cannot be opened" style="color:var(--text3);">${escapeHtml(name)}</span>`;
     }
     return `<div style="display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,0.05);padding:4px 8px;border-radius:var(--r);border:var(--stroke-hair) solid rgba(255,255,255,0.1);margin-bottom:4px;">
-      <span style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px;" title="${escapeHtml(name)}">📄 ${viewLink}</span>
+      <span style="font-size:var(--text-xs);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px;" title="${escapeHtml(name)}">📄 ${viewLink}</span>
       <div style="display:flex;gap:4px;">
-        <button class="btn tx" type="button" onclick="relinkEditExpenseReceipt(${idx})" style="padding:2px 6px;font-size:10px;color:var(--gold-text);" title="Change or edit this receipt link">✏️ Relink</button>
-        <button class="btn tx" type="button" onclick="removeEditExpenseReceipt(${idx})" style="padding:2px 6px;font-size:10px;color:var(--red);" title="Remove receipt attachment">Remove</button>
+        <button class="btn tx" type="button" onclick="relinkEditExpenseReceipt(${idx})" style="padding:2px 6px;font-size:var(--text-2xs);color:var(--gold-text);" title="Change or edit this receipt link">✏️ Relink</button>
+        <button class="btn tx" type="button" onclick="removeEditExpenseReceipt(${idx})" style="padding:2px 6px;font-size:var(--text-2xs);color:var(--red);" title="Remove receipt attachment">Remove</button>
       </div>
     </div>`;
   }).join('');
@@ -16664,7 +16616,7 @@ export function showTripDetail(tripName) {
   });
 
   const catPills = Object.entries(categories || {}).map(([cat, amt]) => {
-    return `<span style="background:rgba(255,255,255,0.06);border:var(--stroke-hair) solid rgba(255,255,255,0.1);padding:2px 8px;border-radius:var(--r);font-size:11px;color:var(--text2);">${escapeHtml(cat)}: <b>-${fmt(amt, baseCurrency)}</b></span>`;
+    return `<span style="background:rgba(255,255,255,0.06);border:var(--stroke-hair) solid rgba(255,255,255,0.1);padding:2px 8px;border-radius:var(--r);font-size:var(--text-xs);color:var(--text2);">${escapeHtml(cat)}: <b>-${fmt(amt, baseCurrency)}</b></span>`;
   }).join(' ');
 
   const rows = sorted.map(item => {
@@ -16673,14 +16625,14 @@ export function showTripDetail(tripName) {
     const origDisplay = `${origSym}${Number(item.origAmount || 0).toFixed(2)}`;
     return `
       <tr style="color:var(--red);">
-        <td style="font-size:12px;">${item.date || '—'}</td>
-        <td style="font-size:12px;">${item.desc || ''}</td>
-        <td style="font-size:12px;">${item.cat || ''}</td>
-        <td style="font-size:12px;">${refCell}</td>
-        <td class="r" style="font-size:12px;">${origDisplay}</td>
+        <td style="font-size:var(--text-sm);">${item.date || '—'}</td>
+        <td style="font-size:var(--text-sm);">${item.desc || ''}</td>
+        <td style="font-size:var(--text-sm);">${item.cat || ''}</td>
+        <td style="font-size:var(--text-sm);">${refCell}</td>
+        <td class="r" style="font-size:var(--text-sm);">${origDisplay}</td>
         <td class="r" style="font-weight:600;">- ${fmt(item.baseAmount, baseCurrency)}</td>
         <td style="display:flex;gap:4px;align-items:center;justify-content:flex-end;">
-          <button class="btn" style="font-size:10px;padding:3px 8px;" onclick="openEditTrip('${item.id}')" title="Move to a different trip">Move</button>
+          <button class="btn" style="font-size:var(--text-2xs);padding:3px 8px;" onclick="openEditTrip('${item.id}')" title="Move to a different trip">Move</button>
           <button class="btn-icon" aria-label="Edit entry" onclick="openEditExpense('businessExpense', '', '${item.id}')" title="Edit entry">✏️</button>
           <button class="btn-icon" aria-label="Delete entry" onclick="removeLedgerEntry('businessExpense', '', '${item.id}')" title="Delete entry">🗑️</button>
         </td>
@@ -16697,13 +16649,13 @@ export function showTripDetail(tripName) {
   $('tc-trip-detail-summary').innerHTML = `
     <div style="display:flex;flex-direction:column;gap:8px;">
       <div>${count} expense${count === 1 ? '' : 's'} &bull; <span style="color:var(--red-light);font-weight:bold;">Trip total: -${fmt(total, baseCurrency)}</span></div>
-      ${recBits.length ? `<div style="display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:var(--text3);">${recBits.join('<span>·</span>')}</div>` : ''}
-      ${rec?.notes ? `<div style="font-size:12px;color:var(--text3);font-style:italic;">${escapeHtml(rec.notes)}</div>` : ''}
+      ${recBits.length ? `<div style="display:flex;flex-wrap:wrap;gap:10px;font-size:var(--text-sm);color:var(--text3);">${recBits.join('<span>·</span>')}</div>` : ''}
+      ${rec?.notes ? `<div style="font-size:var(--text-sm);color:var(--text3);font-style:italic;">${escapeHtml(rec.notes)}</div>` : ''}
       ${catPills ? `<div style="display:flex;flex-wrap:wrap;gap:6px;">${catPills}</div>` : ''}
     </div>
   `;
   $('tc-trip-detail-body').innerHTML = rows
-    || `<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:26px 12px;font-size:12px;">
+    || `<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:26px 12px;font-size:var(--text-sm);">
           <div style="margin-bottom:10px;">No expenses assigned to this trip yet.</div>
           <button class="btn gold" onclick="logExpenseForTrip()">➕ Log the first expense</button>
         </td></tr>`;
@@ -16760,26 +16712,26 @@ export function showCategoryDetail(catName) {
     const links = _localReceiptCell(item) || (legacyReceipt ? _localReceiptCell({ receipt: legacyReceipt }) : '');
     const refCell = [
       links,
-      displayRef ? `<span style="font-size:11px;color:var(--text3);">${displayRef}</span>` : '',
-      item.invoiceNum ? `<span style="font-size:11px;color:var(--gold);">🧾 ${escapeHtml(item.invoiceNum)}</span>` : ''
+      displayRef ? `<span style="font-size:var(--text-xs);color:var(--text3);">${displayRef}</span>` : '',
+      item.invoiceNum ? `<span style="font-size:var(--text-xs);color:var(--gold);">🧾 ${escapeHtml(item.invoiceNum)}</span>` : ''
     ].filter(Boolean).join('<br>');
     const origSym = getSym(item.origCurrency || 'CAD');
     const origDisplay = `${origSym}${Number(item.origAmount || 0).toFixed(2)}`;
     const moveCell = item.sourceType === 'businessExpense'
-      ? `<select onchange="changeExpenseCategory('${item.itemId}', this.value)" style="font-size:11px;padding:2px 4px;border:var(--stroke-hair) solid rgba(255,255,255,.15);border-radius:var(--r);max-width:170px;" title="Move to another category">
+      ? `<select onchange="changeExpenseCategory('${item.itemId}', this.value)" style="font-size:var(--text-xs);padding:2px 4px;border:var(--stroke-hair) solid rgba(255,255,255,.15);border-radius:var(--r);max-width:170px;" title="Move to another category">
           ${TC_CATEGORIES.map(c => `<option value="${c.replace(/"/g, '&quot;')}"${c === item.cat ? ' selected' : ''}>${c}</option>`).join('')}
         </select>`
-      : '<span style="font-size:11px;color:var(--text3);">—</span>';
+      : '<span style="font-size:var(--text-xs);color:var(--text3);">—</span>';
     const showEdit = (item.sourceType === 'businessExpense' || item.sourceType === 'bookExpense');
     const editBtn = showEdit ? `<button class="btn-icon" aria-label="Edit entry" onclick="openEditExpense('${item.sourceType}', '${item.sourceId || ''}', '${item.itemId}')" title="Edit entry" style="margin-right:4px;">✏️</button>` : '';
     const deleteBtn = item.itemId ? `<button class="btn-icon" aria-label="Delete entry" onclick="removeLedgerEntry('${item.sourceType}', '${item.sourceId || ''}', '${item.itemId}')" title="Delete entry">🗑️</button>` : '';
     return `
       <tr style="color:var(--red);">
-        <td style="font-size:12px;">${item.date || '—'}</td>
+        <td style="font-size:var(--text-sm);">${item.date || '—'}</td>
         <td><span class="tag amber">${item.type}</span></td>
-        <td style="font-size:12px;">${item.desc || ''}</td>
-        <td style="font-size:12px;">${refCell}</td>
-        <td class="r" style="font-size:12px;">${origDisplay}</td>
+        <td style="font-size:var(--text-sm);">${item.desc || ''}</td>
+        <td style="font-size:var(--text-sm);">${refCell}</td>
+        <td class="r" style="font-size:var(--text-sm);">${origDisplay}</td>
         <td class="r" style="font-weight:600;">- ${fmt(item.baseAmount, baseCurrency)}</td>
         <td>${moveCell}</td>
         <td class="r">${editBtn}${deleteBtn}</td>
@@ -17405,10 +17357,10 @@ function renderPOS() {
       const posOnly = isPosOnlyBook(book.id);
       const idAttr = escapeHtml(book.id);
       const badge = posOnly
-        ? `<span style="display:inline-block;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);background:var(--gold-bg);border:var(--stroke-hair) solid var(--gold-line);border-radius:var(--r);padding:2px 6px;margin-bottom:6px;">POS-only</span>`
+        ? `<span style="display:inline-block;font-size:var(--text-3xs);font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);background:var(--gold-bg);border:var(--stroke-hair) solid var(--gold-line);border-radius:var(--r);padding:2px 6px;margin-bottom:6px;">POS-only</span>`
         : '';
       const soldNote = (posOnly && book.sold)
-        ? `<div style="font-size:11px;color:var(--green);margin-top:3px;">${book.sold} sold${book.revenue ? ' · ' + posFormat(book.revenue, sourceCode) : ''}</div>`
+        ? `<div style="font-size:var(--text-xs);color:var(--green);margin-top:3px;">${book.sold} sold${book.revenue ? ' · ' + posFormat(book.revenue, sourceCode) : ''}</div>`
         : '';
       // How many are still in the box, counting down as the cart fills. The
       // pill is the only place on this screen that has ever said so.
@@ -17599,7 +17551,7 @@ function _showPosQR(url, amountLabel, sub) {
   if (url && typeof QRCode !== 'undefined') {
     new QRCode(wrap, { text: url, width: 220, height: 220, colorDark: '#000', colorLight: '#fff', correctLevel: QRCode.CorrectLevel.H });
   } else {
-    wrap.innerHTML = '<div style="color:var(--text3);font-size:12px;">QR library not ready.</div>';
+    wrap.innerHTML = '<div style="color:var(--text3);font-size:var(--text-sm);">QR library not ready.</div>';
   }
   openM('pos-qr');
 }
@@ -17825,7 +17777,7 @@ window.posCheckout = function () {
   $('pos-confirm-items').innerHTML = rows.map((row) => {
     const lineDisplay = row.convertedLine === null ? posFormat(row.sourceLine, row.sourceCode) : posFormat(row.convertedLine, posTransactionCurrency);
     const adj = row.overridden
-      ? ` <span style="font-size:11px;color:var(--gold);">(was ${posFormat(row.listUnit, row.sourceCode)} ea)</span>`
+      ? ` <span style="font-size:var(--text-xs);color:var(--gold);">(was ${posFormat(row.listUnit, row.sourceCode)} ea)</span>`
       : '';
     return `<tr><td>${escapeHtml(row.book.title)}${adj}</td><td class="r mono-num">${row.qty}</td><td class="r mono-num">${lineDisplay}</td></tr>`;
   }).join('');
@@ -19486,7 +19438,7 @@ function renderPosBookModalQR() {
   wrap.innerHTML = '';
   _posBookQR = null;
   if (!url) {
-    wrap.innerHTML = '<div style="color:var(--text3);font-size:11px;text-align:center;padding:1rem;">Add or generate a payment link to preview its QR.</div>';
+    wrap.innerHTML = '<div style="color:var(--text3);font-size:var(--text-xs);text-align:center;padding:1rem;">Add or generate a payment link to preview its QR.</div>';
     if (note) note.textContent = '';
     return;
   }
@@ -19494,7 +19446,7 @@ function renderPosBookModalQR() {
     _posBookQR = new QRCode(wrap, { text: url, width: 180, height: 180, colorDark: '#000', colorLight: '#fff', correctLevel: QRCode.CorrectLevel.H });
     if (note) note.textContent = 'Customers scan this to pay via Stripe.';
   } else {
-    wrap.innerHTML = '<div style="color:var(--text3);font-size:11px;">QR library not ready.</div>';
+    wrap.innerHTML = '<div style="color:var(--text3);font-size:var(--text-xs);">QR library not ready.</div>';
   }
 }
 window.renderPosBookModalQR = renderPosBookModalQR;
@@ -19790,7 +19742,7 @@ function openInventoryValuationModal() {
         ? ` title="${item.storeBreakdown.map(s => `${s.storeName}: ${s.onHand}`).join(' | ')}"`
         : '';
       const storePill = item.stockConsigned > 0
-        ? `<span class="tag amber" style="font-size:10px; cursor:help;"${storesTooltip}>${item.stockConsigned} in ${item.storeBreakdown.length} store${item.storeBreakdown.length === 1 ? '' : 's'}</span>`
+        ? `<span class="tag amber" style="font-size:var(--text-2xs); cursor:help;"${storesTooltip}>${item.stockConsigned} in ${item.storeBreakdown.length} store${item.storeBreakdown.length === 1 ? '' : 's'}</span>`
         : '<span style="color:var(--text3);">0</span>';
 
       const curSym = typeof getSym === 'function' ? getSym(item.currency) : '$';
@@ -19799,7 +19751,7 @@ function openInventoryValuationModal() {
         <tr>
           <td>
             <div style="font-weight:600; color:var(--text1);">${escapeHtml(item.title)}</div>
-            <div style="font-size:10px; color:var(--text3);">${escapeHtml(item.isbn)} · ${escapeHtml(item.format)}</div>
+            <div style="font-size:var(--text-2xs); color:var(--text3);">${escapeHtml(item.isbn)} · ${escapeHtml(item.format)}</div>
           </td>
           <td class="r" style="font-weight:600;">${item.stockOnHand}</td>
           <td class="r">${storePill}</td>
@@ -19820,9 +19772,9 @@ function openInventoryValuationModal() {
         <td class="r">${totals.totalStockOnHand}</td>
         <td class="r">${totals.totalStockConsigned}</td>
         <td class="r" style="color:var(--gold);">${totals.totalUnsoldUnits}</td>
-        <td class="r" colspan="2" style="font-size:11px; color:var(--text3);">Weighted Margin: ${totals.weightedAvgMarginPct.toFixed(1)}%</td>
-        <td class="r" style="color:var(--gold); font-size:13px;">$${totals.totalAssetValueCostCAD.toFixed(2)} CAD</td>
-        <td class="r" style="color:var(--green); font-size:13px;">$${totals.totalAssetValueRetailCAD.toFixed(2)} CAD</td>
+        <td class="r" colspan="2" style="font-size:var(--text-xs); color:var(--text3);">Weighted Margin: ${totals.weightedAvgMarginPct.toFixed(1)}%</td>
+        <td class="r" style="color:var(--gold); font-size:var(--text-base);">$${totals.totalAssetValueCostCAD.toFixed(2)} CAD</td>
+        <td class="r" style="color:var(--green); font-size:var(--text-base);">$${totals.totalAssetValueRetailCAD.toFixed(2)} CAD</td>
       </tr>
     `;
   }
@@ -20219,21 +20171,21 @@ function renderStripeFeesCards(data, byYearCurAll) {
         headline = `
           <div style="display:flex;flex-wrap:wrap;gap:1.5rem;align-items:flex-end;">
             <div style="flex:2;min-width:240px;">
-              <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.12em;margin-bottom:4px;">Stripe fees on your sales</div>
+              <div style="font-size:var(--text-xs);color:var(--text3);text-transform:uppercase;letter-spacing:.12em;margin-bottom:4px;">Stripe fees on your sales</div>
               <div style="font-family:var(--font-mono);font-size:32px;font-weight:500;color:var(--red);line-height:1;">${_stripeFmtMoney(fee, cur)}</div>
-              <div style="font-size:13px;color:var(--text2);margin-top:8px;line-height:1.5;">
+              <div style="font-size:var(--text-base);color:var(--text2);margin-top:8px;line-height:1.5;">
                 on <strong>${_stripeFmtMoney(gross, cur)}</strong> across <strong>${salesAgg.count}</strong> customer ${salesAgg.count === 1 ? 'payment' : 'payments'}<br>
                 You received <strong style="color:var(--green);">${_stripeFmtMoney(net, cur)}</strong> net into your Stripe balance
               </div>
             </div>
             <div style="flex:1;min-width:120px;text-align:right;">
-              <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.12em;margin-bottom:4px;">Effective rate</div>
+              <div style="font-size:var(--text-xs);color:var(--text3);text-transform:uppercase;letter-spacing:.12em;margin-bottom:4px;">Effective rate</div>
               <div style="font-family:var(--font-mono);font-size:32px;font-weight:500;color:var(--gold);line-height:1;">${pct.toFixed(2)}%</div>
-              <div style="font-size:11px;color:var(--text3);margin-top:8px;">of gross sales</div>
+              <div style="font-size:var(--text-xs);color:var(--text3);margin-top:8px;">of gross sales</div>
             </div>
           </div>`;
       } else {
-        headline = `<div style="font-size:13px;color:var(--text3);font-style:italic;">No customer payments in this year — only balance activity below.</div>`;
+        headline = `<div style="font-size:var(--text-base);color:var(--text3);font-style:italic;">No customer payments in this year — only balance activity below.</div>`;
       }
 
       const otherTypes = Object.keys(types).filter(t => !SALES_TYPES.has(t)).sort();
@@ -20242,8 +20194,8 @@ function renderStripeFeesCards(data, byYearCurAll) {
         const gross = _stripeMinorToMajor(salesAgg.gross, cur);
         const fee = _stripeMinorToMajor(salesAgg.fee, cur);
         const net = _stripeMinorToMajor(salesAgg.net, cur);
-        detailRows.push(`<tr style="background:rgba(200,145,58,.06);">
-          <td><strong>Customer payments</strong><div style="font-size:10px;color:var(--text3);">charge · payment</div></td>
+        detailRows.push(`<tr style="background:rgba(232,64,42,.06);">
+          <td><strong>Customer payments</strong><div style="font-size:var(--text-2xs);color:var(--text3);">charge · payment</div></td>
           <td class="r">${salesAgg.count}</td>
           <td class="r">${_stripeFmtMoney(gross, '')}</td>
           <td class="r" style="color:var(--red);">${_stripeFmtMoney(fee, '')}</td>
@@ -20256,7 +20208,7 @@ function renderStripeFeesCards(data, byYearCurAll) {
         const fee = _stripeMinorToMajor(r.fee, cur);
         const net = _stripeMinorToMajor(r.net, cur);
         detailRows.push(`<tr>
-          <td>${_stripeFriendlyType(t)}<div style="font-size:10px;color:var(--text3);">${t}</div></td>
+          <td>${_stripeFriendlyType(t)}<div style="font-size:var(--text-2xs);color:var(--text3);">${t}</div></td>
           <td class="r">${r.count}</td>
           <td class="r">${_stripeFmtMoney(gross, '')}</td>
           <td class="r" style="color:${fee !== 0 ? 'var(--red)' : 'var(--text3)'};">${fee !== 0 ? _stripeFmtMoney(fee, '') : '—'}</td>
@@ -20273,7 +20225,7 @@ function renderStripeFeesCards(data, byYearCurAll) {
       cards.push(`
         <div class="card" style="margin-bottom:1rem;padding:1.25rem 1.4rem;">
           <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:14px;border-bottom:var(--stroke-hair) solid var(--border);padding-bottom:10px;">
-            <div style="font-family:var(--font-display);font-size:22px;color:var(--text);">${year}</div>
+            <div style="font-family:var(--font-display);font-size:var(--text-xl);color:var(--text);">${year}</div>
             <span class="pill gold">${cur}</span>
           </div>
           ${headline}
@@ -20286,7 +20238,7 @@ function renderStripeFeesCards(data, byYearCurAll) {
                   <thead><tr><th>Activity</th><th class="r">Count</th><th class="r">Amount</th><th class="r">Stripe fee</th><th class="r">Net</th></tr></thead>
                   <tbody>${detailRows.join('')}
                     <tr style="border-top:var(--stroke) solid var(--gold-line);font-weight:600;background:var(--cream2);">
-                      <td>All activity total<div style="font-size:10px;color:var(--text3);font-weight:400;">matches Stripe Dashboard Balance report</div></td>
+                      <td>All activity total<div style="font-size:var(--text-2xs);color:var(--text3);font-weight:400;">matches Stripe Dashboard Balance report</div></td>
                       <td class="r">${tot.count}</td>
                       <td class="r">${_stripeFmtMoney(tgross, '')}</td>
                       <td class="r" style="color:var(--red);">${_stripeFmtMoney(tfee, '')}</td>
@@ -20295,7 +20247,7 @@ function renderStripeFeesCards(data, byYearCurAll) {
                   </tbody>
                 </table>
               </div>
-              <div style="font-size:11px;color:var(--text3);line-height:1.5;">
+              <div style="font-size:var(--text-xs);color:var(--text3);line-height:1.5;">
                 <strong>Customer payments</strong> is the line that answers "what % does Stripe take from my sales".
                 The other rows (refunds, payouts, service fees, adjustments) are non-sale balance movements — included so the total reconciles with Stripe's Balance report.
               </div>
@@ -20350,7 +20302,7 @@ async function fetchStripeFeesByYear() {
     wrap.style.display = '';
 
     statusEl.innerHTML = `<span style="color:var(--green);">✓ Done — ${allTxns.length} balance transactions across ${years.length} year(s). Key saved for next time.</span>
-      <br><span style="font-size:11px;color:var(--text3);">Verify against your Stripe Dashboard: <a href="https://dashboard.stripe.com/balance" target="_blank" rel="noopener" style="color:var(--gold);">Balance</a> · <a href="https://dashboard.stripe.com/reports/balance" target="_blank" rel="noopener" style="color:var(--gold);">Balance reports</a> (set the date range to a calendar year). Click "Download audit CSV" below for the raw per-transaction data.</span>`;
+      <br><span style="font-size:var(--text-xs);color:var(--text3);">Verify against your Stripe Dashboard: <a href="https://dashboard.stripe.com/balance" target="_blank" rel="noopener" style="color:var(--gold);">Balance</a> · <a href="https://dashboard.stripe.com/reports/balance" target="_blank" rel="noopener" style="color:var(--gold);">Balance reports</a> (set the date range to a calendar year). Click "Download audit CSV" below for the raw per-transaction data.</span>`;
 
     document.getElementById('stripe-fees-download-btn').style.display = '';
     document.getElementById('stripe-fees-clear-btn').style.display = '';
@@ -20371,7 +20323,7 @@ async function fetchStripeFeesByYear() {
     const msg = String(e.message || e);
     let hint = '';
     if (/Failed to fetch|NetworkError|CORS/i.test(msg)) {
-      hint = '<br><span style="font-size:11px;">If this is a CORS error, run <code>scripts/stripe-fees-by-year.js</code> locally instead — your browser may be blocking direct Stripe API calls.</span>';
+      hint = '<br><span style="font-size:var(--text-xs);">If this is a CORS error, run <code>scripts/stripe-fees-by-year.js</code> locally instead — your browser may be blocking direct Stripe API calls.</span>';
     }
     statusEl.innerHTML = `<span style="color:var(--red);">Error: ${msg}</span>${hint}`;
   } finally {
@@ -20645,7 +20597,7 @@ async function reconcileStripeAgainstSales() {
   const rows = window._stripeFeesLedgerData || [];
   const wrap = document.getElementById('stripe-fees-reconcile-wrap');
   if (!rows.length) { showToast('Run "Fetch fees" first.', 'warn'); return; }
-  if (wrap) { wrap.style.display = ''; wrap.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px;">Computing reconciliation…</div>'; }
+  if (wrap) { wrap.style.display = ''; wrap.innerHTML = '<div style="font-size:var(--text-sm);color:var(--text3);padding:8px;">Computing reconciliation…</div>'; }
   const currentYear = new Date().getFullYear();
 
   // Stripe gross customer payments per year, converted to CAD.
@@ -20677,7 +20629,7 @@ async function reconcileStripeAgainstSales() {
   }
 
   const years = [...new Set([...Object.keys(stripeByYear), ...Object.keys(salesByYear)].map(Number))].sort((a, b) => b - a);
-  if (!years.length) { if (wrap) wrap.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px;">No data to reconcile.</div>'; return; }
+  if (!years.length) { if (wrap) wrap.innerHTML = '<div style="font-size:var(--text-sm);color:var(--text3);padding:8px;">No data to reconcile.</div>'; return; }
 
   const fmtCad = (n) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const bodyRows = years.map(y => {
@@ -20691,7 +20643,7 @@ async function reconcileStripeAgainstSales() {
       <td class="r" style="font-family:var(--font-mono);">${fmtCad(stripe)}</td>
       <td class="r" style="font-family:var(--font-mono);">${fmtCad(recorded)}</td>
       <td class="r" style="font-family:var(--font-mono);color:${diffColor};">${diff >= 0 ? '+' : ''}${fmtCad(diff)}</td>
-      <td class="r">${aligned ? '<span class="pill green" style="font-size:10px;">✓ Aligned</span>' : '<span class="pill" style="font-size:10px;background:var(--amber);color:var(--on-status);">Review</span>'}</td>
+      <td class="r">${aligned ? '<span class="pill green" style="font-size:var(--text-2xs);">✓ Aligned</span>' : '<span class="pill" style="font-size:var(--text-2xs);background:var(--amber);color:var(--on-status);">Review</span>'}</td>
     </tr>`;
   }).join('');
 
@@ -20704,7 +20656,7 @@ async function reconcileStripeAgainstSales() {
           <tbody>${bodyRows}</tbody>
         </table>
       </div>
-      <div style="font-size:11px;color:var(--text3);line-height:1.5;margin-top:8px;">
+      <div style="font-size:var(--text-xs);color:var(--text3);line-height:1.5;margin-top:8px;">
         <strong>Stripe collected</strong> = gross customer payments (charge/payment) converted to CAD at the year-end rate.
         <strong>Recorded sales</strong> = qty × price from your book history, summed as entered.
         Differences can be legitimate (cash/PayPal sales, refunds, Stripe payments not yet logged as sales) — this is a directional check, not an exact tie-out.
@@ -20972,14 +20924,14 @@ async function reconcileSync() {
     const msg = String(e.message || e);
     let hint = '';
     if (/permission|rak_charge_read|rak_payment_intent_read/i.test(msg)) {
-      hint = `<br><span style="font-size:11px;line-height:1.6;display:inline-block;margin-top:4px;">
+      hint = `<br><span style="font-size:var(--text-xs);line-height:1.6;display:inline-block;margin-top:4px;">
         Your restricted key is missing a read scope. In
         <a href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener" style="color:var(--gold);">Stripe → API keys</a>,
         edit the key (or create a new one) and grant <strong>Read</strong> on
         <strong>Charges</strong> and <strong>PaymentIntents</strong> (keep <strong>Balance transactions</strong> for the fees tool).
         A full <code>sk_live_…</code> secret key also works. Then paste it above and sync again.</span>`;
     } else if (/Failed to fetch|NetworkError|CORS/i.test(msg)) {
-      hint = '<br><span style="font-size:11px;">Your browser may be blocking the direct Stripe call (CORS). Try again, or use a restricted key.</span>';
+      hint = '<br><span style="font-size:var(--text-xs);">Your browser may be blocking the direct Stripe call (CORS). Try again, or use a restricted key.</span>';
     }
     if (statusEl) statusEl.innerHTML = `<span style="color:var(--red);">Error: ${msg}</span>${hint}`;
   } finally {
@@ -21010,7 +20962,7 @@ function reconRenderKeyRow(forceEdit) {
   if (!row) return;
   const saved = (TAX_CENTER?.settings?.stripeKey || getInvoiceSettings().stripeKey || '').trim();
   if (saved && !forceEdit && !row.dataset.editing) {
-    row.innerHTML = `<span style="font-size:12px;color:var(--text2);">🔒 Stripe key saved <span style="font-family:var(--font-mono);color:var(--text3);">••••${escapeHtml(saved.slice(-4))}</span></span>
+    row.innerHTML = `<span style="font-size:var(--text-sm);color:var(--text2);">🔒 Stripe key saved <span style="font-family:var(--font-mono);color:var(--text3);">••••${escapeHtml(saved.slice(-4))}</span></span>
       <button class="btn tag sm" onclick="reconEditKey()">Change</button>`;
   } else {
     row.innerHTML = `<input type="password" id="recon-key" placeholder="rk_live_… or sk_live_… (reused from Tax Centre / Invoices if already saved)" style="flex:1;" autocomplete="off" value="${escapeHtml(saved)}">`;
@@ -21068,23 +21020,23 @@ function _reconAmountBadge(p) {
 }
 function _reconMeta(p) {
   const who = [p.customer, p.email].filter(Boolean).join(' · ') || '—';
-  const desc = p.description ? `<div style="font-size:11px;color:var(--text3);margin-top:2px;">${escapeHtml(p.description)}</div>` : '';
-  return `<div style="font-size:12px;color:var(--text2);margin-top:3px;">${escapeHtml(p.date)} · ${escapeHtml(who)}</div>${desc}`;
+  const desc = p.description ? `<div style="font-size:var(--text-xs);color:var(--text3);margin-top:2px;">${escapeHtml(p.description)}</div>` : '';
+  return `<div style="font-size:var(--text-sm);color:var(--text2);margin-top:3px;">${escapeHtml(p.date)} · ${escapeHtml(who)}</div>${desc}`;
 }
 
 // One needs-review card.
 function _reconNeedCard(p, c) {
   const idSafe = p.id.replace(/[^A-Za-z0-9_]/g, '');
-  const disputed = p.disputed ? ` <span class="pill" style="font-size:10px;background:var(--red-bg);color:var(--red);">⚠ Disputed</span>` : '';
+  const disputed = p.disputed ? ` <span class="pill" style="font-size:var(--text-2xs);background:var(--red-bg);color:var(--red);">⚠ Disputed</span>` : '';
 
   // Invoice not yet marked paid → send her to the proper invoice flow.
   if (c.kind === 'invoice') {
     const goBtn = c.bookId
       ? `<button class="btn gold sm" onclick="reconcileOpenInvoice('${idSafe}')">Open invoice ${escapeHtml(c.ref)} →</button>`
-      : `<span style="font-size:11px;color:var(--amber);">Invoice ${escapeHtml(c.ref)} not found in this app</span>`;
+      : `<span style="font-size:var(--text-xs);color:var(--amber);">Invoice ${escapeHtml(c.ref)} not found in this app</span>`;
     return `<div class="card" style="margin-bottom:10px;padding:12px 14px;">
       <div class="row-between" style="align-items:flex-start;">
-        <div><div>${_reconAmountBadge(p)} <span class="pill" style="font-size:10px;background:var(--blue-bg);color:var(--blue);">Invoice</span>${disputed}</div>${_reconMeta(p)}</div>
+        <div><div>${_reconAmountBadge(p)} <span class="pill" style="font-size:var(--text-2xs);background:var(--blue-bg);color:var(--blue);">Invoice</span>${disputed}</div>${_reconMeta(p)}</div>
         <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">${goBtn}
           <button class="btn tag sm" onclick="reconcileDismiss('${idSafe}')" title="Not an inventory sale">Dismiss</button></div>
       </div></div>`;
@@ -21094,7 +21046,7 @@ function _reconNeedCard(p, c) {
   if (c.kind === 'bigcartel' && c.scanned) {
     return `<div class="card" style="margin-bottom:10px;padding:12px 14px;">
       <div class="row-between" style="align-items:flex-start;">
-        <div><div>${_reconAmountBadge(p)} <span class="pill" style="font-size:10px;background:var(--green-bg);color:var(--green);">Big Cartel ${escapeHtml(c.ref)}</span>${disputed}</div>${_reconMeta(p)}</div>
+        <div><div>${_reconAmountBadge(p)} <span class="pill" style="font-size:var(--text-2xs);background:var(--green-bg);color:var(--green);">Big Cartel ${escapeHtml(c.ref)}</span>${disputed}</div>${_reconMeta(p)}</div>
         <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
           <button class="btn gold sm" onclick="reconcileApplyBigCartel('${idSafe}')">Apply order</button>
           <button class="btn tag sm" onclick="reconcileDismiss('${idSafe}')">Dismiss</button></div>
@@ -21103,9 +21055,9 @@ function _reconNeedCard(p, c) {
 
   // Direct sale (bare pi_…) or Big Cartel order we never scanned → pick a book.
   const kindPill = c.kind === 'bigcartel'
-    ? `<span class="pill" style="font-size:10px;background:var(--green-bg);color:var(--green);">Big Cartel ${escapeHtml(c.ref)}</span>`
-    : `<span class="pill gold" style="font-size:10px;">Direct sale</span>`;
-  const suggest = c.bookId ? `<span style="font-size:10px;color:var(--green);margin-left:6px;">SKU match → ${escapeHtml(BOOKS[c.bookId].title)}</span>` : '';
+    ? `<span class="pill" style="font-size:var(--text-2xs);background:var(--green-bg);color:var(--green);">Big Cartel ${escapeHtml(c.ref)}</span>`
+    : `<span class="pill gold" style="font-size:var(--text-2xs);">Direct sale</span>`;
+  const suggest = c.bookId ? `<span style="font-size:var(--text-2xs);color:var(--green);margin-left:6px;">SKU match → ${escapeHtml(BOOKS[c.bookId].title)}</span>` : '';
   const recDisabled = c.bookId ? '' : ' disabled';
   return `<div class="card" style="margin-bottom:10px;padding:12px 14px;">
     <div class="row-between" style="align-items:flex-start;">
@@ -21113,11 +21065,11 @@ function _reconNeedCard(p, c) {
     </div>
     <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:10px;">
       <div class="form-group" style="margin:0;flex:1;min-width:160px;">
-        <label style="font-size:10px;">Book</label>
+        <label style="font-size:var(--text-2xs);">Book</label>
         <select id="recon-book-${idSafe}" onchange="document.getElementById('recon-rec-${idSafe}').disabled=!this.value">${_reconBookOptions(c.bookId, !c.bookId)}</select>
       </div>
       <div class="form-group" style="margin:0;width:70px;">
-        <label style="font-size:10px;">Qty</label>
+        <label style="font-size:var(--text-2xs);">Qty</label>
         <input type="number" id="recon-qty-${idSafe}" value="1" min="1" style="width:100%;">
       </div>
       <button class="btn gold sm" id="recon-rec-${idSafe}" style="height:38px;"${recDisabled} onclick="reconcileRecordSale('${idSafe}')">Record sale</button>
@@ -21129,24 +21081,24 @@ function _reconNeedCard(p, c) {
 function _reconGroupCard(items, gi) {
   const p = items[0].p, c = items[0].c, n = items.length;
   const kindPill = c.kind === 'bigcartel'
-    ? `<span class="pill" style="font-size:10px;background:var(--green-bg);color:var(--green);">Big Cartel</span>`
-    : `<span class="pill gold" style="font-size:10px;">Direct sale</span>`;
-  const suggest = c.bookId ? `<span style="font-size:10px;color:var(--green);margin-left:6px;">SKU match → ${escapeHtml(BOOKS[c.bookId].title)}</span>` : '';
+    ? `<span class="pill" style="font-size:var(--text-2xs);background:var(--green-bg);color:var(--green);">Big Cartel</span>`
+    : `<span class="pill gold" style="font-size:var(--text-2xs);">Direct sale</span>`;
+  const suggest = c.bookId ? `<span style="font-size:var(--text-2xs);color:var(--green);margin-left:6px;">SKU match → ${escapeHtml(BOOKS[c.bookId].title)}</span>` : '';
   const total = _stripeFmtMoney(items.reduce((s, it) => s + it.p.amount, 0), p.currency);
-  const desc = p.description ? `<div style="font-size:11px;color:var(--text3);margin-top:2px;">${escapeHtml(p.description)}</div>` : '';
+  const desc = p.description ? `<div style="font-size:var(--text-xs);color:var(--text3);margin-top:2px;">${escapeHtml(p.description)}</div>` : '';
   const recDisabled = c.bookId ? '' : ' disabled';
   return `<div class="card" style="margin-bottom:10px;padding:12px 14px;">
     <div class="row-between" style="align-items:flex-start;">
-      <div><div>${_reconAmountBadge(p)} <span style="font-size:12px;color:var(--text2);font-weight:600;">× ${n}</span> ${kindPill}${suggest}</div>
-        <div style="font-size:12px;color:var(--text2);margin-top:3px;">${n} identical payments · ${escapeHtml(total)} total</div>${desc}</div>
+      <div><div>${_reconAmountBadge(p)} <span style="font-size:var(--text-sm);color:var(--text2);font-weight:600;">× ${n}</span> ${kindPill}${suggest}</div>
+        <div style="font-size:var(--text-sm);color:var(--text2);margin-top:3px;">${n} identical payments · ${escapeHtml(total)} total</div>${desc}</div>
     </div>
     <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:10px;">
       <div class="form-group" style="margin:0;flex:1;min-width:160px;">
-        <label style="font-size:10px;">Book (applies to all ${n})</label>
+        <label style="font-size:var(--text-2xs);">Book (applies to all ${n})</label>
         <select id="recon-gbook-${gi}" onchange="document.getElementById('recon-grec-${gi}').disabled=!this.value">${_reconBookOptions(c.bookId, !c.bookId)}</select>
       </div>
       <div class="form-group" style="margin:0;width:80px;">
-        <label style="font-size:10px;">Qty each</label>
+        <label style="font-size:var(--text-2xs);">Qty each</label>
         <input type="number" id="recon-gqty-${gi}" value="1" min="1" style="width:100%;">
       </div>
       <button class="btn gold sm" id="recon-grec-${gi}" style="height:38px;"${recDisabled} onclick="reconRecordGroup(${gi})">Record all ${n}</button>
@@ -21257,7 +21209,7 @@ export function renderReconcile() {
     <td style="white-space:nowrap;">${escapeHtml(p.date)}</td>
     <td class="r" style="font-family:var(--font-mono);white-space:nowrap;">${_stripeFmtMoney(p.amount, p.currency)}</td>
     <td>${escapeHtml([p.customer, p.email].filter(Boolean).join(' · ') || p.description || '—')}</td>
-    <td><span class="pill ${tone}" style="font-size:10px;">${label}</span> <span style="font-size:11px;color:var(--text3);">${escapeHtml(note)}</span></td>
+    <td><span class="pill ${tone}" style="font-size:var(--text-2xs);">${label}</span> <span style="font-size:var(--text-xs);color:var(--text3);">${escapeHtml(note)}</span></td>
     <td class="r">${getReconMemory().recorded[p.id] || getReconMemory().dismissed[p.id] ? `<button class="btn tag sm" onclick="reconcileUndo('${p.id.replace(/[^A-Za-z0-9_]/g, '')}')">Undo</button>` : ''}</td>
   </tr>`).join('');
   matchedEl.innerHTML = `
@@ -21907,20 +21859,20 @@ function renderReminderReview() {
 
   if (!batch.length) {
     if (count) count.textContent = 'Nothing waiting';
-    host.innerHTML = `<div class="empty-state"><div class="e-icon">✅</div>Nothing to review — everyone due a reminder is squared away.<div style="margin-top:8px;font-size:12px;color:var(--text3);">Invoices appear here the day before the app would chase them.</div></div>`;
+    host.innerHTML = `<div class="empty-state"><div class="e-icon">✅</div>Nothing to review — everyone due a reminder is squared away.<div style="margin-top:8px;font-size:var(--text-sm);color:var(--text3);">Invoices appear here the day before the app would chase them.</div></div>`;
     return;
   }
 
   if (count) count.textContent = `${batch.length} invoice${batch.length === 1 ? '' : 's'} · chased tomorrow`;
   const manyBooks = new Set(batch.map(r => r.bookId)).size > 1;
-  host.innerHTML = `<div class="tbl-wrap"><table class="tbl" style="font-size:12px;">
+  host.innerHTML = `<div class="tbl-wrap"><table class="tbl" style="font-size:var(--text-sm);">
     <thead><tr><th>Customer</th><th>Invoice</th><th class="r">Amount</th><th class="r">Late</th><th></th></tr></thead>
     <tbody>${batch.map(({ bookId, inv }) => {
     const late = daysLate(inv, today());
     const book = BOOKS[bookId];
     return `<tr>
-        <td style="font-weight:600;">${escapeHtml(inv.storeName) || '—'}<div style="font-size:11px;color:var(--text3);font-weight:400;">${escapeHtml(inv.storeEmail) || 'no email'}${manyBooks && book ? ' · ' + escapeHtml(book.title) : ''}</div></td>
-        <td class="mono-num" style="font-size:11px;">${escapeHtml(inv.num)}<div style="font-size:11px;color:var(--text3);">due ${escapeHtml(fmtD(inv.dueDate))}</div></td>
+        <td style="font-weight:600;">${escapeHtml(inv.storeName) || '—'}<div style="font-size:var(--text-xs);color:var(--text3);font-weight:400;">${escapeHtml(inv.storeEmail) || 'no email'}${manyBooks && book ? ' · ' + escapeHtml(book.title) : ''}</div></td>
+        <td class="mono-num" style="font-size:var(--text-xs);">${escapeHtml(inv.num)}<div style="font-size:var(--text-xs);color:var(--text3);">due ${escapeHtml(fmtD(inv.dueDate))}</div></td>
         <td class="r mono-num" style="font-weight:600;">${escapeHtml(invoiceAmountLabel(inv))}</td>
         <td class="r"><span class="pill amber">● ${late || 0}d</span></td>
         <td style="white-space:nowrap;text-align:right;">
@@ -22583,13 +22535,13 @@ function renderMailingList() {
     ? subs.map(s => {
       const sup = _isCustomerSuppressed(s.email);
       const emailCell = sup
-        ? `<span style="text-decoration:line-through;color:var(--text3);">${escapeHtml(s.email)}</span> <span class="pill gray" style="font-size:10px;">unsubscribed</span>`
+        ? `<span style="text-decoration:line-through;color:var(--text3);">${escapeHtml(s.email)}</span> <span class="pill gray" style="font-size:var(--text-2xs);">unsubscribed</span>`
         : `<a href="mailto:${escapeHtml(s.email)}" style="color:var(--gold2);">${escapeHtml(s.email)}</a>`;
       return `<tr${sup ? ' style="opacity:.55;"' : ''}>
           <td class="lead-cell">${escapeHtml(s.name) || '<span style="color:var(--text4);/* faint-ok: em-dash placeholder */">—</span>'}</td>
           <td>${emailCell}</td>
           <td class="date-cell">${s.added ? fmtD(s.added) : '—'}</td>
-          <td><span class="pill gray" style="font-size:10px;">${escapeHtml(s.source || 'Manual')}</span></td>
+          <td><span class="pill gray" style="font-size:var(--text-2xs);">${escapeHtml(s.source || 'Manual')}</span></td>
           <td><button class="btn sm cust-action-btn" onclick="removeFromMailingList('${encodeURIComponent(s.email)}')" title="Remove from mailing list">Remove</button></td>
         </tr>`;
     }).join('')
@@ -23205,7 +23157,7 @@ function renderCustomersAudience() {
     ? list.map(r => {
       const sup = _isCustomerSuppressed(r.email);
       const emailCell = sup
-        ? `<span style="text-decoration:line-through;color:var(--text3);">${escapeHtml(r.email)}</span> <span class="pill gray" style="font-size:10px;">unsubscribed</span>`
+        ? `<span style="text-decoration:line-through;color:var(--text3);">${escapeHtml(r.email)}</span> <span class="pill gray" style="font-size:var(--text-2xs);">unsubscribed</span>`
         : `<a href="mailto:${escapeHtml(r.email)}" style="color:var(--gold2);">${escapeHtml(r.email)}</a>`;
       const onList = mailingListHas(r.email);
       const listBtn = sup
@@ -23222,7 +23174,7 @@ function renderCustomersAudience() {
         <td class="text-cell"><span>${escapeHtml(Array.from(r.books).join(', ')) || '—'}</span></td>
         <td class="r money-cell">${_custSpendStr(r.spend) || '—'}</td>
         <td class="date-cell">${r.last ? fmtD(r.last) : '—'}</td>
-        <td>${Array.from(r.sources).map(s => `<span class="pill gray" style="font-size:10px;">${escapeHtml(s)}</span>`).join(' ')}</td>
+        <td>${Array.from(r.sources).map(s => `<span class="pill gray" style="font-size:var(--text-2xs);">${escapeHtml(s)}</span>`).join(' ')}</td>
         <td><div style="display:flex;gap:6px;flex-wrap:wrap;">${listBtn}${supBtn}</div></td>
       </tr>`;
     }).join('')
@@ -23815,7 +23767,7 @@ async function retryCampaignEmail(idx) {
   } catch (e) {
     if (targetLine) {
       targetLine.style.color = '#f87171';
-      targetLine.innerHTML = `✕ Failed for ${escapeHtml(to)}: ${escapeHtml(e.message)} <button class="btn sm" onclick="retryCampaignEmail(${idx})" style="padding:2px 6px;font-size:10px;margin-left:8px;line-height:1.2;height:auto;width:auto;display:inline-block;background:rgba(255,255,255,0.15);border:var(--stroke-hair) solid rgba(255,255,255,0.3);color:white;cursor:pointer;">Retry</button>`;
+      targetLine.innerHTML = `✕ Failed for ${escapeHtml(to)}: ${escapeHtml(e.message)} <button class="btn sm" onclick="retryCampaignEmail(${idx})" style="padding:2px 6px;font-size:var(--text-2xs);margin-left:8px;line-height:1.2;height:auto;width:auto;display:inline-block;background:rgba(255,255,255,0.15);border:var(--stroke-hair) solid rgba(255,255,255,0.3);color:white;cursor:pointer;">Retry</button>`;
     }
   }
 }
@@ -23841,7 +23793,7 @@ async function renderCampaigns() {
         <div class="campaign-info">
           <div class="campaign-title-row">
             <span class="campaign-subject">${escapeHtml(c.subject)}</span>
-            <span class="pill amber" style="font-size:9px;">Draft</span>
+            <span class="pill amber" style="font-size:var(--text-3xs);">Draft</span>
           </div>
           <div class="campaign-meta-info">Created: ${fmtD(c.createdAt)} · Target: ${escapeHtml(c.segment)}</div>
         </div>
@@ -23866,7 +23818,7 @@ async function renderCampaigns() {
         <div class="campaign-info">
           <div class="campaign-title-row">
             <span class="campaign-subject">${escapeHtml(c.subject)}</span>
-            <span class="pill green" style="font-size:9px;">Sent</span>
+            <span class="pill green" style="font-size:var(--text-3xs);">Sent</span>
           </div>
           <div class="campaign-meta-info">Sent: ${c.sentAt || fmtD(c.createdAt)} · Segment: ${escapeHtml(c.segment)}</div>
         </div>
@@ -24030,7 +23982,7 @@ Object.assign(window, {
   saveArtistPaymentLink, markArtistTransferReceived, settleArtistTransferKeepShare, settleArtistTransferKeepAll, markExpenseReceived,
   submitExpense, voidExpense, toggleExpenseReceiptFilter, toggleExpenseReimburseSelect, requestBulkReimbursement, markPaid, markHistoryConsignmentPaid, removeStore, addProfitTier, removeProfitTier,
   saveProfitTiers, renderProfitSettings, updateProfitTierField, renderProfitTierList,
-  renderFinancials, downloadTaxReport, createSystemBackupNow, restoreSystemBackup, restoreBookFromBackup, applyBookRestore, gotoSysBackupPage, handleBackupImportFile, handleBookRestoreImportFile,
+  downloadTaxReport, createSystemBackupNow, restoreSystemBackup, restoreBookFromBackup, applyBookRestore, gotoSysBackupPage, handleBackupImportFile, handleBookRestoreImportFile,
   chooseBackupFolder, exportToJSON, exportAllToCSV,
   submitTaxExpense, importShippoShippingFromApi, openShippoLabel, removeRecurring, downloadTaxLedgerCSV, renderTaxCenter,
   openRecurringEditor, saveRecurringEditor, updateRecurringPreview, toggleRecurringPause,
@@ -24146,7 +24098,7 @@ async function showWhatsNew(event) {
   const container = $('whats-new-list');
   if (!container) return;
 
-  container.innerHTML = '<div style="font-size:12px;color:var(--text3);text-align:center;padding:20px 0;">Loading recent changes...</div>';
+  container.innerHTML = '<div style="font-size:var(--text-sm);color:var(--text3);text-align:center;padding:20px 0;">Loading recent changes...</div>';
 
   // Update last seen version when they click/view the updates
   const currentVersion = typeof __GIT_COMMIT_DATE__ !== 'undefined' ? __GIT_COMMIT_DATE__ : 'Unknown';
@@ -24164,7 +24116,7 @@ async function showWhatsNew(event) {
     const changes = await fetchRecentChanges();
     if (!changes || !changes.length) {
       container.innerHTML = `
-        <div style="font-size:12px;color:var(--text2);line-height:1.6;padding:10px 0;">
+        <div style="font-size:var(--text-sm);color:var(--text2);line-height:1.6;padding:10px 0;">
           Could not load live changes from GitHub. Below is the static version history:
           <ul style="margin:12px 0 0 20px;padding:0;display:flex;flex-direction:column;gap:8px;">
             <li><strong>v3.1.0</strong>: Added 3D book cover overview badges and ambient dynamic color shadows.</li>
@@ -24182,8 +24134,8 @@ async function showWhatsNew(event) {
       return `
         <div class="commit-item" onclick="window.open('https://github.com/lyricalmyricalbooks/lyrical-inventory/commit/${c.fullSha}', '_blank')" title="Click to view commit details on GitHub">
           <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="font-family:var(--font-mono);font-size:11px;color:var(--gold-text);font-weight:600;">sha: ${c.sha} ↗</span>
-            <span style="font-size:10px;color:var(--text3);">${dateStr}</span>
+            <span style="font-family:var(--font-mono);font-size:var(--text-xs);color:var(--gold-text);font-weight:600;">sha: ${c.sha} ↗</span>
+            <span style="font-size:var(--text-2xs);color:var(--text3);">${dateStr}</span>
           </div>
           <div style="font-size:12.5px;color:var(--text);white-space:pre-wrap;line-height:1.45;font-family:var(--font-ui);font-weight:500;">${cleanMsg}</div>
         </div>`;
@@ -24845,7 +24797,7 @@ function exposeLegacyInlineHandlers() {
     switchSettingsSubTab, renderProfitSettings, psSimulateSplit, renderProfitTierList,
     psApplyTemplate, psRenderSummary, addProfitTier, removeProfitTier, updateProfitTierField,
     saveProfitTiers, calculateArtistEarnings, calculateFinancials, filterArtistEarningsByYear,
-    renderFinancials, downloadTaxReport, logout, showApp, boot, changeExpenseCategory,
+    downloadTaxReport, logout, showApp, boot, changeExpenseCategory,
     _tcSaveLedgerPrefs, _tcRestoreLedgerPrefs, setTcLedgerPage, tcLedgerSearchInput,
     tcLedgerTypeFilter, tcYearChange, tcLedgerYearChange, tcClearLedgerFilters,
     _tcApplyLedgerFilter, renderTaxCenter, _tcSvgEsc, _tcDeltaChip, _tcRenderCashFlowSummary,

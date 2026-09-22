@@ -18,7 +18,8 @@ test('email receipt import is a dedicated Tax Centre sub-tab beside integrations
 });
 
 test('email import modal has a focused workspace shell and responsive dialog treatment', () => {
-  expect(styles).toMatch(/\.modal\.email-import-modal\s*\{[\s\S]*?overflow-y:auto;/);
+  expect(styles).toMatch(/\.modal\.email-import-modal\s*\{[\s\S]*?display:\s*flex;[\s\S]*?overflow:\s*hidden;/);
+  expect(styles).toMatch(/\.email-import-modal #email-panel-gmail,[\s\S]*?\.email-import-modal #email-panel-manual,[\s\S]*?\.email-import-modal #email-panel-direct\s*\{[\s\S]*?overflow-y:\s*auto/);
   expect(styles).toMatch(/\.email-import-header\s*\{[\s\S]*?position:sticky;/);
   expect(styles).toMatch(/\.email-import-modal \.modal-tabs\s*\{[\s\S]*?width:100%;/);
   expect(styles).toMatch(/@media \(max-width: 768px\)[\s\S]*?\.modal\.email-import-modal/);

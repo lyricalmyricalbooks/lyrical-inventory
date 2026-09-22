@@ -15,12 +15,13 @@ test('email importer has a separate Gmail no-AI mode and a scrollable modal', ()
   expect(html).toMatch(/handleEmailImportPrimaryAction\(\)/);
 
   const modalRule = styles.match(/\.modal\.email-import-modal\s*\{([\s\S]*?)\n\}/)?.[1] || '';
-  expect(modalRule).toMatch(/overflow-y:auto/);
-  expect(modalRule).not.toMatch(/overflow:hidden/);
+  expect(modalRule).toMatch(/display:\s*flex/);
+  expect(modalRule).toMatch(/overflow:\s*hidden/);
+  expect(styles).toMatch(/\.email-import-modal #email-panel-gmail,[\s\S]*?\.email-import-modal #email-panel-manual,[\s\S]*?\.email-import-modal #email-panel-direct\s*\{[\s\S]*?overflow-y:\s*auto/);
 });
 
 test('direct Gmail import archives originals without using the AI extraction path', () => {
-  const directImport = receipts.match(/async function importDirectGmailEmails\(\)\s*\{([\s\S]*?)\n\}\n\nasync function importEmailReceiptDrafts/)?.[1] || '';
+  const directImport = receipts.match(/async function importDirectGmailEmails\(\)\s*\{([\s\S]*?)\n\}\s*\n\s*async function importEmailReceiptDrafts\(/)?.[1] || '';
   expect(directImport).toContain('_fetchEmailContent');
   expect(directImport).toContain('_saveDraftReceiptFiles');
   expect(directImport).toContain('amountUnknown: true');
