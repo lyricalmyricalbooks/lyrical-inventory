@@ -480,29 +480,6 @@ function isSimulationAllowed({ isTest }) {
 }
 
 /**
- * Build a test-mode shipment.
- *
- * One factory for both reasons a sandbox run cannot reach Canada Post — the
- * gateway was unreachable, or label creation is not configured yet — so the two
- * paths cannot drift into producing differently-shaped results. Everything it
- * returns is marked `isSimulated`, and `simulationReason` says in plain words
- * why, because that sentence is shown to the shop owner rather than logged.
- */
-export function simulateCanadaPostShipment(reason) {
-  const stamp = Date.now().toString();
-  const mockTrackingPin = `7012${stamp.slice(-12)}`;
-  return {
-    ok: true,
-    shipmentId: `CP-SHIP-${stamp.slice(-8)}`,
-    trackingPin: mockTrackingPin,
-    labelUrl: `local://canadapost/label/${mockTrackingPin}`,
-    receiptUrl: `local://canadapost/label/${mockTrackingPin}`,
-    isSimulated: true,
-    simulationReason: reason || 'Canada Post gateway unreachable'
-  };
-}
-
-/**
  * Audit a Canada Post configuration before any money is spent.
  * Returns the resolved environment plus blocking errors and non-blocking warnings,
  * so the publisher can see exactly which account a label will be billed to.
