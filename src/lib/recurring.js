@@ -388,11 +388,6 @@ export function monthlyEquivalentOn(sub, dateStr) {
   return amountAt(s, dateStr) / frequencyMonths(s.frequency);
 }
 
-/** Whether a subscription is still costing money as of `now`. */
-export function isRecurringLive(sub, now = new Date()) {
-  return recurringStatus(sub, now) === 'active' || recurringStatus(sub, now) === 'scheduled';
-}
-
 /**
  * Roll up a list of subscriptions into the numbers the card header shows.
  *

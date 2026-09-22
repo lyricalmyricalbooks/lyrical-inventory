@@ -82,11 +82,6 @@ export function normalizeWeightUnit(unit) {
 // settings; there is no built-in account to fall back to.
 export const DEFAULT_ZONOS_API_KEY = '';
 
-/** True when a usable Zonos credentialToken has been configured. */
-export function hasZonosCredentials(apiKey) {
-  return !!String(apiKey || '').trim();
-}
-
 function getSavedSheetsUrl() {
   try {
     if (typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function') {

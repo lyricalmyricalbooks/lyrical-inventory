@@ -164,8 +164,3 @@ export function noteIntegrationSuccess(id) {
 export function integrationBackoffMs(id, baseMs) {
   return healthBackoffMs(readHealthState(store(), String(id || '').trim()).attempts, baseMs);
 }
-
-/** Whether this integration is currently in a fault the publisher was told about. */
-export function integrationIsFaulty(id) {
-  return shouldAnnounceFailure(readHealthState(store(), String(id || '').trim()));
-}
