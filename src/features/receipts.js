@@ -2066,6 +2066,11 @@ let _emailContentCache = {};
 // fresh search, a preset chip) silently wiped it. This is the source of truth;
 // the checkbox `checked` state is just its rendering.
 let _gmailSelectedIds = new Set();
+// The restored, no-AI Gmail archive path intentionally keeps its search and
+// selection state separate from the AI finder mounted in the first tab.
+let _directGmailEmailsFetched = [];
+let _directGmailSearchMeta = null;
+let _directGmailSelectedIds = new Set();
 // Receipts pushed in by the Gmail add-on (Firestore `emailReceiptInbox`).
 let _emailInboxItems = [];
 let _emailInboxSeen = null; // Set of seen ids; null until the first snapshot.
@@ -2214,7 +2219,11 @@ function openEmailReceiptImportModal() {
   if (_emailReceiptDrafts.length) renderEmailReceiptDrafts(_emailReceiptDrafts);
   _activeEmailImportTab = 'gmail';
   _gmailSelectedIds = new Set();
+  _directGmailSelectedIds = new Set();
+  _directGmailEmailsFetched = [];
+  _directGmailSearchMeta = null;
   _activeGmailPresetIdx = -1;
+  _activeDirectGmailPresetIdx = -1;
   _emailAttExcluded = {};
   _emailExtractCache = {};
 
@@ -2432,24 +2441,23 @@ function switchEmailImportTab(tab) {
   _activeEmailImportTab = tab;
   const tabGmail = $('email-tab-gmail');
   const tabManual = $('email-tab-manual');
+  const tabDirect = $('email-tab-direct');
   const panelGmail = $('email-panel-gmail');
   const panelManual = $('email-panel-manual');
+  const panelDirect = $('email-panel-direct');
   tabGmail?.setAttribute('aria-selected', String(tab === 'gmail'));
-  tabManual?.setAttribute('aria-selected', String(tab !== 'gmail'));
-  if ($('email-receipt-results')) $('email-receipt-results').hidden = tab === 'gmail';
-  if ($('email-bulk-category-bar')) $('email-bulk-category-bar').hidden = tab === 'gmail';
+  tabManual?.setAttribute('aria-selected', String(tab === 'manual'));
+  tabDirect?.setAttribute('aria-selected', String(tab === 'direct'));
+  if ($('email-receipt-results')) $('email-receipt-results').hidden = tab !== 'manual';
+  if ($('email-bulk-category-bar')) $('email-bulk-category-bar').hidden = tab !== 'manual';
   if ($('email-receipt-scan-btn')) $('email-receipt-scan-btn').hidden = tab === 'gmail';
-  if (tab === 'gmail') {
-    tabGmail?.classList.add('active');
-    tabManual?.classList.remove('active');
-    if (panelGmail) panelGmail.style.display = 'block';
-    if (panelManual) panelManual.style.display = 'none';
-  } else {
-    tabGmail?.classList.remove('active');
-    tabManual?.classList.add('active');
-    if (panelGmail) panelGmail.style.display = 'none';
-    if (panelManual) panelManual.style.display = 'block';
-  }
+  tabGmail?.classList.toggle('active', tab === 'gmail');
+  tabManual?.classList.toggle('active', tab === 'manual');
+  tabDirect?.classList.toggle('active', tab === 'direct');
+  if (panelGmail) panelGmail.style.display = tab === 'gmail' ? 'block' : 'none';
+  if (panelManual) panelManual.style.display = tab === 'manual' ? 'block' : 'none';
+  if (panelDirect) panelDirect.style.display = tab === 'direct' ? 'block' : 'none';
+  if (tab === 'direct' && !$('email-direct-chips')?.childElementCount) renderDirectGmailChips();
   _updateEmailExtractButtonLabel();
 }
 
@@ -2781,6 +2789,153 @@ function toggleAllGmailSelections(isChecked) {
   _updateEmailExtractButtonLabel();
 }
 
+let _activeDirectGmailPresetIdx = -1;
+
+function renderDirectGmailChips() {
+  const chips = $('email-direct-chips');
+  if (!chips) return;
+  chips.innerHTML = GMAIL_RECEIPT_PRESETS.map((preset, index) => `
+    <button type="button" class="filter-chip${index === _activeDirectGmailPresetIdx ? ' active' : ''}" onclick="applyDirectGmailPresetQuery(${index})">
+      <span aria-hidden="true">${preset.icon}</span> ${escapeHtml(preset.label)}
+    </button>`).join('');
+}
+
+function applyDirectGmailPresetQuery(index) {
+  const preset = GMAIL_RECEIPT_PRESETS[index];
+  if (!preset) return;
+  _activeDirectGmailPresetIdx = index;
+  const input = $('email-direct-search-query');
+  if (input) input.value = preset.query;
+  renderDirectGmailChips();
+  searchDirectGmailEmails();
+}
+
+async function searchDirectGmailEmails() {
+  if (!sheetsUrl) {
+    showToast('Connect Google Sheets first to search Gmail', 'warn');
+    return;
+  }
+  if (!navigator.onLine) {
+    showToast('Offline — reconnect to search Gmail.', 'warn');
+    return;
+  }
+  const query = ($('email-direct-search-query')?.value || '').trim();
+  if (!query) {
+    showToast('Enter a Gmail search first', 'warn');
+    return;
+  }
+
+  const btn = $('email-direct-search-btn');
+  const list = $('email-direct-list-wrap');
+  const label = btn?.textContent || 'Search Gmail';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Searching…'; }
+  if (list) list.innerHTML = '<div class="email-zero-state"><div class="spinner"></div><div class="email-zero-state-sub">Reading your Gmail search…</div></div>';
+
+  try {
+    const destUrl = sheetsUrl + (sheetsUrl.includes('?') ? '&' : '?')
+      + 'action=listReceiptEmails&limit=50&q=' + encodeURIComponent(query);
+    const response = await fetch(destUrl, { method: 'GET', mode: 'cors' });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    if (!data?.ok) throw new Error(data?.error || 'Gmail search failed');
+    _directGmailEmailsFetched = data.emails || [];
+    _directGmailSearchMeta = {
+      account: data.account || '',
+      threadsFound: typeof data.threadsFound === 'number' ? data.threadsFound : null,
+      count: typeof data.count === 'number' ? data.count : _directGmailEmailsFetched.length
+    };
+    renderDirectGmailEmailsList();
+  } catch (error) {
+    console.error('[searchDirectGmailEmails]', error);
+    if (list) list.innerHTML = `<div class="empty-state" style="padding:var(--space-5);color:var(--red);">Could not search Gmail: ${escapeHtml(error.message || String(error))}</div>`;
+    showToast('Gmail search failed', 'err');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+  }
+}
+
+function _directGmailVendor(email) {
+  const from = String(email?.from || '');
+  const named = from.match(/^(.*?)\s*<.*>$/)?.[1]?.replace(/["']/g, '').trim();
+  return named || from || 'Email receipt';
+}
+
+function renderDirectGmailEmailsList() {
+  const list = $('email-direct-list-wrap');
+  if (!list) return;
+  if (!_directGmailEmailsFetched.length) {
+    const account = _directGmailSearchMeta?.account ? ` in ${escapeHtml(_directGmailSearchMeta.account)}` : '';
+    list.innerHTML = `<div class="email-zero-state"><div class="email-zero-state-icon">📭</div><div class="email-zero-state-title">No emails matched</div><div class="email-zero-state-sub">Try a wider search${account}, such as “receipt” or “invoice”.</div></div>`;
+    return;
+  }
+
+  const imported = new Set((TAX_CENTER.businessExpenses || []).map(expense => expense.emailMsgId).filter(Boolean));
+  const allSelected = _directGmailEmailsFetched.every(email => _directGmailSelectedIds.has(email.id));
+  const rows = _directGmailEmailsFetched.map(email => {
+    const selected = _directGmailSelectedIds.has(email.id);
+    const date = email.date ? new Date(email.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'Date unavailable';
+    const subject = email.subject || '(No subject)';
+    return `<li class="email-card${selected ? ' selected' : ''}" id="direct-email-row-${email.id}">
+      <div class="email-card-main">
+        <label class="email-card-check" title="Select this email to archive">
+          <input type="checkbox" class="direct-gmail-email-cb" data-msg-id="${email.id}" ${selected ? 'checked' : ''} aria-label="Archive email: ${escapeHtml(subject)}" onchange="toggleDirectGmailSelection('${email.id}', this.checked)">
+        </label>
+        <div class="email-card-body">
+          <div class="email-card-meta"><span class="email-sender" title="${escapeHtml(email.from || '')}">${escapeHtml(_directGmailVendor(email))}</span><span class="email-card-date">${escapeHtml(date)}</span>${imported.has(email.id) ? '<span class="pill green email-card-imported">✓ imported</span>' : ''}</div>
+          <div class="email-subject">${escapeHtml(subject)}</div>
+          ${email.snippet ? `<div class="email-snippet">${escapeHtml(email.snippet)}</div>` : ''}
+        </div>
+        <div class="email-card-actions">${email.hasAttachments ? `<span class="pill gray email-card-att">📎 ${Number(email.attachmentCount) || ''}</span>` : ''}<button type="button" class="btn sm email-preview-btn" id="direct-email-preview-btn-${email.id}" onclick="toggleDirectEmailPreview('${email.id}')">Preview</button></div>
+      </div>
+      <div class="email-card-preview" id="direct-email-preview-row-${email.id}" style="display:none;"><div class="email-preview-drawer" id="direct-email-preview-drawer-${email.id}"></div></div>
+    </li>`;
+  }).join('');
+  const account = _directGmailSearchMeta?.account ? `<b>${escapeHtml(_directGmailSearchMeta.account)}</b>` : 'Gmail';
+  list.innerHTML = `<div class="email-list-meta-header"><label class="email-select-all"><input type="checkbox" id="direct-gmail-select-all" ${allSelected ? 'checked' : ''} onchange="toggleAllDirectGmailSelections(this.checked)"><span>Select all</span></label><span class="email-list-meta-count"><span class="email-list-meta-account">✓ ${account}</span><span class="email-list-meta-tally">${_directGmailEmailsFetched.length} shown</span></span><button type="button" class="btn sm" onclick="searchDirectGmailEmails()">↻ Refresh</button></div><ul class="email-card-list">${rows}</ul>`;
+  _updateEmailExtractButtonLabel();
+}
+
+function toggleDirectGmailSelection(msgId, selected) {
+  if (selected) _directGmailSelectedIds.add(msgId);
+  else _directGmailSelectedIds.delete(msgId);
+  const row = $('direct-email-row-' + msgId);
+  if (row) row.classList.toggle('selected', selected);
+  const all = $('direct-gmail-select-all');
+  if (all) {
+    const count = _directGmailEmailsFetched.filter(email => _directGmailSelectedIds.has(email.id)).length;
+    all.checked = count === _directGmailEmailsFetched.length;
+    all.indeterminate = count > 0 && count < _directGmailEmailsFetched.length;
+  }
+  _updateEmailExtractButtonLabel();
+}
+
+function toggleAllDirectGmailSelections(selected) {
+  _directGmailEmailsFetched.forEach(email => {
+    if (selected) _directGmailSelectedIds.add(email.id);
+    else _directGmailSelectedIds.delete(email.id);
+  });
+  renderDirectGmailEmailsList();
+}
+
+async function toggleDirectEmailPreview(msgId) {
+  const row = $('direct-email-preview-row-' + msgId);
+  const btn = $('direct-email-preview-btn-' + msgId);
+  const drawer = $('direct-email-preview-drawer-' + msgId);
+  if (!row || !btn || !drawer) return;
+  if (row.style.display !== 'none') { row.style.display = 'none'; btn.textContent = 'Preview'; return; }
+  row.style.display = '';
+  btn.textContent = 'Close';
+  drawer.innerHTML = '<div style="padding:var(--space-4);text-align:center;"><span class="spinner"></span></div>';
+  try {
+    const email = await _fetchEmailContent(msgId);
+    const body = escapeHtml(String(email.body || '')).slice(0, 4000).replace(/\n/g, '<br>');
+    const attachmentCount = (email.fileParts || []).length;
+    drawer.innerHTML = `<div class="email-preview-body">${body || 'No email body available.'}</div><div style="margin-top:var(--space-2);font-size:var(--text-xs);color:var(--content-muted);">${attachmentCount ? `📎 ${attachmentCount} attachment${attachmentCount === 1 ? '' : 's'} will be archived with this email.` : 'This email will be archived as a receipt record.'}</div>`;
+  } catch (error) {
+    drawer.innerHTML = `<div style="padding:var(--space-3);color:var(--red);">Could not load this email: ${escapeHtml(error.message || String(error))}</div>`;
+  }
+}
+
 // Keeps the shared footer button honest about which tab's data it will act
 // on and how many emails are selected, instead of a static "Extract drafts"
 // that silently no-ops if the user is looking at the wrong tab.
@@ -2791,12 +2946,21 @@ function _updateEmailExtractButtonLabel() {
     const n = _gmailSelectedIds.size;
     btn.textContent = n ? `✨ Extract from ${n} email${n > 1 ? 's' : ''}` : '✨ Select emails to extract';
     btn.disabled = !n;
+  } else if (_activeEmailImportTab === 'direct') {
+    const n = _directGmailSelectedIds.size;
+    btn.textContent = n ? `Archive ${n} email${n === 1 ? '' : 's'} without AI` : 'Select emails to archive';
+    btn.disabled = !n;
   } else {
     const pasted = ($('email-receipt-source')?.value || '').trim();
     const files = ($('email-receipt-files')?.files || []).length;
     btn.textContent = '✨ Extract from pasted text';
     btn.disabled = !pasted && !files;
   }
+}
+
+function handleEmailImportPrimaryAction() {
+  if (_activeEmailImportTab === 'direct') return importDirectGmailEmails();
+  return extractReceiptsFromEmailText();
 }
 
 async function toggleEmailPreview(msgId) {
@@ -5248,6 +5412,90 @@ async function _saveDraftReceiptFiles(item, ctx) {
   return fallback ? [fallback] : [];
 }
 
+async function importDirectGmailEmails() {
+  const msgIds = Array.from(_directGmailSelectedIds);
+  const selectedEmails = new Map(_directGmailEmailsFetched.map(email => [email.id, email]));
+  const importedMsgIds = new Set((TAX_CENTER.businessExpenses || []).map(expense => expense.emailMsgId).filter(Boolean));
+  const todo = msgIds.filter(msgId => !importedMsgIds.has(msgId));
+  if (!todo.length) {
+    showToast(msgIds.length ? 'Those emails are already imported' : 'Select at least one email to archive', 'warn');
+    return;
+  }
+
+  const btn = $('email-receipt-scan-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Archiving originals…'; }
+  if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
+
+  const baseCurrency = TAX_CENTER.settings?.baseCurrency || 'CAD';
+  const fallbackCategory = $('email-receipt-default-cat')?.value || 'Other';
+  const gmailSavedByMsg = {};
+  const failed = [];
+  let imported = 0;
+
+  for (const msgId of todo) {
+    try {
+      const email = await _fetchEmailContent(msgId);
+      const listed = selectedEmails.get(msgId) || email;
+      const vendor = _directGmailVendor(listed);
+      const item = {
+        msgId,
+        vendor,
+        description: email.subject || listed.subject || `Email receipt from ${vendor}`,
+        reference: `email-import:${msgId}`,
+        selectedAtts: Array.isArray(email.fileParts) ? email.fileParts : []
+      };
+      const receiptFiles = await _saveDraftReceiptFiles(item, {
+        gmailSavedByMsg,
+        savedReceiptPaths: [],
+        draftIdx: imported
+      });
+      const receipt = receiptFiles[0] || '';
+      const date = normalizeReceiptDate(email.date || listed.date) || today();
+      TAX_CENTER.businessExpenses.unshift({
+        id: Date.now() + Math.floor(Math.random() * 100000),
+        desc: item.description,
+        vendor,
+        cat: fallbackCategory,
+        currency: baseCurrency,
+        amount: 0,
+        amountUnknown: true,
+        origCurrency: baseCurrency,
+        origAmount: 0,
+        fxRate: 1,
+        baseAmount: 0,
+        date,
+        ref: item.reference,
+        receipt,
+        receiptFiles,
+        emailMsgId: msgId,
+        sourceSnippet: String(email.body || listed.snippet || '').replace(/\s+/g, ' ').slice(0, 240),
+        importedFromEmail: true,
+        importedWithoutAi: true,
+        importedAt: new Date().toISOString()
+      });
+      imported++;
+    } catch (error) {
+      console.error('[importDirectGmailEmails]', error);
+      failed.push(msgId);
+    }
+  }
+
+  if (imported) {
+    await saveTaxCenter();
+    renderTaxCenter();
+    todo.filter(msgId => !failed.includes(msgId)).forEach(msgId => _directGmailSelectedIds.delete(msgId));
+  }
+  if (failed.length) renderDirectGmailEmailsList();
+  showToast(
+    imported
+      ? `Archived ${imported} email${imported === 1 ? '' : 's'} — add the amount when you review the expense.${failed.length ? ` ${failed.length} could not be archived.` : ''}`
+      : 'Could not archive the selected emails',
+    imported ? 'ok' : 'err'
+  );
+  if (imported && !failed.length) closeEmailReceiptImportModal();
+  else if (btn) _updateEmailExtractButtonLabel();
+}
+
 async function importEmailReceiptDrafts() {
   const drafts = (_emailReceiptDrafts || []).filter(r => r.include !== false);
   if (!drafts.length) { showToast('No drafts selected', 'warn'); return; }
@@ -6168,6 +6416,7 @@ export {
   _stopReceiptCamStream,
   applyBatchExpenseBulk,
   applyBulkCategoryToEmailDrafts,
+  applyDirectGmailPresetQuery,
   applyGmailPresetQuery,
   attachReceiptToExpenseRow,
   authorizeReceiptFolder,
@@ -6208,6 +6457,7 @@ export {
   formatReceiptDiagnostic,
   getPendingWebcamReceipt,
   importEmailReceiptDrafts,
+  importDirectGmailEmails,
   inferReceiptCategory,
   listCachedReceiptMeta,
   listFilesRecursive,
@@ -6246,6 +6496,8 @@ export {
   renderExpenses,
   renderGmailChips,
   renderGmailEmailsList,
+  renderDirectGmailChips,
+  renderDirectGmailEmailsList,
   renderOrganizerTable,
   renderReceiptCacheStatus,
   renderReceiptFolderAlert,
@@ -6262,6 +6514,7 @@ export {
   saveReceiptToLocalFile,
   scanAllBatchExpenses,
   scanProjectReceiptWithAI,
+  searchDirectGmailEmails,
   searchGmailEmails,
   setBatchExpenseDest,
   setPendingWebcamReceipt,
@@ -6271,9 +6524,13 @@ export {
   submitExpense,
   summarizeReceiptProblems,
   switchEmailImportTab,
+  handleEmailImportPrimaryAction,
   toggleAllBatchExpenses,
   toggleAllEmailDrafts,
   toggleAllGmailSelections,
+  toggleAllDirectGmailSelections,
+  toggleDirectEmailPreview,
+  toggleDirectGmailSelection,
   toggleEmailPreview,
   toggleEmailRowSelection,
   toggleExpenseReceiptFilter,
