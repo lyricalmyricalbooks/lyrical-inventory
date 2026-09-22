@@ -8,7 +8,9 @@ const __dirname = path.dirname(__filename);
 
 describe('main.js window binding verification', () => {
   const mainJsPath = path.resolve(__dirname, '../src/main.js');
+  const indexHtmlPath = path.resolve(__dirname, '../index.html');
   const mainContent = fs.readFileSync(mainJsPath, 'utf8');
+  const indexHtml = fs.readFileSync(indexHtmlPath, 'utf8');
 
   // exposeLegacyInlineHandlers still lives in main.js, but the functions it
   // exposes may now be declared in a feature module and imported. The invariant
@@ -141,6 +143,11 @@ describe('main.js window binding verification', () => {
     expect(appSource).toContain('d-stock-sub');
     expect(appSource).toContain('cost / printed');
     expect(appSource).toContain('/book');
+  });
+
+  it('shows the selected book\'s gifted-copy total in More metrics', () => {
+    expect(indexHtml).toContain('id="d-gratuities"');
+    expect(appSource).toContain("animateCountValue('d-gratuities', breakdown.gratuities)");
   });
 
   it('makes recent changes commits clickable in the Whats New modal', () => {

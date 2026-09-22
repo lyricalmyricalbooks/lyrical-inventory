@@ -5633,6 +5633,7 @@ export function updateDash() {
   animateCountValue('d-stock', s.stock); animateCountValue('h-stock', s.stock);
   renderStockDriftBanner(s, book);
   animateCountValue('d-sold', s.sold);
+  animateCountValue('d-gratuities', breakdown.gratuities);
   const heldGross = heldGrossOf(s);
   const recognizedRev = recognizedRevenueOf(s);
   animateCountValue('d-revenue', fmtWhole(recognizedRev, cur)); animateCountValue('h-revenue', fmtWhole(recognizedRev, cur));
