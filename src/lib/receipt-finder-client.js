@@ -245,6 +245,9 @@ export function systemicReceiptFailure(errorOrMessage) {
   const failure = classifyReceiptAiFailure(receiptAiStatus(message));
   if (failure) return `${failure.headline} ${failure.help}`;
   const status = Number(error.status) || 0;
+  // A daily allowance does not come back in a few minutes, and saying so sent
+  // the publisher back to a scan that could only fail again.
+  if (status === 429 && /for today/i.test(message)) return `The AI reader is out of allowance for today (${message}). Scan again once it resets.`;
   if (status === 429) return `Your AI key has hit its usage limit for now (${message}). Wait a few minutes, then scan again.`;
   if ([401, 402, 403].includes(status) || APP_AI_REFUSAL.test(message)) {
     return `Your AI key was refused (${message}). Check the key in the Tax Centre settings, then scan again.`;

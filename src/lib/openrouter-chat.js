@@ -104,6 +104,18 @@ export async function testOpenRouterConnection({
   return { account: data?.data || data || {}, model: smokeData.model || model || DEFAULT_OPENROUTER_MODEL };
 }
 
+/**
+ * One plain sentence on how much the backup can do, from the key's own report
+ * (`GET /api/v1/key`), or '' when there is nothing worth saying.
+ *
+ * `is_free_tier` is true on an account that has never bought credit. Those get
+ * 50 free-model requests a day; buying $10 of credit once raises that to 1,000.
+ */
+export function openRouterAllowanceNote(account) {
+  if (account?.is_free_tier !== true) return '';
+  return 'Your OpenRouter account has never had credit added, so the free backup covers about 50 AI requests a day — adding $10 of credit once raises that to 1,000 a day.';
+}
+
 /** Keep gateway HTML/empty responses from hiding the useful HTTP status. */
 async function readOpenRouterResponse(res) {
   try { return await res.json(); } catch (_) { return null; }
@@ -236,12 +248,40 @@ async function callOnce(body, apiKey, { fetchImpl, signal }) {
 
   let res = await send();
   for (let attempt = 0; attempt < 2 && !res.ok && (res.status === 429 || res.status >= 500); attempt++) {
-    const wait = (700 * Math.pow(2, attempt)) + Math.random() * 400;
+    // A limit that resets more than a minute from now — the free models' daily
+    // allowance, which resets at midnight UTC — will refuse the retry too, and
+    // a refused request can still count against it. Hand the 429 straight back.
+    if (res.status === 429 && await openRouterResetsLater(res)) break;
+    const retryAfter = Number(res.headers?.get?.('retry-after'));
+    const wait = Number.isFinite(retryAfter) && retryAfter > 0
+      ? Math.min(retryAfter * 1000, 8000)
+      : (700 * Math.pow(2, attempt)) + Math.random() * 400;
     await new Promise(r => setTimeout(r, wait));
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
     res = await send();
   }
   return res;
+}
+
+/**
+ * True when a rate-limit response says its limit resets more than a minute
+ * from now. OpenRouter sends the reset as a Unix time in milliseconds (a value
+ * small enough to be seconds is read as seconds) — but a browser only lets the
+ * page read that header if OpenRouter chooses to expose it, so the message is
+ * checked too, on a copy that leaves the original body for the caller to read.
+ */
+async function openRouterResetsLater(res, now = Date.now()) {
+  const raw = Number(res.headers?.get?.('x-ratelimit-reset'));
+  if (Number.isFinite(raw) && raw > 0) {
+    const resetAt = raw < 1e12 ? raw * 1000 : raw;
+    return resetAt - now > 60_000;
+  }
+  try {
+    const peek = typeof res.clone === 'function' ? await res.clone().json() : null;
+    return /free-models-per-day|requests per day/i.test(String(peek?.error?.message || ''));
+  } catch (_) {
+    return false;
+  }
 }
 
 /**
@@ -401,6 +441,22 @@ export function friendlyOpenRouterError(e) {
   // "Rate limit exceeded" 429 text just below it.
   if (/key limit/i.test(raw)) {
     return 'the backup key has hit the spending cap you set for it on OpenRouter — raise or remove that limit, or wait for it to reset';
+  }
+  // OpenRouter's privacy settings decide which models a key may use, and the
+  // free models all keep what is sent to them. With those settings left
+  // strict, every free model is excluded and the refusal reads "No endpoints
+  // found matching your data policy" — which the generic wording below
+  // answered with "retry", when retrying can never fix it.
+  if (/data policy|guardrail/i.test(raw)) {
+    return 'your OpenRouter privacy settings are blocking the free models — on openrouter.ai, open Settings → Privacy and allow the free models (they may keep what is sent to them), then try again';
+  }
+  // The free models' own daily allowance: 50 requests a day on an account that
+  // has never bought credit, 1,000 once it has bought $10 of it. Checked before
+  // the credit wording below, because OpenRouter's message ("Add 10 credits to
+  // unlock 1000 free model requests per day") contains the word "credit" and
+  // was being reported as an empty account.
+  if (/free-models-per-day|requests per day/i.test(raw)) {
+    return 'OpenRouter’s free allowance is used up for today (50 requests a day, or 1,000 once you have added $10 of credit to your OpenRouter account) — it resets at midnight UTC, which is the evening in Canada';
   }
   // The model name is typed by hand, so a wrong one is the likeliest mistake
   // here and deserves to be named rather than shown as a bare 404.

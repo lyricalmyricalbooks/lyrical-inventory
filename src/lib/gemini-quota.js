@@ -174,6 +174,80 @@ export function _geminiAwaitCooldown() {
   return _geminiCooldownWait || Promise.resolve();
 }
 
+// ── WHEN THE ALLOWANCE ITSELF IS SPENT
+// The cooldown above is a pause of a few seconds. A spent allowance is not: once
+// the day's free requests are gone, or prepaid credit has run out, every request
+// is refused the same way until Google resets it. With an OpenRouter backup
+// saved, asking Google first anyway cost three refused requests and a few
+// seconds of backoff on EVERY receipt before the backup was even tried — on a
+// batch of thirty receipts, most of the wait was spent being told no.
+//
+// So a spent allowance is remembered here, shared by every caller, and callers
+// with a backup go straight to it until Google is likely to answer again. It is
+// only ever consulted when there is somewhere else to go: with no backup, every
+// request still asks Google, exactly as before.
+let _geminiRestUntil = 0;
+
+// Google resets the free tier's daily allowance at midnight Pacific time.
+function _msUntilPacificMidnight(now) {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Los_Angeles', hourCycle: 'h23',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    }).formatToParts(new Date(now));
+    const get = (type) => Number(parts.find(p => p.type === type)?.value) || 0;
+    const elapsed = (((get('hour') % 24) * 60 + get('minute')) * 60 + get('second')) * 1000;
+    return Math.max(60_000, 86_400_000 - elapsed);
+  } catch (_) {
+    return 60 * 60 * 1000;
+  }
+}
+
+/**
+ * How long Google is likely to keep refusing, judged from one failure — or 0
+ * when the failure says nothing about the allowance (a bad key, a malformed
+ * request, an outage), so a real problem is never hidden behind the backup.
+ *
+ * @param {{status?: number, message?: string, details?: Array}} error
+ *   What the Gemini callers throw: the HTTP status, Google's own message, and
+ *   the error's `details` block when Google sent one.
+ */
+export function _geminiSpentFor(error, now = Date.now()) {
+  const raw = String(error?.message || '');
+  const status = Number(error?.status) || 0;
+  const details = Array.isArray(error?.details) ? JSON.stringify(error.details) : '';
+  // Prepaid credit or billing: nothing resets on its own, so check back hourly.
+  if (status === 402 || /prepayment|credits? (?:are |is )?depleted|out of credit|billing account|enable billing|paid tier/i.test(raw)) {
+    return 60 * 60 * 1000;
+  }
+  if (status !== 429 && !/RESOURCE_EXHAUSTED|quota|rate.?limit|too many requests/i.test(raw)) return 0;
+  // The daily allowance names itself in the quota id (…PerDay…) and sometimes
+  // in the message. Its "retry in 13s" hint is misleading — nothing frees up
+  // until the reset — so the day's cap wins over any hint.
+  if (/per.?day|daily/i.test(raw) || /PerDay/i.test(details)) return _msUntilPacificMidnight(now);
+  // A per-minute limit: rest as long as Google says, within sensible bounds.
+  const hint = /"retryDelay":"(\d+(?:\.\d+)?)s"/.exec(details) || /retry in (\d+(?:\.\d+)?)\s*s/i.exec(raw);
+  const seconds = hint ? Number(hint[1]) : 60;
+  return Math.min(10 * 60 * 1000, Math.max(15_000, seconds * 1000));
+}
+
+/** Remember a spent allowance, if that is what this failure was. */
+export function _geminiNoteSpent(error, now = Date.now()) {
+  const ms = _geminiSpentFor(error, now);
+  if (ms > 0) _geminiRestUntil = Math.max(_geminiRestUntil, now + ms);
+  return ms;
+}
+
+/** True while Google's allowance is known to be spent. */
+export function _geminiResting(now = Date.now()) {
+  return now < _geminiRestUntil;
+}
+
+/** Forget a spent allowance — a new key, or a test starting clean. */
+export function _geminiClearRest() {
+  _geminiRestUntil = 0;
+}
+
 // What the reader says when it fails is written for whoever wrote the reader,
 // not for whoever is standing at the till. "Request contains an invalid
 // argument" tells a shop owner nothing about what to do next — and the thing to

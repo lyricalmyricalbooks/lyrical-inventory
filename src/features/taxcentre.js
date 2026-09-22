@@ -66,7 +66,8 @@ import { findCategoryMismatches } from '../lib/category-fit.js';
 import { canonicalExpenseCategory } from '../lib/expense-categories.js';
 import { receiptOwners, summarizeReceiptStorage, isReceiptExemptExpense } from '../lib/receipt-storage.js';
 import { testZonosConnection } from '../lib/zonos.js';
-import { friendlyOpenRouterError, testOpenRouterConnection } from '../lib/openrouter-chat.js';
+import { friendlyOpenRouterError, openRouterAllowanceNote, testOpenRouterConnection } from '../lib/openrouter-chat.js';
+import { _geminiClearRest } from '../lib/gemini-quota.js';
 import { testCanadaPostConnection, validateCanadaPostAccount, isValidCustomerNumber, getSavedSheetsUrl, diagnoseCanadaPostConnection, inspectCanadaPostCredentials, resolveCanadaPostCredentials, migrateCanadaPostCredentials, readCanadaPostCredentialSet, credentialSetIsConfigured, CANADAPOST_CREDENTIAL_FIELDS } from '../lib/canadapost.js';
 import {
   RECURRING_FREQUENCIES,
@@ -3940,7 +3941,11 @@ async function testOpenRouterConnectionFromSettings() {
     const remaining = Number(rawRemaining);
     const allowance = rawRemaining != null && Number.isFinite(remaining) ? ` · ${remaining.toFixed(2)} credits remaining` : '';
     const model = result.model ? ` via ${result.model}` : '';
-    if (status) status.textContent = `Connected to OpenRouter${model}${allowance}.`;
+    // How far the backup stretches matters more than that it connected: on an
+    // account that has never bought credit it covers about 50 AI requests a
+    // day, which one big email scan can use up on the day Gemini runs out.
+    const note = openRouterAllowanceNote(result.account);
+    if (status) status.textContent = `Connected to OpenRouter${model}${allowance}.${note ? ` ${note}` : ''}`;
     showToast('✓ OpenRouter connected', 'ok');
     return true;
   } catch (error) {
@@ -3981,6 +3986,9 @@ async function saveTaxCenterSettings() {
   try {
     await loadTaxCenter();
     if (!TAX_CENTER.settings) TAX_CENTER.settings = {};
+    // A different Google key has its own allowance, so a spent one says
+    // nothing about it: ask Google first again rather than going to the backup.
+    if (geminiKey !== (TAX_CENTER.settings.geminiKey || '')) _geminiClearRest();
     TAX_CENTER.settings.geminiKey = geminiKey;
     // undefined means the box was never populated from settings, so the stored
     // value stands; '' means it was deliberately emptied and must be cleared.

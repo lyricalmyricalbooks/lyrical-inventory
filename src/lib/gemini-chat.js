@@ -151,8 +151,10 @@ async function askChain(apiKey, body, opts) {
         let detail = `HTTP ${res.status} from ${model}`;
         let fatal = res.status === 400 || res.status === 401 || res.status === 403;
         if (res.status === 404) _geminiUnavailable.add(model);
+        let details;
         try {
           const err = await res.json();
+          details = err?.error?.details;
           if (err?.error?.message) {
             detail = err.error.message;
             if (res.status === 429
@@ -163,6 +165,8 @@ async function askChain(apiKey, body, opts) {
         } catch (_) { /* a body that isn't JSON tells us nothing extra */ }
         lastErr = new Error(detail);
         lastErr.status = res.status;
+        // Tells a spent day's allowance from a one-minute limit (gemini-quota.js).
+        if (Array.isArray(details)) lastErr.details = details;
         if (fatal) throw lastErr;
         continue;
       }

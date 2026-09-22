@@ -6983,7 +6983,7 @@ async function scanAllPostageReceipts() {
 
   const accepted = await confirmDialog(
     `Read ${candidates.length} receipt${candidates.length === 1 ? '' : 's'} and fill in the recipient and tracking number on each?\n\n`
-    + 'This uses your Gemini allowance, one call per receipt, and takes a few seconds each. '
+    + 'This uses one AI read per receipt — Gemini first, then your OpenRouter backup if Gemini has run out — and takes a few seconds each. '
     + 'Nothing is linked to an order — you still confirm every match afterwards.',
     { title: 'Read all receipts', okLabel: `Read ${candidates.length}` },
   );
