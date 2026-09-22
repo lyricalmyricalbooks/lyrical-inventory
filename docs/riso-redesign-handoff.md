@@ -10,6 +10,47 @@ left, and the non-obvious things that will bite whoever picks it up.** Read it b
 
 ---
 
+## 0. Night mode direction change — "Press Proof" (2026-09-22)
+
+The owner looked at the shipping dark theme and didn't like it: "dark on dark," specifically that
+every object — a card, a button, the modal — was only a shade less dark than the page it sat on.
+Measured: `--surface-card` vs `--cream` was **1.05:1**, visually the same colour.
+
+Three dark-mode directions were mocked up as Design-canvas artifacts (Deep Print — same void,
+wider ramp; Night Newsprint — a lighter warmer void; Press Proof — objects go light, page stays
+black). **Press Proof was chosen** and is now implemented for the core component kit:
+`.card`, `.modal` + its parts, `.btn` (+ `.ink` and `.danger-btn` variants), `.pill` + all six
+tones, `.kpi`, `.tbl-wrap`/`.tbl`, and the segmented control / book-modal stepper.
+
+**The idea:** the page, header and sidebar stay exactly as dark as they always were — that part
+was never the complaint. Every *object* on top of them now uses the app's own **light-mode**
+surface (`--paper` ≈ `--cream`, `--on-paper` = literally `--ink`) instead of a barely-different
+dark tone. It is not a new palette; it's daylight mode's own cards, laid down on a black stage.
+Elevation stops being a grey shadow (invisible on near-black) and becomes a **flare-red offset**
+— a nod to a riso print's own registration drift, and the one place a monochrome shadow would
+have vanished into the desk behind it.
+
+**The mechanism, because it's easy to get wrong:** rather than redefining the shared
+`--surface-card`/`--surface-page` primitives (which would ripple into every one of their 100+
+call sites app-wide, most not yet converted), each `.theme-dark .card { … }`-style rule locally
+**re-declares the semantic layer** — `--content-primary`, `--surface-sunken`, `--border`,
+`--rule-ink`, etc. — so a descendant that reads `var(--content-primary)` picks up the paper-ink
+value through ordinary CSS custom-property inheritance, without touching that descendant's own
+rule. The app already relies on exactly this trick for `--local-accent` inside `.modal`; this is
+the same pattern applied more broadly. See §5 landmine below for what this means for testing.
+
+**What's covered:** the core kit above, verified with the real contrast/token scripts and a
+dedicated `tests/press-proof-dark-mode.test.js` that checks every new token pair for AA and pins
+the exact re-declaration lines.
+**What's NOT yet covered — a real follow-up, not an oversight:** every screen-specific bespoke
+card (the ~53 modal surfaces from Wave 3, the per-screen streams from Wave 2, dropdowns/toasts/
+popovers, `.hist-kpi-card` and other stat-tile variants beyond `.kpi`) still uses the old dark
+surface tokens and will look inconsistent — dark box next to a new paper one — until it gets the
+same treatment. Do that the same way: locally re-declare the semantic layer on the object's own
+class, don't touch the shared primitives.
+
+---
+
 ## 1. Where the work actually stands
 
 Waves 0 and 1 are **done and merged to `main`**. Everything since sits on this branch.
@@ -199,6 +240,21 @@ is where a redesign half-lands.
 
 ## 5. Landmines — the things that have already caused a wasted cycle
 
+-1. **Neither the contrast sweep nor jsdom can verify a locally-scoped custom-property
+   re-declaration** — the exact mechanism Press Proof (§0) is built on. `scripts/check-contrast.mjs`
+   reads a FLAT palette from the top-level `:root[data-theme="dark"]` block; it has no model of a
+   `.theme-dark .card { --content-primary: … }` override cascading to descendants, so it will
+   neither confirm nor deny that the mechanism works — a clean run from it proves nothing about
+   this specific pattern. jsdom is worse than silent: `getComputedStyle` was tested directly
+   against it and it does **not** resolve `var()` at all — it echoes the literal string
+   `"var(--content-primary)"` back rather than computing a colour, so a jsdom-based test would
+   appear to run and would not be testing anything real. The only genuine verification available
+   was: (a) the CSS spec itself — custom-property inheritance and shadowing is standard, not
+   experimental; (b) the app's own precedent, `--local-accent` inside `.modal`, already shipping
+   on exactly this trick; and (c) resolving the real token *values* this pass introduces against
+   the actual file with `paletteFor()`/`contrastRatio()` (what `tests/press-proof-dark-mode.test.js`
+   does) — which proves the colours are right, not that the cascade wires up in a live DOM.
+   **A real browser look at the app in dark mode is still owed before trusting this is correct.**
 0. **A sweep only ever finds the shape it was written to match — and that has been the single
    biggest source of missed work here, three times over.** The colour sweeps matched
    `property:#hex`, so every `rgba()` spelling of a colour was invisible to all of them: the ink
