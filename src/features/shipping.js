@@ -247,7 +247,7 @@ function renderOrderShippingSummary(order) {
   }
   const declId = order.declarationId || order.zonosDeclarationId || '';
   if (declId) {
-    parts.push(`<span class="zonos-decl-tag" style="font-family:var(--font-mono);font-size:11px;color:var(--green);background:rgba(46,125,50,0.08);padding:2px 6px;border-radius:var(--r);border:var(--stroke-hair) solid rgba(46,125,50,0.2);display:inline-flex;align-items:center;gap:4px;">Decl ID: <strong>${escapeHtml(declId)}</strong> <button type="button" onclick="navigator.clipboard.writeText('${escapeHtml(declId)}');showToast('✓ Copied Declaration ID');" style="background:none;border:none;cursor:pointer;padding:0 2px;font-size:11px;" title="Copy Declaration ID">📋</button></span>`);
+    parts.push(`<span class="zonos-decl-tag" style="font-family:var(--font-mono);font-size:var(--text-xs);color:var(--green);background:rgba(46,125,50,0.08);padding:2px 6px;border-radius:var(--r);border:var(--stroke-hair) solid rgba(46,125,50,0.2);display:inline-flex;align-items:center;gap:4px;">Decl ID: <strong>${escapeHtml(declId)}</strong> <button type="button" onclick="navigator.clipboard.writeText('${escapeHtml(declId)}');showToast('✓ Copied Declaration ID');" style="background:none;border:none;cursor:pointer;padding:0 2px;font-size:var(--text-xs);" title="Copy Declaration ID">📋</button></span>`);
   }
   return parts.length ? `<span class="subtext-mute">${parts.join(' · ')}</span>` : '';
 }
@@ -2548,7 +2548,7 @@ function filterShippoDestMenu() {
 
   if (filtered.length === 0) {
     listContainer.innerHTML = `
-      <div style="padding:16px;text-align:center;color:var(--text3);font-size:12px;">
+      <div style="padding:16px;text-align:center;color:var(--text3);font-size:var(--text-sm);">
         No matching addresses found.
       </div>`;
     return;
@@ -3342,34 +3342,34 @@ function renderSaveBookPresetPreview() {
   const formattedWeight = singleWeight ? (singleWeight >= 10 ? (Math.round(singleWeight * 100) / 100) : (Math.round(singleWeight * 10000) / 10000)) : '—';
 
   const scalingNote = qty > 1
-    ? `<div class="sbp-scale-note" style="margin-top:10px;padding:8px 10px;background:var(--gold-bg);border-radius:var(--r);font-size:11px;color:var(--gold-text);line-height:1.45;">ℹ Automatically normalized per copy from total quantity of <strong>${qty}</strong>: single-copy height is <strong>${formattedHeight} ${dimUnit}</strong> and weight is <strong>${formattedWeight} ${weightUnit}</strong>.</div>`
+    ? `<div class="sbp-scale-note" style="margin-top:10px;padding:8px 10px;background:var(--gold-bg);border-radius:var(--r);font-size:var(--text-xs);color:var(--gold-text);line-height:1.45;">ℹ Automatically normalized per copy from total quantity of <strong>${qty}</strong>: single-copy height is <strong>${formattedHeight} ${dimUnit}</strong> and weight is <strong>${formattedWeight} ${weightUnit}</strong>.</div>`
     : '';
 
   preview.innerHTML = `
     <div class="sbp-spec-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;background:var(--surface-card);border:var(--stroke-hair) solid var(--border);border-radius:var(--r2);padding:10px 12px;">
       <div class="sbp-spec-item" style="display:flex;flex-direction:column;gap:2px;">
-        <label style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">Dimensions (Per Copy)</label>
-        <span style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--text);">${length} × ${width} × ${formattedHeight} ${dimUnit}</span>
+        <label style="font-size:var(--text-3xs);font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">Dimensions (Per Copy)</label>
+        <span style="font-family:var(--font-mono);font-size:var(--text-base);font-weight:700;color:var(--text);">${length} × ${width} × ${formattedHeight} ${dimUnit}</span>
       </div>
       <div class="sbp-spec-item" style="display:flex;flex-direction:column;gap:2px;">
-        <label style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">Weight (Per Copy)</label>
-        <span style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--text);">${formattedWeight} ${weightUnit}</span>
+        <label style="font-size:var(--text-3xs);font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">Weight (Per Copy)</label>
+        <span style="font-family:var(--font-mono);font-size:var(--text-base);font-weight:700;color:var(--text);">${formattedWeight} ${weightUnit}</span>
       </div>
       <div class="sbp-spec-item" style="display:flex;flex-direction:column;gap:2px;">
-        <label style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">Customs Value (CAD)</label>
-        <span style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--gold-text);">${customsVal ? customsVal.toFixed(2) + ' CAD' : '—'}</span>
+        <label style="font-size:var(--text-3xs);font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">Customs Value (CAD)</label>
+        <span style="font-family:var(--font-mono);font-size:var(--text-base);font-weight:700;color:var(--gold-text);">${customsVal ? customsVal.toFixed(2) + ' CAD' : '—'}</span>
       </div>
       <div class="sbp-spec-item" style="display:flex;flex-direction:column;gap:2px;">
-        <label style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">HS Tariff Code</label>
-        <span style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--text);">${escapeHtml(hsCode || '—')}</span>
+        <label style="font-size:var(--text-3xs);font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">HS Tariff Code</label>
+        <span style="font-family:var(--font-mono);font-size:var(--text-base);font-weight:700;color:var(--text);">${escapeHtml(hsCode || '—')}</span>
       </div>
       <div class="sbp-spec-item" style="display:flex;flex-direction:column;gap:2px;">
-        <label style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">Default Incoterm</label>
-        <span style="font-size:12px;font-weight:600;color:var(--text);">${escapeHtml(incoterm || 'Auto')}</span>
+        <label style="font-size:var(--text-3xs);font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">Default Incoterm</label>
+        <span style="font-size:var(--text-sm);font-weight:600;color:var(--text);">${escapeHtml(incoterm || 'Auto')}</span>
       </div>
       <div class="sbp-spec-item" style="grid-column:1 / -1;display:flex;flex-direction:column;gap:2px;border-top:var(--stroke-hair) solid rgba(255,255,255,0.06);padding-top:6px;margin-top:2px;">
-        <label style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">Customs Description</label>
-        <span style="font-size:12px;color:var(--text2);font-weight:500;">${escapeHtml(customsDesc || 'Printed books')}</span>
+        <label style="font-size:var(--text-3xs);font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">Customs Description</label>
+        <span style="font-size:var(--text-sm);color:var(--text2);font-weight:500;">${escapeHtml(customsDesc || 'Printed books')}</span>
       </div>
     </div>
     ${scalingNote}
@@ -3688,7 +3688,7 @@ async function verifyShippedTrackingPinsHandler() {
   if (!shipments.length) {
     if (out) {
       out.style.display = 'block';
-      out.innerHTML = '<div style="font-size:11px;color:var(--text3);">No shipped orders with a Canada Post tracking number to check yet.</div>';
+      out.innerHTML = '<div style="font-size:var(--text-xs);color:var(--text3);">No shipped orders with a Canada Post tracking number to check yet.</div>';
     }
     showToast('Nothing to check — no shipped orders carry a Canada Post tracking number', 'ok');
     return;
@@ -3703,7 +3703,7 @@ async function verifyShippedTrackingPinsHandler() {
       if (btn) btn.innerHTML = `<span>⏳</span><span>Checking ${i + 1} of ${shipments.length}…</span>`;
       if (out) {
         out.style.display = 'block';
-        out.innerHTML = `<div style="font-size:11px;color:var(--text3);">Asking Canada Post about parcel ${i + 1} of ${shipments.length}…</div>`;
+        out.innerHTML = `<div style="font-size:var(--text-xs);color:var(--text3);">Asking Canada Post about parcel ${i + 1} of ${shipments.length}…</div>`;
       }
 
       let verdict;
@@ -3754,15 +3754,15 @@ function renderTrackingAuditResult(out, verdicts, summary) {
     return `
       <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;padding:5px 0;border-top:var(--stroke-hair) solid var(--border-subtle,var(--border));">
         <span style="${tone}font-weight:700;">${mark}</span>
-        <span class="tnum" style="font-family:var(--font-mono);font-size:11px;">${escapeHtml(v.pin)}</span>
-        ${v.orderNum ? `<span style="font-size:11px;color:var(--text3);">${escapeHtml(v.orderNum)}</span>` : ''}
-        <span style="font-size:11px;${tone}flex:1;min-width:140px;">${escapeHtml(v.detail || '')}</span>
+        <span class="tnum" style="font-family:var(--font-mono);font-size:var(--text-xs);">${escapeHtml(v.pin)}</span>
+        ${v.orderNum ? `<span style="font-size:var(--text-xs);color:var(--text3);">${escapeHtml(v.orderNum)}</span>` : ''}
+        <span style="font-size:var(--text-xs);${tone}flex:1;min-width:140px;">${escapeHtml(v.detail || '')}</span>
       </div>
     `;
   };
 
   const advice = summary.missing
-    ? `<div style="font-size:11px;color:var(--text3);margin-top:8px;line-height:1.5;">
+    ? `<div style="font-size:var(--text-xs);color:var(--text3);margin-top:8px;line-height:1.5;">
          A parcel Canada Post has no record of was never actually bought — most likely the connection dropped
          during an older purchase. Buy the label again for those orders before telling the customer it is on its way.
        </div>`
@@ -3770,7 +3770,7 @@ function renderTrackingAuditResult(out, verdicts, summary) {
 
   out.style.display = 'block';
   out.innerHTML = `
-    <div style="font-size:11px;font-weight:700;color:var(--text);margin-bottom:6px;">${escapeHtml(describeTrackingAudit(summary))}</div>
+    <div style="font-size:var(--text-xs);font-weight:700;color:var(--text);margin-bottom:6px;">${escapeHtml(describeTrackingAudit(summary))}</div>
     ${sorted.map(rowFor).join('')}
     ${advice}
   `;
@@ -3808,28 +3808,28 @@ async function checkCanadaPostAccountAndPinHandler() {
         : '<span class="pill amber sm">Sandbox Test Mode</span>';
 
       const rows = [];
-      rows.push(`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${modePill}<span class="tnum" style="font-size:11px;color:var(--text3);font-family:var(--font-mono);">${escapeHtml(audit.environment.hostname)}</span></div>`);
-      rows.push(`<div style="font-size:11px;color:var(--text3);margin-top:6px;">${escapeHtml(audit.environment.description)}</div>`);
-      rows.push(`<div style="font-size:11px;margin-top:8px;">Customer number: <span class="tnum" style="font-family:var(--font-mono);">${escapeHtml(audit.customerNumber || '—')}</span>${audit.configured ? '' : ' <span class="pill gray sm">not configured</span>'}</div>`);
+      rows.push(`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${modePill}<span class="tnum" style="font-size:var(--text-xs);color:var(--text3);font-family:var(--font-mono);">${escapeHtml(audit.environment.hostname)}</span></div>`);
+      rows.push(`<div style="font-size:var(--text-xs);color:var(--text3);margin-top:6px;">${escapeHtml(audit.environment.description)}</div>`);
+      rows.push(`<div style="font-size:var(--text-xs);margin-top:8px;">Customer number: <span class="tnum" style="font-family:var(--font-mono);">${escapeHtml(audit.customerNumber || '—')}</span>${audit.configured ? '' : ' <span class="pill gray sm">not configured</span>'}</div>`);
 
       audit.errors.forEach(e => {
-        rows.push(`<div style="font-size:11px;color:var(--red,var(--text));margin-top:6px;">✕ ${escapeHtml(e)}</div>`);
+        rows.push(`<div style="font-size:var(--text-xs);color:var(--red,var(--text));margin-top:6px;">✕ ${escapeHtml(e)}</div>`);
       });
       audit.warnings.forEach(w => {
-        rows.push(`<div style="font-size:11px;color:var(--text3);margin-top:6px;">⚠ ${escapeHtml(w)}</div>`);
+        rows.push(`<div style="font-size:var(--text-xs);color:var(--text3);margin-top:6px;">⚠ ${escapeHtml(w)}</div>`);
       });
       if (audit.ok && !audit.errors.length) {
-        rows.push('<div style="font-size:11px;color:var(--green);margin-top:6px;">✓ Account settings look complete — labels will be attached to this customer number.</div>');
+        rows.push('<div style="font-size:var(--text-xs);color:var(--green);margin-top:6px;">✓ Account settings look complete — labels will be attached to this customer number.</div>');
       }
 
       if (pin) {
         if (tracking && tracking.found) {
-          rows.push(`<div style="font-size:11px;color:var(--green);margin-top:10px;">✓ Tracking PIN <span class="tnum" style="font-family:var(--font-mono);">${escapeHtml(tracking.pin)}</span> found at Canada Post${tracking.status ? ` — ${escapeHtml(tracking.status)}` : ''}.</div>`);
+          rows.push(`<div style="font-size:var(--text-xs);color:var(--green);margin-top:10px;">✓ Tracking PIN <span class="tnum" style="font-family:var(--font-mono);">${escapeHtml(tracking.pin)}</span> found at Canada Post${tracking.status ? ` — ${escapeHtml(tracking.status)}` : ''}.</div>`);
           if (tracking.expectedDeliveryDate) {
-            rows.push(`<div style="font-size:11px;color:var(--text3);margin-top:3px;">Expected delivery: <span class="tnum">${escapeHtml(tracking.expectedDeliveryDate)}</span></div>`);
+            rows.push(`<div style="font-size:var(--text-xs);color:var(--text3);margin-top:3px;">Expected delivery: <span class="tnum">${escapeHtml(tracking.expectedDeliveryDate)}</span></div>`);
           }
         } else {
-          rows.push(`<div style="font-size:11px;color:var(--red,var(--text));margin-top:10px;">✕ Tracking PIN <span class="tnum" style="font-family:var(--font-mono);">${escapeHtml(pin)}</span> could not be confirmed. ${escapeHtml(trackingError)}</div>`);
+          rows.push(`<div style="font-size:var(--text-xs);color:var(--red,var(--text));margin-top:10px;">✕ Tracking PIN <span class="tnum" style="font-family:var(--font-mono);">${escapeHtml(pin)}</span> could not be confirmed. ${escapeHtml(trackingError)}</div>`);
         }
       }
 
@@ -4116,7 +4116,7 @@ async function calculateZonosDutiesHandler({ shippingAmount, carrierName } = {})
       </div>
       <span class="pill gold" style="animation:pulse-glow 1.5s infinite ease-in-out;">Calculating...</span>
     </div>
-    <div style="font-size:12px;color:var(--text3);margin-top:8px;">Fetching real-time landed cost quote from Zonos GraphQL API for destination (${escapeHtml(stCountryCode)})...</div>
+    <div style="font-size:var(--text-sm);color:var(--text3);margin-top:8px;">Fetching real-time landed cost quote from Zonos GraphQL API for destination (${escapeHtml(stCountryCode)})...</div>
   `;
 
   const finalShippingAmount = typeof shippingAmount === 'number' ? shippingAmount : 15.00;
@@ -4219,13 +4219,13 @@ function renderZonosDutyCard(calc, { stCountryCode, qty, unitValue, hsCode, erro
           <span class="zonos-duty-icon">🌐</span>
           <strong>Zonos Landed Cost &amp; Duties</strong>
         </div>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px;">
+        <div style="font-size:var(--text-xs);color:var(--text3);margin-top:2px;">
           ${escapeHtml(stCountryCode || 'International')} · HS Code <span class="tnum">${escapeHtml(hsCode || '490199')}</span> · Declared <span class="tnum">${(qty * unitValue).toFixed(2)} ${cur}</span>
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:6px;">
         ${statusBadge}
-        <button class="btn sm tag" type="button" onclick="calculateZonosDutiesHandler()" style="font-size:10px;padding:3px 8px;" title="Refresh calculation">↻ Refresh</button>
+        <button class="btn sm tag" type="button" onclick="calculateZonosDutiesHandler()" style="font-size:var(--text-2xs);padding:3px 8px;" title="Refresh calculation">↻ Refresh</button>
       </div>
     </div>
 
@@ -4262,7 +4262,7 @@ function renderZonosDutyCard(calc, { stCountryCode, qty, unitValue, hsCode, erro
       </div>
     ` : ''}
 
-    ${errorNote ? `<div style="font-size:10px;color:var(--text3);margin-top:6px;font-style:italic;">Note: Using verified offline table (${escapeHtml(errorNote)})</div>` : ''}
+    ${errorNote ? `<div style="font-size:var(--text-2xs);color:var(--text3);margin-top:6px;font-style:italic;">Note: Using verified offline table (${escapeHtml(errorNote)})</div>` : ''}
   `;
 }
 
@@ -4311,8 +4311,8 @@ async function calculateCanadaPostRatesHandler() {
       <div class="cp-brand-badge">
         <span class="cp-flag-icon">🇨🇦</span>
         <div>
-          <strong style="font-size:13px;color:var(--text);">Canada Post Direct Rates</strong>
-          <div style="font-size:11px;color:var(--text3);">Official Web Services Rating</div>
+          <strong style="font-size:var(--text-base);color:var(--text);">Canada Post Direct Rates</strong>
+          <div style="font-size:var(--text-xs);color:var(--text3);">Official Web Services Rating</div>
         </div>
       </div>
       <span class="pill gold" style="animation:pulse-glow 1.5s infinite ease-in-out;">Quoting live...</span>
@@ -4450,7 +4450,7 @@ function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, isDisable
   const isUsBound = String(stCountryCode || '').toUpperCase() === 'US';
 
   const retailNote = usedRetailFallback ? `
-    <div class="cp-rate-note" style="margin-bottom:12px;padding:10px 14px;background:var(--surface-sunken);border:var(--stroke-hair) solid var(--border);border-radius:var(--r);font-size:12px;color:var(--text2);line-height:1.5;">
+    <div class="cp-rate-note" style="margin-bottom:12px;padding:10px 14px;background:var(--surface-sunken);border:var(--stroke-hair) solid var(--border);border-radius:var(--r);font-size:var(--text-sm);color:var(--text2);line-height:1.5;">
       <div style="display:flex;align-items:center;gap:6px;font-weight:700;color:var(--text);margin-bottom:2px;">
         <span>🛒</span>
         <span>Showing Canada Post Published Retail (Counter) Rates</span>
@@ -4476,16 +4476,16 @@ function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, isDisable
   const rateRows = (quotes || []).map(q => `
     <div class="cp-rate-row">
       <div style="flex:1;min-width:180px;">
-        <div style="font-weight:700;font-size:13px;color:var(--text);">${escapeHtml(q.serviceName)}</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:3px;display:flex;align-items:center;gap:6px;">
+        <div style="font-weight:700;font-size:var(--text-base);color:var(--text);">${escapeHtml(q.serviceName)}</div>
+        <div style="font-size:var(--text-xs);color:var(--text3);margin-top:3px;display:flex;align-items:center;gap:6px;">
           <span>⏱️ ${escapeHtml(q.estimatedSpeed || 'Standard')}</span>
           ${q.deliveryDate ? `<span>· Est. ${escapeHtml(q.deliveryDate)}</span>` : ''}
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
         <div style="text-align:right;">
-          <strong class="tnum" style="font-size:15px;color:var(--text);font-weight:800;">${q.totalPrice.toFixed(2)} CAD</strong>
-          ${q.taxes > 0 ? `<div class="tnum" style="font-size:10px;color:var(--text3);">incl. ${q.taxes.toFixed(2)} tax</div>` : ''}
+          <strong class="tnum" style="font-size:var(--text-md);color:var(--text);font-weight:800;">${q.totalPrice.toFixed(2)} CAD</strong>
+          ${q.taxes > 0 ? `<div class="tnum" style="font-size:var(--text-2xs);color:var(--text3);">incl. ${q.taxes.toFixed(2)} tax</div>` : ''}
         </div>
         <button class="btn sm gold cp-buy-btn" type="button"
           ${canBuy ? '' : 'disabled aria-disabled="true"'}
@@ -4503,8 +4503,8 @@ function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, isDisable
       <div class="cp-brand-badge">
         <span class="cp-flag-icon">🇨🇦</span>
         <div>
-          <strong style="font-size:13px;color:var(--text);">Canada Post Direct Rates &amp; Labels</strong>
-          <div style="font-size:11px;color:var(--text3);">Destination: <strong>${escapeHtml(stCountryCode || 'CA')}</strong> (${(quotes || []).length} available)</div>
+          <strong style="font-size:var(--text-base);color:var(--text);">Canada Post Direct Rates &amp; Labels</strong>
+          <div style="font-size:var(--text-xs);color:var(--text3);">Destination: <strong>${escapeHtml(stCountryCode || 'CA')}</strong> (${(quotes || []).length} available)</div>
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;">
@@ -4521,7 +4521,7 @@ function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, isDisable
       ${retailNote}
       ${rateRows || `<div class="cp-rate-empty">${emptyStateHtml}</div>`}
     </div>
-    ${errorNote ? `<div style="font-size:11px;color:var(--text3);margin-top:8px;font-style:italic;">Note: ${escapeHtml(errorNote)}</div>` : ''}
+    ${errorNote ? `<div style="font-size:var(--text-xs);color:var(--text3);margin-top:8px;font-style:italic;">Note: ${escapeHtml(errorNote)}</div>` : ''}
     <div id="cp-purchased-label-panel" style="display:none;"></div>
   `;
 }
@@ -4563,7 +4563,7 @@ function showArchivedCanadaPostLabels() {
 
   if (!labels.length) {
     out.innerHTML = `
-      <div style="font-size:11px;color:var(--text3);line-height:1.5;">
+      <div style="font-size:var(--text-xs);color:var(--text3);line-height:1.5;">
         No labels stored on this device yet. Every label you buy from here is kept automatically,
         so you can reprint it later even with no internet.
       </div>`;
@@ -4572,9 +4572,9 @@ function showArchivedCanadaPostLabels() {
 
   const rows = labels.map(l => `
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;border-top:var(--stroke-hair) solid var(--border-subtle,var(--border));">
-      <span class="tnum" style="font-family:var(--font-mono);font-size:11px;">${escapeHtml(l.trackingPin || l.pin)}</span>
-      ${l.orderNum ? `<span style="font-size:11px;color:var(--text3);">${escapeHtml(l.orderNum)}</span>` : ''}
-      ${l.destinationName ? `<span style="font-size:11px;color:var(--text3);">→ ${escapeHtml(l.destinationName)}${l.destinationCountry ? ` (${escapeHtml(l.destinationCountry)})` : ''}</span>` : ''}
+      <span class="tnum" style="font-family:var(--font-mono);font-size:var(--text-xs);">${escapeHtml(l.trackingPin || l.pin)}</span>
+      ${l.orderNum ? `<span style="font-size:var(--text-xs);color:var(--text3);">${escapeHtml(l.orderNum)}</span>` : ''}
+      ${l.destinationName ? `<span style="font-size:var(--text-xs);color:var(--text3);">→ ${escapeHtml(l.destinationName)}${l.destinationCountry ? ` (${escapeHtml(l.destinationCountry)})` : ''}</span>` : ''}
       <button class="btn sm tag cp-label-action-btn" type="button" style="margin-left:auto;min-height:36px;padding:6px 12px;" onclick="reprintArchivedCanadaPostLabel('${escapeHtml(l.pin)}')" title="Reopen and reprint this label">
         🖨️ Reprint
       </button>
@@ -4585,10 +4585,10 @@ function showArchivedCanadaPostLabels() {
   `).join('');
 
   out.innerHTML = `
-    <div style="font-size:11px;font-weight:700;color:var(--text);margin-bottom:4px;">
+    <div style="font-size:var(--text-xs);font-weight:700;color:var(--text);margin-bottom:4px;">
       ${labels.length} label${labels.length === 1 ? '' : 's'} stored on this device
     </div>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">These reprint without internet — the postage is already paid.</div>
+    <div style="font-size:var(--text-xs);color:var(--text3);margin-bottom:4px;">These reprint without internet — the postage is already paid.</div>
     ${rows}
   `;
 }
@@ -4633,7 +4633,7 @@ async function showCanadaPostLabelModal(shipmentContext) {
             <span style="font-size:20px;" aria-hidden="true">🇨🇦</span>
             <div style="min-width:0;">
               <strong id="cp-label-modal-title" style="font-size:14px;color:var(--text);">Canada Post Shipping Label</strong>
-              <div style="font-size:11px;color:var(--text3);margin-top:2px;">
+              <div style="font-size:var(--text-xs);color:var(--text3);margin-top:2px;">
                 ${cleanPin
                   ? `Tracking PIN: <strong class="tnum" style="color:var(--text);letter-spacing:0.5px;">${escapeHtml(cleanPin)}</strong>`
                   : 'No tracking number on this shipment'}
@@ -5249,9 +5249,9 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
           <div class="cp-purchased-panel"${isSim ? ' style="border-color:var(--amber,var(--border));"' : ''}>
             ${isSim ? `
               <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;padding:10px 14px;background:var(--surface-card);border:var(--stroke-hair) solid var(--amber,var(--border));border-radius:var(--r);">
-                <span style="font-size:18px;line-height:1.1;" aria-hidden="true">🧪</span>
-                <div style="font-size:11px;color:var(--text3);line-height:1.5;">
-                  <strong style="font-size:12px;color:var(--text);">This was a test run — nothing was bought and nothing was charged.</strong><br>
+                <span style="font-size:var(--text-lg);line-height:1.1;" aria-hidden="true">🧪</span>
+                <div style="font-size:var(--text-xs);color:var(--text3);line-height:1.5;">
+                  <strong style="font-size:var(--text-sm);color:var(--text);">This was a test run — nothing was bought and nothing was charged.</strong><br>
                   ${escapeHtml(result.simulationReason || 'Canada Post could not be reached.')}
                   The number below will not scan, and the label is a practice copy that Canada Post will not accept at the counter.
                   The order and the postage entry it created are both marked as a test so you can find and clear them.
@@ -5260,11 +5260,11 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
             ` : ''}
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
               <div style="display:flex;align-items:center;gap:10px;">
-                <span style="font-size:22px;color:${isSim ? 'var(--amber,var(--text3))' : 'var(--green)'};">${isSim ? '🧪' : '✓'}</span>
+                <span style="font-size:var(--text-xl);color:${isSim ? 'var(--amber,var(--text3))' : 'var(--green)'};">${isSim ? '🧪' : '✓'}</span>
                 <div>
                   <strong style="color:${isSim ? 'var(--amber,var(--text))' : 'var(--green)'};font-size:14px;">${isSim ? 'Test label created' : 'Label purchased'}</strong>
-                  <div style="font-size:11px;color:var(--text3);margin-top:2px;">
-                    ${isSim ? 'Reference' : 'Tracking PIN'}: <strong class="tnum" style="color:var(--text);font-size:12px;">${escapeHtml(result.trackingPin || '—')}</strong>
+                  <div style="font-size:var(--text-xs);color:var(--text3);margin-top:2px;">
+                    ${isSim ? 'Reference' : 'Tracking PIN'}: <strong class="tnum" style="color:var(--text);font-size:var(--text-sm);">${escapeHtml(result.trackingPin || '—')}</strong>
                     · ${isSim ? 'Would cost' : 'Charged'} <strong class="tnum">$${chargedPrice.toFixed(2)} CAD</strong>${priceIsConfirmed ? '' : ' (quoted)'}
                   </div>
                 </div>
@@ -5282,14 +5282,14 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
             </div>
             ${result.manifestRequired && !isSim ? `
               <div style="margin-top:12px;padding:12px 14px;background:var(--surface-card);border:var(--stroke-hair) solid var(--amber,var(--border));border-radius:var(--r);display:flex;align-items:flex-start;gap:10px;">
-                <span style="font-size:18px;line-height:1.1;" aria-hidden="true">📋</span>
-                <div style="font-size:11px;color:var(--text3);line-height:1.5;">
+                <span style="font-size:var(--text-lg);line-height:1.1;" aria-hidden="true">📋</span>
+                <div style="font-size:var(--text-xs);color:var(--text3);line-height:1.5;">
                   ${result.manifestSignal === 'unknown' ? `
-                    <strong style="font-size:12px;color:var(--text);">Canada Post did not say whether this parcel needs a manifest.</strong><br>
+                    <strong style="font-size:var(--text-sm);color:var(--text);">Canada Post did not say whether this parcel needs a manifest.</strong><br>
                     A manifest is one summary sheet that goes with a batch of parcels. Sending one when it
                     is not needed costs nothing, so send it to be safe.
                   ` : `
-                    <strong style="font-size:12px;color:var(--text);">This parcel needs a manifest before you drop it off.</strong><br>
+                    <strong style="font-size:var(--text-sm);color:var(--text);">This parcel needs a manifest before you drop it off.</strong><br>
                     A manifest is one summary sheet Canada Post wants alongside parcels like this one.
                     If the parcel is handed over without it, Canada Post adds an extra charge to it later.
                   `}
@@ -5297,8 +5297,8 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
               </div>
             ` : ''}
             ${declarationId && isSim ? `
-              <div style="margin-top:12px;padding:10px 14px;background:var(--surface-card);border:var(--stroke-hair) solid var(--border);border-radius:var(--r);font-size:11px;color:var(--text3);line-height:1.5;">
-                <strong style="font-size:12px;color:var(--text);">Practice run — nothing was linked.</strong><br>
+              <div style="margin-top:12px;padding:10px 14px;background:var(--surface-card);border:var(--stroke-hair) solid var(--border);border-radius:var(--r);font-size:var(--text-xs);color:var(--text3);line-height:1.5;">
+                <strong style="font-size:var(--text-sm);color:var(--text);">Practice run — nothing was linked.</strong><br>
                 Declaration <span class="tnum" style="font-weight:700;">${escapeHtml(declarationId)}</span> was not
                 spent and no real parcel exists. Do not take this to the counter.
               </div>
@@ -5306,18 +5306,18 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
             ${declarationId && !isSim ? `
               <div style="margin-top:12px;padding:14px;background:var(--surface-card);border:var(--stroke-hair) solid var(--green);border-radius:var(--r);">
                 <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-                  <span style="font-size:18px;" aria-hidden="true">🇺🇸</span>
-                  <strong style="font-size:13px;color:var(--green);">U.S. duty is prepaid and attached to this parcel</strong>
+                  <span style="font-size:var(--text-lg);" aria-hidden="true">🇺🇸</span>
+                  <strong style="font-size:var(--text-base);color:var(--green);">U.S. duty is prepaid and attached to this parcel</strong>
                 </div>
 
-                <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:11px;margin-bottom:10px;">
+                <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:var(--text-xs);margin-bottom:10px;">
                   <span style="color:var(--text3);">Declaration ID</span>
                   <span class="tnum" style="font-weight:700;color:var(--text);letter-spacing:1px;">${escapeHtml(declarationId)}</span>
                   <span style="color:var(--text3);">Tracking number</span>
                   <span class="tnum" style="font-weight:700;color:var(--text);letter-spacing:1px;">${escapeHtml(result.trackingPin || '—')}</span>
                 </div>
 
-                <div style="font-size:11px;color:var(--text3);line-height:1.6;">
+                <div style="font-size:var(--text-xs);color:var(--text3);line-height:1.6;">
                   ${result.declarationSignal === 'issued' ? `
                     Canada Post returned this Declaration ID with the label, which means it has recorded
                     the duty against this parcel.
@@ -5328,8 +5328,8 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
                   `}
                 </div>
 
-                <div style="margin-top:10px;padding-top:10px;border-top:var(--stroke-hair) solid var(--border);font-size:11px;color:var(--text3);line-height:1.6;">
-                  <strong style="color:var(--text);font-size:12px;">Before the counter:</strong>
+                <div style="margin-top:10px;padding-top:10px;border-top:var(--stroke-hair) solid var(--border);font-size:var(--text-xs);color:var(--text3);line-height:1.6;">
+                  <strong style="color:var(--text);font-size:var(--text-sm);">Before the counter:</strong>
                   <div style="margin-top:4px;">1. Print this label and tape it to the parcel.</div>
                   ${result.manifestRequired ? `
                     <div style="margin-top:2px;">2. Send the manifest — see the note above. Handing the parcel over without it earns a surcharge.</div>
@@ -5339,8 +5339,8 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
                   `}
                 </div>
 
-                <div style="margin-top:10px;padding-top:10px;border-top:var(--stroke-hair) solid var(--border);font-size:11px;color:var(--text3);line-height:1.6;">
-                  <strong style="color:var(--text);font-size:12px;">Want it confirmed by Zonos?</strong>
+                <div style="margin-top:10px;padding-top:10px;border-top:var(--stroke-hair) solid var(--border);font-size:var(--text-xs);color:var(--text3);line-height:1.6;">
+                  <strong style="color:var(--text);font-size:var(--text-sm);">Want it confirmed by Zonos?</strong>
                   Open your Prepay order history — <span class="tnum" style="font-weight:700;">${escapeHtml(result.trackingPin || 'the tracking number')}</span>
                   should now be showing beside declaration <span class="tnum" style="font-weight:700;">${escapeHtml(declarationId)}</span>.
                   That pairing is Zonos confirming it too, and it is the only check that does not rely on this app.
@@ -5358,9 +5358,9 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
             ` : ''}
             ${result.declarationSignal === 'missing' && !isSim ? `
               <div style="margin-top:12px;padding:12px 14px;background:var(--surface-card);border:var(--stroke-hair) solid var(--red,var(--border));border-radius:var(--r);display:flex;align-items:flex-start;gap:10px;">
-                <span style="font-size:18px;line-height:1.1;" aria-hidden="true">🇺🇸</span>
-                <div style="font-size:11px;color:var(--text3);line-height:1.5;">
-                  <strong style="font-size:12px;color:var(--text);">This U.S. parcel has no duty declaration, so the duty is not paid.</strong><br>
+                <span style="font-size:var(--text-lg);line-height:1.1;" aria-hidden="true">🇺🇸</span>
+                <div style="font-size:var(--text-xs);color:var(--text3);line-height:1.5;">
+                  <strong style="font-size:var(--text-sm);color:var(--text);">This U.S. parcel has no duty declaration, so the duty is not paid.</strong><br>
                   U.S. customs can hold the parcel or bill your customer for the duty on delivery.
                   Buy a declaration in the Zonos Prepay app and add its ID before you drop this parcel
                   off, or save your Zonos account key in Tax Centre so every future U.S. label gets one
@@ -5583,7 +5583,7 @@ function renderShippoDiagnostics(data, fallbackMessage) {
     }
     detailsHtml = `<ul style="margin:12px 0 0; padding-left:18px; text-align:left; line-height:1.55;">${listItemsHtml}</ul>`;
   } else {
-    detailsHtml = `<div style="margin-top:12px; font-size:12px; line-height:1.55;">${escapeHtml(fallbackMessage)}</div>`;
+    detailsHtml = `<div style="margin-top:12px; font-size:var(--text-sm); line-height:1.55;">${escapeHtml(fallbackMessage)}</div>`;
   }
 
   return `
@@ -5591,7 +5591,7 @@ function renderShippoDiagnostics(data, fallbackMessage) {
       <div style="font-size:32px; margin-bottom:12px;">⚠️</div>
       <div>No rates were returned by Shippo.</div>
       ${detailsHtml}
-      <div style="margin-top:12px; font-size:12px; line-height:1.55; color:var(--text3);">The API key was accepted because Shippo created a shipment response; this usually points to address validation, unsupported origin/destination service, package specs, or missing/enabled carrier accounts rather than a bad key.</div>
+      <div style="margin-top:12px; font-size:var(--text-sm); line-height:1.55; color:var(--text3);">The API key was accepted because Shippo created a shipment response; this usually points to address validation, unsupported origin/destination service, package specs, or missing/enabled carrier accounts rather than a bad key.</div>
     </div>`;
 }
 
@@ -6012,11 +6012,11 @@ async function calculateShippoRates() {
           for (const [key, val] of Object.entries(errData)) {
             errors.push(`${key}: ${Array.isArray(val) ? val.join(', ') : JSON.stringify(val)}`);
           }
-          errMsg += `<br><span style="font-size:12px; font-weight:normal; display:block; margin-top:8px;">${errors.join('<br>')}</span>`;
+          errMsg += `<br><span style="font-size:var(--text-sm); font-weight:normal; display:block; margin-top:8px;">${errors.join('<br>')}</span>`;
         }
       }
       if (list) {
-        list.innerHTML = `<div class="card" style="border-color:var(--red); background:var(--red-bg); padding:1rem; color:var(--red); font-size:13px; font-weight:600; line-height:1.45;">${errMsg}</div>`;
+        list.innerHTML = `<div class="card" style="border-color:var(--red); background:var(--red-bg); padding:1rem; color:var(--red); font-size:var(--text-base); font-weight:600; line-height:1.45;">${errMsg}</div>`;
         list.style.display = 'flex';
       }
       return;
@@ -6072,7 +6072,7 @@ async function calculateShippoRates() {
           <div class="rate-card">
             <div class="rate-info">
               <div class="rate-logo">
-                ${logoUrl ? `<img src="${logoUrl}" alt="${r.provider}">` : `<span style="font-size:9px; font-weight:700;">${r.provider.slice(0, 3)}</span>`}
+                ${logoUrl ? `<img src="${logoUrl}" alt="${r.provider}">` : `<span style="font-size:var(--text-3xs); font-weight:700;">${r.provider.slice(0, 3)}</span>`}
               </div>
               <div class="rate-details">
                 <div style="display:flex; align-items:center; gap:8px;">
@@ -6085,7 +6085,7 @@ async function calculateShippoRates() {
             </div>
             <div class="rate-price-area" style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
               <div class="rate-price">${parseFloat(r.amount).toFixed(2)} ${escapeHtml(r.currency)}</div>
-              <button class="btn gold sm" onclick="buyShippoLabel('${r.object_id}', '${escapeHtml(r.provider)}', '${escapeHtml(r.servicelevel.name)}', ${parseFloat(r.amount)}, '${escapeHtml(r.currency)}')" style="margin:0; padding:4px 8px; font-size:10px; font-weight:600; height:auto; line-height:1;">Buy Label</button>
+              <button class="btn gold sm" onclick="buyShippoLabel('${r.object_id}', '${escapeHtml(r.provider)}', '${escapeHtml(r.servicelevel.name)}', ${parseFloat(r.amount)}, '${escapeHtml(r.currency)}')" style="margin:0; padding:4px 8px; font-size:var(--text-2xs); font-weight:600; height:auto; line-height:1;">Buy Label</button>
             </div>
           </div>
         `;
@@ -6097,7 +6097,7 @@ async function calculateShippoRates() {
     console.error(err);
     if (loading) loading.style.display = 'none';
     if (list) {
-      list.innerHTML = `<div class="card" style="border-color:var(--red); background:var(--red-bg); padding:1rem; color:var(--red); font-weight:600; font-size:13px;">❌ Error fetching rates: ${escapeHtml(err.message)}</div>`;
+      list.innerHTML = `<div class="card" style="border-color:var(--red); background:var(--red-bg); padding:1rem; color:var(--red); font-weight:600; font-size:var(--text-base);">❌ Error fetching rates: ${escapeHtml(err.message)}</div>`;
       list.style.display = 'flex';
     }
   }
@@ -7567,7 +7567,7 @@ function buildShippingPnLHtml(allOrders, relevantExpenses, shippoExpenses, bookF
           </div>
           <div style="display:flex; flex-direction:column; align-items:flex-end; gap:8px;">
             <div style="display:flex; align-items:center; gap:8px;">
-              <button class="btn sm gold" id="ship-bc-sync-btn" onclick="triggerBigCartelShippingSync()" style="height:38px; padding:0 16px; display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; border-radius:var(--r-pill); border:var(--stroke-hair) solid rgba(232, 64, 42,0.3); background:var(--gold-bg); color:var(--gold-text); cursor:pointer; transition:all 0.2s;">
+              <button class="btn sm gold" id="ship-bc-sync-btn" onclick="triggerBigCartelShippingSync()" style="height:38px; padding:0 16px; display:inline-flex; align-items:center; gap:6px; font-size:var(--text-sm); font-weight:700; border-radius:var(--r-pill); border:var(--stroke-hair) solid rgba(232, 64, 42,0.3); background:var(--gold-bg); color:var(--gold-text); cursor:pointer; transition:all 0.2s;">
                 <span>🔄</span> Sync Big Cartel Shipping
               </button>
               <a class="shipping-pnl-action" href="#shipping-pnl-ledger">Review reconciliation</a>
@@ -8371,7 +8371,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
 
       expenseRefHtml = `
         ${refLink}
-        <div style="font-size:10px; color:var(--text3); margin-top:2px;">
+        <div style="font-size:var(--text-2xs); color:var(--text3); margin-top:2px;">
           ${escapeHtml(primary.desc || 'Postage')}
         </div>`;
 
@@ -8383,7 +8383,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
       } else {
         // Actionable rather than a dead dash: this is the one place the owner
         // can put the number in, and every other row already offers it.
-        trackingLinkHtml = `<button class="btn sm ghost" style="font-size:10px; padding:3px 8px;" onclick="promptLedgerTracking('${escapeHtml(postageExpenseKey(primary))}')">+ Add tracking</button>`;
+        trackingLinkHtml = `<button class="btn sm ghost" style="font-size:var(--text-2xs); padding:3px 8px;" onclick="promptLedgerTracking('${escapeHtml(postageExpenseKey(primary))}')">+ Add tracking</button>`;
       }
     } else {
       expenseRefHtml = `<span style="color:var(--text3); font-style:italic;">Unlinked</span>`;
@@ -8392,7 +8392,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
       if (isSuggested) {
         const suggestedItem = suggested[0];
         linkBtn = `
-          <button class="btn sm" onclick="confirmSuggestedShippoLink('${escapeHtml(o.num)}', '${escapeHtml(postageExpenseKey(suggestedItem))}')" style="font-size:10px; padding:3px 8px; background:var(--shipping-pnl-success); border-color:var(--shipping-pnl-success); color:var(--on-accent);">
+          <button class="btn sm" onclick="confirmSuggestedShippoLink('${escapeHtml(o.num)}', '${escapeHtml(postageExpenseKey(suggestedItem))}')" style="font-size:var(--text-2xs); padding:3px 8px; background:var(--shipping-pnl-success); border-color:var(--shipping-pnl-success); color:var(--on-accent);">
             Confirm Match
           </button>`;
       }
@@ -8402,17 +8402,17 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
     if (!o.excludeFromShipping && !isLinked && !isSuggested) {
       actionBtn = `
         <div style="margin-top:6px; display:flex; gap:4px; align-items:center;">
-          <button class="btn sm" onclick="openManualShippoLinkModal('${escapeHtml(o.num)}')" style="font-size:10px; padding:3px 8px;">Link</button>
-          <button class="btn sm ghost" onclick="dismissShippingAnalysisOrder('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:10px; padding:3px 8px; color:var(--text3); min-width:unset;" title="Dismiss order from calculations">✕ Dismiss</button>
+          <button class="btn sm" onclick="openManualShippoLinkModal('${escapeHtml(o.num)}')" style="font-size:var(--text-2xs); padding:3px 8px;">Link</button>
+          <button class="btn sm ghost" onclick="dismissShippingAnalysisOrder('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:var(--text-2xs); padding:3px 8px; color:var(--text3); min-width:unset;" title="Dismiss order from calculations">✕ Dismiss</button>
         </div>`;
     } else if (isLinked || o.manualPostagePaid) {
       const mainBtn = o.manualPostagePaid
-        ? `<button class="btn sm ghost" onclick="unlinkManualPostage('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:10px; padding:3px 8px; opacity:0.7;">Clear manual</button>`
-        : `<button class="btn sm ghost" onclick="unlinkShippoExpense('${escapeHtml(postageExpenseKey(linked[0]))}')" style="font-size:10px; padding:3px 8px; opacity:0.7;">Unlink</button>`;
+        ? `<button class="btn sm ghost" onclick="unlinkManualPostage('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:var(--text-2xs); padding:3px 8px; opacity:0.7;">Clear manual</button>`
+        : `<button class="btn sm ghost" onclick="unlinkShippoExpense('${escapeHtml(postageExpenseKey(linked[0]))}')" style="font-size:var(--text-2xs); padding:3px 8px; opacity:0.7;">Unlink</button>`;
       actionBtn = `
         <div style="margin-top:6px; display:flex; gap:4px; align-items:center;">
           ${mainBtn}
-          <button class="btn sm ghost" onclick="dismissShippingAnalysisOrder('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:10px; padding:3px 8px; color:var(--text3); min-width:unset;" title="Dismiss order from calculations">✕ Dismiss</button>
+          <button class="btn sm ghost" onclick="dismissShippingAnalysisOrder('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:var(--text-2xs); padding:3px 8px; color:var(--text3); min-width:unset;" title="Dismiss order from calculations">✕ Dismiss</button>
         </div>`;
     }
 
@@ -8437,7 +8437,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
         </td>
         <td class="shipping-pnl-money" data-label="Customer paid">
           <div style="display:flex; align-items:center; justify-content:flex-end; gap:6px;">
-            ${o.manualShippingPaid ? `<button class="btn sm ghost" onclick="unlinkManualShippingPaid('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" title="Clear manual override" style="padding:0 4px; font-size:10px; opacity:0.6; min-width: unset; height: auto;">✕</button>` : ''}
+            ${o.manualShippingPaid ? `<button class="btn sm ghost" onclick="unlinkManualShippingPaid('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" title="Clear manual override" style="padding:0 4px; font-size:var(--text-2xs); opacity:0.6; min-width: unset; height: auto;">✕</button>` : ''}
             <input type="number" step="0.01" min="0" 
               class="inline-postage-input" 
               value="${(Number(o.shippingPaid) || 0).toFixed(2)}" 
@@ -8445,7 +8445,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
               data-order-id="${escapeHtml(o.id || o.num)}" 
               onchange="onInlineShippingPaidChange(this)"
             />
-            <span style="font-size: 10px; color: var(--text3); font-weight: 600;">CAD</span>
+            <span style="font-size:var(--text-2xs); color: var(--text3); font-weight: 600;">CAD</span>
           </div>
         </td>
         <td class="shipping-pnl-money" data-label="Postage">
@@ -8457,7 +8457,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
               data-order-id="${escapeHtml(o.id || o.num)}" 
               onchange="onInlinePostageChange(this)"
             />
-            <span style="font-size: 10px; color: var(--text3); font-weight: 600;">CAD</span>
+            <span style="font-size:var(--text-2xs); color: var(--text3); font-weight: 600;">CAD</span>
           </div>
         </td>
         <td class="shipping-pnl-money ${marginClass}" data-label="Margin">
@@ -8492,7 +8492,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
     }
 
     paginationHtml = `
-      <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-top:var(--stroke-hair) solid var(--border); font-size:12px; color:var(--text3); flex-wrap:wrap; gap:12px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-top:var(--stroke-hair) solid var(--border); font-size:var(--text-sm); color:var(--text3); flex-wrap:wrap; gap:12px;">
         <div>Showing ${startIndex + 1} - ${endIndex} of ${totalOrders} orders</div>
         <div style="display:flex; gap:4px; align-items:center;">
           <button class="btn sm" onclick="changeShipAnalysisPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>Prev</button>
@@ -8507,7 +8507,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
     ? `
       <div class="shipping-pnl-table-wrap">
         <div id="ship-analysis-batch-actions" style="display:none; padding:8px 12px; background:var(--card-bg); border-bottom:var(--stroke-hair) solid var(--border); align-items:center; justify-content:space-between; gap:12px;">
-          <span style="font-size:12px; font-weight:600; color:var(--text);"><span id="ship-analysis-batch-count">0</span> orders selected</span>
+          <span style="font-size:var(--text-sm); font-weight:600; color:var(--text);"><span id="ship-analysis-batch-count">0</span> orders selected</span>
           <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
             <button class="btn sm" id="ship-analysis-batch-verify" onclick="batchVerifyLedgerAddresses()" title="Check every selected address with Shippo">⌖ Verify addresses</button>
             <button class="btn sm ghost" onclick="batchDismissShippingAnalysisOrders()" style="color:var(--text3); border:var(--stroke-hair) solid var(--border);">✕ Dismiss Selected</button>
@@ -8571,7 +8571,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
         <div class="shipping-active-filters-badges">
           ${filterBadges}
         </div>
-        <button class="btn sm ghost" onclick="clearAllShipAnalysisFilters()" style="color:var(--red); font-size:11px; padding:2px 8px; border:var(--stroke-hair) solid var(--red); border-radius:var(--r2); background:transparent; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px; margin-left:auto;">
+        <button class="btn sm ghost" onclick="clearAllShipAnalysisFilters()" style="color:var(--red); font-size:var(--text-xs); padding:2px 8px; border:var(--stroke-hair) solid var(--red); border-radius:var(--r2); background:transparent; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px; margin-left:auto;">
           ✕ Clear All
         </button>
       </div>
@@ -8613,12 +8613,12 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
     let statusBadgeHtml = '';
     let borderStyle = 'border:var(--stroke-hair) solid var(--border);';
     if (data.N === 0) {
-      statusBadgeHtml = `<span style="background:rgba(107,102,94,0.08); color:var(--text3); font-size:10px; font-weight:700; padding:2px 8px; border-radius:var(--r-pill); border:var(--stroke-hair) solid rgba(107,102,94,0.15);">Default</span>`;
+      statusBadgeHtml = `<span style="background:rgba(107,102,94,0.08); color:var(--text3); font-size:var(--text-2xs); font-weight:700; padding:2px 8px; border-radius:var(--r-pill); border:var(--stroke-hair) solid rgba(107,102,94,0.15);">Default</span>`;
     } else if (currentBase < recoBase) {
-      statusBadgeHtml = `<span style="background:rgba(201,75,50,0.08); color:var(--red); font-size:10px; font-weight:700; padding:2px 8px; border-radius:var(--r-pill); border:var(--stroke-hair) solid rgba(201,75,50,0.15);">⚠️ Undercharged</span>`;
+      statusBadgeHtml = `<span style="background:rgba(201,75,50,0.08); color:var(--red); font-size:var(--text-2xs); font-weight:700; padding:2px 8px; border-radius:var(--r-pill); border:var(--stroke-hair) solid rgba(201,75,50,0.15);">⚠️ Undercharged</span>`;
       borderStyle = 'border:var(--stroke-hair) solid rgba(201,75,50,0.3); box-shadow:var(--elev-3);';
     } else {
-      statusBadgeHtml = `<span style="background:rgba(29,122,74,0.08); color:var(--green); font-size:10px; font-weight:700; padding:2px 8px; border-radius:var(--r-pill); border:var(--stroke-hair) solid rgba(29,122,74,0.15);">✓ Optimized</span>`;
+      statusBadgeHtml = `<span style="background:rgba(29,122,74,0.08); color:var(--green); font-size:var(--text-2xs); font-weight:700; padding:2px 8px; border-radius:var(--r-pill); border:var(--stroke-hair) solid rgba(29,122,74,0.15);">✓ Optimized</span>`;
     }
 
     const confidenceColor = data.confidence === 'High' ? '#1d7a4a' : data.confidence === 'Medium' ? 'var(--gold-text)' : '#6b665e';
@@ -8636,14 +8636,14 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
           </div>
 
           <div style="background:var(--surface-card); border:var(--stroke-hair) solid var(--border); border-radius:var(--r); padding:10px 12px; margin-bottom:14px; box-shadow:inset 0 1px 3px rgba(0,0,0,0.02);">
-            <label style="font-size:9px; font-weight:700; letter-spacing: 0.05em; text-transform:uppercase; color:var(--text3); display:block; margin-bottom:4px;">Recommended Rate</label>
+            <label style="font-size:var(--text-3xs); font-weight:700; letter-spacing: 0.05em; text-transform:uppercase; color:var(--text3); display:block; margin-bottom:4px;">Recommended Rate</label>
             <div style="display:flex; justify-content:space-between; align-items:baseline;">
-              <span style="font-size:18px; font-weight:800; color:var(--gold-text);">$${recoBase.toFixed(2)} <span style="font-size:10px; font-weight:400; color:var(--text3);">base</span></span>
-              <span style="font-size:13px; font-weight:600; color:var(--text2);">+$${recoAddon.toFixed(2)} <span style="font-size:10px; font-weight:400; color:var(--text3);">add-on</span></span>
+              <span style="font-size:var(--text-lg); font-weight:800; color:var(--gold-text);">$${recoBase.toFixed(2)} <span style="font-size:var(--text-2xs); font-weight:400; color:var(--text3);">base</span></span>
+              <span style="font-size:var(--text-base); font-weight:600; color:var(--text2);">+$${recoAddon.toFixed(2)} <span style="font-size:var(--text-2xs); font-weight:400; color:var(--text3);">add-on</span></span>
             </div>
           </div>
 
-          <div style="font-size:11px; color:var(--text3); margin-bottom:16px; line-height:1.7;">
+          <div style="font-size:var(--text-xs); color:var(--text3); margin-bottom:16px; line-height:1.7;">
             <div style="display:flex; justify-content:space-between; border-bottom:var(--stroke-hair) dashed rgba(0,0,0,0.04); padding-bottom:3px;">
               <span>Confidence:</span>
               <span style="font-weight:700; color:${confidenceColor};">${data.confidence}</span>
@@ -8664,23 +8664,23 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
         </div>
 
         <div style="border-top:var(--stroke-hair) solid var(--border); padding-top:12px; margin-top:auto;">
-          <label style="font-size:9px; font-weight:700; letter-spacing: 0.05em; text-transform:uppercase; color:var(--text3); display:block; margin-bottom:8px;">Current Store Setup</label>
+          <label style="font-size:var(--text-3xs); font-weight:700; letter-spacing: 0.05em; text-transform:uppercase; color:var(--text3); display:block; margin-bottom:8px;">Current Store Setup</label>
           <div style="display:flex; gap:6px; align-items:center; margin-bottom:10px;">
             <div style="flex:1;">
-              <span style="font-size:9px; color:var(--text2); display:block; margin-bottom:2px;">Base ($)</span>
+              <span style="font-size:var(--text-3xs); color:var(--text2); display:block; margin-bottom:2px;">Base ($)</span>
               <input type="number" step="0.50" min="0" value="${currentBase.toFixed(2)}" 
                 onblur="updateManualShippingRates('${meta.key}', 'base', this.value)"
-                style="width:100%; padding:6px 8px; font-size:12px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); text-align:right; font-family:var(--font-mono); outline:none;" />
+                style="width:100%; padding:6px 8px; font-size:var(--text-sm); border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); text-align:right; font-family:var(--font-mono); outline:none;" />
             </div>
             <div style="flex:1;">
-              <span style="font-size:9px; color:var(--text2); display:block; margin-bottom:2px;">Add-on ($)</span>
+              <span style="font-size:var(--text-3xs); color:var(--text2); display:block; margin-bottom:2px;">Add-on ($)</span>
               <input type="number" step="0.50" min="0" value="${currentAddon.toFixed(2)}" 
                 onblur="updateManualShippingRates('${meta.key}', 'addon', this.value)"
-                style="width:100%; padding:6px 8px; font-size:12px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); text-align:right; font-family:var(--font-mono); outline:none;" />
+                style="width:100%; padding:6px 8px; font-size:var(--text-sm); border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); text-align:right; font-family:var(--font-mono); outline:none;" />
             </div>
           </div>
           <button class="btn sm ghost" onclick="applySmartShippingRates('${meta.key}', ${recoBase}, ${recoAddon})" 
-            style="width:100%; font-size:10px; padding:4px; border-radius:var(--r); text-align:center; font-weight:600; display:flex; align-items:center; justify-content:center; gap:4px; height:28px; border:var(--stroke-hair) dashed var(--border); cursor:pointer;">
+            style="width:100%; font-size:var(--text-2xs); padding:4px; border-radius:var(--r); text-align:center; font-weight:600; display:flex; align-items:center; justify-content:center; gap:4px; height:28px; border:var(--stroke-hair) dashed var(--border); cursor:pointer;">
             ⚡ Apply Recommended
           </button>
         </div>
@@ -8715,10 +8715,10 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
 
   const sandboxHtml = `
     <section class="shipping-reco-container" style="background:var(--cream2); border:var(--stroke-hair) solid var(--border); border-radius:var(--r3); padding:20px; margin:0 20px 20px 20px; box-shadow:var(--elev-3);">
-      <h3 style="font-family:var(--font-ui); font-size:18px; color:var(--text); margin:0 0 6px; font-weight:700;">
+      <h3 style="font-family:var(--font-ui); font-size:var(--text-lg); color:var(--text); margin:0 0 6px; font-weight:700;">
         🧪 Live Rate Simulation Sandbox
       </h3>
-      <p style="font-size:12px; color:var(--text3); margin:0 0 16px; line-height:1.5;">
+      <p style="font-size:var(--text-sm); color:var(--text3); margin:0 0 16px; line-height:1.5;">
         Test how your current and recommended shipping rates perform against actual weight calculations and estimated postage costs.
       </p>
 
@@ -8726,20 +8726,20 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
         <!-- Controls -->
         <div style="display:flex; flex-direction:column; gap:12px;">
           <div class="form-group" style="margin:0;">
-            <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">Select Book</label>
-            <select id="sim-book-select" onchange="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; font-weight:600; cursor:pointer;">
+            <label style="font-size:var(--text-2xs); font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">Select Book</label>
+            <select id="sim-book-select" onchange="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:var(--text-sm); border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; font-weight:600; cursor:pointer;">
               ${bookOptionsHtml}
             </select>
           </div>
 
           <div style="display:flex; gap:12px;">
             <div class="form-group" style="flex:1; margin:0;">
-              <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">Quantity</label>
-              <input type="number" id="sim-qty-input" value="1" min="1" max="100" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; text-align:right; font-family:var(--font-mono);" />
+              <label style="font-size:var(--text-2xs); font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">Quantity</label>
+              <input type="number" id="sim-qty-input" value="1" min="1" max="100" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:var(--text-sm); border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; text-align:right; font-family:var(--font-mono);" />
             </div>
             <div class="form-group" style="flex:1; margin:0;">
-              <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">Destination</label>
-              <select id="sim-region-select" onchange="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; font-weight:600; cursor:pointer;">
+              <label style="font-size:var(--text-2xs); font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">Destination</label>
+              <select id="sim-region-select" onchange="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:var(--text-sm); border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; font-weight:600; cursor:pointer;">
                 <option value="ON">Ontario 🍁</option>
                 <option value="CA">Rest of Canada 🇨🇦</option>
                 <option value="US">United States 🇺🇸</option>
@@ -8750,8 +8750,8 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
 
           <div style="display:flex; gap:12px;">
             <div class="form-group" style="flex:1; margin:0;">
-              <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">Packaging Tare</label>
-              <select id="sim-tare-select" onchange="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; font-weight:600; cursor:pointer;">
+              <label style="font-size:var(--text-2xs); font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">Packaging Tare</label>
+              <select id="sim-tare-select" onchange="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:var(--text-sm); border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; font-weight:600; cursor:pointer;">
                 <option value="0">None (0 g)</option>
                 <option value="0.05" selected>Bubble Mailer (+50 g)</option>
                 <option value="0.15">Cardboard Box (+150 g)</option>
@@ -8759,18 +8759,18 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
               </select>
             </div>
             <div class="form-group" style="flex:1; margin:0;">
-              <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">
+              <label style="font-size:var(--text-2xs); font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">
                 Manual Weight <span style="font-weight:400; text-transform:none; color:var(--text3);">(kg)</span>
               </label>
-              <input type="number" id="sim-weight-override" placeholder="Auto-calculated" step="0.05" min="0" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; text-align:right; font-family:var(--font-mono);" />
+              <input type="number" id="sim-weight-override" placeholder="Auto-calculated" step="0.05" min="0" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:var(--text-sm); border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; text-align:right; font-family:var(--font-mono);" />
             </div>
           </div>
 
           <div class="form-group" style="margin:0;">
-            <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">
+            <label style="font-size:var(--text-2xs); font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">
               Custom Postage Override <span style="font-weight:400; text-transform:none; color:var(--text3);">(optional)</span>
             </label>
-            <input type="number" id="sim-postage-override" placeholder="Use default band fallback" step="0.50" min="0" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; text-align:right; font-family:var(--font-mono);" />
+            <input type="number" id="sim-postage-override" placeholder="Use default band fallback" step="0.50" min="0" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:var(--text-sm); border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; text-align:right; font-family:var(--font-mono);" />
           </div>
         </div>
 
@@ -8798,14 +8798,14 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
             <h3 style="font-family:var(--font-display); font-size:20px; color:var(--text); margin:0; display:flex; align-items:center; gap:8px; font-weight:700;">
               <span>🪄</span> Smart Shipping Rate Recommendations
             </h3>
-            <p style="font-size:12px; color:var(--text3); margin:4px 0 0; line-height:1.5; max-width:650px;">
+            <p style="font-size:var(--text-sm); color:var(--text3); margin:4px 0 0; line-height:1.5; max-width:650px;">
               ${explanationText}
             </p>
           </div>
-          <div style="background:var(--cream2); padding:8px 12px; border-radius:var(--r2); border:var(--stroke-hair) solid var(--border); font-size:11px; color:var(--text2); display:flex; align-items:center; gap:12px; font-weight:600; flex-wrap:wrap;">
+          <div style="background:var(--cream2); padding:8px 12px; border-radius:var(--r2); border:var(--stroke-hair) solid var(--border); font-size:var(--text-xs); color:var(--text2); display:flex; align-items:center; gap:12px; font-weight:600; flex-wrap:wrap;">
             <div style="display:flex; align-items:center; gap:4px;">
-              <span style="font-size:13px;">⚖️</span> Weight Profile:
-              <select id="ship-reco-weight-select" onchange="onShipRecoWeightSelectChange(this.value)" style="padding:4px 8px; font-size:11px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; font-weight:600; cursor:pointer; margin-left:4px;">
+              <span style="font-size:var(--text-base);">⚖️</span> Weight Profile:
+              <select id="ship-reco-weight-select" onchange="onShipRecoWeightSelectChange(this.value)" style="padding:4px 8px; font-size:var(--text-xs); border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; font-weight:600; cursor:pointer; margin-left:4px;">
                 <option value="default" ${weightOverride === 'default' ? 'selected' : ''}>Book Weight (${bookWeightKg.toFixed(2)} kg)</option>
                 <option value="under_0.5" ${weightOverride === 'under_0.5' ? 'selected' : ''}>Under 0.5 kg (0.3 kg)</option>
                 <option value="0.5_1" ${weightOverride === '0.5_1' ? 'selected' : ''}>0.5 - 1 kg (0.8 kg)</option>
@@ -8815,15 +8815,15 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
               </select>
               <input id="ship-reco-custom-weight-input" type="number" step="0.1" min="0.01" value="${!['default','under_0.5','0.5_1','1_2','over_2'].includes(weightOverride) ? parseFloat(weightOverride).toFixed(2) : bookWeightKg.toFixed(2)}" 
                 onchange="onShipRecoCustomWeightChange(this.value)"
-                style="display:${!['default','under_0.5','0.5_1','1_2','over_2'].includes(weightOverride) ? 'inline-block' : 'none'}; width:60px; padding:3px 6px; font-size:11px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r); text-align:right; font-family:var(--font-mono); outline:none; margin-left:4px;" />
-              <span style="font-size:11px; color:var(--text3); font-weight:400; margin-left:4px;">(${recoData.bandName})</span>
+                style="display:${!['default','under_0.5','0.5_1','1_2','over_2'].includes(weightOverride) ? 'inline-block' : 'none'}; width:60px; padding:3px 6px; font-size:var(--text-xs); border:var(--stroke-hair) solid var(--border); border-radius:var(--r); text-align:right; font-family:var(--font-mono); outline:none; margin-left:4px;" />
+              <span style="font-size:var(--text-xs); color:var(--text3); font-weight:400; margin-left:4px;">(${recoData.bandName})</span>
             </div>
             
             <div style="border-left:var(--stroke-hair) solid var(--border); height:16px;"></div>
             
             <div style="display:flex; align-items:center; gap:4px;">
-              <span style="font-size:13px;">⚙️</span> Methodology:
-              <select id="ship-reco-mode-select" onchange="onShipRecoModeChange(this.value)" style="padding:4px 8px; font-size:11px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; font-weight:600; cursor:pointer; margin-left:4px;">
+              <span style="font-size:var(--text-base);">⚙️</span> Methodology:
+              <select id="ship-reco-mode-select" onchange="onShipRecoModeChange(this.value)" style="padding:4px 8px; font-size:var(--text-xs); border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; font-weight:600; cursor:pointer; margin-left:4px;">
                 <option value="blended" ${recoMode === 'blended' ? 'selected' : ''}>Blended (History + CP)</option>
                 <option value="cpost" ${recoMode === 'cpost' ? 'selected' : ''}>Canada Post Only</option>
               </select>
@@ -8832,8 +8832,8 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
             <div style="border-left:var(--stroke-hair) solid var(--border); height:16px;"></div>
 
             <div style="display:flex; align-items:center; gap:4px; opacity:${recoMode === 'cpost' ? '0.5' : '1'};">
-              <span style="font-size:13px;">🎯</span> Risk Profile:
-              <select id="ship-reco-percentile-select" onchange="onShipRecoPercentileChange(this.value)" ${recoMode === 'cpost' ? 'disabled' : ''} style="padding:4px 8px; font-size:11px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; font-weight:600; cursor:${recoMode === 'cpost' ? 'not-allowed' : 'pointer'}; margin-left:4px;">
+              <span style="font-size:var(--text-base);">🎯</span> Risk Profile:
+              <select id="ship-reco-percentile-select" onchange="onShipRecoPercentileChange(this.value)" ${recoMode === 'cpost' ? 'disabled' : ''} style="padding:4px 8px; font-size:var(--text-xs); border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; font-weight:600; cursor:${recoMode === 'cpost' ? 'not-allowed' : 'pointer'}; margin-left:4px;">
                 <option value="90" ${recoPercentile === 90 ? 'selected' : ''}>Conservative (90th %)</option>
                 <option value="75" ${recoPercentile === 75 ? 'selected' : ''}>Balanced (75th %)</option>
                 <option value="50" ${recoPercentile === 50 ? 'selected' : ''}>Aggressive (50th %)</option>
@@ -8964,7 +8964,7 @@ function renderShippingAnalysisHub() {
           <h3 id="shipping-pnl-ledger-title">Every order, clearly accounted for</h3>
         </div>
         <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
-          <button class="btn sm gold" onclick="downloadFilteredShippingLedgerCSV()" style="font-size:11px; padding:4px 10px; font-weight:600; cursor:pointer;">
+          <button class="btn sm gold" onclick="downloadFilteredShippingLedgerCSV()" style="font-size:var(--text-xs); padding:4px 10px; font-weight:600; cursor:pointer;">
             📥 Export CSV
           </button>
           <p>Unlinked orders are kept distinct so zeroes never imply settled postage.</p>
@@ -9051,36 +9051,36 @@ function updateShippingSimulation() {
         <!-- Billed Weight & Band Meta Bar -->
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; border-bottom:var(--stroke-hair) solid var(--border); padding-bottom:6px; flex-wrap:wrap; gap:6px;">
           <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-            <span style="font-size:10px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:0.04em;">Canada Post Billed Weight</span>
-            <span style="background:var(--cream2); border:var(--stroke-hair) solid var(--border); border-radius:var(--r-pill); padding:2px 8px; font-size:10px; font-weight:700; color:var(--text2);">🏷️ Band: ${weightBandLabel}</span>
+            <span style="font-size:var(--text-2xs); font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:0.04em;">Canada Post Billed Weight</span>
+            <span style="background:var(--cream2); border:var(--stroke-hair) solid var(--border); border-radius:var(--r-pill); padding:2px 8px; font-size:var(--text-2xs); font-weight:700; color:var(--text2);">🏷️ Band: ${weightBandLabel}</span>
             ${isVolumetricBilled
-              ? `<span style="background:rgba(232, 64, 42,0.15); border:var(--stroke-hair) solid var(--gold-line); border-radius:var(--r-pill); padding:2px 8px; font-size:10px; font-weight:700; color:var(--gold);" title="Volumetric weight exceeds actual weight (L x W x H / 5000)">📐 Volumetric Billed (${volumetricWeightKg.toFixed(2)} kg)</span>`
-              : `<span style="background:rgba(0,120,60,0.08); border:var(--stroke-hair) solid rgba(0,120,60,0.2); border-radius:var(--r-pill); padding:2px 8px; font-size:10px; font-weight:700; color:var(--green);">⚖️ Actual Weight</span>`
+              ? `<span style="background:rgba(232, 64, 42,0.15); border:var(--stroke-hair) solid var(--gold-line); border-radius:var(--r-pill); padding:2px 8px; font-size:var(--text-2xs); font-weight:700; color:var(--gold);" title="Volumetric weight exceeds actual weight (L x W x H / 5000)">📐 Volumetric Billed (${volumetricWeightKg.toFixed(2)} kg)</span>`
+              : `<span style="background:rgba(0,120,60,0.08); border:var(--stroke-hair) solid rgba(0,120,60,0.2); border-radius:var(--r-pill); padding:2px 8px; font-size:var(--text-2xs); font-weight:700; color:var(--green);">⚖️ Actual Weight</span>`
             }
           </div>
-          <span style="font-family:var(--font-mono); font-size:12px; font-weight:700; color:var(--text);">${billedWeightKg.toFixed(3)} kg (${billedWeightLbs.toFixed(2)} lbs)</span>
+          <span style="font-family:var(--font-mono); font-size:var(--text-sm); font-weight:700; color:var(--text);">${billedWeightKg.toFixed(3)} kg (${billedWeightLbs.toFixed(2)} lbs)</span>
         </div>
 
         <!-- HERO CARD: Est. Postage Cost (Primary Focal Point) -->
         <div style="background:linear-gradient(135deg, rgba(26,77,46,0.07), rgba(26,77,46,0.02)); border:1.5px solid var(--green); border-radius:var(--r2); padding:16px; display:flex; justify-content:space-between; align-items:center; box-shadow:var(--elev-2);">
           <div>
             <div style="display:flex; align-items:center; gap:6px; margin-bottom:2px;">
-              <span style="font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:0.06em; color:var(--green);">Est. Postage Cost (${region})</span>
-              <span style="background:rgba(26,77,46,0.1); color:var(--green); font-size:9px; font-weight:700; padding:1px 6px; border-radius:var(--r-pill);">🚚 Tracked</span>
+              <span style="font-size:var(--text-2xs); font-weight:800; text-transform:uppercase; letter-spacing:0.06em; color:var(--green);">Est. Postage Cost (${region})</span>
+              <span style="background:rgba(26,77,46,0.1); color:var(--green); font-size:var(--text-3xs); font-weight:700; padding:1px 6px; border-radius:var(--r-pill);">🚚 Tracked</span>
             </div>
-            <div style="font-family:var(--font-mono); font-size:26px; font-weight:800; color:var(--text); line-height:1.1;">
+            <div style="font-family:var(--font-mono); font-size:var(--text-2xl); font-weight:800; color:var(--text); line-height:1.1;">
               ${formatCcy(postageCost)}
             </div>
             ${billedWeightKg < 0.5 && qty === 1
-              ? `<div style="color:var(--green); font-size:10px; font-weight:600; margin-top:6px; display:flex; gap:4px; align-items:center;">
+              ? `<div style="color:var(--green); font-size:var(--text-2xs); font-weight:600; margin-top:6px; display:flex; gap:4px; align-items:center;">
                    <span>💡</span> <span>Canada Post Lettermail eligible (if thickness &lt; 2cm).</span>
                  </div>`
               : ''
             }
           </div>
           <div style="text-align:right;">
-            <span style="font-size:10px; color:var(--text3); display:block;">Carrier</span>
-            <strong style="font-size:13px; color:var(--text); font-weight:700;">Canada Post</strong>
+            <span style="font-size:var(--text-2xs); color:var(--text3); display:block;">Carrier</span>
+            <strong style="font-size:var(--text-base); color:var(--text); font-weight:700;">Canada Post</strong>
           </div>
         </div>
       </div>

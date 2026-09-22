@@ -94,6 +94,14 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-09-16 | visual | Dashboard — expenses owed to artist | Gave the expense table real column headers, an even row rhythm and a themed category tag, instead of hand-picked padding per cell and no header at all | #839 |
 | 2026-09-16 | visual | Dashboard — artist reimbursement & pending-transfer banners | Gave both author-facing money summaries a shared row divider and tag style instead of two copies of the same hand-rolled row, and swapped a raw hex for the emerald token | #839 |
 | 2026-09-17 | visual | Event POS — search with no matches | Fixed the register's "no books match" message so the search term you typed is actually visible instead of blending into the background | #847 |
+| 2026-09-17 | visual | Whole app — new look ("Riso Press") | Repainted the entire app: flat print-shop inks, square corners, bold outlines and hard offset shadows instead of soft rounded ones, with a matching night mode. New type throughout | #850, #852 |
+| 2026-09-17 | visual | Printed invoice | Redesigned the invoice sheet to match the new look, and kept it deliberately fixed so it prints the same whatever theme you are using | #853 |
+| 2026-09-21 | visual | Whole app — leftovers from the repaint | Swept the values the repaint missed: shadows that were still soft, and colours still keyed to the previous palette. Hover effects on the book cards now show up in night mode for the first time | #861 |
+| 2026-09-21 | visual | Shipping — manual link dialog, sending overlay, updating screen | Three windows had been built their own way and missed the repaint. The updating screen was still glowing in the old brand gold | #861 |
+| 2026-09-21 | visual | Whole app — each screen's own pieces | Flattened the last faded panels, including two table headers, and squared the register's rounded corners so it matches everything else | #862 |
+| 2026-09-21 | fix | Add-a-store banner, consignment balances popup, shipping rate rows | Three things were quietly not working: the "store connected" banner had no background at all, the balances popup opened with nothing dimmed behind it, and hovering a shipping rate highlighted nothing | #862 |
+| 2026-09-21 | perf | Shipping label window, sending overlay | Removed a blur effect that was redrawing the whole screen on every keystroke while you filled in a shipping label | #862 |
+| 2026-09-22 | visual | Whole app, night mode — cards, buttons, the pop-up window, tags, and the summary tiles | Night mode redone as "Press Proof": the screen background stays black, but every box on it — a card, a button, a tag — is now white/cream with dark text, the same look daylight mode already uses, instead of a slightly-less-dark box on a dark screen | #865 |
 
 ---
 

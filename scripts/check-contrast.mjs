@@ -62,6 +62,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 export const INDEX_HTML = join(__dirname, '..', 'index.html');
 export const STYLE_CSS = join(__dirname, '..', 'src', 'style.css');
 export const THEME_DARK_CSS = join(__dirname, '..', 'src', 'styles', 'theme-dark.css');
+export const SYSTEM_CSS = join(__dirname, '..', 'src', 'styles', 'system.css');
 export const BASELINE_JSON = join(__dirname, 'contrast-baseline.json');
 
 /** Palettes this script sweeps index.html against. Both ship, so both gate. */
@@ -237,6 +238,19 @@ const CLASS_TEXT_TOKENS = {
     base: 'var(--on-inverse)',
     modifiers: { gold: 'var(--gold3)', green: 'var(--emerald-soft)', danger: 'var(--rose-soft)' },
   },
+  // Tab strips. The sweep had no idea these existed, which is how the Big
+  // Cartel sub-tab shipped with its selected label on --gold — the FILL, at
+  // 3.74:1 against the page. The ink grade is 5.99:1 light and 9.66:1 dark.
+  // Both entries name the ACTIVE colour, since an unselected tab is muted
+  // secondary text that the generic pass already covers.
+  'bc-sub-tab': {
+    base: 'var(--text3)',
+    modifiers: { active: 'var(--gold-text)' },
+  },
+  'modal-tab-btn': {
+    base: 'var(--text3)',
+    modifiers: { active: 'var(--gold-text)' },
+  },
 };
 
 // className -> { modifierClass -> {background, color} }, for self-contained
@@ -298,10 +312,36 @@ function extractProp(style, prop) {
   return m ? m[1].trim() : null;
 }
 
-function isLargeText(style) {
-  const fsMatch = style.match(/(?:^|;)\s*font-size\s*:\s*([\d.]+)px/i);
-  if (!fsMatch) return false; // unknown size -> assume normal (stricter threshold)
-  const fontSize = parseFloat(fsMatch[1]);
+// The type scale, read from system.css rather than copied here, so the two can
+// never drift: if --text-xl is re-tuned, this follows it in the same commit.
+const TYPE_SCALE = (() => {
+  const scale = new Map();
+  try {
+    const css = readFileSync(SYSTEM_CSS, 'utf8');
+    for (const [, name, px] of css.matchAll(/(--text-[a-z0-9]+)\s*:\s*([\d.]+)px/gi)) {
+      scale.set(name, parseFloat(px));
+    }
+  } catch { /* no scale available; sizes stay unresolved and take the strict threshold */ }
+  return scale;
+})();
+
+// A size written as a token is still a size. Without this, tokenising
+// `font-size:22px` to `font-size:var(--text-xl)` silently moves that text from
+// the 3:1 large-text threshold to the 4.5:1 normal one — the markup would look
+// like it had regressed when nothing about it changed.
+export function resolveFontSize(raw) {
+  if (!raw) return null;
+  const px = raw.match(/^([\d.]+)px/);
+  if (px) return parseFloat(px[1]);
+  const tok = raw.match(/var\(\s*(--text-[a-z0-9]+)/i);
+  if (tok) return TYPE_SCALE.get(tok[1].toLowerCase()) ?? null;
+  return null;
+}
+
+export function isLargeText(style) {
+  const fsMatch = style.match(/(?:^|;)\s*font-size\s*:\s*([^;]+)/i);
+  const fontSize = resolveFontSize(fsMatch && fsMatch[1].trim());
+  if (fontSize == null) return false; // unknown size -> assume normal (stricter threshold)
   const fwMatch = style.match(/(?:^|;)\s*font-weight\s*:\s*(\d+|bold|bolder)/i);
   const weight = fwMatch ? fwMatch[1].toLowerCase() : null;
   const isBold = weight === 'bold' || weight === 'bolder' || (weight && parseInt(weight, 10) >= 700);

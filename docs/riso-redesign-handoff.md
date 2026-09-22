@@ -10,6 +10,47 @@ left, and the non-obvious things that will bite whoever picks it up.** Read it b
 
 ---
 
+## 0. Night mode direction change — "Press Proof" (2026-09-22)
+
+The owner looked at the shipping dark theme and didn't like it: "dark on dark," specifically that
+every object — a card, a button, the modal — was only a shade less dark than the page it sat on.
+Measured: `--surface-card` vs `--cream` was **1.05:1**, visually the same colour.
+
+Three dark-mode directions were mocked up as Design-canvas artifacts (Deep Print — same void,
+wider ramp; Night Newsprint — a lighter warmer void; Press Proof — objects go light, page stays
+black). **Press Proof was chosen** and is now implemented for the core component kit:
+`.card`, `.modal` + its parts, `.btn` (+ `.ink` and `.danger-btn` variants), `.pill` + all six
+tones, `.kpi`, `.tbl-wrap`/`.tbl`, and the segmented control / book-modal stepper.
+
+**The idea:** the page, header and sidebar stay exactly as dark as they always were — that part
+was never the complaint. Every *object* on top of them now uses the app's own **light-mode**
+surface (`--paper` ≈ `--cream`, `--on-paper` = literally `--ink`) instead of a barely-different
+dark tone. It is not a new palette; it's daylight mode's own cards, laid down on a black stage.
+Elevation stops being a grey shadow (invisible on near-black) and becomes a **flare-red offset**
+— a nod to a riso print's own registration drift, and the one place a monochrome shadow would
+have vanished into the desk behind it.
+
+**The mechanism, because it's easy to get wrong:** rather than redefining the shared
+`--surface-card`/`--surface-page` primitives (which would ripple into every one of their 100+
+call sites app-wide, most not yet converted), each `.theme-dark .card { … }`-style rule locally
+**re-declares the semantic layer** — `--content-primary`, `--surface-sunken`, `--border`,
+`--rule-ink`, etc. — so a descendant that reads `var(--content-primary)` picks up the paper-ink
+value through ordinary CSS custom-property inheritance, without touching that descendant's own
+rule. The app already relies on exactly this trick for `--local-accent` inside `.modal`; this is
+the same pattern applied more broadly. See §5 landmine below for what this means for testing.
+
+**What's covered:** the core kit above, verified with the real contrast/token scripts and a
+dedicated `tests/press-proof-dark-mode.test.js` that checks every new token pair for AA and pins
+the exact re-declaration lines.
+**What's NOT yet covered — a real follow-up, not an oversight:** every screen-specific bespoke
+card (the ~53 modal surfaces from Wave 3, the per-screen streams from Wave 2, dropdowns/toasts/
+popovers, `.hist-kpi-card` and other stat-tile variants beyond `.kpi`) still uses the old dark
+surface tokens and will look inconsistent — dark box next to a new paper one — until it gets the
+same treatment. Do that the same way: locally re-declare the semantic layer on the object's own
+class, don't touch the shared primitives.
+
+---
+
 ## 1. Where the work actually stands
 
 Waves 0 and 1 are **done and merged to `main`**. Everything since sits on this branch.
@@ -19,22 +60,40 @@ Waves 0 and 1 are **done and merged to `main`**. Everything since sits on this b
 | 0 — Foundation | Palette, both `:root` blocks merged, night mode rebuilt, fonts, 117 stale gold literals | ✅ merged (PR #850, #852) |
 | 1 — Component kit | `.btn` `.card` `.pill` `.kpi` `.modal` `.tbl-wrap` `.sec-head` `.snav` etc. onto the ink stroke + hard offsets | ✅ merged |
 | — Printed invoice | Full Riso redesign of the invoice sheet | ✅ merged (PR #853) |
-| 3 — shape/motion/type/colour sweeps | radii, borders, shadows, fonts, easing, font-size, inline colours → tokens | ⚠️ **partly done — this branch** |
-| 2 — per-screen passes | The seven screen streams (A–G) | ❌ **not started** |
-| 4 — manual pass, log, dead tab | Both themes × 3 widths, `ux-daily-log.md`, dead `financials` tab | ❌ **not started** |
+| 3 — shape/motion/type/colour sweeps | radii, borders, shadows, fonts, easing, font-size, inline colours → tokens | ✅ merged (PR #854) |
+| — residue sweeps | old-ink `rgba()`, blurred shadows, markup font sizes, retired brand colours, the three bespoke dialogs | ✅ **on this branch** (PR #861) |
+| 2 — per-screen passes | Each screen's own components: gradients flattened, the register squared, panel glass removed | ✅ **on this branch** (PR #862) |
+| 4 — manual pass, log, dead tab | `ux-daily-log.md` ✅ · chart palette validated ✅ · **manual pass still outstanding** · dead `financials` tab deferred | ⚠️ mostly done |
 
-**Unmerged commits on this branch (2, both green):**
+### What is genuinely left
 
-- `2a09ad7` Put motion and type on tokens so reduced-motion actually works
-- `4f9842c` Put inline colour values onto tokens so the theme reaches them
+1. **The manual pass** — all 21 tabs, light and dark, at three widths, triggering the states
+   static review misses (empty, loading, toast, offline chip, failed-sync row). Nothing
+   automated substitutes for it. **This is the only substantial item outstanding.**
+2. **The dead `financials` tab**, deliberately deferred to its own change.
+3. Three judgement calls left open on purpose, each noted where it lives: the Open Call
+   sidebar's glass (at 4.5% surface opacity the blur is doing nearly all the work, so
+   flattening it is a visible decision about that screen), the Open Call avatar's gloss, and
+   the two brand marks that keep a gradient (the header logo tile and the account avatar).
 
-There is a **third commit pending** (the invoice-document fix in §3) that was not yet made when
-this was written — check `git log` before assuming.
+### What the per-screen pass found, beyond styling
+
+Worth knowing, because none of it was visible to any sweep:
+
+- **Eleven `var()` references named tokens that do not exist.** A missing custom property makes
+  the whole declaration invalid, so those rules never applied: a success banner rendering
+  transparent with inherited text, a popover with no scrim, a dead hover state, and a radius
+  asking for `--shipping-pnl-r` when the family defines `--shipping-pnl-radius`.
+  `tests/no-undefined-tokens.test.js` now checks every reference resolves.
+- **A measured performance decision that lived only in a comment** — no full-viewport
+  `backdrop-filter` (55ms/frame and 79ms/keystroke when measured) — had been missed twice.
+  `tests/no-fullviewport-blur.test.js` enforces it now.
+- **Two blurs rendered nothing at all**, sitting behind fully opaque backgrounds.
 
 ### Gate status as of writing
 
 `npm run lint` ✅ · `check-tokens` ✅ · `check-contrast` ✅ (light: 1 accepted, dark: ok) ·
-`npx vitest run` ✅ 4247 tests · `npm run build` ✅
+`npx vitest run` ✅ 4268 tests · `npm run build` ✅
 
 ---
 
@@ -160,20 +219,55 @@ is where a redesign half-lands.
 ### 4d. Wave 4 — verification and cleanup
 
 - Manual pass: all 21 tabs + the all-books overview, light and dark, at desktop / tablet / phone.
-- `renderChannelAnalytics` draws to `<canvas>` — **invisible to the contrast sweep**, so its
-  colours must be checked by eye in both themes.
-- `docs/ux-daily-log.md` has **no entry for any of this yet** (0 mentions of the redesign).
+  **This is the one substantial item still outstanding** — everything below it is done.
+- ~~`renderChannelAnalytics` draws to `<canvas>`~~ — **this was wrong.** It builds ordinary
+  markup (`.ch-table` / `.ch-row` divs), touches no canvas, and is therefore swept like
+  everything else. The only canvases in the app handle receipt photos. Its palette was validated
+  rather than eyeballed: the Okabe-Ito set passes every check on the light page, and passes
+  CVD separation and contrast on dark while sitting outside the validator's preferred dark
+  lightness band — it is accessible in both, but has never been re-stepped for dark. Doing that
+  means a theme-aware palette in JS, which is a feature, not a sweep. `tests/channel-chart-palette.test.js`
+  pins the set and the direct labels that let three below-3:1 hues be legal at all.
+- ~~`docs/ux-daily-log.md` has no entry~~ — added.
 - The dead `financials` tab: it is in `SHELL_TAB_LABELS`, `PUBLISHER_ONLY_IDS` and the render
   dispatch, but `#tab-financials` does not exist and `renderFinancials()` would throw. ~9
   references. It deserves its own change, not a drive-by deletion inside a redesign PR.
 - Ratchet: after the sweeps, lower the limits with `node scripts/check-tokens.mjs --write-baseline`.
-  **Only ever to lower them.** Current: raw-hex 140 · raw-zindex 40 · raw-font-size 99 ·
-  raw-easing 0 · raw-shadow 12.
+  **Only ever to lower them.** Now: raw-hex 131 · raw-zindex 40 · raw-font-size 99 ·
+  raw-easing 0 · raw-shadow 6 (was 140 / 40 / 99 / 0 / 12).
 
 ---
 
 ## 5. Landmines — the things that have already caused a wasted cycle
 
+-1. **Neither the contrast sweep nor jsdom can verify a locally-scoped custom-property
+   re-declaration** — the exact mechanism Press Proof (§0) is built on. `scripts/check-contrast.mjs`
+   reads a FLAT palette from the top-level `:root[data-theme="dark"]` block; it has no model of a
+   `.theme-dark .card { --content-primary: … }` override cascading to descendants, so it will
+   neither confirm nor deny that the mechanism works — a clean run from it proves nothing about
+   this specific pattern. jsdom is worse than silent: `getComputedStyle` was tested directly
+   against it and it does **not** resolve `var()` at all — it echoes the literal string
+   `"var(--content-primary)"` back rather than computing a colour, so a jsdom-based test would
+   appear to run and would not be testing anything real. The only genuine verification available
+   was: (a) the CSS spec itself — custom-property inheritance and shadowing is standard, not
+   experimental; (b) the app's own precedent, `--local-accent` inside `.modal`, already shipping
+   on exactly this trick; and (c) resolving the real token *values* this pass introduces against
+   the actual file with `paletteFor()`/`contrastRatio()` (what `tests/press-proof-dark-mode.test.js`
+   does) — which proves the colours are right, not that the cascade wires up in a live DOM.
+   **A real browser look at the app in dark mode is still owed before trusting this is correct.**
+0. **A sweep only ever finds the shape it was written to match — and that has been the single
+   biggest source of missed work here, three times over.** The colour sweeps matched
+   `property:#hex`, so every `rgba()` spelling of a colour was invisible to all of them: the ink
+   (28 sites, including the scrim behind every dialog), then the whole retired brand palette
+   (49 more), then a gold declared local to a component rather than in `:root`. The shadow sweep
+   required a `px` on the first value, so `0 4px 12px` read as two-valued and was skipped — and
+   that same bug was then re-introduced in the grep used to scope the follow-up. The type sweep
+   only read `src/style.css`, leaving 709 sizes in the markup.
+   **Before trusting a sweep's count, check what its pattern cannot see.** A useful cross-check:
+   enumerate every distinct colour triplet in the stylesheets and compare it against the live
+   palette, rather than searching for the values you already suspect. Two gradients were found
+   carrying the new flare beside an old green in the same declaration, which no targeted search
+   would have surfaced.
 1. **Never reformat `src/style.css`.** Tests anchor on exact whitespace (`/^\.btn\{/m`) and one on
    a byte-exact minified rule. A formatter over that file breaks tests that have nothing to do
    with your change.

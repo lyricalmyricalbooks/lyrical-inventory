@@ -104,6 +104,10 @@
   --surface-raised: var(--surface-card);
   --surface-inset: var(--cream3);
   --surface-inverse: var(--ink);
+  /* The scrim behind a popover or dialog. Referenced by name since the
+     consignment balances popover shipped, but never actually declared —
+     so that popover has been opening over a fully transparent backdrop. */
+  --surface-overlay: rgba(16, 15, 13, .34);
   --surface-inverse-raised: var(--ink2);
 
   --content-primary: var(--text);

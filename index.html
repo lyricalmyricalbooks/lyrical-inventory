@@ -257,7 +257,7 @@
     <div>Myrical</div>
     <div class="pw-logo-outline">Books</div>
   </div>
-  <div style="font-family:var(--font-ui); font-size:11px; text-transform:uppercase; letter-spacing:0.18em; color:var(--gold3); animation: pulse-glow 2s infinite ease-in-out;">Connecting to database…</div>
+  <div style="font-family:var(--font-ui); font-size:var(--text-xs); text-transform:uppercase; letter-spacing:0.18em; color:var(--gold3); animation: pulse-glow 2s infinite ease-in-out;">Connecting to database…</div>
 </div>
 
 <!-- PASSWORD GATE (publisher only — hidden in author mode) -->
@@ -430,7 +430,7 @@
       <button id="profile-tab-test" class="profile-tab" onclick="selectProfileTab('test')">Test Profile</button>
     </div>
 
-    <button id="role-toggle-btn" class="btn sm" onclick="toggleCurrentBookView()" style="display:none;font-size:10px;padding:4px 10px;background:transparent;color:rgba(255,255,255,.6);border-color:rgba(255,255,255,.18);">
+    <button id="role-toggle-btn" class="btn sm" onclick="toggleCurrentBookView()" style="display:none;font-size:var(--text-2xs);padding:4px 10px;background:transparent;color:rgba(255,255,255,.6);border-color:rgba(255,255,255,.18);">
       Author view
     </button>
   </div>
@@ -515,7 +515,7 @@
           <div class="acct-status-row">
             <span class="sync-time" id="sync-time"></span>
             <span class="sheets-badge off" id="sheets-badge">📊 Sheets: not set up</span>
-            <a id="sheets-open-link" href="#" target="_blank" style="display:none;font-family:var(--font-mono);font-size:10px;color:var(--gold3);text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">↗ Open</a>
+            <a id="sheets-open-link" href="#" target="_blank" style="display:none;font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--gold3);text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">↗ Open</a>
           </div>
           <span class="author-watermark" id="author-watermark" style="display:none;"></span>
         </div>
@@ -569,7 +569,7 @@
 <!-- AUTHOR QR CODE PAGE (author view only) -->
 <div class="tab-panel" id="tab-myqr" style="display:none;">
   <div class="author-qr-card">
-    <div id="myqr-book-title" style="font-family:var(--font-display);font-size:22px;font-weight:600;color:var(--content-primary);margin-bottom:6px;"></div>
+    <div id="myqr-book-title" style="font-family:var(--font-display);font-size:var(--text-xl);font-weight:600;color:var(--content-primary);margin-bottom:6px;"></div>
     <div id="myqr-book-meta" class="author-qr-meta"></div>
 
     <!-- QR Code -->
@@ -822,10 +822,10 @@
       <div><div class="book-context-title" id="bc-title-dash">—</div><div class="book-context-meta" id="bc-meta-dash">—</div></div>
     </div>
     <div style="display:flex;align-items:center;gap:12px;">
-      <button class="btn gold sm" id="d-email-artist-btn" onclick="emailArtistForPayment()" style="font-size:11px;display:none;">✉ Email artist for payment</button>
-      <button class="btn gold sm" id="d-qr-btn" onclick="openPaymentQRModal()" style="font-size:11px;">Payment QR Code</button>
-      <button class="btn sm" id="d-seed-test-btn" onclick="seedMockTestData()" style="font-size:11px;display:none;background:linear-gradient(135deg,#a78bfa,#8b5cf6);color:var(--on-accent);border:none;box-shadow:var(--elev-2);">🧪 Seed Mock Test Data</button>
-      <span id="d-notify-status" class="pill gray" style="font-size:10px;display:none;" title="Whether artist submissions can email you for approval"></span>
+      <button class="btn gold sm" id="d-email-artist-btn" onclick="emailArtistForPayment()" style="font-size:var(--text-xs);display:none;">✉ Email artist for payment</button>
+      <button class="btn gold sm" id="d-qr-btn" onclick="openPaymentQRModal()" style="font-size:var(--text-xs);">Payment QR Code</button>
+      <button class="btn sm" id="d-seed-test-btn" onclick="seedMockTestData()" style="font-size:var(--text-xs);display:none;background:linear-gradient(135deg,#a78bfa,#8b5cf6);color:var(--on-accent);border:none;box-shadow:var(--elev-2);">🧪 Seed Mock Test Data</button>
+      <span id="d-notify-status" class="pill gray" style="font-size:var(--text-2xs);display:none;" title="Whether artist submissions can email you for approval"></span>
       <div class="dash-context-meta">Dashboard overview</div>
     </div>
   </div>
@@ -1021,15 +1021,15 @@
   <div class="sect" id="danger-zone-sect" style="display:none;">Danger zone</div>
   <div id="danger-zone-block" style="display:none;background:var(--surface-card);border-radius:var(--r3);border:var(--stroke-hair) solid var(--border);padding:1.25rem;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:1.25rem;">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;">
-      <div style="flex:1;min-width:200px;"><div style="font-weight:700;font-size:13px;margin-bottom:3px;">Reset all sales data for this book</div><div style="font-size:12px;color:var(--text3);">Clears orders, history and consignment for this book only. Your Google Sheet is untouched.</div></div>
+      <div style="flex:1;min-width:200px;"><div style="font-weight:700;font-size:var(--text-base);margin-bottom:3px;">Reset all sales data for this book</div><div style="font-size:var(--text-sm);color:var(--text3);">Clears orders, history and consignment for this book only. Your Google Sheet is untouched.</div></div>
       <button class="btn danger-btn" onclick="resetBookData()">⚠ Reset book data</button>
     </div>
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;padding-top:1.25rem;border-top:var(--stroke-hair) solid var(--border);">
-      <div style="flex:1;min-width:200px;"><div style="font-weight:700;font-size:13px;margin-bottom:3px;">Backfill past gratuity expenses</div><div style="font-size:12px;color:var(--text3);">Automatically creates expense ledger entries for any past gratuities that weren't expensed, using the book's current production cost.</div></div>
+      <div style="flex:1;min-width:200px;"><div style="font-weight:700;font-size:var(--text-base);margin-bottom:3px;">Backfill past gratuity expenses</div><div style="font-size:var(--text-sm);color:var(--text3);">Automatically creates expense ledger entries for any past gratuities that weren't expensed, using the book's current production cost.</div></div>
       <button class="btn outline" onclick="backfillGratuityExpenses()">Backfill past gratuities</button>
     </div>
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;padding-top:1.25rem;border-top:var(--stroke-hair) solid var(--border);">
-      <div style="flex:1;min-width:200px;"><div style="font-weight:700;font-size:13px;margin-bottom:3px;">Restore book data from Google Sheets</div><div style="font-size:12px;color:var(--text3);">Pulls all sales and consignment records for this book from your connected Google Sheet. <strong style="color:var(--amber);">Warning: This will overwrite the local sales, history, and consignment records for this book.</strong></div></div>
+      <div style="flex:1;min-width:200px;"><div style="font-weight:700;font-size:var(--text-base);margin-bottom:3px;">Restore book data from Google Sheets</div><div style="font-size:var(--text-sm);color:var(--text3);">Pulls all sales and consignment records for this book from your connected Google Sheet. <strong style="color:var(--amber);">Warning: This will overwrite the local sales, history, and consignment records for this book.</strong></div></div>
       <button class="btn gold outline" id="d-restore-sheets-btn" onclick="restoreBookDataFromSheets()">Sync from Google Sheet</button>
     </div>
   </div>
@@ -1104,7 +1104,7 @@
     <span class="switch"><input type="checkbox" id="stripe-paid-notify-cb" onchange="toggleStripePaidNotify()"><span class="track"></span></span>
     <span><span class="toggle-title">Notify me on this device when an invoice is paid</span><span class="field-note" id="stripe-paid-notify-note" style="display:block;margin-top:2px;"></span></span>
   </label>
-  <div id="recon-status" style="font-size:12px;color:var(--text3);margin-bottom:8px;min-height:16px;"></div>
+  <div id="recon-status" style="font-size:var(--text-sm);color:var(--text3);margin-bottom:8px;min-height:16px;"></div>
   <div id="recon-toolbar" class="recon-toolbar" style="display:none;">
     <input type="search" id="recon-search" class="recon-search" placeholder="Search name, email, note, amount…" autocomplete="off" oninput="reconOnFilter()">
     <div id="recon-cur-chips" class="recon-chips"></div>
@@ -1123,7 +1123,7 @@
     <label class="recon-toggle" title="Collapse identical payments into one row you can log in bulk"><input type="checkbox" id="recon-group" onchange="reconOnFilter()"> Group identical</label>
     <button class="btn tag sm" onclick="reconDismissAllShown()" title="Dismiss every payment currently shown as not-inventory">Dismiss all shown</button>
   </div>
-  <div id="recon-summary" style="font-size:13px;color:var(--text2);margin-bottom:14px;"></div>
+  <div id="recon-summary" style="font-size:var(--text-base);color:var(--text2);margin-bottom:14px;"></div>
   <div id="recon-needs"><div class="empty-state"><div class="e-icon">💳</div>Press <strong>Sync from Stripe</strong> to pull your payments.</div></div>
   <div id="recon-matched"></div>
 
@@ -1174,7 +1174,7 @@
 <!-- CUSTOMERS / MAILING LIST (publisher only, all books) -->
 <div class="tab-panel" id="tab-customers" style="display:none;">
   <div class="section-hed">Audience Management</div>
-  <div style="font-size:12px;color:var(--text3);max-width:620px;line-height:1.6;margin-bottom:1.25rem;">
+  <div style="font-size:var(--text-sm);color:var(--text3);max-width:620px;line-height:1.6;margin-bottom:1.25rem;">
     Build, segment, and communicate with your audience. Collect buyer emails across all sales channels, run marketing campaigns, and keep track of customer interactions.
   </div>
 
@@ -1191,7 +1191,7 @@
     <div class="row-between" style="align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:1rem;">
       <div>
         <div style="font-family:var(--font-ui);font-size:17px;font-weight:700;">All Discovered Buyers</div>
-        <div style="font-size:12px;color:var(--text3);max-width:560px;line-height:1.5;margin-top:2px;">Everyone who has purchased from you across your channels (Website, POS, Stripe, Consignment).</div>
+        <div style="font-size:var(--text-sm);color:var(--text3);max-width:560px;line-height:1.5;margin-top:2px;">Everyone who has purchased from you across your channels (Website, POS, Stripe, Consignment).</div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
         <button class="btn ink" id="cust-stripe-btn" onclick="customerPullStripe()" title="Pull buyer names &amp; emails from your Stripe payments (needs internet + your saved Stripe key)">↻ Pull buyers from Stripe</button>
@@ -1251,10 +1251,10 @@
         <button class="btn" onclick="exportCustomersCSV()">⬇ Export segment</button>
         <button class="btn gold" onclick="emailCustomerSegment()" title="Open Gmail with the filtered segment pre-filled as BCC">✉ Email segment</button>
       </div>
-      <span id="cust-summary" style="font-size:12px;color:var(--text3);font-weight:500;"></span>
+      <span id="cust-summary" style="font-size:var(--text-sm);color:var(--text3);font-weight:500;"></span>
     </div>
 
-    <div id="cust-stripe-status" style="font-size:11px;color:var(--text3);margin-bottom:10px;min-height:14px;line-height:1.5;"></div>
+    <div id="cust-stripe-status" style="font-size:var(--text-xs);color:var(--text3);margin-bottom:10px;min-height:14px;line-height:1.5;"></div>
     <div class="tbl-wrap sys-sticky-head"><table class="tbl">
       <thead><tr><th>Name</th><th>Email</th><th class="r">Orders</th><th class="r">Units</th><th>Books</th><th class="r">Spend</th><th>Last order</th><th>Source</th><th>Action</th></tr></thead>
       <tbody id="cust-body"></tbody>
@@ -1270,7 +1270,7 @@
       <div class="row-between" style="align-items:flex-start;gap:12px;flex-wrap:wrap;">
         <div>
           <div style="font-family:var(--font-ui);font-size:17px;font-weight:700;">Curated Mailing List</div>
-          <div id="ml-count" style="font-size:12px;color:var(--text3);margin-top:2px;">0 subscribers</div>
+          <div id="ml-count" style="font-size:var(--text-sm);color:var(--text3);margin-top:2px;">0 subscribers</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
           <button class="btn" onclick="copyMailingListEmails()">📋 Copy emails</button>
@@ -1292,7 +1292,7 @@
       <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding-top:10px;border-top:var(--stroke-hair) dashed var(--border);">
         <button class="btn ink" onclick="addAllBuyersToMailingList()" title="Add every buyer we found to your mailing list">↓ Add all buyers</button>
         <button class="btn outline cust-export-btn" onclick="exportMailingListCsv()" title="Export current segment to CSV">📥 Export CSV</button>
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;font-size:12px;color:var(--text2);">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;font-size:var(--text-sm);color:var(--text2);">
           <input type="checkbox" id="ml-autoadd" onchange="toggleMailingAutoAdd(this)" style="width:16px;height:16px;accent-color:var(--gold);">
           Auto-add new buyers as they appear
         </label>
@@ -1309,8 +1309,8 @@
   <div id="cust-sec-campaign" class="customers-section" style="display:none;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap;gap:10px;">
       <div>
-        <div style="font-family:var(--font-ui);font-size:18px;font-weight:700;">Campaigns &amp; Newsletters</div>
-        <div style="font-size:12px;color:var(--text3);margin-top:2px;">Design and broadcast custom email newsletters to your segments.</div>
+        <div style="font-family:var(--font-ui);font-size:var(--text-lg);font-weight:700;">Campaigns &amp; Newsletters</div>
+        <div style="font-size:var(--text-sm);color:var(--text3);margin-top:2px;">Design and broadcast custom email newsletters to your segments.</div>
       </div>
       <button class="btn gold lg" onclick="openCampaignWizard()">＋ Create Campaign</button>
     </div>
@@ -1349,7 +1349,7 @@
         <div>
           <div class="form-group" style="margin:0;">
             <label for="c-body">Message Body (HTML or Plain Text)</label>
-            <textarea id="c-body" rows="14" placeholder="Dear {{name}},&#10;&#10;We are thrilled to announce..." style="width:100%;font-family:var(--font-mono);font-size:13px;line-height:1.5;padding:10px;" oninput="updateCampaignPreview()"></textarea>
+            <textarea id="c-body" rows="14" placeholder="Dear {{name}},&#10;&#10;We are thrilled to announce..." style="width:100%;font-family:var(--font-mono);font-size:var(--text-base);line-height:1.5;padding:10px;" oninput="updateCampaignPreview()"></textarea>
             <div class="helper-btn-group">
               <button class="helper-tag-btn" onclick="insertTemplateTag('{{name}}')" title="Inserts recipient's full name (or 'Customer' if blank)">＋ {{name}}</button>
               <button class="helper-tag-btn" onclick="insertTemplateTag('{{email}}')" title="Inserts recipient's email address">＋ {{email}}</button>
@@ -1369,9 +1369,9 @@
       <div class="campaign-mode-row" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--cream2);border:var(--stroke-hair) solid var(--border);border-radius:var(--r2);margin-top:16px;margin-bottom:8px;transition:all 0.25s ease;">
         <div style="display:flex;align-items:center;gap:8px;">
           <span id="c-mode-indicator-dot" style="width:8px;height:8px;border-radius:50%;background:var(--red);display:inline-block;transition:all 0.2s;"></span>
-          <span id="c-mode-indicator-text" style="font-size:12px;font-weight:600;color:var(--text2);transition:all 0.2s;">Loading mode...</span>
+          <span id="c-mode-indicator-text" style="font-size:var(--text-sm);font-weight:600;color:var(--text2);transition:all 0.2s;">Loading mode...</span>
         </div>
-        <label style="display:flex;align-items:center;gap:8px;margin:0;font-size:12px;color:var(--text2);cursor:pointer;user-select:none;padding:4px 8px;border-radius:var(--r);transition:background 0.2s;">
+        <label style="display:flex;align-items:center;gap:8px;margin:0;font-size:var(--text-sm);color:var(--text2);cursor:pointer;user-select:none;padding:4px 8px;border-radius:var(--r);transition:background 0.2s;">
           <input type="checkbox" id="c-force-mock" onchange="onForceMockChange()" style="width:auto;margin:0;cursor:pointer;">
           <span>Simulate send (mock)</span>
         </label>
@@ -1391,12 +1391,12 @@
 
     <!-- CAMPAIGNS LISTS -->
     <div class="card" style="margin-bottom:1.5rem;">
-      <div style="font-family:var(--font-ui);font-size:15px;font-weight:700;margin-bottom:10px;border-bottom:var(--stroke-hair) dashed var(--border);padding-bottom:6px;">Campaign Drafts</div>
+      <div style="font-family:var(--font-ui);font-size:var(--text-md);font-weight:700;margin-bottom:10px;border-bottom:var(--stroke-hair) dashed var(--border);padding-bottom:6px;">Campaign Drafts</div>
       <div id="campaign-drafts-list" class="campaign-card-list"></div>
     </div>
 
     <div class="card">
-      <div style="font-family:var(--font-ui);font-size:15px;font-weight:700;margin-bottom:10px;border-bottom:var(--stroke-hair) dashed var(--border);padding-bottom:6px;">Sent Campaign History</div>
+      <div style="font-family:var(--font-ui);font-size:var(--text-md);font-weight:700;margin-bottom:10px;border-bottom:var(--stroke-hair) dashed var(--border);padding-bottom:6px;">Sent Campaign History</div>
       <div id="campaign-sent-list" class="campaign-card-list"></div>
     </div>
   </div>
@@ -1435,11 +1435,11 @@
         </div>
         <div class="field-note">Paid in a different currency? Today's exchange rate is applied automatically.</div>
         <div id="m-manual-rate-row" style="display:none;margin-top:8px;">
-          <label style="font-size:11px;color:var(--red);margin-bottom:4px;display:block;">Live rate unavailable — enter exchange rate manually:</label>
+          <label style="font-size:var(--text-xs);color:var(--red);margin-bottom:4px;display:block;">Live rate unavailable — enter exchange rate manually:</label>
           <div style="display:flex;gap:8px;align-items:center;">
-            <span id="m-manual-rate-label" style="font-size:12px;color:var(--text3);white-space:nowrap;">1 USD =</span>
+            <span id="m-manual-rate-label" style="font-size:var(--text-sm);color:var(--text3);white-space:nowrap;">1 USD =</span>
             <input type="number" inputmode="decimal" id="m-manual-rate" step="0.0001" placeholder="e.g. 1.3700" style="width:120px;" oninput="calcManualFxRate()">
-            <span id="m-manual-rate-book-cur" style="font-size:12px;color:var(--text3);"></span>
+            <span id="m-manual-rate-book-cur" style="font-size:var(--text-sm);color:var(--text3);"></span>
           </div>
         </div>
       </div>
@@ -1648,12 +1648,12 @@
 
   <!-- ARTIST PAYMENT LINK (author mode only) -->
   <div id="artist-payment-link-card" style="display:none;margin-bottom:1.5rem;background:var(--ink);border-radius:var(--r3);border:var(--stroke-hair) solid rgba(255,255,255,.08);padding:1.25rem 1.5rem;">
-    <div style="font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--on-inverse-3);margin-bottom:8px;">Your payment link</div>
+    <div style="font-size:var(--text-3xs);font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--on-inverse-3);margin-bottom:8px;">Your payment link</div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-      <input type="text" id="artist-pay-link-input" placeholder="https://paypal.me/yourname or your Interac email" style="flex:1;min-width:220px;padding:9px 13px;font-size:13px;font-family:var(--font-ui);border:var(--stroke-hair) solid rgba(255,255,255,.12);border-radius:var(--r2);background:rgba(255,255,255,.07);color:var(--on-inverse);outline:none;">
+      <input type="text" id="artist-pay-link-input" placeholder="https://paypal.me/yourname or your Interac email" style="flex:1;min-width:220px;padding:9px 13px;font-size:var(--text-base);font-family:var(--font-ui);border:var(--stroke-hair) solid rgba(255,255,255,.12);border-radius:var(--r2);background:rgba(255,255,255,.07);color:var(--on-inverse);outline:none;">
       <button class="btn gold" onclick="saveArtistPaymentLink()">Save</button>
     </div>
-    <div style="font-size:11px;color:var(--on-inverse-2);margin-top:8px;">When the publisher approves a reimbursement, they'll use this link to pay you.</div>
+    <div style="font-size:var(--text-xs);color:var(--on-inverse-2);margin-top:8px;">When the publisher approves a reimbursement, they'll use this link to pay you.</div>
   </div>
 
   <div class="section-hed" style="margin-bottom:1.1rem;">Log an expense</div>
@@ -1698,7 +1698,7 @@
           <div class="dz-fname" id="exp-file-name"></div>
           <button class="dz-remove" type="button" title="Remove file" onclick="expFileClear(event)">×</button>
         </div>
-        <button class="btn gold" style="font-size:12px;display:none;align-self:flex-start;" onclick="scanProjectReceiptWithAI()" id="exp-ai-btn">✨ AI Scan</button>
+        <button class="btn gold" style="font-size:var(--text-sm);display:none;align-self:flex-start;" onclick="scanProjectReceiptWithAI()" id="exp-ai-btn">✨ AI Scan</button>
       </div>
     </div>
     <div class="card-actions">
@@ -1714,7 +1714,7 @@
     <span>Expense history</span>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
       <button type="button" class="ledger-toggle-btn is-alert" id="exp-missing-receipt-btn" style="display:none;" aria-pressed="false" onclick="toggleExpenseReceiptFilter()"><span class="con-group-toggle-icon" aria-hidden="true">⚠</span><span id="exp-missing-receipt-label">0 without a receipt</span></button>
-      <button class="btn gold outline sm" id="exp-bulk-reimburse-btn" style="display:none;font-size:11px;" onclick="requestBulkReimbursement()">💸 Request reimbursement for selected (<span id="exp-bulk-reimburse-count">0</span>)</button>
+      <button class="btn gold outline sm" id="exp-bulk-reimburse-btn" style="display:none;font-size:var(--text-xs);" onclick="requestBulkReimbursement()">💸 Request reimbursement for selected (<span id="exp-bulk-reimburse-count">0</span>)</button>
     </div>
   </div>
   <div class="tbl-wrap"><table class="tbl">
@@ -1733,7 +1733,7 @@
     </div>
     <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('tc-trip-detail')" aria-label="Close dialog" title="Close (Esc)">✕</button>
   </div>
-  <div id="tc-trip-detail-summary" style="font-size:13px;color:var(--text2);margin-bottom:14px;"></div>
+  <div id="tc-trip-detail-summary" style="font-size:var(--text-base);color:var(--text2);margin-bottom:14px;"></div>
   <div class="tbl-wrap" style="max-height:60vh;overflow:auto;">
     <table class="tbl">
       <thead><tr><th>Date</th><th>Description</th><th>Tax Category</th><th>Receipt</th><th class="r">Amount (Orig)</th><th class="r">Amount (CAD)</th><th></th></tr></thead>
@@ -1918,7 +1918,7 @@
     </div>
     <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('tc-edit-trip')" aria-label="Close dialog" title="Close (Esc)">✕</button>
   </div>
-  <div style="font-size:12px;color:var(--text3);margin-bottom:10px;" id="tc-edit-trip-context"></div>
+  <div style="font-size:var(--text-sm);color:var(--text3);margin-bottom:10px;" id="tc-edit-trip-context"></div>
   <div class="form-group">
     <label for="tc-edit-trip-input">Trip name (leave blank to remove)<span class="tip tip-mark" data-tip="Group expenses under a named trip (e.g. a book fair) so you can total travel, lodging and meals per event for your tax records.">?</span></label>
     <div class="tc-trip-picker-wrapper">
@@ -2033,7 +2033,7 @@
     </div>
     <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('tc-cat-detail')" aria-label="Close dialog" title="Close (Esc)">✕</button>
   </div>
-  <div id="tc-cat-detail-summary" style="font-size:13px;color:var(--text2);margin-bottom:14px;"></div>
+  <div id="tc-cat-detail-summary" style="font-size:var(--text-base);color:var(--text2);margin-bottom:14px;"></div>
   <div class="tbl-wrap" style="max-height:60vh;overflow:auto;">
     <table class="tbl">
       <thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Receipt/Ref</th><th class="r">Amount (Orig)</th><th class="r">Amount (CAD)</th><th>Move To</th><th class="r">Actions</th></tr></thead>
@@ -2130,8 +2130,8 @@
 <div class="overlay" id="m-tc-receipt-lightbox" style="display:none;"><div class="modal tc-lightbox-modal" role="dialog" aria-modal="true" style="max-width:960px;width:95vw;max-height:90vh;display:flex;flex-direction:column;">
   <div class="tc-lightbox-header" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding-bottom:12px;border-bottom:var(--stroke-hair) solid var(--border);margin-bottom:12px;flex-wrap:wrap;">
     <div>
-      <div class="tc-lightbox-title" id="tc-lightbox-title" style="font-family:var(--font-ui);font-size:18px;font-weight:700;color:var(--content-primary);">Receipt Preview</div>
-      <div class="tc-lightbox-meta" id="tc-lightbox-meta" style="font-size:12px;color:var(--content-secondary);margin-top:3px;"></div>
+      <div class="tc-lightbox-title" id="tc-lightbox-title" style="font-family:var(--font-ui);font-size:var(--text-lg);font-weight:700;color:var(--content-primary);">Receipt Preview</div>
+      <div class="tc-lightbox-meta" id="tc-lightbox-meta" style="font-size:var(--text-sm);color:var(--content-secondary);margin-top:3px;"></div>
     </div>
     <div class="tc-lightbox-actions" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
       <button class="btn sm" type="button" onclick="tcLightboxZoom(-0.25)" title="Zoom Out" aria-label="Zoom out">🔍−</button>
@@ -2155,7 +2155,7 @@
   <div class="tc-lightbox-footer" style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;flex-wrap:wrap;gap:8px;">
     <div class="tc-lightbox-nav" style="display:flex;align-items:center;gap:8px;">
       <button class="btn sm" type="button" id="tc-lightbox-prev-btn" onclick="tcLightboxNav(-1)">‹ Previous</button>
-      <span id="tc-lightbox-counter" style="font-size:12px;color:var(--text3);font-family:var(--font-mono);min-width:60px;text-align:center;"></span>
+      <span id="tc-lightbox-counter" style="font-size:var(--text-sm);color:var(--text3);font-family:var(--font-mono);min-width:60px;text-align:center;"></span>
       <button class="btn sm" type="button" id="tc-lightbox-next-btn" onclick="tcLightboxNav(1)">Next ›</button>
     </div>
     <button class="btn" type="button" onclick="attemptCloseModal('tc-receipt-lightbox')">Close</button>
@@ -2306,13 +2306,13 @@
     </div>
     <button type="button" class="btn tx modal-close-btn" onclick="closeReceiptCameraModal()" aria-label="Close dialog" title="Close (Esc)">✕</button>
   </div>
-  <div style="background:rgba(180,140,20,.08);border:var(--stroke-hair) solid rgba(180,140,20,.2);border-radius:var(--r2);padding:8px 12px;margin-bottom:12px;font-size:11px;color:var(--text2);line-height:1.5;">
+  <div style="background:rgba(180,140,20,.08);border:var(--stroke-hair) solid rgba(180,140,20,.2);border-radius:var(--r2);padding:8px 12px;margin-bottom:12px;font-size:var(--text-xs);color:var(--text2);line-height:1.5;">
     Hold the receipt flat and well-lit, then snap. The photo will be attached to this expense and saved to your local receipts folder when you log it.
   </div>
   <div id="receipt-cam-stage" style="position:relative;background:var(--ink);border-radius:var(--r2);overflow:hidden;min-height:280px;display:flex;align-items:center;justify-content:center;">
     <video id="receipt-cam-video" autoplay playsinline muted style="width:100%;max-height:60vh;display:block;"></video>
     <canvas id="receipt-cam-canvas" style="display:none;width:100%;max-height:60vh;"></canvas>
-    <div id="receipt-cam-status" style="position:absolute;color:var(--on-accent);font-size:12px;font-family:var(--font-mono);text-align:center;padding:14px;display:none;"></div>
+    <div id="receipt-cam-status" style="position:absolute;color:var(--on-accent);font-size:var(--text-sm);font-family:var(--font-mono);text-align:center;padding:14px;display:none;"></div>
     <div id="receipt-cam-reticle" class="receipt-cam-reticle" aria-hidden="true">
       <div class="reticle-corner top-left"></div>
       <div class="reticle-corner top-right"></div>
@@ -2322,7 +2322,7 @@
       <div class="reticle-guide">Align receipt within frame</div>
     </div>
   </div>
-  <div id="receipt-cam-preview-note" style="font-size:11px;color:var(--text3);margin-top:8px;display:none;">Preview — click Retake to try again, or Use Photo to attach.</div>
+  <div id="receipt-cam-preview-note" style="font-size:var(--text-xs);color:var(--text3);margin-top:8px;display:none;">Preview — click Retake to try again, or Use Photo to attach.</div>
   <div class="modal-footer" role="dialog" aria-modal="true">
     <button class="btn" onclick="closeReceiptCameraModal()">Cancel</button>
     <button class="btn gold outline" onclick="retakeReceiptPhoto()" id="receipt-cam-retake-btn" style="display:none;">↻ Retake</button>
@@ -2365,7 +2365,7 @@
     </div>
     <button type="button" class="btn tx modal-close-btn" onclick="closeExportReceiptsModal()" aria-label="Close dialog" title="Close (Esc)">✕</button>
   </div>
-  <div style="font-size:12px; color:var(--text3); margin-top:-6px; margin-bottom:14px; line-height:1.55;">
+  <div style="font-size:var(--text-sm); color:var(--text3); margin-top:-6px; margin-bottom:14px; line-height:1.55;">
     Downloads a zip with every receipt sorted into folders by year and category, named so they sort by date — plus a summary sheet listing every receipt against its expense. Works on any device; nothing needs to be connected.
   </div>
   <div class="form-group">
@@ -2388,7 +2388,7 @@
     </div>
     <button type="button" class="btn tx modal-close-btn" onclick="closeCloudReceiptsModal()" aria-label="Close dialog" title="Close (Esc)">✕</button>
   </div>
-  <div style="font-size:12px; color:var(--text3); margin-top:-6px; margin-bottom:14px;">
+  <div style="font-size:var(--text-sm); color:var(--text3); margin-top:-6px; margin-bottom:14px;">
     <span id="cloud-receipts-count"></span> — these are saved online and open in a new tab. Moving them files each one into your receipts folder by year and category, then clears the cloud copy.
   </div>
   <div id="cloud-receipts-body" class="cloud-receipts-list"></div>
@@ -2407,37 +2407,37 @@
     </div>
     <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('inventory-valuation-modal')" aria-label="Close dialog" title="Close (Esc)">✕</button>
   </div>
-  <div style="font-size:12px; color:var(--text3); margin-top:-6px; margin-bottom:16px;">
+  <div style="font-size:var(--text-sm); color:var(--text3); margin-top:-6px; margin-bottom:16px;">
     Balance Sheet asset audit across warehouse on-hand stock and partner store consignment inventory.
   </div>
 
   <!-- Summary KPI Cards -->
   <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px; margin-bottom:20px;">
     <div style="background:var(--cream2); border:var(--stroke-hair) solid var(--gold-line); border-radius:var(--r); padding:12px 16px;">
-      <div style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); letter-spacing:.05em;">Total Cost Basis (Asset)</div>
-      <div id="iv-stat-cost-cad" style="font-family:var(--font-mono); font-size:22px; font-weight:700; color:var(--gold); margin:4px 0;">$0.00 CAD</div>
-      <div style="font-size:10px; color:var(--text3);">Balance Sheet Asset Value</div>
+      <div style="font-size:var(--text-2xs); font-weight:700; text-transform:uppercase; color:var(--text3); letter-spacing:.05em;">Total Cost Basis (Asset)</div>
+      <div id="iv-stat-cost-cad" style="font-family:var(--font-mono); font-size:var(--text-xl); font-weight:700; color:var(--gold); margin:4px 0;">$0.00 CAD</div>
+      <div style="font-size:var(--text-2xs); color:var(--text3);">Balance Sheet Asset Value</div>
     </div>
     <div style="background:var(--cream2); border:var(--stroke-hair) solid var(--border); border-radius:var(--r); padding:12px 16px;">
-      <div style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); letter-spacing:.05em;">Total Retail MSRP Value</div>
-      <div id="iv-stat-retail-cad" style="font-family:var(--font-mono); font-size:22px; font-weight:700; color:var(--green); margin:4px 0;">$0.00 CAD</div>
-      <div style="font-size:10px; color:var(--text3);">Potential Unsold Retail Value</div>
+      <div style="font-size:var(--text-2xs); font-weight:700; text-transform:uppercase; color:var(--text3); letter-spacing:.05em;">Total Retail MSRP Value</div>
+      <div id="iv-stat-retail-cad" style="font-family:var(--font-mono); font-size:var(--text-xl); font-weight:700; color:var(--green); margin:4px 0;">$0.00 CAD</div>
+      <div style="font-size:var(--text-2xs); color:var(--text3);">Potential Unsold Retail Value</div>
     </div>
     <div style="background:var(--cream2); border:var(--stroke-hair) solid var(--border); border-radius:var(--r); padding:12px 16px;">
-      <div style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); letter-spacing:.05em;">Unsold Inventory Units</div>
-      <div id="iv-stat-unsold-units" style="font-family:var(--font-mono); font-size:22px; font-weight:700; color:var(--text1); margin:4px 0;">0 units</div>
-      <div id="iv-stat-unsold-sub" style="font-size:10px; color:var(--text3);">0 On-Hand · 0 Consigned</div>
+      <div style="font-size:var(--text-2xs); font-weight:700; text-transform:uppercase; color:var(--text3); letter-spacing:.05em;">Unsold Inventory Units</div>
+      <div id="iv-stat-unsold-units" style="font-family:var(--font-mono); font-size:var(--text-xl); font-weight:700; color:var(--text1); margin:4px 0;">0 units</div>
+      <div id="iv-stat-unsold-sub" style="font-size:var(--text-2xs); color:var(--text3);">0 On-Hand · 0 Consigned</div>
     </div>
     <div style="background:var(--cream2); border:var(--stroke-hair) solid var(--border); border-radius:var(--r); padding:12px 16px;">
-      <div style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); letter-spacing:.05em;">Weighted Profit Margin</div>
-      <div id="iv-stat-margin-pct" style="font-family:var(--font-mono); font-size:22px; font-weight:700; color:var(--gold); margin:4px 0;">0%</div>
-      <div id="iv-stat-margin-sub" style="font-size:10px; color:var(--text3);">$0.00 CAD Total Potential Profit</div>
+      <div style="font-size:var(--text-2xs); font-weight:700; text-transform:uppercase; color:var(--text3); letter-spacing:.05em;">Weighted Profit Margin</div>
+      <div id="iv-stat-margin-pct" style="font-family:var(--font-mono); font-size:var(--text-xl); font-weight:700; color:var(--gold); margin:4px 0;">0%</div>
+      <div id="iv-stat-margin-sub" style="font-size:var(--text-2xs); color:var(--text3);">$0.00 CAD Total Potential Profit</div>
     </div>
   </div>
 
   <!-- Book Asset Table -->
   <div class="tbl-wrap" style="max-height:55vh; overflow-y:auto; border:var(--stroke-hair) solid var(--border); border-radius:var(--r);">
-    <table class="tbl" style="width:100%; font-size:12px;">
+    <table class="tbl" style="width:100%; font-size:var(--text-sm);">
       <thead>
         <tr>
           <th>Book Title &amp; ISBN</th>
@@ -2457,7 +2457,7 @@
 
     <div style="display:flex; gap:8px; align-items:center;">
       <button type="button" class="btn tag" onclick="openInventoryWriteOffModal()" style="color:var(--red); border-color:var(--border);" title="Deduct damaged, lost, or promotional comp stock for tax write-offs">📉 Write-Off Stock</button>
-      <div style="font-size:11px; color:var(--text3);">* FX conversion rates applied automatically to non-CAD currencies.</div>
+      <div style="font-size:var(--text-xs); color:var(--text3);">* FX conversion rates applied automatically to non-CAD currencies.</div>
     </div>
     <div style="display:flex; gap:8px;">
       <button type="button" class="btn" onclick="attemptCloseModal('inventory-valuation-modal')">Close</button>
@@ -2476,7 +2476,7 @@
     </div>
     <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('inventory-writeoff-modal')" aria-label="Close dialog" title="Close (Esc)">✕</button>
   </div>
-  <div style="font-size:12px; color:var(--text3); margin-top:-6px; margin-bottom:16px;">
+  <div style="font-size:var(--text-sm); color:var(--text3); margin-top:-6px; margin-bottom:16px;">
     Deduct damaged, lost, or promotional copies from ending inventory assets to record a deductible tax write-off.
   </div>
 
@@ -2503,7 +2503,7 @@
       </div>
     </div>
 
-    <div style="background:var(--cream2); border:var(--stroke-hair) solid var(--gold-line); border-radius:var(--r); padding:10px 12px; margin-bottom:14px; font-size:12px;">
+    <div style="background:var(--cream2); border:var(--stroke-hair) solid var(--gold-line); border-radius:var(--r); padding:10px 12px; margin-bottom:14px; font-size:var(--text-sm);">
       <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
         <span style="color:var(--text3);">Unit Cost Basis:</span>
         <strong id="wo-unit-cost" style="font-family:var(--font-mono);">$0.00 CAD</strong>
@@ -2512,14 +2512,14 @@
         <span style="color:var(--text3);">Total Tax Write-Off Deduction:</span>
         <strong id="wo-total-deduction" style="font-family:var(--font-mono); color:var(--red); font-size:14px;">$0.00 CAD</strong>
       </div>
-      <div style="font-size:10px; color:var(--text3); line-height:1.4;">
+      <div style="font-size:var(--text-2xs); color:var(--text3); line-height:1.4;">
         * Reductions are logged directly in the Tax Centre as a non-cash inventory expense deduction.
       </div>
     </div>
 
     <div class="form-group" style="margin-bottom:16px;">
-      <label style="font-size:12px; font-weight:600;">Audit Notes / Details (Optional)</label>
-      <input type="text" id="wo-notes" placeholder="e.g. 3 copies water damaged during spring warehouse transit" style="width:100%; padding:8px 10px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--cream2); color:var(--text1); font-size:13px;">
+      <label style="font-size:var(--text-sm); font-weight:600;">Audit Notes / Details (Optional)</label>
+      <input type="text" id="wo-notes" placeholder="e.g. 3 copies water damaged during spring warehouse transit" style="width:100%; padding:8px 10px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--cream2); color:var(--text1); font-size:var(--text-base);">
     </div>
 
     <div class="modal-footer" style="justify-content:flex-end;">
@@ -2682,9 +2682,9 @@
       </div>
     </div>
     <div style="margin-top:16px;">
-      <button class="btn gold" style="width:100%;height:48px;font-size:15px;font-weight:600;letter-spacing:.02em;" onclick="submitTaxExpense()" id="tc-submit-exp-btn">Log Business Expense</button>
+      <button class="btn gold" style="width:100%;height:48px;font-size:var(--text-md);font-weight:600;letter-spacing:.02em;" onclick="submitTaxExpense()" id="tc-submit-exp-btn">Log Business Expense</button>
       <div style="margin-top:8px;text-align:center;display:flex;gap:6px;justify-content:center;flex-wrap:wrap;">
-        <button class="btn tx" style="font-size:12px;padding:4px 12px;color:var(--text3);" onclick="openBatchExpenseModal('business')" title="Drop in a whole pile of receipts, scan them together and log them in one pass">🧾 Log several at once</button>
+        <button class="btn tx" style="font-size:var(--text-sm);padding:4px 12px;color:var(--text3);" onclick="openBatchExpenseModal('business')" title="Drop in a whole pile of receipts, scan them together and log them in one pass">🧾 Log several at once</button>
       </div>
     </div>
   </div>
@@ -2857,7 +2857,7 @@
         <div class="row-between" style="margin-bottom:1rem;flex-wrap:wrap;gap:10px;">
           <div>
             <div class="section-hed">Visual Receipt Vault</div>
-            <div style="font-size:11px;color:var(--text3);">Scan and audit all proof-of-payment receipts, invoices, and cloud documents across your books.</div>
+            <div style="font-size:var(--text-xs);color:var(--text3);">Scan and audit all proof-of-payment receipts, invoices, and cloud documents across your books.</div>
           </div>
           <div class="tc-search-bar" style="margin-bottom:0;">
             <div class="tc-search-wrapper">
@@ -3240,22 +3240,22 @@
       <span id="bc-status-text">Disconnected</span>
     </div>
   </div>
-  <div style="font-size:12px;color:var(--text3);margin-bottom:1.5rem;">Configure your Big Cartel merchant API credentials, test the connection, and view your store products and orders in real-time.</div>
+  <div style="font-size:var(--text-sm);color:var(--text3);margin-bottom:1.5rem;">Configure your Big Cartel merchant API credentials, test the connection, and view your store products and orders in real-time.</div>
 
   <!-- API Connection Card -->
   <div class="card" style="margin-bottom:1.5rem; padding: 1.25rem 1.5rem;">
     <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:12px; align-items:flex-end;">
       <div class="form-group" style="margin:0;">
         <label for="bc-subdomain">Store Subdomain</label>
-        <input type="text" id="bc-subdomain" placeholder="my-store-name" style="padding:6px 12px; font-size:12px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r2); background:var(--cream); outline:none;">
+        <input type="text" id="bc-subdomain" placeholder="my-store-name" style="padding:6px 12px; font-size:var(--text-sm); border:var(--stroke-hair) solid var(--border); border-radius:var(--r2); background:var(--cream); outline:none;">
       </div>
       <div class="form-group" style="margin:0;">
         <label for="bc-username">API Username / Login</label>
-        <input type="text" id="bc-username" placeholder="Subdomain or Username" style="padding:6px 12px; font-size:12px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r2); background:var(--cream); outline:none;">
+        <input type="text" id="bc-username" placeholder="Subdomain or Username" style="padding:6px 12px; font-size:var(--text-sm); border:var(--stroke-hair) solid var(--border); border-radius:var(--r2); background:var(--cream); outline:none;">
       </div>
       <div class="form-group" style="margin:0;">
         <label for="bc-password">API Password / Token</label>
-        <input type="password" id="bc-password" placeholder="••••••••••••••••" style="padding:6px 12px; font-size:12px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r2); background:var(--cream); outline:none;">
+        <input type="password" id="bc-password" placeholder="••••••••••••••••" style="padding:6px 12px; font-size:var(--text-sm); border:var(--stroke-hair) solid var(--border); border-radius:var(--r2); background:var(--cream); outline:none;">
       </div>
       <div style="display:flex; gap:8px;">
         <button id="bc-test-btn" class="btn sm" onclick="testBigCartelConnection()" style="flex:1;">Test Connection</button>
@@ -3266,7 +3266,7 @@
 
   <!-- Store Details (initially hidden) -->
   <div id="bc-store-card" class="card" style="display:none; margin-bottom:1.5rem; border-left:var(--stroke) solid var(--gold-line);">
-    <div style="font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--gold-text); margin-bottom:12px; display:flex; align-items:center; gap:6px;">
+    <div style="font-size:var(--text-xs); font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--gold-text); margin-bottom:12px; display:flex; align-items:center; gap:6px;">
       <span>🔌</span> Connected Store Info
     </div>
     <div class="bc-details-grid">
@@ -3287,8 +3287,8 @@
         <div id="bc-store-email" class="bc-detail-val">—</div>
       </div>
     </div>
-    <div style="font-size:11px; color:var(--text3); display:flex; align-items:center; gap:4px;">
-      Store Link: <a id="bc-store-url" href="#" target="_blank" style="color:var(--gold-text); font-weight:600; text-decoration:none; display:inline-flex; align-items:center; gap:3px;">— <span style="font-size:9px;">↗</span></a>
+    <div style="font-size:var(--text-xs); color:var(--text3); display:flex; align-items:center; gap:4px;">
+      Store Link: <a id="bc-store-url" href="#" target="_blank" style="color:var(--gold-text); font-weight:600; text-decoration:none; display:inline-flex; align-items:center; gap:3px;">— <span style="font-size:var(--text-3xs);">↗</span></a>
     </div>
   </div>
 
@@ -3314,7 +3314,7 @@
       <div class="bc-gap-list" id="bc-gap-list"></div>
       <div id="bc-gap-repairs-wrap" hidden>
         <div class="section-hed" style="margin:1.25rem 0 .5rem;">🔧 Orders recorded under a placeholder number</div>
-        <div style="font-size:12px;color:var(--text3);margin-bottom:.75rem;">These sales were added from a shipping label before the storefront could be consulted, so they carry an invented order number. Giving each one its real number keeps a single record per sale.</div>
+        <div style="font-size:var(--text-sm);color:var(--text3);margin-bottom:.75rem;">These sales were added from a shipping label before the storefront could be consulted, so they carry an invented order number. Giving each one its real number keeps a single record per sale.</div>
         <div class="bc-gap-list" id="bc-gap-repairs"></div>
       </div>
     </div>
@@ -3327,7 +3327,7 @@
     <!-- PRODUCTS TAB -->
     <div id="bc-sec-products" style="display:block;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
-        <span style="font-size:13px; font-weight:600; color:var(--text2);">Catalog Products on Big Cartel</span>
+        <span style="font-size:var(--text-base); font-weight:600; color:var(--text2);">Catalog Products on Big Cartel</span>
         <button class="btn sm" onclick="loadBigCartelData()">Refresh Products</button>
       </div>
       <div id="bc-products-grid" class="bc-grid">
@@ -3338,7 +3338,7 @@
     <!-- ORDERS TAB -->
     <div id="bc-sec-orders" style="display:none;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
-        <span style="font-size:13px; font-weight:600; color:var(--text2);">Recent Orders</span>
+        <span style="font-size:var(--text-base); font-weight:600; color:var(--text2);">Recent Orders</span>
         <button class="btn sm" onclick="loadBigCartelData()">Refresh Orders</button>
       </div>
       <div class="tbl-wrap">
@@ -3368,21 +3368,21 @@
 <!-- SHIPPING RATES CALCULATOR -->
 <div class="tab-panel" id="tab-shipping" style="display:none;">
   <div class="section-hed" style="margin-bottom:0.5rem;">📦 Shipping Specs & Rate Predictor</div>
-  <div style="font-size:12px;color:var(--text3);margin-bottom:1.5rem;">Store package specs, compare live Shippo rates, highlight Canada Post options, and predict what to charge customers for website shipping.</div>
+  <div style="font-size:var(--text-sm);color:var(--text3);margin-bottom:1.5rem;">Store package specs, compare live Shippo rates, highlight Canada Post options, and predict what to charge customers for website shipping.</div>
 
   <!-- API Key Status Row -->
   <div class="card" style="margin-bottom:1.5rem; padding: 1rem 1.4rem;">
     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
       <div style="display:flex; align-items:center; gap:8px;">
         <div id="ship-key-indicator" style="width:10px; height:10px; border-radius:50%; background:var(--red);"></div>
-        <span style="font-size:13px; font-weight:600; color:var(--text2);" id="ship-key-status-text">Shippo API Key Required</span>
+        <span style="font-size:var(--text-base); font-weight:600; color:var(--text2);" id="ship-key-status-text">Shippo API Key Required</span>
       </div>
       <div id="ship-key-setup-group" style="display:flex; gap:8px; align-items:center;">
-        <input type="password" id="ship-api-key-input" placeholder="shippo_live_..." style="padding:6px 12px; font-size:12px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r2); background:var(--cream); width:280px; font-family:var(--font-mono); outline:none;">
+        <input type="password" id="ship-api-key-input" placeholder="shippo_live_..." style="padding:6px 12px; font-size:var(--text-sm); border:var(--stroke-hair) solid var(--border); border-radius:var(--r2); background:var(--cream); width:280px; font-family:var(--font-mono); outline:none;">
         <button class="btn gold sm" onclick="saveShippoApiKey()">Save Key</button>
       </div>
       <div id="ship-key-active-group" style="display:none; gap:8px; align-items:center;">
-        <span style="font-size:11px; font-family:var(--font-mono); color:var(--text3);" id="ship-key-masked">••••••••••••••••</span>
+        <span style="font-size:var(--text-xs); font-family:var(--font-mono); color:var(--text3);" id="ship-key-masked">••••••••••••••••</span>
         <button class="btn sm" onclick="editShippoApiKey()">Change Key</button>
       </div>
     </div>
@@ -3393,27 +3393,27 @@
     <div class="shipping-form-container" style="overflow:visible;">
       <!-- Prefill presets -->
       <div class="card ship-prefills-card" style="margin-bottom:1.25rem; position:relative; z-index:10; overflow:visible;">
-        <div style="font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:8px;">Quick Pre-fills</div>
+        <div style="font-size:var(--text-xs); font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:8px;">Quick Pre-fills</div>
         <div class="g2">
           <div class="form-group" style="position:relative;">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
               <label style="margin-bottom:0;">Load Destination From</label>
-              <span id="ship-dest-count-badge" style="font-size:10px;color:var(--text3);font-weight:500;"></span>
+              <span id="ship-dest-count-badge" style="font-size:var(--text-2xs);color:var(--text3);font-weight:500;"></span>
             </div>
             <div id="custom-ship-dest-wrapper" class="custom-dest-wrapper">
               <div id="custom-ship-dest-trigger" class="custom-dest-trigger" onclick="toggleShippoDestDropdown(event)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleShippoDestDropdown(event);}" tabindex="0" role="button" aria-haspopup="listbox" aria-expanded="false" aria-label="Search or select a destination">
                 <div style="display:flex;align-items:center;gap:8px;overflow:hidden;width:100%;">
                   <span id="custom-ship-dest-icon" style="font-size:14px;color:var(--text3);flex-shrink:0;" aria-hidden="true">🔍</span>
-                  <span id="custom-ship-dest-label" style="font-size:13px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;">— Search or select an address —</span>
+                  <span id="custom-ship-dest-label" style="font-size:var(--text-base);color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;">— Search or select an address —</span>
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-                  <span id="custom-ship-dest-clear" style="display:none;font-size:12px;color:var(--text3);padding:2px 5px;cursor:pointer;border-radius:var(--r);" onclick="clearShippoDestSelection(event)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();clearShippoDestSelection(event);}" tabindex="0" role="button" aria-label="Clear selected destination">✕</span>
-                  <span id="custom-ship-dest-arrow" style="font-size:10px;color:var(--text3);transition:transform 0.2s;" aria-hidden="true">▼</span>
+                  <span id="custom-ship-dest-clear" style="display:none;font-size:var(--text-sm);color:var(--text3);padding:2px 5px;cursor:pointer;border-radius:var(--r);" onclick="clearShippoDestSelection(event)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();clearShippoDestSelection(event);}" tabindex="0" role="button" aria-label="Clear selected destination">✕</span>
+                  <span id="custom-ship-dest-arrow" style="font-size:var(--text-2xs);color:var(--text3);transition:transform 0.2s;" aria-hidden="true">▼</span>
                 </div>
               </div>
               <div id="custom-ship-dest-menu" class="custom-dest-menu" style="display:none;" onclick="event.stopPropagation()">
                 <div class="custom-dest-search-bar">
-                  <span style="font-size:13px;">🔍</span>
+                  <span style="font-size:var(--text-base);">🔍</span>
                   <input type="text" id="custom-ship-dest-search" placeholder="Type to filter by name, order #, city..." oninput="filterShippoDestMenu()">
                 </div>
                 <div class="custom-dest-chips" id="custom-ship-dest-chips">
@@ -3436,7 +3436,7 @@
           <div class="form-group">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
               <label style="margin-bottom:0;">Load Package From</label>
-              <button type="button" class="btn sm tag" id="ship-save-preset-quick-btn" onclick="openSaveBookPresetModal()" style="font-size:10px; padding:2px 8px; height:24px; min-height:24px;" title="Save current specifications to a book preset">💾 Save to Preset</button>
+              <button type="button" class="btn sm tag" id="ship-save-preset-quick-btn" onclick="openSaveBookPresetModal()" style="font-size:var(--text-2xs); padding:2px 8px; height:24px; min-height:24px;" title="Save current specifications to a book preset">💾 Save to Preset</button>
             </div>
             <select id="ship-preset-book" onchange="onShippoBookPresetChange()">
               <option value="">— Select book preset —</option>
@@ -3456,15 +3456,15 @@
       <div class="g2" style="align-items: start; margin-bottom: 1.25rem;">
         <!-- Origin Card -->
         <div class="card" style="margin-bottom:0; height:100%;">
-          <div style="font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;">
+          <div style="font-size:var(--text-sm); font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;">
             <span>Origin (From)</span>
-            <label style="display:inline-flex; align-items:center; gap:4px; font-size:10px; cursor:pointer; text-transform:none; letter-spacing:0; margin-bottom:0; color:var(--text3);">
+            <label style="display:inline-flex; align-items:center; gap:4px; font-size:var(--text-2xs); cursor:pointer; text-transform:none; letter-spacing:0; margin-bottom:0; color:var(--text3);">
               <input type="checkbox" id="ship-save-origin" checked style="width:auto; margin:0;"> Save default
             </label>
           </div>
           <div class="form-group" style="margin-bottom:8px;"><label>Sender Name</label><input type="text" id="sf-name" placeholder="Lyricalmyrical Books"></div>
           <div class="form-group" style="margin-bottom:8px;"><label>Company</label><input type="text" id="sf-company" placeholder="Optional"></div>
-          <div class="form-group" style="margin-bottom:8px;"><label>Phone <span style="font-size:10px;color:var(--text3);text-transform:none;letter-spacing:0;">required for international</span></label><input type="tel" id="sf-phone" placeholder="+1 416 555 0123"></div>
+          <div class="form-group" style="margin-bottom:8px;"><label>Phone <span style="font-size:var(--text-2xs);color:var(--text3);text-transform:none;letter-spacing:0;">required for international</span></label><input type="tel" id="sf-phone" placeholder="+1 416 555 0123"></div>
           <div class="form-group" style="margin-bottom:8px;"><label>Street Address</label><input type="text" id="sf-street1" placeholder="123 Bookish Way"></div>
           <div class="form-group" style="margin-bottom:8px;"><label>Apt/Suite</label><input type="text" id="sf-street2" placeholder="Optional"></div>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
@@ -3489,12 +3489,12 @@
         <!-- Destination Card -->
         <div class="card" style="margin-bottom:0; height:100%;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-            <div style="font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3);">Destination (To)</div>
-            <button class="btn sm tag" id="ship-verify-btn" onclick="verifyDestinationAddress()" style="margin:0; padding:4px 10px; font-size:10px; font-weight:600;">🔍 Verify Address</button>
+            <div style="font-size:var(--text-sm); font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3);">Destination (To)</div>
+            <button class="btn sm tag" id="ship-verify-btn" onclick="verifyDestinationAddress()" style="margin:0; padding:4px 10px; font-size:var(--text-2xs); font-weight:600;">🔍 Verify Address</button>
           </div>
           <div class="form-group" style="margin-bottom:8px;"><label>Recipient Name</label><input type="text" id="st-name" placeholder="John Doe"></div>
           <div class="form-group" style="margin-bottom:8px;"><label>Company</label><input type="text" id="st-company" placeholder="Optional"></div>
-          <div class="form-group" style="margin-bottom:8px;"><label>Phone <span style="font-size:10px;color:var(--text3);text-transform:none;letter-spacing:0;">required for international</span></label><input type="tel" id="st-phone" placeholder="+1 604 555 0123"></div>
+          <div class="form-group" style="margin-bottom:8px;"><label>Phone <span style="font-size:var(--text-2xs);color:var(--text3);text-transform:none;letter-spacing:0;">required for international</span></label><input type="tel" id="st-phone" placeholder="+1 604 555 0123"></div>
           <div class="form-group" style="margin-bottom:8px;"><label>Street Address</label><input type="text" id="st-street1" placeholder="456 Reading Ave"></div>
           <div class="form-group" style="margin-bottom:8px;"><label>Apt/Suite</label><input type="text" id="st-street2" placeholder="Optional"></div>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
@@ -3522,12 +3522,12 @@
 
       <!-- Parcel Specs Card -->
       <div class="card" style="margin-top:1.25rem;">
-        <div style="font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+        <div style="font-size:var(--text-sm); font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
           <div style="display:flex; align-items:center; gap:8px;">
             <span>Parcel Specifications</span>
-            <button type="button" class="btn sm outline" onclick="openSaveBookPresetModal()" style="font-size:11px; padding:3px 10px; height:28px; min-height:28px; display:inline-flex; align-items:center; gap:4px;" title="Save these dimensions, weight, and customs info into a book preset">💾 Save to Book Preset</button>
+            <button type="button" class="btn sm outline" onclick="openSaveBookPresetModal()" style="font-size:var(--text-xs); padding:3px 10px; height:28px; min-height:28px; display:inline-flex; align-items:center; gap:4px;" title="Save these dimensions, weight, and customs info into a book preset">💾 Save to Book Preset</button>
           </div>
-          <span style="font-size:10px; font-weight:400; text-transform:none; color:var(--text3);">Auto-scales height &amp; weight with quantity</span>
+          <span style="font-size:var(--text-2xs); font-weight:400; text-transform:none; color:var(--text3);">Auto-scales height &amp; weight with quantity</span>
         </div>
         <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:8px;">
           <div class="form-group"><label>Length</label><input type="number" id="sp-length" value="10" step="0.1" oninput="updateShippoBaseSpecsFromInputs()"></div>
@@ -3584,9 +3584,9 @@
             </select>
           </div>
         </div>
-        <div id="sp-customs-total" style="font-size:11px;color:var(--text2);font-weight:600;line-height:1.55;margin:-4px 0 6px;"></div>
-        <div id="sp-incoterm-hint" style="font-size:11px;color:var(--text3);line-height:1.55;margin:0 0 12px;"></div>
-        <div style="font-size:11px;color:var(--text3);line-height:1.55;margin:-4px 0 12px;">
+        <div id="sp-customs-total" style="font-size:var(--text-xs);color:var(--text2);font-weight:600;line-height:1.55;margin:-4px 0 6px;"></div>
+        <div id="sp-incoterm-hint" style="font-size:var(--text-xs);color:var(--text3);line-height:1.55;margin:0 0 12px;"></div>
+        <div style="font-size:var(--text-xs);color:var(--text3);line-height:1.55;margin:-4px 0 12px;">
           International Shippo rates include this customs declaration automatically. The declared value is <strong>per copy</strong> and is multiplied by the quantity above. If Canada Post still does not appear, connect or enable your Canada Post carrier account in Shippo.
         </div>
 
@@ -3690,19 +3690,19 @@
         <div id="ship-rate-readiness" class="ship-readiness" role="status" aria-live="polite"></div>
 
         <div class="ship-actions-container" style="margin-top:1rem;display:flex;flex-direction:column;gap:10px;">
-          <button class="btn gold" id="ship-calc-main-btn" style="width:100%;height:46px;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:var(--elev-2);" onclick="calculateShippoRates()">
+          <button class="btn gold" id="ship-calc-main-btn" style="width:100%;height:46px;font-size:var(--text-base);font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:var(--elev-2);" onclick="calculateShippoRates()">
             <span>⚡</span>
             <span>Calculate Shipping Rates &amp; Prediction</span>
           </button>
 
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <button class="btn outline" type="button" onclick="calculateCanadaPostRatesHandler()" style="height:42px;font-size:12px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px;background:rgba(216,42,42,0.06);border-color:rgba(216,42,42,0.3);color:var(--text);" title="Calculate rates and buy official postage labels directly via Canada Post API">
+            <button class="btn outline" type="button" onclick="calculateCanadaPostRatesHandler()" style="height:42px;font-size:var(--text-sm);font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px;background:rgba(216,42,42,0.06);border-color:rgba(216,42,42,0.3);color:var(--text);" title="Calculate rates and buy official postage labels directly via Canada Post API">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;">
                 <path d="M12 2L14 8L19 7L16 12L21 15L15 17L16 22L12 18L8 22L9 17L3 15L8 12L5 7L10 8L12 2Z" fill="#D82A2A"/>
               </svg>
               <span>Canada Post Direct</span>
             </button>
-            <button class="btn tag" type="button" onclick="calculateZonosDutiesHandler()" style="height:42px;font-size:12px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px;" title="Calculate destination customs duties and import taxes with Zonos">
+            <button class="btn tag" type="button" onclick="calculateZonosDutiesHandler()" style="height:42px;font-size:var(--text-sm);font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px;" title="Calculate destination customs duties and import taxes with Zonos">
               <span>🌐</span>
               <span>Landed Cost (Zonos)</span>
             </button>
@@ -3716,9 +3716,9 @@
       <div class="card" style="min-height:300px; height:100%; display:flex; flex-direction:column;">
         <div id="canadapost-rates-card" class="canadapost-rates-card card" style="display:none; margin-bottom:12px; background:var(--surface-card); border:var(--stroke-hair) solid var(--border); border-radius:var(--r2); padding:12px 14px;"></div>
         <div id="zonos-duty-card" class="zonos-duty-card" style="display:none; margin-bottom:12px;"></div>
-        <div style="font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:12px;">Customer Charge Prediction</div>
+        <div style="font-size:var(--text-sm); font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:12px;">Customer Charge Prediction</div>
         <div id="ship-prediction-card" class="shipping-prediction-card" style="display:none;"></div>
-        <div style="font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:12px;">Carrier Rates Comparison</div>
+        <div style="font-size:var(--text-sm); font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:12px;">Carrier Rates Comparison</div>
         <div id="ship-results-placeholder" style="flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:2rem; color:var(--text3);">
           <div style="font-size:32px; margin-bottom:12px;">📦</div>
           <div>Enter origin, destination, and package specs, then click <strong>Calculate Shipping Rates</strong>.</div>
@@ -3763,7 +3763,7 @@
     <div class="row-between" style="margin-bottom:1.25rem;align-items:flex-start;gap:12px;">
       <div>
         <div class="section-hed" style="font-size:24px;">Point of Sale</div>
-        <div style="font-size:12px;color:var(--text3);">Fast checkout for in-person and online sales with controlled currency handling and itemized checkout review.</div>
+        <div style="font-size:var(--text-sm);color:var(--text3);">Fast checkout for in-person and online sales with controlled currency handling and itemized checkout review.</div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
         <button class="btn gold outline" onclick="openFairKitModal()" style="white-space:nowrap;display:flex;align-items:center;gap:6px;">
@@ -4049,9 +4049,9 @@
     <div class="card" style="margin-bottom: 1.5rem; border-left:var(--stroke) solid var(--status-positive); padding: 12px 18px;">
       <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
         <div style="display:flex; align-items:center; gap:8px;">
-          <span style="font-size:18px; color:var(--status-positive);">●</span>
-          <span style="font-weight:600; font-size:13px; color:var(--text);">Live Traffic Dashboard Connected</span>
-          <span id="webanalytics-domain-label" style="font-size:11px; color:var(--text2); font-family:var(--font-mono); background:rgba(0,0,0,0.05); padding:2px 6px; border-radius:var(--r); margin-left:8px;">lyricalmyricalbooks.com</span>
+          <span style="font-size:var(--text-lg); color:var(--status-positive);">●</span>
+          <span style="font-weight:600; font-size:var(--text-base); color:var(--text);">Live Traffic Dashboard Connected</span>
+          <span id="webanalytics-domain-label" style="font-size:var(--text-xs); color:var(--text2); font-family:var(--font-mono); background:rgba(0,0,0,0.05); padding:2px 6px; border-radius:var(--r); margin-left:8px;">lyricalmyricalbooks.com</span>
         </div>
         <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
           <a id="webanalytics-external-link" href="#" target="_blank" class="btn sm" style="text-decoration:none;">↗ Open Dashboard</a>
@@ -4064,12 +4064,12 @@
     <!-- Real-time API KPI Summary Bar -->
     <div id="webanalytics-kpi-bar" style="margin-bottom: 1.5rem; display: none;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 8px;">
-        <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text2); display: flex; align-items: center; gap: 6px;">
+        <div style="font-size:var(--text-sm); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text2); display: flex; align-items: center; gap: 6px;">
           <span>⚡ Real-Time Overview</span>
-          <span style="font-size: 10px; font-weight: 500; background: var(--bg2, var(--cream2)); border:var(--stroke-hair) solid var(--border); padding: 2px 8px; border-radius:var(--r); color: var(--text3);" id="webanalytics-timeframe-tag">Last 24 Hours</span>
+          <span style="font-size:var(--text-2xs); font-weight: 500; background: var(--bg2, var(--cream2)); border:var(--stroke-hair) solid var(--border); padding: 2px 8px; border-radius:var(--r); color: var(--text3);" id="webanalytics-timeframe-tag">Last 24 Hours</span>
         </div>
         <div style="display: flex; align-items: center; gap: 10px;">
-          <span id="webanalytics-api-status" style="font-size: 11px; color: var(--text3);"></span>
+          <span id="webanalytics-api-status" style="font-size:var(--text-xs); color: var(--text3);"></span>
           <button class="btn sm" onclick="refreshUmamiStats()" title="Refresh API metrics">↻ Refresh Stats</button>
         </div>
       </div>
@@ -4158,12 +4158,12 @@
       <div style="text-align:center; margin-bottom:2rem;">
         <div style="font-size:48px; margin-bottom:1rem;">📈</div>
         <h2 style="font-family:var(--font-display); font-size:24px; color:var(--text); margin:0 0 8px;">Monitor Website Traffic in Real-Time</h2>
-        <p style="font-size:13px; color:var(--text3); line-height:1.6; max-width:480px; margin:0 auto;">Connect an external analytics dashboard (like Umami, Plausible, or any shared iframe report) to track visits, referrer paths, and checkout conversions directly from this panel.</p>
+        <p style="font-size:var(--text-base); color:var(--text3); line-height:1.6; max-width:480px; margin:0 auto;">Connect an external analytics dashboard (like Umami, Plausible, or any shared iframe report) to track visits, referrer paths, and checkout conversions directly from this panel.</p>
       </div>
 
       <div style="background:rgba(232, 64, 42,.04); border:var(--stroke-hair) solid rgba(232, 64, 42,.15); padding:1.5rem; border-radius:var(--r2); margin-bottom:2rem;">
         <div class="form-group" style="margin-bottom:1.25rem;">
-          <label for="webanalytics-url-input" style="font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:var(--text2); display:block; margin-bottom:6px;">Shareable Dashboard URL</label>
+          <label for="webanalytics-url-input" style="font-size:var(--text-3xs); font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:var(--text2); display:block; margin-bottom:6px;">Shareable Dashboard URL</label>
           <input type="url" id="webanalytics-url-input" placeholder="https://cloud.umami.is/share/... ">
         </div>
         <button class="btn gold" onclick="saveAnalyticsUrl()" style="width:100%; font-weight:700; height:44px; display:flex; align-items:center; justify-content:center; gap:8px;">
@@ -4172,8 +4172,8 @@
       </div>
 
       <div style="border-top:var(--stroke-hair) dashed var(--border); padding-top:1.5rem;">
-        <div style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:12px; letter-spacing:0.05em;">How to get your share URL:</div>
-        <ul style="font-size:12px; color:var(--text3); line-height:1.8; margin:0; padding-left:1.25rem; display:flex; flex-direction:column; gap:8px;">
+        <div style="font-size:var(--text-xs); font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:12px; letter-spacing:0.05em;">How to get your share URL:</div>
+        <ul style="font-size:var(--text-sm); color:var(--text3); line-height:1.8; margin:0; padding-left:1.25rem; display:flex; flex-direction:column; gap:8px;">
           <li><b>Umami:</b> Go to your Umami Dashboard → Settings → Websites → Edit → Share. Enable the share link and copy the generated URL.</li>
           <li><b>Plausible:</b> Open Site Settings → Visibility → Shareable Links. Create a link and copy the URL.</li>
           <li>Ensure the URL starts with <code>https://</code> so it can load securely.</li>
@@ -4222,7 +4222,7 @@
           <p class="section-subcopy">Manage test books in an isolated sandbox environment. Test book activity is strictly blocked from syncing to Google Sheets and excluded from financial ledgers.</p>
         </div>
         <div class="sec-head-badges">
-          <span style="font-size:10px;font-family:sans-serif;background:rgba(109,40,217,0.1);color:var(--violet-deep);padding:2px 8px;border-radius:var(--r);font-weight:600;letter-spacing:0.5px;border:var(--stroke-hair) solid rgba(109,40,217,0.25);">ISOLATED TEST SANDBOX</span>
+          <span style="font-size:var(--text-2xs);font-family:sans-serif;background:rgba(109,40,217,0.1);color:var(--violet-deep);padding:2px 8px;border-radius:var(--r);font-weight:600;letter-spacing:0.5px;border:var(--stroke-hair) solid rgba(109,40,217,0.25);">ISOLATED TEST SANDBOX</span>
         </div>
       </div>
       <div id="test-catalog-list" style="display:flex;flex-direction:column;gap:12px;"></div>
@@ -4238,7 +4238,7 @@
           <span style="font-size:19px;line-height:1;">🎚️</span>
           <div style="font-family:var(--font-ui);font-size:17px;">Dynamic Profit Sharing</div>
         </div>
-        <div style="font-size:12px;color:var(--text3);line-height:1.6;max-width:760px;">Define payout tiers based on <b>production cost recovery</b>. Artists earn a lower % while costs are being recovered, and a higher % once break-even is reached. Tiers trigger at cumulative gross revenue thresholds — not units sold.</div>
+        <div style="font-size:var(--text-sm);color:var(--text3);line-height:1.6;max-width:760px;">Define payout tiers based on <b>production cost recovery</b>. Artists earn a lower % while costs are being recovered, and a higher % once break-even is reached. Tiers trigger at cumulative gross revenue thresholds — not units sold.</div>
       </div>
 
       <!-- Book selector (full-width, labelled) -->
@@ -4267,18 +4267,18 @@
   <div id="settings-sec-sync" class="settings-section" style="display:none;">
     <div class="sheets-setup" id="sheets-setup-card">
       <div style="margin-bottom:1.5rem;">
-        <div style="font-family:var(--font-ui);font-size:18px;margin-bottom:8px;">Connect Google Sheets</div>
-        <div style="font-size:13px;color:var(--text2);line-height:1.7;">Uses a Google Apps Script webhook — paste your Web App URL once and every order syncs automatically. One connection covers all books.</div>
+        <div style="font-family:var(--font-ui);font-size:var(--text-lg);margin-bottom:8px;">Connect Google Sheets</div>
+        <div style="font-size:var(--text-base);color:var(--text2);line-height:1.7;">Uses a Google Apps Script webhook — paste your Web App URL once and every order syncs automatically. One connection covers all books.</div>
       </div>
 
       <!-- Connection Inputs at the Top -->
       <div style="background:rgba(232, 64, 42,.05); border:var(--stroke-hair) solid rgba(232, 64, 42,.15); padding:1.25rem; border-radius:var(--r2); display:flex; flex-direction:column; gap:12px; margin-bottom:1.5rem;">
         <div class="form-group" style="margin:0;">
-          <label for="sheets-url-input" style="font-size:9px; font-weight:700; color:var(--text2);">Web App URL *</label>
+          <label for="sheets-url-input" style="font-size:var(--text-3xs); font-weight:700; color:var(--text2);">Web App URL *</label>
           <input type="url" id="sheets-url-input" placeholder="https://script.google.com/macros/s/…/exec">
         </div>
         <div class="form-group" style="margin:0;">
-          <label for="sheets-spreadsheet-input" style="font-size:9px; font-weight:700; color:var(--text2);">Google Sheet URL (for the Open link)</label>
+          <label for="sheets-spreadsheet-input" style="font-size:var(--text-3xs); font-weight:700; color:var(--text2);">Google Sheet URL (for the Open link)</label>
           <input type="url" id="sheets-spreadsheet-input" placeholder="https://docs.google.com/spreadsheets/d/…">
         </div>
         <div style="margin-top:4px;">
@@ -4288,22 +4288,22 @@
 
       <!-- Collapsible Setup Instructions -->
       <details class="sheets-instructions-details" style="border:var(--stroke-hair) solid var(--border); border-radius:var(--r2); padding:14px; background:rgba(0,0,0,.02);">
-        <summary style="cursor:pointer; font-weight:700; font-size:13px; color:var(--text2); display:flex; align-items:center; justify-content:space-between; list-style:none;">
+        <summary style="cursor:pointer; font-weight:700; font-size:var(--text-base); color:var(--text2); display:flex; align-items:center; justify-content:space-between; list-style:none;">
           <span style="display:flex; align-items:center; gap:8px;">📋 <span>Setup Instructions &amp; Google Apps Script Code</span></span>
-          <span style="font-size:10px; color:var(--text3); font-weight:400;">Click to toggle</span>
+          <span style="font-size:var(--text-2xs); color:var(--text3); font-weight:400;">Click to toggle</span>
         </summary>
         <div style="margin-top:14px; display:flex; flex-direction:column; gap:18px; border-top:var(--stroke-hair) dashed var(--border); padding-top:14px;">
           <div style="display:flex;gap:14px;align-items:flex-start;">
-            <div style="width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--gold3);font-family:var(--font-mono);font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">1</div>
+            <div style="width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--gold3);font-family:var(--font-mono);font-size:var(--text-sm);display:flex;align-items:center;justify-content:center;flex-shrink:0;">1</div>
             <div>
-              <div style="font-weight:700;font-size:13px;margin-bottom:4px;">Create a Google Sheet → Extensions → Apps Script</div>
-              <div style="font-size:12px;color:var(--text3);">Go to <a href="https://sheets.new" target="_blank" style="color:var(--gold-text);">sheets.new</a>, then Extensions → Apps Script.</div>
+              <div style="font-weight:700;font-size:var(--text-base);margin-bottom:4px;">Create a Google Sheet → Extensions → Apps Script</div>
+              <div style="font-size:var(--text-sm);color:var(--text3);">Go to <a href="https://sheets.new" target="_blank" style="color:var(--gold-text);">sheets.new</a>, then Extensions → Apps Script.</div>
             </div>
           </div>
           <div style="display:flex;gap:14px;align-items:flex-start;">
-            <div style="width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--gold3);font-family:var(--font-mono);font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">2</div>
+            <div style="width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--gold3);font-family:var(--font-mono);font-size:var(--text-sm);display:flex;align-items:center;justify-content:center;flex-shrink:0;">2</div>
             <div style="flex:1;">
-              <div style="font-weight:700;font-size:13px;margin-bottom:8px;">Paste this code exactly → Deploy → <span style="color:var(--gold-text);">New deployment</span> → Web App → Execute as: Me → Who has access: Anyone</div>
+              <div style="font-weight:700;font-size:var(--text-base);margin-bottom:8px;">Paste this code exactly → Deploy → <span style="color:var(--gold-text);">New deployment</span> → Web App → Execute as: Me → Who has access: Anyone</div>
               <div style="font-size:11.5px;color:var(--on-status);background:var(--red);padding:6px 10px;border-radius:var(--r);margin-bottom:8px;font-weight:600;line-height:1.4;">⚠ Every code change needs a NEW deployment — not "Manage deployments". Copy the new URL each time.</div>
               <div class="gas-code-container">
                 <div class="gas-code-header">
@@ -4318,8 +4318,8 @@
                 </div>
                 <pre id="gas-code" class="gas-code-pre">Loading the latest backend code…</pre>
               </div>
-              <div style="font-size:12px;color:var(--text3);margin-top:10px;line-height:1.6;">This <span id="gas-script-ver">v29</span> script syncs inventory events, scans Big Cartel order emails, and captures customer-paid shipping as separate Sheets rows for later shipping/postage analysis.</div>
-              <details style="margin-top:12px;font-size:12px;color:var(--text3);line-height:1.6;border-top:var(--stroke-hair) dashed var(--border);padding-top:10px;">
+              <div style="font-size:var(--text-sm);color:var(--text3);margin-top:10px;line-height:1.6;">This <span id="gas-script-ver">v29</span> script syncs inventory events, scans Big Cartel order emails, and captures customer-paid shipping as separate Sheets rows for later shipping/postage analysis.</div>
+              <details style="margin-top:12px;font-size:var(--text-sm);color:var(--text3);line-height:1.6;border-top:var(--stroke-hair) dashed var(--border);padding-top:10px;">
                 <summary style="cursor:pointer;font-weight:700;color:var(--text2);">Optional: send "Email artist for payment" from the app, not your Gmail</summary>
                 <div style="margin-top:8px;">
                   By default this email sends from the Google account that owns the script (your Gmail). To make it come from a neutral address instead, sign up for a transactional email provider — <b>Resend, Brevo, SendGrid, Mailgun,</b> or <b>Postmark</b> — and verify a sender address. Then in the Apps Script editor open <b>Project Settings → Script properties</b> and add:
@@ -4344,10 +4344,10 @@
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem; flex-wrap:wrap; gap:10px;">
         <div>
           <div style="display:flex; align-items:center; gap:8px;">
-            <div style="font-family:var(--font-ui); font-size:18px; font-weight:700; color:var(--gold3);">📊 Google Sheets Sandbox Simulator</div>
-            <span style="background:linear-gradient(135deg, #a78bfa, #8b5cf6); color:white; font-size:9px; font-weight:700; padding:2px 8px; border-radius:var(--r); text-transform:uppercase; letter-spacing:0.05em; display:inline-block;">Test Mode Active</span>
+            <div style="font-family:var(--font-ui); font-size:var(--text-lg); font-weight:700; color:var(--gold3);">📊 Google Sheets Sandbox Simulator</div>
+            <span style="background:linear-gradient(135deg, #a78bfa, #8b5cf6); color:white; font-size:var(--text-3xs); font-weight:700; padding:2px 8px; border-radius:var(--r); text-transform:uppercase; letter-spacing:0.05em; display:inline-block;">Test Mode Active</span>
           </div>
-          <div style="font-size:12px; color:rgba(255,255,255,0.7); margin-top:4px; line-height:1.5;">
+          <div style="font-size:var(--text-sm); color:rgba(255,255,255,0.7); margin-top:4px; line-height:1.5;">
             Simulating synchronization in real-time. Transactions logged in the Test Profile are captured here in-memory.
           </div>
         </div>
@@ -4361,7 +4361,7 @@
       <!-- Simulated Google Sheet Container -->
       <div class="mock-sheets-viewport">
         <!-- Sheet Toolbar / Info Bar -->
-        <div style="background:#1d1d26; border-bottom:var(--stroke-hair) solid rgba(255,255,255,0.08); padding:6px 12px; display:flex; align-items:center; justify-content:space-between; font-size:11px; color:rgba(255,255,255,0.6);">
+        <div style="background:#1d1d26; border-bottom:var(--stroke-hair) solid rgba(255,255,255,0.08); padding:6px 12px; display:flex; align-items:center; justify-content:space-between; font-size:var(--text-xs); color:rgba(255,255,255,0.6);">
           <div style="display:flex; align-items:center; gap:10px;">
             <span style="font-weight:600; color:#34d399;">● Connected (Simulated)</span>
             <span style="opacity:0.5;">|</span>
@@ -4385,7 +4385,7 @@
         </div>
 
         <!-- Sheet Tabs Selector at the Bottom -->
-        <div style="background:#1d1d26; border-top:var(--stroke-hair) solid rgba(255,255,255,0.08); padding:4px; display:flex; align-items:center; gap:2px; font-size:11px;" id="sim-sheet-tabs">
+        <div style="background:#1d1d26; border-top:var(--stroke-hair) solid rgba(255,255,255,0.08); padding:4px; display:flex; align-items:center; gap:2px; font-size:var(--text-xs);" id="sim-sheet-tabs">
           <!-- Tabs will be injected dynamically -->
         </div>
       </div>
@@ -4396,8 +4396,8 @@
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
           <div>
             <div style="font-weight:700;font-size:14px;color:var(--green);margin-bottom:4px;">✓ Google Sheets connected — all books sync here</div>
-            <div style="font-size:12px;color:var(--text3);word-break:break-all;" id="sheets-url-display"></div>
-            <div id="sheets-version-warning" style="display:none;font-size:12px;color:var(--amber);margin-top:6px;font-weight:600;line-height:1.4;">
+            <div style="font-size:var(--text-sm);color:var(--text3);word-break:break-all;" id="sheets-url-display"></div>
+            <div id="sheets-version-warning" style="display:none;font-size:var(--text-sm);color:var(--amber);margin-top:6px;font-weight:600;line-height:1.4;">
               ⚠ Outdated script version detected (running <span id="sheets-deployed-version"></span>, expected <span id="sheets-expected-version">v29</span>). Please copy the latest code below and deploy a new version.
             </div>
           </div>
@@ -4405,7 +4405,7 @@
             <a id="open-sheet-link" href="#" target="_blank" class="btn gold" style="text-decoration:none;display:none;">↗ Open sheet</a>
             <button class="btn sm" onclick="testSheets()">Test connection</button>
             <button class="btn sm" id="test-notify-btn" onclick="sendTestNotification()" title="Send yourself a test approval-notification email to confirm alerts work end-to-end">✉ Send test notification</button>
-            <button class="btn sm" id="verify-url-btn" onclick="verifyUrl()" style="font-size:10px;">↗ Verify URL</button>
+            <button class="btn sm" id="verify-url-btn" onclick="verifyUrl()" style="font-size:var(--text-2xs);">↗ Verify URL</button>
             <button class="btn sm danger-btn" onclick="disconnectSheets()">Disconnect</button>
           </div>
         </div>
@@ -4414,8 +4414,8 @@
         <div style="margin-top:1.5rem;padding-top:1.5rem;border-top:var(--stroke-hair) solid rgba(42,99,72,.1);">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
             <div>
-              <div style="font-weight:700;font-size:13px;color:var(--text2);">Sync all existing records</div>
-              <div style="font-size:11px;color:var(--text3);margin-top:2px;">Populate your sheet with all historical data from every book.</div>
+              <div style="font-weight:700;font-size:var(--text-base);color:var(--text2);">Sync all existing records</div>
+              <div style="font-size:var(--text-xs);color:var(--text3);margin-top:2px;">Populate your sheet with all historical data from every book.</div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
               <button class="btn ink sm" id="push-all-btn" onclick="pushAllToSheets()">Sync all data</button>
@@ -4431,7 +4431,7 @@
     <div class="tbl-wrap">
       <table class="sheets-log-tbl">
         <thead><tr><th>Time</th><th>Book</th><th>Type</th><th>Summary</th><th>Status</th></tr></thead>
-        <tbody id="sheets-log-body"><tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--text3);font-size:12px;">No sync events yet.</td></tr></tbody>
+        <tbody id="sheets-log-body"><tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--text3);font-size:var(--text-sm);">No sync events yet.</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -4441,8 +4441,8 @@
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
       <div>
         <div style="font-weight:700;font-size:14px;color:var(--gold3);margin-bottom:4px;">System backups (daily, automatic)</div>
-        <div style="font-size:12px;color:rgba(255,255,255,.78);line-height:1.5;">Publisher mode now keeps a daily snapshot in Firestore so you can restore to a previous system state without needing a local file.</div>
-        <div id="system-backup-status" style="font-size:11px;color:rgba(255,255,255,.62);margin-top:8px;">Loading system backups…</div>
+        <div style="font-size:var(--text-sm);color:rgba(255,255,255,.78);line-height:1.5;">Publisher mode now keeps a daily snapshot in Firestore so you can restore to a previous system state without needing a local file.</div>
+        <div id="system-backup-status" style="font-size:var(--text-xs);color:rgba(255,255,255,.62);margin-top:8px;">Loading system backups…</div>
       </div>
       <button class="btn sm" onclick="createSystemBackupNow()">Create backup now</button>
     </div>
@@ -4467,7 +4467,7 @@
     <div style="font-size:24px;">📥</div>
     <div style="flex:1;">
       <div style="font-weight:700;font-size:14px;color:var(--gold-text);margin-bottom:4px;">Daily Backup Recommended</div>
-      <div style="font-size:12px;color:var(--content-secondary);line-height:1.5;">It's been over 24 hours since your last local JSON backup. Download a fresh snapshot to keep your data safe on your computer.</div>
+      <div style="font-size:var(--text-sm);color:var(--content-secondary);line-height:1.5;">It's been over 24 hours since your last local JSON backup. Download a fresh snapshot to keep your data safe on your computer.</div>
     </div>
     <button class="btn gold sm" onclick="exportToJSON(event)">Download now</button>
   </div>
@@ -4475,47 +4475,47 @@
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px;">
     <div class="sheets-setup" style="background:var(--ink2);border:var(--stroke-hair) solid var(--border);padding:1.5rem;border-radius:var(--r3);">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem;">
-        <div style="width:36px;height:36px;border-radius:var(--r);background:rgba(212,175,55,.1);color:var(--gold3);display:flex;align-items:center;justify-content:center;font-size:18px;">💾</div>
+        <div style="width:36px;height:36px;border-radius:var(--r);background:rgba(212,175,55,.1);color:var(--gold3);display:flex;align-items:center;justify-content:center;font-size:var(--text-lg);">💾</div>
         <h3 style="margin:0;font-family:var(--font-ui);font-size:16px;font-weight:700;color:var(--on-inverse);">JSON Snapshot</h3>
       </div>
-      <p style="font-size:12px;color:rgba(255,255,255,.74);line-height:1.6;margin-bottom:1.25rem;">Download a complete backup of your entire database (Catalog, Inventory, History, and Settings). This file can be used to restore your app at any time.</p>
+      <p style="font-size:var(--text-sm);color:rgba(255,255,255,.74);line-height:1.6;margin-bottom:1.25rem;">Download a complete backup of your entire database (Catalog, Inventory, History, and Settings). This file can be used to restore your app at any time.</p>
       <div style="display:flex;flex-direction:column;gap:12px;">
         <button class="btn gold" style="width:100%;" onclick="exportToJSON(event)">Download JSON Backup</button>
         <button class="btn sm" style="width:100%;background:rgba(255,255,255,.06);color:var(--on-inverse);border-color:rgba(255,255,255,.25);" onclick="chooseBackupFolder()">Choose Backup Folder</button>
-        <div id="backup-folder-display" style="font-size:11px;color:rgba(255,255,255,.62);text-align:center;">Backup folder: Browser Downloads (default)</div>
-        <div id="last-backup-display" style="font-size:11px;color:rgba(255,255,255,.62);text-align:center;">Last backup: Never</div>
+        <div id="backup-folder-display" style="font-size:var(--text-xs);color:rgba(255,255,255,.62);text-align:center;">Backup folder: Browser Downloads (default)</div>
+        <div id="last-backup-display" style="font-size:var(--text-xs);color:rgba(255,255,255,.62);text-align:center;">Last backup: Never</div>
       </div>
     </div>
 
     <div class="sheets-setup" style="background:var(--ink2);border:var(--stroke-hair) solid var(--border);padding:1.5rem;border-radius:var(--r3);">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem;">
-        <div style="width:36px;height:36px;border-radius:var(--r);background:rgba(255,255,255,.05);color:var(--on-inverse);display:flex;align-items:center;justify-content:center;font-size:18px;">📤</div>
+        <div style="width:36px;height:36px;border-radius:var(--r);background:rgba(255,255,255,.05);color:var(--on-inverse);display:flex;align-items:center;justify-content:center;font-size:var(--text-lg);">📤</div>
         <h3 style="margin:0;font-family:var(--font-ui);font-size:16px;font-weight:700;color:var(--on-inverse);">Restore from Backup</h3>
       </div>
-      <p style="font-size:12px;color:rgba(255,255,255,.74);line-height:1.6;margin-bottom:1.25rem;">Upload a previously downloaded JSON snapshot from your computer to restore your data.</p>
+      <p style="font-size:var(--text-sm);color:rgba(255,255,255,.74);line-height:1.6;margin-bottom:1.25rem;">Upload a previously downloaded JSON snapshot from your computer to restore your data.</p>
       <div style="display:flex;flex-direction:column;gap:10px;">
-        <div style="font-size:12px;font-weight:700;color:var(--on-inverse);">Restore one book</div>
-        <div style="font-size:11px;color:rgba(255,255,255,.62);line-height:1.5;margin-bottom:2px;">Pick the file, then choose a single book. Every other book and all your settings stay untouched. A safety backup is saved first.</div>
+        <div style="font-size:var(--text-sm);font-weight:700;color:var(--on-inverse);">Restore one book</div>
+        <div style="font-size:var(--text-xs);color:rgba(255,255,255,.62);line-height:1.5;margin-bottom:2px;">Pick the file, then choose a single book. Every other book and all your settings stay untouched. A safety backup is saved first.</div>
         <label for="import-one-book-file" class="btn sm gold restore-file-btn" style="width:100%;text-align:center;cursor:pointer;">Restore one book from file…</label>
         <input type="file" id="import-one-book-file" accept=".json" style="display:none;" onchange="handleBookRestoreImportFile(event)">
-        <div id="import-one-info" style="font-size:11px;color:rgba(255,255,255,.62);text-align:center;">Select a .json backup file</div>
+        <div id="import-one-info" style="font-size:var(--text-xs);color:rgba(255,255,255,.62);text-align:center;">Select a .json backup file</div>
 
         <div style="border-top:var(--stroke-hair) solid rgba(255,255,255,.08);margin:8px 0 4px;"></div>
 
-        <div style="font-size:12px;font-weight:700;color:var(--on-inverse);">Restore everything</div>
-        <div style="font-size:11px;color:rgba(255,255,255,.62);line-height:1.5;margin-bottom:2px;"><strong style="color:var(--rose-soft);">Warning: overwrites your entire database</strong> with the file's contents.</div>
+        <div style="font-size:var(--text-sm);font-weight:700;color:var(--on-inverse);">Restore everything</div>
+        <div style="font-size:var(--text-xs);color:rgba(255,255,255,.62);line-height:1.5;margin-bottom:2px;"><strong style="color:var(--rose-soft);">Warning: overwrites your entire database</strong> with the file's contents.</div>
         <label for="import-file" class="btn sm restore-file-btn" style="width:100%;text-align:center;cursor:pointer;background:rgba(255,255,255,.05);color:var(--on-inverse);">Choose file &amp; overwrite all</label>
         <input type="file" id="import-file" accept=".json" style="display:none;" onchange="handleBackupImportFile(event)">
-        <div id="import-info" style="font-size:11px;color:rgba(255,255,255,.62);text-align:center;">Select a .json backup file</div>
+        <div id="import-info" style="font-size:var(--text-xs);color:rgba(255,255,255,.62);text-align:center;">Select a .json backup file</div>
       </div>
     </div>
 
     <div class="sheets-setup" style="background:var(--ink2);border:var(--stroke-hair) solid var(--border);padding:1.5rem;border-radius:var(--r3);">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem;">
-        <div style="width:36px;height:36px;border-radius:var(--r);background:rgba(255,255,255,.05);color:var(--on-inverse);display:flex;align-items:center;justify-content:center;font-size:18px;">📊</div>
+        <div style="width:36px;height:36px;border-radius:var(--r);background:rgba(255,255,255,.05);color:var(--on-inverse);display:flex;align-items:center;justify-content:center;font-size:var(--text-lg);">📊</div>
         <h3 style="margin:0;font-family:var(--font-ui);font-size:16px;font-weight:700;color:var(--on-inverse);">CSV Export</h3>
       </div>
-      <p style="font-size:12px;color:rgba(255,255,255,.74);line-height:1.6;margin-bottom:1.5rem;">Download all historical records (Sales, Consignments, and Expenses) as a flat CSV file for use in spreadsheet software.</p>
+      <p style="font-size:var(--text-sm);color:rgba(255,255,255,.74);line-height:1.6;margin-bottom:1.5rem;">Download all historical records (Sales, Consignments, and Expenses) as a flat CSV file for use in spreadsheet software.</p>
       <button class="btn sm" style="width:100%;background:transparent;border-color:rgba(255,255,255,.3);color:var(--on-inverse);" onclick="exportAllToCSV()">Download CSV Report</button>
     </div>
   </div>
@@ -4535,12 +4535,12 @@
       </div>
       <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('bc-address-preview')" aria-label="Close dialog" title="Close (Esc)">✕</button>
     </div>
-    <div style="font-size:12px; color:var(--text3); margin-bottom:1rem;" id="bc-addr-order-subtitle">Order details</div>
+    <div style="font-size:var(--text-sm); color:var(--text3); margin-bottom:1rem;" id="bc-addr-order-subtitle">Order details</div>
 
     <div class="card" style="margin-bottom:1rem; padding:1rem 1.25rem; border-left:var(--stroke) solid var(--gold-line); background:var(--bg2, var(--cream2));">
-      <div style="font-size:15px; font-weight:700; color:var(--text); margin-bottom:8px;" id="bc-addr-name">—</div>
-      <div style="font-size:13px; color:var(--text2); line-height:1.6;" id="bc-addr-lines">—</div>
-      <div style="font-size:12px; color:var(--text3); margin-top:10px; border-top:var(--stroke-hair) dashed var(--border); padding-top:8px; display:flex; flex-direction:column; gap:4px;">
+      <div style="font-size:var(--text-md); font-weight:700; color:var(--text); margin-bottom:8px;" id="bc-addr-name">—</div>
+      <div style="font-size:var(--text-base); color:var(--text2); line-height:1.6;" id="bc-addr-lines">—</div>
+      <div style="font-size:var(--text-sm); color:var(--text3); margin-top:10px; border-top:var(--stroke-hair) dashed var(--border); padding-top:8px; display:flex; flex-direction:column; gap:4px;">
         <div id="bc-addr-phone">Phone: —</div>
         <div id="bc-addr-email">Email: —</div>
       </div>
@@ -4643,7 +4643,7 @@
     </div>
     <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('bulk-send')" aria-label="Close dialog" title="Close (Esc)">✕</button>
   </div>
-  <div style="font-size:12px;color:var(--text3);margin-bottom:12px;"><span id="bulk-send-stock" class="mono-num">0</span> in stock · sending <strong id="bulk-send-total" class="mono-num">0</strong> to <strong id="bulk-send-count" class="mono-num">0</strong> store(s)</div>
+  <div style="font-size:var(--text-sm);color:var(--text3);margin-bottom:12px;"><span id="bulk-send-stock" class="mono-num">0</span> in stock · sending <strong id="bulk-send-total" class="mono-num">0</strong> to <strong id="bulk-send-count" class="mono-num">0</strong> store(s)</div>
   <div class="g2" style="margin-bottom:12px;">
     <div class="form-group"><label for="bulk-qty">Qty to each</label><div style="display:flex;gap:6px;"><input id="bulk-qty" type="number" inputmode="numeric" min="0" value="10"><button type="button" class="btn sm" onclick="bulkApplyQty()" title="Set every store to this quantity">Apply to all</button></div></div>
     <div class="form-group"><label for="bulk-date">Date sent</label><input id="bulk-date" type="date"></div>
@@ -4801,12 +4801,12 @@
       </div>
     </div>
     <div class="form-group" id="edit-exp-file-group" style="margin-bottom:12px;"><label>Receipts</label>
-      <div id="edit-exp-receipts-preview" style="margin-bottom:8px;font-size:12px;display:flex;flex-direction:column;gap:4px;"></div>
+      <div id="edit-exp-receipts-preview" style="margin-bottom:8px;font-size:var(--text-sm);display:flex;flex-direction:column;gap:4px;"></div>
       <div style="display:flex;gap:4px;flex-wrap:wrap;">
-        <input type="file" id="edit-exp-file" accept="image/*,.pdf" style="font-size: 11px; margin-top: 6px;flex:1;min-width:140px;">
-        <button class="btn gold outline" style="padding: 0 8px; font-size:12px; margin-top: 6px;" onclick="openReceiptCameraModal()" id="edit-exp-cam-btn" title="Take a photo of the receipt with your webcam">📷 Camera</button>
+        <input type="file" id="edit-exp-file" accept="image/*,.pdf" style="font-size:var(--text-xs); margin-top: 6px;flex:1;min-width:140px;">
+        <button class="btn gold outline" style="padding: 0 8px; font-size:var(--text-sm); margin-top: 6px;" onclick="openReceiptCameraModal()" id="edit-exp-cam-btn" title="Take a photo of the receipt with your webcam">📷 Camera</button>
       </div>
-      <div id="edit-exp-file-preview" style="font-size:11px;color:var(--text3);margin-top:4px;"></div>
+      <div id="edit-exp-file-preview" style="font-size:var(--text-xs);color:var(--text3);margin-top:4px;"></div>
     </div>
   </div>
 
@@ -4882,7 +4882,7 @@
       </select>
     </div>
     <div class="form-group" style="display:flex;flex-direction:column;justify-content:flex-end;">
-      <div style="font-size:11px;color:var(--text3);line-height:1.6;padding-bottom:4px;">Stripe Checkout will charge in this currency. Changing it after a link is created will invalidate the old link.</div>
+      <div style="font-size:var(--text-xs);color:var(--text3);line-height:1.6;padding-bottom:4px;">Stripe Checkout will charge in this currency. Changing it after a link is created will invalidate the old link.</div>
     </div>
   </div>
 
@@ -4892,18 +4892,18 @@
     </label>
   </div>
   <div class="tbl-wrap" style="margin-bottom:8px;">
-    <table class="tbl" style="font-size:12px;">
+    <table class="tbl" style="font-size:var(--text-sm);">
       <thead><tr><th style="width:32%;">Description</th><th style="width:18%;">Title</th><th class="r" style="width:9%;">Qty</th><th class="r" style="width:16%;">Unit price</th><th class="r" style="width:16%;">Amount</th><th></th></tr></thead>
       <tbody id="inv-items-body"></tbody>
     </table>
   </div>
-  <div id="inv-books-hint" style="font-size:11px;color:var(--text3);line-height:1.6;margin:-2px 0 10px;"></div>
+  <div id="inv-books-hint" style="font-size:var(--text-xs);color:var(--text3);line-height:1.6;margin:-2px 0 10px;"></div>
 
   <div class="g2" style="margin-bottom:12px;">
     <div class="form-group">
       <label style="display:flex; justify-content:space-between; align-items:center; width:100%;">
         <span id="inv-discount-label-text">Discount (flat, optional)</span>
-        <select id="inv-discount-type" style="width:auto; padding:2px 8px; font-size:11px; height:24px; margin:0; border-radius:var(--r);" onchange="onDiscountTypeChange()">
+        <select id="inv-discount-type" style="width:auto; padding:2px 8px; font-size:var(--text-xs); height:24px; margin:0; border-radius:var(--r);" onchange="onDiscountTypeChange()">
           <option value="flat">Flat Amount</option>
           <option value="percent">Percentage (%)</option>
         </select>
@@ -4923,16 +4923,16 @@
   </div>
 
   <div style="background:var(--cream2);border-radius:var(--r2);padding:12px 16px;margin-bottom:14px;">
-    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:4px;"><span>Subtotal</span><span id="inv-sub-val" style="font-family:var(--font-mono);font-weight:600;">—</span></div>
-    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:4px;"><span>Discount</span><span id="inv-disc-val" style="font-family:var(--font-mono);font-weight:600;">—</span></div>
-    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:4px;"><span>Tax</span><span id="inv-tax-val" style="font-family:var(--font-mono);font-weight:600;">—</span></div>
-    <div style="display:flex;justify-content:space-between;font-size:14px;color:var(--text);border-top:var(--stroke-hair) solid var(--border);padding-top:6px;margin-top:4px;font-weight:700;"><span>TOTAL</span><span id="inv-total-val" style="font-family:var(--font-mono);color:var(--gold-text);font-size:18px;">—</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:var(--text-sm);color:var(--text2);margin-bottom:4px;"><span>Subtotal</span><span id="inv-sub-val" style="font-family:var(--font-mono);font-weight:600;">—</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:var(--text-sm);color:var(--text2);margin-bottom:4px;"><span>Discount</span><span id="inv-disc-val" style="font-family:var(--font-mono);font-weight:600;">—</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:var(--text-sm);color:var(--text2);margin-bottom:4px;"><span>Tax</span><span id="inv-tax-val" style="font-family:var(--font-mono);font-weight:600;">—</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:14px;color:var(--text);border-top:var(--stroke-hair) solid var(--border);padding-top:6px;margin-top:4px;font-weight:700;"><span>TOTAL</span><span id="inv-total-val" style="font-family:var(--font-mono);color:var(--gold-text);font-size:var(--text-lg);">—</span></div>
   </div>
 
   <div class="form-group" style="margin-bottom:12px;">
     <label for="inv-paylink">Payment link (Stripe Payment Link, PayPal.me, Interac…)</label>
     <input id="inv-paylink" type="url" placeholder="https://buy.stripe.com/… (defaults to this book's link)">
-    <div style="font-size:11px;color:var(--text3);margin-top:5px;line-height:1.5;">
+    <div style="font-size:var(--text-xs);color:var(--text3);margin-top:5px;line-height:1.5;">
       Leave blank to use the book's default payment link. Stripe Payment Links auto-prefill via <code>?prefilled_email</code> &amp; <code>?client_reference_id</code>.
     </div>
   </div>
@@ -4957,7 +4957,7 @@
 <div class="overlay" id="m-invoice-view" style="display:none;"><div class="modal invoice-view-modal" role="dialog" aria-modal="true" style="max-width:880px;max-height:94vh;overflow:hidden;padding:0;background:var(--cream2);">
 
   <div class="no-print" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:14px 22px;background:var(--ink);color:var(--on-inverse);border-radius:var(--r3) var(--r3) 0 0;flex-wrap:wrap;">
-    <div style="font-family:var(--font-ui);font-size:15px;">Invoice preview</div>
+    <div style="font-family:var(--font-ui);font-size:var(--text-md);">Invoice preview</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <button class="btn ink" onclick="editInvoiceFromView()">✎ Edit</button>
       <button class="btn ink" onclick="emailInvoice()">✉ Email</button>
@@ -4990,7 +4990,7 @@
     </div>
     <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('invoice-settings')" aria-label="Close dialog" title="Close (Esc)">✕</button>
   </div>
-  <div style="font-size:12px;color:var(--text3);margin-bottom:1.25rem;line-height:1.6;">These details appear on every invoice you generate. Stored locally per browser.</div>
+  <div style="font-size:var(--text-sm);color:var(--text3);margin-bottom:1.25rem;line-height:1.6;">These details appear on every invoice you generate. Stored locally per browser.</div>
 
   <div class="g2" style="margin-bottom:12px;">
     <div class="form-group"><label for="ivs-name">Publisher name</label><input id="ivs-name" type="text" placeholder="Lyricalmyrical Books"></div>
@@ -5014,24 +5014,24 @@
   </div>
 
   <div style="border-top:var(--stroke-hair) solid var(--border);margin:18px 0 12px;padding-top:14px;">
-    <div style="font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Stripe Checkout (dynamic amounts)</div>
-    <div style="font-size:11px;color:var(--text3);line-height:1.6;margin-bottom:10px;">
+    <div style="font-size:var(--text-3xs);font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Stripe Checkout (dynamic amounts)</div>
+    <div style="font-size:var(--text-xs);color:var(--text3);line-height:1.6;margin-bottom:10px;">
       Paste a Stripe <strong>Restricted Key</strong> with write permissions on <em>Products</em>, <em>Prices</em>, and <em>Payment Links</em>.
       When you finalize an invoice, the app auto-creates a Stripe Payment Link with the <strong>exact amount owed</strong> — so a store can never accidentally pay the wrong quarter.
       <a href="https://dashboard.stripe.com/apikeys/create?name=Lyrical%20Inv%20Pay%20Links&permissions[]=rak_payment_link_write&permissions[]=rak_product_write&permissions[]=rak_plan_write&permissions[]=rak_payment_links_write&permissions[]=rak_prices_write&permissions[]=rak_products_write" target="_blank" style="color:var(--gold-text);">Create a restricted key →</a>
     </div>
     <div class="form-group" style="margin-bottom:8px;"><label for="ivs-stripe-key">Stripe Restricted Key</label>
       <input id="ivs-stripe-key" type="password" placeholder="rk_live_… or rk_test_…" autocomplete="off">
-      <div style="font-size:10px;color:var(--text3);margin-top:4px;">Stored locally in this browser only. Never synced.</div>
+      <div style="font-size:var(--text-2xs);color:var(--text3);margin-top:4px;">Stored locally in this browser only. Never synced.</div>
     </div>
     <div class="g2" style="margin-bottom:8px;">
       <div class="form-group" style="margin:0;">
-        <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2);font-weight:500;text-transform:none;letter-spacing:0;">
+        <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:var(--text2);font-weight:500;text-transform:none;letter-spacing:0;">
           <input id="ivs-stripe-auto" type="checkbox" style="margin:0;"> Auto-create on finalize
         </label>
       </div>
       <div class="form-group" style="margin:0;">
-        <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2);font-weight:500;text-transform:none;letter-spacing:0;">
+        <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:var(--text2);font-weight:500;text-transform:none;letter-spacing:0;">
           <input id="ivs-stripe-test" type="checkbox" style="margin:0;"> Test mode badge
         </label>
       </div>
@@ -5039,27 +5039,27 @@
   </div>
 
   <div style="border-top:var(--stroke-hair) solid var(--border);margin:18px 0 12px;padding-top:14px;">
-    <div style="font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Payment reminders</div>
-    <div style="font-size:11px;color:var(--text3);line-height:1.6;margin-bottom:10px;">
+    <div style="font-size:var(--text-3xs);font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Payment reminders</div>
+    <div style="font-size:var(--text-xs);color:var(--text3);line-height:1.6;margin-bottom:10px;">
       When an invoice goes past its due date, the app can email the customer a polite reminder with a link to pay —
       so you never have to write the awkward follow-up. Each invoice is chased <strong>once</strong>, on a weekday between 9am and 6pm,
       and never after you mark it paid. Needs your Google Sheet connected, since that is what sends the mail.
     </div>
     <div class="form-group" style="margin-bottom:8px;">
-      <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2);font-weight:500;text-transform:none;letter-spacing:0;">
+      <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:var(--text2);font-weight:500;text-transform:none;letter-spacing:0;">
         <input id="ivs-remind-auto" type="checkbox" style="margin:0;"> Chase late invoices for me
       </label>
     </div>
     <div class="form-group" style="margin-bottom:8px;"><label for="ivs-remind-days">Send the reminder this many days past due</label>
       <input id="ivs-remind-days" type="number" inputmode="numeric" min="1" max="180" step="1" placeholder="7">
-      <div style="font-size:10px;color:var(--text3);margin-top:4px;">A reminder goes out the day after this many days have passed.</div>
+      <div style="font-size:var(--text-2xs);color:var(--text3);margin-top:4px;">A reminder goes out the day after this many days have passed.</div>
     </div>
     <div class="form-group" style="margin-bottom:0;"><label for="ivs-remind-msg">Your message (the invoice number, amount and pay link are added for you)</label>
       <textarea id="ivs-remind-msg" rows="2" placeholder="Just a gentle nudge in case this one slipped through…"></textarea>
     </div>
     <div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
       <button class="btn sm ink" type="button" id="ivs-remind-test" onclick="sendTestReminderEmail()">✉ Send me a test reminder</button>
-      <div style="font-size:10px;color:var(--text3);line-height:1.5;flex:1 1 200px;min-width:0;">
+      <div style="font-size:var(--text-2xs);color:var(--text3);line-height:1.5;flex:1 1 200px;min-width:0;">
         Emails a real reminder to you, using the wording above even before you save it — built from a <strong>real outstanding invoice</strong> where you have one, so the customer, the amount, the pay link and the attached PDF are the live ones. Its subject is marked <strong>[TEST]</strong>, and no invoice is touched or counted as chased.
       </div>
     </div>
@@ -5086,9 +5086,9 @@
     </div>
     <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('reminder-review')" aria-label="Close dialog" title="Close (Esc)">✕</button>
   </div>
-  <div style="font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.6;">
+  <div style="font-size:var(--text-sm);color:var(--text3);margin-bottom:14px;line-height:1.6;">
     These customers get an automatic reminder tomorrow. If any of them have already paid you by bank transfer or in cash, mark them paid now and nothing is sent.
-    <div id="reminder-review-count" style="margin-top:6px;font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--text3);"></div>
+    <div id="reminder-review-count" style="margin-top:6px;font-size:var(--text-3xs);font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--text3);"></div>
   </div>
 
   <div id="reminder-review-body"></div>
@@ -5108,9 +5108,9 @@
       </div>
       <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('shipping-label')" aria-label="Close dialog" title="Close (Esc)">✕</button>
     </div>
-    <div id="shipping-label-order-info" style="font-size:12px;color:var(--text3);margin-bottom:1.25rem;font-family:var(--font-mono);"></div>
+    <div id="shipping-label-order-info" style="font-size:var(--text-sm);color:var(--text3);margin-bottom:1.25rem;font-family:var(--font-mono);"></div>
 
-    <div style="font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);margin-bottom:10px;">Ship to</div>
+    <div style="font-size:var(--text-3xs);font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);margin-bottom:10px;">Ship to</div>
     <div class="g2" style="margin-bottom:10px;">
       <div class="form-group" style="margin:0;"><label for="sl-name">Customer name</label><input type="text" id="sl-name" placeholder="Full name"></div>
       <div class="form-group" style="margin:0;"><label for="sl-email">Email (optional)</label><input type="text" id="sl-email" placeholder="customer@email.com"></div>
@@ -5131,7 +5131,7 @@
       </div>
     </div>
 
-    <div id="sl-shipped-status" style="display:none;font-size:12px;margin-bottom:12px;padding:8px 12px;border-radius:var(--r);background:var(--green-bg);color:var(--green);border:var(--stroke-hair) solid var(--green-bg);"></div>
+    <div id="sl-shipped-status" style="display:none;font-size:var(--text-sm);margin-bottom:12px;padding:8px 12px;border-radius:var(--r);background:var(--green-bg);color:var(--green);border:var(--stroke-hair) solid var(--green-bg);"></div>
 
     <div class="modal-footer" role="dialog" aria-modal="true">
       <button class="btn" onclick="attemptCloseModal('shipping-label')">Cancel</button>
@@ -5151,7 +5151,7 @@
       </div>
       <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('import')" aria-label="Close dialog" title="Close (Esc)">✕</button>
     </div>
-    <div id="import-summary" style="font-size:13px;color:var(--text2);margin-bottom:1rem;"></div>
+    <div id="import-summary" style="font-size:var(--text-base);color:var(--text2);margin-bottom:1rem;"></div>
     <div style="flex:1;overflow-y:auto;min-height:0;">
       <div class="tbl-wrap" style="margin-bottom:0;">
         <table class="tbl">
@@ -5160,7 +5160,7 @@
         </table>
       </div>
     </div>
-    <div id="import-warning-box" style="margin-top:1rem;padding:10px 14px;background:var(--amber-bg);border-radius:var(--r2);border-left:var(--stroke) solid var(--amber);font-size:12px;color:var(--amber);">
+    <div id="import-warning-box" style="margin-top:1rem;padding:10px 14px;background:var(--amber-bg);border-radius:var(--r2);border-left:var(--stroke) solid var(--amber);font-size:var(--text-sm);color:var(--amber);">
       ⚠ This will <strong>add</strong> these rows to the current book's history. It will not overwrite existing data. Stock and revenue will be recalculated.
     </div>
     <div class="modal-footer" role="dialog" aria-modal="true">
@@ -5251,18 +5251,18 @@
       </div>
       <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('save-book-preset')" aria-label="Close dialog" title="Close (Esc)">✕</button>
     </div>
-    <div style="font-size:12px; color:var(--text3); margin-bottom:1rem;">
+    <div style="font-size:var(--text-sm); color:var(--text3); margin-bottom:1rem;">
       Save current dimensions, weight, and customs declarations directly onto a catalogue book record. Future shipments for this book will load these specifications automatically.
     </div>
 
     <div class="form-group" style="margin-bottom:1rem;">
-      <label for="sbp-target-book" style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--text2); margin-bottom:6px;">Target Catalogue Book</label>
+      <label for="sbp-target-book" style="font-size:var(--text-xs); font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--text2); margin-bottom:6px;">Target Catalogue Book</label>
       <select id="sbp-target-book" onchange="renderSaveBookPresetPreview()">
         <option value="">— Select a catalogue book to update —</option>
       </select>
     </div>
 
-    <div style="font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:8px;">Specifications Summary</div>
+    <div style="font-size:var(--text-xs); font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:8px;">Specifications Summary</div>
     <div id="sbp-specs-preview" style="margin-bottom:1.25rem;"></div>
 
     <div class="modal-footer" role="dialog" aria-modal="true" style="justify-content:space-between;">
@@ -5306,7 +5306,7 @@
   <div id="book-panel-general" role="tabpanel" aria-labelledby="book-modal-tab-general">
     <div class="g2" style="margin-bottom:12px;">
       <div class="form-group">
-        <label for="nb-id">Book ID (URL safe) * <span style="font-weight:400;font-size:10px;color:var(--text3);">(Permanent database slug)</span></label>
+        <label for="nb-id">Book ID (URL safe) * <span style="font-weight:400;font-size:var(--text-2xs);color:var(--text3);">(Permanent database slug)</span></label>
         <div style="position:relative;">
           <input id="nb-id" placeholder="e.g. collective-photobook" style="font-family:var(--font-mono);font-size:12.5px;">
         </div>
@@ -5350,12 +5350,12 @@
         <label for="nb-thresh">Low Stock Alert Threshold</label>
         <div style="display:flex;align-items:center;gap:6px;">
           <input id="nb-thresh" type="number" inputmode="numeric" value="10" min="0" style="font-family:var(--font-mono);">
-          <span style="font-size:11px;color:var(--text3);white-space:nowrap;">copies remaining</span>
+          <span style="font-size:var(--text-xs);color:var(--text3);white-space:nowrap;">copies remaining</span>
         </div>
       </div>
     </div>
     <div class="form-group" style="margin-bottom:6px;">
-      <label for="nb-pw">Author Google Email <span style="font-weight:400;font-size:10px;color:var(--text3);">(Contributor Sign-In Access)</span></label>
+      <label for="nb-pw">Author Google Email <span style="font-weight:400;font-size:var(--text-2xs);color:var(--text3);">(Contributor Sign-In Access)</span></label>
       <input type="email" id="nb-pw" placeholder="artist@gmail.com">
       <div class="book-modal-callout" style="margin-top:6px;">
         🔐 <strong>Author Mode:</strong> When this author signs in with Google, they enter an isolated portal to view their sales timeline, request balance payouts, and download custom QR codes.
@@ -5406,18 +5406,18 @@
       <input id="nb-price" type="number" step="0.01" inputmode="decimal" value="40" min="0" oninput="updateBookModalFinancials()" style="font-family:var(--font-mono);">
     </div>
     <div class="form-group" style="margin-top:4px;margin-bottom:14px;">
-      <label>Stripe Direct Payment Link <span style="font-weight:400;font-size:10px;color:var(--text3);">(Embedded in QR Codes &amp; POS)</span></label>
+      <label>Stripe Direct Payment Link <span style="font-weight:400;font-size:var(--text-2xs);color:var(--text3);">(Embedded in QR Codes &amp; POS)</span></label>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">
-        <input type="url" id="nb-paylink" placeholder="https://buy.stripe.com/…" style="flex:1;font-family:var(--font-mono);font-size:12px;">
+        <input type="url" id="nb-paylink" placeholder="https://buy.stripe.com/…" style="flex:1;font-family:var(--font-mono);font-size:var(--text-sm);">
         <button type="button" class="btn gold sm" id="nb-gen-stripe-btn" onclick="generateBookStripeLink()" style="white-space:nowrap;">⚡ Generate SKU link</button>
       </div>
-      <div style="font-size:11px;color:var(--text3);line-height:1.45;">
+      <div style="font-size:var(--text-xs);color:var(--text3);line-height:1.45;">
         Paste from your <a href="https://dashboard.stripe.com/payment-links" target="_blank" style="color:var(--gold-text);">Stripe Dashboard</a> or click <strong>Generate SKU link</strong> to create an auto-tagged payment link.
       </div>
     </div>
 
     <!-- Default Shipping Specs (for Shippo & Canada Post Calculator) -->
-    <div style="font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-top:16px; margin-bottom:8px; border-top:var(--stroke-hair) solid var(--border); padding-top:12px;">
+    <div style="font-size:var(--text-xs); font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-top:16px; margin-bottom:8px; border-top:var(--stroke-hair) solid var(--border); padding-top:12px;">
       Default Shipping Specs (for Canada Post &amp; Shippo)
     </div>
     
@@ -5461,7 +5461,7 @@
   <div id="book-panel-costs" style="display:none;" role="tabpanel" aria-labelledby="book-modal-tab-costs">
     <div class="form-group" style="margin-bottom:12px;">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;">
-        <label for="nb-prod" style="margin:0;">Total Production / Printing Expense <span style="font-weight:400;font-size:10px;color:var(--text3);">(Break-even target)</span></label>
+        <label for="nb-prod" style="margin:0;">Total Production / Printing Expense <span style="font-weight:400;font-size:var(--text-2xs);color:var(--text3);">(Break-even target)</span></label>
         <button type="button" class="btn sm secondary" onclick="openProductionCostCalculator()" style="font-size:var(--text-xs);padding:3px 8px;display:inline-flex;align-items:center;gap:4px;" title="Search and sum production expenses from Tax Centre">
           <span>🔍</span><span>Sum from Tax Centre</span>
         </button>
@@ -5472,9 +5472,9 @@
       </div>
     </div>
     <div class="form-group" style="margin-bottom:12px;">
-      <label for="nb-payment-link">Publisher Payment Link <span style="font-weight:400;font-size:10px;color:var(--text3);">(For Artist Dues / Balance Settlement)</span></label>
-      <input type="url" id="nb-payment-link" placeholder="https://paypal.me/lyricalmyricalbooks or email@interac.ca" style="font-family:var(--font-mono);font-size:12px;">
-      <div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.45;">
+      <label for="nb-payment-link">Publisher Payment Link <span style="font-weight:400;font-size:var(--text-2xs);color:var(--text3);">(For Artist Dues / Balance Settlement)</span></label>
+      <input type="url" id="nb-payment-link" placeholder="https://paypal.me/lyricalmyricalbooks or email@interac.ca" style="font-family:var(--font-mono);font-size:var(--text-sm);">
+      <div style="font-size:var(--text-xs);color:var(--text3);margin-top:4px;line-height:1.45;">
         When the artist owes the publisher money (e.g. negative balance from shipping/advances), this payment link appears in their private author portal.
       </div>
     </div>
@@ -5491,7 +5491,7 @@
       </div>
     </div>
     <div class="form-group" style="margin-bottom:6px;">
-      <label for="nb-author-stock">Author-Held Stock <span style="font-weight:400;font-size:10px;color:var(--text3);">(Physical Copies with Author)</span></label>
+      <label for="nb-author-stock">Author-Held Stock <span style="font-weight:400;font-size:var(--text-2xs);color:var(--text3);">(Physical Copies with Author)</span></label>
       <input id="nb-author-stock" type="number" inputmode="numeric" min="0" value="0" placeholder="0" style="font-family:var(--font-mono);">
       <div class="book-modal-callout" style="margin-top:6px;">
         📦 Physical copies currently in the author's hands for their own events. Automatically deducted from available publisher warehouse stock.
@@ -5571,16 +5571,16 @@
     </div>
     <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('payment-qr')" aria-label="Close dialog" title="Close (Esc)">✕</button>
   </div>
-  <div style="font-size:12px;color:var(--content-secondary);margin-bottom:1rem;line-height:1.6;">
+  <div style="font-size:var(--text-sm);color:var(--content-secondary);margin-bottom:1rem;line-height:1.6;">
     Scan this code to pay for <strong id="qr-book-title" style="color:var(--content-primary);"></strong>.
   </div>
 
   <!-- Manual Price & Currency Override Controls -->
   <div class="pqr-override-card">
-    <div style="font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--gold-text);margin-bottom:8px;">Price & Currency Override</div>
+    <div style="font-size:var(--text-xs);font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--gold-text);margin-bottom:8px;">Price & Currency Override</div>
     <div class="g2" style="margin-bottom:8px;">
       <div class="form-group" style="margin:0;">
-        <label for="pqr-currency" style="font-size:11px;">Target Currency</label>
+        <label for="pqr-currency" style="font-size:var(--text-xs);">Target Currency</label>
         <select id="pqr-currency" class="pqr-select" onchange="updateSingleBookPaymentQR()">
           <option value="CAD">CAD (CA$)</option>
           <option value="USD">USD ($)</option>
@@ -5590,7 +5590,7 @@
         </select>
       </div>
       <div class="form-group" style="margin:0;">
-        <label for="pqr-override-price" style="font-size:11px;">Override Price</label>
+        <label for="pqr-override-price" style="font-size:var(--text-xs);">Override Price</label>
         <input type="number" step="0.01" min="0" id="pqr-override-price" class="pqr-input tnum" placeholder="List price" oninput="updateSingleBookPaymentQR()">
       </div>
     </div>
@@ -5624,7 +5624,7 @@
     </div>
     <button type="button" class="btn tx modal-close-btn" onclick="closePosBookModal()" aria-label="Close dialog" title="Close (Esc)">✕</button>
   </div>
-  <div style="font-size:12px;color:var(--text3);margin-bottom:1rem;line-height:1.55;">
+  <div style="font-size:var(--text-sm);color:var(--text3);margin-bottom:1rem;line-height:1.55;">
     A quick title for the sales table — guest authors, consignment, one-off stock. It shows up at the Point of Sale, in the printable sales tracker, and on the QR sheet, but <strong>stays out of your catalog, inventory, and financials</strong>.
   </div>
   <div class="g2" style="margin-bottom:12px;">
@@ -5646,12 +5646,12 @@
   <div class="form-group" style="margin-bottom:12px;"><label for="pb-accent">Accent Color</label><input id="pb-accent" type="color" value="#E8402A"></div>
 
   <div class="form-group" style="margin-bottom:12px;">
-    <label>Stripe Payment Link <span style="font-weight:400;font-size:10px;color:var(--text3);">(used for the QR code)</span></label>
+    <label>Stripe Payment Link <span style="font-weight:400;font-size:var(--text-2xs);color:var(--text3);">(used for the QR code)</span></label>
     <div style="display:flex;gap:8px;align-items:center;">
       <input type="url" id="pb-paylink" placeholder="https://buy.stripe.com/…" style="flex:1;" oninput="renderPosBookModalQR()">
       <button type="button" class="btn gold sm" id="pb-gen-stripe-btn" onclick="generatePosBookStripeLink()" style="white-space:nowrap;">⚡ Generate Stripe link</button>
     </div>
-    <div style="font-size:11px;color:var(--text3);margin-top:5px;line-height:1.5;">
+    <div style="font-size:var(--text-xs);color:var(--text3);margin-top:5px;line-height:1.5;">
       Paste a link from your <a href="https://dashboard.stripe.com/payment-links" target="_blank" style="color:var(--gold-text);">Stripe Dashboard</a>, or click <strong>Generate Stripe link</strong> to mint one at this price instantly (needs your Stripe restricted key saved in the Payments tab or Invoice Settings).
     </div>
   </div>
@@ -5660,7 +5660,7 @@
     <div style="background:white;padding:14px;border-radius:var(--r2);width:208px;height:208px;display:flex;align-items:center;justify-content:center;">
       <div id="pb-qr-canvas"></div>
     </div>
-    <div id="pb-qr-note" style="font-size:11px;color:var(--text3);min-height:14px;"></div>
+    <div id="pb-qr-note" style="font-size:var(--text-xs);color:var(--text3);min-height:14px;"></div>
     <div style="display:flex;gap:8px;">
       <button type="button" class="btn ink sm" onclick="copyPosBookLink()">Copy link</button>
       <button type="button" class="btn gold sm" onclick="downloadPosBookQR()">Download QR</button>
@@ -5683,8 +5683,8 @@
     </div>
     <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('pos-price')" aria-label="Close dialog" title="Close (Esc)">✕</button>
   </div>
-  <div style="font-size:13px;color:var(--text);font-weight:600;margin-bottom:2px;" id="pp-title"></div>
-  <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">List price: <span id="pp-list"></span></div>
+  <div style="font-size:var(--text-base);color:var(--text);font-weight:600;margin-bottom:2px;" id="pp-title"></div>
+  <div style="font-size:var(--text-sm);color:var(--text3);margin-bottom:14px;">List price: <span id="pp-list"></span></div>
 
   <div class="pos-discount-grid" role="group" aria-label="Quick discount presets">
     <button type="button" class="pos-discount-btn" onclick="posPriceQuick(10)" data-shortcut="1" title="Shortcut: Press 1"><span class="mono-num">10%</span> off</button>
@@ -5697,12 +5697,12 @@
   <div class="form-group" style="margin-bottom:8px;">
     <label for="pp-price">Custom price</label>
     <div style="display:flex;align-items:center;gap:8px;">
-      <span id="pp-cur-sym" style="font-family:var(--font-mono);font-size:15px;color:var(--text2);"></span>
+      <span id="pp-cur-sym" style="font-family:var(--font-mono);font-size:var(--text-md);color:var(--text2);"></span>
       <input id="pp-price" type="number" step="0.01" min="0" inputmode="decimal" style="flex:1;" oninput="posPricePreview()">
     </div>
-    <div style="font-size:11px;color:var(--text3);margin-top:4px;">In the book's own currency — the cart converts it for you.</div>
+    <div style="font-size:var(--text-xs);color:var(--text3);margin-top:4px;">In the book's own currency — the cart converts it for you.</div>
   </div>
-  <div id="pp-preview" style="font-size:13px;color:var(--text);min-height:18px;margin-bottom:10px;"></div>
+  <div id="pp-preview" style="font-size:var(--text-base);color:var(--text);min-height:18px;margin-bottom:10px;"></div>
 
   <div class="modal-footer" role="dialog" aria-modal="true">
     <button class="btn" id="pp-reset-btn" onclick="posResetPrice()">Reset to list</button>
@@ -5720,8 +5720,8 @@
     </div>
     <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('pos-qr')" aria-label="Close dialog" title="Close (Esc)">✕</button>
   </div>
-  <div style="text-align:center;margin-bottom:4px;"><span id="pos-qr-amount" class="tnum" style="font-family:var(--font-ui);font-size:26px;font-weight:700;color:var(--status-settled, var(--green));"></span></div>
-  <div id="pos-qr-sub" style="text-align:center;font-size:12px;color:var(--content-secondary);margin-bottom:14px;"></div>
+  <div style="text-align:center;margin-bottom:4px;"><span id="pos-qr-amount" class="tnum" style="font-family:var(--font-ui);font-size:var(--text-2xl);font-weight:700;color:var(--status-settled, var(--green));"></span></div>
+  <div id="pos-qr-sub" style="text-align:center;font-size:var(--text-sm);color:var(--content-secondary);margin-bottom:14px;"></div>
   <div style="display:flex;justify-content:center;margin-bottom:1rem;background:white;padding:1.25rem;border-radius:var(--r2);width:max-content;margin-left:auto;margin-right:auto;">
     <div id="pos-qr-canvas"></div>
   </div>
@@ -5746,7 +5746,7 @@
     </div>
     <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('pos-sale-confirm')" aria-label="Close dialog" title="Close (Esc)">✕</button>
   </div>
-  <div style="font-size:12px;color:var(--text3);margin-bottom:1rem;">Review the sale details before finalizing. Catalog books deduct inventory immediately; POS-only titles are tallied on the card.</div>
+  <div style="font-size:var(--text-sm);color:var(--text3);margin-bottom:1rem;">Review the sale details before finalizing. Catalog books deduct inventory immediately; POS-only titles are tallied on the card.</div>
   <div class="tbl-wrap" style="margin-bottom:1rem;">
     <table class="tbl">
       <thead><tr><th>Item</th><th class="r">Qty</th><th class="r">Line</th></tr></thead>
@@ -5785,7 +5785,7 @@
       </div>
       <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('whats-new')" aria-label="Close dialog" title="Close (Esc)">✕</button>
     </div>
-    <div style="font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.55;">Showing the recent updates and commits loaded into the app:</div>
+    <div style="font-size:var(--text-sm);color:var(--text3);margin-bottom:12px;line-height:1.55;">Showing the recent updates and commits loaded into the app:</div>
     <div id="whats-new-list" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:12px;padding-right:4px;">
       <!-- Populated dynamically -->
     </div>
@@ -5883,7 +5883,7 @@
 <div class="overlay" id="m-confirm" style="display:none;z-index:1200;">
   <div class="modal" role="dialog" aria-modal="true" style="max-width:440px;">
     <div class="modal-title" role="dialog" aria-modal="true" id="m-confirm-title">Are you sure?</div>
-    <div id="m-confirm-body" style="font-size:13px;color:var(--text2);line-height:1.55;white-space:pre-wrap;"></div>
+    <div id="m-confirm-body" style="font-size:var(--text-base);color:var(--text2);line-height:1.55;white-space:pre-wrap;"></div>
     <div class="modal-footer" role="dialog" aria-modal="true">
       <button type="button" class="btn" id="m-confirm-cancel">Cancel</button>
       <button type="button" class="btn gold" id="m-confirm-ok">Confirm</button>
@@ -5951,7 +5951,7 @@
 <div class="overlay" id="m-prompt" style="display:none;z-index:1200;">
   <div class="modal" role="dialog" aria-modal="true" style="max-width:480px;">
     <div class="modal-title" role="dialog" aria-modal="true" id="m-prompt-title">Enter a value</div>
-    <div id="m-prompt-body" style="font-size:13px;color:var(--text2);line-height:1.55;white-space:pre-wrap;margin-bottom:10px;"></div>
+    <div id="m-prompt-body" style="font-size:var(--text-base);color:var(--text2);line-height:1.55;white-space:pre-wrap;margin-bottom:10px;"></div>
     <div class="form-group"><input type="text" id="m-prompt-input" autocomplete="off" /></div>
     <div class="modal-footer" role="dialog" aria-modal="true">
       <button type="button" class="btn" id="m-prompt-cancel">Cancel</button>
@@ -5969,8 +5969,8 @@
       </div>
       <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('restore-book')" aria-label="Close dialog" title="Close (Esc)">✕</button>
     </div>
-    <div id="restore-book-subtitle" style="font-size:12px;color:var(--text2);line-height:1.55;margin-bottom:4px;"></div>
-    <div style="font-size:11px;color:var(--text3);line-height:1.5;margin-bottom:12px;">Pick the book to restore. Only that book's catalog entry, inventory, history and consignment ledger are overwritten from this snapshot — every other book and all your settings stay exactly as they are now.</div>
+    <div id="restore-book-subtitle" style="font-size:var(--text-sm);color:var(--text2);line-height:1.55;margin-bottom:4px;"></div>
+    <div style="font-size:var(--text-xs);color:var(--text3);line-height:1.5;margin-bottom:12px;">Pick the book to restore. Only that book's catalog entry, inventory, history and consignment ledger are overwritten from this snapshot — every other book and all your settings stay exactly as they are now.</div>
     <div id="restore-book-list" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:8px;"></div>
     <div class="modal-footer" role="dialog" aria-modal="true">
       <button type="button" class="btn" onclick="attemptCloseModal('restore-book')">Cancel</button>
@@ -5981,12 +5981,12 @@
 <!-- Campaign Email Sending Progress Overlay -->
 <div class="send-overlay" id="c-send-overlay">
   <div class="send-modal">
-    <div style="font-family:var(--font-ui);font-size:18px;font-weight:700;margin-bottom:6px;">Sending Campaign</div>
-    <div id="c-send-progress-text" style="font-size:13px;color:var(--text2);">Preparing email delivery...</div>
+    <div style="font-family:var(--font-ui);font-size:var(--text-lg);font-weight:700;margin-bottom:6px;">Sending Campaign</div>
+    <div id="c-send-progress-text" style="font-size:var(--text-base);color:var(--text2);">Preparing email delivery...</div>
     <div class="send-progress-track">
       <div class="send-progress-fill" id="c-send-progress-fill"></div>
     </div>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;">Please keep Lyricalmyrical Inventory open until sending finishes.</div>
+    <div style="font-size:var(--text-xs);color:var(--text3);margin-bottom:10px;">Please keep Lyricalmyrical Inventory open until sending finishes.</div>
     <button class="btn sm" id="c-send-cancel-btn" onclick="cancelCampaignSending()">✕ Abort Send</button>
     <div class="send-log-console" id="c-send-log-console"></div>
   </div>
@@ -6024,7 +6024,7 @@
     </div>
 
     <div class="form-group" style="margin-bottom:12px;">
-      <label for="st-qty">Quantity <span id="st-qty-limit-label" class="muted-note" style="font-size:11px;color:var(--content-muted);"></span></label>
+      <label for="st-qty">Quantity <span id="st-qty-limit-label" class="muted-note" style="font-size:var(--text-xs);color:var(--content-muted);"></span></label>
       <div class="st-stepper-row">
         <button type="button" class="btn sm st-stepper-btn" onclick="stepStockTransfer(-1)">−1</button>
         <input type="number" id="st-qty" class="st-qty-input tnum" min="1" step="1" inputmode="numeric" value="1" oninput="onStockTransferQtyChange()">
@@ -6035,7 +6035,7 @@
     </div>
 
     <div class="form-group" style="margin-bottom:14px;">
-      <label for="st-note">Transfer Note / Reason <span class="muted-note" style="font-weight:400;font-size:10px;color:var(--content-muted);">(optional)</span></label>
+      <label for="st-note">Transfer Note / Reason <span class="muted-note" style="font-weight:400;font-size:var(--text-2xs);color:var(--content-muted);">(optional)</span></label>
       <input type="text" id="st-note" placeholder="e.g. Fair copies, Book launch stock">
     </div>
 

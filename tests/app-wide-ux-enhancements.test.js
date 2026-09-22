@@ -74,7 +74,7 @@ describe('App-Wide 5 UX Enhancements Suite (/ux-designer)', () => {
     });
 
     it('formats book prices and IDs with tabular monospace DM Mono figures and adds test books empty state', () => {
-      expect(mainJs).toContain('class="tnum" style="font-family:var(--font-mono);font-size:12px;"');
+      expect(mainJs).toContain('class="tnum" style="font-family:var(--font-mono);font-size:var(--text-sm);"');
       expect(mainJs).toContain('No Test Books Found');
     });
   });

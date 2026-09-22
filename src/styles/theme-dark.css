@@ -69,6 +69,18 @@
   --text3: #9A9182;
   --text4: #6E6557;
 
+  /* PAPER — Press Proof's object surfaces. The chrome above (--ink/--cream)
+     stays the black desk; these are what a card, a button, the modal or a
+     pill sit on instead. --paper is close kin to --cream, --on-paper is
+     exactly --ink — this is the light theme's own system, laid on a black
+     stage rather than a cream one, not a new palette. */
+  --paper: #F2ECDD;
+  --paper2: #E7DFC9;
+  --paper3: #DED4BA;
+  --on-paper: #100F0D;
+  --on-paper2: #4A443C;
+  --on-paper3: #756B5B;
+
   /* GOLD — the brand accent. Lifted ~2 steps because #c8913a sits at 3.1:1 on
      this page colour; these clear AA as label and link text. */
   --gold: #FF6B55;
@@ -170,6 +182,13 @@
     --text2: #C9C0AF;
     --text3: #9A9182;
     --text4: #6E6557;
+
+    --paper: #F2ECDD;
+    --paper2: #E7DFC9;
+    --paper3: #DED4BA;
+    --on-paper: #100F0D;
+    --on-paper2: #4A443C;
+    --on-paper3: #756B5B;
 
     --gold: #FF6B55;
     --gold2: #FF8A78;
@@ -295,7 +314,7 @@
 /* Audience summary card: white → cream diagonal with a gold radial. */
 .theme-dark .audience-summary-card {
   background:
-    radial-gradient(circle at 8% 0%, rgba(229, 169, 63, .16), transparent 34%),
+    radial-gradient(circle at 8% 0%, rgba(255, 107, 85, .16), transparent 34%),
     linear-gradient(135deg, #1f1a13 0%, #16120e 100%); /* token-ok: bespoke gradient stops, not a reusable palette colour */
   box-shadow: var(--elev-3);
 }
@@ -309,9 +328,9 @@
 /* Skeletons: the shimmer has to be lighter than the surface, not darker. */
 .theme-dark .skeleton-line {
   background: linear-gradient(90deg,
-    rgba(247, 242, 233, .04) 25%,
-    rgba(247, 242, 233, .10) 50%,
-    rgba(247, 242, 233, .04) 75%);
+    rgba(250, 246, 236, .04) 25%,
+    rgba(250, 246, 236, .10) 50%,
+    rgba(250, 246, 236, .04) 75%);
   background-size: 200% 100%;
 }
 
@@ -331,32 +350,32 @@
    These are single-declaration overrides on purpose. Rewriting the light rules
    to use a shared token would change 15 shipped screens in light mode too, and
    this change is meant to add a theme, not restyle the app. */
-.theme-dark .cf-detail-totals span { background: rgba(247, 242, 233, .045); }
-.theme-dark .cf-detail-filter { background: rgba(247, 242, 233, .04); }
-.theme-dark .web-order-steps span { background: rgba(247, 242, 233, .05); }
-.theme-dark .web-stat { background: rgba(247, 242, 233, .05); box-shadow: var(--elev-1); }
+.theme-dark .cf-detail-totals span { background: rgba(250, 246, 236, .045); }
+.theme-dark .cf-detail-filter { background: rgba(250, 246, 236, .04); }
+.theme-dark .web-order-steps span { background: rgba(250, 246, 236, .05); }
+.theme-dark .web-stat { background: rgba(250, 246, 236, .05); box-shadow: var(--elev-1); }
 .theme-dark .web-empty {
-  background: linear-gradient(180deg, rgba(247, 242, 233, .04), rgba(247, 242, 233, .015));
+  background: linear-gradient(180deg, rgba(250, 246, 236, .04), rgba(250, 246, 236, .015));
 }
 .theme-dark .web-empty.success {
-  background: linear-gradient(180deg, rgba(52, 211, 153, .10), rgba(247, 242, 233, .02));
+  background: linear-gradient(180deg, rgba(52, 211, 153, .10), rgba(250, 246, 236, .02));
 }
 .theme-dark .consignment-summary-panel {
-  background: linear-gradient(135deg, rgba(247, 242, 233, .05), rgba(247, 242, 233, .02));
+  background: linear-gradient(135deg, rgba(250, 246, 236, .05), rgba(250, 246, 236, .02));
 }
-.theme-dark .audience-stat { background: rgba(247, 242, 233, .05); }
+.theme-dark .audience-stat { background: rgba(250, 246, 236, .05); }
 .theme-dark .audience-stat.focus {
-  background: linear-gradient(180deg, rgba(221, 165, 72, .18), rgba(247, 242, 233, .03));
+  background: linear-gradient(180deg, rgba(221, 165, 72, .18), rgba(250, 246, 236, .03));
 }
-.theme-dark .oc-hero-stat { background: rgba(247, 242, 233, .05); }
-.theme-dark .oc-funnel-seg { background: rgba(247, 242, 233, .04); }
+.theme-dark .oc-hero-stat { background: rgba(250, 246, 236, .05); }
+.theme-dark .oc-funnel-seg { background: rgba(250, 246, 236, .04); }
 .theme-dark .oc-contributor-card {
-  background: linear-gradient(180deg, rgba(247, 242, 233, .055), rgba(247, 242, 233, .025)) !important;
+  background: linear-gradient(180deg, rgba(250, 246, 236, .055), rgba(250, 246, 236, .025)) !important;
 }
 .theme-dark .oc-empty-state {
   background:
-    radial-gradient(circle at center 16%, rgba(229, 169, 63, .16), transparent 32%),
-    rgba(247, 242, 233, .03) !important;
+    radial-gradient(circle at center 16%, rgba(255, 107, 85, .16), transparent 32%),
+    rgba(250, 246, 236, .03) !important;
 }
 /* The active POS book card: gold wash into the card fill. The white stop is
    opaque here, so it has to become the dark card colour, not a light wash. */
@@ -375,9 +394,9 @@
    Alphas are much lower than the light theme's .78/.94: those are "paper on
    paper", where here the same number would be a floodlight. */
 .theme-dark #opencall-body {
-  --oc-surface: rgba(247, 242, 233, .045);
-  --oc-surface-strong: rgba(247, 242, 233, .06);
-  --oc-hairline: rgba(247, 242, 233, .12);
+  --oc-surface: rgba(250, 246, 236, .045);
+  --oc-surface-strong: rgba(250, 246, 236, .06);
+  --oc-hairline: rgba(250, 246, 236, .12);
   --oc-shadow-soft: var(--elev-2);
   --oc-shadow-lift: var(--elev-hover);
 }
@@ -385,20 +404,20 @@
 /* Baked gradients and washes in the same layer that no token reaches. */
 .theme-dark .oc-hero {
   background:
-    radial-gradient(circle at 12% 12%, rgba(229, 169, 63, .18), transparent 32%),
+    radial-gradient(circle at 12% 12%, rgba(255, 107, 85, .18), transparent 32%),
     linear-gradient(135deg, var(--cream3), var(--surface-card));
 }
 .theme-dark .oc-project-card::before {
-  background: radial-gradient(circle at top left, rgba(229, 169, 63, .16), transparent 58%);
+  background: radial-gradient(circle at top left, rgba(255, 107, 85, .16), transparent 58%);
 }
 .theme-dark .oc-status-strip {
-  background: rgba(247, 242, 233, .04);
-  border-color: rgba(247, 242, 233, .10);
+  background: rgba(250, 246, 236, .04);
+  border-color: rgba(250, 246, 236, .10);
 }
 
 /* ── One-off literals with no token home ─────────────────────────────────── */
 
-.theme-dark .sheets-log-tbl tbody tr:nth-child(even) { background: rgba(247, 242, 233, .03); }
+.theme-dark .sheets-log-tbl tbody tr:nth-child(even) { background: rgba(250, 246, 236, .03); }
 .theme-dark .sheets-log-tbl tbody tr:hover { background: rgba(221, 165, 72, .08); }
 .theme-dark .sheets-log-tbl th { background: var(--cream2); }
 
@@ -516,6 +535,119 @@
 }
 .theme-dark .shipping-reconciliation-row:hover {
   border-color: var(--gold-line);
+}
+
+
+/* ── PRESS PROOF — dark-mode objects go light, not darker ───────────────────
+   The chrome (page, sidebar, header) was already near-black, and that part
+   of dark mode was never the complaint. The complaint was that every OBJECT
+   on top of it — a card, a button, the modal, a pill — was ALSO near-black,
+   so nothing had an edge (card vs. page measured 1.05:1). These corrections
+   give each object the app's own LIGHT-mode surface instead of a
+   slightly-less-dark one: --paper is close kin to --cream, --on-paper is
+   exactly --ink. This is not a new palette — it is the light theme laid
+   down on a black stage rather than a cream one.
+
+   The mechanism: each rule locally redefines the semantic tokens its own
+   descendants already read through — --content-primary/secondary/muted,
+   --surface-sunken/inset/raised, --border, --border2, --rule-ink — so a
+   field inside a card, a badge in a modal title bar, or a table's hover
+   state all resolve correctly without hunting down every call site by
+   hand. Only something reading a PRIMITIVE directly (--text, --ink)
+   instead of through the semantic layer would slip past this; nothing
+   found while writing this pass did.
+
+   Elevation stops being a grey shadow and becomes a flare-red offset — the
+   one place a monochrome shadow would have vanished into the black desk
+   behind it, and a nod to a riso print's own registration drift. */
+
+.theme-dark .card,
+.theme-dark .modal {
+  background: var(--paper);
+  border-color: var(--on-paper);
+  --content-primary: var(--on-paper);
+  --content-secondary: var(--on-paper2);
+  --content-muted: var(--on-paper3);
+  --content-faint: var(--on-paper3);
+  --surface-page: var(--paper);
+  --surface-raised: var(--paper);
+  --surface-sunken: var(--paper2);
+  --surface-inset: var(--paper2);
+  --border: rgba(16, 15, 13, .26);
+  --border2: rgba(16, 15, 13, .12);
+  --rule-ink: var(--on-paper);
+}
+.theme-dark .card { box-shadow: 4px 4px 0 var(--gold); }
+.theme-dark .modal { box-shadow: 6px 6px 0 var(--gold); }
+
+.theme-dark .btn {
+  background: var(--paper);
+  color: var(--on-paper);
+  border-color: var(--on-paper);
+  --surface-inset: var(--paper2);
+}
+.theme-dark .btn:hover { background: var(--paper2); }
+/* .btn.gold already puts dark ink on a bright fill — that IS the Press
+   Proof pattern, unchanged since Wave 0. .btn.ink was the OTHER
+   always-dark accent button; on a page that is now also dark it would
+   vanish the same way .kpi did below, so it gets the same paper
+   treatment as the base button rather than staying "always ink". */
+.theme-dark .btn.ink {
+  background: var(--paper);
+  color: var(--on-paper);
+  border-color: var(--on-paper);
+}
+.theme-dark .btn.ink:hover { background: var(--paper2); }
+.theme-dark .btn.danger-btn {
+  background: var(--red);
+  color: var(--on-paper);
+  border-color: var(--on-paper);
+}
+.theme-dark .btn.danger-btn:hover { background: var(--red-light); }
+
+/* Solid stickers, not a tinted wash — a translucent pill over the void
+   just goes murky again, the same failure this whole pass exists to fix. */
+.theme-dark .pill.green { background: var(--green); color: var(--on-paper); }
+.theme-dark .pill.amber { background: var(--amber); color: var(--on-paper); }
+.theme-dark .pill.red   { background: var(--red);   color: var(--on-paper); }
+.theme-dark .pill.blue  { background: var(--blue);  color: var(--on-paper); }
+.theme-dark .pill.gray  { background: var(--paper2); color: var(--on-paper2); border-color: var(--on-paper2); }
+.theme-dark .pill.gold  { background: var(--gold);  color: var(--on-paper); border-color: var(--on-paper); }
+
+/* The KPI tile is deliberately dark in BOTH themes everywhere else in the
+   app — the one bold accent on an otherwise light page. That stops being
+   true the moment the page is also dark: an always-ink tile on a now-ink
+   page is exactly the vanishing act this pass exists to fix, so here it
+   flips with everything else instead of staying "always dark". */
+.theme-dark .kpi {
+  background: var(--paper);
+  border-color: rgba(16, 15, 13, .12);
+  box-shadow: 3px 3px 0 var(--gold);
+}
+.theme-dark .kpi-label { color: var(--on-paper3); }
+.theme-dark .kpi-value { color: var(--on-paper); }
+
+.theme-dark .tbl-wrap {
+  --content-primary: var(--on-paper);
+  --surface-raised: var(--paper);
+  --surface-sunken: var(--paper2);
+  --border: rgba(16, 15, 13, .26);
+  --border2: rgba(16, 15, 13, .12);
+  --rule-ink: var(--on-paper);
+  box-shadow: 4px 4px 0 var(--gold);
+}
+/* .tbl thead stays on --surface-inverse (always ink) — a dark header bar
+   already read correctly against a light table body before this pass,
+   and reads the same way now, so nothing about it needed to change. */
+
+.theme-dark .modal-tabs.segmented-control,
+.theme-dark .book-modal-stepper {
+  background: var(--paper2);
+  border-color: var(--on-paper);
+  --content-primary: var(--on-paper);
+  --content-secondary: var(--on-paper2);
+  --surface-raised: var(--paper);
+  --rule-ink: var(--on-paper);
 }
 
 } /* end @media screen — component corrections */
