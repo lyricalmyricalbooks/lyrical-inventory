@@ -1018,19 +1018,27 @@
     <div id="d-reimburse-list"></div>
   </div>
 
-  <div class="sect" id="danger-zone-sect" style="display:none;">Danger zone</div>
-  <div id="danger-zone-block" style="display:none;background:var(--surface-card);border-radius:var(--r3);border:var(--stroke-hair) solid var(--border);padding:1.25rem;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:1.25rem;">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;">
-      <div style="flex:1;min-width:200px;"><div style="font-weight:700;font-size:var(--text-base);margin-bottom:3px;">Reset all sales data for this book</div><div style="font-size:var(--text-sm);color:var(--text3);">Clears orders, history and consignment for this book only. Your Google Sheet is untouched.</div></div>
-      <button class="btn danger-btn" onclick="resetBookData()">⚠ Reset book data</button>
+  <div class="overview-section" id="danger-zone-sect" style="display:none;">
+    <div class="sec-head is-danger">
+      <div class="sec-head-titles">
+        <div class="sec-kicker"><span class="sec-kicker-dot"></span>Admin</div>
+        <div class="section-hed sec-head-title">Danger zone</div>
+        <p class="section-subcopy">Actions here change or overwrite this book's records and can't be undone.</p>
+      </div>
     </div>
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;padding-top:1.25rem;border-top:var(--stroke-hair) solid var(--border);">
-      <div style="flex:1;min-width:200px;"><div style="font-weight:700;font-size:var(--text-base);margin-bottom:3px;">Backfill past gratuity expenses</div><div style="font-size:var(--text-sm);color:var(--text3);">Automatically creates expense ledger entries for any past gratuities that weren't expensed, using the book's current production cost.</div></div>
-      <button class="btn outline" onclick="backfillGratuityExpenses()">Backfill past gratuities</button>
-    </div>
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;padding-top:1.25rem;border-top:var(--stroke-hair) solid var(--border);">
-      <div style="flex:1;min-width:200px;"><div style="font-weight:700;font-size:var(--text-base);margin-bottom:3px;">Restore book data from Google Sheets</div><div style="font-size:var(--text-sm);color:var(--text3);">Pulls all sales and consignment records for this book from your connected Google Sheet. <strong style="color:var(--amber);">Warning: This will overwrite the local sales, history, and consignment records for this book.</strong></div></div>
-      <button class="btn gold outline" id="d-restore-sheets-btn" onclick="restoreBookDataFromSheets()">Sync from Google Sheet</button>
+    <div id="danger-zone-block" style="display:none;background:var(--surface-card);border-radius:var(--r3);border:var(--stroke-hair) solid var(--border);padding:1.25rem;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:1.25rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;">
+        <div style="flex:1;min-width:200px;"><div style="font-weight:700;font-size:var(--text-base);margin-bottom:3px;">Reset all sales data for this book</div><div style="font-size:var(--text-sm);color:var(--text3);">Clears orders, history and consignment for this book only. Your Google Sheet is untouched.</div></div>
+        <button class="btn danger-btn" onclick="resetBookData()">⚠ Reset book data</button>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;padding-top:1.25rem;border-top:var(--stroke-hair) solid var(--border);">
+        <div style="flex:1;min-width:200px;"><div style="font-weight:700;font-size:var(--text-base);margin-bottom:3px;">Backfill past gratuity expenses</div><div style="font-size:var(--text-sm);color:var(--text3);">Automatically creates expense ledger entries for any past gratuities that weren't expensed, using the book's current production cost.</div></div>
+        <button class="btn outline" onclick="backfillGratuityExpenses()">Backfill past gratuities</button>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;padding-top:1.25rem;border-top:var(--stroke-hair) solid var(--border);">
+        <div style="flex:1;min-width:200px;"><div style="font-weight:700;font-size:var(--text-base);margin-bottom:3px;">Restore book data from Google Sheets</div><div style="font-size:var(--text-sm);color:var(--text3);">Pulls all sales and consignment records for this book from your connected Google Sheet. <strong style="color:var(--amber);">Warning: This will overwrite the local sales, history, and consignment records for this book.</strong></div></div>
+        <button class="btn gold outline" id="d-restore-sheets-btn" onclick="restoreBookDataFromSheets()">Sync from Google Sheet</button>
+      </div>
     </div>
   </div>
 </div>

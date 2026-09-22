@@ -19,7 +19,7 @@ function dashboardPanel() {
   return html.slice(start, end);
 }
 
-test('profit sharing, sales by channel, consignment overview, inventory, break-even, pending transfers and pending reimbursements share the section-head pattern', () => {
+test('profit sharing, sales by channel, consignment overview, inventory, break-even, pending transfers, pending reimbursements and the danger zone share the section-head pattern', () => {
   const panel = dashboardPanel();
 
   // This is the screen the publisher opens for every single book. It used to
@@ -29,8 +29,10 @@ test('profit sharing, sales by channel, consignment overview, inventory, break-e
   // that still fell back to it after the other four were fixed (it sits
   // above them, right below the KPI grid, so it read as already handled);
   // pending artist transfers and pending expense reimbursements were the two
-  // that still fell back to it after that. None of the seven may fall back
-  // to it.
+  // that still fell back to it after that; the Danger zone — reset, backfill
+  // and restore-from-Sheets — was the last one, sitting at the very bottom of
+  // the screen where it read as least important even though its actions are
+  // the least reversible on the page. None of the eight may fall back to it.
   expect(panel).not.toMatch(/class="sect"[^>]*>Profit Sharing Breakdown</);
   expect(panel).not.toMatch(/class="sect">Sales by channel</);
   expect(panel).not.toMatch(/class="sect">Consignment overview</);
@@ -38,9 +40,10 @@ test('profit sharing, sales by channel, consignment overview, inventory, break-e
   expect(panel).not.toMatch(/class="sect">Break-even tracker</);
   expect(panel).not.toMatch(/class="sect">Pending artist transfers</);
   expect(panel).not.toMatch(/class="sect">Pending expense reimbursements</);
+  expect(panel).not.toMatch(/class="sect" id="danger-zone-sect"/);
 
   const serifHeads = panel.match(/class="section-hed sec-head-title"/g) || [];
-  expect(serifHeads).toHaveLength(7);
+  expect(serifHeads).toHaveLength(8);
   expect(panel).toMatch(/class="section-hed sec-head-title">Profit Sharing Breakdown</);
   expect(panel).toMatch(/class="section-hed sec-head-title">Sales by channel</);
   expect(panel).toMatch(/class="section-hed sec-head-title">Consignment overview</);
@@ -48,21 +51,27 @@ test('profit sharing, sales by channel, consignment overview, inventory, break-e
   expect(panel).toMatch(/class="section-hed sec-head-title">Break-even tracker</);
   expect(panel).toMatch(/class="section-hed sec-head-title">Pending artist transfers</);
   expect(panel).toMatch(/class="section-hed sec-head-title">Pending expense reimbursements</);
+  expect(panel).toMatch(/class="section-hed sec-head-title">Danger zone</);
 
   // Each head carries a kicker with its dot, and a line of subcopy.
-  expect(panel.match(/class="sec-kicker"/g) || []).toHaveLength(7);
-  expect(panel.match(/class="sec-kicker-dot"/g) || []).toHaveLength(7);
-  expect(panel.match(/class="section-subcopy"/g) || []).toHaveLength(7);
+  expect(panel.match(/class="sec-kicker"/g) || []).toHaveLength(8);
+  expect(panel.match(/class="sec-kicker-dot"/g) || []).toHaveLength(8);
+  expect(panel.match(/class="section-subcopy"/g) || []).toHaveLength(8);
 });
 
-test('gold stays spent once on this screen — all seven heads are muted', () => {
+test('gold stays spent once on this screen — the seven report heads are muted, and the danger zone alone breaks from that to warn instead', () => {
   const panel = dashboardPanel();
   // The KPI grid above already spends this screen's one gold accent on
   // "Stock on hand" (`.kpi.is-lead`). A second gold kicker here would compete
-  // with it, so every head takes the neutral slate.
-  const heads = panel.match(/<div class="sec-head(?: [\w-]+)? is-muted">/g) || [];
-  expect(heads).toHaveLength(7);
-  expect(heads.every(h => h.includes('is-muted'))).toBe(true);
+  // with it, so every reporting head takes the neutral slate. The danger zone
+  // is not a report — its rose kicker is a deliberate second colour, carrying
+  // the same "this can't be undone" meaning as `.btn.danger-btn` below it.
+  const mutedHeads = panel.match(/<div class="sec-head(?: [\w-]+)? is-muted">/g) || [];
+  expect(mutedHeads).toHaveLength(7);
+  expect(mutedHeads.every(h => h.includes('is-muted'))).toBe(true);
+
+  const dangerHeads = panel.match(/<div class="sec-head is-danger">/g) || [];
+  expect(dangerHeads).toHaveLength(1);
 });
 
 test('profit sharing card sits directly in a .card, so its head carries its own wrap modifier', () => {
@@ -76,7 +85,7 @@ test('profit sharing card sits directly in a .card, so its head carries its own 
 
 test('each overview-section still shares one rhythm', () => {
   const panel = dashboardPanel();
-  expect(panel.match(/class="overview-section"/g) || []).toHaveLength(6);
+  expect(panel.match(/class="overview-section"/g) || []).toHaveLength(7);
 });
 
 test('the tables and stock block keep their real ids and structure under the new heads', () => {
