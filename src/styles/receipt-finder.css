@@ -207,26 +207,6 @@
 .finder-alert.is-warn { border-inline-start-color: var(--amber); }
 .finder-alert.is-info { border-inline-start-color: var(--gold); }
 
-/* ── Setup Disclosure ──────────────────────────────────────────────── */
-.finder-setup { margin-block: var(--space-3); }
-.finder-setup summary { cursor: pointer; padding-block: var(--space-2); font-size: var(--text-sm); color: var(--content-secondary); }
-.finder-setup label { display: block; font-size: var(--text-sm); color: var(--content-secondary); margin-bottom: var(--space-1); }
-.finder-setup input {
-  display: block; width: 100%; min-height: 40px; padding: var(--space-2); box-sizing: border-box;
-  color: var(--content-primary); background: var(--surface-raised); border: 1px solid var(--border-default); border-radius: var(--r);
-}
-.finder-check:empty { display: none; }
-.finder-check {
-  margin-block: var(--space-3); padding: var(--space-4); background: var(--surface-sunken); border: 1px solid var(--border-default);
-  border-inline-start: 3px solid var(--border-default); border-radius: var(--r2); display: grid; gap: var(--space-2);
-}
-.finder-check.is-ready { border-inline-start-color: var(--green); }
-.finder-check.is-warn { border-inline-start-color: var(--amber); }
-.finder-check.is-error { border-inline-start-color: var(--red); }
-.finder-check p { margin: 0; display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; color: var(--content-primary); }
-.finder-check ol { margin: 0; padding-inline-start: var(--space-5); display: grid; gap: var(--space-2); color: var(--content-secondary); font-size: var(--text-sm); line-height: 1.6; }
-.finder-check .skeleton-line { height: 20px; }
-
 /* ── Interaction Baseline ──────────────────────────────────────────── */
 .finder-toolbar { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; margin-block: var(--space-2); }
 .finder-listbar {
@@ -348,7 +328,7 @@
 .finder-draft:hover { border-color: var(--border-strong); }
 .finder-draft > summary {
   display: grid;
-  grid-template-columns: minmax(0, 1.8fr) minmax(130px, .5fr) 140px 110px;
+  grid-template-columns: minmax(0, 1.8fr) minmax(130px, .5fr) 140px 110px var(--target-min);
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
   align-items: center;
@@ -363,6 +343,15 @@
 .finder-money, .finder-edit-grid input[type=number] { text-align: right; }
 .finder-money { font-size: var(--text-base); font-weight: 600; }
 .finder-date { font-size: var(--text-xs); color: var(--content-secondary); }
+/* Sits right on the collapsed row so a receipt that isn't one can be
+   dismissed in a single click, without opening the row to find the button
+   that used to be buried at the bottom of it. */
+.finder-draft-x {
+  justify-self: end;
+  padding: 0;
+  color: var(--content-muted);
+}
+.finder-draft-x:hover { color: var(--red); border-color: var(--red); }
 
 .finder-review {
   padding: var(--space-4);
@@ -468,6 +457,7 @@
   .finder-conn { width: 100%; justify-content: space-between; }
   .finder-summary { grid-template-columns: 1fr; }
   .finder-draft > summary { grid-template-columns: minmax(0, 1fr) minmax(100px, .5fr); }
+  .finder-draft-x { grid-column: 1 / -1; }
   .finder-presets-sep { display: none; }
   .finder-item { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
