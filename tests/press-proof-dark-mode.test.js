@@ -264,7 +264,7 @@ describe('Press Proof — the stylesheet actually parses (not just matches by re
       '.theme-dark .card,\n.theme-dark .modal',
       '.theme-dark .btn',
       '.theme-dark .pill.gray',
-      '.theme-dark .kpi',
+      '.theme-dark .kpi,\n.theme-dark .metric-banner,\n.theme-dark .stock-block,\n.theme-dark .payment-methods-card',
       '.theme-dark .tbl-wrap',
       '.theme-dark .tc-ledger-cat-select',
       '.theme-dark .modal-tabs.segmented-control,\n.theme-dark .book-modal-stepper',
