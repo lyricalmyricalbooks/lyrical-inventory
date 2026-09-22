@@ -686,7 +686,8 @@ import { channelMixRows } from './lib/channel-mix.js';
 import { csvCell, toCsv } from './lib/csv.js';
 import { downloadText, downloadCsv } from './lib/download.js';
 import { OC_STAGES } from './lib/opencall.js';
-import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, orderStockPreview, orderStockPreviewCopy, deriveStockBreakdown, transferAuthorStock, deductSaleFromStockBreakdown, isVoidStale } from './lib/inventory.js';
+import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, recordInventoryDisposal, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, orderStockPreview, orderStockPreviewCopy, deriveStockBreakdown, transferAuthorStock, deductSaleFromStockBreakdown, isVoidStale } from './lib/inventory.js';
+import { createInventoryDisposalExpense, createSection10Adjustment, inventoryAdjustmentCsvRows } from './lib/inventory-adjustment.js';
 import { posStockView, posOversellSummary } from './lib/pos-stock.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores, consignmentLedgerTotals, storeBalanceSlug, storeBalanceComparison } from './lib/consignment.js';
 import { deriveInvoiceBookIds, invoicesForBook, findInvoiceAcrossBooks, otherBookTitles, lineItemBookId, invoiceBookSplit, invoiceShareForBook, neutralInvoicePrefix, invoiceNumberPrefix, nextInvoiceSeq, buildInvoiceNumber, BILL_TO_STORE, BILL_TO_PERSON, invoiceBillToMode, billToPayload, billToPersonFrom } from './lib/invoices.js';
@@ -16150,7 +16151,8 @@ export const TC_CATEGORIES = [
   'Editorial & Proofreading', 'Illustration & Photography', 'Rights & Permissions',
   'ISBN, Barcodes & Cataloging', 'Shipping & Postage', 'Warehousing & Fulfillment',
   'Packaging Materials', 'Office Supplies', 'Home Office', 'Travel & Meals', 'Professional Services',
-  'Books, Research & Reference', 'Events & Exhibitions', 'Artist Royalties', 'Other'
+  'Books, Research & Reference', 'Events & Exhibitions', 'Artist Royalties',
+  'Inventory Valuation Adjustment', 'Other'
 ];
 
 export function changeExpenseCategory(itemId, newCat) {
@@ -19597,6 +19599,7 @@ function calculateInventoryValuationData() {
     }
 
     const totalUnsold = stockOnHand + stockConsigned;
+    const publisherStockOnHand = deriveStockBreakdown(s, book).publisherOnHand;
 
     // ⚡ Bolt: Imperative loops instead of .reduce() avoid array allocations in rendering functions
   let totalSold = 0;
@@ -19657,6 +19660,7 @@ function calculateInventoryValuationData() {
       format: book.format || 'Paperback',
       printRun,
       stockOnHand,
+      publisherStockOnHand,
       stockConsigned,
       totalUnsold,
       totalSold,
@@ -19703,6 +19707,175 @@ function calculateInventoryValuationData() {
   return { items, totals };
 }
 
+let _inventoryAdjustmentMode = 'valuation';
+
+function _selectedInventoryValuationItem() {
+  const id = $('wo-book-id')?.value;
+  return calculateInventoryValuationData().items.find(item => item.id === id) || null;
+}
+
+function _section10RecordsForBook(bookId) {
+  return (TAX_CENTER.businessExpenses || [])
+    .filter(entry => entry?.inventoryAdjustment?.type === 'section10' &&
+      entry.inventoryAdjustment.bookId === bookId && entry.date)
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+}
+
+function _priorSection10WriteDown(bookId, date) {
+  const year = String(date || '').slice(0, 4);
+  const prior = _section10RecordsForBook(bookId)
+    .find(entry => String(entry.date).slice(0, 4) < year);
+  const detail = prior?.inventoryAdjustment;
+  return roundCents(Number(detail?.closingWriteDownCAD ?? detail?.writeDownCAD ?? 0));
+}
+
+function setInventoryAdjustmentMode(mode) {
+  _inventoryAdjustmentMode = mode === 'disposal' ? 'disposal' : 'valuation';
+  const valuation = _inventoryAdjustmentMode === 'valuation';
+  $('wo-mode-valuation-label')?.classList.toggle('is-active', valuation);
+  $('wo-mode-disposal-label')?.classList.toggle('is-active', !valuation);
+  if ($('wo-mode-valuation')) $('wo-mode-valuation').checked = valuation;
+  if ($('wo-mode-disposal')) $('wo-mode-disposal').checked = !valuation;
+  if ($('wo-nrv-wrap')) $('wo-nrv-wrap').style.display = valuation ? '' : 'none';
+  if ($('wo-nrv')) $('wo-nrv').required = valuation;
+  if ($('wo-total-label')) $('wo-total-label').textContent = valuation
+    ? 'Current-year tax adjustment:'
+    : 'Cost basis removed:';
+  if ($('wo-submit')) $('wo-submit').textContent = valuation
+    ? 'Record valuation adjustment'
+    : 'Record physical disposal';
+  const reason = $('wo-reason');
+  if (reason) reason.value = valuation ? 'Obsolete edition or title' : 'Damaged or defective inventory';
+  onWriteOffBookChange();
+}
+
+function openInventoryWriteOffModal() {
+  if (!window.IS_PUBLISHER || isAuthor()) return;
+  const items = calculateInventoryValuationData().items.filter(item => item.totalUnsold > 0);
+  const select = $('wo-book-id');
+  if (!select) return;
+  select.innerHTML = items.map(item =>
+    `<option value="${escapeHtml(item.id)}">${escapeHtml(item.title)} · ${item.totalUnsold} unsold</option>`
+  ).join('');
+  if (items.some(item => item.id === activeBook)) select.value = activeBook;
+  $('writeoff-form')?.reset();
+  if ($('wo-date')) $('wo-date').value = today();
+  if ($('wo-evidence')) $('wo-evidence').value = '';
+  if ($('wo-notes')) $('wo-notes').value = '';
+  setInventoryAdjustmentMode('valuation');
+  openM('inventory-writeoff-modal');
+}
+
+function onWriteOffBookChange() {
+  const item = _selectedInventoryValuationItem();
+  const qty = $('wo-qty');
+  if (!item || !qty) return;
+  const available = _inventoryAdjustmentMode === 'disposal' ? item.publisherStockOnHand : item.totalUnsold;
+  qty.max = String(available);
+  qty.value = String(Math.min(Math.max(1, Number(qty.value) || 1), available));
+  if ($('wo-unit-cost')) {
+    $('wo-unit-cost').textContent = `${item.unitCost.toFixed(2)} ${item.currency} · ${item.fxRate.toFixed(4)} CAD FX`;
+  }
+  recalcWriteOffValue();
+}
+
+function recalcWriteOffValue() {
+  const item = _selectedInventoryValuationItem();
+  if (!item) return;
+  const quantity = Math.max(0, Number($('wo-qty')?.value) || 0);
+  const nrv = _inventoryAdjustmentMode === 'valuation'
+    ? Math.max(0, Number($('wo-nrv')?.value) || 0)
+    : 0;
+  const closingWriteDown = roundCents(Math.max(0, quantity * (item.unitCost - Math.min(nrv, item.unitCost)) * item.fxRate));
+  const priorWriteDown = _inventoryAdjustmentMode === 'valuation'
+    ? _priorSection10WriteDown(item.id, $('wo-date')?.value)
+    : 0;
+  const taxAdjustment = roundCents(closingWriteDown - priorWriteDown);
+  if ($('wo-total-deduction')) $('wo-total-deduction').textContent = `${taxAdjustment < 0 ? '−' : ''}$${Math.abs(taxAdjustment).toFixed(2)} CAD`;
+  if ($('wo-stock-effect')) {
+    $('wo-stock-effect').textContent = _inventoryAdjustmentMode === 'valuation'
+      ? `Physical stock stays at ${item.totalUnsold} unsold copies. This is a non-cash Tax Centre adjustment.`
+      : `${quantity} publisher-held ${quantity === 1 ? 'copy' : 'copies'} will be permanently removed from inventory.`;
+  }
+}
+
+async function submitInventoryWriteOff() {
+  if (!window.IS_PUBLISHER || isAuthor()) return;
+  const item = _selectedInventoryValuationItem();
+  if (!item) return showToast('Choose an inventory title', 'err');
+  const quantity = Number($('wo-qty')?.value);
+  const available = _inventoryAdjustmentMode === 'disposal' ? item.publisherStockOnHand : item.totalUnsold;
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > available) {
+    return showToast(`Quantity must be between 1 and ${available}`, 'err');
+  }
+
+  const input = {
+    id: `iva_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    bookId: item.id,
+    title: item.title,
+    quantity,
+    unitCostNative: item.unitCost,
+    nrvPerUnitNative: Number($('wo-nrv')?.value),
+    currency: item.currency,
+    fxRate: item.fxRate,
+    date: $('wo-date')?.value,
+    reason: $('wo-reason')?.value,
+    evidence: $('wo-evidence')?.value,
+    notes: $('wo-notes')?.value,
+    priorWriteDownCAD: _priorSection10WriteDown(item.id, $('wo-date')?.value),
+  };
+
+  let record;
+  try {
+    record = _inventoryAdjustmentMode === 'valuation'
+      ? createSection10Adjustment(input)
+      : createInventoryDisposalExpense(input);
+  } catch (error) {
+    return showToast(error.message, 'err', 5000);
+  }
+
+  if (!Array.isArray(TAX_CENTER.businessExpenses)) TAX_CENTER.businessExpenses = [];
+  const previousExpenses = [...TAX_CENTER.businessExpenses];
+  if (_inventoryAdjustmentMode === 'valuation') {
+    const taxYear = String(record.date).slice(0, 4);
+    TAX_CENTER.businessExpenses = TAX_CENTER.businessExpenses.filter(entry =>
+      !(entry?.inventoryAdjustment?.type === 'section10' &&
+        entry.inventoryAdjustment.bookId === item.id &&
+        String(entry.date).slice(0, 4) === taxYear)
+    );
+  }
+  TAX_CENTER.businessExpenses.unshift(record);
+  try {
+    const saved = await window._fbSaveSettings('taxCenter', TAX_CENTER);
+    if (!saved) throw new Error('Tax Centre settings save was rejected');
+  } catch (error) {
+    TAX_CENTER.businessExpenses = previousExpenses;
+    console.error(error);
+    return showToast('Could not save the inventory adjustment', 'err', 5000);
+  }
+
+  if (_inventoryAdjustmentMode === 'disposal') {
+    const s = states[item.id] || defaultState(BOOKS[item.id]);
+    states[item.id] = s;
+    recordInventoryDisposal(s, {
+      id: record.id,
+      date: record.date,
+      qty: quantity,
+      reason: input.reason,
+      notes: input.notes,
+    });
+    s.stock = deriveOnHand(s, BOOKS[item.id]);
+    await saveState(item.id);
+  }
+
+  closeM('inventory-writeoff-modal');
+  openInventoryValuationModal();
+  renderTaxCenter();
+  showToast(_inventoryAdjustmentMode === 'valuation'
+    ? '✓ Section 10 valuation recorded — stock unchanged'
+    : `✓ ${quantity} ${quantity === 1 ? 'copy' : 'copies'} disposed and removed from stock`, 'ok', 5000);
+}
+
 function downloadInventoryValuationCSV() {
   const { items, totals } = calculateInventoryValuationData();
   const esc = csvCell;
@@ -19720,6 +19893,12 @@ function downloadInventoryValuationCSV() {
 
   csv += `TOTALS,"Total Active Titles: ${totals.totalTitles}",,,${totals.totalPrintRun},${totals.totalStockOnHand},${totals.totalStockConsigned},${totals.totalUnsoldUnits},${totals.totalSoldUnits},CAD,,,,,,${totals.totalOnHandCostCAD.toFixed(2)},${totals.totalConsignedCostCAD.toFixed(2)},${totals.totalAssetValueCostCAD.toFixed(2)},${totals.totalAssetValueRetailCAD.toFixed(2)},${totals.totalPotentialGrossProfitCAD.toFixed(2)}\n`;
 
+  const adjustmentRows = inventoryAdjustmentCsvRows(TAX_CENTER.businessExpenses);
+  if (adjustmentRows.length > 1) {
+    csv += '\nSECTION 10 VALUATIONS AND PHYSICAL DISPOSALS\n';
+    adjustmentRows.forEach(row => { csv += row.map(csvCell).join(',') + '\n'; });
+  }
+
   downloadCsv(csv, `Lyrical_Inventory_Valuation_${today()}.csv`);
   showToast('✓ Comprehensive Inventory Valuation CSV exported');
 }
@@ -19736,6 +19915,7 @@ function openInventoryValuationModal() {
   const subMarginEl = $('iv-stat-margin-sub');
   const tbody = $('iv-modal-table-body');
   const tfoot = $('iv-modal-table-foot');
+  const historyEl = $('iv-adjustment-history');
 
   if (costEl) costEl.textContent = `$${totals.totalAssetValueCostCAD.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} CAD`;
   if (retailEl) retailEl.textContent = `$${totals.totalAssetValueRetailCAD.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} CAD`;
@@ -19743,6 +19923,20 @@ function openInventoryValuationModal() {
   if (subUnitsEl) subUnitsEl.textContent = `${totals.totalStockOnHand.toLocaleString()} Warehouse · ${totals.totalStockConsigned.toLocaleString()} Consigned`;
   if (marginEl) marginEl.textContent = `${totals.weightedAvgMarginPct.toFixed(1)}%`;
   if (subMarginEl) subMarginEl.textContent = `$${totals.totalPotentialGrossProfitCAD.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} CAD Total Profit`;
+
+  if (historyEl) {
+    const records = (TAX_CENTER.businessExpenses || [])
+      .filter(entry => entry.inventoryAdjustment)
+      .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+    if (!records.length) {
+      historyEl.innerHTML = '<strong>No valuation adjustments recorded.</strong><span>Use “Adjust Inventory” to document a Section 10 year-end value or a physical disposal.</span>';
+    } else {
+      const latest = records[0];
+      const detail = latest.inventoryAdjustment;
+      const currentAdjustment = Number(detail.taxAdjustmentCAD ?? detail.writeDownCAD ?? 0);
+      historyEl.innerHTML = `<strong>${records.length} documented inventory adjustment${records.length === 1 ? '' : 's'}</strong><span>Latest: ${escapeHtml(latest.date || '—')} · ${escapeHtml(detail.title || '')} · closing write-down $${Number(detail.closingWriteDownCAD ?? detail.writeDownCAD ?? 0).toFixed(2)} CAD · current-year adjustment ${currentAdjustment < 0 ? '−' : ''}$${Math.abs(currentAdjustment).toFixed(2)} CAD. Reassess written-down inventory at each year end while copies remain on hand.</span>`;
+    }
+  }
 
   if (tbody) {
     tbody.innerHTML = items.map(item => {
@@ -24901,6 +25095,7 @@ function exposeLegacyInlineHandlers() {
     buyShippoLabel, verifyDestinationAddress, applyVerifiedAddressCorrections,
     dismissAddressVerification, verifyLedgerOrderAddress, batchVerifyLedgerAddresses,
     applyLedgerAddressCorrections, downloadInventoryValuationCSV, openInventoryValuationModal, printInventoryValuationReport,
+    setInventoryAdjustmentMode, openInventoryWriteOffModal, onWriteOffBookChange, recalcWriteOffValue, submitInventoryWriteOff,
     renderShippingAnalysisHub, changeShipAnalysisPage, onShipAnalysisBookFilterChange, setShipAnalysisMarginFilter,
     onShipAnalysisSearch, onInlinePostageChange,
     confirmSuggestedShippoLink, openManualShippoLinkModal, filterManualShippoLinkRows,

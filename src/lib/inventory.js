@@ -19,6 +19,7 @@ export function deriveOnHand(s, book) {
     if (e.voided) continue;
     if (e.type === 'Shipment') stock -= (e.qty || 0);
     else if (e.type === 'Return' && e.status === 'restocked') stock += (e.qty || 0);
+    else if (e.type === 'Inventory Disposal') stock -= (e.qty || 0);
   }
   return Math.max(0, stock);
 }
@@ -40,6 +41,7 @@ export function inventoryBreakdown(s, book) {
   for (const e of ((s && s.ledger) || [])) {
     if (e.voided) continue;
     if (e.type === 'Shipment') shipped += (e.qty || 0);
+    else if (e.type === 'Inventory Disposal') writtenOff += (e.qty || 0);
     else if (e.type === 'Return') {
       if (e.status === 'restocked') restocked += (e.qty || 0);
       else writtenOff += (e.qty || 0);
@@ -49,6 +51,25 @@ export function inventoryBreakdown(s, book) {
   const onHand = deriveOnHand(s, book);
   const accounted = onHand + directSold + consignSold + gratuities + onConsignment + writtenOff;
   return { printed, onHand, directSold, consignSold, gratuities, onConsignment, writtenOff, unaccounted: printed - accounted };
+}
+
+/** Record copies permanently removed from publisher-held inventory. */
+export function recordInventoryDisposal(s, disposal) {
+  if (!s || !disposal) return null;
+  const qty = Number(disposal.qty);
+  if (!Number.isInteger(qty) || qty <= 0) return null;
+  if (!Array.isArray(s.ledger)) s.ledger = [];
+  const entry = {
+    id: disposal.id,
+    type: 'Inventory Disposal',
+    date: disposal.date,
+    qty,
+    reason: String(disposal.reason || '').trim(),
+    notes: String(disposal.notes || '').trim(),
+    status: 'written off',
+  };
+  s.ledger.unshift(entry);
+  return entry;
 }
 
 // Stock change a single timeline row applies to on-hand. Negative = books left

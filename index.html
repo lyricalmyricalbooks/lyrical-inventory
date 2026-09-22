@@ -2263,6 +2263,8 @@
     </div>
   </div>
 
+  <div id="iv-adjustment-history" class="inventory-adjustment-history" aria-live="polite"></div>
+
   <!-- Book Asset Table -->
   <div class="tbl-wrap" style="max-height:55vh; overflow-y:auto; border:var(--stroke-hair) solid var(--border); border-radius:var(--r);">
     <table class="tbl" style="width:100%; font-size:var(--text-sm);">
@@ -2284,7 +2286,7 @@
   </div>
 
     <div style="display:flex; gap:8px; align-items:center;">
-      <button type="button" class="btn tag" onclick="openInventoryWriteOffModal()" style="color:var(--red); border-color:var(--border);" title="Deduct damaged, lost, or promotional comp stock for tax write-offs">📉 Write-Off Stock</button>
+      <button type="button" class="btn tag" onclick="openInventoryWriteOffModal()" style="color:var(--red); border-color:var(--border);" title="Document a Section 10 valuation or physical inventory disposal">📉 Adjust Inventory</button>
       <div style="font-size:var(--text-xs); color:var(--text3);">* FX conversion rates applied automatically to non-CAD currencies.</div>
     </div>
     <div style="display:flex; gap:8px;">
@@ -2295,20 +2297,31 @@
   </div>
 </div></div>
 
-<!-- INVENTORY DEPRECIATION & WRITE-OFF MODAL -->
+<!-- INVENTORY VALUATION & DISPOSAL MODAL -->
 <div class="overlay" id="m-inventory-writeoff-modal" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:520px; width:92vw;">
   <div class="modal-title" role="dialog" aria-modal="true">
     <div class="modal-title-left">
       <span class="modal-title-badge" aria-hidden="true">📉</span>
-      <span>Inventory Write-Off &amp; Depreciation</span>
+      <span>Inventory Adjustment</span>
     </div>
     <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('inventory-writeoff-modal')" aria-label="Close dialog" title="Close (Esc)">✕</button>
   </div>
   <div style="font-size:var(--text-sm); color:var(--text3); margin-top:-6px; margin-bottom:16px;">
-    Deduct damaged, lost, or promotional copies from ending inventory assets to record a deductible tax write-off.
+    Document a year-end Section 10 valuation or permanently remove disposed copies. Review the exported record with your accountant before filing.
   </div>
 
   <form id="writeoff-form" onsubmit="event.preventDefault(); submitInventoryWriteOff();">
+    <div class="inventory-adjustment-modes" role="radiogroup" aria-label="Inventory adjustment type">
+      <label class="inventory-adjustment-mode is-active" id="wo-mode-valuation-label">
+        <input type="radio" id="wo-mode-valuation" name="wo-mode" value="valuation" checked onchange="setInventoryAdjustmentMode(this.value)">
+        <span><strong>Section 10 valuation</strong><small>Lower the tax value; keep every copy in stock.</small></span>
+      </label>
+      <label class="inventory-adjustment-mode" id="wo-mode-disposal-label">
+        <input type="radio" id="wo-mode-disposal" name="wo-mode" value="disposal" onchange="setInventoryAdjustmentMode(this.value)">
+        <span><strong>Physical disposal</strong><small>Remove destroyed, lost, or unusable copies.</small></span>
+      </label>
+    </div>
+
     <div class="form-group" style="margin-bottom:12px;">
       <label for="wo-book-id">Select Book Title</label>
       <select id="wo-book-id" class="input" required onchange="onWriteOffBookChange(this.value)"></select>
@@ -2316,12 +2329,13 @@
 
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
       <div class="form-group">
-        <label for="wo-reason">Write-Off Reason</label>
-        <select id="wo-reason" class="input" required>
-          <option value="Damaged in Shipping / Storage">💔 Damaged (Shipping/Storage)</option>
-          <option value="Promotional Comp / Review Copy">🎁 Promotional Comp / Press</option>
-          <option value="Lost / Missing Audit Deficit">📦 Lost / Missing Audit</option>
-          <option value="Obsolete Inventory Write-Down">📉 Obsolete Inventory Write-Down</option>
+        <label for="wo-reason">Reason</label>
+        <select id="wo-reason" class="input" required onchange="recalcWriteOffValue()">
+          <option value="Obsolete edition or title">Obsolete edition or title</option>
+          <option value="Slow-moving inventory">Slow-moving inventory</option>
+          <option value="Damaged or defective inventory">Damaged or defective inventory</option>
+          <option value="Lost or missing inventory">Lost or missing inventory</option>
+          <option value="Destroyed inventory">Destroyed inventory</option>
         </select>
       </div>
 
@@ -2331,28 +2345,44 @@
       </div>
     </div>
 
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+      <div class="form-group">
+        <label for="wo-date">Valuation / disposal date</label>
+        <input type="date" id="wo-date" class="input" required onchange="recalcWriteOffValue()">
+      </div>
+      <div class="form-group" id="wo-nrv-wrap">
+        <label for="wo-nrv">NRV per unit</label>
+        <input type="number" id="wo-nrv" class="input tnum" min="0" step="0.01" value="0" required inputmode="decimal" oninput="recalcWriteOffValue()">
+      </div>
+    </div>
+
     <div style="background:var(--cream2); border:var(--stroke-hair) solid var(--gold-line); border-radius:var(--r); padding:10px 12px; margin-bottom:14px; font-size:var(--text-sm);">
       <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
         <span style="color:var(--text3);">Unit Cost Basis:</span>
         <strong id="wo-unit-cost" style="font-family:var(--font-mono);">$0.00 CAD</strong>
       </div>
       <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-        <span style="color:var(--text3);">Total Tax Write-Off Deduction:</span>
+        <span style="color:var(--text3);" id="wo-total-label">Proposed valuation adjustment:</span>
         <strong id="wo-total-deduction" style="font-family:var(--font-mono); color:var(--red); font-size:14px;">$0.00 CAD</strong>
       </div>
-      <div style="font-size:var(--text-2xs); color:var(--text3); line-height:1.4;">
-        * Reductions are logged directly in the Tax Centre as a non-cash inventory expense deduction.
+      <div id="wo-stock-effect" class="inventory-adjustment-effect" role="status" aria-live="polite">
+        Physical stock is unchanged. This is stored as a non-cash Tax Centre adjustment.
       </div>
     </div>
 
     <div class="form-group" style="margin-bottom:16px;">
-      <label style="font-size:var(--text-sm); font-weight:600;">Audit Notes / Details (Optional)</label>
-      <input type="text" id="wo-notes" placeholder="e.g. 3 copies water damaged during spring warehouse transit" style="width:100%; padding:8px 10px; border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--cream2); color:var(--text1); font-size:var(--text-base);">
+      <label for="wo-evidence">Evidence supporting value or disposal</label>
+      <textarea id="wo-evidence" class="input inventory-adjustment-notes" required placeholder="Dated market listings, sales history, condition photos, liquidation quote, or destruction record"></textarea>
+    </div>
+
+    <div class="form-group" style="margin-bottom:16px;">
+      <label for="wo-notes">Accountant notes <span style="font-weight:400;color:var(--text3);">(optional)</span></label>
+      <textarea id="wo-notes" class="input inventory-adjustment-notes" placeholder="Method, assumptions, reviewer, or related documentation"></textarea>
     </div>
 
     <div class="modal-footer" style="justify-content:flex-end;">
       <button type="button" class="btn" onclick="attemptCloseModal('inventory-writeoff-modal')">Cancel</button>
-      <button type="submit" class="btn gold" style="background:var(--red); border-color:var(--red); color:var(--on-status);">📉 Record Tax Write-Off</button>
+      <button type="submit" id="wo-submit" class="btn gold">Record valuation adjustment</button>
     </div>
   </form>
 </div></div>

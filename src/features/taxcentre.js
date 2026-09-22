@@ -2322,7 +2322,7 @@ function _tcBuildLedger(selectedYear) {
         ? 0
         : (e.amount || 0) * (_fxRateCache[`${eCur}_CAD`] || 1);
 
-    totalOperatingExpenses += eBase;
+    if (e.affectsCashFlow !== false) totalOperatingExpenses += eBase;
 
     allLedger.push({
       date: e.date,
@@ -2339,7 +2339,8 @@ function _tcBuildLedger(selectedYear) {
       isIncome: false,
       sourceType: 'businessExpense',
       itemId: e.id,
-      trip: e.trip || ''
+      trip: e.trip || '',
+      affectsCashFlow: e.affectsCashFlow !== false
     });
   });
 
@@ -3600,6 +3601,7 @@ function _tcCashFlowBucketRows(key) {
   const monthly = data.selectedYear !== 'all' && data.selectedYear;
   return (data.ledger || []).filter((item) => {
     if (item.sourceType === 'artistPayout') return false;
+    if (item.affectsCashFlow === false) return false;
     const date = item.date || '';
     const itemKey = monthly ? date.substring(0, 7) : date.substring(0, 4);
     return itemKey === key;

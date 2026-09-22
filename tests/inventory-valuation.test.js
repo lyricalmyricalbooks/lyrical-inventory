@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { csvCell } from '../src/lib/csv.js';
+import { inventoryAdjustmentCsvRows } from '../src/lib/inventory-adjustment.js';
+import { deriveStockBreakdown } from '../src/lib/inventory.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -29,6 +31,27 @@ describe('Robust Inventory Valuation Suite & CSV Export', () => {
     expect(indexContent).toContain('id="iv-stat-unsold-units"');
     expect(indexContent).toContain('id="iv-stat-margin-pct"');
     expect(indexContent).toContain('id="iv-modal-table-body"');
+    expect(indexContent).toContain('id="iv-adjustment-history"');
+  });
+
+  it('includes separate Section 10 valuation and physical disposal controls', () => {
+    expect(indexContent).toContain('id="wo-mode-valuation"');
+    expect(indexContent).toContain('id="wo-mode-disposal"');
+    expect(indexContent).toContain('id="wo-nrv"');
+    expect(indexContent).toContain('id="wo-date"');
+    expect(indexContent).toContain('id="wo-evidence"');
+    expect(indexContent).toContain('id="wo-stock-effect"');
+    expect(indexContent).toContain('onchange="setInventoryAdjustmentMode(');
+  });
+
+  it('implements every inventory adjustment handler called by the modal', () => {
+    [
+      'setInventoryAdjustmentMode',
+      'openInventoryWriteOffModal',
+      'onWriteOffBookChange',
+      'recalcWriteOffValue',
+      'submitInventoryWriteOff',
+    ].forEach(name => expect(mainContent).toContain(`function ${name}(`));
   });
 
   it('correctly constructs a comprehensive multi-column CSV with cost basis, MSRP, consignment stock, and totals row', () => {
@@ -72,7 +95,7 @@ describe('Robust Inventory Valuation Suite & CSV Export', () => {
     // column assertions below are exactly what it is responsible for getting
     // right, so stubbing it would test nothing.
     const factory = new Function(
-      'today', 'BOOK_LIST', 'states', 'defaultState', 'getBookCurrencyCode', '_fxRateCache', 'csvCell', 'downloadCsv', 'showToast',
+      'today', 'BOOK_LIST', 'states', 'defaultState', 'getBookCurrencyCode', '_fxRateCache', 'csvCell', 'downloadCsv', 'showToast', 'TAX_CENTER', 'inventoryAdjustmentCsvRows', 'deriveStockBreakdown',
       `
         function isTestBook() { return false; }
         function calculateInventoryValuationData() { ${calcMatch[1]} }
@@ -81,7 +104,7 @@ describe('Robust Inventory Valuation Suite & CSV Export', () => {
     );
 
     const exportFn = factory(
-      mockToday, mockBookList, mockStates, mockDefaultState, mockGetBookCurrencyCode, mockFxRateCache, csvCell, mockDownloadCsv, mockShowToast
+      mockToday, mockBookList, mockStates, mockDefaultState, mockGetBookCurrencyCode, mockFxRateCache, csvCell, mockDownloadCsv, mockShowToast, { businessExpenses: [] }, inventoryAdjustmentCsvRows, deriveStockBreakdown
     );
 
     exportFn();
@@ -123,7 +146,7 @@ describe('Robust Inventory Valuation Suite & CSV Export', () => {
 
     const calcMatch = mainContent.match(/function calculateInventoryValuationData\(\)\s*\{([\s\S]+?)\n\}/);
     const factory = new Function(
-      'BOOK_LIST', 'states', 'defaultState', 'getBookCurrencyCode', '_fxRateCache',
+      'BOOK_LIST', 'states', 'defaultState', 'getBookCurrencyCode', '_fxRateCache', 'deriveStockBreakdown',
       `
         function isTestBook() { return false; }
         ${calcMatch[0]}
@@ -131,7 +154,7 @@ describe('Robust Inventory Valuation Suite & CSV Export', () => {
       `
     );
 
-    const calcFn = factory(mockBookList, mockStates, mockDefaultState, mockGetBookCurrencyCode, mockFxRateCache);
+    const calcFn = factory(mockBookList, mockStates, mockDefaultState, mockGetBookCurrencyCode, mockFxRateCache, deriveStockBreakdown);
     const result = calcFn();
 
     expect(result.items.length).toBe(1);
