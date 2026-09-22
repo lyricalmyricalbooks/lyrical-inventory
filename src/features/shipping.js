@@ -7855,7 +7855,7 @@ function buildShippingRegionSplitHtml(allOrders, shippoExpenses) {
           <td style="text-align:center;">${caCount}</td>
           <td style="text-align:right;">${caRevenue.toFixed(2)} CAD</td>
           <td style="text-align:right;">${caCost.toFixed(2)} CAD</td>
-          <td style="text-align:right; font-weight:700; color:${caMargin >= 0 ? '#2e7d32' : 'var(--red)'};">${caMargin >= 0 ? '+' : ''}${caMargin.toFixed(2)} CAD</td>
+          <td style="text-align:right; font-weight:700; color:${caMargin >= 0 ? 'var(--green)' : 'var(--red)'};">${caMargin >= 0 ? '+' : ''}${caMargin.toFixed(2)} CAD</td>
         </tr>
         <tr class="insight-clickable-row ${usRowClass}" onclick="toggleShipAnalysisRegionFilter('US')" title="Click to filter ledger by USA">
           <td style="font-weight:600; color:var(--text2); display:flex; align-items:center; gap:8px;">
@@ -7865,7 +7865,7 @@ function buildShippingRegionSplitHtml(allOrders, shippoExpenses) {
           <td style="text-align:center;">${usCount}</td>
           <td style="text-align:right;">${usRevenue.toFixed(2)} CAD</td>
           <td style="text-align:right;">${usCost.toFixed(2)} CAD</td>
-          <td style="text-align:right; font-weight:700; color:${usMargin >= 0 ? '#2e7d32' : 'var(--red)'};">${usMargin >= 0 ? '+' : ''}${usMargin.toFixed(2)} CAD</td>
+          <td style="text-align:right; font-weight:700; color:${usMargin >= 0 ? 'var(--green)' : 'var(--red)'};">${usMargin >= 0 ? '+' : ''}${usMargin.toFixed(2)} CAD</td>
         </tr>
         <tr class="insight-clickable-row ${intlRowClass}" onclick="toggleShipAnalysisRegionFilter('intl')" title="Click to filter ledger by International">
           <td style="font-weight:600; color:var(--text2); display:flex; align-items:center; gap:8px;">
@@ -7875,7 +7875,7 @@ function buildShippingRegionSplitHtml(allOrders, shippoExpenses) {
           <td style="text-align:center;">${intlCount}</td>
           <td style="text-align:right;">${intlRevenue.toFixed(2)} CAD</td>
           <td style="text-align:right;">${intlCost.toFixed(2)} CAD</td>
-          <td style="text-align:right; font-weight:700; color:${intlMargin >= 0 ? '#2e7d32' : 'var(--red)'};">${intlMargin >= 0 ? '+' : ''}${intlMargin.toFixed(2)} CAD</td>
+          <td style="text-align:right; font-weight:700; color:${intlMargin >= 0 ? 'var(--green)' : 'var(--red)'};">${intlMargin >= 0 ? '+' : ''}${intlMargin.toFixed(2)} CAD</td>
         </tr>
       </tbody>
     </table>
@@ -7954,7 +7954,7 @@ function buildShippingWeightBandHtml(allOrders, shippoExpenses) {
         <td style="text-align:center;">${data.count}</td>
         <td style="text-align:right;">${data.totalCost.toFixed(2)} CAD</td>
         <td style="text-align:right; font-weight:600;">${avg.toFixed(2)} CAD</td>
-        <td style="text-align:right; font-weight:700; color:${margin >= 0 ? '#2e7d32' : 'var(--red)'};">${margin >= 0 ? '+' : ''}
+        <td style="text-align:right; font-weight:700; color:${margin >= 0 ? 'var(--green)' : 'var(--red)'};">${margin >= 0 ? '+' : ''}
 ${margin.toFixed(2)} CAD</td>
       </tr>
     `;
@@ -8621,7 +8621,7 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
       statusBadgeHtml = `<span style="background:rgba(29,122,74,0.08); color:var(--green); font-size:var(--text-2xs); font-weight:700; padding:2px 8px; border-radius:var(--r-pill); border:var(--stroke-hair) solid rgba(29,122,74,0.15);">✓ Optimized</span>`;
     }
 
-    const confidenceColor = data.confidence === 'High' ? '#1d7a4a' : data.confidence === 'Medium' ? 'var(--gold-text)' : '#6b665e';
+    const confidenceColor = data.confidence === 'High' ? 'var(--green)' : data.confidence === 'Medium' ? 'var(--gold-text)' : 'var(--text3)';
     const avgCostStr = data.avgCost !== null ? `$${data.avgCost.toFixed(2)} CAD` : '—';
     const p90CostStr = data.p90Cost !== null ? `$${data.p90Cost.toFixed(2)} CAD` : '—';
 

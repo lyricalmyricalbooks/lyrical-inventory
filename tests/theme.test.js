@@ -398,13 +398,17 @@ describe('Open Call scoped tokens are themed', () => {
     expect(missing, `dark theme is missing: ${missing.join(', ')}`).toEqual([]);
   });
 
-  it('makes the surfaces dark rather than near-white', () => {
-    // The light values are rgba(255,255,255,.78/.94) — opaque enough to read as
-    // white panels. On dark they must be a low-alpha LIGHT wash instead.
-    const surfaces = [...darkBlock.matchAll(/--oc-surface[\w-]*:\s*rgba\([^)]*,\s*([\d.]+)\s*\)/g)]
-      .map((m) => parseFloat(m[1]));
-    expect(surfaces.length).toBeGreaterThanOrEqual(2);
-    for (const alpha of surfaces) expect(alpha).toBeLessThan(0.2);
+  it('makes the card surfaces paper, like every other card at night', () => {
+    // These were once low-alpha LIGHT washes (a dark card). That predates Press
+    // Proof: every `.card` now takes the paper INKS, so a dark Open Call card
+    // put ink text on charcoal — "Open Call Portal" measured 1.17:1, and every
+    // contributor's name and email went the same way. The surfaces must be
+    // paper to match the ink the card rule gives their text.
+    expect(darkBlock).toMatch(/--oc-surface:\s*var\(--paper\);/);
+    expect(darkBlock).toMatch(/--oc-surface-strong:\s*var\(--paper\);/);
+    // The hairline stays a light rule for the hero on the black page, and is
+    // re-pointed dark only inside the cards.
+    expect(darkCss).toMatch(/\.theme-dark #opencall-body \.card \{ --oc-hairline: var\(--border2\); \}/);
   });
 });
 

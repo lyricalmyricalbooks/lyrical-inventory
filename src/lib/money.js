@@ -248,4 +248,45 @@ export function getContrastSafeText(hex, onDark = false) {
   return hex;
 }
 
+/** WCAG relative luminance of a `#rrggbb` colour, or null if it isn't one. */
+function relativeLuminance(hex) {
+  const color = typeof hex === 'string' && hex.charAt(0) === '#' ? hex.substring(1) : hex;
+  if (typeof color !== 'string' || !/^[0-9a-f]{6}$/i.test(color)) return null;
+  const channel = (i) => {
+    const v = parseInt(color.substring(i, i + 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4);
+}
+
+/**
+ * The darkest step of night mode's paper (--paper3). A card is --paper, but the
+ * accent text also sits in recessed trays and on the cover's own 10% tint
+ * (a `.pill.gold`, the "stock is healthy" note), both darker than --paper —
+ * measuring against the darkest step keeps it clear of AA on all of them.
+ */
+export const PAPER_SURFACE = '#DED4BA';
+
+/**
+ * A book's accent colour as TEXT on night mode's paper objects.
+ *
+ * getContrastSafeText(hex, false) answers the same question for the light
+ * theme, but it only darkens covers brighter than 50% luminance — a mid-tone
+ * blue passes straight through and lands at 3.6:1 on paper. This measures the
+ * real WCAG ratio against the surface and darkens in small steps until the
+ * text clears AA, so it keeps as much of the cover's colour as it can.
+ * Invalid input (not `#rrggbb`) falls back to the ink.
+ */
+export function getPaperSafeText(hex, surface = PAPER_SURFACE) {
+  const bg = relativeLuminance(surface);
+  if (relativeLuminance(hex) === null || bg === null) return 'var(--ink)';
+  let text = hex.charAt(0) === '#' ? hex : `#${hex}`;
+  for (let i = 0; i < 20; i++) {
+    const fg = relativeLuminance(text);
+    if ((bg + 0.05) / (fg + 0.05) >= 4.5) return text;
+    text = darkenColor(text, 0.08);
+  }
+  return 'var(--ink)';
+}
+
 

@@ -918,7 +918,7 @@ function renderOpenCall() {
   const templatesEditor = activeProj ? `
     <div class="card oc-collapse-card ${tmplOpen ? 'open' : ''}" style="margin-top:0;padding:20px;">
       <div class="row-between oc-collapse-head" onclick="if (event.target.closest('button')) return; ocToggleSection('tmpl')" style="${tmplOpen ? 'border-bottom:var(--stroke-hair) solid var(--border);padding-bottom:10px;margin-bottom:15px;' : ''}flex-wrap:wrap;gap:8px;">
-        <div style="font-family:'Playfair Display',serif;font-size:15px;font-weight:700;color:var(--gold-text);">✉ Email Template Designer</div>
+        <div style="font-family:var(--font-ui);font-size:15px;font-weight:700;color:var(--gold-text);">✉ Email Template Designer</div>
         <div style="display:flex;gap:4px;align-items:center;">
           ${tmplOpen ? `
           <button class="btn sm ${activeTmplTab === 'selectionSent' ? 'gold' : ''}" onclick="ocSetTmplTab('selectionSent')">Selection</button>
@@ -1282,7 +1282,7 @@ function renderOpenCall() {
   const resendOpen = ocUiOpen_('resend', false);
   const resendConfigCard = `
     <div class="card oc-resend-card oc-collapse-card ${resendOpen ? 'open' : ''}" style="margin-bottom:0;padding:15px;display:flex;flex-direction:column;gap:8px;">
-      <div class="oc-collapse-head" onclick="ocToggleSection('resend')" style="font-family:'Playfair Display',serif;font-size:14px;font-weight:700;color:var(--gold-text);display:flex;justify-content:space-between;align-items:center;">
+      <div class="oc-collapse-head" onclick="ocToggleSection('resend')" style="font-family:var(--font-ui);font-size:14px;font-weight:700;color:var(--gold-text);display:flex;justify-content:space-between;align-items:center;">
         <span>⚡ Resend API Email</span>
         <span style="display:flex;align-items:center;gap:8px;">
           <span class="oc-collapse-status">${useResend ? 'on' : 'off'}</span>
@@ -1312,7 +1312,7 @@ function renderOpenCall() {
   const senderOpen = ocUiOpen_('sender', false);
   const senderConfigCard = `
     <div class="card oc-collapse-card ${senderOpen ? 'open' : ''}" style="margin-bottom:0;padding:15px;display:flex;flex-direction:column;gap:8px;">
-      <div class="oc-collapse-head" onclick="ocToggleSection('sender')" style="font-family:'Playfair Display',serif;font-size:14px;font-weight:700;color:var(--gold-text);display:flex;justify-content:space-between;align-items:center;">
+      <div class="oc-collapse-head" onclick="ocToggleSection('sender')" style="font-family:var(--font-ui);font-size:14px;font-weight:700;color:var(--gold-text);display:flex;justify-content:space-between;align-items:center;">
         <span>✉ Open Call Sender</span>
         <span style="display:flex;align-items:center;gap:8px;">
           <span class="oc-collapse-status">${escapeHtml(ocFromAlias || 'your Gmail')}</span>
@@ -2486,7 +2486,7 @@ function openOcEmailPreviewModal(cId, stageKey, subject, body, c) {
   modal.innerHTML = `
     <div class="card" style="max-width:650px;width:90%;margin:0 auto;display:flex;flex-direction:column;box-shadow:var(--shadow2);border:1px solid var(--border);">
       <div class="row-between" style="border-bottom:1px solid var(--border);padding:14px 20px;background:var(--cream2);">
-        <div style="font-family:'Playfair Display',serif;font-size:16px;font-weight:700;color:var(--gold-text);">✉ Review Email to ${escapeHtml(c.name)}</div>
+        <div style="font-family:var(--font-ui);font-size:16px;font-weight:700;color:var(--gold-text);">✉ Review Email to ${escapeHtml(c.name)}</div>
         <button type="button" class="btn sm" onclick="closeOcEmailPreviewModal()" style="padding:4px 8px;font-size:12px;" aria-label="Close dialog" title="Close (Esc)">✕</button>
       </div>
       
