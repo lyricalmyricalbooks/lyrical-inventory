@@ -202,22 +202,6 @@ describe('Challenger 2 Empirical Verification: Financial Invariants & Core Calcu
     expect(fmt(100, 'EUR')).toBe('€100.00');
   });
 
-  it('consignment balance equation holds true (Stock = Shipments - Returns - Sales)', () => {
-    const shipments = 50;
-    const returns = 10;
-    const sales = 15;
-    const currentStock = shipments - returns - sales;
-    expect(currentStock).toBe(25);
-  });
-
-  it('bulk send modal warns when total exceeds available on-hand stock', () => {
-    const onHandStock = 12;
-    const totalAllocatedOver = 15;
-    const totalAllocatedUnder = 8;
-    expect(totalAllocatedOver > onHandStock).toBe(true);
-    expect(totalAllocatedUnder > onHandStock).toBe(false);
-  });
-
   it('getContrastSafeText ensures dark and light theme legibility for accent colors', () => {
     // Pale color on light background -> darkened
     const paleYellow = '#ffffaa';
