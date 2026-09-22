@@ -379,8 +379,63 @@
 .finder-item { display: grid; grid-template-columns: minmax(0, 2fr) repeat(3, minmax(70px, 1fr)) auto; gap: var(--space-2); align-items: center; }
 .finder-items { display: grid; gap: var(--space-3); }
 .finder-email { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; padding: var(--space-3); background: var(--surface-sunken); font-family: inherit; }
-.finder-errors summary { cursor: pointer; color: var(--content-secondary); font-size: var(--text-sm); }
-.finder-errors p { color: var(--content-secondary); font-size: var(--text-sm); line-height: 1.6; display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
+
+/* ── Unreadable emails, grouped by reason ──────────────────────────────
+   Riso Press: square, a 2px ink outline and a hard offset — same object
+   language as a card, not the borderless run of rows this used to be. */
+.finder-failures {
+  margin-block: var(--space-4);
+  border: 2px solid var(--rule-ink);
+  border-radius: 0;
+  background: var(--surface-card, var(--surface-raised));
+  box-shadow: var(--elev-1);
+}
+.finder-failures > summary {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: var(--space-3) var(--space-4);
+  color: var(--content-primary);
+  font-size: var(--text-sm);
+}
+.finder-failures[open] > summary { border-block-end: 2px solid var(--rule-ink); }
+.finder-failures-sum { font-weight: 700; }
+.finder-failures-hint {
+  color: var(--content-muted);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+}
+.finder-failures-list { list-style: none; margin: 0; padding: 0; }
+.finder-failure {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+}
+.finder-failure + .finder-failure { border-block-start: 1px solid var(--border-default); }
+.finder-failure p {
+  margin: 0;
+  flex: 1;
+  min-width: 200px;
+  color: var(--content-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+.finder-failure .btn { min-height: 44px; flex: none; }
+.finder-failures-foot {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-block-start: 1px solid var(--border-default);
+  background: var(--surface-sunken);
+  color: var(--content-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}
 .finder-draft.is-review, .finder-draft.is-duplicate { box-shadow: inset 3px 0 0 var(--amber); }
 
 /* ── Pinned Action Bar ─────────────────────────────────────────────── */
