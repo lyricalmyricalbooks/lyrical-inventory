@@ -206,6 +206,16 @@
 }
 .finder-alert.is-warn { border-inline-start-color: var(--amber); }
 .finder-alert.is-info { border-inline-start-color: var(--gold); }
+/* The reasons now sit directly under the count they explain, so the pair
+   reads as one block rather than two notices a screen apart. */
+[data-finder-errors]:empty { display: none; }
+.finder-alert + [data-finder-errors] .finder-failures { margin-block: calc(-1 * var(--space-1)) var(--space-4); }
+.finder-listbar[hidden], .finder-toolbar[hidden], .finder-listbar .btn[hidden] { display: none; }
+.finder-alert-note {
+  flex-basis: 100%;
+  color: var(--content-secondary);
+  font-size: var(--text-xs);
+}
 
 /* ── Interaction Baseline ──────────────────────────────────────────── */
 .finder-toolbar { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; margin-block: var(--space-2); }
@@ -314,6 +324,10 @@
 .finder-stat.is-lead { border-color: var(--gold-line, var(--border-strong)); box-shadow: var(--elev-2); }
 .finder-stat.is-lead .finder-stat-val { font-size: var(--text-2xl); color: var(--gold-text); }
 .finder-stat.is-lead .finder-stat-icon { background: var(--gold-bg, var(--surface-sunken)); }
+/* A zero is "nothing here yet", not an alarm — the lead card's accent colour
+   on an empty count read as an error on first sight. */
+.finder-stat.is-zero .finder-stat-val,
+.finder-stat.is-lead.is-zero .finder-stat-val { color: var(--content-muted); }
 
 /* ── Result Rows ───────────────────────────────────────────────────── */
 .finder-draft {
