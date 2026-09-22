@@ -441,7 +441,7 @@ describe('wiring', () => {
   it('keeps the To-do tab away from authors', () => {
     // Both halves matter: the redirect, and hiding the button that would bounce them.
     expect(mainJs).toMatch(/name === 'todo'|'todo'/);
-    expect(mainJs).toContain('todo-tab-btn');
+    expect(mainJs).toContain('todo-sidebar-btn');
   });
 
   it('renders the tab when it is opened', () => {
