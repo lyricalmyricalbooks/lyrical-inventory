@@ -353,6 +353,37 @@ function renderProgress() {
   host.querySelector('[data-progress-text]').textContent = `Reading ${scanDone} of ${scanTotal} emails`;
 }
 
+// One row per REASON, not per email. A scan that trips the same AI-key problem
+// 86 times used to print 86 identical retry buttons under the results, which
+// buried the single thing the publisher could actually act on.
+function failureGroups() {
+  const groups = new Map();
+  Object.entries(state.scans).forEach(([key, scan]) => {
+    if (!scan.error) return;
+    const entry = groups.get(scan.error) || { reason: scan.error, keys: [] };
+    entry.keys.push(key);
+    groups.set(scan.error, entry);
+  });
+  return [...groups.values()].sort((a, b) => b.keys.length - a.keys.length);
+}
+
+function renderFailures() {
+  const groups = failureGroups();
+  if (!groups.length) return '';
+  const total = groups.reduce((sum, group) => sum + group.keys.length, 0);
+  return `<details class="finder-failures"${groups.length === 1 ? ' open' : ''}>
+    <summary><span class="finder-failures-sum">Why ${total} email${total === 1 ? '' : 's'} couldn’t be read</span>
+      <span class="finder-failures-hint">${groups.length === 1 ? 'One reason' : `${groups.length} reasons`}</span></summary>
+    <ul class="finder-failures-list">${groups.map(group => `
+      <li class="finder-failure">
+        <span class="pill amber mono-num">${group.keys.length}</span>
+        <p>${esc(group.reason)}</p>
+        <button type="button" class="btn sm" data-retry-reason="${esc(group.reason)}" ${busy ? 'disabled' : ''}>Try ${group.keys.length === 1 ? 'it' : 'these'} again</button>
+      </li>`).join('')}</ul>
+    <p class="finder-failures-foot">Emails that can’t be read are never filed, and never charged twice — trying again only re-reads the ones listed here.</p>
+  </details>`;
+}
+
 function renderAlert(counts) {
   const failed = Object.values(state.scans).filter(scan => scan.error);
   const failures = failed.length;
@@ -362,12 +393,11 @@ function renderAlert(counts) {
     // read" and putting the cause in a collapsed list below the results left
     // the publisher staring at a count with no way to know what to do — and
     // the most common cause, a rejected AI key, is something only they can fix.
-    const reasons = [...new Set(failed.map(scan => scan.error))];
+    const groups = failureGroups();
     alert.className = 'finder-alert is-warn';
-    alert.innerHTML = `<span class="pill amber">● ${failures} to retry</span>
-      <p>${failures === 1 ? 'One email' : `${failures} emails`} could not be read.
-        ${esc(reasons[0])}${reasons.length > 1 ? ` (and ${reasons.length - 1} other reason${reasons.length === 2 ? '' : 's'} — see the list below)` : ''}</p>
-      <button type="button" class="btn sm" data-action="retry-failed">Try those again</button>
+    alert.innerHTML = `<span class="pill amber">● ${failures} couldn’t be read</span>
+      <p>${failures === 1 ? 'One email' : `${failures} emails`} could not be read${groups.length > 1 ? `, for ${groups.length} different reasons — see the breakdown below` : `. ${esc(groups[0].reason)}`}</p>
+      <button type="button" class="btn sm" data-action="retry-failed">Try all again</button>
       <button type="button" class="btn sm" data-action="clear-failures">Clear these</button>`;
   } else if (counts.queued) {
     alert.className = 'finder-alert is-info';
@@ -405,8 +435,7 @@ function render() {
     host.querySelector('[data-finder-list]').innerHTML = drafts.length
       ? drafts.map(draft => renderDraft(draft, openIds.has(draft.id))).join('')
       : renderEmpty();
-    const errors = Object.entries(state.scans).filter(([, scan]) => scan.error);
-    host.querySelector('[data-finder-errors]').innerHTML = errors.length ? `<details class="finder-errors" open><summary>${errors.length} email${errors.length === 1 ? '' : 's'} need another attempt</summary>${errors.map(([key, scan]) => `<p>${esc(scan.subject || key)} — ${esc(scan.error)} <button type="button" class="btn sm" data-retry-email="${esc(key)}">Retry email</button></p>`).join('')}</details>` : '';
+    host.querySelector('[data-finder-errors]').innerHTML = renderFailures();
     const ready = drafts.filter(draft => statusOf(draft) === 'ready');
     const all = host.querySelector('[data-select-all]');
     all.checked = ready.length > 0 && ready.every(draft => draft.selected);
@@ -576,7 +605,7 @@ async function onClick(event) {
       downloadBlob(new Blob([decodeGmailBase64(file.base64)], { type: file.mime }), file.name); return;
     }
     if (button.hasAttribute('data-dismiss') && draft) { draft.status = 'ignored'; draft.selected = false; draft.updatedAt = Date.now(); await persist(); render(); return; }
-    if (button.dataset.retryEmail) { await scanEmailRetry(button.dataset.retryEmail); return; }
+    if (button.dataset.retryReason) { await retryFailedEmails(button.dataset.retryReason); return; }
     switch (button.dataset.action) {
       case 'connect': await toggleConnection(); break;
       case 'save-setup':
@@ -904,7 +933,7 @@ async function scan(nextPage) {
     const failed = Object.values(state.scans).filter(item => item.error).length - failedBefore;
     announce([
       found ? `Found ${found} receipt${found === 1 ? '' : 's'} in ${messages.length} emails.` : `Read ${messages.length} emails — none of them held a receipt.`,
-      failed > 0 ? `${failed} could not be read; use “Try those again”.` : '',
+      failed > 0 ? `${failed} could not be read; open “Why ${failed} emails couldn’t be read” below to see why, or use “Try all again”.` : '',
       state.pageToken ? 'There are more emails to check — use “Scan next 25 emails”.' : '',
     ].filter(Boolean).join(' '));
   } catch (error) {
@@ -916,8 +945,10 @@ async function scan(nextPage) {
   } finally { busy = false; controller = null; scanTotal = 0; scanDone = 0; render(); }
 }
 
-async function retryFailedEmails() {
-  const keys = Object.entries(state.scans).filter(([, scan]) => scan.error).map(([key]) => key);
+async function retryFailedEmails(reason = '') {
+  const keys = Object.entries(state.scans)
+    .filter(([, scan]) => scan.error && (!reason || scan.error === reason))
+    .map(([key]) => key);
   for (const key of keys) {
     if (busy) break;
     await scanEmailRetry(key).catch(report);
