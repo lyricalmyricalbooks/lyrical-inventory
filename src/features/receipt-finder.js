@@ -1,5 +1,5 @@
 import { escapeHtml as esc } from '../lib/html.js';
-import { receiptQuery, normalizeFoundReceipt, receiptProblems, receiptReviewStatus, receiptMoney, RECEIPT_STATUSES } from '../lib/receipt-finder.js';
+import { receiptQuery, normalizeFoundReceipt, receiptProblems, receiptReviewStatus, receiptMoney, receiptWorthReading, RECEIPT_STATUSES } from '../lib/receipt-finder.js';
 import { createReceiptFinderClient, extractFoundReceipts, decodeGmailBase64, checkReceiptFinderService, testReceiptAiService, describeAiTest, systemicReceiptFailure, receiptDailySchedule, describeDailySweep } from '../lib/receipt-finder-client.js';
 import { createReceiptFinderStore } from '../lib/receipt-finder-store.js';
 import { flushReceiptOutbox } from '../lib/receipt-finder-outbox.js';
@@ -7,7 +7,7 @@ import { downloadBlob } from '../lib/download.js';
 import '../styles/receipt-finder.css';
 
 const LABELS = { all: 'All', ready: 'Ready', review: 'Needs review', duplicate: 'Duplicates', queued: 'Pending import', imported: 'Imported', ignored: 'Dismissed' };
-const emptyState = () => ({ drafts: [], emails: {}, scans: {}, endpoint: '', account: '', lastScan: '', pageToken: '', lastQuery: '', lastEndpoint: '' });
+const emptyState = () => ({ drafts: [], emails: {}, scans: {}, endpoint: '', account: '', lastScan: '', pageToken: '', lastQuery: '', lastEndpoint: '', lastHalt: '' });
 
 // Emails are read a few at a time rather than one after another. The AI call
 // dominates each one, so this is the difference between a scan that takes a
@@ -17,10 +17,14 @@ const SCAN_CONCURRENCY = 3;
 const RENDER_INTERVAL_MS = 200;
 
 let deps, host, state = emptyState(), uid = '', accessToken = '', tokenExpiresAt = 0;
-let controller = null, busy = false, flushing = false, scanTotal = 0, scanDone = 0;
+let controller = null, busy = false, flushing = false, scanTotal = 0, scanDone = 0, scanSkipped = 0, scanCached = 0;
 let filter = 'all', resultQuery = '', saveChain = Promise.resolve(), saveScheduled = false;
 let initialized = false, restore = Promise.resolve(), serviceReadyFor = '', serviceProblem = null;
 let statusCache = null, cachedExpenses = null, renderTimer = 0, haltReason = '', dailySweep = null;
+// Keys deleted since the last write. The saved copy is merged rather than
+// replaced (two open tabs must not undo each other), so a deletion has to be
+// named to reach storage — see mergeFinderSnapshot.
+const removedEmails = new Set(), removedScans = new Set();
 const store = createReceiptFinderStore();
 const client = createReceiptFinderClient({ token: () => accessToken, onExpired: () => { forgetToken().catch(() => {}); } });
 const active = () => uid && deps?.user()?.uid === uid && deps.publisher();
@@ -59,12 +63,34 @@ function persist() {
   const savedUid = uid;
   if (saveScheduled) return saveChain;
   saveScheduled = true;
-  saveChain = saveChain.catch(() => {}).then(() => {
+  saveChain = saveChain.catch(() => {}).then(async () => {
     saveScheduled = false;
     if (!active() || uid !== savedUid) return undefined;
-    return store.save(savedUid, state);
+    const removed = { emails: [...removedEmails], scans: [...removedScans] };
+    await store.save(savedUid, removed.emails.length || removed.scans.length ? { ...state, removed } : state);
+    // Only what this write carried is settled; anything removed meanwhile
+    // stays pending for the next one.
+    removed.emails.forEach(key => removedEmails.delete(key));
+    removed.scans.forEach(key => removedScans.delete(key));
+    return undefined;
   });
   return saveChain;
+}
+
+function dropEmail(key) {
+  delete state.emails[key];
+  removedEmails.add(key);
+}
+
+function dropScan(key) {
+  delete state.scans[key];
+  removedScans.add(key);
+}
+
+// A different publisher's pending deletions must never be applied to this one's
+// saved mailbox.
+function resetRemovals() {
+  removedEmails.clear(); removedScans.clear();
 }
 
 function announce(text) {
@@ -80,7 +106,9 @@ async function forgetToken() {
 }
 
 function connectionLabel() {
-  if (!tokenLive()) return state.account ? `Reconnect ${state.account}` : 'Connect Gmail';
+  // The address lives in the note underneath. Spelled out on the button it
+  // made a banner-width, all-caps label that read as shouting.
+  if (!tokenLive()) return state.account ? 'Reconnect Gmail' : 'Connect Gmail';
   return 'Disconnect Gmail';
 }
 
@@ -103,11 +131,6 @@ function renderConnection() {
       : state.account
         ? `Gmail access for ${state.account} has run out. Reconnecting takes one click — Google will not ask you to approve it again.`
         : 'Gmail is read-only: the app can read messages to find receipts and can never send, delete or change anything.';
-  }
-  const dot = host?.querySelector('[data-conn-pill]');
-  if (dot) {
-    dot.className = `pill ${tokenLive() ? 'green' : 'gray'}`;
-    dot.textContent = tokenLive() ? '● Connected' : '○ Not connected';
   }
 }
 
@@ -136,7 +159,7 @@ async function startReceiptFinder(dependencies) {
   // Real sign-out arrives on the auth callback below, which still clears both.
   if (!nextUid && uid) return;
   if (nextUid !== uid) {
-    controller?.abort(); accessToken = ''; tokenExpiresAt = 0; state = emptyState(); uid = nextUid;
+    controller?.abort(); accessToken = ''; tokenExpiresAt = 0; state = emptyState(); uid = nextUid; resetRemovals();
     serviceReadyFor = ''; host?.replaceChildren(); host = null;
     if (active()) {
       restore = store.load(uid).then(async saved => {
@@ -154,7 +177,7 @@ async function startReceiptFinder(dependencies) {
     window._fbOnAuthStateChanged?.(user => {
       if (user?.uid !== uid) {
         const owner = uid;
-        controller?.abort(); accessToken = ''; tokenExpiresAt = 0; uid = ''; state = emptyState();
+        controller?.abort(); accessToken = ''; tokenExpiresAt = 0; uid = ''; state = emptyState(); resetRemovals();
         serviceReadyFor = ''; host?.replaceChildren(); host = null;
         // Signing out must also drop the saved Gmail token from this device,
         // not just from memory.
@@ -183,7 +206,6 @@ async function mountReceiptFinder(element, dependencies) {
         <p class="finder-subcopy">Search Gmail, check extracted details, and file directly into Business Expenses. Read-only access.</p>
       </div>
       <div class="finder-conn">
-        <span class="pill gray" data-conn-pill>○ Not connected</span>
         <button type="button" class="btn sm gold finder-conn-btn" data-action="connect">Connect Gmail</button>
       </div>
     </div>
@@ -227,15 +249,15 @@ async function mountReceiptFinder(element, dependencies) {
       <p data-finder-status role="status" aria-live="polite">${state.lastScan ? `Last scan: ${esc(new Date(state.lastScan).toLocaleString())}` : 'Pick a period, then scan. Nothing is filed until you approve it.'}</p>
     </section>
     <div data-finder-alert></div>
+    <div data-finder-errors></div>
     <div data-finder-summary class="finder-summary"></div>
     <div class="finder-toolbar" data-finder-tabs role="group" aria-label="Filter receipt status"></div>
-    <div class="finder-listbar">
+    <div class="finder-listbar" data-finder-listbar>
       <label class="finder-select"><input type="checkbox" data-select-all> Select every ready receipt below</label>
       <input type="search" class="ledger-filter-input" data-result-search aria-label="Search found receipts" placeholder="Vendor, invoice number or description">
       <button type="button" class="btn" data-action="retry">Retry pending imports</button>
     </div>
     <div data-finder-list></div>
-    <div data-finder-errors></div>
     <div class="finder-actionbar">
       <button type="button" class="btn" data-action="next" hidden>Scan next 25 emails</button>
       <span data-selected-count class="finder-count"></span>
@@ -279,14 +301,12 @@ function scheduleRender() {
 // burying the one required setting is what made the finder look broken.
 function gateSteps() {
   const steps = [];
-  if (!tokenLive()) {
-    // The button that does this already sits right above, in the connection
-    // bar — repeating it here just gave the publisher two buttons for the
-    // same click. This step only has to point at it.
-    steps.push({ title: state.account ? 'Reconnect Gmail' : 'Connect Gmail',
-      body: state.account
-        ? 'Your read-only access has run out for now. Use the “Reconnect” button above — Google will not ask you to approve it again.'
-        : 'Use the “Connect Gmail” button above to give the app read-only access, so it can look through your mail for receipts.' });
+  // A lapsed connection is already explained, with its one-click fix, in the
+  // connection bar directly above. Repeating it here as a numbered step made
+  // three separate notices say "reconnect" on one screen.
+  if (!tokenLive() && !state.account) {
+    steps.push({ title: 'Connect Gmail',
+      body: 'Use the “Connect Gmail” button above to give the app read-only access, so it can look through your mail for receipts.' });
   }
   if (!activeEndpoint()) {
     steps.push({ title: 'Connect your Google Sheet', body: 'The finder reads receipts through the same Google script that syncs your sheet. Set that up once in the “Connect your Google Sheet” tab and this step disappears.' });
@@ -312,7 +332,8 @@ function renderGate() {
   if (!steps.length) { gate.replaceChildren(); return; }
   // gateSteps() never pushes more than two entries, so this never has to
   // spell out a bigger number.
-  const heading = steps.length === 1 ? 'One quick thing before your first scan' : 'Two quick things before your first scan';
+  const count = steps.length === 1 ? 'One quick thing' : 'Two quick things';
+  const heading = `${count} before ${state.lastScan ? 'you scan again' : 'your first scan'}`;
   gate.innerHTML = `<h4 class="finder-gate-hed">${esc(heading)}</h4><ol class="finder-gate-steps">${steps.map(step => `
     <li><strong>${esc(step.title)}</strong><span>${esc(step.body)}</span>
       ${step.action ? `<button type="button" class="btn gold sm" data-action="${esc(step.action)}">${esc(step.cta)}</button>` : ''}</li>`).join('')}</ol>`;
@@ -364,16 +385,17 @@ function renderFailures() {
   const groups = failureGroups();
   if (!groups.length) return '';
   const total = groups.reduce((sum, group) => sum + group.keys.length, 0);
-  return `<details class="finder-failures"${groups.length === 1 ? ' open' : ''}>
+  const canRetry = !busy && tokenLive();
+  return `<details class="finder-failures"${groups.length <= 3 ? ' open' : ''}>
     <summary><span class="finder-failures-sum">Why ${total} email${total === 1 ? '' : 's'} couldn’t be read</span>
       <span class="finder-failures-hint">${groups.length === 1 ? 'One reason' : `${groups.length} reasons`}</span></summary>
     <ul class="finder-failures-list">${groups.map(group => `
       <li class="finder-failure">
         <span class="pill amber mono-num">${group.keys.length}</span>
         <p>${esc(group.reason)}</p>
-        <button type="button" class="btn sm" data-retry-reason="${esc(group.reason)}" ${busy ? 'disabled' : ''}>Try ${group.keys.length === 1 ? 'it' : 'these'} again</button>
+        <button type="button" class="btn sm" data-retry-reason="${esc(group.reason)}" ${canRetry ? '' : 'disabled'}>Try ${group.keys.length === 1 ? 'it' : 'these'} again</button>
       </li>`).join('')}</ul>
-    <p class="finder-failures-foot">Emails that can’t be read are never filed, and never charged twice — trying again only re-reads the ones listed here.</p>
+    <p class="finder-failures-foot">${tokenLive() ? '' : 'Reconnect Gmail above to try these again. '}Emails that can’t be read are never filed, and never charged twice — trying again only re-reads the ones listed here.</p>
   </details>`;
 }
 
@@ -388,14 +410,33 @@ function renderAlert(counts) {
     // the most common cause, a rejected AI key, is something only they can fix.
     const groups = failureGroups();
     alert.className = 'finder-alert is-warn';
+    // Retrying needs Gmail. Offering the button while disconnected used to
+    // answer one click with one "Reconnect Gmail" toast per failed email.
+    const canRetry = !busy && tokenLive();
     alert.innerHTML = `<span class="pill amber">● ${failures} couldn’t be read</span>
-      <p>${failures === 1 ? 'One email' : `${failures} emails`} could not be read${groups.length > 1 ? `, for ${groups.length} different reasons — see the breakdown below` : `. ${esc(groups[0].reason)}`}</p>
-      <button type="button" class="btn sm" data-action="retry-failed">Try all again</button>
-      <button type="button" class="btn sm" data-action="clear-failures">Clear these</button>`;
+      <p>${failures === 1 ? 'One email' : `${failures} emails`} could not be read${groups.length > 1 ? `, for ${groups.length} different reasons — listed just below.` : `. ${esc(groups[0].reason)}`}${tokenLive() ? '' : ' Reconnect Gmail above to try them again.'}</p>
+      <button type="button" class="btn sm" data-action="retry-failed" ${canRetry ? '' : 'disabled'} title="${canRetry ? 'Read these emails again' : 'Reconnect Gmail first'}">Try all again</button>
+      <button type="button" class="btn sm" data-action="clear-failures" ${busy ? 'disabled' : ''}>Clear these</button>
+      ${state.lastHalt && !busy ? `<p class="finder-alert-note">The last scan also stopped early: ${esc(state.lastHalt)}</p>` : ''}`;
+  } else if (state.lastHalt && !busy) {
+    // Why the last scan stopped early. The status line said it once and was
+    // overwritten by the next message; this stays until a scan gets through.
+    alert.className = 'finder-alert is-warn';
+    alert.innerHTML = `<span class="pill amber">● Scan stopped early</span>
+      <p>${esc(state.lastHalt)} Nothing was marked as unreadable — the next scan picks up where this one stopped.</p>`;
   } else if (counts.queued) {
-    alert.className = 'finder-alert is-info';
-    alert.innerHTML = `<span class="pill amber">● ${counts.queued} waiting</span>
-      <p>${counts.queued === 1 ? 'One receipt is' : `${counts.queued} receipts are`} waiting to be filed. They finish on their own once you are back online.</p>`;
+    // "They finish on their own once you are back online" is only true of a
+    // receipt that is waiting for a connection. One that failed for a reason —
+    // a missing exchange rate, an upload or storage refusal — never will, and
+    // saying otherwise left it sitting in the queue with nobody told why.
+    const stuck = state.drafts.filter(draft => draft.status === 'queued' && draft.error);
+    alert.className = `finder-alert ${stuck.length ? 'is-warn' : 'is-info'}`;
+    alert.innerHTML = stuck.length
+      ? `<span class="pill amber">● ${counts.queued} not filed yet</span>
+        <p>${stuck.length === 1 ? 'One receipt' : `${stuck.length} receipts`} could not be filed. ${esc(stuck[0].error)}</p>
+        <button type="button" class="btn sm" data-action="retry" ${busy || flushing ? 'disabled' : ''}>Try filing again</button>`
+      : `<span class="pill amber">● ${counts.queued} waiting</span>
+        <p>${counts.queued === 1 ? 'One receipt is' : `${counts.queued} receipts are`} waiting to be filed. They finish on their own once you are back online.</p>`;
   } else {
     alert.className = ''; alert.replaceChildren();
   }
@@ -417,12 +458,18 @@ function render() {
       ['ready', '✓', 'Ready to import', 'Checked and good to file', true],
       ['review', '👀', 'Needs your review', 'Missing or uncertain details', false],
       ['imported', '📁', 'Filed in expenses', 'Already in Business Expenses', false],
-    ].map(([key, icon, label, sub, lead]) => `<div class="finder-stat${lead ? ' is-lead' : ''} tone-${key}${filter === key ? ' is-active-filter' : ''}" data-status="${key}" role="button" tabindex="0" title="Filter by ${label}">
+    ].map(([key, icon, label, sub, lead]) => `<div class="finder-stat${lead ? ' is-lead' : ''}${counts[key] ? '' : ' is-zero'} tone-${key}${filter === key ? ' is-active-filter' : ''}" data-status="${key}" role="button" tabindex="0" title="Filter by ${label}">
         <div class="finder-stat-icon" aria-hidden="true">${icon}</div>
         <div class="finder-stat-body"><span class="finder-stat-label">${label}</span>
           <strong class="finder-stat-val">${counts[key]}</strong>
           <span class="finder-stat-sub">${sub}</span></div></div>`).join('');
-    host.querySelector('[data-finder-tabs]').innerHTML = RECEIPT_STATUSES.map(status => `<button type="button" class="filter-chip${filter === status ? ' active' : ''}" data-status="${status}" aria-pressed="${filter === status}">${LABELS[status]} <span class="mono-num">${counts[status]}</span></button>`).join('');
+    // Seven chips reading "0" was most of the toolbar. Only statuses with
+    // something in them are offered, plus All and whichever one is selected.
+    const chips = RECEIPT_STATUSES.filter(status => status === 'all' || status === filter || counts[status]);
+    host.querySelector('[data-finder-tabs]').hidden = !counts.all;
+    host.querySelector('[data-finder-listbar]').hidden = !counts.all;
+    host.querySelector('.finder-listbar [data-action="retry"]').hidden = !counts.queued;
+    host.querySelector('[data-finder-tabs]').innerHTML = chips.map(status => `<button type="button" class="filter-chip${filter === status ? ' active' : ''}" data-status="${status}" aria-pressed="${filter === status}">${LABELS[status]} <span class="mono-num">${counts[status]}</span></button>`).join('');
     const drafts = visibleDrafts();
     const openIds = new Set(Array.from(host.querySelectorAll('details[data-draft][open]'), el => el.dataset.draft));
     host.querySelector('[data-finder-list]').innerHTML = drafts.length
@@ -639,6 +686,8 @@ async function toggleConnection() {
   accessToken = token; tokenExpiresAt = expiresAt;
   if (!active()) { accessToken = ''; tokenExpiresAt = 0; return; }
   state.account = (await client.profile()).emailAddress.toLowerCase();
+  // A scan stopped by the lapsed connection is answered by reconnecting.
+  if (/Gmail/.test(state.lastHalt)) state.lastHalt = '';
   await persist();
   // Remembering the grant is the whole point: without this the publisher had to
   // reconnect Gmail on every visit, even seconds after the last one.
@@ -683,7 +732,7 @@ async function useSheetsScript() {
 async function clearRecordedFailures() {
   let dropped = 0;
   for (const [key, scan] of Object.entries(state.scans)) {
-    if (scan.error) { delete state.scans[key]; dropped++; }
+    if (scan.error) { dropScan(key); dropped++; }
   }
   await persist(); render();
   announce(dropped ? `Cleared ${dropped} earlier failure${dropped === 1 ? '' : 's'}. Those emails will be read again on the next scan.` : 'There were no failures to clear.');
@@ -755,7 +804,7 @@ async function dropFailuresFromOtherService(endpoint) {
   if (state.lastEndpoint === endpoint) return;
   let dropped = 0;
   for (const [key, scan] of Object.entries(state.scans)) {
-    if (scan.error && scan.endpoint !== endpoint) { delete state.scans[key]; dropped++; }
+    if (scan.error && scan.endpoint !== endpoint) { dropScan(key); dropped++; }
   }
   state.lastEndpoint = endpoint;
   await persist();
@@ -808,12 +857,26 @@ async function ensureServiceReady() {
 
 async function readCandidate(id, signal, endpoint) {
   const owner = uid, account = state.account, key = `${account}:${id}`;
+  // A halt raised by another reader must stop this one before it spends
+  // anything, not after its own request comes back.
+  if (signal.aborted) throw new DOMException('Stopped', 'AbortError');
   // An email read by an earlier scan is skipped rather than paid for twice —
   // but it still counts towards this scan's progress, or the bar stalls.
-  if (state.scans[key]?.done) { scanDone++; scheduleRender(); return; }
+  if (state.scans[key]?.done) { scanDone++; scanCached++; scheduleRender(); return; }
   let email = state.emails[key];
   try {
     if (!email) email = await client.message(id, account, signal);
+    if (signal.aborted || !active() || owner !== uid) throw new DOMException('Stopped', 'AbortError');
+    // No amount in the text and nothing attached: it cannot be a receipt, so it
+    // is not worth an AI read. Most of a broad search is mail like this.
+    if (!receiptWorthReading(email)) {
+      dropEmail(key);
+      state.scans[key] = { done: true, subject: email.subject, count: 0, skipped: 'no-amount' };
+      scanSkipped++;
+      await persist();
+      scanDone++; scheduleRender();
+      return;
+    }
     // Attachments are fetched together rather than one after another; a receipt
     // email routinely carries several and they are independent downloads.
     await Promise.all(email.fileParts.map(file => client.attachment(id, file, signal)));
@@ -834,17 +897,23 @@ async function readCandidate(id, signal, endpoint) {
     // saved body and attachment bytes are dead weight. Dropping them keeps the
     // saved mailbox — and therefore every later save — from growing with every
     // scan of a mostly-ordinary inbox.
-    if (!result.receipts.length) delete state.emails[key];
+    if (!result.receipts.length) dropEmail(key);
     state.scans[key] = { done: true, subject: email.subject, count: result.receipts.length };
     await persist();
   } catch (error) {
     if (error.name === 'AbortError' || !active() || uid !== owner) throw error;
-    state.scans[key] = { error: error.message, subject: email?.subject || id, endpoint };
-    await persist();
     // Every remaining email would fail the same way and spend another request
-    // doing it. One exhausted allowance used to become 77 failed emails.
-    const systemic = systemicReceiptFailure(error.message);
-    if (systemic) { haltReason = systemic; controller?.abort(); }
+    // doing it. One exhausted allowance used to become 77 failed emails, and a
+    // lapsed Gmail connection 86. Neither is the email's fault, so neither is
+    // recorded against it: the next scan simply reads it again.
+    const systemic = systemicReceiptFailure(error);
+    if (systemic) {
+      if (!haltReason) haltReason = systemic;
+      controller?.abort();
+    } else {
+      state.scans[key] = { error: error.message, subject: email?.subject || id, endpoint };
+      await persist();
+    }
   }
   scanDone++;
   scheduleRender();
@@ -876,7 +945,7 @@ async function scan(nextPage) {
   // Claimed before the capability check, which is a network round trip: a
   // second click during it would otherwise start a second scan.
   busy = true; controller = new AbortController(); const signal = controller.signal;
-  scanTotal = 0; scanDone = 0; haltReason = '';
+  scanTotal = 0; scanDone = 0; scanSkipped = 0; scanCached = 0; haltReason = '';
   const before = state.drafts.length;
   const failedBefore = Object.values(state.scans).filter(item => item.error).length;
   render();
@@ -896,16 +965,20 @@ async function scan(nextPage) {
     await runPool(messages, SCAN_CONCURRENCY, message => readCandidate(message.id, signal, endpoint));
     // Commit the next cursor only after this page finishes, so Stop never skips emails.
     state.pageToken = page.nextPageToken || ''; state.lastQuery = query; state.lastScan = new Date().toISOString();
+    state.lastHalt = '';
     await persist();
     const found = state.drafts.length - before;
     const failed = Object.values(state.scans).filter(item => item.error).length - failedBefore;
     announce([
-      found ? `Found ${found} receipt${found === 1 ? '' : 's'} in ${messages.length} emails.` : `Read ${messages.length} emails — none of them held a receipt.`,
-      failed > 0 ? `${failed} could not be read; open “Why ${failed} emails couldn’t be read” below to see why, or use “Try all again”.` : '',
+      found ? `Found ${found} receipt${found === 1 ? '' : 's'} in ${messages.length} emails.` : `Checked ${messages.length} emails — none of them held a new receipt.`,
+      scanSkipped ? `${scanSkipped} had no amount or attachment, so no AI was spent on ${scanSkipped === 1 ? 'it' : 'them'}.` : '',
+      scanCached ? `${scanCached} ${scanCached === 1 ? 'was' : 'were'} already checked in an earlier scan.` : '',
+      failed > 0 ? `${failed} could not be read — the reasons are listed above.` : '',
       state.pageToken ? 'There are more emails to check — use “Scan next 25 emails”.' : '',
     ].filter(Boolean).join(' '));
   } catch (error) {
     if (error.name === 'AbortError') {
+      if (haltReason) { state.lastHalt = haltReason; await persist().catch(() => {}); }
       announce(haltReason
         ? `Scan stopped after the first failure, so nothing more was spent on it. ${haltReason}`
         : 'Scan stopped. Everything already read has been saved; scan again to carry on.');
@@ -913,26 +986,44 @@ async function scan(nextPage) {
   } finally { busy = false; controller = null; scanTotal = 0; scanDone = 0; render(); }
 }
 
+// All the failures in one pass, a few at a time like a scan — not one scan per
+// email, which re-checked the service and repainted the screen 86 times and,
+// while Gmail was disconnected, answered one click with 86 error toasts.
 async function retryFailedEmails(reason = '') {
-  const keys = Object.entries(state.scans)
-    .filter(([, scan]) => scan.error && (!reason || scan.error === reason))
-    .map(([key]) => key);
-  for (const key of keys) {
-    if (busy) break;
-    await scanEmailRetry(key).catch(report);
-  }
-}
-
-async function scanEmailRetry(key) {
   if (busy) return;
-  if (!tokenLive()) throw new Error('Reconnect Gmail to retry');
-  if (!key.startsWith(state.account + ':')) throw new Error('Connect the original Gmail account to retry this email');
-  const endpoint = await ensureServiceReady();
-  busy = true; controller = new AbortController(); render();
+  if (!tokenLive()) throw new Error('Reconnect Gmail first, then try these again.');
+  const prefix = state.account + ':';
+  const keys = Object.entries(state.scans)
+    .filter(([key, scan]) => scan.error && (!reason || scan.error === reason) && key.startsWith(prefix))
+    .map(([key]) => key);
+  if (!keys.length) throw new Error('These emails belong to a different Gmail account. Connect that account to try them again.');
+  // Claimed before the service check, a network round trip, so a second click
+  // during it cannot start a second pass.
+  busy = true; controller = new AbortController(); const signal = controller.signal;
+  scanTotal = keys.length; scanDone = 0; scanSkipped = 0; scanCached = 0; haltReason = '';
+  const failedBefore = keys.length;
+  render();
   try {
-    delete state.scans[key];
-    await readCandidate(key.slice(state.account.length + 1), controller.signal, endpoint);
-  } finally { busy = false; controller = null; render(); }
+    const endpoint = await ensureServiceReady();
+    await runPool(keys, SCAN_CONCURRENCY, async key => {
+      // A retry cut short (Stop, or a problem that halts the batch) leaves the
+      // email exactly as listed before, rather than silently dropping it.
+      const previous = state.scans[key];
+      delete state.scans[key];
+      try { await readCandidate(key.slice(prefix.length), signal, endpoint); }
+      finally { if (!state.scans[key]) state.scans[key] = previous; }
+    });
+    state.lastHalt = '';
+    await persist();
+    const stillFailing = keys.filter(key => state.scans[key]?.error).length;
+    announce(stillFailing
+      ? `${failedBefore - stillFailing} of ${failedBefore} read this time. ${stillFailing} still could not be read.`
+      : `All ${failedBefore} read this time.`);
+  } catch (error) {
+    if (error.name !== 'AbortError') throw error;
+    if (haltReason) { state.lastHalt = haltReason; await persist().catch(() => {}); }
+    announce(haltReason ? `Stopped retrying at the first failure, so nothing more was spent on it. ${haltReason}` : 'Stopped. Everything already read has been saved.');
+  } finally { busy = false; controller = null; scanTotal = 0; scanDone = 0; render(); }
 }
 
 function stopReceiptFinder() { controller?.abort(); }

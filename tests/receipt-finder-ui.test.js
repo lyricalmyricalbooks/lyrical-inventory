@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { normalizeFoundReceipt } from '../src/lib/receipt-finder.js';
+import { normalizeFoundReceipt, mergeFinderSnapshot } from '../src/lib/receipt-finder.js';
 
 const mocks = vi.hoisted(() => ({ saved: null, token: null, save: vi.fn(), load: vi.fn(), clear: vi.fn(),
   loadToken: vi.fn(), saveToken: vi.fn(), clearToken: vi.fn(), aiTest: vi.fn(),
@@ -20,22 +20,24 @@ vi.mock('../src/lib/receipt-finder-client.js', () => ({
     : result.aiStatus === 429
       ? { level: 'warn', headline: 'Google’s AI allowance for your key is used up for now.', steps: ['Wait a few minutes.'], blocksScan: false }
       : { level: 'error', headline: 'Google would not accept the AI key in your script.', steps: ['Use a key that starts with AIza.'], blocksScan: true },
-  systemicReceiptFailure: message => /\(429\)/.test(message)
+  systemicReceiptFailure: error => error?.stopsScan ? error.message : /\(429\)/.test(String(error?.message ?? error))
     ? 'Google’s AI allowance for your key is used up for now. Wait a few minutes.' : null,
   FINDER_ENDPOINT_PATTERN: /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/,
 }));
 
-const source = { id: 'm1', account: 'publisher@example.com', body: 'Original invoice evidence', from: 'Printer', subject: 'Invoice #123', fileParts: [] };
+const source = { id: 'm1', account: 'publisher@example.com', body: 'Original invoice evidence. Total: $113.00', from: 'Printer', subject: 'Invoice #123', fileParts: [] };
 function state() {
   const draft = normalizeFoundReceipt({ vendor: 'Printer', amount: 113, currency: 'CAD', date: '2026-09-01', reference: '123', confidence: 0.3 }, source);
-  return { drafts: [draft], emails: { 'publisher@example.com:m1': source }, endpoint: 'https://script.google.com/macros/s/test/exec', scans: {}, account: 'publisher@example.com' };
+  return { drafts: [draft], emails: { 'publisher@example.com:m1': { ...source } }, endpoint: 'https://script.google.com/macros/s/test/exec', scans: {}, account: 'publisher@example.com' };
 }
 let deps;
 beforeEach(() => {
   vi.resetModules(); vi.clearAllMocks();
   mocks.saved = state();
   mocks.load.mockImplementation(async () => structuredClone(mocks.saved));
-  mocks.save.mockImplementation(async (_uid, value) => { mocks.saved = structuredClone(value); });
+  // Merged, exactly as the real store does, so a deletion that never reaches
+  // storage shows up here instead of only after a reload in the field.
+  mocks.save.mockImplementation(async (_uid, value) => { mocks.saved = structuredClone(mergeFinderSnapshot(mocks.saved, value)); });
   mocks.list.mockResolvedValue({ messages: [{ id: 'm2' }] });
   mocks.message.mockResolvedValue({ ...source, id: 'm2', subject: 'Receipt notice' });
   mocks.extract.mockResolvedValue({ receipts: [{ vendor: 'Courier', amount: 10, currency: 'CAD', date: '2026-09-01', confidence: 0.9 }] });
@@ -411,6 +413,76 @@ describe('receipt finder UI', () => {
     expect(mocks.list).toHaveBeenCalled();
     const gate = document.querySelector('[data-finder-gate]').textContent;
     expect(gate).not.toMatch(/would not accept/);
+  });
+  it('does not spend an AI read on an email with no amount and no attachment', async () => {
+    mocks.message.mockResolvedValue({ ...source, id: 'm2', subject: 'Your parcel is on its way', body: 'Track your order here.' });
+    await mount();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="connect"]').click(); await settle();
+    document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
+    expect(mocks.extract).not.toHaveBeenCalled();
+    expect(mocks.saved.scans['publisher@example.com:m2']).toMatchObject({ done: true, skipped: 'no-amount' });
+    expect(document.querySelector('[data-finder-status]').textContent).toContain('no AI was spent');
+  });
+  it('stops at a lapsed Gmail connection without blaming the emails', async () => {
+    // A token that died mid-scan used to record every remaining email as
+    // "couldn't be read" — 86 of them — for a problem with none of them.
+    mocks.list.mockResolvedValue({ messages: [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }, { id: 'e' }] });
+    mocks.message.mockRejectedValue(Object.assign(new Error('Gmail access expired. Reconnect Gmail, then scan again.'), { status: 401, stopsScan: true }));
+    await mount();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="connect"]').click(); await settle();
+    document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
+    expect(mocks.message.mock.calls.length).toBeLessThan(5);
+    expect(Object.values(mocks.saved.scans).filter(scan => scan.error)).toHaveLength(0);
+    const alert = document.querySelector('[data-finder-alert]');
+    expect(alert.textContent).toContain('Scan stopped early');
+    expect(alert.textContent).toContain('Gmail access expired');
+    expect(mocks.saved.pageToken || '').toBe('');
+  });
+  it('will not offer a retry while Gmail is disconnected', async () => {
+    mocks.saved.scans = {
+      'publisher@example.com:a': { error: 'Receipt extraction failed', subject: 'One' },
+      'publisher@example.com:b': { error: 'Receipt extraction failed', subject: 'Two' },
+    };
+    await mount();
+    expect(document.querySelector('[data-action="retry-failed"]').disabled).toBe(true);
+    expect(document.querySelector('[data-retry-reason]').disabled).toBe(true);
+    // The breakdown sits with the alert, above the results, not below them.
+    const errors = document.querySelector('[data-finder-errors]');
+    expect(errors.compareDocumentPosition(document.querySelector('[data-finder-list]')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+  it('retries every failure in one pass', async () => {
+    mocks.saved.scans = {
+      'publisher@example.com:a': { error: 'Receipt extraction failed', subject: 'One' },
+      'publisher@example.com:b': { error: 'Receipt extraction failed', subject: 'Two' },
+    };
+    mocks.message.mockImplementation(async id => ({ ...source, id, subject: 'Receipt ' + id }));
+    await mount();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="connect"]').click(); await settle();
+    document.querySelector('[data-action="retry-failed"]').click(); await settle(); await settle();
+    expect(mocks.check).toHaveBeenCalledTimes(1);
+    expect(mocks.extract).toHaveBeenCalledTimes(2);
+    expect(Object.values(mocks.saved.scans).every(scan => scan.done)).toBe(true);
+    expect(document.querySelector('[data-finder-status]').textContent).toContain('All 2 read');
+  });
+  it('says why a queued receipt is stuck instead of promising it will file itself', async () => {
+    mocks.saved.drafts[0].status = 'queued';
+    mocks.saved.drafts[0].error = 'Waiting for a currency conversion rate';
+    await mount();
+    const alert = document.querySelector('[data-finder-alert]');
+    expect(alert.className).toContain('is-warn');
+    expect(alert.textContent).toContain('Waiting for a currency conversion rate');
+    expect(alert.textContent).not.toContain('on their own');
+    expect(alert.querySelector('[data-action="retry"]')).not.toBeNull();
+    expect(document.querySelector('.finder-listbar [data-action="retry"]').hidden).toBe(false);
+  });
+  it('shows only the status filters that have something in them', async () => {
+    await mount();
+    const chips = [...document.querySelectorAll('[data-finder-tabs] [data-status]')].map(chip => chip.dataset.status);
+    expect(chips).toEqual(['all', 'review']);
+    expect(document.querySelector('[data-action="retry"]').hidden).toBe(true);
   });
   it('filters drafts when clicking summary KPI cards', async () => {
     await mount();

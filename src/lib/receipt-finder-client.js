@@ -26,6 +26,45 @@ export function decodeGmailBase64(data) {
   return Uint8Array.from(binary, char => char.charCodeAt(0));
 }
 
+// Marketing mail pads its preview text with hundreds of invisible characters,
+// and HTML-to-text leaves runs of blank lines between table cells. None of it
+// carries meaning, all of it is paid for as AI input on every email.
+export function compactEmailText(text) {
+  return String(text || '')
+    .replace(/[​-‏­͏⁠᠎﻿]/g, '')
+    .replace(/[ \t\f\v  -   　]+/g, ' ')
+    .replace(/ *\n\s*/g, '\n')
+    .trim();
+}
+
+// textContent alone runs table cells together ("Subtotal$10.00Tax$1.30"), which
+// is exactly where a receipt keeps its numbers. Break rows and blocks onto their
+// own lines and keep cells apart before flattening.
+export function emailHtmlText(html) {
+  const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
+  doc.querySelectorAll('script,style,head,noscript,template,svg').forEach(el => el.remove());
+  doc.querySelectorAll('br').forEach(el => el.after('\n'));
+  doc.querySelectorAll('p,div,tr,li,h1,h2,h3,h4,h5,h6,table,section,article').forEach(el => el.append('\n'));
+  doc.querySelectorAll('td,th').forEach(el => el.append(' '));
+  return compactEmailText(doc.body?.textContent || '');
+}
+
+// Gmail normally hands text parts back as UTF-8 whatever the email declared,
+// but not always: a windows-1252 or ISO-8859-1 receipt read as UTF-8 turned £
+// and é into �. Strict UTF-8 first — Latin-1 bytes almost never form valid
+// UTF-8 — and only then the charset the email itself names.
+function partText(part) {
+  const bytes = decodeGmailBase64(part.body.data);
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { /* not UTF-8 */ }
+  const type = part.headers?.find(h => h.name.toLowerCase() === 'content-type')?.value || '';
+  const charset = /charset\s*=\s*"?([\w.:-]+)"?/i.exec(type)?.[1] || 'windows-1252';
+  try { return new TextDecoder(charset).decode(bytes); } catch { return new TextDecoder().decode(bytes); }
+}
+
+// Below this, a plain-text part is a "view this email in your browser" stub and
+// the HTML part is the real receipt.
+const PLAIN_STUB_CHARS = 200;
+
 export function gmailMessage(message, account) {
   const headers = message.payload?.headers || [];
   const header = name => headers.find(h => h.name.toLowerCase() === name)?.value || '';
@@ -41,41 +80,75 @@ export function gmailMessage(message, account) {
       fileParts.push({ name: part.filename, mime, attachmentId: part.body?.attachmentId || '',
         partId: part.partId || '', size: part.body?.size || 0, base64: part.body?.data || '' });
     } else if (!part.filename && part.body?.data) {
-      const text = new TextDecoder().decode(decodeGmailBase64(part.body.data));
-      if (mime === 'text/plain') plain.push(text);
-      else if (mime === 'text/html') html.push(text);
+      if (mime === 'text/plain') plain.push(partText(part));
+      else if (mime === 'text/html') html.push(partText(part));
     }
     (part.parts || []).forEach(walk);
   }
   if (message.payload) walk(message.payload);
   // HTML is parsed inertly for text, never mounted into the live document.
-  const body = plain.length ? plain.join('\n') : html.map(text => {
-    const doc = new DOMParser().parseFromString(text, 'text/html');
-    doc.querySelectorAll('script,style').forEach(el => el.remove());
-    return doc.body.textContent || '';
-  }).join('\n');
+  const plainText = compactEmailText(plain.join('\n'));
+  const body = plainText.length >= PLAIN_STUB_CHARS || !html.length
+    ? plainText
+    : html.map(emailHtmlText).join('\n');
   return { id: message.id, account, from: header('From'), subject: header('Subject'),
     date: header('Date'), body, snippet: message.snippet || '', fileParts };
 }
 
 export const MAX_ATTACHMENT_BYTES = 12 * 1024 * 1024;
 
-export function createReceiptFinderClient({ token, fetchImpl = fetch, onExpired = () => {} }) {
+// Gmail allows 250 quota units per user per second and a message read costs 5,
+// so a few readers in parallel can briefly trip it. That is a wait, not a
+// failure of the email, and must not be recorded against it.
+const GMAIL_RETRIES = 3;
+const gmailPause = (ms, signal) => new Promise((resolve, reject) => {
+  const timer = setTimeout(resolve, ms);
+  signal?.addEventListener('abort', () => { clearTimeout(timer); reject(new DOMException('Stopped', 'AbortError')); }, { once: true });
+});
+
+// `stopsScan` marks a problem with the connection rather than the email — a
+// lapsed or refused grant, or a rate limit that outlasted the retries. Every
+// other email in the scan would fail the same way, so the scan stops instead of
+// recording it dozens of times as though the emails were at fault.
+function gmailError(message, status, stopsScan = false) {
+  return Object.assign(new Error(message), { status, stopsScan });
+}
+
+export function createReceiptFinderClient({ token, fetchImpl = fetch, onExpired = () => {}, pause = gmailPause }) {
   async function gmail(path, signal) {
-    const accessToken = token();
-    if (!accessToken) throw new Error('Connect Gmail to scan receipts');
-    const res = await fetchImpl('https://gmail.googleapis.com/gmail/v1/users/me/' + path, {
-      headers: { Authorization: `Bearer ${accessToken}` }, signal,
-    });
-    if (res.status === 401) { onExpired(); throw new Error('Gmail access expired. Reconnect Gmail to continue.'); }
-    if (!res.ok) throw new Error(res.status === 403 ? 'Gmail access was not granted. Enable Gmail API and reconnect with read-only permission.' : `Gmail request failed (${res.status}). Try again.`);
-    return res.json();
+    for (let attempt = 0; ; attempt++) {
+      const accessToken = token();
+      if (!accessToken) throw gmailError('Gmail is not connected. Reconnect Gmail, then scan again.', 401, true);
+      const res = await fetchImpl('https://gmail.googleapis.com/gmail/v1/users/me/' + path, {
+        headers: { Authorization: `Bearer ${accessToken}` }, signal,
+      });
+      if (res.ok) return res.json();
+      if (res.status === 401) { onExpired(); throw gmailError('Gmail access expired. Reconnect Gmail, then scan again.', 401, true); }
+      // Gmail reports a per-user rate limit as 403 rateLimitExceeded as well as
+      // 429, so a 403 is only a permission problem when it says so.
+      let reason = '';
+      if (res.status === 403) {
+        try { reason = (await res.json())?.error?.errors?.[0]?.reason || ''; } catch { /* body is optional */ }
+      }
+      const throttled = res.status === 429 || /rateLimitExceeded|userRateLimitExceeded/.test(reason);
+      if ((throttled || res.status >= 500) && attempt < GMAIL_RETRIES) {
+        const retryAfter = Number(res.headers?.get?.('retry-after'));
+        await pause(Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(retryAfter, 30) * 1000 : 1000 * 2 ** attempt + Math.random() * 500, signal);
+        continue;
+      }
+      if (res.status === 403 && !throttled) {
+        throw gmailError('Gmail access was not granted. Enable the Gmail API and reconnect with read-only permission.', 403, true);
+      }
+      // A 5xx that outlasts the retries stays with its one email: if a single
+      // message keeps failing, stopping every scan on it would stall forever.
+      throw gmailError(throttled ? 'Gmail is busy right now. Wait a minute, then scan again.' : `Gmail request failed (${res.status}). Try again.`, res.status, throttled);
+    }
   }
   return {
     profile: signal => gmail('profile', signal),
     list: (query, pageToken, signal, pageSize = 25) => gmail('messages?' + new URLSearchParams({
-      q: query, maxResults: String(pageSize), ...(pageToken ? { pageToken } : {}) }), signal),
-    message: async (id, account, signal) => gmailMessage(await gmail(`messages/${encodeURIComponent(id)}?format=full`, signal), account),
+      q: query, maxResults: String(pageSize), fields: 'messages/id,nextPageToken', ...(pageToken ? { pageToken } : {}) }), signal),
+    message: async (id, account, signal) => gmailMessage(await gmail(`messages/${encodeURIComponent(id)}?format=full&fields=id,snippet,payload`, signal), account),
     // One oversized attachment must not cost the publisher the rest of the
     // email: mark it skipped and let the body and the other files through.
     attachment: async (messageId, file, signal) => {
@@ -84,7 +157,7 @@ export function createReceiptFinderClient({ token, fetchImpl = fetch, onExpired 
         return file;
       }
       if (!file.base64 && file.attachmentId) {
-        const data = await gmail(`messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(file.attachmentId)}`, signal);
+        const data = await gmail(`messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(file.attachmentId)}?fields=data`, signal);
         file.base64 = data.data;
       }
       if (!file.base64) file.skipped = `Could not download ${file.name}`;
@@ -158,9 +231,49 @@ export function friendlyReceiptAiError(message) {
 // the scan can stop at the first one instead of working through the mailbox
 // collecting the same complaint — which is how one exhausted allowance turned
 // into 77 failed emails and 77 more requests spent against it.
-export function systemicReceiptFailure(message) {
+//
+// Takes the error itself, not just its text: a lapsed Gmail connection and the
+// in-app AI keys report their refusals as a status on the error rather than in
+// the script's "Receipt AI is unavailable (NNN)" wording, and used to slip
+// through as 86 separately "unreadable" emails.
+const APP_AI_REFUSAL = /prepayment|out of credit|credits|billing|quota|api key|paid tier|spending cap|rate.?limit|key was rejected|add a gemini or openrouter key|no free-tier reader/i;
+export function systemicReceiptFailure(errorOrMessage) {
+  const error = typeof errorOrMessage === 'string' ? { message: errorOrMessage } : errorOrMessage || {};
+  const message = String(error.message || '');
+  if (error.stopsScan) return message;
+  if (error.systemic) return error.systemic;
   const failure = classifyReceiptAiFailure(receiptAiStatus(message));
-  return failure ? `${failure.headline} ${failure.help}` : null;
+  if (failure) return `${failure.headline} ${failure.help}`;
+  const status = Number(error.status) || 0;
+  if (status === 429) return `Your AI key has hit its usage limit for now (${message}). Wait a few minutes, then scan again.`;
+  if ([401, 402, 403].includes(status) || APP_AI_REFUSAL.test(message)) {
+    return `Your AI key was refused (${message}). Check the key in the Tax Centre settings, then scan again.`;
+  }
+  return null;
+}
+
+// Models asked for "JSON only" still wrap it in a ```json fence now and then,
+// and a bare JSON.parse turned that into "Unexpected token" on the screen.
+export function parseReceiptJson(text) {
+  const raw = String(text || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  try { return JSON.parse(raw); } catch { /* fall through to the outermost object */ }
+  const start = raw.indexOf('{'), end = raw.lastIndexOf('}');
+  if (start >= 0 && end > start) {
+    try { return JSON.parse(raw.slice(start, end + 1)); } catch { /* reported below */ }
+  }
+  throw new Error('Receipt AI returned an answer that could not be read. Try this email again.');
+}
+
+// When a PDF or photo is attached, that file is the invoice and the email
+// around it is a covering note plus a footer. Sending all of it again as text
+// doubles what each email costs to read for nothing.
+const BODY_LIMIT = 24000, BODY_LIMIT_WITH_FILE = 6000;
+export function receiptBodyForAi(body, hasFile) {
+  const text = String(body || '');
+  const limit = hasFile ? BODY_LIMIT_WITH_FILE : BODY_LIMIT;
+  if (text.length <= limit) return text;
+  const head = Math.round(limit * 0.75);
+  return text.slice(0, head) + '\n[Middle omitted]\n' + text.slice(-(limit - head));
 }
 
 export async function extractFoundReceipts({ endpoint, idToken, email, signal, fetchImpl = fetch, readAi }) {
@@ -171,7 +284,7 @@ export async function extractFoundReceipts({ endpoint, idToken, email, signal, f
   const files = usable.map(file => ({ inlineData: { mimeType: file.mime, data: toStandardBase64(file.base64) } }));
   const body = receiptRequestBody({ idToken, email: {
     subject: email.subject, from: email.from, date: email.date,
-    body: email.body.length > 24000 ? email.body.slice(0, 18000) + '\n[Middle omitted]\n' + email.body.slice(-6000) : email.body,
+    body: receiptBodyForAi(email.body, files.length > 0),
   }, files });
   if (body.length > MAX_AI_PAYLOAD) throw new Error('This email is too large for AI extraction. Review its attachments separately.');
   if (readAi) {
@@ -187,7 +300,7 @@ export async function extractFoundReceipts({ endpoint, idToken, email, signal, f
       + 'If there is no financial document return {"receipts":[]}. Return JSON only.';
     const out = await readAi([{ text: prompt }, { text: JSON.stringify(JSON.parse(body).email) }, ...files], { signal });
     if (out.truncated) throw new Error('AI could not finish this email. Review it manually or retry.');
-    const data = JSON.parse(out.text);
+    const data = parseReceiptJson(out.text);
     if (!Array.isArray(data.receipts) || data.receipts.length > 100 || data.receipts.some(row => !row || typeof row !== 'object' || Array.isArray(row))) {
       throw new Error('Receipt AI returned an invalid response. Retry this email.');
     }
@@ -196,7 +309,13 @@ export async function extractFoundReceipts({ endpoint, idToken, email, signal, f
   const res = await fetchImpl(endpoint, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, body, signal, redirect: 'follow' });
   if (!res.ok) throw new Error(`Receipt AI request failed (${res.status})`);
   const data = await res.json();
-  if (!data.ok) throw new Error(friendlyReceiptAiError(data.error) || 'Receipt AI could not read this email');
+  if (!data.ok) {
+    // Keep the script's own wording on the error so a refusal that will repeat
+    // on every email can still be recognised after it is made friendly.
+    const failure = classifyReceiptAiFailure(receiptAiStatus(data.error));
+    throw Object.assign(new Error(friendlyReceiptAiError(data.error) || 'Receipt AI could not read this email'),
+      failure ? { systemic: `${failure.headline} ${failure.help}` } : {});
+  }
   if (!Array.isArray(data.receipts)) throw new Error('Receipt AI returned an invalid response. Retry this email.');
   return data;
 }
