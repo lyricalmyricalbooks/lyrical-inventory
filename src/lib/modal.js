@@ -80,11 +80,11 @@ export function closeM(id) {
     try { _modalReturnFocus.focus(); } catch { }
   }
   _modalReturnFocus = null;
-  // The Fair Print Kit and the POS sub-panels reuse the overlay markup but are
-  // laid out inline rather than floating over the page. Hiding them here would
-  // blank the panel the seller is working in, so they opt out of the close
-  // animation and the display:none that follows it.
-  if (el.classList.contains('fk-workspace') || el.closest('.pos-subpanel')) return;
+  // The Fair Print Kit, the POS sub-panels, and the Email Receipt Import page
+  // reuse the overlay markup but are laid out inline rather than floating over
+  // the page. Hiding them here would blank the panel the owner is working in,
+  // so they opt out of the close animation and the display:none that follows it.
+  if (el.classList.contains('fk-workspace') || el.classList.contains('email-import-workspace') || el.closest('.pos-subpanel')) return;
   if (el.classList.contains('closing')) return;
   if (_prefersReducedMotion()) { el.style.display = 'none'; clearFieldErrors(el); return; }
   el.classList.add('closing');

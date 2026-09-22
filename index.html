@@ -2162,169 +2162,6 @@
   </div>
 </div></div>
 
-<!-- EMAIL RECEIPT IMPORT MODAL (REDESIGNED) -->
-<div class="overlay" id="m-email-receipt-import-modal" style="display:none;"><div class="modal email-import-modal" role="dialog" aria-modal="true">
-  <div class="modal-title email-import-header" role="dialog" aria-modal="true">
-    <div class="email-import-heading">
-      <span class="modal-title-badge" aria-hidden="true">📧</span>
-      <div class="email-import-heading-copy">
-        <span class="email-import-title">Import receipts from email</span>
-        <span class="email-import-subtitle">Find the proof, check the details, file it once.</span>
-      </div>
-      <span class="pill green email-connected-pill" id="email-account-pill">● Gmail Connected</span>
-    </div>
-    <div class="email-import-header-actions">
-      <span class="email-import-step-label">Step 1 of 2 · Find receipts</span>
-      <button type="button" class="btn tx modal-close-btn" onclick="closeEmailReceiptImportModal()" aria-label="Close dialog" title="Close (Esc)">✕</button>
-    </div>
-  </div>
-  
-  <!-- Sub-Tabs: Apple/Linear-style Segmented Control -->
-  <div class="modal-tabs segmented-control" role="tablist">
-    <button type="button" class="modal-tab-btn active" id="email-tab-gmail" onclick="switchEmailImportTab('gmail')" role="tab" aria-selected="true">
-      <span class="tab-icon">📬</span> Gmail Finder
-    </button>
-    <button type="button" class="modal-tab-btn" id="email-tab-manual" onclick="switchEmailImportTab('manual')" role="tab" aria-selected="false">
-      <span class="tab-icon">📂</span> Paste &amp; Upload
-    </button>
-    <button type="button" class="modal-tab-btn" id="email-tab-direct" onclick="switchEmailImportTab('direct')" role="tab" aria-selected="false">
-      <span class="tab-icon">✉️</span> Gmail Import <span class="email-no-ai-tag">No AI</span>
-    </button>
-  </div>
-
-  <!-- Gmail Tab Panel -->
-  <div id="email-panel-gmail">
-    <!-- AI Assistant Banner -->
-    <div class="email-ai-assistant-card">
-      <div class="email-ai-spark">✦</div>
-      <div class="email-ai-copy">
-        <strong>Intelligent Receipt Scanner:</strong> Search and select invoice emails from your connected Gmail. Gemini AI extracts line items, taxes, currencies, and attached PDFs automatically.
-      </div>
-    </div>
-
-    <!-- Search Bar & Query Builder -->
-    <div class="email-search-row">
-      <div class="email-search-input-wrap">
-        <span class="email-search-icon" aria-hidden="true">🔍</span>
-        <input type="text" id="email-gmail-search-query" class="email-search-input" placeholder="Search receipt emails (e.g. Adobe, Canada Post, supplies)..." aria-label="Search Gmail query">
-        <button type="button" class="email-search-clear-btn" id="email-query-clear-btn" onclick="document.getElementById('email-gmail-search-query').value='';document.getElementById('email-gmail-search-query').focus();" title="Clear query">✕</button>
-      </div>
-      <button type="button" class="btn gold email-search-action-btn" id="email-gmail-search-btn" onclick="searchGmailEmails()">Search Inbox</button>
-    </div>
-
-    <!-- Advanced Query Disclosure Toggle -->
-    <details class="email-advanced-query-details" style="margin-bottom:12px;">
-      <summary class="email-advanced-query-summary">⚙ Advanced Gmail Search Syntax</summary>
-      <div class="email-advanced-query-body">
-        Use standard Gmail search operators such as <code>newer_than:30d</code>, <code>has:attachment</code>, <code>from:supplier@domain.com</code>, or <code>filename:pdf</code>.
-      </div>
-    </details>
-
-    <!-- Filter Chips -->
-    <div class="email-chips-container" id="email-gmail-chips" role="group" aria-label="Quick search presets">
-      <!-- loaded via JS renderGmailChips() -->
-    </div>
-
-    <!-- Results List & Zero State Wrapper -->
-    <div id="email-gmail-list-wrap" class="email-results-viewport" tabindex="0" role="region" aria-label="Gmail search results">
-      <div class="email-zero-state">
-        <div class="email-zero-state-icon" aria-hidden="true">📭</div>
-        <div class="email-zero-state-title">Ready to scan your inbox</div>
-        <div class="email-zero-state-sub">Select a quick preset above (like <b>Past 30 Days</b>) or enter a supplier name to find recent expense receipts.</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Manual Tab Panel -->
-  <div id="email-panel-manual" style="display:none;">
-    <div class="email-ai-assistant-card">
-      <div class="email-ai-spark">📄</div>
-      <div class="email-ai-copy">
-        Paste raw email bodies or drop <code>.eml</code>, <code>.txt</code>, PDF invoices, and receipt photos here for direct Gemini extraction.
-      </div>
-    </div>
-    
-    <div class="email-manual-grid">
-      <div class="form-group email-manual-col">
-        <label for="email-receipt-source" class="email-field-label">Paste Email Text / Receipt Snippet</label>
-        <textarea id="email-receipt-source" rows="8" class="email-paste-textarea" placeholder="Paste order confirmation or forwarded receipt email content here..."></textarea>
-      </div>
-      <div class="form-group email-manual-col">
-        <label for="email-receipt-files" class="email-field-label">Or Drop Receipt Files &amp; PDFs</label>
-        <div class="email-dropzone" id="email-receipt-dropzone" onclick="document.getElementById('email-receipt-files').click()">
-          <input type="file" id="email-receipt-files" accept=".eml,.txt,.html,.htm,.pdf,image/*" multiple style="display:none;">
-          <div class="email-dropzone-icon" aria-hidden="true">📤</div>
-          <div class="email-dropzone-title">Click to browse or drag files here</div>
-          <div class="email-dropzone-sub">Supports .eml, .txt, .pdf, .png, .jpg up to 25 MB</div>
-        </div>
-        <div id="email-receipt-files-list" class="email-files-summary-list"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Direct Gmail import: archives the original messages without AI extraction. -->
-  <div id="email-panel-direct" style="display:none;">
-    <div class="email-ai-assistant-card email-direct-import-card">
-      <div class="email-ai-spark">✉️</div>
-      <div class="email-ai-copy">
-        <strong>Archive selected receipts exactly as sent.</strong> No AI reads this mail. The email and its attachments are saved to your receipts, ready for you to add the amount and details later.
-      </div>
-    </div>
-    <div class="email-search-row">
-      <div class="email-search-input-wrap">
-        <span class="email-search-icon" aria-hidden="true">🔍</span>
-        <input type="text" id="email-direct-search-query" class="email-search-input" placeholder="Search Gmail: supplier, invoice, receipt…" aria-label="Search Gmail to import without AI">
-      </div>
-      <button type="button" class="btn gold email-search-action-btn" id="email-direct-search-btn" onclick="searchDirectGmailEmails()">Search Gmail</button>
-    </div>
-    <div class="email-chips-container" id="email-direct-chips" role="group" aria-label="Quick Gmail search presets"></div>
-    <div id="email-direct-list-wrap" class="email-results-viewport" tabindex="0" role="region" aria-label="Gmail emails to archive without AI">
-      <div class="email-zero-state">
-        <div class="email-zero-state-icon" aria-hidden="true">🗂️</div>
-        <div class="email-zero-state-title">Choose emails to archive</div>
-        <div class="email-zero-state-sub">Search your connected Gmail, select the records you want to keep, then import their original email and attachments.</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Progressive Review Toolbar (Appears only when drafts exist) -->
-  <div id="email-receipt-results" style="margin-top:14px;"></div>
-
-  <!-- Shared Fallback Category & Info Bar (Progressive Disclosure) -->
-  <div id="email-bulk-category-bar" class="email-bulk-category-strip" style="display:none;">
-    <div class="email-bulk-cat-controls">
-      <label for="email-receipt-default-cat" class="email-field-label" style="margin:0;">Bulk category:</label>
-      <select id="email-receipt-default-cat" class="email-cat-select">
-        <option>Other</option>
-        <option>Software &amp; Subscriptions</option>
-        <option>Marketing &amp; Advertising</option>
-        <option>Printing &amp; Production</option>
-        <option>Editorial &amp; Proofreading</option>
-        <option>Illustration &amp; Photography</option>
-        <option>Rights &amp; Permissions</option>
-        <option>ISBN, Barcodes &amp; Cataloging</option>
-        <option>Shipping &amp; Postage</option>
-        <option>Warehousing &amp; Fulfillment</option>
-        <option>Packaging Materials</option>
-        <option>Office Supplies</option>
-        <option>Travel &amp; Meals</option>
-        <option>Professional Services</option>
-        <option>Sales Processing Fees</option>
-        <option>Books, Research &amp; Reference</option>
-        <option>Events &amp; Exhibitions</option>
-      </select>
-      <button type="button" class="btn sm" onclick="applyBulkCategoryToEmailDrafts()" title="Apply this category to all selected rows">Apply to selected</button>
-    </div>
-    <div class="email-bulk-cat-note">Live FX rates auto-fetched on import · Gemini AI</div>
-  </div>
-
-  <!-- Modal Sticky Footer -->
-  <div class="modal-footer" role="dialog" aria-modal="true">
-    <button type="button" class="btn" onclick="closeEmailReceiptImportModal()">Cancel</button>
-    <button type="button" class="btn gold" onclick="handleEmailImportPrimaryAction()" id="email-receipt-scan-btn">✨ Select emails to extract</button>
-  </div>
-</div></div>
-
 <!-- WEBCAM RECEIPT CAPTURE -->
 <div class="overlay" id="m-receipt-camera-modal" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:680px;">
   <div class="modal-title" role="dialog" aria-modal="true">
@@ -2903,8 +2740,164 @@
     </div>
   </div> <!-- /#tc-sec-receipts -->
 
-  <!-- EMAIL RECEIPT IMPORT SECTION -->
+  <!-- EMAIL RECEIPT IMPORT SECTION — a normal Tax Centre sub-page (matches the
+       Integrations card layout) instead of a floating dialog, so finding and
+       reviewing receipts lives on the same screen as everything else here. -->
   <div id="tc-sec-email-import" class="tc-section settings-section" role="tabpanel" aria-labelledby="btn-tctab-email-import" style="display:none;">
+    <div class="card tc-integrations-card email-import-workspace" id="m-email-receipt-import-modal">
+      <div class="tc-integrations-head">
+        <div class="tc-integrations-icon-badge" aria-hidden="true">📧</div>
+        <div class="tc-integrations-headings">
+          <div class="tc-integrations-title"><span>Email Receipt Import</span></div>
+          <div class="tc-integrations-sub">Find the proof, check the details, file it once.</div>
+        </div>
+        <span class="pill green email-connected-pill" id="email-account-pill">● Gmail Connected</span>
+      </div>
+
+      <!-- Sub-Tabs: Apple/Linear-style Segmented Control -->
+      <div class="modal-tabs segmented-control" role="tablist">
+        <button type="button" class="modal-tab-btn active" id="email-tab-gmail" onclick="switchEmailImportTab('gmail')" role="tab" aria-selected="true">
+          <span class="tab-icon">📬</span> Gmail Finder
+        </button>
+        <button type="button" class="modal-tab-btn" id="email-tab-manual" onclick="switchEmailImportTab('manual')" role="tab" aria-selected="false">
+          <span class="tab-icon">📂</span> Paste &amp; Upload
+        </button>
+        <button type="button" class="modal-tab-btn" id="email-tab-direct" onclick="switchEmailImportTab('direct')" role="tab" aria-selected="false">
+          <span class="tab-icon">✉️</span> Gmail Import <span class="email-no-ai-tag">No AI</span>
+        </button>
+      </div>
+
+      <!-- Gmail Tab Panel -->
+      <div id="email-panel-gmail">
+        <!-- AI Assistant Banner -->
+        <div class="email-ai-assistant-card">
+          <div class="email-ai-spark">✦</div>
+          <div class="email-ai-copy">
+            <strong>Intelligent Receipt Scanner:</strong> Search and select invoice emails from your connected Gmail. Gemini AI extracts line items, taxes, currencies, and attached PDFs automatically.
+          </div>
+        </div>
+
+        <!-- Search Bar & Query Builder -->
+        <div class="email-search-row">
+          <div class="email-search-input-wrap">
+            <span class="email-search-icon" aria-hidden="true">🔍</span>
+            <input type="text" id="email-gmail-search-query" class="email-search-input" placeholder="Search receipt emails (e.g. Adobe, Canada Post, supplies)..." aria-label="Search Gmail query">
+            <button type="button" class="email-search-clear-btn" id="email-query-clear-btn" onclick="document.getElementById('email-gmail-search-query').value='';document.getElementById('email-gmail-search-query').focus();" title="Clear query">✕</button>
+          </div>
+          <button type="button" class="btn gold email-search-action-btn" id="email-gmail-search-btn" onclick="searchGmailEmails()">Search Inbox</button>
+        </div>
+
+        <!-- Advanced Query Disclosure Toggle -->
+        <details class="email-advanced-query-details" style="margin-bottom:12px;">
+          <summary class="email-advanced-query-summary">⚙ Advanced Gmail Search Syntax</summary>
+          <div class="email-advanced-query-body">
+            Use standard Gmail search operators such as <code>newer_than:30d</code>, <code>has:attachment</code>, <code>from:supplier@domain.com</code>, or <code>filename:pdf</code>.
+          </div>
+        </details>
+
+        <!-- Filter Chips -->
+        <div class="email-chips-container" id="email-gmail-chips" role="group" aria-label="Quick search presets">
+          <!-- loaded via JS renderGmailChips() -->
+        </div>
+
+        <!-- Results List & Zero State Wrapper -->
+        <div id="email-gmail-list-wrap" class="email-results-viewport" tabindex="0" role="region" aria-label="Gmail search results">
+          <div class="email-zero-state">
+            <div class="email-zero-state-icon" aria-hidden="true">📭</div>
+            <div class="email-zero-state-title">Ready to scan your inbox</div>
+            <div class="email-zero-state-sub">Select a quick preset above (like <b>Past 30 Days</b>) or enter a supplier name to find recent expense receipts.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Manual Tab Panel -->
+      <div id="email-panel-manual" style="display:none;">
+        <div class="email-ai-assistant-card">
+          <div class="email-ai-spark">📄</div>
+          <div class="email-ai-copy">
+            Paste raw email bodies or drop <code>.eml</code>, <code>.txt</code>, PDF invoices, and receipt photos here for direct Gemini extraction.
+          </div>
+        </div>
+
+        <div class="email-manual-grid">
+          <div class="form-group email-manual-col">
+            <label for="email-receipt-source" class="email-field-label">Paste Email Text / Receipt Snippet</label>
+            <textarea id="email-receipt-source" rows="8" class="email-paste-textarea" placeholder="Paste order confirmation or forwarded receipt email content here..."></textarea>
+          </div>
+          <div class="form-group email-manual-col">
+            <label for="email-receipt-files" class="email-field-label">Or Drop Receipt Files &amp; PDFs</label>
+            <div class="email-dropzone" id="email-receipt-dropzone" onclick="document.getElementById('email-receipt-files').click()">
+              <input type="file" id="email-receipt-files" accept=".eml,.txt,.html,.htm,.pdf,image/*" multiple style="display:none;">
+              <div class="email-dropzone-icon" aria-hidden="true">📤</div>
+              <div class="email-dropzone-title">Click to browse or drag files here</div>
+              <div class="email-dropzone-sub">Supports .eml, .txt, .pdf, .png, .jpg up to 25 MB</div>
+            </div>
+            <div id="email-receipt-files-list" class="email-files-summary-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Direct Gmail import: archives the original messages without AI extraction. -->
+      <div id="email-panel-direct" style="display:none;">
+        <div class="email-ai-assistant-card email-direct-import-card">
+          <div class="email-ai-spark">✉️</div>
+          <div class="email-ai-copy">
+            <strong>Archive selected receipts exactly as sent.</strong> No AI reads this mail. The email and its attachments are saved to your receipts, ready for you to add the amount and details later.
+          </div>
+        </div>
+        <div class="email-search-row">
+          <div class="email-search-input-wrap">
+            <span class="email-search-icon" aria-hidden="true">🔍</span>
+            <input type="text" id="email-direct-search-query" class="email-search-input" placeholder="Search Gmail: supplier, invoice, receipt…" aria-label="Search Gmail to import without AI">
+          </div>
+          <button type="button" class="btn gold email-search-action-btn" id="email-direct-search-btn" onclick="searchDirectGmailEmails()">Search Gmail</button>
+        </div>
+        <div class="email-chips-container" id="email-direct-chips" role="group" aria-label="Quick Gmail search presets"></div>
+        <div id="email-direct-list-wrap" class="email-results-viewport" tabindex="0" role="region" aria-label="Gmail emails to archive without AI">
+          <div class="email-zero-state">
+            <div class="email-zero-state-icon" aria-hidden="true">🗂️</div>
+            <div class="email-zero-state-title">Choose emails to archive</div>
+            <div class="email-zero-state-sub">Search your connected Gmail, select the records you want to keep, then import their original email and attachments.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Progressive Review Toolbar (Appears only when drafts exist) -->
+      <div id="email-receipt-results" style="margin-top:14px;"></div>
+
+      <!-- Shared Fallback Category & Info Bar (Progressive Disclosure) -->
+      <div id="email-bulk-category-bar" class="email-bulk-category-strip" style="display:none;">
+        <div class="email-bulk-cat-controls">
+          <label for="email-receipt-default-cat" class="email-field-label" style="margin:0;">Bulk category:</label>
+          <select id="email-receipt-default-cat" class="email-cat-select">
+            <option>Other</option>
+            <option>Software &amp; Subscriptions</option>
+            <option>Marketing &amp; Advertising</option>
+            <option>Printing &amp; Production</option>
+            <option>Editorial &amp; Proofreading</option>
+            <option>Illustration &amp; Photography</option>
+            <option>Rights &amp; Permissions</option>
+            <option>ISBN, Barcodes &amp; Cataloging</option>
+            <option>Shipping &amp; Postage</option>
+            <option>Warehousing &amp; Fulfillment</option>
+            <option>Packaging Materials</option>
+            <option>Office Supplies</option>
+            <option>Travel &amp; Meals</option>
+            <option>Professional Services</option>
+            <option>Sales Processing Fees</option>
+            <option>Books, Research &amp; Reference</option>
+            <option>Events &amp; Exhibitions</option>
+          </select>
+          <button type="button" class="btn sm" onclick="applyBulkCategoryToEmailDrafts()" title="Apply this category to all selected rows">Apply to selected</button>
+        </div>
+        <div class="email-bulk-cat-note">Live FX rates auto-fetched on import · Gemini AI</div>
+      </div>
+
+      <!-- Primary Action -->
+      <div class="tc-form-actions-row">
+        <button type="button" class="btn gold" onclick="handleEmailImportPrimaryAction()" id="email-receipt-scan-btn">✨ Select emails to extract</button>
+      </div>
+    </div>
   </div> <!-- /#tc-sec-email-import -->
 
   <!-- 3. INTEGRATIONS & APIS SECTION -->

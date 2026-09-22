@@ -17,10 +17,17 @@ test('email receipt import is a dedicated Tax Centre sub-tab beside integrations
   expect(html).not.toMatch(/onclick="openEmailReceiptImportModal\(\)" title="Import expenses from forwarded receipt emails"/);
 });
 
-test('email import modal has a focused workspace shell and responsive dialog treatment', () => {
-  expect(styles).toMatch(/\.modal\.email-import-modal\s*\{[\s\S]*?display:\s*flex;[\s\S]*?overflow:\s*hidden;/);
-  expect(styles).toMatch(/\.email-import-modal #email-panel-gmail,[\s\S]*?\.email-import-modal #email-panel-manual,[\s\S]*?\.email-import-modal #email-panel-direct\s*\{[\s\S]*?overflow-y:\s*auto/);
-  expect(styles).toMatch(/\.email-import-header\s*\{[\s\S]*?position:sticky;/);
-  expect(styles).toMatch(/\.email-import-modal \.modal-tabs\s*\{[\s\S]*?width:100%;/);
-  expect(styles).toMatch(/@media \(max-width: 768px\)[\s\S]*?\.modal\.email-import-modal/);
+test('email import renders inline in its sub-tab instead of as a floating dialog', () => {
+  // It lives inside #tc-sec-email-import as ordinary page content, styled
+  // with the same card chrome as the Integrations sub-page right next to it —
+  // not as an `.overlay`/`.modal` dialog that pops up over the app.
+  const section = html.match(/<div id="tc-sec-email-import"[\s\S]*?<\/div>\s*<!-- \/#tc-sec-email-import -->/)?.[0];
+  expect(section).toBeTruthy();
+  expect(section).toMatch(/class="card tc-integrations-card email-import-workspace" id="m-email-receipt-import-modal"/);
+  expect(section).not.toContain('class="overlay"');
+  expect(section).not.toContain('modal-close-btn');
+
+  expect(styles).toMatch(/\.email-import-workspace \.modal-tabs\s*\{[\s\S]*?width:100%;/);
+  expect(styles).toMatch(/\.email-import-workspace \.email-search-row\b/);
+  expect(styles).not.toMatch(/\.modal\.email-import-modal\s*\{/);
 });
