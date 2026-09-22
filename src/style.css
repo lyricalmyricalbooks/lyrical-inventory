@@ -511,13 +511,30 @@ tr.hist-row:hover {
 }
 
 /* HEADER */
-.app-header{background:var(--ink);padding:10px 1.6rem;display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-bottom:var(--stroke-hair) solid rgba(232, 64, 42,.2);position:sticky;top:0;z-index:100;padding-top:max(env(safe-area-inset-top), 10px);}
+.app-header{background:var(--ink);padding:10px 1.6rem;display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-bottom:2px solid rgba(232, 64, 42,.45);position:sticky;top:0;z-index:100;padding-top:max(env(safe-area-inset-top), 10px);}
+/* Riso print texture: a faint halftone grain over the ink header, the way
+   a risograph pass never lays down perfectly flat ink. Sits behind every
+   header child in paint order (a ::before is always painted first), so it
+   never needs its own z-index. */
+.app-header::before{
+  content:'';position:absolute;inset:0;
+  background-image:radial-gradient(circle, rgba(250,246,236,.06) .6px, transparent .6px);
+  background-size:4px 4px;
+  mix-blend-mode:screen;
+  pointer-events:none;
+}
 /* Flexible spacer: one clean gap between the brand/book cluster on the left
    and the actions + KPI + account cluster on the right (no stranded blank row). */
 .header-grow{flex:1 1 0;min-width:10px;align-self:stretch;}
 .header-brand{display:flex;flex-direction:row;align-items:center;gap:11px;cursor:pointer;transition:opacity 0.2s ease;}
 .header-brand:hover{opacity:0.85;}
 .header-mark{width:32px;height:32px;border-radius:var(--r);background:linear-gradient(150deg,var(--gold2),var(--gold));display:flex;align-items:center;justify-content:center;font-family:var(--font-ui);font-weight:700;font-size:16px;color:var(--ink);flex-shrink:0;box-shadow:var(--elev-2);}
+/* Riso print treatment for the header's own brand mark: a flat ink fill
+   (risograph has no gradients) plus a second, offset "L" blended underneath
+   to mimic a mis-registered second print pass. */
+.riso-mark{position:relative;overflow:hidden;background:var(--gold);}
+.riso-mark-ghost{position:absolute;top:50%;left:50%;transform:translate(calc(-50% + 2px), calc(-50% + 2px));color:var(--gold-text);opacity:.5;mix-blend-mode:multiply;pointer-events:none;}
+.riso-mark-letter{position:relative;}
 .header-brand-text{display:flex;flex-direction:column;gap:3px;}
 .header-wordmark{font-family:var(--font-ui);font-size:var(--text-lg);font-weight:700;color:var(--on-inverse);letter-spacing:.01em;line-height:1;}
 .header-tag{font-size:var(--text-3xs);font-weight:600;color:var(--gold2);letter-spacing:.22em;text-transform:uppercase;}
@@ -532,7 +549,7 @@ tr.hist-row:hover {
 .hs-label{font-size:8px;font-weight:700;color:rgba(255,255,255,.34);letter-spacing:.12em;text-transform:uppercase;margin-top:4px;}
 /* Account avatar trigger + corner status dot (#sync-dot drives its colour) */
 .acct-trigger{background:transparent;border:none;padding:0;cursor:pointer;display:flex;align-items:center;}
-.acct-avatar{position:relative;width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--ink3),var(--ink4));border:var(--stroke-hair) solid rgba(255,255,255,.14);color:var(--gold3);font-family:var(--font-ui);font-weight:800;font-size:var(--text-xs);display:flex;align-items:center;justify-content:center;transition:border-color .16s,box-shadow .16s;}
+.acct-avatar{position:relative;width:34px;height:34px;border-radius:50%;background:var(--ink3);border:2px solid rgba(250,246,236,.24);color:var(--gold3);font-family:var(--font-ui);font-weight:800;font-size:var(--text-xs);display:flex;align-items:center;justify-content:center;transition:border-color .16s,box-shadow .16s;}
 .acct-trigger:hover .acct-avatar{border-color:var(--gold);}
 .header-menu.open .acct-avatar{border-color:var(--gold);box-shadow:var(--elev-1);}
 /* Corner status badge: wrapper holds position (survives setSyncState's
@@ -633,7 +650,7 @@ tr.hist-row:hover {
 .book-dropdown-btn{
   display:flex;align-items:center;justify-content:space-between;gap:10px;
   min-width:150px;
-  background:rgba(255,255,255,.07);border:var(--stroke-hair) solid rgba(255,255,255,.12);border-radius:var(--r2);
+  background:rgba(255,255,255,.07);border:2px solid rgba(250,246,236,.22);border-radius:var(--r2);
   color:var(--on-inverse);font-family:var(--font-ui);font-size:var(--text-sm);font-weight:600;
   padding:6px 12px;cursor:pointer;
   transition:background var(--dur-fast) var(--ease-standard),border-color var(--dur-fast) var(--ease-standard),transform var(--dur-fast) var(--ease-standard);
@@ -682,7 +699,7 @@ tr.hist-row:hover {
   display:inline-flex;align-items:center;justify-content:center;
   border-radius:50%;
   background:rgba(255,255,255,.06);
-  border:var(--stroke-hair) solid rgba(255,255,255,.14);
+  border:2px solid rgba(250,246,236,.24);
   color:var(--gold3);
   cursor:pointer;
   transition:
@@ -9302,7 +9319,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   display: inline-flex;
   align-items: center;
   background: rgba(255, 255, 255, 0.04);
-  border:var(--stroke-hair) solid rgba(255, 255, 255, 0.08);
+  border: 2px solid rgba(250, 246, 236, 0.18);
   border-radius: var(--r2);
   padding: 2px;
   gap: 2px;
