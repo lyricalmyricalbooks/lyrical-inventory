@@ -559,12 +559,34 @@
 
    Elevation stops being a grey shadow and becomes a flare-red offset — the
    one place a monochrome shadow would have vanished into the black desk
-   behind it, and a nod to a riso print's own registration drift. */
+   behind it, and a nod to a riso print's own registration drift.
+
+   PRIMITIVES, NOT JUST THE SEMANTIC LAYER. The first pass only redeclared
+   the semantic names (--content-primary, --surface-raised and kin) most
+   call sites read through. It shipped with the Combined Consignment
+   Summary table and the Tax Centre master ledger both still showing
+   dark-on-dark stripes and a solid black category picker, because those
+   bespoke, pre-existing rules (.all-consignment-table, .con-group-row,
+   .tc-ledger-tbl's zebra row, .tc-ledger-cat-select) read the PRIMITIVES —
+   --cream, --cream2, --cream3, --cream4, --surface-card, --text and kin —
+   directly, bypassing the semantic layer entirely. Redeclaring the
+   primitives too, the same trick one layer deeper, fixes every such call
+   site at once through ordinary inheritance, without hunting each one
+   down by hand. */
 
 .theme-dark .card,
 .theme-dark .modal {
   background: var(--paper);
   border-color: var(--on-paper);
+  --cream: var(--paper);
+  --cream2: var(--paper2);
+  --cream3: var(--paper3);
+  --cream4: var(--paper3);
+  --surface-card: var(--paper);
+  --text: var(--on-paper);
+  --text2: var(--on-paper2);
+  --text3: var(--on-paper3);
+  --text4: var(--on-paper3);
   --content-primary: var(--on-paper);
   --content-secondary: var(--on-paper2);
   --content-muted: var(--on-paper3);
@@ -693,6 +715,15 @@
 .theme-dark .kpi.is-lead .kpi-value { color: var(--book-accent-contrast, var(--ink)); }
 
 .theme-dark .tbl-wrap {
+  --cream: var(--paper);
+  --cream2: var(--paper2);
+  --cream3: var(--paper3);
+  --cream4: var(--paper3);
+  --surface-card: var(--paper);
+  --text: var(--on-paper);
+  --text2: var(--on-paper2);
+  --text3: var(--on-paper3);
+  --text4: var(--on-paper3);
   --content-primary: var(--on-paper);
   --surface-raised: var(--paper);
   --surface-sunken: var(--paper2);
@@ -704,6 +735,20 @@
 /* .tbl thead stays on --surface-inverse (always ink) — a dark header bar
    already read correctly against a light table body before this pass,
    and reads the same way now, so nothing about it needed to change. */
+
+/* The Tax Centre master ledger's inline category picker is exactly the
+   "solid black box, white text" failure this whole pass exists to remove,
+   and redeclaring --cream/--text2 above doesn't reach it: this rule and
+   the generic dark-mode `.theme-dark :where(select, textarea, input…)`
+   floor above are tied at one-class specificity, and the floor rule wins
+   on source order because it loads later in this same file. Give the
+   select its own paper treatment so it no longer depends on winning that
+   tie. */
+.theme-dark .tc-ledger-cat-select {
+  background: var(--paper);
+  color: var(--on-paper);
+  border-color: var(--on-paper3);
+}
 
 .theme-dark .modal-tabs.segmented-control,
 .theme-dark .book-modal-stepper {

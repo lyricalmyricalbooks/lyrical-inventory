@@ -2187,6 +2187,9 @@
     <button type="button" class="modal-tab-btn" id="email-tab-manual" onclick="switchEmailImportTab('manual')" role="tab" aria-selected="false">
       <span class="tab-icon">📂</span> Paste &amp; Upload
     </button>
+    <button type="button" class="modal-tab-btn" id="email-tab-direct" onclick="switchEmailImportTab('direct')" role="tab" aria-selected="false">
+      <span class="tab-icon">✉️</span> Gmail Import <span class="email-no-ai-tag">No AI</span>
+    </button>
   </div>
 
   <!-- Gmail Tab Panel -->
@@ -2259,6 +2262,31 @@
     </div>
   </div>
 
+  <!-- Direct Gmail import: archives the original messages without AI extraction. -->
+  <div id="email-panel-direct" style="display:none;">
+    <div class="email-ai-assistant-card email-direct-import-card">
+      <div class="email-ai-spark">✉️</div>
+      <div class="email-ai-copy">
+        <strong>Archive selected receipts exactly as sent.</strong> No AI reads this mail. The email and its attachments are saved to your receipts, ready for you to add the amount and details later.
+      </div>
+    </div>
+    <div class="email-search-row">
+      <div class="email-search-input-wrap">
+        <span class="email-search-icon" aria-hidden="true">🔍</span>
+        <input type="text" id="email-direct-search-query" class="email-search-input" placeholder="Search Gmail: supplier, invoice, receipt…" aria-label="Search Gmail to import without AI">
+      </div>
+      <button type="button" class="btn gold email-search-action-btn" id="email-direct-search-btn" onclick="searchDirectGmailEmails()">Search Gmail</button>
+    </div>
+    <div class="email-chips-container" id="email-direct-chips" role="group" aria-label="Quick Gmail search presets"></div>
+    <div id="email-direct-list-wrap" class="email-results-viewport" tabindex="0" role="region" aria-label="Gmail emails to archive without AI">
+      <div class="email-zero-state">
+        <div class="email-zero-state-icon" aria-hidden="true">🗂️</div>
+        <div class="email-zero-state-title">Choose emails to archive</div>
+        <div class="email-zero-state-sub">Search your connected Gmail, select the records you want to keep, then import their original email and attachments.</div>
+      </div>
+    </div>
+  </div>
+
   <!-- Progressive Review Toolbar (Appears only when drafts exist) -->
   <div id="email-receipt-results" style="margin-top:14px;"></div>
 
@@ -2293,7 +2321,7 @@
   <!-- Modal Sticky Footer -->
   <div class="modal-footer" role="dialog" aria-modal="true">
     <button type="button" class="btn" onclick="closeEmailReceiptImportModal()">Cancel</button>
-    <button type="button" class="btn gold" onclick="extractReceiptsFromEmailText()" id="email-receipt-scan-btn">✨ Select emails to extract</button>
+    <button type="button" class="btn gold" onclick="handleEmailImportPrimaryAction()" id="email-receipt-scan-btn">✨ Select emails to extract</button>
   </div>
 </div></div>
 

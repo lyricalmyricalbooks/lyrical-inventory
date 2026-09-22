@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import postcss from 'postcss';
 import {
   makeColorResolver, contrastRatio, paletteFor,
 } from '../scripts/check-contrast.mjs';
@@ -209,5 +210,71 @@ describe('Press Proof — component corrections exist and use the paper tokens',
     const decl = rule('.theme-dark .modal-tabs.segmented-control,\n.theme-dark .book-modal-stepper');
     expect(decl).toMatch(/--rule-ink:\s*var\(--on-paper\);/);
     expect(decl).toMatch(/background:\s*var\(--paper2\);/);
+  });
+
+  // A real bug, filed by the shop owner after this landed: the Combined
+  // Consignment Summary table and the Tax Centre master ledger both still
+  // showed dark-on-dark striping, because .all-consignment-table,
+  // .con-group-row and .tc-ledger-tbl's zebra row read the PRIMITIVES
+  // (--cream2, --surface-card, --text2…) directly, not the semantic layer
+  // the rules above redeclare. Verified against a real Chromium render
+  // (jsdom can't resolve var()) before this was pinned here.
+  it('.theme-dark .card/.modal and .tbl-wrap also redeclare the primitives, not just the semantic layer', () => {
+    const cardModal = darkCss.match(/\.theme-dark \.card,\n\.theme-dark \.modal \{([\s\S]*?)\n\}/)[1];
+    const wrap = rule('.theme-dark .tbl-wrap');
+    for (const decl of [cardModal, wrap]) {
+      expect(decl).toMatch(/--cream:\s*var\(--paper\);/);
+      expect(decl).toMatch(/--cream2:\s*var\(--paper2\);/);
+      expect(decl).toMatch(/--cream3:\s*var\(--paper3\);/);
+      expect(decl).toMatch(/--surface-card:\s*var\(--paper\);/);
+      expect(decl).toMatch(/--text:\s*var\(--on-paper\);/);
+      expect(decl).toMatch(/--text2:\s*var\(--on-paper2\);/);
+      expect(decl).toMatch(/--text3:\s*var\(--on-paper3\);/);
+    }
+  });
+
+  it('the tax ledger\'s inline category picker gets its own paper treatment', () => {
+    // Ties the generic dark-mode `:where(select, textarea, input…)` floor
+    // at one-class specificity and would lose to it on source order without
+    // its own rule — see the comment above this rule in theme-dark.css.
+    const decl = rule('.theme-dark .tc-ledger-cat-select');
+    expect(decl).toMatch(/background:\s*var\(--paper\);/);
+    expect(decl).toMatch(/color:\s*var\(--on-paper\);/);
+  });
+});
+
+describe('Press Proof — the stylesheet actually parses (not just matches by regex)', () => {
+  // The primitive-widening fix above shipped once already with a byte that
+  // broke it invisibly: an explanatory comment contained the literal
+  // sequence `*/` mid-sentence, closing the CSS comment early. Every regex
+  // test in this file still passed — the raw text was untouched — but a
+  // real CSS parser (and every real browser) stopped there and silently
+  // dropped every rule after it, including all of .card/.modal/.btn/.pill/
+  // .kpi/.tbl-wrap, through to the end of the file. Regex assertions on the
+  // source text can't catch that; only parsing it can.
+  it('parses with no syntax errors', () => {
+    expect(() => postcss.parse(darkCss)).not.toThrow();
+  });
+
+  it('every rule this file pins is a real, cleanly-parsed rule — not text swallowed by a broken comment', () => {
+    const root = postcss.parse(darkCss);
+    const selectors = new Set();
+    root.walkRules((r) => { selectors.add(r.selector); });
+    for (const sel of [
+      '.theme-dark .card,\n.theme-dark .modal',
+      '.theme-dark .btn',
+      '.theme-dark .pill.gray',
+      '.theme-dark .kpi',
+      '.theme-dark .tbl-wrap',
+      '.theme-dark .tc-ledger-cat-select',
+      '.theme-dark .modal-tabs.segmented-control,\n.theme-dark .book-modal-stepper',
+    ]) {
+      expect(selectors, `expected a clean, standalone rule for ${JSON.stringify(sel)}`).toContain(sel);
+    }
+    // The last real rule in the file — if a broken comment ever swallows
+    // the tail again, this is the thing that goes missing.
+    let hasPrintGuard = false;
+    root.walkAtRules('media', (r) => { if (r.params === 'print') hasPrintGuard = true; });
+    expect(hasPrintGuard, 'expected the @media print guard near the end of the file').toBe(true);
   });
 });

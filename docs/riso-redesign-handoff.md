@@ -49,6 +49,19 @@ surface tokens and will look inconsistent — dark box next to a new paper one �
 same treatment. Do that the same way: locally re-declare the semantic layer on the object's own
 class, don't touch the shared primitives.
 
+**2026-09-22 follow-up — the owner reported "big failure," and they were right.** The Combined
+Consignment Summary table and the Tax Centre master ledger both still showed dark-on-dark striped
+rows, plus a category picker rendering as a solid black box. Root cause: `.all-consignment-table`,
+`.con-group-row`, `.tc-ledger-tbl`'s zebra row and `.tc-ledger-cat-select` are bespoke,
+pre-existing rules that read the **primitives** (`--cream`, `--cream2`, `--surface-card`,
+`--text2`…) directly, not the semantic layer §0's mechanism redeclares — exactly the "only
+something reading a primitive directly … would slip past this" risk flagged (and believed
+absent) when this landed. Fixed by widening `.theme-dark .card`/`.modal`/`.tbl-wrap` to also
+redeclare the primitives, one layer deeper than the semantic layer, so both kinds of call site
+resolve correctly through ordinary inheritance. See landmine **-2** below for two more specific
+things this surfaced. Verified this time against a real Chromium render via Playwright (see that
+landmine) — not just the token-pair math jsdom can check.
+
 ---
 
 ## 0b. The last permanently-dark blocks, repainted (2026-09-22)
@@ -282,6 +295,38 @@ is where a redesign half-lands.
 
 ## 5. Landmines — the things that have already caused a wasted cycle
 
+-2. **A local re-declaration only reaches code that reads the layer it redeclares — this shipped
+   a real regression once already.** §0's mechanism redeclared the *semantic* layer
+   (`--content-primary`, `--surface-raised`…). Real, pre-existing, bespoke CSS elsewhere in the
+   app (`.all-consignment-table`, `.con-group-row`, `.tc-ledger-tbl`'s even-row rule) reads the
+   *primitives* (`--cream2`, `--surface-card`, `--text2`) directly, bypassing the semantic layer
+   entirely — those call sites stayed dark while the text inside them (routed through the
+   semantic layer) correctly flipped to dark ink, producing illegible dark-on-dark. The fix
+   redeclares both layers on `.card`/`.modal`/`.tbl-wrap`. **If you add a new `.theme-dark`
+   correction block, redeclare the primitives too, or grep for `var(--cream` / `var(--surface-card`
+   / `var(--text2` etc. inside whatever selector you're scoping to before assuming the semantic
+   layer alone is enough.**
+   Two things found alongside it, worth knowing before you touch this file again:
+   - **A CSS comment that happens to contain the two characters `*/` closes early — silently.**
+     An explanatory comment above the primitive-widening fix contained `--text*/` mid-sentence,
+     which closed the comment there instead of at its real end. Every regex-based test in
+     `tests/press-proof-dark-mode.test.js` still passed (the raw text was untouched), but a real
+     CSS parser — and every browser — stopped there and silently dropped every rule after it:
+     `.card`, `.modal`, `.btn`, `.pill`, `.kpi`, `.tbl-wrap`, all of it, through to the end of the
+     file. Caught only by rendering the real file in Chromium via Playwright and reading
+     `getComputedStyle` — not by any of this repo's own checks. A new
+     `describe('the stylesheet actually parses (not just matches by regex)')` block now parses
+     `theme-dark.css` with `postcss` (added as a devDependency) and pins the rules that would go
+     missing if this ever recurs — regex assertions on the source text cannot catch it, only
+     parsing can.
+   - **`.theme-dark :where(select, textarea, input…)` is not actually zero-specificity.** Its own
+     comment claims `:where()` carries no specificity so "every real rule in style.css still
+     wins" — true of the `:where()` part alone, but the `.theme-dark` prefix in front of it is an
+     ordinary class selector and does contribute (0,1,0). Any one-class selector elsewhere
+     (`.tc-ledger-cat-select`) ties with it and then loses on source order, since this file loads
+     after `style.css`. Don't trust that comment's specificity claim for a one-class selector;
+     give it its own `.theme-dark .that-class { … }` rule instead, the way `.tc-ledger-cat-select`
+     now has one.
 -1. **Neither the contrast sweep nor jsdom can verify a locally-scoped custom-property
    re-declaration** — the exact mechanism Press Proof (§0) is built on. `scripts/check-contrast.mjs`
    reads a FLAT palette from the top-level `:root[data-theme="dark"]` block; it has no model of a
