@@ -65,10 +65,17 @@ test('the on-hand reading leads the panel and sits above the bar it explains', (
   }
 });
 
-test('the ink panels use the inverse text tier, not raw white alphas', () => {
-  expect(rule('.stock-author')).toMatch(/color:\s*var\(--on-inverse-2\)/);
-  expect(rule('.bar-meta-lead')).toMatch(/color:\s*var\(--on-inverse\)/);
-  expect(rule('.bar-meta-note')).toMatch(/color:\s*var\(--on-inverse-2\)/);
+test('the paper panels use the named text tiers, not raw white alphas', () => {
+  // These were the --on-inverse tiers while .stock-block was a permanently
+  // --ink panel. The Riso repaint put it on paper in both themes, so the
+  // correct tiers are the ordinary ones — but what this test protects is
+  // unchanged: named tiers, never a raw alpha.
+  expect(rule('.stock-author')).toMatch(/color:\s*var\(--text2\)/);
+  expect(rule('.bar-meta-lead')).toMatch(/color:\s*var\(--text\)/);
+  expect(rule('.bar-meta-note')).toMatch(/color:\s*var\(--text2\)/);
+  for (const sel of ['.stock-author', '.bar-meta-lead', '.bar-meta-note', '.stock-title']) {
+    expect(rule(sel), sel).not.toMatch(/rgba\(\s*255/);
+  }
   // .bar-meta itself no longer paints text at all — the two spans do.
   expect(rule('.bar-meta')).not.toMatch(/color:/);
 });

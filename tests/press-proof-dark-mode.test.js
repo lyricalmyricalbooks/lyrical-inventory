@@ -156,14 +156,40 @@ describe('Press Proof — component corrections exist and use the paper tokens',
     }
   });
 
-  it('.theme-dark .kpi stops being permanently ink and joins the rest of the objects', () => {
-    // .kpi is the one component that was ALREADY dark in light mode too (the
-    // deliberate "bold chrome" tile). Once the page itself goes dark, an
-    // always-ink tile on an always-ink page is invisible — the same failure
-    // as everything else here — so it gets the paper treatment as well.
-    const kpi = rule('.theme-dark .kpi');
-    expect(kpi).toMatch(/background:\s*var\(--paper\);/);
+  it('the dashboard stat surfaces stop being permanently ink and join the rest of the objects', () => {
+    // .kpi, .metric-banner and .stock-block were the components that were
+    // ALREADY dark in light mode too (the deliberate "bold chrome" blocks).
+    // They are paper in light mode now, and once the page itself goes dark an
+    // always-ink block on an always-ink page is invisible — the same failure
+    // as everything else here — so all three get the paper treatment.
+    const stat = rule(
+      '.theme-dark .kpi,\n.theme-dark .metric-banner,\n.theme-dark .stock-block,\n.theme-dark .payment-methods-card',
+    );
+    expect(stat).toMatch(/background:\s*var\(--paper\);/);
     expect(darkCss).toMatch(/\.theme-dark \.kpi-value \{ color:\s*var\(--on-paper\); \}/);
+
+    // Unlike .card, these three read the PRIMITIVES directly (their figures and
+    // status inks are --text*/--gold-text/--red/…), so re-declaring only the
+    // semantic layer would leave light-on-dark text on a paper block.
+    for (const token of ['--text', '--text2', '--text3', '--gold-text', '--red', '--green', '--track-bg']) {
+      expect(stat, token).toContain(`  ${token}: `);
+    }
+
+    // Every declaration terminates BEFORE its trailing comment. A custom
+    // property swallows anything up to the semicolon, comment included, so
+    // `--gold-text: #B4271A /* note */` (no semicolon) does not merely carry a
+    // comment — it makes the value garbage AND eats the next declaration, and
+    // the element silently falls back to the inherited dark value. That
+    // shipped once in this exact block; this is what catches it next time.
+    for (const line of stat.split('\n')) {
+      const decl = line.trim();
+      if (!decl.startsWith('--')) continue;
+      expect(decl.split('/*')[0].trimEnd(), decl).toMatch(/;$/);
+    }
+
+    // The lead tile keeps the book's cover accent as its fill in both themes;
+    // the paper repaint above must not overwrite it.
+    expect(darkCss).toMatch(/\.theme-dark \.kpi\.is-lead \{ background: var\(--book-accent/);
   });
 
   it('.theme-dark .tbl-wrap repaints its rows and keeps the ink header bar', () => {
