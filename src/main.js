@@ -16048,10 +16048,17 @@ async function boot(forcedBook) {
   await loadPaymentLinks();
   await loadProductionCosts();
   await loadWebsitePaymentMethods();
-  await loadCustomerSuppression();
-  await loadMailingList();
-  await loadCampaigns();
-  await loadOpenCalls();
+  // Publisher-only data: firestore.rules / database.rules.json deny these four
+  // to every other account, and the Customers and Open Call tabs that use them
+  // are closed to authors (switchTab). Keyed on the signed-in ACCOUNT, not
+  // isAuthor(): the publisher previewing "Author view" must still load them, or
+  // a later save from the Customers tab would write back an empty list.
+  if (isPublisherSession()) {
+    await loadCustomerSuppression();
+    await loadMailingList();
+    await loadCampaigns();
+    await loadOpenCalls();
+  }
   renderCatalogList();
   renderProfitSettings();
 

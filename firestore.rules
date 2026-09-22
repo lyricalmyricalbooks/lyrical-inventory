@@ -4,9 +4,16 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // Publisher account — full read/write everywhere.
+    //
+    // email_verified as well as the address: the address alone only proves
+    // what the sign-in provider was TOLD, and a provider that doesn't verify
+    // addresses (were one ever enabled on this project) would let anyone claim
+    // this one. Google sign-in always verifies a Gmail address, so the
+    // publisher's own sign-in is unaffected.
     function isPublisher() {
       return request.auth != null
-        && request.auth.token.email == 'lyricalmyricalbooks@gmail.com';
+        && request.auth.token.email == 'lyricalmyricalbooks@gmail.com'
+        && request.auth.token.email_verified == true;
     }
 
     // Author→book ownership comes from the rules-readable map at
@@ -60,31 +67,35 @@ service cloud.firestore {
       allow read, write: if isPublisher() || isBookAuthor(bookId);
     }
 
-    // Settings documents that must never leave the publisher's account. These
-    // hold API keys, third-party store credentials, business financials and the
-    // ownership map itself — none of which any author has a reason to read:
-    //   taxCenter        settings.geminiKey + every business expense and trip
-    //   bigCartelConfig  Big Cartel username + password
-    //   systemBackups    backup manifest spanning every book
-    //   bookOwners       the author→book map these rules are built on
-    // The client already never requests these in author mode (loadTaxCenter and
-    // saveTaxCenter both early-return on isAuthor(); the Tax Centre, Big Cartel
-    // and Backups tabs are hidden for authors) — but hiding a tab is UI, not a
-    // security boundary, which is exactly why it has to be enforced here.
+    // The ONLY settings documents a non-publisher may read — the ones an author
+    // session actually loads to render its own book:
+    //   modeFlags              which database each book lives in (_fbLoadModeFlags)
+    //   notifyEndpoint         where an author's submission sends the approval email
+    //   analyticsConfig        the web-analytics share link (loaded at sign-in)
+    //   catalog                book list, prices, author emails (loadCatalog)
+    //   paymentLinks           per-book payment links (syncCatalog / boot)
+    //   productionCosts        per-book costs the earnings tiers are built on
+    //   websitePaymentMethods  accepted payment methods per book
     //
-    // NOTE: this is a denylist, so a settings doc added later is author-readable
-    // by default. Any new doc holding a key, credential or publisher-only
-    // financial record must be added to this list.
-    function isPublisherOnlySetting(name) {
-      return name in ['taxCenter', 'bigCartelConfig', 'systemBackups', 'bookOwners'];
+    // This is an allowlist on purpose. It used to be a denylist of four secret
+    // docs, which meant every settings doc added since — the mailing list, the
+    // unsubscribe list, email campaigns, open-call contributors with their
+    // emails and notes — was readable by ANY signed-in Google account, author
+    // or not. A new settings doc is now publisher-only until someone decides
+    // otherwise here, so forgetting to update this list fails closed.
+    //
+    // Keep in step with the "$key" read rule under lyrical/settings in
+    // database.rules.json (tests/security-rules.test.js checks the two agree).
+    function isAuthorReadableSetting(name) {
+      return name in ['modeFlags', 'notifyEndpoint', 'analyticsConfig', 'catalog',
+                      'paymentLinks', 'productionCosts', 'websitePaymentMethods'];
     }
 
-    // Global settings — catalog, productionCosts, paymentLinks, modeFlags and
-    // friends stay readable by any authenticated user (authors need them to
-    // render their own book); only the publisher can write anything.
+    // Global settings — only the publisher writes anything; everyone else reads
+    // just the allowlisted docs above.
     match /settings/{document} {
       allow read: if isPublisher()
-        || (request.auth != null && !isPublisherOnlySetting(document));
+        || (request.auth != null && isAuthorReadableSetting(document));
       allow write: if isPublisher();
     }
 

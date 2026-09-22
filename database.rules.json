@@ -9,13 +9,13 @@
           // leaving this open to every signed-in user would let one author read
           // another's sales, ledger and customers straight out of the RTDB
           // fallback no matter how tight the Firestore rules are.
-          ".read": "auth != null && (auth.token.email === 'lyricalmyricalbooks@gmail.com' || root.child('lyrical/settings/bookOwners').child($bookId).val() === auth.token.email.toLowerCase())",
+          ".read": "auth != null && ((auth.token.email === 'lyricalmyricalbooks@gmail.com' && auth.token.email_verified === true) || root.child('lyrical/settings/bookOwners').child($bookId).val() === auth.token.email.toLowerCase())",
           // Publisher writes any book; an author writes ONLY the book whose
           // authorEmail matches theirs in settings/bookOwners (a plain map
           // maintained by the publisher client). Ownership lives there because
           // the per-book payload is a stringified JSON string these rules can't
           // introspect. Missing map/entry → not the owner → denied.
-          ".write": "auth != null && (auth.token.email === 'lyricalmyricalbooks@gmail.com' || root.child('lyrical/settings/bookOwners').child($bookId).val() === auth.token.email.toLowerCase())",
+          ".write": "auth != null && ((auth.token.email === 'lyricalmyricalbooks@gmail.com' && auth.token.email_verified === true) || root.child('lyrical/settings/bookOwners').child($bookId).val() === auth.token.email.toLowerCase())",
           // Shape guard: the app always writes the whole node as
           // { data: <json string>, ts: <number> }. Reject anything else and cap
           // the blob at ~5 MB so a buggy or malicious client can't bloat the DB
@@ -27,28 +27,31 @@
         "$bookId": {
           // Publisher sees/writes every book's submissions; an author may only
           // read and write submissions for their own book.
-          ".read": "auth != null && (auth.token.email === 'lyricalmyricalbooks@gmail.com' || root.child('lyrical/settings/bookOwners').child($bookId).val() === auth.token.email.toLowerCase())",
-          ".write": "auth != null && (auth.token.email === 'lyricalmyricalbooks@gmail.com' || root.child('lyrical/settings/bookOwners').child($bookId).val() === auth.token.email.toLowerCase())"
+          ".read": "auth != null && ((auth.token.email === 'lyricalmyricalbooks@gmail.com' && auth.token.email_verified === true) || root.child('lyrical/settings/bookOwners').child($bookId).val() === auth.token.email.toLowerCase())",
+          ".write": "auth != null && ((auth.token.email === 'lyricalmyricalbooks@gmail.com' && auth.token.email_verified === true) || root.child('lyrical/settings/bookOwners').child($bookId).val() === auth.token.email.toLowerCase())"
         }
       },
       "settings": {
         // Only the publisher writes settings, at any key.
-        ".write": "auth != null && auth.token.email === 'lyricalmyricalbooks@gmail.com'",
+        ".write": "auth != null && (auth.token.email === 'lyricalmyricalbooks@gmail.com' && auth.token.email_verified === true)",
         // Read is granted per key rather than on the whole node, because RTDB
         // read rules cascade downwards and cannot be revoked by a child — a
-        // ".read" here would hand every signed-in author the Gemini API key in
-        // taxCenter and the Big Cartel credentials. Same denylist as
-        // isPublisherOnlySetting() in firestore.rules; keep the two in step and
-        // add any future key holding a secret or publisher-only financial
-        // record to BOTH files.
+        // ".read" here would hand every signed-in account the Gemini API key in
+        // taxCenter and the Big Cartel credentials.
+        //
+        // An ALLOWLIST of the keys an author session loads, same list as
+        // isAuthorReadableSetting() in firestore.rules (see the reasons there;
+        // tests/security-rules.test.js checks the two agree). Everything else —
+        // secrets, the mailing list, unsubscribes, campaigns, open-call
+        // contributors, and any key added later — is publisher-only.
         "$key": {
-          ".read": "auth != null && (auth.token.email === 'lyricalmyricalbooks@gmail.com' || ($key !== 'taxCenter' && $key !== 'bigCartelConfig' && $key !== 'systemBackups' && $key !== 'bookOwners'))"
+          ".read": "auth != null && ((auth.token.email === 'lyricalmyricalbooks@gmail.com' && auth.token.email_verified === true) || $key === 'modeFlags' || $key === 'notifyEndpoint' || $key === 'analyticsConfig' || $key === 'catalog' || $key === 'paymentLinks' || $key === 'productionCosts' || $key === 'websitePaymentMethods')"
         }
       },
       "backups": {
         // System backup snapshots — one node per backup, publisher only.
-        ".read": "auth != null && auth.token.email === 'lyricalmyricalbooks@gmail.com'",
-        ".write": "auth != null && auth.token.email === 'lyricalmyricalbooks@gmail.com'"
+        ".read": "auth != null && (auth.token.email === 'lyricalmyricalbooks@gmail.com' && auth.token.email_verified === true)",
+        ".write": "auth != null && (auth.token.email === 'lyricalmyricalbooks@gmail.com' && auth.token.email_verified === true)"
       }
     }
   }
