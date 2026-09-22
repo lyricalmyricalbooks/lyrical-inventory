@@ -332,7 +332,12 @@ describe('receipt finder UI', () => {
     expect(alert.textContent).toContain('would not accept the AI key');
     // One shared cause must not be reported as several.
     expect(alert.textContent).not.toContain('other reason');
-    expect(document.querySelector('.finder-errors').open).toBe(true);
+    // One shared cause groups into a single row, not one row per email.
+    const rows = document.querySelectorAll('.finder-failure');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].textContent).toContain('2');
+    expect(document.querySelector('.finder-failures').open).toBe(true);
+    expect(document.querySelectorAll('[data-retry-email]')).toHaveLength(0);
   });
   it('a momentary gap in the signed-in user does not kill a running scan', async () => {
     // startReceiptFinder runs on every modal open and every book reload. It
