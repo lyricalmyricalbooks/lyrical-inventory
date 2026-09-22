@@ -216,27 +216,36 @@ export function contrastRatio(c1, c2) {
 // Keep in sync with src/style.css if these selectors change.
 // ---------------------------------------------------------------------------
 
-const DARK_BG_CLASSES = new Set(['app-header', 'kpi', 'gas-code-container', 'metric-banner']);
+// .kpi and .metric-banner left this set when the dashboard's stat surfaces
+// went from permanently-ink blocks to Riso paper tiles — they sit on
+// --surface-card now, like .card, and checking them against --ink would be
+// checking a surface the app no longer renders.
+const DARK_BG_CLASSES = new Set(['app-header', 'gas-code-container']);
 // Every entry is a TOKEN, never a literal — a literal would resolve to the same
 // colour in both palettes and quietly make the dark sweep check a fiction.
 const CLASS_BG = {
   'gas-code-header': 'var(--ink2)',
   card: 'var(--surface-card)',
+  kpi: 'var(--surface-card)',
+  'metric-banner': 'var(--surface-card)',
   'sheets-setup': 'var(--surface-card)',
   modal: 'var(--cream)',
 };
 
 // className -> { color, modifiers: { modifierClass -> color } }
-// `.kpi-value`/`.metric-banner-value` sit on an --ink banner in both themes, so
-// their base is --on-inverse (NOT --cream, which flips out from under them).
+// `.kpi-value`/`.metric-banner-value` sit on the paper card surface in both
+// themes (light: --surface-card; dark: --paper, via the Press Proof rule in
+// theme-dark.css), so they take --text and the INK grade of each status —
+// never the light-on-ink siblings (--gold3/--orange/--rose-soft) they carried
+// while those two surfaces were permanently --ink.
 const CLASS_TEXT_TOKENS = {
   'kpi-value': {
-    base: 'var(--on-inverse)',
-    modifiers: { gold: 'var(--gold3)', warn: 'var(--orange)', danger: 'var(--rose-soft)' },
+    base: 'var(--text)',
+    modifiers: { gold: 'var(--gold-text)', warn: 'var(--orange-ink)', danger: 'var(--red)' },
   },
   'metric-banner-value': {
-    base: 'var(--on-inverse)',
-    modifiers: { gold: 'var(--gold3)', green: 'var(--emerald-soft)', danger: 'var(--rose-soft)' },
+    base: 'var(--text)',
+    modifiers: { gold: 'var(--gold-text)', green: 'var(--green)', danger: 'var(--red)' },
   },
   // Tab strips. The sweep had no idea these existed, which is how the Big
   // Cartel sub-tab shipped with its selected label on --gold — the FILL, at

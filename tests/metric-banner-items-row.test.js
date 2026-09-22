@@ -21,8 +21,12 @@ test('metric-banner-items rows get a divider instead of running together', () =>
   expect(firstRule[1]).toMatch(/border-top:\s*none/);
 });
 
-test('the reimbursement amount uses the emerald token, not a raw hex', () => {
-  expect(styles).toMatch(/\.metric-banner-green \.mbi-amt\s*\{\s*color:\s*var\(--emerald-soft\);\s*\}/);
+test('the reimbursement amount uses the green ink token, not a raw hex', () => {
+  // --green, not --emerald-soft: the banner is Riso paper now rather than a
+  // permanently --ink block, so the amount takes the text-grade ink of the
+  // family instead of the light-on-ink sibling. What this pins is the same —
+  // a named token, never the raw #6ee7a8 this shipped with.
+  expect(styles).toMatch(/\.metric-banner-green \.mbi-amt\s*\{\s*color:\s*var\(--green\);\s*\}/);
   expect(mainJs).not.toMatch(/color:#6ee7a8/);
 
   const arbBlock = mainJs.match(/\$\('arb-items'\)\.innerHTML = received\.map\(e => `([\s\S]*?)`\)\.join/);
@@ -39,6 +43,7 @@ test('the artist and publisher transfer rows share one row component instead of 
   expect(apbBlock[1]).toContain('mbi-row');
   expect(apbBlock[1]).toContain('is-pending');
 
-  expect(styles).toMatch(/\.metric-banner-gold \.mbi-amt\s*\{\s*color:\s*var\(--gold2\);\s*\}/);
+  // --gold-text for the same reason as --green above: ink grade on paper.
+  expect(styles).toMatch(/\.metric-banner-gold \.mbi-amt\s*\{\s*color:\s*var\(--gold-text\);\s*\}/);
   expect(styles).toMatch(/\.metric-banner-items \.mbi-row\.is-pending\s*\{\s*opacity:\s*\.6;\s*\}/);
 });

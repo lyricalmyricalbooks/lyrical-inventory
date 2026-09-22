@@ -64,6 +64,48 @@ landmine) — not just the token-pair math jsdom can check.
 
 ---
 
+## 0b. The last permanently-dark blocks, repainted (2026-09-22)
+
+The owner looked at the dashboard and said the KPI strip had never been changed. It hadn't —
+and neither had three other blocks, for the same reason. `.kpi`, `.metric-banner`,
+`.stock-block` and `.payment-methods-card` were **deliberately dark in BOTH themes**: "the one
+bold accent on an otherwise light page", a rule written before the Riso repaint and never
+revisited by it. Every sweep skipped them because they were correct *by their own comment*.
+On newsprint, next to paper cards and a paper table, they read as a row of black boxes.
+
+All four are now paper: `--surface-card`, square corners, a 2px ink outline and a hard offset.
+The dashboard's one accent is spent as the **lead KPI tile's fill** (`--book-accent`, with the
+figure on `--book-accent-contrast`) rather than the 34%-transparent border it used to be, which
+was invisible once a 2px ink outline sat over it. In dark mode all four join the Press Proof
+group in `theme-dark.css`.
+
+**The non-obvious part, and the thing to copy:** unlike `.card`, these four read the
+**primitives** directly — `--text`/`--text2`/`--text3` for their figures and labels,
+`--gold-text`/`--red`/`--green`/`--amber`/`--orange-ink` and the matching `-bg` tints for their
+statuses. Re-declaring only the semantic layer (§0's mechanism) would have left light-on-dark
+text on a paper block. The dark rule therefore re-declares the primitives too, to the light
+palette's own values.
+
+**And the landmine that cost a cycle here, now landmine 11:** a `/* token-ok */` comment was
+appended to those re-declarations *without* the terminating semicolon. A custom property
+swallows everything up to the semicolon, so the value became garbage **and ate the next
+declaration** — the metric banner's headline figure silently fell back to the inherited dark
+value, near-invisible on paper. Neither the contrast sweep nor the token check nor 4,291 tests
+saw it; a browser screenshot did, in about ten seconds.
+`tests/press-proof-dark-mode.test.js` now pins that every declaration in that block terminates
+before its comment.
+
+Also swept with them: the break-even alert's inline colours in `updateBreakEven()`
+(`src/main.js`) were all light-on-ink literals — `--gold2`/`--gold3`, raw `#fb923c`/`#fdba74` —
+because that alert renders inside `.stock-block`. They are ink grades now.
+
+**Still dark, and deliberately so:** the app header, tab bar, book switcher, sync bar,
+publisher sidebar, toasts, tooltips, the log console and the selected-state chips that invert
+to solid ink. That chrome was never the complaint. The Open Call screen's dark popovers remain
+the judgement call §1 already records.
+
+---
+
 ## 1. Where the work actually stands
 
 Waves 0 and 1 are **done and merged to `main`**. Everything since sits on this branch.
@@ -340,6 +382,10 @@ is where a redesign half-lands.
    `tests/tokens.test.js`. The mockup's 44px is a deliberate deviation. Individual controls that
    need a real touch target get `.sys-target` one at a time.
 9. **View Transitions stay unwired.** Settled and enforced. Don't wire them.
+11. **A `/* token-ok */` comment goes AFTER the semicolon, never before it.** `--x: #fff /* note */`
+    is not a commented declaration — the custom property swallows the comment into its value and
+    then eats the following declaration too, so the element falls back to whatever it inherits.
+    See §0b: this shipped, silently, past every automated gate in the repo.
 10. **`src/styles/receipt-finder.css` loads last**, after `theme-dark.css`, via a deep import
     chain — equal-specificity conflicts resolve in its favour.
 11. **Merged PR ≠ finished branch.** PR #850 was merged at commit 2 of 5, which shipped a live

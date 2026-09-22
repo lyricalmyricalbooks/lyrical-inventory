@@ -111,24 +111,26 @@ describe('calculateBreakEven — explicit units needed at list price and realize
     expect(result.stockNote).toBe('');
   });
 
-  it('enforces that break-even alert markup never uses light-surface text tokens (--text2, --text3) on dark ink panels', async () => {
+  it('enforces that break-even alert markup uses paper text tokens, not the on-inverse tiers', async () => {
     const fs = await import('fs');
     const mainJs = fs.readFileSync('src/main.js', 'utf8');
     const styleCss = fs.readFileSync('src/style.css', 'utf8');
 
-    // Extract the d-be-alert assignment in main.js
+    // This test used to assert the exact OPPOSITE, and it was right to: the
+    // alert renders inside .stock-block, which was a permanently --ink panel,
+    // so a light-surface token there was catastrophic. The Riso repaint put
+    // .stock-block on paper in both themes, which flips the requirement —
+    // --on-inverse-* is now the light-on-light failure, and --text* is correct.
     const alertMatch = mainJs.match(/al\.innerHTML\s*=\s*`([\s\S]*?)`;/);
     expect(alertMatch).toBeTruthy();
     const alertHtml = alertMatch[1];
 
-    // Must never contain var(--text2) or var(--text3) which causes catastrophic contrast on ink panels
-    expect(alertHtml).not.toContain('var(--text2');
-    expect(alertHtml).not.toContain('var(--text3');
+    expect(alertHtml).not.toContain('var(--on-inverse');
     expect(alertHtml).toContain('stock-alert-details');
-    expect(alertHtml).toContain('var(--on-inverse-2)');
+    expect(alertHtml).toContain('var(--text2)');
 
-    // Verify style.css defines scoped high-contrast rules for .stock-block .stock-alert
+    // And the panel's own sub-line rules follow the same ink grades.
     expect(styleCss).toContain('.stock-block .stock-alert-details');
-    expect(styleCss).toContain('.stock-block .stock-alert{color:var(--on-inverse-2);}');
+    expect(styleCss).not.toContain('.stock-block .stock-alert{color:var(--on-inverse-2);}');
   });
 });

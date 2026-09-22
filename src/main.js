@@ -5885,7 +5885,7 @@ function renderBreakEvenBlock(s, book, cur, cost, recognizedRev) {
   }
 
   $('d-be-bar').style.width = be.pctBe + '%';
-  $('d-be-bar').style.background = be.broken ? '#4ade80' : be.pctBe >= 70 ? '#fb923c' : (book.accent || 'var(--gold2)');
+  $('d-be-bar').style.background = be.broken ? 'var(--green-light)' : be.pctBe >= 70 ? 'var(--orange)' : (book.accent || 'var(--gold2)');
   $('d-be-bar-label').textContent = `${fmt(recognizedRev, cur)} recovered (${be.pctBe.toFixed(1)}%)`;
   $('d-be-bar-right').textContent = be.broken ? 'Break-even reached ✓' : `${fmt(be.remaining, cur)} remaining`;
   const trackEl = $('d-be-bar-track');
@@ -5902,19 +5902,24 @@ function renderBreakEvenBlock(s, book, cur, cost, recognizedRev) {
   } else {
     al.className = 'stock-alert warn';
 
+    // Ink grades, not fills. This alert renders inside .stock-block, which is
+    // a PAPER panel in both themes since the Riso repaint — the light siblings
+    // these used to carry (--gold2/--gold3, the raw #fb923c orange) were
+    // chosen for the panel's old permanently-ink fill and measure under 2:1
+    // on paper. --orange-ink/--gold-text are the same two hues, text-graded.
     if (be.isClose) {
-      al.style.borderLeftColor = '#fb923c';
-      al.style.background = 'rgba(251, 146, 60, 0.08)';
-      al.style.color = '#fb923c';
+      al.style.borderLeftColor = 'var(--orange)';
+      al.style.background = 'rgba(255, 138, 60, 0.1)';
+      al.style.color = 'var(--orange-ink)';
     } else {
-      al.style.borderLeftColor = 'rgba(232,  64,  42, 0.5)';
-      al.style.background = 'rgba(232, 64, 42, 0.08)';
-      al.style.color = 'var(--gold2)';
+      al.style.borderLeftColor = 'var(--gold-line)';
+      al.style.background = 'var(--gold-bg)';
+      al.style.color = 'var(--gold-text)';
     }
 
-    const themeColor = be.isClose ? '#fb923c' : 'var(--gold3)';
-    const themeBg = be.isClose ? 'rgba(251, 146, 60, 0.12)' : 'rgba(232, 64, 42, 0.12)';
-    const themeBorder = be.isClose ? 'rgba(251, 146, 60, 0.25)' : 'rgba(232, 64, 42, 0.25)';
+    const themeColor = be.isClose ? 'var(--orange-ink)' : 'var(--gold-text)';
+    const themeBg = be.isClose ? 'rgba(255, 138, 60, 0.12)' : 'rgba(232, 64, 42, 0.12)';
+    const themeBorder = be.isClose ? 'rgba(255, 138, 60, 0.3)' : 'var(--gold-line)';
 
     al.innerHTML = `
       <div style="display:flex; flex-direction:column; gap:8px; width:100%;">
@@ -5933,19 +5938,19 @@ function renderBreakEvenBlock(s, book, cur, cost, recognizedRev) {
           </div>
         </div>
         <div class="stock-alert-details" style="border-top-color:${themeBorder};">
-          <div style="color:var(--on-inverse-2);">
+          <div style="color:var(--text2);">
             ${be.hasListPrice
-              ? `Requires selling <strong style="color:var(--on-inverse);font-weight:700;">~${be.unitsNeededAtList}</strong> more unit${be.unitsNeededAtList !== 1 ? 's' : ''} at full list price of <strong style="color:var(--on-inverse);font-family:var(--font-mono);font-weight:700;">${fmt(be.listPrice, cur)}</strong> to recover the remaining <strong style="color:var(--on-inverse);font-family:var(--font-mono);font-weight:700;">${fmt(be.remaining, cur)}</strong>.`
+              ? `Requires selling <strong style="color:var(--text);font-weight:700;">~${be.unitsNeededAtList}</strong> more unit${be.unitsNeededAtList !== 1 ? 's' : ''} at full list price of <strong style="color:var(--text);font-family:var(--font-mono);font-weight:700;">${fmt(be.listPrice, cur)}</strong> to recover the remaining <strong style="color:var(--text);font-family:var(--font-mono);font-weight:700;">${fmt(be.remaining, cur)}</strong>.`
               : `Set a list price in book settings to calculate the units needed to break even.`}
           </div>
           ${be.paceNote ? `
-            <div class="stock-alert-note pace" style="color:${be.isClose ? '#fdba74' : 'var(--gold2)'};">
+            <div class="stock-alert-note pace" style="color:${be.isClose ? 'var(--orange-ink)' : 'var(--gold-text)'};">
               <span aria-hidden="true">💡</span>
               <span style="color:inherit;">${escapeHtml(be.paceNote)}</span>
             </div>
           ` : ''}
           ${be.stockNote ? `
-            <div class="stock-alert-note" style="color:var(--on-inverse-2);">
+            <div class="stock-alert-note" style="color:var(--text2);">
               <span aria-hidden="true">📦</span>
               <span style="color:inherit;">${escapeHtml(be.stockNote)}</span>
             </div>

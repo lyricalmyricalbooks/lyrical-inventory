@@ -22,10 +22,17 @@ test('the primary KPI band fills its row however many tiles a book shows', () =>
 test('exactly one dashboard KPI leads the band, at a larger size', () => {
   const lead = styles.match(/\.kpi\.is-lead\s*\{([\s\S]*?)\}/);
   expect(lead).not.toBeNull();
-  // Accent-tinted border + a real lift, so the lead reads as raised against
-  // the flat supporting tiles rather than merely bigger.
-  expect(lead[1]).toMatch(/border-color:\s*color-mix\(/);
-  expect(lead[1]).toMatch(/box-shadow:\s*var\(--elev-3\)/);
+  // The accent is spent as the lead's FILL and the lift goes a step beyond the
+  // supporting tiles' own offset. It used to be a 34%-transparent border, which
+  // stopped being visible at all once .kpi went from an ink block to a paper
+  // tile with a 2px ink outline over it.
+  expect(lead[1]).toMatch(/background:\s*var\(--book-accent/);
+  expect(lead[1]).toMatch(/box-shadow:\s*var\(--elev-4\)/);
+  // The figure on that fill takes the per-book contrast colour, or it lands
+  // accent-on-accent and disappears.
+  expect(styles).toMatch(
+    /\.kpi\.is-lead \.kpi-value[\s\S]*?\{color:var\(--book-accent-contrast/,
+  );
 
   // The size step comes off the scale, never a one-off px value — --text-3xl
   // clamps 28px→40px so the step survives the ≤480px .kpi-value drop to 22px.
@@ -35,16 +42,20 @@ test('exactly one dashboard KPI leads the band, at a larger size', () => {
 });
 
 test('the book accent marks the lead tile only, not the whole row', () => {
-  // The accent hairline used to be painted across every .kpi in a tab panel,
-  // which spent the colour on the entire band. Both halves matter: the lead
-  // keeps the gradient, and everything else is explicitly neutralised.
+  // The accent used to be a gradient hairline painted across every .kpi in a
+  // tab panel, which spent the colour on the entire band. It is the lead
+  // tile's fill now, and that hairline is gone with the dark tile it lifted.
   expect(styles).toMatch(
-    /\.tab-panel \.kpi\.is-lead::before\s*\{[\s\S]*?background:\s*linear-gradient\(90deg,\s*transparent,\s*var\(--book-accent/,
+    /\.tab-panel \.kpi\.is-lead,\n\.tab-panel \.kpi\.is-lead:hover \{\n  background: var\(--book-accent/,
   );
-  const neutral = styles.match(/\.tab-panel \.kpi:not\(\.is-lead\)::before\s*\{([\s\S]*?)\}/);
-  expect(neutral).not.toBeNull();
-  expect(neutral[1]).toMatch(/background:\s*rgba\(255,\s*255,\s*255,\s*\.09\)\s*!important/);
-  expect(neutral[1]).toMatch(/opacity:\s*1/);
+  expect(styles).not.toMatch(/\.kpi[^\n]*::before/);
+
+  // A supporting tile's figure is TEXT on white paper, so it takes the
+  // contrast-safe ink grade — never the raw cover fill, which measured as low
+  // as 1.4:1 there for a pale cover.
+  const supporting = styles.match(/\.tab-panel \.kpi-value\.gold \{([\s\S]*?)\}/);
+  expect(supporting).not.toBeNull();
+  expect(supporting[1]).toMatch(/color:\s*var\(--book-accent-text,/);
 });
 
 test('only the lead figure carries the accent colour in the markup', () => {

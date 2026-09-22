@@ -10,12 +10,14 @@ import { expect, test } from 'vitest';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const styles = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
 
-test('metric banner hint text uses a readable on-inverse token, not a near-invisible raw alpha', () => {
+test('metric banner hint text uses a readable muted token, not a near-invisible raw alpha', () => {
   const rule = styles.match(/\.metric-banner-hint\s*\{([\s\S]*?)\}/);
 
   expect(rule).not.toBeNull();
-  expect(rule[1]).toMatch(/color:\s*var\(--on-inverse-3\)/);
-  // rgba(255,255,255,.2) on the --ink surface composited under ~2.3:1 contrast,
-  // worse than the 2.6:1 the tab bar was fixed away from (style.css "TABS" comment).
+  // --text3, not --on-inverse-3: the banner went from a permanently --ink block
+  // to Riso paper, so the readable muted tier is the one tuned for a light
+  // surface. What this test protects is unchanged — the hint must be a named
+  // muted token, never a raw white alpha, which is what made it near-invisible.
+  expect(rule[1]).toMatch(/color:\s*var\(--text3\)/);
   expect(rule[1]).not.toMatch(/rgba\(255,\s*255,\s*255,\s*\.?2\)/);
 });

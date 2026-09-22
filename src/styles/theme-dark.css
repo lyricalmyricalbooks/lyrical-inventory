@@ -636,18 +636,83 @@
 .theme-dark .pill.gray  { background: var(--paper2); color: var(--on-paper2); border-color: var(--on-paper2); }
 .theme-dark .pill.gold  { background: var(--gold);  color: var(--on-paper); border-color: var(--on-paper); }
 
-/* The KPI tile is deliberately dark in BOTH themes everywhere else in the
-   app — the one bold accent on an otherwise light page. That stops being
-   true the moment the page is also dark: an always-ink tile on a now-ink
-   page is exactly the vanishing act this pass exists to fix, so here it
-   flips with everything else instead of staying "always dark". */
-.theme-dark .kpi {
+/* THE DASHBOARD'S THREE STAT SURFACES — the KPI tile, the metric banner and
+   the inventory/break-even panel. All three used to be permanently --ink in
+   BOTH themes (the "bold chrome" blocks on an otherwise light page), which is
+   why they were the last thing left reading as black boxes after the Riso
+   repaint; they are paper in light mode now, so here they simply join the
+   rest of the Press Proof objects.
+
+   Unlike .card above, these cannot be flipped through the semantic layer
+   alone: their own rules in style.css read the PRIMITIVES directly
+   (--text/--text2/--text3 for the figures and labels, --gold-text/--red/
+   --green/--amber/--orange-ink for the status inks, and the matching -bg
+   tints underneath them). Those primitives are all light-on-dark in this
+   theme, so each one is re-declared here to the LIGHT palette's value —
+   byte-identical to src/style.css's :root, which is exactly what --paper /
+   --on-paper already are. The light theme's own system, on a black stage. */
+.theme-dark .kpi,
+.theme-dark .metric-banner,
+.theme-dark .stock-block,
+.theme-dark .payment-methods-card {
   background: var(--paper);
-  border-color: rgba(16, 15, 13, .12);
-  box-shadow: 3px 3px 0 var(--gold);
+  border-color: var(--on-paper);
+  box-shadow: 4px 4px 0 var(--gold);
+
+  /* semantic layer, same set as .card */
+  --content-primary: var(--on-paper);
+  --content-secondary: var(--on-paper2);
+  --content-muted: var(--on-paper3);
+  --content-faint: var(--on-paper3);
+  --surface-page: var(--paper);
+  --surface-raised: var(--paper);
+  --surface-card: var(--paper);
+  --surface-sunken: var(--paper2);
+  --surface-inset: var(--paper2);
+  --border: rgba(16, 15, 13, .26);
+  --border2: rgba(16, 15, 13, .12);
+  --rule-ink: var(--on-paper);
+
+  /* text ramp */
+  --text: var(--on-paper);
+  --text2: var(--on-paper2);
+  --text3: var(--on-paper3);
+  --text4: var(--on-paper3);
+
+  /* status inks + their tints, back to the light palette's pairings */
+  --gold-text: #B4271A; /* token-ok: the LIGHT :root's own value, restored on a paper object */
+  --gold-bg: rgba(232, 64, 42, .1);
+  --gold-line: rgba(232, 64, 42, .45);
+  --green: #0A6B47; /* token-ok: the LIGHT :root's own value, restored on a paper object */
+  --green-light: #12A06A; /* token-ok: the LIGHT :root's own value, restored on a paper object */
+  --green-bg: rgba(18, 160, 106, .12);
+  --red: #B4271A; /* token-ok: the LIGHT :root's own value, restored on a paper object */
+  --red-light: #E8402A; /* token-ok: the LIGHT :root's own value, restored on a paper object */
+  --red-bg: rgba(232, 64, 42, .1);
+  --amber: #6B4600; /* token-ok: the LIGHT :root's own value, restored on a paper object */
+  --amber-bg: rgba(255, 201, 60, .3);
+  --blue: #1B3FE0; /* token-ok: the LIGHT :root's own value, restored on a paper object */
+  --blue-bg: #DEE4FD; /* token-ok: the LIGHT :root's own value, restored on a paper object */
+  --orange-ink: #8A3D12; /* token-ok: the LIGHT :root's own value, restored on a paper object */
+  --violet-deep: #4A2FC4; /* token-ok: the LIGHT :root's own value, restored on a paper object */
+
+  /* a white wash is no trough on paper */
+  --track-bg: rgba(16, 15, 13, .12);
 }
 .theme-dark .kpi-label { color: var(--on-paper3); }
 .theme-dark .kpi-value { color: var(--on-paper); }
+/* .payment-methods-card sets its own surface with !important (it fought a
+   blur it no longer has), so the group above cannot repaint it on its own. */
+.theme-dark .payment-methods-card {
+  background: var(--paper) !important;
+  border-color: var(--on-paper) !important;
+}
+/* The lead tile keeps the book's cover accent as its fill in both themes, and
+   with it the per-book contrast colour for the figure — the rule above must
+   not repaint either of them back to paper. */
+.theme-dark .kpi.is-lead { background: var(--book-accent, var(--gold2)); }
+.theme-dark .kpi.is-lead .kpi-label,
+.theme-dark .kpi.is-lead .kpi-value { color: var(--book-accent-contrast, var(--ink)); }
 
 .theme-dark .tbl-wrap {
   --cream: var(--paper);
