@@ -5620,6 +5620,7 @@ export function updateDash() {
   const cost = book.productionCost || 0;
   const printed = book.maxPrint || 0;
   const breakdown = deriveStockBreakdown(s, book);
+  const inventory = inventoryBreakdown(s, book);
   let stockSubText = 'of ' + printed + ' printed';
   if (!isAuthor() && cost > 0 && printed > 0) {
     stockSubText += ' · ' + fmt(cost / printed, cur) + '/book';
@@ -5633,7 +5634,7 @@ export function updateDash() {
   animateCountValue('d-stock', s.stock); animateCountValue('h-stock', s.stock);
   renderStockDriftBanner(s, book);
   animateCountValue('d-sold', s.sold);
-  animateCountValue('d-gratuities', breakdown.gratuities);
+  animateCountValue('d-gratuities', inventory.gratuities);
   const heldGross = heldGrossOf(s);
   const recognizedRev = recognizedRevenueOf(s);
   animateCountValue('d-revenue', fmtWhole(recognizedRev, cur)); animateCountValue('h-revenue', fmtWhole(recognizedRev, cur));

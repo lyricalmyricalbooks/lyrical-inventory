@@ -147,7 +147,8 @@ describe('main.js window binding verification', () => {
 
   it('shows the selected book\'s gifted-copy total in More metrics', () => {
     expect(indexHtml).toContain('id="d-gratuities"');
-    expect(appSource).toContain("animateCountValue('d-gratuities', breakdown.gratuities)");
+    expect(appSource).toContain('const inventory = inventoryBreakdown(s, book);');
+    expect(appSource).toContain("animateCountValue('d-gratuities', inventory.gratuities)");
   });
 
   it('makes recent changes commits clickable in the Whats New modal', () => {
