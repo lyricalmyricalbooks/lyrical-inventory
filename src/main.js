@@ -17284,6 +17284,58 @@ function posOnHandFor(bookId) {
   return s && Number.isFinite(s.stock) ? s.stock : null;
 }
 
+// One book tile in the POS grid. Pulled out of renderPOS() so that function
+// stays an orchestrator, matching posCartRowHtml/posCartEmptyHtml's split for
+// the cart panel.
+function posBookCardHtml(book) {
+  const qty = posCart[book.id] || 0;
+  const sourceCode = currencyToCode(book.currency);
+  const converted = convertCurrency(book.listPrice || 0, sourceCode, posTransactionCurrency);
+  const convertedLabel = converted === null
+    ? `No FX rate → ${posFormat(book.listPrice || 0, sourceCode)}`
+    : `${posFormat(converted, posTransactionCurrency)} (${sourceCode})`;
+  const posOnly = isPosOnlyBook(book.id);
+  const idAttr = escapeHtml(book.id);
+  const badge = posOnly
+    ? `<span style="display:inline-block;font-size:var(--text-3xs);font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);background:var(--gold-bg);border:var(--stroke-hair) solid var(--gold-line);border-radius:var(--r);padding:2px 6px;margin-bottom:6px;">POS-only</span>`
+    : '';
+  const soldNote = (posOnly && book.sold)
+    ? `<div style="font-size:var(--text-xs);color:var(--green);margin-top:3px;">${book.sold} sold${book.revenue ? ' · ' + posFormat(book.revenue, sourceCode) : ''}</div>`
+    : '';
+  // How many are still in the box, counting down as the cart fills. The
+  // pill is the only place on this screen that has ever said so.
+  const stockView = posStockView({ onHand: posOnHandFor(book.id), inCart: qty });
+  const stockPill = stockView.tracked
+    ? `<div class="pos-card-stock"><span class="pill ${stockView.pill} pos-stock-pill" title="${escapeHtml(stockView.srText)}">${stockView.glyph ? escapeHtml(stockView.glyph) + ' ' : ''}${escapeHtml(stockView.label)}</span></div>`
+    : '';
+  const editControls = posOnly
+    ? `<div class="pos-card-actions">
+           <button class="btn sm pos-card-btn" onclick="openPosBookModal('${idAttr}')" aria-label="Edit or view QR">✎ Edit / QR</button>
+           <button class="btn sm danger-btn pos-card-btn pos-card-btn-danger" onclick="removePosBook('${idAttr}')" title="Remove POS-only book" aria-label="Remove POS-only book">✕</button>
+         </div>`
+    : '';
+  const isActiveClass = qty > 0 ? ' is-active' : '';
+  return `
+      <div class="card pos-card${isActiveClass}" style="display:flex; flex-direction:column; justify-content:space-between; padding:1.2rem;${posOnly ? 'border:1.5px solid var(--gold-line);' : ''}">
+        <div>
+          ${badge}
+          <div class="pos-card-title">${escapeHtml(book.title)}</div>
+          <div class="pos-card-sub">${posFormat(book.listPrice || 0, sourceCode)} &bull; ${convertedLabel}</div>
+          ${stockPill}
+          ${soldNote}
+        </div>
+        <div>
+          <div class="pos-qty-wrapper">
+            <button class="pos-qty-btn" aria-label="Decrease quantity" onclick="posUpdateQty('${idAttr}', -1)">-</button>
+            <span class="pos-qty-val"${qty > 0 ? ' style="color:var(--gold-text);"' : ''}>${qty}</span>
+            <button class="pos-qty-btn" aria-label="Increase quantity" onclick="posUpdateQty('${idAttr}', 1)">+</button>
+          </div>
+          ${editControls}
+        </div>
+      </div>
+    `;
+}
+
 // The cart in the shape posOversellSummary() wants. Built straight off posCart
 // rather than buildPOSCartRows() so the stock warning stays entirely clear of
 // the money/FX pipeline.
@@ -17350,54 +17402,7 @@ function renderPOS() {
   if (!booksArr.length && posSearchQuery) {
     grid.innerHTML = `<div class="pos-search-empty">No books match <strong>&ldquo;${escapeHtml(posSearchQuery)}&rdquo;</strong>.<span class="pos-search-empty-hint">Press <kbd>Esc</kbd> to clear.</span></div>`;
   } else {
-    grid.innerHTML = booksArr.map((book) => {
-      const qty = posCart[book.id] || 0;
-      const sourceCode = currencyToCode(book.currency);
-      const converted = convertCurrency(book.listPrice || 0, sourceCode, posTransactionCurrency);
-      const convertedLabel = converted === null
-        ? `No FX rate → ${posFormat(book.listPrice || 0, sourceCode)}`
-        : `${posFormat(converted, posTransactionCurrency)} (${sourceCode})`;
-      const posOnly = isPosOnlyBook(book.id);
-      const idAttr = escapeHtml(book.id);
-      const badge = posOnly
-        ? `<span style="display:inline-block;font-size:var(--text-3xs);font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);background:var(--gold-bg);border:var(--stroke-hair) solid var(--gold-line);border-radius:var(--r);padding:2px 6px;margin-bottom:6px;">POS-only</span>`
-        : '';
-      const soldNote = (posOnly && book.sold)
-        ? `<div style="font-size:var(--text-xs);color:var(--green);margin-top:3px;">${book.sold} sold${book.revenue ? ' · ' + posFormat(book.revenue, sourceCode) : ''}</div>`
-        : '';
-      // How many are still in the box, counting down as the cart fills. The
-      // pill is the only place on this screen that has ever said so.
-      const stockView = posStockView({ onHand: posOnHandFor(book.id), inCart: qty });
-      const stockPill = stockView.tracked
-        ? `<div class="pos-card-stock"><span class="pill ${stockView.pill} pos-stock-pill" title="${escapeHtml(stockView.srText)}">${stockView.glyph ? escapeHtml(stockView.glyph) + ' ' : ''}${escapeHtml(stockView.label)}</span></div>`
-        : '';
-      const editControls = posOnly
-        ? `<div class="pos-card-actions">
-           <button class="btn sm pos-card-btn" onclick="openPosBookModal('${idAttr}')" aria-label="Edit or view QR">✎ Edit / QR</button>
-           <button class="btn sm danger-btn pos-card-btn pos-card-btn-danger" onclick="removePosBook('${idAttr}')" title="Remove POS-only book" aria-label="Remove POS-only book">✕</button>
-         </div>`
-        : '';
-      const isActiveClass = qty > 0 ? ' is-active' : '';
-      return `
-      <div class="card pos-card${isActiveClass}" style="display:flex; flex-direction:column; justify-content:space-between; padding:1.2rem;${posOnly ? 'border:1.5px solid var(--gold-line);' : ''}">
-        <div>
-          ${badge}
-          <div class="pos-card-title">${escapeHtml(book.title)}</div>
-          <div class="pos-card-sub">${posFormat(book.listPrice || 0, sourceCode)} &bull; ${convertedLabel}</div>
-          ${stockPill}
-          ${soldNote}
-        </div>
-        <div>
-          <div class="pos-qty-wrapper">
-            <button class="pos-qty-btn" aria-label="Decrease quantity" onclick="posUpdateQty('${idAttr}', -1)">-</button>
-            <span class="pos-qty-val"${qty > 0 ? ' style="color:var(--gold-text);"' : ''}>${qty}</span>
-            <button class="pos-qty-btn" aria-label="Increase quantity" onclick="posUpdateQty('${idAttr}', 1)">+</button>
-          </div>
-          ${editControls}
-        </div>
-      </div>
-    `;
-    }).join('') + (allowPosOnly && !posSearchQuery ? `
+    grid.innerHTML = booksArr.map(posBookCardHtml).join('') + (allowPosOnly && !posSearchQuery ? `
       <button type="button" class="card pos-card pos-add-tile" onclick="openPosBookModal()" aria-label="Add POS-only book">
         <div class="pos-add-tile-icon" aria-hidden="true">＋</div>
         <div class="pos-add-tile-title">Add POS-only book</div>
