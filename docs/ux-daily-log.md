@@ -103,7 +103,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-09-21 | perf | Shipping label window, sending overlay | Removed a blur effect that was redrawing the whole screen on every keystroke while you filled in a shipping label | #862 |
 | 2026-09-22 | visual | Whole app, night mode — cards, buttons, the pop-up window, tags, and the summary tiles | Night mode redone as "Press Proof": the screen background stays black, but every box on it — a card, a button, a tag — is now white/cream with dark text, the same look daylight mode already uses, instead of a slightly-less-dark box on a dark screen | #865 |
 | 2026-09-22 | fix | Night mode — the all-books consignment summary table and the Tax Centre master ledger | Fixed a real bug in the new night mode: the consignment summary table and the tax ledger still showed alternating dark and light rows you could barely read, and the tax-category dropdown in the ledger showed up as a solid black box with white text instead of matching the rest of the redesign | #868 |
-| 2026-09-22 | visual | Book dashboard — Danger zone | Gave the "Danger zone" section a real heading and a warm red warning colour instead of the same faint caption every other section on the page had already moved on from | #TBD |
+| 2026-09-22 | visual | Book dashboard — Danger zone | Gave the "Danger zone" section a real heading and a warm red warning colour instead of the same faint caption every other section on the page had already moved on from | #875 |
 
 ---
 
