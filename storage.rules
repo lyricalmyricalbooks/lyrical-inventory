@@ -2,9 +2,12 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
+    // Same check as isPublisher() in firestore.rules, including email_verified
+    // (see the reason there).
     function isPublisher() {
       return request.auth != null
-        && request.auth.token.email == 'lyricalmyricalbooks@gmail.com';
+        && request.auth.token.email == 'lyricalmyricalbooks@gmail.com'
+        && request.auth.token.email_verified == true;
     }
 
     // Mirrors isBookAuthor() in firestore.rules, resolved cross-service against

@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
+import { firebaseCdnPrecacheEntries } from './scripts/firebase-cdn-precache.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -99,6 +100,13 @@ export default defineConfig({
       // that tab working offline without bloating the initial HTML parse.
       includeAssets: ['favicon.ico', 'apple-touch-icon-180x180.png', 'maskable-icon-512x512.png', 'gas-code.txt'],
       workbox: {
+        // The Firebase SDK is imported from www.gstatic.com by src/firebase.js,
+        // which main.js imports statically — if those modules can't load, no
+        // app code runs and the app opens blank. Precaching them guarantees the
+        // app can start with no signal. The list is read from src/firebase.js
+        // so an SDK version bump can't silently fall out of the precache (the
+        // helper throws if it finds nothing).
+        additionalManifestEntries: firebaseCdnPrecacheEntries(path.resolve(__dirname, 'src/firebase.js')),
         // Cache cross-origin assets at runtime so the app keeps its typography
         // and lazy-loaded libraries (jsPDF/html2canvas, xlsx, qrcode) offline
         // after the first online visit. Without this, an offline invoice PDF
@@ -123,6 +131,17 @@ export default defineConfig({
             handler: 'CacheFirst',
             options: {
               cacheName: 'cdnjs-libs',
+              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              cacheableResponse: { statuses: [0, 200] }
+            }
+          },
+          {
+            // Fallback for any Firebase SDK module the precache above doesn't
+            // list (the URLs are versioned, so a cached copy never goes stale).
+            urlPattern: /^https:\/\/www\.gstatic\.com\/firebasejs\//i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'firebase-sdk',
               expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365 },
               cacheableResponse: { statuses: [0, 200] }
             }
