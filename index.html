@@ -194,9 +194,14 @@
     .invoice-card .inv-c-actions{flex-direction:row;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-2);}
     .invoice-card .inv-c-btns{flex:1 1 auto;}
   }
+  .inv-discount-row{display:flex;gap:8px;align-items:stretch;}
+  .inv-discount-row select{flex:0 0 auto;width:auto;margin:0;}
+  .inv-discount-row .price-wrap{flex:1 1 auto;min-width:0;}
   .inv-item-row td{padding:6px 4px;}
   .inv-item-row input{width:100%;padding:6px 8px;font-size:12px;border:var(--stroke-hair) solid var(--border);border-radius:var(--r);background:transparent;color:var(--text);}
-  .inv-item-row input[type=number]{font-family:var(--font-mono);text-align:right;}
+  .inv-item-row input[type=number]{font-family:var(--font-mono);text-align:right;min-width:64px;-moz-appearance:textfield;appearance:textfield;}
+  .inv-item-row input[type=number]::-webkit-inner-spin-button,.inv-item-row input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0;}
+  .inv-item-row input{min-height:36px;}
   .inv-item-row .inv-item-book{width:100%;padding:6px 8px;font-size:12px;border:var(--stroke-hair) solid var(--border);border-radius:var(--r);background:transparent;color:var(--text);height:auto;margin:0;}
   .inv-item-row .inv-item-amt{display:block;text-align:right;font-family:var(--font-mono);font-size:12px;color:var(--text);padding:7px 6px;}
   .inv-item-row .inv-item-remove{
@@ -4899,7 +4904,7 @@
   </div>
   <div class="tbl-wrap" style="margin-bottom:8px;">
     <table class="tbl" style="font-size:var(--text-sm);">
-      <thead><tr><th style="width:32%;">Description</th><th style="width:18%;">Title</th><th class="r" style="width:9%;">Qty</th><th class="r" style="width:16%;">Unit price</th><th class="r" style="width:16%;">Amount</th><th></th></tr></thead>
+      <thead><tr><th style="width:30%;">Description</th><th style="width:18%;">Title</th><th class="r" style="width:12%;">Qty</th><th class="r" style="width:16%;">Unit price</th><th class="r" style="width:16%;">Amount</th><th style="width:44px;"></th></tr></thead>
       <tbody id="inv-items-body"></tbody>
     </table>
   </div>
@@ -4907,20 +4912,20 @@
 
   <div class="g2" style="margin-bottom:12px;">
     <div class="form-group">
-      <label style="display:flex; justify-content:space-between; align-items:center; width:100%;">
-        <span id="inv-discount-label-text">Discount (flat, optional)</span>
-        <select id="inv-discount-type" style="width:auto; padding:2px 8px; font-size:var(--text-xs); height:24px; margin:0; border-radius:var(--r);" onchange="onDiscountTypeChange()">
-          <option value="flat">Flat Amount</option>
+      <label for="inv-discount"><span id="inv-discount-label-text">Discount (flat, optional)</span></label>
+      <div class="inv-discount-row">
+        <select id="inv-discount-type" aria-label="Discount type" onchange="onDiscountTypeChange()">
+          <option value="flat">Flat amount</option>
           <option value="percent">Percentage (%)</option>
         </select>
-      </label>
-      <div class="price-wrap" id="inv-discount-flat-wrap">
-        <span class="sym" id="inv-discount-sym">€</span>
-        <input id="inv-discount" type="number" inputmode="decimal" step="0.01" min="0" value="0" oninput="recalcInvoiceTotals()">
-      </div>
-      <div class="price-wrap" id="inv-discount-percent-wrap" style="display:none;">
-        <input id="inv-discount-percent" type="number" inputmode="decimal" step="0.01" min="0" max="100" value="0" oninput="recalcInvoiceTotals()">
-        <span class="sym">%</span>
+        <div class="price-wrap" id="inv-discount-flat-wrap">
+          <span class="sym" id="inv-discount-sym">€</span>
+          <input id="inv-discount" type="number" inputmode="decimal" step="0.01" min="0" value="0" oninput="recalcInvoiceTotals()">
+        </div>
+        <div class="price-wrap" id="inv-discount-percent-wrap" style="display:none;">
+          <input id="inv-discount-percent" type="number" inputmode="decimal" step="0.01" min="0" max="100" value="0" oninput="recalcInvoiceTotals()">
+          <span class="sym">%</span>
+        </div>
       </div>
     </div>
     <div class="form-group"><label for="inv-tax">Tax / VAT rate (%)</label>
