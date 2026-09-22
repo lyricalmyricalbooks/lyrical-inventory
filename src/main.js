@@ -3388,7 +3388,7 @@ function buildBookSwitcher() {
   menu.innerHTML = '';
 
   const items = [{ id: 'all', title: 'All books', accent: 'rgba(255,255,255,.25)' }]
-    .concat(BOOK_LIST.map(b => ({ id: b.id, title: b.title, accent: b.accent })));
+    .concat(BOOK_LIST.filter(b => !isTestBook(b)).map(b => ({ id: b.id, title: b.title, accent: b.accent })));
 
   items.forEach((it) => {
     const isActive = (activeBook || 'all') === it.id;
