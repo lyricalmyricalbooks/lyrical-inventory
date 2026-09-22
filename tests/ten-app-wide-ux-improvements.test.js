@@ -7,6 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(path.join(__dirname, '../index.html'), 'utf8');
 const styleCss = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
 const mainJs = readFileSync(path.join(__dirname, '../src/main.js'), 'utf8');
+const customersJs = readFileSync(path.join(__dirname, '../src/features/customers.js'), 'utf8');
 
 describe('10 Additional UX/UI Improvements Suite (/ux-designer)', () => {
   describe('1. POS Till: Quick Discount Keyboard Shortcuts & Visual Badges', () => {
@@ -69,8 +70,8 @@ describe('10 Additional UX/UI Improvements Suite (/ux-designer)', () => {
       expect(styleCss).toMatch(/\.cust-export-btn:active\s*\{[^}]*transform:\s*scale\(0\.96\)/);
     });
 
-    it('implements window.exportMailingListCsv in main.js', () => {
-      expect(mainJs).toContain('function exportMailingListCsv()');
+    it('implements exportMailingListCsv in customers.js and puts it on window in main.js', () => {
+      expect(customersJs).toContain('function exportMailingListCsv()');
       expect(mainJs).toContain('window.exportMailingListCsv = exportMailingListCsv;');
     });
   });

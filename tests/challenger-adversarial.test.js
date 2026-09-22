@@ -7,6 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(path.join(__dirname, '../index.html'), 'utf8');
 const css = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
 const js = readFileSync(path.join(__dirname, '../src/main.js'), 'utf8');
+const customersJs = readFileSync(path.join(__dirname, '../src/features/customers.js'), 'utf8');
 
 describe('Challenger 1 Adversarial Suite: Touch Target Verification (>= 44px)', () => {
   const touchTargetSelectors = [
@@ -88,15 +89,15 @@ describe('Challenger 1 Adversarial Suite: Liquid Spring Motion Physics Verificat
 
 describe('Challenger 1 Adversarial Suite: Zero Blank States & Miller Chunking', () => {
   it('renders Miller-chunked Mailing List empty state with iconography and actionable CTAs', () => {
-    expect(js).toContain('class="empty-state sys-empty"');
-    expect(js).toContain('✉️');
-    expect(js).toContain('addAllBuyersToMailingList()');
-    expect(js).toContain('focusMailingListAdd()');
+    expect(customersJs).toContain('class="empty-state sys-empty"');
+    expect(customersJs).toContain('✉️');
+    expect(customersJs).toContain('addAllBuyersToMailingList()');
+    expect(customersJs).toContain('focusMailingListAdd()');
   });
 
   it('renders Miller-chunked Email Campaign Drafts and Sent empty states with CTAs', () => {
-    expect(js).toMatch(/<div class="empty-state sys-empty"[\s\S]*?📝[\s\S]*?No saved drafts[\s\S]*?openCampaignWizard\(\)/);
-    expect(js).toMatch(/<div class="empty-state sys-empty"[\s\S]*?📣[\s\S]*?No sent campaigns yet[\s\S]*?openCampaignWizard\(\)/);
+    expect(customersJs).toMatch(/<div class="empty-state sys-empty"[\s\S]*?📝[\s\S]*?No saved drafts[\s\S]*?openCampaignWizard\(\)/);
+    expect(customersJs).toMatch(/<div class="empty-state sys-empty"[\s\S]*?📣[\s\S]*?No sent campaigns yet[\s\S]*?openCampaignWizard\(\)/);
   });
 
   it('renders Miller-chunked Book Catalog empty state with 📚 icon and + Add your first book CTA', () => {

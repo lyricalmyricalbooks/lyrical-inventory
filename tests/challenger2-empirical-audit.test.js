@@ -10,6 +10,7 @@ const css = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8').repla
 const systemCss = readFileSync(path.join(__dirname, '../src/styles/system.css'), 'utf8').replace(/\r\n/g, '\n');
 const darkCss = readFileSync(path.join(__dirname, '../src/styles/theme-dark.css'), 'utf8').replace(/\r\n/g, '\n');
 const mainJs = readFileSync(path.join(__dirname, '../src/main.js'), 'utf8').replace(/\r\n/g, '\n');
+const customersJs = readFileSync(path.join(__dirname, '../src/features/customers.js'), 'utf8').replace(/\r\n/g, '\n');
 
 describe('Challenger 2 Empirical Verification: Touch Targets (Fitts’s Law >= 44px)', () => {
   const targetSelectors = [
@@ -155,19 +156,19 @@ describe('Challenger 2 Empirical Verification: Spring Kinetics & Accessibility',
 });
 
 describe('Challenger 2 Empirical Verification: Zero Blank States & Miller’s Chunking', () => {
-  it('implements Miller-chunked empty state for Mailing List in main.js', () => {
-    expect(mainJs).toContain('class="empty-state sys-empty"');
-    expect(mainJs).toContain('✉️');
-    expect(mainJs).toContain('Your mailing list is empty');
-    expect(mainJs).toContain('addAllBuyersToMailingList()');
+  it('implements Miller-chunked empty state for Mailing List in customers.js', () => {
+    expect(customersJs).toContain('class="empty-state sys-empty"');
+    expect(customersJs).toContain('✉️');
+    expect(customersJs).toContain('Your mailing list is empty');
+    expect(customersJs).toContain('addAllBuyersToMailingList()');
   });
 
-  it('implements Miller-chunked empty states for Campaign drafts and sent lists in main.js', () => {
-    expect(mainJs).toContain('📝');
-    expect(mainJs).toContain('No saved drafts');
-    expect(mainJs).toContain('📣');
-    expect(mainJs).toContain('No sent campaigns yet');
-    expect(mainJs).toContain('openCampaignWizard()');
+  it('implements Miller-chunked empty states for Campaign drafts and sent lists in customers.js', () => {
+    expect(customersJs).toContain('📝');
+    expect(customersJs).toContain('No saved drafts');
+    expect(customersJs).toContain('📣');
+    expect(customersJs).toContain('No sent campaigns yet');
+    expect(customersJs).toContain('openCampaignWizard()');
   });
 
   it('implements Miller-chunked empty state for Production Catalog in main.js', () => {

@@ -18,6 +18,7 @@ import {
 const html = fs.readFileSync(path.join(process.cwd(), 'index.html'), 'utf8');
 const css = fs.readFileSync(path.join(process.cwd(), 'src/style.css'), 'utf8');
 const main = fs.readFileSync(path.join(process.cwd(), 'src/main.js'), 'utf8');
+const customers = fs.readFileSync(path.join(process.cwd(), 'src/features/customers.js'), 'utf8');
 
 const ids = (entries) => entries.map(e => e.id);
 const labels = (entries) => entries.map(e => e.label);
@@ -137,19 +138,19 @@ describe('the segment filter bar in the Customers tab', () => {
 
   it('escapes the filter labels it renders', () => {
     // Book titles and the search box are both free text a person types.
-    expect(main).toMatch(/const safe = escapeHtml\(f\.label\);/);
-    expect(main).toMatch(/escapeHtml\(joinFilterLabels\(active\)\)/);
+    expect(customers).toMatch(/const safe = escapeHtml\(f\.label\);/);
+    expect(customers).toMatch(/escapeHtml\(joinFilterLabels\(active\)\)/);
   });
 
   it('offers a way out for one filter and for all of them', () => {
-    expect(main).toMatch(/function clearCustomerFilter\(id\)/);
-    expect(main).toMatch(/function clearCustomerFilters\(\)/);
+    expect(customers).toMatch(/function clearCustomerFilter\(id\)/);
+    expect(customers).toMatch(/function clearCustomerFilters\(\)/);
     // Both have to reach the window or the inline handlers are dead links.
     expect(main).toMatch(/clearCustomerFilter, clearCustomerFilters,/);
   });
 
   it('clears the search box by hand, because the renderer only re-syncs the dropdowns', () => {
-    const fn = main.slice(main.indexOf('function clearCustomerFilters()'));
+    const fn = customers.slice(customers.indexOf('function clearCustomerFilters()'));
     expect(fn.slice(0, 400)).toMatch(/\$\('cust-search'\)/);
   });
 
@@ -179,14 +180,14 @@ describe('the segment filter bar in the Customers tab', () => {
   });
 
   it('shows the two counts in tabular figures', () => {
-    expect(main).toMatch(/<strong class="mono-num">\$\{n\}<\/strong> of <strong class="mono-num">\$\{all\}<\/strong>/);
+    expect(customers).toMatch(/<strong class="mono-num">\$\{n\}<\/strong> of <strong class="mono-num">\$\{all\}<\/strong>/);
   });
 });
 
 describe('the empty buyer table', () => {
-  const emptyFn = main.slice(
-    main.indexOf('function _custEmptyHtml('),
-    main.indexOf('function _custEmptyHtml(') + 2200,
+  const emptyFn = customers.slice(
+    customers.indexOf('function _custEmptyHtml('),
+    customers.indexOf('function _custEmptyHtml(') + 2200,
   );
 
   it('tells the two empty situations apart', () => {
@@ -216,7 +217,8 @@ describe('the empty buyer table', () => {
   });
 
   it('is rendered by the buyer table instead of the old one-line dead end', () => {
-    expect(main).toMatch(/_custEmptyHtml\(all\.length, activeFilters\)/);
+    expect(customers).toMatch(/_custEmptyHtml\(all\.length, activeFilters\)/);
+    expect(customers).not.toMatch(/No customers match this filter\./);
     expect(main).not.toMatch(/No customers match this filter\./);
   });
 
@@ -224,7 +226,7 @@ describe('the empty buyer table', () => {
     // Nine nowrap header cells push a centred panel off the right of a phone
     // screen, where the way out cannot be read or tapped. Same treatment Order
     // History already uses.
-    expect(main).toMatch(/<tr class="sys-empty-row"><td colspan="9">/);
+    expect(customers).toMatch(/<tr class="sys-empty-row"><td colspan="9">/);
     expect(css).toMatch(/\.tbl tbody tr\.sys-empty-row td,/);
     expect(css).toMatch(/\.tbl:has\(> tbody > tr\.sys-empty-row\) thead,?/);
   });
