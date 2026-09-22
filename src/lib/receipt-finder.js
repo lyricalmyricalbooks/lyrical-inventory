@@ -1,12 +1,25 @@
 // Pure receipt discovery and review rules. Missing evidence stays missing.
 import { roundCents } from './money.js';
 
-export const RECEIPT_QUERY = '(receipt OR invoice OR bill OR purchase OR payment OR shipping OR tax OR order)';
+// What the finder looks for when the keyword box is empty. Matching "order",
+// "tax", "payment" or "shipping" anywhere in an email found about 200
+// conversations a month in the publisher's real mailbox — notifications about
+// this very app, promotions, their own sent invoices — and a genuine receipt
+// four weeks back sat past the 100th of them, out of reach of a 25-email page.
+// Gmail's own Purchases sorting, receipt-shaped subject lines and PDF invoices
+// found 17, with every receipt among them on the first page.
+export const RECEIPT_QUERY = '(category:purchases OR subject:(receipt OR invoice OR bill OR statement OR "order confirmation" OR "payment confirmation" OR "payment received") OR (has:attachment filename:pdf (invoice OR receipt)))';
+
+// Never an expense, whatever the search: the publisher's own mail (the invoices
+// they send customers came back as expenses to dismiss), GitHub notifications
+// about this app — full of the words receipt and invoice — and the shop's own
+// "You've received a new order!" sale alerts.
+export const RECEIPT_NOISE = '-from:me -from:notifications@github.com -subject:"received a new order"';
 export const RECEIPT_STATUSES = ['all', 'ready', 'review', 'duplicate', 'queued', 'imported', 'ignored'];
 
 export function receiptQuery({ query = '', after = '', before = '', sender = '', attachments = false, category = '' } = {}) {
   const quote = value => '"' + String(value).replace(/["\\\r\n]/g, ' ') + '"';
-  const parts = [query.trim() || RECEIPT_QUERY, '-in:trash', '-in:spam'];
+  const parts = [query.trim() || RECEIPT_QUERY, RECEIPT_NOISE, '-in:trash', '-in:spam'];
   if (after) parts.push('after:' + after.replaceAll('-', '/'));
   // Gmail's before operator is exclusive. The date picker is inclusive.
   if (before) {

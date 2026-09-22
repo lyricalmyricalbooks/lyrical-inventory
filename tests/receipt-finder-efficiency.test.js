@@ -98,6 +98,18 @@ describe('recognising a failure that would repeat on every email', () => {
   });
 });
 
+describe('what the in-app reader is asked to keep', () => {
+  it('treats a subscription as a purchase and skips the business\'s own sales', async () => {
+    const readAi = vi.fn(async () => ({ text: '{"receipts":[]}' }));
+    const { extractFoundReceipts } = await import('../src/lib/receipt-finder-client.js');
+    await extractFoundReceipts({ email: { subject: 'Your receipt', from: 'a', date: '', body: 'Total CA$31.64', fileParts: [] }, readAi });
+    const prompt = readAi.mock.calls[0][0][0].text;
+    expect(prompt).toMatch(/subscription, software or online-service charge is a purchase receipt/);
+    expect(prompt).toMatch(/skip sales it made/);
+    expect(prompt).not.toMatch(/balances and software notifications/);
+  });
+});
+
 describe('reading the AI answer', () => {
   it('accepts JSON wrapped in a code fence or surrounding words', () => {
     expect(parseReceiptJson('```json\n{"receipts":[]}\n```')).toEqual({ receipts: [] });
