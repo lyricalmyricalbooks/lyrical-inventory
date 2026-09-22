@@ -212,6 +212,10 @@ import { followableUrl } from './lib/receipt-links.js';
 import { isGratuityExpense } from './lib/receipt-storage.js';
 import { pdfLinkPlacements, pdfSafeLinkUrl } from './lib/pdf-links.js';
 import {
+  SYNC_CONFLICTS_KEY, recordConflicts, listConflicts, dismissConflict, locateConflictTarget,
+  applyConflictRestore, describeRecord, renderConflictListHtml, describeConflictCount,
+} from './lib/sync-conflicts.js';
+import {
   CODE_TO_SYMBOL,
   PAYMENT_TYPE_DIRECT_TO_ARTIST,
   buildPaymentMeta,
@@ -3177,24 +3181,197 @@ function adoptMergedState(bookId, res) {
   // differ, the next saveState writes the difference instead of skipping it.
   lastSavedHashes[bookId] = JSON.stringify(res.state);
   if (activeBook === bookId || activeBook === 'all') renderCurrent();
-  reportMergeOutcome(res.conflicts);
+  reportMergeOutcome(bookId, res.conflicts);
 }
 
 // A merge is normal and needs no alarm; a conflict means the same record was
 // edited in two places and one version was dropped, which the user should hear
-// about rather than discover in the ledger later.
-function reportMergeOutcome(conflicts) {
-  const n = Array.isArray(conflicts) ? conflicts.length : 0;
+// about rather than discover in the ledger later — and, since the dropped
+// version used to vanish with the toast, it is now kept on this device (see
+// src/lib/sync-conflicts.js) and can be compared and brought back from the
+// "Edits made on two devices" card on the Backups tab.
+function reportMergeOutcome(bookId, conflicts) {
+  const all = Array.isArray(conflicts) ? conflicts : [];
+  if (all.length) console.warn('[sync] merge conflicts — this device\'s version was kept:', all);
+  let added = [];
+  try {
+    const book = BOOKS[bookId];
+    ({ added } = recordConflicts(syncConflictStorage(), {
+      bookId,
+      bookTitle: (book && book.title) || bookId,
+      cur: book ? getBookCurrencyCode(book) : '',
+      conflicts: all,
+    }));
+  } catch (e) {
+    // Recording is a safety net; it must never turn a successful save into an error.
+    console.warn('[sync] could not record merge conflicts', e);
+  }
+  refreshSyncConflictUi();
+  // Only conflicts a person can act on are counted. Two devices disagreeing
+  // about a running balance the app has already recomputed is not news.
+  const n = added.length;
   if (!n) {
     showToast('↩ Merged in changes from another device', 'ok', 4000);
     return;
   }
-  console.warn('[sync] merge conflicts — this device\'s version was kept:', conflicts);
+  const where = isPublisherSession() ? ' Compare them under Backups → Needs review.' : '';
   showToast(
-    `⚠ Merged with another device · ${n} record${n === 1 ? '' : 's'} changed in both places kept this device's version`,
-    'warn', 7000
+    `⚠ ${n} record${n === 1 ? ' was' : 's were'} changed on two devices at once — this device's version was kept.${where}`,
+    'warn', 9000
   );
 }
+
+// ── EDITS MADE ON TWO DEVICES — REVIEW ───────────────────────────────────────
+// The review screen for the conflicts recorded above. Publisher-only: it lives
+// on the Backups tab (which authors can't open), and restoring rewrites a
+// book's ledger, which author sessions never do.
+
+function syncConflictStorage() {
+  try { return window.localStorage; } catch { return null; }
+}
+
+// Paints the Backups card, the sidebar badge and (if open) the review list
+// from what is stored. Cheap — a localStorage read and a few text writes.
+function refreshSyncConflictUi() {
+  try {
+    const n = listConflicts(syncConflictStorage()).length;
+    const card = $('sync-review-card');
+    if (card) card.classList.toggle('has-items', n > 0);
+    const kicker = $('sync-review-kicker');
+    if (kicker) kicker.textContent = n ? 'Needs review' : 'All clear';
+    const status = $('sync-review-status');
+    if (status) status.textContent = describeConflictCount(n);
+    const open = $('sync-review-open');
+    if (open) open.hidden = n === 0;
+
+    const nav = document.querySelector('#pub-sidebar .snav[title="Backups"]');
+    if (nav) {
+      let badge = nav.querySelector('.sync-review-badge');
+      if (!badge && n) {
+        badge = document.createElement('span');
+        badge.className = 'sync-review-badge pill red';
+        nav.appendChild(badge);
+      }
+      if (badge) {
+        badge.hidden = n === 0;
+        badge.textContent = String(n);
+        badge.setAttribute('aria-label', `${n} record${n === 1 ? '' : 's'} changed on two devices need${n === 1 ? 's' : ''} review`);
+      }
+    }
+    const ov = $('m-sync-conflicts');
+    if (ov && ov.style.display === 'flex') renderSyncConflictList();
+  } catch (e) {
+    console.warn('[sync] could not paint the review card', e);
+  }
+}
+
+function renderSyncConflictList() {
+  const body = $('sync-conflicts-body');
+  if (!body) return;
+  const entries = listConflicts(syncConflictStorage());
+  body.innerHTML = renderConflictListHtml(entries);
+  const count = $('sync-conflicts-count');
+  if (count) count.textContent = entries.length ? `${entries.length} to review` : '';
+}
+
+function openSyncConflicts() {
+  renderSyncConflictList();
+  openM('sync-conflicts');
+}
+
+// The live region is permanent markup in the dialog, so it survives the list
+// being rebuilt and still gets announced.
+function announceSyncConflict(msg) {
+  const live = $('sync-conflicts-live');
+  if (live) live.textContent = msg;
+}
+
+// After a card goes away, put keyboard focus on the next one's first button
+// (or the dialog's Close button) instead of dropping it on <body>.
+function afterSyncConflictAction(index) {
+  refreshSyncConflictUi();
+  const items = document.querySelectorAll('#sync-conflicts-body .sc-item');
+  const next = items[Math.min(index, items.length - 1)];
+  const target = (next && next.querySelector('button')) || $('sync-conflicts-close');
+  if (target) { try { target.focus(); } catch { /* focus is best-effort */ } }
+}
+
+function syncConflictIndex(id) {
+  return listConflicts(syncConflictStorage()).findIndex(e => e.id === id);
+}
+
+function keepSyncConflict(id) {
+  const entries = listConflicts(syncConflictStorage());
+  const index = entries.findIndex(e => e.id === id);
+  if (index === -1) { afterSyncConflictAction(0); return; }
+  dismissConflict(syncConflictStorage(), id);
+  announceSyncConflict(`Kept this device's version: ${describeRecord(entries[index])}.`);
+  afterSyncConflictAction(index);
+}
+
+async function restoreSyncConflict(id) {
+  if (!isPublisherSession()) { showToast('Only the publisher can change these records.', 'err'); return; }
+  const entry = listConflicts(syncConflictStorage()).find(e => e.id === id);
+  if (!entry) { afterSyncConflictAction(0); return; }
+  const summary = describeRecord(entry);
+  const book = BOOKS[entry.bookId];
+  if (!book) {
+    showToast(`“${entry.bookTitle || 'That book'}” is no longer in your catalogue, so this can't be put back. Choose “Keep this device's version” to clear it.`, 'warn', 7000);
+    return;
+  }
+  const loaded = () => { const s = states[entry.bookId]; return s && !s._loadFailed ? s : null; };
+  if (!loaded()) {
+    showToast(`${book.title} hasn't loaded on this device yet. Open it — or reload once you're back online — then try again.`, 'warn', 7000);
+    return;
+  }
+
+  let target = locateConflictTarget(loaded(), entry);
+  if (target.status === 'restored') {
+    dismissConflict(syncConflictStorage(), id);
+    announceSyncConflict(`Already using the other device's version: ${summary}.`);
+    afterSyncConflictAction(Math.max(0, syncConflictIndex(id)));
+    return;
+  }
+  if (target.status === 'changed' || target.status === 'missing') {
+    const ok = await confirmDialog(
+      target.status === 'missing'
+        ? `“${summary}” has been deleted on this device since the two versions clashed. Using the other device's version will add it back to ${book.title}.`
+        : `“${summary}” has been edited again on this device since the two versions clashed. Using the other device's version will replace those newer edits as well.`,
+      { title: 'This record has changed since', okLabel: "Use the other device's version", cancelLabel: 'Leave it as it is', danger: true }
+    );
+    if (!ok) return;
+    // The dialog was open for a while; look again rather than trust the old answer.
+    if (!loaded()) { showToast(`${book.title} is reloading — try again in a moment.`, 'warn', 5000); return; }
+    target = locateConflictTarget(loaded(), entry);
+  }
+
+  const index = Math.max(0, syncConflictIndex(id));
+  const s = loaded();
+  applyConflictRestore(s, entry, target);
+  // loadBook copies this one setting onto the book object; keep them agreeing.
+  if (target.loc.kind === 'value' && target.loc.field === 'artistPaymentLink') book.artistPaymentLink = s.artistPaymentLink;
+  // Same recompute the merge path runs, so stock, revenue, store counts and
+  // every running balance reflect the restored record before it is saved.
+  recomputeAfters(s, book);
+  _appliedIdsCache = null;
+  dismissConflict(syncConflictStorage(), id);
+  if (activeBook === entry.bookId || activeBook === 'all') renderCurrent();
+  saveState(entry.bookId).catch(e => console.error('[sync] save after restore failed', e));
+
+  announceSyncConflict(`Now using the other device's version: ${summary}.`);
+  const list = target.loc.kind === 'row' ? target.loc.list : '';
+  const sheetNote = sheetsUrl && ['hist', 'ledger', 'expenses'].includes(list)
+    ? ' Your Google Sheet isn’t updated automatically — use “Sync all data” on the Sheets tab.'
+    : '';
+  showToast(`✓ Restored the other device's version.${sheetNote}`, 'ok', sheetNote ? 7000 : 3500);
+  afterSyncConflictAction(index);
+}
+
+// Another tab on this device recorded or cleared one — keep this tab's badge honest.
+window.addEventListener('storage', (e) => { if (e.key === SYNC_CONFLICTS_KEY) refreshSyncConflictUi(); });
+Object.assign(window, { openSyncConflicts, keepSyncConflict, restoreSyncConflict, refreshSyncConflictUi });
+// First paint, so a conflict recorded in an earlier session is flagged on load.
+refreshSyncConflictUi();
 
 async function loadBook(bookId) {
   setSyncState('syncing', '<b>Firestore</b> · loading…');
@@ -4216,6 +4393,7 @@ export function switchTab(name) {
   if (name === 'bigcartel') { renderBigCartelTab(); }
   if (name === 'todo') renderTodoTab();
   if (name === 'intel') renderIntel();
+  if (name === 'backups') refreshSyncConflictUi();
 }
 
 function updateHeader() {
