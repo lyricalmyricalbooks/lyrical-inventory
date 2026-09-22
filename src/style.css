@@ -5761,6 +5761,8 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .sec-head-title{margin:0 0 .45rem;text-wrap:balance;}
 /* A head whose section is a supporting read, not the screen's entry point. */
 .sec-head.is-muted{--sec-accent:var(--slate);}
+/* A head whose section holds actions that overwrite or erase records. */
+.sec-head.is-danger{--sec-accent:var(--rose);}
 /* The heads sit above content that carries its own cards (`.book-strip`,
    `.ch-panel`), so the rhythm has to come from the gap between one section and
    the next — group spacing has to beat the 16px the cards already use between
