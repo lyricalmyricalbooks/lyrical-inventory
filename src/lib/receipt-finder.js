@@ -21,6 +21,29 @@ export function receiptQuery({ query = '', after = '', before = '', sender = '',
   return parts.join(' ');
 }
 
+// A receipt always names an amount, in its text or in an attached PDF or photo.
+// An email with neither — a shipping-status ping, a newsletter, a password
+// reset that happens to say "order" — cannot be a receipt, so it is set aside
+// without spending an AI read on it. Matches a currency mark or code beside a
+// number, or a money word followed by a two-decimal figure.
+//
+// Every part is anchored on a single character or bounded in length. This runs
+// on whatever text anyone mails the publisher, and an open-ended run such as
+// `\d[\d,.]*` before the currency mark made one long line of digits cost the
+// square of its length — 40,000 digits held the scan for seconds.
+const AMOUNT_IN_TEXT = new RegExp([
+  String.raw`(?:[$€£¥₹]|\b(?:CAD|USD|EUR|GBP|AUD|NZD|CHF|JPY|MXN|INR)\b)\s?-?\d`,
+  // "12,50 $" is how French-Canadian receipts write it. Only the digit right
+  // before the mark matters for a yes/no answer.
+  String.raw`\d\s?(?:[$€£]|\b(?:CAD|USD|EUR|GBP|AUD|NZD|CHF|SEK|NOK|DKK)\b)`,
+  String.raw`\b(?:total|subtotal|amount|paid|charged|balance|due)\b[^\n\d]{0,40}\d[\d,.]{0,15}[.,]\d{2}\b`,
+].join('|'), 'i');
+
+export function receiptWorthReading(email) {
+  if ((email?.fileParts || []).length) return true;
+  return AMOUNT_IN_TEXT.test(`${email?.subject || ''}\n${email?.body || ''}`);
+}
+
 export function receiptMoney(value) {
   if (value === null || value === undefined || value === '') return null;
   if (typeof value === 'number') return Number.isFinite(value) && Number.isSafeInteger(Math.round(value * 100)) ? roundCents(value) : null;
@@ -125,20 +148,30 @@ export function receiptExpense(draft, rate, receiptFiles = []) {
 
 // Concurrent tabs must not replace each other's outbox. Imported state is
 // monotonic, and otherwise only an actually edited draft gets a new timestamp.
+//
+// A key merely missing from `incoming` may be one another tab added, so absence
+// never removes anything — which also meant a cleared failure or a dropped
+// email copy quietly came back from storage on the next save. Removals are
+// therefore named explicitly in `incoming.removed`, applied before the incoming
+// entries so a key removed and then re-read in the same save keeps its new
+// value. A finished read is never un-done by a removal.
 export function mergeFinderSnapshot(previous, incoming) {
-  if (!previous) return incoming;
+  const { removed, ...next } = incoming;
+  if (!previous) return next;
   const drafts = new Map((previous.drafts || []).map(row => [row.id, row]));
-  for (const row of incoming.drafts || []) {
+  for (const row of next.drafts || []) {
     const old = drafts.get(row.id);
     if (!old || row.status === 'imported' || (old.status !== 'imported' && (row.updatedAt || 0) >= (old.updatedAt || 0))) drafts.set(row.id, row);
   }
   const emails = { ...previous.emails };
-  for (const [key, email] of Object.entries(incoming.emails || {})) {
+  for (const key of removed?.emails || []) delete emails[key];
+  for (const [key, email] of Object.entries(next.emails || {})) {
     emails[key] = { ...email, savedFiles: { ...emails[key]?.savedFiles, ...email.savedFiles } };
   }
   const scans = { ...previous.scans };
-  for (const [key, scan] of Object.entries(incoming.scans || {})) {
+  for (const key of removed?.scans || []) if (!scans[key]?.done) delete scans[key];
+  for (const [key, scan] of Object.entries(next.scans || {})) {
     if (!scans[key]?.done || scan.done) scans[key] = scan;
   }
-  return { ...previous, ...incoming, drafts: [...drafts.values()], emails, scans };
+  return { ...previous, ...next, drafts: [...drafts.values()], emails, scans };
 }

@@ -33,7 +33,6 @@ import {
   getBook,
   getState,
   isAuthor,
-  isGratuityExpense,
   isPermissionDenied,
   notifyPublisherSubmission,
   reportClientError,
@@ -87,6 +86,7 @@ import {
   externalLinkRefs,
   isCloudReceipt,
   isExternalLink,
+  isGratuityExpense,
   isLocalReceipt,
   isOurCloudReceipt,
   isRentExpense,
@@ -3164,7 +3164,9 @@ async function _callAiForReceipts(apiKey, parts, opts = {}) {
       model: TAX_CENTER.settings?.openRouterModel?.trim() || 'openrouter/free' });
   } catch (error) {
     if (error?.name === 'AbortError') throw error;
-    throw Object.assign(new Error(`OpenRouter: ${friendlyOpenRouterError(error)}`), { __alreadyFriendly: true });
+    // The status travels with the friendly wording so the Gmail finder can tell
+    // a refused key (stop the scan) from one email that failed to read.
+    throw Object.assign(new Error(`OpenRouter: ${friendlyOpenRouterError(error)}`), { __alreadyFriendly: true, status: error?.status });
   }
 }
 
