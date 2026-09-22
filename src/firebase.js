@@ -1,8 +1,8 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, set, onValue, get, push, remove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getAuth, signInWithPopup, reauthenticateWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getStorage, ref as sRef, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, setDoc, getDoc, getDocs, getDocFromServer, collection, onSnapshot, deleteDoc, writeBatch, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+import { getDatabase, ref, set, onValue, get, push, remove } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js";
+import { getAuth, signInWithPopup, reauthenticateWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+import { getStorage, ref as sRef, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-storage.js";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, setDoc, getDoc, getDocs, getDocFromServer, collection, onSnapshot, deleteDoc, writeBatch, runTransaction } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 import { receiptDuplicate } from './lib/receipt-finder.js';
 import { ALL_PARTS, LIST_PARTS, assembleParts, emptyPart, splitState, stitchState, mergePart } from './lib/merge-state.js';
 
@@ -133,7 +133,7 @@ window._fbUploadReceipt = async (file, path) => {
 window._fbDeleteReceipt = async (url) => {
   if (!url || !url.includes('firebasestorage')) return;
   try {
-    const { getStorage: gStorage, ref: gRef, deleteObject } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js");
+    const { getStorage: gStorage, ref: gRef, deleteObject } = await import("https://www.gstatic.com/firebasejs/12.19.0/firebase-storage.js");
     const st = gStorage();
     const fileRef = gRef(st, url);
     await deleteObject(fileRef);
