@@ -3883,7 +3883,7 @@ function _batchExpenseDescription(row) {
  *            the same photo in twice looks like.
  * Matched on date + amount + currency, the same test the email import uses.
  */
-function _batchExpenseDuplicate(row) {
+function _batchExpenseDuplicate(row, ledgerIndex) {
   const amount = Number(row.amount) || 0;
   if (!amount || !row.date) return '';
   const cur = String(row.currency || '').toUpperCase();
@@ -3899,7 +3899,13 @@ function _batchExpenseDuplicate(row) {
   if (twin && _batchExpenseRows.indexOf(twin) < _batchExpenseRows.indexOf(row)) return 'batch';
 
   if (_batchExpenseDest === 'business') {
-    return _findDuplicateExpense({ date: row.date, amount, currency: cur }) ? 'ledger' : '';
+    // ⚡ Bolt Optimization: accept the caller's precomputed ledger index
+    // (see _buildDuplicateExpenseIndex) instead of always falling through to
+    // _findDuplicateExpense's linear scan of every business expense on file.
+    // A render/repaint pass calls this once per staged row, so without an
+    // index a 30-row batch against a 1,000-row expense history was doing
+    // ~30,000 comparisons per pass instead of ~1,000.
+    return _findDuplicateExpense({ date: row.date, amount, currency: cur }, ledgerIndex) ? 'ledger' : '';
   }
   const hit = (getState().expenses || []).some(e =>
     e.date === row.date &&
@@ -4067,9 +4073,10 @@ function toggleAllBatchExpenses(on) {
 
 function deselectDuplicateBatchExpenses() {
   let n = 0;
+  const dupIndex = _batchExpenseDest === 'business' ? _buildDuplicateExpenseIndex() : null;
   // Snapshot first: unticking as we go changes what _batchExpenseDuplicate
   // sees for the rows after it, so a run of three copies would only lose one.
-  const flagged = _batchExpenseRows.filter(r => r.include !== false && _batchExpenseDuplicate(r));
+  const flagged = _batchExpenseRows.filter(r => r.include !== false && _batchExpenseDuplicate(r, dupIndex));
   flagged.forEach(r => { r.include = false; n++; });
   renderBatchExpenseRows();
   showToast(n ? `Deselected ${n} likely duplicate${n > 1 ? 's' : ''}` : 'No duplicates flagged', n ? 'ok' : 'warn');
@@ -4098,8 +4105,8 @@ const BATCH_STATUS_LABEL = {
   manual: 'Typed in'
 };
 
-function _batchExpenseStatusCell(row) {
-  const dup = _batchExpenseDuplicate(row);
+function _batchExpenseStatusCell(row, ledgerIndex) {
+  const dup = _batchExpenseDuplicate(row, ledgerIndex);
   const conf = Number(row.confidence);
   const bits = [`<span class="bx-status bx-status-${row.status}">${BATCH_STATUS_LABEL[row.status] || ''}</span>`];
   if (row.status === 'scanned' && Number.isFinite(conf) && conf > 0 && conf < 0.5) {
@@ -4129,6 +4136,8 @@ function renderBatchExpenseRows() {
   const curOptions = (sel) => (currencies.includes(sel) ? currencies : [sel, ...currencies])
     .filter(Boolean)
     .map(c => `<option${c === sel ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('');
+  // Built once for the whole table, not once per row — see _batchExpenseDuplicate.
+  const dupIndex = _batchExpenseDest === 'business' ? _buildDuplicateExpenseIndex() : null;
 
   wrap.innerHTML = `
     <div class="tbl-wrap bx-tbl-wrap">
@@ -4140,11 +4149,11 @@ function renderBatchExpenseRows() {
         </tr></thead>
         <tbody>
         ${rows.map(r => `
-          <tr data-bx-row="${r.uid}"${_batchExpenseDuplicate(r) ? ' class="bx-dup"' : ''}>
+          <tr data-bx-row="${r.uid}"${_batchExpenseDuplicate(r, dupIndex) ? ' class="bx-dup"' : ''}>
             <td class="bx-col-check"><input type="checkbox" data-bx-include="${r.uid}" ${r.include !== false ? 'checked' : ''} aria-label="Include this expense"></td>
             <td class="bx-cell-file">
               <div class="bx-fname" title="${escapeHtml(r.fileName || 'No receipt attached')}">${r.file ? `🧾 ${escapeHtml(r.fileName)}` : '<span class="bx-nofile">no receipt</span>'}</div>
-              <div class="bx-status-wrap" data-bx-status="${r.uid}">${_batchExpenseStatusCell(r)}</div>
+              <div class="bx-status-wrap" data-bx-status="${r.uid}">${_batchExpenseStatusCell(r, dupIndex)}</div>
             </td>
             <td><input type="date" data-bx-uid="${r.uid}" data-bx-field="date" value="${escapeHtml(r.date || '')}" aria-label="Date"></td>
             <td class="bx-cell-desc">
@@ -4200,11 +4209,12 @@ function renderBatchExpenseRows() {
  * typing in another row, which is exactly when a scan tends to land.
  */
 function _repaintBatchExpenseStatuses() {
+  const dupIndex = _batchExpenseDest === 'business' ? _buildDuplicateExpenseIndex() : null;
   _batchExpenseRows.forEach(row => {
     const cell = document.querySelector(`[data-bx-status="${row.uid}"]`);
-    if (cell) cell.innerHTML = _batchExpenseStatusCell(row);
+    if (cell) cell.innerHTML = _batchExpenseStatusCell(row, dupIndex);
     const tr = document.querySelector(`[data-bx-row="${row.uid}"]`);
-    if (tr) tr.classList.toggle('bx-dup', !!_batchExpenseDuplicate(row));
+    if (tr) tr.classList.toggle('bx-dup', !!_batchExpenseDuplicate(row, dupIndex));
   });
 }
 
@@ -4428,7 +4438,8 @@ async function submitBatchExpenses() {
     return;
   }
 
-  const dupes = rows.filter(r => _batchExpenseDuplicate(r) === 'ledger');
+  const dupIndex = _batchExpenseDest === 'business' ? _buildDuplicateExpenseIndex() : null;
+  const dupes = rows.filter(r => _batchExpenseDuplicate(r, dupIndex) === 'ledger');
   if (dupes.length) {
     const proceed = await confirmDialog(
       `${dupes.length} of these already look like expenses in your ledger (same date, same amount). Log them again anyway?`,
@@ -5542,6 +5553,12 @@ async function importEmailReceiptDrafts() {
   let imported = 0, skippedDup = 0, relinked = 0, importedNeedsAmount = 0;
   let draftIdx = 0;
   const gmailSavedByMsg = {}; // msgId → [saved local:// paths] for that email
+  // ⚡ Bolt Optimization: build the ledger index once instead of letting
+  // _findDuplicateExpense fall back to an O(businessExpenses) linear scan on
+  // every draft. Kept in sync as drafts are imported below (new expenses are
+  // unshifted mid-loop) so a duplicate pair within the same import batch is
+  // still caught, matching the old per-item full-rescan behavior exactly.
+  const dupIndex = _buildDuplicateExpenseIndex();
   for (const item of drafts) {
     const currency = (item.currency || baseCur).toUpperCase();
     const amount = Number(item.amount || 0);
@@ -5556,7 +5573,7 @@ async function importEmailReceiptDrafts() {
     // there's nothing to do. If it matches one that has NO receipt yet, fall
     // through and attach the files we're about to save instead of skipping —
     // this is how a previously-imported expense gets its "View Local" link.
-    const dup = _findDuplicateExpense({ ...item, currency });
+    const dup = _findDuplicateExpense({ ...item, currency }, dupIndex);
     if (dup && _expenseHasReceipt(dup)) {
       skippedDup++;
       draftIdx++;
@@ -5589,7 +5606,7 @@ async function importEmailReceiptDrafts() {
     }
     if (!fxRate) fxRate = 1; // last resort
 
-    TAX_CENTER.businessExpenses.unshift({
+    const newExpense = {
       id: Date.now() + Math.floor(Math.random() * 100000),
       desc: item.description || item.vendor || 'Email receipt',
       vendor: item.vendor || '',
@@ -5611,7 +5628,14 @@ async function importEmailReceiptDrafts() {
       sourceSnippet: item.sourceSnippet || '',
       importedFromEmail: true,
       importedAt: new Date().toISOString()
-    });
+    };
+    TAX_CENTER.businessExpenses.unshift(newExpense);
+    // Keep the index in step so a later draft in this same batch that matches
+    // this brand-new expense is still recognized as a duplicate.
+    if (!newExpense.amountUnknown) {
+      const key = _duplicateExpenseKey(newExpense.date, newExpense.amount, newExpense.currency);
+      if (!dupIndex.has(key)) dupIndex.set(key, newExpense);
+    }
     imported++;
     if (item.amountUnknown) importedNeedsAmount++;
   }
