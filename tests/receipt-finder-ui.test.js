@@ -85,6 +85,20 @@ describe('receipt finder UI', () => {
     document.querySelector('[data-status="review"]').click();
     expect(document.querySelector('[data-draft]').dataset.draft).toBe('publisher@example.com:m1:0');
   });
+  it('dismisses a receipt with one click on its row, without opening it', async () => {
+    // The only way to dismiss a receipt used to be a button buried at the
+    // bottom of the opened row, after the edit fields, the line items and the
+    // original email. The X on the row itself is the whole point now.
+    await mount();
+    const row = document.querySelector('[data-draft]');
+    expect(row.open).toBe(false);
+    row.querySelector('[data-dismiss]').click(); await settle();
+    expect(mocks.saved.drafts[0].status).toBe('ignored');
+    // Clicking it must not also spring the row open — it sits inside the
+    // native <summary>, whose default click behaviour is exactly that.
+    expect(document.querySelector('[data-draft]').open).toBe(false);
+    expect(document.querySelector('[data-draft]').textContent).toContain('Dismissed');
+  });
   it('connects read-only and automatically extracts candidate messages', async () => {
     await mount();
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
@@ -111,22 +125,19 @@ describe('receipt finder UI', () => {
     expect(document.querySelector('.finder-email').textContent).toContain('<script>');
   });
   it('names the missing setup steps without starting a scan', async () => {
+    // The setup report is checked before a single Gmail request is spent, and
+    // the missing step now has to surface in the gate card itself — there is
+    // no separate settings panel for it to hide inside any more.
     mocks.check.mockResolvedValue({ level: 'error', headline: 'One thing is still missing.',
       steps: ['Add GEMINI_API_KEY — a Gemini key restricted to the Generative Language API — in the script’s Script Properties. It never goes into this app.'] });
     await mount();
-    document.querySelector('[data-action="check-setup"]').click(); await settle();
-    const panel = document.querySelector('[data-finder-check]');
-    expect(panel.className).toContain('is-error');
-    expect(panel.textContent).toContain('GEMINI_API_KEY');
-    expect(panel.querySelector('.pill.red')).not.toBeNull();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="connect"]').click(); await settle();
+    document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
+    const gate = document.querySelector('[data-finder-gate]');
+    expect(gate.hidden).toBe(false);
+    expect(gate.textContent).toContain('GEMINI_API_KEY');
     expect(mocks.list).not.toHaveBeenCalled();
-  });
-  it('confirms a ready deployment after saving the address', async () => {
-    await mount();
-    document.querySelector('[data-action="save-setup"]').click(); await settle();
-    expect(mocks.check).toHaveBeenCalledWith({ endpoint: 'https://script.google.com/macros/s/test/exec' });
-    expect(document.querySelector('[data-finder-check]').className).toContain('is-ready');
-    expect(document.querySelector('[data-finder-status]').textContent).toContain('ready to scan');
   });
   it('reuses a saved Gmail connection instead of asking for access again', async () => {
     // The connection used to live only in memory, and Google was asked to
@@ -267,7 +278,9 @@ describe('receipt finder UI', () => {
     deps.service = () => '';
     mocks.check.mockResolvedValue({ level: 'error', fix: 'use-sheets', headline: 'The script did not answer.', steps: ['Check the address.'] });
     await mount();
-    document.querySelector('[data-action="check-setup"]').click(); await settle();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="connect"]').click(); await settle();
+    document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
     expect(document.querySelector('[data-action="use-sheets"]')).toBeNull();
     expect(document.querySelector('[data-finder-gate]').textContent).toContain('Check the address.');
   });
@@ -304,20 +317,24 @@ describe('receipt finder UI', () => {
       report: { capabilities: { receiptExtraction: true, receiptSelfTest: true } } });
     mocks.aiTest.mockResolvedValue({ ok: true, aiOk: false, aiStatus: 403 });
     await mount();
-    document.querySelector('[data-action="check-setup"]').click(); await settle();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="connect"]').click(); await settle();
+    document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
     expect(mocks.aiTest).toHaveBeenCalled();
-    const panel = document.querySelector('[data-finder-check]');
-    expect(panel.className).toContain('is-error');
-    expect(panel.textContent).toContain('would not accept');
-    expect(document.querySelector('[data-finder-gate]').hidden).toBe(false);
+    expect(mocks.list).not.toHaveBeenCalled();
+    const gate = document.querySelector('[data-finder-gate]');
+    expect(gate.hidden).toBe(false);
+    expect(gate.textContent).toContain('would not accept');
   });
   it('skips the live key test on a deployment too old to offer it', async () => {
     mocks.check.mockResolvedValue({ level: 'ready', headline: 'Ready.', steps: [],
       report: { capabilities: { receiptExtraction: true } } });
     await mount();
-    document.querySelector('[data-action="check-setup"]').click(); await settle();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="connect"]').click(); await settle();
+    document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
     expect(mocks.aiTest).not.toHaveBeenCalled();
-    expect(document.querySelector('[data-finder-check]').className).toContain('is-ready');
+    expect(mocks.list).toHaveBeenCalled();
   });
   it('names why an email could not be read, in the alert itself', async () => {
     // The count alone was useless: the cause sat in a collapsed list below the

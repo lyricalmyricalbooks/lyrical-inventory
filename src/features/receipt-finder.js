@@ -1,6 +1,6 @@
 import { escapeHtml as esc } from '../lib/html.js';
 import { receiptQuery, normalizeFoundReceipt, receiptProblems, receiptReviewStatus, receiptMoney, RECEIPT_STATUSES } from '../lib/receipt-finder.js';
-import { createReceiptFinderClient, extractFoundReceipts, decodeGmailBase64, checkReceiptFinderService, testReceiptAiService, describeAiTest, systemicReceiptFailure, receiptDailySchedule, describeDailySweep, FINDER_ENDPOINT_PATTERN } from '../lib/receipt-finder-client.js';
+import { createReceiptFinderClient, extractFoundReceipts, decodeGmailBase64, checkReceiptFinderService, testReceiptAiService, describeAiTest, systemicReceiptFailure, receiptDailySchedule, describeDailySweep } from '../lib/receipt-finder-client.js';
 import { createReceiptFinderStore } from '../lib/receipt-finder-store.js';
 import { flushReceiptOutbox } from '../lib/receipt-finder-outbox.js';
 import { downloadBlob } from '../lib/download.js';
@@ -227,18 +227,6 @@ async function mountReceiptFinder(element, dependencies) {
       <p data-finder-status role="status" aria-live="polite">${state.lastScan ? `Last scan: ${esc(new Date(state.lastScan).toLocaleString())}` : 'Pick a period, then scan. Nothing is filed until you approve it.'}</p>
     </section>
     <div data-finder-alert></div>
-    <details class="finder-setup"><summary>Advanced: receipt reading service</summary><div class="form-group">
-      <p>The finder reads receipts through the same Google Sheet script this app already uses. Leave the box below empty unless you run a separate Receipt Finder deployment.</p>
-      <label for="finder-endpoint">Separate deployment address (optional)</label>
-      <input type="url" id="finder-endpoint" value="${esc(state.endpoint)}" placeholder="https://script.google.com/macros/s/…/exec">
-      <p>Uses your saved app AI keys first, then the optional separate deployment. Gmail access is read-only and lasts for this session.</p>
-      <div class="finder-toolbar">
-        <button class="btn" type="button" data-action="save-setup">Save address</button>
-        <button class="btn" type="button" data-action="check-setup">Test connection</button>
-        <button class="btn" type="button" data-action="forget">Clear saved finder data</button>
-      </div>
-      <div class="finder-check" data-finder-check role="status" aria-live="polite"></div>
-    </div></details>
     <div data-finder-summary class="finder-summary"></div>
     <div class="finder-toolbar" data-finder-tabs role="group" aria-label="Filter receipt status"></div>
     <div class="finder-listbar">
@@ -292,11 +280,13 @@ function scheduleRender() {
 function gateSteps() {
   const steps = [];
   if (!tokenLive()) {
+    // The button that does this already sits right above, in the connection
+    // bar — repeating it here just gave the publisher two buttons for the
+    // same click. This step only has to point at it.
     steps.push({ title: state.account ? 'Reconnect Gmail' : 'Connect Gmail',
       body: state.account
-        ? 'Your read-only access has run out for now. One click reconnects it.'
-        : 'Give the app read-only access so it can look through your mail for receipts.',
-      action: 'connect', cta: state.account ? 'Reconnect' : 'Connect Gmail' });
+        ? 'Your read-only access has run out for now. Use the “Reconnect” button above — Google will not ask you to approve it again.'
+        : 'Use the “Connect Gmail” button above to give the app read-only access, so it can look through your mail for receipts.' });
   }
   if (!activeEndpoint()) {
     steps.push({ title: 'Connect your Google Sheet', body: 'The finder reads receipts through the same Google script that syncs your sheet. Set that up once in the “Connect your Google Sheet” tab and this step disappears.' });
@@ -309,7 +299,7 @@ function gateSteps() {
     steps.push({ title: serviceProblem.headline,
       body: canFallBack
         ? 'You no longer need a separate script for this. Switch to the Google Sheet script you have already connected and this goes away.'
-        : (serviceProblem.steps[0] || 'Open Advanced below to check the receipt reading service.'),
+        : (serviceProblem.steps[0] || 'Try scanning again once this is fixed.'),
       action: canFallBack ? 'use-sheets' : '', cta: 'Use my Google Sheet script' });
   }
   return steps;
@@ -320,7 +310,10 @@ function renderGate() {
   const steps = gateSteps();
   gate.hidden = steps.length === 0;
   if (!steps.length) { gate.replaceChildren(); return; }
-  gate.innerHTML = `<h4 class="finder-gate-hed">Two quick things before the first scan</h4><ol class="finder-gate-steps">${steps.map(step => `
+  // gateSteps() never pushes more than two entries, so this never has to
+  // spell out a bigger number.
+  const heading = steps.length === 1 ? 'One quick thing before your first scan' : 'Two quick things before your first scan';
+  gate.innerHTML = `<h4 class="finder-gate-hed">${esc(heading)}</h4><ol class="finder-gate-steps">${steps.map(step => `
     <li><strong>${esc(step.title)}</strong><span>${esc(step.body)}</span>
       ${step.action ? `<button type="button" class="btn gold sm" data-action="${esc(step.action)}">${esc(step.cta)}</button>` : ''}</li>`).join('')}</ol>`;
 }
@@ -477,7 +470,8 @@ function renderDraft(draft, open) {
     <summary><span class="finder-vendor">${esc(draft.vendor || 'Vendor needs review')}<small>${esc(draft.reference || draft.description || 'Receipt details')}</small></span>
       <span class="finder-money">${draft.amount === null ? '—' : esc(`${draft.currency || '?'} ${draft.amount.toFixed(2)}`)}</span>
       <span class="pill ${status === 'ready' || status === 'imported' ? 'green' : status === 'review' || status === 'duplicate' ? 'amber' : 'gray'}">${LABELS[status]}</span>
-      <span class="finder-date">${esc(draft.date || 'Date unknown')}</span></summary>
+      <span class="finder-date">${esc(draft.date || 'Date unknown')}</span>
+      ${!locked ? '<button type="button" class="btn sm sys-target finder-draft-x" data-dismiss title="Not a receipt — dismiss it" aria-label="Dismiss this receipt">✕</button>' : '<span></span>'}</summary>
     <div class="finder-review">
       <div class="finder-toolbar"><label class="finder-select"><input type="checkbox" data-select ${draft.selected ? 'checked' : ''} ${status !== 'ready' ? 'disabled' : ''}> Include in import</label>
         <span class="finder-meta">Confidence ${Math.round(draft.confidence * 100)}%</span>
@@ -502,7 +496,6 @@ function renderDraft(draft, open) {
         <pre class="finder-email">${esc(source?.body || draft.sourceSnippet || 'Email not saved')}</pre>
         <a href="https://mail.google.com/mail/u/?authuser=${encodeURIComponent(draft.account)}#all/${encodeURIComponent(draft.messageId)}" target="_blank" rel="noopener noreferrer">Open original in Gmail</a>
         <div class="finder-toolbar">${(source?.fileParts || []).map((file, index) => file.base64 ? `<button type="button" class="btn sm" data-download="${index}">Download ${esc(file.name)}</button>` : '').join('')}</div></details>
-      ${!locked ? '<button type="button" class="btn sm" data-dismiss>Dismiss receipt</button>' : ''}
       ${status === 'ignored' ? '<button type="button" class="btn sm" data-restore>Restore receipt</button>' : ''}
     </div></details>`;
 }
@@ -604,16 +597,16 @@ async function onClick(event) {
       if (!file?.base64) throw new Error('Attachment is not saved. Scan this email again.');
       downloadBlob(new Blob([decodeGmailBase64(file.base64)], { type: file.mime }), file.name); return;
     }
-    if (button.hasAttribute('data-dismiss') && draft) { draft.status = 'ignored'; draft.selected = false; draft.updatedAt = Date.now(); await persist(); render(); return; }
+    if (button.hasAttribute('data-dismiss') && draft) {
+      // The button lives inside the row's <summary> now, so a plain click
+      // would also toggle the row open — this is the one place that has to
+      // be stopped explicitly.
+      event.preventDefault();
+      draft.status = 'ignored'; draft.selected = false; draft.updatedAt = Date.now(); await persist(); render(); return;
+    }
     if (button.dataset.retryReason) { await retryFailedEmails(button.dataset.retryReason); return; }
     switch (button.dataset.action) {
       case 'connect': await toggleConnection(); break;
-      case 'save-setup':
-        state.endpoint = host.querySelector('#finder-endpoint').value.trim();
-        if (state.endpoint && !FINDER_ENDPOINT_PATTERN.test(state.endpoint)) throw new Error('Enter a valid Apps Script deployment address, or leave the box empty to use your Google Sheet script');
-        serviceReadyFor = '';
-        await persist(); announce(state.endpoint ? 'Separate deployment address saved.' : 'Using your connected Google Sheet script.'); await runSetupCheck(); break;
-      case 'check-setup': await runSetupCheck(); break;
       case 'use-sheets': await useSheetsScript(); break;
       case 'clear-failures': await clearRecordedFailures(); break;
       case 'scan': await scan(false); break;
@@ -628,11 +621,6 @@ async function onClick(event) {
         await persist(); render(); announce('Selected receipts saved for import. They will sync when connected.');
         await resumeReceiptImports(); break;
       case 'show-all': filter = 'all'; resultQuery = ''; host.querySelector('[data-result-search]').value = ''; render(); break;
-      case 'forget':
-        if (busy || flushing) throw new Error('Stop the scan and wait for imports to finish first');
-        if (!await deps.confirm('Remove saved receipt drafts and source files from this device? Already imported expenses are kept.', { title: 'Clear finder data' })) return;
-        await store.clear(uid); state = { ...emptyState(), endpoint: state.endpoint, account: state.account }; await persist(); render();
-        announce('Saved finder drafts and source copies removed from this device. This cannot be undone here.'); break;
     }
   } catch (error) { report(error); }
 }
@@ -686,8 +674,6 @@ async function useSheetsScript() {
   if (!sheets) throw new Error('Connect your Google Sheet first, in the “Connect your Google Sheet” tab.');
   state.endpoint = '';
   serviceReadyFor = ''; serviceProblem = null;
-  const field = host?.querySelector('#finder-endpoint');
-  if (field) field.value = '';
   await persist();
   announce('Now using your Google Sheet script to read receipts.');
   await runSetupCheck();
@@ -703,35 +689,22 @@ async function clearRecordedFailures() {
   announce(dropped ? `Cleared ${dropped} earlier failure${dropped === 1 ? '' : 's'}. Those emails will be read again on the next scan.` : 'There were no failures to clear.');
 }
 
+// The gate card is the only place this result is shown now — there is no
+// separate settings panel to paint it into — so this just records it and
+// leaves the actual rendering to renderGate() on the next render() call.
 function paintSetupCheck(result) {
   serviceProblem = result.level === 'ready' ? null : result;
-  const panel = host?.querySelector('[data-finder-check]');
-  if (!panel) return;
-  const pill = { ready: 'green', warn: 'amber', error: 'red' }[result.level];
-  const glyph = { ready: '✓', warn: '●', error: '✕' }[result.level];
-  const label = { ready: 'Ready', warn: 'Almost ready', error: 'Not ready' }[result.level];
-  const canFallBack = result.fix === 'use-sheets' && state.endpoint && !!deps?.service?.();
-  panel.className = `finder-check is-${result.level}`;
-  panel.innerHTML = `<p><span class="pill ${pill}">${glyph} ${label}</span> ${esc(result.headline)}</p>`
-    + (result.steps.length ? `<ol>${result.steps.map(step => `<li>${esc(step)}</li>`).join('')}</ol>` : '')
-    + (canFallBack ? '<div class="finder-toolbar"><button type="button" class="btn gold sm" data-action="use-sheets">Use my Google Sheet script</button></div>' : '');
 }
 
-// Reads the deployment's own setup report so a missing key is named here,
-// before a scan spends Gmail requests and paid AI calls on every email.
+// Reads the deployment's own setup report so a missing key is named in the
+// gate, before a scan spends Gmail requests and paid AI calls on every email.
+// Only reachable from the "Use my Google Sheet script" fix in the gate now —
+// there is no separate manual check button to trigger it from.
 async function runSetupCheck() {
-  const panel = host?.querySelector('[data-finder-check]');
-  const button = host?.querySelector('[data-action="check-setup"]');
-  if (!panel) return;
-  const typed = host.querySelector('#finder-endpoint').value.trim();
-  const endpoint = typed || activeEndpoint();
-  if (button) button.disabled = true;
-  panel.className = 'finder-check';
-  panel.innerHTML = '<div class="skeleton-line"></div>';
+  const endpoint = activeEndpoint();
   try {
     if (deps.hasAppAi?.() && !endpoint) {
-      const result = { level: 'ready', headline: 'App AI keys are saved. Scans use Gemini first, then OpenRouter.', steps: [] };
-      paintSetupCheck(result);
+      paintSetupCheck({ level: 'ready', headline: 'App AI keys are saved. Scans use Gemini first, then OpenRouter.', steps: [] });
       announce('App AI keys are saved and ready to scan.');
       return;
     }
@@ -740,7 +713,6 @@ async function runSetupCheck() {
     // deployment can prove it, make it actually call Gemini once — a key Google
     // refuses used to report Ready here and then fail one email at a time.
     if (result.level === 'ready' && result.report?.capabilities?.receiptSelfTest) {
-      panel.innerHTML = '<div class="skeleton-line"></div>';
       try {
         result = describeAiTest(await testReceiptAiService({ endpoint, idToken: await deps.user().getIdToken() }));
       } catch (error) {
@@ -764,14 +736,10 @@ async function runSetupCheck() {
     if (result.level === 'ready') { serviceReadyFor = endpoint; await dropFailuresFromOtherService(endpoint); }
     announce(result.level === 'ready' ? 'Receipt service is set up and ready to scan.' : `Receipt service is not ready yet. ${result.headline}`);
   } catch (error) {
-    if (error.name === 'AbortError') { panel.replaceChildren(); return; }
+    if (error.name === 'AbortError') return;
     serviceProblem = { level: 'error', headline: error.message, steps: [] };
-    panel.className = 'finder-check is-error';
-    panel.innerHTML = `<p><span class="pill red">✕ Not ready</span> ${esc(error.message)}</p>`;
   } finally {
-    if (button) button.disabled = false;
-    // The gate at the top mirrors this panel, so it has to be repainted too —
-    // the panel itself lives inside a disclosure the publisher may never open.
+    // The gate mirrors this check, so it has to be repainted here too.
     render();
   }
 }
