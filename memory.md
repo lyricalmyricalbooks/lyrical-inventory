@@ -4,8 +4,10 @@ This file acts as a persistent memory of the project's architecture, patterns, k
 
 ## 1. Project Overview & Architecture
 - **Type**: Progressive Web App (PWA) with offline capabilities.
-- **Frontend**: Vanilla JS (Single Page App) in `index.html` and `src/main.js`. No framework/bundler for the client logic, although Vite is used for dev hosting and PWA building.
-- **Backend**: Local Node.js server (`backend/server.js`) that persists data to `backend/data/store.json`. No active Firebase cloud backend is required for local running, though Firestore rules exist.
+- **Frontend**: Vanilla JS (Single Page App, no framework) in `index.html`, `src/main.js`, `src/features/*.js` (large screens split out of main.js) and `src/lib/*.js` (pure, unit-tested logic). Vite bundles it and generates the PWA service worker; the site is deployed to GitHub Pages by `.github/workflows/deploy.yml` on every push to `main`.
+- **Backend**: Firebase — Firestore (primary; per-book data in `books/{bookId}/data/{part}`, global config in `settings/{name}`), Realtime Database (legacy fallback for books whose `fs_mode_<id>` flag isn't set), Auth (Google sign-in) and Storage (receipts). The SDK is loaded from `www.gstatic.com/firebasejs/<version>/` in `src/firebase.js` and precached by the service worker so the app starts offline. Access control lives in `firestore.rules`, `database.rules.json` and `storage.rules`; these are **not** published by the Pages deploy — run `firebase deploy --only firestore:rules,database,storage` after changing them.
+- **Third-party APIs**: Canada Post, Big Cartel and outgoing email go through the publisher's deployed Google Apps Script (`apps-script/Code.gs`), which gets around browser CORS on GitHub Pages. Others (Stripe, the Gmail receipt finder, AI receipt scanning) are called straight from the browser using keys or OAuth tokens held in publisher-only settings.
+- **`backend/server.js`**: a **local development helper only** — it proxies Canada Post, Zonos and campaign email sends when the app runs on localhost. Its book/author/website-settings admin endpoints and `backend/data/store.json` are not used by the app. Nothing in production depends on it.
 - **Google Sheets Integration**: Integrates with Google Sheets using Apps Script (`apps-script/Code.gs`).
   - **CRITICAL RULE**: Whenever `apps-script/Code.gs` is modified, it must be copied verbatim (no HTML-escaping) to `public/gas-code.txt`. The client fetches it via `loadGasCode()` when opening the "Connect your Google Sheet" tab. Vite's `syncAppsScriptPlugin` also copies it on build/dev change, but the updated file must be committed.
 
@@ -52,7 +54,7 @@ Each book within the catalog is a structured object mapped by its unique ID. Key
 - `useGlobalMethods` (boolean): Flag indicating whether the book inherits payment options from the website level (default `true`).
 
 ### Settings Config Keys
-The app stores global configurations via Firebase settings and local storage:
+The app stores global configurations via Firebase settings and local storage. **Read access is an allowlist**: only `modeFlags`, `notifyEndpoint`, `analyticsConfig`, `catalog`, `paymentLinks`, `productionCosts` and `websitePaymentMethods` are readable by non-publisher accounts (`isAuthorReadableSetting()` in `firestore.rules`, mirrored in `database.rules.json`); every other settings doc — including any new one — is publisher-only. `tests/security-rules.test.js` fails if a settings doc the app uses hasn't been classified.
 - `paymentLinks`: Map of book ID to custom payment link.
 - `websitePaymentMethods`: Array of active global website-level payment methods (`['stripe', 'paypal', 'interac', 'cash_card']`).
 - `invoiceSettings`: Object containing global invoice sequences, company logos, bank transfer details, and tax defaults.
@@ -86,8 +88,9 @@ The app stores global configurations via Firebase settings and local storage:
 - Runs bulk export tasks in batches to avoid execution timeouts.
 
 ### Local-First Persistence & Sync Queue
-- Modifying state (updating books, records, cash flow) writes to the local database store (IndexedDB / LocalStorage) immediately to ensure non-blocking client interaction.
-- Operations are appended to a sync queue that retries Firestore replication asynchronously, guaranteeing offline resilience.
+- A change updates the in-memory book state (`states[bookId]`) and the screen immediately, then `saveState()` writes it to Firestore via `window._fbSave`.
+- `_fbSave` reads the server copy first and three-way merges per part (`src/lib/merge-state.js`) if another device wrote since this one last synced, then commits all changed parts in one atomic batch.
+- If the device is offline or the write can't be verified, the latest state per book goes into the offline queue (`lm-sync-queue` in localStorage, via `src/lib/sync-queue-store.js`, which never throws on full or damaged storage) and is retried with backoff; the sync chip shows what's pending.
 
 ---
 
@@ -104,9 +107,9 @@ The app stores global configurations via Firebase settings and local storage:
   powershell -ExecutionPolicy Bypass -Command "npm run test"
   ```
 
-### Local Mock Backend Storage
-- **Issue**: Offline development mode saves local database mock changes to `backend/data/store.json`.
-- **Solution**: Ensure Node server (`npm run dev:backend`) is actively running alongside the Vite dev server for backend storage routing to work.
+### Local API proxy (Canada Post / Zonos / campaign sends)
+- **Issue**: On localhost, Canada Post rates/labels, Zonos quotes and Resend campaign sends go through `/api/*`, which Vite proxies to `backend/server.js`; without it those calls fall back to the Apps Script route.
+- **Solution**: Run `npm run dev:backend` (or `npm run dev:all`) alongside the Vite dev server when working on those integrations. Book data never goes through it — that is always Firebase.
 
 ---
 

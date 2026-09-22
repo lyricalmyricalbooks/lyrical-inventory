@@ -1,59 +1,67 @@
 # Lyricalmyrical Inventory
 
-This project now includes a local backend service for website/admin settings and catalog management (no Firebase required).
+Inventory, sales and bookkeeping for Lyricalmyrical Books: a point-of-sale for
+markets and fairs, per-book ledgers, consignment, author payouts, invoices,
+shipping labels, receipts and the tax centre.
 
-## Backend features
+It is an offline-first Progressive Web App. It works with no signal and syncs
+when the connection comes back.
 
-- Password login with signed bearer tokens (`POST /api/auth/login`)
-- Book CRUD with publisher metadata (ISBN/SKU/publication details/pricing/inventory/SEO)
-- Author CRUD
-- Shipping profile CRUD with referential safety (cannot delete profile while used by books)
-- Book photo management (`max 10 photos per book`)
-- Website settings API (merchandising, SEO, announcements)
-- Dashboard stats + audit log
-- Inventory compatibility endpoints under `/api/inventory/*`
-- JSON file persistence in `backend/data/store.json`
+## How it fits together
 
-## Run
+| Piece | What it is |
+| --- | --- |
+| **App** | Vanilla JavaScript, no framework. The code is in `index.html`, `src/main.js`, `src/features/*.js` (the larger screens) and `src/lib/*.js` (pure logic, each with tests). Vite bundles it and builds the service worker. |
+| **Data** | Firebase: **Firestore** (books under `books/{bookId}/data/{part}`, config under `settings/{name}`), the **Realtime Database** (older fallback), **Auth** (Google sign-in) and **Storage** (receipt files). The SDK is loaded from `www.gstatic.com` in `src/firebase.js` and precached so the app starts offline. |
+| **Offline saving** | Changes show on screen at once, then save to Firestore. When the device is offline, the latest state of each book waits in an on-device queue and uploads later. If another device changed the same book in the meantime, the two versions are merged, not overwritten. |
+| **Outside services** | Canada Post, Big Cartel and outgoing email go through your deployed Google Apps Script (`apps-script/Code.gs`). Stripe, the Gmail receipt finder and AI receipt scanning are called from the browser. |
+| **Hosting** | GitHub Pages. `.github/workflows/deploy.yml` builds and publishes on every push to `main`. |
+| **Access rules** | `firestore.rules`, `database.rules.json`, `storage.rules`. Only the publisher account reads everything. An author reads and writes only their own book, plus the few settings their screens need. |
 
-```bash
-npm run dev
-npm run dev:backend
-```
+`backend/server.js` is a **local development helper only**. When the app runs
+on `localhost`, it relays Canada Post, Zonos and newsletter sends. Nothing in
+production uses it, and it never holds book data.
 
-Run both together:
+## Run it locally
 
-```bash
-npm run dev:all
-```
-
-Build frontend:
+Needs Node 22 or newer (see `.nvmrc`).
 
 ```bash
-npm run build
+npm ci
+npm run dev            # the app, at http://localhost:5173
+npm run dev:all        # the app plus the local API helper (for Canada Post / Zonos / campaign sends)
 ```
 
-## Quality checks
+To use the helper, copy `backend/.env.example` to `backend/.env` and fill in
+the values it asks for.
+
+## Checks
+
+Run these before pushing. CI (`.github/workflows/ci.yml`) runs all of them on
+every pull request except `lint:tokens`:
 
 ```bash
-# Run the linter (warnings are informational; CI exits 0 unless there are errors)
-npm run lint
-
-# Run the test suite (currently covers pure money/currency helpers in src/lib)
-npm test
-
-# Watch mode while developing
-npm run test:watch
+npm run lint           # ESLint
+npm run lint:contrast  # text contrast in both light and dark themes
+npm run lint:tokens    # stylesheets don't add new hard-coded design values
+npm test               # Vitest (jsdom)
+npm run build          # production build + service worker
 ```
 
-## Backend quickstart
+## Deploying
 
-1. Copy env template:
-   ```bash
-   cp backend/.env.example backend/.env
-   ```
-2. Set a strong `ADMIN_PASSWORD` and `TOKEN_SECRET`.
-3. Start backend:
-   ```bash
-   npm run dev:backend
-   ```
+- **The app:** merge to `main`. The Pages workflow does the rest.
+- **Access rules:** the Pages deploy does *not* publish them. After changing any
+  of the three rules files, publish them with the Firebase CLI:
+  `firebase deploy --only firestore:rules,database,storage`. You can also paste
+  each file into the Firebase console.
+- **Apps Script:** when `apps-script/Code.gs` changes, the build copies it to
+  `public/gas-code.txt`. Paste it into your Apps Script project and redeploy.
+  See `CLAUDE.md` for the version-bump rule.
+
+## More
+
+- `CLAUDE.md`: project rules for anyone (or any AI assistant) changing the code.
+- `memory.md`: architecture notes, data shapes and past decisions.
+- `.agents/`: design system, UX patterns and the offline-sync and ledger rules.
+- `docs/`: Canada Post integration rules and feature plans.
