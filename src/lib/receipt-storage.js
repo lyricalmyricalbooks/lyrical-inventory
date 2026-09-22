@@ -233,6 +233,9 @@ export function isRentExpense(item) {
 /**
  * Whether this expense is a publisher's gifted/promotional copy cost (gratuity),
  * which is deducted directly from inventory without requiring a 3rd-party cash receipt.
+ * These are never reimbursed to the author, so they must be excluded from every
+ * "owed / reimbursement" surface. Legacy records (pre-flag) are detected by their
+ * GRAT- ref or "Gratuity:" description.
  */
 export function isGratuityExpense(item) {
   if (!item || typeof item !== 'object') return false;

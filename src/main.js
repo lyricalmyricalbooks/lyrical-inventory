@@ -209,6 +209,7 @@ import {
   startWatch,
 } from './lib/watch-schedule.js';
 import { followableUrl } from './lib/receipt-links.js';
+import { isGratuityExpense } from './lib/receipt-storage.js';
 import { pdfLinkPlacements, pdfSafeLinkUrl } from './lib/pdf-links.js';
 import {
   CODE_TO_SYMBOL,
@@ -8223,13 +8224,6 @@ function saveArtistPaymentLink() {
   getBook().artistPaymentLink = val;
   saveState(activeBook);
   showToast('✓ Payment link saved');
-}
-
-// Gratuity expenses track the publisher's own cost of gifted copies — they are
-// never reimbursed to the author, so they must be excluded from every "owed /
-// reimbursement" surface. Legacy records (pre-flag) are detected by their GRAT- ref.
-export function isGratuityExpense(e) {
-  return !!(e && (e.gratuity === true || (typeof e.ref === 'string' && e.ref.startsWith('GRAT-')) || (typeof e.desc === 'string' && e.desc.toLowerCase().startsWith('gratuity:'))));
 }
 
 function renderArtistReimburseBanner() {
