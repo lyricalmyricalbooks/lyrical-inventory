@@ -10502,7 +10502,8 @@ function updateInvoiceItem(idx, field, value) {
   const it = invoiceCtx.items[idx]; if (!it) return;
   if (field === 'description') it.description = value;
   else if (field === 'bookId') it.bookId = value || null;
-  else it[field] = parseFloat(value) || 0;
+  // A negative quantity or price would quietly turn the invoice into a credit.
+  else it[field] = Math.max(0, parseFloat(value) || 0);
   // Re-render only the amount cell for performance
   const amtEl = document.querySelector(`#inv-items-body tr[data-i="${idx}"] .inv-item-amt`);
   if (amtEl) amtEl.textContent = fmt((it.qty || 0) * (it.unitPrice || 0), getSym(getInvoiceCurrency()));
@@ -10540,10 +10541,10 @@ function renderInvoiceItems() {
     if (!books.some(b => b.id === selected)) { selected = ownerBookId; it.bookId = ownerBookId; }
     const opts = books.map(b => `<option value="${escapeHTML(b.id)}"${b.id === selected ? ' selected' : ''}>${escapeHTML(b.title)}</option>`).join('');
     return `<tr class="inv-item-row" data-i="${i}">
-    <td><input type="text" value="${escapeHTML(it.description || '')}" placeholder="e.g. ${getBook().title} — consignment sale, Sept 2026" oninput="updateInvoiceItem(${i},'description',this.value)"></td>
+    <td><input type="text" value="${escapeHTML(it.description || '')}" placeholder="e.g. ${escapeHTML(getBook().title || '')} — consignment sale, Sept 2026" oninput="updateInvoiceItem(${i},'description',this.value)"></td>
     <td><select class="inv-item-book" title="Which title this line bills for" aria-label="Title for this line" onchange="updateInvoiceItem(${i},'bookId',this.value)">${opts}</select></td>
-    <td><input type="number" min="0" step="1" value="${it.qty || 0}" oninput="updateInvoiceItem(${i},'qty',this.value)"></td>
-    <td><input type="number" min="0" step="0.01" value="${(it.unitPrice || 0).toFixed(2)}" oninput="updateInvoiceItem(${i},'unitPrice',this.value)"></td>
+    <td><input type="number" min="0" step="1" inputmode="numeric" aria-label="Quantity" value="${it.qty || 0}" oninput="updateInvoiceItem(${i},'qty',this.value)"></td>
+    <td><input type="number" min="0" step="0.01" inputmode="decimal" aria-label="Unit price" value="${(Number(it.unitPrice) || 0).toFixed(2)}" oninput="updateInvoiceItem(${i},'unitPrice',this.value)"></td>
     <td class="r"><span class="inv-item-amt">${fmt((it.qty || 0) * (it.unitPrice || 0), cur)}</span></td>
     <td><button type="button" class="inv-item-remove" onclick="removeInvoiceItem(${i})" title="Remove line" aria-label="Remove line">×</button></td>
   </tr>`;
