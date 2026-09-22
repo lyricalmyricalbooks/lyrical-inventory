@@ -14050,6 +14050,9 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .pos-line-total {
   grid-column: 2;
   justify-self: end;
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum" 1, "zero" 1;
+  font-variant-numeric: tabular-nums;
   font-size: var(--text-base);
   font-weight: 700;
   color: var(--content-primary);
