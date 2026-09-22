@@ -108,6 +108,9 @@ function harness({
         Number(e.amount).toFixed(2) === Number(draft.amount).toFixed(2) &&
         (e.currency || 'CAD').toUpperCase() === String(draft.currency || 'CAD').toUpperCase()
       ) || null,
+      // The real index is just a perf cache in front of the lookup above, which
+      // is what's actually under test here — a no-op stub keeps that so.
+      _buildDuplicateExpenseIndex: () => null,
       _extractReceiptFromFile: extract || (async () => ({})),
 
       // ── scan-result coercion, mirroring the real helpers
@@ -585,6 +588,7 @@ function domHarness() {
       fmt: (n, c) => `${c}${Number(n).toFixed(2)}`,
       showToast: () => {},
       _findDuplicateExpense: () => null,
+      _buildDuplicateExpenseIndex: () => null,
       rescanBatchExpenseRow: () => {},
       normalizeReceiptDate: (s) => s,
       Event
