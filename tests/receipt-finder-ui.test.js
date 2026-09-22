@@ -478,6 +478,25 @@ describe('receipt finder UI', () => {
     expect(alert.querySelector('[data-action="retry"]')).not.toBeNull();
     expect(document.querySelector('.finder-listbar [data-action="retry"]').hidden).toBe(false);
   });
+  it('reads again an email an older reader found nothing in, but not one the current reader did', async () => {
+    // A receipt judged empty by an earlier, vaguer reader was skipped for good
+    // as "already checked" — so fixing the reader never reached it.
+    mocks.list.mockResolvedValue({ messages: [{ id: 'old' }, { id: 'current' }, { id: 'found' }] });
+    mocks.message.mockImplementation(async id => ({ ...source, id, subject: 'Receipt ' + id }));
+    mocks.extract.mockResolvedValue({ receipts: [] });
+    mocks.saved.scans = {
+      'publisher@example.com:old': { done: true, subject: 'Receipt old', count: 0 },
+      'publisher@example.com:current': { done: true, subject: 'Receipt current', count: 0, reader: 2 },
+      'publisher@example.com:found': { done: true, subject: 'Receipt found', count: 1 },
+    };
+    await mount();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="connect"]').click(); await settle();
+    document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
+    expect(mocks.message.mock.calls.map(call => call[0])).toEqual(['old']);
+    expect(mocks.saved.scans['publisher@example.com:old']).toMatchObject({ done: true, reader: 2 });
+    expect(document.querySelector('[data-finder-status]').textContent).toContain('2 were already checked');
+  });
   it('shows only the status filters that have something in them', async () => {
     await mount();
     const chips = [...document.querySelectorAll('[data-finder-tabs] [data-status]')].map(chip => chip.dataset.status);

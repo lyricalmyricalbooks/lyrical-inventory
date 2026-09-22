@@ -14,6 +14,21 @@ describe('receipt discovery and review', () => {
     expect(receiptQuery({ attachments: true })).toContain('filename:pdf');
     expect(receiptQuery({ category: 'invoices' })).toContain('(invoice OR bill)');
   });
+  it('looks for receipt-shaped mail by default, and never the publisher\'s own or app notifications', () => {
+    // The old default matched "order", "tax" and "shipping" anywhere and buried
+    // a real receipt past the 100th result, behind notifications about this app.
+    const fallback = receiptQuery({});
+    expect(fallback).toContain('category:purchases');
+    expect(fallback).toContain('subject:(receipt OR invoice');
+    expect(fallback).not.toMatch(/\bOR tax OR order\b/);
+    expect(fallback).toContain('-from:me');
+    expect(fallback).toContain('-from:notifications@github.com');
+    // A typed search replaces the default but keeps the exclusions.
+    const typed = receiptQuery({ query: 'anthropic' });
+    expect(typed.startsWith('anthropic ')).toBe(true);
+    expect(typed).not.toContain('category:purchases');
+    expect(typed).toContain('-from:me');
+  });
   it.each([['1,234.56', 1234.56], ['1.234,56', 1234.56], ['69,00', 69], ['620,98 €', null], ['$45.00', 45], ['-15,25', -15.25], [null, null], ['', null], ['1,234', null], ['garbage', null]])('parses money %s without guessing', (value, expected) => {
     expect(receiptMoney(value)).toBe(expected);
   });

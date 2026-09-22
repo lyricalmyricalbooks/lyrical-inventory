@@ -14,6 +14,12 @@ const emptyState = () => ({ drafts: [], emails: {}, scans: {}, endpoint: '', acc
 // couple of minutes and one that takes twenty. Kept low on purpose: the script
 // allows 30 extractions a minute and a burst would simply hit that wall.
 const SCAN_CONCURRENCY = 3;
+
+// Bumped whenever what decides "this email holds no receipt" changes — the
+// search, the pre-check or the reading instructions. An email an older reader
+// found nothing in is read once more under the new one instead of being skipped
+// for good as "already checked"; one that did yield a receipt never is.
+const READER_VERSION = 2;
 const RENDER_INTERVAL_MS = 200;
 
 let deps, host, state = emptyState(), uid = '', accessToken = '', tokenExpiresAt = 0;
@@ -214,7 +220,7 @@ async function mountReceiptFinder(element, dependencies) {
     <section class="finder-search" aria-label="Search your mailbox">
       <div class="finder-filters">
         <div class="form-group finder-query"><label for="finder-query">Keywords or Gmail search</label>
-          <input type="search" id="finder-query" placeholder="Invoices, receipts, orders…"></div>
+          <input type="search" id="finder-query" placeholder="Leave blank for all receipts, or name a shop"></div>
         <div class="form-group finder-sender"><label for="finder-sender">Sender / vendor email</label>
           <input type="text" id="finder-sender" inputmode="email" placeholder="supplier@example.com"></div>
         <div class="form-group finder-date-from"><label for="finder-from">From date</label>
@@ -862,7 +868,8 @@ async function readCandidate(id, signal, endpoint) {
   if (signal.aborted) throw new DOMException('Stopped', 'AbortError');
   // An email read by an earlier scan is skipped rather than paid for twice —
   // but it still counts towards this scan's progress, or the bar stalls.
-  if (state.scans[key]?.done) { scanDone++; scanCached++; scheduleRender(); return; }
+  const prior = state.scans[key];
+  if (prior?.done && (prior.count > 0 || prior.reader === READER_VERSION)) { scanDone++; scanCached++; scheduleRender(); return; }
   let email = state.emails[key];
   try {
     if (!email) email = await client.message(id, account, signal);
@@ -871,7 +878,7 @@ async function readCandidate(id, signal, endpoint) {
     // is not worth an AI read. Most of a broad search is mail like this.
     if (!receiptWorthReading(email)) {
       dropEmail(key);
-      state.scans[key] = { done: true, subject: email.subject, count: 0, skipped: 'no-amount' };
+      state.scans[key] = { done: true, subject: email.subject, count: 0, skipped: 'no-amount', reader: READER_VERSION };
       scanSkipped++;
       await persist();
       scanDone++; scheduleRender();
@@ -898,7 +905,7 @@ async function readCandidate(id, signal, endpoint) {
     // saved mailbox — and therefore every later save — from growing with every
     // scan of a mostly-ordinary inbox.
     if (!result.receipts.length) dropEmail(key);
-    state.scans[key] = { done: true, subject: email.subject, count: result.receipts.length };
+    state.scans[key] = { done: true, subject: email.subject, count: result.receipts.length, reader: READER_VERSION };
     await persist();
   } catch (error) {
     if (error.name === 'AbortError' || !active() || uid !== owner) throw error;
