@@ -93,7 +93,7 @@ describe('read-only Gmail and protected extraction', () => {
   it('expires access cleanly and never silently falls back to the public Sheets endpoint', async () => {
     const onExpired = vi.fn();
     const client = createReceiptFinderClient({ token: () => 'expired', fetchImpl: async () => ({ status: 401, ok: false }), onExpired });
-    await expect(client.profile()).rejects.toThrow('Reconnect'); expect(onExpired).toHaveBeenCalledOnce();
+    await expect(client.profile()).rejects.toThrow('renewing'); expect(onExpired).toHaveBeenCalledOnce();
   });
   it('skips an unusable attachment instead of failing the whole email', async () => {
     // One 15 MB scan, or one attachment Gmail will not hand over, used to throw

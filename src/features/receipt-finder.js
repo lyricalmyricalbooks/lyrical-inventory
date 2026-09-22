@@ -7,7 +7,7 @@ import { downloadBlob } from '../lib/download.js';
 import '../styles/receipt-finder.css';
 
 const LABELS = { all: 'All', ready: 'Ready', review: 'Needs review', duplicate: 'Duplicates', queued: 'Pending import', imported: 'Imported', ignored: 'Dismissed' };
-const emptyState = () => ({ drafts: [], emails: {}, scans: {}, endpoint: '', account: '', lastScan: '', pageToken: '', lastQuery: '', lastEndpoint: '', lastHalt: '' });
+const emptyState = () => ({ drafts: [], emails: {}, scans: {}, endpoint: '', account: '', lastScan: '', pageToken: '', lastQuery: '', lastEndpoint: '', lastHalt: '', gmailOff: false });
 
 // Emails are read a few at a time rather than one after another. The AI call
 // dominates each one, so this is the difference between a scan that takes a
@@ -35,6 +35,15 @@ const store = createReceiptFinderStore();
 const client = createReceiptFinderClient({ token: () => accessToken, onExpired: () => { forgetToken().catch(() => {}); } });
 const active = () => uid && deps?.user()?.uid === uid && deps.publisher();
 const tokenLive = () => !!accessToken && tokenExpiresAt > Date.now();
+// "Connected" is the publisher's choice, not the age of Google's pass. The pass
+// a browser app is given lasts an hour and cannot be renewed in the background,
+// which used to flip the panel to "Reconnect Gmail" every hour. Now it stays
+// connected until they press Disconnect, and the pass is renewed as a scan
+// starts — a Google window that opens and closes by itself at most.
+const gmailLinked = () => tokenLive() || (!!state.account && !state.gmailOff);
+// A page of 25 emails can take a few minutes, so a pass about to lapse is
+// renewed before the scan rather than dying halfway through it.
+const RENEW_WITHIN_MS = 10 * 60 * 1000;
 
 // The receipt reader now lives in the same Apps Script the app already uses for
 // Google Sheets, so there is normally nothing to paste: fall back to that
@@ -114,28 +123,29 @@ async function forgetToken() {
 function connectionLabel() {
   // The address lives in the note underneath. Spelled out on the button it
   // made a banner-width, all-caps label that read as shouting.
-  if (!tokenLive()) return state.account ? 'Reconnect Gmail' : 'Connect Gmail';
-  return 'Disconnect Gmail';
+  return gmailLinked() ? 'Disconnect Gmail' : 'Connect Gmail';
 }
 
 function renderConnection() {
   const pill = document.getElementById('email-account-pill');
   if (pill) {
-    pill.textContent = tokenLive() ? `● ${state.account}` : '○ Gmail not connected';
-    pill.className = `pill ${tokenLive() ? 'green' : 'gray'} email-connected-pill`;
+    pill.textContent = gmailLinked() ? `● ${state.account}` : '○ Gmail not connected';
+    pill.className = `pill ${gmailLinked() ? 'green' : 'gray'} email-connected-pill`;
   }
   const button = host?.querySelector('[data-action="connect"]');
   if (button) {
     button.textContent = connectionLabel();
     button.disabled = busy;
-    button.className = tokenLive() ? 'btn sm ink finder-conn-btn' : 'btn sm gold finder-conn-btn';
+    // Disconnecting is the rare action, so it is the quiet button; connecting
+    // is the one the panel is waiting for.
+    button.className = gmailLinked() ? 'btn sm finder-conn-btn' : 'btn sm gold finder-conn-btn';
   }
   const note = host?.querySelector('[data-conn-note]');
   if (note) {
-    note.textContent = tokenLive()
-      ? `Read-only access to ${state.account}. Stays connected until ${new Date(tokenExpiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.`
+    note.textContent = gmailLinked()
+      ? `Connected to ${state.account}, read-only. It stays connected: when Google needs to renew access, a small Google window may open for a moment as you scan, then close by itself.`
       : state.account
-        ? `Gmail access for ${state.account} has run out. Reconnecting takes one click — Google will not ask you to approve it again.`
+        ? `Gmail is disconnected on this device. Connect it again whenever you want to scan ${state.account}.`
         : 'Gmail is read-only: the app can read messages to find receipts and can never send, delete or change anything.';
   }
 }
@@ -310,7 +320,7 @@ function gateSteps() {
   // A lapsed connection is already explained, with its one-click fix, in the
   // connection bar directly above. Repeating it here as a numbered step made
   // three separate notices say "reconnect" on one screen.
-  if (!tokenLive() && !state.account) {
+  if (!gmailLinked()) {
     steps.push({ title: 'Connect Gmail',
       body: 'Use the “Connect Gmail” button above to give the app read-only access, so it can look through your mail for receipts.' });
   }
@@ -391,7 +401,7 @@ function renderFailures() {
   const groups = failureGroups();
   if (!groups.length) return '';
   const total = groups.reduce((sum, group) => sum + group.keys.length, 0);
-  const canRetry = !busy && tokenLive();
+  const canRetry = !busy && gmailLinked();
   return `<details class="finder-failures"${groups.length <= 3 ? ' open' : ''}>
     <summary><span class="finder-failures-sum">Why ${total} email${total === 1 ? '' : 's'} couldn’t be read</span>
       <span class="finder-failures-hint">${groups.length === 1 ? 'One reason' : `${groups.length} reasons`}</span></summary>
@@ -401,7 +411,7 @@ function renderFailures() {
         <p>${esc(group.reason)}</p>
         <button type="button" class="btn sm" data-retry-reason="${esc(group.reason)}" ${canRetry ? '' : 'disabled'}>Try ${group.keys.length === 1 ? 'it' : 'these'} again</button>
       </li>`).join('')}</ul>
-    <p class="finder-failures-foot">${tokenLive() ? '' : 'Reconnect Gmail above to try these again. '}Emails that can’t be read are never filed, and never charged twice — trying again only re-reads the ones listed here.</p>
+    <p class="finder-failures-foot">${gmailLinked() ? '' : 'Connect Gmail above to try these again. '}Emails that can’t be read are never filed, and never charged twice — trying again only re-reads the ones listed here.</p>
   </details>`;
 }
 
@@ -418,10 +428,10 @@ function renderAlert(counts) {
     alert.className = 'finder-alert is-warn';
     // Retrying needs Gmail. Offering the button while disconnected used to
     // answer one click with one "Reconnect Gmail" toast per failed email.
-    const canRetry = !busy && tokenLive();
+    const canRetry = !busy && gmailLinked();
     alert.innerHTML = `<span class="pill amber">● ${failures} couldn’t be read</span>
-      <p>${failures === 1 ? 'One email' : `${failures} emails`} could not be read${groups.length > 1 ? `, for ${groups.length} different reasons — listed just below.` : `. ${esc(groups[0].reason)}`}${tokenLive() ? '' : ' Reconnect Gmail above to try them again.'}</p>
-      <button type="button" class="btn sm" data-action="retry-failed" ${canRetry ? '' : 'disabled'} title="${canRetry ? 'Read these emails again' : 'Reconnect Gmail first'}">Try all again</button>
+      <p>${failures === 1 ? 'One email' : `${failures} emails`} could not be read${groups.length > 1 ? `, for ${groups.length} different reasons — listed just below.` : `. ${esc(groups[0].reason)}`}${gmailLinked() ? '' : ' Connect Gmail above to try them again.'}</p>
+      <button type="button" class="btn sm" data-action="retry-failed" ${canRetry ? '' : 'disabled'} title="${canRetry ? 'Read these emails again' : 'Connect Gmail first'}">Try all again</button>
       <button type="button" class="btn sm" data-action="clear-failures" ${busy ? 'disabled' : ''}>Clear these</button>
       ${state.lastHalt && !busy ? `<p class="finder-alert-note">The last scan also stopped early: ${esc(state.lastHalt)}</p>` : ''}`;
   } else if (state.lastHalt && !busy) {
@@ -679,12 +689,41 @@ async function onClick(event) {
 }
 
 async function toggleConnection() {
-  if (tokenLive()) {
+  if (gmailLinked()) {
+    state.gmailOff = true;
     await forgetToken();
+    await persist();
     announce('Gmail disconnected on this device. Saved receipts remain available.');
     render(); return;
   }
-  const granted = await window._fbConnectReceiptGmail();
+  await grantGmail();
+  announce(`Connected to ${state.account} with read-only access. It stays connected until you disconnect it.`);
+}
+
+// Google answers a blocked or closed window with a code, not a sentence.
+function gmailWindowProblem(error) {
+  const code = String(error?.code || '');
+  if (code === 'auth/popup-blocked') return 'Your browser blocked Google’s window. Allow pop-ups for this site, then try again.';
+  if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+    return 'Google’s window was closed before Gmail access was renewed. Try again and let it finish — it closes by itself.';
+  }
+  if (code === 'auth/user-mismatch') return 'Choose the same Google account you sign in to this app with.';
+  return error?.message || 'Google did not grant Gmail access';
+}
+
+// Renews an old or lapsing pass. Called first thing in a click, before any
+// other wait, because browsers only let a click open Google's window while
+// that click is still fresh.
+async function ensureGmail() {
+  if (accessToken && tokenExpiresAt - Date.now() > RENEW_WITHIN_MS) return;
+  announce('Renewing Gmail access…');
+  await grantGmail();
+}
+
+async function grantGmail() {
+  let granted;
+  try { granted = await window._fbConnectReceiptGmail(); }
+  catch (error) { throw new Error(gmailWindowProblem(error)); }
   // Older builds handed back a bare token string; treat that as a full hour.
   const token = typeof granted === 'string' ? granted : granted?.token;
   const expiresAt = typeof granted === 'string' ? Date.now() + 55 * 60 * 1000 : Number(granted?.expiresAt) || 0;
@@ -692,6 +731,7 @@ async function toggleConnection() {
   accessToken = token; tokenExpiresAt = expiresAt;
   if (!active()) { accessToken = ''; tokenExpiresAt = 0; return; }
   state.account = (await client.profile()).emailAddress.toLowerCase();
+  state.gmailOff = false;
   // A scan stopped by the lapsed connection is answered by reconnecting.
   if (/Gmail/.test(state.lastHalt)) state.lastHalt = '';
   await persist();
@@ -699,7 +739,6 @@ async function toggleConnection() {
   // reconnect Gmail on every visit, even seconds after the last one.
   await store.saveToken?.(uid, { token, expiresAt, account: state.account });
   render();
-  announce(`Connected to ${state.account} with read-only access. You will stay connected on this device.`);
 }
 
 // Drops the saved separate deployment address so the finder falls back to the
@@ -941,9 +980,9 @@ async function runPool(items, limit, worker) {
 
 async function scan(nextPage) {
   if (busy) return;
-  if (!tokenLive()) throw new Error(state.account ? 'Reconnect Gmail to scan — it only takes a click.' : 'Connect Gmail first');
+  if (!gmailLinked()) throw new Error('Connect Gmail first');
   if (!state.endpoint && !deps.hasAppAi?.() && !deps.service?.()) throw new Error('Save an AI key or connect your Google Sheet script before scanning');
-  if (!navigator.onLine) throw new Error('Reconnect to scan Gmail. Saved receipts are available offline.');
+  if (!navigator.onLine) throw new Error('You are offline. Scan once you are back online — saved receipts still work offline.');
   const value = id => host.querySelector('#' + id).value;
   if (value('finder-from') && value('finder-to') && value('finder-from') > value('finder-to')) throw new Error('From date must be before the end date');
   const pressed = key => host.querySelector(`[data-toggle="${key}"]`).getAttribute('aria-pressed') === 'true';
@@ -957,6 +996,7 @@ async function scan(nextPage) {
   const failedBefore = Object.values(state.scans).filter(item => item.error).length;
   render();
   try {
+    await ensureGmail();
     const endpoint = await ensureServiceReady();
     announce('Finding candidate emails…');
     const page = await client.list(query, nextPage ? state.pageToken : '', signal);
@@ -998,7 +1038,7 @@ async function scan(nextPage) {
 // while Gmail was disconnected, answered one click with 86 error toasts.
 async function retryFailedEmails(reason = '') {
   if (busy) return;
-  if (!tokenLive()) throw new Error('Reconnect Gmail first, then try these again.');
+  if (!gmailLinked()) throw new Error('Connect Gmail first, then try these again.');
   const prefix = state.account + ':';
   const keys = Object.entries(state.scans)
     .filter(([key, scan]) => scan.error && (!reason || scan.error === reason) && key.startsWith(prefix))
@@ -1011,6 +1051,7 @@ async function retryFailedEmails(reason = '') {
   const failedBefore = keys.length;
   render();
   try {
+    await ensureGmail();
     const endpoint = await ensureServiceReady();
     await runPool(keys, SCAN_CONCURRENCY, async key => {
       // A retry cut short (Stop, or a problem that halts the batch) leaves the

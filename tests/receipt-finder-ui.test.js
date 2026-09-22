@@ -104,7 +104,6 @@ describe('receipt finder UI', () => {
   it('connects read-only and automatically extracts candidate messages', async () => {
     await mount();
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
-    document.querySelector('[data-action="connect"]').click(); await settle();
     document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
     expect(mocks.list).toHaveBeenCalledOnce(); expect(mocks.extract).toHaveBeenCalledOnce();
     expect(mocks.saved.drafts).toHaveLength(2);
@@ -114,7 +113,6 @@ describe('receipt finder UI', () => {
     await mount();
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
     mocks.extract.mockRejectedValue(new Error('Receipt AI is unavailable'));
-    document.querySelector('[data-action="connect"]').click(); await settle();
     document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
     expect(document.querySelector('[data-finder-errors]').textContent).toContain('Receipt AI is unavailable');
     expect(mocks.saved.scans['publisher@example.com:m2'].done).not.toBe(true);
@@ -134,7 +132,6 @@ describe('receipt finder UI', () => {
       steps: ['Add GEMINI_API_KEY — a Gemini key restricted to the Generative Language API — in the script’s Script Properties. It never goes into this app.'] });
     await mount();
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
-    document.querySelector('[data-action="connect"]').click(); await settle();
     document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
     const gate = document.querySelector('[data-finder-gate]');
     expect(gate.hidden).toBe(false);
@@ -151,14 +148,38 @@ describe('receipt finder UI', () => {
     expect(document.querySelector('[data-action="connect"]').textContent).toBe('Disconnect Gmail');
     expect(document.getElementById('email-account-pill').textContent).toContain('publisher@example.com');
   });
-  it('treats an expired saved connection as disconnected and discards it', async () => {
+  it('stays connected when Google\'s hour-long pass runs out, and renews it as the next scan starts', async () => {
+    // The panel used to flip to "Reconnect Gmail" every hour.
     mocks.token = { token: 'stale-token', expiresAt: Date.now() - 1000, account: 'publisher@example.com' };
     await mount();
     expect(mocks.clearToken).toHaveBeenCalledWith('publisher');
-    expect(document.querySelector('[data-action="connect"]').textContent).toContain('Reconnect');
-    expect(document.querySelector('[data-conn-note]').textContent).toContain('run out');
+    expect(document.querySelector('[data-action="connect"]').textContent).toBe('Disconnect Gmail');
+    expect(document.querySelector('[data-conn-note]').textContent).toContain('stays connected');
+    expect(document.querySelector('[data-conn-note]').textContent).not.toMatch(/run out|Reconnect/);
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
+    expect(window._fbConnectReceiptGmail).toHaveBeenCalledOnce();
+    expect(mocks.list).toHaveBeenCalled();
+    expect(mocks.token).toMatchObject({ token: 'access-token' });
+  });
+  it('does not open Google\'s window when the pass still has time left', async () => {
+    mocks.token = { token: 'saved-token', expiresAt: Date.now() + 30 * 60000, account: 'publisher@example.com' };
+    await mount();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
+    expect(window._fbConnectReceiptGmail).not.toHaveBeenCalled();
+    expect(mocks.list).toHaveBeenCalled();
+  });
+  it('says plainly when the browser blocks Google\'s window', async () => {
+    window._fbConnectReceiptGmail.mockRejectedValueOnce(Object.assign(new Error('Firebase: Error (auth/popup-blocked).'), { code: 'auth/popup-blocked' }));
+    await mount();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
+    expect(deps.toast).toHaveBeenCalledWith(expect.stringContaining('Allow pop-ups'), 'err');
+    expect(mocks.list).not.toHaveBeenCalled();
   });
   it('remembers the connection it just made, with its expiry', async () => {
+    mocks.saved.account = '';
     await mount();
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
     document.querySelector('[data-action="connect"]').click(); await settle();
@@ -170,6 +191,9 @@ describe('receipt finder UI', () => {
     await mount();
     document.querySelector('[data-action="connect"]').click(); await settle();
     expect(mocks.token).toBeNull();
+    // Disconnecting is a choice that sticks: no scan quietly renews it.
+    expect(mocks.saved.gmailOff).toBe(true);
+    expect(document.querySelector('[data-action="connect"]').textContent).toBe('Connect Gmail');
     mocks.token = { token: 'saved-token', expiresAt: Date.now() + 600000, account: 'publisher@example.com' };
     window._fbOnAuthStateChanged.mock.calls[0][0](null); await settle();
     expect(mocks.token).toBeNull();
@@ -182,7 +206,6 @@ describe('receipt finder UI', () => {
       steps: ['Copy the script shown in the Connect your Google Sheet tab and deploy a new version.'] });
     await mount();
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
-    document.querySelector('[data-action="connect"]').click(); await settle();
     document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
     expect(mocks.list).not.toHaveBeenCalled();
     expect(mocks.extract).not.toHaveBeenCalled();
@@ -193,7 +216,6 @@ describe('receipt finder UI', () => {
     deps.service = () => 'https://script.google.com/macros/s/sheets/exec';
     await mount();
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
-    document.querySelector('[data-action="connect"]').click(); await settle();
     document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
     expect(mocks.check).toHaveBeenCalledWith({ endpoint: 'https://script.google.com/macros/s/sheets/exec' });
     expect(mocks.extract.mock.calls[0][0].endpoint).toBe('https://script.google.com/macros/s/sheets/exec');
@@ -210,7 +232,6 @@ describe('receipt finder UI', () => {
     });
     await mount();
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
-    document.querySelector('[data-action="connect"]').click(); await settle();
     document.querySelector('[data-action="scan"]').click();
     await new Promise(resolve => setTimeout(resolve, 120));
     expect(mocks.extract).toHaveBeenCalledTimes(3);
@@ -223,7 +244,6 @@ describe('receipt finder UI', () => {
     mocks.extract.mockResolvedValue({ receipts: [] });
     await mount();
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
-    document.querySelector('[data-action="connect"]').click(); await settle();
     document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
     expect(mocks.saved.scans['publisher@example.com:m2'].done).toBe(true);
     expect(mocks.saved.emails['publisher@example.com:m2']).toBeUndefined();
@@ -233,7 +253,6 @@ describe('receipt finder UI', () => {
     mocks.list.mockResolvedValue({ messages: [] });
     await mount();
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
-    document.querySelector('[data-action="connect"]').click(); await settle();
     document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
     expect(document.querySelector('[data-finder-status]').textContent).toContain('No emails matched');
     expect(mocks.extract).not.toHaveBeenCalled();
@@ -242,7 +261,6 @@ describe('receipt finder UI', () => {
     await mount();
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
     mocks.extract.mockRejectedValue(new Error('Receipt AI is unavailable'));
-    document.querySelector('[data-action="connect"]').click(); await settle();
     document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
     const alert = document.querySelector('[data-finder-alert]');
     expect(alert.className).toContain('is-warn');
@@ -260,7 +278,6 @@ describe('receipt finder UI', () => {
       steps: ['You no longer need a second script — switch to the Google Sheet script you have already connected.'] });
     await mount();
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
-    document.querySelector('[data-action="connect"]').click(); await settle();
     document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
     // The problem, and its remedy, must be at the top of the panel — not only
     // in the status line and the collapsed Advanced section.
@@ -281,7 +298,6 @@ describe('receipt finder UI', () => {
     mocks.check.mockResolvedValue({ level: 'error', fix: 'use-sheets', headline: 'The script did not answer.', steps: ['Check the address.'] });
     await mount();
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
-    document.querySelector('[data-action="connect"]').click(); await settle();
     document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
     expect(document.querySelector('[data-action="use-sheets"]')).toBeNull();
     expect(document.querySelector('[data-finder-gate]').textContent).toContain('Check the address.');
@@ -297,7 +313,6 @@ describe('receipt finder UI', () => {
     await mount();
     expect(document.querySelector('[data-finder-alert]').textContent).toContain('2 emails');
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
-    document.querySelector('[data-action="connect"]').click(); await settle();
     document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
     expect(mocks.saved.scans['publisher@example.com:old1']).toBeUndefined();
     expect(mocks.saved.scans['publisher@example.com:old2']).toBeUndefined();
@@ -320,7 +335,6 @@ describe('receipt finder UI', () => {
     mocks.aiTest.mockResolvedValue({ ok: true, aiOk: false, aiStatus: 403 });
     await mount();
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
-    document.querySelector('[data-action="connect"]').click(); await settle();
     document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
     expect(mocks.aiTest).toHaveBeenCalled();
     expect(mocks.list).not.toHaveBeenCalled();
@@ -333,7 +347,6 @@ describe('receipt finder UI', () => {
       report: { capabilities: { receiptExtraction: true } } });
     await mount();
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
-    document.querySelector('[data-action="connect"]').click(); await settle();
     document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
     expect(mocks.aiTest).not.toHaveBeenCalled();
     expect(mocks.list).toHaveBeenCalled();
@@ -377,7 +390,6 @@ describe('receipt finder UI', () => {
     mocks.aiTest.mockResolvedValue({ ok: true, aiOk: false, aiStatus: 401 });
     await mount();
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
-    document.querySelector('[data-action="connect"]').click(); await settle();
     document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
     expect(mocks.list).not.toHaveBeenCalled();
     expect(mocks.extract).not.toHaveBeenCalled();
@@ -391,7 +403,6 @@ describe('receipt finder UI', () => {
     mocks.extract.mockRejectedValue(new Error('Receipt AI is unavailable (429). Retry later.'));
     await mount();
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
-    document.querySelector('[data-action="connect"]').click(); await settle();
     document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
     // Concurrency means a few may already be in flight, but it must not work
     // through the whole batch.
@@ -408,7 +419,6 @@ describe('receipt finder UI', () => {
     mocks.aiTest.mockResolvedValue({ ok: true, aiOk: false, aiStatus: 429 });
     await mount();
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
-    document.querySelector('[data-action="connect"]').click(); await settle();
     document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
     expect(mocks.list).toHaveBeenCalled();
     const gate = document.querySelector('[data-finder-gate]').textContent;
@@ -418,7 +428,6 @@ describe('receipt finder UI', () => {
     mocks.message.mockResolvedValue({ ...source, id: 'm2', subject: 'Your parcel is on its way', body: 'Track your order here.' });
     await mount();
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
-    document.querySelector('[data-action="connect"]').click(); await settle();
     document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
     expect(mocks.extract).not.toHaveBeenCalled();
     expect(mocks.saved.scans['publisher@example.com:m2']).toMatchObject({ done: true, skipped: 'no-amount' });
@@ -431,7 +440,6 @@ describe('receipt finder UI', () => {
     mocks.message.mockRejectedValue(Object.assign(new Error('Gmail access expired. Reconnect Gmail, then scan again.'), { status: 401, stopsScan: true }));
     await mount();
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
-    document.querySelector('[data-action="connect"]').click(); await settle();
     document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
     expect(mocks.message.mock.calls.length).toBeLessThan(5);
     expect(Object.values(mocks.saved.scans).filter(scan => scan.error)).toHaveLength(0);
@@ -441,6 +449,7 @@ describe('receipt finder UI', () => {
     expect(mocks.saved.pageToken || '').toBe('');
   });
   it('will not offer a retry while Gmail is disconnected', async () => {
+    mocks.saved.gmailOff = true;
     mocks.saved.scans = {
       'publisher@example.com:a': { error: 'Receipt extraction failed', subject: 'One' },
       'publisher@example.com:b': { error: 'Receipt extraction failed', subject: 'Two' },
@@ -460,7 +469,6 @@ describe('receipt finder UI', () => {
     mocks.message.mockImplementation(async id => ({ ...source, id, subject: 'Receipt ' + id }));
     await mount();
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
-    document.querySelector('[data-action="connect"]').click(); await settle();
     document.querySelector('[data-action="retry-failed"]').click(); await settle(); await settle();
     expect(mocks.check).toHaveBeenCalledTimes(1);
     expect(mocks.extract).toHaveBeenCalledTimes(2);
@@ -491,7 +499,6 @@ describe('receipt finder UI', () => {
     };
     await mount();
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
-    document.querySelector('[data-action="connect"]').click(); await settle();
     document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
     expect(mocks.message.mock.calls.map(call => call[0])).toEqual(['old']);
     expect(mocks.saved.scans['publisher@example.com:old']).toMatchObject({ done: true, reader: 2 });
@@ -529,7 +536,6 @@ describe('receipt finder with app AI keys', () => {
     deps.readAi = vi.fn();
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
     await mount();
-    document.querySelector('[data-action="connect"]').click(); await settle();
     document.querySelector('[data-action="scan"]').click(); await settle();
     expect(mocks.extract).toHaveBeenCalledWith(expect.objectContaining({ readAi: deps.readAi, idToken: undefined }));
     expect(mocks.saved.scans['publisher@example.com:m2'].done).toBe(true);

@@ -123,7 +123,7 @@ export function createReceiptFinderClient({ token, fetchImpl = fetch, onExpired 
         headers: { Authorization: `Bearer ${accessToken}` }, signal,
       });
       if (res.ok) return res.json();
-      if (res.status === 401) { onExpired(); throw gmailError('Gmail access expired. Reconnect Gmail, then scan again.', 401, true); }
+      if (res.status === 401) { onExpired(); throw gmailError('Gmail access needed renewing partway through. Scan again to carry on — it renews by itself.', 401, true); }
       // Gmail reports a per-user rate limit as 403 rateLimitExceeded as well as
       // 429, so a 403 is only a permission problem when it says so.
       let reason = '';
