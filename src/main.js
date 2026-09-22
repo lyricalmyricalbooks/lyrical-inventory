@@ -262,6 +262,7 @@ import {
 } from './lib/theme.js';
 import { initStickyOffset } from './lib/sticky-header.js';
 import { SYNC_TONES, describeSyncStatus } from './lib/sync-status.js';
+import { getLocalStorage, loadSyncQueue, persistSyncQueue } from './lib/sync-queue-store.js';
 import { sheetLogLabel, sheetLogSummary, sortSheetPayloads } from './lib/sheet-sync.js';
 import {
   QR_PRESET_PRICE_CURRENCIES,
@@ -2535,7 +2536,11 @@ window.authorSubmissions = {}; // Tracks pending expenses/sales by Authors
 export let activeBook = null;   // currently viewed bookId, or 'all'
 export let orders = [], activeId = null;
 let fbReady = false, lastSavedHashes = {}, lastSaveTimes = {};
-let syncQueue = JSON.parse(localStorage.getItem('lm-sync-queue') || '[]');
+// Loaded through a guard: an unreadable stored queue (or storage that throws on
+// access) used to throw right here, at module load, and the app never started.
+// Anything unreadable is copied aside to 'lm-sync-queue-corrupt' first.
+const _syncQueueLoad = loadSyncQueue(getLocalStorage());
+let syncQueue = _syncQueueLoad.queue;
 let systemBackups = [];
 const SYSTEM_BACKUP_KEY = 'systemBackups';
 const SYSTEM_BACKUP_LIMIT = 30;
@@ -2565,6 +2570,54 @@ let _lastCloudSyncAt = (() => {
   } catch (_) { return null; }   // private mode / blocked storage
 })();
 let _syncChipTimer = null;
+/** True while the latest queue could not be written to device storage (full or
+ *  blocked), i.e. some queued change exists only in this open tab. Drives the
+ *  one-per-streak warning toast and the chip's "keep the app open" wording;
+ *  cleared by the next successful write or by the queue draining. */
+let _syncQueueHeldInMemory = false;
+
+if (_syncQueueLoad.discarded) {
+  console.warn('Offline sync queue was unreadable and was set aside', _syncQueueLoad);
+  // Deferred so the toast host exists and the rest of the module has loaded.
+  setTimeout(() => {
+    showToast(
+      _syncQueueLoad.queue.length
+        ? '⚠ Some changes waiting on this device to upload couldn\'t be read. The rest will still upload — check your latest sales reached the cloud.'
+        : '⚠ Changes waiting on this device to upload couldn\'t be read. Check your latest sales reached the cloud.',
+      'err',
+      9000,
+    );
+  }, 0);
+}
+
+/**
+ * Mirror the in-memory queue to device storage. Never throws — a full or
+ * blocked storage must not stop the upload from being attempted (the change is
+ * still in memory and processSyncQueue can deliver it). Instead the publisher is
+ * told, once per failure streak, to keep the app open until it uploads.
+ * Same precedent as persistSheetsQueue().
+ * @returns {boolean} whether the write landed
+ */
+function saveSyncQueueToDevice() {
+  const res = persistSyncQueue(getLocalStorage(), syncQueue);
+  if (res.ok || !syncQueue.length) {
+    // Landed, or there is nothing left that could be lost.
+    _syncQueueHeldInMemory = false;
+    return res.ok;
+  }
+  console.warn(`Could not store the offline sync queue (${res.reason})`, res.error);
+  if (!_syncQueueHeldInMemory) {
+    _syncQueueHeldInMemory = true;
+    showToast(
+      res.reason === 'quota'
+        ? '⚠ This device is out of storage, so your change couldn\'t be saved on it. Keep the app open until it uploads, or it could be lost.'
+        : '⚠ This device wouldn\'t let the app save your change. Keep the app open until it uploads, or it could be lost.',
+      'err',
+      9000,
+    );
+  }
+  return false;
+}
 
 /** Stamp a confirmed cloud write. Storage failures are never worth throwing on. */
 function markCloudSynced(at = Date.now()) {
@@ -2585,6 +2638,7 @@ function renderSyncChip() {
     pending: syncQueue.length,
     retrying: _syncRetrying,
     lastSyncedAt: _lastCloudSyncAt,
+    heldInMemory: _syncQueueHeldInMemory,
   });
 
   host.hidden = !view.visible;
@@ -2633,7 +2687,9 @@ function retrySyncNow() {
 function queueSync(bookId, state) {
   syncQueue = syncQueue.filter(item => item.bookId !== bookId);
   syncQueue.push({ bookId, state, ts: Date.now() });
-  localStorage.setItem('lm-sync-queue', JSON.stringify(syncQueue));
+  // Must not throw: the upload below is attempted whether or not the device
+  // copy landed, so a full storage can't strand the change with no retry.
+  saveSyncQueueToDevice();
   updatePendingIndicator();
   processSyncQueue();
 }
@@ -2676,7 +2732,9 @@ async function processSyncQueue() {
       }
     }
     syncQueue.shift();
-    localStorage.setItem('lm-sync-queue', JSON.stringify(syncQueue));
+    // Cannot throw. This item IS uploaded; a storage error here used to land in
+    // the catch below, report a false "Save failed" and stall the queue.
+    saveSyncQueueToDevice();
     _syncRetryAttempt = 0;
     _syncRetrying = false;
     _syncFlushing = false;
@@ -2699,7 +2757,14 @@ async function processSyncQueue() {
     const delay = Math.min(30000, 2000 * Math.pow(2, _syncRetryAttempt - 1));
     setSyncState('error', `<b>Firestore</b> · ${syncQueue.length} pending · retrying…`);
     if (_syncRetryAttempt === 1) {
-      showToast('⚠ Save failed — your change is saved locally and will retry', 'err', 4000);
+      // Don't claim "saved locally" when the device just refused to store it.
+      showToast(
+        _syncQueueHeldInMemory
+          ? '⚠ Save failed — keep the app open; your change will retry but isn\'t stored on this device'
+          : '⚠ Save failed — your change is saved locally and will retry',
+        'err',
+        _syncQueueHeldInMemory ? 8000 : 4000,
+      );
     }
     renderSyncChip();
     clearTimeout(_syncRetryTimer);

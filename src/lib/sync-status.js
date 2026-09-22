@@ -86,6 +86,9 @@ export function formatSyncAge(timestamp, now = Date.now()) {
  * @param {number}  [input.pending]       queued, not-yet-uploaded book states
  * @param {boolean} [input.retrying]      the queue drain threw and is backing off
  * @param {number|null} [input.lastSyncedAt]  epoch ms of the last cloud write
+ * @param {boolean} [input.heldInMemory]  the device refused to store the queue
+ *   (storage full or blocked), so the queued changes exist only in the open app
+ *   and are lost if it is closed before they upload
  * @param {number}  [input.now]           epoch ms, injectable for tests
  * @returns {{visible: boolean, tone: string, icon: string, title: string,
  *            detail: string, meta: string, count: number, action: null |
@@ -100,10 +103,17 @@ export function describeSyncStatus(input = {}) {
     pending = 0,
     retrying = false,
     lastSyncedAt = null,
+    heldInMemory = false,
     now = Date.now(),
   } = input || {};
 
   const count = normalizePendingCount(pending);
+  // Only meaningful while something is actually queued: an empty queue has
+  // nothing to lose, whatever the device's storage is doing.
+  const atRisk = heldInMemory === true && count > 0;
+  // Storage can refuse for more than one reason (usually full, sometimes
+  // blocked), so the copy names the consequence rather than guessing the cause.
+  const KEEP_OPEN = "They're only held in the open app — keep it open until they upload.";
   const age = formatSyncAge(lastSyncedAt, now);
   const hidden = {
     visible: false, tone: '', icon: '', title: '', detail: '', meta: '',
@@ -113,7 +123,9 @@ export function describeSyncStatus(input = {}) {
   // Offline outranks everything: it explains the queue AND it is true even when
   // the queue happens to be empty, which is exactly the case the old UI missed.
   if (online === false) {
-    const detail = count
+    const detail = atRisk
+      ? `${pluralChanges(count)} couldn't be stored on this device (its storage may be full). ${KEEP_OPEN}`
+      : count
       ? `${pluralChanges(count)} are saved on this device. They upload on their own the moment you're back online.`
       : 'You can keep selling. Everything you record is saved on this device and uploads on its own when the connection returns.';
     return {
@@ -133,7 +145,9 @@ export function describeSyncStatus(input = {}) {
   if (!count) return hidden;
 
   if (retrying) {
-    const detail = `${pluralChanges(count)} haven't reached the cloud yet. Nothing is lost — they're saved on this device and we keep retrying.`;
+    const detail = atRisk
+      ? `${pluralChanges(count)} haven't reached the cloud yet, and this device couldn't store them. ${KEEP_OPEN}`
+      : `${pluralChanges(count)} haven't reached the cloud yet. Nothing is lost — they're saved on this device and we keep retrying.`;
     return {
       visible: true,
       tone: SYNC_TONES.FAILED,
@@ -147,7 +161,9 @@ export function describeSyncStatus(input = {}) {
     };
   }
 
-  const detail = `${pluralChanges(count)} on the way to the cloud.`;
+  const detail = atRisk
+    ? `${pluralChanges(count)} on the way to the cloud, but this device couldn't store them. ${KEEP_OPEN}`
+    : `${pluralChanges(count)} on the way to the cloud.`;
   return {
     visible: true,
     tone: SYNC_TONES.PENDING,
