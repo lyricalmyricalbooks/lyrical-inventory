@@ -57,6 +57,25 @@ describe('deciding what is worth an AI read', () => {
   });
 });
 
+describe('hostile email text cannot stall a scan', () => {
+  // Both checks used to take the square of the input's length on these shapes:
+  // 100,000 characters meant well over the test timeout. Linear now.
+  it('checks a very long run of digits for an amount at once', () => {
+    const started = performance.now();
+    expect(receiptWorthReading({ subject: '', body: '1'.repeat(100000), fileParts: [] })).toBe(false);
+    expect(receiptWorthReading({ subject: '', body: 'total ' + '1,'.repeat(50000), fileParts: [] })).toBe(false);
+    expect(receiptWorthReading({ subject: '', body: '1'.repeat(100000) + ' $', fileParts: [] })).toBe(true);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
+  it('cleans a long padded AI answer at once', () => {
+    const started = performance.now();
+    expect(() => parseReceiptJson('a' + ' '.repeat(100000) + 'x')).toThrow(/could not be read/);
+    expect(parseReceiptJson('```json\n{"receipts":[]}' + ' '.repeat(100000) + '```')).toEqual({ receipts: [] });
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+});
+
 describe('recognising a failure that would repeat on every email', () => {
   it('stops for a lapsed Gmail connection', () => {
     expect(systemicReceiptFailure(Object.assign(new Error('Gmail access expired.'), { stopsScan: true }))).toBe('Gmail access expired.');

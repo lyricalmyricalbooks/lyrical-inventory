@@ -255,7 +255,11 @@ export function systemicReceiptFailure(errorOrMessage) {
 // Models asked for "JSON only" still wrap it in a ```json fence now and then,
 // and a bare JSON.parse turned that into "Unexpected token" on the screen.
 export function parseReceiptJson(text) {
-  const raw = String(text || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  // The closing fence is cut with string methods: a trailing `\s*` pattern
+  // retried every run of spaces from each starting point, so a long padded
+  // answer took the square of its length to clean.
+  let raw = String(text || '').trim().replace(/^```(?:json)?\s*/i, '');
+  if (raw.endsWith('```')) raw = raw.slice(0, -3).trimEnd();
   try { return JSON.parse(raw); } catch { /* fall through to the outermost object */ }
   const start = raw.indexOf('{'), end = raw.lastIndexOf('}');
   if (start >= 0 && end > start) {

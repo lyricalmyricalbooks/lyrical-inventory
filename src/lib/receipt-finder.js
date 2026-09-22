@@ -26,11 +26,17 @@ export function receiptQuery({ query = '', after = '', before = '', sender = '',
 // reset that happens to say "order" — cannot be a receipt, so it is set aside
 // without spending an AI read on it. Matches a currency mark or code beside a
 // number, or a money word followed by a two-decimal figure.
+//
+// Every part is anchored on a single character or bounded in length. This runs
+// on whatever text anyone mails the publisher, and an open-ended run such as
+// `\d[\d,.]*` before the currency mark made one long line of digits cost the
+// square of its length — 40,000 digits held the scan for seconds.
 const AMOUNT_IN_TEXT = new RegExp([
   String.raw`(?:[$€£¥₹]|\b(?:CAD|USD|EUR|GBP|AUD|NZD|CHF|JPY|MXN|INR)\b)\s?-?\d`,
-  // "12,50 $" is how French-Canadian receipts write it.
-  String.raw`\d(?:[\d,.]*\d)?\s?(?:[$€£]|\b(?:CAD|USD|EUR|GBP|AUD|NZD|CHF|SEK|NOK|DKK)\b)`,
-  String.raw`\b(?:total|subtotal|amount|paid|charged|balance|due)\b[^\n\d]{0,40}\d[\d,.]*[.,]\d{2}\b`,
+  // "12,50 $" is how French-Canadian receipts write it. Only the digit right
+  // before the mark matters for a yes/no answer.
+  String.raw`\d\s?(?:[$€£]|\b(?:CAD|USD|EUR|GBP|AUD|NZD|CHF|SEK|NOK|DKK)\b)`,
+  String.raw`\b(?:total|subtotal|amount|paid|charged|balance|due)\b[^\n\d]{0,40}\d[\d,.]{0,15}[.,]\d{2}\b`,
 ].join('|'), 'i');
 
 export function receiptWorthReading(email) {
