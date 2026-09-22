@@ -215,7 +215,24 @@ raise it again without the same justification.
 
 ## 4. What is left, in the order to do it
 
-### 4a. Finish wave 3 — the modal surfaces (~53)
+**2026-09-22 — 4a/4b/4c below are stale; verified done, not re-deleted so the record stays
+intact.** §1's table already said as much (waves 2/3/residue "✅ merged" / "✅ on this branch"),
+but this section was never cleaned up to match, so it kept reading as an open TODO. Spot-checked
+just now: two `.overlay` modal bodies (`#m-tc-trip-detail`, `#m-tc-new-trip`) read clean — every
+element on `.modal`/`.btn`/`.tbl-wrap`/`.form-group` and friends, zero raw colour or shape inline.
+The ~91 raw-hex hits still findable in `src/main.js`/`src/features/*.js` today are, on inspection,
+not the same debt 4b describes: email/invoice HTML (must stay raw — no `:root` to resolve
+against, see §3), and the Open Call template editor's text/highlight colour **swatch picker**
+(`opencall.js` ~951–977 — a fixed palette of picker options, not themed chrome; converting it to
+app tokens would be wrong, the same way `renderMockSpreadsheet`'s Sheets imitation in 4b is
+correct to leave alone). Neither category is what 4a/4b were originally warning about. If a
+future pass finds a *bespoke live-UI* component still on raw values, that's still real debt —
+just confirm it's not one of these two categories first, the way this check did.
+The one genuinely open item from this whole section is **4d's manual pass** — still true, see
+below — and the ratchet counts in 4d are now stale too; `scripts/token-baseline.json` is the live
+source of truth, not the numbers printed here.
+
+### 4a. Finish wave 3 — the modal surfaces (~53) — superseded, see note above
 
 Nothing deliberate has been done to these yet and they are the most likely thing to be missed:
 
@@ -288,8 +305,11 @@ is where a redesign half-lands.
   dispatch, but `#tab-financials` does not exist and `renderFinancials()` would throw. ~9
   references. It deserves its own change, not a drive-by deletion inside a redesign PR.
 - Ratchet: after the sweeps, lower the limits with `node scripts/check-tokens.mjs --write-baseline`.
-  **Only ever to lower them.** Now: raw-hex 131 · raw-zindex 40 · raw-font-size 99 ·
-  raw-easing 0 · raw-shadow 6 (was 140 / 40 / 99 / 0 / 12).
+  **Only ever to lower them.** ~~Now: raw-hex 131 · raw-zindex 40 · raw-font-size 99 ·
+  raw-easing 0 · raw-shadow 6 (was 140 / 40 / 99 / 0 / 12).~~ Stale the moment it was written —
+  `scripts/token-baseline.json` is the live number, not this line. As of 2026-09-22: raw-shadow
+  cleared to 0 (the 6 remaining sites were reviewed exceptions never marked `token-ok`, plus one
+  genuinely dead fallback value, removed outright — see the PR that landed this note).
 
 ---
 

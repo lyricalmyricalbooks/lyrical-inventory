@@ -459,12 +459,15 @@
   color: var(--gold-text);
 }
 
-/* Inline-save confirmation flash on postage inputs. */
+/* Inline-save confirmation flash on postage inputs. A validation ring, not
+   elevation, so --elev-* doesn't fit; the colour is a bespoke tuned wash
+   (used for both the ring and the fill below, deliberately not var(--green)
+   at full strength) rather than a straight token reference. */
 .theme-dark .inline-postage-input.saved-success { animation-name: save-flash-dark; }
 @keyframes save-flash-dark {
   0% {
     border-color: var(--green);
-    box-shadow: 0 0 0 3px rgba(95, 207, 144, .30);
+    box-shadow: 0 0 0 3px rgba(95, 207, 144, .30); /* token-ok */
     background: rgba(95, 207, 144, .14);
   }
   100% {
