@@ -2898,6 +2898,7 @@ function switchTaxCenterSubTab(subTabName) {
       _tcRenderReceiptStorage();
     }
   }
+  if (activeTaxCenterSubTab === 'email-import') window.openEmailReceiptImportModal();
 }
 
 function tcSubNavKeydown(e) {
