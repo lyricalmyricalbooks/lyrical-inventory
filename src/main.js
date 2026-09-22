@@ -3618,17 +3618,13 @@ function syncRoleUI() {
   // Publisher-only chrome: hidden in author view, shown (with its normal
   // display value) in publisher view.
   const PUBLISHER_ONLY_IDS = [
-    'todo-tab-btn', 'todo-sidebar-btn', 'reconcile-tab-btn', 'opencall-tab-btn',
-    'website-tab-btn', 'global-taxcenter-btn', 'global-sheets-btn',
-    'global-backups-btn', 'd-qr-btn', 'qrcodes-tab-btn', 'webanalytics-tab-btn',
+    'todo-sidebar-btn', 'website-tab-btn', 'd-qr-btn', 'webanalytics-tab-btn',
     'sidebar-webanalytics-btn', 'shipping-tab-btn', 'bigcartel-tab-btn', 'sidebar-bigcartel-btn',
   ];
   for (const id of PUBLISHER_ONLY_IDS) {
     const el = $(id);
     if (el) el.style.display = authorNow ? 'none' : '';
   }
-  const globalActions = $('global-actions');
-  if (globalActions) globalActions.style.display = authorNow ? 'none' : 'flex';
   // myqr tab is AUTHOR-only
   const myqrTabBtn = $('myqr-tab-btn');
   if (myqrTabBtn) myqrTabBtn.style.display = authorNow ? '' : 'none';

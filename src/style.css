@@ -4170,9 +4170,8 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
     padding:6px 8px;
     letter-spacing:.05em;
   }
-  /* Grouped menus on mobile: full-width primary, three triggers in a row,
-     panels drop full-width under the whole toolbar so they never overflow. */
-  .header-actions .header-action-btn.primary{flex:1 1 100%;}
+  /* Grouped menus on mobile: three triggers in a row, panels drop
+     full-width under the whole toolbar so they never overflow. */
   .header-menu{flex:1 1 calc(33.333% - 4px);min-width:96px;position:static;display:flex;}
   .header-menu .header-menu-trigger{flex:1 1 auto;width:100%;}
   .header-menu-panel{top:100%;left:0;right:0;min-width:0;width:auto;margin-top:6px;}

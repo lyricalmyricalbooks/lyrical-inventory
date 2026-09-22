@@ -120,9 +120,11 @@ describe('the mark that outlives the card', () => {
     // The Tax Centre hosts two shipping services, so one mark stands for both
     // rather than a row of identical dots saying the same thing twice.
     expect(indexContent).toContain('data-health-badge="shippo,canadapost,shipping-email,stripe-fees,receipt-scan"');
-    // Two places each, so it is visible wherever that tab is reached from.
+    // Big Cartel is reachable from two places, so it needs a mark at each.
+    // Tax Centre now has a single sidebar entry point (the header's duplicate
+    // shortcut was removed), so it needs only one mark.
     expect(indexContent.match(/data-health-badge="bigcartel"/g)).toHaveLength(2);
-    expect(indexContent.match(/data-health-badge="shippo,canadapost,shipping-email,stripe-fees,receipt-scan"/g)).toHaveLength(2);
+    expect(indexContent.match(/data-health-badge="shippo,canadapost,shipping-email,stripe-fees,receipt-scan"/g)).toHaveLength(1);
   });
 
   it('starts hidden and is announced to a screen reader', () => {

@@ -198,6 +198,6 @@ describe('the fortnightly sweep and the ledger', () => {
 
   it('marks the Tax Centre when Stripe stops answering', () => {
     expect(indexContent.match(/data-health-badge="shippo,canadapost,shipping-email,stripe-fees,receipt-scan"/g))
-      .toHaveLength(2);
+      .toHaveLength(1);
   });
 });
