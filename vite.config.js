@@ -84,6 +84,11 @@ export default defineConfig({
     // Nothing here touches the network or a real Firebase project; a test that
     // hangs is a bug in the test, not something to wait 30s for.
     testTimeout: 10000,
+    // Default 'threads' pool spins up a fresh jsdom environment per test file
+    // (237 times, ~223s of the suite's ~106s wall time in overlapping workers).
+    // vmThreads reuses the environment within a worker via a vm context, cutting
+    // that overhead while still isolating each file's module registry/globals.
+    pool: 'vmThreads',
   },
   plugins: [
     syncAppsScriptPlugin(),
