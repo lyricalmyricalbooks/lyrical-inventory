@@ -19501,3 +19501,43 @@ button[onclick="refreshUmamiStats()"]:active {
   }
   #tab-intel .intel-send{min-height:48px;}
 }
+
+/* ============================================================
+   ADD SALE, PHONE REDESIGN (≤768px only; the computer layout is
+   untouched). Sale / Gift copy switch, and big tap buttons in place
+   of the payment, channel and gift-pile dropdowns. The dropdowns stay
+   in the page as the source of truth; they are only hidden on phones.
+   ============================================================ */
+.phone-mode-seg,.phone-seg{display:none;}
+
+@media (max-width: 768px){
+  #tab-manual .phone-mode-seg{
+    display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;padding:4px;margin-bottom:var(--space-4);
+    border-radius:var(--r3);background:var(--surface-sunken);
+  }
+  .phone-mode-opt{
+    min-height:52px;border:0;border-radius:var(--r2);background:transparent;cursor:pointer;
+    color:var(--content-primary);font-family:var(--font-ui);font-size:var(--text-base);font-weight:800;
+  }
+  .phone-mode-opt[aria-selected="true"]{background:var(--surface-inverse);color:var(--content-on-inverse);}
+  .phone-mode-opt:focus-visible,.phone-seg-opt:focus-visible{outline:2px solid var(--gold);outline-offset:-2px;}
+  #tab-manual:not(.is-gift) #man-gift-sect,
+  #tab-manual.is-gift #man-sale-sect{display:none;}
+  #tab-manual #man-gift-sect > .divider:first-child{display:none;}
+
+  .has-phone-seg > select{display:none;}
+  .has-phone-seg > .phone-seg{
+    display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;
+  }
+  .phone-seg-opt{
+    min-height:52px;padding:0 10px;border:var(--stroke-hair) solid var(--border-default);border-radius:var(--r2);
+    background:var(--surface-raised);color:var(--content-primary);cursor:pointer;
+    font-family:var(--font-ui);font-size:var(--text-base);font-weight:700;line-height:1.2;
+  }
+  .phone-seg-opt[aria-checked="true"]{background:var(--surface-inverse);color:var(--content-on-inverse);border-color:var(--surface-inverse);}
+
+  /* Order number and copies side by side; price takes the full row. */
+  #tab-manual .order-grid{grid-template-columns:repeat(2,minmax(0,1fr)) !important;gap:var(--space-3);}
+  #tab-manual .order-grid > .form-group:nth-child(3){grid-column:1 / -1;}
+  #tab-manual .book-context{margin-bottom:var(--space-3);}
+}

@@ -4514,6 +4514,70 @@ document.getElementById('more-sheet')?.addEventListener('close', () => {
 
 Object.assign(window, { openMoreSheet, closeMoreSheet });
 
+// ── Phone tap buttons for short dropdowns ──────────────────────────────
+// A <select data-phone-seg> gets a row of big buttons beside it that a phone
+// shows instead of the dropdown. The select stays the single source of truth
+// (every save reads it); the buttons only set it and fire its change event.
+function buildPhoneSeg(select) {
+  let seg = select.nextElementSibling;
+  if (!seg || !seg.classList.contains('phone-seg')) {
+    seg = document.createElement('div');
+    seg.className = 'phone-seg';
+    seg.setAttribute('role', 'radiogroup');
+    const label = select.id && document.querySelector(`label[for="${select.id}"]`);
+    if (label) seg.setAttribute('aria-label', label.textContent.replace(/\s+/g, ' ').trim());
+    select.after(seg);
+    select.closest('.form-group')?.classList.add('has-phone-seg');
+  }
+  seg.replaceChildren(...[...select.options].filter((o) => o.value !== '' && !o.disabled).map((o) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'phone-seg-opt';
+    b.setAttribute('role', 'radio');
+    b.dataset.value = o.value;
+    b.textContent = o.textContent.trim();
+    b.addEventListener('click', () => {
+      select.value = o.value;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      syncPhoneSegs();
+    });
+    return b;
+  }));
+  syncPhoneSegs();
+}
+
+function syncPhoneSegs() {
+  document.querySelectorAll('select[data-phone-seg]').forEach((select) => {
+    const seg = select.nextElementSibling;
+    if (!seg?.classList.contains('phone-seg')) return;
+    seg.querySelectorAll('.phone-seg-opt').forEach((b) => {
+      b.setAttribute('aria-checked', String(b.dataset.value === select.value));
+    });
+  });
+}
+
+// Rebuilt whenever Add sale opens (switchTab), so options code added since —
+// the book's payment types and channels — always show as buttons.
+function refreshPhoneSegs() {
+  document.querySelectorAll('select[data-phone-seg]').forEach((select) => {
+    buildPhoneSeg(select);
+    if (select.dataset.phoneSegBound) return;
+    select.dataset.phoneSegBound = '1';
+    select.addEventListener('change', syncPhoneSegs);
+  });
+}
+refreshPhoneSegs();
+
+// Add sale on a phone: show the sale form or the gift-copy form, not both.
+window.setManualMode = function (mode) {
+  const gift = mode === 'gift';
+  document.getElementById('tab-manual')?.classList.toggle('is-gift', gift);
+  document.getElementById('man-mode-sale')?.setAttribute('aria-selected', String(!gift));
+  document.getElementById('man-mode-gift')?.setAttribute('aria-selected', String(gift));
+};
+window.syncPhoneSegs = syncPhoneSegs;
+
+
 // ── Phone fold-open sections ───────────────────────────────────────────
 // Long dashboard sections marked data-phone-fold start folded on a phone:
 // only their heading shows, with a Show/Hide button. On wider screens the
@@ -4611,6 +4675,7 @@ export function switchTab(name) {
 
   if (name === 'dashboard') { updateDash(); renderArtistReimburseBanner(); renderPendingExpenses(); }
   if (name === 'today') renderTodayHub();
+  if (name === 'manual') refreshPhoneSegs();
   if (name === 'history') renderHist();
   // Website orders was the one panel that rendered nothing on arrival, so the
   // queue and its counts showed whatever the last visit left behind — orders
@@ -9146,7 +9211,7 @@ async function submitManual(ev) {
 
     $('m-num').value = ''; $('m-qty').value = '1';
     $('m-price').value = book.listPrice.toFixed(2);
-    $('m-notes').value = ''; $('m-payment-type').value = ''; $('m-hint').textContent = '';
+    $('m-notes').value = ''; $('m-payment-type').value = ''; $('m-hint').textContent = ''; syncPhoneSegs();
     $('m-price-cur').value = 'BOOK';
     onManualCurrencyChange(); // reset fx logic
   });
