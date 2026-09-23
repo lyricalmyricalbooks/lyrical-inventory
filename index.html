@@ -3830,8 +3830,12 @@
       </div>
     </div>
 
-    <div class="pos-layout">
-      <div style="display:flex; flex-direction:column; gap:14px; flex:1; min-width:0;">
+    <div class="pos-mobile-steps" role="group" aria-label="Sale steps">
+      <button type="button" class="pos-mobile-step active" id="pos-mobile-books-tab" aria-pressed="true" aria-controls="pos-mobile-books" onclick="posMobileView('books')">1 · Books</button>
+      <button type="button" class="pos-mobile-step" id="pos-mobile-checkout-tab" aria-pressed="false" aria-controls="pos-mobile-checkout" onclick="posMobileView('checkout')">2 · Checkout <span id="pos-mobile-cart-count">0</span></button>
+    </div>
+    <div class="pos-layout" data-mobile-view="books">
+      <div class="pos-mobile-books" id="pos-mobile-books" style="display:flex; flex-direction:column; gap:14px; flex:1; min-width:0;">
         <div class="pos-search-wrapper">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gold-text)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);pointer-events:none;"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
           <input type="search" id="pos-search-input" placeholder="Search books in POS (press / to focus, Esc to clear)..." oninput="posSearchFilter(this.value)">
@@ -3845,7 +3849,7 @@
            total → lines → pay. The stack rhythm and every type/colour decision
            live in the .pos-checkout-* block in style.css; nothing here carries
            its own inline styling any more. -->
-      <div class="card pos-cart-panel" style="position:sticky;top:88px;">
+      <div class="card pos-cart-panel" id="pos-mobile-checkout" style="position:sticky;top:88px;">
         <div class="pos-checkout-stage">
           <div class="pos-checkout-head">
             <div class="pos-checkout-eyebrow">Checkout Review</div>

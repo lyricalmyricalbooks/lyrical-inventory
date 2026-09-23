@@ -4560,7 +4560,7 @@ export function switchTab(name) {
   if (name === 'sheets') { loadGasCode(); renderSheetsLog(); renderProfitSettings(); switchSettingsSubTab(activeSettingsSubTab); if (typeof updateSheetsTabUI === 'function') updateSheetsTabUI(); }
   if (name === 'qrcodes') renderAllQRCodes();
   if (name === 'myqr') renderAuthorQRPage();
-  if (name === 'pos') { renderPOS(); renderPOSFxStatus(); switchPOSSubTab(activePOSSubTab); }
+  if (name === 'pos') { renderPOS(); renderPOSFxStatus(); switchPOSSubTab(activePOSSubTab); window.posMobileView?.('books', false); }
   if (name === 'webanalytics') renderWebAnalytics();
   if (name === 'shipping') { initShippingTab(); }
   if (name === 'bigcartel') { renderBigCartelTab(); }
@@ -17862,6 +17862,8 @@ function renderPOS() {
   if (!grid) return;
 
   const cartRows = buildPOSCartRows();
+  const mobileCartCount = $('pos-mobile-cart-count');
+  if (mobileCartCount) mobileCartCount.textContent = String(cartRows.reduce((count, row) => count + row.qty, 0));
   const cartItemsEl = $('pos-cart-items');
   const subtotalEl = $('pos-subtotal-lines');
   const totalEl = $('pos-total');
@@ -17929,6 +17931,23 @@ function renderPOS() {
       : `Transaction currency: ${posTransactionCurrency}`;
   }
 }
+
+window.posMobileView = function (view, scroll = true) {
+  if (view !== 'books' && view !== 'checkout') return;
+  const layout = document.querySelector('#pos-subpanel-register .pos-layout');
+  if (!layout) return;
+  layout.dataset.mobileView = view;
+  ['books', 'checkout'].forEach((step) => {
+    const tab = $(`pos-mobile-${step}-tab`);
+    if (!tab) return;
+    const selected = step === view;
+    tab.classList.toggle('active', selected);
+    tab.setAttribute('aria-pressed', String(selected));
+  });
+  if (scroll && window.matchMedia('(max-width: 768px)').matches) {
+    document.querySelector('.pos-mobile-steps')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
+};
 
 window.posUpdateQty = function (bookId, delta) {
   posCart[bookId] = Math.max(0, (posCart[bookId] || 0) + delta);

@@ -19062,6 +19062,7 @@ button[onclick="refreshUmamiStats()"]:active {
    ============================================================ */
 .mnav{display:none;}
 .more-sheet{display:none;}
+.pos-mobile-steps{display:none;}
 
 @media (max-width: 768px){
   .pub-shell .tab-bar{display:none;}
@@ -19170,3 +19171,64 @@ button[onclick="refreshUmamiStats()"]:active {
 }
 @keyframes moreSheetIn{from{transform:translateY(100%);}to{transform:none;}}
 @media (prefers-reduced-motion: reduce){.more-sheet[open]{animation:none;}}
+
+/* Portrait workspaces: keep the book context, figures, and sale controls in
+   separate rows. The register's old fixed checkout obscured the book list. */
+@media (max-width: 768px){
+  .pub-shell .app-header{grid-template-columns:minmax(0,1fr) auto auto;}
+  .pub-shell .header-brand{grid-column:1;min-width:0;}
+  .pub-shell #theme-toggle-btn{grid-column:2;}
+  .pub-shell #hmenu-account{grid-column:3;}
+  .pub-shell .app-header #book-switcher-wrap{
+    grid-row:2;grid-column:1/-1;width:100%;min-width:0;
+    display:flex;flex-wrap:wrap;gap:8px;
+  }
+  .pub-shell #book-dropdown{flex:1 1 100%;width:100%;}
+  .pub-shell #book-dropdown-btn{width:100%;max-width:none;justify-content:space-between;}
+  .pub-shell .profile-toggle-group{flex:1 1 100%;min-width:0;}
+  .pub-shell .profile-tab{flex:1;justify-content:center;min-height:44px;text-align:center;}
+  .pub-shell .kpi-cluster{grid-row:3;grid-column:1/-1;width:100%;justify-content:stretch;}
+  .pub-shell .header-stat{flex:1 1 0;align-items:center;text-align:center;padding:.35rem .2rem;}
+  .pub-shell .hs-val{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+  .pub-shell .app{padding-bottom:calc(88px + env(safe-area-inset-bottom));}
+  .pub-shell .tab-panel{min-width:0;overflow-wrap:anywhere;}
+  .pub-shell .more-sheet-body .pub-nav{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .pub-shell .more-sheet-body .snav{min-height:68px;}
+
+  #tab-pos .pos-subtab-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));}
+  #tab-pos .pos-subtab-btn{min-width:0;white-space:normal;text-align:center;line-height:1.2;}
+  #tab-pos .pos-mobile-steps{
+    display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;
+    position:sticky;top:0;z-index:var(--z-sticky);padding:4px;margin:0 0 var(--space-3);
+    border:var(--stroke-hair) solid var(--border-default);border-radius:var(--r2);
+    background:var(--surface-sunken);scroll-margin-top:8px;
+  }
+  #tab-pos .pos-mobile-step{
+    min-width:0;min-height:48px;border:0;border-radius:var(--r);
+    background:transparent;color:var(--content-secondary);font:700 var(--text-sm) var(--font-ui);
+    cursor:pointer;touch-action:manipulation;
+  }
+  #tab-pos .pos-mobile-step.active{background:var(--surface-card);color:var(--content-primary);box-shadow:var(--elev-1);}
+  #tab-pos .pos-mobile-step:focus-visible{outline:2px solid var(--gold);outline-offset:-2px;}
+  #pos-mobile-cart-count{display:inline-grid;place-items:center;min-width:24px;height:24px;padding-inline:4px;margin-left:4px;border-radius:var(--r-pill);background:var(--gold-bg);color:var(--gold-text);font-family:var(--font-mono);}
+  #tab-pos .pos-layout{display:block;min-width:0;}
+  #tab-pos .pos-layout[data-mobile-view="books"] #pos-mobile-checkout,
+  #tab-pos .pos-layout[data-mobile-view="checkout"] #pos-mobile-books{display:none !important;}
+  #tab-pos .pos-cart-panel{
+    position:static !important;inset:auto !important;max-height:none;overflow:visible;
+    width:100%;margin:0 !important;border-radius:var(--r3) !important;
+  }
+  #tab-pos .pos-cart-scroll{max-height:none;overflow:visible;}
+  #tab-pos .pos-search-wrapper input{font-size:max(1rem,var(--text-base)) !important;min-height:48px;}
+  #tab-pos .pos-card{min-width:0;}
+
+  #tab-manual .price-inline{min-width:0;}
+  #tab-manual .price-inline > *{min-width:0;width:100%;}
+  #tab-manual .order-preview-figures{flex-direction:column;align-items:stretch;}
+  #tab-website .web-orders-actions{display:grid;grid-template-columns:1fr 1fr;width:100%;}
+  #tab-website .web-orders-actions .recon-toggle{grid-column:1/-1;min-height:44px;margin:0 !important;}
+  #tab-website .web-orders-actions .btn{min-width:0;padding-inline:8px;white-space:normal;}
+  #tab-website .order-card-top,#tab-website .order-card-bottom{flex-wrap:wrap;}
+  #tab-website .order-actions{flex-wrap:wrap;}
+}
