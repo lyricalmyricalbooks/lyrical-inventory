@@ -22683,9 +22683,6 @@ function reverseRefundedSalesFromAlert(event) {
   dismissAppAlert('stripe-refunds');
   const pending = readPendingRefundReversals();
   writePendingRefundReversals([]);
-  let reversed = 0;
-  let copies = 0;
-  const touched = new Set();
   reverseSalesWithUndo(pending, 'Refunded in Stripe');
 }
 
