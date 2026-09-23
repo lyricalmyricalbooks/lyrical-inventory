@@ -679,7 +679,9 @@ export function buildAttentionSignals(input = {}) {
     if (!book || !book.id) continue;
     booksById[book.id] = book;
     const s = states[book.id] || {};
-    stockSignals(book, s, signals);
+    // A book whose records haven't arrived yet has no stock count at all, and
+    // reading that as zero announced every book as nearly sold out on startup.
+    if (states[book.id]) stockSignals(book, s, signals);
     moneySignals(book, s, signals, ctx);
     catalogueSignals(book, s, signals);
   }

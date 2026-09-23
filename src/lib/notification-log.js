@@ -127,3 +127,30 @@ export function readSeenUrgent() {
 export function writeSeenUrgent(ids) {
   try { store()?.setItem(SEEN_URGENT_KEY, JSON.stringify(ids.slice(0, 300))); } catch (_) { /* storage full */ }
 }
+
+// ─── One-time clean-up of false stock alerts ───────────────────────────────
+//
+// Before the fix above, opening the app announced "Stock running low — 0
+// copies" for every book with a reorder level, because the check ran before
+// the books had loaded. Those entries were never true. This removes stock
+// alerts from the history that don't match anything low right now, once per
+// device, and leaves every other message alone.
+
+const STOCK_CLEANUP_KEY = 'lm-notif-stock-cleanup-v1';
+
+export function dropFalseStockNotifications(currentSignalIds = []) {
+  const s = store();
+  try { if (s?.getItem(STOCK_CLEANUP_KEY)) return 0; } catch (_) { return 0; }
+  const current = new Set((currentSignalIds || []).map(id => `todo:${id}`));
+  const isStock = (kind) => /^todo:stock-(low|getting-low):/.test(String(kind || ''));
+  const list = readNotificationLog();
+  const kept = list.filter(item => !isStock(item.kind) || current.has(item.kind));
+  const removed = list.length - kept.length;
+  if (removed) writeLog(kept);
+  // The seen list may hold the same false ids; forget them so a real low
+  // stock later is still announced.
+  const seen = readSeenUrgent();
+  if (seen) writeSeenUrgent(seen.filter(id => !/^stock-(low|getting-low):/.test(id) || current.has(`todo:${id}`)));
+  try { s?.setItem(STOCK_CLEANUP_KEY, '1'); } catch (_) { /* storage blocked */ }
+  return removed;
+}
