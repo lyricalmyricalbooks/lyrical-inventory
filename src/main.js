@@ -6532,63 +6532,33 @@ function renderBreakEvenBlock(s, book, cur, cost, recognizedRev) {
     al.style.background = '';
     al.style.color = '';
   } else {
-    al.className = 'stock-alert warn';
-
-    // Ink grades, not fills. This alert renders inside .stock-block, which is
-    // a PAPER panel in both themes since the Riso repaint — the light siblings
-    // these used to carry (--gold2/--gold3, the raw #fb923c orange) were
-    // chosen for the panel's old permanently-ink fill and measure under 2:1
-    // on paper. --orange-ink/--gold-text are the same two hues, text-graded.
-    if (be.isClose) {
-      al.style.borderLeftColor = 'var(--orange)';
-      al.style.background = 'rgba(255, 138, 60, 0.1)';
-      al.style.color = 'var(--orange-ink)';
-    } else {
-      al.style.borderLeftColor = 'var(--gold-line)';
-      al.style.background = 'var(--gold-bg)';
-      al.style.color = 'var(--gold-text)';
+    al.className = `stock-alert be-alert ${be.isClose ? 'be-close' : 'be-far'}`;
+    al.style.borderLeftColor = '';
+    al.style.background = '';
+    al.style.color = '';
+    const units = be.unitsNeededAtList;
+    const unitsStat = be.hasListPrice
+      ? `<span class="be-stat-num">~${units} unit${units !== 1 ? 's' : ''}</span>
+         <span class="be-stat-label">At ${fmt(be.listPrice, cur)} list price</span>`
+      : `<span class="be-stat-num">—</span>
+         <span class="be-stat-label">Set a list price to estimate units</span>`;
+    const captionParts = [];
+    if (be.hasListPrice && be.paceNote) {
+      captionParts.push(`Based on full list price — your realized average (${fmt(be.avgRev, cur)}/unit after splits &amp; discounts) puts it closer to ~${be.unitsNeededAtAvg} units.`);
     }
-
-    const themeColor = be.isClose ? 'var(--orange-ink)' : 'var(--gold-text)';
-    const themeBg = be.isClose ? 'rgba(255, 138, 60, 0.12)' : 'rgba(232, 64, 42, 0.12)';
-    const themeBorder = be.isClose ? 'rgba(255, 138, 60, 0.3)' : 'var(--gold-line)';
+    if (be.stockNote) captionParts.push(escapeHtml(be.stockNote));
 
     al.innerHTML = `
-      <div style="display:flex; flex-direction:column; gap:8px; width:100%;">
-        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; width:100%;">
-          <div style="display:flex; align-items:center; gap:8px;">
-            <span style="font-size:var(--text-base); opacity:0.85;">⚠️</span>
-            <span style="font-weight:600; font-family:var(--font-ui);">${be.isClose ? 'Almost broken even:' : 'Not yet broken even:'}</span>
-          </div>
-          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-            <span style="display:inline-flex; align-items:center; gap:6px; background:${themeBg}; border:var(--stroke-hair) solid ${themeBorder}; color:${themeColor}; font-family:var(--font-mono); font-size:var(--text-xs); font-weight:700; padding:4px 10px; border-radius:var(--r-pill); line-height:1;" title="${fmt(be.remaining, cur)} remaining of ${fmt(cost, cur)} production cost">
-              🎯 ${fmt(be.remaining, cur)} remaining
-            </span>
-            <span style="display:inline-flex; align-items:center; gap:6px; background:${themeBg}; border:var(--stroke-hair) solid ${themeBorder}; color:${themeColor}; font-family:var(--font-mono); font-size:var(--text-xs); font-weight:700; padding:4px 10px; border-radius:var(--r-pill); line-height:1;" title="${escapeHtml(be.unitsBadgeTitle)}">
-              ${escapeHtml(be.unitsBadgeText)}
-            </span>
-          </div>
+      <div class="be-alert-label"><span aria-hidden="true">⚠️</span>${be.isClose ? 'Almost broken even' : 'Not yet broken even'}</div>
+      <div class="be-stats">
+        <div class="be-stat" title="${fmt(be.remaining, cur)} remaining of ${fmt(cost, cur)} production cost">
+          <span class="be-stat-num">${fmt(be.remaining, cur)}</span>
+          <span class="be-stat-label">Left to recover</span>
         </div>
-        <div class="stock-alert-details" style="border-top-color:${themeBorder};">
-          <div style="color:var(--text2);">
-            ${be.hasListPrice
-              ? `Requires selling <strong style="color:var(--text);font-weight:700;">~${be.unitsNeededAtList}</strong> more unit${be.unitsNeededAtList !== 1 ? 's' : ''} at full list price of <strong style="color:var(--text);font-family:var(--font-mono);font-weight:700;">${fmt(be.listPrice, cur)}</strong> to recover the remaining <strong style="color:var(--text);font-family:var(--font-mono);font-weight:700;">${fmt(be.remaining, cur)}</strong>.`
-              : `Set a list price in book settings to calculate the units needed to break even.`}
-          </div>
-          ${be.paceNote ? `
-            <div class="stock-alert-note pace" style="color:${be.isClose ? 'var(--orange-ink)' : 'var(--gold-text)'};">
-              <span aria-hidden="true">💡</span>
-              <span style="color:inherit;">${escapeHtml(be.paceNote)}</span>
-            </div>
-          ` : ''}
-          ${be.stockNote ? `
-            <div class="stock-alert-note" style="color:var(--text2);">
-              <span aria-hidden="true">📦</span>
-              <span style="color:inherit;">${escapeHtml(be.stockNote)}</span>
-            </div>
-          ` : ''}
-        </div>
+        <div class="be-stat-divider" aria-hidden="true"></div>
+        <div class="be-stat be-stat-right" title="${escapeHtml(be.unitsBadgeTitle)}">${unitsStat}</div>
       </div>
+      ${captionParts.length ? `<div class="be-caption">${captionParts.join(' ')}</div>` : ''}
     `;
   }
 }
