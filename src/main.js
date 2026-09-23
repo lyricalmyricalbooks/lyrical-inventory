@@ -18726,7 +18726,7 @@ function renderPOSFxStatus() {
 //
 // fxRate must be the live rate from paymentCurrency → bookNativeCurrency
 // (i.e. the same direction fetchLiveRate uses), matching how manual entry works.
-function _posItemToManualPayload(book, qty, paymentMethod, basePrice, txnCurCode, convertedUnitInTxnCur, nativePerTxnRate, priceNote) {
+function _posItemToManualPayload(book, qty, paymentMethod, basePrice, txnCurCode, convertedUnitInTxnCur, nativePerTxnRate, priceNote, saleNum = '') {
   const nativeCurCode = getBookCurrencyCode(book);
   const isFx = txnCurCode !== nativeCurCode;
 
@@ -18743,7 +18743,10 @@ function _posItemToManualPayload(book, qty, paymentMethod, basePrice, txnCurCode
     fxRate: nativePerTxnRate || 1  // rate: 1 txnCur = N nativeCur  (e.g. 1 CAD = 0.68 EUR)
   });
 
-  const num = `POS-${Date.now().toString().slice(-6)}`;
+  // One number per checkout, passed in by the caller, so every book the
+  // customer bought in one go shares it — the market-day check groups a
+  // checkout's rows by this number to match them to one card payment.
+  const num = saleNum || `POS-${Date.now().toString().slice(-6)}`;
   const chan = 'Book Fair';
   const notes = priceNote ? `${paymentMethod} · ${priceNote}` : paymentMethod;
   return { num, chan, qty, price: basePrice, notes, payment };
@@ -18801,90 +18804,130 @@ window.posCheckout = function () {
   openM('pos-sale-confirm');
 };
 
+// True while a sale is being written. A second tap on Complete Sale — easy on
+// a phone at a busy table — must not record the same sale twice.
+let _posSaving = false;
+
 window.posConfirmSale = async function () {
-  if (!posPendingSale) return;
-  await syncCatalog();
+  if (_posSaving || !posPendingSale) return;
+  _posSaving = true;
+  // Taken now and cleared at once, so nothing that happens while this sale is
+  // being written can pick the same cart up again.
+  const sale = posPendingSale;
+  posPendingSale = null;
+  const saleNum = `POS-${Date.now().toString().slice(-6)}`;
   const previousBook = activeBook;
-  let posExtraTouched = false;
+  const posOnlyRows = [];
+  let recorded = 0;
+  const failed = [];
 
-  for (const row of posPendingSale.rows) {
-    const book = row.book;
-    const qty = row.qty;
+  try {
+    // Catalogue books first, and before anything touches the network: the sale
+    // is written to this device (and queued for the cloud) the moment it is
+    // confirmed. It used to wait for a full catalogue reload, which on a
+    // one-bar fair connection could hold a sale for as long as the signal took
+    // to answer — or forever.
+    for (const row of sale.rows) {
+      const book = row.book;
+      const qty = row.qty;
 
-    // basePrice = native-currency unit price (what flows into revenue, ledger, and Sheets)
-    const basePrice = row.sourceUnit;
+      // POS-only books never touch the catalog ledger; their tally is kept on
+      // the book itself and saved with the catalogue below.
+      if (isPosOnlyBook(book.id) && posExtraBooks[book.id]) {
+        posOnlyRows.push(row);
+        continue;
+      }
 
-    // POS-only books never touch the catalog ledger. Keep an isolated tally on
-    // the book itself so the seller sees a running "sold" count at the table,
-    // then persist it with the catalog doc. Skip the recordOrder path entirely.
-    if (isPosOnlyBook(book.id) && posExtraBooks[book.id]) {
-      const pb = posExtraBooks[book.id];
-      pb.sold = (pb.sold || 0) + qty;
-      pb.revenue = (pb.revenue || 0) + qty * basePrice;
-      pb.lastSold = today();
-      posExtraTouched = true;
-      continue;
-    }
+      try {
+        // basePrice = native-currency unit price (what flows into revenue, ledger, and Sheets)
+        const basePrice = row.sourceUnit;
+        const nativeCurCode = getBookCurrencyCode(book);
+        // txnCurCode = the currency the customer actually paid in
+        const txnCurCode = (row.convertedUnit === null) ? row.sourceCode : sale.currency;
+        const isFx = txnCurCode !== nativeCurCode;
+        // convertedUnitInTxnCur = unit price expressed in the txn currency
+        const convertedUnitInTxnCur = (row.convertedUnit === null) ? row.sourceUnit : row.convertedUnit;
 
-    const nativeCurCode = getBookCurrencyCode(book);
+        // nativePerTxnRate: how many native units = 1 txn-currency unit.
+        // Must match the direction fetchLiveRate(txnCur, nativeCur) returns,
+        // which is exactly what _fxRateCache[`${txnCurCode}_${nativeCurCode}`] holds.
+        let nativePerTxnRate = 1;
+        if (isFx) {
+          const cacheKey = `${txnCurCode}_${nativeCurCode}`;
+          if (_fxRateCache[cacheKey]) {
+            nativePerTxnRate = _fxRateCache[cacheKey];
+          } else {
+            // Derive from CAD-pivot posExchangeRates as fallback:
+            // (txnCur → CAD) / (nativeCur → CAD)  = txnCur → nativeCur
+            const txnToCAD = posExchangeRates[txnCurCode] || 1;
+            const nativeToCAD = posExchangeRates[nativeCurCode] || 1;
+            nativePerTxnRate = txnToCAD / nativeToCAD;
+            _fxRateCache[cacheKey] = nativePerTxnRate;
+          }
+        }
 
-    // txnCurCode = the currency the customer actually paid in
-    const txnCurCode = (row.convertedUnit === null) ? row.sourceCode : posPendingSale.currency;
-    const isFx = txnCurCode !== nativeCurCode;
+        // recordOrder reads the active book, so point it at this row's book.
+        activeBook = book.id;
 
-    // convertedUnitInTxnCur = unit price expressed in the txn currency
-    const convertedUnitInTxnCur = (row.convertedUnit === null) ? row.sourceUnit : row.convertedUnit;
+        // Record a price adjustment (custom price / discount) in the ledger note.
+        const priceNote = row.overridden
+          ? `Price ${posFormat(row.listUnit, row.sourceCode)}→${posFormat(row.sourceUnit, row.sourceCode)}`
+          : null;
 
-    // nativePerTxnRate: how many native units = 1 txn-currency unit
-    // e.g. for a EUR-priced book paid in CAD: rate = how many EUR per 1 CAD
-    // This must match the direction fetchLiveRate(txnCur, nativeCur) returns,
-    // which is exactly what _fxRateCache[`${txnCurCode}_${nativeCurCode}`] holds.
-    let nativePerTxnRate = 1;
-    if (isFx) {
-      const cacheKey = `${txnCurCode}_${nativeCurCode}`;
-      if (_fxRateCache[cacheKey]) {
-        nativePerTxnRate = _fxRateCache[cacheKey];
-      } else {
-        // Derive from CAD-pivot posExchangeRates as fallback:
-        // (txnCur → CAD) / (nativeCur → CAD)  = txnCur → nativeCur
-        const txnToCAD = posExchangeRates[txnCurCode] || 1;
-        const nativeToCAD = posExchangeRates[nativeCurCode] || 1;
-        nativePerTxnRate = txnToCAD / nativeToCAD;
-        // Cache it for paymentSummary to use
-        _fxRateCache[cacheKey] = nativePerTxnRate;
+        const { num, chan, notes, payment } = _posItemToManualPayload(
+          book, qty, sale.method,
+          basePrice, txnCurCode, convertedUnitInTxnCur, nativePerTxnRate, priceNote, saleNum
+        );
+
+        // recordOrder is the single shared sale-writing function used by manual entry.
+        recordOrder(num, chan, qty, basePrice, notes, payment);
+        recorded++;
+      } catch (error) {
+        // One book failing must not take the rest of the customer's books
+        // down with it, and must never be silent.
+        console.error('POS: could not record a line', book?.title, error);
+        failed.push(book?.title || 'a book');
       }
     }
-
-    // Temporarily set activeBook so recordOrder's getState()/getBook() resolve correctly
-    activeBook = book.id;
-
-    // Record a price adjustment (custom price / discount) in the ledger note.
-    const priceNote = row.overridden
-      ? `Price ${posFormat(row.listUnit, row.sourceCode)}→${posFormat(row.sourceUnit, row.sourceCode)}`
-      : null;
-
-    const { num, chan, notes, payment } = _posItemToManualPayload(
-      book, qty, posPendingSale.method,
-      basePrice, txnCurCode, convertedUnitInTxnCur, nativePerTxnRate, priceNote
-    );
-
-    // recordOrder is the single shared sale-writing function used by manual entry.
-    // basePrice (native currency) drives revenue so it's always in the book's own currency.
-    recordOrder(num, chan, qty, basePrice, notes, payment);
+  } finally {
+    // Always back to the book the publisher was looking at, whatever happened.
+    activeBook = previousBook;
+    _posSaving = false;
   }
 
-  activeBook = previousBook;
-
-  if (posExtraTouched) { try { await saveCatalogWithDeletions(); } catch (e) { console.warn('POS-only tally save failed', e); } }
-
   closeM('pos-sale-confirm');
-  posPendingSale = null;
   posCart = {};
   posPriceOverrides = {};
   renderPOS();
+  renderHist();
+  updateDash();
   if (typeof window.renderAllOverview === 'function') window.renderAllOverview();
   updateHeader();
-  showToast('✓ Sale complete', 'ok');
+  if (failed.length) {
+    showToast(`⚠ Sale recorded, but ${failed.join(', ')} could not be saved — add ${failed.length === 1 ? 'it' : 'them'} by hand`, 'err', 8000);
+  } else {
+    showToast('✓ Sale complete', 'ok');
+  }
+
+  // POS-only books: their running tally lives in the shared catalogue, so the
+  // latest copy is fetched first to avoid overwriting another device's count —
+  // but only for as long as the signal allows. Their sale is not in the ledger
+  // either way, so nothing above ever waits on this.
+  if (posOnlyRows.length) {
+    try {
+      await Promise.race([syncCatalog(), new Promise(resolve => setTimeout(resolve, 6000))]);
+    } catch (_) { /* offline — count on what this device has */ }
+    for (const row of posOnlyRows) {
+      const pb = posExtraBooks[row.book.id];
+      if (!pb) continue;
+      pb.sold = (pb.sold || 0) + row.qty;
+      pb.revenue = (pb.revenue || 0) + row.qty * row.sourceUnit;
+      pb.lastSold = today();
+    }
+    try { await saveCatalogWithDeletions(); } catch (e) { console.warn('POS-only tally save failed', e); }
+    renderPOS();
+  }
+  return recorded;
 };
 
 window.posPrintReceipt = function () {
