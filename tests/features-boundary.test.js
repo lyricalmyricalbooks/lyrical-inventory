@@ -43,7 +43,10 @@ const MAIN_IMPORT_BUDGET = {
   // and scheduleRender. The alternative was nine names — BOOK_LIST, activeBook,
   // saveState and three separate renderers among them — every one of which had a
   // cheaper equivalent already across the seam.
-  'bigcartel.js': 19,
+  // 19 -> 20 for isAuthor, when new orders started being recorded without a
+  // button press: an unattended ledger write has to check the role itself,
+  // because no person is there to have been refused the button.
+  'bigcartel.js': 20,
   // +1 for ensurePdfJs: the printable trip report rasterises PDF receipts, and
   // that primitive stays in main.js. The receipt-file primitives it used to
   // take from main.js now come from receipts.js instead. Dropped again when the

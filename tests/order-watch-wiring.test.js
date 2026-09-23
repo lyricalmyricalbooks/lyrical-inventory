@@ -6,6 +6,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { appSource, buildHarness } from './helpers/extract-decl.js';
+import { describeOrderOutcomes, autoRecordBlocker } from '../src/lib/order-watch.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const indexContent = fs.readFileSync(path.resolve(__dirname, '../index.html'), 'utf8');
@@ -29,7 +30,8 @@ function announceHarness({ stored = null } = {}) {
         .filter(o => !seenNums.includes(`#${o.id}`))
         .map(o => ({ num: `#${o.id}`, orderId: String(o.id), customer: 'Dana' })),
       mergeSeenOrders: (a, b) => [...a, ...b],
-      showNewOrderAlert: (entries) => { seen.alerts.push(entries); },
+      handleNewBigCartelOrders: async (entries) => { seen.alerts.push(entries); return entries; },
+      showNewOrderAlert: () => {},
     },
     returns: '{ announceNewBigCartelOrders }',
   });
@@ -76,6 +78,7 @@ describe('noticing an order without being asked', () => {
         seedSeenOrders: () => [],
         newOrdersSince: () => [],
         mergeSeenOrders: () => [],
+        handleNewBigCartelOrders: async () => [],
         showNewOrderAlert: () => {},
       },
       returns: '{ announceNewBigCartelOrders }',
@@ -87,22 +90,18 @@ describe('noticing an order without being asked', () => {
 describe('the notification card', () => {
   function cardHarness() {
     const elements = {
-      'new-order-alert': { hidden: true },
+      'new-order-alert': { hidden: true, dataset: {} },
       'new-order-alert-title': { textContent: '' },
       'new-order-alert-detail': { textContent: '' },
       'new-order-alert-ship': { hidden: false },
       'new-order-alert-record': { hidden: false },
-      'new-order-alert-review': { textContent: '' },
+      'new-order-alert-review': { textContent: '', classList: { toggle: () => {} } },
     };
     const harness = buildHarness({
       names: ['showNewOrderAlert', 'dismissNewOrderAlert'],
       deps: {
         $: (id) => elements[id],
-        describeNewOrders: (list) => ({
-          count: list.length,
-          title: list.length === 1 ? 'New order' : `${list.length} new orders`,
-          detail: `${list.map(o => o.customer).join(', ')} ordered.`,
-        }),
+        describeOrderOutcomes,
       },
       moduleState: 'let _newOrderAlert = null;',
       returns: '{ showNewOrderAlert, dismissNewOrderAlert }',
@@ -112,11 +111,11 @@ describe('the notification card', () => {
 
   it('offers the one-press ship button for a single order', () => {
     const { showNewOrderAlert, elements } = cardHarness();
-    showNewOrderAlert([{ num: '#AAAA-1', orderId: 'AAAA-1', customer: 'Dana' }]);
+    showNewOrderAlert([{ num: '#AAAA-1', orderId: 'AAAA-1', customer: 'Dana', outcome: 'off' }]);
 
     expect(elements['new-order-alert'].hidden).toBe(false);
     expect(elements['new-order-alert-title'].textContent).toBe('New order');
-    expect(elements['new-order-alert-detail'].textContent).toBe('Dana ordered.');
+    expect(elements['new-order-alert-detail'].textContent).toBe('Dana just ordered — #AAAA-1.');
     expect(elements['new-order-alert-ship'].hidden).toBe(false);
     expect(elements['new-order-alert-record'].hidden).toBe(false);
     expect(elements['new-order-alert-review'].textContent).toBe('Review');
@@ -144,7 +143,7 @@ describe('the notification card', () => {
     showNewOrderAlert([{ num: '#BBBB-2', customer: 'Sam' }]);
 
     expect(elements['new-order-alert-title'].textContent).toBe('2 new orders');
-    expect(elements['new-order-alert-detail'].textContent).toBe('Dana, Sam ordered.');
+    expect(elements['new-order-alert-detail'].textContent).toBe('Dana and Sam ordered while you were away.');
     expect(elements['new-order-alert-ship'].hidden).toBe(true);
   });
 
@@ -164,7 +163,142 @@ describe('the notification card', () => {
 
     showNewOrderAlert([{ num: '#BBBB-2', customer: 'Sam' }]);
     expect(elements['new-order-alert-title'].textContent).toBe('New order');
-    expect(elements['new-order-alert-detail'].textContent).toBe('Sam ordered.');
+    expect(elements['new-order-alert-detail'].textContent).toBe('Sam just ordered — #BBBB-2.');
+  });
+});
+
+describe('the card after an order was recorded on its own', () => {
+  function cardHarness() {
+    const toggles = [];
+    const elements = {
+      'new-order-alert': { hidden: true, dataset: {} },
+      'new-order-alert-title': { textContent: '' },
+      'new-order-alert-detail': { textContent: '' },
+      'new-order-alert-ship': { hidden: false },
+      'new-order-alert-record': { hidden: false },
+      'new-order-alert-review': { textContent: '', classList: { toggle: (cls, on) => toggles.push([cls, on]) } },
+    };
+    const harness = buildHarness({
+      names: ['showNewOrderAlert'],
+      deps: { $: (id) => elements[id], describeOrderOutcomes },
+      moduleState: 'let _newOrderAlert = null;',
+      returns: '{ showNewOrderAlert }',
+    });
+    return { ...harness, elements, toggles };
+  }
+
+  it('says what was done, and offers no Record button next to it', () => {
+    const { showNewOrderAlert, elements } = cardHarness();
+    showNewOrderAlert([{
+      num: '#AAAA-1', customer: 'Dana', outcome: 'recorded',
+      qty: 2, bookTitle: 'Altrove', stockBefore: 20, stockLeft: 18, threshold: 5,
+    }]);
+    expect(elements['new-order-alert-title'].textContent).toBe('New order recorded');
+    expect(elements['new-order-alert-detail'].textContent).toBe('Dana bought 2 × Altrove (#AAAA-1). 18 left in stock.');
+    expect(elements['new-order-alert-record'].hidden).toBe(true);
+    expect(elements['new-order-alert-ship'].hidden).toBe(false);
+    expect(elements['new-order-alert'].dataset.tone).toBe('ok');
+  });
+
+  it('leads with the review button when an order is waiting for her', () => {
+    const { showNewOrderAlert, elements, toggles } = cardHarness();
+    showNewOrderAlert([{ num: '#AAAA-1', customer: 'Dana', outcome: 'review', reason: 'mixed' }]);
+    expect(elements['new-order-alert-title'].textContent).toBe('New order needs you');
+    expect(elements['new-order-alert-review'].textContent).toBe('Sort it out');
+    expect(elements['new-order-alert-record'].hidden).toBe(true);
+    expect(elements['new-order-alert'].dataset.tone).toBe('warn');
+    expect(toggles).toContainEqual(['gold', true]);
+  });
+
+  it('keeps Record when the automatic attempt failed, so she can try again', () => {
+    const { showNewOrderAlert, elements } = cardHarness();
+    showNewOrderAlert([{ num: '#AAAA-1', customer: 'Dana', outcome: 'review', reason: 'failed' }]);
+    expect(elements['new-order-alert-record'].hidden).toBe(false);
+  });
+});
+
+describe('dealing with new orders as they arrive', () => {
+  const recent = new Date(Date.now() - 3600000).toISOString();
+  const bcOrder = (id, attributes = {}) => ({ id, attributes: { status: 'completed', created_at: recent, ...attributes } });
+
+  function handleHarness({ auto = true, author = false, plans = {}, results = {}, stock = { hound: 10 } } = {}) {
+    const calls = { recorded: [], alerts: [], notified: [] };
+    const states = { hound: { stock: stock.hound } };
+    const harness = buildHarness({
+      names: ['handleNewBigCartelOrders'],
+      deps: {
+        autoRecordEnabled: () => auto,
+        isAuthor: () => author,
+        findBigCartelOrderById: () => null,
+        bigCartelOrderPlan: (o) => ({ plan: plans[o.id] || { autoSafe: true, confidence: 'exact', presetBookId: 'hound' } }),
+        autoRecordBlocker,
+        recordBigCartelOrderIfMissing: async (o) => {
+          calls.recorded.push(o.id);
+          const r = results[o.id] || { status: 'recorded', qty: 1, bookTitle: 'The Hound' };
+          if (r.status === 'recorded') states.hound.stock -= r.qty;
+          return r;
+        },
+        states,
+        BOOKS: { hound: { id: 'hound', title: 'The Hound', threshold: 3 } },
+        showNewOrderAlert: (o) => calls.alerts.push(o),
+        notifyDeviceNewOrders: (o) => calls.notified.push(o),
+      },
+      returns: '{ handleNewBigCartelOrders }',
+    });
+    return { ...harness, calls };
+  }
+
+  const entry = (id) => ({ num: `#${id}`, orderId: id, customer: 'Dana' });
+
+  it('records a clear order, and reports the stock it left behind', async () => {
+    const { handleNewBigCartelOrders, calls } = handleHarness();
+    const [out] = await handleNewBigCartelOrders([entry('AAAA-1')], [bcOrder('AAAA-1')]);
+    expect(calls.recorded).toEqual(['AAAA-1']);
+    expect(out).toMatchObject({ outcome: 'recorded', stockBefore: 10, stockLeft: 9, threshold: 3 });
+    expect(calls.alerts).toHaveLength(1);
+    expect(calls.notified).toHaveLength(1);
+  });
+
+  it('never moves stock for a box with two different books in it', async () => {
+    const { handleNewBigCartelOrders, calls } = handleHarness({
+      plans: { 'AAAA-1': { autoSafe: false, confidence: 'mixed', presetBookId: 'hound' } },
+    });
+    const [out] = await handleNewBigCartelOrders([entry('AAAA-1')], [bcOrder('AAAA-1')]);
+    expect(calls.recorded).toEqual([]);
+    expect(out).toMatchObject({ outcome: 'review', reason: 'mixed' });
+  });
+
+  it('never records a refunded order on its own', async () => {
+    const { handleNewBigCartelOrders, calls } = handleHarness();
+    const [out] = await handleNewBigCartelOrders([entry('AAAA-1')], [bcOrder('AAAA-1', { status: 'refunded' })]);
+    expect(calls.recorded).toEqual([]);
+    expect(out.reason).toBe('refunded');
+  });
+
+  it('leaves everything alone when she has switched it off', async () => {
+    const { handleNewBigCartelOrders, calls } = handleHarness({ auto: false });
+    const [out] = await handleNewBigCartelOrders([entry('AAAA-1')], [bcOrder('AAAA-1')]);
+    expect(calls.recorded).toEqual([]);
+    expect(out.outcome).toBe('off');
+  });
+
+  it('never writes to the ledger from an artist account', async () => {
+    const { handleNewBigCartelOrders, calls } = handleHarness({ author: true });
+    await handleNewBigCartelOrders([entry('AAAA-1')], [bcOrder('AAAA-1')]);
+    expect(calls.recorded).toEqual([]);
+  });
+
+  it('reports an order another device already recorded as already recorded', async () => {
+    const { handleNewBigCartelOrders } = handleHarness({ results: { 'AAAA-1': { status: 'already-recorded' } } });
+    const [out] = await handleNewBigCartelOrders([entry('AAAA-1')], [bcOrder('AAAA-1')]);
+    expect(out.outcome).toBe('already');
+  });
+
+  it('keeps going after one order fails, so the rest are still recorded', async () => {
+    const { handleNewBigCartelOrders, calls } = handleHarness({ results: { 'AAAA-1': { status: 'failed' } } });
+    const out = await handleNewBigCartelOrders([entry('AAAA-1'), entry('BBBB-2')], [bcOrder('AAAA-1'), bcOrder('BBBB-2')]);
+    expect(calls.recorded).toEqual(['AAAA-1', 'BBBB-2']);
+    expect(out.map(o => o.outcome)).toEqual(['review', 'recorded']);
   });
 });
 
@@ -182,6 +316,13 @@ describe('the shipping tab is up to date, and the markup is wired', () => {
     expect(indexContent).toContain('onclick="reviewNewOrdersFromAlert(event)"');
     expect(indexContent).toContain('onclick="dismissNewOrderAlert(event)"');
     expect(indexContent).toContain('aria-label="Dismiss new order notification"');
+  });
+
+  it('has both automation switches on the Big Cartel tab', () => {
+    expect(indexContent).toContain('onchange="toggleBigCartelAutoRecord()"');
+    expect(indexContent).toContain('onchange="toggleBigCartelOrderNotify()"');
+    expect(appSource).toContain('window.toggleBigCartelAutoRecord = toggleBigCartelAutoRecord');
+    expect(appSource).toContain('window.toggleBigCartelOrderNotify = toggleBigCartelOrderNotify');
   });
 
   it('starts the watch once the catalogue has loaded', () => {
