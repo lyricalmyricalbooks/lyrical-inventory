@@ -147,7 +147,6 @@ function ocUpdateTmplPreview() {
   }
 }
 
-let _ocBulkSelectedRecipients = [];
 let _ocBulkSendingActive = false;
 let _ocBulkFailedIds = []; // ids of contributors that failed in the last send
 

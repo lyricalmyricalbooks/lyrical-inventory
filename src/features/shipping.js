@@ -4072,8 +4072,6 @@ function renderShippoIncotermHint() {
   }
 }
 
-let _lastZonosLandedCost = null;
-
 async function calculateZonosDutiesHandler({ shippingAmount, carrierName } = {}) {
   const sfCountryCode = $('sf-country')?.value || 'CA';
   const stCountryCode = $('st-country')?.value || 'US';
@@ -4140,7 +4138,6 @@ async function calculateZonosDutiesHandler({ shippingAmount, carrierName } = {})
         incoterm: incoterm === 'auto' ? (stCountryCode === 'US' ? 'DDP' : 'DAP') : incoterm,
         currency: 'CAD'
       });
-      _lastZonosLandedCost = result;
     } else {
       result = estimateOfflineLandedCost({
         destCountryCode: stCountryCode,
@@ -4148,7 +4145,6 @@ async function calculateZonosDutiesHandler({ shippingAmount, carrierName } = {})
         shippingCostCad: finalShippingAmount,
         hsCode
       });
-      _lastZonosLandedCost = result;
     }
 
     renderZonosDutyCard(result, { stCountryCode, qty, unitValue, hsCode });
@@ -4160,7 +4156,6 @@ async function calculateZonosDutiesHandler({ shippingAmount, carrierName } = {})
       shippingCostCad: finalShippingAmount,
       hsCode
     });
-    _lastZonosLandedCost = offlineResult;
     renderZonosDutyCard(offlineResult, { stCountryCode, qty, unitValue, hsCode, errorNote: err.message });
   }
 }

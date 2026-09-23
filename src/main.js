@@ -2546,13 +2546,9 @@ window.downloadAuthorQR = function () {
 
 // ═══════════════════════════════════════════════════════
 //  ACCESS CONTROL
-//  URL params:
-//    ?book=hound            → author view, prompts author password
-//    ?book=hound&dev=1      → skip password (dev/testing)
-//    (no param)             → publisher gate, sees all books
+//  Decided at sign-in from the account's email: the publisher sees every
+//  book; an author whose email is on a book is locked to that book.
 // ═══════════════════════════════════════════════════════
-const urlParams = new URLSearchParams(location.search);
-const _URL_BOOK = urlParams.get('book');    // e.g. 'hound'
 let IS_AUTHOR_MODE = false;
 let ACTIVE_BOOK_FORCED = null;
 let AUTHOR_VIEW_BY_BOOK = {};
@@ -4717,10 +4713,8 @@ function renderAllBooksStrips(allBooksVisible) {
   } else {
     list.innerHTML = allBooksVisible.map(book => {
     const s = states[book.id] || defaultState(book);
-    // ⚡ Bolt Optimization: Calculate consigned and owed in a single loop
-    let _consigned = 0, owed = 0;
+    let owed = 0;
     for (let i = 0; i < s.stores.length; i++) {
-      _consigned += s.stores[i].outstanding || 0;
       owed += s.stores[i].amountOwed || 0;
     }
     const pct = Math.max(0, s.stock / book.maxPrint * 100);
@@ -5335,8 +5329,6 @@ function renderChannelAnalytics() {
   }
   const top = chans[0];
   const activeChans = chans.filter(x => (x.revenue || 0) > 0).length;
-  const totalChans = chans.length || 1;
-  const _channelUtilizationPct = Math.round((activeChans / totalChans) * 100);
   const avgOrder = grandTxn ? grandRev / grandTxn : 0;
   const avgUnit = grandU ? grandRev / grandU : 0;
   const topShare = top && grandRev > 0 ? top.revenue / grandRev * 100 : 0;
@@ -12437,7 +12429,6 @@ function openEditHist(idx) {
       settleZone.style.display = 'none';
     }
   }
-  const _voidZone = $('edit-void-zone');
   if (h.voided) {
     $('edit-void-btn').textContent = 'Unvoid this entry';
     $('edit-void-body').textContent = 'This entry is currently voided. Unvoiding will re-apply its stock and revenue effects.';
