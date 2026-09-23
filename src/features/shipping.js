@@ -119,6 +119,14 @@ import {
 import { browserWatchState, dueForCheck, effectiveInterval, startWatch } from '../lib/watch-schedule.js';
 import { SYNC_TONES } from '../lib/sync-status.js';
 import {
+  describePostageReport,
+  describeUnshipped,
+  destinationLabel,
+  postageReport,
+  previousMonth,
+  unshippedOrders,
+} from '../lib/order-followups.js';
+import {
   describeDeliveryNews,
   isDeliveryNews,
   readDelivery,
@@ -1853,6 +1861,116 @@ function openShippingFromDeliveryAlert(event) {
   if (event) event.stopPropagation();
   dismissAppAlert('delivery-watch');
   switchTab('shipping');
+}
+
+// ── After an order is recorded ────────────────────────────────────────────
+//
+// Two follow-ups the automatic recording made worth having: a paid order that
+// has sat unsent for days, and a month where postage cost more than
+// customers paid for it. Rules in lib/order-followups.js.
+
+const UNSHIPPED_ALERT_DAY_KEY = 'lm-unshipped-alert-day';
+const POSTAGE_REPORT_MONTH_KEY = 'lm-postage-report-month';
+const ORDER_FOLLOWUP_INTERVAL_MS = 60 * 60 * 1000;
+let _orderFollowupsStarted = false;
+
+function postageExpenses() {
+  return (TAX_CENTER.businessExpenses || []).filter(expense =>
+    String(expense?.ref || '').startsWith('shippo:') || String(expense?.ref || '').startsWith('canadapost:'));
+}
+
+function websiteLedgerRows() {
+  const rows = [];
+  Object.entries(states).forEach(([bookId, state]) => {
+    (state?.hist || []).forEach(entry => {
+      if (entry && entry.chan === 'Website') rows.push({ bookId, entry, bookTitle: BOOKS[bookId]?.title || '' });
+    });
+  });
+  return rows;
+}
+
+function readStamp(key) {
+  try { return localStorage.getItem(key) || ''; } catch (_) { return ''; }
+}
+
+function writeStamp(key, value) {
+  try { localStorage.setItem(key, value); } catch (_) { /* storage blocked */ }
+}
+
+/** Once a day: the paid orders still waiting to go out. */
+function remindUnshippedOrders() {
+  const day = today();
+  if (readStamp(UNSHIPPED_ALERT_DAY_KEY) === day) return null;
+  const expenses = postageExpenses();
+  const rows = websiteLedgerRows();
+  // An order with a label matched to it has been sent, whatever its flag says.
+  const labelled = new Set(rows
+    .filter(({ entry }) => linkedShippingSummary(entry, expenses, 1).linkedCount > 0)
+    .map(({ entry }) => entry.num));
+  const waiting = unshippedOrders(rows, { labelled });
+  writeStamp(UNSHIPPED_ALERT_DAY_KEY, day);
+  const said = describeUnshipped(waiting);
+  if (!said.count) { dismissAppAlert('unshipped-orders'); return waiting; }
+  pushAppAlert({
+    id: 'unshipped-orders',
+    icon: '📦',
+    title: said.title,
+    detail: said.detail,
+    tone: SYNC_TONES.PENDING,
+    actionLabel: 'Open Shipping',
+    action: 'openShippingFromUnshippedAlert(event)',
+  });
+  return waiting;
+}
+
+function openShippingFromUnshippedAlert(event) {
+  if (event) event.stopPropagation();
+  dismissAppAlert('unshipped-orders');
+  switchTab('shipping');
+}
+
+/** Once a month: whether last month's shipping paid for itself. */
+function reportPostageLosses() {
+  const month = previousMonth(today());
+  if (!month || readStamp(POSTAGE_REPORT_MONTH_KEY) === month) return null;
+  const expenses = postageExpenses();
+  const items = [];
+  websiteLedgerRows().forEach(({ bookId, entry }) => {
+    if (entry.voided || String(entry.date || '').slice(0, 7) !== month) return;
+    // Compared in dollars only: mixing a euro-priced book's shipping into a
+    // Canadian-dollar postage total would invent a loss or hide one.
+    if (getBookCurrencyCode(BOOKS[bookId]) !== 'CAD') return;
+    const summary = linkedShippingSummary(entry, expenses, 1);
+    if (summary.postageBase == null || summary.customerBase == null) return;
+    items.push({
+      date: entry.date,
+      num: entry.num,
+      destination: destinationLabel(entry),
+      paid: summary.customerBase,
+      postage: summary.postageBase,
+    });
+  });
+  const report = postageReport(items, month);
+  writeStamp(POSTAGE_REPORT_MONTH_KEY, month);
+  const said = describePostageReport(report);
+  if (said.count) {
+    pushAppAlert({
+      id: 'postage-report',
+      icon: '📮',
+      title: said.title,
+      detail: said.detail,
+      tone: SYNC_TONES.PENDING,
+    });
+  }
+  return report;
+}
+
+function startOrderFollowups() {
+  if (_orderFollowupsStarted || typeof window === 'undefined' || isAuthor()) return;
+  _orderFollowupsStarted = true;
+  // Hourly, so an app left open overnight still says it on the new day; each
+  // check itself runs at most once a day (orders) or once a month (postage).
+  startWatch(() => { remindUnshippedOrders(); reportPostageLosses(); }, { intervalMs: ORDER_FOLLOWUP_INTERVAL_MS });
 }
 
 function startDeliveryWatch() {
@@ -9564,6 +9682,8 @@ export {
   sweepShippingEmails,
   startShippingEmailSweep,
   startDeliveryWatch,
+  startOrderFollowups,
+  openShippingFromUnshippedAlert,
   openShippingFromDeliveryAlert,
   reconciliationBacklog,
   applyOrderPrefill,
