@@ -513,6 +513,24 @@
 </div>
 
 <!-- TABS (per-book) -->
+<!-- PHONE BOTTOM NAV (publisher, ≤768px). Four everyday destinations plus
+     "More", which opens #more-sheet holding every other tool (cloned from the
+     sidebar so badges and grouping stay in one place). -->
+<nav class="mnav" id="mnav" aria-label="Main">
+  <button type="button" class="mnav-btn" onclick="switchTab('dashboard')"><span class="mnav-ic" aria-hidden="true">▦</span><span class="mnav-label">Home</span></button>
+  <button type="button" class="mnav-btn" onclick="switchTab('pos')"><span class="mnav-ic" aria-hidden="true">🛒</span><span class="mnav-label">Sell</span></button>
+  <button type="button" class="mnav-btn mnav-primary" onclick="switchTab('manual')"><span class="mnav-ic" aria-hidden="true">＋</span><span class="mnav-label">Add sale</span></button>
+  <button type="button" class="mnav-btn" onclick="switchTab('website')"><span class="mnav-ic" aria-hidden="true">🛍</span><span class="mnav-label">Orders</span></button>
+  <button type="button" class="mnav-btn" id="mnav-more" onclick="openMoreSheet()" aria-haspopup="dialog" aria-controls="more-sheet"><span class="mnav-ic" aria-hidden="true">☰</span><span class="mnav-label">More</span><span class="mnav-dot" id="mnav-more-dot" hidden></span></button>
+</nav>
+<dialog class="more-sheet" id="more-sheet" aria-labelledby="more-sheet-title">
+  <div class="more-sheet-head">
+    <span class="more-sheet-grip" aria-hidden="true"></span>
+    <h2 class="more-sheet-title" id="more-sheet-title">All tools</h2>
+    <button type="button" class="more-sheet-close" onclick="closeMoreSheet()" aria-label="Close">✕</button>
+  </div>
+  <div class="more-sheet-body" id="more-sheet-body"></div>
+</dialog>
 <nav class="tab-bar" id="tab-bar">
   <button class="tab-btn active" onclick="switchTab('dashboard')">Dashboard</button>
   <button class="tab-btn" id="website-tab-btn" onclick="switchTab('website')">Website orders</button>

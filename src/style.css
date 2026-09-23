@@ -19037,3 +19037,103 @@ button[onclick="refreshUmamiStats()"]:active {
   }
   .sc-actions .btn { flex: 1 1 100%; }
 }
+
+/* ============================================================
+   PHONE NAVIGATION (publisher, ≤768px)
+   A fixed five-slot bottom bar (Home · Sell · Add sale · Orders ·
+   More) replaces the side-scrolling pill strip, and "More" opens a
+   bottom sheet listing every other tool, grouped as in the sidebar.
+   Authors keep the pill strip: they only have a handful of tabs.
+   ============================================================ */
+.mnav{display:none;}
+.more-sheet{display:none;}
+
+@media (max-width: 768px){
+  .pub-shell .tab-bar{display:none;}
+  .pub-shell .mnav{
+    display:grid;grid-template-columns:repeat(5,1fr);align-items:end;
+    position:fixed;left:0;right:0;bottom:0;z-index:calc(var(--z-sticky) + 60);
+    padding:6px max(6px,env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(6px,env(safe-area-inset-left));
+    background:var(--ink2);
+    border-top:var(--stroke-hair) solid rgba(255,255,255,.08);
+    box-shadow:0 -8px 24px rgba(0,0,0,.18);
+  }
+  .mnav-btn{
+    position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+    min-height:54px;padding:4px 2px;border:0;border-radius:var(--r2);background:transparent;
+    color:rgba(242,237,225,.62);font-family:var(--font-ui);cursor:pointer;touch-action:manipulation;
+    transition:color .15s var(--ease-standard),background-color .15s var(--ease-standard);
+  }
+  .mnav-ic{font-size:var(--text-xl);line-height:1;}
+  .mnav-label{font-size:var(--text-3xs);font-weight:700;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;}
+  .mnav-btn.active{color:var(--gold2);}
+  .mnav-btn.active::before{content:"";position:absolute;top:0;left:28%;right:28%;height:3px;border-radius:0 0 3px 3px;background:var(--gold2);}
+  .mnav-btn:focus-visible{outline:2px solid var(--gold2);outline-offset:-2px;}
+  /* The everyday action gets a raised, filled thumb target in the centre. */
+  .mnav-primary .mnav-ic{
+    display:grid;place-items:center;width:44px;height:44px;margin-top:-18px;border-radius:50%;
+    background:var(--gold);color:var(--ink);font-size:var(--text-2xl);font-weight:700;
+    box-shadow:var(--elev-2);border:3px solid var(--ink2);
+  }
+  .mnav-primary{color:rgba(242,237,225,.85);}
+  .mnav-primary.active::before{display:none;}
+  .mnav-dot{position:absolute;top:8px;right:calc(50% - 16px);width:8px;height:8px;border-radius:50%;background:var(--gold2);box-shadow:0 0 0 2px var(--ink2);}
+
+  /* ---- More sheet ---- */
+  .more-sheet[open]{
+    display:flex;flex-direction:column;
+    position:fixed;inset:auto 0 0 0;margin:0;width:100%;max-width:none;
+    max-height:min(86dvh,calc(100dvh - env(safe-area-inset-top) - 24px));
+    padding:0 0 env(safe-area-inset-bottom);border:0;border-radius:var(--r3) var(--r3) 0 0;
+    background:var(--surface-page);color:var(--text);box-shadow:var(--elev-4);
+    animation:moreSheetIn .28s var(--ease-spring);
+  }
+  .more-sheet::backdrop{background:rgba(12,11,10,.55);}
+  .more-sheet-head{display:flex;align-items:center;gap:var(--space-2);padding:18px var(--space-4) 8px;position:relative;flex-shrink:0;}
+  .more-sheet-grip{position:absolute;top:7px;left:50%;width:40px;height:4px;margin-left:-20px;border-radius:2px;background:var(--border);}
+  .more-sheet-title{flex:1;margin:0;font-family:var(--font-ui);font-size:var(--text-lg);font-weight:800;letter-spacing:.02em;}
+  .more-sheet-close{width:44px;height:44px;border:0;border-radius:50%;background:var(--surface-sunken);color:var(--text2);font-size:var(--text-lg);cursor:pointer;}
+  .more-sheet-body{overflow-y:auto;overscroll-behavior:contain;padding:0 var(--space-4) var(--space-5);}
+  .more-sheet-body .o3-grouplabel,
+  .more-sheet-body .o3-subgrouplabel{
+    grid-column:1/-1;margin:14px 2px 6px;font-size:var(--text-3xs);font-weight:800;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--text3);
+  }
+  .more-sheet-body .pub-nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;}
+  .more-sheet-body .snav{
+    position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+    min-height:78px;padding:10px 4px;border:var(--stroke-hair) solid var(--border);border-radius:var(--r2);
+    background:var(--surface-raised);color:var(--text);font-family:var(--font-ui);text-align:center;cursor:pointer;
+  }
+  .more-sheet-body .snav[hidden]{display:none;}
+  .more-sheet-body .snav.active{border-color:var(--gold);box-shadow:inset 0 0 0 1px var(--gold);}
+  .more-sheet-body .snav-ic{font-size:var(--text-xl);line-height:1;}
+  .more-sheet-body .snav-label{font-size:var(--text-xs);font-weight:600;line-height:1.2;}
+  .more-sheet-body .nav-badge,
+  .more-sheet-body .bc-gap-badge,
+  .more-sheet-body .health-badge{position:absolute;top:6px;right:6px;margin:0 !important;}
+
+  /* ---- Slimmer header: one brand row + book picker, not sticky, so
+     the content gets the screen back once you scroll. ---- */
+  .pub-shell .app-header{
+    position:relative;display:grid;grid-template-columns:minmax(0,auto) minmax(0,1fr) auto auto;
+    align-items:center;column-gap:8px;row-gap:8px;padding-bottom:10px;
+  }
+  .pub-shell .app-header > .hsep,
+  .pub-shell .app-header > .header-grow,
+  .pub-shell .header-right > .hsep{display:none;}
+  .pub-shell .header-brand{grid-row:1;grid-column:1/3;padding:.45rem 0 0;}
+  .pub-shell .header-right{display:contents;}
+  .pub-shell #theme-toggle-btn{grid-row:1;grid-column:3;width:44px;height:44px;}
+  .pub-shell #hmenu-account{grid-row:1;grid-column:4;min-width:0;flex:none;justify-self:end;}
+  .pub-shell #hmenu-account .acct-trigger{min-width:44px;min-height:44px;justify-content:center;}
+  .pub-shell .header-wordmark{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .pub-shell .app-header #book-switcher-wrap{grid-row:2;grid-column:1/2;width:auto;min-width:0;}
+  .pub-shell #book-dropdown-btn{min-height:44px;max-width:46vw;}
+  .pub-shell .kpi-cluster{grid-row:2;grid-column:2/5;display:flex;justify-content:flex-end;min-width:0;}
+  .pub-shell .header-stat{flex:0 1 auto;min-width:0;padding:.3rem .5rem;}
+  .pub-shell .hs-val{font-size:var(--text-sm);}
+  .pub-shell .hs-label{font-size:var(--text-3xs);letter-spacing:.08em;white-space:nowrap;}
+}
+@keyframes moreSheetIn{from{transform:translateY(100%);}to{transform:none;}}
+@media (prefers-reduced-motion: reduce){.more-sheet[open]{animation:none;}}

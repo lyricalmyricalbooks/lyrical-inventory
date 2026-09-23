@@ -4412,6 +4412,67 @@ const SHELL_TAB_LABELS = {
   myqr: 'My QR Code', webanalytics: 'Web Analytics', shipping: 'Shipping',
   bigcartel: 'Big Cartel', todo: 'To-do', intel: 'Intelligence'
 };
+// ── Phone "More" sheet ───────────────────────────────────────────────
+// The phone bottom nav holds four everyday destinations; everything else
+// lives in this sheet. Its contents are cloned from the sidebar each time
+// it opens so grouping, visibility and live badges never drift apart.
+const MNAV_TABS = ['dashboard', 'pos', 'manual', 'website'];
+
+function syncMoreNavState(name) {
+  const more = document.getElementById('mnav-more');
+  if (!more) return;
+  more.classList.toggle('active', !MNAV_TABS.includes(name));
+  const dot = document.getElementById('mnav-more-dot');
+  if (dot) {
+    const hasBadge = [...document.querySelectorAll('#pub-sidebar .nav-badge, #pub-sidebar .health-badge, #pub-sidebar .bc-gap-badge')]
+      .some((b) => !b.hidden && b.style.display !== 'none' && b.closest('.snav') && !MNAV_TABS.some((t) => b.closest('.snav').getAttribute('onclick')?.includes(`'${t}'`)));
+    dot.hidden = !hasBadge;
+  }
+}
+
+export function openMoreSheet() {
+  const sheet = document.getElementById('more-sheet');
+  const body = document.getElementById('more-sheet-body');
+  const sidebar = document.getElementById('pub-sidebar');
+  if (!sheet || !body || !sidebar) return;
+  body.replaceChildren();
+  const first = document.createElement('div');
+  first.className = 'o3-grouplabel';
+  first.textContent = 'Inventory';
+  body.appendChild(first);
+  sidebar.querySelectorAll(':scope > .pub-nav, :scope > .o3-grouplabel').forEach((node) => {
+    const copy = node.cloneNode(true);
+    copy.querySelectorAll('[id]').forEach((el) => el.removeAttribute('id'));
+    body.appendChild(copy);
+  });
+  // Hide the destinations already on the bottom bar.
+  body.querySelectorAll('.snav').forEach((b) => {
+    if (MNAV_TABS.some((t) => b.getAttribute('onclick')?.includes(`'${t}'`))) b.hidden = true;
+  });
+  if (typeof sheet.showModal === 'function') sheet.showModal(); else sheet.setAttribute('open', '');
+  document.getElementById('mnav-more')?.setAttribute('aria-expanded', 'true');
+}
+
+export function closeMoreSheet() {
+  const sheet = document.getElementById('more-sheet');
+  if (!sheet) return;
+  if (typeof sheet.close === 'function' && sheet.open) sheet.close(); else sheet.removeAttribute('open');
+  document.getElementById('mnav-more')?.setAttribute('aria-expanded', 'false');
+}
+
+document.addEventListener('click', (e) => {
+  const sheet = document.getElementById('more-sheet');
+  if (!sheet?.open) return;
+  // Tapping the dimmed backdrop (the dialog element itself) or any tool closes it.
+  if (e.target === sheet || e.target.closest?.('#more-sheet-body .snav')) closeMoreSheet();
+});
+
+document.getElementById('more-sheet')?.addEventListener('close', () => {
+  document.getElementById('mnav-more')?.setAttribute('aria-expanded', 'false');
+});
+
+Object.assign(window, { openMoreSheet, closeMoreSheet });
+
 export function switchTab(name) {
   // publisher-only tabs redirect authors to dashboard
   if (isAuthor() && (name === 'website' || name === 'backups' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes' || name === 'reconcile' || name === 'customers' || name === 'opencall' || name === 'webanalytics' || name === 'shipping' || name === 'bigcartel' || name === 'todo' || name === 'intel')) name = 'dashboard';
@@ -4423,7 +4484,7 @@ export function switchTab(name) {
   closeHeaderMenus();
   closeSideAccount();
 
-  document.querySelectorAll('.tab-btn, .header-action-btn, .header-menu-item, .snav').forEach((b) => {
+  document.querySelectorAll('.tab-btn, .header-action-btn, .header-menu-item, .snav, .mnav-btn').forEach((b) => {
     // We match by checking onclick text to be safe if order ever changes
     if (b.getAttribute('onclick')?.includes(`'${name}'`)) {
       b.classList.add('active');
@@ -4431,6 +4492,8 @@ export function switchTab(name) {
       b.classList.remove('active');
     }
   });
+
+  syncMoreNavState(name);
 
   // Keep the active sidebar item visible if the rail overflows on short screens
   // (no-op when the sidebar/active item is absent — e.g. authors / mobile).
