@@ -27,33 +27,33 @@
 
   /* Card presentation keeps native table semantics, and the exact original
      controls. Detail columns remain accessible through the per-record button. */
-  .tab-panel .tbl-wrap:has(.phone-records) { overflow: visible; border: 0; background: transparent; }
-  .tab-panel table.phone-records, .tab-panel .phone-records tbody { display: block; width: 100%; min-width: 0; }
-  .tab-panel .phone-records thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-  .tab-panel .phone-records tr.phone-record {
+  :is(.tab-panel, .modal) .tbl-wrap:has(.phone-records) { max-height: none !important; overflow: visible !important; margin-inline: 0; border: 0; box-shadow: none; background: transparent; }
+  :is(.tab-panel, .modal) table.phone-records, :is(.tab-panel, .modal) .phone-records tbody { display: block; width: 100%; min-width: 0; }
+  :is(.tab-panel, .modal) .phone-records thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  :is(.tab-panel, .modal) .phone-records tr.phone-record {
     display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2);
     padding: var(--space-4); margin-bottom: var(--space-3);
     border: var(--stroke-hair) solid var(--border-default); border-radius: var(--r2);
     background: var(--surface-raised); color: var(--content-primary);
     content-visibility: visible;
   }
-  .tab-panel .phone-records tr.phone-record > td {
+  :is(.tab-panel, .modal) .phone-records tr.phone-record > td {
     display: block !important; position: static !important; grid-area: auto !important;
     width: auto; max-width: none; min-width: 0; padding: 0 !important; border: 0;
     box-shadow: none; background: transparent !important; text-align: left !important;
     white-space: normal; overflow: visible; overflow-wrap: anywhere;
   }
-  .tab-panel .phone-records td::before { content: attr(data-phone-label); display: block; margin-bottom: var(--space-1); font: 600 var(--text-xs) var(--font-ui); color: var(--content-secondary); }
-  .tab-panel .phone-records td.phone-record-lead { order: -1; font-size: var(--text-base); font-weight: 700; padding-bottom: var(--space-2) !important; border-bottom: var(--stroke-hair) solid var(--border-subtle); }
-  .tab-panel .phone-records td.phone-record-lead::before { display: none; }
-  .tab-panel .phone-records tr.phone-record:not(.phone-record-open) > td.phone-record-detail { display: none !important; }
-  .tab-panel .phone-records tr.phone-record > td[aria-hidden="true"] { display: none !important; }
-  .tab-panel .phone-records td :is(.text-cell, span) { max-width: 100%; white-space: normal; }
+  :is(.tab-panel, .modal) .phone-records td::before { content: attr(data-phone-label); display: block; margin-bottom: var(--space-1); font: 600 var(--text-xs) var(--font-ui); color: var(--content-secondary); }
+  :is(.tab-panel, .modal) .phone-records td.phone-record-lead { order: -1; font-size: var(--text-base); font-weight: 700; padding-bottom: var(--space-2) !important; border-bottom: var(--stroke-hair) solid var(--border-subtle); }
+  :is(.tab-panel, .modal) .phone-records td.phone-record-lead::before { display: none; }
+  :is(.tab-panel, .modal) .phone-records tr.phone-record:not(.phone-record-open) > td.phone-record-detail { display: none !important; }
+  :is(.tab-panel, .modal) .phone-records tr.phone-record > td[aria-hidden="true"] { display: none !important; }
+  :is(.tab-panel, .modal) .phone-records td :is(.text-cell, span) { max-width: 100%; white-space: normal; }
   .phone-record-toggle { display: block; min-height: 44px; margin-top: var(--space-2); padding: var(--space-2) var(--space-3); border: var(--stroke-hair) solid var(--border-default); border-radius: var(--r-pill); background: var(--surface-sunken); color: var(--content-primary); font: 600 var(--text-sm) var(--font-ui); cursor: pointer; }
   .phone-record-toggle:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
-  .tab-panel .phone-records tfoot { display: block; }
-  .tab-panel .phone-records tfoot tr { display: flex; flex-wrap: wrap; justify-content: space-between; }
-  .tab-panel .phone-records tfoot td { position: static !important; white-space: normal; }
+  :is(.tab-panel, .modal) .phone-records tfoot { display: block; }
+  :is(.tab-panel, .modal) .phone-records tfoot tr { display: flex; flex-wrap: wrap; justify-content: space-between; }
+  :is(.tab-panel, .modal) .phone-records tfoot td { position: static !important; white-space: normal; }
 
   /* Catalogue, dashboard and history: let the work start immediately. */
   #tab-all-overview .overview-shell, #all-books-list { grid-template-columns: minmax(0, 1fr); }
@@ -80,8 +80,8 @@
   #tab-shipping .shipping-reco-container { margin-inline: 0 !important; padding: var(--space-3) !important; }
   #tab-shipping .shipping-reco-container > div:has(#sim-book-select) { grid-template-columns: minmax(0, 1fr) !important; }
   #tab-shipping .shipping-reco-container .form-group { flex-wrap: wrap; }
-  .tab-panel .phone-records tbody > tr:not(.phone-record),
-  .tab-panel .phone-records tbody > tr:not(.phone-record) > td { display: block; width: auto; min-width: 0; white-space: normal; }
+  :is(.tab-panel, .modal) .phone-records tbody > tr:not(.phone-record),
+  :is(.tab-panel, .modal) .phone-records tbody > tr:not(.phone-record) > td { display: block; width: auto; min-width: 0; white-space: normal; }
 
   /* Open Call has its own two-column workspace; the generic g2 rule did not
      cover it. Stack the project chooser before the contributor workspace. */
@@ -109,4 +109,26 @@
   #tab-intel .intel-thread { min-height: 12rem; }
   #tab-intel .intel-rail { display: flex; width: auto; max-height: 10rem; overflow: auto; }
   #tab-intel .intel-input { scroll-margin-bottom: calc(150px + env(safe-area-inset-bottom)); }
+
+  /* Pop-up windows. The shell is already a bottom sheet (style.css); these
+     cover what sits inside it. Inline widths set for desktop must yield. */
+  .overlay .modal { max-width: none !important; min-width: 0 !important; }
+  .modal :is(input:not([type=checkbox]):not([type=radio]), select, textarea) { min-width: 0; max-width: 100%; font-size: max(1rem, var(--text-base)); }
+  .modal .modal-close-btn { width: 44px; height: 44px; }
+  .modal .modal-title-left > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+  /* Footers with a nested action group (trip detail has seven) wrapped as one
+     unbreakable row and pushed buttons off-screen. */
+  .modal .modal-footer > div { display: flex; flex: 1 1 100%; flex-wrap: wrap; gap: var(--space-2); min-width: 0; }
+  .modal .modal-footer .btn { min-height: 44px; white-space: normal; }
+  .modal .modal-footer > div > .btn { flex: 1 1 calc(50% - var(--space-2)); }
+  /* Side-by-side field rows: keep pairs where they fit, drop to one column
+     before any field gets narrower than a thumb-sized input. */
+  .modal [style*="grid-template-columns"]:not(table *) { grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)) !important; }
+  .modal :is(.g2, .g3, .g4) { grid-template-columns: minmax(0, 1fr) !important; }
+  .modal .tbl-wrap { max-width: 100%; }
 }
+
+
+/* Matches the bottom-sheet breakpoint in style.css, where the sheet runs
+   edge to edge; an inline desktop width (e.g. 95vw) would leave a gap. */
+@media (max-width: 600px) { .overlay .modal { width: 100% !important; } }
