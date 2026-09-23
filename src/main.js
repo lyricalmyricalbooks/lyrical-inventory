@@ -22957,8 +22957,8 @@ function renderStripeSaleAutoToggle() {
       .map(([id, code]) => ({ code, title: BOOKS[id]?.title || id }))
       .sort((a, b) => a.title.localeCompare(b.title));
     list.innerHTML = rows.length
-      ? rows.map(r => `<li><span class="sale-code">${escapeHtml(r.code)}</span> ${escapeHtml(r.title)}</li>`).join('')
-      : '<li>Add a book to your catalogue to get its code.</li>';
+      ? rows.map(r => `<li><span class="sale-code">${escapeHtml(r.code)}</span><span>${escapeHtml(r.title)}</span></li>`).join('')
+      : '<li class="sale-codes-empty">Add a book to your catalogue to get its code.</li>';
   }
 }
 
