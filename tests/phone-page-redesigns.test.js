@@ -104,3 +104,17 @@ test('the Big Cartel gap warning really disappears when nothing is missing', () 
   expect(document.getElementById('web-bc-gap-strip').hasAttribute('hidden')).toBe(true);
   expect(styles).toMatch(/\.bc-gap-strip\[hidden\]\{display:none;\}/);
 });
+
+test('phone pass: section heads wrap instead of squeezing their title', () => {
+  const block = styles.slice(styles.indexOf('PHONE PASS, EVERY OTHER SCREEN'));
+  expect(block).toMatch(/\.tab-panel \.sec-head\{flex-wrap:wrap;\}/);
+  expect(block).toMatch(/\.tab-panel \.sec-head-titles\{flex:1 1 220px;\}/);
+});
+
+test('phone pass: Add sale keeps its save button in reach and tables keep their first column', () => {
+  const block = styles.slice(styles.indexOf('PHONE PASS, EVERY OTHER SCREEN'));
+  expect(block).toMatch(/#tab-manual \.card-actions \.btn\.gold\.lg\{\s*position:sticky;/);
+  expect(block).toMatch(/\.tab-panel:not\(#tab-history\) \.tbl td:first-child\{position:sticky;left:0;/);
+  // The Save-preset button on Shipping no longer forces a 28px height.
+  expect(html).not.toMatch(/openSaveBookPresetModal\(\)" style="[^"]*height:28px/);
+});
