@@ -33,6 +33,17 @@ Modifiers (compose, don't reinvent):
 Row-level icon actions (edit/manage buttons that appear on hover) use `.edit-btn` —
 see `.tbl tbody tr:hover .edit-btn` (`style.css:1821`) for the reveal-on-hover convention.
 
+**Icon-only round buttons — full state set.** `.modal-close-btn` (`style.css:2741`, `:hover`/
+`:active`/`:focus-visible` at `style.css:4008-4010`) is the reference: hover swaps the fill to
+`--surface-inset` and lifts the icon colour to `--content-primary`, `:active` snaps a
+`transform:scale(0.94)` with no transition (so it reads as an instant press, not a wobble, and
+needs no `prefers-reduced-motion` guard), and `:focus-visible` gets its own outline rather than
+inheriting the browser default. Any new icon-only circular button (`.more-sheet-close`,
+`.store-balance-pop-close`, `.fk-pop-close`) should carry all three — a phone's bottom nav
+(`.mnav-btn`) and its More-sheet tiles (`.more-sheet-body .snav`) shipped with a `background-color`
+transition already declared but nothing ever set it, so every tap landed with zero visual
+confirmation until the same three states were added there too.
+
 ---
 
 ## Status & count badges — `.pill`
