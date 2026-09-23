@@ -490,14 +490,14 @@ describe('Pool width', () => {
     expect(appSource).toContain('_runExtractionPool(todo, EMAIL_EXTRACT_CONCURRENCY');
   });
 
-  it('opens the connection to the reader while the app boots', () => {
-    // The owner taps "AI Scan" and waits; the TLS handshake does not need to
-    // be part of that wait.
+  it('does not compete with app startup for an unused AI connection', () => {
+    // AI scanning is user-triggered and off the opening screen. Firebase and
+    // the app bundle should get the browser's cold-start connections first.
     const html = fs.readFileSync(
       path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../index.html'),
       'utf8'
     );
-    expect(html).toMatch(/rel="preconnect"[^>]*generativelanguage\.googleapis\.com/);
+    expect(html).not.toMatch(/rel="preconnect"[^>]*generativelanguage\.googleapis\.com/);
   });
 });
 

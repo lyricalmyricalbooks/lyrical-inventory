@@ -10,6 +10,7 @@ import { registerSW } from 'virtual:pwa-register';
 import { calcArtistEarnings, tierEffectiveCap, describePayout, payoutRequestCovered } from './lib/earnings.js';
 import { calculateBreakEven } from './lib/breakeven.js';
 import { escapeHtml } from './lib/html.js';
+import { ensureXlsx, loadExternalScript } from './lib/external-scripts.js';
 import { describeCustomerFilters, joinFilterLabels } from './lib/customer-segment.js';
 import { buildActivityFeed } from './lib/activity-feed.js';
 import { buildAttentionSignals, SIGNAL_GROUPS, GROUP_LABELS, GROUP_ICONS, isUrgent } from './lib/attention-signals.js';
@@ -8345,15 +8346,22 @@ function renderArtistReimburseBanner() {
 // ── SPREADSHEET IMPORT
 let _importRows = [];
 
-function handleImportFile(event) {
+async function handleImportFile(event) {
   const file = event.target.files[0];
   if (!file) return;
   event.target.value = ''; // reset so same file can be re-selected
+  let xlsx;
+  try {
+    xlsx = await ensureXlsx();
+  } catch {
+    showToast('Excel import could not load. Check your connection and try again.', 'err');
+    return;
+  }
   const reader = new FileReader();
   reader.onload = (e) => {
     try {
       const data = new Uint8Array(e.target.result);
-      const wb = XLSX.read(data, { type: 'array', cellDates: true });
+      const wb = xlsx.read(data, { type: 'array', cellDates: true });
       const book = getBook();
 
       const SHORT = { 'Un Fantastico Altrove': 'Altrove', 'The Hound': 'Hound', 'Archaeology of Presence': 'Archaeology', 'Sistema_non_autorizzato': 'Sistema', 'As if Nobody is Watching': 'Nobody', 'Collective Photobook': 'Collective' };
@@ -8365,7 +8373,7 @@ function handleImportFile(event) {
         || wb.SheetNames.find(n => n.toLowerCase().includes(book.title.toLowerCase().slice(0, 6)))
         || wb.SheetNames[0];
       const ws = wb.Sheets[sheetName];
-      const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      const rows = xlsx.utils.sheet_to_json(ws, { defval: '' });
 
       if (!rows.length) { showToast('No data found in spreadsheet', 'warn'); return; }
 
@@ -8388,7 +8396,7 @@ function handleImportFile(event) {
           const d = new Date(date);
           if (!isNaN(d)) parsedDate = d.toISOString().split('T')[0];
         } else if (typeof date === 'number') {
-          const d = XLSX.SSF.parse_date_code(date);
+          const d = xlsx.SSF.parse_date_code(date);
           parsedDate = `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`;
         }
         return { num: String(num || 'IMP-' + Date.now()), date: parsedDate, chan: String(chan), qty: Math.abs(Math.round(qty)), price, notes: String(notes) };
@@ -11695,23 +11703,6 @@ function downloadInvoiceHTML(opts) {
       ? '✓ Invoice downloaded with the Stripe pay link embedded — attach it or print to PDF.'
       : '✓ Invoice downloaded (open & print to PDF).');
   }
-}
-
-// Lazily inject an external script once and resolve when it's ready. The libs
-// live on cdnjs (cached by the service worker — see vite.config.js), so after
-// the first online load this works offline too. Failures reject so callers can
-// fall back gracefully.
-const _externalScripts = {};
-function loadExternalScript(src) {
-  if (_externalScripts[src]) return _externalScripts[src];
-  _externalScripts[src] = new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = src; s.async = true;
-    s.onload = () => resolve();
-    s.onerror = () => { delete _externalScripts[src]; reject(new Error('Failed to load ' + src)); };
-    document.head.appendChild(s);
-  });
-  return _externalScripts[src];
 }
 
 // jsPDF + html2canvas are ~0.5 MB combined, so they're only fetched the first
@@ -16111,20 +16102,16 @@ function showApp(role, bookId) {
 
 async function boot(forcedBook) {
   buildBookSwitcher();
-  await loadPaymentLinks();
-  await loadProductionCosts();
-  await loadWebsitePaymentMethods();
+  const bootLoads = [loadPaymentLinks(), loadProductionCosts(), loadWebsitePaymentMethods()];
   // Publisher-only data: firestore.rules / database.rules.json deny these four
   // to every other account, and the Customers and Open Call tabs that use them
   // are closed to authors (switchTab). Keyed on the signed-in ACCOUNT, not
   // isAuthor(): the publisher previewing "Author view" must still load them, or
   // a later save from the Customers tab would write back an empty list.
   if (isPublisherSession()) {
-    await loadCustomerSuppression();
-    await loadMailingList();
-    await loadCampaigns();
-    await loadOpenCalls();
+    bootLoads.push(loadCustomerSuppression(), loadMailingList(), loadCampaigns(), loadOpenCalls());
   }
+  await Promise.all(bootLoads);
   renderCatalogList();
   renderProfitSettings();
 
@@ -24469,23 +24456,27 @@ async function initStartup() {
       // This ensures all devices agree on which database to use.
       await window._fbLoadModeFlags();
 
-      // Pull the shared notification endpoint so artist sessions — which never ran
-      // the Sheet setup locally — still have a URL to POST the approval-needed
-      // email to when they submit. Publisher writes it; everyone can read it.
-      try {
-        const ep = await window._fbLoadSettings('notifyEndpoint');
-        if (ep && ep.url) { notifyUrl = ep.url; localStorage.setItem('lm-notify-url', ep.url); }
-      } catch (_) { }
+      // These independent reads start together after the mode flags choose the
+      // backing store. On a cold connection this costs one round trip instead
+      // of three before the app can dismiss its splash screen.
+      const loadNotifySettings = async () => {
+        try {
+          const ep = await window._fbLoadSettings('notifyEndpoint');
+          if (ep && ep.url) { notifyUrl = ep.url; localStorage.setItem('lm-notify-url', ep.url); }
+        } catch (_) { }
+      };
 
-      try {
-        const ac = await window._fbLoadSettings('analyticsConfig');
-        if (ac && ac.url) {
-          localStorage.setItem('lm-analytics-url', ac.url);
-        }
-      } catch (_) { }
+      const loadAnalyticsSettings = async () => {
+        try {
+          const ac = await window._fbLoadSettings('analyticsConfig');
+          if (ac && ac.url) {
+            localStorage.setItem('lm-analytics-url', ac.url);
+          }
+        } catch (_) { }
+      };
 
       // NOW that we have a valid token, we pull the protected catalog.
-      await loadCatalog();
+      await Promise.all([loadCatalog(), loadNotifySettings(), loadAnalyticsSettings()]);
       loadAuthorViewOverrides();
 
       // Check access
