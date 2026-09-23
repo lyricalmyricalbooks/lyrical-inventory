@@ -190,7 +190,9 @@ describe('Shipping Analysis Hub Functions', () => {
     let syncFn, mockStates, mockCalls, mockSheetsQueue;
     beforeEach(() => {
       const mainContent = appSource;
+      const indexMatch = mainContent.match(/function indexWebsiteHistByOrderNumber\(\) \{([\s\S]+?)\n\}/);
       const syncMatch = mainContent.match(/async function syncBigCartelShippingPaid\(bcOrders\) \{([\s\S]+?)\n\}/);
+      expect(indexMatch).not.toBeNull();
       expect(syncMatch).not.toBeNull();
 
       mockStates = {
@@ -231,6 +233,7 @@ describe('Shipping Analysis Hub Functions', () => {
 
       syncFn = new Function('mockStates', 'mockCalls', 'mockSheetsQueue', 'bcOrders', `
         ${mockEnvBase}
+        ${indexMatch[0]}
         ${syncMatch[0]}
         return syncBigCartelShippingPaid(bcOrders);
       `);

@@ -2457,54 +2457,78 @@ async function voidPlaceholderDuplicate(placeholderNum) {
   showToast(`✓ ${placeholderNum} voided — ${entry.qty} cop${entry.qty === 1 ? 'y' : 'ies'} back in stock`);
 }
 
+/**
+ * Every Website ledger row across every book, indexed by its normalized order
+ * number, built with one pass over history.
+ *
+ * ⚡ Bolt Optimization: syncBigCartelShippingPaid() and the sync block in
+ * triggerBigCartelShippingSync() each rescanned every book's full history for
+ * every single storefront order (O(orders × history rows), re-normalizing the
+ * same order number on every comparison via sameOrderNumber). Both run on a
+ * routine action — syncBigCartelShippingPaid() fires every time the Orders
+ * tab loads — and only get slower as the ledger and order history grow. A
+ * shop with a modest few thousand history rows and a few hundred storefront
+ * orders on file was doing millions of comparisons per load; indexing once
+ * turns that into one pass over history plus an O(1) lookup per order.
+ */
+function indexWebsiteHistByOrderNumber() {
+  const index = new Map();
+  for (const bookId of Object.keys(states)) {
+    const s = states[bookId];
+    if (!s || !Array.isArray(s.hist)) continue;
+    for (const h of s.hist) {
+      if (!h || h.chan !== 'Website') continue;
+      const key = normalizeShippingOrderNumber(h.num);
+      if (!key) continue;
+      let bucket = index.get(key);
+      if (!bucket) index.set(key, bucket = []);
+      bucket.push({ bookId, h });
+    }
+  }
+  return index;
+}
+
 async function syncBigCartelShippingPaid(bcOrders) {
   if (!bcOrders || bcOrders.length === 0) return;
 
   let updateCount = 0;
   let missingCount = 0;
   const affectedBooks = new Set();
+  const histIndex = indexWebsiteHistByOrderNumber();
 
   bcOrders.forEach(bcOrder => {
     const bcId = bcOrder.id;
     const shippingPaid = parseFloat(bcOrder.attributes?.shipping_total || 0);
-    let sawLedgerRow = false;
+    const matches = histIndex.get(normalizeShippingOrderNumber(bcId)) || [];
 
-    Object.keys(states).forEach(bookId => {
-      const s = states[bookId];
-      if (s && Array.isArray(s.hist)) {
-        s.hist.forEach(h => {
-          if (h && h.chan === 'Website' && sameOrderNumber(h.num, bcId)) {
-            sawLedgerRow = true;
-            if (!h.manualShippingPaid && h.shippingPaid !== shippingPaid) {
-              h.shippingPaid = shippingPaid;
-              affectedBooks.add(bookId);
-              updateCount++;
+    matches.forEach(({ bookId, h }) => {
+      if (!h.manualShippingPaid && h.shippingPaid !== shippingPaid) {
+        h.shippingPaid = shippingPaid;
+        affectedBooks.add(bookId);
+        updateCount++;
 
-              const bookObj = BOOKS[bookId];
-              if (bookObj) {
-                syncToSheets({
-                  type: 'order',
-                  book: bookObj.title,
-                  date: h.date,
-                  num: h.num,
-                  chan: h.chan || 'Website',
-                  qty: h.qty,
-                  price: h.price,
-                  total: h.qty * h.price,
-                  stockAfter: h.after,
-                  notes: h.notes || 'Big Cartel',
-                  sheetsId: h.sheetsId,
-                  currency: getBookCurrencyCode(bookObj)
-                });
-                if (h.shippingPaid > 0) {
-                  syncToSheets(shippingPurchaseRowPayload(bookObj, getBookCurrencyCode(bookObj), h));
-                } else {
-                  syncToSheets({ action: 'delete', type: 'shipping', book: bookObj.title, sheetsId: h.sheetsId + '-shipping' });
-                }
-              }
-            }
+        const bookObj = BOOKS[bookId];
+        if (bookObj) {
+          syncToSheets({
+            type: 'order',
+            book: bookObj.title,
+            date: h.date,
+            num: h.num,
+            chan: h.chan || 'Website',
+            qty: h.qty,
+            price: h.price,
+            total: h.qty * h.price,
+            stockAfter: h.after,
+            notes: h.notes || 'Big Cartel',
+            sheetsId: h.sheetsId,
+            currency: getBookCurrencyCode(bookObj)
+          });
+          if (h.shippingPaid > 0) {
+            syncToSheets(shippingPurchaseRowPayload(bookObj, getBookCurrencyCode(bookObj), h));
+          } else {
+            syncToSheets({ action: 'delete', type: 'shipping', book: bookObj.title, sheetsId: h.sheetsId + '-shipping' });
           }
-        });
+        }
       }
     });
 
@@ -2512,7 +2536,7 @@ async function syncBigCartelShippingPaid(bcOrders) {
     // never recorded — no history, no stock deducted. This loop has always been
     // in a position to notice and always stayed silent, which is exactly how two
     // orders came to have shipping labels and no order behind them.
-    if (!sawLedgerRow && !isCancelledStatus(bcOrder) && bigCartelOrderNumber(bcOrder)) missingCount++;
+    if (!matches.length && !isCancelledStatus(bcOrder) && bigCartelOrderNumber(bcOrder)) missingCount++;
   });
 
   if (updateCount > 0) {
@@ -2559,51 +2583,45 @@ async function triggerBigCartelShippingSync() {
     let missingCount = 0;
     const affectedBooks = new Set();
 
+    const histIndex = indexWebsiteHistByOrderNumber();
+
     bigCartelData.orders.forEach(bcOrder => {
       const bcId = bcOrder.id;
       const shippingPaid = parseFloat(bcOrder.attributes?.shipping_total || 0);
-      let sawLedgerRow = false;
+      const matches = histIndex.get(normalizeShippingOrderNumber(bcId)) || [];
 
-      Object.keys(states).forEach(bookId => {
-        const s = states[bookId];
-        if (s && Array.isArray(s.hist)) {
-          s.hist.forEach(h => {
-            if (h && h.chan === 'Website' && sameOrderNumber(h.num, bcId)) {
-              sawLedgerRow = true;
-              if (!h.manualShippingPaid && h.shippingPaid !== shippingPaid) {
-                h.shippingPaid = shippingPaid;
-                affectedBooks.add(bookId);
-                updateCount++;
+      matches.forEach(({ bookId, h }) => {
+        if (!h.manualShippingPaid && h.shippingPaid !== shippingPaid) {
+          h.shippingPaid = shippingPaid;
+          affectedBooks.add(bookId);
+          updateCount++;
 
-                const bookObj = BOOKS[bookId];
-                if (bookObj) {
-                  syncToSheets({
-                    type: 'order',
-                    book: bookObj.title,
-                    date: h.date,
-                    num: h.num,
-                    chan: h.chan || 'Website',
-                    qty: h.qty,
-                    price: h.price,
-                    total: h.qty * h.price,
-                    stockAfter: h.after,
-                    notes: h.notes || 'Big Cartel',
-                    sheetsId: h.sheetsId,
-                    currency: getBookCurrencyCode(bookObj)
-                  });
-                  if (h.shippingPaid > 0) {
-                    syncToSheets(shippingPurchaseRowPayload(bookObj, getBookCurrencyCode(bookObj), h));
-                  } else {
-                    syncToSheets({ action: 'delete', type: 'shipping', book: bookObj.title, sheetsId: h.sheetsId + '-shipping' });
-                  }
-                }
-              }
+          const bookObj = BOOKS[bookId];
+          if (bookObj) {
+            syncToSheets({
+              type: 'order',
+              book: bookObj.title,
+              date: h.date,
+              num: h.num,
+              chan: h.chan || 'Website',
+              qty: h.qty,
+              price: h.price,
+              total: h.qty * h.price,
+              stockAfter: h.after,
+              notes: h.notes || 'Big Cartel',
+              sheetsId: h.sheetsId,
+              currency: getBookCurrencyCode(bookObj)
+            });
+            if (h.shippingPaid > 0) {
+              syncToSheets(shippingPurchaseRowPayload(bookObj, getBookCurrencyCode(bookObj), h));
+            } else {
+              syncToSheets({ action: 'delete', type: 'shipping', book: bookObj.title, sheetsId: h.sheetsId + '-shipping' });
             }
-          });
+          }
         }
       });
 
-      if (!sawLedgerRow && !isCancelledStatus(bcOrder) && bigCartelOrderNumber(bcOrder)) missingCount++;
+      if (!matches.length && !isCancelledStatus(bcOrder) && bigCartelOrderNumber(bcOrder)) missingCount++;
     });
 
     if (updateCount > 0) {
