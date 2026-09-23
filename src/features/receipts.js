@@ -2029,6 +2029,7 @@ function expFileChosen() {
   if (nameEl && hasFile) nameEl.textContent = input.files[0].name;
   if (chip) chip.style.display = hasFile ? 'flex' : 'none';
   if (dz) dz.style.display = hasFile ? 'none' : 'flex';
+  if (hasFile) warmReceiptScan(input.files[0]);
 }
 function expFileClear(ev) {
   if (ev) ev.preventDefault();
@@ -3493,6 +3494,137 @@ async function _prepareReceiptUpload(file) {
   }
 }
 
+// ── SCANNING LESS, AND SOONER
+// Two costs the scan used to pay every time. Shrinking a 12-megapixel phone
+// photo takes a noticeable moment on a phone, and it only started once the
+// button was pressed — so it is now started the moment a receipt is attached
+// and the button picks up the finished result. And the same receipt read twice
+// (a second tap, a batch that picked up a duplicate photo, the postage matcher
+// re-reading a receipt logged weeks ago) paid for a full AI read each time.
+
+// Per attached file, so a second scan of the same attachment — or a scan that
+// follows the warm-up below — never shrinks the photo twice.
+const _receiptUploadMemo = new WeakMap();
+
+function _prepareReceiptUploadOnce(file) {
+  let pending = _receiptUploadMemo.get(file);
+  if (!pending) {
+    pending = _prepareReceiptUpload(file);
+    _receiptUploadMemo.set(file, pending);
+    // A failed read must not be handed to every later scan of this file.
+    pending.catch(() => _receiptUploadMemo.delete(file));
+  }
+  return pending;
+}
+
+const _receiptFingerprintMemo = new WeakMap();
+
+// A fingerprint of the file's actual contents, so the same photo is recognised
+// whatever it is called and however it was opened. The original bytes, not the
+// shrunk copy, so a hit can skip the shrinking too. Empty when the browser
+// can't produce one (an insecure page, an unreadable file), which just means
+// the scan goes ahead as normal.
+function _receiptScanFingerprint(file) {
+  if (!file || typeof file !== 'object') return Promise.resolve('');
+  let pending = _receiptFingerprintMemo.get(file);
+  if (!pending) {
+    pending = (async () => {
+      try {
+        const subtle = globalThis.crypto?.subtle;
+        if (!subtle || typeof file.arrayBuffer !== 'function') return '';
+        const digest = await subtle.digest('SHA-256', await file.arrayBuffer());
+        return Array.from(new Uint8Array(digest).slice(0, 16), b => b.toString(16).padStart(2, '0')).join('');
+      } catch (_) {
+        return '';
+      }
+    })();
+    _receiptFingerprintMemo.set(file, pending);
+  }
+  return pending;
+}
+
+const RECEIPT_SCAN_MEMORY_KEY = 'lm_receipt_scan_memory';
+// Each answer is a few hundred bytes, so this is a small corner of storage —
+// and comfortably more than one book fair's worth of receipts.
+const RECEIPT_SCAN_MEMORY_MAX = 150;
+let _receiptScanMemory = null;
+
+// Answers are only good for the question that produced them. Tied to the
+// instructions and the list of fields, so changing either quietly retires
+// every remembered answer instead of serving ones read under the old rules.
+function _receiptScanMemorySignature() {
+  const s = _buildReceiptScanPrompt() + JSON.stringify(RECEIPT_SCAN_SCHEMA);
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16);
+}
+
+// Read lazily, and treated as disposable: a private window, full storage or a
+// garbled entry all just mean starting with nothing remembered.
+function _receiptScanMemoryLoad() {
+  if (_receiptScanMemory) return _receiptScanMemory;
+  _receiptScanMemory = new Map();
+  try {
+    const saved = JSON.parse(localStorage.getItem(RECEIPT_SCAN_MEMORY_KEY) || 'null');
+    if (saved && saved.sig === _receiptScanMemorySignature() && Array.isArray(saved.entries)) {
+      for (const [fp, parsed] of saved.entries) {
+        if (typeof fp === 'string' && parsed && typeof parsed === 'object') _receiptScanMemory.set(fp, parsed);
+      }
+    }
+  } catch (_) { /* unreadable storage: nothing remembered */ }
+  return _receiptScanMemory;
+}
+
+function _receiptScanRecall(fingerprint) {
+  if (!fingerprint) return null;
+  const memory = _receiptScanMemoryLoad();
+  const parsed = memory.get(fingerprint);
+  if (!parsed) return null;
+  // Most recently used goes to the back, so the oldest untouched is dropped first.
+  memory.delete(fingerprint);
+  memory.set(fingerprint, parsed);
+  return { ...parsed };
+}
+
+// Only a clean, confident read is worth keeping. A shaky one must stay
+// re-scannable: the owner pressing the button again on a blurry photo is
+// asking for a second look, not for the same doubtful answer back.
+function _receiptScanRemember(fingerprint, parsed) {
+  if (!fingerprint || !parsed || typeof parsed !== 'object') return;
+  const conf = Number(parsed.confidence);
+  if (!(_parseReceiptAmount(parsed.amount) > 0)) return;
+  if (!normalizeReceiptDate(parsed.date)) return;
+  if (Number.isFinite(conf) && conf < 0.5) return;
+  const memory = _receiptScanMemoryLoad();
+  const { fromMemory: _fromMemory, ...answer } = parsed;
+  memory.delete(fingerprint);
+  memory.set(fingerprint, answer);
+  while (memory.size > RECEIPT_SCAN_MEMORY_MAX) memory.delete(memory.keys().next().value);
+  try {
+    localStorage.setItem(RECEIPT_SCAN_MEMORY_KEY, JSON.stringify({
+      sig: _receiptScanMemorySignature(),
+      entries: Array.from(memory.entries())
+    }));
+  } catch (_) { /* storage full or blocked: remembered for this session only */ }
+}
+
+// Called when a receipt is attached. Starts the slow local work — reading and
+// shrinking the photo — while the owner is still filling in the rest of the
+// form, so pressing AI Scan goes straight to the upload. Only when a reader key
+// is set: with no key the button can't scan, and the phone shouldn't do the
+// work anyway.
+function warmReceiptScan(file) {
+  if (!file) return;
+  const hasKey = TAX_CENTER.settings?.geminiKey || TAX_CENTER.settings?.openRouterKey?.trim();
+  if (!hasKey) return;
+  _receiptScanFingerprint(file).then(fp => {
+    if (!_receiptScanRecall(fp)) _prepareReceiptUploadOnce(file).catch(() => {});
+  });
+}
+
 // Prompt-only "return strict JSON" was the root of most bad scans: the model
 // fenced the output, added a preamble, returned "$1,234.56" as a string, or
 // invented a category outside the ledger's list. A response schema makes the
@@ -3520,21 +3652,24 @@ const RECEIPT_SCAN_SCHEMA = {
 
 // "Extract these exact 4 keys" never said WHICH number to extract, so a
 // receipt with a subtotal, tax line and total was a coin flip.
+//
+// Every word here is paid for on every scan, so it says each rule once and
+// leaves out what the schema already guarantees (the JSON shape, the category
+// list, which fields are numbers). The rules themselves are all still here:
+// cutting one is how the subtotal-vs-total coin flip came back last time.
 function _buildReceiptScanPrompt() {
-  return `You are reading ONE receipt or invoice for a book publisher's bookkeeping. Return JSON matching the schema.
-
-amount — the final grand total actually charged, including tax, tip and shipping. Never the subtotal, never a single line item, never the pre-discount figure. If the document shows "Balance due", "Amount paid", or "Total charged", use that number.
-currency — ISO 4217, uppercase. Take an explicit code if printed. Otherwise infer from the symbol plus locale cues: "$" alongside GST/HST/QST or a Canadian address is CAD; "$" alongside a US state or "Sales Tax" is USD; "A$" is AUD; "£" is GBP; "€" is EUR. Only fall back to CAD when nothing at all indicates otherwise.
-date — the purchase/transaction date as YYYY-MM-DD. Not the due date, print date, delivery date, or statement period. For an ambiguous NN/NN/YYYY, use the convention of the vendor's country.
-vendor — the merchant being paid. Not the customer, and not the payment processor unless the processor is itself the merchant.
-description — a short plain label for what was bought, 60 characters or less.
-reference — the invoice, order, or receipt number if one is printed, otherwise "".
-category — the single best fit from the allowed list.
-confidence — 0 to 1, covering how certain you are of the amount and date together.
-shipRecipient — ONLY on a shipping/postage receipt or label: the full name of the person the parcel is addressed TO. Never the sender, and never the publisher's own name or business name. Return "" on any other kind of receipt.
-shipTracking — ONLY on a shipping/postage receipt or label: the tracking, article, or barcode number for the parcel, exactly as printed. Prefer a number labelled "Tracking Number", "Numéro de repérage", or "Article". Not the order number, not the authorization code, not the postage-paid or account number. Return "" if none is printed or on any other kind of receipt.
-
-If the image is blurry, cropped, or partly unreadable, still return your best reading and set confidence below 0.4.`;
+  return `Read this ONE receipt or invoice for a book publisher's bookkeeping.
+amount: the grand total actually charged, incl. tax, tip and shipping; prefer "Balance due", "Amount paid" or "Total charged". Never the subtotal, a line item, or a pre-discount figure.
+currency: ISO 4217. Use a printed code; else "$" with GST/HST/QST or a Canadian address = CAD, "$" with a US state or "Sales Tax" = USD, A$ = AUD, £ = GBP, € = EUR. CAD only if nothing indicates otherwise.
+date: purchase date as YYYY-MM-DD, not the due date, print, delivery or statement date. Read NN/NN/YYYY in the vendor country's convention.
+vendor: the merchant paid, not the customer, nor a payment processor unless it is the merchant.
+description: what was bought, 60 characters max.
+reference: printed invoice/order/receipt number, else "".
+category: best fit.
+confidence: 0-1 for amount and date together. If blurry, cropped or partly unreadable, still give your best reading with confidence below 0.4.
+Shipping/postage receipts or labels only, otherwise "":
+shipRecipient: full name the parcel is addressed TO. Never the sender, the publisher, or its business name.
+shipTracking: the tracking/article/barcode number exactly as printed, preferring one labelled "Tracking Number", "Numéro de repérage" or "Article". Not an order, authorization, postage-paid or account number.`;
 }
 
 // A <select> silently ignores an assignment to a value it has no <option> for.
@@ -3572,9 +3707,17 @@ function _applyScanCategory(el, category, vendor, description) {
 // buttons and the batch scanner all go through here, so a prompt or schema
 // change lands on every screen at once — the same reason the two hand-written
 // prompts were collapsed into one in the first place.
+//
+// A receipt this browser has already read confidently is answered from memory
+// instead: no upload, no AI allowance spent, and it works offline. The answer
+// comes back with `fromMemory: true` so a screen can say why it was instant.
 async function _extractReceiptFromFile(apiKey, file, opts = {}) {
   const { signal } = opts;
-  const upload = await _prepareReceiptUpload(file);
+  const fingerprint = await _receiptScanFingerprint(file);
+  const remembered = _receiptScanRecall(fingerprint);
+  if (remembered) return { ...remembered, fromMemory: true };
+
+  const upload = await _prepareReceiptUploadOnce(file);
   if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
   const out = await _callAiForReceipts(apiKey, [
@@ -3590,7 +3733,9 @@ async function _extractReceiptFromFile(apiKey, file, opts = {}) {
     maxOutputTokens: 2048
   });
 
-  return _parseReceiptJson(out?.text || '') || {};
+  const parsed = _parseReceiptJson(out?.text || '') || {};
+  _receiptScanRemember(fingerprint, parsed);
+  return parsed;
 }
 
 /**
@@ -3759,7 +3904,7 @@ async function _runReceiptScan(cfg) {
     // The old blanket "✓ Receipt data extracted" fired even when three of four
     // fields were empty, which is exactly when the user needed to look.
     showToast(
-      `✓ Read ${applied.join(', ')}${warnings.length ? ` · check ${warnings.join(', ')}` : ''}${lowConf ? ' · low confidence' : ''}`,
+      `✓ Read ${applied.join(', ')}${warnings.length ? ` · check ${warnings.join(', ')}` : ''}${lowConf ? ' · low confidence' : ''}${parsed.fromMemory ? ' · remembered from an earlier scan' : ''}`,
       (warnings.length || lowConf) ? 'warn' : 'ok',
       (warnings.length || lowConf) ? 4200 : 2800
     );
@@ -6513,6 +6658,7 @@ export {
   _isLikelyDuplicateExpense,
   _localReceiptCell,
   _prepareReceiptUpload,
+  warmReceiptScan,
   _warmGeminiModelCache,
   _receiptMimeFor,
   _runReceiptScan,
