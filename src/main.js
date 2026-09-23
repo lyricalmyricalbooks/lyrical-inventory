@@ -167,6 +167,7 @@ import {
   voidExpense,
   dismissEmailReceiptDraft,
   openReceiptSweepReviewFromAlert,
+  fileReadyReceiptsFromAlert,
   startReceiptEmailSweep,
   sweepReceiptEmails,
 } from './features/receipts.js';
@@ -196,6 +197,7 @@ import {
   validateFields,
 } from './lib/modal.js';
 import { dismissAppAlert, pushAppAlert } from './lib/app-alert.js';
+import { describeCardSales, stripeSalePlan } from './lib/stripe-sale-autorecord.js';
 import {
   integrationBackoffMs,
   noteIntegrationFailure,
@@ -497,6 +499,8 @@ import {
   startCanadaPostSweep,
   sweepCanadaPostShipments,
   startShippingEmailSweep,
+  startDeliveryWatch,
+  openShippingFromDeliveryAlert,
   sweepShippingEmails,
   refreshShippoLabelsIfDue,
   applyOrderPrefill,
@@ -16630,6 +16634,9 @@ async function boot(forcedBook) {
         // And the fourth: another courier's label, which leaves no API trace
         // but does leave a confirmation email.
         startShippingEmailSweep();
+        // And after the label: follow each parcel to the door, and speak up
+        // when one is waiting at a post office, stuck, or coming back.
+        startDeliveryWatch();
         // Money coming in rather than going out: a consignment store paying its
         // invoice through the Stripe link. Started after the books load because
         // settling an invoice reaches into its own book's ledger.
@@ -21526,6 +21533,8 @@ export async function fetchStripePaymentsForReconcile(maxPages = 3, { since = 0 
         customer: ch.billing_details?.name || '',
         refunded: !!ch.refunded || (ch.amount_refunded > 0),
         disputed: !!ch.disputed,
+        // Tapped or dipped on a card reader, as opposed to typed into a web page.
+        cardPresent: /_present$/.test(String(ch.payment_method_details?.type || '')),
         metadata,
       });
     }
@@ -22035,6 +22044,7 @@ function stripePaidNotifyEnabled() {
  * shows "on" when a notification could not actually reach her.
  */
 function renderStripePaidNotifyToggle() {
+  renderStripeSaleAutoToggle();
   const cb = document.getElementById('stripe-paid-notify-cb');
   if (!cb) return;
   const supported = typeof Notification !== 'undefined';
@@ -22234,6 +22244,7 @@ async function sweepStripeInvoicePayments({ force = false } = {}) {
     const touchedBooks = new Set();
     const totals = new Map();
     const recorded = [];
+    const cardSales = [];
 
     for (const payment of payments) {
       // Money that came back is checked first, and without asking the
@@ -22252,6 +22263,21 @@ async function sweepStripeInvoicePayments({ force = false } = {}) {
       // the intent description, the invoice_num metadata, and its own memory of
       // charges already handled on this device.
       const c = classifyStripePayment(payment);
+
+      // A payment for one book — its QR code, its payment link — becomes a sale
+      // on its own. The rules for when it may are in lib/stripe-sale-autorecord.js.
+      if (c.kind === 'direct') {
+        const outcome = autoRecordStripeSale(payment, c);
+        if (outcome) {
+          cardSales.push(outcome);
+          if (outcome.action === 'record') {
+            touchedBooks.add(outcome.bookId);
+            recorded.push({ chargeId: payment.id, bookId: outcome.bookId, num: '' });
+          }
+        }
+        continue;
+      }
+
       if (c.kind !== 'invoice' || !c.inv || !c.bookId) continue;
 
       const inv = c.inv;
@@ -22304,6 +22330,13 @@ async function sweepStripeInvoicePayments({ force = false } = {}) {
     writeStripeInvoiceStamp(Date.now());
     noteIntegrationSuccess('stripe');
 
+    if (cardSales.length) {
+      renderHist();
+      updateDash();
+      if (typeof window.renderAllOverview === 'function') window.renderAllOverview();
+      showCardSaleAlert(cardSales);
+    }
+
     if (settled || attention) {
       // Repainted once for the whole sweep, not once per invoice.
       renderInvoices();
@@ -22322,6 +22355,131 @@ async function sweepStripeInvoicePayments({ force = false } = {}) {
     _stripeInvoiceSweeping = false;
   }
 }
+
+// ── Card payments that record themselves ────────────────────────────────────
+//
+// A customer who pays by scanning a book's QR code pays through a Stripe link
+// the app made and tagged with that book. The sweep above already sees every
+// such payment; this turns the unambiguous ones into sales, through the same
+// write the Stripe worklist's Record button uses, and leaves the rest in that
+// worklist with a reason.
+
+const STRIPE_SALE_AUTO_KEY = 'lm-stripe-sale-auto';
+const STRIPE_SALE_AUTO_SINCE_KEY = 'lm-stripe-sale-auto-since';
+// Charges the sweep already raised for review, so a payment waiting on the
+// publisher is mentioned once rather than on every five-minute poll.
+const STRIPE_SALE_RAISED_KEY = 'lm-stripe-sale-raised';
+
+function stripeSaleAutoEnabled() {
+  try { return localStorage.getItem(STRIPE_SALE_AUTO_KEY) !== '0'; } catch (_) { return true; }
+}
+
+/**
+ * When automatic recording began on this device. Set the first time it is
+ * asked, so a payment from before then — one the publisher may long since have
+ * entered by hand — is never recorded a second time.
+ */
+function stripeSaleAutoSince() {
+  try {
+    const stored = Number(localStorage.getItem(STRIPE_SALE_AUTO_SINCE_KEY));
+    if (stored > 0) return stored;
+    const now = Date.now();
+    localStorage.setItem(STRIPE_SALE_AUTO_SINCE_KEY, String(now));
+    return now;
+  } catch (_) {
+    // Storage blocked: no safe "since", so nothing is recorded automatically.
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
+function readRaisedStripeSales() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(STRIPE_SALE_RAISED_KEY) || '[]');
+    return Array.isArray(raw) ? raw : [];
+  } catch (_) { return []; }
+}
+
+function noteRaisedStripeSale(chargeId) {
+  const list = readRaisedStripeSales();
+  if (list.includes(chargeId)) return;
+  list.push(chargeId);
+  try { localStorage.setItem(STRIPE_SALE_RAISED_KEY, JSON.stringify(list.slice(-300))); } catch (_) { /* storage full */ }
+}
+
+/**
+ * Record one Stripe payment as a sale if it is safe to, and say what happened.
+ * Returns null when there is nothing worth telling the publisher about.
+ */
+function autoRecordStripeSale(payment, classification) {
+  if (!stripeSaleAutoEnabled()) return null;
+  const book = classification.bookId ? BOOKS[classification.bookId] : null;
+  const plan = stripeSalePlan(payment, {
+    classification,
+    book,
+    bookCurrency: book ? normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD') : '',
+    likelyLogged: _reconLikelyAlreadyLogged(payment),
+    autoSince: stripeSaleAutoSince(),
+  });
+  if (plan.action === 'skip') return null;
+
+  if (plan.action === 'review') {
+    if (readRaisedStripeSales().includes(payment.id)) return null;
+    noteRaisedStripeSale(payment.id);
+    return { ...plan, chargeId: payment.id };
+  }
+
+  if (!states[plan.bookId]) return null;
+  try {
+    _reconApplyPaymentToBook(payment, plan.bookId, plan.qty);
+  } catch (error) {
+    console.error('Automatic record of a Stripe payment failed', error);
+    noteRaisedStripeSale(payment.id);
+    return { action: 'review', reason: 'failed', chargeId: payment.id };
+  }
+  return {
+    ...plan,
+    chargeId: payment.id,
+    bookTitle: BOOKS[plan.bookId]?.title || 'a book',
+    stockLeft: Number(states[plan.bookId]?.stock) || 0,
+  };
+}
+
+function showCardSaleAlert(outcomes) {
+  const said = describeCardSales(outcomes);
+  if (!said.count) return;
+  pushAppAlert({
+    id: 'stripe-card-sales',
+    icon: '💳',
+    title: said.title,
+    detail: said.detail,
+    tone: said.needsYou ? SYNC_TONES.PENDING : '',
+    actionLabel: said.needsYou ? 'Review' : '',
+    action: said.needsYou ? 'openStripeWorklistFromAlert(event)' : '',
+  });
+}
+
+function openStripeWorklistFromAlert(event) {
+  if (event) event.stopPropagation();
+  dismissAppAlert('stripe-card-sales');
+  switchTab('reconcile');
+  if (typeof reconcileSync === 'function' && getReconStripeKey()) reconcileSync();
+}
+window.openStripeWorklistFromAlert = openStripeWorklistFromAlert;
+
+function renderStripeSaleAutoToggle() {
+  const cb = document.getElementById('stripe-sale-auto-cb');
+  if (cb) cb.checked = stripeSaleAutoEnabled();
+}
+
+function toggleStripeSaleAuto() {
+  const cb = document.getElementById('stripe-sale-auto-cb');
+  if (!cb) return;
+  try { localStorage.setItem(STRIPE_SALE_AUTO_KEY, cb.checked ? '1' : '0'); } catch (_) { /* private mode */ }
+  showToast(cb.checked
+    ? '✓ Card payments for a book will be recorded as sales automatically'
+    : 'Card payments will wait for you in this list');
+}
+window.toggleStripeSaleAuto = toggleStripeSaleAuto;
 
 function startStripeInvoiceWatch() {
   if (_stripeInvoiceWatchStarted || typeof window === 'undefined') return;
@@ -24098,6 +24256,7 @@ window.recheckIntegration = (id) => {
   return undefined;
 };
 window.openReceiptSweepReviewFromAlert = openReceiptSweepReviewFromAlert;
+window.fileReadyReceiptsFromAlert = fileReadyReceiptsFromAlert;
 window.dismissEmailReceiptDraft = dismissEmailReceiptDraft;
 window.openInvoiceFromAlert = openInvoiceFromAlert;
 window.sweepStripeInvoicePayments = sweepStripeInvoicePayments;
@@ -24105,6 +24264,7 @@ window.sweepStripeFees = sweepStripeFees;
 window.sweepReceiptEmails = sweepReceiptEmails;
 window.linkConfidentShippingMatchesNow = linkConfidentShippingMatchesNow;
 window.openShippingReconciliationFromAlert = openShippingReconciliationFromAlert;
+window.openShippingFromDeliveryAlert = openShippingFromDeliveryAlert;
 window.shipNewOrderFromAlert = shipNewOrderFromAlert;
 window.recordNewOrderFromAlert = recordNewOrderFromAlert;
 window.toggleBigCartelAutoRecord = toggleBigCartelAutoRecord;

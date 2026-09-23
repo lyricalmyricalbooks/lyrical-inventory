@@ -1108,6 +1108,10 @@
   <div id="recon-keyrow" style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
     <input type="password" id="recon-key" placeholder="rk_live_… or sk_live_… (reused from Tax Centre / Invoices if already saved)" style="flex:1;" autocomplete="off">
   </div>
+  <label class="toggle-row" id="stripe-sale-auto-wrap">
+    <span class="switch"><input type="checkbox" id="stripe-sale-auto-cb" checked onchange="toggleStripeSaleAuto()"><span class="track"></span></span>
+    <span><span class="toggle-title">Record card payments for a book automatically</span><span class="field-note" style="display:block;margin-top:2px;">When someone pays with a book’s QR code or payment link, the sale goes into your ledger and the stock comes off by itself. Only the amount of a card-reader tap reaches the app, not which book it was for, so those wait here for you.</span></span>
+  </label>
   <label class="toggle-row" id="stripe-paid-notify-wrap" style="margin-bottom:14px;">
     <span class="switch"><input type="checkbox" id="stripe-paid-notify-cb" onchange="toggleStripePaidNotify()"><span class="track"></span></span>
     <span><span class="toggle-title">Notify me on this device when an invoice is paid</span><span class="field-note" id="stripe-paid-notify-note" style="display:block;margin-top:2px;"></span></span>
