@@ -19084,6 +19084,14 @@ button[onclick="refreshUmamiStats()"]:active {
   .mnav-btn.active{color:var(--gold2);}
   .mnav-btn.active::before{content:"";position:absolute;top:0;left:28%;right:28%;height:3px;border-radius:0 0 3px 3px;background:var(--gold2);}
   .mnav-btn:focus-visible{outline:2px solid var(--gold2);outline-offset:-2px;}
+  /* A thumb tapping a fixed bar gets no cursor change and no scroll-triggered
+     :hover to lean on, so press feedback is the only confirmation a tap
+     registered — the transition above declared background-color from the
+     start but nothing ever set it until now. */
+  .mnav-btn:active{background-color:rgba(255,255,255,.08);}
+  @media (hover:hover){
+    .mnav-btn:hover{background-color:rgba(255,255,255,.05);}
+  }
   /* The everyday action gets a raised, filled thumb target in the centre. */
   .mnav-primary .mnav-ic{
     display:grid;place-items:center;width:44px;height:44px;margin-top:-18px;border-radius:50%;
@@ -19092,6 +19100,7 @@ button[onclick="refreshUmamiStats()"]:active {
   }
   .mnav-primary{color:rgba(242,237,225,.85);}
   .mnav-primary.active::before{display:none;}
+  .mnav-primary:active .mnav-ic{transform:scale(.92);}
   .mnav-dot{position:absolute;top:8px;right:calc(50% - 16px);width:8px;height:8px;border-radius:50%;background:var(--gold2);box-shadow:0 0 0 2px var(--ink2);}
 
   /* ---- More sheet ---- */
@@ -19108,6 +19117,9 @@ button[onclick="refreshUmamiStats()"]:active {
   .more-sheet-grip{position:absolute;top:7px;left:50%;width:40px;height:4px;margin-left:-20px;border-radius:2px;background:var(--border);}
   .more-sheet-title{flex:1;margin:0;font-family:var(--font-ui);font-size:var(--text-lg);font-weight:800;letter-spacing:.02em;}
   .more-sheet-close{width:44px;height:44px;border:0;border-radius:50%;background:var(--surface-sunken);color:var(--text2);font-size:var(--text-lg);cursor:pointer;}
+  .more-sheet-close:hover{background:var(--surface-inset);color:var(--content-primary);}
+  .more-sheet-close:active{transform:scale(.94);}
+  .more-sheet-close:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
   .more-sheet-body{overflow-y:auto;overscroll-behavior:contain;padding:0 var(--space-4) var(--space-5);}
   .more-sheet-body .o3-grouplabel,
   .more-sheet-body .o3-subgrouplabel{
@@ -19119,9 +19131,15 @@ button[onclick="refreshUmamiStats()"]:active {
     position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
     min-height:78px;padding:10px 4px;border:var(--stroke-hair) solid var(--border);border-radius:var(--r2);
     background:var(--surface-raised);color:var(--text);font-family:var(--font-ui);text-align:center;cursor:pointer;
+    transition:background .15s var(--ease-standard);
   }
   .more-sheet-body .snav[hidden]{display:none;}
   .more-sheet-body .snav.active{border-color:var(--gold);box-shadow:inset 0 0 0 1px var(--gold);}
+  @media (hover:hover){
+    .more-sheet-body .snav:hover{background:var(--surface-inset);}
+  }
+  .more-sheet-body .snav:active{background:var(--surface-sunken);transform:scale(.96);}
+  .more-sheet-body .snav:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
   .more-sheet-body .snav-ic{font-size:var(--text-xl);line-height:1;}
   .more-sheet-body .snav-label{font-size:var(--text-xs);font-weight:600;line-height:1.2;}
   .more-sheet-body .nav-badge,
