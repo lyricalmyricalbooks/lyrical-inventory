@@ -4494,6 +4494,8 @@ export function switchTab(name) {
     return;
   }
 
+  const needsBook = activeBook === 'all' && BOOK_SCOPED_TABS.has(name);
+
   // Selecting a destination closes any open header category menu (and the
   // sidebar footer account menu, if open).
   closeHeaderMenus();
@@ -4536,8 +4538,13 @@ export function switchTab(name) {
     overview.style.display = 'none';
   }
 
-  const panel = $('tab-' + name);
+  const panel = $(needsBook ? 'tab-select-book' : 'tab-' + name);
   if (panel) { panel.style.display = 'block'; panel.classList.add('active'); }
+
+  if (needsBook) {
+    showBookChoice(name);
+    return;
+  }
 
   if (name === 'dashboard') { updateDash(); renderArtistReimburseBanner(); renderPendingExpenses(); }
   if (name === 'history') renderHist();
@@ -4565,6 +4572,27 @@ export function switchTab(name) {
   if (name === 'todo') renderTodoTab();
   if (name === 'intel') renderIntel();
   if (name === 'backups') refreshSyncConflictUi();
+}
+
+const BOOK_SCOPED_TABS = new Set(['website', 'manual', 'consignment', 'history', 'expenses', 'opencall']);
+
+function showBookChoice(tabName) {
+  const heading = $('select-book-heading');
+  if (heading) heading.textContent = `Choose a book for ${SHELL_TAB_LABELS[tabName]}`;
+  const actions = $('select-book-actions');
+  if (!actions) return;
+  actions.replaceChildren();
+  BOOK_LIST.filter(book => !isTestBook(book)).forEach(book => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn gold outline';
+    button.textContent = book.title;
+    button.addEventListener('click', () => {
+      switchBook(book.id);
+      switchTab(tabName);
+    });
+    actions.appendChild(button);
+  });
 }
 
 function updateHeader() {
