@@ -101,3 +101,27 @@ export function calculateBreakEven({
     stockNote
   };
 }
+
+/**
+ * Moves the first profit tier's threshold along with a new production cost,
+ * but only while that tier still stands for recovering the production cost:
+ * its threshold equals the old cost, or it is labelled "break-even". A tier
+ * the publisher has set to some other figure is left alone. An open-ended
+ * first tier (`revenueUpTo: null`) is never given a threshold.
+ *
+ * Mutates the tier in place, as the catalog objects are saved as-is.
+ *
+ * @param {Array|undefined} profitTiers - The book's tiers, first tier first.
+ * @param {number} previousCost - Production cost before this edit.
+ * @param {number} newCost - Production cost being saved.
+ */
+export function syncBreakEvenTier(profitTiers, previousCost, newCost) {
+  if (!Array.isArray(profitTiers) || profitTiers.length === 0) return;
+  const firstTier = profitTiers[0];
+  const tierLabel = (firstTier?.label || '').toLowerCase();
+  const shouldSyncThreshold =
+    firstTier?.revenueUpTo !== null &&
+    (Math.abs((firstTier.revenueUpTo || 0) - previousCost) < 0.0001 || tierLabel.includes('break-even'));
+
+  if (shouldSyncThreshold) firstTier.revenueUpTo = newCost;
+}
