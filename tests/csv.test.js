@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { csvCell, csvRow, csvToObjects, toCsv } from '../src/lib/csv.js';
 
 // These exports go to an accountant and to spreadsheet imports, so a cell that
@@ -94,5 +96,25 @@ describe('csvToObjects', () => {
   it('tolerates an empty file or a header with no rows', () => {
     expect(csvToObjects('')).toEqual([]);
     expect(csvToObjects('Order,Qty\n')).toEqual([]);
+  });
+});
+
+// The last two hand-rolled escapers (Stripe fees audit, mailing list) outlived
+// the consolidation above. Doubling quotes by hand anywhere outside csv.js means
+// a new export has re-invented csvCell, and may get the rules wrong again.
+describe('no hand-rolled CSV escaping outside csv.js', () => {
+  const files = [];
+  const walk = dir => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) walk(path);
+      else if (path.endsWith('.js') && !path.endsWith(join('lib', 'csv.js'))) files.push(path);
+    }
+  };
+  walk(join(__dirname, '..', 'src'));
+
+  it('finds no other place doubling double quotes for a CSV cell', () => {
+    const offenders = files.filter(f => readFileSync(f, 'utf8').includes(`.replace(/"/g, '""')`));
+    expect(offenders).toEqual([]);
   });
 });

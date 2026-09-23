@@ -21937,11 +21937,7 @@ function downloadStripeFeesAuditCSV() {
   const rows = window._stripeFeesAudit || [];
   if (!rows.length) { showToast('Run a Stripe fees fetch first.', 'warn'); return; }
   const header = ['id', 'created_iso', 'year', 'currency', 'type', 'amount_major', 'fee_major', 'net_major', 'source', 'description'];
-  const esc = v => {
-    const s = v == null ? '' : String(v);
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  const lines = [header.join(',')];
+  const lines = [header];
   for (const r of rows) {
     lines.push([
       r.id,
@@ -21951,9 +21947,9 @@ function downloadStripeFeesAuditCSV() {
       _stripeMinorToMajor(r.fee, r.currency).toFixed(2),
       _stripeMinorToMajor(r.net, r.currency).toFixed(2),
       r.source || '', r.description || ''
-    ].map(esc).join(','));
+    ]);
   }
-  downloadCsv(lines.join('\n'), `stripe-balance-transactions-${new Date().toISOString().slice(0, 10)}.csv`);
+  downloadCsv(toCsv(lines), `stripe-balance-transactions-${new Date().toISOString().slice(0, 10)}.csv`);
 }
 
 // ════════════════════════════════════════════════════════════════════════
