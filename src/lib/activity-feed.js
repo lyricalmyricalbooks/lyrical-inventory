@@ -94,6 +94,7 @@ function event({ book, date, tie, kind, icon, text, amount = null, tone = null }
     text,
     amount,
     tone,
+    auto: false,
   };
 }
 
@@ -152,6 +153,8 @@ function eventsForBook(book, state) {
         tone: 'pos',
       });
     ev.key = `hist:${rowKey}`;
+    // Done without anyone pressing anything — shown with an "Automatic" mark.
+    if (h.autoRecorded && !h.gratuity) ev.auto = true;
     out.push(ev);
 
     // The parcel's journey, from the dates already stamped on the order.
@@ -169,6 +172,8 @@ function eventsForBook(book, state) {
         text: `Delivered to ${who || 'the customer'}${order}`,
       });
       got.key = `hist-delivered:${rowKey}`;
+      // Only the parcel watch writes a delivery date; nobody types one in.
+      got.auto = true;
       out.push(got);
     }
   });

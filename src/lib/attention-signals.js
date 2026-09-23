@@ -534,8 +534,13 @@ function automationSignals(ctx, out) {
     out.push({
       id: 'orders-unshipped', group: 'orders', status: oldest.days >= 5 ? 'blocked' : 'warn', icon: '📦',
       label: `${waiting.length} paid ${plural(waiting.length, 'order hasn’t', 'orders haven’t')} been sent`,
-      detail: `Oldest: ${oldest.customer}${oldest.num ? ` (${oldest.num})` : ''}, waiting ${oldest.days} days. If one went out by hand, mark it as shipped.`,
+      detail: `Oldest: ${oldest.customer}${oldest.num ? ` (${oldest.num})` : ''}, waiting ${oldest.days} days. If one went out by hand, mark it as sent below.`,
       fix: { label: 'Open Shipping', ...openTab('shipping') },
+      // Each order can be ticked off right here, without opening it.
+      items: waiting.slice(0, 3).filter(o => o.num).map(o => ({
+        label: `${o.customer} · ${o.num} · ${o.days} days`,
+        quick: { label: 'Mark as sent', kind: 'action', tab: 'mark-shipped', bookId: o.bookId, num: o.num },
+      })),
     });
   }
 
@@ -577,7 +582,8 @@ function automationSignals(ctx, out) {
       id: 'orders-reverse', group: 'orders', status: 'blocked', icon: '↩️',
       label: `${reverse} refunded ${plural(reverse, 'sale is', 'sales are')} still counted`,
       detail: 'The money went back to the customer, but the sale still counts in your stock and earnings until you reverse it.',
-      fix: openAction('reverse-sales', 'Review and reverse'),
+      fix: { label: 'See the payments', ...openTab('reconcile') },
+      quick: openAction('reverse-sales', 'Reverse now'),
     });
   }
 
@@ -591,6 +597,7 @@ function automationSignals(ctx, out) {
         ? `${ready} ${plural(ready, 'is', 'are')} complete and can be filed in one go; the rest need a quick look.`
         : 'Found in your inbox and read for you — they just need a look before going into your books.',
       fix: openAction('receipt-inbox', 'Open receipt inbox'),
+      quick: ready ? openAction('file-ready-receipts', `File ${ready} now`) : null,
     });
   }
 
