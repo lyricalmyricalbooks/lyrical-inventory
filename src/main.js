@@ -946,15 +946,35 @@ function bindUpdatePromptInteractions() {
   });
 }
 
+// How long the "Updating…" screen may wait for the new version to take over
+// before the page reloads anyway. updateSW(true) only reloads when the waiting
+// worker announces it is in control; if that never comes (another tab already
+// activated it, the browser paused the worker, the waiting worker went
+// redundant) the screen used to stay up forever.
+const UPDATE_RELOAD_FAILSAFE_MS = 3000;
+
+export function applyPwaUpdate(updateSW, { reload = () => window.location.reload(), failsafeMs = UPDATE_RELOAD_FAILSAFE_MS } = {}) {
+  hideUpdatePrompt();
+  revealUpdatingScreen();
+  let done = false;
+  const reloadOnce = () => {
+    if (done) return;
+    done = true;
+    reload();
+  };
+  // Reload the moment the new worker takes control, not after a fixed delay.
+  navigator.serviceWorker?.addEventListener?.('controllerchange', reloadOnce, { once: true });
+  setTimeout(reloadOnce, failsafeMs);
+  try {
+    Promise.resolve(updateSW(true)).catch(reloadOnce);
+  } catch (_) {
+    reloadOnce();
+  }
+}
+
 const _updateSW = registerSW({
   onNeedRefresh() {
-    updateSWFunc = () => {
-      hideUpdatePrompt();
-      revealUpdatingScreen();
-      setTimeout(() => {
-        _updateSW(true);
-      }, 520);
-    };
+    updateSWFunc = () => applyPwaUpdate(_updateSW);
 
     const pwaPrompt = document.getElementById('pwa-update-prompt');
     if (pwaPrompt) {
