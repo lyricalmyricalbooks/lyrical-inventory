@@ -18054,8 +18054,18 @@ function codeToSymbol(code) {
   return getSym(code);
 }
 
+// Building an Intl.NumberFormat costs ~60× more than calling .format() on one,
+// and the POS grid asks for two or three per book tile on every re-render, so
+// keep one formatter per currency code. An invalid code still throws at
+// construction (never cached), exactly as before.
+const _posFormatters = new Map();
 function posFormat(amount, currencyCode) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: currencyCode }).format(amount || 0);
+  let fmt = _posFormatters.get(currencyCode);
+  if (!fmt) {
+    fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: currencyCode });
+    _posFormatters.set(currencyCode, fmt);
+  }
+  return fmt.format(amount || 0);
 }
 
 function convertCurrency(amount, fromCode, toCode) {
