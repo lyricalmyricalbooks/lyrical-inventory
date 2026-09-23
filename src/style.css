@@ -4417,6 +4417,15 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   .store-actions{width:100%;}
   .store-actions .btn{flex:1;}
 
+  /* Settings ▸ Book Catalog: the title/ID/price group and the Edit/Remove
+     pair used to share one row with no stacking rule at all, so on a phone
+     the buttons' own min-width forced the row past the screen edge and
+     body{overflow-x:hidden} above silently clipped whatever lost the fight
+     — usually Remove. Same fix as .store-head/.store-actions above. */
+  .catalog-card{flex-direction:column;align-items:stretch;gap:var(--space-3);}
+  .catalog-actions{width:100%;}
+  .catalog-actions .btn{flex:1;}
+
   /* POS */
   .pos-layout{grid-template-columns:1fr !important;gap:.75rem !important;}
   #pos-grid{grid-template-columns:1fr !important;}
