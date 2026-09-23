@@ -779,6 +779,10 @@
         <div class="sec-kicker rail-kicker is-quiet"><span class="sec-kicker-dot rail-dot"></span>Recent activity</div>
       </div>
       <h3 class="rail-title">What's been happening</h3>
+      <div class="activity-filter" role="group" aria-label="Show">
+        <button type="button" class="activity-filter-btn" data-activity-filter="all" aria-pressed="true" onclick="setActivityFilter('all')">Everything</button>
+        <button type="button" class="activity-filter-btn" data-activity-filter="auto" aria-pressed="false" onclick="setActivityFilter('auto')">⚡ Done for you</button>
+      </div>
       <div class="activity-list" id="all-activity"></div>
     </section>
   </aside>
@@ -6059,7 +6063,12 @@
      minutes updates what it already said rather than stacking another card. -->
 <div id="app-alert-stack" hidden></div>
 
-<!-- Every notification the app has raised, newest first. Filled by
+
+</div>
+
+<!-- Every notification the app has raised, newest first. Kept OUTSIDE the
+     alert region above: that region lets clicks pass through it, which made
+     every button in this window dead. Filled by
      renderNotificationsPanel() in main.js from lib/notification-log.js. -->
 <div class="overlay" id="m-notifications" style="display:none;"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="notif-panel-title" style="max-width:560px;">
   <div class="modal-title">
@@ -6077,8 +6086,6 @@
     <button type="button" class="btn gold sm" onclick="attemptCloseModal('notifications')">Done</button>
   </div>
 </div></div>
-
-</div>
 
 <!-- Styled confirm dialog (replaces browser confirm/alert) -->
 <div class="overlay" id="m-confirm" style="display:none;z-index:1200;">

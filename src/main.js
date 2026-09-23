@@ -5838,7 +5838,27 @@ function visibleAttentionResult() {
 function fixAttrs(fix) {
   return `data-fix="${escapeHtml(fix.kind || '')}"`
     + (fix.bookId ? ` data-fix-book="${escapeHtml(fix.bookId)}"` : '')
-    + (fix.tab ? ` data-fix-tab="${escapeHtml(fix.tab)}"` : '');
+    + (fix.tab ? ` data-fix-tab="${escapeHtml(fix.tab)}"` : '')
+    + (fix.num ? ` data-fix-num="${escapeHtml(fix.num)}"` : '');
+}
+
+/**
+ * The one-tap extras on a signal: a quick action that does the thing right
+ * here (file these receipts, reverse these sales), and — for a signal about
+ * several orders — a line per order with its own button. Same data-only
+ * buttons as the fix, so nothing typed can become code.
+ */
+function signalExtrasHtml(sig, btnClass) {
+  const quick = sig.quick
+    ? `<button type="button" class="${btnClass} is-quick" ${fixAttrs(sig.quick)}>${escapeHtml(sig.quick.label)}</button>`
+    : '';
+  const items = (sig.items || []).length
+    ? `<ul class="signal-items">${sig.items.map(item => `<li>
+          <span>${escapeHtml(item.label)}</span>
+          ${item.quick ? `<button type="button" class="${btnClass} is-quick" ${fixAttrs(item.quick)}>${escapeHtml(item.quick.label)}</button>` : ''}
+        </li>`).join('')}</ul>`
+    : '';
+  return { quick, items };
 }
 
 /**
@@ -5852,7 +5872,7 @@ document.addEventListener('click', (event) => {
 
   const btn = event.target.closest?.('[data-fix]');
   if (!btn) return;
-  const { fix, fixBook = '', fixTab = '' } = btn.dataset;
+  const { fix, fixBook = '', fixTab = '', fixNum = '' } = btn.dataset;
   if (fix === 'retry-sync') { retrySyncNow(); return; }
   if (fix === 'tab' && fixTab) { switchTab(fixTab); return; }
   if (fix === 'book' && fixBook) {
@@ -5868,10 +5888,56 @@ document.addEventListener('click', (event) => {
   }
   // Named actions from the automations. A fixed list, so nothing a publisher
   // types can ever choose what runs.
-  if (fix === 'action') runTodoAction(fixTab);
+  if (fix === 'action') runTodoAction(fixTab, { bookId: fixBook, num: fixNum });
 });
 
-function runTodoAction(name) {
+function refreshAttentionSurfaces() {
+  renderTodoTab();
+  renderOverviewRail();
+}
+
+/** Tick one order off as sent, from the to-do list or the landing page. */
+function markOrderSentFromTodo(bookId, num) {
+  const row = (states[bookId]?.hist || []).find(h => h && h.num === num && h.chan === 'Website' && !h.voided);
+  if (!row) { showToast('That order is no longer in your ledger', 'warn'); return; }
+  if (row.shipped) { showToast(`${num} is already marked as sent`); refreshAttentionSurfaces(); return; }
+  row.shipped = true;
+  row.shippedDate = today();
+  saveState(bookId);
+  refreshAttentionSurfaces();
+  renderHist();
+  pushAppAlert({
+    id: 'order-marked-sent',
+    icon: '📦',
+    title: `${num} marked as sent`,
+    detail: `${row.shipName || 'The customer'}’s order won’t be flagged as waiting any more.`,
+    actionLabel: 'Undo',
+    // JSON keeps the order number a safe string in the code; the alert card
+    // escapes the whole action for the page attribute.
+    action: `undoMarkOrderSent(${JSON.stringify(bookId)}, ${JSON.stringify(num)})`,
+    log: false,
+  });
+}
+
+function undoMarkOrderSent(bookId, num) {
+  dismissAppAlert('order-marked-sent');
+  const row = (states[bookId]?.hist || []).find(h => h && h.num === num && h.chan === 'Website');
+  if (!row || !row.shipped) return;
+  delete row.shipped;
+  delete row.shippedDate;
+  saveState(bookId);
+  refreshAttentionSurfaces();
+  renderHist();
+  showToast(`${num} is back on the waiting list`);
+}
+window.undoMarkOrderSent = undoMarkOrderSent;
+
+function runTodoAction(name, { bookId = '', num = '' } = {}) {
+  if (name === 'mark-shipped') { markOrderSentFromTodo(bookId, num); return; }
+  if (name === 'file-ready-receipts') {
+    Promise.resolve(fileReadyReceiptsFromAlert()).finally(refreshAttentionSurfaces);
+    return;
+  }
   if (name === 'receipt-inbox') { openEmailReceiptImportModal(); return; }
   if (name === 'shipping-worklist') {
     switchTab('taxcenter');
@@ -5907,12 +5973,14 @@ function notificationHtml(sig) {
   const action = sig.fix
     ? `<button type="button" class="notif-action" ${fixAttrs(sig.fix)}>${escapeHtml(sig.fix.label)} →</button>`
     : '';
+  const extras = signalExtrasHtml(sig, 'notif-action');
   return `<div class="notif-item tone-${tone}">
       <span class="notif-ico" aria-hidden="true">${escapeHtml(sig.icon || '')}</span>
       <div class="notif-body">
         <div class="notif-title">${escapeHtml(sig.label || '')}</div>
         <div class="notif-detail">${escapeHtml(sig.detail || '')}</div>
-        ${action ? `<div class="notif-meta">${action}</div>` : ''}
+        ${extras.items}
+        ${action || extras.quick ? `<div class="notif-meta">${extras.quick}${action}</div>` : ''}
       </div>
     </div>`;
 }
@@ -5920,6 +5988,7 @@ function notificationHtml(sig) {
 /** One line of history. The amount keeps its own currency — never a total. */
 function activityHtml(ev) {
   const toneClass = ev.tone === 'pos' ? ' is-pos' : ev.tone === 'neg' ? ' is-neg' : '';
+  const autoChip = ev.auto ? '<span class="activity-auto" title="Done by the app on its own">Automatic</span>' : '';
   const amount = ev.amount
     ? `<span class="activity-amt${toneClass} mono-num">${escapeHtml(ev.amount)}</span>`
     : '';
@@ -5927,7 +5996,7 @@ function activityHtml(ev) {
   return `<div class="activity-item">
       <span class="activity-dot" aria-hidden="true">${escapeHtml(ev.icon || '')}</span>
       <div class="activity-body">
-        <div class="activity-text">${escapeHtml(ev.text || '')}</div>
+        <div class="activity-text">${autoChip}${escapeHtml(ev.text || '')}</div>
         <div class="activity-side">${amount}<span class="activity-time mono-num">${escapeHtml(when)}</span></div>
       </div>
     </div>`;
@@ -5945,6 +6014,18 @@ function updateTodoBadge(result) {
     el.hidden = count === 0;
   });
 }
+
+// Which slice of "What's been happening" the rail shows: everything, or only
+// what the app did on its own this week. Remembered on this device.
+const ACTIVITY_FILTER_KEY = 'lm-activity-filter';
+let _activityFilter = (() => { try { return localStorage.getItem(ACTIVITY_FILTER_KEY) === 'auto' ? 'auto' : 'all'; } catch (_) { return 'all'; } })();
+
+function setActivityFilter(value) {
+  _activityFilter = value === 'auto' ? 'auto' : 'all';
+  try { localStorage.setItem(ACTIVITY_FILTER_KEY, _activityFilter); } catch (_) { /* storage blocked */ }
+  renderOverviewRail();
+}
+window.setActivityFilter = setActivityFilter;
 
 /** The landing page's right-hand rail: what needs doing, and what just happened. */
 function renderOverviewRail() {
@@ -5988,10 +6069,28 @@ function renderOverviewRail() {
 
   const activityHost = $('all-activity');
   if (activityHost) {
-    const feed = buildActivityFeed(attentionBooks(), states, { limit: RAIL_ACTIVITY_LIMIT });
+    const autoOnly = _activityFilter === 'auto';
+    document.querySelectorAll('[data-activity-filter]').forEach(btn => {
+      const on = btn.dataset.activityFilter === _activityFilter;
+      btn.classList.toggle('is-active', on);
+      btn.setAttribute('aria-pressed', String(on));
+    });
+    // "Done for you": everything the app did on its own in the last week — the
+    // quick weekly glance at what happened without anyone pressing a button.
+    const weekAgo = Date.now() - 7 * 86400000;
+    const feed = autoOnly
+      ? buildActivityFeed(attentionBooks(), states, { limit: 0 })
+        .filter(ev => ev.auto && ev.sortKey >= weekAgo).slice(0, 30)
+      : buildActivityFeed(attentionBooks(), states, { limit: RAIL_ACTIVITY_LIMIT });
     activityHost.innerHTML = feed.length
       ? feed.map(activityHtml).join('')
-      : `<div class="empty-state rail-empty">
+      : autoOnly
+        ? `<div class="empty-state rail-empty">
+             <div class="e-icon" aria-hidden="true">⚡</div>
+             <strong>Nothing done automatically this week</strong>
+             <span>Orders the app records and parcels it sees delivered will show up here.</span>
+           </div>`
+        : `<div class="empty-state rail-empty">
            <div class="e-icon" aria-hidden="true">🕘</div>
            <strong>Nothing has happened yet</strong>
            <span>Sales, shipments and expenses will show up here as you record them.</span>
@@ -6104,13 +6203,16 @@ function todoRowHtml(sig) {
   // The same reasoning applies here: escapeHtml() only protects the ATTRIBUTE,
   // so the id travels as a data-attribute for the delegated handler to read,
   // never spliced into an onclick string.
+  const extras = signalExtrasHtml(sig, 'btn sm todo-fix');
   return `<div class="todo-row tone-${tone}">
       <span class="todo-ico" aria-hidden="true">${escapeHtml(sig.icon || '')}</span>
       <div class="todo-copy">
         <div class="todo-label">${escapeHtml(sig.label || '')}</div>
         <div class="todo-detail">${escapeHtml(sig.detail || '')}</div>
+        ${extras.items}
       </div>
       <div class="todo-row-actions">
+        ${extras.quick}
         ${action}
         <button type="button" class="todo-dismiss" data-dismiss-signal="${escapeHtml(sig.id || '')}" title="Not relevant — dismiss" aria-label="Dismiss: ${escapeHtml(sig.label || 'this item')}">✕</button>
       </div>
