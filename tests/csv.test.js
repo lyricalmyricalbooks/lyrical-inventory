@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { csvCell, csvRow, toCsv } from '../src/lib/csv.js';
+import { csvCell, csvRow, csvToObjects, toCsv } from '../src/lib/csv.js';
 
 // These exports go to an accountant and to spreadsheet imports, so a cell that
 // silently shifts the columns after it is a real reporting error, not a
@@ -74,5 +74,25 @@ describe('toCsv', () => {
   it('tolerates no rows', () => {
     expect(toCsv([])).toBe('');
     expect(toCsv(null)).toBe('');
+  });
+});
+
+// The order-history import reads .csv files with this instead of SheetJS, so a
+// CSV import works offline before the Excel library has ever been downloaded.
+describe('csvToObjects', () => {
+  it('keys each data row by the header row, the way sheet_to_json does', () => {
+    const text = '\uFEFFOrder #,Date,Channel,Qty,Unit Price,Notes\r\n'
+      + '1001,2026-03-05,Website,2,25.00,"Signed, dedicated"\r\n'
+      + '\r\n'
+      + '1002,2026-03-06,Fair,1,20\r\n';
+    expect(csvToObjects(text)).toEqual([
+      { 'Order #': '1001', Date: '2026-03-05', Channel: 'Website', Qty: '2', 'Unit Price': '25.00', Notes: 'Signed, dedicated' },
+      { 'Order #': '1002', Date: '2026-03-06', Channel: 'Fair', Qty: '1', 'Unit Price': '20', Notes: '' },
+    ]);
+  });
+
+  it('tolerates an empty file or a header with no rows', () => {
+    expect(csvToObjects('')).toEqual([]);
+    expect(csvToObjects('Order,Qty\n')).toEqual([]);
   });
 });

@@ -49,4 +49,26 @@ describe('lazy Excel support', () => {
     document.querySelector(`script[src="${url}"]`).dispatchEvent(new Event('load'));
     await expect(retry).resolves.toBeUndefined();
   });
+
+  it('re-fetches SheetJS when the script loaded but never installed its global', async () => {
+    const first = ensureXlsx();
+    document.querySelector(`script[src="${XLSX_SCRIPT_URL}"]`)?.dispatchEvent(new Event('load'));
+    await expect(first).rejects.toThrow('Excel support did not finish loading');
+    expect(document.querySelector(`script[src="${XLSX_SCRIPT_URL}"]`)).toBeNull();
+
+    const retry = ensureXlsx();
+    const script = document.querySelector(`script[src="${XLSX_SCRIPT_URL}"]`);
+    expect(script).not.toBeNull();
+    window.XLSX = { read: vi.fn() };
+    script.dispatchEvent(new Event('load'));
+    await expect(retry).resolves.toBe(window.XLSX);
+  });
+
+  it('reads a .csv order-history import without fetching SheetJS', () => {
+    const mainContent = fs.readFileSync(path.join(__dirname, '..', 'src', 'main.js'), 'utf8');
+    const start = mainContent.indexOf('async function handleImportFile(');
+    const body = mainContent.slice(start, mainContent.indexOf('\nfunction confirmImport(', start));
+    expect(body).toMatch(/if \(!isCsv\) \{\s*try \{\s*xlsx = await ensureXlsx\(\)/);
+    expect(body).toContain('csvToObjects(e.target.result)');
+  });
 });

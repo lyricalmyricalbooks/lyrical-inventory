@@ -1,6 +1,8 @@
 // Open-call pipeline — pure helpers (no DOM, no Firebase) so they can be
 // unit-tested in isolation. The UI layer in main.js imports these.
 
+import { splitDelimitedRecords } from './csv.js';
+
 // The five stages every contributor moves through, in order. `hint` is the
 // "next action" shown when that stage is the first one not yet ticked.
 export const OC_STAGES = [
@@ -32,65 +34,6 @@ export function newContributor({ name = '', email = '', photo = '', photos = [],
     id: 'oc_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
     name, email, photo: finalPhoto, photos: finalPhotos, createdAt, creditName, notes, ...flags,
   };
-}
-
-// Split raw spreadsheet text (pasted rows or a .csv file's contents) into
-// records of trimmed fields. Understands what Excel actually produces:
-// quoted fields with commas inside ("Ackman, Jeremy"), doubled quotes for a
-// literal quote (""), newlines inside a quoted Notes field, a UTF-8 BOM, and
-// CRLF line endings. Tab-separated rows (Excel copy-paste) are detected per
-// record so a comma inside an unquoted name can't split it.
-function splitDelimitedRecords(raw) {
-  const text = String(raw == null ? '' : raw).replace(/^\uFEFF/, '');
-
-  // Pass 1: cut into logical records at newlines that are outside quotes,
-  // so a multi-line quoted Notes cell stays inside its record.
-  const records = [];
-  let cur = '';
-  let inQuotes = false;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (ch === '"') { inQuotes = !inQuotes; cur += ch; }
-    else if ((ch === '\n' || ch === '\r') && !inQuotes) {
-      if (ch === '\r' && text[i + 1] === '\n') i++;
-      records.push(cur);
-      cur = '';
-    } else cur += ch;
-  }
-  records.push(cur);
-
-  // Pass 2: split each record into fields — tab-delimited when the record
-  // contains a tab (Excel paste), comma otherwise — honoring quotes so a
-  // quoted field can carry the delimiter, and unescaping doubled quotes.
-  const splitFields = (rec, delim) => {
-    const fields = [];
-    let field = '';
-    let q = false;
-    for (let i = 0; i < rec.length; i++) {
-      const ch = rec[i];
-      if (q) {
-        if (ch === '"') {
-          if (rec[i + 1] === '"') { field += '"'; i++; }
-          else q = false;
-        } else field += ch;
-      } else if (ch === '"' && field.trim() === '') {
-        q = true;
-        field = ''; // drop any stray spaces before the opening quote
-      } else if (ch === delim) {
-        fields.push(field.trim());
-        field = '';
-      } else field += ch;
-    }
-    fields.push(field.trim());
-    return fields;
-  };
-
-  const result = [];
-  for (const rec of records) {
-    const fields = splitFields(rec, rec.includes('\t') ? '\t' : ',');
-    if (fields.some(f => f !== '')) result.push(fields);
-  }
-  return result;
 }
 
 // Parse pasted spreadsheet rows or CSV file contents — "Name, Email, Photo,
