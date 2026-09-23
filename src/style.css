@@ -19318,11 +19318,15 @@ button[onclick="refreshUmamiStats()"]:active {
 .today-row-chev{font-size:var(--text-xl);color:var(--content-secondary);}
 @media (prefers-reduced-motion: reduce){.today-card{transition:none;}.today-card:active{transform:none;}}
 
-/* Book codes for card-reader descriptions, under the Stripe auto-record switch. */
-.sale-codes-box { margin: var(--space-3) 0 0; }
-.sale-codes-box summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 600; color: var(--content-secondary); }
-.sale-codes-list { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: var(--space-2); font-size: var(--text-sm); color: var(--content-secondary); }
-.sale-code { display: inline-block; min-width: 3.5em; font-family: var(--font-mono); font-weight: 700; color: var(--content-primary); }
+/* Book codes for card-reader descriptions, under the Stripe auto-record switch.
+   Styled as a sibling of the toggle rows around it so it reads as part of the
+   same settings group, and always open. */
+.sale-codes-box { margin-top: 1.1rem; padding: 12px 14px; background: var(--cream); border: var(--stroke-hair) solid var(--border); border-radius: var(--r2); }
+.sale-codes-head { display: flex; flex-direction: column; gap: 2px; }
+.sale-codes-list { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: var(--space-2); font-size: var(--text-sm); color: var(--content-secondary); }
+.sale-codes-list li { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.sale-code { flex-shrink: 0; min-width: 3.5em; padding: 2px 8px; border: var(--stroke-hair) solid var(--border); border-radius: var(--r); background: var(--surface-raised); font-family: var(--font-mono); font-weight: 700; text-align: center; color: var(--content-primary); }
+.sale-codes-empty { color: var(--content-muted); }
 /* ============================================================
    PHONE PAGE REDESIGNS (≤768px portrait)
    Event POS, Dashboard, Website orders and History, restyled for
