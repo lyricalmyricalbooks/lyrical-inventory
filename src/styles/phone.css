@@ -1,0 +1,112 @@
+/* Portrait workspaces. Keep this after the theme so existing component
+   minimum widths cannot undo the phone layout. Colours use the same tokens. */
+.phone-record-toggle, .phone-section-picker { display: none; }
+
+@media (max-width: 768px) {
+  html { scroll-padding-bottom: calc(100px + env(safe-area-inset-bottom)); }
+  /* .app contains the header, not the page panels. Its old bottom padding
+     made an 88px blank band ABOVE every page while leaving the last row covered. */
+  .pub-shell .app { padding-bottom: 0; }
+  .pub-shell .app-header #book-switcher-wrap { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+  .pub-shell #book-switcher { min-width: 0; width: 100%; }
+  .pub-shell #role-toggle-btn { grid-column: 2; grid-row: 1; }
+  .pub-shell .profile-toggle-group { grid-column: 1 / -1; }
+  .pub-shell #book-dropdown-btn > div { min-width: 0; }
+  .pub-shell #book-dropdown-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pub-shell .tab-panel { padding-bottom: calc(104px + env(safe-area-inset-bottom)); }
+  .tab-panel .sec-head { flex-direction: column; align-items: stretch; gap: var(--space-3); }
+  .tab-panel .sec-head-titles { flex: 0 1 auto; }
+  .tab-panel .section-subcopy, .tab-panel .lead-note { display: block; overflow: visible; -webkit-line-clamp: unset; line-clamp: unset; }
+  .tab-panel :is(.sec-head-badges, .row-between) { min-width: 0; flex-wrap: wrap; }
+  .tab-panel :is(input:not([type=checkbox]):not([type=radio]), select, textarea) { min-width: 0; max-width: 100%; font-size: max(1rem, var(--text-base)); }
+  .tab-panel .btn { white-space: normal; overflow-wrap: anywhere; min-height: 44px; max-width: 100%; }
+  .tab-panel :is(.card, .form-group, .sheets-setup) { min-width: 0; }
+  .tab-panel .settings-sub-nav.has-phone-picker { display: none; }
+  .phone-section-picker { display: grid; gap: var(--space-2); margin-bottom: var(--space-4); color: var(--content-secondary); font-size: var(--text-sm); }
+  .phone-section-picker select { width: 100%; min-height: 48px; color: var(--content-primary); background: var(--surface-raised); }
+
+  /* Card presentation keeps native table semantics, and the exact original
+     controls. Detail columns remain accessible through the per-record button. */
+  .tab-panel .tbl-wrap:has(.phone-records) { overflow: visible; border: 0; background: transparent; }
+  .tab-panel table.phone-records, .tab-panel .phone-records tbody { display: block; width: 100%; min-width: 0; }
+  .tab-panel .phone-records thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .tab-panel .phone-records tr.phone-record {
+    display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2);
+    padding: var(--space-4); margin-bottom: var(--space-3);
+    border: var(--stroke-hair) solid var(--border-default); border-radius: var(--r2);
+    background: var(--surface-raised); color: var(--content-primary);
+    content-visibility: visible;
+  }
+  .tab-panel .phone-records tr.phone-record > td {
+    display: block !important; position: static !important; grid-area: auto !important;
+    width: auto; max-width: none; min-width: 0; padding: 0 !important; border: 0;
+    box-shadow: none; background: transparent !important; text-align: left !important;
+    white-space: normal; overflow: visible; overflow-wrap: anywhere;
+  }
+  .tab-panel .phone-records td::before { content: attr(data-phone-label); display: block; margin-bottom: var(--space-1); font: 600 var(--text-xs) var(--font-ui); color: var(--content-secondary); }
+  .tab-panel .phone-records td.phone-record-lead { order: -1; font-size: var(--text-base); font-weight: 700; padding-bottom: var(--space-2) !important; border-bottom: var(--stroke-hair) solid var(--border-subtle); }
+  .tab-panel .phone-records td.phone-record-lead::before { display: none; }
+  .tab-panel .phone-records tr.phone-record:not(.phone-record-open) > td.phone-record-detail { display: none !important; }
+  .tab-panel .phone-records tr.phone-record > td[aria-hidden="true"] { display: none !important; }
+  .tab-panel .phone-records td :is(.text-cell, span) { max-width: 100%; white-space: normal; }
+  .phone-record-toggle { display: block; min-height: 44px; margin-top: var(--space-2); padding: var(--space-2) var(--space-3); border: var(--stroke-hair) solid var(--border-default); border-radius: var(--r-pill); background: var(--surface-sunken); color: var(--content-primary); font: 600 var(--text-sm) var(--font-ui); cursor: pointer; }
+  .phone-record-toggle:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .tab-panel .phone-records tfoot { display: block; }
+  .tab-panel .phone-records tfoot tr { display: flex; flex-wrap: wrap; justify-content: space-between; }
+  .tab-panel .phone-records tfoot td { position: static !important; white-space: normal; }
+
+  /* Catalogue, dashboard and history: let the work start immediately. */
+  #tab-all-overview .overview-shell, #all-books-list { grid-template-columns: minmax(0, 1fr); }
+  #tab-dashboard .dash-context { flex-wrap: wrap; }
+  #tab-dashboard #artist-transfers-sect > div, #tab-history > .row-between > div { min-width: 0; flex-wrap: wrap; }
+  #tab-dashboard .dash-context-meta { flex-basis: 100%; }
+  #tab-manual .order-grid { grid-template-columns: minmax(0, 1fr) !important; }
+
+  /* QR codes need a whole phone row: two columns clipped the download action. */
+  #tab-qrcodes .qr-grid { grid-template-columns: minmax(0, 1fr) !important; }
+  #tab-qrcodes .qr-card { min-width: 0; }
+  #tab-qrcodes .qr-frame { max-width: 100%; box-sizing: border-box; }
+  #tab-qrcodes .qr-actions { flex-wrap: wrap; }
+
+  /* Shipping: recipient and parcel inputs stay legible at 320px. */
+  #tab-shipping .shipping-form-container, #tab-shipping .shipping-results-container { min-width: 0; }
+  #tab-shipping .phone-address-grid, #tab-shipping .phone-parcel-grid { display: grid; grid-template-columns: minmax(0, 1fr) !important; }
+  #tab-shipping #ship-analysis-hub :is(.shipping-pnl-header, .shipping-pnl-toolbar) { display: flex; flex-direction: column; align-items: stretch; }
+  #tab-shipping #ship-analysis-hub .toolbar-group { min-width: 0; max-width: 100%; }
+  #tab-shipping .filter-segmented-control { display: flex; flex-wrap: wrap; width: 100%; }
+  #tab-shipping .filter-segmented-pill { min-height: 44px; }
+  #tab-shipping #ship-calc-main-btn { height: auto !important; min-height: 56px; }
+
+  #tab-shipping .shipping-reco-container { margin-inline: 0 !important; padding: var(--space-3) !important; }
+  #tab-shipping .shipping-reco-container > div:has(#sim-book-select) { grid-template-columns: minmax(0, 1fr) !important; }
+  #tab-shipping .shipping-reco-container .form-group { flex-wrap: wrap; }
+  .tab-panel .phone-records tbody > tr:not(.phone-record),
+  .tab-panel .phone-records tbody > tr:not(.phone-record) > td { display: block; width: auto; min-width: 0; white-space: normal; }
+
+  /* Open Call has its own two-column workspace; the generic g2 rule did not
+     cover it. Stack the project chooser before the contributor workspace. */
+  #tab-opencall .oc-layout { display: flex !important; flex-direction: column; gap: var(--space-4); }
+  #tab-opencall .oc-layout > * { width: 100% !important; min-width: 0 !important; flex: auto !important; }
+  #tab-opencall .oc-sidebar { display: contents; }
+  #tab-opencall .oc-sidebar > :not(.oc-project-card) { order: 2; }
+  #tab-opencall .oc-main { order: 1; }
+  #tab-opencall :is(.oc-hero, .oc-collapse-head, .oc-card-top) { flex-wrap: wrap; min-width: 0; }
+  #tab-opencall .oc-hero-text { flex: 1 1 100%; min-width: 0; }
+  #tab-opencall .oc-hero-stats { width: 100%; flex-wrap: wrap; }
+  #tab-opencall .oc-card-actions { width: 100%; }
+  #tab-opencall .oc-card-actions .btn { flex: 1 1 auto; }
+
+  /* Backup tools have a 320px desktop minimum inside an already padded page. */
+  #tab-backups .phone-backup-grid { grid-template-columns: minmax(0, 1fr) !important; }
+  #backup-reminder { flex-wrap: wrap; }
+  #tab-bigcartel .phone-connection-actions { flex-wrap: wrap; }
+  #tab-bigcartel .phone-connection-actions .btn { flex: 1 1 auto; }
+  #tab-taxcenter :is(.tc-ledger-actions, .tc-form-actions-row, .tc-form-actions-buttons, .email-import-actions) { flex-wrap: wrap; min-width: 0; }
+  #tab-taxcenter .email-manual-grid { grid-template-columns: minmax(0, 1fr); }
+  #tab-webanalytics .analytics-kpi-grid { grid-template-columns: minmax(0, 1fr); }
+  #tab-webanalytics iframe { width: 100%; max-width: 100%; }
+  #tab-intel .intel-panel { overflow: visible; }
+  #tab-intel .intel-thread { min-height: 12rem; }
+  #tab-intel .intel-rail { display: flex; width: auto; max-height: 10rem; overflow: auto; }
+  #tab-intel .intel-input { scroll-margin-bottom: calc(150px + env(safe-area-inset-bottom)); }
+}

@@ -3381,7 +3381,7 @@
         <label for="bc-password">API Password / Token</label>
         <input type="password" id="bc-password" placeholder="••••••••••••••••" style="padding:6px 12px; font-size:var(--text-sm); border:var(--stroke-hair) solid var(--border); border-radius:var(--r2); background:var(--cream); outline:none;">
       </div>
-      <div style="display:flex; gap:8px;">
+      <div class="phone-connection-actions" style="display:flex; gap:8px;">
         <button id="bc-test-btn" class="btn sm" onclick="testBigCartelConnection()" style="flex:1;">Test Connection</button>
         <button id="bc-save-btn" class="btn gold sm" onclick="saveBigCartelSettings()" style="flex:1;">Save Settings</button>
       </div>
@@ -3603,11 +3603,11 @@
           <div class="form-group" style="margin-bottom:8px;"><label>Phone <span style="font-size:var(--text-2xs);color:var(--text3);text-transform:none;letter-spacing:0;">required for international</span></label><input type="tel" id="sf-phone" placeholder="+1 416 555 0123"></div>
           <div class="form-group" style="margin-bottom:8px;"><label>Street Address</label><input type="text" id="sf-street1" placeholder="123 Bookish Way"></div>
           <div class="form-group" style="margin-bottom:8px;"><label>Apt/Suite</label><input type="text" id="sf-street2" placeholder="Optional"></div>
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          <div class="phone-address-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
             <div class="form-group" style="margin-bottom:8px;"><label>City</label><input type="text" id="sf-city" placeholder="Toronto"></div>
             <div class="form-group" style="margin-bottom:8px;"><label>Prov / State</label><input type="text" id="sf-state" placeholder="ON"></div>
           </div>
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          <div class="phone-address-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
             <div class="form-group" style="margin-bottom:8px;"><label>Postal / Zip</label><input type="text" id="sf-zip" placeholder="M4B 1B3"></div>
             <div class="form-group" style="margin-bottom:8px;">
               <label>Country</label>
@@ -3633,11 +3633,11 @@
           <div class="form-group" style="margin-bottom:8px;"><label>Phone <span style="font-size:var(--text-2xs);color:var(--text3);text-transform:none;letter-spacing:0;">required for international</span></label><input type="tel" id="st-phone" placeholder="+1 604 555 0123"></div>
           <div class="form-group" style="margin-bottom:8px;"><label>Street Address</label><input type="text" id="st-street1" placeholder="456 Reading Ave"></div>
           <div class="form-group" style="margin-bottom:8px;"><label>Apt/Suite</label><input type="text" id="st-street2" placeholder="Optional"></div>
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          <div class="phone-address-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
             <div class="form-group" style="margin-bottom:8px;"><label>City</label><input type="text" id="st-city" placeholder="New York"></div>
             <div class="form-group" style="margin-bottom:8px;"><label>State / Prov</label><input type="text" id="st-state" placeholder="NY"></div>
           </div>
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          <div class="phone-address-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
             <div class="form-group" style="margin-bottom:8px;"><label>Zip / Postal</label><input type="text" id="st-zip" placeholder="10001"></div>
             <div class="form-group" style="margin-bottom:8px;">
               <label>Country</label>
@@ -3665,7 +3665,7 @@
           </div>
           <span style="font-size:var(--text-2xs); font-weight:400; text-transform:none; color:var(--text3);">Auto-scales height &amp; weight with quantity</span>
         </div>
-        <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:8px;">
+        <div class="phone-parcel-grid" style="display:grid; grid-template-columns: repeat(4, 1fr); gap:8px;">
           <div class="form-group"><label>Length</label><input type="number" id="sp-length" value="10" step="0.1" oninput="updateShippoBaseSpecsFromInputs()"></div>
           <div class="form-group"><label>Width</label><input type="number" id="sp-width" value="8" step="0.1" oninput="updateShippoBaseSpecsFromInputs()"></div>
           <div class="form-group"><label>Height</label><input type="number" id="sp-height" value="1" step="0.1" oninput="updateShippoBaseSpecsFromInputs()"></div>
@@ -3677,7 +3677,7 @@
             </select>
           </div>
         </div>
-        <div style="display:grid; grid-template-columns: 1fr 1.2fr 1fr; gap:12px; margin-top:12px;">
+        <div class="phone-parcel-grid" style="display:grid; grid-template-columns: 1fr 1.2fr 1fr; gap:12px; margin-top:12px;">
           <div class="form-group">
             <label>Quantity (Copies)</label>
             <input type="number" id="sp-qty" value="1" min="1" oninput="onShippoQuantityChange()">
@@ -4658,7 +4658,7 @@
     <button class="btn gold sm" onclick="exportToJSON(event)">Download now</button>
   </div>
 
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px;">
+  <div class="phone-backup-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px;">
     <div class="sheets-setup" style="padding:1.5rem;">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem;">
         <div style="width:36px;height:36px;border-radius:var(--r);background:var(--gold-bg);color:var(--gold-text);display:flex;align-items:center;justify-content:center;font-size:var(--text-lg);">💾</div>
