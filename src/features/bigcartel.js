@@ -64,6 +64,7 @@ import {
 } from '../lib/order-watch.js';
 import { escapeHtml } from '../lib/html.js';
 import { pushAppAlert } from '../lib/app-alert.js';
+import { logNotification } from '../lib/notification-log.js';
 import { storeReversalsToRaise } from '../lib/store-reversals.js';
 import { resolveCountryCode } from '../lib/countries.js';
 import { fmt, getBookCurrencyCode } from '../lib/money.js';
@@ -1813,6 +1814,10 @@ async function handleNewBigCartelOrders(fresh = [], bcOrders = []) {
     }
 
     if (recorded.status === 'recorded') {
+      // Flagged so "What's been happening" can say the app did this itself.
+      // Not part of the row's identity (see merge-state.js), so it cannot
+      // split one order into two rows across devices.
+      if (recorded.entry) { recorded.entry.autoRecorded = true; window.saveState(bookId); }
       outcomes.push({
         ...entry,
         outcome: 'recorded',
@@ -1961,6 +1966,21 @@ function showNewOrderAlert(entries) {
   card.dataset.tone = said.needsYou ? 'warn' : 'ok';
 
   card.hidden = false;
+
+  // Into the notification history as well, so the sale can be read about
+  // after this card is dismissed or the app reloads.
+  logNotification({
+    id: 'new-orders',
+    icon: '🛒',
+    title: said.title,
+    detail: said.detail,
+    tone: said.needsYou ? 'pending' : '',
+    actionLabel: said.needsYou ? 'Sort it out' : 'Review',
+    action: 'reviewNewOrdersFromAlert(event)',
+  });
+  if (typeof window !== 'undefined' && typeof window.onNotificationLogged === 'function') {
+    try { window.onNotificationLogged(); } catch (e) { /* repaint only */ }
+  }
 }
 
 function dismissNewOrderAlert(event) {
@@ -2104,6 +2124,11 @@ function startBigCartelOrderWatch() {
   // wired by hand here — the same three triggers every other unattended check
   // uses, so there is one place they can be reasoned about.
   startWatch(() => { refreshBigCartelOrdersIfDue(); }, { intervalMs: BC_ORDER_WATCH_INTERVAL_MS });
+}
+
+/** Storefront orders waiting for the publisher in the review queue. For the To-do list. */
+function bigCartelOrdersToReview() {
+  return pendingGaps(_bcGapResult).length;
 }
 
 /** The count badge on the Big Cartel tab button and the Website orders strip. */
@@ -2708,6 +2733,7 @@ export {
   reviewNewOrdersFromAlert,
   refreshBigCartelOrdersIfDue,
   startBigCartelOrderWatch,
+  bigCartelOrdersToReview,
   toggleBigCartelGapPanel,
   undoBigCartelGapDismiss,
   autoCheckBigCartelLedgerGaps,

@@ -30,11 +30,13 @@ import { expenseMissingReceipt } from './receipt-storage.js';
 import { fmt, getBookCurrencyCode } from './money.js';
 import { findDeductionGaps } from './deduction-gaps.js';
 import { recurringStatus } from './recurring.js';
+import { unshippedOrders } from './order-followups.js';
 
 /** The four buckets the To-do tab groups by, in display order. */
-export const SIGNAL_GROUPS = ['stock', 'money', 'catalogue', 'setup'];
+export const SIGNAL_GROUPS = ['orders', 'stock', 'money', 'catalogue', 'setup'];
 
 export const GROUP_LABELS = {
+  orders: 'Orders & payments to sort',
   stock: 'Stock & reordering',
   money: 'Money to chase',
   catalogue: 'Missing book details',
@@ -42,6 +44,7 @@ export const GROUP_LABELS = {
 };
 
 export const GROUP_ICONS = {
+  orders: '📬',
   stock: '📚',
   money: '💰',
   catalogue: '✍',
@@ -487,6 +490,121 @@ function recurringSignals(ctx, out) {
   }
 }
 
+// ── What the automations left for the publisher ──────────────────────────
+//
+// The app now records orders, card payments and receipts on its own, and each
+// of those automations sets aside what it would not do unattended. Until now
+// that only ever surfaced as a pop-up, gone on dismiss or reload — so the one
+// list meant to answer "what needs me?" did not know about any of it.
+//
+// Parcels and unsent orders are read straight from the ledger here, so they
+// clear themselves the moment the row changes. The rest live in the features
+// that raised them and arrive as counts on `ctx.automation`.
+
+/** Open a screen, or run one of a fixed set of named actions. Data, never code. */
+function openAction(name, label) {
+  return { label, kind: 'action', tab: name };
+}
+
+function automationSignals(ctx, out) {
+  const a = ctx.automation || {};
+  const plural = (n, one, many) => (n === 1 ? one : many);
+
+  const rows = [];
+  for (const [bookId, s] of Object.entries(ctx.states || {})) {
+    for (const entry of (s?.hist || [])) {
+      rows.push({ bookId, entry, bookTitle: ctx.booksById?.[bookId]?.title || '' });
+    }
+  }
+
+  const review = Number(a.websiteOrdersToReview) || 0;
+  if (review) {
+    out.push({
+      id: 'orders-review', group: 'orders', status: 'blocked', icon: '🛒',
+      label: `${review} website ${plural(review, 'order needs', 'orders need')} you`,
+      detail: 'The app could not record these on its own — usually because the book wasn’t clear, or the order held more than one title. Stock hasn’t been taken off for them yet.',
+      fix: { label: 'Sort them out', ...openTab('bigcartel') },
+    });
+  }
+
+  const labelled = new Set(a.labelledOrderNums || []);
+  const waiting = unshippedOrders(rows, { now: Date.parse(`${ctx.today}T12:00:00`) || Date.now(), labelled });
+  if (waiting.length) {
+    const oldest = waiting[0];
+    out.push({
+      id: 'orders-unshipped', group: 'orders', status: oldest.days >= 5 ? 'blocked' : 'warn', icon: '📦',
+      label: `${waiting.length} paid ${plural(waiting.length, 'order hasn’t', 'orders haven’t')} been sent`,
+      detail: `Oldest: ${oldest.customer}${oldest.num ? ` (${oldest.num})` : ''}, waiting ${oldest.days} days. If one went out by hand, mark it as shipped.`,
+      fix: { label: 'Open Shipping', ...openTab('shipping') },
+    });
+  }
+
+  const parcels = { pickup: [], returning: [], stuck: [] };
+  rows.forEach(({ entry }) => {
+    if (!entry || entry.voided || entry.deliveredDate || !parcels[entry.deliveryState]) return;
+    parcels[entry.deliveryState].push(entry);
+  });
+  const parcelText = {
+    pickup: ['is waiting at a post office', 'are waiting at a post office', 'The customer may not know — a quick email usually sorts it.'],
+    returning: ['is on its way back to you', 'are on their way back to you', 'Decide whether to resend or refund when it arrives.'],
+    stuck: ['hasn’t moved in over a week', 'haven’t moved in over a week', 'Worth checking with the carrier before the customer asks.'],
+  };
+  Object.entries(parcels).forEach(([state, list]) => {
+    if (!list.length) return;
+    const [one, many, hint] = parcelText[state];
+    const who = list.slice(0, 2).map(e => e.shipName || e.num).filter(Boolean).join(', ');
+    out.push({
+      id: `parcels-${state}`, group: 'orders', status: state === 'stuck' ? 'warn' : 'blocked', icon: '📮',
+      label: `${list.length} ${plural(list.length, 'parcel', 'parcels')} ${plural(list.length, one, many)}`,
+      detail: `${who ? `${who}. ` : ''}${hint}`,
+      fix: { label: 'Open Shipping', ...openTab('shipping') },
+    });
+  });
+
+  const cards = Number(a.cardPaymentsToMatch) || 0;
+  if (cards) {
+    out.push({
+      id: 'orders-card-match', group: 'orders', status: 'warn', icon: '💳',
+      label: `${cards} card ${plural(cards, 'payment needs', 'payments need')} a book picked`,
+      detail: 'A card payment came in that the app couldn’t match to a book on its own. Until it’s matched, the sale isn’t in your stock or earnings.',
+      fix: { label: 'Match them', ...openTab('reconcile') },
+    });
+  }
+
+  const reverse = (Number(a.refundsToReverse) || 0) + (Number(a.storeReversals) || 0);
+  if (reverse) {
+    out.push({
+      id: 'orders-reverse', group: 'orders', status: 'blocked', icon: '↩️',
+      label: `${reverse} refunded ${plural(reverse, 'sale is', 'sales are')} still counted`,
+      detail: 'The money went back to the customer, but the sale still counts in your stock and earnings until you reverse it.',
+      fix: openAction('reverse-sales', 'Review and reverse'),
+    });
+  }
+
+  const receipts = Number(a.receiptsWaiting) || 0;
+  if (receipts) {
+    const ready = Number(a.receiptsReady) || 0;
+    out.push({
+      id: 'orders-receipts', group: 'orders', status: 'info', icon: '🧾',
+      label: `${receipts} ${plural(receipts, 'receipt is', 'receipts are')} waiting to be filed`,
+      detail: ready
+        ? `${ready} ${plural(ready, 'is', 'are')} complete and can be filed in one go; the rest need a quick look.`
+        : 'Found in your inbox and read for you — they just need a look before going into your books.',
+      fix: openAction('receipt-inbox', 'Open receipt inbox'),
+    });
+  }
+
+  const labels = Number(a.labelsToMatch) || 0;
+  if (labels) {
+    out.push({
+      id: 'orders-labels', group: 'orders', status: 'info', icon: '🏷️',
+      label: `${labels} shipping ${plural(labels, 'label isn’t', 'labels aren’t')} matched to an order`,
+      detail: 'Matching a label to its order puts the postage cost against the right sale, so your shipping profit is right.',
+      fix: openAction('shipping-worklist', 'Match labels'),
+    });
+  }
+}
+
 /**
  * Everything that wants the publisher's attention right now.
  *
@@ -514,6 +632,7 @@ export function buildAttentionSignals(input = {}) {
     openCall: input.openCall,
     taxCenter: input.taxCenter,
     tripsSummary: input.tripsSummary,
+    automation: input.automation,
   };
   const states = input.states || {};
   const booksById = {};
@@ -530,6 +649,7 @@ export function buildAttentionSignals(input = {}) {
   setupSignals(ctx, signals);
   missingCostsSignals({ ...ctx, states, booksById }, signals);
   recurringSignals(ctx, signals);
+  automationSignals({ ...ctx, states, booksById }, signals);
 
   // Most urgent first; within a severity keep collection order, which groups a
   // book's own signals together rather than interleaving the whole catalogue.

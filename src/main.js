@@ -171,6 +171,7 @@ import {
   fileReadyReceiptsFromAlert,
   startReceiptEmailSweep,
   sweepReceiptEmails,
+  receiptInboxCounts,
 } from './features/receipts.js';
 import {
   appendCurrencyLog,
@@ -201,6 +202,14 @@ import { dismissAppAlert, pushAppAlert } from './lib/app-alert.js';
 import { booksInDescription, saleCodes, splitSalePlan } from './lib/sale-codes.js';
 import { describeMarketDay, latestMarketDay, summariseMarketDay } from './lib/market-day.js';
 import { checkMarketCards, describeMarketCards } from './lib/market-card-check.js';
+import { unshippedOrders } from './lib/order-followups.js';
+import {
+  clearNotificationLog,
+  markNotificationsRead,
+  notificationDayLabel,
+  readNotificationLog,
+  unreadNotificationCount,
+} from './lib/notification-log.js';
 import {
   describeCardSales,
   describeRefunds,
@@ -431,6 +440,7 @@ import {
   triggerBigCartelShippingSync,
   undoBigCartelGapDismiss,
   voidPlaceholderDuplicate,
+  bigCartelOrdersToReview,
 } from './features/bigcartel.js';
 import {
   acceptIntelDisclosure,
@@ -595,6 +605,8 @@ import {
   verifyLedgerOrderAddress,
   batchVerifyLedgerAddresses,
   applyLedgerAddressCorrections,
+  ordersWithLabels,
+  reconciliationBacklog,
 } from './features/shipping.js';
 import {
   ocList,
@@ -5649,7 +5661,47 @@ export function attentionInput() {
     openCall,
     taxCenter: TAX_CENTER,
     tripsSummary: (() => { try { return _tcGetTripsSummaryAll() || {}; } catch (_) { return {}; } })(),
+    automation: automationTodoInput(),
     today: today(),
+  };
+}
+
+/**
+ * What the automations have set aside for the publisher, as plain counts for
+ * the signal engine. Each part is guarded on its own: one feature failing to
+ * answer must not empty the whole to-do list.
+ */
+function automationTodoInput() {
+  const safe = (fn, fallback) => { try { return fn(); } catch (_) { return fallback; } };
+  const recorded = safe(() => _reconRecordedChargeIds(), new Set());
+  const mem = safe(() => getReconMemory(), { recorded: {}, dismissed: {} });
+  const cardPaymentsToMatch = safe(() => readRaisedStripeSales()
+    .filter(id => !recorded.has(id) && !mem.recorded?.[id] && !mem.dismissed?.[id]).length, 0);
+  const stillCounted = (item) => {
+    const row = findStripeSaleRow(item.bookId, item.sheetsId);
+    return !!row && !row.voided;
+  };
+  const refundsToReverse = safe(() => readPendingRefundReversals().filter(stillCounted).length, 0);
+  const storeReversals = safe(() => {
+    const list = JSON.parse(localStorage.getItem(STORE_REVERSAL_PENDING_KEY) || '[]');
+    return Array.isArray(list) ? list.filter(item => item.full && stillCounted(item)).length : 0;
+  }, 0);
+  // Only the orders that would otherwise be flagged are checked for labels.
+  const labelledOrderNums = safe(() => {
+    const rows = [];
+    Object.entries(states).forEach(([bookId, st]) => (st?.hist || []).forEach(entry => rows.push({ bookId, entry })));
+    return ordersWithLabels(unshippedOrders(rows).map(o => o.num));
+  }, []);
+  const receipts = safe(() => receiptInboxCounts(), { waiting: 0, ready: 0 });
+  return {
+    websiteOrdersToReview: safe(() => bigCartelOrdersToReview(), 0),
+    labelledOrderNums,
+    cardPaymentsToMatch,
+    refundsToReverse,
+    storeReversals,
+    receiptsWaiting: receipts.waiting,
+    receiptsReady: receipts.ready,
+    labelsToMatch: safe(() => reconciliationBacklog(), 0),
   };
 }
 
@@ -5812,8 +5864,42 @@ document.addEventListener('click', (event) => {
   if (fix === 'taxcenter') {
     switchTab('taxcenter');
     if (fixTab) setTimeout(() => switchTaxCenterSubTab(fixTab), 50);
+    return;
   }
+  // Named actions from the automations. A fixed list, so nothing a publisher
+  // types can ever choose what runs.
+  if (fix === 'action') runTodoAction(fixTab);
 });
+
+function runTodoAction(name) {
+  if (name === 'receipt-inbox') { openEmailReceiptImportModal(); return; }
+  if (name === 'shipping-worklist') {
+    switchTab('taxcenter');
+    setTimeout(() => { switchTaxCenterSubTab('integrations'); openShippingReconciliation(); }, 50);
+    return;
+  }
+  if (name === 'reverse-sales') {
+    const refunds = readPendingRefundReversals();
+    let store = [];
+    try { store = JSON.parse(localStorage.getItem(STORE_REVERSAL_PENDING_KEY) || '[]'); } catch (_) { store = []; }
+    const all = [...refunds, ...(Array.isArray(store) ? store.filter(item => item.full) : [])];
+    if (!all.length) { showToast('Nothing left to reverse', 'ok'); return; }
+    const copies = all.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
+    confirmDialog(
+      `Reverse ${all.length} refunded sale${all.length === 1 ? '' : 's'}?\n\nThis puts ${copies} cop${copies === 1 ? 'y' : 'ies'} back in stock and takes the sale${all.length === 1 ? '' : 's'} out of your earnings. You can undo it straight afterwards.`,
+      { title: 'Reverse refunded sales', okLabel: 'Reverse them' },
+    ).then(ok => {
+      if (!ok) return;
+      writePendingRefundReversals([]);
+      try { localStorage.setItem(STORE_REVERSAL_PENDING_KEY, '[]'); } catch (_) { /* storage blocked */ }
+      dismissAppAlert('stripe-refunds');
+      dismissAppAlert('store-reversals');
+      reverseSalesWithUndo(all, 'Refunded');
+      renderTodoTab();
+      renderOverviewRail();
+    });
+  }
+}
 
 /** One notification card. Tone follows the house amber/red/blue convention. */
 function notificationHtml(sig) {
@@ -5865,6 +5951,8 @@ function renderOverviewRail() {
   if (isAuthor()) return;
   const result = visibleAttentionResult();
   updateTodoBadge(result);
+  renderNotificationBell();
+  renderRailLatestNotifications();
 
   const notifHost = $('all-notifications');
   if (notifHost) {
@@ -5910,6 +5998,99 @@ function renderOverviewRail() {
          </div>`;
   }
 }
+
+// ── Notification history ───────────────────────────────────────────────────
+//
+// Every pop-up is also written to a short history (lib/notification-log.js),
+// so news the publisher missed — or dismissed — can be read again. The bell in
+// the sidebar counts what is unread; the panel lists it all; the rail shows
+// the latest few beside the to-do items.
+
+const RAIL_LATEST_LIMIT = 3;
+
+function notificationLogItemHtml(item, { compact = false } = {}) {
+  const tone = item.tone === 'pending' || item.tone === 'warn' ? 'amber' : item.tone === 'failed' ? 'red' : 'blue';
+  const when = webScanRelativeTime(new Date(item.at).toISOString()) || new Date(item.at).toLocaleString();
+  // The action is written by the app itself (an alert's own handler), never by
+  // anything a publisher typed; it closes the panel before it runs.
+  const action = item.action && item.actionLabel
+    ? `<button type="button" class="notif-action" onclick="closeM('notifications');${escapeHtml(item.action)}">${escapeHtml(item.actionLabel)} →</button>`
+    : '';
+  return `<div class="notif-item tone-${tone}${item.read ? '' : ' is-unread'}">
+      <span class="notif-ico" aria-hidden="true">${escapeHtml(item.icon || '🔔')}</span>
+      <div class="notif-body">
+        <div class="notif-title">${item.read ? '' : '<span class="notif-new-dot" aria-label="New"></span>'}${escapeHtml(item.title)}</div>
+        ${compact ? '' : `<div class="notif-detail">${escapeHtml(item.detail || '')}</div>`}
+        <div class="notif-meta"><span class="notif-when">${escapeHtml(when)}</span>${compact ? '' : action}</div>
+      </div>
+    </div>`;
+}
+
+function renderNotificationBell() {
+  const unread = unreadNotificationCount();
+  document.querySelectorAll('.notif-unread-badge').forEach(el => {
+    el.textContent = unread > 99 ? '99+' : String(unread);
+    el.hidden = unread === 0;
+  });
+  const btn = $('notif-sidebar-btn');
+  if (btn) btn.title = unread ? `Notifications — ${unread} new` : 'Notifications';
+}
+
+function renderRailLatestNotifications() {
+  const wrap = $('all-notif-latest-wrap');
+  const host = $('all-notif-latest');
+  if (!wrap || !host) return;
+  const latest = readNotificationLog().slice(0, RAIL_LATEST_LIMIT);
+  wrap.hidden = !latest.length;
+  host.innerHTML = latest.map(item => notificationLogItemHtml(item, { compact: true })).join('');
+}
+
+function renderNotificationsPanel() {
+  const host = $('notif-log-list');
+  if (!host) return;
+  const list = readNotificationLog();
+  if (!list.length) {
+    host.innerHTML = `<div class="empty-state rail-empty">
+        <div class="e-icon" aria-hidden="true">🔔</div>
+        <strong>No notifications yet</strong>
+        <span>When the app records an order, follows a parcel, files a receipt or needs you for something, it will be listed here.</span>
+      </div>`;
+    return;
+  }
+  let lastDay = '';
+  host.innerHTML = list.map(item => {
+    const day = notificationDayLabel(item.at);
+    const head = day !== lastDay ? `<div class="notif-log-day">${escapeHtml(day)}</div>` : '';
+    lastDay = day;
+    return head + notificationLogItemHtml(item);
+  }).join('');
+}
+
+function openNotificationsPanel() {
+  renderNotificationsPanel();
+  openM('notifications');
+  // Marked read once shown, so the new-dots are visible this time and gone next.
+  markNotificationsRead();
+  renderNotificationBell();
+  renderRailLatestNotifications();
+}
+
+async function clearNotificationHistory() {
+  const ok = await confirmDialog('Clear the notification history on this device?\n\nNothing in your books changes — this only empties this list.', { title: 'Clear history', okLabel: 'Clear it' });
+  if (!ok) return;
+  clearNotificationLog();
+  renderNotificationsPanel();
+  renderNotificationBell();
+  renderRailLatestNotifications();
+}
+
+window.openNotificationsPanel = openNotificationsPanel;
+window.clearNotificationHistory = clearNotificationHistory;
+window.onNotificationLogged = () => {
+  renderNotificationBell();
+  renderRailLatestNotifications();
+  if ($('m-notifications')?.style.display === 'flex') renderNotificationsPanel();
+};
 
 /** One row of the To-do tab. */
 function todoRowHtml(sig) {
@@ -21808,6 +21989,7 @@ function _reconApplySaleToBook(bookId, qty, price, payment, chargeId, notes, ext
     payment, enteredBy: 'Publisher', sheetsId,
     shipEmail: extra.email || '',
   };
+  if (extra.auto) entry.autoRecorded = true;
   st.hist.unshift(entry);
   const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(bk), 'CAD');
   syncToSheets({
@@ -22138,7 +22320,7 @@ export function _reconFindPayment(idSafe) {
 }
 
 // Shared price/payment derivation so the single + bulk record paths stay in lockstep.
-function _reconApplyPaymentToBook(p, bookId, qty, { chan = '', notes = 'Stripe direct' } = {}) {
+function _reconApplyPaymentToBook(p, bookId, qty, { chan = '', notes = 'Stripe direct', auto = false } = {}) {
   const bk = BOOKS[bookId];
   if (!bk) throw new Error('Unknown book');
   const bookCur = normalizeCurrencyCode(getBookCurrencyCode(bk), 'CAD');
@@ -22147,7 +22329,7 @@ function _reconApplyPaymentToBook(p, bookId, qty, { chan = '', notes = 'Stripe d
   // cash as a payment record so FX is preserved (same shape as recordOrder).
   const price = (p.currency === bookCur) ? Math.round((p.amount / qty) * 100) / 100 : (bk.listPrice || 0);
   const payment = { currency: p.currency, amount: p.amount, ref: p.id };
-  _reconApplySaleToBook(bookId, qty, price, payment, p.id, notes, { date: p.date, email: p.email, chan });
+  _reconApplySaleToBook(bookId, qty, price, payment, p.id, notes, { date: p.date, email: p.email, chan, auto });
 }
 
 function reconcileRecordSale(idSafe) {
@@ -22637,8 +22819,8 @@ function autoRecordStripeSale(payment, rawClassification) {
     // A tap on a reader happened in person, so it is filed with the other
     // in-person sales rather than as a website order.
     _reconApplyPaymentToBook(payment, plan.bookId, plan.qty, payment.cardPresent
-      ? { chan: 'Book Fair', notes: 'Card reader' }
-      : {});
+      ? { chan: 'Book Fair', notes: 'Card reader', auto: true }
+      : { auto: true });
   } catch (error) {
     console.error('Automatic record of a Stripe payment failed', error);
     noteRaisedStripeSale(payment.id);
@@ -22923,7 +23105,7 @@ function recordReaderSplitSale(payment, lines) {
         { currency: payment.currency, amount: line.qty * line.price, ref: payment.id },
         i === 0 ? payment.id : `${payment.id}-${i + 1}`,
         'Card reader',
-        { date: payment.date, email: payment.email, chan: 'Book Fair' });
+        { date: payment.date, email: payment.email, chan: 'Book Fair', auto: true });
     });
   } catch (error) {
     console.error('Recording a split card-reader sale failed', error);

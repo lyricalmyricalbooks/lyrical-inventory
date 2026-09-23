@@ -15,6 +15,7 @@
 // and neither should have to import the other to say something.
 
 import { escapeHtml } from './html.js';
+import { logNotification } from './notification-log.js';
 
 const STACK_ID = 'app-alert-stack';
 
@@ -89,6 +90,15 @@ export function pushAppAlert(entry) {
   if (existing >= 0) _entries[existing] = next;
   else _entries.push(next);
   renderAppAlerts();
+  // Kept in the notification history too, so it can be read again after the
+  // card is dismissed or the app reloads. `log: false` opts out, for the rare
+  // card that is purely a live control (an Undo) rather than news.
+  if (entry.log !== false) {
+    logNotification(next);
+    if (typeof window !== 'undefined' && typeof window.onNotificationLogged === 'function') {
+      try { window.onNotificationLogged(); } catch (_) { /* a repaint must never block the card */ }
+    }
+  }
   return next;
 }
 

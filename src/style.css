@@ -19559,3 +19559,15 @@ button[onclick="refreshUmamiStats()"]:active {
   #tab-manual .order-grid > .form-group:nth-child(3){grid-column:1 / -1;}
   #tab-manual .book-context{margin-bottom:var(--space-3);}
 }
+
+/* ── Notification history ─────────────────────────────────────────────────
+   The panel behind the sidebar bell, and the "Latest from the app" strip in
+   the landing page's notifications card. Reuses .notif-item for each row. */
+.notif-log { display: flex; flex-direction: column; gap: var(--space-2); max-height: min(60vh, 560px); overflow-y: auto; padding-right: 2px; }
+.notif-log-day { margin: var(--space-3) 0 2px; font-size: var(--text-2xs); font-weight: 700; letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--content-muted); }
+.notif-log-day:first-child { margin-top: 0; }
+.notif-item.is-unread { background: var(--status-active-bg); }
+.notif-new-dot { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: var(--status-active); vertical-align: middle; }
+.notif-when { font-size: var(--text-2xs); color: var(--content-muted); margin-right: var(--space-2); }
+.notif-latest { margin-top: var(--space-4); padding-top: var(--space-3); border-top: var(--stroke-hair) solid var(--border-subtle); }
+.notif-latest-head { margin-bottom: var(--space-2); font-size: var(--text-2xs); font-weight: 700; letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--content-muted); }
