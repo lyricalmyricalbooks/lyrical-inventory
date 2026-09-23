@@ -23,4 +23,14 @@ describe('startup performance wiring', () => {
     expect(boot).toContain('const bootLoads = [loadPaymentLinks(), loadProductionCosts(), loadWebsitePaymentMethods()]');
     expect(boot).toContain('await Promise.all(bootLoads)');
   });
+
+  it('recounts the Open Call badge once suppressions and open calls have both loaded', () => {
+    const bootStart = mainContent.indexOf('async function boot(forcedBook)');
+    const boot = mainContent.slice(bootStart, bootStart + 5000);
+    const loaded = boot.indexOf('await Promise.all(bootLoads)');
+    const recount = boot.indexOf('updateOpenCallBadges()');
+
+    expect(boot).toContain('loadCustomerSuppression()');
+    expect(recount).toBeGreaterThan(loaded);
+  });
 });

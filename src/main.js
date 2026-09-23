@@ -780,7 +780,7 @@ import {
   exportCustomersCSV,
 } from './features/customers.js';
 import { channelMixRows } from './lib/channel-mix.js';
-import { csvCell, toCsv } from './lib/csv.js';
+import { csvCell, csvToObjects, toCsv } from './lib/csv.js';
 import { downloadText, downloadCsv } from './lib/download.js';
 import { OC_STAGES } from './lib/opencall.js';
 import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, recordInventoryDisposal, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, orderStockPreview, orderStockPreviewCopy, deriveStockBreakdown, transferAuthorStock, deductSaleFromStockBreakdown, isVoidStale } from './lib/inventory.js';
@@ -8655,30 +8655,41 @@ async function handleImportFile(event) {
   const file = event.target.files[0];
   if (!file) return;
   event.target.value = ''; // reset so same file can be re-selected
-  let xlsx;
-  try {
-    xlsx = await ensureXlsx();
-  } catch {
-    showToast('Excel import could not load. Check your connection and try again.', 'err');
-    return;
+  // A .csv is plain text we can read ourselves; only Excel files need SheetJS,
+  // which is fetched on first use — so a CSV import still works offline.
+  const isCsv = /\.csv$/i.test(file.name || '');
+  let xlsx = null;
+  if (!isCsv) {
+    try {
+      xlsx = await ensureXlsx();
+    } catch {
+      showToast('Excel import could not load. Check your connection, or save the file as .csv and try again.', 'err');
+      return;
+    }
   }
   const reader = new FileReader();
   reader.onload = (e) => {
     try {
-      const data = new Uint8Array(e.target.result);
-      const wb = xlsx.read(data, { type: 'array', cellDates: true });
       const book = getBook();
+      let rows, sheetName;
+      if (isCsv) {
+        rows = csvToObjects(e.target.result);
+        sheetName = file.name;
+      } else {
+        const data = new Uint8Array(e.target.result);
+        const wb = xlsx.read(data, { type: 'array', cellDates: true });
 
-      const SHORT = { 'Un Fantastico Altrove': 'Altrove', 'The Hound': 'Hound', 'Archaeology of Presence': 'Archaeology', 'Sistema_non_autorizzato': 'Sistema', 'As if Nobody is Watching': 'Nobody', 'Collective Photobook': 'Collective' };
-      const shortName = SHORT[book.title] || book.title;
-      // Try short name first, then full name, then first sheet
-      let sheetName = wb.SheetNames.find(n => n === shortName + ' — Orders')
-        || wb.SheetNames.find(n => n === book.title + ' — Orders')
-        || wb.SheetNames.find(n => n.toLowerCase().includes(shortName.toLowerCase()))
-        || wb.SheetNames.find(n => n.toLowerCase().includes(book.title.toLowerCase().slice(0, 6)))
-        || wb.SheetNames[0];
-      const ws = wb.Sheets[sheetName];
-      const rows = xlsx.utils.sheet_to_json(ws, { defval: '' });
+        const SHORT = { 'Un Fantastico Altrove': 'Altrove', 'The Hound': 'Hound', 'Archaeology of Presence': 'Archaeology', 'Sistema_non_autorizzato': 'Sistema', 'As if Nobody is Watching': 'Nobody', 'Collective Photobook': 'Collective' };
+        const shortName = SHORT[book.title] || book.title;
+        // Try short name first, then full name, then first sheet
+        sheetName = wb.SheetNames.find(n => n === shortName + ' — Orders')
+          || wb.SheetNames.find(n => n === book.title + ' — Orders')
+          || wb.SheetNames.find(n => n.toLowerCase().includes(shortName.toLowerCase()))
+          || wb.SheetNames.find(n => n.toLowerCase().includes(book.title.toLowerCase().slice(0, 6)))
+          || wb.SheetNames[0];
+        const ws = wb.Sheets[sheetName];
+        rows = xlsx.utils.sheet_to_json(ws, { defval: '' });
+      }
 
       if (!rows.length) { showToast('No data found in spreadsheet', 'warn'); return; }
 
@@ -8700,7 +8711,7 @@ async function handleImportFile(event) {
         else if (typeof date === 'string' && date.trim()) {
           const d = new Date(date);
           if (!isNaN(d)) parsedDate = d.toISOString().split('T')[0];
-        } else if (typeof date === 'number') {
+        } else if (typeof date === 'number' && xlsx) {
           const d = xlsx.SSF.parse_date_code(date);
           parsedDate = `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`;
         }
@@ -8727,7 +8738,7 @@ async function handleImportFile(event) {
       }
 
       // Build preview
-      $('import-summary').innerHTML = `Found <strong>${_importRows.length} orders</strong> in sheet <em>"${sheetName}"</em> — review below then confirm.`;
+      $('import-summary').innerHTML = `Found <strong>${_importRows.length} orders</strong> in ${isCsv ? 'file' : 'sheet'} <em>"${escapeHtml(sheetName)}"</em> — review below then confirm.`;
       $('import-count').textContent = _importRows.length;
       $('import-preview-body').innerHTML = _importRows.map(r => `
         <tr>
@@ -8745,7 +8756,8 @@ async function handleImportFile(event) {
       showToast('Could not read file: ' + err.message, 'err');
     }
   };
-  reader.readAsArrayBuffer(file);
+  if (isCsv) reader.readAsText(file);
+  else reader.readAsArrayBuffer(file);
 }
 
 function confirmImport() {
@@ -16417,6 +16429,10 @@ async function boot(forcedBook) {
     bootLoads.push(loadCustomerSuppression(), loadMailingList(), loadCampaigns(), loadOpenCalls());
   }
   await Promise.all(bootLoads);
+  // loadOpenCalls() counts its nav badge as soon as it lands, which can be
+  // before the suppression list has — recount now that both are in, or
+  // suppressed contributors show as waiting on you until the next edit.
+  if (isPublisherSession()) updateOpenCallBadges();
   renderCatalogList();
   renderProfitSettings();
 
