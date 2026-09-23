@@ -230,13 +230,53 @@ function eventsForBook(book, state) {
   (s.invoices || []).forEach((inv) => {
     if (!inv) return;
     const cur = inv.currencyCode || inv.currency || bookCur;
+    const invKey = `${book?.id || '?'}:${inv.id || inv.num}`;
+    const store = inv.storeName || 'a store';
+    const num = String(inv.num || '').trim();
     const ev = event({
       book, date: inv.date || inv.createdAt, tie: inv.createdAt || inv.id, kind: 'invoice', icon: '📄',
-      text: `Invoice ${inv.num || ''} raised for ${inv.storeName || 'a store'}`.replace('  ', ' '),
+      text: `Invoice ${num} raised for ${store}`.replace('  ', ' '),
       amount: fmt(Number(inv.total) || 0, cur),
     });
-    ev.key = `invoice:${book?.id || '?'}:${inv.id || inv.num}`;
+    ev.key = `invoice:${invKey}`;
     out.push(ev);
+
+    // Paid — and whether the card payment settled it without anyone's help.
+    if (inv.status === 'paid' && inv.paidAt) {
+      const paid = event({
+        book, date: inv.paidAt, tie: inv.paidAt, kind: 'invoice-paid', icon: '✅',
+        text: `${store} paid invoice ${num}${inv.stripeChargeId ? ' by card' : ''}`.replace('  ', ' '),
+        amount: `+${fmt(Number(inv.total) || 0, cur)}`,
+        tone: 'pos',
+      });
+      paid.key = `invoice-paid:${invKey}`;
+      paid.auto = !!inv.stripeChargeId;
+      out.push(paid);
+    }
+
+    (Array.isArray(inv.stripePartPayments) ? inv.stripePartPayments : []).forEach((part, i) => {
+      const got = event({
+        book, date: part.at, tie: part.at, kind: 'invoice-part', icon: '🧾',
+        text: `${store} paid part of invoice ${num} by card`.replace('  ', ' '),
+        amount: `+${fmt((Number(part.amountMinor) || 0) / 100, part.currency || cur)}`,
+        tone: 'pos',
+      });
+      got.key = `invoice-part:${invKey}:${part.chargeId || i}`;
+      got.auto = true;
+      out.push(got);
+    });
+
+    // Reminders the app emailed about this invoice. Only ones that went out.
+    (Array.isArray(inv.reminders) ? inv.reminders : []).forEach((r, i) => {
+      if (!r || r.status !== 'sent') return;
+      const sent = event({
+        book, date: r.at, tie: r.at, kind: 'invoice-reminder', icon: '✉️',
+        text: `Payment reminder emailed to ${store} for invoice ${num}`.replace('  ', ' '),
+      });
+      sent.key = `invoice-reminder:${invKey}:${r.at || i}`;
+      sent.auto = r.kind === 'auto';
+      out.push(sent);
+    });
   });
 
   (s.artistPayouts || []).forEach((p) => {
@@ -281,6 +321,38 @@ function eventsForBook(book, state) {
 }
 
 /**
+ * Shipping labels and filed receipts: business-wide costs that live in the
+ * Tax Centre rather than under any one book, so the per-book walk above never
+ * saw them. Each keeps its own currency, like everything else here.
+ */
+function businessExpenseEvents(expenses) {
+  const out = [];
+  (Array.isArray(expenses) ? expenses : []).forEach((e, i) => {
+    if (!e || e.voided) return;
+    const ref = String(e.ref || '');
+    const isLabel = ref.startsWith('shippo:') || ref.startsWith('canadapost:');
+    if (!isLabel && !e.importedFromEmail) return;
+    const cur = e.currency || e.origCurrency || 'CAD';
+    const amount = Number(e.amount) || 0;
+    const ev = event({
+      book: null,
+      date: e.importedAt || e.date,
+      tie: e.id,
+      kind: isLabel ? 'postage' : 'receipt',
+      icon: isLabel ? '🏷️' : '🧾',
+      text: isLabel
+        ? `Shipping label${e.shippingOrderNumber ? ` for ${e.shippingOrderNumber}` : ''} — ${String(e.desc || 'postage').trim()}`
+        : `Receipt filed — ${String(e.vendor || e.desc || 'an expense').trim()}${e.cat ? ` (${e.cat})` : ''}`,
+      amount: amount ? `−${fmt(Math.abs(amount), cur)}` : null,
+      tone: amount ? 'neg' : null,
+    });
+    ev.key = `business-expense:${e.id || ref || i}`;
+    out.push(ev);
+  });
+  return out;
+}
+
+/**
  * The whole catalogue's recent activity, newest first.
  *
  * @param {Array} books   the books to include — the caller filters out test books
@@ -296,6 +368,7 @@ export function buildActivityFeed(books, states, opts = {}) {
     if (!book) continue;
     all.push(...eventsForBook(book, (states || {})[book.id]));
   }
+  all.push(...businessExpenseEvents(opts.businessExpenses));
   // Newest day first, then the later-recorded row within a day. Array.sort is
   // stable, so rows that match on both keep the order they were collected in —
   // which for `hist` is already newest-first (it is unshifted, not pushed).

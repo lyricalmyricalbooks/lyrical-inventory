@@ -91,3 +91,39 @@ export function notificationDayLabel(at, now = Date.now()) {
   if (day(at) === day(now - 86400000)) return 'Yesterday';
   return new Date(at).toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric' });
 }
+
+// ─── To-do items that became urgent ────────────────────────────────────────
+//
+// Some things turn urgent without any check raising a pop-up — a book drops
+// below its reorder level after a sale, an invoice passes its due date
+// overnight. The to-do list shows them, but the notification history would
+// never mention them. This notices each urgent item the first time it
+// appears and says so once. When an item clears and later comes back, that is
+// news again.
+
+const SEEN_URGENT_KEY = 'lm-seen-urgent-signals';
+
+/**
+ * The urgent signals not seen before, and the ids to remember now.
+ * `seen` of null means this device has never looked: nothing is announced,
+ * so installing the app never produces a burst of old news.
+ */
+export function newlyUrgent(signals = [], seen = null) {
+  const urgent = (Array.isArray(signals) ? signals : [])
+    .filter(s => s && s.id && (s.status === 'blocked' || s.status === 'warn'));
+  const ids = urgent.map(s => s.id);
+  if (!Array.isArray(seen)) return { fresh: [], remember: ids };
+  const known = new Set(seen);
+  return { fresh: urgent.filter(s => !known.has(s.id)), remember: ids };
+}
+
+export function readSeenUrgent() {
+  try {
+    const raw = JSON.parse(store()?.getItem(SEEN_URGENT_KEY) || 'null');
+    return Array.isArray(raw) ? raw : null;
+  } catch (_) { return null; }
+}
+
+export function writeSeenUrgent(ids) {
+  try { store()?.setItem(SEEN_URGENT_KEY, JSON.stringify(ids.slice(0, 300))); } catch (_) { /* storage full */ }
+}
