@@ -79,36 +79,13 @@ describe('describePayout', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Wiring: the preview only helps if it is actually reachable from the markup.
+// What the form does — previewing, recording, editing and deleting a payout,
+// and the history list it feeds — is exercised against the real app in
+// artist-payout-behaviour.test.js. What's left here is what a behaviour test
+// can't observe: accessibility attributes, styling hooks, and the author view
+// (the harness always signs in as the publisher).
 // ---------------------------------------------------------------------------
-describe('record-payout form wiring', () => {
-  it('recomputes the verdict on every keystroke', () => {
-    expect(mainJs).toContain(`oninput="previewArtistPayout('\${bookId}')"`);
-    expect(mainJs).toContain('window.previewArtistPayout = previewArtistPayout;');
-  });
-
-  it('reads the balance from the live earnings pipeline, not a captured value', () => {
-    const fn = mainJs.match(/function previewArtistPayout\([\s\S]*?\n\}/)[0];
-    expect(fn).toContain('calculateArtistEarnings(bookId)');
-    expect(fn).toContain('describePayout(');
-  });
-
-  it('routes the quick-fill button through a handler so the preview follows', () => {
-    // Assigning `.value` from script fires no `input` event, so the old inline
-    // `document.getElementById(...).value = ...` would have left the verdict
-    // line stale on the figure the user most wants checked.
-    expect(mainJs).toContain(`onclick="fillArtistPayoutFull('\${bookId}')"`);
-    const fn = mainJs.match(/function fillArtistPayoutFull\([\s\S]*?\n\}/)[0];
-    expect(fn).toContain('previewArtistPayout(bookId)');
-    expect(mainJs).toContain('window.fillArtistPayoutFull = fillArtistPayoutFull;');
-  });
-
-  it('states the balance the moment the form opens', () => {
-    const fn = mainJs.match(/function toggleArtistPayoutForm\([\s\S]*?\n\}/)[0];
-    expect(fn).toContain('form.hidden = !form.hidden');
-    expect(fn).toContain('previewArtistPayout(bookId)');
-  });
-
+describe('record-payout form markup', () => {
   it('announces the verdict to assistive tech', () => {
     expect(mainJs).toMatch(/id="ap-preview-\$\{bookId\}"[^>]*aria-live="polite"/);
   });
@@ -117,102 +94,14 @@ describe('record-payout form wiring', () => {
     for (const f of ['amount', 'date', 'method', 'notes']) {
       expect(mainJs).toContain(`<label for="ap-${f}-\${bookId}">`);
     }
+    expect(mainJs).toContain('<label for="ap-cur-${bookId}">Currency</label>');
+    expect(mainJs).toContain('<label for="ap-rate-${bookId}">');
   });
 
   it('keeps the amount and date in tabular figures', () => {
     expect(mainJs).toMatch(/id="ap-amount-\$\{bookId\}" class="ps-payout-num"/);
     expect(mainJs).toMatch(/id="ap-date-\$\{bookId\}" class="ps-payout-num"/);
     expect(styleCss).toMatch(/\.ps-payout-num\{[^}]*tnum/);
-  });
-
-  it('persists through the same offline-safe path', () => {
-    const fn = mainJs.match(/async function saveArtistPayout\([\s\S]*?\n\}/)[0];
-    expect(fn).toContain('s.artistPayouts.push');
-    expect(fn).toContain('await saveState(bookId)');
-  });
-
-  it('rounds the stored amount to whole cents', () => {
-    // The preview rounds, so storing the raw input would put 33.333 in the
-    // ledger under a "Records $33.33" confirmation.
-    const fn = mainJs.match(/async function saveArtistPayout\([\s\S]*?\n\}/)[0];
-    expect(fn).toContain('amount: roundCents(nativeAmount)');
-  });
-
-  it('guards its field reads instead of dereferencing them blind', () => {
-    const fn = mainJs.match(/async function saveArtistPayout\([\s\S]*?\n\}/)[0];
-    expect(fn).toContain('if (!dateEl || !methodEl || !notesEl) return;');
-  });
-
-  it('re-checks the request lifecycle whenever a payout is written', () => {
-    const fn = mainJs.match(/async function saveArtistPayout\([\s\S]*?\n\}/)[0];
-    expect(fn).toContain('settlePayoutRequests(bookId)');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Editing an existing payout, and recording one in another currency.
-// ---------------------------------------------------------------------------
-describe('payout editing', () => {
-  it('exposes the edit handler to the inline onclick', () => {
-    expect(mainJs).toContain('window.editArtistPayout = editArtistPayout;');
-    expect(mainJs).toContain('window.saveArtistPayout = saveArtistPayout;');
-  });
-
-  it('loads an existing row back into the same form', () => {
-    const fn = mainJs.match(/async function editArtistPayout\([\s\S]*?\n\}/)[0];
-    expect(fn).toContain("set('ap-amount'");
-    expect(fn).toContain("set('ap-date'");
-    expect(fn).toContain("set('ap-method'");
-    expect(fn).toContain("set('ap-notes'");
-    expect(fn).toContain("save.textContent = 'Update payout'");
-  });
-
-  it('warns before editing a payout derived from a settled sale', () => {
-    const fn = mainJs.match(/async function editArtistPayout\([\s\S]*?\n\}/)[0];
-    expect(fn).toContain('p.sourceNum');
-    expect(fn).toContain('confirmDialog');
-  });
-
-  it('updates in place rather than appending a second row', () => {
-    const fn = mainJs.match(/async function saveArtistPayout\([\s\S]*?\n\}/)[0];
-    expect(fn).toContain('Object.assign(existing, fields');
-    expect(fn).toContain('editedAt');
-  });
-
-  it('refuses to resurrect a payout that was deleted mid-edit', () => {
-    const fn = mainJs.match(/async function saveArtistPayout\([\s\S]*?\n\}/)[0];
-    expect(fn).toContain('That payout no longer exists');
-  });
-
-  it('matches ids as strings so pre-makeEventId rows still resolve', () => {
-    const fn = mainJs.match(/function findArtistPayout\([\s\S]*?\n\}/)[0];
-    expect(fn).toContain('String(p.id) === String(payoutId)');
-    const del = mainJs.match(/async function deleteArtistPayout\([\s\S]*?\n\}/)[0];
-    expect(del).toContain('String(p.id) !== String(payoutId)');
-  });
-
-  it('awaits the save before confirming a delete', () => {
-    const del = mainJs.match(/async function deleteArtistPayout\([\s\S]*?\n\}/)[0];
-    expect(del).toContain('await saveState(bookId)');
-  });
-
-  it('offers a currency selector and a rate row', () => {
-    expect(mainJs).toContain('<label for="ap-cur-${bookId}">Currency</label>');
-    expect(mainJs).toMatch(/id="ap-fx-row-\$\{bookId\}"/);
-    expect(mainJs).toContain('<label for="ap-rate-${bookId}">');
-  });
-
-  it('stores the book-currency figure and keeps the foreign cash beside it', () => {
-    const fn = mainJs.match(/async function saveArtistPayout\([\s\S]*?\n\}/)[0];
-    // Same shape a foreign sale uses, so the migration and the row summary
-    // already know how to read it.
-    expect(fn).toContain('payment: buildPaymentMeta({');
-    expect(fn).toContain('fxEnabled: isFx');
-  });
-
-  it('will not save a foreign payout without a rate', () => {
-    const fn = mainJs.match(/async function saveArtistPayout\([\s\S]*?\n\}/)[0];
-    expect(fn).toContain('if (isFx && !(rate > 0))');
   });
 
   it('never renders the record/edit form for an author', () => {
@@ -224,34 +113,12 @@ describe('payout editing', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// The history list under the form.
-// ---------------------------------------------------------------------------
-describe('payout history list', () => {
+describe('payout history list markup', () => {
   const fn = mainJs.match(/function getPayoutHistoryHtml\([\s\S]*?\n\}/)[0];
-
-  it('totals itself against the "Paid to artist" figure', () => {
-    expect(fn).toContain('ps-payout-total');
-    expect(fn).toContain('stats.totalPaidToArtist ?? 0');
-  });
-
-  it('pluralises the count rather than printing "1 payouts"', () => {
-    expect(fn).toContain("payouts.length === 1 ? '' : 's'");
-  });
 
   it('gives the delete control a full touch target', () => {
     expect(fn).toMatch(/class="btn tx sm sys-target ps-payout-del"/);
     expect(fn).toContain('aria-label="Delete payout"');
-  });
-
-  it('still escapes operator-entered method and notes text', () => {
-    expect(fn).toContain('escapeHtml(p.method)');
-    expect(fn).toContain('escapeHtml(p.notes)');
-  });
-
-  it('offers a guided empty state, not a bare sentence', () => {
-    expect(fn).toContain('ps-payout-empty');
-    expect(fn).toContain('No payouts recorded yet');
   });
 
   it('drops the hairlines that vanished in dark mode', () => {
