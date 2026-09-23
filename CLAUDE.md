@@ -67,6 +67,13 @@ Apply the full process (understand → assess risk → plan → implement → ve
 - If the user asks for something, assume they know what they want.
 - Only ask clarifying questions if the request is genuinely ambiguous.
 
+## Commit messages feed the in-app "What's new" list
+The owner reads recent commits in the app's **What's new** window ([src/lib/whats-new.js](src/lib/whats-new.js)). Whenever a change is something they will notice, add these lines to the commit body (and the PR body, so a squash-merge keeps them), written in plain language with no code terms:
+- `For you: <one sentence on what changed for them>`
+- `Try it: <where to click to use it>` — only when there is something to try.
+
+Purely internal work (tests, refactors, docs, CI) is hidden automatically; leave those lines out.
+
 ## Customizations & Style Guidelines
 - **UX comes with the code, not after it.** A code change isn't done when it's functionally correct if it touches something a user sees or interacts with — a screen, a form, a list, a modal, a new state. Look at what the change touched and apply what's relevant from [.agents/skills/ux-designer/SKILL.md](.agents/skills/ux-designer/SKILL.md) (spacing, empty/loading states, contrast, touch targets, etc.) as part of the same change, without being asked separately for "design polish." Backend-only, test-only, or database-only work is exempt — don't invent a UI concern where there isn't one.
 - **Guidelines:** the premium UX/UI rules live in [.agents/skills/ux-designer/SKILL.md](.agents/skills/ux-designer/SKILL.md), the offline-first sync rules in [.agents/skills/backend-architect/SKILL.md](.agents/skills/backend-architect/SKILL.md), and the financial ledger precision and role-based security rules in [.agents/skills/ledger-auditor/SKILL.md](.agents/skills/ledger-auditor/SKILL.md).

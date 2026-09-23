@@ -393,8 +393,13 @@
   <!-- App "last updated" stamp — publisher shell only (the tab-bar copy is
        hidden here). Text set by updateSubheader() from __GIT_COMMIT_DATE__. -->
   <div class="pub-side-updated-container">
-    <button type="button" class="pub-side-updated" id="pub-updated" onclick="showWhatsNew(event)" aria-label="View app update notes"></button>
-    <button type="button" class="pub-update-badge" id="pub-update-badge" hidden onclick="showWhatsNew(event)" title="Click to see what changed" aria-label="View new app update notes">New Update</button>
+    <button type="button" class="pub-side-updated" id="pub-updated" onclick="showWhatsNew(event)">
+      <span class="pub-upd-ic" aria-hidden="true">✨</span>
+      <span class="pub-upd-text">
+        <span class="pub-upd-title">What's new <span class="pub-upd-new" id="pub-update-badge" hidden>New</span></span>
+        <span class="pub-upd-when" id="pub-updated-when">Up to date</span>
+      </span>
+    </button>
   </div>
 </aside>
 
@@ -5827,16 +5832,16 @@
     <div class="modal-title" role="dialog" aria-modal="true">
       <div class="modal-title-left">
         <span class="modal-title-badge" aria-hidden="true">✨</span>
-        <span>What's New in this Update</span>
+        <span>What's new</span>
       </div>
       <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('whats-new')" aria-label="Close dialog" title="Close (Esc)">✕</button>
     </div>
-    <div style="font-size:var(--text-sm);color:var(--text3);margin-bottom:12px;line-height:1.55;">Showing the recent updates and commits loaded into the app:</div>
+    <p class="wn-intro">Here's what has changed in the app recently. Updates install on their own — you don't need to do anything. If a screen looks different, this list explains why.</p>
     <div id="whats-new-list" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:12px;padding-right:4px;">
       <!-- Populated dynamically -->
     </div>
     <div class="modal-footer" role="dialog" aria-modal="true">
-      <button type="button" class="btn gold" onclick="attemptCloseModal('whats-new')">Dismiss</button>
+      <button type="button" class="btn gold" onclick="attemptCloseModal('whats-new')">Got it</button>
     </div>
   </div>
 </div>

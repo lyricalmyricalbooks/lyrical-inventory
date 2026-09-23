@@ -1970,7 +1970,9 @@ tr.hist-row:hover {
 @media (prefers-reduced-motion: reduce){
   .tab-btn:hover,.tab-btn:active{transform:none;}
 }
-.tab-updated{margin-left:auto;align-self:center;white-space:nowrap;font-family:var(--font-mono);font-size:var(--text-2xs);letter-spacing:.06em;color:var(--on-inverse-3);padding-left:1rem;flex-shrink:0;}
+.tab-updated{margin-left:auto;align-self:center;white-space:nowrap;font-family:var(--font-ui);font-size:var(--text-xs);color:var(--on-inverse-3);padding-left:1rem;flex-shrink:0;}
+.tab-updated.is-clickable{cursor:pointer;text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(250,246,236,.3);}
+.tab-updated.is-clickable:hover{color:var(--on-inverse);}
 .tab-author{display:none;align-self:center;white-space:nowrap;font-family:var(--font-mono);font-size:var(--text-2xs);letter-spacing:.06em;color:var(--gold2);flex-shrink:0;}
 .tab-author.on{display:inline-flex;margin-left:auto;}
 .tab-author.on + .tab-updated{margin-left:0;padding-left:.85rem;}
@@ -7092,7 +7094,6 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   .pub-shell .theme-seg{display:flex;width:100%;min-width:0;}
   .pub-shell .theme-seg-opt{flex:1 1 0;min-width:0;padding:0 4px;gap:4px;}
   /* App last-updated stamp at the very bottom of the sidebar (publisher only). */
-  .pub-shell .pub-side-updated{font-family:var(--font-mono);font-size:var(--text-3xs);letter-spacing:.06em;color:rgba(255,255,255,.28);text-align:center;padding:8px 4px 2px;}
 
   /* ---- Offset the whole right-hand column past the fixed sidebar ----
      Pad #pw-app itself (the shared parent of the header, banner, tab bar AND
@@ -9346,82 +9347,51 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   padding: var(--space-2) var(--space-1) var(--space-3);
 }
 
+/* "What's new" card at the foot of the sidebar: a label the owner can read
+   ("Updated 3 hours ago") instead of a raw build timestamp. */
 .pub-shell .pub-side-updated {
   appearance: none;
   width: 100%;
-  min-height: 44px;
-  border:var(--stroke-hair) solid rgba(232, 64, 42, 0.14);
-  border-radius:var(--r);
-  background: linear-gradient(135deg, rgba(255,255,255,.035), rgba(232, 64, 42,.045));
-  color: rgba(255, 255, 255, 0.48);
-  cursor: pointer;
-  font-family:var(--font-mono);
-  font-size:var(--text-2xs);
-  letter-spacing: .06em;
-  line-height: 1.45;
-  padding: 10px 12px;
-  text-align: center;
-  text-decoration: none;
-  transition: transform .28s var(--ease-entrance), border-color .28s var(--ease-entrance), background .28s var(--ease-entrance), color .28s var(--ease-entrance), box-shadow .28s var(--ease-entrance);
-}
-
-.pub-shell .pub-side-updated:hover,
-.pub-shell .pub-side-updated:focus-visible {
-  border-color: rgba(232, 64, 42, 0.42);
-  background: linear-gradient(135deg, rgba(255,255,255,.075), rgba(232, 64, 42,.12));
-  color: rgba(255, 255, 255, 0.86);
-  box-shadow:var(--elev-1);
-  outline: none;
-  transform: translateY(-1px);
-}
-
-.pub-shell .pub-side-updated.has-unseen-update {
-  border-color: rgba(167, 139, 250, 0.48);
-  color: rgba(255, 255, 255, 0.78);
-  box-shadow:var(--elev-4);
-}
-
-.pub-update-badge {
-  appearance: none;
-  align-self: center;
+  min-height: 48px;
+  display: flex;
   align-items: center;
-  border:var(--stroke-hair) solid rgba(255,255,255,.16);
-  /* token-ok: fixed brand gradient — the violet family lightens in dark mode,
-     which would strand the white label on a pastel fill. */
-  background: linear-gradient(135deg, #a78bfa, #8b5cf6);
-  color: var(--on-accent);
-  font-family:var(--font-ui);
-  font-size:var(--text-3xs);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .06em;
-  min-height: 32px;
-  padding: 5px 10px;
-  border-radius:var(--r-pill);
+  gap: 10px;
+  padding: 8px 12px;
+  border: var(--stroke-hair) solid rgba(250, 246, 236, 0.12);
+  border-radius: var(--r);
+  background: rgba(250, 246, 236, 0.04);
+  color: var(--on-inverse);
   cursor: pointer;
-  box-shadow:var(--elev-2);
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(4px) scale(.96);
-  transition: transform .26s var(--ease-entrance), opacity .26s var(--ease-entrance), box-shadow .26s var(--ease-entrance);
-  user-select: none;
+  text-align: left;
+  font-family: var(--font-ui);
+  transition: border-color .2s var(--ease-entrance), background .2s var(--ease-entrance);
 }
+.pub-shell .pub-side-updated:hover {
+  border-color: rgba(250, 246, 236, 0.28);
+  background: rgba(250, 246, 236, 0.08);
+}
+.pub-shell .pub-side-updated:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+.pub-upd-ic { font-size: var(--text-md); line-height: 1; flex-shrink: 0; }
+.pub-upd-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.pub-upd-title { display: flex; align-items: center; gap: 8px; white-space: nowrap; font-size: var(--text-sm); font-weight: 700; color: var(--on-inverse); }
+.pub-upd-when { font-size: var(--text-xs); color: var(--on-inverse-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pub-shell .pub-side-updated.has-unseen-update { border-color: rgba(167, 139, 250, 0.55); }
 
-.pub-update-badge.is-visible {
-  display: inline-flex;
-  opacity: 1;
-  pointer-events: auto;
-  transform: translateY(0) scale(1);
-  animation: pulse-glow 2s infinite ease-in-out;
+.pub-upd-new {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: var(--violet-soft);
+  color: var(--ink);
+  font-size: var(--text-3xs);
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
 }
-
-.pub-update-badge:hover,
-.pub-update-badge:focus-visible {
-  transform: translateY(-1px) scale(1.04);
-  background: linear-gradient(135deg, #c084fc, #a855f7);
-  box-shadow:var(--elev-3);
-  outline: none;
-}
+.pub-upd-new[hidden] { display: none; }
 
 @keyframes pulse-glow {
   0%, 100% { box-shadow:var(--elev-2); }
@@ -12418,25 +12388,43 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
    WHAT'S NEW MODAL COMMIT ITEMS
    ========================================== */
 .commit-item {
-  padding: 12px;
-  border-radius:var(--r);
+  padding: 14px 16px;
+  border-radius: var(--r);
   background: var(--cream);
-  border:var(--stroke-hair) solid var(--border);
+  border: var(--stroke-hair) solid var(--border);
   display: flex;
   flex-direction: column;
   gap: 6px;
-  cursor: pointer;
-  transition: all 0.25s var(--ease-standard);
 }
-.commit-item:hover {
+.wn-item .wn-kind { align-self: flex-start; }
+.wn-intro { font-size: var(--text-sm); color: var(--text2); line-height: 1.55; margin: 0 0 14px; }
+.wn-day {
+  margin: 6px 0 -4px;
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+.wn-day:first-child { margin-top: 0; }
+.wn-title { margin: 2px 0 0; font-family: var(--font-ui); font-size: var(--text-md); font-weight: 700; line-height: 1.35; color: var(--text); }
+.wn-detail { margin: 0; font-size: var(--text-sm); line-height: 1.55; color: var(--text2); }
+.wn-try {
+  margin: 4px 0 0;
+  padding: 8px 10px;
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: var(--r);
   background: var(--gold-bg);
-  border-color: var(--gold3);
-  transform: translateY(-2px);
-  box-shadow:var(--elev-2);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--text);
 }
-.commit-item:active {
-  transform: translateY(0);
-}
+.wn-tech { margin-top: 2px; font-size: var(--text-xs); color: var(--text3); text-decoration: underline; text-underline-offset: 2px; }
+.wn-tech:hover { color: var(--text); }
+.wn-state { padding: 20px 4px; font-size: var(--text-sm); line-height: 1.6; color: var(--text2); text-align: center; }
+.wn-state strong { display: block; color: var(--text); margin-bottom: 4px; }
 
 /* Shippo Manual Link Modal */
 /* Same scrim treatment as .overlay, and for the same measured reason. This

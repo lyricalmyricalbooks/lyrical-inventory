@@ -781,6 +781,7 @@ import {
 } from './features/customers.js';
 import { channelMixRows } from './lib/channel-mix.js';
 import { csvCell, csvToObjects, toCsv } from './lib/csv.js';
+import { plainChanges, kindLabel, parseBuildDate, relativeWhen, dayHeading } from './lib/whats-new.js';
 import { downloadText, downloadCsv } from './lib/download.js';
 import { OC_STAGES } from './lib/opencall.js';
 import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, recordInventoryDisposal, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, orderStockPreview, orderStockPreviewCopy, deriveStockBreakdown, transferAuthorStock, deductSaleFromStockBreakdown, isVoidStale } from './lib/inventory.js';
@@ -3889,39 +3890,32 @@ function updateSubheader() {
 
   const isPub = window.IS_PUBLISHER && !isAuthor();
 
+  renderUpdatedStamps(isPub);
+}
+
+// "Updated 3 hours ago" rather than a raw build timestamp: the owner wants to
+// know whether the app is fresh, not the second it was built. The exact time
+// stays in the tooltip.
+function renderUpdatedStamps(isPub = window.IS_PUBLISHER && !isAuthor()) {
+  const built = parseBuildDate(typeof __GIT_COMMIT_DATE__ === 'string' ? __GIT_COMMIT_DATE__ : '');
+  const when = built ? relativeWhen(built) : '';
+  const exact = built ? built.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
+
   const upd = $('tab-updated');
   if (upd) {
-    upd.textContent = 'updated ' + __GIT_COMMIT_DATE__;
-    if (isPub) {
-      upd.style.cursor = 'pointer';
-      upd.style.textDecoration = 'underline dotted';
-      upd.title = 'Click to see what changed';
-      upd.onclick = (e) => showWhatsNew(e);
-    } else {
-      upd.style.cursor = '';
-      upd.style.textDecoration = '';
-      upd.title = '';
-      upd.onclick = null;
-    }
+    upd.textContent = when ? `Updated ${when}` : '';
+    upd.classList.toggle('is-clickable', !!isPub);
+    upd.title = isPub ? `Last updated ${exact} — click to see what changed` : (exact ? `Last updated ${exact}` : '');
+    upd.onclick = isPub ? (e) => showWhatsNew(e) : null;
   }
 
-  // Publisher app-shell hides the tab bar, so mirror the stamp into the sidebar.
+  // Publisher app-shell hides the tab bar, so the sidebar carries the card.
+  const whenEl = $('pub-updated-when');
+  if (whenEl) whenEl.textContent = when ? `Updated ${when}` : 'Up to date';
   const pubUpd = $('pub-updated');
-  if (pubUpd) {
-    pubUpd.textContent = 'updated ' + __GIT_COMMIT_DATE__;
-    if (isPub) {
-      pubUpd.style.cursor = 'pointer';
-      pubUpd.style.textDecoration = 'underline dotted';
-      pubUpd.title = 'Click to see what changed';
-      pubUpd.onclick = (e) => showWhatsNew(e);
-    } else {
-      pubUpd.style.cursor = '';
-      pubUpd.style.textDecoration = '';
-      pubUpd.title = '';
-      pubUpd.onclick = null;
-    }
-  }
+  if (pubUpd) pubUpd.title = exact ? `Last updated ${exact}` : '';
 }
+setInterval(() => renderUpdatedStamps(), 5 * 60 * 1000);
 
 // The header can't hold the brand, book switcher, action menus AND the KPI
 // stats on one line at laptop widths, so on desktop the stat strip lives on
@@ -23041,7 +23035,7 @@ function checkAppUpdate() {
     }
     const stamp = $('pub-updated');
     if (stamp) stamp.classList.add('has-unseen-update');
-    showToast(`✨ App successfully updated to ${currentVersion}!`, 'ok', 6000);
+    showToast('✨ The app has been updated. Click "What\'s new" at the bottom of the side menu to see what changed.', 'ok', 6000);
   }
 }
 
@@ -23063,7 +23057,7 @@ window.dismissAppUpdate = dismissAppUpdate;
 
 async function fetchRecentChanges() {
   try {
-    const res = await fetch('https://api.github.com/repos/lyricalmyricalbooks/lyrical-inventory/commits?per_page=5');
+    const res = await fetch('https://api.github.com/repos/lyricalmyricalbooks/lyrical-inventory/commits?per_page=20');
     if (!res.ok) throw new Error('GitHub API request failed');
     const commits = await res.json();
     return commits.map(c => ({
@@ -23095,7 +23089,7 @@ async function showWhatsNew(event) {
   const container = $('whats-new-list');
   if (!container) return;
 
-  container.innerHTML = '<div style="font-size:var(--text-sm);color:var(--text3);text-align:center;padding:20px 0;">Loading recent changes...</div>';
+  container.innerHTML = '<div class="wn-state">Loading the latest changes…</div>';
 
   // Update last seen version when they click/view the updates
   const currentVersion = typeof __GIT_COMMIT_DATE__ !== 'undefined' ? __GIT_COMMIT_DATE__ : 'Unknown';
@@ -23110,32 +23104,33 @@ async function showWhatsNew(event) {
   if (stamp) stamp.classList.remove('has-unseen-update');
 
   try {
-    const changes = await fetchRecentChanges();
+    const commits = await fetchRecentChanges();
+    const changes = commits ? plainChanges(commits) : null;
     if (!changes || !changes.length) {
       container.innerHTML = `
-        <div style="font-size:var(--text-sm);color:var(--text2);line-height:1.6;padding:10px 0;">
-          Could not load live changes from GitHub. Below is the static version history:
-          <ul style="margin:12px 0 0 20px;padding:0;display:flex;flex-direction:column;gap:8px;">
-            <li><strong>v3.1.0</strong>: Added 3D book cover overview badges and ambient dynamic color shadows.</li>
-            <li><strong>v3.0.0</strong>: Premium editorial color theme, dynamic contrast safety validations, Sage/Terracotta financial indicators, and SVG gradients.</li>
-            <li><strong>v2.8.0</strong>: Real-time modal accent color picker previews.</li>
-            <li><strong>v2.5.0</strong>: Google Sheets Apps Script webhook sync integration.</li>
-          </ul>
+        <div class="wn-state">
+          <strong>Couldn't load the list of changes.</strong>
+          You may be offline. Your app is still up to date — try again when you're connected.
         </div>`;
       return;
     }
 
+    let lastHeading = '';
     container.innerHTML = changes.map(c => {
-      const dateStr = new Date(c.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
-      const cleanMsg = escapeHtml(c.message);
-      return `
-        <div class="commit-item" onclick="window.open('https://github.com/lyricalmyricalbooks/lyrical-inventory/commit/${c.fullSha}', '_blank')" title="Click to view commit details on GitHub">
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="font-family:var(--font-mono);font-size:var(--text-xs);color:var(--gold-text);font-weight:600;">sha: ${c.sha} ↗</span>
-            <span style="font-size:var(--text-2xs);color:var(--text3);">${dateStr}</span>
-          </div>
-          <div style="font-size:12.5px;color:var(--text);white-space:pre-wrap;line-height:1.45;font-family:var(--font-ui);font-weight:500;">${cleanMsg}</div>
-        </div>`;
+      const heading = dayHeading(new Date(c.date));
+      const head = heading !== lastHeading ? `<h3 class="wn-day">${escapeHtml(heading)}</h3>` : '';
+      lastHeading = heading;
+      const link = c.fullSha
+        ? `<a class="wn-tech" href="https://github.com/lyricalmyricalbooks/lyrical-inventory/commit/${encodeURIComponent(c.fullSha)}" target="_blank" rel="noopener">Technical details ↗</a>`
+        : '';
+      return `${head}
+        <article class="commit-item wn-item">
+          <span class="pill ${({ new: 'green', fixed: 'blue', faster: 'gold' })[c.kind] || 'gray'} wn-kind">${escapeHtml(kindLabel(c.kind))}</span>
+          <h4 class="wn-title">${escapeHtml(c.title)}</h4>
+          ${c.detail ? `<p class="wn-detail">${escapeHtml(c.detail)}</p>` : ''}
+          ${c.tryIt ? `<p class="wn-try"><strong>How to use it:</strong> ${escapeHtml(c.tryIt)}</p>` : ''}
+          ${link}
+        </article>`;
     }).join('');
   } catch (err) {
     showToast(`❌ Error displaying changes: ${err.message}`, 'err');

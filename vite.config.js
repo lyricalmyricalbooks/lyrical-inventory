@@ -11,7 +11,7 @@ const __dirname = path.dirname(__filename);
 
 let commitDate = '';
 try {
-  commitDate = execSync('git log -1 --format=%cd --date=format:"%Y-%m-%d %H:%M:%S"').toString().trim();
+  commitDate = execSync('git log -1 --format=%cI').toString().trim();
 } catch (e) {
   commitDate = 'Unknown';
 }
