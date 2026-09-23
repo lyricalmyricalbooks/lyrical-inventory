@@ -166,7 +166,7 @@ function systemInstruction() {
 /**
  * Model output is untrusted text and is escaped before anything else happens.
  *
- * Deliberately NOT parseMarkdownToHtml() from main.js: that one restores
+ * Deliberately NOT parseMarkdownToHtml() from opencall.js: that one restores
  * `<span style>` and `<mark style>` from its input on purpose, which is right
  * for the Open Call template editor where the publisher wrote the text, and
  * wrong here where a remote service did. This only ever emits tags it wrote

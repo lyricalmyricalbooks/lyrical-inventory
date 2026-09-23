@@ -20,7 +20,7 @@ describe('rendering an answer', () => {
   });
 
   it('does not restore styled tags the way the email editor does', () => {
-    // parseMarkdownToHtml() in main.js deliberately un-escapes <span style> and
+    // parseMarkdownToHtml() in opencall.js deliberately un-escapes <span style> and
     // <mark style> from its input. That is right for the Open Call template
     // editor, where the publisher wrote the text, and wrong here, where a
     // remote service did. Reusing it would be the bug this test exists to stop.

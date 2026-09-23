@@ -18,22 +18,21 @@
 import {
   $,
   BOOKS,
-  _isCustomerSuppressed,
-  deserializeHtmlToEditor,
   formatDateTime,
   isAuthor,
-  mailingListHas,
-  openCampaignWizard,
-  parseMarkdownToHtml,
-  sendSingleEmailViaBackend,
-  serializeEditorHtml,
   sheetsUrl,
   showToast,
-  suggestEmailTypo,
-  switchCustomersSubTab,
   switchTab,
   today,
 } from '../main.js';
+import {
+  _isCustomerSuppressed,
+  mailingListHas,
+  openCampaignWizard,
+  sendSingleEmailViaBackend,
+  suggestEmailTypo,
+  switchCustomersSubTab,
+} from './customers.js';
 import { confirmDialog } from '../lib/modal.js';
 import { escapeHtml } from '../lib/html.js';
 import { toCsv } from '../lib/csv.js';
@@ -3244,6 +3243,147 @@ function exportOpenCallCSV() {
   downloadCsv(toCsv(rows), `opencall-${proj.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${today()}.csv`);
   showToast(`✓ Exported ${proj.contributors.length} contributor${proj.contributors.length === 1 ? '' : 's'}`);
 }
+
+// ── Decoupled Open Call Portal
+
+// Project Actions
+
+function parseMarkdownToHtml(text) {
+  let html = escapeHtml(text);
+
+  // Restore safe HTML tags that might have been escaped
+  // 1. Restore <mark style="..."> and </mark>
+  html = html.replace(/&lt;mark style=&quot;(.*?)&quot;&gt;/gi, '<mark style="$1">');
+  html = html.replace(/&lt;mark&gt;/gi, '<mark>');
+  html = html.replace(/&lt;\/mark&gt;/gi, '</mark>');
+
+  // 2. Restore <span style="..."> and </span>
+  html = html.replace(/&lt;span style=&quot;(.*?)&quot;&gt;/gi, '<span style="$1">');
+  html = html.replace(/&lt;span&gt;/gi, '<span>');
+  html = html.replace(/&lt;\/span&gt;/gi, '</span>');
+
+  // 3. Restore other basic tags if they typed them
+  html = html.replace(/&lt;strong&gt;/gi, '<strong>').replace(/&lt;\/strong&gt;/gi, '</strong>');
+  html = html.replace(/&lt;em&gt;/gi, '<em>').replace(/&lt;\/em&gt;/gi, '</em>');
+  html = html.replace(/&lt;br&gt;/gi, '<br>');
+
+  // bold **text** or __text__
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/__(.*?)__/g, '<strong>$1</strong>');
+  // italic *text* or _text_
+  html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+  html = html.replace(/_(.*?)_/g, '<em>$1</em>');
+  // links [label](url)
+  html = html.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" style="color:var(--gold2);text-decoration:underline;">$1</a>');
+  // line breaks
+  html = html.replace(/\n/g, '<br>');
+  return html;
+}
+
+function insertFormattingTag(tag) {
+  const editor = $('oc-tmpl-body');
+  if (!editor) return;
+
+  editor.focus();
+
+  const selection = window.getSelection();
+  let range;
+  if (selection.rangeCount > 0) {
+    range = selection.getRangeAt(0);
+  } else {
+    range = document.createRange();
+    range.selectNodeContents(editor);
+    range.collapse(false);
+  }
+
+  const selectedText = selection.toString();
+
+  if (tag === 'bold') {
+    document.execCommand('bold', false, null);
+  } else if (tag === 'italic') {
+    document.execCommand('italic', false, null);
+  } else if (tag === 'underline') {
+    document.execCommand('underline', false, null);
+  } else if (tag === 'link') {
+    const url = prompt('Enter URL:', 'https://');
+    if (!url) return;
+    document.execCommand('createLink', false, url);
+  } else if (tag === 'clear') {
+    document.execCommand('removeFormat', false, null);
+  } else if (tag === 'highlight') {
+    const mark = document.createElement('mark');
+    mark.style.backgroundColor = '#fef08a';
+    mark.style.color = '#000000';
+    mark.style.padding = '2px 4px';
+    mark.style.borderRadius = '4px';
+    mark.textContent = selectedText || 'highlighted text';
+    range.deleteContents();
+    range.insertNode(mark);
+    range.setStartAfter(mark);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  } else if (tag === 'color') {
+    const span = document.createElement('span');
+    span.style.color = '#c5a880';
+    span.textContent = selectedText || 'colored text';
+    range.deleteContents();
+    range.insertNode(span);
+    range.setStartAfter(span);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  } else {
+    const badge = document.createElement('span');
+    badge.className = 'oc-token-badge';
+    badge.setAttribute('contenteditable', 'false');
+    badge.setAttribute('data-token', tag);
+    badge.textContent = `{{${tag}}}`;
+
+    range.deleteContents();
+    range.insertNode(badge);
+    range.setStartAfter(badge);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+
+  ocUpdateTmplPreview();
+}
+
+function serializeEditorHtml(html) {
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = html;
+  const badges = tempDiv.querySelectorAll('.oc-token-badge');
+  badges.forEach(badge => {
+    const token = badge.getAttribute('data-token');
+    badge.replaceWith(`{{${token}}}`);
+  });
+  return tempDiv.innerHTML;
+}
+
+function deserializeHtmlToEditor(html) {
+  let res = html;
+  const tokens = ['name', 'photo', 'creditName', 'project', 'date'];
+  tokens.forEach(t => {
+    const regex = new RegExp(`\\{\\{${t}\\}\\}`, 'g');
+    res = res.replace(regex, `<span class="oc-token-badge" contenteditable="false" data-token="${t}">{{${t}}}</span>`);
+  });
+  return res;
+}
+
+// Apply a parsed file import: preview what's about to happen (count, dupes,
+// first few names) → confirm → add. Routes through the same parser and
+// newContributor() the paste path uses, so file uploads get identical
+// behavior: all 5 columns honored, stage flags initialized, photos split.
+
+// Preset Compose Actions
+
+// ── Open Call: import submissions from Gmail (intake) ─────────────────────
+// Finds the artists' original "here are my photos" emails and turns each into a
+// contributor — name, email, photo filenames, and the submission thread id, so
+// every later stage email replies into that same thread.
+
 export {
   ocList,
   ocBlockedForAuthor_,
@@ -3352,4 +3492,8 @@ export {
   ocUpdateBulkPreview,
   ocSaveTemplates,
   exportOpenCallCSV,
+  parseMarkdownToHtml,
+  insertFormattingTag,
+  serializeEditorHtml,
+  deserializeHtmlToEditor,
 };

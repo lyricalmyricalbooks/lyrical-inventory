@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Lyricalmyrical Inventory</title>
 
 <!-- Firebase -->
@@ -319,6 +319,11 @@
   <nav class="pub-nav" aria-label="Books">
     <button type="button" class="snav" title="Dashboard" onclick="switchTab('dashboard')"><span class="snav-ic">▦</span><span class="snav-label">Dashboard</span></button>
     <button type="button" class="snav" id="todo-sidebar-btn" title="To-do" onclick="switchTab('todo')"><span class="snav-ic">✅</span><span class="snav-label">To-do</span><span class="nav-badge todo-nav-badge" aria-label="things needing attention" hidden></span></button>
+    <button type="button" class="sidebar-alert-toggle" id="sidebar-alert-toggle"
+            onclick="toggleSidebarAlerts()" aria-pressed="false"
+            title="Hide the red notification badges in this menu">
+      <span aria-hidden="true">🔕</span><span id="sidebar-alert-toggle-label">Clear alerts</span>
+    </button>
     <button type="button" class="snav" title="Website orders" onclick="switchTab('website')"><span class="snav-ic">🛍</span><span class="snav-label">Website orders</span></button>
     <button type="button" class="snav" title="Manual entry" onclick="switchTab('manual')"><span class="snav-ic">✎</span><span class="snav-label">Manual entry</span></button>
     <button type="button" class="snav" title="Consignment" onclick="switchTab('consignment')"><span class="snav-ic">🏪</span><span class="snav-label">Consignment</span><span class="health-badge" data-health-badge="stripe" aria-label="Stripe is not answering, so invoice payments may be missed" hidden></span></button>
@@ -2623,7 +2628,7 @@
 
   <div class="row-between" style="margin-top:1.5rem;margin-bottom:12px;">
     <div class="section-hed">Master Ledger (Sales + Expenses)</div>
-    <div style="display:flex;gap:10px;align-items:center;">
+    <div class="tc-ledger-actions" style="display:flex;gap:10px;align-items:center;">
       <select id="tc-year-ledger" class="btn tag" aria-label="Filter ledger by year" onchange="tcYearChange(this.value)" style="background:var(--cream2); border:var(--stroke-hair) solid var(--gold-line); color:var(--text); cursor:pointer;">
         <option value="all">All Time</option>
         <option value="2026">2026</option>
@@ -3383,7 +3388,7 @@
         <div id="ship-key-indicator" style="width:10px; height:10px; border-radius:50%; background:var(--red);"></div>
         <span style="font-size:var(--text-base); font-weight:600; color:var(--text2);" id="ship-key-status-text">Shippo API Key Required</span>
       </div>
-      <div id="ship-key-setup-group" style="display:flex; gap:8px; align-items:center;">
+      <div id="ship-key-setup-group" class="ship-key-setup" style="display:flex; gap:8px; align-items:center;">
         <input type="password" id="ship-api-key-input" placeholder="shippo_live_..." style="padding:6px 12px; font-size:var(--text-sm); border:var(--stroke-hair) solid var(--border); border-radius:var(--r2); background:var(--cream); width:280px; font-family:var(--font-mono); outline:none;">
         <button class="btn gold sm" onclick="saveShippoApiKey()">Save Key</button>
       </div>
@@ -3442,7 +3447,7 @@
           <div class="form-group">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
               <label style="margin-bottom:0;">Load Package From</label>
-              <button type="button" class="btn sm tag" id="ship-save-preset-quick-btn" onclick="openSaveBookPresetModal()" style="font-size:var(--text-2xs); padding:2px 8px; height:24px; min-height:24px;" title="Save current specifications to a book preset">💾 Save to Preset</button>
+              <button type="button" class="btn sm tag" id="ship-save-preset-quick-btn" onclick="openSaveBookPresetModal()" style="font-size:var(--text-2xs); padding:2px 8px;" title="Save current specifications to a book preset">💾 Save to Preset</button>
             </div>
             <select id="ship-preset-book" onchange="onShippoBookPresetChange()">
               <option value="">— Select book preset —</option>
@@ -3701,7 +3706,7 @@
             <span>Calculate Shipping Rates &amp; Prediction</span>
           </button>
 
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div class="ship-duo" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
             <button class="btn outline" type="button" onclick="calculateCanadaPostRatesHandler()" style="height:42px;font-size:var(--text-sm);font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px;background:rgba(216,42,42,0.06);border-color:rgba(216,42,42,0.3);color:var(--text);" title="Calculate rates and buy official postage labels directly via Canada Post API">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;">
                 <path d="M12 2L14 8L19 7L16 12L21 15L15 17L16 22L12 18L8 22L9 17L3 15L8 12L5 7L10 8L12 2Z" fill="#D82A2A"/>
@@ -4442,7 +4447,40 @@
     </div>
   </div>
 </div>
+<!-- EDITS MADE ON TWO DEVICES — review dialog. When the same record was changed
+     on two devices before they synced, the merge keeps this device's version and
+     src/lib/sync-conflicts.js records the other one; this is where the owner
+     compares them. The list is rendered by renderSyncConflictList() in main.js;
+     #sync-conflicts-live stays outside it so announcements survive a re-render. -->
+<div class="overlay" id="m-sync-conflicts" style="display:none;">
+  <div class="modal sc-modal" role="dialog" aria-modal="true" aria-labelledby="sync-conflicts-title">
+    <div class="modal-title">
+      <div class="modal-title-left">
+        <span class="modal-title-badge" aria-hidden="true">⇄</span>
+        <span id="sync-conflicts-title">Edits made on two devices</span>
+      </div>
+      <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('sync-conflicts')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+    </div>
+    <p class="sc-intro">Each record below was changed on this device and on another one before they caught up with each other. This device's version was kept. Compare the two, then keep it or switch to the other device's version.</p>
+    <div class="sc-count" id="sync-conflicts-count"></div>
+    <div id="sync-conflicts-body"></div>
+    <div class="sr-only" id="sync-conflicts-live" role="status" aria-live="polite"></div>
+    <div class="modal-footer">
+      <button type="button" class="btn" id="sync-conflicts-close" onclick="attemptCloseModal('sync-conflicts')">Close</button>
+    </div>
+  </div>
+</div>
 <div class="tab-panel" id="tab-backups" style="color:var(--on-inverse);/* contrast-ok: default text colour for the dark ink cards inside this panel */">
+  <section class="sync-review-card" id="sync-review-card" aria-labelledby="sync-review-title">
+    <div class="sync-review-ic" aria-hidden="true">⇄</div>
+    <div class="sync-review-text">
+      <div class="sync-review-kicker" id="sync-review-kicker">All clear</div>
+      <h3 class="sync-review-title" id="sync-review-title">Edits made on two devices at once</h3>
+      <p class="sync-review-status" id="sync-review-status">Nothing needs review.</p>
+      <p class="sync-review-sub">If the same record is changed on two devices before they sync, this device's version is kept and the other one is saved here, so you can compare them and bring it back.</p>
+    </div>
+    <button type="button" class="btn sm gold sys-target" id="sync-review-open" onclick="openSyncConflicts()" hidden>Review</button>
+  </section>
   <div class="sheets-setup" style="background:var(--ink2);border:var(--stroke-hair) solid var(--border);padding:1.25rem;border-radius:var(--r3);margin-bottom:1rem;">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
       <div>
