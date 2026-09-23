@@ -58,3 +58,25 @@ export function canonicalExpenseCategory(cat, fallback = 'Other') {
   if (!raw) return fallback;
   return CATEGORY_ALIASES[raw.toLowerCase()] || raw;
 }
+
+/**
+ * Every live expense the business has — publisher-level rows from the Tax
+ * Centre plus every book's ledger — in one list, voided rows dropped, each
+ * tagged with where it lives (`_scope` 'business' | 'book', `_bookId`, null
+ * for business rows) and its category folded onto the canonical name (`_cat`)
+ * so "Postage" and "Shipping & Postage" count as one thing.
+ *
+ * @param {{taxCenter?: {businessExpenses?: object[]}, states?: Object<string, {expenses?: object[]}>}} ctx
+ */
+export function allCanonicalExpenses(ctx) {
+  const out = [];
+  for (const e of (ctx.taxCenter?.businessExpenses || [])) {
+    if (e && !e.voided) out.push({ ...e, _scope: 'business', _bookId: null, _cat: canonicalExpenseCategory(e.cat, 'Other') });
+  }
+  for (const [bookId, state] of Object.entries(ctx.states || {})) {
+    for (const e of (state?.expenses || [])) {
+      if (e && !e.voided) out.push({ ...e, _scope: 'book', _bookId: bookId, _cat: canonicalExpenseCategory(e.cat, 'Other') });
+    }
+  }
+  return out;
+}
