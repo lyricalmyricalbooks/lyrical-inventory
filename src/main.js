@@ -4488,6 +4488,12 @@ export function switchTab(name) {
   // publisher redirected away from author-only myqr tab
   if (!isAuthor() && name === 'myqr') name = 'dashboard';
 
+  // Dashboard in All books is the combined inventory overview, not a book panel.
+  if (name === 'dashboard' && activeBook === 'all') {
+    switchBook('all');
+    return;
+  }
+
   // Selecting a destination closes any open header category menu (and the
   // sidebar footer account menu, if open).
   closeHeaderMenus();
