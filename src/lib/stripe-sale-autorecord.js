@@ -102,3 +102,94 @@ export function describeCardSales(outcomes = []) {
     detail: parts.join(' '),
   };
 }
+
+// ─── A card-reader tap that names its book ────────────────────────────────
+//
+// A tap on a card reader reaches the app as an amount and a description, and
+// nothing else. The description is the one field the seller can type into at
+// the moment of sale (the Stripe app's "Add description"), so a title typed
+// there is how a reader sale can say which book it was. Exactly one catalogue
+// title has to appear in it; a description naming two books, or none, is not
+// read as either.
+
+const normalize = (value) => String(value ?? '')
+  .toLowerCase()
+  .normalize('NFD')
+  .replace(/[̀-ͯ]/g, '')
+  .replace(/[^a-z0-9]+/g, ' ')
+  .trim();
+
+/** The one catalogue book a payment description names, or '' when none or several. */
+export function bookNamedIn(text, books = {}) {
+  const haystack = ` ${normalize(text)} `;
+  if (!haystack.trim()) return '';
+  const hits = new Set();
+  Object.values(books || {}).forEach(book => {
+    const title = normalize(book?.title);
+    // Very short titles would match inside ordinary words.
+    if (!book?.id || title.length < 4) return;
+    if (haystack.includes(` ${title} `)) hits.add(book.id);
+  });
+  return hits.size === 1 ? [...hits][0] : '';
+}
+
+// ─── A recorded sale whose money went back ────────────────────────────────
+
+/**
+ * Which refunds reach a sale this app recorded from a Stripe payment.
+ *
+ * `sales` are the ledger rows that came from Stripe, each with the charge it
+ * was recorded from. A full refund is offered for reversal; a partial one is
+ * only mentioned, because the copies may well have stayed sold (a discount
+ * given after the fact, a postage refund) and guessing how many came back
+ * would be inventing a number. A refund already raised is not raised again.
+ */
+export function refundsToRaise(refunds = [], sales = []) {
+  const byCharge = new Map();
+  (Array.isArray(sales) ? sales : []).forEach(sale => {
+    if (sale?.chargeId && !sale.voided) byCharge.set(sale.chargeId, sale);
+  });
+  const out = [];
+  const seen = new Set();
+  (Array.isArray(refunds) ? refunds : []).forEach(refund => {
+    if (!refund || refund.status === 'failed' || refund.status === 'canceled') return;
+    const sale = byCharge.get(refund.chargeId);
+    if (!sale || seen.has(refund.chargeId)) return;
+    if (sale.refundNoted) return;
+    seen.add(refund.chargeId);
+    const paid = Number(sale.paidAmount) || 0;
+    const back = Number(refund.chargeRefundedTotal ?? refund.amount) || 0;
+    const full = refund.fullyRefunded === true || (paid > 0 && back >= paid - 0.005);
+    out.push({ ...sale, refundId: refund.id || '', refunded: back, full });
+  });
+  return out;
+}
+
+/** What the alert says about refunded sales. */
+export function describeRefunds(items = []) {
+  const list = (Array.isArray(items) ? items : []).filter(Boolean);
+  const full = list.filter(item => item.full);
+  const partial = list.filter(item => !item.full);
+  if (!list.length) return { count: 0, title: '', detail: '', canReverse: false };
+
+  const parts = [];
+  if (full.length === 1) {
+    const [s] = full;
+    parts.push(`${s.qty} × ${s.bookTitle} was refunded in full. Reversing it puts ${s.qty === 1 ? 'the copy' : `the ${s.qty} copies`} back in stock and takes the sale out of your earnings.`);
+  } else if (full.length) {
+    const copies = full.reduce((sum, s) => sum + (Number(s.qty) || 0), 0);
+    parts.push(`${full.length} card sales were refunded in full (${copies} cop${copies === 1 ? 'y' : 'ies'}). Reversing them puts the stock back and takes them out of your earnings.`);
+  }
+  if (partial.length) {
+    parts.push(`${partial.length === 1 ? `Part of the ${partial[0].bookTitle} sale was` : `${partial.length} sales were partly`} refunded — check whether any copies came back.`);
+  }
+  return {
+    count: list.length,
+    title: full.length
+      ? (full.length === 1 ? 'A card sale was refunded' : `${full.length} card sales were refunded`)
+      : 'A card sale was partly refunded',
+    detail: parts.join(' '),
+    canReverse: full.length > 0,
+    reverseLabel: full.length === 1 ? 'Reverse it' : `Reverse all ${full.length}`,
+  };
+}

@@ -1150,7 +1150,7 @@
   </div>
   <label class="toggle-row" id="stripe-sale-auto-wrap">
     <span class="switch"><input type="checkbox" id="stripe-sale-auto-cb" checked onchange="toggleStripeSaleAuto()"><span class="track"></span></span>
-    <span><span class="toggle-title">Record card payments for a book automatically</span><span class="field-note" style="display:block;margin-top:2px;">When someone pays with a book’s QR code or payment link, the sale goes into your ledger and the stock comes off by itself. Only the amount of a card-reader tap reaches the app, not which book it was for, so those wait here for you.</span></span>
+    <span><span class="toggle-title">Record card payments for a book automatically</span><span class="field-note" style="display:block;margin-top:2px;">When someone pays with a book’s QR code or payment link, the sale goes into your ledger and the stock comes off by itself. For a tap on a card reader, type the book’s title in the payment’s description in the Stripe app and it’s recorded the same way; without a title it waits here for you. If a recorded payment is refunded, you’ll be offered to reverse the sale.</span></span>
   </label>
   <label class="toggle-row" id="stripe-paid-notify-wrap" style="margin-bottom:14px;">
     <span class="switch"><input type="checkbox" id="stripe-paid-notify-cb" onchange="toggleStripePaidNotify()"><span class="track"></span></span>
