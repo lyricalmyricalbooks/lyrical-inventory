@@ -71,4 +71,17 @@ describe('lazy Excel support', () => {
     expect(body).toMatch(/if \(!isCsv\) \{\s*try \{\s*xlsx = await ensureXlsx\(\)/);
     expect(body).toContain('csvToObjects(e.target.result)');
   });
+
+  it('reads formatted CSV amounts instead of importing them as zero', () => {
+    const mainContent = fs.readFileSync(path.join(__dirname, '..', 'src', 'main.js'), 'utf8');
+    const src = mainContent.match(/function importAmount\(value\) \{[\s\S]*?\n\}/)?.[0];
+    expect(src).toBeTruthy();
+    const importAmount = new Function(`${src}; return importAmount;`)();
+
+    expect(importAmount(12.5)).toBe(12.5);
+    expect(importAmount('$25.00')).toBe(25);
+    expect(importAmount('1,250.00')).toBe(1250);
+    expect(importAmount('3')).toBe(3);
+    expect(importAmount('')).toBeNaN();
+  });
 });

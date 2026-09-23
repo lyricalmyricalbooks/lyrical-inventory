@@ -8651,6 +8651,15 @@ function renderArtistReimburseBanner() {
 // ── SPREADSHEET IMPORT
 let _importRows = [];
 
+// A spreadsheet cell as a number. Excel cells usually arrive as numbers
+// already; CSV cells are always text, so drop the currency symbols and
+// thousands separators a formatted export carries ("$1,250.00") rather than
+// letting parseFloat() read that as NaN and import the sale at 0.
+function importAmount(value) {
+  if (typeof value === 'number') return value;
+  return parseFloat(String(value).replace(/[^\d.-]/g, ''));
+}
+
 async function handleImportFile(event) {
   const file = event.target.files[0];
   if (!file) return;
@@ -8702,8 +8711,8 @@ async function handleImportFile(event) {
         const num = row[k('order')] || row[k('num')] || '';
         const date = row[k('date')] || '';
         const chan = row[k('channel')] || row[k('chan')] || 'Website';
-        const qty = parseFloat(row[k('qty')] || row[k('quantity')] || 1) || 1;
-        const price = parseFloat(row[k('unit')] || row[k('price')] || 0) || 0;
+        const qty = importAmount(row[k('qty')] || row[k('quantity')] || 1) || 1;
+        const price = importAmount(row[k('unit')] || row[k('price')] || 0) || 0;
         const notes = row[k('note')] || '';
         // Parse date — handle Excel date objects, strings, etc.
         let parsedDate = today();
