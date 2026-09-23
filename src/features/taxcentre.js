@@ -3496,11 +3496,6 @@ function renderTaxCenter() {
   renderShippingReconciliationWorklist();
 }
 
-function _tcSvgEsc(s) {
-  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
 function _tcDeltaChip(delta, prevYear, goodWhenUp) {
   if (!delta) return '';
   if (delta.kind === 'new') {
@@ -3567,7 +3562,7 @@ function _tcRenderCashFlowSummary(ctx) {
     const marginCls = profitMargin == null ? '' : profitMargin >= 0 ? 'cf-kpi-good' : 'cf-kpi-bad';
     const napCls = netAfterPayouts >= 0 ? 'cf-kpi-good' : 'cf-kpi-bad';
     const chip = (label, value, valCls = '', title = '') =>
-      `<div class="cf-kpi"${title ? ` title="${_tcSvgEsc(title)}"` : ''}>
+      `<div class="cf-kpi"${title ? ` title="${escapeHtml(title)}"` : ''}>
         <div class="cf-kpi-val ${valCls}">${value}</div>
         <div class="cf-kpi-label">${label}</div>
       </div>`;
@@ -3649,14 +3644,14 @@ function _tcRenderSelectedCashFlowBucket() {
       type="button"
       aria-pressed="${activeType === type ? 'true' : 'false'}"
       onclick="tcSetCashFlowDetailType('${type}')">
-      ${_tcSvgEsc(label)} <span>${count}</span>
+      ${escapeHtml(label)} <span>${count}</span>
     </button>`;
   const rowHtml = (item) => `
     <tr>
-      <td>${_tcSvgEsc(item.date || '—')}</td>
-      <td>${_tcSvgEsc(item.desc || item.type || 'Transaction')}</td>
-      <td>${_tcSvgEsc(item.cat || (item.isIncome ? 'Income' : 'Expense'))}</td>
-      <td class="r ${item.isIncome ? 'cf-detail-income' : 'cf-detail-expense'}">${_tcSvgEsc(fmtSigned(item))}</td>
+      <td>${escapeHtml(item.date || '—')}</td>
+      <td>${escapeHtml(item.desc || item.type || 'Transaction')}</td>
+      <td>${escapeHtml(item.cat || (item.isIncome ? 'Income' : 'Expense'))}</td>
+      <td class="r ${item.isIncome ? 'cf-detail-income' : 'cf-detail-expense'}">${escapeHtml(fmtSigned(item))}</td>
     </tr>`;
   const label = data.selectedYear === 'all' ? bucket.label : `${bucket.label} ${data.selectedYear}`;
   detailEl.innerHTML = `
@@ -3664,14 +3659,14 @@ function _tcRenderSelectedCashFlowBucket() {
       <div class="cf-detail-head">
         <div>
           <div class="cf-detail-kicker">Selected period</div>
-          <strong>${_tcSvgEsc(label)}</strong>
+          <strong>${escapeHtml(label)}</strong>
         </div>
         <button class="btn tiny ghost" type="button" onclick="tcClearCashFlowBucket()">Clear</button>
       </div>
       <div class="cf-detail-totals">
-        <span><b>Income</b>${_tcSvgEsc(fmt(total(incomeRows), data.baseCurrency || 'CAD'))}</span>
-        <span><b>Expenses</b>${_tcSvgEsc(fmt(total(expenseRows), data.baseCurrency || 'CAD'))}</span>
-        <span><b>Net</b>${_tcSvgEsc(fmt((bucket.income || 0) - (bucket.expense || 0), data.baseCurrency || 'CAD'))}</span>
+        <span><b>Income</b>${escapeHtml(fmt(total(incomeRows), data.baseCurrency || 'CAD'))}</span>
+        <span><b>Expenses</b>${escapeHtml(fmt(total(expenseRows), data.baseCurrency || 'CAD'))}</span>
+        <span><b>Net</b>${escapeHtml(fmt((bucket.income || 0) - (bucket.expense || 0), data.baseCurrency || 'CAD'))}</span>
       </div>
       <div class="cf-detail-filters" aria-label="Filter selected period transactions">
         ${typeButton('all', 'All', rows.length)}
@@ -3742,24 +3737,24 @@ function _tcBuildCashFlowChart(allLedger, selectedYear, baseCurrency) {
     const x1 = gx + barGap;
     const x2 = x1 + barW + barGap;
     if (b.income > 0) {
-      bars += `<rect class="cf-chart-bar" tabindex="0" role="button" aria-label="View ${_tcSvgEsc(b.label)} cash flow details" onclick="tcSelectCashFlowBucket('${_tcSvgEsc(b.key)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();tcSelectCashFlowBucket('${_tcSvgEsc(b.key)}')}" x="${x1.toFixed(1)}" y="${(baseY - incH).toFixed(1)}" width="${barW.toFixed(1)}" height="${incH.toFixed(1)}" rx="2" fill="url(#income-grad)"><title>${_tcSvgEsc(b.label)} income: ${_tcSvgEsc(fmt(b.income, baseCurrency))}</title></rect>`;
+      bars += `<rect class="cf-chart-bar" tabindex="0" role="button" aria-label="View ${escapeHtml(b.label)} cash flow details" onclick="tcSelectCashFlowBucket('${escapeHtml(b.key)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();tcSelectCashFlowBucket('${escapeHtml(b.key)}')}" x="${x1.toFixed(1)}" y="${(baseY - incH).toFixed(1)}" width="${barW.toFixed(1)}" height="${incH.toFixed(1)}" rx="2" fill="url(#income-grad)"><title>${escapeHtml(b.label)} income: ${escapeHtml(fmt(b.income, baseCurrency))}</title></rect>`;
     }
     if (b.expense > 0) {
-      bars += `<rect class="cf-chart-bar" tabindex="0" role="button" aria-label="View ${_tcSvgEsc(b.label)} cash flow details" onclick="tcSelectCashFlowBucket('${_tcSvgEsc(b.key)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();tcSelectCashFlowBucket('${_tcSvgEsc(b.key)}')}" x="${x2.toFixed(1)}" y="${(baseY - expH).toFixed(1)}" width="${barW.toFixed(1)}" height="${expH.toFixed(1)}" rx="2" fill="url(#expense-grad)"><title>${_tcSvgEsc(b.label)} expenses: ${_tcSvgEsc(fmt(b.expense, baseCurrency))}</title></rect>`;
+      bars += `<rect class="cf-chart-bar" tabindex="0" role="button" aria-label="View ${escapeHtml(b.label)} cash flow details" onclick="tcSelectCashFlowBucket('${escapeHtml(b.key)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();tcSelectCashFlowBucket('${escapeHtml(b.key)}')}" x="${x2.toFixed(1)}" y="${(baseY - expH).toFixed(1)}" width="${barW.toFixed(1)}" height="${expH.toFixed(1)}" rx="2" fill="url(#expense-grad)"><title>${escapeHtml(b.label)} expenses: ${escapeHtml(fmt(b.expense, baseCurrency))}</title></rect>`;
     }
-    labels += `<text x="${(gx + groupW / 2).toFixed(1)}" y="${(H - 8).toFixed(1)}" text-anchor="middle" class="cf-chart-axis">${_tcSvgEsc(b.label)}</text>`;
+    labels += `<text x="${(gx + groupW / 2).toFixed(1)}" y="${(H - 8).toFixed(1)}" text-anchor="middle" class="cf-chart-axis">${escapeHtml(b.label)}</text>`;
   });
 
   const title = selectedYear === 'all' ? 'Income vs expenses by year' : `Income vs expenses by month — ${selectedYear}`;
   return `
     <div class="cf-chart-head">
-      <span class="cf-chart-title">${_tcSvgEsc(title)}</span>
+      <span class="cf-chart-title">${escapeHtml(title)}</span>
       <span class="cf-legend">
         <span class="cf-legend-item"><span class="cf-legend-dot" style="background:linear-gradient(135deg, var(--green-light), var(--green));"></span>Income</span>
         <span class="cf-legend-item"><span class="cf-legend-dot" style="background:linear-gradient(135deg, var(--red-light), var(--red));"></span>Expenses</span>
       </span>
     </div>
-    <svg class="cf-chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${_tcSvgEsc(title)}">
+    <svg class="cf-chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${escapeHtml(title)}">
       <defs>
         <linearGradient id="income-grad" x1="0%" y1="0%" x2="0%" y2="100%">
           <stop offset="0%" stop-color="var(--green-light, #3ba75c)"/>
@@ -4819,7 +4814,6 @@ export {
   _tcResolveReceiptImages,
   _tcRestoreLedgerPrefs,
   _tcSaveLedgerPrefs,
-  _tcSvgEsc,
   _tcTripRecords,
   _tcTripReportReceipts,
   confirmPendingExpense,
