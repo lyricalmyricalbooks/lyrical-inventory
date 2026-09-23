@@ -1041,7 +1041,11 @@ async function sendSingleEmailViaBackend(to, subject, body, replyTo, htmlBody = 
 
   if (body.includes('<') && !htmlBody) {
     finalHtmlBody = body;
-    finalPlainBody = body.replace(/<[^>]*>/g, '');
+    // Strip tags repeatedly: one pass can leave a tag behind when tags are
+    // nested inside each other (e.g. "<scr<b>ipt>").
+    let stripped = body, prev;
+    do { prev = stripped; stripped = stripped.replace(/<[^>]*>/g, ''); } while (stripped !== prev);
+    finalPlainBody = stripped.replace(/[<>]/g, '');
   } else if (!finalHtmlBody) {
     finalHtmlBody = parseMarkdownToHtml(body);
   }
@@ -1354,11 +1358,11 @@ async function renderCampaigns() {
             <span class="campaign-subject">${escapeHtml(c.subject)}</span>
             <span class="pill amber" style="font-size:var(--text-3xs);">Draft</span>
           </div>
-          <div class="campaign-meta-info">Created: ${fmtD(c.createdAt)} · Target: ${escapeHtml(c.segment)}</div>
+          <div class="campaign-meta-info">Created: ${escapeHtml(fmtD(c.createdAt))} · Target: ${escapeHtml(c.segment)}</div>
         </div>
         <div style="display:flex;gap:6px;">
-          <button class="btn sm cust-action-btn" onclick="editCampaignDraft('${c.id}')">Edit</button>
-          <button class="btn sm cust-action-btn" onclick="deleteCampaign('${c.id}')">Delete</button>
+          <button class="btn sm cust-action-btn" onclick="editCampaignDraft('${escapeHtml(c.id)}')">Edit</button>
+          <button class="btn sm cust-action-btn" onclick="deleteCampaign('${escapeHtml(c.id)}')">Delete</button>
         </div>
       </div>
     `).join('')
@@ -1379,19 +1383,19 @@ async function renderCampaigns() {
             <span class="campaign-subject">${escapeHtml(c.subject)}</span>
             <span class="pill green" style="font-size:var(--text-3xs);">Sent</span>
           </div>
-          <div class="campaign-meta-info">Sent: ${c.sentAt || fmtD(c.createdAt)} · Segment: ${escapeHtml(c.segment)}</div>
+          <div class="campaign-meta-info">Sent: ${escapeHtml(c.sentAt || fmtD(c.createdAt))} · Segment: ${escapeHtml(c.segment)}</div>
         </div>
         <div class="campaign-kpis">
           <div class="campaign-kpi-item">
             <span>Sent</span>
-            <strong>${c.stats ? c.stats.success : 0}</strong>
+            <strong>${Number(c.stats ? c.stats.success : 0) || 0}</strong>
           </div>
           ${c.stats && c.stats.failed ? `
           <div class="campaign-kpi-item">
             <span style="color:var(--status-critical, var(--red));">Failed</span>
-            <strong style="color:var(--status-critical, var(--red));">${c.stats.failed}</strong>
+            <strong style="color:var(--status-critical, var(--red));">${Number(c.stats.failed) || 0}</strong>
           </div>` : ''}
-          <button class="btn sm cust-action-btn" onclick="deleteCampaign('${c.id}')" title="Delete from history" style="margin-left:8px;">✕</button>
+          <button class="btn sm cust-action-btn" onclick="deleteCampaign('${escapeHtml(c.id)}')" title="Delete from history" style="margin-left:8px;">✕</button>
         </div>
       </div>
     `).join('')
