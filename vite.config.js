@@ -90,6 +90,21 @@ export default defineConfig({
     // vmThreads reuses the environment within a worker via a vm context, cutting
     // that overhead while still isolating each file's module registry/globals.
     pool: 'vmThreads',
+    // What lets a test import the real src/main.js (see
+    // tests/helpers/load-app.js). The Firebase SDK is loaded straight from the
+    // gstatic CDN and the PWA hook is a plugin virtual module; under test both
+    // resolve to inert local stubs instead. The CDN pattern matches any SDK
+    // version so a Firebase upgrade doesn't silently break the harness.
+    alias: [
+      {
+        find: /^https:\/\/www\.gstatic\.com\/firebasejs\/[^/]+\/[\w-]+\.js$/,
+        replacement: path.resolve(__dirname, 'tests/helpers/stubs/firebase-sdk.js'),
+      },
+      {
+        find: /^virtual:pwa-register$/,
+        replacement: path.resolve(__dirname, 'tests/helpers/stubs/pwa-register.js'),
+      },
+    ],
   },
   plugins: [
     syncAppsScriptPlugin(),
