@@ -7,7 +7,8 @@ import './style.css';
 import './styles/theme-dark.css';
 import './styles/phone.css';
 import { initPhoneLayouts } from './lib/phone-layout.js';
-initPhoneLayouts(document.getElementById('pw-app'));
+// Body, not #pw-app: the pop-up windows are siblings of the app shell.
+initPhoneLayouts(document.body);
 import './firebase.js';
 import { registerSW } from 'virtual:pwa-register';
 import { calcArtistEarnings, tierEffectiveCap, describePayout, payoutRequestCovered } from './lib/earnings.js';

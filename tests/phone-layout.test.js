@@ -63,3 +63,12 @@ test('grouped consignment puts its Details control outside the hidden spacer', (
   expect(toggle.closest('[aria-hidden="true"]')).toBeNull();
   expect(toggle.parentElement.textContent).toContain('Corner Bookshop');
 });
+test('pop-up window tables outside the app shell become record cards', () => {
+  document.body.innerHTML = '<div id="pw-app"></div><div class="overlay"><div class="modal"><table><thead><tr><th>Date</th><th>Description</th><th>Tax Category</th><th>Receipt</th><th>Amount (Orig)</th><th>Amount (CAD)</th><th></th></tr></thead><tbody id="tc-trip-detail-body"><tr><td>2026-09-01</td><td>Train to fair</td><td>Travel</td><td>—</td><td>US$40.00</td><td>CA$54.20</td><td><button>Edit</button></td></tr></tbody></table></div></div>';
+  stop = initPhoneLayouts(document.body);
+  const row = document.querySelector('#tc-trip-detail-body tr');
+  expect(row.classList.contains('phone-record')).toBe(true);
+  expect(row.cells[1].classList.contains('phone-record-lead')).toBe(true);
+  expect(row.cells[5].classList.contains('phone-record-detail')).toBe(false);
+  expect(row.cells[2].classList.contains('phone-record-detail')).toBe(true);
+});
