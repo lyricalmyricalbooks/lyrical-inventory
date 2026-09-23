@@ -7,33 +7,28 @@
 // this by hand every fair and something gets left off the packing list — but
 // this sheet's fields are different (a tally-column count up to 30, no base
 // currency/price-column set, and a packed-quantity per title instead of a
-// price override), so it gets its own small, dependency-free module.
+// price override), so it keeps its own normalizer and shares only the
+// list/storage plumbing in ./fair-presets.js.
+
+import {
+  createPresetList,
+  MAX_PRESET_NAME_LENGTH,
+  normalizeCurrencyCode,
+  presetId,
+  presetMissingBooks,
+  sortPresets,
+} from './fair-presets.js';
 
 export const ST_PRESET_STORAGE_KEY = 'lm_sales_tracker_fair_presets_v1';
 
-const MAX_NAME_LENGTH = 60;
 const MAX_COLS = 30;
 
-// Stable id derived from the name, so saving under an existing name updates
-// that preset instead of quietly stacking up near-duplicates.
-export function stPresetId(name) {
-  return String(name || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, MAX_NAME_LENGTH);
-}
+export const stPresetId = presetId;
 
 function clampCols(value) {
   const n = parseInt(value, 10);
   if (!Number.isFinite(n)) return 10;
   return Math.max(1, Math.min(MAX_COLS, n));
-}
-
-function normalizeCode(value) {
-  const code = String(value || '').trim().toUpperCase();
-  return /^[A-Z]{3}$/.test(code) ? code : '';
 }
 
 function normalizeQty(value) {
@@ -46,7 +41,7 @@ function normalizeQty(value) {
 // a hand-edited localStorage entry) must not take the print modal down with it.
 export function normalizeStPreset(raw) {
   if (!raw || typeof raw !== 'object') return null;
-  const name = String(raw.name || '').trim().slice(0, MAX_NAME_LENGTH);
+  const name = String(raw.name || '').trim().slice(0, MAX_PRESET_NAME_LENGTH);
   if (!name) return null;
   const id = stPresetId(raw.id || name) || stPresetId(name);
   if (!id) return null;
@@ -94,7 +89,7 @@ export function normalizeStPreset(raw) {
     id,
     name,
     cols: clampCols(raw.cols),
-    currencyCode: normalizeCode(raw.currencyCode) || 'EUR',
+    currencyCode: normalizeCurrencyCode(raw.currencyCode) || 'EUR',
     includeNotes: raw.includeNotes === true,
     bookIds,
     qtyBrought,
@@ -103,62 +98,20 @@ export function normalizeStPreset(raw) {
   };
 }
 
-export function sortStPresets(presets) {
-  return [...(presets || [])].sort((a, b) =>
-    String(a?.name || '').localeCompare(String(b?.name || ''), undefined, { sensitivity: 'base' })
-  );
-}
+export const sortStPresets = sortPresets;
 
-export function loadStPresets(storage) {
-  try {
-    const raw = storage?.getItem(ST_PRESET_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    const list = Array.isArray(parsed) ? parsed : Object.values(parsed || {});
-    return sortStPresets(list.map(normalizeStPreset).filter(Boolean));
-  } catch {
-    return [];
-  }
-}
-
-export function saveStPresets(storage, presets) {
-  const clean = sortStPresets((presets || []).map(normalizeStPreset).filter(Boolean));
-  try {
-    storage?.setItem(ST_PRESET_STORAGE_KEY, JSON.stringify(clean));
-  } catch {
-    // A full or unavailable quota shouldn't lose the in-memory list; the caller
-    // still gets the normalized presets back and the UI stays consistent.
-  }
-  return clean;
-}
-
-export function upsertStPreset(presets, preset) {
-  const normalized = normalizeStPreset(preset);
-  const existing = (presets || []).map(normalizeStPreset).filter(Boolean);
-  if (!normalized) return sortStPresets(existing);
-  return sortStPresets([...existing.filter((p) => p.id !== normalized.id), normalized]);
-}
-
-export function removeStPreset(presets, id) {
-  const target = stPresetId(id);
-  return sortStPresets((presets || []).map(normalizeStPreset).filter(Boolean).filter((p) => p.id !== target));
-}
-
-export function findStPreset(presets, id) {
-  const target = stPresetId(id);
-  if (!target) return null;
-  return (presets || []).find((p) => p && p.id === target) || null;
-}
+const stPresetList = createPresetList(ST_PRESET_STORAGE_KEY, normalizeStPreset);
+export const loadStPresets = stPresetList.load;
+export const saveStPresets = stPresetList.save;
+export const upsertStPreset = stPresetList.upsert;
+export const removeStPreset = stPresetList.remove;
+export const findStPreset = stPresetList.find;
 
 // Book ids a preset remembers that no longer exist in the catalog — a title
 // retired since the last fair. Custom titles aren't checked here: a preset
 // recreates them wholesale, so there's nothing in the catalog for them to
 // fall out of.
-export function stPresetMissingBooks(preset, availableIds) {
-  if (!preset || !Array.isArray(preset.bookIds)) return [];
-  const available = new Set(availableIds || []);
-  return preset.bookIds.filter((id) => !available.has(id));
-}
+export const stPresetMissingBooks = presetMissingBooks;
 
 function totalPacked(preset) {
   const fromCatalog = Object.values(preset.qtyBrought || {}).reduce((sum, n) => sum + n, 0);
