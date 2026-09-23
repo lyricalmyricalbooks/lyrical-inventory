@@ -233,10 +233,16 @@ describe('when another device wrote in the meantime (merged result)', () => {
   });
 
   it('warns, with a count, when the same record was changed in both places', async () => {
-    mergeWithOtherDevice({ conflicts: [{ part: 'hist', id: 'S-1' }, { part: 'hist', id: 'S-9' }] });
+    // Real conflict shape (see mergePart): the same row edited differently on
+    // each device. The price differs, so both are worth a person's attention.
+    const row = (id, price) => ({ id, date: '2026-09-01', qty: 1, price, channel: 'pos' });
+    mergeWithOtherDevice({ conflicts: [
+      { part: 'hist', key: 'S-1', local: row('S-1', 20), remote: row('S-1', 25) },
+      { part: 'hist', key: 'S-9', local: row('S-9', 30), remote: row('S-9', 35) },
+    ] });
     recordSale();
     await app.main.saveState(BOOK);
-    expect(app.toast()).toMatch(/2 records changed in both places/);
+    expect(app.toast()).toMatch(/2 records were changed on two devices at once/);
   });
 
   it('fills in any list the merge dropped, so the screens still have arrays to read', async () => {
