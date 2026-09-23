@@ -4486,6 +4486,7 @@ export function switchTab(name) {
   // Dashboard in All books is the combined inventory overview, not a book panel.
   if (name === 'dashboard' && activeBook === 'all') {
     switchBook('all');
+    if (window.matchMedia?.('(max-width: 768px)').matches) window.scrollTo(0, 0);
     return;
   }
 
@@ -4535,6 +4536,9 @@ export function switchTab(name) {
 
   const panel = $(needsBook ? 'tab-select-book' : 'tab-' + name);
   if (panel) { panel.style.display = 'block'; panel.classList.add('active'); }
+  // The bottom bar changes pages inside one document. Keep a phone from
+  // opening the next page at the previous page's deep scroll position.
+  if (window.matchMedia?.('(max-width: 768px)').matches) window.scrollTo(0, 0);
 
   if (needsBook) {
     showBookChoice(name);

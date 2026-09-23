@@ -19227,6 +19227,10 @@ button[onclick="refreshUmamiStats()"]:active {
   #tab-manual .price-inline > *{min-width:0;width:100%;}
   #tab-manual .order-preview-figures{flex-direction:column;align-items:stretch;}
   #tab-website .web-orders-actions{display:grid;grid-template-columns:1fr 1fr;width:100%;}
+  #tab-website .web-orders-hero::after{display:none;}
+  #tab-website .web-order-steps{display:none;}
+  #tab-website .web-orders-status{grid-template-columns:repeat(2,minmax(0,1fr));}
+  #tab-website .web-orders-status .web-stat:last-child{grid-column:1/-1;}
   #tab-website .web-orders-actions .recon-toggle{grid-column:1/-1;min-height:44px;margin:0 !important;}
   #tab-website .web-orders-actions .btn{min-width:0;padding-inline:8px;white-space:normal;}
   #tab-website .order-card-top,#tab-website .order-card-bottom{flex-wrap:wrap;}
