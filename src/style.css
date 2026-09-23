@@ -17750,29 +17750,6 @@ button[onclick="refreshUmamiStats()"]:active {
 #pub-sidebar.nav-alerts-hidden .sync-review-badge,
 #pub-sidebar.nav-alerts-hidden #oc-nav-badge { display: none !important; }
 
-.sidebar-alert-toggle {
-  min-height: 44px;
-  margin: 2px 8px 4px 42px;
-  padding: 0 10px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 7px;
-  border: 0;
-  border-radius: var(--r);
-  background: transparent;
-  color: var(--content-muted);
-  font: 600 var(--text-xs)/1 var(--font-ui);
-  cursor: pointer;
-  transition: background-color var(--dur-base) var(--ease-entrance), color var(--dur-base) var(--ease-entrance);
-}
-.sidebar-alert-toggle:hover { background: var(--surface-inset); color: var(--content-primary); }
-.sidebar-alert-toggle[aria-pressed="true"] { color: var(--content-secondary); }
-.sidebar-alert-toggle:focus-visible {
-  outline: 2px solid var(--gold);
-  outline-offset: 2px;
-}
-
 /* The strip on the Website orders screen. The Gmail scan reports its own status
    a few lines below this; when the storefront disagrees with it, that has to be
    visible at the same glance rather than one tab away. */

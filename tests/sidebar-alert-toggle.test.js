@@ -9,10 +9,13 @@ const js = fs.readFileSync(path.join(dirname, '../src/main.js'), 'utf8');
 const css = fs.readFileSync(path.join(dirname, '../src/style.css'), 'utf8');
 
 describe('sidebar alert control', () => {
-  it('provides an accessible reversible control next to the To-do navigation', () => {
-    expect(html).toMatch(/id="sidebar-alert-toggle"[\s\S]*aria-pressed="false"/);
+  it('lives in the sidebar account menu, not the navigation list', () => {
+    expect(html).toMatch(/id="sidebar-alert-toggle"[\s\S]*?role="menuitemcheckbox"[\s\S]*?aria-checked="false"/);
     expect(html).toContain('onclick="toggleSidebarAlerts()"');
-    expect(html.indexOf('sidebar-alert-toggle')).toBeGreaterThan(html.indexOf('todo-sidebar-btn'));
+    const menu = html.slice(html.indexOf('id="side-acct-menu"'), html.indexOf('</aside>'));
+    expect(menu).toContain('id="sidebar-alert-toggle"');
+    const navs = html.slice(html.indexOf('<aside id="pub-sidebar"'), html.indexOf('id="side-acct"'));
+    expect(navs).not.toContain('sidebar-alert-toggle');
   });
 
   it('persists the display preference without deleting notification data', () => {
@@ -25,6 +28,6 @@ describe('sidebar alert control', () => {
   it('only suppresses notification badges inside the publisher sidebar', () => {
     expect(css).toContain('#pub-sidebar.nav-alerts-hidden .todo-nav-badge');
     expect(css).toContain('#pub-sidebar.nav-alerts-hidden .health-badge');
-    expect(css).toMatch(/\.sidebar-alert-toggle\s*\{[\s\S]*min-height:\s*44px/);
+    expect(css).toMatch(/\.pub-shell \.pub-side-item\s*\{[\s\S]*?min-height:\s*44px/);
   });
 });

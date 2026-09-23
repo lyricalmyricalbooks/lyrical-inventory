@@ -5425,12 +5425,12 @@ function renderSidebarAlertPreference() {
   const label = $('sidebar-alert-toggle-label');
   if (sidebar) sidebar.classList.toggle('nav-alerts-hidden', _sidebarAlertsHidden);
   if (button) {
-    button.setAttribute('aria-pressed', String(_sidebarAlertsHidden));
+    button.setAttribute('aria-checked', String(_sidebarAlertsHidden));
     button.title = _sidebarAlertsHidden
       ? 'Show the red notification badges in this menu'
       : 'Hide the red notification badges in this menu';
   }
-  if (label) label.textContent = _sidebarAlertsHidden ? 'Show alerts' : 'Clear alerts';
+  if (label) label.textContent = _sidebarAlertsHidden ? 'Show menu alerts' : 'Hide menu alerts';
 }
 
 function toggleSidebarAlerts() {
