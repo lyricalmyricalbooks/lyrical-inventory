@@ -82,7 +82,9 @@ export function describeCardSales(outcomes = []) {
   const parts = [];
   if (recorded.length === 1) {
     const [o] = recorded;
-    parts.push(`${o.qty} × ${o.bookTitle} paid by card and recorded. ${o.stockLeft} left in stock.`);
+    parts.push(o.books > 1
+      ? `${o.qty} copies of ${o.bookTitle} paid by card and recorded.`
+      : `${o.qty} × ${o.bookTitle} paid by card and recorded. ${o.stockLeft} left in stock.`);
   } else if (recorded.length) {
     const copies = recorded.reduce((sum, o) => sum + (o.qty || 0), 0);
     parts.push(`${recorded.length} card payments recorded — ${copies} cop${copies === 1 ? 'y' : 'ies'} in all.`);
@@ -100,5 +102,99 @@ export function describeCardSales(outcomes = []) {
       ? (recorded.length === 1 ? 'Card sale recorded' : `${recorded.length} card sales recorded`)
       : (review.length === 1 ? 'A card payment needs you' : `${review.length} card payments need you`),
     detail: parts.join(' '),
+  };
+}
+
+// ─── A card-reader tap that names its book ────────────────────────────────
+//
+// A tap on a card reader reaches the app as an amount and a description, and
+// nothing else. The description is the one field the seller can type into at
+// the moment of sale (the Stripe app's "Add description"), so a title typed
+// there is how a reader sale can say which book it was. Exactly one catalogue
+// title has to appear in it; a description naming two books, or none, is not
+// read as either.
+
+const normalize = (value) => String(value ?? '')
+  .toLowerCase()
+  .normalize('NFD')
+  .replace(/[̀-ͯ]/g, '')
+  .replace(/[^a-z0-9]+/g, ' ')
+  .trim();
+
+/** The one catalogue book a payment description names, or '' when none or several. */
+export function bookNamedIn(text, books = {}) {
+  const haystack = ` ${normalize(text)} `;
+  if (!haystack.trim()) return '';
+  const hits = new Set();
+  Object.values(books || {}).forEach(book => {
+    const title = normalize(book?.title);
+    // Very short titles would match inside ordinary words.
+    if (!book?.id || title.length < 4) return;
+    if (haystack.includes(` ${title} `)) hits.add(book.id);
+  });
+  return hits.size === 1 ? [...hits][0] : '';
+}
+
+// ─── A recorded sale whose money went back ────────────────────────────────
+
+/**
+ * Which refunds reach a sale this app recorded from a Stripe payment.
+ *
+ * `sales` are the ledger rows that came from Stripe, each with the charge it
+ * was recorded from. A full refund is offered for reversal; a partial one is
+ * only mentioned, because the copies may well have stayed sold (a discount
+ * given after the fact, a postage refund) and guessing how many came back
+ * would be inventing a number. A refund already raised is not raised again.
+ */
+export function refundsToRaise(refunds = [], sales = []) {
+  // One payment can be several ledger rows (a card-reader sale of two
+  // different books), so sales are grouped by the charge they came from.
+  const byCharge = new Map();
+  (Array.isArray(sales) ? sales : []).forEach(sale => {
+    if (!sale?.chargeId || sale.voided) return;
+    if (!byCharge.has(sale.chargeId)) byCharge.set(sale.chargeId, []);
+    byCharge.get(sale.chargeId).push(sale);
+  });
+  const out = [];
+  const seen = new Set();
+  (Array.isArray(refunds) ? refunds : []).forEach(refund => {
+    if (!refund || refund.status === 'failed' || refund.status === 'canceled') return;
+    const rows = (byCharge.get(refund.chargeId) || []).filter(row => !row.refundNoted);
+    if (!rows.length || seen.has(refund.chargeId)) return;
+    seen.add(refund.chargeId);
+    const paid = rows.reduce((sum, row) => sum + (Number(row.paidAmount) || 0), 0);
+    const back = Number(refund.chargeRefundedTotal ?? refund.amount) || 0;
+    const full = refund.fullyRefunded === true || (paid > 0 && back >= paid - 0.005);
+    rows.forEach(row => out.push({ ...row, refundId: refund.id || '', refunded: back, full }));
+  });
+  return out;
+}
+
+/** What the alert says about refunded sales. */
+export function describeRefunds(items = []) {
+  const list = (Array.isArray(items) ? items : []).filter(Boolean);
+  const full = list.filter(item => item.full);
+  const partial = list.filter(item => !item.full);
+  if (!list.length) return { count: 0, title: '', detail: '', canReverse: false };
+
+  const parts = [];
+  if (full.length === 1) {
+    const [s] = full;
+    parts.push(`${s.qty} × ${s.bookTitle} was refunded in full. Reversing it puts ${s.qty === 1 ? 'the copy' : `the ${s.qty} copies`} back in stock and takes the sale out of your earnings.`);
+  } else if (full.length) {
+    const copies = full.reduce((sum, s) => sum + (Number(s.qty) || 0), 0);
+    parts.push(`${full.length} card sales were refunded in full (${copies} cop${copies === 1 ? 'y' : 'ies'}). Reversing them puts the stock back and takes them out of your earnings.`);
+  }
+  if (partial.length) {
+    parts.push(`${partial.length === 1 ? `Part of the ${partial[0].bookTitle} sale was` : `${partial.length} sales were partly`} refunded — check whether any copies came back.`);
+  }
+  return {
+    count: list.length,
+    title: full.length
+      ? (full.length === 1 ? 'A card sale was refunded' : `${full.length} card sales were refunded`)
+      : 'A card sale was partly refunded',
+    detail: parts.join(' '),
+    canReverse: full.length > 0,
+    reverseLabel: full.length === 1 ? 'Reverse it' : `Reverse all ${full.length}`,
   };
 }
