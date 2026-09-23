@@ -40,7 +40,7 @@ function makeHarness({ state, book = BOOK, isPublisher = true, submissions = {} 
     names: [
       'CHANNEL_COLORS', 'CHAN_OTHER', 'HIST_PAGE', 'HIST_SEARCH_MIN',
       'channelColor', 'chanLabel', 'visibleTabName',
-      'renderConsignHistRow', 'renderOrderShippingSummary',
+      'renderConsignHistRow', 'deliveryPhrase', 'renderOrderShippingSummary',
       'renderHistSearchBar', 'histNoSearchMatchHtml',
       'histEmptyStateHtml', 'renderHistFilterBar',
       'renderHistReconciliationPanel', 'scheduleHistVoidSweep',

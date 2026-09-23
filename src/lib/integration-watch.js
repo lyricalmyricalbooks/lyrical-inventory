@@ -32,6 +32,7 @@ export const INTEGRATIONS = Object.freeze({
   bigcartel: { id: 'bigcartel', label: 'Big Cartel' },
   shippo: { id: 'shippo', label: 'Shippo' },
   canadapost: { id: 'canadapost', label: 'Canada Post' },
+  'canadapost-tracking': { id: 'canadapost-tracking', label: 'Parcel tracking' },
   'shipping-email': { id: 'shipping-email', label: 'Shipping email scan' },
   stripe: { id: 'stripe', label: 'Stripe' },
   'stripe-fees': { id: 'stripe-fees', label: 'Stripe fees' },

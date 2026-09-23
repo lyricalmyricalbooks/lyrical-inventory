@@ -63,6 +63,7 @@ import {
   receiptSweepWindowStart,
 } from '../lib/receipt-drafts.js';
 import { dismissAppAlert, pushAppAlert } from '../lib/app-alert.js';
+import { describeReceiptSweep, isReadyToFile } from '../lib/receipt-ready.js';
 import {
   integrationBackoffMs,
   noteIntegrationFailure,
@@ -5534,16 +5535,39 @@ async function importEmailReceiptDrafts() {
   const drafts = (_emailReceiptDrafts || []).filter(r => r.include !== false);
   if (!drafts.length) { showToast('No drafts selected', 'warn'); return; }
 
-  if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
-  const fallbackCat = $('email-receipt-default-cat')?.value || 'Other';
-  const baseCur = TAX_CENTER.settings?.baseCurrency || 'CAD';
-
   const btn = document.querySelector('#email-receipt-results .btn.gold');
   if (btn) { btn.disabled = true; btn.textContent = 'Importing…'; }
 
+  const counts = await _fileReceiptDrafts(drafts, {
+    fallbackCat: $('email-receipt-default-cat')?.value || 'Other',
+    attachedFiles: Array.from($('email-receipt-files')?.files || []),
+  });
+  const { imported, importedNeedsAmount, relinked, skippedDup } = counts;
+
+  const msgParts = [];
+  if (imported) msgParts.push(`✓ Imported ${imported} expense${imported > 1 ? 's' : ''}`);
+  if (importedNeedsAmount) msgParts.push(`${importedNeedsAmount} need${importedNeedsAmount > 1 ? '' : 's'} an amount`);
+  if (relinked) msgParts.push(`📎 ${relinked} receipt${relinked > 1 ? 's' : ''} linked to existing`);
+  if (skippedDup) msgParts.push(`${skippedDup} duplicate${skippedDup > 1 ? 's' : ''} skipped`);
+  showToast(msgParts.join(' · ') || 'Nothing imported', (imported || relinked) ? 'ok' : 'warn');
+
+  if (imported || relinked) closeEmailReceiptImportModal();
+  else if (btn) { btn.disabled = false; btn.textContent = 'Import selected drafts'; }
+}
+
+/**
+ * File these drafted receipts as expenses, and report what happened.
+ *
+ * The whole of what Import used to do, minus the screen: shared by the Import
+ * button (which passes whatever files are attached in the modal) and the
+ * inbox alert's one-tap File button (which passes none, because nothing in the
+ * modal belongs to those receipts).
+ */
+async function _fileReceiptDrafts(drafts, { fallbackCat = 'Other', attachedFiles = [] } = {}) {
+  if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
+  const baseCur = TAX_CENTER.settings?.baseCurrency || 'CAD';
+
   // Save attached files to local receipt storage
-  const fileInput = $('email-receipt-files');
-  const attachedFiles = Array.from(fileInput?.files || []);
   const savedReceiptPaths = [];
   if (attachedFiles.length) {
     for (const file of attachedFiles) {
@@ -5678,16 +5702,7 @@ async function importEmailReceiptDrafts() {
   updateEmailInboxBadge();
 
   if (typeof renderTaxCenter === 'function') renderTaxCenter();
-
-  const msgParts = [];
-  if (imported) msgParts.push(`✓ Imported ${imported} expense${imported > 1 ? 's' : ''}`);
-  if (importedNeedsAmount) msgParts.push(`${importedNeedsAmount} need${importedNeedsAmount > 1 ? '' : 's'} an amount`);
-  if (relinked) msgParts.push(`📎 ${relinked} receipt${relinked > 1 ? 's' : ''} linked to existing`);
-  if (skippedDup) msgParts.push(`${skippedDup} duplicate${skippedDup > 1 ? 's' : ''} skipped`);
-  showToast(msgParts.join(' · ') || 'Nothing imported', (imported || relinked) ? 'ok' : 'warn');
-
-  if (imported || relinked) closeEmailReceiptImportModal();
-  else if (btn) { btn.disabled = false; btn.textContent = 'Import selected drafts'; }
+  return { imported, importedNeedsAmount, relinked, skippedDup };
 }
 
 // ── The receipt inbox scans itself ──────────────────────────────────────
@@ -5783,20 +5798,56 @@ function dismissEmailReceiptDraft(i) {
   updateEmailInboxBadge();
 }
 
-/** The card for a run that found something. */
+// The receipts the last sweep judged complete enough to file in one tap, by
+// their stable ref. Refs rather than the objects themselves, because the draft
+// list is rebuilt when drafts merge and an old reference would file a stale copy.
+let _sweepReadyRefs = [];
+
+/**
+ * The card for a run that found something.
+ *
+ * When some of what it found is complete — an amount read, a real category, a
+ * confident reading, and no match already in the books — the card names them
+ * and offers to file just those. Everything else stays in the review table.
+ */
 function _showReceiptSweepAlert(foundDrafts) {
-  const flagged = foundDrafts.filter(d => d.amountUnknown).length;
-  const n = foundDrafts.length;
+  const dupIndex = _buildDuplicateExpenseIndex();
+  const ready = foundDrafts.filter(d => isReadyToFile(d, { duplicate: _isLikelyDuplicateExpense(d, dupIndex) }));
+  _sweepReadyRefs = ready.map(d => d.ref).filter(Boolean);
+  const said = describeReceiptSweep({ found: foundDrafts, ready });
   pushAppAlert({
     id: 'receipt-sweep',
     icon: '🧾',
-    title: `${n} new receipt${n === 1 ? '' : 's'} found in your inbox`,
-    detail: flagged
-      ? `Waiting for you to review — ${flagged} need${flagged === 1 ? 's' : ''} an amount.`
-      : 'Waiting for you to review.',
-    actionLabel: 'Review',
-    action: 'openReceiptSweepReviewFromAlert(event)',
+    title: said.title,
+    detail: said.detail,
+    actionLabel: said.canFile ? said.fileLabel : 'Review',
+    action: said.canFile ? 'fileReadyReceiptsFromAlert(event)' : 'openReceiptSweepReviewFromAlert(event)',
   });
+}
+
+/** The alert's one-tap File: the easy receipts go straight into the books. */
+async function fileReadyReceiptsFromAlert(event) {
+  if (event) event.stopPropagation();
+  const refs = new Set(_sweepReadyRefs);
+  const drafts = (_emailReceiptDrafts || []).filter(d => d.ref && refs.has(d.ref));
+  _sweepReadyRefs = [];
+  dismissAppAlert('receipt-sweep');
+  if (!drafts.length) { showToast('Those receipts have already been dealt with', 'warn'); return; }
+
+  let counts;
+  try {
+    counts = await _fileReceiptDrafts(drafts);
+  } catch (error) {
+    console.error('Filing receipts from the alert failed', error);
+    showToast('Could not file those receipts. They are still waiting in your receipt inbox.', 'err', 6000);
+    return;
+  }
+  const left = (_emailReceiptDrafts || []).length;
+  const filed = counts.imported + counts.relinked;
+  const leftNote = left ? ` ${left} still waiting in your receipt inbox.` : '';
+  showToast(filed
+    ? `✓ Filed ${filed} receipt${filed === 1 ? '' : 's'}.${leftNote}`
+    : `Nothing new to file — already in your books.${leftNote}`, filed ? 'ok' : 'warn', 5000);
 }
 
 /**
@@ -6590,6 +6641,7 @@ export {
   voidExpense,
   dismissEmailReceiptDraft,
   openReceiptSweepReviewFromAlert,
+  fileReadyReceiptsFromAlert,
   startReceiptEmailSweep,
   sweepReceiptEmails,
 };

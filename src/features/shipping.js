@@ -117,6 +117,13 @@ import {
   dueForShippoCheck,
 } from '../lib/shippo-watch.js';
 import { browserWatchState, dueForCheck, effectiveInterval, startWatch } from '../lib/watch-schedule.js';
+import { SYNC_TONES } from '../lib/sync-status.js';
+import {
+  describeDeliveryNews,
+  isDeliveryNews,
+  readDelivery,
+  shipmentsToFollow,
+} from '../lib/delivery-watch.js';
 import {
   describeInvoiceAvailability,
   invoiceIndexByTransaction,
@@ -234,6 +241,14 @@ function getShippingReconciliationOrders() {
   return Array.from(byNumber.values());
 }
 
+function deliveryPhrase(order) {
+  if (order?.deliveredDate) return `Delivered ${escapeHtml(fmtD(order.deliveredDate) || order.deliveredDate)}`;
+  if (order?.deliveryState === 'pickup') return '<strong>Waiting at a post office</strong>';
+  if (order?.deliveryState === 'returning') return '<strong>Coming back to you</strong>';
+  if (order?.deliveryState === 'stuck') return '<strong>No tracking update for a week</strong>';
+  return '';
+}
+
 function renderOrderShippingSummary(order) {
   const expenses = (TAX_CENTER.businessExpenses || []).filter(expense => String(expense?.ref || '').startsWith('shippo:') || String(expense?.ref || '').startsWith('canadapost:'));
   const summary = linkedShippingSummary(order, expenses, 1);
@@ -245,6 +260,10 @@ function renderOrderShippingSummary(order) {
   if (summary.postageBase == null && !order.shipped) {
     parts.push(summary.linkedCount ? 'Postage linked' : 'Postage not linked');
   }
+  // What the parcel-following watch last heard, in words, so a waiting or
+  // returning parcel is visible on the order itself, not only in a passing card.
+  const delivery = deliveryPhrase(order);
+  if (delivery) parts.push(delivery);
   const declId = order.declarationId || order.zonosDeclarationId || '';
   if (declId) {
     parts.push(`<span class="zonos-decl-tag" style="font-family:var(--font-mono);font-size:var(--text-xs);color:var(--green);background:rgba(46,125,50,0.08);padding:2px 6px;border-radius:var(--r);border:var(--stroke-hair) solid rgba(46,125,50,0.2);display:inline-flex;align-items:center;gap:4px;">Decl ID: <strong>${escapeHtml(declId)}</strong> <button type="button" onclick="navigator.clipboard.writeText('${escapeHtml(declId)}');showToast('✓ Copied Declaration ID');" style="background:none;border:none;cursor:pointer;padding:0 2px;font-size:var(--text-xs);" title="Copy Declaration ID">📋</button></span>`);
@@ -1698,6 +1717,148 @@ function startShippingEmailSweep() {
   if (_emailSweepStarted || typeof window === 'undefined') return;
   _emailSweepStarted = true;
   startWatch(() => { sweepShippingEmails(); }, { intervalMs: EMAIL_SWEEP_INTERVAL_MS });
+}
+
+// ── Following parcels to the door ─────────────────────────────────────────
+//
+// Once a label was bought the app forgot the parcel. It could already ask
+// Canada Post about a tracking number — the audit button above does exactly
+// that — but only when someone pressed it. This asks on its own, a few parcels
+// at a time, writes what it hears onto the order, and says something only when
+// the news changes: delivered, waiting at a post office, on its way back, or
+// not moving. The rules live in lib/delivery-watch.js.
+
+const DELIVERY_WATCH_INTERVAL_MS = 60 * 60 * 1000;
+const DELIVERY_WATCH_LAST_KEY = 'lm-delivery-watch-last';
+
+let _deliveryWatchStarted = false;
+let _deliveryChecking = false;
+
+function readDeliveryWatchStamp() {
+  try { return Number(localStorage.getItem(DELIVERY_WATCH_LAST_KEY)) || 0; } catch (_) { return 0; }
+}
+
+function writeDeliveryWatchStamp(at) {
+  try { localStorage.setItem(DELIVERY_WATCH_LAST_KEY, String(at)); } catch (_) { /* private mode */ }
+}
+
+/** Every shipped ledger row, with the book it lives in so the answer can be saved back. */
+function shippedLedgerRows() {
+  const rows = [];
+  Object.entries(states).forEach(([bookId, state]) => {
+    (state?.hist || []).forEach(entry => {
+      if (entry && entry.shipped) rows.push({ bookId, entry });
+    });
+  });
+  return rows;
+}
+
+async function followShippedParcels({ force = false } = {}) {
+  if (isAuthor()) return null;
+  const { apiKey, apiSecret } = resolveCanadaPostCredentials(TAX_CENTER.settings || {});
+  const configured = !!(apiKey && apiSecret);
+  const { online, visible } = browserWatchState();
+  const due = force
+    ? configured && online && !_deliveryChecking
+    : dueForCheck({
+      lastCheckedAt: readDeliveryWatchStamp(),
+      now: Date.now(),
+      intervalMs: effectiveInterval(
+        DELIVERY_WATCH_INTERVAL_MS,
+        integrationBackoffMs('canadapost-tracking', DELIVERY_WATCH_INTERVAL_MS),
+      ),
+      online, configured, visible, busy: _deliveryChecking,
+    });
+  if (!due) return null;
+
+  _deliveryChecking = true;
+  try {
+    const now = Date.now();
+    const todo = shipmentsToFollow(shippedLedgerRows(), { now });
+    const isTest = !!TAX_CENTER.settings?.cpTestMode;
+    const touched = new Set();
+    const news = [];
+    let answered = 0;
+    let lastError = null;
+
+    for (const item of todo) {
+      let result = null;
+      try {
+        result = await verifyCanadaPostTrackingPin({ pin: item.pin, apiKey, apiSecret, isTest });
+        answered++;
+      } catch (error) {
+        // "No such parcel" is the tracking audit's business, not this watch's —
+        // and a network failure says nothing about the parcel at all. Either
+        // way the row is left exactly as it was, to be asked again later.
+        lastError = error;
+        continue;
+      }
+      const entry = item.entry;
+      const reading = readDelivery(result, { now, shippedDate: entry.shippedDate || entry.date });
+      entry.deliveryCheckedAt = new Date(now).toISOString();
+      touched.add(item.bookId);
+      if (!reading) continue;
+
+      const previous = entry.deliveryState || '';
+      entry.deliveryState = reading.state;
+      entry.deliveryStatus = reading.status;
+      if (reading.eventDate) entry.deliveryEventDate = reading.eventDate;
+      if (reading.state === 'delivered') entry.deliveredDate = reading.deliveredDate;
+      if (isDeliveryNews(previous, reading)) {
+        news.push({
+          state: reading.state,
+          place: reading.place,
+          num: entry.num || '',
+          customer: entry.shipName || '',
+        });
+      }
+    }
+
+    // One save per book that changed, not one per parcel.
+    for (const bookId of touched) saveState(bookId);
+    writeDeliveryWatchStamp(Date.now());
+
+    if (todo.length && !answered && lastError) {
+      noteIntegrationFailure('canadapost-tracking', lastError, { online, configured });
+    } else {
+      noteIntegrationSuccess('canadapost-tracking');
+    }
+
+    if (news.length) showDeliveryAlert(news);
+    return { asked: todo.length, answered, news: news.length };
+  } catch (error) {
+    console.warn('Delivery watch failed', error);
+    noteIntegrationFailure('canadapost-tracking', error, { online, configured });
+    return null;
+  } finally {
+    _deliveryChecking = false;
+  }
+}
+
+function showDeliveryAlert(news) {
+  const said = describeDeliveryNews(news);
+  if (!said.count) return;
+  pushAppAlert({
+    id: 'delivery-watch',
+    icon: said.needsYou ? '📮' : '📬',
+    title: said.title,
+    detail: said.detail,
+    tone: said.needsYou ? SYNC_TONES.PENDING : '',
+    actionLabel: said.needsYou ? 'Open Shipping' : '',
+    action: said.needsYou ? 'openShippingFromDeliveryAlert(event)' : '',
+  });
+}
+
+function openShippingFromDeliveryAlert(event) {
+  if (event) event.stopPropagation();
+  dismissAppAlert('delivery-watch');
+  switchTab('shipping');
+}
+
+function startDeliveryWatch() {
+  if (_deliveryWatchStarted || typeof window === 'undefined') return;
+  _deliveryWatchStarted = true;
+  startWatch(() => { followShippedParcels(); }, { intervalMs: DELIVERY_WATCH_INTERVAL_MS });
 }
 
 const SHIPPO_WATCH_INTERVAL_MS = 5 * 60 * 1000;
@@ -9402,6 +9563,8 @@ export {
   startCanadaPostSweep,
   sweepShippingEmails,
   startShippingEmailSweep,
+  startDeliveryWatch,
+  openShippingFromDeliveryAlert,
   reconciliationBacklog,
   applyOrderPrefill,
   applyOrderParcelPlan,
