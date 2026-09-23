@@ -12,7 +12,16 @@ const featureDir = path.join(root, 'src/features');
 // openM/closeM/confirmDialog are now imported from that leaf module instead of
 // from main.js, so they no longer count against any feature's seam.
 const MAIN_IMPORT_BUDGET = {
-  'opencall.js': 17,
+  // 17 -> 8 when the Customers tab moved out to customers.js: the six
+  // mailing-list / campaign names Open Call used now come from that sibling,
+  // and the template-editor helpers (parseMarkdownToHtml and friends) moved in
+  // here, where their only other caller lives.
+  'opencall.js': 8,
+  // Set at extraction. The buyer list reads the order history (orders, states,
+  // BOOKS, BOOK_LIST), the Stripe reconciliation fetch and key, the applied-ids
+  // cache, the audience summary card and the POS currency symbol; the rest is
+  // the usual $ / showToast / today / sheetsUrl.
+  'customers.js': 13,
   // 23 -> 24 for commitRecoveredWebsiteOrder: the reconciliation worklist can
   // now rebuild a website order the Gmail scan missed, and writing one to the
   // ledger touches the applied-ids cache, the scan memory and the Sheets sync —
@@ -244,10 +253,14 @@ describe('cross-module imports resolve', () => {
     return new Set(block.split(',').map(s => s.trim()).filter(Boolean));
   };
 
-  // main.js has no trailing export block; its exports are inline.
+  // main.js has no trailing export block; its exports are inline, apart from
+  // the odd `export { name };` for a declaration that sits in a section being
+  // edited elsewhere (codeToSymbol, which customers.js takes from the POS code).
   const mainExports = new Set([
     ...[...mainJs.matchAll(/^export (?:async )?function ([A-Za-z_$][\w$]*)/gm)].map(m => m[1]),
     ...[...mainJs.matchAll(/^export (?:const|let|var) ([A-Za-z_$][\w$]*)/gm)].map(m => m[1]),
+    ...[...mainJs.matchAll(/^export \{([^}]*)\};?$/gm)]
+      .flatMap(m => m[1].split(',').map(s => s.trim()).filter(Boolean)),
   ]);
 
   const sources = Object.fromEntries(

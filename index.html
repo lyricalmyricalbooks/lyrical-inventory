@@ -4447,7 +4447,40 @@
     </div>
   </div>
 </div>
+<!-- EDITS MADE ON TWO DEVICES — review dialog. When the same record was changed
+     on two devices before they synced, the merge keeps this device's version and
+     src/lib/sync-conflicts.js records the other one; this is where the owner
+     compares them. The list is rendered by renderSyncConflictList() in main.js;
+     #sync-conflicts-live stays outside it so announcements survive a re-render. -->
+<div class="overlay" id="m-sync-conflicts" style="display:none;">
+  <div class="modal sc-modal" role="dialog" aria-modal="true" aria-labelledby="sync-conflicts-title">
+    <div class="modal-title">
+      <div class="modal-title-left">
+        <span class="modal-title-badge" aria-hidden="true">⇄</span>
+        <span id="sync-conflicts-title">Edits made on two devices</span>
+      </div>
+      <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('sync-conflicts')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+    </div>
+    <p class="sc-intro">Each record below was changed on this device and on another one before they caught up with each other. This device's version was kept. Compare the two, then keep it or switch to the other device's version.</p>
+    <div class="sc-count" id="sync-conflicts-count"></div>
+    <div id="sync-conflicts-body"></div>
+    <div class="sr-only" id="sync-conflicts-live" role="status" aria-live="polite"></div>
+    <div class="modal-footer">
+      <button type="button" class="btn" id="sync-conflicts-close" onclick="attemptCloseModal('sync-conflicts')">Close</button>
+    </div>
+  </div>
+</div>
 <div class="tab-panel" id="tab-backups" style="color:var(--on-inverse);/* contrast-ok: default text colour for the dark ink cards inside this panel */">
+  <section class="sync-review-card" id="sync-review-card" aria-labelledby="sync-review-title">
+    <div class="sync-review-ic" aria-hidden="true">⇄</div>
+    <div class="sync-review-text">
+      <div class="sync-review-kicker" id="sync-review-kicker">All clear</div>
+      <h3 class="sync-review-title" id="sync-review-title">Edits made on two devices at once</h3>
+      <p class="sync-review-status" id="sync-review-status">Nothing needs review.</p>
+      <p class="sync-review-sub">If the same record is changed on two devices before they sync, this device's version is kept and the other one is saved here, so you can compare them and bring it back.</p>
+    </div>
+    <button type="button" class="btn sm gold sys-target" id="sync-review-open" onclick="openSyncConflicts()" hidden>Review</button>
+  </section>
   <div class="sheets-setup" style="background:var(--ink2);border:var(--stroke-hair) solid var(--border);padding:1.25rem;border-radius:var(--r3);margin-bottom:1rem;">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
       <div>

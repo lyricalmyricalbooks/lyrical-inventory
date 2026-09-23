@@ -6,7 +6,7 @@ import { describe, expect, test } from 'vitest';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const styles = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
 const markup = readFileSync(path.join(__dirname, '../index.html'), 'utf8');
-const mainJs = readFileSync(path.join(__dirname, '../src/main.js'), 'utf8');
+const customersJs = readFileSync(path.join(__dirname, '../src/features/customers.js'), 'utf8');
 
 describe('Milestone 2 UX Enhancements (Features 10–17)', () => {
   describe('Feature 10: Receipt OCR Dropzone & Scanning Action Bar', () => {
@@ -120,13 +120,13 @@ describe('Milestone 2 UX Enhancements (Features 10–17)', () => {
     });
 
     test('renderCustomers assigns cust-action-btn to row action buttons', () => {
-      expect(mainJs).toMatch(/<button class="btn sm(?: gold)? cust-action-btn"/);
+      expect(customersJs).toMatch(/<button class="btn sm(?: gold)? cust-action-btn"/);
     });
   });
 
   describe('Feature 14: Customer Directory & Mailing List Empty State', () => {
     test('renderMailingList includes canonical .empty-state.sys-empty with ✉️ icon and CTAs', () => {
-      const mlFn = mainJs.match(/function renderMailingList\(\)\s*\{([\s\S]*?)\n\}/);
+      const mlFn = customersJs.match(/function renderMailingList\(\)\s*\{([\s\S]*?)\n\}/);
       expect(mlFn).not.toBeNull();
       expect(mlFn[1]).toMatch(/<div class="empty-state sys-empty"/);
       expect(mlFn[1]).toMatch(/✉️/);
@@ -150,19 +150,19 @@ describe('Milestone 2 UX Enhancements (Features 10–17)', () => {
       expect(activeHelper[1]).toMatch(/transform:\s*scale\(0\.96\)/);
     });
 
-    test('campaign mode row uses semantic state classes in CSS and main.js', () => {
+    test('campaign mode row uses semantic state classes in CSS and customers.js', () => {
       expect(styles).toMatch(/\.campaign-mode-row\.is-mock\s*\{/);
       expect(styles).toMatch(/\.campaign-mode-row\.is-warn\s*\{/);
       expect(styles).toMatch(/\.campaign-mode-row\.is-live\s*\{/);
 
-      expect(mainJs).toMatch(/row\.classList\.add\('is-mock'\)/);
-      expect(mainJs).toMatch(/row\.classList\.add\('is-warn'\)/);
-      expect(mainJs).toMatch(/row\.classList\.add\('is-live'\)/);
+      expect(customersJs).toMatch(/row\.classList\.add\('is-mock'\)/);
+      expect(customersJs).toMatch(/row\.classList\.add\('is-warn'\)/);
+      expect(customersJs).toMatch(/row\.classList\.add\('is-live'\)/);
     });
 
     test('campaign drafts and sent lists render canonical sys-empty states with icons and CTAs', () => {
-      expect(mainJs).toMatch(/<div class="empty-state sys-empty"[\s\S]*?📝[\s\S]*?No saved drafts[\s\S]*?openCampaignWizard\(\)/);
-      expect(mainJs).toMatch(/<div class="empty-state sys-empty"[\s\S]*?📣[\s\S]*?No sent campaigns yet[\s\S]*?openCampaignWizard\(\)/);
+      expect(customersJs).toMatch(/<div class="empty-state sys-empty"[\s\S]*?📝[\s\S]*?No saved drafts[\s\S]*?openCampaignWizard\(\)/);
+      expect(customersJs).toMatch(/<div class="empty-state sys-empty"[\s\S]*?📣[\s\S]*?No sent campaigns yet[\s\S]*?openCampaignWizard\(\)/);
     });
   });
 

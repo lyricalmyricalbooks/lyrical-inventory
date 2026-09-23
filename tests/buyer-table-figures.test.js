@@ -10,7 +10,7 @@ import { expect, test } from 'vitest';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const styles = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
 const markup = readFileSync(path.join(__dirname, '../index.html'), 'utf8');
-const mainJs = readFileSync(path.join(__dirname, '../src/main.js'), 'utf8');
+const customersJs = readFileSync(path.join(__dirname, '../src/features/customers.js'), 'utf8');
 
 // The four column roles that give a wide list table a reading order: one cell
 // leads, one anchors, the rest recede. Pinned here because each carries a
@@ -74,7 +74,7 @@ test('the buyer table marks Spend as a numeric column in its header', () => {
 });
 
 test('buyer rows use the column roles instead of inline meta styling', () => {
-  const row = mainJs.match(/<td class="lead-cell">\$\{escapeHtml\(r\.name\)[\s\S]*?<\/tr>/);
+  const row = customersJs.match(/<td class="lead-cell">\$\{escapeHtml\(r\.name\)[\s\S]*?<\/tr>/);
   expect(row).not.toBeNull();
 
   expect(row[0]).toMatch(/<td class="r money-cell">\$\{_custSpendStr\(r\.spend\)/);
@@ -90,7 +90,7 @@ test('buyer rows use the column roles instead of inline meta styling', () => {
 });
 
 test('the mailing list date column gets the same figure treatment', () => {
-  const row = mainJs.match(/<td class="lead-cell">\$\{escapeHtml\(s\.name\)[\s\S]*?<\/tr>/);
+  const row = customersJs.match(/<td class="lead-cell">\$\{escapeHtml\(s\.name\)[\s\S]*?<\/tr>/);
   expect(row).not.toBeNull();
   expect(row[0]).toMatch(/<td class="date-cell">\$\{s\.added \? fmtD\(s\.added\)/);
 });
