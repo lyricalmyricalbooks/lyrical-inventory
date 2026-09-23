@@ -19318,6 +19318,11 @@ button[onclick="refreshUmamiStats()"]:active {
 .today-row-chev{font-size:var(--text-xl);color:var(--content-secondary);}
 @media (prefers-reduced-motion: reduce){.today-card{transition:none;}.today-card:active{transform:none;}}
 
+/* Book codes for card-reader descriptions, under the Stripe auto-record switch. */
+.sale-codes-box { margin: var(--space-3) 0 0; }
+.sale-codes-box summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 600; color: var(--content-secondary); }
+.sale-codes-list { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: var(--space-2); font-size: var(--text-sm); color: var(--content-secondary); }
+.sale-code { display: inline-block; min-width: 3.5em; font-family: var(--font-mono); font-weight: 700; color: var(--content-primary); }
 /* ============================================================
    PHONE PAGE REDESIGNS (≤768px portrait)
    Event POS, Dashboard, Website orders and History, restyled for

@@ -63,6 +63,8 @@ import {
   seedSeenOrders,
 } from '../lib/order-watch.js';
 import { escapeHtml } from '../lib/html.js';
+import { pushAppAlert } from '../lib/app-alert.js';
+import { storeReversalsToRaise } from '../lib/store-reversals.js';
 import { resolveCountryCode } from '../lib/countries.js';
 import { fmt, getBookCurrencyCode } from '../lib/money.js';
 import { normalizeShippingOrderNumber } from '../lib/shipping-reconciliation.js';
@@ -1592,6 +1594,9 @@ async function checkBigCartelLedgerGaps({ silent = false } = {}) {
     // Every path that talks to the storefront comes through here, so this is
     // the one place a sale nobody has seen yet can be noticed.
     announceNewBigCartelOrders(bcOrders);
+    // And the one place a recorded sale the store has since refunded or
+    // cancelled can be noticed.
+    raiseStoreReversals(bcOrders);
 
     renderBigCartelLedgerGaps();
     renderBigCartelGapBadge();
@@ -1705,6 +1710,58 @@ function announceNewBigCartelOrders(bcOrders = []) {
     showNewOrderAlert(fresh.map(entry => ({ ...entry, outcome: 'off' })));
   });
   return fresh;
+}
+
+const STORE_REVERSAL_PENDING_KEY = 'lm-store-reversal-pending';
+
+/**
+ * Recorded website sales the store has since refunded or cancelled.
+ *
+ * Offered for reversal rather than reversed: only the publisher knows whether
+ * the book came back. The void itself is the ledger's job and lives in
+ * main.js (reverseStoreOrdersFromAlert); this finds them, marks each row so it
+ * is raised once, and says so.
+ */
+function raiseStoreReversals(bcOrders = []) {
+  if (isAuthor()) return;
+  const rows = [];
+  Object.entries(states).forEach(([bookId, state]) => {
+    (state?.hist || []).forEach(entry => rows.push({ bookId, entry }));
+  });
+  const found = storeReversalsToRaise(bcOrders, rows);
+  if (!found.length) return;
+
+  const touched = new Set();
+  found.forEach(item => {
+    const row = (states[item.bookId]?.hist || []).find(h => h && h.sheetsId === item.sheetsId);
+    if (row) { row.storeReversalNoted = true; touched.add(item.bookId); }
+  });
+  touched.forEach(bookId => window.saveState(bookId));
+
+  let pending = [];
+  try { pending = JSON.parse(localStorage.getItem(STORE_REVERSAL_PENDING_KEY) || '[]'); } catch (e) { pending = []; }
+  if (!Array.isArray(pending)) pending = [];
+  found.forEach(item => { if (!pending.some(p => p.sheetsId === item.sheetsId)) pending.push(item); });
+  try { localStorage.setItem(STORE_REVERSAL_PENDING_KEY, JSON.stringify(pending)); } catch (e) { /* storage full */ }
+
+  const full = pending.filter(item => item.full);
+  const partial = found.filter(item => !item.full);
+  const copies = full.reduce((sum, item) => sum + (item.qty || 0), 0);
+  const parts = [];
+  if (full.length) {
+    parts.push(`${full.length === 1 ? `Order ${full[0].num} was` : `${full.length} orders were`} refunded or cancelled on your store after being recorded. Reversing puts ${copies} cop${copies === 1 ? 'y' : 'ies'} back in stock and takes the sale${full.length === 1 ? '' : 's'} out of your earnings.`);
+  }
+  if (partial.length) {
+    parts.push(`${partial.length === 1 ? `Order ${partial[0].num} was` : `${partial.length} orders were`} partly refunded — check whether any copies came back.`);
+  }
+  pushAppAlert({
+    id: 'store-reversals',
+    icon: '↩️',
+    title: full.length ? 'A website order was reversed on your store' : 'A website order was partly refunded',
+    detail: parts.join(' '),
+    actionLabel: full.length ? (full.length === 1 ? 'Reverse it' : `Reverse all ${full.length}`) : '',
+    action: full.length ? 'reverseStoreOrdersFromAlert(event)' : '',
+  });
 }
 
 const BC_AUTO_RECORD_KEY = 'lm-bc-auto-record';
