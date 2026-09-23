@@ -7,6 +7,8 @@ import {
   ledgerSaleIndexForHistMirror,
   consignmentSyncPayload,
   collectUniqueConsignmentStores,
+  invoiceDiscountLabel,
+  notesWithInvoiceDiscount,
 } from '../src/lib/consignment.js';
 
 // A consignment Sale as it lands in the ledger (canonical) + its History mirror
@@ -173,6 +175,39 @@ describe('ledgerSaleIndexForHistMirror', () => {
     expect(ledgerSaleIndexForHistMirror({ ledger: [] }, histMirror())).toBe(-1);
     const direct = { num: 'A1', chan: 'Direct', date: '2026-06-23', qty: 10, price: 20 };
     expect(ledgerSaleIndexForHistMirror({ ledger: [ledgerSale()] }, direct)).toBe(-1);
+  });
+});
+
+describe('notesWithInvoiceDiscount', () => {
+  const invoices = [
+    { id: 'i1', num: 'INV-001', discount: 5, discountType: 'percent', discountRate: 10 },
+    { id: 'i2', num: 'INV-002', discount: 3, discountType: 'flat' },
+    { id: 'i3', num: 'INV-003', discount: 0 },
+  ];
+
+  it('labels percent and flat discounts', () => {
+    expect(invoiceDiscountLabel(invoices[0])).toBe('Invoice Discount: 10%');
+    expect(invoiceDiscountLabel(invoices[1])).toBe('Invoice Discount: flat');
+  });
+
+  it('appends the discount to existing notes, or stands alone', () => {
+    expect(notesWithInvoiceDiscount(invoices, 'INV-001', 'Fair')).toBe('Fair · Invoice Discount: 10%');
+    expect(notesWithInvoiceDiscount(invoices, 'INV-002', '')).toBe('Invoice Discount: flat');
+    expect(notesWithInvoiceDiscount(invoices, 'INV-002', undefined)).toBe('Invoice Discount: flat');
+  });
+
+  it('finds the invoice by id as well as number', () => {
+    expect(notesWithInvoiceDiscount(invoices, 'INV-x', 'n')).toBe('n');
+    expect(notesWithInvoiceDiscount([{ id: 'INV-9', num: 'X', discount: 1, discountType: 'flat' }], 'INV-9', 'n'))
+      .toBe('n · Invoice Discount: flat');
+  });
+
+  it('leaves notes alone for non-invoice sales, undiscounted invoices, or an existing label', () => {
+    expect(notesWithInvoiceDiscount(invoices, '1042', 'web')).toBe('web');
+    expect(notesWithInvoiceDiscount(invoices, '', null)).toBe('');
+    expect(notesWithInvoiceDiscount(invoices, 'INV-003', 'x')).toBe('x');
+    expect(notesWithInvoiceDiscount(undefined, 'INV-001', 'x')).toBe('x');
+    expect(notesWithInvoiceDiscount(invoices, 'INV-001', 'Invoice Discount: 5%')).toBe('Invoice Discount: 5%');
   });
 });
 
