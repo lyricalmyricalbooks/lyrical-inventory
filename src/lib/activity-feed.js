@@ -112,24 +112,65 @@ function eventsForBook(book, state) {
   const bookCur = getBookCurrencyCode(book);
 
   (s.hist || []).forEach((h, i) => {
-    if (!h || h.voided || h.artistPending || h.consignmentLink) return;
+    if (!h || h.artistPending || h.consignmentLink) return;
+    // hist has no id, so the key is built from whatever identity the row does
+    // carry — the sheets event id, the order number, else its position.
+    const rowKey = `${book?.id || '?'}:${h.sheetsId || h.num || i}`;
     const cur = entryNativeCode(h, book);
     const qty = qtyOf(h.qty);
+    const who = String(h.shipName || '').trim();
+    const order = h.num ? ` (${h.num})` : '';
+
+    // A reversed sale: the sale itself no longer counts, but the reversal is
+    // exactly the kind of thing the owner needs to be able to see happened.
+    if (h.voided) {
+      if (h.voidedAt || h.voidedReason) {
+        const rev = event({
+          book, date: h.voidedAt || h.date, tie: h.voidedAt, kind: 'reversal', icon: '↩️',
+          text: `Sale reversed — ${copies(qty)}${book?.title || 'a book'}${order}${h.voidedReason ? ` · ${h.voidedReason}` : ''}`,
+          amount: `−${fmt(qty * (Number(h.price) || 0), cur)}`,
+          tone: 'neg',
+        });
+        rev.key = `hist-void:${rowKey}`;
+        out.push(rev);
+      }
+      return;
+    }
+
+    const via = /card reader/i.test(String(h.notes || ''))
+      ? 'the card reader'
+      : (String(h.chan || '').trim() || 'Direct');
     const ev = h.gratuity
       ? event({
         book, date: h.date, tie: h.id, kind: 'gratuity', icon: '🎁',
         text: `Gifted ${copies(qty)}${book?.title || 'a copy'}`,
       })
       : event({
-        book, date: h.date, tie: h.id, kind: 'sale', icon: '🛒',
-        text: `Sale recorded — ${copies(qty)}${book?.title || 'a book'} via ${String(h.chan || '').trim() || 'Direct'}`,
+        book, date: h.date, tie: h.id, kind: h.autoRecorded ? 'sale-auto' : 'sale', icon: h.autoRecorded ? '⚡' : '🛒',
+        text: `${h.autoRecorded ? 'Recorded for you' : 'Sale recorded'} — ${copies(qty)}${book?.title || 'a book'} via ${via}${who && h.autoRecorded ? `, ${who}` : ''}`,
         amount: `+${fmt(qty * (Number(h.price) || 0), cur)}`,
         tone: 'pos',
       });
-    // hist has no id, so the key is built from whatever identity the row does
-    // carry — the sheets event id, the order number, else its position.
-    ev.key = `hist:${book?.id || '?'}:${h.sheetsId || h.num || i}`;
+    ev.key = `hist:${rowKey}`;
     out.push(ev);
+
+    // The parcel's journey, from the dates already stamped on the order.
+    if (h.shipped && h.shippedDate) {
+      const sent = event({
+        book, date: h.shippedDate, tie: h.id, kind: 'shipped', icon: '📦',
+        text: `Sent ${who ? `${who}’s` : 'an'} order${order}${h.trackingNumber ? ' — tracking added' : ''}`,
+      });
+      sent.key = `hist-shipped:${rowKey}`;
+      out.push(sent);
+    }
+    if (h.deliveredDate) {
+      const got = event({
+        book, date: h.deliveredDate, tie: h.id, kind: 'delivered', icon: '📬',
+        text: `Delivered to ${who || 'the customer'}${order}`,
+      });
+      got.key = `hist-delivered:${rowKey}`;
+      out.push(got);
+    }
   });
 
   (s.ledger || []).forEach((e) => {

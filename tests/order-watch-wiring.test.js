@@ -102,6 +102,7 @@ describe('the notification card', () => {
       deps: {
         $: (id) => elements[id],
         describeOrderOutcomes,
+        logNotification: () => null,
       },
       moduleState: 'let _newOrderAlert = null;',
       returns: '{ showNewOrderAlert, dismissNewOrderAlert }',
@@ -180,7 +181,7 @@ describe('the card after an order was recorded on its own', () => {
     };
     const harness = buildHarness({
       names: ['showNewOrderAlert'],
-      deps: { $: (id) => elements[id], describeOrderOutcomes },
+      deps: { $: (id) => elements[id], describeOrderOutcomes, logNotification: () => null },
       moduleState: 'let _newOrderAlert = null;',
       returns: '{ showNewOrderAlert }',
     });

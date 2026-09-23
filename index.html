@@ -319,6 +319,7 @@
   <nav class="pub-nav" aria-label="Books">
     <button type="button" class="snav" title="Dashboard" onclick="switchTab('dashboard')"><span class="snav-ic">▦</span><span class="snav-label">Dashboard</span></button>
     <button type="button" class="snav" id="todo-sidebar-btn" title="To-do" onclick="switchTab('todo')"><span class="snav-ic">✅</span><span class="snav-label">To-do</span><span class="nav-badge todo-nav-badge" aria-label="things needing attention" hidden></span></button>
+    <button type="button" class="snav" id="notif-sidebar-btn" title="Notifications" onclick="openNotificationsPanel()"><span class="snav-ic">🔔</span><span class="snav-label">Notifications</span><span class="nav-badge notif-unread-badge" aria-label="unread notifications" hidden></span></button>
     <button type="button" class="snav" title="Website orders" onclick="switchTab('website')"><span class="snav-ic">🛍</span><span class="snav-label">Website orders</span></button>
     <button type="button" class="snav" title="Manual entry" onclick="switchTab('manual')"><span class="snav-ic">✎</span><span class="snav-label">Manual entry</span></button>
     <button type="button" class="snav" title="Consignment" onclick="switchTab('consignment')"><span class="snav-ic">🏪</span><span class="snav-label">Consignment</span><span class="health-badge" data-health-badge="stripe" aria-label="Stripe is not answering, so invoice payments may be missed" hidden></span></button>
@@ -764,6 +765,13 @@
       <p class="sr-only" id="all-notif-status" role="status" aria-live="polite"></p>
       <div class="notif-list" id="all-notifications"></div>
       <button type="button" class="rail-more" id="all-notif-more" onclick="switchTab('todo')" hidden></button>
+      <!-- The latest few things the app itself said — recorded orders, parcels,
+           card sales — kept after their pop-up is gone. -->
+      <div class="notif-latest" id="all-notif-latest-wrap" hidden>
+        <div class="notif-latest-head">Latest from the app</div>
+        <div class="notif-list" id="all-notif-latest"></div>
+        <button type="button" class="rail-more" onclick="openNotificationsPanel()">All notifications →</button>
+      </div>
     </section>
 
     <section class="rail-card" id="all-activity-card">
@@ -6050,6 +6058,25 @@
      Shippo label watch; keyed entries, so a check that repeats every few
      minutes updates what it already said rather than stacking another card. -->
 <div id="app-alert-stack" hidden></div>
+
+<!-- Every notification the app has raised, newest first. Filled by
+     renderNotificationsPanel() in main.js from lib/notification-log.js. -->
+<div class="overlay" id="m-notifications" style="display:none;"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="notif-panel-title" style="max-width:560px;">
+  <div class="modal-title">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">🔔</span>
+      <span id="notif-panel-title">Notifications</span>
+    </div>
+    <button type="button" class="modal-close-btn" onclick="attemptCloseModal('notifications')" aria-label="Close notifications">✕</button>
+  </div>
+  <p class="field-note" style="margin:0 0 12px;">Everything the app has told you — orders it recorded, parcels, card sales, receipts, refunds and connection problems. Kept on this device for the last 150 messages.</p>
+  <div class="notif-log" id="notif-log-list"></div>
+  <div class="modal-footer">
+    <button type="button" class="btn ghost sm" onclick="clearNotificationHistory()">Clear history</button>
+    <button type="button" class="btn sm" onclick="switchTab('todo');closeM('notifications')">Open to-do list</button>
+    <button type="button" class="btn gold sm" onclick="attemptCloseModal('notifications')">Done</button>
+  </div>
+</div></div>
 
 </div>
 
