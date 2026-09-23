@@ -8,7 +8,8 @@ import './styles/theme-dark.css';
 import './firebase.js';
 import { registerSW } from 'virtual:pwa-register';
 import { calcArtistEarnings, tierEffectiveCap, describePayout, payoutRequestCovered } from './lib/earnings.js';
-import { calculateBreakEven, syncBreakEvenTier } from './lib/breakeven.js';
+import { createStripePriceAndLink } from './lib/stripe-payment-link.js';
+import { calculateBreakEven, breakEvenTierMove, readProductionCostInput } from './lib/breakeven.js';
 import { escapeHtml } from './lib/html.js';
 import { ensureXlsx, loadExternalScript } from './lib/external-scripts.js';
 import { buildActivityFeed } from './lib/activity-feed.js';
@@ -2068,8 +2069,6 @@ async function saveBookFromModal() {
     shipHsCode: $('nb-ship-hs').value.trim() || '490199'
   };
 
-  // Keep the first break-even tier aligned when it still represents production-cost recovery.
-  syncBreakEvenTier(book.profitTiers, currentBook.productionCost || 0, book.productionCost);
 
   // A currency change re-denominates every figure already on the books, so ask
   // what to do with the history BEFORE committing the edit. Cancelling here
@@ -2096,6 +2095,23 @@ async function saveBookFromModal() {
     if (!currencyResult) return;   // cancelled — nothing is saved
   }
 
+  // A cost that had a value and is now saved blank would quietly mark the
+  // book as already broken even, so give the owner a way back first.
+  const previousCost = currentBook.productionCost || 0;
+  const costInput = readProductionCostInput($('nb-prod').value, previousCost);
+  if (costInput.suspicious && !(await confirmProductionCostsCleared([book.title]))) {
+    switchBookModalTab('costs');
+    return;
+  }
+
+  // Asked here, after the currency dialog, so cancelling that leaves the
+  // tier untouched, and applied after the currency conversion below so the
+  // target lands on the cost exactly as typed.
+  const tierMove = previousCost !== book.productionCost
+    ? breakEvenTierMove(book.profitTiers, previousCost, book.productionCost)
+    : null;
+  const moveTier = tierMove ? await confirmBreakEvenTierMoves([{ book, move: tierMove }]) : false;
+
   if (editingBookId && editingBookId !== id) {
     delete BOOKS[editingBookId];
     if (states[editingBookId]) {
@@ -2120,6 +2136,7 @@ async function saveBookFromModal() {
     recomputeAfters(states[id], book);
     await saveState(id);
   }
+  if (moveTier) book.profitTiers[0].revenueUpTo = tierMove.to;
   // Re-adding a previously-deleted default removes it from the tombstone list.
   if (DEFAULT_BOOKS[id]) {
     const i = deletedDefaultIds.indexOf(id);
@@ -2127,14 +2144,9 @@ async function saveBookFromModal() {
   }
 
   // Compile and sync productionCosts & paymentLinks to Firebase/localStorage for backward compatibility
-  const prodCosts = {};
+  await persistProductionCosts();
   const payLinks = {};
-  BOOK_LIST.forEach(b => {
-    prodCosts[b.id] = b.productionCost || 0;
-    payLinks[b.id] = b.paymentLink || '';
-  });
-  await window._fbSaveSettings('productionCosts', prodCosts);
-  localStorage.setItem('lm-production-costs', JSON.stringify(prodCosts));
+  BOOK_LIST.forEach(b => { payLinks[b.id] = b.paymentLink || ''; });
   await window._fbSaveSettings('paymentLinks', payLinks);
   localStorage.setItem('lm-payment-links', JSON.stringify(payLinks));
 
@@ -10612,20 +10624,9 @@ async function createStripePaymentLinkForInvoice(invoice) {
   priceParams.set('metadata[store_name]', invoice.storeName || '');
   priceParams.set('metadata[book_id]', book.id || '');
 
-  const priceRes = await fetch('https://api.stripe.com/v1/prices', {
-    method: 'POST',
-    headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: priceParams.toString(),
-  });
-  if (!priceRes.ok) {
-    const err = await priceRes.json().catch(() => ({}));
-    throw new Error('Stripe price: ' + (err.error?.message || ('HTTP ' + priceRes.status)));
-  }
-  const price = await priceRes.json();
 
   // 2. Create the Payment Link
   const linkParams = new URLSearchParams();
-  linkParams.set('line_items[0][price]', price.id);
   linkParams.set('line_items[0][quantity]', '1');
   linkParams.set('metadata[invoice_num]', invoice.num || '');
   linkParams.set('metadata[store_id]', String(invoice.storeId || ''));
@@ -10638,16 +10639,7 @@ async function createStripePaymentLinkForInvoice(invoice) {
   linkParams.set('allow_promotion_codes', 'false');
   linkParams.set('billing_address_collection', 'auto');
 
-  const linkRes = await fetch('https://api.stripe.com/v1/payment_links', {
-    method: 'POST',
-    headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: linkParams.toString(),
-  });
-  if (!linkRes.ok) {
-    const err = await linkRes.json().catch(() => ({}));
-    throw new Error('Stripe payment link: ' + (err.error?.message || ('HTTP ' + linkRes.status)));
-  }
-  const link = await linkRes.json();
+  const { price, link } = await createStripePriceAndLink(key, priceParams, linkParams);
 
   return {
     url: link.url,
@@ -15722,24 +15714,73 @@ function _renderProductionCostFields() {
     </div>`).join('');
 }
 
-async function saveProductionCosts() {
-  await syncCatalog();
+// The per-book cost map mirrors the catalog, so both save paths write every
+// book — not just the ones on screen — and the device copy never lags the cloud.
+async function persistProductionCosts() {
   const stored = {};
-  BOOK_LIST.forEach(book => {
-    const inp = $('pc-' + book.id);
-    if (inp) {
-      const previousCost = book.productionCost || 0;
-      const val = parseFloat(inp.value) || 0;
-      book.productionCost = val;
-      stored[book.id] = val;
-
-      // Keep the first break-even tier aligned when it still represents production-cost recovery.
-      syncBreakEvenTier(book.profitTiers, previousCost, val);
-    }
-  });
-  // Save to Firebase + localStorage fallback
+  BOOK_LIST.forEach(b => { stored[b.id] = b.productionCost || 0; });
   await window._fbSaveSettings('productionCosts', stored);
   localStorage.setItem('lm-production-costs', JSON.stringify(stored));
+}
+
+function confirmProductionCostsCleared(titles) {
+  const which = titles.length === 1 ? `"${titles[0]}"` : `${titles.length} books`;
+  return confirmDialog(
+    `The production cost for ${which} is now blank or zero. Saved like this, `
+    + `${titles.length === 1 ? 'it' : 'they'} will show as already broken even.`,
+    {
+      title: 'Save a zero production cost?',
+      details: titles.length > 1 ? titles.map(t => [t, 'No cost']) : [],
+      okLabel: 'Save anyway',
+      cancelLabel: 'Go back',
+      danger: true,
+    }
+  );
+}
+
+// Moving a break-even target changes the progress bar the owner watches, so
+// it is never done silently. Declining keeps the targets and still saves.
+function confirmBreakEvenTierMoves(changes) {
+  return confirmDialog(
+    'Your break-even target follows the production cost. Update it to match the new cost?',
+    {
+      title: changes.length === 1 ? 'Update the break-even target?' : 'Update break-even targets?',
+      details: changes.map(({ book, move }) => [
+        book.title,
+        `${fmt(move.from, book.currency)} → ${fmt(move.to, book.currency)}`,
+      ]),
+      okLabel: changes.length === 1 ? 'Update target' : 'Update targets',
+      cancelLabel: 'Keep my target' + (changes.length === 1 ? '' : 's'),
+    }
+  );
+}
+
+async function saveProductionCosts() {
+  await syncCatalog();
+  const edits = [];
+  BOOK_LIST.forEach(book => {
+    const inp = $('pc-' + book.id);
+    if (!inp) return;
+    const previousCost = book.productionCost || 0;
+    edits.push({ book, previousCost, ...readProductionCostInput(inp.value, previousCost) });
+  });
+
+  const cleared = edits.filter(e => e.suspicious);
+  if (cleared.length && !(await confirmProductionCostsCleared(cleared.map(e => e.book.title)))) {
+    $('pc-' + cleared[0].book.id)?.focus();
+    return;
+  }
+
+  const moves = edits
+    .filter(e => e.previousCost !== e.value)
+    .map(e => ({ book: e.book, move: breakEvenTierMove(e.book.profitTiers, e.previousCost, e.value) }))
+    .filter(c => c.move);
+  const moveTiers = moves.length ? await confirmBreakEvenTierMoves(moves) : false;
+
+  edits.forEach(e => { e.book.productionCost = e.value; });
+  if (moveTiers) moves.forEach(({ book, move }) => { book.profitTiers[0].revenueUpTo = move.to; });
+
+  await persistProductionCosts();
   // Persist synced profitTiers so the threshold survives a page reload
   await saveCatalogWithDeletions();
   showToast('✓ Break-even targets saved');
@@ -23619,25 +23660,8 @@ async function createStripePaymentLinkForBook(book) {
   priceParams.set('metadata[book_id]', book.id || '');
   priceParams.set('metadata[sku]', book.id || '');
   priceParams.set('metadata[isbn]', book.isbn && book.isbn !== '—' ? book.isbn : '');
-  const priceRes = await fetch('https://api.stripe.com/v1/prices', {
-    method: 'POST',
-    headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: priceParams.toString(),
-  });
-  if (!priceRes.ok) {
-    const err = await priceRes.json().catch(() => ({}));
-    const msg = err.error?.message || ('HTTP ' + priceRes.status);
-    // The Prices endpoint needs the "Prices" (a.k.a. Plans) write scope. A key
-    // missing it is the most common failure here, so point at the exact fix.
-    const hint = /permission|rak_/i.test(msg)
-      ? ' — your restricted key needs Write on Prices, Products and Payment Links.'
-      : '';
-    throw new Error('Stripe price: ' + msg + hint);
-  }
-  const price = await priceRes.json();
 
   const linkParams = new URLSearchParams();
-  linkParams.set('line_items[0][price]', price.id);
   linkParams.set('line_items[0][quantity]', '1');
   linkParams.set('line_items[0][adjustable_quantity][enabled]', 'true');
   linkParams.set('metadata[book_id]', book.id || '');
@@ -23646,16 +23670,7 @@ async function createStripePaymentLinkForBook(book) {
   linkParams.set('payment_intent_data[metadata][book_id]', book.id || '');
   linkParams.set('payment_intent_data[metadata][sku]', book.id || '');
   linkParams.set('billing_address_collection', 'auto');
-  const linkRes = await fetch('https://api.stripe.com/v1/payment_links', {
-    method: 'POST',
-    headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: linkParams.toString(),
-  });
-  if (!linkRes.ok) {
-    const err = await linkRes.json().catch(() => ({}));
-    throw new Error('Stripe payment link: ' + (err.error?.message || ('HTTP ' + linkRes.status)));
-  }
-  const link = await linkRes.json();
+  const { link } = await createStripePriceAndLink(key, priceParams, linkParams, { permissionHint: true });
   return link.url;
 }
 
@@ -23681,23 +23696,8 @@ async function createStripePaymentLinkForAmount({ amountMajor, currencyCode, des
   priceParams.set('currency', curCode.toLowerCase());
   priceParams.set('product_data[name]', (description || 'Book fair sale').slice(0, 250));
   Object.entries(meta).forEach(([k, v]) => priceParams.set(`metadata[${k}]`, v == null ? '' : String(v)));
-  const priceRes = await fetch('https://api.stripe.com/v1/prices', {
-    method: 'POST',
-    headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: priceParams.toString(),
-  });
-  if (!priceRes.ok) {
-    const err = await priceRes.json().catch(() => ({}));
-    const msg = err.error?.message || ('HTTP ' + priceRes.status);
-    const hint = /permission|rak_/i.test(msg)
-      ? ' — your restricted key needs Write on Prices, Products and Payment Links.'
-      : '';
-    throw new Error('Stripe price: ' + msg + hint);
-  }
-  const price = await priceRes.json();
 
   const linkParams = new URLSearchParams();
-  linkParams.set('line_items[0][price]', price.id);
   linkParams.set('line_items[0][quantity]', '1');
   linkParams.set('payment_intent_data[description]', (description || 'Book fair sale').slice(0, 350));
   Object.entries(meta).forEach(([k, v]) => {
@@ -23705,16 +23705,7 @@ async function createStripePaymentLinkForAmount({ amountMajor, currencyCode, des
     linkParams.set(`payment_intent_data[metadata][${k}]`, v == null ? '' : String(v));
   });
   linkParams.set('billing_address_collection', 'auto');
-  const linkRes = await fetch('https://api.stripe.com/v1/payment_links', {
-    method: 'POST',
-    headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: linkParams.toString(),
-  });
-  if (!linkRes.ok) {
-    const err = await linkRes.json().catch(() => ({}));
-    throw new Error('Stripe payment link: ' + (err.error?.message || ('HTTP ' + linkRes.status)));
-  }
-  const link = await linkRes.json();
+  const { link } = await createStripePriceAndLink(key, priceParams, linkParams, { permissionHint: true });
   return link.url;
 }
 

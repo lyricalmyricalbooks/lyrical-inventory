@@ -2563,9 +2563,15 @@ function indexWebsiteHistByOrderNumber() {
   return index;
 }
 
-async function syncBigCartelShippingPaid(bcOrders) {
-  if (!bcOrders || bcOrders.length === 0) return;
-
+/**
+ * Copies each storefront order's shipping charge onto its ledger rows (unless
+ * the owner set it by hand), mirrors the changed rows to the Sheet and saves
+ * the books touched. Also counts live storefront orders with no ledger row at
+ * all — a sale this app has never recorded, no history, no stock deducted.
+ * Shared by the background refresh and the "Sync shipping" button, which only
+ * differ in what they say afterwards.
+ */
+async function applyBigCartelShippingPaid(bcOrders) {
   let updateCount = 0;
   let missingCount = 0;
   const affectedBooks = new Set();
@@ -2607,22 +2613,33 @@ async function syncBigCartelShippingPaid(bcOrders) {
       }
     });
 
-    // A storefront order with no ledger row anywhere is a sale this app has
-    // never recorded — no history, no stock deducted. This loop has always been
-    // in a position to notice and always stayed silent, which is exactly how two
-    // orders came to have shipping labels and no order behind them.
+    // This loop has always been in a position to notice an unrecorded order
+    // and always stayed silent, which is exactly how two orders came to have
+    // shipping labels and no order behind them.
     if (!matches.length && !isCancelledStatus(bcOrder) && bigCartelOrderNumber(bcOrder)) missingCount++;
   });
 
+  for (const bookId of affectedBooks) {
+    await window.saveState(bookId);
+  }
+  return { updateCount, missingCount };
+}
+
+function missingOrdersMessage(missingCount) {
+  return `⚠️ ${missingCount} Big Cartel order${missingCount === 1 ? '' : 's'} ${missingCount === 1 ? 'is' : 'are'} not in your ledger — open Big Cartel to add ${missingCount === 1 ? 'it' : 'them'}`;
+}
+
+async function syncBigCartelShippingPaid(bcOrders) {
+  if (!bcOrders || bcOrders.length === 0) return;
+
+  const { updateCount, missingCount } = await applyBigCartelShippingPaid(bcOrders);
+
   if (updateCount > 0) {
-    for (const bookId of affectedBooks) {
-      await window.saveState(bookId);
-    }
     showToast(`✓ Auto-synced ${updateCount} shipping costs from Big Cartel`, 'ok');
     renderShippingAnalysisHub();
   }
   if (missingCount > 0) {
-    showToast(`⚠️ ${missingCount} Big Cartel order${missingCount === 1 ? '' : 's'} ${missingCount === 1 ? 'is' : 'are'} not in your ledger — open Big Cartel to add ${missingCount === 1 ? 'it' : 'them'}`, 'warn');
+    showToast(missingOrdersMessage(missingCount), 'warn');
   }
 }
 
@@ -2654,55 +2671,9 @@ async function triggerBigCartelShippingSync() {
     const ordersRes = await fetchAllBigCartelOrders(bigCartelData.store.id);
     bigCartelData.orders = ordersRes.data || [];
 
-    let updateCount = 0;
-    let missingCount = 0;
-    const affectedBooks = new Set();
-
-    const histIndex = indexWebsiteHistByOrderNumber();
-
-    bigCartelData.orders.forEach(bcOrder => {
-      const bcId = bcOrder.id;
-      const shippingPaid = parseFloat(bcOrder.attributes?.shipping_total || 0);
-      const matches = histIndex.get(normalizeShippingOrderNumber(bcId)) || [];
-
-      matches.forEach(({ bookId, h }) => {
-        if (!h.manualShippingPaid && h.shippingPaid !== shippingPaid) {
-          h.shippingPaid = shippingPaid;
-          affectedBooks.add(bookId);
-          updateCount++;
-
-          const bookObj = BOOKS[bookId];
-          if (bookObj) {
-            syncToSheets({
-              type: 'order',
-              book: bookObj.title,
-              date: h.date,
-              num: h.num,
-              chan: h.chan || 'Website',
-              qty: h.qty,
-              price: h.price,
-              total: h.qty * h.price,
-              stockAfter: h.after,
-              notes: h.notes || 'Big Cartel',
-              sheetsId: h.sheetsId,
-              currency: getBookCurrencyCode(bookObj)
-            });
-            if (h.shippingPaid > 0) {
-              syncToSheets(shippingPurchaseRowPayload(bookObj, getBookCurrencyCode(bookObj), h));
-            } else {
-              syncToSheets({ action: 'delete', type: 'shipping', book: bookObj.title, sheetsId: h.sheetsId + '-shipping' });
-            }
-          }
-        }
-      });
-
-      if (!matches.length && !isCancelledStatus(bcOrder) && bigCartelOrderNumber(bcOrder)) missingCount++;
-    });
+    const { updateCount, missingCount } = await applyBigCartelShippingPaid(bigCartelData.orders);
 
     if (updateCount > 0) {
-      for (const bookId of affectedBooks) {
-        await window.saveState(bookId);
-      }
       showToast(`✓ Synced ${updateCount} shipping costs from Big Cartel`, 'ok');
       renderShippingAnalysisHub();
     } else if (!missingCount) {
@@ -2712,7 +2683,7 @@ async function triggerBigCartelShippingSync() {
     // Never report "all up to date" over the top of orders that were never
     // recorded: that reading is what let two sales stay invisible.
     if (missingCount > 0) {
-      showToast(`⚠️ ${missingCount} Big Cartel order${missingCount === 1 ? '' : 's'} ${missingCount === 1 ? 'is' : 'are'} not in your ledger — open Big Cartel to add ${missingCount === 1 ? 'it' : 'them'}`, 'warn');
+      showToast(missingOrdersMessage(missingCount), 'warn');
       await checkBigCartelLedgerGaps({ silent: true });
     }
   } catch (e) {
