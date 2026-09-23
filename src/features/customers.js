@@ -180,23 +180,14 @@ function exportMailingListCsv() {
     showToast('Mailing list is empty', 'warn');
     return;
   }
-  const headers = ['Name', 'Email', 'Source', 'Added'];
   const rows = subscribers.map(sub => [
-    `"${(sub.name || '').replace(/"/g, '""')}"`,
-    `"${(sub.email || '').replace(/"/g, '""')}"`,
-    `"${(sub.source || 'Manual').replace(/"/g, '""')}"`,
-    `"${(sub.addedAt || '').replace(/"/g, '""')}"`
+    sub.name || '',
+    sub.email || '',
+    sub.source || 'Manual',
+    sub.addedAt || ''
   ]);
-  const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `mailing-list-${new Date().toISOString().slice(0, 10)}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  const csv = toCsv([['Name', 'Email', 'Source', 'Added'], ...rows], { eol: '\r\n' });
+  downloadCsv(csv, `mailing-list-${new Date().toISOString().slice(0, 10)}.csv`);
   showToast(`✓ Exported ${subscribers.length} subscribers to CSV`);
 }
 
