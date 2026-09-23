@@ -1698,7 +1698,7 @@
         <div class="dz-file" id="exp-file-chip">
           <div class="dz-thumb">📄</div>
           <div class="dz-fname" id="exp-file-name"></div>
-          <button class="dz-remove" type="button" title="Remove file" onclick="expFileClear(event)">×</button>
+          <button class="dz-remove" type="button" title="Remove file" aria-label="Remove receipt file" onclick="expFileClear(event)">×</button>
         </div>
         <button class="btn gold" style="font-size:var(--text-sm);display:none;align-self:flex-start;" onclick="scanProjectReceiptWithAI()" id="exp-ai-btn">✨ AI Scan</button>
       </div>
@@ -2559,7 +2559,7 @@
         <div class="dz-file" id="tc-exp-file-chip">
           <div class="dz-thumb">📄</div>
           <div class="dz-fname" id="tc-exp-file-name"></div>
-          <button class="dz-remove" type="button" title="Remove file" onclick="tcExpFileClear(event)">×</button>
+          <button class="dz-remove" type="button" title="Remove file" aria-label="Remove receipt file" onclick="tcExpFileClear(event)">×</button>
         </div>
         <div class="tc-receipt-scan-actions">
           <button class="btn gold outline" onclick="openReceiptCameraModal()" id="tc-cam-btn" title="Take a photo of the receipt with your webcam">📷 Camera</button>
@@ -2819,7 +2819,7 @@
           <div class="email-search-input-wrap">
             <span class="email-search-icon" aria-hidden="true">🔍</span>
             <input type="text" id="email-gmail-search-query" class="email-search-input" placeholder="Search receipt emails (e.g. Adobe, Canada Post, supplies)..." aria-label="Search Gmail query">
-            <button type="button" class="email-search-clear-btn" id="email-query-clear-btn" onclick="document.getElementById('email-gmail-search-query').value='';document.getElementById('email-gmail-search-query').focus();" title="Clear query">✕</button>
+            <button type="button" class="email-search-clear-btn" id="email-query-clear-btn" onclick="document.getElementById('email-gmail-search-query').value='';document.getElementById('email-gmail-search-query').focus();" title="Clear query" aria-label="Clear search query">✕</button>
           </div>
           <button type="button" class="btn gold email-search-action-btn" id="email-gmail-search-btn" onclick="searchGmailEmails()">Search Inbox</button>
         </div>

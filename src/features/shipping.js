@@ -6661,7 +6661,7 @@ function renderPostageMatchWorklist() {
       <div class="postage-match-actions">
         ${scanBtn}
         <button type="button" class="btn gold sm" onclick="linkPostageExpense('${escapeHtml(key)}')">Link postage</button>
-        <button type="button" class="btn sm ghost" onclick="dismissPostageExpense('${escapeHtml(key)}')" title="Hide this receipt from the list; it stays in your ledger">✕</button>
+        <button type="button" class="btn sm ghost" onclick="dismissPostageExpense('${escapeHtml(key)}')" title="Hide this receipt from the list; it stays in your ledger" aria-label="Hide this receipt from the list; it stays in your ledger">✕</button>
       </div>
     </div>`;
   }).join('');
@@ -8437,7 +8437,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
         </td>
         <td class="shipping-pnl-money" data-label="Customer paid">
           <div style="display:flex; align-items:center; justify-content:flex-end; gap:6px;">
-            ${o.manualShippingPaid ? `<button class="btn sm ghost" onclick="unlinkManualShippingPaid('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" title="Clear manual override" style="padding:0 4px; font-size:var(--text-2xs); opacity:0.6; min-width: unset; height: auto;">✕</button>` : ''}
+            ${o.manualShippingPaid ? `<button class="btn sm ghost" onclick="unlinkManualShippingPaid('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" title="Clear manual override" aria-label="Clear manual shipping override" style="padding:0 4px; font-size:var(--text-2xs); opacity:0.6; min-width: unset; height: auto;">✕</button>` : ''}
             <input type="number" step="0.01" min="0" 
               class="inline-postage-input" 
               value="${(Number(o.shippingPaid) || 0).toFixed(2)}" 
