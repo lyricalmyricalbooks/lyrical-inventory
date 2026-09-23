@@ -3347,6 +3347,18 @@
           <button class="btn gold sm" type="button" id="bc-gap-check-btn" onclick="checkBigCartelLedgerGaps()">Check for missing orders</button>
         </div>
       </div>
+      <!-- What happens to a new order without anyone pressing anything.
+           Wired in features/bigcartel.js (handleNewBigCartelOrders). -->
+      <div class="bc-order-automation">
+        <label class="toggle-row">
+          <span class="switch"><input type="checkbox" id="bc-auto-record-cb" checked onchange="toggleBigCartelAutoRecord()"><span class="track"></span></span>
+          <span><span class="toggle-title">Record new orders automatically</span><span class="field-note" style="display:block;margin-top:2px;">When an order names one of your books, the sale goes into your ledger and the stock comes off as soon as it’s spotted. Anything unclear waits in this list for you.</span></span>
+        </label>
+        <label class="toggle-row">
+          <span class="switch"><input type="checkbox" id="bc-order-notify-cb" onchange="toggleBigCartelOrderNotify()"><span class="track"></span></span>
+          <span><span class="toggle-title">Notify me on this device when an order comes in</span><span class="field-note" id="bc-order-notify-note" style="display:block;margin-top:2px;"></span></span>
+        </label>
+      </div>
       <div class="bc-gap-list" id="bc-gap-list"></div>
       <div id="bc-gap-repairs-wrap" hidden>
         <div class="section-hed" style="margin:1.25rem 0 .5rem;">🔧 Orders recorded under a placeholder number</div>

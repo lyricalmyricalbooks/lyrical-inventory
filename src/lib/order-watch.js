@@ -162,3 +162,150 @@ export function describeNewOrders(entries = []) {
       : `${names.join(' and ')} ordered while you were away.`,
   };
 }
+
+// ─── Recording a new order without being asked ────────────────────────────
+//
+// Announcing a sale was half the job. The card said "Dana just ordered" and
+// then waited for someone to press Record — so an order that arrived while the
+// publisher was packing, or asleep with the laptop open, sat on the screen with
+// its stock still on the shelf and no row in the ledger. The next person to
+// look at the stock count was looking at a number that was wrong.
+//
+// These two functions decide which new orders may be recorded unattended, and
+// what to tell the publisher afterwards. The recording itself stays in
+// features/bigcartel.js, on the same write path the Record button uses.
+
+/** Orders older than this are history catching up, not a sale happening now. */
+export const AUTO_RECORD_MAX_AGE_DAYS = 30;
+
+/**
+ * Why this order must wait for a person, or '' when it may be recorded now.
+ *
+ * Everything that returns a reason is a case where moving stock on a guess is
+ * worse than waiting: a box with two titles cannot be one ledger row, an item
+ * not in the catalogue has no stock to take, a refunded order should not take
+ * stock at all, and an order a month old is far likelier to be one the
+ * publisher already entered by hand under another number.
+ */
+export function autoRecordBlocker(order = {}, plan = {}, {
+  now = Date.now(),
+  maxAgeDays = AUTO_RECORD_MAX_AGE_DAYS,
+} = {}) {
+  if (normalizeStatus(order) === 'refunded') return 'refunded';
+  const created = Date.parse(order?.attributes?.created_at || order?.attributes?.placed_at || '');
+  if (Number.isFinite(created) && now - created > maxAgeDays * 86400000) return 'too-old';
+  if (plan?.autoSafe) return '';
+  if (plan?.confidence === 'mixed') return 'mixed';
+  if (plan?.confidence === 'none' || !plan?.presetBookId) return 'unmatched';
+  if ((plan?.unmatchedTitles || []).length) return 'unmatched';
+  return 'guessed';
+}
+
+const REVIEW_REASONS = {
+  mixed: 'It has more than one book in it, so choose how to record it',
+  unmatched: 'It has something that isn’t in your catalogue',
+  guessed: 'The storefront didn’t say clearly which book it was',
+  refunded: 'It was already refunded',
+  'too-old': 'It’s more than a month old, so check it isn’t already recorded',
+  failed: 'It couldn’t be recorded automatically',
+};
+
+/** The plain-language reason an order is waiting, for the card and the notification. */
+export function reviewReasonText(reason) {
+  return REVIEW_REASONS[reason] || REVIEW_REASONS.failed;
+}
+
+function copies(n) {
+  return `${n} ${n === 1 ? 'copy' : 'copies'}`;
+}
+
+/** What the shelf looks like after this sale, in one sentence. */
+function stockSentence(outcome) {
+  const left = Math.max(0, Number(outcome.stockLeft) || 0);
+  const before = Number(outcome.stockBefore);
+  if (Number.isFinite(before) && before < (Number(outcome.qty) || 0)) {
+    return `You only had ${copies(Math.max(0, before))} on the shelf, so stock is now 0 — worth a recount.`;
+  }
+  if (left === 0) return 'That was your last copy.';
+  const threshold = Number(outcome.threshold);
+  if (Number.isFinite(threshold) && left <= threshold) return `Only ${left} left — time to reorder.`;
+  return `${left} left in stock.`;
+}
+
+function isLow(outcome) {
+  const left = Number(outcome.stockLeft);
+  const threshold = Number(outcome.threshold);
+  return Number.isFinite(left) && Number.isFinite(threshold) && left <= threshold;
+}
+
+/**
+ * What the card and the device notification say once new orders have been
+ * dealt with.
+ *
+ * Each outcome is one new order plus what happened to it:
+ *   'recorded' — the sale is in the ledger and stock came off.
+ *   'already'  — it was in the ledger before this check (another device, a scan).
+ *   'review'   — it is waiting for the publisher; `reason` says why.
+ *   'off'      — automatic recording is switched off; say what `describeNewOrders` says.
+ *
+ * `needsYou` is true when anything is still waiting, so the caller can lead
+ * with the review button rather than the ship button.
+ */
+export function describeOrderOutcomes(outcomes = []) {
+  // An entry with no outcome was only announced, never acted on — the same as 'off'.
+  const list = (Array.isArray(outcomes) ? outcomes.filter(Boolean) : [])
+    .map(o => (o.outcome ? o : { ...o, outcome: 'off' }));
+  if (!list.length) return { title: '', detail: '', count: 0, needsYou: false };
+  if (list.every(o => o.outcome === 'off')) return { ...describeNewOrders(list), needsYou: false };
+
+  const recorded = list.filter(o => o.outcome === 'recorded');
+  const already = list.filter(o => o.outcome === 'already');
+  const waiting = list.filter(o => o.outcome === 'review' || o.outcome === 'failed' || o.outcome === 'off');
+  const needsYou = waiting.length > 0;
+
+  if (list.length === 1) {
+    const [o] = list;
+    if (o.outcome === 'recorded') {
+      return {
+        count: 1,
+        needsYou,
+        title: 'New order recorded',
+        detail: `${o.customer} bought ${o.qty} × ${o.bookTitle} (${o.num}). ${stockSentence(o)}`,
+      };
+    }
+    if (o.outcome === 'already') {
+      return {
+        count: 1,
+        needsYou,
+        title: 'New order',
+        detail: `${o.customer} ordered — ${o.num}. It was already in your ledger.`,
+      };
+    }
+    return {
+      count: 1,
+      needsYou,
+      title: 'New order needs you',
+      detail: `${o.customer} ordered — ${o.num}. ${reviewReasonText(o.reason)}; stock hasn’t been taken off yet.`,
+    };
+  }
+
+  const parts = [];
+  if (recorded.length) parts.push(`${recorded.length} recorded and stock updated`);
+  if (already.length) parts.push(`${already.length} already in your ledger`);
+  if (waiting.length) parts.push(`${waiting.length} need${waiting.length === 1 ? 's' : ''} you`);
+  let detail = `${parts.join('; ')}.`;
+
+  const low = [];
+  recorded.filter(isLow).forEach(o => {
+    const label = `${o.bookTitle} (${Math.max(0, Number(o.stockLeft) || 0)} left)`;
+    if (!low.includes(label)) low.push(label);
+  });
+  if (low.length) detail += ` Running low: ${low.join(', ')}.`;
+
+  return {
+    count: list.length,
+    needsYou,
+    title: needsYou ? `${list.length} new orders — ${waiting.length} need${waiting.length === 1 ? 's' : ''} you` : `${list.length} new orders recorded`,
+    detail,
+  };
+}

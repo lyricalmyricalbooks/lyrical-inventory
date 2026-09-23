@@ -25,6 +25,7 @@ import {
   commitRecoveredWebsiteOrder,
   escapeHTML,
   getReconMemory,
+  isAuthor,
   getScanMemory,
   renderReconcile,
   saveReconMemory,
@@ -54,7 +55,8 @@ import {
 } from '../lib/integration-watch.js';
 import { browserWatchState, effectiveInterval, startWatch } from '../lib/watch-schedule.js';
 import {
-  describeNewOrders,
+  autoRecordBlocker,
+  describeOrderOutcomes,
   dueForRefresh,
   mergeSeenOrders,
   newOrdersSince,
@@ -1677,8 +1679,159 @@ function announceNewBigCartelOrders(bcOrders = []) {
   if (!fresh.length) return [];
 
   writeSeenOrders(mergeSeenOrders(stored, fresh.map(entry => entry.num)));
-  showNewOrderAlert(fresh);
+  // Not awaited: the check that found these must not wait on the ledger writes
+  // and label linking before it can report. The card appears once the orders
+  // have been dealt with, saying what was done rather than what is still to do.
+  handleNewBigCartelOrders(fresh, bcOrders).catch(error => {
+    console.error('Handling new Big Cartel orders failed', error);
+    showNewOrderAlert(fresh.map(entry => ({ ...entry, outcome: 'off' })));
+  });
   return fresh;
+}
+
+const BC_AUTO_RECORD_KEY = 'lm-bc-auto-record';
+const BC_ORDER_NOTIFY_KEY = 'lm-bc-order-notify';
+
+/**
+ * Whether new orders are recorded the moment they are spotted. On unless the
+ * publisher has switched it off: an order that sits unrecorded is the problem
+ * this exists to solve, so the safe default is to record.
+ */
+function autoRecordEnabled() {
+  try { return localStorage.getItem(BC_AUTO_RECORD_KEY) !== '0'; } catch (e) { return true; }
+}
+
+/** Whether she asked for a notification on this device when an order comes in. */
+function orderNotifyEnabled() {
+  try { return localStorage.getItem(BC_ORDER_NOTIFY_KEY) === '1'; } catch (e) { return false; }
+}
+
+/**
+ * Record each new order that can safely be recorded, then say what happened.
+ *
+ * Sequential on purpose: each record reads the ledger the previous one just
+ * wrote, so two orders for the same book both see the stock the other left.
+ * Every order ends with an outcome, including the ones left alone, so the card
+ * can say exactly which sales still need the publisher.
+ */
+async function handleNewBigCartelOrders(fresh = [], bcOrders = []) {
+  const outcomes = [];
+  const auto = autoRecordEnabled() && !isAuthor();
+  for (const entry of fresh) {
+    if (!auto) { outcomes.push({ ...entry, outcome: 'off' }); continue; }
+    const order = bcOrders.find(o => String(o.id) === String(entry.orderId))
+      || findBigCartelOrderById(entry.orderId || entry.num.replace(/^#/, ''));
+    if (!order) { outcomes.push({ ...entry, outcome: 'review', reason: 'failed' }); continue; }
+
+    const { plan } = bigCartelOrderPlan(order);
+    const blocker = autoRecordBlocker(order, plan);
+    if (blocker) { outcomes.push({ ...entry, outcome: 'review', reason: blocker }); continue; }
+
+    const bookId = plan.presetBookId;
+    const stockBefore = Number(states[bookId]?.stock);
+    let recorded;
+    try {
+      recorded = await recordBigCartelOrderIfMissing(order, plan);
+    } catch (error) {
+      console.error('Automatic record of a new order failed', error);
+      recorded = { status: 'failed' };
+    }
+
+    if (recorded.status === 'recorded') {
+      outcomes.push({
+        ...entry,
+        outcome: 'recorded',
+        qty: recorded.qty,
+        bookTitle: recorded.bookTitle,
+        stockBefore,
+        stockLeft: Number(states[bookId]?.stock),
+        threshold: Number(BOOKS[bookId]?.threshold),
+        linked: recorded.linked || 0,
+      });
+    } else if (recorded.status === 'already-recorded' || recorded.status === 'not-owed') {
+      outcomes.push({ ...entry, outcome: 'already' });
+    } else {
+      outcomes.push({ ...entry, outcome: 'review', reason: recorded.status === 'needs-review' ? 'guessed' : 'failed' });
+    }
+  }
+
+  showNewOrderAlert(outcomes);
+  notifyDeviceNewOrders(outcomes);
+  return outcomes;
+}
+
+/**
+ * Put the same news on the device itself, for the times the app is open in a
+ * background tab. Best-effort: a browser that blocks or lacks notifications
+ * must never get in the way of the ledger write that already happened.
+ */
+function notifyDeviceNewOrders(outcomes) {
+  if (!outcomes?.length || !orderNotifyEnabled()) return;
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+  const said = describeOrderOutcomes(outcomes);
+  try {
+    const n = new Notification(said.title, {
+      body: said.detail,
+      icon: '/pwa-192x192.png',
+      tag: 'lm-bc-new-orders',
+    });
+    n.onclick = () => {
+      try { window.focus(); } catch (e) { /* not focusable from here in every browser */ }
+      if (said.needsYou) switchTab('bigcartel');
+      n.close();
+    };
+  } catch (e) { /* unsupported context (e.g. iOS Safari outside an installed PWA) */ }
+}
+
+/** Reflect both switches on the Big Cartel tab, including a permission revoked outside the app. */
+function renderOrderAutomationToggles() {
+  const auto = $('bc-auto-record-cb');
+  if (auto) auto.checked = autoRecordEnabled();
+  const cb = $('bc-order-notify-cb');
+  if (!cb) return;
+  const supported = typeof Notification !== 'undefined';
+  cb.disabled = !supported;
+  cb.checked = supported && orderNotifyEnabled() && Notification.permission === 'granted';
+  const note = $('bc-order-notify-note');
+  if (note) {
+    note.textContent = !supported
+      ? 'Not supported in this browser.'
+      : Notification.permission === 'denied'
+        ? 'Blocked — allow notifications for this site in your browser settings, then try again.'
+        : 'Pops up on this device when an order comes in, even while the app is in a background tab.';
+  }
+}
+
+function toggleBigCartelAutoRecord() {
+  const cb = $('bc-auto-record-cb');
+  if (!cb) return;
+  try { localStorage.setItem(BC_AUTO_RECORD_KEY, cb.checked ? '1' : '0'); } catch (e) { /* storage blocked */ }
+  showToast(cb.checked
+    ? '✓ New website orders will be recorded and stock updated automatically'
+    : 'New website orders will wait for you to record them');
+}
+
+async function toggleBigCartelOrderNotify() {
+  const cb = $('bc-order-notify-cb');
+  if (!cb) return;
+  if (!cb.checked) {
+    try { localStorage.setItem(BC_ORDER_NOTIFY_KEY, '0'); } catch (e) { /* storage blocked */ }
+    return;
+  }
+  if (typeof Notification === 'undefined') {
+    cb.checked = false;
+    showToast('This browser does not support notifications', 'warn');
+    return;
+  }
+  const permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
+  if (permission !== 'granted') {
+    cb.checked = false;
+    showToast('Notifications were blocked — nothing will be sent to this device', 'warn');
+    renderOrderAutomationToggles();
+    return;
+  }
+  try { localStorage.setItem(BC_ORDER_NOTIFY_KEY, '1'); } catch (e) { /* storage blocked */ }
+  showToast('✓ You’ll be notified on this device when a website order comes in');
 }
 
 /**
@@ -1706,7 +1859,11 @@ function showNewOrderAlert(entries) {
   });
   _newOrderAlert = { entries: merged };
 
-  const said = describeNewOrders(merged);
+  const said = describeOrderOutcomes(merged);
+  const single = merged.length === 1 ? merged[0] : null;
+  // Record only makes sense for an order nobody has recorded yet and that the
+  // app could not record itself — never next to "New order recorded".
+  const canRecord = !!single && (single.outcome === 'off' || single.reason === 'failed');
   const title = $('new-order-alert-title');
   const detail = $('new-order-alert-detail');
   const ship = $('new-order-alert-ship');
@@ -1719,8 +1876,14 @@ function showNewOrderAlert(entries) {
   // several have stacked up — a button that silently picks one of four orders
   // to move stock for is worse than no button.
   if (ship) ship.hidden = merged.length !== 1;
-  if (record) record.hidden = merged.length !== 1;
-  if (review) review.textContent = merged.length === 1 ? 'Review' : 'Review orders';
+  if (record) record.hidden = !canRecord;
+  if (review) {
+    review.textContent = said.needsYou && !canRecord
+      ? (single ? 'Sort it out' : 'Review orders')
+      : (single ? 'Review' : 'Review orders');
+    review.classList.toggle('gold', said.needsYou && !canRecord);
+  }
+  card.dataset.tone = said.needsYou ? 'warn' : 'ok';
 
   card.hidden = false;
 }
@@ -1830,7 +1993,9 @@ async function refreshBigCartelOrdersIfDue({ force = false } = {}) {
       ),
       online,
       configured: ready,
-      visible,
+      // A background tab is still worth watching when she asked to be notified
+      // on this device — that is the only moment a notification is any use.
+      visible: visible || orderNotifyEnabled(),
       busy: _bcGapChecking,
     });
   if (!due) return false;
@@ -1934,6 +2099,7 @@ function gapBookOptions(selectedId) {
 function renderBigCartelLedgerGaps() {
   const panel = $('bc-gap-panel');
   if (!panel) return;
+  renderOrderAutomationToggles();
   const summary = $('bc-gap-summary');
   const list = $('bc-gap-list');
   const repairs = $('bc-gap-repairs');
@@ -1963,7 +2129,9 @@ function renderBigCartelLedgerGaps() {
       : `<div class="empty-state" style="padding:1.5rem;">
            <div class="e-icon">✓</div>
            Every Big Cartel order is recorded in your ledger.
-           <div style="font-size:var(--text-xs);color:var(--text3);margin-top:6px;">Nothing to add. Run the check again after your next sale.</div>
+           <div style="font-size:var(--text-xs);color:var(--text3);margin-top:6px;">${autoRecordEnabled()
+             ? 'New orders are recorded automatically while the app is open.'
+             : 'Nothing to add. Run the check again after your next sale.'}</div>
          </div>`;
   }
 
@@ -2470,6 +2638,8 @@ export {
   showNewOrderAlert,
   dismissNewOrderAlert,
   recordNewOrderFromAlert,
+  toggleBigCartelAutoRecord,
+  toggleBigCartelOrderNotify,
   shipNewOrderFromAlert,
   reviewNewOrdersFromAlert,
   refreshBigCartelOrdersIfDue,

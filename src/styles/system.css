@@ -429,6 +429,9 @@ tbody.sys-long-list > tr {
 }
 /* `hidden` must beat the `display:flex` above, or it is always painted. */
 .new-order-alert[hidden] { display: none; }
+/* An order that arrived but is still waiting for the publisher reads as a
+   caution, not as done — the stripe is the first thing the eye lands on. */
+.new-order-alert[data-tone="warn"] { border-left-color: var(--status-active); }
 
 .app-alert-ico,
 .new-order-alert-ico {
