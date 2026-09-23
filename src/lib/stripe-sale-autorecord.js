@@ -82,7 +82,9 @@ export function describeCardSales(outcomes = []) {
   const parts = [];
   if (recorded.length === 1) {
     const [o] = recorded;
-    parts.push(`${o.qty} × ${o.bookTitle} paid by card and recorded. ${o.stockLeft} left in stock.`);
+    parts.push(o.books > 1
+      ? `${o.qty} copies of ${o.bookTitle} paid by card and recorded.`
+      : `${o.qty} × ${o.bookTitle} paid by card and recorded. ${o.stockLeft} left in stock.`);
   } else if (recorded.length) {
     const copies = recorded.reduce((sum, o) => sum + (o.qty || 0), 0);
     parts.push(`${recorded.length} card payments recorded — ${copies} cop${copies === 1 ? 'y' : 'ies'} in all.`);
@@ -145,22 +147,25 @@ export function bookNamedIn(text, books = {}) {
  * would be inventing a number. A refund already raised is not raised again.
  */
 export function refundsToRaise(refunds = [], sales = []) {
+  // One payment can be several ledger rows (a card-reader sale of two
+  // different books), so sales are grouped by the charge they came from.
   const byCharge = new Map();
   (Array.isArray(sales) ? sales : []).forEach(sale => {
-    if (sale?.chargeId && !sale.voided) byCharge.set(sale.chargeId, sale);
+    if (!sale?.chargeId || sale.voided) return;
+    if (!byCharge.has(sale.chargeId)) byCharge.set(sale.chargeId, []);
+    byCharge.get(sale.chargeId).push(sale);
   });
   const out = [];
   const seen = new Set();
   (Array.isArray(refunds) ? refunds : []).forEach(refund => {
     if (!refund || refund.status === 'failed' || refund.status === 'canceled') return;
-    const sale = byCharge.get(refund.chargeId);
-    if (!sale || seen.has(refund.chargeId)) return;
-    if (sale.refundNoted) return;
+    const rows = (byCharge.get(refund.chargeId) || []).filter(row => !row.refundNoted);
+    if (!rows.length || seen.has(refund.chargeId)) return;
     seen.add(refund.chargeId);
-    const paid = Number(sale.paidAmount) || 0;
+    const paid = rows.reduce((sum, row) => sum + (Number(row.paidAmount) || 0), 0);
     const back = Number(refund.chargeRefundedTotal ?? refund.amount) || 0;
     const full = refund.fullyRefunded === true || (paid > 0 && back >= paid - 0.005);
-    out.push({ ...sale, refundId: refund.id || '', refunded: back, full });
+    rows.forEach(row => out.push({ ...row, refundId: refund.id || '', refunded: back, full }));
   });
   return out;
 }

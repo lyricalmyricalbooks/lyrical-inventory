@@ -197,8 +197,9 @@ import {
   validateFields,
 } from './lib/modal.js';
 import { dismissAppAlert, pushAppAlert } from './lib/app-alert.js';
+import { booksInDescription, saleCodes, splitSalePlan } from './lib/sale-codes.js';
+import { describeMarketDay, latestMarketDay, summariseMarketDay } from './lib/market-day.js';
 import {
-  bookNamedIn,
   describeCardSales,
   describeRefunds,
   refundsToRaise,
@@ -13016,6 +13017,24 @@ function voidHistEntry(s, book, h) {
   syncHistoryVoidDeletion(h, true);
 }
 
+/** The exact reverse of voidHistEntry: the sale counts again. */
+function unvoidHistEntry(s, book, h) {
+  s.stock = Math.max(0, s.stock - h.qty);
+  if (!h.gratuity) {
+    s.sold += h.qty;
+    s.revenue += h.qty * h.price;
+  }
+  if (!s.chStats[h.chan]) s.chStats[h.chan] = { txns: 0, units: 0, revenue: 0 };
+  s.chStats[h.chan].txns++;
+  s.chStats[h.chan].units += h.qty;
+  s.chStats[h.chan].revenue += h.qty * h.price;
+  h.voided = false;
+  delete h.voidedAt;
+  delete h.voidedReason;
+  recomputeAfters(s, book);
+  syncHistoryVoidDeletion(h, false);
+}
+
 function voidEntry() {
   if (!editCtx) return;
   const s = getState(), book = getBook();
@@ -13027,20 +13046,7 @@ function voidEntry() {
       voidHistEntry(s, book, h);
       showToast('Entry voided — stock & revenue reversed (Sheets row delete queued)', 'warn');
     } else {
-      // UNVOID: re-apply effects
-      s.stock = Math.max(0, s.stock - h.qty);
-      if (!h.gratuity) {
-        s.sold += h.qty;
-        s.revenue += h.qty * h.price;
-      }
-      if (!s.chStats[h.chan]) s.chStats[h.chan] = { txns: 0, units: 0, revenue: 0 };
-      s.chStats[h.chan].txns++;
-      s.chStats[h.chan].units += h.qty;
-      s.chStats[h.chan].revenue += h.qty * h.price;
-      h.voided = false;
-      delete h.voidedAt;
-      recomputeAfters(s, book);
-      syncHistoryVoidDeletion(h, false);
+      unvoidHistEntry(s, book, h);
       showToast('Entry unvoided — effects restored (Sheets row restore queued)');
     }
   } else {
@@ -16669,6 +16675,8 @@ async function boot(forcedBook) {
         // And after the label: follow each parcel to the door, and speak up
         // when one is waiting at a post office, stuck, or coming back.
         startDeliveryWatch();
+        // The morning after a market day: one summary of what sold in person.
+        showMarketDaySummaryIfDue();
         // Money coming in rather than going out: a consignment store paying its
         // invoice through the Stripe link. Started after the books load because
         // settling an invoice reaches into its own book's ledger.
@@ -22468,8 +22476,14 @@ function autoRecordStripeSale(payment, rawClassification) {
   // A card-reader tap carries no book tag, but the seller may have typed the
   // title into its description in the Stripe app. One title named there is
   // as good as the tag a QR-code payment carries.
-  const describedId = !rawClassification.bookId && payment.cardPresent
-    ? bookNamedIn(payment.description, BOOKS) : '';
+  const lines = !rawClassification.bookId && payment.cardPresent
+    ? booksInDescription(payment.description, BOOKS) : [];
+  // Several books, or a count written in: the description has to add up to
+  // the money, and each book becomes its own ledger row.
+  if (lines.length > 1 || (lines.length === 1 && lines[0].stated)) {
+    return recordReaderSplitSale(payment, lines);
+  }
+  const describedId = lines.length === 1 ? lines[0].bookId : '';
   const classification = describedId ? { ...rawClassification, bookId: describedId } : rawClassification;
   const book = classification.bookId ? BOOKS[classification.bookId] : null;
   const plan = stripeSalePlan(payment, {
@@ -22484,6 +22498,7 @@ function autoRecordStripeSale(payment, rawClassification) {
   if (plan.action === 'review') {
     if (readRaisedStripeSales().includes(payment.id)) return null;
     noteRaisedStripeSale(payment.id);
+    if (payment.cardPresent) noteUnmatchedReaderPayment(payment);
     return { ...plan, chargeId: payment.id };
   }
 
@@ -22561,7 +22576,8 @@ function stripeRecordedSales() {
       sales.push({
         bookId,
         sheetsId: h.sheetsId,
-        chargeId: h.sheetsId.slice('stripe-'.length),
+        // A split reader sale's later rows carry "-2", "-3"; they belong to the same charge.
+        chargeId: h.sheetsId.slice('stripe-'.length).replace(/-\d+$/, ''),
         qty: Number(h.qty) || 0,
         bookTitle: BOOKS[bookId]?.title || 'a book',
         paidAmount: Number(h.payment?.amount) || (Number(h.qty) || 0) * (Number(h.price) || 0),
@@ -22574,6 +22590,8 @@ function stripeRecordedSales() {
 }
 
 function findStripeSaleRow(bookId, sheetsId) {
+  // An empty id would match every row that never had one.
+  if (!sheetsId) return null;
   return (states[bookId]?.hist || []).find(h => h?.sheetsId === sheetsId) || null;
 }
 
@@ -22620,25 +22638,195 @@ function reverseRefundedSalesFromAlert(event) {
   let reversed = 0;
   let copies = 0;
   const touched = new Set();
-  pending.forEach(item => {
+  reverseSalesWithUndo(pending, 'Refunded in Stripe');
+}
+
+// The rows the last reversal voided, so its Undo knows exactly what to restore.
+let _lastReversal = [];
+
+/**
+ * Void these sales the way the Void button does, then offer an Undo.
+ *
+ * Shared by the Stripe refund alert and the storefront one. The Undo is the
+ * safety net for a mis-tap on a small screen: it restores exactly the rows
+ * this reversal voided and nothing else.
+ */
+function reverseSalesWithUndo(items, reason) {
+  let reversed = 0;
+  let copies = 0;
+  const touched = new Set();
+  const done = [];
+  (items || []).forEach(item => {
     const st = states[item.bookId];
     const book = BOOKS[item.bookId];
     const row = findStripeSaleRow(item.bookId, item.sheetsId);
     if (!st || !book || !row || row.voided) return;
     voidHistEntry(st, book, row);
-    row.voidedReason = 'Refunded in Stripe';
+    row.voidedReason = reason;
     reversed++;
     copies += Number(row.qty) || 0;
     touched.add(item.bookId);
+    done.push({ bookId: item.bookId, sheetsId: item.sheetsId });
   });
   touched.forEach(bookId => saveState(bookId));
   if (!reversed) { showToast('Those sales were already reversed', 'warn'); return; }
+  _lastReversal = done;
   renderHist();
   updateDash();
   if (typeof window.renderAllOverview === 'function') window.renderAllOverview();
-  showToast(`✓ Reversed ${reversed} refunded sale${reversed === 1 ? '' : 's'} — ${copies} cop${copies === 1 ? 'y' : 'ies'} back in stock`, 'ok', 5000);
+  pushAppAlert({
+    id: 'sale-reversal-undo',
+    icon: '↩️',
+    title: `Reversed ${reversed} sale${reversed === 1 ? '' : 's'}`,
+    detail: `${copies} cop${copies === 1 ? 'y is' : 'ies are'} back in stock and the sale${reversed === 1 ? ' is' : 's are'} out of your earnings. The sale${reversed === 1 ? ' stays' : 's stay'} in your history, marked as voided.`,
+    actionLabel: 'Undo',
+    action: 'undoLastReversalFromAlert(event)',
+  });
+}
+
+function undoLastReversalFromAlert(event) {
+  if (event) event.stopPropagation();
+  dismissAppAlert('sale-reversal-undo');
+  const rows = _lastReversal;
+  _lastReversal = [];
+  let restored = 0;
+  const touched = new Set();
+  rows.forEach(item => {
+    const st = states[item.bookId];
+    const book = BOOKS[item.bookId];
+    const row = findStripeSaleRow(item.bookId, item.sheetsId);
+    if (!st || !book || !row || !row.voided) return;
+    unvoidHistEntry(st, book, row);
+    restored++;
+    touched.add(item.bookId);
+  });
+  touched.forEach(bookId => saveState(bookId));
+  if (!restored) { showToast('Nothing to undo', 'warn'); return; }
+  renderHist();
+  updateDash();
+  if (typeof window.renderAllOverview === 'function') window.renderAllOverview();
+  showToast(`✓ Undone — ${restored} sale${restored === 1 ? '' : 's'} restored`);
+}
+window.undoLastReversalFromAlert = undoLastReversalFromAlert;
+
+// ── Website orders the store reversed ──────────────────────────────────────
+// The storefront check (features/bigcartel.js) finds them and keeps the list;
+// the reversal happens here because voiding a sale is the ledger's job.
+
+const STORE_REVERSAL_PENDING_KEY = 'lm-store-reversal-pending';
+
+function reverseStoreOrdersFromAlert(event) {
+  if (event) event.stopPropagation();
+  dismissAppAlert('store-reversals');
+  let pending = [];
+  try { pending = JSON.parse(localStorage.getItem(STORE_REVERSAL_PENDING_KEY) || '[]'); } catch (_) { pending = []; }
+  try { localStorage.setItem(STORE_REVERSAL_PENDING_KEY, '[]'); } catch (_) { /* storage blocked */ }
+  reverseSalesWithUndo(Array.isArray(pending) ? pending.filter(item => item.full) : [], 'Refunded or cancelled on the store');
+}
+window.reverseStoreOrdersFromAlert = reverseStoreOrdersFromAlert;
+
+// ── The morning after a market day ─────────────────────────────────────────
+
+const MARKET_DAY_SHOWN_KEY = 'lm-market-day-shown';
+
+function showMarketDaySummaryIfDue() {
+  if (!window.IS_PUBLISHER || isAuthor()) return;
+  const rows = [];
+  Object.entries(states).forEach(([bookId, st]) => (st?.hist || []).forEach(entry => rows.push({ bookId, entry })));
+  let shownFor = '';
+  try { shownFor = localStorage.getItem(MARKET_DAY_SHOWN_KEY) || ''; } catch (_) { /* storage blocked */ }
+  const day = latestMarketDay(rows, { today: today(), shownFor });
+  if (!day) return;
+  const unmatched = (readUnmatchedReaderPayments()[day] || [])
+    .filter(id => !_reconRecordedChargeIds().has(id)).length;
+  const summary = summariseMarketDay(rows, day, {
+    books: BOOKS,
+    stockOf: (bookId) => (states[bookId] ? Number(states[bookId].stock) : null),
+    unmatched,
+  });
+  const said = describeMarketDay(summary);
+  try { localStorage.setItem(MARKET_DAY_SHOWN_KEY, day); } catch (_) { /* storage blocked */ }
+  if (!said.count) return;
+  pushAppAlert({
+    id: 'market-day',
+    icon: '🧾',
+    title: said.title,
+    detail: said.detail,
+    tone: said.needsYou ? SYNC_TONES.PENDING : '',
+    actionLabel: said.needsYou ? 'Match them' : '',
+    action: said.needsYou ? 'openStripeWorklistFromAlert(event)' : '',
+  });
 }
 window.reverseRefundedSalesFromAlert = reverseRefundedSalesFromAlert;
+
+/**
+ * A card-reader payment whose description names several books, or counts.
+ * Recorded only when the books' prices add up to what was paid, one ledger
+ * row per book. The first row carries the charge's own id and the rest a
+ * numbered one, so the worklist still recognises the payment as recorded and
+ * a later refund still finds every row.
+ */
+function recordReaderSplitSale(payment, lines) {
+  if (payment.refunded || payment.disputed) return null;
+  if (!(Number(payment.created) >= stripeSaleAutoSince())) return null;
+  const raise = (reason) => {
+    if (readRaisedStripeSales().includes(payment.id)) return null;
+    noteRaisedStripeSale(payment.id);
+    noteUnmatchedReaderPayment(payment);
+    return { action: 'review', reason, chargeId: payment.id };
+  };
+  if (_reconLikelyAlreadyLogged(payment)) return raise('maybe-rung-up');
+  const plan = splitSalePlan(payment, lines, BOOKS, {
+    bookCurrency: (book) => normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD'),
+  });
+  if (plan.action !== 'record') return raise(plan.reason);
+  if (plan.lines.some(line => !states[line.bookId])) return null;
+
+  try {
+    plan.lines.forEach((line, i) => {
+      _reconApplySaleToBook(line.bookId, line.qty, line.price,
+        { currency: payment.currency, amount: line.qty * line.price, ref: payment.id },
+        i === 0 ? payment.id : `${payment.id}-${i + 1}`,
+        'Card reader',
+        { date: payment.date, email: payment.email, chan: 'Book Fair' });
+    });
+  } catch (error) {
+    console.error('Recording a split card-reader sale failed', error);
+    return raise('failed');
+  }
+  return {
+    action: 'record',
+    bookId: plan.lines[0].bookId,
+    qty: plan.lines.reduce((sum, line) => sum + line.qty, 0),
+    books: plan.lines.length,
+    bookTitle: plan.lines.map(line => BOOKS[line.bookId]?.title || 'a book').join(' and '),
+    stockLeft: Number(states[plan.lines[0].bookId]?.stock) || 0,
+    chargeId: payment.id,
+  };
+}
+
+// Reader payments the app could not match to a book, by the day they were
+// taken, so the morning-after summary can say how many are still waiting.
+const READER_UNMATCHED_KEY = 'lm-reader-unmatched';
+
+function readUnmatchedReaderPayments() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(READER_UNMATCHED_KEY) || '{}');
+    return raw && typeof raw === 'object' ? raw : {};
+  } catch (_) { return {}; }
+}
+
+function noteUnmatchedReaderPayment(payment) {
+  const all = readUnmatchedReaderPayments();
+  const day = String(payment.date || '').slice(0, 10);
+  if (!day) return;
+  const ids = Array.isArray(all[day]) ? all[day] : [];
+  if (!ids.includes(payment.id)) ids.push(payment.id);
+  all[day] = ids;
+  // Only the last couple of weeks matter to a morning-after summary.
+  Object.keys(all).sort().slice(0, -14).forEach(key => { delete all[key]; });
+  try { localStorage.setItem(READER_UNMATCHED_KEY, JSON.stringify(all)); } catch (_) { /* storage full */ }
+}
 
 function showCardSaleAlert(outcomes) {
   const said = describeCardSales(outcomes);
@@ -22665,6 +22853,17 @@ window.openStripeWorklistFromAlert = openStripeWorklistFromAlert;
 function renderStripeSaleAutoToggle() {
   const cb = document.getElementById('stripe-sale-auto-cb');
   if (cb) cb.checked = stripeSaleAutoEnabled();
+  // The short codes a card-reader description can use instead of a title.
+  const list = document.getElementById('stripe-sale-codes');
+  if (list) {
+    const codes = saleCodes(BOOKS);
+    const rows = Object.entries(codes)
+      .map(([id, code]) => ({ code, title: BOOKS[id]?.title || id }))
+      .sort((a, b) => a.title.localeCompare(b.title));
+    list.innerHTML = rows.length
+      ? rows.map(r => `<li><span class="sale-code">${escapeHtml(r.code)}</span> ${escapeHtml(r.title)}</li>`).join('')
+      : '<li>Add a book to your catalogue to get its code.</li>';
+  }
 }
 
 function toggleStripeSaleAuto() {
