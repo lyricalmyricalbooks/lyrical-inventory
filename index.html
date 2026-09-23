@@ -1468,6 +1468,12 @@
     <div class="book-context-dot"></div>
     <div><div class="book-context-title" id="bc-title-man">—</div><div class="book-context-meta">Manual order entry</div></div>
   </div>
+  <!-- Phone only: one form at a time. -->
+  <div class="phone-mode-seg" role="tablist" aria-label="What are you recording?">
+    <button type="button" role="tab" class="phone-mode-opt" id="man-mode-sale" aria-selected="true" aria-controls="man-sale-sect" onclick="setManualMode('sale')">Sale</button>
+    <button type="button" role="tab" class="phone-mode-opt" id="man-mode-gift" aria-selected="false" aria-controls="man-gift-sect" onclick="setManualMode('gift')">Gift copy</button>
+  </div>
+  <div id="man-sale-sect">
   <div class="section-hed" style="margin-bottom:1.1rem;">Log an order</div>
   <div class="card">
     <div class="order-grid">
@@ -1506,10 +1512,10 @@
     </div>
     <!-- Channel and Payment type -->
     <div class="g2" style="margin-top:14px;">
-      <div class="form-group"><label for="m-chan">Channel</label><select id="m-chan"><option>Website</option><option>In Person</option><option>Book Fair</option><option>Consignment</option><option>Other</option></select></div>
+      <div class="form-group"><label for="m-chan">Channel</label><select id="m-chan" data-phone-seg><option>Website</option><option>In Person</option><option>Book Fair</option><option>Consignment</option><option>Other</option></select></div>
       <div class="form-group needs-attention">
         <label for="m-payment-type">Payment type <span class="req-badge">Required</span></label>
-        <select id="m-payment-type" required>
+        <select id="m-payment-type" required data-phone-seg>
           <option value="">— Select payment type —</option>
           <option value="Payment directly to artist">Payment directly to artist</option>
           <option value="Payment directly to publisher">Payment directly to publisher</option>
@@ -1543,7 +1549,9 @@
     </div>
   </div>
   <div class="log-console" id="log-manual"></div>
+  </div>
 
+  <div id="man-gift-sect">
   <div class="divider" style="margin-top:1.5rem;"></div>
   <div class="section-hed" style="margin-bottom:.2rem;margin-top:1.5rem;">Log a gratuity <span class="muted-note">(gifted / complimentary)</span></div>
   <p class="lead-note">Gratuity books reduce stock but are <strong>not</strong> counted as revenue or sold units.</p>
@@ -1556,7 +1564,7 @@
     <div class="g2" style="margin-top:14px;">
       <div class="form-group">
         <label for="g-source">Gratuity pile</label>
-        <select id="g-source" onchange="updateGratuitySourceHint()">
+        <select id="g-source" onchange="updateGratuitySourceHint()" data-phone-seg>
           <option value="publisher">Publisher's pile</option>
           <option value="author">Author's pile</option>
         </select>
@@ -1584,6 +1592,7 @@
     </div>
   </div>
   <div class="log-console" id="log-gratuity"></div>
+  </div>
 </div>
 
 <!-- CONSIGNMENT -->

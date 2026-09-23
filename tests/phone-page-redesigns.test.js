@@ -118,3 +118,46 @@ test('phone pass: Add sale keeps its save button in reach and tables keep their 
   // The Save-preset button on Shipping no longer forces a 28px height.
   expect(html).not.toMatch(/openSaveBookPresetModal\(\)" style="[^"]*height:28px/);
 });
+
+function segApi() {
+  const src = slice('function buildPhoneSeg', 'refreshPhoneSegs();\n');
+  return new Function(`${src}; return { refreshPhoneSegs, syncPhoneSegs };`)();
+}
+
+test('Add sale: tap buttons mirror each dropdown and drive it', () => {
+  const pay = $('m-payment-type');
+  pay.replaceChildren();
+  ['', 'Card', 'Cash'].forEach((v) => pay.add(new Option(v || '— Select —', v)));
+  const api = segApi();
+  api.refreshPhoneSegs();
+  const seg = pay.nextElementSibling;
+  expect(seg.classList.contains('phone-seg')).toBe(true);
+  // The empty "choose one" option never becomes a button.
+  expect([...seg.querySelectorAll('.phone-seg-opt')].map((b) => b.dataset.value)).toEqual(['Card', 'Cash']);
+  let changed = 0;
+  pay.addEventListener('change', () => changed++);
+  seg.querySelector('[data-value="Card"]').click();
+  expect(pay.value).toBe('Card');
+  expect(changed).toBe(1);
+  expect(seg.querySelector('[data-value="Card"]').getAttribute('aria-checked')).toBe('true');
+  // Clearing the form after a save un-highlights the buttons too.
+  pay.value = '';
+  api.syncPhoneSegs();
+  expect(seg.querySelector('[aria-checked="true"]')).toBeNull();
+  // Rebuilding (each time Add sale opens) never duplicates the row.
+  api.refreshPhoneSegs();
+  expect(pay.parentElement.querySelectorAll('.phone-seg').length).toBe(1);
+});
+
+test('Add sale: the form reset after saving re-syncs the buttons', () => {
+  expect(mainJs).toMatch(/\$\('m-payment-type'\)\.value = ''; \$\('m-hint'\)\.textContent = ''; syncPhoneSegs\(\);/);
+  expect(mainJs).toMatch(/if \(name === 'manual'\) refreshPhoneSegs\(\);/);
+});
+
+test('Add sale: Sale / Gift copy switch shows one form at a time, on phones only', () => {
+  expect($('man-sale-sect').querySelector('[onclick="submitManual(event)"]')).not.toBeNull();
+  expect($('man-gift-sect').querySelector('[onclick="submitGratuity(event)"]')).not.toBeNull();
+  expect(styles).toMatch(/\.phone-mode-seg,\.phone-seg\{display:none;\}/);
+  const block = styles.slice(styles.indexOf('ADD SALE, PHONE REDESIGN'));
+  expect(block).toMatch(/#tab-manual:not\(\.is-gift\) #man-gift-sect,\s*#tab-manual\.is-gift #man-sale-sect\{display:none;\}/);
+});
