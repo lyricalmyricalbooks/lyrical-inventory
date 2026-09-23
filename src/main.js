@@ -8,7 +8,7 @@ import './styles/theme-dark.css';
 import './firebase.js';
 import { registerSW } from 'virtual:pwa-register';
 import { calcArtistEarnings, tierEffectiveCap, describePayout, payoutRequestCovered } from './lib/earnings.js';
-import { calculateBreakEven } from './lib/breakeven.js';
+import { calculateBreakEven, syncBreakEvenTier } from './lib/breakeven.js';
 import { escapeHtml } from './lib/html.js';
 import { ensureXlsx, loadExternalScript } from './lib/external-scripts.js';
 import { buildActivityFeed } from './lib/activity-feed.js';
@@ -2069,17 +2069,7 @@ async function saveBookFromModal() {
   };
 
   // Keep the first break-even tier aligned when it still represents production-cost recovery.
-  const previousCost = currentBook.productionCost || 0;
-  const val = book.productionCost;
-  if (Array.isArray(book.profitTiers) && book.profitTiers.length > 0) {
-    const firstTier = book.profitTiers[0];
-    const tierLabel = (firstTier?.label || '').toLowerCase();
-    const shouldSyncThreshold =
-      firstTier?.revenueUpTo !== null &&
-      (Math.abs((firstTier.revenueUpTo || 0) - previousCost) < 0.0001 || tierLabel.includes('break-even'));
-
-    if (shouldSyncThreshold) firstTier.revenueUpTo = val;
-  }
+  syncBreakEvenTier(book.profitTiers, currentBook.productionCost || 0, book.productionCost);
 
   // A currency change re-denominates every figure already on the books, so ask
   // what to do with the history BEFORE committing the edit. Cancelling here
@@ -15744,15 +15734,7 @@ async function saveProductionCosts() {
       stored[book.id] = val;
 
       // Keep the first break-even tier aligned when it still represents production-cost recovery.
-      if (Array.isArray(book.profitTiers) && book.profitTiers.length > 0) {
-        const firstTier = book.profitTiers[0];
-        const tierLabel = (firstTier?.label || '').toLowerCase();
-        const shouldSyncThreshold =
-          firstTier?.revenueUpTo !== null &&
-          (Math.abs((firstTier.revenueUpTo || 0) - previousCost) < 0.0001 || tierLabel.includes('break-even'));
-
-        if (shouldSyncThreshold) firstTier.revenueUpTo = val;
-      }
+      syncBreakEvenTier(book.profitTiers, previousCost, val);
     }
   });
   // Save to Firebase + localStorage fallback
