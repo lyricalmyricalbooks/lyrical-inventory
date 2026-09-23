@@ -601,6 +601,36 @@ function automationSignals(ctx, out) {
     });
   }
 
+  // An invoice a store paid only part of by card. Recorded on the invoice
+  // but deliberately not marked paid, so the rest is still owed — and until
+  // now nothing on the to-do list said so once the pop-up was gone.
+  for (const [bookId, s] of Object.entries(ctx.states || {})) {
+    for (const inv of (s?.invoices || [])) {
+      const parts = Array.isArray(inv?.stripePartPayments) ? inv.stripePartPayments : [];
+      if (!parts.length || inv.status === 'paid' || inv.voided) continue;
+      const cur = parts[0].currency || inv.currencyCode || '';
+      const paid = parts.reduce((sum, p) => sum + (Number(p.amountMinor) || 0), 0) / 100;
+      const due = (Number(parts[parts.length - 1].expectedMinor) || 0) / 100;
+      out.push({
+        id: `money-invoice-short:${bookId}:${inv.id || inv.num}`, group: 'orders', status: 'warn', icon: '🧾',
+        label: `Invoice ${inv.num || ''} was only partly paid`.replace('  ', ' '),
+        detail: `${inv.storeName || 'The store'} paid ${cur} ${paid.toFixed(2)} by card${due ? ` of ${cur} ${due.toFixed(2)}` : ''}. The rest is still owed, so the invoice stays open.`,
+        bookId,
+        fix: { label: 'Open the invoice', ...openBook(bookId, 'consignment') },
+      });
+    }
+  }
+
+  const conflicts = Number(a.syncConflicts) || 0;
+  if (conflicts) {
+    out.push({
+      id: 'setup-sync-conflicts', group: 'setup', status: 'warn', icon: '🔀',
+      label: `${conflicts} ${plural(conflicts, 'change was', 'changes were')} made on two devices at once`,
+      detail: 'Both versions were kept safe. Have a quick look to confirm the one the app kept is the right one.',
+      fix: openAction('sync-conflicts', 'Review them'),
+    });
+  }
+
   const labels = Number(a.labelsToMatch) || 0;
   if (labels) {
     out.push({
