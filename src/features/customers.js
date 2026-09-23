@@ -1395,7 +1395,7 @@ async function renderCampaigns() {
             <span style="color:var(--status-critical, var(--red));">Failed</span>
             <strong style="color:var(--status-critical, var(--red));">${Number(c.stats.failed) || 0}</strong>
           </div>` : ''}
-          <button class="btn sm cust-action-btn" onclick="deleteCampaign('${escapeHtml(c.id)}')" title="Delete from history" style="margin-left:8px;">✕</button>
+          <button class="btn sm cust-action-btn" onclick="deleteCampaign('${escapeHtml(c.id)}')" title="Delete from history" aria-label="Delete campaign ${escapeHtml(c.subject || '')} from history" style="margin-left:8px;">✕</button>
         </div>
       </div>
     `).join('')
