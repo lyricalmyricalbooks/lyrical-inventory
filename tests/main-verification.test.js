@@ -151,8 +151,9 @@ describe('main.js window binding verification', () => {
     expect(appSource).toContain("animateCountValue('d-gratuities', inventory.gratuities)");
   });
 
-  it('makes recent changes commits clickable in the Whats New modal', () => {
-    expect(appSource).toContain('class="commit-item"');
+  it('links each What\'s New note to its technical details', () => {
+    expect(appSource).toContain('class="commit-item wn-item"');
+    expect(appSource).toContain('Technical details ↗');
     expect(appSource).toContain('fullSha');
     expect(appSource).toContain('https://github.com/lyricalmyricalbooks/lyrical-inventory/commit/');
   });

@@ -780,7 +780,8 @@ import {
   exportCustomersCSV,
 } from './features/customers.js';
 import { channelMixRows } from './lib/channel-mix.js';
-import { csvCell, toCsv } from './lib/csv.js';
+import { csvCell, csvToObjects, toCsv } from './lib/csv.js';
+import { plainChanges, kindLabel, parseBuildDate, relativeWhen, dayHeading } from './lib/whats-new.js';
 import { downloadText, downloadCsv } from './lib/download.js';
 import { OC_STAGES } from './lib/opencall.js';
 import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, recordInventoryDisposal, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, orderStockPreview, orderStockPreviewCopy, deriveStockBreakdown, transferAuthorStock, deductSaleFromStockBreakdown, isVoidStale } from './lib/inventory.js';
@@ -3889,39 +3890,32 @@ function updateSubheader() {
 
   const isPub = window.IS_PUBLISHER && !isAuthor();
 
+  renderUpdatedStamps(isPub);
+}
+
+// "Updated 3 hours ago" rather than a raw build timestamp: the owner wants to
+// know whether the app is fresh, not the second it was built. The exact time
+// stays in the tooltip.
+function renderUpdatedStamps(isPub = window.IS_PUBLISHER && !isAuthor()) {
+  const built = parseBuildDate(typeof __GIT_COMMIT_DATE__ === 'string' ? __GIT_COMMIT_DATE__ : '');
+  const when = built ? relativeWhen(built) : '';
+  const exact = built ? built.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
+
   const upd = $('tab-updated');
   if (upd) {
-    upd.textContent = 'updated ' + __GIT_COMMIT_DATE__;
-    if (isPub) {
-      upd.style.cursor = 'pointer';
-      upd.style.textDecoration = 'underline dotted';
-      upd.title = 'Click to see what changed';
-      upd.onclick = (e) => showWhatsNew(e);
-    } else {
-      upd.style.cursor = '';
-      upd.style.textDecoration = '';
-      upd.title = '';
-      upd.onclick = null;
-    }
+    upd.textContent = when ? `Updated ${when}` : '';
+    upd.classList.toggle('is-clickable', !!isPub);
+    upd.title = isPub ? `Last updated ${exact} — click to see what changed` : (exact ? `Last updated ${exact}` : '');
+    upd.onclick = isPub ? (e) => showWhatsNew(e) : null;
   }
 
-  // Publisher app-shell hides the tab bar, so mirror the stamp into the sidebar.
+  // Publisher app-shell hides the tab bar, so the sidebar carries the card.
+  const whenEl = $('pub-updated-when');
+  if (whenEl) whenEl.textContent = when ? `Updated ${when}` : 'Up to date';
   const pubUpd = $('pub-updated');
-  if (pubUpd) {
-    pubUpd.textContent = 'updated ' + __GIT_COMMIT_DATE__;
-    if (isPub) {
-      pubUpd.style.cursor = 'pointer';
-      pubUpd.style.textDecoration = 'underline dotted';
-      pubUpd.title = 'Click to see what changed';
-      pubUpd.onclick = (e) => showWhatsNew(e);
-    } else {
-      pubUpd.style.cursor = '';
-      pubUpd.style.textDecoration = '';
-      pubUpd.title = '';
-      pubUpd.onclick = null;
-    }
-  }
+  if (pubUpd) pubUpd.title = exact ? `Last updated ${exact}` : '';
 }
+setInterval(() => renderUpdatedStamps(), 5 * 60 * 1000);
 
 // The header can't hold the brand, book switcher, action menus AND the KPI
 // stats on one line at laptop widths, so on desktop the stat strip lives on
@@ -8651,34 +8645,54 @@ function renderArtistReimburseBanner() {
 // ── SPREADSHEET IMPORT
 let _importRows = [];
 
+// A spreadsheet cell as a number. Excel cells usually arrive as numbers
+// already; CSV cells are always text, so drop the currency symbols and
+// thousands separators a formatted export carries ("$1,250.00") rather than
+// letting parseFloat() read that as NaN and import the sale at 0.
+function importAmount(value) {
+  if (typeof value === 'number') return value;
+  return parseFloat(String(value).replace(/[^\d.-]/g, ''));
+}
+
 async function handleImportFile(event) {
   const file = event.target.files[0];
   if (!file) return;
   event.target.value = ''; // reset so same file can be re-selected
-  let xlsx;
-  try {
-    xlsx = await ensureXlsx();
-  } catch {
-    showToast('Excel import could not load. Check your connection and try again.', 'err');
-    return;
+  // A .csv is plain text we can read ourselves; only Excel files need SheetJS,
+  // which is fetched on first use — so a CSV import still works offline.
+  const isCsv = /\.csv$/i.test(file.name || '');
+  let xlsx = null;
+  if (!isCsv) {
+    try {
+      xlsx = await ensureXlsx();
+    } catch {
+      showToast('Excel import could not load. Check your connection, or save the file as .csv and try again.', 'err');
+      return;
+    }
   }
   const reader = new FileReader();
   reader.onload = (e) => {
     try {
-      const data = new Uint8Array(e.target.result);
-      const wb = xlsx.read(data, { type: 'array', cellDates: true });
       const book = getBook();
+      let rows, sheetName;
+      if (isCsv) {
+        rows = csvToObjects(e.target.result);
+        sheetName = file.name;
+      } else {
+        const data = new Uint8Array(e.target.result);
+        const wb = xlsx.read(data, { type: 'array', cellDates: true });
 
-      const SHORT = { 'Un Fantastico Altrove': 'Altrove', 'The Hound': 'Hound', 'Archaeology of Presence': 'Archaeology', 'Sistema_non_autorizzato': 'Sistema', 'As if Nobody is Watching': 'Nobody', 'Collective Photobook': 'Collective' };
-      const shortName = SHORT[book.title] || book.title;
-      // Try short name first, then full name, then first sheet
-      let sheetName = wb.SheetNames.find(n => n === shortName + ' — Orders')
-        || wb.SheetNames.find(n => n === book.title + ' — Orders')
-        || wb.SheetNames.find(n => n.toLowerCase().includes(shortName.toLowerCase()))
-        || wb.SheetNames.find(n => n.toLowerCase().includes(book.title.toLowerCase().slice(0, 6)))
-        || wb.SheetNames[0];
-      const ws = wb.Sheets[sheetName];
-      const rows = xlsx.utils.sheet_to_json(ws, { defval: '' });
+        const SHORT = { 'Un Fantastico Altrove': 'Altrove', 'The Hound': 'Hound', 'Archaeology of Presence': 'Archaeology', 'Sistema_non_autorizzato': 'Sistema', 'As if Nobody is Watching': 'Nobody', 'Collective Photobook': 'Collective' };
+        const shortName = SHORT[book.title] || book.title;
+        // Try short name first, then full name, then first sheet
+        sheetName = wb.SheetNames.find(n => n === shortName + ' — Orders')
+          || wb.SheetNames.find(n => n === book.title + ' — Orders')
+          || wb.SheetNames.find(n => n.toLowerCase().includes(shortName.toLowerCase()))
+          || wb.SheetNames.find(n => n.toLowerCase().includes(book.title.toLowerCase().slice(0, 6)))
+          || wb.SheetNames[0];
+        const ws = wb.Sheets[sheetName];
+        rows = xlsx.utils.sheet_to_json(ws, { defval: '' });
+      }
 
       if (!rows.length) { showToast('No data found in spreadsheet', 'warn'); return; }
 
@@ -8691,8 +8705,8 @@ async function handleImportFile(event) {
         const num = row[k('order')] || row[k('num')] || '';
         const date = row[k('date')] || '';
         const chan = row[k('channel')] || row[k('chan')] || 'Website';
-        const qty = parseFloat(row[k('qty')] || row[k('quantity')] || 1) || 1;
-        const price = parseFloat(row[k('unit')] || row[k('price')] || 0) || 0;
+        const qty = importAmount(row[k('qty')] || row[k('quantity')] || 1) || 1;
+        const price = importAmount(row[k('unit')] || row[k('price')] || 0) || 0;
         const notes = row[k('note')] || '';
         // Parse date — handle Excel date objects, strings, etc.
         let parsedDate = today();
@@ -8700,7 +8714,7 @@ async function handleImportFile(event) {
         else if (typeof date === 'string' && date.trim()) {
           const d = new Date(date);
           if (!isNaN(d)) parsedDate = d.toISOString().split('T')[0];
-        } else if (typeof date === 'number') {
+        } else if (typeof date === 'number' && xlsx) {
           const d = xlsx.SSF.parse_date_code(date);
           parsedDate = `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`;
         }
@@ -8727,7 +8741,7 @@ async function handleImportFile(event) {
       }
 
       // Build preview
-      $('import-summary').innerHTML = `Found <strong>${_importRows.length} orders</strong> in sheet <em>"${sheetName}"</em> — review below then confirm.`;
+      $('import-summary').innerHTML = `Found <strong>${_importRows.length} orders</strong> in ${isCsv ? 'file' : 'sheet'} <em>"${escapeHtml(sheetName)}"</em> — review below then confirm.`;
       $('import-count').textContent = _importRows.length;
       $('import-preview-body').innerHTML = _importRows.map(r => `
         <tr>
@@ -8745,7 +8759,8 @@ async function handleImportFile(event) {
       showToast('Could not read file: ' + err.message, 'err');
     }
   };
-  reader.readAsArrayBuffer(file);
+  if (isCsv) reader.readAsText(file);
+  else reader.readAsArrayBuffer(file);
 }
 
 function confirmImport() {
@@ -16417,6 +16432,10 @@ async function boot(forcedBook) {
     bootLoads.push(loadCustomerSuppression(), loadMailingList(), loadCampaigns(), loadOpenCalls());
   }
   await Promise.all(bootLoads);
+  // loadOpenCalls() counts its nav badge as soon as it lands, which can be
+  // before the suppression list has — recount now that both are in, or
+  // suppressed contributors show as waiting on you until the next edit.
+  if (isPublisherSession()) updateOpenCallBadges();
   renderCatalogList();
   renderProfitSettings();
 
@@ -23016,7 +23035,7 @@ function checkAppUpdate() {
     }
     const stamp = $('pub-updated');
     if (stamp) stamp.classList.add('has-unseen-update');
-    showToast(`✨ App successfully updated to ${currentVersion}!`, 'ok', 6000);
+    showToast('✨ The app has been updated. Click "What\'s new" at the bottom of the side menu to see what changed.', 'ok', 6000);
   }
 }
 
@@ -23038,7 +23057,7 @@ window.dismissAppUpdate = dismissAppUpdate;
 
 async function fetchRecentChanges() {
   try {
-    const res = await fetch('https://api.github.com/repos/lyricalmyricalbooks/lyrical-inventory/commits?per_page=5');
+    const res = await fetch('https://api.github.com/repos/lyricalmyricalbooks/lyrical-inventory/commits?per_page=20');
     if (!res.ok) throw new Error('GitHub API request failed');
     const commits = await res.json();
     return commits.map(c => ({
@@ -23070,7 +23089,7 @@ async function showWhatsNew(event) {
   const container = $('whats-new-list');
   if (!container) return;
 
-  container.innerHTML = '<div style="font-size:var(--text-sm);color:var(--text3);text-align:center;padding:20px 0;">Loading recent changes...</div>';
+  container.innerHTML = '<div class="wn-state">Loading the latest changes…</div>';
 
   // Update last seen version when they click/view the updates
   const currentVersion = typeof __GIT_COMMIT_DATE__ !== 'undefined' ? __GIT_COMMIT_DATE__ : 'Unknown';
@@ -23085,32 +23104,33 @@ async function showWhatsNew(event) {
   if (stamp) stamp.classList.remove('has-unseen-update');
 
   try {
-    const changes = await fetchRecentChanges();
+    const commits = await fetchRecentChanges();
+    const changes = commits ? plainChanges(commits) : null;
     if (!changes || !changes.length) {
       container.innerHTML = `
-        <div style="font-size:var(--text-sm);color:var(--text2);line-height:1.6;padding:10px 0;">
-          Could not load live changes from GitHub. Below is the static version history:
-          <ul style="margin:12px 0 0 20px;padding:0;display:flex;flex-direction:column;gap:8px;">
-            <li><strong>v3.1.0</strong>: Added 3D book cover overview badges and ambient dynamic color shadows.</li>
-            <li><strong>v3.0.0</strong>: Premium editorial color theme, dynamic contrast safety validations, Sage/Terracotta financial indicators, and SVG gradients.</li>
-            <li><strong>v2.8.0</strong>: Real-time modal accent color picker previews.</li>
-            <li><strong>v2.5.0</strong>: Google Sheets Apps Script webhook sync integration.</li>
-          </ul>
+        <div class="wn-state">
+          <strong>Couldn't load the list of changes.</strong>
+          You may be offline. Your app is still up to date — try again when you're connected.
         </div>`;
       return;
     }
 
+    let lastHeading = '';
     container.innerHTML = changes.map(c => {
-      const dateStr = new Date(c.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
-      const cleanMsg = escapeHtml(c.message);
-      return `
-        <div class="commit-item" onclick="window.open('https://github.com/lyricalmyricalbooks/lyrical-inventory/commit/${c.fullSha}', '_blank')" title="Click to view commit details on GitHub">
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="font-family:var(--font-mono);font-size:var(--text-xs);color:var(--gold-text);font-weight:600;">sha: ${c.sha} ↗</span>
-            <span style="font-size:var(--text-2xs);color:var(--text3);">${dateStr}</span>
-          </div>
-          <div style="font-size:12.5px;color:var(--text);white-space:pre-wrap;line-height:1.45;font-family:var(--font-ui);font-weight:500;">${cleanMsg}</div>
-        </div>`;
+      const heading = dayHeading(new Date(c.date));
+      const head = heading !== lastHeading ? `<h3 class="wn-day">${escapeHtml(heading)}</h3>` : '';
+      lastHeading = heading;
+      const link = c.fullSha
+        ? `<a class="wn-tech" href="https://github.com/lyricalmyricalbooks/lyrical-inventory/commit/${encodeURIComponent(c.fullSha)}" target="_blank" rel="noopener">Technical details ↗</a>`
+        : '';
+      return `${head}
+        <article class="commit-item wn-item">
+          <span class="pill ${({ new: 'green', fixed: 'blue', faster: 'gold' })[c.kind] || 'gray'} wn-kind">${escapeHtml(kindLabel(c.kind))}</span>
+          <h4 class="wn-title">${escapeHtml(c.title)}</h4>
+          ${c.detail ? `<p class="wn-detail">${escapeHtml(c.detail)}</p>` : ''}
+          ${c.tryIt ? `<p class="wn-try"><strong>How to use it:</strong> ${escapeHtml(c.tryIt)}</p>` : ''}
+          ${link}
+        </article>`;
     }).join('');
   } catch (err) {
     showToast(`❌ Error displaying changes: ${err.message}`, 'err');

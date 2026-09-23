@@ -33,10 +33,21 @@ export function loadExternalScript(src) {
   return pending;
 }
 
+function forgetExternalScript(src) {
+  pendingScripts.delete(src);
+  document.querySelector(`script[src="${src}"]`)?.remove();
+}
+
 export const XLSX_SCRIPT_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 
 export async function ensureXlsx() {
   if (!window.XLSX) await loadExternalScript(XLSX_SCRIPT_URL);
-  if (!window.XLSX) throw new Error('Excel support did not finish loading');
+  if (!window.XLSX) {
+    // The file arrived but never installed its global (truncated download,
+    // evaluation error). Forget it so the next import fetches it afresh
+    // instead of re-awaiting the same resolved promise forever.
+    forgetExternalScript(XLSX_SCRIPT_URL);
+    throw new Error('Excel support did not finish loading');
+  }
   return window.XLSX;
 }
