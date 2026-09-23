@@ -4486,6 +4486,7 @@ export function switchTab(name) {
   // Dashboard in All books is the combined inventory overview, not a book panel.
   if (name === 'dashboard' && activeBook === 'all') {
     switchBook('all');
+    if (window.matchMedia?.('(max-width: 768px)').matches) window.scrollTo(0, 0);
     return;
   }
 
@@ -4535,6 +4536,9 @@ export function switchTab(name) {
 
   const panel = $(needsBook ? 'tab-select-book' : 'tab-' + name);
   if (panel) { panel.style.display = 'block'; panel.classList.add('active'); }
+  // The bottom bar changes pages inside one document. Keep a phone from
+  // opening the next page at the previous page's deep scroll position.
+  if (window.matchMedia?.('(max-width: 768px)').matches) window.scrollTo(0, 0);
 
   if (needsBook) {
     showBookChoice(name);
@@ -4560,7 +4564,7 @@ export function switchTab(name) {
   if (name === 'sheets') { loadGasCode(); renderSheetsLog(); renderProfitSettings(); switchSettingsSubTab(activeSettingsSubTab); if (typeof updateSheetsTabUI === 'function') updateSheetsTabUI(); }
   if (name === 'qrcodes') renderAllQRCodes();
   if (name === 'myqr') renderAuthorQRPage();
-  if (name === 'pos') { renderPOS(); renderPOSFxStatus(); switchPOSSubTab(activePOSSubTab); }
+  if (name === 'pos') { renderPOS(); renderPOSFxStatus(); switchPOSSubTab(activePOSSubTab); window.posMobileView?.('books', false); }
   if (name === 'webanalytics') renderWebAnalytics();
   if (name === 'shipping') { initShippingTab(); }
   if (name === 'bigcartel') { renderBigCartelTab(); }
@@ -17881,6 +17885,8 @@ function renderPOS() {
   if (!grid) return;
 
   const cartRows = buildPOSCartRows();
+  const mobileCartCount = $('pos-mobile-cart-count');
+  if (mobileCartCount) mobileCartCount.textContent = String(cartRows.reduce((count, row) => count + row.qty, 0));
   const cartItemsEl = $('pos-cart-items');
   const subtotalEl = $('pos-subtotal-lines');
   const totalEl = $('pos-total');
@@ -17948,6 +17954,23 @@ function renderPOS() {
       : `Transaction currency: ${posTransactionCurrency}`;
   }
 }
+
+window.posMobileView = function (view, scroll = true) {
+  if (view !== 'books' && view !== 'checkout') return;
+  const layout = document.querySelector('#pos-subpanel-register .pos-layout');
+  if (!layout) return;
+  layout.dataset.mobileView = view;
+  ['books', 'checkout'].forEach((step) => {
+    const tab = $(`pos-mobile-${step}-tab`);
+    if (!tab) return;
+    const selected = step === view;
+    tab.classList.toggle('active', selected);
+    tab.setAttribute('aria-pressed', String(selected));
+  });
+  if (scroll && window.matchMedia('(max-width: 768px)').matches) {
+    document.querySelector('.pos-mobile-steps')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
+};
 
 window.posUpdateQty = function (bookId, delta) {
   posCart[bookId] = Math.max(0, (posCart[bookId] || 0) + delta);
