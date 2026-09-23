@@ -5,6 +5,9 @@ import './style.css';
 // Dark theme loads LAST: it re-points the primitives every rule above resolves
 // against, and its component corrections have to out-specify style.css.
 import './styles/theme-dark.css';
+import './styles/phone.css';
+import { initPhoneLayouts } from './lib/phone-layout.js';
+initPhoneLayouts(document.getElementById('pw-app'));
 import './firebase.js';
 import { registerSW } from 'virtual:pwa-register';
 import { calcArtistEarnings, tierEffectiveCap, describePayout, payoutRequestCovered } from './lib/earnings.js';
