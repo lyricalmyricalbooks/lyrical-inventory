@@ -9660,7 +9660,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   font-weight: 700;
   letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
-  color: var(--local-accent, var(--gold));
+  color: var(--local-accent-text, var(--gold-text)); /* the accent as TEXT: --local-accent is its fill, 2.4:1 here */
   background: var(--local-accent-bg, var(--gold-bg));
   padding: 2px 8px;
   border-radius:var(--r-pill);
@@ -10181,7 +10181,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   font-size: var(--text-lg);
   font-weight: 700;
   font-family:var(--font-mono);
-  color: var(--local-accent, var(--gold));
+  color: var(--local-accent-text, var(--gold-text)); /* the accent as TEXT: --local-accent is its fill, 2.4:1 here */
   font-feature-settings: 'tnum' 1;
 }
 

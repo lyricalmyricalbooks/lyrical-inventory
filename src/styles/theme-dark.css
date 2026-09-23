@@ -824,6 +824,13 @@
    only a local re-declaration picks up the paper one. */
 .theme-dark :is(.card, .modal, .tbl-wrap, .kpi, .metric-banner, .stock-block,
   .payment-methods-card, .intel-panel, .qr-card, .sheets-setup) {
+  /* Text that sets no colour of its own INHERITS one, and what it inherited was
+     the page's — the night theme's near-white, computed on <body> before any of
+     the re-declarations below existed. So a bare <strong> figure inside a paper
+     modal (the write-off dialog's unit cost) rendered at 1.2:1. Setting the
+     object's own colour here means inherited text starts from paper ink. */
+  color: var(--content-primary);
+
   /* A paper object is a LIGHT surface, so the browser's own chrome inside it
      — a date field's calendar glyph, checkboxes, scrollbars, a bare link —
      draws in its light style too, not the pale dark-scheme one. */
