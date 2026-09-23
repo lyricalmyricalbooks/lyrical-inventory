@@ -5409,6 +5409,41 @@ export function attentionInput() {
 // about whether the underlying thing changed, so it is never confused with the
 // engine's own self-clearing behaviour above.
 const TODO_DISMISSED_KEY = 'lm-dismissed-todo-signals';
+const SIDEBAR_ALERTS_HIDDEN_KEY = 'lm-sidebar-alerts-hidden';
+let _sidebarAlertsHidden = false;
+
+/**
+ * Lets the publisher quiet the red menu badges without pretending the work is
+ * fixed. This is deliberately a display preference: the To-do items and
+ * integration details remain available inside their tabs, and the same button
+ * can restore the badges at any time.
+ */
+function renderSidebarAlertPreference() {
+  const sidebar = $('pub-sidebar');
+  const button = $('sidebar-alert-toggle');
+  const label = $('sidebar-alert-toggle-label');
+  if (sidebar) sidebar.classList.toggle('nav-alerts-hidden', _sidebarAlertsHidden);
+  if (button) {
+    button.setAttribute('aria-pressed', String(_sidebarAlertsHidden));
+    button.title = _sidebarAlertsHidden
+      ? 'Show the red notification badges in this menu'
+      : 'Hide the red notification badges in this menu';
+  }
+  if (label) label.textContent = _sidebarAlertsHidden ? 'Show alerts' : 'Clear alerts';
+}
+
+function toggleSidebarAlerts() {
+  const wasHidden = _sidebarAlertsHidden;
+  _sidebarAlertsHidden = !wasHidden;
+  try {
+    localStorage.setItem(SIDEBAR_ALERTS_HIDDEN_KEY, String(_sidebarAlertsHidden));
+  } catch (_) { /* the in-memory preference still works for this session */ }
+  renderSidebarAlertPreference();
+  showToast(wasHidden ? 'Navigation alerts are visible again' : 'Navigation alerts hidden', 'ok', 2600);
+}
+
+try { _sidebarAlertsHidden = localStorage.getItem(SIDEBAR_ALERTS_HIDDEN_KEY) === 'true'; } catch (_) { /* storage may be blocked */ }
+renderSidebarAlertPreference();
 
 function getDismissedTodoSignals() {
   try {
@@ -23630,7 +23665,7 @@ function exposeLegacyInlineHandlers() {
     toggleCurrentBookView, updateProfileTabs, selectProfileTab, seedMockTestData, switchBook,
     switchTab, updateHeader, updateAllOverview, renderCustomersStat, channelColor,
     renderChannelAnalytics, selectAllChCurrency, setChChannelFilter, clearChChannelFilter, setChBookSort, setChBookSearch, renderOverviewRail, renderTodoTab, updateContextBanners,
-    restoreDismissedTodoSignals,
+    restoreDismissedTodoSignals, toggleSidebarAlerts,
     toggleConGroup, toggleConGrouping, toggleAllConGroups, setConStatusFilter, onConSearchInput, clearConSearch, clearConSearchAndFilter, renderConsignmentTable,
     updatePublisherActionBanner, renderBookPendingAlert, heldGrossOf, recognizedRevenueOf,
     dismissStockDrift, updateDash, getProfitTiersHtml, getRevenueProgressHtml, getOwedCardDetails,
