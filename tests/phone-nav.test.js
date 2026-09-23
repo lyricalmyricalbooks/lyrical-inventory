@@ -33,10 +33,10 @@ test('More sheet lists every sidebar tool not already on the bottom bar', () => 
   nav.openMoreSheet();
   expect(document.getElementById('more-sheet').hasAttribute('open')).toBe(true);
   const labels = moreLabels();
-  for (const tool of ['To-do', 'Tax Centre', 'Payments', 'Customers', 'Shipping', 'Backups', 'History', 'Expenses']) {
+  for (const tool of ['Dashboard', 'To-do', 'Tax Centre', 'Payments', 'Customers', 'Shipping', 'Backups', 'History', 'Expenses']) {
     expect(labels).toContain(tool);
   }
-  for (const onBar of ['Dashboard', 'Event POS', 'Manual entry', 'Website orders']) {
+  for (const onBar of ['Event POS', 'Manual entry', 'Website orders']) {
     expect(labels).not.toContain(onBar);
   }
   // Cloned ids would duplicate the sidebar's (badges are looked up by id).
@@ -67,4 +67,38 @@ test('switchTab keeps the bottom bar in sync', () => {
 test('phone nav only replaces the pill strip for publishers', () => {
   expect(styles).toMatch(/\.pub-shell \.tab-bar\{display:none;\}/);
   expect(styles).toMatch(/\.mnav\{display:none;\}/);
+});
+
+test('Home on the bottom bar opens the Today page', () => {
+  const home = document.querySelector('#mnav .mnav-btn');
+  expect(home.getAttribute('onclick')).toBe("switchTab('today')");
+  expect(document.getElementById('tab-today')).not.toBeNull();
+  expect(mainJs).toMatch(/if \(name === 'today'\) renderTodayHub\(\);/);
+});
+
+test('Today puts the four everyday jobs first, each a real button', () => {
+  const cards = [...document.querySelectorAll('#tab-today .today-card')];
+  expect(cards.map((c) => c.querySelector('.today-card-name').textContent)).toEqual(['Sell', 'Add sale', 'Orders', 'To-do']);
+  expect(cards.every((c) => c.tagName === 'BUTTON')).toBe(true);
+  // The To-do count rides the same badge class the sidebar uses, so it stays live.
+  expect(cards[3].querySelector('.todo-nav-badge')).not.toBeNull();
+});
+
+test('Today shows the waiting-orders count from the Website orders panel', () => {
+  const start = mainJs.indexOf('export function renderTodayHub');
+  const end = mainJs.indexOf('// ── Phone "More" sheet');
+  const render = new Function('$', mainJs.slice(start, end).replace('export function', 'function') + '; return renderTodayHub;')((id) => document.getElementById(id));
+  document.querySelector('#web-orders-status .web-stat-value').textContent = '3';
+  render();
+  expect(document.getElementById('today-orders-count').hidden).toBe(false);
+  expect(document.getElementById('today-orders-count').textContent).toBe('3');
+  expect(document.getElementById('today-orders-sub').textContent).toBe('3 ready to apply');
+  document.querySelector('#web-orders-status .web-stat-value').textContent = '0';
+  render();
+  expect(document.getElementById('today-orders-count').hidden).toBe(true);
+  expect(document.getElementById('today-orders-sub').textContent).toBe('Website orders');
+});
+
+test('authors never land on the publisher-only Today page', () => {
+  expect(mainJs).toMatch(/name === 'today'\)\) name = 'dashboard';/);
 });
