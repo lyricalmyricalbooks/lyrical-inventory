@@ -19271,3 +19271,46 @@ button[onclick="refreshUmamiStats()"]:active {
   #tab-select-book .book-choice-card { transition: none; }
   #tab-select-book .book-choice-card:hover { transform: none; }
 }
+
+/* ============================================================
+   TODAY (phone home, opened by the bottom bar's Home)
+   Four everyday jobs as big cards with what's waiting on each,
+   then one row per group of everything else.
+   ============================================================ */
+.today-head{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-3);margin:var(--space-2) 0 var(--space-4);}
+.today-title{margin:0;font-family:var(--font-ui);font-size:var(--text-2xl);font-weight:900;color:var(--content-primary);}
+.today-date{font-family:var(--font-mono);font-size:var(--text-xs);color:var(--content-secondary);}
+.today-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-3);}
+.today-card{
+  position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:4px;
+  min-height:124px;padding:var(--space-4);text-align:left;cursor:pointer;touch-action:manipulation;
+  background:var(--surface-raised);color:var(--content-primary);
+  border:var(--stroke-hair) solid var(--border-default);border-radius:var(--r3);
+  font-family:var(--font-ui);transition:transform .12s var(--ease-standard),box-shadow .12s var(--ease-standard);
+}
+.today-card:active{transform:scale(.98);}
+.today-card:focus-visible,.today-row:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
+.today-card-ink{background:var(--surface-inverse);color:var(--content-on-inverse);border-color:var(--surface-inverse);}
+.today-card-ink .today-card-sub{color:inherit;opacity:.8;}
+.today-card-ic{font-size:var(--text-xl);line-height:1;margin-bottom:auto;}
+.today-card-name{font-size:var(--text-lg);font-weight:800;}
+.today-card-sub{font-size:var(--text-sm);color:var(--content-secondary);}
+.today-card-count{
+  position:absolute;top:var(--space-3);right:var(--space-3);min-width:26px;padding:3px 8px;box-sizing:border-box;
+  border-radius:var(--r-pill);background:var(--gold);color:var(--ink);text-align:center;
+  font-family:var(--font-mono);font-size:var(--text-xs);font-weight:700;
+}
+.today-card-count[hidden]{display:none;}
+.today-label{margin:var(--space-5) 2px var(--space-2);font-size:var(--text-3xs);font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--content-secondary);}
+.today-rows{display:flex;flex-direction:column;}
+.today-row{
+  display:flex;align-items:center;gap:var(--space-3);width:100%;min-height:58px;padding:0 4px;
+  background:transparent;border:0;border-bottom:var(--stroke-hair) solid var(--border-subtle);
+  color:var(--content-primary);font-family:var(--font-ui);text-align:left;cursor:pointer;
+}
+.today-row-ic{width:28px;text-align:center;font-size:var(--text-lg);}
+.today-row-txt{flex:1;display:flex;flex-direction:column;min-width:0;}
+.today-row-name{font-size:var(--text-base);font-weight:700;}
+.today-row-sub{font-size:var(--text-xs);color:var(--content-secondary);}
+.today-row-chev{font-size:var(--text-xl);color:var(--content-secondary);}
+@media (prefers-reduced-motion: reduce){.today-card{transition:none;}.today-card:active{transform:none;}}

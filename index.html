@@ -522,7 +522,7 @@
      "More", which opens #more-sheet holding every other tool (cloned from the
      sidebar so badges and grouping stay in one place). -->
 <nav class="mnav" id="mnav" aria-label="Main">
-  <button type="button" class="mnav-btn" onclick="switchTab('dashboard')"><span class="mnav-ic" aria-hidden="true">▦</span><span class="mnav-label">Home</span></button>
+  <button type="button" class="mnav-btn" onclick="switchTab('today')"><span class="mnav-ic" aria-hidden="true">▦</span><span class="mnav-label">Home</span></button>
   <button type="button" class="mnav-btn" onclick="switchTab('pos')"><span class="mnav-ic" aria-hidden="true">🛒</span><span class="mnav-label">Sell</span></button>
   <button type="button" class="mnav-btn mnav-primary" onclick="switchTab('manual')"><span class="mnav-ic" aria-hidden="true">＋</span><span class="mnav-label">Add sale</span></button>
   <button type="button" class="mnav-btn" onclick="switchTab('website')"><span class="mnav-ic" aria-hidden="true">🛍</span><span class="mnav-label">Orders</span></button>
@@ -1086,6 +1086,46 @@
     <div id="orders-list" class="orders-list"><div class="empty-state web-empty"><div class="e-icon">📬</div><strong>Ready to scan for new orders</strong><span>Press “Scan Gmail” to pull in recent Big Cartel receipts for this book.</span><button class="btn ink sm" onclick="fetchOrders()">Scan Gmail</button></div></div>
     <button class="btn gold apply-all-cta" id="apply-all-btn" onclick="applyAll()" disabled>Apply all new orders</button>
     <div class="log-console" id="log-web"></div>
+  </div>
+</div>
+
+<!-- TODAY (phone home). The bottom bar's Home: the four everyday jobs with
+     what's waiting on each, then one row per group of everything else. -->
+<div class="tab-panel" id="tab-today" style="display:none;">
+  <div class="today-head">
+    <h1 class="today-title">Today</h1>
+    <span class="today-date" id="today-date"></span>
+  </div>
+  <div class="today-grid">
+    <button type="button" class="today-card today-card-ink" onclick="switchTab('pos')">
+      <span class="today-card-ic" aria-hidden="true">🛒</span>
+      <span class="today-card-name">Sell</span>
+      <span class="today-card-sub">Event register</span>
+    </button>
+    <button type="button" class="today-card" onclick="switchTab('manual')">
+      <span class="today-card-ic" aria-hidden="true">＋</span>
+      <span class="today-card-name">Add sale</span>
+      <span class="today-card-sub">Record one by hand</span>
+    </button>
+    <button type="button" class="today-card" onclick="switchTab('website')">
+      <span class="today-card-ic" aria-hidden="true">🛍</span>
+      <span class="today-card-count" id="today-orders-count" hidden></span>
+      <span class="today-card-name">Orders</span>
+      <span class="today-card-sub" id="today-orders-sub">Website orders</span>
+    </button>
+    <button type="button" class="today-card" onclick="switchTab('todo')">
+      <span class="today-card-ic" aria-hidden="true">✅</span>
+      <span class="today-card-count todo-nav-badge" hidden></span>
+      <span class="today-card-name">To-do</span>
+      <span class="today-card-sub">What needs you</span>
+    </button>
+  </div>
+  <div class="today-label">Everything else</div>
+  <div class="today-rows">
+    <button type="button" class="today-row" onclick="switchTab('dashboard')"><span class="today-row-ic" aria-hidden="true">▦</span><span class="today-row-txt"><span class="today-row-name">Books &amp; stock</span><span class="today-row-sub">Dashboard, catalogue, figures</span></span><span class="today-row-chev" aria-hidden="true">›</span></button>
+    <button type="button" class="today-row" onclick="switchTab('reconcile')"><span class="today-row-ic" aria-hidden="true">💳</span><span class="today-row-txt"><span class="today-row-name">Money</span><span class="today-row-sub">Payments, expenses, tax</span></span><span class="today-row-chev" aria-hidden="true">›</span></button>
+    <button type="button" class="today-row" onclick="switchTab('customers')"><span class="today-row-ic" aria-hidden="true">👥</span><span class="today-row-txt"><span class="today-row-name">Audience</span><span class="today-row-sub">Customers, open call</span></span><span class="today-row-chev" aria-hidden="true">›</span></button>
+    <button type="button" class="today-row" onclick="openMoreSheet()"><span class="today-row-ic" aria-hidden="true">☰</span><span class="today-row-txt"><span class="today-row-name">All tools</span><span class="today-row-sub">Shipping, sheets, backups and more</span></span><span class="today-row-chev" aria-hidden="true">›</span></button>
   </div>
 </div>
 

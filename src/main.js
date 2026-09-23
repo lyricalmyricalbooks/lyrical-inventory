@@ -4414,13 +4414,29 @@ const SHELL_TAB_LABELS = {
   pos: 'Event POS', taxcenter: 'Tax Centre', reconcile: 'Payments', qrcodes: 'QR Codes',
   customers: 'Customers', opencall: 'Open Call', sheets: 'Sheets', backups: 'Backups',
   myqr: 'My QR Code', webanalytics: 'Web Analytics', shipping: 'Shipping',
-  bigcartel: 'Big Cartel', todo: 'To-do', intel: 'Intelligence'
+  bigcartel: 'Big Cartel', todo: 'To-do', intel: 'Intelligence', today: 'Today'
 };
+// ── Today (phone home) ──────────────────────────────────────────────
+// Fills in the date and the waiting-orders count. The count is read from the
+// Website orders panel's own "Ready to apply" figure so the two never disagree;
+// the To-do card's count is a .todo-nav-badge, kept current by updateTodoBadge.
+export function renderTodayHub() {
+  const date = $('today-date');
+  if (date) date.textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+  const raw = document.querySelector('#web-orders-status .web-stat-value')?.textContent?.trim() ?? '';
+  const waiting = Number.parseInt(raw, 10);
+  const count = $('today-orders-count');
+  const sub = $('today-orders-sub');
+  const has = Number.isFinite(waiting) && waiting > 0;
+  if (count) { count.hidden = !has; count.textContent = has ? (waiting > 99 ? '99+' : String(waiting)) : ''; }
+  if (sub) sub.textContent = has ? `${waiting} ready to apply` : 'Website orders';
+}
+
 // ── Phone "More" sheet ───────────────────────────────────────────────
 // The phone bottom nav holds four everyday destinations; everything else
 // lives in this sheet. Its contents are cloned from the sidebar each time
 // it opens so grouping, visibility and live badges never drift apart.
-const MNAV_TABS = ['dashboard', 'pos', 'manual', 'website'];
+const MNAV_TABS = ['today', 'pos', 'manual', 'website'];
 
 function syncMoreNavState(name) {
   const more = document.getElementById('mnav-more');
@@ -4479,7 +4495,7 @@ Object.assign(window, { openMoreSheet, closeMoreSheet });
 
 export function switchTab(name) {
   // publisher-only tabs redirect authors to dashboard
-  if (isAuthor() && (name === 'website' || name === 'backups' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes' || name === 'reconcile' || name === 'customers' || name === 'opencall' || name === 'webanalytics' || name === 'shipping' || name === 'bigcartel' || name === 'todo' || name === 'intel')) name = 'dashboard';
+  if (isAuthor() && (name === 'website' || name === 'backups' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes' || name === 'reconcile' || name === 'customers' || name === 'opencall' || name === 'webanalytics' || name === 'shipping' || name === 'bigcartel' || name === 'todo' || name === 'intel' || name === 'today')) name = 'dashboard';
   // publisher redirected away from author-only myqr tab
   if (!isAuthor() && name === 'myqr') name = 'dashboard';
 
@@ -4546,6 +4562,7 @@ export function switchTab(name) {
   }
 
   if (name === 'dashboard') { updateDash(); renderArtistReimburseBanner(); renderPendingExpenses(); }
+  if (name === 'today') renderTodayHub();
   if (name === 'history') renderHist();
   // Website orders was the one panel that rendered nothing on arrival, so the
   // queue and its counts showed whatever the last visit left behind — orders
