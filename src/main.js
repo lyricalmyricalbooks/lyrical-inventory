@@ -2259,7 +2259,23 @@ window.toggleAllFilteredProdCost = toggleAllFilteredProdCost;
 window.applyCalculatedProdCost = applyCalculatedProdCost;
 
 // ── PAYMENT QR GENERATOR (publisher only)
-let _currentQR = null;
+
+// Redraw the payment modal's QR for `url`, replacing whatever it showed before.
+function drawPaymentQR(url) {
+  const canvasContainer = $('payment-qr-canvas');
+  if (!canvasContainer) return;
+  canvasContainer.innerHTML = '';
+  if (typeof QRCode !== 'undefined') {
+    new QRCode(canvasContainer, {
+      text: url,
+      width: 230,
+      height: 230,
+      colorDark: "#000000",
+      colorLight: "#ffffff",
+      correctLevel: QRCode.CorrectLevel.H
+    });
+  }
+}
 
 function openPaymentQRModal() {
   if (!activeBook || activeBook === 'all' || isAuthor()) return;
@@ -2300,20 +2316,7 @@ function updateSingleBookPaymentQR() {
   const linkInput = $('qr-payment-link');
   if (linkInput) linkInput.value = url;
 
-  const canvasContainer = $('payment-qr-canvas');
-  if (canvasContainer) {
-    canvasContainer.innerHTML = '';
-    if (typeof QRCode !== 'undefined') {
-      _currentQR = new QRCode(canvasContainer, {
-        text: url,
-        width: 230,
-        height: 230,
-        colorDark: "#000000",
-        colorLight: "#ffffff",
-        correctLevel: QRCode.CorrectLevel.H
-      });
-    }
-  }
+  drawPaymentQR(url);
 }
 
 async function generateSingleBookStripeQR() {
@@ -2343,20 +2346,7 @@ async function generateSingleBookStripeQR() {
     const linkInput = $('qr-payment-link');
     if (linkInput) linkInput.value = url;
 
-    const canvasContainer = $('payment-qr-canvas');
-    if (canvasContainer) {
-      canvasContainer.innerHTML = '';
-      if (typeof QRCode !== 'undefined') {
-        _currentQR = new QRCode(canvasContainer, {
-          text: url,
-          width: 230,
-          height: 230,
-          colorDark: "#000000",
-          colorLight: "#ffffff",
-          correctLevel: QRCode.CorrectLevel.H
-        });
-      }
-    }
+    drawPaymentQR(url);
     showToast(`✓ Stripe QR generated for ${curCode} ${targetPrice.toFixed(2)}`);
   } catch (e) {
     showToast('Stripe: ' + (e.message || e), 'err', 6000);
@@ -2484,8 +2474,6 @@ window.downloadBookQR = function (bookId) {
 };
 
 // ── AUTHOR QR CODE PAGE (author view — single book)
-let _authorQRInstance = null;
-
 function renderAuthorQRPage() {
   const book = BOOKS[activeBook];
   if (!book) return;
@@ -2506,10 +2494,9 @@ function renderAuthorQRPage() {
   const canvas = $('author-qr-canvas');
   if (!canvas) return;
   canvas.innerHTML = '';
-  _authorQRInstance = null;
 
   if (url && typeof QRCode !== 'undefined') {
-    _authorQRInstance = new QRCode(canvas, {
+    new QRCode(canvas, {
       text: url,
       width: 240,
       height: 240,
@@ -20051,8 +20038,6 @@ window.printFairKit = printFairKit;
 // and the printable QR sheet — never in the catalog, inventory, ledger, or
 // financials. Each can mint a Stripe Payment Link (and matching QR) on the spot.
 // ─────────────────────────────────────────────────────────────────────────
-let _posBookQR = null;
-
 // Build a collision-free, URL-safe id, prefixed so it can never shadow a
 // catalog book in posResolveBook (which checks BOOKS first).
 function _posSlugId(title) {
@@ -20088,14 +20073,13 @@ function renderPosBookModalQR() {
   const url = ($('pb-paylink')?.value || '').trim();
   const note = $('pb-qr-note');
   wrap.innerHTML = '';
-  _posBookQR = null;
   if (!url) {
     wrap.innerHTML = '<div style="color:var(--text3);font-size:var(--text-xs);text-align:center;padding:1rem;">Add or generate a payment link to preview its QR.</div>';
     if (note) note.textContent = '';
     return;
   }
   if (typeof QRCode !== 'undefined') {
-    _posBookQR = new QRCode(wrap, { text: url, width: 180, height: 180, colorDark: '#000', colorLight: '#fff', correctLevel: QRCode.CorrectLevel.H });
+    new QRCode(wrap, { text: url, width: 180, height: 180, colorDark: '#000', colorLight: '#fff', correctLevel: QRCode.CorrectLevel.H });
     if (note) note.textContent = 'Customers scan this to pay via Stripe.';
   } else {
     wrap.innerHTML = '<div style="color:var(--text3);font-size:var(--text-xs);">QR library not ready.</div>';
