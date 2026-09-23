@@ -192,8 +192,13 @@ describe('Shipping Analysis Hub Functions', () => {
       const mainContent = appSource;
       const indexMatch = mainContent.match(/function indexWebsiteHistByOrderNumber\(\) \{([\s\S]+?)\n\}/);
       const syncMatch = mainContent.match(/async function syncBigCartelShippingPaid\(bcOrders\) \{([\s\S]+?)\n\}/);
+      // The loop itself is shared with the "Sync shipping" button.
+      const applyMatch = mainContent.match(/async function applyBigCartelShippingPaid\(bcOrders\) \{([\s\S]+?)\n\}/);
+      const messageMatch = mainContent.match(/function missingOrdersMessage\(missingCount\) \{([\s\S]+?)\n\}/);
       expect(indexMatch).not.toBeNull();
       expect(syncMatch).not.toBeNull();
+      expect(applyMatch).not.toBeNull();
+      expect(messageMatch).not.toBeNull();
 
       mockStates = {
         'book1': {
@@ -234,6 +239,8 @@ describe('Shipping Analysis Hub Functions', () => {
       syncFn = new Function('mockStates', 'mockCalls', 'mockSheetsQueue', 'bcOrders', `
         ${mockEnvBase}
         ${indexMatch[0]}
+        ${applyMatch[0]}
+        ${messageMatch[0]}
         ${syncMatch[0]}
         return syncBigCartelShippingPaid(bcOrders);
       `);
