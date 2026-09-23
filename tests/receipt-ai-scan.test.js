@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { buildHarness, mainJs } from './helpers/extract-decl.js';
 
 // Covers the "✨ AI Scan" rework: the upload downscale that dominated scan
@@ -60,7 +60,11 @@ function scanHarness({ reply, prepare, apiKey = 'k-test' } = {}) {
         showToast: (msg, type) => toasts.push({ msg, type }),
         TAX_CENTER: { settings: { geminiKey: apiKey } },
         EXPENSE_CATEGORIES: CATS,
-        _prepareReceiptUpload: prepare || (async () => ({ mime: 'image/jpeg', base64: 'AAAA', scaled: true })),
+        _prepareReceiptUploadOnce: prepare || (async () => ({ mime: 'image/jpeg', base64: 'AAAA', scaled: true })),
+        // Nothing remembered: these suites are about a real read reaching the form.
+        _receiptScanFingerprint: async () => '',
+        _receiptScanRecall: () => null,
+        _receiptScanRemember: () => {},
         _callAiForReceipts: async (key, parts, opts) => {
           calls.push({ key, parts, opts });
           return typeof reply === 'function' ? reply({ key, parts, opts }) : reply;
@@ -271,6 +275,7 @@ describe('AI receipt scan — cancellation and recovery', () => {
     expect(form.el('btn').disabled).toBe(false);
     expect(form.el('btn').textContent).toMatch(/cancel/i);
 
+    await vi.waitFor(() => expect(h.calls).toHaveLength(1));
     release(okReply({ vendor: 'A', date: '2026-01-01', amount: 1, currency: 'CAD' }));
     await pending;
     expect(form.el('btn').textContent).toBe('✨ AI Scan');
@@ -287,7 +292,9 @@ describe('AI receipt scan — cancellation and recovery', () => {
     });
 
     const pending = h.run(form.cfg);
-    await Promise.resolve();
+    // Wait until the request is actually out, so the second click cancels a
+    // live request rather than the local photo preparation ahead of it.
+    await vi.waitFor(() => expect(h.calls).toHaveLength(1));
     await h.run(form.cfg); // second click = cancel
     await pending;
 

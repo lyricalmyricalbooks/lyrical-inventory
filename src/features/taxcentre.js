@@ -46,6 +46,7 @@ import {
   resolveLocalReceiptFile,
   saveReceiptBestEffort,
   setPendingWebcamReceipt,
+  warmReceiptScan,
   _warmGeminiModelCache,
 } from './receipts.js';
 import { openM, closeM, confirmDialog } from '../lib/modal.js';
@@ -4764,6 +4765,8 @@ function tcExpFileChosen() {
     aiBtn.disabled = !hasFile;
     aiBtn.title = hasFile ? 'Scan receipt with Gemini AI' : 'Select or capture a receipt first to enable AI scanning';
   }
+  // Get the photo ready now, while the rest of the form is being filled in.
+  if (input?.files?.[0]) warmReceiptScan(input.files[0]);
 }
 function tcExpFileClear(ev) {
   if (ev) ev.preventDefault();
