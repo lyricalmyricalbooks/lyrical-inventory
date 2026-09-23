@@ -125,7 +125,7 @@ function extractBigCartelAddress(orderOrAttr = {}, orderId = '', included = []) 
 
   const incList = Array.isArray(included) && included.length > 0
     ? included
-    : ((typeof bigCartelData !== 'undefined' && bigCartelData && bigCartelData.included) || (typeof loadCachedBigCartelOrders === 'function' ? loadCachedBigCartelOrders()?.included || [] : []));
+    : ((typeof bigCartelData !== 'undefined' && bigCartelData && bigCartelData.included) || (typeof cachedBigCartelIncluded === 'function' ? cachedBigCartelIncluded() : []));
 
   // Collect every relationship that can carry contact details, not just the first one:
   // the phone usually lives on shipping_address while the name lives on customer.
@@ -920,7 +920,26 @@ function openBigCartelAddressPreview(orderId) {
   openM('bc-address-preview');
 }
 
+// The saved cache's `included` list, parsed once and reused. The address and
+// order-line readers fall back to it once per order, and every read was a full
+// JSON.parse of the whole cache (orders + included, often megabytes) — hundreds
+// of parses each time the Shipping tab opened. Cleared on every write here and
+// when another browser tab rewrites the cache. Callers only read it.
+let _cachedIncludedMemo = null;
+let _cachedIncludedWatching = false;
+function cachedBigCartelIncluded() {
+  if (!_cachedIncludedWatching && typeof window !== 'undefined' && window.addEventListener) {
+    _cachedIncludedWatching = true;
+    window.addEventListener('storage', (e) => {
+      if (e.key === null || e.key === 'lm-bigcartel-orders-cache') _cachedIncludedMemo = null;
+    });
+  }
+  if (!_cachedIncludedMemo) _cachedIncludedMemo = loadCachedBigCartelOrders()?.included || [];
+  return _cachedIncludedMemo;
+}
+
 function cacheBigCartelOrders(orders, included) {
+  _cachedIncludedMemo = null;
   try {
     localStorage.setItem('lm-bigcartel-orders-cache', JSON.stringify({
       timestamp: Date.now(),
@@ -946,8 +965,7 @@ function getBigCartelIncluded() {
   if (typeof bigCartelData !== 'undefined' && bigCartelData && Array.isArray(bigCartelData.included) && bigCartelData.included.length > 0) {
     return bigCartelData.included;
   }
-  const cached = typeof loadCachedBigCartelOrders === 'function' ? loadCachedBigCartelOrders() : null;
-  return (cached && cached.included) || [];
+  return cachedBigCartelIncluded();
 }
 
 function getCachedBigCartelOrder(orderId) {

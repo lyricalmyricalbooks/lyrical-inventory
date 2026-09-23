@@ -2255,16 +2255,19 @@ function initShippingTab() {
       opt.textContent = 'No Big Cartel orders found';
       bcGroup.appendChild(opt);
     } else {
+      // Read once, not per order: without the Big Cartel tab opened first this
+      // re-parsed the whole saved order cache twice for every order listed.
+      const bcIncluded = getBigCartelIncluded();
       bcOrders.forEach(o => {
         // Pass the whole order: dropping `relationships` hides the included
         // customer/shipping_address resources that carry the phone number.
-        const addrObj = extractBigCartelAddress(o, o.id, getBigCartelIncluded());
+        const addrObj = extractBigCartelAddress(o, o.id, bcIncluded);
         const opt = document.createElement('option');
         // What was bought rides along with where it is going, so choosing this
         // option fills the box as well as the address.
         opt.value = JSON.stringify({
           ...addrObj,
-          parcelLines: bigCartelOrderLines(o, getBigCartelIncluded(), BOOKS),
+          parcelLines: bigCartelOrderLines(o, bcIncluded, BOOKS),
         });
         opt.textContent = `Order #${o.id} - ${addrObj.name} (${addrObj.city || 'Local'}, ${addrObj.country})`;
         bcGroup.appendChild(opt);

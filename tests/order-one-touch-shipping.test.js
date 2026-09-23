@@ -281,7 +281,7 @@ describe('the shipping tab shows what was filled in for you', () => {
   it('sends the order’s books along with its address', () => {
     // Both destination lists carry what was bought, so choosing either fills
     // the box as well as the recipient.
-    expect(appSource).toContain('parcelLines: bigCartelOrderLines(o, getBigCartelIncluded(), BOOKS)');
+    expect(appSource).toContain('parcelLines: bigCartelOrderLines(o, bcIncluded, BOOKS)');
     expect(appSource).toContain('JSON.stringify({ ...addrObj, parcelLines })');
     expect(appSource).toContain('parcelLinesFromLedgerEntry(h, h._bookId, BOOKS)');
   });
