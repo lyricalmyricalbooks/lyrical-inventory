@@ -211,6 +211,7 @@ import {
   logNotification,
   markNotificationsRead,
   newlyUrgent,
+  dropFalseStockNotifications,
   notificationDayLabel,
   readSeenUrgent,
   writeSeenUrgent,
@@ -3761,6 +3762,7 @@ async function loadAllBooks() {
   setSyncState('syncing', '<b>Firestore</b> · loading all books.');
   await Promise.all(Object.keys(BOOKS).map(id => loadBook(id)));
   await loadTaxCenter();
+  _attentionReady = true;
   startEmailInboxWatcher();
   setSyncState('ok', '<b>Firestore</b> · connected · live sync on');
   updateSubheader(new Date().toLocaleTimeString());
@@ -6021,8 +6023,16 @@ function activityHtml(ev) {
  * too, once, so that list is a complete record of what needed attention —
  * not only of the things some check happened to raise a pop-up for.
  */
+// Set once every book's records have arrived. Until then the to-do list is
+// judging half-loaded books, and what it finds is not news.
+let _attentionReady = false;
+
 function logNewlyUrgentSignals(result) {
-  if (!result || isAuthor()) return;
+  if (!result || isAuthor() || !_attentionReady) return;
+  if (dropFalseStockNotifications(result.signals.map(sig => sig.id))) {
+    renderNotificationBell();
+    renderRailLatestNotifications();
+  }
   const { fresh, remember } = newlyUrgent(result.signals, readSeenUrgent());
   writeSeenUrgent(remember);
   if (!fresh.length) return;
