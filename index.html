@@ -900,7 +900,7 @@
     </div>
   </details>
   <!-- PROFIT SHARING BREAKDOWN -->
-  <div id="d-profit-sharing-block" class="card" style="margin-bottom:1.5rem; border-left:var(--stroke) solid var(--book-accent); display:none;">
+  <div id="d-profit-sharing-block" class="card" style="margin-bottom:1.5rem; border-left:var(--stroke) solid var(--book-accent); display:none;" data-phone-fold>
     <div class="sec-head ps-block-head is-muted">
       <div class="sec-head-titles">
         <div class="sec-kicker"><span class="sec-kicker-dot"></span>Revenue Split</div>
@@ -949,7 +949,7 @@
     </div>
     <div class="tbl-wrap ch-mix-wrap"><table class="tbl ch-mix-tbl"><thead><tr><th>Channel</th><th class="r">Transactions</th><th class="r">Units</th><th class="r">Revenue</th><th class="ch-mix-share-col">Share<span class="ch-mix-col-qualifier"> of revenue</span></th></tr></thead><tbody id="ch-body"></tbody><tfoot id="ch-foot"></tfoot></table></div>
   </div>
-  <div class="overview-section">
+  <div class="overview-section" data-phone-fold>
     <div class="sec-head is-muted">
       <div class="sec-head-titles">
         <div class="sec-kicker"><span class="sec-kicker-dot"></span>Retail Partners</div>
@@ -989,7 +989,7 @@
       </div>
     </div>
   </div>
-  <div class="overview-section" id="d-breakeven-block" style="display:none;">
+  <div class="overview-section" id="d-breakeven-block" data-phone-fold style="display:none;">
     <div class="sec-head is-muted">
       <div class="sec-head-titles">
         <div class="sec-kicker"><span class="sec-kicker-dot"></span>Production</div>
@@ -1018,7 +1018,7 @@
     <div id="d-reimburse-list"></div>
   </div>
 
-  <div class="overview-section" id="danger-zone-sect" style="display:none;">
+  <div class="overview-section" id="danger-zone-sect" data-phone-fold style="display:none;">
     <div class="sec-head is-danger">
       <div class="sec-head-titles">
         <div class="sec-kicker"><span class="sec-kicker-dot"></span>Admin</div>
@@ -3898,6 +3898,13 @@
         <div id="pos-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:1rem;">
           <!-- Populated by JS -->
         </div>
+        <!-- Phone only: floats above the bottom bar while books are being picked,
+             so the running count and total are always in view. -->
+        <button type="button" class="pos-review-bar" id="pos-review-bar" onclick="posMobileView('checkout')" hidden>
+          <span class="pos-review-count" id="pos-review-count">0</span>
+          <span class="pos-review-label">Review sale</span>
+          <span class="pos-review-total" id="pos-review-total"></span>
+        </button>
       </div>
 
       <!-- Four stages of a sale, each its own .pos-checkout-stage: rates →
@@ -3933,9 +3940,15 @@
         </div>
 
         <div class="pos-checkout-stage">
-          <div class="form-group">
+          <div class="pos-pay-seg" role="radiogroup" aria-label="How are they paying?">
+            <button type="button" class="pos-pay-opt" role="radio" aria-checked="false" data-pay="Card" onclick="posPickPayment('Card')">Card</button>
+            <button type="button" class="pos-pay-opt" role="radio" aria-checked="true" data-pay="Cash" onclick="posPickPayment('Cash')">Cash</button>
+            <button type="button" class="pos-pay-opt" role="radio" aria-checked="false" data-pay="Bank Transfer" onclick="posPickPayment('Bank Transfer')">E-transfer</button>
+            <button type="button" class="pos-pay-opt" role="radio" aria-checked="false" data-pay="Comp/Gift" onclick="posPickPayment('Comp/Gift')">Comp</button>
+          </div>
+          <div class="form-group pos-pay-select">
             <label for="pos-payment-method">Payment method</label>
-            <select id="pos-payment-method">
+            <select id="pos-payment-method" onchange="posSyncPaymentSeg()">
               <option value="Cash">Cash</option>
               <option value="Card">Card</option>
               <option value="Bank Transfer">Bank Transfer</option>

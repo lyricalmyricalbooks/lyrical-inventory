@@ -17801,6 +17801,9 @@ button[onclick="refreshUmamiStats()"]:active {
   font-size: var(--text-xs);
   line-height: var(--leading-snug);
 }
+/* The strip is shown and hidden with the hidden attribute (bigcartel.js); the
+   display:flex above would otherwise keep it on screen with no gap to report. */
+.bc-gap-strip[hidden]{display:none;}
 
 .bc-gap-strip-icon {
   font-size: var(--text-md);
@@ -19320,3 +19323,110 @@ button[onclick="refreshUmamiStats()"]:active {
 .sale-codes-box summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 600; color: var(--content-secondary); }
 .sale-codes-list { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: var(--space-2); font-size: var(--text-sm); color: var(--content-secondary); }
 .sale-code { display: inline-block; min-width: 3.5em; font-family: var(--font-mono); font-weight: 700; color: var(--content-primary); }
+/* ============================================================
+   PHONE PAGE REDESIGNS (≤768px portrait)
+   Event POS, Dashboard, Website orders and History, restyled for
+   one-handed use. Markup and data stay the same as on a computer;
+   only presentation changes, plus the POS review bar, the payment
+   buttons and the dashboard's fold-open sections.
+   ============================================================ */
+.pos-pay-seg,.pos-review-bar,.phone-fold-btn{display:none;}
+
+@media (max-width: 768px){
+  /* ---- Event POS: pick books ---- */
+  /* The Register / Fair Print Kit tabs above already name this screen and
+     reach the kit, so the heading row goes: the books start sooner. */
+  #pos-subpanel-register > .row-between{display:none;}
+  #tab-pos .pos-subtab-nav{margin-bottom:var(--space-3);}
+  #tab-pos #pos-grid{grid-template-columns:1fr !important;gap:0 !important;}
+  #tab-pos .pos-card,
+  #tab-pos .pos-card:hover{
+    flex-direction:row !important;align-items:center;gap:var(--space-3);min-height:0;transform:none;
+    padding:var(--space-3) var(--space-2) !important;border-radius:0 !important;box-shadow:none !important;
+    border:0 !important;border-bottom:var(--stroke-hair) solid var(--border-subtle) !important;background:transparent !important;
+  }
+  #tab-pos .pos-card > div:first-child{flex:1;min-width:0;}
+  #tab-pos .pos-card.is-active{background:var(--gold-bg) !important;box-shadow:inset 3px 0 0 var(--gold) !important;}
+  #tab-pos .pos-card-title{font-size:var(--text-base);}
+  #tab-pos .pos-qty-wrapper{gap:2px !important;padding:2px !important;border:0 !important;border-radius:var(--r-pill) !important;background:var(--surface-sunken) !important;}
+  #tab-pos .pos-qty-btn{width:44px !important;height:44px !important;min-height:44px;border-radius:50% !important;font-size:var(--text-lg) !important;background:transparent !important;border:0 !important;box-shadow:none !important;color:var(--content-primary);}
+  #tab-pos .pos-card.is-active .pos-qty-wrapper{background:var(--surface-inverse) !important;}
+  #tab-pos .pos-card.is-active .pos-qty-btn,
+  #tab-pos .pos-card.is-active .pos-qty-val{color:var(--content-on-inverse) !important;}
+  #tab-pos .pos-layout[data-mobile-view="books"] #pos-mobile-books{padding-bottom:80px;}
+  .pos-review-bar:not([hidden]){
+    display:flex;align-items:center;gap:var(--space-3);
+    position:fixed;left:12px;right:12px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:calc(var(--z-sticky) + 50);
+    min-height:60px;padding:0 18px;border:0;border-radius:var(--r3);
+    background:var(--gold);color:var(--ink);font-family:var(--font-ui);cursor:pointer;box-shadow:var(--elev-3);
+  }
+  .pos-layout[data-mobile-view="checkout"] .pos-review-bar{display:none;}
+  .pos-review-count{min-width:28px;padding:3px 10px;border-radius:var(--r-pill);background:var(--surface-inverse);color:var(--content-on-inverse);font-family:var(--font-mono);font-size:var(--text-sm);}
+  .pos-review-label{flex:1;text-align:left;font-size:var(--text-md);font-weight:800;}
+  .pos-review-total{font-family:var(--font-mono);font-size:var(--text-md);font-weight:700;}
+
+  /* ---- Event POS: checkout ---- */
+  .pos-pay-seg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;padding:4px;border-radius:var(--r3);background:var(--surface-sunken);margin-bottom:var(--space-3);}
+  .pos-pay-opt{min-height:52px;border:0;border-radius:var(--r2);background:transparent;color:var(--content-primary);font-family:var(--font-ui);font-size:var(--text-base);font-weight:700;cursor:pointer;}
+  .pos-pay-opt[aria-checked="true"]{background:var(--surface-inverse);color:var(--content-on-inverse);}
+  .pos-pay-opt:focus-visible{outline:2px solid var(--gold);outline-offset:-2px;}
+  #tab-pos .pos-pay-select{display:none;}
+  #tab-pos .pos-checkout-total{font-size:var(--text-3xl);}
+  #tab-pos #pos-checkout-btn{
+    position:sticky;bottom:calc(84px + env(safe-area-inset-bottom));z-index:var(--z-raised);
+    width:100%;min-height:60px;font-size:var(--text-md);box-shadow:var(--elev-3);
+  }
+
+  /* ---- Dashboard ---- */
+  #tab-dashboard .kpi-grid-primary{grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-2);}
+  #tab-dashboard #artist-transfers-sect,
+  #tab-dashboard #d-pending-expenses-sect{
+    background:var(--red-bg);border:var(--stroke-hair) solid var(--gold-line);
+    border-radius:var(--r3);padding:var(--space-3) var(--space-3) var(--space-2);
+  }
+  [data-phone-fold] > .sec-head{display:flex;align-items:center;gap:var(--space-2);}
+  [data-phone-fold] > .sec-head > .sec-head-titles{flex:1;min-width:0;}
+  .phone-fold-btn{
+    display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;
+    min-width:64px;min-height:44px;padding:0 14px;border-radius:var(--r-pill);
+    border:var(--stroke-hair) solid var(--border-default);background:var(--surface-raised);
+    color:var(--content-primary);font-family:var(--font-ui);font-size:var(--text-sm);font-weight:700;cursor:pointer;
+  }
+  .is-phone-folded > :not(.sec-head){display:none !important;}
+  .is-phone-folded > .sec-head{margin-bottom:0;}
+  .is-phone-folded .section-subcopy{display:none;}
+
+  /* ---- Website orders ---- */
+  #tab-website .web-orders-copy p{display:none;}
+  #tab-website .web-orders-hero{padding:var(--space-4);gap:var(--space-3);}
+  #tab-website .web-orders-status{grid-template-columns:repeat(3,minmax(0,1fr)) !important;gap:6px;}
+  #tab-website .web-orders-status .web-stat{padding:var(--space-2);grid-column:auto !important;}
+  #tab-website .web-orders-status .web-stat-sub{display:none;}
+  #tab-website .apply-all-cta:not(:disabled){
+    position:sticky;bottom:calc(84px + env(safe-area-inset-bottom));z-index:var(--z-raised);
+    width:100%;min-height:56px;box-shadow:var(--elev-3);
+  }
+
+  /* ---- History: each table row becomes a card ---- */
+  #tab-history .tbl-wrap{overflow:visible;border:0;background:transparent;}
+  #tab-history .tbl thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);}
+  #tab-history .tbl,#tab-history .tbl tbody{display:block;width:100%;}
+  #tab-history .tbl tr.hist-row{
+    display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:var(--space-3);row-gap:4px;
+    padding:var(--space-3);border-bottom:var(--stroke-hair) solid var(--border-subtle);
+  }
+  #tab-history .tbl tr.hist-row > td{display:block;padding:0;border:0;min-width:0;text-align:left;}
+  /* Column order is fixed across every row template: 1 order #, 2 channel,
+     3 qty, 4 unit price, 5 total, 6 stock after, 7 notes, 8 entered by, 9 date, 10 actions. */
+  #tab-history .tbl tr.hist-row > td:nth-child(2){grid-column:1;grid-row:1;font-weight:700;}
+  #tab-history .tbl tr.hist-row > td:nth-child(5){grid-column:2;grid-row:1;text-align:right;font-size:var(--text-base);}
+  #tab-history .tbl tr.hist-row > td:nth-child(1){grid-column:1;grid-row:2;font-size:var(--text-xs);color:var(--content-secondary);}
+  #tab-history .tbl tr.hist-row > td:nth-child(3){grid-column:2;grid-row:2;text-align:right;font-size:var(--text-xs);color:var(--content-secondary);}
+  #tab-history .tbl tr.hist-row > td:nth-child(9){grid-column:1;grid-row:3;font-size:var(--text-xs) !important;}
+  #tab-history .tbl tr.hist-row > td:nth-child(10){grid-column:2;grid-row:3;text-align:right;}
+  #tab-history .tbl tr.hist-row > td:nth-child(7){grid-column:1 / -1;grid-row:4;font-size:var(--text-xs) !important;}
+  #tab-history .tbl tr.hist-row > td:nth-child(4),
+  #tab-history .tbl tr.hist-row > td:nth-child(6),
+  #tab-history .tbl tr.hist-row > td:nth-child(8){display:none;}
+  #tab-history .tbl tr.hist-row > td:nth-child(10) .btn{min-height:44px;}
+}

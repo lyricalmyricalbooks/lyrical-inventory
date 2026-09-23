@@ -4504,6 +4504,33 @@ document.getElementById('more-sheet')?.addEventListener('close', () => {
 
 Object.assign(window, { openMoreSheet, closeMoreSheet });
 
+// ── Phone fold-open sections ───────────────────────────────────────────
+// Long dashboard sections marked data-phone-fold start folded on a phone:
+// only their heading shows, with a Show/Hide button. On wider screens the
+// button is hidden by CSS and nothing is folded.
+function initPhoneFolds() {
+  document.querySelectorAll('[data-phone-fold]').forEach((section, i) => {
+    const head = section.querySelector('.sec-head');
+    if (!head || head.querySelector('.phone-fold-btn')) return;
+    if (!section.id) section.id = `phone-fold-${i}`;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'phone-fold-btn';
+    btn.setAttribute('aria-controls', section.id);
+    const sync = () => {
+      const folded = section.classList.contains('is-phone-folded');
+      btn.setAttribute('aria-expanded', String(!folded));
+      btn.textContent = folded ? 'Show' : 'Hide';
+    };
+    btn.addEventListener('click', () => { section.classList.toggle('is-phone-folded'); sync(); });
+    section.classList.add('is-phone-folded');
+    head.appendChild(btn);
+    sync();
+  });
+}
+initPhoneFolds();
+
+
 export function switchTab(name) {
   // publisher-only tabs redirect authors to dashboard
   if (isAuthor() && (name === 'website' || name === 'backups' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes' || name === 'reconcile' || name === 'customers' || name === 'opencall' || name === 'webanalytics' || name === 'shipping' || name === 'bigcartel' || name === 'todo' || name === 'intel' || name === 'today')) name = 'dashboard';
@@ -17995,12 +18022,44 @@ function renderPOS() {
       ? Object.entries(mixedTotals).map(([code, amount]) => `${codeToSymbol(code)}${amount.toFixed(2)}`).join(' + ')
       : posFormat(convertedTotal, posTransactionCurrency);
   }
+  posSyncReviewBar(cartRows.reduce((count, row) => count + row.qty, 0), totalEl?.textContent || '');
+  posSyncPaymentSeg();
   if (totalNoteEl) {
     totalNoteEl.textContent = hasMissingFx
       ? 'Mixed currency total: configure FX rates or finish in native currencies.'
       : `Transaction currency: ${posTransactionCurrency}`;
   }
 }
+
+// Phone: the floating "Review sale" bar mirrors the cart count and the total
+// the checkout already computed — it never recomputes money itself.
+function posSyncReviewBar(count, totalText) {
+  const bar = $('pos-review-bar');
+  if (!bar) return;
+  bar.hidden = count === 0;
+  const countEl = $('pos-review-count');
+  if (countEl) countEl.textContent = String(count);
+  const totalEl = $('pos-review-total');
+  if (totalEl) totalEl.textContent = totalText;
+  bar.setAttribute('aria-label', `Review sale: ${count} ${count === 1 ? 'book' : 'books'}, ${totalText}`);
+}
+
+// Phone: big payment buttons that drive the existing <select>, which stays the
+// single source of truth read by posCheckout().
+window.posPickPayment = function (value) {
+  const select = $('pos-payment-method');
+  if (!select) return;
+  select.value = value;
+  posSyncPaymentSeg();
+};
+
+function posSyncPaymentSeg() {
+  const value = $('pos-payment-method')?.value;
+  document.querySelectorAll('.pos-pay-opt').forEach((b) => {
+    b.setAttribute('aria-checked', String(b.dataset.pay === value));
+  });
+}
+window.posSyncPaymentSeg = posSyncPaymentSeg;
 
 window.posMobileView = function (view, scroll = true) {
   if (view !== 'books' && view !== 'checkout') return;
