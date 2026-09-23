@@ -13,6 +13,11 @@ const RECORDS = {
   'bc-orders-list': { lead: 0, summary: [1, 2, 6, 7, 8] },
   'sheets-log-body': { lead: 0, summary: [1, 4] },
   'system-backup-list': { lead: 0, summary: [1, 2, 3] },
+  // Pop-up windows sit outside the page panels but get the same record cards.
+  'tc-trip-detail-body': { lead: 1, summary: [0, 5, 6] },
+  'tc-cat-detail-body': { lead: 2, summary: [0, 5, 7] },
+  'iv-modal-table-body': { lead: 0, summary: [3, 6] },
+  'pos-confirm-items': { lead: 0, summary: [1, 2] },
 };
 let detailId = 0;
 
