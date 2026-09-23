@@ -508,6 +508,8 @@ import {
   sweepCanadaPostShipments,
   startShippingEmailSweep,
   startDeliveryWatch,
+  startOrderFollowups,
+  openShippingFromUnshippedAlert,
   openShippingFromDeliveryAlert,
   sweepShippingEmails,
   refreshShippoLabelsIfDue,
@@ -16710,6 +16712,8 @@ async function boot(forcedBook) {
         // And after the label: follow each parcel to the door, and speak up
         // when one is waiting at a post office, stuck, or coming back.
         startDeliveryWatch();
+        // Paid orders that haven't gone out, and whether shipping pays for itself.
+        startOrderFollowups();
         // The morning after a market day: one summary of what sold in person.
         // With Stripe connected it waits for the first Stripe check, so the
         // reader payments it compares against are there.
@@ -24756,6 +24760,7 @@ window.sweepReceiptEmails = sweepReceiptEmails;
 window.linkConfidentShippingMatchesNow = linkConfidentShippingMatchesNow;
 window.openShippingReconciliationFromAlert = openShippingReconciliationFromAlert;
 window.openShippingFromDeliveryAlert = openShippingFromDeliveryAlert;
+window.openShippingFromUnshippedAlert = openShippingFromUnshippedAlert;
 window.shipNewOrderFromAlert = shipNewOrderFromAlert;
 window.recordNewOrderFromAlert = recordNewOrderFromAlert;
 window.toggleBigCartelAutoRecord = toggleBigCartelAutoRecord;
