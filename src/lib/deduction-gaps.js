@@ -26,7 +26,7 @@
 //    industry average this file invented. A made-up number in a financial tool
 //    is worse than no number, because it will be believed.
 
-import { canonicalExpenseCategory } from './expense-categories.js';
+import { allLiveExpenses } from './expense-categories.js';
 import { roundCents } from './money.js';
 
 /** Channels that mean a sale happened face to face, where cash is likeliest. */
@@ -80,23 +80,6 @@ function median(values) {
 /** How spread out a set of values is around its own median, in the same units. */
 function medianAbsoluteDeviation(values, mid = median(values)) {
   return median(values.map(v => Math.abs(v - mid)));
-}
-
-/**
- * Every expense the business has, in one list, with its category folded onto
- * the canonical name so "Postage" and "Shipping & Postage" count as one thing.
- */
-function allExpenses(ctx) {
-  const out = [];
-  for (const e of (ctx.taxCenter?.businessExpenses || [])) {
-    if (e && !e.voided) out.push({ ...e, _scope: 'business', _cat: canonicalExpenseCategory(e.cat, 'Other') });
-  }
-  for (const [bookId, state] of Object.entries(ctx.states || {})) {
-    for (const e of (state?.expenses || [])) {
-      if (e && !e.voided) out.push({ ...e, _scope: 'book', _bookId: bookId, _cat: canonicalExpenseCategory(e.cat, 'Other') });
-    }
-  }
-  return out;
 }
 
 /** What a row is worth, preferring the CAD figure stamped when it was written. */
@@ -228,7 +211,7 @@ function eventsWithoutTravel(ctx) {
  * walked once, not once per detector.
  */
 function categoryMonthBuckets(ctx) {
-  const expenses = allExpenses(ctx).filter(e => str(e.date));
+  const expenses = allLiveExpenses(ctx).filter(e => str(e.date));
   const byCategory = new Map();
   for (const e of expenses) {
     const month = str(e.date).slice(0, 7);
@@ -368,7 +351,7 @@ function missingProcessingFees(ctx) {
   }
   if (onlineRevenue <= 0) return [];
 
-  const fees = allExpenses(ctx).filter(e => e._cat === 'Sales Processing Fees');
+  const fees = allLiveExpenses(ctx).filter(e => e._cat === 'Sales Processing Fees');
   if (fees.length) return [];
 
   return [{
@@ -407,7 +390,7 @@ function missingPostage(ctx) {
   }
   if (shipped < 3) return [];
 
-  const postage = allExpenses(ctx).filter(e => e._cat === 'Shipping & Postage');
+  const postage = allLiveExpenses(ctx).filter(e => e._cat === 'Shipping & Postage');
   if (postage.length >= Math.ceil(shipped / 4)) return [];
 
   const typical = median(postage.map(amountOf));
@@ -433,7 +416,7 @@ function missingPostage(ctx) {
  * nothing was ever logged for producing it, the book looks pure profit.
  */
 function missingProductionCosts(ctx) {
-  const printing = allExpenses(ctx).filter(e => e._cat === 'Printing & Production');
+  const printing = allLiveExpenses(ctx).filter(e => e._cat === 'Printing & Production');
   // ⚡ Bolt Optimization: a single pass over printing expenses to build a
   // membership Set, instead of re-filtering the whole list once per book
   // (O(printing + books) instead of O(printing × books) — this loop only
@@ -472,7 +455,7 @@ function missingIsbnCosts(ctx) {
   const withIsbn = Object.values(ctx.books || {})
     .filter(b => b && str(b.isbn) && str(b.isbn) !== '—').length;
   if (withIsbn < 2) return [];
-  if (allExpenses(ctx).some(e => e._cat === 'ISBN, Barcodes & Cataloging')) return [];
+  if (allLiveExpenses(ctx).some(e => e._cat === 'ISBN, Barcodes & Cataloging')) return [];
 
   return [{
     id: 'no-isbn-costs',
