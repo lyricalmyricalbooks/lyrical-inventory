@@ -6804,18 +6804,33 @@ function renderBreakEvenBlock(s, book, cur, cost, recognizedRev) {
   $('d-be-bar').style.width = be.pctBe + '%';
   $('d-be-bar').style.background = be.broken ? 'var(--green-light)' : be.pctBe >= 70 ? 'var(--orange)' : (book.accent || 'var(--gold2)');
   $('d-be-bar-label').textContent = `${fmt(recognizedRev, cur)} recovered (${be.pctBe.toFixed(1)}%)`;
-  $('d-be-bar-right').textContent = be.broken ? 'Break-even reached ✓' : `${fmt(be.remaining, cur)} remaining`;
+  $('d-be-bar-right').textContent = be.broken ? 'Break-even reached ✓' : `of ${fmt(cost, cur)}`;
   const trackEl = $('d-be-bar-track');
   if (trackEl) {
     trackEl.title = be.broken ? 'Production costs fully recovered!' : `${fmt(recognizedRev, cur)} of ${fmt(cost, cur)} recovered (${be.pctBe.toFixed(1)}%)`;
   }
   const al = $('d-be-alert');
   if (be.broken) {
-    al.className = 'stock-alert ok';
-    al.textContent = '✓ ' + be.primaryExplanation;
+    al.className = 'stock-alert be-alert be-done';
     al.style.borderLeftColor = '';
     al.style.background = '';
     al.style.color = '';
+    const profit = Math.max(0, recognizedRev - cost);
+    al.innerHTML = `
+      <div class="be-alert-label"><span aria-hidden="true">✓</span>Broken even</div>
+      <div class="be-stats">
+        <div class="be-stat">
+          <span class="be-stat-num">${fmt(cost, cur)}</span>
+          <span class="be-stat-label">Production cost earned back</span>
+        </div>
+        <div class="be-stat-divider" aria-hidden="true"></div>
+        <div class="be-stat be-stat-right">
+          <span class="be-stat-num">${fmt(profit, cur)}</span>
+          <span class="be-stat-label">Profit since</span>
+        </div>
+      </div>
+      <div class="be-caption">Everything this title earns from here on is profit.</div>
+    `;
   } else {
     al.className = `stock-alert be-alert ${be.isClose ? 'be-close' : 'be-far'}`;
     al.style.borderLeftColor = '';
