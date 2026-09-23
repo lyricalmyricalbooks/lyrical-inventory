@@ -126,11 +126,13 @@ describe('calculateBreakEven — explicit units needed at list price and realize
     const alertHtml = alertMatch[1];
 
     expect(alertHtml).not.toContain('var(--on-inverse');
-    expect(alertHtml).toContain('stock-alert-details');
-    expect(alertHtml).toContain('var(--text2)');
+    expect(alertHtml).toContain('be-stat-label');
+    expect(alertHtml).toContain('be-caption');
 
-    // And the panel's own sub-line rules follow the same ink grades.
-    expect(styleCss).toContain('.stock-block .stock-alert-details');
+    // The alert's colours live in CSS now, and follow the same ink grades.
+    expect(styleCss).toContain('.stock-block .be-alert{');
+    expect(styleCss).toMatch(/\.be-stat-label\{[^}]*color:var\(--text3\)/);
+    expect(styleCss).toMatch(/\.be-caption\{[^}]*color:var\(--text3\)/);
     expect(styleCss).not.toContain('.stock-block .stock-alert{color:var(--on-inverse-2);}');
   });
 });
