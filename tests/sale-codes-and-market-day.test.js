@@ -109,3 +109,53 @@ describe('refunding a card payment that covered several books', () => {
     expect(refundsToRaise([{ chargeId: 'ch_1', amount: 25 }], sales).every(o => !o.full)).toBe(true);
   });
 });
+
+describe('reading hurried typing at a fair', () => {
+  const FAIR = {
+    hound: { id: 'hound', title: 'The Hound of Heaven', listPrice: 30 },
+    alt: { id: 'alt', title: 'Un Fantastico Altrove', listPrice: 25 },
+    honey: { id: 'honey', title: 'Honey', listPrice: 15 },
+    houses: { id: 'houses', title: 'Houses', listPrice: 20 },
+  };
+  const ids = (text) => booksInDescription(text, FAIR).map(line => `${line.qty} ${line.bookId}`);
+
+  it('finds The Hound however it was typed', () => {
+    ['thehound', 'the hound', 'hound', 'houn', 'hond', 'hund', 'hounf', 'thehoundofheaven', 'HOUND'].forEach(text => {
+      expect(ids(text), text).toEqual(['1 hound']);
+    });
+  });
+
+  it('reads the start of a title and skips articles like "Un"', () => {
+    expect(ids('alt')).toEqual(['1 alt']);
+    expect(ids('altro')).toEqual(['1 alt']);
+    expect(ids('fantastco')).toEqual(['1 alt']);
+  });
+
+  it('reads counts before or after, and several books', () => {
+    expect(ids('2 hound, alt')).toEqual(['2 hound', '1 alt']);
+    expect(ids('alt+hound x3')).toEqual(['1 alt', '3 hound']);
+    expect(ids('2x houn')).toEqual(['2 hound']);
+    expect(ids('hound and alt')).toEqual(['1 hound', '1 alt']);
+    expect(ids('hound hound')).toEqual(['2 hound']);
+  });
+
+  it('prefers the clearer match between look-alike titles', () => {
+    expect(ids('hone')).toEqual(['1 honey']);
+    expect(ids('hous')).toEqual(['1 houses']);
+  });
+
+  it('reads nothing into ordinary words', () => {
+    ['cash', 'card', 'tip', 'thanks', 'the', 'market day', 'sale', ''].forEach(text => {
+      expect(ids(text), text).toEqual([]);
+    });
+  });
+
+  it('gives short, typeable codes and settles clashes with a fourth letter', () => {
+    const codes = saleCodes(FAIR);
+    expect(codes.alt).toBe('FAN');
+    expect(new Set(Object.values(codes)).size).toBe(4);
+    expect(codes.hound).toBe('HOU');
+    expect(codes.houses).toBe('HOUS');
+    expect(ids('hous')).toEqual(['1 houses']);
+  });
+});
