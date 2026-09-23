@@ -16,6 +16,7 @@ import {
   PAYMENT_TYPE_DIRECT_TO_ARTIST,
   isDirectToArtistSale,
   getContrastColor,
+  getAccentFillPair,
   lightenColor,
   darkenColor,
   getContrastSafeText,
@@ -431,3 +432,60 @@ describe('getContrastSafeText', () => {
 });
 
 
+
+describe('getAccentFillPair', () => {
+  // WCAG contrast, measured independently of the helper under test.
+  const lum = (hex) => {
+    const c = (i) => { const v = parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16) / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+    return 0.2126 * c(0) + 0.7152 * c(1) + 0.0722 * c(2);
+  };
+  const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+  const labelHex = (l) => (l === 'var(--ink)' ? '#100F0D' : '#ffffff');
+
+  // The six covers in the default catalogue, plus the flare and the yellow.
+  const COVERS = ['#c8913a', '#3a7cc8', '#7a5c3a', '#2a7a5c', '#8a3a7a', '#E8402A', '#FFC93C'];
+
+  it.each(COVERS)('%s gets a fill whose label clears AA (4.5:1)', (hex) => {
+    const { fill, label } = getAccentFillPair(hex);
+    expect(ratio(fill, labelHex(label))).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('leaves a cover untouched when one of the labels already reads on it', () => {
+    for (const hex of ['#c8913a', '#7a5c3a', '#2a7a5c', '#8a3a7a', '#E8402A', '#FFC93C']) {
+      expect(getAccentFillPair(hex).fill).toBe(hex);
+    }
+  });
+
+  it("nudges a mid-tone cover only as far as it has to — The Hound's blue", () => {
+    // #3a7cc8 is 4.29:1 with white and 4.33:1 with ink: neither passes, which
+    // is what put every gold button below AA while that book was open.
+    expect(ratio('#3a7cc8', '#ffffff')).toBeLessThan(4.5);
+    expect(ratio('#3a7cc8', '#100F0D')).toBeLessThan(4.5);
+    const { fill, label } = getAccentFillPair('#3a7cc8');
+    expect(label).toBe('#ffffff');            // keeps the label it always had
+    expect(fill).not.toBe('#3a7cc8');
+    expect(ratio(fill, '#ffffff')).toBeGreaterThanOrEqual(4.5);
+    // Still recognisably the same blue: every channel within 8% of the original.
+    for (const i of [0, 1, 2]) {
+      const o = parseInt('3a7cc8'.slice(i * 2, i * 2 + 2), 16);
+      const n = parseInt(fill.slice(1 + i * 2, 3 + i * 2), 16);
+      expect(Math.abs(o - n) / o).toBeLessThan(0.08);
+    }
+  });
+
+  it('measures instead of guessing: a mid grey takes ink, not white', () => {
+    // getContrastColor's perceived-brightness guess sits just under its 50%
+    // line for #7f7f7f and hands it white — 4.00:1, a failure. Ink reads at
+    // 4.78:1 on the same fill, so the measured pair keeps the grey and flips
+    // the label.
+    expect(getContrastColor('#7f7f7f')).toBe('#ffffff');
+    expect(ratio('#7f7f7f', '#ffffff')).toBeLessThan(4.5);
+    expect(getAccentFillPair('#7f7f7f')).toEqual({ fill: '#7f7f7f', label: 'var(--ink)' });
+  });
+
+  it('falls back to the flare fill with its ink on invalid input', () => {
+    for (const bad of ['', null, undefined, '#abc', 'red', 'var(--gold)']) {
+      expect(getAccentFillPair(bad)).toEqual({ fill: 'var(--gold2)', label: 'var(--ink)' });
+    }
+  });
+});

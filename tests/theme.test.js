@@ -512,7 +512,12 @@ describe('per-book accent follows the theme', () => {
   // theme change, a publisher who switches to dark keeps the colour that was
   // chosen to read on cream — which is how .book-strip-title became unreadable.
   it('derives --book-accent-text from the resolved theme', () => {
-    expect(mainJs).toContain("getContrastSafeText(book.accent, resolvedTheme === 'dark')");
+    // Still branched on the resolved theme — dark lifts the accent to read on
+    // the black desk; light now MEASURES it against paper (getPaperSafeText)
+    // rather than trusting getContrastSafeText's 50%-luminance guess, which
+    // let a mid-tone cover through at 3.3-3.8:1.
+    expect(mainJs).toContain("root.style.setProperty('--book-accent-text', resolvedTheme === 'dark'");
+    expect(mainJs).toMatch(/resolvedTheme === 'dark'\s*\?\s*getContrastSafeText\(book\.accent, true\)\s*:\s*getPaperSafeText\(book\.accent\)/);
   });
 
   it('recomputes the accent when the preference changes', () => {
@@ -536,10 +541,11 @@ describe('per-book accent follows the theme', () => {
     // -text and -contrast stale from whatever ran last: editing a book's accent
     // kept the old text colour, and an author session never got one at all.
     const raw = mainJs.match(/setProperty\('--book-accent(-[\w-]+)?'/g) ?? [];
-    const insideHelper = mainJs.slice(
-      mainJs.indexOf('function applyBookAccentTokens'),
-      mainJs.indexOf('function applyBookAccentTokens') + 1400,
-    ).match(/setProperty\('--book-accent(-[\w-]+)?'/g) ?? [];
+    // The whole function body, to its closing brace — a fixed character
+    // window stopped counting the moment the helper grew a comment.
+    const start = mainJs.indexOf('function applyBookAccentTokens');
+    const insideHelper = mainJs.slice(start, mainJs.indexOf('\n}\n', start))
+      .match(/setProperty\('--book-accent(-[\w-]+)?'/g) ?? [];
     expect(raw.length, 'all --book-accent-* writes must live in applyBookAccentTokens')
       .toBe(insideHelper.length);
   });

@@ -322,19 +322,17 @@
 
 /* ── Gradients that bake in a light stop ─────────────────────────────────── */
 
-/* Website-orders hero: cream → tan wash. Re-cut from the ink ramp with the
-   same gold bloom, so the hero keeps its warmth instead of going flat. */
+/* Website-orders hero. Flat in both themes now — Riso has no washes — so
+   night mode only needs to swap the near-invisible ink hairline for a flare
+   one; its --cream2 fill already flips with the theme. */
 .theme-dark .web-orders-hero {
-  background: linear-gradient(135deg, #1e1912 0%, #191510 48%, #14110d 100%);
   border-color: var(--gold-line);
   box-shadow: var(--elev-3);
 }
 
-/* Audience summary card: white → cream diagonal with a gold radial. */
+/* Audience summary card: flat --surface-card in both themes (it used to be a
+   white→cream diagonal with a flare glow); night mode keeps its lighter lift. */
 .theme-dark .audience-summary-card {
-  background:
-    radial-gradient(circle at 8% 0%, rgba(255, 107, 85, .16), transparent 34%),
-    linear-gradient(135deg, #1f1a13 0%, #16120e 100%); /* token-ok: bespoke gradient stops, not a reusable palette colour */
   box-shadow: var(--elev-3);
 }
 
@@ -755,6 +753,16 @@
 }
 .theme-dark .kpi-label { color: var(--on-paper3); }
 .theme-dark .kpi-value { color: var(--on-paper); }
+/* The last three light-mode black boxes (Intelligence's console, the QR
+   cards, the Backups/Sheets panels) went to paper in day mode; here they get
+   the same paper object as .card. Their ink set comes from PAPER SCOPE below. */
+.theme-dark .intel-panel,
+.theme-dark .qr-card,
+.theme-dark .sheets-setup {
+  background: var(--paper);
+  border-color: var(--on-paper);
+  box-shadow: 4px 4px 0 var(--gold);
+}
 /* .payment-methods-card sets its own surface with !important (it fought a
    blur it no longer has), so the group above cannot repaint it on its own. */
 .theme-dark .payment-methods-card {
@@ -764,7 +772,7 @@
 /* The lead tile keeps the book's cover accent as its fill in both themes, and
    with it the per-book contrast colour for the figure — the rule above must
    not repaint either of them back to paper. */
-.theme-dark .kpi.is-lead { background: var(--book-accent, var(--gold2)); }
+.theme-dark .kpi.is-lead { background: var(--book-accent-fill, var(--book-accent, var(--gold2))); }
 .theme-dark .kpi.is-lead .kpi-label,
 .theme-dark .kpi.is-lead .kpi-value { color: var(--book-accent-contrast, var(--ink)); }
 
@@ -815,7 +823,7 @@
    where it is declared, so :root's copy still carries the dark value and
    only a local re-declaration picks up the paper one. */
 .theme-dark :is(.card, .modal, .tbl-wrap, .kpi, .metric-banner, .stock-block,
-  .payment-methods-card) {
+  .payment-methods-card, .intel-panel, .qr-card, .sheets-setup) {
   /* A paper object is a LIGHT surface, so the browser's own chrome inside it
      — a date field's calendar glyph, checkboxes, scrollbars, a bare link —
      draws in its light style too, not the pale dark-scheme one. */

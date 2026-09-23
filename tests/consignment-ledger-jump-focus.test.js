@@ -25,9 +25,11 @@ test('consignment ledger jump links define a focus-visible state', () => {
   );
 
   // Hover and focus-visible share the same visited treatment, so tabbing
-  // through the table reads the same as pointing at it.
-  expect(styles).toContain('.con-row-book-title:hover,.con-row-book-title:focus-visible{color:var(--gold2);}');
-  expect(styles).toContain('.store-jump-link:hover,.store-jump-link:focus-visible{color:var(--gold2);text-underline-offset:3px;text-decoration:underline;}');
+  // through the table reads the same as pointing at it. The colour is the
+  // flare's TEXT grade: --gold2 is a fill, and measured 3.1:1 as link text on
+  // the white ledger.
+  expect(styles).toContain('.con-row-book-title:hover,.con-row-book-title:focus-visible{color:var(--gold-text);}');
+  expect(styles).toContain('.store-jump-link:hover,.store-jump-link:focus-visible{color:var(--gold-text);text-underline-offset:3px;text-decoration:underline;}');
 });
 
 test('both jump links stay keyboard-actionable role="button" spans in the ledger row markup', () => {

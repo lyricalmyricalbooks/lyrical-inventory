@@ -85,9 +85,13 @@ test('a head tints its own kicker so only one section spends the gold accent', (
   const kicker = styles.match(/\.sec-kicker,\n\.consignment-kicker\{([^}]*)\}/)[1];
   const dot = styles.match(/\.sec-kicker-dot,\n\.con-kicker-dot\{([^}]*)\}/)[1];
 
-  // Both fall back to gold, so an untagged head is unchanged.
-  expect(kicker).toMatch(/color:var\(--sec-accent,var\(--gold\)\);/);
+  // Both fall back to the flare, so an untagged head is the lead — but the
+  // label falls back to its TEXT grade and the dot to its FILL. They used to
+  // share --gold, which put every section label at 3.3-4.0:1.
+  expect(kicker).toMatch(/color:var\(--sec-accent,var\(--gold-text\)\);/);
   expect(dot).toMatch(/background:var\(--sec-accent,var\(--gold\)\);/);
+  // Riso has no blur: the dot is a flat mark, not a glow.
+  expect(dot).not.toMatch(/box-shadow/);
   // The dot must not size to zero when the head is a flex row.
   expect(dot).toMatch(/flex:none;/);
 

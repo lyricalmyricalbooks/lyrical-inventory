@@ -224,9 +224,9 @@ import {
   fmtWhole,
   fmtD,
   getBookCurrencyCode,
-  getContrastColor,
   getContrastSafeText,
   getPaperSafeText,
+  getAccentFillPair,
   getSym,
   hexToRgba,
   isDirectToArtistSale,
@@ -3126,6 +3126,7 @@ function applyBookAccentTokens(bookId) {
     root.style.setProperty('--book-accent-text', 'var(--gold-text)');
     root.style.setProperty('--book-accent-text-on-ink', 'var(--gold3)');
     root.style.setProperty('--book-accent-contrast', 'var(--ink)');
+    root.style.setProperty('--book-accent-fill', 'var(--gold2)');
     // No cover colour to derive from: the paper objects fall back to their own
     // --gold-text (see PAPER SCOPE in theme-dark.css).
     root.style.removeProperty('--book-accent-text-on-paper');
@@ -3134,10 +3135,22 @@ function applyBookAccentTokens(bookId) {
   root.style.setProperty('--book-accent', book.accent);
   root.style.setProperty('--book-accent-bg', book.accentBg);
   root.style.setProperty('--book-accent-light', lightenColor(book.accent, 0.25));
-  root.style.setProperty('--book-accent-text', getContrastSafeText(book.accent, resolvedTheme === 'dark'));
+  // Light mode's accent-as-text measures the real WCAG ratio against the
+  // darkest light surface it lands on, the same way night mode's paper does.
+  // getContrastSafeText(hex, false) only darkened covers brighter than 50%, so
+  // a mid-tone cover passed straight through: The Hound's blue read at
+  // 3.3-3.8:1 on its own pills and the "stock is healthy" note.
+  root.style.setProperty('--book-accent-text', resolvedTheme === 'dark'
+    ? getContrastSafeText(book.accent, true)
+    : getPaperSafeText(book.accent));
   root.style.setProperty('--book-accent-text-on-ink', getContrastSafeText(book.accent, true));
   root.style.setProperty('--book-accent-text-on-paper', getPaperSafeText(book.accent));
-  root.style.setProperty('--book-accent-contrast', getContrastColor(book.accent));
+  // The accent as a SOLID FILL, and the label that reads on it. Paired so
+  // neither is chosen without measuring against the other — see
+  // getAccentFillPair() for why a mid-tone cover needs its fill nudged.
+  const pair = getAccentFillPair(book.accent);
+  root.style.setProperty('--book-accent-fill', pair.fill);
+  root.style.setProperty('--book-accent-contrast', pair.label);
 }
 
 // The two backends report a rules rejection differently: Firestore sets
@@ -4724,7 +4737,8 @@ function renderAllBooksStrips(allBooksVisible) {
     // costs nothing and stops this template needing a per-field audit again.
     const accent = escapeHtml(book.accent);
     const idAttr = escapeHtml(book.id);
-    return `<div class="book-strip" style="--accent-color: ${accent}; --accent-color-bg: ${escapeHtml(book.accentBg)}; --accent-color-light: ${escapeHtml(lightenColor(book.accent, 0.25))}; --accent-text: ${escapeHtml(getContrastSafeText(book.accent))}; --accent-contrast: ${escapeHtml(getContrastColor(book.accent))};">
+    const accentPair = getAccentFillPair(book.accent);
+    return `<div class="book-strip" style="--accent-color: ${accent}; --accent-color-bg: ${escapeHtml(book.accentBg)}; --accent-color-light: ${escapeHtml(lightenColor(book.accent, 0.25))}; --accent-text: ${escapeHtml(getPaperSafeText(book.accent))}; --accent-fill: ${escapeHtml(accentPair.fill)}; --accent-contrast: ${escapeHtml(accentPair.label)};">
       <div class="book-cover-3d" aria-hidden="true">
         <div class="book-cover-spine"></div>
         <div class="book-cover-front">
@@ -15010,7 +15024,7 @@ function renderSystemBackups() {
   `).join('');
 
   if (totalPages > 1) {
-    html += `<tr><td colspan="4" style="text-align:center;padding:1rem;background:rgba(0,0,0,.15);">
+    html += `<tr><td colspan="4" style="text-align:center;padding:1rem;background:var(--surface-sunken);">
       <button class="btn sm" onclick="gotoSysBackupPage(-1)" ${_sysBackupPage === 0 ? 'disabled' : ''}>← Prev</button>
       <span style="margin:0 15px;font-size:var(--text-sm);color:var(--text2);font-family:var(--font-mono);">Page ${_sysBackupPage + 1} of ${totalPages}</span>
       <button class="btn sm" onclick="gotoSysBackupPage(1)" ${_sysBackupPage === totalPages - 1 ? 'disabled' : ''}>Next →</button>
@@ -23619,8 +23633,10 @@ function updateModalAccentPreview(inputEl) {
   if (modal) {
     modal.style.setProperty('--local-accent', color);
     modal.style.setProperty('--local-accent-bg', colorBg);
-    modal.style.setProperty('--local-accent-text', getContrastSafeText(color));
-    modal.style.setProperty('--local-accent-contrast', getContrastColor(color));
+    modal.style.setProperty('--local-accent-text', getPaperSafeText(color));
+    const pair = getAccentFillPair(color);
+    modal.style.setProperty('--local-accent-fill', pair.fill);
+    modal.style.setProperty('--local-accent-contrast', pair.label);
   }
 }
 

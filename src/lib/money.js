@@ -289,4 +289,64 @@ export function getPaperSafeText(hex, surface = PAPER_SURFACE) {
   return 'var(--ink)';
 }
 
+// The ink and white the app actually puts on a solid accent fill. --ink is
+// #100F0D in the light :root; white is --on-accent.
+const LABEL_INK = '#100F0D';
+const LABEL_WHITE = '#FFFFFF';
+const ratioOf = (a, b) => {
+  const x = relativeLuminance(a), y = relativeLuminance(b);
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+};
+
+/**
+ * A book's accent colour as a SOLID FILL with a label on it — the gold
+ * buttons, the dashboard's lead KPI tile — and the label that goes with it.
+ *
+ * getContrastColor() picks ink or white by a perceived-brightness guess
+ * (luminance > 0.5), which is not the WCAG ratio and does not check the
+ * result. A mid-tone cover sits where NEITHER label clears AA: The Hound's
+ * #3a7cc8 measures 4.29:1 with white and 4.33:1 with ink, so every gold button
+ * in the app read below 4.5:1 whenever that book was open.
+ *
+ * This measures both labels for real. If one already clears 4.5:1 the cover
+ * colour is returned untouched. If neither does, the fill moves the least it
+ * can — darkened a few percent under a white label, or lightened under an ink
+ * one, whichever needs fewer steps — so the button still reads as the book's
+ * colour. Ties keep getContrastColor()'s historical label, so a cover that was
+ * already fine renders exactly as before.
+ *
+ * Returns { fill, label } where label is 'var(--ink)' or '#ffffff' — the same
+ * two values getContrastColor() hands out, so every consumer keeps working.
+ * Invalid input falls back to the flare fill with its ink.
+ */
+export function getAccentFillPair(hex) {
+  const fallback = { fill: 'var(--gold2)', label: 'var(--ink)' };
+  if (relativeLuminance(hex) === null) return fallback;
+  const base = hex.charAt(0) === '#' ? hex : `#${hex}`;
+  const toLabel = (c) => (c === LABEL_INK ? 'var(--ink)' : '#ffffff');
+  const historical = getContrastColor(base) === '#ffffff' ? LABEL_WHITE : LABEL_INK;
+
+  const passing = [LABEL_WHITE, LABEL_INK].filter(l => ratioOf(base, l) >= 4.5);
+  if (passing.length) {
+    const label = passing.includes(historical) ? historical : passing[0];
+    return { fill: base, label: toLabel(label) };
+  }
+
+  // Neither passes: walk each direction and keep the shorter walk.
+  const walk = (label, step) => {
+    let c = base;
+    for (let i = 1; i <= 30; i++) {
+      c = step(c);
+      if (ratioOf(c, label) >= 4.5) return { fill: c, label, steps: i };
+    }
+    return null;
+  };
+  const dark = walk(LABEL_WHITE, c => darkenColor(c, 0.04));
+  const light = walk(LABEL_INK, c => lightenColor(c, 0.06));
+  const options = [dark, light].filter(Boolean);
+  if (!options.length) return fallback;
+  options.sort((a, b) => a.steps - b.steps || (a.label === historical ? -1 : 1));
+  return { fill: options[0].fill, label: toLabel(options[0].label) };
+}
+
 

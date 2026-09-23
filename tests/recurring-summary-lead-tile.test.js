@@ -27,7 +27,8 @@ test('the Recurring Subscriptions summary strip has exactly one leading tile', (
   // The accent is a bottom ::after, never a left border, matching the other
   // stat strips in the app (.hist-kpi-card, .consignment-stat-card).
   expect(styles).toMatch(/\.rec-stat::after\{[\s\S]*?inset:auto 0 0;height:3px;/);
-  expect(styles).toMatch(/\.rec-stat\.is-lead::after\{background:linear-gradient\(90deg,var\(--gold\),var\(--gold3\)\);\}/);
+  // A flat flare strip — Riso has no gradients; this was gold→gold3.
+  expect(styles).toMatch(/\.rec-stat\.is-lead::after\{background:var\(--gold\);\}/);
 
   // Exactly one tile in the rendered strip carries the class — "Committed per
   // month" is the figure the panel exists to report.

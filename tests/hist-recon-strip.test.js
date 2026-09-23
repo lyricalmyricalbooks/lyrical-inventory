@@ -27,8 +27,10 @@ test('the three reconciliation cards share one left edge', () => {
   expect(styles).not.toMatch(/\.hist-kpi-card\.highlight-(gold|green)\s*\{[^}]*border-left/);
   expect(block('.hist-kpi-card::after')).toMatch(/inset:\s*auto\s+0\s+0;/);
   expect(block('.hist-kpi-card::after')).toMatch(/height:\s*3px;/);
-  expect(block('.hist-kpi-card.highlight-gold::after')).toMatch(/background:\s*linear-gradient/);
-  expect(block('.hist-kpi-card.highlight-green::after')).toMatch(/background:\s*linear-gradient/);
+  // Flat strips of one ink each — Riso has no gradients (these were
+  // gold→gold3 and emerald→emerald-soft ramps).
+  expect(block('.hist-kpi-card.highlight-gold::after')).toMatch(/background:\s*var\(--gold\);/);
+  expect(block('.hist-kpi-card.highlight-green::after')).toMatch(/background:\s*var\(--emerald\);/);
 });
 
 test('exactly one card leads the strip, by size and colour together', () => {
@@ -93,7 +95,10 @@ test('the progress bar keeps a visible trough in both themes', () => {
 test('the progress fill plots one measurement in one colour family', () => {
   const fill = block('.hist-progress-bar-fill');
   // The old gold→emerald ramp blended two semantic roles across a single bar.
-  expect(fill).toMatch(/linear-gradient\(90deg,\s*var\(--emerald\),\s*var\(--emerald-soft\)\)/);
+  // Now one flat ink of the one family — the emerald→emerald-soft ramp that
+  // replaced it was still a gradient, which Riso doesn't print.
+  expect(fill).toMatch(/background:\s*var\(--emerald\);/);
+  expect(fill).not.toMatch(/gradient/);
   expect(fill).not.toMatch(/var\(--gold\b/);
   // Motion tokens collapse under prefers-reduced-motion; a literal duration
   // would keep sweeping the bar on every re-render regardless.

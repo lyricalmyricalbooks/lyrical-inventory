@@ -8,7 +8,9 @@ const styles = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
 const html = readFileSync(path.join(__dirname, '../index.html'), 'utf8');
 
 test('danger zone kicker is tinted rose, matching the is-muted convention', () => {
-  expect(styles).toMatch(/\.sec-head\.is-danger\s*\{\s*--sec-accent:\s*var\(--rose\);\s*\}/);
+  // --rose-deep, the family's ink grade: --sec-accent colours the kicker's
+  // TEXT as well as its dot, and --rose (a fill) read 3.6:1 as that text.
+  expect(styles).toMatch(/\.sec-head\.is-danger\s*\{\s*--sec-accent:\s*var\(--rose-deep\);\s*\}/);
 });
 
 test('the book dashboard danger zone uses the section-head furniture, not a bare .sect label', () => {

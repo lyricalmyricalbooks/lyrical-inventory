@@ -35,15 +35,17 @@ test('QR card block establishes the surface, radius and hover lift on tokens', (
   expect(cardRule, '.qr-card rule present').not.toBeNull();
   const decl = cardRule[1];
 
-  // Surface uses the semantic --surface-inverse-raised alias, not raw --ink2.
-  // That alias flips per theme via the primitive re-point — dropping to a
-  // hardcoded ink value would freeze one theme's card.
-  expect(decl).toMatch(/background:\s*var\(--surface-inverse-raised\)/);
+  // Paper, like every card on newsprint: the semantic --surface-card, which
+  // night mode's Press Proof re-points to --paper. This was the permanently
+  // dark --surface-inverse-raised — six black boxes on a light page.
+  expect(decl).toMatch(/background:\s*var\(--surface-card\)/);
+  expect(decl).not.toMatch(/inverse/);
   // Radius, border and shadow all come off tokens — no ad-hoc values that
-  // would silently show up on the token ratchet.
-  expect(decl).toMatch(/border:\s*var\(--stroke-hair\) solid var\(--border-default\)/);
-  expect(decl).toMatch(/border-radius:\s*var\(--r3\)/);
-  expect(decl).toMatch(/box-shadow:\s*var\(--elev-2\)/);
+  // would silently show up on the token ratchet. The Riso object: a 2px ink
+  // outline, a square corner and a hard offset.
+  expect(decl).toMatch(/border:\s*var\(--stroke\) solid var\(--rule-ink\)/);
+  expect(decl).toMatch(/border-radius:\s*var\(--r\)/);
+  expect(decl).toMatch(/box-shadow:\s*var\(--elev-3\)/);
 
   // Column layout with `gap` (not margin-bottom on children) — every stage
   // gap is one number, per UX_PATTERNS.md § Stacked panels.
@@ -67,9 +69,10 @@ test('title leads the card in the interface face, price is mono/tabular', () => 
   // Anton, which is a display face and belongs at 20px and up, not here.)
   expect(titleRule[1]).toMatch(/font-family:\s*var\(--font-ui\)/);
   expect(titleRule[1]).toMatch(/font-size:\s*var\(--text-md\)/);
-  // On a permanently dark card, text goes on --on-inverse — never
-  // color:var(--cream) (tests/theme.test.js would fail on it).
-  expect(titleRule[1]).toMatch(/color:\s*var\(--on-inverse\)/);
+  // On a paper card, text goes on the semantic content tier — never
+  // color:var(--cream) (tests/theme.test.js would fail on it), and no longer
+  // the --on-inverse tier it used while the card was permanently dark.
+  expect(titleRule[1]).toMatch(/color:\s*var\(--content-primary\)/);
 
   const priceRule = styles.match(/\.qr-card-price\s*\{([\s\S]*?)\n\}/);
   expect(priceRule, '.qr-card-price rule').not.toBeNull();
