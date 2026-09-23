@@ -1,0 +1,70 @@
+// @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { beforeEach, expect, test } from 'vitest';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const html = readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+const styles = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
+const mainJs = readFileSync(path.join(__dirname, '../src/main.js'), 'utf8');
+
+// Run the real phone-nav block from main.js against the real markup, without
+// booting the whole app (which needs Firebase).
+const start = mainJs.indexOf('const MNAV_TABS');
+const end = mainJs.indexOf('Object.assign(window, { openMoreSheet, closeMoreSheet });');
+const block = mainJs.slice(start, end).replace(/export function/g, 'function');
+const api = new Function(`${block}; return { openMoreSheet, closeMoreSheet, syncMoreNavState };`);
+
+let nav;
+beforeEach(() => {
+  document.body.innerHTML = html.slice(html.indexOf('<body'), html.lastIndexOf('</body>')).replace(/^<body[^>]*>/, '');
+  nav = api();
+});
+
+const moreLabels = () => [...document.querySelectorAll('#more-sheet-body .snav:not([hidden]) .snav-label')].map((n) => n.textContent);
+
+test('bottom bar has four everyday destinations plus More', () => {
+  const buttons = [...document.querySelectorAll('#mnav .mnav-btn')];
+  expect(buttons.map((b) => b.querySelector('.mnav-label').textContent)).toEqual(['Home', 'Sell', 'Add sale', 'Orders', 'More']);
+});
+
+test('More sheet lists every sidebar tool not already on the bottom bar', () => {
+  nav.openMoreSheet();
+  expect(document.getElementById('more-sheet').hasAttribute('open')).toBe(true);
+  const labels = moreLabels();
+  for (const tool of ['To-do', 'Tax Centre', 'Payments', 'Customers', 'Shipping', 'Backups', 'History', 'Expenses']) {
+    expect(labels).toContain(tool);
+  }
+  for (const onBar of ['Dashboard', 'Event POS', 'Manual entry', 'Website orders']) {
+    expect(labels).not.toContain(onBar);
+  }
+  // Cloned ids would duplicate the sidebar's (badges are looked up by id).
+  expect(document.querySelectorAll('#more-sheet-body [id]').length).toBe(0);
+});
+
+test('reopening the sheet does not duplicate its contents', () => {
+  nav.openMoreSheet();
+  const first = moreLabels().length;
+  nav.closeMoreSheet();
+  nav.openMoreSheet();
+  expect(moreLabels().length).toBe(first);
+});
+
+test('More lights up when the open screen lives inside it', () => {
+  const more = document.getElementById('mnav-more');
+  nav.syncMoreNavState('taxcenter');
+  expect(more.classList.contains('active')).toBe(true);
+  nav.syncMoreNavState('pos');
+  expect(more.classList.contains('active')).toBe(false);
+});
+
+test('switchTab keeps the bottom bar in sync', () => {
+  expect(mainJs).toMatch(/querySelectorAll\('[^']*\.mnav-btn'\)/);
+  expect(mainJs).toMatch(/syncMoreNavState\(name\);/);
+});
+
+test('phone nav only replaces the pill strip for publishers', () => {
+  expect(styles).toMatch(/\.pub-shell \.tab-bar\{display:none;\}/);
+  expect(styles).toMatch(/\.mnav\{display:none;\}/);
+});
