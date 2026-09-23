@@ -405,6 +405,15 @@ describe('The label inspector never invents a shipment', () => {
     expect(download).toMatch(/canadapost-REFERENCE-COPY-/);
     expect(download).toMatch(/canadapost-label-\$\{pin\}\.pdf/);
   });
+
+  it('saves the label through the shared download helper', () => {
+    // A hand-rolled copy revoked the blob URL on the next tick, which can beat
+    // Safari and Firefox to the bytes and leave an empty or failed download.
+    const download = shippingSrc.slice(shippingSrc.indexOf('function downloadCanadaPostLabelModal'));
+    const body = download.slice(0, download.indexOf('\n}\n'));
+    expect(body).toMatch(/downloadBlob\(artifact\.blob, filename\)/);
+    expect(body).not.toMatch(/createObjectURL/);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────

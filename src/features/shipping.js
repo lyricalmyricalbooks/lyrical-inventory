@@ -69,7 +69,7 @@ import {
   shipmentRegion,
 } from '../lib/countries.js';
 import { csvCell } from '../lib/csv.js';
-import { downloadCsv } from '../lib/download.js';
+import { downloadBlob, downloadCsv } from '../lib/download.js';
 import { fmt, fmtD, roundCents, cadEquivalentForSale, getBookCurrencyCode } from '../lib/money.js';
 import {
   buildRecoveredOrderEntry,
@@ -5133,14 +5133,7 @@ function downloadCanadaPostLabelModal() {
     ? `canadapost-label-${pin}.pdf`
     : `canadapost-REFERENCE-COPY-${pin}.svg`;
 
-  const url = URL.createObjectURL(artifact.blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 0);
+  downloadBlob(artifact.blob, filename);
   showToast(isPdf ? '✓ Official label downloaded' : '✓ Reference copy downloaded — not valid for mailing', isPdf ? 'ok' : 'warn');
 }
 
