@@ -134,8 +134,8 @@
   --select-arrow-gold: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23E8402A' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-html{background:var(--cream);}
-body{background:var(--body-bg-tint, transparent);font-family:var(--font-ui);color:var(--text);min-height:100vh;transition:background-color 0.4s var(--ease-standard);}
+html{background:var(--cream);overflow-wrap:break-word;-webkit-text-size-adjust:100%;text-size-adjust:100%;}
+body{background:var(--body-bg-tint, transparent);font-family:var(--font-ui);color:var(--text);min-height:100vh;min-height:100dvh;transition:background-color 0.4s var(--ease-standard);}
 body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");background-size:200px 200px;opacity:.5;}
 .app{position:relative;z-index:1;}
 
@@ -1981,7 +1981,7 @@ tr.hist-row:hover {
 .tab-bar > .kpi-cluster ~ .tab-updated{padding-left:1.1rem;}
 
 /* PANELS */
-.tab-panel{display:none;padding:2rem;max-width:1200px;margin:0 auto;padding-bottom:calc(2rem + env(safe-area-inset-bottom));}
+.tab-panel{display:none;padding:clamp(1rem,2.5vw,2rem);max-width:1200px;margin:0 auto;padding-bottom:calc(clamp(1rem,2.5vw,2rem) + env(safe-area-inset-bottom));container-type:inline-size;}
 .tab-panel.active{display:block;animation:slideUp .22s ease;}
 @keyframes slideUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 
@@ -4145,7 +4145,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
    the "Deliberately NOT themed" note in theme-dark.css): this is a fixed
    black/cream art piece, not a themed surface, so its own hard-offset
    shadow below uses the poster's own colour rather than --elev-*. */
-#pw-gate{position:fixed;inset:0;z-index:9999;min-height:100vh;background:#0c0b0a;color:#f2ede1;font-family:var(--font-ui);display:flex;padding:clamp(14px,2.5vh,28px);overflow:auto;}
+#pw-gate{position:fixed;inset:0;z-index:9999;min-height:100vh;min-height:100dvh;background:#0c0b0a;color:#f2ede1;font-family:var(--font-ui);display:flex;padding:max(14px,env(safe-area-inset-top)) max(14px,env(safe-area-inset-right)) max(14px,env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left));overflow:auto;}
 #pw-gate .pw-scan{position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(255,255,255,0.018) 0 1px,transparent 1px 4px);pointer-events:none;z-index:1;}
 #pw-gate .pw-frame{flex:1;border:3px solid #f2ede1;box-shadow:14px 14px 0 rgba(242,237,225,0.12);position:relative;display:flex;padding:14px;z-index:2;} /* token-ok */
 #pw-gate .pw-inner{flex:1;border:var(--stroke-hair) solid rgba(242,237,225,0.45);display:flex;flex-direction:column;padding:clamp(22px,min(4vw,4vh),56px);position:relative;}
@@ -4455,6 +4455,62 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   .header-actions{flex-direction:column;}
   .header-action-btn{flex:1 1 100%;}
   .header-menu{flex:1 1 100%;min-width:0;}
+}
+
+/* ============ ADAPTIVE VIEWPORT FOUNDATION ============
+   These rules cover shapes that width-only breakpoints miss: phones in
+   landscape, split-screen tablet windows, notches, and very wide displays. */
+@supports (height: 100dvh){
+  .overlay{min-height:100dvh;}
+  .pub-shell #pub-sidebar{height:100dvh;bottom:auto;}
+}
+
+/* Keep page chrome and interactive content clear of curved/notched edges in
+   standalone mode. The max() fallback preserves the regular page inset. */
+@media (max-width: 768px){
+  .app-header{
+    padding-left:max(1rem,env(safe-area-inset-left));
+    padding-right:max(1rem,env(safe-area-inset-right));
+  }
+  .tab-panel{
+    padding-left:max(1rem,env(safe-area-inset-left));
+    padding-right:max(1rem,env(safe-area-inset-right));
+  }
+  .tab-bar{
+    padding-left:max(10px,env(safe-area-inset-left));
+    padding-right:max(10px,env(safe-area-inset-right));
+    scroll-padding-inline:max(10px,env(safe-area-inset-left));
+  }
+}
+
+/* Short landscape screens need vertical space more than decorative chrome.
+   Keep navigation reachable while allowing dialogs to use the available
+   dynamic viewport instead of overflowing behind browser controls. */
+@media (max-height: 560px) and (orientation: landscape){
+  .app-header{position:relative;padding-top:max(.35rem,env(safe-area-inset-top));}
+  .header-stat,.sync-bar{display:none;}
+  .modal{max-height:calc(100dvh - 16px);}
+  #pw-gate{position:absolute;}
+  #pw-gate .pw-band{display:none;}
+  #pw-gate .pw-inner{padding-block:18px;}
+  #pw-gate .pw-logo>div{font-size:clamp(42px,15vh,68px);}
+}
+
+/* On a narrow handset, dialogs become edge-to-edge bottom sheets. This leaves
+   more usable width for forms and respects the home-indicator safe area. */
+@media (max-width: 600px){
+  .overlay{align-items:flex-end;padding:0;}
+  .modal{
+    width:100%;max-width:none;max-height:min(92dvh,calc(100dvh - env(safe-area-inset-top)));
+    margin:0;border-radius:var(--r3) var(--r3) 0 0;
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  .modal-footer{padding-bottom:max(var(--space-4),env(safe-area-inset-bottom));}
+}
+
+/* Do not let content become difficult to scan on cinema-width monitors. */
+@media (min-width: 1600px){
+  .tab-panel{max-width:1440px;}
 }
 
 .sheets-log-tbl tbody tr:nth-child(even){background:#fcfbf8;}
