@@ -58,9 +58,6 @@ export const FUNCTION_RESPONSE_ROLE = 'user';
  */
 export const MAX_TOOL_ROUNDS = 6;
 
-/** Requests are aborted after this long with no answer. */
-export const REQUEST_TIMEOUT_MS = 60_000;
-
 const textOf = (parts) => (parts || [])
   // Newer flash models emit their reasoning as a part flagged `thought`. It is
   // not the answer and must never be shown as one.
