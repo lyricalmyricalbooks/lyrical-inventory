@@ -4662,12 +4662,13 @@
     <div class="sheets-setup" style="padding:1.5rem;">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem;">
         <div style="width:36px;height:36px;border-radius:var(--r);background:var(--gold-bg);color:var(--gold-text);display:flex;align-items:center;justify-content:center;font-size:var(--text-lg);">💾</div>
-        <h3 style="margin:0;font-family:var(--font-ui);font-size:16px;font-weight:700;color:var(--content-primary);">JSON Snapshot</h3>
+        <h3 style="margin:0;font-family:var(--font-ui);font-size:16px;font-weight:700;color:var(--content-primary);">Save a backup copy</h3>
       </div>
-      <p style="font-size:var(--text-sm);color:var(--content-secondary);line-height:1.6;margin-bottom:1.25rem;">Download a complete backup of your entire database (Catalog, Inventory, History, and Settings). This file can be used to restore your app at any time.</p>
+      <p style="font-size:var(--text-sm);color:var(--content-secondary);line-height:1.6;margin-bottom:1.25rem;">Saves one file to your computer with <strong>everything</strong> in the app: your books, stock counts, sales history and settings. Keep it somewhere safe. If anything ever goes wrong, you can use it to bring your data back. Nothing in the app changes when you do this.</p>
       <div style="display:flex;flex-direction:column;gap:12px;">
-        <button class="btn gold" style="width:100%;" onclick="exportToJSON(event)">Download JSON Backup</button>
-        <button class="btn sm" style="width:100%;" onclick="chooseBackupFolder()">Choose Backup Folder</button>
+        <button class="btn gold" style="width:100%;" onclick="exportToJSON(event)">Save backup to my computer</button>
+        <button class="btn sm" style="width:100%;" onclick="chooseBackupFolder()">Change where backups are saved</button>
+        <div style="font-size:var(--text-xs);color:var(--content-muted);text-align:center;line-height:1.5;margin-top:-6px;">Optional: pick a folder once, and future backups go straight there.</div>
         <div id="backup-folder-display" style="font-size:var(--text-xs);color:var(--content-muted);text-align:center;">Backup folder: Browser Downloads (default)</div>
         <div id="last-backup-display" style="font-size:var(--text-xs);color:var(--content-muted);text-align:center;">Last backup: Never</div>
       </div>
@@ -4676,21 +4677,21 @@
     <div class="sheets-setup" style="padding:1.5rem;">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem;">
         <div style="width:36px;height:36px;border-radius:var(--r);background:var(--surface-inset);color:var(--content-primary);display:flex;align-items:center;justify-content:center;font-size:var(--text-lg);">📤</div>
-        <h3 style="margin:0;font-family:var(--font-ui);font-size:16px;font-weight:700;color:var(--content-primary);">Restore from Backup</h3>
+        <h3 style="margin:0;font-family:var(--font-ui);font-size:16px;font-weight:700;color:var(--content-primary);">Bring back data from a backup</h3>
       </div>
-      <p style="font-size:var(--text-sm);color:var(--content-secondary);line-height:1.6;margin-bottom:1.25rem;">Upload a previously downloaded JSON snapshot from your computer to restore your data.</p>
+      <p style="font-size:var(--text-sm);color:var(--content-secondary);line-height:1.6;margin-bottom:1.25rem;">Use a backup file you saved earlier (from the card on the left) to undo mistakes or recover lost data. Choose the option that fits:</p>
       <div style="display:flex;flex-direction:column;gap:10px;">
-        <div style="font-size:var(--text-sm);font-weight:700;color:var(--content-primary);">Restore one book</div>
-        <div style="font-size:var(--text-xs);color:var(--content-muted);line-height:1.5;margin-bottom:2px;">Pick the file, then choose a single book. Every other book and all your settings stay untouched. A safety backup is saved first.</div>
-        <label for="import-one-book-file" class="btn sm gold restore-file-btn" style="width:100%;text-align:center;cursor:pointer;">Restore one book from file…</label>
+        <div style="font-size:var(--text-sm);font-weight:700;color:var(--content-primary);">Fix just one book</div>
+        <div style="font-size:var(--text-xs);color:var(--content-muted);line-height:1.5;margin-bottom:2px;">Use this if one book's numbers look wrong. You pick a backup file, then pick the book. Only that book goes back to how it was. Everything else stays as it is now, and a safety copy is saved first.</div>
+        <label for="import-one-book-file" class="btn sm gold restore-file-btn" style="width:100%;text-align:center;cursor:pointer;">Choose backup file, then pick a book…</label>
         <input type="file" id="import-one-book-file" accept=".json" style="display:none;" onchange="handleBookRestoreImportFile(event)">
         <div id="import-one-info" style="font-size:var(--text-xs);color:var(--content-muted);text-align:center;">Select a .json backup file</div>
 
         <div style="border-top:var(--stroke-hair) solid var(--border2);margin:8px 0 4px;"></div>
 
-        <div style="font-size:var(--text-sm);font-weight:700;color:var(--content-primary);">Restore everything</div>
-        <div style="font-size:var(--text-xs);color:var(--content-muted);line-height:1.5;margin-bottom:2px;"><strong style="color:var(--red);">Warning: overwrites your entire database</strong> with the file's contents.</div>
-        <label for="import-file" class="btn sm restore-file-btn" style="width:100%;text-align:center;cursor:pointer;">Choose file &amp; overwrite all</label>
+        <div style="font-size:var(--text-sm);font-weight:700;color:var(--content-primary);">Replace everything (use with care)</div>
+        <div style="font-size:var(--text-xs);color:var(--content-muted);line-height:1.5;margin-bottom:2px;">Only for emergencies, like setting up a new computer or recovering from a big mistake. <strong style="color:var(--red);">Every book, sale and setting will be replaced</strong> with what's in the file. Anything you added after that backup was made will be lost.</div>
+        <label for="import-file" class="btn sm restore-file-btn" style="width:100%;text-align:center;cursor:pointer;">Choose backup file &amp; replace everything</label>
         <input type="file" id="import-file" accept=".json" style="display:none;" onchange="handleBackupImportFile(event)">
         <div id="import-info" style="font-size:var(--text-xs);color:var(--content-muted);text-align:center;">Select a .json backup file</div>
       </div>
@@ -4699,10 +4700,10 @@
     <div class="sheets-setup" style="padding:1.5rem;">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem;">
         <div style="width:36px;height:36px;border-radius:var(--r);background:var(--surface-inset);color:var(--content-primary);display:flex;align-items:center;justify-content:center;font-size:var(--text-lg);">📊</div>
-        <h3 style="margin:0;font-family:var(--font-ui);font-size:16px;font-weight:700;color:var(--content-primary);">CSV Export</h3>
+        <h3 style="margin:0;font-family:var(--font-ui);font-size:16px;font-weight:700;color:var(--content-primary);">Open in a spreadsheet</h3>
       </div>
-      <p style="font-size:var(--text-sm);color:var(--content-secondary);line-height:1.6;margin-bottom:1.5rem;">Download all historical records (Sales, Consignments, and Expenses) as a flat CSV file for use in spreadsheet software.</p>
-      <button class="btn sm" style="width:100%;" onclick="exportAllToCSV()">Download CSV Report</button>
+      <p style="font-size:var(--text-sm);color:var(--content-secondary);line-height:1.6;margin-bottom:1.5rem;">Downloads your sales, consignments and expenses as one file you can open in Excel, Google Sheets or Numbers. Handy for your accountant or for taxes. <strong>This is not a backup</strong>: it can't be used to bring data back into the app.</p>
+      <button class="btn sm" style="width:100%;" onclick="exportAllToCSV()">Download spreadsheet</button>
     </div>
   </div>
 </div>
