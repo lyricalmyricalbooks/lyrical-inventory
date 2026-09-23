@@ -141,3 +141,44 @@ describe('what has been happening includes what the app did on its own', () => {
     expect(feed([{ chan: 'Website', qty: 1, price: 30, date: '2026-09-10', voided: true }])).toEqual([]);
   });
 });
+
+describe('one-tap actions on to-do items', () => {
+  const book = { id: 'hound', title: 'The Hound of Heaven', threshold: 0 };
+  const run = (automation, hist = []) => buildAttentionSignals({
+    books: [book], states: { hound: { stock: 50, hist } }, automation, today: '2026-09-23',
+  }).byGroup.orders;
+
+  it('gives each unsent order its own "Mark as sent" button', () => {
+    const hist = [
+      { chan: 'Website', num: '#AB-1', date: '2026-09-15', shipName: 'Dana', shipAddr1: '1 Main' },
+      { chan: 'Website', num: '#AB-2', date: '2026-09-18', shipName: 'Sam', shipAddr1: '2 Main' },
+    ];
+    const signal = run({}, hist).find(s => s.id === 'orders-unshipped');
+    expect(signal.items.map(i => i.label)).toEqual(['Dana · #AB-1 · 8 days', 'Sam · #AB-2 · 5 days']);
+    expect(signal.items[0].quick).toEqual({ label: 'Mark as sent', kind: 'action', tab: 'mark-shipped', bookId: 'hound', num: '#AB-1' });
+  });
+
+  it('offers to file the ready receipts, and to reverse refunded sales, in one tap', () => {
+    const signals = run({ receiptsWaiting: 3, receiptsReady: 2, refundsToReverse: 1 });
+    expect(signals.find(s => s.id === 'orders-receipts').quick).toMatchObject({ label: 'File 2 now', tab: 'file-ready-receipts' });
+    expect(signals.find(s => s.id === 'orders-reverse').quick).toMatchObject({ label: 'Reverse now', tab: 'reverse-sales' });
+  });
+
+  it('offers no filing button when nothing is ready', () => {
+    expect(run({ receiptsWaiting: 3, receiptsReady: 0 }).find(s => s.id === 'orders-receipts').quick).toBeNull();
+  });
+});
+
+describe('what the app did on its own is marked automatic', () => {
+  const book = { id: 'hound', title: 'The Hound of Heaven', currency: 'CAD' };
+  const feed = (hist) => buildActivityFeed([book], { hound: { hist } }, { limit: 0 });
+
+  it('marks sales it recorded and parcels it saw delivered, and nothing else', () => {
+    const events = feed([
+      { chan: 'Website', num: '#AB-1', qty: 1, price: 30, date: '2026-09-10', autoRecorded: true, shipped: true, shippedDate: '2026-09-11', deliveredDate: '2026-09-14' },
+      { chan: 'Direct', qty: 1, price: 30, date: '2026-09-12' },
+    ]);
+    const byKind = Object.fromEntries(events.map(e => [e.kind, e.auto]));
+    expect(byKind).toMatchObject({ 'sale-auto': true, delivered: true, shipped: false, sale: false });
+  });
+});
