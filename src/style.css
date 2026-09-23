@@ -19425,3 +19425,70 @@ button[onclick="refreshUmamiStats()"]:active {
   #tab-history .tbl tr.hist-row > td:nth-child(8){display:none;}
   #tab-history .tbl tr.hist-row > td:nth-child(10) .btn{min-height:44px;}
 }
+
+/* ============================================================
+   PHONE PASS, EVERY OTHER SCREEN (≤768px portrait)
+   To-do, Add sale, Consignment, Expenses, Customers, Payments,
+   Tax Centre, QR codes, Open Call, Web Analytics, Shipping, Sheets,
+   Big Cartel, Backups, Intelligence. Presentation only.
+   ============================================================ */
+@media (max-width: 768px){
+  /* Section heads: when the buttons don't fit beside the title they drop
+     under it, instead of squeezing the title to one letter per line. */
+  .tab-panel .sec-head{flex-wrap:wrap;}
+  .tab-panel .sec-head-titles{flex:1 1 220px;}
+  .tab-panel .sec-head-badges{flex-shrink:1;min-width:0;}
+  /* Long explanations: two lines, so the working part of each screen
+     starts sooner. The full sentence is still there for screen readers. */
+  .tab-panel .section-subcopy,
+  .tab-panel .lead-note{
+    display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden;
+  }
+
+  /* Forms: one field per row, full-width main button. */
+  .tab-panel .order-grid,
+  .tab-panel .g2,
+  .tab-panel .g3{grid-template-columns:minmax(0,1fr) !important;}
+  .tab-panel .card-actions{flex-direction:column;align-items:stretch;gap:var(--space-2);}
+  .tab-panel .card-actions .btn{width:100%;min-height:52px;}
+  /* Add sale: the save button stays in thumb reach while the form scrolls. */
+  #tab-manual .card-actions .btn.gold.lg{
+    position:sticky;bottom:calc(84px + env(safe-area-inset-bottom));z-index:var(--z-raised);box-shadow:var(--elev-3);
+  }
+
+  /* Wide tables scroll sideways inside their own box, with the first
+     column (the name or number) held in place. History has its own cards. */
+  .tab-panel:not(#tab-history) .tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;}
+  .tab-panel:not(#tab-history) .tbl th:first-child,
+  .tab-panel:not(#tab-history) .tbl td:first-child{position:sticky;left:0;z-index:var(--z-base);background:var(--surface-page);box-shadow:1px 0 0 var(--border-subtle);}
+
+  /* Sub-tabs (Tax Centre, settings): one swipeable row of pills. */
+  .tab-panel .settings-sub-nav{
+    display:flex;flex-wrap:nowrap;gap:6px;overflow-x:auto;scrollbar-width:none;
+    margin-inline:calc(-1 * var(--space-4));padding-inline:var(--space-4);
+  }
+  .tab-panel .settings-sub-nav::-webkit-scrollbar{display:none;}
+  .tab-panel .settings-sub-tab{flex-shrink:0;min-height:44px;white-space:nowrap;}
+
+  /* Payments: search and filters on their own rows. */
+  #tab-reconcile .recon-toolbar{flex-wrap:wrap;gap:var(--space-2);}
+  #tab-reconcile .recon-search{flex:1 1 100%;}
+  #tab-reconcile .recon-chips{display:flex;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;gap:6px;}
+  #tab-reconcile #recon-keyrow{flex-wrap:wrap;}
+
+  /* QR codes: two per row, big enough to scan off the screen. */
+  #tab-qrcodes .qr-grid{grid-template-columns:repeat(2,minmax(0,1fr)) !important;gap:var(--space-2);}
+
+  /* Shipping: form then rates, one column. */
+  #tab-shipping .shipping-grid{grid-template-columns:minmax(0,1fr) !important;}
+
+  /* Intelligence: the conversation fills the screen; the question box
+     sits just above the bottom bar like a messaging app. */
+  #tab-intel .intel-layout{display:block;}
+  #tab-intel .intel-rail{display:none;}
+  #tab-intel .intel-composer{
+    position:sticky;bottom:calc(84px + env(safe-area-inset-bottom));z-index:var(--z-raised);
+    background:var(--surface-page);padding-top:var(--space-2);box-shadow:0 -1px 0 var(--border-subtle);
+  }
+  #tab-intel .intel-send{min-height:48px;}
+}
