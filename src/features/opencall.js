@@ -37,6 +37,7 @@ import { confirmDialog } from '../lib/modal.js';
 import { escapeHtml } from '../lib/html.js';
 import { toCsv } from '../lib/csv.js';
 import { downloadBlob, downloadCsv } from '../lib/download.js';
+import { ensureXlsx } from '../lib/external-scripts.js';
 import {
   OC_STAGES, ocNextAction, newContributor, parseContributorRows, findUnfilledMergeFields,
   ocProposalKey, ocProposalSummary, ocProposalsFromScan, ocApplyProposal,
@@ -2355,22 +2356,26 @@ async function ocApplyParsedImport_(parsed, sourceLabel) {
   showToast(`✓ Imported ${added}${skipped ? ` · ${skipped} duplicate${skipped === 1 ? '' : 's'} skipped` : ''}`);
 }
 
-function handleOcCsvFile(file) {
+async function handleOcCsvFile(file) {
   if (!file || ocBlockedForAuthor_()) return;
   const fname = (file.name || '').toLowerCase();
   const isExcel = /\.(xlsx|xls)$/.test(fname);
+  let xlsx;
+  if (isExcel) {
+    try {
+      xlsx = await ensureXlsx();
+    } catch {
+      showToast('Excel support could not load. Check your connection or save the file as .csv.', 'err');
+      return;
+    }
+  }
   const reader = new FileReader();
   reader.onload = async function (e) {
     try {
       let text;
       if (isExcel) {
-        // Same SheetJS global the sales-import path uses (loaded in index.html).
-        if (typeof XLSX === 'undefined') {
-          showToast('Excel support needs an internet connection to load — save the file as .csv and retry', 'err');
-          return;
-        }
-        const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
-        text = XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[0]]);
+        const wb = xlsx.read(new Uint8Array(e.target.result), { type: 'array' });
+        text = xlsx.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[0]]);
       } else {
         text = e.target.result;
       }
