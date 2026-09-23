@@ -815,7 +815,7 @@ import { OC_STAGES } from './lib/opencall.js';
 import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, recordInventoryDisposal, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, orderStockPreview, orderStockPreviewCopy, deriveStockBreakdown, transferAuthorStock, deductSaleFromStockBreakdown, isVoidStale } from './lib/inventory.js';
 import { createInventoryDisposalExpense, createSection10Adjustment, inventoryAdjustmentCsvRows } from './lib/inventory-adjustment.js';
 import { posStockView, posOversellSummary } from './lib/pos-stock.js';
-import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores, consignmentLedgerTotals, storeBalanceSlug, storeBalanceComparison } from './lib/consignment.js';
+import { histMirrorForLedger, stampLedgerInvoiceLink, notesWithInvoiceDiscount, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores, consignmentLedgerTotals, storeBalanceSlug, storeBalanceComparison } from './lib/consignment.js';
 import { deriveInvoiceBookIds, invoicesForBook, findInvoiceAcrossBooks, otherBookTitles, lineItemBookId, invoiceBookSplit, invoiceShareForBook, neutralInvoicePrefix, invoiceNumberPrefix, nextInvoiceSeq, buildInvoiceNumber, BILL_TO_STORE, BILL_TO_PERSON, invoiceBillToMode, billToPayload, billToPersonFrom } from './lib/invoices.js';
 import { reminderSettings, reminderBlockReason, invoiceReminderState, dueForReminder, dueForReminderTomorrow, buildReminderEmail, canSendNow, daysLate, describeReminderSweep, describeReminderArming, describeReminderNotice, sampleReminderInvoice } from './lib/payment-reminders.js';
 import { LEDGER_TYPE_FILTERS, emptyLedgerFilter, ledgerFilterIsActive, ledgerStoreOptions, filterLedgerEntries, ledgerTypeCounts, describeLedgerFilter, ledgerTotalsScope } from './lib/consignment-ledger-filter.js';
@@ -7684,18 +7684,7 @@ function recordOrder(num, chan, qty, price, notes, payment = null) {
   s.sold += qty; s.revenue += qty * price;
   if (!s.chStats[chan]) s.chStats[chan] = { txns: 0, units: 0, revenue: 0 };
   s.chStats[chan].txns++; s.chStats[chan].units += qty; s.chStats[chan].revenue += qty * price;
-  let updatedNotes = notes || '';
-  if (num && num.startsWith('INV-')) {
-    const inv = (s.invoices || []).find(i => i.num === num || i.id === num);
-    if (inv && inv.discount > 0) {
-      const discStr = inv.discountType === 'percent'
-        ? `Invoice Discount: ${inv.discountRate}%`
-        : `Invoice Discount: flat`;
-      if (!updatedNotes.includes('Invoice Discount:')) {
-        updatedNotes = updatedNotes ? `${updatedNotes} · ${discStr}` : discStr;
-      }
-    }
-  }
+  const updatedNotes = notesWithInvoiceDiscount(s.invoices, num, notes);
 
   const sheetsId = makeEventId();
   s.hist.unshift({ num, chan, qty, price, after: s.stock, notes: updatedNotes, date: today(), payment, enteredBy, sheetsId, cur: bookCurrencyCode(book) });
@@ -9447,18 +9436,7 @@ function recordOrderPendingTransfer(num, chan, qty, price, notes, payment = null
   s.sold += qty;
   if (!s.chStats[chan]) s.chStats[chan] = { txns: 0, units: 0, revenue: 0 };
   s.chStats[chan].txns++; s.chStats[chan].units += qty;
-  let updatedNotes = notes || '';
-  if (num && num.startsWith('INV-')) {
-    const inv = (s.invoices || []).find(i => i.num === num || i.id === num);
-    if (inv && inv.discount > 0) {
-      const discStr = inv.discountType === 'percent'
-        ? `Invoice Discount: ${inv.discountRate}%`
-        : `Invoice Discount: flat`;
-      if (!updatedNotes.includes('Invoice Discount:')) {
-        updatedNotes = updatedNotes ? `${updatedNotes} · ${discStr}` : discStr;
-      }
-    }
-  }
+  const updatedNotes = notesWithInvoiceDiscount(s.invoices, num, notes);
 
   // Add to history with pending flag. directToArtist marks this as cash the
   // artist collected directly (these only ever come from direct-to-artist sales).

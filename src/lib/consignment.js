@@ -98,6 +98,30 @@ export function ledgerSaleIndexForHistMirror(s, h) {
   );
 }
 
+// The note a discounted invoice leaves on its sale, e.g. "Invoice Discount: 10%".
+export function invoiceDiscountLabel(inv) {
+  return inv.discountType === 'percent'
+    ? `Invoice Discount: ${inv.discountRate}%`
+    : `Invoice Discount: flat`;
+}
+
+// Sale notes for a new sale recorded against invoice `num` ("INV-…"): appends
+// that invoice's discount label once, when it has a discount. Any other sale's
+// notes come back unchanged.
+export function notesWithInvoiceDiscount(invoices, num, notes) {
+  let updatedNotes = notes || '';
+  if (num && num.startsWith('INV-')) {
+    const inv = (invoices || []).find(i => i.num === num || i.id === num);
+    if (inv && inv.discount > 0) {
+      const discStr = invoiceDiscountLabel(inv);
+      if (!updatedNotes.includes('Invoice Discount:')) {
+        updatedNotes = updatedNotes ? `${updatedNotes} · ${discStr}` : discStr;
+      }
+    }
+  }
+  return updatedNotes;
+}
+
 // The only writer of the invoice back-pointers: sets (or clears, when inv===null)
 // invoiceId/invoiceNum on a ledger entry AND its hist mirror in lockstep.
 export function stampLedgerInvoiceLink(s, ledgerId, inv) {
@@ -107,9 +131,7 @@ export function stampLedgerInvoiceLink(s, ledgerId, inv) {
   e.invoiceNum = inv ? inv.num : null;
 
   if (inv && inv.discount > 0) {
-    const discStr = inv.discountType === 'percent'
-      ? `Invoice Discount: ${inv.discountRate}%`
-      : `Invoice Discount: flat`;
+    const discStr = invoiceDiscountLabel(inv);
     let cleaned = e.notes || '';
     cleaned = cleaned.replace(/\s*·\s*Invoice Discount:\s*[^·]+/g, '').replace(/Invoice Discount:\s*[^·]+/g, '').trim();
     e.notes = cleaned ? `${cleaned} · ${discStr}` : discStr;
