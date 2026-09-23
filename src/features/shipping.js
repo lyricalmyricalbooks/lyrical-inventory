@@ -1224,6 +1224,14 @@ function applyShippoRefunds(refunds) {
 }
 
 /** How much postage is still waiting on a person. */
+/** Of these order numbers, the ones with a shipping label matched to them. */
+function ordersWithLabels(nums = []) {
+  const wanted = new Set(nums.filter(Boolean));
+  if (!wanted.size) return [];
+  const expenses = postageExpenses();
+  return [...wanted].filter(num => linkedShippingSummary({ num }, expenses, 1).linkedCount > 0);
+}
+
 function reconciliationBacklog() {
   return (TAX_CENTER.businessExpenses || []).filter(isUnresolvedShippoPostage).length;
 }
@@ -9683,6 +9691,7 @@ export {
   startShippingEmailSweep,
   startDeliveryWatch,
   startOrderFollowups,
+  ordersWithLabels,
   openShippingFromUnshippedAlert,
   openShippingFromDeliveryAlert,
   reconciliationBacklog,

@@ -2344,6 +2344,16 @@ function _emailImportTabVisible() {
 // One count on the "Import from Email" button covers both auto sources — the
 // Gmail add-on's staged queue and the background sweep's own finds — rather
 // than two competing numbers on the same button.
+/** How many receipts are waiting to be filed, and how many of those are complete. For the To-do list. */
+function receiptInboxCounts() {
+  const sweepDrafts = (_emailReceiptDrafts || []).filter(d => d._fromSweep).length;
+  const persistedPending = sweepDrafts ? 0 : readReceiptSweepPending().length;
+  return {
+    waiting: _emailInboxItems.length + sweepDrafts + persistedPending,
+    ready: (_sweepReadyRefs || []).length,
+  };
+}
+
 function updateEmailInboxBadge() {
   const badge = $('email-inbox-badge');
   if (!badge) return;
@@ -6641,6 +6651,7 @@ export {
   voidExpense,
   dismissEmailReceiptDraft,
   openReceiptSweepReviewFromAlert,
+  receiptInboxCounts,
   fileReadyReceiptsFromAlert,
   startReceiptEmailSweep,
   sweepReceiptEmails,
