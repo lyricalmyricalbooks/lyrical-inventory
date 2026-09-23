@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { canonicalExpenseCategory } from '../src/lib/expense-categories.js';
+import { allCanonicalExpenses, canonicalExpenseCategory } from '../src/lib/expense-categories.js';
 
 // The bug this guards: an expense stored as "Marketing" and one stored as
 // "Marketing & Advertising" are the same deductible bucket, but the Tax Centre
@@ -50,5 +50,26 @@ describe('canonicalExpenseCategory', () => {
   it('is idempotent — folding a folded name changes nothing', () => {
     const once = canonicalExpenseCategory('Marketing');
     expect(canonicalExpenseCategory(once)).toBe(once);
+  });
+});
+
+describe('allCanonicalExpenses', () => {
+  it('merges business and book rows, drops voided ones, and tags where each lives', () => {
+    const rows = allCanonicalExpenses({
+      taxCenter: { businessExpenses: [{ id: 'b1', cat: 'Postage' }, { id: 'b2', voided: true }, null] },
+      states: {
+        bookA: { expenses: [{ id: 'a1', cat: 'Production' }, { id: 'a2', cat: '' }] },
+        bookB: {},
+      },
+    });
+    expect(rows.map(r => [r.id, r._scope, r._bookId, r._cat])).toEqual([
+      ['b1', 'business', null, 'Shipping & Postage'],
+      ['a1', 'book', 'bookA', 'Printing & Production'],
+      ['a2', 'book', 'bookA', 'Other'],
+    ]);
+  });
+
+  it('tolerates a context with no ledgers at all', () => {
+    expect(allCanonicalExpenses({})).toEqual([]);
   });
 });

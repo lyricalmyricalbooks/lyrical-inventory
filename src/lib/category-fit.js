@@ -18,7 +18,7 @@
 // used them under each category, so it is checkable and wrong only if the
 // count is wrong.
 
-import { canonicalExpenseCategory } from './expense-categories.js';
+import { allCanonicalExpenses } from './expense-categories.js';
 import { roundCents } from './money.js';
 
 const str = (v) => (v == null ? '' : String(v)).trim();
@@ -61,20 +61,6 @@ function expenseKey(e) {
   return e.id != null && e.id !== '' ? `id:${e.id}` : `row:${e._scope}:${e._bookId}:${e.date}:${e.desc}`;
 }
 
-/** Every expense in scope, tagged with where it lives so a finding can point back at it. */
-function allExpenses(ctx) {
-  const out = [];
-  for (const e of (ctx.taxCenter?.businessExpenses || [])) {
-    if (e && !e.voided) out.push({ ...e, _scope: 'business', _bookId: null, _cat: canonicalExpenseCategory(e.cat, 'Other') });
-  }
-  for (const [bookId, state] of Object.entries(ctx.states || {})) {
-    for (const e of (state?.expenses || [])) {
-      if (e && !e.voided) out.push({ ...e, _scope: 'book', _bookId: bookId, _cat: canonicalExpenseCategory(e.cat, 'Other') });
-    }
-  }
-  return out;
-}
-
 /**
  * Every meaningful word the business has ever filed, and which categories it
  * has landed under — counted by distinct expense rather than by appearance,
@@ -104,7 +90,7 @@ function wordCategoryIndex(expenses) {
  * @param {object} ctx  { books, states, taxCenter }
  */
 export function findCategoryMismatches(ctx = {}) {
-  const expenses = allExpenses(ctx).filter(e => str(e.desc));
+  const expenses = allCanonicalExpenses(ctx).filter(e => str(e.desc));
   if (expenses.length < MIN_LEDGER_SIZE) return [];
 
   const index = wordCategoryIndex(expenses);
