@@ -13788,24 +13788,8 @@ async function confirmRestoreBookDataFromSheets() {
     s.stores = newStores;
     s.doneIds = newDoneIds;
 
-    // Recalculate book units sold and revenue
-    s.sold = 0;
-    s.revenue = 0;
-    s.chStats = {};
-
-    newHist.forEach(h => {
-      if (h.voided) return;
-
-      const chan = h.chan || 'Manual';
-      if (!s.chStats[chan]) s.chStats[chan] = { txns: 0, units: 0, revenue: 0 };
-      s.chStats[chan].txns++;
-      s.chStats[chan].units += (h.qty || 0);
-      s.chStats[chan].revenue += (h.qty || 0) * (h.price || 0);
-
-      if (h.gratuity) return;
-      s.sold += (h.qty || 0);
-      s.revenue += (h.qty || 0) * (h.price || 0);
-    });
+    // Recalculate book units sold and revenue from the imported history
+    recalculateBookStatsFromHistory(s);
 
     // Recalculate store amountOwed
     newStores.forEach(st => {
