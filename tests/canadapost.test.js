@@ -346,6 +346,14 @@ describe('Canada Post Label & Shipment Creation', () => {
     global.fetch = origFetch;
   });
 
+  it('shares one Declaration ID format rule with zonos.js', async () => {
+    const cp = await import('../src/lib/canadapost.js');
+    const zonos = await import('../src/lib/zonos.js');
+    // Label purchase and the Tax Centre must agree on what a valid ID is.
+    expect(cp.formatDeclarationId).toBe(zonos.formatDeclarationId);
+    expect(cp.validateDeclarationId).toBe(zonos.validateDeclarationId);
+  });
+
   it('validates 13-character Zonos Declaration ID format and embeds it in customs XML', async () => {
     const { validateDeclarationId, formatDeclarationId, buildNonContractShipmentJson } = await import('../src/lib/canadapost.js');
 
