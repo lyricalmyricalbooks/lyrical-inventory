@@ -60,8 +60,13 @@ describe('all-books overview — book strip escaping', () => {
   it('escapes every accent-derived value fed into the style attribute', () => {
     const tpl = bookStripTemplate();
     const styleAttr = tpl.slice(0, tpl.indexOf('>'));
-    for (const helper of ['lightenColor', 'getContrastSafeText', 'getContrastColor']) {
+    for (const helper of ['lightenColor', 'getPaperSafeText']) {
       expect(styleAttr).toContain(`escapeHtml(${helper}(`);
+    }
+    // The fill and its label come from getAccentFillPair() as one computed
+    // pair, then go into the attribute one field at a time — each escaped.
+    for (const field of ['accentPair.fill', 'accentPair.label']) {
+      expect(styleAttr).toContain(`escapeHtml(${field})`);
     }
   });
 

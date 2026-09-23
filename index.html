@@ -4477,7 +4477,7 @@
     </div>
   </div>
 </div>
-<div class="tab-panel" id="tab-backups" style="color:var(--on-inverse);/* contrast-ok: default text colour for the dark ink cards inside this panel */">
+<div class="tab-panel" id="tab-backups">
   <section class="sync-review-card" id="sync-review-card" aria-labelledby="sync-review-title">
     <div class="sync-review-ic" aria-hidden="true">⇄</div>
     <div class="sync-review-text">
@@ -4488,12 +4488,12 @@
     </div>
     <button type="button" class="btn sm gold sys-target" id="sync-review-open" onclick="openSyncConflicts()" hidden>Review</button>
   </section>
-  <div class="sheets-setup" style="background:var(--ink2);border:var(--stroke-hair) solid var(--border);padding:1.25rem;border-radius:var(--r3);margin-bottom:1rem;">
+  <div class="sheets-setup" style="padding:1.25rem;margin-bottom:1rem;">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
       <div>
-        <div style="font-weight:700;font-size:14px;color:var(--gold3);margin-bottom:4px;">System backups (daily, automatic)</div>
-        <div style="font-size:var(--text-sm);color:rgba(255,255,255,.78);line-height:1.5;">Publisher mode now keeps a daily snapshot in Firestore so you can restore to a previous system state without needing a local file.</div>
-        <div id="system-backup-status" style="font-size:var(--text-xs);color:rgba(255,255,255,.62);margin-top:8px;">Loading system backups…</div>
+        <div style="font-weight:700;font-size:14px;color:var(--gold-text);margin-bottom:4px;">System backups (daily, automatic)</div>
+        <div style="font-size:var(--text-sm);color:var(--content-secondary);line-height:1.5;">Publisher mode now keeps a daily snapshot in Firestore so you can restore to a previous system state without needing a local file.</div>
+        <div id="system-backup-status" style="font-size:var(--text-xs);color:var(--content-muted);margin-top:8px;">Loading system backups…</div>
       </div>
       <button class="btn sm" onclick="createSystemBackupNow()">Create backup now</button>
     </div>
@@ -4504,8 +4504,8 @@
           <tr><td colspan="4">
             <div class="empty-state sys-empty" style="padding:var(--space-5);text-align:center;">
               <div class="e-icon" aria-hidden="true">💾</div>
-              <strong style="color:var(--on-inverse);font-size:var(--text-sm);">No Cloud Snapshots Saved Yet</strong>
-              <p style="color:var(--on-inverse-2);font-size:var(--text-xs);margin:4px 0 12px;line-height:var(--leading-snug);">Daily Firestore snapshots run automatically in Publisher mode to protect your entire catalog, inventory, and ledgers.</p>
+              <strong style="color:var(--content-primary);font-size:var(--text-sm);">No Cloud Snapshots Saved Yet</strong>
+              <p style="color:var(--content-secondary);font-size:var(--text-xs);margin:4px 0 12px;line-height:var(--leading-snug);">Daily Firestore snapshots run automatically in Publisher mode to protect your entire catalog, inventory, and ledgers.</p>
               <button class="btn gold sm" onclick="createSystemBackupNow()">Create first backup now</button>
             </div>
           </td></tr>
@@ -4524,50 +4524,50 @@
   </div>
 
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px;">
-    <div class="sheets-setup" style="background:var(--ink2);border:var(--stroke-hair) solid var(--border);padding:1.5rem;border-radius:var(--r3);">
+    <div class="sheets-setup" style="padding:1.5rem;">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem;">
-        <div style="width:36px;height:36px;border-radius:var(--r);background:rgba(212,175,55,.1);color:var(--gold3);display:flex;align-items:center;justify-content:center;font-size:var(--text-lg);">💾</div>
-        <h3 style="margin:0;font-family:var(--font-ui);font-size:16px;font-weight:700;color:var(--on-inverse);">JSON Snapshot</h3>
+        <div style="width:36px;height:36px;border-radius:var(--r);background:var(--gold-bg);color:var(--gold-text);display:flex;align-items:center;justify-content:center;font-size:var(--text-lg);">💾</div>
+        <h3 style="margin:0;font-family:var(--font-ui);font-size:16px;font-weight:700;color:var(--content-primary);">JSON Snapshot</h3>
       </div>
-      <p style="font-size:var(--text-sm);color:rgba(255,255,255,.74);line-height:1.6;margin-bottom:1.25rem;">Download a complete backup of your entire database (Catalog, Inventory, History, and Settings). This file can be used to restore your app at any time.</p>
+      <p style="font-size:var(--text-sm);color:var(--content-secondary);line-height:1.6;margin-bottom:1.25rem;">Download a complete backup of your entire database (Catalog, Inventory, History, and Settings). This file can be used to restore your app at any time.</p>
       <div style="display:flex;flex-direction:column;gap:12px;">
         <button class="btn gold" style="width:100%;" onclick="exportToJSON(event)">Download JSON Backup</button>
-        <button class="btn sm" style="width:100%;background:rgba(255,255,255,.06);color:var(--on-inverse);border-color:rgba(255,255,255,.25);" onclick="chooseBackupFolder()">Choose Backup Folder</button>
-        <div id="backup-folder-display" style="font-size:var(--text-xs);color:rgba(255,255,255,.62);text-align:center;">Backup folder: Browser Downloads (default)</div>
-        <div id="last-backup-display" style="font-size:var(--text-xs);color:rgba(255,255,255,.62);text-align:center;">Last backup: Never</div>
+        <button class="btn sm" style="width:100%;" onclick="chooseBackupFolder()">Choose Backup Folder</button>
+        <div id="backup-folder-display" style="font-size:var(--text-xs);color:var(--content-muted);text-align:center;">Backup folder: Browser Downloads (default)</div>
+        <div id="last-backup-display" style="font-size:var(--text-xs);color:var(--content-muted);text-align:center;">Last backup: Never</div>
       </div>
     </div>
 
-    <div class="sheets-setup" style="background:var(--ink2);border:var(--stroke-hair) solid var(--border);padding:1.5rem;border-radius:var(--r3);">
+    <div class="sheets-setup" style="padding:1.5rem;">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem;">
-        <div style="width:36px;height:36px;border-radius:var(--r);background:rgba(255,255,255,.05);color:var(--on-inverse);display:flex;align-items:center;justify-content:center;font-size:var(--text-lg);">📤</div>
-        <h3 style="margin:0;font-family:var(--font-ui);font-size:16px;font-weight:700;color:var(--on-inverse);">Restore from Backup</h3>
+        <div style="width:36px;height:36px;border-radius:var(--r);background:var(--surface-inset);color:var(--content-primary);display:flex;align-items:center;justify-content:center;font-size:var(--text-lg);">📤</div>
+        <h3 style="margin:0;font-family:var(--font-ui);font-size:16px;font-weight:700;color:var(--content-primary);">Restore from Backup</h3>
       </div>
-      <p style="font-size:var(--text-sm);color:rgba(255,255,255,.74);line-height:1.6;margin-bottom:1.25rem;">Upload a previously downloaded JSON snapshot from your computer to restore your data.</p>
+      <p style="font-size:var(--text-sm);color:var(--content-secondary);line-height:1.6;margin-bottom:1.25rem;">Upload a previously downloaded JSON snapshot from your computer to restore your data.</p>
       <div style="display:flex;flex-direction:column;gap:10px;">
-        <div style="font-size:var(--text-sm);font-weight:700;color:var(--on-inverse);">Restore one book</div>
-        <div style="font-size:var(--text-xs);color:rgba(255,255,255,.62);line-height:1.5;margin-bottom:2px;">Pick the file, then choose a single book. Every other book and all your settings stay untouched. A safety backup is saved first.</div>
+        <div style="font-size:var(--text-sm);font-weight:700;color:var(--content-primary);">Restore one book</div>
+        <div style="font-size:var(--text-xs);color:var(--content-muted);line-height:1.5;margin-bottom:2px;">Pick the file, then choose a single book. Every other book and all your settings stay untouched. A safety backup is saved first.</div>
         <label for="import-one-book-file" class="btn sm gold restore-file-btn" style="width:100%;text-align:center;cursor:pointer;">Restore one book from file…</label>
         <input type="file" id="import-one-book-file" accept=".json" style="display:none;" onchange="handleBookRestoreImportFile(event)">
-        <div id="import-one-info" style="font-size:var(--text-xs);color:rgba(255,255,255,.62);text-align:center;">Select a .json backup file</div>
+        <div id="import-one-info" style="font-size:var(--text-xs);color:var(--content-muted);text-align:center;">Select a .json backup file</div>
 
-        <div style="border-top:var(--stroke-hair) solid rgba(255,255,255,.08);margin:8px 0 4px;"></div>
+        <div style="border-top:var(--stroke-hair) solid var(--border2);margin:8px 0 4px;"></div>
 
-        <div style="font-size:var(--text-sm);font-weight:700;color:var(--on-inverse);">Restore everything</div>
-        <div style="font-size:var(--text-xs);color:rgba(255,255,255,.62);line-height:1.5;margin-bottom:2px;"><strong style="color:var(--rose-soft);">Warning: overwrites your entire database</strong> with the file's contents.</div>
-        <label for="import-file" class="btn sm restore-file-btn" style="width:100%;text-align:center;cursor:pointer;background:rgba(255,255,255,.05);color:var(--on-inverse);">Choose file &amp; overwrite all</label>
+        <div style="font-size:var(--text-sm);font-weight:700;color:var(--content-primary);">Restore everything</div>
+        <div style="font-size:var(--text-xs);color:var(--content-muted);line-height:1.5;margin-bottom:2px;"><strong style="color:var(--red);">Warning: overwrites your entire database</strong> with the file's contents.</div>
+        <label for="import-file" class="btn sm restore-file-btn" style="width:100%;text-align:center;cursor:pointer;">Choose file &amp; overwrite all</label>
         <input type="file" id="import-file" accept=".json" style="display:none;" onchange="handleBackupImportFile(event)">
-        <div id="import-info" style="font-size:var(--text-xs);color:rgba(255,255,255,.62);text-align:center;">Select a .json backup file</div>
+        <div id="import-info" style="font-size:var(--text-xs);color:var(--content-muted);text-align:center;">Select a .json backup file</div>
       </div>
     </div>
 
-    <div class="sheets-setup" style="background:var(--ink2);border:var(--stroke-hair) solid var(--border);padding:1.5rem;border-radius:var(--r3);">
+    <div class="sheets-setup" style="padding:1.5rem;">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem;">
-        <div style="width:36px;height:36px;border-radius:var(--r);background:rgba(255,255,255,.05);color:var(--on-inverse);display:flex;align-items:center;justify-content:center;font-size:var(--text-lg);">📊</div>
-        <h3 style="margin:0;font-family:var(--font-ui);font-size:16px;font-weight:700;color:var(--on-inverse);">CSV Export</h3>
+        <div style="width:36px;height:36px;border-radius:var(--r);background:var(--surface-inset);color:var(--content-primary);display:flex;align-items:center;justify-content:center;font-size:var(--text-lg);">📊</div>
+        <h3 style="margin:0;font-family:var(--font-ui);font-size:16px;font-weight:700;color:var(--content-primary);">CSV Export</h3>
       </div>
-      <p style="font-size:var(--text-sm);color:rgba(255,255,255,.74);line-height:1.6;margin-bottom:1.5rem;">Download all historical records (Sales, Consignments, and Expenses) as a flat CSV file for use in spreadsheet software.</p>
-      <button class="btn sm" style="width:100%;background:transparent;border-color:rgba(255,255,255,.3);color:var(--on-inverse);" onclick="exportAllToCSV()">Download CSV Report</button>
+      <p style="font-size:var(--text-sm);color:var(--content-secondary);line-height:1.6;margin-bottom:1.5rem;">Download all historical records (Sales, Consignments, and Expenses) as a flat CSV file for use in spreadsheet software.</p>
+      <button class="btn sm" style="width:100%;" onclick="exportAllToCSV()">Download CSV Report</button>
     </div>
   </div>
 </div>

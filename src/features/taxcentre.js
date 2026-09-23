@@ -882,11 +882,14 @@ function _tcRenderLedgerTable(pageLedger, baseCurrency) {
   }
 }
 
-// Rank-based dot colors for the category breakdown — matches the hues already
-// used for trip category bars (TC_TRIP_CAT_COLORS) so the two "which bucket
-// is this" visual languages stay consistent. Only the top few ranks get a
-// distinct hue; the long tail shares a single muted dot.
-const TC_CATEGORY_RANK_DOTS = ['var(--gold3)', '#f43f5e', '#6366f1', '#14b8a6'];
+// Rank-based dot colors for the category breakdown — the same colour-vision-
+// safe Okabe-Ito set as the sales-channel chart (CHANNEL_COLORS in main.js)
+// and the trip category bars below, so every "which bucket is this" mark in
+// the app speaks one validated language. These were pre-Riso Tailwind hues
+// (rose/indigo/teal) led by the pale flare --gold3, which sat at 1.6:1 on a
+// white card. Only the top few ranks get a distinct hue; the long tail shares
+// a single muted dot, and every row is named in text beside its dot.
+const TC_CATEGORY_RANK_DOTS = ['#0072B2', '#D55E00', '#CC79A7', '#009E73'];
 
 function _tcRenderCategoryPanel(allLedger, baseCurrency) {
   const catBody = $('tc-category-body');
@@ -982,13 +985,16 @@ function tcSetTripsView(mode) {
   }
 }
 
+// Okabe-Ito, in a fixed order, with the channel chart's neutral for "Other"
+// (see TC_CATEGORY_RANK_DOTS above). Each segment carries its category in its
+// title, and the trip card lists the categories in text.
 const TC_TRIP_CAT_COLORS = {
-  'Travel & Transit': 'var(--gold, #E8402A)',
-  'Lodging & Hotel': '#6366f1',
-  'Meals & Entertainment': '#f43f5e',
-  'Booths & Fairs': '#14b8a6',
-  'Supplies & Printing': '#a855f7',
-  'Other': '#a8a29e'
+  'Travel & Transit': '#0072B2',
+  'Lodging & Hotel': '#D55E00',
+  'Meals & Entertainment': '#CC79A7',
+  'Booths & Fairs': '#009E73',
+  'Supplies & Printing': '#E69F00',
+  'Other': '#6B655B'
 };
 
 // ── DECLARED TRIPS ────────────────────────────────────────────────────────
