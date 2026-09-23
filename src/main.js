@@ -205,8 +205,12 @@ import { checkMarketCards, describeMarketCards } from './lib/market-card-check.j
 import { unshippedOrders } from './lib/order-followups.js';
 import {
   clearNotificationLog,
+  logNotification,
   markNotificationsRead,
+  newlyUrgent,
   notificationDayLabel,
+  readSeenUrgent,
+  writeSeenUrgent,
   readNotificationLog,
   unreadNotificationCount,
 } from './lib/notification-log.js';
@@ -5702,6 +5706,7 @@ function automationTodoInput() {
     receiptsWaiting: receipts.waiting,
     receiptsReady: receipts.ready,
     labelsToMatch: safe(() => reconciliationBacklog(), 0),
+    syncConflicts: safe(() => listConflicts(syncConflictStorage()).length, 0),
   };
 }
 
@@ -5939,6 +5944,7 @@ function runTodoAction(name, { bookId = '', num = '' } = {}) {
     return;
   }
   if (name === 'receipt-inbox') { openEmailReceiptImportModal(); return; }
+  if (name === 'sync-conflicts') { openSyncConflicts(); return; }
   if (name === 'shipping-worklist') {
     switchTab('taxcenter');
     setTimeout(() => { switchTaxCenterSubTab('integrations'); openShippingReconciliation(); }, 50);
@@ -6007,7 +6013,31 @@ function activityHtml(ev) {
  * to-do list would sit permanently at some large number and stop meaning
  * anything, which is the failure mode of every notification badge ever built.
  */
+/**
+ * Anything newly urgent on the to-do list goes into the notification history
+ * too, once, so that list is a complete record of what needed attention —
+ * not only of the things some check happened to raise a pop-up for.
+ */
+function logNewlyUrgentSignals(result) {
+  if (!result || isAuthor()) return;
+  const { fresh, remember } = newlyUrgent(result.signals, readSeenUrgent());
+  writeSeenUrgent(remember);
+  if (!fresh.length) return;
+  fresh.slice(0, 5).forEach(sig => logNotification({
+    id: `todo:${sig.id}`,
+    icon: sig.icon || '⚠',
+    title: sig.label,
+    detail: sig.detail,
+    tone: sig.status === 'blocked' ? 'failed' : 'pending',
+    actionLabel: 'Open to-do',
+    action: "switchTab('todo')",
+  }));
+  renderNotificationBell();
+  renderRailLatestNotifications();
+}
+
 function updateTodoBadge(result) {
+  logNewlyUrgentSignals(result);
   const count = result ? result.urgent : 0;
   document.querySelectorAll('.todo-nav-badge').forEach(el => {
     el.textContent = count > 99 ? '99+' : String(count);
@@ -6079,9 +6109,9 @@ function renderOverviewRail() {
     // quick weekly glance at what happened without anyone pressing a button.
     const weekAgo = Date.now() - 7 * 86400000;
     const feed = autoOnly
-      ? buildActivityFeed(attentionBooks(), states, { limit: 0 })
+      ? buildActivityFeed(attentionBooks(), states, { limit: 0, businessExpenses: TAX_CENTER.businessExpenses })
         .filter(ev => ev.auto && ev.sortKey >= weekAgo).slice(0, 30)
-      : buildActivityFeed(attentionBooks(), states, { limit: RAIL_ACTIVITY_LIMIT });
+      : buildActivityFeed(attentionBooks(), states, { limit: RAIL_ACTIVITY_LIMIT, businessExpenses: TAX_CENTER.businessExpenses });
     activityHost.innerHTML = feed.length
       ? feed.map(activityHtml).join('')
       : autoOnly
