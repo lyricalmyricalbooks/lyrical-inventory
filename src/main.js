@@ -199,6 +199,7 @@ import {
 import { dismissAppAlert, pushAppAlert } from './lib/app-alert.js';
 import { booksInDescription, saleCodes, splitSalePlan } from './lib/sale-codes.js';
 import { describeMarketDay, latestMarketDay, summariseMarketDay } from './lib/market-day.js';
+import { checkMarketCards, describeMarketCards } from './lib/market-card-check.js';
 import {
   describeCardSales,
   describeRefunds,
@@ -16690,7 +16691,9 @@ async function boot(forcedBook) {
         // when one is waiting at a post office, stuck, or coming back.
         startDeliveryWatch();
         // The morning after a market day: one summary of what sold in person.
-        showMarketDaySummaryIfDue();
+        // With Stripe connected it waits for the first Stripe check, so the
+        // reader payments it compares against are there.
+        if (!getReconStripeKey()) showMarketDaySummaryIfDue();
         // Money coming in rather than going out: a consignment store paying its
         // invoice through the Stripe link. Started after the books load because
         // settling an invoice reaches into its own book's ledger.
@@ -22356,6 +22359,7 @@ async function sweepStripeInvoicePayments({ force = false } = {}) {
       // Otherwise the existing classifier owns the matching: the INV-… number in
       // the intent description, the invoice_num metadata, and its own memory of
       // charges already handled on this device.
+      if (payment.cardPresent) noteReaderPaymentForDay(payment);
       const c = classifyStripePayment(payment);
 
       // A payment for one book — its QR code, its payment link — becomes a sale
@@ -22423,6 +22427,7 @@ async function sweepStripeInvoicePayments({ force = false } = {}) {
 
     writeStripeInvoiceStamp(Date.now());
     noteIntegrationSuccess('stripe');
+    showMarketDaySummaryIfDue();
 
     // Refunds of older charges, which the payment list above cannot see: it
     // is filtered by when a charge was made, and a refund can come weeks later.
@@ -22790,12 +22795,20 @@ function showMarketDaySummaryIfDue() {
   const said = describeMarketDay(summary);
   try { localStorage.setItem(MARKET_DAY_SHOWN_KEY, day); } catch (_) { /* storage blocked */ }
   if (!said.count) return;
+  // Register and reader side by side. Only when Stripe is connected: without
+  // it every card sale would look like one with no payment behind it.
+  let cardNote = '';
+  if (getReconStripeKey()) {
+    const recorded = _reconRecordedChargeIds();
+    const reader = (readReaderPaymentsByDay()[day] || []).map(p => ({ ...p, recorded: recorded.has(p.id) }));
+    cardNote = describeMarketCards(checkMarketCards(rows, day, reader));
+  }
   pushAppAlert({
     id: 'market-day',
     icon: '🧾',
     title: said.title,
-    detail: said.detail,
-    tone: said.needsYou ? SYNC_TONES.PENDING : '',
+    detail: cardNote ? `${said.detail} ${cardNote}` : said.detail,
+    tone: (said.needsYou || cardNote) ? SYNC_TONES.PENDING : '',
     actionLabel: said.needsYou ? 'Match them' : '',
     action: said.needsYou ? 'openStripeWorklistFromAlert(event)' : '',
   });
@@ -22846,6 +22859,29 @@ function recordReaderSplitSale(payment, lines) {
     stockLeft: Number(states[plan.lines[0].bookId]?.stock) || 0,
     chargeId: payment.id,
   };
+}
+
+// Every card-reader payment, by day, so the morning-after summary can compare
+// the reader with the register. Kept small: id, amount, currency.
+const READER_DAY_KEY = 'lm-reader-payments-by-day';
+
+function readReaderPaymentsByDay() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(READER_DAY_KEY) || '{}');
+    return raw && typeof raw === 'object' ? raw : {};
+  } catch (_) { return {}; }
+}
+
+function noteReaderPaymentForDay(payment) {
+  const day = String(payment.date || '').slice(0, 10);
+  if (!day || payment.refunded) return;
+  const all = readReaderPaymentsByDay();
+  const list = Array.isArray(all[day]) ? all[day] : [];
+  if (list.some(p => p.id === payment.id)) return;
+  list.push({ id: payment.id, amount: payment.amount, currency: payment.currency });
+  all[day] = list;
+  Object.keys(all).sort().slice(0, -14).forEach(key => { delete all[key]; });
+  try { localStorage.setItem(READER_DAY_KEY, JSON.stringify(all)); } catch (_) { /* storage full */ }
 }
 
 // Reader payments the app could not match to a book, by the day they were
