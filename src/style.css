@@ -19236,3 +19236,29 @@ button[onclick="refreshUmamiStats()"]:active {
   #tab-website .order-card-top,#tab-website .order-card-bottom{flex-wrap:wrap;}
   #tab-website .order-actions{flex-wrap:wrap;}
 }
+
+/* Book selection before opening a title's records. */
+#tab-select-book .book-choice { max-width: 1120px; margin: 12px auto 48px; }
+#tab-select-book .book-choice-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 28px; padding-bottom: 24px; border-bottom: 1px solid var(--border-default); }
+#tab-select-book h2 { margin: 8px 0 10px; font-family: var(--font-display); font-size: clamp(30px, 4vw, 46px); line-height: 1.1; color: var(--content-primary); }
+#tab-select-book .book-choice-header p { margin: 0; color: var(--content-secondary); line-height: 1.6; }
+#tab-select-book .book-choice-count { flex-shrink: 0; font-size: var(--text-sm); color: var(--content-secondary); padding: 7px 11px; border: 1px solid var(--border-default); }
+#tab-select-book .book-choice-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); gap: 16px; }
+#tab-select-book .book-choice-card { --choice-accent: var(--gold); display: flex; align-items: flex-start; gap: 16px; width: 100%; min-height: 142px; padding: 24px 20px; text-align: left; white-space: normal; text-transform: none; letter-spacing: normal; background: var(--surface-raised); color: var(--content-primary); border: 1px solid var(--border-default); border-left: 4px solid var(--choice-accent); border-radius: 0; box-shadow: 2px 2px 0 var(--border-default); transition: transform var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard); }
+#tab-select-book .book-choice-card:hover { transform: translateY(-3px); box-shadow: 4px 5px 0 var(--border-default); background: var(--surface-raised); }
+#tab-select-book .book-choice-card:focus-visible { outline: 3px solid var(--content-primary); outline-offset: 4px; }
+#tab-select-book .book-choice-number { padding-top: 3px; font-size: var(--text-xs); font-weight: 500; color: var(--content-secondary); font-variant-numeric: tabular-nums; }
+#tab-select-book .book-choice-details { display: grid; gap: 10px; min-width: 0; flex: 1; }
+#tab-select-book .book-choice-title { font-size: var(--text-lg); line-height: 1.35; font-weight: 700; overflow-wrap: anywhere; }
+#tab-select-book .book-choice-author { font-size: var(--text-sm); line-height: 1.5; font-weight: 400; color: var(--content-secondary); }
+#tab-select-book .book-choice-arrow { font-size: var(--text-xl); line-height: 1.2; font-weight: 400; }
+#tab-select-book .book-choice-note { margin: 24px 0 0; font-size: var(--text-sm); line-height: 1.6; color: var(--content-secondary); }
+@media (max-width: 540px) {
+  #tab-select-book .book-choice-header { gap: 12px; align-items: flex-start; }
+  #tab-select-book .book-choice-count { margin-top: 4px; }
+  #tab-select-book .book-choice-card { min-height: 112px; padding: 20px 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #tab-select-book .book-choice-card { transition: none; }
+  #tab-select-book .book-choice-card:hover { transform: none; }
+}

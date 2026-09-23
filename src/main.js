@@ -4577,21 +4577,40 @@ const BOOK_SCOPED_TABS = new Set(['website', 'manual', 'consignment', 'history',
 
 function showBookChoice(tabName) {
   const heading = $('select-book-heading');
-  if (heading) heading.textContent = `Choose a book for ${SHELL_TAB_LABELS[tabName]}`;
+  if (heading) heading.textContent = SHELL_TAB_LABELS[tabName] || 'Choose a book';
+  const descriptions = {
+    website: 'Choose a book to review its website orders.',
+    manual: 'Which book are you recording a sale for?',
+    consignment: 'Choose a book to manage its stores and consignment stock.',
+    history: 'Choose a book to explore its order history.',
+    expenses: 'Choose a book to review or add project expenses.',
+    opencall: 'Choose a book to manage its contributors.',
+  };
+  const description = $('select-book-description');
+  if (description) description.textContent = descriptions[tabName] || 'Choose the title you want to work with.';
   const actions = $('select-book-actions');
   if (!actions) return;
   actions.replaceChildren();
-  BOOK_LIST.filter(book => !isTestBook(book)).forEach(book => {
+  const books = BOOK_LIST.filter(book => !isTestBook(book));
+  const count = $('select-book-count');
+  if (count) count.textContent = `${books.length} ${books.length === 1 ? 'title' : 'titles'}`;
+  books.forEach((book, index) => {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'btn gold outline';
-    button.textContent = book.title;
+    button.className = 'btn book-choice-card';
+    if (book.accent) button.style.setProperty('--choice-accent', book.accent);
+    button.innerHTML = `<span class="book-choice-number" aria-hidden="true">${String(index + 1).padStart(2, '0')}</span>
+      <span class="book-choice-details"><span class="book-choice-title">${escapeHtml(book.title)}</span>
+      <span class="book-choice-author">${escapeHtml(book.author || 'View this title')}</span></span>
+      <span class="book-choice-arrow" aria-hidden="true">↗</span>`;
+    button.setAttribute('aria-label', `${book.title} — ${SHELL_TAB_LABELS[tabName]}`);
     button.addEventListener('click', () => {
       switchBook(book.id);
       switchTab(tabName);
     });
     actions.appendChild(button);
   });
+  if (!books.length) actions.textContent = 'Your catalogue is empty. Add a book in Sheets settings to get started.';
 }
 
 function updateHeader() {
