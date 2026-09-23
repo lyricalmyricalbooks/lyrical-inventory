@@ -135,7 +135,7 @@
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 html{background:var(--cream);overflow-wrap:break-word;-webkit-text-size-adjust:100%;text-size-adjust:100%;}
-body{background:var(--body-bg-tint, transparent);font-family:var(--font-ui);color:var(--text);min-height:100vh;min-height:100dvh;transition:background-color 0.4s var(--ease-standard);}
+body{overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent;background:var(--body-bg-tint, transparent);font-family:var(--font-ui);color:var(--text);min-height:100vh;min-height:100dvh;transition:background-color 0.4s var(--ease-standard);}
 body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");background-size:200px 200px;opacity:.5;}
 .app{position:relative;z-index:1;}
 
@@ -4307,10 +4307,21 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 
   /* Buttons */
   .btn{font-size:var(--text-sm);padding:11px 16px;min-height:44px;justify-content:center;}
-  .btn.sm{font-size:var(--text-xs);padding:8px 12px;min-height:36px;}
+  .btn.sm{font-size:var(--text-xs);padding:8px 12px;min-height:44px;}
 
   /* Forms */
   .form-group input, .form-group select, .form-group textarea{font-size:16px;padding:12px 14px;}
+  /* Fields outside a .form-group (search boxes, API-key rows, year pickers)
+     get the same 16px floor, or iOS Safari zooms the page on focus and
+     leaves it zoomed after the keyboard closes. */
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]), select, textarea{font-size:max(16px,1em) !important;min-height:44px;}
+  input[type=checkbox], input[type=radio]{width:22px;height:22px;flex-shrink:0;}
+  /* Rows of controls wrap instead of pushing the page sideways. */
+  .row-between{flex-wrap:wrap;gap:var(--space-2);}
+  .ship-key-setup{flex-wrap:wrap;width:100%;}
+  .ship-key-setup input{flex:1 1 180px;width:auto !important;}
+  .tc-ledger-actions{flex-wrap:wrap;}
+  .ship-duo{grid-template-columns:1fr !important;}
 
   /* Cards */
   .card, .store-card, .stock-block, .sheets-setup{padding:1rem;}
