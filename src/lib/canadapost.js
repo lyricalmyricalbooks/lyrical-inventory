@@ -35,6 +35,10 @@ import {
 } from './canadapost-endpoints.js';
 import { parseShipmentResponse, describeNextStep, describeDeclarationStep } from './canadapost-shipment.js';
 import { describeShipmentRejection } from './canadapost-shipment-diagnosis.js';
+// Zonos issues the Declaration ID, so zonos.js owns its format rules; re-exported
+// here so label-purchase callers keep one import site.
+import { formatDeclarationId, validateDeclarationId } from './zonos.js';
+export { formatDeclarationId, validateDeclarationId };
 import {
   missingSenderFields,
   senderAddressIsPlaceholder,
@@ -1977,25 +1981,6 @@ function escapeXml(unsafe) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
-}
-
-/**
- * Normalize a Zonos Declaration ID to its canonical form: 13 lowercase base36 characters.
- * Zonos issues these lowercase (e.g. 0rd4dpkrvc1y9); Canada Post forwards the value
- * verbatim, so the case must be preserved exactly as Zonos issued it.
- */
-export function formatDeclarationId(declarationId) {
-  if (!declarationId || typeof declarationId !== 'string') return '';
-  return declarationId.toLowerCase().trim().replace(/[^a-z0-9]/g, '').slice(0, 13);
-}
-
-/**
- * Validate a 13-character Zonos Declaration ID. Accepts either case on input;
- * the canonical stored and transmitted form is lowercase base36.
- */
-export function validateDeclarationId(declarationId) {
-  if (!declarationId || typeof declarationId !== 'string') return false;
-  return /^[a-z0-9]{13}$/.test(declarationId.trim().toLowerCase());
 }
 
 /**
