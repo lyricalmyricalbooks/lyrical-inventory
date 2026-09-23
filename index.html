@@ -2628,7 +2628,7 @@
 
   <div class="row-between" style="margin-top:1.5rem;margin-bottom:12px;">
     <div class="section-hed">Master Ledger (Sales + Expenses)</div>
-    <div style="display:flex;gap:10px;align-items:center;">
+    <div class="tc-ledger-actions" style="display:flex;gap:10px;align-items:center;">
       <select id="tc-year-ledger" class="btn tag" aria-label="Filter ledger by year" onchange="tcYearChange(this.value)" style="background:var(--cream2); border:var(--stroke-hair) solid var(--gold-line); color:var(--text); cursor:pointer;">
         <option value="all">All Time</option>
         <option value="2026">2026</option>
@@ -3388,7 +3388,7 @@
         <div id="ship-key-indicator" style="width:10px; height:10px; border-radius:50%; background:var(--red);"></div>
         <span style="font-size:var(--text-base); font-weight:600; color:var(--text2);" id="ship-key-status-text">Shippo API Key Required</span>
       </div>
-      <div id="ship-key-setup-group" style="display:flex; gap:8px; align-items:center;">
+      <div id="ship-key-setup-group" class="ship-key-setup" style="display:flex; gap:8px; align-items:center;">
         <input type="password" id="ship-api-key-input" placeholder="shippo_live_..." style="padding:6px 12px; font-size:var(--text-sm); border:var(--stroke-hair) solid var(--border); border-radius:var(--r2); background:var(--cream); width:280px; font-family:var(--font-mono); outline:none;">
         <button class="btn gold sm" onclick="saveShippoApiKey()">Save Key</button>
       </div>
@@ -3447,7 +3447,7 @@
           <div class="form-group">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
               <label style="margin-bottom:0;">Load Package From</label>
-              <button type="button" class="btn sm tag" id="ship-save-preset-quick-btn" onclick="openSaveBookPresetModal()" style="font-size:var(--text-2xs); padding:2px 8px; height:24px; min-height:24px;" title="Save current specifications to a book preset">💾 Save to Preset</button>
+              <button type="button" class="btn sm tag" id="ship-save-preset-quick-btn" onclick="openSaveBookPresetModal()" style="font-size:var(--text-2xs); padding:2px 8px;" title="Save current specifications to a book preset">💾 Save to Preset</button>
             </div>
             <select id="ship-preset-book" onchange="onShippoBookPresetChange()">
               <option value="">— Select book preset —</option>
@@ -3706,7 +3706,7 @@
             <span>Calculate Shipping Rates &amp; Prediction</span>
           </button>
 
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div class="ship-duo" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
             <button class="btn outline" type="button" onclick="calculateCanadaPostRatesHandler()" style="height:42px;font-size:var(--text-sm);font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px;background:rgba(216,42,42,0.06);border-color:rgba(216,42,42,0.3);color:var(--text);" title="Calculate rates and buy official postage labels directly via Canada Post API">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;">
                 <path d="M12 2L14 8L19 7L16 12L21 15L15 17L16 22L12 18L8 22L9 17L3 15L8 12L5 7L10 8L12 2Z" fill="#D82A2A"/>
