@@ -974,15 +974,15 @@ async function renderReceiptCacheStatus() {
   if (!el) return;
   const { count, bytes, previews } = cacheStats(await listCachedReceiptMeta());
   if (!count) {
-    el.innerHTML = `<div class="tc-cache-bar"><span class="tc-cache-badge">💾 Device Cache</span> <span class="tc-cache-desc">No receipts saved on this device yet — save them so they still open if your folder moves or you go offline.</span></div>`;
+    el.innerHTML = `<div class="tc-cache-bar"><span class="tc-cache-badge">On this device</span> <span class="tc-cache-desc">No copies saved here yet. Use “Keep copies on this device” below so receipts still open without internet.</span></div>`;
     el.style.display = '';
     return;
   }
   el.innerHTML = `<div class="tc-cache-bar is-cached">`
-    + `<span class="tc-cache-badge">💾 Device Cache</span> `
+    + `<span class="tc-cache-badge">On this device</span> `
     + `<span class="tc-cache-desc"><strong>${count} receipt${count === 1 ? '' : 's'}</strong> (${escapeHtml(formatCacheSize(bytes))}) saved on this device`
     + (previews ? ` · ${previews} stored as compact previews` : '')
-    + ` — ready for instant offline viewing even if folders move.</span>`
+    + ` — these open even without internet.</span>`
     + `</div>`;
   el.style.display = '';
 }

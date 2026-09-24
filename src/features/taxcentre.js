@@ -2591,7 +2591,8 @@ function _tcRenderReceiptStorage() {
       <div class="tc-tile-icon">📁</div>
       <div class="tc-tile-body">
         <div class="tc-tile-num">${s.localFiles}</div>
-        <div class="tc-tile-label">Local Folder</div>
+        <div class="tc-tile-label">In your folder</div>
+        <div class="tc-tile-hint">Saved in the receipts folder on this computer</div>
       </div>
     </div>
   `);
@@ -2601,7 +2602,8 @@ function _tcRenderReceiptStorage() {
       <div class="tc-tile-icon">☁️</div>
       <div class="tc-tile-body">
         <div class="tc-tile-num">${s.cloudFiles}</div>
-        <div class="tc-tile-label">Cloud Backup</div>
+        <div class="tc-tile-label">Backed up online</div>
+        <div class="tc-tile-hint">Stored safely online</div>
       </div>
     </div>
   `);
@@ -2612,7 +2614,8 @@ function _tcRenderReceiptStorage() {
         <div class="tc-tile-icon">🔗</div>
         <div class="tc-tile-body">
           <div class="tc-tile-num">${s.linkedFiles}</div>
-          <div class="tc-tile-label">External Links</div>
+          <div class="tc-tile-label">Web links</div>
+        <div class="tc-tile-hint">Receipts that live on another website</div>
         </div>
       </div>
     `);
@@ -2624,7 +2627,8 @@ function _tcRenderReceiptStorage() {
         <div class="tc-tile-icon">⚠️</div>
         <div class="tc-tile-body">
           <div class="tc-tile-num">${s.withoutReceipts}</div>
-          <div class="tc-tile-label">No Receipt</div>
+          <div class="tc-tile-label">Missing receipt</div>
+        <div class="tc-tile-hint">Expenses with no receipt attached yet</div>
         </div>
       </div>
     `);
@@ -2636,7 +2640,8 @@ function _tcRenderReceiptStorage() {
         <div class="tc-tile-icon">🏷️</div>
         <div class="tc-tile-body">
           <div class="tc-tile-num">${s.linkOnlyExpenses}</div>
-          <div class="tc-tile-label">Label Only</div>
+          <div class="tc-tile-label">Shipping label only</div>
+        <div class="tc-tile-hint">Has a postage label, but no store receipt</div>
         </div>
       </div>
     `);
@@ -2676,7 +2681,7 @@ function _tcRenderReceiptStorage() {
   }
 
   el.className = (s.withoutReceipts || s.linkOnlyExpenses) ? 'tc-cloud-backlog is-stale' : 'tc-cloud-backlog';
-  el.innerHTML = `<div class="tc-receipt-stat-grid">${tiles.join('')}</div>`
+  el.innerHTML = `<div class="tc-receipt-stat-head">Where your receipts are <span>Tap a box to list those expenses below</span></div><div class="tc-receipt-stat-grid">${tiles.join('')}</div>`
     + (notices.length ? `<div class="tc-receipt-alert-stack">${notices.join('')}</div>` : '');
   el.style.display = '';
 }
