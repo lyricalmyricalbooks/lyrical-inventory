@@ -201,6 +201,26 @@ describe('Zonos Landed Cost & Duty Engine', () => {
       expect(res.status).toBe(401);
       expect(res.error).toContain('401');
     });
+
+    it('falls back to the Apps Script proxy saved under any of the Sheets keys', async () => {
+      // A settings restore can leave only lm-notify-url set; the proxy lookup is
+      // shared with Canada Post and must find it there too.
+      const gasUrl = 'https://script.google.com/macros/s/notify-only/exec';
+      localStorage.removeItem('lm-sheets-url');
+      localStorage.setItem('lm-notify-url', gasUrl);
+      global.fetch = vi.fn()
+        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ data: { __schema: {} } }) });
+
+      try {
+        const res = await testZonosConnection('credential_live_test_key');
+        expect(res.ok).toBe(true);
+        expect(global.fetch).toHaveBeenLastCalledWith(gasUrl, expect.objectContaining({ method: 'POST' }));
+        expect(JSON.parse(global.fetch.mock.calls[1][1].body).action).toBe('proxyzonos');
+      } finally {
+        localStorage.removeItem('lm-notify-url');
+      }
+    });
   });
 
   describe('calculateZonosLandedCost', () => {

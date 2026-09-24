@@ -38,6 +38,9 @@ import { describeShipmentRejection } from './canadapost-shipment-diagnosis.js';
 // Zonos issues the Declaration ID, so zonos.js owns its format rules; re-exported
 // here so label-purchase callers keep one import site.
 import { formatDeclarationId, validateDeclarationId } from './zonos.js';
+import { getSavedSheetsUrl } from './sheets-url.js';
+// Re-exported so the Tax Centre keeps importing it from here.
+export { getSavedSheetsUrl };
 export { formatDeclarationId, validateDeclarationId };
 import {
   missingSenderFields,
@@ -529,22 +532,6 @@ export function validateCanadaPostAccount({
     errors,
     warnings
   };
-}
-
-export function getSavedSheetsUrl() {
-  try {
-    if (typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function') {
-      const url = localStorage.getItem('lm-sheets-url') || localStorage.getItem('lm-notify-url') || localStorage.getItem('lm-last-sheets-url') || '';
-      if (url) return url;
-    }
-  } catch (_) {}
-  try {
-    if (typeof window !== 'undefined') {
-      if (window.sheetsUrl) return window.sheetsUrl;
-      if (window.notifyUrl) return window.notifyUrl;
-    }
-  } catch (_) {}
-  return '';
 }
 
 // Code 128 symbol patterns, one per code value 0-106. Each string is the six
