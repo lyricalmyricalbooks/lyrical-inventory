@@ -15627,6 +15627,9 @@ button[onclick="refreshUmamiStats()"]:active {
 .fk-preset-btn{min-height:44px;flex:none;}
 .fk-pop{
   display:none;flex-direction:column;gap:var(--space-3);
+  /* The global `*{margin:0}` reset wipes the UA's `margin:auto` on [popover],
+     which pinned this panel to the top-left corner — restore the centring. */
+  margin:auto;
   width:min(360px,calc(100vw - 32px));padding:var(--space-4);
   border:var(--stroke-hair) solid var(--gold-line);border-radius:var(--r3);
   background:var(--surface-raised);color:var(--text);
