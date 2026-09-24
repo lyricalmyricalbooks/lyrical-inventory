@@ -2429,6 +2429,32 @@ function undoBigCartelGapDismiss(orderId) {
   renderBigCartelGapBadge();
 }
 
+/**
+ * The X on the whole list: set every order in it aside at once, for a backlog
+ * of old sales already handled another way. One confirm, because it can be
+ * dozens of orders; "Show set aside" brings them all back. Orders that arrive
+ * later still show up, since only these numbers are set aside.
+ */
+async function dismissAllBigCartelGaps() {
+  const open = (_bcGapResult?.missing || []).filter(gap => !gap.setAside);
+  if (!open.length) { showToast('Nothing in the list to set aside', 'warn'); return; }
+  const ok = await confirmDialog(
+    `Set all ${open.length} order${open.length === 1 ? '' : 's'} aside? Nothing is recorded or deleted — they just leave this list. "Show set aside" brings them back, and new orders will still show up here.`,
+    { title: 'Clear the whole list?', okLabel: `Set ${open.length} aside`, cancelLabel: 'Keep the list' }
+  );
+  if (!ok) return;
+  const dismissed = readBcGapDismissed();
+  open.forEach(gap => {
+    gap.setAside = true;
+    if (!dismissed.some(num => sameOrderNumber(num, gap.num))) dismissed.push(gap.num);
+  });
+  writeBcGapDismissed(dismissed);
+  persistBcGapCache();
+  renderBigCartelLedgerGaps();
+  renderBigCartelGapBadge();
+  showToast(`Set ${open.length} order${open.length === 1 ? '' : 's'} aside — "Show set aside" brings them back`);
+}
+
 /** Put every set-aside order back in the review list. */
 async function restoreBigCartelGaps() {
   const dismissed = readBcGapDismissed();
@@ -2741,6 +2767,7 @@ export {
   renderBigCartelLedgerGaps,
   renumberPlaceholderOrder,
   restoreBigCartelGaps,
+  dismissAllBigCartelGaps,
   voidPlaceholderDuplicate,
   reconcileApplyBigCartel,
   extractBigCartelAddress,
