@@ -9,12 +9,7 @@
 //
 // Pure: the caller passes ledger rows and the postage already matched to them.
 
-const DAY = 86400000;
-
-function dayMs(value) {
-  const parsed = Date.parse(String(value || '').slice(0, 10));
-  return Number.isFinite(parsed) ? parsed : NaN;
-}
+import { DAY_MS, dayMs } from './calendar-day.js';
 
 /** Whether this order is meant to go in the post at all. */
 function hasAddress(entry) {
@@ -38,7 +33,7 @@ export function unshippedOrders(rows = [], { now = Date.now(), afterDays = 3, wi
     if (entry.num && labelled.has(entry.num)) return;
     const placed = dayMs(entry.date);
     if (!Number.isFinite(placed)) return;
-    const waiting = Math.floor((now - placed) / DAY);
+    const waiting = Math.floor((now - placed) / DAY_MS);
     if (waiting < afterDays || waiting > withinDays) return;
     out.push({
       bookId,

@@ -12,6 +12,7 @@
 // Canada Post's answer, and what to tell the publisher. Pure — no network, no
 // DOM, no ledger — so the rules can be tested directly. shipping.js asks.
 
+import { DAY_MS, dayMs } from './calendar-day.js';
 import { looksLikeCanadaPostPin, normalizeTrackingPin } from './tracking-audit.js';
 
 /** Parcels older than this are history: delivered, lost, or settled some other way. */
@@ -22,13 +23,6 @@ export const DELIVERY_STUCK_DAYS = 7;
 export const DELIVERY_RECHECK_MS = 12 * 60 * 60 * 1000;
 /** Parcels asked about per run, so a busy month cannot become a burst of requests. */
 export const DELIVERY_BATCH = 10;
-
-const DAY = 86400000;
-
-function dayMs(value) {
-  const parsed = Date.parse(String(value || '').slice(0, 10));
-  return Number.isFinite(parsed) ? parsed : NaN;
-}
 
 /**
  * The shipped orders to ask Canada Post about this run.
@@ -55,7 +49,7 @@ export function shipmentsToFollow(rows = [], { now = Date.now(), batch = DELIVER
     if (entry.deliveryState === 'returning') return;
 
     const shipped = dayMs(entry.shippedDate || entry.date);
-    if (Number.isFinite(shipped) && now - shipped > DELIVERY_FOLLOW_DAYS * DAY) return;
+    if (Number.isFinite(shipped) && now - shipped > DELIVERY_FOLLOW_DAYS * DAY_MS) return;
 
     const checked = Date.parse(entry.deliveryCheckedAt || '');
     if (Number.isFinite(checked) && now - checked < DELIVERY_RECHECK_MS) return;
@@ -100,7 +94,7 @@ export function readDelivery(result, { now = Date.now(), shippedDate = '' } = {}
   if (PICKUP.test(status) || result.attemptedDate) return { ...base, state: 'pickup' };
 
   const lastMove = dayMs(eventDate || shippedDate);
-  if (Number.isFinite(lastMove) && now - lastMove >= DELIVERY_STUCK_DAYS * DAY) {
+  if (Number.isFinite(lastMove) && now - lastMove >= DELIVERY_STUCK_DAYS * DAY_MS) {
     return { ...base, state: 'stuck' };
   }
   return { ...base, state: 'moving' };
