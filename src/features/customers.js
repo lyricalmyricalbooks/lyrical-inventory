@@ -883,10 +883,7 @@ function updateCampaignPreview() {
   const previewPane = $('c-preview-pane');
   if (!previewPane) return;
 
-  const formattedBody = bodyVal
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
+  const formattedBody = escapeHtml(bodyVal)
     .replace(/\n\n/g, '<br><br>')
     .replace(/\n/g, '<br>')
     .replace(/\{\{name\}\}/g, '<strong>John Doe</strong>')
