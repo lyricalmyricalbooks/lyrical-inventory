@@ -1978,6 +1978,7 @@ tr.hist-row:hover {
   .tab-btn:hover,.tab-btn:active{transform:none;}
 }
 .tab-updated{margin-left:auto;align-self:center;white-space:nowrap;font-family:var(--font-ui);font-size:var(--text-xs);color:var(--on-inverse-3);padding-left:1rem;flex-shrink:0;}
+.tab-updated[hidden]{display:none !important;}
 .tab-updated.is-clickable{cursor:pointer;text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(250,246,236,.3);}
 .tab-updated.is-clickable:hover{color:var(--on-inverse);}
 /* Author context chip: book dot + title + small "Author view" tag, so the
