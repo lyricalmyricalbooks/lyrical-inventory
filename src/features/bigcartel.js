@@ -1876,7 +1876,7 @@ function renderOrderAutomationToggles() {
       ? 'Not supported in this browser.'
       : Notification.permission === 'denied'
         ? 'Blocked — allow notifications for this site in your browser settings, then try again.'
-        : 'Pops up on this device when an order comes in, even while the app is in a background tab.';
+        : 'Pops up on this device when an order comes in or a parcel is marked shipped, even while the app is in a background tab.';
   }
 }
 
@@ -2730,6 +2730,7 @@ export {
   shipNewOrderFromAlert,
   reviewNewOrdersFromAlert,
   refreshBigCartelOrdersIfDue,
+  orderNotifyEnabled,
   startBigCartelOrderWatch,
   bigCartelOrdersToReview,
   toggleBigCartelGapPanel,
