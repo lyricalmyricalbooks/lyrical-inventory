@@ -14,7 +14,10 @@ import {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const mainJs = fs.readFileSync(path.resolve(__dirname, '../src/main.js'), 'utf8');
+// The Sheets bridge moved out of main.js into src/features/sheets-bridge.js;
+// these checks follow it there.
+const mainJs = (fs.readFileSync(path.resolve(__dirname, '../src/main.js'), 'utf8')
+  + fs.readFileSync(path.resolve(__dirname, '../src/features/sheets-bridge.js'), 'utf8'));
 const codeGs = fs.readFileSync(path.resolve(__dirname, '../apps-script/Code.gs'), 'utf8');
 
 describe('sheet row classification', () => {
@@ -135,9 +138,9 @@ describe('chronological ordering of sheet rows', () => {
   });
 });
 
-describe('Sheets delivery queue (main.js)', () => {
+describe('Sheets delivery queue (features/sheets-bridge.js)', () => {
   it('labels queued rows through the shared classifier, not an order/else ternary', () => {
-    expect(mainJs).toContain("from './lib/sheet-sync.js'");
+    expect(mainJs).toContain("from '../lib/sheet-sync.js'");
     expect(mainJs).toContain('const typeLabel = sheetLogLabel(payload);');
     expect(mainJs).toContain('const summary = sheetLogSummary(payload);');
     expect(mainJs).not.toContain("payload.type === 'order' ? 'Order' : 'Consignment'");
@@ -205,7 +208,7 @@ describe('Sheets delivery queue (main.js)', () => {
   });
 
   it('lets postToSheets be told whether to simulate rather than inferring it', () => {
-    const post = mainJs.match(/export async function postToSheets\([\s\S]+?\n\}/);
+    const post = mainJs.match(/async function postToSheets\([\s\S]+?\n\}/);
     expect(post).not.toBeNull();
     expect(post[0]).toContain("Object.prototype.hasOwnProperty.call(opts, 'simulate')");
   });

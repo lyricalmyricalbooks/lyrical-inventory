@@ -63,6 +63,10 @@ const MAIN_IMPORT_BUDGET = {
   'receipts.js': 24,
   // Composed by receipts.js with injected adapters; no main.js cycle at all.
   'receipt-finder.js': 0,
+  // Set at extraction: the practice book's fake spreadsheet reads which book is
+  // open, whether it is the test book, and the real sheet's two URLs (for the
+  // cards it hides and shows), plus the usual $ / showToast.
+  'sheets-simulator.js': 6,
 };
 
 const featureFiles = fs.existsSync(featureDir)
@@ -196,6 +200,10 @@ describe('feature module boundary', () => {
 const MIN_EXPORTS = {
   'intel.js': 12,
   'receipt-finder.js': 4,
+  // The practice book's fake spreadsheet: one writer, one renderer and the
+  // three handlers its card needs. Small, but a whole feature with no other
+  // home — it only ever ran for the test book.
+  'sheets-simulator.js': 5,
 };
 
 describe('feature modules are the only home of what they own', () => {

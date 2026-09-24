@@ -35,8 +35,8 @@ import {
   showToast,
   states,
   switchTab,
-  syncToSheets,
 } from '../main.js';
+import { syncToSheets } from './sheets-bridge.js';
 import { openM, closeM, confirmDialog } from '../lib/modal.js';
 import {
   _shippoDestMasterList,

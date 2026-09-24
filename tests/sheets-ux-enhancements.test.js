@@ -13,7 +13,9 @@ describe('Sheets UX Enhancements (#4 & #7)', () => {
 
   const indexHtml = fs.readFileSync(indexHtmlPath, 'utf8');
   const styleCss = fs.readFileSync(styleCssPath, 'utf8');
-  const mainJs = fs.readFileSync(mainJsPath, 'utf8');
+  // The Sheets bridge moved out of main.js into its own feature module.
+  const mainJs = fs.readFileSync(mainJsPath, 'utf8')
+    + fs.readFileSync(path.resolve(__dirname, '../src/features/sheets-bridge.js'), 'utf8');
 
   describe('Apps Script Code Box & Copy Button (#4)', () => {
     it('declares copy-gas-code-btn and gas-script-ver-tag in index.html', () => {
