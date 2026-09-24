@@ -17,6 +17,7 @@
 // tests/features-boundary.test.js: nothing here runs at module-evaluation
 // time. eslint's no-undef, an error in CI, keeps the import list below honest.
 import { withAutoLocalPickup } from '../lib/local-pickup.js';
+import { findOrderInAnyBook, nextOrderToShip, ordersStillToShip, shippedOrderNumbers } from '../lib/ship-queue.js';
 import {
   $,
   BOOKS,
@@ -2966,10 +2967,25 @@ function renderCustomShippoDestPicker() {
     });
   });
 
+  // Orders already sent sink below the ones still waiting, and say so, so the
+  // top of the list is always the next parcel to pack.
+  const shipped = shippedOrderNumbers(websiteLedgerRows(), normalizeShippingOrderNumber);
+  items.forEach(item => {
+    const num = normalizeShippingOrderNumber(item.orderNumber);
+    item.shipped = Boolean(num && shipped.has(num));
+  });
+  const rank = item => (item.shipped ? 2 : item.orderNumber ? 0 : 1);
+  items.sort((a, b) => rank(a) - rank(b));
+
   _shippoDestMasterList = items;
 
   const countBadge = $('ship-dest-count-badge');
-  if (countBadge) countBadge.textContent = `${items.length} destination${items.length === 1 ? '' : 's'}`;
+  const waiting = ordersStillToShip(items, shipped, normalizeShippingOrderNumber).length;
+  if (countBadge) {
+    countBadge.textContent = waiting
+      ? `${waiting} order${waiting === 1 ? '' : 's'} to ship`
+      : `${items.length} destination${items.length === 1 ? '' : 's'}`;
+  }
 
   filterShippoDestMenu();
 }
@@ -3069,15 +3085,62 @@ function filterShippoDestMenu() {
       ? `<span class="custom-dest-item-warn" title="${escapeHtml(destCountryRaw)} is not a country we recognize — set the destination country before buying a label">⚠ check country</span>`
       : '';
     return `
-      <div class="custom-dest-item ${isSelected ? 'selected' : ''}" onclick="selectShippoDestCustomItem(${masterIdx}, event)">
+      <div class="custom-dest-item ${isSelected ? 'selected' : ''}${item.shipped ? ' is-shipped' : ''}" onclick="selectShippoDestCustomItem(${masterIdx}, event)">
         <div class="custom-dest-item-header">
           <span class="custom-dest-item-title">${item.icon} ${escapeHtml(item.title)}</span>
           <span class="custom-dest-item-badge ${item.category}">${escapeHtml(item.catLabel)}</span>
         </div>
-        <div class="custom-dest-item-sub">${escapeHtml(item.sub)}${countryWarning}${phoneWarning}</div>
+        <div class="custom-dest-item-sub">${escapeHtml(item.sub)}${item.shipped ? '<span class="custom-dest-item-done">✓ shipped</span>' : ''}${countryWarning}${phoneWarning}</div>
         ${item.parcelSummary ? `<div class="custom-dest-item-parcel">📦 ${escapeHtml(item.parcelSummary)}</div>` : ''}
       </div>`;
   }).join('');
+}
+
+/**
+ * The "next order" card shown once a label is bought, so a stack of orders is
+ * one click each instead of reopening the picker every time.
+ */
+function nextOrderCardHtml(justShipped) {
+  // Rebuilt first so the order that was just labelled drops out of the queue.
+  renderCustomShippoDestPicker();
+  const shipped = shippedOrderNumbers(websiteLedgerRows(), normalizeShippingOrderNumber);
+  const left = ordersStillToShip(_shippoDestMasterList, shipped, normalizeShippingOrderNumber)
+    .filter(item => normalizeShippingOrderNumber(item.orderNumber) !== normalizeShippingOrderNumber(justShipped));
+  const next = left[0];
+  if (!next) {
+    return `
+      <div class="cp-next-order is-done" role="status">
+        <span aria-hidden="true">🎉</span>
+        <span><strong>That's every order.</strong> Nothing else is waiting to ship.</span>
+      </div>`;
+  }
+  return `
+    <div class="cp-next-order">
+      <div class="cp-next-order-text">
+        <span class="cp-next-order-kicker">Up next · ${left.length} order${left.length === 1 ? '' : 's'} left</span>
+        <strong>${escapeHtml(next.title)}</strong>
+        ${next.parcelSummary ? `<span class="cp-next-order-sub">📦 ${escapeHtml(next.parcelSummary)}</span>` : ''}
+      </div>
+      <button class="btn gold cp-label-action-btn" type="button" onclick="shipNextOrder('${escapeHtml(justShipped || '')}')">
+        <span>Ship next order</span><span aria-hidden="true">→</span>
+      </button>
+    </div>`;
+}
+
+/** Loads the next unsent order into the form and scrolls back up to it. */
+async function shipNextOrder(justShipped = '') {
+  closeCanadaPostLabelModal();
+  const shipped = shippedOrderNumbers(websiteLedgerRows(), normalizeShippingOrderNumber);
+  const next = nextOrderToShip(_shippoDestMasterList, shipped, justShipped, normalizeShippingOrderNumber);
+  if (!next) {
+    showToast("✓ That's every order — nothing left to ship");
+    return;
+  }
+  const panel = $('cp-purchased-label-panel');
+  if (panel) { panel.innerHTML = ''; panel.style.display = 'none'; }
+  const trigger = $('custom-ship-dest-trigger');
+  trigger?.scrollIntoView({ behavior: _prefersReducedMotion() ? 'auto' : 'smooth', block: 'center' });
+  await selectShippoDestCustomItem(_shippoDestMasterList.indexOf(next));
 }
 
 function selectShippoDestCustomItem(idx, e) {
@@ -5659,8 +5722,10 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
       const selectedOrderNumber = normalizeShippingOrderNumber($('ship-prefill-dest')?.dataset.orderNumber || orderNum);
       if (selectedOrderNumber) {
         try {
-          const s = getState();
-          const histItem = (s.hist || []).find(h => normalizeShippingOrderNumber(h.num) === selectedOrderNumber);
+          // Every book, not just the open one: an order for another book used
+          // to stay "unshipped" after its label was bought.
+          const found = findOrderInAnyBook(states, selectedOrderNumber, normalizeShippingOrderNumber);
+          const histItem = found?.entry;
           if (histItem) {
             histItem.shipped = true;
             histItem.shippedDate = today();
@@ -5678,7 +5743,7 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
             // tracking number, and lets a later sweep clear practice runs out.
             histItem.simulated = isSim;
             histItem.trackingSimulated = isSim;
-            saveState(activeBook);
+            saveState(found.bookId);
             renderHist();
             // Said now, while a cheaper service or a better website price can
             // still make a difference. A practice label cost nothing.
@@ -5786,6 +5851,7 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
                 </button>
               </div>
             </div>
+            ${nextOrderCardHtml(selectedOrderNumber)}
             ${result.manifestRequired && !isSim ? `
               <div style="margin-top:12px;padding:12px 14px;background:var(--surface-card);border:var(--stroke-hair) solid var(--amber,var(--border));border-radius:var(--r);display:flex;align-items:flex-start;gap:10px;">
                 <span style="font-size:var(--text-lg);line-height:1.1;" aria-hidden="true">📋</span>
@@ -6169,13 +6235,13 @@ async function buyShippoLabel(rateId, provider, serviceName, amount, currency) {
     // Auto-mark prefilled order as Shipped
     const selectedOrderNumber = normalizeShippingOrderNumber($('ship-prefill-dest')?.dataset.orderNumber);
     if (selectedOrderNumber) {
-      const s = getState();
-      const histItem = s.hist.find(h => normalizeShippingOrderNumber(h.num) === selectedOrderNumber);
+      const found = findOrderInAnyBook(states, selectedOrderNumber, normalizeShippingOrderNumber);
+      const histItem = found?.entry;
       if (histItem) {
         histItem.shipped = true;
         histItem.shippedDate = today();
         histItem.trackingNumber = trackingNumber || '';
-        saveState(activeBook);
+        saveState(found.bookId);
         renderHist();
         if (String(currency || '').toUpperCase() === 'CAD') {
           checkNewPostageLosses({ justBought: { num: selectedOrderNumber, postage: Number(amount) || 0 } });
@@ -9973,6 +10039,7 @@ export {
   setShippoDestCategoryFilter,
   filterShippoDestMenu,
   selectShippoDestCustomItem,
+  shipNextOrder,
   clearShippoDestSelection,
   getRecentShippingOrders,
   saveShippoApiKey,

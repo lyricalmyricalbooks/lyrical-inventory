@@ -20181,3 +20181,43 @@ button[onclick="refreshUmamiStats()"]:active {
 .ship-reco-paid strong{color:var(--text);}
 .ship-reco-paid.is-short strong{color:var(--status-critical);}
 .ship-reco-paid-note{margin:4px 0 0;font-size:var(--text-2xs);line-height:1.45;color:var(--status-critical);}
+
+/* Shipping queue — sent orders sink in the picker; "Up next" after a label. */
+.custom-dest-item.is-shipped { opacity: 0.62; }
+.custom-dest-item-done {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  font-size: var(--text-3xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--green);
+  border: var(--stroke-hair) solid currentColor;
+}
+.cp-next-order {
+  margin-top: 12px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  background: var(--surface-card);
+  border: var(--stroke-hair) solid var(--border);
+  border-radius: var(--r);
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+.cp-next-order.is-done { justify-content: flex-start; color: var(--text3); }
+.cp-next-order-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cp-next-order-kicker {
+  font-size: var(--text-3xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+.cp-next-order-sub { font-size: var(--text-xs); color: var(--text3); }
+.cp-next-order .btn { min-height: 44px; }
