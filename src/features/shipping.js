@@ -28,6 +28,7 @@ import {
   waitingPhrase,
 } from '../lib/ship-queue.js';
 import { storeReversal } from '../lib/store-reversals.js';
+import { HAND_LABEL_ORIENTATION_KEY, buildHandLabelDocument, returnLines } from '../lib/hand-label.js';
 import { bigCartelTrackingByOrder, shipmentDate, trackingToStamp } from '../lib/bigcartel-tracking.js';
 import {
   $,
@@ -507,99 +508,26 @@ function printShippingLabel() {
   saveState(activeBook);
   renderHist();
 
-  const ship = {
-    name: h.shipName, addr1: h.shipAddr1, addr2: h.shipAddr2,
-    city: h.shipCity, province: h.shipProvince, postal: h.shipPostal, country: h.shipCountry
-  };
+  const fallbackFrom = ['Lyricalmyrical Books', '456 Montrose Ave', 'Toronto ON  M6G 3H1'];
+  let orientation = 'portrait';
+  try { orientation = localStorage.getItem(HAND_LABEL_ORIENTATION_KEY) || 'portrait'; } catch (_) { /* private mode */ }
+  const doc = buildHandLabelDocument({
+    to: {
+      name: h.shipName, addr1: h.shipAddr1, addr2: h.shipAddr2, city: h.shipCity,
+      province: h.shipProvince, postal: h.shipPostal, country: h.shipCountry,
+    },
+    from: returnLines(savedShippingOrigin(), fallbackFrom),
+    orderNum: h.num || '',
+    orientation,
+  });
 
-  const fromLines = ['Lyricalmyrical Books', '456 Montrose Ave', 'Toronto, ON  M6G 3H1', 'Canada'];
-
-  const cityLine = [ship.city, ship.province].filter(Boolean).join(', ');
-  const cityPostal = [cityLine, ship.postal].filter(Boolean).join('  ');
-  const toLines = [ship.addr1, ship.addr2, cityPostal].filter(Boolean);
-  const country = (ship.country || '').toUpperCase();
-
-  const esc = escapeHtml;
-
-  const labelHTML = `
-  <div class="label">
-    <section class="to">
-      <div class="kicker">Ship To</div>
-      <div class="to-name">${esc(ship.name || '')}</div>
-      <div class="to-lines">
-        ${toLines.map(l => `<div>${esc(l)}</div>`).join('')}
-      </div>
-      ${country ? `<div class="to-country">${esc(country)}</div>` : ''}
-    </section>
-
-    <section class="from">
-      <div class="kicker">From</div>
-      <div class="from-lines">
-        ${fromLines.map(l => `<div>${esc(l)}</div>`).join('')}
-      </div>
-    </section>
-  </div>`;
-
-  const styles = `
-    @page { margin: 0; size: 4in 6in; }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { background:var(--surface-card); color:var(--text); }
-    body {
-      font-family:var(--font-ui);
-      -webkit-font-smoothing: antialiased;
-      font-size: 11pt;
-    }
-    .label {
-      width: 4in; height: 6in;
-      display: flex; flex-direction: column;
-      color:var(--text);
-    }
-
-    .kicker {
-      font-size: 7pt; font-weight: 800;
-      letter-spacing: .22em; text-transform: uppercase;
-      color:var(--text); margin-bottom: 8px;
-      padding-bottom: 4px;
-      border-bottom: 1.5px solid #111;
-    }
-
-    .to {
-      flex: 1;
-      padding: 0.28in 0.3in 0.18in;
-    }
-    .to-name {
-      font-size: 19pt; font-weight: 800;
-      letter-spacing: -.01em; line-height: 1.1;
-      margin-bottom: 8px;
-    }
-    .to-lines { font-size: 12pt; line-height: 1.38; color:var(--text); }
-    .to-country {
-      margin-top: 8px;
-      font-size: 13pt; font-weight: 800;
-      letter-spacing: .06em;
-    }
-
-    .from {
-      padding: 0.18in 0.3in 0.28in;
-      border-top:var(--stroke-hair) solid #111;
-    }
-    .from .kicker { border-bottom: none; padding-bottom: 0; margin-bottom: 4px; color: #666; }
-    .from-lines { font-size: 8.5pt; line-height: 1.45; color: #444; }
-
-    @media print {
-      body { padding: 0; }
-      .label { box-shadow: none; }
-    }
-  `;
-
-  const win = window.open('', '_blank', 'width=620,height=720');
-  win.document.write(`<!DOCTYPE html><html><head><title>Label — ${esc(h.num)}</title>
-    <meta charset="utf-8">
-    <style>${styles}</style>
-    </head><body>${labelHTML}</body></html>`);
+  // Opens as a preview with a Vertical / Horizontal switch and its own Print
+  // button, rather than jumping straight to the print dialog in one layout.
+  const win = window.open('', '_blank', 'width=760,height=820');
+  if (!win) { showToast('Allow pop-ups for this site to print the label', 'warn'); return; }
+  win.document.write(doc);
   win.document.close();
   win.focus();
-  setTimeout(() => { win.print(); }, 350);
   closeM('shipping-label');
 }
 
