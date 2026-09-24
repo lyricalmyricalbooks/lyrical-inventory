@@ -9290,26 +9290,26 @@ function renderArtistReimburseBanner() {
       linkCard.style.display = 'none';
     }
   }
-  // Show received expenses banner for authors
+  // Author banner: expenses the publisher still has to pay back. Once the
+  // publisher marks one as paid ("Mark received" on their side) it drops off,
+  // and the banner disappears when nothing is left to reimburse.
   const banner = $('artist-reimburse-banner');
   if (!banner) return;
   if (!isAuthor()) { banner.style.display = 'none'; return; }
-  // ⚡ Bolt Optimization: Loop Fusion
-  // Combined .filter() and .reduce() into a single pass to eliminate intermediate array allocations
-  const received = [];
+  const owed = [];
   let total = 0;
   for (const e of (s.expenses || [])) {
-    if (e.received && !isGratuityExpense(e)) {
-      received.push(e);
-      total += (e.amount || 0);
+    if (!e.received && !isGratuityExpense(e)) {
+      owed.push(e);
+      total += (Number(e.amount) || 0);
     }
   }
-  if (!received.length) { banner.style.display = 'none'; return; }
+  if (!owed.length) { banner.style.display = 'none'; return; }
   banner.style.display = '';
   $('arb-amount').textContent = fmt(total, cur);
-  $('arb-detail').textContent = `${received.length} expense${received.length !== 1 ? 's' : ''} marked as received by publisher`;
-  $('arb-hint').textContent = 'These expenses have been settled';
-  $('arb-items').innerHTML = received.map(e => `
+  $('arb-detail').textContent = `${owed.length} expense${owed.length !== 1 ? 's' : ''} your publisher will pay you back for`;
+  $('arb-hint').textContent = s.artistPaymentLink ? 'Your publisher pays this to your saved payment link' : 'Add your payment link below so your publisher can pay you';
+  $('arb-items').innerHTML = owed.map(e => `
     <div class="mbi-row">
       <div class="mbi-desc">${escapeHtml(e.desc)} · ${fmtD(e.date)} · <span class="metric-banner-cat">${escapeHtml(e.cat)}</span></div>
       <div class="mbi-amt">${fmt(e.amount, cur)}</div>
@@ -10093,7 +10093,6 @@ function transferPayUrl(t) {
 function renderArtistTransfers() {
   const s = getState(), book = getBook(), cur = book.currency;
   let transfers = [...(s.artistTransfers || [])].map(t => ({ ...t, status: 'approved' }));
-  const payLink = book.paymentLink || '';
 
   // Merge in pending author submissions for BOTH author and publisher views
   const pbSales = window.authorSubmissions[activeBook]?.sales || {};
@@ -10199,11 +10198,6 @@ function renderArtistTransfers() {
   if (!sect) return;
   if (!transfers.length) { sect.style.display = 'none'; return; }
   sect.style.display = '';
-  const fullPayLink = payLink.startsWith('http') ? payLink : payLink ? 'https://' + payLink : '';
-  const payHtml = fullPayLink
-    ? `<a href="${fullPayLink}" target="_blank" class="btn sm" style="text-decoration:none;background:var(--green-bg);color:var(--green);border-color:rgba(42,99,72,.2);">↗ Payment link</a>`
-    : `<span style="font-size:var(--text-2xs);color:var(--text3);font-family:var(--font-mono);">No payment link set</span>`;
-
   list.innerHTML = transfers.map(t => `
     <div class="pending-card${t.status === 'pending' ? ' is-pending' : ''}">
       <div>
@@ -10216,7 +10210,6 @@ function renderArtistTransfers() {
         <div class="pending-card-note">${escapeHtml(t.notes) || '—'}</div>
       </div>
       <div class="pending-card-actions">
-        ${payHtml}
         ${t.status === 'pending'
       ? `<button class="btn sm outline" disabled>Approve sale first</button>`
       : `${transferPayUrl(t)

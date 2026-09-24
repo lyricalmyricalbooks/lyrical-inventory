@@ -29,7 +29,7 @@ test('the reimbursement amount uses the green ink token, not a raw hex', () => {
   expect(styles).toMatch(/\.metric-banner-green \.mbi-amt\s*\{\s*color:\s*var\(--green\);\s*\}/);
   expect(mainJs).not.toMatch(/color:#6ee7a8/);
 
-  const arbBlock = mainJs.match(/\$\('arb-items'\)\.innerHTML = received\.map\(e => `([\s\S]*?)`\)\.join/);
+  const arbBlock = mainJs.match(/\$\('arb-items'\)\.innerHTML = owed\.map\(e => `([\s\S]*?)`\)\.join/);
   expect(arbBlock).not.toBeNull();
   expect(arbBlock[1]).not.toMatch(/style="/);
   expect(arbBlock[1]).toContain('class="mbi-row"');
