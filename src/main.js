@@ -9290,26 +9290,26 @@ function renderArtistReimburseBanner() {
       linkCard.style.display = 'none';
     }
   }
-  // Show received expenses banner for authors
+  // Author banner: expenses the publisher still has to pay back. Once the
+  // publisher marks one as paid ("Mark received" on their side) it drops off,
+  // and the banner disappears when nothing is left to reimburse.
   const banner = $('artist-reimburse-banner');
   if (!banner) return;
   if (!isAuthor()) { banner.style.display = 'none'; return; }
-  // ⚡ Bolt Optimization: Loop Fusion
-  // Combined .filter() and .reduce() into a single pass to eliminate intermediate array allocations
-  const received = [];
+  const owed = [];
   let total = 0;
   for (const e of (s.expenses || [])) {
-    if (e.received && !isGratuityExpense(e)) {
-      received.push(e);
-      total += (e.amount || 0);
+    if (!e.received && !isGratuityExpense(e)) {
+      owed.push(e);
+      total += (Number(e.amount) || 0);
     }
   }
-  if (!received.length) { banner.style.display = 'none'; return; }
+  if (!owed.length) { banner.style.display = 'none'; return; }
   banner.style.display = '';
   $('arb-amount').textContent = fmt(total, cur);
-  $('arb-detail').textContent = `${received.length} expense${received.length !== 1 ? 's' : ''} marked as received by publisher`;
-  $('arb-hint').textContent = 'These expenses have been settled';
-  $('arb-items').innerHTML = received.map(e => `
+  $('arb-detail').textContent = `${owed.length} expense${owed.length !== 1 ? 's' : ''} your publisher will pay you back for`;
+  $('arb-hint').textContent = s.artistPaymentLink ? 'Your publisher pays this to your saved payment link' : 'Add your payment link below so your publisher can pay you';
+  $('arb-items').innerHTML = owed.map(e => `
     <div class="mbi-row">
       <div class="mbi-desc">${escapeHtml(e.desc)} · ${fmtD(e.date)} · <span class="metric-banner-cat">${escapeHtml(e.cat)}</span></div>
       <div class="mbi-amt">${fmt(e.amount, cur)}</div>
