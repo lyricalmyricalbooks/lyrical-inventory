@@ -47,6 +47,10 @@ import {
 import { renderExpenses, saveReceiptToLocalFile, readShippingFieldsFromReceipt } from './receipts.js';
 import { findExistingLabel, describeExistingLabel } from '../lib/label-duplicate-guard.js';
 import {
+  refundCarrier, refundState, canRequestRefund, shippoTransactionId, refundCredit,
+  unshipOrderForRefund, describeRefundRefusal,
+} from '../lib/label-refunds.js';
+import {
   BATCH_LOOKBACK_DAYS, isBatchCandidate, scaledParcel, batchCustomsDeclaration, pickCheapestRate,
   originBlocker, preflightBlocker, addressVerdictBlocker, describeBatchTotal, buildLabelPrintPage,
 } from '../lib/batch-shipping.js';
@@ -1229,8 +1233,9 @@ function applyShippoRefunds(refunds) {
     if (alreadyCredited.has(`shippo-refund:${refund.id}`)) return;
     const original = byRef.get(`shippo:${refund.transactionId}`);
     if (!original) return; // never imported the label, so nothing to reverse
-    const entry = refundExpense(refund, original, Date.now() + 500000 + i);
+    const entry = refundCredit(original, { refundId: refund.id, date: refund.date || original.date }, Date.now() + 500000 + i);
     if (!entry) return;
+    original.refundRequest = { ...(original.refundRequest || {}), id: refund.id, status: 'SUCCESS' };
     expenses.unshift(entry);
     added++;
   });
@@ -5952,7 +5957,9 @@ async function voidCanadaPostLabelAction(pin) {
       apiSecret,
       isTest: false
     });
-    showToast('✓ Canada Post label refund requested successfully', 'success');
+    const cpExpense = (TAX_CENTER.businessExpenses || []).find(e => e && e.ref === `canadapost:${targetPin}`);
+    if (cpExpense) await recordLabelRefundRequest(cpExpense, { status: 'REQUESTED', tracking: targetPin });
+    showToast('✓ Refund requested from Canada Post. The order is back on your to-ship list. Once the money shows up on your Canada Post account, press “Refund arrived” in the shipping ledger.', 'ok', 9000);
     closeCanadaPostLabelModal();
     showArchivedCanadaPostLabels();
   } catch (err) {
@@ -6406,7 +6413,8 @@ function renderBatchShipping() {
     if (row.status === 'held' || row.status === 'failed') {
       action = `<button class="btn sm ink" type="button" onclick="openBatchRowInForm(${i})">Open in form</button>`;
     } else if (row.status === 'bought' && row.labelUrl) {
-      action = `<a class="btn sm gold" href="${escapeHtml(row.labelUrl)}" target="_blank" rel="noopener">Print label</a>`;
+      action = `<a class="btn sm gold" href="${escapeHtml(row.labelUrl)}" target="_blank" rel="noopener">Print label</a>`
+        + (row.transactionId ? ` <button class="btn sm ghost" type="button" onclick="requestLabelRefund('shippo:${escapeHtml(row.transactionId)}')" title="Cancel this label and get the postage back">↩ Refund</button>` : '');
     }
     return `<tr>
       <td><input type="checkbox" aria-label="Include order ${escapeHtml(row.orderNumber)}" ${row.selected && (tickable || row.status === 'bought' || row.status === 'buying') ? 'checked' : ''} ${tickable ? '' : 'disabled'} onchange="toggleBatchRow(${i}, this.checked)" style="width:20px;height:20px;"></td>
@@ -6614,6 +6622,7 @@ async function buyBatchLabels() {
       row.reason = '';
       row.labelUrl = result.labelUrl || '';
       row.tracking = result.trackingNumber || '';
+      row.transactionId = result.transactionId || '';
       bought++;
     } catch (err) {
       console.error('Batch label purchase failed', row.orderNumber, err);
@@ -6660,6 +6669,127 @@ function openBatchRowInForm(index) {
   } else {
     showToast(`Pick order ${row.orderNumber} from the Destination list to finish it by hand`, 'warn', 7000);
   }
+}
+
+// ── LABEL REFUNDS ────────────────────────────────────────────────────────
+// Asking for money back on an unused label, and keeping the books and the
+// order in step with it. The rules live in lib/label-refunds.js.
+
+/** Records a refund request: marks the expense, frees the order, credits the books if settled. */
+async function recordLabelRefundRequest(expense, { status = 'REQUESTED', refundId = '', tracking = '' } = {}) {
+  expense.refundRequest = { id: refundId, status, at: new Date().toISOString() };
+
+  const found = findOrderAcrossBooks(expense.shippingOrderNumber);
+  if (found && unshipOrderForRefund(found.entry, tracking || expense.trackingNumber || expense.trackingPin || '')) {
+    await saveState(found.bookId).catch(() => {});
+    renderHist();
+  }
+
+  if (isSettledRefund({ status }) && refundId) {
+    const credit = refundCredit(expense, { refundId, date: today() });
+    if (credit) TAX_CENTER.businessExpenses.unshift(credit);
+  }
+  await saveTaxCenter().catch(e => console.warn('Refund save failed', e));
+  renderTaxCenter();
+  renderExpenses();
+  renderShippingAnalysisHub();
+}
+
+/** "Refund label" from the shipping ledger or the batch window. */
+async function requestLabelRefund(expenseKey) {
+  const expenses = TAX_CENTER.businessExpenses || [];
+  const expense = findPostageByKey(expenses, expenseKey)
+    || expenses.find(e => e && String(e.ref || '') === String(expenseKey));
+  if (!expense) { showToast('Couldn’t find that label.', 'err'); return; }
+  if (!canRequestRefund(expense, expenses)) {
+    showToast(refundState(expense, expenses) === 'none'
+      ? 'This label can’t be refunded from here.'
+      : 'A refund has already been requested for this label.', 'warn');
+    return;
+  }
+
+  const carrier = refundCarrier(expense);
+  if (carrier === 'canadapost') {
+    await voidCanadaPostLabelAction(expense.trackingPin || String(expense.ref).slice('canadapost:'.length));
+    return;
+  }
+
+  const shippoKey = TAX_CENTER.settings?.shippoKey || '';
+  if (!shippoKey) { showToast('⚠️ Please configure your Shippo API Key first', 'warn'); return; }
+  if (!navigator.onLine) { showToast('⚠️ You’re offline — connect to request a refund', 'warn'); return; }
+
+  const details = [
+    ['Label', expense.desc || 'Shippo label'],
+    ['Cost', `$${(Number(expense.amount) || 0).toFixed(2)} ${expense.currency || 'CAD'}`],
+  ];
+  if (expense.shippingOrderNumber) details.push(['Order', expense.shippingOrderNumber]);
+  const confirmed = await confirmDialog(
+    'Only use this for a label that will never be mailed — once you ask, the label stops working. '
+      + 'Shippo checks that the carrier never scanned it, then returns the money, usually within a few days to a couple of weeks. '
+      + 'The order goes back on your to-ship list.',
+    { title: 'Refund this shipping label?', details, okLabel: 'Request refund', cancelLabel: 'Keep label', danger: true },
+  );
+  if (!confirmed) return;
+
+  showToast('Asking Shippo for a refund…');
+  try {
+    const resp = await fetch('https://api.goshippo.com/refunds/', {
+      method: 'POST',
+      headers: { 'Authorization': `ShippoToken ${shippoKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transaction: shippoTransactionId(expense), async: false }),
+    });
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => '');
+      throw new Error(describeRefundRefusal(resp.status, body));
+    }
+    const refund = parseRefund(await resp.json());
+    const status = refund?.status || 'QUEUED';
+    if (status === 'ERROR') throw new Error('Shippo couldn’t refund this label — the carrier may have already scanned it.');
+    await recordLabelRefundRequest(expense, { status, refundId: refund?.id || '' });
+    showToast(isSettledRefund({ status })
+      ? '✓ Label refunded — the cost is taken back out of your books and the order is back on your to-ship list.'
+      : '✓ Refund requested. The order is back on your to-ship list, and the money comes off your books automatically once Shippo confirms it.', 'ok', 9000);
+  } catch (err) {
+    console.error('Shippo refund failed', err);
+    showToast(`❌ ${err.message}`, 'err', 9000);
+  }
+}
+
+/** For carriers that don't report back: the owner confirms the money is back. */
+async function markLabelRefundArrived(expenseKey) {
+  const expenses = TAX_CENTER.businessExpenses || [];
+  const expense = findPostageByKey(expenses, expenseKey);
+  if (!expense || refundState(expense, expenses) !== 'requested') return;
+  const ok = await confirmDialog(
+    `Take $${(Number(expense.amount) || 0).toFixed(2)} back out of your shipping costs? Only do this once the refund shows up on your account.`,
+    { title: 'Refund arrived?', okLabel: 'Yes, it arrived', cancelLabel: 'Not yet' },
+  );
+  if (!ok) return;
+  const prefix = refundCarrier(expense) === 'canadapost' ? 'canadapost-refund' : 'shippo-refund';
+  const credit = refundCredit(expense, { refundId: expense.refundRequest?.id || `manual-${Date.now()}`, date: today(), prefix });
+  if (!credit) return;
+  expense.refundRequest = { ...expense.refundRequest, status: 'SUCCESS' };
+  expenses.unshift(credit);
+  await saveTaxCenter().catch(() => {});
+  renderTaxCenter();
+  renderExpenses();
+  renderShippingAnalysisHub();
+  showToast('✓ Refund recorded');
+}
+
+/** The refund control for one label in the shipping ledger. */
+function labelRefundControlHtml(expense) {
+  if (!expense) return '';
+  const expenses = TAX_CENTER.businessExpenses || [];
+  const key = escapeHtml(postageExpenseKey(expense));
+  const state = refundState(expense, expenses);
+  if (state === 'refunded') return '<span class="pill gray">✓ Refunded</span>';
+  if (state === 'requested') {
+    return `<span class="pill amber">● Refund requested</span>
+      <button class="btn sm ghost" style="font-size:var(--text-2xs); padding:3px 8px;" onclick="markLabelRefundArrived('${key}')" title="Record the refund once the money is back">Refund arrived</button>`;
+  }
+  if (!canRequestRefund(expense, expenses)) return '';
+  return `<button class="btn sm ghost" style="font-size:var(--text-2xs); padding:3px 8px; color:var(--text3);" onclick="requestLabelRefund('${key}')" title="Cancel an unused label and get the postage back">↩ Refund label</button>`;
 }
 
 // ── RATE FORM READINESS ──────────────────────────────────────────────────
@@ -9383,9 +9513,11 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
         : o.manualPostagePaid
         ? `<button class="btn sm ghost" onclick="unlinkManualPostage('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:var(--text-2xs); padding:3px 8px; opacity:0.7;">Clear manual</button>`
         : `<button class="btn sm ghost" onclick="unlinkShippoExpense('${escapeHtml(postageExpenseKey(linked[0]))}')" style="font-size:var(--text-2xs); padding:3px 8px; opacity:0.7;">Unlink</button>`;
+      const refundHtml = (!o.localPickup && !o.manualPostagePaid) ? labelRefundControlHtml(linked[0]) : '';
       actionBtn = `
         <div style="margin-top:6px; display:flex; gap:4px; align-items:center; flex-wrap:wrap;">
           ${mainBtn}
+          ${refundHtml}
           <button class="btn sm ghost" onclick="dismissShippingAnalysisOrder('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:var(--text-2xs); padding:3px 8px; color:var(--text3); min-width:unset;" title="Dismiss order from calculations">✕ Dismiss</button>
         </div>`;
     }
@@ -10443,6 +10575,8 @@ export {
   buyBatchLabels,
   toggleBatchRow,
   openBatchRowInForm,
+  requestLabelRefund,
+  markLabelRefundArrived,
   printBatchLabels,
   calculateShippoRates,
   calculateZonosDutiesHandler,

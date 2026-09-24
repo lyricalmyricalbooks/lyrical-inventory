@@ -11,6 +11,7 @@
 
 import { normalizeShippingOrderNumber } from './shipping-reconciliation.js';
 import { isPostageExpense, isPostageLinked } from './postage-matching.js';
+import { refundState } from './label-refunds.js';
 
 /**
  * Every sign that `orderNumber` already has a label.
@@ -25,7 +26,9 @@ export function findExistingLabel(orderNumber, { hist = [], expenses = [] } = {}
 
   // Test-mode rehearsals are stamped `simulated` and never cost anything.
   const labels = expenses
+    // A refunded or refund-requested label no longer ships anything.
     .filter(e => e && !e.simulated && isPostageExpense(e) && isPostageLinked(e)
+      && refundState(e, expenses) === 'none'
       && normalizeShippingOrderNumber(e.shippingOrderNumber) === wanted)
     .map(e => ({
       desc: String(e.desc || 'Postage'),

@@ -555,6 +555,8 @@ import {
   buyBatchLabels,
   toggleBatchRow,
   openBatchRowInForm,
+  requestLabelRefund,
+  markLabelRefundArrived,
   printBatchLabels,
   calculateShippoRates,
   calculateZonosDutiesHandler,
@@ -24663,6 +24665,8 @@ window.checkBatchOrders = checkBatchOrders;
 window.buyBatchLabels = buyBatchLabels;
 window.toggleBatchRow = toggleBatchRow;
 window.openBatchRowInForm = openBatchRowInForm;
+window.requestLabelRefund = requestLabelRefund;
+window.markLabelRefundArrived = markLabelRefundArrived;
 window.printBatchLabels = printBatchLabels;
 window.verifyDestinationAddress = verifyDestinationAddress;
 window.applyVerifiedAddressCorrections = applyVerifiedAddressCorrections;
