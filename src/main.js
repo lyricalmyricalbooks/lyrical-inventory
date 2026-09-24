@@ -441,6 +441,7 @@ import {
   renderBigCartelTab,
   renumberPlaceholderOrder,
   restoreBigCartelGaps,
+  dismissAllBigCartelGaps,
   testBigCartelConnection,
   saveBigCartelSettings,
   loadBigCartelData,
@@ -24569,6 +24570,7 @@ window.dismissBigCartelGap = dismissBigCartelGap;
 window.undoBigCartelGapDismiss = undoBigCartelGapDismiss;
 window.toggleBigCartelGapPanel = toggleBigCartelGapPanel;
 window.restoreBigCartelGaps = restoreBigCartelGaps;
+window.dismissAllBigCartelGaps = dismissAllBigCartelGaps;
 window.renumberPlaceholderOrder = renumberPlaceholderOrder;
 window.voidPlaceholderDuplicate = voidPlaceholderDuplicate;
 window.renderBigCartelLedgerGaps = renderBigCartelLedgerGaps;
