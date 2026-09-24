@@ -372,6 +372,15 @@ describe('summarizeRecurring', () => {
     expect(s.activeCount).toBe(3);
   });
 
+  it('rounds the totals to whole cents so float drift never shows', () => {
+    const s = summarizeRecurring([
+      sub({ id: 'a', amount: 0.1 }),
+      sub({ id: 'b', amount: 0.2 }),
+    ], rates, 'CAD', NOW);
+    expect(s.monthlyBase).toBe(0.3); // not 0.30000000000000004
+    expect(s.annualBase).toBe(3.6);
+  });
+
   it('excludes paused and ended subscriptions from the run rate', () => {
     const s = summarizeRecurring([
       sub({ id: 'a', amount: 100 }),
