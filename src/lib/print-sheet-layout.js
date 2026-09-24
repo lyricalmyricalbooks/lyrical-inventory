@@ -78,3 +78,21 @@ export function computeQrCardSize({
   const frameSize = Math.floor(clamp(frame, lo, QR_MAX_FRAME_PX));
   return { frameSize, renderSize: frameSize - 16, rows, rowsPerPage, cols: c };
 }
+
+/** How many printed pages the tally sheet will take for this many books. */
+export function estimateTallyPages(numBooks, { includeNotes = false, thHeight = 32 } = {}) {
+  const books = Math.max(0, numBooks | 0);
+  if (!books) return 0;
+  const avail = TALLY_PAGE_HEIGHT_PX - TALLY_CHROME_PX - thHeight;
+  const minPerBook = includeNotes ? TALLY_MIN_ROW_PX + TALLY_MIN_PRICE_PX : TALLY_MIN_ROW_PX;
+  const perPage = Math.max(1, Math.floor(avail / minPerBook));
+  return Math.ceil(books / perPage);
+}
+
+/** How many printed pages the QR sheet will take for this many cards. */
+export function estimateQrPages({ count, cols, fitOnePage = false, priceRows = 0 }) {
+  if (!(count > 0)) return 0;
+  if (fitOnePage) return 1;
+  const { rows, rowsPerPage } = computeQrCardSize({ count, cols, priceRows });
+  return Math.ceil(rows / rowsPerPage);
+}

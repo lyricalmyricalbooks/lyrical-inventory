@@ -39,3 +39,19 @@ describe('QR codes adapt to the number of books', () => {
     expect(r.renderSize).toBe(r.frameSize - 16);
   });
 });
+
+describe('page estimates', () => {
+  it('counts tally pages from the number of books', async () => {
+    const { estimateTallyPages } = await import('../src/lib/print-sheet-layout.js');
+    expect(estimateTallyPages(0)).toBe(0);
+    expect(estimateTallyPages(8)).toBe(1);
+    expect(estimateTallyPages(60)).toBeGreaterThan(1);
+    expect(estimateTallyPages(15, { includeNotes: true })).toBeGreaterThanOrEqual(estimateTallyPages(15));
+  });
+  it('keeps a fit-on-one-page QR sheet to one page', async () => {
+    const { estimateQrPages } = await import('../src/lib/print-sheet-layout.js');
+    expect(estimateQrPages({ count: 40, cols: 3, fitOnePage: true })).toBe(1);
+    expect(estimateQrPages({ count: 40, cols: 3, priceRows: 3 })).toBeGreaterThan(1);
+    expect(estimateQrPages({ count: 0, cols: 3 })).toBe(0);
+  });
+});

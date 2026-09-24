@@ -14,7 +14,7 @@ import { registerSW } from 'virtual:pwa-register';
 import { calcArtistEarnings, tierEffectiveCap, describePayout, payoutRequestCovered } from './lib/earnings.js';
 import { createStripePriceAndLink } from './lib/stripe-payment-link.js';
 import { calculateBreakEven, breakEvenTierMove, readProductionCostInput } from './lib/breakeven.js';
-import { computeTallyRowHeights, computeQrCardSize } from './lib/print-sheet-layout.js';
+import { computeTallyRowHeights, computeQrCardSize, estimateTallyPages, estimateQrPages } from './lib/print-sheet-layout.js';
 import { escapeHtml } from './lib/html.js';
 import { ensureXlsx, loadExternalScript } from './lib/external-scripts.js';
 import { buildActivityFeed } from './lib/activity-feed.js';
@@ -19488,8 +19488,26 @@ window.salesTrackerQtyInput = function (el) {
     const cb = salesTrackerCustomBooks[parseInt(el.dataset.customIdx, 10)];
     if (cb) cb.qty = clean;
   }
-  _stUpdatePackTotal();
+  _fkMarkOverPacked(el);
+  fairKitSelectionChanged();
 };
+
+// Bringing more copies than the stock count says you have is almost always a
+// typo (40 for 4) — flag the field itself so it's caught before packing.
+function _fkMarkOverPacked(el) {
+  const over = _fkOverPackedBy(el);
+  el.classList.toggle('fk-over', over > 0);
+  el.title = over > 0 ? `That's ${over} more than you have on hand` : '';
+}
+
+function _fkOverPackedBy(el) {
+  if (!el.dataset.bookId) return 0;
+  const qty = parseInt(el.value, 10);
+  const book = posResolveBook(el.dataset.bookId);
+  const onHand = book ? _stOnHandHint(book) : null;
+  if (!Number.isFinite(qty) || onHand == null) return 0;
+  return Math.max(0, qty - onHand);
+}
 
 // ── FAIR KIT BOOK LIST ──
 // The tally sheet and the payment QR sheet are packed off the same box of
@@ -19587,6 +19605,7 @@ function renderFairKitBookList() {
       </div>`;
   } else {
     list.innerHTML = inventoryHtml + customHtml;
+    list.querySelectorAll('.st-book-qty[data-book-id]').forEach(_fkMarkOverPacked);
   }
   fairKitSelectionChanged();
 }
@@ -19658,18 +19677,39 @@ function _fkUpdateSummary() {
       ${note ? `<span class="fk-stat-note">${note}</span>` : ''}
     </div>`;
 
+  // Page counts come from the same maths the print uses, so "2 pages" here is
+  // what actually comes out of the printer.
+  const pagesLabel = (n) => (n > 1 ? `${n} pages` : 'Fits on 1 page');
+  const tallyPages = estimateTallyPages(titles, { includeNotes: !!document.getElementById('st-notes')?.checked });
+  const qrCols = Math.max(1, Math.min(6, parseInt(document.getElementById('qrp-cols')?.value, 10) || 3));
+  const qrPages = estimateQrPages({
+    count: qrCards,
+    cols: Math.min(qrCards >= 9 && document.getElementById('qrp-fit-one-page')?.checked ? Math.max(qrCols, 4) : qrCols, qrCards),
+    fitOnePage: !!document.getElementById('qrp-fit-one-page')?.checked,
+    priceRows: _qrpSelectedPriceCurrencies().length,
+  });
+
   const parts = [];
   if (mode !== 'qr') {
     parts.push(stat(
       'Tally sheet',
       `${titles} title${titles === 1 ? '' : 's'}`,
-      packed > 0
+      [packed > 0
         ? `${packed} cop${packed === 1 ? 'y' : 'ies'} packed`
-        : 'No copies entered yet',
+        : 'No copies entered yet', titles ? pagesLabel(tallyPages) : ''].filter(Boolean).join(' · '),
     ));
+    const overPacked = Array.from(document.querySelectorAll('.st-book-qty'))
+      .filter((input) => input.closest('.fk-book')?.querySelector('.st-book-check')?.checked && _fkOverPackedBy(input) > 0).length;
+    if (overPacked > 0) {
+      parts.push(`
+        <div class="fk-flag">
+          <span aria-hidden="true">⚠</span>
+          <span>${overPacked} title${overPacked === 1 ? ' is' : 's are'} set to bring more copies than you have on hand.</span>
+        </div>`);
+    }
   }
   if (mode !== 'tracker') {
-    parts.push(stat('QR sheet', `${qrCards} card${qrCards === 1 ? '' : 's'}`, ''));
+    parts.push(stat('QR sheet', `${qrCards} card${qrCards === 1 ? '' : 's'}`, qrCards ? pagesLabel(qrPages) : ''));
     // Named on the spot, with a way to jump straight to the row that needs
     // fixing — a count on its own leaves the seller hunting the list for it.
     if (noCard > 0) {
@@ -20356,6 +20396,15 @@ function renderFairKitPresetPicker() {
 
   const deleteBtn = document.getElementById('fk-preset-delete');
   if (deleteBtn) deleteBtn.disabled = !fkActivePresetId;
+
+  // The loaded fair's name rides on the button, so it's obvious at a glance
+  // which setup (and whose door prices) is about to print.
+  const btnLabel = document.getElementById('fk-preset-btn-label');
+  if (btnLabel) {
+    const loaded = presets.find((p) => p.id === fkActivePresetId);
+    btnLabel.textContent = loaded ? loaded.name : 'Saved fairs';
+    document.getElementById('fk-preset-btn')?.setAttribute('aria-label', loaded ? `Saved fairs — ${loaded.name} loaded` : 'Saved fairs');
+  }
 
   const note = document.getElementById('fk-preset-note');
   if (note) {

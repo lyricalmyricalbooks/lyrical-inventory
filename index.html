@@ -4048,7 +4048,7 @@
           <input type="date" id="st-date">
         </div>
 
-        <button type="button" class="btn sm fk-preset-btn" popovertarget="fk-presets-pop">🗂 Saved fairs</button>
+        <button type="button" class="btn sm fk-preset-btn" popovertarget="fk-presets-pop" id="fk-preset-btn">🗂 <span id="fk-preset-btn-label">Saved fairs</span></button>
         <div id="fk-presets-pop" class="fk-pop" popover>
           <div class="fk-pop-head">
             <span class="fk-eyebrow gold">Saved fairs</span>
@@ -4151,7 +4151,7 @@
                 <div class="fk-hint">Used in price-paid cells.</div>
               </div>
               <label class="fk-check fk-check-block">
-                <input type="checkbox" id="st-notes">
+                <input type="checkbox" id="st-notes" onchange="fairKitSelectionChanged()">
                 <span>
                   <span class="fk-check-title">Include a price-paid row</span>
                   <span class="fk-check-note">Adds a cell under each tally column to record what that copy actually sold for — useful for tracking discounts.</span>
@@ -4165,7 +4165,7 @@
             <div class="fk-acc-body">
               <div class="form-group fk-opt-group">
                 <label for="qrp-cols">Cards across the page</label>
-                <input type="number" inputmode="numeric" id="qrp-cols" value="3" min="1" max="6">
+                <input type="number" inputmode="numeric" id="qrp-cols" value="3" min="1" max="6" oninput="fairKitSelectionChanged()">
                 <div class="fk-hint">How many QR cards sit side by side.</div>
               </div>
               <div class="form-group fk-opt-group">
@@ -4182,13 +4182,13 @@
               </div>
               <div class="fk-eyebrow fk-eyebrow-inline">Price columns on each card</div>
               <div class="fk-checks">
-                <label class="fk-check"><input type="checkbox" id="qrp-show-eur" checked><span>EUR</span></label>
-                <label class="fk-check"><input type="checkbox" id="qrp-show-cad" checked><span>CAD</span></label>
-                <label class="fk-check"><input type="checkbox" id="qrp-show-usd" checked><span>USD</span></label>
-                <label class="fk-check"><input type="checkbox" id="qrp-show-mxn"><span>MXN</span></label>
+                <label class="fk-check"><input type="checkbox" id="qrp-show-eur" checked onchange="fairKitSelectionChanged()"><span>EUR</span></label>
+                <label class="fk-check"><input type="checkbox" id="qrp-show-cad" checked onchange="fairKitSelectionChanged()"><span>CAD</span></label>
+                <label class="fk-check"><input type="checkbox" id="qrp-show-usd" checked onchange="fairKitSelectionChanged()"><span>USD</span></label>
+                <label class="fk-check"><input type="checkbox" id="qrp-show-mxn" onchange="fairKitSelectionChanged()"><span>MXN</span></label>
               </div>
               <label class="fk-check fk-check-block fk-check-gold">
-                <input type="checkbox" id="qrp-fit-one-page" checked>
+                <input type="checkbox" id="qrp-fit-one-page" checked onchange="fairKitSelectionChanged()">
                 <span>
                   <span class="fk-check-title">📄 Fit every card onto one page</span>
                   <span class="fk-check-note">Shrinks the cards so the whole stall fits on a single sheet.</span>

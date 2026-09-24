@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { buildHarness, mainJs } from './helpers/extract-decl.js';
 import { escapeHtml } from '../src/lib/html.js';
+import { estimateTallyPages, estimateQrPages } from '../src/lib/print-sheet-layout.js';
 
 // The tally sheet and the payment QR sheet used to be two buttons, two dialogs
 // and two saved presets for one table at one fair — the seller set the same
@@ -48,7 +49,7 @@ function makeHarness({ stripeKey = '' } = {}) {
       '_stOnHandHint', '_fkPackedTotal', '_stUpdatePackTotal',
       '_fkBookPrintsQR', '_fkSelectionCounts', '_fkUpdateSummary',
       'fairKitSelectionChanged', 'fairKitMode', 'fairKitModeChanged',
-      'renderFairKitBookList',
+      'renderFairKitBookList', '_fkMarkOverPacked', '_fkOverPackedBy',
     ],
     deps: {
       posBooksMap: () => BOOKS,
@@ -58,6 +59,9 @@ function makeHarness({ stripeKey = '' } = {}) {
       convertCurrency: (amount) => amount,
       deriveOnHand: () => 7,
       escapeHtml,
+      estimateTallyPages,
+      estimateQrPages,
+      _qrpSelectedPriceCurrencies: () => ['EUR'],
       window: globalThis.window,
       document: globalThis.document,
     },
@@ -67,7 +71,7 @@ function makeHarness({ stripeKey = '' } = {}) {
     `,
     returns: `{
       renderFairKitBookList, fairKitModeChanged, fairKitSelectionChanged,
-      _fkSelectionCounts, _fkPackedTotal,
+      _fkSelectionCounts, _fkPackedTotal, _fkMarkOverPacked,
       addCustom: (b) => salesTrackerCustomBooks.push(b),
     }`,
   });
@@ -364,5 +368,27 @@ describe('printFairKit source', () => {
     expect(body.indexOf('_fkOpenQrPrintWindow()')).toBeGreaterThan(-1);
     expect(body.indexOf('_fkOpenQrPrintWindow()'))
       .toBeLessThan(body.indexOf('await printPaymentQRCodes({ closeModal: false, win: qrWin })'));
+  });
+});
+
+describe('fair kit summary warns before printing', () => {
+  beforeEach(mountModal);
+
+  it('says how many pages each sheet will print on', () => {
+    const h = makeHarness();
+    h.renderFairKitBookList();
+    const text = document.getElementById('fk-summary').textContent;
+    expect(text).toContain('Fits on 1 page');
+  });
+
+  it('flags a title set to bring more copies than are on hand', () => {
+    const h = makeHarness();
+    h.renderFairKitBookList();
+    const qty = document.getElementById('fk-qty-linked-a');
+    qty.value = '40'; // on hand is 7 in this harness
+    h._fkMarkOverPacked(qty);
+    h.fairKitSelectionChanged();
+    expect(qty.classList.contains('fk-over')).toBe(true);
+    expect(document.getElementById('fk-summary').textContent).toContain('more copies than you have on hand');
   });
 });
