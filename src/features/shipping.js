@@ -128,6 +128,15 @@ import {
   unshippedOrders,
 } from '../lib/order-followups.js';
 import {
+  REGION_NAMES,
+  describePostageLosses,
+  describeRatesAgainstPaid,
+  describeShippingPriceCheck,
+  newPostageLosses,
+  rateAgainstPaid,
+  shippingPriceCheck,
+} from '../lib/shipping-price-check.js';
+import {
   describeDeliveryNews,
   isDeliveryNews,
   readDelivery,
@@ -1974,12 +1983,209 @@ function reportPostageLosses() {
   return report;
 }
 
+// ─── Is shipping paying for itself? ────────────────────────────────────────
+
+const POSTAGE_LOSS_SEEN_KEY = 'lm-postage-loss-seen';
+const SHIP_PRICE_CHECK_MONTH_KEY = 'lm-ship-price-check-month';
+
+/** The pricing region an order's address falls in, the same four the Shipping page recommends for. */
+function pricingRegion(entry = {}) {
+  const bucket = shipmentRegion(entry.shipCountry);
+  if (bucket === 'CA') {
+    const state = String(entry.shipState || '').trim().toUpperCase();
+    return state === 'ON' || state === 'ONTARIO' ? 'ON' : 'CA';
+  }
+  return bucket === 'US' ? 'US' : 'intl';
+}
+
+/**
+ * Website orders as one row per order, in Canadian dollars, with what the
+ * customer paid for shipping and what the postage cost.
+ *
+ * An order for two books is two ledger rows sharing one order number, and
+ * the shipping charge can sit on either or both — so the charge is the
+ * largest on any row, never the sum, and the quantities add up.
+ */
+function websiteOrdersForPricing() {
+  const expenses = (TAX_CENTER.businessExpenses || []).filter(isPostageExpense);
+  const postageByOrder = new Map();
+  expenses.forEach(e => {
+    if (e.shippingMatchStatus !== 'matched') return;
+    const num = normalizeShippingOrderNumber(e.shippingOrderNumber);
+    if (!num) return;
+    postageByOrder.set(num, roundCents((postageByOrder.get(num) || 0) + (Number(e.baseAmount) || Number(e.amount) || 0)));
+  });
+  const orders = new Map();
+  websiteLedgerRows().forEach(({ bookId, entry }) => {
+    if (entry.voided || entry.excludeFromShipping) return;
+    if (getBookCurrencyCode(BOOKS[bookId]) !== 'CAD') return;
+    const num = normalizeShippingOrderNumber(entry.num);
+    if (!num) return;
+    const order = orders.get(num) || {
+      num, date: entry.date, region: pricingRegion(entry), destination: destinationLabel(entry),
+      qty: 0, paid: 0, manualPostage: 0,
+    };
+    order.qty += Math.max(1, Number(entry.qty) || 1);
+    order.paid = Math.max(order.paid, Number(entry.shippingPaid) || 0);
+    if (entry.manualPostagePaid) order.manualPostage = Math.max(order.manualPostage, Number(entry.postagePaid) || 0);
+    orders.set(num, order);
+  });
+  return [...orders.values()].map(o => ({
+    ...o,
+    postage: postageByOrder.has(o.num) ? postageByOrder.get(o.num) : (o.manualPostage || 0),
+  }));
+}
+
+/** What the customer paid for shipping on the order the Shipping form is filled in for, if known. */
+function selectedOrderShippingPaid() {
+  const num = normalizeShippingOrderNumber($('ship-prefill-dest')?.dataset.orderNumber);
+  if (!num) return 0;
+  let paid = 0;
+  let foreign = false;
+  websiteLedgerRows().forEach(({ bookId, entry }) => {
+    if (normalizeShippingOrderNumber(entry.num) !== num) return;
+    if (getBookCurrencyCode(BOOKS[bookId]) !== 'CAD') foreign = true;
+    paid = Math.max(paid, Number(entry.shippingPaid) || 0);
+  });
+  return foreign ? 0 : paid;
+}
+
+/** The small tag beside one rate, saying whether the customer's shipping charge covers it. */
+function rateCoverageTagHtml(price, paid, currency = 'CAD') {
+  if (String(currency || 'CAD').toUpperCase() !== 'CAD') return '';
+  const verdict = rateAgainstPaid(price, paid);
+  if (!verdict) return '';
+  return `<span class="pill ${verdict.losing ? 'red' : 'green'} sm rate-coverage-tag">${verdict.losing ? '▲ ' : '✓ '}${escapeHtml(verdict.text)}</span>`;
+}
+
+/** The line above a list of rates, or nothing when there is no order to compare with. */
+function rateCoverageNoteHtml(prices, paid) {
+  const text = describeRatesAgainstPaid(prices, paid);
+  return text ? `<div class="rate-coverage-note" role="note">${escapeHtml(text)}</div>` : '';
+}
+
+/**
+ * Orders whose postage has come in over what the customer paid, said once
+ * each. `justBought` covers a label bought in the app a moment ago, which may
+ * not be linked to its order yet: `{ num, postage }`.
+ */
+function checkNewPostageLosses({ justBought = null } = {}) {
+  if (isAuthor()) return null;
+  let orders = websiteOrdersForPricing();
+  if (justBought && justBought.num) {
+    const num = normalizeShippingOrderNumber(justBought.num);
+    const known = orders.find(o => o.num === num);
+    if (known) known.postage = Math.max(Number(known.postage) || 0, Number(justBought.postage) || 0);
+  }
+  let seen = null;
+  try { const raw = JSON.parse(localStorage.getItem(POSTAGE_LOSS_SEEN_KEY) || 'null'); seen = Array.isArray(raw) ? raw : null; } catch (_) { seen = null; }
+  // A label bought in the app is news even on a device that has never
+  // checked before — that is exactly the moment worth speaking up — but the
+  // older losers it would find alongside it are not.
+  if (!seen && justBought) {
+    const num = normalizeShippingOrderNumber(justBought.num);
+    seen = newPostageLosses(orders, null, { today: today() }).remember.filter(id => id !== num);
+  }
+  const { fresh, remember } = newPostageLosses(orders, seen, { today: today() });
+  try { localStorage.setItem(POSTAGE_LOSS_SEEN_KEY, JSON.stringify(remember)); } catch (_) { /* storage blocked */ }
+  const said = describePostageLosses(fresh);
+  if (said.count) {
+    pushAppAlert({
+      id: 'postage-loss',
+      icon: '📮',
+      title: said.title,
+      detail: said.detail,
+      tone: SYNC_TONES.PENDING,
+      actionLabel: 'See suggested prices',
+      action: 'openShippingPricesFromAlert(event)',
+    });
+  }
+  return fresh;
+}
+
+/** Once a month: whether the website's shipping prices still cover postage, per destination. */
+function checkShippingPrices() {
+  if (isAuthor()) return null;
+  const month = String(today()).slice(0, 7);
+  if (!month || readStamp(SHIP_PRICE_CHECK_MONTH_KEY) === month) return null;
+  const results = shippingPriceCheck(websiteOrdersForPricing(), { today: today() });
+  writeStamp(SHIP_PRICE_CHECK_MONTH_KEY, month);
+  const said = describeShippingPriceCheck(results);
+  if (said.count) {
+    pushAppAlert({
+      id: 'shipping-price-check',
+      icon: '🏷️',
+      title: said.title,
+      detail: said.detail,
+      tone: SYNC_TONES.PENDING,
+      actionLabel: 'See suggested prices',
+      action: 'openShippingPricesFromAlert(event)',
+    });
+  }
+  return results;
+}
+
+/** Open the Shipping page at its price recommendations. */
+function openShippingPricesFromAlert(event) {
+  if (event) event.stopPropagation();
+  dismissAppAlert('postage-loss');
+  dismissAppAlert('shipping-price-check');
+  switchTab('shipping');
+  setTimeout(() => {
+    const details = document.querySelector('.shipping-pnl-insights');
+    if (details) details.open = true;
+    const target = document.querySelector('.shipping-reco-container') || details;
+    if (target && typeof target.scrollIntoView === 'function') {
+      target.scrollIntoView({ behavior: _prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' });
+    }
+  }, 120);
+}
+
+/**
+ * Canada Post labels bought in the app before the fix above: give them the
+ * postage category and dollar amount every reader looks for, and tie each to
+ * the order that carries its tracking number. Practice labels are left alone.
+ * Returns how many were repaired; safe to run any number of times.
+ */
+function repairInAppCanadaPostExpenses() {
+  const expenses = TAX_CENTER.businessExpenses || [];
+  const targets = expenses.filter(e => e && String(e.ref || '').startsWith('canadapost:')
+    && !e.cat && e.category === 'Shipping & Postage' && !e.simulated);
+  if (!targets.length) return 0;
+  const orderByPin = new Map();
+  websiteLedgerRows().forEach(({ entry }) => {
+    const pin = String(entry.trackingNumber || '').replace(/\s+/g, '');
+    if (pin && entry.num) orderByPin.set(pin, entry.num);
+  });
+  targets.forEach(e => {
+    e.cat = 'Shipping & Postage';
+    if (e.baseAmount == null && String(e.currency || 'CAD').toUpperCase() === 'CAD') {
+      e.baseAmount = roundCents(Number(e.amount) || 0);
+      e.fxRate = 1;
+      e.fxMissing = false;
+    }
+    const pin = String(e.trackingPin || '').replace(/\s+/g, '');
+    if (e.shippingMatchStatus !== 'matched' && pin && orderByPin.has(pin)) {
+      writeShippingLink(e, orderByPin.get(pin), 'label');
+    }
+  });
+  saveTaxCenter().catch(() => { /* retried by the next save */ });
+  return targets.length;
+}
+
 function startOrderFollowups() {
   if (_orderFollowupsStarted || typeof window === 'undefined' || isAuthor()) return;
   _orderFollowupsStarted = true;
+  try { repairInAppCanadaPostExpenses(); } catch (_) { /* never block the checks */ }
   // Hourly, so an app left open overnight still says it on the new day; each
-  // check itself runs at most once a day (orders) or once a month (postage).
-  startWatch(() => { remindUnshippedOrders(); reportPostageLosses(); }, { intervalMs: ORDER_FOLLOWUP_INTERVAL_MS });
+  // check itself runs at most once a day (orders) or once a month (postage
+  // and prices). Losing labels are said as soon as they are linked.
+  startWatch(() => {
+    remindUnshippedOrders();
+    reportPostageLosses();
+    checkNewPostageLosses();
+    checkShippingPrices();
+  }, { intervalMs: ORDER_FOLLOWUP_INTERVAL_MS });
 }
 
 function startDeliveryWatch() {
@@ -4759,6 +4965,11 @@ function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, isDisable
       </div>
     `;
 
+  // What the customer paid for shipping on the order being labelled, so each
+  // service can say whether it is covered before anything is bought.
+  const customerPaid = selectedOrderShippingPaid();
+  const coverageNote = rateCoverageNoteHtml((quotes || []).map(q => q.totalPrice), customerPaid);
+
   const rateRows = (quotes || []).map(q => `
     <div class="cp-rate-row">
       <div style="flex:1;min-width:180px;">
@@ -4772,6 +4983,7 @@ function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, isDisable
         <div style="text-align:right;">
           <strong class="tnum" style="font-size:var(--text-md);color:var(--text);font-weight:800;">${q.totalPrice.toFixed(2)} CAD</strong>
           ${q.taxes > 0 ? `<div class="tnum" style="font-size:var(--text-2xs);color:var(--text3);">incl. ${q.taxes.toFixed(2)} tax</div>` : ''}
+          ${rateCoverageTagHtml(q.totalPrice, customerPaid)}
         </div>
         <button class="btn sm gold cp-buy-btn" type="button"
           ${canBuy ? '' : 'disabled aria-disabled="true"'}
@@ -4805,6 +5017,7 @@ function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, isDisable
     ${blockedReason ? `<div class="cp-buy-blocked" role="status">🔒 <span>${escapeHtml(blockedReason)}</span></div>` : ''}
     <div class="cp-rates-list">
       ${retailNote}
+      ${rateRows ? coverageNote : ''}
       ${rateRows || `<div class="cp-rate-empty">${emptyStateHtml}</div>`}
     </div>
     ${errorNote ? `<div style="font-size:var(--text-xs);color:var(--text3);margin-top:8px;font-style:italic;">Note: ${escapeHtml(errorNote)}</div>` : ''}
@@ -5472,6 +5685,9 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
             histItem.trackingSimulated = isSim;
             saveState(activeBook);
             renderHist();
+            // Said now, while a cheaper service or a better website price can
+            // still make a difference. A practice label cost nothing.
+            if (!isSim) checkNewPostageLosses({ justBought: { num: selectedOrderNumber, postage: chargedPrice } });
           }
         } catch (e) {
           console.warn('Auto-mark order shipped note:', e);
@@ -5489,7 +5705,15 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
             date: today(),
             // Canada Post postage is billed natively in CAD; stored verbatim with no FX conversion.
             amount: chargedPrice,
+            // `cat` is the field every postage reader checks. This row used to
+            // carry only `category`, which nothing reads, so a label bought
+            // here never reached the shipping profit figures or the Tax Centre's
+            // postage total. `category` stays for anything that read it.
+            cat: 'Shipping & Postage',
             category: 'Shipping & Postage',
+            baseAmount: roundCents(chargedPrice),
+            fxRate: 1,
+            fxMissing: false,
             vendor: 'Canada Post',
             desc: `${isSim ? '[SANDBOX TEST — not a real charge] ' : ''}Canada Post ${serviceName} (PIN: ${result.trackingPin || result.shipmentId})${declarationId ? ` · Zonos: ${declarationId}` : ''}`,
             // Marked on the row itself as well as in its description, so a test
@@ -5511,6 +5735,14 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
             receiptRequired: false,
             ocrSkip: true
           });
+          // Bought for a known order, so it belongs to that order now rather
+          // than waiting in the match-a-receipt list.
+          const orderForLabel = normalizeShippingOrderNumber($('ship-prefill-dest')?.dataset.orderNumber || orderNum);
+          // Only an order that is really in the ledger: a blank order box
+          // gets a made-up number, and a link to it would hide the postage.
+          const orderExists = orderForLabel && websiteLedgerRows()
+            .some(({ entry }) => normalizeShippingOrderNumber(entry.num) === orderForLabel);
+          if (orderExists && !isSim) writeShippingLink(TAX_CENTER.businessExpenses[0], orderForLabel, 'label');
         }
         await saveTaxCenter().catch(() => {});
         renderTaxCenter();
@@ -5950,6 +6182,9 @@ async function buyShippoLabel(rateId, provider, serviceName, amount, currency) {
         histItem.trackingNumber = trackingNumber || '';
         saveState(activeBook);
         renderHist();
+        if (String(currency || '').toUpperCase() === 'CAD') {
+          checkNewPostageLosses({ justBought: { num: selectedOrderNumber, postage: Number(amount) || 0 } });
+        }
       }
     }
 
@@ -6332,7 +6567,11 @@ async function calculateShippoRates() {
     }
 
     if (list) {
-      list.innerHTML = sortedByPrice.map(r => {
+      const customerPaid = selectedOrderShippingPaid();
+      const cadPrices = sortedByPrice
+        .filter(r => String(r.currency || '').toUpperCase() === 'CAD')
+        .map(r => parseFloat(r.amount));
+      list.innerHTML = rateCoverageNoteHtml(cadPrices, customerPaid) + sortedByPrice.map(r => {
         const logoUrl = r.provider_image_75 || '';
         const isCheapest = r.object_id === cheapestId;
         const isFastest = r.object_id === fastestId && !isCheapest;
@@ -6364,6 +6603,7 @@ async function calculateShippoRates() {
             </div>
             <div class="rate-price-area" style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
               <div class="rate-price">${parseFloat(r.amount).toFixed(2)} ${escapeHtml(r.currency)}</div>
+              ${rateCoverageTagHtml(parseFloat(r.amount), customerPaid, r.currency)}
               <button class="btn gold sm" onclick="buyShippoLabel('${r.object_id}', '${escapeHtml(r.provider)}', '${escapeHtml(r.servicelevel.name)}', ${parseFloat(r.amount)}, '${escapeHtml(r.currency)}')" style="margin:0; padding:4px 8px; font-size:var(--text-2xs); font-weight:600; height:auto; line-height:1;">Buy Label</button>
             </div>
           </div>
@@ -8942,10 +9182,19 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
     intl: { name: 'International', icon: '🌐', key: 'intl' }
   };
 
+  // What customers have actually been charged, from the orders themselves,
+  // beside the typed-in "current setup" — which can drift from the website.
+  const paidByRegion = {};
+  try {
+    shippingPriceCheck(websiteOrdersForPricing(), { today: today(), minOrders: 3 })
+      .forEach(r => { paidByRegion[r.region] = r; });
+  } catch (_) { /* a pricing hint must never stop the page drawing */ }
+
   let columnsHtml = '';
   Object.keys(regionMeta).forEach(key => {
     const meta = regionMeta[key];
     const data = recoData.results[key];
+    const paidInfo = paidByRegion[key];
     const current = targetRates[key] || { base: 0, addon: 0 };
     const currentBase = current.base;
     const currentAddon = current.addon;
@@ -9002,6 +9251,12 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
               <span>90th percentile cost:</span>
               <strong style="color:var(--text);">${p90CostStr}</strong>
             </div>
+            ${paidInfo ? `
+            <div class="ship-reco-paid${paidInfo.undercharging ? ' is-short' : ''}">
+              <span>Customers actually paid:</span>
+              <strong class="tnum">$${paidInfo.typicalPaid.toFixed(2)}</strong>
+            </div>
+            ${paidInfo.undercharging ? `<p class="ship-reco-paid-note">About $${paidInfo.shortBy.toFixed(2)} less than a typical label to ${escapeHtml(REGION_NAMES[key])} over the last six months.</p>` : ''}` : ''}
           </div>
         </div>
 
@@ -9754,6 +10009,11 @@ export {
   startOrderFollowups,
   ordersWithLabels,
   openShippingFromUnshippedAlert,
+  openShippingPricesFromAlert,
+  checkNewPostageLosses,
+  checkShippingPrices,
+  websiteOrdersForPricing,
+  repairInAppCanadaPostExpenses,
   openShippingFromDeliveryAlert,
   reconciliationBacklog,
   applyOrderPrefill,
