@@ -20262,3 +20262,49 @@ button[onclick="refreshUmamiStats()"]:active {
   .ship-queue-row { flex-wrap: wrap; }
   .ship-queue-wait { order: 3; flex-basis: 100%; }
 }
+
+/* Close / remove controls on the shipping queue cards. */
+.ship-queue-x {
+  flex-shrink: 0;
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r);
+  background: transparent;
+  color: var(--text3);
+  font-size: var(--text-base);
+  cursor: pointer;
+}
+.ship-queue-x:hover { color: var(--text); background: var(--surface-card); }
+.ship-queue-x:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.ship-queue-head-actions { display: flex; align-items: center; gap: 4px; }
+.ship-queue-card.is-empty .ship-queue-empty-text { flex: 1; }
+.cp-next-order .cp-next-order-x { margin-left: auto; }
+.cp-next-order.is-done .cp-next-order-x { margin-left: auto; }
+.ship-queue-foot:empty { display: none; }
+.ship-queue-foot { margin-top: 8px; }
+.ship-queue-hidden-toggle {
+  border: 0;
+  background: transparent;
+  padding: 8px 0;
+  min-height: 44px;
+  font-size: var(--text-xs);
+  color: var(--text3);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.ship-queue-hidden-list { list-style: none; margin: 0; padding: 0; }
+.ship-queue-hidden-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: var(--text-xs);
+  color: var(--text3);
+  border-top: var(--stroke-hair) solid var(--border);
+}

@@ -81,6 +81,7 @@ export function storefrontSaysShipped(order = {}) {
 export function bigCartelShipQueue(orders = [], {
   shipped = new Set(),
   pickups = new Set(),
+  hidden = new Set(),
   orderNumber = order => order?.id,
   reversed = () => false,
   normalize = v => String(v || '').trim(),
@@ -96,7 +97,7 @@ export function bigCartelShipQueue(orders = [], {
     const attr = order.attributes || {};
     if (['abandoned', 'pending'].includes(lower(attr.status))) return;
     if (reversed(order) || storefrontSaysShipped(order)) return;
-    if (shipped.has(num) || pickups.has(num)) return;
+    if (shipped.has(num) || pickups.has(num) || hidden.has(num)) return;
     const placed = Date.parse(attr.created_at || attr.completed_at || '');
     const daysWaiting = Number.isFinite(placed) ? Math.max(0, Math.floor((now - placed) / DAY_MS)) : null;
     if (daysWaiting !== null && daysWaiting > withinDays) return;
@@ -110,4 +111,16 @@ export function waitingPhrase(days) {
   if (days === null || days === undefined) return '';
   if (days <= 0) return 'today';
   return `${days} day${days === 1 ? '' : 's'}`;
+}
+
+/**
+ * Whether the whole "Ready to ship" card stays closed. It was closed while a
+ * given set of orders was waiting; it stays closed until an order that wasn't
+ * in that set turns up, so a new sale is never hidden by an old dismissal.
+ * `closedFor` null means it was never closed.
+ */
+export function queueCardClosed(waitingNums = [], closedFor = null) {
+  if (!Array.isArray(closedFor)) return false;
+  const seen = new Set(closedFor);
+  return waitingNums.every(num => seen.has(num));
 }
