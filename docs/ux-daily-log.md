@@ -106,6 +106,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-09-22 | visual | Book dashboard — Danger zone | Gave the "Danger zone" section a real heading and a warm red warning colour instead of the same faint caption every other section on the page had already moved on from | #875 |
 | 2026-09-23 | visual | Phone bottom nav bar & the "More" sheet | Gave the buttons in the new phone navigation bar and its "More" menu a visible press when tapped, and a visible outline when reached by keyboard — before this, tapping them changed nothing you could see happen | #917 |
 | 2026-09-23 | visual | Settings — Book Catalog | Stopped each book's Edit/Remove buttons from getting squeezed off the edge of the screen on a phone held upright | #926 |
+| 2026-09-24 | visual | Shipping — Shippo rate list | Made the Shippo rate cards match the Canada Post rows beside them: a full-size Buy Label button instead of a squeezed tiny one, prices in plain ink instead of green on every row, a colour for the "Canada Post" tag, and the same lift on hover | #984 |
 
 ---
 
