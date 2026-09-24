@@ -187,14 +187,14 @@ describe('the pay box as a whole', () => {
   it('is tappable end to end, not just on the button glyphs', () => {
     // A customer aiming at "Pay CA$60.00" on a phone should not have to hit
     // the text itself — the whole panel is what reads as the thing to press.
-    expect(paper()).toContain('<section class="inv-pay"${payHref ? ` data-pdf-link="${escapeHTML(payHref)}"` : \'\'}');
+    expect(paper()).toContain('<section class="inv-pay"${payHref ? ` data-pdf-link="${escapeHtml(payHref)}"` : \'\'}');
   });
 
   it('is not a link when there is nowhere to send them', () => {
     // An Interac e-Transfer address renders the same panel with no payHref:
     // an address to send money TO is not somewhere to be sent on tapping.
     const fn = paper();
-    const at = fn.indexOf('data-pdf-link="${escapeHTML(payHref)}"');
+    const at = fn.indexOf('data-pdf-link="${escapeHtml(payHref)}"');
     expect(at).toBeGreaterThan(-1);
     expect(fn.slice(at - 40, at)).toContain('payHref ?');
   });
@@ -220,7 +220,7 @@ describe('the QR code in an emailed invoice', () => {
     // somewhere a customer should be sent on tapping.
     const fn = extractDecl('qrLinkAttr', mainJs);
     expect(fn).toContain('pdfSafeLinkUrl(followableUrl(effectivePaymentLink(inv)))');
-    expect(fn).toContain('escapeHTML(url)');
+    expect(fn).toContain('escapeHtml(url)');
   });
 
   it('leaves the on-screen and printed invoice as it was', () => {
