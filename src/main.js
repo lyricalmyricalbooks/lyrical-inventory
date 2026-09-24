@@ -14,6 +14,7 @@ import { registerSW } from 'virtual:pwa-register';
 import { calcArtistEarnings, tierEffectiveCap, describePayout, payoutRequestCovered } from './lib/earnings.js';
 import { createStripePriceAndLink } from './lib/stripe-payment-link.js';
 import { calculateBreakEven, breakEvenTierMove, readProductionCostInput } from './lib/breakeven.js';
+import { computeTallyRowHeights, computeQrCardSize } from './lib/print-sheet-layout.js';
 import { escapeHtml } from './lib/html.js';
 import { ensureXlsx, loadExternalScript } from './lib/external-scripts.js';
 import { buildActivityFeed } from './lib/activity-feed.js';
@@ -20124,8 +20125,11 @@ function printSalesTracker(opts = {}) {
   const {
     thHeight, titleFontSize, authorFontSize, packedFontSize,
     thFontSize, metaFontSize, metaGap, grandBoxW, grandBoxH, grandLabelFontSize, grandMarginTop,
-    effectiveTallyRowHeight, effectivePriceRowHeight,
   } = computeSalesTrackerLayoutSizes(visualRows, includeNotes);
+  // Row heights come from the page itself so a short list fills the sheet and
+  // a long one flows onto extra pages (header repeats) instead of overflowing.
+  const { tallyRowHeight: effectiveTallyRowHeight, priceRowHeight: effectivePriceRowHeight } =
+    computeTallyRowHeights(numBooks, { includeNotes, thHeight });
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
     <title>Book Sales Tracker${eventName ? ' — ' + escapeHtml(eventName) : ''}</title>
@@ -20156,6 +20160,8 @@ function printSalesTracker(opts = {}) {
       td.title .title-name { font-weight: 700; font-size: ${titleFontSize}; line-height: 1.2; }
       td.title .title-meta { font-size: ${authorFontSize}; color: #555; margin-top: 2px; }
       td.title .title-packed { font-size: ${packedFontSize}; font-weight: 700; color: #8a5815; margin-top: 2px; }
+      thead { display: table-header-group; }
+      tbody tr { break-inside: avoid; page-break-inside: avoid; }
       td.tally { background: #fff; height: ${effectiveTallyRowHeight}px; }
       td.total { background: #fdf0c8; height: ${effectiveTallyRowHeight}px; }
       td.price-paid { background: #fafafa; height: ${effectivePriceRowHeight}px; font-size: 9pt; color: #666; text-align: center; vertical-align: middle; }
@@ -20710,9 +20716,19 @@ async function printPaymentQRCodes(opts = {}) {
 
   const {
     headerPadding, brandFontSize, taglineFontSize, cardPadding, cardMaxWidth, cardNumSize, cardNumMargin,
-    qrFrameSize, qrRenderSize, cornerBracketSize, cornerBracketWidth, titleFontSize, authorFontSize,
+    cornerBracketSize, cornerBracketWidth, titleFontSize, authorFontSize,
     priceThFontSize, priceTdPadding, priceCurFontSize, priceValFontSize, urlFontSize,
   } = computeQrSheetLayoutSizes(count, rowCount, effectiveCols, fitOnePage);
+  // The code itself grows or shrinks to the space each card actually gets on
+  // the page, rather than jumping between a few fixed sizes.
+  const { frameSize, renderSize: qrRenderSize } = computeQrCardSize({
+    count, cols: effectiveCols, fitOnePage,
+    marginIn: fitOnePage ? 0.1 : 0.25,
+    headerPx: rowCount >= 3 ? 64 : 90,
+    priceRows: currenciesShown.length,
+    hasAuthor: booksData.some((b) => b.author),
+  });
+  const qrFrameSize = `${frameSize}px`;
 
   const cardsHtml = booksData.map((book, i) => {
     const priceRows = book.prices.map((p) => `
