@@ -1809,6 +1809,17 @@
 
 <!-- EMAIL RECEIPT IMPORT -->
 <!-- TAX CENTER TRIP DETAIL MODAL -->
+<div class="overlay" id="m-batch-ship" style="display:none;"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="batch-ship-heading" style="max-width:860px;">
+  <div class="modal-title">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">📦</span>
+      <span id="batch-ship-heading">Ship several orders at once</span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('batch-ship')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+  </div>
+  <div id="batch-ship-body" aria-live="polite"></div>
+  <div class="modal-footer" id="batch-ship-footer" style="justify-content:flex-end;flex-wrap:wrap;"></div>
+</div></div>
 <div class="overlay" id="m-tc-trip-detail" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:980px;">
   <div class="modal-title" role="dialog" aria-modal="true">
     <div class="modal-title-left">
@@ -3807,6 +3818,11 @@
           <button class="btn gold" id="ship-calc-main-btn" style="width:100%;height:46px;font-size:var(--text-base);font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:var(--elev-2);" onclick="calculateShippoRates()">
             <span>⚡</span>
             <span>Calculate Shipping Rates &amp; Prediction</span>
+          </button>
+
+          <button class="btn outline" type="button" onclick="openBatchShipping()" style="width:100%;height:42px;font-size:var(--text-sm);font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;" title="Check addresses, find the cheapest rate and buy labels for several orders at once">
+            <span aria-hidden="true">📦</span>
+            <span>Ship several orders at once</span>
           </button>
 
           <div class="ship-duo" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">

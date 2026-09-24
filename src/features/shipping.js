@@ -55,6 +55,11 @@ import {
   today,
 } from '../main.js';
 import { renderExpenses, saveReceiptToLocalFile, readShippingFieldsFromReceipt } from './receipts.js';
+import { findExistingLabel, describeExistingLabel } from '../lib/label-duplicate-guard.js';
+import {
+  BATCH_LOOKBACK_DAYS, isBatchCandidate, scaledParcel, batchCustomsDeclaration, pickCheapestRate,
+  originBlocker, preflightBlocker, addressVerdictBlocker, describeBatchTotal, buildLabelPrintPage,
+} from '../lib/batch-shipping.js';
 import { openM, closeM, confirmDialog, promptDialog, validateFields, clearFieldErrors, fieldError, _prefersReducedMotion } from '../lib/modal.js';
 import { dismissAppAlert, pushAppAlert } from '../lib/app-alert.js';
 import {
@@ -5723,6 +5728,9 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
       : 'NOT prepaid — the customer is billed on delivery']);
   }
 
+  const prefilledOrder = $('ship-prefill-dest')?.dataset.orderNumber || $('sp-order-num')?.value;
+  if (!isTest && prefilledOrder && !(await confirmNoExistingLabel(prefilledOrder))) return;
+
   const billingWarning = isTest
     ? 'Sandbox Test Mode is on, but Canada Post serves test and live from the same address. '
       + 'If the key saved in Tax Centre is a production key, this buys a real label and charges your account.'
@@ -6280,7 +6288,45 @@ function renderShippoDiagnostics(data, fallbackMessage) {
     </div>`;
 }
 
+/**
+ * Asks before buying a second label for an order that already has one.
+ * Resolves true when the purchase should go ahead.
+ */
+async function confirmNoExistingLabel(orderNumber) {
+  const found = findExistingLabel(orderNumber, {
+    hist: getState().hist || [],
+    expenses: TAX_CENTER.businessExpenses || [],
+  });
+  if (!found) return true;
+  return confirmDialog(
+    `Order ${normalizeShippingOrderNumber(orderNumber)} already has a shipping label. `
+      + 'Buying another charges you again for the same parcel.',
+    {
+      title: 'This order already has a label',
+      details: describeExistingLabel(found),
+      okLabel: 'Buy another anyway',
+      cancelLabel: 'Go back',
+      danger: true,
+    },
+  );
+}
+
+let _shippoPurchaseInFlight = false;
+
 async function buyShippoLabel(rateId, provider, serviceName, amount, currency) {
+  if (_shippoPurchaseInFlight) {
+    showToast('A label purchase is already running — give it a moment', 'warn');
+    return;
+  }
+  _shippoPurchaseInFlight = true;
+  try {
+    await buyShippoLabelOnce(rateId, provider, serviceName, amount, currency);
+  } finally {
+    _shippoPurchaseInFlight = false;
+  }
+}
+
+async function buyShippoLabelOnce(rateId, provider, serviceName, amount, currency) {
   const shippoKey = TAX_CENTER.settings?.shippoKey || '';
   if (!shippoKey) {
     showToast('⚠️ Please configure your Shippo API Key first', 'warn');
@@ -6302,6 +6348,9 @@ async function buyShippoLabel(rateId, provider, serviceName, amount, currency) {
     if (!overridden) return;
   }
 
+  const prefilledOrder = $('ship-prefill-dest')?.dataset.orderNumber;
+  if (prefilledOrder && !(await confirmNoExistingLabel(prefilledOrder))) return;
+
   const confirmed = await confirmDialog(`Confirm purchasing shipping label?\n\nCarrier: ${provider}\nService: ${serviceName}\nCost: ${amount} ${currency}`, {
     title: 'Purchase Shipping Label',
     okLabel: 'Purchase',
@@ -6312,123 +6361,483 @@ async function buyShippoLabel(rateId, provider, serviceName, amount, currency) {
   showToast('⚡ Purchasing label from Shippo...');
 
   try {
-    const payload = {
-      rate: rateId,
-      async: false
-    };
-
-    const resp = await fetch('https://api.goshippo.com/transactions/', {
-      method: 'POST',
-      headers: {
-        'Authorization': `ShippoToken ${shippoKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
+    const { labelUrl, trackingNumber } = await purchaseShippoRate({
+      rateId, provider, serviceName, amount, currency,
+      orderNumber: $('ship-prefill-dest')?.dataset.orderNumber,
     });
-
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => null);
-      throw new Error(err ? JSON.stringify(err) : `API Error ${resp.status}`);
-    }
-
-    const data = await resp.json();
-    if (data.status !== 'SUCCESS') {
-      const msgs = (data.messages || []).map(m => m.text).join('; ') || 'Transaction failed.';
-      throw new Error(`Shippo returned status ${data.status}: ${msgs}`);
-    }
-
-    const labelUrl = data.label_url;
-    const trackingNumber = data.tracking_number;
-    const transactionId = data.object_id;
-
-    if (labelUrl) {
-      window.open(labelUrl, '_blank');
-    }
-
-    // Auto-mark prefilled order as Shipped
-    const selectedOrderNumber = normalizeShippingOrderNumber($('ship-prefill-dest')?.dataset.orderNumber);
-    if (selectedOrderNumber) {
-      const found = findOrderInAnyBook(states, selectedOrderNumber, normalizeShippingOrderNumber);
-      const histItem = found?.entry;
-      if (histItem) {
-        histItem.shipped = true;
-        histItem.shippedDate = today();
-        histItem.trackingNumber = trackingNumber || '';
-        saveState(found.bookId);
-        renderHist();
-        if (String(currency || '').toUpperCase() === 'CAD') {
-          checkNewPostageLosses({ justBought: { num: selectedOrderNumber, postage: Number(amount) || 0 } });
-        }
-      }
-    }
-
-    // Auto-log as expense. This has to land in TAX_CENTER.businessExpenses with
-    // the same shape processShippoTxToExpense produces: that is the only ledger
-    // the shipping P&L, carrier scorecard and reconciliation worklist read, and
-    // it is also what the Shippo API import dedupes against by `ref`. Writing
-    // to the per-book state.expenses instead left every in-app purchase
-    // invisible to the analysis hub until a later import re-added it as a
-    // second, duplicate line for the same transaction.
-    const ref = 'shippo:' + transactionId;
-    if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
-    if (!TAX_CENTER.settings) TAX_CENTER.settings = {};
-    const alreadyLogged = TAX_CENTER.businessExpenses.some(e => String(e?.ref || '') === ref);
-
-    if (!alreadyLogged) {
-      const purchaseCurrency = String(currency || 'CAD').toUpperCase();
-      const purchaseAmount = Number(amount);
-      const date = today();
-
-      let fxRate = purchaseCurrency === 'CAD' ? 1 : 0;
-      if (purchaseCurrency !== 'CAD') {
-        try { fxRate = (await fetchHistoricalRate(purchaseCurrency, 'CAD', date))?.rate || 0; } catch (_) { /* continue */ }
-        if (!fxRate) {
-          try { fxRate = (await fetchLiveRate(purchaseCurrency, 'CAD'))?.rate || 0; } catch (_) { /* continue */ }
-        }
-        if (!fxRate) fxRate = _fxRateCache[`${purchaseCurrency}_CAD`] || 0;
-      }
-      const fxMissing = !fxRate;
-
-      const localReceipt = labelUrl ? await saveShippoLabelLocally(labelUrl, transactionId) : null;
-
-      const expense = {
-        id: Date.now(),
-        desc: `Shippo shipping label${trackingNumber ? ` #${trackingNumber}` : ''} — ${provider} ${serviceName}`,
-        cat: 'Shipping & Postage',
-        currency: purchaseCurrency,
-        amount: purchaseAmount,
-        origCurrency: purchaseCurrency,
-        origAmount: purchaseAmount,
-        fxRate: fxMissing ? null : fxRate,
-        baseAmount: fxMissing ? null : roundCents(purchaseAmount * fxRate),
-        fxMissing,
-        date,
-        ref,
-        receipt: localReceipt || labelUrl,
-        trackingUrl: data.tracking_url_provider || '',
-        trip: '',
-      };
-
-      // Reconcile against the order right here rather than waiting for the next
-      // API import to link it. The transaction echoes the shipment metadata,
-      // but the picker's own order number is the authoritative source, so pass
-      // it through as the shipment metadata enrichShippoExpense reads.
-      const shipmentContext = selectedOrderNumber ? { metadata: `order_number:${selectedOrderNumber}` } : {};
-      TAX_CENTER.businessExpenses.unshift(
-        enrichShippoExpense(expense, data, shipmentContext, {}, getShippingReconciliationOrders()),
-      );
-      TAX_CENTER.settings.shippoImportedObjectIds =
-        Array.from(new Set([...(TAX_CENTER.settings.shippoImportedObjectIds || []), transactionId])).slice(-10000);
-      await saveTaxCenter().catch(e => console.warn('Shippo label expense save failed', e));
-      renderTaxCenter();
-      renderShippingAnalysisHub();
-    }
-    renderExpenses();
-
+    if (labelUrl) window.open(labelUrl, '_blank');
     showToast(`✓ Label purchased! Tracking: ${trackingNumber || 'N/A'}`, 'ok', 6000);
   } catch (err) {
     console.error('Failed to buy Shippo label:', err);
     showToast(`❌ Purchase failed: ${err.message}`, 'err');
+  }
+}
+
+/** The order history entry for an order number, in whichever book it was sold. */
+function findOrderAcrossBooks(orderNumber) {
+  const wanted = normalizeShippingOrderNumber(orderNumber);
+  if (!wanted) return null;
+  for (const [bookId, state] of Object.entries(states)) {
+    const entry = (state?.hist || []).find(h => normalizeShippingOrderNumber(h?.num) === wanted);
+    if (entry) return { bookId, entry };
+  }
+  return null;
+}
+
+/**
+ * Buys one Shippo rate and records it: marks the order shipped, logs the
+ * postage expense, links it to the order. No prompts — every caller confirms
+ * with the publisher first. Throws when Shippo does not sell the label.
+ */
+async function purchaseShippoRate({ rateId, provider, serviceName, amount, currency, orderNumber = '', labelFileType = '' }) {
+  const shippoKey = TAX_CENTER.settings?.shippoKey || '';
+  if (!shippoKey) throw new Error('No Shippo API key saved.');
+
+  const resp = await fetch('https://api.goshippo.com/transactions/', {
+    method: 'POST',
+    headers: {
+      'Authorization': `ShippoToken ${shippoKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ rate: rateId, async: false, ...(labelFileType ? { label_file_type: labelFileType } : {}) })
+  });
+
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => null);
+    throw new Error(err ? JSON.stringify(err) : `API Error ${resp.status}`);
+  }
+
+  const data = await resp.json();
+  if (data.status !== 'SUCCESS') {
+    const msgs = (data.messages || []).map(m => m.text).join('; ') || 'Transaction failed.';
+    throw new Error(`Shippo returned status ${data.status}: ${msgs}`);
+  }
+
+  const labelUrl = data.label_url;
+  const trackingNumber = data.tracking_number;
+  const transactionId = data.object_id;
+
+  // Auto-mark the order as Shipped, in whichever book sold it.
+  const selectedOrderNumber = normalizeShippingOrderNumber(orderNumber);
+  const found = selectedOrderNumber ? findOrderAcrossBooks(selectedOrderNumber) : null;
+  if (found) {
+    found.entry.shipped = true;
+    found.entry.shippedDate = today();
+    found.entry.trackingNumber = trackingNumber || '';
+    saveState(found.bookId);
+    renderHist();
+    if (String(currency || '').toUpperCase() === 'CAD') {
+      checkNewPostageLosses({ justBought: { num: selectedOrderNumber, postage: Number(amount) || 0 } });
+    }
+  }
+  // Auto-log as expense. This has to land in TAX_CENTER.businessExpenses with
+  // the same shape processShippoTxToExpense produces: that is the only ledger
+  // the shipping P&L, carrier scorecard and reconciliation worklist read, and
+  // it is also what the Shippo API import dedupes against by `ref`. Writing
+  // to the per-book state.expenses instead left every in-app purchase
+  // invisible to the analysis hub until a later import re-added it as a
+  // second, duplicate line for the same transaction.
+  const ref = 'shippo:' + transactionId;
+  if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
+  if (!TAX_CENTER.settings) TAX_CENTER.settings = {};
+  const alreadyLogged = TAX_CENTER.businessExpenses.some(e => String(e?.ref || '') === ref);
+
+  if (!alreadyLogged) {
+    const purchaseCurrency = String(currency || 'CAD').toUpperCase();
+    const purchaseAmount = Number(amount);
+    const date = today();
+
+    let fxRate = purchaseCurrency === 'CAD' ? 1 : 0;
+    if (purchaseCurrency !== 'CAD') {
+      try { fxRate = (await fetchHistoricalRate(purchaseCurrency, 'CAD', date))?.rate || 0; } catch (_) { /* continue */ }
+      if (!fxRate) {
+        try { fxRate = (await fetchLiveRate(purchaseCurrency, 'CAD'))?.rate || 0; } catch (_) { /* continue */ }
+      }
+      if (!fxRate) fxRate = _fxRateCache[`${purchaseCurrency}_CAD`] || 0;
+    }
+    const fxMissing = !fxRate;
+
+    const localReceipt = labelUrl ? await saveShippoLabelLocally(labelUrl, transactionId) : null;
+
+    const expense = {
+      id: Date.now(),
+      desc: `Shippo shipping label${trackingNumber ? ` #${trackingNumber}` : ''} — ${provider} ${serviceName}`,
+      cat: 'Shipping & Postage',
+      currency: purchaseCurrency,
+      amount: purchaseAmount,
+      origCurrency: purchaseCurrency,
+      origAmount: purchaseAmount,
+      fxRate: fxMissing ? null : fxRate,
+      baseAmount: fxMissing ? null : roundCents(purchaseAmount * fxRate),
+      fxMissing,
+      date,
+      ref,
+      receipt: localReceipt || labelUrl,
+      trackingUrl: data.tracking_url_provider || '',
+      trip: '',
+    };
+
+    // Reconcile against the order right here rather than waiting for the next
+    // API import to link it. The transaction echoes the shipment metadata,
+    // but the picker's own order number is the authoritative source, so pass
+    // it through as the shipment metadata enrichShippoExpense reads.
+    const shipmentContext = selectedOrderNumber ? { metadata: `order_number:${selectedOrderNumber}` } : {};
+    TAX_CENTER.businessExpenses.unshift(
+      enrichShippoExpense(expense, data, shipmentContext, {}, getShippingReconciliationOrders()),
+    );
+    TAX_CENTER.settings.shippoImportedObjectIds =
+      Array.from(new Set([...(TAX_CENTER.settings.shippoImportedObjectIds || []), transactionId])).slice(-10000);
+    await saveTaxCenter().catch(e => console.warn('Shippo label expense save failed', e));
+    renderTaxCenter();
+    renderShippingAnalysisHub();
+  }
+  renderExpenses();
+
+  return { labelUrl, trackingNumber, transactionId };
+}
+
+// ── BATCH SHIPPING ───────────────────────────────────────────────────────
+// Several orders, one pass: check each address with Shippo, size each box from
+// the catalogue, take the cheapest rate, and only then — after one clear
+// confirmation showing the total — buy the labels. Anything the checks cannot
+// vouch for is held back with the reason, to be done in the normal form.
+// The rules live in lib/batch-shipping.js; this is the network and the dialog.
+
+let _batch = { phase: 'idle', rows: [] };
+
+function allOrderHistory() {
+  return Object.values(states).flatMap(state => (Array.isArray(state?.hist) ? state.hist : []));
+}
+
+function batchRowPlace(entry) {
+  return [entry.shipCity, entry.shipProvince, entry.shipCountry].filter(Boolean).join(', ');
+}
+
+function openBatchShipping() {
+  if (!TAX_CENTER.settings?.shippoKey) {
+    showToast('⚠️ Please configure your Shippo API Key first', 'warn');
+    return;
+  }
+  if (_batch.phase === 'checking' || _batch.phase === 'buying') {
+    openM('batch-ship');
+    return;
+  }
+  const now = new Date();
+  const rows = [];
+  Object.entries(states).forEach(([bookId, state]) => {
+    (state?.hist || []).forEach(entry => {
+      if (!isBatchCandidate(entry, now)) return;
+      rows.push({
+        bookId,
+        entry,
+        orderNumber: normalizeShippingOrderNumber(entry.num),
+        selected: true,
+        status: 'waiting',
+        reason: '',
+        rate: null,
+        plan: null,
+      });
+    });
+  });
+  // One sale can be filed under two books (a mixed order); one label covers it.
+  const seen = new Set();
+  _batch = {
+    phase: 'idle',
+    rows: rows
+      .sort((a, b) => new Date(a.entry.date || 0) - new Date(b.entry.date || 0))
+      .filter(row => (seen.has(row.orderNumber) ? false : seen.add(row.orderNumber))),
+  };
+  renderBatchShipping();
+  openM('batch-ship');
+}
+
+const BATCH_STATUS_PILLS = {
+  waiting: '<span class="pill gray">● Not checked</span>',
+  checking: '<span class="pill blue">● Checking…</span>',
+  ready: '<span class="pill green">✓ Ready</span>',
+  held: '<span class="pill amber">● Do by hand</span>',
+  buying: '<span class="pill blue">● Buying…</span>',
+  bought: '<span class="pill green">✓ Label bought</span>',
+  failed: '<span class="pill red">✕ Not bought</span>',
+};
+
+function renderBatchShipping() {
+  const body = $('batch-ship-body');
+  const footer = $('batch-ship-footer');
+  if (!body || !footer) return;
+  const { rows, phase } = _batch;
+
+  if (!rows.length) {
+    body.innerHTML = `<div class="empty-state"><div class="e-icon">📦</div>No orders are waiting to ship. Orders from the last ${BATCH_LOOKBACK_DAYS} days that aren't marked shipped will show up here.</div>`;
+    footer.innerHTML = '<button class="btn" type="button" onclick="attemptCloseModal(\'batch-ship\')">Close</button>';
+    return;
+  }
+
+  const locked = phase === 'checking' || phase === 'buying';
+  const canTick = row => (phase === 'idle' && row.status === 'waiting') || (phase === 'review' && row.status === 'ready');
+  const rowHtml = rows.map((row, i) => {
+    const { entry } = row;
+    const tickable = canTick(row) && !locked;
+    const price = row.rate
+      ? `${escapeHtml(row.rate.provider)} ${escapeHtml(row.rate.servicelevel?.name || '')}<br><strong>$${parseFloat(row.rate.amount).toFixed(2)} ${escapeHtml(row.rate.currency || '')}</strong>`
+      : '<span style="color:var(--text3);">—</span>';
+    let action = '';
+    if (row.status === 'held' || row.status === 'failed') {
+      action = `<button class="btn sm ink" type="button" onclick="openBatchRowInForm(${i})">Open in form</button>`;
+    } else if (row.status === 'bought' && row.labelUrl) {
+      action = `<a class="btn sm gold" href="${escapeHtml(row.labelUrl)}" target="_blank" rel="noopener">Print label</a>`;
+    }
+    return `<tr>
+      <td><input type="checkbox" aria-label="Include order ${escapeHtml(row.orderNumber)}" ${row.selected && (tickable || row.status === 'bought' || row.status === 'buying') ? 'checked' : ''} ${tickable ? '' : 'disabled'} onchange="toggleBatchRow(${i}, this.checked)" style="width:20px;height:20px;"></td>
+      <td><strong>${escapeHtml(row.orderNumber)}</strong> · ${escapeHtml(entry.shipName || '')}<br><span style="color:var(--text3);font-size:var(--text-sm);">${escapeHtml(batchRowPlace(entry))}</span></td>
+      <td>${BATCH_STATUS_PILLS[row.status] || ''}${row.reason ? `<div style="font-size:var(--text-sm);color:var(--text2);margin-top:4px;line-height:1.4;">${escapeHtml(row.reason)}</div>` : ''}${row.tracking ? `<div style="font-size:var(--text-sm);margin-top:4px;">Tracking ${escapeHtml(row.tracking)}</div>` : ''}</td>
+      <td class="r" style="font-family:inherit;">${price}</td>
+      <td>${action}</td>
+    </tr>`;
+  }).join('');
+
+  const intro = {
+    idle: 'Untick anything you don’t want to send yet, then press <strong>Check orders</strong>. Nothing is bought at this step — the app checks each address with Shippo, works out the box from your catalogue, and finds the cheapest rate.',
+    checking: 'Checking each order… nothing is being bought.',
+    review: 'Only orders that passed every check can be bought here. Anything marked <strong>Do by hand</strong> needs a person to look at it first — open it in the normal form.',
+    buying: 'Buying labels one at a time. Keep this window open.',
+    done: 'Done. Print each label from its row — they’re also saved with the expense in your Tax Centre.',
+  }[phase];
+
+  body.innerHTML = `<p style="margin:0 0 12px;line-height:1.5;">${intro}</p>
+    <div style="overflow-x:auto;"><table class="tbl"><thead><tr><th></th><th>Order</th><th>Check</th><th class="r">Cheapest</th><th></th></tr></thead><tbody>${rowHtml}</tbody></table></div>`;
+
+  const picked = rows.filter(r => r.selected && canTick(r));
+  if (phase === 'idle') {
+    footer.innerHTML = `<button class="btn" type="button" onclick="attemptCloseModal('batch-ship')">Cancel</button>
+      <button class="btn gold" type="button" ${picked.length ? '' : 'disabled'} onclick="checkBatchOrders()">Check ${picked.length} order${picked.length === 1 ? '' : 's'}</button>`;
+  } else if (phase === 'review') {
+    footer.innerHTML = `<button class="btn" type="button" onclick="attemptCloseModal('batch-ship')">Not now</button>
+      <button class="btn gold" type="button" ${picked.length ? '' : 'disabled'} onclick="buyBatchLabels()">Buy ${picked.length} label${picked.length === 1 ? '' : 's'} · ${escapeHtml(describeBatchTotal(picked))}</button>`;
+  } else if (phase === 'done') {
+    const printable = rows.filter(r => r.status === 'bought' && r.labelUrl).length;
+    footer.innerHTML = `<button class="btn" type="button" onclick="attemptCloseModal('batch-ship')">Close</button>`
+      + (printable ? `<button class="btn gold" type="button" onclick="printBatchLabels()"><span aria-hidden="true">🖨️</span> Print all ${printable} label${printable === 1 ? '' : 's'}</button>` : '');
+  } else {
+    footer.innerHTML = `<button class="btn" type="button" disabled>${phase === 'buying' ? 'Buying…' : 'Checking…'}</button>`;
+  }
+}
+
+function toggleBatchRow(index, checked) {
+  const row = _batch.rows[index];
+  if (!row) return;
+  row.selected = !!checked;
+  renderBatchShipping();
+}
+
+function batchHold(row, reason) {
+  row.status = 'held';
+  row.reason = reason;
+  row.selected = false;
+}
+
+async function fetchBatchRates(shippoKey, origin, row, address) {
+  const { specs } = resolveBookPresetSpecs(BOOKS[row.plan.presetBookId]);
+  const parcel = scaledParcel(specs, row.plan.totalQty);
+  const originCountry = normalizeCountryCode(origin.country || 'CA') || 'CA';
+  const payload = {
+    address_from: { ...origin, country: originCountry },
+    address_to: {
+      ...address,
+      phone: getFallbackShippingPhone(row.entry.shipPhone || row.entry.phone || ''),
+    },
+    parcels: [parcel],
+    metadata: `order_number:${row.orderNumber.slice(0, 100)}`,
+    async: false,
+  };
+  if (address.country !== originCountry) {
+    payload.customs_declaration = batchCustomsDeclaration({
+      signer: origin.name,
+      originCountry,
+      destCountry: address.country,
+      parcel,
+      qty: row.plan.totalQty,
+      unitValue: row.plan.customsUnitValue,
+      description: row.plan.customsDescription,
+    });
+  }
+  const resp = await fetch('https://api.goshippo.com/shipments/', {
+    method: 'POST',
+    headers: { 'Authorization': `ShippoToken ${shippoKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!resp.ok) throw new Error(`Shippo couldn’t quote this parcel (error ${resp.status}).`);
+  const data = await resp.json();
+  return data.rates || [];
+}
+
+async function checkBatchOrders() {
+  if (_batch.phase !== 'idle') return;
+  const shippoKey = TAX_CENTER.settings?.shippoKey || '';
+  if (!navigator.onLine) {
+    showToast('⚠️ You’re offline — batch shipping needs a connection to check addresses and rates', 'warn');
+    return;
+  }
+  const origin = savedShippingOrigin();
+  const originProblem = originBlocker(origin);
+  if (originProblem) {
+    showToast(`⚠️ ${originProblem}`, 'warn', 8000);
+    return;
+  }
+
+  _batch.phase = 'checking';
+  const touchedBooks = new Set();
+  const history = allOrderHistory();
+  const originCountry = normalizeCountryCode(origin.country || 'CA') || 'CA';
+
+  for (const row of _batch.rows) {
+    if (!row.selected || row.status !== 'waiting') continue;
+    row.status = 'checking';
+    renderBatchShipping();
+    try {
+      const address = ledgerOrderAddress(row.entry);
+      const countryProblem = countryFallbackWarning(row.entry.shipCountry, address.country);
+      row.plan = orderParcelPlan(parcelLinesFromLedgerEntry(row.entry, row.bookId, BOOKS), BOOKS);
+      const existing = findExistingLabel(row.orderNumber, { hist: history, expenses: TAX_CENTER.businessExpenses || [] });
+      const early = countryProblem || preflightBlocker({
+        address,
+        plan: row.plan,
+        existing,
+        originCountry,
+        phone: row.entry.shipPhone || row.entry.phone || '',
+      });
+      if (early) { batchHold(row, early); continue; }
+
+      const verified = await verifyOrderAddressRecord(shippoKey, row.entry, { save: false });
+      touchedBooks.add(row.bookId);
+      const addressProblem = verified.skipped ? verified.blocker : addressVerdictBlocker(verified.result);
+      if (addressProblem) { batchHold(row, addressProblem); continue; }
+
+      const rate = pickCheapestRate(await fetchBatchRates(shippoKey, origin, row, address));
+      if (!rate) { batchHold(row, 'No carrier offered a rate for this parcel.'); continue; }
+      row.rate = rate;
+      row.status = 'ready';
+      row.reason = describeParcelPlan(row.plan);
+    } catch (err) {
+      console.error('Batch shipping check failed', row.orderNumber, err);
+      batchHold(row, err.message || 'The check didn’t finish.');
+    }
+  }
+
+  // The address verdicts are kept on each order, same as the ledger checker.
+  await Promise.all([...touchedBooks].map(bookId => saveState(bookId).catch(() => {})));
+  _batch.phase = 'review';
+  renderBatchShipping();
+  const ready = _batch.rows.filter(r => r.status === 'ready').length;
+  const held = _batch.rows.filter(r => r.status === 'held').length;
+  showToast(`✓ ${ready} ready to buy${held ? ` · ${held} to do by hand` : ''}`, held ? 'warn' : 'ok', 6000);
+}
+
+async function buyBatchLabels() {
+  if (_batch.phase !== 'review') return;
+  const picked = _batch.rows.filter(r => r.selected && r.status === 'ready' && r.rate);
+  if (!picked.length) return;
+
+  const details = picked.slice(0, 8).map(r => [
+    r.orderNumber,
+    `${r.entry.shipName || ''} · ${r.rate.provider} ${r.rate.servicelevel?.name || ''} · $${parseFloat(r.rate.amount).toFixed(2)} ${r.rate.currency || ''}`,
+  ]);
+  if (picked.length > 8) details.push(['', `…and ${picked.length - 8} more`]);
+  details.push(['Total', describeBatchTotal(picked)]);
+
+  const confirmed = await confirmDialog(
+    'This charges your Shippo account for every label below. A label bought by mistake has to be refunded through Shippo.',
+    {
+      title: `Buy ${picked.length} shipping label${picked.length === 1 ? '' : 's'}?`,
+      details,
+      okLabel: `Buy · ${describeBatchTotal(picked)}`,
+      cancelLabel: 'Go back',
+    },
+  );
+  if (!confirmed || _batch.phase !== 'review') return;
+
+  _batch.phase = 'buying';
+  let bought = 0;
+  let failed = 0;
+  for (const row of picked) {
+    row.status = 'buying';
+    renderBatchShipping();
+    // Checked again right before spending: another device may have shipped it
+    // since the check ran.
+    const existing = findExistingLabel(row.orderNumber, { hist: allOrderHistory(), expenses: TAX_CENTER.businessExpenses || [] });
+    if (existing) {
+      row.status = 'failed';
+      row.reason = 'Skipped — this order got a label while the batch was open.';
+      failed++;
+      continue;
+    }
+    if (!navigator.onLine) {
+      row.status = 'failed';
+      row.reason = 'Skipped — you went offline. Nothing was charged for this one.';
+      failed++;
+      continue;
+    }
+    try {
+      const result = await purchaseShippoRate({
+        rateId: row.rate.object_id,
+        provider: row.rate.provider,
+        serviceName: row.rate.servicelevel?.name || '',
+        amount: parseFloat(row.rate.amount),
+        currency: row.rate.currency,
+        orderNumber: row.orderNumber,
+        // Pictures rather than PDFs, so every label in the batch can go on one
+        // printable page.
+        labelFileType: 'PNG',
+      });
+      row.status = 'bought';
+      row.reason = '';
+      row.labelUrl = result.labelUrl || '';
+      row.tracking = result.trackingNumber || '';
+      bought++;
+    } catch (err) {
+      console.error('Batch label purchase failed', row.orderNumber, err);
+      row.status = 'failed';
+      row.reason = `Shippo didn’t sell this label: ${err.message}`;
+      failed++;
+    }
+  }
+  _batch.phase = 'done';
+  renderBatchShipping();
+  showToast(
+    `✓ ${bought} label${bought === 1 ? '' : 's'} bought${failed ? ` · ${failed} not bought — see the list` : ''}`,
+    failed ? 'warn' : 'ok',
+    8000,
+  );
+}
+
+/** Opens every label bought in this batch on one page and prints it. */
+function printBatchLabels() {
+  const labels = _batch.rows
+    .filter(r => r.status === 'bought' && r.labelUrl)
+    .map(r => ({ url: r.labelUrl, orderNumber: r.orderNumber }));
+  if (!labels.length) return;
+  const win = window.open('', '_blank');
+  if (!win) {
+    showToast('⚠️ Your browser blocked the print window — allow pop-ups for this app, then try again', 'warn', 8000);
+    return;
+  }
+  win.document.open();
+  win.document.write(buildLabelPrintPage(labels));
+  win.document.close();
+}
+
+/** Hands a held-back order to the normal one-order form. */
+function openBatchRowInForm(index) {
+  const row = _batch.rows[index];
+  if (!row) return;
+  renderCustomShippoDestPicker();
+  const idx = _shippoDestMasterList.findIndex(item =>
+    item.category === 'orders' && normalizeShippingOrderNumber(item.orderNumber) === row.orderNumber);
+  closeM('batch-ship');
+  if (idx >= 0) {
+    selectShippoDestCustomItem(idx);
+  } else {
+    showToast(`Pick order ${row.orderNumber} from the Destination list to finish it by hand`, 'warn', 7000);
   }
 }
 
@@ -10211,6 +10620,12 @@ export {
   collectShippoMessages,
   renderShippoDiagnostics,
   buyShippoLabel,
+  openBatchShipping,
+  checkBatchOrders,
+  buyBatchLabels,
+  toggleBatchRow,
+  openBatchRowInForm,
+  printBatchLabels,
   calculateShippoRates,
   calculateZonosDutiesHandler,
   renderZonosDutyCard,
