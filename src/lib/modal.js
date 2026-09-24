@@ -13,6 +13,8 @@
 // certain modals open) is injected by the host via configureModals(), so this
 // file stays free of knowledge about which modals exist.
 
+import { prefersReducedMotion } from './motion.js';
+
 const $ = id => document.getElementById(id);
 
 // ── HOST CONFIGURATION ──────────────────────────────────────────────────
@@ -40,9 +42,9 @@ export function _modalFieldSig(id) {
     .map(f => (f.type === 'checkbox' || f.type === 'radio') ? (f.checked ? '1' : '0') : (f.value || ''))
     .join('');
 }
-export function _prefersReducedMotion() {
-  return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-}
+// One definition of the reduced-motion check, shared with the motion layer;
+// re-exported under the name main.js and the shipping feature already import.
+export const _prefersReducedMotion = prefersReducedMotion;
 
 /**
  * True when a modal is open and its fields differ from the snapshot taken when
@@ -86,7 +88,7 @@ export function closeM(id) {
   // so they opt out of the close animation and the display:none that follows it.
   if (el.classList.contains('fk-workspace') || el.classList.contains('email-import-workspace') || el.closest('.pos-subpanel')) return;
   if (el.classList.contains('closing')) return;
-  if (_prefersReducedMotion()) { el.style.display = 'none'; clearFieldErrors(el); return; }
+  if (prefersReducedMotion()) { el.style.display = 'none'; clearFieldErrors(el); return; }
   el.classList.add('closing');
   let t;
   const done = () => {
