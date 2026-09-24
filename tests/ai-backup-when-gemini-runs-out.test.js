@@ -244,11 +244,19 @@ describe('carrying a conversation forward without cutting a lookup in half', () 
 
 const source = fs.readFileSync(path.resolve('apps-script/Code.gs'), 'utf8');
 
+// The sweep reads "today" from the script's own clock. Pinned to the day these
+// fixtures were written for, so the suite doesn't start failing a week later.
+const SWEEP_NOW = Date.parse('2026-09-17T12:00:00Z');
+class PinnedDate extends Date {
+  constructor(...args) { if (args.length) super(...args); else super(SWEEP_NOW); }
+  static now() { return SWEEP_NOW; }
+}
 function sheetScript({ properties = {}, geminiStatus = 200, backupStatus = 200, backupBody = null, savedSettings = { openRouterKey: 'app-backup-key', openRouterModel: '' }, messages = [] } = {}) {
   const props = { GEMINI_API_KEY: 'server-secret', RECEIPT_DAILY_LAST_DAY: '2026-09-15', ...properties };
   const calls = [];
   const written = [];
   const ctx = vm.createContext({
+    Date: PinnedDate,
     PropertiesService: { getScriptProperties: () => ({
       getProperty: key => (key in props ? props[key] : null),
       setProperty: (key, value) => { props[key] = value; },

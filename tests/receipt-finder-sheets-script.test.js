@@ -154,12 +154,20 @@ describe('unified Google Sheet script: receipt extraction (v44)', () => {
 // The trigger runs unattended in the publisher's own account, so a mistake here
 // silently loses receipts or silently burns the AI allowance. Both are worked
 // against the real Code.gs.
+// The sweep reads "today" from the script's own clock. Pinned to the day these
+// fixtures were written for, so the suite doesn't start failing a week later.
+const SWEEP_NOW = Date.parse('2026-09-17T12:00:00Z');
+class PinnedDate extends Date {
+  constructor(...args) { if (args.length) super(...args); else super(SWEEP_NOW); }
+  static now() { return SWEEP_NOW; }
+}
 function sweepCtx({ properties = {}, messages = [], aiStatus = 200, receipts = [], triggers = [] } = {}) {
   const props = { GEMINI_API_KEY: 'server-secret', ...properties };
   const written = [];
   const created = [];
   const aiCalls = [];
   const ctx = vm.createContext({
+    Date: PinnedDate,
     PropertiesService: { getScriptProperties: () => ({
       getProperty: key => (key in props ? props[key] : null),
       setProperty: (key, value) => { props[key] = value; },

@@ -824,6 +824,7 @@ import { OC_STAGES } from './lib/opencall.js';
 import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, recordInventoryDisposal, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, orderStockPreview, orderStockPreviewCopy, deriveStockBreakdown, transferAuthorStock, deductSaleFromStockBreakdown, isVoidStale } from './lib/inventory.js';
 import { createInventoryDisposalExpense, createSection10Adjustment, inventoryAdjustmentCsvRows } from './lib/inventory-adjustment.js';
 import { posStockView, posOversellSummary } from './lib/pos-stock.js';
+import { FAIR_SEARCH_OVER, FAIR_UNDO_MS, fairTileHtml, readLastMethod, rememberMethod, undoOpen, soldLabel, countLabel, keepScreenAwake } from './lib/fair-mode.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, notesWithInvoiceDiscount, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores, consignmentLedgerTotals, storeBalanceSlug, storeBalanceComparison } from './lib/consignment.js';
 import { deriveInvoiceBookIds, invoicesForBook, findInvoiceAcrossBooks, otherBookTitles, lineItemBookId, invoiceBookSplit, invoiceShareForBook, neutralInvoicePrefix, invoiceNumberPrefix, nextInvoiceSeq, buildInvoiceNumber, BILL_TO_STORE, BILL_TO_PERSON, invoiceBillToMode, billToPayload, billToPersonFrom } from './lib/invoices.js';
 import { reminderSettings, reminderBlockReason, invoiceReminderState, dueForReminder, dueForReminderTomorrow, buildReminderEmail, canSendNow, daysLate, describeReminderSweep, describeReminderArming, describeReminderNotice, sampleReminderInvoice } from './lib/payment-reminders.js';
@@ -4719,6 +4720,7 @@ export function switchTab(name) {
   if (name === 'qrcodes') renderAllQRCodes();
   if (name === 'myqr') renderAuthorQRPage();
   if (name === 'pos') { renderPOS(); renderPOSFxStatus(); switchPOSSubTab(activePOSSubTab); window.posMobileView?.('books', false); }
+  fairSetAwake(name === 'pos');
   if (name === 'webanalytics') renderWebAnalytics();
   if (name === 'shipping') { initShippingTab(); }
   if (name === 'bigcartel') { renderBigCartelTab(); }
@@ -17727,6 +17729,40 @@ async function scanReceiptWithAI() {
 // receipts folder. Best-effort: returns a local:// path on success, otherwise
 // null so the caller keeps the original URL. May fail on CORS or no folder.
 
+// ── Snap a receipt (phones) ────────────────────────────────────────────────
+// One tap from Today: the phone's own camera, then the same AI scan and
+// expense form as the Tax Centre, so nothing is saved until you've checked it.
+window.snapReceipt = function () {
+  $('snap-receipt-input')?.click();
+};
+
+window.snapReceiptChosen = async function (input) {
+  const file = input?.files?.[0];
+  if (input) input.value = ''; // the same photo can be picked again
+  if (!file) return;
+  switchTab('taxcenter');
+  switchTaxCenterSubTab('ledger');
+  const fileInput = $('tc-exp-file');
+  if (!fileInput) return;
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  fileInput.files = dt.files;
+  fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+  $('tc-exp-file-group')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  if (navigator.onLine === false) {
+    showToast('📷 Photo attached. No signal, so fill it in by hand or tap AI Scan once you\'re back online.', 'warn', 6000);
+    return;
+  }
+  const hasKey = !!(TAX_CENTER.settings?.geminiKey || TAX_CENTER.settings?.openRouterKey?.trim());
+  if (!hasKey) {
+    showToast('📷 Photo attached. To have it read automatically, add an AI key in Tax Centre → Integrations.', 'warn', 6000);
+    return;
+  }
+  await scanReceiptWithAI();
+  // The scan's own message says what it read and what to check.
+  $('tc-exp-desc')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+};
+
 async function submitTaxExpense() {
   const desc = ($('tc-exp-desc').value || '').trim();
   const cat = $('tc-exp-cat').value;
@@ -18409,6 +18445,7 @@ function renderPOS() {
       : posFormat(convertedTotal, posTransactionCurrency);
   }
   posSyncReviewBar(cartRows.reduce((count, row) => count + row.qty, 0), totalEl?.textContent || '');
+  renderFairMode(booksArr, Object.keys(booksToRender).length, cartRows, totalEl?.textContent || '');
   posSyncPaymentSeg();
   if (totalNoteEl) {
     totalNoteEl.textContent = hasMissingFx
@@ -18428,6 +18465,170 @@ function posSyncReviewBar(count, totalText) {
   const totalEl = $('pos-review-total');
   if (totalEl) totalEl.textContent = totalText;
   bar.setAttribute('aria-label', `Review sale: ${count} ${count === 1 ? 'book' : 'books'}, ${totalText}`);
+}
+
+// ── FAIR MODE (phones) ────────────────────────────────────────────────────
+// The register as a stall tool: big tiles, one pinned Charge button, and a
+// sheet where tapping how they paid records the sale — with a short Undo in
+// place of the desktop's confirm dialog. Money still comes from
+// buildPOSCartRows()/renderPOS(); the sale still goes through posConfirmSale().
+function renderFairMode(booksArr, titleCount, cartRows, totalText) {
+  const tiles = $('fm-tiles');
+  if (!tiles) return;
+  // A short list is faster to tap than to search.
+  document.querySelector('#pos-subpanel-register .pos-layout')?.classList.toggle('fm-searchable', titleCount > FAIR_SEARCH_OVER);
+  tiles.innerHTML = booksArr.map((book) => {
+    const qty = posCart[book.id] || 0;
+    const sourceCode = currencyToCode(book.currency);
+    const converted = convertCurrency(book.listPrice || 0, sourceCode, posTransactionCurrency);
+    const priceText = converted === null ? posFormat(book.listPrice || 0, sourceCode) : posFormat(converted, posTransactionCurrency);
+    const stock = posStockView({ onHand: posOnHandFor(book.id), inCart: qty });
+    return fairTileHtml({ id: book.id, title: book.title || 'Untitled', priceText, qty, stock });
+  }).join('') || '<p class="fm-empty">No books to sell yet. Add a book to your catalogue, or add a POS-only book on a larger screen.</p>';
+  const count = cartRows.reduce((n, row) => n + row.qty, 0);
+  const bar = $('fm-bar');
+  if (bar) bar.hidden = count === 0;
+  const countEl = $('fm-bar-count');
+  if (countEl) countEl.textContent = countLabel(count);
+  const totalEl = $('fm-bar-total');
+  if (totalEl) totalEl.textContent = totalText;
+  const charge = $('fm-charge-btn');
+  if (charge) {
+    charge.textContent = `Charge ${totalText}`;
+    charge.setAttribute('aria-label', `Charge ${totalText} for ${countLabel(count)}`);
+  }
+  // The sheet stays live while open: − on a line repaints it in place.
+  if ($('m-fair-charge')?.style.display === 'flex') {
+    if (!count) closeM('fair-charge');
+    else fairPaintCharge(cartRows, totalText);
+  }
+}
+
+function fairPaintCharge(cartRows, totalText) {
+  $('fm-charge-total').textContent = totalText;
+  $('fm-charge-lines').innerHTML = cartRows.map((row) => {
+    const id = escapeHtml(JSON.stringify(String(row.book.id)));
+    const line = row.convertedLine === null ? posFormat(row.sourceLine, row.sourceCode) : posFormat(row.convertedLine, posTransactionCurrency);
+    return `<li class="fm-line"><span class="fm-line-title">${escapeHtml(row.book.title)}</span><span class="fm-line-qty tnum">×${row.qty}</span><span class="fm-line-amt tnum">${line}</span><button type="button" class="fm-line-minus" onclick="posUpdateQty(${id}, -1)" aria-label="Remove one: ${escapeHtml(row.book.title)}">−</button></li>`;
+  }).join('');
+  posRenderOversellNote('fm-charge-oversell', posOversellSummary(posStockLines()));
+  const last = readLastMethod();
+  document.querySelectorAll('#m-fair-charge .fm-pay-btn').forEach((btn) => {
+    btn.classList.toggle('is-last', btn.dataset.fmMethod === last);
+  });
+  const other = document.querySelector('#m-fair-charge .fm-pay-other');
+  if (other) other.open = ['Bank Transfer', 'Cash', 'Comp/Gift'].includes(last);
+}
+
+window.fairOpenCharge = function () {
+  const rows = buildPOSCartRows();
+  if (!rows.length) return;
+  fairPaintCharge(rows, $('pos-total')?.textContent || '');
+  openM('fair-charge');
+};
+
+// Online only: show the Stripe code, and let the seller record the sale from
+// that same screen once the customer's phone says paid.
+window.fairShowQR = async function () {
+  closeM('fair-charge');
+  const paid = $('pos-qr-record');
+  if (paid) paid.hidden = false;
+  await window.posGenerateSaleQR();
+};
+
+let _fairSaving = false;
+window.fairCharge = async function (method) {
+  if (_fairSaving) return;
+  if (!buildPOSCartRows().length) return;
+  _fairSaving = true;
+  try {
+    const select = $('pos-payment-method');
+    if (select) select.value = method;
+    posSyncPaymentSeg();
+    rememberMethod(method);
+    if (!posPreparePendingSale()) return;
+    const totalText = posPendingSale.totalCharged;
+    const count = posPendingSale.rows.reduce((n, row) => n + row.qty, 0);
+    closeM('fair-charge');
+    if ($('m-pos-qr')?.style.display === 'flex') closeM('pos-qr');
+    const paid = $('pos-qr-record');
+    if (paid) paid.hidden = true;
+    const recorded = window.posConfirmSale();
+    fairShowUndo(soldLabel(count, totalText));
+    await recorded;
+  } finally {
+    _fairSaving = false;
+  }
+};
+
+function fairShowUndo(text) {
+  const bar = $('fm-undo');
+  if (!bar) return;
+  $('fm-undo-text').textContent = text;
+  const btn = $('fm-undo-btn');
+  if (btn) btn.disabled = false;
+  bar.hidden = false;
+  clearTimeout(bar._t);
+  bar._t = setTimeout(() => { bar.hidden = true; }, FAIR_UNDO_MS);
+}
+
+// Reverses the last register sale exactly the way the History Void button
+// does (stock back, revenue and channel totals out, Sheets row deleted), and
+// only inside the undo window so it can never reach an older sale.
+window.fairUndoLastSale = async function () {
+  const sale = _posLastSale;
+  const bar = $('fm-undo');
+  if (!sale || !undoOpen(sale.at)) { if (bar) bar.hidden = true; return; }
+  _posLastSale = null;
+  const btn = $('fm-undo-btn');
+  if (btn) btn.disabled = true;
+  const previousBook = activeBook;
+  let undone = 0;
+  try {
+    for (const bookId of sale.bookIds) {
+      const s = states[bookId];
+      const book = BOOKS[bookId];
+      const h = s?.hist?.find((x) => x.num === sale.saleNum && !x.voided);
+      if (!h) continue;
+      // voidHistEntry's Sheets sync names the active book.
+      activeBook = bookId;
+      voidHistEntry(s, book, h);
+      h.voidedReason = 'Undone at the register';
+      saveState(bookId);
+      undone++;
+    }
+  } finally {
+    activeBook = previousBook;
+  }
+  if (sale.posOnly.length) {
+    // The POS-only tally is written after the sale; take it back only once
+    // that write has landed, so the two can't cross.
+    try { await sale.tail; } catch (_) { /* tally never landed */ }
+    if (sale.tallied) {
+      for (const line of sale.posOnly) {
+        const pb = posExtraBooks[line.id];
+        if (!pb) continue;
+        pb.sold = Math.max(0, (pb.sold || 0) - line.qty);
+        pb.revenue = Math.max(0, (pb.revenue || 0) - line.qty * line.unit);
+      }
+      try { await saveCatalogWithDeletions(); } catch (e) { console.warn('POS-only undo save failed', e); }
+    }
+  }
+  if (bar) bar.hidden = true;
+  renderPOS();
+  renderHist();
+  updateDash();
+  if (typeof window.renderAllOverview === 'function') window.renderAllOverview();
+  updateHeader();
+  showToast(undone || sale.posOnly.length ? '↩ Sale undone — books back in stock' : 'That sale was already undone', undone || sale.posOnly.length ? 'ok' : 'warn');
+};
+
+// Screen stays on while the register is open on a phone.
+// var: tab switches can run before this line is reached during start-up.
+var _fairReleaseWake = null;
+function fairSetAwake(on) {
+  if (on && !_fairReleaseWake && window.matchMedia?.('(max-width: 768px)').matches) _fairReleaseWake = keepScreenAwake();
+  if (!on && _fairReleaseWake) { _fairReleaseWake(); _fairReleaseWake = null; }
 }
 
 // Phone: big payment buttons that drive the existing <select>, which stays the
@@ -18776,13 +18977,15 @@ function _posItemToManualPayload(book, qty, paymentMethod, basePrice, txnCurCode
   return { num, chan, qty, price: basePrice, notes, payment };
 }
 
-window.posCheckout = function () {
+// Freezes the cart into posPendingSale. Shared by the desktop confirm dialog
+// and Fair Mode, which records straight away.
+function posPreparePendingSale() {
   const method = $('pos-payment-method').value;
   const rows = buildPOSCartRows();
 
   if (rows.length === 0) {
     showToast('Cart is empty', 'warn');
-    return;
+    return false;
   }
 
   // ⚡ Bolt Optimization: Loop fusion - Combine the `.some()` check and `.reduce()` accumulation into a single imperative loop.
@@ -18811,6 +19014,12 @@ window.posCheckout = function () {
     timestampIso: timestamp.toISOString(),
     timestampLabel: localeTs
   };
+  return true;
+}
+
+window.posCheckout = function () {
+  if (!posPreparePendingSale()) return;
+  const { rows, method, totalCharged, timestampLabel: localeTs } = posPendingSale;
 
   $('pos-confirm-items').innerHTML = rows.map((row) => {
     const lineDisplay = row.convertedLine === null ? posFormat(row.sourceLine, row.sourceCode) : posFormat(row.convertedLine, posTransactionCurrency);
@@ -18831,6 +19040,8 @@ window.posCheckout = function () {
 // True while a sale is being written. A second tap on Complete Sale — easy on
 // a phone at a busy table — must not record the same sale twice.
 let _posSaving = false;
+// The most recent register sale, for Fair Mode's Undo.
+let _posLastSale = null;
 
 window.posConfirmSale = async function () {
   if (_posSaving || !posPendingSale) return;
@@ -18842,6 +19053,7 @@ window.posConfirmSale = async function () {
   const saleNum = `POS-${Date.now().toString().slice(-6)}`;
   const previousBook = activeBook;
   const posOnlyRows = [];
+  const recordedBooks = [];
   let recorded = 0;
   const failed = [];
 
@@ -18905,6 +19117,7 @@ window.posConfirmSale = async function () {
 
         // recordOrder is the single shared sale-writing function used by manual entry.
         recordOrder(num, chan, qty, basePrice, notes, payment);
+        recordedBooks.push(book.id);
         recorded++;
       } catch (error) {
         // One book failing must not take the rest of the customer's books
@@ -18918,6 +19131,17 @@ window.posConfirmSale = async function () {
     activeBook = previousBook;
     _posSaving = false;
   }
+
+  // What Fair Mode's Undo may reverse, and nothing older.
+  const lastSale = {
+    saleNum,
+    bookIds: recordedBooks,
+    posOnly: posOnlyRows.map((row) => ({ id: row.book.id, qty: row.qty, unit: row.sourceUnit })),
+    at: Date.now(),
+    tail: null,
+    tallied: false,
+  };
+  _posLastSale = lastSale;
 
   closeM('pos-sale-confirm');
   posCart = {};
@@ -18938,6 +19162,8 @@ window.posConfirmSale = async function () {
   // but only for as long as the signal allows. Their sale is not in the ledger
   // either way, so nothing above ever waits on this.
   if (posOnlyRows.length) {
+    let doneTail;
+    lastSale.tail = new Promise((resolve) => { doneTail = resolve; });
     try {
       await Promise.race([syncCatalog(), new Promise(resolve => setTimeout(resolve, 6000))]);
     } catch (_) { /* offline — count on what this device has */ }
@@ -18948,7 +19174,9 @@ window.posConfirmSale = async function () {
       pb.revenue = (pb.revenue || 0) + row.qty * row.sourceUnit;
       pb.lastSold = today();
     }
+    lastSale.tallied = true;
     try { await saveCatalogWithDeletions(); } catch (e) { console.warn('POS-only tally save failed', e); }
+    doneTail();
     renderPOS();
   }
   return recorded;

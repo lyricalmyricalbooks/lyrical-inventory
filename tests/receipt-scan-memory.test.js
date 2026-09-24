@@ -132,8 +132,8 @@ describe('receipt scan warm-up', () => {
     const h = memoryHarness({ reply: clean });
     const file = fakeFile('fresh');
     h.warm(file);
-    await flush();
-    expect(h.prepared).toHaveLength(1);
+    // Fingerprinting the photo can take more than one tick on a busy runner.
+    await vi.waitFor(() => expect(h.prepared).toHaveLength(1));
 
     await h.extract('k', file);
     expect(h.prepared).toHaveLength(1); // not shrunk a second time

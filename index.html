@@ -1131,6 +1131,14 @@
       <span class="today-card-name">To-do</span>
       <span class="today-card-sub">What needs you</span>
     </button>
+    <!-- Opens the phone's own camera; the photo is scanned and lands in a
+         filled-in expense form to check and save. -->
+    <button type="button" class="today-card today-card-wide" onclick="snapReceipt()">
+      <span class="today-card-ic" aria-hidden="true">🧾</span>
+      <span class="today-card-name">Snap a receipt</span>
+      <span class="today-card-sub">Photo → AI reads it → you check and save</span>
+    </button>
+    <input type="file" id="snap-receipt-input" accept="image/*" capture="environment" hidden onchange="snapReceiptChosen(this)">
   </div>
   <div class="today-label">Everything else</div>
   <div class="today-rows">
@@ -3892,6 +3900,8 @@
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gold-text)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);pointer-events:none;"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
           <input type="search" id="pos-search-input" placeholder="Search books in POS (press / to focus, Esc to clear)..." oninput="posSearchFilter(this.value)">
         </div>
+        <!-- Phone only: Fair Mode tiles. One tap adds a copy. Painted by renderPOS(). -->
+        <div class="fm-tiles" id="fm-tiles" role="list" aria-label="Books to sell"></div>
         <div id="pos-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:1rem;">
           <!-- Populated by JS -->
         </div>
@@ -3902,6 +3912,16 @@
           <span class="pos-review-label">Review sale</span>
           <span class="pos-review-total" id="pos-review-total"></span>
         </button>
+        <!-- Phone only: Fair Mode's pinned charge bar and the post-sale undo. -->
+        <div class="fm-bar" id="fm-bar" hidden>
+          <div class="fm-bar-sum"><span class="fm-bar-count" id="fm-bar-count"></span><strong class="fm-bar-total tnum" id="fm-bar-total"></strong></div>
+          <button type="button" class="btn gold fm-charge-btn" id="fm-charge-btn" onclick="fairOpenCharge()">Charge</button>
+        </div>
+        <div class="fm-undo" id="fm-undo" role="status" aria-live="polite" hidden>
+          <span class="fm-undo-check" aria-hidden="true">✓</span>
+          <span class="fm-undo-text" id="fm-undo-text"></span>
+          <button type="button" class="fm-undo-btn" id="fm-undo-btn" onclick="fairUndoLastSale()">Undo</button>
+        </div>
       </div>
 
       <!-- Four stages of a sale, each its own .pos-checkout-stage: rates →
@@ -3942,6 +3962,7 @@
             <button type="button" class="pos-pay-opt" role="radio" aria-checked="true" data-pay="Cash" onclick="posPickPayment('Cash')">Cash</button>
             <button type="button" class="pos-pay-opt" role="radio" aria-checked="false" data-pay="Bank Transfer" onclick="posPickPayment('Bank Transfer')">E-transfer</button>
             <button type="button" class="pos-pay-opt" role="radio" aria-checked="false" data-pay="Comp/Gift" onclick="posPickPayment('Comp/Gift')">Comp</button>
+            <button type="button" class="pos-pay-opt" role="radio" aria-checked="false" data-pay="Stripe QR" onclick="posPickPayment('Stripe QR')">QR / Stripe</button>
           </div>
           <div class="form-group pos-pay-select">
             <label for="pos-payment-method">Payment method</label>
@@ -3950,6 +3971,7 @@
               <option value="Card">Card</option>
               <option value="Bank Transfer">Bank Transfer</option>
               <option value="Comp/Gift">Comp/Gift</option>
+              <option value="Stripe QR">Stripe QR</option>
             </select>
           </div>
           <!-- Painted by posRenderOversellNote() when a cart line sells more copies
@@ -5895,7 +5917,35 @@
   <div class="modal-footer" role="dialog" aria-modal="true">
     <button class="btn" onclick="attemptCloseModal('pos-qr')">Close</button>
     <button class="btn gold" onclick="downloadPosQR()">Download Image</button>
+    <button class="btn gold fm-qr-paid" id="pos-qr-record" onclick="fairCharge('Stripe QR')" hidden>✓ Paid — record sale</button>
   </div>
+</div></div>
+
+<!-- FAIR MODE CHARGE SHEET (phones). Tapping a way to pay records the sale. -->
+<div class="overlay" id="m-fair-charge" style="display:none;"><div class="modal fm-sheet" role="dialog" aria-modal="true" aria-labelledby="fm-charge-title">
+  <div class="modal-title">
+    <div class="modal-title-left">
+      <span id="fm-charge-title">Charge <span class="tnum" id="fm-charge-total"></span></span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('fair-charge')" aria-label="Back to books" title="Back (Esc)">✕</button>
+  </div>
+  <ul class="fm-lines" id="fm-charge-lines" aria-label="In this sale"></ul>
+  <div class="pos-oversell-note" id="fm-charge-oversell" role="status" aria-live="polite" hidden></div>
+  <div class="fm-pay-label" id="fm-pay-label">How are they paying?</div>
+  <div class="fm-pay" role="group" aria-labelledby="fm-pay-label">
+    <button type="button" class="fm-pay-btn" data-fm-method="Card" onclick="fairCharge('Card')"><span aria-hidden="true">💳</span> Card reader</button>
+    <button type="button" class="fm-pay-btn" data-fm-method="Stripe QR" onclick="fairShowQR()"><span aria-hidden="true">▦</span> QR / Stripe</button>
+    <details class="fm-pay-other">
+      <summary>Other ways to pay</summary>
+      <div class="fm-pay-other-row">
+        <button type="button" class="fm-pay-btn sm" data-fm-method="Bank Transfer" onclick="fairCharge('Bank Transfer')">E-transfer</button>
+        <button type="button" class="fm-pay-btn sm" data-fm-method="Cash" onclick="fairCharge('Cash')">Cash</button>
+        <button type="button" class="fm-pay-btn sm" data-fm-method="Comp/Gift" onclick="fairCharge('Comp/Gift')">Comp</button>
+      </div>
+    </details>
+  </div>
+  <p class="fm-pay-hint">Tapping how they paid records the sale right away. You can undo it for a few seconds.</p>
+  <button type="button" class="btn tx fm-more-link" onclick="attemptCloseModal('fair-charge'); posMobileView('checkout')">Change currency or a price →</button>
 </div></div>
 
 <div class="overlay" id="m-pos-sale-confirm" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:640px;">

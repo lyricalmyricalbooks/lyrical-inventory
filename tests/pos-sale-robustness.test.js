@@ -104,3 +104,65 @@ describe('register-only books', () => {
     expect(state(HARBOUR).hist).toHaveLength(1);
   });
 });
+
+describe('Fair Mode on a phone', () => {
+  function cart(lines) {
+    win.posSetCurrency('CAD');
+    for (const [bookId, qty] of Object.entries(lines)) win.posUpdateQty(bookId, qty);
+  }
+
+  it('records the sale the moment a way to pay is tapped — no confirm dialog', async () => {
+    cart({ [HARBOUR]: 2 });
+    await win.fairCharge('Card');
+    await app.settle();
+    expect(state(HARBOUR).hist).toHaveLength(1);
+    expect(state(HARBOUR).hist[0]).toMatchObject({ qty: 2, chan: 'Book Fair', notes: 'Card' });
+    expect(state(HARBOUR).stock).toBe(98);
+    expect(document.getElementById('m-pos-sale-confirm').style.display).not.toBe('flex');
+    expect(document.getElementById('fm-undo').hidden).toBe(false);
+  });
+
+  it('a double tap on the payment button still records once', async () => {
+    cart({ [HARBOUR]: 1 });
+    await Promise.all([win.fairCharge('Card'), win.fairCharge('Card')]);
+    await app.settle();
+    expect(state(HARBOUR).hist).toHaveLength(1);
+  });
+
+  it('Undo puts every book in the checkout back and takes the money out', async () => {
+    cart({ [HARBOUR]: 1, [FABLE]: 2 });
+    await win.fairCharge('Stripe QR');
+    await app.settle();
+    expect(state(FABLE).stock).toBe(48);
+    await win.fairUndoLastSale();
+    await app.settle();
+    for (const id of [HARBOUR, FABLE]) {
+      expect(state(id).hist[0].voided).toBe(true);
+      expect(state(id).revenue).toBe(0);
+      expect(state(id).sold).toBe(0);
+    }
+    expect(state(HARBOUR).stock).toBe(100);
+    expect(state(FABLE).stock).toBe(50);
+    expect(app.main.activeBook).toBe(HARBOUR);
+  });
+
+  it('Undo cannot reach a sale once its window has passed, or twice', async () => {
+    let t = Date.parse('2026-09-20T10:00:00Z');
+    vi.spyOn(Date, 'now').mockImplementation(() => t);
+    cart({ [HARBOUR]: 1 });
+    await win.fairCharge('Card');
+    await app.settle();
+    t += 60_000;
+    await win.fairUndoLastSale();
+    expect(state(HARBOUR).hist[0].voided).toBeFalsy();
+    expect(state(HARBOUR).stock).toBe(99);
+
+    cart({ [HARBOUR]: 1 });
+    await win.fairCharge('Card');
+    await app.settle();
+    await win.fairUndoLastSale();
+    await win.fairUndoLastSale();
+    expect(state(HARBOUR).hist.filter(h => h.voided)).toHaveLength(1);
+    expect(state(HARBOUR).stock).toBe(99);
+  });
+});
