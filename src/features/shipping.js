@@ -55,9 +55,8 @@ import {
 import {
   extractBigCartelAddress,
   getBigCartelIncluded,
-  loadCachedBigCartelOrders,
+  getBigCartelOrders,
   hydrateShippingDestinationPhone,
-  bigCartelData,
 } from './bigcartel.js';
 import { renderTaxCenter, saveTaxCenter, switchTaxCenterSubTab } from './taxcentre.js';
 import { escapeHtml } from '../lib/html.js';
@@ -2739,9 +2738,7 @@ function initShippingTab() {
 
   if (bcGroup) {
     bcGroup.innerHTML = '';
-    let bcOrders = (bigCartelData && bigCartelData.orders && bigCartelData.orders.length > 0)
-      ? bigCartelData.orders
-      : (loadCachedBigCartelOrders()?.orders || []);
+    const bcOrders = getBigCartelOrders();
 
     if (bcOrders.length === 0) {
       const opt = document.createElement('option');
@@ -2881,9 +2878,7 @@ function renderCustomShippoDestPicker() {
   const items = [];
 
   // 1. Big Cartel Orders
-  let bcOrders = (bigCartelData && bigCartelData.orders && bigCartelData.orders.length > 0)
-    ? bigCartelData.orders
-    : (typeof loadCachedBigCartelOrders === 'function' ? loadCachedBigCartelOrders()?.orders || [] : []);
+  const bcOrders = getBigCartelOrders();
 
   const bcIncluded = getBigCartelIncluded();
 
