@@ -4,7 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vitest';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const mainJs = readFileSync(path.join(__dirname, '../src/main.js'), 'utf8');
+// renderMockSpreadsheet moved out of main.js into its own feature module.
+const simulatorJs = readFileSync(path.join(__dirname, '../src/features/sheets-simulator.js'), 'utf8');
 
 // Same relative-luminance / WCAG contrast math as scripts/check-contrast.mjs,
 // duplicated locally rather than imported so this test pins the rendered
@@ -45,7 +46,7 @@ function whiteOnDark(alpha, bgHex) {
 // 4.5:1 small-text floor every other label in this widget already clears).
 // Pinned here so the fix can't quietly regress back to that alpha.
 test('mock spreadsheet row gutter, corner cell and empty state stay legible on their dark chrome', () => {
-  const fnMatch = mainJs.match(/function renderMockSpreadsheet\(\) \{[\s\S]*?\n\}/);
+  const fnMatch = simulatorJs.match(/function renderMockSpreadsheet\(\) \{[\s\S]*?\n\}/);
   expect(fnMatch).not.toBeNull();
   const body = fnMatch[0];
 
