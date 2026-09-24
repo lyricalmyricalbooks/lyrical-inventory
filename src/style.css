@@ -2151,7 +2151,7 @@ tr.hist-row:hover {
    ink header bar, flat rows, hairline dividers. A 200-row expense ledger with
    an outline on every row is unreadable; an outline around the whole table
    reads as printed. */
-.tbl-wrap{border-radius:var(--r2);overflow:hidden;border:var(--stroke) solid var(--border-strong);margin-bottom:1.5rem;box-shadow:var(--shadow);}
+.tbl-wrap{border-radius:var(--r2);overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;border:var(--stroke) solid var(--border-strong);margin-bottom:1.5rem;box-shadow:var(--shadow);}
 .tbl{width:100%;border-collapse:collapse;font-size:var(--text-base);}
 .tbl thead{background:var(--surface-inverse);}
 .tbl th{padding:10px 16px;font-size:var(--text-3xs);font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.58);text-align:left;white-space:nowrap;}
@@ -6155,7 +6155,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .con-action-btn:hover{border-color:var(--gold2);color:var(--text);transform:translateY(-1px);}
 
 /* Table Styling & Hierarchy */
-.all-consignment-table{margin-bottom:0;box-shadow:var(--elev-1);border:var(--stroke-hair) solid var(--border2);border-radius:var(--r2);overflow:hidden;background:var(--surface-card);}
+.all-consignment-table{margin-bottom:0;box-shadow:var(--elev-1);border:var(--stroke-hair) solid var(--border2);border-radius:var(--r2);overflow-x:auto;overflow-y:hidden;background:var(--surface-card);}
 .all-consignment-table .tbl thead{background:var(--surface-inverse);}
 .all-consignment-table .tbl th{padding-top:13px;padding-bottom:13px;color:rgba(255,255,255,.65);font-size:var(--text-3xs);letter-spacing:var(--tracking-label);}
 .all-consignment-table .tbl td{padding-top:13px;padding-bottom:13px;vertical-align:middle;}
@@ -6266,6 +6266,52 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .con-empty-state{padding:2.5rem 1rem !important;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;}
 .con-empty-msg{font-size:var(--text-base);color:var(--text2);margin:0;}
 
+/* ── Combined consignment summary, in Riso ─────────────────────────────────
+   This screen was restyled on its own before the Riso repaint and kept the
+   old idiom: pill-shaped search and toggles, hairline cards with a soft lift,
+   a pink-tinted icon well and rounded progress bars. Re-cut to match the
+   .kpi tiles and .btn: squared corners, a 2px ink rule, a flat offset block
+   for depth, uppercase label type and square-ended bars. Status pills keep
+   their lozenge (--r-pill) — that shape is how they read as status. */
+.consignment-stat-card{border:var(--stroke) solid var(--rule-ink);border-radius:var(--r);box-shadow:var(--elev-3);}
+.consignment-stat-card:hover{transform:translateY(-1px);box-shadow:var(--elev-hover);border-color:var(--rule-ink);}
+.consignment-stat-card::after{display:none;}
+.consignment-stat-card.focus{background:var(--gold-bg);}
+.consignment-stat-icon-wrap{border-radius:var(--r);background:var(--cream2);border:var(--stroke) solid var(--rule-ink);box-shadow:none;}
+.consignment-stat-card.focus .consignment-stat-icon-wrap{background:var(--gold);}
+.con-stat-val{font-weight:500;}
+.con-stat-bar-track,.con-stat-bar-fill,
+.con-row-progress,.con-row-progress-bar{border-radius:0;}
+.con-stat-bar-track{height:6px;background:var(--track-bg);}
+.con-row-progress{background:var(--track-bg);}
+
+.con-search-input{border-radius:var(--r);border:var(--stroke) solid var(--rule-ink);}
+.con-search-input:focus{border-color:var(--rule-ink);}
+.con-search-clear-btn{border-radius:var(--r);}
+.con-toolbar-filters{border-radius:var(--r);border:var(--stroke) solid var(--rule-ink);background:var(--surface-card);padding:0;gap:0;}
+.con-filter-btn{border-radius:0;border:none;border-right:var(--stroke-hair) solid var(--border);text-transform:uppercase;letter-spacing:var(--tracking-caps);font-weight:800;min-height:var(--target-min);padding:6px 14px;}
+.con-filter-btn:last-child{border-right:none;}
+.con-filter-btn.active{background:var(--surface-inverse);color:var(--content-on-inverse);border-color:var(--border);box-shadow:none;}
+.con-filter-badge,.con-filter-btn.active .con-filter-badge{border-radius:0;}
+.con-filter-btn.active .con-filter-badge{background:var(--gold);color:var(--ink);}
+.con-filter-btn.active .con-dot{color:inherit;}
+.con-action-btn,.con-group-toggle-btn{
+  border-radius:var(--r);border:var(--stroke) solid var(--rule-ink);background:var(--surface-card);
+  color:var(--content-primary);text-transform:uppercase;letter-spacing:var(--tracking-caps);font-weight:800;box-shadow:var(--elev-1);
+}
+.con-action-btn:hover,.con-group-toggle-btn:hover{border-color:var(--rule-ink);transform:none;box-shadow:var(--elev-2);}
+.con-group-toggle-btn.is-on{background:var(--gold);border-color:var(--rule-ink);color:var(--ink);}
+
+.all-consignment-table{border:var(--stroke) solid var(--rule-ink);border-radius:var(--r);box-shadow:var(--elev-3);}
+.all-consignment-table .tbl tbody tr.is-active td:first-child{box-shadow:inset 4px 0 0 var(--gold);}
+.all-consignment-table .tbl tbody tr.con-group-row{background:var(--cream2);border-top:var(--stroke) solid var(--rule-ink);border-bottom:var(--stroke-hair) solid var(--border);}
+.all-consignment-table .tbl tbody tr.con-group-row:first-child{border-top:none;}
+.con-group-title{font-weight:800;text-transform:uppercase;letter-spacing:var(--tracking-caps);font-size:var(--text-sm);}
+.con-group-dot{width:10px;height:10px;border-radius:0;box-shadow:none;outline:var(--stroke-hair) solid var(--rule-ink);}
+.con-group-jump-btn{border:var(--stroke-hair) solid var(--rule-ink);text-transform:uppercase;letter-spacing:var(--tracking-caps);}
+.con-outstanding-badge{background:var(--amber-bg);border:var(--stroke-hair) solid var(--amber);}
+.con-tree-guide{border-bottom-left-radius:0;border-color:var(--border);}
+
 /* Container Queries & Responsive Adaptation */
 @container con-summary (max-width: 820px){
   .consignment-stat-grid{grid-template-columns:repeat(3,minmax(0,1fr));}
@@ -6280,6 +6326,13 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   .con-toolbar-actions{margin-left:0;justify-content:stretch;}
   .con-action-btn,
   .con-group-toggle-btn{flex:1;justify-content:center;}
+}
+/* Half-screen windows: tighten the ledger so every column, Status
+   included, fits without a sideways scroll. */
+@container con-summary (max-width: 900px){
+  .all-consignment-table .tbl th,
+  .all-consignment-table .tbl td{padding-left:10px;padding-right:10px;}
+  .all-consignment-table .tbl th{letter-spacing:.08em;}
 }
 @container con-summary (max-width: 580px){
   .all-consignment-table .col-sellthrough{display:none;}
@@ -19685,3 +19738,42 @@ button[onclick="refreshUmamiStats()"]:active {
 .activity-filter { display: flex; gap: 6px; margin: 0 0 var(--space-3); flex-wrap: wrap; }
 .activity-filter-btn { min-height: 44px; padding: 0 12px; border: var(--stroke-hair) solid var(--border-default); border-radius: var(--r-pill); background: transparent; color: var(--content-secondary); font-size: var(--text-xs); font-weight: 600; cursor: pointer; }
 .activity-filter-btn.is-active { background: var(--status-active-bg); border-color: var(--status-active); color: var(--content-primary); }
+
+/* ── Riso sweep: the controls the repaint missed ────────────────────────────
+   Several screens were styled before the Riso repaint and still draw their
+   filters, search fields, segmented toggles and progress bars as soft
+   rounded lozenges with hairline rules. Riso is squared: these take a hard
+   corner, a 2px ink rule on anything you press, and a solid fill (not a
+   tint) for the chosen option, matching .btn and the consignment summary.
+   STATUS pills, counts and badges keep --r-pill on purpose — the lozenge is
+   how they read as a label rather than a button. Switch tracks and the
+   close button stay round because their knob/glyph is circular. */
+
+/* Pressable chips and filters */
+.filter-chip,.email-chips-container .filter-chip,.hist-filter-chip,.hist-filter-chip button,
+.cf-detail-filter,.tcc-filter-pill,.rec-filter,.activity-filter-btn,.store-quick-chip,
+.tc-opt,.tc-trip-chip,.recon-chip,.pile-chip,.oc-token-btn,.oc-add-photo-trigger,
+.oc-layout .oc-util-actions .btn,.oc-util-actions,.phone-fold-btn,.intel-model-pill,.ch-cur-btn{border-radius:var(--r);}
+.filter-chip,.cf-detail-filter,.tcc-filter-pill,.rec-filter,.activity-filter-btn,.store-quick-chip{
+  border:var(--stroke) solid var(--rule-ink);background:var(--surface-card);color:var(--content-primary);
+  font-weight:800;letter-spacing:var(--tracking-caps);text-transform:uppercase;
+}
+.filter-chip.active,.cf-detail-filter.is-active,.tcc-filter-pill.active,.rec-filter.is-on{
+  background:var(--surface-inverse);border-color:var(--rule-ink);color:var(--content-on-inverse);
+}
+.rec-filter.is-on .rec-filter-count{background:var(--gold);color:var(--ink);}
+.activity-filter-btn.is-active{border-color:var(--rule-ink);}
+
+/* Segmented toggles: one ink-ruled bar, squared segments, ink fill = chosen */
+.ch-cur-toggle,.intel-model-switch{border-radius:var(--r);border:var(--stroke) solid var(--rule-ink);background:var(--surface-card);}
+.theme-seg,.theme-seg::before,.theme-seg-opt{border-radius:var(--r);}
+
+/* Search and select fields */
+.pill-select-input,.pill-search-input{border-radius:var(--r);border:var(--stroke) solid var(--rule-ink);}
+.pill-select-input:focus,.pill-search-input:focus{border-color:var(--rule-ink);}
+
+/* Progress bars: square-ended, like a strip of ink */
+.bar-track,.bar-fill,.hist-progress-bar-wrap,.hist-progress-bar-fill,.bx-progress-track,
+.sync-progress-bar,.sync-progress-fill,.ch-row-track,.ch-row-fill,.ch-stack,.ch-mix-track,.ch-mix-fill,
+.sk-bar,.recon-progress,.recon-progress > i,.send-progress-track,.send-progress-fill,
+.oc-progress-track,.oc-progress-fill,.oc-funnel-bar,.oc-funnel-bar > span,.preview-bar{border-radius:0;}
