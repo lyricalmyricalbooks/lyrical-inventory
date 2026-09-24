@@ -4,17 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vitest';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const darkCss = readFileSync(path.join(__dirname, '../src/styles/theme-dark.css'), 'utf8');
 const styles = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
 const html = readFileSync(path.join(__dirname, '../index.html'), 'utf8');
-
-test('night-mode paper sets its own text colour, so inherited text starts from paper ink', () => {
-  // Without it, a figure with no colour of its own inherits the page's
-  // near-white and lands at ~1.2:1 on paper (the write-off dialog's unit cost).
-  const scope = darkCss.match(/\.theme-dark :is\(\.card, \.modal[^)]*\) \{([\s\S]*?)\n\}/);
-  expect(scope, 'PAPER SCOPE rule').not.toBeNull();
-  expect(scope[1]).toMatch(/\n  color: var\(--content-primary\);/);
-});
 
 test('the invoice preview toolbar is paper, not an ink strip of ink buttons', () => {
   const modal = html.slice(html.indexOf('id="m-invoice-view"'), html.indexOf('<div class="overlay"', html.indexOf('id="m-invoice-view"') + 10));
