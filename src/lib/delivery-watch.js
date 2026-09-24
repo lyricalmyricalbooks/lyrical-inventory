@@ -25,7 +25,8 @@ export const DELIVERY_BATCH = 10;
 
 const DAY = 86400000;
 
-function dayMs(value) {
+/** Milliseconds for the calendar day a `YYYY-MM-DD…` date starts with, or NaN. */
+export function dayMs(value) {
   const parsed = Date.parse(String(value || '').slice(0, 10));
   return Number.isFinite(parsed) ? parsed : NaN;
 }
