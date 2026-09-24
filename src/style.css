@@ -4168,6 +4168,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .apb-what{font-size:var(--text-base);color:var(--text);}
 .apb-row.is-pending .apb-what{color:var(--text2);}
 .apb-status{font-size:var(--text-sm);color:var(--text2);}
+.apb-status.is-done{color:var(--green);font-weight:600;}
 .apb-status.is-warn{color:var(--red);font-weight:600;}
 .apb-pay-wrap{display:inline-flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end;}
 .apb-hint{font-size:var(--text-xs);color:var(--text3);}
