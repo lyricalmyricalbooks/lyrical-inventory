@@ -508,7 +508,7 @@ function printShippingLabel() {
   saveState(activeBook);
   renderHist();
 
-  const fallbackFrom = ['Lyricalmyrical Books', '456 Montrose Ave', 'Toronto ON  M6G 3H1'];
+  const fallbackFrom = ['Lyricalmyrical Books', '456 Montrose Ave', 'Toronto ON  M6G 3H1', 'Canada'];
   let orientation = 'portrait';
   try { orientation = localStorage.getItem(HAND_LABEL_ORIENTATION_KEY) || 'portrait'; } catch (_) { /* private mode */ }
   const doc = buildHandLabelDocument({
