@@ -4754,7 +4754,7 @@ function showBookChoice(tabName) {
   books.forEach((book, index) => {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'btn book-choice-card';
+    button.className = 'book-choice-card';
     if (book.accent) button.style.setProperty('--choice-accent', book.accent);
     button.innerHTML = `<span class="book-choice-number" aria-hidden="true">${String(index + 1).padStart(2, '0')}</span>
       <span class="book-choice-details"><span class="book-choice-title">${escapeHtml(book.title)}</span>
