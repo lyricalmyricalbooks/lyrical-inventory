@@ -74,6 +74,30 @@ export function shippingEmailQuery({ since = '', extraSenders = [] } = {}) {
 }
 
 /**
+ * A Gmail search for specific tracking numbers, whoever sent the mail.
+ *
+ * Used when an order has a tracking number (typed into Big Cartel) but no
+ * postage behind it yet: the label's receipt email is the one place its cost
+ * is written down, whatever route the label was bought through. Each number is
+ * searched as written and, for a 16-digit Canada Post number, in the spaced
+ * form its receipts print ("7023 2104 5566 7788").
+ */
+export function trackingEmailQuery(pins = [], { since = '' } = {}) {
+  const forms = new Set();
+  (Array.isArray(pins) ? pins : []).forEach(pin => {
+    const bare = normalizeTrackingNumber(pin);
+    if (!bare) return;
+    forms.add(`"${bare}"`);
+    if (/^\d{16}$/.test(bare)) forms.add(`"${bare.replace(/(\d{4})(?=\d)/g, '$1 ')}"`);
+  });
+  if (!forms.size) return '';
+  const parts = [`{${[...forms].join(' OR ')}}`];
+  const day = String(since || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(day)) parts.push(`after:${day.replace(/-/g, '/')}`);
+  return parts.join(' ');
+}
+
+/**
  * Whether an email is shipping mail at all.
  *
  * The Gmail query is deliberately wide — a missed label is silent, a false

@@ -229,7 +229,7 @@ import {
   normalizeShippingEmail,
   postageCandidateRef,
 } from '../lib/postage-intake.js';
-import { parseShippingEmail, shippingEmailQuery } from '../lib/shipping-email.js';
+import { parseShippingEmail, shippingEmailQuery, trackingEmailQuery } from '../lib/shipping-email.js';
 import {
   assessLiveShippingReadiness,
   inspectZonosAccountKey,
@@ -1436,7 +1436,7 @@ function cpShipmentIdsFrom(payload) {
  * Returns a count of what landed and what still needs a figure, so the caller
  * can say so once rather than per shipment.
  */
-async function sweepCanadaPostShipments({ force = false } = {}) {
+async function sweepCanadaPostShipments({ force = false, pins = [] } = {}) {
   const settings = TAX_CENTER.settings || {};
   const credentials = resolveCanadaPostCredentials(settings);
   const isTest = !!settings.cpTestMode;
@@ -1466,6 +1466,17 @@ async function sweepCanadaPostShipments({ force = false } = {}) {
     }), credentials, isTest);
 
     const ids = cpShipmentIdsFrom(listed);
+    // Tracking numbers Big Cartel knows about but the dated listing didn't
+    // return: ask for each by number too. A website label that the list leaves
+    // out can still be found this way, and it costs only a read.
+    for (const pin of pins.slice(0, 10)) {
+      const one = await cpRead(resolveListShipmentsEndpoint({
+        customerNumber: credentials.customerNumber,
+        mobo: credentials.customerNumber,
+        trackingPin: pin,
+      }), credentials, isTest).catch(() => null);
+      cpShipmentIdsFrom(one).forEach(id => { if (!ids.includes(id)) ids.push(id); });
+    }
     const known = new Set((TAX_CENTER.businessExpenses || [])
       .map(expense => cpText(expense?.ref)).filter(Boolean));
     const knownOrders = getShippingReconciliationOrders();
@@ -1659,7 +1670,13 @@ async function applyBigCartelTracking(orders = [], included = []) {
   if (missing.length) {
     const oldest = Math.min(...missing.map(c => Date.parse(c.shipment.shippedAt) || Date.now()));
     _cpSweepReachBackTo = oldest;
-    sweepCanadaPostShipments({ force: true }).catch(() => {});
+    const pins = missing.map(c => c.shipment.tracking);
+    // Two independent places to find the cost: Canada Post's record of the
+    // label, and its receipt email. Whichever answers first files it; the other
+    // sees the tracking number already on the books and skips it.
+    sweepCanadaPostShipments({ force: true, pins })
+      .finally(() => sweepShippingEmails({ force: true, pins }))
+      .catch(() => {});
   }
 
   if (changes.length) {
@@ -1777,7 +1794,7 @@ async function gmailJson(action, params) {
  * not already in the ledger under that number — which is also what stops this
  * and the Canada Post sweep filing the same Canada Post label twice.
  */
-async function sweepShippingEmails({ force = false } = {}) {
+async function sweepShippingEmails({ force = false, pins = [] } = {}) {
   const configured = !!sheetsUrl;
   const { online, visible } = browserWatchState();
   const due = force
@@ -1803,11 +1820,17 @@ async function sweepShippingEmails({ force = false } = {}) {
       ? last - 86400000
       : Date.now() - EMAIL_SWEEP_COLD_START_DAYS * 86400000).toISOString().slice(0, 10);
 
-    const found = await gmailJson('listReceiptEmails',
-      `limit=25&q=${encodeURIComponent(shippingEmailQuery({ since }))}`);
+    // With tracking numbers to chase, search for those numbers in any mail
+    // from the last 60 days: the label's receipt, whoever sent it. This is a
+    // targeted look, so it leaves the regular sweep's clock alone.
+    const byPin = pins.length > 0;
+    const query = byPin
+      ? trackingEmailQuery(pins, { since: new Date(Date.now() - 60 * 86400000).toISOString().slice(0, 10) })
+      : shippingEmailQuery({ since });
+    const found = await gmailJson('listReceiptEmails', `limit=25&q=${encodeURIComponent(query)}`);
     const ids = (found.emails || []).map(email => cpText(email?.id)).filter(Boolean);
     if (!ids.length) {
-      writeEmailSweepStamp(Date.now());
+      if (!byPin) writeEmailSweepStamp(Date.now());
       noteIntegrationSuccess('shipping-email');
       return { filed: 0, linked: 0, blank: 0, stamped: 0 };
     }
@@ -1850,7 +1873,7 @@ async function sweepShippingEmails({ force = false } = {}) {
       if (needsAmount(candidate)) blank++;
     });
 
-    writeEmailSweepStamp(Date.now());
+    if (!byPin) writeEmailSweepStamp(Date.now());
     noteIntegrationSuccess('shipping-email');
 
     if (filed) {
