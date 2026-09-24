@@ -175,3 +175,45 @@ export function describeBatchTotal(rows = []) {
   });
   return Array.from(byCurrency, ([cur, sum]) => `$${sum.toFixed(2)} ${cur}`).join(' + ') || '$0.00';
 }
+
+function escapeAttr(value) {
+  return String(value || '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+}
+
+/** Whether a label link is an image a web page can print, rather than a PDF. */
+export function isImageLabel(url) {
+  return /\.(png|jpe?g|gif)(\?|#|$)/i.test(String(url || ''));
+}
+
+/**
+ * One printable page holding every label, one label per 4×6 sheet, which
+ * prints itself once all the pictures have loaded. PDF labels can't be
+ * placed on a page like this, so they're listed as links at the top instead.
+ */
+export function buildLabelPrintPage(labels = []) {
+  const images = labels.filter(l => isImageLabel(l.url));
+  const others = labels.filter(l => l.url && !isImageLabel(l.url));
+  const notice = others.length
+    ? `<div class="note">These ${others.length === 1 ? 'label is a PDF' : `${others.length} labels are PDFs`} and must be printed on ${others.length === 1 ? 'its' : 'their'} own: ${others.map(l => `<a href="${escapeAttr(l.url)}" target="_blank" rel="noopener">${escapeAttr(l.orderNumber)}</a>`).join(', ')}</div>`
+    : '';
+  const pages = images.map(l => `<div class="sheet"><img src="${escapeAttr(l.url)}" alt="Shipping label for ${escapeAttr(l.orderNumber)}"></div>`).join('');
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Shipping labels (${images.length})</title>
+<style>
+@page { size: 4in 6in; margin: 0; }
+html, body { margin: 0; padding: 0; background: #fff; color: #000; font: 14px system-ui, sans-serif; }
+.note { padding: 12px 16px; background: #fff4d6; border-bottom: 1px solid #e0c060; }
+.sheet { width: 4in; height: 6in; display: flex; align-items: center; justify-content: center; page-break-after: always; break-after: page; overflow: hidden; }
+.sheet:last-child { page-break-after: auto; break-after: auto; }
+.sheet img { max-width: 100%; max-height: 100%; }
+@media print { .note { display: none; } }
+</style></head><body>${notice}${pages}
+<script>
+(function () {
+  var imgs = Array.prototype.slice.call(document.images);
+  var left = imgs.length;
+  function done() { if (--left <= 0) setTimeout(function () { window.print(); }, 200); }
+  if (!left) return;
+  imgs.forEach(function (img) { if (img.complete) done(); else { img.onload = done; img.onerror = done; } });
+})();
+</script></body></html>`;
+}

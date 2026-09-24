@@ -98,3 +98,24 @@ describe('the rest', () => {
     expect(decl.items[0]).toMatchObject({ quantity: 2, net_weight: '1.10', value_amount: '50.00' });
   });
 });
+
+describe('buildLabelPrintPage', () => {
+  it('puts each picture label on its own sheet and lists PDFs separately', async () => {
+    const { buildLabelPrintPage, isImageLabel } = await import('../src/lib/batch-shipping.js');
+    expect(isImageLabel('https://x/label.png?sig=1')).toBe(true);
+    expect(isImageLabel('https://x/label.pdf')).toBe(false);
+    const html = buildLabelPrintPage([
+      { url: 'https://x/a.png', orderNumber: '#LMB-1' },
+      { url: 'https://x/b.png', orderNumber: '#LMB-2' },
+      { url: 'https://x/c.pdf', orderNumber: '#LMB-3' },
+    ]);
+    expect(html.match(/class="sheet"/g)).toHaveLength(2);
+    expect(html).toContain('size: 4in 6in');
+    expect(html).toContain('href="https://x/c.pdf"');
+    expect(html).toContain('window.print()');
+  });
+  it('escapes what it puts in the page', async () => {
+    const { buildLabelPrintPage } = await import('../src/lib/batch-shipping.js');
+    expect(buildLabelPrintPage([{ url: 'https://x/a.png"><script>', orderNumber: '<b>' }])).not.toContain('"><script>');
+  });
+});

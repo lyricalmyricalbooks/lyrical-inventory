@@ -48,7 +48,7 @@ import { renderExpenses, saveReceiptToLocalFile, readShippingFieldsFromReceipt }
 import { findExistingLabel, describeExistingLabel } from '../lib/label-duplicate-guard.js';
 import {
   BATCH_LOOKBACK_DAYS, isBatchCandidate, scaledParcel, batchCustomsDeclaration, pickCheapestRate,
-  originBlocker, preflightBlocker, addressVerdictBlocker, describeBatchTotal,
+  originBlocker, preflightBlocker, addressVerdictBlocker, describeBatchTotal, buildLabelPrintPage,
 } from '../lib/batch-shipping.js';
 import { openM, closeM, confirmDialog, promptDialog, validateFields, clearFieldErrors, fieldError, _prefersReducedMotion } from '../lib/modal.js';
 import { dismissAppAlert, pushAppAlert } from '../lib/app-alert.js';
@@ -6210,7 +6210,7 @@ function findOrderAcrossBooks(orderNumber) {
  * postage expense, links it to the order. No prompts — every caller confirms
  * with the publisher first. Throws when Shippo does not sell the label.
  */
-async function purchaseShippoRate({ rateId, provider, serviceName, amount, currency, orderNumber = '' }) {
+async function purchaseShippoRate({ rateId, provider, serviceName, amount, currency, orderNumber = '', labelFileType = '' }) {
   const shippoKey = TAX_CENTER.settings?.shippoKey || '';
   if (!shippoKey) throw new Error('No Shippo API key saved.');
 
@@ -6220,7 +6220,7 @@ async function purchaseShippoRate({ rateId, provider, serviceName, amount, curre
       'Authorization': `ShippoToken ${shippoKey}`,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ rate: rateId, async: false })
+    body: JSON.stringify({ rate: rateId, async: false, ...(labelFileType ? { label_file_type: labelFileType } : {}) })
   });
 
   if (!resp.ok) {
@@ -6436,7 +6436,9 @@ function renderBatchShipping() {
     footer.innerHTML = `<button class="btn" type="button" onclick="attemptCloseModal('batch-ship')">Not now</button>
       <button class="btn gold" type="button" ${picked.length ? '' : 'disabled'} onclick="buyBatchLabels()">Buy ${picked.length} label${picked.length === 1 ? '' : 's'} · ${escapeHtml(describeBatchTotal(picked))}</button>`;
   } else if (phase === 'done') {
-    footer.innerHTML = '<button class="btn gold" type="button" onclick="attemptCloseModal(\'batch-ship\')">Close</button>';
+    const printable = rows.filter(r => r.status === 'bought' && r.labelUrl).length;
+    footer.innerHTML = `<button class="btn" type="button" onclick="attemptCloseModal('batch-ship')">Close</button>`
+      + (printable ? `<button class="btn gold" type="button" onclick="printBatchLabels()"><span aria-hidden="true">🖨️</span> Print all ${printable} label${printable === 1 ? '' : 's'}</button>` : '');
   } else {
     footer.innerHTML = `<button class="btn" type="button" disabled>${phase === 'buying' ? 'Buying…' : 'Checking…'}</button>`;
   }
@@ -6604,6 +6606,9 @@ async function buyBatchLabels() {
         amount: parseFloat(row.rate.amount),
         currency: row.rate.currency,
         orderNumber: row.orderNumber,
+        // Pictures rather than PDFs, so every label in the batch can go on one
+        // printable page.
+        labelFileType: 'PNG',
       });
       row.status = 'bought';
       row.reason = '';
@@ -6624,6 +6629,22 @@ async function buyBatchLabels() {
     failed ? 'warn' : 'ok',
     8000,
   );
+}
+
+/** Opens every label bought in this batch on one page and prints it. */
+function printBatchLabels() {
+  const labels = _batch.rows
+    .filter(r => r.status === 'bought' && r.labelUrl)
+    .map(r => ({ url: r.labelUrl, orderNumber: r.orderNumber }));
+  if (!labels.length) return;
+  const win = window.open('', '_blank');
+  if (!win) {
+    showToast('⚠️ Your browser blocked the print window — allow pop-ups for this app, then try again', 'warn', 8000);
+    return;
+  }
+  win.document.open();
+  win.document.write(buildLabelPrintPage(labels));
+  win.document.close();
 }
 
 /** Hands a held-back order to the normal one-order form. */
@@ -10422,6 +10443,7 @@ export {
   buyBatchLabels,
   toggleBatchRow,
   openBatchRowInForm,
+  printBatchLabels,
   calculateShippoRates,
   calculateZonosDutiesHandler,
   renderZonosDutyCard,
