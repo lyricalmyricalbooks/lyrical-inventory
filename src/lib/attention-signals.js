@@ -342,6 +342,44 @@ function catalogueSignals(book, s, out) {
  * already computed — the live checks that produce them talk to Google, Stripe
  * and the sync queue, none of which belongs behind a pure function.
  */
+/**
+ * Register sales taken on the printed Fair Kit QR with no signal. Nothing ties
+ * them to a Stripe payment, so each stays here until the owner has seen the
+ * money arrive and taps Paid. One signal for all of them, one line per sale.
+ */
+export const PRINTED_QR_NOTE = 'Stripe QR (printed code';
+function printedQrSignals({ states, booksById }, out) {
+  const sales = new Map();
+  for (const [bookId, s] of Object.entries(states || {})) {
+    const book = booksById[bookId];
+    if (!book) continue;
+    for (const h of (s?.hist || [])) {
+      if (!h || h.voided || h.qrConfirmed || !String(h.notes || '').startsWith(PRINTED_QR_NOTE)) continue;
+      const sale = sales.get(h.num) || { num: h.num, date: h.date, bookId, parts: [], totals: {} };
+      const cur = getBookCurrencyCode(book);
+      sale.parts.push(`${book.title}${num(h.qty) > 1 ? ` ×${num(h.qty)}` : ''}`);
+      sale.totals[cur] = (sale.totals[cur] || 0) + num(h.qty) * num(h.price);
+      sales.set(h.num, sale);
+    }
+  }
+  if (!sales.size) return;
+  const list = [...sales.values()].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const n = list.length;
+  out.push({
+    id: 'orders-printed-qr',
+    group: 'orders',
+    status: 'warn',
+    icon: '▦',
+    label: `Check ${n === 1 ? 'a QR payment' : `${n} QR payments`} arrived in Stripe`,
+    detail: `${n === 1 ? 'This sale was' : 'These sales were'} paid with your printed QR code while there was no signal. Look for ${n === 1 ? 'the payment' : 'each payment'} in Stripe, then tap Paid.`,
+    fix: { label: 'Open Stripe payments', ...openTab('reconcile') },
+    items: list.map((sale) => ({
+      label: `${sale.date} · ${sale.parts.join(', ')} · ${Object.entries(sale.totals).map(([c, v]) => fmt(v, c)).join(' + ')}`,
+      quick: { label: 'Paid ✓', kind: 'action', tab: 'qr-arrived', bookId: sale.bookId, num: sale.num },
+    })),
+  });
+}
+
 function setupSignals(ctx, out) {
   const sheets = ctx.sheets || {};
   if (sheets.connected && sheets.deployedVersion && sheets.expectedVersion
@@ -685,6 +723,7 @@ export function buildAttentionSignals(input = {}) {
     moneySignals(book, s, signals, ctx);
     catalogueSignals(book, s, signals);
   }
+  printedQrSignals({ states, booksById }, signals);
   setupSignals(ctx, signals);
   missingCostsSignals({ ...ctx, states, booksById }, signals);
   recurringSignals(ctx, signals);

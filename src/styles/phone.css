@@ -335,3 +335,24 @@
   .fm-sum-row span { display: grid; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
   .fm-sum-row small { font-weight: 500; font-size: var(--text-xs); color: var(--content-secondary); }
 }
+
+/* Phase 4: pop-ups on phones — folded actions, swipe to close, keyboard. */
+.phone-more-toggle { display: none; }
+.phone-more-panel { display: contents; }
+@media (max-width: 768px) {
+  .modal .modal-footer > div[data-phone-folded] .phone-more-toggle { display: inline-flex; justify-content: center; flex: 1 1 100%; min-height: 44px; }
+  .modal .modal-footer > div[data-phone-folded]:not(.phone-more-open) .phone-more-panel { display: none; }
+  .modal .modal-footer > div[data-phone-folded].phone-more-open .phone-more-panel { display: flex; flex-wrap: wrap; gap: var(--space-2); flex: 1 1 100%; }
+  .modal .modal-footer > div[data-phone-folded] .phone-more-panel > .btn { flex: 1 1 calc(50% - var(--space-2)); min-height: 44px; }
+}
+@media (max-width: 600px) {
+  /* A grab handle says "this sheet can be swiped down". */
+  .overlay .modal:has(> .modal-title)::before {
+    content: ''; display: block; width: 40px; height: 4px; margin: var(--space-2) auto 0;
+    border-radius: var(--r-pill); background: var(--border-default);
+  }
+  .overlay .modal-title { touch-action: none; }
+  /* Keep the sheet, and its pinned Save, above the on-screen keyboard. */
+  .overlay { padding-bottom: var(--kb-inset, 0px); }
+  .overlay .modal { max-height: min(92dvh, calc(100dvh - env(safe-area-inset-top) - var(--kb-inset, 0px))); }
+}

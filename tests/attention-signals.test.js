@@ -486,3 +486,35 @@ describe('styling', () => {
     expect(block).not.toMatch(/var\(--card\)/);
   });
 });
+
+describe('printed QR sales to check in Stripe', () => {
+  const book = (id, title) => ({ id, title, currency: 'CA$', listPrice: 40 });
+  const row = (num, notes, extra = {}) => ({ num, chan: 'Book Fair', qty: 1, price: 40, date: '2026-09-24', notes, ...extra });
+  it('lists each unconfirmed printed-QR checkout once, across books, with a Paid button', async () => {
+    const { buildAttentionSignals } = await import('../src/lib/attention-signals.js');
+    const out = buildAttentionSignals({
+      today: '2026-09-24',
+      books: [book('a', 'Harbour'), book('b', 'Fables')],
+      states: {
+        a: { stock: 10, hist: [
+          row('POS-1', 'Stripe QR (printed code, check it arrived in Stripe) · TABF'),
+          row('POS-2', 'Stripe QR (printed code, check it arrived in Stripe)', { qrConfirmed: true }),
+          row('POS-3', 'Stripe QR (printed code, check it arrived in Stripe)', { voided: true }),
+          row('POS-4', 'Card'),
+        ] },
+        b: { stock: 10, hist: [row('POS-1', 'Stripe QR (printed code, check it arrived in Stripe) · TABF')] },
+      },
+    });
+    const sig = out.signals.find(s => s.id === 'orders-printed-qr');
+    expect(sig).toBeTruthy();
+    expect(sig.label).toBe('Check a QR payment arrived in Stripe');
+    expect(sig.items).toHaveLength(1);
+    expect(sig.items[0].label).toMatch(/Harbour, Fables/);
+    expect(sig.items[0].quick).toMatchObject({ kind: 'action', tab: 'qr-arrived', num: 'POS-1' });
+  });
+  it('is absent when every printed-QR sale is confirmed', async () => {
+    const { buildAttentionSignals } = await import('../src/lib/attention-signals.js');
+    const out = buildAttentionSignals({ books: [book('a', 'A')], states: { a: { stock: 5, hist: [row('POS-1', 'Stripe QR (printed code, check it arrived in Stripe)', { qrConfirmed: true })] } } });
+    expect(out.signals.find(s => s.id === 'orders-printed-qr')).toBeUndefined();
+  });
+});

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test } from 'vitest';
 import { initPhoneLayouts } from '../src/lib/phone-layout.js';
 let stop;
 beforeEach(() => { stop?.(); document.body.innerHTML = ''; });
@@ -71,4 +71,63 @@ test('pop-up window tables outside the app shell become record cards', () => {
   expect(row.cells[1].classList.contains('phone-record-lead')).toBe(true);
   expect(row.cells[5].classList.contains('phone-record-detail')).toBe(false);
   expect(row.cells[2].classList.contains('phone-record-detail')).toBe(true);
+});
+
+test('a crowded pop-up footer keeps two actions and folds the rest, moving the real buttons', () => {
+  document.body.innerHTML = `<div class="overlay" id="m-trip"><div class="modal"><div class="modal-footer"><div>
+    ${[1, 2, 3, 4, 5, 6, 7].map(n => `<button class="btn" id="b${n}">B${n}</button>`).join('')}
+  </div><button class="btn">Close</button></div></div></div>`;
+  const b5 = document.getElementById('b5'); let clicks = 0; b5.addEventListener('click', () => clicks++);
+  stop = initPhoneLayouts(document.body);
+  const group = document.querySelector('.modal-footer > div');
+  const panel = group.querySelector('.phone-more-panel');
+  expect([...panel.children].map(b => b.id)).toEqual(['b3', 'b4', 'b5', 'b6', 'b7']);
+  expect(group.querySelector('#b1').parentElement).toBe(group);
+  const toggle = group.querySelector('.phone-more-toggle');
+  expect(toggle.getAttribute('aria-controls')).toBe(panel.id);
+  toggle.click();
+  expect(toggle.getAttribute('aria-expanded')).toBe('true');
+  expect(group.classList.contains('phone-more-open')).toBe(true);
+  document.getElementById('b5').click(); expect(clicks).toBe(1);
+});
+
+test('a short footer is left alone', () => {
+  document.body.innerHTML = '<div class="modal"><div class="modal-footer"><div><button class="btn">A</button><button class="btn">B</button><button class="btn">C</button></div></div></div>';
+  stop = initPhoneLayouts(document.body);
+  expect(document.querySelector('.phone-more-toggle')).toBeNull();
+});
+
+describe('swipe down to close', () => {
+  const setup = (phone) => {
+    document.body.innerHTML = '<div class="overlay" id="m-fair-today"><div class="modal"><div class="modal-title"><span>Today</span><button class="modal-close-btn">x</button></div><p>body</p></div></div>';
+    const closed = [];
+    const orig = window.matchMedia;
+    window.matchMedia = () => ({ matches: phone });
+    stop = initPhoneLayouts(document.body, { closeModal: (id) => closed.push(id) });
+    window.matchMedia = orig;
+    return closed;
+  };
+  const drag = (el, from, to, type = 'touch') => {
+    const ev = (name, y) => { const e = new Event(name, { bubbles: true }); Object.assign(e, { clientY: y, pointerType: type }); return e; };
+    el.dispatchEvent(ev('pointerdown', from));
+    el.dispatchEvent(ev('pointermove', to));
+    el.dispatchEvent(ev('pointerup', to));
+  };
+  test('a long swipe on the title closes through the page\'s own dismiss', () => {
+    const origMM = window.matchMedia; window.matchMedia = () => ({ matches: true });
+    const closed = setup(true);
+    window.matchMedia = () => ({ matches: true });
+    drag(document.querySelector('.modal-title span'), 100, 260);
+    window.matchMedia = origMM;
+    expect(closed).toEqual(['fair-today']);
+  });
+  test('a short swipe, a mouse drag, or a swipe on the body does not', () => {
+    window.matchMedia = () => ({ matches: true });
+    const closed = setup(true);
+    window.matchMedia = () => ({ matches: true });
+    drag(document.querySelector('.modal-title span'), 100, 150);
+    drag(document.querySelector('.modal-title span'), 100, 300, 'mouse');
+    drag(document.querySelector('.modal p'), 100, 300);
+    expect(closed).toEqual([]);
+  });
 });

@@ -5946,6 +5946,26 @@ function undoMarkOrderSent(bookId, num) {
 }
 window.undoMarkOrderSent = undoMarkOrderSent;
 
+// A printed-QR register sale whose payment the owner has now seen in Stripe.
+// One checkout can span several books, so every row with that number clears.
+function confirmPrintedQrArrived(num) {
+  if (!num) return;
+  let cleared = 0;
+  for (const [bookId, s] of Object.entries(states)) {
+    let touched = false;
+    for (const h of (s?.hist || [])) {
+      if (h.num === num && !h.qrConfirmed && String(h.notes || '').startsWith('Stripe QR (printed code')) {
+        h.qrConfirmed = true;
+        touched = true;
+        cleared++;
+      }
+    }
+    if (touched) saveState(bookId);
+  }
+  refreshAttentionSurfaces();
+  showToast(cleared ? '✓ Marked as paid' : 'Already marked as paid', 'ok');
+}
+
 function runTodoAction(name, { bookId = '', num = '' } = {}) {
   if (name === 'mark-shipped') { markOrderSentFromTodo(bookId, num); return; }
   if (name === 'file-ready-receipts') {
@@ -5953,6 +5973,7 @@ function runTodoAction(name, { bookId = '', num = '' } = {}) {
     return;
   }
   if (name === 'receipt-inbox') { openEmailReceiptImportModal(); return; }
+  if (name === 'qr-arrived') { confirmPrintedQrArrived(num); return; }
   if (name === 'sync-conflicts') { openSyncConflicts(); return; }
   if (name === 'shipping-worklist') {
     switchTab('taxcenter');
@@ -18437,7 +18458,7 @@ function renderPOS() {
     (b.author || '').toLowerCase().includes(posSearchQuery)
   );
   if (!booksArr.length && posSearchQuery) {
-    grid.innerHTML = `<div class="pos-search-empty">No books match <strong>&ldquo;${escapeHtml(posSearchQuery)}&rdquo;</strong>.<span class="pos-search-empty-hint">Press <kbd>Esc</kbd> to clear.</span></div>`;
+    grid.innerHTML = `<div class="pos-search-empty">No books match <strong>&ldquo;${escapeHtml(posSearchQuery)}&rdquo;</strong>.<span class="pos-search-empty-hint">Clear the search to see every book.</span></div>`;
   } else {
     grid.innerHTML = booksArr.map(posBookCardHtml).join('') + (allowPosOnly && !posSearchQuery ? `
       <button type="button" class="card pos-card pos-add-tile" onclick="openPosBookModal()" aria-label="Add POS-only book">
@@ -19134,7 +19155,7 @@ function renderPOSFxStatus() {
   if (!el) return;
   const ts = localStorage.getItem(POS_FX_FETCHED_AT_KEY);
   if (!ts) {
-    el.textContent = 'Using saved rates — click FX Rates to refresh';
+    el.textContent = 'Using saved rates. Use ↻ FX Rates to refresh them.';
     el.style.color = 'var(--amber)';
   } else {
     const mins = Math.round((Date.now() - new Date(ts).getTime()) / 60000);
