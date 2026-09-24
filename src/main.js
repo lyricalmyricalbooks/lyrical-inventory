@@ -9872,6 +9872,36 @@ function markArtistTransferReceived(transferId, bookId = activeBook, { chargeId 
   return true;
 }
 
+// Tell the publisher an author's Stripe payment just settled their sales: a
+// card that stays until dismissed, plus a device notification when she has
+// switched those on (the same "notify me when paid" switch as invoices).
+function notifyAuthorPaid(r, payment) {
+  const book = BOOKS[r.bookId];
+  const who = book.author || 'An author';
+  const title = `${who} paid you ${fmt(r.total, r.currency)}`;
+  const detail = `${book.title}: ${r.settled} ${r.settled === 1 ? 'sale' : 'sales'} marked received automatically and added to revenue.` +
+    (r.extra ? ` They paid ${fmt(r.extra, r.currency)} more than was due — check whether to refund it.` : '');
+  pushAppAlert({
+    id: `author-paid-${payment.id}`,
+    icon: '💸',
+    title,
+    detail,
+    tone: 'green',
+    actionLabel: 'Open book',
+    action: `switchBook(${JSON.stringify(r.bookId)}); switchTab('dashboard')`,
+  });
+  if (stripePaidNotifyEnabled() && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+    try {
+      const n = new Notification(title, { body: detail, icon: '/pwa-192x192.png', tag: `lm-author-paid-${payment.id}` });
+      n.onclick = () => {
+        try { window.focus(); } catch (_) { /* not focusable here */ }
+        try { switchBook(r.bookId); switchTab('dashboard'); } catch (_) { /* app still loading */ }
+        n.close();
+      };
+    } catch (_) { /* unsupported context */ }
+  }
+}
+
 // An author paid through one of the app's own transfer links (single sale or
 // "Pay all"). Settles exactly the transfers the link named — never more — and
 // only when the money covers them in the book's currency. Returns a short
@@ -9891,6 +9921,12 @@ function settleArtistTransfersFromStripe(payment) {
   let settled = 0;
   for (const t of open) if (markArtistTransferReceived(t.id, bookId, { chargeId: payment.id, quiet: true })) settled++;
   if (s.transferBundle && s.transferBundle.ids.some(id => ids.includes(String(id)))) delete s.transferBundle;
+  // A short, synced receipt list so the author's screen can say "your
+  // publisher received it" once the sales drop off their list.
+  if (settled) {
+    s.transferReceipts = [{ at: Date.now(), amount: due, count: settled, chargeId: payment.id },
+      ...(Array.isArray(s.transferReceipts) ? s.transferReceipts : [])].slice(0, 10);
+  }
   saveState(bookId);
   // Money for sales that were already settled (e.g. paid twice) is worth a look.
   const extra = roundCents(Number(payment.amount) - due);
@@ -10068,6 +10104,7 @@ consumeTransferPaidReturn();
 window.addEventListener('storage', e => { if (e.key === PAID_TAP_KEY) { try { renderArtistTransfers(); } catch (_) { /* still loading */ } } });
 
 const _transferLinkInFlight = new Set();
+let _lastTransferSweepKick = 0;
 function ensureTransferLinks(bookId) {
   const s = states[bookId];
   if (!s || !navigator.onLine) return;
@@ -10082,6 +10119,22 @@ function ensureTransferLinks(bookId) {
   })().finally(() => {
     // Leave failures flagged for this session so a bad key doesn't loop.
   });
+}
+
+// Most recent "publisher received your payment" within the last 14 days.
+function latestTransferReceipt(s) {
+  const r = Array.isArray(s?.transferReceipts) ? s.transferReceipts[0] : null;
+  return r && Date.now() - Number(r.at) < 14 * 86400000 ? r : null;
+}
+// Pop a one-time thank-you on the author's device the first time it sees a receipt.
+const RECEIPT_SEEN_KEY = 'lm-author-receipts-seen';
+function announceTransferReceipt(r, cur) {
+  let seen = [];
+  try { seen = JSON.parse(localStorage.getItem(RECEIPT_SEEN_KEY) || '[]'); } catch (_) { seen = []; }
+  if (!Array.isArray(seen) || seen.includes(r.chargeId)) return;
+  seen = [r.chargeId, ...seen].slice(0, 30);
+  try { localStorage.setItem(RECEIPT_SEEN_KEY, JSON.stringify(seen)); } catch (_) { /* private mode */ }
+  showToast(`✓ Your publisher received your ${fmt(r.amount, cur)} payment — thank you!`, 'ok', 6000);
 }
 
 // The Stripe link minted for this transfer, if it still matches the amount.
@@ -10113,7 +10166,22 @@ function renderArtistTransfers() {
   // authors so there is never a second, competing pay button.
   const banner = $('author-payment-banner');
   if (banner) {
-    if (isAuthor() && transfers.length > 0) {
+    const receipt = isAuthor() ? latestTransferReceipt(s) : null;
+    if (receipt) announceTransferReceipt(receipt, cur);
+    if (isAuthor() && transfers.length === 0 && receipt) {
+      // Nothing left to pay and the publisher recently received a payment:
+      // close the loop with a thank-you instead of just vanishing.
+      banner.style.display = '';
+      banner.querySelector('.metric-banner-label').textContent = 'Money to send to your publisher';
+      $('apb-amount').textContent = 'All paid — thank you!';
+      $('apb-amount').classList.add('is-quiet');
+      $('apb-detail').textContent = `Your publisher received ${fmt(receipt.amount, cur)} on ${fmtD(new Date(receipt.at).toISOString().slice(0, 10))}. Nothing more to send.`;
+      const actions = banner.querySelector('.metric-banner-actions');
+      if (actions) actions.style.display = 'none';
+      $('apb-transfers').innerHTML = '';
+      $('apb-transfers').style.display = 'none';
+    } else if (isAuthor() && transfers.length > 0) {
+      $('apb-transfers').style.display = '';
       let dueNow = 0, dueCount = 0, waitingTotal = 0, waitingCount = 0, missing = 0;
       for (const t of transfers) {
         const amt = transferAmount(t);
@@ -10191,7 +10259,15 @@ function renderArtistTransfers() {
 
   // Publisher with Stripe connected: make any missing/outdated author links in
   // the background, so authors always get a Stripe button with the amount set.
-  if (!isAuthor() && isPublisherSession() && getReconStripeKey()) ensureTransferLinks(activeBook);
+  if (!isAuthor() && isPublisherSession() && getReconStripeKey()) {
+    ensureTransferLinks(activeBook);
+    // Payments may be waiting in Stripe: check now rather than at the next
+    // 5-minute tick (throttled so re-renders don't hammer Stripe).
+    if ((s.artistTransfers || []).some(t => t.payUrl) && Date.now() - _lastTransferSweepKick > 60000) {
+      _lastTransferSweepKick = Date.now();
+      sweepStripeInvoicePayments({ force: true }).catch(() => { /* surfaced by the sweep's own health handling */ });
+    }
+  }
 
   // ── PUBLISHER PANEL
   const sect = $('artist-transfers-sect'), list = $('artist-transfers-list');
@@ -22556,9 +22632,19 @@ async function sweepStripeInvoicePayments({ force = false } = {}) {
         const r = settleArtistTransfersFromStripe(payment);
         if (r && r.settled) {
           touchedBooks.add(r.bookId);
-          showToast(`✓ ${BOOKS[r.bookId].title}: the author paid ${fmt(r.total, r.currency)} through Stripe — ${r.settled} ${r.settled === 1 ? 'sale' : 'sales'} marked received${r.extra ? ` (they paid ${fmt(r.extra, r.currency)} extra — check whether to refund)` : ''}`, 'ok', 7000);
-        } else if (r && r.problem) {
-          showToast(`${BOOKS[r.bookId].title}: an author payment came in ${r.problem === 'short' ? 'for less than' : 'in a different currency from'} what they owed — check it in Stripe and settle it by hand.`, 'warn', 8000);
+          notifyAuthorPaid(r, payment);
+        } else if (r && r.problem && !readRaisedStripeSales().includes(payment.id)) {
+          // Raised once per charge — the sweep sees the same charge every 5 minutes.
+          noteRaisedStripeSale(payment.id);
+          const book = BOOKS[r.bookId];
+          pushAppAlert({
+            id: `author-paid-problem-${payment.id}`,
+            icon: '⚠️',
+            title: `${book.author || 'An author'} sent a payment that doesn't match`,
+            detail: `${book.title}: it came in ${r.problem === 'short' ? 'for less than' : 'in a different currency from'} what they owed, so nothing was marked received. Check it in Stripe and settle it by hand.`,
+            actionLabel: 'Open book',
+            action: `switchBook(${JSON.stringify(r.bookId)}); switchTab('dashboard')`,
+          });
         }
         continue;
       }
