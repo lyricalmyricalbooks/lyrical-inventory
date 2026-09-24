@@ -7,6 +7,8 @@
 // Invariant: Pure helper library — UI rendering and DOM bindings remain in feature modules.
 // Includes offline-first de minimis estimates when network/API is unavailable.
 
+import { getSavedSheetsUrl } from './sheets-url.js';
+
 export const ZONOS_GRAPHQL_ENDPOINT = 'https://api.zonos.com/graphql';
 
 /** Map common abbreviation units to Zonos GraphQL enum codes */
@@ -81,20 +83,6 @@ export function normalizeWeightUnit(unit) {
 // publisher's Zonos key is entered once in the Tax Centre and read from saved
 // settings; there is no built-in account to fall back to.
 export const DEFAULT_ZONOS_API_KEY = '';
-
-function getSavedSheetsUrl() {
-  try {
-    if (typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function') {
-      return localStorage.getItem('lm-sheets-url') || '';
-    }
-  } catch (_) {}
-  try {
-    if (typeof window !== 'undefined' && window.sheetsUrl) {
-      return window.sheetsUrl;
-    }
-  } catch (_) {}
-  return '';
-}
 
 /**
  * Execute Zonos GraphQL query via direct fetch with proxy fallback
