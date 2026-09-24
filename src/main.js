@@ -550,6 +550,11 @@ import {
   collectShippoMessages,
   renderShippoDiagnostics,
   buyShippoLabel,
+  openBatchShipping,
+  checkBatchOrders,
+  buyBatchLabels,
+  toggleBatchRow,
+  openBatchRowInForm,
   calculateShippoRates,
   calculateZonosDutiesHandler,
   renderZonosDutyCard,
@@ -24652,6 +24657,11 @@ window.checkLiveShippingReadinessHandler = checkLiveShippingReadinessHandler;
 window.renderLiveReadinessChecklist = renderLiveReadinessChecklist;
 window.renderZonosAccountKeyHint = renderZonosAccountKeyHint;
 window.buyShippoLabel = buyShippoLabel;
+window.openBatchShipping = openBatchShipping;
+window.checkBatchOrders = checkBatchOrders;
+window.buyBatchLabels = buyBatchLabels;
+window.toggleBatchRow = toggleBatchRow;
+window.openBatchRowInForm = openBatchRowInForm;
 window.verifyDestinationAddress = verifyDestinationAddress;
 window.applyVerifiedAddressCorrections = applyVerifiedAddressCorrections;
 window.dismissAddressVerification = dismissAddressVerification;
