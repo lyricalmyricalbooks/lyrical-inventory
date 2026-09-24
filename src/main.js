@@ -519,6 +519,10 @@ import {
   selectShippoDestCustomItem,
   shipNextOrder,
   shipQueuedOrder,
+  hideQueuedOrder,
+  unhideQueuedOrder,
+  closeShipQueueCard,
+  toggleShipQueueHidden,
   clearShippoDestSelection,
   getRecentShippingOrders,
   saveShippoApiKey,
@@ -24622,6 +24626,10 @@ window.filterShippoDestMenu = filterShippoDestMenu;
 window.selectShippoDestCustomItem = selectShippoDestCustomItem;
 window.shipNextOrder = shipNextOrder;
 window.shipQueuedOrder = shipQueuedOrder;
+window.hideQueuedOrder = hideQueuedOrder;
+window.unhideQueuedOrder = unhideQueuedOrder;
+window.closeShipQueueCard = closeShipQueueCard;
+window.toggleShipQueueHidden = toggleShipQueueHidden;
 window.clearShippoDestSelection = clearShippoDestSelection;
 window.onShippoBookPresetChange = onShippoBookPresetChange;
 window.onShippoAutoQuoteToggle = onShippoAutoQuoteToggle;

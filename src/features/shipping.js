@@ -22,6 +22,7 @@ import {
   findOrderInAnyBook,
   nextOrderToShip,
   ordersStillToShip,
+  queueCardClosed,
   shippedOrderNumbers,
   storefrontSaysShipped,
   waitingPhrase,
@@ -2995,10 +2996,11 @@ function renderCustomShippoDestPicker() {
   // top of the list is always the next parcel to pack.
   const shipped = shippedOrderNumbers(websiteLedgerRows(), normalizeShippingOrderNumber);
   const pickups = localPickupOrderNumbers();
+  const hiddenNums = hiddenQueueOrders();
   items.forEach(item => {
     const num = normalizeShippingOrderNumber(item.orderNumber);
     item.shipped = Boolean(item.storefrontShipped || (num && shipped.has(num)));
-    if (num && pickups.has(num)) item.skipQueue = true;
+    if (num && (pickups.has(num) || hiddenNums.has(num))) item.skipQueue = true;
   });
   // Big Cartel orders waiting to ship come first, oldest at the top, so the
   // picker and "Ship next order" follow the same queue as the Ready to ship card.
@@ -3041,7 +3043,74 @@ function getBigCartelShipQueue() {
     orderNumber: order => normalizeShippingOrderNumber(order.id) || bigCartelOrderNumber(order),
     reversed: order => Boolean(storeReversal(order)),
     normalize: normalizeShippingOrderNumber,
+    hidden: hiddenQueueOrders(),
   });
+}
+
+// Orders the owner removed from "Ready to ship" (sent some other way, or not
+// being sent). Kept in settings so it follows them to every device.
+function hiddenQueueOrders() {
+  return new Set(Object.keys(TAX_CENTER.settings?.shipQueueHidden || {}));
+}
+
+function saveShipQueueSettings() {
+  saveTaxCenter().catch(e => console.warn('Could not save the shipping queue choice', e));
+}
+
+/** The X on one order: take it out of the queue (it can be put back). */
+function hideQueuedOrder(orderNumber) {
+  const num = normalizeShippingOrderNumber(orderNumber);
+  if (!num) return;
+  if (!TAX_CENTER.settings) TAX_CENTER.settings = {};
+  TAX_CENTER.settings.shipQueueHidden = { ...(TAX_CENTER.settings.shipQueueHidden || {}), [num]: today() };
+  saveShipQueueSettings();
+  renderCustomShippoDestPicker();
+  showToast(`Removed ${num} from Ready to ship — "Show removed" puts it back`);
+}
+
+/** Undo for the X: put one removed order back in the queue. */
+function unhideQueuedOrder(orderNumber) {
+  const num = normalizeShippingOrderNumber(orderNumber);
+  const hidden = { ...(TAX_CENTER.settings?.shipQueueHidden || {}) };
+  delete hidden[num];
+  TAX_CENTER.settings.shipQueueHidden = hidden;
+  saveShipQueueSettings();
+  _shipQueueShowHidden = Object.keys(hidden).length > 0 && _shipQueueShowHidden;
+  renderCustomShippoDestPicker();
+}
+
+/** The X on the whole card: close it until a new order comes in. */
+function closeShipQueueCard() {
+  if (!TAX_CENTER.settings) TAX_CENTER.settings = {};
+  TAX_CENTER.settings.shipQueueClosedFor = getBigCartelShipQueue().map(q => q.orderNumber);
+  saveShipQueueSettings();
+  renderBigCartelShipQueue();
+}
+
+let _shipQueueShowHidden = false;
+function toggleShipQueueHidden() {
+  _shipQueueShowHidden = !_shipQueueShowHidden;
+  renderBigCartelShipQueue();
+}
+
+function shipQueueCloseButton() {
+  return `<button class="ship-queue-x" type="button" onclick="closeShipQueueCard()" aria-label="Close Ready to ship" title="Close — comes back when a new order arrives">✕</button>`;
+}
+
+/** The "Show removed (n)" link and, when open, each removed order with Put back. */
+function shipQueueHiddenHtml() {
+  const hidden = Object.keys(TAX_CENTER.settings?.shipQueueHidden || {});
+  if (!hidden.length) return '';
+  const list = _shipQueueShowHidden ? `
+    <ul class="ship-queue-hidden-list">
+      ${hidden.map(num => `
+        <li><span>${escapeHtml(num)}</span>
+          <button class="btn sm tag" type="button" onclick="unhideQueuedOrder('${escapeHtml(num)}')">Put back</button></li>`).join('')}
+    </ul>` : '';
+  return `
+    <button class="ship-queue-hidden-toggle" type="button" onclick="toggleShipQueueHidden()" aria-expanded="${_shipQueueShowHidden}">
+      ${_shipQueueShowHidden ? 'Hide removed' : `Show removed (${hidden.length})`}
+    </button>${list}`;
 }
 
 /**
@@ -3052,12 +3121,17 @@ function renderBigCartelShipQueue() {
   const host = $('ship-bc-queue');
   if (!host) return;
   const queue = getBigCartelShipQueue();
+  if (queueCardClosed(queue.map(q => q.orderNumber), TAX_CENTER.settings?.shipQueueClosedFor ?? null)) {
+    host.innerHTML = '';
+    return;
+  }
   if (!queue.length) {
     // Only worth saying once the store is connected and has orders at all.
     host.innerHTML = getBigCartelOrders().length ? `
       <div class="card ship-queue-card is-empty" role="status">
         <span aria-hidden="true">✓</span>
-        <span><strong>All caught up.</strong> No Big Cartel orders are waiting to ship.</span>
+        <span class="ship-queue-empty-text"><strong>All caught up.</strong> No Big Cartel orders are waiting to ship. ${shipQueueHiddenHtml()}</span>
+        ${shipQueueCloseButton()}
       </div>` : '';
     return;
   }
@@ -3077,6 +3151,7 @@ function renderBigCartelShipQueue() {
         </div>
         ${daysWaiting !== null ? `<span class="ship-queue-wait${late ? ' is-late' : ''}">${daysWaiting <= 0 ? 'Ordered today' : `Waiting ${escapeHtml(waitingPhrase(daysWaiting))}`}</span>` : ''}
         <button class="btn sm outline ship-queue-btn" type="button" onclick="shipQueuedOrder('${escapeHtml(orderNumber)}')">Ship</button>
+        <button class="ship-queue-x" type="button" onclick="hideQueuedOrder('${escapeHtml(orderNumber)}')" aria-label="Remove ${escapeHtml(orderNumber)} from Ready to ship" title="Already sent or not shipping — remove from this list">✕</button>
       </li>`;
   }).join('');
   const more = queue.length - MAX_ROWS;
@@ -3087,12 +3162,16 @@ function renderBigCartelShipQueue() {
           <h3 id="ship-queue-title" class="ship-queue-title">Ready to ship</h3>
           <p class="ship-queue-sub">${queue.length} Big Cartel order${queue.length === 1 ? ' is' : 's are'} waiting for a parcel. Oldest first.</p>
         </div>
-        <button class="btn gold ship-queue-start" type="button" onclick="shipQueuedOrder('${escapeHtml(queue[0].orderNumber)}')">
-          Start with the oldest <span aria-hidden="true">→</span>
-        </button>
+        <div class="ship-queue-head-actions">
+          <button class="btn gold ship-queue-start" type="button" onclick="shipQueuedOrder('${escapeHtml(queue[0].orderNumber)}')">
+            Start with the oldest <span aria-hidden="true">→</span>
+          </button>
+          ${shipQueueCloseButton()}
+        </div>
       </div>
       <ul class="ship-queue-list">${rows}</ul>
       ${more > 0 ? `<p class="ship-queue-more">+ ${more} more — they'll come up as you go with "Ship next order".</p>` : ''}
+      <div class="ship-queue-foot">${shipQueueHiddenHtml()}</div>
     </section>`;
 }
 
@@ -3230,6 +3309,7 @@ function nextOrderCardHtml(justShipped) {
       <div class="cp-next-order is-done" role="status">
         <span aria-hidden="true">🎉</span>
         <span><strong>That's every order.</strong> Nothing else is waiting to ship.</span>
+        <button class="ship-queue-x cp-next-order-x" type="button" onclick="this.closest('.cp-next-order').remove()" aria-label="Close">✕</button>
       </div>`;
   }
   return `
@@ -3242,6 +3322,7 @@ function nextOrderCardHtml(justShipped) {
       <button class="btn gold cp-label-action-btn" type="button" onclick="shipNextOrder('${escapeHtml(justShipped || '')}')">
         <span>Ship next order</span><span aria-hidden="true">→</span>
       </button>
+      <button class="ship-queue-x cp-next-order-x" type="button" onclick="this.closest('.cp-next-order').remove()" aria-label="Close Up next">✕</button>
     </div>`;
 }
 
@@ -10564,6 +10645,10 @@ export {
   shipNextOrder,
   shipQueuedOrder,
   renderBigCartelShipQueue,
+  hideQueuedOrder,
+  unhideQueuedOrder,
+  closeShipQueueCard,
+  toggleShipQueueHidden,
   clearShippoDestSelection,
   getRecentShippingOrders,
   saveShippoApiKey,

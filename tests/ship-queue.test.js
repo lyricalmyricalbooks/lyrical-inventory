@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { shippedOrderNumbers, findOrderInAnyBook, ordersStillToShip, nextOrderToShip, bigCartelShipQueue, waitingPhrase } from '../src/lib/ship-queue.js';
+import { shippedOrderNumbers, findOrderInAnyBook, ordersStillToShip, nextOrderToShip, bigCartelShipQueue, waitingPhrase, queueCardClosed } from '../src/lib/ship-queue.js';
 import { normalizeShippingOrderNumber as norm } from '../src/lib/shipping-reconciliation.js';
 
 describe('ship queue', () => {
@@ -70,5 +70,22 @@ describe('big cartel ship queue', () => {
     expect(waitingPhrase(1)).toBe('1 day');
     expect(waitingPhrase(4)).toBe('4 days');
     expect(waitingPhrase(null)).toBe('');
+  });
+});
+
+describe('hiding orders from the ship queue', () => {
+  const now = Date.parse('2026-09-24T12:00:00Z');
+  const o = id => ({ id, attributes: { status: 'completed', created_at: '2026-09-20T12:00:00Z' } });
+
+  it('leaves out orders the owner removed', () => {
+    const q = bigCartelShipQueue([o('BC-1'), o('BC-2')], { normalize: norm, now, hidden: new Set([norm('BC-1')]) });
+    expect(q.map(x => x.orderNumber)).toEqual([norm('BC-2')]);
+  });
+
+  it('keeps the card closed until a new order arrives', () => {
+    expect(queueCardClosed(['#A-1'], null)).toBe(false);
+    expect(queueCardClosed(['#A-1'], ['#A-1', '#A-2'])).toBe(true);
+    expect(queueCardClosed([], [])).toBe(true);
+    expect(queueCardClosed(['#A-1', '#A-3'], ['#A-1'])).toBe(false);
   });
 });
