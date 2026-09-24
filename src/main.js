@@ -7,6 +7,9 @@ import './style.css';
 import './styles/theme-dark.css';
 import './styles/phone.css';
 import { initPhoneLayouts } from './lib/phone-layout.js';
+import { createPhonePageMemory, initPhoneWorkspace } from './lib/phone-workspace.js';
+const phonePages = createPhonePageMemory(window);
+initPhoneWorkspace(document.getElementById('pw-app'));
 // Body, not #pw-app: the pop-up windows are siblings of the app shell.
 initPhoneLayouts(document.body);
 import './firebase.js';
@@ -4470,25 +4473,32 @@ const SHELL_TAB_LABELS = {
 export function renderTodayHub() {
   const date = $('today-date');
   if (date) date.textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
-  const raw = document.querySelector('#web-orders-status .web-stat-value')?.textContent?.trim() ?? '';
+  if (activeBook !== 'all') renderOrders();
+  const raw = activeBook === 'all' ? '' : document.querySelector('#web-orders-status .web-stat-value')?.textContent?.trim() ?? '';
   const waiting = Number.parseInt(raw, 10);
   const count = $('today-orders-count');
   const sub = $('today-orders-sub');
   const has = Number.isFinite(waiting) && waiting > 0;
   if (count) { count.hidden = !has; count.textContent = has ? (waiting > 99 ? '99+' : String(waiting)) : ''; }
-  if (sub) sub.textContent = has ? `${waiting} ready to apply` : 'Website orders';
+  if (sub) sub.textContent = has ? `${waiting} ready to apply` : activeBook === 'all' ? 'Choose a book to review' : 'Review website orders';
 }
 
 // ── Phone "More" sheet ───────────────────────────────────────────────
-// The phone bottom nav holds four everyday destinations; everything else
+// The phone bottom nav holds three everyday destinations; everything else
 // lives in this sheet. Its contents are cloned from the sidebar each time
 // it opens so grouping, visibility and live badges never drift apart.
-const MNAV_TABS = ['today', 'pos', 'manual', 'website'];
+const MNAV_TABS = ['today', 'pos', 'website'];
 
 function syncMoreNavState(name) {
   const more = document.getElementById('mnav-more');
   if (!more) return;
-  more.classList.toggle('active', !MNAV_TABS.includes(name));
+  const destination = name === 'manual' ? 'pos' : name;
+  more.classList.toggle('active', !MNAV_TABS.includes(destination));
+  document.querySelectorAll('#mnav .mnav-btn').forEach(button => {
+    const selected = button === more ? more.classList.contains('active') : button.getAttribute('onclick')?.includes(`'${destination}'`);
+    button.classList.toggle('active', !!selected);
+    if (selected) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current');
+  });
   const dot = document.getElementById('mnav-more-dot');
   if (dot) {
     const hasBadge = [...document.querySelectorAll('#pub-sidebar .nav-badge, #pub-sidebar .health-badge, #pub-sidebar .bc-gap-badge')]
@@ -4637,10 +4647,16 @@ export function switchTab(name) {
   // publisher redirected away from author-only myqr tab
   if (!isAuthor() && name === 'myqr') name = 'dashboard';
 
+  const phoneScope = `${isAuthor() ? 'author' : 'publisher'}:${activeBook}:`;
+  const previousPanel = document.querySelector('.tab-panel.active');
+  phonePages.leave(previousPanel ? previousPanel.dataset.phoneViewKey || phoneScope + previousPanel.id : null);
+
   // Dashboard in All books is the combined inventory overview, not a book panel.
   if (name === 'dashboard' && activeBook === 'all') {
     switchBook('all');
-    if (window.matchMedia?.('(max-width: 768px)').matches) window.scrollTo(0, 0);
+    const overviewKey = phoneScope + 'tab-all-overview';
+    if ($('tab-all-overview')) $('tab-all-overview').dataset.phoneViewKey = overviewKey;
+    phonePages.enter(overviewKey);
     return;
   }
 
@@ -4690,9 +4706,10 @@ export function switchTab(name) {
 
   const panel = $(needsBook ? 'tab-select-book' : 'tab-' + name);
   if (panel) { panel.style.display = 'block'; panel.classList.add('active'); }
-  // The bottom bar changes pages inside one document. Keep a phone from
-  // opening the next page at the previous page's deep scroll position.
-  if (window.matchMedia?.('(max-width: 768px)').matches) window.scrollTo(0, 0);
+  // Return to this page's own position after its content is rendered.
+  const phoneViewKey = phoneScope + (panel?.id || name);
+  if (panel) panel.dataset.phoneViewKey = phoneViewKey;
+  phonePages.enter(phoneViewKey);
 
   if (needsBook) {
     showBookChoice(name);
@@ -4720,7 +4737,7 @@ export function switchTab(name) {
   if (name === 'sheets') { loadGasCode(); renderSheetsLog(); renderProfitSettings(); switchSettingsSubTab(activeSettingsSubTab); if (typeof updateSheetsTabUI === 'function') updateSheetsTabUI(); }
   if (name === 'qrcodes') renderAllQRCodes();
   if (name === 'myqr') renderAuthorQRPage();
-  if (name === 'pos') { renderPOS(); renderPOSFxStatus(); switchPOSSubTab(activePOSSubTab); window.posMobileView?.('books', false); }
+  if (name === 'pos') { renderPOS(); renderPOSFxStatus(); switchPOSSubTab(activePOSSubTab); }
   fairSetAwake(name === 'pos');
   if (name === 'webanalytics') renderWebAnalytics();
   if (name === 'shipping') { initShippingTab(); }
@@ -8505,12 +8522,13 @@ export function renderOrders() {
     return;
   }
 
+  const expanded = new Set([...list.querySelectorAll('.phone-order-details[open]')].map(el => el.dataset.order));
   list.innerHTML = visible.map(o => {
     const done = isApplied(o);
     const cancelled = isCancelled(o);
     const addrParts = [o.shipAddr1, o.shipCity, o.shipProvince, o.shipCountry].filter(Boolean);
     const addrLine = addrParts.length
-      ? `<div style="font-size:var(--text-xs);color:var(--text3);margin-top:4px;">📦 ${addrParts.join(', ')}</div>`
+      ? `<div style="font-size:var(--text-xs);color:var(--text3);margin-top:4px;">📦 ${addrParts.map(escapeHtml).join(', ')}</div>`
       : '';
     const listPrice = BOOKS[o.bookId]?.listPrice || book.listPrice;
     const listCur = BOOKS[o.bookId]?.currency || cur;
@@ -8551,8 +8569,11 @@ export function renderOrders() {
       <div class="order-row order-card-top">
         <div class="order-identity">
           <div class="order-num">${escapeHtml(o.orderNum)}</div>
-          <div class="order-meta">${escapeHtml(o.date)} · ${escapeHtml(o.customer) || '—'} · <span>${escapeHtml(o.email)}</span></div>
-          ${addrLine}
+          <div class="order-meta">${escapeHtml(o.customer) || '—'} · ${escapeHtml(o.date)}</div>
+          <details class="phone-order-details" data-order="${escapeHtml(o.id)}" ${expanded.has(String(o.id)) ? 'open' : ''}>
+            <summary>Customer &amp; delivery details</summary>
+            <div class="phone-order-contact">${escapeHtml(o.email) || 'No email on this receipt'}${addrLine}</div>
+          </details>
         </div>
         ${statusPill}
       </div>
@@ -9384,7 +9405,10 @@ function updateManualForm() {
   if (!book) return;
   // Pre-fill price with the book's actual list price
   const priceEl = $('m-price');
-  if (priceEl) priceEl.value = book.listPrice.toFixed(2);
+  if (priceEl && priceEl.dataset.phoneBook !== activeBook) {
+    priceEl.value = book.listPrice.toFixed(2);
+    priceEl.dataset.phoneBook = activeBook;
+  }
   // Update book context bar
   const ctxTitle = $('bc-title-man');
   if (ctxTitle) ctxTitle.textContent = book.title;
@@ -18898,7 +18922,7 @@ window.posMobileView = function (view, scroll = true) {
     tab.setAttribute('aria-pressed', String(selected));
   });
   if (scroll && window.matchMedia('(max-width: 768px)').matches) {
-    document.querySelector('.pos-mobile-steps')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    document.querySelector('.pos-mobile-steps')?.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
   }
 };
 
