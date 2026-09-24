@@ -6273,8 +6273,12 @@ function renderNotificationBell() {
     el.textContent = unread > 99 ? '99+' : String(unread);
     el.hidden = unread === 0;
   });
-  const btn = $('notif-sidebar-btn');
-  if (btn) btn.title = unread ? `Notifications — ${unread} new` : 'Notifications';
+  const btn = $('notif-header-btn');
+  if (btn) {
+    const label = unread ? `Notifications — ${unread} new` : 'Notifications';
+    btn.title = label;
+    btn.setAttribute('aria-label', label);
+  }
 }
 
 function renderRailLatestNotifications() {
