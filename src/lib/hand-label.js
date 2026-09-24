@@ -6,15 +6,15 @@
 // browser's fallback serif. Pure: returns a complete HTML document.
 //
 // Two layouts on the same 4×6 in label stock:
-//   portrait  — 4in wide × 6in tall: return address and a stamp box across the
-//               top, the destination filling the lower two-thirds.
-//   landscape — 6in wide × 4in tall: return address top-left, stamp box
-//               top-right, destination in the lower-right, the way an envelope
-//               is addressed.
+//   portrait  — 4in wide × 6in tall: return address across the top, the
+//               destination filling the lower two-thirds.
+//   landscape — 6in wide × 4in tall: return address top-left, destination in
+//               the lower-right, the way an envelope is addressed.
 // A toolbar (hidden when printing) switches between them and remembers the
 // choice.
 
 import { escapeHtml as esc } from './html.js';
+import { countryName } from './countries.js';
 
 export const HAND_LABEL_ORIENTATION_KEY = 'lm-hand-label-orientation';
 
@@ -37,10 +37,9 @@ export function addressLines({ addr1 = '', addr2 = '', city = '', province = '',
   const cityLine = [up(city), up(province)].filter(Boolean).join(' ');
   const last = [cityLine, formatPostalCode(postal, country)].filter(Boolean).join('  ');
   const lines = [up(addr1), up(addr2), last].filter(Boolean);
-  const isDomestic = !country || /^(CA|CANADA)$/i.test(String(country).trim());
-  // A domestic parcel doesn't need the country line; an international one must
-  // end with it, on its own line.
-  if (!isDomestic) lines.push(up(country));
+  // Always ends with the country on its own line, spelled out ("CA" becomes
+  // CANADA). An order with no country saved is a Canadian one.
+  lines.push(up(countryName(country) || 'Canada'));
   return lines;
 }
 
@@ -51,7 +50,9 @@ export function returnLines(origin = {}, fallback = []) {
   const last = [cityLine, formatPostalCode(o.zip, o.country)].filter(Boolean).join('  ');
   const lines = [o.company || o.name, o.company && o.name ? o.name : '', o.street1, o.street2, last]
     .map(v => String(v || '').trim()).filter(Boolean);
-  return lines.length >= 3 ? lines : fallback;
+  if (lines.length < 3) return fallback;
+  lines.push(countryName(o.country) || 'Canada');
+  return lines;
 }
 
 const STYLES = `
@@ -79,20 +80,13 @@ const STYLES = `
     box-shadow: 0 2px 12px rgba(0,0,0,.18);
     display: grid; padding: 0.25in; gap: 0.18in;
   }
-  body.portrait .label  { width: 4in; height: 6in; grid-template-rows: auto 1fr auto; grid-template-columns: 1fr auto; }
-  body.landscape .label { width: 6in; height: 4in; grid-template-rows: auto 1fr; grid-template-columns: 1fr auto; }
+  body.portrait .label  { width: 4in; height: 6in; grid-template-rows: auto 1fr; }
+  body.landscape .label { width: 6in; height: 4in; grid-template-rows: auto 1fr; }
 
   .kicker { font-size: 7pt; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: #555; margin-bottom: 4px; }
 
   .from { grid-column: 1; grid-row: 1; font-size: 8.5pt; line-height: 1.35; color: #222; overflow-wrap: anywhere; }
   .from-lines div:first-child { font-weight: 700; }
-
-  .stamp {
-    grid-column: 2; grid-row: 1; width: 1in; height: 1.15in;
-    border: 1.5px dashed #999; border-radius: 4px;
-    display: flex; align-items: center; justify-content: center; text-align: center;
-    font-size: 6.5pt; letter-spacing: .12em; text-transform: uppercase; color: #999;
-  }
 
   .to {
     grid-column: 1 / -1; grid-row: 2; align-self: center;
@@ -102,12 +96,9 @@ const STYLES = `
   body.landscape .to { justify-self: end; width: 68%; align-self: end; }
   .to-name { font-size: 18pt; font-weight: 800; line-height: 1.12; margin-bottom: 6px; }
   .to-lines { font-size: 13pt; font-weight: 600; line-height: 1.32; letter-spacing: .01em; }
-  .to-lines div:last-child.country { font-weight: 800; margin-top: 2px; }
+  .to-lines .country { font-weight: 800; margin-top: 2px; }
   body.landscape .to-name { font-size: 17pt; }
   body.landscape .to-lines { font-size: 12.5pt; }
-
-  .ref { grid-column: 1 / -1; grid-row: 3; font-size: 7.5pt; color: #666; letter-spacing: .06em; }
-  body.landscape .ref { grid-column: 1; grid-row: 2; align-self: end; }
 
   @media print {
     html, body { background: #fff; }
@@ -125,8 +116,7 @@ const STYLES = `
 export function buildHandLabelDocument({ to = {}, from = [], orderNum = '', orientation = 'portrait' } = {}) {
   const start = orientation === 'landscape' ? 'landscape' : 'portrait';
   const lines = addressLines(to);
-  const international = !(!to.country || /^(CA|CANADA)$/i.test(String(to.country).trim()));
-  const toLines = lines.map((line, i) => `<div${international && i === lines.length - 1 ? ' class="country"' : ''}>${esc(line)}</div>`).join('');
+  const toLines = lines.map((line, i) => `<div${i === lines.length - 1 ? ' class="country"' : ''}>${esc(line)}</div>`).join('');
   const fromLines = from.map(l => `<div>${esc(l)}</div>`).join('');
   const pageSize = o => (o === 'landscape' ? '6in 4in' : '4in 6in');
 
@@ -149,13 +139,11 @@ export function buildHandLabelDocument({ to = {}, from = [], orderNum = '', orie
       <div class="kicker">From</div>
       <div class="from-lines">${fromLines}</div>
     </section>
-    <div class="stamp" aria-hidden="true">Postage<br>here</div>
     <section class="to" aria-label="Ship to">
       <div class="kicker">Ship to</div>
       <div class="to-name">${esc(String(to.name || '').trim())}</div>
       <div class="to-lines">${toLines}</div>
     </section>
-    ${orderNum ? `<div class="ref">Order ${esc(orderNum)}</div>` : ''}
   </div>
 </div>
 <script>
