@@ -824,7 +824,7 @@ import { OC_STAGES } from './lib/opencall.js';
 import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, recordInventoryDisposal, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, orderStockPreview, orderStockPreviewCopy, deriveStockBreakdown, transferAuthorStock, deductSaleFromStockBreakdown, isVoidStale } from './lib/inventory.js';
 import { createInventoryDisposalExpense, createSection10Adjustment, inventoryAdjustmentCsvRows } from './lib/inventory-adjustment.js';
 import { posStockView, posOversellSummary } from './lib/pos-stock.js';
-import { FAIR_SEARCH_OVER, FAIR_UNDO_MS, fairTileHtml, readLastMethod, rememberMethod, undoOpen, soldLabel, countLabel, keepScreenAwake, fairSyncPill, registerSalesForDay } from './lib/fair-mode.js';
+import { FAIR_SEARCH_OVER, FAIR_UNDO_MS, fairTileHtml, readLastMethod, rememberMethod, undoOpen, soldLabel, countLabel, keepScreenAwake, fairSyncPill, registerSalesForDay, fairDaySummary, readCurrentFair, saveCurrentFair } from './lib/fair-mode.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, notesWithInvoiceDiscount, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores, consignmentLedgerTotals, storeBalanceSlug, storeBalanceComparison } from './lib/consignment.js';
 import { deriveInvoiceBookIds, invoicesForBook, findInvoiceAcrossBooks, otherBookTitles, lineItemBookId, invoiceBookSplit, invoiceShareForBook, neutralInvoicePrefix, invoiceNumberPrefix, nextInvoiceSeq, buildInvoiceNumber, BILL_TO_STORE, BILL_TO_PERSON, invoiceBillToMode, billToPayload, billToPersonFrom } from './lib/invoices.js';
 import { reminderSettings, reminderBlockReason, invoiceReminderState, dueForReminder, dueForReminderTomorrow, buildReminderEmail, canSendNow, daysLate, describeReminderSweep, describeReminderArming, describeReminderNotice, sampleReminderInvoice } from './lib/payment-reminders.js';
@@ -18522,6 +18522,7 @@ function renderFairMode(booksArr, titleCount, cartRows, totalText) {
   }
   renderFairToday();
   renderFairSyncPill();
+  renderFairName();
   // The sheet stays live while open: − on a line repaints it in place.
   if ($('m-fair-charge')?.style.display === 'flex') {
     if (!count) closeM('fair-charge');
@@ -18629,6 +18630,80 @@ window.fairVoidSale = async function (saleNum) {
   showToast(undone ? '↩ Sale voided — books back in stock' : 'That sale was already voided', undone ? 'ok' : 'warn');
 };
 
+// ── The fair you're at, sold-out books, end of day ──────────────────────
+function renderFairName() {
+  const el = $('fm-fair-name');
+  if (!el) return;
+  const fair = readCurrentFair(today());
+  el.textContent = fair ? fair.name : "Name today's fair";
+  $('fm-fair-btn')?.classList.toggle('is-set', !!fair);
+}
+
+window.fairSetName = async function () {
+  const fair = readCurrentFair(today());
+  const name = await promptDialog("Which fair are you at today? Each sale will be labelled with it. Leave it empty to stop labelling.", fair?.name || '', { title: "Today's fair", okLabel: 'Save', placeholder: 'e.g. Toronto Art Book Fair' });
+  if (name === null) return;
+  const saved = saveCurrentFair(name, today());
+  renderFairName();
+  showToast(saved ? `📍 Sales today are labelled “${saved}”` : 'Sales are no longer labelled with a fair', 'ok');
+};
+
+window.fairTileNoneLeft = async function (bookId) {
+  const book = posResolveBook(bookId);
+  const ok = await confirmDialog(`Your records show no copies of “${book?.title || 'this book'}” left. Add one anyway? Only do this if you really have a copy in hand, then check its stock count later.`, { okLabel: 'Add anyway', cancelLabel: 'Cancel', title: 'None left' });
+  if (ok) window.posUpdateQty(bookId, 1);
+};
+
+function fairSummaryData() {
+  const day = fairTodaySales();
+  const left = {};
+  for (const id of Object.keys(BOOKS)) left[id] = posOnHandFor(id);
+  return fairDaySummary(day, left);
+}
+
+function fairSummaryText(sum, fair) {
+  const out = [`${fair ? fair.name + ' · ' : ''}${today()}`, `${sum.units} books in ${sum.sales} sales · ${fairTotalsText(sum.totals) || '0'}`, ''];
+  out.push('By payment:');
+  for (const m of sum.methods) out.push(`  ${m.label}: ${fairTotalsText(m.totals)} (${m.sales} ${m.sales === 1 ? 'sale' : 'sales'})`);
+  out.push('', 'By book:');
+  for (const t of sum.titles) out.push(`  ${t.title}: ${t.units} sold · ${fairTotalsText(t.totals)}${t.left === null ? '' : ` · ${t.left} left`}`);
+  return out.join('\n');
+}
+
+window.fairOpenSummary = function () {
+  closeM('fair-today');
+  const sum = fairSummaryData();
+  const fair = readCurrentFair(today());
+  $('fm-summary-title').textContent = fair ? `End of day · ${fair.name}` : 'End of day';
+  const pill = fairSyncPill({
+    online: navigator.onLine !== false, pending: syncQueue.length, retrying: _syncRetrying, atRisk: _syncQueueHeldInMemory,
+  });
+  const synced = pill.tone === 'ok';
+  const methodRows = sum.methods.map((m) => `<li class="fm-sum-row"><span>${escapeHtml(m.label)}<small>${m.sales} ${m.sales === 1 ? 'sale' : 'sales'}</small></span><strong class="tnum">${escapeHtml(fairTotalsText(m.totals))}</strong></li>`).join('');
+  const titleRows = sum.titles.map((t) => `<li class="fm-sum-row"><span>${escapeHtml(t.title)}<small>${t.units} sold${t.left === null ? '' : ` · ${t.left} left`}</small></span><strong class="tnum">${escapeHtml(fairTotalsText(t.totals))}</strong></li>`).join('');
+  $('fm-summary-body').innerHTML = sum.sales ? `
+    <div class="fm-sum-hero"><span class="fm-sum-big tnum">${escapeHtml(fairTotalsText(sum.totals))}</span><span>${sum.units} ${sum.units === 1 ? 'book' : 'books'} in ${sum.sales} ${sum.sales === 1 ? 'sale' : 'sales'}</span></div>
+    <div class="fm-sum-sync ${synced ? 'is-ok' : 'is-wait'}" role="status">${synced ? '✓ Everything is uploaded. Safe to close the app.' : `⚠ ${escapeHtml(pill.text)}. Keep the app open until this says everything is uploaded.`}</div>
+    <h3 class="fm-sum-h">By way of paying</h3>
+    <p class="fm-sum-note">Check the card reader line against your card reader's own total for today.</p>
+    <ul class="fm-sum-list">${methodRows}</ul>
+    <h3 class="fm-sum-h">By book</h3>
+    <ul class="fm-sum-list">${titleRows}</ul>`
+    : '<p class="fm-empty">No register sales yet today.</p>';
+  openM('fair-summary');
+};
+
+window.fairShareSummary = async function () {
+  const text = fairSummaryText(fairSummaryData(), readCurrentFair(today()));
+  try {
+    if (navigator.share) { await navigator.share({ title: 'Fair summary', text }); return; }
+    await navigator.clipboard.writeText(text);
+    showToast('✓ Summary copied — paste it into a message or note', 'ok');
+  } catch (e) {
+    if (e?.name !== 'AbortError') showToast('Could not share — take a screenshot instead', 'warn');
+  }
+};
+
 // ── Upload status pill ───────────────────────────────────────────────────
 function renderFairSyncPill() {
   const pill = $('fm-sync');
@@ -18658,6 +18733,9 @@ window.fairCharge = async function (method, { printedQr = false } = {}) {
     // Paid on the printed code with no signal: nothing links it to a Stripe
     // payment yet, so the sale says to check it arrived.
     if (printedQr) posPendingSale.method = 'Stripe QR (printed code, check it arrived in Stripe)';
+    // Name the fair on every sale row, so History and the sheet say where.
+    const fair = readCurrentFair(today());
+    if (fair) posPendingSale.method = `${posPendingSale.method} · ${fair.name}`;
     const totalText = posPendingSale.totalCharged;
     const count = posPendingSale.rows.reduce((n, row) => n + row.qty, 0);
     closeM('fair-charge');

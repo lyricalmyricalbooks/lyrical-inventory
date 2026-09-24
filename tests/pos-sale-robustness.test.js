@@ -217,3 +217,36 @@ describe('Fair Mode with patchy signal', () => {
     expect(document.getElementById('fm-sync').textContent).toMatch(/^No signal/);
   });
 });
+
+describe('Fair Mode, a whole fair day', () => {
+  function cart(lines) {
+    win.posSetCurrency('CAD');
+    for (const [bookId, qty] of Object.entries(lines)) win.posUpdateQty(bookId, qty);
+  }
+  afterEach(() => { try { localStorage.removeItem('lm-fair-current'); } catch (_) {} });
+
+  it('labels sales with the fair and sums the day by payment and book', async () => {
+    const naming = win.fairSetName();
+    await new Promise((r) => setTimeout(r, 0));
+    document.getElementById('m-prompt-input').value = 'Toronto Art Book Fair';
+    document.getElementById('m-prompt-ok').click();
+    await naming;
+    expect(document.getElementById('fm-fair-name').textContent).toBe('Toronto Art Book Fair');
+
+    cart({ [HARBOUR]: 2 });
+    await win.fairCharge('Card');
+    await app.settle();
+    cart({ [FABLE]: 1 });
+    await win.fairCharge('Stripe QR');
+    await app.settle();
+    expect(state(HARBOUR).hist[0].notes).toBe('Card · Toronto Art Book Fair');
+
+    win.fairOpenSummary();
+    const body = document.getElementById('fm-summary-body').textContent;
+    expect(document.getElementById('fm-summary-title').textContent).toBe('End of day · Toronto Art Book Fair');
+    expect(body).toMatch(/Card reader/);
+    expect(body).toMatch(/QR \/ Stripe/);
+    expect(body).toMatch(/Harbour Lights.*2 sold · 98 left/);
+    expect(body).toMatch(/3 books in 2 sales/);
+  });
+});

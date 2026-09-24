@@ -59,10 +59,12 @@ export function fairTileHtml({ id, title, priceText, qty = 0, stock = null }) {
   const idJs = esc(JSON.stringify(String(id)));
   const left = stock && stock.tracked ? Math.max(0, stock.remaining) : null;
   const out = left === 0 && qty === 0 && stock?.onHand === 0;
+  // Records say every copy is already sold or in this sale: ask before adding.
+  const noneLeft = left !== null && left <= 0;
   const stockText = left === null ? '' : out ? 'Sold out' : left === 1 ? 'Last copy' : `${left} left`;
   const cls = ['fm-tile', qty > 0 ? 'is-in-cart' : '', out ? 'is-out' : '', stock?.level === 'short' ? 'is-short' : ''].filter(Boolean).join(' ');
   return `<div class="${cls}" role="listitem">
-  <button type="button" class="fm-tile-add" onclick="posUpdateQty(${idJs}, 1)" aria-label="Add one: ${esc(title)}, ${esc(priceText)}${qty ? `, ${qty} in sale` : ''}">
+  <button type="button" class="fm-tile-add" onclick="${noneLeft ? `fairTileNoneLeft(${idJs})` : `posUpdateQty(${idJs}, 1)`}" aria-label="${noneLeft ? 'None left' : 'Add one'}: ${esc(title)}, ${esc(priceText)}${qty ? `, ${qty} in sale` : ''}">
     <span class="fm-tile-title">${esc(title)}</span>
     <span class="fm-tile-price">${esc(priceText)}</span>
     ${stockText ? `<span class="fm-tile-stock">${esc(stockText)}</span>` : ''}
@@ -128,7 +130,7 @@ export function registerSalesForDay(books, day) {
     for (const h of book.hist || []) {
       if (!h || h.voided || h.chan !== 'Book Fair' || h.date !== day || !h.num) continue;
       let sale = byNum.get(h.num);
-      if (!sale) { sale = { num: h.num, at: 0, lines: [], totals: {}, units: 0 }; byNum.set(h.num, sale); }
+      if (!sale) { sale = { num: h.num, at: 0, method: saleMethod(h.notes), lines: [], totals: {}, units: 0 }; byNum.set(h.num, sale); }
       sale.at = Math.max(sale.at, eventTime(h.sheetsId));
       const qty = Number(h.qty) || 0;
       const amount = qty * (Number(h.price) || 0);
@@ -155,4 +157,65 @@ export function eventTime(id) {
   const m = /^evt-([0-9a-z]+)-/.exec(String(id || ''));
   const t = m ? parseInt(m[1], 36) : 0;
   return Number.isFinite(t) ? t : 0;
+}
+
+/** Which way of paying a register row's note records ("Card · …" → "Card"). */
+export function saleMethod(notes) {
+  const text = String(notes || '');
+  // Longest first, so "Stripe QR (printed …)" is not read as something shorter.
+  const hit = [...FAIR_METHODS].sort((a, b) => b.value.length - a.value.length).find((m) => text.startsWith(m.value));
+  return hit ? hit.value : 'Other';
+}
+
+export function methodLabel(value) {
+  return FAIR_METHODS.find((m) => m.value === value)?.label || 'Other';
+}
+
+/**
+ * End-of-day summary from registerSalesForDay() output. `leftById` maps a
+ * book id to copies on hand now (or null when untracked). Totals stay per
+ * currency; nothing is converted here.
+ */
+export function fairDaySummary(day, leftById = {}) {
+  const titles = new Map();
+  const methods = new Map();
+  for (const sale of day.sales || []) {
+    const m = methods.get(sale.method) || { method: sale.method, label: methodLabel(sale.method), sales: 0, totals: {} };
+    m.sales++;
+    for (const [cur, amt] of Object.entries(sale.totals)) m.totals[cur] = (m.totals[cur] || 0) + amt;
+    methods.set(sale.method, m);
+    for (const line of sale.lines) {
+      const t = titles.get(line.bookId) || { bookId: line.bookId, title: line.title, units: 0, totals: {}, left: leftById[line.bookId] ?? null };
+      t.units += line.qty;
+      t.totals[line.cur] = (t.totals[line.cur] || 0) + line.amount;
+      titles.set(line.bookId, t);
+    }
+  }
+  const order = FAIR_METHODS.map((m) => m.value);
+  return {
+    titles: [...titles.values()].sort((a, b) => b.units - a.units || a.title.localeCompare(b.title)),
+    methods: [...methods.values()].sort((a, b) => order.indexOf(a.method) - order.indexOf(b.method)),
+    totals: day.totals || {},
+    units: day.units || 0,
+    sales: (day.sales || []).length,
+  };
+}
+
+const FAIR_KEY = 'lm-fair-current';
+
+/** The fair this phone is selling at today, or null. Forgotten the next day. */
+export function readCurrentFair(dayStr, storage = globalThis.localStorage) {
+  try {
+    const v = JSON.parse(storage?.getItem(FAIR_KEY) || 'null');
+    return v && v.day === dayStr && typeof v.name === 'string' && v.name.trim() ? { name: v.name.trim(), day: v.day } : null;
+  } catch { return null; }
+}
+
+export function saveCurrentFair(name, dayStr, storage = globalThis.localStorage) {
+  const clean = String(name || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+  try {
+    if (clean) storage?.setItem(FAIR_KEY, JSON.stringify({ name: clean, day: dayStr }));
+    else storage?.removeItem(FAIR_KEY);
+  } catch { /* private mode: the name just isn't remembered */ }
+  return clean || null;
 }
