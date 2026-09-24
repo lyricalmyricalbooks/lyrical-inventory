@@ -19739,6 +19739,373 @@ button[onclick="refreshUmamiStats()"]:active {
 .activity-filter-btn { min-height: 44px; padding: 0 12px; border: var(--stroke-hair) solid var(--border-default); border-radius: var(--r-pill); background: transparent; color: var(--content-secondary); font-size: var(--text-xs); font-weight: 600; cursor: pointer; }
 .activity-filter-btn.is-active { background: var(--status-active-bg); border-color: var(--status-active); color: var(--content-primary); }
 
+/* ═══ Open Call — worklist layout ═══════════════════════════════════════════
+   One column: header → "needs you" strip → review/outbox queues → stage tabs
+   + compact contributor rows → templates and settings at the foot. Replaces
+   the old sidebar + stacked-card layout, where the same progress figure was
+   drawn three times and every contributor was a full card. */
+.oc-layout.oc-shell {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch; /* the old grid's align-items:start would shrink-wrap every card */
+  gap: var(--space-4);
+  max-width: 1180px;
+  margin: 0 auto;
+}
+.oc-shell > .card { margin-bottom: 0; }
+/* Big containers don't lift on hover — only the things you act on do. */
+.oc-shell > .card:hover { box-shadow: var(--oc-shadow-soft); border-color: var(--oc-hairline); }
+
+.oc-panel-title {
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--content-primary);
+}
+.oc-text-link {
+  background: none;
+  border: 0;
+  padding: 0 2px;
+  min-height: 32px;
+  color: var(--gold-text);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.oc-text-link:hover { text-decoration-thickness: 2px; }
+.oc-inline-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.oc-add-hint { font-size: var(--text-xs); color: var(--text3); line-height: 1.45; }
+
+/* ── Header ── */
+.oc-topbar { padding: var(--space-4) var(--space-5); display: flex; flex-direction: column; gap: var(--space-3); }
+.oc-topbar-main { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--space-4); }
+.oc-topbar-titles { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1 1 320px; }
+.oc-project-picker { display: flex; align-items: center; gap: var(--space-2); }
+.oc-layout .oc-project-picker .oc-project-select {
+  font-family: var(--font-ui);
+  font-size: clamp(20px, 2.2vw, 26px);
+  font-weight: 800;
+  padding: 4px 36px 4px 10px;
+  min-height: 44px;
+  width: auto;
+  max-width: 100%;
+  background-color: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+.oc-layout .oc-project-picker .oc-project-select:hover { border-color: var(--border-default); }
+.oc-icon-btn {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: var(--stroke-hair) solid var(--border-default);
+  border-radius: var(--r);
+  color: var(--content-primary);
+  font-size: var(--text-lg);
+  cursor: pointer;
+}
+.oc-icon-btn:hover { background: var(--surface-inset); }
+.oc-icon-btn:active { transform: scale(0.94); }
+.oc-icon-btn:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: 2px; }
+.oc-topbar-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: var(--text-sm); color: var(--text2); padding-left: 10px; }
+.oc-topbar-meta strong { color: var(--content-primary); font-variant-numeric: tabular-nums; }
+.oc-meter { display: inline-block; width: 120px; height: 8px; background: var(--surface-inset); border: var(--stroke-hair) solid var(--border-default); overflow: hidden; }
+.oc-meter > span { display: block; height: 100%; background: var(--emerald); }
+.oc-meter-pct { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text2); }
+.oc-topbar-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.oc-topbar-foot { font-size: var(--text-xs); color: var(--text3); padding-left: 10px; }
+
+/* Popover menus (More ▾, project ⋯). Placed under their button by
+   ocPlaceMenu(); hidden for the one frame before that happens. */
+.oc-menu {
+  inset: auto;
+  margin: 0;
+  width: 272px;
+  padding: 6px;
+  background: var(--surface-card);
+  color: var(--content-primary);
+  border: var(--stroke) solid var(--border-strong);
+  box-shadow: var(--elev-3);
+  flex-direction: column;
+  gap: 2px;
+}
+.oc-menu:popover-open { display: flex; }
+.oc-menu:not(.is-placed) { visibility: hidden; }
+.oc-menu.is-sheet { inset: auto 8px 8px 8px; width: auto; }
+.oc-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  background: transparent;
+  border: 0;
+  color: var(--content-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.oc-menu-item:hover:not(:disabled), .oc-menu-item:focus-visible { background: var(--surface-inset); outline: none; }
+.oc-menu-item.is-danger { color: var(--status-critical); }
+.oc-menu-item:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ── Add panel ── */
+.oc-add-panel { padding: var(--space-5); }
+.oc-add-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-5); }
+.oc-add-col { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.oc-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.oc-field > span:first-child { font-size: var(--text-2xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text3); }
+.oc-field > span:first-child em { font-style: normal; font-weight: 500; letter-spacing: 0; text-transform: none; }
+.oc-inline-add { display: flex; gap: 6px; }
+.oc-inline-add input { flex: 1; min-width: 0; }
+.oc-add-panel .oc-upload-zone { margin: 0; }
+
+/* ── "Needs you" strip ── */
+.oc-todo { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-3); }
+@media (max-width: 560px) { .oc-todo { grid-template-columns: 1fr 1fr; gap: var(--space-2); } .oc-todo-tile { min-height: 84px; padding: 10px 12px; } }
+.oc-todo-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 96px;
+  padding: 14px 16px;
+  background: var(--surface-card);
+  border: var(--stroke-hair) solid var(--border-default);
+  box-shadow: var(--elev-2);
+  color: var(--content-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard);
+}
+.oc-todo-tile:not(:disabled):hover { transform: translateY(-2px); box-shadow: var(--elev-hover); }
+.oc-todo-tile:not(:disabled):active { transform: translateY(0) scale(.98); }
+.oc-todo-tile:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: 2px; }
+.oc-todo-tile.is-alert { box-shadow: inset 4px 0 0 var(--status-critical), var(--elev-2); }
+.oc-todo-tile.is-warn { box-shadow: inset 4px 0 0 var(--status-active), var(--elev-2); }
+.oc-todo-tile.is-go { box-shadow: inset 4px 0 0 var(--gold), var(--elev-2); }
+.oc-todo-tile.is-clear { cursor: default; background: transparent; box-shadow: none; }
+.oc-todo-tile.is-clear .oc-todo-num { color: var(--text3); }
+.oc-todo-num { font-family: var(--font-mono); font-size: var(--text-2xl); font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.oc-todo-label { font-size: var(--text-sm); font-weight: 700; }
+.oc-todo-sub { font-size: var(--text-xs); color: var(--text3); }
+
+/* ── Queues (review / outbox) ── */
+.oc-queue-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+
+/* ── Contributor list ── */
+.oc-list-card { padding: 0; overflow: visible; }
+.oc-tabs {
+  display: flex;
+  gap: 4px;
+  padding: var(--space-3) var(--space-4) 0;
+  flex-wrap: wrap;
+  border-bottom: var(--stroke-hair) solid var(--border-default);
+  scroll-margin-top: 96px;
+}
+.oc-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 12px;
+  background: transparent;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  color: var(--text2);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.oc-tab:hover { color: var(--content-primary); background: var(--surface-inset); }
+.oc-tab:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: -2px; }
+.oc-tab.is-on { color: var(--content-primary); border-bottom-color: var(--gold); }
+.oc-tab.is-empty:not(.is-on) { color: var(--text3); }
+.oc-tab-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  border: var(--stroke-hair) solid var(--border-strong);
+}
+/* Your move = filled marker; waiting on the artist = outlined. */
+.oc-tab.is-you .oc-tab-step { background: var(--gold); border-color: var(--gold); color: var(--ink); }
+.oc-tab-count {
+  min-width: 22px;
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  background: var(--surface-inset);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.oc-tab.is-warn .oc-tab-count { background: var(--status-active-bg); color: var(--content-primary); }
+.oc-tab.is-alert .oc-tab-count { background: var(--status-critical-bg); color: var(--content-primary); }
+.oc-list-toolbar { display: flex; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-3) var(--space-4) 0; }
+.oc-layout .oc-list-toolbar #oc-search { flex: 1 1 260px; width: auto; min-width: 0; max-width: none; }
+.oc-layout .oc-list-toolbar select { flex: 0 1 200px; width: auto; }
+.oc-list-head { padding: var(--space-2) var(--space-4); min-height: 56px; display: flex; align-items: center; }
+.oc-list-meta, .oc-selbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); width: 100%; font-size: var(--text-sm); color: var(--text2); }
+.oc-list-meta-spacer { flex: 1; }
+.oc-selbar { padding: 6px 10px; background: var(--gold-bg); border: var(--stroke-hair) solid var(--gold-line); color: var(--content-primary); }
+.oc-selbar-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+.oc-check { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; margin: -6px 0; cursor: pointer; flex: 0 0 auto; }
+.oc-layout .oc-check input { width: 18px; height: 18px; margin: 0; padding: 0; cursor: pointer; accent-color: var(--gold); box-shadow: none; }
+
+.oc-list { display: flex; flex-direction: column; }
+.oc-row { border-top: var(--stroke-hair) solid var(--border-default); position: relative; }
+.oc-row::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: transparent; }
+.oc-row.tone-you::before { background: var(--gold); }
+.oc-row.tone-warn::before { background: var(--status-active); }
+.oc-row.tone-alert::before { background: var(--status-critical); }
+.oc-row.tone-done::before { background: var(--emerald); }
+.oc-row.is-selected { background: var(--gold-bg); }
+.oc-row.is-open { background: var(--surface-sunken); }
+.oc-row-main {
+  display: grid;
+  /* Fixed tracks so every row's columns line up down the list. */
+  grid-template-columns: 44px minmax(0, 1.1fr) minmax(0, 1.6fr) 172px 36px;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 8px var(--space-3) 8px var(--space-3);
+  min-height: 68px;
+}
+.oc-row-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 4px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.oc-row-toggle:focus-visible, .oc-row-chevron:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: 2px; }
+.oc-row .oc-avatar { width: 40px; height: 40px; font-size: var(--text-sm); flex-shrink: 0; }
+.oc-row-who { display: flex; flex-direction: column; min-width: 0; }
+.oc-row-name { font-weight: 700; color: var(--content-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oc-row-toggle:hover .oc-row-name { text-decoration: underline; text-underline-offset: 3px; }
+.oc-row-credit { margin-left: 6px; font-weight: 500; color: var(--text2); font-size: var(--text-xs); }
+.oc-row-email { font-size: var(--text-xs); color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oc-row-progress { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; min-width: 0; text-align: left; }
+.oc-track { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; width: min(220px, 100%); }
+.oc-track-seg { height: 6px; background: var(--surface-inset); border: var(--stroke-hair) solid var(--border-default); }
+.oc-track-seg.is-done { background: var(--emerald); border-color: var(--emerald); }
+.oc-track-seg.is-next { background: var(--gold-bg); border-color: var(--gold); }
+.oc-row-status { font-size: var(--text-sm); color: var(--text2); line-height: 1.35; }
+.oc-row.tone-you .oc-row-status, .oc-row.tone-warn .oc-row-status, .oc-row.tone-alert .oc-row-status { color: var(--content-primary); font-weight: 600; }
+.oc-row-flags { display: flex; flex-wrap: wrap; gap: 4px; }
+.oc-flag {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+  border: var(--stroke-hair) solid var(--status-critical);
+  background: var(--status-critical-bg);
+  color: var(--content-primary);
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  cursor: help;
+}
+.oc-row-cta { display: flex; justify-content: flex-end; }
+.oc-row-cta .btn { white-space: nowrap; }
+.oc-row-chevron {
+  width: 36px;
+  height: 36px;
+  background: transparent;
+  border: 0;
+  color: var(--text2);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.oc-row-chevron:hover { color: var(--content-primary); background: var(--surface-inset); }
+.oc-row-detail { padding: 0 var(--space-4) var(--space-4) calc(var(--space-4) + 44px); display: flex; flex-direction: column; gap: var(--space-3); }
+.oc-detail-grid { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-3); }
+.oc-detail-contact { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.oc-detail-actions, .oc-detail-mail { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; }
+.oc-credit-line { font-size: var(--text-sm); color: var(--text2); }
+.oc-row-detail .oc-status-strip { margin: 0; }
+.oc-step-hint { margin-top: 10px; font-size: var(--text-xs); color: var(--text3); text-align: center; }
+/* These were spans; as real buttons they need the browser chrome taken off. */
+.oc-step { background: transparent; border: 0; padding: 0; font: inherit; color: inherit; }
+.oc-thread-preview { background: transparent; border: 0; padding: 4px 2px; font-family: inherit; }
+.oc-add-photo-trigger { font-family: inherit; }
+
+/* Narrow: the row stacks — who on top, progress and the button below. */
+@container oclist (max-width: 760px) {
+  .oc-row-main { grid-template-columns: auto minmax(0, 1fr) 36px; grid-template-areas: "check who chev" ". prog prog" ". cta cta"; row-gap: 6px; }
+  .oc-row-main > .oc-check { grid-area: check; }
+  .oc-row-toggle { grid-area: who; }
+  .oc-row-progress { grid-area: prog; }
+  .oc-row-cta { grid-area: cta; justify-content: flex-start; }
+  .oc-row-chevron { grid-area: chev; }
+  .oc-row-detail { padding-left: var(--space-4); }
+  /* One swipeable strip rather than a stack of seven lines. */
+  .oc-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
+}
+.oc-list-card { container: oclist / inline-size; }
+
+/* ── Settings foot ── */
+.oc-settings { display: flex; flex-direction: column; gap: var(--space-3); margin-top: var(--space-4); }
+.oc-settings-label { font-size: var(--text-2xs); font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--text3); }
+.oc-settings-card { padding: 0; overflow: hidden; }
+.oc-settings-sub { font-size: var(--text-xs); color: var(--text3); margin-top: 2px; }
+.oc-tmpl-tabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 18px 12px; }
+.oc-tmpl-tab {
+  min-height: 40px;
+  padding: 0 12px;
+  background: transparent;
+  border: var(--stroke-hair) solid var(--border-default);
+  border-radius: var(--r-pill);
+  color: var(--text2);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.oc-tmpl-tab:hover { background: var(--surface-inset); color: var(--content-primary); }
+.oc-tmpl-tab.is-on { background: var(--gold-bg); border-color: var(--gold); color: var(--content-primary); }
+.oc-tmpl-tab:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: 2px; }
+.oc-tmpl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: var(--space-5); padding: 0 18px 18px; align-items: start; }
+.oc-tmpl-editor { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.oc-unsaved { font-size: var(--text-xs); font-weight: 700; color: var(--status-active); }
+.oc-preview-box { display: flex; flex-direction: column; min-height: 100%; }
+.oc-preview-label { font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: .08em; font-weight: 700; color: var(--text3); padding-bottom: 6px; margin-bottom: 8px; border-bottom: var(--stroke-hair) solid var(--border-default); }
+.oc-preview-subject { font-size: var(--text-base); font-weight: 700; margin-bottom: 8px; color: var(--content-primary); }
+.oc-preview-body { font-size: var(--text-sm); color: var(--text2); line-height: 1.6; flex: 1; overflow-y: auto; }
+.oc-color-a { font-weight: 800; color: var(--content-primary); border-bottom: 3px solid var(--rose); line-height: 1; padding: 0 2px 1px; }
+.oc-color-h { font-weight: 800; color: var(--content-primary); background: var(--status-active-bg); box-shadow: inset 0 -3px 0 var(--status-active); padding: 1px 5px; line-height: 1.2; }
+.oc-auto-grid { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--space-4); padding: 0 18px 18px; }
+.oc-fieldset { border: var(--stroke-hair) solid var(--border-default); padding: var(--space-3) var(--space-4) var(--space-4); margin: 0; display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.oc-fieldset legend { padding: 0 6px; font-size: var(--text-xs); font-weight: 700; color: var(--content-primary); }
+.oc-check-line { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 44px; font-size: var(--text-sm); color: var(--text2); cursor: pointer; }
+.oc-layout .oc-check-line input { width: 18px; height: 18px; margin: 0; padding: 0; accent-color: var(--gold); box-shadow: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .oc-todo-tile, .oc-todo-tile:hover, .oc-icon-btn:active { transition: none; transform: none; }
+}
 /* ── Riso sweep: the controls the repaint missed ────────────────────────────
    Several screens were styled before the Riso repaint and still draw their
    filters, search fields, segmented toggles and progress bars as soft

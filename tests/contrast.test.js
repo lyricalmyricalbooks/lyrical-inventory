@@ -288,9 +288,14 @@ describe('contrast baseline', () => {
 
   it('covers the rendered HTML, not just index.html', () => {
     // index.html is the skeleton; the POS cart, order history and expense
-    // ledger are template literals that never appear in it.
-    const files = new Set(sweeps.flatMap(s => s.findings).map(f => f.file ? f.file.replace(/\\/g, '/') : f.file));
-    expect([...files].some(f => f && f.startsWith('src/'))).toBe(true);
+    // ledger are template literals that never appear in it. This used to lean
+    // on a real failure in src/ (Open Call's pale-gold text-colour button);
+    // that was fixed, so prove the reach with a planted one instead.
+    const sources = jsRenderSources();
+    expect(sources.some(s => s.file.replace(/\\/g, '/').startsWith('src/features/'))).toBe(true);
+    const planted = { file: 'src/features/_planted.js', source: 'function renderThing() {\n  return `<div style="background:#ffffff;"><button style="color:#c5a880;">A</button></div>`;\n}' };
+    const [light] = scanThemes(html, css, darkCss, ['light'], [...sources, planted]);
+    expect(light.findings.some(f => f.file === planted.file)).toBe(true);
   });
 
   it.each(THEMES)('keeps index.html free of NEW WCAG AA contrast failures [%s]', (theme) => {

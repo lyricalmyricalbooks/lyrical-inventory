@@ -263,3 +263,128 @@ export function findUnfilledMergeFields(template, contributor = {}, context = {}
     return text.includes(token) && !String(resolved[field]).trim();
   });
 }
+
+// ── Worklist views ─────────────────────────────────────────────────────────
+// The Open Call list is filtered by "where is this artist now" rather than by
+// raw flags. These helpers are the single source for the stage tabs, their
+// counts and the "needs you" strip, so a tab's number always matches the rows
+// it shows.
+
+// The receive-stages are the ones where the ball is in the artist's court.
+const OC_ARTIST_STAGES = new Set(['creditReceived', 'filesReceived']);
+
+// Days an artist can sit on a request before the app suggests a reminder, and
+// the gap before it suggests another one after a reminder went out.
+export const OC_NUDGE_AFTER_DAYS = 7;
+export const OC_NUDGE_GAP_DAYS = 5;
+
+// Key of the first stage not yet ticked, or 'complete'.
+export function ocCurrentStage(contributor) {
+  const c = contributor || {};
+  const st = OC_STAGES.find(s => !c[s.key]);
+  return st ? st.key : 'complete';
+}
+
+// Whole days since an ISO timestamp, or null when it doesn't parse.
+function ocDaysSince_(iso, now) {
+  const t = Date.parse(iso || '');
+  if (!Number.isFinite(t)) return null;
+  return Math.max(0, Math.floor((now - t) / 86400000));
+}
+
+// Is this artist overdue for a friendly reminder? Only while we're waiting on
+// them (credit name or files), only with a working address, and not again
+// until OC_NUDGE_GAP_DAYS after the last reminder.
+export function ocNudgeDue(contributor, now = Date.now(), afterDays = OC_NUDGE_AFTER_DAYS, gapDays = OC_NUDGE_GAP_DAYS) {
+  const c = contributor || {};
+  if (!c.email || c.undeliverable) return false;
+  if (!OC_ARTIST_STAGES.has(ocCurrentStage(c))) return false;
+  const waited = ocWaitingDays(c, now);
+  if (waited === null || waited < afterDays) return false;
+  const sinceNudge = ocDaysSince_(c.lastNudgedAt, now);
+  return sinceNudge === null || sinceNudge >= gapDays;
+}
+
+// Which reminder template fits: what the artist still owes us.
+export function ocNudgeTemplateKey(contributor) {
+  const stage = ocCurrentStage(contributor);
+  if (stage === 'creditReceived') return 'nudgeCredit';
+  if (stage === 'filesReceived') return 'nudgeFiles';
+  return null;
+}
+
+// Things that will make the next email fail or go astray. `isSuppressed` is
+// injected (it lives with the mailing list) so this stays pure.
+export function ocProblems(contributor, isSuppressed = () => false) {
+  const c = contributor || {};
+  const out = [];
+  if (!c.email) out.push('noEmail');
+  if (c.undeliverable) out.push('bounced');
+  if (c.email && isSuppressed(c.email)) out.push('unsubscribed');
+  if (c.email && c.selectionSent && !c.gmailThreadId && !c.creditThreadId && !c.filesThreadId
+    && ocCurrentStage(c) !== 'complete') out.push('noThread');
+  return out;
+}
+
+// Does one contributor belong in a list filter? '' = everyone; a stage key =
+// that stage is their next step; 'complete'; 'nudge' = reminder due;
+// 'problems' = anything ocProblems() flags.
+export function ocMatchesFilter(contributor, filter, { now = Date.now(), isSuppressed } = {}) {
+  if (!filter) return true;
+  if (filter === 'nudge') return ocNudgeDue(contributor, now);
+  if (filter === 'problems') return ocProblems(contributor, isSuppressed).length > 0;
+  return ocCurrentStage(contributor) === filter;
+}
+
+// Count for every filter tab in one pass.
+export function ocFilterCounts(contributors, { now = Date.now(), isSuppressed } = {}) {
+  const counts = { '': 0, complete: 0, nudge: 0, problems: 0 };
+  OC_STAGES.forEach(st => { counts[st.key] = 0; });
+  (contributors || []).forEach(c => {
+    counts['']++;
+    counts[ocCurrentStage(c)]++;
+    if (ocNudgeDue(c, now)) counts.nudge++;
+    if (ocProblems(c, isSuppressed).length) counts.problems++;
+  });
+  return counts;
+}
+
+// Free-text search over the fields the owner would type: name, email, credit
+// name, photo file names and notes.
+export function ocMatchesSearch(contributor, query) {
+  const q = String(query || '').toLowerCase().trim();
+  if (!q) return true;
+  const c = contributor || {};
+  const hay = [c.name, c.email, c.creditName, c.photo, c.notes,
+    ...(Array.isArray(c.photos) ? c.photos : [])].filter(Boolean).join('\n').toLowerCase();
+  return hay.includes(q);
+}
+
+// Sorted copy. 'waitingDesc' puts the longest-idle artists first.
+export function ocSortContributors(list, sortBy, now = Date.now()) {
+  const progress = c => OC_STAGES.filter(st => c[st.key]).length;
+  const byDate = (a, b) => {
+    const dA = a.createdAt || '';
+    const dB = b.createdAt || '';
+    return dA < dB ? -1 : (dA > dB ? 1 : 0);
+  };
+  const waited = c => {
+    if (ocCurrentStage(c) === 'complete') return -1;
+    const w = ocWaitingDays(c, now);
+    return w === null ? -1 : w;
+  };
+  const out = [...(list || [])];
+  out.sort((a, b) => {
+    switch (sortBy) {
+      case 'nameAsc': return (a.name || '').localeCompare(b.name || '');
+      case 'nameDesc': return (b.name || '').localeCompare(a.name || '');
+      case 'dateAsc': return byDate(a, b);
+      case 'progressDesc': return progress(b) - progress(a);
+      case 'progressAsc': return progress(a) - progress(b);
+      case 'waitingDesc': return waited(b) - waited(a);
+      case 'dateDesc':
+      default: return byDate(b, a);
+    }
+  });
+  return out;
+}
