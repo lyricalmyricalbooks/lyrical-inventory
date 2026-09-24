@@ -842,20 +842,13 @@ function formatBigCartelOrderAddress(order, included = []) {
 }
 
 function copyBigCartelOrderAddress(orderId) {
-  const orders = (bigCartelData && bigCartelData.orders && bigCartelData.orders.length > 0)
-    ? bigCartelData.orders
-    : (loadCachedBigCartelOrders()?.orders || []);
-  const included = (bigCartelData && bigCartelData.included)
-    ? bigCartelData.included
-    : (loadCachedBigCartelOrders()?.included || []);
-
-  const order = orders.find(o => String(o.id) === String(orderId));
+  const order = findBigCartelOrderById(orderId);
   if (!order) {
     showToast('Order details not found', 'warn');
     return;
   }
 
-  const text = formatBigCartelOrderAddress(order, included);
+  const text = formatBigCartelOrderAddress(order, getBigCartelIncluded());
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(() => {
       showToast('✓ Shipping address copied to clipboard', 'ok');
@@ -874,21 +867,14 @@ function copyBigCartelOrderAddress(orderId) {
 }
 
 function openBigCartelAddressPreview(orderId) {
-  const orders = (bigCartelData && bigCartelData.orders && bigCartelData.orders.length > 0)
-    ? bigCartelData.orders
-    : (loadCachedBigCartelOrders()?.orders || []);
-  const included = (bigCartelData && bigCartelData.included)
-    ? bigCartelData.included
-    : (loadCachedBigCartelOrders()?.included || []);
-
-  const order = orders.find(o => String(o.id) === String(orderId));
+  const order = findBigCartelOrderById(orderId);
   if (!order) {
     showToast('Order details not found', 'warn');
     return;
   }
 
   const attr = order.attributes || {};
-  const addr = extractBigCartelAddress(order, orderId, included);
+  const addr = extractBigCartelAddress(order, orderId, getBigCartelIncluded());
   const email = attr.buyer_email || attr.customer_email || attr.email || attr.shipping_email || '—';
 
   const subtitle = $('bc-addr-order-subtitle');
@@ -1156,17 +1142,6 @@ async function recordBigCartelOrderIfMissing(order, plan) {
   return { status: 'recorded', entry, qty, linked, bookTitle: BOOKS[bookId].title };
 }
 
-/**
- * One press: record the sale, fill the whole shipping form from the order, and
- * fetch the rates.
- *
- * This used to fill in the recipient's address and stop, which left the
- * publisher restating what the order already said — open the package dropdown,
- * find the book, set the quantity, fix the customs value, press Calculate — and
- * left the sale itself unrecorded on a separate tab. Now the order answers all
- * of it. Buying the label is the only thing still asked for, because that is
- * the only step that spends money.
- */
 function findBigCartelOrderById(orderId) {
   const orders = (bigCartelData && bigCartelData.orders && bigCartelData.orders.length > 0)
     ? bigCartelData.orders
@@ -1187,6 +1162,17 @@ function bigCartelOrderPlan(order) {
   return { parcelLines, plan: orderParcelPlan(parcelLines, BOOKS) };
 }
 
+/**
+ * One press: record the sale, fill the whole shipping form from the order, and
+ * fetch the rates.
+ *
+ * This used to fill in the recipient's address and stop, which left the
+ * publisher restating what the order already said — open the package dropdown,
+ * find the book, set the quantity, fix the customs value, press Calculate — and
+ * left the sale itself unrecorded on a separate tab. Now the order answers all
+ * of it. Buying the label is the only thing still asked for, because that is
+ * the only step that spends money.
+ */
 async function prefillShippingFromBigCartelOrder(orderId) {
   const order = findBigCartelOrderById(orderId);
   if (!order) {
