@@ -3900,6 +3900,15 @@
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gold-text)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);pointer-events:none;"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
           <input type="search" id="pos-search-input" placeholder="Search books in POS (press / to focus, Esc to clear)..." oninput="posSearchFilter(this.value)">
         </div>
+        <!-- Phone only: is everything uploaded, and how today is going. -->
+        <div class="fm-top">
+          <span class="fm-sync" id="fm-sync" role="status" aria-live="polite"></span>
+          <button type="button" class="fm-today-btn" id="fm-today-btn" onclick="fairOpenToday()" aria-label="Today's register sales">
+            <span class="fm-today-label">Today</span>
+            <span class="fm-today-sum" id="fm-today-sum">No sales yet</span>
+            <span aria-hidden="true">›</span>
+          </button>
+        </div>
         <!-- Phone only: Fair Mode tiles. One tap adds a copy. Painted by renderPOS(). -->
         <div class="fm-tiles" id="fm-tiles" role="list" aria-label="Books to sell"></div>
         <div id="pos-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:1rem;">
@@ -5921,6 +5930,17 @@
   </div>
 </div></div>
 
+<!-- FAIR MODE: TODAY'S REGISTER SALES (phones). -->
+<div class="overlay" id="m-fair-today" style="display:none;"><div class="modal fm-sheet" role="dialog" aria-modal="true" aria-labelledby="fm-today-title">
+  <div class="modal-title">
+    <div class="modal-title-left"><span id="fm-today-title">Today at the register</span></div>
+    <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('fair-today')" aria-label="Back to books" title="Back (Esc)">✕</button>
+  </div>
+  <div class="fm-today-total" id="fm-today-total"></div>
+  <ul class="fm-today-list" id="fm-today-list" aria-label="Sales today, newest first"></ul>
+  <p class="fm-pay-hint">Register-only books are counted on the book itself, so they are not listed here.</p>
+</div></div>
+
 <!-- FAIR MODE CHARGE SHEET (phones). Tapping a way to pay records the sale. -->
 <div class="overlay" id="m-fair-charge" style="display:none;"><div class="modal fm-sheet" role="dialog" aria-modal="true" aria-labelledby="fm-charge-title">
   <div class="modal-title">
@@ -5943,6 +5963,11 @@
         <button type="button" class="fm-pay-btn sm" data-fm-method="Comp/Gift" onclick="fairCharge('Comp/Gift')">Comp</button>
       </div>
     </details>
+  </div>
+  <div class="fm-qr-offline" id="fm-qr-offline" role="status" hidden>
+    <strong>No signal for a QR payment link.</strong>
+    <span>Have them scan the QR code on your printed Fair Kit sheet, and check their phone shows it paid.</span>
+    <button type="button" class="fm-pay-btn" onclick="fairCharge('Stripe QR', { printedQr: true })">✓ Paid with printed QR — record sale</button>
   </div>
   <p class="fm-pay-hint">Tapping how they paid records the sale right away. You can undo it for a few seconds.</p>
   <button type="button" class="btn tx fm-more-link" onclick="attemptCloseModal('fair-charge'); posMobileView('checkout')">Change currency or a price →</button>

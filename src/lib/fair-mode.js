@@ -97,3 +97,62 @@ export function keepScreenAwake(nav = globalThis.navigator, doc = globalThis.doc
     lock = null;
   };
 }
+
+/**
+ * The register's always-visible upload pill. Unlike the app-wide sync chip it
+ * also shows the good news, because at a stall "is it saved?" is asked all day.
+ */
+export function fairSyncPill({ online = true, pending = 0, retrying = false, atRisk = false } = {}) {
+  const n = Math.max(0, Math.floor(Number(pending) || 0));
+  const waiting = n ? `${n} ${n === 1 ? 'change' : 'changes'} waiting to upload` : '';
+  if (atRisk && n) {
+    return { tone: 'failed', text: `Keep the app open · ${waiting}`, srText: `This phone could not store ${waiting}. Keep the app open until they upload.` };
+  }
+  if (online === false) {
+    return { tone: 'offline', text: n ? `No signal · ${n} saved on this phone` : 'No signal · sales save on this phone', srText: `No signal. ${n ? `${waiting}; they are saved on this phone.` : 'Sales are saved on this phone and upload later.'}` };
+  }
+  if (n) {
+    return { tone: retrying ? 'failed' : 'pending', text: retrying ? `Retrying · ${waiting}` : `Uploading · ${waiting}`, srText: `${waiting}.` };
+  }
+  return { tone: 'ok', text: 'All uploaded ✓', srText: 'Every sale has been uploaded.' };
+}
+
+/**
+ * Today's register sales, one entry per checkout, newest first. `books` is
+ * [{ id, title, currency, hist }]; only Book Fair rows from `day` that are
+ * still live count. Totals are kept per currency, never converted here.
+ */
+export function registerSalesForDay(books, day) {
+  const byNum = new Map();
+  for (const book of books || []) {
+    for (const h of book.hist || []) {
+      if (!h || h.voided || h.chan !== 'Book Fair' || h.date !== day || !h.num) continue;
+      let sale = byNum.get(h.num);
+      if (!sale) { sale = { num: h.num, at: 0, lines: [], totals: {}, units: 0 }; byNum.set(h.num, sale); }
+      sale.at = Math.max(sale.at, eventTime(h.sheetsId));
+      const qty = Number(h.qty) || 0;
+      const amount = qty * (Number(h.price) || 0);
+      const cur = h.cur || book.currency || 'CAD';
+      sale.lines.push({ bookId: book.id, title: book.title || 'Untitled', qty, amount, cur });
+      sale.totals[cur] = (sale.totals[cur] || 0) + amount;
+      sale.units += qty;
+    }
+  }
+  // Sale numbers are only a timestamp's last six digits and wrap every ~17
+  // minutes, so order by the row's event id, which starts with the full time.
+  const sales = [...byNum.values()].sort((a, b) => b.at - a.at);
+  const totals = {};
+  let units = 0;
+  for (const s of sales) {
+    units += s.units;
+    for (const [cur, amt] of Object.entries(s.totals)) totals[cur] = (totals[cur] || 0) + amt;
+  }
+  return { sales, totals, units };
+}
+
+/** Epoch ms from an `evt-<base36 time>-<random>` id; 0 when absent. */
+export function eventTime(id) {
+  const m = /^evt-([0-9a-z]+)-/.exec(String(id || ''));
+  const t = m ? parseInt(m[1], 36) : 0;
+  return Number.isFinite(t) ? t : 0;
+}

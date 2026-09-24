@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, test, vi } from 'vitest';
-import { FAIR_METHODS, FAIR_UNDO_MS, readLastMethod, rememberMethod, undoOpen, soldLabel, countLabel, fairTileHtml, keepScreenAwake } from '../src/lib/fair-mode.js';
+import { fairSyncPill, registerSalesForDay, eventTime, FAIR_METHODS, FAIR_UNDO_MS, readLastMethod, rememberMethod, undoOpen, soldLabel, countLabel, fairTileHtml, keepScreenAwake } from '../src/lib/fair-mode.js';
 
 const memStore = () => { const m = new Map(); return { getItem: k => m.get(k) ?? null, setItem: (k, v) => m.set(k, String(v)) }; };
 
@@ -84,5 +84,54 @@ describe('screen wake lock', () => {
   });
   test('no wake lock support is a quiet no-op', () => {
     expect(() => keepScreenAwake({}, document)()).not.toThrow();
+  });
+});
+
+describe('upload pill', () => {
+  test('says the good news, the waiting count, and no signal', () => {
+    expect(fairSyncPill({ online: true, pending: 0 })).toMatchObject({ tone: 'ok', text: 'All uploaded ✓' });
+    expect(fairSyncPill({ online: true, pending: 2 }).text).toBe('Uploading · 2 changes waiting to upload');
+    expect(fairSyncPill({ online: true, pending: 1, retrying: true }).tone).toBe('failed');
+    expect(fairSyncPill({ online: false, pending: 3 })).toMatchObject({ tone: 'offline', text: 'No signal · 3 saved on this phone' });
+    expect(fairSyncPill({ online: false, pending: 0 }).text).toBe('No signal · sales save on this phone');
+  });
+  test('warns loudest when the phone could not store the queue', () => {
+    expect(fairSyncPill({ online: false, pending: 2, atRisk: true })).toMatchObject({ tone: 'failed', text: 'Keep the app open · 2 changes waiting to upload' });
+  });
+});
+
+describe("today's register sales", () => {
+  const t = (ms) => `evt-${ms.toString(36)}-abc`;
+  const books = [
+    { id: 'a', title: 'Harbour', currency: 'CAD', hist: [
+      { num: 'POS-2', chan: 'Book Fair', date: '2026-09-24', qty: 1, price: 40, cur: 'CAD', sheetsId: t(2000) },
+      { num: 'POS-1', chan: 'Book Fair', date: '2026-09-24', qty: 2, price: 40, cur: 'CAD', sheetsId: t(1000) },
+      { num: 'POS-0', chan: 'Book Fair', date: '2026-09-23', qty: 1, price: 40, cur: 'CAD', sheetsId: t(500) },
+      { num: 'W-9', chan: 'Website', date: '2026-09-24', qty: 1, price: 40, cur: 'CAD', sheetsId: t(1500) },
+      { num: 'POS-3', chan: 'Book Fair', date: '2026-09-24', qty: 1, price: 40, cur: 'CAD', voided: true, sheetsId: t(3000) },
+    ] },
+    { id: 'b', title: 'Fables', currency: 'EUR', hist: [
+      { num: 'POS-1', chan: 'Book Fair', date: '2026-09-24', qty: 1, price: 20, cur: 'EUR', sheetsId: t(1001) },
+    ] },
+  ];
+  test('groups a checkout across books, newest first, only live fair sales from that day', () => {
+    const day = registerSalesForDay(books, '2026-09-24');
+    expect(day.sales.map((s) => s.num)).toEqual(['POS-2', 'POS-1']);
+    expect(day.sales[1].lines.map((l) => l.bookId)).toEqual(['a', 'b']);
+    expect(day.sales[1].totals).toEqual({ CAD: 80, EUR: 20 });
+    expect(day.totals).toEqual({ CAD: 120, EUR: 20 });
+    expect(day.units).toBe(4);
+  });
+  test('orders by real time even when the short sale numbers wrap', () => {
+    const wrapped = [{ id: 'a', title: 'A', hist: [
+      { num: 'POS-999990', chan: 'Book Fair', date: 'd', qty: 1, price: 1, sheetsId: t(1_000) },
+      { num: 'POS-000010', chan: 'Book Fair', date: 'd', qty: 1, price: 1, sheetsId: t(2_000_000) },
+    ] }];
+    expect(registerSalesForDay(wrapped, 'd').sales[0].num).toBe('POS-000010');
+  });
+  test('event ids decode to their time, anything else to 0', () => {
+    expect(eventTime(t(123456789))).toBe(123456789);
+    expect(eventTime('')).toBe(0);
+    expect(eventTime(undefined)).toBe(0);
   });
 });

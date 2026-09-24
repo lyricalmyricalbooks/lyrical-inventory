@@ -166,3 +166,54 @@ describe('Fair Mode on a phone', () => {
     expect(state(HARBOUR).stock).toBe(99);
   });
 });
+
+describe('Fair Mode with patchy signal', () => {
+  function cart(lines) {
+    win.posSetCurrency('CAD');
+    for (const [bookId, qty] of Object.entries(lines)) win.posUpdateQty(bookId, qty);
+  }
+  const offline = (v) => Object.defineProperty(win.navigator, 'onLine', { configurable: true, get: () => !v });
+  afterEach(() => offline(false));
+
+  it('with no signal, QR points to the printed code and records a sale to check', async () => {
+    offline(true);
+    cart({ [HARBOUR]: 1 });
+    win.fairOpenCharge();
+    await win.fairShowQR();
+    expect(document.getElementById('fm-qr-offline').hidden).toBe(false);
+    expect(state(HARBOUR).hist).toHaveLength(0);
+    await win.fairCharge('Stripe QR', { printedQr: true });
+    await app.settle();
+    expect(state(HARBOUR).hist[0].notes).toMatch(/Stripe QR \(printed code, check it arrived in Stripe\)/);
+    expect(state(HARBOUR).stock).toBe(99);
+  });
+
+  it("shows today's register takings and voids one sale from the list", async () => {
+    cart({ [HARBOUR]: 1, [FABLE]: 1 });
+    await win.fairCharge('Card');
+    await app.settle();
+    cart({ [HARBOUR]: 2 });
+    await win.fairCharge('Card');
+    await app.settle();
+    expect(document.getElementById('fm-today-sum').textContent).toMatch(/^2 sales · /);
+    win.fairOpenToday();
+    expect(document.querySelectorAll('#fm-today-list .fm-today-sale')).toHaveLength(2);
+
+    const firstNum = state(FABLE).hist[0].num;
+    const voiding = win.fairVoidSale(firstNum);
+    await app.answerConfirm(true);
+    await voiding;
+    await app.settle();
+    expect(state(FABLE).hist[0].voided).toBe(true);
+    expect(state(FABLE).stock).toBe(50);
+    expect(state(HARBOUR).hist.find((h) => h.num === firstNum).voided).toBe(true);
+    expect(state(HARBOUR).stock).toBe(98);
+    expect(document.getElementById('fm-today-sum').textContent).toMatch(/^1 sale · /);
+  });
+
+  it('the upload pill reads the real queue', () => {
+    offline(true);
+    win.dispatchEvent(new win.Event('offline'));
+    expect(document.getElementById('fm-sync').textContent).toMatch(/^No signal/);
+  });
+});
