@@ -132,3 +132,126 @@
 /* Matches the bottom-sheet breakpoint in style.css, where the sheet runs
    edge to edge; an inline desktop width (e.g. 95vw) would leave a gap. */
 @media (max-width: 600px) { .overlay .modal { width: 100% !important; } }
+
+/* ── Fair Mode: the register on a phone ──────────────────────────────────
+   Big tiles (one tap adds a copy), one pinned Charge button in the thumb
+   zone, a bottom-sheet to pick how they paid, and a short Undo bar. Heavy
+   ink borders and large type so it reads in daylight at an outdoor stall. */
+.fm-tiles, .fm-bar, .fm-undo { display: none; }
+
+@media (max-width: 768px) {
+  /* The step toggle, desktop-style cards and review bar give way to tiles.
+     The full checkout panel stays one tap away for currency or price edits. */
+  #tab-pos #pos-subpanel-register > .row-between > div:first-child > div:last-child { display: none; }
+  #tab-pos .pos-mobile-steps:has(+ .pos-layout[data-mobile-view="books"]) { display: none; }
+  #tab-pos .pos-layout[data-mobile-view="books"] :is(#pos-grid, .pos-review-bar) { display: none !important; }
+  #tab-pos .pos-layout[data-mobile-view="books"]:not(.fm-searchable) .pos-search-wrapper { display: none; }
+  #tab-pos .pos-layout[data-mobile-view="books"] #pos-mobile-books { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+
+  #tab-pos .pos-layout[data-mobile-view="books"] .fm-tiles {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3);
+  }
+  .fm-tile { position: relative; min-width: 0; }
+  .fm-tile-add {
+    display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1);
+    width: 100%; min-height: 128px; padding: var(--space-4) var(--space-3) var(--space-3);
+    border: var(--stroke) solid var(--rule-ink); border-radius: var(--r2);
+    background: var(--surface-raised); color: var(--content-primary);
+    font: inherit; text-align: left; cursor: pointer;
+    -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+    transition: transform var(--dur-fast) var(--ease-spring), background-color var(--dur-fast) ease;
+  }
+  .fm-tile-add:active { transform: scale(.97); }
+  .fm-tile-add:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+  .fm-tile-title {
+    font: 700 var(--text-md) / 1.2 var(--font-ui); overflow-wrap: anywhere;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden;
+  }
+  .fm-tile-price { margin-top: auto; font: 700 var(--text-xl) / 1.1 var(--font-ui); font-variant-numeric: tabular-nums; }
+  .fm-tile-stock { font: 600 var(--text-xs) var(--font-ui); color: var(--content-secondary); }
+  .fm-tile.is-in-cart .fm-tile-add { background: var(--gold-bg); border-color: var(--gold-text); }
+  /* Room under the price for the − button, so it never covers the amount. */
+  .fm-tile.is-in-cart .fm-tile-add { padding-bottom: calc(48px + var(--space-2) * 2); }
+  .fm-tile.is-short .fm-tile-stock { color: var(--red); }
+  .fm-tile.is-out .fm-tile-add { opacity: .55; }
+  .fm-tile-qty {
+    position: absolute; top: -8px; right: -8px; min-width: 36px; height: 36px; padding: 0 8px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: var(--r-pill); background: var(--gold); color: var(--ink, #14110d);
+    border: var(--stroke) solid var(--rule-ink); font: 800 var(--text-md) var(--font-ui);
+  }
+  /* 48px, clear of the add area so a busy thumb doesn't take a copy back. */
+  .fm-tile-minus {
+    position: absolute; right: var(--space-2); bottom: var(--space-2); width: 48px; height: 48px;
+    border: var(--stroke) solid var(--rule-ink); border-radius: var(--r-pill);
+    background: var(--surface-page); color: var(--content-primary);
+    font: 800 var(--text-xl) / 1 var(--font-ui); cursor: pointer; touch-action: manipulation;
+  }
+  .fm-tile-minus:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+  .fm-empty { grid-column: 1 / -1; color: var(--content-secondary); font-size: var(--text-sm); }
+
+  /* Pinned in the thumb zone, just above the app's bottom bar. */
+  #tab-pos .pos-layout[data-mobile-view="books"] .fm-bar:not([hidden]),
+  #tab-pos .fm-undo:not([hidden]) {
+    display: flex; align-items: center; gap: var(--space-3);
+    position: fixed; left: 12px; right: 12px; bottom: calc(84px + env(safe-area-inset-bottom));
+    z-index: calc(var(--z-sticky) + 50);
+    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+    border: var(--stroke) solid var(--rule-ink); border-radius: var(--r3);
+    background: var(--surface-page); box-shadow: var(--elev-3);
+  }
+  .fm-bar-sum { display: grid; min-width: 0; line-height: 1.15; }
+  .fm-bar-count { font: 600 var(--text-xs) var(--font-ui); color: var(--content-secondary); }
+  .fm-bar-total { font: 800 var(--text-lg) var(--font-ui); overflow-wrap: anywhere; }
+  .fm-charge-btn { flex: 1 1 auto; min-height: 56px !important; font-size: var(--text-base) !important; }
+  #tab-pos .fm-undo:not([hidden]) { animation: fm-undo-in .22s var(--ease-spring); }
+  .fm-undo-check {
+    flex: none; width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center;
+    border-radius: var(--r-pill); background: var(--green); color: #fff; font-weight: 800; font-size: var(--text-lg);
+  }
+  .fm-undo-text { flex: 1 1 auto; min-width: 0; font: 700 var(--text-base) var(--font-ui); }
+  .fm-undo-btn {
+    flex: none; min-height: 48px; min-width: 88px; padding: 0 var(--space-4);
+    border: var(--stroke) solid var(--rule-ink); border-radius: var(--r2);
+    background: var(--surface-raised); color: var(--content-primary);
+    font: 800 var(--text-sm) var(--font-ui); text-transform: uppercase; letter-spacing: .06em; cursor: pointer;
+  }
+  .fm-undo-btn:disabled { opacity: .35; }
+
+  /* Charge sheet */
+  .fm-lines { list-style: none; margin: 0 0 var(--space-3); padding: 0; }
+  .fm-line {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto auto 44px; align-items: center; gap: var(--space-2);
+    padding: var(--space-2) 0; border-bottom: var(--stroke-hair) solid var(--border-subtle);
+  }
+  .fm-line-title { font-weight: 600; overflow-wrap: anywhere; }
+  .fm-line-qty { color: var(--content-secondary); }
+  .fm-line-amt { font-weight: 700; }
+  .fm-line-minus {
+    width: 44px; height: 44px; border: var(--stroke-hair) solid var(--border-default); border-radius: var(--r-pill);
+    background: var(--surface-sunken); color: var(--content-primary); font: 800 var(--text-lg) / 1 var(--font-ui); cursor: pointer;
+  }
+  .fm-pay-label { margin: var(--space-3) 0 var(--space-2); font: 700 var(--text-sm) var(--font-ui); color: var(--content-secondary); }
+  .fm-pay { display: grid; gap: var(--space-2); }
+  .fm-pay-btn {
+    display: flex; align-items: center; justify-content: center; gap: var(--space-2);
+    min-height: 64px; padding: 0 var(--space-4);
+    border: var(--stroke) solid var(--rule-ink); border-radius: var(--r2);
+    background: var(--surface-raised); color: var(--content-primary);
+    font: 800 var(--text-md) var(--font-ui); cursor: pointer; touch-action: manipulation;
+  }
+  .fm-pay-btn.sm { min-height: 52px; font-size: var(--text-sm); flex: 1 1 0; min-width: 0; }
+  .fm-pay-btn.is-last { background: var(--gold); color: var(--ink, #14110d); }
+  .fm-pay-btn:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+  .fm-pay-btn:active { transform: scale(.98); }
+  .fm-pay-other summary { min-height: 44px; display: flex; align-items: center; justify-content: center; font: 600 var(--text-sm) var(--font-ui); color: var(--content-secondary); cursor: pointer; }
+  .fm-pay-other-row { display: flex; gap: var(--space-2); }
+  .fm-pay-hint { margin: var(--space-3) 0 var(--space-4); font-size: var(--text-xs); color: var(--content-secondary); text-align: center; }
+  .fm-qr-paid:not([hidden]) { flex-basis: 100%; min-height: 56px; }
+}
+@media (max-width: 768px) and (prefers-reduced-motion: reduce) {
+  .fm-tile-add, #tab-pos .fm-undo:not([hidden]) { transition: none; animation: none; }
+}
+@keyframes fm-undo-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@media (max-width: 768px) { .fm-more-link { display: block; width: 100%; min-height: 44px; margin-bottom: var(--space-4); } }
+@media (max-width: 768px) { #tab-pos .pos-pay-opt[data-pay="Stripe QR"] { grid-column: 1 / -1; } }
