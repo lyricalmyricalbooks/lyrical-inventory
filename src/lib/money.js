@@ -159,6 +159,24 @@ export function isDirectToArtistSale(entry) {
   return (entry.notes || '').includes(PAYMENT_TYPE_DIRECT_TO_ARTIST);
 }
 
+// Amount of a direct-to-artist transfer, or null when the record doesn't carry
+// one it can be trusted for (missing/garbled total AND no usable qty × price).
+// Callers show "amount missing" instead of summing NaN into a banner or ledger.
+export function transferAmount(t) {
+  if (!t) return null;
+  const total = Number(t.total);
+  if (t.total !== '' && t.total != null && Number.isFinite(total)) return total;
+  const qty = Number(t.qty), price = Number(t.price);
+  if (t.qty != null && t.price != null && Number.isFinite(qty) && Number.isFinite(price)) return qty * price;
+  return null;
+}
+
+// Copies line for a transfer: "3×", or '' when the count wasn't recorded.
+export function transferQtyLabel(t) {
+  const qty = Number(t && t.qty);
+  return t && t.qty != null && t.qty !== '' && Number.isFinite(qty) ? `${qty}×` : '';
+}
+
 export function hexToRgba(hex, alpha) {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);

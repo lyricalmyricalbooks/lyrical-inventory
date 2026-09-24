@@ -264,6 +264,8 @@ import {
   getSym,
   hexToRgba,
   isDirectToArtistSale,
+  transferAmount,
+  transferQtyLabel,
   lightenColor,
   normalizeCurrencyCode,
   paymentSummary,
@@ -4024,7 +4026,10 @@ function renderUpdatedStamps(isPub = window.IS_PUBLISHER && !isAuthor()) {
 
   const upd = $('tab-updated');
   if (upd) {
-    upd.textContent = when ? `Updated ${when}` : '';
+    // Authors don't need to know when the app was last deployed — only the
+    // publisher sees the stamp (it opens What's new).
+    upd.textContent = when && isPub ? `Updated ${when}` : '';
+    upd.hidden = !isPub;
     upd.classList.toggle('is-clickable', !!isPub);
     upd.title = isPub ? `Last updated ${exact} — click to see what changed` : (exact ? `Last updated ${exact}` : '');
     upd.onclick = isPub ? (e) => showWhatsNew(e) : null;
@@ -5097,7 +5102,7 @@ function renderCombinedChannelAnalytics(allBooksVisible) {
     // forwarded; fold the held gross back in per channel so the channel revenue is
     // recognized consistently with the headline figures.
     const heldByChan = {};
-    (s.artistTransfers || []).forEach(t => { heldByChan[t.chan] = (heldByChan[t.chan] || 0) + (t.total || 0); });
+    (s.artistTransfers || []).forEach(t => { heldByChan[t.chan] = (heldByChan[t.chan] || 0) + (transferAmount(t) || 0); });
     const revOf = (chan, cs) => (cs.revenue || 0) + (heldByChan[chan] || 0);
     const bookRev = entries.reduce((a, [chan, cs]) => a + revOf(chan, cs), 0);
     const cur = book.currency;
@@ -6562,7 +6567,7 @@ function renderBookPendingAlert() {
 
 // Gross of direct-to-artist sales the artist has collected but not yet forwarded.
 function heldGrossOf(s) {
-  return (s.artistTransfers || []).reduce((sum, t) => sum + (t.total || 0), 0);
+  return (s.artistTransfers || []).reduce((sum, t) => sum + (transferAmount(t) || 0), 0);
 }
 // Revenue recognized for a book: cash collected plus the gross still held by the
 // artist. A sale is complete the moment it happens, so its full value is recognized
@@ -6731,7 +6736,7 @@ export function updateDash() {
     }
   });
 
-  const pendingTotal = pendingTransfers.reduce((a, t) => a + t.total, 0);
+  const pendingTotal = pendingTransfers.reduce((a, t) => a + (transferAmount(t) || 0), 0);
   animateCountValue('d-artist-pending', pendingTransfers.length > 0 ? fmtWhole(pendingTotal, cur) : '—');
   $('d-artist-pending').className = 'kpi-value' + (pendingTransfers.length > 0 ? ' warn' : '');
   $('d-artist-pending-sub').textContent = pendingTransfers.length > 0 ? `${pendingTransfers.length} order${pendingTransfers.length > 1 ? 's' : ''} (incl. pending) awaiting forwarding` : 'no pending transfers';
@@ -9738,6 +9743,11 @@ function markArtistTransferReceived(transferId) {
   const s = getState(), book = getBook();
   const t = s.artistTransfers.find(x => x.id === transferId);
   if (!t) return;
+  if (transferAmount(t) == null) {
+    showToast('This sale has no amount saved, so it can’t be settled yet. Check the order and re-enter it.', 'err', 5000);
+    return;
+  }
+  t.total = transferAmount(t);
   // Now credit the revenue
   s.revenue += t.total;
   if (!s.chStats[t.chan]) s.chStats[t.chan] = { txns: 0, units: 0, revenue: 0 };
@@ -9771,6 +9781,11 @@ async function settleArtistTransferKeepShare(transferId) {
   const s = getState(), book = getBook();
   const t = s.artistTransfers.find(x => x.id === transferId);
   if (!t) return;
+  if (transferAmount(t) == null) {
+    showToast('This sale has no amount saved, so it can’t be settled yet. Check the order and re-enter it.', 'err', 5000);
+    return;
+  }
+  t.total = transferAmount(t);
 
   // The held sale already counts toward earnings, so its marginal share is the
   // drop in lifetime earnings if it were removed (this respects tier placement).
@@ -9834,6 +9849,11 @@ async function settleArtistTransferKeepAll(transferId) {
   const s = getState(), book = getBook();
   const t = s.artistTransfers.find(x => x.id === transferId);
   if (!t) return;
+  if (transferAmount(t) == null) {
+    showToast('This sale has no amount saved, so it can’t be settled yet. Check the order and re-enter it.', 'err', 5000);
+    return;
+  }
+  t.total = transferAmount(t);
 
   if (!(await confirmDialog(
     `Settle ${escapeHtml(t.num)} — artist keeps everything?\n\n` +
@@ -9902,13 +9922,15 @@ function renderArtistTransfers() {
   if (banner) {
     if (isAuthor() && transfers.length > 0) {
       // ⚡ Bolt: Imperative loops instead of .reduce() avoid array allocations in rendering functions
-  let totalOwed = 0;
+  let totalOwed = 0, missing = 0;
       for (const t of transfers) {
-        totalOwed += t.total;
+        const amt = transferAmount(t);
+        if (amt == null) missing++; else totalOwed += amt;
       }
       banner.style.display = '';
       $('apb-amount').textContent = fmt(totalOwed, cur);
-      $('apb-detail').textContent = `${transfers.length} transfer${transfers.length > 1 ? 's' : ''} from sales collected on your end (incl. pending)`;
+      $('apb-detail').textContent = `${transfers.length} transfer${transfers.length > 1 ? 's' : ''} from sales collected on your end (incl. pending)` +
+        (missing ? ` · ${missing} without an amount yet — your publisher will confirm ${missing > 1 ? 'them' : 'it'}` : '');
       const btn = $('apb-pay-btn');
       if (payLink) {
         const fullLink = payLink.startsWith('http') ? payLink : 'https://' + payLink;
@@ -9923,8 +9945,8 @@ function renderArtistTransfers() {
       }
       $('apb-transfers').innerHTML = transfers.map(t => `
         <div class="mbi-row${t.status === 'pending' ? ' is-pending' : ''}">
-          <div class="mbi-desc">${escapeHtml(t.num)} · ${fmtD(t.date)} · ${t.qty}× ${t.status === 'pending' ? ' (Pending Approval)' : ''}</div>
-          <div class="mbi-amt">${fmt(t.total, cur)}</div>
+          <div class="mbi-desc">${[escapeHtml(t.num), fmtD(t.date), transferQtyLabel(t)].filter(Boolean).join(' · ')}${t.status === 'pending' ? ' (Pending Approval)' : ''}</div>
+          <div class="mbi-amt">${transferAmount(t) == null ? 'Amount to confirm' : fmt(transferAmount(t), cur)}</div>
         </div>`).join('');
     } else {
       banner.style.display = 'none';
@@ -9949,7 +9971,7 @@ function renderArtistTransfers() {
           <span class="pending-card-num">${escapeHtml(t.num)}</span>
           ${t.status === 'pending' ? `<span class="pill gray" style="font-size:var(--text-2xs);">Pending Approval</span>` : ''}
         </div>
-        <div class="pending-card-meta">${fmtD(t.date)} · ${t.chan} · ${t.qty}× · <strong class="pending-card-highlight">${fmt(t.total, cur)} held</strong></div>
+        <div class="pending-card-meta">${[fmtD(t.date), escapeHtml(t.chan || ''), transferQtyLabel(t)].filter(Boolean).join(' · ')} · <strong class="pending-card-highlight">${transferAmount(t) == null ? 'Amount missing — check this sale' : `${fmt(transferAmount(t), cur)} held`}</strong></div>
         <div class="pending-card-note">${escapeHtml(t.notes) || '—'}</div>
       </div>
       <div class="pending-card-actions">
