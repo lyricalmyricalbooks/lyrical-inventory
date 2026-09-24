@@ -317,7 +317,6 @@
   </div>
 
   <nav class="pub-nav" aria-label="Books">
-    <button type="button" class="snav" id="notif-sidebar-btn" title="Notifications" onclick="openNotificationsPanel()"><span class="snav-ic">🔔</span><span class="snav-label">Notifications</span><span class="nav-badge notif-unread-badge" aria-label="unread notifications" hidden></span></button>
     <button type="button" class="snav" title="Dashboard" onclick="switchTab('dashboard')"><span class="snav-ic">▦</span><span class="snav-label">Dashboard</span></button>
     <button type="button" class="snav" id="todo-sidebar-btn" title="To-do" onclick="switchTab('todo')"><span class="snav-ic">✅</span><span class="snav-label">To-do</span><span class="nav-badge todo-nav-badge" aria-label="things needing attention" hidden></span></button>
     <button type="button" class="snav" title="Website orders" onclick="switchTab('website')"><span class="snav-ic">🛍</span><span class="snav-label">Website orders</span></button>
@@ -469,6 +468,15 @@
             onclick="toggleTheme()" aria-pressed="false"
             title="Switch to dark mode" aria-label="Switch to dark mode">
       <span class="ttb-ico" aria-hidden="true">☾</span>
+    </button>
+
+    <!-- Notifications bell, beside the theme switch. Publisher-only: hidden
+         unless #pw-app has .pub-shell (publisher session, not author view).
+         Title and badge are kept current by renderNotificationBell(). -->
+    <button type="button" class="theme-toggle-btn hdr-notif-btn" id="notif-header-btn"
+            onclick="openNotificationsPanel()" title="Notifications" aria-label="Notifications">
+      <span class="ttb-ico" aria-hidden="true">🔔</span>
+      <span class="nav-badge notif-unread-badge hdr-notif-badge" aria-label="unread notifications" hidden></span>
     </button>
 
     <!-- Account avatar + sync status (corner dot reflects sync state) -->
