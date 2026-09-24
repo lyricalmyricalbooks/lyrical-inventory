@@ -3673,7 +3673,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 
 .store-balance-pop{
   display:none;flex-direction:column;gap:var(--space-3);
-  /* The global `*{margin:0}` reset wipes the UA's `margin:auto` on [popover],
+  /* The global margin reset wipes the browser default margin:auto on a popover,
      which is what centres a popover in the viewport — restore it here. */
   margin:auto;
   width:min(420px,calc(100vw - 32px));padding:var(--space-4);
@@ -15624,9 +15624,15 @@ button[onclick="refreshUmamiStats()"]:active {
 /* Saved fairs — a control touched twice a year, so it lives behind a button
    instead of owning the largest box on the screen. Native popover: no z-index
    stack to lose a panel behind, and Esc / click-away come for free. */
-.fk-preset-btn{min-height:44px;flex:none;}
+.fk-preset-btn{min-height:44px;flex:none;max-width:240px;}
+.fk-preset-btn #fk-preset-btn-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
+/* Copies bringing > on hand: almost always a typo, so the field says so. */
+.st-book-qty.fk-over{border-color:var(--status-active);box-shadow:inset 0 0 0 1px var(--status-active);}
 .fk-pop{
   display:none;flex-direction:column;gap:var(--space-3);
+  /* The global margin reset wipes the browser default margin:auto on a popover,
+     which pinned this panel to the top-left corner — restore the centring. */
+  margin:auto;
   width:min(360px,calc(100vw - 32px));padding:var(--space-4);
   border:var(--stroke-hair) solid var(--gold-line);border-radius:var(--r3);
   background:var(--surface-raised);color:var(--text);
