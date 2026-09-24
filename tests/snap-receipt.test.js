@@ -38,6 +38,30 @@ describe('Snap a receipt', () => {
     expect(JSON.stringify(app.main.TAX_CENTER?.expenses || [])).toBe(before);
   });
 
+  it('reads a receipt snapped with no signal once the signal returns, unless it was typed in by hand', async () => {
+    globalThis.DataTransfer = win.DataTransfer = class { constructor() { this.files = []; this.items = { add: (f) => this.files.push(f) }; } };
+    const fileInput = document.getElementById('tc-exp-file');
+    Object.defineProperty(fileInput, 'files', { configurable: true, writable: true, value: [] });
+    app.main.TAX_CENTER.settings.geminiKey = 'test-key';
+    const onLine = (v) => Object.defineProperty(win.navigator, 'onLine', { configurable: true, get: () => v });
+    const toast = () => document.getElementById('toast').textContent;
+
+    onLine(false);
+    await pick(new win.File(['a'], 'a.jpg', { type: 'image/jpeg' }));
+    document.getElementById('tc-exp-desc').value = '';
+    document.getElementById('tc-exp-amount').value = '';
+    onLine(true);
+    win.dispatchEvent(new win.Event('online'));
+    expect(toast()).toMatch(/Back online — reading your receipt/);
+
+    onLine(false);
+    await pick(new win.File(['b'], 'b.jpg', { type: 'image/jpeg' }));
+    document.getElementById('tc-exp-desc').value = 'Table fee';
+    onLine(true);
+    win.dispatchEvent(new win.Event('online'));
+    expect(toast()).not.toMatch(/Back online/);
+  });
+
   it('ignores a cancelled camera', async () => {
     await expect(pick(undefined)).resolves.toBeUndefined();
   });
