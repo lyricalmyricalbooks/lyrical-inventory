@@ -509,7 +509,7 @@ async function sendOcBulkEmails(_retryFailedOnly = false) {
   const consoleEl = $('oc-bulk-console');
   consoleEl.innerHTML = simulate
     ? `<div style="color:#fbbf24;margin-bottom:4px;">[SIMULATION] Starting dry run · ${selectedRecs.length} recipient${selectedRecs.length !== 1 ? 's' : ''}</div>`
-    : `<div style="color:#6b8cff;margin-bottom:4px;">Starting bulk send · ${selectedRecs.length} recipient${selectedRecs.length !== 1 ? 's' : ''} · ${delayMs > 0 ? delayMs / 1000 + 's delay' : 'no delay'}${replyTo ? ' · reply-to: ' + replyTo : ''}</div>`;
+    : `<div style="color:#6b8cff;margin-bottom:4px;">Starting bulk send · ${selectedRecs.length} recipient${selectedRecs.length !== 1 ? 's' : ''} · ${delayMs > 0 ? delayMs / 1000 + 's delay' : 'no delay'}${replyTo ? ' · reply-to: ' + escapeHtml(replyTo) : ''}</div>`;
 
   _ocBulkSendingActive = true;
   _ocBulkFailedIds = [];
@@ -2763,7 +2763,9 @@ async function ocPreviewModalSend(cId, stageKey) {
 
   const subject = window._ocPreviewSubject;
   const htmlBody = window._ocPreviewBody;
-  const plainBody = htmlBody.replace(/<[^>]*>/g, '');
+  // Let the browser's parser produce the text version; a tag-stripping regex
+  // can leave half-tags behind in the plain-text copy.
+  const plainBody = new DOMParser().parseFromString(htmlBody, 'text/html').body.textContent || '';
   const replyTo = localStorage.getItem('lm-oc-replyto') || '';
 
   const replyThread = $('oc-preview-reply-thread')?.checked || false;
