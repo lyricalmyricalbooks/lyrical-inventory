@@ -7,9 +7,16 @@ describe('hand-addressed label', () => {
     expect(formatPostalCode('90210', 'United States')).toBe('90210');
   });
 
-  it('capitalises the address and leaves the country off a domestic parcel', () => {
+  it('capitalises the address and always ends with the country', () => {
     expect(addressLines({ addr1: '69 riverine Lane West', city: 'Lethbridge', province: 'Alberta', postal: 'T1K5V6', country: 'Canada' }))
-      .toEqual(['69 RIVERINE LANE WEST', 'LETHBRIDGE ALBERTA  T1K 5V6']);
+      .toEqual(['69 RIVERINE LANE WEST', 'LETHBRIDGE ALBERTA  T1K 5V6', 'CANADA']);
+    expect(addressLines({ addr1: '1 Main St', city: 'Toronto', country: 'CA' }).at(-1)).toBe('CANADA');
+    expect(addressLines({ addr1: '1 Main St', city: 'Toronto' }).at(-1)).toBe('CANADA');
+  });
+
+  it('has no postage box or order number', () => {
+    const html = buildHandLabelDocument({ to: { name: 'A' }, from: ['A'], orderNum: '#X-1' });
+    expect(html).not.toMatch(/Postage|class="stamp"|class="ref"|Order #X-1<\/div>/);
   });
 
   it('ends an international address with the country on its own line', () => {
@@ -19,7 +26,7 @@ describe('hand-addressed label', () => {
 
   it('uses the saved return address, or the fallback when it is incomplete', () => {
     const origin = { company: 'Lyricalmyrical Books', street1: '456 Montrose Ave', city: 'Toronto', state: 'ON', zip: 'm6g3h1', country: 'CA' };
-    expect(returnLines(origin, ['x'])).toEqual(['Lyricalmyrical Books', '456 Montrose Ave', 'Toronto ON  M6G 3H1']);
+    expect(returnLines(origin, ['x'])).toEqual(['Lyricalmyrical Books', '456 Montrose Ave', 'Toronto ON  M6G 3H1', 'Canada']);
     expect(returnLines({}, ['fallback'])).toEqual(['fallback']);
   });
 
