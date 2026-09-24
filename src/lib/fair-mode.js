@@ -1,6 +1,8 @@
 // Fair Mode: the phone register used at a stall. Pure helpers plus the
 // screen wake lock; the sale itself still goes through posConfirmSale().
 
+import { escapeHtml as esc } from './html.js';
+
 /** Payment choices on the charge sheet, in thumb order. `value` is what the
  *  sale records, and must match the register's payment <select>. */
 export const FAIR_METHODS = [
@@ -48,8 +50,6 @@ export function countLabel(count) {
   const n = Math.max(0, Math.floor(count) || 0);
   return `${n} ${n === 1 ? 'book' : 'books'}`;
 }
-
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 /**
  * One tile. The whole tile adds a copy; the − chip (only once something is in
