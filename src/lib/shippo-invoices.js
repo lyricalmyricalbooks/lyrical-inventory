@@ -218,3 +218,37 @@ export function describeInvoiceAvailability(status) {
   }
   return 'Shippo invoices couldn\'t be read just now. Shipping labels were imported as usual.';
 }
+
+/**
+ * Put the Shippo invoice in front of each label as the receipt of record.
+ *
+ * `itemIndex` maps a transaction to its invoice item (invoiceIndexByTransaction)
+ * and `invoicesById` maps an invoice id to a parsed invoice. The label stays
+ * attached after the invoice, and in `supportingFiles`, because it is still the
+ * evidence of what was shipped. Only expenses that change are returned, so the
+ * caller can save once and report an honest count. Idempotent: an invoice
+ * already attached is not added twice.
+ */
+export function attachInvoiceReceipts(expenses, itemIndex, invoicesById) {
+  const changed = [];
+  let noInvoice = 0;
+  (expenses || []).forEach(e => {
+    const txId = shippoTxIdFromRef(e?.ref);
+    if (!txId) return;
+    const invoiceId = e.invoiceId || itemIndex?.get(txId)?.invoiceId || '';
+    const url = invoiceId ? (invoicesById?.get(invoiceId)?.url || '') : '';
+    if (!url) { noInvoice++; return; }
+    const files = Array.isArray(e.receiptFiles) && e.receiptFiles.length
+      ? e.receiptFiles.filter(r => typeof r === 'string' && r)
+      : (e.receipt ? [e.receipt] : []);
+    if (files.includes(url) && e.invoiceId === invoiceId) return;
+    const others = files.filter(r => r !== url);
+    e.invoiceId = invoiceId;
+    e.receiptFiles = [url, ...others];
+    e.receipt = url;
+    const support = Array.isArray(e.supportingFiles) ? e.supportingFiles : [];
+    e.supportingFiles = [...new Set([...support, ...others])];
+    changed.push(e);
+  });
+  return { changed, noInvoice };
+}

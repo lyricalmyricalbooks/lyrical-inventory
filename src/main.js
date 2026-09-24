@@ -618,6 +618,7 @@ import {
   doManualShippoLink,
   closeManualShippoLinkModal,
   unlinkShippoExpense,
+  findShippoReceipts,
   getShipRecoPercentile,
   setShipRecoPercentile,
   onShipInsightsToggle,
@@ -24713,6 +24714,7 @@ window.filterManualShippoLinkRows = filterManualShippoLinkRows;
 window.doManualShippoLink = doManualShippoLink;
 window.closeManualShippoLinkModal = closeManualShippoLinkModal;
 window.unlinkShippoExpense = unlinkShippoExpense;
+window.findShippoReceipts = findShippoReceipts;
 window.editPostageCost = editPostageCost;
 window.unlinkManualPostage = unlinkManualPostage;
 window.dismissShippingAnalysisOrder = dismissShippingAnalysisOrder;

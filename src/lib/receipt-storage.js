@@ -61,6 +61,29 @@ export function isExternalLink(ref) {
 }
 
 /**
+ * A Shippo postage label link — proof a parcel was sent, not a receipt.
+ *
+ * Labels are served from Shippo's delivery hosts; anything else (an invoice
+ * PDF, a supplier's order page) is a real web-link receipt. The storage tiles
+ * and the ledger filters both decide through this one test, so a tile's count
+ * and the list it opens can never disagree again.
+ */
+export function isShippingLabelRef(ref) {
+  return isExternalLink(ref) && /deliver\.goshippo\.com|shippo-delivery/i.test(ref);
+}
+
+/** A web-link receipt that is not a shipping label. */
+export function isWebReceiptLink(ref) {
+  return isExternalLink(ref) && !isShippingLabelRef(ref);
+}
+
+/** An expense whose only attachments are shipping labels. */
+export function hasOnlyShippingLabels(item) {
+  const refs = receiptRefsOf(item);
+  return refs.length > 0 && refs.every(isShippingLabelRef);
+}
+
+/**
  * Any web link, ours or not.
  *
  * Kept for the places that only need "is this a file on disk or not", but
@@ -307,8 +330,8 @@ export function summarizeReceiptStorage(items) {
     if (cloud.length) cloudExpenses++;
     cloudFiles += cloud.length;
     localFiles += refs.filter(isLocalReceipt).length;
-    linkedFiles += refs.filter(isExternalLink).length;
-    if (hasOnlyExternalLinks(item)) linkOnlyExpenses++;
+    linkedFiles += refs.filter(isWebReceiptLink).length;
+    if (hasOnlyShippingLabels(item)) linkOnlyExpenses++;
   });
 
   return {

@@ -65,7 +65,7 @@ import {
 } from '../lib/deduction-gaps.js';
 import { findCategoryMismatches } from '../lib/category-fit.js';
 import { canonicalExpenseCategory } from '../lib/expense-categories.js';
-import { receiptOwners, summarizeReceiptStorage, isReceiptExemptExpense } from '../lib/receipt-storage.js';
+import { receiptOwners, summarizeReceiptStorage, isReceiptExemptExpense, receiptRefsOf, isWebReceiptLink, hasOnlyShippingLabels } from '../lib/receipt-storage.js';
 import { testZonosConnection } from '../lib/zonos.js';
 import { friendlyOpenRouterError, openRouterAllowanceNote, testOpenRouterConnection } from '../lib/openrouter-chat.js';
 import { _geminiClearRest } from '../lib/gemini-quota.js';
@@ -434,15 +434,9 @@ function _tcApplyLedgerFilter(rows) {
           }
         }
       } else if (_tcLedgerSpecialFilter === 'linked') {
-        if (typeof r.receipt === 'string' && /^https?:\/\//i.test(r.receipt) && !r.receipt.includes('shippo')) matchedSpecial = true;
-        else if (Array.isArray(r.receiptFiles)) {
-          for (let k = 0; k < r.receiptFiles.length; k++) {
-            if (r.receiptFiles[k] && /^https?:\/\//i.test(r.receiptFiles[k]) && !r.receiptFiles[k].includes('shippo')) { matchedSpecial = true; break; }
-          }
-        }
+        matchedSpecial = receiptRefsOf(r).some(isWebReceiptLink);
       } else if (_tcLedgerSpecialFilter === 'label') {
-        if (typeof r.receipt === 'string' && r.receipt.includes('shippo')) matchedSpecial = true;
-        else if (typeof r.ref === 'string' && r.ref.includes('shippo')) matchedSpecial = true;
+        matchedSpecial = hasOnlyShippingLabels(r);
       }
 
       if (!matchedSpecial) continue;
@@ -775,7 +769,7 @@ function _tcRenderLedgerFilterChip() {
     if (_tcLedgerSpecialFilter === 'missing') parts.push('⚠️ Missing receipts only');
     else if (_tcLedgerSpecialFilter === 'cloud') parts.push('☁️ Cloud storage receipts');
     else if (_tcLedgerSpecialFilter === 'local') parts.push('📁 Local folder receipts');
-    else if (_tcLedgerSpecialFilter === 'linked') parts.push('🔗 External link receipts');
+    else if (_tcLedgerSpecialFilter === 'linked') parts.push('🔗 Web-link receipts');
     else if (_tcLedgerSpecialFilter === 'label') parts.push('🏷️ Shipping labels only');
     const q = _tcLedgerSearch.trim();
     if (q) parts.push(`“${escapeHtml(q)}”`);
@@ -2615,7 +2609,7 @@ function _tcRenderReceiptStorage() {
         <div class="tc-tile-body">
           <div class="tc-tile-num">${s.linkedFiles}</div>
           <div class="tc-tile-label">Web links</div>
-        <div class="tc-tile-hint">Receipts that live on another website</div>
+        <div class="tc-tile-hint">Receipts saved as a link to another website</div>
         </div>
       </div>
     `);
@@ -2641,7 +2635,7 @@ function _tcRenderReceiptStorage() {
         <div class="tc-tile-body">
           <div class="tc-tile-num">${s.linkOnlyExpenses}</div>
           <div class="tc-tile-label">Shipping label only</div>
-        <div class="tc-tile-hint">Has a postage label, but no store receipt</div>
+        <div class="tc-tile-hint">Postage with a label but no Shippo receipt yet</div>
         </div>
       </div>
     `);
@@ -2668,8 +2662,9 @@ function _tcRenderReceiptStorage() {
       <div class="tc-receipt-alert is-info" id="tc-notice-shippo">
         <span class="tc-alert-glyph">🏷️</span>
         <div class="tc-alert-info">
-          <strong>${s.linkOnlyExpenses} expense${s.linkOnlyExpenses === 1 ? ' has' : 's have'} only a shipping label link.</strong>
-          <span>A shipping label confirms a parcel was sent, not that you paid for it. Import your Shippo invoices or receipts for official proof of payment.</span>
+          <strong>${s.linkOnlyExpenses} postage expense${s.linkOnlyExpenses === 1 ? ' has' : 's have'} a shipping label but no receipt.</strong>
+          <span>A label proves a parcel was sent, not that you paid. Shippo sends a receipt for your postage each week — fetch those and attach them here.</span>
+          <button type="button" class="btn sm ink tc-alert-cta" onclick="findShippoReceipts(this)">Find my Shippo receipts</button>
         </div>
         <button class="tc-alert-dismiss" type="button" onclick="dismissReceiptNotice('shippo')" title="Dismiss this notice" aria-label="Dismiss notice">✕</button>
       </div>

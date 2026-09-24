@@ -166,9 +166,11 @@ import {
   shipmentsToFollow,
 } from '../lib/delivery-watch.js';
 import {
+  attachInvoiceReceipts,
   describeInvoiceAvailability,
   invoiceIndexByTransaction,
   isSettledRefund,
+  parseInvoice,
   parseInvoiceItem,
   parseRefund,
   shippoTxIdFromRef,
@@ -680,6 +682,63 @@ async function fetchShippoInvoiceItems(token) {
     return { index: new Map(), unavailable: describeInvoiceAvailability(0), status: 0 };
   }
   return { index: invoiceIndexByTransaction(items), unavailable: '', status: 200, count: items.length };
+}
+
+/** Every Shippo invoice, keyed by id — the documents that carry a download link. */
+async function fetchShippoInvoices(token) {
+  const byId = new Map();
+  let page = 1;
+  try {
+    while (page <= 50) {
+      const resp = await fetch(`https://api.goshippo.com/invoices/?page=${page}&results=100`, {
+        headers: { Authorization: `ShippoToken ${token}`, 'Content-Type': 'application/json' },
+      });
+      if (!resp.ok) return { byId, unavailable: describeInvoiceAvailability(resp.status) };
+      const json = await resp.json();
+      const rows = Array.isArray(json?.results) ? json.results : [];
+      rows.forEach(r => { const inv = parseInvoice(r); if (inv) byId.set(inv.id, inv); });
+      if (!json?.next || !rows.length) break;
+      page++;
+    }
+  } catch (e) {
+    console.warn('Shippo invoices unavailable', e);
+    return { byId, unavailable: describeInvoiceAvailability(0) };
+  }
+  return { byId, unavailable: '' };
+}
+
+/**
+ * "Find the real receipts" for postage: attach each label's Shippo invoice as
+ * the receipt of record, keeping the label behind it. Runs from the Receipts
+ * card's "Shipping label only" notice; best-effort because the endpoint is beta.
+ */
+async function findShippoReceipts(btn) {
+  const token = (TAX_CENTER.settings?.shippoKey || '').trim();
+  if (!token) { showToast('Connect Shippo in Settings first, then try again.', 'warn'); return; }
+  if (!navigator.onLine) { showToast('You’re offline — connect to the internet to fetch Shippo receipts.', 'warn'); return; }
+  const label = btn?.textContent;
+  if (btn) { btn.disabled = true; btn.textContent = 'Looking up Shippo receipts…'; }
+  try {
+    const [items, invoices] = await Promise.all([fetchShippoInvoiceItems(token), fetchShippoInvoices(token)]);
+    const unavailable = items.unavailable || invoices.unavailable;
+    const { changed, noInvoice } = attachInvoiceReceipts(TAX_CENTER.businessExpenses || [], items.index, invoices.byId);
+    if (changed.length) {
+      await saveTaxCenter({ rethrow: true });
+      renderTaxCenter();
+      showToast(`✓ Attached the Shippo receipt to ${changed.length} postage expense${changed.length === 1 ? '' : 's'}.`);
+    } else if (unavailable) {
+      showToast(unavailable, 'warn');
+    } else {
+      showToast(noInvoice
+        ? `Shippo hasn’t issued a receipt yet for ${noInvoice} label${noInvoice === 1 ? '' : 's'} — it bills weekly, so try again later.`
+        : 'Every postage expense already has its Shippo receipt.');
+    }
+  } catch (e) {
+    console.warn('Finding Shippo receipts failed', e);
+    showToast('Couldn’t save the Shippo receipts — nothing was changed. Try again.', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+  }
 }
 
 /**
@@ -10814,6 +10873,7 @@ function onShippoQuantityChange() {
   showToast(`✓ Scaled specs for ${qty} ${qty === 1 ? 'copy' : 'copies'}`);
 }
 export {
+  findShippoReceipts,
   _shippoDestMasterList,
   getShippingReconciliationOrders,
   renderOrderShippingSummary,
