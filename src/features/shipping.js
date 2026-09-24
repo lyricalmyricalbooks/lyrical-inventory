@@ -16,6 +16,7 @@
 // The cycle with main.js is safe for the reason set out in
 // tests/features-boundary.test.js: nothing here runs at module-evaluation
 // time. eslint's no-undef, an error in CI, keeps the import list below honest.
+import { withAutoLocalPickup } from '../lib/local-pickup.js';
 import {
   $,
   BOOKS,
@@ -6447,10 +6448,43 @@ async function markShippingOrderLocalPickup(bookId, orderIdentifier) {
   if (!h) return;
 
   h.localPickup = true;
+  delete h.pickupDeclined;
   h.manualPostagePaid = true;
   h.postagePaid = 0;
   await window.saveState(bookId);
   showToast(`Order ${h.num} marked as local pick-up`, 'ok');
+  renderShippingAnalysisHub();
+}
+
+// Orders whose checkout option says pick-up are treated as $0-postage
+// pick-ups in the hub without the owner clicking anything. Derived on the
+// in-memory copies, never saved, so an owner's own choice always wins.
+function applyAutoLocalPickups(orders) {
+  const linkedNumbers = new Set((TAX_CENTER.businessExpenses || [])
+    .filter(e => isPostageExpense(e) && e.shippingMatchStatus === 'matched')
+    .map(e => normalizeShippingOrderNumber(e.shippingOrderNumber))
+    .filter(Boolean));
+  orders.forEach((o, i) => {
+    orders[i] = withAutoLocalPickup(o, linkedNumbers.has(normalizeShippingOrderNumber(o.num)));
+  });
+}
+
+async function unmarkShippingOrderLocalPickup(bookId, orderIdentifier) {
+  const s = states[bookId];
+  if (!s || !s.hist) return;
+  const h = s.hist.find(x => x.id === orderIdentifier || x.num === orderIdentifier);
+  if (!h) return;
+
+  delete h.localPickup;
+  if (h.manualPostagePaid && !Number(h.postagePaid)) {
+    delete h.postagePaid;
+    delete h.manualPostagePaid;
+  }
+  // Remembered so an order whose checkout option says pick-up is not
+  // re-recognised as one the next time the ledger draws.
+  h.pickupDeclined = true;
+  await window.saveState(bookId);
+  showToast(`Order ${h.num} is no longer a local pick-up`, 'ok');
   renderShippingAnalysisHub();
 }
 
@@ -8688,7 +8722,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
         trackingLinkHtml = `<button class="btn sm ghost" style="font-size:var(--text-2xs); padding:3px 8px;" onclick="promptLedgerTracking('${escapeHtml(postageExpenseKey(primary))}')">+ Add tracking</button>`;
       }
     } else if (o.localPickup) {
-      expenseRefHtml = `<span style="color:var(--text3); font-style:italic;">Picked up in person</span>`;
+      expenseRefHtml = `<span style="color:var(--text3); font-style:italic;" title="${o.autoLocalPickup ? `Recognised from the checkout option “${escapeHtml(o.shippingMethod)}”` : 'Marked as picked up'}">Picked up in person${o.autoLocalPickup ? ' · from checkout' : ''}</span>`;
       trackingLinkHtml = `<span style="color:var(--text3); font-style:italic;">—</span>`;
     } else {
       expenseRefHtml = `<span style="color:var(--text3); font-style:italic;">Unlinked</span>`;
@@ -8713,7 +8747,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
         </div>`;
     } else if (isLinked || o.manualPostagePaid) {
       const mainBtn = o.localPickup
-        ? `<button class="btn sm ghost" onclick="unlinkManualPostage('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:var(--text-2xs); padding:3px 8px; opacity:0.7;" title="This order was shipped after all">Not pick-up</button>`
+        ? `<button class="btn sm ghost" onclick="unmarkShippingOrderLocalPickup('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:var(--text-2xs); padding:3px 8px; opacity:0.7;" title="This order was shipped after all">Not pick-up</button>`
         : o.manualPostagePaid
         ? `<button class="btn sm ghost" onclick="unlinkManualPostage('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:var(--text-2xs); padding:3px 8px; opacity:0.7;">Clear manual</button>`
         : `<button class="btn sm ghost" onclick="unlinkShippoExpense('${escapeHtml(postageExpenseKey(linked[0]))}')" style="font-size:var(--text-2xs); padding:3px 8px; opacity:0.7;">Unlink</button>`;
@@ -9204,6 +9238,7 @@ function renderShippingAnalysisHub() {
   });
 
   allOrders.sort((a, b) => b._dateMs - a._dateMs);
+  applyAutoLocalPickups(allOrders);
 
   // 2. Gather every postage cost, whichever carrier it came from.
   //
@@ -9419,6 +9454,7 @@ function downloadFilteredShippingLedgerCSV() {
   });
 
   allOrders.sort((a, b) => b._dateMs - a._dateMs);
+  applyAutoLocalPickups(allOrders);
 
   const filteredOrders = allOrders.filter(o => {
     if (shipAnalysisMarginFilter === 'dismissed') return o.excludeFromShipping === true;
@@ -9778,6 +9814,7 @@ export {
   unlinkManualPostage,
   dismissShippingAnalysisOrder,
   markShippingOrderLocalPickup,
+  unmarkShippingOrderLocalPickup,
   restoreShippingAnalysisOrder,
   toggleAllShipAnalysisOrders,
   updateShipAnalysisBatchActionUI,
