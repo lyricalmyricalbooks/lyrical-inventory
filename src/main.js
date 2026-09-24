@@ -824,7 +824,7 @@ import { OC_STAGES } from './lib/opencall.js';
 import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, recordInventoryDisposal, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, orderStockPreview, orderStockPreviewCopy, deriveStockBreakdown, transferAuthorStock, deductSaleFromStockBreakdown, isVoidStale } from './lib/inventory.js';
 import { createInventoryDisposalExpense, createSection10Adjustment, inventoryAdjustmentCsvRows } from './lib/inventory-adjustment.js';
 import { posStockView, posOversellSummary } from './lib/pos-stock.js';
-import { FAIR_SEARCH_OVER, FAIR_UNDO_MS, fairTileHtml, readLastMethod, rememberMethod, undoOpen, soldLabel, countLabel, keepScreenAwake } from './lib/fair-mode.js';
+import { FAIR_SEARCH_OVER, FAIR_UNDO_MS, fairTileHtml, readLastMethod, rememberMethod, undoOpen, soldLabel, countLabel, keepScreenAwake, fairSyncPill, registerSalesForDay, fairDaySummary, readCurrentFair, saveCurrentFair } from './lib/fair-mode.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, notesWithInvoiceDiscount, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores, consignmentLedgerTotals, storeBalanceSlug, storeBalanceComparison } from './lib/consignment.js';
 import { deriveInvoiceBookIds, invoicesForBook, findInvoiceAcrossBooks, otherBookTitles, lineItemBookId, invoiceBookSplit, invoiceShareForBook, neutralInvoicePrefix, invoiceNumberPrefix, nextInvoiceSeq, buildInvoiceNumber, BILL_TO_STORE, BILL_TO_PERSON, invoiceBillToMode, billToPayload, billToPersonFrom } from './lib/invoices.js';
 import { reminderSettings, reminderBlockReason, invoiceReminderState, dueForReminder, dueForReminderTomorrow, buildReminderEmail, canSendNow, daysLate, describeReminderSweep, describeReminderArming, describeReminderNotice, sampleReminderInvoice } from './lib/payment-reminders.js';
@@ -2781,6 +2781,7 @@ function renderSyncChip() {
     heldInMemory: _syncQueueHeldInMemory,
   });
 
+  renderFairSyncPill();
   host.hidden = !view.visible;
   host.classList.toggle('is-offline', view.tone === 'offline');
   host.classList.toggle('is-pending', view.tone === 'pending');
@@ -5945,6 +5946,26 @@ function undoMarkOrderSent(bookId, num) {
 }
 window.undoMarkOrderSent = undoMarkOrderSent;
 
+// A printed-QR register sale whose payment the owner has now seen in Stripe.
+// One checkout can span several books, so every row with that number clears.
+function confirmPrintedQrArrived(num) {
+  if (!num) return;
+  let cleared = 0;
+  for (const [bookId, s] of Object.entries(states)) {
+    let touched = false;
+    for (const h of (s?.hist || [])) {
+      if (h.num === num && !h.qrConfirmed && String(h.notes || '').startsWith('Stripe QR (printed code')) {
+        h.qrConfirmed = true;
+        touched = true;
+        cleared++;
+      }
+    }
+    if (touched) saveState(bookId);
+  }
+  refreshAttentionSurfaces();
+  showToast(cleared ? '✓ Marked as paid' : 'Already marked as paid', 'ok');
+}
+
 function runTodoAction(name, { bookId = '', num = '' } = {}) {
   if (name === 'mark-shipped') { markOrderSentFromTodo(bookId, num); return; }
   if (name === 'file-ready-receipts') {
@@ -5952,6 +5973,7 @@ function runTodoAction(name, { bookId = '', num = '' } = {}) {
     return;
   }
   if (name === 'receipt-inbox') { openEmailReceiptImportModal(); return; }
+  if (name === 'qr-arrived') { confirmPrintedQrArrived(num); return; }
   if (name === 'sync-conflicts') { openSyncConflicts(); return; }
   if (name === 'shipping-worklist') {
     switchTab('taxcenter');
@@ -17729,6 +17751,27 @@ async function scanReceiptWithAI() {
 // receipts folder. Best-effort: returns a local:// path on success, otherwise
 // null so the caller keeps the original URL. May fail on CORS or no folder.
 
+// A receipt snapped with no signal is read the moment the signal returns, as
+// long as it is still the photo on the form and nothing has been typed yet —
+// the scan never overwrites what the owner filled in by hand.
+var _snapPendingFile = null;
+function _snapReadWhenOnline(file) {
+  const first = !_snapPendingFile;
+  _snapPendingFile = file;
+  if (!first) return;
+  window.addEventListener('online', async function onBack() {
+    window.removeEventListener('online', onBack);
+    const pending = _snapPendingFile;
+    _snapPendingFile = null;
+    const attached = $('tc-exp-file')?.files?.[0];
+    const untouched = !($('tc-exp-desc')?.value || '').trim() && !($('tc-exp-amount')?.value || '').trim();
+    const hasKey = !!(TAX_CENTER.settings?.geminiKey || TAX_CENTER.settings?.openRouterKey?.trim());
+    if (!pending || attached !== pending || !untouched || !hasKey) return;
+    showToast('📶 Back online — reading your receipt…', 'ok');
+    await scanReceiptWithAI();
+  });
+}
+
 // ── Snap a receipt (phones) ────────────────────────────────────────────────
 // One tap from Today: the phone's own camera, then the same AI scan and
 // expense form as the Tax Centre, so nothing is saved until you've checked it.
@@ -17750,7 +17793,8 @@ window.snapReceiptChosen = async function (input) {
   fileInput.dispatchEvent(new Event('change', { bubbles: true }));
   $('tc-exp-file-group')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
   if (navigator.onLine === false) {
-    showToast('📷 Photo attached. No signal, so fill it in by hand or tap AI Scan once you\'re back online.', 'warn', 6000);
+    showToast('📷 Photo attached. No signal — it will be read as soon as you\'re back online. Keep the app open.', 'warn', 6000);
+    _snapReadWhenOnline(file);
     return;
   }
   const hasKey = !!(TAX_CENTER.settings?.geminiKey || TAX_CENTER.settings?.openRouterKey?.trim());
@@ -18414,7 +18458,7 @@ function renderPOS() {
     (b.author || '').toLowerCase().includes(posSearchQuery)
   );
   if (!booksArr.length && posSearchQuery) {
-    grid.innerHTML = `<div class="pos-search-empty">No books match <strong>&ldquo;${escapeHtml(posSearchQuery)}&rdquo;</strong>.<span class="pos-search-empty-hint">Press <kbd>Esc</kbd> to clear.</span></div>`;
+    grid.innerHTML = `<div class="pos-search-empty">No books match <strong>&ldquo;${escapeHtml(posSearchQuery)}&rdquo;</strong>.<span class="pos-search-empty-hint">Clear the search to see every book.</span></div>`;
   } else {
     grid.innerHTML = booksArr.map(posBookCardHtml).join('') + (allowPosOnly && !posSearchQuery ? `
       <button type="button" class="card pos-card pos-add-tile" onclick="openPosBookModal()" aria-label="Add POS-only book">
@@ -18497,6 +18541,9 @@ function renderFairMode(booksArr, titleCount, cartRows, totalText) {
     charge.textContent = `Charge ${totalText}`;
     charge.setAttribute('aria-label', `Charge ${totalText} for ${countLabel(count)}`);
   }
+  renderFairToday();
+  renderFairSyncPill();
+  renderFairName();
   // The sheet stays live while open: − on a line repaints it in place.
   if ($('m-fair-charge')?.style.display === 'flex') {
     if (!count) closeM('fair-charge');
@@ -18523,6 +18570,8 @@ function fairPaintCharge(cartRows, totalText) {
 window.fairOpenCharge = function () {
   const rows = buildPOSCartRows();
   if (!rows.length) return;
+  const printed = $('fm-qr-offline');
+  if (printed) printed.hidden = true;
   fairPaintCharge(rows, $('pos-total')?.textContent || '');
   openM('fair-charge');
 };
@@ -18530,14 +18579,169 @@ window.fairOpenCharge = function () {
 // Online only: show the Stripe code, and let the seller record the sale from
 // that same screen once the customer's phone says paid.
 window.fairShowQR = async function () {
+  // No signal: a payment link can't be made, so point to the printed code.
+  if (navigator.onLine === false) { fairShowPrintedQr(); return; }
   closeM('fair-charge');
   const paid = $('pos-qr-record');
   if (paid) paid.hidden = false;
   await window.posGenerateSaleQR();
+  // One bar of signal can still fail to reach Stripe: fall back the same way.
+  if ($('m-pos-qr')?.style.display !== 'flex') {
+    if (paid) paid.hidden = true;
+    window.fairOpenCharge();
+    fairShowPrintedQr();
+  }
 };
 
+function fairShowPrintedQr() {
+  const box = $('fm-qr-offline');
+  if (!box) return;
+  box.hidden = false;
+  box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+// ── Today at the register ────────────────────────────────────────────────
+function fairTodaySales() {
+  const books = Object.keys(BOOKS).map((id) => ({ id, title: BOOKS[id]?.title, currency: getBookCurrencyCode(BOOKS[id]), hist: states[id]?.hist }));
+  return registerSalesForDay(books, today());
+}
+
+function fairTotalsText(totals) {
+  const parts = Object.entries(totals).map(([cur, amt]) => posFormat(amt, currencyToCode(cur)));
+  return parts.join(' + ');
+}
+
+function renderFairToday() {
+  const sum = $('fm-today-sum');
+  if (!sum) return;
+  const day = fairTodaySales();
+  const n = day.sales.length;
+  sum.textContent = n ? `${n} ${n === 1 ? 'sale' : 'sales'} · ${fairTotalsText(day.totals)}` : 'No sales yet';
+  if ($('m-fair-today')?.style.display !== 'flex') return;
+  $('fm-today-total').textContent = n
+    ? `${day.units} ${day.units === 1 ? 'book' : 'books'} in ${n} ${n === 1 ? 'sale' : 'sales'} · ${fairTotalsText(day.totals)}`
+    : 'No register sales yet today.';
+  $('fm-today-list').innerHTML = day.sales.map((sale) => {
+    const lines = sale.lines.map((l) => `${escapeHtml(l.title)}${l.qty > 1 ? ` ×${l.qty}` : ''}`).join(', ');
+    const time = sale.at ? new Date(sale.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
+    const num = escapeHtml(JSON.stringify(String(sale.num)));
+    return `<li class="fm-today-sale"><div class="fm-today-main"><span class="fm-today-lines">${lines}</span><span class="fm-today-meta">${escapeHtml(time)}</span></div><span class="fm-today-amt tnum">${escapeHtml(fairTotalsText(sale.totals))}</span><button type="button" class="fm-today-void" onclick="fairVoidSale(${num})" aria-label="Void this sale: ${lines}">Void</button></li>`;
+  }).join('');
+}
+
+window.fairOpenToday = function () {
+  openM('fair-today');
+  renderFairToday();
+};
+
+window.fairVoidSale = async function (saleNum) {
+  const sale = fairTodaySales().sales.find((x) => x.num === saleNum);
+  if (!sale) return;
+  const what = sale.lines.map((l) => `${l.title}${l.qty > 1 ? ` ×${l.qty}` : ''}`).join(', ');
+  const ok = await confirmDialog(`Void this sale? ${what} goes back into stock and ${fairTotalsText(sale.totals)} comes out of your takings. Do this if it was refunded or rung up by mistake.`, { okLabel: 'Void sale', cancelLabel: 'Keep it', danger: true, title: 'Void sale' });
+  if (!ok) return;
+  if (_posLastSale?.saleNum === saleNum) { _posLastSale = null; const bar = $('fm-undo'); if (bar) bar.hidden = true; }
+  const undone = voidRegisterSale(saleNum, [...new Set(sale.lines.map((l) => l.bookId))], 'Voided at the register');
+  renderPOS();
+  renderHist();
+  updateDash();
+  if (typeof window.renderAllOverview === 'function') window.renderAllOverview();
+  updateHeader();
+  renderFairToday();
+  showToast(undone ? '↩ Sale voided — books back in stock' : 'That sale was already voided', undone ? 'ok' : 'warn');
+};
+
+// ── The fair you're at, sold-out books, end of day ──────────────────────
+function renderFairName() {
+  const el = $('fm-fair-name');
+  if (!el) return;
+  const fair = readCurrentFair(today());
+  el.textContent = fair ? fair.name : "Name today's fair";
+  $('fm-fair-btn')?.classList.toggle('is-set', !!fair);
+}
+
+window.fairSetName = async function () {
+  const fair = readCurrentFair(today());
+  const name = await promptDialog("Which fair are you at today? Each sale will be labelled with it. Leave it empty to stop labelling.", fair?.name || '', { title: "Today's fair", okLabel: 'Save', placeholder: 'e.g. Toronto Art Book Fair' });
+  if (name === null) return;
+  const saved = saveCurrentFair(name, today());
+  renderFairName();
+  showToast(saved ? `📍 Sales today are labelled “${saved}”` : 'Sales are no longer labelled with a fair', 'ok');
+};
+
+window.fairTileNoneLeft = async function (bookId) {
+  const book = posResolveBook(bookId);
+  const ok = await confirmDialog(`Your records show no copies of “${book?.title || 'this book'}” left. Add one anyway? Only do this if you really have a copy in hand, then check its stock count later.`, { okLabel: 'Add anyway', cancelLabel: 'Cancel', title: 'None left' });
+  if (ok) window.posUpdateQty(bookId, 1);
+};
+
+function fairSummaryData() {
+  const day = fairTodaySales();
+  const left = {};
+  for (const id of Object.keys(BOOKS)) left[id] = posOnHandFor(id);
+  return fairDaySummary(day, left);
+}
+
+function fairSummaryText(sum, fair) {
+  const out = [`${fair ? fair.name + ' · ' : ''}${today()}`, `${sum.units} books in ${sum.sales} sales · ${fairTotalsText(sum.totals) || '0'}`, ''];
+  out.push('By payment:');
+  for (const m of sum.methods) out.push(`  ${m.label}: ${fairTotalsText(m.totals)} (${m.sales} ${m.sales === 1 ? 'sale' : 'sales'})`);
+  out.push('', 'By book:');
+  for (const t of sum.titles) out.push(`  ${t.title}: ${t.units} sold · ${fairTotalsText(t.totals)}${t.left === null ? '' : ` · ${t.left} left`}`);
+  return out.join('\n');
+}
+
+window.fairOpenSummary = function () {
+  closeM('fair-today');
+  const sum = fairSummaryData();
+  const fair = readCurrentFair(today());
+  $('fm-summary-title').textContent = fair ? `End of day · ${fair.name}` : 'End of day';
+  const pill = fairSyncPill({
+    online: navigator.onLine !== false, pending: syncQueue.length, retrying: _syncRetrying, atRisk: _syncQueueHeldInMemory,
+  });
+  const synced = pill.tone === 'ok';
+  const methodRows = sum.methods.map((m) => `<li class="fm-sum-row"><span>${escapeHtml(m.label)}<small>${m.sales} ${m.sales === 1 ? 'sale' : 'sales'}</small></span><strong class="tnum">${escapeHtml(fairTotalsText(m.totals))}</strong></li>`).join('');
+  const titleRows = sum.titles.map((t) => `<li class="fm-sum-row"><span>${escapeHtml(t.title)}<small>${t.units} sold${t.left === null ? '' : ` · ${t.left} left`}</small></span><strong class="tnum">${escapeHtml(fairTotalsText(t.totals))}</strong></li>`).join('');
+  $('fm-summary-body').innerHTML = sum.sales ? `
+    <div class="fm-sum-hero"><span class="fm-sum-big tnum">${escapeHtml(fairTotalsText(sum.totals))}</span><span>${sum.units} ${sum.units === 1 ? 'book' : 'books'} in ${sum.sales} ${sum.sales === 1 ? 'sale' : 'sales'}</span></div>
+    <div class="fm-sum-sync ${synced ? 'is-ok' : 'is-wait'}" role="status">${synced ? '✓ Everything is uploaded. Safe to close the app.' : `⚠ ${escapeHtml(pill.text)}. Keep the app open until this says everything is uploaded.`}</div>
+    <h3 class="fm-sum-h">By way of paying</h3>
+    <p class="fm-sum-note">Check the card reader line against your card reader's own total for today.</p>
+    <ul class="fm-sum-list">${methodRows}</ul>
+    <h3 class="fm-sum-h">By book</h3>
+    <ul class="fm-sum-list">${titleRows}</ul>`
+    : '<p class="fm-empty">No register sales yet today.</p>';
+  openM('fair-summary');
+};
+
+window.fairShareSummary = async function () {
+  const text = fairSummaryText(fairSummaryData(), readCurrentFair(today()));
+  try {
+    if (navigator.share) { await navigator.share({ title: 'Fair summary', text }); return; }
+    await navigator.clipboard.writeText(text);
+    showToast('✓ Summary copied — paste it into a message or note', 'ok');
+  } catch (e) {
+    if (e?.name !== 'AbortError') showToast('Could not share — take a screenshot instead', 'warn');
+  }
+};
+
+// ── Upload status pill ───────────────────────────────────────────────────
+function renderFairSyncPill() {
+  const pill = $('fm-sync');
+  if (!pill) return;
+  const view = fairSyncPill({
+    online: typeof navigator === 'undefined' || navigator.onLine !== false,
+    pending: syncQueue.length,
+    retrying: _syncRetrying,
+    atRisk: _syncQueueHeldInMemory,
+  });
+  pill.textContent = view.text;
+  pill.dataset.tone = view.tone;
+  pill.setAttribute('aria-label', view.srText);
+}
+
 let _fairSaving = false;
-window.fairCharge = async function (method) {
+window.fairCharge = async function (method, { printedQr = false } = {}) {
   if (_fairSaving) return;
   if (!buildPOSCartRows().length) return;
   _fairSaving = true;
@@ -18547,12 +18751,20 @@ window.fairCharge = async function (method) {
     posSyncPaymentSeg();
     rememberMethod(method);
     if (!posPreparePendingSale()) return;
+    // Paid on the printed code with no signal: nothing links it to a Stripe
+    // payment yet, so the sale says to check it arrived.
+    if (printedQr) posPendingSale.method = 'Stripe QR (printed code, check it arrived in Stripe)';
+    // Name the fair on every sale row, so History and the sheet say where.
+    const fair = readCurrentFair(today());
+    if (fair) posPendingSale.method = `${posPendingSale.method} · ${fair.name}`;
     const totalText = posPendingSale.totalCharged;
     const count = posPendingSale.rows.reduce((n, row) => n + row.qty, 0);
     closeM('fair-charge');
     if ($('m-pos-qr')?.style.display === 'flex') closeM('pos-qr');
     const paid = $('pos-qr-record');
     if (paid) paid.hidden = true;
+    const printed = $('fm-qr-offline');
+    if (printed) printed.hidden = true;
     const recorded = window.posConfirmSale();
     fairShowUndo(soldLabel(count, totalText));
     await recorded;
@@ -18575,6 +18787,31 @@ function fairShowUndo(text) {
 // Reverses the last register sale exactly the way the History Void button
 // does (stock back, revenue and channel totals out, Sheets row deleted), and
 // only inside the undo window so it can never reach an older sale.
+// Reverses one register checkout exactly the way the History Void button
+// does (stock back, revenue and channel totals out, Sheets row deleted).
+// Returns how many book rows were reversed.
+function voidRegisterSale(saleNum, bookIds, reason) {
+  const previousBook = activeBook;
+  let undone = 0;
+  try {
+    for (const bookId of bookIds) {
+      const s = states[bookId];
+      const book = BOOKS[bookId];
+      const h = s?.hist?.find((x) => x.num === saleNum && x.chan === 'Book Fair' && !x.voided);
+      if (!h) continue;
+      // voidHistEntry's Sheets sync names the active book.
+      activeBook = bookId;
+      voidHistEntry(s, book, h);
+      h.voidedReason = reason;
+      saveState(bookId);
+      undone++;
+    }
+  } finally {
+    activeBook = previousBook;
+  }
+  return undone;
+}
+
 window.fairUndoLastSale = async function () {
   const sale = _posLastSale;
   const bar = $('fm-undo');
@@ -18582,24 +18819,7 @@ window.fairUndoLastSale = async function () {
   _posLastSale = null;
   const btn = $('fm-undo-btn');
   if (btn) btn.disabled = true;
-  const previousBook = activeBook;
-  let undone = 0;
-  try {
-    for (const bookId of sale.bookIds) {
-      const s = states[bookId];
-      const book = BOOKS[bookId];
-      const h = s?.hist?.find((x) => x.num === sale.saleNum && !x.voided);
-      if (!h) continue;
-      // voidHistEntry's Sheets sync names the active book.
-      activeBook = bookId;
-      voidHistEntry(s, book, h);
-      h.voidedReason = 'Undone at the register';
-      saveState(bookId);
-      undone++;
-    }
-  } finally {
-    activeBook = previousBook;
-  }
+  const undone = voidRegisterSale(sale.saleNum, sale.bookIds, 'Undone at the register');
   if (sale.posOnly.length) {
     // The POS-only tally is written after the sale; take it back only once
     // that write has landed, so the two can't cross.
@@ -18935,7 +19155,7 @@ function renderPOSFxStatus() {
   if (!el) return;
   const ts = localStorage.getItem(POS_FX_FETCHED_AT_KEY);
   if (!ts) {
-    el.textContent = 'Using saved rates — click FX Rates to refresh';
+    el.textContent = 'Using saved rates. Use ↻ FX Rates to refresh them.';
     el.style.color = 'var(--amber)';
   } else {
     const mins = Math.round((Date.now() - new Date(ts).getTime()) / 60000);
