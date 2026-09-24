@@ -40,11 +40,16 @@ describe('Email Receipt Import — inline Tax Centre sub-page', () => {
     expect(css).toContain('.segmented-control .modal-tab-btn.active');
   });
 
-  it('features Gemini AI assistant card and search bar with clear button', () => {
-    expect(html).toContain('class="email-ai-assistant-card"');
-    expect(html).toContain('id="email-gmail-search-query"');
-    expect(html).toContain('id="email-query-clear-btn"');
-    expect(html).toContain('class="email-advanced-query-details"');
+  it('says what each way in does, and lets pasted files be added and removed one by one', () => {
+    // The Gmail Finder panel is drawn by src/features/receipt-finder.js; the
+    // static copy of an older finder that used to sit here was never shown.
+    expect(html).not.toContain('id="email-gmail-search-query"');
+    expect(html).toContain('class="email-tab-sub"');
+    expect(html).toContain('id="email-receipt-files-list" class="email-file-chips"');
+    expect(html).toMatch(/id="email-receipt-dropzone" role="button" tabindex="0"/);
+    expect(receiptsJs).toContain('data-remove-file');
+    expect(receiptsJs).toContain('sourceInput.onpaste');
+    expect(css).toContain('.email-dropzone.is-dragover');
   });
 
   it('includes micro-icons for all Gmail search preset chips', () => {

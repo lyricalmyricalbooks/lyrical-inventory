@@ -415,7 +415,7 @@ describe('receipt finder UI', () => {
     expect(gate).not.toMatch(/would not accept/);
   });
   it('does not spend an AI read on an email with no amount and no attachment', async () => {
-    mocks.message.mockResolvedValue({ ...source, id: 'm2', subject: 'Your parcel is on its way', body: 'Track your order here.' });
+    mocks.message.mockResolvedValue({ ...source, id: 'm2', subject: 'Thanks for your order', body: 'We will be in touch soon.' });
     await mount();
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
     document.querySelector('[data-action="connect"]').click(); await settle();
@@ -423,6 +423,51 @@ describe('receipt finder UI', () => {
     expect(mocks.extract).not.toHaveBeenCalled();
     expect(mocks.saved.scans['publisher@example.com:m2']).toMatchObject({ done: true, skipped: 'no-amount' });
     expect(document.querySelector('[data-finder-status]').textContent).toContain('no AI was spent');
+  });
+  it('does not spend an AI read on a delivery note, even one that repeats the order total', async () => {
+    // The receipt for the same order arrives as its own email; paying the AI
+    // to read the "has shipped" note too only ever found nothing.
+    mocks.message.mockResolvedValue({ ...source, id: 'm2', subject: 'Your order has shipped', body: 'Order total: $42.00. Track it here.' });
+    await mount();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="connect"]').click(); await settle();
+    document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
+    expect(mocks.extract).not.toHaveBeenCalled();
+    expect(mocks.saved.scans['publisher@example.com:m2']).toMatchObject({ done: true, skipped: 'notification' });
+  });
+  it('never pays to read an email that is already filed as an expense', async () => {
+    // Filed by the no-AI Gmail import, which records the message but not the
+    // account — still the same email, still not worth a second read.
+    deps.expenses = () => [{ emailMsgId: 'm2', amount: 10, currency: 'CAD' }];
+    await mount();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="connect"]').click(); await settle();
+    document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
+    expect(mocks.message).not.toHaveBeenCalled();
+    expect(mocks.extract).not.toHaveBeenCalled();
+    // Not marked as read: if that expense is deleted, the next scan finds it.
+    expect(mocks.saved.scans['publisher@example.com:m2']).toBeUndefined();
+    expect(document.querySelector('[data-finder-status]').textContent).toContain('1 was already in your expenses');
+  });
+  it('finds invoices and shipping costs together when both chips are on', async () => {
+    await mount();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="connect"]').click(); await settle();
+    document.querySelector('[data-toggle="invoices"]').click();
+    document.querySelector('[data-toggle="shipping"]').click();
+    document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
+    const query = mocks.list.mock.calls[0][0];
+    expect(query).toContain('(invoice OR bill OR shipping OR postage');
+  });
+  it('picks one period at a time and opens the exact-dates drawer for custom dates', async () => {
+    await mount();
+    const pressed = () => [...document.querySelectorAll('.finder-period [aria-pressed="true"]')].map(b => b.dataset.preset);
+    expect(pressed()).toEqual(['30']);
+    document.querySelector('.finder-period [data-preset="7"]').click(); await settle();
+    expect(pressed()).toEqual(['7']);
+    document.querySelector('.finder-period [data-preset="custom"]').click(); await settle();
+    expect(pressed()).toEqual(['custom']);
+    expect(document.querySelector('[data-more-filters]').open).toBe(true);
   });
   it('stops at a lapsed Gmail connection without blaming the emails', async () => {
     // A token that died mid-scan used to record every remaining email as
@@ -500,16 +545,20 @@ describe('receipt finder UI', () => {
   it('shows only the status filters that have something in them', async () => {
     await mount();
     const chips = [...document.querySelectorAll('[data-finder-tabs] [data-status]')].map(chip => chip.dataset.status);
-    expect(chips).toEqual(['all', 'review']);
+    // Ready and Needs review are always offered — they are the two piles the
+    // publisher works through — and nothing else until it has something in it.
+    expect(chips).toEqual(['all', 'ready', 'review']);
     expect(document.querySelector('[data-action="retry"]').hidden).toBe(true);
   });
-  it('filters drafts when clicking summary KPI cards', async () => {
+  it('filters drafts from the status tabs', async () => {
     await mount();
-    const readyCard = document.querySelector('.finder-stat[data-status="ready"]');
+    // The three count tiles that duplicated these tabs are gone.
+    expect(document.querySelector('.finder-stat')).toBeNull();
+    const readyCard = document.querySelector('[data-finder-tabs] [data-status="ready"]');
     expect(readyCard).not.toBeNull();
     readyCard.click();
     expect(document.querySelector('[data-finder-list]').textContent).toContain('Nothing matches this view');
-    const reviewCard = document.querySelector('.finder-stat[data-status="review"]');
+    const reviewCard = document.querySelector('[data-finder-tabs] [data-status="review"]');
     expect(reviewCard).not.toBeNull();
     reviewCard.click();
     expect(document.querySelector('[data-draft]').dataset.draft).toBe('publisher@example.com:m1:0');

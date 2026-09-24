@@ -17,7 +17,11 @@ export const RECEIPT_QUERY = '(category:purchases OR subject:(receipt OR invoice
 export const RECEIPT_NOISE = '-from:me -from:notifications@github.com -subject:"received a new order"';
 export const RECEIPT_STATUSES = ['all', 'ready', 'review', 'duplicate', 'queued', 'imported', 'ignored'];
 
-export function receiptQuery({ query = '', after = '', before = '', sender = '', attachments = false, category = '' } = {}) {
+// Each narrowing chip adds its own words. Turning on both used to keep only the
+// shipping one, silently; now either kind of email is found.
+const CATEGORY_TERMS = { invoices: ['invoice', 'bill'], shipping: ['shipping', 'postage', 'courier', 'freight', 'label'] };
+
+export function receiptQuery({ query = '', after = '', before = '', sender = '', attachments = false, category = '', categories = [] } = {}) {
   const quote = value => '"' + String(value).replace(/["\\\r\n]/g, ' ') + '"';
   const parts = [query.trim() || RECEIPT_QUERY, RECEIPT_NOISE, '-in:trash', '-in:spam'];
   if (after) parts.push('after:' + after.replaceAll('-', '/'));
@@ -29,8 +33,8 @@ export function receiptQuery({ query = '', after = '', before = '', sender = '',
   }
   if (sender.trim()) parts.push('from:' + quote(sender.trim()));
   if (attachments) parts.push('has:attachment (filename:pdf OR filename:jpg OR filename:jpeg OR filename:png OR filename:webp)');
-  if (category === 'invoices') parts.push('(invoice OR bill)');
-  if (category === 'shipping') parts.push('(shipping OR postage OR courier OR freight OR label)');
+  const terms = [...new Set([category, ...categories])].flatMap(key => CATEGORY_TERMS[key] || []);
+  if (terms.length) parts.push('(' + terms.join(' OR ') + ')');
   return parts.join(' ');
 }
 
@@ -52,9 +56,35 @@ const AMOUNT_IN_TEXT = new RegExp([
   String.raw`\b(?:total|subtotal|amount|paid|charged|balance|due)\b[^\n\d]{0,40}\d[\d,.]{0,15}[.,]\d{2}\b`,
 ].join('|'), 'i');
 
+// A small picture that is not marked inline is still almost always a logo or a
+// social-media icon; a photographed receipt is far bigger. Such pictures stay
+// with the email for the record but are never sent to the AI to look at.
+export const MIN_RECEIPT_IMAGE_BYTES = 15 * 1024;
+
+export function receiptFileForAi(file) {
+  if (!file) return false;
+  if (String(file.mime || '').startsWith('image/') && file.size > 0 && file.size < MIN_RECEIPT_IMAGE_BYTES) return false;
+  return true;
+}
+
+// Delivery pings, review requests and account mail often repeat the order
+// total, so the amount check alone lets them through — and the AI then rightly
+// finds no receipt in them, after being paid to read them. The real receipt for
+// the same order arrives as its own email. Bounded phrases only, run on the
+// subject line alone.
+const NOT_A_RECEIPT_SUBJECT = /\b(?:has shipped|have shipped|is on (?:its|the) way|out for delivery|was delivered|has been delivered|delivery update|shipment update|tracking (?:number|update)|rate your|review your|how did we do|tell us what you think|verify your|reset your password|password reset|security alert|sign-?in attempt)\b/i;
+
+// Why an email is not worth an AI read, or '' when it is. A receipt always
+// names an amount, in its text or in an attached PDF or photo.
+export function receiptSkipReason(email) {
+  const files = (email?.fileParts || []).filter(receiptFileForAi);
+  if (files.length) return '';
+  if (NOT_A_RECEIPT_SUBJECT.test(String(email?.subject || '').slice(0, 300))) return 'notification';
+  return AMOUNT_IN_TEXT.test(`${email?.subject || ''}\n${email?.body || ''}`) ? '' : 'no-amount';
+}
+
 export function receiptWorthReading(email) {
-  if ((email?.fileParts || []).length) return true;
-  return AMOUNT_IN_TEXT.test(`${email?.subject || ''}\n${email?.body || ''}`);
+  return !receiptSkipReason(email);
 }
 
 export function receiptMoney(value) {

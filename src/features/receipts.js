@@ -119,6 +119,8 @@ import {
 } from '../lib/receipt-naming.js';
 import { isExpiringLabelUrl, isLabelUrlExpired, shippoTxIdFromRef } from '../lib/shippo-invoices.js';
 import { mountReceiptFinder, startReceiptFinder, stopReceiptFinder } from './receipt-finder.js';
+import { receiptTextForAi } from '../lib/receipt-finder-client.js';
+import { RECEIPT_QUERY, RECEIPT_NOISE } from '../lib/receipt-finder.js';
 
 function receiptFinderDependencies() {
   return {
@@ -2255,37 +2257,7 @@ function openEmailReceiptImportModal() {
   // finder owns that panel now; these render paths stay for the tab's other
   // callers but are no longer run on open.
 
-  const fileInput = $('email-receipt-files');
-  const list = $('email-receipt-files-list');
-  const dropzone = $('email-receipt-dropzone');
-  if (fileInput) {
-    fileInput.value = '';
-    fileInput.onchange = () => {
-      if (list) {
-        const fs = Array.from(fileInput.files || []);
-        list.innerHTML = fs.length
-          ? fs.map(f => `• ${f.name} <span style="opacity:.6;">(${Math.round(f.size / 1024)} KB)</span>`).join('<br>')
-          : '';
-      }
-      _updateEmailExtractButtonLabel();
-    };
-
-    if (dropzone) {
-      dropzone.ondragover = (e) => { e.preventDefault(); dropzone.style.borderColor = 'var(--gold)'; };
-      dropzone.ondragleave = () => { dropzone.style.borderColor = ''; };
-      dropzone.ondrop = (e) => {
-        e.preventDefault();
-        dropzone.style.borderColor = '';
-        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
-          fileInput.files = e.dataTransfer.files;
-          fileInput.dispatchEvent(new Event('change'));
-        }
-      };
-    }
-  }
-  const sourceInput = $('email-receipt-source');
-  if (sourceInput) sourceInput.oninput = () => _updateEmailExtractButtonLabel();
-
+  _setupEmailPastePanel();
   _updateEmailExtractButtonLabel();
 
   // Surface anything the Gmail add-on has pushed in as ready-to-edit drafts.
@@ -2294,6 +2266,119 @@ function openEmailReceiptImportModal() {
     console.error('[receipt-finder] Could not open', error);
     showToast('Could not open saved receipts: ' + error.message, 'err');
   });
+}
+
+// ── Paste & Upload panel ─────────────────────────────────────────────
+// Files live on the hidden file input so the extraction path keeps reading
+// them from one place. Dropping or pasting ADDS to what is already there —
+// replacing it silently lost the first batch when a second file was dropped —
+// and each file can be taken back out again from its chip.
+function _setEmailReceiptFiles(files) {
+  const input = $('email-receipt-files');
+  if (!input || typeof DataTransfer === 'undefined') return;
+  const seen = new Set();
+  const transfer = new DataTransfer();
+  for (const file of files) {
+    const key = `${file.name}:${file.size}:${file.lastModified}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    transfer.items.add(file);
+  }
+  input.files = transfer.files;
+  _renderEmailReceiptFiles();
+}
+
+function _renderEmailReceiptFiles() {
+  const input = $('email-receipt-files');
+  const list = $('email-receipt-files-list');
+  if (!input || !list) return;
+  const files = Array.from(input.files || []);
+  const size = bytes => bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  const icon = file => /pdf/i.test(file.type) || /\.pdf$/i.test(file.name) ? '📄' : /^image\//.test(file.type) ? '🖼️' : '✉️';
+  list.innerHTML = files.map((file, index) => `<li class="email-file-chip">
+      <span class="email-file-chip-icon" aria-hidden="true">${icon(file)}</span>
+      <span class="email-file-chip-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
+      <span class="email-file-chip-size">${size(file.size)}</span>
+      <button type="button" class="email-file-chip-x" data-remove-file="${index}" aria-label="Remove ${escapeHtml(file.name)}">✕</button>
+    </li>`).join('');
+  _updateEmailExtractButtonLabel();
+}
+
+function _renderEmailPasteMeta() {
+  const source = $('email-receipt-source');
+  const count = $('email-receipt-source-count');
+  const clear = $('email-receipt-source-clear');
+  const text = source?.value || '';
+  if (clear) clear.hidden = !text;
+  if (count) count.textContent = text.trim() ? `${text.trim().length.toLocaleString()} characters pasted` : '';
+}
+
+function _setupEmailPastePanel() {
+  const fileInput = $('email-receipt-files');
+  const list = $('email-receipt-files-list');
+  const dropzone = $('email-receipt-dropzone');
+  const sourceInput = $('email-receipt-source');
+  if (fileInput) {
+    fileInput.value = '';
+    // The picker replaces its own selection; fold what was already chosen back in.
+    let before = [];
+    fileInput.onclick = () => { before = Array.from(fileInput.files || []); };
+    fileInput.onchange = () => {
+      const picked = Array.from(fileInput.files || []);
+      _setEmailReceiptFiles([...before, ...picked]);
+      before = [];
+    };
+    // Some browsers empty the input when the picker is cancelled.
+    fileInput.oncancel = () => {
+      if (before.length && !(fileInput.files || []).length) _setEmailReceiptFiles(before);
+      before = [];
+    };
+    _renderEmailReceiptFiles();
+  }
+  if (list) {
+    list.onclick = event => {
+      const button = event.target.closest('[data-remove-file]');
+      if (!button || !fileInput) return;
+      const files = Array.from(fileInput.files || []);
+      files.splice(Number(button.dataset.removeFile), 1);
+      _setEmailReceiptFiles(files);
+      (list.querySelector('[data-remove-file]') || dropzone)?.focus();
+    };
+  }
+  if (dropzone && fileInput) {
+    dropzone.ondragover = e => { e.preventDefault(); dropzone.classList.add('is-dragover'); };
+    dropzone.ondragleave = () => dropzone.classList.remove('is-dragover');
+    dropzone.ondrop = e => {
+      e.preventDefault();
+      dropzone.classList.remove('is-dragover');
+      const dropped = Array.from(e.dataTransfer?.files || []);
+      if (dropped.length) _setEmailReceiptFiles([...Array.from(fileInput.files || []), ...dropped]);
+    };
+  }
+  if (sourceInput) {
+    sourceInput.oninput = () => { _renderEmailPasteMeta(); _updateEmailExtractButtonLabel(); };
+    // A screenshot pasted into the text box becomes a receipt file rather than
+    // being dropped on the floor.
+    sourceInput.onpaste = e => {
+      const images = Array.from(e.clipboardData?.files || []).filter(file => /^image\//.test(file.type));
+      if (!images.length || !fileInput) return;
+      e.preventDefault();
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+      const named = images.map((file, i) => new File([file], `pasted-receipt-${stamp}${images.length > 1 ? `-${i + 1}` : ''}.${(file.type.split('/')[1] || 'png').replace('jpeg', 'jpg')}`, { type: file.type }));
+      _setEmailReceiptFiles([...Array.from(fileInput.files || []), ...named]);
+      showToast(images.length === 1 ? 'Screenshot added as a receipt file' : `${images.length} screenshots added as receipt files`, 'ok');
+    };
+  }
+  const clear = $('email-receipt-source-clear');
+  if (clear && sourceInput) {
+    clear.onclick = () => {
+      sourceInput.value = '';
+      _renderEmailPasteMeta();
+      _updateEmailExtractButtonLabel();
+      sourceInput.focus();
+    };
+  }
+  _renderEmailPasteMeta();
 }
 
 function closeEmailReceiptImportModal() {
@@ -2486,12 +2571,16 @@ function switchEmailImportTab(tab) {
 // Single source of truth for the quick-preset chips — this used to be
 // copy-pasted into both renderGmailChips and applyGmailPresetQuery, so
 // editing one without the other made a chip's label lie about its query.
+// Built on the finder's own receipt search: the old queries matched "order"
+// and "payment" anywhere, so the list filled with delivery pings, promotions
+// and the shop's own sale alerts before the real receipts.
+const _RECEIPT_MAIL = `${RECEIPT_QUERY} ${RECEIPT_NOISE}`;
 const GMAIL_RECEIPT_PRESETS = [
-  { icon: '🕒', label: 'Past 7 Days', query: 'newer_than:7d -from:me (subject:(receipt OR invoice OR bill OR order OR purchase OR payment) OR "receipt" OR "invoice" OR "payment")' },
-  { icon: '📅', label: 'Past 30 Days', query: 'newer_than:30d -from:me (subject:(receipt OR invoice OR bill OR order OR purchase OR payment) OR "receipt" OR "invoice" OR "payment")' },
-  { icon: '📎', label: 'With Attachments', query: 'newer_than:30d has:attachment -from:me (receipt OR invoice OR bill)' },
-  { icon: '🧾', label: 'Invoices / Bills', query: '-from:me (subject:(receipt OR invoice OR bill OR payment OR order OR purchase OR confirmation) OR "receipt" OR "invoice" OR "payment")' },
-  { icon: '📦', label: 'Shipping costs', query: '-from:me subject:(shipping OR postage OR label OR shippo OR ups OR fedex OR dhl OR tracking)' }
+  { icon: '🕒', label: 'Past 7 days', query: `newer_than:7d ${_RECEIPT_MAIL}` },
+  { icon: '📅', label: 'Past 30 days', query: `newer_than:30d ${_RECEIPT_MAIL}` },
+  { icon: '📎', label: 'Has a PDF or photo', query: `newer_than:90d has:attachment (filename:pdf OR filename:jpg OR filename:jpeg OR filename:png) ${_RECEIPT_MAIL}` },
+  { icon: '🧾', label: 'Invoices & bills', query: `newer_than:1y (invoice OR bill) ${_RECEIPT_MAIL}` },
+  { icon: '📦', label: 'Shipping costs', query: `newer_than:1y (shipping OR postage OR label OR shippo OR courier) ${RECEIPT_NOISE}` }
 ];
 let _activeGmailPresetIdx = -1;
 
@@ -2817,7 +2906,7 @@ function renderDirectGmailChips() {
   const chips = $('email-direct-chips');
   if (!chips) return;
   chips.innerHTML = GMAIL_RECEIPT_PRESETS.map((preset, index) => `
-    <button type="button" class="filter-chip${index === _activeDirectGmailPresetIdx ? ' active' : ''}" onclick="applyDirectGmailPresetQuery(${index})">
+    <button type="button" class="filter-chip${index === _activeDirectGmailPresetIdx ? ' active' : ''}" aria-pressed="${index === _activeDirectGmailPresetIdx}" onclick="applyDirectGmailPresetQuery(${index})">
       <span aria-hidden="true">${preset.icon}</span> ${escapeHtml(preset.label)}
     </button>`).join('');
 }
@@ -2825,27 +2914,39 @@ function renderDirectGmailChips() {
 function applyDirectGmailPresetQuery(index) {
   const preset = GMAIL_RECEIPT_PRESETS[index];
   if (!preset) return;
-  _activeDirectGmailPresetIdx = index;
-  const input = $('email-direct-search-query');
-  if (input) input.value = preset.query;
+  // A chip narrows whatever is typed in the box rather than overwriting it
+  // with raw Gmail syntax; clicking the chosen one again turns it off.
+  _activeDirectGmailPresetIdx = _activeDirectGmailPresetIdx === index ? -1 : index;
   renderDirectGmailChips();
   searchDirectGmailEmails();
 }
 
+// What is typed, narrowed by the chosen chip. With nothing at all, the past
+// month of receipt-shaped mail — the same default a blank finder search uses.
+function _directGmailQuery() {
+  const typed = ($('email-direct-search-query')?.value || '').trim();
+  const preset = GMAIL_RECEIPT_PRESETS[_activeDirectGmailPresetIdx];
+  if (preset) return [typed, preset.query].filter(Boolean).join(' ');
+  return typed ? `${typed} ${RECEIPT_NOISE}` : GMAIL_RECEIPT_PRESETS[1].query;
+}
+
+// Said in the list itself, where the owner is looking — a toast alone left the
+// list showing its "pick the emails" invitation as though nothing went wrong.
+function _directGmailNotice(icon, title, sub) {
+  const list = $('email-direct-list-wrap');
+  if (list) list.innerHTML = `<div class="email-zero-state"><div class="email-zero-state-icon" aria-hidden="true">${icon}</div><div class="email-zero-state-title">${escapeHtml(title)}</div><div class="email-zero-state-sub">${escapeHtml(sub)}</div></div>`;
+}
+
 async function searchDirectGmailEmails() {
   if (!sheetsUrl) {
-    showToast('Connect Google Sheets first to search Gmail', 'warn');
+    _directGmailNotice('🔌', 'Connect your Google Sheet first', 'This tab reads Gmail through the same Google script that keeps your sheet in sync. Set it up once in the “Connect your Google Sheet” tab.');
     return;
   }
   if (!navigator.onLine) {
-    showToast('Offline — reconnect to search Gmail.', 'warn');
+    _directGmailNotice('📴', 'You are offline', 'Gmail can only be searched with a connection. Anything already saved is still in your expenses.');
     return;
   }
-  const query = ($('email-direct-search-query')?.value || '').trim();
-  if (!query) {
-    showToast('Enter a Gmail search first', 'warn');
-    return;
-  }
+  const query = _directGmailQuery();
 
   const btn = $('email-direct-search-btn');
   const list = $('email-direct-list-wrap');
@@ -2869,7 +2970,7 @@ async function searchDirectGmailEmails() {
     renderDirectGmailEmailsList();
   } catch (error) {
     console.error('[searchDirectGmailEmails]', error);
-    if (list) list.innerHTML = `<div class="empty-state" style="padding:var(--space-5);color:var(--red);">Could not search Gmail: ${escapeHtml(error.message || String(error))}</div>`;
+    _directGmailNotice('⚠️', 'Gmail could not be searched', `${error.message || String(error)} — try again in a moment.`);
     showToast('Gmail search failed', 'err');
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = label; }
@@ -2975,7 +3076,8 @@ function _updateEmailExtractButtonLabel() {
   } else {
     const pasted = ($('email-receipt-source')?.value || '').trim();
     const files = ($('email-receipt-files')?.files || []).length;
-    btn.textContent = '✨ Extract from pasted text';
+    const what = [files ? `${files} file${files === 1 ? '' : 's'}` : '', pasted ? 'the pasted text' : ''].filter(Boolean).join(' and ');
+    btn.textContent = what ? `✨ Read ${what} with AI` : '✨ Paste text or add a file first';
     btn.disabled = !pasted && !files;
   }
 }
@@ -5291,11 +5393,13 @@ async function extractReceiptsFromEmailText() {
 
     try {
       const fileParts = await readReceiptFiles(files);
-      const cleanedText = parseEmlOrText(pasted);
-      if (cleanedText) parts.push({ text: '--- PASTED EMAIL TEXT ---\n' + cleanedText.slice(0, 120000) });
+      // Tracking links and legal footers are stripped from the AI's copy only —
+      // they never hold an amount and were most of what a pasted email cost.
+      const cleanedText = receiptTextForAi(parseEmlOrText(pasted));
+      if (cleanedText) parts.push({ text: '--- PASTED EMAIL TEXT ---\n' + cleanedText.slice(0, 60000) });
       for (const fp of fileParts) {
         if (fp.kind === 'text' && fp.text) {
-          parts.push({ text: `--- FILE: ${fp.name} ---\n` + fp.text.slice(0, 60000) });
+          parts.push({ text: `--- FILE: ${fp.name} ---\n` + receiptTextForAi(fp.text).slice(0, 40000) });
         } else if (fp.kind === 'inline' && fp.base64) {
           parts.push({ inline_data: { mime_type: fp.mime, data: fp.base64 } });
         }
