@@ -57,3 +57,57 @@ export function nextOrderToShip(items = [], shipped = new Set(), justShipped = '
   const skip = normalize(justShipped);
   return ordersStillToShip(items, shipped, normalize).find(item => normalize(item.orderNumber) !== skip) || null;
 }
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const lower = value => String(value ?? '').trim().toLowerCase();
+
+/**
+ * True when the storefront itself says the parcel went out. Big Cartel marks
+ * an order shipped when it's fulfilled there, including orders labelled
+ * outside this app.
+ */
+export function storefrontSaysShipped(order = {}) {
+  const attr = order.attributes || {};
+  return lower(attr.shipping_status) === 'shipped' || lower(attr.status) === 'shipped' || Boolean(attr.shipped_at);
+}
+
+/**
+ * Big Cartel orders still waiting for a parcel, oldest first.
+ *
+ * Left out: cancelled or refunded orders (`reversed`), ones the storefront or
+ * the ledger already calls shipped, pick-ups, and anything older than
+ * `withinDays` — an order that old went out some other way.
+ */
+export function bigCartelShipQueue(orders = [], {
+  shipped = new Set(),
+  pickups = new Set(),
+  orderNumber = order => order?.id,
+  reversed = () => false,
+  normalize = v => String(v || '').trim(),
+  now = Date.now(),
+  withinDays = 60,
+} = {}) {
+  const seen = new Set();
+  const queue = [];
+  (Array.isArray(orders) ? orders : []).forEach(order => {
+    const num = normalize(orderNumber(order));
+    if (!num || seen.has(num)) return;
+    seen.add(num);
+    const attr = order.attributes || {};
+    if (['abandoned', 'pending'].includes(lower(attr.status))) return;
+    if (reversed(order) || storefrontSaysShipped(order)) return;
+    if (shipped.has(num) || pickups.has(num)) return;
+    const placed = Date.parse(attr.created_at || attr.completed_at || '');
+    const daysWaiting = Number.isFinite(placed) ? Math.max(0, Math.floor((now - placed) / DAY_MS)) : null;
+    if (daysWaiting !== null && daysWaiting > withinDays) return;
+    queue.push({ order, orderNumber: num, placedAt: Number.isFinite(placed) ? placed : null, daysWaiting });
+  });
+  return queue.sort((a, b) => (a.placedAt ?? Infinity) - (b.placedAt ?? Infinity));
+}
+
+/** "today", "1 day", "5 days" — how long an order has waited. */
+export function waitingPhrase(days) {
+  if (days === null || days === undefined) return '';
+  if (days <= 0) return 'today';
+  return `${days} day${days === 1 ? '' : 's'}`;
+}

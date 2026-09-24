@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { shippedOrderNumbers, findOrderInAnyBook, ordersStillToShip, nextOrderToShip } from '../src/lib/ship-queue.js';
+import { shippedOrderNumbers, findOrderInAnyBook, ordersStillToShip, nextOrderToShip, bigCartelShipQueue, waitingPhrase } from '../src/lib/ship-queue.js';
 import { normalizeShippingOrderNumber as norm } from '../src/lib/shipping-reconciliation.js';
 
 describe('ship queue', () => {
@@ -33,5 +33,42 @@ describe('ship queue', () => {
     const items = [{ orderNumber: 'BC-1' }, { orderNumber: 'BC-2' }];
     expect(nextOrderToShip(items, new Set(), 'BC-1', norm).orderNumber).toBe('BC-2');
     expect(nextOrderToShip(items, new Set([norm('BC-2')]), 'BC-1', norm)).toBeNull();
+  });
+});
+
+describe('big cartel ship queue', () => {
+  const now = Date.parse('2026-09-24T12:00:00Z');
+  const o = (id, attrs = {}) => ({ id, attributes: { status: 'completed', created_at: '2026-09-20T12:00:00Z', ...attrs } });
+
+  it('lists waiting orders oldest first with days waiting', () => {
+    const q = bigCartelShipQueue([o('BC-2'), o('BC-1', { created_at: '2026-09-18T12:00:00Z' })], { normalize: norm, now });
+    expect(q.map(x => x.orderNumber)).toEqual([norm('BC-1'), norm('BC-2')]);
+    expect(q[0].daysWaiting).toBe(6);
+  });
+
+  it('leaves out shipped, pick-up, cancelled, pending, reversed and stale orders', () => {
+    const orders = [
+      o('BC-1', { shipping_status: 'shipped' }),
+      o('BC-2'),
+      o('BC-3'),
+      o('BC-4', { status: 'pending' }),
+      o('BC-5'),
+      o('BC-6', { created_at: '2026-06-01T00:00:00Z' }),
+      o('BC-7'),
+    ];
+    const q = bigCartelShipQueue(orders, {
+      normalize: norm, now,
+      shipped: new Set([norm('BC-2')]),
+      pickups: new Set([norm('BC-3')]),
+      reversed: ord => ord.id === 'BC-5',
+    });
+    expect(q.map(x => x.orderNumber)).toEqual([norm('BC-7')]);
+  });
+
+  it('describes the wait in plain words', () => {
+    expect(waitingPhrase(0)).toBe('today');
+    expect(waitingPhrase(1)).toBe('1 day');
+    expect(waitingPhrase(4)).toBe('4 days');
+    expect(waitingPhrase(null)).toBe('');
   });
 });

@@ -20221,3 +20221,44 @@ button[onclick="refreshUmamiStats()"]:active {
 }
 .cp-next-order-sub { font-size: var(--text-xs); color: var(--text3); }
 .cp-next-order .btn { min-height: 44px; }
+
+/* Ready to ship — Big Cartel orders waiting for a parcel. */
+.ship-queue-card { margin-bottom: 1.25rem; }
+.ship-queue-card.is-empty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--text-sm);
+  color: var(--text3);
+}
+.ship-queue-card.is-empty > span:first-child { color: var(--green); font-weight: 700; }
+.ship-queue-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.ship-queue-title { margin: 0; font-size: var(--text-lg); color: var(--text); }
+.ship-queue-sub { margin: 4px 0 0; font-size: var(--text-xs); color: var(--text3); }
+.ship-queue-start { min-height: 44px; }
+.ship-queue-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.ship-queue-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: var(--stroke-hair) solid var(--border);
+}
+.ship-queue-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.ship-queue-name { font-size: var(--text-sm); color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ship-queue-meta { font-size: var(--text-xs); color: var(--text3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ship-queue-wait { font-size: var(--text-xs); color: var(--text3); white-space: nowrap; }
+.ship-queue-wait.is-late { color: var(--orange-deep); font-weight: 700; }
+.ship-queue-btn { min-height: 44px; min-width: 64px; }
+.ship-queue-more { margin: 8px 0 0; font-size: var(--text-xs); color: var(--text3); }
+@media (max-width: 520px) {
+  .ship-queue-row { flex-wrap: wrap; }
+  .ship-queue-wait { order: 3; flex-basis: 100%; }
+}
