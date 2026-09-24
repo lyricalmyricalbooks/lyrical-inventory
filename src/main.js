@@ -9673,7 +9673,10 @@ window.approveSubmission = async function (type, subKey) {
         recordOrderPendingTransfer(raw.num, raw.chan, raw.qty, raw.price, raw.notes, raw.payment);
         pendingTransfer = true;
         const newest = getState().artistTransfers.at(-1);
-        if (newest) mintArtistTransferPayLink(activeBook, newest.id, { quiet: true });
+        if (newest) {
+          const bookId = activeBook;
+          mintArtistTransferPayLink(bookId, newest.id, { quiet: true }).then(() => mintArtistTransferBundleLink(bookId));
+        }
       } else {
         recordOrder(raw.num, raw.chan, raw.qty, raw.price, raw.notes, raw.payment);
       }
@@ -9773,15 +9776,63 @@ async function mintArtistTransferPayLink(bookId, transferId, { quiet = false } =
     return null;
   }
 }
-window.mintArtistTransferPayLink = (transferId) => mintArtistTransferPayLink(activeBook, transferId);
+window.mintArtistTransferPayLink = async (transferId) => {
+  await mintArtistTransferPayLink(activeBook, transferId);
+  mintArtistTransferBundleLink(activeBook);
+};
 
-function markArtistTransferReceived(transferId) {
-  const s = getState(), book = getBook();
-  const t = s.artistTransfers.find(x => x.id === transferId);
-  if (!t) return;
+// Approved transfers the author can pay right now.
+function payableTransfers(s) {
+  return (s?.artistTransfers || []).filter(t => transferAmount(t) > 0);
+}
+
+// The "Pay all" link, if it still covers exactly what's due now.
+function transferBundleFor(s) {
+  const b = s?.transferBundle;
+  const due = payableTransfers(s);
+  if (!b || !b.url || due.length < 2) return null;
+  const ids = due.map(t => String(t.id)).sort().join(',');
+  const amt = roundCents(due.reduce((a, t) => a + transferAmount(t), 0));
+  return b.key === ids && Number(b.amount) === amt ? { url: b.url, amount: amt, count: due.length } : null;
+}
+
+// Publisher-side: one Stripe link for everything an author owes right now, so
+// they can pay several sales in one go. Re-made whenever the set changes.
+async function mintArtistTransferBundleLink(bookId) {
+  if (!isPublisherSession() || !getReconStripeKey()) return null;
+  const s = states[bookId], book = BOOKS[bookId];
+  if (!s || !book) return null;
+  const due = payableTransfers(s);
+  if (due.length < 2) return null;
+  if (transferBundleFor(s)) return s.transferBundle.url;
+  const key = due.map(t => String(t.id)).sort().join(',');
+  if (key.length > 480) return null; // Stripe metadata values cap at 500 characters
+  const amount = roundCents(due.reduce((a, t) => a + transferAmount(t), 0));
+  try {
+    const url = await createStripePaymentLinkForAmount({
+      amountMajor: amount,
+      currencyCode: bookCurrencyCode(book),
+      description: `${book.title} — author transfer for ${due.length} sales`,
+      metadata: { kind: 'artist_transfer', transfer_ids: key, transfer_book: bookId },
+    });
+    s.transferBundle = { key, ids: due.map(t => t.id), amount, url };
+    saveState(bookId);
+    if (bookId === activeBook) renderArtistTransfers();
+    return url;
+  } catch (e) {
+    console.warn('Pay-all link failed', e);
+    return null;
+  }
+}
+
+function markArtistTransferReceived(transferId, bookId = activeBook, { chargeId = '', quiet = false } = {}) {
+  const s = states[bookId], book = BOOKS[bookId];
+  if (!s || !book) return false;
+  const t = (s.artistTransfers || []).find(x => x.id === transferId);
+  if (!t) return false;
   if (transferAmount(t) == null) {
-    showToast('This sale has no amount saved, so it can’t be settled yet. Check the order and re-enter it.', 'err', 5000);
-    return;
+    if (!quiet) showToast('This sale has no amount saved, so it can’t be settled yet. Check the order and re-enter it.', 'err', 5000);
+    return false;
   }
   t.total = transferAmount(t);
   // Now credit the revenue
@@ -9790,10 +9841,11 @@ function markArtistTransferReceived(transferId) {
   s.chStats[t.chan].revenue += t.total;
   // Mark history entry as resolved
   const h = s.hist.find(x => x.num === t.num && x.artistPending);
-  if (h) { h.artistPending = false; h.notes = (h.notes ? h.notes + ' · ' : '') + 'Transfer received'; }
+  if (h) { h.artistPending = false; h.notes = (h.notes ? h.notes + ' · ' : '') + (chargeId ? `Transfer received via Stripe (${chargeId})` : 'Transfer received'); }
   // Remove from pending queue
   s.artistTransfers = s.artistTransfers.filter(x => x.id !== transferId);
-  renderHist(); updateDash(); renderArtistTransfers(); saveState(activeBook);
+  saveState(bookId);
+  if (bookId === activeBook) { renderHist(); updateDash(); renderArtistTransfers(); }
   const nativeCurT = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
   const cadEquivT = cadEquivalentForSale({ nativeCurrency: nativeCurT, totalNative: t.total, payment: t.payment });
   syncToSheets({
@@ -9805,7 +9857,33 @@ function markArtistTransferReceived(transferId) {
     paymentRate: t.payment?.rate ?? '',
     convertedTotal: cadEquivT
   });
-  showToast(`✓ Transfer received — ${fmt(t.total, book.currency)} added to revenue`);
+  if (!quiet) showToast(`✓ Transfer received — ${fmt(t.total, book.currency)} added to revenue`);
+  return true;
+}
+
+// An author paid through one of the app's own transfer links (single sale or
+// "Pay all"). Settles exactly the transfers the link named — never more — and
+// only when the money covers them in the book's currency. Returns a short
+// report for the sweep, or null when there was nothing (left) to settle.
+function settleArtistTransfersFromStripe(payment) {
+  const meta = payment.metadata || {};
+  const bookId = meta.transfer_book;
+  const s = states[bookId], book = BOOKS[bookId];
+  if (!s || !book) return null;
+  const ids = String(meta.transfer_ids || meta.transfer_id || '').split(',').map(x => x.trim()).filter(Boolean);
+  const open = (s.artistTransfers || []).filter(t => ids.includes(String(t.id)) && transferAmount(t) > 0);
+  if (!open.length) return null;
+  const due = roundCents(open.reduce((a, t) => a + transferAmount(t), 0));
+  const bookCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
+  if (String(payment.currency || '').toUpperCase() !== bookCur) return { bookId, settled: 0, problem: 'currency' };
+  if (Number(payment.amount) + 0.005 < due) return { bookId, settled: 0, problem: 'short' };
+  let settled = 0;
+  for (const t of open) if (markArtistTransferReceived(t.id, bookId, { chargeId: payment.id, quiet: true })) settled++;
+  if (s.transferBundle && s.transferBundle.ids.some(id => ids.includes(String(id)))) delete s.transferBundle;
+  saveState(bookId);
+  // Money for sales that were already settled (e.g. paid twice) is worth a look.
+  const extra = roundCents(Number(payment.amount) - due);
+  return { bookId, settled, total: due, extra: extra > 0.009 ? extra : 0, currency: book.currency };
 }
 
 // Settle a held transfer where the artist KEEPS their share and only forwards
@@ -9935,6 +10013,28 @@ async function settleArtistTransferKeepAll(transferId) {
   showToast(`✓ Settled — artist keeps full ${fmt(t.total, book.currency)}; publisher cut forgiven`);
 }
 
+// Per-device memory of "I tapped Pay" so an author who already paid isn't
+// shown the same Pay button again while the publisher's app catches up.
+// Expires after 3 days in case the payment was abandoned half-way.
+const PAID_TAP_KEY = 'lm-author-paid-taps';
+const PAID_TAP_TTL = 3 * 86400000;
+function readPaidTaps() {
+  try { return JSON.parse(localStorage.getItem(PAID_TAP_KEY) || '{}') || {}; } catch (_) { return {}; }
+}
+function recentlyPaidTransfer(id) {
+  const at = readPaidTaps()[String(id)];
+  return !!at && Date.now() - at < PAID_TAP_TTL;
+}
+function notePaidTransfer(id, alsoIds = []) {
+  const taps = readPaidTaps();
+  const now = Date.now();
+  [id, ...alsoIds].forEach(x => { taps[String(x)] = now; });
+  for (const k of Object.keys(taps)) if (now - taps[k] > PAID_TAP_TTL) delete taps[k];
+  try { localStorage.setItem(PAID_TAP_KEY, JSON.stringify(taps)); } catch (_) { /* private mode */ }
+  setTimeout(() => renderArtistTransfers(), 400);
+}
+window.notePaidTransfer = notePaidTransfer;
+
 // The Stripe link minted for this transfer, if it still matches the amount.
 function transferPayUrl(t) {
   const amt = transferAmount(t);
@@ -9960,57 +10060,85 @@ function renderArtistTransfers() {
   });
 
   // ── AUTHOR BANNER
+  // The author's single place to pay: one headline ("to send now"), then one
+  // row per sale with its own action. The lower publisher panel is hidden for
+  // authors so there is never a second, competing pay button.
   const banner = $('author-payment-banner');
   if (banner) {
     if (isAuthor() && transfers.length > 0) {
-      // ⚡ Bolt: Imperative loops instead of .reduce() avoid array allocations in rendering functions
-  let totalOwed = 0, missing = 0;
+      const fullLink = payLink ? (payLink.startsWith('http') ? payLink : 'https://' + payLink) : '';
+      let dueNow = 0, dueCount = 0, waitingTotal = 0, waitingCount = 0, missing = 0;
       for (const t of transfers) {
         const amt = transferAmount(t);
-        if (amt == null) missing++; else totalOwed += amt;
+        if (t.status === 'pending') { waitingCount++; waitingTotal += amt || 0; }
+        else if (amt == null) missing++;
+        else if (amt > 0 && !recentlyPaidTransfer(t.id)) { dueNow += amt; dueCount++; }
       }
       banner.style.display = '';
-      $('apb-amount').textContent = fmt(totalOwed, cur);
-      $('apb-detail').textContent = `${transfers.length} transfer${transfers.length > 1 ? 's' : ''} from sales collected on your end (incl. pending)` +
-        (missing ? ` · ${missing} without an amount yet — your publisher will confirm ${missing > 1 ? 'them' : 'it'}` : '');
-      const btn = $('apb-pay-btn');
-      btn.onclick = null;
-      const payable = transfers.filter(t => t.status !== 'pending' && transferAmount(t) > 0);
-      const readyLinks = payable.filter(t => transferPayUrl(t));
-      if (payable.length === 1 && readyLinks.length === 1) {
-        // One sale to pay and Stripe already knows the amount: go straight there.
-        const t = payable[0];
-        btn.href = transferPayUrl(t);
+      banner.querySelector('.metric-banner-label').textContent = 'Money to send to your publisher';
+      $('apb-amount').textContent = dueCount ? fmt(dueNow, cur) : 'Nothing to pay yet';
+      $('apb-amount').classList.toggle('is-quiet', !dueCount);
+      const bits = [];
+      if (dueCount) bits.push(dueCount === 1 ? 'Tap Pay on the sale below. The amount is filled in for you.' : `Tap Pay on each of the ${dueCount} sales below. The amount is filled in for you.`);
+      if (waitingCount) bits.push(`${waitingCount} more ${waitingCount === 1 ? 'sale' : 'sales'} (${fmt(waitingTotal, cur)}) waiting for your publisher to check — nothing to do yet.`);
+      if (missing) bits.push(`${missing} ${missing === 1 ? 'sale needs' : 'sales need'} a price from you — tell your publisher what the buyer paid.`);
+      $('apb-detail').textContent = bits.join(' ');
+      // The banner-level button is only "Pay all" — shown when one Stripe link
+      // covers every sale due now. Otherwise each sale row carries its own action.
+      const actions = banner.querySelector('.metric-banner-actions');
+      const bundle = transferBundleFor(s);
+      // Any sale in the bundle already paid on its own (or the bundle itself)
+      // means "Pay all" would charge part of it twice — so it goes away.
+      const bundlePaid = bundle && (recentlyPaidTransfer(`bundle:${bundle.url}`) || payableTransfers(s).some(t => recentlyPaidTransfer(t.id)));
+      if (actions) actions.style.display = bundle && !bundlePaid ? '' : 'none';
+      if (bundle && !bundlePaid) {
+        const btn = $('apb-pay-btn');
+        btn.href = bundle.url;
         btn.target = '_blank';
-        btn.textContent = `Send ${fmt(transferAmount(t), cur)} →`;
-        $('apb-link-hint').textContent = 'Opens Stripe with the amount already filled in';
-      } else if (payable.length > 1) {
-        // Each approved sale has its own exact-amount link on its card below.
-        btn.href = '#artist-transfers-sect';
-        btn.removeAttribute('target');
-        btn.onclick = e => { e.preventDefault(); $('artist-transfers-sect')?.scrollIntoView({ behavior: 'smooth' }); };
-        btn.textContent = 'Pay each sale below ↓';
-        $('apb-link-hint').textContent = 'Each sale has its own Send button with the amount filled in';
-      } else if (payLink) {
-        const fullLink = payLink.startsWith('http') ? payLink : 'https://' + payLink;
-        btn.href = fullLink;
-        btn.target = '_blank';
-        btn.textContent = 'Send payment →';
-        $('apb-link-hint').textContent = 'Opens payment link in a new tab';
-      } else {
-        btn.href = '#';
-        btn.onclick = e => { e.preventDefault(); };
-        btn.textContent = 'Contact publisher';
-        $('apb-link-hint').textContent = 'Payment link not set — contact your publisher';
+        btn.rel = 'noopener';
+        btn.textContent = `Pay all ${fmt(bundle.amount, cur)} →`;
+        btn.onclick = () => notePaidTransfer(`bundle:${bundle.url}`, payableTransfers(s).map(t => t.id));
+        $('apb-link-hint').textContent = `One payment for all ${bundle.count} sales · amount filled in`;
+        $('apb-detail').textContent = `Tap Pay all to send everything in one go, or pay each sale on its own below.` +
+          (waitingCount ? ` ${waitingCount} more ${waitingCount === 1 ? 'sale' : 'sales'} waiting for your publisher to check — nothing to do yet.` : '');
       }
-      $('apb-transfers').innerHTML = transfers.map(t => `
-        <div class="mbi-row${t.status === 'pending' ? ' is-pending' : ''}">
-          <div class="mbi-desc">${[escapeHtml(t.num), fmtD(t.date), transferQtyLabel(t)].filter(Boolean).join(' · ')}${t.status === 'pending' ? ' (Pending Approval)' : ''}</div>
-          <div class="mbi-amt">${transferAmount(t) == null ? 'Amount to confirm' : fmt(transferAmount(t), cur)}</div>
-        </div>`).join('');
+
+      const order = t => (t.status === 'pending' ? 2 : transferAmount(t) == null ? 1 : 0);
+      $('apb-transfers').innerHTML = [...transfers].sort((x, y) => order(x) - order(y)).map(t => {
+        const amt = transferAmount(t);
+        const copies = Number(t.qty) > 0 ? `${Number(t.qty)} ${Number(t.qty) === 1 ? 'copy' : 'copies'}` : 'A sale';
+        const what = `${copies}${Number(t.qty) > 0 ? ' sold' : ''}${t.date ? ` on ${fmtD(t.date)}` : ''}`;
+        let action, state = '';
+        if (t.status === 'pending') {
+          state = ' is-pending';
+          action = `<span class="apb-status">Waiting for your publisher${amt ? ` · ${escapeHtml(fmt(amt, cur))}` : ''}</span>`;
+        } else if (amt == null) {
+          action = `<span class="apb-status is-warn">Tell your publisher the price</span>`;
+        } else if (recentlyPaidTransfer(t.id)) {
+          // They tapped Pay on this device recently: don't invite a second payment.
+          action = `<span class="apb-status is-done">✓ Payment sent — this clears once your publisher's app sees it</span>`;
+        } else {
+          const url = transferPayUrl(t) || fullLink;
+          const hint = transferPayUrl(t) ? '' : `<span class="apb-hint">Type ${escapeHtml(fmt(amt, cur))} on the payment page</span>`;
+          action = url
+            ? `<span class="apb-pay-wrap">${hint}<a class="btn gold apb-pay" href="${escapeHtml(url)}" target="_blank" rel="noopener" onclick="notePaidTransfer(${Number(t.id)})">Pay ${escapeHtml(fmt(amt, cur))} →</a></span>`
+            : `<span class="apb-status">Send ${escapeHtml(fmt(amt, cur))} to your publisher</span>`;
+        }
+        return `<div class="mbi-row apb-row${state}">
+          <div class="apb-what">${escapeHtml(what)}</div>
+          ${action}
+        </div>`;
+      }).join('');
     } else {
       banner.style.display = 'none';
     }
+  }
+
+  // Authors pay from the banner above; the panel below is the publisher's desk.
+  if (isAuthor()) {
+    const sectA = $('artist-transfers-sect');
+    if (sectA) sectA.style.display = 'none';
+    return;
   }
 
   // ── PUBLISHER PANEL
@@ -10022,51 +10150,6 @@ function renderArtistTransfers() {
   const payHtml = fullPayLink
     ? `<a href="${fullPayLink}" target="_blank" class="btn sm" style="text-decoration:none;background:var(--green-bg);color:var(--green);border-color:rgba(42,99,72,.2);">↗ Payment link</a>`
     : `<span style="font-size:var(--text-2xs);color:var(--text3);font-family:var(--font-mono);">No payment link set</span>`;
-
-  // Authors get a plain step-by-step card: what happened, how much to send,
-  // one button. The settle actions below are publisher decisions.
-  const hed = sect.querySelector('.sec-head-title'), sub = sect.querySelector('.section-subcopy');
-  if (hed) hed.textContent = isAuthor() ? 'Money to send to your publisher' : 'Pending artist transfers';
-  if (sub) sub.textContent = isAuthor()
-    ? 'When a buyer pays you directly, the money goes on to your publisher. Follow the steps on each card.'
-    : "Sales already collected where the artist's share hasn't been sent yet.";
-  if (isAuthor()) {
-    list.innerHTML = transfers.map(t => {
-      const amt = transferAmount(t);
-      const copies = Number(t.qty) > 0 ? `${Number(t.qty)} ${Number(t.qty) === 1 ? 'copy' : 'copies'}` : 'a sale';
-      const what = `You sold ${copies}${t.date ? ` on ${fmtD(t.date)}` : ''} and the buyer paid you.`;
-      if (t.status === 'pending') {
-        return `<div class="pending-card is-pending author-transfer-card">
-          <div><div class="pending-card-head"><span class="pill gray">Waiting for your publisher</span></div>
-          <p class="author-transfer-what">${escapeHtml(what)}</p>
-          <p class="author-transfer-next">Nothing to do yet. Your publisher checks the sale first — then we'll show you how much to send here.</p></div>
-        </div>`;
-      }
-      if (amt == null) {
-        return `<div class="pending-card author-transfer-card">
-          <div><div class="pending-card-head"><span class="pill amber">Amount missing</span></div>
-          <p class="author-transfer-what">${escapeHtml(what)}</p>
-          <p class="author-transfer-next">We don't know the price of this sale. Please tell your publisher how much the buyer paid.</p></div>
-        </div>`;
-      }
-      const stripeUrl = transferPayUrl(t);
-      const cardLink = stripeUrl || fullPayLink;
-      const steps = stripeUrl
-        ? `<li>Tap <strong>Send ${escapeHtml(fmt(amt, cur))}</strong>. The payment page opens with the amount already filled in.</li><li>Pay with your card, Apple Pay or Google Pay.</li><li>That's it. Your publisher confirms it, and this card goes away.</li>`
-        : fullPayLink
-        ? `<li>Tap <strong>Send ${escapeHtml(fmt(amt, cur))}</strong>. The payment page opens.</li><li>Type exactly <strong>${escapeHtml(fmt(amt, cur))}</strong> in the amount box.</li><li>That's it. Your publisher confirms it, and this card goes away.</li>`
-        : `<li>Send <strong>${escapeHtml(fmt(amt, cur))}</strong> to your publisher, the way you usually pay them.</li><li>That's it. Your publisher confirms it, and this card goes away.</li>`;
-      return `<div class="pending-card author-transfer-card">
-        <div>
-          <div class="pending-card-head"><span class="pill amber">To send: ${escapeHtml(fmt(amt, cur))}</span></div>
-          <p class="author-transfer-what">${escapeHtml(what)} Please send the money on to your publisher.</p>
-          <ol class="author-transfer-steps">${steps}</ol>
-        </div>
-        ${cardLink ? `<div class="pending-card-actions"><a href="${escapeHtml(cardLink)}" target="_blank" rel="noopener" class="btn gold lg" style="text-decoration:none;">Send ${escapeHtml(fmt(amt, cur))} →</a></div>` : ''}
-      </div>`;
-    }).join('');
-    return;
-  }
 
   list.innerHTML = transfers.map(t => `
     <div class="pending-card${t.status === 'pending' ? ' is-pending' : ''}">
@@ -22423,6 +22506,17 @@ async function sweepStripeInvoicePayments({ force = false } = {}) {
 
       // A payment for one book — its QR code, its payment link — becomes a sale
       // on its own. The rules for when it may are in lib/stripe-sale-autorecord.js.
+      if (c.kind === 'artist_transfer') {
+        const r = settleArtistTransfersFromStripe(payment);
+        if (r && r.settled) {
+          touchedBooks.add(r.bookId);
+          showToast(`✓ ${BOOKS[r.bookId].title}: the author paid ${fmt(r.total, r.currency)} through Stripe — ${r.settled} ${r.settled === 1 ? 'sale' : 'sales'} marked received${r.extra ? ` (they paid ${fmt(r.extra, r.currency)} extra — check whether to refund)` : ''}`, 'ok', 7000);
+        } else if (r && r.problem) {
+          showToast(`${BOOKS[r.bookId].title}: an author payment came in ${r.problem === 'short' ? 'for less than' : 'in a different currency from'} what they owed — check it in Stripe and settle it by hand.`, 'warn', 8000);
+        }
+        continue;
+      }
+
       if (c.kind === 'direct') {
         const outcome = autoRecordStripeSale(payment, c);
         if (outcome) {

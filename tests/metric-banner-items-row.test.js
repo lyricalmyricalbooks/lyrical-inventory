@@ -37,7 +37,7 @@ test('the reimbursement amount uses the green ink token, not a raw hex', () => {
 });
 
 test('the artist and publisher transfer rows share one row component instead of two duplicated inline templates', () => {
-  const apbBlock = mainJs.match(/\$\('apb-transfers'\)\.innerHTML = transfers\.map\(t => `([\s\S]*?)`\)\.join/);
+  const apbBlock = mainJs.match(/\$\('apb-transfers'\)\.innerHTML = ([\s\S]*?)\.join\(''\)/);
   expect(apbBlock).not.toBeNull();
   expect(apbBlock[1]).not.toMatch(/style="/);
   expect(apbBlock[1]).toContain('mbi-row');
