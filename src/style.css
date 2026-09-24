@@ -4162,9 +4162,15 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 }
 .field-warn::before{content:'⚠';line-height:var(--leading-snug);}
 
+/* Author version of the pending-transfer card: plain sentences + numbered steps. */
+.author-transfer-what{margin:var(--space-2) 0 0;font-size:var(--text-base);color:var(--text);line-height:var(--leading-snug);}
+.author-transfer-next{margin:var(--space-1) 0 0;font-size:var(--text-sm);color:var(--text2);}
+.author-transfer-steps{margin:var(--space-2) 0 0;padding-left:1.25rem;font-size:var(--text-sm);color:var(--text2);line-height:1.6;}
+.author-transfer-steps strong{color:var(--text);}
+
 /* TOOLTIPS (#10) — add data-tip="..." to any element. */
 .tip{position:relative;cursor:help;}
-.tip[data-tip]:hover::after,.tip[data-tip]:focus-visible::after{
+.tip[data-tip]:hover::after,.tip[data-tip]:focus-visible::after,.tip[data-tip]:focus::after{
   content:attr(data-tip);
   position:absolute;
   left:50%;
@@ -4188,7 +4194,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   pointer-events:none;
   animation:overlayIn .14s ease;
 }
-.tip[data-tip]:hover::before,.tip[data-tip]:focus-visible::before{
+.tip[data-tip]:hover::before,.tip[data-tip]:focus-visible::before,.tip[data-tip]:focus::before{
   content:'';
   position:absolute;
   left:50%;
