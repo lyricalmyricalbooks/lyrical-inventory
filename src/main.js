@@ -11534,9 +11534,9 @@ function renderInvoiceItems() {
     // dropdown can never display one title while the invoice files under another.
     let selected = lineItemBookId(it, ownerBookId, books);
     if (!books.some(b => b.id === selected)) { selected = ownerBookId; it.bookId = ownerBookId; }
-    const opts = books.map(b => `<option value="${escapeHTML(b.id)}"${b.id === selected ? ' selected' : ''}>${escapeHTML(b.title)}</option>`).join('');
+    const opts = books.map(b => `<option value="${escapeHtml(b.id)}"${b.id === selected ? ' selected' : ''}>${escapeHtml(b.title)}</option>`).join('');
     return `<tr class="inv-item-row" data-i="${i}">
-    <td><input type="text" value="${escapeHTML(it.description || '')}" placeholder="e.g. ${escapeHTML(getBook().title || '')} — consignment sale, Sept 2026" oninput="updateInvoiceItem(${i},'description',this.value)"></td>
+    <td><input type="text" value="${escapeHtml(it.description || '')}" placeholder="e.g. ${escapeHtml(getBook().title || '')} — consignment sale, Sept 2026" oninput="updateInvoiceItem(${i},'description',this.value)"></td>
     <td><select class="inv-item-book" title="Which title this line bills for" aria-label="Title for this line" onchange="updateInvoiceItem(${i},'bookId',this.value)">${opts}</select></td>
     <td><input type="number" min="0" step="1" inputmode="numeric" aria-label="Quantity" value="${it.qty || 0}" oninput="updateInvoiceItem(${i},'qty',this.value)"></td>
     <td><input type="number" min="0" step="0.01" inputmode="decimal" aria-label="Unit price" value="${(Number(it.unitPrice) || 0).toFixed(2)}" oninput="updateInvoiceItem(${i},'unitPrice',this.value)"></td>
@@ -11564,8 +11564,6 @@ function renderInvoiceBooksHint() {
   }
   el.innerHTML = `Filed under <strong>${titles.map(escapeHtml).join('</strong>, <strong>')}</strong> — this invoice appears in each of those titles' Invoices lists, and is numbered for the business rather than one title.`;
 }
-
-export function escapeHTML(s) { return escapeHtml(s); }
 
 function onDiscountTypeChange() {
   // ⚡ Bolt Optimization: Calculate subtotal once upfront using imperative loop to avoid multiple reduce calls and array allocations
@@ -12056,7 +12054,7 @@ function renderInvoicePaperHTML(inv, { showChase = false } = {}) {
 
   const accent = book.accent || '#c8913a';
   const itemsHtml = (inv.items || []).map(it => `<tr>
-    <td>${escapeHTML(it.description || '—')}</td>
+    <td>${escapeHtml(it.description || '—')}</td>
     <td class="r">${(it.qty || 0)}</td>
     <td class="r">${fmt(it.unitPrice || 0, cur)}</td>
     <td class="r"><strong>${fmt((it.qty || 0) * (it.unitPrice || 0), cur)}</strong></td>
@@ -12081,14 +12079,14 @@ function renderInvoicePaperHTML(inv, { showChase = false } = {}) {
     if (!showChase) return '';
     if (inv.status === 'paid' || inv.status === 'cancelled') return '';
     if (chase.snoozedUntil && today() <= chase.snoozedUntil) {
-      return `<div class="inv-meta-sub no-print" style="margin-top:4px;">📅 Promised to pay by ${escapeHTML(fmtD(chase.snoozedUntil))}</div>`;
+      return `<div class="inv-meta-sub no-print" style="margin-top:4px;">📅 Promised to pay by ${escapeHtml(fmtD(chase.snoozedUntil))}</div>`;
     }
     if (chase.lastStatus === 'failed') {
       return `<div class="inv-meta-sub no-print" style="margin-top:4px;">⏰ The last reminder could not be sent</div>`;
     }
     if (!chase.count) return '';
     const when = chase.lastAt ? fmtD(new Date(chase.lastAt).toISOString().slice(0, 10)) : '';
-    return `<div class="inv-meta-sub no-print" style="margin-top:4px;">⏰ Reminded ${chase.count === 1 ? 'once' : `${chase.count} times`}${when ? `, last on ${escapeHTML(when)}` : ''}</div>`;
+    return `<div class="inv-meta-sub no-print" style="margin-top:4px;">⏰ Reminded ${chase.count === 1 ? 'once' : `${chase.count} times`}${when ? `, last on ${escapeHtml(when)}` : ''}</div>`;
   })();
   const divergedNote = inv.ledgerDivergedAt
     ? `<div class="inv-meta-sub" style="margin-top:6px;color:var(--red);font-weight:600;">⚠ ledger changed since invoiced — reopen to re-import amounts</div>`
@@ -12109,19 +12107,19 @@ function renderInvoicePaperHTML(inv, { showChase = false } = {}) {
 
   const payFallback = payUrl ? (payHref
     ? `
-    <p class="inv-pay-fallback">Pay online: <a href="${escapeHTML(payHref)}" target="_blank" rel="noopener">${escapeHTML(payUrl)}</a></p>`
+    <p class="inv-pay-fallback">Pay online: <a href="${escapeHtml(payHref)}" target="_blank" rel="noopener">${escapeHtml(payUrl)}</a></p>`
     : `
-    <p class="inv-pay-fallback">Send an Interac e-Transfer to: <strong>${escapeHTML(payUrl)}</strong></p>`) : '';
+    <p class="inv-pay-fallback">Send an Interac e-Transfer to: <strong>${escapeHtml(payUrl)}</strong></p>`) : '';
 
   const payBlock = payUrl ? `
-    <section class="inv-pay"${payHref ? ` data-pdf-link="${escapeHTML(payHref)}"` : ''} style="--book-accent:${accent};">
+    <section class="inv-pay"${payHref ? ` data-pdf-link="${escapeHtml(payHref)}"` : ''} style="--book-accent:${accent};">
       <div class="inv-pay-info">
         ${dynBadge}
         <h3>Pay this invoice</h3>
         <p>${payCopy}</p>
         ${payHref
-    ? `<a class="pay-btn" href="${escapeHTML(payHref)}" target="_blank" rel="noopener">Pay ${fmt(inv.total || 0, cur)} →</a>`
-    : `<p class="inv-pay-address">Send <strong>${fmt(inv.total || 0, cur)}</strong> by Interac e-Transfer to<br><strong>${escapeHTML(payUrl)}</strong></p>`}
+    ? `<a class="pay-btn" href="${escapeHtml(payHref)}" target="_blank" rel="noopener">Pay ${fmt(inv.total || 0, cur)} →</a>`
+    : `<p class="inv-pay-address">Send <strong>${fmt(inv.total || 0, cur)}</strong> by Interac e-Transfer to<br><strong>${escapeHtml(payUrl)}</strong></p>`}
         <div class="pay-methods">${payMethodsLabel}</div>
       </div>
       <div class="inv-qr"></div>
@@ -12131,18 +12129,18 @@ function renderInvoicePaperHTML(inv, { showChase = false } = {}) {
   const bankBlock = settings.bank ? `
     <div class="inv-notes-block">
       <h4>Bank transfer details</h4>
-      <div>${escapeHTML(settings.bank)}</div>
+      <div>${escapeHtml(settings.bank)}</div>
     </div>` : '';
 
   return `<div style="--book-accent:${accent};">
     <header class="inv-head">
       <div class="inv-brand">
-        <h1>${escapeHTML(settings.name || 'Lyricalmyrical Books')}</h1>
-        <div class="inv-addr">${escapeHTML(settings.addr || '')}${settings.email ? '\n' + escapeHTML(settings.email) : ''}${settings.web ? '\n' + escapeHTML(settings.web) : ''}${settings.vat ? '\nVAT/Tax ID: ' + escapeHTML(settings.vat) : ''}</div>
+        <h1>${escapeHtml(settings.name || 'Lyricalmyrical Books')}</h1>
+        <div class="inv-addr">${escapeHtml(settings.addr || '')}${settings.email ? '\n' + escapeHtml(settings.email) : ''}${settings.web ? '\n' + escapeHtml(settings.web) : ''}${settings.vat ? '\nVAT/Tax ID: ' + escapeHtml(settings.vat) : ''}</div>
       </div>
       <div class="inv-id">
         <div class="inv-word">Invoice</div>
-        <div class="inv-num">${escapeHTML(inv.num)}</div>
+        <div class="inv-num">${escapeHtml(inv.num)}</div>
         <div><span class="inv-status ${statusCls}">${statusLabel}</span></div>
       </div>
     </header>
@@ -12150,8 +12148,8 @@ function renderInvoicePaperHTML(inv, { showChase = false } = {}) {
     <section class="inv-meta-grid">
       <div>
         <label>Billed to</label>
-        <strong>${escapeHTML(inv.storeName || '—')}</strong>
-        <div class="inv-meta-sub">${[inv.storeContact, inv.storeEmail, inv.storePhone, inv.storeAddress, [inv.storeCity, inv.storeRegion, inv.storePostal].filter(Boolean).join(', '), inv.storeCountry].filter(Boolean).map(escapeHTML).join('\n')}</div>
+        <strong>${escapeHtml(inv.storeName || '—')}</strong>
+        <div class="inv-meta-sub">${[inv.storeContact, inv.storeEmail, inv.storePhone, inv.storeAddress, [inv.storeCity, inv.storeRegion, inv.storePostal].filter(Boolean).join(', '), inv.storeCountry].filter(Boolean).map(escapeHtml).join('\n')}</div>
       </div>
       <div>
         <label>Issue date</label>
@@ -12183,12 +12181,12 @@ function renderInvoicePaperHTML(inv, { showChase = false } = {}) {
     ${payBlock}
 
     <div class="inv-notes">
-      ${inv.notes ? `<div class="inv-notes-block"><h4>Notes</h4><div>${escapeHTML(inv.notes)}</div></div>` : ''}
-      ${inv.terms ? `<div class="inv-notes-block"><h4>Terms</h4><div>${escapeHTML(inv.terms)}</div></div>` : ''}
+      ${inv.notes ? `<div class="inv-notes-block"><h4>Notes</h4><div>${escapeHtml(inv.notes)}</div></div>` : ''}
+      ${inv.terms ? `<div class="inv-notes-block"><h4>Terms</h4><div>${escapeHtml(inv.terms)}</div></div>` : ''}
       ${bankBlock}
     </div>
 
-    <div class="inv-foot">${escapeHTML(settings.footer || 'Thank you for stocking our books.')}</div>
+    <div class="inv-foot">${escapeHtml(settings.footer || 'Thank you for stocking our books.')}</div>
   </div>`;
 }
 
@@ -12360,43 +12358,43 @@ function buildInvoiceEmailHTML(inv) {
   const cur = inv.currency || getBook().currency;
   const payUrl = effectivePaymentLink(inv);
   const accent = (BOOKS[activeBook] || getBook()).accent || '#c8913a';
-  const contact = escapeHTML(inv.storeContact || inv.storeName || 'there');
+  const contact = escapeHtml(inv.storeContact || inv.storeName || 'there');
   const items = (inv.items || []).map(it => `
     <tr>
-      <td style="padding:12px 10px;border-bottom:1px solid #f1eadc;color:#1a1814;">${escapeHTML(it.description || '—')}</td>
+      <td style="padding:12px 10px;border-bottom:1px solid #f1eadc;color:#1a1814;">${escapeHtml(it.description || '—')}</td>
       <td align="right" style="padding:12px 10px;border-bottom:1px solid #f1eadc;color:#1a1814;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${it.qty || 0}</td>
       <td align="right" style="padding:12px 10px;border-bottom:1px solid #f1eadc;color:#1a1814;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${fmt(it.unitPrice || 0, cur)}</td>
       <td align="right" style="padding:12px 10px;border-bottom:1px solid #f1eadc;color:#1a1814;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:700;">${fmt((it.qty || 0) * (it.unitPrice || 0), cur)}</td>
     </tr>`).join('');
   const billedTo = [inv.storeContact, inv.storeEmail, inv.storePhone, inv.storeAddress, [inv.storeCity, inv.storeRegion, inv.storePostal].filter(Boolean).join(', '), inv.storeCountry]
-    .filter(Boolean).map(escapeHTML).join('<br>');
+    .filter(Boolean).map(escapeHtml).join('<br>');
   const notes = [
-    inv.notes ? `<div style="margin-top:16px;"><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#6b6459;font-weight:700;margin-bottom:4px;">Notes</div><div style="white-space:pre-wrap;">${escapeHTML(inv.notes)}</div></div>` : '',
-    inv.terms ? `<div style="margin-top:16px;"><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#6b6459;font-weight:700;margin-bottom:4px;">Terms</div><div style="white-space:pre-wrap;">${escapeHTML(inv.terms)}</div></div>` : '',
+    inv.notes ? `<div style="margin-top:16px;"><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#6b6459;font-weight:700;margin-bottom:4px;">Notes</div><div style="white-space:pre-wrap;">${escapeHtml(inv.notes)}</div></div>` : '',
+    inv.terms ? `<div style="margin-top:16px;"><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#6b6459;font-weight:700;margin-bottom:4px;">Terms</div><div style="white-space:pre-wrap;">${escapeHtml(inv.terms)}</div></div>` : '',
   ].join('');
   return `
 <div style="margin:0;padding:0;background:#f7f2e9;color:#1a1814;font-family:Arial,Helvetica,sans-serif;">
   <div style="max-width:760px;margin:0 auto;padding:24px 14px;">
     <p style="font-size:16px;line-height:1.55;margin:0 0 16px;">Hi ${contact},</p>
-    <p style="font-size:15px;line-height:1.55;margin:0 0 22px;">Here is invoice <strong>${escapeHTML(inv.num)}</strong> for <strong>${fmt(inv.total || 0, cur)}</strong>. It is also ready to print or save as a PDF from the invoice screen.</p>
+    <p style="font-size:15px;line-height:1.55;margin:0 0 22px;">Here is invoice <strong>${escapeHtml(inv.num)}</strong> for <strong>${fmt(inv.total || 0, cur)}</strong>. It is also ready to print or save as a PDF from the invoice screen.</p>
     <div style="background:#ffffff;border:1px solid #eadfca;border-radius:12px;overflow:hidden;box-shadow:0 8px 28px rgba(14,12,10,.10);">
-      <div style="height:7px;background:${escapeHTML(accent)};"></div>
+      <div style="height:7px;background:${escapeHtml(accent)};"></div>
       <div style="padding:30px 34px;">
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-bottom:26px;">
           <tr>
             <td style="vertical-align:top;">
-              <div style="font-family:Georgia,'Times New Roman',serif;font-size:28px;font-weight:700;color:#0e0c0a;line-height:1.1;">${escapeHTML(settings.name || 'Lyricalmyrical Books')}</div>
-              <div style="font-size:12px;line-height:1.55;color:#756e64;margin-top:10px;white-space:pre-wrap;">${escapeHTML(settings.addr || '')}${settings.email ? '<br>' + escapeHTML(settings.email) : ''}${settings.web ? '<br>' + escapeHTML(settings.web) : ''}</div>
+              <div style="font-family:Georgia,'Times New Roman',serif;font-size:28px;font-weight:700;color:#0e0c0a;line-height:1.1;">${escapeHtml(settings.name || 'Lyricalmyrical Books')}</div>
+              <div style="font-size:12px;line-height:1.55;color:#756e64;margin-top:10px;white-space:pre-wrap;">${escapeHtml(settings.addr || '')}${settings.email ? '<br>' + escapeHtml(settings.email) : ''}${settings.web ? '<br>' + escapeHtml(settings.web) : ''}</div>
             </td>
             <td align="right" style="vertical-align:top;white-space:nowrap;">
-              <div style="font-family:Georgia,'Times New Roman',serif;font-size:22px;color:${escapeHTML(accent)};letter-spacing:.16em;text-transform:uppercase;font-weight:700;">Invoice</div>
-              <div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;font-weight:700;margin-top:8px;">${escapeHTML(inv.num)}</div>
+              <div style="font-family:Georgia,'Times New Roman',serif;font-size:22px;color:${escapeHtml(accent)};letter-spacing:.16em;text-transform:uppercase;font-weight:700;">Invoice</div>
+              <div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;font-weight:700;margin-top:8px;">${escapeHtml(inv.num)}</div>
             </td>
           </tr>
         </table>
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border-top:1px solid #eadfca;border-bottom:1px solid #eadfca;margin-bottom:22px;">
           <tr>
-            <td style="padding:16px 12px 16px 0;vertical-align:top;width:45%;"><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#6b6459;font-weight:700;margin-bottom:6px;">Billed to</div><div style="font-weight:700;">${escapeHTML(inv.storeName || '—')}</div><div style="font-size:12px;line-height:1.5;color:#756e64;margin-top:4px;">${billedTo}</div></td>
+            <td style="padding:16px 12px 16px 0;vertical-align:top;width:45%;"><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#6b6459;font-weight:700;margin-bottom:6px;">Billed to</div><div style="font-weight:700;">${escapeHtml(inv.storeName || '—')}</div><div style="font-size:12px;line-height:1.5;color:#756e64;margin-top:4px;">${billedTo}</div></td>
             <td style="padding:16px 12px;vertical-align:top;"><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#6b6459;font-weight:700;margin-bottom:6px;">Issue date</div><div style="font-weight:700;">${fmtD(inv.date)}</div>${inv.dueDate ? `<div style="font-size:12px;color:#756e64;margin-top:4px;">Due ${fmtD(inv.dueDate)}</div>` : ''}</td>
             <td align="right" style="padding:16px 0 16px 12px;vertical-align:top;"><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#6b6459;font-weight:700;margin-bottom:6px;">Amount due</div><div style="font-size:22px;font-weight:800;color:#0e0c0a;">${fmt(inv.total || 0, cur)}</div></td>
           </tr>
@@ -12415,13 +12413,13 @@ function buildInvoiceEmailHTML(inv) {
         ${payUrl ? `<div style="background:#faf6ec;border:1px solid #eadfca;border-radius:10px;padding:18px 20px;margin:16px 0 20px;"><div style="font-family:Georgia,'Times New Roman',serif;font-size:18px;font-weight:700;margin-bottom:6px;">Pay this invoice</div><div style="font-size:13px;line-height:1.5;color:#675f55;margin-bottom:14px;">${followableUrl(payUrl)
     ? `Pay <strong>${fmt(inv.total || 0, cur)}</strong> securely online${isDynamicStripeLink(inv) ? ' via Stripe Checkout' : ''}.`
     : `Pay <strong>${fmt(inv.total || 0, cur)}</strong> by Interac e-Transfer.`}</div>${followableUrl(payUrl)
-    ? `<a href="${escapeHTML(followableUrl(payUrl))}" style="display:inline-block;background:#0e0c0a;color:#f0c060;text-decoration:none;border-radius:999px;padding:11px 22px;font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;">Pay ${fmt(inv.total || 0, cur)} →</a>`
-    : `<div style="font-size:14px;line-height:1.5;color:#0e0c0a;">Send by Interac e-Transfer to <strong>${escapeHTML(payUrl)}</strong></div>`}<div style="font-size:11px;line-height:1.4;color:#6b6459;margin-top:10px;word-break:break-all;">${escapeHTML(payUrl)}</div></div>` : ''}
+    ? `<a href="${escapeHtml(followableUrl(payUrl))}" style="display:inline-block;background:#0e0c0a;color:#f0c060;text-decoration:none;border-radius:999px;padding:11px 22px;font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;">Pay ${fmt(inv.total || 0, cur)} →</a>`
+    : `<div style="font-size:14px;line-height:1.5;color:#0e0c0a;">Send by Interac e-Transfer to <strong>${escapeHtml(payUrl)}</strong></div>`}<div style="font-size:11px;line-height:1.4;color:#6b6459;margin-top:10px;word-break:break-all;">${escapeHtml(payUrl)}</div></div>` : ''}
         ${notes}
-        <div style="text-align:center;font-size:12px;color:#6b6459;margin-top:24px;font-style:italic;">${escapeHTML(settings.footer || 'Thank you for stocking our books.')}</div>
+        <div style="text-align:center;font-size:12px;color:#6b6459;margin-top:24px;font-style:italic;">${escapeHtml(settings.footer || 'Thank you for stocking our books.')}</div>
       </div>
     </div>
-    <p style="font-size:15px;line-height:1.55;margin:22px 0 0;">Thank you,<br>${escapeHTML(settings.name || 'Lyricalmyrical Books')}</p>
+    <p style="font-size:15px;line-height:1.55;margin:22px 0 0;">Thank you,<br>${escapeHtml(settings.name || 'Lyricalmyrical Books')}</p>
   </div>
 </div>`;
 }
@@ -12509,7 +12507,7 @@ function collectInvoicePaperCss() {
  */
 function qrLinkAttr(inv) {
   const url = pdfSafeLinkUrl(followableUrl(effectivePaymentLink(inv)));
-  return url ? ` data-pdf-link="${escapeHTML(url)}"` : '';
+  return url ? ` data-pdf-link="${escapeHtml(url)}"` : '';
 }
 
 function invoicePaperBodyWithQR(inv) {
@@ -12609,7 +12607,7 @@ function buildStandaloneInvoiceHTML(inv) {
     }
   `;
 
-  const head = `<meta charset="utf-8"><title>Invoice ${escapeHTML(inv.num || '')}</title>${fontLinks}<style>${css}</style>`;
+  const head = `<meta charset="utf-8"><title>Invoice ${escapeHtml(inv.num || '')}</title>${fontLinks}<style>${css}</style>`;
   const body = `<body><div class="invoice-paper">${bodyInner}</div></body>`;
   return `<!doctype html><html><head>${head}</head>${body}</html>`;
 }
@@ -24355,7 +24353,7 @@ function exposeLegacyInlineHandlers() {
     createStripePaymentLinkForInvoice, deactivateStripePaymentLink, invoicesVisibleHere,
     renderInvoices, openCreateInvoice, nextInvoiceNumber, onInvoiceStoreChange, getInvoiceCurrency,
     onInvoiceCurrencyChange, addInvoiceItem, removeInvoiceItem, updateInvoiceItem,
-    renderInvoiceItems, escapeHTML, recalcInvoiceTotals, prefillFromPendingSales, saveInvoice,
+    renderInvoiceItems, escapeHtml, recalcInvoiceTotals, prefillFromPendingSales, saveInvoice,
     onDiscountTypeChange,
     regenerateStripeLinkFromView, deleteInvoice, viewInvoice, effectivePaymentLink,
     isDynamicStripeLink, renderInvoicePaperHTML, editInvoiceFromView, markInvoicePaidFromView,
