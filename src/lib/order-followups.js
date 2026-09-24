@@ -9,6 +9,8 @@
 //
 // Pure: the caller passes ledger rows and the postage already matched to them.
 
+import { LOSS_MARGIN, money } from './shipping-price-check.js';
+
 const DAY = 86400000;
 
 function dayMs(value) {
@@ -100,15 +102,11 @@ export function postageReport(items = [], month = '') {
     postage += Number(item.postage) || 0;
     const g = groups.get(item.destination) || { destination: item.destination, orders: 0, losing: 0, loss: 0 };
     g.orders++;
-    if (gap > 0.5) { g.losing++; g.loss += gap; losing++; }
+    if (gap > LOSS_MARGIN) { g.losing++; g.loss += gap; losing++; }
     groups.set(item.destination, g);
   });
   const losers = [...groups.values()].filter(g => g.losing).sort((a, b) => b.loss - a.loss);
   return { month, orders: inMonth.length, losing, paid, postage, net: paid - postage, groups: losers };
-}
-
-function money(n) {
-  return `$${(Math.round(Math.abs(n) * 100) / 100).toFixed(2)}`;
 }
 
 function monthName(month) {
