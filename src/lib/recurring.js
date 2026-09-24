@@ -42,6 +42,8 @@
  * day moves earlier; see walkCharges.
  */
 
+import { roundCents } from './money.js';
+
 /** Supported billing cadences, in the order the editor lists them. */
 export const RECURRING_FREQUENCIES = [
   { id: 'monthly', months: 1, label: 'Monthly', short: 'Monthly', per: '/mo' },
@@ -445,10 +447,10 @@ export function summarizeRecurring(subs, rates = {}, base = 'CAD', now = new Dat
   // else held constant, so the two figures are comparable.
   if (out.upcomingChange) {
     const after = live.reduce((sum, l) => sum + monthlyEquivalentOn(l.sub, out.upcomingChange.date) * l.rate, 0);
-    out.monthlyBaseAfterChange = Math.round((after + Number.EPSILON) * 100) / 100;
+    out.monthlyBaseAfterChange = roundCents(after);
   }
-  out.monthlyBase = Math.round((out.monthlyBase + Number.EPSILON) * 100) / 100;
-  out.annualBase = Math.round((out.monthlyBase * 12 + Number.EPSILON) * 100) / 100;
+  out.monthlyBase = roundCents(out.monthlyBase);
+  out.annualBase = roundCents(out.monthlyBase * 12);
   return out;
 }
 
