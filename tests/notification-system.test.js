@@ -131,6 +131,22 @@ describe('what has been happening includes what the app did on its own', () => {
     ]));
   });
 
+  it('says when the tracking number came from Big Cartel', () => {
+    const texts = feed([{
+      chan: 'Website', num: '#AB-2', qty: 1, price: 30, date: '2026-09-10', shipName: 'Lutz',
+      shipped: true, shippedDate: '2026-09-11', trackingNumber: '7023', trackingSource: 'bigcartel',
+    }]).map(e => e.text);
+    expect(texts).toContain('Sent Lutz’s order (#AB-2) — tracking from Big Cartel');
+  });
+
+  it('marks a label bought on the Canada Post website', () => {
+    const events = buildActivityFeed([book], { hound: { hist: [] } }, {
+      limit: 0,
+      businessExpenses: [{ id: 1, ref: 'canadapost:7023', postageSource: 'canadapost', shippingOrderNumber: '#AB-2', desc: 'Expedited Parcel', amount: 18.5, currency: 'CAD', date: '2026-09-11' }],
+    });
+    expect(events.map(e => e.text)).toContain('Shipping label for #AB-2 (bought on the Canada Post website) — Expedited Parcel');
+  });
+
   it('shows a reversed sale, with the reason', () => {
     const [ev] = feed([{ chan: 'Website', num: '#AB-1', qty: 2, price: 30, date: '2026-09-10', voided: true, voidedAt: Date.parse('2026-09-12T10:00:00'), voidedReason: 'Refunded in Stripe' }]);
     expect(ev.kind).toBe('reversal');

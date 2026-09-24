@@ -78,6 +78,7 @@ import {
   getBigCartelIncluded,
   getBigCartelOrders,
   hydrateShippingDestinationPhone,
+  orderNotifyEnabled,
   refreshBigCartelOrdersIfDue,
 } from './bigcartel.js';
 import { renderTaxCenter, saveTaxCenter, switchTaxCenterSubTab } from './taxcentre.js';
@@ -1613,6 +1614,8 @@ async function applyBigCartelTracking(orders = [], included = []) {
   const touchedBooks = new Set();
   changes.forEach(({ bookId, entry, shipment }) => {
     entry.trackingNumber = shipment.tracking;
+    // Lets Recent Activity say where the number came from.
+    entry.trackingSource = 'bigcartel';
     if (shipment.trackingUrl && !entry.trackingUrl) entry.trackingUrl = shipment.trackingUrl;
     if (!entry.shipped) {
       entry.shipped = true;
@@ -1662,16 +1665,33 @@ async function applyBigCartelTracking(orders = [], included = []) {
   if (changes.length) {
     renderCustomShippoDestPicker();
     const n = changes.length;
-    pushAppAlert({
-      id: 'bigcartel-tracking',
-      icon: '📦',
-      title: `${n} order${n === 1 ? '' : 's'} marked shipped from Big Cartel`,
-      detail: linked
-        ? `Tracking added, and ${linked} postage cost${linked === 1 ? '' : 's'} matched to ${linked === 1 ? 'its order' : 'their orders'}.`
-        : 'Tracking added. The postage cost is added once Canada Post reports the label.',
-    });
+    const title = `${n} order${n === 1 ? '' : 's'} marked shipped from Big Cartel`;
+    const detail = linked
+      ? `Tracking added, and ${linked} postage cost${linked === 1 ? '' : 's'} matched to ${linked === 1 ? 'its order' : 'their orders'}.`
+      : 'Tracking added. The postage cost is added once Canada Post reports the label.';
+    pushAppAlert({ id: 'bigcartel-tracking', icon: '📦', title, detail });
+    notifyDevice(title, detail, 'lm-bc-tracking');
   }
   return { stamped: changes.length, linked };
+}
+
+/**
+ * The same news as a phone or desktop notification, for when the app is in a
+ * background tab. Uses the switch that already exists for new-order
+ * notifications on the Big Cartel tab, so there is one setting, not two.
+ * Best-effort: a browser that blocks notifications changes nothing here.
+ */
+function notifyDevice(title, body, tag) {
+  if (!orderNotifyEnabled()) return;
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+  try {
+    const n = new Notification(title, { body, icon: '/pwa-192x192.png', tag });
+    n.onclick = () => {
+      try { window.focus(); } catch (_) { /* not focusable from here in every browser */ }
+      switchTab('shipping');
+      n.close();
+    };
+  } catch (_) { /* unsupported context (e.g. iOS Safari outside an installed PWA) */ }
 }
 
 /** The card announcing labels bought elsewhere that filed themselves. */
@@ -1682,6 +1702,7 @@ function showPostageSweepAlert({ filed, linked, blank, needsReview, source = 'Ca
   if (blank > 0) parts.push(`${blank} ${blank === 1 ? 'needs' : 'need'} an amount`);
   else if (needsReview > 0) parts.push(`${needsReview} ${needsReview === 1 ? 'needs' : 'need'} you`);
 
+  notifyDevice(`${labels} added from ${source}`, parts.length ? `Bought outside the app — ${parts.join(', ')}.` : 'Bought outside the app and added to your books.', 'lm-postage-sweep');
   pushAppAlert({
     // Keyed per source, so a Canada Post sweep and an email sweep finding
     // labels minutes apart do not overwrite each other's news.

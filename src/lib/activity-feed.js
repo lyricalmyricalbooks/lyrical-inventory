@@ -161,7 +161,9 @@ function eventsForBook(book, state) {
     if (h.shipped && h.shippedDate) {
       const sent = event({
         book, date: h.shippedDate, tie: h.id, kind: 'shipped', icon: '📦',
-        text: `Sent ${who ? `${who}’s` : 'an'} order${order}${h.trackingNumber ? ' — tracking added' : ''}`,
+        text: `Sent ${who ? `${who}’s` : 'an'} order${order}${h.trackingNumber
+          ? (h.trackingSource === 'bigcartel' ? ' — tracking from Big Cartel' : ' — tracking added')
+          : ''}`,
       });
       sent.key = `hist-shipped:${rowKey}`;
       out.push(sent);
@@ -341,7 +343,7 @@ function businessExpenseEvents(expenses) {
       kind: isLabel ? 'postage' : 'receipt',
       icon: isLabel ? '🏷️' : '🧾',
       text: isLabel
-        ? `Shipping label${e.shippingOrderNumber ? ` for ${e.shippingOrderNumber}` : ''} — ${String(e.desc || 'postage').trim()}`
+        ? `Shipping label${e.shippingOrderNumber ? ` for ${e.shippingOrderNumber}` : ''}${e.postageSource === 'canadapost' ? ' (bought on the Canada Post website)' : ''} — ${String(e.desc || 'postage').trim()}`
         : `Receipt filed — ${String(e.vendor || e.desc || 'an expense').trim()}${e.cat ? ` (${e.cat})` : ''}`,
       amount: amount ? `−${fmt(Math.abs(amount), cur)}` : null,
       tone: amount ? 'neg' : null,
