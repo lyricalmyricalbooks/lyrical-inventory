@@ -9724,9 +9724,7 @@ function markArtistTransferReceived(transferId) {
   s.artistTransfers = s.artistTransfers.filter(x => x.id !== transferId);
   renderHist(); updateDash(); renderArtistTransfers(); saveState(activeBook);
   const nativeCurT = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
-  let cadEquivT = '';
-  if (nativeCurT === 'CAD') cadEquivT = t.total;
-  else if (t.payment && t.payment.currency === 'CAD' && t.payment.amount) cadEquivT = t.payment.amount;
+  const cadEquivT = cadEquivalentForSale({ nativeCurrency: nativeCurT, totalNative: t.total, payment: t.payment });
   syncToSheets({
     type: 'order', book: book.title, date: today(), num: t.num, chan: t.chan, qty: t.qty, price: t.price, total: t.total, stockAfter: s.stock, notes: (t.notes || '') + ' [ARTIST TRANSFER RECEIVED]',
     sheetsId: t.sheetsId || (h && h.sheetsId) || '',
@@ -9791,9 +9789,7 @@ async function settleArtistTransferKeepShare(transferId) {
   s.artistTransfers = s.artistTransfers.filter(x => x.id !== transferId);
   renderHist(); updateDash(); renderArtistTransfers(); await saveState(activeBook);
   const nativeCurS = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
-  let cadEquivS = '';
-  if (nativeCurS === 'CAD') cadEquivS = t.total;
-  else if (t.payment && t.payment.currency === 'CAD' && t.payment.amount) cadEquivS = t.payment.amount;
+  const cadEquivS = cadEquivalentForSale({ nativeCurrency: nativeCurS, totalNative: t.total, payment: t.payment });
   syncToSheets({
     type: 'order', book: book.title, date: today(), num: t.num, chan: t.chan, qty: t.qty, price: t.price, total: t.total, stockAfter: s.stock, notes: (t.notes || '') + ' [ARTIST KEPT SHARE]',
     sheetsId: t.sheetsId || (h && h.sheetsId) || '',
@@ -9845,9 +9841,7 @@ async function settleArtistTransferKeepAll(transferId) {
   s.artistTransfers = s.artistTransfers.filter(x => x.id !== transferId);
   renderHist(); updateDash(); renderArtistTransfers(); await saveState(activeBook);
   const nativeCurA = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
-  let cadEquivA = '';
-  if (nativeCurA === 'CAD') cadEquivA = t.total;
-  else if (t.payment && t.payment.currency === 'CAD' && t.payment.amount) cadEquivA = t.payment.amount;
+  const cadEquivA = cadEquivalentForSale({ nativeCurrency: nativeCurA, totalNative: t.total, payment: t.payment });
   syncToSheets({
     type: 'order', book: book.title, date: today(), num: t.num, chan: t.chan, qty: t.qty, price: t.price, total: t.total, stockAfter: s.stock, notes: (t.notes || '') + ' [ARTIST KEPT ALL — PUBLISHER CUT FORGIVEN]',
     sheetsId: t.sheetsId || (h && h.sheetsId) || '',
