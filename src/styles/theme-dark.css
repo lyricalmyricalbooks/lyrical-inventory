@@ -675,6 +675,31 @@
   border-color: var(--on-paper);
 }
 .theme-dark .btn.danger-btn:hover { background: var(--sticker-red-hover); }
+/* Buttons whose own, more specific rule paints a translucent tint instead of
+   paper. The .btn scope below still hands them the paper inks, so over the
+   black page they read dark red on charcoal (~2.3:1). Give them the paper
+   face every other button has; the coloured border keeps them recognisable.
+   Guarded by tests/dark-mode-button-surfaces.test.js. */
+.theme-dark .btn.gold.outline,
+.theme-dark .oc-layout .oc-util-actions .btn.gold {
+  background: var(--paper);
+  color: var(--gold-text);
+}
+.theme-dark .btn.gold.outline:hover,
+.theme-dark .oc-layout .oc-util-actions .btn.gold:hover {
+  background: var(--paper2);
+  color: var(--gold-text);
+}
+.theme-dark .oc-layout .btn.danger-btn,
+.theme-dark .oc-layout .oc-util-actions .btn.danger-btn {
+  background: var(--paper);
+  color: var(--red);
+}
+.theme-dark .oc-layout .btn.danger-btn:hover,
+.theme-dark .oc-layout .oc-util-actions .btn.danger-btn:hover {
+  background: var(--paper2);
+  color: var(--red);
+}
 
 /* Solid stickers, not a tinted wash — a translucent pill over the void
    just goes murky again, the same failure this whole pass exists to fix.
