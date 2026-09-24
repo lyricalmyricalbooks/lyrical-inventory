@@ -19,15 +19,7 @@
   ],
   "themes": {
     "light": {
-      "accepted": [
-        {
-          "key": "#c5a880::#ffffff",
-          "textColor": "#c5a880",
-          "bgColor": "(inherited)",
-          "ratio": 2.26,
-          "count": 1
-        }
-      ]
+      "accepted": []
     },
     "dark": {
       "accepted": []
