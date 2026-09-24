@@ -10517,24 +10517,39 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   flex-direction: column;
   height: 100%;
 }
+/* Shippo's rate list shares one anatomy with the Canada Post list beside it
+   (.cp-rate-row): the same wrap and gap, the same spring lift with a hard
+   offset shadow on hover, the price in plain ink rather than green (the
+   coverage tag under it is what says good or bad), and the same full-size
+   Buy Label button. It used to be a squeezed 10px button, a green price on
+   every row, and a hover that eased linearly with no shadow. */
 .rate-card {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: var(--cream);
+  flex-wrap: wrap;
+  gap: 14px;
+  background: var(--surface-raised);
   border:var(--stroke-hair) solid var(--border);
   border-radius: var(--r2);
   padding: 12px 16px;
-  transition: transform 0.15s, border-color 0.15s;
+  transition: transform var(--dur-fast) var(--ease-spring), background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-spring);
 }
 .rate-card:hover {
-  border-color: var(--gold);
-  transform: translateY(-1px);
+  background: var(--surface-sunken);
+  border-color: var(--border-strong);
+  transform: translateY(-1.5px);
+  box-shadow: var(--elev-2);
+}
+@media (prefers-reduced-motion: reduce) {
+  .rate-card:hover { transform: none; }
 }
 .rate-info {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex: 1;
+  min-width: 180px;
 }
 .rate-logo {
   width: 32px;
@@ -10580,20 +10595,21 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 4px;
+  gap: 6px;
 }
 .rate-price {
   font-family:var(--font-mono);
   font-size:var(--text-lg);
   font-weight: 700;
-  color: var(--green);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
 }
 .rate-badges {
   display: flex;
   gap: 4px;
 }
 .rate-badge {
-  font-size: 8px;
+  font-size: var(--text-3xs);
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -10607,6 +10623,10 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .rate-badge.fastest {
   background: var(--blue-bg);
   color: var(--blue);
+}
+.rate-badge.canada-post {
+  background: var(--red-bg);
+  color: var(--red);
 }
 
 
@@ -11192,7 +11212,8 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   transform: translateY(-1.5px);
   box-shadow: var(--elev-2);
 }
-.cp-buy-btn {
+.cp-buy-btn,
+.rate-buy-btn {
   min-height: 44px;
   min-width: 100px;
   padding: 10px 18px;
@@ -11207,12 +11228,14 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   cursor: pointer;
   transition: transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast) var(--ease-spring), filter var(--dur-fast) var(--ease-standard);
 }
-.cp-buy-btn:hover {
+.cp-buy-btn:hover,
+.rate-buy-btn:hover {
   transform: translateY(-2px);
   box-shadow: var(--elev-hover);
   filter: brightness(1.05);
 }
-.cp-buy-btn:active {
+.cp-buy-btn:active,
+.rate-buy-btn:active {
   transform: scale(0.975);
 }
 

@@ -17,7 +17,7 @@
 // All amounts are in one currency (the callers only pass Canadian-dollar
 // orders), and all rounding is to the cent.
 
-const LOSS_MARGIN = 0.5; // under 50 cents is noise, not a pricing problem
+export const LOSS_MARGIN = 0.5; // under 50 cents is noise, not a pricing problem
 
 function cents(n) {
   return Math.round((Number(n) || 0) * 100) / 100;
