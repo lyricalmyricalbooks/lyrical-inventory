@@ -1131,6 +1131,14 @@
       <span class="today-card-name">To-do</span>
       <span class="today-card-sub">What needs you</span>
     </button>
+    <!-- Opens the phone's own camera; the photo is scanned and lands in a
+         filled-in expense form to check and save. -->
+    <button type="button" class="today-card today-card-wide" onclick="snapReceipt()">
+      <span class="today-card-ic" aria-hidden="true">🧾</span>
+      <span class="today-card-name">Snap a receipt</span>
+      <span class="today-card-sub">Photo → AI reads it → you check and save</span>
+    </button>
+    <input type="file" id="snap-receipt-input" accept="image/*" capture="environment" hidden onchange="snapReceiptChosen(this)">
   </div>
   <div class="today-label">Everything else</div>
   <div class="today-rows">

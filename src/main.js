@@ -17729,6 +17729,40 @@ async function scanReceiptWithAI() {
 // receipts folder. Best-effort: returns a local:// path on success, otherwise
 // null so the caller keeps the original URL. May fail on CORS or no folder.
 
+// ── Snap a receipt (phones) ────────────────────────────────────────────────
+// One tap from Today: the phone's own camera, then the same AI scan and
+// expense form as the Tax Centre, so nothing is saved until you've checked it.
+window.snapReceipt = function () {
+  $('snap-receipt-input')?.click();
+};
+
+window.snapReceiptChosen = async function (input) {
+  const file = input?.files?.[0];
+  if (input) input.value = ''; // the same photo can be picked again
+  if (!file) return;
+  switchTab('taxcenter');
+  switchTaxCenterSubTab('ledger');
+  const fileInput = $('tc-exp-file');
+  if (!fileInput) return;
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  fileInput.files = dt.files;
+  fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+  $('tc-exp-file-group')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  if (navigator.onLine === false) {
+    showToast('📷 Photo attached. No signal, so fill it in by hand or tap AI Scan once you\'re back online.', 'warn', 6000);
+    return;
+  }
+  const hasKey = !!(TAX_CENTER.settings?.geminiKey || TAX_CENTER.settings?.openRouterKey?.trim());
+  if (!hasKey) {
+    showToast('📷 Photo attached. To have it read automatically, add an AI key in Tax Centre → Integrations.', 'warn', 6000);
+    return;
+  }
+  await scanReceiptWithAI();
+  // The scan's own message says what it read and what to check.
+  $('tc-exp-desc')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+};
+
 async function submitTaxExpense() {
   const desc = ($('tc-exp-desc').value || '').trim();
   const cat = $('tc-exp-cat').value;

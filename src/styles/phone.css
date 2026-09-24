@@ -255,3 +255,4 @@
 @keyframes fm-undo-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 @media (max-width: 768px) { .fm-more-link { display: block; width: 100%; min-height: 44px; margin-bottom: var(--space-4); } }
 @media (max-width: 768px) { #tab-pos .pos-pay-opt[data-pay="Stripe QR"] { grid-column: 1 / -1; } }
+.today-card-wide { grid-column: 1 / -1; }

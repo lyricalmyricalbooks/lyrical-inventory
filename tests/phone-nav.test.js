@@ -76,9 +76,9 @@ test('Home on the bottom bar opens the Today page', () => {
   expect(mainJs).toMatch(/if \(name === 'today'\) renderTodayHub\(\);/);
 });
 
-test('Today puts the four everyday jobs first, each a real button', () => {
+test('Today puts the four everyday jobs first, then Snap a receipt, each a real button', () => {
   const cards = [...document.querySelectorAll('#tab-today .today-card')];
-  expect(cards.map((c) => c.querySelector('.today-card-name').textContent)).toEqual(['Sell', 'Add sale', 'Orders', 'To-do']);
+  expect(cards.map((c) => c.querySelector('.today-card-name').textContent)).toEqual(['Sell', 'Add sale', 'Orders', 'To-do', 'Snap a receipt']);
   expect(cards.every((c) => c.tagName === 'BUTTON')).toBe(true);
   // The To-do count rides the same badge class the sidebar uses, so it stays live.
   expect(cards[3].querySelector('.todo-nav-badge')).not.toBeNull();
