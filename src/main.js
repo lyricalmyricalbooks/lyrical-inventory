@@ -9672,6 +9672,8 @@ window.approveSubmission = async function (type, subKey) {
       if (isDirectToArtistSale(raw)) {
         recordOrderPendingTransfer(raw.num, raw.chan, raw.qty, raw.price, raw.notes, raw.payment);
         pendingTransfer = true;
+        const newest = getState().artistTransfers.at(-1);
+        if (newest) mintArtistTransferPayLink(activeBook, newest.id, { quiet: true });
       } else {
         recordOrder(raw.num, raw.chan, raw.qty, raw.price, raw.notes, raw.payment);
       }
@@ -9739,6 +9741,39 @@ function recordOrderPendingTransfer(num, chan, qty, price, notes, payment = null
     convertedTotal: cadEquiv
   });
 }
+
+// Publisher-side only: make a Stripe link for exactly what the author owes on
+// one transfer and keep its URL on the record, so the author's "Send" button
+// opens Stripe with the amount already filled in. The Stripe key never leaves
+// the publisher's device — authors only ever see the finished link.
+async function mintArtistTransferPayLink(bookId, transferId, { quiet = false } = {}) {
+  if (!isPublisherSession() || !getReconStripeKey()) return null;
+  const book = BOOKS[bookId];
+  const s = states[bookId];
+  const t = s && (s.artistTransfers || []).find(x => x.id === transferId);
+  if (!book || !t) return null;
+  const amt = transferAmount(t);
+  if (!(amt > 0)) return null;
+  if (t.payUrl && Number(t.payAmount) === amt) return t.payUrl;
+  try {
+    const url = await createStripePaymentLinkForAmount({
+      amountMajor: amt,
+      currencyCode: bookCurrencyCode(book),
+      description: `${book.title} — author transfer for sale ${t.num || ''}`.trim(),
+      metadata: { kind: 'artist_transfer', transfer_id: t.id, transfer_book: bookId, transfer_num: t.num || '' },
+    });
+    t.payUrl = url;
+    t.payAmount = amt;
+    saveState(bookId);
+    if (bookId === activeBook) renderArtistTransfers();
+    if (!quiet) showToast(`✓ Stripe link ready — the author's Send button now fills in ${fmt(amt, book.currency)}`);
+    return url;
+  } catch (e) {
+    if (!quiet) showToast(`Couldn't make the Stripe link: ${e.message}`, 'err', 5000);
+    return null;
+  }
+}
+window.mintArtistTransferPayLink = (transferId) => mintArtistTransferPayLink(activeBook, transferId);
 
 function markArtistTransferReceived(transferId) {
   const s = getState(), book = getBook();
@@ -9900,6 +9935,12 @@ async function settleArtistTransferKeepAll(transferId) {
   showToast(`✓ Settled — artist keeps full ${fmt(t.total, book.currency)}; publisher cut forgiven`);
 }
 
+// The Stripe link minted for this transfer, if it still matches the amount.
+function transferPayUrl(t) {
+  const amt = transferAmount(t);
+  return t && t.payUrl && amt != null && Number(t.payAmount) === amt ? t.payUrl : '';
+}
+
 function renderArtistTransfers() {
   const s = getState(), book = getBook(), cur = book.currency;
   let transfers = [...(s.artistTransfers || [])].map(t => ({ ...t, status: 'approved' }));
@@ -9933,9 +9974,27 @@ function renderArtistTransfers() {
       $('apb-detail').textContent = `${transfers.length} transfer${transfers.length > 1 ? 's' : ''} from sales collected on your end (incl. pending)` +
         (missing ? ` · ${missing} without an amount yet — your publisher will confirm ${missing > 1 ? 'them' : 'it'}` : '');
       const btn = $('apb-pay-btn');
-      if (payLink) {
+      btn.onclick = null;
+      const payable = transfers.filter(t => t.status !== 'pending' && transferAmount(t) > 0);
+      const readyLinks = payable.filter(t => transferPayUrl(t));
+      if (payable.length === 1 && readyLinks.length === 1) {
+        // One sale to pay and Stripe already knows the amount: go straight there.
+        const t = payable[0];
+        btn.href = transferPayUrl(t);
+        btn.target = '_blank';
+        btn.textContent = `Send ${fmt(transferAmount(t), cur)} →`;
+        $('apb-link-hint').textContent = 'Opens Stripe with the amount already filled in';
+      } else if (payable.length > 1) {
+        // Each approved sale has its own exact-amount link on its card below.
+        btn.href = '#artist-transfers-sect';
+        btn.removeAttribute('target');
+        btn.onclick = e => { e.preventDefault(); $('artist-transfers-sect')?.scrollIntoView({ behavior: 'smooth' }); };
+        btn.textContent = 'Pay each sale below ↓';
+        $('apb-link-hint').textContent = 'Each sale has its own Send button with the amount filled in';
+      } else if (payLink) {
         const fullLink = payLink.startsWith('http') ? payLink : 'https://' + payLink;
         btn.href = fullLink;
+        btn.target = '_blank';
         btn.textContent = 'Send payment →';
         $('apb-link-hint').textContent = 'Opens payment link in a new tab';
       } else {
@@ -9990,8 +10049,12 @@ function renderArtistTransfers() {
           <p class="author-transfer-next">We don't know the price of this sale. Please tell your publisher how much the buyer paid.</p></div>
         </div>`;
       }
-      const steps = fullPayLink
-        ? `<li>Tap <strong>Send ${escapeHtml(fmt(amt, cur))}</strong>. The payment page opens.</li><li>Pay exactly <strong>${escapeHtml(fmt(amt, cur))}</strong>.</li><li>That's it. Your publisher confirms it, and this card goes away.</li>`
+      const stripeUrl = transferPayUrl(t);
+      const cardLink = stripeUrl || fullPayLink;
+      const steps = stripeUrl
+        ? `<li>Tap <strong>Send ${escapeHtml(fmt(amt, cur))}</strong>. The payment page opens with the amount already filled in.</li><li>Pay with your card, Apple Pay or Google Pay.</li><li>That's it. Your publisher confirms it, and this card goes away.</li>`
+        : fullPayLink
+        ? `<li>Tap <strong>Send ${escapeHtml(fmt(amt, cur))}</strong>. The payment page opens.</li><li>Type exactly <strong>${escapeHtml(fmt(amt, cur))}</strong> in the amount box.</li><li>That's it. Your publisher confirms it, and this card goes away.</li>`
         : `<li>Send <strong>${escapeHtml(fmt(amt, cur))}</strong> to your publisher, the way you usually pay them.</li><li>That's it. Your publisher confirms it, and this card goes away.</li>`;
       return `<div class="pending-card author-transfer-card">
         <div>
@@ -9999,7 +10062,7 @@ function renderArtistTransfers() {
           <p class="author-transfer-what">${escapeHtml(what)} Please send the money on to your publisher.</p>
           <ol class="author-transfer-steps">${steps}</ol>
         </div>
-        ${fullPayLink ? `<div class="pending-card-actions"><a href="${escapeHtml(fullPayLink)}" target="_blank" rel="noopener" class="btn gold lg" style="text-decoration:none;">Send ${escapeHtml(fmt(amt, cur))} →</a></div>` : ''}
+        ${cardLink ? `<div class="pending-card-actions"><a href="${escapeHtml(cardLink)}" target="_blank" rel="noopener" class="btn gold lg" style="text-decoration:none;">Send ${escapeHtml(fmt(amt, cur))} →</a></div>` : ''}
       </div>`;
     }).join('');
     return;
@@ -10020,7 +10083,10 @@ function renderArtistTransfers() {
         ${payHtml}
         ${t.status === 'pending'
       ? `<button class="btn sm outline" disabled>Approve sale first</button>`
-      : `<button class="btn sm outline" onclick="settleArtistTransferKeepShare(${t.id})" title="Artist keeps their share; only your cut is forwarded">Artist keeps share</button>
+      : `${transferPayUrl(t)
+          ? `<span class="pill green" title="The author's Send button opens Stripe with this amount filled in">Stripe link ready</span>`
+          : (getReconStripeKey() && transferAmount(t) > 0 ? `<button class="btn sm outline" onclick="mintArtistTransferPayLink(${t.id})" title="Make a Stripe link for exactly this amount, so the author doesn't have to type it">Make Stripe link</button>` : '')}
+             <button class="btn sm outline" onclick="settleArtistTransferKeepShare(${t.id})" title="Artist keeps their share; only your cut is forwarded">Artist keeps share</button>
              <button class="btn sm outline" onclick="settleArtistTransferKeepAll(${t.id})" title="Artist keeps everything — publisher forgives their cut">Artist keeps all</button>
              <button class="btn gold" onclick="markArtistTransferReceived(${t.id})" title="Artist forwarded the full amount to you">✓ Mark transfer received</button>`}
       </div>
@@ -21664,6 +21730,12 @@ export function classifyStripePayment(p) {
   if (mem.dismissed[p.id]) return { kind: 'dismissed' };
   if (mem.recorded[p.id] || recordedIds.has(p.id)) return { kind: 'recorded', bookId: mem.recorded[p.id]?.bookId };
 
+  // An author forwarding cash they collected for an already-recorded sale.
+  // Never a new book sale — it only settles an artistTransfers row.
+  if (p.metadata?.kind === 'artist_transfer') {
+    return { kind: 'artist_transfer', bookId: p.metadata.transfer_book || null, ref: p.metadata.transfer_num || '' };
+  }
+
   // Our own SKU-tagged links (book payment links / invoices) carry book_id.
   const metaBookId = p.metadata?.book_id && BOOKS[p.metadata.book_id] ? p.metadata.book_id : null;
 
@@ -21954,6 +22026,7 @@ export function renderReconcile() {
     const c = classifyStripePayment(p);
     if (c.kind === 'dismissed') { matched.push({ p, c, label: 'Dismissed', tone: 'gray', note: 'Marked "not inventory".' }); continue; }
     if (c.kind === 'recorded') { matched.push({ p, c, label: 'Logged', tone: 'green', note: c.bookId && BOOKS[c.bookId] ? `Recorded against ${BOOKS[c.bookId].title}.` : 'Recorded in inventory.' }); continue; }
+    if (c.kind === 'artist_transfer') { matched.push({ p, c, label: 'Author transfer', tone: 'green', note: `An author sent you money for sale ${c.ref || ''} they collected. Mark it received on that book's dashboard — it is not a new sale.`.replace(/\s+/g, ' ') }); continue; }
     if (c.kind === 'likely') { matched.push({ p, c, label: 'Likely logged', tone: 'gray', note: 'Matches a sale you already recorded (same amount & date).' }); continue; }
     if (p.refunded) { matched.push({ p, c, label: 'Refunded', tone: 'gray', note: 'Refunded in Stripe — no stock to deduct.' }); continue; }
     if (c.kind === 'invoice' && c.inv && c.inv.status === 'paid') { matched.push({ p, c, label: 'Invoice paid', tone: 'green', note: `${c.ref} already marked paid.` }); continue; }
