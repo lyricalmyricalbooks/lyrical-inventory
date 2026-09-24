@@ -956,12 +956,19 @@ function getBigCartelIncluded() {
   return cachedBigCartelIncluded();
 }
 
+// The live orders once the Big Cartel tab has fetched them, else the copy saved
+// from the last fetch — so order lookups still work offline or before the tab
+// has been opened this session.
+function getBigCartelOrders() {
+  if (typeof bigCartelData !== 'undefined' && bigCartelData && bigCartelData.orders && bigCartelData.orders.length > 0) {
+    return bigCartelData.orders;
+  }
+  return loadCachedBigCartelOrders()?.orders || [];
+}
+
 function getCachedBigCartelOrder(orderId) {
   const key = normalizeShippingOrderNumber(orderId) || String(orderId || '');
-  const orders = (typeof bigCartelData !== 'undefined' && bigCartelData && bigCartelData.orders && bigCartelData.orders.length > 0)
-    ? bigCartelData.orders
-    : (loadCachedBigCartelOrders()?.orders || []);
-  return orders.find(o => String(o.id) === String(orderId)
+  return getBigCartelOrders().find(o => String(o.id) === String(orderId)
     || normalizeShippingOrderNumber(o.id) === key) || null;
 }
 
@@ -1143,10 +1150,7 @@ async function recordBigCartelOrderIfMissing(order, plan) {
 }
 
 function findBigCartelOrderById(orderId) {
-  const orders = (bigCartelData && bigCartelData.orders && bigCartelData.orders.length > 0)
-    ? bigCartelData.orders
-    : (loadCachedBigCartelOrders()?.orders || []);
-  return orders.find(o => String(o.id) === String(orderId)) || null;
+  return getBigCartelOrders().find(o => String(o.id) === String(orderId)) || null;
 }
 
 /**
@@ -2748,6 +2752,7 @@ export {
   cacheBigCartelOrders,
   loadCachedBigCartelOrders,
   getBigCartelIncluded,
+  getBigCartelOrders,
   getCachedBigCartelOrder,
   renderBigCartelOrders,
   prefillShippingFromBigCartelOrder,
