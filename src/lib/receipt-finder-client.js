@@ -1,6 +1,7 @@
 // Gmail reading + the receipt-AI call, kept free of DOM so both can be tested
 // directly. The AI half talks to the publisher's Apps Script deployment; the
 // Gmail half talks to Google with a read-only token held by the browser.
+import { receiptFileForAi } from './receipt-finder.js';
 
 // Exactly what the Apps Script accepts. Sending anything else makes the script
 // reject the whole email ("Unsupported attachment"), so an email carrying one
@@ -274,9 +275,34 @@ export function parseReceiptJson(text) {
 // When a PDF or photo is attached, that file is the invoice and the email
 // around it is a covering note plus a footer. Sending all of it again as text
 // doubles what each email costs to read for nothing.
-const BODY_LIMIT = 24000, BODY_LIMIT_WITH_FILE = 6000;
+const BODY_LIMIT = 24000, BODY_LIMIT_WITH_FILE = 4000;
+
+// A marketing receipt's plain-text part spells out every tracking link in full
+// — often 200+ characters each, dozens per email — and closes with the same
+// legal footer every time. None of it names an amount, a date or a vendor, all
+// of it is paid for as AI input. Only the AI's copy is trimmed; the saved email
+// the publisher reviews keeps everything.
+const LINK = /\b(?:https?:\/\/|www\.)[^\s<>"'()[\]]+|<mailto:[^\s<>]+>/gi;
+const BOILERPLATE_LINE = /unsubscribe|privacy (?:policy|notice)|all rights reserved|view (?:this email )?in (?:your|a) browser|manage (?:your )?(?:email )?preferences|this (?:email|message) was sent to|you(?:'|’)re receiving this|you are receiving this|update your preferences|terms of (?:service|use)/i;
+
+export function receiptTextForAi(body) {
+  const lines = String(body || '').replace(LINK, '').split('\n');
+  const kept = [];
+  for (const raw of lines) {
+    const line = raw.replace(/[ \t]+/g, ' ').replace(/^[ <>()[\]|:-]+$/, '').trim();
+    if (!line) continue;
+    // A footer line is short prose; a line that also carries a figure could be
+    // a total that happens to share the line, so it stays.
+    if (line.length < 300 && BOILERPLATE_LINE.test(line) && !/\d[.,]\d{2}\b/.test(line)) continue;
+    // HTML receipts repeat a line back-to-back when a layout table is nested.
+    if (kept[kept.length - 1] === line) continue;
+    kept.push(line);
+  }
+  return kept.join('\n');
+}
+
 export function receiptBodyForAi(body, hasFile) {
-  const text = String(body || '');
+  const text = receiptTextForAi(body);
   const limit = hasFile ? BODY_LIMIT_WITH_FILE : BODY_LIMIT;
   if (text.length <= limit) return text;
   const head = Math.round(limit * 0.75);
@@ -287,7 +313,16 @@ export async function extractFoundReceipts({ endpoint, idToken, email, signal, f
   if (!readAi && !FINDER_ENDPOINT_PATTERN.test(endpoint || '')) {
     throw new Error('Connect your Google Sheet script before scanning for receipts');
   }
-  const usable = email.fileParts.filter(file => file.base64 && ATTACHMENT_MIMES.has(file.mime)).slice(0, MAX_AI_FILES);
+  // The same file attached twice — a common forwarding accident — is read once,
+  // and a small logo picture not at all (see receiptFileForAi).
+  const seen = new Set();
+  const usable = email.fileParts.filter(file => {
+    if (!file.base64 || !ATTACHMENT_MIMES.has(file.mime) || !receiptFileForAi(file)) return false;
+    const key = `${file.name}:${file.base64.length}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, MAX_AI_FILES);
   const files = usable.map(file => ({ inlineData: { mimeType: file.mime, data: toStandardBase64(file.base64) } }));
   const body = receiptRequestBody({ idToken, email: {
     subject: email.subject, from: email.from, date: email.date,

@@ -1,12 +1,12 @@
 import { escapeHtml as esc } from '../lib/html.js';
-import { receiptQuery, normalizeFoundReceipt, receiptProblems, receiptReviewStatus, receiptMoney, receiptWorthReading, RECEIPT_STATUSES } from '../lib/receipt-finder.js';
+import { receiptQuery, normalizeFoundReceipt, receiptProblems, receiptReviewStatus, receiptMoney, receiptSkipReason, RECEIPT_STATUSES } from '../lib/receipt-finder.js';
 import { createReceiptFinderClient, extractFoundReceipts, decodeGmailBase64, checkReceiptFinderService, testReceiptAiService, describeAiTest, systemicReceiptFailure, receiptDailySchedule, describeDailySweep } from '../lib/receipt-finder-client.js';
 import { createReceiptFinderStore } from '../lib/receipt-finder-store.js';
 import { flushReceiptOutbox } from '../lib/receipt-finder-outbox.js';
 import { downloadBlob } from '../lib/download.js';
 import '../styles/receipt-finder.css';
 
-const LABELS = { all: 'All', ready: 'Ready', review: 'Needs review', duplicate: 'Duplicates', queued: 'Pending import', imported: 'Imported', ignored: 'Dismissed' };
+const LABELS = { all: 'All', ready: 'Ready', review: 'Needs review', duplicate: 'Duplicates', queued: 'Waiting to file', imported: 'Filed', ignored: 'Dismissed' };
 const emptyState = () => ({ drafts: [], emails: {}, scans: {}, endpoint: '', account: '', lastScan: '', pageToken: '', lastQuery: '', lastEndpoint: '', lastHalt: '' });
 
 // Emails are read a few at a time rather than one after another. The AI call
@@ -23,7 +23,11 @@ const READER_VERSION = 2;
 const RENDER_INTERVAL_MS = 200;
 
 let deps, host, state = emptyState(), uid = '', accessToken = '', tokenExpiresAt = 0;
-let controller = null, busy = false, flushing = false, scanTotal = 0, scanDone = 0, scanSkipped = 0, scanCached = 0;
+let controller = null, busy = false, flushing = false, scanTotal = 0, scanDone = 0, scanSkipped = 0, scanCached = 0, scanFiled = 0;
+// Message ids this scan must not pay to read: already filed as an expense by
+// any route (this finder, the no-AI Gmail import, the Gmail add-on), or
+// already holding a found receipt. Built once per scan, not once per email.
+let knownMessages = null;
 let filter = 'all', resultQuery = '', saveChain = Promise.resolve(), saveScheduled = false;
 let initialized = false, restore = Promise.resolve(), serviceReadyFor = '', serviceProblem = null;
 let statusCache = null, cachedExpenses = null, renderTimer = 0, haltReason = '', dailySweep = null;
@@ -118,10 +122,26 @@ function connectionLabel() {
   return 'Disconnect Gmail';
 }
 
+// "Last checked Sep 22, 2:27 PM" reads at a glance; the full locale string with
+// seconds did not.
+function lastScanText() {
+  const when = new Date(state.lastScan);
+  if (!Number.isFinite(when.getTime())) return '';
+  return `Last checked ${when.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}.`;
+}
+
 function renderConnection() {
+  const bar = host?.querySelector('[data-conn-bar]');
+  if (bar) {
+    bar.dataset.state = tokenLive() ? 'on' : state.account ? 'lapsed' : 'off';
+    bar.querySelector('[data-conn-title]').textContent = tokenLive()
+      ? `Connected to ${state.account}`
+      : state.account ? 'Gmail needs a quick reconnect' : 'Gmail is not connected';
+  }
   const pill = document.getElementById('email-account-pill');
   if (pill) {
-    pill.textContent = tokenLive() ? `● ${state.account}` : '○ Gmail not connected';
+    // Says the same thing as the connection bar below it, never something else.
+    pill.textContent = tokenLive() ? `● ${state.account}` : state.account ? '○ Reconnect Gmail' : '○ Gmail not connected';
     pill.className = `pill ${tokenLive() ? 'green' : 'gray'} email-connected-pill`;
   }
   const button = host?.querySelector('[data-action="connect"]');
@@ -133,10 +153,10 @@ function renderConnection() {
   const note = host?.querySelector('[data-conn-note]');
   if (note) {
     note.textContent = tokenLive()
-      ? `Read-only access to ${state.account}. Stays connected until ${new Date(tokenExpiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.`
+      ? `Read-only, until ${new Date(tokenExpiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}. The app can never send, delete or change mail.`
       : state.account
-        ? `Gmail access for ${state.account} has run out. Reconnecting takes one click — Google will not ask you to approve it again.`
-        : 'Gmail is read-only: the app can read messages to find receipts and can never send, delete or change anything.';
+        ? `Access for ${state.account} has run out. One click reconnects — Google will not ask you to approve it again.`
+        : 'Read-only: the app looks through your mail for receipts and can never send, delete or change anything.';
   }
 }
 
@@ -203,47 +223,51 @@ async function mountReceiptFinder(element, dependencies) {
   host = element;
   host.removeEventListener('click', onClick);
   host.removeEventListener('change', onChange);
-  host.removeEventListener('keydown', onKeyDown);
   const from = new Date(); from.setDate(from.getDate() - 30);
   host.innerHTML = `
-    <div class="finder-head">
-      <div class="finder-head-text">
-        <h4 class="finder-subhead">Scan your mailbox for receipts and line items</h4>
-        <p class="finder-subcopy">Search Gmail, check extracted details, and file directly into Business Expenses. Read-only access.</p>
+    <div class="finder-conn-bar" data-conn-bar>
+      <span class="finder-conn-dot" aria-hidden="true"></span>
+      <div class="finder-conn-text">
+        <strong class="finder-conn-title" data-conn-title>Gmail</strong>
+        <span class="finder-conn-note" data-conn-note></span>
       </div>
-      <div class="finder-conn">
-        <button type="button" class="btn sm gold finder-conn-btn" data-action="connect">Connect Gmail</button>
-      </div>
+      <button type="button" class="btn sm gold finder-conn-btn" data-action="connect">Connect Gmail</button>
     </div>
-    <p class="finder-conn-note" data-conn-note></p>
     <div class="finder-gate" data-finder-gate hidden></div>
     <section class="finder-search" aria-label="Search your mailbox">
-      <div class="finder-filters">
-        <div class="form-group finder-query"><label for="finder-query">Keywords or Gmail search</label>
-          <input type="search" id="finder-query" placeholder="Leave blank for all receipts, or name a shop"></div>
-        <div class="form-group finder-sender"><label for="finder-sender">Sender / vendor email</label>
-          <input type="text" id="finder-sender" inputmode="email" placeholder="supplier@example.com"></div>
-        <div class="form-group finder-date-from"><label for="finder-from">From date</label>
-          <input type="date" id="finder-from" value="${from.toISOString().slice(0, 10)}"></div>
-        <div class="form-group finder-date-to"><label for="finder-to">Through date</label>
-          <input type="date" id="finder-to"></div>
+      <div class="finder-searchbar">
+        <label class="finder-query-wrap" for="finder-query">
+          <span class="finder-query-icon" aria-hidden="true">🔍</span>
+          <span class="sr-only">Shop, supplier or keyword</span>
+          <input type="search" id="finder-query" autocomplete="off" placeholder="Shop, supplier or keyword — leave blank for every receipt">
+        </label>
+        <button type="button" class="btn gold finder-scan-btn" data-action="scan">Find receipts</button>
+        <button type="button" class="btn finder-stop-btn" data-action="cancel" hidden>Stop</button>
       </div>
       <div class="finder-search-tools">
-        <div class="finder-presets" role="group" aria-label="Quick filters">
-          <button type="button" class="filter-chip" data-preset="7">🕒 Past 7 days</button>
-          <button type="button" class="filter-chip" data-preset="30">📅 Past 30 days</button>
-          <button type="button" class="filter-chip" data-preset="90">🗓️ Past 3 months</button>
-          <span class="finder-presets-sep" aria-hidden="true"></span>
-          <button type="button" class="filter-chip" data-toggle="attachments" aria-pressed="false">📎 With attachments</button>
-          <button type="button" class="filter-chip" data-toggle="invoices" aria-pressed="false">🧾 Invoices &amp; bills</button>
-          <button type="button" class="filter-chip" data-toggle="shipping" aria-pressed="false">📦 Shipping costs</button>
+        <div class="finder-period" role="group" aria-label="How far back to look">
+          <button type="button" class="finder-period-btn" data-preset="7" aria-pressed="false">7 days</button>
+          <button type="button" class="finder-period-btn" data-preset="30" aria-pressed="true">30 days</button>
+          <button type="button" class="finder-period-btn" data-preset="90" aria-pressed="false">3 months</button>
+          <button type="button" class="finder-period-btn" data-preset="custom" aria-pressed="false">Pick dates</button>
         </div>
-        <div class="finder-run">
-          <button type="button" class="btn gold lg" data-action="scan">Find invoices &amp; receipts</button>
-          <button type="button" class="btn" data-action="cancel" hidden>Stop scan</button>
-          <span class="finder-run-hint">Reads up to 25 messages at a time.</span>
+        <div class="finder-presets" role="group" aria-label="Narrow the search">
+          <button type="button" class="filter-chip" data-toggle="attachments" aria-pressed="false"><span aria-hidden="true">📎</span> Has a PDF or photo</button>
+          <button type="button" class="filter-chip" data-toggle="invoices" aria-pressed="false"><span aria-hidden="true">🧾</span> Invoices &amp; bills</button>
+          <button type="button" class="filter-chip" data-toggle="shipping" aria-pressed="false"><span aria-hidden="true">📦</span> Shipping costs</button>
         </div>
       </div>
+      <details class="finder-more" data-more-filters>
+        <summary>Sender and exact dates</summary>
+        <div class="finder-filters">
+          <div class="form-group finder-sender"><label for="finder-sender">Only from this sender</label>
+            <input type="text" id="finder-sender" inputmode="email" autocomplete="off" placeholder="supplier@example.com"></div>
+          <div class="form-group finder-date-from"><label for="finder-from">From</label>
+            <input type="date" id="finder-from" value="${from.toISOString().slice(0, 10)}"></div>
+          <div class="form-group finder-date-to"><label for="finder-to">Through</label>
+            <input type="date" id="finder-to"></div>
+        </div>
+      </details>
       <div class="finder-auto">
         <label class="finder-select"><input type="checkbox" data-daily-toggle> Find receipts automatically, every morning</label>
         <span class="finder-auto-note" data-daily-note>Checking…</span>
@@ -252,32 +276,36 @@ async function mountReceiptFinder(element, dependencies) {
         <div class="finder-progress-track"><div class="finder-progress-fill" data-progress-fill style="width:0%"></div></div>
         <span class="finder-progress-text" data-progress-text></span>
       </div>
-      <p data-finder-status role="status" aria-live="polite">${state.lastScan ? `Last scan: ${esc(new Date(state.lastScan).toLocaleString())}` : 'Pick a period, then scan. Nothing is filed until you approve it.'}</p>
+      <p class="finder-status" data-finder-status role="status" aria-live="polite">${state.lastScan ? esc(lastScanText()) : 'Pick a period, then find receipts. It reads 25 emails at a time, and nothing is filed until you approve it.'}</p>
     </section>
     <div data-finder-alert></div>
     <div data-finder-errors></div>
-    <div data-finder-summary class="finder-summary"></div>
-    <div class="finder-toolbar" data-finder-tabs role="group" aria-label="Filter receipt status"></div>
-    <div class="finder-listbar" data-finder-listbar>
-      <label class="finder-select"><input type="checkbox" data-select-all> Select every ready receipt below</label>
-      <input type="search" class="ledger-filter-input" data-result-search aria-label="Search found receipts" placeholder="Vendor, invoice number or description">
-      <button type="button" class="btn" data-action="retry">Retry pending imports</button>
+    <div class="finder-results-head" data-finder-results-head>
+      <div class="finder-tabs" data-finder-tabs role="group" aria-label="Show receipts by status"></div>
+      <div class="finder-listbar" data-finder-listbar>
+        <label class="finder-select"><input type="checkbox" data-select-all> Select all ready</label>
+        <label class="finder-result-search"><span class="sr-only">Search found receipts</span>
+          <input type="search" class="ledger-filter-input" data-result-search placeholder="Filter by vendor, invoice number or description"></label>
+        <button type="button" class="btn sm" data-action="retry">Retry pending imports</button>
+      </div>
     </div>
-    <div data-finder-list></div>
-    <div class="finder-actionbar">
-      <button type="button" class="btn" data-action="next" hidden>Scan next 25 emails</button>
+    <div class="finder-list" data-finder-list></div>
+    <div class="finder-actionbar" data-finder-actionbar>
+      <button type="button" class="btn" data-action="next" hidden>Check the next 25 emails</button>
       <span data-selected-count class="finder-count"></span>
-      <button type="button" class="btn gold" data-action="import">Import selected</button>
+      <button type="button" class="btn gold" data-action="import">File selected</button>
     </div>`;
   host.addEventListener('click', onClick);
   host.addEventListener('change', onChange);
-  host.addEventListener('keydown', onKeyDown);
   host.querySelector('[data-result-search]').addEventListener('input', event => {
     resultQuery = event.target.value.toLowerCase(); render();
   });
-  host.querySelector('#finder-query').addEventListener('keydown', event => {
+  // Enter in any search field runs the search, as it would anywhere else.
+  host.querySelectorAll('#finder-query, #finder-sender').forEach(input => input.addEventListener('keydown', event => {
     if (event.key === 'Enter') { event.preventDefault(); scan(false).catch(report); }
-  });
+  }));
+  // Typing an exact date means the quick period no longer describes the search.
+  host.querySelectorAll('#finder-from, #finder-to').forEach(input => input.addEventListener('input', () => markPeriod('custom')));
   render();
 }
 
@@ -460,22 +488,14 @@ function render() {
     const counts = Object.fromEntries(RECEIPT_STATUSES.map(status => [status, 0]));
     state.drafts.forEach(draft => { counts.all++; counts[statusOf(draft)]++; });
     renderAlert(counts);
-    host.querySelector('[data-finder-summary]').innerHTML = [
-      ['ready', '✓', 'Ready to import', 'Checked and good to file', true],
-      ['review', '👀', 'Needs your review', 'Missing or uncertain details', false],
-      ['imported', '📁', 'Filed in expenses', 'Already in Business Expenses', false],
-    ].map(([key, icon, label, sub, lead]) => `<div class="finder-stat${lead ? ' is-lead' : ''}${counts[key] ? '' : ' is-zero'} tone-${key}${filter === key ? ' is-active-filter' : ''}" data-status="${key}" role="button" tabindex="0" title="Filter by ${label}">
-        <div class="finder-stat-icon" aria-hidden="true">${icon}</div>
-        <div class="finder-stat-body"><span class="finder-stat-label">${label}</span>
-          <strong class="finder-stat-val">${counts[key]}</strong>
-          <span class="finder-stat-sub">${sub}</span></div></div>`).join('');
-    // Seven chips reading "0" was most of the toolbar. Only statuses with
-    // something in them are offered, plus All and whichever one is selected.
-    const chips = RECEIPT_STATUSES.filter(status => status === 'all' || status === filter || counts[status]);
-    host.querySelector('[data-finder-tabs]').hidden = !counts.all;
-    host.querySelector('[data-finder-listbar]').hidden = !counts.all;
+    // One row of status tabs replaces the three big count tiles that used to
+    // sit above a second row of chips doing the same filtering. Ready and
+    // Needs review are the two piles the publisher works through, so they are
+    // always offered; the rest appear only once something is in them.
+    const chips = RECEIPT_STATUSES.filter(status => ['all', 'ready', 'review'].includes(status) || status === filter || counts[status]);
+    host.querySelector('[data-finder-results-head]').hidden = !counts.all;
     host.querySelector('.finder-listbar [data-action="retry"]').hidden = !counts.queued;
-    host.querySelector('[data-finder-tabs]').innerHTML = chips.map(status => `<button type="button" class="filter-chip${filter === status ? ' active' : ''}" data-status="${status}" aria-pressed="${filter === status}">${LABELS[status]} <span class="mono-num">${counts[status]}</span></button>`).join('');
+    host.querySelector('[data-finder-tabs]').innerHTML = chips.map(status => `<button type="button" class="finder-tab tone-${status}${filter === status ? ' active' : ''}${counts[status] ? '' : ' is-zero'}" data-status="${status}" aria-pressed="${filter === status}">${LABELS[status]} <span class="finder-tab-count">${counts[status]}</span></button>`).join('');
     const drafts = visibleDrafts();
     const openIds = new Set(Array.from(host.querySelectorAll('details[data-draft][open]'), el => el.dataset.draft));
     host.querySelector('[data-finder-list]').innerHTML = drafts.length
@@ -488,7 +508,12 @@ function render() {
     all.indeterminate = ready.some(draft => draft.selected) && !all.checked;
     all.disabled = ready.length === 0;
     const selected = state.drafts.filter(draft => draft.selected && statusOf(draft) === 'ready').length;
-    host.querySelector('[data-selected-count]').textContent = selected ? `${selected} selected` : 'Nothing selected yet';
+    host.querySelector('[data-selected-count]').textContent = selected
+      ? `${selected} ready to file`
+      : counts.ready ? 'Tick the receipts you want to file' : 'Nothing is ready to file yet';
+    // The bar only earns its place when there is something to file or more
+    // mail to check; with neither it was a disabled button under an empty list.
+    host.querySelector('[data-finder-actionbar]').hidden = !counts.ready && !counts.queued && !state.pageToken;
     host.querySelector('[data-action="import"]').disabled = !selected || busy;
     host.querySelector('[data-action="scan"]').disabled = busy;
     host.querySelector('[data-action="cancel"]').hidden = !busy;
@@ -520,7 +545,7 @@ function renderDraft(draft, open) {
   const problems = receiptProblems(draft);
   const skipped = (source?.fileParts || []).filter(file => file.skipped);
   return `<details class="finder-draft is-${status}" data-draft="${esc(draft.id)}" ${open ? 'open' : ''}>
-    <summary><span class="finder-vendor">${esc(draft.vendor || 'Vendor needs review')}<small>${esc(draft.reference || draft.description || 'Receipt details')}</small></span>
+    <summary><span class="finder-vendor">${esc(draft.vendor || 'Vendor needs review')}<small>${esc(draft.reference || draft.description || 'Receipt details')}${draft.attachments?.length ? `<span class="finder-att" title="Attachments kept with this receipt"> · 📎 ${draft.attachments.length}</span>` : ''}</small></span>
       <span class="finder-money">${draft.amount === null ? '—' : esc(`${draft.currency || '?'} ${draft.amount.toFixed(2)}`)}</span>
       <span class="pill ${status === 'ready' || status === 'imported' ? 'green' : status === 'review' || status === 'duplicate' ? 'amber' : 'gray'}">${LABELS[status]}</span>
       <span class="finder-date">${esc(draft.date || 'Date unknown')}</span>
@@ -595,33 +620,28 @@ async function onChange(event) {
   } catch (error) { report(error); }
 }
 
-function applyPreset(days) {
-  const date = new Date(); date.setDate(date.getDate() - Number(days));
+function markPeriod(preset) {
+  host.querySelectorAll('.finder-period [data-preset]').forEach(button => {
+    button.setAttribute('aria-pressed', String(button.dataset.preset === preset));
+  });
+}
+
+function applyPreset(preset) {
+  markPeriod(preset);
+  if (preset === 'custom') {
+    // The exact dates live in the "Sender and exact dates" drawer; picking
+    // them opens it and puts the cursor where the typing starts.
+    const more = host.querySelector('[data-more-filters]');
+    more.open = true;
+    host.querySelector('#finder-from').focus();
+    return;
+  }
+  const date = new Date(); date.setDate(date.getDate() - Number(preset));
   host.querySelector('#finder-from').value = date.toISOString().slice(0, 10);
   host.querySelector('#finder-to').value = '';
 }
 
-async function onKeyDown(event) {
-  if (event.key === 'Enter' || event.key === ' ') {
-    const stat = event.target.closest('.finder-stat[data-status]');
-    if (stat) {
-      event.preventDefault();
-      filter = stat.dataset.status;
-      render();
-    }
-  }
-}
-
 async function onClick(event) {
-  const statCard = event.target.closest('.finder-stat[data-status]');
-  if (statCard) {
-    try {
-      if (!active()) throw new Error('Publisher access required');
-      filter = statCard.dataset.status;
-      render();
-      return;
-    } catch (error) { report(error); return; }
-  }
   const button = event.target.closest('button');
   if (!button) return;
   try {
@@ -632,7 +652,6 @@ async function onClick(event) {
       // The widen-the-search button inside an empty result set is only useful
       // if it actually runs the wider search.
       if (button.closest('.empty-state')) { await scan(false); return; }
-      host.querySelectorAll('[data-preset]').forEach(chip => chip.classList.toggle('active', chip === button));
       return;
     }
     if (button.dataset.toggle) {
@@ -870,15 +889,19 @@ async function readCandidate(id, signal, endpoint) {
   // but it still counts towards this scan's progress, or the bar stalls.
   const prior = state.scans[key];
   if (prior?.done && (prior.count > 0 || prior.reader === READER_VERSION)) { scanDone++; scanCached++; scheduleRender(); return; }
+  // Deliberately not recorded as scanned: if that expense is later deleted,
+  // the next scan should find the receipt again.
+  if (knownMessages?.has(key)) { scanDone++; scanFiled++; scheduleRender(); return; }
   let email = state.emails[key];
   try {
     if (!email) email = await client.message(id, account, signal);
     if (signal.aborted || !active() || owner !== uid) throw new DOMException('Stopped', 'AbortError');
     // No amount in the text and nothing attached: it cannot be a receipt, so it
     // is not worth an AI read. Most of a broad search is mail like this.
-    if (!receiptWorthReading(email)) {
+    const skipReason = receiptSkipReason(email);
+    if (skipReason) {
       dropEmail(key);
-      state.scans[key] = { done: true, subject: email.subject, count: 0, skipped: 'no-amount', reader: READER_VERSION };
+      state.scans[key] = { done: true, subject: email.subject, count: 0, skipped: skipReason, reader: READER_VERSION };
       scanSkipped++;
       await persist();
       scanDone++; scheduleRender();
@@ -926,6 +949,15 @@ async function readCandidate(id, signal, endpoint) {
   scheduleRender();
 }
 
+function buildKnownMessages() {
+  const account = state.account, known = new Set();
+  for (const expense of deps.expenses() || []) {
+    if (expense?.emailMsgId && (!expense.emailAccount || expense.emailAccount === account)) known.add(`${account}:${expense.emailMsgId}`);
+  }
+  for (const draft of state.drafts) if (draft.account === account) known.add(`${account}:${draft.messageId}`);
+  return known;
+}
+
 // Runs `worker` over `items` a few at a time. One rejection (only an abort can
 // reach here — readCandidate records its own failures) stops the batch without
 // leaving the other runners' rejections unhandled.
@@ -948,11 +980,12 @@ async function scan(nextPage) {
   if (value('finder-from') && value('finder-to') && value('finder-from') > value('finder-to')) throw new Error('From date must be before the end date');
   const pressed = key => host.querySelector(`[data-toggle="${key}"]`).getAttribute('aria-pressed') === 'true';
   const query = nextPage ? state.lastQuery : receiptQuery({ query: value('finder-query'), after: value('finder-from'), before: value('finder-to'),
-    sender: value('finder-sender'), attachments: pressed('attachments'), category: pressed('shipping') ? 'shipping' : pressed('invoices') ? 'invoices' : '' });
+    sender: value('finder-sender'), attachments: pressed('attachments'), categories: ['invoices', 'shipping'].filter(pressed) });
   // Claimed before the capability check, which is a network round trip: a
   // second click during it would otherwise start a second scan.
   busy = true; controller = new AbortController(); const signal = controller.signal;
-  scanTotal = 0; scanDone = 0; scanSkipped = 0; scanCached = 0; haltReason = '';
+  scanTotal = 0; scanDone = 0; scanSkipped = 0; scanCached = 0; scanFiled = 0; haltReason = '';
+  knownMessages = buildKnownMessages();
   const before = state.drafts.length;
   const failedBefore = Object.values(state.scans).filter(item => item.error).length;
   render();
@@ -978,10 +1011,11 @@ async function scan(nextPage) {
     const failed = Object.values(state.scans).filter(item => item.error).length - failedBefore;
     announce([
       found ? `Found ${found} receipt${found === 1 ? '' : 's'} in ${messages.length} emails.` : `Checked ${messages.length} emails — none of them held a new receipt.`,
-      scanSkipped ? `${scanSkipped} had no amount or attachment, so no AI was spent on ${scanSkipped === 1 ? 'it' : 'them'}.` : '',
+      scanFiled ? `${scanFiled} ${scanFiled === 1 ? 'was' : 'were'} already in your expenses.` : '',
+      scanSkipped ? `${scanSkipped} ${scanSkipped === 1 ? 'was a delivery note or had' : 'were delivery notes or had'} no amount, so no AI was spent on ${scanSkipped === 1 ? 'it' : 'them'}.` : '',
       scanCached ? `${scanCached} ${scanCached === 1 ? 'was' : 'were'} already checked in an earlier scan.` : '',
       failed > 0 ? `${failed} could not be read — the reasons are listed above.` : '',
-      state.pageToken ? 'There are more emails to check — use “Scan next 25 emails”.' : '',
+      state.pageToken ? 'There are more emails to check — use “Check the next 25 emails”.' : '',
     ].filter(Boolean).join(' '));
   } catch (error) {
     if (error.name === 'AbortError') {
@@ -990,7 +1024,7 @@ async function scan(nextPage) {
         ? `Scan stopped after the first failure, so nothing more was spent on it. ${haltReason}`
         : 'Scan stopped. Everything already read has been saved; scan again to carry on.');
     } else throw error;
-  } finally { busy = false; controller = null; scanTotal = 0; scanDone = 0; render(); }
+  } finally { busy = false; controller = null; knownMessages = null; scanTotal = 0; scanDone = 0; render(); }
 }
 
 // All the failures in one pass, a few at a time like a scan — not one scan per

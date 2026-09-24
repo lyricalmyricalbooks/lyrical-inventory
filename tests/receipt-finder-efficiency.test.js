@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
-import { receiptWorthReading, mergeFinderSnapshot } from '../src/lib/receipt-finder.js';
-import { compactEmailText, emailHtmlText, gmailMessage, parseReceiptJson, receiptBodyForAi, systemicReceiptFailure,
+import { receiptWorthReading, receiptSkipReason, mergeFinderSnapshot } from '../src/lib/receipt-finder.js';
+import { compactEmailText, emailHtmlText, gmailMessage, parseReceiptJson, receiptBodyForAi, receiptTextForAi, extractFoundReceipts, systemicReceiptFailure,
   createReceiptFinderClient } from '../src/lib/receipt-finder-client.js';
 
 const b64 = bytes => btoa(String.fromCharCode(...bytes)).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
@@ -42,7 +42,51 @@ describe('reading email text cheaply', () => {
   });
 });
 
+describe('trimming what the AI is paid to read', () => {
+  it('drops tracking links, footer boilerplate and repeated lines, but keeps amounts', () => {
+    const body = [
+      'Thanks for your order',
+      'View this email in your browser: https://click.shop.example/ls/click?upn=' + 'x'.repeat(300),
+      'Subtotal $10.00', 'Subtotal $10.00', 'Tax $1.30',
+      'Total $11.30 https://track.example/abc',
+      'Unsubscribe | Privacy policy | Manage preferences',
+      '© 2026 Shop Inc. All rights reserved.',
+    ].join('\n');
+    const text = receiptTextForAi(body);
+    expect(text).toBe('Thanks for your order\nSubtotal $10.00\nTax $1.30\nTotal $11.30');
+    expect(receiptBodyForAi(body, false)).toBe(text);
+  });
+
+  it('keeps a footer-looking line that also carries a figure', () => {
+    expect(receiptTextForAi('Amount paid $12.50 — see our privacy policy')).toContain('$12.50');
+  });
+
+  it('does not send a small logo picture or the same file twice to the AI', async () => {
+    const readAi = vi.fn(async () => ({ text: '{"receipts":[]}' }));
+    const pdf = { name: 'invoice.pdf', mime: 'application/pdf', size: 90000, base64: 'QUJD' };
+    await extractFoundReceipts({ readAi, email: { subject: 'Invoice', from: 'a', date: '', body: 'See attached.', fileParts: [
+      pdf, { ...pdf },
+      { name: 'logo.png', mime: 'image/png', size: 4000, base64: 'QUJD' },
+      { name: 'receipt-photo.jpg', mime: 'image/jpeg', size: 400000, base64: 'REVG' },
+    ] } });
+    const sent = readAi.mock.calls[0][0].filter(part => part.inlineData).map(part => part.inlineData.mimeType);
+    expect(sent).toEqual(['application/pdf', 'image/jpeg']);
+  });
+});
+
 describe('deciding what is worth an AI read', () => {
+  it('treats a lone small logo picture as nothing attached', () => {
+    expect(receiptWorthReading({ subject: 'Hello', body: 'Thanks', fileParts: [{ name: 'logo.png', mime: 'image/png', size: 3000 }] })).toBe(false);
+    expect(receiptWorthReading({ subject: 'Hello', body: 'Thanks', fileParts: [{ name: 'scan.png', mime: 'image/png', size: 300000 }] })).toBe(true);
+  });
+
+  it('skips delivery and account notes unless a document is attached', () => {
+    expect(receiptSkipReason({ subject: 'Your order has shipped', body: 'Order total $42.00', fileParts: [] })).toBe('notification');
+    expect(receiptSkipReason({ subject: 'Rate your recent purchase', body: 'You paid $42.00', fileParts: [] })).toBe('notification');
+    expect(receiptSkipReason({ subject: 'Your order has shipped', body: '', fileParts: [{ name: 'invoice.pdf', mime: 'application/pdf', size: 50000 }] })).toBe('');
+    expect(receiptSkipReason({ subject: 'Your receipt from Shop', body: 'Total $42.00', fileParts: [] })).toBe('');
+  });
+
   it('skips mail with no amount and nothing attached', () => {
     expect(receiptWorthReading({ subject: 'Your parcel shipped', body: 'Track it here', fileParts: [] })).toBe(false);
     expect(receiptWorthReading({ subject: 'Order #4412 confirmed', body: 'Thanks!', fileParts: [] })).toBe(false);
