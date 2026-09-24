@@ -374,3 +374,97 @@
   }
   .fm-ccy-rates[hidden] { display: none; }
 }
+
+/* Phone workspace: keep the newer Fair Mode and native receipt capture,
+   with one shared header and predictable destinations across every page. */
+#phone-account-tools:empty, .phone-sell-head, .phone-eyebrow { display: none; }
+.phone-order-details > summary { display: none; }
+.phone-order-details > .phone-order-contact { display: block; }
+@media (max-width: 768px) {
+  .pub-shell .app-header {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: var(--space-1) var(--space-2); padding: var(--space-3) var(--space-4);
+  }
+  .pub-shell .header-brand { display: flex; grid-row: 1; grid-column: 1; padding: 0; min-width: 0; }
+  .pub-shell .header-brand .mark, .pub-shell .header-tag { display: none; }
+  .pub-shell .header-wordmark { font-size: var(--text-base); letter-spacing: -.02em; white-space: normal; line-height: 1.2; }
+  .pub-shell #theme-toggle-btn { grid-row: 1; grid-column: 2; width: 44px; height: 44px; }
+  .pub-shell #hmenu-account { grid-row: 1; grid-column: 3; }
+  .pub-shell .acct-trigger { min-width: 44px; min-height: 44px; }
+  .pub-shell .kpi-cluster { display: none; }
+  .pub-shell .app-header #book-switcher-wrap { grid-row: 2; grid-column: 1 / -1; display: block; width: 100%; }
+  .pub-shell #book-dropdown-btn { min-height: 44px; border-radius: var(--r2); font-size: var(--text-sm); }
+  .pub-shell #phone-account-tools { display: grid; gap: var(--space-2); padding: var(--space-3); border-bottom: var(--stroke-hair) solid var(--border-subtle); }
+  .pub-shell #phone-account-tools .profile-toggle-group { width: 100%; }
+  .pub-shell #phone-account-tools #role-toggle-btn { min-height: 44px; justify-content: center; }
+  .pub-shell .header-menu-panel.account-panel { max-height: calc(100dvh - 110px); overflow-y: auto; overscroll-behavior: contain; }
+  .pub-shell .app > .sync-chip {
+    position: static; max-width: none; margin: 0; border-radius: 0;
+    box-shadow: none; animation: none; padding: var(--space-3) var(--space-4);
+  }
+  .pub-shell .mnav { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .pub-shell .mnav-btn { min-height: 60px; gap: var(--space-1); }
+  .pub-shell .mnav-label { font-size: var(--text-xs); text-transform: none; letter-spacing: 0; }
+  .pub-shell .mnav-btn.active { background: var(--ink3); }
+  .pub-shell .tab-panel { padding-top: var(--space-5); }
+  .phone-eyebrow { display: block; margin-bottom: var(--space-2); color: var(--content-secondary); font: 700 var(--text-xs) var(--font-ui); letter-spacing: .06em; }
+  #tab-today .today-head { align-items: flex-start; flex-direction: column-reverse; gap: var(--space-4); margin-bottom: var(--space-5); }
+  #tab-today .today-title, .phone-sell-head h1 { font: 400 var(--text-3xl) / 1.1 var(--font-display); text-transform: none; letter-spacing: -.03em; margin: 0; }
+  #tab-today .today-grid { gap: var(--space-3); }
+  #tab-today .today-card { min-height: 150px; padding: var(--space-4); gap: var(--space-2); border-radius: var(--r3); }
+  #tab-today .today-card-ink { grid-column: 1 / -1; min-height: 130px; background: var(--gold); color: var(--on-accent); border-color: var(--gold); }
+  #tab-today .today-card-ink .today-card-name { font-size: var(--text-2xl); }
+  #tab-today .today-receipt-card { grid-column: 1 / -1; min-height: 106px; }
+  #tab-today .today-card-sub { line-height: 1.4; }
+  #tab-today .today-row { min-height: 76px; padding-block: var(--space-4); }
+  .phone-sell-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-4); }
+  .phone-sell-head .btn { max-width: 48%; font-size: var(--text-xs); }
+  #tab-pos #pos-subpanel-register > .row-between { display: none; }
+  #tab-pos .pos-subtab-nav { margin-bottom: var(--space-4); }
+  #tab-pos .pos-subtab-btn { font-size: var(--text-xs); padding: var(--space-3); min-height: 48px; }
+  #tab-website .web-orders-hero { gap: var(--space-4); padding: var(--space-4); }
+  #tab-website .web-orders-copy h2 { font: 400 var(--text-3xl) / 1.1 var(--font-display); text-transform: none; }
+  #tab-website .web-orders-copy p { font-size: var(--text-sm); max-width: 38ch; }
+  #tab-website .web-order-steps { display: none; }
+  #tab-website .web-orders-actions { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+  #tab-website #scan-btn { grid-column: 1 / -1; grid-row: 1; }
+  #tab-website .recon-toggle { min-height: 48px; font-size: var(--text-xs); }
+  #tab-website .order-card { padding: var(--space-4); border-radius: var(--r3); }
+  #tab-website .order-meta { font-size: var(--text-sm); line-height: 1.5; }
+  #tab-website .order-num { font-size: var(--text-lg); }
+  #tab-website .order-card-top { align-items: flex-start; }
+  #tab-website .order-identity { min-width: 0; flex: 1; }
+  #tab-website .phone-order-details > summary { display: list-item; min-height: 44px; padding-block: var(--space-3); font-size: var(--text-xs); color: var(--content-secondary); cursor: pointer; }
+  #tab-website .phone-order-details:not([open]) > .phone-order-contact { display: none; }
+  #tab-website .phone-order-contact { font-size: var(--text-sm); overflow-wrap: anywhere; padding-bottom: var(--space-3); }
+  #tab-website .order-actions { display: flex; flex-wrap: wrap; width: 100%; gap: var(--space-2); }
+  #tab-website .order-actions > .btn { flex: 1; min-height: 44px; }
+  #tab-website .order-actions > .btn.gold { flex-basis: 100%; order: -1; }
+  /* Consistent breathing room and reachable disclosure across the remaining
+     customer, tax, consignment, stock and administration pages. */
+  .tab-panel .phone-records tr.phone-record { border-radius: var(--r3); padding: var(--space-4); gap: var(--space-3); }
+  .phone-record-toggle { width: 100%; text-align: center; }
+  .phone-section-picker select { border-radius: var(--r2); padding: var(--space-3); }
+  .pub-shell .more-sheet-body .pub-nav { grid-template-columns: minmax(0, 1fr); }
+  .pub-shell .more-sheet-body .snav { min-height: 52px; }
+  .pub-shell :is(button, summary):focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+}
+
+/* Native details hide their anonymous content box in modern browsers. Keep
+   desktop contact information visible; older engines retain an operable toggle. */
+@media (min-width: 769px) {
+  .phone-order-details::details-content { content-visibility: visible; display: block; }
+  @supports not selector(::details-content) {
+    .phone-order-details > summary { display: list-item; }
+  }
+}
+@media (max-width: 768px) {
+  #tab-website .web-orders-hero { background: transparent; border: 0; box-shadow: none; padding: 0; }
+  #tab-website .web-orders-actions .recon-toggle { grid-column: 1; margin: 0 !important; }
+  #tab-website .web-orders-actions #backfill-shipping-btn { grid-column: 2; box-shadow: none; font-size: var(--text-xs); }
+  #tab-website .order-card-top { flex-direction: row; }
+  #tab-website .order-card-top > .pill { flex: none; }
+  .pub-shell .more-sheet-body .snav { flex-direction: row; justify-content: flex-start; text-align: left; gap: var(--space-3); padding: var(--space-3) var(--space-4); }
+  .pub-shell .more-sheet-body .snav-ic { width: 24px; flex: none; }
+  .pub-shell .more-sheet-body .snav-label { font-size: var(--text-sm); }
+}
