@@ -2815,10 +2815,10 @@
               <span class="tc-receipts-title-icon">🗂</span>
               <span>Receipts &amp; Proof of Payment</span>
             </div>
-            <div class="rec-card-sub tc-receipts-sub">Your receipts are kept safely in the cloud and cached locally for offline access. Export audit-ready tax archives or manage local folders. Click any storage metric tile below to filter the ledger.</div>
+            <div class="rec-card-sub tc-receipts-sub">Every expense should have a receipt for tax time. See where yours are kept, fix any that are missing, and download them all when you file.</div>
           </div>
           <div class="tc-receipts-head-action">
-            <button class="btn gold tc-hero-export-btn" type="button" onclick="openExportReceiptsModal()" id="tc-export-receipts-btn" style="display:none;" title="Download every receipt, sorted into folders by year and category, with a summary sheet">⬇ Export receipts…</button>
+            <button class="btn gold tc-hero-export-btn" type="button" onclick="openExportReceiptsModal()" id="tc-export-receipts-btn" style="display:none;" title="Download every receipt, sorted into folders by year and category, with a summary sheet">⬇ Download all receipts…</button>
           </div>
         </div>
 
@@ -2827,17 +2827,26 @@
         <div id="tc-receipt-problems" class="tc-receipt-problems" style="display:none;"></div>
         <div id="tc-cache-status" class="tc-cache-status" style="display:none;"></div>
 
-        <div class="tc-receipts-actions">
-          <button class="btn sm" type="button" onclick="cacheAllReceiptsNow()" id="tc-cache-btn" title="Keep a copy of every receipt on this device so they still open offline">💾 Save for offline viewing</button>
-          <button class="btn sm" type="button" onclick="openCloudReceiptsModal()" id="tc-view-cloud-btn" style="display:none;" title="See every receipt currently stored in the cloud">👁 See stored receipts</button>
-          <button class="btn sm" type="button" onclick="openReceiptOrganizer()" id="tc-organize-btn" title="Sort and rename an existing folder of receipts into year and category folders">🗃 Tidy an existing folder…</button>
+        <div class="tc-receipts-actions" role="group" aria-label="Receipt tools">
+          <button class="tc-action-card" type="button" onclick="cacheAllReceiptsNow()" id="tc-cache-btn">
+            <span class="tc-action-title">Keep copies on this device</span>
+            <span class="tc-action-desc">So receipts still open when you have no internet.</span>
+          </button>
+          <button class="tc-action-card" type="button" onclick="openCloudReceiptsModal()" id="tc-view-cloud-btn" style="display:none;">
+            <span class="tc-action-title">Look through online receipts</span>
+            <span class="tc-action-desc">Browse every receipt that's backed up online.</span>
+          </button>
+          <button class="tc-action-card" type="button" onclick="openReceiptOrganizer()" id="tc-organize-btn">
+            <span class="tc-action-title">Sort a messy receipt folder…</span>
+            <span class="tc-action-desc">Renames files and files them by year and category.</span>
+          </button>
         </div>
 
         <details class="tc-receipts-advanced">
           <summary class="tc-folder-summary">
             <span class="tc-folder-summary-left">
               <span class="tc-folder-summary-icon">📁</span>
-              <span>Local folder settings &amp; maintenance</span>
+              <span>More options: change folder, repair links</span>
             </span>
             <span class="tc-folder-summary-chevron">▾</span>
           </summary>
