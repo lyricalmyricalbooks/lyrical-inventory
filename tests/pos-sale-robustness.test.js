@@ -250,3 +250,27 @@ describe('Fair Mode, a whole fair day', () => {
     expect(body).toMatch(/3 books in 2 sales/);
   });
 });
+
+describe('printed QR sales on the To-do list', () => {
+  it('tapping Paid on the To-do line marks every book in that checkout as paid', async () => {
+    Object.defineProperty(win.navigator, 'onLine', { configurable: true, get: () => false });
+    try {
+      win.posSetCurrency('CAD');
+      win.posUpdateQty(HARBOUR, 1);
+      win.posUpdateQty(FABLE, 1);
+      await win.fairCharge('Stripe QR', { printedQr: true });
+      await app.settle();
+    } finally {
+      Object.defineProperty(win.navigator, 'onLine', { configurable: true, get: () => true });
+    }
+    const num = state(HARBOUR).hist[0].num;
+    const btn = document.createElement('button');
+    Object.assign(btn.dataset, { fix: 'action', fixTab: 'qr-arrived', fixBook: HARBOUR, fixNum: num });
+    document.body.append(btn);
+    btn.click();
+    await app.settle();
+    expect(state(HARBOUR).hist[0].qrConfirmed).toBe(true);
+    expect(state(FABLE).hist[0].qrConfirmed).toBe(true);
+    btn.remove();
+  });
+});

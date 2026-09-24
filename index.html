@@ -3898,7 +3898,7 @@
       <div class="pos-mobile-books" id="pos-mobile-books" style="display:flex; flex-direction:column; gap:14px; flex:1; min-width:0;">
         <div class="pos-search-wrapper">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gold-text)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);pointer-events:none;"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-          <input type="search" id="pos-search-input" placeholder="Search books in POS (press / to focus, Esc to clear)..." oninput="posSearchFilter(this.value)">
+          <input type="search" id="pos-search-input" placeholder="Search books…" title="Shortcut: press / to search, Esc to clear" aria-label="Search books" oninput="posSearchFilter(this.value)">
         </div>
         <!-- Phone only: is everything uploaded, and how today is going. -->
         <div class="fm-top">
@@ -3946,7 +3946,7 @@
             <div class="pos-checkout-eyebrow">Checkout Review</div>
             <button class="btn sm" onclick="posConfigureRates()">↻ FX Rates</button>
           </div>
-          <div id="pos-fx-status" class="pos-checkout-fx">Using saved rates — click ↻ FX Rates to refresh</div>
+          <div id="pos-fx-status" class="pos-checkout-fx">Using saved rates. Use ↻ FX Rates to refresh them.</div>
         </div>
 
         <div class="pos-checkout-stage">

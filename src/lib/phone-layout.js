@@ -101,11 +101,101 @@ function enhanceSections(nav) {
   return () => observer.disconnect();
 }
 
-export function initPhoneLayouts(root) {
+// Footers with more than three actions (the trip window has seven) keep the
+// first two in view and fold the rest behind "More actions" on a phone. The
+// original buttons are moved, never copied, so their handlers stay the same;
+// on a wide screen the wrapper is display:contents and nothing changes.
+const FOLD_AFTER = 2;
+let foldId = 0;
+function foldFooterActions(group) {
+  if (group.dataset.phoneFolded) return;
+  const buttons = [...group.children].filter(el => el.matches('button, .btn'));
+  if (buttons.length <= FOLD_AFTER + 1) return;
+  group.dataset.phoneFolded = '1';
+  const panel = document.createElement('div');
+  panel.className = 'phone-more-panel';
+  panel.id = `phone-more-${++foldId}`;
+  buttons.slice(FOLD_AFTER).forEach(btn => panel.append(btn));
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'btn phone-more-toggle';
+  toggle.textContent = 'More actions';
+  toggle.setAttribute('aria-expanded', 'false');
+  toggle.setAttribute('aria-controls', panel.id);
+  toggle.addEventListener('click', () => {
+    const open = group.classList.toggle('phone-more-open');
+    toggle.setAttribute('aria-expanded', String(open));
+    toggle.textContent = open ? 'Fewer actions' : 'More actions';
+  });
+  group.append(toggle, panel);
+}
+
+// Bottom sheets close with a downward swipe from their title bar, the way
+// phone sheets do. Only on touch, only from the title, so scrolling a long
+// form never closes it; the close goes through the page's own dismiss so the
+// unsaved-changes guard still asks first.
+const SWIPE_CLOSE_PX = 90;
+function enableSwipeToClose(root, closeFn, isPhone) {
+  let drag = null;
+  const onStart = (e) => {
+    if (!isPhone() || e.pointerType !== 'touch') return;
+    const title = e.target.closest?.('.overlay .modal-title');
+    if (!title || e.target.closest('button, input, select, a')) return;
+    const modal = title.closest('.modal');
+    drag = { modal, overlay: modal.closest('.overlay'), y: e.clientY, dy: 0 };
+    modal.style.transition = 'none';
+  };
+  const onMove = (e) => {
+    if (!drag) return;
+    drag.dy = Math.max(0, e.clientY - drag.y);
+    drag.modal.style.transform = drag.dy ? `translateY(${drag.dy}px)` : '';
+  };
+  const onEnd = () => {
+    if (!drag) return;
+    const { modal, overlay, dy } = drag;
+    drag = null;
+    modal.style.transition = '';
+    modal.style.transform = '';
+    if (dy >= SWIPE_CLOSE_PX && overlay?.id?.startsWith('m-')) closeFn(overlay.id.slice(2));
+  };
+  root.addEventListener('pointerdown', onStart);
+  root.addEventListener('pointermove', onMove);
+  root.addEventListener('pointerup', onEnd);
+  root.addEventListener('pointercancel', onEnd);
+  return () => {
+    root.removeEventListener('pointerdown', onStart);
+    root.removeEventListener('pointermove', onMove);
+    root.removeEventListener('pointerup', onEnd);
+    root.removeEventListener('pointercancel', onEnd);
+  };
+}
+
+// The on-screen keyboard covers the bottom of the page without resizing it on
+// most phones, hiding a sheet's Save button. Publish its height so the sheet
+// can sit above it.
+function trackKeyboard(win) {
+  const vv = win.visualViewport;
+  if (!vv) return () => {};
+  const docEl = win.document.documentElement;
+  const update = () => {
+    const covered = Math.max(0, Math.round(win.innerHeight - vv.height - vv.offsetTop));
+    docEl.style.setProperty('--kb-inset', `${covered}px`);
+  };
+  vv.addEventListener('resize', update);
+  vv.addEventListener('scroll', update);
+  update();
+  return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); };
+}
+
+export function initPhoneLayouts(root, { closeModal = (id) => globalThis.attemptCloseModal?.(id) } = {}) {
   if (!root) return () => {};
   root.querySelectorAll('table').forEach(enhanceRecords);
   const cleanups = [...root.querySelectorAll('.settings-sub-nav')]
     .filter(nav => nav.querySelector('.settings-sub-tab')).map(enhanceSections);
+  root.querySelectorAll('.modal-footer > div').forEach(foldFooterActions);
+  const isPhone = () => globalThis.matchMedia?.('(max-width: 600px)').matches ?? false;
+  cleanups.push(enableSwipeToClose(root, closeModal, isPhone));
+  if (root.ownerDocument?.defaultView) cleanups.push(trackKeyboard(root.ownerDocument.defaultView));
   // Renderers replace tbody contents after filtering or syncing. Only revisit
   // affected tables, never rebuild records or duplicate the desktop data model.
   const observer = new MutationObserver(mutations => {
