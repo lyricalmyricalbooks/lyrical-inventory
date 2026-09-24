@@ -6622,10 +6622,17 @@ async function calculateShippoRates() {
   }
 }
 
+// Shipping-ledger rows identify an order by its id, or by its order number
+// for older sales saved before ids existed. Returns null when the book or
+// order is not loaded.
+function findShippingLedgerOrder(bookId, orderIdentifier) {
+  const hist = states[bookId]?.hist;
+  if (!hist) return null;
+  return hist.find(x => x.id === orderIdentifier || x.num === orderIdentifier) || null;
+}
+
 async function editPostageCost(bookId, orderIdentifier) {
-  const s = states[bookId];
-  if (!s || !s.hist) return;
-  const h = s.hist.find(x => x.id === orderIdentifier || x.num === orderIdentifier);
+  const h = findShippingLedgerOrder(bookId, orderIdentifier);
   if (!h) return;
 
   const current = h.postagePaid || 0;
@@ -6646,9 +6653,7 @@ async function editPostageCost(bookId, orderIdentifier) {
 }
 
 async function unlinkManualPostage(bookId, orderIdentifier) {
-  const s = states[bookId];
-  if (!s || !s.hist) return;
-  const h = s.hist.find(x => x.id === orderIdentifier || x.num === orderIdentifier);
+  const h = findShippingLedgerOrder(bookId, orderIdentifier);
   if (!h) return;
 
   delete h.postagePaid;
@@ -6660,9 +6665,7 @@ async function unlinkManualPostage(bookId, orderIdentifier) {
 }
 
 async function dismissShippingAnalysisOrder(bookId, orderIdentifier) {
-  const s = states[bookId];
-  if (!s || !s.hist) return;
-  const h = s.hist.find(x => x.id === orderIdentifier || x.num === orderIdentifier);
+  const h = findShippingLedgerOrder(bookId, orderIdentifier);
   if (!h) return;
 
   const ok = await confirmDialog(`Are you sure you want to dismiss order "${h.num}" from the shipping ledger and calculations? It will be hidden.`, {
@@ -6682,9 +6685,7 @@ async function dismissShippingAnalysisOrder(bookId, orderIdentifier) {
 // keeps every total and margin that already understands manual postage
 // correct, and the flag lets the row say *why* it is zero.
 async function markShippingOrderLocalPickup(bookId, orderIdentifier) {
-  const s = states[bookId];
-  if (!s || !s.hist) return;
-  const h = s.hist.find(x => x.id === orderIdentifier || x.num === orderIdentifier);
+  const h = findShippingLedgerOrder(bookId, orderIdentifier);
   if (!h) return;
 
   h.localPickup = true;
@@ -6710,9 +6711,7 @@ function applyAutoLocalPickups(orders) {
 }
 
 async function unmarkShippingOrderLocalPickup(bookId, orderIdentifier) {
-  const s = states[bookId];
-  if (!s || !s.hist) return;
-  const h = s.hist.find(x => x.id === orderIdentifier || x.num === orderIdentifier);
+  const h = findShippingLedgerOrder(bookId, orderIdentifier);
   if (!h) return;
 
   delete h.localPickup;
@@ -6729,9 +6728,7 @@ async function unmarkShippingOrderLocalPickup(bookId, orderIdentifier) {
 }
 
 async function restoreShippingAnalysisOrder(bookId, orderIdentifier) {
-  const s = states[bookId];
-  if (!s || !s.hist) return;
-  const h = s.hist.find(x => x.id === orderIdentifier || x.num === orderIdentifier);
+  const h = findShippingLedgerOrder(bookId, orderIdentifier);
   if (!h) return;
 
   delete h.excludeFromShipping;
@@ -6772,13 +6769,10 @@ async function batchDismissShippingAnalysisOrders() {
   const updatesByBook = {};
   checkboxes.forEach(cb => {
     const [bookId, orderIdentifier] = cb.value.split('|');
-    const s = states[bookId];
-    if (s && s.hist) {
-      const h = s.hist.find(x => x.id === orderIdentifier || x.num === orderIdentifier);
-      if (h) {
-        h.excludeFromShipping = true;
-        updatesByBook[bookId] = true;
-      }
+    const h = findShippingLedgerOrder(bookId, orderIdentifier);
+    if (h) {
+      h.excludeFromShipping = true;
+      updatesByBook[bookId] = true;
     }
   });
 
@@ -6870,9 +6864,7 @@ async function onInlinePostageChange(inputEl) {
     return;
   }
 
-  const s = states[bookId];
-  if (!s || !s.hist) return;
-  const h = s.hist.find(x => x.id === orderIdentifier || x.num === orderIdentifier);
+  const h = findShippingLedgerOrder(bookId, orderIdentifier);
   if (!h) return;
 
   h.postagePaid = val;
@@ -6899,9 +6891,7 @@ async function onInlineShippingPaidChange(inputEl) {
     return;
   }
 
-  const s = states[bookId];
-  if (!s || !s.hist) return;
-  const h = s.hist.find(x => x.id === orderIdentifier || x.num === orderIdentifier);
+  const h = findShippingLedgerOrder(bookId, orderIdentifier);
   if (!h) return;
 
   h.shippingPaid = val;
@@ -6918,9 +6908,7 @@ async function onInlineShippingPaidChange(inputEl) {
 }
 
 async function unlinkManualShippingPaid(bookId, orderIdentifier) {
-  const s = states[bookId];
-  if (!s || !s.hist) return;
-  const h = s.hist.find(x => x.id === orderIdentifier || x.num === orderIdentifier);
+  const h = findShippingLedgerOrder(bookId, orderIdentifier);
   if (!h) return;
 
   delete h.manualShippingPaid;
