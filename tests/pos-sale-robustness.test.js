@@ -274,3 +274,18 @@ describe('printed QR sales on the To-do list', () => {
     btn.remove();
   });
 });
+
+describe('changing currency on the phone register', () => {
+  it('the switch at the top reprices the tiles, charges in that currency, and is remembered', async () => {
+    win.posSetCurrency('CAD');
+    const select = document.getElementById('fm-currency');
+    expect([...select.options].map((o) => o.value)).toEqual(expect.arrayContaining(['CAD', 'EUR', 'USD']));
+    expect(select.value).toBe('CAD');
+    select.value = 'EUR';
+    select.dispatchEvent(new win.Event('change'));
+    expect(document.getElementById('pos-currency').value).toBe('EUR');
+    expect(document.querySelector('#fm-tiles .fm-tile-price').textContent).toMatch(/€/);
+    expect(localStorage.getItem('lm-pos-currency')).toBe('EUR');
+    win.posSetCurrency('CAD');
+  });
+});

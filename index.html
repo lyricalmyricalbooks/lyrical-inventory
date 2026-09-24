@@ -3905,6 +3905,11 @@
           <button type="button" class="fm-fair-btn" id="fm-fair-btn" onclick="fairSetName()">
             <span aria-hidden="true">📍</span> <span id="fm-fair-name">Name today's fair</span>
           </button>
+          <div class="fm-ccy">
+            <label class="fm-ccy-label" for="fm-currency">Charging in</label>
+            <select id="fm-currency" class="fm-ccy-select" onchange="fairSetCurrency(this.value)"></select>
+            <button type="button" class="fm-ccy-rates" id="fm-ccy-rates" onclick="posConfigureRates()" hidden>Get exchange rates</button>
+          </div>
           <span class="fm-sync" id="fm-sync" role="status" aria-live="polite"></span>
           <button type="button" class="fm-today-btn" id="fm-today-btn" onclick="fairOpenToday()" aria-label="Today's register sales">
             <span class="fm-today-label">Today</span>
