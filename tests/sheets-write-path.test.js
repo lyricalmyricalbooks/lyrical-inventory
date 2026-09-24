@@ -6,7 +6,10 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const codeGs = fs.readFileSync(path.resolve(__dirname, '../apps-script/Code.gs'), 'utf8').replace(/\r\n/g, '\n');
-const mainJs = fs.readFileSync(path.resolve(__dirname, '../src/main.js'), 'utf8').replace(/\r\n/g, '\n');
+// The Sheets bridge moved out of main.js into src/features/sheets-bridge.js;
+// these checks follow it there.
+const mainJs = (fs.readFileSync(path.resolve(__dirname, '../src/main.js'), 'utf8')
+  + fs.readFileSync(path.resolve(__dirname, '../src/features/sheets-bridge.js'), 'utf8')).replace(/\r\n/g, '\n');
 
 // The body of doPost, which is where every sheet write happens.
 function doPostSource() {
@@ -113,7 +116,7 @@ describe('doPost can reach a spreadsheet at all', () => {
 });
 
 describe('the client no longer reports an unwritten row as written', () => {
-  const post = mainJs.match(/export async function postToSheets\([\s\S]+?\n\}/)[0];
+  const post = mainJs.match(/async function postToSheets\([\s\S]+?\n\}/)[0];
 
   it('only falls back to no-cors when nothing came back at all', () => {
     // A readable `{ error: ... }` reply must not be re-POSTed blind. That is

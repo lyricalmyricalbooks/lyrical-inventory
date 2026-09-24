@@ -29,12 +29,10 @@ import {
   activeBook,
   addLog,
   fetchLiveRate,
-  fetchSheetsCapabilities,
   getBook,
   getState,
   isAuthor,
   isPermissionDenied,
-  notifyPublisherSubmission,
   reportClientError,
   saveState,
   sheetsUrl,
@@ -43,6 +41,7 @@ import {
   today,
   updateDash,
 } from '../main.js';
+import { fetchSheetsCapabilities, notifyPublisherSubmission } from './sheets-bridge.js';
 import { escapeHtml } from '../lib/html.js';
 import { runOpenRouterRead, friendlyOpenRouterError } from '../lib/openrouter-chat.js';
 import {
