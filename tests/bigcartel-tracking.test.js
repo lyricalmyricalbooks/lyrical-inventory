@@ -50,3 +50,12 @@ describe('Big Cartel tracking numbers', () => {
     expect(shipmentDate({ shippedAt: '' })).toBe('');
   });
 });
+
+describe('searching email for a specific tracking number', () => {
+  it('searches each number, plus the spaced form of a Canada Post number', async () => {
+    const { trackingEmailQuery } = await import('../src/lib/shipping-email.js');
+    expect(trackingEmailQuery(['7023 2104 5566 7788', 'LX123456789CA'], { since: '2026-08-01' }))
+      .toBe('{"7023210455667788" OR "7023 2104 5566 7788" OR "LX123456789CA"} after:2026/08/01');
+    expect(trackingEmailQuery([])).toBe('');
+  });
+});
