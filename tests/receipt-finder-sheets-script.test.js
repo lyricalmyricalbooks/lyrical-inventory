@@ -161,13 +161,23 @@ class PinnedDate extends Date {
   constructor(...args) { if (args.length) super(...args); else super(SWEEP_NOW); }
   static now() { return SWEEP_NOW; }
 }
-function sweepCtx({ properties = {}, messages = [], aiStatus = 200, receipts = [], triggers = [] } = {}) {
+// A runtime whose own local zone is `hours` from the script's declared one
+// (UTC in this harness). Only a date-time with no offset reads the local zone,
+// so that is all it changes. Setting TZ can't do this: worker threads ignore it.
+const dateInLocalZone = hours => class extends PinnedDate {
+  constructor(...args) {
+    if (typeof args[0] === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(args[0])) {
+      super(Date.parse(args[0] + 'Z') - hours * 3600000);
+    } else super(...args);
+  }
+};
+function sweepCtx({ properties = {}, messages = [], aiStatus = 200, receipts = [], triggers = [], localZoneHours = 0 } = {}) {
   const props = { GEMINI_API_KEY: 'server-secret', ...properties };
   const written = [];
   const created = [];
   const aiCalls = [];
   const ctx = vm.createContext({
-    Date: PinnedDate,
+    Date: localZoneHours ? dateInLocalZone(localZoneHours) : PinnedDate,
     PropertiesService: { getScriptProperties: () => ({
       getProperty: key => (key in props ? props[key] : null),
       setProperty: (key, value) => { props[key] = value; },
@@ -301,6 +311,25 @@ describe('daily receipt sweep run', () => {
     ctx.receiptDailyScan();
     expect(aiCalls).toHaveLength(0);
     expect(JSON.parse(props.RECEIPT_DAILY_STATUS).text).toContain('GEMINI_API_KEY');
+  });
+
+  it('picks the day’s emails by the script’s time zone, whatever zone the machine is in', () => {
+    // The window is worked out in the script's own time zone, so the emails
+    // inside it must be too. Reading the bounds in the machine's local zone
+    // shifted them by up to a day: far from UTC, every email was dropped.
+    const onThe16th = ['2026-09-16T00:30:00Z', '2026-09-16T23:30:00Z'];
+    for (const localZoneHours of [14, -11, 0]) {
+      const { ctx, props, written } = sweepCtx({
+        localZoneHours,
+        messages: ['2026-09-15T23:30:00Z', ...onThe16th, '2026-09-17T00:30:00Z'].map(when => mailMessage(when)),
+        receipts: [{ vendor: 'Printer', amount: 42 }],
+        properties: { RECEIPT_DAILY_LAST_DAY: '2026-09-15' },
+      });
+      ctx.receiptDailyScan();
+      const read = written.map(w => JSON.parse(w.body.fields.data.stringValue).gmailMessageId);
+      expect(read, `local zone ${localZoneHours}h`).toEqual(onThe16th.map(when => 'msg-' + when));
+      expect(props.RECEIPT_DAILY_LAST_DAY).toBe('2026-09-16');
+    }
   });
 
   it('never throws out of the trigger, whatever Gmail does', () => {
