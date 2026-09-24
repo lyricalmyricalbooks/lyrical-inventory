@@ -9960,57 +9960,66 @@ function renderArtistTransfers() {
   });
 
   // ── AUTHOR BANNER
+  // The author's single place to pay: one headline ("to send now"), then one
+  // row per sale with its own action. The lower publisher panel is hidden for
+  // authors so there is never a second, competing pay button.
   const banner = $('author-payment-banner');
   if (banner) {
     if (isAuthor() && transfers.length > 0) {
-      // ⚡ Bolt: Imperative loops instead of .reduce() avoid array allocations in rendering functions
-  let totalOwed = 0, missing = 0;
+      const fullLink = payLink ? (payLink.startsWith('http') ? payLink : 'https://' + payLink) : '';
+      let dueNow = 0, dueCount = 0, waitingTotal = 0, waitingCount = 0, missing = 0;
       for (const t of transfers) {
         const amt = transferAmount(t);
-        if (amt == null) missing++; else totalOwed += amt;
+        if (t.status === 'pending') { waitingCount++; waitingTotal += amt || 0; }
+        else if (amt == null) missing++;
+        else if (amt > 0) { dueNow += amt; dueCount++; }
       }
       banner.style.display = '';
-      $('apb-amount').textContent = fmt(totalOwed, cur);
-      $('apb-detail').textContent = `${transfers.length} transfer${transfers.length > 1 ? 's' : ''} from sales collected on your end (incl. pending)` +
-        (missing ? ` · ${missing} without an amount yet — your publisher will confirm ${missing > 1 ? 'them' : 'it'}` : '');
-      const btn = $('apb-pay-btn');
-      btn.onclick = null;
-      const payable = transfers.filter(t => t.status !== 'pending' && transferAmount(t) > 0);
-      const readyLinks = payable.filter(t => transferPayUrl(t));
-      if (payable.length === 1 && readyLinks.length === 1) {
-        // One sale to pay and Stripe already knows the amount: go straight there.
-        const t = payable[0];
-        btn.href = transferPayUrl(t);
-        btn.target = '_blank';
-        btn.textContent = `Send ${fmt(transferAmount(t), cur)} →`;
-        $('apb-link-hint').textContent = 'Opens Stripe with the amount already filled in';
-      } else if (payable.length > 1) {
-        // Each approved sale has its own exact-amount link on its card below.
-        btn.href = '#artist-transfers-sect';
-        btn.removeAttribute('target');
-        btn.onclick = e => { e.preventDefault(); $('artist-transfers-sect')?.scrollIntoView({ behavior: 'smooth' }); };
-        btn.textContent = 'Pay each sale below ↓';
-        $('apb-link-hint').textContent = 'Each sale has its own Send button with the amount filled in';
-      } else if (payLink) {
-        const fullLink = payLink.startsWith('http') ? payLink : 'https://' + payLink;
-        btn.href = fullLink;
-        btn.target = '_blank';
-        btn.textContent = 'Send payment →';
-        $('apb-link-hint').textContent = 'Opens payment link in a new tab';
-      } else {
-        btn.href = '#';
-        btn.onclick = e => { e.preventDefault(); };
-        btn.textContent = 'Contact publisher';
-        $('apb-link-hint').textContent = 'Payment link not set — contact your publisher';
-      }
-      $('apb-transfers').innerHTML = transfers.map(t => `
-        <div class="mbi-row${t.status === 'pending' ? ' is-pending' : ''}">
-          <div class="mbi-desc">${[escapeHtml(t.num), fmtD(t.date), transferQtyLabel(t)].filter(Boolean).join(' · ')}${t.status === 'pending' ? ' (Pending Approval)' : ''}</div>
-          <div class="mbi-amt">${transferAmount(t) == null ? 'Amount to confirm' : fmt(transferAmount(t), cur)}</div>
-        </div>`).join('');
+      banner.querySelector('.metric-banner-label').textContent = 'Money to send to your publisher';
+      $('apb-amount').textContent = dueCount ? fmt(dueNow, cur) : 'Nothing to pay yet';
+      $('apb-amount').classList.toggle('is-quiet', !dueCount);
+      const bits = [];
+      if (dueCount) bits.push(dueCount === 1 ? 'Tap Pay on the sale below. The amount is filled in for you.' : `Tap Pay on each of the ${dueCount} sales below. The amount is filled in for you.`);
+      if (waitingCount) bits.push(`${waitingCount} more ${waitingCount === 1 ? 'sale' : 'sales'} (${fmt(waitingTotal, cur)}) waiting for your publisher to check — nothing to do yet.`);
+      if (missing) bits.push(`${missing} ${missing === 1 ? 'sale needs' : 'sales need'} a price from you — tell your publisher what the buyer paid.`);
+      $('apb-detail').textContent = bits.join(' ');
+      // No banner-level button: each sale row carries its own action.
+      const actions = banner.querySelector('.metric-banner-actions');
+      if (actions) actions.style.display = 'none';
+
+      const order = t => (t.status === 'pending' ? 2 : transferAmount(t) == null ? 1 : 0);
+      $('apb-transfers').innerHTML = [...transfers].sort((x, y) => order(x) - order(y)).map(t => {
+        const amt = transferAmount(t);
+        const copies = Number(t.qty) > 0 ? `${Number(t.qty)} ${Number(t.qty) === 1 ? 'copy' : 'copies'}` : 'A sale';
+        const what = `${copies}${Number(t.qty) > 0 ? ' sold' : ''}${t.date ? ` on ${fmtD(t.date)}` : ''}`;
+        let action, state = '';
+        if (t.status === 'pending') {
+          state = ' is-pending';
+          action = `<span class="apb-status">Waiting for your publisher${amt ? ` · ${escapeHtml(fmt(amt, cur))}` : ''}</span>`;
+        } else if (amt == null) {
+          action = `<span class="apb-status is-warn">Tell your publisher the price</span>`;
+        } else {
+          const url = transferPayUrl(t) || fullLink;
+          const hint = transferPayUrl(t) ? '' : `<span class="apb-hint">Type ${escapeHtml(fmt(amt, cur))} on the payment page</span>`;
+          action = url
+            ? `<span class="apb-pay-wrap">${hint}<a class="btn gold apb-pay" href="${escapeHtml(url)}" target="_blank" rel="noopener">Pay ${escapeHtml(fmt(amt, cur))} →</a></span>`
+            : `<span class="apb-status">Send ${escapeHtml(fmt(amt, cur))} to your publisher</span>`;
+        }
+        return `<div class="mbi-row apb-row${state}">
+          <div class="apb-what">${escapeHtml(what)}</div>
+          ${action}
+        </div>`;
+      }).join('');
     } else {
       banner.style.display = 'none';
     }
+  }
+
+  // Authors pay from the banner above; the panel below is the publisher's desk.
+  if (isAuthor()) {
+    const sectA = $('artist-transfers-sect');
+    if (sectA) sectA.style.display = 'none';
+    return;
   }
 
   // ── PUBLISHER PANEL
@@ -10022,51 +10031,6 @@ function renderArtistTransfers() {
   const payHtml = fullPayLink
     ? `<a href="${fullPayLink}" target="_blank" class="btn sm" style="text-decoration:none;background:var(--green-bg);color:var(--green);border-color:rgba(42,99,72,.2);">↗ Payment link</a>`
     : `<span style="font-size:var(--text-2xs);color:var(--text3);font-family:var(--font-mono);">No payment link set</span>`;
-
-  // Authors get a plain step-by-step card: what happened, how much to send,
-  // one button. The settle actions below are publisher decisions.
-  const hed = sect.querySelector('.sec-head-title'), sub = sect.querySelector('.section-subcopy');
-  if (hed) hed.textContent = isAuthor() ? 'Money to send to your publisher' : 'Pending artist transfers';
-  if (sub) sub.textContent = isAuthor()
-    ? 'When a buyer pays you directly, the money goes on to your publisher. Follow the steps on each card.'
-    : "Sales already collected where the artist's share hasn't been sent yet.";
-  if (isAuthor()) {
-    list.innerHTML = transfers.map(t => {
-      const amt = transferAmount(t);
-      const copies = Number(t.qty) > 0 ? `${Number(t.qty)} ${Number(t.qty) === 1 ? 'copy' : 'copies'}` : 'a sale';
-      const what = `You sold ${copies}${t.date ? ` on ${fmtD(t.date)}` : ''} and the buyer paid you.`;
-      if (t.status === 'pending') {
-        return `<div class="pending-card is-pending author-transfer-card">
-          <div><div class="pending-card-head"><span class="pill gray">Waiting for your publisher</span></div>
-          <p class="author-transfer-what">${escapeHtml(what)}</p>
-          <p class="author-transfer-next">Nothing to do yet. Your publisher checks the sale first — then we'll show you how much to send here.</p></div>
-        </div>`;
-      }
-      if (amt == null) {
-        return `<div class="pending-card author-transfer-card">
-          <div><div class="pending-card-head"><span class="pill amber">Amount missing</span></div>
-          <p class="author-transfer-what">${escapeHtml(what)}</p>
-          <p class="author-transfer-next">We don't know the price of this sale. Please tell your publisher how much the buyer paid.</p></div>
-        </div>`;
-      }
-      const stripeUrl = transferPayUrl(t);
-      const cardLink = stripeUrl || fullPayLink;
-      const steps = stripeUrl
-        ? `<li>Tap <strong>Send ${escapeHtml(fmt(amt, cur))}</strong>. The payment page opens with the amount already filled in.</li><li>Pay with your card, Apple Pay or Google Pay.</li><li>That's it. Your publisher confirms it, and this card goes away.</li>`
-        : fullPayLink
-        ? `<li>Tap <strong>Send ${escapeHtml(fmt(amt, cur))}</strong>. The payment page opens.</li><li>Type exactly <strong>${escapeHtml(fmt(amt, cur))}</strong> in the amount box.</li><li>That's it. Your publisher confirms it, and this card goes away.</li>`
-        : `<li>Send <strong>${escapeHtml(fmt(amt, cur))}</strong> to your publisher, the way you usually pay them.</li><li>That's it. Your publisher confirms it, and this card goes away.</li>`;
-      return `<div class="pending-card author-transfer-card">
-        <div>
-          <div class="pending-card-head"><span class="pill amber">To send: ${escapeHtml(fmt(amt, cur))}</span></div>
-          <p class="author-transfer-what">${escapeHtml(what)} Please send the money on to your publisher.</p>
-          <ol class="author-transfer-steps">${steps}</ol>
-        </div>
-        ${cardLink ? `<div class="pending-card-actions"><a href="${escapeHtml(cardLink)}" target="_blank" rel="noopener" class="btn gold lg" style="text-decoration:none;">Send ${escapeHtml(fmt(amt, cur))} →</a></div>` : ''}
-      </div>`;
-    }).join('');
-    return;
-  }
 
   list.innerHTML = transfers.map(t => `
     <div class="pending-card${t.status === 'pending' ? ' is-pending' : ''}">

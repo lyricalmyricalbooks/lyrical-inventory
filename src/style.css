@@ -4162,11 +4162,16 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 }
 .field-warn::before{content:'⚠';line-height:var(--leading-snug);}
 
-/* Author version of the pending-transfer card: plain sentences + numbered steps. */
-.author-transfer-what{margin:var(--space-2) 0 0;font-size:var(--text-base);color:var(--text);line-height:var(--leading-snug);}
-.author-transfer-next{margin:var(--space-1) 0 0;font-size:var(--text-sm);color:var(--text2);}
-.author-transfer-steps{margin:var(--space-2) 0 0;padding-left:1.25rem;font-size:var(--text-sm);color:var(--text2);line-height:1.6;}
-.author-transfer-steps strong{color:var(--text);}
+/* Author payment banner: one row per sale, each with its own action. */
+#apb-amount.is-quiet{font-size:var(--text-xl);color:var(--text2);}
+.apb-row{min-height:52px;}
+.apb-what{font-size:var(--text-base);color:var(--text);}
+.apb-row.is-pending .apb-what{color:var(--text2);}
+.apb-status{font-size:var(--text-sm);color:var(--text2);}
+.apb-status.is-warn{color:var(--red);font-weight:600;}
+.apb-pay-wrap{display:inline-flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end;}
+.apb-hint{font-size:var(--text-xs);color:var(--text3);}
+.apb-pay{text-decoration:none;min-height:44px;}
 
 /* TOOLTIPS (#10) — add data-tip="..." to any element. */
 .tip{position:relative;cursor:help;}
