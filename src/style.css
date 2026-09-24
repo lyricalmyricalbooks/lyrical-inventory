@@ -6266,6 +6266,52 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .con-empty-state{padding:2.5rem 1rem !important;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;}
 .con-empty-msg{font-size:var(--text-base);color:var(--text2);margin:0;}
 
+/* ── Combined consignment summary, in Riso ─────────────────────────────────
+   This screen was restyled on its own before the Riso repaint and kept the
+   old idiom: pill-shaped search and toggles, hairline cards with a soft lift,
+   a pink-tinted icon well and rounded progress bars. Re-cut to match the
+   .kpi tiles and .btn: squared corners, a 2px ink rule, a flat offset block
+   for depth, uppercase label type and square-ended bars. Status pills keep
+   their lozenge (--r-pill) — that shape is how they read as status. */
+.consignment-stat-card{border:var(--stroke) solid var(--rule-ink);border-radius:var(--r);box-shadow:var(--elev-3);}
+.consignment-stat-card:hover{transform:translateY(-1px);box-shadow:var(--elev-hover);border-color:var(--rule-ink);}
+.consignment-stat-card::after{display:none;}
+.consignment-stat-card.focus{background:var(--gold-bg);}
+.consignment-stat-icon-wrap{border-radius:var(--r);background:var(--cream2);border:var(--stroke) solid var(--rule-ink);box-shadow:none;}
+.consignment-stat-card.focus .consignment-stat-icon-wrap{background:var(--gold);}
+.con-stat-val{font-weight:500;}
+.con-stat-bar-track,.con-stat-bar-fill,
+.con-row-progress,.con-row-progress-bar{border-radius:0;}
+.con-stat-bar-track{height:6px;background:var(--track-bg);}
+.con-row-progress{background:var(--track-bg);}
+
+.con-search-input{border-radius:var(--r);border:var(--stroke) solid var(--rule-ink);}
+.con-search-input:focus{border-color:var(--rule-ink);}
+.con-search-clear-btn{border-radius:var(--r);}
+.con-toolbar-filters{border-radius:var(--r);border:var(--stroke) solid var(--rule-ink);background:var(--surface-card);padding:0;gap:0;}
+.con-filter-btn{border-radius:0;border:none;border-right:var(--stroke-hair) solid var(--border);text-transform:uppercase;letter-spacing:var(--tracking-caps);font-weight:800;min-height:var(--target-min);padding:6px 14px;}
+.con-filter-btn:last-child{border-right:none;}
+.con-filter-btn.active{background:var(--surface-inverse);color:var(--content-on-inverse);border-color:var(--border);box-shadow:none;}
+.con-filter-badge,.con-filter-btn.active .con-filter-badge{border-radius:0;}
+.con-filter-btn.active .con-filter-badge{background:var(--gold);color:var(--ink);}
+.con-filter-btn.active .con-dot{color:inherit;}
+.con-action-btn,.con-group-toggle-btn{
+  border-radius:var(--r);border:var(--stroke) solid var(--rule-ink);background:var(--surface-card);
+  color:var(--content-primary);text-transform:uppercase;letter-spacing:var(--tracking-caps);font-weight:800;box-shadow:var(--elev-1);
+}
+.con-action-btn:hover,.con-group-toggle-btn:hover{border-color:var(--rule-ink);transform:none;box-shadow:var(--elev-2);}
+.con-group-toggle-btn.is-on{background:var(--gold);border-color:var(--rule-ink);color:var(--ink);}
+
+.all-consignment-table{border:var(--stroke) solid var(--rule-ink);border-radius:var(--r);box-shadow:var(--elev-3);}
+.all-consignment-table .tbl tbody tr.is-active td:first-child{box-shadow:inset 4px 0 0 var(--gold);}
+.all-consignment-table .tbl tbody tr.con-group-row{background:var(--cream2);border-top:var(--stroke) solid var(--rule-ink);border-bottom:var(--stroke-hair) solid var(--border);}
+.all-consignment-table .tbl tbody tr.con-group-row:first-child{border-top:none;}
+.con-group-title{font-weight:800;text-transform:uppercase;letter-spacing:var(--tracking-caps);font-size:var(--text-sm);}
+.con-group-dot{width:10px;height:10px;border-radius:0;box-shadow:none;outline:var(--stroke-hair) solid var(--rule-ink);}
+.con-group-jump-btn{border:var(--stroke-hair) solid var(--rule-ink);text-transform:uppercase;letter-spacing:var(--tracking-caps);}
+.con-outstanding-badge{background:var(--amber-bg);border:var(--stroke-hair) solid var(--amber);}
+.con-tree-guide{border-bottom-left-radius:0;border-color:var(--border);}
+
 /* Container Queries & Responsive Adaptation */
 @container con-summary (max-width: 820px){
   .consignment-stat-grid{grid-template-columns:repeat(3,minmax(0,1fr));}
