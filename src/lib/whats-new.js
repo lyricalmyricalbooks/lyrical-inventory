@@ -111,6 +111,13 @@ export function parseBuildDate(stamp) {
   return isNaN(d) ? null : d;
 }
 
+// Whole local calendar days from `date` to `now` (0 = same day, 1 = yesterday),
+// counted midnight to midnight rather than in 24-hour blocks.
+function calendarDaysAgo(date, now) {
+  const startOfDay = d => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  return Math.round((startOfDay(now) - startOfDay(date)) / 86400000);
+}
+
 /** "just now" / "3 hours ago" / "yesterday" / "4 days ago" / "on 2 Sep". */
 export function relativeWhen(date, now = new Date()) {
   if (!(date instanceof Date) || isNaN(date)) return '';
@@ -118,8 +125,7 @@ export function relativeWhen(date, now = new Date()) {
   if (mins < 2) return 'just now';
   if (mins < 60) return `${mins} minutes ago`;
   const hours = Math.round(mins / 60);
-  const startOfDay = d => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const days = Math.round((startOfDay(now) - startOfDay(date)) / 86400000);
+  const days = calendarDaysAgo(date, now);
   if (days === 0) return hours === 1 ? '1 hour ago' : `${hours} hours ago`;
   if (days === 1) return 'yesterday';
   if (days < 7) return `${days} days ago`;
@@ -129,8 +135,7 @@ export function relativeWhen(date, now = new Date()) {
 /** Day heading for grouping notes: "Today", "Yesterday", "Monday 21 September". */
 export function dayHeading(date, now = new Date()) {
   if (!(date instanceof Date) || isNaN(date)) return 'Earlier';
-  const startOfDay = d => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const days = Math.round((startOfDay(now) - startOfDay(date)) / 86400000);
+  const days = calendarDaysAgo(date, now);
   if (days === 0) return 'Today';
   if (days === 1) return 'Yesterday';
   return date.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' });
