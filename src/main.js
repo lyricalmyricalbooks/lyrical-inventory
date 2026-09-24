@@ -10309,25 +10309,29 @@ function renderStores() {
     </div>`;
     return;
   }
+  // ⚡ Bolt Optimization: tally the ledger ONCE per render, grouped by store,
+  // instead of re-walking every ledger row for each store card (was
+  // stores × ledger rows; now ledger rows + stores).
+  const ledgerTally = new Map();
+  for (const e of s.ledger || []) {
+    let t = ledgerTally.get(e.storeId);
+    if (!t) { t = { sent: 0, sold: 0, returned: 0, rows: 0 }; ledgerTally.set(e.storeId, t); }
+    // Counted including voided rows: the "Ledger" button below exists to show
+    // this store's paper trail, and a void is part of that trail even though
+    // it moved nothing.
+    t.rows += 1;
+    if (e.voided) continue;
+    if (e.type === 'Shipment') t.sent += e.qty || 0;
+    else if (e.type === 'Sale') t.sold += e.qty || 0;
+    else if (e.type === 'Return') t.returned += e.qty || 0;
+  }
   el.innerHTML = s.stores.map(st => {
     const sp = st.outstanding === 0 && st.sent > 0 ? '<span class="pill gray">Settled</span>' : st.amountOwed > 0 ? '<span class="pill amber">Payment due</span>' : '<span class="pill green">Active</span>';
 
     // ── #3: Double-entry ledger balance check ───────────────────────────────
-    const ledger = s.ledger || [];
-    // ⚡ Bolt Optimization: Calculate double-entry ledger balances in a single pass to eliminate intermediate arrays and multiple loop overhead
-    let ledgerSent = 0, ledgerSold = 0, ledgerReturned = 0;
-    // Counted alongside, and deliberately including voided rows: the "Ledger"
-    // button below exists to show this store's paper trail, and a void is part
-    // of that trail even though it moved nothing.
-    let ledgerRows = 0;
-    for (const e of ledger) {
-      if (e.storeId === st.id) ledgerRows += 1;
-      if (e.storeId === st.id && !e.voided) {
-        if (e.type === 'Shipment') ledgerSent += e.qty || 0;
-        else if (e.type === 'Sale') ledgerSold += e.qty || 0;
-        else if (e.type === 'Return') ledgerReturned += e.qty || 0;
-      }
-    }
+    const tally = ledgerTally.get(st.id);
+    const ledgerSent = tally?.sent ?? 0, ledgerSold = tally?.sold ?? 0, ledgerReturned = tally?.returned ?? 0;
+    const ledgerRows = tally?.rows ?? 0;
     const calculatedOutstanding = ledgerSent - ledgerSold - ledgerReturned;
     const isUnbalanced = (ledgerSent > 0 || st.sent > 0) && (
       st.sent !== ledgerSent ||
