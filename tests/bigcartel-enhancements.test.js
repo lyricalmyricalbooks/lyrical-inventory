@@ -25,11 +25,11 @@ describe('Big Cartel Orders Enhancements (#2, #3, #4, #6)', () => {
     expect(formatFunc).not.toBeNull();
     expect(extractItemsFunc).not.toBeNull();
 
-    matchBigCartelOrderToCatalog = new Function('order', 'included', 'BOOKS', 'function escapeHTML(s){return String(s||"");}\n' + extractItemsFunc[0] + '\n' + matchFunc[0] + '\nreturn matchBigCartelOrderToCatalog(order, included, BOOKS);');
+    matchBigCartelOrderToCatalog = new Function('order', 'included', 'BOOKS', 'function escapeHtml(s){return String(s||"");}\n' + extractItemsFunc[0] + '\n' + matchFunc[0] + '\nreturn matchBigCartelOrderToCatalog(order, included, BOOKS);');
     const extractAddrFunc = mainContent.match(/function extractBigCartelAddress\([^)]*\)\s*\{([\s\S]+?)\n\}/);
 
     formatBigCartelOrderAddress = new Function('resolveCountryCode', 'order', extractAddrFunc[0] + '\n' + formatFunc[0] + '\nreturn formatBigCartelOrderAddress(order);').bind(null, resolveCountryCode);
-    extractBigCartelOrderItems = new Function('order', 'included', 'customBooks', 'function escapeHTML(s){return String(s||"");}\n' + extractItemsFunc[0] + '\nreturn extractBigCartelOrderItems(order, included, customBooks);');
+    extractBigCartelOrderItems = new Function('order', 'included', 'customBooks', 'function escapeHtml(s){return String(s||"");}\n' + extractItemsFunc[0] + '\nreturn extractBigCartelOrderItems(order, included, customBooks);');
   });
 
   describe('extractBigCartelOrderItems', () => {
@@ -37,7 +37,7 @@ describe('Big Cartel Orders Enhancements (#2, #3, #4, #6)', () => {
       altrove: { id: 'altrove', title: 'Altrove', listPrice: '32.50' }
     };
 
-    function escapeHTML(str) { return str; }
+    function escapeHtml(str) { return str; }
 
     it('deduces ordered catalog items from order net total when line items array is stripped', () => {
       const order = {
@@ -49,7 +49,7 @@ describe('Big Cartel Orders Enhancements (#2, #3, #4, #6)', () => {
         }
       };
 
-      const result = extractBigCartelOrderItems(order, [], mockBooks, escapeHTML);
+      const result = extractBigCartelOrderItems(order, [], mockBooks, escapeHtml);
       expect(result).toContain('Altrove x1');
     });
 
@@ -63,7 +63,7 @@ describe('Big Cartel Orders Enhancements (#2, #3, #4, #6)', () => {
         }
       };
 
-      const result = extractBigCartelOrderItems(order, [], mockBooks, escapeHTML);
+      const result = extractBigCartelOrderItems(order, [], mockBooks, escapeHtml);
       expect(result).toContain('Altrove x2');
     });
   });

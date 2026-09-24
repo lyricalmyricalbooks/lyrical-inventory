@@ -23,7 +23,6 @@ import {
   applyOne,
   classifyStripePayment,
   commitRecoveredWebsiteOrder,
-  escapeHTML,
   getReconMemory,
   isAuthor,
   getScanMemory,
@@ -646,7 +645,7 @@ function renderBigCartelProducts(products, included = []) {
           }
           optionsListHtml += `
             <div style="display:flex; justify-content:space-between; font-size:var(--text-xs); color:var(--text2); margin-top:2px; font-family:var(--font-mono);">
-              <span>${escapeHTML(opt.name || 'Default')}</span>
+              <span>${escapeHtml(opt.name || 'Default')}</span>
               <span>$${price} (Stock: ${quantity} | Sold: ${sold})</span>
             </div>
           `;
@@ -660,11 +659,11 @@ function renderBigCartelProducts(products, included = []) {
     card.className = 'bc-card';
     card.innerHTML = `
       <div class="bc-img-wrap">
-        <img class="bc-img" src="${imgUrl}" alt="${escapeHTML(attr.name)}" loading="lazy">
+        <img class="bc-img" src="${imgUrl}" alt="${escapeHtml(attr.name)}" loading="lazy">
       </div>
       <div class="bc-info">
         <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
-          <h3 class="bc-title">${escapeHTML(attr.name)}</h3>
+          <h3 class="bc-title">${escapeHtml(attr.name)}</h3>
           <span class="${statusClass}">${statusLabel}</span>
         </div>
         <div class="bc-price">$${price} CAD</div>
@@ -673,7 +672,7 @@ function renderBigCartelProducts(products, included = []) {
           ${optionsListHtml}
         </div>
         <div class="bc-meta-row" style="margin-top:10px; font-size:var(--text-xs);">
-          <span>Category: ${escapeHTML((attr.category_names && attr.category_names[0]) || 'Books')}</span>
+          <span>Category: ${escapeHtml((attr.category_names && attr.category_names[0]) || 'Books')}</span>
           <span>Stock: ${hasStockTracking ? totalStock : '∞'}</span>
         </div>
       </div>
@@ -715,7 +714,7 @@ function extractBigCartelOrderItems(order, included = [], customBooks = null) {
                  itemAttr.title ||
                  itemAttr.description;
     const qty = itemAttr.quantity || itemAttr.qty || 1;
-    if (name) return `${escapeHTML(name)} x${qty}`;
+    if (name) return `${escapeHtml(name)} x${qty}`;
     return null;
   };
 
@@ -782,7 +781,7 @@ function extractBigCartelOrderItems(order, included = [], customBooks = null) {
         const qtyRatio = netMerch / price;
         const roundedQty = Math.round(qtyRatio);
         if (Math.abs(qtyRatio - roundedQty) < 0.05 && roundedQty > 0) {
-          items.push(`${escapeHTML(book.title)} x${roundedQty}`);
+          items.push(`${escapeHtml(book.title)} x${roundedQty}`);
           break;
         }
       }
@@ -1037,7 +1036,7 @@ function renderBigCartelOrders(orders, included = []) {
     const matchInfo = matchBigCartelOrderToCatalog(o, included);
     let matchPillHtml = '';
     if (matchInfo.matched) {
-      matchPillHtml = `<br><span class="bc-match-pill matched" title="Matches catalog inventory">✓ Matched: ${escapeHTML(matchInfo.matchedBooks.join(', '))}</span>`;
+      matchPillHtml = `<br><span class="bc-match-pill matched" title="Matches catalog inventory">✓ Matched: ${escapeHtml(matchInfo.matchedBooks.join(', '))}</span>`;
     } else {
       matchPillHtml = `<br><span class="bc-match-pill unmatched" title="Product is not linked to catalog book">⚠️ Unmatched</span>`;
     }
@@ -1055,9 +1054,9 @@ function renderBigCartelOrders(orders, included = []) {
 
     const row = document.createElement('tr');
     row.innerHTML = `
-      <td style="font-family:var(--font-mono); font-size:var(--text-xs);">#${escapeHTML(o.id)}</td>
+      <td style="font-family:var(--font-mono); font-size:var(--text-xs);">#${escapeHtml(o.id)}</td>
       <td>${dateStr}</td>
-      <td style="font-weight:600;"><a class="bc-customer-link" onclick="openBigCartelAddressPreview('${o.id}')" title="Click to view full shipping address">${escapeHTML(customer)}</a>${email ? `<br><span style="font-size:var(--text-xs); color:var(--text3); font-weight:normal;">${escapeHTML(email)}</span>` : ''}</td>
+      <td style="font-weight:600;"><a class="bc-customer-link" onclick="openBigCartelAddressPreview('${o.id}')" title="Click to view full shipping address">${escapeHtml(customer)}</a>${email ? `<br><span style="font-size:var(--text-xs); color:var(--text3); font-weight:normal;">${escapeHtml(email)}</span>` : ''}</td>
       <td style="font-size:var(--text-sm); line-height:1.45;">${itemsHtml}</td>
       <td class="r" style="font-family:var(--font-mono);">$${tax}</td>
       <td class="r" style="font-family:var(--font-mono);">$${shipping}</td>

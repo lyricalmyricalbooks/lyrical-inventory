@@ -81,14 +81,19 @@ export function ocChosenPhoto(contributor) {
   return c.photo || (Array.isArray(c.photos) ? c.photos.join(', ') : '');
 }
 
+// Whole days since an ISO timestamp, or null when it doesn't parse.
+function ocDaysSince_(iso, now) {
+  const t = Date.parse(iso || '');
+  if (!Number.isFinite(t)) return null;
+  return Math.max(0, Math.floor((now - t) / 86400000));
+}
+
 // Whole days since the contributor's last stage change (falling back to
 // createdAt for records that predate tracking). null when no usable date.
 // Powers the "waiting Nd" aging chip on cards.
 export function ocWaitingDays(contributor, now = Date.now()) {
   const c = contributor || {};
-  const t = Date.parse(c.lastStageAt || c.createdAt || '');
-  if (!Number.isFinite(t)) return null;
-  return Math.max(0, Math.floor((now - t) / 86400000));
+  return ocDaysSince_(c.lastStageAt || c.createdAt, now);
 }
 
 // ── Approval inbox ─────────────────────────────────────────────────────────
@@ -283,13 +288,6 @@ export function ocCurrentStage(contributor) {
   const c = contributor || {};
   const st = OC_STAGES.find(s => !c[s.key]);
   return st ? st.key : 'complete';
-}
-
-// Whole days since an ISO timestamp, or null when it doesn't parse.
-function ocDaysSince_(iso, now) {
-  const t = Date.parse(iso || '');
-  if (!Number.isFinite(t)) return null;
-  return Math.max(0, Math.floor((now - t) / 86400000));
 }
 
 // Is this artist overdue for a friendly reminder? Only while we're waiting on

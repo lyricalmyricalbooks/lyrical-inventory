@@ -6601,10 +6601,10 @@ async function calculateShippoRates() {
                 ${transitInfo ? `<div class="rate-transit">${escapeHtml(transitInfo)}</div>` : ''}
               </div>
             </div>
-            <div class="rate-price-area" style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
+            <div class="rate-price-area">
               <div class="rate-price">${parseFloat(r.amount).toFixed(2)} ${escapeHtml(r.currency)}</div>
               ${rateCoverageTagHtml(parseFloat(r.amount), customerPaid, r.currency)}
-              <button class="btn gold sm" onclick="buyShippoLabel('${r.object_id}', '${escapeHtml(r.provider)}', '${escapeHtml(r.servicelevel.name)}', ${parseFloat(r.amount)}, '${escapeHtml(r.currency)}')" style="margin:0; padding:4px 8px; font-size:var(--text-2xs); font-weight:600; height:auto; line-height:1;">Buy Label</button>
+              <button class="btn gold sm rate-buy-btn" type="button" onclick="buyShippoLabel('${r.object_id}', '${escapeHtml(r.provider)}', '${escapeHtml(r.servicelevel.name)}', ${parseFloat(r.amount)}, '${escapeHtml(r.currency)}')"><span aria-hidden="true">🏷️</span><span>Buy Label</span></button>
             </div>
           </div>
         `;
