@@ -2726,8 +2726,14 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
    Adheres strictly to Linear / Apple HIG segmented control, progressive
    disclosure, and canonical design tokens.
    ═══════════════════════════════════════════════════════════════════════════ */
-.email-import-workspace .modal-tabs{width:100%;margin:var(--space-2) 0 0;}
-.email-import-workspace .modal-tab-btn{flex:1;justify-content:center;min-height:44px;}
+.email-import-workspace .modal-tabs{width:100%;margin:var(--space-2) 0 var(--space-4);}
+.email-import-workspace .modal-tab-btn{flex:1;flex-direction:column;justify-content:center;align-items:center;gap:2px;min-height:56px;padding:var(--space-2) var(--space-3);border:var(--stroke-hair) solid transparent;}
+/* The label stays caps like every segmented control; the line under it is
+   plain sentence case so it reads as a description, not a second label. */
+.email-tab-head{display:inline-flex;align-items:center;gap:var(--space-1);}
+.email-tab-sub{font-size:var(--text-2xs);font-weight:500;letter-spacing:0;text-transform:none;color:var(--content-muted);}
+.email-import-workspace .modal-tab-btn.active .email-tab-sub{color:var(--content-secondary);}
+.email-panel-intro{margin:0 0 var(--space-3);max-width:68ch;color:var(--content-secondary);font-size:var(--text-sm);line-height:var(--leading-normal);}
 .email-connected-pill{white-space:nowrap;margin-left:auto;align-self:center;}
 .email-no-ai-tag{display:inline-flex;align-items:center;margin-left:var(--space-1);padding:2px 6px;border-radius:var(--r-pill);background:var(--green-bg);color:var(--green);font-family:var(--font-mono);font-size:var(--text-3xs);letter-spacing:.04em;}
 .email-import-workspace .email-ai-assistant-card{margin-bottom:var(--space-4);padding:var(--space-4);}
@@ -2742,7 +2748,8 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 
 @media (max-width: 768px){
   .email-import-workspace .modal-tabs{overflow-x:auto;scroll-snap-type:x proximity;}
-  .email-import-workspace .modal-tab-btn{flex:0 0 auto;scroll-snap-align:start;}
+  .email-import-workspace .modal-tab-btn{flex:0 0 auto;scroll-snap-align:start;min-height:48px;}
+  .email-tab-sub{display:none;}
 }
 
 .modal-title-badge {
@@ -2861,7 +2868,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 
 .email-search-input {
   width: 100%;
-  height: 38px;
+  height: 44px;
   padding: 0 34px 0 34px;
   font-size: var(--text-sm);
   background: var(--surface-raised);
@@ -2893,7 +2900,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 }
 
 .email-search-action-btn {
-  height: 38px;
+  height: 44px;
   padding: 0 var(--space-4);
   font-size: var(--text-xs);
   white-space: nowrap;
@@ -2936,7 +2943,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  height: 28px;
+  min-height: 36px;
   padding: 0 var(--space-3);
   font-size: var(--text-xs);
   border-radius:var(--r-pill);
@@ -2998,24 +3005,68 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   line-height: var(--leading-normal);
 }
 
-/* Manual Paste & Dropzone */
+/* Manual Paste & Dropzone — two numbered cards side by side, so "paste the
+   text OR add a file" reads as two ways in rather than one long form. */
 .email-manual-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-3);
   margin-bottom: var(--space-3);
 }
+.email-manual-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-3);
+  background: var(--surface-raised);
+  border: var(--stroke-hair) solid var(--border-default);
+  border-radius: var(--r2);
+  box-shadow: var(--elev-1);
+}
+.email-manual-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: 32px;
+}
+.email-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-right: var(--space-1);
+  border-radius: 50%;
+  background: var(--surface-inverse);
+  color: var(--content-on-inverse);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: 700;
+}
+.email-manual-foot {
+  min-height: 1.2em;
+  color: var(--content-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-feature-settings: 'tnum' 1;
+}
+.email-manual-clear[hidden] { display: none; }
 
 .email-field-label {
-  font-size: var(--text-xs);
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--text-sm);
   font-weight: 600;
-  color: var(--content-secondary);
-  margin-bottom: var(--space-1);
-  display: block;
+  color: var(--content-primary);
+  margin: 0;
 }
 
 .email-paste-textarea {
+  flex: 1;
   width: 100%;
+  min-height: 190px;
   border:var(--stroke-hair) solid var(--border-default);
   border-radius: var(--r2);
   padding: var(--space-2) var(--space-3);
@@ -3027,20 +3078,29 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   background: var(--surface-sunken);
   color: var(--content-primary);
 }
+.email-paste-textarea:focus { border-color: var(--gold); box-shadow: var(--focus-ring-halo); outline: none; }
 
 .email-dropzone {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 190px;
   border: 2px dashed var(--border-default);
   border-radius: var(--r2);
-  padding: 24px 16px;
+  padding: var(--space-5) var(--space-4);
   text-align: center;
   background: var(--surface-sunken);
   cursor: pointer;
   transition: border-color var(--dur-fast) var(--ease-standard), background-color var(--dur-fast) var(--ease-standard);
 }
-.email-dropzone:hover {
+.email-dropzone:hover, .email-dropzone:focus-visible, .email-dropzone.is-dragover {
   border-color: var(--gold);
-  background: var(--surface-inset);
+  background: var(--gold-bg);
+  outline: none;
 }
+.email-dropzone.is-dragover { border-style: solid; }
 
 .email-dropzone-icon {
   font-size: var(--text-2xl);
@@ -3048,15 +3108,50 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 }
 
 .email-dropzone-title {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--content-primary);
   margin-bottom: var(--space-1);
 }
 
 .email-dropzone-sub {
-  font-size: var(--text-2xs);
+  max-width: 34ch;
+  font-size: var(--text-xs);
   color: var(--content-muted);
+  line-height: var(--leading-normal);
+}
+
+/* Chosen files, each one removable on its own. */
+.email-file-chips { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1); }
+.email-file-chips:empty { display: none; }
+.email-file-chip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--target-min);
+  padding: 0 0 0 var(--space-3);
+  background: var(--surface-sunken);
+  border: var(--stroke-hair) solid var(--border-subtle);
+  border-radius: var(--r);
+  font-size: var(--text-xs);
+}
+.email-file-chip-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--content-primary); font-weight: 500; }
+.email-file-chip-size { color: var(--content-muted); font-family: var(--font-mono); font-feature-settings: 'tnum' 1; white-space: nowrap; }
+.email-file-chip-x {
+  width: var(--target-min);
+  height: var(--target-min);
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: var(--content-muted);
+  cursor: pointer;
+  border-radius: var(--r);
+}
+.email-file-chip-x:hover, .email-file-chip-x:focus-visible { color: var(--red); background: var(--surface-inset); }
+
+@media (max-width: 720px) {
+  .email-manual-grid { grid-template-columns: 1fr; }
+  .email-paste-textarea, .email-dropzone { min-height: 150px; }
 }
 
 /* Progressive Bulk Category Strip */

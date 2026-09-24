@@ -4,51 +4,44 @@
 #email-panel-gmail { container-type: inline-size; }
 #email-panel-gmail [hidden], #email-receipt-results[hidden], #email-bulk-category-bar[hidden], #email-receipt-scan-btn[hidden] { display:none !important; }
 
-/* ── Header + Connection Status ─────────────────────────────────────── */
-.finder-head {
+/* ── Connection bar ─────────────────────────────────────────────────
+   One line saying whether Gmail is connected, with its one fix beside it.
+   It used to be a titled card, a separate note underneath and a pill in the
+   page header — three places saying the same thing. */
+.finder-conn-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding: var(--space-3) var(--space-4);
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  margin-bottom: var(--space-3);
   background: var(--surface-sunken);
   border: 1px solid var(--border-default);
   border-radius: var(--r2);
-  margin-bottom: var(--space-2);
 }
-.finder-head-text { min-width: 0; }
-.finder-subhead {
-  margin: 0;
-  font-family: var(--font-ui);
+.finder-conn-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--content-muted);
+  box-shadow: 0 0 0 3px var(--surface-raised);
+}
+.finder-conn-bar[data-state="on"] .finder-conn-dot { background: var(--green); }
+.finder-conn-bar[data-state="lapsed"] .finder-conn-dot { background: var(--amber); }
+.finder-conn-bar[data-state="lapsed"] { border-inline-start: 3px solid var(--amber); }
+.finder-conn-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.finder-conn-title {
   font-size: var(--text-sm);
   font-weight: 600;
   color: var(--content-primary);
-  line-height: var(--leading-tight);
+  overflow-wrap: anywhere;
 }
-.finder-subcopy {
-  margin: 2px 0 0;
+.finder-conn-note {
   color: var(--content-secondary);
   font-size: var(--text-xs);
   line-height: 1.45;
 }
-.finder-conn {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-shrink: 0;
-}
-.finder-conn-btn {
-  min-height: 34px !important;
-  padding: 5px 12px !important;
-  font-size: var(--text-xs) !important;
-  white-space: nowrap;
-}
-.finder-conn-note {
-  margin: 0 0 var(--space-3) var(--space-1);
-  color: var(--content-muted);
-  font-size: var(--text-xs);
-  line-height: 1.4;
-}
+.finder-conn-btn { flex: none; min-height: var(--target-min) !important; white-space: nowrap; }
 
 /* ── First-run gate: prerequisites before the first scan ───────────── */
 .finder-gate {
@@ -64,7 +57,9 @@
 .finder-gate-steps strong { color: var(--content-primary); font-size: var(--text-base); }
 .finder-gate-steps .btn { margin-top: var(--space-1); }
 
-/* ── Search console card ────────────────────────────────────────────── */
+/* ── Search card ────────────────────────────────────────────────────
+   One search box and one button carry the common case; the period is a
+   single segmented control, and sender + exact dates wait in a drawer. */
 .finder-search {
   background: var(--surface-raised);
   border: 1px solid var(--border-default);
@@ -73,20 +68,104 @@
   margin-bottom: var(--space-4);
   box-shadow: var(--elev-1);
 }
+.finder-searchbar { display: flex; gap: var(--space-2); align-items: stretch; }
+.finder-query-wrap { position: relative; flex: 1; min-width: 0; display: flex; align-items: center; }
+.finder-query-icon {
+  position: absolute;
+  inset-inline-start: var(--space-3);
+  font-size: var(--text-sm);
+  pointer-events: none;
+  opacity: .7;
+}
+#finder-query {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 48px;
+  padding: 0 var(--space-3) 0 calc(var(--space-3) + 26px);
+  font-size: var(--text-base);
+  background: var(--surface-page);
+  border: 1px solid var(--border-strong, var(--border-default));
+  border-radius: var(--r2);
+  color: var(--content-primary);
+}
+#finder-query:focus { border-color: var(--gold); box-shadow: var(--focus-ring-halo); outline: none; }
+.finder-scan-btn, .finder-stop-btn { min-height: 48px !important; padding-inline: var(--space-5) !important; white-space: nowrap; }
 
-/* Balanced 4-column filter grid */
+.finder-search-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-top: var(--space-3);
+}
+/* Segmented period picker — one choice at a time, so it reads as one control
+   rather than three chips that looked like they could all be on. */
+.finder-period {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r2);
+}
+.finder-period-btn {
+  min-height: 38px;
+  padding: 0 var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--r);
+  background: transparent;
+  color: var(--content-secondary);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.finder-period-btn:hover { color: var(--content-primary); }
+.finder-period-btn[aria-pressed="true"] {
+  background: var(--surface-raised);
+  color: var(--content-primary);
+  border-color: var(--rule-ink);
+  box-shadow: var(--elev-1);
+}
+.finder-presets { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.finder-presets .filter-chip[aria-pressed="true"] {
+  background: var(--gold-bg);
+  border-color: var(--gold-line);
+  color: var(--gold-text);
+}
+
+.finder-more { margin-top: var(--space-3); }
+.finder-more > summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target-min);
+  gap: var(--space-1);
+  cursor: pointer;
+  color: var(--content-secondary);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  user-select: none;
+}
+.finder-more > summary:hover { color: var(--content-primary); }
+.finder-more > summary::-webkit-details-marker { display: none; }
+.finder-more > summary::before {
+  content: '▸';
+  display: inline-block;
+  transition: transform var(--dur-fast) var(--ease-standard);
+}
+.finder-more[open] > summary::before { transform: rotate(90deg); }
 .finder-filters {
   display: grid;
-  grid-template-columns: minmax(0, 1.8fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr);
   gap: var(--space-3);
   align-items: end;
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r2);
 }
-.finder-filters .form-group {
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
+.finder-filters .form-group { margin: 0; display: flex; flex-direction: column; gap: var(--space-1); }
 .finder-filters label {
   font-size: var(--text-2xs);
   font-weight: 700;
@@ -97,53 +176,13 @@
 .finder-filters input {
   width: 100%;
   box-sizing: border-box;
-  min-height: 38px;
+  min-height: var(--target-min);
   padding: 6px var(--space-2);
   font-size: var(--text-sm);
   background: var(--surface-page);
   border: 1px solid var(--border-default);
   border-radius: var(--r);
   color: var(--content-primary);
-}
-
-/* Tools strip: quick preset pills on left, primary scan button on right */
-.finder-search-tools {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-  margin-top: var(--space-3);
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--border-subtle);
-}
-.finder-presets {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  align-items: center;
-}
-.finder-presets-sep {
-  width: 1px;
-  height: 20px;
-  background: var(--border-default);
-  margin-inline: var(--space-1);
-}
-.finder-run {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-  margin-left: auto;
-}
-.finder-run .btn {
-  min-height: 38px !important;
-  padding-inline: var(--space-4) !important;
-}
-.finder-run-hint {
-  color: var(--content-muted);
-  font-size: var(--text-xs);
-  white-space: nowrap;
 }
 
 /* Daily-scan automated toggle */
@@ -177,9 +216,10 @@
   font-feature-settings: 'tnum' 1, 'zero' 1;
 }
 [data-finder-status] {
-  margin: var(--space-2) 0 0;
+  margin: var(--space-3) 0 0;
   font-size: var(--text-xs);
-  color: var(--content-muted);
+  color: var(--content-secondary);
+  line-height: 1.5;
 }
 
 /* ── Inline Alerts ─────────────────────────────────────────────────── */
@@ -224,15 +264,13 @@
   gap: var(--space-3);
   align-items: center;
   flex-wrap: wrap;
-  margin-block: var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  background: var(--surface-sunken);
-  border: 1px solid var(--border-default);
-  border-radius: var(--r2);
+  margin-block: var(--space-2) 0;
+  padding: var(--space-2) 0;
 }
+.finder-result-search { flex: 1; min-width: 220px; display: flex; }
 .finder-listbar [data-result-search] {
   flex: 1;
-  min-width: 220px;
+  width: 100%;
   min-height: 38px;
   padding: 6px var(--space-2);
   border-radius: var(--r);
@@ -247,87 +285,48 @@
 .finder-select { display: inline-flex; align-items: center; gap: var(--space-2); cursor: pointer; font-size: var(--text-xs); }
 .finder-meta { color: var(--content-secondary); font-size: var(--text-sm); }
 
-/* ── Summary KPI Tiles (Interactive Filters) ───────────────────────── */
-.finder-summary {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-3);
-  margin-block: var(--space-3);
-}
-.finder-stat {
-  position: relative;
-  overflow: hidden;
+/* ── Results head: status tabs + list tools ─────────────────────────
+   One row of status tabs with counts replaces the three count tiles and the
+   second row of chips that filtered exactly the same way. */
+.finder-results-head[hidden] { display: none; }
+.finder-results-head { margin-block: var(--space-4) var(--space-2); }
+.finder-tabs {
   display: flex;
-  align-items: stretch;
-  gap: var(--space-3);
-  background: var(--surface-raised);
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--border-default);
-  border-radius: var(--r2);
-  cursor: pointer;
-  user-select: none;
-  transition: transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast) var(--ease-spring), border-color var(--dur-fast) var(--ease-standard);
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  border-bottom: 2px solid var(--rule-ink);
 }
-.finder-stat:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--elev-2);
-  border-color: var(--border-strong);
-}
-.finder-stat:active { transform: scale(0.985); }
-.finder-stat::after {
-  content: '';
-  position: absolute;
-  inset-inline: 0;
-  bottom: 0;
-  height: 3px;
-  background: var(--border-default);
-  transition: height var(--dur-fast) ease;
-}
-.finder-stat.tone-ready::after { background: var(--green); }
-.finder-stat.tone-review::after { background: var(--amber); }
-.finder-stat.tone-imported::after { background: var(--content-muted); }
-
-/* Active filter selection state */
-.finder-stat.is-active-filter {
-  border-color: var(--gold);
-  box-shadow: 0 0 0 1px var(--gold), var(--elev-2);
-  background: color-mix(in srgb, var(--surface-raised) 92%, var(--gold-bg));
-}
-.finder-stat.is-active-filter::after { height: 4px; }
-
-.finder-stat-icon {
-  align-self: flex-start;
-  width: 36px;
-  height: 36px;
-  flex-shrink: 0;
-  display: flex;
+.finder-tab {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  border-radius: var(--r2);
-  background: var(--surface-sunken);
-  font-size: var(--text-md);
-}
-.finder-stat-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.finder-stat-label {
+  gap: var(--space-2);
+  min-height: var(--target-min);
+  padding: 0 var(--space-3);
+  margin-bottom: -2px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
   color: var(--content-secondary);
-  font-size: var(--text-2xs);
-  font-weight: 800;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
 }
-.finder-stat-val {
-  font: 500 var(--text-xl)/1.2 'DM Mono', monospace;
+.finder-tab:hover { color: var(--content-primary); }
+.finder-tab.active { color: var(--content-primary); border-bottom-color: var(--gold); }
+.finder-tab-count {
+  min-width: 22px;
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  background: var(--surface-sunken);
+  font-family: 'DM Mono', monospace;
   font-feature-settings: 'tnum' 1, 'zero' 1;
-  color: var(--content-primary);
+  font-size: var(--text-xs);
+  text-align: center;
 }
-.finder-stat-sub { margin-top: auto; color: var(--content-muted); font-size: var(--text-xs); }
-.finder-stat.is-lead { border-color: var(--gold-line, var(--border-strong)); box-shadow: var(--elev-2); }
-.finder-stat.is-lead .finder-stat-val { font-size: var(--text-2xl); color: var(--gold-text); }
-.finder-stat.is-lead .finder-stat-icon { background: var(--gold-bg, var(--surface-sunken)); }
-/* A zero is "nothing here yet", not an alarm — the lead card's accent colour
-   on an empty count read as an error on first sight. */
-.finder-stat.is-zero .finder-stat-val,
-.finder-stat.is-lead.is-zero .finder-stat-val { color: var(--content-muted); }
+.finder-tab.tone-ready:not(.is-zero) .finder-tab-count { background: var(--green-bg); color: var(--green); }
+.finder-tab.tone-review:not(.is-zero) .finder-tab-count,
+.finder-tab.tone-duplicate:not(.is-zero) .finder-tab-count { background: var(--amber-bg); color: var(--content-primary); }
+.finder-tab.is-zero { color: var(--content-muted); }
 
 /* ── Result Rows ───────────────────────────────────────────────────── */
 .finder-draft {
@@ -342,13 +341,16 @@
 .finder-draft:hover { border-color: var(--border-strong); }
 .finder-draft > summary {
   display: grid;
-  grid-template-columns: minmax(0, 1.8fr) minmax(130px, .5fr) 140px 110px var(--target-min);
+  grid-template-columns: minmax(0, 1fr) auto auto 96px var(--target-min);
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
   align-items: center;
   cursor: pointer;
 }
 .finder-vendor { font-weight: 600; font-size: var(--text-sm); overflow-wrap: anywhere; }
+.finder-draft > summary::-webkit-details-marker { display: none; }
+.finder-draft > summary > .pill { justify-self: start; white-space: nowrap; }
+.finder-att { white-space: nowrap; }
 .finder-vendor small { display: block; color: var(--content-secondary); font-weight: 400; font-size: var(--text-xs); margin-top: 2px; }
 .finder-money, .finder-date, .finder-edit-grid input[type=number] {
   font-family: 'DM Mono', monospace;
@@ -440,6 +442,8 @@
   line-height: var(--leading-normal);
 }
 .finder-draft.is-review, .finder-draft.is-duplicate { box-shadow: inset 3px 0 0 var(--amber); }
+.finder-draft.is-ready { box-shadow: inset 3px 0 0 var(--green); }
+.finder-draft.is-ignored > summary { opacity: .72; }
 
 /* ── Pinned Action Bar ─────────────────────────────────────────────── */
 .finder-actionbar {
@@ -456,34 +460,38 @@
   border-top: 1px solid var(--border-default);
   box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.05);
 }
+.finder-actionbar[hidden] { display: none; }
+.finder-actionbar [data-action="next"] { margin-inline-end: auto; }
 .finder-count { color: var(--content-secondary); font-size: var(--text-sm); font-weight: 500; }
 
 /* ── Container Queries & Responsive Sizing ─────────────────────────── */
-@container (max-width: 960px) {
-  .finder-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .finder-edit-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .finder-search-tools { flex-direction: column; align-items: stretch; }
-  .finder-run { justify-content: space-between; margin-left: 0; width: 100%; }
-}
-
-@container (max-width: 680px) {
-  .finder-head { flex-direction: column; align-items: stretch; }
-  .finder-conn { width: 100%; justify-content: space-between; }
-  .finder-summary { grid-template-columns: 1fr; }
-  .finder-draft > summary { grid-template-columns: minmax(0, 1fr) minmax(100px, .5fr); }
-  .finder-draft-x { grid-column: 1 / -1; }
-  .finder-presets-sep { display: none; }
+@container (max-width: 760px) {
+  .finder-filters, .finder-edit-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .finder-sender { grid-column: 1 / -1; }
+  .finder-draft > summary { grid-template-columns: minmax(0, 1fr) auto var(--target-min); }
+  .finder-draft > summary > .pill { grid-row: 2; grid-column: 1; }
+  .finder-draft > summary > .finder-date { grid-row: 2; grid-column: 2; justify-self: end; }
+  .finder-draft-x { grid-row: 1; grid-column: 3; }
   .finder-item { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-@container (max-width: 440px) {
+@container (max-width: 520px) {
+  .finder-conn-bar { flex-wrap: wrap; padding: var(--space-3); }
+  .finder-conn-btn { width: 100%; justify-content: center; }
+  .finder-searchbar { flex-wrap: wrap; }
+  .finder-query-wrap { flex-basis: 100%; }
+  .finder-scan-btn, .finder-stop-btn { flex: 1; justify-content: center; }
+  .finder-period { width: 100%; }
+  .finder-period-btn { flex: 1; padding-inline: var(--space-1); }
   .finder-filters, .finder-edit-grid { grid-template-columns: 1fr; }
-  .finder-run .btn { width: 100%; justify-content: center; }
+  .finder-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .finder-tab { flex: none; }
   .finder-actionbar { flex-wrap: wrap; justify-content: stretch; }
+  .finder-actionbar .btn { flex: 1; justify-content: center; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   #email-panel-gmail button { transition: none; transform: none; }
   .finder-progress-fill { transition: none; }
-  .finder-stat { transition: none; transform: none; }
+  .finder-more > summary::before { transition: none; }
 }
