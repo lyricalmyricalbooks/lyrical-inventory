@@ -3673,7 +3673,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 
 .store-balance-pop{
   display:none;flex-direction:column;gap:var(--space-3);
-  /* The global `*{margin:0}` reset wipes the UA's `margin:auto` on [popover],
+  /* The global margin reset wipes the browser default margin:auto on a popover,
      which is what centres a popover in the viewport — restore it here. */
   margin:auto;
   width:min(420px,calc(100vw - 32px));padding:var(--space-4);
@@ -15627,7 +15627,7 @@ button[onclick="refreshUmamiStats()"]:active {
 .fk-preset-btn{min-height:44px;flex:none;}
 .fk-pop{
   display:none;flex-direction:column;gap:var(--space-3);
-  /* The global `*{margin:0}` reset wipes the UA's `margin:auto` on [popover],
+  /* The global margin reset wipes the browser default margin:auto on a popover,
      which pinned this panel to the top-left corner — restore the centring. */
   margin:auto;
   width:min(360px,calc(100vw - 32px));padding:var(--space-4);
