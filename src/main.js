@@ -10093,7 +10093,6 @@ function transferPayUrl(t) {
 function renderArtistTransfers() {
   const s = getState(), book = getBook(), cur = book.currency;
   let transfers = [...(s.artistTransfers || [])].map(t => ({ ...t, status: 'approved' }));
-  const payLink = book.paymentLink || '';
 
   // Merge in pending author submissions for BOTH author and publisher views
   const pbSales = window.authorSubmissions[activeBook]?.sales || {};
@@ -10199,11 +10198,6 @@ function renderArtistTransfers() {
   if (!sect) return;
   if (!transfers.length) { sect.style.display = 'none'; return; }
   sect.style.display = '';
-  const fullPayLink = payLink.startsWith('http') ? payLink : payLink ? 'https://' + payLink : '';
-  const payHtml = fullPayLink
-    ? `<a href="${fullPayLink}" target="_blank" class="btn sm" style="text-decoration:none;background:var(--green-bg);color:var(--green);border-color:rgba(42,99,72,.2);">↗ Payment link</a>`
-    : `<span style="font-size:var(--text-2xs);color:var(--text3);font-family:var(--font-mono);">No payment link set</span>`;
-
   list.innerHTML = transfers.map(t => `
     <div class="pending-card${t.status === 'pending' ? ' is-pending' : ''}">
       <div>
@@ -10216,7 +10210,6 @@ function renderArtistTransfers() {
         <div class="pending-card-note">${escapeHtml(t.notes) || '—'}</div>
       </div>
       <div class="pending-card-actions">
-        ${payHtml}
         ${t.status === 'pending'
       ? `<button class="btn sm outline" disabled>Approve sale first</button>`
       : `${transferPayUrl(t)
