@@ -45,6 +45,7 @@ import {
   today,
 } from '../main.js';
 import { renderExpenses, saveReceiptToLocalFile, readShippingFieldsFromReceipt } from './receipts.js';
+import { findExistingLabel, describeExistingLabel } from '../lib/label-duplicate-guard.js';
 import { openM, closeM, confirmDialog, promptDialog, validateFields, clearFieldErrors, fieldError, _prefersReducedMotion } from '../lib/modal.js';
 import { dismissAppAlert, pushAppAlert } from '../lib/app-alert.js';
 import {
@@ -5547,6 +5548,9 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
       : 'NOT prepaid — the customer is billed on delivery']);
   }
 
+  const prefilledOrder = $('ship-prefill-dest')?.dataset.orderNumber || $('sp-order-num')?.value;
+  if (!isTest && prefilledOrder && !(await confirmNoExistingLabel(prefilledOrder))) return;
+
   const billingWarning = isTest
     ? 'Sandbox Test Mode is on, but Canada Post serves test and live from the same address. '
       + 'If the key saved in Tax Centre is a production key, this buys a real label and charges your account.'
@@ -6101,7 +6105,45 @@ function renderShippoDiagnostics(data, fallbackMessage) {
     </div>`;
 }
 
+/**
+ * Asks before buying a second label for an order that already has one.
+ * Resolves true when the purchase should go ahead.
+ */
+async function confirmNoExistingLabel(orderNumber) {
+  const found = findExistingLabel(orderNumber, {
+    hist: getState().hist || [],
+    expenses: TAX_CENTER.businessExpenses || [],
+  });
+  if (!found) return true;
+  return confirmDialog(
+    `Order ${normalizeShippingOrderNumber(orderNumber)} already has a shipping label. `
+      + 'Buying another charges you again for the same parcel.',
+    {
+      title: 'This order already has a label',
+      details: describeExistingLabel(found),
+      okLabel: 'Buy another anyway',
+      cancelLabel: 'Go back',
+      danger: true,
+    },
+  );
+}
+
+let _shippoPurchaseInFlight = false;
+
 async function buyShippoLabel(rateId, provider, serviceName, amount, currency) {
+  if (_shippoPurchaseInFlight) {
+    showToast('A label purchase is already running — give it a moment', 'warn');
+    return;
+  }
+  _shippoPurchaseInFlight = true;
+  try {
+    await buyShippoLabelOnce(rateId, provider, serviceName, amount, currency);
+  } finally {
+    _shippoPurchaseInFlight = false;
+  }
+}
+
+async function buyShippoLabelOnce(rateId, provider, serviceName, amount, currency) {
   const shippoKey = TAX_CENTER.settings?.shippoKey || '';
   if (!shippoKey) {
     showToast('⚠️ Please configure your Shippo API Key first', 'warn');
@@ -6122,6 +6164,9 @@ async function buyShippoLabel(rateId, provider, serviceName, amount, currency) {
     );
     if (!overridden) return;
   }
+
+  const prefilledOrder = $('ship-prefill-dest')?.dataset.orderNumber;
+  if (prefilledOrder && !(await confirmNoExistingLabel(prefilledOrder))) return;
 
   const confirmed = await confirmDialog(`Confirm purchasing shipping label?\n\nCarrier: ${provider}\nService: ${serviceName}\nCost: ${amount} ${currency}`, {
     title: 'Purchase Shipping Label',
