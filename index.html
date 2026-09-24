@@ -477,6 +477,7 @@
         <span class="acct-avatar">LM<span class="acct-dot"><span class="sync-dot syncing" id="sync-dot"></span></span></span>
       </button>
       <div class="header-menu-panel account-panel">
+        <div id="phone-account-tools" aria-label="Book profile and view"></div>
         <div class="acct-status">
           <div class="sync-label" id="sync-label"><b>Firestore</b> · connecting…</div>
           <div class="acct-status-row">
@@ -525,7 +526,6 @@
 <nav class="mnav" id="mnav" aria-label="Main">
   <button type="button" class="mnav-btn" onclick="switchTab('today')"><span class="mnav-ic" aria-hidden="true">▦</span><span class="mnav-label">Home</span></button>
   <button type="button" class="mnav-btn" onclick="switchTab('pos')"><span class="mnav-ic" aria-hidden="true">🛒</span><span class="mnav-label">Sell</span></button>
-  <button type="button" class="mnav-btn mnav-primary" onclick="switchTab('manual')"><span class="mnav-ic" aria-hidden="true">＋</span><span class="mnav-label">Add sale</span></button>
   <button type="button" class="mnav-btn" onclick="switchTab('website')"><span class="mnav-ic" aria-hidden="true">🛍</span><span class="mnav-label">Orders</span></button>
   <button type="button" class="mnav-btn" id="mnav-more" onclick="openMoreSheet()" aria-haspopup="dialog" aria-controls="more-sheet"><span class="mnav-ic" aria-hidden="true">☰</span><span class="mnav-label">More</span><span class="mnav-dot" id="mnav-more-dot" hidden></span></button>
 </nav>
@@ -1060,9 +1060,9 @@
   <div class="web-orders-shell">
     <div class="web-orders-hero">
       <div class="web-orders-copy">
-        <div class="eyebrow">Website fulfillment</div>
-        <h2>Big Cartel orders</h2>
-        <p>Pull Gmail receipts into a focused review queue, confirm customer details, then apply new orders to inventory in one click.</p>
+        <div class="eyebrow">From order to inventory</div>
+        <h2>Orders</h2>
+        <p>Review your Big Cartel receipts, then record new orders in your inventory.</p>
         <div class="web-order-steps" aria-label="Website order workflow">
           <span><b>1</b> Scan Gmail</span>
           <span><b>2</b> Review matches</span>
@@ -1105,19 +1105,14 @@
      what's waiting on each, then one row per group of everything else. -->
 <div class="tab-panel" id="tab-today" style="display:none;">
   <div class="today-head">
-    <h1 class="today-title">Today</h1>
+    <div><div class="phone-eyebrow">Your shop, at a glance</div><h1 class="today-title">Let’s get to it.</h1></div>
     <span class="today-date" id="today-date"></span>
   </div>
   <div class="today-grid">
     <button type="button" class="today-card today-card-ink" onclick="switchTab('pos')">
       <span class="today-card-ic" aria-hidden="true">🛒</span>
       <span class="today-card-name">Sell</span>
-      <span class="today-card-sub">Event register</span>
-    </button>
-    <button type="button" class="today-card" onclick="switchTab('manual')">
-      <span class="today-card-ic" aria-hidden="true">＋</span>
-      <span class="today-card-name">Add sale</span>
-      <span class="today-card-sub">Record one by hand</span>
+      <span class="today-card-sub">Open your register</span>
     </button>
     <button type="button" class="today-card" onclick="switchTab('website')">
       <span class="today-card-ic" aria-hidden="true">🛍</span>
@@ -1133,14 +1128,14 @@
     </button>
     <!-- Opens the phone's own camera; the photo is scanned and lands in a
          filled-in expense form to check and save. -->
-    <button type="button" class="today-card today-card-wide" onclick="snapReceipt()">
+    <button type="button" class="today-card today-receipt-card" onclick="snapReceipt()">
       <span class="today-card-ic" aria-hidden="true">🧾</span>
       <span class="today-card-name">Snap a receipt</span>
-      <span class="today-card-sub">Photo → AI reads it → you check and save</span>
+      <span class="today-card-sub">Take a photo, check it, save</span>
     </button>
     <input type="file" id="snap-receipt-input" accept="image/*" capture="environment" hidden onchange="snapReceiptChosen(this)">
   </div>
-  <div class="today-label">Everything else</div>
+  <div class="today-label">Your workspace</div>
   <div class="today-rows">
     <button type="button" class="today-row" onclick="switchTab('dashboard')"><span class="today-row-ic" aria-hidden="true">▦</span><span class="today-row-txt"><span class="today-row-name">Books &amp; stock</span><span class="today-row-sub">Dashboard, catalogue, figures</span></span><span class="today-row-chev" aria-hidden="true">›</span></button>
     <button type="button" class="today-row" onclick="switchTab('reconcile')"><span class="today-row-ic" aria-hidden="true">💳</span><span class="today-row-txt"><span class="today-row-name">Money</span><span class="today-row-sub">Payments, expenses, tax</span></span><span class="today-row-chev" aria-hidden="true">›</span></button>
@@ -3863,6 +3858,7 @@
 
 <!-- EVENT POS -->
 <div class="tab-panel" id="tab-pos" style="display:none;">
+  <div class="phone-sell-head"><div><div class="phone-eyebrow">At the counter</div><h1>Sell</h1></div><button type="button" class="btn" onclick="switchTab('manual')">Record another sale ↗</button></div>
   <!-- POS Subtab Navigation -->
   <div class="pos-subtab-nav" role="tablist" aria-label="Point of Sale workspace navigation">
     <button type="button" class="pos-subtab-btn active" id="btn-pos-subtab-register" role="tab" aria-selected="true" aria-controls="pos-subpanel-register" onclick="switchPOSSubTab('register')">

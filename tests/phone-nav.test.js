@@ -24,19 +24,19 @@ beforeEach(() => {
 
 const moreLabels = () => [...document.querySelectorAll('#more-sheet-body .snav:not([hidden]) .snav-label')].map((n) => n.textContent);
 
-test('bottom bar has four everyday destinations plus More', () => {
+test('bottom bar has three everyday destinations plus More', () => {
   const buttons = [...document.querySelectorAll('#mnav .mnav-btn')];
-  expect(buttons.map((b) => b.querySelector('.mnav-label').textContent)).toEqual(['Home', 'Sell', 'Add sale', 'Orders', 'More']);
+  expect(buttons.map((b) => b.querySelector('.mnav-label').textContent)).toEqual(['Home', 'Sell', 'Orders', 'More']);
 });
 
 test('More sheet lists every sidebar tool not already on the bottom bar', () => {
   nav.openMoreSheet();
   expect(document.getElementById('more-sheet').hasAttribute('open')).toBe(true);
   const labels = moreLabels();
-  for (const tool of ['Dashboard', 'To-do', 'Tax Centre', 'Payments', 'Customers', 'Shipping', 'Backups', 'History', 'Expenses']) {
+  for (const tool of ['Dashboard', 'To-do', 'Tax Centre', 'Payments', 'Customers', 'Shipping', 'Backups', 'History', 'Expenses', 'Manual entry']) {
     expect(labels).toContain(tool);
   }
-  for (const onBar of ['Event POS', 'Manual entry', 'Website orders']) {
+  for (const onBar of ['Event POS', 'Website orders']) {
     expect(labels).not.toContain(onBar);
   }
   // Cloned ids would duplicate the sidebar's (badges are looked up by id).
@@ -76,18 +76,18 @@ test('Home on the bottom bar opens the Today page', () => {
   expect(mainJs).toMatch(/if \(name === 'today'\) renderTodayHub\(\);/);
 });
 
-test('Today puts the four everyday jobs first, then Snap a receipt, each a real button', () => {
+test('Today gives selling, orders, tasks and receipt capture a real button', () => {
   const cards = [...document.querySelectorAll('#tab-today .today-card')];
-  expect(cards.map((c) => c.querySelector('.today-card-name').textContent)).toEqual(['Sell', 'Add sale', 'Orders', 'To-do', 'Snap a receipt']);
+  expect(cards.map((c) => c.querySelector('.today-card-name').textContent)).toEqual(['Sell', 'Orders', 'To-do', 'Snap a receipt']);
   expect(cards.every((c) => c.tagName === 'BUTTON')).toBe(true);
   // The To-do count rides the same badge class the sidebar uses, so it stays live.
-  expect(cards[3].querySelector('.todo-nav-badge')).not.toBeNull();
+  expect(cards[2].querySelector('.todo-nav-badge')).not.toBeNull();
 });
 
 test('Today shows the waiting-orders count from the Website orders panel', () => {
   const start = mainJs.indexOf('export function renderTodayHub');
   const end = mainJs.indexOf('// ── Phone "More" sheet');
-  const render = new Function('$', mainJs.slice(start, end).replace('export function', 'function') + '; return renderTodayHub;')((id) => document.getElementById(id));
+  const render = new Function('$', 'activeBook', 'renderOrders', mainJs.slice(start, end).replace('export function', 'function') + '; return renderTodayHub;')((id) => document.getElementById(id), 'book-a', () => {});
   document.querySelector('#web-orders-status .web-stat-value').textContent = '3';
   render();
   expect(document.getElementById('today-orders-count').hidden).toBe(false);
@@ -96,9 +96,40 @@ test('Today shows the waiting-orders count from the Website orders panel', () =>
   document.querySelector('#web-orders-status .web-stat-value').textContent = '0';
   render();
   expect(document.getElementById('today-orders-count').hidden).toBe(true);
-  expect(document.getElementById('today-orders-sub').textContent).toBe('Website orders');
+  expect(document.getElementById('today-orders-sub').textContent).toBe('Review website orders');
 });
 
 test('authors never land on the publisher-only Today page', () => {
   expect(mainJs).toMatch(/name === 'today'\)\) name = 'dashboard';/);
+});
+
+test('manual entry belongs to Sell and only one destination is announced', () => {
+  nav.syncMoreNavState('manual');
+  const selected = document.querySelectorAll('#mnav [aria-current="page"]');
+  expect(selected).toHaveLength(1);
+  expect(selected[0].textContent).toContain('Sell');
+  expect(document.querySelector('#tab-pos .phone-sell-head [onclick="switchTab(\'manual\')"]')).not.toBeNull();
+});
+
+test('Home in All books does not reuse another book’s order count', () => {
+  const start = mainJs.indexOf('export function renderTodayHub');
+  const end = mainJs.indexOf('// ── Phone "More" sheet');
+  const render = new Function('$', 'activeBook', 'renderOrders', mainJs.slice(start, end).replace('export function', 'function') + '; return renderTodayHub;')((id) => document.getElementById(id), 'all', () => { throw new Error('must not render a book-specific queue'); });
+  document.querySelector('#web-orders-status .web-stat-value').textContent = '8';
+  render();
+  expect(document.getElementById('today-orders-count').hidden).toBe(true);
+  expect(document.getElementById('today-orders-sub').textContent).toBe('Choose a book to review');
+});
+
+test('reopening a manual sale preserves its entered price; a different book gets its own price', () => {
+  const start = mainJs.indexOf('function updateManualForm()');
+  const end = mainJs.indexOf('// Keeps the live order-preview', start);
+  let bookId = 'first';
+  const make = () => new Function('$', 'getBook', 'activeBook', 'isAuthor', 'phint', mainJs.slice(start, end) + '; return updateManualForm;')((id) => document.getElementById(id), () => ({ title: bookId, listPrice: bookId === 'first' ? 20 : 30 }), bookId, () => false, () => {});
+  make()();
+  document.getElementById('m-price').value = '13.25';
+  make()();
+  expect(document.getElementById('m-price').value).toBe('13.25');
+  bookId = 'second'; make()();
+  expect(document.getElementById('m-price').value).toBe('30.00');
 });
