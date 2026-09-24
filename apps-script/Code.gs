@@ -2912,14 +2912,14 @@ function receiptDailyScan() {
 
     var threads = GmailApp.search(RECEIPT_DAILY_QUERY + ' after:' + win.after + ' before:' + win.before, 0, RECEIPT_DAILY_MAX_MESSAGES);
     var grouped = GmailApp.getMessagesForThreads(threads);
-    var from = new Date(win.startDay + 'T00:00:00');
-    var until = new Date(win.before.replace(/\//g, '-') + 'T00:00:00');
     var messages = [];
     for (var t = 0; t < grouped.length; t++) {
       for (var m = 0; m < grouped[t].length; m++) {
         // A thread matches on any message, so its older replies come back too.
-        var when = grouped[t][m].getDate();
-        if (when >= from && when < until) messages.push(grouped[t][m]);
+        // Compared as script-time-zone day strings, the same way `todayDay`
+        // was worked out, never through the runtime's own local zone.
+        var when = receiptDayString_(grouped[t][m].getDate());
+        if (when >= win.startDay && when <= win.throughDay) messages.push(grouped[t][m]);
       }
     }
     messages = messages.slice(0, RECEIPT_DAILY_MAX_MESSAGES);
