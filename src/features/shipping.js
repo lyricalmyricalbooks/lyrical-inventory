@@ -16,6 +16,7 @@
 // The cycle with main.js is safe for the reason set out in
 // tests/features-boundary.test.js: nothing here runs at module-evaluation
 // time. eslint's no-undef, an error in CI, keeps the import list below honest.
+import { withAutoLocalPickup } from '../lib/local-pickup.js';
 import {
   $,
   BOOKS,
@@ -6412,6 +6413,7 @@ async function unlinkManualPostage(bookId, orderIdentifier) {
 
   delete h.postagePaid;
   delete h.manualPostagePaid;
+  delete h.localPickup;
   await window.saveState(bookId);
   showToast('Manual postage cleared', 'ok');
   renderShippingAnalysisHub();
@@ -6432,6 +6434,57 @@ async function dismissShippingAnalysisOrder(bookId, orderIdentifier) {
   h.excludeFromShipping = true;
   await window.saveState(bookId);
   showToast('Order dismissed from shipping', 'ok');
+  renderShippingAnalysisHub();
+}
+
+// A local pick-up order never gets a label: the customer collects it in
+// person, so there is no postage to link. Recording it as a $0 manual postage
+// keeps every total and margin that already understands manual postage
+// correct, and the flag lets the row say *why* it is zero.
+async function markShippingOrderLocalPickup(bookId, orderIdentifier) {
+  const s = states[bookId];
+  if (!s || !s.hist) return;
+  const h = s.hist.find(x => x.id === orderIdentifier || x.num === orderIdentifier);
+  if (!h) return;
+
+  h.localPickup = true;
+  delete h.pickupDeclined;
+  h.manualPostagePaid = true;
+  h.postagePaid = 0;
+  await window.saveState(bookId);
+  showToast(`Order ${h.num} marked as local pick-up`, 'ok');
+  renderShippingAnalysisHub();
+}
+
+// Orders whose checkout option says pick-up are treated as $0-postage
+// pick-ups in the hub without the owner clicking anything. Derived on the
+// in-memory copies, never saved, so an owner's own choice always wins.
+function applyAutoLocalPickups(orders) {
+  const linkedNumbers = new Set((TAX_CENTER.businessExpenses || [])
+    .filter(e => isPostageExpense(e) && e.shippingMatchStatus === 'matched')
+    .map(e => normalizeShippingOrderNumber(e.shippingOrderNumber))
+    .filter(Boolean));
+  orders.forEach((o, i) => {
+    orders[i] = withAutoLocalPickup(o, linkedNumbers.has(normalizeShippingOrderNumber(o.num)));
+  });
+}
+
+async function unmarkShippingOrderLocalPickup(bookId, orderIdentifier) {
+  const s = states[bookId];
+  if (!s || !s.hist) return;
+  const h = s.hist.find(x => x.id === orderIdentifier || x.num === orderIdentifier);
+  if (!h) return;
+
+  delete h.localPickup;
+  if (h.manualPostagePaid && !Number(h.postagePaid)) {
+    delete h.postagePaid;
+    delete h.manualPostagePaid;
+  }
+  // Remembered so an order whose checkout option says pick-up is not
+  // re-recognised as one the next time the ledger draws.
+  h.pickupDeclined = true;
+  await window.saveState(bookId);
+  showToast(`Order ${h.num} is no longer a local pick-up`, 'ok');
   renderShippingAnalysisHub();
 }
 
@@ -8479,6 +8532,9 @@ function renderLedgerVerifyCell(order) {
 
   // Always inside .ship-verify-cell: the Recipient cell styles bare <span>s as
   // truncating block lines, which would flatten a pill into an ellipsised row.
+  if (order.localPickup) {
+    return `<div class="ship-verify-cell" data-verify-cell="${escapeHtml(key)}"><span class="ship-verify-pill none" title="Collected in person — no address needed">Local pick-up</span></div>`;
+  }
   if (!address.street1) {
     return `<div class="ship-verify-cell" data-verify-cell="${escapeHtml(key)}"><span class="ship-verify-pill none" title="This order has no street address to check">No address</span></div>`;
   }
@@ -8605,6 +8661,8 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
 
     const status = o.excludeFromShipping
       ? { label: 'Dismissed', className: 'neutral' }
+      : o.localPickup
+        ? { label: 'Local pick-up', className: 'matched' }
       : o.manualPostagePaid
         ? { label: 'Manual', className: 'matched' }
         : (!isLinked && !isSuggested
@@ -8663,6 +8721,9 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
         // can put the number in, and every other row already offers it.
         trackingLinkHtml = `<button class="btn sm ghost" style="font-size:var(--text-2xs); padding:3px 8px;" onclick="promptLedgerTracking('${escapeHtml(postageExpenseKey(primary))}')">+ Add tracking</button>`;
       }
+    } else if (o.localPickup) {
+      expenseRefHtml = `<span style="color:var(--text3); font-style:italic;" title="${o.autoLocalPickup ? `Recognised from the checkout option “${escapeHtml(o.shippingMethod)}”` : 'Marked as picked up'}">Picked up in person${o.autoLocalPickup ? ' · from checkout' : ''}</span>`;
+      trackingLinkHtml = `<span style="color:var(--text3); font-style:italic;">—</span>`;
     } else {
       expenseRefHtml = `<span style="color:var(--text3); font-style:italic;">Unlinked</span>`;
       trackingLinkHtml = `<span style="color:var(--text3); font-style:italic;">—</span>`;
@@ -8681,10 +8742,13 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
       actionBtn = `
         <div style="margin-top:6px; display:flex; gap:4px; align-items:center;">
           <button class="btn sm" onclick="openManualShippoLinkModal('${escapeHtml(o.num)}')" style="font-size:var(--text-2xs); padding:3px 8px;">Link</button>
+          <button class="btn sm ghost" onclick="markShippingOrderLocalPickup('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:var(--text-2xs); padding:3px 8px; min-width:unset;" title="The customer collected this in person — no postage to link">Pick-up</button>
           <button class="btn sm ghost" onclick="dismissShippingAnalysisOrder('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:var(--text-2xs); padding:3px 8px; color:var(--text3); min-width:unset;" title="Dismiss order from calculations">✕ Dismiss</button>
         </div>`;
     } else if (isLinked || o.manualPostagePaid) {
-      const mainBtn = o.manualPostagePaid
+      const mainBtn = o.localPickup
+        ? `<button class="btn sm ghost" onclick="unmarkShippingOrderLocalPickup('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:var(--text-2xs); padding:3px 8px; opacity:0.7;" title="This order was shipped after all">Not pick-up</button>`
+        : o.manualPostagePaid
         ? `<button class="btn sm ghost" onclick="unlinkManualPostage('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:var(--text-2xs); padding:3px 8px; opacity:0.7;">Clear manual</button>`
         : `<button class="btn sm ghost" onclick="unlinkShippoExpense('${escapeHtml(postageExpenseKey(linked[0]))}')" style="font-size:var(--text-2xs); padding:3px 8px; opacity:0.7;">Unlink</button>`;
       actionBtn = `
@@ -9174,6 +9238,7 @@ function renderShippingAnalysisHub() {
   });
 
   allOrders.sort((a, b) => b._dateMs - a._dateMs);
+  applyAutoLocalPickups(allOrders);
 
   // 2. Gather every postage cost, whichever carrier it came from.
   //
@@ -9389,6 +9454,7 @@ function downloadFilteredShippingLedgerCSV() {
   });
 
   allOrders.sort((a, b) => b._dateMs - a._dateMs);
+  applyAutoLocalPickups(allOrders);
 
   const filteredOrders = allOrders.filter(o => {
     if (shipAnalysisMarginFilter === 'dismissed') return o.excludeFromShipping === true;
@@ -9486,6 +9552,8 @@ function downloadFilteredShippingLedgerCSV() {
 
     const statusLabel = o.excludeFromShipping
       ? 'Dismissed'
+      : o.localPickup
+        ? 'Local pick-up'
       : o.manualPostagePaid
         ? 'Manual'
         : (!isLinked && !isSuggested
@@ -9745,6 +9813,8 @@ export {
   editPostageCost,
   unlinkManualPostage,
   dismissShippingAnalysisOrder,
+  markShippingOrderLocalPickup,
+  unmarkShippingOrderLocalPickup,
   restoreShippingAnalysisOrder,
   toggleAllShipAnalysisOrders,
   updateShipAnalysisBatchActionUI,

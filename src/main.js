@@ -573,6 +573,8 @@ import {
   editPostageCost,
   unlinkManualPostage,
   dismissShippingAnalysisOrder,
+  markShippingOrderLocalPickup,
+  unmarkShippingOrderLocalPickup,
   restoreShippingAnalysisOrder,
   toggleAllShipAnalysisOrders,
   updateShipAnalysisBatchActionUI,
@@ -24504,7 +24506,7 @@ function exposeLegacyInlineHandlers() {
     renderShippingAnalysisHub, changeShipAnalysisPage, onShipAnalysisBookFilterChange, setShipAnalysisMarginFilter,
     onShipAnalysisSearch, onInlinePostageChange,
     confirmSuggestedShippoLink, openManualShippoLinkModal, filterManualShippoLinkRows,
-    editPostageCost, unlinkManualPostage, dismissShippingAnalysisOrder, restoreShippingAnalysisOrder,
+    editPostageCost, unlinkManualPostage, dismissShippingAnalysisOrder, markShippingOrderLocalPickup, unmarkShippingOrderLocalPickup, restoreShippingAnalysisOrder,
     toggleAllShipAnalysisOrders, updateShipAnalysisBatchActionUI, batchDismissShippingAnalysisOrders,
     syncBigCartelShippingPaid, triggerBigCartelShippingSync,
     toggleShipAnalysisCarrierFilter, toggleShipAnalysisRegionFilter, toggleShipAnalysisWeightFilter, clearAllShipAnalysisFilters, downloadFilteredShippingLedgerCSV,
@@ -24661,6 +24663,8 @@ window.unlinkShippoExpense = unlinkShippoExpense;
 window.editPostageCost = editPostageCost;
 window.unlinkManualPostage = unlinkManualPostage;
 window.dismissShippingAnalysisOrder = dismissShippingAnalysisOrder;
+window.markShippingOrderLocalPickup = markShippingOrderLocalPickup;
+window.unmarkShippingOrderLocalPickup = unmarkShippingOrderLocalPickup;
 window.restoreShippingAnalysisOrder = restoreShippingAnalysisOrder;
 window.toggleAllShipAnalysisOrders = toggleAllShipAnalysisOrders;
 window.updateShipAnalysisBatchActionUI = updateShipAnalysisBatchActionUI;
