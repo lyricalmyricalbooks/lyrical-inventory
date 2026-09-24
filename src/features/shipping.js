@@ -18,6 +18,16 @@
 // time. eslint's no-undef, an error in CI, keeps the import list below honest.
 import { withAutoLocalPickup } from '../lib/local-pickup.js';
 import {
+  bigCartelShipQueue,
+  findOrderInAnyBook,
+  nextOrderToShip,
+  ordersStillToShip,
+  shippedOrderNumbers,
+  storefrontSaysShipped,
+  waitingPhrase,
+} from '../lib/ship-queue.js';
+import { storeReversal } from '../lib/store-reversals.js';
+import {
   $,
   BOOKS,
   BOOK_LIST,
@@ -66,6 +76,7 @@ import {
   getBigCartelIncluded,
   getBigCartelOrders,
   hydrateShippingDestinationPhone,
+  refreshBigCartelOrdersIfDue,
 } from './bigcartel.js';
 import { renderTaxCenter, saveTaxCenter, switchTaxCenterSubTab } from './taxcentre.js';
 import { escapeHtml } from '../lib/html.js';
@@ -90,7 +101,7 @@ import {
   orderParcelPlan,
   parcelLinesFromLedgerEntry,
 } from '../lib/order-parcel-prefill.js';
-import { bigCartelOrderLines } from '../lib/bigcartel-ledger-gap.js';
+import { bigCartelOrderLines, bigCartelOrderNumber } from '../lib/bigcartel-ledger-gap.js';
 import { receiptLinkTarget } from '../lib/receipt-links.js';
 import {
   autoMatchPostage,
@@ -2863,6 +2874,11 @@ function initShippingTab() {
     weight_unit: $('sp-weight-unit').value || 'lb'
   };
   renderCustomShippoDestPicker();
+  // Ask Big Cartel for anything new so the "Ready to ship" queue is current.
+  // Skipped quietly offline or when it was checked a moment ago.
+  refreshBigCartelOrdersIfDue()
+    .then(fetched => { if (fetched) renderCustomShippoDestPicker(); })
+    .catch(() => {});
   bindDestinationVerificationWatchers();
   renderDestinationVerification();
   bindRateReadinessWatchers();
@@ -2906,6 +2922,10 @@ function renderCustomShippoDestPicker() {
       parcelSummary: describeParcelPlan(orderParcelPlan(parcelLines, BOOKS)),
       value: JSON.stringify({ ...addrObj, parcelLines }),
       orderNumber: o.id,
+      placedAt: Date.parse(o.attributes?.created_at || '') || 0,
+      storefrontShipped: storefrontSaysShipped(o),
+      // Cancelled or refunded in the store: nothing to send.
+      skipQueue: Boolean(storeReversal(o)),
       missingPhone: !getFallbackShippingPhone(addrObj.phone),
       searchText: `order #${o.id} ${addrObj.name} ${addrObj.city} ${addrObj.state} ${addrObj.country} ${addrObj.street1}`.toLowerCase()
     });
@@ -2975,12 +2995,121 @@ function renderCustomShippoDestPicker() {
     });
   });
 
+  // Orders already sent sink below the ones still waiting, and say so, so the
+  // top of the list is always the next parcel to pack.
+  const shipped = shippedOrderNumbers(websiteLedgerRows(), normalizeShippingOrderNumber);
+  const pickups = localPickupOrderNumbers();
+  items.forEach(item => {
+    const num = normalizeShippingOrderNumber(item.orderNumber);
+    item.shipped = Boolean(item.storefrontShipped || (num && shipped.has(num)));
+    if (num && pickups.has(num)) item.skipQueue = true;
+  });
+  // Big Cartel orders waiting to ship come first, oldest at the top, so the
+  // picker and "Ship next order" follow the same queue as the Ready to ship card.
+  const rank = item => {
+    if (item.shipped || item.skipQueue) return 3;
+    if (item.category === 'bc') return 0;
+    return item.orderNumber ? 1 : 2;
+  };
+  items.sort((a, b) => rank(a) - rank(b) || (rank(a) === 0 ? (a.placedAt || Infinity) - (b.placedAt || Infinity) : 0));
+
   _shippoDestMasterList = items;
 
   const countBadge = $('ship-dest-count-badge');
-  if (countBadge) countBadge.textContent = `${items.length} destination${items.length === 1 ? '' : 's'}`;
+  const waiting = ordersStillToShip(items.filter(i => !i.shipped && !i.skipQueue), shipped, normalizeShippingOrderNumber).length;
+  if (countBadge) {
+    countBadge.textContent = waiting
+      ? `${waiting} order${waiting === 1 ? '' : 's'} to ship`
+      : `${items.length} destination${items.length === 1 ? '' : 's'}`;
+  }
 
   filterShippoDestMenu();
+  renderBigCartelShipQueue();
+}
+
+/** Ledger orders marked (or recognised) as picked up in person — no parcel. */
+function localPickupOrderNumbers() {
+  const out = new Set();
+  websiteLedgerRows().forEach(({ entry }) => {
+    const num = normalizeShippingOrderNumber(entry.num);
+    if (num && withAutoLocalPickup(entry)?.localPickup) out.add(num);
+  });
+  return out;
+}
+
+/** Big Cartel orders still waiting for a parcel, oldest first. */
+function getBigCartelShipQueue() {
+  return bigCartelShipQueue(getBigCartelOrders(), {
+    shipped: shippedOrderNumbers(websiteLedgerRows(), normalizeShippingOrderNumber),
+    pickups: localPickupOrderNumbers(),
+    orderNumber: order => normalizeShippingOrderNumber(order.id) || bigCartelOrderNumber(order),
+    reversed: order => Boolean(storeReversal(order)),
+    normalize: normalizeShippingOrderNumber,
+  });
+}
+
+/**
+ * The "Ready to ship" card at the top of the Shipping tab: every Big Cartel
+ * order still waiting for a parcel, oldest first, one tap each to load it.
+ */
+function renderBigCartelShipQueue() {
+  const host = $('ship-bc-queue');
+  if (!host) return;
+  const queue = getBigCartelShipQueue();
+  if (!queue.length) {
+    // Only worth saying once the store is connected and has orders at all.
+    host.innerHTML = getBigCartelOrders().length ? `
+      <div class="card ship-queue-card is-empty" role="status">
+        <span aria-hidden="true">✓</span>
+        <span><strong>All caught up.</strong> No Big Cartel orders are waiting to ship.</span>
+      </div>` : '';
+    return;
+  }
+  const included = getBigCartelIncluded();
+  const MAX_ROWS = 8;
+  const rows = queue.slice(0, MAX_ROWS).map(({ order, orderNumber, daysWaiting }) => {
+    const addr = extractBigCartelAddress(order, order.id, included);
+    const parcel = describeParcelPlan(orderParcelPlan(bigCartelOrderLines(order, included, BOOKS), BOOKS));
+    const place = [addr.city, addr.state || addr.country].filter(Boolean).join(', ');
+    const late = daysWaiting !== null && daysWaiting >= 3;
+    return `
+      <li class="ship-queue-row">
+        <div class="ship-queue-main">
+          <strong class="ship-queue-name">${escapeHtml(addr.name || 'Customer')}</strong>
+          <span class="ship-queue-meta">${escapeHtml(orderNumber)}${place ? ` · ${escapeHtml(place)}` : ''}</span>
+          ${parcel ? `<span class="ship-queue-meta">📦 ${escapeHtml(parcel)}</span>` : ''}
+        </div>
+        ${daysWaiting !== null ? `<span class="ship-queue-wait${late ? ' is-late' : ''}">${daysWaiting <= 0 ? 'Ordered today' : `Waiting ${escapeHtml(waitingPhrase(daysWaiting))}`}</span>` : ''}
+        <button class="btn sm outline ship-queue-btn" type="button" onclick="shipQueuedOrder('${escapeHtml(orderNumber)}')">Ship</button>
+      </li>`;
+  }).join('');
+  const more = queue.length - MAX_ROWS;
+  host.innerHTML = `
+    <section class="card ship-queue-card" aria-labelledby="ship-queue-title">
+      <div class="ship-queue-head">
+        <div>
+          <h3 id="ship-queue-title" class="ship-queue-title">Ready to ship</h3>
+          <p class="ship-queue-sub">${queue.length} Big Cartel order${queue.length === 1 ? ' is' : 's are'} waiting for a parcel. Oldest first.</p>
+        </div>
+        <button class="btn gold ship-queue-start" type="button" onclick="shipQueuedOrder('${escapeHtml(queue[0].orderNumber)}')">
+          Start with the oldest <span aria-hidden="true">→</span>
+        </button>
+      </div>
+      <ul class="ship-queue-list">${rows}</ul>
+      ${more > 0 ? `<p class="ship-queue-more">+ ${more} more — they'll come up as you go with "Ship next order".</p>` : ''}
+    </section>`;
+}
+
+/** Loads one queued Big Cartel order into the form: address, box and rates. */
+async function shipQueuedOrder(orderNumber) {
+  const key = normalizeShippingOrderNumber(orderNumber);
+  const idx = _shippoDestMasterList.findIndex(item => item.category === 'bc'
+    && normalizeShippingOrderNumber(item.orderNumber) === key);
+  if (idx < 0) { showToast('That order is no longer in the list — refresh Big Cartel and try again', 'warn'); return; }
+  const panel = $('cp-purchased-label-panel');
+  if (panel) { panel.innerHTML = ''; panel.style.display = 'none'; }
+  $('custom-ship-dest-trigger')?.scrollIntoView({ behavior: _prefersReducedMotion() ? 'auto' : 'smooth', block: 'center' });
+  await selectShippoDestCustomItem(idx);
 }
 
 function setShippoDestMenuOpenState(isOpen) {
@@ -3078,15 +3207,62 @@ function filterShippoDestMenu() {
       ? `<span class="custom-dest-item-warn" title="${escapeHtml(destCountryRaw)} is not a country we recognize — set the destination country before buying a label">⚠ check country</span>`
       : '';
     return `
-      <div class="custom-dest-item ${isSelected ? 'selected' : ''}" onclick="selectShippoDestCustomItem(${masterIdx}, event)">
+      <div class="custom-dest-item ${isSelected ? 'selected' : ''}${item.shipped ? ' is-shipped' : ''}" onclick="selectShippoDestCustomItem(${masterIdx}, event)">
         <div class="custom-dest-item-header">
           <span class="custom-dest-item-title">${item.icon} ${escapeHtml(item.title)}</span>
           <span class="custom-dest-item-badge ${item.category}">${escapeHtml(item.catLabel)}</span>
         </div>
-        <div class="custom-dest-item-sub">${escapeHtml(item.sub)}${countryWarning}${phoneWarning}</div>
+        <div class="custom-dest-item-sub">${escapeHtml(item.sub)}${item.shipped ? '<span class="custom-dest-item-done">✓ shipped</span>' : ''}${countryWarning}${phoneWarning}</div>
         ${item.parcelSummary ? `<div class="custom-dest-item-parcel">📦 ${escapeHtml(item.parcelSummary)}</div>` : ''}
       </div>`;
   }).join('');
+}
+
+/**
+ * The "next order" card shown once a label is bought, so a stack of orders is
+ * one click each instead of reopening the picker every time.
+ */
+function nextOrderCardHtml(justShipped) {
+  // Rebuilt first so the order that was just labelled drops out of the queue.
+  renderCustomShippoDestPicker();
+  const shipped = shippedOrderNumbers(websiteLedgerRows(), normalizeShippingOrderNumber);
+  const left = ordersStillToShip(_shippoDestMasterList.filter(i => !i.shipped && !i.skipQueue), shipped, normalizeShippingOrderNumber)
+    .filter(item => normalizeShippingOrderNumber(item.orderNumber) !== normalizeShippingOrderNumber(justShipped));
+  const next = left[0];
+  if (!next) {
+    return `
+      <div class="cp-next-order is-done" role="status">
+        <span aria-hidden="true">🎉</span>
+        <span><strong>That's every order.</strong> Nothing else is waiting to ship.</span>
+      </div>`;
+  }
+  return `
+    <div class="cp-next-order">
+      <div class="cp-next-order-text">
+        <span class="cp-next-order-kicker">Up next · ${left.length} order${left.length === 1 ? '' : 's'} left</span>
+        <strong>${escapeHtml(next.title)}</strong>
+        ${next.parcelSummary ? `<span class="cp-next-order-sub">📦 ${escapeHtml(next.parcelSummary)}</span>` : ''}
+      </div>
+      <button class="btn gold cp-label-action-btn" type="button" onclick="shipNextOrder('${escapeHtml(justShipped || '')}')">
+        <span>Ship next order</span><span aria-hidden="true">→</span>
+      </button>
+    </div>`;
+}
+
+/** Loads the next unsent order into the form and scrolls back up to it. */
+async function shipNextOrder(justShipped = '') {
+  closeCanadaPostLabelModal();
+  const shipped = shippedOrderNumbers(websiteLedgerRows(), normalizeShippingOrderNumber);
+  const next = nextOrderToShip(_shippoDestMasterList.filter(i => !i.shipped && !i.skipQueue), shipped, justShipped, normalizeShippingOrderNumber);
+  if (!next) {
+    showToast("✓ That's every order — nothing left to ship");
+    return;
+  }
+  const panel = $('cp-purchased-label-panel');
+  if (panel) { panel.innerHTML = ''; panel.style.display = 'none'; }
+  const trigger = $('custom-ship-dest-trigger');
+  trigger?.scrollIntoView({ behavior: _prefersReducedMotion() ? 'auto' : 'smooth', block: 'center' });
+  await selectShippoDestCustomItem(_shippoDestMasterList.indexOf(next));
 }
 
 function selectShippoDestCustomItem(idx, e) {
@@ -5671,8 +5847,10 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
       const selectedOrderNumber = normalizeShippingOrderNumber($('ship-prefill-dest')?.dataset.orderNumber || orderNum);
       if (selectedOrderNumber) {
         try {
-          const s = getState();
-          const histItem = (s.hist || []).find(h => normalizeShippingOrderNumber(h.num) === selectedOrderNumber);
+          // Every book, not just the open one: an order for another book used
+          // to stay "unshipped" after its label was bought.
+          const found = findOrderInAnyBook(states, selectedOrderNumber, normalizeShippingOrderNumber);
+          const histItem = found?.entry;
           if (histItem) {
             histItem.shipped = true;
             histItem.shippedDate = today();
@@ -5690,7 +5868,7 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
             // tracking number, and lets a later sweep clear practice runs out.
             histItem.simulated = isSim;
             histItem.trackingSimulated = isSim;
-            saveState(activeBook);
+            saveState(found.bookId);
             renderHist();
             // Said now, while a cheaper service or a better website price can
             // still make a difference. A practice label cost nothing.
@@ -5798,6 +5976,7 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
                 </button>
               </div>
             </div>
+            ${nextOrderCardHtml(selectedOrderNumber)}
             ${result.manifestRequired && !isSim ? `
               <div style="margin-top:12px;padding:12px 14px;background:var(--surface-card);border:var(--stroke-hair) solid var(--amber,var(--border));border-radius:var(--r);display:flex;align-items:flex-start;gap:10px;">
                 <span style="font-size:var(--text-lg);line-height:1.1;" aria-hidden="true">📋</span>
@@ -10513,6 +10692,9 @@ export {
   setShippoDestCategoryFilter,
   filterShippoDestMenu,
   selectShippoDestCustomItem,
+  shipNextOrder,
+  shipQueuedOrder,
+  renderBigCartelShipQueue,
   clearShippoDestSelection,
   getRecentShippingOrders,
   saveShippoApiKey,
