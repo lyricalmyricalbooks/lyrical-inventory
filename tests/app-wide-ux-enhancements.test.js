@@ -5,7 +5,10 @@ import { describe, it, expect } from 'vitest';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const styleCss = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
-const mainJs = readFileSync(path.join(__dirname, '../src/main.js'), 'utf8');
+// The Sheets bridge moved out of main.js into src/features/sheets-bridge.js;
+// these checks follow it there.
+const mainJs = (readFileSync(path.join(__dirname, '../src/main.js'), 'utf8')
+  + readFileSync(path.join(__dirname, '../src/features/sheets-bridge.js'), 'utf8'));
 
 describe('App-Wide 5 UX Enhancements Suite (/ux-designer)', () => {
   describe('1. Consignment: Store Quick Filter Chips 44px Fitts & Spring Physics', () => {
