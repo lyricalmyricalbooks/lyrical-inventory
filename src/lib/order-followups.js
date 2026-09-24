@@ -9,14 +9,8 @@
 //
 // Pure: the caller passes ledger rows and the postage already matched to them.
 
+import { DAY, dayMs } from './calendar-day.js';
 import { LOSS_MARGIN, money } from './shipping-price-check.js';
-
-const DAY = 86400000;
-
-function dayMs(value) {
-  const parsed = Date.parse(String(value || '').slice(0, 10));
-  return Number.isFinite(parsed) ? parsed : NaN;
-}
 
 /** Whether this order is meant to go in the post at all. */
 function hasAddress(entry) {
