@@ -18102,7 +18102,10 @@ function isPosOnlyBook(id) {
 }
 
 // Default to the native currency of the first available book, falling back to EUR
+const POS_CURRENCY_KEY = 'lm-pos-currency';
 function _getPosDefaultCurrency() {
+  // The currency last charged in on this device, e.g. EUR at a fair abroad.
+  try { const saved = localStorage.getItem(POS_CURRENCY_KEY); if (saved) return saved; } catch (_) { /* private mode */ }
   const firstBook = Object.values(posBooksMap())[0];
   return firstBook ? currencyToCode(firstBook.currency) : 'EUR';
 }
@@ -18529,6 +18532,20 @@ function renderFairMode(booksArr, titleCount, cartRows, totalText) {
     const stock = posStockView({ onHand: posOnHandFor(book.id), inCart: qty });
     return fairTileHtml({ id: book.id, title: book.title || 'Untitled', priceText, qty, stock });
   }).join('') || '<p class="fm-empty">No books to sell yet. Add a book to your catalogue, or add a POS-only book on a larger screen.</p>';
+  // Currency switch: same list and state as the full checkout's selector.
+  const ccy = $('fm-currency');
+  if (ccy) {
+    const codes = getPOSCurrencies();
+    if (ccy.dataset.codes !== codes.join()) {
+      ccy.innerHTML = codes.map((code) => `<option value="${escapeHtml(code)}">${escapeHtml(code)}</option>`).join('');
+      ccy.dataset.codes = codes.join();
+    }
+    ccy.value = posTransactionCurrency;
+  }
+  // A book with no rate into this currency shows its own price; say so.
+  const missingRate = booksArr.some((book) => convertCurrency(book.listPrice || 0, currencyToCode(book.currency), posTransactionCurrency) === null);
+  const ratesBtn = $('fm-ccy-rates');
+  if (ratesBtn) ratesBtn.hidden = !missingRate;
   const count = cartRows.reduce((n, row) => n + row.qty, 0);
   const bar = $('fm-bar');
   if (bar) bar.hidden = count === 0;
@@ -19094,7 +19111,13 @@ window.posGenerateLineQR = async function (bookId) {
 
 window.posSetCurrency = function (code) {
   posTransactionCurrency = code || posTransactionCurrency;
+  try { localStorage.setItem(POS_CURRENCY_KEY, posTransactionCurrency); } catch (_) { /* private mode */ }
   renderPOS();
+};
+
+window.fairSetCurrency = function (code) {
+  window.posSetCurrency(code);
+  showToast(`Prices now shown and charged in ${posTransactionCurrency}`, 'ok');
 };
 
 // Fetch live rates for all POS currencies (CAD-pivot) and populate both

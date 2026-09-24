@@ -356,3 +356,21 @@
   .overlay { padding-bottom: var(--kb-inset, 0px); }
   .overlay .modal { max-height: min(92dvh, calc(100dvh - env(safe-area-inset-top) - var(--kb-inset, 0px))); }
 }
+
+/* Register currency switch (phones). */
+@media (max-width: 768px) {
+  .fm-ccy { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
+  .fm-ccy-label { font: 700 var(--text-sm) var(--font-ui); color: var(--content-secondary); }
+  .fm-ccy-select {
+    width: auto !important; flex: 0 0 auto; min-height: 44px; min-width: 96px; padding: 0 var(--space-3);
+    border: var(--stroke) solid var(--rule-ink); border-radius: var(--r2);
+    background: var(--surface-raised); color: var(--content-primary);
+    font: 800 var(--text-md) var(--font-ui);
+  }
+  .fm-ccy-rates {
+    min-height: 44px; padding: 0 var(--space-3);
+    border: var(--stroke) solid var(--gold-text); border-radius: var(--r2);
+    background: var(--gold-bg); color: var(--content-primary); font: 700 var(--text-sm) var(--font-ui);
+  }
+  .fm-ccy-rates[hidden] { display: none; }
+}
