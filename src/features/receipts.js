@@ -5407,7 +5407,7 @@ async function extractReceiptsFromEmailText() {
     } catch (e) {
       console.error('[email-receipt-import] file read failed', e);
       if (wrap) {
-        wrap.innerHTML = `<div style="background:rgba(220,60,60,.08);border:var(--stroke-hair) solid rgba(220,60,60,.25);border-radius:var(--r2);padding:10px 14px;font-size:var(--text-sm);color:var(--red);">File read failed: ${(e.message || e).toString().replace(/</g, '&lt;')}</div>`;
+        wrap.innerHTML = `<div style="background:rgba(220,60,60,.08);border:var(--stroke-hair) solid rgba(220,60,60,.25);border-radius:var(--r2);padding:10px 14px;font-size:var(--text-sm);color:var(--red);">File read failed: ${escapeHtml(e.message || e)}</div>`;
       }
       showToast('Could not read files', 'err');
       if (btn) btn.disabled = false;
