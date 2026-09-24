@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { shippedOrderNumbers, findOrderInAnyBook, ordersStillToShip, nextOrderToShip, bigCartelShipQueue, waitingPhrase, queueCardClosed } from '../src/lib/ship-queue.js';
+import { shippedOrderNumbers, findOrderInAnyBook, ordersStillToShip, nextOrderToShip, bigCartelShipQueue, waitingPhrase, queueCardClosed, storefrontSaysShipped } from '../src/lib/ship-queue.js';
 import { normalizeShippingOrderNumber as norm } from '../src/lib/shipping-reconciliation.js';
 
 describe('ship queue', () => {
@@ -87,5 +87,14 @@ describe('hiding orders from the ship queue', () => {
     expect(queueCardClosed(['#A-1'], ['#A-1', '#A-2'])).toBe(true);
     expect(queueCardClosed([], [])).toBe(true);
     expect(queueCardClosed(['#A-1', '#A-3'], ['#A-1'])).toBe(false);
+  });
+});
+
+describe('orders marked shipped in Big Cartel', () => {
+  it('counts an order with a recorded shipment as shipped', () => {
+    expect(storefrontSaysShipped({ relationships: { shipments: { data: [{ type: 'shipments', id: '1' }] } } })).toBe(true);
+    expect(storefrontSaysShipped({ attributes: { shipments: [{ tracking_number: 'X' }] } })).toBe(true);
+    expect(storefrontSaysShipped({ relationships: { shipments: { data: [] } } })).toBe(false);
+    expect(storefrontSaysShipped({ attributes: { status: 'completed' } })).toBe(false);
   });
 });

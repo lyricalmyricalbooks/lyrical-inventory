@@ -68,7 +68,11 @@ const lower = value => String(value ?? '').trim().toLowerCase();
  */
 export function storefrontSaysShipped(order = {}) {
   const attr = order.attributes || {};
-  return lower(attr.shipping_status) === 'shipped' || lower(attr.status) === 'shipped' || Boolean(attr.shipped_at);
+  if (lower(attr.shipping_status) === 'shipped' || lower(attr.status) === 'shipped' || attr.shipped_at) return true;
+  // A shipment recorded on the order ("Mark as shipped" with a tracking number).
+  const inline = Array.isArray(attr.shipments) ? attr.shipments : [];
+  const refs = order.relationships?.shipments?.data;
+  return inline.length > 0 || (Array.isArray(refs) ? refs.length > 0 : Boolean(refs));
 }
 
 /**

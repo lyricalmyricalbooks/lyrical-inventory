@@ -39,6 +39,7 @@ import { syncToSheets } from './sheets-bridge.js';
 import { openM, closeM, confirmDialog } from '../lib/modal.js';
 import {
   _shippoDestMasterList,
+  applyBigCartelTracking,
   applyOrderPrefill,
   autoLinkPostageForOrder,
   getFallbackShippingPhone,
@@ -542,6 +543,7 @@ async function loadBigCartelData() {
       bigCartelData.orders = ordersRes.data || [];
       bigCartelData.included = ordersRes.included || [];
       cacheBigCartelOrders(bigCartelData.orders, bigCartelData.included);
+      applyBigCartelTracking(bigCartelData.orders, bigCartelData.included).catch(e => console.warn('Big Cartel tracking sync failed', e));
       renderBigCartelOrders(bigCartelData.orders, bigCartelData.included);
       await syncBigCartelShippingPaid(bigCartelData.orders);
     }
@@ -1280,7 +1282,10 @@ function switchBigCartelSubTab(tabName) {
   loadBigCartelData();
 }
 
-const BIG_CARTEL_ORDER_INCLUDES = 'items,customer,shipping_address';
+const BIG_CARTEL_ORDER_INCLUDES = 'items,customer,shipping_address,shipments';
+// Tried in order when Big Cartel refuses an include list, so a store that
+// won't send shipments still gets its customers and addresses.
+const BIG_CARTEL_ORDER_INCLUDE_FALLBACKS = ['items,customer,shipping_address', 'items'];
 
 function mergeBigCartelIncluded(target, incoming) {
   if (!Array.isArray(incoming) || incoming.length === 0) return target;
@@ -1310,10 +1315,13 @@ async function fetchAllBigCartelOrders(storeId) {
     try {
       res = await fetchBigCartel(`orders?include=${includes}&page[limit]=${limit}&page[offset]=${offset}`, storeId);
     } catch (e) {
-      // Stores that reject the richer include list still need to load: retry with items only.
-      if (includes !== 'items') {
-        console.warn('Big Cartel rejected the extended include list, retrying with items only', e);
-        includes = 'items';
+      // Stores that reject the richer include list still need to load: step down
+      // one list at a time rather than straight to items only.
+      // indexOf is -1 for the full list, so it steps to the first fallback.
+      const next = BIG_CARTEL_ORDER_INCLUDE_FALLBACKS[BIG_CARTEL_ORDER_INCLUDE_FALLBACKS.indexOf(includes) + 1];
+      if (next) {
+        console.warn(`Big Cartel rejected include=${includes}, retrying with ${next}`, e);
+        includes = next;
         continue;
       }
       throw e;
@@ -1572,6 +1580,7 @@ async function checkBigCartelLedgerGaps({ silent = false } = {}) {
     const included = ordersRes.included || [];
     bigCartelData.orders = bcOrders;
     cacheBigCartelOrders(bcOrders, included);
+    applyBigCartelTracking(bcOrders, included).catch(e => console.warn('Big Cartel tracking sync failed', e));
 
     _bcGapResult = findLedgerGaps(bcOrders, included, {
       ledgerNumbers: bigCartelLedgerNumbers(),

@@ -54,17 +54,18 @@ describe('Big Cartel Apps Script proxy requests', () => {
     expect(fetchSource).toMatch(/parsed\.errors/);
   });
 
-  it('includes items plus the contact relationships that carry the recipient phone', () => {
-    expect(source).toContain("const BIG_CARTEL_ORDER_INCLUDES = 'items,customer,shipping_address';");
+  it('includes items, the contact relationships that carry the recipient phone, and shipments', () => {
+    expect(source).toContain("const BIG_CARTEL_ORDER_INCLUDES = 'items,customer,shipping_address,shipments';");
     expect(source).toMatch(/orders\?include=\$\{includes\}&page/);
     expect(source).toMatch(/let includes = BIG_CARTEL_ORDER_INCLUDES;/);
   });
 
-  it('falls back to an items-only include when the extended list is rejected', () => {
+  it('steps down one include list at a time, keeping contacts before items only', () => {
     const fetchOrdersSource = functionSource('fetchAllBigCartelOrders');
 
-    expect(fetchOrdersSource).toMatch(/if \(includes !== 'items'\)/);
-    expect(fetchOrdersSource).toMatch(/includes = 'items';/);
+    expect(source).toContain("const BIG_CARTEL_ORDER_INCLUDE_FALLBACKS = ['items,customer,shipping_address', 'items'];");
+    expect(fetchOrdersSource).toMatch(/BIG_CARTEL_ORDER_INCLUDE_FALLBACKS\[BIG_CARTEL_ORDER_INCLUDE_FALLBACKS\.indexOf\(includes\) \+ 1\]/);
+    expect(fetchOrdersSource).toMatch(/includes = next;/);
     expect(fetchOrdersSource).toMatch(/throw e;/);
   });
 
