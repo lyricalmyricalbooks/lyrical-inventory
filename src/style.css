@@ -2151,7 +2151,7 @@ tr.hist-row:hover {
    ink header bar, flat rows, hairline dividers. A 200-row expense ledger with
    an outline on every row is unreadable; an outline around the whole table
    reads as printed. */
-.tbl-wrap{border-radius:var(--r2);overflow:hidden;border:var(--stroke) solid var(--border-strong);margin-bottom:1.5rem;box-shadow:var(--shadow);}
+.tbl-wrap{border-radius:var(--r2);overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;border:var(--stroke) solid var(--border-strong);margin-bottom:1.5rem;box-shadow:var(--shadow);}
 .tbl{width:100%;border-collapse:collapse;font-size:var(--text-base);}
 .tbl thead{background:var(--surface-inverse);}
 .tbl th{padding:10px 16px;font-size:var(--text-3xs);font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.58);text-align:left;white-space:nowrap;}
@@ -6155,7 +6155,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .con-action-btn:hover{border-color:var(--gold2);color:var(--text);transform:translateY(-1px);}
 
 /* Table Styling & Hierarchy */
-.all-consignment-table{margin-bottom:0;box-shadow:var(--elev-1);border:var(--stroke-hair) solid var(--border2);border-radius:var(--r2);overflow:hidden;background:var(--surface-card);}
+.all-consignment-table{margin-bottom:0;box-shadow:var(--elev-1);border:var(--stroke-hair) solid var(--border2);border-radius:var(--r2);overflow-x:auto;overflow-y:hidden;background:var(--surface-card);}
 .all-consignment-table .tbl thead{background:var(--surface-inverse);}
 .all-consignment-table .tbl th{padding-top:13px;padding-bottom:13px;color:rgba(255,255,255,.65);font-size:var(--text-3xs);letter-spacing:var(--tracking-label);}
 .all-consignment-table .tbl td{padding-top:13px;padding-bottom:13px;vertical-align:middle;}
@@ -6280,6 +6280,13 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   .con-toolbar-actions{margin-left:0;justify-content:stretch;}
   .con-action-btn,
   .con-group-toggle-btn{flex:1;justify-content:center;}
+}
+/* Half-screen windows: tighten the ledger so every column, Status
+   included, fits without a sideways scroll. */
+@container con-summary (max-width: 900px){
+  .all-consignment-table .tbl th,
+  .all-consignment-table .tbl td{padding-left:10px;padding-right:10px;}
+  .all-consignment-table .tbl th{letter-spacing:.08em;}
 }
 @container con-summary (max-width: 580px){
   .all-consignment-table .col-sellthrough{display:none;}
