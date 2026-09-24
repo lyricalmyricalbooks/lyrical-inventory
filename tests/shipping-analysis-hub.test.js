@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { appSource } from './helpers/extract-decl.js';
+import { appSource, extractDecl } from './helpers/extract-decl.js';
 import { shipmentRegion } from '../src/lib/countries.js';
 import fs from 'fs';
 import path from 'path';
@@ -124,6 +124,7 @@ describe('Shipping Analysis Hub Functions', () => {
         const window = { saveState: async (b) => { mockCalls.push('saveState:' + b); } };
         const showToast = (msg) => { mockCalls.push('showToast:' + msg); };
         const renderShippingAnalysisHub = () => { mockCalls.push('render'); };
+        ${extractDecl('findShippingLedgerOrder')}
       `;
 
       const documentMock = `
