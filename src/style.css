@@ -20308,3 +20308,23 @@ button[onclick="refreshUmamiStats()"]:active {
   color: var(--text3);
   border-top: var(--stroke-hair) solid var(--border);
 }
+
+/* Shared close button for cards and notices ("✕"). 44px touch target. */
+.card-x {
+  flex-shrink: 0;
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r);
+  background: transparent;
+  color: var(--text3);
+  font-size: var(--text-base);
+  cursor: pointer;
+}
+.card-x:hover { color: var(--text); background: var(--surface-card); }
+.card-x:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.cp-ready-head .card-x { margin-left: auto; }
