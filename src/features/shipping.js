@@ -28,6 +28,7 @@ import {
   waitingPhrase,
 } from '../lib/ship-queue.js';
 import { storeReversal } from '../lib/store-reversals.js';
+import { bigCartelTrackingByOrder, shipmentDate, trackingToStamp } from '../lib/bigcartel-tracking.js';
 import {
   $,
   BOOKS,
@@ -1371,7 +1372,16 @@ function writeCpSweepStamp(at) {
 }
 
 /** `YYYYMMDD`, the only date format Get Shipments accepts. */
+// Set when Big Cartel names a tracking number older than the normal look-back,
+// so the next sweep reaches back far enough to find that label. Cleared after.
+let _cpSweepReachBackTo = 0;
+const CP_SWEEP_MAX_REACH_DAYS = 60;
+
 function cpSweepFromDate() {
+  if (_cpSweepReachBackTo) {
+    const floor = Date.now() - CP_SWEEP_MAX_REACH_DAYS * 86400000;
+    return new Date(Math.max(floor, _cpSweepReachBackTo - 86400000)).toISOString().slice(0, 10).replace(/-/g, '');
+  }
   const last = readCpSweepStamp();
   const from = last
     // A day of overlap, because a shipment created just before the last sweep
@@ -1506,6 +1516,7 @@ async function sweepCanadaPostShipments({ force = false } = {}) {
     }
 
     writeCpSweepStamp(Date.now());
+    _cpSweepReachBackTo = 0;
     noteIntegrationSuccess('canadapost');
 
     if (filed) {
@@ -1577,6 +1588,90 @@ function writeTrackingBackToOrders(expenses = []) {
 
   if (stamped) renderHist();
   return stamped;
+}
+
+/**
+ * Tracking numbers the owner typed into Big Cartel, put onto the matching
+ * orders here.
+ *
+ * A label bought on canadapost.ca is found by the Canada Post sweep, but the
+ * sweep could only guess its order from the name and postal code. The owner
+ * types the tracking number into Big Cartel every time, so once it is on the
+ * order the sweep matches the label on that number exactly, and the postage
+ * cost links itself.
+ *
+ * Same rules as writeTrackingBackToOrders: fills a blank only, never a voided
+ * row. Postage already filed but unlinked is re-checked against the new
+ * numbers, and anything still not found asks Canada Post straight away.
+ */
+const _bcTrackingChased = new Set();
+async function applyBigCartelTracking(orders = [], included = []) {
+  const byOrder = bigCartelTrackingByOrder(orders, included);
+  if (!byOrder.size) return { stamped: 0, linked: 0 };
+
+  const changes = trackingToStamp(websiteLedgerRows(), byOrder, normalizeShippingOrderNumber);
+  const touchedBooks = new Set();
+  changes.forEach(({ bookId, entry, shipment }) => {
+    entry.trackingNumber = shipment.tracking;
+    if (shipment.trackingUrl && !entry.trackingUrl) entry.trackingUrl = shipment.trackingUrl;
+    if (!entry.shipped) {
+      entry.shipped = true;
+      entry.shippedDate = shipmentDate(shipment) || entry.shippedDate || today();
+    }
+    touchedBooks.add(bookId);
+  });
+  touchedBooks.forEach(bookId => saveState(bookId));
+  if (changes.length) renderHist();
+
+  // Re-check postage already filed against the new numbers: a label that sat
+  // in "needs review" because the name didn't match now has an exact key.
+  const fresh = new Set(changes.map(c => c.shipment.tracking));
+  let linked = 0;
+  if (fresh.size) {
+    const orders = getShippingReconciliationOrders();
+    postageExpenses().forEach(expense => {
+      if (!isUnresolvedShippoPostage(expense)) return;
+      if (!fresh.has(normalizeTrackingNumber(expense.trackingNumber))) return;
+      Object.assign(expense, reconcileShippingExpense({
+        recipientName: expense.recipientName,
+        recipientPostal: expense.recipientPostal,
+        trackingNumber: expense.trackingNumber,
+        date: expense.date,
+      }, orders));
+    });
+    linked = applyConfidentShippingLinks();
+    if (linked) {
+      await saveTaxCenter().catch(e => console.warn('Big Cartel tracking link save failed', e));
+      renderShippingAnalysisHub();
+    }
+  }
+
+  // Any number with no postage behind it yet: ask Canada Post now rather than
+  // in up to half an hour, reaching back to the oldest one.
+  const filedTracking = new Set(postageExpenses().map(e => normalizeTrackingNumber(e.trackingNumber)).filter(Boolean));
+  // Each number is chased once per visit, so a parcel sent another way (not on
+  // this Canada Post account) doesn't trigger a Canada Post check every refresh.
+  const missing = changes.filter(c => !filedTracking.has(c.shipment.tracking) && !_bcTrackingChased.has(c.shipment.tracking));
+  missing.forEach(c => _bcTrackingChased.add(c.shipment.tracking));
+  if (missing.length) {
+    const oldest = Math.min(...missing.map(c => Date.parse(c.shipment.shippedAt) || Date.now()));
+    _cpSweepReachBackTo = oldest;
+    sweepCanadaPostShipments({ force: true }).catch(() => {});
+  }
+
+  if (changes.length) {
+    renderCustomShippoDestPicker();
+    const n = changes.length;
+    pushAppAlert({
+      id: 'bigcartel-tracking',
+      icon: '📦',
+      title: `${n} order${n === 1 ? '' : 's'} marked shipped from Big Cartel`,
+      detail: linked
+        ? `Tracking added, and ${linked} postage cost${linked === 1 ? '' : 's'} matched to ${linked === 1 ? 'its order' : 'their orders'}.`
+        : 'Tracking added. The postage cost is added once Canada Post reports the label.',
+    });
+  }
+  return { stamped: changes.length, linked };
 }
 
 /** The card announcing labels bought elsewhere that filed themselves. */
@@ -10793,6 +10888,7 @@ export {
   filterShippoDestMenu,
   selectShippoDestCustomItem,
   shipNextOrder,
+  applyBigCartelTracking,
   closePurchasedLabelPanel,
   closeLiveReadinessChecklist,
   shipQueuedOrder,
