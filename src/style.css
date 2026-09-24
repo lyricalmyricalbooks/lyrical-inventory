@@ -20144,3 +20144,17 @@ button[onclick="refreshUmamiStats()"]:active {
 .sync-progress-bar,.sync-progress-fill,.ch-row-track,.ch-row-fill,.ch-stack,.ch-mix-track,.ch-mix-fill,
 .sk-bar,.recon-progress,.recon-progress > i,.send-progress-track,.send-progress-fill,
 .oc-progress-track,.oc-progress-fill,.oc-funnel-bar,.oc-funnel-bar > span,.preview-bar{border-radius:0;}
+
+/* ── Does the customer's shipping charge cover this label? ──
+   A tag beside each rate and one plain sentence above the list, shown only
+   when the Shipping form is filled in from an order with a shipping charge. */
+.rate-coverage-tag{margin-top:4px;white-space:normal;text-align:right;max-width:220px;}
+.rate-coverage-note{
+  margin-bottom:10px;padding:10px 14px;border-radius:var(--r);
+  background:var(--surface-sunken);border:var(--stroke-hair) solid var(--border);
+  font-size:var(--text-sm);line-height:1.5;color:var(--text2);
+}
+.ship-reco-paid{display:flex;justify-content:space-between;gap:8px;padding-top:3px;margin-top:3px;border-top:var(--stroke-hair) dashed var(--border);}
+.ship-reco-paid strong{color:var(--text);}
+.ship-reco-paid.is-short strong{color:var(--status-critical);}
+.ship-reco-paid-note{margin:4px 0 0;font-size:var(--text-2xs);line-height:1.45;color:var(--status-critical);}
