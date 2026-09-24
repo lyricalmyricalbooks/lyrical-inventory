@@ -20384,3 +20384,4 @@ button[onclick="refreshUmamiStats()"]:active {
 .tc-receipts-advanced{border:var(--stroke-hair) solid var(--rule-ink);border-radius:var(--r);}
 .tc-folder-summary{font-weight:700;}
 @media (prefers-reduced-motion: reduce){ .tc-action-card{transition:none;} }
+.tc-alert-cta{margin-top:var(--space-2);align-self:flex-start;}

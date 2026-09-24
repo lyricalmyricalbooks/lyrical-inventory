@@ -167,11 +167,13 @@ describe('receipt storage summary', () => {
     expect(s.totalFiles).toBe(4);
   });
 
-  it('counts links separately and does not call them files we hold', () => {
+  it('counts shipping labels apart from web-link receipts, and neither as files we hold', () => {
     const s = summarizeReceiptStorage([
       { receipt: 'https://shippo-delivery-east.s3.amazonaws.com/label.pdf' },
+      { receipt: 'https://supplier.example.com/order/42' },
       { receipt: OURS },
     ]);
+    // The label is not a web-link receipt — the tile would open an empty list.
     expect(s.linkedFiles).toBe(1);
     expect(s.linkOnlyExpenses).toBe(1);
     // A link is not a file in our possession.
@@ -485,3 +487,35 @@ describe('cloud fallback wiring', () => {
   });
 });
 
+
+
+import { isShippingLabelRef, isWebReceiptLink, hasOnlyShippingLabels } from '../src/lib/receipt-storage.js';
+import { attachInvoiceReceipts } from '../src/lib/shippo-invoices.js';
+
+describe('shipping labels vs web-link receipts', () => {
+  const LABEL = 'https://deliver.goshippo.com/abc.pdf?Expires=1';
+  const INVOICE = 'https://goshippo.com/invoices/inv1.pdf';
+  it('tells a label from a real web receipt', () => {
+    expect(isShippingLabelRef(LABEL)).toBe(true);
+    expect(isShippingLabelRef(INVOICE)).toBe(false);
+    expect(isWebReceiptLink(INVOICE)).toBe(true);
+    expect(isWebReceiptLink(LABEL)).toBe(false);
+    expect(hasOnlyShippingLabels({ receipt: LABEL })).toBe(true);
+    expect(hasOnlyShippingLabels({ receiptFiles: [INVOICE, LABEL] })).toBe(false);
+  });
+
+  it('puts the Shippo invoice in front of the label, once', () => {
+    const e = { ref: 'shippo:tx1', receipt: LABEL };
+    const items = new Map([['tx1', { invoiceId: 'inv1' }]]);
+    const invoices = new Map([['inv1', { id: 'inv1', url: INVOICE }]]);
+    const first = attachInvoiceReceipts([e, { ref: 'shippo:tx2', receipt: LABEL }], items, invoices);
+    expect(first.changed).toHaveLength(1);
+    expect(first.noInvoice).toBe(1);
+    expect(e.receiptFiles).toEqual([INVOICE, LABEL]);
+    expect(e.receipt).toBe(INVOICE);
+    expect(e.supportingFiles).toEqual([LABEL]);
+    expect(e.invoiceId).toBe('inv1');
+    expect(hasOnlyShippingLabels(e)).toBe(false);
+    expect(attachInvoiceReceipts([e], items, invoices).changed).toHaveLength(0);
+  });
+});
