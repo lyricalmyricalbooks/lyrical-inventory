@@ -4399,13 +4399,14 @@ async function seedMockTestData() {
   // Artist transfers due
   testState.artistTransfers = [
     {
-      num: 4,
+      id: 4001,
+      num: 'TEST-4',
+      chan: 'In Person',
+      qty: 1,
+      price: 17,
+      total: 17,
       date: '2026-07-06',
-      amount: 17,
-      notes: 'Direct sale collected by author',
-      email: 'test@artist.com',
-      key: 'transfer_1',
-      status: 'pending'
+      notes: 'Direct sale collected by author'
     }
   ];
 
@@ -9962,6 +9963,47 @@ function renderArtistTransfers() {
   const payHtml = fullPayLink
     ? `<a href="${fullPayLink}" target="_blank" class="btn sm" style="text-decoration:none;background:var(--green-bg);color:var(--green);border-color:rgba(42,99,72,.2);">↗ Payment link</a>`
     : `<span style="font-size:var(--text-2xs);color:var(--text3);font-family:var(--font-mono);">No payment link set</span>`;
+
+  // Authors get a plain step-by-step card: what happened, how much to send,
+  // one button. The settle actions below are publisher decisions.
+  const hed = sect.querySelector('.sec-head-title'), sub = sect.querySelector('.section-subcopy');
+  if (hed) hed.textContent = isAuthor() ? 'Money to send to your publisher' : 'Pending artist transfers';
+  if (sub) sub.textContent = isAuthor()
+    ? 'When a buyer pays you directly, the money goes on to your publisher. Follow the steps on each card.'
+    : "Sales already collected where the artist's share hasn't been sent yet.";
+  if (isAuthor()) {
+    list.innerHTML = transfers.map(t => {
+      const amt = transferAmount(t);
+      const copies = Number(t.qty) > 0 ? `${Number(t.qty)} ${Number(t.qty) === 1 ? 'copy' : 'copies'}` : 'a sale';
+      const what = `You sold ${copies}${t.date ? ` on ${fmtD(t.date)}` : ''} and the buyer paid you.`;
+      if (t.status === 'pending') {
+        return `<div class="pending-card is-pending author-transfer-card">
+          <div><div class="pending-card-head"><span class="pill gray">Waiting for your publisher</span></div>
+          <p class="author-transfer-what">${escapeHtml(what)}</p>
+          <p class="author-transfer-next">Nothing to do yet. Your publisher checks the sale first — then we'll show you how much to send here.</p></div>
+        </div>`;
+      }
+      if (amt == null) {
+        return `<div class="pending-card author-transfer-card">
+          <div><div class="pending-card-head"><span class="pill amber">Amount missing</span></div>
+          <p class="author-transfer-what">${escapeHtml(what)}</p>
+          <p class="author-transfer-next">We don't know the price of this sale. Please tell your publisher how much the buyer paid.</p></div>
+        </div>`;
+      }
+      const steps = fullPayLink
+        ? `<li>Tap <strong>Send ${escapeHtml(fmt(amt, cur))}</strong>. The payment page opens.</li><li>Pay exactly <strong>${escapeHtml(fmt(amt, cur))}</strong>.</li><li>That's it. Your publisher confirms it, and this card goes away.</li>`
+        : `<li>Send <strong>${escapeHtml(fmt(amt, cur))}</strong> to your publisher, the way you usually pay them.</li><li>That's it. Your publisher confirms it, and this card goes away.</li>`;
+      return `<div class="pending-card author-transfer-card">
+        <div>
+          <div class="pending-card-head"><span class="pill amber">To send: ${escapeHtml(fmt(amt, cur))}</span></div>
+          <p class="author-transfer-what">${escapeHtml(what)} Please send the money on to your publisher.</p>
+          <ol class="author-transfer-steps">${steps}</ol>
+        </div>
+        ${fullPayLink ? `<div class="pending-card-actions"><a href="${escapeHtml(fullPayLink)}" target="_blank" rel="noopener" class="btn gold lg" style="text-decoration:none;">Send ${escapeHtml(fmt(amt, cur))} →</a></div>` : ''}
+      </div>`;
+    }).join('');
+    return;
+  }
 
   list.innerHTML = transfers.map(t => `
     <div class="pending-card${t.status === 'pending' ? ' is-pending' : ''}">

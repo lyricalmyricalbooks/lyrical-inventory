@@ -1500,10 +1500,10 @@
   <div class="section-hed" style="margin-bottom:1.1rem;">Log an order</div>
   <div class="card">
     <div class="order-grid">
-      <div class="form-group"><label for="m-num">Order #</label><input type="text" id="m-num" placeholder="optional"></div>
-      <div class="form-group"><label for="m-qty">Qty</label><input type="number" inputmode="numeric" id="m-qty" value="1" min="1" oninput="phint()"></div>
+      <div class="form-group"><label for="m-num">Order #<span class="tip tip-mark" tabindex="0" role="img" aria-label="Help: Type the order or receipt number if you have one. No number? Leave it empty." data-tip="Type the order or receipt number if you have one. No number? Leave it empty.">?</span></label><input type="text" id="m-num" placeholder="optional"></div>
+      <div class="form-group"><label for="m-qty">Qty<span class="tip tip-mark" tabindex="0" role="img" aria-label="Help: How many copies did you sell in this sale? Type the number." data-tip="How many copies did you sell in this sale? Type the number.">?</span></label><input type="number" inputmode="numeric" id="m-qty" value="1" min="1" oninput="phint()"></div>
       <div class="form-group">
-        <label id="m-price-label">Price paid <span id="m-fx-inline-result" style="display:none;color:var(--gold-text);font-weight:600;margin-left:8px;"></span></label>
+        <label id="m-price-label">Price paid<span class="tip tip-mark" tabindex="0" role="img" aria-label="Help: The price for ONE copy, not the total. Paid in another currency? Choose it in the box on the left first." data-tip="The price for ONE copy, not the total. Paid in another currency? Choose it in the box on the left first.">?</span> <span id="m-fx-inline-result" style="display:none;color:var(--gold-text);font-weight:600;margin-left:8px;"></span></label>
         <div class="price-inline">
           <select id="m-price-cur" onchange="onManualCurrencyChange()">
             <option value="BOOK">Book currency</option>
@@ -1535,9 +1535,9 @@
     </div>
     <!-- Channel and Payment type -->
     <div class="g2" style="margin-top:14px;">
-      <div class="form-group"><label for="m-chan">Channel</label><select id="m-chan" data-phone-seg><option>Website</option><option>In Person</option><option>Book Fair</option><option>Consignment</option><option>Other</option></select></div>
+      <div class="form-group"><label for="m-chan">Channel<span class="tip tip-mark" tabindex="0" role="img" aria-label="Help: Where did you sell it? Pick one: Website, In person, Book fair, a shop (Consignment) or Other." data-tip="Where did you sell it? Pick one: Website, In person, Book fair, a shop (Consignment) or Other.">?</span></label><select id="m-chan" data-phone-seg><option>Website</option><option>In Person</option><option>Book Fair</option><option>Consignment</option><option>Other</option></select></div>
       <div class="form-group needs-attention">
-        <label for="m-payment-type">Payment type <span class="req-badge">Required</span></label>
+        <label for="m-payment-type">Payment type<span class="tip tip-mark" tabindex="0" role="img" aria-label="Help: Who got the money? If the buyer paid YOU, pick “directly to artist” — you will send the publisher their part later. If they paid the publisher, pick “directly to publisher”." data-tip="Who got the money? If the buyer paid YOU, pick “directly to artist” — you will send the publisher their part later. If they paid the publisher, pick “directly to publisher”.">?</span> <span class="req-badge">Required</span></label>
         <select id="m-payment-type" required data-phone-seg>
           <option value="">— Select payment type —</option>
           <option value="Payment directly to artist">Payment directly to artist</option>
@@ -1545,7 +1545,7 @@
         </select>
       </div>
     </div>
-    <div class="form-group" style="margin-top:14px;"><label for="m-notes">Notes</label><input type="text" id="m-notes" placeholder="e.g. promo, event"></div>
+    <div class="form-group" style="margin-top:14px;"><label for="m-notes">Notes<span class="tip tip-mark" tabindex="0" role="img" aria-label="Help: Anything worth remembering, like a discount or the event name. You can leave it empty." data-tip="Anything worth remembering, like a discount or the event name. You can leave it empty.">?</span></label><input type="text" id="m-notes" placeholder="e.g. promo, event"></div>
     <!-- Live order preview — what this order costs and what it leaves on the
          shelf, shown before "Add order" is pressed. Populated by phint(). -->
     <div class="order-preview-wrap">
@@ -1580,20 +1580,20 @@
   <p class="lead-note">Gratuity books reduce stock but are <strong>not</strong> counted as revenue or sold units.</p>
   <div class="card" style="border-left:var(--stroke) solid var(--gold-line);">
     <div class="g3">
-      <div class="form-group"><label for="g-ref">Recipient / Ref</label><input type="text" id="g-ref" placeholder="e.g. reviewer, press"></div>
-      <div class="form-group"><label for="g-qty">Qty</label><input type="number" inputmode="numeric" id="g-qty" value="1" min="1" oninput="updateGratuityExpenseHint()"></div>
-      <div class="form-group"><label for="g-date">Date</label><input type="date" id="g-date"></div>
+      <div class="form-group"><label for="g-ref">Recipient / Ref<span class="tip tip-mark" tabindex="0" role="img" aria-label="Help: Who got the free copy? For example a reviewer, a magazine or a friend." data-tip="Who got the free copy? For example a reviewer, a magazine or a friend.">?</span></label><input type="text" id="g-ref" placeholder="e.g. reviewer, press"></div>
+      <div class="form-group"><label for="g-qty">Qty<span class="tip tip-mark" tabindex="0" role="img" aria-label="Help: How many free copies did you give away? Type the number." data-tip="How many free copies did you give away? Type the number.">?</span></label><input type="number" inputmode="numeric" id="g-qty" value="1" min="1" oninput="updateGratuityExpenseHint()"></div>
+      <div class="form-group"><label for="g-date">Date<span class="tip tip-mark" tabindex="0" role="img" aria-label="Help: The day you gave the copies away. Click the calendar to pick it." data-tip="The day you gave the copies away. Click the calendar to pick it.">?</span></label><input type="date" id="g-date"></div>
     </div>
     <div class="g2" style="margin-top:14px;">
       <div class="form-group">
-        <label for="g-source">Gratuity pile</label>
+        <label for="g-source">Gratuity pile<span class="tip tip-mark" tabindex="0" role="img" aria-label="Help: Whose free copies were used? Pick your own pile (Author) if they came from the copies you keep." data-tip="Whose free copies were used? Pick your own pile (Author) if they came from the copies you keep.">?</span></label>
         <select id="g-source" onchange="updateGratuitySourceHint()" data-phone-seg>
           <option value="publisher">Publisher's pile</option>
           <option value="author">Author's pile</option>
         </select>
         <div id="g-source-remaining" class="pile-stats"></div>
       </div>
-      <div class="form-group"><label for="g-notes">Notes</label><input type="text" id="g-notes" placeholder="e.g. press copy, author gift, launch event"></div>
+      <div class="form-group"><label for="g-notes">Notes<span class="tip tip-mark" tabindex="0" role="img" aria-label="Help: Why you gave them away, like a press copy or a launch event. You can leave it empty." data-tip="Why you gave them away, like a press copy or a launch event. You can leave it empty.">?</span></label><input type="text" id="g-notes" placeholder="e.g. press copy, author gift, launch event"></div>
     </div>
     <label class="toggle-row" id="g-expense-wrap">
       <span class="switch"><input type="checkbox" id="g-expense-cb" onchange="toggleGratuityExpense()"><span class="track"></span></span>
