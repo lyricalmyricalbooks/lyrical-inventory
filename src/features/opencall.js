@@ -43,7 +43,7 @@ import {
   ocProposalKey, ocProposalSummary, ocProposalsFromScan, ocApplyProposal,
   ocOutboxKey, ocOutboxAdditions, ocPruneQueues, ocMergeTemplate, ocWaitingDays,
   ocCurrentStage, ocNudgeDue, ocNudgeTemplateKey, ocProblems, ocMatchesFilter, ocFilterCounts,
-  ocMatchesSearch, ocSortContributors, OC_NUDGE_AFTER_DAYS,
+  ocMatchesSearch, ocSortContributors, OC_NUDGE_AFTER_DAYS, ocDaysSince,
 } from '../lib/opencall.js';
 
 let ocImportOpen = false;
@@ -1317,9 +1317,8 @@ function ocRowStatus_(c) {
 }
 
 function ocDaysAgoLabel_(iso) {
-  const t = Date.parse(iso || '');
-  if (!Number.isFinite(t)) return '';
-  const d = Math.max(0, Math.floor((Date.now() - t) / 86400000));
+  const d = ocDaysSince(iso);
+  if (d === null) return '';
   return d === 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`;
 }
 

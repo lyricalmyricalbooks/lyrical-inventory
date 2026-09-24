@@ -86,7 +86,12 @@ export function ocChosenPhoto(contributor) {
 // Powers the "waiting Nd" aging chip on cards.
 export function ocWaitingDays(contributor, now = Date.now()) {
   const c = contributor || {};
-  const t = Date.parse(c.lastStageAt || c.createdAt || '');
+  return ocDaysSince(c.lastStageAt || c.createdAt, now);
+}
+
+// Whole days since an ISO timestamp, or null when it doesn't parse.
+export function ocDaysSince(iso, now = Date.now()) {
+  const t = Date.parse(iso || '');
   if (!Number.isFinite(t)) return null;
   return Math.max(0, Math.floor((now - t) / 86400000));
 }
@@ -285,13 +290,6 @@ export function ocCurrentStage(contributor) {
   return st ? st.key : 'complete';
 }
 
-// Whole days since an ISO timestamp, or null when it doesn't parse.
-function ocDaysSince_(iso, now) {
-  const t = Date.parse(iso || '');
-  if (!Number.isFinite(t)) return null;
-  return Math.max(0, Math.floor((now - t) / 86400000));
-}
-
 // Is this artist overdue for a friendly reminder? Only while we're waiting on
 // them (credit name or files), only with a working address, and not again
 // until OC_NUDGE_GAP_DAYS after the last reminder.
@@ -301,7 +299,7 @@ export function ocNudgeDue(contributor, now = Date.now(), afterDays = OC_NUDGE_A
   if (!OC_ARTIST_STAGES.has(ocCurrentStage(c))) return false;
   const waited = ocWaitingDays(c, now);
   if (waited === null || waited < afterDays) return false;
-  const sinceNudge = ocDaysSince_(c.lastNudgedAt, now);
+  const sinceNudge = ocDaysSince(c.lastNudgedAt, now);
   return sinceNudge === null || sinceNudge >= gapDays;
 }
 

@@ -3,7 +3,7 @@ import {
   OC_STAGES, ocNextAction, newContributor, parseContributorRows, findUnfilledMergeFields,
   ocProposalKey, ocProposalSummary, ocProposalsFromScan, ocApplyProposal,
   ocNextSendStage, ocOutboxKey, ocOutboxAdditions, ocPruneQueues, ocMergeTemplate,
-  ocChosenPhoto, ocWaitingDays,
+  ocChosenPhoto, ocWaitingDays, ocDaysSince,
 } from '../src/lib/opencall.js';
 
 describe('newContributor', () => {
@@ -372,6 +372,22 @@ describe('ocChosenPhoto', () => {
   it('feeds the blank-field guard, so a curated contributor never warns on {{photo}}', () => {
     const c = { name: 'Ada', photo: '', photos: [], selectedPhotos: ['win.jpg'] };
     expect(findUnfilledMergeFields('{{photo}}', c, {})).toEqual([]);
+  });
+});
+
+describe('ocDaysSince', () => {
+  const now = Date.parse('2026-07-03T12:00:00Z');
+
+  it('counts whole days, rounding partial days down', () => {
+    expect(ocDaysSince('2026-06-30T12:00:00Z', now)).toBe(3);
+    expect(ocDaysSince('2026-07-02T13:00:00Z', now)).toBe(0);
+  });
+
+  it('returns null for missing or unparseable dates and clamps future ones to 0', () => {
+    expect(ocDaysSince(undefined, now)).toBeNull();
+    expect(ocDaysSince('', now)).toBeNull();
+    expect(ocDaysSince('not-a-date', now)).toBeNull();
+    expect(ocDaysSince('2026-07-10T12:00:00Z', now)).toBe(0);
   });
 });
 
