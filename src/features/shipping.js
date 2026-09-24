@@ -8738,9 +8738,9 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
     }
 
     let actionBtn = '';
-    if (!o.excludeFromShipping && !isLinked && !isSuggested) {
+    if (!o.excludeFromShipping && !isLinked && !isSuggested && !o.localPickup) {
       actionBtn = `
-        <div style="margin-top:6px; display:flex; gap:4px; align-items:center;">
+        <div style="margin-top:6px; display:flex; gap:4px; align-items:center; flex-wrap:wrap;">
           <button class="btn sm" onclick="openManualShippoLinkModal('${escapeHtml(o.num)}')" style="font-size:var(--text-2xs); padding:3px 8px;">Link</button>
           <button class="btn sm ghost" onclick="markShippingOrderLocalPickup('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:var(--text-2xs); padding:3px 8px; min-width:unset;" title="The customer collected this in person — no postage to link">Pick-up</button>
           <button class="btn sm ghost" onclick="dismissShippingAnalysisOrder('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:var(--text-2xs); padding:3px 8px; color:var(--text3); min-width:unset;" title="Dismiss order from calculations">✕ Dismiss</button>
@@ -8752,7 +8752,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
         ? `<button class="btn sm ghost" onclick="unlinkManualPostage('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:var(--text-2xs); padding:3px 8px; opacity:0.7;">Clear manual</button>`
         : `<button class="btn sm ghost" onclick="unlinkShippoExpense('${escapeHtml(postageExpenseKey(linked[0]))}')" style="font-size:var(--text-2xs); padding:3px 8px; opacity:0.7;">Unlink</button>`;
       actionBtn = `
-        <div style="margin-top:6px; display:flex; gap:4px; align-items:center;">
+        <div style="margin-top:6px; display:flex; gap:4px; align-items:center; flex-wrap:wrap;">
           ${mainBtn}
           <button class="btn sm ghost" onclick="dismissShippingAnalysisOrder('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:var(--text-2xs); padding:3px 8px; color:var(--text3); min-width:unset;" title="Dismiss order from calculations">✕ Dismiss</button>
         </div>`;
