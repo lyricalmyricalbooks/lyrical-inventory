@@ -133,6 +133,7 @@ import {
   renderOrganizerTable,
   renderReceiptCacheStatus,
   renderReceiptFolderAlert,
+  closeReceiptFolderAlert,
   renderReceiptProblemPanel,
   requestBulkReimbursement,
   rescanBatchExpenseRow,
@@ -518,6 +519,8 @@ import {
   filterShippoDestMenu,
   selectShippoDestCustomItem,
   shipNextOrder,
+  closePurchasedLabelPanel,
+  closeLiveReadinessChecklist,
   shipQueuedOrder,
   hideQueuedOrder,
   unhideQueuedOrder,
@@ -24627,6 +24630,9 @@ window.setShippoDestCategoryFilter = setShippoDestCategoryFilter;
 window.filterShippoDestMenu = filterShippoDestMenu;
 window.selectShippoDestCustomItem = selectShippoDestCustomItem;
 window.shipNextOrder = shipNextOrder;
+window.closePurchasedLabelPanel = closePurchasedLabelPanel;
+window.closeLiveReadinessChecklist = closeLiveReadinessChecklist;
+window.closeReceiptFolderAlert = closeReceiptFolderAlert;
 window.shipQueuedOrder = shipQueuedOrder;
 window.hideQueuedOrder = hideQueuedOrder;
 window.unhideQueuedOrder = unhideQueuedOrder;

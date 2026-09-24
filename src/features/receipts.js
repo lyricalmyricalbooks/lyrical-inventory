@@ -940,10 +940,18 @@ function receiptFolderReachable() {
  * owner clicks a receipt — which is exactly what moving the folder used to feel
  * like.
  */
+// Closed with its X: stays closed for this visit. The folder is still missing,
+// so it comes back next time the app opens rather than being forgotten.
+let _receiptFolderAlertClosed = false;
+function closeReceiptFolderAlert() {
+  _receiptFolderAlertClosed = true;
+  renderReceiptFolderAlert();
+}
+
 function renderReceiptFolderAlert() {
   const el = $('tc-folder-alert');
   if (!el) return;
-  if (_receiptFolderReachable) {
+  if (_receiptFolderReachable || _receiptFolderAlertClosed) {
     el.style.display = 'none';
     el.innerHTML = '';
     return;
@@ -955,6 +963,7 @@ function renderReceiptFolderAlert() {
     + `Receipts still open from offline device cache, and new uploads save to cloud until you reconnect.`
     + `</div>`
     + `<button class="btn sm gold" type="button" onclick="setupReceiptFolder()">Reconnect Folder</button>`
+    + `<button class="card-x" type="button" onclick="closeReceiptFolderAlert()" aria-label="Close this warning" title="Close until you next open the app">✕</button>`
     + `</div>`;
   el.style.display = '';
 }
@@ -6857,6 +6866,7 @@ export {
   renderOrganizerTable,
   renderReceiptCacheStatus,
   renderReceiptFolderAlert,
+  closeReceiptFolderAlert,
   renderReceiptProblemPanel,
   requestBulkReimbursement,
   rescanBatchExpenseRow,

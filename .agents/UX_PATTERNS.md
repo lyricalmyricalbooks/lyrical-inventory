@@ -601,6 +601,21 @@ slide-up motion. Use `confirmDialog()`/`promptDialog()` (already on `window`, se
 
 ---
 
+## Every card and notice gets an X — `.card-x`
+
+The owner has asked for this directly: anything that appears on its own (a
+notice, a "done" summary, an "up next" card, a checklist, a queue) must have a
+close button. Inline form validation and in-modal warnings are the exception —
+the modal's own close covers those.
+
+- Use `<button class="card-x" type="button" aria-label="Close …">✕</button>`, placed at
+  the top-right of the card. It's a 44px touch target and themed for dark mode.
+- Closing must never lose anything. Say where it comes back in the `title`
+  ("stays under Reprint a Past Label", "comes back when a new order arrives").
+- Removing one item from a list needs a way back ("Show removed" → "Put back").
+- A warning about something still broken may close for the visit only, and
+  comes back the next time the app opens.
+
 ## Loading states
 Use `.skeleton-line` (`style.css:2447`) for any content that loads asynchronously (Sheets
 sync, Stripe pulls, Gemini OCR) instead of a spinner GIF or a bare "Loading…" string.

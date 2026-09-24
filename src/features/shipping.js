@@ -4672,6 +4672,22 @@ function currentLiveReadiness() {
 
 const READINESS_ICONS = { ok: '✓', warn: '!', blocked: '✕' };
 
+/** The X on the purchased-label summary. The label itself stays in the archive. */
+function closePurchasedLabelPanel() {
+  const panel = $('cp-purchased-label-panel');
+  if (!panel) return;
+  panel.innerHTML = '';
+  panel.style.display = 'none';
+}
+
+/** The X on the go-live checklist; "Check" opens it again. */
+function closeLiveReadinessChecklist(hostId = 'cp-live-readiness') {
+  const host = $(hostId);
+  if (!host) return;
+  host.style.display = 'none';
+  host.innerHTML = '';
+}
+
 /**
  * The go-live checklist: every condition for buying a real label, each with
  * what to do about it. Rendered wherever a host element exists, so the same
@@ -4698,7 +4714,9 @@ function renderLiveReadinessChecklist(hostId = 'cp-live-readiness') {
   }
 
   host.innerHTML = `
-    <div class="cp-ready-head">${headline}</div>
+    <div class="cp-ready-head">${headline}
+      <button class="card-x" type="button" onclick="closeLiveReadinessChecklist('${escapeHtml(hostId)}')" aria-label="Close checklist">✕</button>
+    </div>
     <ul class="cp-ready-list">
       ${readiness.checks.map(c => `
         <li class="cp-ready-item is-${escapeHtml(c.status)}">
@@ -6055,6 +6073,7 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
                   <span aria-hidden="true">📋</span>
                   <span>Copy PIN</span>
                 </button>
+                <button class="card-x" type="button" onclick="closePurchasedLabelPanel()" aria-label="Close label summary" title="Close — the label stays under “Reprint a Past Label”">✕</button>
               </div>
             </div>
             ${nextOrderCardHtml(selectedOrderNumber)}
@@ -10774,6 +10793,8 @@ export {
   filterShippoDestMenu,
   selectShippoDestCustomItem,
   shipNextOrder,
+  closePurchasedLabelPanel,
+  closeLiveReadinessChecklist,
   shipQueuedOrder,
   renderBigCartelShipQueue,
   hideQueuedOrder,
