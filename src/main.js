@@ -530,6 +530,7 @@ import {
   startDeliveryWatch,
   startOrderFollowups,
   openShippingFromUnshippedAlert,
+  openShippingPricesFromAlert,
   openShippingFromDeliveryAlert,
   sweepShippingEmails,
   refreshShippoLabelsIfDue,
@@ -24574,6 +24575,7 @@ window.linkConfidentShippingMatchesNow = linkConfidentShippingMatchesNow;
 window.openShippingReconciliationFromAlert = openShippingReconciliationFromAlert;
 window.openShippingFromDeliveryAlert = openShippingFromDeliveryAlert;
 window.openShippingFromUnshippedAlert = openShippingFromUnshippedAlert;
+window.openShippingPricesFromAlert = openShippingPricesFromAlert;
 window.shipNewOrderFromAlert = shipNewOrderFromAlert;
 window.recordNewOrderFromAlert = recordNewOrderFromAlert;
 window.toggleBigCartelAutoRecord = toggleBigCartelAutoRecord;
