@@ -3999,7 +3999,9 @@ function updateSubheader() {
   if (auth) {
     if (isAuthor()) {
       const book = getBook();
-      auth.textContent = (book && book.title ? book.title : 'Author') + ' · Author view';
+      const title = book && book.title ? book.title : 'Your book';
+      auth.innerHTML = `<span class="tab-author-dot" aria-hidden="true"></span><span class="tab-author-title">${escapeHtml(title)}</span><span class="tab-author-tag">Author view</span>`;
+      auth.title = `${title} · Author view`;
       auth.classList.add('on');
     } else {
       auth.classList.remove('on');
