@@ -5,20 +5,19 @@ import { dirname, join, relative } from 'node:path';
 import postcss from 'postcss';
 import { paletteFor, parseRootVars, makeColorResolver, contrastRatio } from '../scripts/check-contrast.mjs';
 
-// Night mode paints every `.btn` as a light paper object and switches the
-// text tokens inside it to dark ink (`.theme-dark .btn:not([style*=
-// "background"])` in theme-dark.css). That is right for a plain button — but
-// a component that ALSO carries `btn` and paints its own background with a
-// more specific rule keeps the dark ink on a surface that is no longer paper.
-// The book picker cards did exactly that and went ink-on-charcoal at 1.07:1;
-// outline and Open Call gold buttons did the same with a translucent tint over
-// the black page.
+// Night mode is all dark surfaces with light text (theme-dark.css). A button
+// is a dark raised control whose label inherits the light --text. The failure
+// this guards against is a component that also carries `btn` and paints its
+// own background with a rule more specific than `.theme-dark .btn`: if that
+// background comes out LIGHT (a white fill, an un-themed literal), the light
+// label lands pale-on-pale. The old light-tile dark mode hit the mirror image
+// of this three times (the book picker cards at 1.07:1, outline and Open Call
+// buttons at ~2.3:1).
 //
 // This sweep finds that shape statically: every class list in the app's
-// markup that includes `btn`, every rule whose classes fit one of them that out-specifies the dark
-// `.btn` paper rule and sets a background, resolved in the dark palette with
-// the paper-ink tokens a `.btn` carries. Verified against real Chromium
-// rendering when it was written — the numbers it reports match the browser's.
+// markup that includes `btn`, every rule whose classes fit one of them, that
+// out-specifies the dark `.btn` rule and sets a background — resolved in the
+// dark palette and measured against the text it will actually carry.
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
@@ -66,18 +65,11 @@ function declsOf(rule) {
   return d;
 }
 
-/**
- * The dark palette as a `.btn` sees it: the dark :root, plus the paper-ink
- * tokens `.theme-dark .btn` / `.theme-dark .btn:not(...)` re-declare.
- */
+/** The dark palette, with system.css's semantic layer underneath it. */
 function darkButtonPalette() {
   // The semantic layer (--surface-raised, --content-primary, …) lives in
   // system.css's :root and aliases the palette, so it sits underneath.
   const vars = new Map([...parseRootVars(read('src/styles/system.css')), ...paletteFor('dark', styleCss, darkCss)]);
-  postcss.parse(darkCss).walkRules((r) => {
-    if (!/^\.theme-dark \.btn(?::not\(\[style\*="background"\]\))?$/.test(r.selector)) return;
-    r.walkDecls((d) => { if (d.prop.startsWith('--')) vars.set(d.prop.slice(2), d.value); });
-  });
   return vars;
 }
 
@@ -94,7 +86,7 @@ function indexRules(css) {
 function findDarkButtonClashes(classLists) {
   const vars = darkButtonPalette();
   const resolve = makeColorResolver(vars);
-  const ink = resolve('var(--on-paper)');
+  const ink = resolve('var(--text)');
   const page = resolve('var(--cream)');
   const darkRules = indexRules(darkCss);
   const findings = [];
@@ -149,11 +141,19 @@ describe('night-mode buttons that paint their own background', () => {
     expect(findDarkButtonClashes(buttonClassLists(markupFiles))).toEqual([]);
   });
 
-  it('catches the book-picker card shape (a dark card that also carried `btn`)', () => {
-    // Regression fixture: the card's own rule still paints --surface-raised,
-    // so re-adding `btn` to it must fail this sweep.
-    const findings = findDarkButtonClashes([new Set(['btn', 'book-choice-card'])]);
-    expect(findings.some((f) => f.includes('.book-choice-card'))).toBe(true);
+  it('night mode never hands buttons (or anything) a dark ink set', () => {
+    // The retired light-tile design re-declared --text/--content-* to dark
+    // ink inside every button and card; that is what made a class-painted
+    // dark surface go dark-on-dark. No rule in the dark theme may do it again.
+    const offenders = [];
+    postcss.parse(darkCss).walkRules((r) => {
+      r.walkDecls((d) => {
+        if (/^--(?:text\d?|content-(?:primary|secondary|muted|faint))$/.test(d.prop) && !/^:root/.test(r.selector)) {
+          offenders.push(`${r.selector} { ${d.prop} }`);
+        }
+      });
+    });
+    expect(offenders).toEqual([]);
   });
 
   it('the book picker cards are not buttons-by-class', () => {

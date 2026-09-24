@@ -32,7 +32,7 @@ export const RESOLVED_THEMES = ['light', 'dark'];
 /** The <meta name="theme-color"> value per resolved theme — this paints the
  *  browser/PWA chrome, so it has to match the app header's --ink, not the
  *  page background, or the status bar and the header disagree. */
-export const THEME_COLORS = { light: '#100F0D', dark: '#060504' };
+export const THEME_COLORS = { light: '#100F0D', dark: '#141413' };
 
 /**
  * Narrows an arbitrary value (localStorage returns strings, null, or whatever

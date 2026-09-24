@@ -94,7 +94,7 @@ describe('dark palette resolution', () => {
     const darkVars = parseDarkVars(css, darkCss);
     const resolve = makeColorResolver(darkVars);
     // Re-pointed by the dark block.
-    expect(resolve('var(--cream)')).toEqual({ r: 0x14, g: 0x12, b: 0x0f, a: 1 });
+    expect(resolve('var(--cream)')).toEqual({ r: 0x26, g: 0x26, b: 0x24, a: 1 });
     // NOT re-pointed — must still resolve, inherited from the light :root.
     // If the overlay were replaced by a straight read of the dark block, these
     // would come back null and every check touching them would silently skip.
@@ -320,7 +320,7 @@ describe('contrast baseline', () => {
   // light one) but is indistinguishable from a sweep that silently resolves
   // nothing. Mutating a dark token must break it.
   it('the dark sweep actually reads the dark palette', () => {
-    const broken = darkCss.replace('--text3: #9A9182;', '--text3: #2a2620;');
+    const broken = darkCss.replace('--text3: #A8A59C;', '--text3: #2a2620;');
     expect(broken, 'anchor moved — update this mutation').not.toBe(darkCss);
     const findings = findLowContrastText(html, paletteFor('dark', css, broken));
     expect(findings.length).toBeGreaterThan(50);

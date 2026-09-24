@@ -89,7 +89,7 @@ test('the progress bar keeps a visible trough in both themes', () => {
   const wrap = block('.hist-progress-bar-wrap');
   expect(wrap).toMatch(/background:\s*var\(--track-bg\);/);
   expect(wrap).not.toMatch(/var\(--cream2\)/);
-  expect(darkStyles).toMatch(/--track-bg:\s*rgba\(255,\s*255,\s*255,\s*\.13\)/);
+  expect(darkStyles).toMatch(/--track-bg:\s*rgba\(245,\s*244,\s*238,\s*\.12\)/);
 });
 
 test('the progress fill plots one measurement in one colour family', () => {
