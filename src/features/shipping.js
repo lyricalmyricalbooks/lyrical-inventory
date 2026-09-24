@@ -156,7 +156,6 @@ import {
   isSettledRefund,
   parseInvoiceItem,
   parseRefund,
-  refundExpense,
   shippoTxIdFromRef,
 } from '../lib/shippo-invoices.js';
 import {
