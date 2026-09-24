@@ -263,6 +263,18 @@ function clearSimulatedSheet() {
   }
 }
 
+// The spreadsheet link is typed by the publisher (or restored from a backup),
+// so it is only ever put in an href once it parses as an https: URL. Anything
+// else — a javascript: link above all — leaves the Open button hidden.
+function httpsHref(raw) {
+  try {
+    const u = new URL(String(raw || ''));
+    return u.protocol === 'https:' ? u.href : '';
+  } catch (e) {
+    return '';
+  }
+}
+
 function updateSheetsTabUI() {
   const isTest = isTestBookId(activeBook);
   const simCard = $('sheets-simulated-card');
@@ -283,8 +295,9 @@ function updateSheetsTabUI() {
       if (urlDisplay) urlDisplay.textContent = sheetsUrl;
       const openBtn = $('open-sheet-link');
       if (openBtn) {
-        if (sheetsSpreadsheetUrl) {
-          openBtn.href = sheetsSpreadsheetUrl;
+        const sheetLink = httpsHref(sheetsSpreadsheetUrl);
+        if (sheetLink) {
+          openBtn.href = sheetLink;
           openBtn.style.display = 'inline-flex';
         } else {
           openBtn.style.display = 'none';
