@@ -384,6 +384,10 @@
   .pub-shell .app-header {
     grid-template-columns: minmax(0, 1fr) auto auto;
     gap: var(--space-1) var(--space-2); padding: var(--space-3) var(--space-4);
+    /* The shorthand above resets padding-top to a flat 12px, undoing style.css's
+       safe-area allowance. On a notched or Dynamic Island phone held upright that
+       plants the wordmark and header buttons under the cutout. */
+    padding-top: max(var(--space-3), env(safe-area-inset-top));
   }
   .pub-shell .header-brand { display: flex; grid-row: 1; grid-column: 1; padding: 0; min-width: 0; }
   .pub-shell .header-brand .mark, .pub-shell .header-tag { display: none; }
