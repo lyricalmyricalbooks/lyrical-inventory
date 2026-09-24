@@ -4162,17 +4162,58 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 }
 .field-warn::before{content:'⚠';line-height:var(--leading-snug);}
 
-/* Author payment banner: one row per sale, each with its own action. */
-#apb-amount.is-quiet{font-size:var(--text-xl);color:var(--text2);}
-.apb-row{min-height:52px;}
-.apb-what{font-size:var(--text-base);color:var(--text);}
-.apb-row.is-pending .apb-what{color:var(--text2);}
-.apb-status{font-size:var(--text-sm);color:var(--text2);}
-.apb-status.is-done{color:var(--green);font-weight:600;}
-.apb-status.is-warn{color:var(--red);font-weight:600;}
-.apb-pay-wrap{display:inline-flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end;}
-.apb-hint{font-size:var(--text-xs);color:var(--text3);}
-.apb-pay{text-decoration:none;min-height:44px;}
+/* Author payment banner, in Riso: newsprint with a halftone grain, a poster
+   headline and amount printed with a mis-registered second pass, and each
+   sale as its own ticket with a hard offset shadow. Flat fills only. */
+.metric-banner.apb-riso{background:var(--cream);}
+.metric-banner.apb-riso::before{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background-image:radial-gradient(circle, rgba(16,15,13,.07) .7px, transparent .8px);
+  background-size:5px 5px;
+}
+.apb-riso .metric-banner-label{font-family:var(--font-display);font-size:var(--text-xl);font-weight:400;letter-spacing:.01em;color:var(--text);margin-bottom:10px;}
+.apb-riso #apb-amount{font-family:var(--font-display);font-size:64px;font-weight:400;letter-spacing:.01em;color:var(--gold-text);text-shadow:3px 3px 0 rgba(27,63,224,.28);} /* token-ok: poster-scale Riso amount, above the type scale on purpose */
+.apb-riso #apb-amount.is-quiet{font-size:var(--text-3xl);color:var(--text);text-shadow:3px 3px 0 rgba(232,64,42,.3);}
+.apb-riso .metric-banner-sub{max-width:62ch;font-size:var(--text-base);}
+.apb-riso .metric-banner-items{border-top:none;padding-top:.25rem;gap:12px;}
+.apb-riso .metric-banner-link{border:var(--stroke) solid var(--rule-ink);box-shadow:var(--elev-3);font-size:var(--text-base);padding:16px 26px;transition:transform var(--dur-fast) var(--ease-standard),box-shadow var(--dur-fast) var(--ease-standard),background .15s;}
+.apb-riso .metric-banner-link:hover{transform:translate(-2px,-2px);box-shadow:6px 6px 0 var(--rule-ink);}
+.apb-riso .metric-banner-link:active{transform:translate(4px,4px);box-shadow:0 0 0 var(--rule-ink);}
+.metric-banner-items .apb-row{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:16px;padding:14px 16px;min-height:64px;background:var(--surface-card);border:var(--stroke) solid var(--rule-ink);border-radius:var(--r);box-shadow:var(--elev-2);}
+.metric-banner-items .apb-row:first-child{padding-top:14px;border-top:var(--stroke) solid var(--rule-ink);}
+.metric-banner-items .apb-row.is-pending{opacity:1;background:transparent;border-style:dashed;border-color:var(--border);box-shadow:none;}
+.apb-stamp{display:inline-flex;align-items:center;justify-content:center;min-width:48px;height:48px;padding:0 6px;background:var(--amber-bg);border:var(--stroke) solid var(--rule-ink);font-family:var(--font-display);font-size:var(--text-2xl);color:var(--text);transform:rotate(-3deg);}
+.apb-row.is-pending .apb-stamp{background:transparent;border-style:dashed;border-color:var(--border);color:var(--text3);transform:none;}
+.apb-what{font-size:var(--text-base);font-weight:600;color:var(--text);}
+.apb-row.is-pending .apb-what{color:var(--text2);font-weight:400;}
+.apb-status{font-size:var(--text-sm);color:var(--text2);text-align:right;}
+.apb-status.is-done{color:var(--green);font-weight:700;text-transform:uppercase;letter-spacing:.08em;font-size:var(--text-xs);border:var(--stroke) solid currentColor;padding:6px 10px;transform:rotate(-2deg);}
+.apb-status.is-warn{color:var(--red);font-weight:700;}
+.apb-pay{text-decoration:none;min-height:48px;padding:12px 22px;border:var(--stroke) solid var(--rule-ink);box-shadow:var(--elev-2);transition:transform var(--dur-fast) var(--ease-standard),box-shadow var(--dur-fast) var(--ease-standard);}
+.apb-pay:hover{transform:translate(-2px,-2px);box-shadow:5px 5px 0 var(--rule-ink);}
+.apb-pay:active{transform:translate(3px,3px);box-shadow:0 0 0 var(--rule-ink);}
+@media (max-width:600px){
+  .apb-riso #apb-amount{font-size:48px;} /* token-ok: poster-scale amount at phone width */
+  .metric-banner-items .apb-row{grid-template-columns:auto 1fr;}
+  .metric-banner-items .apb-row > :last-child{grid-column:1 / -1;justify-self:stretch;text-align:center;justify-content:center;}
+}
+@media (prefers-reduced-motion: reduce){
+  .apb-pay,.apb-riso .metric-banner-link{transition:none;}
+  .apb-pay:hover,.apb-pay:active,.apb-riso .metric-banner-link:hover,.apb-riso .metric-banner-link:active{transform:none;}
+}
+
+/* Thank-you slip: a stamped Riso card over the page. */
+.thanks-overlay{z-index:var(--z-modal);padding:16px;}
+.thanks-riso{position:relative;width:100%;max-width:420px;background:var(--cream);border:var(--stroke) solid var(--rule-ink);box-shadow:8px 8px 0 var(--gold);padding:40px 28px 28px;text-align:center;overflow:hidden;animation:modalIn .35s var(--ease-spring);}
+.thanks-riso::before{content:'';position:absolute;inset:0;pointer-events:none;background-image:radial-gradient(circle, rgba(16,15,13,.08) .7px, transparent .8px);background-size:5px 5px;}
+.thanks-stamp{position:relative;display:inline-grid;margin:0 auto 18px;transform:rotate(-8deg);}
+.thanks-stamp span{grid-area:1 / 1;font-family:var(--font-display);font-size:44px;line-height:1;text-transform:uppercase;padding:8px 18px;border:4px solid currentColor;} /* token-ok: rubber-stamp lettering, poster scale */
+.thanks-stamp span:first-child{color:var(--green);}
+.thanks-stamp span:last-child{color:var(--gold);opacity:.45;mix-blend-mode:multiply;transform:translate(3px,3px);}
+.thanks-title{position:relative;font-family:var(--font-display);font-size:var(--text-3xl);font-weight:400;text-transform:uppercase;color:var(--text);margin:0 0 10px;line-height:1;}
+.thanks-body{position:relative;font-size:var(--text-base);color:var(--text2);margin:0 0 22px;line-height:1.5;}
+.thanks-close{position:relative;border:var(--stroke) solid var(--rule-ink);box-shadow:var(--elev-2);min-height:48px;}
+@media (prefers-reduced-motion: reduce){ .thanks-riso{animation:none;} }
 
 /* TOOLTIPS (#10) — add data-tip="..." to any element. */
 .tip{position:relative;cursor:help;}

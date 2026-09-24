@@ -10093,7 +10093,7 @@ function consumeTransferPaidReturn() {
   const ids = raw.split('.').map(x => x.trim()).filter(Boolean);
   if (ids.length) {
     notePaidTransfer(ids[0], ids.slice(1));
-    setTimeout(() => showToast('✓ Payment received by Stripe — thank you!', 'ok', 5000), 1200);
+    setTimeout(() => showThanksPopup({ stamp: 'Paid', title: 'Payment sent!', body: 'Stripe has your payment. Your publisher’s app will mark it received shortly — nothing more to do.' }), 1200);
   }
   params.delete('transfer_paid');
   const q = params.toString();
@@ -10134,7 +10134,38 @@ function announceTransferReceipt(r, cur) {
   if (!Array.isArray(seen) || seen.includes(r.chargeId)) return;
   seen = [r.chargeId, ...seen].slice(0, 30);
   try { localStorage.setItem(RECEIPT_SEEN_KEY, JSON.stringify(seen)); } catch (_) { /* private mode */ }
-  showToast(`✓ Your publisher received your ${fmt(r.amount, cur)} payment — thank you!`, 'ok', 6000);
+  showThanksPopup({
+    stamp: 'Received',
+    title: 'Thank you!',
+    body: `Your publisher received your ${fmt(r.amount, cur)} payment${r.count ? ` for ${r.count} ${r.count === 1 ? 'sale' : 'sales'}` : ''}. Nothing more to send.`,
+  });
+}
+
+// Riso thank-you card: a stamped paper slip over the page. One at a time;
+// Esc, the button or a click outside closes it, and focus returns to where it was.
+function showThanksPopup({ stamp = 'Paid', title = 'Thank you!', body = '' } = {}) {
+  document.getElementById('thanks-riso')?.remove();
+  const back = document.activeElement;
+  const wrap = document.createElement('div');
+  wrap.className = 'overlay thanks-overlay';
+  wrap.id = 'thanks-riso';
+  wrap.innerHTML = `<div class="thanks-riso" role="dialog" aria-modal="true" aria-labelledby="thanks-riso-title" aria-describedby="thanks-riso-body">
+      <div class="thanks-stamp" aria-hidden="true"><span>${escapeHtml(stamp)}</span><span>${escapeHtml(stamp)}</span></div>
+      <h2 class="thanks-title" id="thanks-riso-title">${escapeHtml(title)}</h2>
+      <p class="thanks-body" id="thanks-riso-body">${escapeHtml(body)}</p>
+      <button type="button" class="btn gold lg thanks-close">Lovely, close</button>
+    </div>`;
+  const close = () => {
+    wrap.remove();
+    document.removeEventListener('keydown', onKey);
+    try { back?.focus?.(); } catch (_) { /* element gone */ }
+  };
+  const onKey = e => { if (e.key === 'Escape') close(); };
+  wrap.addEventListener('click', e => { if (e.target === wrap) close(); });
+  wrap.querySelector('.thanks-close').addEventListener('click', close);
+  document.addEventListener('keydown', onKey);
+  document.body.appendChild(wrap);
+  wrap.querySelector('.thanks-close').focus();
 }
 
 // The Stripe link minted for this transfer, if it still matches the amount.
@@ -10172,6 +10203,7 @@ function renderArtistTransfers() {
       // Nothing left to pay and the publisher recently received a payment:
       // close the loop with a thank-you instead of just vanishing.
       banner.style.display = '';
+      banner.classList.add('apb-riso');
       banner.querySelector('.metric-banner-label').textContent = 'Money to send to your publisher';
       $('apb-amount').textContent = 'All paid — thank you!';
       $('apb-amount').classList.add('is-quiet');
@@ -10190,6 +10222,7 @@ function renderArtistTransfers() {
         else if (amt > 0 && !recentlyPaidTransfer(t.id)) { dueNow += amt; dueCount++; }
       }
       banner.style.display = '';
+      banner.classList.add('apb-riso');
       banner.querySelector('.metric-banner-label').textContent = 'Money to send to your publisher';
       $('apb-amount').textContent = dueCount ? fmt(dueNow, cur) : 'Nothing to pay yet';
       $('apb-amount').classList.toggle('is-quiet', !dueCount);
@@ -10240,7 +10273,9 @@ function renderArtistTransfers() {
             ? `<a class="btn gold apb-pay" href="${escapeHtml(url)}" target="_blank" rel="noopener">Pay ${escapeHtml(fmt(amt, cur))} →</a>`
             : `<span class="apb-status">Payment link on its way — your publisher's app is preparing it. Check back soon.</span>`;
         }
+        const stamp = Number(t.qty) > 0 ? `${Number(t.qty)}×` : '?';
         return `<div class="mbi-row apb-row${state}">
+          <div class="apb-stamp" aria-hidden="true">${stamp}</div>
           <div class="apb-what">${escapeHtml(what)}</div>
           ${action}
         </div>`;
