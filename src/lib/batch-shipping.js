@@ -81,7 +81,28 @@ export function pickCheapestRate(rates = []) {
     .filter(r => r && r.object_id && Number.isFinite(parseFloat(r.amount)) && parseFloat(r.amount) > 0);
   if (!usable.length) return null;
   const days = r => (Number.isFinite(Number(r.estimated_days)) ? Number(r.estimated_days) : 99);
-  return [...usable].sort((a, b) => (parseFloat(a.amount) - parseFloat(b.amount)) || (days(a) - days(b)))[0];
+
+  // ⚡ Bolt Optimization: Use O(N) imperative loop instead of O(N log N) sort()[0] to find cheapest rate
+  let bestRate = null;
+  let minAmount = Infinity;
+  let minDays = Infinity;
+
+  for (let i = 0; i < usable.length; i++) {
+    const r = usable[i];
+    const amount = parseFloat(r.amount);
+    const d = days(r);
+
+    if (amount < minAmount) {
+      minAmount = amount;
+      minDays = d;
+      bestRate = r;
+    } else if (amount === minAmount && d < minDays) {
+      minDays = d;
+      bestRate = r;
+    }
+  }
+
+  return bestRate;
 }
 
 /**

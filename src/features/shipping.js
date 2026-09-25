@@ -4367,9 +4367,20 @@ function buildShippingChargePrediction(rates) {
   const subtotal = baseAmount + handling;
   const recommended = roundShippingCharge(subtotal * (1 + margin));
   const cheapest = usableRates[0];
-  const fastest = usableRates
-    .filter(r => r.estimated_days !== null && r.estimated_days !== undefined)
-    .sort((a, b) => parseInt(a.estimated_days) - parseInt(b.estimated_days))[0] || null;
+
+  // ⚡ Bolt Optimization: Use O(N) imperative loop instead of O(N log N) filter().sort()[0] to find fastest rate
+  let fastest = null;
+  let minDays = Infinity;
+  for (let i = 0; i < usableRates.length; i++) {
+    const r = usableRates[i];
+    if (r.estimated_days != null) {
+      const days = parseInt(r.estimated_days);
+      if (days < minDays) {
+        minDays = days;
+        fastest = r;
+      }
+    }
+  }
 
   return {
     recommended,
@@ -7487,29 +7498,43 @@ async function calculateShippoRates() {
 
     renderShippingChargePrediction(rates);
 
+    // ⚡ Bolt Optimization: Use a single O(N) imperative loop to find cheapest and fastest rates instead of O(N log N) multiple sorts
+    let cheapestRate = null;
+    let minAmount = Infinity;
+    let fastestId = null;
+    let minDays = Infinity;
+
+    for (let i = 0; i < rates.length; i++) {
+      const r = rates[i];
+      const amount = parseFloat(r.amount);
+      if (amount < minAmount) {
+        minAmount = amount;
+        cheapestRate = r;
+      }
+
+      if (r.estimated_days != null) {
+        const days = parseInt(r.estimated_days);
+        if (days < minDays) {
+          minDays = days;
+          fastestId = r.object_id;
+        }
+      }
+    }
+
     if (isInternational) {
-      const cheapestRate = rates.length > 0 ? [...rates].sort((a, b) => parseFloat(a.amount) - parseFloat(b.amount))[0] : null;
       calculateZonosDutiesHandler({ shippingAmount: cheapestRate ? parseFloat(cheapestRate.amount) : 15.00, carrierName: cheapestRate?.provider || '' }).catch(() => {});
     }
 
-    // Sort rates by amount ascending to find the cheapest
-    const sortedByPrice = [...rates].sort((a, b) => parseFloat(a.amount) - parseFloat(b.amount));
-    const cheapestId = sortedByPrice[0]?.object_id;
-
-    // Filter rates with estimated days to find the fastest
-    const ratesWithDays = rates.filter(r => r.estimated_days !== null && r.estimated_days !== undefined);
-    let fastestId = null;
-    if (ratesWithDays.length > 0) {
-      const sortedByDays = [...ratesWithDays].sort((a, b) => parseInt(a.estimated_days) - parseInt(b.estimated_days));
-      fastestId = sortedByDays[0]?.object_id;
-    }
+    const cheapestId = cheapestRate?.object_id;
 
     if (list) {
       const customerPaid = selectedOrderShippingPaid();
-      const cadPrices = sortedByPrice
+      // Restore sorted rates for display in UI since we eliminated the explicit sort above
+      const ratesForDisplay = [...rates].sort((a, b) => parseFloat(a.amount) - parseFloat(b.amount));
+      const cadPrices = ratesForDisplay
         .filter(r => String(r.currency || '').toUpperCase() === 'CAD')
         .map(r => parseFloat(r.amount));
-      list.innerHTML = rateCoverageNoteHtml(cadPrices, customerPaid) + sortedByPrice.map(r => {
+      list.innerHTML = rateCoverageNoteHtml(cadPrices, customerPaid) + ratesForDisplay.map(r => {
         const logoUrl = r.provider_image_75 || '';
         const isCheapest = r.object_id === cheapestId;
         const isFastest = r.object_id === fastestId && !isCheapest;
