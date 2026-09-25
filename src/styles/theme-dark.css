@@ -578,6 +578,17 @@
   border-color: var(--border);
 }
 
+/* The author's Riso pay box and its thank-you slip are "newsprint" --cream in
+   light mode, a step below the white card. Here --cream IS the page, so both
+   rendered with no fill at all — just an outline floating on the page, the
+   author's most important money figure reading as less finished than any
+   card beside it. Lift the box to a card, and the sale tickets inside it one
+   step further, so they still rise off the box the way they do in daylight.
+   Pending (dashed) tickets stay transparent on purpose. */
+.theme-dark .metric-banner.apb-riso,
+.theme-dark .thanks-riso { background: var(--surface-card); }
+.theme-dark .metric-banner-items .apb-row:not(.is-pending) { background: var(--cream3); }
+
 /* Buttons sit one step above whatever holds them, with a hairline. */
 .theme-dark .btn {
   background: var(--cream3);
