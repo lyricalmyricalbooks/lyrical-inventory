@@ -10168,6 +10168,45 @@ function showThanksPopup({ stamp = 'Paid', title = 'Thank you!', body = '' } = {
   wrap.querySelector('.thanks-close').focus();
 }
 
+// Publisher → author: "please add the link I should pay you back through".
+// Opens an email with plain steps and a link that drops the author straight
+// onto the payment-link box; falls back to copying the message.
+function askAuthorForPayLink() {
+  const book = getBook();
+  const url = `${location.origin}${location.pathname}?setup=paylink`;
+  const first = (book.author || '').split(' ')[0] || 'there';
+  const subject = `Add your payment link — ${book.title}`;
+  const body = `Hi ${first},\n\nI'd like to pay you back for your expenses on ${book.title}, but I don't have a payment link for you yet.\n\nIt takes a minute:\n1. Open this link and sign in: ${url}\n2. Paste your PayPal.me link or Interac email into the "Your payment link" box.\n3. Press Save.\n\nThat's it — I'll send the money there.\n\nThanks!`;
+  const to = (book.authorEmail || '').trim();
+  if (to) {
+    window.location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    return;
+  }
+  const done = () => showToast('No author email saved for this book — message copied, paste it to them', 'warn', 5000);
+  if (navigator.clipboard?.writeText) navigator.clipboard.writeText(`${subject}\n\n${body}`).then(done).catch(() => showToast('Add the author’s email in the book settings to send this', 'warn', 5000));
+  else showToast('Add the author’s email in the book settings to send this', 'warn', 5000);
+}
+window.askAuthorForPayLink = askAuthorForPayLink;
+
+// Author arrived from that email (?setup=paylink): open Expenses and put the
+// cursor in the payment-link box, then tidy the address bar.
+function openPayLinkSetupIfAsked() {
+  let params;
+  try { params = new URLSearchParams(location.search); } catch (_) { return; }
+  if (params.get('setup') !== 'paylink') return;
+  params.delete('setup');
+  const q = params.toString();
+  try { history.replaceState(null, '', `${location.pathname}${q ? `?${q}` : ''}${location.hash}`); } catch (_) { /* old browser */ }
+  setTimeout(() => {
+    try { switchTab('expenses'); } catch (_) { return; }
+    const card = $('artist-payment-link-card');
+    const input = $('artist-pay-link-input');
+    card?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    input?.focus();
+    showToast('Paste your payment link here and press Save', 'ok', 5000);
+  }, 600);
+}
+
 // The Stripe link minted for this transfer, if it still matches the amount.
 function transferPayUrl(t) {
   const amt = transferAmount(t);
@@ -10360,7 +10399,7 @@ function renderPendingExpenses() {
   const fullLink = artistLink ? (artistLink.startsWith('http') ? artistLink : 'https://' + artistLink) : '';
   const payHtml = fullLink
     ? `<a href="${fullLink}" target="_blank" class="btn sm" style="text-decoration:none;background:var(--green-bg);color:var(--green);border-color:rgba(42,99,72,.2);">↗ Payment link</a>`
-    : `<span style="font-size:var(--text-2xs);color:var(--text3);font-family:var(--font-mono);">No payment link set</span>`;
+    : `<button type="button" class="btn sm outline" onclick="askAuthorForPayLink()" title="Send the author simple steps to add the link you'll pay them back through">✉ Ask author to add payment link</button>`;
   list.innerHTML = pending.map(e => `
     <div class="pending-card">
       <div>
@@ -24283,6 +24322,7 @@ async function initStartup() {
         IS_AUTHOR_MODE = true;
         ACTIVE_BOOK_FORCED = matchedBookId;
         showApp('author', matchedBookId);
+        openPayLinkSetupIfAsked();
         dismissSplash();
         return;
       }
