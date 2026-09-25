@@ -108,7 +108,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-09-23 | visual | Settings — Book Catalog | Stopped each book's Edit/Remove buttons from getting squeezed off the edge of the screen on a phone held upright | #926 |
 | 2026-09-24 | visual | Shipping — Shippo rate list | Made the Shippo rate cards match the Canada Post rows beside them: a full-size Buy Label button instead of a squeezed tiny one, prices in plain ink instead of green on every row, a colour for the "Canada Post" tag, and the same lift on hover | #984 |
 | 2026-09-24 | visual | Phone header, held upright | Stopped the sticky header's top padding from resetting to a flat 12px on a phone, which planted the logo and header buttons under a notch or Dynamic Island | #992 |
-| 2026-09-25 | visual | Author view — "Money to send to your publisher" box and the thank-you pop-up | In night mode the author's payment box and the "Payment sent!" pop-up had no fill at all — the same colour as the page, just an outline. Both are now a proper card, and each sale waiting to be paid sits one step brighter inside the box so it still stands out | pending |
+| 2026-09-25 | visual | Author view — "Money to send to your publisher" box and the thank-you pop-up | In night mode the author's payment box and the "Payment sent!" pop-up had no fill at all — the same colour as the page, just an outline. Both are now a proper card, and each sale waiting to be paid sits one step brighter inside the box so it still stands out | #1026 |
 
 ---
 
