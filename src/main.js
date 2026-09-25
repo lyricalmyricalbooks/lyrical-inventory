@@ -10197,15 +10197,19 @@ function openPayLinkSetupIfAsked() {
   params.delete('setup');
   const q = params.toString();
   try { history.replaceState(null, '', `${location.pathname}${q ? `?${q}` : ''}${location.hash}`); } catch (_) { /* old browser */ }
-  setTimeout(() => {
-    try { switchTab('expenses'); } catch (_) { return; }
-    const card = $('artist-payment-link-card');
-    const input = $('artist-pay-link-input');
-    card?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    input?.focus();
-    showToast('Paste your payment link here and press Save', 'ok', 5000);
-  }, 600);
+  setTimeout(goToPayLinkSetup, 600);
 }
+
+// Author: jump to the "Your payment link" box and put the cursor in it.
+function goToPayLinkSetup() {
+  try { switchTab('expenses'); } catch (_) { return; }
+  const card = $('artist-payment-link-card');
+  const input = $('artist-pay-link-input');
+  card?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  input?.focus();
+  showToast('Paste your PayPal.me link or Interac email here, then press Save', 'ok', 5000);
+}
+window.goToPayLinkSetup = goToPayLinkSetup;
 
 // The Stripe link minted for this transfer, if it still matches the amount.
 function transferPayUrl(t) {
@@ -10399,7 +10403,9 @@ function renderPendingExpenses() {
   const fullLink = artistLink ? (artistLink.startsWith('http') ? artistLink : 'https://' + artistLink) : '';
   const payHtml = fullLink
     ? `<a href="${fullLink}" target="_blank" class="btn sm" style="text-decoration:none;background:var(--green-bg);color:var(--green);border-color:rgba(42,99,72,.2);">↗ Payment link</a>`
-    : `<button type="button" class="btn sm outline" onclick="askAuthorForPayLink()" title="Send the author simple steps to add the link you'll pay them back through">✉ Ask author to add payment link</button>`;
+    : isAuthor()
+      ? `<button type="button" class="btn sm gold" onclick="goToPayLinkSetup()" title="Add the link your publisher pays you back through">Set up your payment link →</button>`
+      : `<button type="button" class="btn sm outline" onclick="askAuthorForPayLink()" title="Send the author simple steps to add the link you'll pay them back through">✉ Ask author to add payment link</button>`;
   list.innerHTML = pending.map(e => `
     <div class="pending-card">
       <div>
