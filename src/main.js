@@ -10217,6 +10217,25 @@ function transferPayUrl(t) {
   return t && t.payUrl && amt != null && Number(t.payAmount) === amt && t.payLinkV === TRANSFER_LINK_VERSION ? t.payUrl : '';
 }
 
+// Approve an author's direct-to-artist sale straight from its transfer card.
+// Confirms first: approving writes the sale into the ledger and stock.
+async function approvePendingTransferSale(subKey) {
+  const sub = window.authorSubmissions[activeBook]?.sales?.[subKey];
+  if (!sub) { showToast('This sale was already handled', 'warn'); return; }
+  let raw = {};
+  try { raw = typeof sub.data === 'string' ? JSON.parse(sub.data) : (sub.data || {}); } catch (_) { /* shown generically */ }
+  const book = getBook();
+  const amt = (Number(raw.qty) || 0) * (Number(raw.price) || 0);
+  const ok = await confirmDialog(
+    `Approve this sale?\n\n${Number(raw.qty) || '?'} × ${book.title}${amt ? ` · ${fmt(amt, book.currency)}` : ''}${raw.date ? ` · ${fmtD(raw.date)}` : ''}\n\n` +
+    'It will be added to your sales and stock, and the author will be asked to send you the money.',
+    { okLabel: 'Approve sale' },
+  );
+  if (!ok) return;
+  await window.approveSubmission('sales', subKey);
+}
+window.approvePendingTransferSale = approvePendingTransferSale;
+
 function renderArtistTransfers() {
   const s = getState(), book = getBook(), cur = book.currency;
   let transfers = [...(s.artistTransfers || [])].map(t => ({ ...t, status: 'approved' }));
@@ -10229,7 +10248,8 @@ function renderArtistTransfers() {
       transfers.push({
         ...raw,
         total: (raw.qty || 0) * (raw.price || 0),
-        status: 'pending' // Flagged as pending approval
+        status: 'pending', // Flagged as pending approval
+        _subKey: k,
       });
     }
   });
@@ -10365,7 +10385,9 @@ function renderArtistTransfers() {
       </div>
       <div class="pending-card-actions">
         ${t.status === 'pending'
-      ? `<button class="btn sm outline" disabled>Approve sale first</button>`
+      ? (t._subKey
+        ? `<button class="btn gold" onclick="approvePendingTransferSale(${escapeHtml(JSON.stringify(t._subKey))})" title="Add this sale to your records. Once approved, the author can pay you for it.">✓ Approve sale</button>`
+        : `<button class="btn sm outline" disabled>Approve sale first</button>`)
       : `${transferPayUrl(t)
           ? `<span class="pill green" title="The author's Send button opens Stripe with this amount filled in">Stripe link ready</span>`
           : (getReconStripeKey() && transferAmount(t) > 0 ? `<button class="btn sm outline" onclick="mintArtistTransferPayLink(${t.id})" title="Make a Stripe link for exactly this amount, so the author doesn't have to type it">Make Stripe link</button>` : '')}
