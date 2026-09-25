@@ -96,6 +96,19 @@ describe('store orders reversed after being recorded', () => {
     ], rows);
     expect(out).toEqual([{ bookId: 'altrove', sheetsId: 'bc-ABCD-1', num: '#ABCD-1', qty: 2, full: true }]);
   });
+
+  it('matches however the order number was typed, and the first store order wins', () => {
+    const rows = [
+      { bookId: 'altrove', entry: { chan: 'Website', num: 'abcd-9', sheetsId: 'bc-ABCD-9', qty: 1 } },
+      { bookId: 'hound', entry: { chan: 'Website', num: '#ABCD-9', sheetsId: 'bc-ABCD-9-2', qty: 3 } },
+      { bookId: 'hound', entry: { chan: 'Website', num: '', sheetsId: 'bc-blank', qty: 1 } },
+    ];
+    const out = storeReversalsToRaise([
+      order('#abcd-9', { payment_status: 'partially_refunded' }),
+      order('ABCD-9', { status: 'cancelled' }),
+    ], rows);
+    expect(out.map(o => [o.sheetsId, o.full])).toEqual([['bc-ABCD-9', false], ['bc-ABCD-9-2', false]]);
+  });
 });
 
 describe('refunding a card payment that covered several books', () => {

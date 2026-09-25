@@ -5,7 +5,8 @@
 // earnings. The storefront check already reads every order's status; this
 // decides which recorded orders the store has since reversed. Pure.
 
-import { bigCartelOrderNumber, sameOrderNumber } from './bigcartel-ledger-gap.js';
+import { bigCartelOrderNumber } from './bigcartel-ledger-gap.js';
+import { normalizeShippingOrderNumber } from './shipping-reconciliation.js';
 
 const clean = (value) => String(value ?? '').trim().toLowerCase();
 
@@ -26,18 +27,21 @@ export function storeReversal(order = {}) {
  * (`storeReversalNoted`) or already voided is left alone.
  */
 export function storeReversalsToRaise(bcOrders = [], rows = []) {
-  const reversed = [];
+  // Keyed by normalized order number (what sameOrderNumber compares), so each
+  // ledger row is one lookup rather than a scan of every reversed order — the
+  // caller passes every history row of every book on each storefront check.
+  const reversed = new Map();
   (Array.isArray(bcOrders) ? bcOrders : []).forEach(order => {
     const kind = storeReversal(order);
-    const num = bigCartelOrderNumber(order);
-    if (kind && num) reversed.push({ num, kind });
+    const key = kind ? bigCartelOrderNumber(order) : '';
+    if (key && !reversed.has(key)) reversed.set(key, kind);
   });
-  if (!reversed.length) return [];
+  if (!reversed.size) return [];
   const out = [];
   (Array.isArray(rows) ? rows : []).forEach(({ bookId, entry }) => {
     if (!entry || entry.voided || entry.chan !== 'Website' || entry.storeReversalNoted || !entry.sheetsId) return;
-    const hit = reversed.find(r => sameOrderNumber(r.num, entry.num));
-    if (hit) out.push({ bookId, sheetsId: entry.sheetsId || '', num: entry.num, qty: Number(entry.qty) || 0, full: hit.kind === 'reversed' });
+    const kind = reversed.get(normalizeShippingOrderNumber(entry.num));
+    if (kind) out.push({ bookId, sheetsId: entry.sheetsId || '', num: entry.num, qty: Number(entry.qty) || 0, full: kind === 'reversed' });
   });
   return out;
 }
