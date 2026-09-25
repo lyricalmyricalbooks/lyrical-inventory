@@ -836,6 +836,12 @@ land on top of each other. `tests/dark-chrome-ink2-separation.test.js` pins the 
 3. **Deliberately light things stay light.** The invoice paper, the email composer preview, and
    the carrier logo plates are documents and artwork, not chrome — the foot of
    `theme-dark.css` lists them and why.
+4. **A `--cream` fill is "the page" in dark mode.** In light mode `--cream` sits a step below
+   the white `--surface-card`, so a component filled with it (the author's Riso pay box, the
+   thank-you slip) reads as newsprint. In dark mode `--cream` *is* the page colour, and the
+   same component renders with no fill at all. Give it a `.theme-dark` override onto
+   `--surface-card`, and move anything that should rise off it up to `--cream3`.
+   `tests/author-pay-box-dark-fill.test.js` pins the pay box case.
 
 ---
 
