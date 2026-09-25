@@ -10391,9 +10391,24 @@ function renderArtistTransfers() {
       : `${transferPayUrl(t)
           ? `<span class="pill green" title="The author's Send button opens Stripe with this amount filled in">Stripe link ready</span>`
           : (getReconStripeKey() && transferAmount(t) > 0 ? `<button class="btn sm outline" onclick="mintArtistTransferPayLink(${t.id})" title="Make a Stripe link for exactly this amount, so the author doesn't have to type it">Make Stripe link</button>` : '')}
-             <button class="btn sm outline" onclick="settleArtistTransferKeepShare(${t.id})" title="Artist keeps their share; only your cut is forwarded">Artist keeps share</button>
-             <button class="btn sm outline" onclick="settleArtistTransferKeepAll(${t.id})" title="Artist keeps everything — publisher forgives their cut">Artist keeps all</button>
-             <button class="btn gold" onclick="markArtistTransferReceived(${t.id})" title="Artist forwarded the full amount to you">✓ Mark transfer received</button>`}
+             <details class="settle-chooser">
+               <summary class="btn sm outline">Settle by hand <span aria-hidden="true">▾</span></summary>
+               <div class="settle-menu" role="group" aria-label="How did this sale end?">
+                 <p class="settle-q">How did this sale end?</p>
+                 <button type="button" class="settle-opt" onclick="this.closest('details').open=false;markArtistTransferReceived(${t.id})">
+                   <strong>They sent me the full ${escapeHtml(transferAmount(t) != null ? fmt(transferAmount(t), cur) : 'amount')}</strong>
+                   <span>All of it goes into your revenue. (Stripe payments do this for you automatically.)</span>
+                 </button>
+                 <button type="button" class="settle-opt" onclick="this.closest('details').open=false;settleArtistTransferKeepShare(${t.id})">
+                   <strong>They kept their share and sent me my cut</strong>
+                   <span>Their share counts as already paid to them. You'll see the exact split before confirming.</span>
+                 </button>
+                 <button type="button" class="settle-opt" onclick="this.closest('details').open=false;settleArtistTransferKeepAll(${t.id})">
+                   <strong>They keep all of it</strong>
+                   <span>You let them keep your cut too. The sale still counts, and the whole amount is recorded as paid to them.</span>
+                 </button>
+               </div>
+             </details>`}
       </div>
     </div>`).join('');
 }
