@@ -237,7 +237,7 @@ describe('sharing the drafts table with a hand-driven review and the Gmail add-o
       appSource.indexOf('function loadGmailInboxDrafts'),
       appSource.indexOf('async function localizeInboxReceiptFiles'),
     );
-    expect(loadFn).toContain('mergeReceiptDrafts(_emailReceiptDrafts, _emailInboxItems.map(_inboxItemToDraft))');
+    expect(loadFn).toContain('mergeReceiptDrafts(_emailReceiptDrafts, filterDismissedReceipts(_emailInboxItems.map(_inboxItemToDraft)))');
     expect(loadFn).not.toContain('hasUnsavedReview');
     expect(loadFn).not.toContain('replaces the drafts below');
   });
@@ -254,7 +254,7 @@ describe('a wrongly-flagged row can be made to go away for good', () => {
   });
 
   it('is only offered on a row an automated source found', () => {
-    expect(appSource).toContain("(r._fromSweep || r._inboxId) ? `<button class=\"btn sm\" type=\"button\" title=\"Not a receipt");
+    expect(appSource).toContain("(r._fromSweep || r._inboxId) ? `<button class=\"btn sm\" type=\"button\" title=\"Discard this receipt");
   });
 });
 
