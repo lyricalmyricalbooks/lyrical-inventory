@@ -26,6 +26,28 @@ describe('backup AI requests', () => {
   });
 });
 
+describe('backup reader when no free model fits the request', () => {
+  const noProvider = () => ({ ok: false, status: 404, json: async () => ({ error: { code: 404, message: 'No endpoints found that can handle the requested parameters' } }) });
+  const parts = [{ text: 'Read the receipt' }, { inlineData: { mimeType: 'application/pdf', data: 'cA==' } }];
+
+  it('asks for less, one step at a time, instead of giving up', async () => {
+    const fetchImpl = vi.fn().mockImplementationOnce(async () => noProvider()).mockImplementationOnce(async () => noProvider()).mockImplementation(async () => good());
+    const out = await router.runOpenRouterRead({ apiKey: 'b', parts, schema: { type: 'OBJECT', properties: {} }, fetchImpl });
+    const bodies = fetchImpl.mock.calls.map(([, init]) => JSON.parse(init.body));
+    expect(bodies[0].provider).toEqual({ require_parameters: true });
+    expect(bodies[1].provider).toBeUndefined();
+    expect(bodies[1].messages[0].content.some(p => p.type === 'file')).toBe(true);
+    expect(bodies[2].messages[0].content.every(p => p.type === 'text')).toBe(true);
+    expect(out.text).toBe('{"total":12}');
+  });
+
+  it('does not retry an unrelated failure', async () => {
+    const fetchImpl = vi.fn(async () => ({ ok: false, status: 402, json: async () => ({ error: { code: 402, message: 'Insufficient credits' } }) }));
+    await expect(router.runOpenRouterRead({ apiKey: 'b', parts, fetchImpl })).rejects.toMatchObject({ status: 402 });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('receipt fallback', () => {
   function reader(primary, settings = { geminiKey: 'g', openRouterKey: 'b' }, { resting = false } = {}) {
     const backup = vi.fn(async () => ({ text: '{"total":12}', via: 'openrouter' }));
