@@ -12,6 +12,8 @@
 // Written defensively, because storage can be full or blocked and a history
 // that fails must never stop the notification itself from showing.
 
+import { reviewTaskStillOpen } from './review-queue.js';
+
 const LOG_KEY = 'lm-notification-log';
 /** Messages kept. A few weeks of a busy shop. */
 export const LOG_LIMIT = 150;
@@ -111,6 +113,57 @@ export function markNotificationKindRead(kind) {
   const list = readNotificationLog();
   if (!list.some(item => item.kind === kind && !item.read)) return;
   writeLog(list.map(item => item.kind === kind ? { ...item, read: true } : item));
+}
+
+/** Remove one message. Returns whether it was there. */
+export function removeNotification(uid) {
+  const list = readNotificationLog();
+  const kept = list.filter(item => item.uid !== uid);
+  if (kept.length === list.length) return false;
+  writeLog(kept);
+  return true;
+}
+
+/**
+ * The messages whose work is finished, so they can be cleared away by
+ * themselves instead of waiting for the owner to tidy them.
+ *
+ * - A to-do message (`todo:<signal>`) is finished when that signal is gone from
+ *   the to-do list: the stock was reordered, the script was updated, the
+ *   receipt was filed.
+ * - While its signal is still there, only the newest message of that kind is
+ *   worth keeping. "Script is out of date (v47)" is replaced by "(v48)", not
+ *   listed beside it.
+ * - A receipt or label message is finished when nothing of that kind is left
+ *   in the review inbox.
+ * Every other kind (parcel delivered, connection restored…) is news, not a
+ * task, and is only ever removed by the owner.
+ */
+export function resolvedNotificationUids(list = readNotificationLog(), { signalIds = new Set(), review = {} } = {}) {
+  const newestOfKind = new Map();
+  list.forEach(item => {
+    const seen = newestOfKind.get(item.kind);
+    if (!seen || (Number(item.at) || 0) > (Number(seen.at) || 0)) newestOfKind.set(item.kind, item);
+  });
+  const out = [];
+  list.forEach(item => {
+    const kind = String(item.kind || '');
+    if (kind.startsWith('todo:')) {
+      if (!signalIds.has(kind.slice(5)) || newestOfKind.get(kind) !== item) out.push(item.uid);
+      return;
+    }
+    if (reviewTaskStillOpen(kind, review) === false) out.push(item.uid);
+  });
+  return out;
+}
+
+/** Clear the finished messages. Returns how many went. */
+export function pruneResolvedNotifications(context) {
+  const list = readNotificationLog();
+  const gone = new Set(resolvedNotificationUids(list, context));
+  if (!gone.size) return 0;
+  writeLog(list.filter(item => !gone.has(item.uid)));
+  return gone.size;
 }
 
 export function clearNotificationLog() {
