@@ -53,9 +53,10 @@ describe('escapeHtml', () => {
     expect(escapeHtml('a & b & c')).toBe('a &amp; b &amp; c');
   });
 
-  it('contains the Shippo order reconciliation worklist', () => {
+  it('contains the shipping label review pane', () => {
     expect(html).toContain('id="shipping-reconciliation-list"');
-    expect(html).toContain('Shipping reconciliation');
+    expect(html).toContain('Shipping label review');
+    expect(html).toContain('id="shipping-amount-review-list"');
   });
 
   it('ensures bigcartel and shipping panels have tab-panel class for proper panel isolation', () => {
@@ -63,4 +64,3 @@ describe('escapeHtml', () => {
     expect(html).toContain('class="tab-panel" id="tab-shipping"');
   });
 });
-

@@ -538,6 +538,7 @@ import {
   onShippoAutoQuoteToggle,
   linkConfidentShippingMatchesNow,
   openShippingReconciliationFromAlert,
+  openPostageAmountEditor,
   startShippoLabelWatch,
   startCanadaPostSweep,
   sweepCanadaPostShipments,
@@ -16886,7 +16887,7 @@ export function openEditExpense(type, bid, id) {
 
   $('edit-exp-desc').value = exp.desc || '';
   $('edit-exp-cur').value = exp.origCurrency || exp.currency || 'CAD';
-  $('edit-exp-amount').value = exp.origAmount != null ? exp.origAmount : (exp.amount || 0);
+  $('edit-exp-amount').value = exp.amountUnknown ? '' : (exp.origAmount != null ? exp.origAmount : (exp.amount || 0));
   $('edit-exp-date').value = exp.date || today();
   $('edit-exp-trip').value = exp.trip || '';
   $('edit-exp-file').value = '';
@@ -16947,6 +16948,7 @@ async function saveExpenseEdit() {
         exp.currency = currency;
         exp.origCurrency = currency;
         exp.amount = amount;
+        if (exp.amountUnknown) exp.amountUnknown = false;
         exp.origAmount = amount;
         exp.fxRate = fxRate;
         exp.baseAmount = baseAmount;
@@ -25106,6 +25108,7 @@ window.sweepStripeFees = sweepStripeFees;
 window.sweepReceiptEmails = sweepReceiptEmails;
 window.linkConfidentShippingMatchesNow = linkConfidentShippingMatchesNow;
 window.openShippingReconciliationFromAlert = openShippingReconciliationFromAlert;
+window.openPostageAmountEditor = openPostageAmountEditor;
 window.openShippingFromDeliveryAlert = openShippingFromDeliveryAlert;
 window.openShippingFromUnshippedAlert = openShippingFromUnshippedAlert;
 window.openShippingPricesFromAlert = openShippingPricesFromAlert;
