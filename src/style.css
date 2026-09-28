@@ -5699,10 +5699,18 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .erd-table th:nth-child(4) { width: 17%; }
 .erd-table th:nth-child(5) { width: 14%; }
 .erd-table th:nth-child(6) { width: 172px; }
-.erd-table th:nth-child(7) { width: 40px; padding-left: 0; }
+.erd-table th:nth-child(7) { width: 88px; padding-left: 0; }
 
 .erd-table td:nth-child(1) { padding-right: 0; }
 .erd-table td:nth-child(7) { padding-left: 0; }
+.erd-table td:nth-child(7) button { min-height: 44px; }
+.email-receipt-source { margin-top: 6px; font-size: var(--text-xs); color: var(--content-secondary); overflow-wrap: anywhere; }
+.email-receipt-source summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; color: var(--accent); }
+.email-receipt-source div { margin: 3px 0; }
+@media (max-width: 900px) {
+  .erd-table-wrap { overflow-x: auto; }
+  .erd-table { min-width: 760px; }
+}
 
 .erd-table input,
 .erd-table select {
