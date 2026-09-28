@@ -8,7 +8,10 @@ import {
   markNotificationKindRead,
   notificationDayLabel,
   notificationSource,
+  pruneResolvedNotifications,
   readNotificationLog,
+  removeNotification,
+  resolvedNotificationUids,
   unreadNotificationCount,
 } from '../src/lib/notification-log.js';
 import { buildAttentionSignals } from '../src/lib/attention-signals.js';
@@ -81,6 +84,44 @@ describe('notification history', () => {
     expect(notificationSource({ id: 'receipt-sweep' })).toBe('Receipt finder');
     expect(notificationSource({ id: 'postage-sweep-canada-post' })).toBe('Canada Post');
     expect(notificationSource({ id: 'health-gmail' })).toBe('Connection check');
+  });
+});
+
+describe('clearing notifications away', () => {
+  beforeEach(() => { localStorage.clear(); });
+
+  it('clears one message on its own and leaves the rest', () => {
+    const a = logNotification({ id: 'delivery-watch', title: 'Parcel delivered' }, { now: 1000 });
+    logNotification({ id: 'health-gmail', title: 'Gmail is back' }, { now: 2000 });
+    expect(removeNotification(a.uid)).toBe(true);
+    expect(readNotificationLog().map(i => i.title)).toEqual(['Gmail is back']);
+    expect(removeNotification(a.uid)).toBe(false);
+  });
+
+  it('clears a to-do message once its signal has gone, and keeps a live one', () => {
+    logNotification({ id: 'todo:stock-low:hound', title: 'Stock running low' }, { now: 1000 });
+    logNotification({ id: 'todo:setup-script', title: 'Script is out of date' }, { now: 2000 });
+    const removed = pruneResolvedNotifications({ signalIds: new Set(['setup-script']), review: {} });
+    expect(removed).toBe(1);
+    expect(readNotificationLog().map(i => i.kind)).toEqual(['todo:setup-script']);
+  });
+
+  it('keeps only the newest message of a still-active to-do item', () => {
+    logNotification({ id: 'todo:setup-script', title: 'Script out of date (v47)' }, { now: 1000 });
+    markNotificationsRead();
+    logNotification({ id: 'todo:setup-script', title: 'Script out of date (v48)' }, { now: 5000 });
+    pruneResolvedNotifications({ signalIds: new Set(['setup-script']), review: {} });
+    expect(readNotificationLog().map(i => i.title)).toEqual(['Script out of date (v48)']);
+  });
+
+  it('clears receipt and label messages once nothing is left to review, and never touches plain news', () => {
+    logNotification({ id: 'receipt-sweep', title: '1 new receipt' }, { now: 1000 });
+    logNotification({ id: 'postage-sweep-your-email', title: '1 label added' }, { now: 2000 });
+    logNotification({ id: 'delivery-watch', title: 'Parcel delivered' }, { now: 3000 });
+    const list = readNotificationLog();
+    expect(resolvedNotificationUids(list, { review: { receipts: 0, labels: 1 } })).toEqual([list[2].uid]);
+    pruneResolvedNotifications({ review: { receipts: 0, labels: 0 } });
+    expect(readNotificationLog().map(i => i.kind)).toEqual(['delivery-watch']);
   });
 });
 
