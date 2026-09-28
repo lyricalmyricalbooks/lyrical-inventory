@@ -220,7 +220,8 @@
  *      and whole books). It leaves out test/connection-check rows, adds a
  *      Shipping column so its grand total matches Revenue on __Summary, fills
  *      in empty months, and writes live SUM formulas for its totals. Test rows
- *      are also left out of the Key numbers panel. Bump flags v48-and-older as
+ *      are also left out of the Key numbers panel, which now splits Revenue
+ *      into book sales and customer-paid shipping. Bump flags v48-and-older as
  *      outdated so the publisher redeploys.
  */
 
@@ -2106,6 +2107,8 @@ function refreshOverviewSummary_(ss) {
   const kpiRows = [
     ['Books sold (qty)', kpi.unitsSold],
     ['Revenue (CAD)',    kpi.revenueCAD],
+    ['  Book sales',     kpi.bookCAD],
+    ['  Shipping paid by customers', kpi.shippingCAD],
     ['Entries (live)',   kpi.entries],
     ['Top book',         kpi.topBook || '—'],
     ['Top channel',      kpi.topChannel || '—'],
@@ -2117,11 +2120,15 @@ function refreshOverviewSummary_(ss) {
   summary.setColumnWidth(7, 150);
   summary.getRange(2, 6, kpiRows.length, 1).setFontWeight('bold');
   summary.getRange(2, 7, kpiRows.length, 1).setHorizontalAlignment('right');
+  // Rows: 2 Books sold · 3 Revenue · 4 Book sales · 5 Shipping · 6 Entries ·
+  // 7 Top book · 8 Top channel · 9 This month.
   summary.getRange(2, 7).setNumberFormat('#,##0');                 // Books sold
-  summary.getRange(4, 7).setNumberFormat('#,##0');                 // Entries
+  summary.getRange(6, 7).setNumberFormat('#,##0');                 // Entries
   summary.getRange(3, 7).setNumberFormat('"CA$"#,##0.00')          // Revenue
     .setFontColor('#064e3b').setFontWeight('bold').setBackground('#ecfdf5');
-  summary.getRange(7, 7).setNumberFormat('"CA$"#,##0.00')          // This month
+  summary.getRange(4, 7, 2, 1).setNumberFormat('"CA$"#,##0.00');   // Books / shipping
+  summary.getRange(4, 6, 2, 2).setFontWeight('normal').setFontColor('#475569');
+  summary.getRange(9, 7).setNumberFormat('"CA$"#,##0.00')          // This month
     .setFontColor('#064e3b').setFontWeight('bold').setBackground('#ecfdf5');
   summary.getRange(1, 6, kpiRows.length + 1, 2)
     .setBorder(true, true, true, true, true, true, '#cbd5e1', SpreadsheetApp.BorderStyle.SOLID);
@@ -2137,7 +2144,7 @@ function refreshOverviewSummary_(ss) {
 function computeOverviewKpis_(overview, tz) {
   const zone = tz || 'America/Toronto';
   const out = {
-    unitsSold: 0, revenueCAD: 0, entries: 0,
+    unitsSold: 0, revenueCAD: 0, bookCAD: 0, shippingCAD: 0, entries: 0,
     topBook: '', topChannel: '', monthCAD: 0,
     monthLabel: Utilities.formatDate(new Date(), zone, 'yyyy-MM')
   };
@@ -2159,6 +2166,7 @@ function computeOverviewKpis_(overview, tz) {
     const isSale = type === 'order' || (type === 'consignment' && /^sale$/i.test(evnum));
     if (isSale) out.unitsSold += qty;
     out.revenueCAD += cad;
+    if (type === 'shipping') out.shippingCAD += cad; else out.bookCAD += cad;
     const chan = String(r[COL['Store/Chan'] - 1] || '').trim();
     if (book) byBook[book] = (byBook[book] || 0) + cad;
     if (chan) byChan[chan] = (byChan[chan] || 0) + cad;
