@@ -19,6 +19,7 @@ import { createStripePriceAndLink } from './lib/stripe-payment-link.js';
 import { calculateBreakEven, breakEvenTierMove, readProductionCostInput } from './lib/breakeven.js';
 import { computeTallyRowHeights, computeQrCardSize, estimateTallyPages, estimateQrPages } from './lib/print-sheet-layout.js';
 import { escapeHtml } from './lib/html.js';
+import { normalizeLetterhead, renderLetterhead } from './lib/letterhead.js';
 import { ensureXlsx, loadExternalScript } from './lib/external-scripts.js';
 import { buildActivityFeed } from './lib/activity-feed.js';
 import { buildAttentionSignals, SIGNAL_GROUPS, GROUP_LABELS, GROUP_ICONS, isUrgent } from './lib/attention-signals.js';
@@ -15763,10 +15764,93 @@ window.renderBookPaymentConfig = renderBookPaymentConfig;
 let psActiveBookId = null;
 let psSimGross = null;   // "what-if" gross revenue for the live earnings preview
 let activeSettingsSubTab = 'catalog';
+const LETTERHEAD_KEY = 'lm-letterhead';
+const LETTERHEAD_FIELDS = ['name', 'address', 'email', 'website', 'phone', 'recipient', 'date', 'subject', 'body', 'signoff', 'signature', 'accent'];
+let letterheadLogo = '';
+let letterheadLoaded = false;
+
+function readLetterhead() {
+  try { return normalizeLetterhead(JSON.parse(localStorage.getItem(LETTERHEAD_KEY) || '{}'), getInvoiceSettings()); }
+  catch (e) { return normalizeLetterhead({}, getInvoiceSettings()); }
+}
+
+function currentLetterhead() {
+  const value = { logo: letterheadLogo };
+  LETTERHEAD_FIELDS.forEach(field => { value[field] = $('lh-' + field)?.value || ''; });
+  return normalizeLetterhead(value);
+}
+
+function loadLetterhead() {
+  if (letterheadLoaded) return;
+  const saved = readLetterhead();
+  LETTERHEAD_FIELDS.forEach(field => { if ($('lh-' + field)) $('lh-' + field).value = saved[field]; });
+  letterheadLogo = saved.logo;
+  letterheadLoaded = true;
+  previewLetterhead();
+}
+
+function previewLetterhead() {
+  const host = $('letterhead-preview');
+  if (host) host.innerHTML = renderLetterhead(currentLetterhead());
+}
+
+function saveLetterhead() {
+  try {
+    localStorage.setItem(LETTERHEAD_KEY, JSON.stringify(currentLetterhead()));
+    showToast('Letterhead saved in this browser');
+  } catch (e) {
+    showToast('Could not save letterhead. Try a smaller logo.', 'warn');
+  }
+}
+
+function loadLetterheadLogo(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(file.type) || file.size > 1024 * 1024) {
+    showToast('Choose a PNG, JPEG, WebP or GIF under 1 MB', 'warn');
+    event.target.value = '';
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => { letterheadLogo = String(reader.result || ''); previewLetterhead(); };
+  reader.readAsDataURL(file);
+}
+
+function removeLetterheadLogo() {
+  letterheadLogo = '';
+  if ($('lh-logo')) $('lh-logo').value = '';
+  previewLetterhead();
+}
+
+function printLetterhead() {
+  const doc = renderLetterhead(currentLetterhead());
+  const frame = document.createElement('iframe');
+  frame.style.cssText = 'position:fixed;width:0;height:0;border:0;opacity:0';
+  frame.setAttribute('title', 'Letterhead print view');
+  frame.onload = () => {
+    const win = frame.contentWindow;
+    win.onafterprint = () => frame.remove();
+    win.focus();
+    win.print();
+  };
+  frame.srcdoc = `<!doctype html><html><head><title>Letterhead</title><style>
+    @page{size:letter;margin:0}*{box-sizing:border-box}body{margin:0;color:#242424;font:11pt Georgia,serif}
+    .letterhead-page{width:8.5in;min-height:11in;padding:.7in .8in;display:flex;flex-direction:column;background:#fff}
+    .letterhead-paper-header{display:flex;justify-content:space-between;gap:20px;border-bottom:3px solid var(--letter-accent);padding-bottom:20px;margin-bottom:40px}
+    .letterhead-brand{display:flex;align-items:center;gap:14px}.letterhead-logo{max-width:90px;max-height:75px;object-fit:contain}
+    .letterhead-name{font-size:23pt;font-weight:bold;color:var(--letter-accent)}.letterhead-contact{text-align:right;font:9pt Arial,sans-serif;line-height:1.5}
+    .letterhead-meta{display:flex;justify-content:space-between;gap:20px;white-space:pre-wrap;line-height:1.5;margin-bottom:30px}
+    .letterhead-subject{font: bold 13pt Arial,sans-serif;margin:0 0 25px}.letterhead-body{line-height:1.65;min-height:3in;overflow-wrap:anywhere}
+    .letterhead-signoff{line-height:1.6;margin-top:35px}.letterhead-paper-footer{margin-top:auto;border-top:1px solid var(--letter-accent);padding-top:10px;text-align:center;font:8pt Arial,sans-serif}
+  </style></head><body>${doc}</body></html>`;
+  document.body.appendChild(frame);
+}
+
+Object.assign(window, { previewLetterhead, saveLetterhead, loadLetterheadLogo, removeLetterheadLogo, printLetterhead });
 
 function switchSettingsSubTab(subTabName) {
   activeSettingsSubTab = subTabName;
-  const subTabs = ['profit', 'catalog', 'sync'];
+  const subTabs = ['profit', 'catalog', 'sync', 'letterhead'];
   subTabs.forEach(tab => {
     const btn = document.getElementById('btn-subtab-' + tab);
     const sec = document.getElementById('settings-sec-' + tab);
@@ -15783,6 +15867,7 @@ function switchSettingsSubTab(subTabName) {
   if (subTabName === 'sync' && typeof updateSheetsTabUI === 'function') {
     updateSheetsTabUI();
   }
+  if (subTabName === 'letterhead') loadLetterhead();
 }
 window.switchSettingsSubTab = switchSettingsSubTab;
 
