@@ -40,6 +40,8 @@ describe('shipping label review', () => {
     expect(row?.textContent).toContain('Shipping confirmation email');
     expect(row?.textContent).toContain('Carrier <receipts@example.com>');
     expect(row?.querySelector('button')?.dataset.ref).toBe('postage:EE123');
+    expect(row?.querySelector('.shipping-review-discard')?.getAttribute('aria-label'))
+      .toContain('Discard Shipping label from Shipping & Postage');
     expect(dom.querySelector('#shipping-reconciliation-list .shipping-reconciliation-row')).toBeNull();
 
     expense.amountUnknown = false;
@@ -71,5 +73,57 @@ describe('shipping label review', () => {
     openShippingReconciliationFromAlert(null, 'email');
     expect(visited).toEqual(['shippo-labels', 'postage-sweep-your-email', 'taxcenter', 'integrations', 'review']);
     expect(dom.activeElement.textContent).toBe('Email task');
+  });
+
+  it('discards only the selected imported expense and remembers its ref across scans', async () => {
+    const selected = { ref: 'postage:EE123', desc: 'UPS label', amountUnknown: true, postageSource: 'email' };
+    const other = { ref: 'postage:EE456', desc: 'Another label', amountUnknown: true };
+    const taxCenter = { businessExpenses: [selected, other] };
+    let saved = null;
+    const { discardImportedPostageExpense, knownImportedPostageRefs } = buildHarness({
+      names: ['discardImportedPostageExpense', 'knownImportedPostageRefs'],
+      deps: {
+        TAX_CENTER: taxCenter,
+        cpText: value => String(value || '').trim(),
+        needsAmountAttention,
+        confirmDialog: async () => true,
+        saveTaxCenter: async () => { saved = [...taxCenter.businessExpenses]; },
+        dismissAppAlert: () => {},
+        renderTaxCenter: () => {},
+        renderShippingAnalysisHub: () => {},
+        renderPostageMatchWorklist: () => {},
+        showToast: () => {},
+      },
+      returns: '{ discardImportedPostageExpense, knownImportedPostageRefs }',
+    });
+
+    await discardImportedPostageExpense(selected.ref);
+    expect(saved).toEqual([other]);
+    expect(taxCenter.discardedPostageRefs).toEqual([selected.ref]);
+    expect(knownImportedPostageRefs().has(selected.ref)).toBe(true);
+    expect(knownImportedPostageRefs().has(other.ref)).toBe(true);
+  });
+
+  it('keeps the expense if saving its discard fails', async () => {
+    const selected = { ref: 'postage:EE123', amountUnknown: true };
+    const taxCenter = { businessExpenses: [selected] };
+    const messages = [];
+    const { discardImportedPostageExpense } = buildHarness({
+      names: ['discardImportedPostageExpense'],
+      deps: {
+        TAX_CENTER: taxCenter,
+        needsAmountAttention,
+        confirmDialog: async () => true,
+        saveTaxCenter: async () => { throw new Error('offline'); },
+        console: { error: () => {} },
+        showToast: message => messages.push(message),
+      },
+      returns: '{ discardImportedPostageExpense }',
+    });
+
+    await discardImportedPostageExpense(selected.ref);
+    expect(taxCenter.businessExpenses).toEqual([selected]);
+    expect(taxCenter.discardedPostageRefs).toBeUndefined();
+    expect(messages).toContain('Could not discard that label. Please try again.');
   });
 });
