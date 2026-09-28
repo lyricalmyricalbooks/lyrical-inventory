@@ -1509,16 +1509,8 @@
             <option value="BOOK">Book currency</option>
             <option value="USD">USD $</option>
             <option value="EUR">EUR €</option>
-            <option value="GBP">GBP £</option>
             <option value="CAD">CAD $</option>
-            <option value="AUD">AUD $</option>
             <option value="MXN">MXN MX$</option>
-            <option value="CHF">CHF</option>
-            <option value="JPY">JPY ¥</option>
-            <option value="NOK">NOK kr</option>
-            <option value="SEK">SEK kr</option>
-            <option value="DKK">DKK kr</option>
-            <option value="OTHER">Other</option>
           </select>
           <input type="number" inputmode="decimal" id="m-price" value="40.00" step="0.01" oninput="phint()">
         </div>
@@ -1767,8 +1759,6 @@
                 <option value="CAD">CAD</option>
                 <option value="USD">USD</option>
                 <option value="EUR">EUR</option>
-                <option value="GBP">GBP</option>
-                <option value="AUD">AUD</option>
                 <option value="MXN">MXN</option>
               </select>
               <input type="number" inputmode="decimal" id="exp-amount" step="0.01" min="0" placeholder="0.00" oninput="calcExpenseFx()">
@@ -1888,7 +1878,6 @@
           <option value="CAD">CAD</option>
           <option value="USD">USD</option>
           <option value="EUR">EUR</option>
-          <option value="GBP">GBP</option>
           <option value="MXN">MXN</option>
         </select>
         <input type="number" inputmode="decimal" id="tc-pending-amount" step="0.01" min="0" placeholder="0.00" style="flex:1;">
@@ -2079,7 +2068,6 @@
           <option value="CAD">CAD</option>
           <option value="USD">USD</option>
           <option value="EUR">EUR</option>
-          <option value="GBP">GBP</option>
           <option value="MXN">MXN</option>
         </select>
         <input type="number" inputmode="decimal" step="0.01" min="0" id="rec-edit-amount" placeholder="0.00" style="flex:1;" oninput="updateRecurringPreview()">
@@ -2643,7 +2631,6 @@
               <option value="CAD">CAD</option>
               <option value="USD">USD</option>
               <option value="EUR">EUR</option>
-              <option value="GBP">GBP</option>
               <option value="MXN">MXN</option>
             </select>
             <input type="number" inputmode="decimal" id="tc-exp-amount" step="0.01" min="0" placeholder="0.00" style="flex:1;">
@@ -4196,7 +4183,6 @@
                   <option value="EUR">€ EUR</option>
                   <option value="CAD">CA$ CAD</option>
                   <option value="USD">$ USD</option>
-                  <option value="GBP">£ GBP</option>
                   <option value="MXN">MX$ MXN</option>
                 </select>
                 <div class="fk-hint">Used in price-paid cells.</div>
@@ -4226,7 +4212,6 @@
                   <option value="EUR">EUR (€)</option>
                   <option value="CAD">CAD (CA$)</option>
                   <option value="USD">USD ($)</option>
-                  <option value="GBP">GBP (£)</option>
                   <option value="MXN">MXN (MX$)</option>
                 </select>
                 <div class="fk-hint">Marked as the listed price; others are converted via your saved FX rates.</div>
@@ -5072,7 +5057,6 @@
             <option value="CAD">CAD</option>
             <option value="USD">USD</option>
             <option value="EUR">EUR</option>
-            <option value="GBP">GBP</option>
             <option value="MXN">MXN</option>
           </select>
           <input id="edit-exp-amount" type="number" inputmode="decimal" step="0.01" min="0" style="flex:1;">
@@ -5164,11 +5148,7 @@
         <option value="EUR">EUR — €</option>
         <option value="CAD">CAD — CA$</option>
         <option value="USD">USD — US$</option>
-        <option value="GBP">GBP — £</option>
-        <option value="AUD">AUD — A$</option>
         <option value="MXN">MXN — MX$</option>
-        <option value="CHF">CHF — CHF</option>
-        <option value="JPY">JPY — ¥</option>
       </select>
     </div>
     <div class="form-group" style="display:flex;flex-direction:column;justify-content:flex-end;">
@@ -5682,7 +5662,6 @@
           <option value="€">Euro (€ - EUR)</option>
           <option value="CA$">Canadian Dollar (CA$ - CAD)</option>
           <option value="$">US Dollar ($ - USD)</option>
-          <option value="£">British Pound (£ - GBP)</option>
           <option value="MX$">Mexican Peso (MX$ - MXN)</option>
         </select>
       </div>
@@ -5875,7 +5854,6 @@
           <option value="CAD">CAD (CA$)</option>
           <option value="USD">USD ($)</option>
           <option value="EUR">EUR (€)</option>
-          <option value="GBP">GBP (£)</option>
           <option value="MXN">MXN (MX$)</option>
         </select>
       </div>
@@ -5929,7 +5907,7 @@
         <option value="€">Euro (€)</option>
         <option value="CA$">Canadian Dollar (CA$)</option>
         <option value="US$">US Dollar (US$)</option>
-        <option value="£">British Pound (£)</option>
+        <option value="MX$">Mexican Peso (MX$)</option>
       </select>
     </div>
   </div>

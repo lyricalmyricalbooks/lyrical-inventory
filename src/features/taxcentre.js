@@ -54,7 +54,7 @@ import { renderShippingReconciliationWorklist } from './shipping.js';
 import { escapeHtml } from '../lib/html.js';
 import { csvRow, toCsv } from '../lib/csv.js';
 import { downloadCsv } from '../lib/download.js';
-import { fmt, getSym, getBookCurrencyCode, roundCents } from '../lib/money.js';
+import { fmt, getSym, getBookCurrencyCode, roundCents, setSelectCurrency } from '../lib/money.js';
 import { reconcileConsignmentMirrors } from '../lib/consignment.js';
 import { buildCashFlowBuckets, cashFlowDelta, computeCashFlowMetrics } from '../lib/cashflow.js';
 import {
@@ -1321,7 +1321,7 @@ function openPendingExpense(id, prefillTrip) {
   const set = (elId, val) => { const el = $(elId); if (el) el.value = val ?? ''; };
   set('tc-pending-desc', item?.desc);
   set('tc-pending-cat', item?.cat || 'Other');
-  set('tc-pending-cur', item?.currency || TAX_CENTER.settings?.baseCurrency || 'CAD');
+  setSelectCurrency($('tc-pending-cur'), item?.currency || TAX_CENTER.settings?.baseCurrency || 'CAD');
   set('tc-pending-amount', item?.estAmount || '');
   set('tc-pending-date', item?.expectedDate);
   set('tc-pending-remind', item?.remindOn);
@@ -1419,7 +1419,7 @@ function confirmPendingExpense(id) {
   const set = (elId, val) => { const el = $(elId); if (el) el.value = val ?? ''; };
   set('tc-exp-desc', item.desc);
   set('tc-exp-cat', item.cat || 'Other');
-  set('tc-exp-cur', item.currency || 'CAD');
+  setSelectCurrency($('tc-exp-cur'), item.currency || 'CAD');
   set('tc-exp-amount', item.estAmount || '');
   set('tc-exp-date', item.expectedDate || today());
   if ($('tc-exp-trip')) tcSelectTripOption('tc-exp-trip', item.trip || '');
@@ -4441,7 +4441,7 @@ function openRecurringEditor(id = '', focus = '') {
 
   $('rec-edit-desc').value = sub?.desc || '';
   $('rec-edit-vendor').value = sub?.vendor || '';
-  $('rec-edit-cur').value = sub?.currency || 'CAD';
+  setSelectCurrency($('rec-edit-cur'), sub?.currency || 'CAD');
   $('rec-edit-amount').value = sub ? sub.amount : '';
   $('rec-edit-start').value = sub?.startDate || today();
   $('rec-edit-end').value = sub?.endDate || '';
