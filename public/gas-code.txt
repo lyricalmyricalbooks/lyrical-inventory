@@ -221,7 +221,8 @@
  *      Shipping column so its grand total matches Revenue on __Summary, fills
  *      in empty months, and writes live SUM formulas for its totals. Test rows
  *      are also left out of the Key numbers panel, which now splits Revenue
- *      into book sales and customer-paid shipping. Bump flags v48-and-older as
+ *      into book sales and customer-paid shipping and counts only real sales
+ *      plus shipping, matching the monthly tab. Bump flags v48-and-older as
  *      outdated so the publisher redeploys.
  */
 
@@ -2165,8 +2166,13 @@ function computeOverviewKpis_(overview, tz) {
     const type = String(r[COL.Type - 1] || '').toLowerCase();
     const isSale = type === 'order' || (type === 'consignment' && /^sale$/i.test(evnum));
     if (isSale) out.unitsSold += qty;
+    // Revenue is real sales plus customer-paid shipping — the same rows the
+    // Monthly (CAD) tab counts, so the two always agree. A consignment
+    // shipment or return carrying a hand-typed amount is not income.
+    if (type === 'shipping') out.shippingCAD += cad;
+    else if (isSale) out.bookCAD += cad;
+    else continue;
     out.revenueCAD += cad;
-    if (type === 'shipping') out.shippingCAD += cad; else out.bookCAD += cad;
     const chan = String(r[COL['Store/Chan'] - 1] || '').trim();
     if (book) byBook[book] = (byBook[book] || 0) + cad;
     if (chan) byChan[chan] = (byChan[chan] || 0) + cad;
