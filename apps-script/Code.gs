@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v48)
+/* Lyricalmyrical Inventory — Unified Backend (v49)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:
@@ -215,6 +215,13 @@
  *      "software development notification" and dropped). Only developer
  *      notifications that merely mention invoices are rejected now. Bump flags
  *      v47-and-older as outdated so the publisher redeploys.
+ *  47. v49: the "Monthly (CAD)" tab rebuilds itself on every sync instead of
+ *      only from the menu, so it no longer goes stale (it was missing months
+ *      and whole books). It leaves out test/connection-check rows, adds a
+ *      Shipping column so its grand total matches Revenue on __Summary, fills
+ *      in empty months, and writes live SUM formulas for its totals. Test rows
+ *      are also left out of the Key numbers panel. Bump flags v48-and-older as
+ *      outdated so the publisher redeploys.
  */
 
 const HEADERS = [
@@ -269,8 +276,8 @@ function doGet(e) {
   const receiptModel = receiptProps.getProperty('GEMINI_MODEL') || 'gemini-2.5-flash';
   const receiptModelValid = /^[a-zA-Z0-9.-]+$/.test(receiptModel);
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v48',
-    scriptVersion: 'v48',
+    service: 'lyrical-sheets-webhook-v49',
+    scriptVersion: 'v49',
     capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, canadaPostRefund: true, graphicalEmails: true, authorPaymentEmails: true, dateOrderedRows: true, receiptExtraction: true, receiptSelfTest: true, receiptDailySweep: true, receiptBackupAi: true },
     receiptAi: {
       geminiApiKey: !!receiptProps.getProperty('GEMINI_API_KEY'),
@@ -2118,6 +2125,9 @@ function refreshOverviewSummary_(ss) {
     .setFontColor('#064e3b').setFontWeight('bold').setBackground('#ecfdf5');
   summary.getRange(1, 6, kpiRows.length + 1, 2)
     .setBorder(true, true, true, true, true, true, '#cbd5e1', SpreadsheetApp.BorderStyle.SOLID);
+
+  // Keep the Month × Book tab in step with every sync so it can't go stale.
+  try { writeMonthlySummary_(ss); } catch (err) { console.warn('Monthly summary skipped: ' + err); }
 }
 
 // Read the Overview tab and compute headline figures. "Books sold" counts only
@@ -2141,6 +2151,7 @@ function computeOverviewKpis_(overview, tz) {
     const book = String(r[COL.Book - 1] || '').trim();
     const evnum = String(r[COL['Event/Num'] - 1] || '').trim();
     if (!book && !evnum) continue; // skip blank rows
+    if (isTestRow_(r)) continue;   // connection checks / test books
     out.entries++;
     const qty = Number(r[COL.Qty - 1]) || 0;
     const cad = Number(r[COL['CAD Equivalent'] - 1]) || 0;
@@ -2373,91 +2384,149 @@ function onOpen() {
 // ─────────────────────────────────────────────────────────────
 function buildMonthlySummary() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const overview = ss.getSheetByName('Overview');
-  if (!overview || overview.getLastRow() < 2) {
-    SpreadsheetApp.getUi().alert('No data in Overview yet.');
+  const res = writeMonthlySummary_(ss);
+  if (!res) {
+    SpreadsheetApp.getUi().alert('No dated sales found in Overview to summarize.');
     return;
   }
+  SpreadsheetApp.getUi().alert(
+    `Monthly summary rebuilt: ${res.months} month(s) × ${res.books} book(s).\n` +
+    `Books CA$${res.books$.toFixed(2)} + shipping CA$${res.shipping.toFixed(2)} = CA$${res.grand.toFixed(2)}` +
+    (res.skippedTest ? `\n${res.skippedTest} test row(s) left out.` : '') +
+    (res.skippedUndated ? `\n${res.skippedUndated} row(s) without a usable date left out.` : '')
+  );
+}
+
+// Connection checks and throwaway test books ("Test", "test1", …) must never
+// count as sales.
+function isTestRow_(r) {
+  const book = String(r[COL.Book - 1] || '').trim();
+  const evnum = String(r[COL['Event/Num'] - 1] || '').trim();
+  const chan = String(r[COL['Store/Chan'] - 1] || '').trim();
+  const id = String(r[COL._eventId - 1] || '');
+  return /^(test\d*|connection check)$/i.test(book) ||
+    /^(test|verify url)$/i.test(chan) ||
+    /^(TEST|VERIFY)-/i.test(evnum) ||
+    /^conn-test-/.test(id);
+}
+
+// Month (yyyy-MM) → next month.
+function nextMonthKey_(mk) {
+  let y = Number(mk.slice(0, 4)), m = Number(mk.slice(5, 7)) + 1;
+  if (m > 12) { m = 1; y++; }
+  return y + '-' + (m < 10 ? '0' : '') + m;
+}
+
+// Writes the "Monthly (CAD)" tab. Returns null when there is nothing to show.
+function writeMonthlySummary_(ss) {
+  const overview = ss.getSheetByName('Overview');
+  if (!overview || overview.getLastRow() < 2) return null;
   const zone = ss.getSpreadsheetTimeZone();
   const values = overview.getRange(2, 1, overview.getLastRow() - 1, HEADERS.length).getValues();
 
   const byMonthBook = {};         // 'YYYY-MM' -> { book -> cad }
+  const shipByMonth = {};         // 'YYYY-MM' -> customer-paid shipping (cad)
   const bookSet = {}, monthSet = {};
+  let skippedTest = 0, skippedUndated = 0;
   for (const r of values) {
     const status = String(r[COL.Status - 1] || '').toUpperCase();
     if (status.indexOf('VOID') >= 0 || status.indexOf('CANCEL') >= 0) continue;
     const type = String(r[COL.Type - 1] || '').toLowerCase();
     const evnum = String(r[COL['Event/Num'] - 1] || '').trim();
     const isSale = type === 'order' || (type === 'consignment' && /^sale$/i.test(evnum));
-    if (!isSale) continue;
-    const cad = Number(r[COL['CAD Equivalent'] - 1]) || 0;
+    const isShip = type === 'shipping';
+    if (!isSale && !isShip) continue;
+    let cad = Number(r[COL['CAD Equivalent'] - 1]);
+    // Legacy rows can have a blank CAD Equivalent; a CAD sale is its own value.
+    if (!cad && normalizeCcy_(r[COL.Currency - 1]) === 'CAD') cad = Number(r[COL['Total/Amount'] - 1]);
+    cad = cad || 0;
     if (!cad) continue;
-    const book = String(r[COL.Book - 1] || '(unknown)').trim() || '(unknown)';
+    if (isTestRow_(r)) { skippedTest++; continue; }
     const d = r[COL.Date - 1];
     const mk = (d instanceof Date && !isNaN(d.getTime()))
       ? Utilities.formatDate(d, zone, 'yyyy-MM')
       : String(d || '').slice(0, 7);
-    if (!/^\d{4}-\d{2}$/.test(mk)) continue; // skip rows without a usable date
+    if (!/^\d{4}-\d{2}$/.test(mk)) { skippedUndated++; continue; }
+    monthSet[mk] = true;
+    if (isShip) { shipByMonth[mk] = (shipByMonth[mk] || 0) + cad; continue; }
+    const book = String(r[COL.Book - 1] || '(unknown)').trim() || '(unknown)';
     (byMonthBook[mk] = byMonthBook[mk] || {});
     byMonthBook[mk][book] = (byMonthBook[mk][book] || 0) + cad;
-    bookSet[book] = true; monthSet[mk] = true;
+    bookSet[book] = true;
   }
 
-  const months = Object.keys(monthSet).sort();
+  const found = Object.keys(monthSet).sort();
+  if (!found.length) return null;
+  // Every month from first to last, so quiet months show as zero, not gaps.
+  const months = [];
+  for (let mk = found[0]; mk <= found[found.length - 1]; mk = nextMonthKey_(mk)) months.push(mk);
   const books = Object.keys(bookSet).sort();
-  if (!months.length) {
-    SpreadsheetApp.getUi().alert('No dated sales found to summarize.');
-    return;
-  }
+  const cents = v => Math.round(v * 100) / 100;
 
-  // Build the grid: header, one row per month, then a totals row.
-  const header = ['Month'].concat(books, ['Total']);
+  // Header, one row per month, then a totals row — totals are live formulas
+  // so a hand-edited cell still adds up.
+  const header = ['Month'].concat(books, ['Shipping', 'Total']);
+  const nCols = header.length, nRows = months.length + 2;
+  const shipCol = columnLetter_(nCols - 1);
+  const firstBookCol = columnLetter_(2);
   const grid = [header];
-  const bookTotals = books.map(() => 0);
-  let grand = 0;
-  for (const m of months) {
+  months.forEach((m, i) => {
+    const rowNum = i + 2;
     const row = [m];
-    let monthTotal = 0;
-    books.forEach((b, i) => {
-      const v = (byMonthBook[m][b] || 0);
-      row.push(v);
-      monthTotal += v; bookTotals[i] += v;
-    });
-    row.push(monthTotal);
-    grand += monthTotal;
+    books.forEach(b => row.push(cents((byMonthBook[m] || {})[b] || 0)));
+    row.push(cents(shipByMonth[m] || 0));
+    row.push(`=SUM(${firstBookCol}${rowNum}:${shipCol}${rowNum})`);
     grid.push(row);
+  });
+  const totalRow = ['Total'];
+  for (let c = 2; c <= nCols; c++) {
+    const L = columnLetter_(c);
+    totalRow.push(`=SUM(${L}2:${L}${nRows - 1})`);
   }
-  grid.push(['Total'].concat(bookTotals, [grand]));
+  grid.push(totalRow);
+
+  let booksTotal = 0, shipping = 0;
+  months.forEach(m => {
+    books.forEach(b => booksTotal += cents((byMonthBook[m] || {})[b] || 0));
+    shipping += cents(shipByMonth[m] || 0);
+  });
 
   let sheet = ss.getSheetByName('Monthly (CAD)');
   if (!sheet) sheet = ss.insertSheet('Monthly (CAD)');
   else { sheet.clear(); sheet.clearConditionalFormatRules(); }
 
-  const nCols = header.length, nRows = grid.length;
+  // Month labels as plain text so Sheets doesn't turn "2026-05" into a date.
+  sheet.getRange(1, 1, nRows, 1).setNumberFormat('@');
   sheet.getRange(1, 1, nRows, nCols).setValues(grid);
 
   // Formatting
   sheet.getRange(1, 1, 1, nCols)
     .setFontWeight('bold').setFontSize(11).setFontFamily('Inter')
     .setBackground('#0f172a').setFontColor('#ffffff')
-    .setHorizontalAlignment('center').setVerticalAlignment('middle');
-  sheet.setRowHeight(1, 34);
+    .setHorizontalAlignment('center').setVerticalAlignment('middle').setWrap(true);
+  sheet.setRowHeight(1, 40);
   sheet.setFrozenRows(1);
   sheet.setFrozenColumns(1);
-  sheet.getRange(2, 1, nRows - 1, 1).setFontWeight('bold'); // month labels
+  sheet.getRange(2, 1, nRows - 1, 1).setFontWeight('bold').setHorizontalAlignment('left');
   sheet.getRange(2, 2, nRows - 1, nCols - 1)
     .setNumberFormat('"CA$"#,##0.00').setHorizontalAlignment('right');
+  sheet.getRange(2, nCols - 1, nRows - 2, 1).setFontColor('#475569');   // shipping
   sheet.getRange(nRows, 1, 1, nCols).setBackground('#fef3c7').setFontWeight('bold');
-  sheet.getRange(1, nCols, nRows, 1).setFontWeight('bold').setBackground('#ecfdf5').setFontColor('#064e3b');
+  sheet.getRange(2, nCols, nRows - 2, 1).setFontWeight('bold').setBackground('#ecfdf5').setFontColor('#064e3b');
   sheet.getRange(1, 1, nRows, nCols)
     .setBorder(true, true, true, true, true, true, '#cbd5e1', SpreadsheetApp.BorderStyle.SOLID);
   sheet.setColumnWidth(1, 90);
-  for (let c = 2; c <= nCols; c++) sheet.setColumnWidth(c, 130);
+  for (let c = 2; c <= nCols; c++) sheet.setColumnWidth(c, 140);
+  sheet.getRange(nRows + 2, 1).setValue(
+    'Rebuilt automatically on every sync. Book sales + customer-paid shipping, in CAD. ' +
+    'Voided sales and test rows are left out.'
+  ).setFontColor('#64748b').setFontStyle('italic');
 
-  SpreadsheetApp.getUi().alert(
-    `Monthly summary rebuilt: ${months.length} month(s) × ${books.length} book(s).\n` +
-    `Total CAD revenue: CA$${grand.toFixed(2)}`
-  );
+  return {
+    months: months.length, books: books.length,
+    books$: cents(booksTotal), shipping: cents(shipping), grand: cents(booksTotal + shipping),
+    skippedTest, skippedUndated
+  };
 }
 
 // ─────────────────────────────────────────────────────────────
