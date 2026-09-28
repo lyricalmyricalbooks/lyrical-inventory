@@ -58,6 +58,7 @@ import {
   today,
 } from '../main.js';
 import { renderExpenses, saveReceiptToLocalFile, readShippingFieldsFromReceipt } from './receipts.js';
+import { openReviewInbox } from './review-inbox.js';
 import { findExistingLabel, describeExistingLabel } from '../lib/label-duplicate-guard.js';
 import {
   refundCarrier, refundState, canRequestRefund, shippoTransactionId, refundCredit,
@@ -1226,21 +1227,93 @@ async function linkShippingExpense(ref) {
   const expense = (TAX_CENTER.businessExpenses || []).find(item => String(item.ref) === String(ref));
   if (!expense) { showToast('Shipping expense was not found', 'err'); return; }
   const domId = String(expense.ref).replace(/[^A-Za-z0-9_-]/g, '-');
-  const number = normalizeShippingOrderNumber($(domId)?.value);
-  if (!number) { showToast('Choose an order before linking postage', 'warn'); return; }
+  await linkPostageToOrder(ref, $(domId)?.value);
+}
+
+/**
+ * Link one label's postage to an order. Shared by the Tax Centre worklist
+ * (which reads the order from its dropdown) and the review inbox (which reads
+ * it from its own), so the two can never link differently.
+ */
+async function linkPostageToOrder(ref, orderNumber) {
+  const expense = (TAX_CENTER.businessExpenses || []).find(item => String(item.ref) === String(ref));
+  if (!expense) { showToast('Shipping expense was not found', 'err'); return false; }
+  const number = normalizeShippingOrderNumber(orderNumber);
+  if (!number) { showToast('Choose an order before linking postage', 'warn'); return false; }
   try {
     await persistManualShippingLink(expense, number, () => saveTaxCenter({ rethrow: true }));
   } catch (error) {
     console.error('Shipping link save failed', error);
     renderShippingReconciliationWorklist();
     showToast('Could not save the shipping link. Please try again.', 'err');
-    return;
+    return false;
   }
   renderShippingReconciliationWorklist();
   renderOrders();
   renderHist();
   renderTaxCenter();
   showToast(`Postage linked to ${number}`);
+  return true;
+}
+
+/**
+ * Every label that still needs a person, and what it needs — for the review
+ * inbox. Uses the same two tests as the Tax Centre worklist (needs an order,
+ * needs an amount), so the inbox and the worklist always list the same labels.
+ */
+function labelReviewEntries() {
+  const entries = [];
+  (TAX_CENTER.businessExpenses || []).forEach(expense => {
+    const needsAmount = needsAmountAttention(expense);
+    const needsOrder = isUnresolvedShippoPostage(expense);
+    if (!needsAmount && !needsOrder) return;
+    entries.push({
+      expense,
+      needsAmount,
+      needsOrder,
+      suggestedOrder: normalizeShippingOrderNumber(expense.shippingSuggestedOrderNumber),
+    });
+  });
+  return entries;
+}
+
+/**
+ * Stop asking about one label's order without touching its cost.
+ *
+ * For a label that was never for a website order — a hand sale, a personal
+ * parcel. The expense stays in Shipping & Postage exactly as it was; only the
+ * "needs an order" flag is set aside, the same mark the worklist's Clear list
+ * button puts on many at once.
+ */
+async function setAsideLabelFromReview(ref) {
+  const expense = (TAX_CENTER.businessExpenses || []).find(item => String(item.ref) === String(ref));
+  if (!expense || !isUnresolvedShippoPostage(expense)) return false;
+  const hadStatus = Object.prototype.hasOwnProperty.call(expense, 'shippingMatchStatus');
+  const prior = expense.shippingMatchStatus;
+  expense.shippingMatchStatus = 'dismissed';
+  try {
+    await saveTaxCenter({ rethrow: true });
+  } catch (error) {
+    if (hadStatus) expense.shippingMatchStatus = prior;
+    else delete expense.shippingMatchStatus;
+    console.error('Setting a label aside failed', error);
+    showToast('Could not save that. Please try again.', 'err');
+    return false;
+  }
+  renderShippingReconciliationWorklist();
+  renderTaxCenter();
+  showToast('Done. The cost stays in your books; it just stops asking for an order.', 'ok');
+  return true;
+}
+
+/** The orders a label can be linked to, as `{ number, name }`. */
+function postageOrderChoices() {
+  return getShippingReconciliationOrders()
+    .map(order => ({
+      number: normalizeShippingOrderNumber(order.num || order.orderNum),
+      name: order.shipName || order.customer || 'Customer',
+    }))
+    .filter(choice => choice.number);
 }
 
 async function processShippoTxToExpense(tx, token, txId, ref, importedCount, context, knownOrders, invoiceIndex = null) {
@@ -1797,7 +1870,7 @@ function showPostageSweepAlert({ filed, linked, blank, needsReview, source = 'Ca
   if (needsReview > 0) parts.push(`${needsReview} ${needsReview === 1 ? 'needs' : 'need'} an order link`);
 
   const detail = parts.length
-    ? `Added to Shipping & Postage from ${source}; ${parts.join(', ')}. Open Tax Centre → Integrations to finish.`
+    ? `Added to Shipping & Postage from ${source}; ${parts.join(', ')}. Press Review to finish them.`
     : `Found in ${source} and added to Shipping & Postage.`;
   notifyDevice(`${labels} found in ${source}`, detail, 'lm-postage-sweep',
     () => openShippingReconciliationFromAlert(null, source === 'your email' ? 'email' : 'canadapost'));
@@ -1808,7 +1881,7 @@ function showPostageSweepAlert({ filed, linked, blank, needsReview, source = 'Ca
     icon: '📮',
     title: `${labels} found in ${source}`,
     detail,
-    actionLabel: blank ? 'Enter postage amount' : needsReview ? 'Review order links' : '',
+    actionLabel: (blank || needsReview) ? 'Review labels' : '',
     action: (blank || needsReview)
       ? `openShippingReconciliationFromAlert(event, '${source === 'your email' ? 'email' : 'canadapost'}')` : '',
   });
@@ -2510,34 +2583,34 @@ function showShippoLabelAlert(result) {
     icon: '🏷️',
     title: said.title,
     detail: said.detail,
-    actionLabel: said.needsReview ? 'Review' : '',
+    actionLabel: said.needsReview ? `Review ${said.needsReview} label${said.needsReview === 1 ? '' : 's'}` : '',
     action: said.needsReview ? 'openShippingReconciliationFromAlert(event)' : '',
   });
 }
 
 /**
- * Open the worklist from the card, wherever the publisher happens to be.
- *
- * All three steps are needed and none is redundant: the worklist lives inside
- * the Integrations pane of the Tax Centre, and that pane starts hidden behind
- * the Ledger one. Revealing the panel without both navigations would "open" it
- * on a screen nobody is looking at, which is the same as the button doing
- * nothing.
+ * The card's Review button: open the review inbox on the labels, wherever the
+ * publisher happens to be. The inbox is a window over whatever screen is open,
+ * so unlike the Tax Centre worklist it needs no navigation to be seen.
  */
 function openShippingReconciliationFromAlert(event, source = '') {
   if (event) event.stopPropagation();
   dismissAppAlert('shippo-labels');
   if (source) dismissAppAlert(`postage-sweep-${source === 'email' ? 'your-email' : 'canada-post'}`);
+  openReviewInbox({ filter: 'label' });
+}
+
+/**
+ * The Tax Centre's full shipping worklist, for when the review inbox is not enough.
+ * The worklist lives inside the Integrations pane of the Tax Centre, which starts
+ * hidden behind the Ledger one, so both navigations are needed before revealing it.
+ */
+function openShippingWorklistPanel() {
   switchTab('taxcenter');
   switchTaxCenterSubTab('integrations');
   openShippingReconciliation();
   const panel = document.querySelector('.shipping-reconciliation');
-  const amountRow = [...(panel?.querySelectorAll('.shipping-amount-row') || [])]
-    .find(row => !source || row.dataset.source === source);
-  const orderRow = [...(panel?.querySelectorAll('.shipping-reconciliation-row') || [])]
-    .find(row => !source || row.dataset.source === source);
-  const target = amountRow?.querySelector('button') || orderRow?.querySelector('button')
-    || panel?.querySelector('.shipping-reconciliation-row button');
+  const target = panel?.querySelector('.shipping-amount-row button, .shipping-reconciliation-row button');
   panel?.scrollIntoView({ block: 'start' });
   target?.focus({ preventScroll: true });
 }
@@ -11009,6 +11082,11 @@ function onShippoQuantityChange() {
   showToast(`✓ Scaled specs for ${qty} ${qty === 1 ? 'copy' : 'copies'}`);
 }
 export {
+  setAsideLabelFromReview,
+  labelReviewEntries,
+  postageOrderChoices,
+  linkPostageToOrder,
+  openShippingWorklistPanel,
   findShippoReceipts,
   _shippoDestMasterList,
   getShippingReconciliationOrders,

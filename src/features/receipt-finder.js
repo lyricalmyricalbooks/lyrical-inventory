@@ -501,7 +501,7 @@ function render() {
     host.querySelector('[data-finder-list]').innerHTML = drafts.length
       ? drafts.map(draft => renderDraft(draft, openIds.has(draft.id))).join('')
       : renderEmpty();
-    host.querySelector('[data-finder-errors]').innerHTML = renderFailures();
+    host.querySelector('[data-finder-errors]').innerHTML = renderFailures() + renderSetAside();
     const ready = drafts.filter(draft => statusOf(draft) === 'ready');
     const all = host.querySelector('[data-select-all]');
     all.checked = ready.length > 0 && ready.every(draft => draft.selected);
@@ -676,6 +676,7 @@ async function onClick(event) {
       event.preventDefault();
       draft.status = 'ignored'; draft.selected = false; draft.updatedAt = Date.now(); await persist(); render(); return;
     }
+    if (button.dataset.reread) { await rereadSetAside(button.dataset.reread); return; }
     if (button.dataset.retryReason) { await retryFailedEmails(button.dataset.retryReason); return; }
     switch (button.dataset.action) {
       case 'connect': await toggleConnection(); break;
@@ -880,7 +881,7 @@ async function ensureServiceReady() {
   return endpoint;
 }
 
-async function readCandidate(id, signal, endpoint) {
+async function readCandidate(id, signal, endpoint, force = false) {
   const owner = uid, account = state.account, key = `${account}:${id}`;
   // A halt raised by another reader must stop this one before it spends
   // anything, not after its own request comes back.
@@ -888,7 +889,7 @@ async function readCandidate(id, signal, endpoint) {
   // An email read by an earlier scan is skipped rather than paid for twice —
   // but it still counts towards this scan's progress, or the bar stalls.
   const prior = state.scans[key];
-  if (prior?.done && (prior.count > 0 || prior.reader === READER_VERSION)) { scanDone++; scanCached++; scheduleRender(); return; }
+  if (!force && prior?.done && (prior.count > 0 || prior.reader === READER_VERSION)) { scanDone++; scanCached++; scheduleRender(); return; }
   // Deliberately not recorded as scanned: if that expense is later deleted,
   // the next scan should find the receipt again.
   if (knownMessages?.has(key)) { scanDone++; scanFiled++; scheduleRender(); return; }
@@ -898,7 +899,9 @@ async function readCandidate(id, signal, endpoint) {
     if (signal.aborted || !active() || owner !== uid) throw new DOMException('Stopped', 'AbortError');
     // No amount in the text and nothing attached: it cannot be a receipt, so it
     // is not worth an AI read. Most of a broad search is mail like this.
-    const skipReason = receiptSkipReason(email);
+    // A publisher who asked for this email to be read again has already judged
+    // it worth the read, so the quick set-aside rules do not apply.
+    const skipReason = force ? '' : receiptSkipReason(email);
     if (skipReason) {
       dropEmail(key);
       state.scans[key] = { done: true, subject: email.subject, count: 0, skipped: skipReason, reader: READER_VERSION };
@@ -1038,11 +1041,60 @@ async function retryFailedEmails(reason = '') {
     .filter(([key, scan]) => scan.error && (!reason || scan.error === reason) && key.startsWith(prefix))
     .map(([key]) => key);
   if (!keys.length) throw new Error('These emails belong to a different Gmail account. Connect that account to try them again.');
+  await rereadEmails(keys, { force: false });
+}
+
+// Emails the finder looked at and set aside as not being receipts — either the
+// quick check found no amount in them, or the AI read them and found nothing.
+// Either judgement can be wrong, and without a way back a real receipt that was
+// wrongly set aside stayed missing for good.
+const SET_ASIDE_SHOWN = 30;
+const SET_ASIDE_WHY = {
+  'no-amount': 'no price found in it',
+  notification: 'looked like a shipping or account notice',
+};
+
+function setAsideEmails() {
+  const prefix = state.account + ':';
+  return Object.entries(state.scans)
+    .filter(([key, scan]) => scan.done && !scan.error && !scan.count && key.startsWith(prefix))
+    .map(([key, scan]) => ({ key, subject: scan.subject || '(no subject)', why: SET_ASIDE_WHY[scan.skipped] || 'read, but no receipt found in it' }));
+}
+
+function renderSetAside() {
+  const all = setAsideEmails();
+  if (!all.length) return '';
+  const rows = all.slice(-SET_ASIDE_SHOWN).reverse();
+  const canRetry = !busy && tokenLive();
+  return `<details class="finder-failures finder-setaside">
+    <summary><span class="finder-failures-sum">${all.length} email${all.length === 1 ? '' : 's'} set aside as not receipts</span>
+      <span class="finder-failures-hint">Missing one? Read it again</span></summary>
+    <ul class="finder-failures-list">${rows.map(row => `
+      <li class="finder-failure">
+        <p><strong>${esc(row.subject.slice(0, 120))}</strong><br><span class="finder-setaside-why">${esc(row.why)}</span></p>
+        <button type="button" class="btn sm" data-reread="${esc(row.key)}" ${canRetry ? '' : 'disabled'} aria-label="Read this email again: ${esc(row.subject.slice(0, 80))}">Read again</button>
+      </li>`).join('')}</ul>
+    <p class="finder-failures-foot">${tokenLive() ? '' : 'Reconnect Gmail above to read these again. '}${all.length > SET_ASIDE_SHOWN ? `Showing the latest ${SET_ASIDE_SHOWN}. ` : ''}Reading again uses the AI once for that email; anything it finds appears in the list above for your approval.</p>
+  </details>`;
+}
+
+async function rereadSetAside(key) {
+  if (busy) return;
+  if (!tokenLive()) throw new Error('Reconnect Gmail first, then read this again.');
+  if (!state.scans[key] || !key.startsWith(state.account + ':')) throw new Error('That email belongs to a different Gmail account. Connect that account to read it again.');
+  await rereadEmails([key], { force: true });
+}
+
+// The emails again, a few at a time like a scan — not one scan per email, which
+// re-checked the service and repainted the screen 86 times and, while Gmail was
+// disconnected, answered one click with 86 error toasts.
+async function rereadEmails(keys, { force }) {
+  const prefix = state.account + ':';
   // Claimed before the service check, a network round trip, so a second click
   // during it cannot start a second pass.
   busy = true; controller = new AbortController(); const signal = controller.signal;
   scanTotal = keys.length; scanDone = 0; scanSkipped = 0; scanCached = 0; haltReason = '';
-  const failedBefore = keys.length;
+  const total = keys.length;
   render();
   try {
     const endpoint = await ensureServiceReady();
@@ -1051,15 +1103,19 @@ async function retryFailedEmails(reason = '') {
       // email exactly as listed before, rather than silently dropping it.
       const previous = state.scans[key];
       delete state.scans[key];
-      try { await readCandidate(key.slice(prefix.length), signal, endpoint); }
+      try { await readCandidate(key.slice(prefix.length), signal, endpoint, force); }
       finally { if (!state.scans[key]) state.scans[key] = previous; }
     });
     state.lastHalt = '';
     await persist();
-    const stillFailing = keys.filter(key => state.scans[key]?.error).length;
-    announce(stillFailing
-      ? `${failedBefore - stillFailing} of ${failedBefore} read this time. ${stillFailing} still could not be read.`
-      : `All ${failedBefore} read this time.`);
+    const failing = keys.filter(key => state.scans[key]?.error).length;
+    const found = keys.filter(key => state.scans[key]?.count > 0).length;
+    announce(force
+      ? (failing ? 'That email could not be read this time — the reason is listed above.'
+        : found ? `Found ${found === 1 ? 'a receipt' : `${found} receipts`} in it — see the list above.` : 'Read again, and it still does not look like a receipt.')
+      : failing
+        ? `${total - failing} of ${total} read this time. ${failing} still could not be read.`
+        : `All ${total} read this time.`);
   } catch (error) {
     if (error.name !== 'AbortError') throw error;
     if (haltReason) { state.lastHalt = haltReason; await persist().catch(() => {}); }

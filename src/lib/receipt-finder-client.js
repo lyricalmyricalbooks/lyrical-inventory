@@ -240,7 +240,7 @@ export function friendlyReceiptAiError(message) {
 const APP_AI_REFUSAL = /prepayment|out of credit|credits|billing|quota|api key|paid tier|spending cap|rate.?limit|key was rejected|add a gemini or openrouter key|no free-tier reader/i;
 export function systemicReceiptFailure(errorOrMessage) {
   const error = typeof errorOrMessage === 'string' ? { message: errorOrMessage } : errorOrMessage || {};
-  const message = String(error.message || '');
+  const message = String(error.classifyAs ?? error.message ?? '');
   if (error.stopsScan) return message;
   if (error.systemic) return error.systemic;
   const failure = classifyReceiptAiFailure(receiptAiStatus(message));

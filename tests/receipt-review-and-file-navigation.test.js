@@ -8,8 +8,10 @@ beforeAll(async () => {
   win = app.window;
 }, 30000);
 
+const inbox = () => document.getElementById('m-review-inbox');
+
 describe('review and file it navigation', () => {
-  it('openReceiptSweepReviewFromAlert takes publisher to Tax Centre email import tab and dismisses alert', () => {
+  it('openReceiptSweepReviewFromAlert opens the review inbox on the receipts and closes the notifications window', () => {
     win.openM('notifications');
     expect(document.getElementById('m-notifications').style.display).not.toBe('none');
 
@@ -17,34 +19,27 @@ describe('review and file it navigation', () => {
     win.openReceiptSweepReviewFromAlert(event);
 
     expect(event.stopPropagation).toHaveBeenCalled();
-    // Notification modal is dismissed so review workspace is directly reachable
+    // The notification window steps aside so the inbox is directly reachable.
     expect(document.getElementById('m-notifications').style.display).toBe('none');
-    // Tab and sub-tab are active
-    const tab = document.getElementById('tab-taxcenter');
-    expect(tab.classList.contains('active')).toBe(true);
-    const subSection = document.getElementById('tc-sec-email-import');
-    expect(subSection.style.display).not.toBe('none');
-    expect(document.getElementById('email-tab-review').getAttribute('aria-selected')).toBe('true');
-    expect(document.getElementById('email-receipt-results').hidden).toBe(false);
+    expect(inbox().style.display).toBe('flex');
+    // With nothing waiting it says so, rather than showing an empty list.
+    expect(document.getElementById('ri-detail').innerHTML).toContain('All caught up');
   });
 
-  it('fileReadyReceiptsFromAlert takes publisher to review page with ready receipts selected rather than auto-filing', () => {
+  it('fileReadyReceiptsFromAlert opens the inbox for a decision rather than auto-filing', () => {
+    win.closeM('review-inbox');
     const expensesBefore = (app.main.TAX_CENTER.businessExpenses || []).length;
     const event = { stopPropagation: vi.fn(), preventDefault: vi.fn() };
     win.fileReadyReceiptsFromAlert(event);
 
     expect(event.stopPropagation).toHaveBeenCalled();
-    const tab = document.getElementById('tab-taxcenter');
-    expect(tab.classList.contains('active')).toBe(true);
-    const subSection = document.getElementById('tc-sec-email-import');
-    expect(subSection.style.display).not.toBe('none');
-
-    // Crucial requirement: It takes the user to the review page where they decide;
-    // it does NOT silently write to ledger without review.
+    expect(inbox().style.display).toBe('flex');
+    // Crucial requirement: it takes the user to where they decide;
+    // it does NOT silently write to the ledger without review.
     expect((app.main.TAX_CENTER.businessExpenses || []).length).toBe(expensesBefore);
   });
 
-  it('renders and restores drafts from localStorage in the review workspace', () => {
+  it('lists a saved draft in the inbox with what the app found and what to do', () => {
     const drafts = [
       {
         ref: 'receipt-email:test-bigcartel',
@@ -55,15 +50,21 @@ describe('review and file it navigation', () => {
         category: 'Software & Subscriptions',
         confidence: 0.95,
         date: '2026-09-25',
+        emailFrom: 'billing@bigcartel.com',
         _fromSweep: true,
       },
     ];
     localStorage.setItem('lm-email-receipt-drafts', JSON.stringify(drafts));
 
+    win.closeM('review-inbox');
     win.openReceiptSweepReviewFromAlert();
 
-    const results = document.getElementById('email-receipt-results');
-    expect(results.innerHTML).toContain('Big Cartel');
-    expect(results.innerHTML).toContain('File selected receipts');
+    const list = document.getElementById('ri-list').innerHTML;
+    expect(list).toContain('Big Cartel');
+    expect(list).toContain('Ready to file');
+    const detail = document.getElementById('ri-detail').innerHTML;
+    expect(detail).toContain('What to do');
+    expect(detail).toContain('File this receipt');
+    expect(detail).toContain('billing@bigcartel.com');
   });
 });

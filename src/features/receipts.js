@@ -64,6 +64,7 @@ import {
 } from '../lib/receipt-drafts.js';
 import { dismissAppAlert, pushAppAlert } from '../lib/app-alert.js';
 import { describeReceiptSweep, isReadyToFile } from '../lib/receipt-ready.js';
+import { openReviewInbox } from './review-inbox.js';
 import { filterDismissedReceipts, rememberDismissedReceipt } from '../lib/receipt-dismissals.js';
 import {
   integrationBackoffMs,
@@ -2522,6 +2523,56 @@ function receiptInboxCounts() {
   };
 }
 
+// ── The review inbox's view of the receipt queue ───────────────────────────
+//
+// The review inbox (features/review-inbox.js) shows one receipt at a time
+// instead of the table. These four are its only way in: they read and change
+// the same drafts the table does, through the same filing routine, so a receipt
+// reviewed there and one reviewed in the table can never end up different.
+
+/** The drafted receipts waiting for a person, brought up to date, plus the ledger's duplicate check. */
+function reviewableReceiptDrafts({ refresh = true } = {}) {
+  if (!_emailReceiptDrafts.length) _emailReceiptDrafts = readPersistedEmailReceiptDrafts();
+  // Merging the add-on's queue rewrites saved drafts, so the frequent, read-only
+  // callers (the landing page's counts) skip it and only the inbox itself asks.
+  if (refresh) loadGmailInboxDrafts();
+  _emailReceiptDrafts = filterDismissedReceipts(_filterAlreadyImportedDrafts(_emailReceiptDrafts));
+  _emailReceiptDrafts = _emailReceiptDrafts.filter(d => d._inboxId || d._fromSweep);
+  const dupIndex = _buildDuplicateExpenseIndex();
+  return {
+    drafts: _emailReceiptDrafts.slice(),
+    isDuplicate: (draft) => _isLikelyDuplicateExpense(draft, dupIndex),
+  };
+}
+
+/** Change one field of a drafted receipt, the way editing it in the table would. */
+function editReviewedReceipt(draft, field, value) {
+  if (!draft || !_emailReceiptDrafts.includes(draft)) return false;
+  let v = value;
+  if (field === 'amount') v = Number(v) || 0;
+  if (field === 'currency') v = String(v).toUpperCase();
+  if (field === 'date') v = normalizeReceiptDate(v) || v;
+  draft[field] = v;
+  if (field === 'amount') draft.amountUnknown = needsReceiptAmount(draft);
+  writePersistedEmailReceiptDrafts(_emailReceiptDrafts);
+  return true;
+}
+
+/** File drafted receipts into the books. Returns what happened, or null if none of them is still waiting. */
+async function fileReviewedReceipts(drafts) {
+  const waiting = (drafts || []).filter(draft => _emailReceiptDrafts.includes(draft));
+  if (!waiting.length) return null;
+  return _fileReceiptDrafts(waiting, { fallbackCat: 'Other' });
+}
+
+/** Discard one drafted receipt for good. */
+async function discardReviewedReceipt(draft) {
+  const i = _emailReceiptDrafts.indexOf(draft);
+  if (i < 0) return false;
+  await dismissEmailReceiptDraft(i);
+  return true;
+}
+
 function updateEmailInboxBadge() {
   const badge = $('email-inbox-badge');
   if (!badge) return;
@@ -3359,6 +3410,11 @@ function _geminiThinkingPatch(mode, budget) {
 async function _callAiForReceipts(apiKey, parts, opts = {}) {
   if (opts.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
   const key = TAX_CENTER.settings?.openRouterKey?.trim();
+  // Why Google's reader did not produce the answer, kept so that when the
+  // backup fails too the screen can name BOTH reasons. Showing only the
+  // backup's error left the publisher unable to tell a spent allowance from a
+  // rejected key on the side that normally does the work.
+  let googleWhy = '';
   if (apiKey && !(key && _geminiResting())) {
     try {
       return await _callGeminiForReceipts(apiKey, parts, opts);
@@ -3366,7 +3422,10 @@ async function _callAiForReceipts(apiKey, parts, opts = {}) {
       if (error?.name === 'AbortError') throw error;
       _geminiNoteSpent(error);
       if (!key) throw error;
+      googleWhy = _friendlyScanError(error);
     }
+  } else if (apiKey) {
+    googleWhy = 'its free allowance is used up for now, so the backup was tried first';
   }
   if (!key) throw new Error('Add a Gemini or OpenRouter key in the Tax Centre config');
   try {
@@ -3376,7 +3435,12 @@ async function _callAiForReceipts(apiKey, parts, opts = {}) {
     if (error?.name === 'AbortError') throw error;
     // The status travels with the friendly wording so the Gmail finder can tell
     // a refused key (stop the scan) from one email that failed to read.
-    throw Object.assign(new Error(`OpenRouter: ${friendlyOpenRouterError(error)}`), { __alreadyFriendly: true, status: error?.status });
+    const backupWhy = `OpenRouter: ${friendlyOpenRouterError(error)}`;
+    const trimmed = text => String(text).replace(/[.\s]+$/, '');
+    throw Object.assign(new Error(googleWhy ? `Google: ${trimmed(googleWhy)}. ${backupWhy}` : backupWhy),
+      // classifyAs keeps the stop-the-scan decision on the backup's own wording:
+      // Google's text is there to be read, not to change what counts as fatal.
+      { __alreadyFriendly: true, status: error?.status, classifyAs: backupWhy });
   }
 }
 
@@ -6135,15 +6199,14 @@ function _receiptSweepQuery(sinceMs) {
   return preset.replace('newer_than:30d', `after:${day}`);
 }
 
-/** Take the owner straight to the now-populated review table from the card. */
+/** Take the owner straight to the review inbox, on the receipts, from the card. */
 function openReceiptSweepReviewFromAlert(event) {
   if (event) {
     if (typeof event.stopPropagation === 'function') event.stopPropagation();
     if (typeof event.preventDefault === 'function') event.preventDefault();
   }
   dismissAppAlert('receipt-sweep');
-  openEmailReceiptImportModal({ selectReadyOnly: true, review: true });
-  _focusEmailReceiptResults();
+  openReviewInbox({ filter: 'receipt' });
 }
 
 /**
@@ -6196,24 +6259,19 @@ function _showReceiptSweepAlert(foundDrafts) {
     icon: '🧾',
     title: said.title,
     detail: said.detail,
-    actionLabel: 'Review receipts',
+    actionLabel: `Review ${foundDrafts.length} receipt${foundDrafts.length === 1 ? '' : 's'}`,
     action: 'openReceiptSweepReviewFromAlert(event)',
   });
 }
 
 /**
- * Takes the owner straight to the review page where they can review details,
- * with complete ready-to-file receipts pre-selected, and decide whether to
- * put them into the ledger.
+ * The old one-tap "File it" on the alert. It never filed anything — it opened
+ * the review table with the complete receipts ticked — so the button promised
+ * more than it did. It now opens the review inbox, where filing is an explicit
+ * press on a receipt the owner can see.
  */
 function fileReadyReceiptsFromAlert(event) {
-  if (event) {
-    if (typeof event.stopPropagation === 'function') event.stopPropagation();
-    if (typeof event.preventDefault === 'function') event.preventDefault();
-  }
-  dismissAppAlert('receipt-sweep');
-  openEmailReceiptImportModal({ selectReadyOnly: true, review: true });
-  _focusEmailReceiptResults();
+  openReceiptSweepReviewFromAlert(event);
 }
 
 /**
@@ -6851,6 +6909,10 @@ function calcExpenseFx() {
 }
 
 export {
+  reviewableReceiptDrafts,
+  editReviewedReceipt,
+  fileReviewedReceipts,
+  discardReviewedReceipt,
   calcExpenseFx,
   loadReceiptFileForScan,
   onExpenseCurrencyChange,
