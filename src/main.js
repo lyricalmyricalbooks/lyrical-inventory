@@ -540,6 +540,7 @@ import {
   linkConfidentShippingMatchesNow,
   openShippingReconciliationFromAlert,
   openPostageAmountEditor,
+  discardImportedPostageExpense,
   startShippoLabelWatch,
   startCanadaPostSweep,
   sweepCanadaPostShipments,
@@ -25215,6 +25216,7 @@ window.sweepReceiptEmails = sweepReceiptEmails;
 window.linkConfidentShippingMatchesNow = linkConfidentShippingMatchesNow;
 window.openShippingReconciliationFromAlert = openShippingReconciliationFromAlert;
 window.openPostageAmountEditor = openPostageAmountEditor;
+window.discardImportedPostageExpense = discardImportedPostageExpense;
 window.openShippingFromDeliveryAlert = openShippingFromDeliveryAlert;
 window.openShippingFromUnshippedAlert = openShippingFromUnshippedAlert;
 window.openShippingPricesFromAlert = openShippingPricesFromAlert;
