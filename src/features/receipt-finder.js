@@ -7,6 +7,22 @@ import { downloadBlob } from '../lib/download.js';
 import '../styles/receipt-finder.css';
 
 const LABELS = { all: 'All', ready: 'Ready', review: 'Needs review', duplicate: 'Duplicates', queued: 'Waiting to file', imported: 'Filed', ignored: 'Dismissed' };
+// The three piles the screen is organised around. Each receipt status belongs
+// to exactly one, so a receipt is never shown in two places or in none.
+const PILES = {
+  ready: { label: 'Ready to file', statuses: ['ready', 'queued'] },
+  needs: { label: 'Needs you', statuses: ['review', 'duplicate'] },
+  aside: { label: 'Not receipts', statuses: ['ignored'] },
+  filed: { label: 'Filed', statuses: ['imported'] },
+};
+
+// A calendar day in the publisher's own time zone. toISOString() gives the UTC
+// day, which in a Canadian evening is already tomorrow.
+function localDay(offset = 0) {
+  const date = new Date(); date.setDate(date.getDate() + offset);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
 const emptyState = () => ({ drafts: [], emails: {}, scans: {}, endpoint: '', account: '', lastScan: '', pageToken: '', lastQuery: '', lastEndpoint: '', lastHalt: '' });
 
 // Emails are read a few at a time rather than one after another. The AI call
@@ -28,7 +44,7 @@ let controller = null, busy = false, flushing = false, scanTotal = 0, scanDone =
 // any route (this finder, the no-AI Gmail import, the Gmail add-on), or
 // already holding a found receipt. Built once per scan, not once per email.
 let knownMessages = null;
-let filter = 'all', resultQuery = '', saveChain = Promise.resolve(), saveScheduled = false;
+let filter = 'auto', resultQuery = '', saveChain = Promise.resolve(), saveScheduled = false;
 let initialized = false, restore = Promise.resolve(), serviceReadyFor = '', serviceProblem = null;
 let statusCache = null, cachedExpenses = null, renderTimer = 0, haltReason = '', dailySweep = null;
 // Keys deleted since the last write. The saved copy is merged rather than
@@ -223,7 +239,6 @@ async function mountReceiptFinder(element, dependencies) {
   host = element;
   host.removeEventListener('click', onClick);
   host.removeEventListener('change', onChange);
-  const from = new Date(); from.setDate(from.getDate() - 30);
   host.innerHTML = `
     <div class="finder-conn-bar" data-conn-bar>
       <span class="finder-conn-dot" aria-hidden="true"></span>
@@ -233,55 +248,58 @@ async function mountReceiptFinder(element, dependencies) {
       </div>
       <button type="button" class="btn sm gold finder-conn-btn" data-action="connect">Connect Gmail</button>
     </div>
-    <div class="finder-gate" data-finder-gate hidden></div>
-    <section class="finder-search" aria-label="Search your mailbox">
-      <div class="finder-searchbar">
-        <label class="finder-query-wrap" for="finder-query">
-          <span class="finder-query-icon" aria-hidden="true">🔍</span>
-          <span class="sr-only">Shop, supplier or keyword</span>
-          <input type="search" id="finder-query" autocomplete="off" placeholder="Shop, supplier or keyword — leave blank for every receipt">
-        </label>
-        <button type="button" class="btn gold finder-scan-btn" data-action="scan">Find receipts</button>
-        <button type="button" class="btn finder-stop-btn" data-action="cancel" hidden>Stop</button>
-      </div>
-      <div class="finder-search-tools">
-        <div class="finder-period" role="group" aria-label="How far back to look">
+    <div class="finder-gate finder-next" data-finder-gate hidden></div>
+    <div data-finder-alert></div>
+    <section class="finder-search" aria-label="Scan your mailbox">
+      <div class="finder-scanrow">
+        <button type="button" class="btn gold finder-day-btn" data-action="scan-day">Scan yesterday</button>
+        <span class="finder-or" aria-hidden="true">or</span>
+        <div class="finder-period" role="group" aria-label="Scan a longer period">
+          <button type="button" class="finder-period-btn" data-preset="0" aria-pressed="false">Today</button>
           <button type="button" class="finder-period-btn" data-preset="7" aria-pressed="false">7 days</button>
           <button type="button" class="finder-period-btn" data-preset="30" aria-pressed="true">30 days</button>
           <button type="button" class="finder-period-btn" data-preset="90" aria-pressed="false">3 months</button>
-          <button type="button" class="finder-period-btn" data-preset="custom" aria-pressed="false">Pick dates</button>
+          <button type="button" class="finder-period-btn" data-preset="custom" aria-pressed="false">Pick dates…</button>
         </div>
-        <div class="finder-presets" role="group" aria-label="Narrow the search">
-          <button type="button" class="filter-chip" data-toggle="attachments" aria-pressed="false"><span aria-hidden="true">📎</span> Has a PDF or photo</button>
-          <button type="button" class="filter-chip" data-toggle="invoices" aria-pressed="false"><span aria-hidden="true">🧾</span> Invoices &amp; bills</button>
-          <button type="button" class="filter-chip" data-toggle="shipping" aria-pressed="false"><span aria-hidden="true">📦</span> Shipping costs</button>
-        </div>
+        <button type="button" class="btn finder-stop-btn" data-action="cancel" hidden>Stop</button>
       </div>
       <details class="finder-more" data-more-filters>
-        <summary>Sender and exact dates</summary>
-        <div class="finder-filters">
-          <div class="form-group finder-sender"><label for="finder-sender">Only from this sender</label>
-            <input type="text" id="finder-sender" inputmode="email" autocomplete="off" placeholder="supplier@example.com"></div>
-          <div class="form-group finder-date-from"><label for="finder-from">From</label>
-            <input type="date" id="finder-from" value="${from.toISOString().slice(0, 10)}"></div>
-          <div class="form-group finder-date-to"><label for="finder-to">Through</label>
-            <input type="date" id="finder-to"></div>
+        <summary>Narrow it down — keyword, sender, exact dates, PDFs only</summary>
+        <div class="finder-narrow">
+          <label class="finder-query-wrap" for="finder-query">
+            <span class="finder-query-icon" aria-hidden="true">🔍</span>
+            <span class="sr-only">Shop, supplier or keyword</span>
+            <input type="search" id="finder-query" autocomplete="off" placeholder="Shop, supplier or keyword — leave blank for every receipt">
+          </label>
+          <div class="finder-presets" role="group" aria-label="Only look for">
+            <button type="button" class="filter-chip" data-toggle="attachments" aria-pressed="false"><span aria-hidden="true">📎</span> Has a PDF or photo</button>
+            <button type="button" class="filter-chip" data-toggle="invoices" aria-pressed="false"><span aria-hidden="true">🧾</span> Invoices &amp; bills</button>
+            <button type="button" class="filter-chip" data-toggle="shipping" aria-pressed="false"><span aria-hidden="true">📦</span> Shipping costs</button>
+          </div>
+          <div class="finder-filters">
+            <div class="form-group finder-sender"><label for="finder-sender">Only from this sender</label>
+              <input type="text" id="finder-sender" inputmode="email" autocomplete="off" placeholder="supplier@example.com"></div>
+            <div class="form-group finder-date-from"><label for="finder-from">From</label>
+              <input type="date" id="finder-from" value="${localDay(-30)}"></div>
+            <div class="form-group finder-date-to"><label for="finder-to">Through</label>
+              <input type="date" id="finder-to"></div>
+          </div>
+          <button type="button" class="btn gold finder-scan-btn" data-action="scan">Find receipts</button>
         </div>
       </details>
-      <div class="finder-auto">
-        <label class="finder-select"><input type="checkbox" data-daily-toggle> Find receipts automatically, every morning</label>
-        <span class="finder-auto-note" data-daily-note>Checking…</span>
-      </div>
       <div class="finder-progress" data-finder-progress hidden>
         <div class="finder-progress-track"><div class="finder-progress-fill" data-progress-fill style="width:0%"></div></div>
         <span class="finder-progress-text" data-progress-text></span>
       </div>
-      <p class="finder-status" data-finder-status role="status" aria-live="polite">${state.lastScan ? esc(lastScanText()) : 'Pick a period, then find receipts. It reads 25 emails at a time, and nothing is filed until you approve it.'}</p>
+      <p class="finder-status" data-finder-status role="status" aria-live="polite">${state.lastScan ? esc(lastScanText()) : 'Scan yesterday’s mail, or pick a longer period. Nothing is filed until you approve it.'}</p>
+      <div class="finder-health" data-finder-health>
+        <span class="finder-health-item" data-health-reader></span>
+        <label class="finder-auto finder-health-item"><input type="checkbox" data-daily-toggle> Scan every morning <span class="finder-auto-note" data-daily-note>Checking…</span></label>
+      </div>
     </section>
-    <div data-finder-alert></div>
-    <div data-finder-errors></div>
     <div class="finder-results-head" data-finder-results-head>
-      <div class="finder-tabs" data-finder-tabs role="group" aria-label="Show receipts by status"></div>
+      <div class="finder-tabs finder-piles" data-finder-tabs role="group" aria-label="Show receipts by pile"></div>
+      <div data-finder-errors></div>
       <div class="finder-listbar" data-finder-listbar>
         <label class="finder-select"><input type="checkbox" data-select-all> Select all ready</label>
         <label class="finder-result-search"><span class="sr-only">Search found receipts</span>
@@ -319,8 +337,10 @@ function report(error) {
 function visibleDrafts() {
   // Sorted so results read newest-first and stay in a stable order however the
   // scan's parallel readers happen to finish.
+  const pile = currentPile();
+  const statuses = PILES[pile]?.statuses || [pile];
   return state.drafts
-    .filter(draft => (filter === 'all' || statusOf(draft) === filter)
+    .filter(draft => (pile === 'all' || statuses.includes(statusOf(draft)))
       && `${draft.vendor} ${draft.reference} ${draft.description}`.toLowerCase().includes(resultQuery))
     .sort((a, b) => (b.date || '').localeCompare(a.date || '') || a.id.localeCompare(b.id));
 }
@@ -344,7 +364,7 @@ function gateSteps() {
   }
   if (!activeEndpoint()) {
     steps.push({ title: 'Connect your Google Sheet', body: 'The finder reads receipts through the same Google script that syncs your sheet. Set that up once in the “Connect your Google Sheet” tab and this step disappears.' });
-  } else if (serviceProblem) {
+  } else if (serviceProblem && serviceProblem.level !== 'warn') {
     // A saved address that the app cannot read blocks every scan. Telling the
     // publisher to "clear this address" while the field itself sits inside a
     // collapsed disclosure is not an instruction anyone can act on — so the
@@ -368,9 +388,9 @@ function renderGate() {
   // spell out a bigger number.
   const count = steps.length === 1 ? 'One quick thing' : 'Two quick things';
   const heading = `${count} before ${state.lastScan ? 'you scan again' : 'your first scan'}`;
-  gate.innerHTML = `<h4 class="finder-gate-hed">${esc(heading)}</h4><ol class="finder-gate-steps">${steps.map(step => `
+  gate.innerHTML = `<span class="finder-next-num" aria-hidden="true">${steps.length}</span><div class="finder-next-body"><h4 class="finder-gate-hed">${esc(heading)}</h4><ol class="finder-gate-steps">${steps.map(step => `
     <li><strong>${esc(step.title)}</strong><span>${esc(step.body)}</span>
-      ${step.action ? `<button type="button" class="btn gold sm" data-action="${esc(step.action)}">${esc(step.cta)}</button>` : ''}</li>`).join('')}</ol>`;
+      ${step.action ? `<button type="button" class="btn gold sm" data-action="${esc(step.action)}">${esc(step.cta)}</button>` : ''}</li>`).join('')}</ol></div>`;
 }
 
 function renderDailySweep() {
@@ -385,6 +405,52 @@ function renderDailySweep() {
   toggle.checked = !!dailySweep.enabled;
   toggle.disabled = busy;
   note.textContent = describeDailySweep(dailySweep);
+}
+
+// One line on whether the reader is set up, with a coloured dot. A problem the
+// app is already working around (a spent script key while the app's own key
+// covers it) belongs here, not in a numbered card that blocks the screen.
+function renderHealth() {
+  const item = host.querySelector('[data-health-reader]');
+  if (!item) return;
+  const warn = serviceProblem?.level === 'warn';
+  const blocked = serviceProblem && !warn;
+  const tone = blocked ? 'bad' : warn ? 'warn' : 'ok';
+  const text = blocked ? 'Receipt reader needs setting up — see above'
+    : warn ? 'Your Sheet script’s AI key has a problem — the app’s own key is covering it'
+      : 'Receipt reader ready';
+  item.innerHTML = `<i class="finder-dot is-${tone}" aria-hidden="true"></i><span>${esc(text)}</span>${warn && serviceProblem.steps?.[0] ? `<details class="finder-health-more"><summary>How to fix</summary><p>${esc(serviceProblem.steps[0])}</p></details>` : ''}`;
+}
+
+// Which pile is showing. Until the publisher picks one, open on whatever needs
+// them: problems first, then receipts ready to file.
+function currentPile(counts = pileCounts()) {
+  if (filter !== 'auto') return filter;
+  if (counts.needs) return 'needs';
+  if (counts.ready) return 'ready';
+  return counts.aside ? 'aside' : 'ready';
+}
+
+function pileCounts() {
+  const counts = { ready: 0, needs: failureGroups().reduce((sum, group) => sum + group.keys.length, 0), aside: setAsideEmails().length, filed: 0 };
+  state.drafts.forEach(draft => {
+    const status = statusOf(draft);
+    const pile = Object.keys(PILES).find(key => PILES[key].statuses.includes(status));
+    if (pile) counts[pile]++;
+  });
+  return counts;
+}
+
+function renderPiles(counts, pile) {
+  const hints = {
+    ready: 'Approve and file them',
+    needs: 'Couldn’t be read, or need a check',
+    aside: 'Missing a receipt? It will be here',
+    filed: 'Already in your expenses',
+  };
+  return ['ready', 'needs', 'aside', 'filed'].filter(key => key !== 'filed' || counts.filed).map(key => `<button type="button" class="finder-pile tone-${key}${pile === key ? ' active' : ''}${counts[key] ? '' : ' is-zero'}" data-status="${key}" aria-pressed="${pile === key}">
+      <span class="finder-pile-top"><span class="finder-pile-name">${PILES[key].label}</span><span class="finder-pile-count">${counts[key]}</span></span>
+      <span class="finder-pile-hint">${hints[key]}</span></button>`).join('');
 }
 
 function renderProgress() {
@@ -443,21 +509,24 @@ function renderAlert(counts) {
     // the publisher staring at a count with no way to know what to do — and
     // the most common cause, a rejected AI key, is something only they can fix.
     const groups = failureGroups();
-    alert.className = 'finder-alert is-warn';
+    alert.className = 'finder-alert finder-next is-warn';
     // Retrying needs Gmail. Offering the button while disconnected used to
     // answer one click with one "Reconnect Gmail" toast per failed email.
     const canRetry = !busy && tokenLive();
-    alert.innerHTML = `<span class="pill amber">● ${failures} couldn’t be read</span>
-      <p>${failures === 1 ? 'One email' : `${failures} emails`} could not be read${groups.length > 1 ? `, for ${groups.length} different reasons — listed just below.` : `. ${esc(groups[0].reason)}`}${tokenLive() ? '' : ' Reconnect Gmail above to try them again.'}</p>
-      <button type="button" class="btn sm" data-action="retry-failed" ${canRetry ? '' : 'disabled'} title="${canRetry ? 'Read these emails again' : 'Reconnect Gmail first'}">Try all again</button>
-      <button type="button" class="btn sm" data-action="clear-failures" ${busy ? 'disabled' : ''}>Clear these</button>
-      ${state.lastHalt && !busy ? `<p class="finder-alert-note">The last scan also stopped early: ${esc(state.lastHalt)}</p>` : ''}`;
+    const subject = failures === 1 ? Object.values(state.scans).find(scan => scan.error)?.subject : '';
+    alert.innerHTML = `<span class="finder-next-num" aria-hidden="true">${failures}</span>
+      <div class="finder-next-body"><h4>${failures === 1 ? 'One email couldn’t be read.' : `${failures} emails couldn’t be read.`} ${tokenLive() ? 'Try again.' : 'Reconnect Gmail above, then try again.'}</h4>
+      <p>${subject ? `“${esc(subject)}” — ` : ''}${groups.length > 1 ? `${groups.length} different reasons, listed under “Needs you” below.` : esc(groups[0].reason)}</p>
+      ${state.lastHalt && !busy ? `<p class="finder-alert-note">The last scan also stopped early: ${esc(state.lastHalt)}</p>` : ''}</div>
+      <div class="finder-next-actions"><button type="button" class="btn gold sm" data-action="retry-failed" ${canRetry ? '' : 'disabled'} title="${canRetry ? 'Read these emails again' : 'Reconnect Gmail first'}">Try all again</button>
+      <button type="button" class="btn sm" data-action="clear-failures" ${busy ? 'disabled' : ''}>Clear these</button></div>`;
   } else if (state.lastHalt && !busy) {
     // Why the last scan stopped early. The status line said it once and was
     // overwritten by the next message; this stays until a scan gets through.
-    alert.className = 'finder-alert is-warn';
-    alert.innerHTML = `<span class="pill amber">● Scan stopped early</span>
-      <p>${esc(state.lastHalt)} Nothing was marked as unreadable — the next scan picks up where this one stopped.</p>`;
+    alert.className = 'finder-alert finder-next is-warn';
+    alert.innerHTML = `<span class="finder-next-num" aria-hidden="true">!</span>
+      <div class="finder-next-body"><h4>The last scan stopped early.</h4>
+      <p>${esc(state.lastHalt)} Nothing was marked as unreadable — the next scan picks up where this one stopped.</p></div>`;
   } else if (counts.queued) {
     // "They finish on their own once you are back online" is only true of a
     // receipt that is waiting for a connection. One that failed for a reason —
@@ -484,6 +553,7 @@ function render() {
     renderConnection();
     renderGate();
     renderDailySweep();
+    renderHealth();
     renderProgress();
     const counts = Object.fromEntries(RECEIPT_STATUSES.map(status => [status, 0]));
     state.drafts.forEach(draft => { counts.all++; counts[statusOf(draft)]++; });
@@ -492,16 +562,18 @@ function render() {
     // sit above a second row of chips doing the same filtering. Ready and
     // Needs review are the two piles the publisher works through, so they are
     // always offered; the rest appear only once something is in them.
-    const chips = RECEIPT_STATUSES.filter(status => ['all', 'ready', 'review'].includes(status) || status === filter || counts[status]);
-    host.querySelector('[data-finder-results-head]').hidden = !counts.all;
+    const piles = pileCounts();
+    const pile = currentPile(piles);
+    host.querySelector('[data-finder-results-head]').hidden = !counts.all && !piles.needs && !piles.aside;
     host.querySelector('.finder-listbar [data-action="retry"]').hidden = !counts.queued;
-    host.querySelector('[data-finder-tabs]').innerHTML = chips.map(status => `<button type="button" class="finder-tab tone-${status}${filter === status ? ' active' : ''}${counts[status] ? '' : ' is-zero'}" data-status="${status}" aria-pressed="${filter === status}">${LABELS[status]} <span class="finder-tab-count">${counts[status]}</span></button>`).join('');
+    host.querySelector('[data-finder-listbar]').hidden = pile !== 'ready' && pile !== 'all';
+    host.querySelector('[data-finder-tabs]').innerHTML = renderPiles(piles, pile);
     const drafts = visibleDrafts();
     const openIds = new Set(Array.from(host.querySelectorAll('details[data-draft][open]'), el => el.dataset.draft));
     host.querySelector('[data-finder-list]').innerHTML = drafts.length
       ? drafts.map(draft => renderDraft(draft, openIds.has(draft.id))).join('')
       : renderEmpty();
-    host.querySelector('[data-finder-errors]').innerHTML = renderFailures() + renderSetAside();
+    host.querySelector('[data-finder-errors]').innerHTML = pile === 'needs' ? renderFailures() : pile === 'aside' ? renderSetAside() : '';
     const ready = drafts.filter(draft => statusOf(draft) === 'ready');
     const all = host.querySelector('[data-select-all]');
     all.checked = ready.length > 0 && ready.every(draft => draft.selected);
@@ -516,6 +588,8 @@ function render() {
     host.querySelector('[data-finder-actionbar]').hidden = !counts.ready && !counts.queued && !state.pageToken;
     host.querySelector('[data-action="import"]').disabled = !selected || busy;
     host.querySelector('[data-action="scan"]').disabled = busy;
+    host.querySelector('[data-action="scan-day"]').disabled = busy;
+    host.querySelectorAll('.finder-period [data-preset]').forEach(button => { button.disabled = busy; });
     host.querySelector('[data-action="cancel"]').hidden = !busy;
     host.querySelector('[data-action="next"]').hidden = !state.pageToken;
     host.querySelector('[data-action="next"]').disabled = busy;
@@ -523,6 +597,16 @@ function render() {
 }
 
 function renderEmpty() {
+  const pile = currentPile();
+  if (pile === 'needs' && failureGroups().length) return '';
+  if (pile === 'aside' && setAsideEmails().length) return '';
+  if (state.drafts.length && pile !== 'all') {
+    const words = { ready: ['Nothing to file right now', 'Receipts the finder is sure about land here, ready for one click.'],
+      needs: ['Nothing needs you', 'Emails that couldn’t be read, and receipts worth a second look, land here.'],
+      aside: ['Nothing set aside', 'Emails the finder decided weren’t receipts land here, so you can read one again.'],
+      filed: ['Nothing filed yet', 'Receipts you file appear here.'] }[pile];
+    if (words) return `<div class="empty-state"><h4>${words[0]}</h4><p>${words[1]}</p></div>`;
+  }
   if (state.drafts.length) {
     return `<div class="empty-state"><div class="e-icon" aria-hidden="true">🔍</div><h4>Nothing matches this view</h4>
       <p>Choose All, or clear the search box, to see your other receipts again.</p>
@@ -535,7 +619,7 @@ function renderEmpty() {
   }
   return `<div class="empty-state"><div class="e-icon" aria-hidden="true">🧾</div><h4>Your receipts will appear here</h4>
     <p>Scan a period to pull invoices and receipts out of your mail — including the ones inside PDFs and photos.</p>
-    <button type="button" class="btn gold" data-action="scan">Scan the past 30 days</button></div>`;
+    <button type="button" class="btn gold" data-action="scan-day">Scan yesterday</button></div>`;
 }
 
 function renderDraft(draft, open) {
@@ -636,8 +720,7 @@ function applyPreset(preset) {
     host.querySelector('#finder-from').focus();
     return;
   }
-  const date = new Date(); date.setDate(date.getDate() - Number(preset));
-  host.querySelector('#finder-from').value = date.toISOString().slice(0, 10);
+  host.querySelector('#finder-from').value = localDay(-Number(preset));
   host.querySelector('#finder-to').value = '';
 }
 
@@ -649,9 +732,9 @@ async function onClick(event) {
     if (button.dataset.status) { filter = button.dataset.status; render(); return; }
     if (button.dataset.preset) {
       applyPreset(button.dataset.preset);
-      // The widen-the-search button inside an empty result set is only useful
-      // if it actually runs the wider search.
-      if (button.closest('.empty-state')) { await scan(false); return; }
+      // A period button is a scan button: picking "7 days" means "look through
+      // the last 7 days". Before Gmail is connected it only sets the period.
+      if (button.dataset.preset !== 'custom' && tokenLive()) { await scan(false); return; }
       return;
     }
     if (button.dataset.toggle) {
@@ -683,6 +766,7 @@ async function onClick(event) {
       case 'use-sheets': await useSheetsScript(); break;
       case 'clear-failures': await clearRecordedFailures(); break;
       case 'scan': await scan(false); break;
+      case 'scan-day': await scanOneDay(-1); break;
       case 'next': await scan(true); break;
       case 'cancel': controller?.abort(); break;
       case 'retry': await resumeReceiptImports(); break;
@@ -693,7 +777,7 @@ async function onClick(event) {
         }));
         await persist(); render(); announce('Selected receipts saved for import. They will sync when connected.');
         await resumeReceiptImports(); break;
-      case 'show-all': filter = 'all'; resultQuery = ''; host.querySelector('[data-result-search]').value = ''; render(); break;
+      case 'show-all': filter = 'auto'; resultQuery = ''; host.querySelector('[data-result-search]').value = ''; render(); break;
     }
   } catch (error) { report(error); }
 }
@@ -974,6 +1058,17 @@ async function runPool(items, limit, worker) {
   if (failed) throw failed.reason;
 }
 
+// The one-day scan: yesterday by default, the day most receipts are waiting
+// from. Sets the exact dates so the status line and a "next 25" page describe
+// the same search.
+async function scanOneDay(offset) {
+  if (busy) return;
+  markPeriod('');
+  host.querySelector('#finder-from').value = localDay(offset);
+  host.querySelector('#finder-to').value = localDay(offset);
+  await scan(false);
+}
+
 async function scan(nextPage) {
   if (busy) return;
   if (!tokenLive()) throw new Error(state.account ? 'Reconnect Gmail to scan — it only takes a click.' : 'Connect Gmail first');
@@ -1066,7 +1161,7 @@ function renderSetAside() {
   if (!all.length) return '';
   const rows = all.slice(-SET_ASIDE_SHOWN).reverse();
   const canRetry = !busy && tokenLive();
-  return `<details class="finder-failures finder-setaside">
+  return `<details class="finder-failures finder-setaside" open>
     <summary><span class="finder-failures-sum">${all.length} email${all.length === 1 ? '' : 's'} set aside as not receipts</span>
       <span class="finder-failures-hint">Missing one? Read it again</span></summary>
     <ul class="finder-failures-list">${rows.map(row => `
