@@ -120,7 +120,7 @@ describe('how far back to ask Stripe', () => {
 describe('reading a moment', () => {
   it('reads the year locally', () => {
     expect(yearOf(at(2026, 7, 4))).toBe(2026);
-    expect(yearOf(0)).toBe(1970);
+    expect(yearOf(new Date(1970, 0, 1).getTime())).toBe(1970);
   });
 
   it('tells one day from another', () => {
