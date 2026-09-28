@@ -2905,6 +2905,10 @@
            few words what it does, so choosing between three ways of getting a
            receipt in does not need a guess. -->
       <div class="modal-tabs segmented-control email-import-tabs" role="tablist" aria-label="How to bring receipts in">
+        <button type="button" class="modal-tab-btn" id="email-tab-review" onclick="switchEmailImportTab('review')" role="tab" aria-selected="false" aria-controls="email-panel-review">
+          <span class="email-tab-head"><span class="tab-icon" aria-hidden="true">🧾</span> Review</span>
+          <span class="email-tab-sub">Check before filing</span>
+        </button>
         <button type="button" class="modal-tab-btn active" id="email-tab-gmail" onclick="switchEmailImportTab('gmail')" role="tab" aria-selected="true" aria-controls="email-panel-gmail">
           <span class="email-tab-head"><span class="tab-icon" aria-hidden="true">📬</span> Gmail Finder</span>
           <span class="email-tab-sub">AI finds and reads receipts</span>
@@ -2917,6 +2921,10 @@
           <span class="email-tab-head"><span class="tab-icon" aria-hidden="true">✉️</span> Gmail Import <span class="email-no-ai-tag">No AI</span></span>
           <span class="email-tab-sub">Keep the original email as is</span>
         </button>
+      </div>
+
+      <div id="email-panel-review" role="tabpanel" aria-labelledby="email-tab-review" style="display:none;">
+        <p class="email-panel-intro">Review each found receipt and its source before filing. Discard receipts that do not belong in your records.</p>
       </div>
 
       <!-- Gmail Finder panel. src/features/receipt-finder.js renders the whole

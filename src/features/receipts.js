@@ -38,6 +38,7 @@ import {
   sheetsUrl,
   showToast,
   states,
+  switchTab,
   today,
   updateDash,
 } from '../main.js';
@@ -63,6 +64,7 @@ import {
 } from '../lib/receipt-drafts.js';
 import { dismissAppAlert, pushAppAlert } from '../lib/app-alert.js';
 import { describeReceiptSweep, isReadyToFile } from '../lib/receipt-ready.js';
+import { filterDismissedReceipts, rememberDismissedReceipt } from '../lib/receipt-dismissals.js';
 import {
   integrationBackoffMs,
   noteIntegrationFailure,
@@ -81,7 +83,7 @@ import { toCsv } from '../lib/csv.js';
 import { downloadBlob } from '../lib/download.js';
 import { createZip, textEntry } from '../lib/zip.js';
 import { planFile } from '../lib/receipt-match.js';
-import { renderTaxCenter, saveTaxCenter, tcExpenseRowDrop } from './taxcentre.js';
+import { renderTaxCenter, saveTaxCenter, switchTaxCenterSubTab, tcExpenseRowDrop } from './taxcentre.js';
 import {
   cloudReceiptRefs,
   expenseMissingReceipt,
@@ -2071,7 +2073,42 @@ async function scanProjectReceiptWithAI() {
 
 // ── EMAIL RECEIPT IMPORT
 // Module-level draft store so we don't smuggle JSON through onclick attributes.
-let _emailReceiptDrafts = [];
+const EMAIL_RECEIPT_DRAFTS_KEY = 'lm-email-receipt-drafts';
+
+function readPersistedEmailReceiptDrafts() {
+  try {
+    const raw = localStorage.getItem(EMAIL_RECEIPT_DRAFTS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function writePersistedEmailReceiptDrafts(drafts) {
+  try {
+    if (!drafts || !drafts.length) {
+      localStorage.removeItem(EMAIL_RECEIPT_DRAFTS_KEY);
+    } else {
+      localStorage.setItem(EMAIL_RECEIPT_DRAFTS_KEY, JSON.stringify(drafts));
+    }
+  } catch (_) {
+    /* private mode / quota */
+  }
+}
+
+function _filterAlreadyImportedDrafts(drafts) {
+  if (!Array.isArray(drafts) || !drafts.length) return [];
+  const expenses = (typeof TAX_CENTER !== 'undefined' && TAX_CENTER.businessExpenses) || [];
+  const importedRefs = new Set(expenses.map(e => e.ref).filter(Boolean));
+  const importedMsgIds = new Set(expenses.map(e => e.emailMsgId).filter(Boolean));
+  return drafts.filter(d => {
+    if (d.ref && importedRefs.has(d.ref)) return false;
+    if (d.msgId && importedMsgIds.has(d.msgId)) return false;
+    return true;
+  });
+}
+
+let _emailReceiptDrafts = readPersistedEmailReceiptDrafts();
 let _activeEmailImportTab = 'gmail';
 let _gmailEmailsFetched = [];
 let _gmailSearchMeta = null;
@@ -2220,17 +2257,46 @@ async function readReceiptFiles(files) {
   return out;
 }
 
-function openEmailReceiptImportModal() {
+let _inOpenEmailReceiptModal = false;
+
+function _focusEmailReceiptResults() {
+  setTimeout(() => {
+    const results = document.getElementById('email-receipt-results') || document.getElementById('m-email-receipt-import-modal');
+    if (results && typeof results.scrollIntoView === 'function') {
+      results.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, 100);
+}
+
+function openEmailReceiptImportModal({ selectReadyOnly = false, review = false } = {}) {
   if (!window.IS_PUBLISHER || isAuthor()) { showToast('Publisher access required', 'warn'); return; }
-  openM('email-receipt-import-modal');
-  if ($('email-receipt-results')) $('email-receipt-results').innerHTML = '';
-  // Reopening starts a fresh hand-driven review — but a row an automated
-  // source already found (the background sweep, or the Gmail add-on's live
-  // feed) is not that: it's unreviewed work sitting in the background, and
-  // the whole point of scanning automatically is that it survives the owner
-  // not having the modal open when it was found.
-  _emailReceiptDrafts = _emailReceiptDrafts.filter(d => d._inboxId || d._fromSweep);
-  if (_emailReceiptDrafts.length) renderEmailReceiptDrafts(_emailReceiptDrafts);
+  if (_inOpenEmailReceiptModal) return;
+  _inOpenEmailReceiptModal = true;
+  try {
+    closeM('notifications');
+    const notifications = $('m-notifications');
+    if (notifications) notifications.style.display = 'none';
+    switchTab('taxcenter');
+    switchTaxCenterSubTab('email-import');
+
+    openM('email-receipt-import-modal');
+    if ($('email-receipt-results')) $('email-receipt-results').innerHTML = '';
+
+    if (!_emailReceiptDrafts.length) {
+      _emailReceiptDrafts = readPersistedEmailReceiptDrafts();
+    }
+    _emailReceiptDrafts = filterDismissedReceipts(_filterAlreadyImportedDrafts(_emailReceiptDrafts));
+    _emailReceiptDrafts = _emailReceiptDrafts.filter(d => d._inboxId || d._fromSweep);
+
+    if (selectReadyOnly) {
+      const dupIndex = _buildDuplicateExpenseIndex();
+      _emailReceiptDrafts.forEach(d => {
+        d.include = isReadyToFile(d, { duplicate: _isLikelyDuplicateExpense(d, dupIndex) });
+      });
+    }
+
+    renderEmailReceiptDrafts(_emailReceiptDrafts);
+    writePersistedEmailReceiptDrafts(_emailReceiptDrafts);
   _activeEmailImportTab = 'gmail';
   _gmailSelectedIds = new Set();
   _directGmailSelectedIds = new Set();
@@ -2253,10 +2319,11 @@ function openEmailReceiptImportModal() {
 
   // Progressive category strip begins hidden until drafts exist
   const bulkCatBar = $('email-bulk-category-bar');
-  if (bulkCatBar) bulkCatBar.style.display = 'none';
+  if (bulkCatBar) bulkCatBar.style.display = _emailReceiptDrafts.length ? 'flex' : 'none';
 
-  // Reset tab to Gmail
-  switchEmailImportTab('gmail');
+  // A notification opens the actual review rows; ordinary entry opens them
+  // whenever saved drafts are waiting, so they do not hide behind Gmail Finder.
+  switchEmailImportTab(review || _emailReceiptDrafts.length ? 'review' : 'gmail');
 
   // The preset chips, the default query and the results list all render into
   // #email-panel-gmail, which mountReceiptFinder() replaces wholesale a few
@@ -2269,11 +2336,14 @@ function openEmailReceiptImportModal() {
   _updateEmailExtractButtonLabel();
 
   // Surface anything the Gmail add-on has pushed in as ready-to-edit drafts.
-  loadGmailInboxDrafts();
-  mountReceiptFinder($('email-panel-gmail'), receiptFinderDependencies()).catch(error => {
-    console.error('[receipt-finder] Could not open', error);
-    showToast('Could not open saved receipts: ' + error.message, 'err');
-  });
+    loadGmailInboxDrafts();
+    mountReceiptFinder($('email-panel-gmail'), receiptFinderDependencies()).catch(error => {
+      console.error('[receipt-finder] Could not open', error);
+      showToast('Could not open saved receipts: ' + error.message, 'err');
+    });
+  } finally {
+    _inOpenEmailReceiptModal = false;
+  }
 }
 
 // ── Paste & Upload panel ─────────────────────────────────────────────
@@ -2408,7 +2478,7 @@ function startEmailInboxWatcher() {
   }
   if (isAuthor() || typeof window._fbWatchEmailInbox !== 'function') return;
   window._fbWatchEmailInbox(items => {
-    _emailInboxItems = Array.isArray(items) ? items : [];
+    _emailInboxItems = filterDismissedReceipts(Array.isArray(items) ? items : []);
     const ids = new Set(_emailInboxItems.map(i => i._inboxId));
     // Only toast for items that landed after the first snapshot, so we don't
     // shout on every page load about a backlog the user already knows about.
@@ -2503,7 +2573,8 @@ function _emailDraftsHaveManualReview() {
 // destructive case impossible, so the banner that used to defer to it is gone.
 function loadGmailInboxDrafts() {
   if (!_emailInboxItems.length) return;
-  _emailReceiptDrafts = mergeReceiptDrafts(_emailReceiptDrafts, _emailInboxItems.map(_inboxItemToDraft));
+  _emailReceiptDrafts = mergeReceiptDrafts(_emailReceiptDrafts, filterDismissedReceipts(_emailInboxItems.map(_inboxItemToDraft)));
+  writePersistedEmailReceiptDrafts(_emailReceiptDrafts);
   if (_emailImportTabVisible() && !_emailDraftsHaveManualReview()) {
     renderEmailReceiptDrafts(_emailReceiptDrafts);
   }
@@ -2554,21 +2625,26 @@ async function localizeInboxReceiptFiles(item) {
 
 function switchEmailImportTab(tab) {
   _activeEmailImportTab = tab;
+  const tabReview = $('email-tab-review');
   const tabGmail = $('email-tab-gmail');
   const tabManual = $('email-tab-manual');
   const tabDirect = $('email-tab-direct');
   const panelGmail = $('email-panel-gmail');
+  const panelReview = $('email-panel-review');
   const panelManual = $('email-panel-manual');
   const panelDirect = $('email-panel-direct');
+  tabReview?.setAttribute('aria-selected', String(tab === 'review'));
   tabGmail?.setAttribute('aria-selected', String(tab === 'gmail'));
   tabManual?.setAttribute('aria-selected', String(tab === 'manual'));
   tabDirect?.setAttribute('aria-selected', String(tab === 'direct'));
-  if ($('email-receipt-results')) $('email-receipt-results').hidden = tab !== 'manual';
-  if ($('email-bulk-category-bar')) $('email-bulk-category-bar').hidden = tab !== 'manual';
+  if ($('email-receipt-results')) $('email-receipt-results').hidden = tab !== 'manual' && tab !== 'review';
+  if ($('email-bulk-category-bar')) $('email-bulk-category-bar').hidden = tab !== 'manual' && tab !== 'review';
   if ($('email-receipt-scan-btn')) $('email-receipt-scan-btn').hidden = tab === 'gmail';
+  tabReview?.classList.toggle('active', tab === 'review');
   tabGmail?.classList.toggle('active', tab === 'gmail');
   tabManual?.classList.toggle('active', tab === 'manual');
   tabDirect?.classList.toggle('active', tab === 'direct');
+  if (panelReview) panelReview.style.display = tab === 'review' ? 'block' : 'none';
   if (panelGmail) panelGmail.style.display = tab === 'gmail' ? 'block' : 'none';
   if (panelManual) panelManual.style.display = tab === 'manual' ? 'block' : 'none';
   if (panelDirect) panelDirect.style.display = tab === 'direct' ? 'block' : 'none';
@@ -5161,6 +5237,9 @@ function _draftsFromReceiptRows(rows, msgId) {
         ? r.category
         : inferReceiptCategory(r.vendor, r.description),
       sourceSnippet: String(r.sourceSnippet || '').slice(0, 240),
+      emailSubject: email?.subject || '',
+      emailFrom: email?.from || '',
+      emailDate: email?.date || '',
       confidence: Number(r.confidence || 0.7),
       // An unpriced row must be a deliberate checkbox, never an automatic
       // import — the whole point of flagging it instead of dropping it.
@@ -5503,7 +5582,7 @@ function renderEmailReceiptDrafts(receipts) {
   const bulkCatBar = $('email-bulk-category-bar');
   if (!wrap) return;
   if (!Array.isArray(receipts) || !receipts.length) {
-    wrap.innerHTML = '<div class="empty-state" style="padding:14px;font-size:var(--text-sm);color:var(--text3);">No valid receipts found.</div>';
+    wrap.innerHTML = '<div class="empty-state" style="padding:14px;font-size:var(--text-sm);color:var(--text3);">No receipts waiting for review.</div>';
     if (bulkCatBar) bulkCatBar.style.display = 'none';
     return;
   }
@@ -5553,6 +5632,15 @@ function renderEmailReceiptDrafts(receipts) {
               ${r.msgId
         ? `<div style="font-size:var(--text-2xs);color:var(--content-muted);margin-top:2px;">${(r.selectedAtts && r.selectedAtts.length) ? `📎 ${r.selectedAtts.length} file${r.selectedAtts.length > 1 ? 's' : ''} + email` : `📄 email`} → receipts folder on import</div>`
         : ''}
+              ${(r.sourceSnippet || r.emailSubject || r.emailFrom || r.emailDate || r.selectedAtts?.length || r.receiptUrls?.length || r.receipt)
+        ? `<details class="email-receipt-source"><summary>View source details</summary>
+                    ${r.emailSubject ? `<div><strong>Subject:</strong> ${esc(r.emailSubject)}</div>` : ''}
+                    ${r.emailFrom ? `<div><strong>From:</strong> ${esc(r.emailFrom)}</div>` : ''}
+                    ${r.emailDate ? `<div><strong>Email date:</strong> ${esc(r.emailDate)}</div>` : ''}
+                    ${r.sourceSnippet ? `<div><strong>Receipt text:</strong> ${esc(r.sourceSnippet)}</div>` : ''}
+                    ${(r.selectedAtts || []).map(att => `<div><strong>Attachment:</strong> ${esc(att.name || 'Receipt file')}</div>`).join('')}
+                    ${(Array.isArray(r.receiptUrls) && r.receiptUrls.length ? r.receiptUrls : [r.receipt]).filter(url => /^https?:/i.test(String(url || ''))).map((url, fileIndex) => `<div><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Open original receipt${fileIndex ? ` ${fileIndex + 1}` : ''}</a></div>`).join('')}
+                  </details>` : ''}
             </td>
             <td><select data-erd-field="category" data-erd-i="${i}" style="font-size:var(--text-sm);">${catOptionsHtml}</select></td>
             <td><input type="text" data-erd-field="reference" data-erd-i="${i}" value="${esc(r.reference)}" placeholder="—" style="font-size:var(--text-sm);"></td>
@@ -5563,8 +5651,7 @@ function renderEmailReceiptDrafts(receipts) {
               </div>
             </td>
             <td>
-              ${r.sourceSnippet ? `<button class="btn sm" type="button" title="View source snippet" aria-label="View source snippet" onclick="confirmDialog(${JSON.stringify(r.sourceSnippet)}, {title:'Source snippet', okLabel:'OK', cancelLabel:'Close'})">👁</button>` : ''}
-              ${(r._fromSweep || r._inboxId) ? `<button class="btn sm" type="button" title="Not a receipt — remove it" aria-label="Not a receipt — remove it" onclick="dismissEmailReceiptDraft(${i})">✕</button>` : ''}
+              ${(r._fromSweep || r._inboxId) ? `<button class="btn sm" type="button" title="Discard this receipt" aria-label="Discard this receipt" onclick="dismissEmailReceiptDraft(${i})">Discard</button>` : ''}
             </td>
           </tr>`;
   }).join('')}
@@ -5573,7 +5660,7 @@ function renderEmailReceiptDrafts(receipts) {
     </div>
     <div style="margin-top:10px;display:flex;gap:8px;align-items:center;justify-content:flex-end;">
       <span style="font-size:var(--text-xs);color:var(--content-muted);font-family:var(--font-mono);">FX rates auto-fetched at import</span>
-      <button class="btn gold" type="button" onclick="importEmailReceiptDrafts()">Import selected drafts</button>
+      <button class="btn gold" type="button" onclick="importEmailReceiptDrafts()">File selected receipts</button>
     </div>
   `;
 
@@ -5602,6 +5689,7 @@ function renderEmailReceiptDrafts(receipts) {
     if (includeAttr !== null) {
       const i = Number(includeAttr);
       if (_emailReceiptDrafts[i]) _emailReceiptDrafts[i].include = !!el.checked;
+      writePersistedEmailReceiptDrafts(_emailReceiptDrafts);
       return;
     }
     const f = el.getAttribute('data-erd-field');
@@ -5619,11 +5707,13 @@ function renderEmailReceiptDrafts(receipts) {
       // cleared, so blanking the field back out puts the warning back too.
       _emailReceiptDrafts[i].amountUnknown = needsReceiptAmount(_emailReceiptDrafts[i]);
     }
+    writePersistedEmailReceiptDrafts(_emailReceiptDrafts);
   });
 }
 
 function toggleAllEmailDrafts(on) {
   _emailReceiptDrafts.forEach(d => { d.include = !!on; });
+  writePersistedEmailReceiptDrafts(_emailReceiptDrafts);
   document.querySelectorAll('[data-erd-include]').forEach(cb => { cb.checked = !!on; });
 }
 
@@ -5641,6 +5731,7 @@ function deselectDuplicateEmailDrafts() {
       if (cb) cb.checked = false;
     }
   });
+  writePersistedEmailReceiptDrafts(_emailReceiptDrafts);
   if (n) showToast(`Deselected ${n} duplicate${n > 1 ? 's' : ''}`);
 }
 
@@ -5659,6 +5750,7 @@ function applyBulkCategoryToEmailDrafts() {
     const sel = document.querySelector(`[data-erd-field="category"][data-erd-i="${i}"]`);
     if (sel) sel.value = cat;
   });
+  writePersistedEmailReceiptDrafts(_emailReceiptDrafts);
   if (n) showToast(`Set category on ${n} selected draft${n > 1 ? 's' : ''}`);
   else showToast('No drafts selected', 'warn');
 }
@@ -5819,7 +5911,7 @@ async function importEmailReceiptDrafts() {
   showToast(msgParts.join(' · ') || 'Nothing imported', (imported || relinked) ? 'ok' : 'warn');
 
   if (imported || relinked) closeEmailReceiptImportModal();
-  else if (btn) { btn.disabled = false; btn.textContent = 'Import selected drafts'; }
+  else if (btn) { btn.disabled = false; btn.textContent = 'File selected receipts'; }
 }
 
 /**
@@ -5966,6 +6058,7 @@ async function _fileReceiptDrafts(drafts, { fallbackCat = 'Other', attachedFiles
   const processed = new Set(drafts);
   _emailReceiptDrafts = _emailReceiptDrafts.filter(d => !processed.has(d));
   _clearResolvedSweepPending(drafts);
+  writePersistedEmailReceiptDrafts(_emailReceiptDrafts);
   updateEmailInboxBadge();
 
   if (typeof renderTaxCenter === 'function') renderTaxCenter();
@@ -6022,7 +6115,8 @@ function writeReceiptSweepPending(list) {
 function _clearResolvedSweepPending(resolvedDrafts) {
   const resolvedMsgIds = new Set((resolvedDrafts || []).map(d => d.msgId).filter(Boolean));
   if (!resolvedMsgIds.size) return;
-  const remaining = readReceiptSweepPending().filter(p => !resolvedMsgIds.has(p.msgId));
+  const stillWaiting = new Set(_emailReceiptDrafts.map(d => d.msgId).filter(Boolean));
+  const remaining = readReceiptSweepPending().filter(p => !resolvedMsgIds.has(p.msgId) || stillWaiting.has(p.msgId));
   writeReceiptSweepPending(remaining);
 }
 
@@ -6039,9 +6133,13 @@ function _receiptSweepQuery(sinceMs) {
 
 /** Take the owner straight to the now-populated review table from the card. */
 function openReceiptSweepReviewFromAlert(event) {
-  if (event) event.stopPropagation();
+  if (event) {
+    if (typeof event.stopPropagation === 'function') event.stopPropagation();
+    if (typeof event.preventDefault === 'function') event.preventDefault();
+  }
   dismissAppAlert('receipt-sweep');
-  openEmailReceiptImportModal();
+  openEmailReceiptImportModal({ selectReadyOnly: true, review: true });
+  _focusEmailReceiptResults();
 }
 
 /**
@@ -6052,17 +6150,24 @@ function openReceiptSweepReviewFromAlert(event) {
  * something irrelevant to show up. One click and it's gone for good, not
  * back on the next run.
  */
-function dismissEmailReceiptDraft(i) {
+async function dismissEmailReceiptDraft(i) {
   const draft = _emailReceiptDrafts[i];
   if (!draft) return;
+  if (!rememberDismissedReceipt(draft)) {
+    showToast('Could not save your discard decision. Please try again.', 'err');
+    return;
+  }
   _emailReceiptDrafts.splice(i, 1);
   if (draft._inboxId && typeof window._fbDeleteInboxItem === 'function') {
-    window._fbDeleteInboxItem(draft._inboxId);
     _emailInboxItems = _emailInboxItems.filter(it => it._inboxId !== draft._inboxId);
+    try { await window._fbDeleteInboxItem(draft._inboxId); }
+    catch (error) { console.error('[receipt-inbox] Could not remove discarded inbox item', error); }
   }
   _clearResolvedSweepPending([draft]);
+  writePersistedEmailReceiptDrafts(_emailReceiptDrafts);
   renderEmailReceiptDrafts(_emailReceiptDrafts);
   updateEmailInboxBadge();
+  showToast('Receipt discarded. It will stay out of this inbox.', 'ok');
 }
 
 // The receipts the last sweep judged complete enough to file in one tap, by
@@ -6087,34 +6192,24 @@ function _showReceiptSweepAlert(foundDrafts) {
     icon: '🧾',
     title: said.title,
     detail: said.detail,
-    actionLabel: said.canFile ? said.fileLabel : 'Review',
-    action: said.canFile ? 'fileReadyReceiptsFromAlert(event)' : 'openReceiptSweepReviewFromAlert(event)',
+    actionLabel: 'Review receipts',
+    action: 'openReceiptSweepReviewFromAlert(event)',
   });
 }
 
-/** The alert's one-tap File: the easy receipts go straight into the books. */
-async function fileReadyReceiptsFromAlert(event) {
-  if (event) event.stopPropagation();
-  const refs = new Set(_sweepReadyRefs);
-  const drafts = (_emailReceiptDrafts || []).filter(d => d.ref && refs.has(d.ref));
-  _sweepReadyRefs = [];
-  dismissAppAlert('receipt-sweep');
-  if (!drafts.length) { showToast('Those receipts have already been dealt with', 'warn'); return; }
-
-  let counts;
-  try {
-    counts = await _fileReceiptDrafts(drafts);
-  } catch (error) {
-    console.error('Filing receipts from the alert failed', error);
-    showToast('Could not file those receipts. They are still waiting in your receipt inbox.', 'err', 6000);
-    return;
+/**
+ * Takes the owner straight to the review page where they can review details,
+ * with complete ready-to-file receipts pre-selected, and decide whether to
+ * put them into the ledger.
+ */
+function fileReadyReceiptsFromAlert(event) {
+  if (event) {
+    if (typeof event.stopPropagation === 'function') event.stopPropagation();
+    if (typeof event.preventDefault === 'function') event.preventDefault();
   }
-  const left = (_emailReceiptDrafts || []).length;
-  const filed = counts.imported + counts.relinked;
-  const leftNote = left ? ` ${left} still waiting in your receipt inbox.` : '';
-  showToast(filed
-    ? `✓ Filed ${filed} receipt${filed === 1 ? '' : 's'}.${leftNote}`
-    : `Nothing new to file — already in your books.${leftNote}`, filed ? 'ok' : 'warn', 5000);
+  dismissAppAlert('receipt-sweep');
+  openEmailReceiptImportModal({ selectReadyOnly: true, review: true });
+  _focusEmailReceiptResults();
 }
 
 /**
@@ -6200,8 +6295,9 @@ async function sweepReceiptEmails({ force = false } = {}) {
         });
         const rows = _parseReceiptJson(out.text || '{}').receipts || [];
         const { drafts } = _draftsFromReceiptRows(rows, msgId);
-        if (drafts.length) {
-          foundDrafts.push(...drafts.map(d => ({ ...d, _fromSweep: true })));
+        const visibleDrafts = filterDismissedReceipts(drafts);
+        if (visibleDrafts.length) {
+          foundDrafts.push(...visibleDrafts.map(d => ({ ...d, _fromSweep: true })));
           newPendingEntries.push({ msgId, foundAt: Date.now() });
         }
         return drafts;
@@ -6210,6 +6306,7 @@ async function sweepReceiptEmails({ force = false } = {}) {
 
     if (foundDrafts.length) {
       _emailReceiptDrafts = mergeReceiptDrafts(_emailReceiptDrafts, foundDrafts);
+      writePersistedEmailReceiptDrafts(_emailReceiptDrafts);
       writeReceiptSweepPending([...pending, ...newPendingEntries]);
       if (_emailImportTabVisible() && !_emailDraftsHaveManualReview()) {
         renderEmailReceiptDrafts(_emailReceiptDrafts);
