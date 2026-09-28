@@ -5705,7 +5705,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .erd-table td:nth-child(7) { padding-left: 0; }
 .erd-table td:nth-child(7) button { min-height: 44px; }
 .email-receipt-source { margin-top: 6px; font-size: var(--text-xs); color: var(--content-secondary); overflow-wrap: anywhere; }
-.email-receipt-source summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; color: var(--accent); }
+.email-receipt-source summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; color: var(--accent-color); }
 .email-receipt-source div { margin: 3px 0; }
 @media (max-width: 900px) {
   .erd-table-wrap { overflow-x: auto; }
@@ -20537,19 +20537,19 @@ button[onclick="refreshUmamiStats()"]:active {
 .letterhead-toolbar { display:flex;flex-wrap:wrap;align-items:center;gap:5px;padding:7px;background:var(--surface-inset);border:1px solid var(--border-default);border-radius:var(--r2) var(--r2) 0 0; }
 .letterhead-toolbar .btn { min-width:34px;min-height:34px;padding:5px 8px; }
 .letterhead-toolbar-divider { height:22px;border-left:1px solid var(--border-default);margin:0 3px; }
-.letterhead-editor { box-sizing:border-box;min-height:240px;padding:14px 16px;background:var(--input-bg,#fff);color:var(--content-primary);border:1px solid var(--border-default);border-top:0;border-radius:0 0 var(--r2) var(--r2);font:var(--text-sm)/1.65 var(--font-ui);outline:0;overflow-wrap:anywhere; }
-.letterhead-editor:focus { border-color:var(--gold);box-shadow:0 0 0 3px rgba(168,112,66,.18); }
+.letterhead-editor { box-sizing:border-box;min-height:240px;padding:14px 16px;background:var(--input-bg,var(--surface-raised));color:var(--content-primary);border:1px solid var(--border-default);border-top:0;border-radius:0 0 var(--r2) var(--r2);font:var(--text-sm)/1.65 var(--font-ui);outline:0;overflow-wrap:anywhere; }
+.letterhead-editor:focus { border-color:var(--gold);box-shadow:var(--focus-ring-halo); }
 .letterhead-editor p { margin:0 0 .9em; }
 .letterhead-editor ul,.letterhead-editor ol { padding-left:1.4em;margin:.5em 0 1em; }
 .letterhead-preview-wrap { min-width:0;overflow:auto; }
 .letterhead-preview-label { margin-bottom:10px;color:var(--content-muted);font-size:var(--text-xs); }
 #letterhead-preview { overflow:auto;background:var(--surface-inset);padding:16px;border:1px solid var(--border-default);border-radius:var(--r2); }
-.letterhead-page { box-sizing:border-box;width:100%;max-width:816px;min-height:1056px;margin:auto;padding:68px 72px 58px;display:flex;flex-direction:column;background:#fff;color:#26211e;box-shadow:0 4px 22px rgba(0,0,0,.14);font:15px/1.65 Georgia,serif; }
+.letterhead-page { box-sizing:border-box;width:100%;max-width:816px;min-height:1056px;margin:auto;padding:68px 72px 58px;display:flex;flex-direction:column;background:var(--surface-page);color:var(--content-primary);box-shadow:var(--elev-2);font:15px/1.65 Georgia,serif; }
 .letterhead-paper-header { display:flex;justify-content:space-between;align-items:center;gap:28px;border-bottom:1px solid var(--letter-accent);padding-bottom:22px;margin-bottom:46px; }
 .letterhead-brand { display:flex;align-items:center;gap:18px;min-width:0; }
 .letterhead-logo { max-width:76px;max-height:70px;object-fit:contain; }
-.letterhead-name { font-size:27px;line-height:1.12;letter-spacing:-.025em;font-weight:700;color:#26211e;overflow-wrap:anywhere; }
-.letterhead-contact { max-width:240px;text-align:right;font:11px/1.55 Arial,sans-serif;color:#5b5651;overflow-wrap:anywhere; }
+.letterhead-name { font-size:27px;line-height:1.12;letter-spacing:-.025em;font-weight:700;color:var(--content-primary);overflow-wrap:anywhere; }
+.letterhead-contact { max-width:240px;text-align:right;font:11px/1.55 Arial,sans-serif;color:var(--content-secondary);overflow-wrap:anywhere; }
 .letterhead-meta { display:flex;justify-content:space-between;gap:20px;line-height:1.5;margin-bottom:32px; }
 .letterhead-meta>div:last-child { white-space:nowrap; }
 .letterhead-subject { font:700 16px/1.35 Arial,sans-serif;margin:0 0 25px; }
@@ -20558,6 +20558,6 @@ button[onclick="refreshUmamiStats()"]:active {
 .letterhead-body ul,.letterhead-body ol { padding-left:1.5em;margin:.5em 0 1em; }
 .letterhead-signoff { line-height:1.6;margin-top:28px; }
 .letterhead-signoff:empty { display:none; }
-.letterhead-paper-footer { margin-top:auto;border-top:1px solid #d8d3cd;padding-top:10px;text-align:center;color:#6a655f;font:10px Arial,sans-serif; }
+.letterhead-paper-footer { margin-top:auto;border-top:1px solid var(--border-subtle);padding-top:10px;text-align:center;color:var(--content-secondary);font:10px Arial,sans-serif; }
 @media (max-width:1000px) { .letterhead-layout { grid-template-columns:1fr; } }
 @media (max-width:600px) { .letterhead-page { min-height:700px;padding:32px 26px; } .letterhead-paper-header { flex-wrap:wrap; } .letterhead-contact { text-align:left; } }
