@@ -2135,7 +2135,7 @@ const EXPENSE_CATEGORIES = [
   'Software & Subscriptions', 'Marketing & Advertising', 'Printing & Production',
   'Editorial & Proofreading', 'Illustration & Photography', 'Rights & Permissions',
   'ISBN, Barcodes & Cataloging', 'Shipping & Postage', 'Warehousing & Fulfillment',
-  'Packaging Materials', 'Office Supplies', 'Home Office', 'Travel & Meals', 'Professional Services',
+  'Packaging Materials', 'Office Supplies', 'Home Office', 'Travel & Meals', 'Meals & Entertainment', 'Professional Services',
   'Sales Processing Fees',
   'Books, Research & Reference', 'Events & Exhibitions', 'Other'
 ];

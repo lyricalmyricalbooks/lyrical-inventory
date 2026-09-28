@@ -33,6 +33,12 @@ const CATEGORY_ALIASES = {
   'travel': 'Travel & Meals',
   'meals': 'Travel & Meals',
   'travel and meals': 'Travel & Meals',
+  // Food, drink and entertainment carry the CRA's 50% limit, so they get
+  // their own bucket rather than hiding inside Travel & Meals.
+  'meals & entertainment': 'Meals & Entertainment',
+  'meals and entertainment': 'Meals & Entertainment',
+  'entertainment': 'Meals & Entertainment',
+  'meals/entertainment': 'Meals & Entertainment',
   'editorial': 'Editorial & Proofreading',
   'proofreading': 'Editorial & Proofreading',
   'illustration': 'Illustration & Photography',
