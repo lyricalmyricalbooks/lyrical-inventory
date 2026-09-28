@@ -132,8 +132,8 @@ describe('reading a value a person or a model actually wrote', () => {
   });
 
   it('folds an old category spelling and checks it against the real list', () => {
-    const ctx = { expenseCategories: ['Travel & Meals', 'Other'] };
-    expect(val('businessExpense', 'category', 'travel', ctx).value).toBe('Travel & Meals');
+    const ctx = { expenseCategories: ['Travel', 'Other'] };
+    expect(val('businessExpense', 'category', 'travel', ctx).value).toBe('Travel');
     expect(val('businessExpense', 'category', 'Yacht Hire', ctx).ok).toBe(false);
   });
 });

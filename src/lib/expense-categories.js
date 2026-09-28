@@ -30,11 +30,14 @@ const CATEGORY_ALIASES = {
   'software': 'Software & Subscriptions',
   'subscriptions': 'Software & Subscriptions',
   'software and subscriptions': 'Software & Subscriptions',
-  'travel': 'Travel & Meals',
-  'meals': 'Travel & Meals',
-  'travel and meals': 'Travel & Meals',
+  // "Travel & Meals" was renamed "Travel" once meals got their own 50%-limited
+  // category; rows saved under the old name fold onto the new one on read.
+  'travel': 'Travel',
+  'travel & meals': 'Travel',
+  'travel and meals': 'Travel',
+  'meals': 'Travel',
   // Food, drink and entertainment carry the CRA's 50% limit, so they get
-  // their own bucket rather than hiding inside Travel & Meals.
+  // their own bucket rather than hiding inside Travel.
   'meals & entertainment': 'Meals & Entertainment',
   'meals and entertainment': 'Meals & Entertainment',
   'entertainment': 'Meals & Entertainment',

@@ -27,16 +27,16 @@ function ledgerWithOneMismatch() {
     expense({ id: 'p2', desc: 'printer toner', cat: 'Printing & Production' }),
     expense({ id: 'p3', desc: 'printer paper', cat: 'Printing & Production' }),
     expense({ id: 'p4', desc: 'inkjet cartridge', cat: 'Printing & Production' }),
-    expense({ id: 'outlier', desc: 'printer ink refill', cat: 'Travel & Meals', amount: 42, baseAmount: 42 }),
+    expense({ id: 'outlier', desc: 'printer ink refill', cat: 'Travel', amount: 42, baseAmount: 42 }),
     expense({ id: 'sw1', desc: 'domain hosting renewal', cat: 'Software & Subscriptions' }),
     expense({ id: 'sw2', desc: 'domain hosting renewal', cat: 'Software & Subscriptions' }),
     expense({ id: 'sw3', desc: 'domain hosting renewal', cat: 'Software & Subscriptions' }),
     expense({ id: 'ev1', desc: 'conference table booth', cat: 'Events & Exhibitions' }),
     expense({ id: 'ev2', desc: 'conference table booth', cat: 'Events & Exhibitions' }),
     expense({ id: 'ev3', desc: 'conference table booth', cat: 'Events & Exhibitions' }),
-    expense({ id: 'tr1', desc: 'train ticket fare', cat: 'Travel & Meals' }),
-    expense({ id: 'tr2', desc: 'train ticket fare', cat: 'Travel & Meals' }),
-    expense({ id: 'tr3', desc: 'train ticket fare', cat: 'Travel & Meals' }),
+    expense({ id: 'tr1', desc: 'train ticket fare', cat: 'Travel' }),
+    expense({ id: 'tr2', desc: 'train ticket fare', cat: 'Travel' }),
+    expense({ id: 'tr3', desc: 'train ticket fare', cat: 'Travel' }),
     expense({ id: 'ed1', desc: 'editor proofreading pass', cat: 'Editorial & Proofreading' }),
     expense({ id: 'ed2', desc: 'editor proofreading pass', cat: 'Editorial & Proofreading' }),
   ];
@@ -47,7 +47,7 @@ describe('an expense whose own words point at a different category', () => {
     const findings = findCategoryMismatches(fixture({ businessExpenses: ledgerWithOneMismatch() }));
     const hit = findings.find(f => f.expenseId === 'outlier');
     expect(hit).toBeDefined();
-    expect(hit.currentCategory).toBe('Travel & Meals');
+    expect(hit.currentCategory).toBe('Travel');
     expect(hit.suggestedCategory).toBe('Printing & Production');
     expect(hit.evidence.matchedWords).toContain('printer');
     expect(hit.evidence.suggestedSupport).toBeGreaterThanOrEqual(3);
@@ -80,7 +80,7 @@ describe('when there is nothing solid to check against', () => {
   it('says nothing when a shared word has only ever been used once before', () => {
     const ledger = [
       expense({ id: 'p1', desc: 'printer maintenance', cat: 'Printing & Production' }),
-      expense({ id: 'outlier2', desc: 'printer service', cat: 'Travel & Meals' }),
+      expense({ id: 'outlier2', desc: 'printer service', cat: 'Travel' }),
       ...Array.from({ length: 13 }, (_, i) => expense({ id: `pad${i}`, desc: 'random filler copy', cat: 'Other' })),
     ];
     const findings = findCategoryMismatches(fixture({ businessExpenses: ledger }));

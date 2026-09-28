@@ -14,6 +14,7 @@ initPhoneWorkspace(document.getElementById('pw-app'));
 initPhoneLayouts(document.body);
 import './firebase.js';
 import { registerSW } from 'virtual:pwa-register';
+import { canonicalExpenseCategory } from './lib/expense-categories.js';
 import { calcArtistEarnings, tierEffectiveCap, describePayout, payoutRequestCovered } from './lib/earnings.js';
 import { createStripePriceAndLink } from './lib/stripe-payment-link.js';
 import { calculateBreakEven, breakEvenTierMove, readProductionCostInput } from './lib/breakeven.js';
@@ -16747,7 +16748,7 @@ export const TC_CATEGORIES = [
   'Software & Subscriptions', 'Marketing & Advertising', 'Printing & Production',
   'Editorial & Proofreading', 'Illustration & Photography', 'Rights & Permissions',
   'ISBN, Barcodes & Cataloging', 'Shipping & Postage', 'Warehousing & Fulfillment',
-  'Packaging Materials', 'Office Supplies', 'Home Office', 'Travel & Meals', 'Meals & Entertainment', 'Professional Services',
+  'Packaging Materials', 'Office Supplies', 'Home Office', 'Travel', 'Meals & Entertainment', 'Professional Services',
   'Books, Research & Reference', 'Events & Exhibitions', 'Artist Royalties',
   'Inventory Valuation Adjustment', 'Other'
 ];
@@ -17068,10 +17069,12 @@ export function openEditExpense(type, bid, id) {
   const catSelect = $('edit-exp-cat');
   if (catSelect) {
     catSelect.innerHTML = TC_CATEGORIES.map(c => `<option value="${c.replace(/"/g, '&quot;')}">${c}</option>`).join('');
-    if (exp.cat && !TC_CATEGORIES.includes(exp.cat)) {
-      catSelect.innerHTML += `<option value="${exp.cat.replace(/"/g, '&quot;')}">${exp.cat}</option>`;
+    // Fold legacy names (e.g. "Travel & Meals") so the picker preselects the current one.
+    const editCat = canonicalExpenseCategory(exp.cat, 'Other');
+    if (!TC_CATEGORIES.includes(editCat)) {
+      catSelect.innerHTML += `<option value="${editCat.replace(/"/g, '&quot;')}">${editCat}</option>`;
     }
-    catSelect.value = exp.cat || 'Other';
+    catSelect.value = editCat;
   }
 
   _editingExpense = {
@@ -17534,9 +17537,9 @@ export const TAX_CATEGORIES = {
   'ink': 'Office Supplies',
   'boxes': 'Office Supplies',
   'mailers': 'Office Supplies',
-  'flight': 'Travel & Meals',
-  'uber': 'Travel & Meals',
-  'hotel': 'Travel & Meals',
+  'flight': 'Travel',
+  'uber': 'Travel',
+  'hotel': 'Travel',
   'dinner': 'Meals & Entertainment',
   'lunch': 'Meals & Entertainment',
   'restaurant': 'Meals & Entertainment',

@@ -1054,7 +1054,7 @@ function _tcGetTripsSummaryAll() {
     if (!t) return;
     const eCur = e.currency || 'CAD';
     const eBase = e.baseAmount != null ? e.baseAmount : (e.amount || 0) * (_fxRateCache[`${eCur}_CAD`] || 1);
-    const cat = e.cat || 'Other';
+    const cat = canonicalExpenseCategory(e.cat, 'Other');
     if (!tripSummary[t]) {
       tripSummary[t] = { total: 0, count: 0, latestDate: '', items: [], categories: {} };
     }
@@ -2015,7 +2015,7 @@ function _tcRenderTripsPanel(selectedYear, baseCurrency) {
     if (!t) return;
     const eCur = e.currency || 'CAD';
     const eBase = e.baseAmount != null ? e.baseAmount : (e.amount || 0) * (_fxRateCache[`${eCur}_CAD`] || 1);
-    const cat = e.cat || 'Other';
+    const cat = canonicalExpenseCategory(e.cat, 'Other');
     if (!tripSummary[t]) tripSummary[t] = { total: 0, count: 0, items: [], categories: {}, minDate: '', maxDate: '' };
     tripSummary[t].total += eBase;
     tripSummary[t].count++;
