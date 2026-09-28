@@ -224,6 +224,8 @@ import {
   readSeenUrgent,
   writeSeenUrgent,
   readNotificationLog,
+  removeNotification,
+  pruneResolvedNotifications,
   unreadNotificationCount,
 } from './lib/notification-log.js';
 import {
@@ -6160,9 +6162,14 @@ let _attentionReady = false;
 
 function logNewlyUrgentSignals(result) {
   if (!result || isAuthor() || !_attentionReady) return;
-  if (dropFalseStockNotifications(result.signals.map(sig => sig.id))) {
+  let changed = dropFalseStockNotifications(result.signals.map(sig => sig.id)) > 0;
+  // Work that has been dealt with clears its own message away.
+  const review = reviewQueueSnapshot().summary;
+  if (pruneResolvedNotifications({ signalIds: new Set(result.signals.map(sig => sig.id)), review })) changed = true;
+  if (changed) {
     renderNotificationBell();
     renderRailLatestNotifications();
+    if ($('m-notifications')?.style.display === 'flex') renderNotificationsPanel();
   }
   const { fresh, remember } = newlyUrgent(result.signals, readSeenUrgent());
   writeSeenUrgent(remember);
@@ -6319,6 +6326,7 @@ function notificationLogItemHtml(item, review = { receipts: 0, labels: 0 }) {
   }
   return `<div class="notif-item tone-${task?.done ? 'blue' : tone}${item.read || task?.done ? '' : ' is-unread'}${task?.done ? ' is-done' : ''}">
       <span class="notif-ico" aria-hidden="true">${escapeHtml(item.icon || '🔔')}</span>
+      <button type="button" class="notif-clear" data-uid="${escapeHtml(item.uid)}" onclick="dismissNotification(this.dataset.uid)" title="Clear this notification" aria-label="Clear: ${escapeHtml(item.title)}">✕</button>
       <div class="notif-body">
         <div class="notif-source">From ${escapeHtml(notificationSource(item))}</div>
         <div class="notif-title">${item.read ? '' : '<span class="notif-new-dot" aria-label="New"></span>'}${escapeHtml(item.title)}</div>
@@ -6390,6 +6398,15 @@ function reviewNotification(kind) {
 }
 
 window.reviewNotification = reviewNotification;
+
+/** The ✕ on one message: clear just that one. */
+function dismissNotification(uid) {
+  if (!removeNotification(uid)) return;
+  renderNotificationBell();
+  renderRailLatestNotifications();
+  renderNotificationsPanel();
+}
+window.dismissNotification = dismissNotification;
 
 async function clearNotificationHistory() {
   const ok = await confirmDialog('Clear the notification history on this device?\n\nNothing in your books changes — this only empties this list.', { title: 'Clear history', okLabel: 'Clear it' });
