@@ -77,7 +77,7 @@ import {
   effectiveInterval,
   startWatch,
 } from '../lib/watch-schedule.js';
-import { fmt, fmtD, getBookCurrencyCode, normalizeCurrencyCode } from '../lib/money.js';
+import { fmt, fmtD, getBookCurrencyCode, normalizeCurrencyCode, putCurrencyFirst, setSelectCurrency } from '../lib/money.js';
 import { expenseLedgerTotals, expenseTotalsCopy } from '../lib/expense-totals.js';
 import { closeM, confirmDialog, openM } from '../lib/modal.js';
 import { toCsv } from '../lib/csv.js';
@@ -4196,7 +4196,7 @@ let _batchScanAbort = null;
 // True while scanning or logging — blocks a second run over the same rows.
 let _batchExpenseBusy = false;
 
-const BATCH_EXPENSE_CURRENCIES = ['CAD', 'USD', 'EUR', 'GBP', 'AUD', 'MXN', 'JPY', 'CHF'];
+const BATCH_EXPENSE_CURRENCIES = ['CAD', 'EUR', 'USD', 'MXN'];
 
 // Receipts read in parallel. Three was the safe number back when a rate limit
 // meant every worker independently retried into the same congestion window.
@@ -4254,9 +4254,7 @@ function _batchExpenseCategories() {
  */
 function _batchExpenseCurrencies() {
   const own = _batchExpenseDefaultCurrency();
-  return BATCH_EXPENSE_CURRENCIES.includes(own)
-    ? BATCH_EXPENSE_CURRENCIES
-    : [own, ...BATCH_EXPENSE_CURRENCIES];
+  return [own, ...BATCH_EXPENSE_CURRENCIES.filter((c) => c !== own)];
 }
 
 function _batchExpenseNewRow(file) {
@@ -5605,7 +5603,7 @@ async function extractReceiptsFromEmailText() {
 // already-imported expense that has none yet.
 // The currencies a draft row can be switched to. Module scope so the option
 // markup is built from one list rather than re-declared per render.
-const DRAFT_CURRENCIES = ['CAD', 'USD', 'EUR', 'GBP', 'AUD', 'JPY', 'MXN', 'CHF', 'SEK', 'NOK', 'DKK'];
+const DRAFT_CURRENCIES = ['CAD', 'EUR', 'USD', 'MXN'];
 
 function _duplicateExpenseKey(date, amount, currency) {
   return `${date}|${Number(amount).toFixed(2)}|${String(currency || 'CAD').toUpperCase()}`;
@@ -6410,7 +6408,10 @@ function updateExpenseForm() {
 
   const native = getBookCurrencyCode(book);
   const curField = $('exp-cur');
-  if (curField) curField.value = localStorage.getItem('lastExpenseCurrency') || native;
+  if (curField) {
+    putCurrencyFirst(curField, native);
+    setSelectCurrency(curField, localStorage.getItem('lastExpenseCurrency') || native);
+  }
   if ($('exp-fx-inline-result')) $('exp-fx-inline-result').style.display = 'none';
   _expenseFxRate = null;
 

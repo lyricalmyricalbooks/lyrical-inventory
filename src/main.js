@@ -274,6 +274,8 @@ import {
   normalizeCurrencyCode,
   paymentSummary,
   roundCents,
+  putCurrencyFirst,
+  setSelectCurrency,
 } from './lib/money.js';
 import {
   buildPartPaymentNote,
@@ -1483,7 +1485,7 @@ function openEditBookModal(id) {
   $('nb-isbn').value = book.isbn || '—';
   $('nb-max').value = book.maxPrint ?? 100;
   $('nb-price').value = book.listPrice ?? 40;
-  $('nb-cur').value = book.currency || '€';
+  setSelectCurrency($('nb-cur'), book.currency || '€');
   $('nb-thresh').value = book.threshold ?? 10;
   $('nb-accent').value = book.accent || '#E8402A';
   onCustomAccentInput(book.accent || '#E8402A');
@@ -2416,7 +2418,10 @@ function openPaymentQRModal() {
   if (titleEl) titleEl.textContent = book.title;
 
   const curSelect = $('pqr-currency');
-  if (curSelect) curSelect.value = currencyToCode(book.currency) || 'CAD';
+  if (curSelect) {
+    putCurrencyFirst(curSelect, currencyToCode(book.currency));
+    setSelectCurrency(curSelect, currencyToCode(book.currency) || 'CAD');
+  }
 
   const overrideInput = $('pqr-override-price');
   if (overrideInput) {
@@ -4454,6 +4459,9 @@ function switchBook(bookId) {
     const book = BOOKS[bookId];
     if (label) label.textContent = book.title;
     if (dot) dot.style.background = book.accent;
+    // Put the book's own currency first in the price pickers.
+    putCurrencyFirst($('m-price-cur'), getBookCurrencyCode(book));
+    putCurrencyFirst($('exp-cur'), getBookCurrencyCode(book));
   }
   // Highlight active item in menu (buildBookSwitcher() also rebuilds this fresh
   // on next open, but keep it in sync in case the menu is still in the DOM).
@@ -11790,7 +11798,10 @@ function openCreateInvoice(storeId, editingId) {
 
   // set currency dropdown — default to book currency
   const bookCurCode = getBookCurrencyCode(book);
-  if ($('inv-currency')) $('inv-currency').value = bookCurCode;
+  if ($('inv-currency')) {
+    putCurrencyFirst($('inv-currency'), bookCurCode);
+    setSelectCurrency($('inv-currency'), bookCurCode);
+  }
   $('inv-discount-sym').textContent = getSym(bookCurCode);
 
   if (editingId) {
@@ -11834,7 +11845,7 @@ function openCreateInvoice(storeId, editingId) {
     $('inv-delete-btn').style.display = '';
     // restore invoice's own currency
     const invCurCode = normalizeCurrencyCode(inv.currency || bookCurCode, bookCurCode);
-    if ($('inv-currency')) $('inv-currency').value = invCurCode;
+    if ($('inv-currency')) setSelectCurrency($('inv-currency'), invCurCode);
     $('inv-discount-sym').textContent = getSym(invCurCode);
   } else {
     invoiceCtx = { editingId: null, ownerBookId, items: [] };
@@ -17071,7 +17082,7 @@ export function openEditExpense(type, bid, id) {
   };
 
   $('edit-exp-desc').value = exp.desc || '';
-  $('edit-exp-cur').value = exp.origCurrency || exp.currency || 'CAD';
+  setSelectCurrency($('edit-exp-cur'), exp.origCurrency || exp.currency || 'CAD');
   $('edit-exp-amount').value = exp.amountUnknown ? '' : (exp.origAmount != null ? exp.origAmount : (exp.amount || 0));
   $('edit-exp-date').value = exp.date || today();
   $('edit-exp-trip').value = exp.trip || '';
@@ -20636,7 +20647,7 @@ window.openPosBookModal = function (id) {
   $('pb-title').value = book?.title || '';
   $('pb-author').value = book?.author || '';
   $('pb-price').value = book?.listPrice ?? 40;
-  $('pb-cur').value = book?.currency || '€';
+  setSelectCurrency($('pb-cur'), book?.currency || '€');
   $('pb-accent').value = book?.accent || '#c8913a';
   $('pb-paylink').value = book?.stripeLink || book?.paymentLink || '';
   const removeBtn = $('pb-remove-btn');

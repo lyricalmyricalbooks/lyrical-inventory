@@ -40,7 +40,7 @@ import {
   setAsideLabelFromReview,
 } from './shipping.js';
 
-const CURRENCIES = ['CAD', 'USD', 'EUR', 'GBP', 'AUD', 'JPY', 'MXN', 'CHF', 'SEK', 'NOK', 'DKK'];
+const CURRENCIES = ['CAD', 'EUR', 'USD', 'MXN'];
 /** Modals the inbox steps aside for; it comes back when they close. */
 const HAND_OFF_MODALS = ['edit-expense', 'recover-website-order'];
 
