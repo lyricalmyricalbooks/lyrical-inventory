@@ -194,14 +194,19 @@ describe('one-tap actions on to-do items', () => {
     expect(signal.items[0].quick).toEqual({ label: 'Mark as sent', kind: 'action', tab: 'mark-shipped', bookId: 'hound', num: '#AB-1' });
   });
 
-  it('offers to file the ready receipts, and to reverse refunded sales, in one tap', () => {
+  it('offers to reverse refunded sales in one tap, and sends receipts to the review inbox', () => {
     const signals = run({ receiptsWaiting: 3, receiptsReady: 2, refundsToReverse: 1 });
-    expect(signals.find(s => s.id === 'orders-receipts').quick).toMatchObject({ label: 'File 2 now', tab: 'file-ready-receipts' });
     expect(signals.find(s => s.id === 'orders-reverse').quick).toMatchObject({ label: 'Reverse now', tab: 'reverse-sales' });
+    // It used to say "File 2 now" while only opening a table; filing is now an explicit press in the inbox.
+    const receipts = signals.find(s => s.id === 'orders-receipts');
+    expect(receipts.quick).toBeNull();
+    expect(receipts.fix).toMatchObject({ kind: 'action', tab: 'review-inbox', num: 'receipt', label: 'Review receipts' });
   });
 
-  it('offers no filing button when nothing is ready', () => {
-    expect(run({ receiptsWaiting: 3, receiptsReady: 0 }).find(s => s.id === 'orders-receipts').quick).toBeNull();
+  it('sends labels to the review inbox too', () => {
+    const labels = run({ labelsToMatch: 2 }).find(s => s.id === 'orders-labels');
+    expect(labels.label).toBe('2 shipping labels need your review');
+    expect(labels.fix).toMatchObject({ kind: 'action', tab: 'review-inbox', num: 'label' });
   });
 });
 

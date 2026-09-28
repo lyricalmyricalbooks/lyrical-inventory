@@ -51,28 +51,42 @@ describe('shipping label review', () => {
       .toContain('No labels need a postage amount');
   });
 
-  it('takes an email alert to the matching amount task', () => {
+  it('opens the review inbox on the labels from an email alert, and clears the alert cards', () => {
+    const visited = [];
+    const { openShippingReconciliationFromAlert } = buildHarness({
+      names: ['openShippingReconciliationFromAlert'],
+      deps: {
+        dismissAppAlert: id => visited.push(id),
+        openReviewInbox: opts => visited.push(`inbox:${opts.filter}`),
+      },
+      returns: '{ openShippingReconciliationFromAlert }',
+    });
+
+    openShippingReconciliationFromAlert(null, 'email');
+    expect(visited).toEqual(['shippo-labels', 'postage-sweep-your-email', 'inbox:label']);
+  });
+
+  it('still reaches the full Tax Centre worklist, and lands on its first task', () => {
     const dom = reviewDom();
     dom.querySelector('.shipping-reconciliation').innerHTML +=
       '<div class="shipping-amount-row" data-source="canadapost"><button>Canada Post task</button></div>' +
       '<div class="shipping-amount-row" data-source="email"><button>Email task</button></div>';
     HTMLElement.prototype.scrollIntoView = () => {};
     const visited = [];
-    const { openShippingReconciliationFromAlert } = buildHarness({
-      names: ['openShippingReconciliationFromAlert'],
+    const { openShippingWorklistPanel } = buildHarness({
+      names: ['openShippingWorklistPanel'],
       deps: {
         document: dom,
-        dismissAppAlert: id => visited.push(id),
         switchTab: tab => visited.push(tab),
         switchTaxCenterSubTab: tab => visited.push(tab),
         openShippingReconciliation: () => visited.push('review'),
       },
-      returns: '{ openShippingReconciliationFromAlert }',
+      returns: '{ openShippingWorklistPanel }',
     });
 
-    openShippingReconciliationFromAlert(null, 'email');
-    expect(visited).toEqual(['shippo-labels', 'postage-sweep-your-email', 'taxcenter', 'integrations', 'review']);
-    expect(dom.activeElement.textContent).toBe('Email task');
+    openShippingWorklistPanel();
+    expect(visited).toEqual(['taxcenter', 'integrations', 'review']);
+    expect(dom.activeElement.textContent).toBe('Canada Post task');
   });
 
   it('discards only the selected imported expense and remembers its ref across scans', async () => {

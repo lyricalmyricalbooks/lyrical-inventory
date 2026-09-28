@@ -64,6 +64,7 @@ import {
 } from '../lib/receipt-drafts.js';
 import { dismissAppAlert, pushAppAlert } from '../lib/app-alert.js';
 import { describeReceiptSweep, isReadyToFile } from '../lib/receipt-ready.js';
+import { openReviewInbox } from './review-inbox.js';
 import { filterDismissedReceipts, rememberDismissedReceipt } from '../lib/receipt-dismissals.js';
 import {
   integrationBackoffMs,
@@ -2520,6 +2521,56 @@ function receiptInboxCounts() {
     waiting: _emailInboxItems.length + sweepDrafts + persistedPending,
     ready: (_sweepReadyRefs || []).length,
   };
+}
+
+// ── The review inbox's view of the receipt queue ───────────────────────────
+//
+// The review inbox (features/review-inbox.js) shows one receipt at a time
+// instead of the table. These four are its only way in: they read and change
+// the same drafts the table does, through the same filing routine, so a receipt
+// reviewed there and one reviewed in the table can never end up different.
+
+/** The drafted receipts waiting for a person, brought up to date, plus the ledger's duplicate check. */
+function reviewableReceiptDrafts({ refresh = true } = {}) {
+  if (!_emailReceiptDrafts.length) _emailReceiptDrafts = readPersistedEmailReceiptDrafts();
+  // Merging the add-on's queue rewrites saved drafts, so the frequent, read-only
+  // callers (the landing page's counts) skip it and only the inbox itself asks.
+  if (refresh) loadGmailInboxDrafts();
+  _emailReceiptDrafts = filterDismissedReceipts(_filterAlreadyImportedDrafts(_emailReceiptDrafts));
+  _emailReceiptDrafts = _emailReceiptDrafts.filter(d => d._inboxId || d._fromSweep);
+  const dupIndex = _buildDuplicateExpenseIndex();
+  return {
+    drafts: _emailReceiptDrafts.slice(),
+    isDuplicate: (draft) => _isLikelyDuplicateExpense(draft, dupIndex),
+  };
+}
+
+/** Change one field of a drafted receipt, the way editing it in the table would. */
+function editReviewedReceipt(draft, field, value) {
+  if (!draft || !_emailReceiptDrafts.includes(draft)) return false;
+  let v = value;
+  if (field === 'amount') v = Number(v) || 0;
+  if (field === 'currency') v = String(v).toUpperCase();
+  if (field === 'date') v = normalizeReceiptDate(v) || v;
+  draft[field] = v;
+  if (field === 'amount') draft.amountUnknown = needsReceiptAmount(draft);
+  writePersistedEmailReceiptDrafts(_emailReceiptDrafts);
+  return true;
+}
+
+/** File drafted receipts into the books. Returns what happened, or null if none of them is still waiting. */
+async function fileReviewedReceipts(drafts) {
+  const waiting = (drafts || []).filter(draft => _emailReceiptDrafts.includes(draft));
+  if (!waiting.length) return null;
+  return _fileReceiptDrafts(waiting, { fallbackCat: 'Other' });
+}
+
+/** Discard one drafted receipt for good. */
+async function discardReviewedReceipt(draft) {
+  const i = _emailReceiptDrafts.indexOf(draft);
+  if (i < 0) return false;
+  await dismissEmailReceiptDraft(i);
+  return true;
 }
 
 function updateEmailInboxBadge() {
@@ -6148,15 +6199,14 @@ function _receiptSweepQuery(sinceMs) {
   return preset.replace('newer_than:30d', `after:${day}`);
 }
 
-/** Take the owner straight to the now-populated review table from the card. */
+/** Take the owner straight to the review inbox, on the receipts, from the card. */
 function openReceiptSweepReviewFromAlert(event) {
   if (event) {
     if (typeof event.stopPropagation === 'function') event.stopPropagation();
     if (typeof event.preventDefault === 'function') event.preventDefault();
   }
   dismissAppAlert('receipt-sweep');
-  openEmailReceiptImportModal({ selectReadyOnly: true, review: true });
-  _focusEmailReceiptResults();
+  openReviewInbox({ filter: 'receipt' });
 }
 
 /**
@@ -6209,24 +6259,19 @@ function _showReceiptSweepAlert(foundDrafts) {
     icon: '🧾',
     title: said.title,
     detail: said.detail,
-    actionLabel: 'Review receipts',
+    actionLabel: `Review ${foundDrafts.length} receipt${foundDrafts.length === 1 ? '' : 's'}`,
     action: 'openReceiptSweepReviewFromAlert(event)',
   });
 }
 
 /**
- * Takes the owner straight to the review page where they can review details,
- * with complete ready-to-file receipts pre-selected, and decide whether to
- * put them into the ledger.
+ * The old one-tap "File it" on the alert. It never filed anything — it opened
+ * the review table with the complete receipts ticked — so the button promised
+ * more than it did. It now opens the review inbox, where filing is an explicit
+ * press on a receipt the owner can see.
  */
 function fileReadyReceiptsFromAlert(event) {
-  if (event) {
-    if (typeof event.stopPropagation === 'function') event.stopPropagation();
-    if (typeof event.preventDefault === 'function') event.preventDefault();
-  }
-  dismissAppAlert('receipt-sweep');
-  openEmailReceiptImportModal({ selectReadyOnly: true, review: true });
-  _focusEmailReceiptResults();
+  openReceiptSweepReviewFromAlert(event);
 }
 
 /**
@@ -6864,6 +6909,10 @@ function calcExpenseFx() {
 }
 
 export {
+  reviewableReceiptDrafts,
+  editReviewedReceipt,
+  fileReviewedReceipts,
+  discardReviewedReceipt,
   calcExpenseFx,
   loadReceiptFileForScan,
   onExpenseCurrencyChange,

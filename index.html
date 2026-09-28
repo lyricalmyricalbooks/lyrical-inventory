@@ -6223,6 +6223,35 @@
 
 </div>
 
+<!-- Review inbox: the receipts and shipping labels the app found on its own,
+     one at a time. Filled by features/review-inbox.js. -->
+<div class="overlay" id="m-review-inbox" style="display:none;"><div class="modal ri-modal" role="dialog" aria-modal="true" aria-labelledby="ri-title">
+  <div class="modal-title">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">📥</span>
+      <span id="ri-title">Review inbox</span>
+    </div>
+    <button type="button" class="modal-close-btn" data-ri-action="close" aria-label="Close review inbox">✕</button>
+  </div>
+  <p class="field-note ri-intro">The app found these on its own and stopped before guessing. Go through them one at a time. Nothing goes into your books until you press a button.</p>
+  <p class="ri-summary" id="ri-summary" role="status" aria-live="polite"></p>
+  <div class="ri-filters" role="group" aria-label="Show">
+    <button type="button" class="ri-filter is-active" data-ri-filter="all" aria-pressed="true">All <span class="ri-count">0</span></button>
+    <button type="button" class="ri-filter" data-ri-filter="receipt" aria-pressed="false">🧾 Receipts <span class="ri-count">0</span></button>
+    <button type="button" class="ri-filter" data-ri-filter="label" aria-pressed="false">🏷️ Labels <span class="ri-count">0</span></button>
+  </div>
+  <div class="ri-shell" data-view="list">
+    <ul class="ri-list" id="ri-list" aria-label="Waiting for review"></ul>
+    <div class="ri-detail" id="ri-detail"></div>
+  </div>
+  <div class="modal-footer ri-footer">
+    <button type="button" class="btn ghost sm" data-ri-action="fullTable">Open the full receipts table</button>
+    <button type="button" class="btn ghost sm" data-ri-action="worklist">Open the shipping worklist</button>
+    <button type="button" class="btn gold sm" id="ri-file-ready" data-ri-action="fileAllReady" hidden>File all ready receipts</button>
+    <button type="button" class="btn sm" data-ri-action="close">Done</button>
+  </div>
+</div></div>
+
 <!-- Every notification the app has raised, newest first. Kept OUTSIDE the
      alert region above: that region lets clicks pass through it, which made
      every button in this window dead. Filled by

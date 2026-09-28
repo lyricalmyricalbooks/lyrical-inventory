@@ -181,7 +181,6 @@ import {
   fileReadyReceiptsFromAlert,
   startReceiptEmailSweep,
   sweepReceiptEmails,
-  receiptInboxCounts,
 } from './features/receipts.js';
 import {
   appendCurrencyLog,
@@ -647,7 +646,6 @@ import {
   batchVerifyLedgerAddresses,
   applyLedgerAddressCorrections,
   ordersWithLabels,
-  reconciliationBacklog,
 } from './features/shipping.js';
 import {
   ocList,
@@ -860,6 +858,13 @@ import {
   _custFallbackCopy,
   exportCustomersCSV,
 } from './features/customers.js';
+import {
+  openReviewInbox,
+  renderReviewInbox,
+  reviewInboxIsOpen,
+  reviewQueueSnapshot,
+} from './features/review-inbox.js';
+import { reviewTaskStillOpen } from './lib/review-queue.js';
 import {
   clearSimulatedSheet,
   renderMockSpreadsheet,
@@ -5794,16 +5799,18 @@ function automationTodoInput() {
     Object.entries(states).forEach(([bookId, st]) => (st?.hist || []).forEach(entry => rows.push({ bookId, entry })));
     return ordersWithLabels(unshippedOrders(rows).map(o => o.num));
   }, []);
-  const receipts = safe(() => receiptInboxCounts(), { waiting: 0, ready: 0 });
+  // The same list the review inbox shows, so a count here and the inbox itself
+  // can never disagree about what is waiting.
+  const review = safe(() => reviewQueueSnapshot().summary, { receipts: 0, labels: 0, ready: 0 });
   return {
     websiteOrdersToReview: safe(() => bigCartelOrdersToReview(), 0),
     labelledOrderNums,
     cardPaymentsToMatch,
     refundsToReverse,
     storeReversals,
-    receiptsWaiting: receipts.waiting,
-    receiptsReady: receipts.ready,
-    labelsToMatch: safe(() => reconciliationBacklog(), 0),
+    receiptsWaiting: review.receipts,
+    receiptsReady: safe(() => reviewQueueSnapshot().items.filter(i => i.kind === 'receipt' && i.state === 'ready').length, 0),
+    labelsToMatch: review.labels,
     syncConflicts: safe(() => listConflicts(syncConflictStorage()).length, 0),
   };
 }
@@ -5994,7 +6001,7 @@ document.addEventListener('click', (event) => {
   if (fix === 'action') runTodoAction(fixTab, { bookId: fixBook, num: fixNum });
 });
 
-function refreshAttentionSurfaces() {
+export function refreshAttentionSurfaces() {
   renderTodoTab();
   renderOverviewRail();
 }
@@ -6057,18 +6064,13 @@ function confirmPrintedQrArrived(num) {
 
 function runTodoAction(name, { bookId = '', num = '' } = {}) {
   if (name === 'mark-shipped') { markOrderSentFromTodo(bookId, num); return; }
-  if (name === 'file-ready-receipts') {
-    Promise.resolve(fileReadyReceiptsFromAlert()).finally(refreshAttentionSurfaces);
-    return;
-  }
-  if (name === 'receipt-inbox') { openEmailReceiptImportModal(); return; }
+  // Receipts and labels the app found are reviewed one at a time in the review
+  // inbox; `num` says which kind to open it on.
+  if (name === 'review-inbox') { openReviewInbox({ filter: num === 'receipt' || num === 'label' ? num : 'all' }); return; }
+  if (name === 'file-ready-receipts' || name === 'receipt-inbox') { openReviewInbox({ filter: 'receipt' }); return; }
   if (name === 'qr-arrived') { confirmPrintedQrArrived(num); return; }
   if (name === 'sync-conflicts') { openSyncConflicts(); return; }
-  if (name === 'shipping-worklist') {
-    switchTab('taxcenter');
-    setTimeout(() => { switchTaxCenterSubTab('integrations'); openShippingReconciliation(); }, 50);
-    return;
-  }
+  if (name === 'shipping-worklist') { openReviewInbox({ filter: 'label' }); return; }
   if (name === 'reverse-sales') {
     const refunds = readPendingRefundReversals();
     let store = [];
@@ -6107,6 +6109,20 @@ function notificationHtml(sig) {
         <div class="notif-detail">${escapeHtml(sig.detail || '')}</div>
         ${extras.items}
         ${action || extras.quick ? `<div class="notif-meta">${extras.quick}${action}</div>` : ''}
+      </div>
+    </div>`;
+}
+
+/** The landing page's card for everything waiting in the review inbox. */
+function reviewCardHtml(review) {
+  const tone = review.needsYou ? 'amber' : 'blue';
+  return `<div class="notif-item tone-${tone} notif-review">
+      <span class="notif-ico" aria-hidden="true">📥</span>
+      <div class="notif-body">
+        <div class="notif-source">Review inbox</div>
+        <div class="notif-title">${escapeHtml(review.headline)}</div>
+        <div class="notif-detail">${escapeHtml(review.detail)} Nothing goes into your books until you press a button.</div>
+        <div class="notif-meta"><button type="button" class="btn gold sm" onclick="openReviewInbox()">Start reviewing →</button></div>
       </div>
     </div>`;
 }
@@ -6197,9 +6213,13 @@ function renderOverviewRail() {
   if (notifHost) {
     const urgent = result.signals.filter(isUrgent);
     const shown = urgent.slice(0, RAIL_NOTIFICATION_LIMIT);
-    notifHost.innerHTML = shown.length
-      ? shown.map(notificationHtml).join('')
-      : `<div class="empty-state rail-empty">
+    // Receipts and labels the app found are tasks too. They used to sit below
+    // this card, so a screen could say "Nothing needs you" directly above a
+    // receipt waiting to be filed. Now they are counted here, and led with.
+    const review = reviewQueueSnapshot().summary;
+    const attentionCount = urgent.length + (review.total ? 1 : 0);
+    notifHost.innerHTML = (review.total ? reviewCardHtml(review) : '') + shown.map(notificationHtml).join('');
+    if (!review.total && !shown.length) notifHost.innerHTML = `<div class="empty-state rail-empty">
            <div class="e-icon" aria-hidden="true">✓</div>
            <strong>Nothing needs you right now</strong>
            <span>Stock, money owed and your connections all look healthy.</span>
@@ -6207,8 +6227,8 @@ function renderOverviewRail() {
 
     const countEl = $('all-notif-count');
     if (countEl) {
-      countEl.textContent = String(urgent.length);
-      countEl.hidden = urgent.length === 0;
+      countEl.textContent = String(attentionCount);
+      countEl.hidden = attentionCount === 0;
     }
     const moreEl = $('all-notif-more');
     if (moreEl) {
@@ -6219,8 +6239,8 @@ function renderOverviewRail() {
     // Permanent live region — only its TEXT changes, so screen readers keep it.
     const statusEl = $('all-notif-status');
     if (statusEl) {
-      statusEl.textContent = urgent.length
-        ? `${urgent.length} ${urgent.length === 1 ? 'thing needs' : 'things need'} your attention.`
+      statusEl.textContent = attentionCount
+        ? `${attentionCount} ${attentionCount === 1 ? 'thing needs' : 'things need'} your attention.`
         : 'Nothing needs your attention.';
     }
   }
@@ -6265,15 +6285,39 @@ function renderOverviewRail() {
 
 const RAIL_LATEST_LIMIT = 3;
 
-function notificationLogItemHtml(item) {
+/**
+ * What a logged message about receipts or labels should offer now.
+ *
+ * A message is a record of a moment ago; the work behind it may be finished, or
+ * have grown. So its button is rebuilt from what is waiting right now: a
+ * finished task says so instead of offering a button that leads nowhere, and an
+ * open one always says how many are left and opens the review inbox.
+ */
+function reviewTaskForNotification(item, review) {
+  const open = reviewTaskStillOpen(item.kind, review);
+  if (open === null) return null;
+  if (!open) return { done: true };
+  const isReceipt = item.kind === 'receipt-sweep' || item.kind === 'todo:orders-receipts';
+  const n = isReceipt ? review.receipts : review.labels;
+  const noun = isReceipt ? 'receipt' : 'label';
+  return { done: false, label: `Review ${n} ${noun}${n === 1 ? '' : 's'}`, action: `openReviewInbox({filter:'${noun}'})` };
+}
+
+function notificationLogItemHtml(item, review = { receipts: 0, labels: 0 }) {
   const tone = item.tone === 'pending' || item.tone === 'warn' ? 'amber' : item.tone === 'failed' ? 'red' : 'blue';
   const when = webScanRelativeTime(new Date(item.at).toISOString()) || new Date(item.at).toLocaleString();
+  const task = reviewTaskForNotification(item, review);
   // The action is written by the app itself (an alert's own handler), never by
   // anything a publisher typed; it closes the panel before it runs.
-  const action = item.action && item.actionLabel
+  let action = item.action && item.actionLabel
     ? `<button type="button" class="notif-action" onclick="reviewNotification('${escapeHtml(item.kind)}');closeM('notifications');${escapeHtml(item.action)}">${escapeHtml(item.actionLabel)} →</button>`
     : '';
-  return `<div class="notif-item tone-${tone}${item.read ? '' : ' is-unread'}">
+  if (task) {
+    action = task.done
+      ? '<span class="notif-done"><span aria-hidden="true">✓</span> All reviewed. Nothing left to do here.</span>'
+      : `<button type="button" class="notif-action" onclick="reviewNotification('${escapeHtml(item.kind)}');closeM('notifications');${escapeHtml(task.action)}">${escapeHtml(task.label)} →</button>`;
+  }
+  return `<div class="notif-item tone-${task?.done ? 'blue' : tone}${item.read || task?.done ? '' : ' is-unread'}${task?.done ? ' is-done' : ''}">
       <span class="notif-ico" aria-hidden="true">${escapeHtml(item.icon || '🔔')}</span>
       <div class="notif-body">
         <div class="notif-source">From ${escapeHtml(notificationSource(item))}</div>
@@ -6304,13 +6348,15 @@ function renderRailLatestNotifications() {
   if (!wrap || !host) return;
   const latest = readNotificationLog().slice(0, RAIL_LATEST_LIMIT);
   wrap.hidden = !latest.length;
-  host.innerHTML = latest.map(notificationLogItemHtml).join('');
+  const review = reviewQueueSnapshot().summary;
+  host.innerHTML = latest.map(item => notificationLogItemHtml(item, review)).join('');
 }
 
 function renderNotificationsPanel() {
   const host = $('notif-log-list');
   if (!host) return;
   const list = readNotificationLog();
+  const review = reviewQueueSnapshot().summary;
   if (!list.length) {
     host.innerHTML = `<div class="empty-state rail-empty">
         <div class="e-icon" aria-hidden="true">🔔</div>
@@ -6324,7 +6370,7 @@ function renderNotificationsPanel() {
     const day = notificationDayLabel(item.at);
     const head = day !== lastDay ? `<div class="notif-log-day">${escapeHtml(day)}</div>` : '';
     lastDay = day;
-    return head + notificationLogItemHtml(item);
+    return head + notificationLogItemHtml(item, review);
   }).join('');
 }
 
@@ -6355,11 +6401,14 @@ async function clearNotificationHistory() {
 }
 
 window.openNotificationsPanel = openNotificationsPanel;
+window.openReviewInbox = openReviewInbox;
 window.clearNotificationHistory = clearNotificationHistory;
 window.onNotificationLogged = () => {
   renderNotificationBell();
   renderRailLatestNotifications();
   if ($('m-notifications')?.style.display === 'flex') renderNotificationsPanel();
+  // New finds can arrive while the inbox is open; keep its list honest.
+  if (reviewInboxIsOpen()) renderReviewInbox();
 };
 
 /** One row of the To-do tab. */
