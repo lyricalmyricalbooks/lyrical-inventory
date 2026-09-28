@@ -190,7 +190,7 @@ async function loadReceiptFolderHandle() {
   });
 }
 
-async function setupReceiptFolder() {
+async function setupReceiptFolder({ reclaim = true } = {}) {
   if (!('showDirectoryPicker' in window)) {
     showToast('Folder selection is not supported in this browser', 'warn');
     return null;
@@ -200,6 +200,9 @@ async function setupReceiptFolder() {
     await saveReceiptFolderHandle(dirHandle);
     renderTaxCenter();
     showToast('✓ Receipt folder connected');
+    if (reclaim) {
+      reclaimCloudReceipts({ interactive: false }).catch(e => console.warn('Receipt folder sync failed', e));
+    }
     return dirHandle;
   } catch (e) {
     if (e?.name !== 'AbortError') showToast('Could not save folder', 'err');
@@ -395,6 +398,7 @@ async function authorizeReceiptFolder() {
     if (await handle.requestPermission({ mode: 'readwrite' }) === 'granted') {
       renderTaxCenter();
       showToast('✓ Folder access authorized');
+      reclaimCloudReceipts({ interactive: false }).catch(e => console.warn('Receipt folder sync failed', e));
     }
   } catch (e) {
     showToast('⚠ Authorization failed', 'err');
@@ -1290,7 +1294,7 @@ async function reclaimCloudReceipts({ interactive = false } = {}) {
       { title: 'Move receipts to your folder', okLabel: 'Choose folder…', cancelLabel: 'Cancel' }
     );
     if (!connect) return { moved: 0, failed: 0 };
-    dirHandle = await setupReceiptFolder();
+    dirHandle = await setupReceiptFolder({ reclaim: false });
     if (!dirHandle) return { moved: 0, failed: 0 };
   }
 
