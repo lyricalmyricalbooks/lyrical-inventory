@@ -852,6 +852,10 @@ function renderShippingReconciliationWorklist() {
         ? [expense.postageEmailFrom, expense.postageEmailSubject].filter(Boolean).map(escapeHtml).join(' · ')
         : '';
       return `<div class="shipping-amount-row" data-source="${escapeHtml(expense.postageSource || '')}">
+        <button class="shipping-review-discard" type="button" data-ref="${escapeHtml(expense.ref)}"
+          onclick="discardImportedPostageExpense(this.dataset.ref)"
+          aria-label="Discard ${escapeHtml(expense.desc || 'shipping label')} from Shipping &amp; Postage"
+          title="Discard this imported label and expense">✕</button>
         <div class="shipping-reconciliation-copy">
           <strong>${escapeHtml(expense.desc || 'Shipping label')}</strong>
           <span>Found in: ${source}</span>
@@ -922,6 +926,47 @@ function openPostageAmountEditor(ref) {
     amount.value = '';
     amount.focus();
   }
+}
+
+function knownImportedPostageRefs() {
+  return new Set([
+    ...(TAX_CENTER.businessExpenses || []).map(expense => cpText(expense?.ref)),
+    ...(TAX_CENTER.discardedPostageRefs || []),
+  ].filter(Boolean));
+}
+
+async function discardImportedPostageExpense(ref) {
+  const expense = (TAX_CENTER.businessExpenses || []).find(item =>
+    String(item.ref) === String(ref) && needsAmountAttention(item));
+  if (!expense) {
+    renderShippingReconciliationWorklist();
+    showToast('This label is no longer waiting for review.', 'warn');
+    return;
+  }
+  const accepted = await confirmDialog(
+    `Discard "${expense.desc || 'shipping label'}"?\n\nThis removes its expense from Shipping & Postage and prevents this label from being imported again. Tracking already saved on an order will remain.`,
+    { title: 'Discard imported label', okLabel: 'Discard label', danger: true },
+  );
+  if (!accepted) return;
+
+  const priorExpenses = TAX_CENTER.businessExpenses;
+  const priorDiscarded = TAX_CENTER.discardedPostageRefs;
+  TAX_CENTER.businessExpenses = priorExpenses.filter(item => item !== expense);
+  TAX_CENTER.discardedPostageRefs = [...new Set([...(priorDiscarded || []), String(expense.ref)])];
+  try {
+    await saveTaxCenter({ rethrow: true });
+  } catch (error) {
+    TAX_CENTER.businessExpenses = priorExpenses;
+    TAX_CENTER.discardedPostageRefs = priorDiscarded;
+    console.error('Imported postage discard failed', error);
+    showToast('Could not discard that label. Please try again.', 'err');
+    return;
+  }
+  dismissAppAlert(`postage-sweep-${expense.postageSource === 'email' ? 'your-email' : 'canada-post'}`);
+  renderTaxCenter();
+  renderShippingAnalysisHub();
+  renderPostageMatchWorklist();
+  showToast('Imported label discarded and removed from Shipping & Postage', 'ok');
 }
 
 function closeShippingReconciliation() {
@@ -1503,8 +1548,7 @@ async function sweepCanadaPostShipments({ force = false, pins = [] } = {}) {
       }), credentials, isTest).catch(() => null);
       cpShipmentIdsFrom(one).forEach(id => { if (!ids.includes(id)) ids.push(id); });
     }
-    const known = new Set((TAX_CENTER.businessExpenses || [])
-      .map(expense => cpText(expense?.ref)).filter(Boolean));
+    const known = knownImportedPostageRefs();
     const knownOrders = getShippingReconciliationOrders();
 
     let filed = 0;
@@ -1533,7 +1577,7 @@ async function sweepCanadaPostShipments({ force = false, pins = [] } = {}) {
       );
 
       const ref = postageCandidateRef(candidate);
-      if (!ref || known.has(ref)) continue;
+      if (!ref || known.has(ref) || TAX_CENTER.discardedPostageRefs?.includes(ref)) continue;
       known.add(ref);
       if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
 
@@ -1872,8 +1916,7 @@ async function sweepShippingEmails({ force = false, pins = [] } = {}) {
     }
 
     const bodies = await gmailJson('getEmailContents', `ids=${encodeURIComponent(ids.join(','))}`);
-    const known = new Set((TAX_CENTER.businessExpenses || [])
-      .map(expense => cpText(expense?.ref)).filter(Boolean));
+    const known = knownImportedPostageRefs();
     const knownOrders = getShippingReconciliationOrders();
 
     let filed = 0;
@@ -11032,6 +11075,7 @@ export {
   linkConfidentShippingMatchesNow,
   openShippingReconciliationFromAlert,
   openPostageAmountEditor,
+  discardImportedPostageExpense,
   refreshShippoLabelsIfDue,
   startShippoLabelWatch,
   sweepCanadaPostShipments,
