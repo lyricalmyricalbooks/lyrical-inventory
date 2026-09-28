@@ -112,7 +112,9 @@ describe('the worklist shows postage from anywhere, not only Shippo', () => {
 
   it('is shown beside the review count rather than left implicit', () => {
     expect(appSource).toContain('needs an amount');
-    expect(appSource).toContain('(TAX_CENTER.businessExpenses || []).filter(needsAmountAttention).length');
+    expect(appSource).toContain('filter(needsAmountAttention)');
+    expect(indexContent).toContain('id="shipping-amount-review-list"');
+    expect(indexContent).toContain('Postage amounts to enter');
   });
 });
 

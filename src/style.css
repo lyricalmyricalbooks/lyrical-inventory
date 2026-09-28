@@ -17486,6 +17486,50 @@ button[onclick="refreshUmamiStats()"]:active {
   gap: 8px;
 }
 
+.shipping-review-heading {
+  margin: 14px 0 8px;
+  color: var(--content-primary);
+  font-size: var(--text-sm);
+}
+
+.shipping-review-order-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+  padding-top: 8px;
+  border-top: var(--stroke-hair) solid var(--border-subtle);
+}
+
+.shipping-review-help,
+.shipping-review-clear {
+  color: var(--content-muted);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  margin: 0 0 8px;
+}
+
+.shipping-amount-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px;
+  background: var(--surface-sunken);
+  border: var(--stroke-hair) solid var(--border-subtle);
+  border-radius: var(--r2, 10px);
+}
+
+.shipping-amount-row .shipping-reconciliation-copy { flex: 1 1 230px; }
+.shipping-amount-row .btn { min-height: 44px; }
+.shipping-amount-row .shipping-reconciliation-hint {
+  white-space: normal;
+  overflow: visible;
+}
+
 /* Two blocks: the postage on the left, the decision on the right. The
    decision block owns its own minimum width, so the select and the button
    can never ride over the amount the way a four-column template let them. */
