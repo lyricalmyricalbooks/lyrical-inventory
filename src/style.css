@@ -17512,12 +17512,13 @@ button[onclick="refreshUmamiStats()"]:active {
 }
 
 .shipping-amount-row {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 12px;
-  padding: 12px;
+  padding: 12px 60px 12px 12px;
   background: var(--surface-sunken);
   border: var(--stroke-hair) solid var(--border-subtle);
   border-radius: var(--r2, 10px);
@@ -17525,6 +17526,24 @@ button[onclick="refreshUmamiStats()"]:active {
 
 .shipping-amount-row .shipping-reconciliation-copy { flex: 1 1 230px; }
 .shipping-amount-row .btn { min-height: 44px; }
+.shipping-review-discard {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: var(--r2, 10px);
+  background: transparent;
+  color: var(--content-muted);
+  cursor: pointer;
+  font-size: var(--text-base);
+}
+.shipping-review-discard:hover,
+.shipping-review-discard:focus-visible {
+  background: var(--surface-raised);
+  color: var(--content-primary);
+}
 .shipping-amount-row .shipping-reconciliation-hint {
   white-space: normal;
   overflow: visible;

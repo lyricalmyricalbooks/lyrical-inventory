@@ -350,3 +350,17 @@ describe('the carrier email sweep, for what Canada Post cannot be asked about', 
     expect(start).toContain('if (_emailSweepStarted');
   });
 });
+
+it('keeps a discarded tracking ref out of both automatic intake paths', () => {
+  const canadaPostSweep = appSource.slice(
+    appSource.indexOf('async function sweepCanadaPostShipments'),
+    appSource.indexOf('function startCanadaPostSweep'),
+  );
+  const emailSweep = appSource.slice(
+    appSource.indexOf('async function sweepShippingEmails'),
+    appSource.indexOf('function startShippingEmailSweep'),
+  );
+  expect(canadaPostSweep).toContain('knownImportedPostageRefs()');
+  expect(emailSweep).toContain('knownImportedPostageRefs()');
+  expect(canadaPostSweep).toContain('TAX_CENTER.discardedPostageRefs?.includes(ref)');
+});
