@@ -2112,7 +2112,7 @@ function _filterAlreadyImportedDrafts(drafts) {
   });
 }
 
-let _emailReceiptDrafts = readPersistedEmailReceiptDrafts();
+let _emailReceiptDrafts = [];
 let _activeEmailImportTab = 'gmail';
 let _gmailEmailsFetched = [];
 let _gmailSearchMeta = null;

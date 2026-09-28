@@ -43,10 +43,14 @@ function definedTokens() {
   }
   // …or set at runtime from JS, or on an element's own style attribute.
   const jsDir = path.join(root, 'src', 'features');
+  const libDir = path.join(root, 'src', 'lib');
   const jsPaths = [
     'src/main.js',
     ...(existsSync(jsDir)
       ? readdirSync(jsDir).filter(f => f.endsWith('.js')).map(f => `src/features/${f}`)
+      : []),
+    ...(existsSync(libDir)
+      ? readdirSync(libDir).filter(f => f.endsWith('.js')).map(f => `src/lib/${f}`)
       : []),
   ];
   for (const f of [...jsPaths, 'index.html']) {
