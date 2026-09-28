@@ -208,7 +208,7 @@ import {
   refreshUnsavedMarkers,
   validateFields,
 } from './lib/modal.js';
-import { dismissAppAlert, pushAppAlert } from './lib/app-alert.js';
+import { dismissAppAlert, markAppAlertReviewed, pushAppAlert } from './lib/app-alert.js';
 import { booksInDescription, saleCodes, splitSalePlan } from './lib/sale-codes.js';
 import { describeMarketDay, latestMarketDay, summariseMarketDay } from './lib/market-day.js';
 import { checkMarketCards, describeMarketCards } from './lib/market-card-check.js';
@@ -216,10 +216,12 @@ import { unshippedOrders } from './lib/order-followups.js';
 import {
   clearNotificationLog,
   logNotification,
-  markNotificationsRead,
+  markInformationalNotificationsRead,
+  markNotificationKindRead,
   newlyUrgent,
   dropFalseStockNotifications,
   notificationDayLabel,
+  notificationSource,
   readSeenUrgent,
   writeSeenUrgent,
   readNotificationLog,
@@ -6100,6 +6102,7 @@ function notificationHtml(sig) {
   return `<div class="notif-item tone-${tone}">
       <span class="notif-ico" aria-hidden="true">${escapeHtml(sig.icon || '')}</span>
       <div class="notif-body">
+        <div class="notif-source">From To-do list</div>
         <div class="notif-title">${escapeHtml(sig.label || '')}</div>
         <div class="notif-detail">${escapeHtml(sig.detail || '')}</div>
         ${extras.items}
@@ -6262,20 +6265,21 @@ function renderOverviewRail() {
 
 const RAIL_LATEST_LIMIT = 3;
 
-function notificationLogItemHtml(item, { compact = false } = {}) {
+function notificationLogItemHtml(item) {
   const tone = item.tone === 'pending' || item.tone === 'warn' ? 'amber' : item.tone === 'failed' ? 'red' : 'blue';
   const when = webScanRelativeTime(new Date(item.at).toISOString()) || new Date(item.at).toLocaleString();
   // The action is written by the app itself (an alert's own handler), never by
   // anything a publisher typed; it closes the panel before it runs.
   const action = item.action && item.actionLabel
-    ? `<button type="button" class="notif-action" onclick="closeM('notifications');${escapeHtml(item.action)}">${escapeHtml(item.actionLabel)} →</button>`
+    ? `<button type="button" class="notif-action" onclick="reviewNotification('${escapeHtml(item.kind)}');closeM('notifications');${escapeHtml(item.action)}">${escapeHtml(item.actionLabel)} →</button>`
     : '';
   return `<div class="notif-item tone-${tone}${item.read ? '' : ' is-unread'}">
       <span class="notif-ico" aria-hidden="true">${escapeHtml(item.icon || '🔔')}</span>
       <div class="notif-body">
+        <div class="notif-source">From ${escapeHtml(notificationSource(item))}</div>
         <div class="notif-title">${item.read ? '' : '<span class="notif-new-dot" aria-label="New"></span>'}${escapeHtml(item.title)}</div>
-        ${compact ? '' : `<div class="notif-detail">${escapeHtml(item.detail || '')}</div>`}
-        <div class="notif-meta"><span class="notif-when">${escapeHtml(when)}</span>${compact ? '' : action}</div>
+        ${item.detail ? `<div class="notif-detail">${escapeHtml(item.detail)}</div>` : ''}
+        <div class="notif-meta"><span class="notif-when">${escapeHtml(when)}</span>${action}</div>
       </div>
     </div>`;
 }
@@ -6300,7 +6304,7 @@ function renderRailLatestNotifications() {
   if (!wrap || !host) return;
   const latest = readNotificationLog().slice(0, RAIL_LATEST_LIMIT);
   wrap.hidden = !latest.length;
-  host.innerHTML = latest.map(item => notificationLogItemHtml(item, { compact: true })).join('');
+  host.innerHTML = latest.map(notificationLogItemHtml).join('');
 }
 
 function renderNotificationsPanel() {
@@ -6327,11 +6331,19 @@ function renderNotificationsPanel() {
 function openNotificationsPanel() {
   renderNotificationsPanel();
   openM('notifications');
-  // Marked read once shown, so the new-dots are visible this time and gone next.
-  markNotificationsRead();
+  // Tasks stay unread until the publisher opens their review destination.
+  markInformationalNotificationsRead();
   renderNotificationBell();
   renderRailLatestNotifications();
 }
+
+function reviewNotification(kind) {
+  markNotificationKindRead(kind);
+  renderNotificationBell();
+  renderRailLatestNotifications();
+}
+
+window.reviewNotification = reviewNotification;
 
 async function clearNotificationHistory() {
   const ok = await confirmDialog('Clear the notification history on this device?\n\nNothing in your books changes — this only empties this list.', { title: 'Clear history', okLabel: 'Clear it' });
@@ -23192,8 +23204,8 @@ function showRefundAlert(items) {
     title: said.title,
     detail: said.detail,
     tone: SYNC_TONES.PENDING,
-    actionLabel: said.canReverse ? said.reverseLabel : 'Review',
-    action: said.canReverse ? 'reverseRefundedSalesFromAlert(event)' : 'openStripeWorklistFromAlert(event)',
+    actionLabel: 'Review refunds',
+    action: "switchTab('todo')",
   });
 }
 
@@ -25189,6 +25201,7 @@ window.renderBigCartelLedgerGaps = renderBigCartelLedgerGaps;
 window.autoCheckBigCartelLedgerGaps = autoCheckBigCartelLedgerGaps;
 window.dismissNewOrderAlert = dismissNewOrderAlert;
 window.dismissAppAlert = dismissAppAlert;
+window.markAppAlertReviewed = markAppAlertReviewed;
 window.renderIntegrationBadges = renderIntegrationBadges;
 
 /**

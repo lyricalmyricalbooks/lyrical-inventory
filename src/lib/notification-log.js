@@ -18,6 +18,24 @@ export const LOG_LIMIT = 150;
 /** A repeat of the same unread message within this long updates it instead of adding another. */
 const MERGE_WINDOW_MS = 12 * 60 * 60 * 1000;
 
+/** Plain source labels for alerts raised by the app's background checks. */
+export function notificationSource(entry = {}) {
+  if (entry.source) return String(entry.source);
+  const id = String(entry.kind || entry.id || '');
+  if (id.startsWith('health-')) return 'Connection check';
+  if (id.startsWith('postage-sweep-')) return id.endsWith('canada-post') ? 'Canada Post' : id.endsWith('gmail') ? 'Gmail' : 'Postage import';
+  if (id.startsWith('stripe-') || id.startsWith('author-paid-')) return 'Stripe';
+  if (id.startsWith('todo:')) return 'To-do list';
+  if (id === 'receipt-sweep') return 'Receipt finder';
+  if (id === 'delivery-watch') return 'Parcel tracking';
+  if (id === 'shippo-labels') return 'Shippo';
+  if (id.includes('shipping') || id.includes('postage') || id.includes('unshipped')) return 'Shipping';
+  if (id.includes('store') || id.includes('order') || id.includes('bigcartel')) return 'Website orders';
+  if (id.includes('market')) return 'Market sales';
+  if (id.includes('invoice')) return 'Invoices';
+  return 'Lyrical Inventory';
+}
+
 function store() {
   try { return typeof localStorage === 'undefined' ? null : localStorage; } catch (_) { return null; }
 }
@@ -49,6 +67,7 @@ export function logNotification(entry = {}, { now = Date.now() } = {}) {
   const item = {
     uid: `${kind}:${now}`,
     kind,
+    source: notificationSource(entry),
     icon: entry.icon || '',
     title,
     detail: String(entry.detail || ''),
@@ -78,6 +97,20 @@ export function markNotificationsRead() {
   const list = readNotificationLog();
   if (!list.some(item => !item.read)) return;
   writeLog(list.map(item => ({ ...item, read: true })));
+}
+
+/** Viewing the list acknowledges news, but leaves tasks visible until opened. */
+export function markInformationalNotificationsRead() {
+  const list = readNotificationLog();
+  if (!list.some(item => !item.read && !(item.action && item.actionLabel))) return;
+  writeLog(list.map(item => item.action && item.actionLabel ? item : { ...item, read: true }));
+}
+
+/** Opening a task acknowledges the matching alert, including repeated checks. */
+export function markNotificationKindRead(kind) {
+  const list = readNotificationLog();
+  if (!list.some(item => item.kind === kind && !item.read)) return;
+  writeLog(list.map(item => item.kind === kind ? { ...item, read: true } : item));
 }
 
 export function clearNotificationLog() {

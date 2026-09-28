@@ -1758,8 +1758,8 @@ function raiseStoreReversals(bcOrders = []) {
     icon: '↩️',
     title: full.length ? 'A website order was reversed on your store' : 'A website order was partly refunded',
     detail: parts.join(' '),
-    actionLabel: full.length ? (full.length === 1 ? 'Reverse it' : `Reverse all ${full.length}`) : '',
-    action: full.length ? 'reverseStoreOrdersFromAlert(event)' : '',
+    actionLabel: 'Review reversals',
+    action: "switchTab('todo')",
   });
 }
 

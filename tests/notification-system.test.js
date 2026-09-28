@@ -4,7 +4,10 @@ import {
   clearNotificationLog,
   logNotification,
   markNotificationsRead,
+  markInformationalNotificationsRead,
+  markNotificationKindRead,
   notificationDayLabel,
+  notificationSource,
   readNotificationLog,
   unreadNotificationCount,
 } from '../src/lib/notification-log.js';
@@ -43,6 +46,17 @@ describe('notification history', () => {
     expect(readNotificationLog()).toHaveLength(1);
   });
 
+  it('keeps review tasks unread when the panel opens, then acknowledges only the opened task', () => {
+    logNotification({ id: 'receipt-sweep', title: 'Review receipts', actionLabel: 'Review receipts', action: 'openReceipts()' }, { now: 1000 });
+    logNotification({ id: 'delivery-watch', title: 'Parcel delivered' }, { now: 2000 });
+    markInformationalNotificationsRead();
+    expect(readNotificationLog().map(i => [i.kind, i.read])).toEqual([
+      ['delivery-watch', true], ['receipt-sweep', false],
+    ]);
+    markNotificationKindRead('receipt-sweep');
+    expect(unreadNotificationCount()).toBe(0);
+  });
+
   it('is capped, and can be cleared', () => {
     for (let i = 0; i < LOG_LIMIT + 20; i++) logNotification({ id: `k${i}`, title: `t${i}` }, { now: i });
     expect(readNotificationLog()).toHaveLength(LOG_LIMIT);
@@ -61,6 +75,12 @@ describe('notification history', () => {
     const now = Date.parse('2026-09-23T15:00:00');
     expect(notificationDayLabel(now - 3600000, now)).toBe('Today');
     expect(notificationDayLabel(now - 86400000, now)).toBe('Yesterday');
+  });
+
+  it('names the source of an alert so the publisher knows where it came from', () => {
+    expect(notificationSource({ id: 'receipt-sweep' })).toBe('Receipt finder');
+    expect(notificationSource({ id: 'postage-sweep-canada-post' })).toBe('Canada Post');
+    expect(notificationSource({ id: 'health-gmail' })).toBe('Connection check');
   });
 });
 
