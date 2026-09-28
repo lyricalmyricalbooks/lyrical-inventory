@@ -6768,7 +6768,16 @@ export function updateDash() {
     $('danger-zone-block').style.display = 'none';
   }
   // ── EXPENSES SUMMARY (publisher only)
-  if (!isAuthor()) renderExpensesSummaryBlock(s, cur);
+  if (!isAuthor()) {
+    renderExpensesSummaryBlock(s, cur);
+  } else {
+    // The same reimbursement has an artist-facing banner. Hide publisher
+    // totals when switching views so it is not shown twice on the dashboard.
+    const expSect = $('d-expenses-sect');
+    const expKpi = $('d-expenses-kpi');
+    if (expSect) expSect.style.display = 'none';
+    if (expKpi) expKpi.style.display = 'none';
+  }
 
   // ── BREAK-EVEN (publisher only)
   renderBreakEvenBlock(s, book, cur, cost, recognizedRev);
