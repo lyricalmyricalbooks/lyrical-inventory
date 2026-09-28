@@ -38,7 +38,10 @@ export function configureModals({ prepareOpen } = {}) {
 let _modalSnapshots = {};
 export function _modalFieldSig(id) {
   const el = $('m-' + id); if (!el) return '';
+  // Fields inside [data-autosave] write themselves as they change, so there is
+  // never anything unsaved in them to lose.
   return Array.from(el.querySelectorAll('input,select,textarea'))
+    .filter(f => !f.closest('[data-autosave]'))
     .map(f => (f.type === 'checkbox' || f.type === 'radio') ? (f.checked ? '1' : '0') : (f.value || ''))
     .join('');
 }

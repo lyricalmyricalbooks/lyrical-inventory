@@ -130,6 +130,29 @@ no pill — a `0` there would read as "out of stock" and stop a perfectly good s
 
 ---
 
+## Review a queue one item at a time — `.ri-*` (review inbox)
+
+For anything the app found by itself and stopped short of deciding (a receipt read from an
+email, a label bought elsewhere), don't send the owner to a table. Use the review inbox
+(`src/features/review-inbox.js`, `src/styles/review-inbox.css`): a list on the left, a detail
+pane on the right, and on a phone the two take turns with a "← Back to the list" button.
+
+The pane always answers four questions in this order, in plain words:
+1. **Why it is here** — the specific reason the app stopped (`reasons` from `lib/review-queue.js`).
+2. **What to do** — numbered steps that name the buttons exactly as they are labelled.
+3. **The details to check** — the fields, or the one decision, right there in the pane.
+4. **What the app found** — the evidence (sender, subject, tracking) and a link to the original.
+
+Rules worth keeping:
+- **State is a word plus a glyph, never colour alone** — `! Needs you`, `● Take a look`, `✓ Ready to file` (`.ri-chip`).
+- **Nothing is filed by opening the screen.** A button that says "File" files; one that only opens something says "Review".
+- **Disable a button only with the reason beside it** ("Fill in the missing details above to file it.").
+- **Fields that save as they change go inside `[data-autosave]`**, so closing the window never asks "discard unsaved changes?" about them (see `_modalFieldSig` in `lib/modal.js`).
+- **After a field edit, repaint the list and the guidance but not the box being typed in.**
+- A notification that points at review work is rebuilt from what is waiting *now* (`reviewTaskStillOpen`): finished work says "All reviewed", open work says how many are left.
+
+---
+
 ## Stat cards / HUD strips — one anatomy, two surfaces
 
 A row of headline figures at the head of a screen (the consignment summary HUD, Order History's

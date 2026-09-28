@@ -63,6 +63,10 @@ const MAIN_IMPORT_BUDGET = {
   'receipts.js': 24,
   // Composed by receipts.js with injected adapters; no main.js cycle at all.
   'receipt-finder.js': 0,
+  // The review inbox is a window over receipts.js and shipping.js, which hold its
+  // data. From main.js it needs only the DOM lookup, the role check, the toast,
+  // and the call that repaints the landing page after something is filed.
+  'review-inbox.js': 4,
   // Set at extraction: the practice book's fake spreadsheet reads which book is
   // open, whether it is the test book, and the real sheet's two URLs (for the
   // cards it hides and shows), plus the usual $ / showToast.
@@ -200,6 +204,8 @@ describe('feature module boundary', () => {
 const MIN_EXPORTS = {
   'intel.js': 12,
   'receipt-finder.js': 4,
+  // Open it, read the queue, repaint it, ask whether it is showing.
+  'review-inbox.js': 4,
   // The practice book's fake spreadsheet: one writer, one renderer and the
   // three handlers its card needs. Small, but a whole feature with no other
   // home — it only ever ran for the test book.

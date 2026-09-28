@@ -630,12 +630,12 @@ function automationSignals(ctx, out) {
     const ready = Number(a.receiptsReady) || 0;
     out.push({
       id: 'orders-receipts', group: 'orders', status: 'info', icon: '🧾',
-      label: `${receipts} ${plural(receipts, 'receipt is', 'receipts are')} waiting to be filed`,
+      label: `${receipts} ${plural(receipts, 'receipt is', 'receipts are')} waiting for your review`,
       detail: ready
-        ? `${ready} ${plural(ready, 'is', 'are')} complete and can be filed in one go; the rest need a quick look.`
-        : 'Found in your inbox and read for you — they just need a look before going into your books.',
-      fix: openAction('receipt-inbox', 'Open receipt inbox'),
-      quick: ready ? openAction('file-ready-receipts', `File ${ready} now`) : null,
+        ? `${ready} ${plural(ready, 'looks', 'look')} complete and can be filed with one press; the rest need a quick look. Nothing goes into your books until you say so.`
+        : 'Found in your inbox and read for you. They just need a look before going into your books.',
+      fix: { ...openAction('review-inbox', 'Review receipts'), num: 'receipt' },
+      quick: null,
     });
   }
 
@@ -673,9 +673,9 @@ function automationSignals(ctx, out) {
   if (labels) {
     out.push({
       id: 'orders-labels', group: 'orders', status: 'info', icon: '🏷️',
-      label: `${labels} shipping ${plural(labels, 'label isn’t', 'labels aren’t')} matched to an order`,
-      detail: 'Matching a label to its order puts the postage cost against the right sale, so your shipping profit is right.',
-      fix: openAction('shipping-worklist', 'Match labels'),
+      label: `${labels} shipping ${plural(labels, 'label needs', 'labels need')} your review`,
+      detail: 'Matching a label to its order puts the postage cost against the right sale, so your shipping profit is right. A label with no price also needs its amount entered.',
+      fix: { ...openAction('review-inbox', 'Review labels'), num: 'label' },
     });
   }
 }
