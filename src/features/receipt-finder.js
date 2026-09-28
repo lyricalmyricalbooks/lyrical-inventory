@@ -19,7 +19,7 @@ const SCAN_CONCURRENCY = 3;
 // search, the pre-check or the reading instructions. An email an older reader
 // found nothing in is read once more under the new one instead of being skipped
 // for good as "already checked"; one that did yield a receipt never is.
-const READER_VERSION = 2;
+const READER_VERSION = 3;
 const RENDER_INTERVAL_MS = 200;
 
 let deps, host, state = emptyState(), uid = '', accessToken = '', tokenExpiresAt = 0;
