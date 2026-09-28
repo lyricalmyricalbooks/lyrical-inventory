@@ -531,7 +531,7 @@ describe('receipt finder UI', () => {
     mocks.extract.mockResolvedValue({ receipts: [] });
     mocks.saved.scans = {
       'publisher@example.com:old': { done: true, subject: 'Receipt old', count: 0 },
-      'publisher@example.com:current': { done: true, subject: 'Receipt current', count: 0, reader: 2 },
+      'publisher@example.com:current': { done: true, subject: 'Receipt current', count: 0, reader: 3 },
       'publisher@example.com:found': { done: true, subject: 'Receipt found', count: 1 },
     };
     await mount();
@@ -539,7 +539,7 @@ describe('receipt finder UI', () => {
     document.querySelector('[data-action="connect"]').click(); await settle();
     document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
     expect(mocks.message.mock.calls.map(call => call[0])).toEqual(['old']);
-    expect(mocks.saved.scans['publisher@example.com:old']).toMatchObject({ done: true, reader: 2 });
+    expect(mocks.saved.scans['publisher@example.com:old']).toMatchObject({ done: true, reader: 3 });
     expect(document.querySelector('[data-finder-status]').textContent).toContain('2 were already checked');
   });
   it('shows only the status filters that have something in them', async () => {
