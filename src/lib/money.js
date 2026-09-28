@@ -77,6 +77,35 @@ export function getBookCurrencyCode(book) {
   return CURRENCY_SYMBOL_TO_CODE[c] || (String(c).length === 3 ? c : 'EUR');
 }
 
+// The only currencies offered in pickers. Older records may carry others
+// (GBP, AUD…); setSelectCurrency() keeps those editable without offering them
+// for new entries.
+export const PICKER_CURRENCIES = ['CAD', 'EUR', 'USD', 'MXN'];
+
+// Moves `code` to the front of a currency <select>, leaving any leading
+// non-currency choice (e.g. "Book currency") on top. Does not change the value.
+export function putCurrencyFirst(sel, code) {
+  if (!sel || !code) return;
+  const opts = Array.from(sel.options);
+  const first = opts.find((o) => o.value === code);
+  if (!first) return;
+  const anchor = opts.find((o) => !PICKER_CURRENCIES.includes(o.value));
+  if (anchor) anchor.after(first); else sel.prepend(first);
+}
+
+// Selects `code`, appending a one-off option when it is a legacy currency the
+// picker no longer lists, so editing an old record doesn't blank the field.
+export function setSelectCurrency(sel, code) {
+  if (!sel) return;
+  if (code && !Array.from(sel.options).some((o) => o.value === code)) {
+    const opt = document.createElement('option');
+    opt.value = code;
+    opt.textContent = code;
+    sel.appendChild(opt);
+  }
+  sel.value = code;
+}
+
 // The currency an entry's own amounts (price, convertedTotal, amountDue…) are
 // denominated in. Prefers the `cur` stamp written at entry time; falls back to
 // the book's current currency for legacy rows recorded before stamping existed.
