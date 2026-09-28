@@ -83,8 +83,8 @@ describe('receipt finder UI', () => {
   it('filters without losing saved drafts or changing their real identities', async () => {
     await mount();
     document.querySelector('[data-status="ready"]').click();
-    expect(document.querySelector('[data-finder-list]').textContent).toContain('Nothing matches this view');
-    document.querySelector('[data-status="review"]').click();
+    expect(document.querySelector('[data-finder-list]').textContent).toContain('Nothing to file right now');
+    document.querySelector('[data-status="needs"]').click();
     expect(document.querySelector('[data-draft]').dataset.draft).toBe('publisher@example.com:m1:0');
   });
   it('dismisses a receipt with one click on its row, without opening it', async () => {
@@ -108,7 +108,8 @@ describe('receipt finder UI', () => {
     document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
     expect(mocks.list).toHaveBeenCalledOnce(); expect(mocks.extract).toHaveBeenCalledOnce();
     expect(mocks.saved.drafts).toHaveLength(2);
-    expect(document.querySelector('[data-finder-list]').textContent).toContain('Courier');
+    const everything = ['ready', 'needs'].map(pile => { document.querySelector(`[data-status="${pile}"]`).click(); return document.querySelector('[data-finder-list]').textContent; }).join(' ');
+    expect(everything).toContain('Courier');
   });
   it('keeps extraction errors visible and retryable', async () => {
     await mount();
@@ -246,7 +247,7 @@ describe('receipt finder UI', () => {
     document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
     const alert = document.querySelector('[data-finder-alert]');
     expect(alert.className).toContain('is-warn');
-    expect(alert.textContent).toContain('could not be read');
+    expect(alert.textContent).toContain('couldn’t be read');
     expect(alert.querySelector('[data-action="retry-failed"]')).not.toBeNull();
   });
   it('offers a one-click switch when the saved address is a retired Receipt Finder', async () => {
@@ -347,7 +348,7 @@ describe('receipt finder UI', () => {
     };
     await mount();
     const alert = document.querySelector('[data-finder-alert]');
-    expect(alert.textContent).toContain('2 emails could not be read');
+    expect(alert.textContent).toContain('2 emails couldn’t be read');
     expect(alert.textContent).toContain('would not accept the AI key');
     // One shared cause must not be reported as several.
     expect(alert.textContent).not.toContain('other reason');
@@ -481,7 +482,7 @@ describe('receipt finder UI', () => {
     expect(mocks.message.mock.calls.length).toBeLessThan(5);
     expect(Object.values(mocks.saved.scans).filter(scan => scan.error)).toHaveLength(0);
     const alert = document.querySelector('[data-finder-alert]');
-    expect(alert.textContent).toContain('Scan stopped early');
+    expect(alert.textContent).toContain('The last scan stopped early');
     expect(alert.textContent).toContain('Gmail access expired');
     expect(mocks.saved.pageToken || '').toBe('');
   });
@@ -521,6 +522,7 @@ describe('receipt finder UI', () => {
     mocks.message.mockResolvedValue({ ...source, id: 'quiet', subject: 'Thanks for your order', body: 'We will be in touch soon.', fileParts: [] });
     mocks.extract.mockResolvedValue({ receipts: [] });
     await mount();
+    document.querySelector('[data-status="aside"]').click();
     const list = document.querySelector('.finder-setaside');
     expect(list.textContent).toContain('1 email set aside as not receipts');
     expect(list.textContent).toContain('Thanks for your order');
@@ -564,23 +566,45 @@ describe('receipt finder UI', () => {
     expect(mocks.saved.scans['publisher@example.com:old']).toMatchObject({ done: true, reader: 3 });
     expect(document.querySelector('[data-finder-status]').textContent).toContain('2 were already checked');
   });
-  it('shows only the status filters that have something in them', async () => {
+  it('shows the three piles, and Filed only once something is filed', async () => {
     await mount();
     const chips = [...document.querySelectorAll('[data-finder-tabs] [data-status]')].map(chip => chip.dataset.status);
-    // Ready and Needs review are always offered — they are the two piles the
-    // publisher works through — and nothing else until it has something in it.
-    expect(chips).toEqual(['all', 'ready', 'review']);
+    // Ready, Needs you and Not receipts are always offered; Filed appears only
+    // once something is in it.
+    expect(chips).toEqual(['ready', 'needs', 'aside']);
+    // It opens on the pile that needs the publisher, not on an empty one.
+    expect(document.querySelector('[data-status="needs"]').getAttribute('aria-pressed')).toBe('true');
     expect(document.querySelector('[data-action="retry"]').hidden).toBe(true);
   });
-  it('filters drafts from the status tabs', async () => {
+  it('scans exactly one day, yesterday by default, in local time', async () => {
+    await mount();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="connect"]').click(); await settle();
+    document.querySelector('[data-action="scan-day"]').click(); await settle(); await settle();
+    const d = new Date(); d.setDate(d.getDate() - 1);
+    const day = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+    const next = new Date(d); next.setDate(next.getDate() + 1);
+    const query = mocks.list.mock.calls[0][0];
+    expect(query).toContain('after:' + day);
+    expect(query).toContain('before:');
+    expect(document.querySelector('#finder-from').value).toBe(document.querySelector('#finder-to').value);
+  });
+  it('treats a period button as a scan once Gmail is connected', async () => {
+    await mount();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="connect"]').click(); await settle();
+    document.querySelector('.finder-period [data-preset="7"]').click(); await settle(); await settle();
+    expect(mocks.list).toHaveBeenCalledOnce();
+  });
+  it('filters drafts from the piles', async () => {
     await mount();
     // The three count tiles that duplicated these tabs are gone.
     expect(document.querySelector('.finder-stat')).toBeNull();
     const readyCard = document.querySelector('[data-finder-tabs] [data-status="ready"]');
     expect(readyCard).not.toBeNull();
     readyCard.click();
-    expect(document.querySelector('[data-finder-list]').textContent).toContain('Nothing matches this view');
-    const reviewCard = document.querySelector('[data-finder-tabs] [data-status="review"]');
+    expect(document.querySelector('[data-finder-list]').textContent).toContain('Nothing to file right now');
+    const reviewCard = document.querySelector('[data-finder-tabs] [data-status="needs"]');
     expect(reviewCard).not.toBeNull();
     reviewCard.click();
     expect(document.querySelector('[data-draft]').dataset.draft).toBe('publisher@example.com:m1:0');

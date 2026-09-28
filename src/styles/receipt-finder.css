@@ -497,3 +497,111 @@
   .finder-progress-fill { transition: none; }
   .finder-more > summary::before { transition: none; }
 }
+
+/* ── Option A layout: one next step, a scan row, three piles ─────────────
+   The screen answers three questions in order: what do I need to do now
+   (the next-step card), how do I look for more (the scan row), and what did
+   it find (the piles). Everything else waits in a drawer. */
+.finder-next {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-3) var(--space-4);
+  align-items: center;
+  padding: var(--space-4);
+  margin-block: 0 var(--space-4);
+  background: var(--amber-bg);
+  border: 2px solid var(--rule-ink);
+  border-radius: 0;
+}
+.finder-alert.finder-next { border-inline-start: 2px solid var(--rule-ink); }
+.finder-alert.finder-next:empty { display: none; }
+.finder-next-num {
+  font-family: var(--font-display);
+  font-size: 40px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--content-primary);
+  min-width: 1ch;
+}
+.finder-next-body { display: grid; gap: var(--space-1); min-width: 0; }
+.finder-next-body h4 { margin: 0; font-size: var(--text-md); color: var(--content-primary); text-wrap: balance; }
+.finder-next-body p { margin: 0; min-width: 0; color: var(--content-secondary); font-size: var(--text-sm); line-height: 1.5; overflow-wrap: anywhere; }
+.finder-next-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.finder-next-actions .btn { min-height: var(--target-min); }
+.finder-gate.finder-next .finder-gate-hed { margin-bottom: var(--space-2); }
+@container (max-width: 640px) {
+  .finder-next { grid-template-columns: auto minmax(0, 1fr); }
+  .finder-next-actions { grid-column: 1 / -1; }
+}
+
+.finder-scanrow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.finder-day-btn { min-height: 56px !important; padding-inline: var(--space-6, 28px) !important; font-size: var(--text-base) !important; white-space: nowrap; }
+.finder-or { color: var(--content-muted); font-size: var(--text-sm); }
+.finder-scanrow .finder-period-btn { min-height: 44px; font-size: var(--text-sm); }
+.finder-scanrow .finder-period { flex-wrap: wrap; }
+.finder-stop-btn { min-height: 44px !important; }
+
+.finder-narrow { display: grid; gap: var(--space-3); margin-top: var(--space-2); padding: var(--space-3); background: var(--surface-sunken); border: 1px solid var(--border-subtle); }
+.finder-narrow .finder-filters { margin: 0; padding: 0; background: none; border: 0; }
+.finder-narrow .finder-scan-btn { justify-self: start; }
+
+.finder-health {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-5);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--text-xs);
+  color: var(--content-secondary);
+}
+.finder-health-item { display: inline-flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; min-width: 0; }
+.finder-health .finder-auto { margin: 0; padding: 0; border: 0; cursor: pointer; }
+.finder-health .finder-auto-note { flex: none; min-width: 0; }
+.finder-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--content-muted); }
+.finder-dot.is-ok { background: var(--green); }
+.finder-dot.is-warn { background: var(--amber); }
+.finder-dot.is-bad { background: var(--red); }
+.finder-health-more > summary { cursor: pointer; color: var(--content-primary); font-weight: 600; min-height: 32px; display: inline-flex; align-items: center; }
+.finder-health-more p { margin: var(--space-1) 0 0; max-width: 65ch; line-height: 1.5; }
+
+.finder-piles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-3);
+  border: 0;
+  margin-bottom: var(--space-3);
+}
+.finder-pile {
+  display: grid;
+  gap: var(--space-1);
+  text-align: start;
+  padding: var(--space-3) var(--space-4);
+  min-height: 72px;
+  background: var(--surface-raised);
+  color: var(--content-primary);
+  border: 2px solid var(--rule-ink);
+  border-radius: 0;
+  cursor: pointer;
+  font: inherit;
+}
+.finder-pile:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+.finder-pile.active { box-shadow: 4px 4px 0 var(--rule-ink); background: var(--surface-card, var(--surface-raised)); }
+.finder-pile.is-zero:not(.active) { border-color: var(--border-default); color: var(--content-muted); }
+.finder-pile-top { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-2); }
+.finder-pile-name { font-weight: 700; font-size: var(--text-sm); }
+.finder-pile-count { font-family: 'DM Mono', monospace; font-variant-numeric: tabular-nums; font-size: 22px; line-height: 1; }
+.finder-pile-hint { font-size: var(--text-xs); color: var(--content-secondary); }
+.finder-pile.tone-ready:not(.is-zero) .finder-pile-count { color: var(--green); }
+.finder-pile.tone-needs:not(.is-zero) .finder-pile-count { color: var(--red); }
+[data-finder-results-head] [data-finder-errors] .finder-failures { margin-block: 0 var(--space-3); }
+@container (max-width: 520px) {
+  .finder-scanrow { display: grid; grid-template-columns: 1fr; }
+  .finder-or { display: none; }
+  .finder-day-btn { width: 100%; }
+  .finder-scanrow .finder-period { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .finder-scanrow .finder-period-btn { padding-inline: var(--space-2); }
+  .finder-piles { grid-template-columns: 1fr; }
+  .finder-pile { min-height: 56px; }
+}
