@@ -432,6 +432,8 @@
   line-height: var(--leading-normal);
 }
 .finder-failure .btn { min-height: 44px; flex: none; }
+.finder-setaside { margin-block-start: var(--space-3); }
+.finder-setaside-why { color: var(--content-muted); font-size: var(--text-xs); }
 .finder-failures-foot {
   margin: 0;
   padding: var(--space-3) var(--space-4);

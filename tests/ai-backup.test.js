@@ -52,7 +52,7 @@ describe('receipt fallback', () => {
   function reader(primary, settings = { geminiKey: 'g', openRouterKey: 'b' }, { resting = false } = {}) {
     const backup = vi.fn(async () => ({ text: '{"total":12}', via: 'openrouter' }));
     const noteSpent = vi.fn();
-    const call = buildHarness({ names: ['_callAiForReceipts'], deps: { TAX_CENTER: { settings }, _callGeminiForReceipts: primary, runOpenRouterRead: backup, friendlyOpenRouterError: router.friendlyOpenRouterError,
+    const call = buildHarness({ names: ['_callAiForReceipts'], deps: { TAX_CENTER: { settings }, _callGeminiForReceipts: primary, runOpenRouterRead: backup, friendlyOpenRouterError: router.friendlyOpenRouterError, _friendlyScanError: e => `friendly(${e.message})`,
       _geminiResting: () => resting, _geminiNoteSpent: noteSpent }, returns: '_callAiForReceipts' });
     return { call, backup, noteSpent };
   }
@@ -61,6 +61,20 @@ describe('receipt fallback', () => {
     const parts = [{ text: 'receipt' }];
     expect((await h.call('g', parts)).via).toBe('openrouter');
     expect(h.backup).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'b', parts }));
+  });
+  it('names both readers when the backup fails too, without changing what counts as fatal', async () => {
+    const h = reader(async () => { throw Object.assign(new Error('Bad key'), { status: 400 }); });
+    h.backup.mockRejectedValue(Object.assign(new Error('No endpoints found that can handle this'), { status: 404 }));
+    const error = await h.call('g', []).catch(e => e);
+    expect(error.message).toBe('Google: friendly(Bad key). OpenRouter: no OpenRouter provider currently supports everything this request needs — retry, or choose a compatible model in the Tax Centre config');
+    expect(error.status).toBe(404);
+    expect(error.classifyAs).toMatch(/^OpenRouter: /);
+    expect(error.classifyAs).not.toMatch(/Google/);
+  });
+  it('says the Google reader was skipped when its allowance is known to be spent', async () => {
+    const h = reader(async () => ({ text: 'unused' }), undefined, { resting: true });
+    h.backup.mockRejectedValue(new Error('No endpoints found'));
+    expect((await h.call('g', []).catch(e => e)).message).toMatch(/^Google: its free allowance is used up for now/);
   });
   it('does not spend backup requests when Gemini succeeds', async () => {
     const h = reader(async () => ({ text: 'primary' }));
@@ -125,7 +139,7 @@ describe('provider boundary integration', () => {
         fetch: fetchImpl, DOMException, _geminiModelChain: () => ['gemini-test'],
         _geminiUnavailable: new Set(), _geminiAwaitCooldown: async () => {}, _geminiNoteThrottle: () => {},
         _geminiResting: () => false, _geminiNoteSpent: () => 0,
-        runOpenRouterRead: args => router.runOpenRouterRead({ ...args, fetchImpl }), friendlyOpenRouterError: router.friendlyOpenRouterError },
+        runOpenRouterRead: args => router.runOpenRouterRead({ ...args, fetchImpl }), friendlyOpenRouterError: router.friendlyOpenRouterError, _friendlyScanError: e => e.message },
       returns: '_callAiForReceipts',
     });
     expect((await read('google-test-key', [{ text: 'Return receipt JSON' }])).text).toBe('{"total":12}');

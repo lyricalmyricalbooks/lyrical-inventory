@@ -512,6 +512,28 @@ describe('receipt finder UI', () => {
     expect(Object.values(mocks.saved.scans).every(scan => scan.done)).toBe(true);
     expect(document.querySelector('[data-finder-status]').textContent).toContain('All 2 read');
   });
+  it('lists emails set aside as not receipts and reads one again even past the quick skip rule', async () => {
+    mocks.saved.scans = {
+      'publisher@example.com:quiet': { done: true, subject: 'Thanks for your order', count: 0, skipped: 'no-amount', reader: 3 },
+      'publisher@example.com:found': { done: true, subject: 'Already a receipt', count: 1, reader: 3 },
+    };
+    // Nothing that would pass the quick check: no amount, no attachment.
+    mocks.message.mockResolvedValue({ ...source, id: 'quiet', subject: 'Thanks for your order', body: 'We will be in touch soon.', fileParts: [] });
+    mocks.extract.mockResolvedValue({ receipts: [] });
+    await mount();
+    const list = document.querySelector('.finder-setaside');
+    expect(list.textContent).toContain('1 email set aside as not receipts');
+    expect(list.textContent).toContain('Thanks for your order');
+    expect(list.textContent).toContain('no price found in it');
+    expect(list.textContent).not.toContain('Already a receipt');
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="connect"]').click(); await settle();
+    document.querySelector('[data-reread]').click(); await settle(); await settle();
+    expect(mocks.extract).toHaveBeenCalledTimes(1);
+    expect(mocks.saved.scans['publisher@example.com:quiet']).toMatchObject({ done: true, count: 0 });
+    expect(mocks.saved.scans['publisher@example.com:quiet'].skipped).toBeUndefined();
+    expect(document.querySelector('[data-finder-status]').textContent).toContain('still does not look like a receipt');
+  });
   it('says why a queued receipt is stuck instead of promising it will file itself', async () => {
     mocks.saved.drafts[0].status = 'queued';
     mocks.saved.drafts[0].error = 'Waiting for a currency conversion rate';

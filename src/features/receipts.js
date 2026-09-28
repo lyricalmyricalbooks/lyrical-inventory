@@ -3359,6 +3359,11 @@ function _geminiThinkingPatch(mode, budget) {
 async function _callAiForReceipts(apiKey, parts, opts = {}) {
   if (opts.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
   const key = TAX_CENTER.settings?.openRouterKey?.trim();
+  // Why Google's reader did not produce the answer, kept so that when the
+  // backup fails too the screen can name BOTH reasons. Showing only the
+  // backup's error left the publisher unable to tell a spent allowance from a
+  // rejected key on the side that normally does the work.
+  let googleWhy = '';
   if (apiKey && !(key && _geminiResting())) {
     try {
       return await _callGeminiForReceipts(apiKey, parts, opts);
@@ -3366,7 +3371,10 @@ async function _callAiForReceipts(apiKey, parts, opts = {}) {
       if (error?.name === 'AbortError') throw error;
       _geminiNoteSpent(error);
       if (!key) throw error;
+      googleWhy = _friendlyScanError(error);
     }
+  } else if (apiKey) {
+    googleWhy = 'its free allowance is used up for now, so the backup was tried first';
   }
   if (!key) throw new Error('Add a Gemini or OpenRouter key in the Tax Centre config');
   try {
@@ -3376,7 +3384,12 @@ async function _callAiForReceipts(apiKey, parts, opts = {}) {
     if (error?.name === 'AbortError') throw error;
     // The status travels with the friendly wording so the Gmail finder can tell
     // a refused key (stop the scan) from one email that failed to read.
-    throw Object.assign(new Error(`OpenRouter: ${friendlyOpenRouterError(error)}`), { __alreadyFriendly: true, status: error?.status });
+    const backupWhy = `OpenRouter: ${friendlyOpenRouterError(error)}`;
+    const trimmed = text => String(text).replace(/[.\s]+$/, '');
+    throw Object.assign(new Error(googleWhy ? `Google: ${trimmed(googleWhy)}. ${backupWhy}` : backupWhy),
+      // classifyAs keeps the stop-the-scan decision on the backup's own wording:
+      // Google's text is there to be read, not to change what counts as fatal.
+      { __alreadyFriendly: true, status: error?.status, classifyAs: backupWhy });
   }
 }
 
