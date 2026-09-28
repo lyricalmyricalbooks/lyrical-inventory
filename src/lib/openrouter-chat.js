@@ -383,6 +383,8 @@ export async function runOpenRouterTurn({
   };
 }
 
+const NO_PROVIDER = /no endpoints found|no available providers?|provider.*(?:unavailable|support)/i;
+
 /** Read structured text, images or PDFs using the same saved backup as chat. */
 export async function runOpenRouterRead({
   apiKey, model = DEFAULT_OPENROUTER_MODEL, parts = [], schema,
@@ -399,22 +401,41 @@ export async function runOpenRouterRead({
     if (mime === 'application/pdf') return { type: 'file', file: { filename: 'document.pdf', file_data: url } };
     throw new Error('The backup reader supports photos and PDF files');
   });
-  const body = {
-    model: model?.trim() || DEFAULT_OPENROUTER_MODEL,
-    messages: [{ role: 'user', content }],
-    temperature: 0.1, max_tokens: maxOutputTokens,
-    response_format: schema
-      ? { type: 'json_schema', json_schema: { name: 'receipt', schema: toJsonSchema(schema) } }
-      : { type: 'json_object' },
-    provider: { require_parameters: true },
+  // The free router must find ONE model that takes the attachments, honours
+  // the structured-output schema and accepts every setting sent. That set is
+  // often empty, and the refusal reads "no provider supports this request".
+  // So when it happens, ask for less rather than give up: first without the
+  // strict-settings demand (the prompt already asks for JSON, and the caller
+  // repairs fenced or padded answers), then with the email text alone, which
+  // carries the vendor, date and totals of any emailed receipt.
+  const build = ({ strict, withFiles }) => {
+    const parts = withFiles ? content : content.filter(part => part.type === 'text');
+    const body = {
+      model: model?.trim() || DEFAULT_OPENROUTER_MODEL,
+      messages: [{ role: 'user', content: parts }],
+      temperature: 0.1, max_tokens: maxOutputTokens,
+      response_format: strict && schema
+        ? { type: 'json_schema', json_schema: { name: 'receipt', schema: toJsonSchema(schema) } }
+        : { type: 'json_object' },
+    };
+    if (strict) body.provider = { require_parameters: true };
+    if (parts.some(part => part.type === 'file')) {
+      body.plugins = [{ id: 'file-parser', pdf: { engine: 'cloudflare-ai' } }];
+    }
+    return body;
   };
-  if (content.some(part => part.type === 'file')) {
-    body.plugins = [{ id: 'file-parser', pdf: { engine: 'cloudflare-ai' } }];
-  }
-  const res = await callOnce(body, apiKey.trim(), { fetchImpl, signal });
-  const data = await readOpenRouterResponse(res);
-  if (!res.ok || data?.error) {
-    throw Object.assign(new Error(data?.error?.message || `HTTP ${res.status} from OpenRouter`), { status: Number(data?.error?.code) || res.status });
+  const hasFiles = content.some(part => part.type !== 'text');
+  const attempts = [{ strict: true, withFiles: true }, { strict: false, withFiles: true }];
+  if (hasFiles) attempts.push({ strict: false, withFiles: false });
+  let body, data;
+  for (let i = 0; i < attempts.length; i++) {
+    body = build(attempts[i]);
+    const res = await callOnce(body, apiKey.trim(), { fetchImpl, signal });
+    data = await readOpenRouterResponse(res);
+    if (res.ok && !data?.error) break;
+    const message = data?.error?.message || `HTTP ${res.status} from OpenRouter`;
+    const error = Object.assign(new Error(message), { status: Number(data?.error?.code) || res.status });
+    if (i === attempts.length - 1 || !NO_PROVIDER.test(message)) throw error;
   }
   const choice = data?.choices?.[0];
   if (choice?.finish_reason && !['stop', 'length'].includes(choice.finish_reason)) {
@@ -460,7 +481,7 @@ export function friendlyOpenRouterError(e) {
   }
   // The model name is typed by hand, so a wrong one is the likeliest mistake
   // here and deserves to be named rather than shown as a bare 404.
-  if (/no endpoints found|no available providers?|provider.*(?:unavailable|support)/i.test(raw)) {
+  if (NO_PROVIDER.test(raw)) {
     return 'no OpenRouter provider currently supports everything this request needs — retry, or choose a compatible model in the Tax Centre config';
   }
   if (status === 404 || /no (?:such )?model|model not found|not a valid model/i.test(raw)) {
