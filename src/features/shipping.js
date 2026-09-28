@@ -821,6 +821,7 @@ function renderShippingReconciliationWorklist() {
   const list = $('shipping-reconciliation-list');
   const count = $('shipping-reconciliation-count');
   if (!list || !count || isAuthor()) return;
+  const amountList = $('shipping-amount-review-list');
   const panel = list.closest('.shipping-reconciliation');
   const openButton = $('shipping-reconciliation-open');
   if (panel?.dataset.closed === 'true') {
@@ -836,15 +837,37 @@ function renderShippingReconciliationWorklist() {
   // job; a label needing a figure is a bookkeeping one, and it stays visible
   // here because the alternative — a silent zero in the postage column — is how
   // a shipping margin quietly stops being true.
-  const blanks = (TAX_CENTER.businessExpenses || []).filter(needsAmountAttention).length;
+  const amountTasks = (TAX_CENTER.businessExpenses || []).filter(needsAmountAttention);
+  const blanks = amountTasks.length;
   count.textContent = blanks
-    ? `${expenses.length} to review · ${blanks} needs an amount`
+    ? `${expenses.length} to link · ${blanks} label${blanks === 1 ? '' : 's'} need${blanks === 1 ? 's' : ''} an amount`
     : `${expenses.length} to review`;
+  if (amountList) {
+    amountList.innerHTML = amountTasks.length ? amountTasks.map(expense => {
+      const source = expense.postageSource === 'email' ? 'Shipping confirmation email'
+        : expense.postageSource === 'canadapost' ? 'Canada Post account' : 'Imported label';
+      const evidence = [expense.trackingCarrier, expense.trackingNumber, expense.date, expense.recipientName]
+        .filter(Boolean).map(escapeHtml).join(' · ');
+      const emailEvidence = expense.postageSource === 'email'
+        ? [expense.postageEmailFrom, expense.postageEmailSubject].filter(Boolean).map(escapeHtml).join(' · ')
+        : '';
+      return `<div class="shipping-amount-row" data-source="${escapeHtml(expense.postageSource || '')}">
+        <div class="shipping-reconciliation-copy">
+          <strong>${escapeHtml(expense.desc || 'Shipping label')}</strong>
+          <span>Found in: ${source}</span>
+          ${emailEvidence ? `<small>${emailEvidence}</small>` : ''}
+          <small>${evidence || 'No further label details available'}</small>
+          <span class="shipping-reconciliation-hint">The confirmation did not give a reliable price. Check the carrier charge, then enter the amount.</span>
+        </div>
+        <button class="btn gold sm" type="button" data-ref="${escapeHtml(expense.ref)}" onclick="openPostageAmountEditor(this.dataset.ref)">Enter postage amount</button>
+      </div>`;
+    }).join('') : '<p class="shipping-review-clear">No labels need a postage amount.</p>';
+  }
   if (!expenses.length) {
     list.innerHTML = `<div class="shipping-reconciliation-empty">
       <span class="recon-empty-mark" aria-hidden="true">\u2713</span>
-      <strong>Every label is linked</strong>
-      <span>All imported postage is matched to an order. New labels appear here after the next import.</span>
+      <strong>No order links to review</strong>
+      <span>New labels that need an order link will appear here.</span>
     </div>`;
     return;
   }
@@ -866,9 +889,9 @@ function renderShippingReconciliationWorklist() {
       : (expense.shippingMatchStatus === 'unmatched'
         ? '<span class="shipping-reconciliation-hint">No order matched this label. Pick one, or add the missing order.</span>'
         : '');
-    return `<div class="shipping-reconciliation-row">
+    return `<div class="shipping-reconciliation-row" data-source="${escapeHtml(expense.postageSource || '')}">
       <div class="shipping-reconciliation-copy">
-        <strong>${fmt(expense.amount || 0, expense.currency || 'CAD')}</strong>
+        <strong>${needsAmountAttention(expense) ? 'Amount needed' : fmt(expense.amount || 0, expense.currency || 'CAD')}</strong>
         <span>${escapeHtml(expense.date || 'Date unavailable')} · ${escapeHtml(context || 'Recipient unavailable')}</span>
         <small>${escapeHtml(expense.shippingMatchStatus || 'unmatched')}</small>
         ${hint}
@@ -883,6 +906,22 @@ function renderShippingReconciliationWorklist() {
       </div>
     </div>`;
   }).join('');
+}
+
+function openPostageAmountEditor(ref) {
+  const expense = (TAX_CENTER.businessExpenses || []).find(item =>
+    String(item.ref) === String(ref) && needsAmountAttention(item));
+  if (!expense) {
+    renderShippingReconciliationWorklist();
+    showToast('This label no longer needs an amount.', 'ok');
+    return;
+  }
+  window.openEditExpense('businessExpense', '', expense.id);
+  const amount = $('edit-exp-amount');
+  if (amount) {
+    amount.value = '';
+    amount.focus();
+  }
 }
 
 function closeShippingReconciliation() {
@@ -1470,6 +1509,7 @@ async function sweepCanadaPostShipments({ force = false, pins = [] } = {}) {
 
     let filed = 0;
     let blank = 0;
+    const filedRefs = new Set();
     for (const shipmentId of ids) {
       const args = {
         customerNumber: credentials.customerNumber,
@@ -1510,6 +1550,7 @@ async function sweepCanadaPostShipments({ force = false, pins = [] } = {}) {
         date: expense.date,
       }, knownOrders));
       TAX_CENTER.businessExpenses.unshift(expense);
+      filedRefs.add(ref);
       filed++;
       if (needsAmount(candidate)) blank++;
     }
@@ -1525,7 +1566,11 @@ async function sweepCanadaPostShipments({ force = false, pins = [] } = {}) {
       await saveTaxCenter().catch(e => console.warn('Canada Post sweep save failed', e));
       renderTaxCenter();
       renderShippingAnalysisHub();
-      showPostageSweepAlert({ filed, linked, blank, needsReview: reconciliationBacklog() });
+      const needsReview = TAX_CENTER.businessExpenses
+        .filter(expense => filedRefs.has(expense.ref) && isUnresolvedShippoPostage(expense)).length;
+      const linkedNow = TAX_CENTER.businessExpenses
+        .filter(expense => filedRefs.has(expense.ref) && expense.shippingMatchStatus === 'matched').length;
+      showPostageSweepAlert({ filed, linked: linkedNow, blank, needsReview });
       return { filed, linked, blank, stamped };
     }
     return { filed: 0, linked: 0, blank: 0, stamped: 0 };
@@ -1685,14 +1730,15 @@ async function applyBigCartelTracking(orders = [], included = []) {
  * notifications on the Big Cartel tab, so there is one setting, not two.
  * Best-effort: a browser that blocks notifications changes nothing here.
  */
-function notifyDevice(title, body, tag) {
+function notifyDevice(title, body, tag, onClick) {
   if (!orderNotifyEnabled()) return;
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
   try {
     const n = new Notification(title, { body, icon: '/pwa-192x192.png', tag });
     n.onclick = () => {
       try { window.focus(); } catch (_) { /* not focusable from here in every browser */ }
-      switchTab('shipping');
+      if (onClick) onClick();
+      else switchTab('shipping');
       n.close();
     };
   } catch (_) { /* unsupported context (e.g. iOS Safari outside an installed PWA) */ }
@@ -1703,21 +1749,24 @@ function showPostageSweepAlert({ filed, linked, blank, needsReview, source = 'Ca
   const labels = `${filed} label${filed === 1 ? '' : 's'}`;
   const parts = [];
   if (linked > 0) parts.push(`${linked} matched to ${linked === 1 ? 'its order' : 'their orders'}`);
-  if (blank > 0) parts.push(`${blank} ${blank === 1 ? 'needs' : 'need'} an amount`);
-  else if (needsReview > 0) parts.push(`${needsReview} ${needsReview === 1 ? 'needs' : 'need'} you`);
+  if (blank > 0) parts.push(`${blank} ${blank === 1 ? 'needs' : 'need'} a postage amount`);
+  if (needsReview > 0) parts.push(`${needsReview} ${needsReview === 1 ? 'needs' : 'need'} an order link`);
 
-  notifyDevice(`${labels} added from ${source}`, parts.length ? `Bought outside the app — ${parts.join(', ')}.` : 'Bought outside the app and added to your books.', 'lm-postage-sweep');
+  const detail = parts.length
+    ? `Added to Shipping & Postage from ${source}; ${parts.join(', ')}. Open Tax Centre → Integrations to finish.`
+    : `Found in ${source} and added to Shipping & Postage.`;
+  notifyDevice(`${labels} found in ${source}`, detail, 'lm-postage-sweep',
+    () => openShippingReconciliationFromAlert(null, source === 'your email' ? 'email' : 'canadapost'));
   pushAppAlert({
     // Keyed per source, so a Canada Post sweep and an email sweep finding
     // labels minutes apart do not overwrite each other's news.
     id: `postage-sweep-${source.replace(/[^a-z]+/gi, '-').toLowerCase()}`,
     icon: '📮',
-    title: `${labels} added from ${source}`,
-    detail: parts.length
-      ? `Bought outside the app — ${parts.join(', ')}.`
-      : 'Bought outside the app and added to your books.',
-    actionLabel: (blank || needsReview) ? 'Review' : '',
-    action: (blank || needsReview) ? 'openShippingReconciliationFromAlert(event)' : '',
+    title: `${labels} found in ${source}`,
+    detail,
+    actionLabel: blank ? 'Enter postage amount' : needsReview ? 'Review order links' : '',
+    action: (blank || needsReview)
+      ? `openShippingReconciliationFromAlert(event, '${source === 'your email' ? 'email' : 'canadapost'}')` : '',
   });
 }
 
@@ -1829,6 +1878,7 @@ async function sweepShippingEmails({ force = false, pins = [] } = {}) {
 
     let filed = 0;
     let blank = 0;
+    const filedRefs = new Set();
     (bodies.emails || []).forEach(email => {
       if (!email) return;
       const parsed = parseShippingEmail({
@@ -1848,6 +1898,8 @@ async function sweepShippingEmails({ force = false, pins = [] } = {}) {
       known.add(ref);
 
       const expense = buildPostageExpense(candidate);
+      expense.postageEmailFrom = cpText(email.from);
+      expense.postageEmailSubject = cpText(email.subject);
       Object.assign(expense, reconcileShippingExpense({
         recipientName: expense.recipientName,
         recipientPostal: expense.recipientPostal,
@@ -1856,6 +1908,7 @@ async function sweepShippingEmails({ force = false, pins = [] } = {}) {
       }, knownOrders));
       if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
       TAX_CENTER.businessExpenses.unshift(expense);
+      filedRefs.add(ref);
       filed++;
       if (needsAmount(candidate)) blank++;
     });
@@ -1870,8 +1923,13 @@ async function sweepShippingEmails({ force = false, pins = [] } = {}) {
       await saveTaxCenter().catch(e => console.warn('Shipping email sweep save failed', e));
       renderTaxCenter();
       renderShippingAnalysisHub();
+      const linkedNow = TAX_CENTER.businessExpenses
+        .filter(expense => filedRefs.has(expense.ref) && expense.shippingMatchStatus === 'matched').length;
       showPostageSweepAlert({
-        filed, linked, blank, needsReview: reconciliationBacklog(), source: 'your email',
+        filed, linked: linkedNow, blank,
+        needsReview: TAX_CENTER.businessExpenses
+          .filter(expense => filedRefs.has(expense.ref) && isUnresolvedShippoPostage(expense)).length,
+        source: 'your email',
       });
       return { filed, linked, blank, stamped };
     }
@@ -2423,12 +2481,22 @@ function showShippoLabelAlert(result) {
  * on a screen nobody is looking at, which is the same as the button doing
  * nothing.
  */
-function openShippingReconciliationFromAlert(event) {
+function openShippingReconciliationFromAlert(event, source = '') {
   if (event) event.stopPropagation();
   dismissAppAlert('shippo-labels');
+  if (source) dismissAppAlert(`postage-sweep-${source === 'email' ? 'your-email' : 'canada-post'}`);
   switchTab('taxcenter');
   switchTaxCenterSubTab('integrations');
   openShippingReconciliation();
+  const panel = document.querySelector('.shipping-reconciliation');
+  const amountRow = [...(panel?.querySelectorAll('.shipping-amount-row') || [])]
+    .find(row => !source || row.dataset.source === source);
+  const orderRow = [...(panel?.querySelectorAll('.shipping-reconciliation-row') || [])]
+    .find(row => !source || row.dataset.source === source);
+  const target = amountRow?.querySelector('button') || orderRow?.querySelector('button')
+    || panel?.querySelector('.shipping-reconciliation-row button');
+  panel?.scrollIntoView({ block: 'start' });
+  target?.focus({ preventScroll: true });
 }
 
 /**
@@ -10963,6 +11031,7 @@ export {
   applyConfidentShippingLinks,
   linkConfidentShippingMatchesNow,
   openShippingReconciliationFromAlert,
+  openPostageAmountEditor,
   refreshShippoLabelsIfDue,
   startShippoLabelWatch,
   sweepCanadaPostShipments,
