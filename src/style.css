@@ -18388,6 +18388,7 @@ button[onclick="refreshUmamiStats()"]:active {
   color: var(--content-secondary);
   text-wrap: pretty;
 }
+.notif-source, .app-alert-source { display: block; font-size: var(--text-2xs); font-weight: 700; color: var(--content-muted); margin-bottom: 2px; }
 .notif-meta { margin-top: var(--space-2); }
 .notif-action {
   position: relative;

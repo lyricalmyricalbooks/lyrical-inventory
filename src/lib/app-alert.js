@@ -15,7 +15,7 @@
 // and neither should have to import the other to say something.
 
 import { escapeHtml } from './html.js';
-import { logNotification } from './notification-log.js';
+import { logNotification, markNotificationKindRead, notificationSource } from './notification-log.js';
 
 const STACK_ID = 'app-alert-stack';
 
@@ -40,7 +40,7 @@ export function clearAppAlerts() {
  */
 function entryHtml(entry) {
   const action = entry.actionLabel && entry.action
-    ? `<button type="button" class="btn gold sm" onclick="${escapeHtml(entry.action)}">${escapeHtml(entry.actionLabel)}</button>`
+    ? `<button type="button" class="btn gold sm" onclick="markAppAlertReviewed('${escapeHtml(entry.id)}');${escapeHtml(entry.action)}">${escapeHtml(entry.actionLabel)}</button>`
     : '';
   // Tone is opt-in and defaults to nothing, so every entry written before this
   // existed keeps the positive styling it was designed with. A fault needs to
@@ -50,6 +50,7 @@ function entryHtml(entry) {
   return `<div class="app-alert${tone}" data-alert-id="${escapeHtml(entry.id)}" role="status" aria-live="polite">
       <span class="app-alert-ico" aria-hidden="true">${escapeHtml(entry.icon || '')}</span>
       <div class="app-alert-body">
+        <span class="app-alert-source">From ${escapeHtml(notificationSource(entry))}</span>
         <span class="app-alert-title">${escapeHtml(entry.title || '')}</span>
         <span class="app-alert-detail">${escapeHtml(entry.detail || '')}</span>
         ${action ? `<div class="app-alert-actions">${action}</div>` : ''}
@@ -79,6 +80,7 @@ export function pushAppAlert(entry) {
   if (!id || !entry?.title) return null;
   const next = {
     id,
+    source: entry.source || '',
     icon: entry.icon || '',
     title: entry.title,
     detail: entry.detail || '',
@@ -111,4 +113,10 @@ export function dismissAppAlert(id) {
   // own entry on every successful run, and rebuilding the stack's markup on a
   // timer would interrupt a press on whichever other card is showing.
   if (_entries.length !== before) renderAppAlerts();
+}
+
+export function markAppAlertReviewed(id) {
+  markNotificationKindRead(String(id || ''));
+  dismissAppAlert(id);
+  if (typeof window !== 'undefined' && typeof window.onNotificationLogged === 'function') window.onNotificationLogged();
 }
