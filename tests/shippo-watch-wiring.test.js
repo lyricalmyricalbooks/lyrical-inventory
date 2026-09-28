@@ -281,10 +281,9 @@ describe('the alert stack itself', () => {
 
 describe('the worklist can clear its own backlog', () => {
   it('offers linking beside the existing dismiss-all', () => {
-    expect(indexContent).toContain('onclick="linkConfidentShippingMatchesNow()"');
-    expect(indexContent).toContain('id="shipping-reconciliation-autolink"');
-    // The dismiss-all is still there; this is a counterpart, not a replacement.
-    expect(indexContent).toContain('onclick="clearShippingReconciliationList()"');
+    // Both controls moved with the review into the Review inbox.
+    expect(indexContent).toContain('data-ri-action="linkCertain"');
+    expect(appSource).toContain('async function clearShippingReconciliationList');
   });
 
   it('records an automatic link as automatic, never as the publisher’s', () => {

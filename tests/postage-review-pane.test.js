@@ -3,52 +3,36 @@ import { buildHarness } from './helpers/extract-decl.js';
 import { escapeHtml } from '../src/lib/html.js';
 import { isUnresolvedShippoPostage, needsAmountAttention } from '../src/lib/shipping-reconciliation.js';
 
-function reviewDom() {
-  document.body.innerHTML = `<section class="shipping-reconciliation">
-    <span id="shipping-reconciliation-count"></span>
-    <div id="shipping-amount-review-list"></div>
-    <div id="shipping-reconciliation-list"></div>
-  </section><button id="shipping-reconciliation-open" hidden></button>`;
+function summaryDom() {
+  document.body.innerHTML = '<p id="shipping-review-summary"></p>';
   return document;
 }
 
 describe('shipping label review', () => {
-  it('keeps a missing price visible even after the order was matched, then clears it when resolved', () => {
-    const dom = reviewDom();
-    const expense = {
-      id: 1, ref: 'postage:EE123', amountUnknown: true, shippingMatchStatus: 'matched',
-      postageSource: 'email', postageEmailFrom: 'Carrier <receipts@example.com>',
-      postageEmailSubject: 'Your label', desc: 'Shipping label', trackingNumber: 'EE123',
-    };
-    const { renderShippingReconciliationWorklist } = buildHarness({
-      names: ['renderShippingReconciliationWorklist'],
-      deps: {
-        $: id => dom.getElementById(id),
-        document: dom,
-        isAuthor: () => false,
-        TAX_CENTER: { businessExpenses: [expense] },
-        isUnresolvedShippoPostage,
-        needsAmountAttention,
-        getShippingReconciliationOrders: () => [],
-        escapeHtml,
-      },
-      returns: '{ renderShippingReconciliationWorklist }',
-    });
+  const harness = (dom, expenses) => buildHarness({
+    names: ['renderShippingReconciliationWorklist'],
+    deps: {
+      $: id => dom.getElementById(id),
+      isAuthor: () => false,
+      labelReviewEntries: () => expenses.map(expense => ({
+        expense, needsAmount: needsAmountAttention(expense), needsOrder: isUnresolvedShippoPostage(expense),
+      })).filter(e => e.needsAmount || e.needsOrder),
+    },
+    returns: '{ renderShippingReconciliationWorklist }',
+  }).renderShippingReconciliationWorklist;
 
-    renderShippingReconciliationWorklist();
-    const row = dom.querySelector('.shipping-amount-row');
-    expect(row?.textContent).toContain('Shipping confirmation email');
-    expect(row?.textContent).toContain('Carrier <receipts@example.com>');
-    expect(row?.querySelector('button')?.dataset.ref).toBe('postage:EE123');
-    expect(row?.querySelector('.shipping-review-discard')?.getAttribute('aria-label'))
-      .toContain('Discard Shipping label from Shipping & Postage');
-    expect(dom.querySelector('#shipping-reconciliation-list .shipping-reconciliation-row')).toBeNull();
-
-    expense.amountUnknown = false;
-    renderShippingReconciliationWorklist();
-    expect(dom.querySelector('.shipping-amount-row')).toBeNull();
-    expect(dom.getElementById('shipping-amount-review-list').textContent)
-      .toContain('No labels need a postage amount');
+  it('tells the Tax Centre how many labels wait in the review inbox, and what each needs', () => {
+    const dom = summaryDom();
+    const expenses = [
+      { ref: 'postage:EE1', amountUnknown: true, shippingMatchStatus: 'matched' },
+      { ref: 'postage:EE2', shippingMatchStatus: 'unmatched' },
+    ];
+    harness(dom, expenses)();
+    expect(dom.getElementById('shipping-review-summary').textContent)
+      .toBe('2 labels waiting for review: 1 needs an amount, 1 needs an order link.');
+    expenses.length = 0;
+    harness(dom, expenses)();
+    expect(dom.getElementById('shipping-review-summary').textContent).toBe('No labels are waiting for review.');
   });
 
   it('opens the review inbox on the labels from an email alert, and clears the alert cards', () => {
@@ -64,29 +48,6 @@ describe('shipping label review', () => {
 
     openShippingReconciliationFromAlert(null, 'email');
     expect(visited).toEqual(['shippo-labels', 'postage-sweep-your-email', 'inbox:label']);
-  });
-
-  it('still reaches the full Tax Centre worklist, and lands on its first task', () => {
-    const dom = reviewDom();
-    dom.querySelector('.shipping-reconciliation').innerHTML +=
-      '<div class="shipping-amount-row" data-source="canadapost"><button>Canada Post task</button></div>' +
-      '<div class="shipping-amount-row" data-source="email"><button>Email task</button></div>';
-    HTMLElement.prototype.scrollIntoView = () => {};
-    const visited = [];
-    const { openShippingWorklistPanel } = buildHarness({
-      names: ['openShippingWorklistPanel'],
-      deps: {
-        document: dom,
-        switchTab: tab => visited.push(tab),
-        switchTaxCenterSubTab: tab => visited.push(tab),
-        openShippingReconciliation: () => visited.push('review'),
-      },
-      returns: '{ openShippingWorklistPanel }',
-    });
-
-    openShippingWorklistPanel();
-    expect(visited).toEqual(['taxcenter', 'integrations', 'review']);
-    expect(dom.activeElement.textContent).toBe('Canada Post task');
   });
 
   it('discards only the selected imported expense and remembers its ref across scans', async () => {

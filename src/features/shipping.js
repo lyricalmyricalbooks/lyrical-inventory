@@ -83,7 +83,7 @@ import {
   orderNotifyEnabled,
   refreshBigCartelOrdersIfDue,
 } from './bigcartel.js';
-import { renderTaxCenter, saveTaxCenter, switchTaxCenterSubTab } from './taxcentre.js';
+import { renderTaxCenter, saveTaxCenter } from './taxcentre.js';
 import { escapeHtml } from '../lib/html.js';
 import {
   REGION_LABELS,
@@ -818,99 +818,24 @@ async function fetchShippoContext(token, tx) {
   return { shipment, shippoOrder };
 }
 
+/**
+ * The Tax Centre's line about labels waiting for review. The review itself
+ * happens in the Review inbox; this only says how many are waiting there.
+ */
 function renderShippingReconciliationWorklist() {
-  const list = $('shipping-reconciliation-list');
-  const count = $('shipping-reconciliation-count');
-  if (!list || !count || isAuthor()) return;
-  const amountList = $('shipping-amount-review-list');
-  const panel = list.closest('.shipping-reconciliation');
-  const openButton = $('shipping-reconciliation-open');
-  if (panel?.dataset.closed === 'true') {
-    panel.hidden = true;
-    if (openButton) openButton.hidden = false;
+  const summary = $('shipping-review-summary');
+  if (!summary || isAuthor()) return;
+  const entries = labelReviewEntries();
+  if (!entries.length) {
+    summary.textContent = 'No labels are waiting for review.';
     return;
   }
-  if (panel) panel.hidden = false;
-  if (openButton) openButton.hidden = true;
-  const expenses = (TAX_CENTER.businessExpenses || []).filter(isUnresolvedShippoPostage);
-  const knownOrders = getShippingReconciliationOrders();
-  // Two different kinds of unfinished. A label needing an order is a matching
-  // job; a label needing a figure is a bookkeeping one, and it stays visible
-  // here because the alternative — a silent zero in the postage column — is how
-  // a shipping margin quietly stops being true.
-  const amountTasks = (TAX_CENTER.businessExpenses || []).filter(needsAmountAttention);
-  const blanks = amountTasks.length;
-  count.textContent = blanks
-    ? `${expenses.length} to link · ${blanks} label${blanks === 1 ? '' : 's'} need${blanks === 1 ? 's' : ''} an amount`
-    : `${expenses.length} to review`;
-  if (amountList) {
-    amountList.innerHTML = amountTasks.length ? amountTasks.map(expense => {
-      const source = expense.postageSource === 'email' ? 'Shipping confirmation email'
-        : expense.postageSource === 'canadapost' ? 'Canada Post account' : 'Imported label';
-      const evidence = [expense.trackingCarrier, expense.trackingNumber, expense.date, expense.recipientName]
-        .filter(Boolean).map(escapeHtml).join(' · ');
-      const emailEvidence = expense.postageSource === 'email'
-        ? [expense.postageEmailFrom, expense.postageEmailSubject].filter(Boolean).map(escapeHtml).join(' · ')
-        : '';
-      return `<div class="shipping-amount-row" data-source="${escapeHtml(expense.postageSource || '')}">
-        <button class="shipping-review-discard" type="button" data-ref="${escapeHtml(expense.ref)}"
-          onclick="discardImportedPostageExpense(this.dataset.ref)"
-          aria-label="Discard ${escapeHtml(expense.desc || 'shipping label')} from Shipping &amp; Postage"
-          title="Discard this imported label and expense">✕</button>
-        <div class="shipping-reconciliation-copy">
-          <strong>${escapeHtml(expense.desc || 'Shipping label')}</strong>
-          <span>Found in: ${source}</span>
-          ${emailEvidence ? `<small>${emailEvidence}</small>` : ''}
-          <small>${evidence || 'No further label details available'}</small>
-          <span class="shipping-reconciliation-hint">The confirmation did not give a reliable price. Check the carrier charge, then enter the amount.</span>
-        </div>
-        <button class="btn gold sm" type="button" data-ref="${escapeHtml(expense.ref)}" onclick="openPostageAmountEditor(this.dataset.ref)">Enter postage amount</button>
-      </div>`;
-    }).join('') : '<p class="shipping-review-clear">No labels need a postage amount.</p>';
-  }
-  if (!expenses.length) {
-    list.innerHTML = `<div class="shipping-reconciliation-empty">
-      <span class="recon-empty-mark" aria-hidden="true">\u2713</span>
-      <strong>No order links to review</strong>
-      <span>New labels that need an order link will appear here.</span>
-    </div>`;
-    return;
-  }
-
-  list.innerHTML = expenses.map(expense => {
-    const domId = String(expense.ref).replace(/[^A-Za-z0-9_-]/g, '-');
-    const suggested = normalizeShippingOrderNumber(expense.shippingSuggestedOrderNumber);
-    const options = knownOrders.map(order => {
-      const number = normalizeShippingOrderNumber(order.num || order.orderNum);
-      return `<option value="${escapeHtml(number)}"${number === suggested ? ' selected' : ''}>${escapeHtml(number)} · ${escapeHtml(order.shipName || order.customer || 'Customer')}</option>`;
-    }).join('');
-    const context = [expense.recipientName, expense.recipientPostal, expense.trackingUrl ? 'Tracking saved' : ''].filter(Boolean).join(' · ');
-    // No order to pick means the sale never reached the app at all — the Gmail
-    // scan missed it. Say so plainly and point at the way out, instead of
-    // leaving an empty dropdown that looks like a broken control.
-    const noCandidates = !knownOrders.length;
-    const hint = noCandidates
-      ? '<span class="shipping-reconciliation-hint">No website orders on file yet — add this one to link it.</span>'
-      : (expense.shippingMatchStatus === 'unmatched'
-        ? '<span class="shipping-reconciliation-hint">No order matched this label. Pick one, or add the missing order.</span>'
-        : '');
-    return `<div class="shipping-reconciliation-row" data-source="${escapeHtml(expense.postageSource || '')}">
-      <div class="shipping-reconciliation-copy">
-        <strong>${needsAmountAttention(expense) ? 'Amount needed' : fmt(expense.amount || 0, expense.currency || 'CAD')}</strong>
-        <span>${escapeHtml(expense.date || 'Date unavailable')} · ${escapeHtml(context || 'Recipient unavailable')}</span>
-        <small>${escapeHtml(expense.shippingMatchStatus || 'unmatched')}</small>
-        ${hint}
-      </div>
-      <div class="shipping-reconciliation-decision">
-        <label for="${domId}">Order</label>
-        <select id="${domId}" aria-label="Order for postage expense"${noCandidates ? ' disabled' : ''}><option value="">${noCandidates ? 'No orders on file' : 'Select an order'}</option>${options}</select>
-        <div class="shipping-reconciliation-actions">
-          <button class="btn sm" type="button" data-ref="${escapeHtml(expense.ref)}" onclick="openRecoverWebsiteOrder(this.dataset.ref)">Add missing order</button>
-          <button class="btn gold sm" type="button" data-ref="${escapeHtml(expense.ref)}" onclick="linkShippingExpense(this.dataset.ref)"${noCandidates ? ' disabled' : ''}>Link postage</button>
-        </div>
-      </div>
-    </div>`;
-  }).join('');
+  const amounts = entries.filter(e => e.needsAmount).length;
+  const orders = entries.filter(e => e.needsOrder).length;
+  const parts = [];
+  if (amounts) parts.push(`${amounts} need${amounts === 1 ? 's' : ''} an amount`);
+  if (orders) parts.push(`${orders} need${orders === 1 ? 's' : ''} an order link`);
+  summary.textContent = `${entries.length} label${entries.length === 1 ? '' : 's'} waiting for review: ${parts.join(', ')}.`;
 }
 
 function openPostageAmountEditor(ref) {
@@ -968,20 +893,6 @@ async function discardImportedPostageExpense(ref) {
   renderShippingAnalysisHub();
   renderPostageMatchWorklist();
   showToast('Imported label discarded and removed from Shipping & Postage', 'ok');
-}
-
-function closeShippingReconciliation() {
-  const panel = document.querySelector('.shipping-reconciliation');
-  if (!panel) return;
-  panel.dataset.closed = 'true';
-  renderShippingReconciliationWorklist();
-}
-
-function openShippingReconciliation() {
-  const panel = document.querySelector('.shipping-reconciliation');
-  if (!panel) return;
-  delete panel.dataset.closed;
-  renderShippingReconciliationWorklist();
 }
 
 async function clearShippingReconciliationList() {
@@ -2598,21 +2509,6 @@ function openShippingReconciliationFromAlert(event, source = '') {
   dismissAppAlert('shippo-labels');
   if (source) dismissAppAlert(`postage-sweep-${source === 'email' ? 'your-email' : 'canada-post'}`);
   openReviewInbox({ filter: 'label' });
-}
-
-/**
- * The Tax Centre's full shipping worklist, for when the review inbox is not enough.
- * The worklist lives inside the Integrations pane of the Tax Centre, which starts
- * hidden behind the Ledger one, so both navigations are needed before revealing it.
- */
-function openShippingWorklistPanel() {
-  switchTab('taxcenter');
-  switchTaxCenterSubTab('integrations');
-  openShippingReconciliation();
-  const panel = document.querySelector('.shipping-reconciliation');
-  const target = panel?.querySelector('.shipping-amount-row button, .shipping-reconciliation-row button');
-  panel?.scrollIntoView({ block: 'start' });
-  target?.focus({ preventScroll: true });
 }
 
 /**
@@ -11086,7 +10982,6 @@ export {
   labelReviewEntries,
   postageOrderChoices,
   linkPostageToOrder,
-  openShippingWorklistPanel,
   findShippoReceipts,
   _shippoDestMasterList,
   getShippingReconciliationOrders,
@@ -11106,8 +11001,6 @@ export {
   fetchShippoContext,
   renderShippingReconciliationWorklist,
   autoLinkPostageForOrder,
-  closeShippingReconciliation,
-  openShippingReconciliation,
   clearShippingReconciliationList,
   linkShippingExpense,
   renderPostageMatchWorklist,

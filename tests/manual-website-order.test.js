@@ -223,12 +223,12 @@ describe('the worklist offers a way out of an unmatched label', () => {
   });
 
   it('offers the recovery button on every unmatched row', () => {
-    expect(appSource).toContain('onclick="openRecoverWebsiteOrder(this.dataset.ref)"');
+    expect(appSource).toContain('data-ri-action="addOrder"');
   });
 
   it('explains an empty dropdown instead of leaving a dead control', () => {
-    expect(appSource).toContain('No website orders on file yet');
-    expect(appSource).toContain('No orders on file');
+    expect(appSource).toContain('No website orders on file');
+    expect(appSource).toContain("choices.length ? '' : ' disabled'");
   });
 
   it('exposes the recovery handlers to the inline onclick attributes', () => {

@@ -52,4 +52,16 @@ describe('the review inbox', () => {
     // No labels waiting: it falls back to everything rather than showing a blank list.
     expect(document.querySelector('[data-ri-filter="all"]').getAttribute('aria-pressed')).toBe('true');
   });
+
+  it('reviews shipping labels here: order link, "not a website order", and link-certain', () => {
+    app.main.TAX_CENTER.businessExpenses = [
+      { id: 1, ref: 'postage:EE9', desc: 'Expedited Parcel', date: '2026-09-27', amount: 12.5, currency: 'CAD', postageSource: 'email', shippingMatchStatus: 'unmatched' },
+    ];
+    win.openReviewInbox({ filter: 'label' });
+    const html = detail().innerHTML;
+    expect(html).toContain('Order this label was for');
+    expect(html).toContain('data-ri-action="link"');
+    expect(html).toContain('Not a website order');
+    expect(document.getElementById('ri-link-certain').hidden).toBe(false);
+  });
 });
