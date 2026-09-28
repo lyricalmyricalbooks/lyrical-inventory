@@ -12,7 +12,7 @@
 //
 // What this checks instead is narrower and provable: "you have filed the
 // word 'ink' under Printing & Production four separate times, and this once
-// under Travel & Meals, where 'ink' has never appeared before" is a fact
+// under Travel, where 'ink' has never appeared before" is a fact
 // about THIS ledger, not a guess about what the word means. Every finding
 // names the exact words behind it and how many times the business itself
 // used them under each category, so it is checkable and wrong only if the

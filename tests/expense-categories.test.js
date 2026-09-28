@@ -24,7 +24,7 @@ describe('canonicalExpenseCategory', () => {
   });
 
   it('accepts the spelled-out "and" variant', () => {
-    expect(canonicalExpenseCategory('Travel and Meals')).toBe('Travel & Meals');
+    expect(canonicalExpenseCategory('Travel and Meals')).toBe('Travel');
   });
 
   it('passes an unrecognised category through rather than swallowing it', () => {

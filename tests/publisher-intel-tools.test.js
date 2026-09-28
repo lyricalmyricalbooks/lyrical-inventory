@@ -48,13 +48,13 @@ function fixture(over = {}) {
     tripBudgets: { 'Toronto Word Fair': 400 },
     businessExpenses: [
       { id: 'b1', desc: 'Train', cat: 'travel', amount: 120, currency: 'CAD', baseAmount: 120, date: '2026-06-13', trip: 'Toronto Word Fair' },
-      { id: 'b2', desc: 'Hotel', cat: 'Travel & Meals', amount: 200, currency: 'USD', date: '2026-06-13', trip: 'Toronto Word Fair', fxMissing: true },
+      { id: 'b2', desc: 'Hotel', cat: 'Travel', amount: 200, currency: 'USD', date: '2026-06-13', trip: 'Toronto Word Fair', fxMissing: true },
     ],
   };
   const tripsSummary = {
     'Toronto Word Fair': {
       total: 320, count: 2, latestDate: '2026-06-14',
-      categories: { 'Travel & Meals': 320 },
+      categories: { 'Travel': 320 },
       items: [{ date: '2026-06-13' }, { date: '2026-06-14' }],
       record: { name: 'Toronto Word Fair', destination: 'Toronto', startDate: '2026-06-13', endDate: '2026-06-15' },
     },
@@ -144,9 +144,9 @@ describe('queryExpenses', () => {
   it('folds an old category spelling onto the canonical one and says it did', () => {
     const out = runIntelTool('queryExpenses', { scope: 'business' }, fixture());
     const train = out.rows.find(r => r.id === 'b1');
-    expect(train.category).toBe('Travel & Meals');
+    expect(train.category).toBe('Travel');
     expect(train.storedCategory).toBe('travel');
-    expect(out.byCategory.find(c => c.category === 'Travel & Meals').count).toBe(2);
+    expect(out.byCategory.find(c => c.category === 'Travel').count).toBe(2);
   });
 
   it('uses the stamped CAD figure and never re-converts a foreign row', () => {
@@ -231,7 +231,7 @@ describe('findAnomalies', () => {
     expect(out.byKind['category-alias']).toBe(2);        // "travel" and "Events"
     expect(out.byKind['missing-exchange-rate']).toBe(1);
     const alias = out.rows.find(r => r.kind === 'category-alias' && r.expenseId === 'b1');
-    expect(alias.suggestedFix).toEqual({ target: 'businessExpense', field: 'category', value: 'Travel & Meals' });
+    expect(alias.suggestedFix).toEqual({ target: 'businessExpense', field: 'category', value: 'Travel' });
   });
 
   it('spots one cost entered twice', () => {
@@ -252,10 +252,10 @@ describe('proposeEdits', () => {
 
   it('stages a change without making it', () => {
     const ctx = fixture();
-    const out = propose([{ target: 'businessExpense', id: 'b1', field: 'category', value: 'Travel & Meals' }], ctx);
+    const out = propose([{ target: 'businessExpense', id: 'b1', field: 'category', value: 'Travel' }], ctx);
     expect(out.ok).toBe(true);
     expect(out.batch.items[0]).toMatchObject({
-      target: 'businessExpense', field: 'cat', beforeText: 'travel', afterText: 'Travel & Meals', risk: 'descriptive',
+      target: 'businessExpense', field: 'cat', beforeText: 'travel', afterText: 'Travel', risk: 'descriptive',
     });
     // Nothing was written. This is the whole safety argument for the feature.
     expect(ctx.taxCenter.businessExpenses.find(e => e.id === 'b1').cat).toBe('travel');
@@ -381,7 +381,7 @@ describe('proposeEdits', () => {
 
   it('refuses a category this app does not have', () => {
     const ctx = fixture();
-    ctx.expenseCategories = ['Travel & Meals', 'Other'];
+    ctx.expenseCategories = ['Travel', 'Other'];
     const out = propose([{ target: 'businessExpense', id: 'b1', field: 'category', value: 'Yacht Hire' }], ctx);
     expect(out.ok).toBe(false);
     expect(out.rejected[0].reason).toMatch(/not one of this app/i);

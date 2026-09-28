@@ -166,13 +166,17 @@ function eventsWithoutCosts(ctx) {
  * forgotten cost of an event, because the table fee arrives as an invoice and
  * the petrol does not.
  */
+// Trip buckets built from rows saved before the rename can still be keyed
+// "Travel & Meals"; count both so an old fair doesn't look like it has no travel.
+const travelSpend = (bucket) => num(bucket?.categories?.['Travel']) + num(bucket?.categories?.['Travel & Meals']);
+
 function eventsWithoutTravel(ctx) {
   const summary = ctx.tripsSummary || {};
   const gaps = [];
   const travelSpends = [];
 
   for (const bucket of Object.values(summary)) {
-    const t = num(bucket?.categories?.['Travel & Meals']);
+    const t = travelSpend(bucket);
     if (t > 0) travelSpends.push(t);
   }
   const typical = median(travelSpends);
@@ -180,12 +184,12 @@ function eventsWithoutTravel(ctx) {
   for (const [name, bucket] of Object.entries(summary)) {
     const spent = num(bucket?.total);
     if (spent <= 0) continue;
-    if (num(bucket?.categories?.['Travel & Meals']) > 0) continue;
+    if (travelSpend(bucket) > 0) continue;
 
     gaps.push({
       id: `event-no-travel:${name}`,
       kind: 'event-missing-travel',
-      category: 'Travel & Meals',
+      category: 'Travel',
       title: `Nothing recorded for getting to ${name}`,
       detail: `${name} has ${roundCents(spent).toFixed(2)} of costs against it but nothing for travel or meals. `
         + 'Petrol, a train fare or lunch on the day rarely comes with an invoice, so it is the easiest one to lose.',
