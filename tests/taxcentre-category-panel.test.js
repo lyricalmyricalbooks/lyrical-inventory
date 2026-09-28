@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildHarness } from './helpers/extract-decl.js';
+import { deductibleAmount, deductibleRate } from '../src/lib/deductibility.js';
 
 // _tcRenderCategoryPanel gained real arithmetic when the table grew a "% of
 // total" column and a totals row: shares have to sum to the whole, a sub-0.1%
@@ -20,6 +21,8 @@ function render(expenses) {
         { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
       )),
       fmt: (n) => `CA$${n.toFixed(2)}`,
+      deductibleAmount,
+      deductibleRate,
       window: win,
     },
     returns: '_tcRenderCategoryPanel',
@@ -104,6 +107,23 @@ describe('_tcRenderCategoryPanel', () => {
     const { body } = render([{ isIncome: false, cat: 'R&D <script>', baseAmount: 10 }]);
     expect(body).toContain('R&amp;D &lt;script&gt;');
     expect(body).not.toContain('<script>');
+  });
+
+  it('counts only 50% of Meals & Entertainment toward the deductible total', () => {
+    const { body, foot, stash } = render([
+      { isIncome: false, cat: 'Printing & Production', baseAmount: 900 },
+      { isIncome: false, cat: 'Meals & Entertainment', baseAmount: 100 },
+      { isIncome: false, cat: 'Meals & Entertainment', baseAmount: 100 },
+    ]);
+    expect(stash.byName['Meals & Entertainment'].total).toBe(100);
+    expect(stash.byName['Meals & Entertainment'].spent).toBe(200);
+    expect(body).toContain('50% of CA$200.00 spent (CRA limit)');
+    expect(foot).toContain('CA$1000.00'); // 900 + 50% of 200, not 1100
+    expect(pctLabels(body)).toEqual(['90%', '10%']);
+  });
+
+  it('does not annotate categories that are fully deductible', () => {
+    expect(render(ledger).body).not.toContain('CRA limit');
   });
 
   it('gives every row a keyboard-reachable button and leaves the row a plain row', () => {

@@ -13457,6 +13457,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .tc-cat-chevron{display:inline-block;margin-left:6px;opacity:0;color:var(--text3);font-weight:400;transition:opacity var(--dur-fast,140ms) var(--ease-standard,ease);}
 .tc-cat-tbl tbody tr:hover .tc-cat-chevron,
 .tc-cat-tbl tbody tr:focus-within .tc-cat-chevron{opacity:1;}
+.tc-cat-limit{display:block;margin-top:2px;font-family:var(--font-mono);font-size:var(--text-2xs);font-weight:400;color:var(--text3);}
 .tc-cat-tbl tfoot .tc-cat-foot-row td{border-top:2px solid var(--text);padding-top:12px;padding-bottom:12px;font-weight:700;color:var(--text);}
 .tc-cat-tbl tfoot .tc-cat-foot-pct{font-family:var(--font-mono);color:var(--text3)!important;font-weight:600;}
 

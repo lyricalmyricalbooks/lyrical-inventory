@@ -65,6 +65,7 @@ import {
 } from '../lib/deduction-gaps.js';
 import { findCategoryMismatches } from '../lib/category-fit.js';
 import { canonicalExpenseCategory } from '../lib/expense-categories.js';
+import { deductibleAmount, deductibleRate } from '../lib/deductibility.js';
 import { receiptOwners, summarizeReceiptStorage, isReceiptExemptExpense, receiptRefsOf, isWebReceiptLink, hasOnlyShippingLabels } from '../lib/receipt-storage.js';
 import { testZonosConnection } from '../lib/zonos.js';
 import { friendlyOpenRouterError, openRouterAllowanceNote, testOpenRouterConnection } from '../lib/openrouter-chat.js';
@@ -898,11 +899,15 @@ function _tcRenderCategoryPanel(allLedger, baseCurrency) {
       const ex = allLedger[i];
       if (!ex.isIncome) {
         const c = ex.cat || 'Uncategorized';
-        if (!catSummary[c]) catSummary[c] = { total: 0, count: 0, items: [] };
-        catSummary[c].total += ex.baseAmount;
+        if (!catSummary[c]) catSummary[c] = { total: 0, spent: 0, rate: deductibleRate(c), count: 0, items: [] };
+        // `total` is what the CRA lets us deduct (Meals & Entertainment is
+        // capped at 50%); `spent` is what actually left the bank account.
+        const deductible = deductibleAmount(c, ex.baseAmount);
+        catSummary[c].total += deductible;
+        catSummary[c].spent += ex.baseAmount;
         catSummary[c].count++;
         catSummary[c].items.push(ex);
-        grandTotal += ex.baseAmount;
+        grandTotal += deductible;
         totalTxns++;
       }
     }
@@ -937,7 +942,7 @@ function _tcRenderCategoryPanel(allLedger, baseCurrency) {
                 <span class="tc-cat-pct-label" aria-hidden="true">${pctLabel}</span>
               </span>
             </td>
-            <td class="r" style="font-weight:bold;color:var(--red);">- ${fmt(c.total, baseCurrency)}<span class="tc-cat-chevron" aria-hidden="true">›</span></td>
+            <td class="r" style="font-weight:bold;color:var(--red);">- ${fmt(c.total, baseCurrency)}<span class="tc-cat-chevron" aria-hidden="true">›</span>${c.rate < 1 ? `<span class="tc-cat-limit">${Math.round(c.rate * 100)}% of ${fmt(c.spent, baseCurrency)} spent (CRA limit)</span>` : ''}</td>
           </tr>
       `;
     }).join('') || `<tr><td colspan="4"><div class="empty-state" style="padding:1rem;">No deductible expenses recorded</div></td></tr>`;

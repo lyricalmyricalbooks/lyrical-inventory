@@ -16736,7 +16736,7 @@ export const TC_CATEGORIES = [
   'Software & Subscriptions', 'Marketing & Advertising', 'Printing & Production',
   'Editorial & Proofreading', 'Illustration & Photography', 'Rights & Permissions',
   'ISBN, Barcodes & Cataloging', 'Shipping & Postage', 'Warehousing & Fulfillment',
-  'Packaging Materials', 'Office Supplies', 'Home Office', 'Travel & Meals', 'Professional Services',
+  'Packaging Materials', 'Office Supplies', 'Home Office', 'Travel & Meals', 'Meals & Entertainment', 'Professional Services',
   'Books, Research & Reference', 'Events & Exhibitions', 'Artist Royalties',
   'Inventory Valuation Adjustment', 'Other'
 ];
@@ -17282,7 +17282,7 @@ export function showCategoryDetail(catName) {
   const detail = window._tcCategoryDetail;
   if (!detail || !detail.byName[catName]) return;
   const { baseCurrency } = detail;
-  const { items, total, count } = detail.byName[catName];
+  const { items, total, count, spent, rate } = detail.byName[catName];
 
   // ⚡ Bolt Optimization: Use string comparison instead of parsing to Date for sorting "YYYY-MM-DD" formatted dates
   const sorted = items.slice().sort((a, b) => {
@@ -17331,7 +17331,13 @@ export function showCategoryDetail(catName) {
   }).join('');
 
   $('tc-cat-detail-title').textContent = catName;
-  $('tc-cat-detail-summary').innerHTML = `${count} transaction${count === 1 ? '' : 's'} · <span style="color:var(--red);font-weight:bold;">Total: - ${fmt(total, baseCurrency)}</span>`;
+  // Rows below show what was spent; a limited category (Meals & Entertainment)
+  // says up front that only part of it is deductible, so the header total
+  // doesn't look like it disagrees with the rows.
+  const limitNote = rate < 1
+    ? ` · <span style="color:var(--text3);">Spent ${fmt(spent, baseCurrency)}, ${Math.round(rate * 100)}% deductible (CRA limit)</span>`
+    : '';
+  $('tc-cat-detail-summary').innerHTML = `${count} transaction${count === 1 ? '' : 's'} · <span style="color:var(--red);font-weight:bold;">${rate < 1 ? 'Deductible' : 'Total'}: - ${fmt(total, baseCurrency)}</span>${limitNote}`;
   $('tc-cat-detail-body').innerHTML = rows;
   openM('tc-cat-detail');
 }
@@ -17520,8 +17526,10 @@ export const TAX_CATEGORIES = {
   'flight': 'Travel & Meals',
   'uber': 'Travel & Meals',
   'hotel': 'Travel & Meals',
-  'dinner': 'Travel & Meals',
-  'lunch': 'Travel & Meals',
+  'dinner': 'Meals & Entertainment',
+  'lunch': 'Meals & Entertainment',
+  'restaurant': 'Meals & Entertainment',
+  'catering': 'Meals & Entertainment',
   'accountant': 'Professional Services',
   'legal': 'Professional Services',
   'lawyer': 'Professional Services',
