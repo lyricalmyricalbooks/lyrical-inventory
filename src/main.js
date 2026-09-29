@@ -10025,9 +10025,25 @@ function settleArtistTransfersFromStripe(payment) {
   const s = states[bookId], book = BOOKS[bookId];
   if (!s || !book) return null;
   const ids = String(meta.transfer_ids || meta.transfer_id || '').split(',').map(x => x.trim()).filter(Boolean);
-  const open = (s.artistTransfers || []).filter(t => ids.includes(String(t.id)) && transferAmount(t) > 0);
+
+  // ⚡ Bolt Optimization: Use Set for O(1) lookups and single imperative loop to replace .filter().reduce()
+  const idSet = new Set(ids);
+  const open = [];
+  let dueRaw = 0;
+  const transfers = s.artistTransfers || [];
+  for (let i = 0; i < transfers.length; i++) {
+    const t = transfers[i];
+    if (idSet.has(String(t.id))) {
+      const amt = transferAmount(t);
+      if (amt > 0) {
+        open.push(t);
+        dueRaw += amt;
+      }
+    }
+  }
+
   if (!open.length) return null;
-  const due = roundCents(open.reduce((a, t) => a + transferAmount(t), 0));
+  const due = roundCents(dueRaw);
   const bookCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
   if (String(payment.currency || '').toUpperCase() !== bookCur) return { bookId, settled: 0, problem: 'currency' };
   if (Number(payment.amount) + 0.005 < due) return { bookId, settled: 0, problem: 'short' };
