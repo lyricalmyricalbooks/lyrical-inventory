@@ -446,7 +446,13 @@
   #tab-website .order-actions > .btn.gold { flex-basis: 100%; order: -1; }
   /* Consistent breathing room and reachable disclosure across the remaining
      customer, tax, consignment, stock and administration pages. */
-  .tab-panel .phone-records tr.phone-record { border-radius: var(--r3); padding: var(--space-4); gap: var(--space-3); }
+  /* Record cards match .card: 2px ink outline + hard offset shadow, so a list of
+     records reads as a stack of printed slips. Labels drop to the micro-caps
+     tier so the lead line and the values carry the hierarchy; the gap between
+     cards (space-4) beats the gap inside one (space-3). */
+  .tab-panel .phone-records tr.phone-record { border: var(--stroke) solid var(--border-strong); border-radius: var(--r3); padding: var(--space-4); gap: var(--space-3); margin-bottom: var(--space-4); box-shadow: var(--elev-1); }
+  .tab-panel .phone-records td::before { font: 800 var(--text-2xs) var(--font-ui); text-transform: uppercase; letter-spacing: var(--tracking-caps); }
+  .tab-panel .phone-records td.phone-record-lead { font-size: var(--text-md); border-bottom: var(--stroke) solid var(--border-strong); }
   .phone-record-toggle { width: 100%; text-align: center; }
   .phone-section-picker select { border-radius: var(--r2); padding: var(--space-3); }
   .pub-shell .more-sheet-body .pub-nav { grid-template-columns: minmax(0, 1fr); }
