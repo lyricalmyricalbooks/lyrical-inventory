@@ -110,10 +110,11 @@ describe('the worklist shows postage from anywhere, not only Shippo', () => {
     expect(needsAmountAttention({ ref: '', amountUnknown: true })).toBe(false);
   });
 
-  it('is shown beside the review count rather than left implicit', () => {
+  it('is surfaced by the global review inbox rather than left implicit', () => {
     expect(appSource).toContain('an amount');
     expect(appSource).toContain('needsAmount = needsAmountAttention(expense)');
-    expect(indexContent).toContain('id="shipping-review-summary"');
+    expect(indexContent).toContain('id="review-inbox-header-btn"');
+    expect(indexContent).toContain('id="review-inbox-header-badge"');
   });
 });
 

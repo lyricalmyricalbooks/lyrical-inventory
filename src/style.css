@@ -731,11 +731,15 @@ tr.hist-row:hover {
 }
 .theme-toggle-btn:hover .ttb-ico{transform:rotate(-18deg) scale(1.08);}
 .theme-toggle-btn:active .ttb-ico{transform:scale(.9);}
-/* Notifications bell shares the theme chip's look; publisher eyes only. */
-#pw-app:not(.pub-shell) .hdr-notif-btn{display:none;}
-.hdr-notif-btn:hover .ttb-ico{transform:none;}
+/* Notifications and review inbox share the theme chip's look; publisher eyes only. */
+#pw-app:not(.pub-shell) .hdr-notif-btn,
+#pw-app:not(.pub-shell) .hdr-review-btn{display:none;}
+.hdr-notif-btn:hover .ttb-ico,
+.hdr-review-btn:hover .ttb-ico{transform:none;}
 .hdr-notif-badge{position:absolute;top:-6px;right:-8px;margin:0;pointer-events:none;}
 .hdr-notif-badge[hidden]{display:none;}
+.hdr-review-badge{position:absolute;top:-6px;right:-8px;margin:0;pointer-events:none;}
+.hdr-review-badge[hidden]{display:none;}
 
 /* ── APPEARANCE CONTROL ────────────────────────────────────────────────────
    Auto / Light / Dark, rendered inside the account dropdown and the publisher
@@ -19510,7 +19514,7 @@ button[onclick="refreshUmamiStats()"]:active {
   /* ---- Slimmer header: one brand row + book picker, not sticky, so
      the content gets the screen back once you scroll. ---- */
   .pub-shell .app-header{
-    position:relative;display:grid;grid-template-columns:minmax(0,auto) minmax(0,1fr) auto auto;
+    position:relative;display:grid;grid-template-columns:minmax(0,auto) minmax(0,1fr) auto auto auto auto;
     align-items:center;column-gap:8px;row-gap:8px;padding-bottom:10px;
   }
   .pub-shell .app-header > .hsep,
@@ -19519,12 +19523,14 @@ button[onclick="refreshUmamiStats()"]:active {
   .pub-shell .header-brand{grid-row:1;grid-column:1/3;padding:.45rem 0 0;}
   .pub-shell .header-right{display:contents;}
   .pub-shell #theme-toggle-btn{grid-row:1;grid-column:3;width:44px;height:44px;}
-  .pub-shell #hmenu-account{grid-row:1;grid-column:4;min-width:0;flex:none;justify-self:end;}
+  .pub-shell #notif-header-btn{grid-row:1;grid-column:4;width:44px;height:44px;}
+  .pub-shell #review-inbox-header-btn{grid-row:1;grid-column:5;width:44px;height:44px;}
+  .pub-shell #hmenu-account{grid-row:1;grid-column:6;min-width:0;flex:none;justify-self:end;}
   .pub-shell #hmenu-account .acct-trigger{min-width:44px;min-height:44px;justify-content:center;}
   .pub-shell .header-wordmark{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .pub-shell .app-header #book-switcher-wrap{grid-row:2;grid-column:1/2;width:auto;min-width:0;}
   .pub-shell #book-dropdown-btn{min-height:44px;max-width:46vw;}
-  .pub-shell .kpi-cluster{grid-row:2;grid-column:2/5;display:flex;justify-content:flex-end;min-width:0;}
+  .pub-shell .kpi-cluster{grid-row:2;grid-column:2/7;display:flex;justify-content:flex-end;min-width:0;}
   .pub-shell .header-stat{flex:0 1 auto;min-width:0;padding:.3rem .5rem;}
   .pub-shell .hs-val{font-size:var(--text-sm);}
   .pub-shell .hs-label{font-size:var(--text-3xs);letter-spacing:.08em;white-space:nowrap;}
@@ -19535,10 +19541,12 @@ button[onclick="refreshUmamiStats()"]:active {
 /* Portrait workspaces: keep the book context, figures, and sale controls in
    separate rows. The register's old fixed checkout obscured the book list. */
 @media (max-width: 768px){
-  .pub-shell .app-header{grid-template-columns:minmax(0,1fr) auto auto;}
+  .pub-shell .app-header{grid-template-columns:minmax(0,1fr) auto auto auto auto;}
   .pub-shell .header-brand{grid-column:1;min-width:0;}
   .pub-shell #theme-toggle-btn{grid-column:2;}
-  .pub-shell #hmenu-account{grid-column:3;}
+  .pub-shell #notif-header-btn{grid-column:3;}
+  .pub-shell #review-inbox-header-btn{grid-column:4;}
+  .pub-shell #hmenu-account{grid-column:5;}
   .pub-shell .app-header #book-switcher-wrap{
     grid-row:2;grid-column:1/-1;width:100%;min-width:0;
     display:flex;flex-wrap:wrap;gap:8px;
@@ -20589,10 +20597,3 @@ button[onclick="refreshUmamiStats()"]:active {
 .notif-clear:active { transform: scale(0.94); }
 .notif-clear:focus-visible { outline: 2px solid var(--gold-text); outline-offset: -2px; }
 .notif-log .notif-body, .notif-latest .notif-body { padding-right: var(--space-6); }
-
-/* The Tax Centre's way into the Review inbox for shipping labels. */
-.shipping-review-card { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; margin-top: var(--space-3); padding: var(--space-4); border: var(--stroke-hair) solid var(--border); border-radius: var(--r2); background: var(--surface-card); }
-.shipping-review-card-copy { flex: 1 1 320px; min-width: 0; }
-.shipping-review-card-copy p { margin: .25rem 0 0; font-size: var(--text-xs); line-height: var(--leading-snug); color: var(--content-muted); }
-.shipping-review-card-copy .shipping-review-card-count { font-size: var(--text-sm); font-weight: 600; color: var(--content-primary); }
-.shipping-review-card .btn { min-height: 44px; }

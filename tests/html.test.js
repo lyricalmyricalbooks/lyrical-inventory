@@ -53,11 +53,12 @@ describe('escapeHtml', () => {
     expect(escapeHtml('a & b & c')).toBe('a &amp; b &amp; c');
   });
 
-  it('points the shipping label review at the review inbox', () => {
-    // The review itself moved into the Review inbox; the Tax Centre keeps the way in.
-    expect(html).toContain('Shipping label review');
-    expect(html).toContain('id="shipping-review-summary"');
-    expect(html).toContain("openReviewInbox({filter:'label'})");
+  it('keeps the review inbox in the global header instead of the Tax Centre', () => {
+    expect(html).toContain('id="review-inbox-header-btn"');
+    expect(html).toContain('id="review-inbox-header-badge"');
+    expect(html).toContain('onclick="openReviewInbox()"');
+    expect(html).not.toContain('id="shipping-review-summary"');
+    expect(html).not.toContain('class="shipping-review-card"');
     expect(html).not.toContain('id="shipping-reconciliation-list"');
   });
 

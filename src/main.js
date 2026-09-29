@@ -6220,6 +6220,7 @@ function renderOverviewRail() {
   if (isAuthor()) return;
   const result = visibleAttentionResult();
   updateTodoBadge(result);
+  renderReviewInboxButton();
   renderNotificationBell();
   renderRailLatestNotifications();
 
@@ -6288,6 +6289,21 @@ function renderOverviewRail() {
            <span>Sales, shipments and expenses will show up here as you record them.</span>
          </div>`;
   }
+}
+
+/** Keep the global Review inbox shortcut honest about the work waiting inside. */
+function renderReviewInboxButton() {
+  const btn = $('review-inbox-header-btn');
+  const badge = $('review-inbox-header-badge');
+  if (!btn || !badge) return;
+  const total = reviewQueueSnapshot().summary.total;
+  badge.textContent = total > 99 ? '99+' : String(total);
+  badge.hidden = total === 0;
+  const label = total
+    ? `Review inbox — ${total} item${total === 1 ? '' : 's'} waiting`
+    : 'Review inbox — nothing waiting';
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
 }
 
 // ── Notification history ───────────────────────────────────────────────────

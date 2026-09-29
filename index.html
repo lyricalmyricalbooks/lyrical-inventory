@@ -479,6 +479,14 @@
       <span class="nav-badge notif-unread-badge hdr-notif-badge" aria-label="unread notifications" hidden></span>
     </button>
 
+    <!-- Review inbox stays one tap away from every publisher screen. -->
+    <button type="button" class="theme-toggle-btn hdr-review-btn" id="review-inbox-header-btn"
+            onclick="openReviewInbox()" title="Review inbox" aria-label="Review inbox">
+      <span class="ttb-ico" aria-hidden="true">📥</span>
+      <span class="nav-badge hdr-review-badge" id="review-inbox-header-badge"
+            aria-label="items waiting for review" hidden></span>
+    </button>
+
     <!-- Account avatar + sync status (corner dot reflects sync state) -->
     <div class="header-menu" id="hmenu-account">
       <button type="button" class="header-menu-trigger acct-trigger" onclick="toggleHeaderMenu('account')" aria-haspopup="true" aria-expanded="false" title="Account &amp; sync status">
@@ -3114,16 +3122,6 @@
             </div>
           </div>
         </div>
-
-        <!-- Shipping label review lives in the Review inbox now; this is the way in. -->
-        <section class="shipping-review-card" aria-labelledby="shipping-review-card-title">
-          <div class="shipping-review-card-copy">
-            <strong id="shipping-review-card-title">Shipping label review</strong>
-            <p>The app checks shipping confirmation emails through connected Gmail and your Canada Post account. New labels are added to Shipping &amp; Postage; finish any missing price or order link in the Review inbox.</p>
-            <p class="shipping-review-card-count" id="shipping-review-summary" role="status" aria-live="polite">No labels are waiting for review.</p>
-          </div>
-          <button class="btn gold sm" id="shipping-review-open" type="button" onclick="openReviewInbox({filter:'label'})">Open the review inbox</button>
-        </section>
 
         <!-- Shippo API Section -->
         <div class="tc-integration-section" id="tc-integration-card-shippo">
