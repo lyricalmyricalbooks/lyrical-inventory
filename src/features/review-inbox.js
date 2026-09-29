@@ -9,7 +9,7 @@
 //
 // It owns no data. Receipts are the same drafts the receipt table edits and are
 // filed by the same routine; labels are the same postage expenses the shipping
-// worklist lists and are linked by the same function. What a person could do
+// Tax Centre summary counts and are linked by the same function. What a person could do
 // here they could do there, and the two can never disagree.
 import '../styles/review-inbox.css';
 import { escapeHtml } from '../lib/html.js';
@@ -32,10 +32,10 @@ import {
 import {
   discardImportedPostageExpense,
   labelReviewEntries,
+  linkConfidentShippingMatchesNow,
   linkPostageToOrder,
   openPostageAmountEditor,
   openRecoverWebsiteOrder,
-  openShippingWorklistPanel,
   postageOrderChoices,
   setAsideLabelFromReview,
 } from './shipping.js';
@@ -286,6 +286,8 @@ function renderReviewInbox({ focusDetail = false } = {}) {
     fileAll.hidden = readyReceipts < 2;
     fileAll.textContent = `File all ${readyReceipts} ready receipts`;
   }
+  const linkCertain = $('ri-link-certain');
+  if (linkCertain) linkCertain.hidden = !_items.some(i => i.kind === 'label' && i.needsOrder);
   if (focusDetail && selected) $('ri-detail-title')?.focus({ preventScroll: false });
 }
 
@@ -430,7 +432,7 @@ const ACTIONS = {
   },
   fileAllReady: () => run('fileAllReady', fileAllReady),
   fullTable() { closeM('review-inbox'); openEmailReceiptImportModal({ review: true }); },
-  worklist() { closeM('review-inbox'); openShippingWorklistPanel(); },
+  linkCertain: () => run('linkCertain', async () => { await linkConfidentShippingMatchesNow(); await afterChange(_selectedKey); }),
   close() { closeM('review-inbox'); },
 };
 

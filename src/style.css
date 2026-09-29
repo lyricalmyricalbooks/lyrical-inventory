@@ -20589,3 +20589,10 @@ button[onclick="refreshUmamiStats()"]:active {
 .notif-clear:active { transform: scale(0.94); }
 .notif-clear:focus-visible { outline: 2px solid var(--gold-text); outline-offset: -2px; }
 .notif-log .notif-body, .notif-latest .notif-body { padding-right: var(--space-6); }
+
+/* The Tax Centre's way into the Review inbox for shipping labels. */
+.shipping-review-card { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; margin-top: var(--space-3); padding: var(--space-4); border: var(--stroke-hair) solid var(--border); border-radius: var(--r2); background: var(--surface-card); }
+.shipping-review-card-copy { flex: 1 1 320px; min-width: 0; }
+.shipping-review-card-copy p { margin: .25rem 0 0; font-size: var(--text-xs); line-height: var(--leading-snug); color: var(--content-muted); }
+.shipping-review-card-copy .shipping-review-card-count { font-size: var(--text-sm); font-weight: 600; color: var(--content-primary); }
+.shipping-review-card .btn { min-height: 44px; }

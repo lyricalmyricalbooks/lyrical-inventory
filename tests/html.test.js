@@ -53,10 +53,12 @@ describe('escapeHtml', () => {
     expect(escapeHtml('a & b & c')).toBe('a &amp; b &amp; c');
   });
 
-  it('contains the shipping label review pane', () => {
-    expect(html).toContain('id="shipping-reconciliation-list"');
+  it('points the shipping label review at the review inbox', () => {
+    // The review itself moved into the Review inbox; the Tax Centre keeps the way in.
     expect(html).toContain('Shipping label review');
-    expect(html).toContain('id="shipping-amount-review-list"');
+    expect(html).toContain('id="shipping-review-summary"');
+    expect(html).toContain("openReviewInbox({filter:'label'})");
+    expect(html).not.toContain('id="shipping-reconciliation-list"');
   });
 
   it('ensures bigcartel and shipping panels have tab-panel class for proper panel isolation', () => {

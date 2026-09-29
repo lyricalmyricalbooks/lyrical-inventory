@@ -104,7 +104,7 @@ describe('main.js window binding verification', () => {
   });
 
   it('keeps Shippo references out of visible worklist copy', () => {
-    expect(appSource).toContain('aria-label="Order for postage expense"');
+    expect(appSource).toContain('Order this label was for');
     expect(appSource).not.toContain('<span class="sr-only"> for ${escapeHtml(expense.ref)}</span>');
   });
 

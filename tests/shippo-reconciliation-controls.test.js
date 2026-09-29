@@ -7,14 +7,12 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 describe('Shippo reconciliation controls', () => {
-  it('declares close, reopen, and clear-list controls in the UI', () => {
+  it('offers linking in the review inbox and no longer carries the old worklist panel', () => {
     const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 
-    expect(html).toContain('closeShippingReconciliation()');
-    expect(html).toContain('openShippingReconciliation()');
-    expect(html).toContain('clearShippingReconciliationList()');
-    expect(html).toContain('id="shipping-reconciliation-close"');
-    expect(html).toContain('id="shipping-reconciliation-clear"');
+    expect(html).toContain('data-ri-action="linkCertain"');
+    expect(html).not.toContain('closeShippingReconciliation()');
+    expect(html).not.toContain('id="shipping-reconciliation-close"');
   });
 
   it('supports dismissing imported expenses without removing them from the ledger', () => {
@@ -23,6 +21,6 @@ describe('Shippo reconciliation controls', () => {
     expect(main).toContain("expense.shippingMatchStatus !== 'dismissed'");
     expect(main).toContain("expense.shippingMatchStatus = 'dismissed'");
     expect(main).toContain('clearShippingReconciliationList');
-    expect(main).toContain('closeShippingReconciliation, openShippingReconciliation, clearShippingReconciliationList');
+    expect(main).toContain('clearShippingReconciliationList');
   });
 });
