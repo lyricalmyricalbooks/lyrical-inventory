@@ -11,6 +11,7 @@
 // verdict, parcel plan, existing-label check and rates, and this decides.
 
 import { addressValidationBlocker } from './address-verification.js';
+import { escapeHtml } from './html.js';
 import { normalizeShippingOrderNumber } from './shipping-reconciliation.js';
 
 /** How far back an unshipped order is still worth offering. */
@@ -197,9 +198,8 @@ export function describeBatchTotal(rows = []) {
   return Array.from(byCurrency, ([cur, sum]) => `$${sum.toFixed(2)} ${cur}`).join(' + ') || '$0.00';
 }
 
-function escapeAttr(value) {
-  return String(value || '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
-}
+// Any falsy value (0, false, NaN) prints as nothing, not its string form.
+const escapeAttr = (value) => escapeHtml(value || '');
 
 /** Whether a label link is an image a web page can print, rather than a PDF. */
 export function isImageLabel(url) {
