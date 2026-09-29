@@ -118,4 +118,10 @@ describe('buildLabelPrintPage', () => {
     const { buildLabelPrintPage } = await import('../src/lib/batch-shipping.js');
     expect(buildLabelPrintPage([{ url: 'https://x/a.png"><script>', orderNumber: '<b>' }])).not.toContain('"><script>');
   });
+  it('escapes quotes in label links and prints a missing order number as nothing', async () => {
+    const { buildLabelPrintPage } = await import('../src/lib/batch-shipping.js');
+    const html = buildLabelPrintPage([{ url: "https://x/it's.pdf", orderNumber: 0 }]);
+    expect(html).toContain('href="https://x/it&#39;s.pdf"');
+    expect(html).toContain('rel="noopener"></a>');
+  });
 });
