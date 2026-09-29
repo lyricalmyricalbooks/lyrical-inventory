@@ -1,9 +1,9 @@
 ---
 name: ux
-description: State-of-the-Art Design Engineering & Elite UX/UI Architecture system. Employs OKLCH perceptual color, CSS Anchor Positioning, Popover API, field-sizing, APCA contrast, Container Queries, Subgrid, View Transitions, spring physics, and cognitive ergonomics to craft world-class, accessible, and high-converting web interfaces.
+description: Short alias of /ux-designer — the Riso Press design system (flat inks, hard edges, Anton/Archivo/DM Mono, day newsprint and warm-grey night) plus the interaction and accessibility patterns that hold up in this codebase. Read before building, auditing or restyling any screen.
 ---
 
-# State-of-the-Art UX/UI Design Engineering (/ux)
+# UX/UI Design Reference (/ux)
 
 Apply this skill whenever building, auditing, polishing, or refactoring user interfaces across this project.
 

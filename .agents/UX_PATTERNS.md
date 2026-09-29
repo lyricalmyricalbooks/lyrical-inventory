@@ -14,7 +14,7 @@
 ---
 
 ## Buttons — `.btn`
-Base: `.btn` (`style.css:1578`) — uppercase Syne, 11px, `border-radius:var(--r2)`, `padding:8px 16px`, 44px+ touch target once padding + line-height are counted.
+Base: `.btn` (`style.css:2502`) — Archivo 800 uppercase at `--text-xs` (11px) with `--tracking-caps`, square (`border-radius:var(--r2)` = 0), a 2px `--rule-ink` outline, `padding:8px 16px` and a flat `--elev-1` offset that grows to `--elev-hover` on hover. It sits at ~33px tall by design (a settled decision — no `min-height`); a control pressed on a phone gets its full 44px target from `.sys-target` or `btn lg`.
 
 Modifiers (compose, don't reinvent):
 - `.btn.gold` — primary action (gold fill, ink text)
@@ -321,7 +321,7 @@ quietly lose the argument — a money column left in proportional body type at t
 size and colour as the free text beside it cannot be compared down the page. Four
 classes on `.tbl td` say which cell leads, which anchors, and which recede:
 
-- `.lead-cell` — the row's subject (a buyer's name, a store name). Syne 600, primary
+- `.lead-cell` — the row's subject (a buyer's name, a store name). Archivo 600, primary
   text. **One per row**; a second one leaves the row with no entry point again.
 - `.money-cell` — pairs with `.r`; the row's headline figure. Primary text at
   `font-weight:500`, not 600 — DM Mono is loaded at 400/500 only (see the font link in
@@ -349,7 +349,7 @@ label/figure cells rather than a `<table>`): it loses the alignment `.tbl` gets 
 - **One figure leads.** The row exists to answer one question — for an invoice, *how much* — so
   that figure goes two steps up the scale (`--text-lg` against the `--text-base` dates beside it).
   A total at the same size as a due date is the bug, whatever colour it is.
-- **Captions go on the Syne micro-label scale** (`--text-3xs`, uppercase, `--tracking-caps`),
+- **Captions go on the Archivo micro-label scale** (`--text-3xs`, uppercase, `--tracking-caps`),
   and the figure inside must reset `letter-spacing` and `text-transform` or it inherits the
   caption's tracking. At body size a caption and its own figure read as one run of text.
 - **`--gold-text`, never `--gold`, for a figure you want to sing.** Raw `--gold` is a fill/accent
@@ -445,7 +445,7 @@ carry a single emoji that matches the section's theme (💳 payments, 📄 invoi
 
 A screen's sections are headed one of two ways, and mixing the two on one screen is
 what `.sec-head` exists to stop. The app has a micro-label tier (`.sect` — 9px uppercase
-grey with a trailing hairline) and a heading tier (`.section-hed` — 20px Playfair serif).
+grey with a trailing hairline) and a heading tier (`.section-hed` — Anton 20px uppercase).
 Before this landed, the "All books" landing screen ran two `.sect` labels above a section
 that had a gold kicker, a heading and a line of subcopy — so the first screen the publisher
 sees carried the faintest headings in the app, and the only part that looked designed was
@@ -587,7 +587,7 @@ property outright and left the row stacked. Anything a `style.display = ''`
 touches must get its display from CSS (`.stock-actions`).
 
 **Money figures lead on type, not just size.** The sale total on that panel was
-34px Syne 800 — the heading face, proportional — so the digits re-widthed on
+34px Syne 800 — the old heading face, proportional — so the digits re-widthed on
 every quantity tap and it was the one monetary value in the app not in DM Mono.
 Any figure that leads a panel gets `'DM Mono'` + `font-variant-numeric:
 tabular-nums` + `font-feature-settings:"tnum" 1,"zero" 1` and takes its
@@ -874,7 +874,8 @@ land on top of each other. `tests/dark-chrome-ink2-separation.test.js` pins the 
    touch target ≥ 44px?
 3. If it's clickable-but-not-a-`<button>` (a table cell, a progress bar), does it have
    `role="button" tabindex="0"` + `onkeydown` Enter/Space handling?
-4. Numbers in mono (`DM Mono`), labels in Syne uppercase — did I match the existing type split?
+4. Numbers in mono (`DM Mono`), labels and buttons in Archivo uppercase, names and titles in
+   Anton — did I match the existing type split?
 5. Active/settled/error states — did I reuse the amber/green/gray/red pill convention instead
    of picking new colors?
 6. Empty state: rich (icon+CTA) if it's a panel's primary state, plain if it's a nested list.

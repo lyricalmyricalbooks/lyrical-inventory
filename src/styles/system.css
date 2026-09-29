@@ -19,7 +19,7 @@
 
 :root {
   /* ── TYPE SCALE ──────────────────────────────────────────────────────────
-     Replaces 47 ad-hoc px sizes. --text-3xs..2xs are the uppercase Syne
+     Replaces 47 ad-hoc px sizes. --text-3xs..2xs are the uppercase Archivo
      micro-labels this app leans on; body sits at --text-sm/--text-base. */
   --text-3xs: 9px;
   --text-2xs: 10px;

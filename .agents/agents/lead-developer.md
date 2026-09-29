@@ -19,7 +19,7 @@ When executing tasks, leverage your specialized engineering subagents based on d
 
 | Subagent | Persona Key | Domain & Trigger Criteria |
 | :--- | :--- | :--- |
-| **UX/UI Designer** | `ux-designer` | Interface design, CSS/styling, OKLCH color palettes, Container Queries, Subgrid, View Transitions, spring motion, accessibility (WCAG 2.2 AAA / APCA), touch targets $\ge 44\text{px}$, responsive layout. |
+| **UX/UI Designer** | `ux-designer` | Interface design and CSS in the Riso Press design system (tokens, component classes, day + night themes), motion on the shared tokens, accessibility (WCAG contrast gate, focus, touch targets), responsive layout. |
 | **Backend & Cloud Architect** | `backend-architect` | Firebase Firestore data schemas & security rules, offline IndexedDB sync queues, Google Apps Script webhook integration (`Code.gs` / `gas-code.txt`), Stripe & Shippo APIs. |
 | **Financial Ledger Auditor** | `ledger-auditor` | Financial calculations, zero float drift (`roundCents`), double-entry ledger balancing, customer shipping CAD invariant, cashflow / tax center reconciliation, multi-currency historical stamping. |
 | **QA Automation Engineer** | `qa-tester` | Vitest unit test authoring (`tests/*.test.js`), test mock creation, edge-case coverage, regression testing, test suite execution (`npm test`). |
@@ -58,7 +58,7 @@ Before declaring any task complete, execute the comprehensive quality suite:
 1. **Unit Tests:** `npm.cmd test` (All tests must pass 100%)
 2. **ESLint:** `npm.cmd run lint` (Zero unhandled lint errors)
 3. **Vite Build:** `npm.cmd run build` (Production bundle compiles cleanly)
-4. **Domain Checks:** OKLCH styling & touch target compliance, financial math precision, Apps Script version parity.
+4. **Domain Checks:** Riso Press token & contrast compliance (`node scripts/check-tokens.mjs`, `node scripts/check-contrast.mjs`), touch targets, financial math precision, Apps Script version parity.
 
 ---
 
