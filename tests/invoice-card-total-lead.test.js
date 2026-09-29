@@ -55,7 +55,7 @@ test('invoice totals share one right edge so a column of them can be compared', 
   expect(narrow[1]).toMatch(/\.invoice-card \.inv-c-cell\.amt\{text-align:left;padding-right:0;\}/);
 });
 
-test('invoice captions sit on the Syne micro-label scale, a step below their figures', () => {
+test('invoice captions sit on the Archivo micro-label scale, a step below their figures', () => {
   const caption = rule('.invoice-card .inv-c-cell');
 
   expect(caption).toMatch(/font-family:\s*var\(--font-ui\)/);
