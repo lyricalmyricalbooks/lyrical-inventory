@@ -5,21 +5,29 @@
 .ri-summary { margin: 0 0 var(--space-3); font-size: var(--text-sm); font-weight: 600; color: var(--content-primary); }
 
 .ri-filters { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-3); }
+/* Filters are Riso tabs, not lozenges: squared, 2px ink outline, caps label like .btn.
+   The one you're on is inked in, so it reads at a glance which pile you're looking at. */
 .ri-filter {
   min-height: 44px;
   padding: 0 var(--space-4);
-  border: var(--stroke-hair) solid var(--border-default);
-  border-radius: 999px;
-  background: var(--surface-raised);
-  color: var(--content-secondary);
-  font: inherit;
-  font-size: var(--text-sm);
-  font-weight: 600;
+  border: var(--stroke) solid var(--border-strong);
+  border-radius: var(--r2);
+  background: var(--surface-card);
+  color: var(--content-primary);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  font-weight: 800;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  box-shadow: var(--elev-1);
   cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard);
 }
-.ri-filter.is-active { background: var(--surface-inset); border-color: var(--border-strong); color: var(--content-primary); }
+.ri-filter:hover { background: var(--surface-inset); box-shadow: var(--elev-2); }
+.ri-filter.is-active { background: var(--surface-inverse); border-color: var(--surface-inverse); color: var(--content-on-inverse); box-shadow: none; }
+.ri-filter.is-active .ri-count { color: var(--on-inverse-2); }
 .ri-filter:focus-visible, .ri-item:focus-visible { outline: 2px solid var(--gold-text); outline-offset: 2px; }
-.ri-count { margin-left: 4px; font-variant-numeric: tabular-nums; color: var(--content-muted); }
+.ri-count { margin-left: 4px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--content-muted); }
 
 .ri-shell {
   display: grid;
@@ -61,7 +69,7 @@
 .ri-chip {
   flex: none;
   padding: 2px var(--space-2);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   font-size: var(--text-2xs);
   font-weight: 700;
   white-space: nowrap;
@@ -72,18 +80,20 @@
 .ri-chip.is-check { background: var(--status-active-bg); color: var(--status-active); }
 .ri-chip.is-ready { background: var(--status-positive-bg); color: var(--status-positive); }
 
+/* The pane is the object on this screen, so it gets the card treatment: ink outline, offset shadow. */
 .ri-detail {
   padding: var(--space-4);
   background: var(--surface-raised);
-  border: var(--stroke-hair) solid var(--border-subtle);
-  border-radius: var(--r2);
+  border: var(--stroke) solid var(--border-strong);
+  border-radius: var(--r3);
+  box-shadow: var(--elev-2);
 }
-.ri-detail-head { display: flex; align-items: flex-start; gap: var(--space-3); margin-bottom: var(--space-3); }
+.ri-detail-head { display: flex; align-items: flex-start; gap: var(--space-3); margin-bottom: var(--space-4); padding-bottom: var(--space-3); border-bottom: var(--stroke-hair) solid var(--border-default); }
 .ri-detail-head > div { flex: 1; min-width: 0; }
 .ri-detail-ico { font-size: var(--text-lg); }
-.ri-detail-head h3 { margin: 0; font-size: var(--text-lg); color: var(--content-primary); overflow-wrap: anywhere; }
+.ri-detail-head h3 { margin: 0; font-family: var(--font-display); font-size: var(--text-xl); font-weight: 400; line-height: var(--leading-tight); text-transform: uppercase; letter-spacing: .01em; color: var(--content-primary); overflow-wrap: anywhere; }
 .ri-detail-head h3:focus { outline: none; }
-.ri-kind { margin: 2px 0 0; font-size: var(--text-xs); color: var(--content-muted); }
+.ri-kind { margin: var(--space-1) 0 0; font-size: var(--text-2xs); font-weight: 700; letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--content-muted); }
 
 .ri-section { margin-bottom: var(--space-4); }
 .ri-section h4 {
