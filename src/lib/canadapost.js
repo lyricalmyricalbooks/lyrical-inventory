@@ -38,6 +38,7 @@ import { describeShipmentRejection } from './canadapost-shipment-diagnosis.js';
 // Zonos issues the Declaration ID, so zonos.js owns its format rules; re-exported
 // here so label-purchase callers keep one import site.
 import { formatDeclarationId, validateDeclarationId } from './zonos.js';
+import { escapeHtml } from './html.js';
 import { getSavedSheetsUrl } from './sheets-url.js';
 // Re-exported so the Tax Centre keeps importing it from here.
 export { getSavedSheetsUrl };
@@ -1961,14 +1962,9 @@ export function estimateOfflineCanadaPostRates({
   ];
 }
 
-function escapeXml(unsafe) {
-  return String(unsafe || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
+// The label is SVG (XML); the shared escaper's &#39; is as valid there as
+// &apos;. Any falsy value (0, false, NaN) prints as nothing, not its string form.
+const escapeXml = (unsafe) => escapeHtml(unsafe || '');
 
 /**
  * Format HS Tariff Code to match Canada Post's strict OpenAPI regex:
