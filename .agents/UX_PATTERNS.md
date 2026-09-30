@@ -145,6 +145,7 @@ The pane always answers four questions in this order, in plain words:
 
 Rules worth keeping:
 - **State is a word plus a glyph, never colour alone** — `! Needs you`, `● Take a look`, `✓ Ready to file` (`.ri-chip`).
+- **Filters are squared Riso tabs, not lozenges** (`.ri-filter`): 2px ink outline, caps label like `.btn`, and the active one inked in (`--surface-inverse` / `--content-on-inverse`; night mode steps it to `--cream4` instead). The detail pane is the card on this screen — ink outline, `--elev-2` — and its title is Anton uppercase so the item leads. Lozenge radius stays reserved for the status chips. `tests/review-inbox-riso-chrome.test.js` pins it.
 - **Nothing is filed by opening the screen.** A button that says "File" files; one that only opens something says "Review".
 - **Disable a button only with the reason beside it** ("Fill in the missing details above to file it.").
 - **Fields that save as they change go inside `[data-autosave]`**, so closing the window never asks "discard unsaved changes?" about them (see `_modalFieldSig` in `lib/modal.js`).
