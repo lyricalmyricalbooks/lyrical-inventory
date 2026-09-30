@@ -605,6 +605,13 @@
 .theme-dark .btn.ink:hover { background: var(--cream4); }
 .theme-dark .btn.danger-btn { background: var(--red-bg); color: var(--red); border-color: rgba(240, 140, 122, .35); }
 .theme-dark .btn.danger-btn:hover { background: var(--rose-pale); }
+/* Review inbox filters follow the night button: quiet rule, no offset; the one you're on
+   steps up to the raised grey instead of an ink block that would vanish into the page. */
+.theme-dark .ri-filter { background: var(--cream3); border-color: var(--border); box-shadow: none; }
+.theme-dark .ri-filter:hover { background: var(--cream4); box-shadow: none; }
+.theme-dark .ri-filter.is-active { background: var(--cream4); border-color: var(--text2); color: var(--text); }
+.theme-dark .ri-filter:hover .ri-count,
+.theme-dark .ri-filter.is-active .ri-count { color: var(--text2); }
 
 /* Tables: a quiet header row instead of the light theme's ink bar. */
 .theme-dark .tbl-wrap { border-color: var(--border); }
