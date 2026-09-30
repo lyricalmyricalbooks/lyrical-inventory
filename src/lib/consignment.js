@@ -163,14 +163,20 @@ export function stampLedgerInvoiceLink(s, ledgerId, inv) {
 // forcing a re-save. Idempotent and cheap; safe to call at the top of a render.
 export function reconcileConsignmentMirrors(s) {
   if (!s || !Array.isArray(s.ledger)) return;
-  const invoices = s.invoices || [];
+  // Index invoices once instead of rescanning the list for every linked sale
+  // (this runs on every Tax Center / History render). First id wins, matching
+  // the previous Array#find behaviour if an id were ever duplicated.
+  const invoicesById = new Map();
+  for (const inv of s.invoices || []) {
+    if (inv && !invoicesById.has(inv.id)) invoicesById.set(inv.id, inv);
+  }
   const claimed = new Set();
   for (const e of s.ledger) {
     if (e.type !== 'Sale') continue;
     // Keep the ledger's own denormalized number current with the live invoice
     // (renamed after the link was stamped → e.invoiceNum would be stale).
     if (e.invoiceId) {
-      const inv = invoices.find(i => i.id === e.invoiceId);
+      const inv = invoicesById.get(e.invoiceId);
       if (inv) e.invoiceNum = inv.num;
       else { e.invoiceId = null; e.invoiceNum = null; } // invoice was deleted
     }
