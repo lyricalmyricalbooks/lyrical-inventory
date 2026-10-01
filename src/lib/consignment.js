@@ -153,6 +153,12 @@ export function stampLedgerInvoiceLink(s, ledgerId, inv) {
   }
 }
 
+function pushBucket(map, key, value) {
+  const list = map.get(key);
+  if (list) list.push(value);
+  else map.set(key, [value]);
+}
+
 // Re-derive every consignment Sale mirror from its canonical ledger entry: the
 // amount, quantity, date and void state, plus the invoice fields resolved
 // against the live invoice — healing legacy split sheetsIds along the way.
@@ -170,7 +176,35 @@ export function reconcileConsignmentMirrors(s) {
   for (const inv of s.invoices || []) {
     if (inv && !invoicesById.has(inv.id)) invoicesById.set(inv.id, inv);
   }
+  // Bucket the consignment mirrors by sheetsId and by date once, so each ledger
+  // Sale only checks the few mirrors that could match instead of rescanning all
+  // of s.hist (O(ledger × hist) → roughly O(ledger + hist)). Buckets keep
+  // s.hist order and are filtered with histMirrorForLedger's own predicates, so
+  // the first match is the same row it would return. The loop only mutates
+  // mirrors it has just claimed, and claimed mirrors are skipped from then on,
+  // so the buckets never go stale for a row that can still match.
+  const mirrorsById = new Map();
+  const mirrorsByDate = new Map();
+  for (const h of s.hist || []) {
+    if (!h || !h.consignmentLink) continue;
+    if (h.sheetsId) pushBucket(mirrorsById, h.sheetsId, h);
+    pushBucket(mirrorsByDate, h.date, h);
+  }
   const claimed = new Set();
+  const free = h => !claimed.has(h);
+  const mirrorFor = e => {
+    if (e.sheetsId) {
+      const byId = (mirrorsById.get(e.sheetsId) || []).find(h => h.sheetsId === e.sheetsId && free(h));
+      if (byId) return byId;
+    }
+    return (mirrorsByDate.get(e.date) || []).find(h =>
+      free(h) &&
+      h.notes === e.storeName &&
+      h.date === e.date &&
+      (h.qty || 0) === (e.qty || 0) &&
+      Math.abs((h.price || 0) * (h.qty || 0) - (e.amountDue || 0)) < 0.01
+    ) || null;
+  };
   for (const e of s.ledger) {
     if (e.type !== 'Sale') continue;
     // Keep the ledger's own denormalized number current with the live invoice
@@ -180,7 +214,7 @@ export function reconcileConsignmentMirrors(s) {
       if (inv) e.invoiceNum = inv.num;
       else { e.invoiceId = null; e.invoiceNum = null; } // invoice was deleted
     }
-    const h = histMirrorForLedger(s, e, claimed);
+    const h = mirrorFor(e);
     if (!h) continue;
     claimed.add(h);
     syncHistMirrorFromLedger(s, e, h);
