@@ -10726,6 +10726,21 @@ function downloadFilteredShippingLedgerCSV() {
   // the one that gets sent to an accountant.
   const shippoExpenses = (TAX_CENTER.businessExpenses || []).filter(isPostageExpense);
   
+  // ⚡ Bolt Optimization: Pre-compute shippoExpenses by order number for O(1) lookups
+  // replacing repeated O(N) array traversals (filter) in the filter and aggregate loops below.
+  const shippoExpensesByOrder = new Map();
+  for (const e of shippoExpenses) {
+    if (e.shippingMatchStatus === 'matched') {
+      const num = normalizeShippingOrderNumber(e.shippingOrderNumber);
+      if (num) {
+        if (!shippoExpensesByOrder.has(num)) {
+          shippoExpensesByOrder.set(num, []);
+        }
+        shippoExpensesByOrder.get(num).push(e);
+      }
+    }
+  }
+
   const allOrders = [];
   Object.keys(states).forEach(bookId => {
     if (shipAnalysisBookFilter === 'all' || bookId === shipAnalysisBookFilter) {
@@ -10752,9 +10767,7 @@ function downloadFilteredShippingLedgerCSV() {
     if (shipAnalysisMarginFilter !== 'all') {
       const customerPaidBase = Number(o.shippingPaid) || 0;
       const orderNumber = normalizeShippingOrderNumber(o.num);
-      const linked = orderNumber ? shippoExpenses.filter(e =>
-        e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
-      ) : [];
+      const linked = orderNumber ? (shippoExpensesByOrder.get(orderNumber) || []) : [];
 
       if (shipAnalysisMarginFilter === 'missing') {
         if (customerPaidBase !== 0) return false;
@@ -10775,9 +10788,7 @@ function downloadFilteredShippingLedgerCSV() {
     // B. Carrier filter
     if (shipAnalysisCarrierFilter !== 'all') {
       const orderNumber = normalizeShippingOrderNumber(o.num);
-      const linked = orderNumber ? shippoExpenses.filter(e =>
-        e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
-      ) : [];
+      const linked = orderNumber ? (shippoExpensesByOrder.get(orderNumber) || []) : [];
       const carrier = o.manualPostagePaid
         ? 'Manual Override'
         : (linked.length > 0 ? parseCarrierInfo(linked[0].desc).provider : 'Unlinked');
@@ -10818,9 +10829,7 @@ function downloadFilteredShippingLedgerCSV() {
 
   filteredOrders.forEach(o => {
     const orderNumber = normalizeShippingOrderNumber(o.num);
-    const linked = orderNumber ? shippoExpenses.filter(e =>
-      e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
-    ) : [];
+    const linked = orderNumber ? (shippoExpensesByOrder.get(orderNumber) || []) : [];
 
     const postageCostCAD = o.manualPostagePaid
       ? (Number(o.postagePaid) || 0)
