@@ -5260,6 +5260,27 @@ function renderZonosDutyCard(calc, { stCountryCode, qty, unitValue, hsCode, erro
 /**
  * Calculate Direct Canada Post Rates for the current shipment form
  */
+
+async function calculateChitChatsRatesHandler() {
+  const card = $('chitchats-rates-card');
+  if (!card) return;
+
+  const clientId = TAX_CENTER.settings?.ccClientId;
+  const token = TAX_CENTER.settings?.ccToken;
+  const enabled = TAX_CENTER.settings?.ccEnabled !== false;
+
+  if (!enabled || !clientId || !token) {
+    card.style.display = 'none';
+    return;
+  }
+
+  card.style.display = 'block';
+  card.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center;">
+    <div style="font-weight:600; color:var(--text);"><span style="color:#f42534; margin-right:4px;">Y"'</span> Chit Chats</div>
+    <div style="font-size:var(--text-sm); color:var(--text3);">Ready</div>
+  </div>`;
+}
+
 async function calculateCanadaPostRatesHandler() {
   const card = $('canadapost-rates-card');
   if (!card) return;
@@ -11113,6 +11134,7 @@ export {
   reprintArchivedCanadaPostLabel,
   openZonosPrepayAppHandler,
   calculateCanadaPostRatesHandler,
+  calculateChitChatsRatesHandler,
   renderCanadaPostRatesCard,
   buyCanadaPostLabelHandler,
   openCanadaPostPurchasedLabel,
