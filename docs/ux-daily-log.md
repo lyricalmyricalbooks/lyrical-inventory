@@ -112,7 +112,6 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-09-29 | visual | Phone record cards (customers, tax, consignment, stock lists) | Gave the record cards on a phone the same bold outline and offset shadow as the rest of the app, with small caps labels and more space between cards | — |
 | 2026-09-30 | visual | Review inbox (receipts and labels to check) | Brought the Review inbox into the house look: the filter buttons are now square, outlined tabs with the one you're on filled in, the details pane is a proper card, and the item's name heads it in the big title lettering | #1058 |
 | 2026-09-30 | visual | Phone record cards — Show details button | Made the details button on a phone record card a square, outlined caps button that presses in when tapped, instead of a soft pill | — |
-| 2026-10-01 | visual | Order History & Expenses — rows waiting for your approval | Gave Approve / Reject the same square, outlined caps buttons as the rest of the app, and stopped fading the waiting row: it now keeps full-strength text with an amber stripe down its edge, so the one row that needs you stands out instead of looking spent | — |
 
 ---
 

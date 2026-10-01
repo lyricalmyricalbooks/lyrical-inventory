@@ -10537,6 +10537,20 @@ function renderShippingAnalysisHub() {
   // this one list, so widening it here is what lets a counter receipt appear
   // in the P&L, the carrier scorecard, the ledger and the insights at once.
   const shippoExpenses = (TAX_CENTER.businessExpenses || []).filter(isPostageExpense);
+  // ⚡ Bolt Optimization: Pre-compute shippoExpenses by order number for O(1) lookups
+  // replacing repeated O(N) array traversals (filter) in the filter and aggregate loops below.
+  const shippoExpensesByOrder = new Map();
+  for (const e of shippoExpenses) {
+    if (e.shippingMatchStatus === 'matched') {
+      const num = normalizeShippingOrderNumber(e.shippingOrderNumber);
+      if (num) {
+        if (!shippoExpensesByOrder.has(num)) {
+          shippoExpensesByOrder.set(num, []);
+        }
+        shippoExpensesByOrder.get(num).push(e);
+      }
+    }
+  }
   const relevantExpenses = (shipAnalysisBookFilter === 'all')
     ? shippoExpenses
     : (() => {
@@ -10725,7 +10739,6 @@ function downloadFilteredShippingLedgerCSV() {
   // table it was exported from — the worst kind of wrong number, because it is
   // the one that gets sent to an accountant.
   const shippoExpenses = (TAX_CENTER.businessExpenses || []).filter(isPostageExpense);
-  
   // ⚡ Bolt Optimization: Pre-compute shippoExpenses by order number for O(1) lookups
   // replacing repeated O(N) array traversals (filter) in the filter and aggregate loops below.
   const shippoExpensesByOrder = new Map();
