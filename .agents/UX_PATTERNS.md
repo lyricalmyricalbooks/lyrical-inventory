@@ -104,6 +104,17 @@ it. Derive the state with `:has()` where the figure already carries a class
 rules so critical comes *after* active, or a tile that is both owed-money and
 off-ledger paints amber.
 
+### A row that needs you is flagged, never faded
+
+Opacity is how this app says *spent* — `.tbl tbody tr.voided td{opacity:.35}`. A row
+awaiting the publisher's decision (an artist-submitted sale or expense) used to be set to
+`opacity:0.8` inline, so the one row on the screen that needed action read as half-voided,
+and its Approve button was dimmed with it. It now carries `.is-awaiting`: full ink, the
+`--amber-bg` wash, and the inset amber bar on its first cell (the same device as above). On a
+phone the bar moves up to the record card itself (`styles/phone.css`). Its Approve / Reject
+pair (`.appr-btn`) sits on the `.btn` chassis — 2px ink outline, caps, `--elev-1`, press-in —
+so never restyle it with a darker raw hex on hover; the lift is the hover.
+
 ### Reporting stock on a surface that spends it
 
 Any screen that moves inventory (POS register, manual entry, a future shipment form) should say
