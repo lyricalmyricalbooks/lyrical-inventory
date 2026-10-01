@@ -644,3 +644,6 @@
                        that are dark in both themes by design.
      .publisher-action-banner — a fixed red alert band; it must not soften.
    ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Phone More sheet: the current page steps up to --cream4 rather than inverting to white. */
+.theme-dark .pub-shell .more-sheet-body .snav.active { background: var(--cream4); border-color: var(--text2); color: var(--text); }

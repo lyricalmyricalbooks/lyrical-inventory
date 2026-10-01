@@ -470,6 +470,27 @@
   .pub-shell :is(button, summary):focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
 }
 
+/* The "More" sheet on a phone, brought into the Riso look: the destination tiles are
+   square slips with a 2px ink outline and a hard offset shadow that presses in when
+   tapped; the current page is inked in (not just a thin gold edge); group labels and
+   the close button are square caps controls instead of a faint caption and a round dot. */
+@media (max-width: 768px) {
+  .pub-shell .more-sheet-title { font: 400 var(--text-xl) / 1.1 var(--font-display); text-transform: uppercase; letter-spacing: .01em; }
+  .pub-shell .more-sheet-close { border: var(--stroke) solid var(--rule-ink); border-radius: var(--r2); background: var(--surface-card); box-shadow: var(--elev-1); transition: transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast) var(--ease-spring); }
+  .pub-shell .more-sheet-close:active { transform: translate(1px, 1px); box-shadow: none; }
+  .pub-shell .more-sheet-body { padding-top: var(--space-1); }
+  .pub-shell .more-sheet-body .pub-nav { gap: var(--space-3); }
+  .pub-shell .more-sheet-body .o3-grouplabel,
+  .pub-shell .more-sheet-body .o3-subgrouplabel { margin: var(--space-5) var(--space-1) var(--space-1); font-size: var(--text-2xs); letter-spacing: var(--tracking-caps); color: var(--content-secondary); }
+  .pub-shell .more-sheet-body .snav { border: var(--stroke) solid var(--rule-ink); background: var(--surface-card); box-shadow: var(--elev-1); transition: transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast) var(--ease-spring), background var(--dur-fast) var(--ease-spring); }
+  .pub-shell .more-sheet-body .snav:active { transform: translate(1px, 1px); box-shadow: none; background: var(--surface-inset); }
+  .pub-shell .more-sheet-body .snav-label { font-weight: 800; text-transform: uppercase; letter-spacing: var(--tracking-caps); font-size: var(--text-xs); }
+  .pub-shell .more-sheet-body .snav.active { background: var(--surface-inverse); border-color: var(--surface-inverse); color: var(--content-on-inverse); box-shadow: none; }
+}
+@media (max-width: 768px) and (prefers-reduced-motion: reduce) {
+  .pub-shell .more-sheet-close, .pub-shell .more-sheet-body .snav { transition: none; }
+}
+
 /* Native details hide their anonymous content box in modern browsers. Keep
    desktop contact information visible; older engines retain an operable toggle. */
 @media (min-width: 769px) {
