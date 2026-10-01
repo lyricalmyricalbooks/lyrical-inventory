@@ -2264,16 +2264,7 @@ async function readReceiptFiles(files) {
 
 let _inOpenEmailReceiptModal = false;
 
-function _focusEmailReceiptResults() {
-  setTimeout(() => {
-    const results = document.getElementById('email-receipt-results') || document.getElementById('m-email-receipt-import-modal');
-    if (results && typeof results.scrollIntoView === 'function') {
-      results.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-  }, 100);
-}
-
-function openEmailReceiptImportModal({ selectReadyOnly = false, review = false } = {}) {
+function openEmailReceiptImportModal({ review = false } = {}) {
   if (!window.IS_PUBLISHER || isAuthor()) { showToast('Publisher access required', 'warn'); return; }
   if (_inOpenEmailReceiptModal) return;
   _inOpenEmailReceiptModal = true;
@@ -2292,13 +2283,6 @@ function openEmailReceiptImportModal({ selectReadyOnly = false, review = false }
     }
     _emailReceiptDrafts = filterDismissedReceipts(_filterAlreadyImportedDrafts(_emailReceiptDrafts));
     _emailReceiptDrafts = _emailReceiptDrafts.filter(d => d._inboxId || d._fromSweep);
-
-    if (selectReadyOnly) {
-      const dupIndex = _buildDuplicateExpenseIndex();
-      _emailReceiptDrafts.forEach(d => {
-        d.include = isReadyToFile(d, { duplicate: _isLikelyDuplicateExpense(d, dupIndex) });
-      });
-    }
 
     renderEmailReceiptDrafts(_emailReceiptDrafts);
     writePersistedEmailReceiptDrafts(_emailReceiptDrafts);
