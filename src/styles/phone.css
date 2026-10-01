@@ -464,6 +464,13 @@
   }
   .tab-panel .phone-record-toggle:active { transform: translate(1px, 1px); box-shadow: none; }
   .tab-panel .phone-record-open .phone-record-toggle { background: var(--surface-inset); box-shadow: none; }
+  /* A record awaiting approval (an artist's sale or expense): the amber wash and inset
+     amber bar move from the first cell up to the card itself, and Approve / Reject
+     grow to a full thumb target. */
+  .tab-panel .phone-records tr.phone-record.is-awaiting { background: linear-gradient(var(--amber-bg), var(--amber-bg)), var(--surface-raised); box-shadow: inset 3px 0 0 var(--status-active), var(--elev-1); }
+  .tab-panel .phone-records tr.phone-record.is-awaiting > td { box-shadow: none; }
+  .tab-panel .phone-records .appr-btn { height: var(--target-min); }
+  .tab-panel .phone-records .appr-btn.reject { width: var(--target-min); }
   .phone-section-picker select { border-radius: var(--r2); padding: var(--space-3); }
   .pub-shell .more-sheet-body .pub-nav { grid-template-columns: minmax(0, 1fr); }
   .pub-shell .more-sheet-body .snav { min-height: 52px; }
