@@ -377,6 +377,7 @@ import {
   saveTaxCenterSettings,
   testOpenRouterConnectionFromSettings,
   testZonosConnectionHandler,
+  testChitChatsConnectionHandler,
   testCanadaPostConnectionHandler,
   diagnoseCanadaPostHandler,
   renderCanadaPostKeySets,
@@ -587,7 +588,8 @@ import {
   showArchivedCanadaPostLabels,
   reprintArchivedCanadaPostLabel,
   openZonosPrepayAppHandler,
-  calculateCanadaPostRatesHandler,
+  calculateCanadaPostRatesHandler, calculateChitChatsRatesHandler,
+  importChitChatsShippingHandler,
   renderCanadaPostRatesCard,
   buyCanadaPostLabelHandler,
   openCanadaPostPurchasedLabel,
@@ -3032,7 +3034,7 @@ export let notifyUrl = localStorage.getItem('lm-notify-url') || '';
 // The Apps Script `scriptVersion` the client expects. Bump this (and the value
 // in apps-script/Code.gs) whenever Code.gs gains behaviour that needs a fresh
 // deploy — the connection card flags any older deployed version as outdated.
-export const EXPECTED_SCRIPT_VERSION = 'v49';
+export const EXPECTED_SCRIPT_VERSION = 'v51';
 // What the connected spreadsheet last told us it was running. Null until a
 // version check has actually answered — an unknown version is not a mismatch,
 // so the To-do list stays quiet rather than inventing a problem.
@@ -25285,7 +25287,7 @@ function exposeLegacyInlineHandlers() {
     getShipRecoPercentile, setShipRecoPercentile, onShipRecoPercentileChange, updateShippingSimulation,
     toggleIntegrationSection,
     testOpenRouterConnectionFromSettings, testZonosConnectionHandler, calculateZonosDutiesHandler, renderZonosDutyCard,
-    testCanadaPostConnectionHandler, diagnoseCanadaPostHandler, renderCanadaPostKeySets, calculateCanadaPostRatesHandler, renderCanadaPostRatesCard, buyCanadaPostLabelHandler,
+    testCanadaPostConnectionHandler, diagnoseCanadaPostHandler, renderCanadaPostKeySets, calculateCanadaPostRatesHandler, calculateChitChatsRatesHandler, renderCanadaPostRatesCard, buyCanadaPostLabelHandler,
     showCanadaPostLabelModal, retryFetchCanadaPostLabelArtifact, closeCanadaPostLabelModal, printCanadaPostLabelModal, downloadCanadaPostLabelModal, copyCanadaPostPin,
     checkLiveShippingReadinessHandler, renderLiveReadinessChecklist, renderZonosAccountKeyHint,
     openSaveBookPresetModal, confirmSaveBookPreset, renderSaveBookPresetPreview,
@@ -25399,6 +25401,7 @@ window.onShippoDestCountryChange = onShippoDestCountryChange;
 window.updateShippoCustomsTotalHint = updateShippoCustomsTotalHint;
 window.calculateZonosDutiesHandler = calculateZonosDutiesHandler;
 window.testZonosConnectionHandler = testZonosConnectionHandler;
+window.testChitChatsConnectionHandler = testChitChatsConnectionHandler;
 window.onZonosDeclarationIdInput = onZonosDeclarationIdInput;
 window.pasteZonosDeclarationId = pasteZonosDeclarationId;
 window.checkCanadaPostAccountAndPinHandler = checkCanadaPostAccountAndPinHandler;
@@ -25407,6 +25410,8 @@ window.showArchivedCanadaPostLabels = showArchivedCanadaPostLabels;
 window.reprintArchivedCanadaPostLabel = reprintArchivedCanadaPostLabel;
 window.openZonosPrepayAppHandler = openZonosPrepayAppHandler;
 window.calculateCanadaPostRatesHandler = calculateCanadaPostRatesHandler;
+window.calculateChitChatsRatesHandler = calculateChitChatsRatesHandler;
+window.importChitChatsShippingHandler = importChitChatsShippingHandler;
 window.testCanadaPostConnectionHandler = testCanadaPostConnectionHandler;
 window.diagnoseCanadaPostHandler = diagnoseCanadaPostHandler;
 window.renderCanadaPostKeySets = renderCanadaPostKeySets;

@@ -7,7 +7,7 @@ import { expect, test } from 'vitest';
 // global URL is not a node file URL and node:fs rejects it. Matches the rest
 // of tests/.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const mainJs = readFileSync(path.join(__dirname, '../src/main.js'), 'utf8');
+const mainJs = readFileSync(path.join(__dirname, '../src/main.js'), 'utf8').replace(/\r\n/g, '\n');
 
 // The channel mix is the one place in the app where colour carries identity
 // across many series at once. The brand inks were tried here and failed a

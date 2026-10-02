@@ -2363,6 +2363,7 @@ const INTEGRATION_PILL_SPECS = [
   { key: 'gemini', fields: ['tc-api-key', 'tc-backup-key'] },
   { key: 'shippo', fields: ['tc-shippo-key'] },
   { key: 'zonos', fields: ['tc-zonos-key'], toggle: 'tc-zonos-enabled' },
+  { key: 'chitchats', fields: ['tc-cc-client-id', 'tc-cc-token'], toggle: 'tc-cc-enabled', requireAll: true },
   { key: 'canadapost', fields: ['tc-cp-live-key', 'tc-cp-live-secret', 'tc-cp-test-key', 'tc-cp-test-secret'], toggle: 'tc-cp-enabled', requireAll: false },
   { key: 'stripe', fields: ['stripe-fees-key'] },
 ];
@@ -2430,6 +2431,11 @@ function _tcRenderStatusHeaders() {
     }
   }
   hydrateCredentialField('tc-zonos-key', TAX_CENTER.settings?.zonosApiKey);
+  hydrateCredentialField('tc-cc-client-id', TAX_CENTER.settings?.ccClientId);
+  hydrateCredentialField('tc-cc-token', TAX_CENTER.settings?.ccToken);
+  if ($('tc-cc-test-mode')) $('tc-cc-test-mode').checked = !!TAX_CENTER.settings?.ccTestMode;
+  if ($('tc-cc-enabled') && TAX_CENTER.settings?.ccEnabled !== undefined) $('tc-cc-enabled').checked = TAX_CENTER.settings.ccEnabled !== false;
+
   hydrateCredentialField('tc-zonos-account-key', TAX_CENTER.settings?.zonosAccountKey);
   if ($('tc-zonos-enabled') && TAX_CENTER.settings?.zonosEnabled !== undefined) $('tc-zonos-enabled').checked = TAX_CENTER.settings.zonosEnabled !== false;
   if ($('tc-zonos-strict-prepay') && TAX_CENTER.settings?.requireZonosUsPrepay !== undefined) $('tc-zonos-strict-prepay').checked = TAX_CENTER.settings.requireZonosUsPrepay !== false;
@@ -3966,6 +3972,7 @@ async function testOpenRouterConnectionFromSettings() {
 }
 
 async function saveTaxCenterSettings() {
+  if (isAuthor()) return;
   const btn = $('tc-save-config-btn') || $('tc-save-zonos-btn') || $('tc-save-cp-btn');
   const oldText = btn ? btn.textContent : 'Save Config';
   if (btn) { btn.textContent = 'Saving...'; btn.disabled = true; }
@@ -3974,6 +3981,10 @@ async function saveTaxCenterSettings() {
   const openRouterKey = readCredentialField('tc-backup-key');
   const openRouterModel = $('tc-backup-model')?.value.trim();
   const zonosApiKey = readCredentialField('tc-zonos-key');
+  const ccClientId = readCredentialField('tc-cc-client-id');
+  const ccToken = readCredentialField('tc-cc-token');
+  const ccEnabled = $('tc-cc-enabled') ? $('tc-cc-enabled').checked : true;
+
   const zonosAccountKey = readCredentialField('tc-zonos-account-key');
   const zonosEnabled = $('tc-zonos-enabled') ? $('tc-zonos-enabled').checked : true;
   const requireZonosUsPrepay = $('tc-zonos-strict-prepay') ? $('tc-zonos-strict-prepay').checked : true;
@@ -4004,6 +4015,10 @@ async function saveTaxCenterSettings() {
     put('openRouterModel', openRouterModel);
     put('zonosApiKey', zonosApiKey);
     put('zonosAccountKey', zonosAccountKey);
+    put('ccClientId', ccClientId);
+    put('ccToken', ccToken);
+    TAX_CENTER.settings.ccEnabled = ccEnabled;
+    TAX_CENTER.settings.ccTestMode = !!$('tc-cc-test-mode')?.checked;
     TAX_CENTER.settings.zonosEnabled = zonosEnabled;
     TAX_CENTER.settings.requireZonosUsPrepay = requireZonosUsPrepay;
 
@@ -4792,6 +4807,43 @@ function tcExpFileDrop(ev) {
   }
 }
 
+async function testChitChatsConnectionHandler() {
+  const statusEl = $('tc-cc-status');
+  const testBtn = $('tc-cc-test-btn');
+  if (!statusEl || !testBtn) return;
+  const clientId = $('tc-cc-client-id')?.value.trim();
+  const token = $('tc-cc-token')?.value.trim();
+
+  if (!clientId || !token) {
+    statusEl.className = 'tc-status-msg tc-status-err';
+    statusEl.innerHTML = '⚠ Client ID and Token are required to test connection.';
+    return;
+  }
+
+  testBtn.disabled = true;
+  testBtn.innerHTML = '<span class="spinner"></span>Testing…';
+  statusEl.className = 'tc-status-msg';
+  statusEl.innerHTML = 'Connecting to Chit Chats API…';
+
+  try {
+    const { verifyChitChatsConnection } = await import('../lib/chitchats.js');
+    const result = await verifyChitChatsConnection({ clientId, token, isTest: !!$('tc-cc-test-mode')?.checked });
+    if (result.ok) {
+      statusEl.className = 'tc-status-msg tc-status-ok';
+      statusEl.textContent = `✓ ${$('tc-cc-test-mode')?.checked ? 'Staging' : 'Live'} account authenticated. Save Config to keep these settings.`;
+    } else {
+      statusEl.className = 'tc-status-msg tc-status-err';
+      statusEl.textContent = `⚠ Connection failed: ${result.error}`;
+    }
+  } catch (err) {
+    statusEl.className = 'tc-status-msg tc-status-err';
+    statusEl.textContent = `⚠ Error: ${err.message}`;
+  } finally {
+    testBtn.disabled = false;
+    testBtn.innerHTML = 'Test Connection';
+  }
+}
+
 export {
   _tcAllReceiptItems,
   isReceiptNoticeDismissed,
@@ -4857,6 +4909,7 @@ export {
   testOpenRouterConnectionFromSettings,
   snoozeDeductionGap,
   testZonosConnectionHandler,
+  testChitChatsConnectionHandler,
   testCanadaPostConnectionHandler,
   diagnoseCanadaPostHandler,
   renderCanadaPostKeySets,

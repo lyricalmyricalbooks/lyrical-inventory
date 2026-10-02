@@ -88,6 +88,17 @@ describe('Label PDF Cache (IndexedDB)', () => {
     expect(retrieved).toBeNull();
   });
 
+  it('keeps alphanumeric Chit Chats labels separate from each other and Canada Post', async () => {
+    const a = new Blob(['A']); const b = new Blob(['B']); const live = new Blob(['live']);
+    await storeCachedLabelPdf('chitchats:test:123:ABC99', a);
+    await storeCachedLabelPdf('chitchats:test:123:DEF99', b);
+    await storeCachedLabelPdf('chitchats:123:ABC99', live);
+    expect((await getCachedLabelPdf('chitchats:test:123:ABC99')).blob).toBe(a);
+    expect((await getCachedLabelPdf('chitchats:test:123:DEF99')).blob).toBe(b);
+    expect((await getCachedLabelPdf('chitchats:123:ABC99')).blob).toBe(live);
+    expect(await getCachedLabelPdf('12399')).toBeNull();
+  });
+
   it('clears all cached PDF labels', async () => {
     const blob1 = new Blob(['1'], { type: 'application/pdf' });
     const blob2 = new Blob(['2'], { type: 'application/pdf' });

@@ -12,6 +12,13 @@ import { archiveKeyForPin } from './label-archive.js';
 export const LABEL_CACHE_DB = 'lm-shipping-labels-db';
 export const LABEL_CACHE_STORE = 'label_artifacts';
 
+// Chit Chats IDs are alphanumeric. Preserve their account/environment namespace
+// rather than stripping letters and colliding with a Canada Post PIN.
+export function labelCacheKey(pin) {
+  const value = String(pin || '');
+  return /^chitchats:(?:test:)?\d+:[a-z0-9]+$/i.test(value) ? value : archiveKeyForPin(pin);
+}
+
 /**
  * Open the IndexedDB database instance. Returns null if IndexedDB is not supported.
  */
@@ -40,7 +47,7 @@ export async function openLabelCacheDb() {
  * Never throws — a cache write failure must never block application flow.
  */
 export async function storeCachedLabelPdf(pin, blob, metadata = {}) {
-  const key = archiveKeyForPin(pin);
+  const key = labelCacheKey(pin);
   if (!key || !blob) return false;
 
   const db = await openLabelCacheDb();
@@ -75,7 +82,7 @@ export async function storeCachedLabelPdf(pin, blob, metadata = {}) {
  * Returns { blob, storedAt, pin, ... } or null if not found.
  */
 export async function getCachedLabelPdf(pin) {
-  const key = archiveKeyForPin(pin);
+  const key = labelCacheKey(pin);
   if (!key) return null;
 
   const db = await openLabelCacheDb();
@@ -103,7 +110,7 @@ export async function getCachedLabelPdf(pin) {
  * Delete a cached label PDF from IndexedDB (e.g. on label void or refund).
  */
 export async function deleteCachedLabelPdf(pin) {
-  const key = archiveKeyForPin(pin);
+  const key = labelCacheKey(pin);
   if (!key) return false;
 
   const db = await openLabelCacheDb();

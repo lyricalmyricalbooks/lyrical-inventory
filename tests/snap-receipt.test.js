@@ -60,6 +60,9 @@ describe('Snap a receipt', () => {
     onLine(true);
     win.dispatchEvent(new win.Event('online'));
     expect(toast()).not.toMatch(/Back online/);
+    await vi.waitFor(() => {
+      expect(document.getElementById('tc-ai-scan-btn').textContent).not.toContain('Scanning');
+    });
   });
 
   it('ignores a cancelled camera', async () => {
