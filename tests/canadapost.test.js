@@ -508,6 +508,17 @@ describe('Canada Post Label & Shipment Creation', () => {
     expect(svg).toContain('ZONOS12345678');
   });
 
+  it('escapes markup-significant characters in label text', async () => {
+    const { generateCanadaPostLabelSvg } = await import('../src/lib/canadapost.js');
+    const svg = generateCanadaPostLabelSvg({
+      orderNum: '#12 "rush"',
+      destination: { name: "O'Brien & <Sons>", address1: '1 Rue', city: 'Montréal', state: 'QC', postalCode: 'H2X 1Y4' },
+    });
+    expect(svg).toContain('O&#39;BRIEN &amp; &lt;SONS&gt;');
+    expect(svg).toContain('#12 &quot;rush&quot;');
+    expect(svg).not.toContain('<SONS>');
+  });
+
   it('generates vector printable Blob from shipment context with zero network errors', async () => {
     const { generateClientCanadaPostLabelBlob, fetchCanadaPostLabelBlob, setLastPurchasedShipmentContext } = await import('../src/lib/canadapost.js');
     const context = {

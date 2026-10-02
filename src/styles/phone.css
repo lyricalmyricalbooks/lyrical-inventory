@@ -453,7 +453,24 @@
   .tab-panel .phone-records tr.phone-record { border: var(--stroke) solid var(--border-strong); border-radius: var(--r3); padding: var(--space-4); gap: var(--space-3); margin-bottom: var(--space-4); box-shadow: var(--elev-1); }
   .tab-panel .phone-records td::before { font: 800 var(--text-2xs) var(--font-ui); text-transform: uppercase; letter-spacing: var(--tracking-caps); }
   .tab-panel .phone-records td.phone-record-lead { font-size: var(--text-md); border-bottom: var(--stroke) solid var(--border-strong); }
-  .phone-record-toggle { width: 100%; text-align: center; }
+  /* The Show/Hide details button on a record card: square inked outline, caps label and a
+     press like .btn, instead of the soft pill that sat under a hard-edged card. */
+  .tab-panel .phone-record-toggle {
+    width: 100%; text-align: center; border: var(--stroke) solid var(--rule-ink); border-radius: var(--r2);
+    background: var(--surface-card); box-shadow: var(--elev-1);
+    font: 800 var(--text-xs) var(--font-ui); text-transform: uppercase; letter-spacing: var(--tracking-caps);
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+    transition: transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast) var(--ease-spring);
+  }
+  .tab-panel .phone-record-toggle:active { transform: translate(1px, 1px); box-shadow: none; }
+  .tab-panel .phone-record-open .phone-record-toggle { background: var(--surface-inset); box-shadow: none; }
+  /* A record awaiting approval (an artist's sale or expense): the amber wash and inset
+     amber bar move from the first cell up to the card itself, and Approve / Reject
+     grow to a full thumb target. */
+  .tab-panel .phone-records tr.phone-record.is-awaiting { background: linear-gradient(var(--amber-bg), var(--amber-bg)), var(--surface-raised); box-shadow: inset 3px 0 0 var(--status-active), var(--elev-1); }
+  .tab-panel .phone-records tr.phone-record.is-awaiting > td { box-shadow: none; }
+  .tab-panel .phone-records .appr-btn { height: var(--target-min); }
+  .tab-panel .phone-records .appr-btn.reject { width: var(--target-min); }
   .phone-section-picker select { border-radius: var(--r2); padding: var(--space-3); }
   .pub-shell .more-sheet-body .pub-nav { grid-template-columns: minmax(0, 1fr); }
   .pub-shell .more-sheet-body .snav { min-height: 52px; }
@@ -477,4 +494,8 @@
   .pub-shell .more-sheet-body .snav { flex-direction: row; justify-content: flex-start; text-align: left; gap: var(--space-3); padding: var(--space-3) var(--space-4); }
   .pub-shell .more-sheet-body .snav-ic { width: 24px; flex: none; }
   .pub-shell .more-sheet-body .snav-label { font-size: var(--text-sm); }
+}
+
+@media (max-width: 768px) and (prefers-reduced-motion: reduce) {
+  .tab-panel .phone-record-toggle { transition: none; }
 }

@@ -2264,16 +2264,7 @@ async function readReceiptFiles(files) {
 
 let _inOpenEmailReceiptModal = false;
 
-function _focusEmailReceiptResults() {
-  setTimeout(() => {
-    const results = document.getElementById('email-receipt-results') || document.getElementById('m-email-receipt-import-modal');
-    if (results && typeof results.scrollIntoView === 'function') {
-      results.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-  }, 100);
-}
-
-function openEmailReceiptImportModal({ selectReadyOnly = false, review = false } = {}) {
+function openEmailReceiptImportModal({ review = false } = {}) {
   if (!window.IS_PUBLISHER || isAuthor()) { showToast('Publisher access required', 'warn'); return; }
   if (_inOpenEmailReceiptModal) return;
   _inOpenEmailReceiptModal = true;
@@ -2292,13 +2283,6 @@ function openEmailReceiptImportModal({ selectReadyOnly = false, review = false }
     }
     _emailReceiptDrafts = filterDismissedReceipts(_filterAlreadyImportedDrafts(_emailReceiptDrafts));
     _emailReceiptDrafts = _emailReceiptDrafts.filter(d => d._inboxId || d._fromSweep);
-
-    if (selectReadyOnly) {
-      const dupIndex = _buildDuplicateExpenseIndex();
-      _emailReceiptDrafts.forEach(d => {
-        d.include = isReadyToFile(d, { duplicate: _isLikelyDuplicateExpense(d, dupIndex) });
-      });
-    }
 
     renderEmailReceiptDrafts(_emailReceiptDrafts);
     writePersistedEmailReceiptDrafts(_emailReceiptDrafts);
@@ -6687,7 +6671,7 @@ function renderExpenses() {
       const actionCell = window.IS_PUBLISHER
         ? `<div class="approval-actions"><button class="appr-btn approve" onclick="approveSubmission('expenses', '${e._subKey}')" aria-label="Approve submission"><span class="ico">✓</span>Approve</button><button class="appr-btn reject" onclick="rejectSubmission('expenses', '${e._subKey}')" title="Reject submission" aria-label="Reject submission">✕</button></div>`
         : `<span style="font-size:var(--text-2xs);color:var(--amber);">Awaiting Publisher</span>`;
-      return `<tr style="opacity:0.8;background:var(--amber-bg);">
+      return `<tr class="is-awaiting">
         ${showSelectCol ? '<td></td>' : ''}
         <td class="mono" style="color:var(--text3);">${fmtD(e.date) ?? '—'}</td>
         <td style="font-weight:600;">${escapeHtml(e.desc)}</td>
