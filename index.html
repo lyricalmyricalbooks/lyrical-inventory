@@ -3305,7 +3305,7 @@
           <div class="tc-integration-section" id="tc-integration-card-chitchats">
             <div class="oc-collapse-head" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-chitchats" onclick="toggleIntegrationSection('chitchats')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('chitchats');}">
               <div class="tc-service-header-left">
-                <div class="tc-service-badge badge-chitchats" style="background:#f42534; color:#fff;" aria-hidden="true">CC</div>
+                <div class="tc-service-badge" aria-hidden="true">CC</div>
                 <div class="tc-service-meta">
                   <strong class="tc-service-title">Chit Chats API</strong>
                   <div class="tc-service-desc">Buy Chit Chats labels, get tracking, and manage shipments.</div>
@@ -3333,14 +3333,17 @@
                   <input type="checkbox" id="tc-cc-enabled" checked>
                   <span>Enable Chit Chats</span>
                 </label>
+                <label class="tc-toggle-wrap"><input type="checkbox" id="tc-cc-test-mode"><span>Use staging account — practice labels cannot be mailed</span></label>
               </div>
               <div class="tc-form-actions-row">
                 <div class="tc-form-actions-buttons">
                   <button id="tc-cc-test-btn" class="btn gold outline" onclick="testChitChatsConnectionHandler()">Test Connection</button>
                   <button id="tc-save-cc-btn" class="btn gold" onclick="saveTaxCenterSettings()">Save Config</button>
+                  <button id="tc-cc-import-btn" class="btn outline" onclick="importChitChatsShippingHandler()">Import paid shipments</button>
                 </div>
               </div>
-              <div id="tc-cc-status" class="tc-status-msg"></div>
+              <p class="tc-form-hint">Requires the connected Google Sheet with Apps Script v51 or later. Staging uses a separate Chit Chats account and token. Your live purchases charge your Chit Chats balance.</p>
+              <div id="tc-cc-status" class="tc-status-msg" role="status" aria-live="polite"></div>
             </div>
           </div>
 
@@ -3894,7 +3897,18 @@
     <div class="shipping-results-container">
       <div class="card" style="min-height:300px; height:100%; display:flex; flex-direction:column;">
         <div id="canadapost-rates-card" class="canadapost-rates-card card" style="display:none; margin-bottom:12px; background:var(--surface-card); border:var(--stroke-hair) solid var(--border); border-radius:var(--r2); padding:12px 14px;"></div>
-        <div id="chitchats-rates-card" class="chitchats-rates-card card" style="display:none; margin-bottom:12px; background:var(--surface-card); border:var(--stroke-hair) solid var(--border); border-radius:var(--r2); padding:12px 14px;"></div>
+        <div class="card">
+          <strong>Chit Chats</strong>
+          <p>Use the address, parcel, and declared value above. Rates create an unpaid draft; nothing is charged until you choose Buy label.</p>
+          <div class="tc-form-grid">
+            <div class="tc-form-group"><label class="tc-form-label" for="cc-ship-date">Expected Chit Chats drop-off date</label><input id="cc-ship-date" type="date" class="tc-form-input"></div>
+            <div class="tc-form-group"><label class="tc-form-label" for="cc-origin-country">Country where the books were printed (two-letter code)</label><input id="cc-origin-country" class="tc-form-input" maxlength="2" placeholder="CA" autocomplete="off"><div class="tc-form-hint">Required for shipments outside Canada. Use the printing country, even if it differs from your return address.</div></div>
+          </div>
+          <button class="btn gold lg" type="button" onclick="calculateChitChatsRatesHandler()">Chit Chats Rates</button>
+          <button class="btn lg" type="button" onclick="importChitChatsShippingHandler()">Refresh shipments</button>
+          <p id="cc-portal-status" role="status" aria-live="polite"></p>
+          <div id="chitchats-rates-card" class="card" hidden></div>
+        </div>
         <div id="zonos-duty-card" class="zonos-duty-card" style="display:none; margin-bottom:12px;"></div>
         <div style="font-size:var(--text-sm); font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:12px;">Customer Charge Prediction</div>
         <div id="ship-prediction-card" class="shipping-prediction-card" style="display:none;"></div>

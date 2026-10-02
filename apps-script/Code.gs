@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v49)
+/* Lyricalmyrical Inventory — Unified Backend (v51)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:
@@ -215,6 +215,8 @@
  *      "software development notification" and dropped). Only developer
  *      notifications that merely mention invoices are rejected now. Bump flags
  *      v47-and-older as outdated so the publisher redeploys.
+ *  49. v51: Complete the Chit Chats proxy with allowlisted shipment operations,
+ *      staging support, official PDF artifacts, and upstream error reporting.
  *  47. v49: the "Monthly (CAD)" tab rebuilds itself on every sync instead of
  *      only from the menu, so it no longer goes stale (it was missing months
  *      and whole books). It leaves out test/connection-check rows, adds a
@@ -278,8 +280,8 @@ function doGet(e) {
   const receiptModel = receiptProps.getProperty('GEMINI_MODEL') || 'gemini-2.5-flash';
   const receiptModelValid = /^[a-zA-Z0-9.-]+$/.test(receiptModel);
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v49',
-    scriptVersion: 'v50',
+    service: 'lyrical-sheets-webhook-v51',
+    scriptVersion: 'v51',
     capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyChitChats: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, canadaPostRefund: true, graphicalEmails: true, authorPaymentEmails: true, dateOrderedRows: true, receiptExtraction: true, receiptSelfTest: true, receiptDailySweep: true, receiptBackupAi: true },
     receiptAi: {
       geminiApiKey: !!receiptProps.getProperty('GEMINI_API_KEY'),
@@ -752,7 +754,36 @@ function doPost(e) {
     }
 
     // ── Proxy Canada Post Web Services API request (bypasses browser CORS) ──
-    $proxyCode
+    if (action === 'proxychitchats') {
+      const d = payload.payload || {};
+      const endpoint = String(d.endpoint || '');
+      const method = String(d.method || 'GET').toUpperCase();
+      const artifact = d.isArtifact === true;
+      const apiPattern = /^https:\/\/(?:staging\.)?chitchats\.com\/api\/v1\/clients\/\d+\/shipments(?:\/[a-z0-9]+(?:\/(?:buy|refund|refresh))?)?(?:\?[^#]*)?$/i;
+      const pdfPattern = /^https:\/\/(?:staging\.)?chitchats\.com\/labels\/shipments\/[a-z0-9]+\.pdf(?:\?[^#]*)?$/i;
+      if (!(artifact ? pdfPattern : apiPattern).test(endpoint)) return jsonOut_({ error: 'Invalid Chit Chats endpoint' });
+      const path = endpoint.split('?')[0];
+      const allowedMethod = artifact ? method === 'GET'
+        : /\/(buy|refund|refresh)$/.test(path) ? method === 'PATCH'
+        : /\/shipments$/.test(path) ? ['GET', 'POST'].indexOf(method) !== -1 : method === 'GET';
+      if (!allowedMethod) return jsonOut_({ error: 'Invalid Chit Chats operation' });
+      if (!d.apiKey) return jsonOut_({ error: 'Chit Chats API token required' });
+      try {
+        const options = { method: method.toLowerCase(), headers: { Authorization: d.apiKey, Accept: artifact ? 'application/pdf' : 'application/json' },
+          muteHttpExceptions: true, followRedirects: false };
+        if (d.jsonPayload && method !== 'GET') { options.contentType = 'application/json'; options.payload = JSON.stringify(d.jsonPayload); }
+        const response = UrlFetchApp.fetch(endpoint, options);
+        const status = response.getResponseCode();
+        if (artifact && status >= 200 && status < 300) {
+          return jsonOut_({ ok: true, status: status, base64: Utilities.base64Encode(response.getBlob().getBytes()) });
+        }
+        let data = null;
+        try { data = JSON.parse(response.getContentText()); } catch (_) {}
+        const headers = response.getAllHeaders();
+        return jsonOut_({ ok: status >= 200 && status < 300, status: status, data: data,
+          retryAfter: headers['Retry-After'] || headers['retry-after'] || '', text: data ? '' : 'Chit Chats returned an unreadable response.' });
+      } catch (_) { return jsonOut_({ error: 'Chit Chats could not be reached. Check the original shipment before trying another purchase.' }); }
+    }
     if (action === 'proxycanadapost') {
       const d = payload.payload || {};
       const endpoint = d.endpoint || d.targetEndpoint;

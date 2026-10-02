@@ -7,7 +7,7 @@ import { beforeEach, expect, test } from 'vitest';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(path.join(__dirname, '../index.html'), 'utf8');
 const styles = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
-const mainJs = readFileSync(path.join(__dirname, '../src/main.js'), 'utf8');
+const mainJs = readFileSync(path.join(__dirname, '../src/main.js'), 'utf8').replace(/\r\n/g, '\n');
 
 // Pull one top-level block of main.js out by its first and last markers and
 // run it against the real markup, without booting Firebase.

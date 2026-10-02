@@ -17,6 +17,9 @@
 // tests/features-boundary.test.js: nothing here runs at module-evaluation
 // time. eslint's no-undef, an error in CI, keeps the import list below honest.
 import { withAutoLocalPickup } from '../lib/local-pickup.js';
+import { buildChitChatsShipment, getChitChatsRates, buyChitChatsLabel, normalizeChitChatsShipment,
+  listChitChatsShipments, refundChitChatsShipment, fetchChitChatsLabelArtifact } from '../lib/chitchats.js';
+import { readChitChatsState, saveChitChatsState, safeChitChatsRecord } from '../lib/chitchats-state.js';
 import {
   bigCartelShipQueue,
   findOrderInAnyBook,
@@ -3094,6 +3097,11 @@ function initShippingTab() {
   loadShippoIncotermPreference($('st-country')?.value || '');
   updateShippoCustomsTotalHint();
   renderShippingAnalysisHub();
+  recoverChitChatsRecords().catch(() => {});
+  if (!window._ccRecoveryWired) {
+    window._ccRecoveryWired = true;
+    window.addEventListener('online', () => { recoverChitChatsRecords().catch(() => {}); });
+  }
 }
 
 function getFallbackShippingPhone(preferredPhone) {
@@ -5263,22 +5271,271 @@ function renderZonosDutyCard(calc, { stCountryCode, qty, unitValue, hsCode, erro
 
 async function calculateChitChatsRatesHandler() {
   const card = $('chitchats-rates-card');
-  if (!card) return;
-
-  const clientId = TAX_CENTER.settings?.ccClientId;
-  const token = TAX_CENTER.settings?.ccToken;
-  const enabled = TAX_CENTER.settings?.ccEnabled !== false;
-
-  if (!enabled || !clientId || !token) {
-    card.style.display = 'none';
-    return;
-  }
-
+  if (!card || isAuthor() || _ccBusy) return;
+  const account = chitChatsAccount();
   card.style.display = 'block';
-  card.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center;">
-    <div style="font-weight:600; color:var(--text);"><span style="color:#f42534; margin-right:4px;">Y"'</span> Chit Chats</div>
-    <div style="font-size:var(--text-sm); color:var(--text3);">Ready</div>
-  </div>`;
+  if (!account.clientId || !account.token || TAX_CENTER.settings?.ccEnabled === false) {
+    renderChitChatsPortal('Connect and enable Chit Chats in Tax Centre → Integrations first.'); return;
+  }
+  if (!navigator.onLine) { renderChitChatsPortal('You are offline. Saved labels remain available; rates and purchases need a connection.'); return; }
+  _ccBusy = true;
+  renderChitChatsPortal('Getting Chit Chats rates…');
+  try {
+    const payload = chitChatsFormPayload();
+    const fingerprint = JSON.stringify(payload);
+    const state = readChitChatsState(account);
+    const sameDraft = state.draft?.fingerprint === fingerprint && state.draft?.clientId === account.clientId;
+    const result = await getChitChatsRates({ ...account, payload, shipmentId: sameDraft ? state.draft.id : '' });
+    state.draft = { id: result.shipment.id, clientId: account.clientId, fingerprint, payload, rates: result.rates };
+    saveChitChatsState(account, state);
+    renderChitChatsPortal(result.rates.length ? '' : 'Chit Chats offered no services for this parcel. Check its address, size, weight, and customs details.');
+  } catch (error) { renderChitChatsPortal(error.message); }
+  finally { _ccBusy = false; }
+}
+
+let _ccBusy = false;
+let _ccImportBusy = false;
+
+function chitChatsAccount() {
+  const settings = TAX_CENTER.settings || {};
+  return { clientId: String(settings.ccClientId || '').trim(), token: String(settings.ccToken || '').trim(), isTest: !!settings.ccTestMode };
+}
+
+function chitChatsFormPayload() {
+  const value = id => String($(id)?.value || '').trim();
+  const quantity = Number(value('sp-qty'));
+  const unitValue = Number(value('sp-customs-value'));
+  if (!Number.isInteger(quantity) || quantity < 1 || !Number.isFinite(unitValue) || unitValue <= 0) throw new Error('Check the number of copies and the declared value per copy.');
+  const weight = Number(value('sp-weight'));
+  const weightUnit = value('sp-weight-unit');
+  const country = normalizeCountryCode(value('st-country'));
+  const description = value('sp-customs-description');
+  const payload = {
+    name: value('st-name'), address_1: value('st-street1'), address_2: value('st-street2'), city: value('st-city'),
+    province_code: value('st-state'), postal_code: value('st-zip'), country_code: country, phone: value('st-phone'),
+    package_contents: 'merchandise', description, value: roundCents(unitValue * quantity).toFixed(2), value_currency: 'cad',
+    order_id: normalizeShippingOrderNumber($('ship-prefill-dest')?.dataset.orderNumber || value('sp-order-num')), order_store: 'other',
+    package_type: 'parcel', weight, weight_unit: weightUnit, size_x: Number(value('sp-length')), size_y: Number(value('sp-width')),
+    size_z: Number(value('sp-height')), size_unit: value('sp-dim-unit'), ship_date: value('cc-ship-date') || today(),
+  };
+  if (country !== 'CA') {
+    const hs = value('sp-customs-hs').replace(/\./g, '');
+    const origin = value('cc-origin-country').toUpperCase();
+    if (!/^\d{6,10}$/.test(hs) || !/^[A-Z]{2}$/.test(origin)) throw new Error('Check the customs tariff code and enter the country where the books were printed.');
+    // One line per copy avoids ambiguity between per-item and line-total value.
+    if (quantity > 100) throw new Error('Chit Chats customs supports up to 100 copies in this form. Split this order into parcels.');
+    payload.line_items = Array.from({ length: quantity }, () => ({ quantity: 1, description, value_amount: unitValue.toFixed(2),
+      currency_code: 'cad', hs_tariff_code: hs, origin_country: origin, weight: weight / quantity, weight_unit: weightUnit }));
+  }
+  return buildChitChatsShipment(payload);
+}
+
+function renderChitChatsPortal(message = '') {
+  const card = $('chitchats-rates-card');
+  if (!card || isAuthor()) return;
+  const account = chitChatsAccount();
+  const state = readChitChatsState(account);
+  const draft = state.draft;
+  card.style.display = 'block';
+  card.hidden = false;
+  if ($('cc-portal-status')) $('cc-portal-status').textContent = message;
+  let matches = false;
+  try { matches = draft?.fingerprint === JSON.stringify(chitChatsFormPayload()); } catch (_) { /* incomplete form */ }
+  const pending = Object.values(state.purchases || {}).filter(item => item.status === 'pending');
+  const rates = matches ? draft.rates || [] : [];
+  const archive = Object.values(state.shipments || {}).slice(-30).reverse();
+  card.innerHTML = `<div class="cp-rate-header"><strong>Chit Chats rates &amp; labels</strong><span class="pill ${account.isTest ? 'amber' : 'blue'}">${account.isTest ? '● Staging — not mailable' : '● Live account'}</span></div>
+    <p>${escapeHtml(message || (rates.length ? 'Choose a service below. Buying a label charges your Chit Chats balance.' : 'Use Chit Chats Rates to quote the address and parcel above.'))}</p>
+    ${pending.map(item => `<div class="cp-buy-blocked"><span>● Purchase ${escapeHtml(item.id)} needs checking. Do not buy another label for this parcel.</span><button class="btn lg" type="button" data-cc-check="${escapeHtml(item.id)}">Check purchase</button></div>`).join('')}
+    <div class="cp-rates-list">${rates.map((rate, index) => `<div class="cp-rate-row"><div><strong>${escapeHtml(rate.serviceName)}</strong><div>${escapeHtml(rate.delivery)} · ${escapeHtml(rate.tracking)}</div></div><div><strong class="tnum">${rate.totalPrice.toFixed(2)} CAD</strong><button class="btn gold lg" type="button" data-cc-buy="${index}" ${pending.length ? 'disabled' : ''}>Buy label</button></div></div>`).join('')}</div>
+    ${archive.length ? '<p><strong>Saved Chit Chats shipments</strong> — downloaded PDFs can be reprinted offline.</p>' : ''}
+    ${archive.map(shipment => {
+      const expense = normalizeChitChatsShipment(shipment, account);
+      const row = (TAX_CENTER.businessExpenses || []).find(item => item.ref === expense?.ref);
+      const refund = row && refundState(row, TAX_CENTER.businessExpenses);
+      return `<div class="cp-rate-row"><div><strong>${escapeHtml(shipment.to_name || shipment.id)}</strong><div>${escapeHtml(shipment.carrier_tracking_code || shipment.id)} · ${escapeHtml(shipment.status)}</div>${expense?.trackingUrl ? `<a href="${escapeHtml(expense.trackingUrl)}" target="_blank" rel="noopener noreferrer">Track parcel</a>` : ''}</div><div>
+        <button class="btn lg" type="button" data-cc-label="${escapeHtml(shipment.id)}">Download PDF</button>
+        ${row && refund === 'none' && !row.simulated && shipment.status !== 'voided' ? `<button class="btn lg" type="button" data-cc-refund="${escapeHtml(row.ref)}">Request refund</button>` : ''}
+        ${row && refund === 'requested' ? `<span class="pill amber">● Refund requested</span><button class="btn lg" type="button" data-cc-credit="${escapeHtml(row.ref)}">Refund arrived</button>` : ''}
+        </div></div>`;
+    }).join('')}`;
+  card.querySelectorAll('[data-cc-buy]').forEach(button => button.addEventListener('click', () => buyChitChatsLabelHandler(Number(button.dataset.ccBuy))));
+  card.querySelectorAll('[data-cc-check]').forEach(button => button.addEventListener('click', () => checkChitChatsPurchaseHandler(button.dataset.ccCheck)));
+  card.querySelectorAll('[data-cc-label]').forEach(button => button.addEventListener('click', () => openChitChatsLabelHandler(button.dataset.ccLabel)));
+  card.querySelectorAll('[data-cc-refund]').forEach(button => button.addEventListener('click', () => requestLabelRefund(button.dataset.ccRefund)));
+  card.querySelectorAll('[data-cc-credit]').forEach(button => button.addEventListener('click', async () => { await markLabelRefundArrived(button.dataset.ccCredit); renderChitChatsPortal(); }));
+}
+
+async function applyChitChatsShipment(shipment, account, orderNumber = '') {
+  const expense = normalizeChitChatsShipment(shipment, account);
+  if (!expense || account.isTest) return;
+  const expenses = TAX_CENTER.businessExpenses ||= [];
+  let existing = expenses.find(item => item.ref === expense.ref || (expense.trackingNumber && !item.simulated && item.trackingNumber === expense.trackingNumber));
+  if (!existing) { expenses.unshift(expense); existing = expense; }
+  else {
+    // Retain receipt links, refund history, and a manual order match.
+    const receipt = existing.receipt; const link = existing.shippingOrderNumber;
+    if (expense.amountUnknown && !existing.amountUnknown) {
+      for (const field of ['amount', 'baseAmount', 'origAmount', 'amountUnknown', 'amountConfirmed']) expense[field] = existing[field];
+    }
+    Object.assign(existing, expense, { id: existing.id, receipt: receipt || '', shippingOrderNumber: link || '' });
+  }
+  const local = readChitChatsState(account);
+  if (!existing.refundRequest && local.refundRequests?.[shipment.id]) existing.refundRequest = local.refundRequests[shipment.id];
+  for (const credit of Object.values(local.credits || {})) {
+    if (!expenses.some(row => row.ref === credit.ref)) expenses.unshift(credit);
+  }
+  const wanted = normalizeShippingOrderNumber(orderNumber || shipment.order_id);
+  const found = wanted ? findOrderAcrossBooks(wanted) : null;
+  if (found && !existing.shippingOrderNumber) writeShippingLink(existing, wanted, 'label');
+  if (found && !['voided', 'canceled'].includes(shipment.status) && refundState(existing, expenses) === 'none') {
+    const oldTracking = String(found.entry.trackingNumber || '');
+    if (!oldTracking || oldTracking === expense.trackingNumber) {
+      found.entry.shipped = true; found.entry.shippedDate ||= shipment.ship_date || today();
+      found.entry.trackingNumber = expense.trackingNumber || shipment.id; found.entry.carrier = 'chitchats';
+      if (!expense.amountUnknown) found.entry.postagePaid = expense.amount;
+      await saveState(found.bookId);
+    }
+  }
+}
+
+async function finishChitChatsPurchase(shipment, account) {
+  const state = readChitChatsState(account);
+  const intent = state.purchases?.[shipment.id];
+  (state.shipments ||= {})[shipment.id] = safeChitChatsRecord(shipment);
+  if (intent) intent.status = 'complete';
+  if (state.draft?.id === shipment.id) delete state.draft;
+  saveChitChatsState(account, state);
+  await applyChitChatsShipment(shipment, account, intent?.orderNumber);
+  if (navigator.onLine) await saveTaxCenter();
+  renderHist(); renderTaxCenter(); renderShippingAnalysisHub(); renderChitChatsPortal('✓ Label purchased. Open / print PDF below and take the parcel to Chit Chats.');
+  // Fetch immediately so a later printer jam or disconnect can use the cache.
+  fetchChitChatsLabelArtifact({ ...account, shipmentId: shipment.id }).catch(() => {});
+}
+
+async function buyChitChatsLabelHandler(index) {
+  if (_ccBusy || isAuthor()) return;
+  _ccBusy = true;
+  const account = chitChatsAccount();
+  try {
+    if (!navigator.onLine || TAX_CENTER.settings?.ccEnabled === false) throw new Error('Connect to the internet and enable Chit Chats before buying.');
+    const state = readChitChatsState(account); const draft = state.draft; const rate = draft?.rates?.[index];
+    if (!rate || draft.fingerprint !== JSON.stringify(chitChatsFormPayload())) throw new Error('The parcel changed. Get fresh Chit Chats rates before buying.');
+    if (Object.values(state.purchases || {}).some(item => item.status === 'pending')) throw new Error('Check the previous purchase before buying another label.');
+    const orderNumber = draft.payload.order_id;
+    if (!account.isTest && orderNumber) {
+      const found = findExistingLabel(orderNumber, { hist: Object.values(states).flatMap(s => s.hist || []), expenses: TAX_CENTER.businessExpenses || [] });
+      if (found && !(await confirmDialog('This order already has a label. Buying another charges you again.', { title: 'Another label?', details: describeExistingLabel(found), okLabel: 'Buy another', cancelLabel: 'Go back', danger: true }))) return;
+    }
+    if (!(await confirmDialog(account.isTest ? 'This creates a staging label. It cannot be mailed and will not enter your accounts.' : 'This charges your Chit Chats account. Only buy when the parcel details are correct.', {
+      title: 'Buy this Chit Chats label?', details: [['Service', rate.serviceName], ['Recipient', draft.payload.name], ['Address', `${draft.payload.address_1}, ${draft.payload.city}, ${draft.payload.postal_code}`], ['Price', `${rate.totalPrice.toFixed(2)} CAD`]], okLabel: 'Buy label', cancelLabel: 'Cancel' }))) return;
+    // Recheck after the confirmation: another tab/device may have changed the form.
+    if (draft.fingerprint !== JSON.stringify(chitChatsFormPayload())) throw new Error('The parcel changed while confirming. Get fresh rates.');
+    const shipment = await buyChitChatsLabel({ ...account, shipmentId: draft.id, postageType: rate.postageType, onIntent: () => {
+      const fresh = readChitChatsState(account);
+      if (Object.values(fresh.purchases || {}).some(item => item.status === 'pending')) throw new Error('A purchase is already waiting to be checked.');
+      (fresh.purchases ||= {})[draft.id] = { id: draft.id, status: 'pending', orderNumber, at: new Date().toISOString() };
+      saveChitChatsState(account, fresh);
+    } });
+    await finishChitChatsPurchase(shipment, account);
+  } catch (error) {
+    if (error.purchaseFailed) clearFailedChitChatsPurchase(account);
+    renderChitChatsPortal(error.message); showToast(error.message, 'warn', 9000);
+  }
+  finally { _ccBusy = false; }
+}
+
+async function checkChitChatsPurchaseHandler(shipmentId) {
+  if (_ccBusy || isAuthor()) return;
+  _ccBusy = true; const account = chitChatsAccount();
+  try { await finishChitChatsPurchase(await buyChitChatsLabel({ ...account, shipmentId, resume: true }), account); }
+  catch (error) {
+    if (error.purchaseFailed) clearFailedChitChatsPurchase(account, shipmentId);
+    renderChitChatsPortal(error.message);
+  }
+  finally { _ccBusy = false; }
+}
+
+async function openChitChatsLabelHandler(shipmentId) {
+  if (isAuthor()) return;
+  try { downloadBlob(await fetchChitChatsLabelArtifact({ ...chitChatsAccount(), shipmentId }), `chitchats-${shipmentId}.pdf`); }
+  catch (error) { showToast(error.message, 'err', 9000); }
+}
+
+function clearFailedChitChatsPurchase(account, shipmentId = '') {
+  const state = readChitChatsState(account);
+  for (const item of Object.values(state.purchases || {})) {
+    if (item.status === 'pending' && (!shipmentId || item.id === shipmentId)) item.status = 'failed';
+  }
+  delete state.draft;
+  saveChitChatsState(account, state);
+}
+
+async function importChitChatsShippingHandler() {
+  if (_ccImportBusy || isAuthor()) return;
+  _ccImportBusy = true; const account = chitChatsAccount(); const status = $('tc-cc-status');
+  const button = $('tc-cc-import-btn'); if (button) button.disabled = true;
+  if (status) status.textContent = 'Reading Chit Chats shipments…';
+  try {
+    if (TAX_CENTER.settings?.ccEnabled === false) throw new Error('Enable Chit Chats and save its settings first.');
+    const shipments = await listChitChatsShipments(account);
+    const state = readChitChatsState(account); let count = 0;
+    for (const shipment of shipments) {
+      if (!normalizeChitChatsShipment(shipment, account)) continue;
+      (state.shipments ||= {})[shipment.id] = safeChitChatsRecord(shipment); count++;
+    }
+    saveChitChatsState(account, state);
+    for (const shipment of Object.values(state.shipments || {})) await applyChitChatsShipment(shipment, account);
+    if (!account.isTest) await saveTaxCenter();
+    renderHist(); renderTaxCenter(); renderShippingAnalysisHub(); renderChitChatsPortal();
+    if (status) status.textContent = `✓ ${count} paid ${account.isTest ? 'staging shipments saved for practice; no expenses filed' : 'shipments checked; existing expenses kept without duplicates'}.`;
+  } catch (error) { if (status) status.textContent = error.message; showToast(error.message, 'err'); }
+  finally { _ccImportBusy = false; if (button) button.disabled = false; }
+}
+
+async function recoverChitChatsRecords() {
+  if (isAuthor()) return;
+  const account = chitChatsAccount(); if (!account.clientId) return;
+  const state = readChitChatsState(account);
+  for (const shipment of Object.values(state.shipments || {})) await applyChitChatsShipment(shipment, account, state.purchases?.[shipment.id]?.orderNumber);
+  if (navigator.onLine && !account.isTest && Object.keys(state.shipments || {}).length) await saveTaxCenter();
+  renderChitChatsPortal();
+}
+
+async function requestChitChatsRefundHandler(expense) {
+  if (isAuthor() || _ccBusy) return;
+  const account = chitChatsAccount();
+  if (account.clientId !== expense.ccClientId || account.isTest !== expense.ccTestMode) {
+    showToast('Switch back to the Chit Chats account that bought this label before requesting a refund.', 'warn'); return;
+  }
+  if (!navigator.onLine) { showToast('Connect to the internet before requesting a refund.', 'warn'); return; }
+  _ccBusy = true;
+  try {
+    if (!(await confirmDialog('Use this only for a label you will not mail. Chit Chats may take up to two weeks to return the money. The cost stays in your books until you confirm the refund arrived.', {
+      title: 'Refund this Chit Chats label?', details: [['Label', expense.desc], ['Cost', `${Number(expense.amount).toFixed(2)} CAD`]], okLabel: 'Request refund', cancelLabel: 'Keep label', danger: true }))) return;
+    const state = readChitChatsState(account);
+    if (state.refundRequests?.[expense.ccShipmentId]) throw new Error('A refund request was already sent or needs checking in Chit Chats.');
+    const intent = { id: expense.ccShipmentId, status: 'CHECK_REQUIRED', at: new Date().toISOString() };
+    (state.refundRequests ||= {})[expense.ccShipmentId] = intent;
+    saveChitChatsState(account, state);
+    expense.refundRequest = intent;
+    await refundChitChatsShipment({ ...account, shipmentId: expense.ccShipmentId });
+    intent.status = 'REQUESTED';
+    saveChitChatsState(account, state);
+    const found = findOrderAcrossBooks(expense.shippingOrderNumber);
+    if (found && unshipOrderForRefund(found.entry, expense.trackingNumber || expense.ccShipmentId)) await saveState(found.bookId);
+    await saveTaxCenter(); renderHist(); renderTaxCenter(); renderShippingAnalysisHub();
+    renderChitChatsPortal('✓ Refund requested. Confirm Refund arrived only after the credit appears in Chit Chats.');
+  } catch (error) {
+    renderChitChatsPortal(`${error.message} Check the refund in Chit Chats before sending another request.`);
+    if (error.status >= 400 && error.status < 500 && ![408, 429].includes(error.status)) {
+      const state = readChitChatsState(account);
+      delete state.refundRequests?.[expense.ccShipmentId];
+      saveChitChatsState(account, state);
+      delete expense.refundRequest;
+    }
+    showToast(error.message, 'warn');
+  } finally { _ccBusy = false; }
 }
 
 async function calculateCanadaPostRatesHandler() {
@@ -7225,6 +7482,10 @@ async function requestLabelRefund(expenseKey) {
   }
 
   const carrier = refundCarrier(expense);
+  if (carrier === 'chitchats') {
+    await requestChitChatsRefundHandler(expense);
+    return;
+  }
   if (carrier === 'canadapost') {
     await voidCanadaPostLabelAction(expense.trackingPin || String(expense.ref).slice('canadapost:'.length));
     return;
@@ -7281,9 +7542,15 @@ async function markLabelRefundArrived(expenseKey) {
     { title: 'Refund arrived?', okLabel: 'Yes, it arrived', cancelLabel: 'Not yet' },
   );
   if (!ok) return;
-  const prefix = refundCarrier(expense) === 'canadapost' ? 'canadapost-refund' : 'shippo-refund';
+  const prefix = `${refundCarrier(expense) || 'shippo'}-refund`;
   const credit = refundCredit(expense, { refundId: expense.refundRequest?.id || `manual-${Date.now()}`, date: today(), prefix });
   if (!credit) return;
+  if (refundCarrier(expense) === 'chitchats') {
+    const account = { clientId: expense.ccClientId, isTest: expense.ccTestMode };
+    const state = readChitChatsState(account);
+    (state.credits ||= {})[credit.ref] = credit;
+    saveChitChatsState(account, state);
+  }
   expense.refundRequest = { ...expense.refundRequest, status: 'SUCCESS' };
   expenses.unshift(credit);
   await saveTaxCenter().catch(() => {});
@@ -11135,6 +11402,11 @@ export {
   openZonosPrepayAppHandler,
   calculateCanadaPostRatesHandler,
   calculateChitChatsRatesHandler,
+  buyChitChatsLabelHandler,
+  checkChitChatsPurchaseHandler,
+  openChitChatsLabelHandler,
+  importChitChatsShippingHandler,
+  recoverChitChatsRecords,
   renderCanadaPostRatesCard,
   buyCanadaPostLabelHandler,
   openCanadaPostPurchasedLabel,

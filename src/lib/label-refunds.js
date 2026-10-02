@@ -15,6 +15,7 @@ export function refundCarrier(expense = {}) {
   const ref = String(expense.ref || '');
   if (ref.startsWith('shippo:')) return 'shippo';
   if (ref.startsWith('canadapost:')) return 'canadapost';
+  if (ref.startsWith('chitchats:')) return 'chitchats';
   return '';
 }
 
