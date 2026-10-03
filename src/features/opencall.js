@@ -244,9 +244,16 @@ function renderOcBulkModalContent(retryMode = false) {
     eligible = ocBulkEligible_(proj, stage, resendMode);
   }
   const isChecked = (c) => retryMode || !_ocBulkPreselect || _ocBulkPreselect.has(c.id);
-  const notReady = _ocBulkPreselect && !retryMode
-    ? [..._ocBulkPreselect].filter(id => !eligible.some(c => c.id === id)).length
-    : 0;
+  // ⚡ Bolt Optimization: Replace chained .filter().some().length passes with O(1) Set lookups and a single imperative loop
+  let notReady = 0;
+  if (_ocBulkPreselect && !retryMode) {
+    const eligibleIds = new Set(eligible.map(c => c.id));
+    for (const id of _ocBulkPreselect) {
+      if (!eligibleIds.has(id)) {
+        notReady++;
+      }
+    }
+  }
 
   const listHtml = eligible.length > 0
     ? `<div style="display:flex;gap:6px;margin-bottom:8px;">
