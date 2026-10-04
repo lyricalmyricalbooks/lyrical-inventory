@@ -108,7 +108,7 @@ describe('Fair Print Kit — Adaptive Space and Sizing', () => {
       const body = fn.slice(0, fn.indexOf('\nwindow.printSalesTracker ='));
 
       expect(body).toContain('td.tally { background: #fff; height: ${effectiveTallyRowHeight}px; }');
-      expect(body).toContain('td.total { background: #fdf0c8; height: ${effectiveTallyRowHeight}px; }');
+      expect(body).toContain('td.total { background: #f4ded8; height: ${effectiveTallyRowHeight}px; }');
       expect(body).toContain('min-height: calc(100vh - 0.4in);');
     });
 
@@ -117,7 +117,7 @@ describe('Fair Print Kit — Adaptive Space and Sizing', () => {
       const body = fn.slice(0, fn.indexOf('\nwindow.printSalesTracker ='));
 
       expect(body).toContain('dateLabel ? escapeHtml(dateLabel) : \'&nbsp;\'');
-      expect(body).toContain('border-bottom: 1.5px solid #111;');
+      expect(body).toContain('border-bottom: 1.5px solid #17130f;');
     });
 
     it('makes date input optional without forcing today() on modal open', () => {
