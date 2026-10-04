@@ -19827,40 +19827,40 @@ function printSalesTracker(opts = {}) {
     <style>
       @page { size: letter landscape; margin: 0.4in; }
       * { box-sizing: border-box; }
-      html, body { background: #fff; color: #111; margin: 0; padding: 0; }
+      html, body { background: #fff; color: #17130f; margin: 0; padding: 0; }
       body {
-        font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+        font-family: "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
         padding: 0.2in;
         min-height: calc(100vh - 0.4in);
         display: flex;
         flex-direction: column;
         justify-content: flex-start;
       }
-      .header { text-align: center; margin-bottom: 14px; }
-      .header h1 { margin: 0; font-size: 26pt; font-weight: 800; letter-spacing: -.01em; }
+      .header { text-align: center; margin-bottom: 14px; border-bottom: 2px solid #17130f; padding-bottom: 8px; }
+      .header h1 { margin: 0; font-family: "Anton", Impact, sans-serif; font-size: 26pt; font-weight: 800; letter-spacing: .035em; text-transform: uppercase; }
       .meta { display: flex; gap: ${metaGap}; margin-bottom: 12px; font-size: ${metaFontSize}; }
-      .meta-row { flex: 1; display: flex; align-items: baseline; gap: 8px; border-bottom: 1.5px solid #111; padding-bottom: 4px; min-height: 1.4em; }
+      .meta-row { flex: 1; display: flex; align-items: baseline; gap: 8px; border-bottom: 1.5px solid #17130f; padding-bottom: 4px; min-height: 1.4em; }
       .meta-row .label { font-weight: 800; }
       .meta-row .value { flex: 1; font-weight: 500; min-height: 1.2em; }
       table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-      th, td { border: 1.2px solid #111; padding: 0; }
-      thead th { background: #e8e8e8; font-size: ${thFontSize}; font-weight: 800; text-align: center; height: ${thHeight}px; padding: 4px; }
+      th, td { border: 1.2px solid #17130f; padding: 0; }
+      thead th { background: #e8e1d6; font-size: ${thFontSize}; font-weight: 800; text-align: center; height: ${thHeight}px; padding: 4px; text-transform: uppercase; letter-spacing: .04em; }
       thead th.title-col { text-align: left; padding-left: 10px; width: 22%; }
-      thead th.total-col { background: #f4e4b8; width: 80px; }
+      thead th.total-col { background: #e6b4a8; width: 80px; }
       td.title { padding: 8px 10px; vertical-align: middle; }
-      td.title .title-name { font-weight: 700; font-size: ${titleFontSize}; line-height: 1.2; }
+      td.title .title-name { font-family: "Anton", Impact, sans-serif; font-weight: 700; font-size: ${titleFontSize}; line-height: 1.2; text-transform: uppercase; letter-spacing: .02em; }
       td.title .title-meta { font-size: ${authorFontSize}; color: #555; margin-top: 2px; }
-      td.title .title-packed { font-size: ${packedFontSize}; font-weight: 700; color: #8a5815; margin-top: 2px; }
+      td.title .title-packed { font-size: ${packedFontSize}; font-weight: 700; color: #654400; margin-top: 2px; }
       thead { display: table-header-group; }
       tbody tr { break-inside: avoid; page-break-inside: avoid; }
       td.tally { background: #fff; height: ${effectiveTallyRowHeight}px; }
-      td.total { background: #fdf0c8; height: ${effectiveTallyRowHeight}px; }
+      td.total { background: #f4ded8; height: ${effectiveTallyRowHeight}px; }
       td.price-paid { background: #fafafa; height: ${effectivePriceRowHeight}px; font-size: 9pt; color: #666; text-align: center; vertical-align: middle; }
       tr.price-row td.price-paid::before { content: "${currencySymbol} ___"; color: #bbb; font-size: 8pt; }
       tfoot td { border: none; padding-top: 14px; }
       .grand-row { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: ${grandMarginTop}; }
       .grand-label { font-size: ${grandLabelFontSize}; font-weight: 800; }
-      .grand-box { width: ${grandBoxW}; height: ${grandBoxH}; border: 1.5px solid #111; background: #fdf0c8; }
+      .grand-box { width: ${grandBoxW}; height: ${grandBoxH}; border: 2px solid #17130f; background: #f4ded8; }
       @media print {
         body { padding: 0; min-height: 100%; }
       }
@@ -20144,7 +20144,7 @@ window.fkDeleteFairPreset = async function () {
 function _fkOpenQrPrintWindow() {
   const win = window.open('', '_blank', 'width=1100,height=800');
   if (!win) return null;
-  win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Preparing payment QR codes…</title></head><body style="font-family:-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;background:#faf8f4;color:#1c1814;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;"><div style="text-align:center;"><div style="font-size:15px;letter-spacing:.08em;text-transform:uppercase;">Preparing payment QR codes…</div><div style="font-size:12px;color:#8b6f47;margin-top:8px;">Keep this tab open.</div></div></body></html>');
+  win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Preparing payment QR codes…</title></head><body style="font-family:Archivo,Arial,sans-serif;background:#f5f0e7;color:#17130f;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;"><div style="text-align:center;border:2px solid #17130f;padding:28px;box-shadow:6px 6px 0 #17130f;"><div style="font-family:Anton,Impact,sans-serif;font-size:15px;letter-spacing:.08em;text-transform:uppercase;">Preparing payment QR codes…</div><div style="font-size:12px;color:#5d544a;margin-top:8px;">Keep this tab open.</div></div></body></html>');
   win.document.close();
   return win;
 }
@@ -20462,21 +20462,24 @@ async function printPaymentQRCodes(opts = {}) {
 <meta charset="UTF-8">
 <title>Lyricalmyrical Books — Payment QR Codes</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Jost:wght@200;300;400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --ink: #1c1814;
-    --paper: #faf8f4;
-    --rule: #d6cfc4;
-    --accent: #8b6f47;
+    --ink: #17130f;
+    --paper: #f5f0e7;
+    --rule: #c9c0b3;
+    --accent: #d84a3a;
+    --accent-light: #f4ded8;
+    --blue-light: #dce8ee;
+    --mono: "DM Mono", monospace;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body {
     height: 100%;
     min-height: 100vh;
     background: var(--paper);
-    font-family: 'Jost', sans-serif;
-    font-weight: 300;
+    font-family: "Archivo", Arial, sans-serif;
+    font-weight: 400;
     color: var(--ink);
   }
   body {
@@ -20485,12 +20488,12 @@ async function printPaymentQRCodes(opts = {}) {
     justify-content: space-between;
   }
 
-  .header { text-align: center; padding: ${headerPadding}; border-bottom: 1px solid var(--rule); flex-shrink: 0; }
-  .header::before { content: ''; display: block; width: 32px; height: 1px; background: var(--accent); margin: 0 auto 10px; }
-  .brand { font-family: 'Cormorant Garamond', serif; font-size: ${brandFontSize}; font-weight: 300; letter-spacing: 0.12em; line-height: 1; }
-  .brand em { font-style: italic; }
-  .tagline { margin-top: 6px; font-size: ${taglineFontSize}; letter-spacing: 0.24em; text-transform: uppercase; color: var(--accent); }
-  .date-line { margin-top: 4px; font-size: 0.55rem; letter-spacing: 0.16em; text-transform: uppercase; color: #aaa; }
+  .header { text-align: center; padding: ${headerPadding}; border-bottom: 2px solid var(--ink); flex-shrink: 0; }
+  .header::before { content: ''; display: block; width: 32px; height: 4px; background: var(--accent); margin: 0 auto 10px; }
+  .brand { font-family: Anton, Impact, sans-serif; font-size: ${brandFontSize}; font-weight: 400; letter-spacing: 0.06em; line-height: 1; text-transform: uppercase; }
+  .brand em { font-style: normal; }
+  .tagline { margin-top: 6px; font-size: ${taglineFontSize}; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink); }
+  .date-line { margin-top: 4px; font-family: var(--mono); font-size: 0.55rem; letter-spacing: 0.12em; text-transform: uppercase; color: #62594f; }
 
   .page-main {
     flex: 1 1 auto;
@@ -20513,46 +20516,47 @@ async function printPaymentQRCodes(opts = {}) {
   .card {
     width: calc(100% / ${effectiveCols});
     padding: ${cardPadding};
-    border-right: 1px solid var(--rule);
-    border-bottom: 1px solid var(--rule);
-    ${count === 1 ? 'border-left: 1px solid var(--rule); border-top: 1px solid var(--rule);' : ''}
+    border: 2px solid var(--ink);
+    border-right-width: 0;
+    border-bottom-width: 0;
+    background: var(--paper);
     display: flex; flex-direction: column; align-items: center; position: relative;
     page-break-inside: avoid; break-inside: avoid;
-    ${count <= 2 ? 'box-shadow: 0 4px 18px rgba(0,0,0,0.03);' : ''}
+    ${count <= 2 ? 'box-shadow: 6px 6px 0 var(--ink);' : ''}
   }
-  .card:nth-child(${effectiveCols}n) { border-right: none; }
-  ${count === 1 ? '.card { border-right: 1px solid var(--rule) !important; }' : ''}
-  .card::before, .card::after { content: ''; position: absolute; width: ${cornerBracketSize}; height: ${cornerBracketSize}; border-color: var(--accent); border-style: solid; opacity: 0.35; }
+  .card:nth-child(${effectiveCols}n) { border-right-width: 2px; }
+  .card:nth-last-child(-n + ${effectiveCols}) { border-bottom-width: 2px; }
+  .card::before, .card::after { content: ''; position: absolute; width: ${cornerBracketSize}; height: ${cornerBracketSize}; border-color: var(--accent); border-style: solid; opacity: 1; }
   .card::before { top: 6px; left: 6px; border-width: ${cornerBracketWidth} 0 0 ${cornerBracketWidth}; }
   .card::after  { bottom: 6px; right: 6px; border-width: 0 ${cornerBracketWidth} ${cornerBracketWidth} 0; }
 
-  .card-num { font-size: ${cardNumSize}; letter-spacing: 0.2em; color: var(--accent); text-transform: uppercase; margin-bottom: ${cardNumMargin}; font-weight: 400; }
+  .card-num { font-family: var(--mono); font-size: ${cardNumSize}; letter-spacing: 0.16em; color: #a32e24; text-transform: uppercase; margin-bottom: ${cardNumMargin}; font-weight: 500; }
 
-  .qr-frame { width: ${qrFrameSize}; height: ${qrFrameSize}; padding: 6px; background: #fff; border: 1px solid var(--rule); display: flex; align-items: center; justify-content: center; margin-bottom: 10px; flex-shrink: 0; }
+  .qr-frame { width: ${qrFrameSize}; height: ${qrFrameSize}; padding: 6px; background: #fff; border: 2px solid var(--ink); display: flex; align-items: center; justify-content: center; margin-bottom: 10px; flex-shrink: 0; }
 
-  .card-title { font-family: 'Cormorant Garamond', serif; font-size: ${titleFontSize}; font-style: italic; font-weight: 400; text-align: center; line-height: 1.25; margin-bottom: 4px; }
-  .card-author { font-size: ${authorFontSize}; color: #777; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 8px; text-align: center; }
+  .card-title { font-family: Anton, Impact, sans-serif; font-size: ${titleFontSize}; font-style: normal; font-weight: 400; text-transform: uppercase; letter-spacing: .02em; text-align: center; line-height: 1.15; margin-bottom: 4px; }
+  .card-author { font-size: ${authorFontSize}; color: #51483f; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 8px; text-align: center; }
 
   .prices { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
-  .prices thead tr { border-bottom: 1px solid var(--rule); }
-  .prices thead th { font-size: ${priceThFontSize}; font-weight: 400; letter-spacing: 0.18em; text-transform: uppercase; color: #aaa; padding: 0 0 3px; text-align: left; }
+  .prices thead tr { border-bottom: 2px solid var(--ink); }
+  .prices thead th { font-size: ${priceThFontSize}; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: #51483f; padding: 0 0 3px; text-align: left; }
   .prices thead th:last-child { text-align: right; }
-  .prices tbody tr { border-bottom: 1px solid #f0ebe3; }
+  .prices tbody tr { border-bottom: 1px solid var(--rule); }
   .prices tbody tr:last-child { border-bottom: none; }
   .prices tbody td { font-size: ${priceCurFontSize}; padding: ${priceTdPadding}; color: var(--ink); letter-spacing: 0.04em; }
-  .prices tbody td:first-child { color: var(--accent); font-size: ${priceCurFontSize}; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 400; }
-  .prices tbody td:last-child { text-align: right; font-family: 'Cormorant Garamond', serif; font-size: ${priceValFontSize}; }
+  .prices tbody td:first-child { color: #a32e24; font-size: ${priceCurFontSize}; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 700; }
+  .prices tbody td:last-child { text-align: right; font-family: var(--mono); font-size: ${priceValFontSize}; font-variant-numeric: tabular-nums; }
   .prices .base-price td:first-child { color: var(--ink); }
 
-  .card-url { font-size: ${urlFontSize}; color: #c0b8ae; word-break: break-all; text-align: center; margin-top: 4px; line-height: 1.4; }
+  .card-url { font-family: var(--mono); font-size: ${urlFontSize}; color: #62594f; word-break: break-all; text-align: center; margin-top: 4px; line-height: 1.4; }
 
-  .footer { border-top: 1px solid var(--rule); padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; margin-top: auto; }
-  .footer-brand { font-family: 'Cormorant Garamond', serif; font-size: 0.78rem; font-style: italic; color: #aaa; letter-spacing: 0.08em; }
-  .footer-note { font-size: 0.55rem; letter-spacing: 0.12em; text-transform: uppercase; color: #bbb; }
+  .footer { border-top: 2px solid var(--ink); padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; margin-top: auto; }
+  .footer-brand { font-family: Anton, Impact, sans-serif; font-size: 0.78rem; text-transform: uppercase; color: var(--ink); letter-spacing: 0.08em; }
+  .footer-note { font-size: 0.55rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #51483f; }
 
   .print-bar { position: fixed; bottom: 22px; right: 22px; z-index: 100; }
-  .print-btn { background: var(--ink); color: var(--paper); border: none; font-family: 'Jost', sans-serif; font-size: 0.68rem; font-weight: 300; letter-spacing: 0.16em; text-transform: uppercase; padding: 12px 26px; cursor: pointer; transition: background 0.2s; }
-  .print-btn:hover { background: var(--accent); }
+  .print-btn { background: var(--accent); color: var(--ink); border: 2px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); font-family: "Archivo", Arial, sans-serif; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; padding: 12px 26px; cursor: pointer; }
+  .print-btn:hover { transform: translate(-1px,-1px); box-shadow: 5px 5px 0 var(--ink); }
 
   @media print {
     @page { size: portrait; margin: ${fitOnePage ? '0.1in' : '0.25in'}; }
