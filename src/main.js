@@ -4551,7 +4551,7 @@ const SHELL_TAB_LABELS = {
   pos: 'Event POS', taxcenter: 'Tax Centre', reconcile: 'Payments', qrcodes: 'QR Codes',
   customers: 'Customers', opencall: 'Open Call', sheets: 'Sheets', backups: 'Backups',
   myqr: 'My QR Code', webanalytics: 'Web Analytics', shipping: 'Shipping',
-  bigcartel: 'Big Cartel', todo: 'To-do', intel: 'Intelligence', today: 'Today'
+  bigcartel: 'Big Cartel', todo: 'To-do', intel: 'Intelligence', today: 'Today', help: 'Help'
 };
 // ── Today (phone home) ──────────────────────────────────────────────
 // Fills in the date and the waiting-orders count. The count is read from the
@@ -4832,6 +4832,26 @@ export function switchTab(name) {
   if (name === 'todo') renderTodoTab();
   if (name === 'intel') renderIntel();
   if (name === 'backups') refreshSyncConflictUi();
+}
+
+// Help tab search: hide questions (and whole sections) that don't mention the words typed.
+export function filterHelp(text) {
+  const words = String(text || '').toLowerCase().split(/\s+/).filter(Boolean);
+  let shown = 0;
+  document.querySelectorAll('#tab-help .help-sec').forEach((sec) => {
+    let secShown = 0;
+    sec.querySelectorAll('.help-q').forEach((q) => {
+      const hay = q.textContent.toLowerCase();
+      const match = words.every((w) => hay.includes(w));
+      q.hidden = !match;
+      if (words.length) q.open = match;
+      if (match) secShown++;
+    });
+    sec.hidden = secShown === 0;
+    shown += secShown;
+  });
+  const empty = $('help-empty');
+  if (empty) empty.hidden = shown > 0;
 }
 
 const BOOK_SCOPED_TABS = new Set(['website', 'manual', 'consignment', 'history', 'expenses', 'opencall']);
@@ -24415,7 +24435,7 @@ Object.assign(window, {
   reconOnFilter, reconSetCurrency, reconClearFilters, reconEditKey, reconRecordGroup, reconDismissGroup, reconDismissAllShown,
   toggleStripePaidNotify,
   generateBookStripeLink,
-  logout, switchTab, toggleBookDropdown, toggleHeaderMenu, closeHeaderMenus, toggleSideAccount, switchBook, forceSync, recalcOnHand, dismissStockDrift,
+  logout, switchTab, filterHelp, toggleBookDropdown, toggleHeaderMenu, closeHeaderMenus, toggleSideAccount, switchBook, forceSync, recalcOnHand, dismissStockDrift,
   showMoreHist, showAllHist,
   restateBookCurrency, onCurrencyModeChange, onCurrencyRateModeChange, refreshCurrencyPreview,
   renderOpenCall, ocAdd, ocToggle, ocDelete, ocCopyEmails, ocToggleImport, ocRunImport, checkOcEmailTypo, applyOcEmailCorrection,

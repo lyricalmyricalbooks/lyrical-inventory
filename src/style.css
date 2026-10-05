@@ -20623,3 +20623,24 @@ button[onclick="refreshUmamiStats()"]:active {
 .notif-clear:active { transform: scale(0.94); }
 .notif-clear:focus-visible { outline: 2px solid var(--gold-text); outline-offset: -2px; }
 .notif-log .notif-body, .notif-latest .notif-body { padding-right: var(--space-6); }
+
+/* ── Help / FAQ tab ─────────────────────────────────────────── */
+.help-page { max-width: 760px; }
+.help-search-label { display:block; margin-top:var(--space-4); font-size:var(--text-xs); font-weight:800; text-transform:uppercase; letter-spacing:.06em; color:var(--content-secondary); }
+.help-search { width:100%; min-height:44px; margin-top:var(--space-2); padding:10px 12px; font-size:var(--text-md); border:2px solid var(--rule-ink); border-radius:0; background:var(--surface-raised); color:var(--content-primary); }
+.help-empty { margin-top:var(--space-4); color:var(--content-muted); }
+.help-sec { margin-top:var(--space-5); }
+.help-sec-title { font-family:var(--font-display); font-size:var(--text-lg); font-weight:400; text-transform:uppercase; color:var(--content-primary); margin:0 0 var(--space-2); }
+.help-q { border:2px solid var(--rule-ink); background:var(--surface-raised); box-shadow:var(--elev-1); margin-bottom:var(--space-2); }
+.help-q summary { cursor:pointer; min-height:44px; display:flex; align-items:center; gap:var(--space-2); padding:10px 14px; font-size:var(--text-md); font-weight:700; color:var(--content-primary); list-style:none; }
+.help-q summary::-webkit-details-marker { display:none; }
+.help-q summary::before { content:'+'; font-family:var(--font-mono, monospace); font-weight:800; width:1em; flex:none; color:var(--gold-text); }
+.help-q[open] summary::before { content:'−'; }
+.help-q summary:hover { background:var(--surface-inset); }
+.help-q summary:focus-visible { outline:2px solid var(--gold); outline-offset:2px; }
+.help-a { padding:0 14px 14px 38px; font-size:var(--text-md); line-height:1.55; color:var(--content-secondary); }
+.help-a p, .help-a ul, .help-a ol { margin:6px 0 0; }
+.help-a ul, .help-a ol { padding-left:1.2em; }
+.help-a li { margin:4px 0; }
+.help-a b { color:var(--content-primary); }
+.help-foot { margin:var(--space-5) 0; font-weight:700; color:var(--content-secondary); }
