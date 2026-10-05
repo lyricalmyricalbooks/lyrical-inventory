@@ -346,6 +346,7 @@
     <button type="button" class="snav" title="Sheets" onclick="switchTab('sheets')"><span class="snav-ic">⚙️</span><span class="snav-label">Sheets</span></button>
     <button type="button" class="snav" id="sidebar-bigcartel-btn" title="Big Cartel" onclick="switchTab('bigcartel')"><span class="snav-ic">🏪</span><span class="snav-label">Big Cartel</span><span class="bc-gap-badge pill red" aria-label="orders missing from your ledger" hidden></span><span class="health-badge" data-health-badge="bigcartel" aria-label="Big Cartel is not answering" hidden></span></button>
     <button type="button" class="snav" title="Backups" onclick="switchTab('backups')"><span class="snav-ic">💾</span><span class="snav-label">Backups</span></button>
+    <button type="button" class="snav" title="Help" onclick="switchTab('help')"><span class="snav-ic">❓</span><span class="snav-label">Help</span></button>
   </nav>
 
   <div class="pub-side-spacer"></div>
@@ -562,6 +563,7 @@
   <button class="tab-btn" onclick="switchTab('expenses')">Expenses</button>
   <button class="tab-btn" id="webanalytics-tab-btn" onclick="switchTab('webanalytics')">Web Analytics</button>
   <button class="tab-btn" onclick="switchTab('myqr')" id="myqr-tab-btn" style="display:none;">📲 My QR Code</button>
+  <button class="tab-btn" id="help-tab-btn" onclick="switchTab('help')">❓ Help</button>
   <button class="tab-btn" id="shipping-tab-btn" onclick="switchTab('shipping')">📦 Shipping Rates</button>
   <button class="tab-btn" id="bigcartel-tab-btn" onclick="switchTab('bigcartel')">Big Cartel<span class="bc-gap-badge pill red" aria-label="orders missing from your ledger" hidden></span><span class="health-badge" data-health-badge="bigcartel" aria-label="Big Cartel is not answering" hidden></span></button>
   <span class="tab-author" id="tab-author"></span>
@@ -598,6 +600,52 @@
         <li>Download the image to print or save it to your phone's camera roll.</li>
       </ul>
     </div>
+  </div>
+</div>
+
+<!-- HELP / FAQ (everyone) — plain-language guide for artists. -->
+<div class="tab-panel" id="tab-help" style="display:none;">
+  <div class="help-page">
+    <div class="section-hed">Help &amp; questions</div>
+    <p class="section-subcopy">Quick answers about using the app. Tap a question to open it.</p>
+    <label class="help-search-label" for="help-search">Search the help</label>
+    <input type="search" id="help-search" class="help-search" placeholder="Type a word, like “fair” or “expense”" oninput="filterHelp(this.value)">
+    <p class="help-empty" id="help-empty" hidden>No answers match that. Try a simpler word, or ask the publisher.</p>
+    <section class="help-sec">
+      <h3 class="help-sec-title">Getting started</h3>
+      <details class="help-q"><summary>What is this app for?</summary><div class="help-a"><p>It keeps track of your book: how many copies are left, every sale, every free copy you give away, the shops holding your books, and money you've spent. You and the publisher see the same numbers, so nobody has to keep a separate spreadsheet.</p></div></details>
+      <details class="help-q"><summary>Where do I start?</summary><div class="help-a"><ol><li>Open <b>Dashboard</b> to see how your book is doing.</li><li>Sold a copy yourself? Go to <b>Manual entry</b> and add it.</li><li>At a fair? Open <b>📲 My QR Code</b> and let buyers scan it.</li></ol><p>That's all most artists ever need.</p></div></details>
+      <details class="help-q"><summary>What do the tabs along the top do?</summary><div class="help-a"><ul><li><b>Dashboard</b> — your book at a glance: copies left, sales and earnings.</li><li><b>Manual entry</b> — add a sale or a free copy you gave away.</li><li><b>Consignment</b> — shops holding your books and what they owe.</li><li><b>History</b> — every sale ever recorded.</li><li><b>Expenses</b> — costs you paid for the book (to be paid back).</li><li><b>📲 My QR Code</b> — a payment code for buyers at events.</li><li><b>❓ Help</b> — this page.</li></ul></div></details>
+      <details class="help-q"><summary>Do I need to save?</summary><div class="help-a"><p>No. Everything saves by itself the moment you add it. You'll see a small <b>✓ Saved</b> note.</p></div></details>
+    </section>
+    <section class="help-sec">
+      <h3 class="help-sec-title">Selling books</h3>
+      <details class="help-q"><summary>How do I record a sale I made?</summary><div class="help-a"><ol><li>Tap <b>Manual entry</b>.</li><li>Type how many copies (<b>Qty</b>) and the price of <b>one</b> copy.</li><li>Pick where you sold it under <b>Channel</b> (In person, Book fair…).</li><li>Under <b>Payment type</b>, pick who got the money.</li><li>Press the add button. Done!</li></ol></div></details>
+      <details class="help-q"><summary>Which “Payment type” do I pick?</summary><div class="help-a"><ul><li>The buyer paid <b>you</b> (cash, your e-transfer…) → <b>directly to artist</b>. You'll send the publisher their part later.</li><li>The buyer paid <b>the publisher</b> (QR code, website) → <b>directly to publisher</b>.</li></ul></div></details>
+      <details class="help-q"><summary>Why does my sale say it's waiting for approval?</summary><div class="help-a"><p>When money went to you directly, the publisher gets a note to check it. That's normal — it doesn't mean anything is wrong. It will show as approved once they look at it.</p></div></details>
+      <details class="help-q"><summary>I gave a copy away for free. What do I do?</summary><div class="help-a"><p>Go to <b>Manual entry</b> and use the free copy (gratuity) form. Write who got it, how many, and the date. This keeps the copy count right.</p></div></details>
+      <details class="help-q"><summary>I made a mistake in a sale.</summary><div class="help-a"><p>Don't add a second sale to “cancel” it. Send the publisher a quick message with the date and amount and they'll fix it, so the totals stay correct.</p></div></details>
+    </section>
+    <section class="help-sec">
+      <h3 class="help-sec-title">Book fairs & events</h3>
+      <details class="help-q"><summary>How do buyers pay me at a fair?</summary><div class="help-a"><ol><li>Open <b>📲 My QR Code</b>.</li><li>Show the code on your phone (or print it).</li><li>The buyer scans it with their phone camera and pays by card.</li></ol><p>The money goes straight to the publisher and the sale appears on its own — you don't need to type anything.</p></div></details>
+      <details class="help-q"><summary>Can I print my QR code?</summary><div class="help-a"><p>Yes. Press <b>Download QR</b> and print the picture, or save it to your phone's photos. <b>Copy link</b> gives you the web link to share online.</p></div></details>
+      <details class="help-q"><summary>Someone paid me in cash at the fair.</summary><div class="help-a"><p>Add it in <b>Manual entry</b> with <b>Channel: Book fair</b> and <b>Payment type: directly to artist</b>.</p></div></details>
+    </section>
+    <section class="help-sec">
+      <h3 class="help-sec-title">Shops & money</h3>
+      <details class="help-q"><summary>What is “Consignment”?</summary><div class="help-a"><p>When a shop takes your books and pays only for the ones it sells. The <b>Consignment</b> tab shows each shop, how many copies it still has, and what it owes.</p></div></details>
+      <details class="help-q"><summary>I paid for something for my book. Can I get it back?</summary><div class="help-a"><p>Yes. Add it in <b>Expenses</b> with the amount, date and a short note (a photo of the receipt helps). The publisher reviews it and pays you back.</p></div></details>
+      <details class="help-q"><summary>Where do I see how much I've earned?</summary><div class="help-a"><p>On the <b>Dashboard</b>. For each single sale, look in <b>History</b>.</p></div></details>
+    </section>
+    <section class="help-sec">
+      <h3 class="help-sec-title">Trouble?</h3>
+      <details class="help-q"><summary>I have no internet. Can I still use it?</summary><div class="help-a"><p>Yes. Keep adding sales as usual. They're kept safely on your device and sent automatically once you're back online. Just don't clear your browser data before then.</p></div></details>
+      <details class="help-q"><summary>Can I put it on my phone like an app?</summary><div class="help-a"><ul><li><b>iPhone:</b> open it in Safari, tap Share, then <b>Add to Home Screen</b>.</li><li><b>Android:</b> open it in Chrome, tap the ⋮ menu, then <b>Install app</b>.</li></ul></div></details>
+      <details class="help-q"><summary>A number looks wrong.</summary><div class="help-a"><p>Wait a few seconds and refresh the page — it may still be syncing. If it's still wrong, tell the publisher which number and where you saw it.</p></div></details>
+      <details class="help-q"><summary>What does the little “?” next to a box mean?</summary><div class="help-a"><p>Tap or hover over it for a short explanation of what to type in that box.</p></div></details>
+    </section>
+    <p class="help-foot">Still stuck? Message the publisher — there's no wrong question.</p>
   </div>
 </div>
 
