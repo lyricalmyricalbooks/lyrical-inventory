@@ -8062,9 +8062,25 @@ export function scheduleRender() {
 // ── Ready-to-send outbox ───────────────────────────────────────────────────
 
 function recordOrder(num, chan, qty, price, notes, payment = null) {
-  const s = getState(), book = getBook();
   const enteredBy = isAuthor() ? 'Artist' : 'Publisher';
-  if (isAuthor() || enteredBy === 'Artist') {
+  writeOrderToLedger(activeBook, { num, chan, qty, price, notes, payment, enteredBy });
+  renderHist(); updateDash();
+}
+
+/**
+ * The one way a sale enters a book's ledger. A sale typed into the order form
+ * and a card payment picked up from Stripe both come through here, so they land
+ * as the same kind of row: same stock and earnings effect, same invoice-discount
+ * note, same running Stock After, same Google Sheet row. Callers repaint.
+ *
+ * `sheetsId` and `date` default to a fresh id and today; a Stripe payment
+ * passes its own (the charge id keeps it from being recorded twice, and the
+ * payment's date is when the sale happened). `extra` is merged onto the row.
+ */
+function writeOrderToLedger(bookId, { num = '', chan, qty, price, notes = '', payment = null, enteredBy = 'Publisher', date, sheetsId, extra = {} } = {}) {
+  const s = states[bookId], book = BOOKS[bookId];
+  if (!s || !book) throw new Error('Unknown book');
+  if (enteredBy === 'Artist') {
     deductSaleFromStockBreakdown(s, qty, true);
   }
   s.stock = Math.max(0, s.stock - qty);
@@ -8073,16 +8089,17 @@ function recordOrder(num, chan, qty, price, notes, payment = null) {
   s.chStats[chan].txns++; s.chStats[chan].units += qty; s.chStats[chan].revenue += qty * price;
   const updatedNotes = notesWithInvoiceDiscount(s.invoices, num, notes);
 
-  const sheetsId = makeEventId();
-  s.hist.unshift({ num, chan, qty, price, after: s.stock, notes: updatedNotes, date: today(), payment, enteredBy, sheetsId, cur: bookCurrencyCode(book) });
+  const id = sheetsId || makeEventId();
+  const when = date || today();
+  s.hist.unshift({ ...extra, num, chan, qty, price, after: s.stock, notes: updatedNotes, date: when, payment, enteredBy, sheetsId: id, cur: bookCurrencyCode(book) });
   recomputeAfters(s, book);
-  renderHist(); updateDash(); saveState(activeBook);
+  saveState(bookId);
   const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
   const totalNative = qty * price;
   const cadEquiv = cadEquivalentForSale({ nativeCurrency: nativeCur, totalNative, payment });
   syncToSheets({
-    type: 'order', book: book.title, date: today(), num, chan, qty, price, total: totalNative, stockAfter: s.stock, notes: updatedNotes,
-    sheetsId,
+    type: 'order', book: book.title, date: when, num, chan, qty, price, total: totalNative, stockAfter: s.stock, notes: updatedNotes,
+    sheetsId: id,
     currency: nativeCur,
     paymentCurrency: normalizeCurrencyCode(payment?.currency || nativeCur, 'CAD'),
     paymentAmount: payment?.amount ?? totalNative,
@@ -22340,37 +22357,23 @@ export function classifyStripePayment(p) {
 }
 
 // Apply a sale to a SPECIFIC book (the reconcile worklist records against the
-// book the user picks, not necessarily the active one). Mirrors recordOrder's
-// state mutations + Sheets sync, keyed by a deterministic stripe sheetsId.
+// book the user picks, not necessarily the active one), keyed by a
+// deterministic stripe sheetsId. It goes through the same ledger write as a
+// sale typed into the order form, so a Stripe sale and a hand-entered one are
+// the same kind of row apart from where the money came from.
 function _reconApplySaleToBook(bookId, qty, price, payment, chargeId, notes, extra = {}) {
-  const st = states[bookId], bk = BOOKS[bookId];
-  if (!st || !bk) throw new Error('Unknown book');
-  st.stock = Math.max(0, st.stock - qty);
-  st.sold += qty;
-  const totalNative = roundCents(qty * price);
-  st.revenue = roundCents(st.revenue + totalNative);
-  const chan = extra.chan || 'Website';
-  if (!st.chStats[chan]) st.chStats[chan] = { txns: 0, units: 0, revenue: 0 };
-  st.chStats[chan].txns++; st.chStats[chan].units += qty; st.chStats[chan].revenue = roundCents(st.chStats[chan].revenue + totalNative);
-  const sheetsId = 'stripe-' + chargeId;
-  const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(bk), 'CAD');
-  const entry = {
-    num: extra.num || '', chan, qty, price, after: st.stock, cur: nativeCur,
-    notes: notes || 'Stripe', date: extra.date || today(),
-    payment, enteredBy: 'Publisher', sheetsId,
-    shipEmail: extra.email || '',
-  };
-  if (extra.auto) entry.autoRecorded = true;
-  st.hist.unshift(entry);
-  syncToSheets({
-    type: 'order', book: bk.title, date: entry.date, num: entry.num, chan, qty, price,
-    total: totalNative, stockAfter: st.stock, notes: entry.notes, sheetsId, currency: nativeCur,
-    paymentCurrency: normalizeCurrencyCode(payment?.currency || nativeCur, 'CAD'),
-    paymentAmount: payment?.amount ?? (qty * price),
-    paymentRate: payment?.rate ?? '',
-    convertedTotal: payment?.convertedTotal ?? totalNative,
+  const row = { shipEmail: extra.email || '' };
+  if (extra.auto) row.autoRecorded = true;
+  writeOrderToLedger(bookId, {
+    num: extra.num || '',
+    chan: extra.chan || 'Website',
+    qty, price, payment,
+    notes: notes || 'Stripe',
+    enteredBy: 'Publisher',
+    date: extra.date || today(),
+    sheetsId: 'stripe-' + chargeId,
+    extra: row,
   });
-  saveState(bookId);
 }
 
 async function reconcileSync() {
