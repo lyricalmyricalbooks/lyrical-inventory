@@ -210,14 +210,14 @@ function eventsWithoutTravel(ctx) {
  * off, and this is the pattern a person is least able to spot by eye.
  */
 /**
- * Every category's monthly totals, built once and shared by every detector
- * that reasons about a category's spend over time — so a busy ledger is
- * walked once, not once per detector.
+ * Every category's monthly totals. Built once per scan (see `scanCache`) and
+ * shared by every detector that reasons about a category's spend over time —
+ * so a busy ledger is walked once, not once per detector.
  */
-function categoryMonthBuckets(ctx) {
-  const expenses = allCanonicalExpenses(ctx).filter(e => str(e.date));
+function categoryMonthBuckets(expenses) {
   const byCategory = new Map();
   for (const e of expenses) {
+    if (!str(e.date)) continue;
     const month = str(e.date).slice(0, 7);
     if (!month) continue;
     const bucket = byCategory.get(e._cat) || { months: new Map(), amounts: [] };
@@ -228,9 +228,9 @@ function categoryMonthBuckets(ctx) {
   return byCategory;
 }
 
-function missingMonths(ctx) {
+function missingMonths(ctx, scan) {
   const gaps = [];
-  for (const [category, bucket] of categoryMonthBuckets(ctx)) {
+  for (const [category, bucket] of scan.monthBuckets()) {
     const months = [...bucket.months.keys()].sort();
     // Needs a real run before an absence means anything. Four separate months
     // is the point at which "most months" is a fair description.
@@ -291,9 +291,9 @@ function monthsBetween(first, last) {
  * history already swings widely makes "unusually low" meaningless, so a
  * lumpy cost like a print run is left to the detector built for it.
  */
-function categorySpendDip(ctx) {
+function categorySpendDip(ctx, scan) {
   const gaps = [];
-  for (const [category, bucket] of categoryMonthBuckets(ctx)) {
+  for (const [category, bucket] of scan.monthBuckets()) {
     const months = [...bucket.months.keys()].sort();
     if (months.length < 5) continue; // needs a real run, and a month to hold out as "typical"
     const expected = monthsBetween(months[0], months[months.length - 1]);
@@ -344,7 +344,7 @@ function categorySpendDip(ctx) {
  * ever logged, the fee was not free — it was netted off a payout and never
  * entered, which makes both the income and the cost wrong.
  */
-function missingProcessingFees(ctx) {
+function missingProcessingFees(ctx, scan) {
   let onlineRevenue = 0;
   for (const state of Object.values(ctx.states || {})) {
     for (const h of (state?.hist || [])) {
@@ -355,7 +355,7 @@ function missingProcessingFees(ctx) {
   }
   if (onlineRevenue <= 0) return [];
 
-  const fees = allCanonicalExpenses(ctx).filter(e => e._cat === 'Sales Processing Fees');
+  const fees = scan.expenses().filter(e => e._cat === 'Sales Processing Fees');
   if (fees.length) return [];
 
   return [{
@@ -381,7 +381,7 @@ function missingProcessingFees(ctx) {
  * The app knows an order shipped. Stamps bought at a counter are the textbook
  * cash expense: no invoice, no card entry, nothing to reconcile against.
  */
-function missingPostage(ctx) {
+function missingPostage(ctx, scan) {
   let shipped = 0;
   for (const state of Object.values(ctx.states || {})) {
     for (const h of (state?.hist || [])) {
@@ -394,7 +394,7 @@ function missingPostage(ctx) {
   }
   if (shipped < 3) return [];
 
-  const postage = allCanonicalExpenses(ctx).filter(e => e._cat === 'Shipping & Postage');
+  const postage = scan.expenses().filter(e => e._cat === 'Shipping & Postage');
   if (postage.length >= Math.ceil(shipped / 4)) return [];
 
   const typical = median(postage.map(amountOf));
@@ -419,8 +419,8 @@ function missingPostage(ctx) {
  * The largest single cost a small press has. If a book carries a print run and
  * nothing was ever logged for producing it, the book looks pure profit.
  */
-function missingProductionCosts(ctx) {
-  const printing = allCanonicalExpenses(ctx).filter(e => e._cat === 'Printing & Production');
+function missingProductionCosts(ctx, scan) {
+  const printing = scan.expenses().filter(e => e._cat === 'Printing & Production');
   // ⚡ Bolt Optimization: a single pass over printing expenses to build a
   // membership Set, instead of re-filtering the whole list once per book
   // (O(printing + books) instead of O(printing × books) — this loop only
@@ -455,11 +455,11 @@ function missingProductionCosts(ctx) {
  * Small, but exactly the kind of one-off administrative fee that is paid once,
  * by card, years ago, and never categorised.
  */
-function missingIsbnCosts(ctx) {
+function missingIsbnCosts(ctx, scan) {
   const withIsbn = Object.values(ctx.books || {})
     .filter(b => b && str(b.isbn) && str(b.isbn) !== '—').length;
   if (withIsbn < 2) return [];
-  if (allCanonicalExpenses(ctx).some(e => e._cat === 'ISBN, Barcodes & Cataloging')) return [];
+  if (scan.expenses().some(e => e._cat === 'ISBN, Barcodes & Cataloging')) return [];
 
   return [{
     id: 'no-isbn-costs',
@@ -473,6 +473,23 @@ function missingIsbnCosts(ctx) {
     evidence: { booksWithIsbn: withIsbn },
     prompt: 'Add what you paid to register ISBNs.',
   }];
+}
+
+/**
+ * What several detectors read, computed at most once per scan.
+ *
+ * Every expense row is copied and re-categorised by `allCanonicalExpenses`,
+ * and five detectors need that list — building it per detector walked (and
+ * cloned) the whole ledger six times on every scan. Lazy, so a detector that
+ * throws building it still only costs the detectors that needed it.
+ */
+function scanCache(ctx) {
+  let expenses = null;
+  let buckets = null;
+  return {
+    expenses: () => expenses || (expenses = allCanonicalExpenses(ctx)),
+    monthBuckets() { return buckets || (buckets = categoryMonthBuckets(this.expenses())); },
+  };
 }
 
 const DETECTORS = [
@@ -526,10 +543,11 @@ export function findDeductionGaps(ctx = {}) {
   const today = str(ctx.today) || iso(new Date());
   const notes = ctx.taxCenter?.deductionNotes || {};
 
+  const scan = scanCache(ctx);
   let found = [];
   for (const detect of DETECTORS) {
     try {
-      found = found.concat(detect(ctx) || []);
+      found = found.concat(detect(ctx, scan) || []);
     } catch (_) {
       // One detector failing must not cost the publisher the other six.
     }
