@@ -11,9 +11,6 @@ export function resolveShipmentEndpoint(clientId, shipmentId = '', isTest = fals
   if (!/^[a-z0-9]+$/i.test(shipmentId) || !['', 'buy', 'refund', 'refresh'].includes(action)) throw new Error('Invalid Chit Chats shipment endpoint.');
   return `${base}/${shipmentId}${action ? `/${action}` : ''}`;
 }
-export function resolveCreateBatchEndpoint(clientId, isTest = false) {
-  return resolveListShipmentsEndpoint(clientId, isTest).replace(/shipments$/, 'batches');
-}
 export function isChitChatsEndpoint(endpoint, artifact = false) {
   try {
     const url = new URL(endpoint);
