@@ -217,7 +217,10 @@ window._fbCommitFoundReceipt = async (expense, draft) => {
 // it tried to save. ok:false means the server copy could not be read, so
 // nothing was written and the caller should queue and retry rather than risk
 // overwriting a change it cannot see.
-window._fbSave = async (bookId, json) => {
+// A copy of the merge base for a book, so a change queued offline can carry it.
+window._fbBaseFor = (bookId) => ({ ...((window._fsHashes || {})[bookId] || {}) });
+
+window._fbSave = async (bookId, json, opts = {}) => {
   try {
     if (window._useFirestoreForBook(bookId)) {
       const parts = splitState(JSON.parse(json));
@@ -229,6 +232,13 @@ window._fbSave = async (bookId, json) => {
       const partNames = Object.keys(parts);
       const dirty = partNames.filter(p => hashes[p] !== JSON.stringify(parts[p]));
       if (!dirty.length) return { ok: true, merged: false };
+      // The merge base is what this edit was made on top of, fixed NOW, before
+      // the server read below. The live listener moves `hashes` to the newest
+      // server copy, so reading it after the await (or, for a change queued
+      // offline, at flush time) made another device's edit look like our own
+      // starting point and the write overwrote it. A queued change carries the
+      // base it was made on in `opts.base`.
+      const base = opts.base || { ...hashes };
 
       // Read the server's current copy of every part we're about to change.
       // getDocFromServer (not getDoc) on purpose: with persistent local cache
@@ -252,7 +262,7 @@ window._fbSave = async (bookId, json) => {
       dirty.forEach((p, i) => {
         const snap = snaps[i];
         const remoteJson = snap.exists() ? snap.data().data : null;
-        const baseJson = Object.prototype.hasOwnProperty.call(hashes, p) ? hashes[p] : null;
+        const baseJson = Object.prototype.hasOwnProperty.call(base, p) ? base[p] : null;
         if (remoteJson === baseJson) return; // nobody else touched it
 
         // Diverged. A null base (this device never read the part — a fresh tab

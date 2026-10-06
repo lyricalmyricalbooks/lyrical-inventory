@@ -2916,8 +2916,13 @@ function retrySyncNow() {
 // lost. Only the LATEST snapshot per book is kept — a newer edit supersedes
 // an older queued one, so rapid edits don't grow the queue unbounded.
 function queueSync(bookId, state) {
+  // Keep the merge base of the change this one supersedes: the newer snapshot
+  // was still made on top of it, not on whatever the cloud holds now. Without
+  // it the flush can't tell another device's edits from our own starting point.
+  const prior = syncQueue.find(item => item.bookId === bookId);
+  const base = (prior && prior.base) || (typeof window._fbBaseFor === 'function' ? window._fbBaseFor(bookId) : undefined);
   syncQueue = syncQueue.filter(item => item.bookId !== bookId);
-  syncQueue.push({ bookId, state, ts: Date.now() });
+  syncQueue.push({ bookId, state, ts: Date.now(), base });
   // Must not throw: the upload below is attempted whether or not the device
   // copy landed, so a full storage can't strand the change with no retry.
   saveSyncQueueToDevice();
@@ -2942,7 +2947,9 @@ async function processSyncQueue() {
   _syncFlushing = true;
   const item = syncQueue[0];
   try {
-    const res = await window._fbSave(item.bookId, JSON.stringify(item.state));
+    // An item saved by an older build has no base: an empty one makes the merge a
+    // union, which may keep a row another device deleted but never drops one.
+    const res = await window._fbSave(item.bookId, JSON.stringify(item.state), { base: item.base || {} });
     // The server copy couldn't be read, so nothing was written and the queued
     // change is still pending. Treat it exactly like a failed write: keep it
     // queued and let the backoff retry rather than dropping it.
@@ -3349,7 +3356,10 @@ export async function saveState(bookId) {
   if (json === lastSavedHashes[bookId]) return;
   setSyncState('syncing', '<b>Firestore</b> · saving…');
   try {
-    if (!fbReady || !navigator.onLine) {
+    // A change for this book is already waiting in the queue: this edit was
+    // made on top of it, so it must go out after it and merge against the
+    // same base, not race it with a direct write.
+    if (!fbReady || !navigator.onLine || syncQueue.some(item => item.bookId === bookId)) {
       queueSync(bookId, state);
       setSyncState('ok', '<b>Firestore</b> · changes queued (offline)');
       return;
@@ -3633,6 +3643,10 @@ async function loadBook(bookId) {
 
     window._fbWatch(bookId, json2 => {
       if (json2 === lastSavedHashes[bookId]) return;
+      // This book has an unsent change. Replacing the screen with the cloud
+      // copy would hide it until the flush; the flush merges the two and
+      // adopts the result instead.
+      if (syncQueue.some(item => item.bookId === bookId)) return;
       const loaded = JSON.parse(json2);
       states[bookId] = { ...defaultState(book), ...loaded };
       if (!states[bookId].doneIds) states[bookId].doneIds = [];
@@ -4844,7 +4858,8 @@ export function filterHelp(text) {
       const hay = q.textContent.toLowerCase();
       const match = words.every((w) => hay.includes(w));
       q.hidden = !match;
-      if (words.length) q.open = match;
+      // Clearing the search folds back the questions it opened.
+      q.open = words.length ? match : false;
       if (match) secShown++;
     });
     sec.hidden = secShown === 0;
@@ -8111,14 +8126,17 @@ function writeOrderToLedger(bookId, { num = '', chan, qty, price, notes = '', pa
 
   const id = sheetsId || makeEventId();
   const when = date || today();
-  s.hist.unshift({ ...extra, num, chan, qty, price, after: s.stock, notes: updatedNotes, date: when, payment, enteredBy, sheetsId: id, cur: bookCurrencyCode(book) });
+  const row = { ...extra, num, chan, qty, price, after: s.stock, notes: updatedNotes, date: when, payment, enteredBy, sheetsId: id, cur: bookCurrencyCode(book) };
+  s.hist.unshift(row);
   recomputeAfters(s, book);
   saveState(bookId);
   const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
   const totalNative = qty * price;
   const cadEquiv = cadEquivalentForSale({ nativeCurrency: nativeCur, totalNative, payment });
   syncToSheets({
-    type: 'order', book: book.title, date: when, num, chan, qty, price, total: totalNative, stockAfter: s.stock, notes: updatedNotes,
+    // The row's own running balance: a backdated sale (a Stripe payment from
+    // last week) sits earlier in the timeline than today's on-hand count.
+    type: 'order', book: book.title, date: when, num, chan, qty, price, total: totalNative, stockAfter: row.after ?? s.stock, notes: updatedNotes,
     sheetsId: id,
     currency: nativeCur,
     paymentCurrency: normalizeCurrencyCode(payment?.currency || nativeCur, 'CAD'),
@@ -16738,6 +16756,9 @@ async function boot(forcedBook) {
         setSyncState('ok', '<b>Firestore</b> · connected');
         updateSubheader(new Date().toLocaleTimeString());
         renderAll(); updateHeader(); updateRoleToggleButton(); syncRoleUI();
+        // Send anything queued before the app was last closed. The call before
+        // initFn runs while Firestore isn't ready yet, so it can't.
+        processSyncQueue();
         // Fire-and-forget: a stall with no signal must still finish booting,
         // so this isn't awaited and its own failures are swallowed silently.
         window.posConfigureRates({ silent: true });
@@ -16750,6 +16771,8 @@ async function boot(forcedBook) {
       // the moment loadAllBooks() resolves.
       showCatalogueSkeleton();
       loadAllBooks().then(() => {
+        // Send anything queued before the app was last closed (see author branch).
+        processSyncQueue();
         maybeRunDailyBackup(true); startDailyBackupWatcher();
         window.posConfigureRates({ silent: true });
         // Ask the storefront whether any sale is missing from the ledger. Runs
@@ -22806,6 +22829,13 @@ function _reconReadSaleInputs(idSafe, bookId, grouped = false) {
 function reconcileRecordSale(idSafe) {
   const p = _reconFindPayment(idSafe);
   if (!p) return;
+  // The background sweep may have recorded this charge since the list was
+  // painted, without repainting it. Recording it again would count the sale twice.
+  if (_reconRecordedChargeIds().has(p.id)) {
+    showToast('This payment is already in your order history', 'warn');
+    renderReconcile();
+    return;
+  }
   const bookId = document.getElementById('recon-book-' + idSafe)?.value;
   const qty = Math.max(1, parseInt(document.getElementById('recon-qty-' + idSafe)?.value, 10) || 1);
   if (!bookId || !BOOKS[bookId]) { showToast('Pick a book first', 'warn'); return; }

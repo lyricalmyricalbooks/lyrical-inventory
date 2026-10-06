@@ -93,3 +93,34 @@ describe('a Stripe sale enters the ledger the way a manual sale does', () => {
     expect(card.syncToSheets).not.toHaveBeenCalled();
   });
 });
+
+describe('a backdated sale tells the Google Sheet its own running stock', () => {
+  it('sends the row\'s recomputed Stock After, not today\'s on-hand', () => {
+    const h = harness();
+    // Pretend the timeline puts this older sale before others: its running
+    // balance is 15, while today's on-hand is still 8.
+    h.recomputeAfters.mockImplementation((s) => { s.hist[0].after = 15; });
+    h._reconApplySaleToBook('b1', 2, 20, stripePayment(), 'ch_old', 'Stripe', { date: '2026-09-01', chan: 'Website' });
+    expect(h.states.b1.stock).toBe(8);
+    expect(h.syncToSheets.mock.calls[0][0].stockAfter).toBe(15);
+  });
+});
+
+describe('the worklist Record button cannot record a charge twice', () => {
+  it('refuses a charge already in history and repaints the list', () => {
+    const p = { id: 'ch_9', amount: 20, currency: 'CAD', date: '2026-10-05' };
+    const deps = {
+      _reconFindPayment: () => p,
+      _reconRecordedChargeIds: () => new Set(['ch_9']),
+      _reconApplyPaymentToBook: vi.fn(),
+      showToast: vi.fn(),
+      renderReconcile: vi.fn(),
+      BOOKS: { b1: {} },
+      document: { getElementById: () => ({ value: 'b1' }) },
+    };
+    const { reconcileRecordSale } = buildHarness({ names: ['reconcileRecordSale'], deps, returns: '{ reconcileRecordSale }' });
+    reconcileRecordSale('ch_9');
+    expect(deps._reconApplyPaymentToBook).not.toHaveBeenCalled();
+    expect(deps.renderReconcile).toHaveBeenCalled();
+  });
+});
