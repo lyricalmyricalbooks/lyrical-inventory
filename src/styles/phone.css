@@ -496,6 +496,27 @@
   .pub-shell .more-sheet-body .snav-label { font-size: var(--text-sm); }
 }
 
+/* More sheet, Riso Press: it still wore the pre-repaint soft look (round close button,
+   hairline tiles, a gold inset ring for the current screen). Ink outline on the sheet,
+   a square outlined close button, offset-shadow tiles that press in, and the screen
+   you are on inked in like the review-inbox filter tabs. */
+@media (max-width: 768px) {
+  .more-sheet[open] { border-top: var(--stroke) solid var(--rule-ink); border-radius: 0; }
+  .more-sheet-grip { border-radius: 0; background: var(--rule-ink); }
+  .more-sheet-title { font-family: var(--font-display); font-weight: 400; font-size: var(--text-xl); text-transform: uppercase; letter-spacing: var(--tracking-caps); }
+  .more-sheet-close { border-radius: var(--r2); border: var(--stroke) solid var(--rule-ink); background: var(--surface-card); color: var(--content-primary); box-shadow: var(--elev-1); }
+  .more-sheet-close:active { transform: translate(2px, 2px); box-shadow: none; }
+  .pub-shell .more-sheet-body .pub-nav { gap: var(--space-3); }
+  .pub-shell .more-sheet-body .snav { border: var(--stroke) solid var(--rule-ink); background: var(--surface-card); box-shadow: var(--elev-1); transition: background .15s var(--ease-standard), transform .1s var(--ease-standard), box-shadow .1s var(--ease-standard); }
+  .pub-shell .more-sheet-body .snav:active { transform: translate(2px, 2px); box-shadow: none; }
+  .pub-shell .more-sheet-body .snav.active::before { display: none; }
+  .pub-shell .more-sheet-body .snav.active .snav-ic { color: inherit; }
+  .pub-shell .more-sheet-body .snav.active { background: var(--surface-inverse); color: var(--content-on-inverse); border-color: var(--rule-ink); box-shadow: var(--elev-1); }
+}
+@media (max-width: 768px) and (prefers-reduced-motion: reduce) {
+  .pub-shell .more-sheet-body .snav, .more-sheet-close { transition: none; }
+}
+
 @media (max-width: 768px) and (prefers-reduced-motion: reduce) {
   .tab-panel .phone-record-toggle { transition: none; }
 }
