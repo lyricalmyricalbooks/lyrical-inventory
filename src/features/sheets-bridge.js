@@ -96,16 +96,26 @@ async function testSheets() {
 // Sheets delivery engine (rebuilt): durable queue + retry + deterministic event IDs
 const SHEETS_QUEUE_KEY = 'lm-sheets-write-queue-v2';
 const SHEETS_LOG_KEY = 'lm-sheets-log-v2';
-const MAX_SHEETS_RETRIES = 6;
+// About four minutes of trying per row with the 60s backoff cap. Six tries ran
+// out in ~37 seconds, so Wi-Fi without real internet at a market dropped rows.
+const MAX_SHEETS_RETRIES = 10;
 const RETRY_BASE_MS = 1200;
 // A write that never answers used to park the queue forever: `fetch` has no
 // default timeout, so one hung Apps Script call left `_sheetsWriting` true and
 // every later row queued silently behind it. Nothing may take longer than this.
 const SHEETS_WRITE_TIMEOUT_MS = 45000;
 const SHEETS_BATCH_TIMEOUT_MS = 120000;
-let _sheetsQueue = JSON.parse(localStorage.getItem(SHEETS_QUEUE_KEY) || '[]');
+// Read at module load: a truncated or corrupt saved value used to throw here,
+// and since main.js imports this module, the whole app failed to start.
+function readStoredList(key) {
+  try {
+    const v = JSON.parse(localStorage.getItem(key) || '[]');
+    return Array.isArray(v) ? v : [];
+  } catch (_) { return []; }
+}
+let _sheetsQueue = (() => readStoredList(SHEETS_QUEUE_KEY))();
 let _sheetsWriting = false;
-let sheetsLog = JSON.parse(localStorage.getItem(SHEETS_LOG_KEY) || '[]');
+let sheetsLog = (() => readStoredList(SHEETS_LOG_KEY))();
 
 // Both of these are called from inside the delivery loop, including from its
 // error path. A QuotaExceededError thrown here used to escape `_processQueue`
@@ -455,10 +465,22 @@ function _recordSheetsFailure(item, e) {
     _sheetsQueue.shift();
     persistSheetsQueue();
     updateBulkProgress(item.count || 1);
+    _announceSheetsGiveUp();
     return;
   }
   persistSheetsQueue();
   addSheetsLog(item.book, item.type, item.summary + ` [retry ${item.attempts}/${MAX_SHEETS_RETRIES}]`, 'retry');
+}
+
+// A row the sheet never got is invisible unless someone opens the log, so say
+// so on screen, once per burst of give-ups rather than once per row.
+let _sheetsGiveUpTimer = null;
+function _announceSheetsGiveUp() {
+  if (_sheetsGiveUpTimer) return;
+  _sheetsGiveUpTimer = setTimeout(() => {
+    _sheetsGiveUpTimer = null;
+    showToast('⚠ Some changes didn\'t reach your Google Sheet. Open Google Sheet and tap Sync all data to fill them in.', 'err', 8000);
+  }, 1500);
 }
 
 function sheetPayloadWithBookAccent(payload) {
