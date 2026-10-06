@@ -149,24 +149,45 @@ const cents = n => Math.round((Number(n) || 0) * 100);
 // payout look wrong. Largest-remainder: floor every share, then hand the
 // leftover cents to the shares that lost the most in the rounding.
 function allocate(amount, weights) {
+  // ⚡ Bolt Optimization: Replace map and reduce with imperative loops for allocation logic to avoid intermediate array allocations
   const totalCents = cents(amount);
-  const weightSum = weights.reduce((a, w) => a + w, 0);
-  if (!weights.length) return [];
+  const len = weights.length;
+  if (!len) return [];
+
+  let weightSum = 0;
+  for (let i = 0; i < len; i++) {
+    weightSum += weights[i];
+  }
+
   if (weightSum <= 0) {
     // Nothing to weight by (a zero-value invoice, or every line free): give it
     // all to the first title rather than inventing a split.
-    return weights.map((_, i) => (i === 0 ? totalCents / 100 : 0));
+    const res = new Array(len).fill(0);
+    res[0] = totalCents / 100;
+    return res;
   }
-  const exact = weights.map(w => (totalCents * w) / weightSum);
-  const floors = exact.map(Math.floor);
-  let remainder = totalCents - floors.reduce((a, c) => a + c, 0);
-  const order = exact
-    .map((v, i) => ({ i, frac: v - Math.floor(v) }))
-    .sort((a, b) => b.frac - a.frac || a.i - b.i);
-  for (let k = 0; k < order.length && remainder > 0; k++, remainder--) {
+
+  const floors = new Array(len);
+  const order = new Array(len);
+  let floorSum = 0;
+  for (let i = 0; i < len; i++) {
+    const v = (totalCents * weights[i]) / weightSum;
+    const f = Math.floor(v);
+    floors[i] = f;
+    floorSum += f;
+    order[i] = { i, frac: v - f };
+  }
+
+  let remainder = totalCents - floorSum;
+  order.sort((a, b) => b.frac - a.frac || a.i - b.i);
+  for (let k = 0; k < len && remainder > 0; k++, remainder--) {
     floors[order[k].i]++;
   }
-  return floors.map(c => c / 100);
+
+  for (let i = 0; i < len; i++) {
+    floors[i] = floors[i] / 100;
+  }
+  return floors;
 }
 
 // Per-title breakdown of one invoice: what each book contributed before the
@@ -186,21 +207,38 @@ export function invoiceBookSplit(inv, ownerBookId, books) {
     subtotals.set(bid, subtotals.get(bid) + (Number(it.qty) || 0) * (Number(it.unitPrice) || 0));
   }
 
-  const weights = order.map(bid => Math.max(0, cents(subtotals.get(bid))));
+  // ⚡ Bolt Optimization: Loop fusion - Combine multiple .map() and .reduce() calls into a single pass
+  const len = order.length;
+  const weights = new Array(len);
+  let subtotalSum = 0;
+  let weightSum = 0;
+
+  for (let i = 0; i < len; i++) {
+    const bid = order[i];
+    const sub = subtotals.get(bid);
+    subtotalSum += sub;
+    const w = Math.max(0, cents(sub));
+    weights[i] = w;
+    weightSum += w;
+  }
+
   // Prefer the invoice's stored total; fall back to the line sum so a partly
   // filled draft still splits sensibly.
-  const subtotalSum = order.reduce((a, bid) => a + subtotals.get(bid), 0);
   const grand = (inv && inv.total != null) ? Number(inv.total) || 0 : subtotalSum;
   const totals = allocate(grand, weights);
-  const weightSum = weights.reduce((a, w) => a + w, 0);
 
-  return order.map((bid, i) => ({
-    bookId: bid,
-    title: (byId.get(bid) || {}).title || bid,
-    subtotal: Math.round(subtotals.get(bid) * 100) / 100,
-    share: weightSum > 0 ? weights[i] / weightSum : (i === 0 ? 1 : 0),
-    total: totals[i],
-  }));
+  const res = new Array(len);
+  for (let i = 0; i < len; i++) {
+    const bid = order[i];
+    res[i] = {
+      bookId: bid,
+      title: (byId.get(bid) || {}).title || bid,
+      subtotal: Math.round(subtotals.get(bid) * 100) / 100,
+      share: weightSum > 0 ? weights[i] / weightSum : (i === 0 ? 1 : 0),
+      total: totals[i],
+    };
+  }
+  return res;
 }
 
 // One title's slice of an invoice, or null when that title isn't on it.
