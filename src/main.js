@@ -4588,12 +4588,12 @@ export function renderTodayHub() {
 // The phone bottom nav holds three everyday destinations; everything else
 // lives in this sheet. Its contents are cloned from the sidebar each time
 // it opens so grouping, visibility and live badges never drift apart.
-const MNAV_TABS = ['today', 'pos', 'website'];
+const MNAV_TABS = ['today', 'pos', 'manual'];
 
 function syncMoreNavState(name) {
   const more = document.getElementById('mnav-more');
   if (!more) return;
-  const destination = name === 'manual' ? 'pos' : name;
+  const destination = name;
   more.classList.toggle('active', !MNAV_TABS.includes(destination));
   document.querySelectorAll('#mnav .mnav-btn').forEach(button => {
     const selected = button === more ? more.classList.contains('active') : button.getAttribute('onclick')?.includes(`'${destination}'`);
