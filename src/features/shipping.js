@@ -5187,26 +5187,42 @@ function renderZonosDutyCard(calc, { stCountryCode, qty, unitValue, hsCode, erro
     ? '<span class="pill gray">Offline Estimate</span>'
     : (isFree ? '<span class="pill green">Duty &amp; Tax Free</span>' : '<span class="pill gold">Landed Cost Quoted</span>');
 
-  const dutyItemRows = (calc.dutiesBreakdown || []).filter(d => d.amount > 0).map(d => `
+  // ⚡ Bolt Optimization: Replace chained .filter().map().join() passes with a single imperative loop to eliminate intermediate array allocations
+  let dutyItemRows = '';
+  for (const d of (calc.dutiesBreakdown || [])) {
+    if (d.amount > 0) {
+      dutyItemRows += `
     <div class="zonos-detail-row">
       <span>${escapeHtml(d.description || 'Duty')} ${d.note ? `<small style="color:var(--text3);">(${escapeHtml(d.note)})</small>` : ''}</span>
       <strong class="tnum">${d.amount.toFixed(2)} ${cur}</strong>
     </div>
-  `).join('');
+  `;
+    }
+  }
 
-  const feeItemRows = (calc.feesBreakdown || []).filter(f => f.amount > 0).map(f => `
+  let feeItemRows = '';
+  for (const f of (calc.feesBreakdown || [])) {
+    if (f.amount > 0) {
+      feeItemRows += `
     <div class="zonos-detail-row">
       <span>${escapeHtml(f.description || 'Clearance Fee')}</span>
       <strong class="tnum">${f.amount.toFixed(2)} ${cur}</strong>
     </div>
-  `).join('');
+  `;
+    }
+  }
 
-  const taxItemRows = (calc.taxesBreakdown || []).filter(t => t.amount > 0).map(t => `
+  let taxItemRows = '';
+  for (const t of (calc.taxesBreakdown || [])) {
+    if (t.amount > 0) {
+      taxItemRows += `
     <div class="zonos-detail-row">
       <span>${escapeHtml(t.description || 'Import Tax')}</span>
       <strong class="tnum">${t.amount.toFixed(2)} ${cur}</strong>
     </div>
-  `).join('');
+  `;
+    }
+  }
 
   card.innerHTML = `
     <div class="zonos-duty-header">
