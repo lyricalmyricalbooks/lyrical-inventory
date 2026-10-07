@@ -4846,27 +4846,89 @@ export function switchTab(name) {
   if (name === 'todo') renderTodoTab();
   if (name === 'intel') renderIntel();
   if (name === 'backups') refreshSyncConflictUi();
+  if (name === 'help') initHelpAudience();
 }
 
-// Help tab search: hide questions (and whole sections) that don't mention the words typed.
+// Help tab: two guides (artist / publisher) on one page, plus a word search.
+// Text is folded (case, accents, curly quotes) so “fair” finds "Fair" and café finds cafe.
+const foldHelpText = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[‘’]/g, "'").replace(/[“”]/g, '"');
+const helpAudienceOf = (el) => el.dataset.audience || 'both';
+const helpInAudience = (el, aud) => { const a = helpAudienceOf(el); return a === 'both' || a === aud; };
+
+function helpPage() { return document.querySelector('#tab-help .help-page'); }
+
+export function setHelpAudience(aud) {
+  const page = helpPage();
+  if (!page || (aud !== 'artist' && aud !== 'publisher')) return;
+  page.dataset.audience = aud;
+  page.querySelectorAll('.help-aud-btn').forEach((btn) => btn.setAttribute('aria-pressed', String(btn.dataset.aud === aud)));
+  filterHelp($('help-search')?.value || '');
+}
+
+// Opens the guide that matches who is signed in, the first time Help is shown.
+function initHelpAudience() {
+  const page = helpPage();
+  if (!page || page.dataset.audienceChosen) return;
+  page.dataset.audienceChosen = '1';
+  // Opening one question by hand keeps the Open all / Close all label honest.
+  page.addEventListener('toggle', syncHelpToggleLabel, true);
+  setHelpAudience(window.IS_PUBLISHER && !isAuthor() ? 'publisher' : 'artist');
+}
+
 export function filterHelp(text) {
-  const words = String(text || '').toLowerCase().split(/\s+/).filter(Boolean);
+  const page = helpPage();
+  if (!page) return;
+  const aud = page.dataset.audience || 'artist';
+  const words = foldHelpText(text).split(/\s+/).filter(Boolean);
   let shown = 0;
-  document.querySelectorAll('#tab-help .help-sec').forEach((sec) => {
+  let otherHits = 0;
+  page.querySelectorAll('.help-sec').forEach((sec) => {
+    const mine = helpInAudience(sec, aud);
     let secShown = 0;
     sec.querySelectorAll('.help-q').forEach((q) => {
-      const hay = q.textContent.toLowerCase();
+      const hay = foldHelpText(q.textContent);
       const match = words.every((w) => hay.includes(w));
+      if (!mine) { if (words.length && match) otherHits++; q.hidden = false; return; }
       q.hidden = !match;
       // Clearing the search folds back the questions it opened.
       q.open = words.length ? match : false;
       if (match) secShown++;
     });
-    sec.hidden = secShown === 0;
+    sec.hidden = !mine || secShown === 0;
     shown += secShown;
   });
+  page.querySelectorAll('.help-foot').forEach((f) => { f.hidden = !helpInAudience(f, aud); });
   const empty = $('help-empty');
   if (empty) empty.hidden = shown > 0;
+  const other = $('help-other-aud');
+  if (other) {
+    const otherAud = aud === 'artist' ? 'publisher' : 'artist';
+    other.hidden = shown > 0 || otherHits === 0;
+    other.dataset.aud = otherAud;
+    other.textContent = `See ${otherHits} answer${otherHits === 1 ? '' : 's'} in the ${otherAud === 'artist' ? 'artist' : 'publisher'} guide`;
+  }
+  const count = $('help-count');
+  if (count) count.textContent = words.length ? (shown ? `${shown} answer${shown === 1 ? '' : 's'} found` : '') : `${shown} questions`;
+  syncHelpToggleLabel();
+}
+
+function visibleHelpQuestions() {
+  return [...document.querySelectorAll('#tab-help .help-sec:not([hidden]) .help-q:not([hidden])')];
+}
+
+function syncHelpToggleLabel() {
+  const btn = $('help-toggle-all');
+  if (!btn) return;
+  const qs = visibleHelpQuestions();
+  btn.hidden = qs.length < 2;
+  btn.textContent = qs.length && qs.every((q) => q.open) ? 'Close all' : 'Open all';
+}
+
+export function toggleAllHelp() {
+  const qs = visibleHelpQuestions();
+  const open = !qs.every((q) => q.open);
+  qs.forEach((q) => { q.open = open; });
+  syncHelpToggleLabel();
 }
 
 const BOOK_SCOPED_TABS = new Set(['website', 'manual', 'consignment', 'history', 'expenses', 'opencall']);
@@ -24548,7 +24610,7 @@ Object.assign(window, {
   reconOnFilter, reconSetCurrency, reconClearFilters, reconEditKey, reconRecordGroup, reconDismissGroup, reconDismissAllShown,
   toggleStripePaidNotify,
   generateBookStripeLink,
-  logout, switchTab, filterHelp, toggleBookDropdown, toggleHeaderMenu, closeHeaderMenus, toggleSideAccount, switchBook, forceSync, recalcOnHand, dismissStockDrift,
+  logout, switchTab, filterHelp, setHelpAudience, toggleAllHelp, toggleBookDropdown, toggleHeaderMenu, closeHeaderMenus, toggleSideAccount, switchBook, forceSync, recalcOnHand, dismissStockDrift,
   showMoreHist, showAllHist,
   restateBookCurrency, onCurrencyModeChange, onCurrencyRateModeChange, refreshCurrencyPreview,
   renderOpenCall, ocAdd, ocToggle, ocDelete, ocCopyEmails, ocToggleImport, ocRunImport, checkOcEmailTypo, applyOcEmailCorrection,
