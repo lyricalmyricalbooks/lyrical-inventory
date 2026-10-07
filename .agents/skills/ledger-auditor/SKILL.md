@@ -39,7 +39,11 @@ Use this skill whenever verifying, auditing, debugging, or modifying financial c
    $$\text{Store Commission} = \text{roundCents}(\text{Gross Sales} \times \text{Commission Rate})$$
    $$\text{Publisher/Artist Net Due} = \text{roundCents}(\text{Gross Sales} - \text{Store Commission})$$
    $$\text{Balance Unpaid} = \sum \text{Net Due} - \sum \text{Payouts Settled}$$
-3. **Ledger Sequence Continuity (`_after` / `after`):**
+3. **Artist Debt Netting:** a payout that nets debts stores `offsets: [{id, amount}]`; offsets are derived, never stored on the debt, so deleting the payout reopens it.
+   $$\text{Owed to Artist} = \text{Earned} - \sum \text{Cash Payouts} - \sum \text{Offsets} - \text{Held Share}$$
+   $$\text{Debt Open} = \sum \text{Receivables} - \sum \text{Offsets}$$
+   Debts and their offsets are restated together on a currency change.
+4. **Ledger Sequence Continuity (`_after` / `after`):**
    - Verify that sequential stock mutation events chain unbroken: $\text{OnHand}_{t} = \text{OnHand}_{t-1} + \Delta\text{Stock}_t$.
    - Voided entries must have zero effect on $\text{OnHand}$ while preserving the audit row.
 

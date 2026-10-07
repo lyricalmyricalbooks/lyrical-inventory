@@ -203,12 +203,31 @@ describe('artist receivables and net payout', () => {
     expect(r.netPayable).toBe(70);
   });
 
-  it('ignores voided and fully-offset receivables', () => {
+  it('ignores voided receivables and counts partial offsets from payouts', () => {
+    const payouts = [
+      { amount: 5, offsets: [{ id: 'c', amount: 0.05 }, { id: 'b', amount: 20 }] },
+      { amount: 5, voided: true, offsets: [{ id: 'c', amount: 9 }] }
+    ];
     expect(sumOpenReceivables([
       rec('a', 30, 'd', { voided: true }),
-      rec('b', 20, 'd', { offsetApplied: 20 }),
-      rec('c', 10.1, 'd', { offsetApplied: 0.05 })
-    ])).toBe(10.05);
+      rec('b', 20, 'd'),
+      rec('c', 10.1, 'd')
+    ], payouts)).toBe(10.05);
+  });
+
+  it('a payout that netted a debt lowers royalties owed and the debt equally', () => {
+    const payouts = [{ amount: 70, offsets: [{ id: 'a', amount: 30 }] }];
+    const r = calcArtistEarnings(book, { hist: [sale(10, 20)], artistPayouts: payouts, artistReceivables: [rec('a', 30, 'd')] });
+    expect(r.totalOffset).toBe(30);
+    expect(r.owedToArtist).toBe(0);
+    expect(r.owedByArtist).toBe(0);
+    expect(r.netPayable).toBe(0);
+  });
+
+  it('deleting that payout reopens the debt', () => {
+    const r = calcArtistEarnings(book, { hist: [sale(10, 20)], artistPayouts: [], artistReceivables: [rec('a', 30, 'd')] });
+    expect(r.owedByArtist).toBe(30);
+    expect(r.owedToArtist).toBe(100);
   });
 
   it('pays one net amount when royalties exceed the debt', () => {

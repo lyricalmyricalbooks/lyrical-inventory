@@ -12,38 +12,58 @@ export function tierEffectiveCap(tier, productionCost = 0) {
   return Number.isFinite(tier.revenueUpTo) && tier.revenueUpTo > 0 ? tier.revenueUpTo : null;
 }
 
-// Still-unsettled part of one receivable (money the artist owes the shop).
-// `offsetApplied` is the running total already netted against payouts.
-export function receivableOpen(r) {
+// How much of each receivable (money the artist owes the shop) has been netted
+// against royalties, keyed by receivable id.
+//
+// Derived from the payouts rather than stored on the receivable: a payout that
+// netted a debt carries `offsets: [{ id, amount }]`, so deleting or voiding that
+// payout reopens the debt on its own, with no second write to forget.
+export function appliedOffsets(payouts) {
+  const applied = new Map();
+  for (const p of (payouts || [])) {
+    if (!p || p.voided || !Array.isArray(p.offsets)) continue;
+    for (const o of p.offsets) {
+      const amt = parseFloat(o && o.amount) || 0;
+      if (!o || o.id == null || amt <= 0) continue;
+      applied.set(String(o.id), roundCents((applied.get(String(o.id)) || 0) + amt));
+    }
+  }
+  return applied;
+}
+
+// Still-unsettled part of one receivable, given what has been netted so far.
+export function receivableOpen(r, applied = 0) {
   if (!r || r.voided) return 0;
-  const open = roundCents((parseFloat(r.amount) || 0) - (parseFloat(r.offsetApplied) || 0));
+  const open = roundCents((parseFloat(r.amount) || 0) - (parseFloat(applied) || 0));
   return open > 0 ? open : 0;
 }
 
-export function sumOpenReceivables(list) {
+export function sumOpenReceivables(list, payouts) {
+  const applied = appliedOffsets(payouts);
   let total = 0;
-  for (const r of (list || [])) total = roundCents(total + receivableOpen(r));
+  for (const r of (list || [])) total = roundCents(total + receivableOpen(r, applied.get(String(r.id))));
   return total;
 }
 
 // Work out ONE combined payment: royalties owed to the artist minus what they
 // owe the shop, applied oldest receivable first. Pure — the caller records the
-// cash payout and stamps `applied` onto the receivables in a single state write.
+// cash payout with `offsets: applied` in a single state write.
 //   cashToPay   : what to actually send (0 when the debt is as big or bigger)
 //   offset      : total debt cleared by this payment
-//   applied     : [{ id, amount }] per receivable, for the audit trail / undo
+//   applied     : [{ id, amount }] per receivable, stored on the payout
 //   debtLeft    : debt still open afterwards (carries to future royalties)
-export function planNetPayout(owedToArtist, receivables) {
+export function planNetPayout(owedToArtist, receivables, payouts) {
   const owed = Math.max(0, roundCents(Number(owedToArtist) || 0));
+  const already = appliedOffsets(payouts);
   const open = (receivables || [])
-    .filter(r => receivableOpen(r) > 0)
+    .filter(r => receivableOpen(r, already.get(String(r.id))) > 0)
     .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
   let room = owed;
   let offset = 0;
   const applied = [];
   for (const r of open) {
     if (room <= 0) break;
-    const take = Math.min(receivableOpen(r), room);
+    const take = Math.min(receivableOpen(r, already.get(String(r.id))), room);
     applied.push({ id: r.id, amount: roundCents(take) });
     offset = roundCents(offset + take);
     room = roundCents(room - take);
@@ -53,7 +73,7 @@ export function planNetPayout(owedToArtist, receivables) {
     offset,
     cashToPay: roundCents(owed - offset),
     applied,
-    debtLeft: roundCents(sumOpenReceivables(receivables) - offset)
+    debtLeft: roundCents(sumOpenReceivables(receivables, payouts) - offset)
   };
 }
 
@@ -113,10 +133,14 @@ export function calcArtistEarnings(book, state) {
   // Combined .filter() and .reduce() into a single pass to eliminate intermediate array allocations
   const payouts = [];
   let sumPayouts = 0;
+  let totalOffset = 0;   // royalties settled by netting against artist debts
   for (const p of (s.artistPayouts || [])) {
     if (!p.voided) {
       payouts.push(p);
       sumPayouts = roundCents(sumPayouts + (parseFloat(p.amount) || 0));
+      if (Array.isArray(p.offsets)) {
+        for (const o of p.offsets) totalOffset = roundCents(totalOffset + (parseFloat(o && o.amount) || 0));
+      }
     }
   }
   const totalPaidToArtist = sumPayouts;
@@ -126,17 +150,18 @@ export function calcArtistEarnings(book, state) {
   // (publisherCutHeldByArtist) — it is NOT a payment to the artist, so it must
   // not reduce owedToArtist. owedToArtist still goes negative on genuine
   // overpayment (payouts exceeding net earnings).
-  const owedToArtist = roundCents(totalArtistEarned - totalPaidToArtist - heldByArtistShare);
+  const owedToArtist = roundCents(totalArtistEarned - totalPaidToArtist - heldByArtistShare - totalOffset);
   const publisherCutHeldByArtist = roundCents(heldByArtistGross - heldByArtistShare);
   // Other money the artist owes the shop (wholesale copies, advances, manual
   // debts). Kept apart from owedToArtist so the royalty balance stays pure;
   // netPayable is what actually changes hands if the two are offset.
-  const owedByArtist = sumOpenReceivables(s.artistReceivables);
+  const owedByArtist = sumOpenReceivables(s.artistReceivables, payouts);
   const netPayable = roundCents(owedToArtist - owedByArtist);
 
   return {
     owedByArtist,
     netPayable,
+    totalOffset,
     totalArtistEarned,
     cumulativeRevenue,
     // Publisher keeps their cut of every sale, including the cut the artist is

@@ -15,7 +15,7 @@ initPhoneLayouts(document.body);
 import './firebase.js';
 import { registerSW } from 'virtual:pwa-register';
 import { canonicalExpenseCategory } from './lib/expense-categories.js';
-import { calcArtistEarnings, tierEffectiveCap, describePayout, payoutRequestCovered } from './lib/earnings.js';
+import { calcArtistEarnings, tierEffectiveCap, describePayout, payoutRequestCovered, planNetPayout } from './lib/earnings.js';
 import { createStripePriceAndLink } from './lib/stripe-payment-link.js';
 import { calculateBreakEven, breakEvenTierMove, applyBreakEvenTierMove, readProductionCostInput } from './lib/breakeven.js';
 import { computeTallyRowHeights, computeQrCardSize, estimateTallyPages, estimateQrPages } from './lib/print-sheet-layout.js';
@@ -3055,7 +3055,7 @@ if (sheetsUrl) {
 }
 
 export function defaultState(book) {
-  return { stock: book.maxPrint, authorStock: 0, stockTransfers: [], sold: 0, revenue: 0, chStats: {}, hist: [], stores: [], ledger: [], doneIds: [], artistTransfers: [], artistPayouts: [], payoutRequests: [], expenses: [], artistPaymentLink: '', invoices: [], invoiceSeq: 0, openCall: [] };
+  return { stock: book.maxPrint, authorStock: 0, stockTransfers: [], sold: 0, revenue: 0, chStats: {}, hist: [], stores: [], ledger: [], doneIds: [], artistTransfers: [], artistPayouts: [], artistReceivables: [], payoutRequests: [], expenses: [], artistPaymentLink: '', invoices: [], invoiceSeq: 0, openCall: [] };
 }
 
 export function getState() {
@@ -7280,6 +7280,15 @@ function getOwedCardDetails(stats, cur) {
     owedVal = fmt(owed, cur);
     owedSub = 'action needed';
     owedTone = 'gold';
+    // Debts netted into one payment: spell out the sum so the artist sees why the
+    // transfer is smaller than the royalty, instead of having to ask.
+    const debt = stats.owedByArtist || 0;
+    if (debt > 0.01) {
+      const net = Math.max(0, owed - debt);
+      owedSub = isAuthor()
+        ? `less ${fmt(Math.min(debt, owed), cur)} you owe the publisher → you receive ${fmt(net, cur)}`
+        : `less ${fmt(Math.min(debt, owed), cur)} the artist owes you → send ${fmt(net, cur)}`;
+    }
   } else {
     owedLabel = 'Owed to artist';
     owedVal = fmt(0, cur);
@@ -7421,6 +7430,7 @@ function getPayoutHistoryHtml(stats, bookId, cur) {
     // ("Paid USD 50.00 @ 1.3640 → CA$68.20") beside the book-currency figure the
     // balance is measured in. A same-currency payout would only restate the
     // amount already shown, so it gets no note at all.
+    const netted = Array.isArray(p.offsets) ? p.offsets.reduce((n, o) => roundCents(n + (parseFloat(o && o.amount) || 0)), 0) : 0;
     const isFxPayout = p.payment
       && normalizeCurrencyCode(p.payment.currency, '') !== normalizeCurrencyCode(p.cur, bookCurrencyCode(book));
     const fxNote = isFxPayout ? paymentSummary(p.payment, book, p) : '';
@@ -7428,6 +7438,7 @@ function getPayoutHistoryHtml(stats, bookId, cur) {
       p.method ? escapeHtml(p.method) : '',
       p.notes ? escapeHtml(p.notes) : '',
       fxNote ? escapeHtml(fxNote) : '',
+      netted > 0.005 ? `netted ${fmt(netted, cur)} owed to you` : '',
       p.editedAt ? 'edited' : '',
     ].filter(Boolean).join(' · ');
     const pid = escapeHtml(String(p.id));
@@ -7540,6 +7551,16 @@ function getPayoutFormHtml(bookId, cur, owed) {
     `<option value="${code}"${code === nativeCode ? ' selected' : ''}>${getSym(code)} ${code}</option>`
   ).join('');
 
+  // Offer to net what the artist owes the shop against this payment. Only worth
+  // showing when there is both a royalty to pay and an open debt to take off it.
+  const st = states[bookId];
+  const plan = planNetPayout(owed, st && st.artistReceivables, st && st.artistPayouts);
+  const netHtml = plan.offset > 0.005 ? `
+        <label class="ps-payout-net" for="ap-net-${bookId}">
+          <input type="checkbox" id="ap-net-${bookId}" checked onchange="onArtistPayoutNetChange('${bookId}')">
+          <span>Net against what the artist owes you — clears ${fmt(plan.offset, cur)}, so you send ${fmt(plan.cashToPay, cur)}</span>
+        </label>` : '';
+
   return `
       <div id="artist-payout-form-${bookId}" class="ps-payout-form sys-container" hidden>
         <div class="ps-payout-fields">
@@ -7574,12 +7595,13 @@ function getPayoutFormHtml(bookId, cur, owed) {
             oninput="previewArtistPayout('${bookId}')">
           <span class="ps-payout-fx-note" id="ap-fx-note-${bookId}"></span>
         </div>
+        ${netHtml}
         <!-- Live verdict on what the typed amount does to the balance. Announced
              politely so a screen reader hears the overpayment warning too. -->
         <div class="ps-payout-preview" id="ap-preview-${bookId}" role="status" aria-live="polite"></div>
         <div class="ps-payout-actions">
           <button class="btn gold" id="ap-save-${bookId}" onclick="saveArtistPayout('${bookId}')">Save payout</button>
-          ${owed > 0.01 ? `<button class="btn" onclick="fillArtistPayoutFull('${bookId}')">Pay full balance (${fmt(owed, cur)})</button>` : ''}
+          ${owed > 0.01 ? `<button class="btn" onclick="fillArtistPayoutFull('${bookId}')">Pay full balance (${fmt(plan.offset > 0.005 ? plan.cashToPay : owed, cur)})</button>` : ''}
           <button class="btn tx" onclick="toggleArtistPayoutForm('${bookId}')">Cancel</button>
         </div>
       </div>`;
@@ -7603,6 +7625,8 @@ function resetArtistPayoutForm(bookId) {
   set('ap-notes', '');
   set('ap-rate', '');
   set('ap-cur', bookCurrencyCode(book));
+  const net = document.getElementById(`ap-net-${bookId}`);
+  if (net) { net.checked = true; net.disabled = false; }
   const save = document.getElementById(`ap-save-${bookId}`);
   if (save) save.textContent = 'Save payout';
   syncArtistPayoutFxRow(bookId);
@@ -7658,6 +7682,9 @@ async function editArtistPayout(bookId, payoutId) {
   set('ap-method', p.method || '');
   set('ap-notes', p.notes || '');
 
+  // An edit keeps whatever the payout already netted; re-netting is a new payout.
+  const net = document.getElementById(`ap-net-${bookId}`);
+  if (net) { net.checked = false; net.disabled = true; }
   const save = document.getElementById(`ap-save-${bookId}`);
   if (save) save.textContent = 'Update payout';
   syncArtistPayoutFxRow(bookId);
@@ -7734,13 +7761,31 @@ async function onArtistPayoutCurrencyChange(bookId) {
 // Quick-fill the amount with the whole outstanding balance. Goes through here
 // rather than an inline assignment so the preview refreshes with it — `value`
 // set from script fires no `input` event.
+// The netting plan the form should apply: null when the box is absent, unticked
+// or the payout is an edit (an edit never re-nets).
+function netPlanForForm(bookId, stats) {
+  const net = document.getElementById(`ap-net-${bookId}`);
+  if (!net || !net.checked || net.disabled) return null;
+  const s = states[bookId];
+  const plan = planNetPayout(stats.owedToArtist, s && s.artistReceivables, s && s.artistPayouts);
+  return plan.offset > 0.005 ? plan : null;
+}
+
+function onArtistPayoutNetChange(bookId) {
+  previewArtistPayout(bookId);
+}
+
 function fillArtistPayoutFull(bookId) {
   const stats = calculateArtistEarnings(bookId);
   const amount = document.getElementById(`ap-amount-${bookId}`);
   if (!stats || !amount) return;
   const owed = stats.owedToArtist;
   if (!(owed > 0.01)) return;
-  amount.value = owed.toFixed(2);
+  const plan = netPlanForForm(bookId, stats);
+  const cash = plan ? plan.cashToPay : owed;
+  // Fully netted: no cash changes hands, so leave the box empty (saving an
+  // empty box with netting on records a zero-cash payout).
+  amount.value = cash > 0.005 ? cash.toFixed(2) : '';
   previewArtistPayout(bookId);
   amount.focus();
 }
@@ -7779,7 +7824,19 @@ function previewArtistPayout(bookId) {
     host.textContent = `Enter a conversion rate to see what this is worth in ${cur}.`;
     return;
   }
-  const v = describePayout(isFx ? (Number.isFinite(nativeAmount) ? nativeAmount : '') : input.value, owed);
+  // With netting on, the debt clears part of the royalty first; the typed cash
+  // is judged against what is left, and an empty box means "nothing to send".
+  const plan = editing ? null : netPlanForForm(bookId, stats);
+  if (plan) owed = roundCents(owed - plan.offset);
+  const typed = isFx ? (Number.isFinite(nativeAmount) ? nativeAmount : '') : input.value;
+  if (plan && (typed === '' || typed === null)) {
+    host.className = 'ps-payout-preview is-neutral';
+    host.textContent = plan.cashToPay > 0.005
+      ? `Clears ${fmt(plan.offset, cur)} the artist owes you — send ${fmt(plan.cashToPay, cur)}.`
+      : `Clears ${fmt(plan.offset, cur)} the artist owes you — nothing to send.${plan.debtLeft > 0.005 ? ` ${fmt(plan.debtLeft, cur)} stays open against future royalties.` : ''}`;
+    return;
+  }
+  const v = describePayout(typed, owed);
 
   let tone = 'neutral', msg;
   if (v.tone === 'empty' || v.tone === 'invalid') {
@@ -7826,10 +7883,20 @@ async function saveArtistPayout(bookId) {
   // than throwing on a field that is no longer in the document.
   if (!dateEl || !methodEl || !notesEl) return;
 
-  const { amount, code, isFx, rate, nativeAmount } = readArtistPayoutForm(bookId);
-  if (!Number.isFinite(amount) || amount <= 0) { showToast('⚠ Enter a valid amount', 'warn'); return; }
-  if (isFx && !(rate > 0)) { showToast('⚠ Enter a conversion rate', 'warn'); return; }
-  if (!Number.isFinite(nativeAmount) || nativeAmount <= 0) { showToast('⚠ Enter a valid amount', 'warn'); return; }
+  const editingNow = _editingPayout && _editingPayout.bookId === bookId;
+  const plan = editingNow ? null : netPlanForForm(bookId, calculateArtistEarnings(bookId) || { owedToArtist: 0 });
+  const form = readArtistPayoutForm(bookId);
+  // A fully-netted payment sends no cash at all: an empty amount is then valid
+  // and records a zero-cash payout that carries only the offsets.
+  const cashFree = !!plan && !(Number.isFinite(form.amount) && form.amount > 0);
+  const { code, isFx, rate } = form;
+  const amount = cashFree ? 0 : form.amount;
+  const nativeAmount = cashFree ? 0 : form.nativeAmount;
+  if (!cashFree) {
+    if (!Number.isFinite(amount) || amount <= 0) { showToast('⚠ Enter a valid amount', 'warn'); return; }
+    if (isFx && !(rate > 0)) { showToast('⚠ Enter a conversion rate', 'warn'); return; }
+    if (!Number.isFinite(nativeAmount) || nativeAmount <= 0) { showToast('⚠ Enter a valid amount', 'warn'); return; }
+  }
 
   if (!s.artistPayouts) s.artistPayouts = [];
   const fields = {
@@ -7843,9 +7910,12 @@ async function saveArtistPayout(bookId) {
     cur: bookCurrencyCode(book),
     payment: buildPaymentMeta({
       book, qty: 1, unitPrice: roundCents(nativeAmount),
-      fxEnabled: isFx, fxCur: code, fxAmt: amount, fxRate: rate,
+      fxEnabled: isFx && !cashFree, fxCur: code, fxAmt: amount, fxRate: rate,
     }),
   };
+  // Debts cleared by this payment. Stored on the payout (not on the debt) so
+  // deleting the payout reopens them automatically.
+  if (plan) fields.offsets = plan.applied;
 
   const editingId = _editingPayout && _editingPayout.bookId === bookId ? _editingPayout.id : null;
   const existing = editingId ? findArtistPayout(bookId, editingId) : null;
@@ -7866,10 +7936,12 @@ async function saveArtistPayout(bookId) {
 
   settlePayoutRequests(bookId);
   await saveState(bookId);
-  showToast(`✓ ${existing ? 'Updated' : 'Recorded'} payout of ${fmt(fields.amount, book.currency)}`);
+  showToast(plan
+    ? `✓ Recorded ${fmt(fields.amount, book.currency)} payout, netting ${fmt(plan.offset, book.currency)} owed to you`
+    : `✓ ${existing ? 'Updated' : 'Recorded'} payout of ${fmt(fields.amount, book.currency)}`);
   resetArtistPayoutForm(bookId);
-  const form = document.getElementById(`artist-payout-form-${bookId}`);
-  if (form) form.hidden = true;
+  const formEl = document.getElementById(`artist-payout-form-${bookId}`);
+  if (formEl) formEl.hidden = true;
   renderProfitSharingBreakdown(bookId);
 }
 
@@ -7927,6 +7999,8 @@ async function deleteArtistPayout(bookId, payoutId) {
   if (!s || !s.artistPayouts) return;
   // String-compared because ids are now minted by makeEventId, while rows
   // written before that carry the numeric Date.now() ids.
+  const gone = s.artistPayouts.find(p => String(p.id) === String(payoutId));
+  const reopened = !!(gone && Array.isArray(gone.offsets) && gone.offsets.length);
   s.artistPayouts = s.artistPayouts.filter(p => String(p.id) !== String(payoutId));
   // Removing a payout can put a request back into the red, so re-evaluate
   // before the write rather than leaving a settled flag that no longer holds.
@@ -7937,13 +8011,14 @@ async function deleteArtistPayout(bookId, payoutId) {
   if (_editingPayout && _editingPayout.bookId === bookId && String(_editingPayout.id) === String(payoutId)) {
     resetArtistPayoutForm(bookId);
   }
-  showToast('✓ Payout deleted');
+  showToast(reopened ? '✓ Payout deleted — the debt it netted is owed again' : '✓ Payout deleted');
   renderProfitSharingBreakdown(bookId);
 }
 
 window.toggleArtistPayoutForm = toggleArtistPayoutForm;
 window.fillArtistPayoutFull = fillArtistPayoutFull;
 window.previewArtistPayout = previewArtistPayout;
+window.onArtistPayoutNetChange = onArtistPayoutNetChange;
 window.onArtistPayoutCurrencyChange = onArtistPayoutCurrencyChange;
 window.saveArtistPayout = saveArtistPayout;
 window.editArtistPayout = editArtistPayout;

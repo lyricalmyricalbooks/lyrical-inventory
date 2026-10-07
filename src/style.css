@@ -16484,6 +16484,17 @@ button[onclick="refreshUmamiStats()"]:active {
              color var(--dur-fast) var(--ease-standard);
 }
 .ps-payout-preview:empty{display:none;}
+.ps-payout-net{
+  display:flex;
+  align-items:flex-start;
+  gap:var(--space-2);
+  margin-top:var(--space-3);
+  min-height:44px;
+  font-size:var(--text-sm);
+  line-height:var(--leading-snug);
+  cursor:pointer;
+}
+.ps-payout-net input{margin-top:3px;flex:none;}
 .ps-payout-preview.is-good{
   color:var(--status-positive);
   background:var(--status-positive-bg);
