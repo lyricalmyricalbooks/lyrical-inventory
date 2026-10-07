@@ -923,6 +923,10 @@ import { resolveCountryCode } from './lib/countries.js';
 // Declared in the POS section below; exported here for features/customers.js.
 export { codeToSymbol };
 
+// Tells the boot watchdog in index.html that the bundle and every import it
+// needs loaded, so it stands down instead of reporting a failed start.
+window.__lmAppLoaded = true;
+
 // ─────────────────────────────────────────────
 // CLIENT ERROR REPORTING
 // ─────────────────────────────────────────────
