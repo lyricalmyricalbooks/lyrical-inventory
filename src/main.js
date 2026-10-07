@@ -314,6 +314,7 @@ import {
   readOrphanQueues, releaseOrphanKeys, pickNextSyncItem, SYNC_TAB_HEARTBEAT_MS,
 } from './lib/sync-queue-store.js';
 import { partHashesOf } from './lib/merge-state.js';
+import { loadFxHistory, saveFxHistory, datesNeedingRates, fillDatedRates, datedRateKey } from './lib/sale-fx.js';
 import {
   QR_PRESET_PRICE_CURRENCIES,
   loadQrPresets,
@@ -4023,6 +4024,9 @@ window.performFullMigration = async () => {
 // ── TAX CENTER STATE (Publisher Only)
 export let TAX_CENTER = { businessExpenses: [], recurring: [], settings: { baseCurrency: 'CAD', geminiKey: '' } };
 export let _fxRateCache = { 'CAD_CAD': 1 };
+// Rates for a given date never change once published, so the ones already
+// fetched are kept on the device and a past sale keeps its value offline.
+Object.assign(_fxRateCache, loadFxHistory(getLocalStorage()));
 
 export async function loadTaxCenter() {
   if (isAuthor()) return;
@@ -5051,7 +5055,7 @@ export function switchTab(name) {
   if (name === 'opencall') renderOpenCall();
   if (name === 'reconcile') renderReconcile();
   if (name === 'customers') renderCustomers();
-  if (name === 'taxcenter') renderTaxCenter();
+  if (name === 'taxcenter') { renderTaxCenter(); refreshTaxCentreRates(); }
   if (name === 'sheets') { loadGasCode(); renderSheetsLog(); renderProfitSettings(); switchSettingsSubTab(activeSettingsSubTab); if (typeof updateSheetsTabUI === 'function') updateSheetsTabUI(); }
   if (name === 'qrcodes') renderAllQRCodes();
   if (name === 'myqr') renderAuthorQRPage();
@@ -9656,16 +9660,41 @@ async function fetchOrders() {
 // ── MANUAL
 // Session-level cache so we don't re-fetch the same currency pair twice (Uses global _fxRateCache)
 
+// A rate lookup on a weak connection could hang a screen indefinitely, and a
+// boot with no signal sent the same failing request over and over. Each lookup
+// now gives up after a few seconds, and a pair that just failed isn't asked for
+// again for a minute.
+const FX_FETCH_TIMEOUT_MS = 8000;
+const FX_FAILURE_PAUSE_MS = 60_000;
+const _fxFailedUntil = {};
+
+async function fetchFx(url) {
+  const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), FX_FETCH_TIMEOUT_MS) : null;
+  try {
+    return await fetch(url, ctrl ? { signal: ctrl.signal } : undefined);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export async function fetchLiveRate(from, to) {
   if (from === to) return { rate: 1 };
   if (from === 'OTHER' || to === 'OTHER' || !from || !to) return { error: 'manual' };
 
   const key = `${from}_${to}`;
   if (_fxRateCache[key]) return { rate: _fxRateCache[key] };
+  if (_fxFailedUntil[key] > Date.now()) return { error: 'recently-failed', context: `${from}->${to}` };
 
+  const result = await fetchLiveRateUncached(from, to, key);
+  if (!result.rate) _fxFailedUntil[key] = Date.now() + FX_FAILURE_PAUSE_MS;
+  return result;
+}
+
+async function fetchLiveRateUncached(from, to, key) {
   // Primary API: open.er-api.com (v6) — very reliable
   try {
-    const res = await fetch(`https://open.er-api.com/v6/latest/${from}`);
+    const res = await fetchFx(`https://open.er-api.com/v6/latest/${from}`);
     if (res.ok) {
       const json = await res.json();
       const rate = json?.rates?.[to];
@@ -9680,7 +9709,7 @@ export async function fetchLiveRate(from, to) {
 
   // Fallback API: Frankfurter
   try {
-    const res = await fetch(`https://api.frankfurter.app/latest?from=${from}&to=${to}`);
+    const res = await fetchFx(`https://api.frankfurter.app/latest?from=${from}&to=${to}`);
     if (res.ok) {
       const json = await res.json();
       const rate = json?.rates?.[to];
@@ -9702,17 +9731,149 @@ export async function fetchHistoricalRate(from, to, date) {
   if (from === to) return { rate: 1 };
   if (!from || !to || from === 'OTHER' || to === 'OTHER') return { error: 'manual' };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return { error: 'bad-date' };
-  const key = `${from}_${to}@${date}`;
+  const key = datedRateKey(from, to, date);
   if (_fxRateCache[key]) return { rate: _fxRateCache[key] };
+  if (_fxFailedUntil[key] > Date.now()) return { error: 'recently-failed', context: `${from}->${to}@${date}` };
   try {
-    const res = await fetch(`https://api.frankfurter.app/${date}?from=${from}&to=${to}`);
+    const res = await fetchFx(`https://api.frankfurter.app/${date}?from=${from}&to=${to}`);
     if (res.ok) {
       const json = await res.json();
       const rate = json?.rates?.[to];
-      if (rate) { _fxRateCache[key] = rate; return { rate }; }
+      if (rate) {
+        _fxRateCache[key] = rate;
+        saveFxHistory(getLocalStorage(), _fxRateCache);
+        return { rate };
+      }
     }
   } catch (e) { /* fall through to caller's live-rate fallback */ }
+  _fxFailedUntil[key] = Date.now() + FX_FAILURE_PAUSE_MS;
   return { error: 'historical-unavailable', context: `${from}->${to}@${date}` };
+}
+
+// Published daily rates for a date range, as { 'YYYY-MM-DD': rate }. One
+// request covers every sale of a currency, instead of one per sale date.
+async function fetchHistoricalRateSeries(from, to, start, end) {
+  const res = await fetchFx(`https://api.frankfurter.app/${start}..${end}?from=${from}&to=${to}`);
+  if (!res.ok) throw new Error(`FX series ${res.status}`);
+  const json = await res.json();
+  const out = {};
+  for (const [day, rates] of Object.entries(json?.rates || {})) {
+    const rate = Number(rates && rates[to]);
+    if (rate > 0) out[day] = rate;
+  }
+  return out;
+}
+
+const addDays = (iso, n) => {
+  const d = new Date(`${iso}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+
+let _saleFxWarming = null;
+let _saleFxRetryAt = 0;
+
+/**
+ * Fetch the published rate for the date of every foreign-currency sale and
+ * payout that doesn't have one yet, so the Tax Centre and cash-flow figures
+ * value each at its own date's rate. One date-range request per currency, kept
+ * on the device afterwards. Resolves true when anything new arrived.
+ */
+export function warmSaleFxHistory() {
+  if (_saleFxWarming) return _saleFxWarming;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return Promise.resolve(false);
+  if (Date.now() < _saleFxRetryAt) return Promise.resolve(false);
+  _saleFxWarming = (async () => {
+    const wanted = datesNeedingRates(BOOKS, states, _fxRateCache, {
+      currencyOf: getBookCurrencyCode,
+      skip: (id, book) => isTestBookId(id) || isTestBook(book),
+    });
+    let filled = 0;
+    for (const [cur, dates] of wanted) {
+      try {
+        // A week's lead so a sale on a weekend or holiday finds the rate before it.
+        const series = await fetchHistoricalRateSeries(cur, 'CAD', addDays(dates[0], -7), dates[dates.length - 1]);
+        filled += fillDatedRates(_fxRateCache, cur, 'CAD', series, dates);
+      } catch (e) {
+        console.warn(`[fx] could not fetch ${cur} rates by date`, e);
+        _saleFxRetryAt = Date.now() + 10 * 60_000;
+      }
+    }
+    if (filled) saveFxHistory(getLocalStorage(), _fxRateCache);
+    return filled > 0;
+  })().finally(() => { _saleFxWarming = null; });
+  return _saleFxWarming;
+}
+
+/**
+ * The rate to convert an expense into `target` (CAD unless the books say
+ * otherwise): the rate published for its date, else today's, else 0 when none
+ * can be found — never a silent 1:1. A caller getting 0 records the expense with
+ * `fxMissing` so the Tax Centre says so and fills it in once online.
+ */
+export async function resolveExpenseRate(currency, date, target = 'CAD') {
+  const cur = String(currency || target).toUpperCase();
+  const to = String(target || 'CAD').toUpperCase();
+  if (cur === to) return 1;
+  try {
+    const h = await fetchHistoricalRate(cur, to, date);
+    if (h && h.rate) return h.rate;
+  } catch (_) { /* try today's */ }
+  try {
+    const l = await fetchLiveRate(cur, to);
+    if (l && l.rate) return l.rate;
+  } catch (_) { /* fall through */ }
+  return _fxRateCache[`${cur}_${to}`] || 0;
+}
+
+// Exchange rates the Tax Centre's figures are waiting on: each foreign sale's
+// own date's rate, and a CAD value for expenses logged offline or booked 1:1.
+// Both need a connection, so this runs in the background whenever the Tax
+// Centre is opened and redraws it once if anything changed. Throttled, so a
+// stretch offline doesn't retry on every visit.
+let _tcRatesCheckedAt = 0;
+function refreshTaxCentreRates() {
+  if (isAuthor() || Date.now() - _tcRatesCheckedAt < 5 * 60_000) return;
+  _tcRatesCheckedAt = Date.now();
+  Promise.all([warmSaleFxHistory(), healExpenseRates()])
+    .then(([warmed, healed]) => {
+      if (healed) {
+        showToast(`✓ Filled in the CAD value of ${healed} foreign-currency expense${healed === 1 ? '' : 's'} at the rate for ${healed === 1 ? 'its' : 'each'} date`, 'ok', 6000);
+      }
+      if ((warmed || healed) && $('tab-taxcenter')?.classList.contains('active')) renderTaxCenter();
+    })
+    .catch(e => console.warn('[tax centre] could not refresh exchange rates', e));
+}
+
+/**
+ * Fill in the CAD value of Tax Centre expenses saved without one (`fxMissing`,
+ * logged offline), and correct foreign-currency ones an older build booked at
+ * 1:1 because no rate was cached (their CAD value equals the foreign amount).
+ * Uses each expense's own date's rate. Business expenses only: there `fxRate`
+ * always means "to CAD", while a book expense's can mean "to the book's
+ * currency". Returns how many were updated.
+ */
+export async function healExpenseRates() {
+  if (isAuthor()) return 0;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return 0;
+  const needsRate = (e) => {
+    const cur = String(e.currency || 'CAD').toUpperCase();
+    if (cur === 'CAD' || e.amountUnknown || !(Number(e.amount) > 0)) return false;
+    if (e.fxMissing === true || e.baseAmount == null) return true;
+    return Number(e.fxRate) === 1 && Math.abs(Number(e.baseAmount) - Number(e.amount)) < 0.005;
+  };
+  let fixed = 0;
+  for (const e of (TAX_CENTER.businessExpenses || [])) {
+    if (!needsRate(e)) continue;
+    const rate = await resolveExpenseRate(e.currency, e.date || today());
+    if (!rate || rate === 1) continue;
+    e.fxRate = rate;
+    e.baseAmount = roundCents((Number(e.amount) || 0) * rate);
+    e.fxMissing = false;
+    fixed++;
+  }
+  if (fixed) await window._fbSaveSettings('taxCenter', TAX_CENTER);
+  return fixed;
 }
 
 let _manualFxRate = null;
@@ -17594,9 +17755,10 @@ async function saveExpenseEdit() {
       _editingExpense.files.push(newReceiptUrl);
     }
 
-    // Recalculate converted CAD total
-    const fxRate = _fxRateCache[`${currency}_CAD`] || 1;
-    const baseAmount = amount * fxRate;
+    // Recalculate converted CAD total at the expense's own date's rate. No rate
+    // found (offline) means no CAD value yet, flagged — never a silent 1:1.
+    const fxRate = await resolveExpenseRate(currency, date);
+    const baseAmount = fxRate ? roundCents(amount * fxRate) : null;
 
     // Find and update item
     let exp = null;
@@ -17610,8 +17772,9 @@ async function saveExpenseEdit() {
         exp.amount = amount;
         if (exp.amountUnknown) exp.amountUnknown = false;
         exp.origAmount = amount;
-        exp.fxRate = fxRate;
+        exp.fxRate = fxRate || null;
         exp.baseAmount = baseAmount;
+        exp.fxMissing = !fxRate;
         exp.date = date;
         exp.trip = trip;
         exp.receiptFiles = [..._editingExpense.files];
@@ -17933,13 +18096,17 @@ async function submitTaxExpense() {
     }
   }
 
-  // Multi-currency calculation
-  const fxRate = _fxRateCache[`${currency}_CAD`] || 1;
-  const baseAmount = amount * fxRate;
+  // Multi-currency calculation, at the rate for the expense's date. With no
+  // rate to be had (offline), the expense is logged without a CAD value and
+  // flagged; the Tax Centre fills it in the next time it's online. It used to
+  // fall back to 1:1, so US$100 went in as CA$100 for good.
+  const fxRate = await resolveExpenseRate(currency, date);
+  const baseAmount = fxRate ? roundCents(amount * fxRate) : null;
 
   if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
   const trip = ($('tc-exp-trip')?.value || '').trim();
-  const entry = { id: Date.now(), desc, cat, currency, amount, fxRate, baseAmount, date, ref: '', receipt: receiptUrl, trip };
+  const entry = { id: Date.now(), desc, cat, currency, amount, fxRate: fxRate || null, baseAmount, date, ref: '', receipt: receiptUrl, trip };
+  if (!fxRate) entry.fxMissing = true;
   // Stamped only on the cloud path, and it is what tells the Tax Centre how
   // long this receipt has been waiting to come home.
   if (receiptStorage === 'cloud') entry.receiptCloudAt = new Date().toISOString();
@@ -17952,7 +18119,10 @@ async function submitTaxExpense() {
 
   saveTaxCenter();
   renderTaxCenter();
-  if (receiptStorage === 'cloud') {
+  if (!fxRate) {
+    // Logged, but with no CAD value yet: say so, rather than a plain "Logged".
+    showToast(`✓ Logged — no ${currency} exchange rate is available right now, so its CAD value will be filled in next time you open the Tax Centre online`, 'warn', 7000);
+  } else if (receiptStorage === 'cloud') {
     // Say it plainly rather than letting a "✓ Logged" imply the receipt is
     // filed where the owner expects to find it.
     showToast('✓ Logged — receipt saved to the cloud until your folder is available', 'ok', 5000);

@@ -58,6 +58,7 @@ import { fmt, getSym, getBookCurrencyCode, roundCents, setSelectCurrency } from 
 import { payoutNetted } from '../lib/earnings.js';
 import { reconcileConsignmentMirrors } from '../lib/consignment.js';
 import { buildCashFlowBuckets, cashFlowDelta, computeCashFlowMetrics } from '../lib/cashflow.js';
+import { saleCadAmounts, datedCadRate } from '../lib/sale-fx.js';
 import {
   DEFAULT_SNOOZE_DAYS,
   findDeductionGaps,
@@ -141,9 +142,11 @@ function processRecurringExpenses() {
     recurringDueCharges(sub, now).forEach(charge => {
       if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
       const origCur = sub.currency || 'CAD';
-      const fxRate = _fxRateCache[`${origCur}_CAD`] || 1;
+      // The charge's own date's rate, else today's. With neither, the charge is
+      // flagged and healExpenseRates fills it in online — not booked 1:1.
+      const fxRate = datedCadRate(origCur, charge.date, _fxRateCache);
       const chargeAmount = Number(charge.amount) || 0;
-      const baseAmount = chargeAmount * fxRate;
+      const baseAmount = fxRate.missing ? null : roundCents(chargeAmount * fxRate.rate);
 
       TAX_CENTER.businessExpenses.unshift({
         id: Date.now() + Math.random(),
@@ -151,8 +154,9 @@ function processRecurringExpenses() {
         cat: sub.cat,
         currency: origCur,
         amount: chargeAmount,
-        fxRate: fxRate,
+        fxRate: fxRate.missing ? null : fxRate.rate,
         baseAmount: baseAmount,
+        ...(fxRate.missing ? { fxMissing: true } : {}),
         date: charge.date,
         ref: 'Auto-Injected',
         recurringId: sub.id || '',
@@ -2177,8 +2181,8 @@ function _tcBuildLedger(selectedYear) {
     // recorded at, and so an invoice rename reaches the Receipt/Ref column.
     reconcileConsignmentMirrors(s);
 
-    // Determine conversion to CAD for sales
-    const hRate = _fxRateCache[`${cur}_CAD`] || 1;
+    // Each sale is converted at its own date's rate (see lib/sale-fx.js), not
+    // today's, so a past year's totals don't move with the exchange rate.
 
     // Add sales to ledger
     // ⚡ Bolt Optimization: Use imperative loop to avoid array allocation from .filter()
@@ -2189,10 +2193,10 @@ function _tcBuildLedger(selectedYear) {
         const hYear = h.date ? h.date.substring(0, 4) : '';
         if (selectedYear !== 'all' && hYear !== selectedYear) continue;
 
-        const unitPrice = h.price ?? h.unitPrice ?? 0;
-        const amt = h.voided ? 0 : (unitPrice * (h.qty || 1));
-        const baseAmt = amt * hRate;
-        totalGrossSales += baseAmt;
+        const fx = saleCadAmounts(h, cur, _fxRateCache);
+        const amt = fx.merchandise;
+        const baseAmt = fx.merchandiseCad;
+        totalGrossSales = roundCents(totalGrossSales + baseAmt);
 
         allLedger.push({
           date: h.date,
@@ -2206,16 +2210,18 @@ function _tcBuildLedger(selectedYear) {
           baseAmount: baseAmt,
           qty: h.qty || 1,
           voided: !!h.voided,
-          hasRateError: !hRate,
+          hasRateError: fx.missing,
+          rateEstimated: fx.estimated && !fx.missing && !h.voided,
           isIncome: true,
           sourceType: 'sale',
           sourceId: bid,
           itemId: h.id || h.num
         });
 
+        // Customer shipping is recorded in CAD whatever the book's currency.
         const shippingIncome = h.voided ? 0 : (Number(h.shippingPaid) || 0);
         if (shippingIncome > 0) {
-          const shippingBase = roundCents(shippingIncome * hRate);
+          const shippingBase = fx.shippingCad;
           totalGrossSales = roundCents(totalGrossSales + shippingBase);
           allLedger.push({
             date: h.date,
@@ -2223,12 +2229,12 @@ function _tcBuildLedger(selectedYear) {
             desc: `Customer shipping paid (${b.title})`,
             cat: 'Income',
             ref: h.num,
-            origCurrency: cur,
+            origCurrency: 'CAD',
             origAmount: shippingIncome,
             baseAmount: shippingBase,
             qty: 0,
             voided: false,
-            hasRateError: !hRate,
+            hasRateError: false,
             isIncome: true,
             sourceType: 'shippingIncome',
             sourceId: bid,
@@ -2250,13 +2256,15 @@ function _tcBuildLedger(selectedYear) {
       const bookCur = e.currency || 'CAD';
 
       let eBase;
+      let eRateMissing = false;
       if (e.baseAmount != null) {
         // Pre-calculated at submission time — no double conversion
         eBase = e.baseAmount;
       } else {
-        // Legacy entry: calculate once now
-        const eRate = _fxRateCache[`${bookCur}_CAD`] || 1;
-        eBase = (e.amount || 0) * eRate;
+        // No stored CAD value: convert at the expense's own date's rate.
+        const eRate = datedCadRate(bookCur, e.date, _fxRateCache);
+        eBase = roundCents((e.amount || 0) * eRate.rate);
+        eRateMissing = eRate.missing;
       }
 
       totalOperatingExpenses += eBase;
@@ -2271,7 +2279,7 @@ function _tcBuildLedger(selectedYear) {
         origCurrency: displayOrigCur,
         origAmount: displayOrigAmt,
         baseAmount: eBase,
-        hasRateError: false,
+        hasRateError: eRateMissing,
         isIncome: false,
         sourceType: 'bookExpense',
         sourceId: bid,
@@ -2298,7 +2306,8 @@ function _tcBuildLedger(selectedYear) {
         // `amount` is always in the book's own currency; a payout paid in
         // another currency keeps that cash in `payment` for the audit trail.
         const pAmount = Number(p.amount) || 0;
-        const pBase = pAmount * hRate;
+        const pFx = datedCadRate(cur, tDate, _fxRateCache);
+        const pBase = roundCents(pAmount * pFx.rate);
         allLedger.push({
           date: tDate,
           type: 'Expense',
@@ -2312,7 +2321,8 @@ function _tcBuildLedger(selectedYear) {
           origCurrency: cur,
           origAmount: pAmount,
           baseAmount: pBase,
-          hasRateError: !hRate,
+          hasRateError: pFx.missing,
+          rateEstimated: pFx.estimated && !pFx.missing,
           isIncome: false,
           sourceType: 'artistPayout',
           sourceId: bid,
@@ -2327,12 +2337,15 @@ function _tcBuildLedger(selectedYear) {
     if (selectedYear !== 'all' && eYear !== selectedYear) return;
 
     const eCur = e.currency || 'CAD';
-    // Use stored baseAmount when available to avoid re-conversion
+    // Use stored baseAmount when available to avoid re-conversion. Without one,
+    // a rate already known for the expense's date gives the value; otherwise it
+    // counts as 0 and is flagged until healExpenseRates fills it in.
+    const eFx = datedCadRate(eCur, e.date, _fxRateCache);
     const eBase = e.baseAmount != null
       ? e.baseAmount
-      : e.fxMissing
+      : (e.fxMissing && eFx.estimated) || eFx.missing
         ? 0
-        : (e.amount || 0) * (_fxRateCache[`${eCur}_CAD`] || 1);
+        : roundCents((e.amount || 0) * eFx.rate);
 
     if (e.affectsCashFlow !== false) totalOperatingExpenses += eBase;
 
@@ -2347,7 +2360,7 @@ function _tcBuildLedger(selectedYear) {
       origCurrency: eCur,
       origAmount: e.amount || 0,
       baseAmount: eBase,
-      hasRateError: !!e.fxMissing,
+      hasRateError: e.baseAmount == null && ((!!e.fxMissing && eFx.estimated) || eFx.missing),
       isIncome: false,
       sourceType: 'businessExpense',
       itemId: e.id,
@@ -3596,11 +3609,18 @@ function _tcRenderCashFlowSummary(ctx) {
   const fxEl = $('tc-fx-warning');
   if (fxEl) {
     const stale = (allLedger || []).filter(r => r.hasRateError).length;
+    const estimated = (allLedger || []).filter(r => r.rateEstimated).length;
     if (stale > 0) {
       fxEl.innerHTML =
         `<div class="cf-fx-warn" role="status">
           <span class="cf-fx-ic" aria-hidden="true">⚠</span>
           <span>${stale} transaction${stale === 1 ? '' : 's'} used a fallback exchange rate (1.0) — totals may be inaccurate. Refresh FX rates and reload.</span>
+        </div>`;
+    } else if (estimated > 0) {
+      fxEl.innerHTML =
+        `<div class="cf-fx-warn" role="status">
+          <span class="cf-fx-ic" aria-hidden="true">⚠</span>
+          <span>${estimated} foreign-currency sale${estimated === 1 ? ' is' : 's are'} shown at today's exchange rate for now. The rate from each sale's own date downloads the next time you're online, and the totals update then.</span>
         </div>`;
     } else {
       fxEl.innerHTML = '';

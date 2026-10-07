@@ -7,6 +7,7 @@
 // baseAmount preference) — so the numbers can never drift from the ledger.
 
 import { getBookCurrencyCode, roundCents } from './money.js';
+import { saleCadAmounts, datedCadRate } from './sale-fx.js';
 
 const yearOf = (d) => (d ? String(d).substring(0, 4) : '');
 const monthOf = (d) => (d ? String(d).substring(0, 7) : '');
@@ -37,16 +38,15 @@ export function computeCashFlowMetrics(sources, yearFilter) {
     const s = states[bid] || {};
     const b = books[bid] || {};
     const cur = getBookCurrencyCode(b);
-    const hRate = fxRateCache[`${cur}_CAD`] || 1;
 
     // Sales — skip pending-to-artist rows (unless voided, which counts as 0) and gratuities.
     (s.hist || []).filter((h) => (!h.artistPending || h.voided) && !h.gratuity).forEach((h) => {
       if (!inYear(h.date, yearFilter)) return;
       const qty = h.qty || 1;
-      const unitPrice = h.price ?? h.unitPrice ?? 0;
-      const merchandise = h.voided ? 0 : unitPrice * qty;
-      const customerShipping = h.voided ? 0 : (Number(h.shippingPaid) || 0);
-      grossSales = roundCents(grossSales + ((merchandise + customerShipping) * hRate));
+      // Merchandise at the sale's own date's rate; customer shipping is CAD
+      // already (see lib/sale-fx.js). Matches the Tax Centre ledger line for line.
+      const fx = saleCadAmounts(h, cur, fxRateCache);
+      grossSales = roundCents(grossSales + fx.merchandiseCad + fx.shippingCad);
       txnCount += 1;
       if (!h.voided) unitsSold += qty;
     });
@@ -58,8 +58,7 @@ export function computeCashFlowMetrics(sources, yearFilter) {
       if (e.baseAmount != null) {
         eBase = e.baseAmount;
       } else {
-        const bookCur = e.currency || 'CAD';
-        eBase = (e.amount || 0) * (fxRateCache[`${bookCur}_CAD`] || 1);
+        eBase = roundCents((e.amount || 0) * datedCadRate(e.currency || 'CAD', e.date, fxRateCache).rate);
       }
       operatingExpenses += eBase;
     });
@@ -76,7 +75,7 @@ export function computeCashFlowMetrics(sources, yearFilter) {
       if (!inYear(p.date, yearFilter)) return;
       // `amount` is denominated in the book's own currency (a payout made in
       // another currency stores the foreign cash under `payment`).
-      artistPayouts += (Number(p.amount) || 0) * hRate;
+      artistPayouts = roundCents(artistPayouts + (Number(p.amount) || 0) * datedCadRate(cur, p.date, fxRateCache).rate);
     });
   });
 
@@ -85,11 +84,13 @@ export function computeCashFlowMetrics(sources, yearFilter) {
     if (!inYear(e.date, yearFilter)) return;
     if (e.affectsCashFlow === false) return;
     const eCur = e.currency || 'CAD';
+    // Same rule as the Tax Centre ledger (see _tcBuildLedger).
+    const eFx = datedCadRate(eCur, e.date, fxRateCache);
     const eBase = e.baseAmount != null
       ? e.baseAmount
-      : e.fxMissing
+      : (e.fxMissing && eFx.estimated) || eFx.missing
         ? 0
-        : (e.amount || 0) * (fxRateCache[`${eCur}_CAD`] || 1);
+        : roundCents((e.amount || 0) * eFx.rate);
     operatingExpenses += eBase;
   });
 
