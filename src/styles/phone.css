@@ -534,3 +534,23 @@
   :is(.fm-tile-add, .fm-today-btn, .fm-pay-btn, .fm-undo-btn):active:not(:disabled) { transform: translate(2px, 2px); box-shadow: none; }
   .fm-undo-btn:disabled { box-shadow: none; }
 }
+
+/* Phone home (Today), Riso Press: the four big job cards and the rows under them still wore
+   the pre-repaint look: a hairline border, a soft press that shrank the card, and a round
+   count badge. Each card now has the 2px ink outline and hard offset shadow of every other
+   card, presses into it when tapped, and the count badge is a square inked stamp. The rows
+   below keep their quiet dividers but get a clear pressed state, so the screen has one
+   loud thing (the cards) and one calm thing (the list). */
+@media (max-width: 768px) {
+  #tab-today .today-card { border: var(--stroke) solid var(--rule-ink); box-shadow: var(--elev-1); transition: transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast) var(--ease-spring); }
+  #tab-today .today-card-ink { border-color: var(--rule-ink); }
+  #tab-today .today-card:active { transform: translate(2px, 2px); box-shadow: none; }
+  #tab-today .today-card-name { text-transform: uppercase; letter-spacing: var(--tracking-caps); font-weight: 800; }
+  #tab-today .today-card-count { border: var(--stroke) solid var(--rule-ink); border-radius: var(--r2); padding: 1px 7px; }
+  #tab-today .today-label { margin-top: var(--space-6); padding-bottom: var(--space-2); border-bottom: var(--stroke) solid var(--rule-ink); letter-spacing: var(--tracking-caps); color: var(--content-primary); }
+  #tab-today .today-row:active { background: var(--surface-inset); }
+  #tab-today .today-row-name { font-weight: 800; }
+}
+@media (max-width: 768px) and (prefers-reduced-motion: reduce) {
+  #tab-today .today-card { transition: none; }
+}
