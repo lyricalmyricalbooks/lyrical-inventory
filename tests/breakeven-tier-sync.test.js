@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { syncBreakEvenTier, breakEvenTierMove, readProductionCostInput } from '../src/lib/breakeven.js';
+import { applyBreakEvenTierMove, breakEvenTierMove, readProductionCostInput } from '../src/lib/breakeven.js';
+
+// What a save does once the publisher agrees: work out the move, then apply it.
+function syncBreakEvenTier(profitTiers, previousCost, newCost) {
+  const move = breakEvenTierMove(profitTiers, previousCost, newCost);
+  applyBreakEvenTierMove(profitTiers, move);
+  return move;
+}
 
 describe('syncBreakEvenTier — first tier follows production cost only while it means break-even', () => {
   it('moves a threshold that matched the old production cost', () => {
@@ -50,6 +57,22 @@ describe('breakEvenTierMove — reports the change without making it', () => {
     expect(breakEvenTierMove([{ label: 'Launch', revenueUpTo: 2000 }], 5000, 6100)).toBeNull();
     expect(breakEvenTierMove([{ label: 'Break-even', revenueUpTo: 6100 }], 5000, 6100)).toBeNull();
     expect(breakEvenTierMove([{ label: 'Break-even', revenueUpTo: null }], 0, 6100)).toBeNull();
+  });
+});
+
+describe('applyBreakEvenTierMove — lands an agreed move', () => {
+  it('sets only the first tier to the new threshold', () => {
+    const tiers = [{ label: 'Recoup', revenueUpTo: 5000 }, { label: 'Profit', revenueUpTo: null }];
+    applyBreakEvenTierMove(tiers, { from: 5000, to: 6100 });
+    expect(tiers).toEqual([{ label: 'Recoup', revenueUpTo: 6100 }, { label: 'Profit', revenueUpTo: null }]);
+  });
+
+  it('does nothing without a move or without tiers', () => {
+    const tiers = [{ label: 'Recoup', revenueUpTo: 5000 }];
+    applyBreakEvenTierMove(tiers, null);
+    expect(tiers[0].revenueUpTo).toBe(5000);
+    expect(() => applyBreakEvenTierMove(undefined, { from: 0, to: 1 })).not.toThrow();
+    expect(() => applyBreakEvenTierMove([], { from: 0, to: 1 })).not.toThrow();
   });
 });
 

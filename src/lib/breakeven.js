@@ -129,13 +129,13 @@ export function breakEvenTierMove(profitTiers, previousCost, newCost) {
 }
 
 /**
- * Applies `breakEvenTierMove`. Mutates the tier in place, as the catalog
- * objects are saved as-is.
+ * Applies a move from `breakEvenTierMove` once the publisher has agreed to it.
+ * Mutates the tier in place, as the catalog objects are saved as-is. A null
+ * move, or a book that has since lost its tiers, is left untouched.
  */
-export function syncBreakEvenTier(profitTiers, previousCost, newCost) {
-  const move = breakEvenTierMove(profitTiers, previousCost, newCost);
-  if (move) profitTiers[0].revenueUpTo = move.to;
-  return move;
+export function applyBreakEvenTierMove(profitTiers, move) {
+  if (!move || !Array.isArray(profitTiers) || profitTiers.length === 0) return;
+  profitTiers[0].revenueUpTo = move.to;
 }
 
 /**
