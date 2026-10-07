@@ -7,6 +7,10 @@ import {
   loadSyncQueue, persistSyncQueue, isQuotaError, getLocalStorage,
 } from '../src/lib/sync-queue-store.js';
 import { describeSyncStatus } from '../src/lib/sync-status.js';
+import {
+  queueKeyFor, getSyncTabId, markTabAlive, markTabGone, findOrphanQueueKeys, readOrphanQueues,
+  releaseOrphanKeys, pickNextSyncItem, SYNC_TAB_PREFIX, SYNC_TAB_SESSION_KEY, SYNC_TAB_STALE_MS,
+} from '../src/lib/sync-queue-store.js';
 
 /** Minimal Web Storage stand-in with switchable failure modes. */
 function makeStorage(initial = {}, { quotaBytes = Infinity, throwOnGet = false, throwOnSet = null } = {}) {
@@ -223,7 +227,7 @@ describe('main.js wiring', () => {
   it('no longer parses or writes the queue key unguarded', () => {
     expect(mainJs).not.toMatch(/JSON\.parse\(localStorage\.getItem\('lm-sync-queue'/);
     expect(mainJs).not.toMatch(/localStorage\.setItem\('lm-sync-queue'/);
-    expect(mainJs).toMatch(/loadSyncQueue\(getLocalStorage\(\)\)/);
+    expect(mainJs).toMatch(/loadSyncQueue\(getLocalStorage\(\), SYNC_QUEUE_STORAGE_KEY\)/);
   });
 
   it('queueSync still kicks off the upload after a failed device write', () => {
@@ -237,5 +241,87 @@ describe('main.js wiring', () => {
 
   it('feeds the memory-only state to the sync chip', () => {
     expect(mainJs).toMatch(/heldInMemory:\s*_syncQueueHeldInMemory/);
+  });
+});
+
+// Web Storage with key()/length, which the orphan scan needs.
+function makeListStorage(initial = {}) {
+  const s = makeStorage(initial);
+  return Object.assign(s, {
+    get length() { return s.data.size; },
+    key(i) { return [...s.data.keys()][i] ?? null; },
+  });
+}
+
+describe('one queue per tab', () => {
+  const NOW = 1_000_000;
+
+  it('keeps a tab\'s id across reloads of that tab', () => {
+    const session = makeStorage({ [SYNC_TAB_SESSION_KEY]: 't1' });
+    expect(getSyncTabId(session, makeListStorage(), { now: NOW })).toBe('t1');
+  });
+
+  it('mints a new id when the stored one belongs to a live (duplicated) tab', () => {
+    const session = makeStorage({ [SYNC_TAB_SESSION_KEY]: 't1' });
+    const local = makeListStorage({ [SYNC_TAB_PREFIX + 't1']: String(NOW - 1000) });
+    const id = getSyncTabId(session, local, { now: NOW, random: () => 't2' });
+    expect(id).toBe('t2');
+    expect(session.getItem(SYNC_TAB_SESSION_KEY)).toBe('t2');
+  });
+
+  it('treats the legacy shared key and silent tabs as orphans, live tabs and itself as not', () => {
+    const local = makeListStorage({
+      'lm-sync-queue': '[]',
+      [queueKeyFor('me')]: '[]',
+      [queueKeyFor('live')]: '[]',
+      [queueKeyFor('stale')]: '[]',
+      [queueKeyFor('never-beat')]: '[]',
+      'lm-sync-queue-corrupt': 'x',
+    });
+    markTabAlive(local, 'live', NOW - 1000);
+    markTabAlive(local, 'stale', NOW - SYNC_TAB_STALE_MS - 1);
+    expect(findOrphanQueueKeys(local, 'me', NOW).sort())
+      .toEqual(['lm-sync-queue', queueKeyFor('never-beat'), queueKeyFor('stale')].sort());
+  });
+
+  it('reads orphans as adopted, with ids, and only removes them when asked', () => {
+    const local = makeListStorage({ [queueKeyFor('gone')]: JSON.stringify([item('book-a')]) });
+    const { items, keys } = readOrphanQueues(local, 'me', NOW);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ bookId: 'book-a', adopted: true });
+    expect(items[0].qid).toBeTruthy();
+    expect(local.data.has(queueKeyFor('gone'))).toBe(true);
+    releaseOrphanKeys(local, keys);
+    expect(local.data.has(queueKeyFor('gone'))).toBe(false);
+  });
+
+  it('a closing tab can be adopted at once', () => {
+    const local = makeListStorage({ [queueKeyFor('closing')]: '[]' });
+    markTabAlive(local, 'closing', NOW);
+    expect(findOrphanQueueKeys(local, 'me', NOW)).toEqual([]);
+    markTabGone(local, 'closing');
+    expect(findOrphanQueueKeys(local, 'me', NOW)).toEqual([queueKeyFor('closing')]);
+  });
+});
+
+describe('pickNextSyncItem', () => {
+  const q = (bookId, extra = {}) => ({ bookId, state: {}, ...extra });
+
+  it('takes changes in order', () => {
+    const a = q('a'); const b = q('b');
+    expect(pickNextSyncItem([a, b], 0)).toBe(a);
+  });
+
+  it('skips a book backing off, without letting a later change to it jump ahead', () => {
+    const a1 = q('a', { retryAt: 100 }); const a2 = q('a'); const b = q('b');
+    expect(pickNextSyncItem([a1, a2, b], 50)).toBe(b);
+    expect(pickNextSyncItem([a1, a2, b], 150)).toBe(a1);
+  });
+
+  it('holds a change made on top of one still waiting', () => {
+    const first = q('a', { qid: 'x', retryAt: 100 });
+    const next = q('a', { after: 'x' });
+    expect(pickNextSyncItem([first, next], 50)).toBeNull();
+    expect(pickNextSyncItem([next], 50)).toBe(next);
   });
 });

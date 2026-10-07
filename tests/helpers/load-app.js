@@ -258,7 +258,14 @@ export async function loadApp({ books = [makeBook()], states: initialStates = {}
     },
     /** The app's persisted offline queue (what survives a reload). */
     queued() {
-      try { return JSON.parse(localStorage.getItem('lm-sync-queue') || '[]'); } catch { return []; }
+      // Each tab keeps its own queue key (lm-sync-queue:<tab id>); gather them all.
+      const out = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key !== 'lm-sync-queue' && !(key || '').startsWith('lm-sync-queue:')) continue;
+        try { out.push(...JSON.parse(localStorage.getItem(key) || '[]')); } catch { /* unreadable */ }
+      }
+      return out;
     },
     /**
      * Start a test from a known ledger: back online, the default cloud, an

@@ -309,7 +309,11 @@ import {
 } from './lib/theme.js';
 import { initStickyOffset } from './lib/sticky-header.js';
 import { SYNC_TONES, describeSyncStatus } from './lib/sync-status.js';
-import { getLocalStorage, loadSyncQueue, persistSyncQueue } from './lib/sync-queue-store.js';
+import {
+  getLocalStorage, loadSyncQueue, persistSyncQueue, queueKeyFor, getSyncTabId, markTabAlive, markTabGone,
+  readOrphanQueues, releaseOrphanKeys, pickNextSyncItem, SYNC_TAB_HEARTBEAT_MS,
+} from './lib/sync-queue-store.js';
+import { partHashesOf } from './lib/merge-state.js';
 import {
   QR_PRESET_PRICE_CURRENCIES,
   loadQrPresets,
@@ -2773,8 +2777,17 @@ let fbReady = false, lastSavedHashes = {}, lastSaveTimes = {};
 // Loaded through a guard: an unreadable stored queue (or storage that throws on
 // access) used to throw right here, at module load, and the app never started.
 // Anything unreadable is copied aside to 'lm-sync-queue-corrupt' first.
-const _syncQueueLoad = loadSyncQueue(getLocalStorage());
+//
+// Each open tab keeps its own queue under its own key (see sync-queue-store.js):
+// two tabs sharing one key erased each other's offline sales. A reload of the
+// same tab keeps its id, so it picks its own queue straight back up.
+const SYNC_TAB_ID = getSyncTabId((() => { try { return window.sessionStorage; } catch (_) { return null; } })(), getLocalStorage());
+const SYNC_QUEUE_STORAGE_KEY = queueKeyFor(SYNC_TAB_ID);
+const _syncQueueLoad = loadSyncQueue(getLocalStorage(), SYNC_QUEUE_STORAGE_KEY);
 let syncQueue = _syncQueueLoad.queue;
+markTabAlive(getLocalStorage(), SYNC_TAB_ID);
+/** The queue item being uploaded right now, if any. queueSync never replaces it. */
+let _syncInFlightItem = null;
 let systemBackups = [];
 const SYSTEM_BACKUP_KEY = 'systemBackups';
 const SYSTEM_BACKUP_LIMIT = 30;
@@ -2833,7 +2846,7 @@ if (_syncQueueLoad.discarded) {
  * @returns {boolean} whether the write landed
  */
 function saveSyncQueueToDevice() {
-  const res = persistSyncQueue(getLocalStorage(), syncQueue);
+  const res = persistSyncQueue(getLocalStorage(), syncQueue, SYNC_QUEUE_STORAGE_KEY);
   if (res.ok || !syncQueue.length) {
     // Landed, or there is nothing left that could be lost.
     _syncQueueHeldInMemory = false;
@@ -2913,20 +2926,104 @@ function retrySyncNow() {
   clearTimeout(_syncRetryTimer);
   _syncRetryTimer = null;
   _syncRetryAttempt = 0;
+  syncQueue.forEach(item => { delete item.retryAt; });
   processSyncQueue();
 }
+
+// ── Other tabs' leftover changes ───────────────────────────────────────────
+// A tab closed (or frozen) before its offline changes uploaded leaves them under
+// its own key. Any live tab adopts them: stored under this tab's key first, and
+// only then removed from the old one, so a failed write leaves them where they
+// were. Web Locks (where the browser has them) stop two tabs adopting the same
+// change at once and uploading it twice.
+export async function adoptOrphanedSyncChanges() {
+  const storage = getLocalStorage();
+  if (!storage) return;
+  const adopt = () => {
+    const { items, keys } = readOrphanQueues(storage, SYNC_TAB_ID);
+    if (!keys.length) return;
+    const have = new Set(syncQueue.map(item => item.qid).filter(Boolean));
+    const fresh = items.filter(item => !have.has(item.qid));
+    syncQueue.push(...fresh);
+    const res = persistSyncQueue(storage, syncQueue, SYNC_QUEUE_STORAGE_KEY);
+    if (!res.ok) {
+      // Couldn't store them here: leave them under the old key for a later pass.
+      syncQueue = syncQueue.filter(item => !fresh.includes(item));
+      return;
+    }
+    releaseOrphanKeys(storage, keys);
+    if (fresh.length) {
+      console.info(`[sync] adopted ${fresh.length} change(s) left by another tab`);
+      updatePendingIndicator();
+      processSyncQueue();
+    }
+  };
+  try {
+    if (typeof navigator !== 'undefined' && navigator.locks && typeof navigator.locks.request === 'function') {
+      await navigator.locks.request('lm-sync-adopt', adopt);
+    } else {
+      adopt();
+    }
+  } catch (e) {
+    console.warn('[sync] could not adopt another tab\'s changes', e);
+  }
+}
+
+/**
+ * True when another tab has adopted this tab's queue (this tab was frozen long
+ * enough to look closed, e.g. restored from the back-forward cache). Its key is
+ * gone though the last write here landed, so uploading the in-memory copy would
+ * send those changes a second time.
+ */
+function syncQueueTakenByAnotherTab() {
+  if (!syncQueue.some(item => !item.adopted) || _syncQueueHeldInMemory) return false;
+  const storage = getLocalStorage();
+  if (!storage) return false;
+  try { return storage.getItem(SYNC_QUEUE_STORAGE_KEY) === null; } catch (_) { return false; }
+}
+
+setInterval(() => {
+  markTabAlive(getLocalStorage(), SYNC_TAB_ID);
+  adoptOrphanedSyncChanges();
+}, SYNC_TAB_HEARTBEAT_MS);
+window.addEventListener('pagehide', () => markTabGone(getLocalStorage(), SYNC_TAB_ID));
+window.addEventListener('pageshow', (e) => {
+  if (!e.persisted) return;
+  markTabAlive(getLocalStorage(), SYNC_TAB_ID);
+  processSyncQueue();
+});
+setTimeout(adoptOrphanedSyncChanges, 0);
 
 // Persist a not-yet-saved book state so an optimistic UI change is never
 // lost. Only the LATEST snapshot per book is kept — a newer edit supersedes
 // an older queued one, so rapid edits don't grow the queue unbounded.
-function queueSync(bookId, state) {
+function queueSync(bookId, state, baseOverride) {
   // Keep the merge base of the change this one supersedes: the newer snapshot
   // was still made on top of it, not on whatever the cloud holds now. Without
   // it the flush can't tell another device's edits from our own starting point.
-  const prior = syncQueue.find(item => item.bookId === bookId);
-  const base = (prior && prior.base) || (typeof window._fbBaseFor === 'function' ? window._fbBaseFor(bookId) : undefined);
-  syncQueue = syncQueue.filter(item => item.bookId !== bookId);
-  syncQueue.push({ bookId, state, ts: Date.now(), base });
+  //
+  // Never supersede the change that is uploading right now (removing the wrong
+  // item when it landed dropped this edit), nor one adopted from another tab
+  // (this tab's screen never showed it, so this snapshot doesn't contain it).
+  const replaceable = item => item.bookId === bookId && !item.adopted && item !== _syncInFlightItem;
+  const prior = syncQueue.find(replaceable);
+  const uploading = !prior && _syncInFlightItem && _syncInFlightItem.bookId === bookId && !_syncInFlightItem.adopted
+    ? _syncInFlightItem : null;
+  const base = (prior && prior.base)
+    || (uploading && uploading.base)
+    || baseOverride
+    || (typeof window._fbBaseFor === 'function' ? window._fbBaseFor(bookId) : undefined);
+  // Made on top of the uploading snapshot: once that lands, this merges against
+  // it (processSyncQueue swaps the base in). Until then it waits behind it.
+  const after = (prior && prior.after) || (uploading && uploading.qid) || undefined;
+  syncQueue = syncQueue.filter(item => !replaceable(item));
+  // A copy, not the live object: later edits mutate states[bookId] in place,
+  // and the queued snapshot has to stay the one this base describes.
+  syncQueue.push({
+    bookId, state: JSON.parse(JSON.stringify(state)), ts: Date.now(), base,
+    qid: `${SYNC_TAB_ID}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+    ...(after ? { after } : {}),
+  });
   // Must not throw: the upload below is attempted whether or not the device
   // copy landed, so a full storage can't strand the change with no retry.
   saveSyncQueueToDevice();
@@ -2948,8 +3045,28 @@ function updatePendingIndicator() {
 async function processSyncQueue() {
   if (_syncFlushing) return;
   if (!navigator.onLine || !fbReady || !syncQueue.length) return;
+  if (syncQueueTakenByAnotherTab()) {
+    // Another tab took these over and uploads them; sending them too would
+    // record them twice. Keep only what was adopted here.
+    syncQueue = syncQueue.filter(item => item.adopted);
+    saveSyncQueueToDevice();
+    updatePendingIndicator();
+    if (!syncQueue.length) return;
+  }
+  const item = pickNextSyncItem(syncQueue);
+  if (!item) {
+    // Everything left is backing off after a failure (or waiting behind a
+    // change that is); wake for the soonest retry.
+    const now = Date.now();
+    const waits = syncQueue.map(i => i.retryAt).filter(t => t && t > now);
+    if (waits.length) {
+      clearTimeout(_syncRetryTimer);
+      _syncRetryTimer = setTimeout(processSyncQueue, Math.min(...waits) - now);
+    }
+    return;
+  }
   _syncFlushing = true;
-  const item = syncQueue[0];
+  _syncInFlightItem = item;
   try {
     // An item saved by an older build has no base: an empty one makes the merge a
     // union, which may keep a row another device deleted but never drops one.
@@ -2959,11 +3076,28 @@ async function processSyncQueue() {
     // queued and let the backoff retry rather than dropping it.
     if (res && res.ok === false) throw new Error(res.reason || 'save-unverified');
 
+    // Remove exactly this item. syncQueue.shift() removed whatever was at the
+    // head by then, which an edit queued during the upload could have changed.
+    _syncInFlightItem = null;
+    const at = syncQueue.indexOf(item);
+    if (at !== -1) syncQueue.splice(at, 1);
+    // An edit queued while this was uploading was made on top of this snapshot,
+    // so this snapshot (not the base this one carried) is its merge base.
+    if (item.qid) {
+      syncQueue.forEach(next => {
+        if (next.after === item.qid) { next.base = partHashesOf(item.state); delete next.after; }
+      });
+    }
+    const newerPending = syncQueue.some(other => other.bookId === item.bookId);
+
     // This is the path that matters after a stretch offline: whatever the other
     // device wrote while we were away is now merged in, so adopt the reconciled
-    // state instead of leaving the screen on our pre-merge copy.
+    // state instead of leaving the screen on our pre-merge copy — unless a newer
+    // change to this book is still queued: the screen already shows it, and its
+    // own upload merges and adopts the result.
     if (res && res.merged && res.state) {
-      adoptMergedState(item.bookId, res);
+      if (!newerPending) adoptMergedState(item.bookId, res);
+      else reportMergeOutcome(item.bookId, res.conflicts);
       lastSaveTimes[item.bookId] = Date.now();
     } else {
       // Mark this exact snapshot as saved so saveState won't re-send it.
@@ -2973,12 +3107,15 @@ async function processSyncQueue() {
         lastSaveTimes[item.bookId] = Date.now();
       }
     }
-    syncQueue.shift();
     // Cannot throw. This item IS uploaded; a storage error here used to land in
     // the catch below, report a false "Save failed" and stall the queue.
     saveSyncQueueToDevice();
-    _syncRetryAttempt = 0;
-    _syncRetrying = false;
+    // Still backing off on another book's change? Keep the retry state (and the
+    // chip saying so) until that one lands too.
+    if (!syncQueue.some(other => other.retryAt && other.retryAt > Date.now())) {
+      _syncRetryAttempt = 0;
+      _syncRetrying = false;
+    }
     _syncFlushing = false;
     markCloudSynced();
     if (syncQueue.length) {
@@ -2992,11 +3129,15 @@ async function processSyncQueue() {
   } catch (e) {
     console.error('Queue sync failed', e);
     _syncFlushing = false;
+    _syncInFlightItem = null;
     // Schedule an automatic retry with exponential backoff (capped at 30s)
     // so a transient failure reconciles itself without user action.
     _syncRetryAttempt++;
     _syncRetrying = true;
     const delay = Math.min(30000, 2000 * Math.pow(2, _syncRetryAttempt - 1));
+    // This change backs off on its own, so one book the cloud keeps refusing
+    // (a permission error, an oversized record) can't hold up every other book.
+    item.retryAt = Date.now() + delay;
     setSyncState('error', `<b>Firestore</b> · ${syncQueue.length} pending · retrying…`);
     if (_syncRetryAttempt === 1) {
       // Don't claim "saved locally" when the device just refused to store it.
@@ -3011,6 +3152,8 @@ async function processSyncQueue() {
     renderSyncChip();
     clearTimeout(_syncRetryTimer);
     _syncRetryTimer = setTimeout(processSyncQueue, delay);
+    // Other books' changes needn't wait out this one's backoff.
+    if (pickNextSyncItem(syncQueue)) setTimeout(processSyncQueue, 0);
   }
 }
 
@@ -3020,6 +3163,7 @@ async function processSyncQueue() {
 window.addEventListener('online', () => {
   // A restored connection means the backoff clock is stale: drain now.
   _syncRetryAttempt = 0;
+  syncQueue.forEach(item => { delete item.retryAt; });
   clearTimeout(_syncRetryTimer);
   _syncRetryTimer = null;
   if (!syncQueue.length) setSyncState('ok', '<b>Firestore</b> · connected · live sync on');
@@ -3333,7 +3477,44 @@ function setSyncState(status, msg) {
 }
 
 // ── FIREBASE (per-book)
+// One save per book at a time. Two overlapping saves both took the merge base
+// from before either landed, so the second saw the first's new sales as another
+// device's additions and the merge kept them twice. A save asked for while one
+// is in flight now waits and runs once, afterwards, with whatever the book holds
+// by then; callers awaiting it resolve when that later save is done.
+const _saveRuns = new Map();
+const _saveAgain = new Set();
+
 export async function saveState(bookId) {
+  if (_saveRuns.has(bookId)) {
+    _saveAgain.add(bookId);
+    return _saveRuns.get(bookId);
+  }
+  const run = (async () => {
+    let base;
+    do {
+      _saveAgain.delete(bookId);
+      base = await saveStateNow(bookId, base);
+    } while (_saveAgain.has(bookId) || base);
+  })();
+  _saveRuns.set(bookId, run);
+  try {
+    await run;
+  } finally {
+    _saveRuns.delete(bookId);
+  }
+}
+
+/** True while a save of this book is running (the live listener stands aside). */
+function saveInFlight(bookId) {
+  return _saveRuns.has(bookId);
+}
+
+// `rebase` is the merge base for a save that follows a merged one: the snapshot
+// that save sent. Returns such a base when this save merged but the book was
+// edited while it ran, so the follow-up save merges those edits in rather than
+// writing over what the other device added.
+async function saveStateNow(bookId, rebase) {
   const state = states[bookId];
   if (!state) {
     console.warn(`saveState: No local state found for bookId: ${bookId}`);
@@ -3364,22 +3545,36 @@ export async function saveState(bookId) {
     // made on top of it, so it must go out after it and merge against the
     // same base, not race it with a direct write.
     if (!fbReady || !navigator.onLine || syncQueue.some(item => item.bookId === bookId)) {
-      queueSync(bookId, state);
+      queueSync(bookId, state, rebase);
       setSyncState('ok', '<b>Firestore</b> · changes queued (offline)');
       return;
     }
-    const res = await window._fbSave(bookId, json);
+    const res = await window._fbSave(bookId, json, rebase ? { base: rebase } : undefined);
     // Couldn't read the server copy, so _fbSave declined to overwrite it rather
     // than risk erasing a change made on another device. Queue and retry.
     if (res && res.ok === false) {
-      queueSync(bookId, state);
+      queueSync(bookId, JSON.parse(json), rebase);
       setSyncState('error', '<b>Firestore</b> · could not verify cloud copy · retrying…');
       return;
     }
+    // Edited while the save was in flight? Then the screen holds more than was
+    // sent, and the follow-up save (saveState runs one) must carry it.
+    const editedSince = states[bookId] !== state || JSON.stringify(states[bookId]) !== json;
     // Another device had written since we last synced and _fbSave merged the
     // two. Adopt the reconciled state locally so the screen matches the cloud
     // instead of the version we tried to push.
     if (res && res.merged && res.state) {
+      if (editedSince) {
+        // Adopting would wipe the new edit off the screen. Leave it, mark the
+        // book dirty against what the cloud now holds, and have the follow-up
+        // merge it with the snapshot just sent as base.
+        lastSavedHashes[bookId] = JSON.stringify(res.state);
+        reportMergeOutcome(bookId, res.conflicts);
+        _saveAgain.add(bookId);
+        lastSaveTimes[bookId] = Date.now();
+        markCloudSynced();
+        return partHashesOf(JSON.parse(json));
+      }
       adoptMergedState(bookId, res);
     } else {
       lastSavedHashes[bookId] = json;
@@ -3395,8 +3590,9 @@ export async function saveState(bookId) {
     // The optimistic UI already shows this change, but the cloud write
     // failed. Queue it (with backoff retry) so the change is never lost
     // and reconciles automatically instead of silently diverging.
-    queueSync(bookId, state);
+    queueSync(bookId, states[bookId] || state, rebase);
   }
+  return undefined;
 }
 
 // Called by _fbSave once a three-way merge has produced a combined state, before
@@ -3439,9 +3635,10 @@ function reportMergeOutcome(bookId, conflicts) {
   const all = Array.isArray(conflicts) ? conflicts : [];
   if (all.length) console.warn('[sync] merge conflicts — this device\'s version was kept:', all);
   let added = [];
+  let unsaved = 0;
   try {
     const book = BOOKS[bookId];
-    ({ added } = recordConflicts(syncConflictStorage(), {
+    ({ added, unsaved = 0 } = recordConflicts(syncConflictStorage(), {
       bookId,
       bookTitle: (book && book.title) || bookId,
       cur: book ? getBookCurrencyCode(book) : '',
@@ -3455,6 +3652,13 @@ function reportMergeOutcome(bookId, conflicts) {
   // Only conflicts a person can act on are counted. Two devices disagreeing
   // about a running balance the app has already recomputed is not news.
   const n = added.length;
+  if (unsaved) {
+    showToast(
+      `⚠ ${n + unsaved} record${n + unsaved === 1 ? ' was' : 's were'} changed on two devices at once — this device's version was kept. This device is out of storage, so ${unsaved === 1 ? 'the other version' : `${unsaved} of the other versions`} couldn't be kept for review.`,
+      'warn', 10000
+    );
+    return;
+  }
   if (!n) {
     showToast('↩ Merged in changes from another device', 'ok', 4000);
     return;
@@ -3618,7 +3822,7 @@ Object.assign(window, { openSyncConflicts, keepSyncConflict, restoreSyncConflict
 // First paint, so a conflict recorded in an earlier session is flagged on load.
 refreshSyncConflictUi();
 
-async function loadBook(bookId) {
+export async function loadBook(bookId) {
   setSyncState('syncing', '<b>Firestore</b> · loading…');
   try {
     if (!fbReady) throw new Error('not ready');
@@ -3630,6 +3834,13 @@ async function loadBook(bookId) {
     } else {
       states[bookId] = defaultState(book);
     }
+    // A change made here that hasn't uploaded yet (say, a sale recorded offline
+    // before a reload) isn't in the cloud copy. Show it: the next edit is built
+    // on the screen and supersedes the queued change, so a screen without it
+    // made that edit silently drop it. lastSavedHashes stays on the cloud copy
+    // below, so the book still reads as having something to send.
+    const pending = [...syncQueue].reverse().find(item => item.bookId === bookId && !item.adopted);
+    if (pending) states[bookId] = { ...defaultState(book), ...JSON.parse(JSON.stringify(pending.state)) };
     if (!states[bookId].doneIds) states[bookId].doneIds = [];
     if (!states[bookId].artistTransfers) states[bookId].artistTransfers = [];
     if (!states[bookId].artistPayouts) states[bookId].artistPayouts = [];
@@ -3637,7 +3848,7 @@ async function loadBook(bookId) {
     // Sync artist payment link to book object so publisher can read it in reimbursements
     if (states[bookId].artistPaymentLink) BOOKS[bookId].artistPaymentLink = states[bookId].artistPaymentLink;
     recomputeAfters(states[bookId], BOOKS[bookId]);
-    lastSavedHashes[bookId] = JSON.stringify(states[bookId]);
+    lastSavedHashes[bookId] = pending && json ? json : JSON.stringify(states[bookId]);
     // Watch for live updates
     window._fbWatchSubmissions(bookId, data => {
       window.authorSubmissions[bookId] = data || {};
@@ -3649,8 +3860,10 @@ async function loadBook(bookId) {
       if (json2 === lastSavedHashes[bookId]) return;
       // This book has an unsent change. Replacing the screen with the cloud
       // copy would hide it until the flush; the flush merges the two and
-      // adopts the result instead.
-      if (syncQueue.some(item => item.bookId === bookId)) return;
+      // adopts the result instead. Same while a save is in flight: the snapshot
+      // may be that save's own echo, older than an edit made since, and the
+      // save already reads and merges the server copy.
+      if (syncQueue.some(item => item.bookId === bookId) || saveInFlight(bookId)) return;
       const loaded = JSON.parse(json2);
       states[bookId] = { ...defaultState(book), ...loaded };
       if (!states[bookId].doneIds) states[bookId].doneIds = [];
