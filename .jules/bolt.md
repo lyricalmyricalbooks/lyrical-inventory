@@ -5,3 +5,7 @@
 ## 2024-10-06 - Fused invoice calculations in invoices.js
 **Learning:** Declarative array methods like `.reduce()` and `.map()` can create multiple intermediate arrays. During operations processing bulk ledger/invoice calculations (e.g. `allocate` or `invoiceBookSplit`), this leads to significant O(N) memory allocations and high garbage collection pressure.
 **Action:** Use 'loop fusion' pattern to consolidate multiple passes over data sets (such as mapping properties and summing totals) into single imperative `for` loops.
+
+## 2025-02-14 - Loop Fusion in HTML Templating
+**Learning:** Chaining `.filter().map().join('')` to generate HTML strings creates multiple intermediate array allocations, increasing GC pressure.
+**Action:** Replace with a single imperative `for...of` loop and string concatenation for significant performance gains in rendering paths.
