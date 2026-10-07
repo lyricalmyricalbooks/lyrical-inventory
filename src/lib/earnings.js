@@ -43,6 +43,15 @@ export function appliedOffsets(payouts, receivables) {
   return applied;
 }
 
+// Debt one payout cleared by netting (as recorded on it), for display. The
+// balance math caps this per debt; a single row just reports what it says.
+export function payoutNetted(p) {
+  if (!p || !Array.isArray(p.offsets)) return 0;
+  let n = 0;
+  for (const o of p.offsets) n = roundCents(n + (parseFloat(o && o.amount) || 0));
+  return n;
+}
+
 // Still-unsettled part of one receivable, given what has been netted so far.
 export function receivableOpen(r, applied = 0) {
   if (!r || r.voided) return 0;

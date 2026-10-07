@@ -15,7 +15,7 @@ initPhoneLayouts(document.body);
 import './firebase.js';
 import { registerSW } from 'virtual:pwa-register';
 import { canonicalExpenseCategory } from './lib/expense-categories.js';
-import { calcArtistEarnings, tierEffectiveCap, describePayout, payoutRequestCovered, planNetPayout } from './lib/earnings.js';
+import { calcArtistEarnings, tierEffectiveCap, describePayout, payoutRequestCovered, planNetPayout, payoutNetted } from './lib/earnings.js';
 import { createStripePriceAndLink } from './lib/stripe-payment-link.js';
 import { calculateBreakEven, breakEvenTierMove, applyBreakEvenTierMove, readProductionCostInput } from './lib/breakeven.js';
 import { computeTallyRowHeights, computeQrCardSize, estimateTallyPages, estimateQrPages } from './lib/print-sheet-layout.js';
@@ -7430,7 +7430,7 @@ function getPayoutHistoryHtml(stats, bookId, cur) {
     // ("Paid USD 50.00 @ 1.3640 → CA$68.20") beside the book-currency figure the
     // balance is measured in. A same-currency payout would only restate the
     // amount already shown, so it gets no note at all.
-    const netted = Array.isArray(p.offsets) ? p.offsets.reduce((n, o) => roundCents(n + (parseFloat(o && o.amount) || 0)), 0) : 0;
+    const netted = payoutNetted(p);
     const isFxPayout = p.payment
       && normalizeCurrencyCode(p.payment.currency, '') !== normalizeCurrencyCode(p.cur, bookCurrencyCode(book));
     const fxNote = isFxPayout ? paymentSummary(p.payment, book, p) : '';
@@ -17053,6 +17053,7 @@ function removeOneByKey(list, id) {
 
 export async function removeLedgerEntry(type, bid, id) {
   if (!(await confirmDialog('Are you sure you want to permanently delete this entry from the ledger?', { okLabel: 'Delete entry', danger: true }))) return;
+  let reopenedDebt = false;
 
   if (type === 'businessExpense') {
     TAX_CENTER.businessExpenses = (TAX_CENTER.businessExpenses || []).filter(e => String(e.id) !== String(id));
@@ -17069,6 +17070,8 @@ export async function removeLedgerEntry(type, bid, id) {
     // the wrong array left the row on screen and removed an unrelated transfer.
     const s = states[bid];
     if (s && s.artistPayouts) {
+      const gone = s.artistPayouts.find(p => String(p.id) === String(id));
+      if (payoutNetted(gone) > 0.005) reopenedDebt = true;
       removeOneByKey(s.artistPayouts, id);
       settlePayoutRequests(bid);
       saveState(bid);
@@ -17082,7 +17085,7 @@ export async function removeLedgerEntry(type, bid, id) {
   }
 
   renderTaxCenter();
-  showToast('✓ Entry removed from ledger');
+  showToast(reopenedDebt ? '✓ Entry removed — the debt it netted is owed again' : '✓ Entry removed from ledger');
 }
 
 export let _tcEditTripId = null;
@@ -21572,7 +21575,11 @@ window.downloadFullTaxSeasonExport = function () {
       const payoutRaw = parseFloat(p.amount || 0);
       flagRateIfMissing(book, cur, rawRate, payoutRaw > 0);
       const payoutCAD = payoutRaw * hRate;
-      const desc = p.method || 'Payment to artist';
+      // Only the cash is a cash outflow; a netted slice is noted so the row
+      // explains itself (a fully netted payment shows 0.00 with the reason).
+      const netted = payoutNetted(p);
+      const desc = [p.method || 'Payment to artist',
+        netted > 0.005 ? `plus ${(netted * hRate).toFixed(2)} netted against money the artist owed` : ''].filter(Boolean).join(' — ');
       csv += `${p.date},${esc(book.title)},"Artist Payout",${esc(desc)},${payoutCAD.toFixed(2)},""\n`;
     });
   });

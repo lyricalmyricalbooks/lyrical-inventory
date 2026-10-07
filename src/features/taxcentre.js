@@ -55,6 +55,7 @@ import { escapeHtml } from '../lib/html.js';
 import { csvRow, toCsv } from '../lib/csv.js';
 import { downloadCsv } from '../lib/download.js';
 import { fmt, getSym, getBookCurrencyCode, roundCents, setSelectCurrency } from '../lib/money.js';
+import { payoutNetted } from '../lib/earnings.js';
 import { reconcileConsignmentMirrors } from '../lib/consignment.js';
 import { buildCashFlowBuckets, cashFlowDelta, computeCashFlowMetrics } from '../lib/cashflow.js';
 import {
@@ -2301,7 +2302,11 @@ function _tcBuildLedger(selectedYear) {
         allLedger.push({
           date: tDate,
           type: 'Expense',
-          desc: `Artist Payout (${b.title})`,
+          // The ledger counts cash only; say when part of the royalty was
+          // settled by netting a debt, so a small or zero row isn't a mystery.
+          desc: payoutNetted(p) > 0.005
+            ? `Artist Payout (${b.title}) — plus ${fmt(payoutNetted(p), cur)} netted against money owed`
+            : `Artist Payout (${b.title})`,
           cat: 'Artist Royalties',
           ref: p.method || p.sourceNum || '',
           origCurrency: cur,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calcArtistEarnings, tierEffectiveCap, payoutRequestCovered, planNetPayout, sumOpenReceivables } from '../src/lib/earnings.js';
+import { calcArtistEarnings, tierEffectiveCap, payoutRequestCovered, planNetPayout, sumOpenReceivables, payoutNetted } from '../src/lib/earnings.js';
 
 const tier = (label, revenueUpTo, artistPct) => ({ label, revenueUpTo, artistPct });
 const sale = (qty, price, extra = {}) => ({ qty, price, ...extra });
@@ -289,5 +289,11 @@ describe('artist receivables and net payout', () => {
     const p = planNetPayout(25, [rec('new', 10, '2026-03-01'), rec('old', 20, '2026-01-01')], payouts);
     expect(p.applied).toEqual([{ id: 'new', amount: 10 }]);
     expect(p.cashToPay).toBe(15);
+  });
+
+  it('payoutNetted reports a row\'s own offsets and tolerates junk', () => {
+    expect(payoutNetted({ offsets: [{ id: 'a', amount: 10.1 }, { id: 'b', amount: '0.2' }, null] })).toBe(10.3);
+    expect(payoutNetted({ amount: 5 })).toBe(0);
+    expect(payoutNetted(null)).toBe(0);
   });
 });

@@ -86,6 +86,14 @@ describe('buildActivityFeed — sources', () => {
     expect(feed[4].text).toBe('10× The Hound handed to Ian Willms');
   });
 
+  it('says when a payout netted money the artist owed', () => {
+    const feed = buildActivityFeed([hound], {
+      hound: { artistPayouts: [{ id: 7, amount: 50, date: '2026-03-03', cur: 'CAD', offsets: [{ id: 'd', amount: 30 }] }] },
+    });
+    expect(feed[0].text).toMatch(/netting CA\$30\.00 they owed/);
+    expect(feed[0].amount).toBe('−CA$50.00');
+  });
+
   it('reports a gifted copy as a gift, not a sale', () => {
     const feed = buildActivityFeed([hound], {
       hound: { hist: [{ qty: 1, price: 0, gratuity: true, date: '2026-03-01' }] },
