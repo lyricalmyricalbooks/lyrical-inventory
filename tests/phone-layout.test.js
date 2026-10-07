@@ -98,6 +98,36 @@ test('a short footer is left alone', () => {
 });
 
 describe('swipe down to close', () => {
+  test('cancelled gestures and other fingers do not dismiss a form; a completed swipe does', () => {
+    document.body.innerHTML = '<div class="overlay" id="m-sale"><div class="modal"><div class="modal-title">Sale</div></div></div>';
+    const original = window.matchMedia;
+    window.matchMedia = () => ({ matches: true });
+    const closed = [];
+    stop = initPhoneLayouts(document.body, { closeModal: id => closed.push(id) });
+    const title = document.querySelector('.modal-title');
+    const send = (name, pointerId, clientY) => {
+      const event = new Event(name, { bubbles: true });
+      Object.assign(event, { pointerType: 'touch', pointerId, clientY });
+      title.dispatchEvent(event);
+    };
+    try {
+      send('pointerdown', 1, 100);
+      send('pointermove', 1, 260);
+      send('pointercancel', 1, 260);
+      expect(closed).toEqual([]);
+      expect(title.parentElement.style.transform).toBe('');
+      send('pointerdown', 1, 100);
+      send('pointerdown', 2, 100);
+      send('pointermove', 2, 300);
+      send('pointerup', 2, 300);
+      expect(closed).toEqual([]);
+      send('pointerup', 1, 120);
+      expect(closed).toEqual([]);
+      send('pointerdown', 3, 100);
+      send('pointerup', 3, 260);
+      expect(closed).toEqual(['sale']);
+    } finally { window.matchMedia = original; }
+  });
   const setup = (phone) => {
     document.body.innerHTML = '<div class="overlay" id="m-fair-today"><div class="modal"><div class="modal-title"><span>Today</span><button class="modal-close-btn">x</button></div><p>body</p></div></div>';
     const closed = [];
