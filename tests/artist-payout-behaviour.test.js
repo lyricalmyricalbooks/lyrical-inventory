@@ -473,4 +473,40 @@ describe('netting what the artist owes against a payout', () => {
     expect(document.querySelector('#ps-dash-content .ps-payout-list').textContent)
       .toMatch(/netted CA\$30\.00 owed to you/);
   });
+
+  it('a mistyped amount is rejected, not silently treated as "send nothing"', async () => {
+    await withDebt();
+    const before = payouts().length;
+    type('ap-amount', '-5');
+    await win.saveArtistPayout(BOOK);
+    expect(payouts()).toHaveLength(before);
+    expect(app.toast()).toMatch(/valid amount/);
+  });
+
+  it('a payout request is closed by a netted payment', async () => {
+    await withDebt();
+    await app.resetBook(BOOK, {
+      hist: SALES, sold: 8, revenue: 320, stock: 92,
+      artistPayouts: [PRIOR_PAYOUT], artistReceivables: [DEBT],
+      payoutRequests: [{ id: 'r1', requestedAt: '2026-03-01T00:00:00Z', amount: 80, currency: 'CA$', paidAtRequest: 30 }],
+    });
+    win.renderProfitSharingBreakdown(BOOK);
+    win.toggleArtistPayoutForm(BOOK);
+    type('ap-amount', '50');
+    await win.saveArtistPayout(BOOK);
+    expect(app.main.states[BOOK].payoutRequests[0].settled).toBe(true);
+  });
+
+  it('editing a netted payout keeps what it netted', async () => {
+    await withDebt();
+    type('ap-amount', '50');
+    await win.saveArtistPayout(BOOK);
+    const id = payouts().at(-1).id;
+    await win.editArtistPayout(BOOK, id);
+    expect(el('ap-net')).toBeNull(); // debt already cleared, nothing left to offer
+    type('ap-amount', '55');
+    await win.saveArtistPayout(BOOK);
+    expect(payouts().at(-1).offsets).toEqual([{ id: 'd-1', amount: 30 }]);
+    expect(payouts().at(-1).amount).toBe(55);
+  });
 });

@@ -22,7 +22,7 @@
 // output stays byte-comparable against the stored per-part hashes. Reordering
 // would make every hash comparison report a false difference.
 export const LIST_PARTS = [
-  'hist', 'ledger', 'expenses', 'stores', 'artistTransfers', 'artistPayouts', 'doneIds',
+  'hist', 'ledger', 'expenses', 'stores', 'artistTransfers', 'artistPayouts', 'artistReceivables', 'doneIds',
 ];
 
 // Every document a book's state is stored as, in the order stitchState emits.
@@ -40,7 +40,7 @@ export function emptyPart(name) {
 
 // Parts whose rows carry a stable `id` (minted as Date.now() at creation).
 export const ID_KEYED_PARTS = new Set([
-  'ledger', 'expenses', 'stores', 'artistTransfers', 'artistPayouts',
+  'ledger', 'expenses', 'stores', 'artistTransfers', 'artistPayouts', 'artistReceivables',
 ]);
 
 // Metadata fields recomputed from hist/ledger by recomputeAfters(). Merging

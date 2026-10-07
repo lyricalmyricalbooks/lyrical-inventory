@@ -51,7 +51,7 @@ describe('artist payout request', () => {
 
   it('stamps the paid-to-date baseline the request is measured against', () => {
     const fn = mainJs.match(/async function requestArtistPayout\([\s\S]*?\r?\n\}\r?\n/)[0];
-    expect(fn).toContain('paidAtRequest: roundCents(stats.totalPaidToArtist || 0)');
+    expect(fn).toContain('paidAtRequest: roundCents((stats.totalPaidToArtist || 0) + (stats.totalOffset || 0))');
     // A stable id keeps payoutRequests row-mergeable in the metadata document
     // (mergeMetadata only merges row-wise when every entry carries an id).
     expect(fn).toContain('id: makeEventId()');

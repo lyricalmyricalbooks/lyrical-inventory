@@ -7888,7 +7888,8 @@ async function saveArtistPayout(bookId) {
   const form = readArtistPayoutForm(bookId);
   // A fully-netted payment sends no cash at all: an empty amount is then valid
   // and records a zero-cash payout that carries only the offsets.
-  const cashFree = !!plan && !(Number.isFinite(form.amount) && form.amount > 0);
+  const amountBox = document.getElementById(`ap-amount-${bookId}`);
+  const cashFree = !!plan && !(amountBox && amountBox.value.trim() !== '');
   const { code, isFx, rate } = form;
   const amount = cashFree ? 0 : form.amount;
   const nativeAmount = cashFree ? 0 : form.nativeAmount;
@@ -7972,7 +7973,7 @@ async function requestArtistPayout(bookId) {
     // The lifetime paid-to-artist total as it stands right now. Everything paid
     // beyond this counts toward covering this request, which is what lets the
     // request close itself without depending on payout dates.
-    paidAtRequest: roundCents(stats.totalPaidToArtist || 0),
+    paidAtRequest: roundCents((stats.totalPaidToArtist || 0) + (stats.totalOffset || 0)),
   };
   try {
     if (!s.payoutRequests) s.payoutRequests = [];

@@ -213,7 +213,7 @@ describe('splitState / stitchState', () => {
   const state = {
     stock: 5, sold: 2, revenue: 40, chStats: {}, invoiceSeq: 3,
     hist: [sale(1)], ledger: [{ id: 1 }], expenses: [], stores: [],
-    artistTransfers: [], artistPayouts: [], doneIds: ['a'],
+    artistTransfers: [], artistPayouts: [], artistReceivables: [], doneIds: ['a'],
     invoices: [], artistPaymentLink: '',
   };
 
