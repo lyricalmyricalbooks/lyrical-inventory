@@ -520,3 +520,17 @@
 @media (max-width: 768px) and (prefers-reduced-motion: reduce) {
   .tab-panel .phone-record-toggle { transition: none; }
 }
+
+/* Register (Fair Mode), Riso Press: the tiles and buttons had the ink outline but sat flat
+   on the page, unlike every card and button around them. Each gets the same hard offset
+   shadow and presses into it when tapped, so a tile reads as a physical key. A tile that
+   is in the cart keeps its ink outline (the gold wash carries the state) so the shadow
+   does not change colour under the thumb. */
+@media (max-width: 768px) {
+  .fm-tile-add, .fm-today-btn, .fm-pay-btn, .fm-undo-btn { box-shadow: var(--elev-1); touch-action: manipulation; }
+  .fm-tile-add { transition: transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast) var(--ease-spring), background-color var(--dur-fast) ease; }
+  .fm-tile.is-in-cart .fm-tile-add { border-color: var(--rule-ink); }
+  .fm-tile.is-out .fm-tile-add { box-shadow: none; }
+  :is(.fm-tile-add, .fm-today-btn, .fm-pay-btn, .fm-undo-btn):active:not(:disabled) { transform: translate(2px, 2px); box-shadow: none; }
+  .fm-undo-btn:disabled { box-shadow: none; }
+}
