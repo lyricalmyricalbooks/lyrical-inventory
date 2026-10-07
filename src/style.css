@@ -20640,6 +20640,17 @@ button[onclick="refreshUmamiStats()"]:active {
 .help-search-label { display:block; margin-top:var(--space-4); font-size:var(--text-xs); font-weight:800; text-transform:uppercase; letter-spacing:.06em; color:var(--content-secondary); }
 .help-search { width:100%; min-height:44px; margin-top:var(--space-2); padding:10px 12px; font-size:var(--text-md); border:2px solid var(--rule-ink); border-radius:0; background:var(--surface-raised); color:var(--content-primary); }
 .help-empty { margin-top:var(--space-4); color:var(--content-muted); }
+.help-empty p { margin:0 0 var(--space-2); }
+.help-aud[hidden] { display:none; }
+.help-aud { display:flex; flex-wrap:wrap; gap:0; margin-top:var(--space-4); }
+.help-aud-btn { min-height:44px; padding:8px 16px; border:2px solid var(--rule-ink); border-radius:0; background:var(--surface-raised); color:var(--content-primary); font-weight:800; font-size:var(--text-sm); cursor:pointer; }
+.help-aud-btn + .help-aud-btn { border-left:0; }
+.help-aud-btn[aria-pressed="true"] { background:var(--ink); color:var(--on-inverse); }
+.help-aud-btn:focus-visible, .help-tool-btn:focus-visible { outline:2px solid var(--gold); outline-offset:2px; }
+.help-tools { display:flex; align-items:center; justify-content:space-between; gap:var(--space-2); margin-top:var(--space-2); min-height:44px; }
+.help-count { font-size:var(--text-sm); color:var(--content-muted); }
+.help-tool-btn { min-height:44px; padding:8px 12px; border:2px solid var(--rule-ink); border-radius:0; background:transparent; color:var(--content-primary); font-weight:700; font-size:var(--text-sm); cursor:pointer; }
+.help-tool-btn:hover, .help-aud-btn:hover:not([aria-pressed="true"]) { background:var(--surface-inset); }
 .help-sec { margin-top:var(--space-5); }
 .help-sec-title { font-family:var(--font-display); font-size:var(--text-lg); font-weight:400; text-transform:uppercase; color:var(--content-primary); margin:0 0 var(--space-2); }
 .help-q { border:2px solid var(--rule-ink); background:var(--surface-raised); box-shadow:var(--elev-1); margin-bottom:var(--space-2); }
