@@ -26,17 +26,17 @@ const moreLabels = () => [...document.querySelectorAll('#more-sheet-body .snav:n
 
 test('bottom bar has three everyday destinations plus More', () => {
   const buttons = [...document.querySelectorAll('#mnav .mnav-btn')];
-  expect(buttons.map((b) => b.querySelector('.mnav-label').textContent)).toEqual(['Home', 'Sell', 'Orders', 'More']);
+  expect(buttons.map((b) => b.querySelector('.mnav-label').textContent)).toEqual(['Home', 'Sell', 'Manual entry', 'More']);
 });
 
 test('More sheet lists every sidebar tool not already on the bottom bar', () => {
   nav.openMoreSheet();
   expect(document.getElementById('more-sheet').hasAttribute('open')).toBe(true);
   const labels = moreLabels();
-  for (const tool of ['Dashboard', 'To-do', 'Tax Centre', 'Payments', 'Customers', 'Shipping', 'Backups', 'History', 'Expenses', 'Manual entry']) {
+  for (const tool of ['Dashboard', 'To-do', 'Tax Centre', 'Payments', 'Customers', 'Shipping', 'Backups', 'History', 'Expenses', 'Website orders']) {
     expect(labels).toContain(tool);
   }
-  for (const onBar of ['Event POS', 'Website orders']) {
+  for (const onBar of ['Event POS', 'Manual entry']) {
     expect(labels).not.toContain(onBar);
   }
   // Cloned ids would duplicate the sidebar's (badges are looked up by id).
@@ -103,11 +103,11 @@ test('authors never land on the publisher-only Today page', () => {
   expect(mainJs).toMatch(/name === 'today'\)\) name = 'dashboard';/);
 });
 
-test('manual entry belongs to Sell and only one destination is announced', () => {
+test('manual entry has its own destination and only one destination is announced', () => {
   nav.syncMoreNavState('manual');
   const selected = document.querySelectorAll('#mnav [aria-current="page"]');
   expect(selected).toHaveLength(1);
-  expect(selected[0].textContent).toContain('Sell');
+  expect(selected[0].textContent).toContain('Manual entry');
   expect(document.querySelector('#tab-pos .phone-sell-head [onclick="switchTab(\'manual\')"]')).not.toBeNull();
 });
 
