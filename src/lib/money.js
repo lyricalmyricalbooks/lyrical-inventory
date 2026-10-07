@@ -61,6 +61,11 @@ export const fmtNum = (n) => Number(n).toFixed(2);
 // money so accumulated error can't grow as the number of transactions grows.
 export const roundCents = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
+// Date.toLocaleDateString with options builds a fresh Intl.DateTimeFormat on
+// every call (~150x slower than reusing one), and fmtD runs once per row in the
+// sales, expense and invoice tables, so build the formatter once.
+const DATE_FMT_EN_GB = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
 export const fmtD = (d) => {
   if (!d || d === '—' || d === 'Invalid Date') return '—';
   let dt = new Date(d);
@@ -69,7 +74,7 @@ export const fmtD = (d) => {
     if (!isNaN(noon.getTime())) dt = noon;
   }
   if (isNaN(dt.getTime())) return '—';
-  return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  return DATE_FMT_EN_GB.format(dt);
 };
 
 export function getBookCurrencyCode(book) {
