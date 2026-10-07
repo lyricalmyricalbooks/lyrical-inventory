@@ -17,7 +17,7 @@ import { registerSW } from 'virtual:pwa-register';
 import { canonicalExpenseCategory } from './lib/expense-categories.js';
 import { calcArtistEarnings, tierEffectiveCap, describePayout, payoutRequestCovered } from './lib/earnings.js';
 import { createStripePriceAndLink } from './lib/stripe-payment-link.js';
-import { calculateBreakEven, breakEvenTierMove, readProductionCostInput } from './lib/breakeven.js';
+import { calculateBreakEven, breakEvenTierMove, applyBreakEvenTierMove, readProductionCostInput } from './lib/breakeven.js';
 import { computeTallyRowHeights, computeQrCardSize, estimateTallyPages, estimateQrPages } from './lib/print-sheet-layout.js';
 import { escapeHtml } from './lib/html.js';
 import { normalizeLetterhead, renderLetterhead } from './lib/letterhead.js';
@@ -2245,7 +2245,7 @@ async function saveBookFromModal() {
     recomputeAfters(states[id], book);
     await saveState(id);
   }
-  if (moveTier) book.profitTiers[0].revenueUpTo = tierMove.to;
+  if (moveTier) applyBreakEvenTierMove(book.profitTiers, tierMove);
   // Re-adding a previously-deleted default removes it from the tombstone list.
   if (DEFAULT_BOOKS[id]) {
     const i = deletedDefaultIds.indexOf(id);
@@ -15697,7 +15697,7 @@ async function saveProductionCosts() {
   const moveTiers = moves.length ? await confirmBreakEvenTierMoves(moves) : false;
 
   edits.forEach(e => { e.book.productionCost = e.value; });
-  if (moveTiers) moves.forEach(({ book, move }) => { book.profitTiers[0].revenueUpTo = move.to; });
+  if (moveTiers) moves.forEach(({ book, move }) => applyBreakEvenTierMove(book.profitTiers, move));
 
   await persistProductionCosts();
   // Persist synced profitTiers so the threshold survives a page reload
