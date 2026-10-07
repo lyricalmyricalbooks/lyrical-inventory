@@ -12,6 +12,92 @@ export function tierEffectiveCap(tier, productionCost = 0) {
   return Number.isFinite(tier.revenueUpTo) && tier.revenueUpTo > 0 ? tier.revenueUpTo : null;
 }
 
+// How much of each receivable (money the artist owes the shop) has been netted
+// against royalties, keyed by receivable id.
+//
+// Derived from the payouts rather than stored on the receivable: a payout that
+// netted a debt carries `offsets: [{ id, amount }]`, so deleting or voiding that
+// payout reopens the debt on its own, with no second write to forget.
+//
+// Each debt can only ever absorb its own amount. Two devices netting the same
+// debt while offline would otherwise count it twice and understate what the
+// artist is owed; the surplus is ignored here and shows up honestly as extra
+// cash paid. An offset pointing at a voided or missing debt counts for nothing,
+// so forgiving a debt puts the royalty it had reduced back on what is owed.
+export function appliedOffsets(payouts, receivables) {
+  const raw = new Map();
+  for (const p of (payouts || [])) {
+    if (!p || p.voided || !Array.isArray(p.offsets)) continue;
+    for (const o of p.offsets) {
+      const amt = parseFloat(o && o.amount) || 0;
+      if (!o || o.id == null || amt <= 0) continue;
+      raw.set(String(o.id), roundCents((raw.get(String(o.id)) || 0) + amt));
+    }
+  }
+  const applied = new Map();
+  for (const r of (receivables || [])) {
+    if (!r || r.voided) continue;
+    const got = raw.get(String(r.id));
+    if (got) applied.set(String(r.id), Math.min(got, roundCents(parseFloat(r.amount) || 0)));
+  }
+  return applied;
+}
+
+// Debt one payout cleared by netting (as recorded on it), for display. The
+// balance math caps this per debt; a single row just reports what it says.
+export function payoutNetted(p) {
+  if (!p || !Array.isArray(p.offsets)) return 0;
+  let n = 0;
+  for (const o of p.offsets) n = roundCents(n + (parseFloat(o && o.amount) || 0));
+  return n;
+}
+
+// Still-unsettled part of one receivable, given what has been netted so far.
+export function receivableOpen(r, applied = 0) {
+  if (!r || r.voided) return 0;
+  const open = roundCents((parseFloat(r.amount) || 0) - (parseFloat(applied) || 0));
+  return open > 0 ? open : 0;
+}
+
+export function sumOpenReceivables(list, payouts) {
+  const applied = appliedOffsets(payouts, list);
+  let total = 0;
+  for (const r of (list || [])) total = roundCents(total + receivableOpen(r, applied.get(String(r.id))));
+  return total;
+}
+
+// Work out ONE combined payment: royalties owed to the artist minus what they
+// owe the shop, applied oldest receivable first. Pure — the caller records the
+// cash payout with `offsets: applied` in a single state write.
+//   cashToPay   : what to actually send (0 when the debt is as big or bigger)
+//   offset      : total debt cleared by this payment
+//   applied     : [{ id, amount }] per receivable, stored on the payout
+//   debtLeft    : debt still open afterwards (carries to future royalties)
+export function planNetPayout(owedToArtist, receivables, payouts) {
+  const owed = Math.max(0, roundCents(Number(owedToArtist) || 0));
+  const already = appliedOffsets(payouts, receivables);
+  const open = (receivables || [])
+    .filter(r => receivableOpen(r, already.get(String(r.id))) > 0)
+    .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+  let room = owed;
+  let offset = 0;
+  const applied = [];
+  for (const r of open) {
+    if (room <= 0) break;
+    const take = Math.min(receivableOpen(r, already.get(String(r.id))), room);
+    applied.push({ id: r.id, amount: roundCents(take) });
+    offset = roundCents(offset + take);
+    room = roundCents(room - take);
+  }
+  return {
+    gross: owed,
+    offset,
+    cashToPay: roundCents(owed - offset),
+    applied,
+    debtLeft: roundCents(sumOpenReceivables(receivables, payouts) - offset)
+  };
+}
+
 // Compute artist earnings, payouts, and held-funds reconciliation for one book.
 //   book  : { profitTiers, productionCost, ... }
 //   state : { hist, revenue, artistPayouts }
@@ -81,10 +167,21 @@ export function calcArtistEarnings(book, state) {
   // (publisherCutHeldByArtist) — it is NOT a payment to the artist, so it must
   // not reduce owedToArtist. owedToArtist still goes negative on genuine
   // overpayment (payouts exceeding net earnings).
-  const owedToArtist = roundCents(totalArtistEarned - totalPaidToArtist - heldByArtistShare);
+  // Royalties settled by netting against what the artist owes (capped per debt).
+  let totalOffset = 0;
+  for (const v of appliedOffsets(payouts, s.artistReceivables).values()) totalOffset = roundCents(totalOffset + v);
+  const owedToArtist = roundCents(totalArtistEarned - totalPaidToArtist - heldByArtistShare - totalOffset);
   const publisherCutHeldByArtist = roundCents(heldByArtistGross - heldByArtistShare);
+  // Other money the artist owes the shop (wholesale copies, advances, manual
+  // debts). Kept apart from owedToArtist so the royalty balance stays pure;
+  // netPayable is what actually changes hands if the two are offset.
+  const owedByArtist = sumOpenReceivables(s.artistReceivables, payouts);
+  const netPayable = roundCents(owedToArtist - owedByArtist);
 
   return {
+    owedByArtist,
+    netPayable,
+    totalOffset,
     totalArtistEarned,
     cumulativeRevenue,
     // Publisher keeps their cut of every sale, including the cut the artist is
@@ -117,7 +214,9 @@ export function payoutRequestCovered(req, stats) {
   const asked = Number(req.amount) || 0;
   const paidBefore = Number(req.paidAtRequest);
   if (!Number.isFinite(paidBefore)) return (stats.owedToArtist ?? 0) <= 0.01;
-  const paidSince = roundCents((stats.totalPaidToArtist || 0) - paidBefore);
+  // Money netted against what the artist owes settles a request just as cash
+  // does, and `paidAtRequest` is stamped on the same combined basis.
+  const paidSince = roundCents((stats.totalPaidToArtist || 0) + (stats.totalOffset || 0) - paidBefore);
   // Same half-cent deadband describePayout uses, so a request is not left open
   // by a rounding crumb.
   return paidSince >= asked - 0.005;

@@ -165,6 +165,20 @@ export function collectNativeAmounts(state, book) {
     }
   }
 
+  // What the artist owes the shop, and the slices of it already netted against
+  // payouts, move together. Each slice is restated at its DEBT's date (not the
+  // payout's) so debt and offsets use one rate and the open balance can't drift.
+  const debtDate = new Map();
+  for (const r of (s.artistReceivables || [])) {
+    debtDate.set(String(r.id), r.date || '');
+    push('receivable', `Artist debt ${r.date || ''}`, r, 'amount', r.date);
+  }
+  for (const p of (s.artistPayouts || [])) {
+    for (const o of (p.offsets || [])) {
+      push('receivable', `Artist debt netted ${p.date || ''}`, o, 'amount', debtDate.get(String(o.id)) || p.date);
+    }
+  }
+
   // Outstanding payout requests are quoted in the book's currency too. Missing
   // them left a pending request showing its old number under the new symbol.
   // They stamp on `currency` (their own pre-existing field), not `cur` — the

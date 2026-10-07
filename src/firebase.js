@@ -302,7 +302,7 @@ window._fbSave = async (bookId, json, opts = {}) => {
       // either lands entirely or not at all, and the not-at-all case is already
       // handled (the caller queues and retries).
       //
-      // Bounded by ALL_PARTS (8 documents), so Firestore's 500-write batch
+      // Bounded by ALL_PARTS (9 documents), so Firestore's 500-write batch
       // limit is not reachable here.
       if (pending.length) {
         const batch = writeBatch(fs);

@@ -72,6 +72,17 @@ describe('collectNativeAmounts', () => {
     expect(scopes).toEqual(new Set(['book', 'hist', 'ledger', 'store', 'payout', 'transfer', 'totals']));
   });
 
+  it('moves artist debts and the slices netted against payouts together', () => {
+    const s = state({
+      artistReceivables: [{ id: 'd1', date: '2026-03-01', amount: 30 }],
+      artistPayouts: [{ id: 1, date: '2026-04-01', amount: 50, offsets: [{ id: 'd1', amount: 30 }] }],
+    });
+    const fields = collectNativeAmounts(s, book()).filter(f => f.scope === 'receivable');
+    expect(fields).toHaveLength(2);
+    // Both are restated at the debt's date, so one rate applies to debt and offset.
+    expect(new Set(fields.map(f => f.date))).toEqual(new Set(['2026-03-01']));
+  });
+
   it('includes a payment convertedTotal but never the foreign amount paid', () => {
     const s = state({
       hist: [nativeSale({ payment: { currency: 'USD', amount: 36, rate: 1.41, convertedTotal: 50.78 } })],

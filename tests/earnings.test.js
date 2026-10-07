@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calcArtistEarnings, tierEffectiveCap, payoutRequestCovered } from '../src/lib/earnings.js';
+import { calcArtistEarnings, tierEffectiveCap, payoutRequestCovered, planNetPayout, sumOpenReceivables, payoutNetted } from '../src/lib/earnings.js';
 
 const tier = (label, revenueUpTo, artistPct) => ({ label, revenueUpTo, artistPct });
 const sale = (qty, price, extra = {}) => ({ qty, price, ...extra });
@@ -186,5 +186,114 @@ describe('payoutRequestCovered', () => {
   it('is never covered without a request or stats', () => {
     expect(payoutRequestCovered(null, stats(10))).toBe(false);
     expect(payoutRequestCovered({ amount: 1 }, null)).toBe(false);
+  });
+});
+
+describe('artist receivables and net payout', () => {
+  const book = { profitTiers: [tier('Final', null, 50)] };
+  const rec = (id, amount, date, extra = {}) => ({ id, amount, date, ...extra });
+
+  it('subtracts what the artist owes from royalties owed', () => {
+    const r = calcArtistEarnings(book, {
+      hist: [sale(10, 20)],
+      artistReceivables: [rec('a', 30, '2026-01-01')]
+    });
+    expect(r.owedToArtist).toBe(100);
+    expect(r.owedByArtist).toBe(30);
+    expect(r.netPayable).toBe(70);
+  });
+
+  it('ignores voided receivables and counts partial offsets from payouts', () => {
+    const payouts = [
+      { amount: 5, offsets: [{ id: 'c', amount: 0.05 }, { id: 'b', amount: 20 }] },
+      { amount: 5, voided: true, offsets: [{ id: 'c', amount: 9 }] }
+    ];
+    expect(sumOpenReceivables([
+      rec('a', 30, 'd', { voided: true }),
+      rec('b', 20, 'd'),
+      rec('c', 10.1, 'd')
+    ], payouts)).toBe(10.05);
+  });
+
+  it('a payout that netted a debt lowers royalties owed and the debt equally', () => {
+    const payouts = [{ amount: 70, offsets: [{ id: 'a', amount: 30 }] }];
+    const r = calcArtistEarnings(book, { hist: [sale(10, 20)], artistPayouts: payouts, artistReceivables: [rec('a', 30, 'd')] });
+    expect(r.totalOffset).toBe(30);
+    expect(r.owedToArtist).toBe(0);
+    expect(r.owedByArtist).toBe(0);
+    expect(r.netPayable).toBe(0);
+  });
+
+  it('deleting that payout reopens the debt', () => {
+    const r = calcArtistEarnings(book, { hist: [sale(10, 20)], artistPayouts: [], artistReceivables: [rec('a', 30, 'd')] });
+    expect(r.owedByArtist).toBe(30);
+    expect(r.owedToArtist).toBe(100);
+  });
+
+  it('pays one net amount when royalties exceed the debt', () => {
+    const p = planNetPayout(100, [rec('a', 30, '2026-01-01')]);
+    expect(p).toEqual({ gross: 100, offset: 30, cashToPay: 70, applied: [{ id: 'a', amount: 30 }], debtLeft: 0 });
+  });
+
+  it('pays nothing and carries the rest when the debt is larger', () => {
+    const p = planNetPayout(40, [rec('b', 25, '2026-02-01'), rec('a', 30, '2026-01-01')]);
+    expect(p.cashToPay).toBe(0);
+    expect(p.applied).toEqual([{ id: 'a', amount: 30 }, { id: 'b', amount: 10 }]);
+    expect(p.debtLeft).toBe(15);
+  });
+
+  it('never offsets when nothing is owed to the artist', () => {
+    const p = planNetPayout(-5, [rec('a', 30, 'd')]);
+    expect(p.offset).toBe(0);
+    expect(p.cashToPay).toBe(0);
+    expect(p.debtLeft).toBe(30);
+  });
+
+  it('keeps cents exact', () => {
+    const p = planNetPayout(0.3, [rec('a', 0.1, 'd'), rec('b', 0.2, 'e')]);
+    expect(p.offset).toBe(0.3);
+    expect(p.cashToPay).toBe(0);
+  });
+
+  it('two devices netting the same debt cannot count it twice', () => {
+    const payouts = [
+      { id: 1, amount: 70, offsets: [{ id: 'a', amount: 30 }] },
+      { id: 2, amount: 70, offsets: [{ id: 'a', amount: 30 }] }
+    ];
+    const r = calcArtistEarnings(book, { hist: [sale(10, 20)], artistPayouts: payouts, artistReceivables: [rec('a', 30, 'd')] });
+    expect(r.totalOffset).toBe(30);       // capped at the debt
+    expect(r.owedByArtist).toBe(0);
+    expect(r.owedToArtist).toBe(100 - 140 - 30); // honest: the artist was overpaid cash
+  });
+
+  it('forgiving (voiding) a debt puts the royalty it reduced back on what is owed', () => {
+    const payouts = [{ id: 1, amount: 70, offsets: [{ id: 'a', amount: 30 }] }];
+    const r = calcArtistEarnings(book, { hist: [sale(10, 20)], artistPayouts: payouts, artistReceivables: [rec('a', 30, 'd', { voided: true })] });
+    expect(r.totalOffset).toBe(0);
+    expect(r.owedToArtist).toBe(30);
+  });
+
+  it('a payout request is settled by cash plus the debt netted in the same payment', () => {
+    const base = calcArtistEarnings(book, { hist: [sale(10, 20)], artistReceivables: [rec('a', 30, 'd')] });
+    const req = { amount: 100, paidAtRequest: 0 };
+    expect(payoutRequestCovered(req, base)).toBe(false);
+    const after = calcArtistEarnings(book, {
+      hist: [sale(10, 20)], artistReceivables: [rec('a', 30, 'd')],
+      artistPayouts: [{ id: 1, amount: 70, offsets: [{ id: 'a', amount: 30 }] }]
+    });
+    expect(payoutRequestCovered(req, after)).toBe(true);
+  });
+
+  it('applies debts oldest first and skips ones already fully netted', () => {
+    const payouts = [{ id: 1, amount: 0, offsets: [{ id: 'old', amount: 20 }] }];
+    const p = planNetPayout(25, [rec('new', 10, '2026-03-01'), rec('old', 20, '2026-01-01')], payouts);
+    expect(p.applied).toEqual([{ id: 'new', amount: 10 }]);
+    expect(p.cashToPay).toBe(15);
+  });
+
+  it('payoutNetted reports a row\'s own offsets and tolerates junk', () => {
+    expect(payoutNetted({ offsets: [{ id: 'a', amount: 10.1 }, { id: 'b', amount: '0.2' }, null] })).toBe(10.3);
+    expect(payoutNetted({ amount: 5 })).toBe(0);
+    expect(payoutNetted(null)).toBe(0);
   });
 });

@@ -30,6 +30,7 @@
 //      two currencies together.
 
 import { fmt, entryNativeCode, getBookCurrencyCode } from './money.js';
+import { payoutNetted } from './earnings.js';
 
 /** How many events the feed returns unless the caller asks for more. */
 export const ACTIVITY_LIMIT = 40;
@@ -286,7 +287,9 @@ function eventsForBook(book, state) {
     const cur = entryNativeCode(p, book);
     const ev = event({
       book, date: p.date, tie: p.id, kind: 'payout', icon: '💸',
-      text: `Paid ${book?.author || 'the artist'} their share of ${book?.title || 'this book'}`,
+      text: payoutNetted(p) > 0.005
+        ? `Paid ${book?.author || 'the artist'} their share of ${book?.title || 'this book'}, netting ${fmt(payoutNetted(p), cur)} they owed`
+        : `Paid ${book?.author || 'the artist'} their share of ${book?.title || 'this book'}`,
       amount: `−${fmt(Math.abs(Number(p.amount) || 0), cur)}`,
       tone: 'neg',
     });

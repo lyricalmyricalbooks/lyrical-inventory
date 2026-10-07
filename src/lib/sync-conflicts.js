@@ -484,6 +484,10 @@ export function describeRecord(entry) {
       const amt = money(row.amount);
       return `Payment to the artist${on(row.date)}${amt ? ` — ${amt}` : ''}`;
     }
+    case 'artistReceivables': {
+      const amt = money(row.amount);
+      return `Money the artist owes you${on(row.date)}${amt ? ` — ${amt}` : ''}`;
+    }
     case 'invoices':
       return `Invoice ${row.num || ''}${on(row.date)}`.replace(/\s+/g, ' ').trim();
     case 'payoutRequests': {
