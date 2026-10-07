@@ -4857,28 +4857,40 @@ const helpInAudience = (el, aud) => { const a = helpAudienceOf(el); return a ===
 
 function helpPage() { return document.querySelector('#tab-help .help-page'); }
 
+// Only a signed-in publisher (not in Author view) may see the publisher guide.
+const canSeePublisherHelp = () => !!window.IS_PUBLISHER && !isAuthor();
+
 export function setHelpAudience(aud) {
   const page = helpPage();
   if (!page || (aud !== 'artist' && aud !== 'publisher')) return;
+  if (aud === 'publisher' && !canSeePublisherHelp()) aud = 'artist';
   page.dataset.audience = aud;
   page.querySelectorAll('.help-aud-btn').forEach((btn) => btn.setAttribute('aria-pressed', String(btn.dataset.aud === aud)));
   filterHelp($('help-search')?.value || '');
 }
 
-// Opens the guide that matches who is signed in, the first time Help is shown.
+// Runs every time Help opens: artists get only their guide (no switch at all);
+// a publisher starts on the publisher guide the first time.
 function initHelpAudience() {
   const page = helpPage();
-  if (!page || page.dataset.audienceChosen) return;
-  page.dataset.audienceChosen = '1';
-  // Opening one question by hand keeps the Open all / Close all label honest.
-  page.addEventListener('toggle', syncHelpToggleLabel, true);
-  setHelpAudience(window.IS_PUBLISHER && !isAuthor() ? 'publisher' : 'artist');
+  if (!page) return;
+  const pub = canSeePublisherHelp();
+  const sw = page.querySelector('.help-aud');
+  if (sw) sw.hidden = !pub;
+  if (!page.dataset.audienceChosen) {
+    page.dataset.audienceChosen = '1';
+    // Opening one question by hand keeps the Open all / Close all label honest.
+    page.addEventListener('toggle', syncHelpToggleLabel, true);
+    setHelpAudience(pub ? 'publisher' : 'artist');
+  } else if (!pub && page.dataset.audience !== 'artist') {
+    setHelpAudience('artist');
+  }
 }
 
 export function filterHelp(text) {
   const page = helpPage();
   if (!page) return;
-  const aud = page.dataset.audience || 'artist';
+  const aud = canSeePublisherHelp() ? (page.dataset.audience || 'artist') : 'artist';
   const words = foldHelpText(text).split(/\s+/).filter(Boolean);
   let shown = 0;
   let otherHits = 0;
@@ -4888,7 +4900,7 @@ export function filterHelp(text) {
     sec.querySelectorAll('.help-q').forEach((q) => {
       const hay = foldHelpText(q.textContent);
       const match = words.every((w) => hay.includes(w));
-      if (!mine) { if (words.length && match) otherHits++; q.hidden = false; return; }
+      if (!mine) { if (words.length && match && canSeePublisherHelp()) otherHits++; q.hidden = false; return; }
       q.hidden = !match;
       // Clearing the search folds back the questions it opened.
       q.open = words.length ? match : false;

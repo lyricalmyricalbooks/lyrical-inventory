@@ -20641,6 +20641,7 @@ button[onclick="refreshUmamiStats()"]:active {
 .help-search { width:100%; min-height:44px; margin-top:var(--space-2); padding:10px 12px; font-size:var(--text-md); border:2px solid var(--rule-ink); border-radius:0; background:var(--surface-raised); color:var(--content-primary); }
 .help-empty { margin-top:var(--space-4); color:var(--content-muted); }
 .help-empty p { margin:0 0 var(--space-2); }
+.help-aud[hidden] { display:none; }
 .help-aud { display:flex; flex-wrap:wrap; gap:0; margin-top:var(--space-4); }
 .help-aud-btn { min-height:44px; padding:8px 16px; border:2px solid var(--rule-ink); border-radius:0; background:var(--surface-raised); color:var(--content-primary); font-weight:800; font-size:var(--text-sm); cursor:pointer; }
 .help-aud-btn + .help-aud-btn { border-left:0; }
