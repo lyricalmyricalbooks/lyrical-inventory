@@ -12,6 +12,51 @@ export function tierEffectiveCap(tier, productionCost = 0) {
   return Number.isFinite(tier.revenueUpTo) && tier.revenueUpTo > 0 ? tier.revenueUpTo : null;
 }
 
+// Still-unsettled part of one receivable (money the artist owes the shop).
+// `offsetApplied` is the running total already netted against payouts.
+export function receivableOpen(r) {
+  if (!r || r.voided) return 0;
+  const open = roundCents((parseFloat(r.amount) || 0) - (parseFloat(r.offsetApplied) || 0));
+  return open > 0 ? open : 0;
+}
+
+export function sumOpenReceivables(list) {
+  let total = 0;
+  for (const r of (list || [])) total = roundCents(total + receivableOpen(r));
+  return total;
+}
+
+// Work out ONE combined payment: royalties owed to the artist minus what they
+// owe the shop, applied oldest receivable first. Pure — the caller records the
+// cash payout and stamps `applied` onto the receivables in a single state write.
+//   cashToPay   : what to actually send (0 when the debt is as big or bigger)
+//   offset      : total debt cleared by this payment
+//   applied     : [{ id, amount }] per receivable, for the audit trail / undo
+//   debtLeft    : debt still open afterwards (carries to future royalties)
+export function planNetPayout(owedToArtist, receivables) {
+  const owed = Math.max(0, roundCents(Number(owedToArtist) || 0));
+  const open = (receivables || [])
+    .filter(r => receivableOpen(r) > 0)
+    .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+  let room = owed;
+  let offset = 0;
+  const applied = [];
+  for (const r of open) {
+    if (room <= 0) break;
+    const take = Math.min(receivableOpen(r), room);
+    applied.push({ id: r.id, amount: roundCents(take) });
+    offset = roundCents(offset + take);
+    room = roundCents(room - take);
+  }
+  return {
+    gross: owed,
+    offset,
+    cashToPay: roundCents(owed - offset),
+    applied,
+    debtLeft: roundCents(sumOpenReceivables(receivables) - offset)
+  };
+}
+
 // Compute artist earnings, payouts, and held-funds reconciliation for one book.
 //   book  : { profitTiers, productionCost, ... }
 //   state : { hist, revenue, artistPayouts }
@@ -83,8 +128,15 @@ export function calcArtistEarnings(book, state) {
   // overpayment (payouts exceeding net earnings).
   const owedToArtist = roundCents(totalArtistEarned - totalPaidToArtist - heldByArtistShare);
   const publisherCutHeldByArtist = roundCents(heldByArtistGross - heldByArtistShare);
+  // Other money the artist owes the shop (wholesale copies, advances, manual
+  // debts). Kept apart from owedToArtist so the royalty balance stays pure;
+  // netPayable is what actually changes hands if the two are offset.
+  const owedByArtist = sumOpenReceivables(s.artistReceivables);
+  const netPayable = roundCents(owedToArtist - owedByArtist);
 
   return {
+    owedByArtist,
+    netPayable,
     totalArtistEarned,
     cumulativeRevenue,
     // Publisher keeps their cut of every sale, including the cut the artist is
