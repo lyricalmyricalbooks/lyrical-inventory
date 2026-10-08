@@ -66,14 +66,64 @@ export function stripeSalePlan(payment = {}, {
   const foreign = bookCurrency && currency !== String(bookCurrency).toUpperCase();
   if (foreign && (!(conversionRate > 0) || !Number.isFinite(conversionRate))) return { action: 'review', reason: 'currency' };
 
-  const price = Number(book.listPrice);
-  if (!(price > 0)) return { action: 'review', reason: 'no-price' };
-  const convertedAmount = foreign ? roundCents(Number(payment.amount) * conversionRate) : Number(payment.amount);
-  const copies = convertedAmount / price;
-  const qty = Math.round(copies);
-  if (qty < 1 || Math.abs(copies - qty) * price > 0.01) return { action: 'review', reason: 'amount' };
+  // Counted in the money the customer paid wherever the app knows what a copy
+  // cost in it. A converted amount almost never lands on the list price to the
+  // cent, so converting first would send every such sale back for review.
+  const unit = paidUnitPrice(payment, book, bookCurrency);
+  let qty;
+  if (unit) {
+    qty = wholeCopies(payment.amount, unit.price);
+  } else {
+    const price = Number(book.listPrice);
+    if (!(price > 0)) return { action: 'review', reason: 'no-price' };
+    const convertedAmount = foreign ? roundCents(Number(payment.amount) * conversionRate) : Number(payment.amount);
+    qty = wholeCopies(convertedAmount, price);
+  }
+  if (!qty) return { action: 'review', reason: 'amount' };
   if (qty > MAX_AUTO_QTY) return { action: 'review', reason: 'too-many' };
   return { action: 'record', bookId, qty };
+}
+
+// Every payment link the app makes for a book at a set price says that price
+// in its description: "Un Fantastico Altrove (EUR 40.00)".
+const LINK_PRICE = /\(([A-Z]{3}) (\d+(?:\.\d{1,2})?)\)\s*$/;
+
+/**
+ * What one copy cost in the currency the customer paid, when the app knows it
+ * for certain — so a sale in euros is counted in euros, not guessed through an
+ * exchange rate. Strongest first:
+ *
+ *   1. the price written on the app's own fixed-price payment link (those
+ *      links carry `override: 'true'` and sell exactly one copy each);
+ *   2. the book's list price, when the payment is in the book's own currency;
+ *   3. the price the book was given in that currency for its payment QR code.
+ *
+ * Returns { price, source } or null.
+ */
+export function paidUnitPrice(payment = {}, book = null, bookCurrency = '') {
+  if (!payment || !book) return null;
+  const currency = String(payment.currency || '').toUpperCase();
+  if (!/^[A-Z]{3}$/.test(currency)) return null;
+  if (payment.metadata?.override === 'true') {
+    const match = LINK_PRICE.exec(String(payment.description || ''));
+    if (match && match[1] === currency && Number(match[2]) > 0) return { price: Number(match[2]), source: 'link' };
+  }
+  if (currency === String(bookCurrency || '').toUpperCase()) {
+    const price = Number(book.listPrice);
+    return price > 0 ? { price, source: 'list' } : null;
+  }
+  const set = Number(book.priceOverrides?.[currency]);
+  return set > 0 && Number.isFinite(set) ? { price: set, source: 'book' } : null;
+}
+
+/** Whole copies `amount` pays for at `price` (to the cent), or 0 when it isn't a whole number of them. */
+export function wholeCopies(amount, price) {
+  // In whole cents, so "within a cent" isn't decided by floating-point dust.
+  const paid = Math.round(Number(amount) * 100);
+  const each = Math.round(Number(price) * 100);
+  if (!(each > 0) || !Number.isFinite(paid)) return 0;
+  const qty = Math.round(paid / each);
+  return qty >= 1 && Math.abs(paid - qty * each) <= 1 ? qty : 0;
 }
 
 /** What the alert says once a sweep has recorded what it could. */
