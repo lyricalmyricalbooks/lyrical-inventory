@@ -672,3 +672,22 @@
 @media (max-width: 768px) and (prefers-reduced-motion: reduce) {
   #tab-website .order-card:not(.is-skeleton) { transition: none; }
 }
+
+/* Section picker on a phone, Riso Press: the dropdown that replaces a page's sub-tabs (Settings,
+   Tax Centre...) was a hairline box under a plain grey sentence. The label is now the micro-caps
+   tier, and the dropdown is the same inked slip as the buttons around it: 2px ink outline, caps
+   label, hard offset shadow, pressing in when tapped. It also restores the arrow's room on the
+   right, which the earlier padding shorthand had swallowed so long names ran under the arrow. */
+@media (max-width: 768px) {
+  .phone-section-picker > span { font: 800 var(--text-2xs) var(--font-ui); text-transform: uppercase; letter-spacing: var(--tracking-caps); color: var(--content-secondary); }
+  .phone-section-picker select {
+    padding-right: 40px; border: var(--stroke) solid var(--rule-ink); background-color: var(--surface-card);
+    box-shadow: var(--elev-1); font: 800 var(--text-sm) var(--font-ui); text-transform: uppercase; letter-spacing: var(--tracking-caps);
+    transition: transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast) var(--ease-spring);
+  }
+  .phone-section-picker select:active { transform: translate(2px, 2px); box-shadow: none; }
+  .phone-section-picker select:focus-visible { box-shadow: var(--elev-1), var(--focus-ring-halo); }
+}
+@media (max-width: 768px) and (prefers-reduced-motion: reduce) {
+  .phone-section-picker select { transition: none; }
+}
