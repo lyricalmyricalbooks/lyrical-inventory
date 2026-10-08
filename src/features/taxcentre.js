@@ -318,6 +318,29 @@ function _tcSaveLedgerPrefs() {
   } catch (e) { /* ignore quota / private-mode errors */ }
 }
 
+// Offer the coming year even before its first entry. Record years outside the
+// standard range remain accessible, including records synchronized offline.
+function _tcRefreshYearOptions(currentYear = new Date().getFullYear()) {
+  const selects = [$('tc-year'), $('tc-year-ledger')].filter(Boolean);
+  if (!selects.length) return;
+  const selected = selects[0].value || 'all';
+  const years = new Set();
+  for (let year = currentYear + 1; year >= 2023; year--) years.add(year);
+  const addYear = value => {
+    if (/^[1-9]\d{3}$/.test(value)) years.add(Number(value));
+  };
+  addYear(selected);
+  for (const row of _tcBuildLedger('all').allLedger) {
+    addYear(String(row.date || '').slice(0, 4));
+  }
+  const options = '<option value="all">All Time</option>' +
+    [...years].sort((a, b) => b - a).map(year => `<option value="${year}">${year}</option>`).join('');
+  for (const select of selects) {
+    if (select.innerHTML !== options) select.innerHTML = options;
+    select.value = selected;
+  }
+}
+
 function _tcRestoreLedgerPrefs() {
   if (_tcPrefsRestored) return;
   _tcPrefsRestored = true;
@@ -3441,6 +3464,8 @@ function renderTaxCenter() {
   if (TAX_CENTER?.settings?.geminiKey) _warmGeminiModelCache(TAX_CENTER.settings.geminiKey);
   // Preserve active subtab state
   switchTaxCenterSubTab(activeTaxCenterSubTab);
+  // Populate years before restoring a saved selection such as next year.
+  _tcRefreshYearOptions();
   // Restore the saved ledger view (year + search + type) before reading the year.
   _tcRestoreLedgerPrefs();
   _tcRenderStatusHeaders();
