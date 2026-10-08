@@ -23270,9 +23270,9 @@ async function reconUpdateDefaults(id, grouped = false, reset = false, retry = f
   }
   // A different book has a different price, so the copy count follows it
   // unless she has typed one herself.
-  const qtyInput = document.getElementById(`${prefix}qty-${id}`);
-  if (reset && qtyInput && qtyInput.dataset.manual !== '1') qtyInput.value = String(_reconDefaultQty(p, bookId));
   const currency = normalizeCurrencyCode(document.getElementById(`${prefix}currency-${id}`)?.value, '');
+  const qtyInput = document.getElementById(`${prefix}qty-${id}`);
+  if (reset && qtyInput && qtyInput.dataset.manual !== '1') qtyInput.value = String(_reconDefaultQty({ ...p, currency }, bookId));
   const bookCurrency = normalizeCurrencyCode(getBookCurrencyCode(BOOKS[bookId]), 'CAD');
   const pair = `${currency}:${bookCurrency}:${p.date}`;
   if (input.dataset.pair && input.dataset.pair !== pair) {
@@ -23457,7 +23457,7 @@ function _reconNeedCard(p, c) {
       <button class="btn tag sm" style="height:38px;" onclick="reconcileDismiss('${idSafe}')" title="Not an inventory sale (donation, test charge, etc.)">Dismiss</button>
     </div>
     <div id="recon-fx-${idSafe}" role="status" aria-live="polite" style="font-size:var(--text-xs);color:var(--text2);margin-top:6px;">Preparing the exchange rate…</div>
-    <div style="font-size:var(--text-xs);color:var(--text3);margin-top:6px;">Stripe’s paid amount is preserved. A payment-date reference rate and an order number fill automatically; you can edit them. The reference rate may differ from Stripe’s payout conversion.</div>
+    <div style="font-size:var(--text-xs);color:var(--text3);margin-top:6px;">Stripe’s paid amount is preserved. A payment-date reference rate, the number of copies and an order number fill automatically; you can edit them. The reference rate may differ from Stripe’s payout conversion.</div>
     </div>`;
 }
 
