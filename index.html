@@ -544,7 +544,7 @@
   <button type="button" class="mnav-btn" onclick="switchTab('today')"><span class="mnav-ic" aria-hidden="true">▦</span><span class="mnav-label">Home</span></button>
   <button type="button" class="mnav-btn" onclick="switchTab('pos')"><span class="mnav-ic" aria-hidden="true">🛒</span><span class="mnav-label">Sell</span></button>
   <button type="button" class="mnav-btn" onclick="switchTab('manual')"><span class="mnav-ic" aria-hidden="true">✎</span><span class="mnav-label">Manual entry</span></button>
-  <button type="button" class="mnav-btn" id="mnav-more" onclick="openMoreSheet()" aria-haspopup="dialog" aria-controls="more-sheet"><span class="mnav-ic" aria-hidden="true">☰</span><span class="mnav-label">More</span><span class="mnav-dot" id="mnav-more-dot" hidden></span></button>
+  <button type="button" class="mnav-btn" id="mnav-more" onclick="openMoreSheet()" aria-haspopup="dialog" aria-controls="more-sheet" aria-expanded="false"><span class="mnav-ic" aria-hidden="true">☰</span><span class="mnav-label">More</span><span class="mnav-dot" id="mnav-more-dot" hidden></span></button>
 </nav>
 <dialog class="more-sheet" id="more-sheet" aria-labelledby="more-sheet-title">
   <div class="more-sheet-head">
@@ -1598,7 +1598,7 @@
       <div class="form-group"><label for="m-num">Order #<span class="tip tip-mark" tabindex="0" role="img" aria-label="Help: Type the order or receipt number if you have one. No number? Leave it empty." data-tip="Type the order or receipt number if you have one. No number? Leave it empty.">?</span></label><input type="text" id="m-num" placeholder="optional"></div>
       <div class="form-group"><label for="m-qty">Qty<span class="tip tip-mark" tabindex="0" role="img" aria-label="Help: How many copies did you sell in this sale? Type the number." data-tip="How many copies did you sell in this sale? Type the number.">?</span></label><input type="number" inputmode="numeric" id="m-qty" value="1" min="1" oninput="phint()"></div>
       <div class="form-group">
-        <label id="m-price-label">Price paid<span class="tip tip-mark" tabindex="0" role="img" aria-label="Help: The price for ONE copy, not the total. Paid in another currency? Choose it in the box on the left first." data-tip="The price for ONE copy, not the total. Paid in another currency? Choose it in the box on the left first.">?</span> <span id="m-fx-inline-result" style="display:none;color:var(--gold-text);font-weight:600;margin-left:8px;"></span></label>
+        <label id="m-price-label" for="m-price">Price paid<span class="tip tip-mark" tabindex="0" role="img" aria-label="Help: The price for ONE copy, not the total. Paid in another currency? Choose it in the box on the left first." data-tip="The price for ONE copy, not the total. Paid in another currency? Choose it in the box on the left first.">?</span> <span id="m-fx-inline-result" style="display:none;color:var(--gold-text);font-weight:600;margin-left:8px;"></span></label>
         <div class="price-inline">
           <select id="m-price-cur" onchange="onManualCurrencyChange()">
             <option value="BOOK">Book currency</option>

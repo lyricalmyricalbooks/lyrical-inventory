@@ -14,7 +14,7 @@ const mainJs = readFileSync(path.join(__dirname, '../src/main.js'), 'utf8');
 const start = mainJs.indexOf('const MNAV_TABS');
 const end = mainJs.indexOf('Object.assign(window, { openMoreSheet, closeMoreSheet });');
 const block = mainJs.slice(start, end).replace(/export function/g, 'function');
-const api = new Function(`${block}; return { openMoreSheet, closeMoreSheet, syncMoreNavState };`);
+const api = new Function(`${block}; return { openMoreSheet, closeMoreSheet, syncMoreNavState, refreshMoreDot };`);
 
 let nav;
 beforeEach(() => {
@@ -132,4 +132,30 @@ test('reopening a manual sale preserves its entered price; a different book gets
   expect(document.getElementById('m-price').value).toBe('13.25');
   bookId = 'second'; make()();
   expect(document.getElementById('m-price').value).toBe('30.00');
+});
+
+test('the More dot lights up as soon as a badge appears, without a screen change', async () => {
+  const { observeSidebarBadges } = await import('../src/lib/phone-workspace.js');
+  const observer = observeSidebarBadges(document.getElementById('pub-sidebar'), nav.refreshMoreDot);
+  const dot = document.getElementById('mnav-more-dot');
+  const more = document.getElementById('mnav-more');
+  expect(dot.hidden).toBe(true);
+  expect(more.hasAttribute('aria-label')).toBe(false);
+  document.querySelector('#todo-sidebar-btn .nav-badge').hidden = false;
+  await Promise.resolve();
+  expect(dot.hidden).toBe(false);
+  expect(more.getAttribute('aria-label')).toBe('More, something needs your attention');
+  document.querySelector('#todo-sidebar-btn .nav-badge').hidden = true;
+  await Promise.resolve();
+  expect(dot.hidden).toBe(true);
+  expect(more.hasAttribute('aria-label')).toBe(false);
+  // Open Call's badge is shown through its inline style, not `hidden`.
+  document.getElementById('oc-nav-badge').style.display = '';
+  await Promise.resolve();
+  expect(dot.hidden).toBe(false);
+  observer.disconnect();
+});
+
+test('More says it is closed before it is ever opened', () => {
+  expect(document.getElementById('mnav-more').getAttribute('aria-expanded')).toBe('false');
 });

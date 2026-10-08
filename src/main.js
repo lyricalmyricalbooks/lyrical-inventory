@@ -7,7 +7,7 @@ import './style.css';
 import './styles/theme-dark.css';
 import './styles/phone.css';
 import { initPhoneLayouts } from './lib/phone-layout.js';
-import { createPhonePageMemory, initPhoneWorkspace } from './lib/phone-workspace.js';
+import { createPhonePageMemory, initPhoneWorkspace, observeSidebarBadges } from './lib/phone-workspace.js';
 const phonePages = createPhonePageMemory(window);
 initPhoneWorkspace(document.getElementById('pw-app'));
 // Body, not #pw-app: the pop-up windows are siblings of the app shell.
@@ -4604,13 +4604,22 @@ function syncMoreNavState(name) {
     button.classList.toggle('active', !!selected);
     if (selected) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current');
   });
-  const dot = document.getElementById('mnav-more-dot');
-  if (dot) {
-    const hasBadge = [...document.querySelectorAll('#pub-sidebar .nav-badge, #pub-sidebar .health-badge, #pub-sidebar .bc-gap-badge')]
-      .some((b) => !b.hidden && b.style.display !== 'none' && b.closest('.snav') && !MNAV_TABS.some((t) => b.closest('.snav').getAttribute('onclick')?.includes(`'${t}'`)));
-    dot.hidden = !hasBadge;
-  }
+  refreshMoreDot();
 }
+
+// The dot on More means "a tool in here has something for you". It follows the
+// sidebar's own badges, so screen readers hear it in the button's name too.
+function refreshMoreDot() {
+  const dot = document.getElementById('mnav-more-dot');
+  if (!dot) return;
+  const hasBadge = [...document.querySelectorAll('#pub-sidebar .nav-badge, #pub-sidebar .health-badge, #pub-sidebar .bc-gap-badge')]
+    .some((b) => !b.hidden && b.style.display !== 'none' && b.closest('.snav') && !MNAV_TABS.some((t) => b.closest('.snav').getAttribute('onclick')?.includes(`'${t}'`)));
+  dot.hidden = !hasBadge;
+  const more = document.getElementById('mnav-more');
+  if (hasBadge) more?.setAttribute('aria-label', 'More, something needs your attention');
+  else more?.removeAttribute('aria-label');
+}
+
 
 export function openMoreSheet() {
   const sheet = document.getElementById('more-sheet');
@@ -4654,6 +4663,9 @@ document.getElementById('more-sheet')?.addEventListener('close', () => {
 });
 
 Object.assign(window, { openMoreSheet, closeMoreSheet });
+// Badges light up when a sync or a background check finishes, not only when
+// the owner changes screens, so the More dot follows them as they change.
+observeSidebarBadges(document.getElementById('pub-sidebar'), refreshMoreDot);
 
 // ── Phone tap buttons for short dropdowns ──────────────────────────────
 // A <select data-phone-seg> gets a row of big buttons beside it that a phone
@@ -10130,12 +10142,15 @@ async function submitManual(ev) {
     const num = $('m-num').value.trim() || 'MAN-' + Date.now(), chan = $('m-chan').value, notes = $('m-notes').value.trim();
     const paymentType = $('m-payment-type').value;
     if (!paymentType) {
-      $('m-payment-type').style.borderColor = 'var(--red)';
-      $('m-payment-type').focus();
+      // The error goes under the field, where a phone shows tap buttons in place
+      // of the (hidden) dropdown — reddening the dropdown alone showed nothing there.
+      const select = $('m-payment-type');
+      fieldError('m-payment-type', 'Pick who got the money');
+      const target = select.offsetParent ? select : select.nextElementSibling?.querySelector?.('.phone-seg-opt');
+      (target || select).focus();
       showToast('⚠ Please select a payment type', 'warn');
       return;
     }
-    $('m-payment-type').style.borderColor = '';
 
     const cur = $('m-price-cur').value;
     const pricing = resolveManualSalePricing(book, qty, rawPrice, cur);
@@ -18147,6 +18162,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // checkboxes — in any open dialog.
   document.addEventListener('change', (e) => {
     const t = e.target;
+    // A dropdown answered by its phone tap buttons only fires `change`, so the
+    // error under it clears here (Add sale's payment type on a phone).
+    if (t && t.closest && t.closest('.form-group.invalid')) clearFieldError(t);
     if (t && t.closest && t.closest('.overlay[id^="m-"]')) refreshUnsavedMarkers();
   });
 });
