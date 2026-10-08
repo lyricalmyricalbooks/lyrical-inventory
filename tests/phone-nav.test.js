@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, expect, test } from 'vitest';
+import { salesForDay as salesForDayFn } from '../src/lib/today-summary.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(path.join(__dirname, '../index.html'), 'utf8');
@@ -84,10 +85,22 @@ test('Today gives selling, orders, tasks and receipt capture a real button', () 
   expect(cards[2].querySelector('.todo-nav-badge')).not.toBeNull();
 });
 
-test('Today shows the waiting-orders count from the Website orders panel', () => {
-  const start = mainJs.indexOf('export function renderTodayHub');
+// Run the Today renderers from main.js against the real markup, with the app's
+// own state stood in for.
+function todayApi({ activeBook, renderOrders = () => {}, books = {}, states = {} }) {
+  const start = mainJs.indexOf('// "Sold today · all books" on the phone home.');
   const end = mainJs.indexOf('// ── Phone "More" sheet');
-  const render = new Function('$', 'activeBook', 'renderOrders', mainJs.slice(start, end).replace('export function', 'function') + '; return renderTodayHub;')((id) => document.getElementById(id), 'book-a', () => {});
+  expect(start).toBeGreaterThan(-1);
+  const src = mainJs.slice(start, end).replace('export function', 'function') + '; return { renderTodayHub, renderTodaySoFar };';
+  const sync = [];
+  const api = new Function('$', 'activeBook', 'renderOrders', 'BOOKS', 'states', 'getBookCurrencyCode', 'salesForDay', 'today', 'fairTotalsText', 'renderFairSyncPill', src)(
+    (id) => document.getElementById(id), activeBook, renderOrders, books, states, () => 'CAD',
+    salesForDayFn, () => '2026-10-08', (t) => Object.entries(t).map(([c, a]) => `${c} ${a.toFixed(2)}`).join(' + '), () => sync.push(1));
+  return { ...api, sync };
+}
+
+test('Today shows the waiting-orders count from the Website orders panel', () => {
+  const render = todayApi({ activeBook: 'book-a' }).renderTodayHub;
   document.querySelector('#web-orders-status .web-stat-value').textContent = '3';
   render();
   expect(document.getElementById('today-orders-count').hidden).toBe(false);
@@ -112,9 +125,7 @@ test('manual entry has its own destination and only one destination is announced
 });
 
 test('Home in All books does not reuse another book’s order count', () => {
-  const start = mainJs.indexOf('export function renderTodayHub');
-  const end = mainJs.indexOf('// ── Phone "More" sheet');
-  const render = new Function('$', 'activeBook', 'renderOrders', mainJs.slice(start, end).replace('export function', 'function') + '; return renderTodayHub;')((id) => document.getElementById(id), 'all', () => { throw new Error('must not render a book-specific queue'); });
+  const render = todayApi({ activeBook: 'all', renderOrders: () => { throw new Error('must not render a book-specific queue'); } }).renderTodayHub;
   document.querySelector('#web-orders-status .web-stat-value').textContent = '8';
   render();
   expect(document.getElementById('today-orders-count').hidden).toBe(true);
@@ -159,3 +170,25 @@ test('the More dot lights up as soon as a badge appears, without a screen change
 test('More says it is closed before it is ever opened', () => {
   expect(document.getElementById('mnav-more').getAttribute('aria-expanded')).toBe('false');
 });
+
+test('Today so far totals the day across every book and refreshes the upload pill', () => {
+  const day = '2026-10-08';
+  const { renderTodaySoFar, sync } = todayApi({
+    activeBook: 'all',
+    books: { a: {}, b: {} },
+    states: {
+      a: { hist: [{ num: 'S1', chan: 'In Person', qty: 2, price: 20, date: day }, { num: 'G', chan: 'Gratuity', qty: 1, price: 0, date: day, gratuity: true }] },
+      b: { hist: [{ num: 'S2', chan: 'Website', qty: 1, price: 15, date: day }] },
+    },
+  });
+  renderTodaySoFar();
+  expect(document.getElementById('today-sold-sum').textContent).toBe('2 sales · 3 books · CAD 55.00');
+  expect(sync).toHaveLength(1);
+});
+
+test('Today so far says so when nothing has sold yet', () => {
+  const { renderTodaySoFar } = todayApi({ activeBook: 'all', books: { a: {} }, states: { a: { hist: [] } } });
+  renderTodaySoFar();
+  expect(document.getElementById('today-sold-sum').textContent).toBe('No sales yet today');
+});
+

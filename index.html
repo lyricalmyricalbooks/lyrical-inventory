@@ -1211,6 +1211,15 @@
     <div><div class="phone-eyebrow">Your shop, at a glance</div><h1 class="today-title">Let’s get to it.</h1></div>
     <span class="today-date" id="today-date"></span>
   </div>
+  <!-- Today so far, across every book: what was sold, and whether it has all
+       reached the cloud. Filled by renderTodaySoFar() and renderFairSyncPill(). -->
+  <div class="today-sofar">
+    <button type="button" class="today-sold" id="today-sold" onclick="switchTab('history')">
+      <span class="today-sold-label">Sold today · all books</span>
+      <strong class="today-sold-sum tnum" id="today-sold-sum">No sales yet today</strong>
+    </button>
+    <span class="fm-sync today-sync" id="today-sync" role="status" aria-live="polite"></span>
+  </div>
   <div class="today-grid">
     <button type="button" class="today-card today-card-ink" onclick="switchTab('pos')">
       <span class="today-card-ic" aria-hidden="true">🛒</span>

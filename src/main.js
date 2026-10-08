@@ -213,6 +213,7 @@ import {
   validateFields,
 } from './lib/modal.js';
 import { installBackClose } from './lib/back-close.js';
+import { salesForDay } from './lib/today-summary.js';
 import { dismissAppAlert, markAppAlertReviewed, pushAppAlert } from './lib/app-alert.js';
 import { booksInDescription, saleCodes, splitSalePlan } from './lib/sale-codes.js';
 import { describeMarketDay, latestMarketDay, summariseMarketDay } from './lib/market-day.js';
@@ -4577,7 +4578,21 @@ const SHELL_TAB_LABELS = {
 // Fills in the date and the waiting-orders count. The count is read from the
 // Website orders panel's own "Ready to apply" figure so the two never disagree;
 // the To-do card's count is a .todo-nav-badge, kept current by updateTodoBadge.
+// "Sold today · all books" on the phone home. Same rule as the Dashboard
+// (see lib/today-summary.js), so it agrees with History for the day.
+function renderTodaySoFar() {
+  const sum = $('today-sold-sum');
+  if (!sum) return;
+  const books = Object.keys(BOOKS).map((id) => ({ id, currency: getBookCurrencyCode(BOOKS[id]), hist: states[id]?.hist }));
+  const day = salesForDay(books, today());
+  sum.textContent = day.sales
+    ? `${day.sales} ${day.sales === 1 ? 'sale' : 'sales'} · ${day.units} ${day.units === 1 ? 'book' : 'books'} · ${fairTotalsText(day.totals)}`
+    : 'No sales yet today';
+  renderFairSyncPill();
+}
+
 export function renderTodayHub() {
+  renderTodaySoFar();
   const date = $('today-date');
   if (date) date.textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
   if (activeBook !== 'all') renderOrders();
@@ -8347,6 +8362,7 @@ function visibleTabName() {
 
 function renderAll() {
   _revMemo.clear();
+  if (visibleTabName() === 'today') renderTodaySoFar();
   if (activeBook === 'all') {
     // The To-do tab is reached from the all-books screen, so it sits inside this
     // branch rather than in TAB_RENDERERS below — which never runs while
@@ -18858,17 +18874,20 @@ window.fairShareSummary = async function () {
 
 // ── Upload status pill ───────────────────────────────────────────────────
 function renderFairSyncPill() {
-  const pill = $('fm-sync');
-  if (!pill) return;
   const view = fairSyncPill({
     online: typeof navigator === 'undefined' || navigator.onLine !== false,
     pending: syncQueue.length,
     retrying: _syncRetrying,
     atRisk: _syncQueueHeldInMemory,
   });
-  pill.textContent = view.text;
-  pill.dataset.tone = view.tone;
-  pill.setAttribute('aria-label', view.srText);
+  // The register's pill and the phone home's strip say the same thing.
+  for (const id of ['fm-sync', 'today-sync']) {
+    const pill = $(id);
+    if (!pill) continue;
+    pill.textContent = view.text;
+    pill.dataset.tone = view.tone;
+    pill.setAttribute('aria-label', view.srText);
+  }
 }
 
 let _fairSaving = false;
