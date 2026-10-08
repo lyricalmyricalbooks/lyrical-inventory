@@ -9,6 +9,7 @@ import {
   mergeRows,
   mergeMetadata,
   mergePart,
+  mergeSettingDoc,
   splitState,
   stitchState,
 } from '../src/lib/merge-state.js';
@@ -330,5 +331,75 @@ describe('assembleParts', () => {
   it('gives metadata an object default and list parts an array default', () => {
     expect(emptyPart('metadata')).toEqual({});
     LIST_PARTS.forEach(p => expect(emptyPart(p)).toEqual([]));
+  });
+});
+
+describe('mergeRows never counts one sale twice', () => {
+  const cash = { num: 'C-1', chan: 'Market', qty: 1, price: 20, date: '2026-05-02' };
+  const stripe = { num: 'ST-9', chan: 'Stripe', qty: 1, price: 30, date: '2026-05-03', sheetsId: 'stripe-ch_9' };
+
+  it('still keeps two identical cash sales recorded on two devices (known base)', () => {
+    const { rows } = mergeRows('hist', [], [cash], [cash]);
+    expect(rows).toHaveLength(2);
+  });
+
+  it('keeps one row when both devices recorded the same imported charge', () => {
+    const { rows } = mergeRows('hist', [], [stripe], [stripe]);
+    expect(rows).toHaveLength(1);
+  });
+
+  it('keeps both rows when one import really holds two identical lines', () => {
+    const { rows } = mergeRows('hist', [], [stripe], [stripe, stripe]);
+    expect(rows).toHaveLength(2);
+  });
+
+  it('with no base at all, takes the union instead of doubling the history', () => {
+    const history = [cash, { ...cash, num: 'C-2' }, { ...cash, num: 'C-3' }];
+    const { rows } = mergeRows('hist', [], history, [{ ...cash, num: 'C-4' }, ...history], { baseKnown: false });
+    expect(rows.map(r => r.num).sort()).toEqual(['C-1', 'C-2', 'C-3', 'C-4']);
+  });
+
+  it('mergePart passes the unknown-base flag through', () => {
+    const { value } = mergePart('hist', [], [cash], [cash], { baseKnown: false });
+    expect(value).toHaveLength(1);
+  });
+});
+
+describe('mergeSettingDoc (catalog, Tax Centre)', () => {
+  const J = JSON.stringify;
+  const base = { bk1: { title: 'One', listPrice: 20 }, _deletedDefaults: [] };
+
+  it('writes local unchanged when the cloud still matches what was loaded', () => {
+    const local = { ...base, bk1: { title: 'One', listPrice: 25 } };
+    expect(mergeSettingDoc(J(base), J(base), local)).toMatchObject({ value: local, merged: false });
+  });
+
+  it('keeps a book added on another device when this one changes a price', () => {
+    const remote = { ...base, bk2: { title: 'Two', listPrice: 30 } };
+    const local = { ...base, bk1: { title: 'One', listPrice: 25 } };
+    const { value, merged } = mergeSettingDoc(J(base), J(remote), local);
+    expect(merged).toBe(true);
+    expect(value.bk1.listPrice).toBe(25);
+    expect(value.bk2.title).toBe('Two');
+  });
+
+  it('keeps an expense imported on another device', () => {
+    const tcBase = { expenses: [{ id: 'e1', amount: 10 }] };
+    const remote = { expenses: [{ id: 'e1', amount: 10 }, { id: 'e2', amount: 5 }] };
+    const local = { expenses: [{ id: 'e1', amount: 10 }, { id: 'e3', amount: 7 }] };
+    const { value } = mergeSettingDoc(J(tcBase), J(remote), local);
+    expect(value.expenses.map(e => e.id).sort()).toEqual(['e1', 'e2', 'e3']);
+  });
+
+  it('still lets this device delete a book', () => {
+    const local = { _deletedDefaults: [] };
+    const { value } = mergeSettingDoc(J(base), J({ ...base, bk2: { title: 'Two' } }), local);
+    expect(value.bk1).toBeUndefined();
+    expect(value.bk2).toBeDefined();
+  });
+
+  it('writes local when there is no base to merge against', () => {
+    const local = { bk1: {} };
+    expect(mergeSettingDoc(null, J(base), local)).toMatchObject({ value: local, merged: false });
   });
 });

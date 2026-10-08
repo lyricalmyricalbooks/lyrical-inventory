@@ -377,3 +377,14 @@ describe('wiring', () => {
     expect(fn.indexOf('recomputeAfters(')).toBeLessThan(fn.indexOf('saveState('));
   });
 });
+
+describe('recordConflicts is honest about a full device', () => {
+  it('reports conflicts it could not store as unsaved, not added', () => {
+    const full = { getItem: () => null, setItem: () => { throw Object.assign(new Error('full'), { name: 'QuotaExceededError' }); } };
+    const conflict = { part: 'hist', key: 'k', local: { qty: 1, price: 10 }, remote: { qty: 2, price: 10 } };
+    const res = recordConflicts(full, { bookId: 'b', conflicts: [conflict] });
+    expect(res.added).toEqual([]);
+    expect(isMeaningfulConflict(conflict)).toBe(true);
+    expect(res.unsaved).toBe(1);
+  });
+});
