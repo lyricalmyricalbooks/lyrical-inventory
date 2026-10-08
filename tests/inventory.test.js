@@ -266,6 +266,13 @@ describe('deduplicateDirectConsignmentSales', () => {
 });
 
 describe('recalculateBookStatsFromHistory', () => {
+  it('counts sold copies but keeps artist-held money out of received revenue', () => {
+    const s = state({ hist: [{ qty: 1, price: 100, chan: 'Fair', artistPending: true }, { qty: 1, price: 40, chan: 'Fair' }] });
+    recalculateBookStatsFromHistory(s);
+    expect(s.sold).toBe(2);
+    expect(s.revenue).toBe(40);
+    expect(s.chStats.Fair).toEqual({ txns: 2, units: 2, revenue: 40 });
+  });
   it('handles an empty or undefined history', () => {
     const s1 = state();
     recalculateBookStatsFromHistory(s1);

@@ -52,6 +52,18 @@ export function payoutNetted(p) {
   return n;
 }
 
+// Principal/debt cleared by a combined payment is not another book sale or
+// another royalty. Keep its receipt separate from both revenue and earnings.
+export function payoutDebtCollected(p) {
+  if (!p || p.voided) return 0;
+  let total = 0;
+  for (const payment of (p.receivablePayments || [])) {
+    const amount = Number(payment?.amount);
+    if (Number.isFinite(amount) && amount > 0) total = roundCents(total + amount);
+  }
+  return total;
+}
+
 // Still-unsettled part of one receivable, given what has been netted so far.
 export function receivableOpen(r, applied = 0) {
   if (!r || r.voided) return 0;
@@ -61,9 +73,31 @@ export function receivableOpen(r, applied = 0) {
 
 export function sumOpenReceivables(list, payouts) {
   const applied = appliedOffsets(payouts, list);
+  const payments = appliedReceivablePayments(payouts, list);
   let total = 0;
-  for (const r of (list || [])) total = roundCents(total + receivableOpen(r, applied.get(String(r.id))));
+  for (const r of (list || [])) total = roundCents(total + receivableOpen(r, roundCents((applied.get(String(r.id)) || 0) + (payments.get(String(r.id)) || 0))));
   return total;
+}
+
+// Debt cleared as part of a combined transfer is separate from royalties.
+// Derive it from the linked record so Undo reopens it without a second write.
+export function appliedReceivablePayments(payouts, receivables) {
+  const offsets = appliedOffsets(payouts, receivables);
+  const raw = new Map();
+  for (const p of (payouts || [])) {
+    if (!p || p.voided) continue;
+    for (const r of (p.receivablePayments || [])) {
+      const amount = Number(r?.amount);
+      if (r?.id == null || !Number.isFinite(amount) || amount <= 0) continue;
+      raw.set(String(r.id), roundCents((raw.get(String(r.id)) || 0) + amount));
+    }
+  }
+  const applied = new Map();
+  for (const r of (receivables || [])) {
+    const room = receivableOpen(r, offsets.get(String(r.id)));
+    if (room > 0 && raw.has(String(r.id))) applied.set(String(r.id), Math.min(room, raw.get(String(r.id))));
+  }
+  return applied;
 }
 
 // Work out ONE combined payment: royalties owed to the artist minus what they
@@ -76,6 +110,7 @@ export function sumOpenReceivables(list, payouts) {
 export function planNetPayout(owedToArtist, receivables, payouts) {
   const owed = Math.max(0, roundCents(Number(owedToArtist) || 0));
   const already = appliedOffsets(payouts, receivables);
+  for (const [id, amount] of appliedReceivablePayments(payouts, receivables)) already.set(id, roundCents((already.get(id) || 0) + amount));
   const open = (receivables || [])
     .filter(r => receivableOpen(r, already.get(String(r.id))) > 0)
     .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));

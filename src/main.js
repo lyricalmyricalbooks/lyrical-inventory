@@ -16,6 +16,8 @@ import './firebase.js';
 import { registerSW } from 'virtual:pwa-register';
 import { canonicalExpenseCategory } from './lib/expense-categories.js';
 import { calcArtistEarnings, tierEffectiveCap, describePayout, payoutRequestCovered, planNetPayout, payoutNetted, describeArtistSettlement } from './lib/earnings.js';
+import { planArtistSettlement, applyArtistSettlement, undoArtistSettlement, artistSettlementStatement, artistSettlementIssues } from './lib/artist-settlement.js';
+import { keyRows } from './lib/merge-state.js';
 import { createStripePriceAndLink } from './lib/stripe-payment-link.js';
 import { calculateBreakEven, breakEvenTierMove, applyBreakEvenTierMove, readProductionCostInput } from './lib/breakeven.js';
 import { computeTallyRowHeights, computeQrCardSize, estimateTallyPages, estimateQrPages } from './lib/print-sheet-layout.js';
@@ -7393,6 +7395,9 @@ function getArtistHeldHtml(stats, cur) {
   return { heldCardHtml, heldNoteHtml, hasHeld };
 }
 
+const artistSettlementPreviews = new Map();
+const artistSettlementBusy = new Set();
+
 function toggleArtistSettlement(bookId) {
   if (isAuthor()) return;
   const result = document.getElementById(`artist-settlement-${bookId}`);
@@ -7401,6 +7406,9 @@ function toggleArtistSettlement(bookId) {
   if (!result || !button || !stats) return;
   const open = result.hidden;
   if (open) {
+    const plan = planArtistSettlement(BOOKS[bookId], states[bookId]);
+    if (!plan) { showToast('This book has not loaded. Reload before calculating a settlement.', 'err'); return; }
+    artistSettlementPreviews.set(bookId, plan);
     const balance = describeArtistSettlement(stats);
     const cur = BOOKS[bookId].currency;
     const row = (label, amount, sign = '') => `<div class="ps-payout-row">
@@ -7425,12 +7433,131 @@ function toggleArtistSettlement(bookId) {
       <p class="ps-payout-preview">Their cut is deducted once. Remaining earnings already exclude that cut, previous payouts and recorded debt offsets. This is a calculation only; no payment has been recorded.</p>
       ${balance.overpaid > 0 ? '<p class="ps-payout-preview">This includes the previous overpayment as money to recover. If you agreed to leave it as credit against future earnings, subtract that overpayment from the amount to collect.</p>' : ''}
       <p class="ps-payout-preview">Based on records currently on this device. If another device has recent sales or payments, let it synchronize before agreeing the final amount.</p>
+      <div class="ps-payout-actions">
+        <button class="btn sys-target" onclick="copyArtistSettlement('${bookId}')">Copy explanation</button>
+        ${plan.hasWork ? `<button class="btn gold sys-target" id="artist-settlement-record-button-${bookId}" onclick="toggleArtistSettlementForm('${bookId}')">${balance.direction === 'to-publisher' ? 'Record payment received' : balance.direction === 'to-artist' ? 'Record payment sent' : 'Record offset'}</button>` : ''}
+      </div>
+      ${plan.error ? '<p class="ps-payout-preview is-warn">A previous settlement needs review. Check the payment history and undo an incorrect or overlapping settlement before recording another.</p>' : ''}
+      <details>
+        <summary>View explanation to share</summary>
+        <label for="artist-settlement-text-${bookId}">Explanation for the author</label>
+        <textarea id="artist-settlement-text-${bookId}" rows="12" readonly>${escapeHtml(artistSettlementStatement(BOOKS[bookId], balance, today()))}</textarea>
+      </details>
+      <div id="artist-settlement-form-${bookId}" class="ps-payout-form" hidden>
+        <p class="ps-payout-preview">Only save after this payment has actually arrived or been sent. This records the full settlement shown above.</p>
+        <div class="ps-payout-fields">
+          <div class="form-group"><label for="as-date-${bookId}">Payment date</label><input id="as-date-${bookId}" type="date" value="${today()}"></div>
+          <div class="form-group"><label for="as-method-${bookId}">Payment method (optional)</label><input id="as-method-${bookId}" placeholder="e-Transfer, cash…"></div>
+          <div class="form-group"><label for="as-notes-${bookId}">Notes (optional)</label><input id="as-notes-${bookId}" placeholder="Payment reference or agreement"></div>
+        </div>
+        <div class="ps-payout-actions">
+          <button class="btn gold" onclick="recordArtistSettlement('${bookId}')">Save settlement</button>
+          <button class="btn tx" onclick="toggleArtistSettlementForm('${bookId}')">Cancel</button>
+        </div>
+      </div>
+      <div id="artist-settlement-feedback-${bookId}" class="ps-payout-preview" role="status" aria-live="polite"></div>
     `;
   }
   result.hidden = !open;
   button.setAttribute('aria-expanded', String(open));
 }
 window.toggleArtistSettlement = toggleArtistSettlement;
+
+function toggleArtistSettlementForm(bookId) {
+  if (!isPublisherSession() || isAuthor()) return;
+  const form = document.getElementById(`artist-settlement-form-${bookId}`);
+  if (!form) return;
+  form.hidden = !form.hidden;
+  if (!form.hidden) document.getElementById(`as-date-${bookId}`)?.focus();
+  else document.getElementById(`artist-settlement-record-button-${bookId}`)?.focus();
+}
+
+async function copyArtistSettlement(bookId, payoutId = '') {
+  const record = payoutId ? findArtistPayout(bookId, payoutId) : null;
+  const plan = artistSettlementPreviews.get(bookId);
+  const text = record?.settlement?.statement || (plan && artistSettlementStatement(BOOKS[bookId], plan.balance, today()));
+  if (!text) return;
+  try {
+    if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+    await navigator.clipboard.writeText(text);
+    showToast('Explanation copied — ready to share with the author');
+  } catch (_) {
+    const field = document.getElementById(payoutId ? `artist-settlement-receipt-${bookId}-${payoutId}` : `artist-settlement-text-${bookId}`);
+    if (field) {
+      field.closest('details').open = true;
+      field.focus(); field.select();
+    }
+    showToast('Clipboard access was blocked. Select and copy the explanation shown.', 'warn');
+  }
+}
+
+async function recordArtistSettlement(bookId) {
+  if (!isPublisherSession() || isAuthor() || artistSettlementBusy.has(bookId)) return;
+  const plan = artistSettlementPreviews.get(bookId);
+  const book = BOOKS[bookId];
+  const current = book && states[bookId] && planArtistSettlement(book, states[bookId]);
+  if (!plan || !current || plan.signature !== current.signature) { showToast('The balances changed. Close the calculation and calculate again before recording.', 'warn'); return; }
+  const value = name => document.getElementById(`as-${name}-${bookId}`)?.value || '';
+  const date = value('date'), method = value('method').trim(), notes = value('notes').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { showToast('Choose a payment date.', 'warn'); return; }
+  artistSettlementBusy.add(bookId);
+  try {
+    const direction = plan.balance.direction;
+    const cash = fmt(plan.balance.amount, book.currency);
+    const message = direction === 'to-publisher' ? `Confirm the author has paid you ${cash}.`
+      : direction === 'to-artist' ? `Confirm you have paid the author ${cash}.` : 'Confirm both balances should be offset without a cash payment.';
+    if (!(await confirmDialog(`${message}\n\nThis clears the held sales and both outstanding balances in this calculation. The settlement stays in the payment history and can be undone.`, { title: 'Record author settlement', okLabel: 'Record settlement' }))) return;
+    const outcome = applyArtistSettlement(BOOKS[bookId], states[bookId], plan, { date, method, notes });
+    if (!outcome.ok) { showToast('The balances changed. Calculate again before recording.', 'warn'); return; }
+    settlePayoutRequests(bookId);
+    await saveState(bookId);
+    syncArtistSettlementSales(bookId, outcome.record);
+    if (bookId === activeBook) { renderHist(); updateDash(); renderArtistTransfers(); }
+    renderProfitSharingBreakdown(bookId);
+    showToast(artistSettlementIssues(states[bookId]).size ? 'Settlement recorded — overlapping settlements need review in payment history'
+      : syncQueue.some(q => q.bookId === bookId) ? 'Settlement recorded on this device — waiting to synchronize' : 'Settlement recorded — both balances cleared');
+  } finally { artistSettlementBusy.delete(bookId); }
+}
+
+async function undoRecordedArtistSettlement(bookId, payoutId) {
+  if (!isPublisherSession() || isAuthor() || artistSettlementBusy.has(bookId)) return;
+  const record = findArtistPayout(bookId, payoutId);
+  if (!record?.settlement || record.voided) return;
+  artistSettlementBusy.add(bookId);
+  try {
+    if (!(await confirmDialog('Undo this author settlement?\n\nThis removes its effect from the balances and restores any sales it settled. It changes the records only; it does not return any money.', { title: 'Undo settlement', okLabel: 'Undo settlement', danger: true }))) return;
+    const outcome = undoArtistSettlement(states[bookId], payoutId);
+    if (!outcome.ok) { showToast('A linked sale changed. Review it before undoing this settlement.', 'warn'); return; }
+    settlePayoutRequests(bookId);
+    await saveState(bookId);
+    syncArtistSettlementSales(bookId, record);
+    if (bookId === activeBook) { renderHist(); updateDash(); renderArtistTransfers(); }
+    renderProfitSharingBreakdown(bookId);
+    showToast('Settlement undone — balances recalculated');
+  } finally { artistSettlementBusy.delete(bookId); }
+}
+Object.assign(window, { toggleArtistSettlementForm, copyArtistSettlement, recordArtistSettlement, undoRecordedArtistSettlement });
+
+function syncArtistSettlementSales(bookId, record) {
+  if (!sheetsUrl) return;
+  const state = states[bookId], book = BOOKS[bookId];
+  const keys = keyRows('hist', state.hist || []);
+  for (const link of record.settlement.heldSales) {
+    const h = state.hist[keys.indexOf(link.key)];
+    if (!h || h.consignmentLink) continue;
+    const nativeCur = getBookCurrencyCode(book);
+    const totalNative = roundCents(h.qty * h.price);
+    const marker = h.artistPending ? '[PENDING ARTIST TRANSFER — NET SETTLEMENT UNDONE]' : '[AUTHOR NET SETTLEMENT RECORDED]';
+    syncToSheets({
+      type: 'order', book: book.title, date: h.date, num: h.num, chan: h.chan,
+      qty: h.qty, price: h.price, total: totalNative, stockAfter: h.after ?? state.stock,
+      notes: `${h.notes || ''} ${marker}`, sheetsId: h.sheetsId || '', currency: nativeCur,
+      paymentCurrency: normalizeCurrencyCode(h.payment?.currency || nativeCur, 'CAD'),
+      paymentAmount: h.payment?.amount ?? totalNative, paymentRate: h.payment?.rate ?? '',
+      convertedTotal: cadEquivalentForSale({ nativeCurrency: nativeCur, totalNative, payment: h.payment }),
+    });
+  }
+}
 
 // Bring every request's `settled` flag in line with what has actually been paid.
 // Both directions matter: deleting or reducing a payout has to re-open a request
@@ -7525,18 +7652,44 @@ function getPayoutRequestHtml(bookId, stats, cur, owed) {
 
 function getPayoutHistoryHtml(stats, bookId, cur) {
   const payouts = stats.payouts || [];
+  const issues = artistSettlementIssues(states[bookId] || {});
+  const undone = (states[bookId]?.artistPayouts || []).filter(p => p.voided && p.settlement).map(p =>
+    `<div class="ps-payout-row"><span class="ps-payout-row-main"><strong>Undone author settlement</strong><span class="ps-payout-row-meta">${fmtD(p.date)} · Original amount ${fmt(p.settlement.balance.amount, p.settlement.cur)} · balances recalculated</span></span></div>`
+  ).join('');
   if (!payouts.length) {
     return `<div class="ps-payout-empty">
       <span class="ps-payout-empty-icon" aria-hidden="true">💸</span>
       <strong>No payouts recorded yet</strong>
       <span>Every payment you send the artist belongs here — it is what the balance above is measured against.</span>
-    </div>`;
+    </div>${undone}`;
   }
 
   const book = BOOKS[bookId];
 
   // ⚡ Bolt Optimization: Use string comparison instead of localeCompare for sorting ISO "YYYY-MM-DD" dates
   const rows = payouts.slice().sort((a, b) => { const dA = a.date || ''; const dB = b.date || ''; return dA > dB ? -1 : (dA < dB ? 1 : 0); }).map(p => {
+    if (p.settlement) {
+      const balance = p.settlement.balance;
+      const pid = escapeHtml(String(p.id));
+      const label = balance.direction === 'to-publisher' ? 'Received from author'
+        : balance.direction === 'to-artist' ? 'Sent to author' : 'Offset without cash';
+      return `<div class="ps-payout-form">
+        ${issues.has(p.id) ? '<p class="ps-payout-preview is-warn">Needs review: this settlement overlaps another payment or a linked sale changed. Check the actual payments and undo the incorrect record.</p>' : ''}
+        <div class="ps-payout-row">
+          <span class="ps-payout-row-main"><strong>${label}</strong><span class="ps-payout-row-meta">${fmtD(p.date)}${p.method ? ' · ' + escapeHtml(p.method) : ''}</span></span>
+          <span class="ps-payout-row-amt">${fmt(balance.amount, p.settlement.cur)}</span>
+        </div>
+        <p class="ps-payout-preview">${p.amount < 0 ? `${fmt(-p.amount, cur)} in previous earnings recovered.` : `${fmt(p.amount, cur)} in earnings settled, including money the author kept.`} ${p.notes ? escapeHtml(p.notes) : ''}</p>
+        <div class="ps-payout-actions">
+          <button class="btn sys-target" onclick="copyArtistSettlement('${bookId}', '${pid}')">Copy explanation</button>
+          ${!isAuthor() ? `<button class="btn tx sys-target" onclick="undoRecordedArtistSettlement('${bookId}', '${pid}')">Undo settlement</button>` : ''}
+        </div>
+        <details><summary>View settlement explanation</summary>
+          <label for="artist-settlement-receipt-${bookId}-${pid}">Recorded explanation for the author</label>
+          <textarea id="artist-settlement-receipt-${bookId}-${pid}" rows="12" readonly>${escapeHtml(p.settlement.statement)}</textarea>
+        </details>
+      </div>`;
+    }
     // ⚡ Bolt Optimization: Use shared escapeHtml to prevent GC pressure from inline object creation during replace operations
     // A payout handed over in another currency carries the same `payment` meta a
     // foreign sale does, so the row can show the cash that actually moved
@@ -7572,13 +7725,14 @@ function getPayoutHistoryHtml(stats, bookId, cur) {
 
   // The running total is the same figure as the "Paid to artist" card above, so
   // the list can be reconciled against it without adding the rows up by hand.
-  return `${rows}
+  return `${rows}${undone}
         <div class="ps-payout-total">
           <span>${payouts.length} payout${payouts.length === 1 ? '' : 's'}</span>
           <span class="ps-payout-total-val">${fmt(stats.totalPaidToArtist ?? 0, cur)}</span>
         </div>`;
 }
 function renderProfitSharingBreakdown(bookId) {
+  artistSettlementPreviews.delete(bookId);
   const block = $('d-profit-sharing-block');
   const content = $('ps-dash-content');
   if (!block || !content) return;
@@ -7605,6 +7759,7 @@ function renderProfitSharingBreakdown(bookId) {
   const payoutRequestHtml = getPayoutRequestHtml(bookId, stats, cur, owed);
   const payoutHistoryHtml = getPayoutHistoryHtml(stats, bookId, cur);
   const payoutFormHtml = getPayoutFormHtml(bookId, cur, owed);
+  const hasSettlements = (states[bookId]?.artistPayouts || []).some(p => p.settlement);
 
   content.innerHTML = `
     <div class="ps-stat-grid ${hasHeld ? 'cols-4' : 'cols-3'}">
@@ -7614,7 +7769,7 @@ function renderProfitSharingBreakdown(bookId) {
         <div class="ps-stat-sub">lifetime total</div>
       </div>
       <div class="ps-stat-card">
-        <div class="ps-stat-label">Paid to artist</div>
+        <div class="ps-stat-label">${hasSettlements ? 'Earnings settled' : 'Paid to artist'}</div>
         <div class="ps-stat-val is-muted">${fmt(stats.totalPaidToArtist, cur)}</div>
         <div class="ps-stat-sub">${stats.payouts?.length || 0} payout${(stats.payouts?.length || 0) !== 1 ? 's' : ''} recorded</div>
       </div>
@@ -7631,7 +7786,7 @@ function renderProfitSharingBreakdown(bookId) {
         aria-expanded="false" aria-controls="artist-settlement-${bookId}"
         onclick="toggleArtistSettlement('${bookId}')">Calculate author payment</button>
     </div>
-    <div id="artist-settlement-${bookId}" class="ps-payout-form sys-container" role="status" aria-live="polite" hidden></div>` : ''}
+    <div id="artist-settlement-${bookId}" class="ps-payout-form sys-container" role="region" aria-label="Author payment calculation" hidden></div>` : ''}
     ${payoutRequestHtml}
     <div style="margin-bottom:1rem;">
        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
@@ -7644,7 +7799,7 @@ function renderProfitSharingBreakdown(bookId) {
     ${progressHtml}
     <div class="ps-payout-section">
       <div class="ps-payout-head">
-        <span class="sect sect-inline">Artist Payouts</span>
+        <span class="sect sect-inline">${hasSettlements ? 'Payments & settlements' : 'Artist Payouts'}</span>
         ${payoutFormHtml ? `<button class="btn gold" onclick="toggleArtistPayoutForm('${bookId}')">+ Record payout</button>` : ''}
       </div>
       ${payoutFormHtml}
@@ -7775,6 +7930,7 @@ async function editArtistPayout(bookId, payoutId) {
   if (!s || !book) return;
   const p = (s.artistPayouts || []).find(x => String(x.id) === String(payoutId));
   if (!p) { showToast('⚠ Payout record not found', 'err'); return; }
+  if (p.settlement) { showToast('This is a combined settlement. Undo it before recording a correction.', 'warn'); return; }
 
   if (p.sourceNum) {
     const ok = await confirmDialog(
@@ -8049,6 +8205,7 @@ async function saveArtistPayout(bookId) {
   }
 
   if (existing) {
+    if (existing.settlement) { showToast('Undo the combined settlement before recording a correction.', 'warn'); return; }
     Object.assign(existing, fields, { editedAt: new Date().toISOString() });
   } else {
     s.artistPayouts.push({ id: makeEventId(), ...fields });
@@ -8114,6 +8271,7 @@ async function requestArtistPayout(bookId) {
 }
 
 async function deleteArtistPayout(bookId, payoutId) {
+  if (findArtistPayout(bookId, payoutId)?.settlement) return undoRecordedArtistSettlement(bookId, payoutId);
   if (!(await confirmDialog('Delete this payout record?', { danger: true, okLabel: 'Delete' }))) return;
   const s = states[bookId];
   if (!s || !s.artistPayouts) return;
@@ -13760,6 +13918,7 @@ async function convertKeptAllToReceived() {
 function openEditHist(idx) {
   const s = getState(), book = getBook(), h = s.hist[idx];
   if (!h) return;
+  if (h.artistSettlementId) { showToast('Undo the author settlement before changing this sale.', 'warn'); return; }
   // A consignment sale shown here is a mirror of its ledger row, and the ledger
   // row is the record that reaches the Google Sheet and gets re-derived on every
   // recompute. Editing the mirror directly would be overwritten, so send the
@@ -13996,6 +14155,7 @@ function saveLedgerEntryEdit(s, book) {
 function saveEntryEdit() {
   if (!editCtx) return;
   const s = getState(), book = getBook();
+  if (editCtx.kind === 'hist' && s.hist[editCtx.idx]?.artistSettlementId) { showToast('Undo the author settlement before changing this sale.', 'warn'); return; }
   if (editCtx.kind === 'hist') {
     saveHistEntryEdit(s, book);
   } else {
@@ -14360,6 +14520,7 @@ function voidEntry() {
   if (editCtx.kind === 'hist') {
     const h = s.hist[editCtx.idx];
     if (!h) return;
+    if (h.artistSettlementId) { showToast('Undo the author settlement before voiding this sale.', 'warn'); return; }
     if (!h.voided) {
       voidHistEntry(s, book, h);
       showToast('Entry voided — stock & revenue reversed (Sheets row delete queued)', 'warn');
@@ -17171,6 +17332,14 @@ function removeOneByKey(list, id) {
 }
 
 export async function removeLedgerEntry(type, bid, id) {
+  if ((type === 'artistPayout' || type === 'artistDebtRecovery') && findArtistPayout(bid, id)?.settlement) {
+    await undoRecordedArtistSettlement(bid, id);
+    renderTaxCenter();
+    return;
+  }
+  if (type === 'sale' && (states[bid]?.hist || []).find(h => String(h.id ?? h.num) === String(id))?.artistSettlementId) {
+    showToast('Undo the author settlement before deleting this sale.', 'warn'); return;
+  }
   if (!(await confirmDialog('Are you sure you want to permanently delete this entry from the ledger?', { okLabel: 'Delete entry', danger: true }))) return;
   let reopenedDebt = false;
 
@@ -18726,6 +18895,7 @@ function voidRegisterSale(saleNum, bookIds, reason) {
       const book = BOOKS[bookId];
       const h = s?.hist?.find((x) => x.num === saleNum && x.chan === 'Book Fair' && !x.voided);
       if (!h) continue;
+      if (h.artistSettlementId) { showToast('Undo the author settlement before voiding this sale.', 'warn'); continue; }
       // voidHistEntry's Sheets sync names the active book.
       activeBook = bookId;
       voidHistEntry(s, book, h);
@@ -21694,6 +21864,10 @@ window.downloadFullTaxSeasonExport = function () {
       const payoutRaw = parseFloat(p.amount || 0);
       flagRateIfMissing(book, cur, rawRate, payoutRaw > 0);
       const payoutCAD = payoutRaw * hRate;
+      if (p.settlement) {
+        csv += `${p.date},${esc(book.title)},"Earnings settled",${esc('Royalty credit including earnings retained from held sales; see settlement cash section for the actual payment')},${payoutCAD.toFixed(2)},""\n`;
+        return;
+      }
       // Only the cash is a cash outflow; a netted slice is noted so the row
       // explains itself (a fully netted payment shows 0.00 with the reason).
       const netted = payoutNetted(p);
@@ -21711,6 +21885,20 @@ window.downloadFullTaxSeasonExport = function () {
     return l.date && l.date.startsWith(year);
   }).forEach(l => {
     csv += `${l.date},"Publisher (General)",${esc(l.cat)},${esc(l.desc)},${getAmt(l).toFixed(2)},${esc(l.receipt)}\n`;
+  });
+
+  // Actual settlement transfers are separate from royalty credits and sales.
+  csv += '\n--- AUTHOR SETTLEMENT CASH (NOT ADDITIONAL SALES OR EXPENSES) ---\n';
+  csv += 'Date,Book,Currency,Money Held,Author Cut Kept,Remaining Earnings,Other Debt Repaid,Overpayment Recovered,Cash Received,Cash Sent,Method\n';
+  BOOK_LIST.forEach(book => {
+    if (isTestBook(book) || isTestBookId(book.id)) return;
+    (states[book.id]?.artistPayouts || []).forEach(p => {
+      if (!p.settlement || p.voided || (!isAllTime && !p.date?.startsWith(year))) return;
+      const b = p.settlement.balance;
+      csv += [p.date, esc(book.title), esc(p.settlement.cur), b.heldGross, b.heldShare, b.royaltiesOwed,
+        b.otherDebt, b.overpaid, b.direction === 'to-publisher' ? b.amount : 0,
+        b.direction === 'to-artist' ? b.amount : 0, esc(p.method || '')].join(',') + '\n';
+    });
   });
 
   // Section 3: FX rate warnings — surface any book exported at 1.0 because no

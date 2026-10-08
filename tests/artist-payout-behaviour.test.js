@@ -5,7 +5,7 @@
 // Here the form is rendered by the app, typed into, and saved with the same
 // functions its buttons call, and the assertions are on what the publisher is
 // told and what reaches the ledger and the cloud — so a wrong amount fails.
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { loadApp, makeBook } from './helpers/load-app.js';
 
 const BOOK = 'harbour';
@@ -113,6 +113,107 @@ describe('calculating the author payment', () => {
     const result = el('artist-settlement');
     expect(result.textContent).toContain('You send the author');
     expect(result.querySelector('.ps-stat-val').textContent).toBe('CA$80.00');
+  });
+});
+
+describe('recording and explaining a combined settlement', () => {
+  beforeEach(() => {
+    const s = app.main.states[BOOK];
+    s.hist.unshift({ num: 'held', qty: 1, price: 200, artistPending: true, date: '2026-03-01', chan: 'Fair' });
+    s.artistTransfers = [{ id: 't-held', num: 'held', total: 200, price: 200, qty: 1, date: '2026-03-01', chan: 'Fair' }];
+    win.renderProfitSharingBreakdown(BOOK);
+    el('artist-settlement-button').click();
+  });
+
+  it('copies the displayed explanation without recording money', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    const before = JSON.stringify(app.main.states[BOOK]);
+    await win.copyArtistSettlement(BOOK);
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('You send the publisher CA$20.00'));
+    expect(writeText.mock.calls[0][0]).toContain('CA$100.00');
+    expect(writeText.mock.calls[0][0]).toContain('not a receipt');
+    expect(JSON.stringify(app.main.states[BOOK])).toBe(before);
+  });
+
+  it('keeps the text selectable when clipboard access fails', async () => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) } });
+    await win.copyArtistSettlement(BOOK);
+    expect(el('artist-settlement-text').value).toContain('You send the publisher CA$20.00');
+    expect(app.toast()).toMatch(/select|copy/i);
+  });
+
+  it('records offline, queues the whole linked change, and undoes both balances', async () => {
+    app.setOnline(false);
+    win.toggleArtistSettlementForm(BOOK);
+    const saved = win.recordArtistSettlement(BOOK);
+    await app.answerConfirm(true);
+    await saved;
+    const record = payouts().at(-1);
+    expect(record.amount).toBe(180);
+    expect(record.settlement.balance).toMatchObject({ amount: 20, direction: 'to-publisher' });
+    expect(app.main.states[BOOK].artistTransfers).toHaveLength(0);
+    expect(app.queued().at(-1).state.artistPayouts.at(-1).settlement.balance.amount).toBe(20);
+    expect(app.queued().at(-1).state.hist[0].artistPending).toBe(false);
+    expect(document.querySelector('#ps-dash-content .is-lead .ps-stat-val').textContent).toBe('CA$0.00');
+    const undone = win.undoRecordedArtistSettlement(BOOK, record.id);
+    await app.answerConfirm(true);
+    await undone;
+    expect(record.voided).toBe(true);
+    expect(app.main.states[BOOK].hist[0].artistPending).toBe(true);
+    expect(app.main.states[BOOK].artistTransfers).toHaveLength(1);
+    expect(document.querySelector('#ps-dash-content .is-lead .ps-stat-val').textContent).toBe('CA$80.00');
+  });
+
+  it('leaves everything unchanged when confirmation is cancelled', async () => {
+    win.toggleArtistSettlementForm(BOOK);
+    const before = JSON.stringify(app.main.states[BOOK]);
+    const saved = win.recordArtistSettlement(BOOK);
+    await app.answerConfirm(false);
+    await saved;
+    expect(JSON.stringify(app.main.states[BOOK])).toBe(before);
+  });
+
+  it('rejects a stale preview rather than recording a different amount', async () => {
+    win.toggleArtistSettlementForm(BOOK);
+    app.main.states[BOOK].artistPayouts.push({ id: 'new', amount: 10 });
+    const before = JSON.stringify(app.main.states[BOOK]);
+    await win.recordArtistSettlement(BOOK);
+    expect(JSON.stringify(app.main.states[BOOK])).toBe(before);
+    expect(app.toast()).toMatch(/changed|calculate again/i);
+  });
+
+  it('checks again after confirmation if another payment arrives while the dialog is open', async () => {
+    win.toggleArtistSettlementForm(BOOK);
+    const saved = win.recordArtistSettlement(BOOK);
+    app.main.states[BOOK].artistPayouts.push({ id: 'received-elsewhere', amount: 10 });
+    const before = JSON.stringify(app.main.states[BOOK]);
+    await app.answerConfirm(true); await saved;
+    expect(JSON.stringify(app.main.states[BOOK])).toBe(before);
+    expect(app.toast()).toMatch(/changed|calculate again/i);
+  });
+
+  it('uses the settlement undo path when the generic delete action is invoked', async () => {
+    win.toggleArtistSettlementForm(BOOK);
+    const saved = win.recordArtistSettlement(BOOK);
+    await app.answerConfirm(true); await saved;
+    const record = payouts().at(-1);
+    const deleted = win.deleteArtistPayout(BOOK, record.id);
+    await app.answerConfirm(true); await deleted;
+    expect(record.voided).toBe(true);
+    expect(app.main.states[BOOK].hist[0].artistPending).toBe(true);
+  });
+
+  it('uses Undo from the Tax Centre without deleting only half the settlement', async () => {
+    win.toggleArtistSettlementForm(BOOK);
+    const saved = win.recordArtistSettlement(BOOK);
+    await app.answerConfirm(true); await saved;
+    const record = payouts().at(-1);
+    const deleted = app.main.removeLedgerEntry('artistPayout', BOOK, record.id);
+    await app.answerConfirm(true); await deleted;
+    expect(record.voided).toBe(true);
+    expect(app.main.states[BOOK].hist[0].artistPending).toBe(true);
+    expect(app.main.states[BOOK].artistTransfers).toHaveLength(1);
   });
 });
 
