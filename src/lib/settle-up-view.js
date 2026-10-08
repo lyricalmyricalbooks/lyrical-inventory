@@ -67,30 +67,28 @@ export function settleUpHeadline(model, cur) {
   };
 }
 
-function column(side, cur, model, cls) {
-  const rows = side.rows.length ? side.rows.map(r => {
+// Direction 1, "Receipt": the answer first, as one big figure, then the sum
+// laid out like a till slip — the author's side added (+), your side taken
+// away (−), a double rule, and the result (=). One primary action.
+function slipLines(model, cur) {
+  const line = (sign, r) => {
     const detail = r.detail
-      ? `<span class="ps-settle-detail">${escapeHtml(r.detail.replace('{gross}', fmt(model.heldGross, cur)).replace('{share}', fmt(model.heldShare, cur)))}</span>`
+      ? `<small class="ps-slip-detail">${escapeHtml(r.detail.replace('{gross}', fmt(model.heldGross, cur)).replace('{share}', fmt(model.heldShare, cur)))}</small>`
       : '';
-    return `<li class="ps-settle-line"><span class="ps-settle-line-label">${escapeHtml(r.label)}${detail}</span><span class="ps-settle-amt">${fmt(r.amount, cur)}</span></li>`;
-  }).join('') : '<li class="ps-settle-line is-empty"><span class="ps-settle-line-label">Nothing</span><span class="ps-settle-amt">—</span></li>';
-  return `<section class="ps-settle-col ${cls}" aria-label="${escapeHtml(side.title)}">
-      <h4 class="ps-settle-col-title">${escapeHtml(side.title)}</h4>
-      <ul class="ps-settle-lines">${rows}</ul>
-      <div class="ps-settle-total"><span>Total</span><span class="ps-settle-amt">${fmt(side.total, cur)}</span></div>
-    </section>`;
+    return `<li class="ps-slip-line"><span class="ps-slip-label">${escapeHtml(r.label)}${detail}</span><span class="ps-slip-dots" aria-hidden="true"></span><span class="ps-slip-amt">${sign} ${fmt(r.amount, cur)}</span></li>`;
+  };
+  // The side that is paying sits first so the slip reads top-down to its result.
+  const [first, second] = model.direction === 'to-artist' ? [model.right, model.left] : [model.left, model.right];
+  return [...first.rows.map(r => line('+', r)), ...second.rows.map(r => line('−', r))].join('');
 }
 
 // opts: { bookId, cur, date, payLinkReady, canRecord, hasWork, reviewError, pendingSync, statement }
 export function settleUpHtml(model, opts) {
   const { bookId, cur, date = '', payLinkReady = false, canRecord = false, hasWork = false, reviewError = false, pendingSync = 0, statement = '' } = opts;
   const id = escapeHtml(String(bookId));
-  const tone = model.direction === 'settled' ? 'tone-green' : 'tone-gold';
-  const equation = model.direction === 'settled'
-    ? `${fmt(model.left.total, cur)} − ${fmt(model.right.total, cur)} = ${fmt(0, cur)}`
-    : model.direction === 'to-publisher'
-      ? `${fmt(model.left.total, cur)} − ${fmt(model.right.total, cur)}`
-      : `${fmt(model.right.total, cur)} − ${fmt(model.left.total, cur)}`;
+  const tone = model.direction === 'settled' ? 'is-settled' : 'is-due';
+  const [big, small] = model.direction === 'to-artist' ? [model.right.total, model.left.total] : [model.left.total, model.right.total];
+  const equation = `${fmt(big, cur)} − ${fmt(small, cur)}${model.direction === 'settled' ? ` = ${fmt(0, cur)}` : ''}`;
   const syncNote = pendingSync > 0
     ? `<p class="ps-payout-preview is-warn">${pendingSync} change${pendingSync === 1 ? '' : 's'} on this device ${pendingSync === 1 ? "hasn't" : "haven't"} synced yet. Let them sync before agreeing the amount.</p>`
     : '<p class="ps-settle-note">Based on the records on this device. If another device has new sales or payments, let it sync first.</p>';
@@ -98,73 +96,48 @@ export function settleUpHtml(model, opts) {
     ? '<p class="ps-settle-note">This counts an earlier overpayment as money to recover. If you agreed to leave it as credit against future earnings, use the payout form instead.</p>'
     : '';
   const record = canRecord && hasWork && !reviewError;
-  const steps = `
-    <ol class="ps-settle-steps">
-      <li class="ps-settle-step">
-        <span class="ps-settle-step-num" aria-hidden="true">1</span>
-        <div class="ps-settle-step-body">
-          <strong>${model.author ? 'Check the numbers' : 'Check the numbers above'}</strong>
-          <span>${model.author ? 'This is what the publisher sees too.' : 'Each side is added up once; only the difference changes hands.'}</span>
-        </div>
-      </li>
-      <li class="ps-settle-step">
-        <span class="ps-settle-step-num" aria-hidden="true">2</span>
-        <div class="ps-settle-step-body">
-          <strong>${model.author ? 'Keep a copy' : 'Send the author the statement'}</strong>
-          ${payLinkReady && !model.author ? `<span>Their app already shows a Stripe button for exactly ${fmt(model.amount, cur)}. If they pay with it, the settlement records itself.</span>` : ''}
-          <div class="ps-payout-actions">
-            <button type="button" class="btn sys-target" onclick="shareArtistSettlement('${id}')">${model.author ? 'Copy statement' : 'Share statement'}</button>
-          </div>
-          <details class="ps-settle-preview">
-            <summary>Preview statement</summary>
-            <label for="artist-settlement-text-${id}" class="sr-only">Statement for the author</label>
-            <textarea id="artist-settlement-text-${id}" rows="11" readonly>${escapeHtml(statement)}</textarea>
-          </details>
-        </div>
-      </li>
-      ${record ? `<li class="ps-settle-step">
-        <span class="ps-settle-step-num" aria-hidden="true">3</span>
-        <div class="ps-settle-step-body">
-          <strong>Record it once the money has moved</strong>
-          <div class="ps-payout-actions">
-            <button type="button" class="btn gold sys-target" id="artist-settlement-record-button-${id}"
-              aria-expanded="false" aria-controls="artist-settlement-form-${id}"
-              onclick="toggleArtistSettlementForm('${id}')">${model.recordLabel}</button>
-          </div>
-          <div id="artist-settlement-form-${id}" class="ps-payout-form ps-settle-form" hidden>
-            <p class="ps-settle-note">Records the full ${fmt(model.amount, cur)} shown above and clears both sides. Only save once the payment has actually ${model.direction === 'to-publisher' ? 'arrived' : model.direction === 'to-artist' ? 'been sent' : 'been agreed'}.</p>
-            <div class="ps-payout-fields">
-              <div class="form-group"><label for="as-date-${id}">Payment date</label><input id="as-date-${id}" type="date" value="${escapeHtml(date)}"></div>
-              <div class="form-group"><label for="as-method-${id}">Payment method (optional)</label><input id="as-method-${id}" placeholder="e-Transfer, cash…"></div>
-              <div class="form-group"><label for="as-notes-${id}">Notes (optional)</label><input id="as-notes-${id}" placeholder="Payment reference or agreement"></div>
-            </div>
-            <div class="ps-payout-actions">
-              <button type="button" class="btn gold" onclick="recordArtistSettlement('${id}')">Save settlement</button>
-              <button type="button" class="btn tx" onclick="toggleArtistSettlementForm('${id}')">Cancel</button>
-            </div>
-          </div>
-        </div>
-      </li>` : ''}
-    </ol>`;
+  const stripeNote = payLinkReady && !model.author
+    ? `<p class="ps-settle-note">Their app already shows a Stripe button for exactly ${fmt(model.amount, cur)}. If they pay with it, this records itself.</p>`
+    : '';
   return `
-  <div class="ps-settle" id="artist-settlement-${id}" role="region" aria-label="Settle up with the author">
-    <div class="ps-settle-head">
-      <span class="sect sect-inline">Settle up</span>
-      <span class="ps-settle-kicker">Money runs both ways — one payment clears it</span>
-    </div>
-    <div class="ps-settle-cols">
-      ${column(model.left, cur, model, 'is-left')}
-      ${column(model.right, cur, model, 'is-right')}
-    </div>
-    <div class="ps-stat-card ps-settle-result ${tone}">
+  <div class="ps-settle ps-receipt" id="artist-settlement-${id}" role="region" aria-label="Settle up with the author">
+    <div class="ps-settle-result ${tone}">
       <div class="ps-stat-label">${escapeHtml(model.result)}</div>
       <div class="ps-stat-val">${fmt(model.amount, cur)}</div>
       <div class="ps-stat-sub">${equation}</div>
+      <p class="ps-receipt-kicker">${model.direction === 'settled' ? 'The two sides cancel out.' : 'One payment clears both sides.'}</p>
     </div>
+    <ul class="ps-slip" aria-label="How the amount adds up">
+      ${slipLines(model, cur)}
+      <li class="ps-slip-line ps-slip-total"><span class="ps-slip-label">${escapeHtml(model.result)}</span><span class="ps-slip-dots" aria-hidden="true"></span><span class="ps-slip-amt">= ${fmt(model.amount, cur)}</span></li>
+    </ul>
     ${syncNote}
     ${overpaidNote}
+    ${stripeNote}
     ${reviewError && canRecord ? '<p class="ps-payout-preview is-warn">An earlier settlement needs review. Check the payment history below and undo the wrong one before recording another.</p>' : ''}
-    ${steps}
+    <div class="ps-payout-actions ps-receipt-actions">
+      ${record ? `<button type="button" class="btn gold sys-target" id="artist-settlement-record-button-${id}"
+        aria-expanded="false" aria-controls="artist-settlement-form-${id}"
+        onclick="toggleArtistSettlementForm('${id}')">${model.recordLabel}</button>` : ''}
+      <button type="button" class="btn ${record ? 'tx' : ''} sys-target" onclick="shareArtistSettlement('${id}')">${model.author ? 'Copy statement' : 'Share statement'}</button>
+    </div>
+    <details class="ps-settle-preview">
+      <summary>Preview the statement</summary>
+      <label for="artist-settlement-text-${id}" class="sr-only">Statement for the author</label>
+      <textarea id="artist-settlement-text-${id}" rows="11" readonly>${escapeHtml(statement)}</textarea>
+    </details>
+    ${record ? `<div id="artist-settlement-form-${id}" class="ps-payout-form ps-settle-form" hidden>
+      <p class="ps-settle-note">Records the full ${fmt(model.amount, cur)} shown above and clears both sides. Only save once the payment has actually ${model.direction === 'to-publisher' ? 'arrived' : model.direction === 'to-artist' ? 'been sent' : 'been agreed'}.</p>
+      <div class="ps-payout-fields">
+        <div class="form-group"><label for="as-date-${id}">Payment date</label><input id="as-date-${id}" type="date" value="${escapeHtml(date)}"></div>
+        <div class="form-group"><label for="as-method-${id}">Payment method (optional)</label><input id="as-method-${id}" placeholder="e-Transfer, cash…"></div>
+        <div class="form-group"><label for="as-notes-${id}">Notes (optional)</label><input id="as-notes-${id}" placeholder="Payment reference or agreement"></div>
+      </div>
+      <div class="ps-payout-actions">
+        <button type="button" class="btn gold" onclick="recordArtistSettlement('${id}')">Save settlement</button>
+        <button type="button" class="btn tx" onclick="toggleArtistSettlementForm('${id}')">Cancel</button>
+      </div>
+    </div>` : ''}
     <div id="artist-settlement-feedback-${id}" class="ps-settle-note" role="status" aria-live="polite"></div>
   </div>`;
 }

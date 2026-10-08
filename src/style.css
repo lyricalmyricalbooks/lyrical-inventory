@@ -16317,6 +16317,8 @@ button[onclick="refreshUmamiStats()"]:active {
 }
 .ps-stat-grid.cols-3{grid-template-columns:repeat(3,minmax(0,1fr));}
 .ps-stat-grid.cols-4{grid-template-columns:repeat(4,minmax(0,1fr));}
+.ps-stat-grid.cols-5{grid-template-columns:repeat(5,minmax(0,1fr));}
+@container (max-width:820px){.ps-stat-grid.cols-5{grid-template-columns:repeat(3,minmax(0,1fr));}}
 /* auto-fit, not a fixed count: the Profit Tiers context strip shows 1 card
    (no book activity yet) or 3 (production cost + revenue + earned), and a
    fixed template would leave the 1-card case stranded at a third of the
@@ -16324,7 +16326,8 @@ button[onclick="refreshUmamiStats()"]:active {
 .ps-stat-grid.cols-auto{grid-template-columns:repeat(auto-fit,minmax(180px,1fr));}
 @container (max-width:520px){
   .ps-stat-grid.cols-3,
-  .ps-stat-grid.cols-4{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .ps-stat-grid.cols-4,
+  .ps-stat-grid.cols-5{grid-template-columns:repeat(2,minmax(0,1fr));}
 }
 .ps-stat-card{
   position:relative;overflow:hidden;
@@ -16372,6 +16375,14 @@ button[onclick="refreshUmamiStats()"]:active {
 .ps-stat-card.tone-critical::after{background:var(--status-critical);}
 .ps-stat-card.tone-critical .ps-stat-val,
 .ps-stat-card.tone-critical .ps-stat-sub{color:var(--status-critical);}
+
+/* Amber: a figure that matters but isn't the one to act on (the earnings
+   owed, beside the net balance that leads). Yellow is a fill only; its ink
+   is --amber. */
+.ps-stat-card.tone-amber{background:var(--amber-bg);border-color:color-mix(in srgb,var(--amber) 30%,transparent);}
+.ps-stat-card.tone-amber::after{background:var(--amber);}
+.ps-stat-card.tone-amber .ps-stat-val,
+.ps-stat-card.tone-amber .ps-stat-sub{color:var(--amber);}
 
 .ps-stat-card.tone-green{background:var(--status-positive-bg);border-color:color-mix(in srgb,var(--status-positive) 30%,transparent);}
 .ps-stat-card.tone-green::after{background:var(--status-positive);}
@@ -16642,104 +16653,56 @@ button[onclick="refreshUmamiStats()"]:active {
   color:var(--content-muted);
 }
 
-/* ── Settle up — when money runs both ways ─────────────────────────────────
-   The author holds the publisher's cut of copies they sold AND is owed
-   earnings. Two facing columns, one total each, and the subtraction happens
-   once, in the result card — instead of a list that subtracts, subtotals and
-   subtracts again with every figure painted green. Every amount is a plain
-   positive number; which column it sits in says who owes it. */
+/* ── Settle up — Receipt ───────────────────────────────────────────────────
+   The answer first, as one big figure; then the sum as a till slip: the
+   paying side added (+), the other taken away (−), a double rule, and the
+   result (=). One primary action, sharing as the secondary. */
 .ps-settle{
-  container-type:inline-size;
   margin-bottom:var(--space-5);
-  padding:var(--space-4);
-  background:var(--surface-sunken);
+  padding:var(--space-5);
+  background:var(--surface-card);
   border:var(--stroke) solid var(--border-strong);
   border-radius:var(--r2);
+  box-shadow:var(--elev-2);
 }
-.ps-settle-head{
-  display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;
-  gap:var(--space-2);margin-bottom:var(--space-3);
-}
-.ps-settle-kicker{font-size:var(--text-xs);color:var(--content-muted);}
-.ps-settle-cols{
-  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
-  gap:var(--space-3);margin-bottom:var(--space-3);
-}
-@container (max-width:680px){
-  .ps-settle-cols{grid-template-columns:minmax(0,1fr);}
-}
-.ps-settle-col{
-  display:flex;flex-direction:column;min-width:0;
-  background:var(--surface-card);
-  border:var(--stroke-hair) solid var(--border-default);
-  border-radius:var(--r2);
-  padding:var(--space-3) var(--space-4);
-}
-.ps-settle-col-title{
-  margin:0 0 var(--space-2);
+.ps-settle-result .ps-stat-label{
   font-size:var(--text-2xs);font-weight:800;letter-spacing:var(--tracking-label);
   text-transform:uppercase;color:var(--content-muted);
 }
-.ps-settle-lines{list-style:none;margin:0;padding:0;flex:1;}
-.ps-settle-line{
-  display:flex;justify-content:space-between;align-items:flex-start;gap:var(--space-3);
-  padding:var(--space-2) 0;
-  font-size:var(--text-sm);color:var(--content-secondary);
-  border-bottom:var(--stroke-hair) solid var(--border-subtle);
+.ps-settle-result .ps-stat-val{
+  font-family:var(--font-display,'Anton',Impact,sans-serif);font-weight:400;
+  font-size:clamp(44px,7vw,72px);line-height:.95;letter-spacing:.01em;
+  color:var(--gold-text);margin:var(--space-1) 0;
 }
-.ps-settle-line:last-child{border-bottom:0;}
-.ps-settle-line.is-empty{color:var(--content-muted);}
-.ps-settle-line-label{display:flex;flex-direction:column;gap:2px;min-width:0;}
-.ps-settle-detail{font-size:var(--text-2xs);color:var(--content-muted);line-height:var(--leading-snug);}
-.ps-settle-amt{
-  flex-shrink:0;white-space:nowrap;
+.ps-settle-result.is-settled .ps-stat-val{color:var(--status-positive);}
+.ps-settle-result .ps-stat-sub{
+  font-family:var(--font-mono);font-feature-settings:"tnum" 1;
+  font-size:var(--text-xs);color:var(--content-muted);
+}
+.ps-receipt-kicker{margin:var(--space-1) 0 0;font-size:var(--text-sm);color:var(--content-secondary);}
+.ps-slip{
+  list-style:none;margin:var(--space-4) 0;padding:var(--space-3) 0 0;
+  max-width:520px;
+  border-top:var(--stroke) dashed var(--border-strong);
   font-family:var(--font-mono);font-feature-settings:"tnum" 1,"zero" 1;
-  color:var(--content-primary);
+  font-size:var(--text-sm);color:var(--content-primary);
 }
-/* The 2px ink rule is the Riso "sum line" — the one place a column adds up. */
-.ps-settle-total{
-  display:flex;justify-content:space-between;align-items:baseline;gap:var(--space-3);
-  margin-top:var(--space-2);padding-top:var(--space-2);
-  border-top:var(--stroke) solid var(--border-strong);
-  font-size:var(--text-2xs);font-weight:800;letter-spacing:var(--tracking-label);
-  text-transform:uppercase;color:var(--content-primary);
+.ps-slip-line{display:flex;align-items:baseline;gap:var(--space-2);padding:6px 0;}
+.ps-slip-label{display:flex;flex-direction:column;gap:2px;min-width:0;font-family:var(--font-ui);}
+.ps-slip-detail{font-size:var(--text-2xs);color:var(--content-muted);}
+.ps-slip-dots{flex:1;min-width:16px;border-bottom:var(--stroke) dotted var(--border-default);transform:translateY(-4px);}
+.ps-slip-amt{white-space:nowrap;}
+.ps-slip-total{
+  margin-top:var(--space-1);padding-top:var(--space-2);
+  border-top:4px double var(--border-strong);font-weight:700;
 }
-.ps-settle-total .ps-settle-amt{font-size:var(--text-lg);font-weight:700;letter-spacing:normal;text-transform:none;}
-.ps-settle-result{margin-bottom:var(--space-3);}
-.ps-settle-result .ps-stat-val{font-size:var(--text-2xl);}
-.ps-settle-result .ps-stat-sub{font-family:var(--font-mono);font-feature-settings:"tnum" 1;}
-.ps-settle-note{
-  margin:0 0 var(--space-3);
-  font-size:var(--text-xs);line-height:var(--leading-snug);color:var(--content-muted);
-}
+.ps-slip-total .ps-slip-label{font-weight:800;}
+.ps-settle-note{margin:0 0 var(--space-3);font-size:var(--text-xs);line-height:var(--leading-snug);color:var(--content-muted);max-width:64ch;}
 .ps-settle-note:empty{display:none;}
 .ps-settle .ps-payout-preview{margin:0 0 var(--space-3);}
-.ps-settle-steps{
-  list-style:none;margin:var(--space-4) 0 0;padding:var(--space-3) 0 0;
-  border-top:var(--stroke-hair) solid var(--border-default);
-  display:flex;flex-direction:column;gap:var(--space-4);
-}
-.ps-settle-step{display:grid;grid-template-columns:28px minmax(0,1fr);gap:var(--space-3);align-items:start;}
-.ps-settle-step-num{
-  display:flex;align-items:center;justify-content:center;
-  width:28px;height:28px;
-  font-family:var(--font-mono);font-weight:700;font-size:var(--text-sm);
-  color:var(--content-primary);background:var(--surface-card);
-  border:var(--stroke) solid var(--border-strong);border-radius:var(--r2);
-}
-.ps-settle-step-body{display:flex;flex-direction:column;gap:2px;min-width:0;}
-.ps-settle-step-body > strong{
-  /* Snug leading plus a top pad centres a one-line heading on the 28px
-     number tile, without a two-line one splitting 28px apart on a phone. */
-  font-size:var(--text-sm);color:var(--content-primary);
-  line-height:var(--leading-snug);padding-top:5px;
-}
-.ps-settle-step-body > span{font-size:var(--text-xs);color:var(--content-muted);}
-.ps-settle-step .ps-payout-actions{margin-top:var(--space-2);}
-/* A long direction label ("Record payment received") wraps inside its
-   button on a phone rather than running past the panel's edge. */
-.ps-settle-step .ps-payout-actions .btn{white-space:normal;max-width:100%;text-align:center;}
-.ps-settle-preview{margin-top:var(--space-2);}
+.ps-receipt-actions{margin-top:var(--space-2);}
+.ps-receipt-actions .btn{white-space:normal;max-width:100%;text-align:center;}
+.ps-settle-preview{margin-top:var(--space-1);}
 .ps-settle-preview > summary{
   display:inline-flex;align-items:center;min-height:var(--target-min);
   cursor:pointer;font-size:var(--text-sm);font-weight:600;color:var(--content-secondary);
@@ -16748,12 +16711,11 @@ button[onclick="refreshUmamiStats()"]:active {
 .ps-settle-preview textarea{
   width:100%;margin-top:var(--space-2);
   font-family:var(--font-mono);font-size:var(--text-xs);line-height:var(--leading-snug);
-  background:var(--surface-card);color:var(--content-primary);
+  background:var(--surface-sunken);color:var(--content-primary);
   border:var(--stroke-hair) solid var(--border-default);border-radius:var(--r2);
   padding:var(--space-3);resize:vertical;
 }
-.ps-settle-form{margin:var(--space-3) 0 0;background:var(--surface-card);}
-.ps-settle-form .form-group input{background:var(--surface-sunken);}
+.ps-settle-form{margin:var(--space-3) 0 0;}
 
 /* The motion tokens already collapse to 1ms; the transforms still need
    standing down for anyone who asked for reduced motion. */

@@ -45,10 +45,13 @@ test('exactly one profit sharing card leads, by size, and its tone is a token mo
 test('the grid step is a class modifier, not an inline template-computed column count', () => {
   const mainJs = readFileSync(path.join(__dirname, '../src/main.js'), 'utf8');
   expect(mainJs).not.toMatch(/grid-template-columns:repeat\(\$\{hasHeld/);
-  expect(mainJs).toMatch(/ps-stat-grid \$\{hasHeld \? 'cols-4' : 'cols-3'\}/);
+  expect(mainJs).toMatch(/ps-stat-grid \$\{statCols\}/);
+  expect(mainJs).toMatch(/statCols = `cols-\$\{3 \+/);
 
   const grid3 = styles.match(/\.ps-stat-grid\.cols-3\s*\{([\s\S]*?)\}/);
   const grid4 = styles.match(/\.ps-stat-grid\.cols-4\s*\{([\s\S]*?)\}/);
   expect(grid3[1]).toMatch(/repeat\(3,\s*minmax\(0,\s*1fr\)\)/);
   expect(grid4[1]).toMatch(/repeat\(4,\s*minmax\(0,\s*1fr\)\)/);
+  const grid5 = styles.match(/\.ps-stat-grid\.cols-5\s*\{([\s\S]*?)\}/);
+  expect(grid5[1]).toMatch(/repeat\(5,\s*minmax\(0,\s*1fr\)\)/);
 });

@@ -31,8 +31,8 @@ describe('the two columns', () => {
     expect(html.querySelector('.ps-settle-result .ps-stat-val').textContent).toBe('CA$232.21');
     expect(html.querySelector('.ps-settle-result .ps-stat-sub').textContent).toBe('CA$499.97 − CA$267.76');
     expect(html.textContent).toContain('They collected CA$574.68 and keep their CA$74.71 share');
-    // No negative figures anywhere in the columns.
-    expect([...html.querySelectorAll('.ps-settle-col .ps-settle-amt')].some(a => a.textContent.includes('−'))).toBe(false);
+    // The slip reads top-down: their side added, yours taken away, then the result.
+    expect([...html.querySelectorAll('.ps-slip-amt')].map(a => a.textContent)).toEqual(['+ CA$499.97', '− CA$267.76', '= CA$232.21']);
   });
 
   it('reverses when the publisher owes more', () => {
