@@ -19456,9 +19456,9 @@ button[onclick="refreshUmamiStats()"]:active {
 
 /* ============================================================
    PHONE NAVIGATION (publisher, ≤768px)
-   A fixed five-slot bottom bar (Home · Sell · Add sale · Orders ·
-   More) replaces the side-scrolling pill strip, and "More" opens a
-   bottom sheet listing every other tool, grouped as in the sidebar.
+   A fixed bottom bar (Home · Sell · Manual entry · More) replaces the
+   side-scrolling pill strip, and "More" opens a bottom sheet listing
+   every other tool, grouped as in the sidebar.
    Authors keep the pill strip: they only have a handful of tabs.
    ============================================================ */
 .mnav{display:none;}
@@ -19472,19 +19472,20 @@ button[onclick="refreshUmamiStats()"]:active {
     position:fixed;left:0;right:0;bottom:0;z-index:calc(var(--z-sticky) + 60);
     padding:6px max(6px,env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(6px,env(safe-area-inset-left));
     background:var(--ink2);
-    border-top:var(--stroke-hair) solid rgba(255,255,255,.08);
-    box-shadow:0 -8px 24px rgba(0,0,0,.18);
+    /* Riso: a printed ink rule along the top edge, not a soft glow. */
+    border-top:var(--stroke) solid var(--rule-ink);
+    box-shadow:none;
   }
   .mnav-btn{
     position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
     min-height:54px;padding:4px 2px;border:0;border-radius:var(--r2);background:transparent;
-    color:rgba(242,237,225,.62);font-family:var(--font-ui);cursor:pointer;touch-action:manipulation;
+    color:var(--on-inverse-2);font-family:var(--font-ui);cursor:pointer;touch-action:manipulation;
     transition:color .15s var(--ease-standard),background-color .15s var(--ease-standard);
   }
   .mnav-ic{font-size:var(--text-xl);line-height:1;}
   .mnav-label{font-size:var(--text-3xs);font-weight:700;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;}
   .mnav-btn.active{color:var(--gold2);}
-  .mnav-btn.active::before{content:"";position:absolute;top:0;left:28%;right:28%;height:3px;border-radius:0 0 3px 3px;background:var(--gold2);}
+  .mnav-btn.active::before{content:"";position:absolute;top:0;left:28%;right:28%;height:3px;border-radius:0;background:var(--gold2);}
   .mnav-btn:focus-visible{outline:2px solid var(--gold2);outline-offset:-2px;}
   /* A thumb tapping a fixed bar gets no cursor change and no scroll-triggered
      :hover to lean on, so press feedback is the only confirmation a tap
@@ -19494,16 +19495,8 @@ button[onclick="refreshUmamiStats()"]:active {
   @media (hover:hover){
     .mnav-btn:hover{background-color:rgba(255,255,255,.05);}
   }
-  /* The everyday action gets a raised, filled thumb target in the centre. */
-  .mnav-primary .mnav-ic{
-    display:grid;place-items:center;width:44px;height:44px;margin-top:-18px;border-radius:50%;
-    background:var(--gold);color:var(--ink);font-size:var(--text-2xl);font-weight:700;
-    box-shadow:var(--elev-2);border:3px solid var(--ink2);
-  }
-  .mnav-primary{color:rgba(242,237,225,.85);}
-  .mnav-primary.active::before{display:none;}
-  .mnav-primary:active .mnav-ic{transform:scale(.92);}
-  .mnav-dot{position:absolute;top:8px;right:calc(50% - 16px);width:8px;height:8px;border-radius:50%;background:var(--gold2);box-shadow:0 0 0 2px var(--ink2);}
+  /* "Something in here needs you": a square stamp, like the other count badges. */
+  .mnav-dot{position:absolute;top:8px;right:calc(50% - 16px);width:8px;height:8px;border-radius:0;background:var(--gold2);outline:var(--stroke) solid var(--ink2);}
 
   /* ---- More sheet ---- */
   .more-sheet[open]{
@@ -19520,7 +19513,7 @@ button[onclick="refreshUmamiStats()"]:active {
   .more-sheet-title{flex:1;margin:0;font-family:var(--font-ui);font-size:var(--text-lg);font-weight:800;letter-spacing:.02em;}
   .more-sheet-close{width:44px;height:44px;border:0;border-radius:50%;background:var(--surface-sunken);color:var(--text2);font-size:var(--text-lg);cursor:pointer;}
   .more-sheet-close:hover{background:var(--surface-inset);color:var(--content-primary);}
-  .more-sheet-close:active{transform:scale(.94);}
+  .more-sheet-close:active{transform:translate(2px,2px);}
   .more-sheet-close:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
   .more-sheet-body{overflow-y:auto;overscroll-behavior:contain;padding:0 var(--space-4) var(--space-5);}
   .more-sheet-body .o3-grouplabel,

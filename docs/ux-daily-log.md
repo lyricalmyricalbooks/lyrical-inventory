@@ -119,6 +119,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-08 | fix | Phone header, register, Add sale, More button | Stopped the bell and account button being drawn on top of each other, lifted messages clear of the register's Undo bar and the update notice clear of the bottom bar, showed a missing payment type right under its buttons, pinned Add order and Log gratuity above the bottom bar, and made the More dot light up as soon as something needs you | — |
 | 2026-10-08 | behavioural | Every pop-up, on Android phones | The back gesture now closes the pop-up on top (asking first if you'd lose typing) instead of leaving the app; Esc closes the one opened last, not the one last in the page | — |
 | 2026-10-08 | behavioural | Number boxes across the app, on phones | Copy counts bring up the whole-number keypad and prices, weights and sizes the decimal one (about 30 boxes had neither), and commission rates now accept a decimal such as 37.5% | — |
+| 2026-10-08 | visual | Phone bottom bar, pop-up sheets, register tabs | Gave the bottom bar a printed ink rule and square marks instead of a soft glow, and gave pop-up sheets a square ink grip, square corners and a square outlined close button; the register's tabs now ink in the one you're on and press in when tapped | — |
 
 ---
 
