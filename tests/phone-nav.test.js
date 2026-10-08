@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, expect, test } from 'vitest';
+import { PUBLISHER_ONLY_TABS } from '../src/lib/help-guide.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(path.join(__dirname, '../index.html'), 'utf8');
@@ -100,7 +101,8 @@ test('Today shows the waiting-orders count from the Website orders panel', () =>
 });
 
 test('authors never land on the publisher-only Today page', () => {
-  expect(mainJs).toMatch(/name === 'today'\)\) name = 'dashboard';/);
+  expect(mainJs).toMatch(/if \(isAuthor\(\) && PUBLISHER_ONLY_TABS\.has\(name\)\) name = 'dashboard';/);
+  expect(PUBLISHER_ONLY_TABS.has('today')).toBe(true);
 });
 
 test('manual entry has its own destination and only one destination is announced', () => {

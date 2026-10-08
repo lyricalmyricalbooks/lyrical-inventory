@@ -20779,3 +20779,9 @@ button[onclick="refreshUmamiStats()"]:active {
 .help-a li { margin:4px 0; }
 .help-a b { color:var(--content-primary); }
 .help-foot { margin:var(--space-5) 0; font-weight:700; color:var(--content-secondary); }
+/* Topic row: one button per section, jumps there. Sections stop clear of the sticky top bar. */
+.help-topics[hidden] { display:none; }
+.help-topics { display:flex; flex-wrap:wrap; gap:var(--space-2); margin-top:var(--space-3); }
+.help-sec { scroll-margin-top:96px; }
+/* "Open Manual entry →" under an answer: straight to the tab it describes. */
+.help-a .help-go-row { margin-top:var(--space-3); }
