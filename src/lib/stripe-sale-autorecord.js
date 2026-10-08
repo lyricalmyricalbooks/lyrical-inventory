@@ -11,6 +11,7 @@
 // why the others cannot. Pure — no ledger, no network — so the rules can be
 // tested directly; main.js does the recording, through the same function the
 // worklist's Record button uses.
+import { roundCents } from './money.js';
 
 /** A sale this large is unusual enough that a person should confirm it. */
 export const MAX_AUTO_QTY = 20;
@@ -46,6 +47,7 @@ export function stripeSalePlan(payment = {}, {
   bookCurrency = '',
   likelyLogged = false,
   autoSince = 0,
+  conversionRate = null,
 } = {}) {
   if (!payment || payment.refunded || payment.disputed) return { action: 'skip' };
   if (classification.kind !== 'direct') return { action: 'skip' };
@@ -61,11 +63,13 @@ export function stripeSalePlan(payment = {}, {
   if (likelyLogged) return { action: 'review', reason: 'maybe-rung-up' };
 
   const currency = String(payment.currency || '').toUpperCase();
-  if (bookCurrency && currency !== String(bookCurrency).toUpperCase()) return { action: 'review', reason: 'currency' };
+  const foreign = bookCurrency && currency !== String(bookCurrency).toUpperCase();
+  if (foreign && (!(conversionRate > 0) || !Number.isFinite(conversionRate))) return { action: 'review', reason: 'currency' };
 
   const price = Number(book.listPrice);
   if (!(price > 0)) return { action: 'review', reason: 'no-price' };
-  const copies = Number(payment.amount) / price;
+  const convertedAmount = foreign ? roundCents(Number(payment.amount) * conversionRate) : Number(payment.amount);
+  const copies = convertedAmount / price;
   const qty = Math.round(copies);
   if (qty < 1 || Math.abs(copies - qty) * price > 0.01) return { action: 'review', reason: 'amount' };
   if (qty > MAX_AUTO_QTY) return { action: 'review', reason: 'too-many' };

@@ -8,6 +8,13 @@ const direct = { kind: 'direct', bookId: 'hound' };
 const opts = (extra = {}) => ({ classification: direct, book, bookCurrency: 'CAD', autoSince: 1000, ...extra });
 
 describe('a book payment that can be recorded on its own', () => {
+  it('uses a resolved conversion to count copies without changing the original paid amount', () => {
+    const foreign = payment({ currency: 'EUR', amount: 40 });
+    expect(stripeSalePlan(foreign, opts({ conversionRate: 1.25 }))).toEqual({ action: 'record', bookId: 'hound', qty: 2 });
+    expect(foreign.amount).toBe(40);
+    expect(stripeSalePlan(foreign, opts({ conversionRate: 1.3 })).reason).toBe('amount');
+    expect(stripeSalePlan(foreign, opts({ conversionRate: Infinity })).reason).toBe('currency');
+  });
   it('records a whole number of copies at the book’s price', () => {
     expect(stripeSalePlan(payment(), opts())).toEqual({ action: 'record', bookId: 'hound', qty: 2 });
   });
