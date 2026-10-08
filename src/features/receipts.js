@@ -4571,7 +4571,7 @@ function renderBatchExpenseRows() {
             <td><input type="text" data-bx-uid="${r.uid}" data-bx-field="reference" value="${escapeHtml(r.reference || '')}" placeholder="—" aria-label="Reference"></td>
             <td class="r bx-cell-amount">
               <select data-bx-uid="${r.uid}" data-bx-field="currency" aria-label="Currency">${curOptions(r.currency)}</select>
-              <input type="number" step="0.01" min="0" data-bx-uid="${r.uid}" data-bx-field="amount" value="${r.amount === '' ? '' : escapeHtml(String(r.amount))}" placeholder="0.00" aria-label="Amount">
+              <input type="number" inputmode="decimal" step="0.01" min="0" data-bx-uid="${r.uid}" data-bx-field="amount" value="${r.amount === '' ? '' : escapeHtml(String(r.amount))}" placeholder="0.00" aria-label="Amount">
             </td>
             <td class="bx-col-actions">
               ${r.file ? `<button class="btn sm" type="button" title="Read this receipt again" aria-label="Read this receipt again" onclick="rescanBatchExpenseRow('${r.uid}')">✨</button>` : ''}

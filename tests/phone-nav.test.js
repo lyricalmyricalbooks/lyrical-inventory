@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, expect, test } from 'vitest';
+import { salesForDay as salesForDayFn } from '../src/lib/today-summary.js';
 import { PUBLISHER_ONLY_TABS } from '../src/lib/help-guide.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -15,7 +16,7 @@ const mainJs = readFileSync(path.join(__dirname, '../src/main.js'), 'utf8');
 const start = mainJs.indexOf('const MNAV_TABS');
 const end = mainJs.indexOf('Object.assign(window, { openMoreSheet, closeMoreSheet });');
 const block = mainJs.slice(start, end).replace(/export function/g, 'function');
-const api = new Function(`${block}; return { openMoreSheet, closeMoreSheet, syncMoreNavState };`);
+const api = new Function(`${block}; return { openMoreSheet, closeMoreSheet, syncMoreNavState, refreshMoreDot };`);
 
 let nav;
 beforeEach(() => {
@@ -85,10 +86,22 @@ test('Today gives selling, orders, tasks and receipt capture a real button', () 
   expect(cards[2].querySelector('.todo-nav-badge')).not.toBeNull();
 });
 
-test('Today shows the waiting-orders count from the Website orders panel', () => {
-  const start = mainJs.indexOf('export function renderTodayHub');
+// Run the Today renderers from main.js against the real markup, with the app's
+// own state stood in for.
+function todayApi({ activeBook, renderOrders = () => {}, books = {}, states = {} }) {
+  const start = mainJs.indexOf('// "Sold today · all books" on the phone home.');
   const end = mainJs.indexOf('// ── Phone "More" sheet');
-  const render = new Function('$', 'activeBook', 'renderOrders', mainJs.slice(start, end).replace('export function', 'function') + '; return renderTodayHub;')((id) => document.getElementById(id), 'book-a', () => {});
+  expect(start).toBeGreaterThan(-1);
+  const src = mainJs.slice(start, end).replace('export function', 'function') + '; return { renderTodayHub, renderTodaySoFar };';
+  const sync = [];
+  const api = new Function('$', 'activeBook', 'renderOrders', 'BOOKS', 'states', 'getBookCurrencyCode', 'salesForDay', 'today', 'fairTotalsText', 'renderFairSyncPill', src)(
+    (id) => document.getElementById(id), activeBook, renderOrders, books, states, () => 'CAD',
+    salesForDayFn, () => '2026-10-08', (t) => Object.entries(t).map(([c, a]) => `${c} ${a.toFixed(2)}`).join(' + '), () => sync.push(1));
+  return { ...api, sync };
+}
+
+test('Today shows the waiting-orders count from the Website orders panel', () => {
+  const render = todayApi({ activeBook: 'book-a' }).renderTodayHub;
   document.querySelector('#web-orders-status .web-stat-value').textContent = '3';
   render();
   expect(document.getElementById('today-orders-count').hidden).toBe(false);
@@ -114,9 +127,7 @@ test('manual entry has its own destination and only one destination is announced
 });
 
 test('Home in All books does not reuse another book’s order count', () => {
-  const start = mainJs.indexOf('export function renderTodayHub');
-  const end = mainJs.indexOf('// ── Phone "More" sheet');
-  const render = new Function('$', 'activeBook', 'renderOrders', mainJs.slice(start, end).replace('export function', 'function') + '; return renderTodayHub;')((id) => document.getElementById(id), 'all', () => { throw new Error('must not render a book-specific queue'); });
+  const render = todayApi({ activeBook: 'all', renderOrders: () => { throw new Error('must not render a book-specific queue'); } }).renderTodayHub;
   document.querySelector('#web-orders-status .web-stat-value').textContent = '8';
   render();
   expect(document.getElementById('today-orders-count').hidden).toBe(true);
@@ -135,3 +146,51 @@ test('reopening a manual sale preserves its entered price; a different book gets
   bookId = 'second'; make()();
   expect(document.getElementById('m-price').value).toBe('30.00');
 });
+
+test('the More dot lights up as soon as a badge appears, without a screen change', async () => {
+  const { observeSidebarBadges } = await import('../src/lib/phone-workspace.js');
+  const observer = observeSidebarBadges(document.getElementById('pub-sidebar'), nav.refreshMoreDot);
+  const dot = document.getElementById('mnav-more-dot');
+  const more = document.getElementById('mnav-more');
+  expect(dot.hidden).toBe(true);
+  expect(more.hasAttribute('aria-label')).toBe(false);
+  document.querySelector('#todo-sidebar-btn .nav-badge').hidden = false;
+  await Promise.resolve();
+  expect(dot.hidden).toBe(false);
+  expect(more.getAttribute('aria-label')).toBe('More, something needs your attention');
+  document.querySelector('#todo-sidebar-btn .nav-badge').hidden = true;
+  await Promise.resolve();
+  expect(dot.hidden).toBe(true);
+  expect(more.hasAttribute('aria-label')).toBe(false);
+  // Open Call's badge is shown through its inline style, not `hidden`.
+  document.getElementById('oc-nav-badge').style.display = '';
+  await Promise.resolve();
+  expect(dot.hidden).toBe(false);
+  observer.disconnect();
+});
+
+test('More says it is closed before it is ever opened', () => {
+  expect(document.getElementById('mnav-more').getAttribute('aria-expanded')).toBe('false');
+});
+
+test('Today so far totals the day across every book and refreshes the upload pill', () => {
+  const day = '2026-10-08';
+  const { renderTodaySoFar, sync } = todayApi({
+    activeBook: 'all',
+    books: { a: {}, b: {} },
+    states: {
+      a: { hist: [{ num: 'S1', chan: 'In Person', qty: 2, price: 20, date: day }, { num: 'G', chan: 'Gratuity', qty: 1, price: 0, date: day, gratuity: true }] },
+      b: { hist: [{ num: 'S2', chan: 'Website', qty: 1, price: 15, date: day }] },
+    },
+  });
+  renderTodaySoFar();
+  expect(document.getElementById('today-sold-sum').textContent).toBe('2 sales · 3 books · CAD 55.00');
+  expect(sync).toHaveLength(1);
+});
+
+test('Today so far says so when nothing has sold yet', () => {
+  const { renderTodaySoFar } = todayApi({ activeBook: 'all', books: { a: {} }, states: { a: { hist: [] } } });
+  renderTodaySoFar();
+  expect(document.getElementById('today-sold-sum').textContent).toBe('No sales yet today');
+});
+

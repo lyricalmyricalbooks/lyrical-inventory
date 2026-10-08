@@ -7,7 +7,7 @@ import './style.css';
 import './styles/theme-dark.css';
 import './styles/phone.css';
 import { initPhoneLayouts } from './lib/phone-layout.js';
-import { createPhonePageMemory, initPhoneWorkspace } from './lib/phone-workspace.js';
+import { createPhonePageMemory, initPhoneWorkspace, observeSidebarBadges } from './lib/phone-workspace.js';
 const phonePages = createPhonePageMemory(window);
 initPhoneWorkspace(document.getElementById('pw-app'));
 // Body, not #pw-app: the pop-up windows are siblings of the app shell.
@@ -210,8 +210,11 @@ import {
   openM,
   promptDialog,
   refreshUnsavedMarkers,
+  topOpenModalId,
   validateFields,
 } from './lib/modal.js';
+import { installBackClose } from './lib/back-close.js';
+import { salesForDay } from './lib/today-summary.js';
 import { dismissAppAlert, markAppAlertReviewed, pushAppAlert } from './lib/app-alert.js';
 import { booksInDescription, saleCodes, splitSalePlan } from './lib/sale-codes.js';
 import { describeMarketDay, latestMarketDay, summariseMarketDay } from './lib/market-day.js';
@@ -4802,7 +4805,21 @@ const SHELL_TAB_LABELS = {
 // Fills in the date and the waiting-orders count. The count is read from the
 // Website orders panel's own "Ready to apply" figure so the two never disagree;
 // the To-do card's count is a .todo-nav-badge, kept current by updateTodoBadge.
+// "Sold today · all books" on the phone home. Same rule as the Dashboard
+// (see lib/today-summary.js), so it agrees with History for the day.
+function renderTodaySoFar() {
+  const sum = $('today-sold-sum');
+  if (!sum) return;
+  const books = Object.keys(BOOKS).map((id) => ({ id, currency: getBookCurrencyCode(BOOKS[id]), hist: states[id]?.hist }));
+  const day = salesForDay(books, today());
+  sum.textContent = day.sales
+    ? `${day.sales} ${day.sales === 1 ? 'sale' : 'sales'} · ${day.units} ${day.units === 1 ? 'book' : 'books'} · ${fairTotalsText(day.totals)}`
+    : 'No sales yet today';
+  renderFairSyncPill();
+}
+
 export function renderTodayHub() {
+  renderTodaySoFar();
   const date = $('today-date');
   if (date) date.textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
   if (activeBook !== 'all') renderOrders();
@@ -4831,13 +4848,22 @@ function syncMoreNavState(name) {
     button.classList.toggle('active', !!selected);
     if (selected) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current');
   });
-  const dot = document.getElementById('mnav-more-dot');
-  if (dot) {
-    const hasBadge = [...document.querySelectorAll('#pub-sidebar .nav-badge, #pub-sidebar .health-badge, #pub-sidebar .bc-gap-badge')]
-      .some((b) => !b.hidden && b.style.display !== 'none' && b.closest('.snav') && !MNAV_TABS.some((t) => b.closest('.snav').getAttribute('onclick')?.includes(`'${t}'`)));
-    dot.hidden = !hasBadge;
-  }
+  refreshMoreDot();
 }
+
+// The dot on More means "a tool in here has something for you". It follows the
+// sidebar's own badges, so screen readers hear it in the button's name too.
+function refreshMoreDot() {
+  const dot = document.getElementById('mnav-more-dot');
+  if (!dot) return;
+  const hasBadge = [...document.querySelectorAll('#pub-sidebar .nav-badge, #pub-sidebar .health-badge, #pub-sidebar .bc-gap-badge')]
+    .some((b) => !b.hidden && b.style.display !== 'none' && b.closest('.snav') && !MNAV_TABS.some((t) => b.closest('.snav').getAttribute('onclick')?.includes(`'${t}'`)));
+  dot.hidden = !hasBadge;
+  const more = document.getElementById('mnav-more');
+  if (hasBadge) more?.setAttribute('aria-label', 'More, something needs your attention');
+  else more?.removeAttribute('aria-label');
+}
+
 
 export function openMoreSheet() {
   const sheet = document.getElementById('more-sheet');
@@ -4881,6 +4907,9 @@ document.getElementById('more-sheet')?.addEventListener('close', () => {
 });
 
 Object.assign(window, { openMoreSheet, closeMoreSheet });
+// Badges light up when a sync or a background check finishes, not only when
+// the owner changes screens, so the More dot follows them as they change.
+observeSidebarBadges(document.getElementById('pub-sidebar'), refreshMoreDot);
 
 // ── Phone tap buttons for short dropdowns ──────────────────────────────
 // A <select data-phone-seg> gets a row of big buttons beside it that a phone
@@ -8588,6 +8617,7 @@ function visibleTabName() {
 
 function renderAll() {
   _revMemo.clear();
+  if (visibleTabName() === 'today') renderTodaySoFar();
   if (activeBook === 'all') {
     // The To-do tab is reached from the all-books screen, so it sits inside this
     // branch rather than in TAB_RENDERERS below — which never runs while
@@ -10544,12 +10574,15 @@ async function submitManual(ev) {
     const num = $('m-num').value.trim() || 'MAN-' + Date.now(), chan = $('m-chan').value, notes = $('m-notes').value.trim();
     const paymentType = $('m-payment-type').value;
     if (!paymentType) {
-      $('m-payment-type').style.borderColor = 'var(--red)';
-      $('m-payment-type').focus();
+      // The error goes under the field, where a phone shows tap buttons in place
+      // of the (hidden) dropdown — reddening the dropdown alone showed nothing there.
+      const select = $('m-payment-type');
+      fieldError('m-payment-type', 'Pick who got the money');
+      const target = select.offsetParent ? select : select.nextElementSibling?.querySelector?.('.phone-seg-opt');
+      (target || select).focus();
       showToast('⚠ Please select a payment type', 'warn');
       return;
     }
-    $('m-payment-type').style.borderColor = '';
 
     const cur = $('m-price-cur').value;
     const pricing = resolveManualSalePricing(book, qty, rawPrice, cur);
@@ -16613,7 +16646,7 @@ function _renderProductionCostFields() {
       <div class="form-group" style="flex:1;margin:0;">
         <div class="price-wrap">
           <span class="sym">${book.currency}</span>
-          <input type="number" id="pc-${book.id}" value="${book.productionCost || ''}" placeholder="0.00" step="0.01" min="0">
+          <input type="number" inputmode="decimal" id="pc-${book.id}" value="${book.productionCost || ''}" placeholder="0.00" step="0.01" min="0">
         </div>
       </div>
     </div>`).join('');
@@ -17258,6 +17291,7 @@ function renderProfitTierList() {
     } else {
       const inp = document.createElement('input');
       inp.type = 'number';
+      inp.inputMode = 'decimal';
       inp.value = t.revenueUpTo || '';
       inp.placeholder = 'e.g. production cost';
       inp.style.width = '100%';
@@ -17402,7 +17436,7 @@ function psRenderSummary(book, cur, productionCost) {
         <div class="settings-metric-label" style="color:rgba(255,255,255,.5);">Earnings split simulator</div>
         <div style="display:flex;align-items:center;gap:8px;">
           <span style="font-size:var(--text-xs);color:rgba(255,255,255,.55);">If gross revenue is</span>
-          <input id="ps-sim-input" type="number" value="${gross}" style="width:120px;padding:6px 10px;font-size:var(--text-base);font-family:var(--font-mono);border:var(--stroke-hair) solid rgba(255,255,255,.14);border-radius:var(--r);background:rgba(255,255,255,.06);color:var(--on-inverse);outline:none;">
+          <input id="ps-sim-input" type="number" inputmode="decimal" step="0.01" value="${gross}" style="width:120px;padding:6px 10px;font-size:var(--text-base);font-family:var(--font-mono);border:var(--stroke-hair) solid rgba(255,255,255,.14);border-radius:var(--r);background:rgba(255,255,255,.06);color:var(--on-inverse);outline:none;">
           <span style="font-size:var(--text-xs);color:rgba(255,255,255,.55);">${escapeHtml(cur)}</span>
         </div>
       </div>
@@ -18718,15 +18752,6 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-document.addEventListener('DOMContentLoaded', () => {
-  const numericIds = ['nb-max', 'nb-price', 'nb-thresh', 'nb-prod', 'm-qty', 'm-price', 'sale-qty', 'sale-price', 'sent-qty', 'exp-amt', 'tc-exp-amt'];
-  numericIds.forEach((id) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.setAttribute('inputmode', 'decimal');
-  });
-});
-
 // ── MODAL UX: backdrop-click + Esc to close, clear validation on input ──
 // The modal primitives live in src/lib/modal.js and know nothing about this
 // app's dialogs. Seeding the date field is the one behaviour that does, so it
@@ -18735,7 +18760,24 @@ document.addEventListener('DOMContentLoaded', () => {
 // This runs for EVERY modal, not just the three named ones — any dialog that
 // happens to contain a #ret-date field gets today's date. That is the
 // long-standing behaviour, preserved deliberately.
+// The pop-up on top: the one opened last through openM, or — for the few
+// shown some other way — the last open one in the page, as Esc always did.
+function topOverlayId() {
+  const opened = topOpenModalId();
+  if (opened) return opened;
+  const open = Array.from(document.querySelectorAll('.overlay')).filter(o =>
+    o.style.display !== 'none' &&
+    !o.classList.contains('closing') && o.id.startsWith('m-') &&
+    !o.hasAttribute('data-no-backdrop-close'));
+  return open.length ? open[open.length - 1].id.slice(2) : null;
+}
+
+// On an Android phone the back gesture closes the pop-up on top (asking first
+// if there is unsaved typing) instead of leaving the app. See back-close.js.
+const backClose = installBackClose({ getTop: topOpenModalId, requestClose: attemptCloseModal });
+
 configureModals({
+  onStackChange: () => backClose.sync(),
   prepareOpen: (id) => {
     const d = id === 'send-books' ? 'send-date' : id === 'record-sale' ? 'sale-date' : 'ret-date';
     if ($(d)) $(d).value = today();
@@ -18758,12 +18800,12 @@ document.addEventListener('DOMContentLoaded', () => {
   // Esc closes the topmost open modal.
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
-    const open = Array.from(document.querySelectorAll('.overlay')).filter(o =>
-      o.style.display !== 'none' &&
-      !o.classList.contains('closing') && o.id.startsWith('m-') &&
-      !o.hasAttribute('data-no-backdrop-close'));
-    if (!open.length) return;
-    attemptCloseModal(open[open.length - 1].id.slice(2));
+    const top = topOverlayId();
+    if (!top) return;
+    // Handled here, so the browser doesn't also pass Esc to the back-gesture
+    // watcher and close a second pop-up.
+    e.preventDefault();
+    attemptCloseModal(top);
   });
 
   // Clear a field's error state as soon as the user edits it.
@@ -18780,6 +18822,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // checkboxes — in any open dialog.
   document.addEventListener('change', (e) => {
     const t = e.target;
+    // A dropdown answered by its phone tap buttons only fires `change`, so the
+    // error under it clears here (Add sale's payment type on a phone).
+    if (t && t.closest && t.closest('.form-group.invalid')) clearFieldError(t);
     if (t && t.closest && t.closest('.overlay[id^="m-"]')) refreshUnsavedMarkers();
   });
 });
@@ -19462,17 +19507,20 @@ window.fairShareSummary = async function () {
 
 // ── Upload status pill ───────────────────────────────────────────────────
 function renderFairSyncPill() {
-  const pill = $('fm-sync');
-  if (!pill) return;
   const view = fairSyncPill({
     online: typeof navigator === 'undefined' || navigator.onLine !== false,
     pending: syncQueue.length,
     retrying: _syncRetrying,
     atRisk: _syncQueueHeldInMemory,
   });
-  pill.textContent = view.text;
-  pill.dataset.tone = view.tone;
-  pill.setAttribute('aria-label', view.srText);
+  // The register's pill and the phone home's strip say the same thing.
+  for (const id of ['fm-sync', 'today-sync']) {
+    const pill = $(id);
+    if (!pill) continue;
+    pill.textContent = view.text;
+    pill.dataset.tone = view.tone;
+    pill.setAttribute('aria-label', view.srText);
+  }
 }
 
 let _fairSaving = false;
@@ -20283,7 +20331,7 @@ function renderFairKitBookList() {
         </span>
         <span class="fk-cell fk-field fk-field-price">
           <label class="fk-cell-lab" for="qrp-override-${book.id}">Door price (${escapeHtml(targetCode)})</label>
-          <input type="number" step="0.01" min="0" class="qrp-override-input" id="qrp-override-${book.id}" data-book-id="${book.id}" value="${existingOverride}" placeholder="${defaultPrice.toFixed(2)}" oninput="fairKitSelectionChanged()">
+          <input type="number" inputmode="decimal" step="0.01" min="0" class="qrp-override-input" id="qrp-override-${book.id}" data-book-id="${book.id}" value="${existingOverride}" placeholder="${defaultPrice.toFixed(2)}" oninput="fairKitSelectionChanged()">
         </span>
         <span class="fk-cell fk-cell-status">${tag}</span>
       </div>
@@ -23704,7 +23752,7 @@ function _reconNeedCard(p, c) {
       </div>
       <div class="form-group" style="margin:0;width:70px;">
         <label style="font-size:var(--text-2xs);">Qty</label>
-        <input type="number" id="recon-qty-${idSafe}" value="${_reconDefaultQty(p, c.bookId)}" min="1" oninput="this.dataset.manual='1'" style="width:100%;">
+        <input type="number" inputmode="numeric" id="recon-qty-${idSafe}" value="${_reconDefaultQty(p, c.bookId)}" min="1" oninput="this.dataset.manual='1'" style="width:100%;">
       </div>
       <div class="form-group" style="margin:0;width:280px;max-width:100%;">
         <label for="recon-num-${idSafe}" style="font-size:var(--text-2xs);">Order #</label>
@@ -23752,7 +23800,7 @@ function _reconGroupCard(items, gi) {
       </div>
       <div class="form-group" style="margin:0;width:80px;">
         <label style="font-size:var(--text-2xs);">Qty each</label>
-        <input type="number" id="recon-gqty-${gi}" value="${_reconDefaultQty(p, c.bookId)}" min="1" oninput="this.dataset.manual='1'" style="width:100%;">
+        <input type="number" inputmode="numeric" id="recon-gqty-${gi}" value="${_reconDefaultQty(p, c.bookId)}" min="1" oninput="this.dataset.manual='1'" style="width:100%;">
       </div>
       <div class="form-group" style="margin:0;width:120px;">
         <label style="font-size:var(--text-2xs);">Stripe amount paid</label>

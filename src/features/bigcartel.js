@@ -2292,7 +2292,7 @@ function gapRowHtml(gap) {
       <label for="bc-gap-book-${idSafe}">Book</label>
       <select id="bc-gap-book-${idSafe}" aria-label="Book sold on order ${escapeHtml(gap.num)}">${gapBookOptions(gap.bookId || catalogBooks()[0]?.id)}</select>
       <label for="bc-gap-qty-${idSafe}">Copies</label>
-      <input id="bc-gap-qty-${idSafe}" type="number" min="1" step="1" value="${gap.qty || 1}" aria-label="Copies sold on order ${escapeHtml(gap.num)}">
+      <input id="bc-gap-qty-${idSafe}" type="number" inputmode="numeric" min="1" step="1" value="${gap.qty || 1}" aria-label="Copies sold on order ${escapeHtml(gap.num)}">
       <div class="bc-gap-actions">
         <button class="btn gold sm" type="button" data-order="${idSafe}" onclick="addBigCartelOrderToLedger(this.dataset.order)">Add to ledger</button>
       </div>

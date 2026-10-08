@@ -62,3 +62,15 @@ export function initPhoneWorkspace(root, win = window) {
     if (chip) { chipMarker.after(chip); chipMarker.remove(); }
   };
 }
+
+// Call `onChange` whenever a badge in the sidebar appears, disappears or is
+// added. Badges are shown through `hidden` or an inline display style, and
+// change after a sync or a background check, not only on a screen change.
+// Watches the sidebar alone, and attributes that can show or hide a badge.
+export function observeSidebarBadges(sidebar, onChange) {
+  if (!sidebar || typeof MutationObserver !== 'function') return null;
+  const observer = new MutationObserver(() => onChange());
+  observer.observe(sidebar, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden', 'style'] });
+  onChange();
+  return observer;
+}
