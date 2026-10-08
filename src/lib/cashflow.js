@@ -8,6 +8,7 @@
 
 import { getBookCurrencyCode, roundCents } from './money.js';
 import { saleCadAmounts, datedCadRate } from './sale-fx.js';
+import { payoutDebtCollected } from './earnings.js';
 
 const yearOf = (d) => (d ? String(d).substring(0, 4) : '');
 const monthOf = (d) => (d ? String(d).substring(0, 7) : '');
@@ -30,6 +31,8 @@ export function computeCashFlowMetrics(sources, yearFilter) {
   let grossSales = 0;
   let operatingExpenses = 0;
   let artistPayouts = 0;
+  let artistDebtRecovered = 0;
+  let artistSettlementCashAdjustment = 0;
   let txnCount = 0;
   let unitsSold = 0;
 
@@ -38,6 +41,7 @@ export function computeCashFlowMetrics(sources, yearFilter) {
     const s = states[bid] || {};
     const b = books[bid] || {};
     const cur = getBookCurrencyCode(b);
+    const settlements = new Map((s.artistPayouts || []).filter(p => p.settlement && !p.voided).map(p => [p.id, p]));
 
     // Sales — skip pending-to-artist rows (unless voided, which counts as 0) and gratuities.
     (s.hist || []).filter((h) => (!h.artistPending || h.voided) && !h.gratuity).forEach((h) => {
@@ -46,7 +50,13 @@ export function computeCashFlowMetrics(sources, yearFilter) {
       // Merchandise at the sale's own date's rate; customer shipping is CAD
       // already (see lib/sale-fx.js). Matches the Tax Centre ledger line for line.
       const fx = saleCadAmounts(h, cur, fxRateCache);
-      grossSales = roundCents(grossSales + fx.merchandiseCad + fx.shippingCad);
+      const saleCad = roundCents(fx.merchandiseCad + fx.shippingCad);
+      grossSales = roundCents(grossSales + saleCad);
+      // Sales stay on their sale date for revenue reporting. Their cash is
+      // received through the combined payment on its own date instead.
+      if (settlements.has(h.artistSettlementId)) {
+        artistSettlementCashAdjustment = roundCents(artistSettlementCashAdjustment - saleCad);
+      }
       txnCount += 1;
       if (!h.voided) unitsSold += qty;
     });
@@ -75,7 +85,17 @@ export function computeCashFlowMetrics(sources, yearFilter) {
       if (!inYear(p.date, yearFilter)) return;
       // `amount` is denominated in the book's own currency (a payout made in
       // another currency stores the foreign cash under `payment`).
-      artistPayouts = roundCents(artistPayouts + (Number(p.amount) || 0) * datedCadRate(cur, p.date, fxRateCache).rate);
+      const hRate = datedCadRate(cur, p.date, fxRateCache).rate;
+      artistPayouts = roundCents(artistPayouts + (Number(p.amount) || 0) * hRate);
+      artistDebtRecovered = roundCents(artistDebtRecovered + payoutDebtCollected(p) * hRate);
+      if (p.settlement) {
+        const receipt = p.settlement;
+        const cashRate = fxRateCache[`${receipt.cur}_CAD`] || 1;
+        const cash = receipt.balance.direction === 'to-publisher' ? receipt.balance.amount
+          : receipt.balance.direction === 'to-artist' ? -receipt.balance.amount : 0;
+        artistSettlementCashAdjustment = roundCents(artistSettlementCashAdjustment + cash * cashRate
+          + ((Number(p.amount) || 0) - payoutDebtCollected(p)) * hRate);
+      }
     });
   });
 
@@ -94,7 +114,9 @@ export function computeCashFlowMetrics(sources, yearFilter) {
     operatingExpenses += eBase;
   });
 
-  return { grossSales, operatingExpenses, artistPayouts, txnCount, unitsSold };
+  return { grossSales, operatingExpenses, artistPayouts, txnCount, unitsSold,
+    ...(artistDebtRecovered ? { artistDebtRecovered } : {}),
+    ...(artistSettlementCashAdjustment ? { artistSettlementCashAdjustment } : {}) };
 }
 
 // Period-over-period delta for one metric. Handles a zero prior period without
@@ -133,7 +155,7 @@ export function buildCashFlowBuckets(ledger, yearFilter) {
   }
 
   (ledger || []).forEach((item) => {
-    if (item.sourceType === 'artistPayout') return; // excluded from opex
+    if (item.sourceType === 'artistPayout' || item.sourceType === 'artistDebtRecovery') return; // separate from operating sales/expenses
     if (item.affectsCashFlow === false) return; // non-cash tax/accounting adjustment
     // When charting a single year, ignore any stray out-of-year rows so the
     // axis stays the 12 seeded months (the production ledger is already

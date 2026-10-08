@@ -21,6 +21,7 @@
 // browser. main.js owns the dialog, the rate fetching and the persistence.
 
 import { roundCents, normalizeCurrencyCode, CODE_TO_SYMBOL } from './money.js';
+import { keyRows } from './merge-state.js';
 
 // Amounts that are NOT the book's native currency and must never be swept up in
 // a restatement:
@@ -177,6 +178,9 @@ export function collectNativeAmounts(state, book) {
     for (const o of (p.offsets || [])) {
       push('receivable', `Artist debt netted ${p.date || ''}`, o, 'amount', debtDate.get(String(o.id)) || p.date);
     }
+    for (const payment of (p.receivablePayments || [])) {
+      push('receivable', `Artist debt collected ${p.date || ''}`, payment, 'amount', debtDate.get(String(payment.id)) || p.date);
+    }
   }
 
   // Outstanding payout requests are quoted in the book's currency too. Missing
@@ -248,7 +252,11 @@ export function planCurrencyChange({ state, book, from, to, rateFor, skip }) {
     changes.push({ field: f, rate, before, after: roundCents(before * rate) });
   }
 
+  const keys = keyRows('hist', state?.hist || []);
+  const settlementLinks = (state?.artistPayouts || []).flatMap(p =>
+    !p.voided && p.settlement ? p.settlement.heldSales.map(link => ({ link, row: state.hist[keys.indexOf(link.key)] })) : []);
   return {
+    state, settlementLinks,
     from: fromCode,
     to: toCode,
     changes,
@@ -285,6 +293,15 @@ export function applyCurrencyChange(plan, { at } = {}) {
   // later change can tell them apart from unstamped legacy rows.
   for (const f of plan.skipped) {
     if (!curOf(f)) { f.record[curKeyOf(f)] = plan.to; touched.add(f.record); }
+  }
+
+  // Currency restatement changes history's content keys. Refresh only links
+  // whose exact source existed before migration; a deleted/edited sale stays
+  // an error on Undo. The original receipt's cash currency and wording remain.
+  const keys = keyRows('hist', plan.state?.hist || []);
+  for (const { link, row } of (plan.settlementLinks || [])) {
+    const index = plan.state.hist.indexOf(row);
+    if (row && index >= 0) link.key = keys[index];
   }
 
   return { converted: plan.changes.length, stamped: touched.size };

@@ -55,7 +55,7 @@ import { escapeHtml } from '../lib/html.js';
 import { csvRow, toCsv } from '../lib/csv.js';
 import { downloadCsv } from '../lib/download.js';
 import { fmt, getSym, getBookCurrencyCode, roundCents, setSelectCurrency } from '../lib/money.js';
-import { payoutNetted } from '../lib/earnings.js';
+import { payoutNetted, payoutDebtCollected } from '../lib/earnings.js';
 import { reconcileConsignmentMirrors } from '../lib/consignment.js';
 import { buildCashFlowBuckets, cashFlowDelta, computeCashFlowMetrics } from '../lib/cashflow.js';
 import { saleCadAmounts, datedCadRate } from '../lib/sale-fx.js';
@@ -320,6 +320,29 @@ function _tcSaveLedgerPrefs() {
       year: yearEl ? yearEl.value : 'all',
     }));
   } catch (e) { /* ignore quota / private-mode errors */ }
+}
+
+// Offer the coming year even before its first entry. Record years outside the
+// standard range remain accessible, including records synchronized offline.
+function _tcRefreshYearOptions(currentYear = new Date().getFullYear()) {
+  const selects = [$('tc-year'), $('tc-year-ledger')].filter(Boolean);
+  if (!selects.length) return;
+  const selected = selects[0].value || 'all';
+  const years = new Set();
+  for (let year = currentYear + 1; year >= 2023; year--) years.add(year);
+  const addYear = value => {
+    if (/^[1-9]\d{3}$/.test(value)) years.add(Number(value));
+  };
+  addYear(selected);
+  for (const row of _tcBuildLedger('all').allLedger) {
+    addYear(String(row.date || '').slice(0, 4));
+  }
+  const options = '<option value="all">All Time</option>' +
+    [...years].sort((a, b) => b - a).map(year => `<option value="${year}">${year}</option>`).join('');
+  for (const select of selects) {
+    if (select.innerHTML !== options) select.innerHTML = options;
+    select.value = selected;
+  }
 }
 
 function _tcRestoreLedgerPrefs() {
@@ -870,7 +893,7 @@ function _tcRenderLedgerTable(pageLedger, baseCurrency) {
           ? `<button class="edit-btn" aria-label="Edit entry" onclick="openEditExpense('${item.sourceType}', '${item.sourceId || ''}', '${item.itemId}')" title="Edit entry">✎</button>`
           : (item.sourceType === 'sale'
             ? `<button class="edit-btn" aria-label="Edit entry" onclick="openEditSale('${item.sourceId || ''}', '${item.itemId}')" title="Edit entry">✎</button>`
-            : (item.sourceType === 'artistPayout'
+            : (item.sourceType === 'artistPayout' || item.sourceType === 'artistDebtRecovery'
               ? `<button class="edit-btn" aria-label="Edit entry" onclick="openEditArtistPayout('${item.sourceId || ''}', '${item.itemId}')" title="Edit entry">✎</button>`
               : ''
             )
@@ -2313,7 +2336,9 @@ function _tcBuildLedger(selectedYear) {
           type: 'Expense',
           // The ledger counts cash only; say when part of the royalty was
           // settled by netting a debt, so a small or zero row isn't a mystery.
-          desc: payoutNetted(p) > 0.005
+          desc: p.settlement
+            ? `Author settlement (${b.title}) — earnings settled, including money retained from sales`
+            : payoutNetted(p) > 0.005
             ? `Artist Payout (${b.title}) — plus ${fmt(payoutNetted(p), cur)} netted against money owed`
             : `Artist Payout (${b.title})`,
           cat: 'Artist Royalties',
@@ -2327,6 +2352,13 @@ function _tcBuildLedger(selectedYear) {
           sourceType: 'artistPayout',
           sourceId: bid,
           itemId: p.id
+        });
+        const debtCollected = payoutDebtCollected(p);
+        if (debtCollected > 0) allLedger.push({
+          date: tDate, type: 'Transfer', desc: `Author debt settled (${b.title}) — included in the combined payment; not another sale`,
+          cat: 'Debt repayment', ref: p.method || '', origCurrency: cur,
+          origAmount: debtCollected, baseAmount: roundCents(debtCollected * pFx.rate),
+          hasRateError: pFx.missing, isIncome: true, sourceType: 'artistDebtRecovery', sourceId: bid, itemId: p.id,
         });
       }
     }
@@ -3454,6 +3486,8 @@ function renderTaxCenter() {
   if (TAX_CENTER?.settings?.geminiKey) _warmGeminiModelCache(TAX_CENTER.settings.geminiKey);
   // Preserve active subtab state
   switchTaxCenterSubTab(activeTaxCenterSubTab);
+  // Populate years before restoring a saved selection such as next year.
+  _tcRefreshYearOptions();
   // Restore the saved ledger view (year + search + type) before reading the year.
   _tcRestoreLedgerPrefs();
   _tcRenderStatusHeaders();
@@ -3565,7 +3599,7 @@ function _tcRenderCashFlowSummary(ctx) {
   const sources = { books: BOOKS, states, taxCenter: TAX_CENTER, fxRateCache: _fxRateCache };
   const cur = computeCashFlowMetrics(sources, selectedYear);
   const artistPayouts = cur.artistPayouts;
-  const netAfterPayouts = netCashFlow - artistPayouts;
+  const netAfterPayouts = netCashFlow - artistPayouts + (cur.artistDebtRecovered || 0) + (cur.artistSettlementCashAdjustment || 0);
   const profitMargin = totalGrossSales > 0 ? (netCashFlow / totalGrossSales) * 100 : null;
   const avgSale = cur.txnCount > 0 ? totalGrossSales / cur.txnCount : null;
 
@@ -3600,8 +3634,9 @@ function _tcRenderCashFlowSummary(ctx) {
       chip('Profit Margin', profitMargin == null ? '—' : `${profitMargin.toFixed(1)}%`, marginCls, 'Net cash flow ÷ gross sales'),
       chip('Transactions', String(cur.txnCount), '', 'Number of sales in this period'),
       chip('Avg Sale', avgSale == null ? '—' : fmt(avgSale, baseCurrency), '', 'Gross sales ÷ transactions'),
-      chip('Artist Payouts', fmt(artistPayouts, baseCurrency), 'cf-kpi-muted', 'Paid to artists — excluded from operating expenses'),
-      chip('Net After Payouts', fmt(netAfterPayouts, baseCurrency), napCls, 'Net cash flow minus artist payouts'),
+      chip('Artist Payouts', fmt(artistPayouts, baseCurrency), 'cf-kpi-muted', 'Earnings paid or retained by artists — excluded from operating expenses'),
+      ...(cur.artistDebtRecovered ? [chip('Author debt recovered', fmt(cur.artistDebtRecovered, baseCurrency), 'cf-kpi-muted', 'Debt cleared by combined payments — kept separate from new sales')] : []),
+      chip('Net After Payouts', fmt(netAfterPayouts, baseCurrency), napCls, 'After artist payouts and debt repayments; combined payments count on their payment date'),
     ].join('');
   }
 
@@ -3639,7 +3674,7 @@ function _tcCashFlowBucketRows(key) {
   const data = window._tcCashFlowChartDetail || {};
   const monthly = data.selectedYear !== 'all' && data.selectedYear;
   return (data.ledger || []).filter((item) => {
-    if (item.sourceType === 'artistPayout') return false;
+    if (item.sourceType === 'artistPayout' || item.sourceType === 'artistDebtRecovery') return false;
     if (item.affectsCashFlow === false) return false;
     const date = item.date || '';
     const itemKey = monthly ? date.substring(0, 7) : date.substring(0, 4);

@@ -1,6 +1,8 @@
 // Pure inventory math — no DOM, no Firestore — so on-hand reconciliation can be
 // imported anywhere and unit-tested in isolation.
 
+import { roundCents } from './money.js';
+
 // Derive on-hand stock purely from a book's records: everything ever printed,
 // minus direct sales, minus books currently out on consignment, plus any good
 // returns that came back. Consignment SALES are excluded — those copies already
@@ -236,11 +238,11 @@ export function recalculateBookStatsFromHistory(s) {
     if (!s.chStats[chan]) s.chStats[chan] = { txns: 0, units: 0, revenue: 0 };
     s.chStats[chan].txns++;
     s.chStats[chan].units += (h.qty || 0);
-    s.chStats[chan].revenue += (h.qty || 0) * (h.price || 0);
+    if (!h.artistPending) s.chStats[chan].revenue = roundCents(s.chStats[chan].revenue + (h.qty || 0) * (h.price || 0));
 
     if (h.gratuity) return;
     s.sold += (h.qty || 0);
-    s.revenue += (h.qty || 0) * (h.price || 0);
+    if (!h.artistPending) s.revenue = roundCents(s.revenue + (h.qty || 0) * (h.price || 0));
   });
 }
 

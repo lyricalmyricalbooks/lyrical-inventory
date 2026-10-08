@@ -138,31 +138,37 @@ const SWIPE_CLOSE_PX = 90;
 function enableSwipeToClose(root, closeFn, isPhone) {
   let drag = null;
   const onStart = (e) => {
-    if (!isPhone() || e.pointerType !== 'touch') return;
+    if (drag || !isPhone() || e.pointerType !== 'touch') return;
     const title = e.target.closest?.('.overlay .modal-title');
     if (!title || e.target.closest('button, input, select, a')) return;
     const modal = title.closest('.modal');
-    drag = { modal, overlay: modal.closest('.overlay'), y: e.clientY, dy: 0 };
+    drag = { modal, overlay: modal.closest('.overlay'), pointerId: e.pointerId, y: e.clientY, dy: 0, transition: modal.style.transition, transform: modal.style.transform };
     modal.style.transition = 'none';
   };
   const onMove = (e) => {
-    if (!drag) return;
+    if (!drag || e.pointerId !== drag.pointerId) return;
     drag.dy = Math.max(0, e.clientY - drag.y);
     drag.modal.style.transform = drag.dy ? `translateY(${drag.dy}px)` : '';
   };
-  const onEnd = () => {
+  const reset = () => {
     if (!drag) return;
-    const { modal, overlay, dy } = drag;
+    const { modal, transition, transform } = drag;
     drag = null;
-    modal.style.transition = '';
-    modal.style.transform = '';
-    if (dy >= SWIPE_CLOSE_PX && overlay?.id?.startsWith('m-')) closeFn(overlay.id.slice(2));
+    modal.style.transition = transition;
+    modal.style.transform = transform;
+  };
+  const onEnd = (e) => {
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    const { overlay, y } = drag;
+    reset();
+    if (e.type === 'pointerup' && isPhone() && e.clientY - y >= SWIPE_CLOSE_PX && overlay?.id?.startsWith('m-')) closeFn(overlay.id.slice(2));
   };
   root.addEventListener('pointerdown', onStart);
   root.addEventListener('pointermove', onMove);
   root.addEventListener('pointerup', onEnd);
   root.addEventListener('pointercancel', onEnd);
   return () => {
+    reset();
     root.removeEventListener('pointerdown', onStart);
     root.removeEventListener('pointermove', onMove);
     root.removeEventListener('pointerup', onEnd);

@@ -15,8 +15,11 @@ initPhoneLayouts(document.body);
 import './firebase.js';
 import { registerSW } from 'virtual:pwa-register';
 import { canonicalExpenseCategory } from './lib/expense-categories.js';
-import { calcArtistEarnings, tierEffectiveCap, describePayout, payoutRequestCovered, planNetPayout, payoutNetted } from './lib/earnings.js';
+import { calcArtistEarnings, tierEffectiveCap, describePayout, payoutRequestCovered, planNetPayout, payoutNetted, describeArtistSettlement } from './lib/earnings.js';
+import { planArtistSettlement, applyArtistSettlement, undoArtistSettlement, artistSettlementStatement, artistSettlementIssues } from './lib/artist-settlement.js';
+import { keyRows } from './lib/merge-state.js';
 import { createStripePriceAndLink } from './lib/stripe-payment-link.js';
+import { createStripeRateResolver, stripeOrderNumber } from './lib/stripe-sale-defaults.js';
 import { calculateBreakEven, breakEvenTierMove, applyBreakEvenTierMove, readProductionCostInput } from './lib/breakeven.js';
 import { computeTallyRowHeights, computeQrCardSize, estimateTallyPages, estimateQrPages } from './lib/print-sheet-layout.js';
 import { escapeHtml } from './lib/html.js';
@@ -4027,6 +4030,7 @@ export let _fxRateCache = { 'CAD_CAD': 1 };
 // Rates for a given date never change once published, so the ones already
 // fetched are kept on the device and a past sale keeps its value offline.
 Object.assign(_fxRateCache, loadFxHistory(getLocalStorage()));
+const _fxHistoricalDates = {};
 
 export async function loadTaxCenter() {
   if (isAuthor()) return;
@@ -4809,12 +4813,12 @@ export function renderTodayHub() {
 // The phone bottom nav holds three everyday destinations; everything else
 // lives in this sheet. Its contents are cloned from the sidebar each time
 // it opens so grouping, visibility and live badges never drift apart.
-const MNAV_TABS = ['today', 'pos', 'website'];
+const MNAV_TABS = ['today', 'pos', 'manual'];
 
 function syncMoreNavState(name) {
   const more = document.getElementById('mnav-more');
   if (!more) return;
-  const destination = name === 'manual' ? 'pos' : name;
+  const destination = name;
   more.classList.toggle('active', !MNAV_TABS.includes(destination));
   document.querySelectorAll('#mnav .mnav-btn').forEach(button => {
     const selected = button === more ? more.classList.contains('active') : button.getAttribute('onclick')?.includes(`'${destination}'`);
@@ -6474,7 +6478,7 @@ function activityHtml(ev) {
   const amount = ev.amount
     ? `<span class="activity-amt${toneClass} mono-num">${escapeHtml(ev.amount)}</span>`
     : '';
-  const when = webScanRelativeTime(ev.date) || fmtD(ev.date);
+  const when = ev.timestamp ? webScanRelativeTime(ev.timestamp) : fmtD(ev.date);
   return `<div class="activity-item">
       <span class="activity-dot" aria-hidden="true">${escapeHtml(ev.icon || '')}</span>
       <div class="activity-body">
@@ -7614,6 +7618,170 @@ function getArtistHeldHtml(stats, cur) {
   return { heldCardHtml, heldNoteHtml, hasHeld };
 }
 
+const artistSettlementPreviews = new Map();
+const artistSettlementBusy = new Set();
+
+function toggleArtistSettlement(bookId) {
+  if (isAuthor()) return;
+  const result = document.getElementById(`artist-settlement-${bookId}`);
+  const button = document.getElementById(`artist-settlement-button-${bookId}`);
+  const stats = calculateArtistEarnings(bookId);
+  if (!result || !button || !stats) return;
+  const open = result.hidden;
+  if (open) {
+    const plan = planArtistSettlement(BOOKS[bookId], states[bookId]);
+    if (!plan) { showToast('This book has not loaded. Reload before calculating a settlement.', 'err'); return; }
+    artistSettlementPreviews.set(bookId, plan);
+    const balance = describeArtistSettlement(stats);
+    const cur = BOOKS[bookId].currency;
+    const row = (label, amount, sign = '') => `<div class="ps-payout-row">
+      <span>${label}</span><span class="ps-payout-row-amt" style="white-space:nowrap;">${sign}${fmt(amount, cur)}</span>
+    </div>`;
+    const label = balance.direction === 'to-publisher' ? 'Author sends you'
+      : balance.direction === 'to-artist' ? 'You send the author' : 'No payment needed';
+    result.innerHTML = `
+      <div class="ps-payout-list">
+        ${row('Money held by the author', balance.heldGross)}
+        ${row('Their cut of those sales — they keep this', balance.heldShare, '− ')}
+        ${row('Your cut of the held money', balance.publisherHeld)}
+        ${balance.otherDebt > 0 ? row('Other money the author still owes you', balance.otherDebt, '+ ') : ''}
+        ${row('Remaining earnings you owe the author', balance.royaltiesOwed, '− ')}
+        ${balance.overpaid > 0 ? row('Previous overpayment to the author', balance.overpaid, '+ ') : ''}
+      </div>
+      <div class="ps-stat-card tone-green">
+        <div class="ps-stat-label">${label}</div>
+        <div class="ps-stat-val">${fmt(balance.amount, cur)}</div>
+        <div class="ps-stat-sub">For this title, after both balances are offset.</div>
+      </div>
+      <p class="ps-payout-preview">Their cut is deducted once. Remaining earnings already exclude that cut, previous payouts and recorded debt offsets. This is a calculation only; no payment has been recorded.</p>
+      ${balance.overpaid > 0 ? '<p class="ps-payout-preview">This includes the previous overpayment as money to recover. If you agreed to leave it as credit against future earnings, subtract that overpayment from the amount to collect.</p>' : ''}
+      <p class="ps-payout-preview">Based on records currently on this device. If another device has recent sales or payments, let it synchronize before agreeing the final amount.</p>
+      <div class="ps-payout-actions">
+        <button class="btn sys-target" onclick="copyArtistSettlement('${bookId}')">Copy explanation</button>
+        ${plan.hasWork ? `<button class="btn gold sys-target" id="artist-settlement-record-button-${bookId}" onclick="toggleArtistSettlementForm('${bookId}')">${balance.direction === 'to-publisher' ? 'Record payment received' : balance.direction === 'to-artist' ? 'Record payment sent' : 'Record offset'}</button>` : ''}
+      </div>
+      ${plan.error ? '<p class="ps-payout-preview is-warn">A previous settlement needs review. Check the payment history and undo an incorrect or overlapping settlement before recording another.</p>' : ''}
+      <details>
+        <summary>View explanation to share</summary>
+        <label for="artist-settlement-text-${bookId}">Explanation for the author</label>
+        <textarea id="artist-settlement-text-${bookId}" rows="12" readonly>${escapeHtml(artistSettlementStatement(BOOKS[bookId], balance, today()))}</textarea>
+      </details>
+      <div id="artist-settlement-form-${bookId}" class="ps-payout-form" hidden>
+        <p class="ps-payout-preview">Only save after this payment has actually arrived or been sent. This records the full settlement shown above.</p>
+        <div class="ps-payout-fields">
+          <div class="form-group"><label for="as-date-${bookId}">Payment date</label><input id="as-date-${bookId}" type="date" value="${today()}"></div>
+          <div class="form-group"><label for="as-method-${bookId}">Payment method (optional)</label><input id="as-method-${bookId}" placeholder="e-Transfer, cash…"></div>
+          <div class="form-group"><label for="as-notes-${bookId}">Notes (optional)</label><input id="as-notes-${bookId}" placeholder="Payment reference or agreement"></div>
+        </div>
+        <div class="ps-payout-actions">
+          <button class="btn gold" onclick="recordArtistSettlement('${bookId}')">Save settlement</button>
+          <button class="btn tx" onclick="toggleArtistSettlementForm('${bookId}')">Cancel</button>
+        </div>
+      </div>
+      <div id="artist-settlement-feedback-${bookId}" class="ps-payout-preview" role="status" aria-live="polite"></div>
+    `;
+  }
+  result.hidden = !open;
+  button.setAttribute('aria-expanded', String(open));
+}
+window.toggleArtistSettlement = toggleArtistSettlement;
+
+function toggleArtistSettlementForm(bookId) {
+  if (!isPublisherSession() || isAuthor()) return;
+  const form = document.getElementById(`artist-settlement-form-${bookId}`);
+  if (!form) return;
+  form.hidden = !form.hidden;
+  if (!form.hidden) document.getElementById(`as-date-${bookId}`)?.focus();
+  else document.getElementById(`artist-settlement-record-button-${bookId}`)?.focus();
+}
+
+async function copyArtistSettlement(bookId, payoutId = '') {
+  const record = payoutId ? findArtistPayout(bookId, payoutId) : null;
+  const plan = artistSettlementPreviews.get(bookId);
+  const text = record?.settlement?.statement || (plan && artistSettlementStatement(BOOKS[bookId], plan.balance, today()));
+  if (!text) return;
+  try {
+    if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+    await navigator.clipboard.writeText(text);
+    showToast('Explanation copied — ready to share with the author');
+  } catch (_) {
+    const field = document.getElementById(payoutId ? `artist-settlement-receipt-${bookId}-${payoutId}` : `artist-settlement-text-${bookId}`);
+    if (field) {
+      field.closest('details').open = true;
+      field.focus(); field.select();
+    }
+    showToast('Clipboard access was blocked. Select and copy the explanation shown.', 'warn');
+  }
+}
+
+async function recordArtistSettlement(bookId) {
+  if (!isPublisherSession() || isAuthor() || artistSettlementBusy.has(bookId)) return;
+  const plan = artistSettlementPreviews.get(bookId);
+  const book = BOOKS[bookId];
+  const current = book && states[bookId] && planArtistSettlement(book, states[bookId]);
+  if (!plan || !current || plan.signature !== current.signature) { showToast('The balances changed. Close the calculation and calculate again before recording.', 'warn'); return; }
+  const value = name => document.getElementById(`as-${name}-${bookId}`)?.value || '';
+  const date = value('date'), method = value('method').trim(), notes = value('notes').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { showToast('Choose a payment date.', 'warn'); return; }
+  artistSettlementBusy.add(bookId);
+  try {
+    const direction = plan.balance.direction;
+    const cash = fmt(plan.balance.amount, book.currency);
+    const message = direction === 'to-publisher' ? `Confirm the author has paid you ${cash}.`
+      : direction === 'to-artist' ? `Confirm you have paid the author ${cash}.` : 'Confirm both balances should be offset without a cash payment.';
+    if (!(await confirmDialog(`${message}\n\nThis clears the held sales and both outstanding balances in this calculation. The settlement stays in the payment history and can be undone.`, { title: 'Record author settlement', okLabel: 'Record settlement' }))) return;
+    const outcome = applyArtistSettlement(BOOKS[bookId], states[bookId], plan, { date, method, notes });
+    if (!outcome.ok) { showToast('The balances changed. Calculate again before recording.', 'warn'); return; }
+    settlePayoutRequests(bookId);
+    await saveState(bookId);
+    syncArtistSettlementSales(bookId, outcome.record);
+    if (bookId === activeBook) { renderHist(); updateDash(); renderArtistTransfers(); }
+    renderProfitSharingBreakdown(bookId);
+    showToast(artistSettlementIssues(states[bookId]).size ? 'Settlement recorded — overlapping settlements need review in payment history'
+      : syncQueue.some(q => q.bookId === bookId) ? 'Settlement recorded on this device — waiting to synchronize' : 'Settlement recorded — both balances cleared');
+  } finally { artistSettlementBusy.delete(bookId); }
+}
+
+async function undoRecordedArtistSettlement(bookId, payoutId) {
+  if (!isPublisherSession() || isAuthor() || artistSettlementBusy.has(bookId)) return;
+  const record = findArtistPayout(bookId, payoutId);
+  if (!record?.settlement || record.voided) return;
+  artistSettlementBusy.add(bookId);
+  try {
+    if (!(await confirmDialog('Undo this author settlement?\n\nThis removes its effect from the balances and restores any sales it settled. It changes the records only; it does not return any money.', { title: 'Undo settlement', okLabel: 'Undo settlement', danger: true }))) return;
+    const outcome = undoArtistSettlement(states[bookId], payoutId);
+    if (!outcome.ok) { showToast('A linked sale changed. Review it before undoing this settlement.', 'warn'); return; }
+    settlePayoutRequests(bookId);
+    await saveState(bookId);
+    syncArtistSettlementSales(bookId, record);
+    if (bookId === activeBook) { renderHist(); updateDash(); renderArtistTransfers(); }
+    renderProfitSharingBreakdown(bookId);
+    showToast('Settlement undone — balances recalculated');
+  } finally { artistSettlementBusy.delete(bookId); }
+}
+Object.assign(window, { toggleArtistSettlementForm, copyArtistSettlement, recordArtistSettlement, undoRecordedArtistSettlement });
+
+function syncArtistSettlementSales(bookId, record) {
+  if (!sheetsUrl) return;
+  const state = states[bookId], book = BOOKS[bookId];
+  const keys = keyRows('hist', state.hist || []);
+  for (const link of record.settlement.heldSales) {
+    const h = state.hist[keys.indexOf(link.key)];
+    if (!h || h.consignmentLink) continue;
+    const nativeCur = getBookCurrencyCode(book);
+    const totalNative = roundCents(h.qty * h.price);
+    const marker = h.artistPending ? '[PENDING ARTIST TRANSFER — NET SETTLEMENT UNDONE]' : '[AUTHOR NET SETTLEMENT RECORDED]';
+    syncToSheets({
+      type: 'order', book: book.title, date: h.date, num: h.num, chan: h.chan,
+      qty: h.qty, price: h.price, total: totalNative, stockAfter: h.after ?? state.stock,
+      notes: `${h.notes || ''} ${marker}`, sheetsId: h.sheetsId || '', currency: nativeCur,
+      paymentCurrency: normalizeCurrencyCode(h.payment?.currency || nativeCur, 'CAD'),
+      paymentAmount: h.payment?.amount ?? totalNative, paymentRate: h.payment?.rate ?? '',
+      convertedTotal: cadEquivalentForSale({ nativeCurrency: nativeCur, totalNative, payment: h.payment }),
+    });
+  }
+}
+
 // Bring every request's `settled` flag in line with what has actually been paid.
 // Both directions matter: deleting or reducing a payout has to re-open a request
 // it used to cover, or the attention signal would stay silent about money that
@@ -7707,18 +7875,44 @@ function getPayoutRequestHtml(bookId, stats, cur, owed) {
 
 function getPayoutHistoryHtml(stats, bookId, cur) {
   const payouts = stats.payouts || [];
+  const issues = artistSettlementIssues(states[bookId] || {});
+  const undone = (states[bookId]?.artistPayouts || []).filter(p => p.voided && p.settlement).map(p =>
+    `<div class="ps-payout-row"><span class="ps-payout-row-main"><strong>Undone author settlement</strong><span class="ps-payout-row-meta">${fmtD(p.date)} · Original amount ${fmt(p.settlement.balance.amount, p.settlement.cur)} · balances recalculated</span></span></div>`
+  ).join('');
   if (!payouts.length) {
     return `<div class="ps-payout-empty">
       <span class="ps-payout-empty-icon" aria-hidden="true">💸</span>
       <strong>No payouts recorded yet</strong>
       <span>Every payment you send the artist belongs here — it is what the balance above is measured against.</span>
-    </div>`;
+    </div>${undone}`;
   }
 
   const book = BOOKS[bookId];
 
   // ⚡ Bolt Optimization: Use string comparison instead of localeCompare for sorting ISO "YYYY-MM-DD" dates
   const rows = payouts.slice().sort((a, b) => { const dA = a.date || ''; const dB = b.date || ''; return dA > dB ? -1 : (dA < dB ? 1 : 0); }).map(p => {
+    if (p.settlement) {
+      const balance = p.settlement.balance;
+      const pid = escapeHtml(String(p.id));
+      const label = balance.direction === 'to-publisher' ? 'Received from author'
+        : balance.direction === 'to-artist' ? 'Sent to author' : 'Offset without cash';
+      return `<div class="ps-payout-form">
+        ${issues.has(p.id) ? '<p class="ps-payout-preview is-warn">Needs review: this settlement overlaps another payment or a linked sale changed. Check the actual payments and undo the incorrect record.</p>' : ''}
+        <div class="ps-payout-row">
+          <span class="ps-payout-row-main"><strong>${label}</strong><span class="ps-payout-row-meta">${fmtD(p.date)}${p.method ? ' · ' + escapeHtml(p.method) : ''}</span></span>
+          <span class="ps-payout-row-amt">${fmt(balance.amount, p.settlement.cur)}</span>
+        </div>
+        <p class="ps-payout-preview">${p.amount < 0 ? `${fmt(-p.amount, cur)} in previous earnings recovered.` : `${fmt(p.amount, cur)} in earnings settled, including money the author kept.`} ${p.notes ? escapeHtml(p.notes) : ''}</p>
+        <div class="ps-payout-actions">
+          <button class="btn sys-target" onclick="copyArtistSettlement('${bookId}', '${pid}')">Copy explanation</button>
+          ${!isAuthor() ? `<button class="btn tx sys-target" onclick="undoRecordedArtistSettlement('${bookId}', '${pid}')">Undo settlement</button>` : ''}
+        </div>
+        <details><summary>View settlement explanation</summary>
+          <label for="artist-settlement-receipt-${bookId}-${pid}">Recorded explanation for the author</label>
+          <textarea id="artist-settlement-receipt-${bookId}-${pid}" rows="12" readonly>${escapeHtml(p.settlement.statement)}</textarea>
+        </details>
+      </div>`;
+    }
     // ⚡ Bolt Optimization: Use shared escapeHtml to prevent GC pressure from inline object creation during replace operations
     // A payout handed over in another currency carries the same `payment` meta a
     // foreign sale does, so the row can show the cash that actually moved
@@ -7754,13 +7948,14 @@ function getPayoutHistoryHtml(stats, bookId, cur) {
 
   // The running total is the same figure as the "Paid to artist" card above, so
   // the list can be reconciled against it without adding the rows up by hand.
-  return `${rows}
+  return `${rows}${undone}
         <div class="ps-payout-total">
           <span>${payouts.length} payout${payouts.length === 1 ? '' : 's'}</span>
           <span class="ps-payout-total-val">${fmt(stats.totalPaidToArtist ?? 0, cur)}</span>
         </div>`;
 }
 function renderProfitSharingBreakdown(bookId) {
+  artistSettlementPreviews.delete(bookId);
   const block = $('d-profit-sharing-block');
   const content = $('ps-dash-content');
   if (!block || !content) return;
@@ -7787,6 +7982,7 @@ function renderProfitSharingBreakdown(bookId) {
   const payoutRequestHtml = getPayoutRequestHtml(bookId, stats, cur, owed);
   const payoutHistoryHtml = getPayoutHistoryHtml(stats, bookId, cur);
   const payoutFormHtml = getPayoutFormHtml(bookId, cur, owed);
+  const hasSettlements = (states[bookId]?.artistPayouts || []).some(p => p.settlement);
 
   content.innerHTML = `
     <div class="ps-stat-grid ${hasHeld ? 'cols-4' : 'cols-3'}">
@@ -7796,7 +7992,7 @@ function renderProfitSharingBreakdown(bookId) {
         <div class="ps-stat-sub">lifetime total</div>
       </div>
       <div class="ps-stat-card">
-        <div class="ps-stat-label">Paid to artist</div>
+        <div class="ps-stat-label">${hasSettlements ? 'Earnings settled' : 'Paid to artist'}</div>
         <div class="ps-stat-val is-muted">${fmt(stats.totalPaidToArtist, cur)}</div>
         <div class="ps-stat-sub">${stats.payouts?.length || 0} payout${(stats.payouts?.length || 0) !== 1 ? 's' : ''} recorded</div>
       </div>
@@ -7808,6 +8004,12 @@ function renderProfitSharingBreakdown(bookId) {
       </div>
     </div>
     ${heldNoteHtml}
+    ${!isAuthor() ? `<div class="ps-payout-head">
+      <button class="btn sys-target" id="artist-settlement-button-${bookId}"
+        aria-expanded="false" aria-controls="artist-settlement-${bookId}"
+        onclick="toggleArtistSettlement('${bookId}')">Calculate author payment</button>
+    </div>
+    <div id="artist-settlement-${bookId}" class="ps-payout-form sys-container" role="region" aria-label="Author payment calculation" hidden></div>` : ''}
     ${payoutRequestHtml}
     <div style="margin-bottom:1rem;">
        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
@@ -7820,7 +8022,7 @@ function renderProfitSharingBreakdown(bookId) {
     ${progressHtml}
     <div class="ps-payout-section">
       <div class="ps-payout-head">
-        <span class="sect sect-inline">Artist Payouts</span>
+        <span class="sect sect-inline">${hasSettlements ? 'Payments & settlements' : 'Artist Payouts'}</span>
         ${payoutFormHtml ? `<button class="btn gold" onclick="toggleArtistPayoutForm('${bookId}')">+ Record payout</button>` : ''}
       </div>
       ${payoutFormHtml}
@@ -7951,6 +8153,7 @@ async function editArtistPayout(bookId, payoutId) {
   if (!s || !book) return;
   const p = (s.artistPayouts || []).find(x => String(x.id) === String(payoutId));
   if (!p) { showToast('⚠ Payout record not found', 'err'); return; }
+  if (p.settlement) { showToast('This is a combined settlement. Undo it before recording a correction.', 'warn'); return; }
 
   if (p.sourceNum) {
     const ok = await confirmDialog(
@@ -8225,6 +8428,7 @@ async function saveArtistPayout(bookId) {
   }
 
   if (existing) {
+    if (existing.settlement) { showToast('Undo the combined settlement before recording a correction.', 'warn'); return; }
     Object.assign(existing, fields, { editedAt: new Date().toISOString() });
   } else {
     s.artistPayouts.push({ id: makeEventId(), ...fields });
@@ -8290,6 +8494,7 @@ async function requestArtistPayout(bookId) {
 }
 
 async function deleteArtistPayout(bookId, payoutId) {
+  if (findArtistPayout(bookId, payoutId)?.settlement) return undoRecordedArtistSettlement(bookId, payoutId);
   if (!(await confirmDialog('Delete this payout record?', { danger: true, okLabel: 'Delete' }))) return;
   const s = states[bookId];
   if (!s || !s.artistPayouts) return;
@@ -8497,7 +8702,7 @@ function writeOrderToLedger(bookId, { num = '', chan, qty, price, notes = '', pa
 
   const id = sheetsId || makeEventId();
   const when = date || today();
-  const row = { ...extra, num, chan, qty, price, after: s.stock, notes: updatedNotes, date: when, payment, enteredBy, sheetsId: id, cur: bookCurrencyCode(book) };
+  const row = { recordedAt: new Date().toISOString(), ...extra, num, chan, qty, price, after: s.stock, notes: updatedNotes, date: when, payment, enteredBy, sheetsId: id, cur: bookCurrencyCode(book) };
   s.hist.unshift(row);
   recomputeAfters(s, book);
   saveState(bookId);
@@ -9732,17 +9937,18 @@ export async function fetchHistoricalRate(from, to, date) {
   if (!from || !to || from === 'OTHER' || to === 'OTHER') return { error: 'manual' };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return { error: 'bad-date' };
   const key = datedRateKey(from, to, date);
-  if (_fxRateCache[key]) return { rate: _fxRateCache[key] };
+  if (_fxRateCache[key]) return { rate: _fxRateCache[key], date: _fxHistoricalDates[key] || '' };
   if (_fxFailedUntil[key] > Date.now()) return { error: 'recently-failed', context: `${from}->${to}@${date}` };
   try {
     const res = await fetchFx(`https://api.frankfurter.app/${date}?from=${from}&to=${to}`);
     if (res.ok) {
       const json = await res.json();
       const rate = json?.rates?.[to];
-      if (rate) {
+      if (Number.isFinite(rate) && rate > 0) {
         _fxRateCache[key] = rate;
+        _fxHistoricalDates[key] = json.date || '';
         saveFxHistory(getLocalStorage(), _fxRateCache);
-        return { rate };
+        return { rate, date: json.date };
       }
     }
   } catch (e) { /* fall through to caller's live-rate fallback */ }
@@ -14093,6 +14299,7 @@ async function convertKeptAllToReceived() {
 function openEditHist(idx) {
   const s = getState(), book = getBook(), h = s.hist[idx];
   if (!h) return;
+  if (h.artistSettlementId) { showToast('Undo the author settlement before changing this sale.', 'warn'); return; }
   // A consignment sale shown here is a mirror of its ledger row, and the ledger
   // row is the record that reaches the Google Sheet and gets re-derived on every
   // recompute. Editing the mirror directly would be overwritten, so send the
@@ -14329,6 +14536,7 @@ function saveLedgerEntryEdit(s, book) {
 function saveEntryEdit() {
   if (!editCtx) return;
   const s = getState(), book = getBook();
+  if (editCtx.kind === 'hist' && s.hist[editCtx.idx]?.artistSettlementId) { showToast('Undo the author settlement before changing this sale.', 'warn'); return; }
   if (editCtx.kind === 'hist') {
     saveHistEntryEdit(s, book);
   } else {
@@ -14693,6 +14901,7 @@ function voidEntry() {
   if (editCtx.kind === 'hist') {
     const h = s.hist[editCtx.idx];
     if (!h) return;
+    if (h.artistSettlementId) { showToast('Undo the author settlement before voiding this sale.', 'warn'); return; }
     if (!h.voided) {
       voidHistEntry(s, book, h);
       showToast('Entry voided — stock & revenue reversed (Sheets row delete queued)', 'warn');
@@ -17504,6 +17713,14 @@ function removeOneByKey(list, id) {
 }
 
 export async function removeLedgerEntry(type, bid, id) {
+  if ((type === 'artistPayout' || type === 'artistDebtRecovery') && findArtistPayout(bid, id)?.settlement) {
+    await undoRecordedArtistSettlement(bid, id);
+    renderTaxCenter();
+    return;
+  }
+  if (type === 'sale' && (states[bid]?.hist || []).find(h => String(h.id ?? h.num) === String(id))?.artistSettlementId) {
+    showToast('Undo the author settlement before deleting this sale.', 'warn'); return;
+  }
   if (!(await confirmDialog('Are you sure you want to permanently delete this entry from the ledger?', { okLabel: 'Delete entry', danger: true }))) return;
   let reopenedDebt = false;
 
@@ -19068,6 +19285,7 @@ function voidRegisterSale(saleNum, bookIds, reason) {
       const book = BOOKS[bookId];
       const h = s?.hist?.find((x) => x.num === saleNum && x.chan === 'Book Fair' && !x.voided);
       if (!h) continue;
+      if (h.artistSettlementId) { showToast('Undo the author settlement before voiding this sale.', 'warn'); continue; }
       // voidHistEntry's Sheets sync names the active book.
       activeBook = bookId;
       voidHistEntry(s, book, h);
@@ -22036,6 +22254,10 @@ window.downloadFullTaxSeasonExport = function () {
       const payoutRaw = parseFloat(p.amount || 0);
       flagRateIfMissing(book, cur, rawRate, payoutRaw > 0);
       const payoutCAD = payoutRaw * hRate;
+      if (p.settlement) {
+        csv += `${p.date},${esc(book.title)},"Earnings settled",${esc('Royalty credit including earnings retained from held sales; see settlement cash section for the actual payment')},${payoutCAD.toFixed(2)},""\n`;
+        return;
+      }
       // Only the cash is a cash outflow; a netted slice is noted so the row
       // explains itself (a fully netted payment shows 0.00 with the reason).
       const netted = payoutNetted(p);
@@ -22053,6 +22275,20 @@ window.downloadFullTaxSeasonExport = function () {
     return l.date && l.date.startsWith(year);
   }).forEach(l => {
     csv += `${l.date},"Publisher (General)",${esc(l.cat)},${esc(l.desc)},${getAmt(l).toFixed(2)},${esc(l.receipt)}\n`;
+  });
+
+  // Actual settlement transfers are separate from royalty credits and sales.
+  csv += '\n--- AUTHOR SETTLEMENT CASH (NOT ADDITIONAL SALES OR EXPENSES) ---\n';
+  csv += 'Date,Book,Currency,Money Held,Author Cut Kept,Remaining Earnings,Other Debt Repaid,Overpayment Recovered,Cash Received,Cash Sent,Method\n';
+  BOOK_LIST.forEach(book => {
+    if (isTestBook(book) || isTestBookId(book.id)) return;
+    (states[book.id]?.artistPayouts || []).forEach(p => {
+      if (!p.settlement || p.voided || (!isAllTime && !p.date?.startsWith(year))) return;
+      const b = p.settlement.balance;
+      csv += [p.date, esc(book.title), esc(p.settlement.cur), b.heldGross, b.heldShare, b.royaltiesOwed,
+        b.otherDebt, b.overpaid, b.direction === 'to-publisher' ? b.amount : 0,
+        b.direction === 'to-artist' ? b.amount : 0, esc(p.method || '')].join(',') + '\n';
+    });
   });
 
   // Section 3: FX rate warnings — surface any book exported at 1.0 because no
@@ -22847,6 +23083,7 @@ export async function fetchStripePaymentsForReconcile(maxPages = 3, { since = 0 
         description: (ch.description || pi?.description || '').trim(),
         email: ch.billing_details?.email || ch.receipt_email || '',
         customer: ch.billing_details?.name || '',
+        receiptNumber: ch.receipt_number || '',
         refunded: !!ch.refunded || (ch.amount_refunded > 0),
         fullyRefunded: !!ch.refunded,
         amountRefunded: _stripeMinorToMajor(ch.amount_refunded || 0, cur),
@@ -23003,6 +23240,72 @@ async function reconcileSync() {
 let _reconFilter = { q: '', cur: 'all', type: 'all', sort: 'date-desc', group: false };
 export let _reconSession = { logged: 0, dismissed: 0 };
 
+const resolveStripeRate = createStripeRateResolver({
+  fetchRate: fetchHistoricalRate,
+  storage: {
+    getItem: key => localStorage.getItem(key),
+    setItem: (key, value) => localStorage.setItem(key, value),
+  },
+});
+
+// Update the existing fields rather than rebuilding the card: preserve edits,
+// focus, and ignore responses for a book/currency selection that has changed.
+async function reconUpdateDefaults(id, grouped = false, reset = false) {
+  const prefix = grouped ? 'recon-g' : 'recon-';
+  const input = document.getElementById(`${prefix}rate-${id}`);
+  const status = document.getElementById(`${prefix}fx-${id}`);
+  const button = document.getElementById(`${prefix}rec-${id}`);
+  const bookId = document.getElementById(`${prefix}book-${id}`)?.value;
+  const p = grouped
+    ? (window._reconPayments || []).find(p => p.id === window._reconGroupMap?.[id]?.[0])
+    : _reconFindPayment(id);
+  if (!input || !status || !button || !p) return;
+  const request = String(Number(input.dataset.request || 0) + 1);
+  input.dataset.request = request;
+  if (reset) { input.value = ''; delete input.dataset.manual; }
+  if (!bookId || !BOOKS[bookId]) {
+    button.disabled = true;
+    status.textContent = 'Choose a book to calculate the converted total.';
+    return;
+  }
+  const currency = normalizeCurrencyCode(document.getElementById(`${prefix}currency-${id}`)?.value, '');
+  const bookCurrency = normalizeCurrencyCode(getBookCurrencyCode(BOOKS[bookId]), 'CAD');
+  const pair = `${currency}:${bookCurrency}:${p.date}`;
+  if (input.dataset.pair && input.dataset.pair !== pair) {
+    input.value = '';
+    delete input.dataset.manual;
+  }
+  input.dataset.pair = pair;
+  input.disabled = currency === bookCurrency;
+  const manual = input.dataset.manual === '1' && Number(input.value) > 0;
+  button.disabled = !manual && currency !== bookCurrency;
+  status.textContent = currency === bookCurrency ? 'No conversion needed.' : 'Fetching the payment-date exchange rate…';
+  const result = manual ? { rate: Number(input.value), source: 'manual' }
+    : await resolveStripeRate({ ...p, currency }, bookCurrency);
+  if (!input.isConnected || input.dataset.request !== request) return;
+  const overridden = input.dataset.manual === '1';
+  if (!overridden) input.value = result.rate ? String(result.rate) : '';
+  input.dataset.source = overridden ? 'manual' : (result.source || '');
+  input.dataset.rateDate = overridden ? '' : (result.date || '');
+  const rate = Number(input.value);
+  const amount = Number(document.getElementById(`${prefix}amount-${id}`)?.value);
+  button.disabled = false; // Invalid/missing values are explained on Record.
+  if (!(rate > 0) || !Number.isFinite(rate)) {
+    status.textContent = 'Payment-date rate unavailable. Retry when online, or enter a rate above. ';
+    const retry = document.createElement('button');
+    retry.type = 'button';
+    retry.className = 'btn tag sm';
+    retry.textContent = 'Retry rate';
+    retry.addEventListener('click', () => reconUpdateDefaults(id, grouped));
+    status.appendChild(retry);
+    return;
+  }
+  const total = Number.isFinite(amount) && amount > 0 ? `${bookCurrency} ${_stripeFmtMoney(roundCents(amount * rate), bookCurrency)}` : 'Enter the paid amount';
+  const source = currency === bookCurrency ? 'No conversion needed'
+    : overridden ? 'Your exchange rate' : `Reference rate${result.date ? ` · ${result.date}` : ` for ${p.date}`}`;
+  status.textContent = `${source} · ${total}${grouped ? ' per payment' : ''}`;
+}
+
 function _reconBookOptions(selectedId, includeBlank) {
   // includeBlank seeds a "— Choose book —" first option so an unmatched payment
   // can't be logged against the first book by a stray click. Selected when no
@@ -23124,32 +23427,33 @@ function _reconNeedCard(p, c) {
     <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:10px;">
       <div class="form-group" style="margin:0;flex:1;min-width:160px;">
         <label style="font-size:var(--text-2xs);">Book</label>
-        <select id="recon-book-${idSafe}" onchange="document.getElementById('recon-rec-${idSafe}').disabled=!this.value">${_reconBookOptions(c.bookId, !c.bookId)}</select>
+        <select id="recon-book-${idSafe}" onchange="reconUpdateDefaults('${idSafe}', false, true)">${_reconBookOptions(c.bookId, !c.bookId)}</select>
       </div>
       <div class="form-group" style="margin:0;width:70px;">
         <label style="font-size:var(--text-2xs);">Qty</label>
         <input type="number" id="recon-qty-${idSafe}" value="1" min="1" style="width:100%;">
       </div>
-      <div class="form-group" style="margin:0;width:120px;">
-        <label style="font-size:var(--text-2xs);">Order # (optional)</label>
-        <input type="text" id="recon-num-${idSafe}" maxlength="80" placeholder="No order number" autocomplete="off" style="width:100%;">
+      <div class="form-group" style="margin:0;width:280px;max-width:100%;">
+        <label for="recon-num-${idSafe}" style="font-size:var(--text-2xs);">Order #</label>
+        <input type="text" id="recon-num-${idSafe}" maxlength="80" value="${escapeHtml(stripeOrderNumber(p))}" autocomplete="off" style="width:100%;">
       </div>
       <div class="form-group" style="margin:0;width:120px;">
         <label style="font-size:var(--text-2xs);">Stripe amount paid</label>
-        <input type="number" id="recon-amount-${idSafe}" value="${Number(p.amount).toFixed(2)}" min="0.01" step="0.01" inputmode="decimal" style="width:100%;">
+        <input type="number" id="recon-amount-${idSafe}" value="${Number(p.amount).toFixed(2)}" min="0.01" step="0.01" inputmode="decimal" oninput="reconUpdateDefaults('${idSafe}')" style="width:100%;">
       </div>
       <div class="form-group" style="margin:0;width:90px;">
         <label style="font-size:var(--text-2xs);">Currency</label>
-        <input type="text" id="recon-currency-${idSafe}" value="${escapeHtml(p.currency)}" maxlength="3" pattern="[A-Za-z]{3}" autocapitalize="characters" autocomplete="off" style="width:100%;">
+        <input type="text" id="recon-currency-${idSafe}" value="${escapeHtml(p.currency)}" maxlength="3" pattern="[A-Za-z]{3}" autocapitalize="characters" autocomplete="off" onchange="reconUpdateDefaults('${idSafe}', false, true)" style="width:100%;">
       </div>
       <div class="form-group" style="margin:0;width:130px;">
-        <label style="font-size:var(--text-2xs);">Rate to book currency</label>
-        <input type="number" id="recon-rate-${idSafe}" min="0.000001" step="any" inputmode="decimal" placeholder="1 paid = ?" style="width:100%;">
+        <label for="recon-rate-${idSafe}" style="font-size:var(--text-2xs);">Automatic exchange rate</label>
+        <input type="number" id="recon-rate-${idSafe}" data-recon-default="${idSafe}" min="0.000001" step="any" inputmode="decimal" placeholder="Fetched automatically" oninput="this.dataset.manual='1';reconUpdateDefaults('${idSafe}')" aria-describedby="recon-fx-${idSafe}" style="width:100%;">
       </div>
       <button class="btn gold sm" id="recon-rec-${idSafe}" style="height:38px;"${recDisabled} onclick="reconcileRecordSale('${idSafe}')">Record sale</button>
       <button class="btn tag sm" style="height:38px;" onclick="reconcileDismiss('${idSafe}')" title="Not an inventory sale (donation, test charge, etc.)">Dismiss</button>
     </div>
-    <div style="font-size:var(--text-xs);color:var(--text3);margin-top:6px;">The amount and currency start with Stripe’s figures. Leave the order number blank when there isn’t one. If the payment currency differs from the book, enter how much of the book’s currency equals 1 unit paid.</div>
+    <div id="recon-fx-${idSafe}" role="status" aria-live="polite" style="font-size:var(--text-xs);color:var(--text2);margin-top:6px;">Preparing the exchange rate…</div>
+    <div style="font-size:var(--text-xs);color:var(--text3);margin-top:6px;">Stripe’s paid amount is preserved. A payment-date reference rate and an order number fill automatically; you can edit them. The reference rate may differ from Stripe’s payout conversion.</div>
     </div>`;
 }
 
@@ -23171,7 +23475,7 @@ function _reconGroupCard(items, gi) {
     <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:10px;">
       <div class="form-group" style="margin:0;flex:1;min-width:160px;">
         <label style="font-size:var(--text-2xs);">Book (applies to all ${n})</label>
-        <select id="recon-gbook-${gi}" onchange="document.getElementById('recon-grec-${gi}').disabled=!this.value">${_reconBookOptions(c.bookId, !c.bookId)}</select>
+        <select id="recon-gbook-${gi}" onchange="reconUpdateDefaults('${gi}', true, true)">${_reconBookOptions(c.bookId, !c.bookId)}</select>
       </div>
       <div class="form-group" style="margin:0;width:80px;">
         <label style="font-size:var(--text-2xs);">Qty each</label>
@@ -23179,20 +23483,21 @@ function _reconGroupCard(items, gi) {
       </div>
       <div class="form-group" style="margin:0;width:120px;">
         <label style="font-size:var(--text-2xs);">Stripe amount paid</label>
-        <input type="number" id="recon-gamount-${gi}" value="${Number(p.amount).toFixed(2)}" min="0.01" step="0.01" inputmode="decimal" style="width:100%;">
+        <input type="number" id="recon-gamount-${gi}" value="${Number(p.amount).toFixed(2)}" min="0.01" step="0.01" inputmode="decimal" oninput="reconUpdateDefaults('${gi}', true)" style="width:100%;">
       </div>
       <div class="form-group" style="margin:0;width:90px;">
         <label style="font-size:var(--text-2xs);">Currency</label>
-        <input type="text" id="recon-gcurrency-${gi}" value="${escapeHtml(p.currency)}" maxlength="3" pattern="[A-Za-z]{3}" autocapitalize="characters" autocomplete="off" style="width:100%;">
+        <input type="text" id="recon-gcurrency-${gi}" value="${escapeHtml(p.currency)}" maxlength="3" pattern="[A-Za-z]{3}" autocapitalize="characters" autocomplete="off" onchange="reconUpdateDefaults('${gi}', true, true)" style="width:100%;">
       </div>
       <div class="form-group" style="margin:0;width:130px;">
-        <label style="font-size:var(--text-2xs);">Rate to book currency</label>
-        <input type="number" id="recon-grate-${gi}" min="0.000001" step="any" inputmode="decimal" placeholder="1 paid = ?" style="width:100%;">
+        <label for="recon-grate-${gi}" style="font-size:var(--text-2xs);">Automatic exchange rate</label>
+        <input type="number" id="recon-grate-${gi}" data-recon-default="${gi}" data-grouped="1" min="0.000001" step="any" inputmode="decimal" placeholder="Fetched automatically" oninput="this.dataset.manual='1';reconUpdateDefaults('${gi}', true)" aria-describedby="recon-gfx-${gi}" style="width:100%;">
       </div>
       <button class="btn gold sm" id="recon-grec-${gi}" style="height:38px;"${recDisabled} onclick="reconRecordGroup(${gi})">Record all ${n}</button>
       <button class="btn tag sm" style="height:38px;" onclick="reconDismissGroup(${gi})">Dismiss all ${n}</button>
     </div>
-    <div style="font-size:var(--text-xs);color:var(--text3);margin-top:6px;">The amount and currency apply to each payment. Enter a conversion rate if they differ from the book’s currency. Ungroup payments to enter a separate order number for each one.</div>
+    <div id="recon-gfx-${gi}" role="status" aria-live="polite" style="font-size:var(--text-xs);color:var(--text2);margin-top:6px;">Preparing the exchange rate…</div>
+    <div style="font-size:var(--text-xs);color:var(--text3);margin-top:6px;">${escapeHtml(p.date)} · Each payment keeps its own order number. The paid amount and reference exchange rate apply to each sale. Ungroup to edit individual orders.</div>
     </div>`;
 }
 
@@ -23277,7 +23582,7 @@ export function renderReconcile() {
     window._reconGroupMap = {};
     shown.forEach(it => {
       if (!_reconIsPickable(it.c)) { singles.push(it); return; }
-      const sig = [it.p.currency, it.p.amount, (it.p.description || '').trim(), it.c.kind, it.c.ref || '', it.c.bookId || ''].join('|');
+      const sig = [it.p.date, it.p.currency, it.p.amount, (it.p.description || '').trim(), it.c.kind, it.c.ref || '', it.c.bookId || ''].join('|');
       if (!groups.has(sig)) groups.set(sig, []);
       groups.get(sig).push(it);
     });
@@ -23293,6 +23598,10 @@ export function renderReconcile() {
   } else {
     needsEl.innerHTML = shown.map(({ p, c }) => _reconNeedCard(p, c)).join('');
   }
+
+  needsEl.querySelectorAll('[data-recon-default]').forEach(input => {
+    void reconUpdateDefaults(input.dataset.reconDefault, input.dataset.grouped === '1');
+  });
 
   // ── Reconciled (collapsed detail)
   if (!matched.length) { matchedEl.innerHTML = ''; return; }
@@ -23315,7 +23624,7 @@ export function _reconFindPayment(idSafe) {
 }
 
 // Shared price/payment derivation so the single + bulk record paths stay in lockstep.
-function _reconApplyPaymentToBook(p, bookId, qty, { chan = '', notes = 'Stripe direct', auto = false, num = '', amount, currency, rate } = {}) {
+function _reconApplyPaymentToBook(p, bookId, qty, { chan = '', notes = 'Stripe direct', auto = false, num = '', amount, currency, rate, rateSource = '', rateDate = '' } = {}) {
   const bk = BOOKS[bookId];
   if (!bk) throw new Error('Unknown book');
   const bookCur = normalizeCurrencyCode(getBookCurrencyCode(bk), 'CAD');
@@ -23337,8 +23646,13 @@ function _reconApplyPaymentToBook(p, bookId, qty, { chan = '', notes = 'Stripe d
     convertedTotal,
     ref: p.id,
   };
+  if (paidCurrency !== bookCur) {
+    payment.rateSource = rateSource || 'manual';
+    payment.rateDate = payment.rateSource === 'Frankfurter' ? rateDate : (rateDate || p.date);
+    payment.rateRequestedDate = p.date;
+  }
   _reconApplySaleToBook(bookId, qty, price, payment, p.id, notes, {
-    date: p.date, email: p.email, chan: chan || (p.cardPresent ? 'In Person' : 'Website'), auto, num,
+    date: p.date, email: p.email, chan: chan || (p.cardPresent ? 'In Person' : 'Website'), auto, num: num || stripeOrderNumber(p),
   });
 }
 
@@ -23367,7 +23681,11 @@ function _reconReadSaleInputs(idSafe, bookId, grouped = false) {
     showToast('Enter a valid conversion rate greater than zero', 'warn');
     return null;
   }
-  return { amount: roundCents(amount), currency, rate, num };
+  const rateInput = document.getElementById(`${prefix}rate-${idSafe}`);
+  return { amount: roundCents(amount), currency, rate, num,
+    rateSource: rateInput?.dataset.manual === '1' ? 'manual' : rateInput?.dataset.source || 'manual',
+    rateDate: rateInput?.dataset.rateDate || '',
+  };
 }
 
 function reconcileRecordSale(idSafe) {
@@ -23385,6 +23703,7 @@ function reconcileRecordSale(idSafe) {
   if (!bookId || !BOOKS[bookId]) { showToast('Pick a book first', 'warn'); return; }
   const saleInputs = _reconReadSaleInputs(idSafe, bookId);
   if (!saleInputs) return;
+  saleInputs.num ||= stripeOrderNumber(p);
   try {
     _reconApplyPaymentToBook(p, bookId, qty, saleInputs);
   } catch (e) { showToast('Could not record: ' + (e.message || e), 'err'); return; }
@@ -23697,12 +24016,12 @@ async function sweepStripeInvoicePayments({ force = false } = {}) {
       }
 
       if (c.kind === 'direct') {
-        const outcome = autoRecordStripeSale(payment, c);
+        const outcome = await autoRecordStripeSale(payment, c);
         if (outcome) {
           cardSales.push(outcome);
           if (outcome.action === 'record') {
             touchedBooks.add(outcome.bookId);
-            recorded.push({ chargeId: payment.id, bookId: outcome.bookId, num: '' });
+            recorded.push({ chargeId: payment.id, bookId: outcome.bookId, num: stripeOrderNumber(payment) });
           }
         }
         continue;
@@ -23851,7 +24170,7 @@ function noteRaisedStripeSale(chargeId) {
  * Record one Stripe payment as a sale if it is safe to, and say what happened.
  * Returns null when there is nothing worth telling the publisher about.
  */
-function autoRecordStripeSale(payment, rawClassification) {
+async function autoRecordStripeSale(payment, rawClassification) {
   if (!stripeSaleAutoEnabled()) return null;
   // A card-reader tap carries no book tag, but the seller may have typed the
   // title into its description in the Stripe app. One title named there is
@@ -23866,13 +24185,26 @@ function autoRecordStripeSale(payment, rawClassification) {
   const describedId = lines.length === 1 ? lines[0].bookId : '';
   const classification = describedId ? { ...rawClassification, bookId: describedId } : rawClassification;
   const book = classification.bookId ? BOOKS[classification.bookId] : null;
-  const plan = stripeSalePlan(payment, {
+  const options = {
     classification,
     book,
     bookCurrency: book ? normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD') : '',
     likelyLogged: _reconLikelyAlreadyLogged(payment),
     autoSince: stripeSaleAutoSince(),
-  });
+  };
+  let plan = stripeSalePlan(payment, options);
+  let conversion = null;
+  if (plan.action === 'review' && plan.reason === 'currency') {
+    conversion = await resolveStripeRate(payment, options.bookCurrency);
+    // A publisher may have recorded this payment while the rate was loading.
+    if (!stripeSaleAutoEnabled() || _reconRecordedChargeIds().has(payment.id)) return null;
+    if (classifyStripePayment(payment).kind !== 'direct') return null;
+    const currentBook = BOOKS[classification.bookId];
+    if (!currentBook || normalizeCurrencyCode(getBookCurrencyCode(currentBook), 'CAD') !== options.bookCurrency) return null;
+    plan = stripeSalePlan(payment, { ...options, book: currentBook,
+      likelyLogged: _reconLikelyAlreadyLogged(payment), conversionRate: conversion.rate,
+    });
+  }
   if (plan.action === 'skip') return null;
 
   if (plan.action === 'review') {
@@ -23886,9 +24218,11 @@ function autoRecordStripeSale(payment, rawClassification) {
   try {
     // A tap on a reader happened in person, so it is filed with the other
     // in-person sales rather than as a website order.
-    _reconApplyPaymentToBook(payment, plan.bookId, plan.qty, payment.cardPresent
-      ? { chan: 'Book Fair', notes: 'Card reader', auto: true }
-      : { auto: true });
+    _reconApplyPaymentToBook(payment, plan.bookId, plan.qty, {
+      auto: true, num: stripeOrderNumber(payment), rate: conversion?.rate,
+      rateSource: conversion?.source, rateDate: conversion?.date,
+      ...(payment.cardPresent ? { chan: 'Book Fair', notes: 'Card reader' } : {}),
+    });
   } catch (error) {
     console.error('Automatic record of a Stripe payment failed', error);
     noteRaisedStripeSale(payment.id);
@@ -24173,7 +24507,7 @@ function recordReaderSplitSale(payment, lines) {
         { currency: payment.currency, amount: line.qty * line.price, ref: payment.id },
         i === 0 ? payment.id : `${payment.id}-${i + 1}`,
         'Card reader',
-        { date: payment.date, email: payment.email, chan: 'Book Fair', auto: true });
+        { date: payment.date, email: payment.email, chan: 'Book Fair', auto: true, num: stripeOrderNumber(payment) });
     });
   } catch (error) {
     console.error('Recording a split card-reader sale failed', error);
@@ -24836,12 +25170,14 @@ function reconRecordGroup(gi) {
   if (!saleInputs) return;
   const mem = getReconMemory();
   let n = 0;
+  const recordedIds = _reconRecordedChargeIds();
   ids.forEach(id => {
     const p = (window._reconPayments || []).find(x => x.id === id);
-    if (!p || mem.recorded[id] || mem.dismissed[id]) return;
+    if (!p || mem.recorded[id] || mem.dismissed[id] || recordedIds.has(id)) return;
+    const num = stripeOrderNumber(p);
     try {
-      _reconApplyPaymentToBook(p, bookId, qty, saleInputs);
-      mem.recorded[id] = { bookId, num: '', at: Date.now() };
+      _reconApplyPaymentToBook(p, bookId, qty, { ...saleInputs, num });
+      mem.recorded[id] = { bookId, num, at: Date.now() };
       _reconSession.logged++; n++;
     } catch (e) { /* skip the bad one, keep going */ }
   });
@@ -25911,7 +26247,7 @@ function exposeLegacyInlineHandlers() {
     _reconApplySaleToBook, reconcileSync, _reconBookOptions, reconRenderKeyRow, reconEditKey,
     reconOnFilter, reconSetCurrency, reconClearFilters, _reconIsPickable, _reconMatchesFilter,
     _reconAmountBadge, _reconMeta, _reconNeedCard, _reconGroupCard, renderReconcile,
-    _reconFindPayment, _reconApplyPaymentToBook, reconcileRecordSale, reconcileApplyBigCartel,
+    _reconFindPayment, _reconApplyPaymentToBook, reconUpdateDefaults, reconcileRecordSale, reconcileApplyBigCartel,
     reconcileOpenInvoice, reconcileDismiss, reconRecordGroup, reconDismissGroup,
     reconDismissAllShown, reconcileUndo, createStripePaymentLinkForBook,
     createStripePaymentLinkForAmount, generateBookStripeLink, _isCustomerSuppressed,
