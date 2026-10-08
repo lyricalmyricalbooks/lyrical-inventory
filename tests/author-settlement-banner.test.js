@@ -123,3 +123,78 @@ describe("the publisher's awaiting-transfer card", () => {
     expect(list.textContent).not.toContain('Make Stripe link');
   });
 });
+
+describe('new sales coming in', () => {
+  const panelNet = () => document.querySelector('#artist-settlement-harbour .ps-settle-result .ps-stat-val')?.textContent;
+  async function sellAtRegister(qty) {
+    win.posSetCurrency('CAD');
+    win.posUpdateQty(BOOK, qty);
+    document.getElementById('pos-payment-method').value = 'Cash';
+    win.posCheckout();
+    await win.posConfirmSale();
+    await app.settle();
+  }
+
+  it('updates the Settle up figures, the headline and the author card straight away', async () => {
+    win.renderProfitSharingBreakdown(BOOK);
+    expect(panelNet()).toBe('CA$232.21');
+    // Two copies at CA$40: the author earns 13% of CA$80 = CA$10.40 more, so
+    // the publisher owes CA$278.16 and the author sends CA$499.97 − 278.16.
+    await sellAtRegister(2);
+    expect(win.calculateArtistEarnings(BOOK).owedToArtist).toBe(278.16);
+    expect(panelNet()).toBe('CA$221.81');
+    expect(document.querySelector('#ps-dash-content .is-lead .ps-stat-val').textContent).toBe('CA$221.81');
+    // The author's card follows, and the old link for CA$232.21 is not offered.
+    app.main.states[BOOK].settlementLink = { url: 'https://buy.stripe.com/old', amount: 232.21, key: 'settle-23221', v: 2 };
+    asAuthor();
+    app.main.renderArtistTransfers();
+    expect($('apb-amount').textContent).toBe('CA$221.81');
+    expect(document.querySelector('#author-payment-banner .metric-banner-actions').style.display).toBe('none');
+  });
+
+  it('settles correctly when the author pays the older amount after a new sale', async () => {
+    await sellAtRegister(2);
+    // They paid CA$232.21 from the link they had open; CA$221.81 is due now.
+    const r = app.main.settleArtistTransfersFromStripe(payment({ amount: 232.21 }));
+    expect(r).toMatchObject({ settlement: true, carried: 10.4 });
+    const s = app.main.states[BOOK];
+    expect(s.artistTransfers).toEqual([]);
+    expect(s.hist.find(h => h.num === 'held').artistPending).toBe(false);
+    // Their held cut is fully cleared; the CA$10.40 from the new sale is still
+    // owed to them, exactly as if they'd been paid everything else.
+    expect(win.calculateArtistEarnings(BOOK)).toMatchObject({ owedToArtist: 10.4, heldByArtistGross: 0, owedByArtist: 0 });
+    expect(s.artistPayouts.at(-1).settlement.statement).toContain('still owed to you and paid separately: CA$10.40');
+  });
+
+  it("doesn't let the author pay twice when the amount changes after they paid", async () => {
+    // Stripe brought them back after paying CA$232.21 …
+    win.localStorage.setItem('lm-author-paid-v2', JSON.stringify({ 'settle-23221': Date.now() }));
+    try {
+      // … then a sale lowered the amount before the publisher's app recorded it.
+      await sellAtRegister(2);
+      app.main.states[BOOK].settlementLink = { url: 'https://buy.stripe.com/new', amount: 221.81, key: 'settle-22181', v: 2 };
+      asAuthor();
+      app.main.renderArtistTransfers();
+      expect($('apb-detail').textContent).toMatch(/Paid — thank you/);
+      expect(document.querySelector('#author-payment-banner .metric-banner-actions').style.display).toBe('none');
+    } finally {
+      win.localStorage.removeItem('lm-author-paid-v2');
+    }
+  });
+});
+
+describe('the settlement in the payouts list', () => {
+  it('shows the earnings it paid the artist, so the rows add up to the total', () => {
+    app.main.settleArtistTransfersFromStripe(payment());
+    win.renderProfitSharingBreakdown(BOOK);
+    const list = document.querySelector('#ps-dash-content .ps-payout-section');
+    expect(list.textContent).toContain('Earnings paid by settlement');
+    // 74.71 kept + 267.76 offset = 342.47 paid to the artist by this settlement.
+    expect(list.textContent).toContain('CA$342.47');
+    expect(list.textContent).toContain('They kept CA$74.71 of the sales money they collected, CA$267.76 came off what they owed you.');
+    expect(list.textContent).toContain('They sent you CA$232.21.');
+    // 274.71 + 342.47 = the 617.18 they earned: nothing left owed either way.
+    expect(list.querySelector('.ps-payout-total-val').textContent).toBe('CA$617.18');
+    expect(win.calculateArtistEarnings(BOOK)).toMatchObject({ totalArtistEarned: 617.18, owedToArtist: 0 });
+  });
+});
