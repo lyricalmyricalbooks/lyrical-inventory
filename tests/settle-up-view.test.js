@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { describeArtistSettlement } from '../src/lib/earnings.js';
-import { needsSettleUp, settleUpModel, settleUpHeadline, settleUpHtml } from '../src/lib/settle-up-view.js';
+import { needsSettleUp, settleUpModel, settleUpHeadline, settleUpHtml, settlementPayoutSummary } from '../src/lib/settle-up-view.js';
 
 // The figures from the owner's screenshot: the author holds 574.68, keeps their
 // 74.71 share, so owes 499.97; the publisher owes 267.76 → author sends 232.21.
@@ -87,5 +87,38 @@ describe('recording', () => {
     const m = settleUpModel(balance());
     expect(render(m, { pendingSync: 2 }).textContent).toContain("2 changes on this device haven't synced yet");
     expect(render(m).textContent).toContain('Based on the records on this device');
+  });
+});
+
+describe('a recorded settlement in the payouts list', () => {
+  const money = n => `CA$${n.toFixed(2)}`;
+  it('shows the earnings it paid and the cash that moved', () => {
+    const s = settlementPayoutSummary(balance(), 342.47, money);
+    expect(s.title).toBe('Earnings paid by settlement');
+    expect(s.amount).toBe(342.47);
+    expect(s.detail).toBe('They kept CA$74.71 of the sales money they collected, CA$267.76 came off what they owed you. They sent you CA$232.21.');
+  });
+
+  it('splits the earnings into the offset and the cash sent when the publisher owed more', () => {
+    const s = settlementPayoutSummary(balance({ owedToArtist: 600 }), 674.71, money);
+    expect(s.detail).toBe('They kept CA$74.71 of the sales money they collected, CA$499.97 came off what they owed you, you sent them CA$100.03.');
+  });
+
+  it('mentions earnings still owed from newer sales', () => {
+    const s = settlementPayoutSummary({ ...balance(), royaltiesCarried: 8.27 }, 342.47, money);
+    expect(s.detail).toMatch(/CA\$8\.27 from newer sales is still owed to them\.$/);
+  });
+
+  it('names a recovered overpayment', () => {
+    const s = settlementPayoutSummary(balance({ owedToArtist: -10 }), 64.71, money);
+    expect(s.detail).toContain('CA$10.00 of an earlier overpayment was recovered');
+    expect(settlementPayoutSummary(balance({ owedToArtist: -100 }), -25.29, money).title).toBe('Earlier overpayment recovered');
+  });
+});
+
+describe("the author's view of a recorded settlement", () => {
+  it('speaks from their side', () => {
+    const s = settlementPayoutSummary({ ...balance(), royaltiesCarried: 8.27 }, 342.47, n => `CA$${n.toFixed(2)}`, { author: true });
+    expect(s.detail).toBe('You kept CA$74.71 of the sales money you collected, CA$267.76 came off what you owed the publisher. You sent the publisher CA$232.21. CA$8.27 from newer sales is still owed to you.');
   });
 });

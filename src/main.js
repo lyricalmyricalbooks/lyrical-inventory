@@ -16,14 +16,14 @@ import './firebase.js';
 import { registerSW } from 'virtual:pwa-register';
 import { canonicalExpenseCategory } from './lib/expense-categories.js';
 import { calcArtistEarnings, tierEffectiveCap, describePayout, payoutRequestCovered, planNetPayout, payoutNetted } from './lib/earnings.js';
-import { planArtistSettlement, applyArtistSettlement, undoArtistSettlement, artistSettlementStatement, artistSettlementIssues } from './lib/artist-settlement.js';
+import { planArtistSettlement, applyArtistSettlement, undoArtistSettlement, artistSettlementStatement, artistSettlementIssues, planSettlementForPayment } from './lib/artist-settlement.js';
 import { keyRows } from './lib/merge-state.js';
 import { createStripePriceAndLink } from './lib/stripe-payment-link.js';
 import { createStripeRateResolver, stripeOrderNumber } from './lib/stripe-sale-defaults.js';
 import { calculateBreakEven, breakEvenTierMove, applyBreakEvenTierMove, readProductionCostInput } from './lib/breakeven.js';
 import { computeTallyRowHeights, computeQrCardSize, estimateTallyPages, estimateQrPages } from './lib/print-sheet-layout.js';
 import { escapeHtml } from './lib/html.js';
-import { needsSettleUp, settleUpModel, settleUpHeadline, settleUpHtml } from './lib/settle-up-view.js';
+import { needsSettleUp, settleUpModel, settleUpHeadline, settleUpHtml, settlementPayoutSummary } from './lib/settle-up-view.js';
 import { normalizeLetterhead, renderLetterhead } from './lib/letterhead.js';
 import { ensureXlsx, loadExternalScript } from './lib/external-scripts.js';
 import { buildActivityFeed } from './lib/activity-feed.js';
@@ -7873,15 +7873,17 @@ function getPayoutHistoryHtml(stats, bookId, cur) {
     if (p.settlement) {
       const balance = p.settlement.balance;
       const pid = escapeHtml(String(p.id));
-      const label = balance.direction === 'to-publisher' ? 'Received from author'
-        : balance.direction === 'to-artist' ? 'Sent to author' : 'Offset without cash';
+      // The payout this settlement made to the artist — the same figure the
+      // list's total adds — with the cash that actually moved as the detail.
+      const credit = parseFloat(p.amount) || 0;
+      const summary = settlementPayoutSummary(balance, credit, n => fmt(n, cur), { author: isAuthor() });
       return `<div class="ps-payout-form">
         ${issues.has(p.id) ? '<p class="ps-payout-preview is-warn">Needs review: this settlement overlaps another payment or a linked sale changed. Check the actual payments and undo the incorrect record.</p>' : ''}
         <div class="ps-payout-row">
-          <span class="ps-payout-row-main"><strong>${label}</strong><span class="ps-payout-row-meta">${fmtD(p.date)}${p.method ? ' · ' + escapeHtml(p.method) : ''}</span></span>
-          <span class="ps-payout-row-amt">${fmt(balance.amount, p.settlement.cur)}</span>
+          <span class="ps-payout-row-main"><strong>${summary.title}</strong><span class="ps-payout-row-meta">${fmtD(p.date)}${p.method ? ' · ' + escapeHtml(p.method) : ''}</span></span>
+          <span class="ps-payout-row-amt">${credit < 0 ? '−' : ''}${fmt(Math.abs(credit), cur)}</span>
         </div>
-        <p class="ps-payout-preview">${p.amount < 0 ? `${fmt(-p.amount, cur)} in previous earnings recovered.` : `${fmt(p.amount, cur)} in earnings settled, including money the author kept.`} ${p.notes ? escapeHtml(p.notes) : ''}</p>
+        <p class="ps-payout-preview">${escapeHtml(summary.detail)} ${p.notes ? escapeHtml(p.notes) : ''}</p>
         <div class="ps-payout-actions">
           <button class="btn sys-target" onclick="copyArtistSettlement('${bookId}', '${pid}')">Copy explanation</button>
           ${!isAuthor() ? `<button class="btn tx sys-target" onclick="undoRecordedArtistSettlement('${bookId}', '${pid}')">Undo settlement</button>` : ''}
@@ -10775,26 +10777,31 @@ function settleArtistSettlementFromStripe(payment, bookId) {
   if ((s.artistPayouts || []).some(p => p.settlement && p.chargeId === payment.id)) return null;
   const bookCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
   if (String(payment.currency || '').toUpperCase() !== bookCur) return { bookId, settled: 0, problem: 'currency' };
-  const due = authorSettlementDue(bookId);
   const paid = roundCents(Number(payment.amount) || 0);
-  if (!due?.payable || Math.abs(paid - due.balance.amount) > 0.005) {
-    // Paid what the link asked, but the balance has since moved → "changed";
-    // paid less than the link asked → "short".
-    const asked = roundCents(Number(payment.metadata?.settlement_amount) || 0);
-    return { bookId, settled: 0, problem: asked > 0 && paid + 0.005 < asked ? 'short' : 'changed' };
-  }
+  const asked = roundCents(Number(payment.metadata?.settlement_amount) || 0);
+  if (asked > 0 && paid + 0.005 < asked) return { bookId, settled: 0, problem: 'short' };
+  // Exactly what is due now records as-is. What an older link asked, after new
+  // sales raised the earnings owed, still clears the author's side in full and
+  // offsets fewer earnings — the rest stays owed to them (see
+  // planSettlementForPayment). Anything else is left for a person.
+  const due = authorSettlementDue(bookId);
+  const plan = due ? planSettlementForPayment(due.plan, paid) : null;
+  if (!plan) return { bookId, settled: 0, problem: 'changed' };
   const date = /^\d{4}-\d{2}-\d{2}$/.test(payment.date || '') ? payment.date : today();
-  const outcome = applyArtistSettlement(book, s, due.plan, { date, method: 'Stripe', notes: `Paid by the author through Stripe (${payment.id})` });
+  const outcome = applyArtistSettlement(book, s, plan, { date, method: 'Stripe', notes: `Paid by the author through Stripe (${payment.id})` });
   if (!outcome.ok) return { bookId, settled: 0, problem: 'changed' };
   outcome.record.chargeId = payment.id;
   delete s.settlementLink;
   settlePayoutRequests(bookId);
-  s.transferReceipts = [{ at: Date.now(), amount: paid, count: due.plan.heldSales.length, chargeId: payment.id },
+  s.transferReceipts = [{ at: Date.now(), amount: paid, count: plan.heldSales.length, chargeId: payment.id },
     ...(Array.isArray(s.transferReceipts) ? s.transferReceipts : [])].slice(0, 10);
   saveState(bookId);
   syncArtistSettlementSales(bookId, outcome.record);
   if (bookId === activeBook) { renderHist(); updateDash(); renderArtistTransfers(); renderProfitSharingBreakdown(bookId); }
-  return { bookId, settled: Math.max(1, due.plan.heldSales.length), total: paid, extra: 0, currency: book.currency, settlement: true };
+  return {
+    bookId, settled: Math.max(1, plan.heldSales.length), total: paid, extra: 0, currency: book.currency,
+    settlement: true, carried: plan.balance.royaltiesCarried || 0,
+  };
 }
 
 function markArtistTransferReceived(transferId, bookId = activeBook, { chargeId = '', quiet = false } = {}) {
@@ -10841,7 +10848,8 @@ function notifyAuthorPaid(r, payment) {
   const who = book.author || 'An author';
   const title = `${who} paid you ${fmt(r.total, r.currency)}`;
   const detail = (r.settlement
-    ? `${book.title}: both sides settled automatically — they kept their share, the earnings you owed came off, and the sales they held are now in your revenue.`
+    ? `${book.title}: both sides settled automatically — they kept their share, the earnings you owed came off, and the sales they held are now in your revenue.` +
+      (r.carried > 0 ? ` New sales since their link was made earned them ${fmt(r.carried, r.currency)} more — that is still owed to them; record it as a payout when you pay it.` : '')
     : `${book.title}: ${r.settled} ${r.settled === 1 ? 'sale' : 'sales'} marked received automatically and added to revenue.`) +
     (r.extra ? ` They paid ${fmt(r.extra, r.currency)} more than was due — check whether to refund it.` : '');
   pushAppAlert({
@@ -11085,20 +11093,27 @@ window.addEventListener('storage', e => { if (e.key === PAID_TAP_KEY) { try { re
 
 const _transferLinkInFlight = new Set();
 let _lastTransferSweepKick = 0;
+// Keep the author's one net pay link in step with what they owe. Returns
+// true when the book is in settle-up mode (money running both ways), whether
+// or not a link had to be made, so callers skip the per-sale links.
+function ensureSettlementLink(bookId) {
+  const s = states[bookId];
+  const settle = s && authorSettlementDue(bookId);
+  if (!settle) return false;
+  if (navigator.onLine && settle.payable && !settlementLinkFor(s, settle) && !_transferLinkInFlight.has(`${bookId}:settle`)) {
+    _transferLinkInFlight.add(`${bookId}:settle`);
+    // Cleared only on success, so a bad Stripe key doesn't retry every render.
+    mintArtistSettlementLink(bookId).then(url => { if (url) _transferLinkInFlight.delete(`${bookId}:settle`); });
+  }
+  return true;
+}
+
 function ensureTransferLinks(bookId) {
   const s = states[bookId];
   if (!s || !navigator.onLine) return;
   // Money running both ways is paid as one net amount, so per-sale links
   // (which ask for each sale in full) would quote the wrong figure.
-  const settle = authorSettlementDue(bookId);
-  if (settle) {
-    if (settle.payable && !settlementLinkFor(s, settle) && !_transferLinkInFlight.has(`${bookId}:settle`)) {
-      _transferLinkInFlight.add(`${bookId}:settle`);
-      // Cleared only on success, so a bad Stripe key doesn't retry every render.
-      mintArtistSettlementLink(bookId).then(url => { if (url) _transferLinkInFlight.delete(`${bookId}:settle`); });
-    }
-    return;
-  }
+  if (ensureSettlementLink(bookId)) return;
   const missing = payableTransfers(s).filter(t => !transferPayUrl(t) && !_transferLinkInFlight.has(`${bookId}:${t.id}`));
   const needBundle = payableTransfers(s).length >= 2 && !transferBundleFor(s) && !_transferLinkInFlight.has(`${bookId}:bundle`);
   if (!missing.length && !needBundle) return;
@@ -11227,6 +11242,23 @@ async function approvePendingTransferSale(subKey) {
 }
 window.approvePendingTransferSale = approvePendingTransferSale;
 
+// The author paid a settle-up link on this device and the publisher's app
+// hasn't recorded it yet. Matched on any settle-up payment, not on this amount:
+// a new sale changes the amount, and a fresh Pay button then would invite them
+// to pay twice. A settlement or receipt written after the payment absorbs it.
+function unrecordedSettlementPayment(s) {
+  let tapAt = 0;
+  for (const [k, at] of Object.entries(readPaidTaps())) {
+    if (k.startsWith('settle-') && Date.now() - at < PAID_TAP_TTL) tapAt = Math.max(tapAt, at);
+  }
+  if (!tapAt) return false;
+  let absorbedAt = Number(s?.transferReceipts?.[0]?.at) || 0;
+  for (const p of s?.artistPayouts || []) {
+    if (p.settlement && !p.voided) absorbedAt = Math.max(absorbedAt, Number(p.recordedAt) || 0);
+  }
+  return tapAt > absorbedAt;
+}
+
 // The author's banner when money runs both ways. One headline — the same net
 // figure as the publisher's Settle up panel — one Stripe button for exactly
 // that, and the sales listed underneath as what it covers.
@@ -11234,7 +11266,7 @@ function renderAuthorSettlementBanner(banner, s, settle, transfers, cur) {
   const b = settle.balance;
   const money = n => fmt(n, cur);
   const link = settlementLinkFor(s, settle);
-  const paid = settle.payable && recentlyPaidTransfer(settlementPaidKey(b.amount));
+  const paid = settle.payable && unrecordedSettlementPayment(s);
   banner.style.display = '';
   banner.classList.add('apb-riso');
   banner.querySelector('.metric-banner-label').textContent = 'Money to send to your publisher';
@@ -24164,7 +24196,7 @@ async function sweepStripeInvoicePayments({ force = false } = {}) {
             icon: '⚠️',
             title: `${book.author || 'An author'} sent a payment that doesn't match`,
             detail: r.problem === 'changed'
-              ? `${book.title}: they paid the settle-up amount, but the figures have changed since (a new sale or payment), so nothing was recorded. Check it in Stripe, then record it from Settle up on the book's dashboard.`
+              ? `${book.title}: they paid ${fmt(Number(payment.amount) || 0, book.currency)} for settle-up, but the account no longer matches it — it may already have been settled by hand, or they now owe more after another sale they collected — so nothing was recorded. Check it in Stripe: refund it if it was paid twice, or settle the difference with them before recording it by hand.`
               : `${book.title}: it came in ${r.problem === 'short' ? 'for less than' : 'in a different currency from'} what they owed, so nothing was marked received. Check it in Stripe and settle it by hand.`,
             actionLabel: 'Open book',
             action: `switchBook(${JSON.stringify(r.bookId)}); switchTab('dashboard')`,
@@ -24247,6 +24279,14 @@ async function sweepStripeInvoicePayments({ force = false } = {}) {
       console.warn('Stripe refund check skipped', error);
     }
     raiseRefundedStripeSales(refundSignals);
+
+    // A sale recorded in the background (a card payment above, another
+    // device) changes what an author owes on a book nobody has open. Re-make
+    // any settle-up pay link whose amount went stale, so the author's Pay
+    // button doesn't wait for the publisher to open that book.
+    for (const id of Object.keys(states)) {
+      if (BOOKS[id]?.profitTiers?.length) ensureSettlementLink(id);
+    }
 
     if (cardSales.length) {
       renderHist();
