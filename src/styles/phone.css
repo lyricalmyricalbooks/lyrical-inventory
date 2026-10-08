@@ -650,3 +650,25 @@
 @media (max-width: 768px) and (prefers-reduced-motion: reduce) {
   :is(.phone-mode-opt, .phone-seg-opt) { transition: none; }
 }
+
+/* Website orders on a phone, Riso Press: the order cards kept a hairline border and a soft hover
+   lift while every other card stack (record cards, job cards) is an inked slip. Same 2px ink
+   outline and offset shadow, the coloured status stripe kept down the left edge, a press-in on
+   tap instead of the hover lift, and more space between cards than inside one. */
+@media (max-width: 768px) {
+  #tab-website .order-card {
+    border: var(--stroke) solid var(--border-strong); border-left-width: 4px; border-left-color: var(--gold);
+    box-shadow: var(--elev-1); margin-bottom: var(--space-4);
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+  }
+  #tab-website .order-card.done { border-left-color: var(--border-strong); }
+  #tab-website .order-card.cancelled { border-left-color: var(--red); }
+  #tab-website .order-card:hover { transform: none; box-shadow: var(--elev-1); border-color: var(--border-strong); border-left-color: var(--gold); }
+  #tab-website .order-card.done:hover { border-left-color: var(--border-strong); }
+  #tab-website .order-card.cancelled:hover { border-left-color: var(--red); }
+  #tab-website .order-card:active { transform: translate(2px, 2px); box-shadow: none; }
+  #tab-website .order-card:not(.is-skeleton) { transition: transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast) var(--ease-spring); }
+}
+@media (max-width: 768px) and (prefers-reduced-motion: reduce) {
+  #tab-website .order-card:not(.is-skeleton) { transition: none; }
+}
