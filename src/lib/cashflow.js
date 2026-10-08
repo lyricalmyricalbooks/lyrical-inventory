@@ -68,7 +68,8 @@ export function computeCashFlowMetrics(sources, yearFilter) {
       if (e.baseAmount != null) {
         eBase = e.baseAmount;
       } else {
-        eBase = roundCents((e.amount || 0) * datedCadRate(e.currency || 'CAD', e.date, fxRateCache).rate);
+        const eFx = datedCadRate(e.currency || 'CAD', e.date, fxRateCache);
+        eBase = eFx.missing ? 0 : roundCents((e.amount || 0) * eFx.rate);
       }
       operatingExpenses += eBase;
     });

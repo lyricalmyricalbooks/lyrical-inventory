@@ -2286,7 +2286,8 @@ function _tcBuildLedger(selectedYear) {
       } else {
         // No stored CAD value: convert at the expense's own date's rate.
         const eRate = datedCadRate(bookCur, e.date, _fxRateCache);
-        eBase = roundCents((e.amount || 0) * eRate.rate);
+        // No rate known at all: count nothing and flag it, rather than 1:1.
+        eBase = eRate.missing ? 0 : roundCents((e.amount || 0) * eRate.rate);
         eRateMissing = eRate.missing;
       }
 

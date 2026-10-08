@@ -621,24 +621,47 @@ window._fbDeleteSubmission = async (bookId, type, subId) => {
 const MERGED_SETTINGS = new Set(['catalog', 'taxCenter']);
 const _settingsBase = {};
 function noteSettingsBase(key, json) {
-  if (MERGED_SETTINGS.has(key) && typeof json === 'string') _settingsBase[key] = json;
+  if (MERGED_SETTINGS.has(key) && typeof json === 'string') {
+    _settingsBase[key] = json;
+  }
 }
+
+// A save that couldn't read the cloud copy is held here and retried once back
+// online, rather than written blind: Firestore would replay a blind offline
+// write on reconnect without merging, over whatever another device added
+// meanwhile. Held in memory only — a copy kept across a reload could be older
+// than the cloud copy the next session loads, and merging it then would undo
+// the other device's later changes. The app still shows the change, and the
+// next save of that setting carries it.
+const _pendingSettings = {};
+function holdSetting(key, data) { _pendingSettings[key] = data; }
+function releaseSetting(key) { delete _pendingSettings[key]; }
+async function flushPendingSettings() {
+  for (const key of MERGED_SETTINGS) {
+    const data = _pendingSettings[key];
+    if (data === undefined || !Object.prototype.hasOwnProperty.call(_settingsBase, key)) continue;
+    try { await writeMergedSetting(key, data); } catch (e) { console.warn(`[FB] settings/${key}: retry failed`, e); }
+  }
+}
+if (typeof window !== 'undefined') window.addEventListener('online', () => { flushPendingSettings(); });
 
 async function writeMergedSetting(key, data) {
   const target = doc(fs, 'settings', key);
   const localJson = JSON.stringify(data);
   let value = data;
   if (Object.prototype.hasOwnProperty.call(_settingsBase, key)) {
+    let snap;
     try {
-      const snap = await getDocFromServer(target);
-      const res = mergeSettingDoc(_settingsBase[key], snap.exists() ? snap.data().data : null, data);
-      if (res.merged) {
-        value = res.value;
-        if (res.conflicts.length) console.warn(`[FB] settings/${key}: changed on two devices, this device's version kept`, res.conflicts);
-      }
+      snap = await getDocFromServer(target);
     } catch (e) {
-      // Offline or unreadable: write what we have, as before, rather than not at all.
-      console.warn(`[FB] settings/${key}: could not read the cloud copy to merge`, e);
+      console.warn(`[FB] settings/${key}: could not read the cloud copy to merge; will retry online`, e);
+      holdSetting(key, data);
+      return value;
+    }
+    const res = mergeSettingDoc(_settingsBase[key], snap.exists() ? snap.data().data : null, data);
+    if (res.merged) {
+      value = res.value;
+      if (res.conflicts.length) console.warn(`[FB] settings/${key}: changed on two devices, this device's version kept`, res.conflicts);
     }
   }
   await setDoc(target, { data: JSON.stringify(value), ts: Date.now() });
@@ -646,6 +669,7 @@ async function writeMergedSetting(key, data) {
   // this copy, so the next save must treat whatever the other device added as
   // theirs to keep, not as something this device deleted.
   _settingsBase[key] = localJson;
+  releaseSetting(key);
   return value;
 }
 
