@@ -116,6 +116,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-06 | visual | Phone "More" sheet | Gave the More menu on a phone the same bold outlined, offset-shadow tiles and square close button as the rest of the app, with the screen you're on inked in instead of ringed in gold | — |
 | 2026-10-07 | visual | Phone register (Fair Mode) | Gave the register tiles and buttons the same hard shadow as the rest of the app, and made them press in when tapped | — |
 | 2026-10-07 | visual | Phone home screen (Today) | Gave the four big job cards the same bold outline and offset shadow as the rest of the app, pressing in when tapped, with a square count stamp and a sharper heading over the list below | — |
+| 2026-10-08 | visual | Phone Add Sale (Sale/Gift switch, payment and channel buttons) | Gave the Add Sale toggles on a phone square ink outlines and the offset shadow, pressing in when tapped, instead of a soft grey well | — |
 
 ---
 

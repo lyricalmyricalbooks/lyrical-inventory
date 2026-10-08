@@ -16,14 +16,14 @@ import './firebase.js';
 import { registerSW } from 'virtual:pwa-register';
 import { canonicalExpenseCategory } from './lib/expense-categories.js';
 import { calcArtistEarnings, tierEffectiveCap, describePayout, payoutRequestCovered, planNetPayout, payoutNetted } from './lib/earnings.js';
-import { planArtistSettlement, applyArtistSettlement, undoArtistSettlement, artistSettlementStatement, artistSettlementIssues } from './lib/artist-settlement.js';
+import { planArtistSettlement, applyArtistSettlement, undoArtistSettlement, artistSettlementStatement, artistSettlementIssues, planSettlementForPayment } from './lib/artist-settlement.js';
 import { keyRows } from './lib/merge-state.js';
 import { createStripePriceAndLink } from './lib/stripe-payment-link.js';
 import { createStripeRateResolver, stripeOrderNumber } from './lib/stripe-sale-defaults.js';
 import { calculateBreakEven, breakEvenTierMove, applyBreakEvenTierMove, readProductionCostInput } from './lib/breakeven.js';
 import { computeTallyRowHeights, computeQrCardSize, estimateTallyPages, estimateQrPages } from './lib/print-sheet-layout.js';
 import { escapeHtml } from './lib/html.js';
-import { needsSettleUp, settleUpModel, settleUpHeadline, settleUpHtml } from './lib/settle-up-view.js';
+import { needsSettleUp, settleUpModel, settleUpHeadline, settleUpHtml, settlementPayoutSummary } from './lib/settle-up-view.js';
 import { normalizeLetterhead, renderLetterhead } from './lib/letterhead.js';
 import { ensureXlsx, loadExternalScript } from './lib/external-scripts.js';
 import { buildActivityFeed } from './lib/activity-feed.js';
@@ -238,6 +238,8 @@ import {
   describeRefunds,
   refundsToRaise,
   stripeSalePlan,
+  paidUnitPrice,
+  wholeCopies,
 } from './lib/stripe-sale-autorecord.js';
 import {
   integrationBackoffMs,
@@ -319,6 +321,7 @@ import {
 } from './lib/sync-queue-store.js';
 import { partHashesOf } from './lib/merge-state.js';
 import { loadFxHistory, saveFxHistory, datesNeedingRates, fillDatedRates, datedRateKey } from './lib/sale-fx.js';
+import { DATED_RATE_SOURCES, frankfurterUrl } from './lib/fx-sources.js';
 import {
   QR_PRESET_PRICE_CURRENCIES,
   loadQrPresets,
@@ -4033,6 +4036,7 @@ export let _fxRateCache = { 'CAD_CAD': 1 };
 // fetched are kept on the device and a past sale keeps its value offline.
 Object.assign(_fxRateCache, loadFxHistory(getLocalStorage()));
 const _fxHistoricalDates = {};
+const _fxHistoricalSources = {};
 
 export async function loadTaxCenter() {
   if (isAuthor()) return;
@@ -7911,15 +7915,17 @@ function getPayoutHistoryHtml(stats, bookId, cur) {
     if (p.settlement) {
       const balance = p.settlement.balance;
       const pid = escapeHtml(String(p.id));
-      const label = balance.direction === 'to-publisher' ? 'Received from author'
-        : balance.direction === 'to-artist' ? 'Sent to author' : 'Offset without cash';
+      // The payout this settlement made to the artist — the same figure the
+      // list's total adds — with the cash that actually moved as the detail.
+      const credit = parseFloat(p.amount) || 0;
+      const summary = settlementPayoutSummary(balance, credit, n => fmt(n, cur), { author: isAuthor() });
       return `<div class="ps-payout-form">
         ${issues.has(p.id) ? '<p class="ps-payout-preview is-warn">Needs review: this settlement overlaps another payment or a linked sale changed. Check the actual payments and undo the incorrect record.</p>' : ''}
         <div class="ps-payout-row">
-          <span class="ps-payout-row-main"><strong>${label}</strong><span class="ps-payout-row-meta">${fmtD(p.date)}${p.method ? ' · ' + escapeHtml(p.method) : ''}</span></span>
-          <span class="ps-payout-row-amt">${fmt(balance.amount, p.settlement.cur)}</span>
+          <span class="ps-payout-row-main"><strong>${summary.title}</strong><span class="ps-payout-row-meta">${fmtD(p.date)}${p.method ? ' · ' + escapeHtml(p.method) : ''}</span></span>
+          <span class="ps-payout-row-amt">${credit < 0 ? '−' : ''}${fmt(Math.abs(credit), cur)}</span>
         </div>
-        <p class="ps-payout-preview">${p.amount < 0 ? `${fmt(-p.amount, cur)} in previous earnings recovered.` : `${fmt(p.amount, cur)} in earnings settled, including money the author kept.`} ${p.notes ? escapeHtml(p.notes) : ''}</p>
+        <p class="ps-payout-preview">${escapeHtml(summary.detail)} ${p.notes ? escapeHtml(p.notes) : ''}</p>
         <div class="ps-payout-actions">
           <button class="btn sys-target" onclick="copyArtistSettlement('${bookId}', '${pid}')">Copy explanation</button>
           ${!isAuthor() ? `<button class="btn tx sys-target" onclick="undoRecordedArtistSettlement('${bookId}', '${pid}')">Undo settlement</button>` : ''}
@@ -9928,7 +9934,7 @@ async function fetchLiveRateUncached(from, to, key) {
 
   // Fallback API: Frankfurter
   try {
-    const res = await fetchFx(`https://api.frankfurter.app/latest?from=${from}&to=${to}`);
+    const res = await fetchFx(frankfurterUrl('latest', from, to));
     if (res.ok) {
       const json = await res.json();
       const rate = json?.rates?.[to];
@@ -9945,27 +9951,32 @@ async function fetchLiveRateUncached(from, to, key) {
 
 // Exchange rate as of a specific date (YYYY-MM-DD), for accurate bookkeeping on
 // historical expenses. Frankfurter returns the nearest prior business day for
-// weekends/holidays. Cached per pair+date.
-export async function fetchHistoricalRate(from, to, date) {
+// weekends/holidays; a second dated service answers when it can't. Cached per
+// pair+date. `retry` is someone pressing Retry: they want another try now,
+// not the minute's pause that follows a failure.
+export async function fetchHistoricalRate(from, to, date, { retry = false } = {}) {
   if (from === to) return { rate: 1 };
   if (!from || !to || from === 'OTHER' || to === 'OTHER') return { error: 'manual' };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return { error: 'bad-date' };
   const key = datedRateKey(from, to, date);
-  if (_fxRateCache[key]) return { rate: _fxRateCache[key], date: _fxHistoricalDates[key] || '' };
-  if (_fxFailedUntil[key] > Date.now()) return { error: 'recently-failed', context: `${from}->${to}@${date}` };
-  try {
-    const res = await fetchFx(`https://api.frankfurter.app/${date}?from=${from}&to=${to}`);
-    if (res.ok) {
-      const json = await res.json();
-      const rate = json?.rates?.[to];
-      if (Number.isFinite(rate) && rate > 0) {
-        _fxRateCache[key] = rate;
-        _fxHistoricalDates[key] = json.date || '';
+  if (_fxRateCache[key]) {
+    return { rate: _fxRateCache[key], date: _fxHistoricalDates[key] || '', source: _fxHistoricalSources[key] || 'Frankfurter' };
+  }
+  if (!retry && _fxFailedUntil[key] > Date.now()) return { error: 'recently-failed', context: `${from}->${to}@${date}` };
+  for (const source of DATED_RATE_SOURCES) {
+    try {
+      const res = await fetchFx(source.url(from, to, date));
+      const found = res.ok ? source.read(await res.json(), from, to) : null;
+      if (found) {
+        _fxRateCache[key] = found.rate;
+        _fxHistoricalDates[key] = found.date;
+        _fxHistoricalSources[key] = source.name;
+        delete _fxFailedUntil[key];
         saveFxHistory(getLocalStorage(), _fxRateCache);
-        return { rate, date: json.date };
+        return { rate: found.rate, date: found.date, source: source.name };
       }
-    }
-  } catch (e) { /* fall through to caller's live-rate fallback */ }
+    } catch (e) { /* ask the next source */ }
+  }
   _fxFailedUntil[key] = Date.now() + FX_FAILURE_PAUSE_MS;
   return { error: 'historical-unavailable', context: `${from}->${to}@${date}` };
 }
@@ -9973,7 +9984,7 @@ export async function fetchHistoricalRate(from, to, date) {
 // Published daily rates for a date range, as { 'YYYY-MM-DD': rate }. One
 // request covers every sale of a currency, instead of one per sale date.
 async function fetchHistoricalRateSeries(from, to, start, end) {
-  const res = await fetchFx(`https://api.frankfurter.app/${start}..${end}?from=${from}&to=${to}`);
+  const res = await fetchFx(frankfurterUrl(`${start}..${end}`, from, to));
   if (!res.ok) throw new Error(`FX series ${res.status}`);
   const json = await res.json();
   const out = {};
@@ -10813,26 +10824,31 @@ function settleArtistSettlementFromStripe(payment, bookId) {
   if ((s.artistPayouts || []).some(p => p.settlement && p.chargeId === payment.id)) return null;
   const bookCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
   if (String(payment.currency || '').toUpperCase() !== bookCur) return { bookId, settled: 0, problem: 'currency' };
-  const due = authorSettlementDue(bookId);
   const paid = roundCents(Number(payment.amount) || 0);
-  if (!due?.payable || Math.abs(paid - due.balance.amount) > 0.005) {
-    // Paid what the link asked, but the balance has since moved → "changed";
-    // paid less than the link asked → "short".
-    const asked = roundCents(Number(payment.metadata?.settlement_amount) || 0);
-    return { bookId, settled: 0, problem: asked > 0 && paid + 0.005 < asked ? 'short' : 'changed' };
-  }
+  const asked = roundCents(Number(payment.metadata?.settlement_amount) || 0);
+  if (asked > 0 && paid + 0.005 < asked) return { bookId, settled: 0, problem: 'short' };
+  // Exactly what is due now records as-is. What an older link asked, after new
+  // sales raised the earnings owed, still clears the author's side in full and
+  // offsets fewer earnings — the rest stays owed to them (see
+  // planSettlementForPayment). Anything else is left for a person.
+  const due = authorSettlementDue(bookId);
+  const plan = due ? planSettlementForPayment(due.plan, paid) : null;
+  if (!plan) return { bookId, settled: 0, problem: 'changed' };
   const date = /^\d{4}-\d{2}-\d{2}$/.test(payment.date || '') ? payment.date : today();
-  const outcome = applyArtistSettlement(book, s, due.plan, { date, method: 'Stripe', notes: `Paid by the author through Stripe (${payment.id})` });
+  const outcome = applyArtistSettlement(book, s, plan, { date, method: 'Stripe', notes: `Paid by the author through Stripe (${payment.id})` });
   if (!outcome.ok) return { bookId, settled: 0, problem: 'changed' };
   outcome.record.chargeId = payment.id;
   delete s.settlementLink;
   settlePayoutRequests(bookId);
-  s.transferReceipts = [{ at: Date.now(), amount: paid, count: due.plan.heldSales.length, chargeId: payment.id },
+  s.transferReceipts = [{ at: Date.now(), amount: paid, count: plan.heldSales.length, chargeId: payment.id },
     ...(Array.isArray(s.transferReceipts) ? s.transferReceipts : [])].slice(0, 10);
   saveState(bookId);
   syncArtistSettlementSales(bookId, outcome.record);
   if (bookId === activeBook) { renderHist(); updateDash(); renderArtistTransfers(); renderProfitSharingBreakdown(bookId); }
-  return { bookId, settled: Math.max(1, due.plan.heldSales.length), total: paid, extra: 0, currency: book.currency, settlement: true };
+  return {
+    bookId, settled: Math.max(1, plan.heldSales.length), total: paid, extra: 0, currency: book.currency,
+    settlement: true, carried: plan.balance.royaltiesCarried || 0,
+  };
 }
 
 function markArtistTransferReceived(transferId, bookId = activeBook, { chargeId = '', quiet = false } = {}) {
@@ -10879,7 +10895,8 @@ function notifyAuthorPaid(r, payment) {
   const who = book.author || 'An author';
   const title = `${who} paid you ${fmt(r.total, r.currency)}`;
   const detail = (r.settlement
-    ? `${book.title}: both sides settled automatically — they kept their share, the earnings you owed came off, and the sales they held are now in your revenue.`
+    ? `${book.title}: both sides settled automatically — they kept their share, the earnings you owed came off, and the sales they held are now in your revenue.` +
+      (r.carried > 0 ? ` New sales since their link was made earned them ${fmt(r.carried, r.currency)} more — that is still owed to them; record it as a payout when you pay it.` : '')
     : `${book.title}: ${r.settled} ${r.settled === 1 ? 'sale' : 'sales'} marked received automatically and added to revenue.`) +
     (r.extra ? ` They paid ${fmt(r.extra, r.currency)} more than was due — check whether to refund it.` : '');
   pushAppAlert({
@@ -11123,20 +11140,27 @@ window.addEventListener('storage', e => { if (e.key === PAID_TAP_KEY) { try { re
 
 const _transferLinkInFlight = new Set();
 let _lastTransferSweepKick = 0;
+// Keep the author's one net pay link in step with what they owe. Returns
+// true when the book is in settle-up mode (money running both ways), whether
+// or not a link had to be made, so callers skip the per-sale links.
+function ensureSettlementLink(bookId) {
+  const s = states[bookId];
+  const settle = s && authorSettlementDue(bookId);
+  if (!settle) return false;
+  if (navigator.onLine && settle.payable && !settlementLinkFor(s, settle) && !_transferLinkInFlight.has(`${bookId}:settle`)) {
+    _transferLinkInFlight.add(`${bookId}:settle`);
+    // Cleared only on success, so a bad Stripe key doesn't retry every render.
+    mintArtistSettlementLink(bookId).then(url => { if (url) _transferLinkInFlight.delete(`${bookId}:settle`); });
+  }
+  return true;
+}
+
 function ensureTransferLinks(bookId) {
   const s = states[bookId];
   if (!s || !navigator.onLine) return;
   // Money running both ways is paid as one net amount, so per-sale links
   // (which ask for each sale in full) would quote the wrong figure.
-  const settle = authorSettlementDue(bookId);
-  if (settle) {
-    if (settle.payable && !settlementLinkFor(s, settle) && !_transferLinkInFlight.has(`${bookId}:settle`)) {
-      _transferLinkInFlight.add(`${bookId}:settle`);
-      // Cleared only on success, so a bad Stripe key doesn't retry every render.
-      mintArtistSettlementLink(bookId).then(url => { if (url) _transferLinkInFlight.delete(`${bookId}:settle`); });
-    }
-    return;
-  }
+  if (ensureSettlementLink(bookId)) return;
   const missing = payableTransfers(s).filter(t => !transferPayUrl(t) && !_transferLinkInFlight.has(`${bookId}:${t.id}`));
   const needBundle = payableTransfers(s).length >= 2 && !transferBundleFor(s) && !_transferLinkInFlight.has(`${bookId}:bundle`);
   if (!missing.length && !needBundle) return;
@@ -11265,6 +11289,23 @@ async function approvePendingTransferSale(subKey) {
 }
 window.approvePendingTransferSale = approvePendingTransferSale;
 
+// The author paid a settle-up link on this device and the publisher's app
+// hasn't recorded it yet. Matched on any settle-up payment, not on this amount:
+// a new sale changes the amount, and a fresh Pay button then would invite them
+// to pay twice. A settlement or receipt written after the payment absorbs it.
+function unrecordedSettlementPayment(s) {
+  let tapAt = 0;
+  for (const [k, at] of Object.entries(readPaidTaps())) {
+    if (k.startsWith('settle-') && Date.now() - at < PAID_TAP_TTL) tapAt = Math.max(tapAt, at);
+  }
+  if (!tapAt) return false;
+  let absorbedAt = Number(s?.transferReceipts?.[0]?.at) || 0;
+  for (const p of s?.artistPayouts || []) {
+    if (p.settlement && !p.voided) absorbedAt = Math.max(absorbedAt, Number(p.recordedAt) || 0);
+  }
+  return tapAt > absorbedAt;
+}
+
 // The author's banner when money runs both ways. One headline — the same net
 // figure as the publisher's Settle up panel — one Stripe button for exactly
 // that, and the sales listed underneath as what it covers.
@@ -11272,7 +11313,7 @@ function renderAuthorSettlementBanner(banner, s, settle, transfers, cur) {
   const b = settle.balance;
   const money = n => fmt(n, cur);
   const link = settlementLinkFor(s, settle);
-  const paid = settle.payable && recentlyPaidTransfer(settlementPaidKey(b.amount));
+  const paid = settle.payable && unrecordedSettlementPayment(s);
   banner.style.display = '';
   banner.classList.add('apb-riso');
   banner.querySelector('.metric-banner-label').textContent = 'Money to send to your publisher';
@@ -23317,14 +23358,18 @@ function _reconFindInvoice(num) {
 // Soft heuristic: did the publisher likely already log this payment by hand?
 // Matches a non-void history entry with the same paid amount+currency within a
 // few days. Used only to keep already-handled payments out of the urgent list.
-function _reconLikelyAlreadyLogged(p) {
+// `near` widens "same amount" to within 10%: before recording on its own, a
+// register row in euros holds a live-converted figure (€37.42 for a €40 copy),
+// so an exact match would miss the very sale it is guarding against.
+function _reconLikelyAlreadyLogged(p, { near = false } = {}) {
   const target = Math.round(p.amount * 100);
+  const slack = near ? target * 0.1 : 0;
   for (const s of Object.values(states)) {
     for (const h of (s.hist || [])) {
       if (h.voided || h.gratuity) continue;
       const pay = h.payment;
       if (!pay || !pay.amount || normalizeCurrencyCode(pay.currency || '', '') !== p.currency) continue;
-      if (Math.round(pay.amount * 100) !== target) continue;
+      if (Math.abs(Math.round(pay.amount * 100) - target) > slack) continue;
       const dDays = Math.abs((new Date(h.date).getTime() - p.created) / 86400000);
       if (dDays <= 3) return true;
     }
@@ -23407,7 +23452,14 @@ async function reconcileSync() {
     saveReconMemory(mem);
     _reconSession = { logged: 0, dismissed: 0 };
     const krow = document.getElementById('recon-keyrow'); if (krow) delete krow.dataset.editing;
-    if (statusEl) statusEl.innerHTML = `<span style="color:var(--green);">✓ Pulled ${payments.length} payment${payments.length === 1 ? '' : 's'} from Stripe.</span>`;
+    if (statusEl && stripeSaleAutoEnabled()) statusEl.textContent = 'Recording the sales that are ready…';
+    const auto = await recordReadyStripeSales(payments);
+    _reconSession.logged += auto.length;
+    const autoNote = !auto.length ? ''
+      : auto.length === 1
+        ? ` Recorded automatically: ${auto[0].qty} × ${escapeHtml(auto[0].bookTitle)}.`
+        : ` Recorded ${auto.length} sales automatically.`;
+    if (statusEl) statusEl.innerHTML = `<span style="color:var(--green);">✓ Pulled ${payments.length} payment${payments.length === 1 ? '' : 's'} from Stripe.${autoNote}</span>`;
     renderReconcile();
   } catch (e) {
     const msg = String(e.message || e);
@@ -23442,9 +23494,18 @@ const resolveStripeRate = createStripeRateResolver({
   },
 });
 
+// Copies a payment covers at the price the app knows in the paid currency —
+// the price on its own payment link, or the book's — else 1 for her to set.
+function _reconDefaultQty(p, bookId) {
+  const book = bookId ? BOOKS[bookId] : null;
+  if (!p || !book) return 1;
+  const unit = paidUnitPrice(p, book, normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD'));
+  return (unit && wholeCopies(p.amount, unit.price)) || 1;
+}
+
 // Update the existing fields rather than rebuilding the card: preserve edits,
 // focus, and ignore responses for a book/currency selection that has changed.
-async function reconUpdateDefaults(id, grouped = false, reset = false) {
+async function reconUpdateDefaults(id, grouped = false, reset = false, retry = false) {
   const prefix = grouped ? 'recon-g' : 'recon-';
   const input = document.getElementById(`${prefix}rate-${id}`);
   const status = document.getElementById(`${prefix}fx-${id}`);
@@ -23462,7 +23523,11 @@ async function reconUpdateDefaults(id, grouped = false, reset = false) {
     status.textContent = 'Choose a book to calculate the converted total.';
     return;
   }
+  // A different book has a different price, so the copy count follows it
+  // unless she has typed one herself.
   const currency = normalizeCurrencyCode(document.getElementById(`${prefix}currency-${id}`)?.value, '');
+  const qtyInput = document.getElementById(`${prefix}qty-${id}`);
+  if (reset && qtyInput && qtyInput.dataset.manual !== '1') qtyInput.value = String(_reconDefaultQty({ ...p, currency }, bookId));
   const bookCurrency = normalizeCurrencyCode(getBookCurrencyCode(BOOKS[bookId]), 'CAD');
   const pair = `${currency}:${bookCurrency}:${p.date}`;
   if (input.dataset.pair && input.dataset.pair !== pair) {
@@ -23475,7 +23540,7 @@ async function reconUpdateDefaults(id, grouped = false, reset = false) {
   button.disabled = !manual && currency !== bookCurrency;
   status.textContent = currency === bookCurrency ? 'No conversion needed.' : 'Fetching the payment-date exchange rate…';
   const result = manual ? { rate: Number(input.value), source: 'manual' }
-    : await resolveStripeRate({ ...p, currency }, bookCurrency);
+    : await resolveStripeRate({ ...p, currency }, bookCurrency, { retry });
   if (!input.isConnected || input.dataset.request !== request) return;
   const overridden = input.dataset.manual === '1';
   if (!overridden) input.value = result.rate ? String(result.rate) : '';
@@ -23485,16 +23550,16 @@ async function reconUpdateDefaults(id, grouped = false, reset = false) {
   const amount = Number(document.getElementById(`${prefix}amount-${id}`)?.value);
   button.disabled = false; // Invalid/missing values are explained on Record.
   if (!(rate > 0) || !Number.isFinite(rate)) {
-    status.textContent = 'Payment-date rate unavailable. Retry when online, or enter a rate above. ';
-    const retry = document.createElement('button');
-    retry.type = 'button';
-    retry.className = 'btn tag sm';
-    retry.textContent = 'Retry rate';
-    retry.addEventListener('click', () => reconUpdateDefaults(id, grouped));
-    status.appendChild(retry);
+    status.textContent = `Couldn’t get the exchange rate for ${p.date}. Check your connection and retry, or type a rate in the field above. `;
+    const again = document.createElement('button');
+    again.type = 'button';
+    again.className = 'btn tag sm';
+    again.textContent = 'Retry rate';
+    again.addEventListener('click', () => reconUpdateDefaults(id, grouped, false, true));
+    status.appendChild(again);
     return;
   }
-  const total = Number.isFinite(amount) && amount > 0 ? `${bookCurrency} ${_stripeFmtMoney(roundCents(amount * rate), bookCurrency)}` : 'Enter the paid amount';
+  const total = Number.isFinite(amount) && amount > 0 ? _stripeFmtMoney(roundCents(amount * rate), bookCurrency) : 'Enter the paid amount';
   const source = currency === bookCurrency ? 'No conversion needed'
     : overridden ? 'Your exchange rate' : `Reference rate${result.date ? ` · ${result.date}` : ` for ${p.date}`}`;
   status.textContent = `${source} · ${total}${grouped ? ' per payment' : ''}`;
@@ -23625,7 +23690,7 @@ function _reconNeedCard(p, c) {
       </div>
       <div class="form-group" style="margin:0;width:70px;">
         <label style="font-size:var(--text-2xs);">Qty</label>
-        <input type="number" id="recon-qty-${idSafe}" value="1" min="1" style="width:100%;">
+        <input type="number" id="recon-qty-${idSafe}" value="${_reconDefaultQty(p, c.bookId)}" min="1" oninput="this.dataset.manual='1'" style="width:100%;">
       </div>
       <div class="form-group" style="margin:0;width:280px;max-width:100%;">
         <label for="recon-num-${idSafe}" style="font-size:var(--text-2xs);">Order #</label>
@@ -23641,13 +23706,13 @@ function _reconNeedCard(p, c) {
       </div>
       <div class="form-group" style="margin:0;width:130px;">
         <label for="recon-rate-${idSafe}" style="font-size:var(--text-2xs);">Automatic exchange rate</label>
-        <input type="number" id="recon-rate-${idSafe}" data-recon-default="${idSafe}" min="0.000001" step="any" inputmode="decimal" placeholder="Fetched automatically" oninput="this.dataset.manual='1';reconUpdateDefaults('${idSafe}')" aria-describedby="recon-fx-${idSafe}" style="width:100%;">
+        <input type="number" id="recon-rate-${idSafe}" data-recon-default="${idSafe}" min="0.000001" step="any" inputmode="decimal" placeholder="Automatic" oninput="this.dataset.manual='1';reconUpdateDefaults('${idSafe}')" aria-describedby="recon-fx-${idSafe}" style="width:100%;">
       </div>
       <button class="btn gold sm" id="recon-rec-${idSafe}" style="height:38px;"${recDisabled} onclick="reconcileRecordSale('${idSafe}')">Record sale</button>
       <button class="btn tag sm" style="height:38px;" onclick="reconcileDismiss('${idSafe}')" title="Not an inventory sale (donation, test charge, etc.)">Dismiss</button>
     </div>
     <div id="recon-fx-${idSafe}" role="status" aria-live="polite" style="font-size:var(--text-xs);color:var(--text2);margin-top:6px;">Preparing the exchange rate…</div>
-    <div style="font-size:var(--text-xs);color:var(--text3);margin-top:6px;">Stripe’s paid amount is preserved. A payment-date reference rate and an order number fill automatically; you can edit them. The reference rate may differ from Stripe’s payout conversion.</div>
+    <div style="font-size:var(--text-xs);color:var(--text3);margin-top:6px;">Stripe’s paid amount is preserved. A payment-date reference rate, the number of copies and an order number fill automatically; you can edit them. The reference rate may differ from Stripe’s payout conversion.</div>
     </div>`;
 }
 
@@ -23673,7 +23738,7 @@ function _reconGroupCard(items, gi) {
       </div>
       <div class="form-group" style="margin:0;width:80px;">
         <label style="font-size:var(--text-2xs);">Qty each</label>
-        <input type="number" id="recon-gqty-${gi}" value="1" min="1" style="width:100%;">
+        <input type="number" id="recon-gqty-${gi}" value="${_reconDefaultQty(p, c.bookId)}" min="1" oninput="this.dataset.manual='1'" style="width:100%;">
       </div>
       <div class="form-group" style="margin:0;width:120px;">
         <label style="font-size:var(--text-2xs);">Stripe amount paid</label>
@@ -23685,7 +23750,7 @@ function _reconGroupCard(items, gi) {
       </div>
       <div class="form-group" style="margin:0;width:130px;">
         <label for="recon-grate-${gi}" style="font-size:var(--text-2xs);">Automatic exchange rate</label>
-        <input type="number" id="recon-grate-${gi}" data-recon-default="${gi}" data-grouped="1" min="0.000001" step="any" inputmode="decimal" placeholder="Fetched automatically" oninput="this.dataset.manual='1';reconUpdateDefaults('${gi}', true)" aria-describedby="recon-gfx-${gi}" style="width:100%;">
+        <input type="number" id="recon-grate-${gi}" data-recon-default="${gi}" data-grouped="1" min="0.000001" step="any" inputmode="decimal" placeholder="Automatic" oninput="this.dataset.manual='1';reconUpdateDefaults('${gi}', true)" aria-describedby="recon-gfx-${gi}" style="width:100%;">
       </div>
       <button class="btn gold sm" id="recon-grec-${gi}" style="height:38px;"${recDisabled} onclick="reconRecordGroup(${gi})">Record all ${n}</button>
       <button class="btn tag sm" style="height:38px;" onclick="reconDismissGroup(${gi})">Dismiss all ${n}</button>
@@ -23842,7 +23907,9 @@ function _reconApplyPaymentToBook(p, bookId, qty, { chan = '', notes = 'Stripe d
   };
   if (paidCurrency !== bookCur) {
     payment.rateSource = rateSource || 'manual';
-    payment.rateDate = payment.rateSource === 'Frankfurter' ? rateDate : (rateDate || p.date);
+    // A looked-up rate keeps the day it is actually from (blank when unknown);
+    // only a hand-typed rate is taken as the payment date's.
+    payment.rateDate = payment.rateSource === 'manual' ? (rateDate || p.date) : rateDate;
     payment.rateRequestedDate = p.date;
   }
   _reconApplySaleToBook(bookId, qty, price, payment, p.id, notes, {
@@ -24202,7 +24269,7 @@ async function sweepStripeInvoicePayments({ force = false } = {}) {
             icon: '⚠️',
             title: `${book.author || 'An author'} sent a payment that doesn't match`,
             detail: r.problem === 'changed'
-              ? `${book.title}: they paid the settle-up amount, but the figures have changed since (a new sale or payment), so nothing was recorded. Check it in Stripe, then record it from Settle up on the book's dashboard.`
+              ? `${book.title}: they paid ${fmt(Number(payment.amount) || 0, book.currency)} for settle-up, but the account no longer matches it — it may already have been settled by hand, or they now owe more after another sale they collected — so nothing was recorded. Check it in Stripe: refund it if it was paid twice, or settle the difference with them before recording it by hand.`
               : `${book.title}: it came in ${r.problem === 'short' ? 'for less than' : 'in a different currency from'} what they owed, so nothing was marked received. Check it in Stripe and settle it by hand.`,
             actionLabel: 'Open book',
             action: `switchBook(${JSON.stringify(r.bookId)}); switchTab('dashboard')`,
@@ -24286,6 +24353,14 @@ async function sweepStripeInvoicePayments({ force = false } = {}) {
     }
     raiseRefundedStripeSales(refundSignals);
 
+    // A sale recorded in the background (a card payment above, another
+    // device) changes what an author owes on a book nobody has open. Re-make
+    // any settle-up pay link whose amount went stale, so the author's Pay
+    // button doesn't wait for the publisher to open that book.
+    for (const id of Object.keys(states)) {
+      if (BOOKS[id]?.profitTiers?.length) ensureSettlementLink(id);
+    }
+
     if (cardSales.length) {
       renderHist();
       updateDash();
@@ -24348,6 +24423,22 @@ function stripeSaleAutoSince() {
   }
 }
 
+// When this version's counting rules first ran on this device (see
+// autoRecordStripeSale). Set once, like the switch's own start time.
+const STRIPE_SALE_RULES_SINCE_KEY = 'lm-stripe-sale-rules-v2-since';
+
+function stripeSaleRulesSince() {
+  try {
+    const stored = Number(localStorage.getItem(STRIPE_SALE_RULES_SINCE_KEY));
+    if (stored > 0) return stored;
+    const now = Date.now();
+    localStorage.setItem(STRIPE_SALE_RULES_SINCE_KEY, String(now));
+    return now;
+  } catch (_) {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
 function readRaisedStripeSales() {
   try {
     const raw = JSON.parse(localStorage.getItem(STRIPE_SALE_RAISED_KEY) || '[]');
@@ -24366,7 +24457,7 @@ function noteRaisedStripeSale(chargeId) {
  * Record one Stripe payment as a sale if it is safe to, and say what happened.
  * Returns null when there is nothing worth telling the publisher about.
  */
-async function autoRecordStripeSale(payment, rawClassification) {
+async function autoRecordStripeSale(payment, rawClassification, { raise = true } = {}) {
   if (!stripeSaleAutoEnabled()) return null;
   // A card-reader tap carries no book tag, but the seller may have typed the
   // title into its description in the Stripe app. One title named there is
@@ -24385,8 +24476,11 @@ async function autoRecordStripeSale(payment, rawClassification) {
     classification,
     book,
     bookCurrency: book ? normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD') : '',
-    likelyLogged: _reconLikelyAlreadyLogged(payment),
-    autoSince: stripeSaleAutoSince(),
+    likelyLogged: _reconLikelyAlreadyLogged(payment, { near: true }),
+    // Payments from before this version first ran were judged by the old
+    // rules, under which a euro or door-price sale never recorded — she may
+    // well have typed those in by hand since. They are never recorded now.
+    autoSince: Math.max(stripeSaleAutoSince(), stripeSaleRulesSince()),
   };
   let plan = stripeSalePlan(payment, options);
   let conversion = null;
@@ -24398,12 +24492,15 @@ async function autoRecordStripeSale(payment, rawClassification) {
     const currentBook = BOOKS[classification.bookId];
     if (!currentBook || normalizeCurrencyCode(getBookCurrencyCode(currentBook), 'CAD') !== options.bookCurrency) return null;
     plan = stripeSalePlan(payment, { ...options, book: currentBook,
-      likelyLogged: _reconLikelyAlreadyLogged(payment), conversionRate: conversion.rate,
+      likelyLogged: _reconLikelyAlreadyLogged(payment, { near: true }), conversionRate: conversion.rate,
     });
   }
   if (plan.action === 'skip') return null;
 
   if (plan.action === 'review') {
+    // Sync shows these in the list itself, so it leaves the one-time alert
+    // for the background check to raise.
+    if (!raise) return { ...plan, chargeId: payment.id };
     if (readRaisedStripeSales().includes(payment.id)) return null;
     noteRaisedStripeSale(payment.id);
     if (payment.cardPresent) noteUnmatchedReaderPayment(payment);
@@ -24430,6 +24527,45 @@ async function autoRecordStripeSale(payment, rawClassification) {
     bookTitle: BOOKS[plan.bookId]?.title || 'a book',
     stockLeft: Number(states[plan.bookId]?.stock) || 0,
   };
+}
+
+// Pressing Sync records what the background check would record by itself —
+// a payment through one of the app's own links that adds up to whole copies —
+// so the list left behind is only the payments that need her. Same rules,
+// same write as the background check: nothing is recorded here that it
+// wouldn't record, and nothing at all when she has switched it off.
+const RECON_AUTO_BUDGET_MS = 15000;
+
+async function recordReadyStripeSales(payments, { budgetMs = RECON_AUTO_BUDGET_MS } = {}) {
+  if (!window.IS_PUBLISHER || isAuthor() || !stripeSaleAutoEnabled()) return [];
+  const stopAt = Date.now() + budgetMs;
+  const recorded = [];
+  for (const payment of payments || []) {
+    // A slow rate lookup must not hold the list back; whatever is left stays in
+    // it for her, and the background check tries again.
+    const left = stopAt - Date.now();
+    if (left <= 0) break;
+    if (payment.refunded || payment.disputed) continue;
+    const c = classifyStripePayment(payment);
+    if (c.kind !== 'direct') continue;
+    // Stop waiting once time is up; a lookup still running finishes in the
+    // background and the background check picks the payment up later.
+    const outcome = await Promise.race([
+      autoRecordStripeSale(payment, c, { raise: false }),
+      new Promise(done => setTimeout(() => done(null), left)),
+    ]);
+    if (outcome?.action === 'record') recorded.push({ ...outcome, num: stripeOrderNumber(payment) });
+  }
+  if (recorded.length) {
+    const mem = getReconMemory();
+    const at = Date.now();
+    recorded.forEach(r => { mem.recorded[r.chargeId] = { bookId: r.bookId, num: r.num, at }; });
+    saveReconMemory(mem);
+    renderHist();
+    updateDash();
+    if (typeof window.renderAllOverview === 'function') window.renderAllOverview();
+  }
+  return recorded;
 }
 
 /** Refunds issued since `since`, one page, newest first. */
