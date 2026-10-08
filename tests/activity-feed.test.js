@@ -30,6 +30,25 @@ describe('activityTimestamp', () => {
 });
 
 describe('buildActivityFeed — sources', () => {
+  it('retains an exact recording time without changing the accounting day', () => {
+    const recordedAt = '2026-10-08T18:30:00.000Z';
+    const [sale] = buildActivityFeed([hound], { hound: { hist: [{ date: '2026-10-08', recordedAt, qty: 1, price: 25 }] } });
+    expect(sale.date).toBe('2026-10-08');
+    expect(sale.timestamp).toBe(Date.parse(recordedAt));
+    expect(sale.sortKey).toBe(Date.parse(recordedAt));
+  });
+
+  it('does not invent an exact time for a date-only sale', () => {
+    const [sale] = buildActivityFeed([hound], { hound: { hist: [{ date: '2026-10-08', qty: 1, price: 25 }] } });
+    expect(sale.timestamp).toBe(0);
+  });
+
+  it('keeps full datetime precision for a delivery', () => {
+    const deliveredDate = '2026-10-08T18:30:00.000Z';
+    const feed = buildActivityFeed([hound], { hound: { hist: [{ date: '2026-10-07', deliveredDate }] } });
+    expect(feed.find(e => e.kind === 'delivered').timestamp).toBe(Date.parse(deliveredDate));
+  });
+
   it('reads a sale out of history', () => {
     const feed = buildActivityFeed([hound], {
       hound: { hist: [{ num: '1042', chan: 'Website', qty: 3, price: 25, date: '2026-03-01', cur: 'CAD' }] },
