@@ -79,6 +79,43 @@ describe('the balance card before anything is recorded', () => {
   });
 });
 
+describe('calculating the author payment', () => {
+  it('opens from the real button offline without writing or clearing any balances', async () => {
+    app.main.states[BOOK].hist.unshift({ num: 'held', qty: 1, price: 200, artistPending: true });
+    app.setOnline(false);
+    win.renderProfitSharingBreakdown(BOOK);
+    const before = JSON.stringify(app.main.states[BOOK]);
+    const saves = app.cloud.saves.length;
+    const queued = JSON.stringify(app.queued());
+    const button = el('artist-settlement-button');
+    expect(button).not.toBeNull();
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    button.click();
+    const result = el('artist-settlement');
+    expect(result.hidden).toBe(false);
+    expect(result.textContent).toContain('Author sends you');
+    expect(result.querySelector('.ps-stat-val').textContent).toBe('CA$20.00');
+    expect(result.textContent).toContain('CA$100.00');
+    expect(result.textContent).toContain('CA$80.00');
+    expect(JSON.stringify(app.main.states[BOOK])).toBe(before);
+    expect(app.cloud.saves.length).toBe(saves);
+    expect(JSON.stringify(app.queued())).toBe(queued);
+    button.click();
+    expect(result.hidden).toBe(true);
+    // Reopening reads the newest balances rather than retaining the old result.
+    app.main.states[BOOK].artistReceivables = [{ id: 'new', amount: 15 }];
+    button.click();
+    expect(result.querySelector('.ps-stat-val').textContent).toBe('CA$35.00');
+  });
+
+  it('says you send the author money when they hold no sales money', () => {
+    el('artist-settlement-button').click();
+    const result = el('artist-settlement');
+    expect(result.textContent).toContain('You send the author');
+    expect(result.querySelector('.ps-stat-val').textContent).toBe('CA$80.00');
+  });
+});
+
 describe('previewing a payout before it is saved', () => {
   it('states the balance the moment the form opens', () => {
     win.toggleArtistPayoutForm(BOOK);

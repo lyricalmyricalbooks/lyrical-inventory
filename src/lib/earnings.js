@@ -197,6 +197,27 @@ export function calcArtistEarnings(book, state) {
   };
 }
 
+// Preview one transfer across BOTH sides of the account, without recording a
+// payout or clearing held sales. owedToArtist already excludes the held share
+// and applied offsets; deduct only that remaining balance from the publisher's
+// held cut plus open debts. Keep the signed balance so overpayments are visible.
+export function describeArtistSettlement(stats = {}) {
+  const heldGross = roundCents(stats.heldByArtistGross || 0);
+  const heldShare = roundCents(stats.heldByArtistShare || 0);
+  const publisherHeld = roundCents(heldGross - heldShare);
+  const otherDebt = roundCents(stats.owedByArtist || 0);
+  const owed = roundCents(stats.owedToArtist || 0);
+  const royaltiesOwed = Math.max(0, owed);
+  const overpaid = Math.max(0, roundCents(-owed));
+  const netToPublisher = roundCents(roundCents(publisherHeld + otherDebt) - owed);
+  return {
+    heldGross, heldShare, publisherHeld, otherDebt, royaltiesOwed, overpaid,
+    netToPublisher,
+    amount: Math.abs(netToPublisher),
+    direction: netToPublisher > 0 ? 'to-publisher' : netToPublisher < 0 ? 'to-artist' : 'settled',
+  };
+}
+
 // Has enough been paid since a payout request was made to cover what it asked
 // for?
 //

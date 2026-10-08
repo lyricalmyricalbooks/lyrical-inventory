@@ -15,7 +15,7 @@ initPhoneLayouts(document.body);
 import './firebase.js';
 import { registerSW } from 'virtual:pwa-register';
 import { canonicalExpenseCategory } from './lib/expense-categories.js';
-import { calcArtistEarnings, tierEffectiveCap, describePayout, payoutRequestCovered, planNetPayout, payoutNetted } from './lib/earnings.js';
+import { calcArtistEarnings, tierEffectiveCap, describePayout, payoutRequestCovered, planNetPayout, payoutNetted, describeArtistSettlement } from './lib/earnings.js';
 import { createStripePriceAndLink } from './lib/stripe-payment-link.js';
 import { calculateBreakEven, breakEvenTierMove, applyBreakEvenTierMove, readProductionCostInput } from './lib/breakeven.js';
 import { computeTallyRowHeights, computeQrCardSize, estimateTallyPages, estimateQrPages } from './lib/print-sheet-layout.js';
@@ -7393,6 +7393,45 @@ function getArtistHeldHtml(stats, cur) {
   return { heldCardHtml, heldNoteHtml, hasHeld };
 }
 
+function toggleArtistSettlement(bookId) {
+  if (isAuthor()) return;
+  const result = document.getElementById(`artist-settlement-${bookId}`);
+  const button = document.getElementById(`artist-settlement-button-${bookId}`);
+  const stats = calculateArtistEarnings(bookId);
+  if (!result || !button || !stats) return;
+  const open = result.hidden;
+  if (open) {
+    const balance = describeArtistSettlement(stats);
+    const cur = BOOKS[bookId].currency;
+    const row = (label, amount, sign = '') => `<div class="ps-payout-row">
+      <span>${label}</span><span class="ps-payout-row-amt" style="white-space:nowrap;">${sign}${fmt(amount, cur)}</span>
+    </div>`;
+    const label = balance.direction === 'to-publisher' ? 'Author sends you'
+      : balance.direction === 'to-artist' ? 'You send the author' : 'No payment needed';
+    result.innerHTML = `
+      <div class="ps-payout-list">
+        ${row('Money held by the author', balance.heldGross)}
+        ${row('Their cut of those sales — they keep this', balance.heldShare, '− ')}
+        ${row('Your cut of the held money', balance.publisherHeld)}
+        ${balance.otherDebt > 0 ? row('Other money the author still owes you', balance.otherDebt, '+ ') : ''}
+        ${row('Remaining earnings you owe the author', balance.royaltiesOwed, '− ')}
+        ${balance.overpaid > 0 ? row('Previous overpayment to the author', balance.overpaid, '+ ') : ''}
+      </div>
+      <div class="ps-stat-card tone-green">
+        <div class="ps-stat-label">${label}</div>
+        <div class="ps-stat-val">${fmt(balance.amount, cur)}</div>
+        <div class="ps-stat-sub">For this title, after both balances are offset.</div>
+      </div>
+      <p class="ps-payout-preview">Their cut is deducted once. Remaining earnings already exclude that cut, previous payouts and recorded debt offsets. This is a calculation only; no payment has been recorded.</p>
+      ${balance.overpaid > 0 ? '<p class="ps-payout-preview">This includes the previous overpayment as money to recover. If you agreed to leave it as credit against future earnings, subtract that overpayment from the amount to collect.</p>' : ''}
+      <p class="ps-payout-preview">Based on records currently on this device. If another device has recent sales or payments, let it synchronize before agreeing the final amount.</p>
+    `;
+  }
+  result.hidden = !open;
+  button.setAttribute('aria-expanded', String(open));
+}
+window.toggleArtistSettlement = toggleArtistSettlement;
+
 // Bring every request's `settled` flag in line with what has actually been paid.
 // Both directions matter: deleting or reducing a payout has to re-open a request
 // it used to cover, or the attention signal would stay silent about money that
@@ -7587,6 +7626,12 @@ function renderProfitSharingBreakdown(bookId) {
       </div>
     </div>
     ${heldNoteHtml}
+    ${!isAuthor() ? `<div class="ps-payout-head">
+      <button class="btn sys-target" id="artist-settlement-button-${bookId}"
+        aria-expanded="false" aria-controls="artist-settlement-${bookId}"
+        onclick="toggleArtistSettlement('${bookId}')">Calculate author payment</button>
+    </div>
+    <div id="artist-settlement-${bookId}" class="ps-payout-form sys-container" role="status" aria-live="polite" hidden></div>` : ''}
     ${payoutRequestHtml}
     <div style="margin-bottom:1rem;">
        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
