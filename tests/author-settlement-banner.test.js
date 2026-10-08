@@ -198,3 +198,17 @@ describe('the settlement in the payouts list', () => {
     expect(win.calculateArtistEarnings(BOOK)).toMatchObject({ totalArtistEarned: 617.18, owedToArtist: 0 });
   });
 });
+
+describe('the headline boxes when money runs both ways', () => {
+  it('shows the earnings owed beside the net balance, which leads', () => {
+    win.renderProfitSharingBreakdown(BOOK);
+    const cards = [...document.querySelectorAll('#ps-dash-content .ps-stat-grid .ps-stat-card')];
+    const owed = cards.find(c => c.querySelector('.ps-stat-label').textContent === 'Owed to artist');
+    expect(owed.classList.contains('tone-amber')).toBe(true);
+    expect(owed.querySelector('.ps-stat-val').textContent).toBe('CA$267.76');
+    expect(owed.querySelector('.ps-stat-sub').textContent).toBe('comes off the net balance');
+    const lead = document.querySelector('#ps-dash-content .ps-stat-card.is-lead');
+    expect(lead.querySelector('.ps-stat-label').textContent).toBe('Net balance');
+    expect(lead.querySelector('.ps-stat-val').textContent).toBe('CA$232.21');
+  });
+});

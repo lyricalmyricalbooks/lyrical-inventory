@@ -8002,7 +8002,20 @@ function renderProfitSharingBreakdown(bookId) {
   const progressHtml = getRevenueProgressHtml(stats, tiers, nextTier, effectiveCap, cur);
   const settle = getSettleUpHtml(bookId);
   const { owedLabel, owedVal, owedSub, owedTone, owed } = getOwedCardDetails(stats, cur, settle.model);
+  // Money running both ways: keep the earnings owed visible as its own box,
+  // beside the net balance that leads — in a calm colour, since the net is
+  // what gets acted on, and the two shouldn't look like two alarms.
+  const royaltyCard = settle.model ? (() => {
+    const r = getOwedCardDetails(stats, cur, null);
+    const sub = r.owed > 0.01 ? 'comes off the net balance' : r.owedSub;
+    return `<div class="ps-stat-card tone-amber">
+        <div class="ps-stat-label">${r.owedLabel.replace('⚠ ', '')}</div>
+        <div class="ps-stat-val">${r.owedVal}</div>
+        <div class="ps-stat-sub">${sub}</div>
+      </div>`;
+  })() : '';
   const { heldCardHtml, hasHeld } = getArtistHeldHtml(stats, cur);
+  const statCols = `cols-${3 + (hasHeld ? 1 : 0) + (royaltyCard ? 1 : 0)}`;
   // While the net runs toward the publisher, inviting the author to request a
   // payout would ask them for money they don't actually have coming.
   const payoutRequestHtml = settle.model?.direction === 'to-publisher' ? '' : getPayoutRequestHtml(bookId, stats, cur, owed);
@@ -8011,7 +8024,7 @@ function renderProfitSharingBreakdown(bookId) {
   const hasSettlements = (states[bookId]?.artistPayouts || []).some(p => p.settlement);
 
   content.innerHTML = `
-    <div class="ps-stat-grid ${hasHeld ? 'cols-4' : 'cols-3'}">
+    <div class="ps-stat-grid ${statCols}">
       <div class="ps-stat-card">
         <div class="ps-stat-label">Artist earnings</div>
         <div class="ps-stat-val is-positive">${fmt(stats.totalArtistEarned, cur)}</div>
@@ -8023,6 +8036,7 @@ function renderProfitSharingBreakdown(bookId) {
         <div class="ps-stat-sub">${stats.payouts?.length || 0} payout${(stats.payouts?.length || 0) !== 1 ? 's' : ''} recorded</div>
       </div>
       ${heldCardHtml}
+      ${royaltyCard}
       <div class="ps-stat-card is-lead tone-${owedTone}">
         <div class="ps-stat-label">${owedLabel}</div>
         <div class="ps-stat-val">${owedVal}</div>
