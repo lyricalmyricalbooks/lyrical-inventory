@@ -81,9 +81,9 @@ function column(side, cur, model, cls) {
     </section>`;
 }
 
-// opts: { bookId, cur, date, canRecord, hasWork, reviewError, pendingSync, statement }
+// opts: { bookId, cur, date, payLinkReady, canRecord, hasWork, reviewError, pendingSync, statement }
 export function settleUpHtml(model, opts) {
-  const { bookId, cur, date = '', canRecord = false, hasWork = false, reviewError = false, pendingSync = 0, statement = '' } = opts;
+  const { bookId, cur, date = '', payLinkReady = false, canRecord = false, hasWork = false, reviewError = false, pendingSync = 0, statement = '' } = opts;
   const id = escapeHtml(String(bookId));
   const tone = model.direction === 'settled' ? 'tone-green' : 'tone-gold';
   const equation = model.direction === 'settled'
@@ -111,6 +111,7 @@ export function settleUpHtml(model, opts) {
         <span class="ps-settle-step-num" aria-hidden="true">2</span>
         <div class="ps-settle-step-body">
           <strong>${model.author ? 'Keep a copy' : 'Send the author the statement'}</strong>
+          ${payLinkReady && !model.author ? `<span>Their app already shows a Stripe button for exactly ${fmt(model.amount, cur)}. If they pay with it, the settlement records itself.</span>` : ''}
           <div class="ps-payout-actions">
             <button type="button" class="btn sys-target" onclick="shareArtistSettlement('${id}')">${model.author ? 'Copy statement' : 'Share statement'}</button>
           </div>
