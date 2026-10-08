@@ -7,6 +7,7 @@
 // baseAmount preference) — so the numbers can never drift from the ledger.
 
 import { getBookCurrencyCode, roundCents } from './money.js';
+import { payoutDebtCollected } from './earnings.js';
 
 const yearOf = (d) => (d ? String(d).substring(0, 4) : '');
 const monthOf = (d) => (d ? String(d).substring(0, 7) : '');
@@ -29,6 +30,8 @@ export function computeCashFlowMetrics(sources, yearFilter) {
   let grossSales = 0;
   let operatingExpenses = 0;
   let artistPayouts = 0;
+  let artistDebtRecovered = 0;
+  let artistSettlementCashAdjustment = 0;
   let txnCount = 0;
   let unitsSold = 0;
 
@@ -38,6 +41,7 @@ export function computeCashFlowMetrics(sources, yearFilter) {
     const b = books[bid] || {};
     const cur = getBookCurrencyCode(b);
     const hRate = fxRateCache[`${cur}_CAD`] || 1;
+    const settlements = new Map((s.artistPayouts || []).filter(p => p.settlement && !p.voided).map(p => [p.id, p]));
 
     // Sales — skip pending-to-artist rows (unless voided, which counts as 0) and gratuities.
     (s.hist || []).filter((h) => (!h.artistPending || h.voided) && !h.gratuity).forEach((h) => {
@@ -47,6 +51,11 @@ export function computeCashFlowMetrics(sources, yearFilter) {
       const merchandise = h.voided ? 0 : unitPrice * qty;
       const customerShipping = h.voided ? 0 : (Number(h.shippingPaid) || 0);
       grossSales = roundCents(grossSales + ((merchandise + customerShipping) * hRate));
+      // Sales stay on their sale date for revenue reporting. Their cash is
+      // received through the combined payment on its own date instead.
+      if (settlements.has(h.artistSettlementId)) {
+        artistSettlementCashAdjustment = roundCents(artistSettlementCashAdjustment - ((merchandise + customerShipping) * hRate));
+      }
       txnCount += 1;
       if (!h.voided) unitsSold += qty;
     });
@@ -77,6 +86,15 @@ export function computeCashFlowMetrics(sources, yearFilter) {
       // `amount` is denominated in the book's own currency (a payout made in
       // another currency stores the foreign cash under `payment`).
       artistPayouts += (Number(p.amount) || 0) * hRate;
+      artistDebtRecovered = roundCents(artistDebtRecovered + payoutDebtCollected(p) * hRate);
+      if (p.settlement) {
+        const receipt = p.settlement;
+        const cashRate = fxRateCache[`${receipt.cur}_CAD`] || 1;
+        const cash = receipt.balance.direction === 'to-publisher' ? receipt.balance.amount
+          : receipt.balance.direction === 'to-artist' ? -receipt.balance.amount : 0;
+        artistSettlementCashAdjustment = roundCents(artistSettlementCashAdjustment + cash * cashRate
+          + ((Number(p.amount) || 0) - payoutDebtCollected(p)) * hRate);
+      }
     });
   });
 
@@ -93,7 +111,9 @@ export function computeCashFlowMetrics(sources, yearFilter) {
     operatingExpenses += eBase;
   });
 
-  return { grossSales, operatingExpenses, artistPayouts, txnCount, unitsSold };
+  return { grossSales, operatingExpenses, artistPayouts, txnCount, unitsSold,
+    ...(artistDebtRecovered ? { artistDebtRecovered } : {}),
+    ...(artistSettlementCashAdjustment ? { artistSettlementCashAdjustment } : {}) };
 }
 
 // Period-over-period delta for one metric. Handles a zero prior period without
@@ -132,7 +152,7 @@ export function buildCashFlowBuckets(ledger, yearFilter) {
   }
 
   (ledger || []).forEach((item) => {
-    if (item.sourceType === 'artistPayout') return; // excluded from opex
+    if (item.sourceType === 'artistPayout' || item.sourceType === 'artistDebtRecovery') return; // separate from operating sales/expenses
     if (item.affectsCashFlow === false) return; // non-cash tax/accounting adjustment
     // When charting a single year, ignore any stray out-of-year rows so the
     // axis stays the 12 seeded months (the production ledger is already

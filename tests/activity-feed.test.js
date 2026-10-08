@@ -30,6 +30,16 @@ describe('activityTimestamp', () => {
 });
 
 describe('buildActivityFeed — sources', () => {
+  it('describes the actual settlement transfer rather than implying all retained earnings were sent', () => {
+    const payout = { id: 'settlement', amount: 342.47, date: '2026-10-08', settlement: { cur: 'CAD', balance: { amount: 232.21, direction: 'to-publisher' } } };
+    const [received] = buildActivityFeed([hound], { hound: { artistPayouts: [payout] } });
+    expect(received.text).toContain('payment received');
+    expect(received.amount).toBe('+CA$232.21');
+    payout.voided = true;
+    const [undone] = buildActivityFeed([hound], { hound: { artistPayouts: [payout] } });
+    expect(undone.text).toContain('Undid');
+    expect(undone.amount).toBe('');
+  });
   it('retains an exact recording time without changing the accounting day', () => {
     const recordedAt = '2026-10-08T18:30:00.000Z';
     const [sale] = buildActivityFeed([hound], { hound: { hist: [{ date: '2026-10-08', recordedAt, qty: 1, price: 25 }] } });

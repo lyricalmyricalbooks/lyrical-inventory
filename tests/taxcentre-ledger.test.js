@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildHarness } from './helpers/extract-decl.js';
-import { getBookCurrencyCode } from '../src/lib/money.js';
+import { getBookCurrencyCode, fmt, roundCents } from '../src/lib/money.js';
+import { payoutNetted, payoutDebtCollected } from '../src/lib/earnings.js';
 import { reconcileConsignmentMirrors } from '../src/lib/consignment.js';
 import { canonicalExpenseCategory } from '../src/lib/expense-categories.js';
 
@@ -55,16 +56,17 @@ const TAX_CENTER = {
 // EUR sells at 1.50 CAD so the conversion is visible in the totals.
 const _fxRateCache = { EUR_CAD: 1.5, CAD_CAD: 1 };
 
-function buildLedger(year) {
+function buildLedger(year, extraState = {}) {
   const fn = buildHarness({
     names: ['_tcBuildLedger'],
     deps: {
       BOOKS,
-      states: JSON.parse(JSON.stringify(states)),
+      states: JSON.parse(JSON.stringify({ ...states, ...extraState })),
       TAX_CENTER: JSON.parse(JSON.stringify(TAX_CENTER)),
       _fxRateCache,
       defaultState: () => ({ hist: [], expenses: [], stores: [], ledger: [] }),
       getBookCurrencyCode,
+      fmt, roundCents, payoutNetted, payoutDebtCollected,
       reconcileConsignmentMirrors,
       canonicalExpenseCategory,
       today: () => '2026-07-27',
@@ -75,6 +77,14 @@ function buildLedger(year) {
 }
 
 describe('Tax Centre ledger', () => {
+  it('shows settled royalties and collected debt separately without counting another sale', () => {
+    const { allLedger, totalGrossSales } = buildLedger('2026', {
+      hound: { ...states.hound, artistPayouts: [{ id: 'settlement', date: '2026-10-08', amount: 80, settlement: {}, receivablePayments: [{ id: 'debt', amount: 30 }] }] },
+    });
+    expect(allLedger.find(r => r.sourceType === 'artistPayout')).toMatchObject({ origAmount: 80, isIncome: false });
+    expect(allLedger.find(r => r.sourceType === 'artistDebtRecovery')).toMatchObject({ origAmount: 30, type: 'Transfer', isIncome: true });
+    expect(totalGrossSales).toBe(55);
+  });
   it('totals sales for the selected year only', () => {
     // hound 2×20 = 40 CAD, altrove 1×10 EUR × 1.5 = 15 CAD. The 2025 sale, the
     // voided one and the artist-pending one must not count.

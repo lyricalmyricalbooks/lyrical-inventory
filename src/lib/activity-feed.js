@@ -289,6 +289,22 @@ function eventsForBook(book, state) {
 
   (s.artistPayouts || []).forEach((p) => {
     if (!p) return;
+    if (p.settlement) {
+      const balance = p.settlement.balance;
+      const received = balance.direction === 'to-publisher';
+      const ev = event({
+        book, date: p.voided ? p.voidedAt || p.date : p.date, tie: p.id, kind: 'payout', icon: '🧾',
+        text: p.voided ? `Undid the author settlement for ${book?.title || 'this book'}`
+          : received ? `Recorded payment received from ${book?.author || 'the author'} for ${book?.title || 'this book'}`
+          : balance.direction === 'to-artist' ? `Recorded payment sent to ${book?.author || 'the author'} for ${book?.title || 'this book'}`
+          : `Offset both balances for ${book?.title || 'this book'} without cash`,
+        amount: p.voided ? '' : `${balance.amount ? received ? '+' : '−' : ''}${fmt(balance.amount, p.settlement.cur)}`,
+        tone: p.voided || !balance.amount ? 'info' : received ? 'pos' : 'neg',
+      });
+      ev.key = `payout:${book?.id || '?'}:${p.id}`;
+      out.push(ev);
+      return;
+    }
     const cur = entryNativeCode(p, book);
     const ev = event({
       book, date: p.date, tie: p.id, kind: 'payout', icon: '💸',
