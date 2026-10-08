@@ -931,6 +931,7 @@ import { reminderSettings, reminderBlockReason, invoiceReminderState, dueForRemi
 import { LEDGER_TYPE_FILTERS, emptyLedgerFilter, ledgerFilterIsActive, ledgerStoreOptions, filterLedgerEntries, ledgerTypeCounts, describeLedgerFilter, ledgerTotalsScope } from './lib/consignment-ledger-filter.js';
 import { filterHistoryRows, historySearchIsActive, describeHistorySearch } from './lib/order-history-search.js';
 import { resolveCountryCode } from './lib/countries.js';
+import { PUBLISHER_ONLY_TABS, AUTHOR_ONLY_TABS, helpTabOpenFor, helpQueryWords, helpMatches } from './lib/help-guide.js';
 
 // Declared in the POS section below; exported here for features/customers.js.
 export { codeToSymbol };
@@ -4974,9 +4975,9 @@ initPhoneFolds();
 
 export function switchTab(name) {
   // publisher-only tabs redirect authors to dashboard
-  if (isAuthor() && (name === 'website' || name === 'backups' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes' || name === 'reconcile' || name === 'customers' || name === 'opencall' || name === 'webanalytics' || name === 'shipping' || name === 'bigcartel' || name === 'todo' || name === 'intel' || name === 'today')) name = 'dashboard';
+  if (isAuthor() && PUBLISHER_ONLY_TABS.has(name)) name = 'dashboard';
   // publisher redirected away from author-only myqr tab
-  if (!isAuthor() && name === 'myqr') name = 'dashboard';
+  if (!isAuthor() && AUTHOR_ONLY_TABS.has(name)) name = 'dashboard';
 
   const phoneScope = `${isAuthor() ? 'author' : 'publisher'}:${activeBook}:`;
   const previousPanel = document.querySelector('.tab-panel.active');
@@ -5080,8 +5081,7 @@ export function switchTab(name) {
 }
 
 // Help tab: two guides (artist / publisher) on one page, plus a word search.
-// Text is folded (case, accents, curly quotes) so “fair” finds "Fair" and café finds cafe.
-const foldHelpText = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[‘’]/g, "'").replace(/[“”]/g, '"');
+// A section or a single question can belong to one guide (data-audience) or both.
 const helpAudienceOf = (el) => el.dataset.audience || 'both';
 const helpInAudience = (el, aud) => { const a = helpAudienceOf(el); return a === 'both' || a === aud; };
 
@@ -5089,6 +5089,10 @@ function helpPage() { return document.querySelector('#tab-help .help-page'); }
 
 // Only a signed-in publisher (not in Author view) may see the publisher guide.
 const canSeePublisherHelp = () => !!window.IS_PUBLISHER && !isAuthor();
+
+// What a question is searched on: its title and answer, not its "Open …" button,
+// so typing "open" doesn't match every answer that has one.
+const helpQuestionText = (q) => [...q.querySelectorAll('summary, .help-a > :not(.help-go-row)')].map((n) => n.textContent).join(' ');
 
 export function setHelpAudience(aud) {
   const page = helpPage();
@@ -5099,6 +5103,18 @@ export function setHelpAudience(aud) {
   filterHelp($('help-search')?.value || '');
 }
 
+// "Open Manual entry →" in an answer goes straight there; a topic button
+// scrolls to its section and puts focus on its first question.
+function onHelpClick(e) {
+  const go = e.target.closest('[data-go]');
+  if (go) { switchTab(go.dataset.go); return; }
+  const jump = e.target.closest('[data-jump]');
+  const sec = jump && $(jump.dataset.jump);
+  if (!sec) return;
+  sec.scrollIntoView({ behavior: _prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' });
+  sec.querySelector('.help-q:not([hidden]) summary')?.focus({ preventScroll: true });
+}
+
 // Runs every time Help opens: artists get only their guide (no switch at all);
 // a publisher starts on the publisher guide the first time.
 function initHelpAudience() {
@@ -5107,10 +5123,16 @@ function initHelpAudience() {
   const pub = canSeePublisherHelp();
   const sw = page.querySelector('.help-aud');
   if (sw) sw.hidden = !pub;
+  // A "take me there" button only shows when this viewer can open that tab
+  // (the publisher reading the artist guide has no My QR Code tab, for one).
+  page.querySelectorAll('[data-go]').forEach((btn) => {
+    btn.closest('.help-go-row').hidden = !helpTabOpenFor(btn.dataset.go, { author: isAuthor() });
+  });
   if (!page.dataset.audienceChosen) {
     page.dataset.audienceChosen = '1';
     // Opening one question by hand keeps the Open all / Close all label honest.
     page.addEventListener('toggle', syncHelpToggleLabel, true);
+    page.addEventListener('click', onHelpClick);
     setHelpAudience(pub ? 'publisher' : 'artist');
   } else if (!pub && page.dataset.audience !== 'artist') {
     setHelpAudience('artist');
@@ -5120,23 +5142,28 @@ function initHelpAudience() {
 export function filterHelp(text) {
   const page = helpPage();
   if (!page) return;
-  const aud = canSeePublisherHelp() ? (page.dataset.audience || 'artist') : 'artist';
-  const words = foldHelpText(text).split(/\s+/).filter(Boolean);
+  const pub = canSeePublisherHelp();
+  const aud = pub ? (page.dataset.audience || 'artist') : 'artist';
+  const otherAud = aud === 'artist' ? 'publisher' : 'artist';
+  const words = helpQueryWords(text);
   let shown = 0;
   let otherHits = 0;
   page.querySelectorAll('.help-sec').forEach((sec) => {
-    const mine = helpInAudience(sec, aud);
     let secShown = 0;
     sec.querySelectorAll('.help-q').forEach((q) => {
-      const hay = foldHelpText(q.textContent);
-      const match = words.every((w) => hay.includes(w));
-      if (!mine) { if (words.length && match && canSeePublisherHelp()) otherHits++; q.hidden = false; return; }
+      const match = helpMatches(helpQuestionText(q), words);
+      if (!helpInAudience(sec, aud) || !helpInAudience(q, aud)) {
+        if (pub && words.length && match && helpInAudience(sec, otherAud) && helpInAudience(q, otherAud)) otherHits++;
+        q.hidden = true;
+        q.open = false;
+        return;
+      }
       q.hidden = !match;
       // Clearing the search folds back the questions it opened.
       q.open = words.length ? match : false;
       if (match) secShown++;
     });
-    sec.hidden = !mine || secShown === 0;
+    sec.hidden = secShown === 0;
     shown += secShown;
   });
   page.querySelectorAll('.help-foot').forEach((f) => { f.hidden = !helpInAudience(f, aud); });
@@ -5144,14 +5171,25 @@ export function filterHelp(text) {
   if (empty) empty.hidden = shown > 0;
   const other = $('help-other-aud');
   if (other) {
-    const otherAud = aud === 'artist' ? 'publisher' : 'artist';
     other.hidden = shown > 0 || otherHits === 0;
     other.dataset.aud = otherAud;
-    other.textContent = `See ${otherHits} answer${otherHits === 1 ? '' : 's'} in the ${otherAud === 'artist' ? 'artist' : 'publisher'} guide`;
+    other.textContent = `See ${otherHits} answer${otherHits === 1 ? '' : 's'} in the ${otherAud} guide`;
   }
   const count = $('help-count');
   if (count) count.textContent = words.length ? (shown ? `${shown} answer${shown === 1 ? '' : 's'} found` : '') : `${shown} questions`;
+  renderHelpTopics(page, words.length > 0);
   syncHelpToggleLabel();
+}
+
+// A row of topic buttons under the search, one per section in this guide.
+// Hidden while searching (the results are already short) and on a short guide.
+function renderHelpTopics(page, searching) {
+  const nav = $('help-topics');
+  if (!nav) return;
+  const secs = [...page.querySelectorAll('.help-sec[id]:not([hidden])')];
+  nav.hidden = searching || secs.length < 3;
+  if (nav.hidden) return;
+  nav.innerHTML = secs.map((sec) => `<button type="button" class="help-tool-btn" data-jump="${escapeHtml(sec.id)}">${escapeHtml(sec.querySelector('.help-sec-title')?.textContent || '')}</button>`).join('');
 }
 
 function visibleHelpQuestions() {
