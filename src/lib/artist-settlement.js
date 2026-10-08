@@ -118,6 +118,7 @@ export function applyArtistSettlement(book, state, plan, { date, method = '', no
   const ids = new Set(plan.transfers.map(t => String(t.id)));
   state.artistTransfers = (state.artistTransfers || []).filter(t => !ids.has(String(t.id)));
   delete state.transferBundle; // any old link quoted the full, unsettled amount
+  delete state.settlementLink; // the net link for this settlement is spent
   recalculateBookStatsFromHistory(state);
   return { ok: true, record };
 }
