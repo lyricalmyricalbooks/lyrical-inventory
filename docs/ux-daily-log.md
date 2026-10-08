@@ -117,6 +117,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-07 | visual | Phone register (Fair Mode) | Gave the register tiles and buttons the same hard shadow as the rest of the app, and made them press in when tapped | — |
 | 2026-10-07 | visual | Phone home screen (Today) | Gave the four big job cards the same bold outline and offset shadow as the rest of the app, pressing in when tapped, with a square count stamp and a sharper heading over the list below | — |
 | 2026-10-08 | fix | Phone header, register, Add sale, More button | Stopped the bell and account button being drawn on top of each other, lifted messages clear of the register's Undo bar and the update notice clear of the bottom bar, showed a missing payment type right under its buttons, pinned Add order and Log gratuity above the bottom bar, and made the More dot light up as soon as something needs you | — |
+| 2026-10-08 | behavioural | Every pop-up, on Android phones | The back gesture now closes the pop-up on top (asking first if you'd lose typing) instead of leaving the app; Esc closes the one opened last, not the one last in the page | — |
 
 ---
 

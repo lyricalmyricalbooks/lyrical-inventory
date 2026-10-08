@@ -209,8 +209,10 @@ import {
   openM,
   promptDialog,
   refreshUnsavedMarkers,
+  topOpenModalId,
   validateFields,
 } from './lib/modal.js';
+import { installBackClose } from './lib/back-close.js';
 import { dismissAppAlert, markAppAlertReviewed, pushAppAlert } from './lib/app-alert.js';
 import { booksInDescription, saleCodes, splitSalePlan } from './lib/sale-codes.js';
 import { describeMarketDay, latestMarketDay, summariseMarketDay } from './lib/market-day.js';
@@ -18117,7 +18119,24 @@ document.addEventListener('DOMContentLoaded', () => {
 // This runs for EVERY modal, not just the three named ones — any dialog that
 // happens to contain a #ret-date field gets today's date. That is the
 // long-standing behaviour, preserved deliberately.
+// The pop-up on top: the one opened last through openM, or — for the few
+// shown some other way — the last open one in the page, as Esc always did.
+function topOverlayId() {
+  const opened = topOpenModalId();
+  if (opened) return opened;
+  const open = Array.from(document.querySelectorAll('.overlay')).filter(o =>
+    o.style.display !== 'none' &&
+    !o.classList.contains('closing') && o.id.startsWith('m-') &&
+    !o.hasAttribute('data-no-backdrop-close'));
+  return open.length ? open[open.length - 1].id.slice(2) : null;
+}
+
+// On an Android phone the back gesture closes the pop-up on top (asking first
+// if there is unsaved typing) instead of leaving the app. See back-close.js.
+const backClose = installBackClose({ getTop: topOpenModalId, requestClose: attemptCloseModal });
+
 configureModals({
+  onStackChange: () => backClose.sync(),
   prepareOpen: (id) => {
     const d = id === 'send-books' ? 'send-date' : id === 'record-sale' ? 'sale-date' : 'ret-date';
     if ($(d)) $(d).value = today();
@@ -18140,12 +18159,12 @@ document.addEventListener('DOMContentLoaded', () => {
   // Esc closes the topmost open modal.
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
-    const open = Array.from(document.querySelectorAll('.overlay')).filter(o =>
-      o.style.display !== 'none' &&
-      !o.classList.contains('closing') && o.id.startsWith('m-') &&
-      !o.hasAttribute('data-no-backdrop-close'));
-    if (!open.length) return;
-    attemptCloseModal(open[open.length - 1].id.slice(2));
+    const top = topOverlayId();
+    if (!top) return;
+    // Handled here, so the browser doesn't also pass Esc to the back-gesture
+    // watcher and close a second pop-up.
+    e.preventDefault();
+    attemptCloseModal(top);
   });
 
   // Clear a field's error state as soon as the user edits it.
