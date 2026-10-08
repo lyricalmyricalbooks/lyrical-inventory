@@ -121,6 +121,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-08 | behavioural | Number boxes across the app, on phones | Copy counts bring up the whole-number keypad and prices, weights and sizes the decimal one (about 30 boxes had neither), and commission rates now accept a decimal such as 37.5% | — |
 | 2026-10-08 | visual | Phone bottom bar, pop-up sheets, register tabs | Gave the bottom bar a printed ink rule and square marks instead of a soft glow, and gave pop-up sheets a square ink grip, square corners and a square outlined close button; the register's tabs now ink in the one you're on and press in when tapped | — |
 | 2026-10-08 | visual | Phone home screen (Today) | Added a 'Sold today · all books' slip at the top (sales, books and takings per currency, tap for History) with the register's upload pill under it, so the day's numbers and whether they've reached the cloud are the first thing you see | — |
+| 2026-10-08 | visual | Phone Add Sale (Sale/Gift switch, payment and channel buttons) | Gave the Add Sale toggles on a phone square ink outlines and the offset shadow, pressing in when tapped, instead of a soft grey well | — |
 
 ---
 

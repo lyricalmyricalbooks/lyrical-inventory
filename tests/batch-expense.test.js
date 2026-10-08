@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildHarness } from './helpers/extract-decl.js';
+import { roundCents } from '../src/lib/money.js';
 
 const INDEX_HTML = fs.readFileSync(
   path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../index.html'), 'utf8'
@@ -85,6 +86,7 @@ function harness({
       getBook: () => book,
       getState: () => bookState,
       getBookCurrencyCode: (b) => b.currency,
+      roundCents,
       today: () => '2026-08-14',
       fmt: (n, c) => `${c} ${Number(n).toFixed(2)}`,
       showToast: (msg, type) => toasts.push({ msg, type }),
@@ -584,6 +586,7 @@ function domHarness() {
       getBook: () => ({ title: 'Bramble & Bee', currency: 'CAD' }),
       getState: () => ({ expenses: [] }),
       getBookCurrencyCode: (b) => b.currency,
+      roundCents,
       today: () => '2026-08-14',
       fmt: (n, c) => `${c}${Number(n).toFixed(2)}`,
       showToast: () => {},

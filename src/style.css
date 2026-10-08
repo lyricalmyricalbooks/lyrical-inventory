@@ -16642,6 +16642,119 @@ button[onclick="refreshUmamiStats()"]:active {
   color:var(--content-muted);
 }
 
+/* ── Settle up — when money runs both ways ─────────────────────────────────
+   The author holds the publisher's cut of copies they sold AND is owed
+   earnings. Two facing columns, one total each, and the subtraction happens
+   once, in the result card — instead of a list that subtracts, subtotals and
+   subtracts again with every figure painted green. Every amount is a plain
+   positive number; which column it sits in says who owes it. */
+.ps-settle{
+  container-type:inline-size;
+  margin-bottom:var(--space-5);
+  padding:var(--space-4);
+  background:var(--surface-sunken);
+  border:var(--stroke) solid var(--border-strong);
+  border-radius:var(--r2);
+}
+.ps-settle-head{
+  display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;
+  gap:var(--space-2);margin-bottom:var(--space-3);
+}
+.ps-settle-kicker{font-size:var(--text-xs);color:var(--content-muted);}
+.ps-settle-cols{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:var(--space-3);margin-bottom:var(--space-3);
+}
+@container (max-width:680px){
+  .ps-settle-cols{grid-template-columns:minmax(0,1fr);}
+}
+.ps-settle-col{
+  display:flex;flex-direction:column;min-width:0;
+  background:var(--surface-card);
+  border:var(--stroke-hair) solid var(--border-default);
+  border-radius:var(--r2);
+  padding:var(--space-3) var(--space-4);
+}
+.ps-settle-col-title{
+  margin:0 0 var(--space-2);
+  font-size:var(--text-2xs);font-weight:800;letter-spacing:var(--tracking-label);
+  text-transform:uppercase;color:var(--content-muted);
+}
+.ps-settle-lines{list-style:none;margin:0;padding:0;flex:1;}
+.ps-settle-line{
+  display:flex;justify-content:space-between;align-items:flex-start;gap:var(--space-3);
+  padding:var(--space-2) 0;
+  font-size:var(--text-sm);color:var(--content-secondary);
+  border-bottom:var(--stroke-hair) solid var(--border-subtle);
+}
+.ps-settle-line:last-child{border-bottom:0;}
+.ps-settle-line.is-empty{color:var(--content-muted);}
+.ps-settle-line-label{display:flex;flex-direction:column;gap:2px;min-width:0;}
+.ps-settle-detail{font-size:var(--text-2xs);color:var(--content-muted);line-height:var(--leading-snug);}
+.ps-settle-amt{
+  flex-shrink:0;white-space:nowrap;
+  font-family:var(--font-mono);font-feature-settings:"tnum" 1,"zero" 1;
+  color:var(--content-primary);
+}
+/* The 2px ink rule is the Riso "sum line" — the one place a column adds up. */
+.ps-settle-total{
+  display:flex;justify-content:space-between;align-items:baseline;gap:var(--space-3);
+  margin-top:var(--space-2);padding-top:var(--space-2);
+  border-top:var(--stroke) solid var(--border-strong);
+  font-size:var(--text-2xs);font-weight:800;letter-spacing:var(--tracking-label);
+  text-transform:uppercase;color:var(--content-primary);
+}
+.ps-settle-total .ps-settle-amt{font-size:var(--text-lg);font-weight:700;letter-spacing:normal;text-transform:none;}
+.ps-settle-result{margin-bottom:var(--space-3);}
+.ps-settle-result .ps-stat-val{font-size:var(--text-2xl);}
+.ps-settle-result .ps-stat-sub{font-family:var(--font-mono);font-feature-settings:"tnum" 1;}
+.ps-settle-note{
+  margin:0 0 var(--space-3);
+  font-size:var(--text-xs);line-height:var(--leading-snug);color:var(--content-muted);
+}
+.ps-settle-note:empty{display:none;}
+.ps-settle .ps-payout-preview{margin:0 0 var(--space-3);}
+.ps-settle-steps{
+  list-style:none;margin:var(--space-4) 0 0;padding:var(--space-3) 0 0;
+  border-top:var(--stroke-hair) solid var(--border-default);
+  display:flex;flex-direction:column;gap:var(--space-4);
+}
+.ps-settle-step{display:grid;grid-template-columns:28px minmax(0,1fr);gap:var(--space-3);align-items:start;}
+.ps-settle-step-num{
+  display:flex;align-items:center;justify-content:center;
+  width:28px;height:28px;
+  font-family:var(--font-mono);font-weight:700;font-size:var(--text-sm);
+  color:var(--content-primary);background:var(--surface-card);
+  border:var(--stroke) solid var(--border-strong);border-radius:var(--r2);
+}
+.ps-settle-step-body{display:flex;flex-direction:column;gap:2px;min-width:0;}
+.ps-settle-step-body > strong{
+  /* Snug leading plus a top pad centres a one-line heading on the 28px
+     number tile, without a two-line one splitting 28px apart on a phone. */
+  font-size:var(--text-sm);color:var(--content-primary);
+  line-height:var(--leading-snug);padding-top:5px;
+}
+.ps-settle-step-body > span{font-size:var(--text-xs);color:var(--content-muted);}
+.ps-settle-step .ps-payout-actions{margin-top:var(--space-2);}
+/* A long direction label ("Record payment received") wraps inside its
+   button on a phone rather than running past the panel's edge. */
+.ps-settle-step .ps-payout-actions .btn{white-space:normal;max-width:100%;text-align:center;}
+.ps-settle-preview{margin-top:var(--space-2);}
+.ps-settle-preview > summary{
+  display:inline-flex;align-items:center;min-height:var(--target-min);
+  cursor:pointer;font-size:var(--text-sm);font-weight:600;color:var(--content-secondary);
+}
+.ps-settle-preview > summary:focus-visible{outline:var(--focus-ring-width) solid var(--focus-ring-color);outline-offset:2px;}
+.ps-settle-preview textarea{
+  width:100%;margin-top:var(--space-2);
+  font-family:var(--font-mono);font-size:var(--text-xs);line-height:var(--leading-snug);
+  background:var(--surface-card);color:var(--content-primary);
+  border:var(--stroke-hair) solid var(--border-default);border-radius:var(--r2);
+  padding:var(--space-3);resize:vertical;
+}
+.ps-settle-form{margin:var(--space-3) 0 0;background:var(--surface-card);}
+.ps-settle-form .form-group input{background:var(--surface-sunken);}
+
 /* The motion tokens already collapse to 1ms; the transforms still need
    standing down for anyone who asked for reduced motion. */
 @media (prefers-reduced-motion:reduce){
@@ -20668,3 +20781,9 @@ button[onclick="refreshUmamiStats()"]:active {
 .help-a li { margin:4px 0; }
 .help-a b { color:var(--content-primary); }
 .help-foot { margin:var(--space-5) 0; font-weight:700; color:var(--content-secondary); }
+/* Topic row: one button per section, jumps there. Sections stop clear of the sticky top bar. */
+.help-topics[hidden] { display:none; }
+.help-topics { display:flex; flex-wrap:wrap; gap:var(--space-2); margin-top:var(--space-3); }
+.help-sec { scroll-margin-top:96px; }
+/* "Open Manual entry →" under an answer: straight to the tab it describes. */
+.help-a .help-go-row { margin-top:var(--space-3); }

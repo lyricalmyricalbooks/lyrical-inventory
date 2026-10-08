@@ -1,5 +1,7 @@
 // Defaults shared by the worklist, grouped recording, and the Stripe sweep.
 // Generated references use the full charge ID: stable across devices and undo.
+import { DATED_RATE_SOURCES } from './fx-sources.js';
+
 export function stripeOrderNumber(payment = {}) {
   const meta = payment.metadata || {};
   const existing = [payment.orderNumber, meta.order_number, meta.order_num, meta.orderNumber, meta.invoice_num]
@@ -16,12 +18,16 @@ const validRate = value => typeof value === 'number' && Number.isFinite(value) &
 const validDate = value => /^\d{4}-\d{2}-\d{2}$/.test(value || '')
   && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
 
+const DATED_SOURCES = new Set(DATED_RATE_SOURCES.map(source => source.name));
+
 // Cache only dated reference rates, never latest rates or failed requests.
 // A saved rate remains available offline without depending on the current book.
+// `retry` passes through to the lookup: a person pressing Retry wants a fresh
+// try now, not the pause that follows a failure.
 export function createStripeRateResolver({ fetchRate, storage } = {}) {
   const memory = new Map();
   const pending = new Map();
-  return async function resolve(payment, bookCurrency) {
+  return async function resolve(payment, bookCurrency, { retry = false } = {}) {
     const from = String(payment?.currency || '').toUpperCase();
     const to = String(bookCurrency || '').toUpperCase();
     if (!/^[A-Z]{3}$/.test(from) || !/^[A-Z]{3}$/.test(to)) return { error: 'bad-currency' };
@@ -34,7 +40,7 @@ export function createStripeRateResolver({ fetchRate, storage } = {}) {
       const saved = JSON.parse(storage?.getItem(key) || 'null');
       if (validRate(saved?.rate) && saved.from === from && saved.to === to
         && saved.requestedDate === requestedDate && (!saved.date || validDate(saved.date))
-        && saved.source === 'Frankfurter') {
+        && DATED_SOURCES.has(saved.source)) {
         memory.set(key, saved);
         return saved;
       }
@@ -42,10 +48,10 @@ export function createStripeRateResolver({ fetchRate, storage } = {}) {
     if (pending.has(key)) return pending.get(key);
     const request = (async () => {
       try {
-        const result = await fetchRate(from, to, requestedDate);
+        const result = await fetchRate(from, to, requestedDate, { retry });
         if (!validRate(result?.rate)) return { error: 'rate-unavailable' };
         const value = { rate: result.rate, date: validDate(result.date) ? result.date : '',
-          requestedDate, from, to, source: 'Frankfurter' };
+          requestedDate, from, to, source: DATED_SOURCES.has(result.source) ? result.source : 'Frankfurter' };
         memory.set(key, value);
         try { storage?.setItem(key, JSON.stringify(value)); } catch (_) { /* keep session cache */ }
         return value;

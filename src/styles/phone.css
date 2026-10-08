@@ -631,3 +631,22 @@
 @media (max-width: 768px) and (prefers-reduced-motion: reduce) {
   #tab-today .today-sold { transition: none; }
 }
+
+/* Add Sale on a phone, Riso Press: the Sale / Gift switch and the payment / channel buttons
+   were soft grey wells and hairline boxes from before the repaint. Each option is now a square
+   2px-ink button with the hard offset shadow, the chosen one stays inked in, and every option
+   presses into its shadow when tapped, like the register and home cards. */
+@media (max-width: 768px) {
+  #tab-manual .phone-mode-seg { gap: var(--space-2); padding: 0; background: transparent; }
+  :is(.phone-mode-opt, .phone-seg-opt) {
+    border: var(--stroke) solid var(--rule-ink); border-radius: var(--r2);
+    background: var(--surface-raised); box-shadow: var(--elev-1); touch-action: manipulation;
+    transition: transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast) var(--ease-spring);
+  }
+  .phone-seg { gap: var(--space-2); }
+  :is(.phone-mode-opt[aria-selected="true"], .phone-seg-opt[aria-checked="true"]) { border-color: var(--rule-ink); }
+  :is(.phone-mode-opt, .phone-seg-opt):active { transform: translate(2px, 2px); box-shadow: none; }
+}
+@media (max-width: 768px) and (prefers-reduced-motion: reduce) {
+  :is(.phone-mode-opt, .phone-seg-opt) { transition: none; }
+}

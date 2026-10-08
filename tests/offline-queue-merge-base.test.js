@@ -14,6 +14,8 @@ describe('queueSync keeps the base a queued change was made on', () => {
   function harness(baseNow) {
     const deps = {
       syncQueue: [],
+      _syncInFlightItem: null,
+      SYNC_TAB_ID: 'tab-test',
       window: { _fbBaseFor: vi.fn(() => ({ ...baseNow })) },
       saveSyncQueueToDevice: vi.fn(),
       updatePendingIndicator: vi.fn(),

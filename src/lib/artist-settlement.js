@@ -87,6 +87,7 @@ export function artistSettlementStatement(book, balance, date, recorded = false)
   if (balance.otherDebt > 0) lines.push(`Other money you owe the publisher: +${money(balance.otherDebt)}`);
   lines.push(`Remaining earnings the publisher owes you: −${money(balance.royaltiesOwed)}`);
   if (balance.overpaid > 0) lines.push(`Previous overpayment being recovered: +${money(balance.overpaid)}`);
+  if (balance.royaltiesCarried > 0) lines.push(`Earnings from newer sales, still owed to you and paid separately: ${money(balance.royaltiesCarried)}`);
   lines.push('', balance.direction === 'to-publisher'
     ? `You send the publisher ${money(balance.amount)}.`
     : balance.direction === 'to-artist' ? `The publisher sends you ${money(balance.amount)}.` : 'No money needs to change hands.');
@@ -112,14 +113,47 @@ export function applyArtistSettlement(book, state, plan, { date, method = '', no
     id: plan.id, date, amount: plan.royaltyCredit, method, notes,
     cur: getBookCurrencyCode(book), settlement,
     receivablePayments: plan.receivablePayments,
+    // When it was written, so the author's screen can tell a payment it
+    // remembers making apart from one this record has already absorbed.
+    recordedAt: Date.now(),
   };
   (state.artistPayouts ||= []).push(record);
   for (const h of rows) { h.artistPending = false; h.artistSettlementId = plan.id; }
   const ids = new Set(plan.transfers.map(t => String(t.id)));
   state.artistTransfers = (state.artistTransfers || []).filter(t => !ids.has(String(t.id)));
   delete state.transferBundle; // any old link quoted the full, unsettled amount
+  delete state.settlementLink; // the net link for this settlement is spent
   recalculateBookStatsFromHistory(state);
   return { ok: true, record };
+}
+
+// A payment for an older settle-up amount. Usually a new sale came in after
+// the author opened their pay link: it raised the earnings owed to them, the
+// net shrank, and they paid what the link asked rather than what is due now.
+// The money still clears everything they owed (the held cut and any debts);
+// it just offsets fewer earnings. Credit exactly those, and leave the rest
+// owed to the author like any other unpaid earnings.
+// Returns the plan to record — unchanged when the payment is exactly what is
+// due — or null when the payment can't be read that way: less than is due now
+// (something new is owed that it doesn't cover), more than everything the
+// author owed, or an earlier overpayment in the mix.
+export function planSettlementForPayment(plan, paid) {
+  if (!plan?.hasWork) return null;
+  const b = plan.balance;
+  const amount = roundCents(Number(paid) || 0);
+  if (!(amount > 0)) return null;
+  if (b.direction === 'to-publisher' && Math.abs(amount - b.amount) <= 0.005) return plan;
+  const authorSide = roundCents(b.publisherHeld + b.otherDebt);
+  if (b.overpaid > 0 || amount > authorSide + 0.005 || amount + 0.005 < b.netToPublisher) return null;
+  const covered = Math.max(0, roundCents(authorSide - amount));
+  return {
+    ...plan,
+    royaltyCredit: roundCents(b.heldShare + covered),
+    balance: {
+      ...b, royaltiesOwed: covered, netToPublisher: amount, amount, direction: 'to-publisher',
+      royaltiesCarried: roundCents(b.royaltiesOwed - covered),
+    },
+  };
 }
 
 export function undoArtistSettlement(state, id) {
