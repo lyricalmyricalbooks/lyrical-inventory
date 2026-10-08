@@ -16006,7 +16006,7 @@ function _renderProductionCostFields() {
       <div class="form-group" style="flex:1;margin:0;">
         <div class="price-wrap">
           <span class="sym">${book.currency}</span>
-          <input type="number" id="pc-${book.id}" value="${book.productionCost || ''}" placeholder="0.00" step="0.01" min="0">
+          <input type="number" inputmode="decimal" id="pc-${book.id}" value="${book.productionCost || ''}" placeholder="0.00" step="0.01" min="0">
         </div>
       </div>
     </div>`).join('');
@@ -16651,6 +16651,7 @@ function renderProfitTierList() {
     } else {
       const inp = document.createElement('input');
       inp.type = 'number';
+      inp.inputMode = 'decimal';
       inp.value = t.revenueUpTo || '';
       inp.placeholder = 'e.g. production cost';
       inp.style.width = '100%';
@@ -16795,7 +16796,7 @@ function psRenderSummary(book, cur, productionCost) {
         <div class="settings-metric-label" style="color:rgba(255,255,255,.5);">Earnings split simulator</div>
         <div style="display:flex;align-items:center;gap:8px;">
           <span style="font-size:var(--text-xs);color:rgba(255,255,255,.55);">If gross revenue is</span>
-          <input id="ps-sim-input" type="number" value="${gross}" style="width:120px;padding:6px 10px;font-size:var(--text-base);font-family:var(--font-mono);border:var(--stroke-hair) solid rgba(255,255,255,.14);border-radius:var(--r);background:rgba(255,255,255,.06);color:var(--on-inverse);outline:none;">
+          <input id="ps-sim-input" type="number" inputmode="decimal" step="0.01" value="${gross}" style="width:120px;padding:6px 10px;font-size:var(--text-base);font-family:var(--font-mono);border:var(--stroke-hair) solid rgba(255,255,255,.14);border-radius:var(--r);background:rgba(255,255,255,.06);color:var(--on-inverse);outline:none;">
           <span style="font-size:var(--text-xs);color:rgba(255,255,255,.55);">${escapeHtml(cur)}</span>
         </div>
       </div>
@@ -18099,15 +18100,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const body = document.getElementById(`tc-integration-body-${key}`);
     if (!body) return;
     applyIntegrationSectionState(key, localStorage.getItem(`lm-integrations-collapsed-${key}`) === '1');
-  });
-});
-
-document.addEventListener('DOMContentLoaded', () => {
-  const numericIds = ['nb-max', 'nb-price', 'nb-thresh', 'nb-prod', 'm-qty', 'm-price', 'sale-qty', 'sale-price', 'sent-qty', 'exp-amt', 'tc-exp-amt'];
-  numericIds.forEach((id) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.setAttribute('inputmode', 'decimal');
   });
 });
 
@@ -19687,7 +19679,7 @@ function renderFairKitBookList() {
         </span>
         <span class="fk-cell fk-field fk-field-price">
           <label class="fk-cell-lab" for="qrp-override-${book.id}">Door price (${escapeHtml(targetCode)})</label>
-          <input type="number" step="0.01" min="0" class="qrp-override-input" id="qrp-override-${book.id}" data-book-id="${book.id}" value="${existingOverride}" placeholder="${defaultPrice.toFixed(2)}" oninput="fairKitSelectionChanged()">
+          <input type="number" inputmode="decimal" step="0.01" min="0" class="qrp-override-input" id="qrp-override-${book.id}" data-book-id="${book.id}" value="${existingOverride}" placeholder="${defaultPrice.toFixed(2)}" oninput="fairKitSelectionChanged()">
         </span>
         <span class="fk-cell fk-cell-status">${tag}</span>
       </div>
@@ -23084,7 +23076,7 @@ function _reconNeedCard(p, c) {
       </div>
       <div class="form-group" style="margin:0;width:70px;">
         <label style="font-size:var(--text-2xs);">Qty</label>
-        <input type="number" id="recon-qty-${idSafe}" value="1" min="1" style="width:100%;">
+        <input type="number" inputmode="numeric" id="recon-qty-${idSafe}" value="1" min="1" style="width:100%;">
       </div>
       <div class="form-group" style="margin:0;width:280px;max-width:100%;">
         <label for="recon-num-${idSafe}" style="font-size:var(--text-2xs);">Order #</label>
@@ -23132,7 +23124,7 @@ function _reconGroupCard(items, gi) {
       </div>
       <div class="form-group" style="margin:0;width:80px;">
         <label style="font-size:var(--text-2xs);">Qty each</label>
-        <input type="number" id="recon-gqty-${gi}" value="1" min="1" style="width:100%;">
+        <input type="number" inputmode="numeric" id="recon-gqty-${gi}" value="1" min="1" style="width:100%;">
       </div>
       <div class="form-group" style="margin:0;width:120px;">
         <label style="font-size:var(--text-2xs);">Stripe amount paid</label>
