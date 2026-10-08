@@ -4,7 +4,7 @@ import { getAuth, signInWithPopup, reauthenticateWithPopup, GoogleAuthProvider, 
 import { getStorage, ref as sRef, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-storage.js";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, setDoc, getDoc, getDocs, getDocFromServer, collection, onSnapshot, deleteDoc, writeBatch, runTransaction } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 import { receiptDuplicate } from './lib/receipt-finder.js';
-import { ALL_PARTS, LIST_PARTS, assembleParts, emptyPart, splitState, stitchState, mergePart } from './lib/merge-state.js';
+import { ALL_PARTS, LIST_PARTS, assembleParts, emptyPart, splitState, stitchState, mergePart, mergeSettingDoc } from './lib/merge-state.js';
 
 const firebaseConfig = {
   apiKey:"AIzaSyB0BTOjfUFZKCVth9eR8iN0mvfkpRIFKSI",
@@ -266,13 +266,15 @@ window._fbSave = async (bookId, json, opts = {}) => {
         if (remoteJson === baseJson) return; // nobody else touched it
 
         // Diverged. A null base (this device never read the part — a fresh tab
-        // that wrote before loading) is treated as empty, which makes the merge
-        // a union: it may keep a row the other device deleted, but it will
-        // never drop one, and dropping is the failure that loses money.
+        // that wrote before loading, or a change queued by an older build) is
+        // treated as empty and flagged as unknown, which makes the merge a
+        // union: it may keep a row the other device deleted, but it will never
+        // drop one (dropping loses money) or count a sale both sides already
+        // hold twice (doubling invents it).
         didMerge = true;
         const remoteVal = remoteJson != null ? (safeParse(remoteJson) ?? emptyFor(p)) : emptyFor(p);
         const baseVal = baseJson != null ? (safeParse(baseJson) ?? emptyFor(p)) : emptyFor(p);
-        const res = mergePart(p, baseVal, remoteVal, parts[p]);
+        const res = mergePart(p, baseVal, remoteVal, parts[p], { baseKnown: baseJson != null });
         merged[p] = res.value;
         res.conflicts.forEach(c => conflicts.push(c));
       });
@@ -613,9 +615,47 @@ window._fbDeleteSubmission = async (bookId, type, subId) => {
 // looking saved and was gone on the next load. Several callers wrap this in
 // `try { … } catch (_) {}`, which was always dead code — it never threw — so
 // there was nowhere else for the failure to surface either.
+// Shared settings that are edited on more than one device and were written
+// back whole: merge them against the copy this device last loaded instead (see
+// mergeSettingDoc). `_settingsBase[key]` is that copy, as stored JSON.
+const MERGED_SETTINGS = new Set(['catalog', 'taxCenter']);
+const _settingsBase = {};
+function noteSettingsBase(key, json) {
+  if (MERGED_SETTINGS.has(key) && typeof json === 'string') _settingsBase[key] = json;
+}
+
+async function writeMergedSetting(key, data) {
+  const target = doc(fs, 'settings', key);
+  const localJson = JSON.stringify(data);
+  let value = data;
+  if (Object.prototype.hasOwnProperty.call(_settingsBase, key)) {
+    try {
+      const snap = await getDocFromServer(target);
+      const res = mergeSettingDoc(_settingsBase[key], snap.exists() ? snap.data().data : null, data);
+      if (res.merged) {
+        value = res.value;
+        if (res.conflicts.length) console.warn(`[FB] settings/${key}: changed on two devices, this device's version kept`, res.conflicts);
+      }
+    } catch (e) {
+      // Offline or unreadable: write what we have, as before, rather than not at all.
+      console.warn(`[FB] settings/${key}: could not read the cloud copy to merge`, e);
+    }
+  }
+  await setDoc(target, { data: JSON.stringify(value), ts: Date.now() });
+  // The base is this device's copy, not the merged result: the screen still shows
+  // this copy, so the next save must treat whatever the other device added as
+  // theirs to keep, not as something this device deleted.
+  _settingsBase[key] = localJson;
+  return value;
+}
+
 window._fbSaveSettings = async (key, data) => {
   try {
     if (window._useFirestoreGlobal()) {
+      if (MERGED_SETTINGS.has(key)) {
+        await writeMergedSetting(key, data);
+        return true;
+      }
       await setDoc(doc(fs, 'settings', key), { data: JSON.stringify(data), ts: Date.now() });
       return true;
     }
@@ -634,7 +674,7 @@ window._fbLoadSettings = async (key) => {
   try {
     if (window._useFirestoreGlobal()) {
       const s = await getDoc(doc(fs, 'settings', key));
-      if (s.exists()) return safeParse(s.data().data);
+      if (s.exists()) { noteSettingsBase(key, s.data().data); return safeParse(s.data().data); }
       // Transparent fallback: Firestore doc missing — read from RTDB
       console.warn(`[FB] settings/${key} not in Firestore, reading from RTDB`);
       const rtSnap = await get(ref(db, `lyrical/settings/${key}`));
@@ -679,7 +719,7 @@ window._fbDeleteInboxItem = async (id) => {
 window._fbSaveCatalog = async (catalog) => {
   try {
     if (window._useFirestoreGlobal()) {
-      await setDoc(doc(fs, 'settings', 'catalog'), { data: JSON.stringify(catalog), ts: Date.now() });
+      await writeMergedSetting('catalog', catalog);
       return true;
     }
     await set(ref(db, `lyrical/settings/catalog`), { data: JSON.stringify(catalog), ts: Date.now() });
@@ -751,7 +791,7 @@ window._fbLoadCatalog = async () => {
   try {
     if (window._useFirestoreGlobal()) {
       const s = await getDoc(doc(fs, 'settings', 'catalog'));
-      if (s.exists()) return safeParse(s.data().data);
+      if (s.exists()) { noteSettingsBase('catalog', s.data().data); return safeParse(s.data().data); }
       // Transparent fallback: Firestore doc missing — read from RTDB
       console.warn('[FB] catalog not in Firestore, reading from RTDB');
       const rtSnap = await get(ref(db, `lyrical/settings/catalog`));

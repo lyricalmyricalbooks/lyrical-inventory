@@ -57,6 +57,55 @@
   })();
 </script>
 
+<!-- BOOT WATCHDOG — a classic script, so it runs even when the module bundle
+     cannot. On a device that has never cached the app, opening it with no
+     signal fails to fetch the Firebase SDK, the bundle never evaluates, and
+     the sign-in button's onclick names a function that was never defined:
+     a dead button under a "Connecting…" splash that never clears. This
+     defines a stand-in sign-in that src/main.js overwrites the moment it
+     runs, and turns a failed bundle load into words on the sign-in screen.
+     src/main.js sets window.__lmAppLoaded first thing; tests/boot-watchdog
+     .test.js runs this block in jsdom. -->
+<script>
+  (function () {
+    var OFFLINE_MSG = 'You’re offline and this device hasn’t saved the app yet. Connect to the internet once, then tap Sign in again.';
+    var FAILED_MSG = 'The app couldn’t finish loading. Check your connection, then tap Sign in to try again.';
+    var SLOW_MSG = 'Still connecting… this is taking longer than usual.';
+    function offline() { return navigator.onLine === false; }
+    function say(msg) {
+      var err = document.getElementById('pw-err');
+      if (err) err.textContent = msg;
+    }
+    function showLoadFailure() {
+      if (window.__lmAppLoaded) return;
+      window.__lmBootFailed = true;
+      var splash = document.getElementById('splash-screen');
+      if (splash) splash.style.display = 'none';
+      say(offline() ? OFFLINE_MSG : FAILED_MSG);
+    }
+    // Overwritten by the real sign-in in src/main.js once the bundle runs.
+    window.tryGoogleLogin = function () {
+      if (window.__lmAppLoaded) return;
+      if (offline()) { say(OFFLINE_MSG); return; }
+      say('Loading…');
+      location.reload();
+    };
+    // A module graph that fails to fetch fires `error` on its <script>;
+    // script errors don't bubble, so listen in the capture phase.
+    window.addEventListener('error', function (e) {
+      var t = e && e.target;
+      if (t && t.tagName === 'SCRIPT' && t.type === 'module') showLoadFailure();
+    }, true);
+    setTimeout(function () {
+      if (window.__lmAppLoaded || window.__lmBootFailed) return;
+      if (offline()) { showLoadFailure(); return; }
+      var splash = document.getElementById('splash-screen');
+      var line = splash && splash.lastElementChild;
+      if (line) line.textContent = SLOW_MSG;
+    }, 12000);
+  })();
+</script>
+
 <style>
   /* ─── INVOICE PAPER (sharp, printable) ─────────────────────────────── */
   /* Riso Press, printed. Colours stay hardcoded and fonts are named outright

@@ -27,8 +27,10 @@ it('writes the original money, converted total, and automatic order number to th
 
 it('keeps the previous business day on a warmed historical-rate cache', async () => {
   const api = buildHarness({ names: ['fetchHistoricalRate'], deps: {
-    _fxRateCache: {}, _fxHistoricalDates: {}, AbortSignal,
-    fetch: async () => ({ ok: true, json: async () => ({ date: '2026-10-02', rates: { CAD: 1.55 } }) }),
+    _fxRateCache: {}, _fxHistoricalDates: {}, _fxFailedUntil: {},
+    datedRateKey: (f, t, d) => `${f}_${t}@${d}`,
+    saveFxHistory: () => true, getLocalStorage: () => null, FX_FAILURE_PAUSE_MS: 60000,
+    fetchFx: async () => ({ ok: true, json: async () => ({ date: '2026-10-02', rates: { CAD: 1.55 } }) }),
   }, returns: '{ fetchHistoricalRate }' });
   expect(await api.fetchHistoricalRate('EUR', 'CAD', '2026-10-04')).toEqual({ rate: 1.55, date: '2026-10-02' });
   expect(await api.fetchHistoricalRate('EUR', 'CAD', '2026-10-04')).toEqual({ rate: 1.55, date: '2026-10-02' });
