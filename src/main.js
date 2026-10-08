@@ -23320,14 +23320,18 @@ function _reconFindInvoice(num) {
 // Soft heuristic: did the publisher likely already log this payment by hand?
 // Matches a non-void history entry with the same paid amount+currency within a
 // few days. Used only to keep already-handled payments out of the urgent list.
-function _reconLikelyAlreadyLogged(p) {
+// `near` widens "same amount" to within 10%: before recording on its own, a
+// register row in euros holds a live-converted figure (€37.42 for a €40 copy),
+// so an exact match would miss the very sale it is guarding against.
+function _reconLikelyAlreadyLogged(p, { near = false } = {}) {
   const target = Math.round(p.amount * 100);
+  const slack = near ? target * 0.1 : 0;
   for (const s of Object.values(states)) {
     for (const h of (s.hist || [])) {
       if (h.voided || h.gratuity) continue;
       const pay = h.payment;
       if (!pay || !pay.amount || normalizeCurrencyCode(pay.currency || '', '') !== p.currency) continue;
-      if (Math.round(pay.amount * 100) !== target) continue;
+      if (Math.abs(Math.round(pay.amount * 100) - target) > slack) continue;
       const dDays = Math.abs((new Date(h.date).getTime() - p.created) / 86400000);
       if (dDays <= 3) return true;
     }
@@ -24381,6 +24385,22 @@ function stripeSaleAutoSince() {
   }
 }
 
+// When this version's counting rules first ran on this device (see
+// autoRecordStripeSale). Set once, like the switch's own start time.
+const STRIPE_SALE_RULES_SINCE_KEY = 'lm-stripe-sale-rules-v2-since';
+
+function stripeSaleRulesSince() {
+  try {
+    const stored = Number(localStorage.getItem(STRIPE_SALE_RULES_SINCE_KEY));
+    if (stored > 0) return stored;
+    const now = Date.now();
+    localStorage.setItem(STRIPE_SALE_RULES_SINCE_KEY, String(now));
+    return now;
+  } catch (_) {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
 function readRaisedStripeSales() {
   try {
     const raw = JSON.parse(localStorage.getItem(STRIPE_SALE_RAISED_KEY) || '[]');
@@ -24399,7 +24419,7 @@ function noteRaisedStripeSale(chargeId) {
  * Record one Stripe payment as a sale if it is safe to, and say what happened.
  * Returns null when there is nothing worth telling the publisher about.
  */
-async function autoRecordStripeSale(payment, rawClassification) {
+async function autoRecordStripeSale(payment, rawClassification, { raise = true } = {}) {
   if (!stripeSaleAutoEnabled()) return null;
   // A card-reader tap carries no book tag, but the seller may have typed the
   // title into its description in the Stripe app. One title named there is
@@ -24418,8 +24438,11 @@ async function autoRecordStripeSale(payment, rawClassification) {
     classification,
     book,
     bookCurrency: book ? normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD') : '',
-    likelyLogged: _reconLikelyAlreadyLogged(payment),
-    autoSince: stripeSaleAutoSince(),
+    likelyLogged: _reconLikelyAlreadyLogged(payment, { near: true }),
+    // Payments from before this version first ran were judged by the old
+    // rules, under which a euro or door-price sale never recorded — she may
+    // well have typed those in by hand since. They are never recorded now.
+    autoSince: Math.max(stripeSaleAutoSince(), stripeSaleRulesSince()),
   };
   let plan = stripeSalePlan(payment, options);
   let conversion = null;
@@ -24431,12 +24454,15 @@ async function autoRecordStripeSale(payment, rawClassification) {
     const currentBook = BOOKS[classification.bookId];
     if (!currentBook || normalizeCurrencyCode(getBookCurrencyCode(currentBook), 'CAD') !== options.bookCurrency) return null;
     plan = stripeSalePlan(payment, { ...options, book: currentBook,
-      likelyLogged: _reconLikelyAlreadyLogged(payment), conversionRate: conversion.rate,
+      likelyLogged: _reconLikelyAlreadyLogged(payment, { near: true }), conversionRate: conversion.rate,
     });
   }
   if (plan.action === 'skip') return null;
 
   if (plan.action === 'review') {
+    // Sync shows these in the list itself, so it leaves the one-time alert
+    // for the background check to raise.
+    if (!raise) return { ...plan, chargeId: payment.id };
     if (readRaisedStripeSales().includes(payment.id)) return null;
     noteRaisedStripeSale(payment.id);
     if (payment.cardPresent) noteUnmatchedReaderPayment(payment);
@@ -24479,11 +24505,17 @@ async function recordReadyStripeSales(payments, { budgetMs = RECON_AUTO_BUDGET_M
   for (const payment of payments || []) {
     // A slow rate lookup must not hold the list back; whatever is left stays in
     // it for her, and the background check tries again.
-    if (Date.now() > stopAt) break;
+    const left = stopAt - Date.now();
+    if (left <= 0) break;
     if (payment.refunded || payment.disputed) continue;
     const c = classifyStripePayment(payment);
     if (c.kind !== 'direct') continue;
-    const outcome = await autoRecordStripeSale(payment, c);
+    // Stop waiting once time is up; a lookup still running finishes in the
+    // background and the background check picks the payment up later.
+    const outcome = await Promise.race([
+      autoRecordStripeSale(payment, c, { raise: false }),
+      new Promise(done => setTimeout(() => done(null), left)),
+    ]);
     if (outcome?.action === 'record') recorded.push({ ...outcome, num: stripeOrderNumber(payment) });
   }
   if (recorded.length) {

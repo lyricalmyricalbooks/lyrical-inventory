@@ -164,7 +164,7 @@ function autoRecorder(resolve, recorded = new Set()) {
   const deps = {
     ...currencyDeps, BOOKS: { b1: book }, states: { b1: { stock: 8 } },
     stripeSalePlan, stripeSaleAutoEnabled: () => flags.enabled, booksInDescription: () => [],
-    _reconLikelyAlreadyLogged: () => false, stripeSaleAutoSince: () => 1000,
+    _reconLikelyAlreadyLogged: () => false, stripeSaleAutoSince: () => 1000, stripeSaleRulesSince: () => flags.rulesSince || 0,
     resolveStripeRate: resolve, _reconRecordedChargeIds: () => recorded,
     classifyStripePayment: () => ({ kind: recorded.has(payment.id) ? 'recorded' : flags.kind, bookId: 'b1' }),
     readRaisedStripeSales: () => [], noteRaisedStripeSale: () => {}, noteUnmatchedReaderPayment: () => {},
@@ -274,4 +274,36 @@ describe('pressing Sync records the sales that are ready', () => {
     expect(await pass.recordReadyStripeSales(list, { budgetMs: -1 })).toEqual([]);
     expect(pass.asked).toEqual([]);
   });
+});
+
+it('never records a payment from before the new counting rules first ran, which she may have typed in by hand', async () => {
+  const api = autoRecorder(async () => ({ rate: 1.62, source: 'Frankfurter' }));
+  api.flags.rulesSince = 5000;
+  const linked = { ...payment, created: 2000, description: 'Test Book (EUR 40.00)', metadata: { book_id: 'b1', override: 'true' } };
+  expect(await api.autoRecordStripeSale(linked, { kind: 'direct', bookId: 'b1' })).toBe(null);
+  expect(api.writes).toHaveLength(0);
+});
+
+it('leaves the one-time alert alone when Sync finds a payment that needs her', async () => {
+  const api = autoRecorder(async () => ({ error: 'rate-unavailable' }));
+  let raised = 0;
+  const outcome = await buildHarness({ names: ['autoRecordStripeSale'], deps: {
+    ...currencyDeps, BOOKS: { b1: { ...BOOKS.b1, listPrice: 31 } }, states: { b1: {} }, stripeSalePlan,
+    stripeSaleAutoEnabled: () => true, booksInDescription: () => [], _reconLikelyAlreadyLogged: () => false,
+    stripeSaleAutoSince: () => 1000, stripeSaleRulesSince: () => 0, resolveStripeRate: async () => ({}),
+    _reconRecordedChargeIds: () => new Set(), classifyStripePayment: () => ({ kind: 'direct', bookId: 'b1' }),
+    readRaisedStripeSales: () => [], noteRaisedStripeSale: () => { raised++; }, noteUnmatchedReaderPayment: () => {},
+  }, returns: '{ autoRecordStripeSale }' }).autoRecordStripeSale({ ...payment, created: 2000 }, { kind: 'direct', bookId: 'b1' }, { raise: false });
+  expect(outcome).toMatchObject({ action: 'review', reason: 'currency' });
+  expect(raised).toBe(0);
+  expect(api.writes).toHaveLength(0);
+});
+
+it('treats a register row in the same currency within 10% as possibly the same sale', () => {
+  const states = { b1: { hist: [{ date: '2026-10-08', payment: { currency: 'EUR', amount: 37.42 } }] } };
+  const api = buildHarness({ names: ['_reconLikelyAlreadyLogged'], deps: { states, normalizeCurrencyCode: currencyDeps.normalizeCurrencyCode }, returns: '{ _reconLikelyAlreadyLogged }' });
+  const pay = { ...payment, created: Date.parse('2026-10-08T15:00:00Z') };
+  expect(api._reconLikelyAlreadyLogged(pay, { near: true })).toBe(true);
+  expect(api._reconLikelyAlreadyLogged(pay)).toBe(false);
+  expect(api._reconLikelyAlreadyLogged({ ...pay, amount: 55 }, { near: true })).toBe(false);
 });
