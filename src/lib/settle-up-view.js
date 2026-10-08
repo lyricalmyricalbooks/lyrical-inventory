@@ -81,9 +81,9 @@ function column(side, cur, model, cls) {
     </section>`;
 }
 
-// opts: { bookId, cur, date, canRecord, hasWork, reviewError, pendingSync, statement }
+// opts: { bookId, cur, date, payLinkReady, canRecord, hasWork, reviewError, pendingSync, statement }
 export function settleUpHtml(model, opts) {
-  const { bookId, cur, date = '', canRecord = false, hasWork = false, reviewError = false, pendingSync = 0, statement = '' } = opts;
+  const { bookId, cur, date = '', payLinkReady = false, canRecord = false, hasWork = false, reviewError = false, pendingSync = 0, statement = '' } = opts;
   const id = escapeHtml(String(bookId));
   const tone = model.direction === 'settled' ? 'tone-green' : 'tone-gold';
   const equation = model.direction === 'settled'
@@ -111,6 +111,7 @@ export function settleUpHtml(model, opts) {
         <span class="ps-settle-step-num" aria-hidden="true">2</span>
         <div class="ps-settle-step-body">
           <strong>${model.author ? 'Keep a copy' : 'Send the author the statement'}</strong>
+          ${payLinkReady && !model.author ? `<span>Their app already shows a Stripe button for exactly ${fmt(model.amount, cur)}. If they pay with it, the settlement records itself.</span>` : ''}
           <div class="ps-payout-actions">
             <button type="button" class="btn sys-target" onclick="shareArtistSettlement('${id}')">${model.author ? 'Copy statement' : 'Share statement'}</button>
           </div>
@@ -166,4 +167,34 @@ export function settleUpHtml(model, opts) {
     ${steps}
     <div id="artist-settlement-feedback-${id}" class="ps-settle-note" role="status" aria-live="polite"></div>
   </div>`;
+}
+
+// How a recorded settlement paid the artist, for the payouts list. A
+// settlement is a payout of earnings even when no cash went to the author:
+// part of it is the share they kept from sales they collected, part came off
+// what they owed. Its row shows that payout (the record's `amount`, the figure
+// the list's total adds up), with the cash that actually moved as a detail —
+// otherwise the rows and the total disagree.
+//   balance : the settlement's stored balance; credit : the record's amount.
+export function settlementPayoutSummary(balance, credit, money, { author = false } = {}) {
+  const b = balance || {};
+  const cashToArtist = b.direction === 'to-artist' ? roundCents(b.amount || 0) : 0;
+  const offset = Math.max(0, roundCents((b.royaltiesOwed || 0) - cashToArtist));
+  const parts = [];
+  if (b.heldShare > 0.005) parts.push(author ? `You kept ${money(b.heldShare)} of the sales money you collected` : `They kept ${money(b.heldShare)} of the sales money they collected`);
+  if (offset > 0.005) parts.push(author ? `${money(offset)} came off what you owed the publisher` : `${money(offset)} came off what they owed you`);
+  if (cashToArtist > 0.005) parts.push(author ? `the publisher sent you ${money(cashToArtist)}` : `you sent them ${money(cashToArtist)}`);
+  if (b.overpaid > 0.005) parts.push(`${money(b.overpaid)} of an earlier overpayment was recovered`);
+  let detail = parts.length ? `${parts.join(', ')}.` : '';
+  detail = detail.charAt(0).toUpperCase() + detail.slice(1);
+  const cash = b.direction === 'to-publisher' ? (author ? `You sent the publisher ${money(b.amount)}.` : `They sent you ${money(b.amount)}.`)
+    : b.direction === 'settled' ? 'No cash changed hands.' : '';
+  const carried = b.royaltiesCarried > 0.005
+    ? (author ? `${money(b.royaltiesCarried)} from newer sales is still owed to you.` : `${money(b.royaltiesCarried)} from newer sales is still owed to them.`)
+    : '';
+  return {
+    title: credit < 0 ? 'Earlier overpayment recovered' : 'Earnings paid by settlement',
+    amount: credit,
+    detail: [detail, cash, carried].filter(Boolean).join(' '),
+  };
 }

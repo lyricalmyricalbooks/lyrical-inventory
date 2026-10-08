@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { planArtistSettlement, applyArtistSettlement, undoArtistSettlement, artistSettlementStatement, artistSettlementIssues } from '../src/lib/artist-settlement.js';
+import { planArtistSettlement, applyArtistSettlement, undoArtistSettlement, artistSettlementStatement, artistSettlementIssues, planSettlementForPayment } from '../src/lib/artist-settlement.js';
 import { calcArtistEarnings, describeArtistSettlement } from '../src/lib/earnings.js';
 import { mergeRows } from '../src/lib/merge-state.js';
 import { computeCashFlowMetrics } from '../src/lib/cashflow.js';
@@ -195,5 +195,47 @@ describe('a linked author settlement', () => {
       expect(artistSettlementIssues(state).size).toBe(0);
       expect(state.hist[0].artistPending).toBe(false);
     }
+  });
+});
+
+describe('a Stripe payment for an older settle-up amount', () => {
+  // The screenshot account (held 574.68, keeps 74.71, owed 267.76 → 232.21),
+  // then a new shop sale that earns the author 8.27 more → 223.94 due now.
+  const withNewSale = () => {
+    const s = makeState();
+    s.hist.push({ num: 'new', qty: 1, price: 8.27 / 0.13, date: '2026-10-08', chan: 'Shop' });
+    return s;
+  };
+
+
+  it('records exactly what is due unchanged', () => {
+    const plan = planArtistSettlement(book, makeState());
+    expect(planSettlementForPayment(plan, 232.21)).toBe(plan);
+  });
+
+  it('clears the author side in full and leaves the newer earnings owed', () => {
+    const s = withNewSale();
+    const plan = planArtistSettlement(book, s);
+    expect(plan.balance.amount).toBe(223.94);
+    const paidOld = planSettlementForPayment(plan, 232.21);
+    expect(paidOld.balance).toMatchObject({ amount: 232.21, royaltiesOwed: 267.76, royaltiesCarried: 8.27 });
+    expect(paidOld.royaltyCredit).toBe(342.47);
+    expect(applyArtistSettlement(book, s, paidOld, { date: '2026-10-08' }).ok).toBe(true);
+    expect(calcArtistEarnings(book, s)).toMatchObject({ owedToArtist: 8.27, heldByArtistGross: 0, owedByArtist: 0 });
+  });
+
+  it('refuses a payment smaller than what is due now, or more than they owed', () => {
+    const plan = planArtistSettlement(book, withNewSale());
+    expect(planSettlementForPayment(plan, 200)).toBeNull();
+    expect(planSettlementForPayment(plan, 499.98)).toBeNull();
+    expect(planSettlementForPayment(plan, 0)).toBeNull();
+  });
+
+  it('refuses when an earlier overpayment is part of the balance', () => {
+    const s = makeState();
+    s.artistPayouts = [{ id: 'big', amount: 700 }];
+    const plan = planArtistSettlement(book, s);
+    expect(plan.balance.overpaid).toBeGreaterThan(0);
+    expect(planSettlementForPayment(plan, plan.balance.amount + 1)).toBeNull();
   });
 });
