@@ -19,7 +19,7 @@ export const MAX_AUTO_QTY = 20;
 const REASONS = {
   'no-book': 'A card payment came in without saying which book it was for',
   'maybe-rung-up': 'It matches a sale already rung up by hand, so it may be the same sale',
-  currency: 'It was paid in a different currency from the book’s price',
+  currency: 'It was paid in another currency and the day’s exchange rate couldn’t be fetched yet — the app will try again',
   amount: 'The amount isn’t a whole number of copies at the book’s price',
   'no-price': 'The book has no price set',
   'too-many': 'It’s an unusually large order',
