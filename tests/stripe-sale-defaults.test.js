@@ -54,6 +54,18 @@ describe('dated Stripe conversion', () => {
     expect((await retry).rate).toBe(1.55);
     expect(calls).toBe(2);
   });
+  it('keeps the backup service’s name on a saved rate, and passes Retry through', async () => {
+    const saved = storage();
+    const asked = [];
+    const resolve = createStripeRateResolver({ storage: saved, fetchRate: async (_f, _t, _d, opts) => {
+      asked.push(opts);
+      return { rate: 1.61, date: '2026-10-08', source: 'Currency API' };
+    } });
+    expect(await resolve(payment, 'CAD', { retry: true })).toMatchObject({ rate: 1.61, source: 'Currency API' });
+    expect(asked).toEqual([{ retry: true }]);
+    const offline = createStripeRateResolver({ storage: saved, fetchRate: async () => { throw new Error('offline'); } });
+    expect(await offline(payment, 'CAD')).toMatchObject({ rate: 1.61, source: 'Currency API' });
+  });
   it('ignores malformed saved rates and remains usable when storage is blocked', async () => {
     const resolve = createStripeRateResolver({
       storage: { getItem: () => '{broken', setItem: () => { throw new Error('full'); } },

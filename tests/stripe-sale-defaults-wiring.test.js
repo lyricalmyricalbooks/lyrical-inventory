@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { buildHarness } from './helpers/extract-decl.js';
 import { stripeOrderNumber } from '../src/lib/stripe-sale-defaults.js';
 import { roundCents } from '../src/lib/money.js';
-import { stripeSalePlan } from '../src/lib/stripe-sale-autorecord.js';
+import { stripeSalePlan, paidUnitPrice, wholeCopies } from '../src/lib/stripe-sale-autorecord.js';
+import { DATED_RATE_SOURCES } from '../src/lib/fx-sources.js';
 
 const payment = { id: 'ch_Test42', currency: 'EUR', amount: 40, date: '2026-10-08' };
 const BOOKS = { b1: { id: 'b1', currency: 'CAD' }, b2: { id: 'b2', currency: 'USD' } };
@@ -25,15 +26,43 @@ it('writes the original money, converted total, and automatic order number to th
   expect(row[6].num).toBe('OWNER-42');
 });
 
-it('keeps the previous business day on a warmed historical-rate cache', async () => {
+function historical(fetchFx) {
+  const calls = [];
   const api = buildHarness({ names: ['fetchHistoricalRate'], deps: {
-    _fxRateCache: {}, _fxHistoricalDates: {}, _fxFailedUntil: {},
-    datedRateKey: (f, t, d) => `${f}_${t}@${d}`,
+    _fxRateCache: {}, _fxHistoricalDates: {}, _fxHistoricalSources: {}, _fxFailedUntil: {},
+    datedRateKey: (f, t, d) => `${f}_${t}@${d}`, DATED_RATE_SOURCES,
     saveFxHistory: () => true, getLocalStorage: () => null, FX_FAILURE_PAUSE_MS: 60000,
-    fetchFx: async () => ({ ok: true, json: async () => ({ date: '2026-10-02', rates: { CAD: 1.55 } }) }),
+    fetchFx: async url => { calls.push(url); return fetchFx(url); },
   }, returns: '{ fetchHistoricalRate }' });
-  expect(await api.fetchHistoricalRate('EUR', 'CAD', '2026-10-04')).toEqual({ rate: 1.55, date: '2026-10-02' });
-  expect(await api.fetchHistoricalRate('EUR', 'CAD', '2026-10-04')).toEqual({ rate: 1.55, date: '2026-10-02' });
+  return { ...api, calls };
+}
+
+it('keeps the previous business day on a warmed historical-rate cache', async () => {
+  const api = historical(async () => ({ ok: true, json: async () => ({ date: '2026-10-02', rates: { CAD: 1.55 } }) }));
+  const want = { rate: 1.55, date: '2026-10-02', source: 'Frankfurter' };
+  expect(await api.fetchHistoricalRate('EUR', 'CAD', '2026-10-04')).toEqual(want);
+  expect(await api.fetchHistoricalRate('EUR', 'CAD', '2026-10-04')).toEqual(want);
+  expect(api.calls).toEqual(['https://api.frankfurter.dev/v1/2026-10-04?from=EUR&to=CAD']);
+});
+
+it('asks the second dated service when Frankfurter fails, and says which one answered', async () => {
+  const api = historical(async url => url.includes('frankfurter')
+    ? { ok: false, status: 404, json: async () => ({}) }
+    : { ok: true, json: async () => ({ date: '2026-10-08', eur: { cad: 1.61 } }) });
+  expect(await api.fetchHistoricalRate('EUR', 'CAD', '2026-10-08')).toEqual({ rate: 1.61, date: '2026-10-08', source: 'Currency API' });
+  expect(api.calls[1]).toBe('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@2026-10-08/v1/currencies/eur.json');
+});
+
+it('lets Retry through the pause that follows a failed lookup', async () => {
+  let online = false;
+  const api = historical(async () => {
+    if (!online) throw new Error('offline');
+    return { ok: true, json: async () => ({ date: '2026-10-07', rates: { CAD: 1.6 } }) };
+  });
+  expect((await api.fetchHistoricalRate('EUR', 'CAD', '2026-10-08')).error).toBe('historical-unavailable');
+  online = true;
+  expect((await api.fetchHistoricalRate('EUR', 'CAD', '2026-10-08')).error).toBe('recently-failed');
+  expect(await api.fetchHistoricalRate('EUR', 'CAD', '2026-10-08', { retry: true })).toMatchObject({ rate: 1.6, date: '2026-10-07' });
 });
 
 it('does not invent an effective reference date when only a cached rate is known', () => {
@@ -46,17 +75,18 @@ it('does not invent an effective reference date when only a cached rate is known
   expect(row[3].rateRequestedDate).toBe('2026-10-08');
 });
 
-function screen(resolve) {
+function screen(resolve, { pay = payment, books = BOOKS } = {}) {
   document.body.innerHTML = `<select id="recon-book-ch_Test42"><option value="b1">CAD book</option><option value="b2">USD book</option></select>
+    <input id="recon-qty-ch_Test42" value="1">
     <input id="recon-currency-ch_Test42" value="EUR"><input id="recon-amount-ch_Test42" value="40">
     <input id="recon-rate-ch_Test42"><input id="recon-num-ch_Test42" value="STRIPE-Test42">
     <button id="recon-rec-ch_Test42"></button><div id="recon-fx-ch_Test42"></div>`;
-  return buildHarness({ names: ['reconUpdateDefaults'], deps: {
-    ...currencyDeps, document, window,
-    _reconFindPayment: () => payment,
+  return buildHarness({ names: ['reconUpdateDefaults', '_reconDefaultQty'], deps: {
+    ...currencyDeps, BOOKS: books, document, window, paidUnitPrice, wholeCopies,
+    _reconFindPayment: () => pay,
     resolveStripeRate: resolve,
     _stripeFmtMoney: (amount, currency) => `${currency} ${amount.toFixed(2)}`,
-  }, returns: '{ reconUpdateDefaults }' });
+  }, returns: '{ reconUpdateDefaults, _reconDefaultQty }' });
 }
 
 describe('Stripe rate fields', () => {
@@ -66,6 +96,7 @@ describe('Stripe rate fields', () => {
     await api.reconUpdateDefaults('ch_Test42');
     expect(document.getElementById('recon-rate-ch_Test42').value).toBe('1.55');
     expect(document.getElementById('recon-fx-ch_Test42').textContent).toContain('CAD 62.00');
+    expect(document.getElementById('recon-fx-ch_Test42').textContent).not.toContain('CAD CAD');
     expect(document.getElementById('recon-fx-ch_Test42').textContent).toContain('2026-10-07');
     expect(document.getElementById('recon-rec-ch_Test42').disabled).toBe(false);
   });
@@ -98,6 +129,31 @@ describe('Stripe rate fields', () => {
     await api.reconUpdateDefaults('ch_Test42');
     expect(document.getElementById('recon-rate-ch_Test42').value).toBe('');
     expect(document.getElementById('recon-fx-ch_Test42').textContent).toMatch(/retry|Retry/);
+  });
+  it('asks for a fresh lookup when Retry is pressed', async () => {
+    const asked = [];
+    const api = screen(async (_p, _cur, opts) => {
+      asked.push(opts);
+      return asked.length === 1 ? { error: 'rate-unavailable' } : { rate: 1.55, date: '2026-10-07' };
+    });
+    await api.reconUpdateDefaults('ch_Test42');
+    document.querySelector('#recon-fx-ch_Test42 button').click();
+    await new Promise(done => setTimeout(done, 0));
+    expect(asked.map(o => o.retry)).toEqual([false, true]);
+    expect(document.getElementById('recon-rate-ch_Test42').value).toBe('1.55');
+  });
+  it('sets the copy count from the price on the app’s own link when the book changes, unless she typed one', async () => {
+    const linked = { ...payment, amount: 80, description: 'Altrove (EUR 40.00)', metadata: { override: 'true' } };
+    const api = screen(async () => ({ rate: 1.55 }), { pay: linked, books: { b1: { id: 'b1', currency: 'CAD', listPrice: 55 }, b2: BOOKS.b2 } });
+    expect(api._reconDefaultQty(linked, 'b1')).toBe(2);
+    expect(api._reconDefaultQty(payment, 'b1')).toBe(1);
+    await api.reconUpdateDefaults('ch_Test42', false, true);
+    expect(document.getElementById('recon-qty-ch_Test42').value).toBe('2');
+    const qty = document.getElementById('recon-qty-ch_Test42');
+    qty.value = '5';
+    qty.dataset.manual = '1';
+    await api.reconUpdateDefaults('ch_Test42', false, true);
+    expect(qty.value).toBe('5');
   });
 });
 
@@ -162,4 +218,60 @@ it('assigns individual references when recording a group and skips payments alre
   expect(rows.map(args => args[6].num)).toEqual(['STRIPE-Test42', 'STRIPE-Second42']);
   expect(mem.recorded.ch_Second42.num).toBe('STRIPE-Second42');
   expect(mem.recorded.ch_Already42).toBeUndefined();
+});
+
+it('records a sale through the app’s own euro link as one copy, converted at the day’s rate', async () => {
+  const api = autoRecorder(async () => ({ rate: 1.62, source: 'Frankfurter', date: '2026-10-07' }));
+  const linked = { ...payment, created: 2000, description: 'Test Book (EUR 40.00)', metadata: { book_id: 'b1', override: 'true' } };
+  expect(await api.autoRecordStripeSale(linked, { kind: 'direct', bookId: 'b1' })).toMatchObject({ action: 'record', qty: 1 });
+  expect(api.writes[0][1]).toBe(1);
+  expect(api.writes[0][3]).toMatchObject({ amount: 40, currency: 'EUR', convertedTotal: 64.8, rate: 1.62 });
+});
+
+describe('pressing Sync records the sales that are ready', () => {
+  function syncPass({ enabled = true, outcomes = {} } = {}) {
+    const mem = { recorded: {}, dismissed: {} };
+    const asked = [];
+    const repaint = [];
+    const api = buildHarness({ names: ['recordReadyStripeSales'], deps: {
+      window: { IS_PUBLISHER: true }, isAuthor: () => false, RECON_AUTO_BUDGET_MS: 15000,
+      stripeSaleAutoEnabled: () => enabled, stripeOrderNumber,
+      classifyStripePayment: p => ({ kind: p.kind, bookId: 'b1' }),
+      autoRecordStripeSale: async p => { asked.push(p.id); return outcomes[p.id] || null; },
+      getReconMemory: () => mem, saveReconMemory: () => repaint.push('saved'),
+      renderHist: () => repaint.push('hist'), updateDash: () => repaint.push('dash'),
+    }, returns: '{ recordReadyStripeSales }' });
+    return { ...api, mem, asked, repaint };
+  }
+  const list = [
+    { id: 'ch_ready', kind: 'direct' },
+    { id: 'ch_check', kind: 'direct' },
+    { id: 'ch_invoice', kind: 'invoice' },
+    { id: 'ch_refunded', kind: 'direct', refunded: true },
+  ];
+
+  it('records only direct payments the background rules accept, and remembers them', async () => {
+    const pass = syncPass({ outcomes: {
+      ch_ready: { action: 'record', bookId: 'b1', qty: 1, chargeId: 'ch_ready', bookTitle: 'Test Book' },
+      ch_check: { action: 'review', reason: 'amount', chargeId: 'ch_check' },
+    } });
+    const done = await pass.recordReadyStripeSales(list);
+    expect(done.map(o => o.chargeId)).toEqual(['ch_ready']);
+    expect(pass.asked).toEqual(['ch_ready', 'ch_check']);
+    expect(pass.mem.recorded.ch_ready).toMatchObject({ bookId: 'b1', num: 'STRIPE-ready' });
+    expect(pass.mem.recorded.ch_check).toBeUndefined();
+    expect(pass.repaint).toEqual(['saved', 'hist', 'dash']);
+  });
+
+  it('records nothing when she has switched automatic recording off', async () => {
+    const pass = syncPass({ enabled: false });
+    expect(await pass.recordReadyStripeSales(list)).toEqual([]);
+    expect(pass.asked).toEqual([]);
+  });
+
+  it('stops starting new lookups once its time is up, leaving the rest in the list', async () => {
+    const pass = syncPass();
+    expect(await pass.recordReadyStripeSales(list, { budgetMs: -1 })).toEqual([]);
+    expect(pass.asked).toEqual([]);
+  });
 });

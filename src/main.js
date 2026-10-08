@@ -238,6 +238,8 @@ import {
   describeRefunds,
   refundsToRaise,
   stripeSalePlan,
+  paidUnitPrice,
+  wholeCopies,
 } from './lib/stripe-sale-autorecord.js';
 import {
   integrationBackoffMs,
@@ -319,6 +321,7 @@ import {
 } from './lib/sync-queue-store.js';
 import { partHashesOf } from './lib/merge-state.js';
 import { loadFxHistory, saveFxHistory, datesNeedingRates, fillDatedRates, datedRateKey } from './lib/sale-fx.js';
+import { DATED_RATE_SOURCES, frankfurterUrl } from './lib/fx-sources.js';
 import {
   QR_PRESET_PRICE_CURRENCIES,
   loadQrPresets,
@@ -4032,6 +4035,7 @@ export let _fxRateCache = { 'CAD_CAD': 1 };
 // fetched are kept on the device and a past sale keeps its value offline.
 Object.assign(_fxRateCache, loadFxHistory(getLocalStorage()));
 const _fxHistoricalDates = {};
+const _fxHistoricalSources = {};
 
 export async function loadTaxCenter() {
   if (isAuthor()) return;
@@ -9889,7 +9893,7 @@ async function fetchLiveRateUncached(from, to, key) {
 
   // Fallback API: Frankfurter
   try {
-    const res = await fetchFx(`https://api.frankfurter.app/latest?from=${from}&to=${to}`);
+    const res = await fetchFx(frankfurterUrl('latest', from, to));
     if (res.ok) {
       const json = await res.json();
       const rate = json?.rates?.[to];
@@ -9906,27 +9910,32 @@ async function fetchLiveRateUncached(from, to, key) {
 
 // Exchange rate as of a specific date (YYYY-MM-DD), for accurate bookkeeping on
 // historical expenses. Frankfurter returns the nearest prior business day for
-// weekends/holidays. Cached per pair+date.
-export async function fetchHistoricalRate(from, to, date) {
+// weekends/holidays; a second dated service answers when it can't. Cached per
+// pair+date. `retry` is someone pressing Retry: they want another try now,
+// not the minute's pause that follows a failure.
+export async function fetchHistoricalRate(from, to, date, { retry = false } = {}) {
   if (from === to) return { rate: 1 };
   if (!from || !to || from === 'OTHER' || to === 'OTHER') return { error: 'manual' };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return { error: 'bad-date' };
   const key = datedRateKey(from, to, date);
-  if (_fxRateCache[key]) return { rate: _fxRateCache[key], date: _fxHistoricalDates[key] || '' };
-  if (_fxFailedUntil[key] > Date.now()) return { error: 'recently-failed', context: `${from}->${to}@${date}` };
-  try {
-    const res = await fetchFx(`https://api.frankfurter.app/${date}?from=${from}&to=${to}`);
-    if (res.ok) {
-      const json = await res.json();
-      const rate = json?.rates?.[to];
-      if (Number.isFinite(rate) && rate > 0) {
-        _fxRateCache[key] = rate;
-        _fxHistoricalDates[key] = json.date || '';
+  if (_fxRateCache[key]) {
+    return { rate: _fxRateCache[key], date: _fxHistoricalDates[key] || '', source: _fxHistoricalSources[key] || 'Frankfurter' };
+  }
+  if (!retry && _fxFailedUntil[key] > Date.now()) return { error: 'recently-failed', context: `${from}->${to}@${date}` };
+  for (const source of DATED_RATE_SOURCES) {
+    try {
+      const res = await fetchFx(source.url(from, to, date));
+      const found = res.ok ? source.read(await res.json(), from, to) : null;
+      if (found) {
+        _fxRateCache[key] = found.rate;
+        _fxHistoricalDates[key] = found.date;
+        _fxHistoricalSources[key] = source.name;
+        delete _fxFailedUntil[key];
         saveFxHistory(getLocalStorage(), _fxRateCache);
-        return { rate, date: json.date };
+        return { rate: found.rate, date: found.date, source: source.name };
       }
-    }
-  } catch (e) { /* fall through to caller's live-rate fallback */ }
+    } catch (e) { /* ask the next source */ }
+  }
   _fxFailedUntil[key] = Date.now() + FX_FAILURE_PAUSE_MS;
   return { error: 'historical-unavailable', context: `${from}->${to}@${date}` };
 }
@@ -9934,7 +9943,7 @@ export async function fetchHistoricalRate(from, to, date) {
 // Published daily rates for a date range, as { 'YYYY-MM-DD': rate }. One
 // request covers every sale of a currency, instead of one per sale date.
 async function fetchHistoricalRateSeries(from, to, start, end) {
-  const res = await fetchFx(`https://api.frankfurter.app/${start}..${end}?from=${from}&to=${to}`);
+  const res = await fetchFx(frankfurterUrl(`${start}..${end}`, from, to));
   if (!res.ok) throw new Error(`FX series ${res.status}`);
   const json = await res.json();
   const out = {};
@@ -23188,7 +23197,14 @@ async function reconcileSync() {
     saveReconMemory(mem);
     _reconSession = { logged: 0, dismissed: 0 };
     const krow = document.getElementById('recon-keyrow'); if (krow) delete krow.dataset.editing;
-    if (statusEl) statusEl.innerHTML = `<span style="color:var(--green);">✓ Pulled ${payments.length} payment${payments.length === 1 ? '' : 's'} from Stripe.</span>`;
+    if (statusEl && stripeSaleAutoEnabled()) statusEl.textContent = 'Recording the sales that are ready…';
+    const auto = await recordReadyStripeSales(payments);
+    _reconSession.logged += auto.length;
+    const autoNote = !auto.length ? ''
+      : auto.length === 1
+        ? ` Recorded automatically: ${auto[0].qty} × ${escapeHtml(auto[0].bookTitle)}.`
+        : ` Recorded ${auto.length} sales automatically.`;
+    if (statusEl) statusEl.innerHTML = `<span style="color:var(--green);">✓ Pulled ${payments.length} payment${payments.length === 1 ? '' : 's'} from Stripe.${autoNote}</span>`;
     renderReconcile();
   } catch (e) {
     const msg = String(e.message || e);
@@ -23223,9 +23239,18 @@ const resolveStripeRate = createStripeRateResolver({
   },
 });
 
+// Copies a payment covers at the price the app knows in the paid currency —
+// the price on its own payment link, or the book's — else 1 for her to set.
+function _reconDefaultQty(p, bookId) {
+  const book = bookId ? BOOKS[bookId] : null;
+  if (!p || !book) return 1;
+  const unit = paidUnitPrice(p, book, normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD'));
+  return (unit && wholeCopies(p.amount, unit.price)) || 1;
+}
+
 // Update the existing fields rather than rebuilding the card: preserve edits,
 // focus, and ignore responses for a book/currency selection that has changed.
-async function reconUpdateDefaults(id, grouped = false, reset = false) {
+async function reconUpdateDefaults(id, grouped = false, reset = false, retry = false) {
   const prefix = grouped ? 'recon-g' : 'recon-';
   const input = document.getElementById(`${prefix}rate-${id}`);
   const status = document.getElementById(`${prefix}fx-${id}`);
@@ -23243,6 +23268,10 @@ async function reconUpdateDefaults(id, grouped = false, reset = false) {
     status.textContent = 'Choose a book to calculate the converted total.';
     return;
   }
+  // A different book has a different price, so the copy count follows it
+  // unless she has typed one herself.
+  const qtyInput = document.getElementById(`${prefix}qty-${id}`);
+  if (reset && qtyInput && qtyInput.dataset.manual !== '1') qtyInput.value = String(_reconDefaultQty(p, bookId));
   const currency = normalizeCurrencyCode(document.getElementById(`${prefix}currency-${id}`)?.value, '');
   const bookCurrency = normalizeCurrencyCode(getBookCurrencyCode(BOOKS[bookId]), 'CAD');
   const pair = `${currency}:${bookCurrency}:${p.date}`;
@@ -23256,7 +23285,7 @@ async function reconUpdateDefaults(id, grouped = false, reset = false) {
   button.disabled = !manual && currency !== bookCurrency;
   status.textContent = currency === bookCurrency ? 'No conversion needed.' : 'Fetching the payment-date exchange rate…';
   const result = manual ? { rate: Number(input.value), source: 'manual' }
-    : await resolveStripeRate({ ...p, currency }, bookCurrency);
+    : await resolveStripeRate({ ...p, currency }, bookCurrency, { retry });
   if (!input.isConnected || input.dataset.request !== request) return;
   const overridden = input.dataset.manual === '1';
   if (!overridden) input.value = result.rate ? String(result.rate) : '';
@@ -23266,16 +23295,16 @@ async function reconUpdateDefaults(id, grouped = false, reset = false) {
   const amount = Number(document.getElementById(`${prefix}amount-${id}`)?.value);
   button.disabled = false; // Invalid/missing values are explained on Record.
   if (!(rate > 0) || !Number.isFinite(rate)) {
-    status.textContent = 'Payment-date rate unavailable. Retry when online, or enter a rate above. ';
-    const retry = document.createElement('button');
-    retry.type = 'button';
-    retry.className = 'btn tag sm';
-    retry.textContent = 'Retry rate';
-    retry.addEventListener('click', () => reconUpdateDefaults(id, grouped));
-    status.appendChild(retry);
+    status.textContent = `Couldn’t get the exchange rate for ${p.date}. Check your connection and retry, or type a rate in the field above. `;
+    const again = document.createElement('button');
+    again.type = 'button';
+    again.className = 'btn tag sm';
+    again.textContent = 'Retry rate';
+    again.addEventListener('click', () => reconUpdateDefaults(id, grouped, false, true));
+    status.appendChild(again);
     return;
   }
-  const total = Number.isFinite(amount) && amount > 0 ? `${bookCurrency} ${_stripeFmtMoney(roundCents(amount * rate), bookCurrency)}` : 'Enter the paid amount';
+  const total = Number.isFinite(amount) && amount > 0 ? _stripeFmtMoney(roundCents(amount * rate), bookCurrency) : 'Enter the paid amount';
   const source = currency === bookCurrency ? 'No conversion needed'
     : overridden ? 'Your exchange rate' : `Reference rate${result.date ? ` · ${result.date}` : ` for ${p.date}`}`;
   status.textContent = `${source} · ${total}${grouped ? ' per payment' : ''}`;
@@ -23406,7 +23435,7 @@ function _reconNeedCard(p, c) {
       </div>
       <div class="form-group" style="margin:0;width:70px;">
         <label style="font-size:var(--text-2xs);">Qty</label>
-        <input type="number" id="recon-qty-${idSafe}" value="1" min="1" style="width:100%;">
+        <input type="number" id="recon-qty-${idSafe}" value="${_reconDefaultQty(p, c.bookId)}" min="1" oninput="this.dataset.manual='1'" style="width:100%;">
       </div>
       <div class="form-group" style="margin:0;width:280px;max-width:100%;">
         <label for="recon-num-${idSafe}" style="font-size:var(--text-2xs);">Order #</label>
@@ -23422,7 +23451,7 @@ function _reconNeedCard(p, c) {
       </div>
       <div class="form-group" style="margin:0;width:130px;">
         <label for="recon-rate-${idSafe}" style="font-size:var(--text-2xs);">Automatic exchange rate</label>
-        <input type="number" id="recon-rate-${idSafe}" data-recon-default="${idSafe}" min="0.000001" step="any" inputmode="decimal" placeholder="Fetched automatically" oninput="this.dataset.manual='1';reconUpdateDefaults('${idSafe}')" aria-describedby="recon-fx-${idSafe}" style="width:100%;">
+        <input type="number" id="recon-rate-${idSafe}" data-recon-default="${idSafe}" min="0.000001" step="any" inputmode="decimal" placeholder="Automatic" oninput="this.dataset.manual='1';reconUpdateDefaults('${idSafe}')" aria-describedby="recon-fx-${idSafe}" style="width:100%;">
       </div>
       <button class="btn gold sm" id="recon-rec-${idSafe}" style="height:38px;"${recDisabled} onclick="reconcileRecordSale('${idSafe}')">Record sale</button>
       <button class="btn tag sm" style="height:38px;" onclick="reconcileDismiss('${idSafe}')" title="Not an inventory sale (donation, test charge, etc.)">Dismiss</button>
@@ -23454,7 +23483,7 @@ function _reconGroupCard(items, gi) {
       </div>
       <div class="form-group" style="margin:0;width:80px;">
         <label style="font-size:var(--text-2xs);">Qty each</label>
-        <input type="number" id="recon-gqty-${gi}" value="1" min="1" style="width:100%;">
+        <input type="number" id="recon-gqty-${gi}" value="${_reconDefaultQty(p, c.bookId)}" min="1" oninput="this.dataset.manual='1'" style="width:100%;">
       </div>
       <div class="form-group" style="margin:0;width:120px;">
         <label style="font-size:var(--text-2xs);">Stripe amount paid</label>
@@ -23466,7 +23495,7 @@ function _reconGroupCard(items, gi) {
       </div>
       <div class="form-group" style="margin:0;width:130px;">
         <label for="recon-grate-${gi}" style="font-size:var(--text-2xs);">Automatic exchange rate</label>
-        <input type="number" id="recon-grate-${gi}" data-recon-default="${gi}" data-grouped="1" min="0.000001" step="any" inputmode="decimal" placeholder="Fetched automatically" oninput="this.dataset.manual='1';reconUpdateDefaults('${gi}', true)" aria-describedby="recon-gfx-${gi}" style="width:100%;">
+        <input type="number" id="recon-grate-${gi}" data-recon-default="${gi}" data-grouped="1" min="0.000001" step="any" inputmode="decimal" placeholder="Automatic" oninput="this.dataset.manual='1';reconUpdateDefaults('${gi}', true)" aria-describedby="recon-gfx-${gi}" style="width:100%;">
       </div>
       <button class="btn gold sm" id="recon-grec-${gi}" style="height:38px;"${recDisabled} onclick="reconRecordGroup(${gi})">Record all ${n}</button>
       <button class="btn tag sm" style="height:38px;" onclick="reconDismissGroup(${gi})">Dismiss all ${n}</button>
@@ -23623,7 +23652,9 @@ function _reconApplyPaymentToBook(p, bookId, qty, { chan = '', notes = 'Stripe d
   };
   if (paidCurrency !== bookCur) {
     payment.rateSource = rateSource || 'manual';
-    payment.rateDate = payment.rateSource === 'Frankfurter' ? rateDate : (rateDate || p.date);
+    // A looked-up rate keeps the day it is actually from (blank when unknown);
+    // only a hand-typed rate is taken as the payment date's.
+    payment.rateDate = payment.rateSource === 'manual' ? (rateDate || p.date) : rateDate;
     payment.rateRequestedDate = p.date;
   }
   _reconApplySaleToBook(bookId, qty, price, payment, p.id, notes, {
@@ -24209,6 +24240,39 @@ async function autoRecordStripeSale(payment, rawClassification) {
     bookTitle: BOOKS[plan.bookId]?.title || 'a book',
     stockLeft: Number(states[plan.bookId]?.stock) || 0,
   };
+}
+
+// Pressing Sync records what the background check would record by itself —
+// a payment through one of the app's own links that adds up to whole copies —
+// so the list left behind is only the payments that need her. Same rules,
+// same write as the background check: nothing is recorded here that it
+// wouldn't record, and nothing at all when she has switched it off.
+const RECON_AUTO_BUDGET_MS = 15000;
+
+async function recordReadyStripeSales(payments, { budgetMs = RECON_AUTO_BUDGET_MS } = {}) {
+  if (!window.IS_PUBLISHER || isAuthor() || !stripeSaleAutoEnabled()) return [];
+  const stopAt = Date.now() + budgetMs;
+  const recorded = [];
+  for (const payment of payments || []) {
+    // A slow rate lookup must not hold the list back; whatever is left stays in
+    // it for her, and the background check tries again.
+    if (Date.now() > stopAt) break;
+    if (payment.refunded || payment.disputed) continue;
+    const c = classifyStripePayment(payment);
+    if (c.kind !== 'direct') continue;
+    const outcome = await autoRecordStripeSale(payment, c);
+    if (outcome?.action === 'record') recorded.push({ ...outcome, num: stripeOrderNumber(payment) });
+  }
+  if (recorded.length) {
+    const mem = getReconMemory();
+    const at = Date.now();
+    recorded.forEach(r => { mem.recorded[r.chargeId] = { bookId: r.bookId, num: r.num, at }; });
+    saveReconMemory(mem);
+    renderHist();
+    updateDash();
+    if (typeof window.renderAllOverview === 'function') window.renderAllOverview();
+  }
+  return recorded;
 }
 
 /** Refunds issued since `since`, one page, newest first. */
