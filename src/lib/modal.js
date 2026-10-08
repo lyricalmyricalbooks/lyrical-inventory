@@ -21,6 +21,7 @@ const $ = id => document.getElementById(id);
 // The host app registers behaviour that must run when a modal opens but that
 // depends on domain knowledge this module deliberately doesn't have.
 let _prepareOpen = null;
+let _onStackChange = null;
 
 /**
  * @param {{prepareOpen?: (id: string, el: HTMLElement) => void}} opts
@@ -28,8 +29,35 @@ let _prepareOpen = null;
  *   snapshot is taken, so anything it seeds counts as a default rather than a
  *   user edit.
  */
-export function configureModals({ prepareOpen } = {}) {
+export function configureModals({ prepareOpen, onStackChange } = {}) {
   _prepareOpen = typeof prepareOpen === 'function' ? prepareOpen : null;
+  _onStackChange = typeof onStackChange === 'function' ? onStackChange : null;
+}
+
+// ── OPEN POP-UPS, IN THE ORDER THEY OPENED ──────────────────────────────
+// "The one on top" is the one opened last, not the one last in the page:
+// the confirm dialog sits earlier in the markup than several pop-ups it can
+// open over. Esc and the phone's back gesture both close this one.
+let _openStack = [];
+
+// The Fair Print Kit, the POS sub-panels and the Email Receipt Import page
+// reuse the overlay markup but sit inline in the page, never over it.
+function isInlineWorkspace(el) {
+  return el.classList.contains('fk-workspace') || el.classList.contains('email-import-workspace') || !!el.closest('.pos-subpanel');
+}
+
+function _stackChanged() {
+  if (_onStackChange) { try { _onStackChange(); } catch { /* a listener must not block the dialog */ } }
+}
+
+/** Id (without the `m-` prefix) of the pop-up opened last that is still open, or null. */
+export function topOpenModalId() {
+  for (let i = _openStack.length - 1; i >= 0; i--) {
+    const el = $('m-' + _openStack[i]);
+    if (!el || el.style.display === 'none' || el.classList.contains('closing') || el.hasAttribute('data-no-backdrop-close')) continue;
+    return _openStack[i];
+  }
+  return null;
 }
 
 // ── MODAL HELPERS ───────────────────────────────────────────────────────
@@ -74,9 +102,18 @@ export function openM(id) {
   _modalReturnFocus = document.activeElement;
   const focusable = el.querySelector('input:not([type=hidden]),select,textarea,button,[tabindex]:not([tabindex="-1"])');
   if (focusable) setTimeout(() => { try { focusable.focus(); } catch { } }, 0);
+  if (el.classList.contains('overlay') && !isInlineWorkspace(el)) {
+    _openStack = _openStack.filter(x => x !== id);
+    _openStack.push(id);
+    _stackChanged();
+  }
 }
 export function closeM(id) {
   const el = $('m-' + id); if (!el) return;
+  if (_openStack.includes(id)) {
+    _openStack = _openStack.filter(x => x !== id);
+    _stackChanged();
+  }
   el.dispatchEvent(new Event('modal-close'));
   delete _modalSnapshots[id];
   _clearUnsavedMarker(el);
@@ -89,7 +126,7 @@ export function closeM(id) {
   // reuse the overlay markup but are laid out inline rather than floating over
   // the page. Hiding them here would blank the panel the owner is working in,
   // so they opt out of the close animation and the display:none that follows it.
-  if (el.classList.contains('fk-workspace') || el.classList.contains('email-import-workspace') || el.closest('.pos-subpanel')) return;
+  if (isInlineWorkspace(el)) return;
   if (el.classList.contains('closing')) return;
   if (prefersReducedMotion()) { el.style.display = 'none'; clearFieldErrors(el); return; }
   el.classList.add('closing');

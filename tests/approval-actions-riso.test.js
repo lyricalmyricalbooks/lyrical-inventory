@@ -47,7 +47,7 @@ test('a row awaiting approval is flagged with the amber bar, not faded', () => {
 });
 
 test('on a phone the flag moves to the card and both buttons get a full target', () => {
-  expect(rule(phone, '.tab-panel .phone-records tr.phone-record.is-awaiting'))
+  expect(rule(phone, ':is(.tab-panel, .modal) .phone-records tr.phone-record.is-awaiting'))
     .toMatch(/inset 3px 0 0 var\(--status-active\), var\(--elev-1\)/);
-  expect(rule(phone, '.tab-panel .phone-records .appr-btn')).toMatch(/height: var\(--target-min\)/);
+  expect(rule(phone, ':is(.tab-panel, .modal) .phone-records .appr-btn')).toMatch(/height: var\(--target-min\)/);
 });

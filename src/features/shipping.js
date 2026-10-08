@@ -10357,7 +10357,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
         <td class="shipping-pnl-money" data-label="Customer paid">
           <div style="display:flex; align-items:center; justify-content:flex-end; gap:6px;">
             ${o.manualShippingPaid ? `<button class="btn sm ghost" onclick="unlinkManualShippingPaid('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" title="Clear manual override" aria-label="Clear manual shipping override" style="padding:0 4px; font-size:var(--text-2xs); opacity:0.6; min-width: unset; height: auto;">✕</button>` : ''}
-            <input type="number" step="0.01" min="0" 
+            <input type="number" inputmode="decimal" step="0.01" min="0" 
               class="inline-postage-input" 
               value="${(Number(o.shippingPaid) || 0).toFixed(2)}" 
               data-book-id="${escapeHtml(o.bookId)}" 
@@ -10369,7 +10369,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
         </td>
         <td class="shipping-pnl-money" data-label="Postage">
           <div style="display:flex; align-items:center; justify-content:flex-end; gap:6px;">
-            <input type="number" step="0.01" min="0" 
+            <input type="number" inputmode="decimal" step="0.01" min="0" 
               class="inline-postage-input ${isSavedSuccess ? 'saved-success' : ''}" 
               value="${postageCostCAD.toFixed(2)}" 
               data-book-id="${escapeHtml(o.bookId)}" 
@@ -10602,13 +10602,13 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
           <div style="display:flex; gap:6px; align-items:center; margin-bottom:10px;">
             <div style="flex:1;">
               <span style="font-size:var(--text-3xs); color:var(--text2); display:block; margin-bottom:2px;">Base ($)</span>
-              <input type="number" step="0.50" min="0" value="${currentBase.toFixed(2)}" 
+              <input type="number" inputmode="decimal" step="0.50" min="0" value="${currentBase.toFixed(2)}" 
                 onblur="updateManualShippingRates('${meta.key}', 'base', this.value)"
                 style="width:100%; padding:6px 8px; font-size:var(--text-sm); border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); text-align:right; font-family:var(--font-mono); outline:none;" />
             </div>
             <div style="flex:1;">
               <span style="font-size:var(--text-3xs); color:var(--text2); display:block; margin-bottom:2px;">Add-on ($)</span>
-              <input type="number" step="0.50" min="0" value="${currentAddon.toFixed(2)}" 
+              <input type="number" inputmode="decimal" step="0.50" min="0" value="${currentAddon.toFixed(2)}" 
                 onblur="updateManualShippingRates('${meta.key}', 'addon', this.value)"
                 style="width:100%; padding:6px 8px; font-size:var(--text-sm); border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); text-align:right; font-family:var(--font-mono); outline:none;" />
             </div>
@@ -10669,7 +10669,7 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
           <div style="display:flex; gap:12px;">
             <div class="form-group" style="flex:1; margin:0;">
               <label style="font-size:var(--text-2xs); font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">Quantity</label>
-              <input type="number" id="sim-qty-input" value="1" min="1" max="100" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:var(--text-sm); border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; text-align:right; font-family:var(--font-mono);" />
+              <input type="number" inputmode="numeric" id="sim-qty-input" value="1" min="1" max="100" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:var(--text-sm); border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; text-align:right; font-family:var(--font-mono);" />
             </div>
             <div class="form-group" style="flex:1; margin:0;">
               <label style="font-size:var(--text-2xs); font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">Destination</label>
@@ -10696,7 +10696,7 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
               <label style="font-size:var(--text-2xs); font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">
                 Manual Weight <span style="font-weight:400; text-transform:none; color:var(--text3);">(kg)</span>
               </label>
-              <input type="number" id="sim-weight-override" placeholder="Auto-calculated" step="0.05" min="0" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:var(--text-sm); border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; text-align:right; font-family:var(--font-mono);" />
+              <input type="number" inputmode="decimal" id="sim-weight-override" placeholder="Auto-calculated" step="0.05" min="0" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:var(--text-sm); border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; text-align:right; font-family:var(--font-mono);" />
             </div>
           </div>
 
@@ -10704,7 +10704,7 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
             <label style="font-size:var(--text-2xs); font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">
               Custom Postage Override <span style="font-weight:400; text-transform:none; color:var(--text3);">(optional)</span>
             </label>
-            <input type="number" id="sim-postage-override" placeholder="Use default band fallback" step="0.50" min="0" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:var(--text-sm); border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; text-align:right; font-family:var(--font-mono);" />
+            <input type="number" inputmode="decimal" id="sim-postage-override" placeholder="Use default band fallback" step="0.50" min="0" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:var(--text-sm); border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; text-align:right; font-family:var(--font-mono);" />
           </div>
         </div>
 
@@ -10747,7 +10747,7 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
                 <option value="over_2" ${weightOverride === 'over_2' ? 'selected' : ''}>Over 2 kg (2.5 kg)</option>
                 <option value="custom" ${!['default','under_0.5','0.5_1','1_2','over_2'].includes(weightOverride) ? 'selected' : ''}>Custom Weight...</option>
               </select>
-              <input id="ship-reco-custom-weight-input" type="number" step="0.1" min="0.01" value="${!['default','under_0.5','0.5_1','1_2','over_2'].includes(weightOverride) ? parseFloat(weightOverride).toFixed(2) : bookWeightKg.toFixed(2)}" 
+              <input id="ship-reco-custom-weight-input" type="number" inputmode="decimal" step="0.1" min="0.01" value="${!['default','under_0.5','0.5_1','1_2','over_2'].includes(weightOverride) ? parseFloat(weightOverride).toFixed(2) : bookWeightKg.toFixed(2)}" 
                 onchange="onShipRecoCustomWeightChange(this.value)"
                 style="display:${!['default','under_0.5','0.5_1','1_2','over_2'].includes(weightOverride) ? 'inline-block' : 'none'}; width:60px; padding:3px 6px; font-size:var(--text-xs); border:var(--stroke-hair) solid var(--border); border-radius:var(--r); text-align:right; font-family:var(--font-mono); outline:none; margin-left:4px;" />
               <span style="font-size:var(--text-xs); color:var(--text3); font-weight:400; margin-left:4px;">(${recoData.bandName})</span>
