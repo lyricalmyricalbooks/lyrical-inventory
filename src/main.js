@@ -6253,7 +6253,7 @@ function activityHtml(ev) {
   const amount = ev.amount
     ? `<span class="activity-amt${toneClass} mono-num">${escapeHtml(ev.amount)}</span>`
     : '';
-  const when = webScanRelativeTime(ev.date) || fmtD(ev.date);
+  const when = ev.timestamp ? webScanRelativeTime(ev.timestamp) : fmtD(ev.date);
   return `<div class="activity-item">
       <span class="activity-dot" aria-hidden="true">${escapeHtml(ev.icon || '')}</span>
       <div class="activity-body">
@@ -8276,7 +8276,7 @@ function writeOrderToLedger(bookId, { num = '', chan, qty, price, notes = '', pa
 
   const id = sheetsId || makeEventId();
   const when = date || today();
-  const row = { ...extra, num, chan, qty, price, after: s.stock, notes: updatedNotes, date: when, payment, enteredBy, sheetsId: id, cur: bookCurrencyCode(book) };
+  const row = { recordedAt: new Date().toISOString(), ...extra, num, chan, qty, price, after: s.stock, notes: updatedNotes, date: when, payment, enteredBy, sheetsId: id, cur: bookCurrencyCode(book) };
   s.hist.unshift(row);
   recomputeAfters(s, book);
   saveState(bookId);
