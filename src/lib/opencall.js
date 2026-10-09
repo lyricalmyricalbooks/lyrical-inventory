@@ -417,3 +417,40 @@ export function ocSortContributors(list, sortBy, now = Date.now()) {
   });
   return out;
 }
+
+// ── The artist panel's email helpers ──────────────────────────────────────
+
+// The email the owner would send this artist next: a step email ('selectionSent',
+// 'cmykSent', 'preorderSent'), a reminder ('nudgeCredit' / 'nudgeFiles') once
+// one is due, or null when nothing is ours to send (waiting, finished, or no
+// working address).
+export function ocNextEmailKey(contributor, { now = Date.now(), isSuppressed = () => false } = {}) {
+  const c = contributor || {};
+  const who = ocWhoseMove(c, isSuppressed);
+  if (who === 'you') return ocCurrentStage(c);
+  if (who === 'artist' && ocNudgeDue(c, now)) return ocNudgeTemplateKey(c);
+  return null;
+}
+
+// Plain words for the merge fields an email left blank.
+const OC_FIELD_WORDS = { name: 'their name', photo: 'the photo', creditName: 'the credit name', project: 'the project title', date: 'the deadline date' };
+export function ocFieldWords(fields) {
+  return (fields || []).map(f => OC_FIELD_WORDS[f] || f);
+}
+
+// The new part of an email reply: everything above the quoted history
+// ("On Tue, Sep 30, … wrote:" or lines starting with ">").
+export function ocTrimQuotedReply(text) {
+  const lines = String(text || '').replace(/\r\n/g, '\n').split('\n');
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^\s*>/.test(line)) break;
+    // The "On … wrote:" header can wrap onto a second line.
+    const joined = (line + ' ' + (lines[i + 1] || '')).trim();
+    if (/^On\b.{4,240}\bwrote:\s*$/.test(line.trim()) || (/^On\b/.test(line.trim()) && /\bwrote:\s*$/.test(joined) && joined.length < 260)) break;
+    if (/^-{2,}\s*Original Message\s*-{2,}/i.test(line.trim())) break;
+    out.push(line);
+  }
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
