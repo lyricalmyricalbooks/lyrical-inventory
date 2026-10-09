@@ -44,6 +44,7 @@ import {
   ocOutboxKey, ocOutboxAdditions, ocPruneQueues, ocMergeTemplate, ocWaitingDays,
   ocCurrentStage, ocNudgeDue, ocNudgeTemplateKey, ocProblems, ocMatchesFilter, ocFilterCounts,
   ocMatchesSearch, ocSortContributors, OC_NUDGE_AFTER_DAYS, ocStageStates,
+  ocNextEmailKey, ocFieldWords, ocTrimQuotedReply,
 } from '../lib/opencall.js';
 
 let ocImportOpen = false;
@@ -770,6 +771,12 @@ async function executeOcBulkRemove() {
 let ocAddOpen = false;
 // The artist whose details fill the side panel (null = first row shown).
 let _ocActiveId = null;
+// Unsent quick replies, by contributor id — kept across redraws of the panel.
+const _ocReplyDrafts = {};
+// Gmail conversations already fetched for the panel: threadId -> { at, messages }.
+const _ocThreadCache = new Map();
+const _ocThreadInflight = new Map();
+const OC_THREAD_FRESH_MS = 5 * 60 * 1000;
 const _ocSelected = new Set();
 // Unsaved template edits, per template tab, so a full redraw (approving a
 // scan result, starring a photo) can't silently discard a half-written email.
@@ -1255,8 +1262,18 @@ function renderOcList() {
     </div>`;
 
   if (panelEl) {
+    // A background reply check can redraw the panel mid-sentence: put the
+    // cursor back where it was in the reply box.
+    const typing = document.activeElement?.id === `oc-reply-${active.id}` ? document.activeElement : null;
+    const caret = typing ? [typing.selectionStart, typing.selectionEnd] : null;
     panelEl.innerHTML = ocPanelHtml_(active);
     panelEl.hidden = false;
+    if (caret) {
+      const box = $(`oc-reply-${active.id}`);
+      box?.focus({ preventScroll: true });
+      box?.setSelectionRange(caret[0], caret[1]);
+    }
+    ocLoadLatestEmails_(active);
   }
 }
 
@@ -1507,6 +1524,7 @@ function ocPanelHtml_(c) {
       <div class="oc-panel-callout tone-${status.tone}">
         <div class="oc-panel-headline">${escapeHtml(status.text)}</div>
         <div class="oc-panel-sub">${subs[status.tone] || ''}</div>
+        ${ocNextEmailPreviewHtml_(c, proj)}
         ${status.cta ? `<div>${status.cta.replace('btn sm', 'btn')}</div>` : ''}
       </div>`;
   }
@@ -1556,9 +1574,11 @@ function ocPanelHtml_(c) {
     ${c.notes ? `<div class="oc-panel-sec"><div class="oc-panel-label">Note</div><div class="oc-note">${escapeHtml(c.notes)}</div></div>` : ''}
     <div class="oc-panel-sec">
       <div class="oc-panel-label">Conversation</div>
+      ${c.gmailThreadId ? `<div id="oc-latest-${c.id}" class="oc-latest" aria-live="polite">${ocLatestEmailsHtml_(c, _ocThreadCache.get(c.gmailThreadId))}</div>` : ''}
       ${gmailLinksHtml || '<span class="oc-panel-meta">No Gmail conversation yet.</span>'}
       <div id="oc-inline-thread-${c.id}" class="oc-inline-thread-container" style="display:none;padding:12px;background:var(--surface-sunken);border-radius:var(--r);border:var(--stroke-hair) solid var(--border);max-height:280px;overflow-y:auto;font-size:12px;text-align:left;"></div>
     </div>
+    ${ocQuickReplyHtml_(c, proj)}
     <div class="oc-panel-foot">
       ${canNudge ? `<button type="button" class="btn sm" onclick="ocComposeNudge('${c.id}')" title="Send a friendly reminder, replying into their conversation">↻ Send a reminder now</button>` : ''}
       <button type="button" class="btn sm" id="oc-scan-single-${c.id}" onclick="ocScanRepliesSingle('${c.id}')" title="Check Gmail for replies from this artist only">📥 Check replies</button>
@@ -1566,6 +1586,194 @@ function ocPanelHtml_(c) {
       <button type="button" class="btn sm danger-btn" onclick="ocDelete('${c.id}')" title="Remove contributor">✕ Remove</button>
     </div>
     <button type="button" class="oc-text-link oc-panel-back" onclick="ocBackToRow('${c.id}')">↑ Back to the list</button>`;
+}
+
+// ── Panel: the next email, the latest emails, and a quick reply ────────────
+
+const OC_NEXT_EMAIL_LABELS = { selectionSent: 'Selection email', cmykSent: 'File request', preorderSent: 'Pre-order email', nudgeCredit: 'Reminder', nudgeFiles: 'Reminder' };
+
+// A peek at the email the main button would send: its subject, its first
+// lines with this artist's details filled in, and any blanks it would go
+// out with — so a missing credit name shows up before the send screen.
+function ocNextEmailPreviewHtml_(c, proj) {
+  const key = ocNextEmailKey(c, { isSuppressed: _isCustomerSuppressed });
+  if (!key || !proj) return '';
+  ocEnsureTemplates_(proj);
+  const tmpl = proj.templates?.[key];
+  const label = OC_NEXT_EMAIL_LABELS[key] || 'Next email';
+  if (!tmpl) {
+    return `<div class="oc-next-email"><div class="oc-panel-label">Next email · ${label}</div><div class="oc-panel-meta">Uses the built-in wording — save your own under “Emails &amp; settings”.</div></div>`;
+  }
+  const savedDate = localStorage.getItem('lm-oc-last-deadline') || '';
+  const ctx = { project: proj.title, date: savedDate };
+  const raw = (tmpl.subject || '') + '\n' + (tmpl.body || '');
+  const asksForDate = key !== 'nudgeCredit' && key !== 'nudgeFiles' && raw.includes('{{date}}');
+  // A step email asks for the deadline as it opens, so a blank date there
+  // isn't a problem yet — say so instead of warning.
+  const missing = findUnfilledMergeFields(raw, c, ctx).filter(f => !(f === 'date' && asksForDate));
+  const subject = ocMergeTemplate(tmpl.subject || '', c, ctx);
+  const html = ocMergeTemplate(ocTemplateBodyHtml_(tmpl.body), c, ctx);
+  // Space out paragraphs and line breaks before flattening to one line, or
+  // "Hi Ada,</p><p>Just…" reads as "Hi Ada,Just…".
+  const spaced = html.replace(/<br\s*\/?>|<\/(p|div|li|h[1-6])>/gi, ' $&');
+  const text = (new DOMParser().parseFromString(spaced, 'text/html').body.textContent || '').replace(/\s+/g, ' ').trim();
+  const snippet = text.length > 170 ? text.slice(0, 170).replace(/\s\S*$/, '') + '…' : text;
+  return `
+    <div class="oc-next-email">
+      <div class="oc-panel-label">Next email · ${label}</div>
+      <div class="oc-next-subject">${escapeHtml(subject || '(no subject)')}</div>
+      ${snippet ? `<div class="oc-next-body">${escapeHtml(snippet)}</div>` : ''}
+      ${missing.length ? `<div class="oc-next-warn">⚠ Would go out with ${escapeHtml(ocFieldWords(missing).join(' and '))} blank — fill it in with ✎ Edit first.</div>` : ''}
+      ${asksForDate && !savedDate ? '<div class="oc-panel-meta">You’ll be asked for a deadline date when you open it.</div>' : ''}
+    </div>`;
+}
+
+// The last two emails in the artist's conversation, newest first, with any
+// attachments ready to download.
+function ocLatestEmailsHtml_(c, cached, note = '') {
+  if (!sheetsUrl) return '<span class="oc-panel-meta">Connect your Google Sheet to see their emails here.</span>';
+  if (!cached) {
+    return note
+      ? `<span class="oc-panel-meta">${escapeHtml(note)}</span>`
+      : '<span class="oc-panel-meta"><span class="spinner" aria-hidden="true"></span> Loading their latest emails…</span>';
+  }
+  const msgs = (cached.messages || []).slice(-2).reverse();
+  if (!msgs.length) return '<span class="oc-panel-meta">No emails in this conversation yet.</span>';
+  const artist = String(c.email || '').toLowerCase();
+  return `
+    ${msgs.map(msg => {
+      const from = String(msg.from || '');
+      const fromThem = artist && from.toLowerCase().includes(artist);
+      const who = fromThem ? (c.name || c.email) : 'You';
+      const body = ocTrimQuotedReply(msg.body);
+      const short = body.length > 420 ? body.slice(0, 420).replace(/\s\S*$/, '') + '…' : body;
+      return `
+        <article class="oc-latest-msg ${fromThem ? 'is-them' : 'is-you'}">
+          <div class="oc-latest-meta"><strong>${escapeHtml(who)}</strong><span>${escapeHtml(formatDateTime(msg.date))}</span></div>
+          <div class="oc-latest-body">${escapeHtml(short || '(no text)')}</div>
+          ${(msg.attachments || []).length ? `<div class="oc-latest-files">${msg.attachments.map(att => `
+            <button type="button" class="btn sm" onclick="downloadOcAttachment('${escapeHtml(msg.id)}', '${escapeHtml(att.name)}', this)" title="Download this attachment">📎 ${escapeHtml(att.name)} · ${Math.max(1, Math.round((att.size || 0) / 1024))} KB</button>`).join('')}</div>` : ''}
+        </article>`;
+    }).join('')}
+    <div class="oc-latest-foot">
+      <span class="oc-panel-meta">${cached.messages.length > 2 ? `Latest 2 of ${cached.messages.length} emails` : 'Whole conversation'} · checked ${escapeHtml(ocAgo_(new Date(cached.at).toISOString()))}</span>
+      <button type="button" class="oc-text-link" onclick="ocRefreshLatestEmails('${c.id}')">↻ Refresh</button>
+    </div>`;
+}
+
+async function ocFetchThread_(threadId) {
+  if (_ocThreadInflight.has(threadId)) return _ocThreadInflight.get(threadId);
+  const job = (async () => {
+    const url = sheetsUrl + (sheetsUrl.includes('?') ? '&' : '?') + 'action=getThreadContent&threadId=' + encodeURIComponent(threadId);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    const entry = { at: Date.now(), messages: Array.isArray(data.messages) ? data.messages : [] };
+    _ocThreadCache.set(threadId, entry);
+    return entry;
+  })();
+  _ocThreadInflight.set(threadId, job);
+  try { return await job; } finally { _ocThreadInflight.delete(threadId); }
+}
+
+// Fill the panel's "latest emails" box. Fetched once and kept for a few
+// minutes, so redrawing the panel (typing in search, ticking a box) never
+// re-asks Gmail. Offline, it says so instead of spinning.
+async function ocLoadLatestEmails_(c, force = false) {
+  const threadId = c?.gmailThreadId;
+  if (!threadId || !sheetsUrl) return;
+  const paint = (cached, note) => {
+    const box = $(`oc-latest-${c.id}`);
+    if (box) box.innerHTML = ocLatestEmailsHtml_(c, cached, note);
+  };
+  const cached = _ocThreadCache.get(threadId);
+  if (cached && !force && Date.now() - cached.at < OC_THREAD_FRESH_MS) return;
+  if (navigator.onLine === false) {
+    if (!cached) paint(null, 'You’re offline — their emails will show here when you’re back online.');
+    return;
+  }
+  if (force) paint(null);
+  try {
+    paint(await ocFetchThread_(threadId));
+  } catch (err) {
+    console.error('Failed to load latest emails:', err);
+    paint(cached, cached ? '' : `Couldn’t load their emails (${err.message}). Try ↻ Refresh in a moment.`);
+  }
+}
+
+function ocRefreshLatestEmails(cId) {
+  const c = ocList().find(x => x.id === cId);
+  if (c) ocLoadLatestEmails_(c, true);
+}
+
+// A short free-text email to the artist — for anything the step emails don't
+// cover. It replies into their conversation when there is one, so it reads
+// as part of the same thread on their side.
+function ocQuickReplyHtml_(c, proj) {
+  const first = String(c.name || '').trim().split(/\s+/)[0] || 'them';
+  if (!c.email) return '';
+  if (_isCustomerSuppressed(c.email)) {
+    return `<div class="oc-panel-sec"><div class="oc-panel-label">Write to ${escapeHtml(first)}</div><span class="oc-panel-meta">They unsubscribed, so the app won’t email them. Re-subscribe them first if they asked you to get in touch.</span></div>`;
+  }
+  const draft = _ocReplyDrafts[c.id] || '';
+  const thread = c.gmailThreadId;
+  return `
+    <div class="oc-panel-sec oc-reply">
+      <label class="oc-panel-label" for="oc-reply-${c.id}">Write to ${escapeHtml(first)}</label>
+      ${thread ? '' : `<input id="oc-reply-subject-${c.id}" type="text" class="oc-reply-subject" placeholder="Subject" value="${escapeHtml(proj?.title || 'Open call')}" aria-label="Subject">`}
+      <textarea id="oc-reply-${c.id}" class="oc-reply-box" rows="3" placeholder="A quick note — e.g. “Got your files, thank you!”" oninput="ocReplyDraft('${c.id}', this.value)">${escapeHtml(draft)}</textarea>
+      ${c.undeliverable ? '<div class="oc-next-warn">⚠ Their last email bounced — fix the address with ✎ Edit or this may bounce too.</div>' : ''}
+      <div class="oc-reply-foot">
+        <span class="oc-panel-meta">${thread ? 'Replies into your conversation with them.' : 'Starts a new email; later step emails will reply into it.'}</span>
+        <button type="button" class="btn sm gold" id="oc-reply-send-${c.id}" onclick="ocSendQuickReply('${c.id}')">✉ Send</button>
+      </div>
+    </div>`;
+}
+
+function ocReplyDraft(cId, text) {
+  if (text) _ocReplyDrafts[cId] = text;
+  else delete _ocReplyDrafts[cId];
+}
+
+async function ocSendQuickReply(cId) {
+  if (ocBlockedForAuthor_()) return;
+  const proj = ocActiveProject_();
+  const c = proj?.contributors.find(x => x.id === cId);
+  if (!c || !c.email) return;
+  const text = ($(`oc-reply-${cId}`)?.value || _ocReplyDrafts[cId] || '').trim();
+  if (!text) { showToast('Write a message first', 'warn'); $(`oc-reply-${cId}`)?.focus(); return; }
+  if (navigator.onLine === false) {
+    showToast('⚠ You’re offline — your message is kept here. Send it when you’re back online.', 'warn');
+    return;
+  }
+  if (!sheetsUrl) { showToast('⚠ Connect your Google Sheet first to send emails', 'warn'); return; }
+  const threadId = c.gmailThreadId || null;
+  const subject = threadId ? `Re: ${proj.title}` : (($(`oc-reply-subject-${cId}`)?.value || '').trim() || proj.title);
+  const ok = await confirmDialog(
+    `Send this message to ${c.name || c.email} <${c.email}> now?\n\n“${text.length > 200 ? text.slice(0, 200) + '…' : text}”\n\nIt goes to a real inbox and can't be unsent.`,
+    { title: 'Send message', okLabel: 'Send', cancelLabel: 'Cancel', danger: true });
+  if (!ok) return;
+
+  const btn = $(`oc-reply-send-${cId}`);
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+  const html = escapeHtml(text).replace(/\n/g, '<br>');
+  try {
+    const resp = await sendSingleEmailViaBackend(c.email, subject, text, localStorage.getItem('lm-oc-replyto') || '', html, threadId, !threadId);
+    delete _ocReplyDrafts[cId];
+    // A brand-new email becomes their conversation, so step emails follow it.
+    if (!threadId && resp?.threadId) {
+      c.gmailThreadId = resp.threadId;
+      await _persistOpenCalls();
+    }
+    if (c.gmailThreadId) _ocThreadCache.delete(c.gmailThreadId);
+    renderOcList();
+    showToast(`✓ Message sent to ${c.name || c.email}`);
+  } catch (err) {
+    console.error('Quick reply failed:', err);
+    showToast(`✕ Couldn’t send: ${err.message} — your message is still in the box`, 'err');
+    if (btn) { btn.disabled = false; btn.textContent = '✉ Send'; }
+  }
 }
 
 // Pick the artist whose details fill the side panel.
@@ -3741,6 +3949,9 @@ export {
   ocMarkTmplDirty,
   ocSelectArtist,
   ocBackToRow,
+  ocRefreshLatestEmails,
+  ocReplyDraft,
+  ocSendQuickReply,
   ocToggleSelect,
   ocSelectAllVisible,
   ocClearSelection,
