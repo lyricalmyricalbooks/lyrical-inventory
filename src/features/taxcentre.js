@@ -866,23 +866,23 @@ function _tcRenderLedgerTable(pageLedger, baseCurrency) {
 
       const catCell = item.sourceType === 'businessExpense'
         ? `<select class="tc-ledger-cat-select" onchange="changeExpenseCategory('${item.itemId}', this.value)" title="Change category">
-              ${TC_CATEGORIES.map(c => `<option value="${c.replace(/"/g, '&quot;')}"${c === item.cat ? ' selected' : ''}>${c}</option>`).join('')}
-              ${TC_CATEGORIES.includes(item.cat) ? '' : `<option value="${(item.cat || '').replace(/"/g, '&quot;')}" selected>${item.cat || ''}</option>`}
+              ${TC_CATEGORIES.map(c => `<option value="${escapeHtml(c)}"${c === item.cat ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('')}
+              ${TC_CATEGORIES.includes(item.cat) ? '' : `<option value="${escapeHtml(item.cat)}" selected>${escapeHtml(item.cat)}</option>`}
             </select>`
-        : item.cat;
+        : escapeHtml(item.cat);
 
-      let descCell = item.desc || '';
+      let descCell = escapeHtml(item.desc);
       if (item.sourceType === 'businessExpense') {
         const tripPill = item.trip
-          ? `<span class="tc-ledger-trip-chip is-set" onclick="event.stopPropagation();openEditTrip('${item.itemId}')" title="Edit trip">✈ ${item.trip}</span>`
+          ? `<span class="tc-ledger-trip-chip is-set" onclick="event.stopPropagation();openEditTrip('${item.itemId}')" title="Edit trip">✈ ${escapeHtml(item.trip)}</span>`
           : `<span class="tc-ledger-trip-chip is-unset" onclick="event.stopPropagation();openEditTrip('${item.itemId}')" title="Assign to a trip">+ trip</span>`;
-        descCell = `<div>${item.desc || ''}</div>${tripPill}`;
+        descCell = `<div>${escapeHtml(item.desc)}</div>${tripPill}`;
       }
 
       return `
         <tr class="tc-ledger-row" ondragover="tcExpenseRowDragOver(event, this)" ondragleave="tcExpenseRowDragLeave(event, this)" ondrop="tcExpenseRowDrop(event, this, '${item.sourceType || ''}', '${item.sourceId || ''}', '${item.itemId || ''}')">
             <td style="font-size:var(--text-sm);">${item.date || '—'}</td>
-            <td><span class="tag ${item.isIncome ? 'green' : 'amber'}">${item.type}</span></td>
+            <td><span class="tag ${item.isIncome ? 'green' : 'amber'}">${escapeHtml(item.type)}</span></td>
             <td style="font-size:var(--text-sm);">${descCell}</td>
             <td style="font-size:var(--text-sm);">${catCell}</td>
             <td style="font-size:var(--text-sm);">${refCell}</td>

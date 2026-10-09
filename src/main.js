@@ -22,7 +22,7 @@ import { createStripePriceAndLink } from './lib/stripe-payment-link.js';
 import { createStripeRateResolver, stripeOrderNumber } from './lib/stripe-sale-defaults.js';
 import { calculateBreakEven, breakEvenTierMove, applyBreakEvenTierMove, readProductionCostInput } from './lib/breakeven.js';
 import { computeTallyRowHeights, computeQrCardSize, estimateTallyPages, estimateQrPages } from './lib/print-sheet-layout.js';
-import { escapeHtml } from './lib/html.js';
+import { escapeHtml, safeHttpUrl } from './lib/html.js';
 import { needsSettleUp, settleUpModel, settleUpHeadline, settleUpHtml, settlementPayoutSummary } from './lib/settle-up-view.js';
 import { normalizeLetterhead, renderLetterhead } from './lib/letterhead.js';
 import { ensureXlsx, loadExternalScript } from './lib/external-scripts.js';
@@ -7421,8 +7421,9 @@ function renderExpensesSummaryBlock(s, cur) {
       const payBtn = $('d-exp-pay-btn');
       const payHint = $('d-exp-pay-hint');
       if (payBtn) {
-        if (artistLink) {
-          payBtn.href = artistLink.startsWith('http') ? artistLink : 'https://' + artistLink;
+        const safeLink = safeHttpUrl(artistLink);
+        if (safeLink) {
+          payBtn.href = safeLink;
           payBtn.style.display = '';
           if (payHint) payHint.textContent = 'Opens payment link in a new tab';
         } else {
@@ -11660,10 +11661,9 @@ function renderPendingExpenses() {
   if (!sect) return;
   if (!pending.length) { sect.style.display = 'none'; return; }
   sect.style.display = '';
-  const artistLink = (s.artistPaymentLink || '').trim();
-  const fullLink = artistLink ? (artistLink.startsWith('http') ? artistLink : 'https://' + artistLink) : '';
+  const fullLink = safeHttpUrl(s.artistPaymentLink);
   const payHtml = fullLink
-    ? `<a href="${fullLink}" target="_blank" class="btn sm" style="text-decoration:none;background:var(--green-bg);color:var(--green);border-color:rgba(42,99,72,.2);">↗ Payment link</a>`
+    ? `<a href="${escapeHtml(fullLink)}" target="_blank" rel="noopener" class="btn sm" style="text-decoration:none;background:var(--green-bg);color:var(--green);border-color:rgba(42,99,72,.2);">↗ Payment link</a>`
     : isAuthor()
       ? `<button type="button" class="btn sm gold" onclick="goToPayLinkSetup()" title="Add the link your publisher pays you back through">Set up your payment link →</button>`
       : `<button type="button" class="btn sm outline" onclick="askAuthorForPayLink()" title="Send the author simple steps to add the link you'll pay them back through">✉ Ask author to add payment link</button>`;
@@ -18884,8 +18884,8 @@ export function showTripDetail(tripName) {
     return `
       <tr style="color:var(--red);">
         <td style="font-size:var(--text-sm);">${item.date || '—'}</td>
-        <td style="font-size:var(--text-sm);">${item.desc || ''}</td>
-        <td style="font-size:var(--text-sm);">${item.cat || ''}</td>
+        <td style="font-size:var(--text-sm);">${escapeHtml(item.desc)}</td>
+        <td style="font-size:var(--text-sm);">${escapeHtml(item.cat)}</td>
         <td style="font-size:var(--text-sm);">${refCell}</td>
         <td class="r" style="font-size:var(--text-sm);">${origDisplay}</td>
         <td class="r" style="font-weight:600;">- ${fmt(item.baseAmount, baseCurrency)}</td>
@@ -18977,7 +18977,7 @@ export function showCategoryDetail(catName) {
     const origDisplay = `${origSym}${Number(item.origAmount || 0).toFixed(2)}`;
     const moveCell = item.sourceType === 'businessExpense'
       ? `<select onchange="changeExpenseCategory('${item.itemId}', this.value)" style="font-size:var(--text-xs);padding:2px 4px;border:var(--stroke-hair) solid rgba(255,255,255,.15);border-radius:var(--r);max-width:170px;" title="Move to another category">
-          ${TC_CATEGORIES.map(c => `<option value="${c.replace(/"/g, '&quot;')}"${c === item.cat ? ' selected' : ''}>${c}</option>`).join('')}
+          ${TC_CATEGORIES.map(c => `<option value="${escapeHtml(c)}"${c === item.cat ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('')}
         </select>`
       : '<span style="font-size:var(--text-xs);color:var(--text3);">—</span>';
     const showEdit = (item.sourceType === 'businessExpense' || item.sourceType === 'bookExpense');
@@ -18986,8 +18986,8 @@ export function showCategoryDetail(catName) {
     return `
       <tr style="color:var(--red);">
         <td style="font-size:var(--text-sm);">${item.date || '—'}</td>
-        <td><span class="tag amber">${item.type}</span></td>
-        <td style="font-size:var(--text-sm);">${item.desc || ''}</td>
+        <td><span class="tag amber">${escapeHtml(item.type)}</span></td>
+        <td style="font-size:var(--text-sm);">${escapeHtml(item.desc)}</td>
         <td style="font-size:var(--text-sm);">${refCell}</td>
         <td class="r" style="font-size:var(--text-sm);">${origDisplay}</td>
         <td class="r" style="font-weight:600;">- ${fmt(item.baseAmount, baseCurrency)}</td>
