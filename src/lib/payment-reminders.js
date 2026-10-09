@@ -20,6 +20,7 @@
 //     same function, so what the owner is told matches what actually happens.
 
 import { BILL_TO_PERSON } from './invoices.js';
+import { escapeHtml } from './html.js';
 
 /** What the settings mean before the publisher has touched them. */
 export const REMINDER_DEFAULTS = {
@@ -163,9 +164,7 @@ export function canSendNow(date = new Date()) {
   return hour >= SEND_WINDOW.startHour && hour < SEND_WINDOW.endHour;
 }
 
-const esc = (s) => str(s)
-  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;');
+const esc = (s) => escapeHtml(str(s));
 
 /**
  * The first word of a person's name, for a greeting that reads like it was
