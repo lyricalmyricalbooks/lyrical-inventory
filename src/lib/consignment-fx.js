@@ -113,3 +113,51 @@ export function consignmentFxSummary(entry, bookCur) {
   }
   return parts.join(' · ');
 }
+
+/**
+ * Shares one payment (an invoice paid in full) across the sales it settles,
+ * in proportion to what each sale was owed, so every ledger row says what it
+ * received. The cash and book-currency figures are split separately and the
+ * last row takes the rounding remainder, so the shares add up to the payment
+ * exactly. Returns one record per row, in order.
+ *
+ * @param {object} payment  a consignmentPaymentRecord()
+ * @param {Array<{amountDue:number}>} rows
+ */
+export function splitConsignmentPayment(payment, rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  if (!payment || !list.length) return [];
+  const dues = list.map(r => roundCents(Number(r && r.amountDue) || 0));
+  const totalDue = roundCents(dues.reduce((a, d) => a + d, 0));
+  const share = (whole, i, soFar) => {
+    if (i === list.length - 1) return roundCents(whole - soFar);
+    return totalDue > 0 ? roundCents(whole * dues[i] / totalDue) : (i === 0 ? roundCents(whole) : 0);
+  };
+  let amountSoFar = 0, convertedSoFar = 0;
+  return list.map((_, i) => {
+    const amount = share(payment.amount, i, amountSoFar);
+    const convertedTotal = share(payment.convertedTotal, i, convertedSoFar);
+    amountSoFar = roundCents(amountSoFar + amount);
+    convertedSoFar = roundCents(convertedSoFar + convertedTotal);
+    return {
+      currency: payment.currency,
+      amount,
+      rate: payment.rate,
+      convertedTotal,
+      date: payment.date || '',
+      difference: roundCents(convertedTotal - dues[i]),
+    };
+  });
+}
+
+/**
+ * The currency a store's sales are recorded in by default: the one it was
+ * last given (or set on the store), else the book's.
+ */
+export function storeSaleCurrency(store, bookCur, allowed) {
+  const book = normalizeCurrencyCode(bookCur, 'CAD');
+  const code = store && store.currency ? normalizeCurrencyCode(store.currency, '') : '';
+  if (!code) return book;
+  if (Array.isArray(allowed) && !allowed.includes(code) && code !== book) return book;
+  return code;
+}

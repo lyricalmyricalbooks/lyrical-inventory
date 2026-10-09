@@ -89,3 +89,35 @@ describe('currency change restates a consignment payment', () => {
     expect(consignmentFxSummary(e, 'USD')).toBe('Sold at EUR 20.00 @ 0.7500 · Paid EUR 36.00 @ 0.7250 → USD 26.10 · short USD 0.90');
   });
 });
+
+import { splitConsignmentPayment, storeSaleCurrency } from '../src/lib/consignment-fx.js';
+
+describe('splitConsignmentPayment', () => {
+  it('shares an invoice payment across its sales and adds up exactly', () => {
+    const pay = consignmentPaymentRecord({ amountDue: 100, bookCur: 'CAD', payCur: 'EUR', payAmount: 66.67, fxRate: 1.4777 });
+    const rows = [{ amountDue: 33.33 }, { amountDue: 33.33 }, { amountDue: 33.34 }];
+    const parts = splitConsignmentPayment(pay, rows);
+    expect(parts).toHaveLength(3);
+    expect(parts.reduce((a, p) => Math.round((a + p.amount) * 100) / 100, 0)).toBe(66.67);
+    expect(parts.reduce((a, p) => Math.round((a + p.convertedTotal) * 100) / 100, 0)).toBe(pay.convertedTotal);
+    parts.forEach((p, i) => {
+      expect(p.currency).toBe('EUR');
+      expect(p.difference).toBe(Math.round((p.convertedTotal - rows[i].amountDue) * 100) / 100);
+    });
+  });
+  it('is empty with nothing to split', () => {
+    expect(splitConsignmentPayment(null, [{ amountDue: 1 }])).toEqual([]);
+    expect(splitConsignmentPayment({ amount: 1, convertedTotal: 1 }, [])).toEqual([]);
+  });
+});
+
+describe('storeSaleCurrency', () => {
+  it('uses the store\'s remembered currency', () => {
+    expect(storeSaleCurrency({ currency: 'EUR' }, 'CAD', ['CAD', 'EUR'])).toBe('EUR');
+  });
+  it('falls back to the book currency', () => {
+    expect(storeSaleCurrency({}, 'CAD')).toBe('CAD');
+    expect(storeSaleCurrency(null, 'USD')).toBe('USD');
+    expect(storeSaleCurrency({ currency: 'XYZ' }, 'CAD', ['CAD', 'EUR'])).toBe('CAD');
+  });
+});

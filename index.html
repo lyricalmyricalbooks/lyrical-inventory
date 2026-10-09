@@ -5105,7 +5105,7 @@
   <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="es-city">City</label><input id="es-city" placeholder="e.g. Milan"></div><div class="form-group"><label for="es-region">State / Province</label><input id="es-region" placeholder="e.g. ON"></div></div>
   <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="es-postal">Postal / ZIP code</label><input id="es-postal" placeholder="e.g. M5V 2J4"></div><div class="form-group"><label for="es-country">Country</label><input id="es-country" placeholder="e.g. Canada"></div></div>
   <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="es-website">Website</label><input id="es-website" placeholder="e.g. store.com"></div><div class="form-group"><label for="es-rate">Commission rate (%)</label><input id="es-rate" type="number" inputmode="decimal" step="any" value="40" min="0" max="100"></div></div>
-  <div class="form-group" style="margin-bottom:12px;"><label for="es-terms">Payment terms</label><input id="es-terms" placeholder="e.g. Net 30, paid on sale"></div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="es-terms">Payment terms</label><input id="es-terms" placeholder="e.g. Net 30, paid on sale"></div><div class="form-group"><label for="es-currency">Sells in</label><select id="es-currency"></select><div class="field-note">Sales for this store start in this currency.</div></div></div>
   <div class="form-group"><label for="es-notes">Notes</label><textarea id="es-notes" placeholder="Delivery info, special arrangements…"></textarea></div>
   <div class="modal-footer" role="dialog" aria-modal="true"><button class="btn" onclick="attemptCloseModal('edit-store')">Cancel</button><button class="btn gold" onclick="confirmEditStore()">Save changes</button></div>
 </div></div>
@@ -5171,7 +5171,7 @@
   <div class="modal-footer" role="dialog" aria-modal="true"><button class="btn" onclick="attemptCloseModal('record-sale')">Cancel</button><button class="btn gold" onclick="confirmSale()">Record sale</button></div>
 </div></div>
 
-<div class="overlay" id="m-consign-payment" style="display:none;"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="cp-title">
+<div class="overlay" id="m-consign-payment" style="display:none;z-index:1250;"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="cp-title">
   <div class="modal-title">
     <div class="modal-title-left">
       <span class="modal-title-badge" aria-hidden="true">💸</span>

@@ -156,22 +156,37 @@ describe('the modal delegates instead of writing its own copy', () => {
     appSource.indexOf('function printInvoice'),
   );
 
+  // The button opens the payment form (amount, currency, date, rate actually
+  // received); the form's confirm is what settles, through the shared writer.
+  const confirm = appSource.slice(
+    appSource.indexOf('function confirmConsignPayment'),
+    appSource.indexOf('async function markHistoryConsignmentPaid'),
+  );
+
+  it('opens the payment form for this invoice', () => {
+    expect(modal).toContain("openConsignPayment({ kind: 'invoice', id: inv.id, bookId })");
+  });
+
   it('calls the shared writer', () => {
-    expect(modal).toContain('applyInvoicePaid(inv, bookId, s)');
+    expect(confirm).toContain('applyInvoicePaid(t.inv, t.bookId, s)');
   });
 
   it('no longer writes the paid fields itself', () => {
     // There were already two writers of inv.status = 'paid'; a third by
     // copy-paste is how the invoice and the store's owed balance drift apart.
-    expect(modal).not.toContain("inv.status = 'paid'");
-    expect(modal).not.toContain('inv.paidAt =');
+    for (const src of [modal, confirm]) {
+      expect(src).not.toContain("inv.status = 'paid'");
+      expect(src).not.toContain('inv.paidAt =');
+    }
     expect(modal).not.toContain('settleLedgerSalePaid');
   });
 
-  it('keeps the confirmation it always had', () => {
+  it('still asks before settling', () => {
     // Settling by hand is still a deliberate act; only the background path is
-    // allowed to do it without asking.
-    expect(modal).toContain('confirmDialog(');
+    // allowed to do it without asking. The form is the question now: opening
+    // it writes nothing.
+    expect(modal).not.toContain('applyInvoicePaid');
+    expect(modal).not.toContain('saveState');
   });
 });
 
