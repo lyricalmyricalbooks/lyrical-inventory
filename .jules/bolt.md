@@ -9,3 +9,7 @@
 ## 2025-02-14 - Loop Fusion in HTML Templating
 **Learning:** Chaining `.filter().map().join('')` to generate HTML strings creates multiple intermediate array allocations, increasing GC pressure.
 **Action:** Replace with a single imperative `for...of` loop and string concatenation for significant performance gains in rendering paths.
+
+## 2026-10-09 - Reuse one number formatter for Stripe money strings
+**Learning:** `Number.toLocaleString(locale, options)` constructs a new `Intl.NumberFormat` on every call (~40x slower than `.format()` on a cached one). `_stripeFmtMoney` ran it per table row and per payment on every reconciliation search keystroke.
+**Action:** Hoist option-bearing `toLocaleString` calls on hot paths into a module-level `Intl.NumberFormat`; output is identical by spec.
