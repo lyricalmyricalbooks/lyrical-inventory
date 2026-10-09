@@ -28,4 +28,15 @@ describe('Chit Chats serverless proxy', () => {
     const { result } = run({ endpoint: 'https://chitchats.com/labels/shipments/abc.pdf?auth_token=fake', apiKey: 'fake', isArtifact: true }, { getResponseCode: () => 200, getBlob: () => ({ getBytes: () => [37, 80, 68, 70, 45] }) });
     expect(result, JSON.stringify(result)).toMatchObject({ base64: 'JVBERi0=' });
   });
+  it('lets a single unpaid draft be deleted, never the whole list or a purchase', () => {
+    const ok = { getResponseCode: () => 204, getContentText: () => '', getAllHeaders: () => ({}) };
+    const { result, fetch } = run({ endpoint: 'https://chitchats.com/api/v1/clients/123/shipments/ABC', apiKey: 'fake', method: 'DELETE' }, ok);
+    expect(result, JSON.stringify(result)).toMatchObject({ ok: true });
+    expect(fetch.mock.calls[0][1]).toMatchObject({ method: 'delete' });
+    for (const endpoint of ['https://chitchats.com/api/v1/clients/123/shipments', 'https://chitchats.com/api/v1/clients/123/shipments/ABC/buy']) {
+      const refused = run({ endpoint, apiKey: 'fake', method: 'DELETE' }, ok);
+      expect(refused.result.error).toBeTruthy(); expect(refused.fetch).not.toHaveBeenCalled();
+    }
+  });
 });
+

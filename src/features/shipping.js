@@ -18,7 +18,7 @@
 // time. eslint's no-undef, an error in CI, keeps the import list below honest.
 import { withAutoLocalPickup } from '../lib/local-pickup.js';
 import { buildChitChatsShipment, getChitChatsRates, buyChitChatsLabel, normalizeChitChatsShipment,
-  listChitChatsShipments, refundChitChatsShipment, fetchChitChatsLabelArtifact } from '../lib/chitchats.js';
+  listChitChatsShipments, refundChitChatsShipment, fetchChitChatsLabelArtifact, deleteChitChatsDraft } from '../lib/chitchats.js';
 import { readChitChatsState, saveChitChatsState, safeChitChatsRecord } from '../lib/chitchats-state.js';
 import {
   bigCartelShipQueue,
@@ -5301,10 +5301,21 @@ async function calculateChitChatsRatesHandler() {
     const fingerprint = JSON.stringify(payload);
     const state = readChitChatsState(account);
     const sameDraft = state.draft?.fingerprint === fingerprint && state.draft?.clientId === account.clientId;
-    const result = await getChitChatsRates({ ...account, payload, shipmentId: sameDraft ? state.draft.id : '' });
+    const replaced = sameDraft ? '' : state.draft?.id;
+    let result;
+    try { result = await getChitChatsRates({ ...account, payload, shipmentId: sameDraft ? state.draft.id : '' }); }
+    catch (error) {
+      if (error.alreadyBought) { delete state.draft; saveChitChatsState(account, state); }
+      throw error;
+    }
     state.draft = { id: result.shipment.id, clientId: account.clientId, fingerprint, payload, rates: result.rates };
     saveChitChatsState(account, state);
     renderChitChatsPortal(result.rates.length ? '' : 'Chit Chats offered no services for this parcel. Check its address, size, weight, and customs details.');
+    // Tidy the draft this parcel replaced so the Chit Chats account doesn't
+    // fill with unpaid shipments. Never one that a purchase may be using.
+    if (replaced && replaced !== result.shipment.id && !state.purchases?.[replaced]) {
+      deleteChitChatsDraft({ ...account, shipmentId: replaced }).catch(() => {});
+    }
   } catch (error) { renderChitChatsPortal(error.message); }
   finally { _ccBusy = false; }
 }
@@ -5317,6 +5328,20 @@ function chitChatsAccount() {
   return { clientId: String(settings.ccClientId || '').trim(), token: String(settings.ccToken || '').trim(), isTest: !!settings.ccTestMode };
 }
 
+// Chit Chats takes today or a date up to a week ahead, on the owner's own
+// calendar (the app's today() is UTC, a day ahead on Canadian evenings).
+function chitChatsShipDateRange(now = new Date()) {
+  const localDay = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  const weekOut = new Date(now); weekOut.setDate(now.getDate() + 7);
+  return { first: localDay(now), last: localDay(weekOut) };
+}
+
+function limitChitChatsShipDate() {
+  const input = $('cc-ship-date'); if (!input) return;
+  const { first, last } = chitChatsShipDateRange();
+  input.min = first; input.max = last;
+}
+
 function chitChatsFormPayload() {
   const value = id => String($(id)?.value || '').trim();
   const quantity = Number(value('sp-qty'));
@@ -5326,13 +5351,21 @@ function chitChatsFormPayload() {
   const weightUnit = value('sp-weight-unit');
   const country = normalizeCountryCode(value('st-country'));
   const description = value('sp-customs-description');
+  const { first, last } = chitChatsShipDateRange();
+  const shipDate = value('cc-ship-date') || first;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(shipDate) || shipDate < first || shipDate > last) {
+    throw new Error('Set the drop-off date to today or a day within the next week.');
+  }
+  if (['CA', 'US'].includes(country) && (!value('st-state') || !value('st-zip'))) {
+    throw new Error(`Fill in the ${country === 'US' ? 'state and ZIP code' : 'province and postal code'} before requesting rates.`);
+  }
   const payload = {
     name: value('st-name'), address_1: value('st-street1'), address_2: value('st-street2'), city: value('st-city'),
     province_code: value('st-state'), postal_code: value('st-zip'), country_code: country, phone: value('st-phone'),
     package_contents: 'merchandise', description, value: roundCents(unitValue * quantity).toFixed(2), value_currency: 'cad',
-    order_id: normalizeShippingOrderNumber($('ship-prefill-dest')?.dataset.orderNumber || value('sp-order-num')), order_store: 'other',
+    order_id: normalizeShippingOrderNumber($('ship-prefill-dest')?.dataset.orderNumber || value('sp-order-num')),
     package_type: 'parcel', weight, weight_unit: weightUnit, size_x: Number(value('sp-length')), size_y: Number(value('sp-width')),
-    size_z: Number(value('sp-height')), size_unit: value('sp-dim-unit'), ship_date: value('cc-ship-date') || today(),
+    size_z: Number(value('sp-height')), size_unit: value('sp-dim-unit'), ship_date: shipDate,
   };
   if (country !== 'CA') {
     const hs = value('sp-customs-hs').replace(/\./g, '');
@@ -5341,7 +5374,7 @@ function chitChatsFormPayload() {
     // One line per copy avoids ambiguity between per-item and line-total value.
     if (quantity > 100) throw new Error('Chit Chats customs supports up to 100 copies in this form. Split this order into parcels.');
     payload.line_items = Array.from({ length: quantity }, () => ({ quantity: 1, description, value_amount: unitValue.toFixed(2),
-      currency_code: 'cad', hs_tariff_code: hs, origin_country: origin, weight: weight / quantity, weight_unit: weightUnit }));
+      currency_code: 'cad', hs_tariff_code: hs, origin_country: origin }));
   }
   return buildChitChatsShipment(payload);
 }
@@ -5355,6 +5388,7 @@ function renderChitChatsPortal(message = '') {
   card.style.display = 'block';
   card.hidden = false;
   if ($('cc-portal-status')) $('cc-portal-status').textContent = message;
+  limitChitChatsShipDate();
   let matches = false;
   try { matches = draft?.fingerprint === JSON.stringify(chitChatsFormPayload()); } catch (_) { /* incomplete form */ }
   const pending = Object.values(state.purchases || {}).filter(item => item.status === 'pending');
@@ -5478,12 +5512,13 @@ async function openChitChatsLabelHandler(shipmentId) {
   catch (error) { showToast(error.message, 'err', 9000); }
 }
 
+// Keeps the unpaid draft, so topping up the balance and choosing Buy label
+// again reuses it instead of leaving an orphan in the Chit Chats account.
 function clearFailedChitChatsPurchase(account, shipmentId = '') {
   const state = readChitChatsState(account);
   for (const item of Object.values(state.purchases || {})) {
     if (item.status === 'pending' && (!shipmentId || item.id === shipmentId)) item.status = 'failed';
   }
-  delete state.draft;
   saveChitChatsState(account, state);
 }
 
