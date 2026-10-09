@@ -83,6 +83,27 @@ export function zipEntryName(name) {
     .join('/');
 }
 
+/**
+ * The name an entry will actually carry in the archive: `name` itself, or
+ * `name-2.ext`, `name-3.ext`… when that path is already in `seen`. Records the
+ * chosen name (lower-cased) in `seen`. Exported so a caller that lists entries
+ * elsewhere (a manifest) can use the very name the zip will use.
+ */
+export function uniqueZipPath(name, seen) {
+  let out = name;
+  if (seen.has(out.toLowerCase())) {
+    const dot = out.lastIndexOf('.');
+    const stem = dot > 0 ? out.slice(0, dot) : out;
+    const ext = dot > 0 ? out.slice(dot) : '';
+    let i = 2;
+    let candidate = `${stem}-${i}${ext}`;
+    while (seen.has(candidate.toLowerCase())) candidate = `${stem}-${++i}${ext}`;
+    out = candidate;
+  }
+  seen.add(out.toLowerCase());
+  return out;
+}
+
 function pushU16(out, v) { out.push(v & 0xff, (v >>> 8) & 0xff); }
 function pushU32(out, v) { out.push(v & 0xff, (v >>> 8) & 0xff, (v >>> 16) & 0xff, (v >>> 24) & 0xff); }
 
@@ -103,16 +124,7 @@ export function createZip(files, { mimeType = 'application/zip' } = {}) {
     if (!name) return;
 
     // Same-name collision: suffix rather than let one entry hide another.
-    if (seen.has(name.toLowerCase())) {
-      const dot = name.lastIndexOf('.');
-      const stem = dot > 0 ? name.slice(0, dot) : name;
-      const ext = dot > 0 ? name.slice(dot) : '';
-      let i = 2;
-      let candidate = `${stem}-${i}${ext}`;
-      while (seen.has(candidate.toLowerCase())) candidate = `${stem}-${++i}${ext}`;
-      name = candidate;
-    }
-    seen.add(name.toLowerCase());
+    name = uniqueZipPath(name, seen);
     entries.push({ name, data: f.data instanceof Uint8Array ? f.data : new Uint8Array(f.data), date: f.date });
   });
 

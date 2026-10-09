@@ -101,6 +101,9 @@ function harness({
       saveReceiptBestEffort: saveReceipt,
       uploadReceiptToCloud: uploadCloud,
       notifyPublisherSubmission: async (kind, data, summary) => notified.push({ kind, data, summary }),
+      // The date-specific lookup resolves from the warmed cache here; the
+      // dated fetch itself is covered by receipts-fault-fixes.test.js.
+      resolveExpenseRate: async (from, _date, to = 'CAD') => (from === to ? 1 : (rates[`${from}_${to}`] || 0)),
       fetchLiveRate: async (from, to) => {
         fxFetches.push(`${from}_${to}`);
         return { rate: rates[`${from}_${to}`] || 0 };
