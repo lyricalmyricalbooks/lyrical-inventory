@@ -33,6 +33,7 @@ import {
   today,
 } from '../main.js';
 import { parseMarkdownToHtml, renderOpenCall } from './opencall.js';
+import { withCampaignFooter, campaignFooterHtml } from '../lib/campaign-footer.js';
 import { confirmDialog } from '../lib/modal.js';
 import { escapeHtml } from '../lib/html.js';
 import { toCsv } from '../lib/csv.js';
@@ -87,7 +88,7 @@ function setCustomerBookFilter(v) { _customerBookFilter = v || ''; renderCustome
 // or flip on auto-add so new buyers join by themselves. Copy / Export / Email
 // here always act on this curated list, minus anyone who has unsubscribed.
 const MAILING_LIST_KEY = 'lm-mailing-list';
-let MAILING_LIST = { subs: {}, autoAdd: false };
+let MAILING_LIST = { subs: {}, autoAdd: false, removed: {} };
 
 function mailingSubsArray() {
   // ⚡ Bolt Optimization: Use string comparison instead of localeCompare for sorting ISO "YYYY-MM-DD" dates
@@ -104,7 +105,7 @@ async function loadMailingList() {
   data = await window._fbLoadSettings('mailingList');
   if (!data) { try { data = JSON.parse(localStorage.getItem(MAILING_LIST_KEY) || 'null'); } catch (_) { } }
   if (data && typeof data === 'object') {
-    MAILING_LIST = { subs: (data.subs && typeof data.subs === 'object') ? data.subs : {}, autoAdd: !!data.autoAdd };
+    MAILING_LIST = { subs: (data.subs && typeof data.subs === 'object') ? data.subs : {}, autoAdd: !!data.autoAdd, removed: (data.removed && typeof data.removed === 'object') ? data.removed : {} };
   }
 }
 async function _persistMailingList() {
@@ -121,6 +122,7 @@ function _mailingUpsert(email, name, source) {
     if (name && name.length > (existing.name || '').length) existing.name = name;
     return false;
   }
+  if (MAILING_LIST.removed) delete MAILING_LIST.removed[key]; // explicit re-add clears the tombstone
   MAILING_LIST.subs[key] = { email: String(email).trim(), name: String(name || '').trim(), source: source || 'Manual', added: today() };
   return true;
 }
@@ -153,15 +155,19 @@ async function removeFromMailingList(encEmail) {
   const key = _custEmailKey(decodeURIComponent(encEmail));
   if (!MAILING_LIST.subs[key]) return;
   delete MAILING_LIST.subs[key];
+  // Remember the removal so auto-add doesn't quietly put them back.
+  if (!MAILING_LIST.removed) MAILING_LIST.removed = {};
+  MAILING_LIST.removed[key] = today();
   await _persistMailingList();
   renderMailingList(); renderCustomers(); renderOpenCall();
 }
 
 // Merge every non-suppressed discovered buyer into the list. Returns count added.
-function _mailingMergeBuyers(list) {
+function _mailingMergeBuyers(list, { respectRemoved = false } = {}) {
   let added = 0;
   (list || buildCustomerList()).forEach(r => {
     if (_isCustomerSuppressed(r.email)) return;
+    if (respectRemoved && MAILING_LIST.removed && MAILING_LIST.removed[_custEmailKey(r.email)]) return;
     if (_mailingUpsert(r.email, r.name, 'Buyer')) added++;
   });
   return added;
@@ -194,7 +200,7 @@ function exportMailingListCsv() {
 async function toggleMailingAutoAdd(cb) {
   MAILING_LIST.autoAdd = !!(cb && cb.checked);
   let added = 0;
-  if (MAILING_LIST.autoAdd) added = _mailingMergeBuyers();
+  if (MAILING_LIST.autoAdd) added = _mailingMergeBuyers(null, { respectRemoved: true });
   await _persistMailingList();
   renderMailingList(); renderCustomers(); renderOpenCall();
   showToast(MAILING_LIST.autoAdd
@@ -205,7 +211,7 @@ async function toggleMailingAutoAdd(cb) {
 // When auto-add is on, fold any newly discovered buyers in (persist only if changed).
 function _mailingAutoSync(list) {
   if (!MAILING_LIST.autoAdd) return;
-  if (_mailingMergeBuyers(list) > 0) _persistMailingList();
+  if (_mailingMergeBuyers(list, { respectRemoved: true }) > 0) _persistMailingList();
 }
 
 function renderMailingList() {
@@ -399,9 +405,10 @@ function buildCustomerList() {
   // 3) Stripe pull cache — discover/enrich card buyers. Only add counts + spend
   //    for buyers we don't already know locally, so payments already reconciled
   //    into history aren't double-counted.
+  const knownBeforeStripe = new Set(map.keys());
   _loadCustomerStripeCache().forEach(p => {
     if (p.refunded || !_custEmailKey(p.email)) return;
-    const existed = map.has(_custEmailKey(p.email));
+    const existed = knownBeforeStripe.has(_custEmailKey(p.email));
     const rec = _custUpsert(map, p.email, p.customer || '');
     rec.sources.add('Stripe');
     _custTouchDate(rec, p.date);
@@ -898,10 +905,7 @@ function updateCampaignPreview() {
         <div style="font-size: 15px; color: #333; line-height: 1.6; min-height: 150px; white-space: pre-line;">
           ${formattedBody}
         </div>
-        <div style="font-size: 11px; color: #63605c; border-top: 1px dashed #eee; margin-top: 24px; padding-top: 12px; line-height: 1.4;">
-          You are receiving this email because you are a valued customer of Lyricalmyrical Books.<br>
-          <a href="#" style="color: #8a5815; text-decoration: underline;">Unsubscribe</a> from this list.
-        </div>
+        ${campaignFooterHtml(($('c-replyto')?.value || '').trim())}
       </div>
     </div>
   `;
@@ -917,6 +921,7 @@ function getSegmentRecipients(segmentName) {
 
   if (segmentName.startsWith('single-target:')) {
     const email = segmentName.split(':')[1];
+    if (_isCustomerSuppressed(email)) { showToast(`${email} has unsubscribed — not sending`, 'warn'); return []; }
     const existing = curated.find(s => s.email === email) || allDiscovered.find(c => c.email === email);
     return [{ name: existing?.name || '', email: email }];
   }
@@ -1120,7 +1125,8 @@ async function sendTestEmailCampaign() {
       .replace(/\{\{name\}\}/g, 'Test Recipient')
       .replace(/\{\{email\}\}/g, testEmail);
 
-    await sendSingleEmailViaBackend(testEmail, '[TEST] ' + subject, personalizedBody, replyTo);
+    const out = withCampaignFooter(personalizedBody, replyTo, parseMarkdownToHtml);
+    await sendSingleEmailViaBackend(testEmail, '[TEST] ' + subject, out.body, replyTo, out.htmlBody);
     showToast('✓ Test email sent successfully!');
   } catch (e) {
     showToast('Send failed: ' + e.message, 'err');
@@ -1211,7 +1217,8 @@ async function sendNextCampaignEmail(subject, body, replyTo, draftId) {
       .replace(/\{\{name\}\}/g, name)
       .replace(/\{\{email\}\}/g, to);
 
-    await sendSingleEmailViaBackend(to, subject, personalizedBody, replyTo);
+    const out = withCampaignFooter(personalizedBody, replyTo, parseMarkdownToHtml);
+    await sendSingleEmailViaBackend(to, subject, out.body, replyTo, out.htmlBody);
     _campaignSuccessCount++;
     $('c-send-log-console').innerHTML += `<div style="color:#a9ffaf;">✓ Sent to ${escapeHtml(to)} (${escapeHtml(name)})</div>`;
   } catch (e) {
@@ -1303,7 +1310,8 @@ async function retryCampaignEmail(idx) {
       .replace(/\{\{name\}\}/g, name)
       .replace(/\{\{email\}\}/g, to);
 
-    await sendSingleEmailViaBackend(to, subject, personalizedBody, replyTo);
+    const out = withCampaignFooter(personalizedBody, replyTo, parseMarkdownToHtml);
+    await sendSingleEmailViaBackend(to, subject, out.body, replyTo, out.htmlBody);
 
     _campaignSuccessCount++;
     _campaignFailCount--;

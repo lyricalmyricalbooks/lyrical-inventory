@@ -16777,7 +16777,8 @@ async function applyBackupData(data) {
   if (data.mailingList && typeof data.mailingList === 'object') {
     _setMailingList({
       subs: (data.mailingList.subs && typeof data.mailingList.subs === 'object') ? data.mailingList.subs : {},
-      autoAdd: !!data.mailingList.autoAdd
+      autoAdd: !!data.mailingList.autoAdd,
+      removed: (data.mailingList.removed && typeof data.mailingList.removed === 'object') ? data.mailingList.removed : {}
     });
     await _persistMailingList();
   }

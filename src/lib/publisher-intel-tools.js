@@ -731,17 +731,45 @@ function resolveRecord(ctx, target, id, bookId) {
  */
 function currencySideEffect(record, spec, value) {
   if (spec.key !== 'amount' && spec.key !== 'currency') return null;
-  if (record.baseAmount == null) return null;
+
+  // The expense editor reads origAmount / origCurrency before amount / currency
+  // and the ledger shows them as "original", so they have to move with the edit
+  // or the next save of that form quietly puts the old figure back.
+  const orig = {};
+  if (spec.key === 'amount') {
+    if (record.origAmount != null) orig.origAmount = value;
+    if (record.amountUnknown) orig.amountUnknown = false;
+  } else if (record.origCurrency != null) {
+    orig.origCurrency = value;
+  }
+  const hasOrig = Object.keys(orig).length > 0;
+  if (record.baseAmount == null) {
+    return hasOrig ? { patch: orig, note: 'the original figure shown on the expense form is updated to match' } : null;
+  }
 
   if (spec.key === 'amount') {
     const rate = Number(record.fxRate);
     if (Number.isFinite(rate) && rate > 0) {
-      return { patch: { baseAmount: roundCents(value * rate) }, note: 'its Canadian figure is recalculated at the rate already recorded' };
+      return { patch: { ...orig, baseAmount: roundCents(value * rate) }, note: 'its Canadian figure is recalculated at the rate already recorded' };
     }
-    return { patch: { baseAmount: roundCents(value) }, note: 'its Canadian figure follows the new amount' };
+    // Book expenses never store a rate, but the rate they were converted at is
+    // still implied by the old Canadian and native figures.
+    const oldAmount = Number(record.amount);
+    const oldBase = Number(record.baseAmount);
+    if (oldAmount > 0 && oldBase > 0) {
+      return { patch: { ...orig, baseAmount: roundCents(value * (oldBase / oldAmount)) }, note: 'its Canadian figure is recalculated at the same exchange rate as before' };
+    }
+    const cur = String(record.currency || 'CAD').toUpperCase();
+    if (cur === 'CAD') {
+      return { patch: { ...orig, baseAmount: roundCents(value) }, note: 'its Canadian figure follows the new amount' };
+    }
+    return {
+      patch: { ...orig, baseAmount: null, fxMissing: true },
+      note: 'its Canadian figure is cleared, because no exchange rate is on record — it will show as needing one',
+    };
   }
   return {
-    patch: { baseAmount: null, fxMissing: true },
+    patch: { ...orig, baseAmount: null, fxMissing: true },
     note: 'its Canadian figure is cleared, because the old one was for the previous currency — it will show as needing an exchange rate',
   };
 }
