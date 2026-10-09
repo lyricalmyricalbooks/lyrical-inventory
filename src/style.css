@@ -18427,15 +18427,6 @@ button[onclick="refreshUmamiStats()"]:active {
   color: var(--status-active);
 }
 
-.inv-item-row .inv-item-was {
-  display: block;
-  text-align: right;
-  font-family: var(--font-mono);
-  font-size: var(--text-3xs);
-  color: var(--content-muted);
-  text-decoration: line-through;
-  padding: 0 6px;
-}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    LANDING RAIL — NOTIFICATIONS, RECENT ACTIVITY & THE TO-DO LIST

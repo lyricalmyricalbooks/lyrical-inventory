@@ -240,13 +240,35 @@
   }
   .inv-discount-row{display:flex;gap:8px;align-items:stretch;}
   .inv-discount-row input{flex:1 1 auto;min-width:0;font-family:var(--font-mono);font-size:var(--text-md);}
-  .inv-item-row td{padding:6px 4px;}
-  .inv-item-row input{width:100%;padding:6px 8px;font-size:12px;border:var(--stroke-hair) solid var(--border);border-radius:var(--r);background:transparent;color:var(--text);}
-  .inv-item-row input[type=number]{font-family:var(--font-mono);text-align:right;min-width:64px;-moz-appearance:textfield;appearance:textfield;}
+  .inv-lines{display:flex;flex-direction:column;gap:10px;margin-bottom:10px;}
+  .inv-lines-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px;}
+  .inv-lines-title{font-size:var(--text-xs);font-weight:800;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--content-secondary);}
+  .inv-lines-empty{border:var(--stroke-hair) dashed var(--border-default);padding:18px;text-align:center;font-size:var(--text-sm);color:var(--content-muted);}
+  .inv-lines-add{display:flex;flex-direction:column;gap:8px;margin-bottom:10px;}
+  .inv-lines-add .btn{align-self:flex-start;}
+  .inv-item-row{background:var(--surface-card);border:var(--stroke) solid var(--rule-ink);box-shadow:var(--elev-1);padding:12px 14px;display:grid;grid-template-columns:1fr auto;gap:10px 12px;}
+  .inv-item-row .inv-item-field{display:flex;flex-direction:column;gap:4px;min-width:0;}
+  .inv-item-row .inv-item-lbl{font-size:var(--text-3xs);font-weight:700;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--content-muted);}
+  .inv-item-row .inv-item-top{grid-column:1 / -1;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:end;}
+  .inv-item-row .inv-item-num{font-family:var(--font-mono);font-weight:700;font-size:var(--text-sm);color:var(--content-muted);padding-bottom:12px;min-width:22px;}
+  .inv-item-row .inv-item-desc{grid-column:1 / -1;}
+  .inv-item-row .inv-item-nums{grid-column:1 / -1;display:grid;grid-template-columns:minmax(64px,.7fr) minmax(96px,1fr) minmax(76px,.8fr) minmax(110px,1.2fr);gap:10px;align-items:end;}
+  .inv-item-row input,.inv-item-row .inv-item-book{width:100%;min-height:44px;padding:8px 10px;font-size:var(--text-base);border:var(--stroke-hair) solid var(--border-default);border-radius:var(--r);background:var(--surface-page);color:var(--content-primary);margin:0;height:auto;}
+  .inv-item-row .inv-item-book{font-weight:600;}
+  .inv-item-row input.num{font-family:var(--font-mono);text-align:right;-moz-appearance:textfield;appearance:textfield;}
   .inv-item-row input[type=number]::-webkit-inner-spin-button,.inv-item-row input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0;}
-  .inv-item-row input{min-height:36px;}
-  .inv-item-row .inv-item-book{width:100%;padding:6px 8px;font-size:12px;border:var(--stroke-hair) solid var(--border);border-radius:var(--r);background:transparent;color:var(--text);height:auto;margin:0;}
-  .inv-item-row .inv-item-amt{display:block;text-align:right;font-family:var(--font-mono);font-size:12px;color:var(--text);padding:7px 6px;}
+  .inv-item-row .inv-item-suffix{position:relative;}
+  .inv-item-row .inv-item-suffix input{padding-right:28px;}
+  .inv-item-row .inv-item-suffix i{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-style:normal;font-family:var(--font-mono);color:var(--content-muted);pointer-events:none;}
+  .inv-item-row .inv-item-prefix{position:relative;}
+  .inv-item-row .inv-item-prefix input{padding-left:40px;}
+  .inv-item-row .inv-item-prefix i{position:absolute;left:10px;top:50%;transform:translateY(-50%);font-style:normal;font-family:var(--font-mono);font-size:var(--text-sm);color:var(--content-muted);pointer-events:none;}
+  .inv-item-row .inv-item-total{text-align:right;}
+  .inv-item-row .inv-item-amt{display:block;font-family:var(--font-mono);font-size:var(--text-lg);font-weight:700;color:var(--content-primary);padding:8px 0 2px;white-space:nowrap;}
+  .inv-item-row .inv-item-was{display:block;font-family:var(--font-mono);font-size:var(--text-xs);color:var(--content-muted);text-decoration:line-through;}
+  @media (max-width:560px){
+    .inv-item-row .inv-item-nums{grid-template-columns:1fr 1fr;}
+  }
   .inv-item-row .inv-item-remove{
     background:transparent;border:none;color:var(--content-muted);cursor:pointer;font-size:16px;line-height:1;
     min-width:36px;min-height:36px;border-radius:var(--r);display:inline-flex;align-items:center;justify-content:center;
@@ -5358,16 +5380,17 @@
     </div>
   </div>
 
-  <div class="form-group" style="margin-bottom:8px;">
-    <label>Line items <button class="btn sm" type="button" onclick="addInvoiceItem()" style="margin-left:8px;">+ Add line</button>
-      <button class="btn sm ink" type="button" id="inv-import-pending-btn" onclick="prefillFromPendingSales()" style="margin-left:4px;" title="Pull all unpaid consignment sales for the selected store">⚡ Import pending sales</button>
-    </label>
+  <!-- Line items as roomy cards rather than a cramped table: every field has
+       its own label and full-size box, the title picker gets the whole width
+       so long titles are readable, and the line's total sits large on the right. -->
+  <div class="inv-lines-head">
+    <span class="inv-lines-title">What you're billing</span>
+    <button class="btn sm ink" type="button" id="inv-import-pending-btn" onclick="prefillFromPendingSales()" title="Pull all unpaid consignment sales for the selected store">⚡ Import pending sales</button>
   </div>
-  <div class="tbl-wrap" style="margin-bottom:8px;">
-    <table class="tbl" style="font-size:var(--text-sm);">
-      <thead><tr><th style="width:28%;">Description</th><th style="width:17%;">Title</th><th class="r" style="width:9%;">Qty</th><th class="r" style="width:14%;">Unit price</th><th class="r" style="width:10%;" title="A percentage off this one line — e.g. 40 for a trade discount">Disc %</th><th class="r" style="width:14%;">Amount</th><th style="width:44px;"></th></tr></thead>
-      <tbody id="inv-items-body"></tbody>
-    </table>
+  <div id="inv-items-body" class="inv-lines"></div>
+  <div class="inv-lines-add">
+    <button class="btn" type="button" onclick="addInvoiceItem(); focusLastInvoiceLine('description');">+ Add a blank line</button>
+    <div class="inv-chip-row" id="inv-add-book-chips" role="group" aria-label="Add a line for one of your books"></div>
   </div>
   <div id="inv-books-hint" style="font-size:var(--text-xs);color:var(--text3);line-height:1.6;margin:-2px 0 10px;"></div>
 

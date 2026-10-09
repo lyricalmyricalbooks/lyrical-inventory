@@ -13285,7 +13285,7 @@ function updateInvoiceItem(idx, field, value) {
   // A negative quantity or price would quietly turn the invoice into a credit.
   else it[field] = Math.max(0, parseFloat(value) || 0);
   // Re-render only the amount cell for performance
-  const row = document.querySelector(`#inv-items-body tr[data-i="${idx}"]`);
+  const row = document.querySelector(`#inv-items-body [data-i="${idx}"]`);
   const amtEl = row && row.querySelector('.inv-item-amt');
   if (amtEl) amtEl.textContent = fmt(invoiceLineAmount(it), getSym(getInvoiceCurrency()));
   const wasEl = row && row.querySelector('.inv-item-was');
@@ -13318,9 +13318,10 @@ function invoiceBookOptions() {
 }
 
 function renderInvoiceItems() {
-  const body = $('inv-items-body'), cur = getSym(getInvoiceCurrency());
+  const body = $('inv-items-body'), code = getInvoiceCurrency(), cur = getSym(code);
+  renderInvoiceAddBookChips();
   if (!invoiceCtx.items.length) {
-    body.innerHTML = `<tr><td colspan="7" style="font-size:var(--text-sm);color:var(--text3);padding:14px;text-align:center;">No line items. Click <strong>+ Add line</strong>.</td></tr>`;
+    body.innerHTML = `<div class="inv-lines-empty">Nothing on this invoice yet — tap one of your books below, or <strong>+ Add a blank line</strong>.</div>`;
     renderInvoiceBooksHint();
     return;
   }
@@ -13335,17 +13336,68 @@ function renderInvoiceItems() {
     let selected = lineItemBookId(it, ownerBookId, books);
     if (!books.some(b => b.id === selected)) { selected = ownerBookId; it.bookId = ownerBookId; }
     const opts = books.map(b => `<option value="${escapeHtml(b.id)}"${b.id === selected ? ' selected' : ''}>${escapeHtml(b.title)}</option>`).join('');
-    return `<tr class="inv-item-row" data-i="${i}">
-    <td><input type="text" value="${escapeHtml(it.description || '')}" placeholder="e.g. ${escapeHtml(getBook().title || '')} — consignment sale, Sept 2026" oninput="updateInvoiceItem(${i},'description',this.value)"></td>
-    <td><select class="inv-item-book" title="Which title this line bills for" aria-label="Title for this line" onchange="updateInvoiceItem(${i},'bookId',this.value)">${opts}</select></td>
-    <td><input type="number" min="0" step="1" inputmode="numeric" aria-label="Quantity" value="${it.qty || 0}" oninput="updateInvoiceItem(${i},'qty',this.value)"></td>
-    <td><input type="number" min="0" step="0.01" inputmode="decimal" aria-label="Unit price" value="${(Number(it.unitPrice) || 0).toFixed(2)}" oninput="updateInvoiceItem(${i},'unitPrice',this.value)"></td>
-    <td><input type="text" class="inv-item-disc" inputmode="decimal" autocomplete="off" placeholder="0" aria-label="Discount on this line, in percent" title="A percentage off this one line — e.g. 40 for a trade discount" value="${clampPercent(it.discountPct) > 0 ? clampPercent(it.discountPct) : ''}" onfocus="this.select()" oninput="updateInvoiceItem(${i},'discountPct',this.value)"></td>
-    <td class="r"><span class="inv-item-amt">${fmt(invoiceLineAmount(it), cur)}</span><span class="inv-item-was" aria-label="Before the line discount">${clampPercent(it.discountPct) > 0 ? fmt(invoiceLineGross(it), cur) : ''}</span></td>
-    <td><button type="button" class="inv-item-remove" onclick="removeInvoiceItem(${i})" title="Remove line" aria-label="Remove line">×</button></td>
-  </tr>`;
+    const pct = clampPercent(it.discountPct);
+    return `<div class="inv-item-row" data-i="${i}" onkeydown="onInvoiceLineKey(event, ${i})">
+    <div class="inv-item-top">
+      <span class="inv-item-num" aria-hidden="true">${i + 1}</span>
+      <label class="inv-item-field"><span class="inv-item-lbl">Book</span><select class="inv-item-book" data-f="bookId" title="Which title this line bills for" onchange="updateInvoiceItem(${i},'bookId',this.value)">${opts}</select></label>
+      <button type="button" class="inv-item-remove" onclick="removeInvoiceItem(${i})" title="Remove this line" aria-label="Remove line ${i + 1}">×</button>
+    </div>
+    <label class="inv-item-field inv-item-desc"><span class="inv-item-lbl">Description (printed on the invoice)</span><input type="text" data-f="description" value="${escapeHtml(it.description || '')}" placeholder="e.g. ${escapeHtml(getBook().title || '')} — consignment sale, Sept 2026" oninput="updateInvoiceItem(${i},'description',this.value)"></label>
+    <div class="inv-item-nums">
+      <label class="inv-item-field"><span class="inv-item-lbl">Copies</span><input class="num" type="number" data-f="qty" min="0" step="1" inputmode="numeric" value="${it.qty || 0}" onfocus="this.select()" oninput="updateInvoiceItem(${i},'qty',this.value)"></label>
+      <label class="inv-item-field"><span class="inv-item-lbl">Price each</span><span class="inv-item-prefix"><i>${escapeHtml(cur)}</i><input class="num" type="number" data-f="unitPrice" min="0" step="0.01" inputmode="decimal" value="${(Number(it.unitPrice) || 0).toFixed(2)}" onfocus="this.select()" oninput="updateInvoiceItem(${i},'unitPrice',this.value)"></span></label>
+      <label class="inv-item-field" title="A percentage off this one line — e.g. 40 for a trade discount"><span class="inv-item-lbl">Discount</span><span class="inv-item-suffix"><input class="num inv-item-disc" type="text" data-f="discountPct" inputmode="decimal" autocomplete="off" placeholder="0" value="${pct > 0 ? pct : ''}" onfocus="this.select()" oninput="updateInvoiceItem(${i},'discountPct',this.value)"><i>%</i></span></label>
+      <div class="inv-item-field inv-item-total"><span class="inv-item-lbl">Line total</span><span class="inv-item-amt">${fmt(invoiceLineAmount(it), cur)}</span><span class="inv-item-was" aria-label="Before the line discount">${pct > 0 ? fmt(invoiceLineGross(it), cur) : ''}</span></div>
+    </div>
+  </div>`;
   }).join('');
   renderInvoiceBooksHint();
+}
+
+// One button per book: tap it and a line for that title appears with its
+// list price already filled in (when the book is priced in this invoice's
+// currency), ready for the number of copies.
+function renderInvoiceAddBookChips() {
+  const wrap = $('inv-add-book-chips');
+  if (!wrap) return;
+  const books = invoiceBookOptions();
+  if (!books.length) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = `<span class="inv-chip-row-label">Add a book</span>` + books.map(b =>
+    `<button type="button" class="preset-chip-btn inv-chip" onclick="addInvoiceBookLine('${escapeHtml(b.id)}')">+ ${escapeHtml(b.title)}</button>`).join('');
+}
+
+function addInvoiceBookLine(bookId) {
+  if (!invoiceCtx) return;
+  const book = BOOKS[bookId];
+  const it = { description: (book && book.title) || '', qty: 1, unitPrice: 0, discountPct: 0, bookId };
+  const price = Number(book && book.listPrice) || 0;
+  if (book && price > 0 && getBookCurrencyCode(book) === getInvoiceCurrency()) it.unitPrice = price;
+  // A single untouched blank line (the one a new invoice starts with) is
+  // replaced rather than left sitting empty above the book that was picked.
+  const only = invoiceCtx.items.length === 1 ? invoiceCtx.items[0] : null;
+  if (only && !String(only.description || '').trim() && !(Number(only.unitPrice) > 0) && !only._ledgerId) invoiceCtx.items = [];
+  invoiceCtx.items.push(it);
+  renderInvoiceItems();
+  recalcInvoiceTotals();
+  refreshAutoInvoiceNumber();
+  focusLastInvoiceLine(it.unitPrice > 0 ? 'qty' : 'unitPrice');
+}
+
+function focusLastInvoiceLine(field) {
+  const rows = document.querySelectorAll('#inv-items-body .inv-item-row');
+  const el = rows.length && rows[rows.length - 1].querySelector(`[data-f="${field}"]`);
+  if (el) { try { el.focus(); el.scrollIntoView({ block: 'nearest' }); } catch { /* focus is a nicety */ } }
+}
+
+// Enter in a line's last box starts the next line, so a run of titles can be
+// typed without reaching for the mouse.
+function onInvoiceLineKey(ev, idx) {
+  if (ev.key !== 'Enter' || ev.target.tagName !== 'INPUT') return;
+  ev.preventDefault();
+  if (idx === invoiceCtx.items.length - 1) { addInvoiceItem(); focusLastInvoiceLine('description'); return; }
+  const next = document.querySelector(`#inv-items-body [data-i="${idx + 1}"] [data-f="description"]`);
+  if (next) next.focus();
 }
 
 // Say out loud which titles this invoice will be filed under. A line item is
@@ -26716,6 +26768,9 @@ function exposeLegacyInlineHandlers() {
     renderInvoiceItems, escapeHtml, recalcInvoiceTotals, prefillFromPendingSales, saveInvoice,
     onDiscountTypeChange,
     onDiscountInput,
+    addInvoiceBookLine,
+    focusLastInvoiceLine,
+    onInvoiceLineKey,
     applyDiscountPreset,
     applyInvoiceDueTerm,
     onInvoiceIssueDateChange,
