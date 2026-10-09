@@ -66,8 +66,8 @@ function onGmailMessageOpen(e) {
     .setFieldName('amount').setTitle('Amount')
     .setValue(guess.amount ? String(guess.amount) : ''));
   section.addWidget(CardService.newTextInput()
-    .setFieldName('currency').setTitle('Currency (e.g. CAD)')
-    .setValue(guess.currency || 'CAD'));
+    .setFieldName('currency').setTitle('Currency (required: CAD, USD, EUR...)')
+    .setValue(guess.currency || ''));
   section.addWidget(CardService.newTextInput()
     .setFieldName('date').setTitle('Date (YYYY-MM-DD)').setValue(guess.date || ''));
 
@@ -108,7 +108,7 @@ function importReceiptToApp(e) {
       vendor: String(f.vendor || '').trim(),
       description: String(f.vendor || 'Email receipt').trim(),
       amount: parseFloat(String(f.amount || '0').replace(/[^0-9.\-]/g, '')) || 0,
-      currency: String(f.currency || 'CAD').toUpperCase().slice(0, 3),
+      currency: String(f.currency || '').trim().toUpperCase().slice(0, 3),
       date: normalizeDate_(f.date),
       reference: '',
       category: ADDON_CATEGORIES.indexOf(f.category) >= 0 ? f.category : 'Other',
@@ -120,6 +120,11 @@ function importReceiptToApp(e) {
 
     if (!draft.amount) {
       return notify_('Enter an amount before sending.');
+    }
+    // A bare "$" is CAD or USD (or another dollar) — never guessed. The owner
+    // names the currency so the CAD value is converted from the right one.
+    if (!/^[A-Z]{3}$/.test(draft.currency)) {
+      return notify_('Enter the currency (for example CAD or USD) before sending.');
     }
 
     // Best-effort enrichment from the live message (snippet + order/ref number)
@@ -245,13 +250,15 @@ function extractReceiptFields_(msg) {
     .trim();
 
   var amount = 0;
-  var currency = 'CAD';
+  // Left blank unless the email says which currency it is: a bare "$" could be
+  // CAD or USD, and guessing wrong overstates the expense by ~35%.
+  var currency = '';
   var money = hay.match(/([$€£])\s*([0-9][0-9,]*\.[0-9]{2})/);
   if (money) {
     amount = parseFloat(money[2].replace(/,/g, '')) || 0;
     if (money[1] === '€') currency = 'EUR';
     else if (money[1] === '£') currency = 'GBP';
-    else currency = 'USD'; // bare $ — refine below if a code is present
+    // bare $ — currency stays blank unless a code is present, see below
   }
   var cm = hay.match(/\b(USD|CAD|EUR|GBP|AUD|JPY|MXN|CHF)\b/);
   if (cm) currency = cm[1].toUpperCase();
