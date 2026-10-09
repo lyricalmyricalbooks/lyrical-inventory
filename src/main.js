@@ -15669,15 +15669,24 @@ function syncHistoryVoidDeletion(h, isVoided) {
  * hand-voided one is.
  */
 function voidHistEntry(s, book, h) {
+  // A held-cash (direct-to-artist) sale never added revenue; it only sits in
+  // the pending-transfer queue. Pull that transfer so the artist is not left
+  // owing a cut (and a later "received" can't add revenue) for a voided sale.
+  let pendingRev = false;
+  if (h.artistPending) {
+    pendingRev = true;
+    const ti = (s.artistTransfers || []).findIndex(x => (h.sheetsId && x.sheetsId === h.sheetsId) || (x.num === h.num && x.qty === h.qty));
+    if (ti !== -1) h.voidedTransfer = s.artistTransfers.splice(ti, 1)[0];
+  }
   s.stock += h.qty;
   if (!h.gratuity) {
     s.sold = Math.max(0, s.sold - h.qty);
-    s.revenue = Math.max(0, s.revenue - h.qty * h.price);
+    if (!pendingRev) s.revenue = Math.max(0, s.revenue - h.qty * h.price);
   }
   if (s.chStats[h.chan]) {
     s.chStats[h.chan].txns = Math.max(0, s.chStats[h.chan].txns - 1);
     s.chStats[h.chan].units = Math.max(0, s.chStats[h.chan].units - h.qty);
-    s.chStats[h.chan].revenue = Math.max(0, s.chStats[h.chan].revenue - h.qty * h.price);
+    if (!pendingRev) s.chStats[h.chan].revenue = Math.max(0, s.chStats[h.chan].revenue - h.qty * h.price);
     if (s.chStats[h.chan].txns <= 0) delete s.chStats[h.chan];
   }
   h.voided = true;
@@ -15691,12 +15700,17 @@ function unvoidHistEntry(s, book, h) {
   s.stock = Math.max(0, s.stock - h.qty);
   if (!h.gratuity) {
     s.sold += h.qty;
-    s.revenue += h.qty * h.price;
+    if (!h.artistPending) s.revenue += h.qty * h.price;
   }
   if (!s.chStats[h.chan]) s.chStats[h.chan] = { txns: 0, units: 0, revenue: 0 };
   s.chStats[h.chan].txns++;
   s.chStats[h.chan].units += h.qty;
-  s.chStats[h.chan].revenue += h.qty * h.price;
+  if (!h.artistPending) s.chStats[h.chan].revenue += h.qty * h.price;
+  if (h.voidedTransfer) {
+    s.artistTransfers = s.artistTransfers || [];
+    s.artistTransfers.push(h.voidedTransfer);
+    delete h.voidedTransfer;
+  }
   h.voided = false;
   delete h.voidedAt;
   delete h.voidedReason;
@@ -17086,6 +17100,8 @@ function exportAllToCSV() {
 
     // History
     (s.hist || []).forEach(h => {
+      // Consignment sales are mirrored into history; the ledger row below is the one record.
+      if (h.consignmentLink) return;
       rows.push([
         loggedAt,
         h.id || '',
@@ -17125,7 +17141,7 @@ function exportAllToCSV() {
         '',
         '',
         '',
-        l.status || (l.voided ? 'VOID' : 'OK'),
+        l.voided ? 'VOID' : (l.status || 'OK'),
         l.notes || ''
       ]);
     });
@@ -18559,9 +18575,24 @@ export async function removeLedgerEntry(type, bid, id) {
   } else if (type === 'sale') {
     const s = states[bid];
     if (s && s.hist) {
+      // A live sale is reversed exactly like Void (stock, sold, revenue,
+      // channel totals, Sheets row) before the row goes; an already-voided
+      // one has nothing left to reverse.
+      const h = s.hist.find(x => String(x.id ?? x.num) === String(id));
+      if (h && !h.voided && !h.consignmentLink && BOOKS[bid]) {
+        const prev = activeBook;
+        activeBook = bid;
+        try { voidHistEntry(s, BOOKS[bid], h); } finally { activeBook = prev; }
+      }
       removeOneByKey(s.hist, id);
       saveState(bid);
     }
+  } else if (type === 'shippingIncome') {
+    // Shipping income is derived from the sale's shippingPaid; clear it there.
+    const s = states[bid];
+    const sid = String(id).replace(/-shipping-income$/, '');
+    const h = s?.hist?.find(x => String(x.id ?? x.num) === sid);
+    if (h) { h.shippingPaid = 0; saveState(bid); }
   }
 
   renderTaxCenter();
@@ -20199,7 +20230,7 @@ window.posMobileView = function (view, scroll = true) {
 
 window.posUpdateQty = function (bookId, delta) {
   posCart[bookId] = Math.max(0, (posCart[bookId] || 0) + delta);
-  if (posCart[bookId] === 0) delete posCart[bookId];
+  if (posCart[bookId] === 0) { delete posCart[bookId]; delete posPriceOverrides[bookId]; }
   renderPOS();
 };
 
@@ -21983,6 +22014,7 @@ async function printPaymentQRCodes(opts = {}) {
     ? `⌛ Preparing payment QR sheet — skipping ${droppedCount} title${droppedCount === 1 ? '' : 's'} with no payment link`
     : '⌛ Preparing payment QR code sheet…');
 
+  const _qrPriceFallbackTitles = [];
   const booksData = await Promise.all(selectedIds.map(async (id) => {
     const book = posResolveBook(id);
     const nativeCode = currencyToCode(book.currency);
@@ -21992,7 +22024,7 @@ async function printPaymentQRCodes(opts = {}) {
     const overrideVal = overrideInput ? parseFloat(overrideInput.value) : NaN;
     const hasOverride = !isNaN(overrideVal) && overrideVal > 0;
 
-    const listedAmount = hasOverride
+    let listedAmount = hasOverride
       ? overrideVal
       : (baseCur === 'auto' ? (book.listPrice || 0) : convertCurrency(book.listPrice || 0, nativeCode, listedCode));
 
@@ -22002,6 +22034,9 @@ async function printPaymentQRCodes(opts = {}) {
     }
 
     let url = book.stripeLink || book.paymentLink || '';
+    // The card must print what the QR actually charges. A door-price link that
+    // could not be minted falls back to the saved link, which charges list price.
+    let overrideLinkMade = false;
 
     // If override is set and Stripe key is configured, create live Stripe Payment Link
     const stripeKey = getReconStripeKey();
@@ -22013,12 +22048,18 @@ async function printPaymentQRCodes(opts = {}) {
           description: `${book.title} (${listedCode} ${listedAmount.toFixed(2)})`,
           metadata: { book_id: book.id, sku: book.id, override: 'true' }
         });
+        overrideLinkMade = !!url;
       } catch (err) {
         console.warn('Stripe link creation failed for override:', err);
       }
     } else if (hasOverride && url && !url.includes('amount=')) {
       const joiner = url.includes('?') ? '&' : '?';
       url = `${url}${joiner}amount=${listedAmount.toFixed(2)}&currency=${listedCode}`;
+    }
+    if (hasOverride && !overrideLinkMade) {
+      // Payment Links have a fixed price, so show the price the saved link charges.
+      listedAmount = baseCur === 'auto' ? (book.listPrice || 0) : convertCurrency(book.listPrice || 0, nativeCode, listedCode);
+      _qrPriceFallbackTitles.push(book.title);
     }
 
     const prices = currenciesShown.map((code) => {
@@ -22046,6 +22087,9 @@ async function printPaymentQRCodes(opts = {}) {
     return { id: book.id, title: book.title, author: book.author || '', url, prices };
   }));
 
+  if (_qrPriceFallbackTitles.length) {
+    showToast(`Couldn't make a door-price link for ${_qrPriceFallbackTitles.join(', ')} — the card shows the list price its QR charges.`, 'warn', 6000);
+  }
   const fitOnePage = !!document.getElementById('qrp-fit-one-page')?.checked;
   const count = booksData.length;
 
@@ -22504,6 +22548,8 @@ function calculateInventoryValuationData() {
   let totalSold = 0;
     if (s.hist) {
       for (const h of s.hist) {
+        // Consignment sales are mirrored here and counted via the stores below; voided and gratuity rows are not sales.
+        if (h.consignmentLink || h.voided || h.gratuity) continue;
         totalSold += (parseInt(h.qty, 10) || 0);
       }
     }
@@ -24386,7 +24432,7 @@ export function renderReconcile() {
     if (c.kind === 'recorded') { matched.push({ p, c, label: 'Logged', tone: 'green', note: c.bookId && BOOKS[c.bookId] ? `Recorded against ${BOOKS[c.bookId].title}.` : 'Recorded in inventory.' }); continue; }
     if (c.kind === 'artist_transfer') { matched.push({ p, c, label: 'Author transfer', tone: 'green', note: `An author sent you money for sale ${c.ref || ''} they collected. Mark it received on that book's dashboard — it is not a new sale.`.replace(/\s+/g, ' ') }); continue; }
     if (c.kind === 'likely') { matched.push({ p, c, label: 'Likely logged', tone: 'gray', note: 'Matches a sale you already recorded (same amount & date).' }); continue; }
-    if (p.refunded) { matched.push({ p, c, label: 'Refunded', tone: 'gray', note: 'Refunded in Stripe — no stock to deduct.' }); continue; }
+    if (p.refunded && p.fullyRefunded !== false) { matched.push({ p, c, label: 'Refunded', tone: 'gray', note: 'Refunded in Stripe — no stock to deduct.' }); continue; }
     if (c.kind === 'invoice' && c.inv && c.inv.status === 'paid') { matched.push({ p, c, label: 'Invoice paid', tone: 'green', note: `${c.ref} already marked paid.` }); continue; }
     if (c.kind === 'bigcartel' && c.applied) { matched.push({ p, c, label: 'Big Cartel', tone: 'green', note: `Order ${c.ref} already applied to stock.` }); continue; }
     needs.push({ p, c });
