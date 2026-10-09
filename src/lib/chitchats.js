@@ -8,6 +8,8 @@ const paidStatuses = new Set(['ready', 'in_transit', 'received', 'released', 'in
 // The documented state of a shipment whose postage was never bought.
 const DRAFT_STATUS = 'pending';
 const unpack = data => data?.shipment || data;
+// One key per shipment, shared by the ledger ref and the label PDF cache.
+const shipmentKey = (clientId, shipmentId, isTest) => `chitchats:${isTest ? 'test:' : ''}${clientId}:${shipmentId}`;
 // A 4xx other than a timeout or rate limit is a definite refusal: nothing ran.
 const isRefusal = error => error?.status >= 400 && error.status < 500 && ![408, 429].includes(error.status);
 const money = value => value == null || value === '' || !Number.isFinite(Number(value)) || Number(value) < 0 ? null : roundCents(Number(value));
@@ -75,7 +77,7 @@ export async function getChitChatsRates({ clientId, token, isTest = false, paylo
   let shipment = null;
   if (shipmentId) {
     // Reuse the unchanged draft, unless it was deleted or bought on the website.
-    try { shipment = unpack(await request({ endpoint: resolveShipmentEndpoint(clientId, shipmentId, isTest), token, method: 'GET' })); }
+    try { shipment = await getChitChatsShipment({ clientId, token, isTest, shipmentId, request }); }
     catch (error) { if (error.status !== 404) throw error; }
     if (shipment && shipment.id !== shipmentId) shipment = null;
     if (shipment && (paidStatuses.has(shipment.status) || shipment.status === 'postage_requested')) {
@@ -191,7 +193,7 @@ export function normalizeChitChatsShipment(shipment, { isTest = false, clientId 
     trackingNumber: shipment.carrier_tracking_code || '', carrier: 'Chit Chats', recipientName: shipment.to_name,
     recipientPostal: shipment.to_postal_code, source: 'chitchats', description: `Chit Chats ${shipment.postage_type || 'postage'} · ${shipment.id}`,
   }, { id: `exp_cc_${isTest ? 'test_' : ''}${clientId}_${shipment.id}` });
-  return { ...expense, ref: `chitchats:${isTest ? 'test:' : ''}${clientId}:${shipment.id}`, ccShipmentId: shipment.id, ccClientId: clientId,
+  return { ...expense, ref: shipmentKey(clientId, shipment.id, isTest), ccShipmentId: shipment.id, ccClientId: clientId,
     ccTestMode: isTest, ccStatus: shipment.status, ccOrderNumber: shipment.order_id || '', trackingUrl: safeTrackingUrl(shipment.tracking_url),
     ...(shipment.status === 'voided' ? { refundRequest: { id: shipment.id, status: 'REQUESTED', at: shipment.created_at || '' } } : {}),
     amountConfirmed: !!charged, simulated: isTest, receiptRequired: false, ocrSkip: true, autoLogged: true };
@@ -203,7 +205,7 @@ export async function refundChitChatsShipment({ clientId, token, isTest = false,
   return request({ endpoint: resolveShipmentEndpoint(clientId, shipmentId, isTest, 'refund'), token, method: 'PATCH' });
 }
 export async function fetchChitChatsLabelArtifact({ clientId, token, isTest = false, shipmentId, request = executeChitChatsProxy }) {
-  const cacheKey = `chitchats:${isTest ? 'test:' : ''}${clientId}:${shipmentId}`;
+  const cacheKey = shipmentKey(clientId, shipmentId, isTest);
   const cached = await getCachedLabelPdf(cacheKey);
   if (cached?.blob) return cached.blob;
   const shipment = await getChitChatsShipment({ clientId, token, isTest, shipmentId, request });
