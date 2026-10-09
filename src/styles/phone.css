@@ -693,3 +693,22 @@
 @media (max-width: 768px) and (prefers-reduced-motion: reduce) {
   #tab-website .order-card:not(.is-skeleton) { transition: none; }
 }
+
+/* Register take-back controls on a phone, Riso Press: the tile − button, the cart-line − button and
+   the in-cart count badge were round (and the cart one only hairline-outlined) beside square,
+   shadowed tiles. All three are now square 2px-ink stamps; the two buttons carry the offset shadow
+   and press into it when tapped. Pills (sync status) stay lozenges by design. */
+@media (max-width: 768px) {
+  .fm-tile-qty { border-radius: var(--r2); }
+  :is(.fm-tile-minus, .fm-line-minus) {
+    border: var(--stroke) solid var(--rule-ink); border-radius: var(--r2);
+    box-shadow: var(--elev-1); touch-action: manipulation;
+    transition: transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast) var(--ease-spring);
+  }
+  .fm-line-minus { background: var(--surface-raised); }
+  .fm-line-minus:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+  :is(.fm-tile-minus, .fm-line-minus):active { transform: translate(2px, 2px); box-shadow: none; }
+}
+@media (max-width: 768px) and (prefers-reduced-motion: reduce) {
+  :is(.fm-tile-minus, .fm-line-minus) { transition: none; }
+}
