@@ -313,3 +313,68 @@ export function describePayout(amountRaw, owed) {
   if (left < -0.005) return { tone: 'over', amount: paid, remaining: 0, over: roundCents(-left) };
   return { tone: 'clears', amount: paid, remaining: 0, over: 0 };
 }
+
+// Which sales the royalty still owed comes from, so the balance card can say
+// "40% of CA$740 · 23 copies sold since 3 Aug" instead of a bare figure.
+//
+// Payouts are money, not tied to particular sales, so payments are taken to
+// clear the oldest sales first: whatever is owed is the artist's share of the
+// newest sales. Direct-to-artist sales are skipped — the artist already holds
+// their share of those, so none of what is owed comes from them. Sales that
+// earned nothing (a 0% tier) are skipped too, so they don't pad the count.
+//
+//   owed : the royalty balance (calcArtistEarnings' owedToArtist)
+// Returns null when nothing is owed, or { copies, revenue, rates, since }:
+//   revenue : the slice of sales the owed share was earned on (owed ≈ rate × revenue)
+//   rates   : distinct artist percentages that slice was earned at, low → high
+//   since   : date of the oldest sale still (partly) unpaid
+export function unpaidSalesSummary(book, state, owed) {
+  let left = roundCents(Number(owed) || 0);
+  if (!book || left <= 0.01) return null;
+  const tiers = [...(book.profitTiers || [])].sort((a, b) => (a.revenueUpTo || Infinity) - (b.revenueUpTo || Infinity));
+  if (tiers.length === 0) return null;
+  const capOf = (t) => tierEffectiveCap(t, book.productionCost);
+
+  // Same chronological tier walk as calcArtistEarnings, so each slice lands in
+  // the tier (and at the rate) the earnings were actually counted at.
+  const chunks = [];
+  let cumulativeRevenue = 0;
+  const hist = (state && state.hist) || [];
+  for (let i = hist.length - 1; i >= 0; i--) {
+    const h = hist[i];
+    if (h.voided || h.gratuity || !(h.qty > 0) || !(h.price > 0)) continue;
+    let revRemaining = roundCents(h.qty * h.price);
+    while (revRemaining > 0.001) {
+      const tierIdx = tiers.findIndex(t => capOf(t) !== null && cumulativeRevenue < capOf(t));
+      const idx = tierIdx === -1 ? tiers.length - 1 : tierIdx;
+      const tier = tiers[idx];
+      const tCap = capOf(tier);
+      const isLastTier = idx === tiers.length - 1 || tCap === null;
+      const capacity = isLastTier ? revRemaining : Math.min(revRemaining, tCap - cumulativeRevenue);
+      const pct = Number(tier.artistPct) || 0;
+      const earned = roundCents(capacity * (pct / 100));
+      if (!h.artistPending && earned > 0) chunks.push({ sale: h, revenue: capacity, earned, pct });
+      cumulativeRevenue = roundCents(cumulativeRevenue + capacity);
+      revRemaining = roundCents(revRemaining - capacity);
+    }
+  }
+  if (chunks.length === 0) return null;
+
+  let revenue = 0;
+  let since = null;
+  const sales = new Set();
+  const rates = new Set();
+  for (let c = chunks.length - 1; c >= 0 && left > 0.005; c--) {
+    const { sale, earned, pct } = chunks[c];
+    const take = Math.min(earned, left);
+    // A partly unpaid slice contributes only the sales that share was earned on.
+    revenue = roundCents(revenue + (take === earned ? chunks[c].revenue : take / (pct / 100)));
+    left = roundCents(left - take);
+    sales.add(sale);
+    rates.add(pct);
+    if (sale.date) since = sale.date;
+  }
+  let copies = 0;
+  for (const s of sales) copies += Number(s.qty) || 0;
+  return { copies, revenue: roundCents(revenue), rates: [...rates].sort((a, b) => a - b), since };
+}
