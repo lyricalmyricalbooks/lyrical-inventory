@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v52)
+/* Lyricalmyrical Inventory — Unified Backend (v53)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:
@@ -221,6 +221,20 @@
  *      the app can remove the unpaid rate-quote draft a changed parcel
  *      replaced (Chit Chats itself refuses to delete anything with postage).
  *      Bump flags v51-and-older as outdated so the publisher redeploys.
+ *  51. v53: the webhook now authenticates callers. Every action except the
+ *      plain health/capabilities GET requires a Firebase ID token (GET:
+ *      ?idToken=, POST: top-level idToken) that Firebase itself verifies, and
+ *      the verified, email_verified address must be the publisher's. The one
+ *      exception is 'notifypublisher' (an author's submission alert), which
+ *      accepts any verified signed-in user and stamps their own address on the
+ *      email. Before this, anyone holding the URL (it is readable from the
+ *      app's settings) could search the publisher's Gmail, send mail as them,
+ *      or reset the sheet. Also: bulk sync grows the sheet grid before
+ *      appending (it failed near 1000 rows), writes take a script lock so a
+ *      client retry cannot overlap a still-running write, the daily receipt
+ *      sweep no longer moves its watermark past mail it did not read or save,
+ *      and Open Call reply detection only counts mail sent after the request.
+ *      Bump flags v52-and-older as outdated so the publisher redeploys.
  *  47. v49: the "Monthly (CAD)" tab rebuilds itself on every sync instead of
  *      only from the menu, so it no longer goes stale (it was missing months
  *      and whole books). It leaves out test/connection-check rows, adds a
@@ -255,6 +269,15 @@ const COL = HEADERS.reduce((m, h, i) => (m[h] = i + 1, m), {});
 // doGet: Gmail scanner (preserved) + default health check
 // ─────────────────────────────────────────────────────────────
 function doGet(e) {
+  // Everything except the bare health/capabilities answer below needs the
+  // publisher's verified Firebase ID token.
+  if (e && e.parameter && e.parameter.action) {
+    try {
+      requirePublisher_(e.parameter.idToken);
+    } catch (authErr) {
+      return jsonOut_({ error: authErrorMessage_(authErr) });
+    }
+  }
   if (e && e.parameter && e.parameter.action === 'scanGmail') {
     return scanGmail_(e);
   }
@@ -284,8 +307,8 @@ function doGet(e) {
   const receiptModel = receiptProps.getProperty('GEMINI_MODEL') || 'gemini-2.5-flash';
   const receiptModelValid = /^[a-zA-Z0-9.-]+$/.test(receiptModel);
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v52',
-    scriptVersion: 'v52',
+    service: 'lyrical-sheets-webhook-v53',
+    scriptVersion: 'v53',
     capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyChitChats: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, canadaPostRefund: true, graphicalEmails: true, authorPaymentEmails: true, dateOrderedRows: true, receiptExtraction: true, receiptSelfTest: true, receiptDailySweep: true, receiptBackupAi: true },
     receiptAi: {
       geminiApiKey: !!receiptProps.getProperty('GEMINI_API_KEY'),
@@ -721,6 +744,7 @@ function getAttachment_(e) {
 // doPost: sync (add) + void/delete by eventId
 // ─────────────────────────────────────────────────────────────
 function doPost(e) {
+  let writeLock = null;
   try {
     const payload = JSON.parse(e.postData.contents);
     if (payload.version !== 2) {
@@ -733,6 +757,19 @@ function doPost(e) {
     }
 
     const action = String(payload.action || (payload.payload && payload.payload.action) || '').toLowerCase();
+
+    // ── Caller authentication (v53) ──
+    // Publisher only for every action, except an author's submission alert,
+    // which any verified signed-in user may trigger (it only ever emails the
+    // publisher, and the author address in it is the verified one).
+    let caller;
+    try {
+      caller = action === 'notifypublisher'
+        ? verifyFirebaseCaller_(payload.idToken)
+        : requirePublisher_(payload.idToken);
+    } catch (authErr) {
+      return jsonOut_({ error: authErrorMessage_(authErr) });
+    }
 
     // ── Receipt AI: read invoices out of one scanned email (v44) ──
     // Folded in from the standalone Receipt Finder deployment so the publisher
@@ -1011,6 +1048,7 @@ function doPost(e) {
     // ── Publisher notification email ──
     if (action === 'notifypublisher') {
       const d = payload.payload || {};
+      d.authorEmail = caller.email;
       try {
         // Strip CR/LF (and other control chars) from any author-supplied value
         // before it lands in the subject or a body line, so a crafted title like
@@ -1454,6 +1492,13 @@ function doPost(e) {
       });
     }
 
+    // Serialize every sheet write. The client times out and retries while the
+    // first execution may still be running; without a lock the retry's duplicate
+    // scan can run before the first append lands, or a retried reset can wipe
+    // rows a batch just wrote.
+    writeLock = LockService.getScriptLock();
+    writeLock.waitLock(30000);
+
     // ── Batch Sheets sync: process many add/delete rows in one Web App call ──
     if (action === 'batch') {
       const rows = (payload.payload && payload.payload.rows) || payload.rows || [];
@@ -1606,6 +1651,9 @@ function doPost(e) {
         const sheet = ensureSheet_(ss, sheetName);
         const newRows = rowsToAppendBySheet[sheetName];
         const lastRow = sheet.getLastRow();
+        // New tabs have a 1000-row grid and setValues cannot write past it.
+        const needRows = lastRow + newRows.length;
+        if (sheet.getMaxRows() < needRows) sheet.insertRowsAfter(sheet.getMaxRows(), needRows - sheet.getMaxRows());
         sheet.getRange(lastRow + 1, 1, newRows.length, HEADERS.length).setValues(newRows);
         touchedSheets[sheetName] = true;
       }
@@ -1632,6 +1680,8 @@ function doPost(e) {
     return jsonOut_(Object.assign({ ok: true }, result));
   } catch (err) {
     return jsonOut_({ error: String(err) });
+  } finally {
+    if (writeLock) { try { writeLock.releaseLock(); } catch (_) { /* not held */ } }
   }
 }
 
@@ -2692,6 +2742,49 @@ function numOrBlank_(v) {
 // exactly like every other action in this script. Adding the AI key alone must
 // be enough, so a missing publisher check is never treated as an error.
 // ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// CALLER AUTHENTICATION (v53)
+//
+// Firebase verifies the token (signature, expiry, project) through
+// accounts:lookup; decoded claims or an address supplied by the browser are
+// never trusted. The web API key is a public identifier, not a secret, so it
+// ships as a default here; FIREBASE_WEB_API_KEY in Script Properties overrides.
+// ─────────────────────────────────────────────────────────────
+const PUBLISHER_EMAIL = 'lyricalmyricalbooks@gmail.com';
+const DEFAULT_FIREBASE_WEB_API_KEY = 'AIzaSyB0BTOjfUFZKCVth9eR8iN0mvfkpRIFKSI';
+
+function authErrorMessage_(err) {
+  const m = String((err && err.message) || '');
+  return /^(Sign in|Publisher )/.test(m) ? m : 'Sign in again';
+}
+
+function verifyFirebaseCaller_(idToken) {
+  if (typeof idToken !== 'string' || !idToken || idToken.length > 10000) throw new Error('Sign in again (this action needs a signed-in account)');
+  const cache = CacheService.getScriptCache();
+  const digest = Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, idToken));
+  const cacheKey = 'auth-' + digest;
+  const hit = cache.get(cacheKey);
+  if (hit) return JSON.parse(hit);
+  const props = PropertiesService.getScriptProperties();
+  const authKey = props.getProperty('FIREBASE_WEB_API_KEY') || DEFAULT_FIREBASE_WEB_API_KEY;
+  const res = UrlFetchApp.fetch('https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=' + encodeURIComponent(authKey), {
+    method: 'post', contentType: 'application/json',
+    payload: JSON.stringify({ idToken: idToken }), muteHttpExceptions: true
+  });
+  if (res.getResponseCode() !== 200) throw new Error('Sign in again (your session expired)');
+  const users = JSON.parse(res.getContentText()).users || [];
+  if (users.length !== 1 || users[0].disabled || !users[0].email || users[0].emailVerified !== true) throw new Error('Sign in again (verified account required)');
+  const caller = { uid: users[0].localId, email: String(users[0].email).toLowerCase() };
+  cache.put(cacheKey, JSON.stringify(caller), 300);
+  return caller;
+}
+
+function requirePublisher_(idToken) {
+  const caller = verifyFirebaseCaller_(idToken);
+  if (caller.email !== PUBLISHER_EMAIL) throw new Error('Publisher access required');
+  return caller;
+}
+
 function extractReceipt_(input) {
   try {
     const props = PropertiesService.getScriptProperties();
@@ -3035,7 +3128,11 @@ function receiptDailyScan() {
     var win = receiptDailyWindow_(props.getProperty('RECEIPT_DAILY_LAST_DAY') || '', todayDay, RECEIPT_DAILY_MAX_DAYS);
     if (!win) { receiptDailyNote_(props, 'Already up to date — nothing new to read.'); return; }
 
-    var threads = GmailApp.search(RECEIPT_DAILY_QUERY + ' after:' + win.after + ' before:' + win.before, 0, RECEIPT_DAILY_MAX_MESSAGES);
+    // Look at more threads than the AI cap so overflow is noticed (and carried
+    // to the next run) instead of silently never being read.
+    var searchLimit = RECEIPT_DAILY_MAX_MESSAGES * 5;
+    var threads = GmailApp.search(RECEIPT_DAILY_QUERY + ' after:' + win.after + ' before:' + win.before, 0, searchLimit);
+    var threadsTruncated = threads.length >= searchLimit;
     var grouped = GmailApp.getMessagesForThreads(threads);
     var messages = [];
     for (var t = 0; t < grouped.length; t++) {
@@ -3047,7 +3144,15 @@ function receiptDailyScan() {
         if (when >= win.startDay && when <= win.throughDay) messages.push(grouped[t][m]);
       }
     }
+    // Oldest first, so what is left over is always the newest mail and the
+    // watermark can stop cleanly in front of it.
+    messages.sort(function (a, b) { return a.getDate().getTime() - b.getDate().getTime(); });
+    var unread = messages.slice(RECEIPT_DAILY_MAX_MESSAGES);
     messages = messages.slice(0, RECEIPT_DAILY_MAX_MESSAGES);
+    // Earliest day not fully handled (left over, or failed): the watermark must
+    // not move past it. Re-reading is safe — inbox writes are keyed on the Gmail id.
+    var heldDay = unread.length ? receiptDayString_(unread[0].getDate()) : '';
+    var failed = 0;
 
     var found = 0;
     var read = 0;
@@ -3065,15 +3170,39 @@ function receiptDailyScan() {
         receiptDailyNote_(props, 'Stopped early: ' + outcome.halt + ' Read ' + read + ', found ' + found + '.' + hint);
         return;
       }
+      if (outcome.failed) {
+        failed++;
+        var failDay = receiptDayString_(messages[i].getDate());
+        if (!heldDay || failDay < heldDay) heldDay = failDay;
+        continue;
+      }
       read++;
       found += outcome.found;
     }
 
-    props.setProperty('RECEIPT_DAILY_LAST_DAY', win.throughDay);
+    var through = win.throughDay;
+    var caveat = '';
+    if (heldDay) {
+      var dayBefore = receiptDayBefore_(heldDay);
+      if (dayBefore >= win.startDay) {
+        through = dayBefore;
+        caveat = ' Stopped at ' + dayBefore + ' so ' + (failed + unread.length) + ' email' + (failed + unread.length === 1 ? '' : 's') + ' from ' + heldDay + ' on are tried again next run.';
+      } else if (failed && !unread.length) {
+        // Nothing earlier to advance to: leave the watermark so the failed
+        // mail is retried (the window itself is capped at MAX_DAYS).
+        through = '';
+        caveat = ' ' + failed + ' email' + (failed === 1 ? '' : 's') + ' could not be read and will be retried next run.';
+      } else {
+        caveat = ' More than ' + RECEIPT_DAILY_MAX_MESSAGES + ' emails arrived on ' + heldDay + '; ' + (failed + unread.length) + ' were NOT read — check Gmail for receipts that day.';
+      }
+    }
+    if (threadsTruncated) caveat += ' More than ' + searchLimit + ' emails matched this window, so older ones may not have been read.';
+
+    if (through) props.setProperty('RECEIPT_DAILY_LAST_DAY', through);
     props.setProperty('RECEIPT_DAILY_LAST_RUN', new Date().toISOString());
     receiptDailyNote_(props, 'Read ' + read + ' email' + (read === 1 ? '' : 's') + ' from ' + win.startDay +
-      ' to ' + win.throughDay + ', found ' + found + ' receipt' + (found === 1 ? '' : 's') + '.' +
-      (ai.backupReads ? ' Gemini could not answer, so your OpenRouter backup read ' + ai.backupReads + ' of them.' : ''));
+      ' to ' + (through || win.startDay) + ', found ' + found + ' receipt' + (found === 1 ? '' : 's') + '.' +
+      (ai.backupReads ? ' Gemini could not answer, so your OpenRouter backup read ' + ai.backupReads + ' of them.' : '') + caveat);
   } catch (error) {
     receiptDailyNote_(props, 'Failed: ' + (error && error.message ? error.message : error));
   }
@@ -3100,7 +3229,7 @@ function receiptDailyReadOne_(message, aiKey, props, ai) {
       }),
       files: files
     }, ai || { allowAppSettings: true, backupReads: 0 });
-    if (!read.finished) return { found: 0 };
+    if (!read.finished) return { found: 0, failed: true };
     var receipts = JSON.parse(read.text).receipts || [];
 
     var links = [];
@@ -3121,8 +3250,14 @@ function receiptDailyReadOne_(message, aiKey, props, ai) {
     // Allowance and key problems repeat on every remaining message, so there is
     // nothing to gain — and allowance to lose — by carrying on.
     if (/unavailable \((429|400|401|402|403)\)/.test(text)) return { found: 0, halt: text };
-    return { found: 0 };
+    return { found: 0, failed: true };
   }
+}
+
+function receiptDayBefore_(dayString) {
+  var p = String(dayString).split('-');
+  var d = new Date(Date.UTC(Number(p[0]), Number(p[1]) - 1, Number(p[2])) - 86400000);
+  return d.toISOString().slice(0, 10);
 }
 
 /** Shape the app's inbox already understands, from one extracted receipt. */
@@ -3794,6 +3929,28 @@ function ocFlagTruthy_(v) {
   return v === true || v === 'true' || v === 'TRUE' || v === 1;
 }
 
+// A reply only counts when the artist wrote AFTER we did in the same thread.
+// Their original submission email (low-res photos attached) is already in the
+// mailbox before any selection or CMYK request goes out, so a bare
+// "any mail from the artist" search flagged credit/files as received at once.
+// Returns { thread, message } for the first such reply, or null.
+function ocReplyAfterOurs_(email, extraQuery, daysBack, needAttachment) {
+  const artist = String(email).toLowerCase();
+  const threads = GmailApp.search('from:' + email + extraQuery + ' newer_than:' + daysBack + 'd', 0, 10);
+  for (let t = 0; t < threads.length; t++) {
+    const msgs = threads[t].getMessages();
+    let ourMessageSeen = false;
+    for (let m = 0; m < msgs.length; m++) {
+      const fromArtist = String(msgs[m].getFrom() || '').toLowerCase().indexOf(artist) >= 0;
+      if (!fromArtist) { ourMessageSeen = true; continue; }
+      if (!ourMessageSeen) continue;
+      if (needAttachment && msgs[m].getAttachments({ includeInlineImages: false }).length === 0) continue;
+      return { thread: threads[t], message: msgs[m] };
+    }
+  }
+  return null;
+}
+
 // Scan Gmail for one contributor's reply / files / bounce signals, given the
 // stage flags the caller knows. Returns an update object or null. Shared by
 // the scanopencallreplies action and ocScheduledScan().
@@ -3808,13 +3965,13 @@ function ocScanContributor_(c, daysBack) {
   // Credit name: any reply from the artist after a selection email went out.
   if (ocFlagTruthy_(c.selectionSent) && !ocFlagTruthy_(c.creditReceived)) {
     try {
-      const threads = GmailApp.search('from:' + email + ' newer_than:' + daysBack + 'd', 0, 1);
-      if (threads.length > 0) {
+      const found = ocReplyAfterOurs_(email, '', daysBack, false);
+      if (found) {
         update.creditReceived = true;
-        update.creditThreadId = threads[0].getId();
+        update.creditThreadId = found.thread.getId();
 
         // Try parsing credit name from messages in the thread
-        const msgs = threads[0].getMessages();
+        const msgs = found.thread.getMessages();
         for (let j = msgs.length - 1; j >= 0; j--) {
           const body = msgs[j].getPlainBody() || '';
           const match = body.match(/(?:credit\s*name\s*(?:is|should\s*be)?|exact\s*name\s*(?:for\s*my\s*credit\s*)?(?:is|should\s*be)?|credit\s*(?:as|for))\s*[:=-]?\s*["']?([^\n\r"']{2,60})["']?/i);
@@ -3831,10 +3988,10 @@ function ocScanContributor_(c, daysBack) {
   // High-res files: a reply WITH an attachment from the artist.
   if (ocFlagTruthy_(c.cmykSent) && !ocFlagTruthy_(c.filesReceived)) {
     try {
-      const threads = GmailApp.search('from:' + email + ' has:attachment newer_than:' + daysBack + 'd', 0, 1);
-      if (threads.length > 0) {
+      const found = ocReplyAfterOurs_(email, ' has:attachment', daysBack, true);
+      if (found) {
         update.filesReceived = true;
-        update.filesThreadId = threads[0].getId();
+        update.filesThreadId = found.thread.getId();
         hasUpdate = true;
       }
     } catch (_) {}

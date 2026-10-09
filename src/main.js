@@ -13,6 +13,8 @@ initPhoneWorkspace(document.getElementById('pw-app'));
 // Body, not #pw-app: the pop-up windows are siblings of the app shell.
 initPhoneLayouts(document.body);
 import './firebase.js';
+import { installGasAuth } from './lib/gas-auth.js';
+installGasAuth(() => (typeof window._fbGetIdToken === 'function' ? window._fbGetIdToken() : ''));
 import { registerSW } from 'virtual:pwa-register';
 import { canonicalExpenseCategory } from './lib/expense-categories.js';
 import { calcArtistEarnings, tierEffectiveCap, describePayout, payoutRequestCovered, planNetPayout, payoutNetted, unpaidSalesSummary } from './lib/earnings.js';
@@ -3242,7 +3244,7 @@ export let notifyUrl = localStorage.getItem('lm-notify-url') || '';
 // The Apps Script `scriptVersion` the client expects. Bump this (and the value
 // in apps-script/Code.gs) whenever Code.gs gains behaviour that needs a fresh
 // deploy — the connection card flags any older deployed version as outdated.
-export const EXPECTED_SCRIPT_VERSION = 'v52';
+export const EXPECTED_SCRIPT_VERSION = 'v53';
 // What the connected spreadsheet last told us it was running. Null until a
 // version check has actually answered — an unknown version is not a mismatch,
 // so the To-do list stays quiet rather than inventing a problem.
@@ -26632,7 +26634,10 @@ window.showWhatsNew = showWhatsNew;
 // ── STARTUP ROUTING
 async function initStartup() {
   // Master Publisher Email
-  const publisherEmail = 'lyricalmyrical@gmail.com';
+  // Must match the address the Firestore/Storage/Database rules and the Apps
+  // Script trust, or the publisher UI would open for an account the backend
+  // then refuses.
+  const publisherEmail = 'lyricalmyricalbooks@gmail.com';
 
   window._fbOnAuthStateChanged(async user => {
     const dismissSplash = () => {
@@ -26698,7 +26703,7 @@ async function initStartup() {
       // Check access
       _pendingGateMsg = null;
       const uEmail = user.email.toLowerCase().trim();
-      if (uEmail === publisherEmail || uEmail === 'lyricalmyricalbooks@gmail.com') {
+      if (uEmail === publisherEmail && user.emailVerified === true) {
         window.IS_PUBLISHER = true;
         IS_AUTHOR_MODE = false;
         // Seed/refresh the rules-readable ownership map now we're authenticated as
