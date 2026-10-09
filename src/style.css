@@ -18346,6 +18346,98 @@ button[onclick="refreshUmamiStats()"]:active {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   INVOICE MODAL — discount box, quick chips and line discounts
+   A percentage discount used to hide behind a dropdown, and its box started
+   at "0" with the % sign painted over the digits. Now a %/amount toggle sits
+   beside one roomy box, the common percentages are one tap each, and the
+   line underneath says in money what is being taken off. The same compact
+   chips set the due date ("30 days") from the issue date.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.inv-optional {
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--content-muted);
+  margin-left: var(--space-1);
+}
+
+.inv-disc-mode {
+  flex: 0 0 auto;
+}
+
+.inv-disc-mode .inv-disc-mode-btn {
+  min-width: var(--target-min);
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: var(--text-md);
+  letter-spacing: 0;
+}
+
+.inv-chip-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.inv-chip-row-label {
+  font-size: var(--text-3xs);
+  font-weight: 700;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--content-muted);
+  margin-right: var(--space-1);
+}
+
+.preset-chip-btn.inv-chip {
+  padding: 6px 12px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+/* Selected takes the primary flare with ink text — the same pairing as a
+   .btn.gold — so it stands out in night mode too, where an ink fill would
+   sink into the dark panel around it. */
+.preset-chip-btn.inv-chip[aria-pressed="true"] {
+  background: var(--gold);
+  color: var(--ink);
+  border-color: var(--rule-ink);
+  box-shadow: var(--elev-1);
+}
+
+.preset-chip-btn.inv-chip:focus-visible {
+  outline: 2px solid var(--rule-ink);
+  outline-offset: 2px;
+}
+
+.inv-disc-readout {
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--content-secondary);
+  margin-top: var(--space-2);
+  min-height: 1.4em;
+}
+
+.inv-disc-readout strong {
+  font-family: var(--font-mono);
+  color: var(--content-primary);
+}
+
+.inv-disc-readout.is-warn {
+  color: var(--status-active);
+}
+
+.inv-item-row .inv-item-was {
+  display: block;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: var(--text-3xs);
+  color: var(--content-muted);
+  text-decoration: line-through;
+  padding: 0 6px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    LANDING RAIL — NOTIFICATIONS, RECENT ACTIVITY & THE TO-DO LIST
    ───────────────────────────────────────────────────────────────────────────
    The all-books screen keeps its three sections in the main column and gains a
