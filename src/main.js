@@ -7645,7 +7645,11 @@ function owedFromSalesHtml(bookId, owed, cur) {
   const u = unpaidSalesSummary(BOOKS[bookId], states[bookId], owed);
   if (!u || u.copies <= 0) return '';
   const rate = u.rates.length === 1 ? `${u.rates[0]}%` : `${u.rates[0]}–${u.rates[u.rates.length - 1]}%`;
-  const copies = `${u.copies} cop${u.copies === 1 ? 'y' : 'ies'} sold${u.since ? ` since ${fmtD(u.since)}` : ''}`;
+  // Counted from the last payout when there is one; before the first payout
+  // there is no "last payout" to point at, so give the first sale's date.
+  const paidBefore = (states[bookId]?.artistPayouts || []).some(p => !p.voided);
+  const when = paidBefore ? ' since last payout' : u.since ? ` since ${fmtD(u.since)}` : '';
+  const copies = `${u.copies} cop${u.copies === 1 ? 'y' : 'ies'} sold${when}`;
   return `<div class="ps-stat-detail">${rate} of ${fmt(u.revenue, cur)} · ${copies}</div>`;
 }
 
