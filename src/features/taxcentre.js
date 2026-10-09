@@ -144,7 +144,16 @@ function processRecurringExpenses() {
       const origCur = sub.currency || 'CAD';
       // The charge's own date's rate, else today's. With neither, the charge is
       // flagged and healExpenseRates fills it in online — not booked 1:1.
-      const fxRate = datedCadRate(origCur, charge.date, _fxRateCache);
+      let fxRate = datedCadRate(origCur, charge.date, _fxRateCache);
+      // Today's rate is a fair stand-in only for a charge dated today. A back-
+      // charge (a subscription that began months ago, or the app was closed for
+      // a while) valued at today's rate would be permanent — the rate healer
+      // only revisits expenses flagged as missing one — so a past charge
+      // without its own date's rate is flagged and healed with the historical
+      // rate once online, exactly like an expense logged offline.
+      if (fxRate.estimated && !fxRate.missing && String(charge.date || '') < today()) {
+        fxRate = { rate: 1, estimated: true, missing: true };
+      }
       const chargeAmount = Number(charge.amount) || 0;
       const baseAmount = fxRate.missing ? null : roundCents(chargeAmount * fxRate.rate);
 
@@ -1070,6 +1079,20 @@ function _tcEmptyTripBucket(rec) {
   };
 }
 
+/**
+ * An expense's value in the book currency, valued exactly as the ledger does:
+ * the stored baseAmount, else a rate known for the expense's own date, else 0
+ * (the ledger flags those until healExpenseRates fills them in) — never today's
+ * rate or a silent 1:1.
+ */
+function _tcExpenseBaseAmount(e) {
+  if (e.baseAmount != null) return e.baseAmount;
+  const eFx = datedCadRate(e.currency || 'CAD', e.date, _fxRateCache);
+  return (e.fxMissing && eFx.estimated) || eFx.missing
+    ? 0
+    : roundCents((e.amount || 0) * eFx.rate);
+}
+
 function _tcGetTripsSummaryAll() {
   const tripSummary = {};
   _tcTripRecords().forEach(rec => {
@@ -1081,7 +1104,7 @@ function _tcGetTripsSummaryAll() {
     const t = (e.trip || '').trim();
     if (!t) return;
     const eCur = e.currency || 'CAD';
-    const eBase = e.baseAmount != null ? e.baseAmount : (e.amount || 0) * (_fxRateCache[`${eCur}_CAD`] || 1);
+    const eBase = _tcExpenseBaseAmount(e);
     const cat = canonicalExpenseCategory(e.cat, 'Other');
     if (!tripSummary[t]) {
       tripSummary[t] = { total: 0, count: 0, latestDate: '', items: [], categories: {} };
@@ -1871,6 +1894,7 @@ async function exportTripPDF(tripName) {
 
   const { baseCurrency } = detail;
   const { items, total, count, categories } = detail.byName[name];
+  const deductibleTotal = detail.byName[name].deductible ?? total;
   const rec = _tcFindTripRecord(name);
   const budget = TAX_CENTER.tripBudgets?.[name] || 0;
 
@@ -1904,7 +1928,8 @@ async function exportTripPDF(tripName) {
       <td>${escapeHtml(cat)}</td>
       <td class="r">${total > 0 ? ((amt / total) * 100).toFixed(1) : '0.0'}%</td>
       <td class="r">${fmt(amt, baseCurrency)}</td>
-    </tr>`).join('') || '<tr><td colspan="3" class="empty">No expenses assigned to this trip.</td></tr>';
+      <td class="r">${fmt(deductibleAmount(cat, amt), baseCurrency)}${deductibleRate(cat) < 1 ? ` <small>(${Math.round(deductibleRate(cat) * 100)}% limit)</small>` : ''}</td>
+    </tr>`).join('') || '<tr><td colspan="4" class="empty">No expenses assigned to this trip.</td></tr>';
 
   const expenseRows = sorted.map(item => `<tr>
       <td>${escapeHtml(item.date || '—')}</td>
@@ -1980,8 +2005,8 @@ async function exportTripPDF(tripName) {
     </div>
 
     <div class="totals">
-      <div class="amount">${fmt(total, baseCurrency)}</div>
-      <div class="label">Total deductible spend</div>
+      <div class="amount">${fmt(deductibleTotal, baseCurrency)}</div>
+      <div class="label">Total deductible spend${deductibleTotal !== total ? ` (of ${fmt(total, baseCurrency)} spent)` : ''}</div>
     </div>
     ${budgetLine}
 
@@ -1991,9 +2016,9 @@ async function exportTripPDF(tripName) {
 
     <h2>Spend by tax category</h2>
     <table>
-      <thead><tr><th>Tax category</th><th class="r">Share</th><th class="r">Total (${escapeHtml(baseCurrency)})</th></tr></thead>
+      <thead><tr><th>Tax category</th><th class="r">Share</th><th class="r">Spent (${escapeHtml(baseCurrency)})</th><th class="r">Deductible</th></tr></thead>
       <tbody>${catRows}</tbody>
-      <tfoot><tr><td>Total</td><td class="r"></td><td class="r">${fmt(total, baseCurrency)}</td></tr></tfoot>
+      <tfoot><tr><td>Total</td><td class="r"></td><td class="r">${fmt(total, baseCurrency)}</td><td class="r">${fmt(deductibleTotal, baseCurrency)}</td></tr></tfoot>
     </table>
 
     <h2>Expenses</h2>
@@ -2042,13 +2067,16 @@ function _tcRenderTripsPanel(selectedYear, baseCurrency) {
     const t = (e.trip || '').trim();
     if (!t) return;
     const eCur = e.currency || 'CAD';
-    const eBase = e.baseAmount != null ? e.baseAmount : (e.amount || 0) * (_fxRateCache[`${eCur}_CAD`] || 1);
+    const eBase = _tcExpenseBaseAmount(e);
     const cat = canonicalExpenseCategory(e.cat, 'Other');
     if (!tripSummary[t]) tripSummary[t] = { total: 0, count: 0, items: [], categories: {}, minDate: '', maxDate: '' };
     tripSummary[t].total += eBase;
     tripSummary[t].count++;
     if (!tripSummary[t].categories[cat]) tripSummary[t].categories[cat] = 0;
     tripSummary[t].categories[cat] += eBase;
+    // The CRA limit (50% of meals) applies to the same spend; the report shows
+    // it as the deductible figure while budgets keep tracking what was spent.
+    tripSummary[t].deductible = (tripSummary[t].deductible || 0) + deductibleAmount(cat, eBase);
 
     if (e.date) {
       if (!tripSummary[t].minDate || e.date < tripSummary[t].minDate) tripSummary[t].minDate = e.date;
@@ -2349,6 +2377,8 @@ function _tcBuildLedger(selectedYear) {
           hasRateError: pFx.missing,
           rateEstimated: pFx.estimated && !pFx.missing,
           isIncome: false,
+          // An artist payout is backed by the payment record, not a till slip.
+          receiptExempt: true,
           sourceType: 'artistPayout',
           sourceId: bid,
           itemId: p.id
@@ -2394,6 +2424,8 @@ function _tcBuildLedger(selectedYear) {
       baseAmount: eBase,
       hasRateError: e.baseAmount == null && ((!!e.fxMissing && eFx.estimated) || eFx.missing),
       isIncome: false,
+      // Inventory write-downs and the like carry this flag on the saved expense.
+      receiptExempt: !!(e.receiptExempt || e.isRent),
       sourceType: 'businessExpense',
       itemId: e.id,
       trip: e.trip || '',
