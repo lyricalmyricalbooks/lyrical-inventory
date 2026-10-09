@@ -3492,7 +3492,7 @@
                 <div class="tc-form-actions-buttons">
                   <button id="tc-cc-test-btn" class="btn gold outline" onclick="testChitChatsConnectionHandler()">Test Connection</button>
                   <button id="tc-save-cc-btn" class="btn gold" onclick="saveTaxCenterSettings()">Save Config</button>
-                  <button id="tc-cc-import-btn" class="btn outline" onclick="importChitChatsShippingHandler()">Import paid shipments</button>
+                  <button id="tc-cc-import-btn" class="btn outline" onclick="importChitChatsShippingHandler({ full: true })">Import paid shipments</button>
                 </div>
               </div>
               <p class="tc-form-hint">Requires the connected Google Sheet with Apps Script v51 or later. Staging uses a separate Chit Chats account and token. Your live purchases charge your Chit Chats balance.</p>
