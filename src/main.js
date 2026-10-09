@@ -5290,10 +5290,12 @@ function showBookChoice(tabName) {
 function updateHeader() {
   if (activeBook === 'all') {
     // Sum all books in a single pass (was three separate reduce iterations).
-    let totalStock = 0, totalRev = 0, totalCon = 0;
-    Object.values(states).forEach(s => {
+    let totalStock = 0, totalCon = 0;
+    const revByCur = new Map(); // revenue is only summed within one currency
+    Object.entries(states).forEach(([bid, s]) => {
       totalStock += (s.stock || 0);
-      totalRev += recognizedRevenueOf(s);
+      const curSym = (BOOKS[bid] && BOOKS[bid].currency) || '';
+      revByCur.set(curSym, (revByCur.get(curSym) || 0) + recognizedRevenueOf(s));
       // ⚡ Bolt Optimization: Use for-loop instead of reduce to avoid function allocation
       let storesCon = 0;
       for (let i = 0; i < s.stores.length; i++) {
@@ -5302,7 +5304,7 @@ function updateHeader() {
       totalCon += storesCon;
     });
     animateCountValue('h-stock', totalStock);
-    animateCountValue('h-revenue', '~' + Math.round(totalRev).toLocaleString());
+    animateCountValue('h-revenue', [...revByCur].map(([c, v]) => fmtWhole(v, c)).join(' + ') || '0');
     animateCountValue('h-consigned', totalCon);
   } else {
     const s = getState(), book = getBook();
@@ -8759,9 +8761,9 @@ export function scheduleRender() {
 
 // ── Ready-to-send outbox ───────────────────────────────────────────────────
 
-function recordOrder(num, chan, qty, price, notes, payment = null) {
-  const enteredBy = isAuthor() ? 'Artist' : 'Publisher';
-  writeOrderToLedger(activeBook, { num, chan, qty, price, notes, payment, enteredBy });
+function recordOrder(num, chan, qty, price, notes, payment = null, { date, enteredBy: enteredByOverride } = {}) {
+  const enteredBy = enteredByOverride || (isAuthor() ? 'Artist' : 'Publisher');
+  writeOrderToLedger(activeBook, { num, chan, qty, price, notes, payment, enteredBy, date });
   renderHist(); updateDash();
 }
 
@@ -10389,10 +10391,20 @@ async function handleImportFile(event) {
           const d = xlsx.SSF.parse_date_code(date);
           parsedDate = `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`;
         }
-        return { num: String(num || 'IMP-' + Date.now()), date: parsedDate, chan: String(chan), qty: Math.abs(Math.round(qty)), price, notes: String(notes) };
+        return { num: String(num || ''), date: parsedDate, chan: String(chan), qty: Math.abs(Math.round(qty)), price, notes: String(notes) };
       };
 
       _importRows = rows.map(colMap).filter(r => r.qty > 0);
+      // Blank order numbers get a deterministic id (same row content => same id), so
+      // re-importing the same file is caught by the duplicate check. Identical rows within
+      // one file are told apart by an occurrence counter.
+      const seenBlank = {};
+      _importRows.forEach(r => {
+        if (r.num) return;
+        const key = `${r.date}|${r.chan}|${r.qty}|${r.price}|${r.notes}`;
+        seenBlank[key] = (seenBlank[key] || 0) + 1;
+        r.num = `IMP-${r.date}-${r.chan}-${r.qty}-${r.price}-${seenBlank[key]}`.replace(/\s+/g, '');
+      });
 
       if (!_importRows.length) { showToast('Could not parse any valid rows', 'warn'); return; }
 
@@ -10443,6 +10455,7 @@ function confirmImport() {
   // Add in reverse so newest ends up at top after unshift
   [..._importRows].reverse().forEach(r => {
     if (existingNums.has(r.num)) { skipped++; return; } // skip duplicates
+    existingNums.add(r.num); // also catches repeats inside the same file
     s.stock = Math.max(0, s.stock - r.qty);
     s.sold += r.qty;
     s.revenue += r.qty * r.price;
@@ -10593,7 +10606,12 @@ function submitManualPublisherRoute(directToArtist, num, chan, qty, price, book,
 async function submitManual(ev) {
   return withButtonLoading(ev, 'Saving…', async () => {
     const book = getBook(), qty = parseInt($('m-qty').value) || 1;
-    const rawPrice = parseFloat($('m-price').value) || book.listPrice;
+    const typedPrice = parseFloat($('m-price').value);
+    const rawPrice = Number.isFinite(typedPrice) ? typedPrice : book.listPrice;
+    if (qty < 1 || rawPrice < 0) {
+      showToast('⚠ Quantity must be at least 1 and price cannot be negative', 'warn');
+      return;
+    }
     const num = $('m-num').value.trim() || 'MAN-' + Date.now(), chan = $('m-chan').value, notes = $('m-notes').value.trim();
     const paymentType = $('m-payment-type').value;
     if (!paymentType) {
@@ -10641,12 +10659,16 @@ async function submitManual(ev) {
 // is still awaiting the Firestore delete would record the same sale/expense
 // twice (inventory off, revenue double-counted). Keys are `${type}:${subKey}`.
 const _submissionsInFlight = new Set();
+// Submissions already written to the ledger whose queue entry could not be removed;
+// refuse to approve them a second time this session.
+const _approvedSubmissionKeys = new Set();
 
 window.approveSubmission = async function (type, subKey) {
   const queue = window.authorSubmissions[activeBook]?.[type] || {};
   if (!queue[subKey]) return;
   const flightKey = `${activeBook}:${type}:${subKey}`;
   if (_submissionsInFlight.has(flightKey)) return;
+  if (_approvedSubmissionKeys.has(flightKey)) { showToast('⚠ Already added to the ledger - it just could not be cleared from the queue. Reload and reject it.', 'warn'); return; }
   _submissionsInFlight.add(flightKey);
   try {
     const raw = JSON.parse(queue[subKey].data);
@@ -10657,8 +10679,10 @@ window.approveSubmission = async function (type, subKey) {
 
       s.expenses.unshift(raw);
       saveState(activeBook);
-      await window._fbDeleteSubmission(activeBook, type, subKey);
-      showToast('✓ Expense approved and added to ledger');
+      if (await window._fbDeleteSubmission(activeBook, type, subKey) === false) {
+        _approvedSubmissionKeys.add(flightKey);
+        showToast('⚠ Expense added, but it could not be cleared from the pending list. Do not approve it again.', 'warn');
+      } else showToast('✓ Expense approved and added to ledger');
       updateDash();
       switchTab('dashboard');
       setTimeout(() => {
@@ -10668,7 +10692,7 @@ window.approveSubmission = async function (type, subKey) {
     } else if (type === 'sales') {
       let pendingTransfer = false;
       if (isDirectToArtistSale(raw)) {
-        recordOrderPendingTransfer(raw.num, raw.chan, raw.qty, raw.price, raw.notes, raw.payment);
+        recordOrderPendingTransfer(raw.num, raw.chan, raw.qty, raw.price, raw.notes, raw.payment, raw.date);
         pendingTransfer = true;
         const newest = getState().artistTransfers.at(-1);
         if (newest) {
@@ -10676,10 +10700,12 @@ window.approveSubmission = async function (type, subKey) {
           mintArtistTransferPayLink(bookId, newest.id, { quiet: true }).then(() => mintArtistTransferBundleLink(bookId));
         }
       } else {
-        recordOrder(raw.num, raw.chan, raw.qty, raw.price, raw.notes, raw.payment);
+        recordOrder(raw.num, raw.chan, raw.qty, raw.price, raw.notes, raw.payment, { date: raw.date, enteredBy: 'Artist' });
       }
-      await window._fbDeleteSubmission(activeBook, type, subKey);
-      showToast('✓ Sale approved and added to ledger');
+      if (await window._fbDeleteSubmission(activeBook, type, subKey) === false) {
+        _approvedSubmissionKeys.add(flightKey);
+        showToast('⚠ Sale added, but it could not be cleared from the pending list. Do not approve it again.', 'warn');
+      } else showToast('✓ Sale approved and added to ledger');
       updateDash();
       if (pendingTransfer) {
         switchTab('dashboard');
@@ -10711,8 +10737,9 @@ window.rejectSubmission = async function (type, subKey) {
   }
 }
 
-function recordOrderPendingTransfer(num, chan, qty, price, notes, payment = null) {
+function recordOrderPendingTransfer(num, chan, qty, price, notes, payment = null, date = null) {
   const s = getState(), book = getBook();
+  const when = date || today();
   deductSaleFromStockBreakdown(s, qty, true);
   // Reduce stock and count as sold, but do NOT add to revenue yet
   s.stock = Math.max(0, s.stock - qty);
@@ -10724,16 +10751,16 @@ function recordOrderPendingTransfer(num, chan, qty, price, notes, payment = null
   // Add to history with pending flag. directToArtist marks this as cash the
   // artist collected directly (these only ever come from direct-to-artist sales).
   const sheetsId = makeEventId();
-  s.hist.unshift({ num, chan, qty, price, after: s.stock, notes: updatedNotes, date: today(), artistPending: true, directToArtist: true, payment, sheetsId, cur: bookCurrencyCode(book) });
+  s.hist.unshift({ num, chan, qty, price, after: s.stock, notes: updatedNotes, date: when, artistPending: true, directToArtist: true, payment, sheetsId, cur: bookCurrencyCode(book) });
   // Add to artistTransfers queue (share sheetsId so receipt updates the same sheet row)
-  s.artistTransfers.push({ id: Date.now(), num, chan, qty, price, total: qty * price, notes: updatedNotes, date: today(), payment, sheetsId, cur: bookCurrencyCode(book) });
+  s.artistTransfers.push({ id: Date.now(), num, chan, qty, price, total: qty * price, notes: updatedNotes, date: when, payment, sheetsId, cur: bookCurrencyCode(book) });
   recomputeAfters(s, book);
   renderHist(); updateDash(); saveState(activeBook);
   const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
   const totalNative = qty * price;
   const cadEquiv = cadEquivalentForSale({ nativeCurrency: nativeCur, totalNative, payment });
   syncToSheets({
-    type: 'order', book: book.title, date: today(), num, chan, qty, price, total: totalNative, stockAfter: s.stock, notes: updatedNotes + ' [PENDING ARTIST TRANSFER]',
+    type: 'order', book: book.title, date: when, num, chan, qty, price, total: totalNative, stockAfter: s.stock, notes: updatedNotes + ' [PENDING ARTIST TRANSFER]',
     sheetsId,
     currency: nativeCur,
     paymentCurrency: normalizeCurrencyCode(payment?.currency || nativeCur, 'CAD'),
@@ -12001,7 +12028,7 @@ function addStore() {
     { id: 'ns-rate', test: v => { if (v.trim() === '') return true; const n = parseFloat(v); return !isNaN(n) && n >= 0 && n <= 100; }, msg: 'Commission must be between 0 and 100' },
   ])) return;
   const name = $('ns-name').value.trim();
-  getState().stores.push({ id: Date.now(), name, contact: $('ns-contact').value.trim(), email: $('ns-email').value.trim(), phone: $('ns-phone').value.trim(), address: $('ns-address').value.trim(), city: $('ns-city').value.trim(), region: $('ns-region').value.trim(), postal: $('ns-postal').value.trim(), country: $('ns-country').value.trim(), website: $('ns-website').value.trim(), terms: $('ns-terms').value.trim(), rate: parseFloat($('ns-rate').value) || 40, notes: $('ns-notes').value.trim(), sent: 0, sold: 0, returned: 0, outstanding: 0, amountOwed: 0 });
+  getState().stores.push({ id: Date.now(), name, contact: $('ns-contact').value.trim(), email: $('ns-email').value.trim(), phone: $('ns-phone').value.trim(), address: $('ns-address').value.trim(), city: $('ns-city').value.trim(), region: $('ns-region').value.trim(), postal: $('ns-postal').value.trim(), country: $('ns-country').value.trim(), website: $('ns-website').value.trim(), terms: $('ns-terms').value.trim(), rate: (() => { const r = parseFloat($('ns-rate').value); return Number.isFinite(r) ? r : 40; })(), notes: $('ns-notes').value.trim(), sent: 0, sold: 0, returned: 0, outstanding: 0, amountOwed: 0 });
   closeM('add-store');
   clearAddStoreForm();
   renderStores(); updateDash(); saveState(activeBook); showToast('✓ Store added');
@@ -12096,7 +12123,7 @@ function confirmEditStore() {
     { id: 'es-rate', test: v => { if (v.trim() === '') return true; const n = parseFloat(v); return !isNaN(n) && n >= 0 && n <= 100; }, msg: 'Commission must be between 0 and 100' },
   ])) return;
   const name = $('es-name').value.trim();
-  st.name = name; st.contact = $('es-contact').value.trim(); st.email = $('es-email').value.trim(); st.phone = $('es-phone').value.trim(); st.address = $('es-address').value.trim(); st.city = $('es-city').value.trim(); st.region = $('es-region').value.trim(); st.postal = $('es-postal').value.trim(); st.country = $('es-country').value.trim(); st.website = $('es-website').value.trim(); st.terms = $('es-terms').value.trim(); st.rate = parseFloat($('es-rate').value) || st.rate; st.notes = $('es-notes').value.trim();
+  st.name = name; st.contact = $('es-contact').value.trim(); st.email = $('es-email').value.trim(); st.phone = $('es-phone').value.trim(); st.address = $('es-address').value.trim(); st.city = $('es-city').value.trim(); st.region = $('es-region').value.trim(); st.postal = $('es-postal').value.trim(); st.country = $('es-country').value.trim(); st.website = $('es-website').value.trim(); st.terms = $('es-terms').value.trim(); { const r = parseFloat($('es-rate').value); if (Number.isFinite(r)) st.rate = r; } st.notes = $('es-notes').value.trim();
   { const bookCode = getBookCurrencyCode(getBook()), code = $('es-currency') ? $('es-currency').value : ''; if (code && code !== bookCode) st.currency = code; else delete st.currency; }
   closeM('edit-store'); renderStores(); updateDash(); saveState(activeBook); showToast('✓ Store updated');
 }
@@ -12108,7 +12135,7 @@ function confirmSend() {
     { id: 'send-qty', test: v => (parseInt(v) || 0) <= s.stock, msg: `Only ${s.stock} in stock` },
     { id: 'send-rate', test: v => { const n = parseFloat(v); return !isNaN(n) && n >= 0 && n <= 100; }, msg: 'Commission must be between 0 and 100' },
   ])) return;
-  const qty = parseInt($('send-qty').value) || 0, date = $('send-date').value, rate = parseFloat($('send-rate').value) || st.rate, notes = $('send-notes').value.trim();
+  const qty = parseInt($('send-qty').value) || 0, date = $('send-date').value, rate = Number.isFinite(parseFloat($('send-rate').value)) ? parseFloat($('send-rate').value) : st.rate, notes = $('send-notes').value.trim();
   s.stock -= qty; st.sent += qty; st.outstanding += qty;
   const sheetsId = makeEventId();
   s.ledger.push({ id: Date.now(), storeId: st.id, storeName: st.name, type: 'Shipment', date, qty, rate, amountDue: 0, paid: 'n/a', notes, status: 'sent', sheetsId });
@@ -12397,7 +12424,7 @@ function confirmReturn() {
 function settleLedgerSalePaid(s, e) {
   if (!e || e.status !== 'pending' || e.voided) return false;
   const st = (s.stores || []).find(x => x.id === e.storeId);
-  if (st) st.amountOwed = Math.max(0, (st.amountOwed || 0) - (e.amountDue || 0));
+  if (st) st.amountOwed = roundCents(Math.max(0, (st.amountOwed || 0) - (e.amountDue || 0)));
   e.status = 'paid'; e.paid = 'paid';
   const h = histMirrorForLedger(s, e);
   if (h) h.paidState = 'paid';
@@ -13093,21 +13120,28 @@ function renderInvoices() {
 
   // Mark overdue automatically (visual only, not persisted)
   const todayStr = today();
+  // Never written onto the stored invoice (it would be saved and outlive a paid/cancelled status).
+  const overdueIds = new Set();
   for (const inv of invs) {
-    if (inv.status === 'sent' && inv.dueDate && inv.dueDate < todayStr) inv._overdue = true;
+    delete inv._overdue; // clear any flag an older version saved
+    if (inv.status === 'sent' && inv.dueDate && inv.dueDate < todayStr) overdueIds.add(inv.id);
   }
 
   // Summary line
   // ⚡ Bolt Optimization: Calculate outstanding, paid, and drafts in a single pass instead of iterating over the `invs` array three times.
-  let outstanding = 0, paid = 0, drafts = 0, shared = 0;
+  // Totals are kept per currency: an invoice in another currency is never added into the book's.
+  const outByCur = new Map(), paidByCur = new Map();
+  let drafts = 0, shared = 0;
+  const addTo = (m, i) => { const c = i.currency || cur; m.set(c, (m.get(c) || 0) + (i.total || 0)); };
   for (const r of rows) {
     const i = r.inv;
     if (r.shared) shared++;
-    if (i.status === 'sent') outstanding += (i.total || 0);
-    else if (i.status === 'paid') paid += (i.total || 0);
+    if (i.status === 'sent') addTo(outByCur, i);
+    else if (i.status === 'paid') addTo(paidByCur, i);
     else if (i.status === 'draft') drafts++;
   }
-  summary.textContent = `${invs.length} total · ${fmt(outstanding, cur)} outstanding · ${fmt(paid, cur)} collected${drafts ? ` · ${drafts} draft${drafts > 1 ? 's' : ''}` : ''}${shared ? ` · ${shared} shared with another title` : ''}`;
+  const sumText = m => m.size ? [...m].map(([c, v]) => fmt(v, c)).join(' + ') : fmt(0, cur);
+  summary.textContent = `${invs.length} total · ${sumText(outByCur)} outstanding · ${sumText(paidByCur)} collected${drafts ? ` · ${drafts} draft${drafts > 1 ? 's' : ''}` : ''}${shared ? ` · ${shared} shared with another title` : ''}`;
 
   if (!invs.length) {
     list.innerHTML = '<div class="empty-state"><div class="e-icon">📄</div>No invoices yet. Click <strong>+ New invoice</strong> to bill a consignment store — or anyone else who owes you.<div style="margin-top:12px;"><button class="btn gold" onclick="openCreateInvoice()">+ New invoice</button></div></div>';
@@ -13115,8 +13149,8 @@ function renderInvoices() {
   }
 
   list.innerHTML = rows.map(({ inv, ownerBookId }) => {
-    const statusLabel = inv._overdue ? 'OVERDUE' : (inv.status || 'draft').toUpperCase();
-    const statusCls = inv._overdue ? 'overdue' : (inv.status || 'draft');
+    const statusLabel = overdueIds.has(inv.id) ? 'OVERDUE' : (inv.status || 'draft').toUpperCase();
+    const statusCls = overdueIds.has(inv.id) ? 'overdue' : (inv.status || 'draft');
     const due = inv.dueDate ? fmtD(inv.dueDate) : '—';
     const stripeChip = isDynamicStripeLink(inv)
       ? `<span class="chip-status gold sm" title="Dynamic Stripe Checkout · exact amount">💳 Stripe</span>`
@@ -13960,6 +13994,10 @@ function saveInvoice(status) {
       // would let the same bill be chased a second time as if for the first.
       if (Array.isArray(old.reminders) && old.reminders.length) payload.reminders = old.reminders;
       if (old.remindAfter) payload.remindAfter = old.remindAfter;
+      // Stripe settlement stamps: without them a later refund/chargeback can't be matched
+      // to this invoice, and the sweep would re-note a short payment it already recorded.
+      if (old.stripeChargeId) payload.stripeChargeId = old.stripeChargeId;
+      if (Array.isArray(old.stripePartPayments) && old.stripePartPayments.length) payload.stripePartPayments = old.stripePartPayments;
       // preserve Stripe link only if amount/currency unchanged
       const amountChanged = (Number(old.total || 0).toFixed(2) !== Number(payload.total || 0).toFixed(2))
         || (old.currency !== payload.currency);
@@ -13968,6 +14006,8 @@ function saveInvoice(status) {
       } else if (old.stripe) {
         // amount changed → invalidate old link (will deactivate below)
         oldStripeLinkId = old.stripe.paymentLinkId;
+        // The edit form was prefilled with the old Stripe URL; don't keep printing the dead link.
+        if (payload.paymentLink && payload.paymentLink === (old.stripe.url || old.paymentLink)) payload.paymentLink = '';
       }
       s.invoices[idx] = payload;
     } else {
@@ -14098,6 +14138,8 @@ async function deleteInvoice() {
     if (it._ledgerId) stampLedgerInvoiceLink(s, it._ledgerId, null);
   }
   s.invoices = (s.invoices || []).filter(i => i.id !== invoiceCtx.editingId);
+  // A deleted invoice must not stay payable through its Stripe link.
+  if (inv.status !== 'paid' && inv.stripe?.paymentLinkId) deactivateStripePaymentLink(inv.stripe.paymentLinkId);
   saveState(bookId);
   closeM('invoice-edit');
   renderInvoices();
@@ -15287,10 +15329,14 @@ function saveLedgerEntryEdit(s, book) {
       // it from the old amountDue so quantity/rate-only edits behave as before.
       const derivedPrice = oldDue > 0 ? (oldDue / (e.qty * (1 - e.rate / 100))) : book.listPrice;
       const typedPrice = parseFloat($('edit-l-price') ? $('edit-l-price').value : '');
-      const salePrice = (!isNaN(typedPrice) && typedPrice > 0) ? typedPrice : derivedPrice;
-      const newDue = newQty * salePrice * (1 - newRate / 100);
+      // The field is pre-filled with the 2-decimal rounding of derivedPrice. If it still
+      // shows that, the user didn't touch the price: keep the exact derived one so a
+      // notes/date/qty-only edit doesn't drift the amount by a cent.
+      const priceUntouched = !isNaN(typedPrice) && typedPrice === Number((derivedPrice || 0).toFixed(2));
+      const salePrice = (!isNaN(typedPrice) && typedPrice > 0 && !priceUntouched) ? typedPrice : derivedPrice;
+      const newDue = roundCents(newQty * salePrice * (1 - newRate / 100));
       if (e.paid === 'pending' && st) {
-        st.amountOwed = Math.max(0, st.amountOwed - oldDue + newDue);
+        st.amountOwed = roundCents(Math.max(0, st.amountOwed - oldDue + newDue));
       }
       s.revenue = Math.max(0, s.revenue - oldDue + newDue);
       if (s.chStats['Consignment']) {
@@ -15730,7 +15776,7 @@ function voidEntry() {
     if (!e.voided) {
       // VOID consignment entry
       if (e.type === 'Shipment' && st) { st.sent = Math.max(0, st.sent - e.qty); st.outstanding = Math.max(0, st.outstanding - e.qty); s.stock += e.qty; }
-      if (e.type === 'Sale' && st) { st.sold = Math.max(0, st.sold - e.qty); st.outstanding += e.qty; s.sold = Math.max(0, s.sold - e.qty); s.revenue = Math.max(0, s.revenue - e.amountDue); if (e.paid === 'pending') st.amountOwed = Math.max(0, st.amountOwed - e.amountDue); if (s.chStats['Consignment']) { s.chStats['Consignment'].txns = Math.max(0, s.chStats['Consignment'].txns - 1); s.chStats['Consignment'].units = Math.max(0, s.chStats['Consignment'].units - e.qty); s.chStats['Consignment'].revenue = Math.max(0, s.chStats['Consignment'].revenue - e.amountDue); } }
+      if (e.type === 'Sale' && st) { st.sold = Math.max(0, st.sold - e.qty); st.outstanding += e.qty; s.sold = Math.max(0, s.sold - e.qty); s.revenue = Math.max(0, s.revenue - e.amountDue); if (e.paid === 'pending') st.amountOwed = roundCents(Math.max(0, st.amountOwed - e.amountDue)); if (s.chStats['Consignment']) { s.chStats['Consignment'].txns = Math.max(0, s.chStats['Consignment'].txns - 1); s.chStats['Consignment'].units = Math.max(0, s.chStats['Consignment'].units - e.qty); s.chStats['Consignment'].revenue = Math.max(0, s.chStats['Consignment'].revenue - e.amountDue); } }
       if (e.type === 'Return' && st) { st.returned = Math.max(0, st.returned - e.qty); st.outstanding += e.qty; if (e.status === 'restocked') s.stock = Math.max(0, s.stock - e.qty); }
       e.voided = true;
       e.voidedAt = Date.now();
@@ -15743,7 +15789,7 @@ function voidEntry() {
     } else {
       // UNVOID consignment entry
       if (e.type === 'Shipment' && st) { st.sent += e.qty; st.outstanding += e.qty; s.stock = Math.max(0, s.stock - e.qty); }
-      if (e.type === 'Sale' && st) { st.sold += e.qty; st.outstanding = Math.max(0, st.outstanding - e.qty); s.sold += e.qty; s.revenue += e.amountDue; if (e.paid === 'pending') st.amountOwed += e.amountDue; if (!s.chStats['Consignment']) s.chStats['Consignment'] = { txns: 0, units: 0, revenue: 0 }; s.chStats['Consignment'].txns++; s.chStats['Consignment'].units += e.qty; s.chStats['Consignment'].revenue += e.amountDue; }
+      if (e.type === 'Sale' && st) { st.sold += e.qty; st.outstanding = Math.max(0, st.outstanding - e.qty); s.sold += e.qty; s.revenue += e.amountDue; if (e.paid === 'pending') st.amountOwed = roundCents(st.amountOwed + e.amountDue); if (!s.chStats['Consignment']) s.chStats['Consignment'] = { txns: 0, units: 0, revenue: 0 }; s.chStats['Consignment'].txns++; s.chStats['Consignment'].units += e.qty; s.chStats['Consignment'].revenue += e.amountDue; }
       if (e.type === 'Return' && st) { st.returned += e.qty; st.outstanding = Math.max(0, st.outstanding - e.qty); if (e.status === 'restocked') s.stock += e.qty; }
       e.voided = false;
       delete e.voidedAt;
@@ -16109,7 +16155,7 @@ async function confirmRestoreBookDataFromSheets() {
       if (e.voided || e.type !== 'Sale' || !e.storeId) return;
       const st = newStores.find(x => x.id === e.storeId);
       if (st && e.status === 'pending') {
-        st.amountOwed += (e.amountDue || 0);
+        st.amountOwed = roundCents(st.amountOwed + (e.amountDue || 0));
       }
     });
 

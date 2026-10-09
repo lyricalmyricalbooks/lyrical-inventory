@@ -6,6 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { appSource, buildHarness } from './helpers/extract-decl.js';
 import { histMirrorForLedger } from '../src/lib/consignment.js';
+import { roundCents } from '../src/lib/money.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const indexContent = fs.readFileSync(path.resolve(__dirname, '../index.html'), 'utf8');
@@ -25,6 +26,7 @@ function paidHarness({ book = { id: 'hound', stripeLink: '' } } = {}) {
     deps: {
       BOOKS: { [book.id]: book },
       histMirrorForLedger,
+      roundCents,
       isDynamicStripeLink: (inv) => !!(inv && inv.stripe && inv.stripe.url),
       deactivateStripePaymentLink: (id) => { deactivated.push(id); },
       saveState: (id) => { saved.push(id); },

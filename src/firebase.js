@@ -597,10 +597,11 @@ window._fbDeleteSubmission = async (bookId, type, subId) => {
   try {
     if (window._useFirestoreForBook(bookId)) {
       await deleteDoc(doc(fs, 'submissions', bookId, type, subId));
-      return;
+      return true;
     }
     await remove(ref(db, `lyrical/submissions/${bookId}/${type}/${subId}`));
-  } catch (e) { console.error("fbDeleteSub failed", e); }
+    return true;
+  } catch (e) { console.error("fbDeleteSub failed", e); return false; }
 };
 
 // ─────────────────────────────────────────────
