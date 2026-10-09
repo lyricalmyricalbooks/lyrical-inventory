@@ -26,7 +26,7 @@ const read = (p) => readFileSync(path.join(root, p), 'utf8');
 // one works the other way round: every reference must resolve to something
 // actually defined.
 
-const CSS_FILES = ['src/style.css', 'src/styles/system.css', 'src/styles/theme-dark.css'];
+const CSS_FILES = ['src/style.css', 'src/styles/system.css', 'src/styles/theme-dark.css', 'src/styles/phone.css'];
 
 function definedTokens() {
   const defined = new Set();

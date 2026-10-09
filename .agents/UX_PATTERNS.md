@@ -224,6 +224,16 @@ are. **Never reuse `.hs-label`/`.hs-val`** for a card like this — that pair is
 header's permanently-dark strip (`rgba(255,255,255,.34)` label, fixed `--gold3` figure) and using it
 on a light card means fighting every property back with an inline override, one per card.
 
+**Two-sided balance — `.ps-settle`** (the Profit Sharing panel's "Settle up", `src/lib/settle-up-view.js`).
+When money runs both ways between two parties, never show it as a running list that subtracts,
+subtotals and subtracts again. Use two facing `.ps-settle-col` columns, one per direction. Every line
+is a plain positive amount, and each column ends in one `.ps-settle-total` above a 2px ink rule (the
+Riso "sum line"). The subtraction happens once, in a `.ps-stat-card.tone-*` result card whose sub-line
+shows the equation (`499.97 − 267.76`). The headline strip then leads with that single net figure
+instead of flagging both sides. Columns stack below 680px through a `@container` on `.ps-settle`.
+Follow-up actions are a numbered `.ps-settle-steps` list (check → share → record), and the record step
+only renders for a role that can write.
+
 ---
 
 ## Permanently-dark banner tables — `.metric-banner-table`

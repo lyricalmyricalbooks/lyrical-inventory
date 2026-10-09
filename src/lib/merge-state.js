@@ -163,7 +163,7 @@ function insertRow(part, rows, row) {
  * the caller can tell the user something was overwritten rather than pretending
  * the merge was clean.
  */
-export function mergeRows(part, base, remote, local) {
+export function mergeRows(part, base, remote, local, { baseKnown = true } = {}) {
   const B = groupRows(part, base);
   const R = groupRows(part, remote);
   const L = groupRows(part, local);
@@ -201,12 +201,30 @@ export function mergeRows(part, base, remote, local) {
     // all we have to go on. Rows beyond the base count on each side are that
     // side's additions and both sides' additions must survive — otherwise two
     // devices each recording an indistinguishable cash sale would net one sale.
+    //
+    // Two cases call for the union of the sides' additions (the larger count)
+    // rather than their sum, because the "additions" on each side are very
+    // likely the SAME rows:
+    //  - the base is unknown (a change queued by an older build, or a part this
+    //    device never read). With nothing to subtract, every row on both sides
+    //    looks like an addition, and summing doubled the whole sales history.
+    //  - the row carries a sheetsId. Big Cartel and Stripe imports mint it from
+    //    the order or charge number so one order is one row on every device;
+    //    two devices recording the same charge must net one sale, not two.
+    // Union never drops a row either side holds, so nothing is lost.
+    const sample = l[0] || r[0] || b[0];
+    const imported = part === 'hist' && !!sample && typeof sample === 'object'
+      && sample.sheetsId != null && sample.sheetsId !== '';
     const shared = Math.min(l.length, r.length, b.length);
     const survivingBase = Math.max(
       0,
       b.length - Math.max(0, b.length - l.length) - Math.max(0, b.length - r.length),
     );
-    const total = survivingBase + Math.max(0, l.length - b.length) + Math.max(0, r.length - b.length);
+    const addedL = Math.max(0, l.length - b.length);
+    const addedR = Math.max(0, r.length - b.length);
+    const total = (!baseKnown || imported)
+      ? survivingBase + Math.max(addedL, addedR)
+      : survivingBase + addedL + addedR;
 
     const candidates = [];
     for (let i = 0; i < shared; i++) candidates.push(resolve(l[i], r[i], b[i]));
@@ -300,6 +318,16 @@ export function splitState(state) {
   return parts;
 }
 
+// The per-part JSON a state is stored as — the same strings _fbSave writes and
+// keeps in window._fsHashes. A change queued on top of one that has since
+// uploaded uses this of that snapshot as its merge base.
+export function partHashesOf(state) {
+  const parts = splitState(state);
+  const out = {};
+  for (const name of Object.keys(parts)) out[name] = JSON.stringify(parts[name]);
+  return out;
+}
+
 export function stitchState(parts) {
   const p = parts || {};
   const out = { ...(p.metadata && typeof p.metadata === 'object' ? p.metadata : {}) };
@@ -341,13 +369,48 @@ export function assembleParts(raw) {
 }
 
 // Dispatch for a single part name, so callers don't repeat the branch.
-export function mergePart(part, base, remote, local) {
+// `opts.baseKnown` is false when the caller has no base for this part at all
+// (as opposed to a base that is genuinely empty); see mergeRows.
+export function mergePart(part, base, remote, local, opts = {}) {
   if (part === 'metadata') return mergeMetadata(base, remote, local);
   const { rows, conflicts } = mergeRows(
     part,
     Array.isArray(base) ? base : [],
     Array.isArray(remote) ? remote : [],
     Array.isArray(local) ? local : [],
+    opts,
   );
   return { value: rows, conflicts };
+}
+
+// Shared settings documents (the catalog, the Tax Centre with its expenses) are
+// single JSON blobs, loaded once at startup and written back whole. A device
+// that had been open a while wrote its stale copy over a book or a receipt
+// another device had added since. Merging key by key against the copy this
+// device last loaded keeps both: a book added on one device and a price changed
+// on the other both survive; the same entry changed on both keeps this device's
+// version (reported in `conflicts`).
+//
+// baseJson   the document as this device last loaded or wrote it (null if it
+//            never read one — then nothing is merged and local is written)
+// remoteJson the document as the server holds it now (null if none)
+// local      the value this device wants to write
+// Returns { value, merged, conflicts }; merged is false when the server still
+// matches the base, and value is then local unchanged.
+export function mergeSettingDoc(baseJson, remoteJson, local) {
+  if (baseJson == null || remoteJson == null || remoteJson === baseJson) {
+    return { value: local, merged: false, conflicts: [] };
+  }
+  let base;
+  let remote;
+  try {
+    base = JSON.parse(baseJson);
+    remote = JSON.parse(remoteJson);
+  } catch (_) {
+    return { value: local, merged: false, conflicts: [] };
+  }
+  const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
+  if (!isObj(base) || !isObj(remote) || !isObj(local)) return { value: local, merged: false, conflicts: [] };
+  const { value, conflicts } = mergeMetadata(base, remote, local);
+  return { value, merged: true, conflicts };
 }

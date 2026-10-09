@@ -113,7 +113,10 @@ test('phone pass: section heads wrap instead of squeezing their title', () => {
 
 test('phone pass: Add sale keeps its save button in reach and tables keep their first column', () => {
   const block = styles.slice(styles.indexOf('PHONE PASS, EVERY OTHER SCREEN'));
-  expect(block).toMatch(/#tab-manual \.card-actions \.btn\.gold\.lg\{\s*position:sticky;/);
+  // The whole save bar is sticky inside the card: a sticky button inside its
+  // own button-tall box had nowhere to travel, so it never stayed in reach.
+  expect(block).toMatch(/#tab-manual \.card > \.card-actions\{[\s\S]{0,300}?position:sticky;bottom:calc\(72px \+ env\(safe-area-inset-bottom\)\)/);
+  expect(block).not.toMatch(/#tab-manual \.card-actions \.btn\.gold\.lg\{\s*position:sticky/);
   expect(block).toMatch(/\.tab-panel:not\(#tab-history\) \.tbl td:first-child\{position:sticky;left:0;/);
   // The Save-preset button on Shipping no longer forces a 28px height.
   expect(html).not.toMatch(/openSaveBookPresetModal\(\)" style="[^"]*height:28px/);
@@ -160,4 +163,28 @@ test('Add sale: Sale / Gift copy switch shows one form at a time, on phones only
   expect(styles).toMatch(/\.phone-mode-seg,\.phone-seg\{display:none;\}/);
   const block = styles.slice(styles.indexOf('ADD SALE, PHONE REDESIGN'));
   expect(block).toMatch(/#tab-manual:not\(\.is-gift\) #man-gift-sect,\s*#tab-manual\.is-gift #man-sale-sect\{display:none;\}/);
+});
+
+test('Add sale: a missing payment type shows under the tap buttons and clears when one is tapped', async () => {
+  const { fieldError, clearFieldError } = await import('../src/lib/modal.js');
+  const submit = slice('async function submitManual', '// Guard against double-taps');
+  // The error is written under the field, not as a red border on a dropdown a
+  // phone hides behind its tap buttons.
+  expect(submit).toMatch(/fieldError\('m-payment-type', 'Pick who got the money'\)/);
+  expect(submit).not.toMatch(/style\.borderColor = 'var\(--red\)'/);
+  // Tap buttons fire `change` on the dropdown, never `input`, so the app-wide
+  // clearer has to listen for `change` too.
+  expect(mainJs).toMatch(/addEventListener\('change', \(e\) => \{\s*const t = e\.target;[\s\S]{0,200}?closest\('\.form-group\.invalid'\)\) clearFieldError\(t\)/);
+
+  const api = segApi();
+  api.refreshPhoneSegs();
+  const pay = $('m-payment-type');
+  document.addEventListener('change', (e) => { if (e.target.closest('.form-group.invalid')) clearFieldError(e.target); });
+  fieldError('m-payment-type', 'Pick who got the money');
+  const group = pay.closest('.form-group');
+  expect(group.classList.contains('invalid')).toBe(true);
+  expect(group.querySelector('.field-error').textContent).toBe('Pick who got the money');
+  pay.nextElementSibling.querySelector('.phone-seg-opt').click();
+  expect(group.classList.contains('invalid')).toBe(false);
+  expect(group.querySelector('.field-error')).toBeNull();
 });

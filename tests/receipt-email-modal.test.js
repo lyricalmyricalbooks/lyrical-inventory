@@ -28,8 +28,13 @@ describe('Email Receipt Import — inline Tax Centre sub-page', () => {
   });
 
   it('stays put instead of hiding when the owner navigates away', () => {
-    const guard = modalJs.match(/if \(el\.classList\.contains\('fk-workspace'\)[\s\S]*?\) return;/)?.[0] || '';
-    expect(guard).toContain("el.classList.contains('email-import-workspace')");
+    // closeM returns early for inline workspaces, before the hide; the list of
+    // what counts as one lives in isInlineWorkspace().
+    const helper = modalJs.match(/function isInlineWorkspace\(el\) \{[\s\S]*?\n\}/)?.[0] || '';
+    expect(helper).toContain("el.classList.contains('email-import-workspace')");
+    const close = modalJs.slice(modalJs.indexOf('export function closeM'));
+    expect(close.indexOf('if (isInlineWorkspace(el)) return;')).toBeGreaterThan(-1);
+    expect(close.indexOf('if (isInlineWorkspace(el)) return;')).toBeLessThan(close.indexOf("el.style.display = 'none'"));
   });
 
   it('provides Apple/Linear style segmented control tabs', () => {

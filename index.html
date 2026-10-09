@@ -57,6 +57,55 @@
   })();
 </script>
 
+<!-- BOOT WATCHDOG — a classic script, so it runs even when the module bundle
+     cannot. On a device that has never cached the app, opening it with no
+     signal fails to fetch the Firebase SDK, the bundle never evaluates, and
+     the sign-in button's onclick names a function that was never defined:
+     a dead button under a "Connecting…" splash that never clears. This
+     defines a stand-in sign-in that src/main.js overwrites the moment it
+     runs, and turns a failed bundle load into words on the sign-in screen.
+     src/main.js sets window.__lmAppLoaded first thing; tests/boot-watchdog
+     .test.js runs this block in jsdom. -->
+<script>
+  (function () {
+    var OFFLINE_MSG = 'You’re offline and this device hasn’t saved the app yet. Connect to the internet once, then tap Sign in again.';
+    var FAILED_MSG = 'The app couldn’t finish loading. Check your connection, then tap Sign in to try again.';
+    var SLOW_MSG = 'Still connecting… this is taking longer than usual.';
+    function offline() { return navigator.onLine === false; }
+    function say(msg) {
+      var err = document.getElementById('pw-err');
+      if (err) err.textContent = msg;
+    }
+    function showLoadFailure() {
+      if (window.__lmAppLoaded) return;
+      window.__lmBootFailed = true;
+      var splash = document.getElementById('splash-screen');
+      if (splash) splash.style.display = 'none';
+      say(offline() ? OFFLINE_MSG : FAILED_MSG);
+    }
+    // Overwritten by the real sign-in in src/main.js once the bundle runs.
+    window.tryGoogleLogin = function () {
+      if (window.__lmAppLoaded) return;
+      if (offline()) { say(OFFLINE_MSG); return; }
+      say('Loading…');
+      location.reload();
+    };
+    // A module graph that fails to fetch fires `error` on its <script>;
+    // script errors don't bubble, so listen in the capture phase.
+    window.addEventListener('error', function (e) {
+      var t = e && e.target;
+      if (t && t.tagName === 'SCRIPT' && t.type === 'module') showLoadFailure();
+    }, true);
+    setTimeout(function () {
+      if (window.__lmAppLoaded || window.__lmBootFailed) return;
+      if (offline()) { showLoadFailure(); return; }
+      var splash = document.getElementById('splash-screen');
+      var line = splash && splash.lastElementChild;
+      if (line) line.textContent = SLOW_MSG;
+    }, 12000);
+  })();
+</script>
+
 <style>
   /* ─── INVOICE PAPER (sharp, printable) ─────────────────────────────── */
   /* Riso Press, printed. Colours stay hardcoded and fonts are named outright
@@ -544,7 +593,7 @@
   <button type="button" class="mnav-btn" onclick="switchTab('today')"><span class="mnav-ic" aria-hidden="true">▦</span><span class="mnav-label">Home</span></button>
   <button type="button" class="mnav-btn" onclick="switchTab('pos')"><span class="mnav-ic" aria-hidden="true">🛒</span><span class="mnav-label">Sell</span></button>
   <button type="button" class="mnav-btn" onclick="switchTab('manual')"><span class="mnav-ic" aria-hidden="true">✎</span><span class="mnav-label">Manual entry</span></button>
-  <button type="button" class="mnav-btn" id="mnav-more" onclick="openMoreSheet()" aria-haspopup="dialog" aria-controls="more-sheet"><span class="mnav-ic" aria-hidden="true">☰</span><span class="mnav-label">More</span><span class="mnav-dot" id="mnav-more-dot" hidden></span></button>
+  <button type="button" class="mnav-btn" id="mnav-more" onclick="openMoreSheet()" aria-haspopup="dialog" aria-controls="more-sheet" aria-expanded="false"><span class="mnav-ic" aria-hidden="true">☰</span><span class="mnav-label">More</span><span class="mnav-dot" id="mnav-more-dot" hidden></span></button>
 </nav>
 <dialog class="more-sheet" id="more-sheet" aria-labelledby="more-sheet-title">
   <div class="more-sheet-head">
@@ -603,7 +652,10 @@
   </div>
 </div>
 
-<!-- HELP / FAQ (everyone) — plain-language guides for artists and for the publisher. -->
+<!-- HELP / FAQ (everyone) — plain-language guides for artists and for the publisher.
+     A section or question with data-audience shows in that guide only; no attribute = both.
+     data-go="<tab>" buttons jump to that tab and hide themselves for anyone who can't open it.
+     Give each section an id so it gets a button in the topic row. -->
 <div class="tab-panel" id="tab-help" style="display:none;">
   <div class="help-page" data-audience="artist">
     <div class="section-hed">Help &amp; questions</div>
@@ -614,6 +666,7 @@
     </div>
     <label class="help-search-label" for="help-search">Search the help</label>
     <input type="search" id="help-search" class="help-search" placeholder="Type a word, like “fair” or “expense”" autocomplete="off" oninput="filterHelp(this.value)">
+    <nav class="help-topics" id="help-topics" aria-label="Jump to a topic" hidden></nav>
     <div class="help-tools">
       <span class="help-count" id="help-count" aria-live="polite"></span>
       <button type="button" class="help-tool-btn" id="help-toggle-all" onclick="toggleAllHelp()">Open all</button>
@@ -622,69 +675,73 @@
       <p>No answers match that. Try a simpler word, or ask the publisher.</p>
       <button type="button" class="help-tool-btn" id="help-other-aud" hidden onclick="setHelpAudience(this.dataset.aud)"></button>
     </div>
-    <section class="help-sec" data-audience="artist">
+    <section class="help-sec" id="help-start" data-audience="artist">
       <h3 class="help-sec-title">Getting started</h3>
       <details class="help-q"><summary>What is this app for?</summary><div class="help-a"><p>It keeps track of your book: how many copies are left, every sale, every free copy you give away, the shops holding your books, and money you've spent. You and the publisher see the same numbers, so nobody has to keep a separate spreadsheet.</p></div></details>
-      <details class="help-q"><summary>Where do I start?</summary><div class="help-a"><ol><li>Open <b>Dashboard</b> to see how your book is doing.</li><li>Sold a copy yourself? Go to <b>Manual entry</b> and add it.</li><li>At a fair? Open <b>📲 My QR Code</b> and let buyers scan it.</li></ol><p>That's all most artists ever need.</p></div></details>
+      <details class="help-q"><summary>Where do I start?</summary><div class="help-a"><ol><li>Open <b>Dashboard</b> to see how your book is doing.</li><li>Sold a copy yourself? Go to <b>Manual entry</b> and add it.</li><li>At a fair? Open <b>📲 My QR Code</b> and let buyers scan it.</li></ol><p>That's all most artists ever need.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="dashboard">Open Dashboard →</button></p></div></details>
       <details class="help-q"><summary>What do the tabs along the top do?</summary><div class="help-a"><ul><li><b>Dashboard</b> — your book at a glance: copies left, sales and earnings.</li><li><b>Manual entry</b> — add a sale or a free copy you gave away.</li><li><b>Consignment</b> — shops holding your books and what they owe.</li><li><b>History</b> — every sale ever recorded.</li><li><b>Expenses</b> — costs you paid for the book (to be paid back).</li><li><b>📲 My QR Code</b> — a payment code for buyers at events.</li><li><b>❓ Help</b> — this page.</li></ul></div></details>
       <details class="help-q"><summary>Do I need to save?</summary><div class="help-a"><p>No. Everything saves by itself the moment you add it. You'll see a small <b>✓ Saved</b> note.</p></div></details>
     </section>
-    <section class="help-sec" data-audience="artist">
+    <section class="help-sec" id="help-selling" data-audience="artist">
       <h3 class="help-sec-title">Selling books</h3>
-      <details class="help-q"><summary>How do I record a sale I made?</summary><div class="help-a"><ol><li>Tap <b>Manual entry</b>.</li><li>Type how many copies (<b>Qty</b>) and the price of <b>one</b> copy.</li><li>Pick where you sold it under <b>Channel</b> (In person, Book fair…).</li><li>Under <b>Payment type</b>, pick who got the money.</li><li>Press the add button. Done!</li></ol></div></details>
+      <details class="help-q"><summary>How do I record a sale I made?</summary><div class="help-a"><ol><li>Tap <b>Manual entry</b>.</li><li>Type how many copies (<b>Qty</b>) and the price of <b>one</b> copy.</li><li>Pick where you sold it under <b>Channel</b> (In person, Book fair…).</li><li>Under <b>Payment type</b>, pick who got the money.</li><li>Press the add button. Done!</li></ol><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="manual">Open Manual entry →</button></p></div></details>
       <details class="help-q"><summary>Which “Payment type” do I pick?</summary><div class="help-a"><ul><li>The buyer paid <b>you</b> (cash, your e-transfer…) → <b>directly to artist</b>. You'll send the publisher their part later.</li><li>The buyer paid <b>the publisher</b> (QR code, website) → <b>directly to publisher</b>.</li></ul></div></details>
       <details class="help-q"><summary>Why does my sale say it's waiting for approval?</summary><div class="help-a"><p>When money went to you directly, the publisher gets a note to check it. That's normal — it doesn't mean anything is wrong. It will show as approved once they look at it.</p></div></details>
-      <details class="help-q"><summary>I gave a copy away for free. What do I do?</summary><div class="help-a"><p>Go to <b>Manual entry</b> and use the free copy (gratuity) form. Write who got it, how many, and the date. This keeps the copy count right.</p></div></details>
+      <details class="help-q"><summary>I gave a copy away for free. What do I do?</summary><div class="help-a"><p>Go to <b>Manual entry</b> and use the free copy (gratuity) form. Write who got it, how many, and the date. This keeps the copy count right.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="manual">Open Manual entry →</button></p></div></details>
       <details class="help-q"><summary>I made a mistake in a sale.</summary><div class="help-a"><p>Don't add a second sale to “cancel” it. Send the publisher a quick message with the date and amount and they'll fix it, so the totals stay correct.</p></div></details>
     </section>
-    <section class="help-sec" data-audience="artist">
-      <h3 class="help-sec-title">Book fairs & events</h3>
-      <details class="help-q"><summary>How do buyers pay me at a fair?</summary><div class="help-a"><ol><li>Open <b>📲 My QR Code</b>.</li><li>Show the code on your phone (or print it).</li><li>The buyer scans it with their phone camera and pays by card.</li></ol><p>The money goes straight to the publisher and the sale appears on its own — you don't need to type anything.</p></div></details>
-      <details class="help-q"><summary>Can I print my QR code?</summary><div class="help-a"><p>Yes. Press <b>Download QR</b> and print the picture, or save it to your phone's photos. <b>Copy link</b> gives you the web link to share online.</p></div></details>
-      <details class="help-q"><summary>Someone paid me in cash at the fair.</summary><div class="help-a"><p>Add it in <b>Manual entry</b> with <b>Channel: Book fair</b> and <b>Payment type: directly to artist</b>.</p></div></details>
+    <section class="help-sec" id="help-fairs" data-audience="artist">
+      <h3 class="help-sec-title">Book fairs &amp; events</h3>
+      <details class="help-q"><summary>How do buyers pay me at a fair?</summary><div class="help-a"><ol><li>Open <b>📲 My QR Code</b>.</li><li>Show the code on your phone (or print it).</li><li>The buyer scans it with their phone camera and pays by card.</li></ol><p>The money goes straight to the publisher and the sale appears on its own — you don't need to type anything.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="myqr">Open My QR Code →</button></p></div></details>
+      <details class="help-q"><summary>Can I print my QR code?</summary><div class="help-a"><p>Yes. Press <b>Download QR</b> and print the picture, or save it to your phone's photos. <b>Copy link</b> gives you the web link to share online.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="myqr">Open My QR Code →</button></p></div></details>
+      <details class="help-q"><summary>Someone paid me in cash at the fair.</summary><div class="help-a"><p>Add it in <b>Manual entry</b> with <b>Channel: Book fair</b> and <b>Payment type: directly to artist</b>.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="manual">Open Manual entry →</button></p></div></details>
     </section>
-    <section class="help-sec" data-audience="artist">
-      <h3 class="help-sec-title">Shops & money</h3>
-      <details class="help-q"><summary>What is “Consignment”?</summary><div class="help-a"><p>When a shop takes your books and pays only for the ones it sells. The <b>Consignment</b> tab shows each shop, how many copies it still has, and what it owes.</p></div></details>
-      <details class="help-q"><summary>I paid for something for my book. Can I get it back?</summary><div class="help-a"><p>Yes. Add it in <b>Expenses</b> with the amount, date and a short note (a photo of the receipt helps). The publisher reviews it and pays you back.</p></div></details>
-      <details class="help-q"><summary>Where do I see how much I've earned?</summary><div class="help-a"><p>On the <b>Dashboard</b>. For each single sale, look in <b>History</b>.</p></div></details>
+    <section class="help-sec" id="help-money" data-audience="artist">
+      <h3 class="help-sec-title">Shops &amp; money</h3>
+      <details class="help-q"><summary>What is “Consignment”?</summary><div class="help-a"><p>When a shop takes your books and pays only for the ones it sells. The <b>Consignment</b> tab shows each shop, how many copies it still has, and what it owes.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="consignment">Open Consignment →</button></p></div></details>
+      <details class="help-q"><summary>I paid for something for my book. Can I get it back?</summary><div class="help-a"><p>Yes. Add it in <b>Expenses</b> with the amount, date and a short note (a photo of the receipt helps). The publisher reviews it and pays you back.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="expenses">Open Expenses →</button></p></div></details>
+      <details class="help-q"><summary>Where do I see how much I've earned?</summary><div class="help-a"><p>On the <b>Dashboard</b>. For each single sale, look in <b>History</b>.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="dashboard">Open Dashboard →</button></p></div></details>
+      <details class="help-q"><summary>My Dashboard says I have money to send to the publisher.</summary><div class="help-a"><p>When a buyer paid you directly, part of that money is the publisher's share. The <b>Money to send to your publisher</b> card shows how much.</p><p>If the publisher also owes you earnings, the two are already subtracted from each other, so there's only <b>one</b> payment to make. Press the <b>Pay</b> button on the card to pay exactly that amount by card — it's recorded for you, no message needed.</p><p>If the card says <b>Nothing to send</b>, there's nothing for you to pay right now.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="dashboard">Open Dashboard →</button></p></div></details>
     </section>
-    <section class="help-sec" data-audience="both">
-      <h3 class="help-sec-title">Trouble?</h3>
-      <details class="help-q"><summary>I have no internet. Can I still use it?</summary><div class="help-a"><p>Yes. Keep adding sales as usual. They're kept safely on your device and sent automatically once you're back online. Just don't clear your browser data before then.</p></div></details>
-      <details class="help-q"><summary>Can I put it on my phone like an app?</summary><div class="help-a"><ul><li><b>iPhone:</b> open it in Safari, tap Share, then <b>Add to Home Screen</b>.</li><li><b>Android:</b> open it in Chrome, tap the ⋮ menu, then <b>Install app</b>.</li></ul></div></details>
-      <details class="help-q"><summary>A number looks wrong.</summary><div class="help-a"><p>Wait a few seconds and refresh the page — it may still be syncing. If it's still wrong, tell the publisher which number and where you saw it.</p></div></details>
-      <details class="help-q"><summary>What does the little “?” next to a box mean?</summary><div class="help-a"><p>Tap or hover over it for a short explanation of what to type in that box.</p></div></details>
-    </section>
-        <section class="help-sec" data-audience="publisher">
+    <section class="help-sec" id="help-press" data-audience="publisher">
       <h3 class="help-sec-title">Running the press</h3>
       <details class="help-q"><summary>What can I see that artists can’t?</summary><div class="help-a"><p>Artists only see their own book and the everyday tabs: Dashboard, Manual entry, Consignment, History, Expenses and their QR code. You see every book, plus the business tabs — Website orders, Event POS, Payments, Tax Centre, Customers, Shipping, Big Cartel, Sheets and Backups.</p></div></details>
       <details class="help-q"><summary>How do I see exactly what an artist sees?</summary><div class="help-a"><p>Choose their book, then press <b>Author view</b> at the top of the screen. A note reminds you that you’re previewing. Press it again to get your full view back.</p></div></details>
-      <details class="help-q"><summary>Where do I start each day?</summary><div class="help-a"><ol><li>Open <b>Dashboard</b> and read any <b>Action required</b> note first.</li><li>Open <b>Website orders</b> and apply the ones marked ready.</li><li>Check <b>To-do</b> for anything still waiting on you.</li></ol></div></details>
+      <details class="help-q"><summary>Where do I start each day?</summary><div class="help-a"><ol><li>Open <b>Dashboard</b> and read any <b>Action required</b> note first.</li><li>Open <b>Website orders</b> and apply the ones marked ready.</li><li>Check <b>To-do</b> for anything still waiting on you.</li></ol><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="todo">Open To-do →</button></p></div></details>
       <details class="help-q"><summary>How do I switch between books?</summary><div class="help-a"><p>Use the book picker at the top. Some tabs need one book chosen; others, like the Dashboard, can show <b>all books</b> together.</p></div></details>
     </section>
-    <section class="help-sec" data-audience="publisher">
-      <h3 class="help-sec-title">Sales &amp; approvals</h3>
-      <details class="help-q"><summary>An artist’s sale says it’s waiting for approval.</summary><div class="help-a"><p>When a buyer paid the artist directly, the sale waits for you so the money owed between you stays correct. The Dashboard shows an <b>Action required</b> note with how many are waiting. Check the amount with the artist, then approve it.</p></div></details>
-      <details class="help-q"><summary>How do website orders get into the books?</summary><div class="help-a"><p>Open <b>Website orders</b>. Orders that match a book are marked ready — apply them and the copies and sales update on their own. Anything that can’t be matched stays listed so nothing is lost.</p></div></details>
-      <details class="help-q"><summary>An artist made a mistake in a sale.</summary><div class="help-a"><p>Find the original sale in <b>History</b> and correct that one, rather than adding a second sale to cancel it out. That keeps the copy count and what each person is owed correct.</p></div></details>
-      <details class="help-q"><summary>How do I sell at a fair or event?</summary><div class="help-a"><p>Open <b>Event POS</b> on your phone or tablet. It’s built for quick sales at a table, keeps the screen awake, and keeps working without internet — sales send once you’re back online.</p></div></details>
+    <section class="help-sec" id="help-approvals" data-audience="publisher">
+      <h3 class="help-sec-title">Sales &amp; orders</h3>
+      <details class="help-q"><summary>An artist’s sale says it’s waiting for approval.</summary><div class="help-a"><p>When a buyer paid the artist directly, the sale waits for you so the money owed between you stays correct. The Dashboard shows an <b>Action required</b> note with how many are waiting. Check the amount with the artist, then approve it.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="dashboard">Open Dashboard →</button></p></div></details>
+      <details class="help-q"><summary>How do website orders get into the books?</summary><div class="help-a"><p>Open <b>Website orders</b>. Orders that match a book are marked ready — apply them and the copies and sales update on their own. Anything that can’t be matched stays listed so nothing is lost.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="website">Open Website orders →</button></p></div></details>
+      <details class="help-q"><summary>An artist made a mistake in a sale.</summary><div class="help-a"><p>Find the original sale in <b>History</b> and correct that one, rather than adding a second sale to cancel it out. That keeps the copy count and what each person is owed correct.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="history">Open History →</button></p></div></details>
+      <details class="help-q"><summary>How do I sell at a fair or event?</summary><div class="help-a"><p>Open <b>Event POS</b> on your phone or tablet. It’s built for quick sales at a table, keeps the screen awake, and keeps working without internet — sales send once you’re back online.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="pos">Open Event POS →</button></p></div></details>
+      <details class="help-q"><summary>How much should I charge for shipping?</summary><div class="help-a"><p>Open <b>Shipping</b>. Save the size and weight of the packages you usually mail, then compare live postage prices (Canada Post options are highlighted). It also suggests what to charge customers for website shipping, so postage doesn’t eat into each sale.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="shipping">Open Shipping →</button></p></div></details>
     </section>
-    <section class="help-sec" data-audience="publisher">
+    <section class="help-sec" id="help-pub-money" data-audience="publisher">
       <h3 class="help-sec-title">Money, shops &amp; taxes</h3>
-      <details class="help-q"><summary>How do I pay back an artist’s expense?</summary><div class="help-a"><p>Artists add costs in <b>Expenses</b>. The Dashboard shows <b>Reimbursements due</b> while any are waiting. Review each one (the receipt photo helps) before paying it back.</p></div></details>
-      <details class="help-q"><summary>How do I keep track of shops holding books?</summary><div class="help-a"><p>Use <b>Consignment</b>: add the shop, record the copies you dropped off, then record sales and payments as the shop reports them. It shows what each shop still holds and owes.</p></div></details>
-      <details class="help-q"><summary>Where do I check money came in?</summary><div class="help-a"><p><b>Payments</b> lines up what customers paid against the sales in the books, so you can spot anything missing or doubled.</p></div></details>
-      <details class="help-q"><summary>Where are my numbers for taxes?</summary><div class="help-a"><p>Open <b>Tax Centre</b> for totals by year and expense category, ready to hand to your accountant.</p></div></details>
+      <details class="help-q"><summary>An artist and I owe each other money.</summary><div class="help-a"><p>This happens when an artist kept the money from sales they made themselves, and you also owe them earnings. Choose their book and open the <b>Dashboard</b>: under <b>Profit Sharing Breakdown</b>, the <b>Settle up</b> panel shows both sides and the <b>one</b> payment that clears them.</p><ol><li>Send the artist the statement with <b>Share statement</b> so they see how it adds up.</li><li>Once the money has actually moved, record it there. Saved it by mistake? Use <b>Undo settlement</b>.</li></ol><p>If the artist pays with the card button on their own Dashboard, it’s recorded for you.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="dashboard">Open Dashboard →</button></p></div></details>
+      <details class="help-q"><summary>How do I pay back an artist’s expense?</summary><div class="help-a"><p>Artists add costs in <b>Expenses</b>. The Dashboard shows <b>Reimbursements due</b> while any are waiting. Review each one (the receipt photo helps) before paying it back.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="expenses">Open Expenses →</button></p></div></details>
+      <details class="help-q"><summary>How do I keep track of shops holding books?</summary><div class="help-a"><p>Use <b>Consignment</b>: add the shop, record the copies you dropped off, then record sales and payments as the shop reports them. It shows what each shop still holds and owes.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="consignment">Open Consignment →</button></p></div></details>
+      <details class="help-q"><summary>Where do I check money came in?</summary><div class="help-a"><p><b>Payments</b> lines up what customers paid against the sales in the books, so you can spot anything missing or doubled.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="reconcile">Open Payments →</button></p></div></details>
+      <details class="help-q"><summary>Where are my numbers for taxes?</summary><div class="help-a"><p>Open <b>Tax Centre</b> for totals by year and expense category, ready to hand to your accountant.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="taxcenter">Open Tax Centre →</button></p></div></details>
     </section>
-    <section class="help-sec" data-audience="publisher">
+    <section class="help-sec" id="help-safe" data-audience="publisher">
       <h3 class="help-sec-title">Keeping things safe</h3>
       <details class="help-q"><summary>Does an artist see my other books or the business totals?</summary><div class="help-a"><p>No. An artist only sees their own book. Business tabs like Payments, Tax Centre and Customers stay with you.</p></div></details>
-      <details class="help-q"><summary>How do I make a backup?</summary><div class="help-a"><p>Open <b>Backups</b> to save a copy of everything. Do this before big clean-ups, like deleting old sales or changing many prices at once.</p></div></details>
-      <details class="help-q"><summary>Two devices show different numbers.</summary><div class="help-a"><p>One of them may still be sending changes made offline. Get both online, wait a minute and refresh. If they still disagree, open <b>Backups</b> — when the same thing was changed on two devices, the other version is kept there so you can compare and bring it back.</p></div></details>
+      <details class="help-q"><summary>How do I make a backup?</summary><div class="help-a"><p>Open <b>Backups</b> to save a copy of everything. Do this before big clean-ups, like deleting old sales or changing many prices at once.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="backups">Open Backups →</button></p></div></details>
+      <details class="help-q"><summary>Two devices show different numbers.</summary><div class="help-a"><p>One of them may still be sending changes made offline. Get both online, wait a minute and refresh. If they still disagree, open <b>Backups</b> — when the same thing was changed on two devices, the other version is kept there so you can compare and bring it back.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="backups">Open Backups →</button></p></div></details>
     </section>
-<p class="help-foot" data-audience="artist">Still stuck? Message the publisher — there's no wrong question.</p>
-    <p class="help-foot" data-audience="publisher">Something here out of date, or an artist asked a question that isn’t covered? Note it so this guide keeps up.</p>
+    <section class="help-sec" id="help-trouble">
+      <h3 class="help-sec-title">Trouble?</h3>
+      <details class="help-q"><summary>I have no internet. Can I still use it?</summary><div class="help-a"><p>Yes. Keep adding sales as usual. They're kept safely on your device and sent automatically once you're back online. Just don't clear your browser data before then.</p></div></details>
+      <details class="help-q"><summary>Can I put it on my phone like an app?</summary><div class="help-a"><ul><li><b>iPhone:</b> open it in Safari, tap Share, then <b>Add to Home Screen</b>.</li><li><b>Android:</b> open it in Chrome, tap the ⋮ menu, then <b>Install app</b>.</li></ul></div></details>
+      <details class="help-q" data-audience="artist"><summary>A number looks wrong.</summary><div class="help-a"><p>Wait a few seconds and refresh the page — it may still be syncing. If it's still wrong, tell the publisher which number and where you saw it.</p></div></details>
+      <details class="help-q" data-audience="publisher"><summary>A number looks wrong.</summary><div class="help-a"><ol><li>Wait a few seconds and refresh — a change from another device may still be on its way.</li><li>Choose the book and look through its sales in <b>History</b>. A sale typed twice, or with the price of all copies in the one-copy box, is the usual cause. Fix that sale rather than adding another.</li><li>Two devices disagree? See <b>Keeping things safe</b> above.</li></ol><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="history">Open History →</button></p></div></details>
+      <details class="help-q"><summary>What does the little “?” next to a box mean?</summary><div class="help-a"><p>Tap or hover over it for a short explanation of what to type in that box.</p></div></details>
+    </section>
+    <p class="help-foot" data-audience="artist">Still stuck? Message the publisher — there's no wrong question.</p>
+    <p class="help-foot" data-audience="publisher">Something here out of date, or an artist asked a question that isn’t covered? Ask for it to be added, so the next person finds the answer here.</p>
   </div>
 </div>
 
@@ -1211,6 +1268,15 @@
     <div><div class="phone-eyebrow">Your shop, at a glance</div><h1 class="today-title">Let’s get to it.</h1></div>
     <span class="today-date" id="today-date"></span>
   </div>
+  <!-- Today so far, across every book: what was sold, and whether it has all
+       reached the cloud. Filled by renderTodaySoFar() and renderFairSyncPill(). -->
+  <div class="today-sofar">
+    <button type="button" class="today-sold" id="today-sold" onclick="switchTab('history')">
+      <span class="today-sold-label">Sold today · all books</span>
+      <strong class="today-sold-sum tnum" id="today-sold-sum">No sales yet today</strong>
+    </button>
+    <span class="fm-sync today-sync" id="today-sync" role="status" aria-live="polite"></span>
+  </div>
   <div class="today-grid">
     <button type="button" class="today-card today-card-ink" onclick="switchTab('pos')">
       <span class="today-card-ic" aria-hidden="true">🛒</span>
@@ -1268,7 +1334,7 @@
   </div>
   <label class="toggle-row" id="stripe-sale-auto-wrap">
     <span class="switch"><input type="checkbox" id="stripe-sale-auto-cb" checked onchange="toggleStripeSaleAuto()"><span class="track"></span></span>
-    <span><span class="toggle-title">Record card payments for a book automatically</span><span class="field-note" style="display:block;margin-top:2px;">When someone pays with a book’s QR code or payment link, the sale goes into your ledger and the stock comes off by itself. For a tap on a card reader, type the book’s title or its short code (listed below) in the payment’s description in the Stripe app and it’s recorded the same way; without a title it waits here for you. If a recorded payment is refunded, you’ll be offered to reverse the sale.</span></span>
+    <span><span class="toggle-title">Record card payments for a book automatically</span><span class="field-note" style="display:block;margin-top:2px;">When someone pays with a book’s QR code or payment link, the sale goes into your ledger and the stock comes off by itself — in the background, and whenever you press Sync. A payment in another currency is converted at that day’s exchange rate. For a tap on a card reader, type the book’s title or its short code (listed below) in the payment’s description in the Stripe app and it’s recorded the same way; without a title it waits here for you. If a recorded payment is refunded, you’ll be offered to reverse the sale.</span></span>
   </label>
   <!-- Always open: a folded list read as a plain heading and hid the codes. -->
   <section class="sale-codes-box" aria-labelledby="sale-codes-title">
@@ -1598,7 +1664,7 @@
       <div class="form-group"><label for="m-num">Order #<span class="tip tip-mark" tabindex="0" role="img" aria-label="Help: Type the order or receipt number if you have one. No number? Leave it empty." data-tip="Type the order or receipt number if you have one. No number? Leave it empty.">?</span></label><input type="text" id="m-num" placeholder="optional"></div>
       <div class="form-group"><label for="m-qty">Qty<span class="tip tip-mark" tabindex="0" role="img" aria-label="Help: How many copies did you sell in this sale? Type the number." data-tip="How many copies did you sell in this sale? Type the number.">?</span></label><input type="number" inputmode="numeric" id="m-qty" value="1" min="1" oninput="phint()"></div>
       <div class="form-group">
-        <label id="m-price-label">Price paid<span class="tip tip-mark" tabindex="0" role="img" aria-label="Help: The price for ONE copy, not the total. Paid in another currency? Choose it in the box on the left first." data-tip="The price for ONE copy, not the total. Paid in another currency? Choose it in the box on the left first.">?</span> <span id="m-fx-inline-result" style="display:none;color:var(--gold-text);font-weight:600;margin-left:8px;"></span></label>
+        <label id="m-price-label" for="m-price">Price paid<span class="tip tip-mark" tabindex="0" role="img" aria-label="Help: The price for ONE copy, not the total. Paid in another currency? Choose it in the box on the left first." data-tip="The price for ONE copy, not the total. Paid in another currency? Choose it in the box on the left first.">?</span> <span id="m-fx-inline-result" style="display:none;color:var(--gold-text);font-weight:600;margin-left:8px;"></span></label>
         <div class="price-inline">
           <select id="m-price-cur" onchange="onManualCurrencyChange()">
             <option value="BOOK">Book currency</option>
@@ -2061,7 +2127,7 @@
 
     <div class="form-group">
       <label for="tc-new-trip-budget">Target budget (CAD) <span class="tc-opt">optional</span></label>
-      <input type="number" id="tc-new-trip-budget" min="0" step="0.01" placeholder="0.00" class="tnum" style="font-family:var(--font-mono);">
+      <input type="number" inputmode="decimal" id="tc-new-trip-budget" min="0" step="0.01" placeholder="0.00" class="tnum" style="font-family:var(--font-mono);">
       <div class="tc-field-hint">Drives the progress bar and the over-budget warning on the trip card.</div>
     </div>
 
@@ -2569,7 +2635,7 @@
 
       <div class="form-group">
         <label for="wo-qty">Quantity (Units)</label>
-        <input type="number" id="wo-qty" class="input tnum" min="1" step="1" value="1" required oninput="recalcWriteOffValue()" style="font-family:var(--font-mono);">
+        <input type="number" inputmode="numeric" id="wo-qty" class="input tnum" min="1" step="1" value="1" required oninput="recalcWriteOffValue()" style="font-family:var(--font-mono);">
       </div>
     </div>
 
@@ -3794,9 +3860,9 @@
           <span style="font-size:var(--text-2xs); font-weight:400; text-transform:none; color:var(--text3);">Auto-scales height &amp; weight with quantity</span>
         </div>
         <div class="phone-parcel-grid" style="display:grid; grid-template-columns: repeat(4, 1fr); gap:8px;">
-          <div class="form-group"><label>Length</label><input type="number" id="sp-length" value="10" step="0.1" oninput="updateShippoBaseSpecsFromInputs()"></div>
-          <div class="form-group"><label>Width</label><input type="number" id="sp-width" value="8" step="0.1" oninput="updateShippoBaseSpecsFromInputs()"></div>
-          <div class="form-group"><label>Height</label><input type="number" id="sp-height" value="1" step="0.1" oninput="updateShippoBaseSpecsFromInputs()"></div>
+          <div class="form-group"><label>Length</label><input type="number" inputmode="decimal" id="sp-length" value="10" step="0.1" oninput="updateShippoBaseSpecsFromInputs()"></div>
+          <div class="form-group"><label>Width</label><input type="number" inputmode="decimal" id="sp-width" value="8" step="0.1" oninput="updateShippoBaseSpecsFromInputs()"></div>
+          <div class="form-group"><label>Height</label><input type="number" inputmode="decimal" id="sp-height" value="1" step="0.1" oninput="updateShippoBaseSpecsFromInputs()"></div>
           <div class="form-group">
             <label>Dim. Unit</label>
             <select id="sp-dim-unit" onchange="updateShippoBaseSpecsFromInputs()">
@@ -3808,11 +3874,11 @@
         <div class="phone-parcel-grid" style="display:grid; grid-template-columns: 1fr 1.2fr 1fr; gap:12px; margin-top:12px;">
           <div class="form-group">
             <label>Quantity (Copies)</label>
-            <input type="number" id="sp-qty" value="1" min="1" oninput="onShippoQuantityChange()">
+            <input type="number" inputmode="numeric" id="sp-qty" value="1" min="1" oninput="onShippoQuantityChange()">
           </div>
           <div class="form-group">
             <label>Total Weight</label>
-            <input type="number" id="sp-weight" value="1.2" step="0.01" oninput="updateShippoBaseSpecsFromInputs()">
+            <input type="number" inputmode="decimal" id="sp-weight" value="1.2" step="0.01" oninput="updateShippoBaseSpecsFromInputs()">
           </div>
           <div class="form-group">
             <label>Weight Unit</label>
@@ -3832,7 +3898,7 @@
           </div>
           <div class="form-group">
             <label>Customs value per copy (CAD)</label>
-            <input type="number" id="sp-customs-value" value="25" step="0.01" min="0.01" oninput="updateShippoCustomsTotalHint()">
+            <input type="number" inputmode="decimal" id="sp-customs-value" value="25" step="0.01" min="0.01" oninput="updateShippoCustomsTotalHint()">
           </div>
           <div class="form-group">
             <label>HS tariff code</label>
@@ -3928,7 +3994,7 @@
         <div class="shipping-predictor-settings">
           <div class="form-group">
             <label>Packaging / handling buffer (CAD)</label>
-            <input type="number" id="sp-handling" value="2.50" step="0.25" min="0">
+            <input type="number" inputmode="decimal" id="sp-handling" value="2.50" step="0.25" min="0">
           </div>
           <div class="form-group">
             <label>Safety margin</label>
@@ -4998,7 +5064,7 @@
   <div class="form-group" style="margin-bottom:12px;"><label for="ns-address">Street address</label><input id="ns-address" placeholder="e.g. 80 Spadina Ave, Suite 205"></div>
   <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="ns-city">City</label><input id="ns-city" placeholder="e.g. Milan"></div><div class="form-group"><label for="ns-region">State / Province</label><input id="ns-region" placeholder="e.g. ON"></div></div>
   <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="ns-postal">Postal / ZIP code</label><input id="ns-postal" placeholder="e.g. M5V 2J4"></div><div class="form-group"><label for="ns-country">Country</label><input id="ns-country" placeholder="e.g. Canada"></div></div>
-  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="ns-website">Website</label><input id="ns-website" placeholder="e.g. store.com"></div><div class="form-group"><label for="ns-rate">Commission rate (%)<span class="tip tip-mark" data-tip="The store's cut of each sale. At 40%, you keep 60% of the list price on every book they sell.">?</span></label><input id="ns-rate" type="number" inputmode="numeric" value="40" min="0" max="100"></div></div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="ns-website">Website</label><input id="ns-website" placeholder="e.g. store.com"></div><div class="form-group"><label for="ns-rate">Commission rate (%)<span class="tip tip-mark" data-tip="The store's cut of each sale. At 40%, you keep 60% of the list price on every book they sell.">?</span></label><input id="ns-rate" type="number" inputmode="decimal" step="any" value="40" min="0" max="100"></div></div>
   <div class="form-group" style="margin-bottom:12px;"><label for="ns-terms">Payment terms<span class="tip tip-mark" data-tip="When the store pays you for sold books — e.g. Net 30 (within 30 days) or paid on each sale. For your reference only.">?</span></label><input id="ns-terms" placeholder="e.g. Net 30, paid on sale"></div>
   <div class="form-group"><label for="ns-notes">Notes</label><textarea id="ns-notes" placeholder="Delivery info, special arrangements…"></textarea></div>
   <div class="modal-footer" role="dialog" aria-modal="true"><button class="btn" onclick="attemptCloseModal('add-store')">Cancel</button><button class="btn gold" onclick="addStore()">Add store</button></div>
@@ -5017,7 +5083,7 @@
   <div class="form-group" style="margin-bottom:12px;"><label for="es-address">Street address</label><input id="es-address" placeholder="e.g. 80 Spadina Ave, Suite 205"></div>
   <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="es-city">City</label><input id="es-city" placeholder="e.g. Milan"></div><div class="form-group"><label for="es-region">State / Province</label><input id="es-region" placeholder="e.g. ON"></div></div>
   <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="es-postal">Postal / ZIP code</label><input id="es-postal" placeholder="e.g. M5V 2J4"></div><div class="form-group"><label for="es-country">Country</label><input id="es-country" placeholder="e.g. Canada"></div></div>
-  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="es-website">Website</label><input id="es-website" placeholder="e.g. store.com"></div><div class="form-group"><label for="es-rate">Commission rate (%)</label><input id="es-rate" type="number" inputmode="numeric" value="40" min="0" max="100"></div></div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="es-website">Website</label><input id="es-website" placeholder="e.g. store.com"></div><div class="form-group"><label for="es-rate">Commission rate (%)</label><input id="es-rate" type="number" inputmode="decimal" step="any" value="40" min="0" max="100"></div></div>
   <div class="form-group" style="margin-bottom:12px;"><label for="es-terms">Payment terms</label><input id="es-terms" placeholder="e.g. Net 30, paid on sale"></div>
   <div class="form-group"><label for="es-notes">Notes</label><textarea id="es-notes" placeholder="Delivery info, special arrangements…"></textarea></div>
   <div class="modal-footer" role="dialog" aria-modal="true"><button class="btn" onclick="attemptCloseModal('edit-store')">Cancel</button><button class="btn gold" onclick="confirmEditStore()">Save changes</button></div>
@@ -5032,7 +5098,7 @@
     <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('send-books')" aria-label="Close dialog" title="Close (Esc)">✕</button>
   </div>
   <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="send-qty">Qty to send</label><input id="send-qty" type="number" inputmode="numeric" value="10" min="1"></div><div class="form-group"><label for="send-date">Date sent</label><input id="send-date" type="date"></div></div>
-  <div class="form-group" style="margin-bottom:12px;"><label for="send-rate">Commission rate (%)</label><input id="send-rate" type="number" inputmode="numeric" value="40" min="0" max="100"></div>
+  <div class="form-group" style="margin-bottom:12px;"><label for="send-rate">Commission rate (%)</label><input id="send-rate" type="number" inputmode="decimal" step="any" value="40" min="0" max="100"></div>
   <div class="form-group"><label for="send-notes">Notes</label><input id="send-notes" placeholder="e.g. delivery ref, batch #"></div>
   <div class="modal-footer" role="dialog" aria-modal="true"><button class="btn" onclick="attemptCloseModal('send-books')">Cancel</button><button class="btn gold" onclick="confirmSend()">Send books</button></div>
 </div></div>
@@ -5051,7 +5117,7 @@
     <div class="form-group"><label for="bulk-date">Date sent</label><input id="bulk-date" type="date"></div>
   </div>
   <div class="g2" style="margin-bottom:12px;">
-    <div class="form-group"><label for="bulk-rate">Commission override (%)<span class="tip tip-mark" data-tip="Leave blank to use each store's own commission rate.">?</span></label><input id="bulk-rate" type="number" inputmode="numeric" min="0" max="100" placeholder="store default"></div>
+    <div class="form-group"><label for="bulk-rate">Commission override (%)<span class="tip tip-mark" data-tip="Leave blank to use each store's own commission rate.">?</span></label><input id="bulk-rate" type="number" inputmode="decimal" step="any" min="0" max="100" placeholder="store default"></div>
     <div class="form-group"><label for="bulk-notes">Notes (all)</label><input id="bulk-notes" placeholder="e.g. spring launch batch"></div>
   </div>
   <div id="bulk-send-list" style="max-height:260px;overflow:auto;border:var(--stroke-hair) solid var(--border);border-radius:var(--r);padding:2px 12px;margin-bottom:6px;"></div>
@@ -5827,9 +5893,9 @@
     </div>
 
     <div class="shipping-dims-grid">
-      <div class="form-group"><label for="nb-ship-length">Length</label><input id="nb-ship-length" type="number" placeholder="Length" step="0.1" style="font-family:var(--font-mono);"></div>
-      <div class="form-group"><label for="nb-ship-width">Width</label><input id="nb-ship-width" type="number" placeholder="Width" step="0.1" style="font-family:var(--font-mono);"></div>
-      <div class="form-group"><label for="nb-ship-height">Height</label><input id="nb-ship-height" type="number" placeholder="Height" step="0.1" style="font-family:var(--font-mono);"></div>
+      <div class="form-group"><label for="nb-ship-length">Length</label><input id="nb-ship-length" type="number" inputmode="decimal" placeholder="Length" step="0.1" style="font-family:var(--font-mono);"></div>
+      <div class="form-group"><label for="nb-ship-width">Width</label><input id="nb-ship-width" type="number" inputmode="decimal" placeholder="Width" step="0.1" style="font-family:var(--font-mono);"></div>
+      <div class="form-group"><label for="nb-ship-height">Height</label><input id="nb-ship-height" type="number" inputmode="decimal" placeholder="Height" step="0.1" style="font-family:var(--font-mono);"></div>
       <div class="form-group">
         <label for="nb-ship-dim-unit">Dim. Unit</label>
         <select id="nb-ship-dim-unit">
@@ -5839,7 +5905,7 @@
       </div>
     </div>
     <div class="shipping-weights-grid">
-      <div class="form-group" style="margin:0;"><label for="nb-ship-weight">Weight</label><input id="nb-ship-weight" type="number" placeholder="Weight" step="0.01" style="font-family:var(--font-mono);"></div>
+      <div class="form-group" style="margin:0;"><label for="nb-ship-weight">Weight</label><input id="nb-ship-weight" type="number" inputmode="decimal" placeholder="Weight" step="0.01" style="font-family:var(--font-mono);"></div>
       <div class="form-group" style="margin:0;">
         <label for="nb-ship-weight-unit">Weight Unit</label>
         <select id="nb-ship-weight-unit">
@@ -5986,7 +6052,7 @@
       </div>
       <div class="form-group" style="margin:0;">
         <label for="pqr-override-price" style="font-size:var(--text-xs);">Override Price</label>
-        <input type="number" step="0.01" min="0" id="pqr-override-price" class="pqr-input tnum" placeholder="List price" oninput="updateSingleBookPaymentQR()">
+        <input type="number" inputmode="decimal" step="0.01" min="0" id="pqr-override-price" class="pqr-input tnum" placeholder="List price" oninput="updateSingleBookPaymentQR()">
       </div>
     </div>
     <button class="btn gold outline pqr-gen-btn" id="pqr-gen-stripe-btn" onclick="generateSingleBookStripeQR()">

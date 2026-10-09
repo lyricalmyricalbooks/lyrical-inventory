@@ -50,8 +50,10 @@ describe('a Stripe sale enters the ledger the way a manual sale does', () => {
 
     const [m] = manual.states.b1.hist;
     const [c] = card.states.b1.hist;
-    const { sheetsId: mId, ...mRest } = m;
-    const { sheetsId: cId, shipEmail, ...cRest } = c;
+    const { sheetsId: mId, recordedAt: mTime, ...mRest } = m;
+    const { sheetsId: cId, shipEmail, recordedAt: cTime, ...cRest } = c;
+    expect(Number.isFinite(Date.parse(mTime))).toBe(true);
+    expect(Number.isFinite(Date.parse(cTime))).toBe(true);
     expect(cRest).toEqual(mRest);
     expect(mId).toBe('evt-1');
     expect(cId).toBe('stripe-ch_1');
