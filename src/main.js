@@ -290,6 +290,7 @@ import {
   setSelectCurrency,
   PICKER_CURRENCIES,
 } from './lib/money.js';
+import { localDay, localDayPlus } from './lib/calendar-day.js';
 import {
   buildPartPaymentNote,
   describeInvoicePaymentReversal,
@@ -2768,7 +2769,8 @@ function triggerCardAnimations() {
 // normalizeCurrencyCode, fmt, fmtNum, fmtD, getBookCurrencyCode,
 // paymentSummary, buildPaymentMeta) are imported from ./lib/money.js
 
-export const today = () => new Date().toISOString().split('T')[0];
+// LOCAL calendar day, not the UTC one (which is tomorrow on a Canadian evening).
+export const today = () => localDay();
 
 export const formatDateTime = (isoString) => {
   if (!isoString) return '';
@@ -9848,7 +9850,7 @@ function normalizeGmailOrder(o, book) {
   if (rawDate) {
     const parsedDt = new Date(rawDate);
     if (!isNaN(parsedDt.getTime())) {
-      normalizedDate = parsedDt.toISOString().split('T')[0];
+      normalizedDate = localDay(rawDate); // bare dates pass through; timestamps -> local day
     }
   }
 
@@ -13260,8 +13262,7 @@ function openCreateInvoice(storeId, editingId, { copyFrom = null } = {}) {
     $('inv-num').value = invoiceCtx.autoNum;
     $('inv-date').value = today();
     // default due date = 30 days from today
-    const d = new Date(); d.setDate(d.getDate() + 30);
-    $('inv-due').value = d.toISOString().split('T')[0];
+    $('inv-due').value = localDayPlus(30);
     // Percent first: it is the discount publishers reach for most (a store's
     // trade discount), so the box is ready for "40" without a mode change.
     setInvoiceDiscountUI('percent', 0);
@@ -23205,7 +23206,7 @@ async function fetchStripeTransactions(key, onProgress, { since = 0 } = {}) {
     }
     const json = await resp.json();
     for (const tx of (json.data || [])) {
-      const year = new Date((tx.created || 0) * 1000).getUTCFullYear();
+      const year = new Date((tx.created || 0) * 1000).getFullYear();
       const cur = (tx.currency || '').toUpperCase();
       const type = tx.type || 'unknown';
       allTxns.push({
@@ -23908,7 +23909,7 @@ export async function fetchStripePaymentsForReconcile(maxPages = 3, { since = 0 
         amount: _stripeMinorToMajor(ch.amount, cur),
         currency: cur,
         created: (ch.created || 0) * 1000,
-        date: new Date((ch.created || 0) * 1000).toISOString().slice(0, 10),
+        date: localDay((ch.created || 0) * 1000),
         description: (ch.description || pi?.description || '').trim(),
         email: ch.billing_details?.email || ch.receipt_email || '',
         customer: ch.billing_details?.name || '',
@@ -25852,8 +25853,7 @@ async function reminderReviewHoldOff(id) {
   const { inv, bookId } = invoiceHome(id);
   if (!inv) return;
   const suggested = inv.remindAfter || (() => {
-    const d = new Date(); d.setDate(d.getDate() + 14);
-    return d.toISOString().split('T')[0];
+    return localDayPlus(14);
   })();
   const picked = await promptDialog(
     `When did ${inv.storeName || 'they'} say they would pay ${inv.num}? No reminder goes out before then.`,
@@ -26046,8 +26046,7 @@ async function snoozeInvoiceFromView() {
   const { inv, bookId } = invoiceHome(currentViewInvoiceId);
   if (!inv) return;
   const suggested = inv.remindAfter || (() => {
-    const d = new Date(); d.setDate(d.getDate() + 14);
-    return d.toISOString().split('T')[0];
+    return localDayPlus(14);
   })();
   const picked = await promptDialog(
     `When did ${inv.storeName || 'they'} say they would pay ${inv.num}? No reminder goes out before then. Clear the date to start chasing again.`,

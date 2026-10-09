@@ -24,6 +24,7 @@ import {
   states,
 } from '../main.js';
 import { escapeHtml } from '../lib/html.js';
+import { localDay } from '../lib/calendar-day.js';
 import { confirmDialog } from '../lib/modal.js';
 import { buildAttentionSignals } from '../lib/attention-signals.js';
 import { INTEL_TOOL_SCHEMAS } from '../lib/publisher-intel-tools.js';
@@ -142,7 +143,7 @@ function intelContext() {
 }
 
 function systemInstruction() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDay();
   const titles = Object.entries(BOOKS).map(([id, b]) => `${id} = ${b.title}`).join('; ');
   return [
     'You answer questions about a small independent book publisher\'s own business records.',

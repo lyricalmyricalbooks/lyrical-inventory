@@ -27,6 +27,7 @@
 // of the ledger.
 
 import { normalizeShippingOrderNumber } from './shipping-reconciliation.js';
+import { localDay } from './calendar-day.js';
 
 const clean = (value) => String(value ?? '').trim();
 const normalizeText = (value) => clean(value).toLowerCase().replace(/\s+/g, ' ');
@@ -69,8 +70,7 @@ export function bigCartelOrderDate(order = {}) {
   const attr = order.attributes || {};
   const raw = attr.created_at || attr.placed_at || attr.date || '';
   if (!raw) return '';
-  const parsed = new Date(raw);
-  return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString().split('T')[0];
+  return localDay(raw);
 }
 
 /** Money the customer paid for the books themselves, with tax and postage taken off. */

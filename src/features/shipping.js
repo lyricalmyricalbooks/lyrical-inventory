@@ -99,6 +99,7 @@ import {
 import { csvCell } from '../lib/csv.js';
 import { downloadBlob, downloadCsv } from '../lib/download.js';
 import { fmt, fmtD, roundCents, cadEquivalentForSale, getBookCurrencyCode } from '../lib/money.js';
+import { localDay } from '../lib/calendar-day.js';
 import {
   buildRecoveredOrderEntry,
   recoveredOrderPrefill,
@@ -1235,7 +1236,7 @@ async function processShippoTxToExpense(tx, token, txId, ref, importedCount, con
   if (!Number.isFinite(amount) || amount <= 0) return null;
 
   const dateRaw = tx.object_created || tx.object_updated || '';
-  const date = /^\d{4}-\d{2}-\d{2}/.test(dateRaw) ? dateRaw.slice(0, 10) : today();
+  const date = localDay(dateRaw) || today();
 
   let fxRate = currency === 'CAD' ? 1 : 0;
   if (currency !== 'CAD') {
