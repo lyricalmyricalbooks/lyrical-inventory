@@ -296,7 +296,10 @@ function deliveryPhrase(order) {
 }
 
 function renderOrderShippingSummary(order) {
-  const expenses = (TAX_CENTER.businessExpenses || []).filter(expense => String(expense?.ref || '').startsWith('shippo:') || String(expense?.ref || '').startsWith('canadapost:'));
+  // Every kind of postage that can be linked to an order — Shippo, Canada Post,
+  // counter receipts / carrier emails ('postage:'), and Chit Chats — matches
+  // what the shipping worklist and monthly report count.
+  const expenses = (TAX_CENTER.businessExpenses || []).filter(expense => /^(shippo:|canadapost:|postage[:-]|chitchats:)/.test(String(expense?.ref || '')));
   const summary = linkedShippingSummary(order, expenses, 1);
   const customerPaidVal = summary.customerPaid ?? Number(order.shippingPaid || order.shipping_total || 0);
   const parts = [];
@@ -391,7 +394,18 @@ async function backfillShipping() {
       }
       if (match.merchandisePaid !== undefined && Number(h.qty) > 0) {
         const netPrice = Math.round((Number(match.merchandisePaid) / Number(h.qty)) * 100) / 100;
-        if (h.price !== netPrice) { h.price = netPrice; changed = true; }
+        if (h.price !== netPrice) {
+          // Revenue was booked at qty × the old price, so move it by the
+          // difference (as Reapply does) — otherwise totals drift from history
+          // and a later void would subtract an amount that was never added.
+          const delta = roundCents(Number(h.qty) * (netPrice - (Number(h.price) || 0)));
+          st.revenue = roundCents((Number(st.revenue) || 0) + delta);
+          if (!st.chStats) st.chStats = {};
+          if (!st.chStats.Website) st.chStats.Website = { txns: 0, units: 0, revenue: 0 };
+          st.chStats.Website.revenue = roundCents((Number(st.chStats.Website.revenue) || 0) + delta);
+          h.price = netPrice;
+          changed = true;
+        }
       }
       if (changed) {
         updated++;
@@ -2126,9 +2140,19 @@ const POSTAGE_REPORT_MONTH_KEY = 'lm-postage-report-month';
 const ORDER_FOLLOWUP_INTERVAL_MS = 60 * 60 * 1000;
 let _orderFollowupsStarted = false;
 
+/**
+ * Whether an expense is parcel postage that can be linked to an order. The
+ * old Shippo / Canada Post prefixes are kept, and labels filed from counter
+ * receipts, carrier emails and Chit Chats count too — the same rule the
+ * shipping analysis uses — so a linked label always shows in its order's margin.
+ */
+function isLinkablePostageExpense(expense) {
+  const ref = String(expense?.ref || '');
+  return /^(shippo:|canadapost:|postage[:-]|chitchats:)/.test(ref) || isPostageExpense(expense || {});
+}
+
 function postageExpenses() {
-  return (TAX_CENTER.businessExpenses || []).filter(expense =>
-    String(expense?.ref || '').startsWith('shippo:') || String(expense?.ref || '').startsWith('canadapost:'));
+  return (TAX_CENTER.businessExpenses || []).filter(isLinkablePostageExpense);
 }
 
 function websiteLedgerRows() {
@@ -2186,13 +2210,26 @@ function reportPostageLosses() {
   const month = previousMonth(today());
   if (!month || readStamp(POSTAGE_REPORT_MONTH_KEY) === month) return null;
   const expenses = postageExpenses();
-  const items = [];
+  // An order for two books is two ledger rows sharing one order number. It is
+  // one parcel, so it is one item: the postage is already summed per order, and
+  // the customer's shipping charge is the largest on any row, never the sum.
+  const orders = new Map();
   websiteLedgerRows().forEach(({ bookId, entry }) => {
-    if (entry.voided || String(entry.date || '').slice(0, 7) !== month) return;
+    if (entry.voided || entry.excludeFromShipping || String(entry.date || '').slice(0, 7) !== month) return;
     // Compared in dollars only: mixing a euro-priced book's shipping into a
     // Canadian-dollar postage total would invent a loss or hide one.
     if (getBookCurrencyCode(BOOKS[bookId]) !== 'CAD') return;
-    const summary = linkedShippingSummary(entry, expenses, 1);
+    const key = normalizeShippingOrderNumber(entry.num) || `row:${bookId}:${orders.size}`;
+    const order = orders.get(key);
+    if (!order) {
+      orders.set(key, { entry, shippingPaid: Number(entry.shippingPaid) || 0 });
+    } else {
+      order.shippingPaid = Math.max(order.shippingPaid, Number(entry.shippingPaid) || 0);
+    }
+  });
+  const items = [];
+  orders.forEach(({ entry, shippingPaid }) => {
+    const summary = linkedShippingSummary({ ...entry, shippingPaid }, expenses, 1);
     if (summary.postageBase == null || summary.customerBase == null) return;
     items.push({
       date: entry.date,
@@ -2222,12 +2259,21 @@ function reportPostageLosses() {
 const POSTAGE_LOSS_SEEN_KEY = 'lm-postage-loss-seen';
 const SHIP_PRICE_CHECK_MONTH_KEY = 'lm-ship-price-check-month';
 
+/**
+ * Whether a ledger row ships to Ontario. Rows store the province as
+ * `shipProvince` (label modal, Big Cartel, manual orders); `shipState` is the
+ * older spelling and is still honoured so neither shape lands in the wrong bucket.
+ */
+function isOntarioOrder(entry = {}) {
+  const province = String(entry.shipProvince || entry.shipState || '').trim().toUpperCase();
+  return province === 'ON' || province === 'ONTARIO';
+}
+
 /** The pricing region an order's address falls in, the same four the Shipping page recommends for. */
 function pricingRegion(entry = {}) {
   const bucket = shipmentRegion(entry.shipCountry);
   if (bucket === 'CA') {
-    const state = String(entry.shipState || '').trim().toUpperCase();
-    return state === 'ON' || state === 'ONTARIO' ? 'ON' : 'CA';
+    return isOntarioOrder(entry) ? 'ON' : 'CA';
   }
   return bucket === 'US' ? 'US' : 'intl';
 }
@@ -2639,7 +2685,9 @@ async function importShippoShippingFromApi({
           fetchedIds.add(txId);
 
           const existingExpense = existingExpensesByRef.get(ref);
-          if (existingExpense && existingExpense.shippingMatchStatus === 'matched') {
+          // A dismissed label was set aside on purpose (hand sale, personal parcel):
+          // re-enriching it would wipe that and could auto-link it to an order.
+          if (existingExpense && (existingExpense.shippingMatchStatus === 'matched' || existingExpense.shippingMatchStatus === 'dismissed')) {
             result.alreadyImported = true;
             return result;
           }
@@ -3040,7 +3088,7 @@ function initShippingTab() {
         const rawPhone = h.shipPhone || h.phone || h.contactPhone || h.buyerPhone || '';
         const addrObj = {
           orderNumber: h.num,
-          parcelLines: parcelLinesFromLedgerEntry(h, h._bookId, BOOKS),
+          parcelLines: recentOrderParcelLines(h),
           name: h.shipName,
           company: '',
           phone: getFallbackShippingPhone(rawPhone),
@@ -3180,7 +3228,7 @@ function renderCustomShippoDestPicker() {
   const recentOrders = typeof getRecentShippingOrders === 'function' ? getRecentShippingOrders() : [];
   recentOrders.slice(0, 20).forEach(h => {
     const rawPhone = h.shipPhone || h.phone || h.contactPhone || h.buyerPhone || '';
-    const parcelLines = parcelLinesFromLedgerEntry(h, h._bookId, BOOKS);
+    const parcelLines = recentOrderParcelLines(h);
     const addrObj = {
       orderNumber: h.num,
       parcelLines,
@@ -3627,22 +3675,44 @@ function clearShippoDestSelection(e) {
   renderShippoRateReadiness();
 }
 
+/** Every title on a picker order, as parcel lines (the first row plus any other rows of the same order). */
+function recentOrderParcelLines(h) {
+  return [
+    ...parcelLinesFromLedgerEntry(h, h._bookId, BOOKS),
+    ...(h._otherRows || []).flatMap(({ bookId, entry }) => parcelLinesFromLedgerEntry(entry, bookId, BOOKS)),
+  ];
+}
+
+/**
+ * Recent website orders for the picker, one per ORDER. A customer who orders
+ * twice has two orders; a two-book order is two ledger rows with one order
+ * number. Rows without an order number fall back to name + street.
+ */
 function getRecentShippingOrders() {
   const orders = [];
-  const seen = new Set();
+  const byKey = new Map();
   Object.entries(states).forEach(([bookId, s]) => {
     if (s && Array.isArray(s.hist)) {
       s.hist.forEach(h => {
         if (h && h.shipName && h.shipAddr1 && !h.voided) {
-          const key = `${h.shipName.trim()}|${h.shipAddr1.trim()}`.toLowerCase();
-          if (!seen.has(key)) {
-            seen.add(key);
-            // A history row does not record which book it sold — the book is
-            // the state it is filed under — so the id is carried alongside it
-            // for the parcel prefill. A shallow copy rather than a tag on the
-            // stored row, so nothing here can write into saved ledger state.
-            orders.push({ ...h, _bookId: bookId });
+          const num = normalizeShippingOrderNumber(h.num);
+          const key = num
+            ? `order:${num}`
+            : `${h.shipName.trim()}|${h.shipAddr1.trim()}`.toLowerCase();
+          const existing = byKey.get(key);
+          if (existing) {
+            // Another title on the same order: carried so the parcel is sized
+            // for everything in it, not just the first book.
+            existing._otherRows.push({ bookId, entry: h });
+            return;
           }
+          // A history row does not record which book it sold — the book is
+          // the state it is filed under — so the id is carried alongside it
+          // for the parcel prefill. A shallow copy rather than a tag on the
+          // stored row, so nothing here can write into saved ledger state.
+          const copy = { ...h, _bookId: bookId, _otherRows: [] };
+          byKey.set(key, copy);
+          orders.push(copy);
         }
       });
     }
@@ -5442,6 +5512,18 @@ async function applyChitChatsShipment(shipment, account, orderNumber = '') {
   const wanted = normalizeShippingOrderNumber(orderNumber || shipment.order_id);
   const found = wanted ? findOrderAcrossBooks(wanted) : null;
   if (found && !existing.shippingOrderNumber) writeShippingLink(existing, wanted, 'label');
+  // A label voided or refunded on the Chit Chats site must put its order back
+  // in the to-ship pile, as the in-app refund button does — but only when the
+  // order still carries THIS label's tracking number, so a replacement label or
+  // a hand-marked shipment is left alone.
+  if (['voided', 'canceled'].includes(shipment.status)) {
+    const voidedFor = found || (existing.shippingOrderNumber ? findOrderAcrossBooks(normalizeShippingOrderNumber(existing.shippingOrderNumber)) : null);
+    const labelTracking = expense.trackingNumber || shipment.id;
+    if (voidedFor && String(voidedFor.entry.trackingNumber || '').trim()
+      && unshipOrderForRefund(voidedFor.entry, labelTracking)) {
+      await saveState(voidedFor.bookId);
+    }
+  }
   if (found && !['voided', 'canceled'].includes(shipment.status) && refundState(existing, expenses) === 'none') {
     const oldTracking = String(found.entry.trackingNumber || '');
     if (!oldTracking || oldTracking === expense.trackingNumber) {
@@ -6803,7 +6885,7 @@ async function voidCanadaPostLabelAction(pin) {
       customerNumber: context.customerNumber || customerNumber,
       apiKey,
       apiSecret,
-      isTest: false
+      isTest: !!TAX_CENTER.settings?.cpTestMode
     });
     const cpExpense = (TAX_CENTER.businessExpenses || []).find(e => e && e.ref === `canadapost:${targetPin}`);
     if (cpExpense) await recordLabelRefundRequest(cpExpense, { status: 'REQUESTED', tracking: targetPin });
@@ -7200,9 +7282,12 @@ function openBatchShipping() {
   }
   const now = new Date();
   const rows = [];
+  const hiddenOrders = hiddenQueueOrders();
+  const pickupOrders = localPickupOrderNumbers();
   Object.entries(states).forEach(([bookId, state]) => {
     (state?.hist || []).forEach(entry => {
-      if (!isBatchCandidate(entry, now)) return;
+      if (!isBatchCandidate(entry, now, { hidden: hiddenOrders })) return;
+      if (pickupOrders.has(normalizeShippingOrderNumber(entry.num))) return;
       rows.push({
         bookId,
         entry,
@@ -7216,6 +7301,11 @@ function openBatchShipping() {
     });
   });
   // One sale can be filed under two books (a mixed order); one label covers it.
+  // The batch plans a parcel from one row, so an order filed under several
+  // titles is flagged and held for the full form rather than bought part-sized.
+  const rowsPerOrder = new Map();
+  rows.forEach(row => rowsPerOrder.set(row.orderNumber, (rowsPerOrder.get(row.orderNumber) || 0) + 1));
+  rows.forEach(row => { row.multiTitle = rowsPerOrder.get(row.orderNumber) > 1; });
   const seen = new Set();
   _batch = {
     phase: 'idle',
@@ -7372,6 +7462,10 @@ async function checkBatchOrders() {
     row.status = 'checking';
     renderBatchShipping();
     try {
+      if (row.multiTitle) {
+        batchHold(row, 'This order has more than one title, so one parcel size can’t be worked out here. Ship it from the Shipping form.');
+        continue;
+      }
       const address = ledgerOrderAddress(row.entry);
       const countryProblem = countryFallbackWarning(row.entry.shipCountry, address.country);
       row.plan = orderParcelPlan(parcelLinesFromLedgerEntry(row.entry, row.bookId, BOOKS), BOOKS);
@@ -9214,8 +9308,8 @@ function getSmartShippingRecommendations(allOrders, shippoExpenses, optWeightOve
   regions.forEach(region => {
     const regOrders = allOrders.filter(o => {
       const bucket = shipmentRegion(o.shipCountry);
-      const state = String(o.shipState || '').trim().toUpperCase();
-      const isON = state === 'ON' || state === 'ONTARIO';
+      const province = String(o.shipProvince || o.shipState || '').trim().toUpperCase();
+      const isON = province === 'ON' || province === 'ONTARIO';
 
       if (region === 'ON') return bucket === 'CA' && isON;
       if (region === 'CA') return bucket === 'CA' && !isON;
