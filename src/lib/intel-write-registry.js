@@ -157,6 +157,24 @@ const boolean = () => ({
   format: (v) => (v ? 'Yes' : 'No'),
 });
 
+/**
+ * Both expense ledgers share one category list, checked against the categories
+ * the app passes in on `ctx` so a write can't invent a new one.
+ */
+const expenseCategory = () => ({
+  type: 'choice',
+  coerce: (raw) => canonicalExpenseCategory(str(raw), ''),
+  validate: (v, _rec, _raw, ctx) => {
+    if (!v) return 'a category is required';
+    const known = ctx && ctx.expenseCategories;
+    if (Array.isArray(known) && known.length && !known.includes(v)) {
+      return `"${v}" is not one of this app's categories`;
+    }
+    return null;
+  },
+  format: (v) => str(v) || '—',
+});
+
 const link = () => ({
   type: 'text',
   coerce: str,
@@ -214,20 +232,7 @@ export const WRITABLE_FIELDS = {
 
   // ── Expenses (the same fields on both the business and the per-book ledger)
   'businessExpense.description': { target: 'businessExpense', key: 'desc', label: 'Description', risk: 'descriptive', ...text({ max: 400 }) },
-  'businessExpense.category': {
-    target: 'businessExpense', key: 'cat', label: 'Category', risk: 'descriptive',
-    type: 'choice',
-    coerce: (raw) => canonicalExpenseCategory(str(raw), ''),
-    validate: (v, _rec, _raw, ctx) => {
-      if (!v) return 'a category is required';
-      const known = ctx && ctx.expenseCategories;
-      if (Array.isArray(known) && known.length && !known.includes(v)) {
-        return `"${v}" is not one of this app's categories`;
-      }
-      return null;
-    },
-    format: (v) => str(v) || '—',
-  },
+  'businessExpense.category': { target: 'businessExpense', key: 'cat', label: 'Category', risk: 'descriptive', ...expenseCategory() },
   'businessExpense.trip': { target: 'businessExpense', key: 'trip', label: 'Trip or event', risk: 'descriptive', ...text({ max: 200 }) },
   'businessExpense.date': { target: 'businessExpense', key: 'date', label: 'Date', risk: 'descriptive', ...isoDate() },
   'businessExpense.amount': { target: 'businessExpense', key: 'amount', label: 'Amount', risk: 'money', ...number({ min: 0 }) },
@@ -235,20 +240,7 @@ export const WRITABLE_FIELDS = {
   'businessExpense.reference': { target: 'businessExpense', key: 'ref', label: 'Reference', risk: 'descriptive', ...text({ max: 200 }) },
 
   'bookExpense.description': { target: 'bookExpense', key: 'desc', label: 'Description', risk: 'descriptive', ...text({ max: 400 }) },
-  'bookExpense.category': {
-    target: 'bookExpense', key: 'cat', label: 'Category', risk: 'descriptive',
-    type: 'choice',
-    coerce: (raw) => canonicalExpenseCategory(str(raw), ''),
-    validate: (v, _rec, _raw, ctx) => {
-      if (!v) return 'a category is required';
-      const known = ctx && ctx.expenseCategories;
-      if (Array.isArray(known) && known.length && !known.includes(v)) {
-        return `"${v}" is not one of this app's categories`;
-      }
-      return null;
-    },
-    format: (v) => str(v) || '—',
-  },
+  'bookExpense.category': { target: 'bookExpense', key: 'cat', label: 'Category', risk: 'descriptive', ...expenseCategory() },
   'bookExpense.trip': { target: 'bookExpense', key: 'trip', label: 'Trip or event', risk: 'descriptive', ...text({ max: 200 }) },
   'bookExpense.date': { target: 'bookExpense', key: 'date', label: 'Date', risk: 'descriptive', ...isoDate() },
   'bookExpense.amount': { target: 'bookExpense', key: 'amount', label: 'Amount', risk: 'money', ...number({ min: 0 }) },

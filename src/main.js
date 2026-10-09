@@ -703,6 +703,9 @@ import {
   ocMarkTmplDirty,
   ocSelectArtist,
   ocBackToRow,
+  ocRefreshLatestEmails,
+  ocReplyDraft,
+  ocSendQuickReply,
   ocToggleSelect,
   ocSelectAllVisible,
   ocClearSelection,
@@ -22645,10 +22648,14 @@ const _STRIPE_TYPE_LABELS = {
 function _stripeFriendlyType(t) {
   return _STRIPE_TYPE_LABELS[t] || (t || 'Other').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
+// Number.toLocaleString with options builds a fresh Intl.NumberFormat on every
+// call; _stripeFmtMoney runs per row in the Stripe tables and per payment on
+// every reconciliation search keystroke, so build the formatter once.
+const _STRIPE_MONEY_FMT = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 function _stripeFmtMoney(amt, cur) {
   const sign = amt < 0 ? '-' : '';
   const abs = Math.abs(amt);
-  return `${sign}${cur ? cur + ' ' : ''}${abs.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `${sign}${cur ? cur + ' ' : ''}${_STRIPE_MONEY_FMT.format(abs)}`;
 }
 
 async function fetchStripeTransactions(key, onProgress, { since = 0 } = {}) {
@@ -25751,7 +25758,7 @@ Object.assign(window, {
   openOcImportGmailModal, closeOcImportGmailModal, ocImportGmailSearch, ocImportGmailSelectAll, ocImportGmailConfirm,
   ocApproveProposal, ocDismissProposal, ocApproveAllProposals, ocOutboxRemove, ocOutboxSendAll, ocSetServerSchedule,
   ocToggleSection, ocTogglePhotoPick,
-  ocPlaceMenu, ocMarkTmplDirty, ocSelectArtist, ocBackToRow, ocToggleSelect, ocSelectAllVisible, ocClearSelection,
+  ocPlaceMenu, ocMarkTmplDirty, ocSelectArtist, ocBackToRow, ocRefreshLatestEmails, ocReplyDraft, ocSendQuickReply, ocToggleSelect, ocSelectAllVisible, ocClearSelection,
   ocClearFilters, ocEmailSelected, ocRemoveSelected, ocToggleAddPanel, ocComposeNudge,
   toggleCurrentBookView,
   fetchOrders, applyOne, applyAll, cancelOrder, restoreOrder, unapplyOne, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,
