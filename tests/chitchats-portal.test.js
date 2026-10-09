@@ -104,5 +104,39 @@ describe('Chit Chats portal and accounts', () => {
     expect(document.getElementById('chitchats-rates-card').textContent).toMatch(/drop-off date/i);
     document.getElementById('cc-ship-date').value = '';
   });
+  it('books what Chit Chats charged and says when it differs from the quote', async () => {
+    const bought = { ...paid, purchase_amount: '7.20', postage_fee: '7.20', delivery_fee: '1.00', federal_tax: '0.41' };
+    vi.stubGlobal('fetch', vi.fn(async (_url, options) => {
+      const call = JSON.parse(options.body).payload;
+      if (call.isArtifact) return reply(null);
+      if (call.method === 'POST') return reply({ shipment: { id: paid.id, status: 'pending', rates: [{ postage_type: 'chit_chats_select', postage_description: 'Select', payment_amount: '8.10' }] } });
+      return reply(call.method === 'PATCH' ? {} : { shipment: bought });
+    }));
+    await shipping.calculateChitChatsRatesHandler();
+    const done = shipping.buyChitChatsLabelHandler(0);
+    await app.answerConfirm(true); await done;
+    expect(app.main.TAX_CENTER.businessExpenses[0]).toMatchObject({ amount: 8.61, amountConfirmed: true });
+    expect(document.getElementById('chitchats-rates-card').textContent).toMatch(/charged 8\.61 CAD \(quoted 8\.10\)/);
+    expect(readChitChatsState(account).purchases[paid.id].quotedTotal).toBe(8.1);
+  });
+  it('will not buy on prices more than an hour old', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => reply({ shipment: { id: paid.id, status: 'pending', rates: [{ postage_type: 'chit_chats_select', postage_description: 'Select', payment_amount: '9.68' }] } })));
+    await shipping.calculateChitChatsRatesHandler();
+    const state = readChitChatsState(account); state.draft.quotedAt = Date.now() - 2 * 60 * 60 * 1000; saveChitChatsState(account, state);
+    const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
+    await shipping.buyChitChatsLabelHandler(0);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(app.toast()).toMatch(/over an hour old/);
+    expect(document.querySelector('#chitchats-rates-card [data-cc-buy]')).toBeNull();
+  });
+  it('refreshes only recent shipments once a full import has run', async () => {
+    const calls = [];
+    vi.stubGlobal('fetch', vi.fn(async (_url, options) => { calls.push(JSON.parse(options.body).payload.endpoint); return reply([paid]); }));
+    await shipping.importChitChatsShippingHandler({ full: true });
+    await shipping.importChitChatsShippingHandler();
+    expect(calls[0]).not.toContain('from_date');
+    expect(calls[1]).toMatch(/from_date=\d{4}-\d{2}-\d{2}/);
+    expect(document.getElementById('chitchats-rates-card').textContent).toMatch(/1 paid shipments checked/);
+  });
 });
 

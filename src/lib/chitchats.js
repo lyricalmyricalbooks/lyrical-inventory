@@ -151,19 +151,41 @@ export async function buyChitChatsLabel({ clientId, token, isTest = false, shipm
   const error = new Error('The purchase is still being checked. Use Check purchase; do not buy a second label.');
   error.pending = true; throw error;
 }
-export async function listChitChatsShipments({ clientId, token, isTest = false, request = executeChitChatsProxy, limit = 100 }) {
+// Each page is one Apps Script round trip, so ask for big pages (the API
+// allows up to 1000). `fromDate` (YYYY-MM-DD) limits the list to shipments
+// created on or after that day.
+export async function listChitChatsShipments({ clientId, token, isTest = false, request = executeChitChatsProxy, limit = 500, fromDate = '' }) {
   const shipments = [];
+  const since = /^\d{4}-\d{2}-\d{2}$/.test(fromDate) ? `&from_date=${fromDate}` : '';
   for (let page = 1; page <= 1000; page++) {
-    const data = await request({ endpoint: `${resolveListShipmentsEndpoint(clientId, isTest)}?limit=${limit}&page=${page}`, token, method: 'GET' });
+    const data = await request({ endpoint: `${resolveListShipmentsEndpoint(clientId, isTest)}?limit=${limit}&page=${page}${since}`, token, method: 'GET' });
     if (!Array.isArray(data)) throw new Error('Chit Chats returned an unexpected shipment list. Nothing was imported.');
     shipments.push(...data);
     if (data.length < limit) return shipments;
   }
   throw new Error('Too many shipments to import at once. Nothing was imported.');
 }
-export function normalizeChitChatsShipment(shipment, { isTest = false, clientId = '' } = {}) {
+// What the label really cost. A shipment's purchase_amount is only the
+// postage: Chit Chats also charges insurance, its delivery fee and GST/HST/PST,
+// which the quoted payment_amount already includes. Prefer payment_amount,
+// then postage plus every fee and tax, then the bare purchase_amount.
+export function chitChatsCharge(shipment) {
+  const paid = money(shipment?.payment_amount);
+  if (paid) return paid;
+  const postage = money(shipment?.postage_fee);
+  if (postage) {
+    return roundCents(['postage_fee', 'insurance_fee', 'delivery_fee', 'federal_tax', 'provincial_tax']
+      .reduce((sum, field) => sum + (money(shipment[field]) || 0), 0));
+  }
+  return money(shipment?.purchase_amount) || null;
+}
+// `quoted` is the price the owner confirmed when buying: a stand-in, flagged
+// as unconfirmed, for a shipment that comes back with no amounts at all.
+export function normalizeChitChatsShipment(shipment, { isTest = false, clientId = '', quoted = null } = {}) {
   if (!shipment?.id || !paidStatuses.has(shipment.status)) return null;
-  const amount = money(shipment.purchase_amount);
+  const charged = chitChatsCharge(shipment);
+  const fallback = charged ? null : money(quoted);
+  const amount = charged || fallback;
   const expense = buildPostageExpense({
     amount: amount && amount > 0 ? amount : null, currency: 'CAD', date: (shipment.created_at || shipment.ship_date || '').slice(0, 10),
     trackingNumber: shipment.carrier_tracking_code || '', carrier: 'Chit Chats', recipientName: shipment.to_name,
@@ -172,7 +194,7 @@ export function normalizeChitChatsShipment(shipment, { isTest = false, clientId 
   return { ...expense, ref: `chitchats:${isTest ? 'test:' : ''}${clientId}:${shipment.id}`, ccShipmentId: shipment.id, ccClientId: clientId,
     ccTestMode: isTest, ccStatus: shipment.status, ccOrderNumber: shipment.order_id || '', trackingUrl: safeTrackingUrl(shipment.tracking_url),
     ...(shipment.status === 'voided' ? { refundRequest: { id: shipment.id, status: 'REQUESTED', at: shipment.created_at || '' } } : {}),
-    amountConfirmed: amount !== null && amount > 0, simulated: isTest, receiptRequired: false, ocrSkip: true, autoLogged: true };
+    amountConfirmed: !!charged, simulated: isTest, receiptRequired: false, ocrSkip: true, autoLogged: true };
 }
 export function safeTrackingUrl(value) {
   try { const url = new URL(value); return url.protocol === 'https:' && ['chitchats.com', 'staging.chitchats.com'].includes(url.hostname) && /^\/tracking\//.test(url.pathname) ? url.href : ''; } catch (_) { return ''; }

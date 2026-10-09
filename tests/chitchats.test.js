@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { buildChitChatsShipment, getChitChatsRates, buyChitChatsLabel, executeChitChatsProxy, normalizeChitChatsShipment, listChitChatsShipments, chitChatsErrorMessage, verifyChitChatsConnection } from '../src/lib/chitchats.js';
+import { buildChitChatsShipment, getChitChatsRates, buyChitChatsLabel, executeChitChatsProxy, normalizeChitChatsShipment, listChitChatsShipments, chitChatsErrorMessage, verifyChitChatsConnection, chitChatsCharge } from '../src/lib/chitchats.js';
 
 const credentials = { clientId: '123', token: 'test-token', isTest: true };
 const parcel = { name: 'Jane', address_1: '1 Main St', city: 'Toronto', province_code: 'ON', postal_code: 'M1M1M1', country_code: 'CA', description: 'Books', value: '25.00', value_currency: 'cad', package_type: 'parcel', weight: 250, weight_unit: 'g', size_x: 20, size_y: 15, size_z: 2, size_unit: 'cm', postage_type: 'unknown' };
@@ -119,4 +119,21 @@ describe('Chit Chats shipping', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: false, status: 401, data: { error: 'unauthorized' } }) }));
     await expect(executeChitChatsProxy({ endpoint: 'https://chitchats.com/api/v1/clients/123/shipments', token: 'bad' })).rejects.toThrow(/did not accept/);
   });
+  it('books the whole charge, not just the postage part', () => {
+    expect(chitChatsCharge({ payment_amount: '9.68', purchase_amount: '7.20' })).toBe(9.68);
+    expect(chitChatsCharge({ purchase_amount: '22.39', postage_fee: '22.39', delivery_fee: '1.00', insurance_fee: null, federal_tax: '1.17' })).toBe(24.56);
+    expect(chitChatsCharge({ purchase_amount: '9.68' })).toBe(9.68);
+    expect(chitChatsCharge({})).toBeNull();
+    expect(normalizeChitChatsShipment({ id: 'paid', status: 'ready', purchase_amount: '22.39', postage_fee: '22.39', delivery_fee: '1.00' })).toMatchObject({ amount: 23.39, amountConfirmed: true });
+  });
+  it('falls back to the confirmed quote, flagged as unconfirmed, when a label has no amounts yet', () => {
+    const expense = normalizeChitChatsShipment({ id: 'paid', status: 'ready' }, { quoted: 9.68 });
+    expect(expense).toMatchObject({ amount: 9.68, amountUnknown: false, amountConfirmed: false });
+  });
+  it('reads big pages and can stop at a start date', async () => {
+    const request = vi.fn().mockResolvedValue([]);
+    await listChitChatsShipments({ ...credentials, request, fromDate: '2026-06-01' });
+    expect(request.mock.calls[0][0].endpoint).toMatch(/\?limit=500&page=1&from_date=2026-06-01$/);
+  });
 });
+

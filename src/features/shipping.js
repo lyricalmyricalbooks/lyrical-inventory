@@ -18,7 +18,7 @@
 // time. eslint's no-undef, an error in CI, keeps the import list below honest.
 import { withAutoLocalPickup } from '../lib/local-pickup.js';
 import { buildChitChatsShipment, getChitChatsRates, buyChitChatsLabel, normalizeChitChatsShipment,
-  listChitChatsShipments, refundChitChatsShipment, fetchChitChatsLabelArtifact, deleteChitChatsDraft } from '../lib/chitchats.js';
+  listChitChatsShipments, refundChitChatsShipment, fetchChitChatsLabelArtifact, deleteChitChatsDraft, chitChatsCharge } from '../lib/chitchats.js';
 import { readChitChatsState, saveChitChatsState, safeChitChatsRecord } from '../lib/chitchats-state.js';
 import {
   bigCartelShipQueue,
@@ -5308,7 +5308,7 @@ async function calculateChitChatsRatesHandler() {
       if (error.alreadyBought) { delete state.draft; saveChitChatsState(account, state); }
       throw error;
     }
-    state.draft = { id: result.shipment.id, clientId: account.clientId, fingerprint, payload, rates: result.rates };
+    state.draft = { id: result.shipment.id, clientId: account.clientId, fingerprint, payload, rates: result.rates, quotedAt: Date.now() };
     saveChitChatsState(account, state);
     renderChitChatsPortal(result.rates.length ? '' : 'Chit Chats offered no services for this parcel. Check its address, size, weight, and customs details.');
     // Tidy the draft this parcel replaced so the Chit Chats account doesn't
@@ -5322,6 +5322,7 @@ async function calculateChitChatsRatesHandler() {
 
 let _ccBusy = false;
 let _ccImportBusy = false;
+const CHITCHATS_QUOTE_TTL_MS = 60 * 60 * 1000;
 
 function chitChatsAccount() {
   const settings = TAX_CENTER.settings || {};
@@ -5392,10 +5393,12 @@ function renderChitChatsPortal(message = '') {
   let matches = false;
   try { matches = draft?.fingerprint === JSON.stringify(chitChatsFormPayload()); } catch (_) { /* incomplete form */ }
   const pending = Object.values(state.purchases || {}).filter(item => item.status === 'pending');
-  const rates = matches ? draft.rates || [] : [];
+  const stale = matches && !(Date.now() - Number(draft.quotedAt) < CHITCHATS_QUOTE_TTL_MS);
+  const rates = matches && !stale ? draft.rates || [] : [];
   const archive = Object.values(state.shipments || {}).slice(-30).reverse();
   card.innerHTML = `<div class="cp-rate-header"><strong>Chit Chats rates &amp; labels</strong><span class="pill ${account.isTest ? 'amber' : 'blue'}">${account.isTest ? '● Staging — not mailable' : '● Live account'}</span></div>
-    <p>${escapeHtml(message || (rates.length ? 'Choose a service below. Buying a label charges your Chit Chats balance.' : 'Use Chit Chats Rates to quote the address and parcel above.'))}</p>
+    <p>${escapeHtml(message || (rates.length ? 'Choose a service below. Buying a label charges your Chit Chats balance.'
+      : stale ? 'Those prices are over an hour old. Choose Chit Chats Rates again for today’s prices.' : 'Use Chit Chats Rates to quote the address and parcel above.'))}</p>
     ${pending.map(item => `<div class="cp-buy-blocked"><span>● Purchase ${escapeHtml(item.id)} needs checking. Do not buy another label for this parcel.</span><button class="btn lg" type="button" data-cc-check="${escapeHtml(item.id)}">Check purchase</button></div>`).join('')}
     <div class="cp-rates-list">${rates.map((rate, index) => `<div class="cp-rate-row"><div><strong>${escapeHtml(rate.serviceName)}</strong><div>${escapeHtml(rate.delivery)} · ${escapeHtml(rate.tracking)}</div></div><div><strong class="tnum">${rate.totalPrice.toFixed(2)} CAD</strong><button class="btn gold lg" type="button" data-cc-buy="${index}" ${pending.length ? 'disabled' : ''}>Buy label</button></div></div>`).join('')}</div>
     ${archive.length ? '<p><strong>Saved Chit Chats shipments</strong> — downloaded PDFs can be reprinted offline.</p>' : ''}
@@ -5417,7 +5420,8 @@ function renderChitChatsPortal(message = '') {
 }
 
 async function applyChitChatsShipment(shipment, account, orderNumber = '') {
-  const expense = normalizeChitChatsShipment(shipment, account);
+  const quoted = readChitChatsState(account).purchases?.[shipment.id]?.quotedTotal;
+  const expense = normalizeChitChatsShipment(shipment, { ...account, quoted });
   if (!expense || account.isTest) return;
   const expenses = TAX_CENTER.businessExpenses ||= [];
   let existing = expenses.find(item => item.ref === expense.ref || (expense.trackingNumber && !item.simulated && item.trackingNumber === expense.trackingNumber));
@@ -5458,7 +5462,12 @@ async function finishChitChatsPurchase(shipment, account) {
   saveChitChatsState(account, state);
   await applyChitChatsShipment(shipment, account, intent?.orderNumber);
   if (navigator.onLine) await saveTaxCenter();
-  renderHist(); renderTaxCenter(); renderShippingAnalysisHub(); renderChitChatsPortal('✓ Label purchased. Open / print PDF below and take the parcel to Chit Chats.');
+  // Say so when the charge differs from the confirmed quote; the books keep
+  // what Chit Chats actually charged.
+  const charged = chitChatsCharge(shipment); const quoted = Number(intent?.quotedTotal);
+  const priceNote = charged && quoted > 0 && Math.abs(charged - quoted) >= 0.01
+    ? ` Chit Chats charged ${charged.toFixed(2)} CAD (quoted ${quoted.toFixed(2)}); your books use the charged amount.` : '';
+  renderHist(); renderTaxCenter(); renderShippingAnalysisHub(); renderChitChatsPortal(`✓ Label purchased. Open / print PDF below and take the parcel to Chit Chats.${priceNote}`);
   // Fetch immediately so a later printer jam or disconnect can use the cache.
   fetchChitChatsLabelArtifact({ ...account, shipmentId: shipment.id }).catch(() => {});
 }
@@ -5471,6 +5480,8 @@ async function buyChitChatsLabelHandler(index) {
     if (!navigator.onLine || TAX_CENTER.settings?.ccEnabled === false) throw new Error('Connect to the internet and enable Chit Chats before buying.');
     const state = readChitChatsState(account); const draft = state.draft; const rate = draft?.rates?.[index];
     if (!rate || draft.fingerprint !== JSON.stringify(chitChatsFormPayload())) throw new Error('The parcel changed. Get fresh Chit Chats rates before buying.');
+    // Chit Chats charges today's price, not the one on screen.
+    if (!(Date.now() - Number(draft.quotedAt) < CHITCHATS_QUOTE_TTL_MS)) throw new Error('These prices are over an hour old. Choose Chit Chats Rates again before buying.');
     if (Object.values(state.purchases || {}).some(item => item.status === 'pending')) throw new Error('Check the previous purchase before buying another label.');
     const orderNumber = draft.payload.order_id;
     if (!account.isTest && orderNumber) {
@@ -5484,7 +5495,7 @@ async function buyChitChatsLabelHandler(index) {
     const shipment = await buyChitChatsLabel({ ...account, shipmentId: draft.id, postageType: rate.postageType, onIntent: () => {
       const fresh = readChitChatsState(account);
       if (Object.values(fresh.purchases || {}).some(item => item.status === 'pending')) throw new Error('A purchase is already waiting to be checked.');
-      (fresh.purchases ||= {})[draft.id] = { id: draft.id, status: 'pending', orderNumber, at: new Date().toISOString() };
+      (fresh.purchases ||= {})[draft.id] = { id: draft.id, status: 'pending', orderNumber, at: new Date().toISOString(), quotedTotal: rate.totalPrice };
       saveChitChatsState(account, fresh);
     } });
     await finishChitChatsPurchase(shipment, account);
@@ -5522,15 +5533,24 @@ function clearFailedChitChatsPurchase(account, shipmentId = '') {
   saveChitChatsState(account, state);
 }
 
-async function importChitChatsShippingHandler() {
+// After one full import, Refresh shipments only reads the last few months:
+// newer labels, and older ones whose status (voided, delivered) changed late.
+// Import paid shipments in Tax Centre always reads the whole account.
+const CHITCHATS_REFRESH_DAYS = 120;
+
+async function importChitChatsShippingHandler({ full = false } = {}) {
   if (_ccImportBusy || isAuthor()) return;
   _ccImportBusy = true; const account = chitChatsAccount(); const status = $('tc-cc-status');
   const button = $('tc-cc-import-btn'); if (button) button.disabled = true;
   if (status) status.textContent = 'Reading Chit Chats shipments…';
   try {
     if (TAX_CENTER.settings?.ccEnabled === false) throw new Error('Enable Chit Chats and save its settings first.');
-    const shipments = await listChitChatsShipments(account);
+    const before = readChitChatsState(account);
+    const recentOnly = !full && !!before.fullImportAt;
+    const since = new Date(); since.setDate(since.getDate() - CHITCHATS_REFRESH_DAYS);
+    const shipments = await listChitChatsShipments({ ...account, fromDate: recentOnly ? since.toISOString().slice(0, 10) : '' });
     const state = readChitChatsState(account); let count = 0;
+    if (!recentOnly) state.fullImportAt = new Date().toISOString();
     for (const shipment of shipments) {
       if (!normalizeChitChatsShipment(shipment, account)) continue;
       (state.shipments ||= {})[shipment.id] = safeChitChatsRecord(shipment); count++;
@@ -5538,9 +5558,13 @@ async function importChitChatsShippingHandler() {
     saveChitChatsState(account, state);
     for (const shipment of Object.values(state.shipments || {})) await applyChitChatsShipment(shipment, account);
     if (!account.isTest) await saveTaxCenter();
-    renderHist(); renderTaxCenter(); renderShippingAnalysisHub(); renderChitChatsPortal();
-    if (status) status.textContent = `✓ ${count} paid ${account.isTest ? 'staging shipments saved for practice; no expenses filed' : 'shipments checked; existing expenses kept without duplicates'}.`;
-  } catch (error) { if (status) status.textContent = error.message; showToast(error.message, 'err'); }
+    const summary = `✓ ${count} paid ${account.isTest ? 'staging shipments saved for practice; no expenses filed' : 'shipments checked; existing expenses kept without duplicates'}${recentOnly ? ` (last ${CHITCHATS_REFRESH_DAYS} days — use Import paid shipments in Tax Centre for older ones)` : ''}.`;
+    renderHist(); renderTaxCenter(); renderShippingAnalysisHub(); renderChitChatsPortal(summary);
+    if (status) status.textContent = summary;
+  } catch (error) {
+    if (status) status.textContent = error.message;
+    renderChitChatsPortal(error.message); showToast(error.message, 'err');
+  }
   finally { _ccImportBusy = false; if (button) button.disabled = false; }
 }
 
