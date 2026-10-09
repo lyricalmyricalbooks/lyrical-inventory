@@ -4040,29 +4040,29 @@
         <!-- Live "what's still missing" line, filled in by renderShippoRateReadiness(). -->
         <div id="ship-rate-readiness" class="ship-readiness" role="status" aria-live="polite"></div>
 
-        <div class="ship-actions-container" style="margin-top:1rem;display:flex;flex-direction:column;gap:10px;">
-          <button class="btn gold" id="ship-calc-main-btn" style="width:100%;height:46px;font-size:var(--text-base);font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:var(--elev-2);" onclick="calculateShippoRates()">
-            <span>⚡</span>
-            <span>Calculate Shipping Rates &amp; Prediction</span>
-          </button>
+        <div class="ship-flow">
+          <button class="btn gold lg ship-flow-primary" id="ship-calc-main-btn" type="button" onclick="calculateShippoRates()">Compare all rates &amp; predict customer charge</button>
 
-          <button class="btn outline" type="button" onclick="openBatchShipping()" style="width:100%;height:42px;font-size:var(--text-sm);font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;" title="Check addresses, find the cheapest rate and buy labels for several orders at once">
-            <span aria-hidden="true">📦</span>
-            <span>Ship several orders at once</span>
-          </button>
-
-          <div class="ship-duo" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <button class="btn outline" type="button" onclick="calculateCanadaPostRatesHandler()" style="height:42px;font-size:var(--text-sm);font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px;background:rgba(216,42,42,0.06);border-color:rgba(216,42,42,0.3);color:var(--text);" title="Calculate rates and buy official postage labels directly via Canada Post API">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;">
-                <path d="M12 2L14 8L19 7L16 12L21 15L15 17L16 22L12 18L8 22L9 17L3 15L8 12L5 7L10 8L12 2Z" fill="#D82A2A"/>
-              </svg>
-              <span>Canada Post Direct</span>
-            </button>
-            <button class="btn tag" type="button" onclick="calculateZonosDutiesHandler()" style="height:42px;font-size:var(--text-sm);font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px;" title="Calculate destination customs duties and import taxes with Zonos">
-              <span>🌐</span>
-              <span>Landed Cost (Zonos)</span>
-            </button>
+          <div class="ship-flow-group">
+            <div class="sect">Or quote one carrier directly</div>
+            <div class="ship-carrier-grid">
+              <button class="btn" type="button" onclick="calculateCanadaPostRatesHandler()" title="Rates and official labels straight from Canada Post">Canada Post</button>
+              <button class="btn" type="button" onclick="calculateChitChatsRatesHandler()" title="Creates an unpaid draft; nothing is charged until you choose Buy label">Chit Chats</button>
+              <button class="btn" type="button" onclick="calculateZonosDutiesHandler()" title="Destination duties and import taxes with Zonos">Duties &amp; taxes</button>
+            </div>
           </div>
+
+          <details class="ship-flow-group ship-cc-details">
+            <summary class="sect">Chit Chats details</summary>
+            <div class="tc-form-grid">
+              <div class="tc-form-group"><label class="tc-form-label" for="cc-ship-date">Drop-off date</label><input id="cc-ship-date" type="date" class="tc-form-input"></div>
+              <div class="tc-form-group"><label class="tc-form-label" for="cc-origin-country">Country printed in</label><input id="cc-origin-country" class="tc-form-input" maxlength="2" placeholder="CA" autocomplete="off" autocapitalize="characters"></div>
+            </div>
+            <div class="tc-form-hint">Two-letter country code, needed for parcels leaving Canada. Getting rates saves an unpaid draft — nothing is charged until you choose Buy label.</div>
+            <button class="btn sm" type="button" onclick="importChitChatsShippingHandler()">Refresh Chit Chats shipments</button>
+          </details>
+
+          <button class="btn ship-flow-batch" type="button" onclick="openBatchShipping()" title="Check addresses, find the cheapest rate and buy labels for several orders at once">Ship several orders at once →</button>
         </div>
       </div>
     </div>
@@ -4071,25 +4071,17 @@
     <div class="shipping-results-container">
       <div class="card" style="min-height:300px; height:100%; display:flex; flex-direction:column;">
         <div id="canadapost-rates-card" class="canadapost-rates-card card" style="display:none; margin-bottom:12px; background:var(--surface-card); border:var(--stroke-hair) solid var(--border); border-radius:var(--r2); padding:12px 14px;"></div>
-        <div class="card">
-          <strong>Chit Chats</strong>
-          <p>Use the address, parcel, and declared value above. Rates create an unpaid draft; nothing is charged until you choose Buy label.</p>
-          <div class="tc-form-grid">
-            <div class="tc-form-group"><label class="tc-form-label" for="cc-ship-date">Expected Chit Chats drop-off date</label><input id="cc-ship-date" type="date" class="tc-form-input"></div>
-            <div class="tc-form-group"><label class="tc-form-label" for="cc-origin-country">Country where the books were printed (two-letter code)</label><input id="cc-origin-country" class="tc-form-input" maxlength="2" placeholder="CA" autocomplete="off"><div class="tc-form-hint">Required for shipments outside Canada. Use the printing country, even if it differs from your return address.</div></div>
-          </div>
-          <button class="btn gold lg" type="button" onclick="calculateChitChatsRatesHandler()">Chit Chats Rates</button>
-          <button class="btn lg" type="button" onclick="importChitChatsShippingHandler()">Refresh shipments</button>
-          <p id="cc-portal-status" role="status" aria-live="polite"></p>
-          <div id="chitchats-rates-card" class="card" hidden></div>
-        </div>
+        <p id="cc-portal-status" class="sr-only" role="status" aria-live="polite"></p>
+        <div id="chitchats-rates-card" class="cc-panel-results canadapost-rates-card" hidden></div>
         <div id="zonos-duty-card" class="zonos-duty-card" style="display:none; margin-bottom:12px;"></div>
-        <div style="font-size:var(--text-sm); font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:12px;">Customer Charge Prediction</div>
-        <div id="ship-prediction-card" class="shipping-prediction-card" style="display:none;"></div>
-        <div style="font-size:var(--text-sm); font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:12px;">Carrier Rates Comparison</div>
+        <div class="ship-results-group ship-results-group--prediction">
+          <div class="sect">Customer charge prediction</div>
+          <div id="ship-prediction-card" class="shipping-prediction-card" style="display:none;"></div>
+        </div>
+        <div class="sect">Carrier rates comparison</div>
         <div id="ship-results-placeholder" style="flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:2rem; color:var(--text3);">
           <div style="font-size:32px; margin-bottom:12px;">📦</div>
-          <div>Enter origin, destination, and package specs, then click <strong>Calculate Shipping Rates</strong>.</div>
+          <div>Enter origin, destination, and package specs, then choose <strong>Compare all rates</strong> or one carrier on the left.</div>
         </div>
         
         <!-- Loading State -->

@@ -5398,7 +5398,7 @@ function renderChitChatsPortal(message = '') {
   const archive = Object.values(state.shipments || {}).slice(-30).reverse();
   card.innerHTML = `<div class="cp-rate-header"><strong>Chit Chats rates &amp; labels</strong><span class="pill ${account.isTest ? 'amber' : 'blue'}">${account.isTest ? '● Staging — not mailable' : '● Live account'}</span></div>
     <p>${escapeHtml(message || (rates.length ? 'Choose a service below. Buying a label charges your Chit Chats balance.'
-      : stale ? 'Those prices are over an hour old. Choose Chit Chats Rates again for today’s prices.' : 'Use Chit Chats Rates to quote the address and parcel above.'))}</p>
+      : stale ? 'Those prices are over an hour old. Choose the Chit Chats button again for today’s prices.' : 'Use the Chit Chats button to quote the address and parcel above.'))}</p>
     ${pending.map(item => `<div class="cp-buy-blocked"><span>● Purchase ${escapeHtml(item.id)} needs checking. Do not buy another label for this parcel.</span><button class="btn lg" type="button" data-cc-check="${escapeHtml(item.id)}">Check purchase</button></div>`).join('')}
     <div class="cp-rates-list">${rates.map((rate, index) => `<div class="cp-rate-row"><div><strong>${escapeHtml(rate.serviceName)}</strong><div>${escapeHtml(rate.delivery)} · ${escapeHtml(rate.tracking)}</div></div><div><strong class="tnum">${rate.totalPrice.toFixed(2)} CAD</strong><button class="btn gold lg" type="button" data-cc-buy="${index}" ${pending.length ? 'disabled' : ''}>Buy label</button></div></div>`).join('')}</div>
     ${archive.length ? '<p><strong>Saved Chit Chats shipments</strong> — downloaded PDFs can be reprinted offline.</p>' : ''}
@@ -5481,7 +5481,7 @@ async function buyChitChatsLabelHandler(index) {
     const state = readChitChatsState(account); const draft = state.draft; const rate = draft?.rates?.[index];
     if (!rate || draft.fingerprint !== JSON.stringify(chitChatsFormPayload())) throw new Error('The parcel changed. Get fresh Chit Chats rates before buying.');
     // Chit Chats charges today's price, not the one on screen.
-    if (!(Date.now() - Number(draft.quotedAt) < CHITCHATS_QUOTE_TTL_MS)) throw new Error('These prices are over an hour old. Choose Chit Chats Rates again before buying.');
+    if (!(Date.now() - Number(draft.quotedAt) < CHITCHATS_QUOTE_TTL_MS)) throw new Error('These prices are over an hour old. Choose the Chit Chats button again before buying.');
     if (Object.values(state.purchases || {}).some(item => item.status === 'pending')) throw new Error('Check the previous purchase before buying another label.');
     const orderNumber = draft.payload.order_id;
     if (!account.isTest && orderNumber) {

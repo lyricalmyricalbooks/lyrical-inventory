@@ -7,7 +7,7 @@ API reference: https://chitchats.com/docs/api/v1
 1. Deploy the updated **Apps Script v52** from Connect your Google Sheet. Update the existing web-app deployment, keeping its URL.
 2. Open **Tax Centre → Integrations → Chit Chats API**. Enter your numeric Client ID and API access token, enable the service, and save.
 3. Use **Test Connection** to verify the selected account. **Use staging account** targets `staging.chitchats.com`; staging needs its own account/token.
-4. Open **Shipping**, fill in the destination, package, number of copies and declared value per copy, then choose **Chit Chats Rates**.
+4. Open **Shipping**, fill in the destination, package, number of copies and declared value per copy, then choose **Chit Chats** under "Or quote one carrier directly".
 5. For parcels leaving Canada, enter the country where the books were printed and check the customs tariff code. Set the expected Chit Chats drop-off date: today or up to a week ahead, on your own calendar.
 6. Choose **Buy label** and review the purchase confirmation. Download the official PDF and print it from your PDF viewer. Take the parcel to Chit Chats.
 

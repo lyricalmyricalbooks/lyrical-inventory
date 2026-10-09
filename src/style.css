@@ -10641,6 +10641,29 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   flex-direction: column;
   height: 100%;
 }
+/* Shipping actions run top to bottom in the order you use them: one main
+   "compare everything" button, single-carrier quotes side by side, the extra
+   Chit Chats fields folded away, and batch shipping last. */
+.ship-flow { margin-top: var(--space-4); display: flex; flex-direction: column; gap: var(--space-4); }
+.ship-flow .btn { justify-content: center; text-align: center; }
+.ship-flow-primary { width: 100%; }
+.ship-flow-group .sect { margin-bottom: var(--space-2); }
+.ship-carrier-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--space-2); }
+.ship-cc-details { display: flex; flex-direction: column; gap: var(--space-3); }
+.ship-cc-details > summary { cursor: pointer; list-style: none; margin-bottom: 0; min-height: 32px; }
+.ship-cc-details > summary::-webkit-details-marker { display: none; }
+.ship-cc-details > summary::before { content: '▸'; }
+.ship-cc-details[open] > summary::before { content: '▾'; }
+.ship-cc-details[open] > * + * { margin-top: var(--space-3); }
+.ship-cc-details .btn.sm { align-self: flex-start; }
+.ship-flow-batch { width: 100%; border-style: dashed; }
+.cc-panel-results { margin-bottom: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
+.cc-panel-results[hidden] { display: none !important; }
+.cc-panel-results p { margin: 0; font-size: var(--text-sm); color: var(--content-muted); }
+.cc-panel-results .cp-rates-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.cc-panel-results .cp-rate-row > div:last-child { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+/* The prediction label only appears once there is a prediction under it. */
+.ship-results-group--prediction:has(> #ship-prediction-card:empty) { display: none; }
 /* Shippo's rate list shares one anatomy with the Canada Post list beside it
    (.cp-rate-row): the same wrap and gap, the same spring lift with a hard
    offset shadow on hover, the price in plain ink rather than green (the
