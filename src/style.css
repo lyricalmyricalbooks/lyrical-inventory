@@ -16362,6 +16362,15 @@ button[onclick="refreshUmamiStats()"]:active {
      fixed gap would leave its sub-line sitting above the others'. */
   margin-top:auto;padding-top:6px;
 }
+/* Where an owed figure comes from ("40% of CA$740 · 23 copies sold since…"):
+   sits right under the figure it explains, in the card's own ink. */
+.ps-stat-detail{
+  margin-top:var(--space-1);
+  font-size:var(--text-xs);font-weight:600;line-height:1.35;
+  color:inherit;
+}
+.ps-stat-card.tone-gold .ps-stat-detail{color:var(--gold-text);}
+.ps-stat-card.tone-amber .ps-stat-detail{color:var(--amber);}
 /* Exactly one card leads: the balance this panel exists to act on. */
 .ps-stat-card.is-lead{box-shadow:var(--elev-2);}
 .ps-stat-card.is-lead .ps-stat-val{font-size:var(--text-2xl);}
