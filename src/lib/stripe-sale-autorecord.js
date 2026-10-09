@@ -213,13 +213,21 @@ export function refundsToRaise(refunds = [], sales = []) {
   const seen = new Set();
   (Array.isArray(refunds) ? refunds : []).forEach(refund => {
     if (!refund || refund.status === 'failed' || refund.status === 'canceled') return;
-    const rows = (byCharge.get(refund.chargeId) || []).filter(row => !row.refundNoted);
+    const all = byCharge.get(refund.chargeId) || [];
+    // A row only partly refunded before can be raised again if this refund completes it.
+    const prior = all.filter(row => row.refundNoted && row.refundPartial && refund.id && refund.id !== row.refundNoted);
+    const rows = all.filter(row => !row.refundNoted).concat(prior);
     if (!rows.length || seen.has(refund.chargeId)) return;
     seen.add(refund.chargeId);
     const paid = rows.reduce((sum, row) => sum + (Number(row.paidAmount) || 0), 0);
-    const back = Number(refund.chargeRefundedTotal ?? refund.amount) || 0;
+    const earlier = prior.reduce((sum, row) => sum + (Number(row.refundedSoFar) || 0), 0);
+    const back = Number(refund.chargeRefundedTotal ?? (earlier + (Number(refund.amount) || 0))) || 0;
     const full = refund.fullyRefunded === true || (paid > 0 && back >= paid - 0.005);
-    rows.forEach(row => out.push({ ...row, refundId: refund.id || '', refunded: back, full }));
+    rows.forEach(row => {
+      // Rows already alerted as partial stay quiet unless this refund finishes the job.
+      if (row.refundNoted && !full) return;
+      out.push({ ...row, refundId: refund.id || '', refunded: back, full });
+    });
   });
   return out;
 }

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { inventoryBreakdown } from '../src/lib/inventory.js';
 import { tierEffectiveCap } from '../src/lib/earnings.js';
 import { reminderBlockReason } from '../src/lib/payment-reminders.js';
+import { refundsToRaise } from '../src/lib/stripe-sale-autorecord.js';
 
 const main = readFileSync('src/main.js', 'utf8');
 const fn = (name) => { const i = main.indexOf(name); return main.slice(i, i + 2600); };
@@ -62,5 +63,42 @@ describe('stock-group wiring', () => {
   });
   it('partly refunded card payments stay in needs-review', () => {
     expect(main).toContain('p.refunded && p.fullyRefunded !== false');
+  });
+});
+
+describe('second partial refund completing a refund', () => {
+  const sale = (extra = {}) => ({ chargeId: 'ch_1', sheetsId: 'stripe-ch_1', qty: 1, paidAmount: 100, ...extra });
+  it('is raised as full after an earlier partial was noted', () => {
+    const noted = sale({ refundNoted: 're_1', refundPartial: true, refundedSoFar: 40 });
+    const out = refundsToRaise([{ id: 're_1', chargeId: 'ch_1', amount: 40 }, { id: 're_2', chargeId: 'ch_1', amount: 60 }], [noted]);
+    expect(out).toHaveLength(1);
+    expect(out[0].full).toBe(true);
+  });
+  it('stays quiet if the second refund is still partial', () => {
+    const noted = sale({ refundNoted: 're_1', refundPartial: true, refundedSoFar: 40 });
+    expect(refundsToRaise([{ id: 're_2', chargeId: 'ch_1', amount: 10 }], [noted])).toHaveLength(0);
+  });
+});
+
+describe('remaining stock-group fixes', () => {
+  it('voiding an author-entered sale gives the copies back to the author', () => {
+    expect(fn('function voidHistEntry(')).toContain('s.authorStock');
+    expect(fn('function unvoidHistEntry(')).toContain('deductSaleFromStockBreakdown(s, h.qty, true)');
+  });
+  it('undoing a reversal syncs under the sale own book', () => {
+    expect(main).toContain('withActiveBook(item.bookId, () => unvoidHistEntry(st, book, row))');
+    expect(main).toContain('withActiveBook(item.bookId, () => voidHistEntry(st, book, row))');
+  });
+  it('the no-access message survives the sign-out it triggers', () => {
+    expect(main).toContain('setupGate(_pendingGateMsg)');
+    expect(main).toContain('_pendingGateMsg = `Your Google account');
+  });
+  it('book expense edit keeps its CAD value offline and the export flags unconverted expenses', () => {
+    expect(main).toContain('const sameBasis = !fxRate');
+    expect(main).toContain('rateWarnings.set(`expense-${cur}`');
+  });
+  it('the invoice sweep reads several pages and only advances when complete', () => {
+    expect(main).toContain('fetchStripePaymentsForReconcile(10,');
+    expect(main).toContain('if (!payments.truncated) writeStripeInvoiceStamp');
   });
 });

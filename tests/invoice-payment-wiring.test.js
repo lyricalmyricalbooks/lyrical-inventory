@@ -277,7 +277,7 @@ describe('the Stripe invoice sweep and money', () => {
 
   it('asks Stripe only about the window since it last looked', () => {
     // Without this every poll drags hundreds of charges over to learn nothing.
-    expect(sweep).toContain('fetchStripePaymentsForReconcile(1, { since: stripeInvoiceSweepSince() })');
+    expect(sweep).toContain('fetchStripePaymentsForReconcile(10, { since: stripeInvoiceSweepSince() })');
     const fetcher = appSource.slice(
       appSource.indexOf('async function fetchStripePaymentsForReconcile'),
       appSource.indexOf('function _reconRecordedChargeIds'),
