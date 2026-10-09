@@ -7,7 +7,10 @@ import { roundCents } from './money.js';
 // Effective revenue cap for a tier. A "break-even" tier caps at the book's
 // production cost; otherwise it uses the tier's own revenueUpTo (or null = no cap).
 export function tierEffectiveCap(tier, productionCost = 0) {
-  const isBreakEvenTier = (tier.label || '').toLowerCase().includes('break');
+  const label = (tier.label || '').toLowerCase();
+  // "Post Break-even" is the stage after the cost is recovered: it keeps its own
+  // ceiling (none), instead of being capped at production cost like "Pre".
+  const isBreakEvenTier = label.includes('break') && !/^\s*post\b/.test(label);
   if (isBreakEvenTier && productionCost > 0) return productionCost;
   return Number.isFinite(tier.revenueUpTo) && tier.revenueUpTo > 0 ? tier.revenueUpTo : null;
 }

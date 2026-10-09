@@ -103,7 +103,7 @@ export function invoiceReminderState(inv) {
  * Ordered so the answer is the most useful one: a paid invoice reports `paid`
  * rather than `no-email`, because that is what the owner would want to hear.
  */
-export function reminderBlockReason(inv, { today, days } = {}) {
+export function reminderBlockReason(inv, { today, days, now = Date.now() } = {}) {
   if (!inv) return 'no-invoice';
   const status = str(inv.status) || 'draft';
   if (status === 'paid') return 'paid';
@@ -113,6 +113,13 @@ export function reminderBlockReason(inv, { today, days } = {}) {
 
   const state = invoiceReminderState(inv);
   if (state.count > 0) return 'already-chased';
+  // Back off after an attempt that did not complete (failed, or still stamped
+  // 'sending' by another device): wait a day before trying again, so a bad
+  // address can't fill every hourly batch or mail the customer repeatedly.
+  const log = Array.isArray(inv.reminders) ? inv.reminders : [];
+  const lastTry = log.length ? log[log.length - 1] : null;
+  if (lastTry && (lastTry.status === 'failed' || lastTry.status === 'sending')
+    && now - (Number(lastTry.at) || 0) < 24 * 60 * 60 * 1000) return 'recent-attempt';
   if (state.snoozedUntil && isIsoDate(today) && str(today) <= state.snoozedUntil) return 'snoozed';
   if (!str(inv.storeEmail)) return 'no-email';
 
