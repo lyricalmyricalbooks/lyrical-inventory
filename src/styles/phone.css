@@ -602,6 +602,27 @@
   .pub-shell #book-dropdown-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
 }
 
+/* Header buttons on a phone, Riso Press: theme, bell, review inbox and the account button were
+   still four cream-ringed circles on a translucent wash, sitting right above the squared,
+   shadowed book switcher. They now match it: square, a firm cream outline, the same hard offset
+   shadow, and a press-in on tap. The bell and review badges and the sync dot keep their shape. */
+@media (max-width: 768px) {
+  .pub-shell :is(#theme-toggle-btn, #notif-header-btn, #review-inbox-header-btn),
+  .pub-shell .acct-avatar {
+    border-radius: var(--r2);
+    border-color: var(--on-inverse-3);
+    box-shadow: 2px 2px 0 color-mix(in srgb, var(--on-inverse) 26%, transparent);
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+    transition: transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast) var(--ease-spring),
+      background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard);
+  }
+  .pub-shell :is(#theme-toggle-btn, #notif-header-btn, #review-inbox-header-btn):active,
+  .pub-shell .acct-trigger:active .acct-avatar,
+  .pub-shell .header-menu.open .acct-avatar { transform: translate(2px, 2px); box-shadow: none; }
+  .pub-shell :is(#theme-toggle-btn, #notif-header-btn, #review-inbox-header-btn):focus-visible,
+  .pub-shell .acct-trigger:focus-visible .acct-avatar { outline: 2px solid var(--gold); outline-offset: 3px; }
+}
+
 /* Pop-up sheets, Riso Press: they kept the pre-repaint soft look after the More
    sheet moved on: a pale rounded grab handle, rounded top corners and a round
    close button that grew on hover. They now match the More sheet: a square ink

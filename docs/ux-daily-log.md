@@ -124,6 +124,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-08 | visual | Phone Add Sale (Sale/Gift switch, payment and channel buttons) | Gave the Add Sale toggles on a phone square ink outlines and the offset shadow, pressing in when tapped, instead of a soft grey well | — |
 | 2026-10-08 | visual | Phone Website orders | Gave each web order card on a phone the same bold outline and offset shadow as the other cards, keeping its coloured status stripe, pressing in when tapped | — |
 | 2026-10-09 | visual | Phone header — book switcher | Gave the "which book am I in" button on a phone a firm outline, an offset shadow, caps lettering and a visible arrow, pressing in when tapped, instead of a faint see-through box | — |
+| 2026-10-09 | visual | Phone header — theme, bell, review inbox and account buttons | Squared the four round header buttons on a phone with a firm outline and offset shadow that presses in when tapped, to match the book switcher under them | — |
 
 ---
 
