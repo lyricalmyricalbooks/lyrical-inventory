@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   ocCurrentStage, ocNudgeDue, ocNudgeTemplateKey, ocProblems, ocMatchesFilter,
   ocFilterCounts, ocMatchesSearch, ocSortContributors, OC_NUDGE_AFTER_DAYS, OC_NUDGE_GAP_DAYS,
+  ocWhoseMove, ocStageStates,
 } from '../src/lib/opencall.js';
 
 const NOW = Date.parse('2026-09-24T12:00:00Z');
@@ -94,11 +95,44 @@ describe('ocFilterCounts / ocMatchesFilter agree', () => {
     expect(counts.complete).toBe(1);
     expect(counts.nudge).toBe(1);
     expect(counts.problems).toBe(2);
+    // No address and a bounce are neither "your move" nor "waiting".
+    expect(counts.you).toBe(1);
+    expect(counts.waiting).toBe(2);
   });
   it('every count equals the rows its filter shows', () => {
     Object.keys(counts).forEach(f => {
       expect(list.filter(c => ocMatchesFilter(c, f, { now: NOW })).length, f).toBe(counts[f]);
     });
+  });
+});
+
+describe('ocWhoseMove', () => {
+  it('splits the pipeline into your move, waiting on the artist and done', () => {
+    expect(ocWhoseMove(at(0))).toBe('you');
+    expect(ocWhoseMove(at(1))).toBe('artist');
+    expect(ocWhoseMove(at(2))).toBe('you');
+    expect(ocWhoseMove(at(3))).toBe('artist');
+    expect(ocWhoseMove(at(4))).toBe('you');
+    expect(ocWhoseMove(at(5))).toBe('done');
+  });
+  it('is blocked when no email can go out', () => {
+    expect(ocWhoseMove(at(0, { email: '' }))).toBe('blocked');
+    expect(ocWhoseMove(at(1, { undeliverable: true }))).toBe('blocked');
+    expect(ocWhoseMove(at(2), () => true)).toBe('blocked');
+    // Finished stays finished even if the address later bounced.
+    expect(ocWhoseMove(at(5, { undeliverable: true }))).toBe('done');
+  });
+});
+
+describe('ocStageStates', () => {
+  it('marks done steps, whose move the next one is, and later steps', () => {
+    expect(ocStageStates(at(0))).toEqual(['you', 'todo', 'todo', 'todo', 'todo']);
+    expect(ocStageStates(at(1))).toEqual(['done', 'artist', 'todo', 'todo', 'todo']);
+    expect(ocStageStates(at(4))).toEqual(['done', 'done', 'done', 'done', 'you']);
+    expect(ocStageStates(at(5))).toEqual(['done', 'done', 'done', 'done', 'done']);
+  });
+  it('keeps a step ticked by hand out of order', () => {
+    expect(ocStageStates(at(0, { cmykSent: true }))).toEqual(['you', 'todo', 'done', 'todo', 'todo']);
   });
 });
 
