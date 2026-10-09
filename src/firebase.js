@@ -388,7 +388,11 @@ window._fbLoad = async (bookId) => {
     }
     const s = await get(ref(db, `lyrical/books/${bookId}`));
     return s.exists() ? s.val().data : null;
-  } catch (e) { console.error("fbLoad failed", e); return null; }
+  } catch (e) {
+    // Rethrow: a failed read is not an empty book. Returning null made callers
+    // seed defaults over the real ledger on the next save.
+    console.error("fbLoad failed", e); throw e;
+  }
 };
 
 let _fsWatchUnsubs = {};
@@ -800,7 +804,11 @@ window._fbLoadCatalog = async () => {
     }
     const s = await get(ref(db, `lyrical/settings/catalog`));
     return s.exists() ? safeParse(s.val().data) : null;
-  } catch (e) { console.error("fbLoadCatalog failed", e); return null; }
+  } catch (e) {
+    // Rethrow: null means "no catalog exists"; a failed read must stay distinct
+    // so the caller never writes the default books over the real catalog.
+    console.error("fbLoadCatalog failed", e); throw e;
+  }
 };
 
 // ─────────────────────────────────────────────

@@ -75,7 +75,7 @@ describe('normalizeTestBookAccents', () => {
   });
 
   it('catches a test book identified by title rather than id', () => {
-    const books = { b1: { id: 'b1', title: 'my test book', accent: '#000000' } };
+    const books = { b1: { id: 'b1', title: 'testpage', accent: '#000000' } };
     const { normalizeTestBookAccents } = loadThemeHelpers(books);
     normalizeTestBookAccents();
     expect(books.b1.accent).toBe('#8b5cf6');
