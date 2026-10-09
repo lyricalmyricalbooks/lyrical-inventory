@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildHarness, appSource } from './helpers/extract-decl.js';
 import { escapeHtml } from '../src/lib/html.js';
+import { PUBLISHER_ONLY_TABS } from '../src/lib/help-guide.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const INDEX_HTML = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
@@ -547,8 +548,8 @@ describe('the panel in the app shell', () => {
     // The boundary that matters is firestore.rules, which already denies an
     // author settings/taxCenter. This stops them landing on a screen that
     // could only ever error.
-    const gate = appSource.match(/if \(isAuthor\(\) && \([^)]*\)\) name = 'dashboard';/);
-    expect(gate[0]).toContain("name === 'intel'");
+    expect(appSource).toMatch(/if \(isAuthor\(\) && PUBLISHER_ONLY_TABS\.has\(name\)\) name = 'dashboard';/);
+    expect(PUBLISHER_ONLY_TABS.has('intel')).toBe(true);
   });
 
   it('keeps the composer out of the rebuilt thread', () => {

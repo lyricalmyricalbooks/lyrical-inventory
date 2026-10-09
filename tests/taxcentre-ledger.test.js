@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { buildHarness } from './helpers/extract-decl.js';
-import { getBookCurrencyCode } from '../src/lib/money.js';
+import { getBookCurrencyCode, fmt, roundCents } from '../src/lib/money.js';
+import { payoutNetted, payoutDebtCollected } from '../src/lib/earnings.js';
+import { saleCadAmounts, datedCadRate } from '../src/lib/sale-fx.js';
 import { reconcileConsignmentMirrors } from '../src/lib/consignment.js';
 import { canonicalExpenseCategory } from '../src/lib/expense-categories.js';
 
@@ -55,16 +57,19 @@ const TAX_CENTER = {
 // EUR sells at 1.50 CAD so the conversion is visible in the totals.
 const _fxRateCache = { EUR_CAD: 1.5, CAD_CAD: 1 };
 
-function buildLedger(year) {
+function buildLedger(year, extraState = {}, { fxCache = _fxRateCache, statesOverride } = {}) {
   const fn = buildHarness({
     names: ['_tcBuildLedger'],
     deps: {
       BOOKS,
-      states: JSON.parse(JSON.stringify(states)),
+      states: JSON.parse(JSON.stringify({ ...(statesOverride || states), ...extraState })),
       TAX_CENTER: JSON.parse(JSON.stringify(TAX_CENTER)),
-      _fxRateCache,
+      _fxRateCache: fxCache,
+      saleCadAmounts,
+      datedCadRate,
       defaultState: () => ({ hist: [], expenses: [], stores: [], ledger: [] }),
       getBookCurrencyCode,
+      fmt, roundCents, payoutNetted, payoutDebtCollected,
       reconcileConsignmentMirrors,
       canonicalExpenseCategory,
       today: () => '2026-07-27',
@@ -75,6 +80,14 @@ function buildLedger(year) {
 }
 
 describe('Tax Centre ledger', () => {
+  it('shows settled royalties and collected debt separately without counting another sale', () => {
+    const { allLedger, totalGrossSales } = buildLedger('2026', {
+      hound: { ...states.hound, artistPayouts: [{ id: 'settlement', date: '2026-10-08', amount: 80, settlement: {}, receivablePayments: [{ id: 'debt', amount: 30 }] }] },
+    });
+    expect(allLedger.find(r => r.sourceType === 'artistPayout')).toMatchObject({ origAmount: 80, isIncome: false });
+    expect(allLedger.find(r => r.sourceType === 'artistDebtRecovery')).toMatchObject({ origAmount: 30, type: 'Transfer', isIncome: true });
+    expect(totalGrossSales).toBe(55);
+  });
   it('totals sales for the selected year only', () => {
     // hound 2×20 = 40 CAD, altrove 1×10 EUR × 1.5 = 15 CAD. The 2025 sale, the
     // voided one and the artist-pending one must not count.
@@ -151,5 +164,31 @@ describe('Tax Centre ledger', () => {
     const snapshot = JSON.stringify(states);
     buildLedger('2026');
     expect(JSON.stringify(states)).toBe(snapshot);
+  });
+});
+
+describe('Tax Centre ledger — each sale at its own date\'s rate', () => {
+  it('uses the rate published for the sale\'s date over today\'s', () => {
+    const { allLedger } = buildLedger('2026', {}, { fxCache: { ..._fxRateCache, 'EUR_CAD@2026-03-09': 1.4 } });
+    const eur = allLedger.find(r => r.ref === 'B1');
+    expect(eur.baseAmount).toBeCloseTo(14, 6);
+    expect(eur.rateEstimated).toBe(false);
+  });
+
+  it('flags a sale shown at today\'s rate until its date\'s rate is known', () => {
+    const { allLedger } = buildLedger('2026');
+    expect(allLedger.find(r => r.ref === 'B1').rateEstimated).toBe(true);
+    expect(allLedger.find(r => r.ref === 'A1').rateEstimated).toBe(false);
+  });
+
+  it('does not convert customer shipping, which is recorded in CAD', () => {
+    const withShipping = JSON.parse(JSON.stringify(states));
+    withShipping.altrove.hist[0].shippingPaid = 10;
+    const { allLedger, totalGrossSales } = buildLedger('2026', {}, { statesOverride: withShipping });
+    const ship = allLedger.find(r => r.sourceType === 'shippingIncome');
+    expect(ship.baseAmount).toBe(10);
+    expect(ship.origCurrency).toBe('CAD');
+    // 40 (hound) + 15 (€10 at 1.5) + 10 shipping
+    expect(totalGrossSales).toBeCloseTo(65, 6);
   });
 });

@@ -230,7 +230,8 @@ const sameConflict = (e, bookId, c) =>
  * identical conflict already on file (same record, same set-aside version —
  * a retried save reporting it twice) is refreshed rather than duplicated.
  *
- * @returns {{ added: object[], entries: object[] }} what was recorded, and the full stored list
+ * @returns {{ added: object[], entries: object[], unsaved?: number }} what was recorded, the full stored list,
+ *   and how many conflicts could not be stored (device storage full)
  */
 export function recordConflicts(storage, { bookId, bookTitle = '', cur = '', conflicts = [], now = Date.now() } = {}) {
   const meaningful = (Array.isArray(conflicts) ? conflicts : []).filter(isMeaningfulConflict);
@@ -254,7 +255,12 @@ export function recordConflicts(storage, { bookId, bookTitle = '', cur = '', con
   });
   // Newest first: this batch (in report order) ahead of everything older.
   entries = writeConflicts(storage, [...added, ...entries]);
-  return { added, entries };
+  // Only what actually landed counts as recorded. A full storage used to
+  // report these as added, and the owner was sent to review records that
+  // were never kept.
+  const stored = new Set(entries.map(e => e.id));
+  const kept = added.filter(e => stored.has(e.id));
+  return { added: kept, entries, unsaved: added.length - kept.length };
 }
 
 /** Removes one entry by id. Returns the remaining list. */

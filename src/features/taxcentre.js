@@ -55,9 +55,10 @@ import { escapeHtml } from '../lib/html.js';
 import { csvRow, toCsv } from '../lib/csv.js';
 import { downloadCsv } from '../lib/download.js';
 import { fmt, getSym, getBookCurrencyCode, roundCents, setSelectCurrency } from '../lib/money.js';
-import { payoutNetted } from '../lib/earnings.js';
+import { payoutNetted, payoutDebtCollected } from '../lib/earnings.js';
 import { reconcileConsignmentMirrors } from '../lib/consignment.js';
 import { buildCashFlowBuckets, cashFlowDelta, computeCashFlowMetrics } from '../lib/cashflow.js';
+import { saleCadAmounts, datedCadRate } from '../lib/sale-fx.js';
 import {
   DEFAULT_SNOOZE_DAYS,
   findDeductionGaps,
@@ -141,9 +142,11 @@ function processRecurringExpenses() {
     recurringDueCharges(sub, now).forEach(charge => {
       if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
       const origCur = sub.currency || 'CAD';
-      const fxRate = _fxRateCache[`${origCur}_CAD`] || 1;
+      // The charge's own date's rate, else today's. With neither, the charge is
+      // flagged and healExpenseRates fills it in online — not booked 1:1.
+      const fxRate = datedCadRate(origCur, charge.date, _fxRateCache);
       const chargeAmount = Number(charge.amount) || 0;
-      const baseAmount = chargeAmount * fxRate;
+      const baseAmount = fxRate.missing ? null : roundCents(chargeAmount * fxRate.rate);
 
       TAX_CENTER.businessExpenses.unshift({
         id: Date.now() + Math.random(),
@@ -151,8 +154,9 @@ function processRecurringExpenses() {
         cat: sub.cat,
         currency: origCur,
         amount: chargeAmount,
-        fxRate: fxRate,
+        fxRate: fxRate.missing ? null : fxRate.rate,
         baseAmount: baseAmount,
+        ...(fxRate.missing ? { fxMissing: true } : {}),
         date: charge.date,
         ref: 'Auto-Injected',
         recurringId: sub.id || '',
@@ -316,6 +320,29 @@ function _tcSaveLedgerPrefs() {
       year: yearEl ? yearEl.value : 'all',
     }));
   } catch (e) { /* ignore quota / private-mode errors */ }
+}
+
+// Offer the coming year even before its first entry. Record years outside the
+// standard range remain accessible, including records synchronized offline.
+function _tcRefreshYearOptions(currentYear = new Date().getFullYear()) {
+  const selects = [$('tc-year'), $('tc-year-ledger')].filter(Boolean);
+  if (!selects.length) return;
+  const selected = selects[0].value || 'all';
+  const years = new Set();
+  for (let year = currentYear + 1; year >= 2023; year--) years.add(year);
+  const addYear = value => {
+    if (/^[1-9]\d{3}$/.test(value)) years.add(Number(value));
+  };
+  addYear(selected);
+  for (const row of _tcBuildLedger('all').allLedger) {
+    addYear(String(row.date || '').slice(0, 4));
+  }
+  const options = '<option value="all">All Time</option>' +
+    [...years].sort((a, b) => b - a).map(year => `<option value="${year}">${year}</option>`).join('');
+  for (const select of selects) {
+    if (select.innerHTML !== options) select.innerHTML = options;
+    select.value = selected;
+  }
 }
 
 function _tcRestoreLedgerPrefs() {
@@ -866,7 +893,7 @@ function _tcRenderLedgerTable(pageLedger, baseCurrency) {
           ? `<button class="edit-btn" aria-label="Edit entry" onclick="openEditExpense('${item.sourceType}', '${item.sourceId || ''}', '${item.itemId}')" title="Edit entry">✎</button>`
           : (item.sourceType === 'sale'
             ? `<button class="edit-btn" aria-label="Edit entry" onclick="openEditSale('${item.sourceId || ''}', '${item.itemId}')" title="Edit entry">✎</button>`
-            : (item.sourceType === 'artistPayout'
+            : (item.sourceType === 'artistPayout' || item.sourceType === 'artistDebtRecovery'
               ? `<button class="edit-btn" aria-label="Edit entry" onclick="openEditArtistPayout('${item.sourceId || ''}', '${item.itemId}')" title="Edit entry">✎</button>`
               : ''
             )
@@ -2177,8 +2204,8 @@ function _tcBuildLedger(selectedYear) {
     // recorded at, and so an invoice rename reaches the Receipt/Ref column.
     reconcileConsignmentMirrors(s);
 
-    // Determine conversion to CAD for sales
-    const hRate = _fxRateCache[`${cur}_CAD`] || 1;
+    // Each sale is converted at its own date's rate (see lib/sale-fx.js), not
+    // today's, so a past year's totals don't move with the exchange rate.
 
     // Add sales to ledger
     // ⚡ Bolt Optimization: Use imperative loop to avoid array allocation from .filter()
@@ -2189,10 +2216,10 @@ function _tcBuildLedger(selectedYear) {
         const hYear = h.date ? h.date.substring(0, 4) : '';
         if (selectedYear !== 'all' && hYear !== selectedYear) continue;
 
-        const unitPrice = h.price ?? h.unitPrice ?? 0;
-        const amt = h.voided ? 0 : (unitPrice * (h.qty || 1));
-        const baseAmt = amt * hRate;
-        totalGrossSales += baseAmt;
+        const fx = saleCadAmounts(h, cur, _fxRateCache);
+        const amt = fx.merchandise;
+        const baseAmt = fx.merchandiseCad;
+        totalGrossSales = roundCents(totalGrossSales + baseAmt);
 
         allLedger.push({
           date: h.date,
@@ -2206,16 +2233,18 @@ function _tcBuildLedger(selectedYear) {
           baseAmount: baseAmt,
           qty: h.qty || 1,
           voided: !!h.voided,
-          hasRateError: !hRate,
+          hasRateError: fx.missing,
+          rateEstimated: fx.estimated && !fx.missing && !h.voided,
           isIncome: true,
           sourceType: 'sale',
           sourceId: bid,
           itemId: h.id || h.num
         });
 
+        // Customer shipping is recorded in CAD whatever the book's currency.
         const shippingIncome = h.voided ? 0 : (Number(h.shippingPaid) || 0);
         if (shippingIncome > 0) {
-          const shippingBase = roundCents(shippingIncome * hRate);
+          const shippingBase = fx.shippingCad;
           totalGrossSales = roundCents(totalGrossSales + shippingBase);
           allLedger.push({
             date: h.date,
@@ -2223,12 +2252,12 @@ function _tcBuildLedger(selectedYear) {
             desc: `Customer shipping paid (${b.title})`,
             cat: 'Income',
             ref: h.num,
-            origCurrency: cur,
+            origCurrency: 'CAD',
             origAmount: shippingIncome,
             baseAmount: shippingBase,
             qty: 0,
             voided: false,
-            hasRateError: !hRate,
+            hasRateError: false,
             isIncome: true,
             sourceType: 'shippingIncome',
             sourceId: bid,
@@ -2250,13 +2279,15 @@ function _tcBuildLedger(selectedYear) {
       const bookCur = e.currency || 'CAD';
 
       let eBase;
+      let eRateMissing = false;
       if (e.baseAmount != null) {
         // Pre-calculated at submission time — no double conversion
         eBase = e.baseAmount;
       } else {
-        // Legacy entry: calculate once now
-        const eRate = _fxRateCache[`${bookCur}_CAD`] || 1;
-        eBase = (e.amount || 0) * eRate;
+        // No stored CAD value: convert at the expense's own date's rate.
+        const eRate = datedCadRate(bookCur, e.date, _fxRateCache);
+        eBase = roundCents((e.amount || 0) * eRate.rate);
+        eRateMissing = eRate.missing;
       }
 
       totalOperatingExpenses += eBase;
@@ -2271,7 +2302,7 @@ function _tcBuildLedger(selectedYear) {
         origCurrency: displayOrigCur,
         origAmount: displayOrigAmt,
         baseAmount: eBase,
-        hasRateError: false,
+        hasRateError: eRateMissing,
         isIncome: false,
         sourceType: 'bookExpense',
         sourceId: bid,
@@ -2298,13 +2329,16 @@ function _tcBuildLedger(selectedYear) {
         // `amount` is always in the book's own currency; a payout paid in
         // another currency keeps that cash in `payment` for the audit trail.
         const pAmount = Number(p.amount) || 0;
-        const pBase = pAmount * hRate;
+        const pFx = datedCadRate(cur, tDate, _fxRateCache);
+        const pBase = roundCents(pAmount * pFx.rate);
         allLedger.push({
           date: tDate,
           type: 'Expense',
           // The ledger counts cash only; say when part of the royalty was
           // settled by netting a debt, so a small or zero row isn't a mystery.
-          desc: payoutNetted(p) > 0.005
+          desc: p.settlement
+            ? `Author settlement (${b.title}) — earnings settled, including money retained from sales`
+            : payoutNetted(p) > 0.005
             ? `Artist Payout (${b.title}) — plus ${fmt(payoutNetted(p), cur)} netted against money owed`
             : `Artist Payout (${b.title})`,
           cat: 'Artist Royalties',
@@ -2312,11 +2346,19 @@ function _tcBuildLedger(selectedYear) {
           origCurrency: cur,
           origAmount: pAmount,
           baseAmount: pBase,
-          hasRateError: !hRate,
+          hasRateError: pFx.missing,
+          rateEstimated: pFx.estimated && !pFx.missing,
           isIncome: false,
           sourceType: 'artistPayout',
           sourceId: bid,
           itemId: p.id
+        });
+        const debtCollected = payoutDebtCollected(p);
+        if (debtCollected > 0) allLedger.push({
+          date: tDate, type: 'Transfer', desc: `Author debt settled (${b.title}) — included in the combined payment; not another sale`,
+          cat: 'Debt repayment', ref: p.method || '', origCurrency: cur,
+          origAmount: debtCollected, baseAmount: roundCents(debtCollected * pFx.rate),
+          hasRateError: pFx.missing, isIncome: true, sourceType: 'artistDebtRecovery', sourceId: bid, itemId: p.id,
         });
       }
     }
@@ -2327,12 +2369,15 @@ function _tcBuildLedger(selectedYear) {
     if (selectedYear !== 'all' && eYear !== selectedYear) return;
 
     const eCur = e.currency || 'CAD';
-    // Use stored baseAmount when available to avoid re-conversion
+    // Use stored baseAmount when available to avoid re-conversion. Without one,
+    // a rate already known for the expense's date gives the value; otherwise it
+    // counts as 0 and is flagged until healExpenseRates fills it in.
+    const eFx = datedCadRate(eCur, e.date, _fxRateCache);
     const eBase = e.baseAmount != null
       ? e.baseAmount
-      : e.fxMissing
+      : (e.fxMissing && eFx.estimated) || eFx.missing
         ? 0
-        : (e.amount || 0) * (_fxRateCache[`${eCur}_CAD`] || 1);
+        : roundCents((e.amount || 0) * eFx.rate);
 
     if (e.affectsCashFlow !== false) totalOperatingExpenses += eBase;
 
@@ -2347,7 +2392,7 @@ function _tcBuildLedger(selectedYear) {
       origCurrency: eCur,
       origAmount: e.amount || 0,
       baseAmount: eBase,
-      hasRateError: !!e.fxMissing,
+      hasRateError: e.baseAmount == null && ((!!e.fxMissing && eFx.estimated) || eFx.missing),
       isIncome: false,
       sourceType: 'businessExpense',
       itemId: e.id,
@@ -3441,6 +3486,8 @@ function renderTaxCenter() {
   if (TAX_CENTER?.settings?.geminiKey) _warmGeminiModelCache(TAX_CENTER.settings.geminiKey);
   // Preserve active subtab state
   switchTaxCenterSubTab(activeTaxCenterSubTab);
+  // Populate years before restoring a saved selection such as next year.
+  _tcRefreshYearOptions();
   // Restore the saved ledger view (year + search + type) before reading the year.
   _tcRestoreLedgerPrefs();
   _tcRenderStatusHeaders();
@@ -3552,7 +3599,7 @@ function _tcRenderCashFlowSummary(ctx) {
   const sources = { books: BOOKS, states, taxCenter: TAX_CENTER, fxRateCache: _fxRateCache };
   const cur = computeCashFlowMetrics(sources, selectedYear);
   const artistPayouts = cur.artistPayouts;
-  const netAfterPayouts = netCashFlow - artistPayouts;
+  const netAfterPayouts = netCashFlow - artistPayouts + (cur.artistDebtRecovered || 0) + (cur.artistSettlementCashAdjustment || 0);
   const profitMargin = totalGrossSales > 0 ? (netCashFlow / totalGrossSales) * 100 : null;
   const avgSale = cur.txnCount > 0 ? totalGrossSales / cur.txnCount : null;
 
@@ -3587,8 +3634,9 @@ function _tcRenderCashFlowSummary(ctx) {
       chip('Profit Margin', profitMargin == null ? '—' : `${profitMargin.toFixed(1)}%`, marginCls, 'Net cash flow ÷ gross sales'),
       chip('Transactions', String(cur.txnCount), '', 'Number of sales in this period'),
       chip('Avg Sale', avgSale == null ? '—' : fmt(avgSale, baseCurrency), '', 'Gross sales ÷ transactions'),
-      chip('Artist Payouts', fmt(artistPayouts, baseCurrency), 'cf-kpi-muted', 'Paid to artists — excluded from operating expenses'),
-      chip('Net After Payouts', fmt(netAfterPayouts, baseCurrency), napCls, 'Net cash flow minus artist payouts'),
+      chip('Artist Payouts', fmt(artistPayouts, baseCurrency), 'cf-kpi-muted', 'Earnings paid or retained by artists — excluded from operating expenses'),
+      ...(cur.artistDebtRecovered ? [chip('Author debt recovered', fmt(cur.artistDebtRecovered, baseCurrency), 'cf-kpi-muted', 'Debt cleared by combined payments — kept separate from new sales')] : []),
+      chip('Net After Payouts', fmt(netAfterPayouts, baseCurrency), napCls, 'After artist payouts and debt repayments; combined payments count on their payment date'),
     ].join('');
   }
 
@@ -3596,11 +3644,18 @@ function _tcRenderCashFlowSummary(ctx) {
   const fxEl = $('tc-fx-warning');
   if (fxEl) {
     const stale = (allLedger || []).filter(r => r.hasRateError).length;
+    const estimated = (allLedger || []).filter(r => r.rateEstimated).length;
     if (stale > 0) {
       fxEl.innerHTML =
         `<div class="cf-fx-warn" role="status">
           <span class="cf-fx-ic" aria-hidden="true">⚠</span>
           <span>${stale} transaction${stale === 1 ? '' : 's'} used a fallback exchange rate (1.0) — totals may be inaccurate. Refresh FX rates and reload.</span>
+        </div>`;
+    } else if (estimated > 0) {
+      fxEl.innerHTML =
+        `<div class="cf-fx-warn" role="status">
+          <span class="cf-fx-ic" aria-hidden="true">⚠</span>
+          <span>${estimated} foreign-currency sale${estimated === 1 ? ' is' : 's are'} shown at today's exchange rate for now. The rate from each sale's own date downloads the next time you're online, and the totals update then.</span>
         </div>`;
     } else {
       fxEl.innerHTML = '';
@@ -3619,7 +3674,7 @@ function _tcCashFlowBucketRows(key) {
   const data = window._tcCashFlowChartDetail || {};
   const monthly = data.selectedYear !== 'all' && data.selectedYear;
   return (data.ledger || []).filter((item) => {
-    if (item.sourceType === 'artistPayout') return false;
+    if (item.sourceType === 'artistPayout' || item.sourceType === 'artistDebtRecovery') return false;
     if (item.affectsCashFlow === false) return false;
     const date = item.date || '';
     const itemKey = monthly ? date.substring(0, 7) : date.substring(0, 4);

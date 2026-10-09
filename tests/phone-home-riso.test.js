@@ -21,3 +21,14 @@ test('the gold card keeps the ink outline rather than a gold one', () => {
 test('the count badge is a square stamp, not a pill', () => {
   expect(phone).toMatch(/#tab-today \.today-card-count \{[^}]*border-radius: var\(--r2\)/);
 });
+
+test('"Today so far" is an inked slip over the shared upload pill', () => {
+  const html = readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+  expect(html).toMatch(/<button type="button" class="today-sold" id="today-sold" onclick="switchTab\('history'\)">/);
+  // Announced politely, so a screen reader hears the upload status change.
+  expect(html).toMatch(/<span class="fm-sync today-sync" id="today-sync" role="status" aria-live="polite"><\/span>/);
+  expect(phone).toMatch(/#tab-today \.today-sold \{[^}]*border: var\(--stroke\) solid var\(--rule-ink\); border-radius: var\(--r2\);[^}]*box-shadow: var\(--elev-1\)/);
+  expect(phone).toMatch(/#tab-today \.today-sold:active \{ transform: translate\(2px, 2px\); box-shadow: none/);
+  // Only on phones: the strip is hidden everywhere else.
+  expect(phone).toMatch(/\.phone-eyebrow, \.today-sofar \{ display: none; \}/);
+});

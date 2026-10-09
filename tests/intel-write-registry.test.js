@@ -135,5 +135,8 @@ describe('reading a value a person or a model actually wrote', () => {
     const ctx = { expenseCategories: ['Travel', 'Other'] };
     expect(val('businessExpense', 'category', 'travel', ctx).value).toBe('Travel');
     expect(val('businessExpense', 'category', 'Yacht Hire', ctx).ok).toBe(false);
+    expect(val('bookExpense', 'category', 'travel', ctx).value).toBe('Travel');
+    expect(val('bookExpense', 'category', 'Yacht Hire', ctx).ok).toBe(false);
+    expect(val('bookExpense', 'category', '', ctx).ok).toBe(false);
   });
 });

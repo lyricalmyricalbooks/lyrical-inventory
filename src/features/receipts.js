@@ -77,7 +77,7 @@ import {
   effectiveInterval,
   startWatch,
 } from '../lib/watch-schedule.js';
-import { fmt, fmtD, getBookCurrencyCode, normalizeCurrencyCode, putCurrencyFirst, setSelectCurrency } from '../lib/money.js';
+import { fmt, fmtD, getBookCurrencyCode, normalizeCurrencyCode, putCurrencyFirst, roundCents, setSelectCurrency } from '../lib/money.js';
 import { expenseLedgerTotals, expenseTotalsCopy } from '../lib/expense-totals.js';
 import { closeM, confirmDialog, openM } from '../lib/modal.js';
 import { toCsv } from '../lib/csv.js';
@@ -4571,7 +4571,7 @@ function renderBatchExpenseRows() {
             <td><input type="text" data-bx-uid="${r.uid}" data-bx-field="reference" value="${escapeHtml(r.reference || '')}" placeholder="—" aria-label="Reference"></td>
             <td class="r bx-cell-amount">
               <select data-bx-uid="${r.uid}" data-bx-field="currency" aria-label="Currency">${curOptions(r.currency)}</select>
-              <input type="number" step="0.01" min="0" data-bx-uid="${r.uid}" data-bx-field="amount" value="${r.amount === '' ? '' : escapeHtml(String(r.amount))}" placeholder="0.00" aria-label="Amount">
+              <input type="number" inputmode="decimal" step="0.01" min="0" data-bx-uid="${r.uid}" data-bx-field="amount" value="${r.amount === '' ? '' : escapeHtml(String(r.amount))}" placeholder="0.00" aria-label="Amount">
             </td>
             <td class="bx-col-actions">
               ${r.file ? `<button class="btn sm" type="button" title="Read this receipt again" aria-label="Read this receipt again" onclick="rescanBatchExpenseRow('${r.uid}')">✨</button>` : ''}
@@ -4933,11 +4933,15 @@ async function _postBatchToBusinessLedger(rows) {
       else if (saved.storage === 'cloud') row._cloud = true;
     }
 
-    const fxRate = currency === base ? 1 : (_fxRateCache[`${currency}_${base}`] || 1);
+    // The rate warmed for this batch (_warmBatchExpenseRates). None to be had
+    // means no converted value yet, flagged and filled in by the Tax Centre
+    // once online — not a silent 1:1.
+    const fxRate = currency === base ? 1 : (_fxRateCache[`${currency}_${base}`] || 0);
     const entry = {
       id: idBase + logged,
-      desc, cat, currency, amount, fxRate,
-      baseAmount: amount * fxRate,
+      desc, cat, currency, amount, fxRate: fxRate || null,
+      baseAmount: fxRate ? roundCents(amount * fxRate) : null,
+      ...(fxRate ? {} : { fxMissing: true }),
       date: row.date || today(),
       ref: row.reference || '',
       receipt,
@@ -5021,7 +5025,9 @@ async function _postBatchToProjectLedger(rows) {
       ref: row.reference || '',
       receipt,
       fxRate,
-      baseAmount: cadRate ? amount * cadRate : amount
+      // No CAD rate known: leave the CAD value empty so the Tax Centre converts
+      // it at the expense's date's rate, rather than booking it 1:1.
+      baseAmount: cadRate ? roundCents(amount * cadRate) : null
     };
     if (row._cloud || (author && receipt)) entry.receiptCloudAt = new Date().toISOString();
 
@@ -6045,14 +6051,10 @@ async function _fileReceiptDrafts(drafts, { fallbackCat = 'Other', attachedFiles
       continue;
     }
 
-    let fxRate = currency === baseCur ? 1 : (_fxRateCache[`${currency}_${baseCur}`] || 0);
-    if (!fxRate) {
-      try {
-        const r = await fetchLiveRate(currency, baseCur);
-        fxRate = r?.rate || 0;
-      } catch (_) { /* fall through */ }
-    }
-    if (!fxRate) fxRate = 1; // last resort
+    // Rates were warmed for the whole import above. None at all leaves the
+    // converted value empty and flagged for the Tax Centre to fill in once
+    // online, rather than booking a foreign amount 1:1.
+    const fxRate = currency === baseCur ? 1 : (_fxRateCache[`${currency}_${baseCur}`] || 0);
 
     const newExpense = {
       id: Date.now() + Math.floor(Math.random() * 100000),
@@ -6064,8 +6066,9 @@ async function _fileReceiptDrafts(drafts, { fallbackCat = 'Other', attachedFiles
       amountUnknown: !!item.amountUnknown,
       origCurrency: currency,
       origAmount: amount,
-      fxRate,
-      baseAmount: amount * fxRate,
+      fxRate: fxRate || null,
+      baseAmount: fxRate ? roundCents(amount * fxRate) : null,
+      ...(fxRate ? {} : { fxMissing: true }),
       date: item.date || today(),
       // The stable receipt-email:<id> ref computed at extraction time, not
       // Gemini's free-text reference guess — see receipt-drafts.js.

@@ -81,12 +81,17 @@ function copies(qty) {
  * One normalized event. `text` is already written for the shop owner — the
  * renderer only wraps it in markup.
  */
-function event({ book, date, tie, kind, icon, text, amount = null, tone = null }) {
+function event({ book, date, recordedAt, tie, kind, icon, text, amount = null, tone = null }) {
+  // A calendar day is not an instant. Only real datetimes may say "minutes ago".
+  const exact = value => typeof value === 'number' || (typeof value === 'string' && /T\d{2}:\d{2}/.test(value))
+    ? activityTimestamp(value) : 0;
+  const timestamp = exact(recordedAt) || exact(date);
   return {
     key: '',
     kind,
     date: dayOf(date),
-    sortKey: activityTimestamp(date),
+    sortKey: timestamp || activityTimestamp(date),
+    timestamp,
     tie: tieOf(tie),
     bookId: book?.id || '',
     bookTitle: book?.title || '',
@@ -144,11 +149,11 @@ function eventsForBook(book, state) {
       : (String(h.chan || '').trim() || 'Direct');
     const ev = h.gratuity
       ? event({
-        book, date: h.date, tie: h.id, kind: 'gratuity', icon: '🎁',
+        book, date: h.date, recordedAt: h.recordedAt, tie: h.id, kind: 'gratuity', icon: '🎁',
         text: `Gifted ${copies(qty)}${book?.title || 'a copy'}`,
       })
       : event({
-        book, date: h.date, tie: h.id, kind: h.autoRecorded ? 'sale-auto' : 'sale', icon: h.autoRecorded ? '⚡' : '🛒',
+        book, date: h.date, recordedAt: h.recordedAt, tie: h.id, kind: h.autoRecorded ? 'sale-auto' : 'sale', icon: h.autoRecorded ? '⚡' : '🛒',
         text: `${h.autoRecorded ? 'Recorded for you' : 'Sale recorded'} — ${copies(qty)}${book?.title || 'a book'} via ${via}${who && h.autoRecorded ? `, ${who}` : ''}`,
         amount: `+${fmt(qty * (Number(h.price) || 0), cur)}`,
         tone: 'pos',
@@ -284,6 +289,22 @@ function eventsForBook(book, state) {
 
   (s.artistPayouts || []).forEach((p) => {
     if (!p) return;
+    if (p.settlement) {
+      const balance = p.settlement.balance;
+      const received = balance.direction === 'to-publisher';
+      const ev = event({
+        book, date: p.voided ? p.voidedAt || p.date : p.date, tie: p.id, kind: 'payout', icon: '🧾',
+        text: p.voided ? `Undid the author settlement for ${book?.title || 'this book'}`
+          : received ? `Recorded payment received from ${book?.author || 'the author'} for ${book?.title || 'this book'}`
+          : balance.direction === 'to-artist' ? `Recorded payment sent to ${book?.author || 'the author'} for ${book?.title || 'this book'}`
+          : `Offset both balances for ${book?.title || 'this book'} without cash`,
+        amount: p.voided ? '' : `${balance.amount ? received ? '+' : '−' : ''}${fmt(balance.amount, p.settlement.cur)}`,
+        tone: p.voided || !balance.amount ? 'info' : received ? 'pos' : 'neg',
+      });
+      ev.key = `payout:${book?.id || '?'}:${p.id}`;
+      out.push(ev);
+      return;
+    }
     const cur = entryNativeCode(p, book);
     const ev = event({
       book, date: p.date, tie: p.id, kind: 'payout', icon: '💸',

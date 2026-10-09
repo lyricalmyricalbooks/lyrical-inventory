@@ -43,7 +43,7 @@ import {
   ocProposalKey, ocProposalSummary, ocProposalsFromScan, ocApplyProposal,
   ocOutboxKey, ocOutboxAdditions, ocPruneQueues, ocMergeTemplate, ocWaitingDays,
   ocCurrentStage, ocNudgeDue, ocNudgeTemplateKey, ocProblems, ocMatchesFilter, ocFilterCounts,
-  ocMatchesSearch, ocSortContributors, OC_NUDGE_AFTER_DAYS,
+  ocMatchesSearch, ocSortContributors, OC_NUDGE_AFTER_DAYS, ocStageStates,
 } from '../lib/opencall.js';
 
 let ocImportOpen = false;
@@ -768,7 +768,8 @@ async function executeOcBulkRemove() {
 // expanding a row go through the second, so typing in the search box keeps
 // its focus and an unsaved template draft is never thrown away by a filter.
 let ocAddOpen = false;
-const _ocExpanded = new Set();
+// The artist whose details fill the side panel (null = first row shown).
+let _ocActiveId = null;
 const _ocSelected = new Set();
 // Unsaved template edits, per template tab, so a full redraw (approving a
 // scan result, starring a photo) can't silently discard a half-written email.
@@ -929,25 +930,32 @@ function renderOpenCall() {
     <div class="oc-layout oc-shell">
       ${ocTopbarHtml_(activeProj, { total, done, pct, sched, lastScannedVal })}
       ${ocAddOpen ? ocAddPanelHtml_() : ''}
-      ${total ? ocTodoHtml_(counts, inboxItems.length, outboxItems.length) : ''}
       ${ocInboxHtml_(inboxItems, contributorsById)}
       ${ocOutboxHtml_(activeProj, outboxItems, contributorsById)}
-      <section class="card oc-list-card" aria-label="Contributors">
-        <div id="oc-tabs" class="oc-tabs" role="group" aria-label="Filter by stage"></div>
-        <div class="oc-list-toolbar">
-          <input type="search" id="oc-search" placeholder="Search name, email, credit, photo, notes…" value="${escapeHtml(ocSearchQuery)}" oninput="ocSearch(this.value)" aria-label="Search contributors">
-          <select id="oc-sort-by" onchange="ocSetSort(this.value)" aria-label="Sort contributors">
-            <option value="dateDesc" ${ocSortBy === 'dateDesc' ? 'selected' : ''}>Newest first</option>
-            <option value="dateAsc" ${ocSortBy === 'dateAsc' ? 'selected' : ''}>Oldest first</option>
-            <option value="waitingDesc" ${ocSortBy === 'waitingDesc' ? 'selected' : ''}>Waiting longest</option>
-            <option value="nameAsc" ${ocSortBy === 'nameAsc' ? 'selected' : ''}>Name A–Z</option>
-            <option value="nameDesc" ${ocSortBy === 'nameDesc' ? 'selected' : ''}>Name Z–A</option>
-            <option value="progressDesc" ${ocSortBy === 'progressDesc' ? 'selected' : ''}>Furthest along</option>
-            <option value="progressAsc" ${ocSortBy === 'progressAsc' ? 'selected' : ''}>Least along</option>
-          </select>
+      <section class="oc-ledger-wrap" aria-label="Contributors">
+        <div id="oc-tabs" class="oc-views" role="group" aria-label="Show"></div>
+        <div class="oc-ledger">
+          <div class="card oc-list-card">
+            <div class="oc-list-toolbar">
+              <input type="search" id="oc-search" placeholder="Search name, email, credit, photo, notes…" value="${escapeHtml(ocSearchQuery)}" oninput="ocSearch(this.value)" aria-label="Search contributors">
+              <select id="oc-stage-filter" class="oc-stage-select" onchange="ocFilterByStage(this.value)" aria-label="Show one step">
+                ${OC_TAB_DEFS.map(t => `<option value="${t.key}" ${ocFilterStage === t.key ? 'selected' : ''}>${t.key ? `Next step: ${t.label}` : 'Any step'}</option>`).join('')}
+              </select>
+              <select id="oc-sort-by" onchange="ocSetSort(this.value)" aria-label="Sort contributors">
+                <option value="dateDesc" ${ocSortBy === 'dateDesc' ? 'selected' : ''}>Newest first</option>
+                <option value="dateAsc" ${ocSortBy === 'dateAsc' ? 'selected' : ''}>Oldest first</option>
+                <option value="waitingDesc" ${ocSortBy === 'waitingDesc' ? 'selected' : ''}>Waiting longest</option>
+                <option value="nameAsc" ${ocSortBy === 'nameAsc' ? 'selected' : ''}>Name A–Z</option>
+                <option value="nameDesc" ${ocSortBy === 'nameDesc' ? 'selected' : ''}>Name Z–A</option>
+                <option value="progressDesc" ${ocSortBy === 'progressDesc' ? 'selected' : ''}>Furthest along</option>
+                <option value="progressAsc" ${ocSortBy === 'progressAsc' ? 'selected' : ''}>Least along</option>
+              </select>
+            </div>
+            <div id="oc-list-head" class="oc-list-head"></div>
+            <div id="oc-list" class="oc-list"></div>
+          </div>
+          <aside id="oc-panel" class="card oc-panel" aria-label="Selected contributor" hidden></aside>
         </div>
-        <div id="oc-list-head" class="oc-list-head"></div>
-        <div id="oc-list" class="oc-list"></div>
       </section>
       <div class="oc-settings">
         <div class="oc-settings-label">Emails &amp; settings</div>
@@ -1105,28 +1113,11 @@ function ocAddPanelHtml_() {
     </div>`;
 }
 
-// "Needs you" strip — each tile is a shortcut to the work behind its number.
-function ocTodoHtml_(counts, inboxCount, outboxCount) {
-  const tile = ({ n, label, sub, tone, onclick, tip }) => `
-    <button type="button" class="oc-todo-tile ${n ? `is-${tone}` : 'is-clear'}" ${n ? `onclick="${onclick}"` : 'disabled'} title="${escapeHtml(tip)}">
-      <span class="oc-todo-num">${n}</span>
-      <span class="oc-todo-label">${label}</span>
-      <span class="oc-todo-sub">${n ? sub : 'All clear'}</span>
-    </button>`;
-  const filterTile = (key) => `ocFilterByStage('${key}');document.getElementById('oc-tabs')?.scrollIntoView({behavior:'smooth',block:'start'})`;
-  return `
-    <div class="oc-todo" role="group" aria-label="What needs you">
-      ${tile({ n: inboxCount, label: 'Replies to confirm', sub: 'Review what Gmail found', tone: 'alert', tip: 'Credit names, files and bounces found in Gmail — nothing changes until you approve', onclick: "document.querySelector('.oc-inbox-card')?.scrollIntoView({behavior:'smooth'})" })}
-      ${tile({ n: outboxCount, label: 'Emails ready to send', sub: 'Next-step emails queued', tone: 'go', tip: 'Next-stage emails queued up after a reply came in', onclick: "document.querySelector('.oc-outbox-card')?.scrollIntoView({behavior:'smooth'})" })}
-      ${tile({ n: counts.selectionSent, label: 'Selection emails to send', sub: 'Show who hasn’t heard yet', tone: 'go', tip: 'Artists who have not received their selection email', onclick: filterTile('selectionSent') })}
-      ${tile({ n: counts.nudge, label: 'Need a reminder', sub: `Quiet for ${OC_NUDGE_AFTER_DAYS}+ days`, tone: 'warn', tip: `Artists who haven't answered a request in ${OC_NUDGE_AFTER_DAYS} days or more`, onclick: filterTile('nudge') })}
-      ${tile({ n: counts.problems, label: 'Problems', sub: 'Bounced, missing or unlinked', tone: 'alert', tip: 'Bounced or missing addresses, unsubscribes, and artists with no linked Gmail conversation', onclick: filterTile('problems') })}
-    </div>`;
-}
+// What each kind of Gmail finding means, for the review queue and the panel.
+const OC_INBOX_LABELS = { creditReceived: '✍️ Sent their credit name', filesReceived: '📎 Sent high-res files', undeliverable: '⚠ Email bounced (undeliverable)' };
 
 function ocInboxHtml_(inboxItems, contributorsById) {
   if (!inboxItems.length) return '';
-  const inboxTypeLabels = { creditReceived: '✍️ Sent their credit name', filesReceived: '📎 Sent high-res files', undeliverable: '⚠ Email bounced (undeliverable)' };
   const rows = inboxItems.map(p => {
     const c = contributorsById.get(p.contributorId);
     const threadLink = p.threadId
@@ -1138,7 +1129,7 @@ function ocInboxHtml_(inboxItems, contributorsById) {
     return `
       <div class="oc-queue-row">
         <div class="oc-queue-row-main">
-          <div><strong>${escapeHtml(c.name || c.email)}</strong> — ${inboxTypeLabels[p.type] || escapeHtml(p.type)} ${threadLink}</div>
+          <div><strong>${escapeHtml(c.name || c.email)}</strong> — ${OC_INBOX_LABELS[p.type] || escapeHtml(p.type)} ${threadLink}</div>
           ${creditInput}
         </div>
         <div class="oc-queue-row-actions">
@@ -1205,13 +1196,16 @@ function renderOcList() {
   const listEl = $('oc-list');
   if (!listEl) return;
   const all = ocList();
+  const panelEl = $('oc-panel');
 
-  // Drop selections/expansions for contributors that no longer exist.
+  // Drop ticks for contributors that no longer exist.
   const ids = new Set(all.map(c => c.id));
   [..._ocSelected].forEach(id => { if (!ids.has(id)) _ocSelected.delete(id); });
-  [..._ocExpanded].forEach(id => { if (!ids.has(id)) _ocExpanded.delete(id); });
+  if (_ocActiveId && !ids.has(_ocActiveId)) _ocActiveId = null;
 
   ocRenderTabs_(all);
+  const stageSel = $('oc-stage-filter');
+  if (stageSel) stageSel.value = OC_TAB_DEFS.some(t => t.key === ocFilterStage) ? ocFilterStage : '';
   const list = ocVisibleContributors_();
   ocRenderListHead_(list, all.length);
 
@@ -1231,30 +1225,72 @@ function renderOcList() {
                <button type="button" class="btn" onclick="openOcImportGmailModal()">📨 Import from Gmail</button>`}
         </div>
       </div>`;
+    if (panelEl) { panelEl.hidden = true; panelEl.innerHTML = ''; }
     return;
   }
 
-  listEl.innerHTML = list.map(ocRowHtml_).join('');
+  // The panel follows the artist you picked; if a filter hides them, it
+  // shows the first row instead (without forgetting your pick).
+  const active = list.find(c => c.id === _ocActiveId) || list[0];
+  const withReply = new Set((ocActiveProject_()?.inbox || []).map(p => p.contributorId));
+  const head = OC_STAGES.map((st, i) => {
+    const on = ocFilterStage === st.key;
+    const def = OC_TAB_DEFS.find(t => t.key === st.key);
+    const tip = on ? 'Show everyone' : `Show only who is at this step: ${def ? def.label : st.label}`;
+    return `<th scope="col" class="oc-col-stage"><button type="button" class="oc-stage-head ${on ? 'is-on' : ''}" aria-pressed="${on}" onclick="ocFilterByStage('${on ? '' : st.key}')" title="${escapeHtml(tip)}"><span class="oc-stage-num">${i + 1}</span>${escapeHtml(st.label)}</button></th>`;
+  }).join('');
+
+  listEl.innerHTML = `
+    <div class="tbl-wrap oc-ledger-scroll">
+      <table class="tbl oc-ledger-tbl">
+        <caption class="sr-only">Contributors and where each one is in the five steps</caption>
+        <thead><tr>
+          <th scope="col" class="oc-col-check"><span class="sr-only">Tick</span></th>
+          <th scope="col" class="oc-col-who">Artist</th>
+          ${head}
+          <th scope="col" class="oc-col-wait">Waiting</th>
+        </tr></thead>
+        <tbody>${list.map(c => ocRowHtml_(c, c.id === active.id, withReply.has(c.id))).join('')}</tbody>
+      </table>
+    </div>`;
+
+  if (panelEl) {
+    panelEl.innerHTML = ocPanelHtml_(active);
+    panelEl.hidden = false;
+  }
 }
 
-// Stage tabs double as the list filter; each count is exactly what that tab shows.
+// The count tiles above the ledger double as its filter; each number is
+// exactly what that tile shows. Per-step filters live on the column heads.
+const OC_VIEW_DEFS = [
+  { key: '', label: 'Everyone', tip: 'Show everyone' },
+  { key: 'you', label: 'Your move', tip: 'An email from you is the next step' },
+  { key: 'waiting', label: 'Waiting on artists', tip: 'Waiting for the artist to reply with a credit name or files' },
+  { key: 'nudge', label: 'Reminders due', tone: 'warn', tip: `No reply to a request in ${OC_NUDGE_AFTER_DAYS}+ days` },
+  { key: 'problems', label: 'Problems', tone: 'alert', tip: 'Bounced or missing addresses, unsubscribes, no linked Gmail conversation' },
+  { key: 'complete', label: 'Finished', tip: 'Every step done' },
+];
+
 function ocRenderTabs_(all) {
   const tabsEl = $('oc-tabs');
   if (!tabsEl) return;
   if (!all.length) { tabsEl.innerHTML = ''; return; }
   const counts = ocFilterCounts(all, { isSuppressed: _isCustomerSuppressed });
-  const tabs = [...OC_TAB_DEFS];
-  // Special views only appear once they have something in them (or are active).
-  if (counts.nudge || ocFilterStage === 'nudge') tabs.push({ key: 'nudge', label: 'Need a reminder', tone: 'warn', tip: `No reply to a request in ${OC_NUDGE_AFTER_DAYS}+ days` });
-  if (counts.problems || ocFilterStage === 'problems') tabs.push({ key: 'problems', label: 'Problems', tone: 'alert', tip: 'Bounced or missing addresses, unsubscribes, no linked Gmail conversation' });
-  tabsEl.innerHTML = tabs.map((t, i) => {
+  tabsEl.innerHTML = OC_VIEW_DEFS.map(t => {
     const n = counts[t.key] || 0;
     const on = ocFilterStage === t.key;
-    const step = (i >= 1 && i <= OC_STAGES.length) ? `<span class="oc-tab-step">${i}</span>` : '';
-    const whose = t.who ? (t.who === 'you' ? ' · your move' : ' · waiting on the artist') : '';
-    return `<button type="button" class="oc-tab ${on ? 'is-on' : ''} ${t.who ? `is-${t.who}` : ''} ${t.tone ? `is-${t.tone}` : ''} ${n ? '' : 'is-empty'}"
-      aria-pressed="${on}" onclick="ocFilterByStage('${on && t.key ? '' : t.key}')" title="${escapeHtml(t.tip || 'Show everyone')}${whose}">${step}<span class="oc-tab-label">${t.label}</span><span class="oc-tab-count">${n}</span></button>`;
+    return `<button type="button" class="oc-view ${on ? 'is-on' : ''} ${n && t.tone ? `is-${t.tone}` : ''}" aria-pressed="${on}"
+      onclick="ocFilterByStage('${on && t.key ? '' : t.key}')" title="${escapeHtml(t.tip)}"><span class="oc-view-label">${t.label}</span><span class="oc-view-num">${n}</span></button>`;
   }).join('');
+}
+
+// What the current filter means, for the line above the rows.
+function ocFilterLabel_(key) {
+  if (!key) return '';
+  const view = OC_VIEW_DEFS.find(t => t.key === key);
+  if (view) return view.label;
+  const tab = OC_TAB_DEFS.find(t => t.key === key);
+  return tab ? `Next step: ${tab.label}` : '';
 }
 
 // The strip above the rows: a count line normally, the bulk-action bar while
@@ -1265,25 +1301,23 @@ function ocRenderListHead_(list = ocVisibleContributors_(), total = ocList().len
   if (!total) { headEl.innerHTML = ''; return; }
   const selectedVisible = list.filter(c => _ocSelected.has(c.id)).length;
   const allVisibleSelected = list.length > 0 && selectedVisible === list.length;
-  const anyOpen = list.some(c => _ocExpanded.has(c.id));
   const q = ocSearchQuery.trim();
+  const filterLabel = ocFilterLabel_(ocFilterStage);
   headEl.innerHTML = _ocSelected.size ? `
-    <div class="oc-selbar" role="region" aria-label="Selected contributors">
-      <label class="oc-check"><input type="checkbox" ${allVisibleSelected ? 'checked' : ''} onchange="ocSelectAllVisible(this.checked)" aria-label="Select everyone shown"></label>
-      <strong>${_ocSelected.size} selected</strong>
+    <div class="oc-selbar" role="region" aria-label="Ticked contributors">
+      <label class="oc-check"><input type="checkbox" ${allVisibleSelected ? 'checked' : ''} onchange="ocSelectAllVisible(this.checked)" aria-label="Tick everyone shown"></label>
+      <strong>${_ocSelected.size} ticked</strong>
       <div class="oc-selbar-actions">
-        <button type="button" class="btn sm gold" onclick="ocEmailSelected()">✉ Email selected</button>
+        <button type="button" class="btn sm gold" onclick="ocEmailSelected()">✉ Email ticked</button>
         <button type="button" class="btn sm" onclick="ocCopyEmails(true)">⧉ Copy emails</button>
         <button type="button" class="btn sm danger-btn" onclick="ocRemoveSelected()">✕ Remove</button>
         <button type="button" class="btn sm" onclick="ocClearSelection()">Clear</button>
       </div>
     </div>` : `
     <div class="oc-list-meta">
-      <label class="oc-check"><input type="checkbox" onchange="ocSelectAllVisible(this.checked)" ${list.length ? '' : 'disabled'} aria-label="Select everyone shown"></label>
-      <span>${list.length === total ? `Showing all ${total}` : `Showing ${list.length} of ${total}`}${q ? ` matching “${escapeHtml(q)}”` : ''}</span>
+      <label class="oc-check"><input type="checkbox" onchange="ocSelectAllVisible(this.checked)" ${list.length ? '' : 'disabled'} aria-label="Tick everyone shown"></label>
+      <span>${list.length === total ? `Showing all ${total}` : `Showing ${list.length} of ${total}`}${filterLabel ? ` · ${escapeHtml(filterLabel)}` : ''}${q ? ` matching “${escapeHtml(q)}”` : ''}</span>
       ${(ocFilterStage || q) ? '<button type="button" class="oc-text-link" onclick="ocClearFilters()">Clear filters</button>' : ''}
-      <span class="oc-list-meta-spacer"></span>
-      ${list.length ? `<button type="button" class="oc-text-link" onclick="ocExpandAll(${anyOpen ? 'false' : 'true'})">${anyOpen ? 'Collapse all' : 'Expand all'}</button>` : ''}
     </div>`;
 }
 
@@ -1330,58 +1364,88 @@ function ocDaysAgoLabel_(iso) {
   return d === 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`;
 }
 
-function ocRowHtml_(c) {
-  const open = _ocExpanded.has(c.id);
+const OC_STAMP_MARK = { done: '✓', you: '●', artist: '…', todo: '—' };
+const OC_STAMP_WORD = { done: 'done', you: 'your move', artist: 'waiting on the artist', todo: 'not yet' };
+
+// One ledger row: who, a stamp per step, and how long they've been waiting.
+function ocRowHtml_(c, isActive, hasReply = false) {
   const selected = _ocSelected.has(c.id);
   const status = ocRowStatus_(c);
-  const stageIdx = OC_STAGES.findIndex(st => !c[st.key]);
-  const doneCount = OC_STAGES.filter(st => c[st.key]).length;
-  const track = OC_STAGES.map((st, i) => {
-    const cls = c[st.key] ? 'is-done' : (i === stageIdx ? 'is-next' : '');
-    return `<span class="oc-track-seg ${cls}" title="${escapeHtml(st.label)}${c[st.key] ? ' ✓' : ''}"></span>`;
-  }).join('');
+  const states = ocStageStates(c);
+  const name = c.name || c.email || 'Unnamed';
+  const stamps = OC_STAGES.map((st, i) => `
+      <td class="oc-col-stage"><span class="oc-stamp is-${states[i]}" aria-hidden="true" title="${escapeHtml(st.label)}: ${OC_STAMP_WORD[states[i]]}">${OC_STAMP_MARK[states[i]]}</span><span class="sr-only">${escapeHtml(st.label)}: ${OC_STAMP_WORD[states[i]]}</span></td>`).join('');
+  // The same steps as a thin bar — shown instead of the stamps on a phone.
+  const track = states.map((s, i) => `<span class="oc-track-seg ${s === 'done' ? 'is-done' : (s === 'you' || s === 'artist') ? 'is-next' : ''}" title="${escapeHtml(OC_STAGES[i].label)}"></span>`).join('');
+  const doneCount = states.filter(s => s === 'done').length;
   const problems = ocProblems(c, _isCustomerSuppressed)
     // The status line already says it for these two.
-    .filter(p => !(p === 'noEmail' || (p === 'bounced')))
+    .filter(p => !(p === 'noEmail' || p === 'bounced'))
     .map(p => `<span class="oc-flag" title="${escapeHtml(OC_PROBLEM_LABELS[p].tip)}">${OC_PROBLEM_LABELS[p].text}</span>`).join('');
-  const name = c.name || c.email || 'Unnamed';
+  const flags = (hasReply ? '<span class="oc-flag is-found" title="Gmail found a reply from them — approve it in their panel or under “Replies to confirm”">✉ Reply found</span>' : '') + problems;
+  const complete = ocCurrentStage(c) === 'complete';
+  const waited = complete ? null : ocWaitingDays(c);
+  const due = ocNudgeDue(c);
 
   return `
-    <article class="oc-row ${open ? 'is-open' : ''} ${selected ? 'is-selected' : ''} tone-${status.tone}" id="oc-card-${c.id}">
-      <div class="oc-row-main">
-        <label class="oc-check"><input type="checkbox" ${selected ? 'checked' : ''} onchange="ocToggleSelect('${c.id}', this.checked)" aria-label="Select ${escapeHtml(name)}"></label>
-        <button type="button" class="oc-row-toggle" id="oc-row-toggle-${c.id}" aria-expanded="${open}" aria-controls="oc-row-detail-${c.id}" onclick="ocToggleExpand('${c.id}')">
-          <span class="oc-avatar" aria-hidden="true">${escapeHtml(ocInitials(c.name))}</span>
-          <span class="oc-row-who">
-            <span class="oc-row-name">${escapeHtml(name)}${c.creditName && c.creditName !== c.name ? `<span class="oc-row-credit">as “${escapeHtml(c.creditName)}”</span>` : ''}</span>
-            <span class="oc-row-email">${c.email ? escapeHtml(c.email) : 'no email'}</span>
-          </span>
+    <tr class="oc-lrow tone-${status.tone} ${isActive ? 'is-active' : ''} ${selected ? 'is-selected' : ''}" id="oc-card-${c.id}">
+      <td class="oc-col-check"><label class="oc-check"><input type="checkbox" ${selected ? 'checked' : ''} onchange="ocToggleSelect('${c.id}', this.checked)" aria-label="Tick ${escapeHtml(name)}"></label></td>
+      <td class="oc-col-who">
+        <button type="button" class="oc-lrow-who" id="oc-row-toggle-${c.id}" aria-pressed="${isActive}" aria-controls="oc-panel" onclick="ocSelectArtist('${c.id}')">
+          <span class="oc-lrow-name">${escapeHtml(name)}${c.creditName && c.creditName !== c.name ? `<span class="oc-row-credit">as “${escapeHtml(c.creditName)}”</span>` : ''}</span>
+          <span class="oc-lrow-note">${escapeHtml(status.text)}</span>
+          <span class="oc-track" role="img" aria-label="${doneCount} of ${OC_STAGES.length} steps done">${track}</span>
         </button>
-        <div class="oc-row-progress">
-          <span class="oc-track" role="img" aria-label="${doneCount} of ${OC_STAGES.length} stages done">${track}</span>
-          <span class="oc-row-status">${escapeHtml(status.text)}</span>
-          ${problems ? `<span class="oc-row-flags">${problems}</span>` : ''}
-        </div>
-        <div class="oc-row-cta">${status.cta}</div>
-        <button type="button" class="oc-row-chevron" onclick="ocToggleExpand('${c.id}')" aria-label="${open ? 'Hide' : 'Show'} details for ${escapeHtml(name)}" tabindex="-1">${open ? '▴' : '▾'}</button>
-      </div>
-      ${open ? `<div class="oc-row-detail" id="oc-row-detail-${c.id}">${ocDetailHtml_(c)}</div>` : ''}
-    </article>`;
+        ${flags ? `<span class="oc-row-flags">${flags}</span>` : ''}
+      </td>${stamps}
+      <td class="oc-col-wait ${due ? 'is-due' : ''}">${waited === null ? '—' : `${waited} d`}</td>
+    </tr>`;
 }
 
-// Everything about one artist: contact, conversation, photos, the clickable
-// stage tracker and the less-common actions.
-function ocDetailHtml_(c) {
+// The photo chips, with the star that curates which one {{photo}} names.
+function ocPhotosHtml_(c) {
+  const photosArr = c.photos || (c.photo ? c.photo.split(/;\s*|,\s*/).map(p => p.trim()).filter(Boolean) : []);
+  const picks = Array.isArray(c.selectedPhotos) ? c.selectedPhotos : [];
+  const pickStatus = photosArr.length > 1
+    ? (picks.length
+      ? `<span class="oc-pick-count" title="Emails reference only the starred photo(s)">★ ${picks.length}/${photosArr.length} picked</span>`
+      : `<span class="oc-pick-hint" title="Click ☆ on the winning photo — {{photo}} in emails will use it instead of listing all ${photosArr.length}">☆ star the chosen photo</span>`)
+    : '';
+  return `
+    <div class="oc-photo-row">
+      ${photosArr.map((p, idx) => {
+        const isPicked = picks.includes(p);
+        return `
+        <span class="oc-photo-chip ${isPicked ? 'picked' : ''}">
+          <span class="oc-photo-pick ${isPicked ? 'on' : ''}" role="button" tabindex="0" aria-pressed="${isPicked}" onclick="ocTogglePhotoPick('${c.id}', ${idx})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ocTogglePhotoPick('${c.id}', ${idx});}" title="${isPicked ? 'Unpick this photo' : 'Pick this photo — emails will reference it'}">${isPicked ? '★' : '☆'}</span>
+          ${escapeHtml(p)}
+          <span class="oc-photo-chip-remove" role="button" tabindex="0" onclick="ocRemovePhotoFromContributor('${c.id}', ${idx})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ocRemovePhotoFromContributor('${c.id}', ${idx});}" title="Remove photo" aria-label="Remove ${escapeHtml(p)}">✕</span>
+        </span>`;
+      }).join('')}
+      ${photosArr.length ? '' : '<span class="oc-panel-meta">No photo files listed yet.</span>'}
+      ${pickStatus}
+      <button type="button" id="oc-add-photo-btn-${c.id}" class="oc-add-photo-trigger" onclick="document.getElementById('oc-add-photo-input-${c.id}').style.display='inline-block'; this.style.display='none'; document.getElementById('oc-add-photo-input-${c.id}').focus();">＋ Add</button>
+      <input id="oc-add-photo-input-${c.id}" class="oc-add-photo-input" type="text" placeholder="photo_file.jpg (Enter)" aria-label="New photo file name" onkeydown="if(event.key==='Enter') { ocAddPhotoToContributor('${c.id}', this.value); } else if(event.key==='Escape') { this.style.display='none'; document.getElementById('oc-add-photo-btn-${c.id}').style.display='inline-flex'; }">
+    </div>`;
+}
+
+// The side panel: everything about one artist — what to do next, the
+// clickable steps, photos, the Gmail conversation and the rarer actions.
+function ocPanelHtml_(c) {
+  const proj = ocActiveProject_();
+  const status = ocRowStatus_(c);
+  const name = c.name || c.email || 'Unnamed';
+  const proposals = (proj?.inbox || []).filter(p => p.contributorId === c.id);
+
   let mailStatusHtml = '';
   let mailActionsHtml = '';
   if (c.email) {
     const sup = _isCustomerSuppressed(c.email);
-    const onList = mailingListHas(c.email);
     if (sup) {
       mailStatusHtml = `<span class="oc-mail-badge sup">unsubscribed</span>`;
       mailActionsHtml = `<button type="button" class="btn sm" onclick="toggleCustomerSuppress('${encodeURIComponent(c.email)}')" title="Allow emailing this contributor again">Re-subscribe</button>`;
     } else {
-      if (onList) {
+      if (mailingListHas(c.email)) {
         mailStatusHtml = `<span class="oc-mail-badge on">✓ On mailing list</span>`;
       } else {
         mailStatusHtml = `<span class="oc-mail-badge off">not on mailing list</span>`;
@@ -1414,94 +1478,119 @@ function ocDetailHtml_(c) {
     gmailLinksHtml = `<span class="oc-thread-warn" title="${escapeHtml(OC_PROBLEM_LABELS.noThread.tip)}">⚠ no linked conversation</span>`;
   }
 
-  // The star curates: picked photos are what {{photo}} resolves to in every
-  // stage email — so the selection email names the winner(s), not all five.
-  const photosArr = c.photos || (c.photo ? c.photo.split(/;\s*|,\s*/).map(p => p.trim()).filter(Boolean) : []);
-  const picks = Array.isArray(c.selectedPhotos) ? c.selectedPhotos : [];
-  const pickStatus = photosArr.length > 1
-    ? (picks.length
-      ? `<span class="oc-pick-count" title="Emails reference only the starred photo(s)">★ ${picks.length}/${photosArr.length} picked</span>`
-      : `<span class="oc-pick-hint" title="Click ☆ on the winning photo — {{photo}} in emails will use it instead of listing all ${photosArr.length}">☆ star the chosen photo</span>`)
-    : '';
-  const photosHtml = `
-    <div class="oc-photo-row">
-      <span class="oc-photo-label">📷 Photos:</span>
-      ${photosArr.map((p, idx) => {
-        const isPicked = picks.includes(p);
-        return `
-        <span class="oc-photo-chip ${isPicked ? 'picked' : ''}">
-          <span class="oc-photo-pick ${isPicked ? 'on' : ''}" role="button" tabindex="0" aria-pressed="${isPicked}" onclick="ocTogglePhotoPick('${c.id}', ${idx})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ocTogglePhotoPick('${c.id}', ${idx});}" title="${isPicked ? 'Unpick this photo' : 'Pick this photo — emails will reference it'}">${isPicked ? '★' : '☆'}</span>
-          ${escapeHtml(p)}
-          <span class="oc-photo-chip-remove" role="button" tabindex="0" onclick="ocRemovePhotoFromContributor('${c.id}', ${idx})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ocRemovePhotoFromContributor('${c.id}', ${idx});}" title="Remove photo" aria-label="Remove ${escapeHtml(p)}">✕</span>
-        </span>`;
-      }).join('')}
-      ${pickStatus}
-      <button type="button" id="oc-add-photo-btn-${c.id}" class="oc-add-photo-trigger" onclick="document.getElementById('oc-add-photo-input-${c.id}').style.display='inline-block'; this.style.display='none'; document.getElementById('oc-add-photo-input-${c.id}').focus();">＋ Add</button>
-      <input id="oc-add-photo-input-${c.id}" class="oc-add-photo-input" type="text" placeholder="photo_file.jpg (Enter)" aria-label="New photo file name" onkeydown="if(event.key==='Enter') { ocAddPhotoToContributor('${c.id}', this.value); } else if(event.key==='Escape') { this.style.display='none'; document.getElementById('oc-add-photo-btn-${c.id}').style.display='inline-flex'; }">
-    </div>`;
+  // What to do next. A reply Gmail found comes first: it's the freshest news
+  // and approving it is what moves the artist on.
+  let callout;
+  if (proposals.length) {
+    callout = `
+      <div class="oc-panel-callout tone-found">
+        <div class="oc-panel-headline">Gmail found ${proposals.length === 1 ? 'a reply' : `${proposals.length} replies`} — nothing changes until you approve</div>
+        ${proposals.map(p => `
+          <div class="oc-panel-found">
+            <span>${OC_INBOX_LABELS[p.type] || escapeHtml(p.type)}${p.type === 'creditReceived' && p.creditName ? `: “${escapeHtml(p.creditName)}”` : ''}</span>
+            <span class="oc-inline-actions">
+              <button type="button" class="btn sm gold" onclick="ocApproveProposal('${p.id}')">✓ Approve</button>
+              <button type="button" class="btn sm" onclick="ocDismissProposal('${p.id}')">Dismiss</button>
+            </span>
+          </div>`).join('')}
+      </div>`;
+  } else {
+    const subs = {
+      you: 'Nothing is sent until you review the email and press send.',
+      warn: 'A reminder replies into the same conversation, so they see the original ask too.',
+      artist: `Nothing to do yet. They move to “Reminders due” after ${OC_NUDGE_AFTER_DAYS} quiet days.`,
+      alert: 'No emails can reach them until this is fixed.',
+      done: 'Every step is done — nothing left to do.',
+      muted: 'They asked not to be emailed. Re-subscribe them below if that changes.',
+    };
+    callout = `
+      <div class="oc-panel-callout tone-${status.tone}">
+        <div class="oc-panel-headline">${escapeHtml(status.text)}</div>
+        <div class="oc-panel-sub">${subs[status.tone] || ''}</div>
+        ${status.cta ? `<div>${status.cta.replace('btn sm', 'btn')}</div>` : ''}
+      </div>`;
+  }
 
-  // Clickable stage tracker — ticking a stage by hand is how the owner records
-  // something that happened outside the app.
-  let progressPercent = 0;
-  if (c.preorderSent) progressPercent = 100;
-  else if (c.filesReceived) progressPercent = 75;
-  else if (c.cmykSent) progressPercent = 50;
-  else if (c.creditReceived) progressPercent = 25;
-  const stageIdx = OC_STAGES.findIndex(st => !c[st.key]);
-  const stepHtml = (st, i) => {
-    const doneVal = c[st.key];
-    const cls = doneVal ? 'done' : (i === stageIdx ? 'active' : '');
+  // Clickable steps — ticking one by hand is how the owner records something
+  // that happened outside the app.
+  const states = ocStageStates(c);
+  const stateWord = { done: 'Done', you: 'Your move', artist: 'Waiting on them', todo: '' };
+  const steps = OC_STAGES.map((st, i) => {
+    const done = states[i] === 'done';
     return `
-      <button type="button" class="oc-step ${cls}" onclick="ocToggle('${c.id}','${st.key}')" aria-pressed="${!!doneVal}" title="${doneVal ? 'Mark “' + st.label + '” as not done' : 'Mark “' + st.label + '” as done'}">
-        <span class="oc-step-circle">${doneVal ? '✓' : i + 1}</span>
-        <span class="oc-step-label">${st.label}</span>
-      </button>`;
-  };
+      <li><button type="button" class="oc-ladder-step is-${states[i]}" onclick="ocToggle('${c.id}','${st.key}')" aria-pressed="${done}" title="${done ? 'Mark “' + st.label + '” as not done' : 'Mark “' + st.label + '” as done'}">
+        <span class="oc-ladder-dot" aria-hidden="true">${done ? '✓' : i + 1}</span>
+        <span class="oc-ladder-label">${escapeHtml(st.label)}</span>
+        <span class="oc-ladder-state">${stateWord[states[i]]}</span>
+      </button></li>`;
+  }).join('');
 
   const nudgeKey = ocNudgeTemplateKey(c);
-  // Offered early here (before it's due); once due, the row's own button has it.
+  // Offered early here (before it's due); once due, the callout has it.
   const canNudge = nudgeKey && c.email && !c.undeliverable && !_isCustomerSuppressed(c.email) && !ocNudgeDue(c);
-  const nudgeLabel = '↻ Send a reminder now';
+  const meta = [
+    c.createdAt ? `Added ${escapeHtml(c.createdAt)}` : '',
+    c.nudgeCount ? ocPlural_(c.nudgeCount, 'reminder') + ' sent' : '',
+  ].filter(Boolean).join(' · ');
 
   return `
-    <div class="oc-detail-grid">
-      <div class="oc-detail-contact">
+    <div class="oc-panel-head">
+      <span class="oc-avatar" aria-hidden="true">${escapeHtml(ocInitials(c.name))}</span>
+      <div class="oc-panel-who">
+        <h3 class="oc-panel-name" id="oc-panel-title" tabindex="-1">${escapeHtml(name)}</h3>
+        ${c.creditName ? `<div class="oc-credit-line">Credited as <strong>${escapeHtml(c.creditName)}</strong></div>` : ''}
         <div class="oc-email-row">${emailCell} ${mailStatusHtml}</div>
-        ${gmailLinksHtml ? `<div class="oc-email-row">${gmailLinksHtml}</div>` : ''}
-        ${c.creditName ? `<div class="oc-credit-line">Credit index: <strong>${escapeHtml(c.creditName)}</strong></div>` : ''}
-        ${c.createdAt ? `<div class="oc-credit-line">Added ${escapeHtml(c.createdAt)}${c.nudgeCount ? ` · ${ocPlural_(c.nudgeCount, 'reminder')} sent` : ''}</div>` : ''}
       </div>
-      <div class="oc-detail-actions">
-        ${canNudge ? `<button type="button" class="btn sm" onclick="ocComposeNudge('${c.id}')" title="Send a friendly reminder, replying into their conversation">${nudgeLabel}</button>` : ''}
-        <button type="button" class="btn sm" id="oc-scan-single-${c.id}" onclick="ocScanRepliesSingle('${c.id}')" title="Check Gmail for replies from this artist only">📥 Check replies</button>
-        <button type="button" class="btn sm" onclick="openOcEditModal('${c.id}')" title="Edit contributor details">✎ Edit</button>
-        <button type="button" class="btn sm danger-btn" onclick="ocDelete('${c.id}')" title="Remove contributor">✕ Remove</button>
-      </div>
+      <button type="button" class="btn sm" onclick="openOcEditModal('${c.id}')" title="Edit contributor details">✎ Edit</button>
     </div>
-    ${photosHtml}
-    ${c.notes ? `<div class="oc-note"><strong>Note:</strong> ${escapeHtml(c.notes)}</div>` : ''}
-    <div class="oc-status-strip">
-      <div class="oc-step-container">
-        <div class="oc-step-line"></div>
-        <div class="oc-step-line-fill" style="width: ${progressPercent}%;"></div>
-        ${OC_STAGES.map(stepHtml).join('')}
-      </div>
-      <div class="oc-step-hint">Tick a stage by hand if it happened outside the app.</div>
+    ${callout}
+    <div class="oc-panel-sec">
+      <div class="oc-panel-label">Steps · tap one to tick it by hand</div>
+      <ol class="oc-ladder">${steps}</ol>
+      ${meta ? `<div class="oc-panel-meta">${meta}</div>` : ''}
     </div>
-    ${mailActionsHtml ? `<div class="oc-detail-mail">${mailActionsHtml}</div>` : ''}
-    <div id="oc-inline-thread-${c.id}" class="oc-inline-thread-container" style="display:none;margin-top:12px;padding:12px;background:var(--surface-sunken);border-radius:var(--r);border:var(--stroke-hair) solid var(--border);max-height:280px;overflow-y:auto;font-size:12px;text-align:left;"></div>`;
+    <div class="oc-panel-sec">
+      <div class="oc-panel-label">Photos · the starred one goes in every email</div>
+      ${ocPhotosHtml_(c)}
+    </div>
+    ${c.notes ? `<div class="oc-panel-sec"><div class="oc-panel-label">Note</div><div class="oc-note">${escapeHtml(c.notes)}</div></div>` : ''}
+    <div class="oc-panel-sec">
+      <div class="oc-panel-label">Conversation</div>
+      ${gmailLinksHtml || '<span class="oc-panel-meta">No Gmail conversation yet.</span>'}
+      <div id="oc-inline-thread-${c.id}" class="oc-inline-thread-container" style="display:none;padding:12px;background:var(--surface-sunken);border-radius:var(--r);border:var(--stroke-hair) solid var(--border);max-height:280px;overflow-y:auto;font-size:12px;text-align:left;"></div>
+    </div>
+    <div class="oc-panel-foot">
+      ${canNudge ? `<button type="button" class="btn sm" onclick="ocComposeNudge('${c.id}')" title="Send a friendly reminder, replying into their conversation">↻ Send a reminder now</button>` : ''}
+      <button type="button" class="btn sm" id="oc-scan-single-${c.id}" onclick="ocScanRepliesSingle('${c.id}')" title="Check Gmail for replies from this artist only">📥 Check replies</button>
+      ${mailActionsHtml}
+      <button type="button" class="btn sm danger-btn" onclick="ocDelete('${c.id}')" title="Remove contributor">✕ Remove</button>
+    </div>
+    <button type="button" class="oc-text-link oc-panel-back" onclick="ocBackToRow('${c.id}')">↑ Back to the list</button>`;
 }
 
-function ocToggleExpand(id) {
-  if (_ocExpanded.has(id)) _ocExpanded.delete(id);
-  else _ocExpanded.add(id);
+// Pick the artist whose details fill the side panel.
+function ocSelectArtist(id) {
+  _ocActiveId = id;
   renderOcList();
-  $(`oc-row-toggle-${id}`)?.focus({ preventScroll: true });
+  const panel = $('oc-panel');
+  const row = $(`oc-row-toggle-${id}`);
+  const listEl = $('oc-list');
+  // On a phone the panel sits under the list, so take the owner to it;
+  // beside the list, focus simply stays on the row they picked.
+  const stacked = panel && listEl && panel.getBoundingClientRect().top >= listEl.getBoundingClientRect().bottom - 1;
+  if (stacked) {
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    panel.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+    $('oc-panel-title')?.focus({ preventScroll: true });
+  } else {
+    row?.focus({ preventScroll: true });
+  }
 }
 
-function ocExpandAll(open) {
-  ocVisibleContributors_().forEach(c => { if (open) _ocExpanded.add(c.id); else _ocExpanded.delete(c.id); });
-  renderOcList();
+function ocBackToRow(id) {
+  const row = $(`oc-row-toggle-${id}`);
+  row?.scrollIntoView({ block: 'center' });
+  row?.focus({ preventScroll: true });
 }
 
 function ocToggleSelect(id, checked) {
@@ -2460,9 +2549,9 @@ async function ocDeleteProject() {
 function ocSwitchProject(id) {
   if (!OPENCALL_DATA.projects[id]) return;
   OPENCALL_DATA.activeProjectId = id;
-  // Selections, open rows and template drafts all belong to the old project.
+  // Ticks, the open panel and template drafts all belong to the old project.
   _ocSelected.clear();
-  _ocExpanded.clear();
+  _ocActiveId = null;
   Object.keys(_ocTmplDrafts).forEach(k => delete _ocTmplDrafts[k]);
   _ocTmplDirty = false;
   renderOpenCall();
@@ -3650,8 +3739,8 @@ export {
   renderOcList,
   ocPlaceMenu,
   ocMarkTmplDirty,
-  ocToggleExpand,
-  ocExpandAll,
+  ocSelectArtist,
+  ocBackToRow,
   ocToggleSelect,
   ocSelectAllVisible,
   ocClearSelection,

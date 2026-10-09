@@ -5,7 +5,7 @@
 // Here the form is rendered by the app, typed into, and saved with the same
 // functions its buttons call, and the assertions are on what the publisher is
 // told and what reaches the ledger and the cloud — so a wrong amount fails.
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { loadApp, makeBook } from './helpers/load-app.js';
 
 const BOOK = 'harbour';
@@ -76,6 +76,159 @@ describe('the balance card before anything is recorded', () => {
     expect(statText('Paid to artist')).toMatch(/30\.00$/);
     expect(document.querySelector('#ps-dash-content .ps-stat-card.is-lead .ps-stat-val').textContent)
       .toMatch(/80\.00/);
+  });
+});
+
+describe('the settle up panel', () => {
+  const panel = () => el('artist-settlement');
+  const result = () => panel().querySelector('.ps-settle-result .ps-stat-val').textContent;
+
+  it('appears on its own, offline, without writing or clearing any balances', async () => {
+    app.main.states[BOOK].hist.unshift({ num: 'held', qty: 1, price: 200, artistPending: true });
+    app.setOnline(false);
+    const before = JSON.stringify(app.main.states[BOOK]);
+    const saves = app.cloud.saves.length;
+    const queued = JSON.stringify(app.queued());
+    win.renderProfitSharingBreakdown(BOOK);
+    expect(panel()).not.toBeNull();
+    expect(panel().textContent).toContain('Author sends you');
+    expect(result()).toBe('CA$20.00');
+    expect(panel().textContent).toContain('CA$100.00');
+    expect(panel().textContent).toContain('CA$80.00');
+    // One lead figure: the net, not two alarms.
+    const lead = document.querySelector('#ps-dash-content .ps-stat-card.is-lead');
+    expect(lead.querySelector('.ps-stat-label').textContent).toBe('Net balance');
+    expect(lead.querySelector('.ps-stat-val').textContent).toBe('CA$20.00');
+    expect(document.querySelectorAll('#ps-dash-content .ps-stat-grid .tone-critical')).toHaveLength(0);
+    expect(JSON.stringify(app.main.states[BOOK])).toBe(before);
+    expect(app.cloud.saves.length).toBe(saves);
+    expect(JSON.stringify(app.queued())).toBe(queued);
+    // A redraw reads the newest balances rather than keeping the old result.
+    app.main.states[BOOK].artistReceivables = [{ id: 'new', amount: 15 }];
+    win.renderProfitSharingBreakdown(BOOK);
+    expect(result()).toBe('CA$35.00');
+  });
+
+  it('stays out of the way when only the publisher owes money', () => {
+    expect(panel()).toBeNull();
+    expect(document.querySelector('#ps-dash-content .is-lead .ps-stat-label').textContent).toMatch(/Owed to artist/);
+  });
+
+  it('shows the author the same figures, read-only, with no payout request while they owe', () => {
+    app.main.states[BOOK].hist.unshift({ num: 'held', qty: 1, price: 200, artistPending: true });
+    const prior = win.sessionStorage.getItem('lm-unlocked');
+    win.sessionStorage.setItem('lm-unlocked', `author:${BOOK}`);
+    try { win.renderProfitSharingBreakdown(BOOK); }
+    finally {
+      if (prior == null) win.sessionStorage.removeItem('lm-unlocked'); else win.sessionStorage.setItem('lm-unlocked', prior);
+    }
+    expect(panel().textContent).toContain('You send the publisher');
+    expect(el('artist-settlement-record-button')).toBeNull();
+    expect(el('request-payout-btn')).toBeNull();
+  });
+});
+
+describe('recording and explaining a combined settlement', () => {
+  beforeEach(() => {
+    const s = app.main.states[BOOK];
+    s.hist.unshift({ num: 'held', qty: 1, price: 200, artistPending: true, date: '2026-03-01', chan: 'Fair' });
+    s.artistTransfers = [{ id: 't-held', num: 'held', total: 200, price: 200, qty: 1, date: '2026-03-01', chan: 'Fair' }];
+    win.renderProfitSharingBreakdown(BOOK);
+  });
+
+  it('copies the displayed explanation without recording money', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    const before = JSON.stringify(app.main.states[BOOK]);
+    await win.copyArtistSettlement(BOOK);
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('You send the publisher CA$20.00'));
+    expect(writeText.mock.calls[0][0]).toContain('CA$100.00');
+    expect(writeText.mock.calls[0][0]).toContain('not a receipt');
+    expect(JSON.stringify(app.main.states[BOOK])).toBe(before);
+  });
+
+  it('keeps the text selectable when clipboard access fails', async () => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) } });
+    await win.copyArtistSettlement(BOOK);
+    expect(el('artist-settlement-text').value).toContain('You send the publisher CA$20.00');
+    expect(app.toast()).toMatch(/select|copy/i);
+  });
+
+  it('records offline, queues the whole linked change, and undoes both balances', async () => {
+    app.setOnline(false);
+    win.toggleArtistSettlementForm(BOOK);
+    const saved = win.recordArtistSettlement(BOOK);
+    await app.answerConfirm(true);
+    await saved;
+    const record = payouts().at(-1);
+    expect(record.amount).toBe(180);
+    expect(record.settlement.balance).toMatchObject({ amount: 20, direction: 'to-publisher' });
+    expect(app.main.states[BOOK].artistTransfers).toHaveLength(0);
+    expect(app.queued().at(-1).state.artistPayouts.at(-1).settlement.balance.amount).toBe(20);
+    expect(app.queued().at(-1).state.hist[0].artistPending).toBe(false);
+    expect(document.querySelector('#ps-dash-content .is-lead .ps-stat-val').textContent).toBe('CA$0.00');
+    expect(document.querySelector('#ps-dash-content .is-lead .ps-stat-sub').textContent).toMatch(/all square/);
+    expect(el('artist-settlement')).toBeNull();
+    const undone = win.undoRecordedArtistSettlement(BOOK, record.id);
+    await app.answerConfirm(true);
+    await undone;
+    expect(record.voided).toBe(true);
+    expect(app.main.states[BOOK].hist[0].artistPending).toBe(true);
+    expect(app.main.states[BOOK].artistTransfers).toHaveLength(1);
+    // Undo brings the panel back with the same net figure.
+    expect(document.querySelector('#ps-dash-content .is-lead .ps-stat-val').textContent).toBe('CA$20.00');
+    expect(el('artist-settlement').querySelector('.ps-settle-result .ps-stat-val').textContent).toBe('CA$20.00');
+  });
+
+  it('leaves everything unchanged when confirmation is cancelled', async () => {
+    win.toggleArtistSettlementForm(BOOK);
+    const before = JSON.stringify(app.main.states[BOOK]);
+    const saved = win.recordArtistSettlement(BOOK);
+    await app.answerConfirm(false);
+    await saved;
+    expect(JSON.stringify(app.main.states[BOOK])).toBe(before);
+  });
+
+  it('rejects a stale preview rather than recording a different amount', async () => {
+    win.toggleArtistSettlementForm(BOOK);
+    app.main.states[BOOK].artistPayouts.push({ id: 'new', amount: 10 });
+    const before = JSON.stringify(app.main.states[BOOK]);
+    await win.recordArtistSettlement(BOOK);
+    expect(JSON.stringify(app.main.states[BOOK])).toBe(before);
+    expect(app.toast()).toMatch(/changed|calculate again/i);
+  });
+
+  it('checks again after confirmation if another payment arrives while the dialog is open', async () => {
+    win.toggleArtistSettlementForm(BOOK);
+    const saved = win.recordArtistSettlement(BOOK);
+    app.main.states[BOOK].artistPayouts.push({ id: 'received-elsewhere', amount: 10 });
+    const before = JSON.stringify(app.main.states[BOOK]);
+    await app.answerConfirm(true); await saved;
+    expect(JSON.stringify(app.main.states[BOOK])).toBe(before);
+    expect(app.toast()).toMatch(/changed|calculate again/i);
+  });
+
+  it('uses the settlement undo path when the generic delete action is invoked', async () => {
+    win.toggleArtistSettlementForm(BOOK);
+    const saved = win.recordArtistSettlement(BOOK);
+    await app.answerConfirm(true); await saved;
+    const record = payouts().at(-1);
+    const deleted = win.deleteArtistPayout(BOOK, record.id);
+    await app.answerConfirm(true); await deleted;
+    expect(record.voided).toBe(true);
+    expect(app.main.states[BOOK].hist[0].artistPending).toBe(true);
+  });
+
+  it('uses Undo from the Tax Centre without deleting only half the settlement', async () => {
+    win.toggleArtistSettlementForm(BOOK);
+    const saved = win.recordArtistSettlement(BOOK);
+    await app.answerConfirm(true); await saved;
+    const record = payouts().at(-1);
+    const deleted = app.main.removeLedgerEntry('artistPayout', BOOK, record.id);
+    await app.answerConfirm(true); await deleted;
+    expect(record.voided).toBe(true);
+    expect(app.main.states[BOOK].hist[0].artistPending).toBe(true);
+    expect(app.main.states[BOOK].artistTransfers).toHaveLength(1);
   });
 });
 
@@ -404,10 +557,12 @@ describe('netting what the artist owes against a payout', () => {
     expect(el('ap-net')).toBeNull();
   });
 
-  it('spells the sum out on the balance card', async () => {
+  it('leads with the one net figure and spells the sum out in the settle up panel', async () => {
     await withDebt();
-    const sub = document.querySelector('#ps-dash-content .ps-stat-card.is-lead .ps-stat-sub').textContent;
-    expect(sub).toMatch(/less CA\$30\.00 the artist owes you → send CA\$50\.00/);
+    const lead = document.querySelector('#ps-dash-content .ps-stat-card.is-lead');
+    expect(lead.querySelector('.ps-stat-val').textContent).toBe('CA$50.00');
+    expect(lead.querySelector('.ps-stat-sub').textContent).toMatch(/you send the author/);
+    expect(el('artist-settlement').querySelector('.ps-settle-result .ps-stat-sub').textContent).toBe('CA$80.00 − CA$30.00');
   });
 
   it('"Pay full balance" fills the net cash and the preview says what clears', async () => {
