@@ -581,6 +581,27 @@
   .form-group.invalid .phone-seg-opt { border: var(--stroke) solid var(--red); }
 }
 
+/* Book switcher on a phone, Riso Press: the control that says which book you are in was the
+   faintest thing in the header - a 22%-cream hairline, a 40%-cream caret and mixed-case text on
+   a translucent wash, with a hover lift that does nothing under a thumb. It now reads as one of
+   the app's printed buttons on the dark chrome: a firm cream outline, a hard offset shadow, the
+   book's name in caps like .btn, a caret you can see, and a press-in on tap. */
+@media (max-width: 768px) {
+  .pub-shell #book-dropdown-btn {
+    border-color: var(--on-inverse-3);
+    box-shadow: 3px 3px 0 color-mix(in srgb, var(--on-inverse) 26%, transparent);
+    font-weight: 800; text-transform: uppercase; letter-spacing: var(--tracking-caps);
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+    transition: transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast) var(--ease-spring),
+      background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard);
+  }
+  .pub-shell #book-dropdown-btn:hover { transform: none; }
+  .pub-shell #book-dropdown-btn:active { transform: translate(3px, 3px); box-shadow: none; }
+  .pub-shell #book-dropdown.open #book-dropdown-btn { box-shadow: none; transform: translate(3px, 3px); }
+  .pub-shell #book-dropdown-btn .book-dropdown-caret { opacity: .85; }
+  .pub-shell #book-dropdown-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+}
+
 /* Pop-up sheets, Riso Press: they kept the pre-repaint soft look after the More
    sheet moved on: a pale rounded grab handle, rounded top corners and a round
    close button that grew on hover. They now match the More sheet: a square ink
