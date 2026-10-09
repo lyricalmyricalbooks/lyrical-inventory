@@ -1167,14 +1167,16 @@ export function isTestBook(b) {
   if (!b) return false;
   const idLower = String(b.id || '').toLowerCase().trim();
   const titleLower = String(b.title || '').toLowerCase().trim();
-  return idLower === 'test1' || idLower === 'testpage' || idLower.includes('test') ||
-    titleLower === 'test1' || titleLower === 'testpage' || titleLower.includes('test');
+  // Exact test ids (or an explicit flag) only — a substring match hid real
+  // books such as "Greatest Hits" or "Contest" from reports and the picker.
+  return b.isTest === true || idLower === 'test1' || idLower === 'testpage' ||
+    titleLower === 'test1' || titleLower === 'testpage';
 }
 
 export function isTestBookId(bid) {
   if (!bid) return false;
   const str = String(bid).toLowerCase().trim();
-  if (str === 'test1' || str === 'testpage' || str.includes('test')) return true;
+  if (str === 'test1' || str === 'testpage') return true;
   if (BOOKS && BOOKS[bid]) return isTestBook(BOOKS[bid]);
   if (BOOKS) {
     const found = Object.values(BOOKS).find(b => (b.id && String(b.id).toLowerCase() === str) || (b.title && String(b.title).toLowerCase() === str));
@@ -1235,7 +1237,15 @@ function ownersFromBooks() {
   return owners;
 }
 
+let catalogLoadFailed = false;
+
 export function saveCatalogWithDeletions() {
+  // The last catalog read failed, so BOOKS may be the built-in defaults rather
+  // than the real catalog. Writing it would overwrite the real one.
+  if (catalogLoadFailed) {
+    if (typeof showToast === 'function') showToast('⚠ Not saving — the book catalog never loaded. Reload first.', 'err', 6000);
+    return Promise.resolve();
+  }
   // Keep the rules-readable ownership map in step with the catalog so the
   // tightened security rules can verify author→book ownership. Publisher-only —
   // authors can't write settings (rules reject), so skip to avoid noisy errors.
@@ -1255,6 +1265,7 @@ const DEFAULT_BOOKS = {
 async function loadCatalog() {
   try {
     const stored = await window._fbLoadCatalog(); // handles FS → RTDB fallback internally
+    catalogLoadFailed = false;
     if (stored) {
       deletedDefaultIds = Array.isArray(stored._deletedDefaults) ? stored._deletedDefaults.slice() : [];
       posExtraBooks = (stored._posExtra && typeof stored._posExtra === 'object') ? { ...stored._posExtra } : {};
@@ -1281,11 +1292,17 @@ async function loadCatalog() {
     }
   } catch (e) {
     console.error('Critical error loading catalog', e);
-    BOOKS = { ...DEFAULT_BOOKS };
-    BOOK_LIST = Object.values(BOOKS);
-    normalizeTestBookAccents();
-    deletedDefaultIds = [];
-    posExtraBooks = {};
+    // A failed read is not an empty catalog: never save from here. Keep any
+    // catalog already in memory; only fall back to the defaults on a cold start.
+    catalogLoadFailed = true;
+    if (!BOOKS || !Object.keys(BOOKS).length) {
+      BOOKS = { ...DEFAULT_BOOKS };
+      BOOK_LIST = Object.values(BOOKS);
+      normalizeTestBookAccents();
+      deletedDefaultIds = [];
+      posExtraBooks = {};
+    }
+    if (typeof showToast === 'function') showToast('⚠ Could not load the book catalog — showing what is saved on this device. Reload once you are back online.', 'err', 7000);
   }
 }
 
@@ -2173,9 +2190,24 @@ async function saveBookFromModal() {
   const id = rawId.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
   await syncCatalog();
+  if (catalogLoadFailed) {
+    showToast('⚠ Could not reach the catalog, so nothing was saved. Check your connection and try again.', 'err', 5000);
+    return;
+  }
+
+  // An id that already belongs to a different book must never be overwritten
+  // (adding "The Hound" twice, or renaming one book onto another's id).
+  if (BOOKS[id] && editingBookId !== id) {
+    showToast(`⚠ A book with the id "${id}" already exists — choose a different Book ID.`, 'err', 5000);
+    switchBookModalTab('general');
+    return;
+  }
 
   const currentBook = BOOKS[editingBookId] || BOOKS[id] || {};
+  const thresholdInput = parseInt($('nb-thresh').value, 10);
   const book = {
+    // Start from the stored book so fields this form doesn't list survive an edit.
+    ...currentBook,
     id,
     title: $('nb-title').value.trim(),
     author: $('nb-author').value.trim(),
@@ -2183,16 +2215,16 @@ async function saveBookFromModal() {
     maxPrint: parseInt($('nb-max').value) || 100,
     listPrice: parseFloat($('nb-price').value) || 40,
     currency: $('nb-cur').value || '€',
-    threshold: parseInt($('nb-thresh').value) || 10,
+    threshold: Number.isFinite(thresholdInput) && thresholdInput >= 0 ? thresholdInput : 10,
     productionCost: parseFloat($('nb-prod').value) || 0,
     pubGratuity: parseInt($('nb-pub-grat')?.value) || 0,
     authorGratuity: parseInt($('nb-author-grat')?.value) || 0,
     paymentLink: $('nb-payment-link') ? $('nb-payment-link').value.trim() || 'https://paypal.me/lyricalmyricalbooks' : currentBook.paymentLink || 'https://paypal.me/lyricalmyricalbooks',
-    stripeLink: $('nb-paylink').value.trim() || currentBook.stripeLink || '',
+    stripeLink: $('nb-paylink').value.trim(),
     accent: $('nb-accent').value,
     accentBg: hexToRgba($('nb-accent').value, 0.1),
     urlParam: currentBook.urlParam || id,
-    authorEmail: ($('nb-pw').value || '').toLowerCase().trim() || currentBook.authorEmail || '',
+    authorEmail: ($('nb-pw').value || '').toLowerCase().trim(),
     profitTiers: currentBook.profitTiers || [],
     acceptedMethods: currentBook.acceptedMethods || ['stripe', 'paypal', 'interac', 'cash_card'],
     useGlobalMethods: currentBook.useGlobalMethods ?? true,
@@ -2316,8 +2348,8 @@ function renderCatalogList() {
   const testContainer = $('test-catalog-list');
 
   // Find test books (e.g. title or id contains "test")
-  const testBooks = BOOK_LIST.filter(b => b.id.toLowerCase().includes('test') || b.title.toLowerCase().includes('test'));
-  const regularBooks = BOOK_LIST.filter(b => !b.id.toLowerCase().includes('test') && !b.title.toLowerCase().includes('test'));
+  const testBooks = BOOK_LIST.filter(isTestBook);
+  const regularBooks = BOOK_LIST.filter(b => !isTestBook(b));
 
   if (regularBooks.length === 0) {
     container.innerHTML = `
@@ -3906,6 +3938,14 @@ export async function loadBook(bookId) {
     // with no sales in it.
     console.error('loadBook failed', bookId, e);
     reportClientError('load-book-failed', e && e.message, { stack: e && e.stack });
+    const priorState = states[bookId];
+    if (priorState && !priorState._loadFailed) {
+      // A reload that failed leaves the book already on screen untouched; the
+      // real data is still there, so don't swap it for an empty ledger.
+      setSyncState('error', '<b>Firestore</b> · reload failed');
+      showToast(`⚠ Could not refresh ${(BOOKS[bookId] && BOOKS[bookId].title) || bookId} — still showing the last copy loaded.`, 'err', 5000);
+      return;
+    }
     states[bookId] = defaultState(BOOKS[bookId]);
     // Mark the state so a later save can tell it apart from a genuinely empty
     // book. Non-enumerable so it never reaches Firestore via JSON.stringify.
@@ -8455,7 +8495,17 @@ function findArtistPayout(bookId, payoutId) {
 // balance and every downstream total are denominated in); when the money moved
 // in another currency the cash that actually changed hands is kept alongside it
 // in `payment`, exactly as a foreign sale records it.
+// A double tap on Save used to record the payout twice: the second tap read the
+// still-filled form while the first was awaiting its save.
+const artistPayoutSaving = new Set();
 async function saveArtistPayout(bookId) {
+  if (artistPayoutSaving.has(bookId)) return;
+  artistPayoutSaving.add(bookId);
+  try { return await saveArtistPayoutNow(bookId); }
+  finally { artistPayoutSaving.delete(bookId); }
+}
+
+async function saveArtistPayoutNow(bookId) {
   const book = BOOKS[bookId];
   const s = states[bookId];
   if (!book || !s) return;
