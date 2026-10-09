@@ -15689,6 +15689,8 @@ function voidHistEntry(s, book, h) {
     if (!pendingRev) s.chStats[h.chan].revenue = Math.max(0, s.chStats[h.chan].revenue - h.qty * h.price);
     if (s.chStats[h.chan].txns <= 0) delete s.chStats[h.chan];
   }
+  // Author-fulfilled sales took copies from the author's held stock; give them back.
+  if (h.directToArtist || h.enteredBy === 'Artist') s.authorStock = (Number.isFinite(s.authorStock) ? s.authorStock : 0) + h.qty;
   h.voided = true;
   h.voidedAt = Date.now();
   recomputeAfters(s, book);
@@ -15711,6 +15713,7 @@ function unvoidHistEntry(s, book, h) {
     s.artistTransfers.push(h.voidedTransfer);
     delete h.voidedTransfer;
   }
+  if (h.directToArtist || h.enteredBy === 'Artist') deductSaleFromStockBreakdown(s, h.qty, true);
   h.voided = false;
   delete h.voidedAt;
   delete h.voidedReason;
@@ -18845,13 +18848,20 @@ async function saveExpenseEdit() {
       if (s && s.expenses) {
         exp = s.expenses.find(e => String(e.id) === String(id));
         if (exp) {
+          const prevAmount = exp.amount, prevCurrency = exp.currency;
           exp.desc = desc;
           exp.cat = cat;
           exp.currency = currency;
           exp.origCurrency = currency;
           exp.amount = amount;
           exp.origAmount = amount;
-          exp.baseAmount = baseAmount;
+          // Offline with no cached rate: keep the saved CAD value if nothing it depends on changed, instead of blanking it.
+          const sameBasis = !fxRate && exp.baseAmount != null && exp.amount === prevAmount && exp.currency === prevCurrency;
+          if (!sameBasis) {
+            exp.fxRate = fxRate || null;
+            exp.baseAmount = baseAmount;
+            exp.fxMissing = !fxRate;
+          }
           exp.date = date;
           exp.receiptFiles = [..._editingExpense.files];
           exp.receipt = _editingExpense.files[0] || '';
@@ -23027,11 +23037,15 @@ window.downloadFullTaxSeasonExport = function () {
   csv += 'Tax Year: ' + (isAllTime ? 'All Time' : year) + '\n\n';
 
   const esc = csvCell;
-  const getAmt = (e) => (parseFloat(e.baseAmount || e.amountCAD || e.amount || 0));
-
   // Track books exported with no saved CAD rate (fell back to 1.0 — a silently
   // wrong tax figure). Keyed by book id so a book is listed at most once.
   const rateWarnings = new Map();
+  const getAmt = (e) => {
+    // A foreign-currency expense saved with no CAD amount is exported in its own currency: flag it.
+    const cur = String(e.currency || e.origCurrency || 'CAD').toUpperCase();
+    if (cur !== 'CAD' && !(e.baseAmount || e.amountCAD) && (parseFloat(e.amount) || 0) > 0) rateWarnings.set(`expense-${cur}`, { title: 'Expenses', cur });
+    return parseFloat(e.baseAmount || e.amountCAD || e.amount || 0);
+  };
   const flagRateIfMissing = (book, cur, rawRate, hasAmount) => {
     if (hasAmount && cur && cur !== 'CAD' && !rawRate) rateWarnings.set(book.id, { title: book.title, cur });
   };
@@ -23970,6 +23984,7 @@ export async function fetchStripePaymentsForReconcile(maxPages = 3, { since = 0 
     }
     if (!json.has_more || !json.data.length) break;
     starting_after = json.data[json.data.length - 1].id;
+    if (page === maxPages - 1) out.truncated = true; // older charges in the window were not read
   }
   return out;
 }
@@ -24854,8 +24869,8 @@ async function sweepStripeInvoicePayments({ force = false } = {}) {
 
   _stripeInvoiceSweeping = true;
   try {
-    // One page behind a date filter: in the steady state this returns nothing.
-    const payments = await fetchStripePaymentsForReconcile(1, { since: stripeInvoiceSweepSince() });
+    // A few pages behind a date filter: in the steady state this returns one tiny page.
+    const payments = await fetchStripePaymentsForReconcile(10, { since: stripeInvoiceSweepSince() });
 
     let settled = 0;
     let attention = 0;
@@ -24979,7 +24994,9 @@ async function sweepStripeInvoicePayments({ force = false } = {}) {
       saveReconMemory(mem);
     }
 
-    writeStripeInvoiceStamp(Date.now());
+    // Only move the checkpoint when the whole window was read; otherwise the
+    // charges that were cut off would fall out of the next window unseen.
+    if (!payments.truncated) writeStripeInvoiceStamp(Date.now());
     noteIntegrationSuccess('stripe');
     showMarketDaySummaryIfDue();
 
@@ -25269,6 +25286,8 @@ function stripeRecordedSales() {
         paidAmount: Number(h.payment?.amount) || (Number(h.qty) || 0) * (Number(h.price) || 0),
         voided: !!h.voided,
         refundNoted: h.refundNoted || '',
+        refundPartial: !!h.refundPartial,
+        refundedSoFar: Number(h.refundedSoFar) || 0,
       });
     });
   });
@@ -25289,7 +25308,12 @@ function raiseRefundedStripeSales(signals) {
     const row = findStripeSaleRow(item.bookId, item.sheetsId);
     // Marked on the row itself, so it is raised once — on this device and on
     // any other that syncs the book — rather than on every five-minute poll.
-    if (row) { row.refundNoted = item.refundId || 'refunded'; touched.add(item.bookId); }
+    if (row) {
+      row.refundNoted = item.refundId || 'refunded';
+      // A partial refund is remembered so a later one that completes it can still be raised.
+      if (item.full) { delete row.refundPartial; delete row.refundedSoFar; } else { row.refundPartial = true; row.refundedSoFar = Number(item.refunded) || 0; }
+      touched.add(item.bookId);
+    }
   });
   touched.forEach(bookId => saveState(bookId));
 
@@ -25334,6 +25358,13 @@ let _lastReversal = [];
  * safety net for a mis-tap on a small screen: it restores exactly the rows
  * this reversal voided and nothing else.
  */
+// The void/unvoid Sheets sync names the on-screen book, so point it at this sale's book.
+function withActiveBook(bookId, fn) {
+  const prev = activeBook;
+  activeBook = bookId;
+  try { fn(); } finally { activeBook = prev; }
+}
+
 function reverseSalesWithUndo(items, reason) {
   let reversed = 0;
   let copies = 0;
@@ -25344,7 +25375,7 @@ function reverseSalesWithUndo(items, reason) {
     const book = BOOKS[item.bookId];
     const row = findStripeSaleRow(item.bookId, item.sheetsId);
     if (!st || !book || !row || row.voided) return;
-    voidHistEntry(st, book, row);
+    withActiveBook(item.bookId, () => voidHistEntry(st, book, row));
     row.voidedReason = reason;
     reversed++;
     copies += Number(row.qty) || 0;
@@ -25379,7 +25410,7 @@ function undoLastReversalFromAlert(event) {
     const book = BOOKS[item.bookId];
     const row = findStripeSaleRow(item.bookId, item.sheetsId);
     if (!st || !book || !row || !row.voided) return;
-    unvoidHistEntry(st, book, row);
+    withActiveBook(item.bookId, () => unvoidHistEntry(st, book, row));
     restored++;
     touched.add(item.bookId);
   });
@@ -26533,8 +26564,8 @@ async function initStartup() {
           dismissSplash();
           return;
         }
-        // Not logged in
-        setupGate(null);
+        // Not logged in (or just signed out by the no-access branch below, whose message must survive)
+        setupGate(_pendingGateMsg);
         const err = document.getElementById('pw-err');
         if (err) err.textContent = '';
         dismissSplash();
@@ -26569,6 +26600,7 @@ async function initStartup() {
       loadAuthorViewOverrides();
 
       // Check access
+      _pendingGateMsg = null;
       const uEmail = user.email.toLowerCase().trim();
       if (uEmail === publisherEmail || uEmail === 'lyricalmyricalbooks@gmail.com') {
         window.IS_PUBLISHER = true;
@@ -26600,8 +26632,10 @@ async function initStartup() {
       }
 
       // No match
+      // The sign-out re-fires this listener with no user, which would wipe the message.
+      _pendingGateMsg = `Your Google account (${user.email}) is not authorized for any books.`;
       window._fbSignOut();
-      setupGate(`Your Google account (${user.email}) is not authorized for any books.`);
+      setupGate(_pendingGateMsg);
       const err = document.getElementById('pw-err');
       if (err) err.textContent = '';
       dismissSplash();
@@ -26612,6 +26646,7 @@ async function initStartup() {
   });
 }
 
+let _pendingGateMsg = null;
 function setupGate(errMsg) {
   $('pw-gate').style.display = '';
   $('pw-app').style.display = 'none';
