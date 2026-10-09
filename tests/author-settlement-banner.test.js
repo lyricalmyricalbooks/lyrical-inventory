@@ -208,7 +208,7 @@ describe('the headline boxes when money runs both ways', () => {
     expect(owed.querySelector('.ps-stat-val').textContent).toBe('CA$267.76');
     expect(owed.querySelector('.ps-stat-sub').textContent).toBe('comes off the net balance');
     // Says which sales that figure comes from, not just the bare amount.
-    expect(owed.querySelector('.ps-stat-detail').textContent).toMatch(/^\d+(–\d+)?% of CA\$[\d,.]+ · \d+ cop(y|ies) sold/);
+    expect(owed.querySelector('.ps-stat-detail').textContent).toMatch(/^\d+(–\d+)?% of CA\$[\d,.]+ · \d+ cop(y|ies) sold since last payout$/);
     const lead = document.querySelector('#ps-dash-content .ps-stat-card.is-lead');
     expect(lead.querySelector('.ps-stat-label').textContent).toBe('Net balance');
     expect(lead.querySelector('.ps-stat-val').textContent).toBe('CA$232.21');
