@@ -275,8 +275,10 @@ export function findUnfilledMergeFields(template, contributor = {}, context = {}
 // counts and the "needs you" strip, so a tab's number always matches the rows
 // it shows.
 
-// The receive-stages are the ones where the ball is in the artist's court.
+// The receive-stages are the ones where the ball is in the artist's court;
+// the send-stages are the owner's move.
 const OC_ARTIST_STAGES = new Set(['creditReceived', 'filesReceived']);
+const OC_YOU_STAGES = new Set(['selectionSent', 'cmykSent', 'preorderSent']);
 
 // Days an artist can sit on a request before the app suggests a reminder, and
 // the gap before it suggests another one after a reminder went out.
@@ -324,23 +326,52 @@ export function ocProblems(contributor, isSuppressed = () => false) {
   return out;
 }
 
+// Whose move is it? 'you' when the next step is an email the owner sends,
+// 'artist' while we wait on a reply, 'blocked' when no email can go out (no
+// address, bounced, unsubscribed), 'done' once every stage is ticked.
+export function ocWhoseMove(contributor, isSuppressed = () => false) {
+  const c = contributor || {};
+  const stage = ocCurrentStage(c);
+  if (stage === 'complete') return 'done';
+  if (!c.email || c.undeliverable || isSuppressed(c.email)) return 'blocked';
+  return OC_YOU_STAGES.has(stage) ? 'you' : 'artist';
+}
+
+// One entry per stage for the ledger's stamps: 'done', 'you' / 'artist' for
+// the next step (whose move it is), or 'todo' for later steps.
+export function ocStageStates(contributor) {
+  const c = contributor || {};
+  const next = ocCurrentStage(c);
+  return OC_STAGES.map(st => {
+    if (c[st.key]) return 'done';
+    if (st.key !== next) return 'todo';
+    return OC_ARTIST_STAGES.has(st.key) ? 'artist' : 'you';
+  });
+}
+
 // Does one contributor belong in a list filter? '' = everyone; a stage key =
-// that stage is their next step; 'complete'; 'nudge' = reminder due;
+// that stage is their next step; 'complete'; 'you' = an email of ours is
+// next; 'waiting' = waiting on the artist; 'nudge' = reminder due;
 // 'problems' = anything ocProblems() flags.
 export function ocMatchesFilter(contributor, filter, { now = Date.now(), isSuppressed } = {}) {
   if (!filter) return true;
   if (filter === 'nudge') return ocNudgeDue(contributor, now);
   if (filter === 'problems') return ocProblems(contributor, isSuppressed).length > 0;
+  if (filter === 'you') return ocWhoseMove(contributor, isSuppressed) === 'you';
+  if (filter === 'waiting') return ocWhoseMove(contributor, isSuppressed) === 'artist';
   return ocCurrentStage(contributor) === filter;
 }
 
-// Count for every filter tab in one pass.
+// Count for every filter view in one pass.
 export function ocFilterCounts(contributors, { now = Date.now(), isSuppressed } = {}) {
-  const counts = { '': 0, complete: 0, nudge: 0, problems: 0 };
+  const counts = { '': 0, complete: 0, you: 0, waiting: 0, nudge: 0, problems: 0 };
   OC_STAGES.forEach(st => { counts[st.key] = 0; });
   (contributors || []).forEach(c => {
     counts['']++;
     counts[ocCurrentStage(c)]++;
+    const who = ocWhoseMove(c, isSuppressed);
+    if (who === 'you') counts.you++;
+    if (who === 'artist') counts.waiting++;
     if (ocNudgeDue(c, now)) counts.nudge++;
     if (ocProblems(c, isSuppressed).length) counts.problems++;
   });

@@ -20166,132 +20166,116 @@ button[onclick="refreshUmamiStats()"]:active {
 .oc-inline-add input { flex: 1; min-width: 0; }
 .oc-add-panel .oc-upload-zone { margin: 0; }
 
-/* ── "Needs you" strip ── */
-.oc-todo { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-3); }
-@media (max-width: 560px) { .oc-todo { grid-template-columns: 1fr 1fr; gap: var(--space-2); } .oc-todo-tile { min-height: 84px; padding: 10px 12px; } }
-.oc-todo-tile {
+/* ── Queues (review / outbox) ── */
+.oc-queue-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+
+/* ── Contributor ledger: count tiles, the table and the side panel ── */
+.oc-ledger-wrap { container: ocledger / inline-size; display: flex; flex-direction: column; gap: var(--space-3); scroll-margin-top: 96px; }
+
+/* Count tiles — each one filters the ledger to exactly its number. */
+.oc-views { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--space-2); }
+.oc-views:empty { display: none; }
+.oc-view {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
-  min-height: 96px;
-  padding: 14px 16px;
-  background: var(--surface-card);
-  border: var(--stroke-hair) solid var(--border-default);
-  box-shadow: var(--elev-2);
+  justify-content: space-between;
+  gap: var(--space-1);
+  min-height: 72px;
+  padding: 10px 12px;
+  background: var(--surface-raised);
+  border: var(--stroke) solid var(--border-strong);
   color: var(--content-primary);
   font: inherit;
   text-align: left;
   cursor: pointer;
   transition: transform var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard);
 }
-.oc-todo-tile:not(:disabled):hover { transform: translateY(-2px); box-shadow: var(--elev-hover); }
-.oc-todo-tile:not(:disabled):active { transform: translateY(0) scale(.98); }
-.oc-todo-tile:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: 2px; }
-.oc-todo-tile.is-alert { box-shadow: inset 4px 0 0 var(--status-critical), var(--elev-2); }
-.oc-todo-tile.is-warn { box-shadow: inset 4px 0 0 var(--status-active), var(--elev-2); }
-.oc-todo-tile.is-go { box-shadow: inset 4px 0 0 var(--gold), var(--elev-2); }
-.oc-todo-tile.is-clear { cursor: default; background: transparent; box-shadow: none; }
-.oc-todo-tile.is-clear .oc-todo-num { color: var(--text3); }
-.oc-todo-num { font-family: var(--font-mono); font-size: var(--text-2xl); font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
-.oc-todo-label { font-size: var(--text-sm); font-weight: 700; }
-.oc-todo-sub { font-size: var(--text-xs); color: var(--text3); }
+.oc-view:hover { transform: translate(-1px, -1px); box-shadow: var(--elev-1); }
+.oc-view:active { transform: none; box-shadow: none; }
+.oc-view:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: var(--focus-ring-offset); }
+.oc-view-label { font-size: var(--text-3xs); font-weight: 700; letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--content-muted); line-height: var(--leading-tight); }
+.oc-view-num { font-family: var(--font-mono); font-size: var(--text-2xl); font-weight: 500; line-height: 1; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.oc-view.is-warn { background: var(--status-active-bg); }
+.oc-view.is-alert { background: var(--status-critical-bg); }
+.oc-view.is-warn .oc-view-label, .oc-view.is-alert .oc-view-label { color: var(--content-primary); }
+.oc-view.is-on { background: var(--surface-inverse); color: var(--content-on-inverse); box-shadow: var(--elev-1); }
+.oc-view.is-on .oc-view-label { color: var(--on-inverse-2); }
+@container ocledger (max-width: 720px) { .oc-views { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@container ocledger (max-width: 400px) { .oc-views { grid-template-columns: repeat(2, minmax(0, 1fr)); } .oc-view { min-height: 64px; } }
 
-/* ── Queues (review / outbox) ── */
-.oc-queue-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+/* Table and panel sit side by side when there's room; the panel stacks
+   under the table on a phone (and then never scrolls on its own). */
+.oc-ledger { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); align-items: start; }
+.oc-ledger > .card { margin: 0; }
+@container ocledger (min-width: 960px) {
+  .oc-ledger { grid-template-columns: minmax(0, 1fr) minmax(320px, 380px); }
+  .oc-panel { position: sticky; top: 88px; max-height: calc(100dvh - 104px); overflow-y: auto; overscroll-behavior: contain; }
+  .oc-panel-back { display: none; }
+}
 
-/* ── Contributor list ── */
-.oc-list-card { padding: 0; overflow: visible; }
-.oc-tabs {
-  display: flex;
-  gap: 4px;
-  padding: var(--space-3) var(--space-4) 0;
-  flex-wrap: wrap;
-  border-bottom: var(--stroke-hair) solid var(--border-default);
-  scroll-margin-top: 96px;
-}
-.oc-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex: 0 0 auto;
-  min-height: 44px;
-  padding: 0 12px;
-  background: transparent;
-  border: 0;
-  border-bottom: 3px solid transparent;
-  color: var(--text2);
-  font: inherit;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.oc-tab:hover { color: var(--content-primary); background: var(--surface-inset); }
-.oc-tab:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: -2px; }
-.oc-tab.is-on { color: var(--content-primary); border-bottom-color: var(--gold); }
-.oc-tab.is-empty:not(.is-on) { color: var(--text3); }
-.oc-tab-step {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  font-size: var(--text-2xs);
-  font-weight: 700;
-  border: var(--stroke-hair) solid var(--border-strong);
-}
-/* Your move = filled marker; waiting on the artist = outlined. */
-.oc-tab.is-you .oc-tab-step { background: var(--gold); border-color: var(--gold); color: var(--ink); }
-.oc-tab-count {
-  min-width: 22px;
-  padding: 1px 6px;
-  border-radius: var(--r-pill);
-  background: var(--surface-inset);
-  font-family: var(--font-mono);
-  font-size: var(--text-2xs);
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-.oc-tab.is-warn .oc-tab-count { background: var(--status-active-bg); color: var(--content-primary); }
-.oc-tab.is-alert .oc-tab-count { background: var(--status-critical-bg); color: var(--content-primary); }
+.oc-list-card { padding: 0; overflow: hidden; container: oclist / inline-size; }
 .oc-list-toolbar { display: flex; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-3) var(--space-4) 0; }
-.oc-layout .oc-list-toolbar #oc-search { flex: 1 1 260px; width: auto; min-width: 0; max-width: none; }
-.oc-layout .oc-list-toolbar select { flex: 0 1 200px; width: auto; }
+.oc-layout .oc-list-toolbar #oc-search { flex: 1 1 240px; width: auto; min-width: 0; max-width: none; }
+.oc-layout .oc-list-toolbar select { flex: 0 1 190px; width: auto; }
+.oc-layout .oc-list-toolbar .oc-stage-select { display: none; }
 .oc-list-head { padding: var(--space-2) var(--space-4); min-height: 56px; display: flex; align-items: center; }
 .oc-list-meta, .oc-selbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); width: 100%; font-size: var(--text-sm); color: var(--text2); }
-.oc-list-meta-spacer { flex: 1; }
 .oc-selbar { padding: 6px 10px; background: var(--gold-bg); border: var(--stroke-hair) solid var(--gold-line); color: var(--content-primary); }
 .oc-selbar-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
 .oc-check { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; margin: -6px 0; cursor: pointer; flex: 0 0 auto; }
 .oc-layout .oc-check input { width: 18px; height: 18px; margin: 0; padding: 0; cursor: pointer; accent-color: var(--gold); box-shadow: none; }
 
 .oc-list { display: flex; flex-direction: column; }
-.oc-row { border-top: var(--stroke-hair) solid var(--border-default); position: relative; }
-.oc-row::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: transparent; }
-.oc-row.tone-you::before { background: var(--gold); }
-.oc-row.tone-warn::before { background: var(--status-active); }
-.oc-row.tone-alert::before { background: var(--status-critical); }
-.oc-row.tone-done::before { background: var(--emerald); }
-.oc-row.is-selected { background: var(--gold-bg); }
-.oc-row.is-open { background: var(--surface-sunken); }
-.oc-row-main {
-  display: grid;
-  /* Fixed tracks so every row's columns line up down the list. */
-  grid-template-columns: 44px minmax(0, 1.1fr) minmax(0, 1.6fr) 172px 36px;
+.oc-ledger-scroll.tbl-wrap { border: 0; border-top: var(--stroke) solid var(--border-strong); box-shadow: none; border-radius: 0; margin: 0; overflow-x: auto; }
+.oc-ledger-tbl { width: 100%; }
+.oc-ledger-tbl th { padding: 0 6px; height: 44px; vertical-align: middle; }
+.oc-ledger-tbl th.oc-col-who { padding-left: 4px; }
+.oc-ledger-tbl td { padding: 6px; vertical-align: middle; }
+.oc-col-check { width: 44px; }
+.oc-ledger-tbl th.oc-col-check, .oc-ledger-tbl td.oc-col-check { padding: 0 0 0 var(--space-2); }
+.oc-col-stage { width: 1%; text-align: center; }
+.oc-ledger-tbl th.oc-col-wait, .oc-ledger-tbl td.oc-col-wait { text-align: right; padding-right: var(--space-4); }
+
+/* Column heads filter to "next step = this one". They inherit the head's
+   ink, so they read on the dark bar by day and the grey bar by night. */
+.oc-stage-head {
+  display: inline-flex;
+  flex-direction: column;
   align-items: center;
-  gap: var(--space-3);
-  padding: 8px var(--space-3) 8px var(--space-3);
-  min-height: 68px;
+  gap: 2px;
+  min-height: 44px;
+  min-width: 60px;
+  padding: 4px 2px;
+  background: transparent;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  white-space: normal;
+  line-height: var(--leading-tight);
+  cursor: pointer;
 }
-.oc-row-toggle {
+.oc-stage-head:hover { text-decoration: underline; text-underline-offset: 3px; }
+.oc-stage-head:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: -2px; }
+.oc-stage-head.is-on { border-bottom-color: var(--gold); }
+.oc-stage-num { font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: 0; }
+
+.oc-lrow td { transition: background-color var(--dur-fast) var(--ease-standard); }
+.oc-lrow.is-selected td { background: var(--surface-sunken); }
+.oc-lrow.is-active td { background: var(--gold-bg); }
+.oc-lrow.is-active td.oc-col-check { border-left: 4px solid var(--gold); }
+.oc-lrow-who {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
   min-width: 0;
   min-height: 44px;
-  padding: 4px;
+  padding: 4px 0;
   background: transparent;
   border: 0;
   color: inherit;
@@ -20299,21 +20283,15 @@ button[onclick="refreshUmamiStats()"]:active {
   text-align: left;
   cursor: pointer;
 }
-.oc-row-toggle:focus-visible, .oc-row-chevron:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: 2px; }
-.oc-row .oc-avatar { width: 40px; height: 40px; font-size: var(--text-sm); flex-shrink: 0; }
-.oc-row-who { display: flex; flex-direction: column; min-width: 0; }
-.oc-row-name { font-weight: 700; color: var(--content-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.oc-row-toggle:hover .oc-row-name { text-decoration: underline; text-underline-offset: 3px; }
+.oc-lrow-who:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: 2px; }
+.oc-lrow-who:hover .oc-lrow-name { text-decoration: underline; text-underline-offset: 3px; }
+.oc-lrow-name { font-weight: 700; font-size: var(--text-base); color: var(--content-primary); overflow-wrap: anywhere; }
 .oc-row-credit { margin-left: 6px; font-weight: 500; color: var(--text2); font-size: var(--text-xs); }
-.oc-row-email { font-size: var(--text-xs); color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.oc-row-progress { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; min-width: 0; text-align: left; }
-.oc-track { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; width: min(220px, 100%); }
-.oc-track-seg { height: 6px; background: var(--surface-inset); border: var(--stroke-hair) solid var(--border-default); }
-.oc-track-seg.is-done { background: var(--emerald); border-color: var(--emerald); }
-.oc-track-seg.is-next { background: var(--gold-bg); border-color: var(--gold); }
-.oc-row-status { font-size: var(--text-sm); color: var(--text2); line-height: 1.35; }
-.oc-row.tone-you .oc-row-status, .oc-row.tone-warn .oc-row-status, .oc-row.tone-alert .oc-row-status { color: var(--content-primary); font-weight: 600; }
-.oc-row-flags { display: flex; flex-wrap: wrap; gap: 4px; }
+.oc-lrow-note { font-size: var(--text-xs); color: var(--content-secondary); line-height: var(--leading-snug); }
+.oc-lrow.tone-you .oc-lrow-note, .oc-lrow.tone-warn .oc-lrow-note { color: var(--status-active); font-weight: 600; }
+.oc-lrow.tone-alert .oc-lrow-note { color: var(--status-critical); font-weight: 600; }
+.oc-lrow.tone-done .oc-lrow-note { color: var(--status-positive); }
+.oc-row-flags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
 .oc-flag {
   display: inline-flex;
   align-items: center;
@@ -20326,43 +20304,101 @@ button[onclick="refreshUmamiStats()"]:active {
   font-weight: 700;
   cursor: help;
 }
-.oc-row-cta { display: flex; justify-content: flex-end; }
-.oc-row-cta .btn { white-space: nowrap; }
-.oc-row-chevron {
-  width: 36px;
-  height: 36px;
+
+.oc-flag.is-found { border-color: var(--gold); background: var(--gold-bg); cursor: default; }
+/* Phones pin every table's first column for sideways scrolling; the ledger
+   never scrolls sideways (it swaps the stamps for a bar), so undo that here. */
+#tab-opencall .tbl.oc-ledger-tbl th:first-child,
+#tab-opencall .tbl.oc-ledger-tbl td:first-child { position: static; background: transparent; box-shadow: none; }
+#tab-opencall .tbl.oc-ledger-tbl tr.is-selected td:first-child { background: var(--surface-sunken); }
+#tab-opencall .tbl.oc-ledger-tbl tr.is-active td:first-child { background: var(--gold-bg); }
+
+/* A stamp per step: green tick done, yellow dot your move, dashed dots
+   waiting on the artist, a faint dash for later. Mark AND colour, never
+   colour alone. */
+.oc-stamp {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  font-size: var(--text-sm);
+  font-weight: 800;
+  line-height: 1;
+  border: var(--stroke-hair) solid transparent;
+  color: var(--content-faint);
+}
+.oc-stamp.is-done { background: var(--status-positive-bg); color: var(--status-positive); }
+.oc-stamp.is-you { background: var(--status-active-bg); color: var(--status-active); border-color: var(--status-active); }
+.oc-stamp.is-artist { background: var(--surface-sunken); color: var(--content-secondary); border: var(--stroke-hair) dashed var(--border-default); }
+.oc-col-wait { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--content-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.oc-col-wait.is-due { color: var(--status-active); font-weight: 700; }
+
+/* The thin step bar is the phone's stand-in for the stamp columns. */
+.oc-track { display: none; grid-template-columns: repeat(5, 1fr); gap: 3px; width: min(200px, 100%); margin-top: 4px; }
+.oc-track-seg { height: 6px; background: var(--surface-inset); border: var(--stroke-hair) solid var(--border-default); }
+.oc-track-seg.is-done { background: var(--emerald); border-color: var(--emerald); }
+.oc-track-seg.is-next { background: var(--gold-bg); border-color: var(--gold); }
+@container oclist (max-width: 620px) {
+  .oc-ledger-tbl .oc-col-stage, .oc-ledger-tbl .oc-col-wait { display: none; }
+  .oc-lrow .oc-track { display: grid; }
+  .oc-layout .oc-list-toolbar .oc-stage-select { display: block; }
+  .oc-ledger-tbl td { padding-right: var(--space-4); }
+}
+
+/* Side panel */
+.oc-panel { padding: 0; overflow: hidden; }
+.oc-panel[hidden] { display: none; }
+.oc-panel-head { display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-4) var(--space-4) var(--space-3); border-bottom: var(--stroke-hair) solid var(--border-default); }
+.oc-panel-head .oc-avatar { width: 40px; height: 40px; flex-shrink: 0; }
+.oc-panel-who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.oc-panel-name { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: var(--text-xl); line-height: 1.05; text-transform: uppercase; overflow-wrap: anywhere; }
+.oc-panel-name:focus { outline: none; }
+.oc-panel-name:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: var(--focus-ring-offset); }
+.oc-panel .oc-email-row { font-size: var(--text-sm); overflow-wrap: anywhere; }
+.oc-panel-callout { margin: var(--space-4); padding: var(--space-3); border: var(--stroke) solid var(--border-strong); background: var(--surface-sunken); display: flex; flex-direction: column; gap: var(--space-2); }
+.oc-panel-callout.tone-you, .oc-panel-callout.tone-warn { background: var(--status-active-bg); }
+.oc-panel-callout.tone-alert { background: var(--status-critical-bg); }
+.oc-panel-callout.tone-done { background: var(--status-positive-bg); }
+.oc-panel-callout.tone-found { background: var(--gold-bg); }
+.oc-panel-headline { font-size: var(--text-md); font-weight: 700; line-height: var(--leading-snug); }
+.oc-panel-sub { font-size: var(--text-sm); color: var(--content-secondary); line-height: var(--leading-snug); }
+.oc-panel-sub:empty { display: none; }
+.oc-panel-found { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); padding-top: var(--space-2); border-top: var(--stroke-hair) solid var(--border-default); font-size: var(--text-sm); }
+.oc-panel-sec { display: flex; flex-direction: column; gap: var(--space-2); padding: 0 var(--space-4) var(--space-4); }
+.oc-panel-label { font-size: var(--text-3xs); font-weight: 700; letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--content-muted); }
+.oc-panel-meta { font-size: var(--text-xs); color: var(--content-muted); }
+.oc-panel .oc-photo-row { margin: 0; }
+.oc-panel .oc-note { margin: 0; }
+.oc-ladder { list-style: none; margin: 0; padding: 0; border: var(--stroke-hair) solid var(--border-default); background: var(--surface-raised); }
+.oc-ladder li + li { border-top: var(--stroke-hair) solid var(--border-subtle); }
+.oc-ladder-step {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 44px;
+  padding: 0 var(--space-3);
   background: transparent;
   border: 0;
-  color: var(--text2);
-  font-size: var(--text-sm);
+  color: inherit;
+  font: inherit;
+  text-align: left;
   cursor: pointer;
 }
-.oc-row-chevron:hover { color: var(--content-primary); background: var(--surface-inset); }
-.oc-row-detail { padding: 0 var(--space-4) var(--space-4) calc(var(--space-4) + 44px); display: flex; flex-direction: column; gap: var(--space-3); }
-.oc-detail-grid { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-3); }
-.oc-detail-contact { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.oc-detail-actions, .oc-detail-mail { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; }
-.oc-credit-line { font-size: var(--text-sm); color: var(--text2); }
-.oc-row-detail .oc-status-strip { margin: 0; }
-.oc-step-hint { margin-top: 10px; font-size: var(--text-xs); color: var(--text3); text-align: center; }
-/* These were spans; as real buttons they need the browser chrome taken off. */
-.oc-step { background: transparent; border: 0; padding: 0; font: inherit; color: inherit; }
+.oc-ladder-step:hover { background: var(--surface-sunken); }
+.oc-ladder-step:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: -2px; }
+.oc-ladder-dot { display: grid; place-items: center; width: 24px; height: 24px; font-family: var(--font-mono); font-size: var(--text-xs); border: var(--stroke) solid var(--border-strong); background: var(--surface-raised); color: var(--content-primary); }
+.oc-ladder-step.is-done .oc-ladder-dot { background: var(--surface-inverse); color: var(--content-on-inverse); }
+.oc-ladder-step.is-you .oc-ladder-dot, .oc-ladder-step.is-artist .oc-ladder-dot { background: var(--gold); color: var(--ink); }
+.oc-ladder-label { font-size: var(--text-sm); }
+.oc-ladder-step.is-you .oc-ladder-label, .oc-ladder-step.is-artist .oc-ladder-label { font-weight: 700; }
+.oc-ladder-state { font-size: var(--text-xs); color: var(--content-muted); }
+.oc-panel-foot { display: flex; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-3) var(--space-4); border-top: var(--stroke-hair) solid var(--border-default); background: var(--surface-sunken); }
+.oc-panel-foot .danger-btn { margin-left: auto; }
+.oc-panel-back { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 44px; }
 .oc-thread-preview { background: transparent; border: 0; padding: 4px 2px; font-family: inherit; }
 .oc-add-photo-trigger { font-family: inherit; }
-
-/* Narrow: the row stacks — who on top, progress and the button below. */
-@container oclist (max-width: 760px) {
-  .oc-row-main { grid-template-columns: auto minmax(0, 1fr) 36px; grid-template-areas: "check who chev" ". prog prog" ". cta cta"; row-gap: 6px; }
-  .oc-row-main > .oc-check { grid-area: check; }
-  .oc-row-toggle { grid-area: who; }
-  .oc-row-progress { grid-area: prog; }
-  .oc-row-cta { grid-area: cta; justify-content: flex-start; }
-  .oc-row-chevron { grid-area: chev; }
-  .oc-row-detail { padding-left: var(--space-4); }
-  /* One swipeable strip rather than a stack of seven lines. */
-  .oc-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
-}
-.oc-list-card { container: oclist / inline-size; }
 
 /* ── Settings foot ── */
 .oc-settings { display: flex; flex-direction: column; gap: var(--space-3); margin-top: var(--space-4); }
@@ -20401,7 +20437,7 @@ button[onclick="refreshUmamiStats()"]:active {
 .oc-layout .oc-check-line input { width: 18px; height: 18px; margin: 0; padding: 0; accent-color: var(--gold); box-shadow: none; }
 
 @media (prefers-reduced-motion: reduce) {
-  .oc-todo-tile, .oc-todo-tile:hover, .oc-icon-btn:active { transition: none; transform: none; }
+  .oc-view, .oc-view:hover, .oc-lrow td, .oc-icon-btn:active { transition: none; transform: none; }
 }
 /* ── Riso sweep: the controls the repaint missed ────────────────────────────
    Several screens were styled before the Riso repaint and still draw their
