@@ -204,7 +204,8 @@ export function invoiceBookSplit(inv, ownerBookId, books) {
   for (const it of items) {
     const bid = lineItemBookId(it, ownerBookId, books);
     if (!subtotals.has(bid)) { subtotals.set(bid, 0); order.push(bid); }
-    subtotals.set(bid, subtotals.get(bid) + (Number(it.qty) || 0) * (Number(it.unitPrice) || 0));
+    // What the line actually bills — after its own discount, if it has one.
+    subtotals.set(bid, subtotals.get(bid) + invoiceLineAmount(it));
   }
 
   // ⚡ Bolt Optimization: Loop fusion - Combine multiple .map() and .reduce() calls into a single pass
@@ -383,4 +384,149 @@ export function billToPersonFrom(inv) {
     postal: (inv && inv.storePostal) || '',
     country: (inv && inv.storeCountry) || '',
   });
+}
+
+
+// ── Line and invoice arithmetic ──────────────────────────────────────────
+// One place that says what a line and an invoice come to, so the editor, the
+// printed page, the emailed copy and the per-title split can never disagree
+// about a figure the customer is being asked to pay.
+
+const round2 = n => Math.round((Number(n) || 0) * 100) / 100;
+const nonNeg = n => Math.max(0, Number(n) || 0);
+
+// A number as people actually type it: "12,5" and "12.5" are both twelve and
+// a half, and with both marks present the last one is the decimal point
+// ("1.234,50" and "1,234.50" are the same amount). NaN when there is no number.
+export function parseLooseNumber(v) {
+  let t = String(v ?? '').replace(/[^0-9.,-]/g, '');
+  const lastComma = t.lastIndexOf(','), lastDot = t.lastIndexOf('.');
+  if (lastComma > -1 && lastDot > -1) {
+    t = lastComma > lastDot ? t.replace(/\./g, '').replace(',', '.') : t.replace(/,/g, '');
+  } else if (lastComma > -1) {
+    t = t.replace(',', '.');
+  }
+  return parseFloat(t);
+}
+
+// A percentage the publisher typed, held to 0–100. Anything that isn't a
+// number reads as no discount rather than as a nonsense figure on the bill.
+export function clampPercent(v) {
+  const n = typeof v === 'number' ? v : parseLooseNumber(v);
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(100, Math.max(0, n));
+}
+
+// What a line is worth before its own discount: quantity × unit price.
+export function invoiceLineGross(item) {
+  return round2(nonNeg(item && item.qty) * nonNeg(item && item.unitPrice));
+}
+
+// What a line actually bills, after its own percentage discount (e.g. a 40%
+// trade discount on one title). Lines written before per-line discounts
+// existed carry none, so they come out exactly as they always did.
+export function invoiceLineAmount(item) {
+  const gross = nonNeg(item && item.qty) * nonNeg(item && item.unitPrice);
+  const pct = clampPercent(item && item.discountPct);
+  return round2(gross * (1 - pct / 100));
+}
+
+// True when any line on the invoice carries its own discount — the printed
+// invoice only grows a "Disc." column when there is something to put in it.
+export function invoiceHasLineDiscounts(items) {
+  return (items || []).some(it => clampPercent(it && it.discountPct) > 0);
+}
+
+// The whole invoice: subtotal of the (already line-discounted) lines, then the
+// invoice-wide discount, then tax on what is left. A flat discount can never
+// exceed the subtotal — a bill showing "−€80" against €50 of books is wrong
+// even if the total is clamped to zero underneath it.
+export function computeInvoiceTotals({ items, discountType, discountValue, taxRate } = {}) {
+  let subtotal = 0;
+  for (const it of (items || [])) subtotal += invoiceLineAmount(it);
+  subtotal = round2(subtotal);
+
+  const type = discountType === 'percent' ? 'percent' : 'flat';
+  let discount = 0;
+  let discountRate = 0;
+  if (type === 'percent') {
+    discountRate = clampPercent(discountValue);
+    discount = round2((subtotal * discountRate) / 100);
+  } else {
+    const flat = typeof discountValue === 'number' ? discountValue : parseLooseNumber(discountValue);
+    discount = round2(Math.min(subtotal, nonNeg(flat)));
+  }
+
+  const rate = clampPercent(taxRate);
+  const taxable = round2(Math.max(0, subtotal - discount));
+  const tax = round2(taxable * (rate / 100));
+  const total = round2(taxable + tax);
+  return { subtotal, discount, discountType: type, discountRate, taxRate: rate, tax, total };
+}
+
+// Read whatever the publisher typed into the discount box. "15%" is a
+// percentage whatever mode the box is in, "€10" or "$10" is an amount, and a
+// bare number keeps the box's current mode. Commas work as decimal points, so
+// "12,5" is twelve and a half — the way it's written on a European invoice.
+// Returns { type, value, explicit } where `explicit` says the text itself
+// named the kind of discount (so the toggle can follow it).
+export function parseDiscountEntry(text, currentType = 'flat') {
+  const raw = String(text ?? '').trim();
+  const mode = currentType === 'percent' ? 'percent' : 'flat';
+  if (!raw) return { type: mode, value: 0, explicit: false };
+  const hasPercent = raw.includes('%');
+  const hasMoney = /[€$£¥]|\b(?:eur|usd|cad|mxn|gbp)\b/i.test(raw);
+  const num = parseLooseNumber(raw);
+  const value = Number.isFinite(num) ? Math.max(0, num) : 0;
+  if (hasPercent) return { type: 'percent', value: Math.min(100, value), explicit: true };
+  if (hasMoney) return { type: 'flat', value, explicit: true };
+  return { type: mode, value: mode === 'percent' ? Math.min(100, value) : value, explicit: false };
+}
+
+// The due date `days` after an issue date, both as YYYY-MM-DD. Worked in UTC
+// so a "30 days" term never lands a day early or late across a clock change.
+// Returns '' when the issue date isn't a real date.
+export function dueDateFromTerms(issueDate, days) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(issueDate || '').trim());
+  if (!m) return '';
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  if (Number.isNaN(d.getTime())) return '';
+  d.setUTCDate(d.getUTCDate() + (Math.round(Number(days)) || 0));
+  return d.toISOString().slice(0, 10);
+}
+
+// How many days a due date sits after the issue date — what lets the editor
+// light up the matching "Net 30" shortcut when an invoice is reopened.
+// Returns null when either date is missing or malformed.
+export function daysBetween(fromDate, toDate) {
+  const a = dueDateFromTerms(fromDate, 0), b = dueDateFromTerms(toDate, 0);
+  if (!a || !b) return null;
+  return Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 86400000);
+}
+
+// A copy of an invoice's content for "Duplicate": who it bills, what it bills
+// and how it's priced — but none of its identity or history. Links to
+// consignment sales are dropped, because those sales are already billed on the
+// original and carrying the link would re-point them at the copy.
+export function duplicateInvoiceContent(inv) {
+  const src = inv || {};
+  return {
+    billTo: invoiceBillToMode(src),
+    storeId: src.storeId ?? null,
+    person: billToPersonFrom(src),
+    items: (src.items || []).map(it => ({
+      description: String((it && it.description) || ''),
+      qty: nonNeg(it && it.qty),
+      unitPrice: nonNeg(it && it.unitPrice),
+      discountPct: clampPercent(it && it.discountPct),
+      bookId: (it && it.bookId) || null,
+    })),
+    discountType: src.discountType === 'percent' ? 'percent' : 'flat',
+    discountValue: src.discountType === 'percent' ? clampPercent(src.discountRate) : nonNeg(src.discount),
+    taxRate: clampPercent(src.taxRate),
+    currencyCode: src.currencyCode || '',
+    notes: String(src.notes || ''),
+    terms: String(src.terms || ''),
+    linkedSalesDropped: (src.items || []).filter(it => it && it._ledgerId).length,
+  };
 }

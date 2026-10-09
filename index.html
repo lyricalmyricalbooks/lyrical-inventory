@@ -239,8 +239,7 @@
     .invoice-card .inv-c-btns{flex:1 1 auto;}
   }
   .inv-discount-row{display:flex;gap:8px;align-items:stretch;}
-  .inv-discount-row select{flex:0 0 auto;width:auto;margin:0;}
-  .inv-discount-row .price-wrap{flex:1 1 auto;min-width:0;}
+  .inv-discount-row input{flex:1 1 auto;min-width:0;font-family:var(--font-mono);font-size:var(--text-md);}
   .inv-item-row td{padding:6px 4px;}
   .inv-item-row input{width:100%;padding:6px 8px;font-size:12px;border:var(--stroke-hair) solid var(--border);border-radius:var(--r);background:transparent;color:var(--text);}
   .inv-item-row input[type=number]{font-family:var(--font-mono);text-align:right;min-width:64px;-moz-appearance:textfield;appearance:textfield;}
@@ -5330,9 +5329,19 @@
     </div>
   </div>
 
-  <div class="g2" style="margin-bottom:12px;">
-    <div class="form-group"><label for="inv-date">Issue date</label><input id="inv-date" type="date"></div>
-    <div class="form-group"><label for="inv-due">Due date</label><input id="inv-due" type="date"></div>
+  <div class="g2" style="margin-bottom:6px;">
+    <div class="form-group"><label for="inv-date">Issue date</label><input id="inv-date" type="date" onchange="onInvoiceIssueDateChange()"></div>
+    <div class="form-group"><label for="inv-due">Due date</label><input id="inv-due" type="date" onchange="onInvoiceDueDateChange()"></div>
+  </div>
+  <!-- One tap sets the due date from the issue date, and keeps a "Net 30"
+       line in the terms below saying the same thing as the date. -->
+  <div class="inv-chip-row" role="group" aria-label="Payment due" style="margin-bottom:12px;">
+    <span class="inv-chip-row-label">Payment due</span>
+    <button type="button" class="preset-chip-btn inv-chip" data-due-days="0" aria-pressed="false" onclick="applyInvoiceDueTerm(0)">On receipt</button>
+    <button type="button" class="preset-chip-btn inv-chip" data-due-days="15" aria-pressed="false" onclick="applyInvoiceDueTerm(15)">15 days</button>
+    <button type="button" class="preset-chip-btn inv-chip" data-due-days="30" aria-pressed="false" onclick="applyInvoiceDueTerm(30)">30 days</button>
+    <button type="button" class="preset-chip-btn inv-chip" data-due-days="60" aria-pressed="false" onclick="applyInvoiceDueTerm(60)">60 days</button>
+    <button type="button" class="preset-chip-btn inv-chip" data-due-days="90" aria-pressed="false" onclick="applyInvoiceDueTerm(90)">90 days</button>
   </div>
 
   <div class="g2" style="margin-bottom:12px;">
@@ -5356,32 +5365,45 @@
   </div>
   <div class="tbl-wrap" style="margin-bottom:8px;">
     <table class="tbl" style="font-size:var(--text-sm);">
-      <thead><tr><th style="width:30%;">Description</th><th style="width:18%;">Title</th><th class="r" style="width:12%;">Qty</th><th class="r" style="width:16%;">Unit price</th><th class="r" style="width:16%;">Amount</th><th style="width:44px;"></th></tr></thead>
+      <thead><tr><th style="width:28%;">Description</th><th style="width:17%;">Title</th><th class="r" style="width:9%;">Qty</th><th class="r" style="width:14%;">Unit price</th><th class="r" style="width:10%;" title="A percentage off this one line — e.g. 40 for a trade discount">Disc %</th><th class="r" style="width:14%;">Amount</th><th style="width:44px;"></th></tr></thead>
       <tbody id="inv-items-body"></tbody>
     </table>
   </div>
   <div id="inv-books-hint" style="font-size:var(--text-xs);color:var(--text3);line-height:1.6;margin:-2px 0 10px;"></div>
 
-  <div class="g2" style="margin-bottom:12px;">
-    <div class="form-group">
-      <label for="inv-discount"><span id="inv-discount-label-text">Discount (flat, optional)</span></label>
-      <div class="inv-discount-row">
-        <select id="inv-discount-type" aria-label="Discount type" onchange="onDiscountTypeChange()">
-          <option value="flat">Flat amount</option>
-          <option value="percent">Percentage (%)</option>
-        </select>
-        <div class="price-wrap" id="inv-discount-flat-wrap">
-          <span class="sym" id="inv-discount-sym">€</span>
-          <input id="inv-discount" type="number" inputmode="decimal" step="0.01" min="0" value="0" oninput="recalcInvoiceTotals()">
-        </div>
-        <div class="price-wrap" id="inv-discount-percent-wrap" style="display:none;">
-          <input id="inv-discount-percent" type="number" inputmode="decimal" step="0.01" min="0" max="100" value="0" oninput="recalcInvoiceTotals()">
-          <span class="sym">%</span>
-        </div>
+  <!-- Discount for the whole invoice. A percentage is one tap on a preset;
+       typing "15%" or "€10" in the box picks the kind of discount by itself,
+       and the line underneath says in money what is being taken off. -->
+  <div class="form-group inv-discount-group" style="margin-bottom:12px;">
+    <label for="inv-discount-input">Discount on the whole invoice <span class="inv-optional">optional</span></label>
+    <div class="inv-discount-row">
+      <div class="modal-tabs segmented-control inv-disc-mode" role="radiogroup" aria-label="Discount type">
+        <button type="button" class="modal-tab-btn inv-disc-mode-btn active" id="inv-disc-mode-percent" role="radio" aria-checked="true" title="Percentage off" onclick="onDiscountTypeChange('percent')">%</button>
+        <button type="button" class="modal-tab-btn inv-disc-mode-btn" id="inv-disc-mode-flat" role="radio" aria-checked="false" title="Fixed amount off" onclick="onDiscountTypeChange('flat')"><span id="inv-discount-sym">€</span></button>
       </div>
+      <input id="inv-discount-input" type="text" inputmode="decimal" autocomplete="off" placeholder="0" aria-describedby="inv-disc-readout" oninput="onDiscountInput()" onfocus="this.select()">
     </div>
+    <div class="inv-chip-row" role="group" aria-label="Quick percentage discounts" style="margin-top:8px;">
+      <button type="button" class="preset-chip-btn inv-chip" data-disc-pct="0" aria-pressed="false" onclick="applyDiscountPreset(0)">None</button>
+      <button type="button" class="preset-chip-btn inv-chip" data-disc-pct="5" aria-pressed="false" onclick="applyDiscountPreset(5)">5%</button>
+      <button type="button" class="preset-chip-btn inv-chip" data-disc-pct="10" aria-pressed="false" onclick="applyDiscountPreset(10)">10%</button>
+      <button type="button" class="preset-chip-btn inv-chip" data-disc-pct="15" aria-pressed="false" onclick="applyDiscountPreset(15)">15%</button>
+      <button type="button" class="preset-chip-btn inv-chip" data-disc-pct="20" aria-pressed="false" onclick="applyDiscountPreset(20)">20%</button>
+      <button type="button" class="preset-chip-btn inv-chip" data-disc-pct="25" aria-pressed="false" onclick="applyDiscountPreset(25)">25%</button>
+      <button type="button" class="preset-chip-btn inv-chip" data-disc-pct="30" aria-pressed="false" onclick="applyDiscountPreset(30)">30%</button>
+      <button type="button" class="preset-chip-btn inv-chip" data-disc-pct="40" aria-pressed="false" onclick="applyDiscountPreset(40)">40%</button>
+      <button type="button" class="preset-chip-btn inv-chip" data-disc-pct="50" aria-pressed="false" onclick="applyDiscountPreset(50)">50%</button>
+    </div>
+    <div class="inv-disc-readout" id="inv-disc-readout" aria-live="polite"></div>
+  </div>
+  <input type="hidden" id="inv-discount-type" value="percent">
+
+  <div class="g2" style="margin-bottom:12px;">
     <div class="form-group"><label for="inv-tax">Tax / VAT rate (%)</label>
-      <input id="inv-tax" type="number" inputmode="decimal" step="0.01" min="0" max="100" value="0" oninput="recalcInvoiceTotals()">
+      <input id="inv-tax" type="text" inputmode="decimal" autocomplete="off" placeholder="0" oninput="recalcInvoiceTotals()" onfocus="this.select()">
+    </div>
+    <div class="form-group" style="display:flex;flex-direction:column;justify-content:flex-end;">
+      <div style="font-size:var(--text-xs);color:var(--text3);line-height:1.6;padding-bottom:4px;">Tax is worked out on the total after every discount. Type <strong>12,5</strong> or <strong>12.5</strong> — both work.</div>
     </div>
   </div>
 
@@ -5407,8 +5429,9 @@
 
   <div class="modal-footer" role="dialog" aria-modal="true" style="justify-content:space-between;">
     <button class="btn danger-btn" id="inv-delete-btn" style="display:none;" onclick="deleteInvoice()">Delete invoice</button>
-    <div style="display:flex;gap:8px;">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
       <button class="btn" onclick="attemptCloseModal('invoice-edit')">Cancel</button>
+      <button class="btn" id="inv-save-draft-btn" onclick="saveInvoice('draft')" title="Keep working on it later — a draft isn't chased and gets no payment link yet">Save draft</button>
       <button class="btn gold" onclick="saveInvoice('sent')">Save &amp; finalize</button>
     </div>
   </div>
@@ -5423,6 +5446,7 @@
     <div style="font-family:var(--font-ui);font-size:var(--text-md);">Invoice preview</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <button class="btn" onclick="editInvoiceFromView()">✎ Edit</button>
+      <button class="btn" onclick="duplicateInvoiceFromView()" title="Start a new invoice with the same customer, lines and discount">⧉ Duplicate</button>
       <button class="btn" onclick="emailInvoice()">✉ Email</button>
       <button class="btn" onclick="copyInvoicePayLink()">🔗 Copy pay link</button>
       <button class="btn" id="inv-stripe-btn" onclick="regenerateStripeLinkFromView()" title="Create a Stripe Payment Link with the exact invoice amount">💳 Stripe link</button>

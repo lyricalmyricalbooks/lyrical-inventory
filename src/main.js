@@ -932,7 +932,7 @@ import { createInventoryDisposalExpense, createSection10Adjustment, inventoryAdj
 import { posStockView, posOversellSummary } from './lib/pos-stock.js';
 import { FAIR_SEARCH_OVER, FAIR_UNDO_MS, fairTileHtml, readLastMethod, rememberMethod, undoOpen, soldLabel, countLabel, keepScreenAwake, fairSyncPill, registerSalesForDay, fairDaySummary, readCurrentFair, saveCurrentFair } from './lib/fair-mode.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, notesWithInvoiceDiscount, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores, consignmentLedgerTotals, storeBalanceSlug, storeBalanceComparison } from './lib/consignment.js';
-import { deriveInvoiceBookIds, invoicesForBook, findInvoiceAcrossBooks, otherBookTitles, lineItemBookId, invoiceBookSplit, invoiceShareForBook, neutralInvoicePrefix, invoiceNumberPrefix, nextInvoiceSeq, buildInvoiceNumber, BILL_TO_STORE, BILL_TO_PERSON, invoiceBillToMode, billToPayload, billToPersonFrom } from './lib/invoices.js';
+import { deriveInvoiceBookIds, invoicesForBook, findInvoiceAcrossBooks, otherBookTitles, lineItemBookId, invoiceBookSplit, invoiceShareForBook, neutralInvoicePrefix, invoiceNumberPrefix, nextInvoiceSeq, buildInvoiceNumber, BILL_TO_STORE, BILL_TO_PERSON, invoiceBillToMode, billToPayload, billToPersonFrom, invoiceLineAmount, invoiceLineGross, invoiceHasLineDiscounts, computeInvoiceTotals, parseDiscountEntry, clampPercent, dueDateFromTerms, daysBetween, duplicateInvoiceContent } from './lib/invoices.js';
 import { reminderSettings, reminderBlockReason, invoiceReminderState, dueForReminder, dueForReminderTomorrow, buildReminderEmail, canSendNow, daysLate, describeReminderSweep, describeReminderArming, describeReminderNotice, sampleReminderInvoice } from './lib/payment-reminders.js';
 import { LEDGER_TYPE_FILTERS, emptyLedgerFilter, ledgerFilterIsActive, ledgerStoreOptions, filterLedgerEntries, ledgerTypeCounts, describeLedgerFilter, ledgerTotalsScope } from './lib/consignment-ledger-filter.js';
 import { filterHistoryRows, historySearchIsActive, describeHistorySearch } from './lib/order-history-search.js';
@@ -12890,13 +12890,16 @@ function renderInvoices() {
 // ── invoice editor state ────────────────────────────────────────────────
 let invoiceCtx = null; // { editingId, items: [{description,qty,unitPrice}] }
 
-function openCreateInvoice(storeId, editingId) {
+function openCreateInvoice(storeId, editingId, { copyFrom = null } = {}) {
   // Edit the invoice where it lives. Opening a shared invoice from a title that
   // doesn't own it must still edit the one stored copy — including its store
   // list and currency, which belong to the owning book, not the one on screen.
   const hit = editingId ? locateInvoice(editingId) : null;
   if (editingId && !hit) { showToast('Invoice not found', 'err'); return; }
-  const ownerBookId = hit ? hit.ownerBookId : activeBook;
+  // A copy is written into the same book as its original, so the store it
+  // bills is on that book's store list and the copy files beside it.
+  const source = !editingId && copyFrom ? locateInvoice(copyFrom) : null;
+  const ownerBookId = hit ? hit.ownerBookId : (source ? source.ownerBookId : activeBook);
   const s = states[ownerBookId] || getState(), book = BOOKS[ownerBookId] || getBook();
   // Populate store dropdown
   const sel = $('inv-store');
@@ -12929,26 +12932,17 @@ function openCreateInvoice(storeId, editingId) {
     $('inv-num').value = inv.num || '';
     $('inv-date').value = inv.date || today();
     $('inv-due').value = inv.dueDate || '';
-    const distType = inv.discountType || 'flat';
-    $('inv-discount-type').value = distType;
-    if (distType === 'percent') {
-      $('inv-discount-percent').value = inv.discountRate || 0;
-      $('inv-discount').value = 0;
-      $('inv-discount-flat-wrap').style.display = 'none';
-      $('inv-discount-percent-wrap').style.display = 'flex';
-      $('inv-discount-label-text').textContent = 'Discount (percent, optional)';
-    } else {
-      $('inv-discount').value = inv.discount || 0;
-      $('inv-discount-percent').value = 0;
-      $('inv-discount-flat-wrap').style.display = 'flex';
-      $('inv-discount-percent-wrap').style.display = 'none';
-      $('inv-discount-label-text').textContent = 'Discount (flat, optional)';
-    }
-    $('inv-tax').value = inv.taxRate || 0;
+    if (inv.discountType === 'percent') setInvoiceDiscountUI('percent', inv.discountRate || 0);
+    else setInvoiceDiscountUI('flat', inv.discount || 0);
+    $('inv-tax').value = inv.taxRate ? String(inv.taxRate) : '';
     $('inv-paylink').value = inv.paymentLink || '';
     $('inv-notes').value = inv.notes || '';
     $('inv-terms').value = inv.terms || '';
     $('inv-delete-btn').style.display = '';
+    // A draft can stay a draft; anything already sent, paid or cancelled can't
+    // be quietly pulled back to one from here.
+    invoiceCtx.originalStatus = inv.status || 'draft';
+    $('inv-save-draft-btn').style.display = invoiceCtx.originalStatus === 'draft' ? '' : 'none';
     // restore invoice's own currency
     const invCurCode = normalizeCurrencyCode(inv.currency || bookCurCode, bookCurCode);
     if ($('inv-currency')) setSelectCurrency($('inv-currency'), invCurCode);
@@ -12969,24 +12963,111 @@ function openCreateInvoice(storeId, editingId) {
     // default due date = 30 days from today
     const d = new Date(); d.setDate(d.getDate() + 30);
     $('inv-due').value = d.toISOString().split('T')[0];
-    $('inv-discount-type').value = 'flat';
-    $('inv-discount').value = 0;
-    $('inv-discount-percent').value = 0;
-    $('inv-discount-flat-wrap').style.display = 'flex';
-    $('inv-discount-percent-wrap').style.display = 'none';
-    $('inv-discount-label-text').textContent = 'Discount (flat, optional)';
-    $('inv-tax').value = 0;
+    // Percent first: it is the discount publishers reach for most (a store's
+    // trade discount), so the box is ready for "40" without a mode change.
+    setInvoiceDiscountUI('percent', 0);
+    $('inv-tax').value = '';
     $('inv-paylink').value = '';
     const settings = getInvoiceSettings();
     $('inv-notes').value = '';
     $('inv-terms').value = settings.terms || 'Net 30. Payment via Stripe, PayPal, or bank transfer.';
     $('inv-delete-btn').style.display = 'none';
-    if (storeId) prefillFromPendingSales(storeId);
+    $('inv-save-draft-btn').style.display = '';
+    if (source) fillInvoiceEditorFromCopy(source.inv, sel);
+    else if (storeId) prefillFromPendingSales(storeId);
     else addInvoiceItem();
   }
+  syncInvoiceDueChips();
   renderInvoiceItems();
   recalcInvoiceTotals();
   openM('invoice-edit');
+}
+
+// "Duplicate": a new invoice carrying the original's customer, lines, discount,
+// tax, currency, notes and terms — with today's date, a fresh number and no
+// payment link (a Stripe link is for the old invoice's exact amount). Lines
+// that were consignment sales lose their link to those sales, since the
+// original invoice is still the one billing them.
+function fillInvoiceEditorFromCopy(srcInv, sel) {
+  const copy = duplicateInvoiceContent(srcInv);
+  invoiceCtx.items = copy.items;
+  invoiceCtx.copiedFrom = srcInv.num || '';
+  $('inv-edit-title').textContent = srcInv.num ? `New invoice (copy of ${srcInv.num})` : 'New invoice (copy)';
+  if (copy.billTo === BILL_TO_PERSON) {
+    fillInvoicePersonForm(copy.person);
+    setInvoiceBillToMode(BILL_TO_PERSON, { silent: true });
+  } else {
+    setInvoiceBillToMode(BILL_TO_STORE, { silent: true });
+    sel.value = copy.storeId != null ? String(copy.storeId) : '';
+    onInvoiceStoreChange();
+  }
+  setInvoiceDiscountUI(copy.discountType, copy.discountValue);
+  $('inv-tax').value = copy.taxRate ? String(copy.taxRate) : '';
+  $('inv-notes').value = copy.notes;
+  if (copy.terms) $('inv-terms').value = copy.terms;
+  if (copy.currencyCode && $('inv-currency')) {
+    setSelectCurrency($('inv-currency'), copy.currencyCode);
+    $('inv-discount-sym').textContent = getSym(getInvoiceCurrency());
+  }
+  // Keep the original's gap between issue and due date ("Net 15" stays Net 15).
+  const gap = daysBetween(srcInv.date, srcInv.dueDate);
+  if (gap != null && gap >= 0) $('inv-due').value = dueDateFromTerms($('inv-date').value, gap);
+  refreshAutoInvoiceNumber();
+  if (copy.linkedSalesDropped) {
+    showToast(`Copied ${copy.items.length} line${copy.items.length === 1 ? '' : 's'} — they are no longer tied to the consignment sales on ${srcInv.num || 'the original'}`, 'ok', 4500);
+  }
+}
+
+function duplicateInvoiceFromView() {
+  if (!currentViewInvoiceId) return;
+  const id = currentViewInvoiceId;
+  const hit = locateInvoice(id);
+  if (!hit) { showToast('Invoice not found', 'err'); return; }
+  closeM('invoice-view');
+  setTimeout(() => openCreateInvoice(null, null, { copyFrom: id }), 60);
+}
+
+// ── due-date shortcuts ──────────────────────────────────────────────────
+// "30 days" sets the due date from the issue date, and moves with it if the
+// issue date changes afterwards. Typing a due date by hand lights up whichever
+// shortcut it happens to match, or none.
+const INV_TERMS_PHRASE = /^(?:net\s*\d+|due\s+on\s+receipt)\b\.?/i;
+
+function invoiceDueTermPhrase(days) {
+  return days === 0 ? 'Due on receipt.' : `Net ${days}.`;
+}
+
+function syncInvoiceDueChips() {
+  const days = daysBetween($('inv-date')?.value, $('inv-due')?.value);
+  if (invoiceCtx) invoiceCtx.dueTermDays = days;
+  document.querySelectorAll('#m-invoice-edit [data-due-days]').forEach(btn => {
+    btn.setAttribute('aria-pressed', String(days != null && Number(btn.dataset.dueDays) === days));
+  });
+}
+
+function applyInvoiceDueTerm(days) {
+  const issue = $('inv-date').value || today();
+  if (!$('inv-date').value) $('inv-date').value = issue;
+  $('inv-due').value = dueDateFromTerms(issue, days);
+  // Keep the written terms saying the same thing as the date — a bill that is
+  // due in 15 days must not still print "Net 30" underneath.
+  const termsEl = $('inv-terms');
+  if (termsEl) {
+    const t = termsEl.value.trim();
+    if (!t) termsEl.value = invoiceDueTermPhrase(days);
+    else if (INV_TERMS_PHRASE.test(t)) termsEl.value = t.replace(INV_TERMS_PHRASE, invoiceDueTermPhrase(days));
+  }
+  syncInvoiceDueChips();
+}
+
+function onInvoiceIssueDateChange() {
+  const days = invoiceCtx ? invoiceCtx.dueTermDays : null;
+  if (days != null && days >= 0 && $('inv-date').value) $('inv-due').value = dueDateFromTerms($('inv-date').value, days);
+  syncInvoiceDueChips();
+}
+
+function onInvoiceDueDateChange() {
+  syncInvoiceDueChips();
 }
 
 // Every invoice on record, across all books. A neutral-prefixed number is
@@ -13179,7 +13260,7 @@ function onInvoiceCurrencyChange() {
 function addInvoiceItem(description = '', qty = 1, unitPrice = 0) {
   // A new line bills the book issuing the invoice until the publisher says
   // otherwise, which is the common case and keeps the picker from starting blank.
-  invoiceCtx.items.push({ description, qty, unitPrice, bookId: invoiceCtx.ownerBookId || activeBook });
+  invoiceCtx.items.push({ description, qty, unitPrice, discountPct: 0, bookId: invoiceCtx.ownerBookId || activeBook });
   renderInvoiceItems();
   recalcInvoiceTotals();
 }
@@ -13193,12 +13274,22 @@ function removeInvoiceItem(idx) {
 function updateInvoiceItem(idx, field, value) {
   const it = invoiceCtx.items[idx]; if (!it) return;
   if (field === 'description') it.description = value;
-  else if (field === 'bookId') it.bookId = value || null;
+  else if (field === 'bookId') {
+    it.bookId = value || null;
+    // Picking a title on a line that has no price yet fills in that book's
+    // list price (and its name, if the line is blank) — as long as the book is
+    // priced in the invoice's currency, so a CA$ price never lands on a € bill.
+    if (fillInvoiceLineFromBook(it)) { renderInvoiceItems(); recalcInvoiceTotals(); refreshAutoInvoiceNumber(); return; }
+  }
+  else if (field === 'discountPct') it.discountPct = clampPercent(value);
   // A negative quantity or price would quietly turn the invoice into a credit.
   else it[field] = Math.max(0, parseFloat(value) || 0);
   // Re-render only the amount cell for performance
-  const amtEl = document.querySelector(`#inv-items-body tr[data-i="${idx}"] .inv-item-amt`);
-  if (amtEl) amtEl.textContent = fmt((it.qty || 0) * (it.unitPrice || 0), getSym(getInvoiceCurrency()));
+  const row = document.querySelector(`#inv-items-body tr[data-i="${idx}"]`);
+  const amtEl = row && row.querySelector('.inv-item-amt');
+  if (amtEl) amtEl.textContent = fmt(invoiceLineAmount(it), getSym(getInvoiceCurrency()));
+  const wasEl = row && row.querySelector('.inv-item-was');
+  if (wasEl) wasEl.textContent = clampPercent(it.discountPct) > 0 ? fmt(invoiceLineGross(it), getSym(getInvoiceCurrency())) : '';
   // Which titles the invoice covers follows the picker and the descriptions, so
   // keep the "filed under" line — and the invoice number — honest as they change.
   if (field === 'description' || field === 'bookId') {
@@ -13206,6 +13297,18 @@ function updateInvoiceItem(idx, field, value) {
     refreshAutoInvoiceNumber();
   }
   recalcInvoiceTotals();
+}
+
+function fillInvoiceLineFromBook(it) {
+  if (!it || !it.bookId || (Number(it.unitPrice) || 0) > 0) return false;
+  const book = BOOKS[it.bookId];
+  const price = Number(book && book.listPrice) || 0;
+  if (!book || price <= 0) return false;
+  if (getBookCurrencyCode(book) !== getInvoiceCurrency()) return false;
+  it.unitPrice = price;
+  if (!String(it.description || '').trim()) it.description = book.title || '';
+  showToast(`Filled in the list price of ${book.title || 'that title'}`, 'ok', 1800);
+  return true;
 }
 
 // The titles a line item can be billed against. Test books never appear — an
@@ -13217,7 +13320,7 @@ function invoiceBookOptions() {
 function renderInvoiceItems() {
   const body = $('inv-items-body'), cur = getSym(getInvoiceCurrency());
   if (!invoiceCtx.items.length) {
-    body.innerHTML = `<tr><td colspan="6" style="font-size:var(--text-sm);color:var(--text3);padding:14px;text-align:center;">No line items. Click <strong>+ Add line</strong>.</td></tr>`;
+    body.innerHTML = `<tr><td colspan="7" style="font-size:var(--text-sm);color:var(--text3);padding:14px;text-align:center;">No line items. Click <strong>+ Add line</strong>.</td></tr>`;
     renderInvoiceBooksHint();
     return;
   }
@@ -13237,7 +13340,8 @@ function renderInvoiceItems() {
     <td><select class="inv-item-book" title="Which title this line bills for" aria-label="Title for this line" onchange="updateInvoiceItem(${i},'bookId',this.value)">${opts}</select></td>
     <td><input type="number" min="0" step="1" inputmode="numeric" aria-label="Quantity" value="${it.qty || 0}" oninput="updateInvoiceItem(${i},'qty',this.value)"></td>
     <td><input type="number" min="0" step="0.01" inputmode="decimal" aria-label="Unit price" value="${(Number(it.unitPrice) || 0).toFixed(2)}" oninput="updateInvoiceItem(${i},'unitPrice',this.value)"></td>
-    <td class="r"><span class="inv-item-amt">${fmt((it.qty || 0) * (it.unitPrice || 0), cur)}</span></td>
+    <td><input type="text" class="inv-item-disc" inputmode="decimal" autocomplete="off" placeholder="0" aria-label="Discount on this line, in percent" title="A percentage off this one line — e.g. 40 for a trade discount" value="${clampPercent(it.discountPct) > 0 ? clampPercent(it.discountPct) : ''}" onfocus="this.select()" oninput="updateInvoiceItem(${i},'discountPct',this.value)"></td>
+    <td class="r"><span class="inv-item-amt">${fmt(invoiceLineAmount(it), cur)}</span><span class="inv-item-was" aria-label="Before the line discount">${clampPercent(it.discountPct) > 0 ? fmt(invoiceLineGross(it), cur) : ''}</span></td>
     <td><button type="button" class="inv-item-remove" onclick="removeInvoiceItem(${i})" title="Remove line" aria-label="Remove line">×</button></td>
   </tr>`;
   }).join('');
@@ -13262,69 +13366,116 @@ function renderInvoiceBooksHint() {
   el.innerHTML = `Filed under <strong>${titles.map(escapeHtml).join('</strong>, <strong>')}</strong> — this invoice appears in each of those titles' Invoices lists, and is numbered for the business rather than one title.`;
 }
 
-function onDiscountTypeChange() {
-  // ⚡ Bolt Optimization: Calculate subtotal once upfront using imperative loop to avoid multiple reduce calls and array allocations
-  let subtotal = 0;
-  for (const it of invoiceCtx.items) {
-    subtotal += (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0);
-  }
+// ── the invoice-wide discount ───────────────────────────────────────────
+// One box and a %/amount toggle. Switching the toggle keeps the number that
+// was typed and reads it the other way — someone who typed 15 with the toggle
+// on € almost always meant 15%, not "convert €15 into a percentage".
+function getInvoiceDiscountType() {
+  return $('inv-discount-type')?.value === 'flat' ? 'flat' : 'percent';
+}
 
-  const type = $('inv-discount-type').value;
-  if (type === 'percent') {
-    $('inv-discount-flat-wrap').style.display = 'none';
-    $('inv-discount-percent-wrap').style.display = 'flex';
-    $('inv-discount-label-text').textContent = 'Discount (percent, optional)';
-    // Convert current flat value to percent of subtotal (best effort)
-        const flatVal = parseFloat($('inv-discount').value) || 0;
-    if (subtotal > 0 && flatVal > 0) {
-      $('inv-discount-percent').value = parseFloat(((flatVal / subtotal) * 100).toFixed(2));
-    } else {
-      $('inv-discount-percent').value = 0;
-    }
-  } else {
-    $('inv-discount-flat-wrap').style.display = 'flex';
-    $('inv-discount-percent-wrap').style.display = 'none';
-    $('inv-discount-label-text').textContent = 'Discount (flat, optional)';
-    // Convert current percent value to flat amount (best effort)
-        const percentVal = parseFloat($('inv-discount-percent').value) || 0;
-    if (subtotal > 0 && percentVal > 0) {
-      $('inv-discount').value = parseFloat(((subtotal * percentVal) / 100).toFixed(2));
-    } else {
-      $('inv-discount').value = 0;
-    }
+function setInvoiceDiscountUI(type, value) {
+  const t = type === 'flat' ? 'flat' : 'percent';
+  $('inv-discount-type').value = t;
+  const n = Number(value) || 0;
+  $('inv-discount-input').value = n > 0 ? String(parseFloat(n.toFixed(2))) : '';
+  syncInvoiceDiscountControls();
+}
+
+function syncInvoiceDiscountControls() {
+  const t = getInvoiceDiscountType();
+  for (const [id, on] of [['inv-disc-mode-percent', t === 'percent'], ['inv-disc-mode-flat', t === 'flat']]) {
+    const btn = $(id);
+    if (!btn) continue;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-checked', on ? 'true' : 'false');
   }
+  const input = $('inv-discount-input');
+  if (input) {
+    input.placeholder = t === 'percent' ? 'e.g. 15' : 'e.g. 10.00';
+    input.setAttribute('aria-label', t === 'percent' ? 'Discount, in percent' : 'Discount, as an amount');
+  }
+  const { value } = parseDiscountEntry(input ? input.value : '', t);
+  document.querySelectorAll('#m-invoice-edit [data-disc-pct]').forEach(btn => {
+    const pct = Number(btn.dataset.discPct);
+    const on = pct === 0 ? !(value > 0) : (t === 'percent' && value === pct);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+}
+
+function onDiscountTypeChange(type) {
+  const next = type === 'flat' || type === 'percent' ? type : (getInvoiceDiscountType() === 'flat' ? 'percent' : 'flat');
+  $('inv-discount-type').value = next;
+  const input = $('inv-discount-input');
+  // Strip a symbol the other mode left behind ("15%" → "15") so the box shows
+  // a plain number in the mode that is now selected.
+  if (input && input.value.trim()) {
+    const { value } = parseDiscountEntry(input.value, next);
+    input.value = value > 0 ? String(value) : '';
+  }
+  syncInvoiceDiscountControls();
   recalcInvoiceTotals();
+}
+
+function onDiscountInput() {
+  const input = $('inv-discount-input');
+  const parsed = parseDiscountEntry(input.value, getInvoiceDiscountType());
+  // "15%" or "€10" typed into the box flips the toggle to match.
+  if (parsed.explicit && parsed.type !== getInvoiceDiscountType()) $('inv-discount-type').value = parsed.type;
+  syncInvoiceDiscountControls();
+  recalcInvoiceTotals();
+}
+
+function applyDiscountPreset(pct) {
+  setInvoiceDiscountUI('percent', pct);
+  recalcInvoiceTotals();
+}
+
+// Say in money what the discount takes off, so a percentage is never a guess.
+function renderInvoiceDiscountReadout(totals, cur) {
+  const el = $('inv-disc-readout');
+  if (!el) return;
+  const input = $('inv-discount-input');
+  const entered = parseDiscountEntry(input ? input.value : '', totals.discountType).value;
+  el.classList.remove('is-warn');
+  if (!(entered > 0)) { el.textContent = ''; return; }
+  if (totals.subtotal <= 0) {
+    el.textContent = 'Add a line with a price and the discount will be worked out here.';
+    return;
+  }
+  if (totals.discountType === 'percent') {
+    const capped = entered > 100 ? ' (a discount can go up to 100%)' : '';
+    el.innerHTML = `${escapeHtml(String(totals.discountRate))}% off ${escapeHtml(fmt(totals.subtotal, cur))} takes off <strong>${escapeHtml(fmt(totals.discount, cur))}</strong> — leaving ${escapeHtml(fmt(totals.subtotal - totals.discount, cur))} before tax${escapeHtml(capped)}.`;
+    if (capped) el.classList.add('is-warn');
+    return;
+  }
+  const pct = totals.subtotal > 0 ? (totals.discount / totals.subtotal) * 100 : 0;
+  if (entered > totals.subtotal) {
+    el.innerHTML = `That's more than the ${escapeHtml(fmt(totals.subtotal, cur))} being billed, so it's held at <strong>${escapeHtml(fmt(totals.discount, cur))}</strong> (100% off).`;
+    el.classList.add('is-warn');
+    return;
+  }
+  el.innerHTML = `Takes off <strong>${escapeHtml(fmt(totals.discount, cur))}</strong> — about ${escapeHtml(String(parseFloat(pct.toFixed(1))))}% of ${escapeHtml(fmt(totals.subtotal, cur))}.`;
 }
 
 function recalcInvoiceTotals() {
   const cur = getSym(getInvoiceCurrency());
-  // ⚡ Bolt Optimization: Replace reduce with imperative loop to avoid array method allocations on hot paths
-  let subtotal = 0;
-  for (const it of invoiceCtx.items) {
-    subtotal += (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0);
-  }
-  
-  const type = $('inv-discount-type') ? $('inv-discount-type').value : 'flat';
-  let discount = 0;
-  let discountRate = 0;
-  if (type === 'percent') {
-    discountRate = parseFloat($('inv-discount-percent').value) || 0;
-    discount = parseFloat(((subtotal * discountRate) / 100).toFixed(2));
-  } else {
-    discount = parseFloat($('inv-discount').value) || 0;
-  }
-  
-  const taxRate = parseFloat($('inv-tax').value) || 0;
-  const taxable = Math.max(0, subtotal - discount);
-  const tax = parseFloat((taxable * (taxRate / 100)).toFixed(2));
-  const total = parseFloat((taxable + tax).toFixed(2));
-  
-  $('inv-sub-val').textContent = fmt(subtotal, cur);
-  $('inv-disc-val').textContent = discount ? '−' + fmt(discount, cur) : fmt(0, cur);
-  $('inv-tax-val').textContent = fmt(tax, cur);
-  $('inv-total-val').textContent = fmt(total, cur);
-  
-  return { subtotal, discount, discountType: type, discountRate, taxRate, tax, total };
+  const type = getInvoiceDiscountType();
+  const entry = parseDiscountEntry($('inv-discount-input') ? $('inv-discount-input').value : '', type);
+  const totals = computeInvoiceTotals({
+    items: invoiceCtx.items,
+    discountType: entry.type,
+    discountValue: entry.value,
+    taxRate: $('inv-tax').value,
+  });
+
+  $('inv-sub-val').textContent = fmt(totals.subtotal, cur);
+  $('inv-disc-val').textContent = totals.discount ? '−' + fmt(totals.discount, cur) : fmt(0, cur);
+  $('inv-tax-val').textContent = fmt(totals.tax, cur);
+  $('inv-total-val').textContent = fmt(totals.total, cur);
+  renderInvoiceDiscountReadout(totals, cur);
+
+  return totals;
 }
 
 function prefillFromPendingSales(forceStoreId) {
@@ -13409,7 +13560,12 @@ function saveInvoice(status) {
     num,
     ...billToPayload(billToMode, { store, person }),
     date, dueDate,
-    items: invoiceCtx.items.map(it => ({ description: it.description || '', qty: parseFloat(it.qty) || 0, unitPrice: parseFloat(it.unitPrice) || 0, _ledgerId: it._ledgerId || null, bookId: it.bookId || null })),
+    items: invoiceCtx.items.map(it => {
+      const line = { description: it.description || '', qty: parseFloat(it.qty) || 0, unitPrice: parseFloat(it.unitPrice) || 0, _ledgerId: it._ledgerId || null, bookId: it.bookId || null };
+      const pct = clampPercent(it.discountPct);
+      if (pct > 0) line.discountPct = pct;
+      return line;
+    }),
     subtotal: totals.subtotal,
     discount: totals.discount,
     discountType: totals.discountType || 'flat',
@@ -13442,6 +13598,9 @@ function saveInvoice(status) {
       // preserve paid metadata if existing
       const old = s.invoices[idx];
       oldLedgerIds = (old.items || []).map(it => it._ledgerId).filter(Boolean);
+      // Fixing a typo on a paid (or cancelled) invoice must not reopen it as
+      // money owed — that would put it back on the chase list.
+      if (old.status === 'paid' || old.status === 'cancelled') payload.status = old.status;
       payload.paidAt = old.paidAt || null;
       payload.paidMethod = old.paidMethod || null;
       // What was already said to this customer, and any date they promised to
@@ -13510,11 +13669,12 @@ function saveInvoice(status) {
   renderInvoices();
   renderLedger();
   renderHist();
-  showToast(status === 'draft' ? '✓ Draft saved' : '✓ Invoice saved');
+  showToast(payload.status === 'draft' ? '✓ Draft saved' : '✓ Invoice saved');
 
-  // Stripe Payment Link: auto-create on finalize (or regenerate after edit)
+  // Stripe Payment Link: auto-create on finalize (or regenerate after edit).
+  // Never for a draft, and never for an invoice that is already paid or cancelled.
   const settings = getInvoiceSettings();
-  const shouldAutoStripe = status !== 'draft' && settings.stripeAuto !== false && !!settings.stripeKey && !payload.stripe;
+  const shouldAutoStripe = payload.status === 'sent' && settings.stripeAuto !== false && !!settings.stripeKey && !payload.stripe;
   if (oldStripeLinkId) deactivateStripePaymentLink(oldStripeLinkId);
 
   if (shouldAutoStripe) {
@@ -13750,11 +13910,15 @@ function renderInvoicePaperHTML(inv, { showChase = false } = {}) {
   const statusCls = overdue ? 'overdue' : (inv.status || 'draft');
 
   const accent = book.accent || '#c8913a';
+  // A "Disc." column only appears when a line actually has its own discount,
+  // so an ordinary invoice prints exactly as it always has.
+  const lineDisc = invoiceHasLineDiscounts(inv.items);
   const itemsHtml = (inv.items || []).map(it => `<tr>
     <td>${escapeHtml(it.description || '—')}</td>
     <td class="r">${(it.qty || 0)}</td>
     <td class="r">${fmt(it.unitPrice || 0, cur)}</td>
-    <td class="r"><strong>${fmt((it.qty || 0) * (it.unitPrice || 0), cur)}</strong></td>
+    ${lineDisc ? `<td class="r">${clampPercent(it.discountPct) > 0 ? `${clampPercent(it.discountPct)}%` : '—'}</td>` : ''}
+    <td class="r"><strong>${fmt(invoiceLineAmount(it), cur)}</strong></td>
   </tr>`).join('');
 
   const acceptedMethods = getAcceptedPaymentMethodsForBook(book.id);
@@ -13864,7 +14028,7 @@ function renderInvoicePaperHTML(inv, { showChase = false } = {}) {
     </section>
 
     <table class="inv-items">
-      <thead><tr><th>Description</th><th class="r">Qty</th><th class="r">Unit price</th><th class="r">Amount</th></tr></thead>
+      <thead><tr><th>Description</th><th class="r">Qty</th><th class="r">Unit price</th>${lineDisc ? '<th class="r">Disc.</th>' : ''}<th class="r">Amount</th></tr></thead>
       <tbody>${itemsHtml}</tbody>
     </table>
 
@@ -14056,12 +14220,14 @@ function buildInvoiceEmailHTML(inv) {
   const payUrl = effectivePaymentLink(inv);
   const accent = (BOOKS[activeBook] || getBook()).accent || '#c8913a';
   const contact = escapeHtml(inv.storeContact || inv.storeName || 'there');
+  const lineDisc = invoiceHasLineDiscounts(inv.items);
   const items = (inv.items || []).map(it => `
     <tr>
       <td style="padding:12px 10px;border-bottom:1px solid #f1eadc;color:#1a1814;">${escapeHtml(it.description || '—')}</td>
       <td align="right" style="padding:12px 10px;border-bottom:1px solid #f1eadc;color:#1a1814;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${it.qty || 0}</td>
       <td align="right" style="padding:12px 10px;border-bottom:1px solid #f1eadc;color:#1a1814;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${fmt(it.unitPrice || 0, cur)}</td>
-      <td align="right" style="padding:12px 10px;border-bottom:1px solid #f1eadc;color:#1a1814;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:700;">${fmt((it.qty || 0) * (it.unitPrice || 0), cur)}</td>
+      ${lineDisc ? `<td align="right" style="padding:12px 10px;border-bottom:1px solid #f1eadc;color:#1a1814;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${clampPercent(it.discountPct) > 0 ? `${clampPercent(it.discountPct)}%` : '—'}</td>` : ''}
+      <td align="right" style="padding:12px 10px;border-bottom:1px solid #f1eadc;color:#1a1814;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:700;">${fmt(invoiceLineAmount(it), cur)}</td>
     </tr>`).join('');
   const billedTo = [inv.storeContact, inv.storeEmail, inv.storePhone, inv.storeAddress, [inv.storeCity, inv.storeRegion, inv.storePostal].filter(Boolean).join(', '), inv.storeCountry]
     .filter(Boolean).map(escapeHtml).join('<br>');
@@ -14097,7 +14263,7 @@ function buildInvoiceEmailHTML(inv) {
           </tr>
         </table>
         <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-bottom:18px;">
-          <thead><tr><th align="left" style="padding:0 10px 9px;border-bottom:1px solid #eadfca;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6b6459;">Description</th><th align="right" style="padding:0 10px 9px;border-bottom:1px solid #eadfca;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6b6459;">Qty</th><th align="right" style="padding:0 10px 9px;border-bottom:1px solid #eadfca;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6b6459;">Unit price</th><th align="right" style="padding:0 10px 9px;border-bottom:1px solid #eadfca;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6b6459;">Amount</th></tr></thead>
+          <thead><tr><th align="left" style="padding:0 10px 9px;border-bottom:1px solid #eadfca;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6b6459;">Description</th><th align="right" style="padding:0 10px 9px;border-bottom:1px solid #eadfca;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6b6459;">Qty</th><th align="right" style="padding:0 10px 9px;border-bottom:1px solid #eadfca;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6b6459;">Unit price</th>${lineDisc ? '<th align="right" style="padding:0 10px 9px;border-bottom:1px solid #eadfca;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6b6459;">Disc.</th>' : ''}<th align="right" style="padding:0 10px 9px;border-bottom:1px solid #eadfca;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6b6459;">Amount</th></tr></thead>
           <tbody>${items}</tbody>
         </table>
         <table role="presentation" align="right" width="300" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-bottom:22px;">
@@ -26549,6 +26715,12 @@ function exposeLegacyInlineHandlers() {
     onInvoiceCurrencyChange, addInvoiceItem, removeInvoiceItem, updateInvoiceItem,
     renderInvoiceItems, escapeHtml, recalcInvoiceTotals, prefillFromPendingSales, saveInvoice,
     onDiscountTypeChange,
+    onDiscountInput,
+    applyDiscountPreset,
+    applyInvoiceDueTerm,
+    onInvoiceIssueDateChange,
+    onInvoiceDueDateChange,
+    duplicateInvoiceFromView,
     regenerateStripeLinkFromView, deleteInvoice, viewInvoice, effectivePaymentLink,
     isDynamicStripeLink, renderInvoicePaperHTML, editInvoiceFromView, markInvoicePaidFromView,
     printInvoice, printInvoiceViaPopup, copyInvoicePayLink, invoiceEmailPlainText,
