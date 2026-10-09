@@ -155,6 +155,14 @@ export function receiptDuplicate(draft, expenses) {
     const reference = String(expense.ref || expense.reference || '').trim().toLowerCase();
     const sameReference = draft.reference && reference === draft.reference.trim().toLowerCase();
     if (draft.reference && reference && reference !== 'email-import' && !sameReference) return false;
+    // Two different emails with the same vendor, amount and day and no invoice
+    // number to tell them apart are as likely two purchases (two identical
+    // postage fees, two seats) as one receipt sent twice. Treating them as one
+    // silently drops a real expense, so only a matching reference, the very same
+    // message, or a hand-entered expense counts as the same receipt.
+    const hasNoInvoiceRef = !draft.reference && (!reference || reference === 'email-import' || reference.startsWith('receipt-email:'));
+    const fromOtherEmail = !!expense.emailMsgId && !sameMessage;
+    if (hasNoInvoiceRef && fromOtherEmail) return false;
     const sameVendor = normalizedVendor(draft.vendor) && normalizedVendor(expense.vendor) === normalizedVendor(draft.vendor);
     const sameMoney = receiptMoney(expense.amount) !== null && receiptMoney(expense.amount) === receiptMoney(draft.amount)
       && expense.currency === draft.currency;
@@ -184,7 +192,9 @@ export function receiptExpense(draft, rate, receiptFiles = []) {
     emailMsgId: draft.messageId, emailAccount: draft.account, emailAttachmentIds: draft.attachmentIds,
     emailAttachments: (draft.attachments || []).map((file, index) => ({ ...file, downloadUrl: receiptFiles[index + 1] || '' })),
     emailUrl: `https://mail.google.com/mail/u/?authuser=${encodeURIComponent(draft.account)}#all/${encodeURIComponent(draft.messageId)}`,
-    receipt: receiptFiles[0] || '', receiptFiles, sourceSnippet: draft.sourceSnippet,
+    // A skipped attachment leaves an empty slot (so the others keep their place
+    // in emailAttachments above); it is not a receipt file.
+    receipt: receiptFiles.find(Boolean) || '', receiptFiles: receiptFiles.filter(Boolean), sourceSnippet: draft.sourceSnippet,
     importedFromEmail: true, importedAt: new Date().toISOString(),
   };
 }

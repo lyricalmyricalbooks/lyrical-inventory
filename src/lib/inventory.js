@@ -39,17 +39,19 @@ export function inventoryBreakdown(s, book) {
     else if (h.consignmentLink) consignSold += (h.qty || 0); // sold through a store
     else directSold += (h.qty || 0);                    // website / manual / etc.
   }
-  let shipped = 0, restocked = 0, writtenOff = 0;
+  let shipped = 0, restocked = 0, writtenOff = 0, returnedOut = 0;
   for (const e of ((s && s.ledger) || [])) {
     if (e.voided) continue;
     if (e.type === 'Shipment') shipped += (e.qty || 0);
     else if (e.type === 'Inventory Disposal') writtenOff += (e.qty || 0);
     else if (e.type === 'Return') {
       if (e.status === 'restocked') restocked += (e.qty || 0);
-      else writtenOff += (e.qty || 0);
+      else { writtenOff += (e.qty || 0); returnedOut += (e.qty || 0); }
     }
   }
-  const onConsignment = Math.max(0, shipped - consignSold - restocked - writtenOff);
+  // Publisher-side disposals never sat on consignment, so only unrestocked
+  // returns (copies that came back from a store) leave the consignment count.
+  const onConsignment = Math.max(0, shipped - consignSold - restocked - returnedOut);
   const onHand = deriveOnHand(s, book);
   const accounted = onHand + directSold + consignSold + gratuities + onConsignment + writtenOff;
   return { printed, onHand, directSold, consignSold, gratuities, onConsignment, writtenOff, unaccounted: printed - accounted };

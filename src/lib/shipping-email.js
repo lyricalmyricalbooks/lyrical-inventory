@@ -143,7 +143,9 @@ export function extractTrackingNumber(text) {
 // price as it is the postage, so an unlabelled figure is not read at all — the
 // amount stays blank and gets flagged, which is the honest answer.
 const AMOUNT_PATTERNS = Object.freeze([
-  /(?:total\s*(?:charged|paid|amount)?|amount\s*(?:charged|paid|due)|grand\s*total|order\s*total|charged)\s*[:\-]?\s*(?:CAD|USD|C\$|US\$|\$)?\s*([0-9][0-9,]*\.\d{2})/i,
+  // `total` must stand alone: "Subtotal" / "Sub-total" is the pre-tax figure, and
+  // reading it files the postage without its tax.
+  /(?<![a-z])(?<!sub[\s-]*)(?:total\s*(?:charged|paid|amount)?|amount\s*(?:charged|paid|due)|grand\s*total|order\s*total|charged)\s*[:\-]?\s*(?:CAD|USD|C\$|US\$|\$)?\s*([0-9][0-9,]*\.\d{2})/i,
   /(?:postage|shipping)\s*(?:cost|charge|total)?\s*[:\-]?\s*(?:CAD|USD|C\$|US\$|\$)?\s*([0-9][0-9,]*\.\d{2})/i,
 ]);
 

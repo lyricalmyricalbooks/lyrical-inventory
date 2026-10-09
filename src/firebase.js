@@ -151,6 +151,8 @@ window._fbDeleteReceipt = async (url) => {
 window._fbSignInWithGoogle = () => signInWithPopup(auth, googleProvider);
 window._fbSignOut = () => signOut(auth);
 window._fbOnAuthStateChanged = (cb) => onAuthStateChanged(auth, cb);
+// The signed-in user's ID token, for the Apps Script webhook (see lib/gas-auth.js).
+window._fbGetIdToken = async () => (auth.currentUser ? auth.currentUser.getIdToken() : '');
 
 // Gmail permission is incremental, separate from normal app sign-in.
 //
@@ -388,7 +390,11 @@ window._fbLoad = async (bookId) => {
     }
     const s = await get(ref(db, `lyrical/books/${bookId}`));
     return s.exists() ? s.val().data : null;
-  } catch (e) { console.error("fbLoad failed", e); return null; }
+  } catch (e) {
+    // Rethrow: a failed read is not an empty book. Returning null made callers
+    // seed defaults over the real ledger on the next save.
+    console.error("fbLoad failed", e); throw e;
+  }
 };
 
 let _fsWatchUnsubs = {};
@@ -597,10 +603,11 @@ window._fbDeleteSubmission = async (bookId, type, subId) => {
   try {
     if (window._useFirestoreForBook(bookId)) {
       await deleteDoc(doc(fs, 'submissions', bookId, type, subId));
-      return;
+      return true;
     }
     await remove(ref(db, `lyrical/submissions/${bookId}/${type}/${subId}`));
-  } catch (e) { console.error("fbDeleteSub failed", e); }
+    return true;
+  } catch (e) { console.error("fbDeleteSub failed", e); return false; }
 };
 
 // ─────────────────────────────────────────────
@@ -744,6 +751,11 @@ window._fbSaveBookOwners = async (owners) => {
     const email = String(owners[id] || '').toLowerCase().trim();
     if (email) clean[id] = email;
   });
+  // authorEmails: { <email, dots as commas>: true } — lets the settings read
+  // rules ask "is the caller an author of ANY book?" (RTDB keys can't hold '.').
+  const authorEmails = {};
+  Object.keys(clean).forEach(id => { authorEmails[clean[id].replace(/\./g, ',')] = true; });
+  if (Object.keys(authorEmails).length) clean.authorEmails = authorEmails;
   try { await set(ref(db, 'lyrical/settings/bookOwners'), clean); }
   catch (e) { console.error('fbSaveBookOwners (RTDB) failed', e); }
   try { await setDoc(doc(fs, 'settings', 'bookOwners'), clean); }
@@ -799,7 +811,11 @@ window._fbLoadCatalog = async () => {
     }
     const s = await get(ref(db, `lyrical/settings/catalog`));
     return s.exists() ? safeParse(s.val().data) : null;
-  } catch (e) { console.error("fbLoadCatalog failed", e); return null; }
+  } catch (e) {
+    // Rethrow: null means "no catalog exists"; a failed read must stay distinct
+    // so the caller never writes the default books over the real catalog.
+    console.error("fbLoadCatalog failed", e); throw e;
+  }
 };
 
 // ─────────────────────────────────────────────

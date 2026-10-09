@@ -291,6 +291,8 @@ function sheetScript({ properties = {}, geminiStatus = 200, backupStatus = 200, 
     console,
   });
   vm.runInContext(source, ctx);
+  // Caller authentication has its own tests; these exercise what runs after it.
+  vm.runInContext("verifyFirebaseCaller_ = () => ({ uid: \"p\", email: \"lyricalmyricalbooks@gmail.com\" }); requirePublisher_ = verifyFirebaseCaller_;", ctx);
   const aiCalls = (host) => calls.filter(c => c.url.startsWith(host));
   return { ctx, props, calls, written, aiCalls };
 }

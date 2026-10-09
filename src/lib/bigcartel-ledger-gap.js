@@ -27,6 +27,7 @@
 // of the ledger.
 
 import { normalizeShippingOrderNumber } from './shipping-reconciliation.js';
+import { localDay } from './calendar-day.js';
 
 const clean = (value) => String(value ?? '').trim();
 const normalizeText = (value) => clean(value).toLowerCase().replace(/\s+/g, ' ');
@@ -69,8 +70,7 @@ export function bigCartelOrderDate(order = {}) {
   const attr = order.attributes || {};
   const raw = attr.created_at || attr.placed_at || attr.date || '';
   if (!raw) return '';
-  const parsed = new Date(raw);
-  return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString().split('T')[0];
+  return localDay(raw);
 }
 
 /** Money the customer paid for the books themselves, with tax and postage taken off. */
@@ -395,6 +395,41 @@ export function buildBigCartelOrderEntry(gap = {}, {
     // The same deterministic id applyOne() derives, so the same order added on
     // a second device produces one Sheets row rather than two.
     sheetsId: 'bc-' + num.replace(/^#/, '').replace(/[^A-Za-z0-9-]/g, ''),
+  };
+}
+
+/**
+ * How an order with several different titles is recorded: one ledger row per
+ * book, each at its own copies and price, so stock and revenue land on the
+ * right book. The order's shipping and tax ride on the first row only.
+ *
+ * Returns null for an ordinary one-book order (the existing single-row path),
+ * `{ blocked: true }` when the order mixes books but a line could not be
+ * matched to the catalogue (a guess would move the wrong stock), and
+ * `{ parts: [{ bookId, qty, price }] }` otherwise. `price` is null when the
+ * storefront gave no unit price; the caller falls back to the book's list price.
+ */
+export function splitGapByBook(gap = {}) {
+  const lines = Array.isArray(gap.lines) ? gap.lines : [];
+  if (lines.length < 2) return null;
+  const matched = lines.filter(line => line && line.bookId);
+  if (new Set(matched.map(line => line.bookId)).size < 2) return null;
+  if (matched.length !== lines.length) return { blocked: true };
+  const byBook = new Map();
+  matched.forEach(line => {
+    const qty = Math.max(1, Math.floor(Number(line.qty) || 1));
+    const unit = Number(line.unitPrice);
+    const part = byBook.get(line.bookId) || { bookId: line.bookId, qty: 0, amount: 0, priced: 0 };
+    part.qty += qty;
+    if (Number.isFinite(unit) && unit > 0) { part.amount += unit * qty; part.priced += qty; }
+    byBook.set(line.bookId, part);
+  });
+  return {
+    parts: [...byBook.values()].map(part => ({
+      bookId: part.bookId,
+      qty: part.qty,
+      price: part.priced === part.qty ? Math.round((part.amount / part.qty) * 100) / 100 : null,
+    })),
   };
 }
 

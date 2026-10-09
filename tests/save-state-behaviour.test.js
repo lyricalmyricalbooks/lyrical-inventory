@@ -261,6 +261,7 @@ describe('a book that never loaded', () => {
   it('is marked as not-real-data when its load fails, and then refuses to save', async () => {
     const realLoad = app.window._fbLoad;
     app.window._fbLoad = async () => { throw new Error('unavailable'); };
+    delete app.main.states[BOOK]; // never loaded on this device
     try {
       await app.window.forceSync();
     } finally {
@@ -275,6 +276,20 @@ describe('a book that never loaded', () => {
     expect(app.queued()).toHaveLength(0);
     // JSON.stringify must never carry the marker to the cloud.
     expect(JSON.stringify(state())).not.toContain('_loadFailed');
+  });
+
+  it('keeps the book already on screen when a later reload fails', async () => {
+    recordSale();
+    const kept = state();
+    const realLoad = app.window._fbLoad;
+    app.window._fbLoad = async () => { throw new Error('unavailable'); };
+    try {
+      await app.main.loadBook(BOOK);
+    } finally {
+      app.window._fbLoad = realLoad;
+    }
+    expect(state()).toBe(kept);
+    expect(state()._loadFailed).toBeUndefined();
   });
 
   it('is not saved over the real one, not queued, and the user is told why', async () => {

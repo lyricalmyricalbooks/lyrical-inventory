@@ -220,7 +220,7 @@ export async function loadApp({ books = [makeBook()], states: initialStates = {}
   // Sign in as the publisher: runs the real startup path against the fakes.
   const authCallbacks = globalThis.__firebaseStub.authCallbacks;
   if (!authCallbacks.length) throw new Error('load-app: main.js never subscribed to auth state');
-  await authCallbacks[authCallbacks.length - 1]({ email: PUBLISHER_EMAIL, uid: 'publisher' });
+  await authCallbacks[authCallbacks.length - 1]({ email: PUBLISHER_EMAIL, uid: 'publisher', emailVerified: true });
   await vi.waitFor(() => {
     for (const b of books) if (!main.states[b.id]) throw new Error(`book ${b.id} not loaded yet`);
   }, { timeout: 10000, interval: 10 });

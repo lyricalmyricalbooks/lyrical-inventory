@@ -13,6 +13,8 @@ initPhoneWorkspace(document.getElementById('pw-app'));
 // Body, not #pw-app: the pop-up windows are siblings of the app shell.
 initPhoneLayouts(document.body);
 import './firebase.js';
+import { installGasAuth } from './lib/gas-auth.js';
+installGasAuth(() => (typeof window._fbGetIdToken === 'function' ? window._fbGetIdToken() : ''));
 import { registerSW } from 'virtual:pwa-register';
 import { canonicalExpenseCategory } from './lib/expense-categories.js';
 import { calcArtistEarnings, tierEffectiveCap, describePayout, payoutRequestCovered, planNetPayout, payoutNetted, unpaidSalesSummary } from './lib/earnings.js';
@@ -22,7 +24,7 @@ import { createStripePriceAndLink } from './lib/stripe-payment-link.js';
 import { createStripeRateResolver, stripeOrderNumber } from './lib/stripe-sale-defaults.js';
 import { calculateBreakEven, breakEvenTierMove, applyBreakEvenTierMove, readProductionCostInput } from './lib/breakeven.js';
 import { computeTallyRowHeights, computeQrCardSize, estimateTallyPages, estimateQrPages } from './lib/print-sheet-layout.js';
-import { escapeHtml } from './lib/html.js';
+import { escapeHtml, safeHttpUrl } from './lib/html.js';
 import { needsSettleUp, settleUpModel, settleUpHeadline, settleUpHtml, settlementPayoutSummary } from './lib/settle-up-view.js';
 import { normalizeLetterhead, renderLetterhead } from './lib/letterhead.js';
 import { ensureXlsx, loadExternalScript } from './lib/external-scripts.js';
@@ -290,6 +292,7 @@ import {
   setSelectCurrency,
   PICKER_CURRENCIES,
 } from './lib/money.js';
+import { localDay, localDayPlus } from './lib/calendar-day.js';
 import {
   buildPartPaymentNote,
   describeInvoicePaymentReversal,
@@ -1167,14 +1170,16 @@ export function isTestBook(b) {
   if (!b) return false;
   const idLower = String(b.id || '').toLowerCase().trim();
   const titleLower = String(b.title || '').toLowerCase().trim();
-  return idLower === 'test1' || idLower === 'testpage' || idLower.includes('test') ||
-    titleLower === 'test1' || titleLower === 'testpage' || titleLower.includes('test');
+  // Exact test ids (or an explicit flag) only — a substring match hid real
+  // books such as "Greatest Hits" or "Contest" from reports and the picker.
+  return b.isTest === true || idLower === 'test1' || idLower === 'testpage' ||
+    titleLower === 'test1' || titleLower === 'testpage';
 }
 
 export function isTestBookId(bid) {
   if (!bid) return false;
   const str = String(bid).toLowerCase().trim();
-  if (str === 'test1' || str === 'testpage' || str.includes('test')) return true;
+  if (str === 'test1' || str === 'testpage') return true;
   if (BOOKS && BOOKS[bid]) return isTestBook(BOOKS[bid]);
   if (BOOKS) {
     const found = Object.values(BOOKS).find(b => (b.id && String(b.id).toLowerCase() === str) || (b.title && String(b.title).toLowerCase() === str));
@@ -1235,7 +1240,15 @@ function ownersFromBooks() {
   return owners;
 }
 
+let catalogLoadFailed = false;
+
 export function saveCatalogWithDeletions() {
+  // The last catalog read failed, so BOOKS may be the built-in defaults rather
+  // than the real catalog. Writing it would overwrite the real one.
+  if (catalogLoadFailed) {
+    if (typeof showToast === 'function') showToast('⚠ Not saving — the book catalog never loaded. Reload first.', 'err', 6000);
+    return Promise.resolve();
+  }
   // Keep the rules-readable ownership map in step with the catalog so the
   // tightened security rules can verify author→book ownership. Publisher-only —
   // authors can't write settings (rules reject), so skip to avoid noisy errors.
@@ -1255,6 +1268,7 @@ const DEFAULT_BOOKS = {
 async function loadCatalog() {
   try {
     const stored = await window._fbLoadCatalog(); // handles FS → RTDB fallback internally
+    catalogLoadFailed = false;
     if (stored) {
       deletedDefaultIds = Array.isArray(stored._deletedDefaults) ? stored._deletedDefaults.slice() : [];
       posExtraBooks = (stored._posExtra && typeof stored._posExtra === 'object') ? { ...stored._posExtra } : {};
@@ -1281,11 +1295,17 @@ async function loadCatalog() {
     }
   } catch (e) {
     console.error('Critical error loading catalog', e);
-    BOOKS = { ...DEFAULT_BOOKS };
-    BOOK_LIST = Object.values(BOOKS);
-    normalizeTestBookAccents();
-    deletedDefaultIds = [];
-    posExtraBooks = {};
+    // A failed read is not an empty catalog: never save from here. Keep any
+    // catalog already in memory; only fall back to the defaults on a cold start.
+    catalogLoadFailed = true;
+    if (!BOOKS || !Object.keys(BOOKS).length) {
+      BOOKS = { ...DEFAULT_BOOKS };
+      BOOK_LIST = Object.values(BOOKS);
+      normalizeTestBookAccents();
+      deletedDefaultIds = [];
+      posExtraBooks = {};
+    }
+    if (typeof showToast === 'function') showToast('⚠ Could not load the book catalog — showing what is saved on this device. Reload once you are back online.', 'err', 7000);
   }
 }
 
@@ -2173,9 +2193,24 @@ async function saveBookFromModal() {
   const id = rawId.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
   await syncCatalog();
+  if (catalogLoadFailed) {
+    showToast('⚠ Could not reach the catalog, so nothing was saved. Check your connection and try again.', 'err', 5000);
+    return;
+  }
+
+  // An id that already belongs to a different book must never be overwritten
+  // (adding "The Hound" twice, or renaming one book onto another's id).
+  if (BOOKS[id] && editingBookId !== id) {
+    showToast(`⚠ A book with the id "${id}" already exists — choose a different Book ID.`, 'err', 5000);
+    switchBookModalTab('general');
+    return;
+  }
 
   const currentBook = BOOKS[editingBookId] || BOOKS[id] || {};
+  const thresholdInput = parseInt($('nb-thresh').value, 10);
   const book = {
+    // Start from the stored book so fields this form doesn't list survive an edit.
+    ...currentBook,
     id,
     title: $('nb-title').value.trim(),
     author: $('nb-author').value.trim(),
@@ -2183,16 +2218,16 @@ async function saveBookFromModal() {
     maxPrint: parseInt($('nb-max').value) || 100,
     listPrice: parseFloat($('nb-price').value) || 40,
     currency: $('nb-cur').value || '€',
-    threshold: parseInt($('nb-thresh').value) || 10,
+    threshold: Number.isFinite(thresholdInput) && thresholdInput >= 0 ? thresholdInput : 10,
     productionCost: parseFloat($('nb-prod').value) || 0,
     pubGratuity: parseInt($('nb-pub-grat')?.value) || 0,
     authorGratuity: parseInt($('nb-author-grat')?.value) || 0,
     paymentLink: $('nb-payment-link') ? $('nb-payment-link').value.trim() || 'https://paypal.me/lyricalmyricalbooks' : currentBook.paymentLink || 'https://paypal.me/lyricalmyricalbooks',
-    stripeLink: $('nb-paylink').value.trim() || currentBook.stripeLink || '',
+    stripeLink: $('nb-paylink').value.trim(),
     accent: $('nb-accent').value,
     accentBg: hexToRgba($('nb-accent').value, 0.1),
     urlParam: currentBook.urlParam || id,
-    authorEmail: ($('nb-pw').value || '').toLowerCase().trim() || currentBook.authorEmail || '',
+    authorEmail: ($('nb-pw').value || '').toLowerCase().trim(),
     profitTiers: currentBook.profitTiers || [],
     acceptedMethods: currentBook.acceptedMethods || ['stripe', 'paypal', 'interac', 'cash_card'],
     useGlobalMethods: currentBook.useGlobalMethods ?? true,
@@ -2316,8 +2351,8 @@ function renderCatalogList() {
   const testContainer = $('test-catalog-list');
 
   // Find test books (e.g. title or id contains "test")
-  const testBooks = BOOK_LIST.filter(b => b.id.toLowerCase().includes('test') || b.title.toLowerCase().includes('test'));
-  const regularBooks = BOOK_LIST.filter(b => !b.id.toLowerCase().includes('test') && !b.title.toLowerCase().includes('test'));
+  const testBooks = BOOK_LIST.filter(isTestBook);
+  const regularBooks = BOOK_LIST.filter(b => !isTestBook(b));
 
   if (regularBooks.length === 0) {
     container.innerHTML = `
@@ -2768,7 +2803,8 @@ function triggerCardAnimations() {
 // normalizeCurrencyCode, fmt, fmtNum, fmtD, getBookCurrencyCode,
 // paymentSummary, buildPaymentMeta) are imported from ./lib/money.js
 
-export const today = () => new Date().toISOString().split('T')[0];
+// LOCAL calendar day, not the UTC one (which is tomorrow on a Canadian evening).
+export const today = () => localDay();
 
 export const formatDateTime = (isoString) => {
   if (!isoString) return '';
@@ -3208,7 +3244,7 @@ export let notifyUrl = localStorage.getItem('lm-notify-url') || '';
 // The Apps Script `scriptVersion` the client expects. Bump this (and the value
 // in apps-script/Code.gs) whenever Code.gs gains behaviour that needs a fresh
 // deploy — the connection card flags any older deployed version as outdated.
-export const EXPECTED_SCRIPT_VERSION = 'v52';
+export const EXPECTED_SCRIPT_VERSION = 'v53';
 // What the connected spreadsheet last told us it was running. Null until a
 // version check has actually answered — an unknown version is not a mismatch,
 // so the To-do list stays quiet rather than inventing a problem.
@@ -3906,6 +3942,14 @@ export async function loadBook(bookId) {
     // with no sales in it.
     console.error('loadBook failed', bookId, e);
     reportClientError('load-book-failed', e && e.message, { stack: e && e.stack });
+    const priorState = states[bookId];
+    if (priorState && !priorState._loadFailed) {
+      // A reload that failed leaves the book already on screen untouched; the
+      // real data is still there, so don't swap it for an empty ledger.
+      setSyncState('error', '<b>Firestore</b> · reload failed');
+      showToast(`⚠ Could not refresh ${(BOOKS[bookId] && BOOKS[bookId].title) || bookId} — still showing the last copy loaded.`, 'err', 5000);
+      return;
+    }
     states[bookId] = defaultState(BOOKS[bookId]);
     // Mark the state so a later save can tell it apart from a genuinely empty
     // book. Non-enumerable so it never reaches Firestore via JSON.stringify.
@@ -5290,10 +5334,12 @@ function showBookChoice(tabName) {
 function updateHeader() {
   if (activeBook === 'all') {
     // Sum all books in a single pass (was three separate reduce iterations).
-    let totalStock = 0, totalRev = 0, totalCon = 0;
-    Object.values(states).forEach(s => {
+    let totalStock = 0, totalCon = 0;
+    const revByCur = new Map(); // revenue is only summed within one currency
+    Object.entries(states).forEach(([bid, s]) => {
       totalStock += (s.stock || 0);
-      totalRev += recognizedRevenueOf(s);
+      const curSym = (BOOKS[bid] && BOOKS[bid].currency) || '';
+      revByCur.set(curSym, (revByCur.get(curSym) || 0) + recognizedRevenueOf(s));
       // ⚡ Bolt Optimization: Use for-loop instead of reduce to avoid function allocation
       let storesCon = 0;
       for (let i = 0; i < s.stores.length; i++) {
@@ -5302,7 +5348,7 @@ function updateHeader() {
       totalCon += storesCon;
     });
     animateCountValue('h-stock', totalStock);
-    animateCountValue('h-revenue', '~' + Math.round(totalRev).toLocaleString());
+    animateCountValue('h-revenue', [...revByCur].map(([c, v]) => fmtWhole(v, c)).join(' + ') || '0');
     animateCountValue('h-consigned', totalCon);
   } else {
     const s = getState(), book = getBook();
@@ -7421,8 +7467,9 @@ function renderExpensesSummaryBlock(s, cur) {
       const payBtn = $('d-exp-pay-btn');
       const payHint = $('d-exp-pay-hint');
       if (payBtn) {
-        if (artistLink) {
-          payBtn.href = artistLink.startsWith('http') ? artistLink : 'https://' + artistLink;
+        const safeLink = safeHttpUrl(artistLink);
+        if (safeLink) {
+          payBtn.href = safeLink;
           payBtn.style.display = '';
           if (payHint) payHint.textContent = 'Opens payment link in a new tab';
         } else {
@@ -8455,7 +8502,17 @@ function findArtistPayout(bookId, payoutId) {
 // balance and every downstream total are denominated in); when the money moved
 // in another currency the cash that actually changed hands is kept alongside it
 // in `payment`, exactly as a foreign sale records it.
+// A double tap on Save used to record the payout twice: the second tap read the
+// still-filled form while the first was awaiting its save.
+const artistPayoutSaving = new Set();
 async function saveArtistPayout(bookId) {
+  if (artistPayoutSaving.has(bookId)) return;
+  artistPayoutSaving.add(bookId);
+  try { return await saveArtistPayoutNow(bookId); }
+  finally { artistPayoutSaving.delete(bookId); }
+}
+
+async function saveArtistPayoutNow(bookId) {
   const book = BOOKS[bookId];
   const s = states[bookId];
   if (!book || !s) return;
@@ -8759,9 +8816,9 @@ export function scheduleRender() {
 
 // ── Ready-to-send outbox ───────────────────────────────────────────────────
 
-function recordOrder(num, chan, qty, price, notes, payment = null) {
-  const enteredBy = isAuthor() ? 'Artist' : 'Publisher';
-  writeOrderToLedger(activeBook, { num, chan, qty, price, notes, payment, enteredBy });
+function recordOrder(num, chan, qty, price, notes, payment = null, { date, enteredBy: enteredByOverride } = {}) {
+  const enteredBy = enteredByOverride || (isAuthor() ? 'Artist' : 'Publisher');
+  writeOrderToLedger(activeBook, { num, chan, qty, price, notes, payment, enteredBy, date });
   renderHist(); updateDash();
 }
 
@@ -9848,7 +9905,7 @@ function normalizeGmailOrder(o, book) {
   if (rawDate) {
     const parsedDt = new Date(rawDate);
     if (!isNaN(parsedDt.getTime())) {
-      normalizedDate = parsedDt.toISOString().split('T')[0];
+      normalizedDate = localDay(rawDate); // bare dates pass through; timestamps -> local day
     }
   }
 
@@ -10389,10 +10446,20 @@ async function handleImportFile(event) {
           const d = xlsx.SSF.parse_date_code(date);
           parsedDate = `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`;
         }
-        return { num: String(num || 'IMP-' + Date.now()), date: parsedDate, chan: String(chan), qty: Math.abs(Math.round(qty)), price, notes: String(notes) };
+        return { num: String(num || ''), date: parsedDate, chan: String(chan), qty: Math.abs(Math.round(qty)), price, notes: String(notes) };
       };
 
       _importRows = rows.map(colMap).filter(r => r.qty > 0);
+      // Blank order numbers get a deterministic id (same row content => same id), so
+      // re-importing the same file is caught by the duplicate check. Identical rows within
+      // one file are told apart by an occurrence counter.
+      const seenBlank = {};
+      _importRows.forEach(r => {
+        if (r.num) return;
+        const key = `${r.date}|${r.chan}|${r.qty}|${r.price}|${r.notes}`;
+        seenBlank[key] = (seenBlank[key] || 0) + 1;
+        r.num = `IMP-${r.date}-${r.chan}-${r.qty}-${r.price}-${seenBlank[key]}`.replace(/\s+/g, '');
+      });
 
       if (!_importRows.length) { showToast('Could not parse any valid rows', 'warn'); return; }
 
@@ -10443,6 +10510,7 @@ function confirmImport() {
   // Add in reverse so newest ends up at top after unshift
   [..._importRows].reverse().forEach(r => {
     if (existingNums.has(r.num)) { skipped++; return; } // skip duplicates
+    existingNums.add(r.num); // also catches repeats inside the same file
     s.stock = Math.max(0, s.stock - r.qty);
     s.sold += r.qty;
     s.revenue += r.qty * r.price;
@@ -10593,7 +10661,12 @@ function submitManualPublisherRoute(directToArtist, num, chan, qty, price, book,
 async function submitManual(ev) {
   return withButtonLoading(ev, 'Saving…', async () => {
     const book = getBook(), qty = parseInt($('m-qty').value) || 1;
-    const rawPrice = parseFloat($('m-price').value) || book.listPrice;
+    const typedPrice = parseFloat($('m-price').value);
+    const rawPrice = Number.isFinite(typedPrice) ? typedPrice : book.listPrice;
+    if (qty < 1 || rawPrice < 0) {
+      showToast('⚠ Quantity must be at least 1 and price cannot be negative', 'warn');
+      return;
+    }
     const num = $('m-num').value.trim() || 'MAN-' + Date.now(), chan = $('m-chan').value, notes = $('m-notes').value.trim();
     const paymentType = $('m-payment-type').value;
     if (!paymentType) {
@@ -10641,12 +10714,16 @@ async function submitManual(ev) {
 // is still awaiting the Firestore delete would record the same sale/expense
 // twice (inventory off, revenue double-counted). Keys are `${type}:${subKey}`.
 const _submissionsInFlight = new Set();
+// Submissions already written to the ledger whose queue entry could not be removed;
+// refuse to approve them a second time this session.
+const _approvedSubmissionKeys = new Set();
 
 window.approveSubmission = async function (type, subKey) {
   const queue = window.authorSubmissions[activeBook]?.[type] || {};
   if (!queue[subKey]) return;
   const flightKey = `${activeBook}:${type}:${subKey}`;
   if (_submissionsInFlight.has(flightKey)) return;
+  if (_approvedSubmissionKeys.has(flightKey)) { showToast('⚠ Already added to the ledger - it just could not be cleared from the queue. Reload and reject it.', 'warn'); return; }
   _submissionsInFlight.add(flightKey);
   try {
     const raw = JSON.parse(queue[subKey].data);
@@ -10657,8 +10734,10 @@ window.approveSubmission = async function (type, subKey) {
 
       s.expenses.unshift(raw);
       saveState(activeBook);
-      await window._fbDeleteSubmission(activeBook, type, subKey);
-      showToast('✓ Expense approved and added to ledger');
+      if (await window._fbDeleteSubmission(activeBook, type, subKey) === false) {
+        _approvedSubmissionKeys.add(flightKey);
+        showToast('⚠ Expense added, but it could not be cleared from the pending list. Do not approve it again.', 'warn');
+      } else showToast('✓ Expense approved and added to ledger');
       updateDash();
       switchTab('dashboard');
       setTimeout(() => {
@@ -10668,7 +10747,7 @@ window.approveSubmission = async function (type, subKey) {
     } else if (type === 'sales') {
       let pendingTransfer = false;
       if (isDirectToArtistSale(raw)) {
-        recordOrderPendingTransfer(raw.num, raw.chan, raw.qty, raw.price, raw.notes, raw.payment);
+        recordOrderPendingTransfer(raw.num, raw.chan, raw.qty, raw.price, raw.notes, raw.payment, raw.date);
         pendingTransfer = true;
         const newest = getState().artistTransfers.at(-1);
         if (newest) {
@@ -10676,10 +10755,12 @@ window.approveSubmission = async function (type, subKey) {
           mintArtistTransferPayLink(bookId, newest.id, { quiet: true }).then(() => mintArtistTransferBundleLink(bookId));
         }
       } else {
-        recordOrder(raw.num, raw.chan, raw.qty, raw.price, raw.notes, raw.payment);
+        recordOrder(raw.num, raw.chan, raw.qty, raw.price, raw.notes, raw.payment, { date: raw.date, enteredBy: 'Artist' });
       }
-      await window._fbDeleteSubmission(activeBook, type, subKey);
-      showToast('✓ Sale approved and added to ledger');
+      if (await window._fbDeleteSubmission(activeBook, type, subKey) === false) {
+        _approvedSubmissionKeys.add(flightKey);
+        showToast('⚠ Sale added, but it could not be cleared from the pending list. Do not approve it again.', 'warn');
+      } else showToast('✓ Sale approved and added to ledger');
       updateDash();
       if (pendingTransfer) {
         switchTab('dashboard');
@@ -10711,8 +10792,9 @@ window.rejectSubmission = async function (type, subKey) {
   }
 }
 
-function recordOrderPendingTransfer(num, chan, qty, price, notes, payment = null) {
+function recordOrderPendingTransfer(num, chan, qty, price, notes, payment = null, date = null) {
   const s = getState(), book = getBook();
+  const when = date || today();
   deductSaleFromStockBreakdown(s, qty, true);
   // Reduce stock and count as sold, but do NOT add to revenue yet
   s.stock = Math.max(0, s.stock - qty);
@@ -10724,16 +10806,16 @@ function recordOrderPendingTransfer(num, chan, qty, price, notes, payment = null
   // Add to history with pending flag. directToArtist marks this as cash the
   // artist collected directly (these only ever come from direct-to-artist sales).
   const sheetsId = makeEventId();
-  s.hist.unshift({ num, chan, qty, price, after: s.stock, notes: updatedNotes, date: today(), artistPending: true, directToArtist: true, payment, sheetsId, cur: bookCurrencyCode(book) });
+  s.hist.unshift({ num, chan, qty, price, after: s.stock, notes: updatedNotes, date: when, artistPending: true, directToArtist: true, payment, sheetsId, cur: bookCurrencyCode(book) });
   // Add to artistTransfers queue (share sheetsId so receipt updates the same sheet row)
-  s.artistTransfers.push({ id: Date.now(), num, chan, qty, price, total: qty * price, notes: updatedNotes, date: today(), payment, sheetsId, cur: bookCurrencyCode(book) });
+  s.artistTransfers.push({ id: Date.now(), num, chan, qty, price, total: qty * price, notes: updatedNotes, date: when, payment, sheetsId, cur: bookCurrencyCode(book) });
   recomputeAfters(s, book);
   renderHist(); updateDash(); saveState(activeBook);
   const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
   const totalNative = qty * price;
   const cadEquiv = cadEquivalentForSale({ nativeCurrency: nativeCur, totalNative, payment });
   syncToSheets({
-    type: 'order', book: book.title, date: today(), num, chan, qty, price, total: totalNative, stockAfter: s.stock, notes: updatedNotes + ' [PENDING ARTIST TRANSFER]',
+    type: 'order', book: book.title, date: when, num, chan, qty, price, total: totalNative, stockAfter: s.stock, notes: updatedNotes + ' [PENDING ARTIST TRANSFER]',
     sheetsId,
     currency: nativeCur,
     paymentCurrency: normalizeCurrencyCode(payment?.currency || nativeCur, 'CAD'),
@@ -11660,10 +11742,9 @@ function renderPendingExpenses() {
   if (!sect) return;
   if (!pending.length) { sect.style.display = 'none'; return; }
   sect.style.display = '';
-  const artistLink = (s.artistPaymentLink || '').trim();
-  const fullLink = artistLink ? (artistLink.startsWith('http') ? artistLink : 'https://' + artistLink) : '';
+  const fullLink = safeHttpUrl(s.artistPaymentLink);
   const payHtml = fullLink
-    ? `<a href="${fullLink}" target="_blank" class="btn sm" style="text-decoration:none;background:var(--green-bg);color:var(--green);border-color:rgba(42,99,72,.2);">↗ Payment link</a>`
+    ? `<a href="${escapeHtml(fullLink)}" target="_blank" rel="noopener" class="btn sm" style="text-decoration:none;background:var(--green-bg);color:var(--green);border-color:rgba(42,99,72,.2);">↗ Payment link</a>`
     : isAuthor()
       ? `<button type="button" class="btn sm gold" onclick="goToPayLinkSetup()" title="Add the link your publisher pays you back through">Set up your payment link →</button>`
       : `<button type="button" class="btn sm outline" onclick="askAuthorForPayLink()" title="Send the author simple steps to add the link you'll pay them back through">✉ Ask author to add payment link</button>`;
@@ -12001,7 +12082,7 @@ function addStore() {
     { id: 'ns-rate', test: v => { if (v.trim() === '') return true; const n = parseFloat(v); return !isNaN(n) && n >= 0 && n <= 100; }, msg: 'Commission must be between 0 and 100' },
   ])) return;
   const name = $('ns-name').value.trim();
-  getState().stores.push({ id: Date.now(), name, contact: $('ns-contact').value.trim(), email: $('ns-email').value.trim(), phone: $('ns-phone').value.trim(), address: $('ns-address').value.trim(), city: $('ns-city').value.trim(), region: $('ns-region').value.trim(), postal: $('ns-postal').value.trim(), country: $('ns-country').value.trim(), website: $('ns-website').value.trim(), terms: $('ns-terms').value.trim(), rate: parseFloat($('ns-rate').value) || 40, notes: $('ns-notes').value.trim(), sent: 0, sold: 0, returned: 0, outstanding: 0, amountOwed: 0 });
+  getState().stores.push({ id: Date.now(), name, contact: $('ns-contact').value.trim(), email: $('ns-email').value.trim(), phone: $('ns-phone').value.trim(), address: $('ns-address').value.trim(), city: $('ns-city').value.trim(), region: $('ns-region').value.trim(), postal: $('ns-postal').value.trim(), country: $('ns-country').value.trim(), website: $('ns-website').value.trim(), terms: $('ns-terms').value.trim(), rate: (() => { const r = parseFloat($('ns-rate').value); return Number.isFinite(r) ? r : 40; })(), notes: $('ns-notes').value.trim(), sent: 0, sold: 0, returned: 0, outstanding: 0, amountOwed: 0 });
   closeM('add-store');
   clearAddStoreForm();
   renderStores(); updateDash(); saveState(activeBook); showToast('✓ Store added');
@@ -12096,7 +12177,7 @@ function confirmEditStore() {
     { id: 'es-rate', test: v => { if (v.trim() === '') return true; const n = parseFloat(v); return !isNaN(n) && n >= 0 && n <= 100; }, msg: 'Commission must be between 0 and 100' },
   ])) return;
   const name = $('es-name').value.trim();
-  st.name = name; st.contact = $('es-contact').value.trim(); st.email = $('es-email').value.trim(); st.phone = $('es-phone').value.trim(); st.address = $('es-address').value.trim(); st.city = $('es-city').value.trim(); st.region = $('es-region').value.trim(); st.postal = $('es-postal').value.trim(); st.country = $('es-country').value.trim(); st.website = $('es-website').value.trim(); st.terms = $('es-terms').value.trim(); st.rate = parseFloat($('es-rate').value) || st.rate; st.notes = $('es-notes').value.trim();
+  st.name = name; st.contact = $('es-contact').value.trim(); st.email = $('es-email').value.trim(); st.phone = $('es-phone').value.trim(); st.address = $('es-address').value.trim(); st.city = $('es-city').value.trim(); st.region = $('es-region').value.trim(); st.postal = $('es-postal').value.trim(); st.country = $('es-country').value.trim(); st.website = $('es-website').value.trim(); st.terms = $('es-terms').value.trim(); { const r = parseFloat($('es-rate').value); if (Number.isFinite(r)) st.rate = r; } st.notes = $('es-notes').value.trim();
   { const bookCode = getBookCurrencyCode(getBook()), code = $('es-currency') ? $('es-currency').value : ''; if (code && code !== bookCode) st.currency = code; else delete st.currency; }
   closeM('edit-store'); renderStores(); updateDash(); saveState(activeBook); showToast('✓ Store updated');
 }
@@ -12108,7 +12189,7 @@ function confirmSend() {
     { id: 'send-qty', test: v => (parseInt(v) || 0) <= s.stock, msg: `Only ${s.stock} in stock` },
     { id: 'send-rate', test: v => { const n = parseFloat(v); return !isNaN(n) && n >= 0 && n <= 100; }, msg: 'Commission must be between 0 and 100' },
   ])) return;
-  const qty = parseInt($('send-qty').value) || 0, date = $('send-date').value, rate = parseFloat($('send-rate').value) || st.rate, notes = $('send-notes').value.trim();
+  const qty = parseInt($('send-qty').value) || 0, date = $('send-date').value, rate = Number.isFinite(parseFloat($('send-rate').value)) ? parseFloat($('send-rate').value) : st.rate, notes = $('send-notes').value.trim();
   s.stock -= qty; st.sent += qty; st.outstanding += qty;
   const sheetsId = makeEventId();
   s.ledger.push({ id: Date.now(), storeId: st.id, storeName: st.name, type: 'Shipment', date, qty, rate, amountDue: 0, paid: 'n/a', notes, status: 'sent', sheetsId });
@@ -12397,7 +12478,7 @@ function confirmReturn() {
 function settleLedgerSalePaid(s, e) {
   if (!e || e.status !== 'pending' || e.voided) return false;
   const st = (s.stores || []).find(x => x.id === e.storeId);
-  if (st) st.amountOwed = Math.max(0, (st.amountOwed || 0) - (e.amountDue || 0));
+  if (st) st.amountOwed = roundCents(Math.max(0, (st.amountOwed || 0) - (e.amountDue || 0)));
   e.status = 'paid'; e.paid = 'paid';
   const h = histMirrorForLedger(s, e);
   if (h) h.paidState = 'paid';
@@ -13093,21 +13174,28 @@ function renderInvoices() {
 
   // Mark overdue automatically (visual only, not persisted)
   const todayStr = today();
+  // Never written onto the stored invoice (it would be saved and outlive a paid/cancelled status).
+  const overdueIds = new Set();
   for (const inv of invs) {
-    if (inv.status === 'sent' && inv.dueDate && inv.dueDate < todayStr) inv._overdue = true;
+    delete inv._overdue; // clear any flag an older version saved
+    if (inv.status === 'sent' && inv.dueDate && inv.dueDate < todayStr) overdueIds.add(inv.id);
   }
 
   // Summary line
   // ⚡ Bolt Optimization: Calculate outstanding, paid, and drafts in a single pass instead of iterating over the `invs` array three times.
-  let outstanding = 0, paid = 0, drafts = 0, shared = 0;
+  // Totals are kept per currency: an invoice in another currency is never added into the book's.
+  const outByCur = new Map(), paidByCur = new Map();
+  let drafts = 0, shared = 0;
+  const addTo = (m, i) => { const c = i.currency || cur; m.set(c, (m.get(c) || 0) + (i.total || 0)); };
   for (const r of rows) {
     const i = r.inv;
     if (r.shared) shared++;
-    if (i.status === 'sent') outstanding += (i.total || 0);
-    else if (i.status === 'paid') paid += (i.total || 0);
+    if (i.status === 'sent') addTo(outByCur, i);
+    else if (i.status === 'paid') addTo(paidByCur, i);
     else if (i.status === 'draft') drafts++;
   }
-  summary.textContent = `${invs.length} total · ${fmt(outstanding, cur)} outstanding · ${fmt(paid, cur)} collected${drafts ? ` · ${drafts} draft${drafts > 1 ? 's' : ''}` : ''}${shared ? ` · ${shared} shared with another title` : ''}`;
+  const sumText = m => m.size ? [...m].map(([c, v]) => fmt(v, c)).join(' + ') : fmt(0, cur);
+  summary.textContent = `${invs.length} total · ${sumText(outByCur)} outstanding · ${sumText(paidByCur)} collected${drafts ? ` · ${drafts} draft${drafts > 1 ? 's' : ''}` : ''}${shared ? ` · ${shared} shared with another title` : ''}`;
 
   if (!invs.length) {
     list.innerHTML = '<div class="empty-state"><div class="e-icon">📄</div>No invoices yet. Click <strong>+ New invoice</strong> to bill a consignment store — or anyone else who owes you.<div style="margin-top:12px;"><button class="btn gold" onclick="openCreateInvoice()">+ New invoice</button></div></div>';
@@ -13115,8 +13203,8 @@ function renderInvoices() {
   }
 
   list.innerHTML = rows.map(({ inv, ownerBookId }) => {
-    const statusLabel = inv._overdue ? 'OVERDUE' : (inv.status || 'draft').toUpperCase();
-    const statusCls = inv._overdue ? 'overdue' : (inv.status || 'draft');
+    const statusLabel = overdueIds.has(inv.id) ? 'OVERDUE' : (inv.status || 'draft').toUpperCase();
+    const statusCls = overdueIds.has(inv.id) ? 'overdue' : (inv.status || 'draft');
     const due = inv.dueDate ? fmtD(inv.dueDate) : '—';
     const stripeChip = isDynamicStripeLink(inv)
       ? `<span class="chip-status gold sm" title="Dynamic Stripe Checkout · exact amount">💳 Stripe</span>`
@@ -13260,8 +13348,7 @@ function openCreateInvoice(storeId, editingId, { copyFrom = null } = {}) {
     $('inv-num').value = invoiceCtx.autoNum;
     $('inv-date').value = today();
     // default due date = 30 days from today
-    const d = new Date(); d.setDate(d.getDate() + 30);
-    $('inv-due').value = d.toISOString().split('T')[0];
+    $('inv-due').value = localDayPlus(30);
     // Percent first: it is the discount publishers reach for most (a store's
     // trade discount), so the box is ready for "40" without a mode change.
     setInvoiceDiscountUI('percent', 0);
@@ -13960,6 +14047,10 @@ function saveInvoice(status) {
       // would let the same bill be chased a second time as if for the first.
       if (Array.isArray(old.reminders) && old.reminders.length) payload.reminders = old.reminders;
       if (old.remindAfter) payload.remindAfter = old.remindAfter;
+      // Stripe settlement stamps: without them a later refund/chargeback can't be matched
+      // to this invoice, and the sweep would re-note a short payment it already recorded.
+      if (old.stripeChargeId) payload.stripeChargeId = old.stripeChargeId;
+      if (Array.isArray(old.stripePartPayments) && old.stripePartPayments.length) payload.stripePartPayments = old.stripePartPayments;
       // preserve Stripe link only if amount/currency unchanged
       const amountChanged = (Number(old.total || 0).toFixed(2) !== Number(payload.total || 0).toFixed(2))
         || (old.currency !== payload.currency);
@@ -13968,6 +14059,8 @@ function saveInvoice(status) {
       } else if (old.stripe) {
         // amount changed → invalidate old link (will deactivate below)
         oldStripeLinkId = old.stripe.paymentLinkId;
+        // The edit form was prefilled with the old Stripe URL; don't keep printing the dead link.
+        if (payload.paymentLink && payload.paymentLink === (old.stripe.url || old.paymentLink)) payload.paymentLink = '';
       }
       s.invoices[idx] = payload;
     } else {
@@ -14098,6 +14191,8 @@ async function deleteInvoice() {
     if (it._ledgerId) stampLedgerInvoiceLink(s, it._ledgerId, null);
   }
   s.invoices = (s.invoices || []).filter(i => i.id !== invoiceCtx.editingId);
+  // A deleted invoice must not stay payable through its Stripe link.
+  if (inv.status !== 'paid' && inv.stripe?.paymentLinkId) deactivateStripePaymentLink(inv.stripe.paymentLinkId);
   saveState(bookId);
   closeM('invoice-edit');
   renderInvoices();
@@ -15287,10 +15382,14 @@ function saveLedgerEntryEdit(s, book) {
       // it from the old amountDue so quantity/rate-only edits behave as before.
       const derivedPrice = oldDue > 0 ? (oldDue / (e.qty * (1 - e.rate / 100))) : book.listPrice;
       const typedPrice = parseFloat($('edit-l-price') ? $('edit-l-price').value : '');
-      const salePrice = (!isNaN(typedPrice) && typedPrice > 0) ? typedPrice : derivedPrice;
-      const newDue = newQty * salePrice * (1 - newRate / 100);
+      // The field is pre-filled with the 2-decimal rounding of derivedPrice. If it still
+      // shows that, the user didn't touch the price: keep the exact derived one so a
+      // notes/date/qty-only edit doesn't drift the amount by a cent.
+      const priceUntouched = !isNaN(typedPrice) && typedPrice === Number((derivedPrice || 0).toFixed(2));
+      const salePrice = (!isNaN(typedPrice) && typedPrice > 0 && !priceUntouched) ? typedPrice : derivedPrice;
+      const newDue = roundCents(newQty * salePrice * (1 - newRate / 100));
       if (e.paid === 'pending' && st) {
-        st.amountOwed = Math.max(0, st.amountOwed - oldDue + newDue);
+        st.amountOwed = roundCents(Math.max(0, st.amountOwed - oldDue + newDue));
       }
       s.revenue = Math.max(0, s.revenue - oldDue + newDue);
       if (s.chStats['Consignment']) {
@@ -15669,17 +15768,28 @@ function syncHistoryVoidDeletion(h, isVoided) {
  * hand-voided one is.
  */
 function voidHistEntry(s, book, h) {
+  // A held-cash (direct-to-artist) sale never added revenue; it only sits in
+  // the pending-transfer queue. Pull that transfer so the artist is not left
+  // owing a cut (and a later "received" can't add revenue) for a voided sale.
+  let pendingRev = false;
+  if (h.artistPending) {
+    pendingRev = true;
+    const ti = (s.artistTransfers || []).findIndex(x => (h.sheetsId && x.sheetsId === h.sheetsId) || (x.num === h.num && x.qty === h.qty));
+    if (ti !== -1) h.voidedTransfer = s.artistTransfers.splice(ti, 1)[0];
+  }
   s.stock += h.qty;
   if (!h.gratuity) {
     s.sold = Math.max(0, s.sold - h.qty);
-    s.revenue = Math.max(0, s.revenue - h.qty * h.price);
+    if (!pendingRev) s.revenue = Math.max(0, s.revenue - h.qty * h.price);
   }
   if (s.chStats[h.chan]) {
     s.chStats[h.chan].txns = Math.max(0, s.chStats[h.chan].txns - 1);
     s.chStats[h.chan].units = Math.max(0, s.chStats[h.chan].units - h.qty);
-    s.chStats[h.chan].revenue = Math.max(0, s.chStats[h.chan].revenue - h.qty * h.price);
+    if (!pendingRev) s.chStats[h.chan].revenue = Math.max(0, s.chStats[h.chan].revenue - h.qty * h.price);
     if (s.chStats[h.chan].txns <= 0) delete s.chStats[h.chan];
   }
+  // Author-fulfilled sales took copies from the author's held stock; give them back.
+  if (h.directToArtist || h.enteredBy === 'Artist') s.authorStock = (Number.isFinite(s.authorStock) ? s.authorStock : 0) + h.qty;
   h.voided = true;
   h.voidedAt = Date.now();
   recomputeAfters(s, book);
@@ -15691,12 +15801,18 @@ function unvoidHistEntry(s, book, h) {
   s.stock = Math.max(0, s.stock - h.qty);
   if (!h.gratuity) {
     s.sold += h.qty;
-    s.revenue += h.qty * h.price;
+    if (!h.artistPending) s.revenue += h.qty * h.price;
   }
   if (!s.chStats[h.chan]) s.chStats[h.chan] = { txns: 0, units: 0, revenue: 0 };
   s.chStats[h.chan].txns++;
   s.chStats[h.chan].units += h.qty;
-  s.chStats[h.chan].revenue += h.qty * h.price;
+  if (!h.artistPending) s.chStats[h.chan].revenue += h.qty * h.price;
+  if (h.voidedTransfer) {
+    s.artistTransfers = s.artistTransfers || [];
+    s.artistTransfers.push(h.voidedTransfer);
+    delete h.voidedTransfer;
+  }
+  if (h.directToArtist || h.enteredBy === 'Artist') deductSaleFromStockBreakdown(s, h.qty, true);
   h.voided = false;
   delete h.voidedAt;
   delete h.voidedReason;
@@ -15730,7 +15846,7 @@ function voidEntry() {
     if (!e.voided) {
       // VOID consignment entry
       if (e.type === 'Shipment' && st) { st.sent = Math.max(0, st.sent - e.qty); st.outstanding = Math.max(0, st.outstanding - e.qty); s.stock += e.qty; }
-      if (e.type === 'Sale' && st) { st.sold = Math.max(0, st.sold - e.qty); st.outstanding += e.qty; s.sold = Math.max(0, s.sold - e.qty); s.revenue = Math.max(0, s.revenue - e.amountDue); if (e.paid === 'pending') st.amountOwed = Math.max(0, st.amountOwed - e.amountDue); if (s.chStats['Consignment']) { s.chStats['Consignment'].txns = Math.max(0, s.chStats['Consignment'].txns - 1); s.chStats['Consignment'].units = Math.max(0, s.chStats['Consignment'].units - e.qty); s.chStats['Consignment'].revenue = Math.max(0, s.chStats['Consignment'].revenue - e.amountDue); } }
+      if (e.type === 'Sale' && st) { st.sold = Math.max(0, st.sold - e.qty); st.outstanding += e.qty; s.sold = Math.max(0, s.sold - e.qty); s.revenue = Math.max(0, s.revenue - e.amountDue); if (e.paid === 'pending') st.amountOwed = roundCents(Math.max(0, st.amountOwed - e.amountDue)); if (s.chStats['Consignment']) { s.chStats['Consignment'].txns = Math.max(0, s.chStats['Consignment'].txns - 1); s.chStats['Consignment'].units = Math.max(0, s.chStats['Consignment'].units - e.qty); s.chStats['Consignment'].revenue = Math.max(0, s.chStats['Consignment'].revenue - e.amountDue); } }
       if (e.type === 'Return' && st) { st.returned = Math.max(0, st.returned - e.qty); st.outstanding += e.qty; if (e.status === 'restocked') s.stock = Math.max(0, s.stock - e.qty); }
       e.voided = true;
       e.voidedAt = Date.now();
@@ -15743,7 +15859,7 @@ function voidEntry() {
     } else {
       // UNVOID consignment entry
       if (e.type === 'Shipment' && st) { st.sent += e.qty; st.outstanding += e.qty; s.stock = Math.max(0, s.stock - e.qty); }
-      if (e.type === 'Sale' && st) { st.sold += e.qty; st.outstanding = Math.max(0, st.outstanding - e.qty); s.sold += e.qty; s.revenue += e.amountDue; if (e.paid === 'pending') st.amountOwed += e.amountDue; if (!s.chStats['Consignment']) s.chStats['Consignment'] = { txns: 0, units: 0, revenue: 0 }; s.chStats['Consignment'].txns++; s.chStats['Consignment'].units += e.qty; s.chStats['Consignment'].revenue += e.amountDue; }
+      if (e.type === 'Sale' && st) { st.sold += e.qty; st.outstanding = Math.max(0, st.outstanding - e.qty); s.sold += e.qty; s.revenue += e.amountDue; if (e.paid === 'pending') st.amountOwed = roundCents(st.amountOwed + e.amountDue); if (!s.chStats['Consignment']) s.chStats['Consignment'] = { txns: 0, units: 0, revenue: 0 }; s.chStats['Consignment'].txns++; s.chStats['Consignment'].units += e.qty; s.chStats['Consignment'].revenue += e.amountDue; }
       if (e.type === 'Return' && st) { st.returned += e.qty; st.outstanding = Math.max(0, st.outstanding - e.qty); if (e.status === 'restocked') s.stock += e.qty; }
       e.voided = false;
       delete e.voidedAt;
@@ -16109,7 +16225,7 @@ async function confirmRestoreBookDataFromSheets() {
       if (e.voided || e.type !== 'Sale' || !e.storeId) return;
       const st = newStores.find(x => x.id === e.storeId);
       if (st && e.status === 'pending') {
-        st.amountOwed += (e.amountDue || 0);
+        st.amountOwed = roundCents(st.amountOwed + (e.amountDue || 0));
       }
     });
 
@@ -16777,7 +16893,8 @@ async function applyBackupData(data) {
   if (data.mailingList && typeof data.mailingList === 'object') {
     _setMailingList({
       subs: (data.mailingList.subs && typeof data.mailingList.subs === 'object') ? data.mailingList.subs : {},
-      autoAdd: !!data.mailingList.autoAdd
+      autoAdd: !!data.mailingList.autoAdd,
+      removed: (data.mailingList.removed && typeof data.mailingList.removed === 'object') ? data.mailingList.removed : {}
     });
     await _persistMailingList();
   }
@@ -17086,6 +17203,8 @@ function exportAllToCSV() {
 
     // History
     (s.hist || []).forEach(h => {
+      // Consignment sales are mirrored into history; the ledger row below is the one record.
+      if (h.consignmentLink) return;
       rows.push([
         loggedAt,
         h.id || '',
@@ -17125,7 +17244,7 @@ function exportAllToCSV() {
         '',
         '',
         '',
-        l.status || (l.voided ? 'VOID' : 'OK'),
+        l.voided ? 'VOID' : (l.status || 'OK'),
         l.notes || ''
       ]);
     });
@@ -18559,9 +18678,24 @@ export async function removeLedgerEntry(type, bid, id) {
   } else if (type === 'sale') {
     const s = states[bid];
     if (s && s.hist) {
+      // A live sale is reversed exactly like Void (stock, sold, revenue,
+      // channel totals, Sheets row) before the row goes; an already-voided
+      // one has nothing left to reverse.
+      const h = s.hist.find(x => String(x.id ?? x.num) === String(id));
+      if (h && !h.voided && !h.consignmentLink && BOOKS[bid]) {
+        const prev = activeBook;
+        activeBook = bid;
+        try { voidHistEntry(s, BOOKS[bid], h); } finally { activeBook = prev; }
+      }
       removeOneByKey(s.hist, id);
       saveState(bid);
     }
+  } else if (type === 'shippingIncome') {
+    // Shipping income is derived from the sale's shippingPaid; clear it there.
+    const s = states[bid];
+    const sid = String(id).replace(/-shipping-income$/, '');
+    const h = s?.hist?.find(x => String(x.id ?? x.num) === sid);
+    if (h) { h.shippingPaid = 0; saveState(bid); }
   }
 
   renderTaxCenter();
@@ -18814,13 +18948,20 @@ async function saveExpenseEdit() {
       if (s && s.expenses) {
         exp = s.expenses.find(e => String(e.id) === String(id));
         if (exp) {
+          const prevAmount = exp.amount, prevCurrency = exp.currency;
           exp.desc = desc;
           exp.cat = cat;
           exp.currency = currency;
           exp.origCurrency = currency;
           exp.amount = amount;
           exp.origAmount = amount;
-          exp.baseAmount = baseAmount;
+          // Offline with no cached rate: keep the saved CAD value if nothing it depends on changed, instead of blanking it.
+          const sameBasis = !fxRate && exp.baseAmount != null && exp.amount === prevAmount && exp.currency === prevCurrency;
+          if (!sameBasis) {
+            exp.fxRate = fxRate || null;
+            exp.baseAmount = baseAmount;
+            exp.fxMissing = !fxRate;
+          }
           exp.date = date;
           exp.receiptFiles = [..._editingExpense.files];
           exp.receipt = _editingExpense.files[0] || '';
@@ -18884,8 +19025,8 @@ export function showTripDetail(tripName) {
     return `
       <tr style="color:var(--red);">
         <td style="font-size:var(--text-sm);">${item.date || '—'}</td>
-        <td style="font-size:var(--text-sm);">${item.desc || ''}</td>
-        <td style="font-size:var(--text-sm);">${item.cat || ''}</td>
+        <td style="font-size:var(--text-sm);">${escapeHtml(item.desc)}</td>
+        <td style="font-size:var(--text-sm);">${escapeHtml(item.cat)}</td>
         <td style="font-size:var(--text-sm);">${refCell}</td>
         <td class="r" style="font-size:var(--text-sm);">${origDisplay}</td>
         <td class="r" style="font-weight:600;">- ${fmt(item.baseAmount, baseCurrency)}</td>
@@ -18977,7 +19118,7 @@ export function showCategoryDetail(catName) {
     const origDisplay = `${origSym}${Number(item.origAmount || 0).toFixed(2)}`;
     const moveCell = item.sourceType === 'businessExpense'
       ? `<select onchange="changeExpenseCategory('${item.itemId}', this.value)" style="font-size:var(--text-xs);padding:2px 4px;border:var(--stroke-hair) solid rgba(255,255,255,.15);border-radius:var(--r);max-width:170px;" title="Move to another category">
-          ${TC_CATEGORIES.map(c => `<option value="${c.replace(/"/g, '&quot;')}"${c === item.cat ? ' selected' : ''}>${c}</option>`).join('')}
+          ${TC_CATEGORIES.map(c => `<option value="${escapeHtml(c)}"${c === item.cat ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('')}
         </select>`
       : '<span style="font-size:var(--text-xs);color:var(--text3);">—</span>';
     const showEdit = (item.sourceType === 'businessExpense' || item.sourceType === 'bookExpense');
@@ -18986,8 +19127,8 @@ export function showCategoryDetail(catName) {
     return `
       <tr style="color:var(--red);">
         <td style="font-size:var(--text-sm);">${item.date || '—'}</td>
-        <td><span class="tag amber">${item.type}</span></td>
-        <td style="font-size:var(--text-sm);">${item.desc || ''}</td>
+        <td><span class="tag amber">${escapeHtml(item.type)}</span></td>
+        <td style="font-size:var(--text-sm);">${escapeHtml(item.desc)}</td>
         <td style="font-size:var(--text-sm);">${refCell}</td>
         <td class="r" style="font-size:var(--text-sm);">${origDisplay}</td>
         <td class="r" style="font-weight:600;">- ${fmt(item.baseAmount, baseCurrency)}</td>
@@ -20199,7 +20340,7 @@ window.posMobileView = function (view, scroll = true) {
 
 window.posUpdateQty = function (bookId, delta) {
   posCart[bookId] = Math.max(0, (posCart[bookId] || 0) + delta);
-  if (posCart[bookId] === 0) delete posCart[bookId];
+  if (posCart[bookId] === 0) { delete posCart[bookId]; delete posPriceOverrides[bookId]; }
   renderPOS();
 };
 
@@ -21983,6 +22124,7 @@ async function printPaymentQRCodes(opts = {}) {
     ? `⌛ Preparing payment QR sheet — skipping ${droppedCount} title${droppedCount === 1 ? '' : 's'} with no payment link`
     : '⌛ Preparing payment QR code sheet…');
 
+  const _qrPriceFallbackTitles = [];
   const booksData = await Promise.all(selectedIds.map(async (id) => {
     const book = posResolveBook(id);
     const nativeCode = currencyToCode(book.currency);
@@ -21992,7 +22134,7 @@ async function printPaymentQRCodes(opts = {}) {
     const overrideVal = overrideInput ? parseFloat(overrideInput.value) : NaN;
     const hasOverride = !isNaN(overrideVal) && overrideVal > 0;
 
-    const listedAmount = hasOverride
+    let listedAmount = hasOverride
       ? overrideVal
       : (baseCur === 'auto' ? (book.listPrice || 0) : convertCurrency(book.listPrice || 0, nativeCode, listedCode));
 
@@ -22002,6 +22144,9 @@ async function printPaymentQRCodes(opts = {}) {
     }
 
     let url = book.stripeLink || book.paymentLink || '';
+    // The card must print what the QR actually charges. A door-price link that
+    // could not be minted falls back to the saved link, which charges list price.
+    let overrideLinkMade = false;
 
     // If override is set and Stripe key is configured, create live Stripe Payment Link
     const stripeKey = getReconStripeKey();
@@ -22013,12 +22158,18 @@ async function printPaymentQRCodes(opts = {}) {
           description: `${book.title} (${listedCode} ${listedAmount.toFixed(2)})`,
           metadata: { book_id: book.id, sku: book.id, override: 'true' }
         });
+        overrideLinkMade = !!url;
       } catch (err) {
         console.warn('Stripe link creation failed for override:', err);
       }
     } else if (hasOverride && url && !url.includes('amount=')) {
       const joiner = url.includes('?') ? '&' : '?';
       url = `${url}${joiner}amount=${listedAmount.toFixed(2)}&currency=${listedCode}`;
+    }
+    if (hasOverride && !overrideLinkMade) {
+      // Payment Links have a fixed price, so show the price the saved link charges.
+      listedAmount = baseCur === 'auto' ? (book.listPrice || 0) : convertCurrency(book.listPrice || 0, nativeCode, listedCode);
+      _qrPriceFallbackTitles.push(book.title);
     }
 
     const prices = currenciesShown.map((code) => {
@@ -22046,6 +22197,9 @@ async function printPaymentQRCodes(opts = {}) {
     return { id: book.id, title: book.title, author: book.author || '', url, prices };
   }));
 
+  if (_qrPriceFallbackTitles.length) {
+    showToast(`Couldn't make a door-price link for ${_qrPriceFallbackTitles.join(', ')} — the card shows the list price its QR charges.`, 'warn', 6000);
+  }
   const fitOnePage = !!document.getElementById('qrp-fit-one-page')?.checked;
   const count = booksData.length;
 
@@ -22504,6 +22658,8 @@ function calculateInventoryValuationData() {
   let totalSold = 0;
     if (s.hist) {
       for (const h of s.hist) {
+        // Consignment sales are mirrored here and counted via the stores below; voided and gratuity rows are not sales.
+        if (h.consignmentLink || h.voided || h.gratuity) continue;
         totalSold += (parseInt(h.qty, 10) || 0);
       }
     }
@@ -22981,11 +23137,15 @@ window.downloadFullTaxSeasonExport = function () {
   csv += 'Tax Year: ' + (isAllTime ? 'All Time' : year) + '\n\n';
 
   const esc = csvCell;
-  const getAmt = (e) => (parseFloat(e.baseAmount || e.amountCAD || e.amount || 0));
-
   // Track books exported with no saved CAD rate (fell back to 1.0 — a silently
   // wrong tax figure). Keyed by book id so a book is listed at most once.
   const rateWarnings = new Map();
+  const getAmt = (e) => {
+    // A foreign-currency expense saved with no CAD amount is exported in its own currency: flag it.
+    const cur = String(e.currency || e.origCurrency || 'CAD').toUpperCase();
+    if (cur !== 'CAD' && !(e.baseAmount || e.amountCAD) && (parseFloat(e.amount) || 0) > 0) rateWarnings.set(`expense-${cur}`, { title: 'Expenses', cur });
+    return parseFloat(e.baseAmount || e.amountCAD || e.amount || 0);
+  };
   const flagRateIfMissing = (book, cur, rawRate, hasAmount) => {
     if (hasAmount && cur && cur !== 'CAD' && !rawRate) rateWarnings.set(book.id, { title: book.title, cur });
   };
@@ -23205,7 +23365,7 @@ async function fetchStripeTransactions(key, onProgress, { since = 0 } = {}) {
     }
     const json = await resp.json();
     for (const tx of (json.data || [])) {
-      const year = new Date((tx.created || 0) * 1000).getUTCFullYear();
+      const year = new Date((tx.created || 0) * 1000).getFullYear();
       const cur = (tx.currency || '').toUpperCase();
       const type = tx.type || 'unknown';
       allTxns.push({
@@ -23908,7 +24068,7 @@ export async function fetchStripePaymentsForReconcile(maxPages = 3, { since = 0 
         amount: _stripeMinorToMajor(ch.amount, cur),
         currency: cur,
         created: (ch.created || 0) * 1000,
-        date: new Date((ch.created || 0) * 1000).toISOString().slice(0, 10),
+        date: localDay((ch.created || 0) * 1000),
         description: (ch.description || pi?.description || '').trim(),
         email: ch.billing_details?.email || ch.receipt_email || '',
         customer: ch.billing_details?.name || '',
@@ -23924,6 +24084,7 @@ export async function fetchStripePaymentsForReconcile(maxPages = 3, { since = 0 
     }
     if (!json.has_more || !json.data.length) break;
     starting_after = json.data[json.data.length - 1].id;
+    if (page === maxPages - 1) out.truncated = true; // older charges in the window were not read
   }
   return out;
 }
@@ -24386,7 +24547,7 @@ export function renderReconcile() {
     if (c.kind === 'recorded') { matched.push({ p, c, label: 'Logged', tone: 'green', note: c.bookId && BOOKS[c.bookId] ? `Recorded against ${BOOKS[c.bookId].title}.` : 'Recorded in inventory.' }); continue; }
     if (c.kind === 'artist_transfer') { matched.push({ p, c, label: 'Author transfer', tone: 'green', note: `An author sent you money for sale ${c.ref || ''} they collected. Mark it received on that book's dashboard — it is not a new sale.`.replace(/\s+/g, ' ') }); continue; }
     if (c.kind === 'likely') { matched.push({ p, c, label: 'Likely logged', tone: 'gray', note: 'Matches a sale you already recorded (same amount & date).' }); continue; }
-    if (p.refunded) { matched.push({ p, c, label: 'Refunded', tone: 'gray', note: 'Refunded in Stripe — no stock to deduct.' }); continue; }
+    if (p.refunded && p.fullyRefunded !== false) { matched.push({ p, c, label: 'Refunded', tone: 'gray', note: 'Refunded in Stripe — no stock to deduct.' }); continue; }
     if (c.kind === 'invoice' && c.inv && c.inv.status === 'paid') { matched.push({ p, c, label: 'Invoice paid', tone: 'green', note: `${c.ref} already marked paid.` }); continue; }
     if (c.kind === 'bigcartel' && c.applied) { matched.push({ p, c, label: 'Big Cartel', tone: 'green', note: `Order ${c.ref} already applied to stock.` }); continue; }
     needs.push({ p, c });
@@ -24808,8 +24969,8 @@ async function sweepStripeInvoicePayments({ force = false } = {}) {
 
   _stripeInvoiceSweeping = true;
   try {
-    // One page behind a date filter: in the steady state this returns nothing.
-    const payments = await fetchStripePaymentsForReconcile(1, { since: stripeInvoiceSweepSince() });
+    // A few pages behind a date filter: in the steady state this returns one tiny page.
+    const payments = await fetchStripePaymentsForReconcile(10, { since: stripeInvoiceSweepSince() });
 
     let settled = 0;
     let attention = 0;
@@ -24933,7 +25094,9 @@ async function sweepStripeInvoicePayments({ force = false } = {}) {
       saveReconMemory(mem);
     }
 
-    writeStripeInvoiceStamp(Date.now());
+    // Only move the checkpoint when the whole window was read; otherwise the
+    // charges that were cut off would fall out of the next window unseen.
+    if (!payments.truncated) writeStripeInvoiceStamp(Date.now());
     noteIntegrationSuccess('stripe');
     showMarketDaySummaryIfDue();
 
@@ -25223,6 +25386,8 @@ function stripeRecordedSales() {
         paidAmount: Number(h.payment?.amount) || (Number(h.qty) || 0) * (Number(h.price) || 0),
         voided: !!h.voided,
         refundNoted: h.refundNoted || '',
+        refundPartial: !!h.refundPartial,
+        refundedSoFar: Number(h.refundedSoFar) || 0,
       });
     });
   });
@@ -25243,7 +25408,12 @@ function raiseRefundedStripeSales(signals) {
     const row = findStripeSaleRow(item.bookId, item.sheetsId);
     // Marked on the row itself, so it is raised once — on this device and on
     // any other that syncs the book — rather than on every five-minute poll.
-    if (row) { row.refundNoted = item.refundId || 'refunded'; touched.add(item.bookId); }
+    if (row) {
+      row.refundNoted = item.refundId || 'refunded';
+      // A partial refund is remembered so a later one that completes it can still be raised.
+      if (item.full) { delete row.refundPartial; delete row.refundedSoFar; } else { row.refundPartial = true; row.refundedSoFar = Number(item.refunded) || 0; }
+      touched.add(item.bookId);
+    }
   });
   touched.forEach(bookId => saveState(bookId));
 
@@ -25288,6 +25458,13 @@ let _lastReversal = [];
  * safety net for a mis-tap on a small screen: it restores exactly the rows
  * this reversal voided and nothing else.
  */
+// The void/unvoid Sheets sync names the on-screen book, so point it at this sale's book.
+function withActiveBook(bookId, fn) {
+  const prev = activeBook;
+  activeBook = bookId;
+  try { fn(); } finally { activeBook = prev; }
+}
+
 function reverseSalesWithUndo(items, reason) {
   let reversed = 0;
   let copies = 0;
@@ -25298,7 +25475,7 @@ function reverseSalesWithUndo(items, reason) {
     const book = BOOKS[item.bookId];
     const row = findStripeSaleRow(item.bookId, item.sheetsId);
     if (!st || !book || !row || row.voided) return;
-    voidHistEntry(st, book, row);
+    withActiveBook(item.bookId, () => voidHistEntry(st, book, row));
     row.voidedReason = reason;
     reversed++;
     copies += Number(row.qty) || 0;
@@ -25333,7 +25510,7 @@ function undoLastReversalFromAlert(event) {
     const book = BOOKS[item.bookId];
     const row = findStripeSaleRow(item.bookId, item.sheetsId);
     if (!st || !book || !row || !row.voided) return;
-    unvoidHistEntry(st, book, row);
+    withActiveBook(item.bookId, () => unvoidHistEntry(st, book, row));
     restored++;
     touched.add(item.bookId);
   });
@@ -25852,8 +26029,7 @@ async function reminderReviewHoldOff(id) {
   const { inv, bookId } = invoiceHome(id);
   if (!inv) return;
   const suggested = inv.remindAfter || (() => {
-    const d = new Date(); d.setDate(d.getDate() + 14);
-    return d.toISOString().split('T')[0];
+    return localDayPlus(14);
   })();
   const picked = await promptDialog(
     `When did ${inv.storeName || 'they'} say they would pay ${inv.num}? No reminder goes out before then.`,
@@ -26046,8 +26222,7 @@ async function snoozeInvoiceFromView() {
   const { inv, bookId } = invoiceHome(currentViewInvoiceId);
   if (!inv) return;
   const suggested = inv.remindAfter || (() => {
-    const d = new Date(); d.setDate(d.getDate() + 14);
-    return d.toISOString().split('T')[0];
+    return localDayPlus(14);
   })();
   const picked = await promptDialog(
     `When did ${inv.storeName || 'they'} say they would pay ${inv.num}? No reminder goes out before then. Clear the date to start chasing again.`,
@@ -26459,7 +26634,10 @@ window.showWhatsNew = showWhatsNew;
 // ── STARTUP ROUTING
 async function initStartup() {
   // Master Publisher Email
-  const publisherEmail = 'lyricalmyrical@gmail.com';
+  // Must match the address the Firestore/Storage/Database rules and the Apps
+  // Script trust, or the publisher UI would open for an account the backend
+  // then refuses.
+  const publisherEmail = 'lyricalmyricalbooks@gmail.com';
 
   window._fbOnAuthStateChanged(async user => {
     const dismissSplash = () => {
@@ -26487,8 +26665,8 @@ async function initStartup() {
           dismissSplash();
           return;
         }
-        // Not logged in
-        setupGate(null);
+        // Not logged in (or just signed out by the no-access branch below, whose message must survive)
+        setupGate(_pendingGateMsg);
         const err = document.getElementById('pw-err');
         if (err) err.textContent = '';
         dismissSplash();
@@ -26523,8 +26701,9 @@ async function initStartup() {
       loadAuthorViewOverrides();
 
       // Check access
+      _pendingGateMsg = null;
       const uEmail = user.email.toLowerCase().trim();
-      if (uEmail === publisherEmail || uEmail === 'lyricalmyricalbooks@gmail.com') {
+      if (uEmail === publisherEmail && user.emailVerified === true) {
         window.IS_PUBLISHER = true;
         IS_AUTHOR_MODE = false;
         // Seed/refresh the rules-readable ownership map now we're authenticated as
@@ -26554,8 +26733,10 @@ async function initStartup() {
       }
 
       // No match
+      // The sign-out re-fires this listener with no user, which would wipe the message.
+      _pendingGateMsg = `Your Google account (${user.email}) is not authorized for any books.`;
       window._fbSignOut();
-      setupGate(`Your Google account (${user.email}) is not authorized for any books.`);
+      setupGate(_pendingGateMsg);
       const err = document.getElementById('pw-err');
       if (err) err.textContent = '';
       dismissSplash();
@@ -26566,6 +26747,7 @@ async function initStartup() {
   });
 }
 
+let _pendingGateMsg = null;
 function setupGate(errMsg) {
   $('pw-gate').style.display = '';
   $('pw-app').style.display = 'none';

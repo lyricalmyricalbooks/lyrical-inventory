@@ -39,8 +39,13 @@ export function storeReversalsToRaise(bcOrders = [], rows = []) {
   if (!reversed.size) return [];
   const out = [];
   (Array.isArray(rows) ? rows : []).forEach(({ bookId, entry }) => {
-    if (!entry || entry.voided || entry.chan !== 'Website' || entry.storeReversalNoted || !entry.sheetsId) return;
+    if (!entry || entry.voided || entry.chan !== 'Website' || !entry.sheetsId) return;
     const kind = reversed.get(normalizeShippingOrderNumber(entry.num));
+    // A partial refund already raised must not hide the later full refund or
+    // cancellation: only a note for the same kind (or a full one) settles it.
+    const noted = entry.storeReversalNoted;
+    if (noted === true || noted === 'full') return;
+    if (noted === 'partial' && kind !== 'reversed') return;
     if (kind) out.push({ bookId, sheetsId: entry.sheetsId || '', num: entry.num, qty: Number(entry.qty) || 0, full: kind === 'reversed' });
   });
   return out;

@@ -31,12 +31,23 @@ export function booksNamedInText(text, books) {
   let remaining = hay;
   for (const b of candidates) {
     const title = String(b.title).toLowerCase().trim();
-    if (remaining.includes(title)) {
-      found.push(b.id);
-      // Consume the match so a shorter title nested inside it can't also claim
-      // this same stretch of text.
-      remaining = remaining.split(title).join(' ');
+    // Whole-word match only: "Cat" must not be found inside "Catalog".
+    let hit = false, from = 0, out = '', at;
+    const isWord = ch => !!ch && /[\p{L}\p{N}]/u.test(ch);
+    while ((at = remaining.indexOf(title, from)) !== -1) {
+      const end = at + title.length;
+      if (!isWord(remaining[at - 1]) && !isWord(remaining[end])) {
+        hit = true;
+        // Consume the match so a shorter title nested inside it can't also claim
+        // this same stretch of text.
+        out += remaining.slice(from, at) + ' ';
+      } else {
+        out += remaining.slice(from, end);
+      }
+      from = end;
     }
+    out += remaining.slice(from);
+    if (hit) { found.push(b.id); remaining = out; }
   }
   return found;
 }
@@ -404,7 +415,8 @@ export function parseLooseNumber(v) {
   if (lastComma > -1 && lastDot > -1) {
     t = lastComma > lastDot ? t.replace(/\./g, '').replace(',', '.') : t.replace(/,/g, '');
   } else if (lastComma > -1) {
-    t = t.replace(',', '.');
+    // "1,500" / "1,234,567" are thousands groups (a lone leading 0 is a decimal, "0,500").
+    t = /^-?(?!0,)\d{1,3}(,\d{3})+$/.test(t) ? t.replace(/,/g, '') : t.replace(',', '.');
   }
   return parseFloat(t);
 }

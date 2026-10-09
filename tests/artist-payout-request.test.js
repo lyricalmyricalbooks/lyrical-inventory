@@ -68,7 +68,7 @@ describe('artist payout request', () => {
   });
 
   it('re-evaluates the lifecycle on every payout write and delete', () => {
-    for (const handler of ['saveArtistPayout', 'deleteArtistPayout']) {
+    for (const handler of ['saveArtistPayoutNow', 'deleteArtistPayout']) {
       const fn = mainJs.match(new RegExp(`async function ${handler}\\([\\s\\S]*?\\n\\}`))[0];
       expect(fn).toContain('settlePayoutRequests(bookId)');
     }

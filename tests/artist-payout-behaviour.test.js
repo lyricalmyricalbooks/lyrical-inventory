@@ -665,3 +665,12 @@ describe('netting what the artist owes against a payout', () => {
     expect(payouts().at(-1).amount).toBe(55);
   });
 });
+
+describe('a double tap on Save', () => {
+  it('records the payout once', async () => {
+    type('ap-amount', '20');
+    const before = payouts().length;
+    await Promise.all([win.saveArtistPayout(BOOK), win.saveArtistPayout(BOOK)]);
+    expect(payouts().length).toBe(before + 1);
+  });
+});

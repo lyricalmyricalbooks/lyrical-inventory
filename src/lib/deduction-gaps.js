@@ -38,9 +38,10 @@ export const MIN_GAP_AMOUNT = 5;
 /** How long a snooze lasts when no date is given. */
 export const DEFAULT_SNOOZE_DAYS = 30;
 
+import { localDay } from './calendar-day.js';
 const str = (v) => (v == null ? '' : String(v)).trim();
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
-const iso = (d) => (d instanceof Date ? d : new Date(d)).toISOString().slice(0, 10);
+const iso = (d) => localDay(d);
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',

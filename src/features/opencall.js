@@ -1485,7 +1485,7 @@ function ocPanelHtml_(c) {
   let gmailLinksHtml = '';
   if (c.email && (c.gmailThreadId || c.creditThreadId || c.filesThreadId)) {
     const links = [];
-    const link = (tid, label) => `<a href="https://mail.google.com/mail/u/0/#inbox/${encodeURIComponent(tid)}" target="_blank" rel="noopener" title="Open in Gmail">✉ ${label} ↗</a> <button type="button" class="oc-thread-preview" onclick="ocToggleInlineThread('${c.id}', '${escapeHtml(tid)}', '${label}')" title="Read the conversation here">👁 Read here</button>`;
+    const link = (tid, label) => `<a href="https://mail.google.com/mail/u/0/#inbox/${encodeURIComponent(tid)}" target="_blank" rel="noopener" title="Open in Gmail">✉ ${label} ↗</a> <button type="button" class="oc-thread-preview" onclick="ocToggleInlineThread(${escapeHtml(JSON.stringify(String(c.id)))}, ${escapeHtml(JSON.stringify(String(tid)))}, ${escapeHtml(JSON.stringify(String(label)))})" title="Read the conversation here">👁 Read here</button>`;
     // Canonical thread: the conversation every stage email replies into.
     if (c.gmailThreadId) links.push(link(c.gmailThreadId, 'Conversation'));
     if (c.creditThreadId && c.creditThreadId !== c.gmailThreadId) links.push(link(c.creditThreadId, 'Credit reply'));
@@ -1652,7 +1652,7 @@ function ocLatestEmailsHtml_(c, cached, note = '') {
           <div class="oc-latest-meta"><strong>${escapeHtml(who)}</strong><span>${escapeHtml(formatDateTime(msg.date))}</span></div>
           <div class="oc-latest-body">${escapeHtml(short || '(no text)')}</div>
           ${(msg.attachments || []).length ? `<div class="oc-latest-files">${msg.attachments.map(att => `
-            <button type="button" class="btn sm" onclick="downloadOcAttachment('${escapeHtml(msg.id)}', '${escapeHtml(att.name)}', this)" title="Download this attachment">📎 ${escapeHtml(att.name)} · ${Math.max(1, Math.round((att.size || 0) / 1024))} KB</button>`).join('')}</div>` : ''}
+            <button type="button" class="btn sm" onclick="downloadOcAttachment(${escapeHtml(JSON.stringify(String(msg.id)))}, ${escapeHtml(JSON.stringify(String(att.name)))}, this)" title="Download this attachment">📎 ${escapeHtml(att.name)} · ${Math.max(1, Math.round((att.size || 0) / 1024))} KB</button>`).join('')}</div>` : ''}
         </article>`;
     }).join('')}
     <div class="oc-latest-foot">
@@ -2957,20 +2957,20 @@ function ocComposeStageEmail(cId, stageKey) {
     }
 
     subject = ocMergeTemplate(tmpl.subject, c, { project: proj.title, date: dl || 'July 15th' });
-    body = ocMergeTemplate(tmpl.body, c, { project: proj.title, date: dl || 'July 15th' });
+    body = ocMergeTemplate(ocTemplateBodyHtml_(tmpl.body), c, { project: proj.title, date: dl || 'July 15th' });
   } else {
     if (stageKey === 'selectionSent') {
       subject = `[Selected] Lyricalmyrical Collective Open Call`;
-      body = `Hi ${c.name || 'Artist'},\n\nCongratulations! Your work has been selected from our open call to be featured in our upcoming project. We're thrilled to include you!\n\nWe are now entering the layout phase and require one initial piece of info:\n1. The exact name you want to use in the credit index.\n\nPlease reply to this email to let us know.\n\nWarm regards,\nLyricalmyrical Books`;
+      body = ocTemplateBodyHtml_(`Hi ${c.name || 'Artist'},\n\nCongratulations! Your work has been selected from our open call to be featured in our upcoming project. We're thrilled to include you!\n\nWe are now entering the layout phase and require one initial piece of info:\n1. The exact name you want to use in the credit index.\n\nPlease reply to this email to let us know.\n\nWarm regards,\nLyricalmyrical Books`);
     } else if (stageKey === 'cmykSent') {
       subject = `[Files Requested] Lyricalmyrical Open Call - ${proj.title}`;
-      body = `Hi ${c.name || 'Artist'},\n\nWe are now preparing the print-ready files and require your high-resolution artwork.\n\nPlease send us your files (CMYK profile, 300 DPI, with 3mm bleed) as soon as possible.\n\nThank you again!\n\nWarm regards,\nLyricalmyrical Books`;
+      body = ocTemplateBodyHtml_(`Hi ${c.name || 'Artist'},\n\nWe are now preparing the print-ready files and require your high-resolution artwork.\n\nPlease send us your files (CMYK profile, 300 DPI, with 3mm bleed) as soon as possible.\n\nThank you again!\n\nWarm regards,\nLyricalmyrical Books`);
     } else if (stageKey === 'preorderSent') {
       subject = `[Pre-orders Open] Lyricalmyrical Collective Project - ${proj.title}`;
-      body = `Hi ${c.name || 'Artist'},\n\nWe are thrilled to announce that pre-orders for the collective project are now officially open!\n\nAs selected contributor, you receive a special 50% discount on any number of copies. Use code LMBCOLLECTIVE at checkout:\nhttps://www.lyricalmyricalbooks.com/product/collective-photobook\n\nThank you for being part of this project!\n\nWarm regards,\nLyricalmyrical Books`;
+      body = ocTemplateBodyHtml_(`Hi ${c.name || 'Artist'},\n\nWe are thrilled to announce that pre-orders for the collective project are now officially open!\n\nAs selected contributor, you receive a special 50% discount on any number of copies. Use code LMBCOLLECTIVE at checkout:\nhttps://www.lyricalmyricalbooks.com/product/collective-photobook\n\nThank you for being part of this project!\n\nWarm regards,\nLyricalmyrical Books`);
     } else {
       subject = `Regarding Open Call - ${proj.title}`;
-      body = `Hi ${c.name || 'Artist'},\n\n...`;
+      body = ocTemplateBodyHtml_(`Hi ${c.name || 'Artist'},\n\n...`);
     }
   }
 
@@ -3016,7 +3016,7 @@ function openOcEmailPreviewModal(cId, stageKey, subject, body, c) {
         
         <div style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;text-align:left;">Email Body Preview</div>
         <div style="background:#ffffff;color:#000000;border:1px solid var(--border);border-radius:6px;padding:20px;min-height:180px;overflow-y:auto;font-family:'Inter',sans-serif;font-size:14px;line-height:1.6;text-align:left;box-shadow:inset 0 1px 3px rgba(0,0,0,0.05);">
-          ${body}
+          <iframe sandbox="" referrerpolicy="no-referrer" title="Email body preview" srcdoc="${escapeHtml(body)}" style="width:100%;min-height:180px;border:0;background:#ffffff;"></iframe>
         </div>
 
         <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px;text-align:left;border-top:1px solid var(--border);padding-top:12px;">
@@ -3509,7 +3509,7 @@ async function ocToggleInlineThread(cId, threadId, title) {
           ${msg.attachments && msg.attachments.length > 0 ? `
             <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">
               ${msg.attachments.map(att => `
-                <button type="button" class="pill gray" style="font-size:var(--text-2xs);padding:2px 6px;background:rgba(255,255,255,0.05);border:var(--stroke-hair) solid rgba(255,255,255,0.1);color:var(--text2);cursor:pointer;display:inline-flex;align-items:center;gap:4px;" onclick="downloadOcAttachment('${msg.id}', '${escapeHtml(att.name)}', this)" title="Click to download attachment">
+                <button type="button" class="pill gray" style="font-size:var(--text-2xs);padding:2px 6px;background:rgba(255,255,255,0.05);border:var(--stroke-hair) solid rgba(255,255,255,0.1);color:var(--text2);cursor:pointer;display:inline-flex;align-items:center;gap:4px;" onclick="downloadOcAttachment(${escapeHtml(JSON.stringify(String(msg.id)))}, ${escapeHtml(JSON.stringify(String(att.name)))}, this)" title="Click to download attachment">
                   📎 ${escapeHtml(att.name)} (${Math.round(att.size / 1024)} KB)
                 </button>
               `).join('')}

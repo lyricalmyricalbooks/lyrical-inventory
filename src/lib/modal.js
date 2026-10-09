@@ -343,7 +343,12 @@ export function confirmDialog(message, opts = {}) {
     const onCancel = () => cleanup(false);
     const onCloseEvent = () => cleanup(false);
     const onEnter = (e) => {
-      if (e.key === 'Enter') cleanup(true);
+      if (e.key !== 'Enter') return;
+      // A focused button handles its own Enter (via click) — so Enter on
+      // "Go back"/Cancel cancels instead of confirming.
+      const t = e.target;
+      if (t && t.closest && t.closest('button, a, [role="button"]')) return;
+      cleanup(true);
     };
 
     ok.addEventListener('click', onOk);
