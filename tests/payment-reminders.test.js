@@ -234,7 +234,7 @@ describe('buildReminderEmail', () => {
   it('mentions the attached invoice', () => {
     const mail = built();
     expect(mail.text).toContain("I've attached the invoice");
-    expect(mail.html).toContain("I've attached the invoice");
+    expect(mail.html).toContain('I&#39;ve attached the invoice');
   });
 
   it('says nothing was attached when the PDF could not be built', () => {
@@ -347,6 +347,12 @@ describe('buildReminderEmail', () => {
     const nasty = buildReminderEmail(lateInvoice({ storeName: '<script>alert(1)</script>' }), { settings });
     expect(nasty.html).not.toContain('<script>');
     expect(nasty.html).toContain('&lt;script&gt;');
+  });
+
+  it('escapes an apostrophe in a customer name', () => {
+    const mail = buildReminderEmail(lateInvoice({ storeName: "O'Hara Books" }), { settings });
+    expect(mail.html).toContain('O&#39;Hara Books');
+    expect(mail.html).not.toContain("O'Hara");
   });
 });
 
