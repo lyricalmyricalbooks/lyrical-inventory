@@ -2563,6 +2563,13 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 }
 .price-wrap input{padding-left:44px;}
 .price-inline{display:grid;grid-template-columns:minmax(120px,42%) 1fr;gap:8px;align-items:center;}
+/* Consignment sale / payment in another currency: "1 EUR = [rate] CAD". */
+.consign-fx-rate{display:flex;align-items:center;gap:8px;font-family:var(--font-mono);font-size:var(--text-sm);color:var(--text2);font-variant-numeric:tabular-nums;}
+.consign-fx-rate input{width:9rem;}
+.consign-fx-rate span{white-space:nowrap;}
+.consign-fx-preview{font-variant-numeric:tabular-nums;}
+.consign-fx-preview:empty{display:none;}
+.consign-fx-preview.warn,.consign-fx-row .field-note.warn{color:var(--status-active);}
 .g2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
 .g4{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end;}

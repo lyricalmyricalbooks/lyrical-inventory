@@ -286,6 +286,7 @@ import {
   roundCents,
   putCurrencyFirst,
   setSelectCurrency,
+  PICKER_CURRENCIES,
 } from './lib/money.js';
 import {
   buildPartPaymentNote,
@@ -324,6 +325,7 @@ import {
 } from './lib/sync-queue-store.js';
 import { partHashesOf } from './lib/merge-state.js';
 import { loadFxHistory, saveFxHistory, datesNeedingRates, fillDatedRates, datedRateKey } from './lib/sale-fx.js';
+import { consignmentSaleAmounts, expectedConsignmentPayment, consignmentPaymentRecord, consignmentFxSummary } from './lib/consignment-fx.js';
 import { DATED_RATE_SOURCES, frankfurterUrl } from './lib/fx-sources.js';
 import {
   QR_PRESET_PRICE_CURRENCIES,
@@ -12181,28 +12183,115 @@ function confirmBulkSend() {
   closeM('bulk-send'); renderStores(); renderLedger(); updateDash(); saveState(activeBook);
   showToast(`✓ Sent ${totalQty} book${totalQty > 1 ? 's' : ''} to ${picks.length} store${picks.length > 1 ? 's' : ''}`);
 }
+// ── Consignment in another currency ─────────────────────────────────────
+// A shop abroad sells at its own price and may pay in its own money. The ledger
+// still keeps one book-currency figure per sale (every total adds those up);
+// the foreign side rides along on the row. See lib/consignment-fx.js.
+function fillConsignCurrencySelect(sel, bookCode, selected) {
+  if (!sel) return;
+  const codes = [bookCode, ...PICKER_CURRENCIES.filter(c => c !== bookCode)];
+  sel.innerHTML = codes.map(c => `<option value="${c}">${c} ${escapeHtml(getSym(c))}${c === bookCode ? ' · book' : ''}</option>`).join('');
+  setSelectCurrency(sel, selected || bookCode);
+}
+
+// The rate for `date` (falling back to today's) as "1 from = rate to", or 0.
+async function lookupConsignRate(from, to, date) {
+  if (from === to) return 1;
+  try {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date || '') && date <= today()) {
+      const dated = await fetchHistoricalRate(from, to, date);
+      if (dated && dated.rate) return dated.rate;
+    }
+    const live = await fetchLiveRate(from, to);
+    return (live && live.rate) || 0;
+  } catch (e) { return 0; }
+}
+
+// Shows the rate row for a foreign currency and fills it from the lookup.
+// `token` guards against a slow answer for an earlier choice landing late.
+const _consignFxToken = { sale: 0, cp: 0 };
+async function refreshConsignRate(prefix, cur, bookCode, date, onDone) {
+  const row = $(`${prefix}-fx-row`), input = $(`${prefix}-fx-rate`), note = $(`${prefix}-fx-note`);
+  const token = ++_consignFxToken[prefix === 'sale' ? 'sale' : 'cp'];
+  if (!row || !input) return;
+  if (cur === bookCode) { row.hidden = true; input.value = ''; onDone(); return; }
+  row.hidden = false;
+  $(`${prefix}-fx-from`).textContent = `1 ${cur} =`;
+  $(`${prefix}-fx-to`).textContent = bookCode;
+  input.value = '';
+  if (note) { note.textContent = 'Looking up the exchange rate…'; note.classList.remove('warn'); }
+  onDone();
+  const rate = await lookupConsignRate(cur, bookCode, date);
+  if (token !== _consignFxToken[prefix === 'sale' ? 'sale' : 'cp']) return;
+  if (rate) {
+    input.value = Number(rate).toFixed(4);
+    if (note) note.textContent = prefix === 'sale'
+      ? 'Looked up for the sale date. Change it if your bank used a different rate.'
+      : 'Looked up for the date received. Change it to match your bank statement.';
+  } else if (note) {
+    note.textContent = 'Couldn’t look up a rate (offline?). Type the rate from your bank statement.';
+    note.classList.add("warn");
+    input.focus();
+  }
+  onDone();
+}
+
 function openSale(id) {
-  activeId = id; const book = getBook(); $('sale-sym').textContent = book.currency; $('sale-price').value = book.listPrice.toFixed(2); $('sale-sname').textContent = storeById(id).name;
+  activeId = id; const book = getBook(), bookCode = getBookCurrencyCode(book);
+  fillConsignCurrencySelect($('sale-cur'), bookCode, bookCode);
+  $('sale-fx-row').hidden = true; $('sale-fx-rate').value = '';
+  $('sale-price').value = book.listPrice.toFixed(2); $('sale-sname').textContent = storeById(id).name;
   // The "draft an invoice after saving" shortcut only makes sense where the
   // Invoices panel is available (publisher, single-book view).
   const invRow = $('sale-invoice-row');
   if (invRow) invRow.style.display = invoicesVisibleHere() ? '' : 'none';
   if ($('sale-makeinvoice')) $('sale-makeinvoice').checked = false;
   openM('record-sale');
+  updateConsignSalePreview();
+}
+function onConsignSaleCurrencyChange() {
+  const bookCode = getBookCurrencyCode(getBook());
+  refreshConsignRate('sale', $('sale-cur').value, bookCode, $('sale-date').value, updateConsignSalePreview);
+}
+function consignSaleFormAmounts() {
+  const book = getBook(), st = storeById(activeId);
+  if (!st) return null;
+  return consignmentSaleAmounts({
+    qty: parseInt($('sale-qty').value) || 0,
+    unitPrice: parseFloat($('sale-price').value) || 0,
+    commission: st.rate,
+    saleCur: $('sale-cur').value,
+    bookCur: getBookCurrencyCode(book),
+    fxRate: parseFloat($('sale-fx-rate').value),
+  });
+}
+function updateConsignSalePreview() {
+  const el = $('sale-preview'); if (!el) return;
+  const st = storeById(activeId), bookCode = getBookCurrencyCode(getBook());
+  const a = consignSaleFormAmounts();
+  if (!st || !a) { el.textContent = $('sale-cur').value !== bookCode ? 'Add an exchange rate to see what this is worth in ' + bookCode + '.' : ''; return; }
+  if (!a.gross) { el.textContent = ''; return; }
+  el.textContent = a.sale
+    ? `Store keeps ${st.rate}% · you’re owed ${fmt(a.sale.due, a.sale.currency)} ≈ ${fmt(a.due, bookCode)}`
+    : `Store keeps ${st.rate}% · you’re owed ${fmt(a.due, bookCode)}`;
 }
 function confirmSale() {
   const s = getState(), book = getBook(), cur = book.currency, st = storeById(activeId);
+  const bookCode = getBookCurrencyCode(book), saleCur = $('sale-cur').value || bookCode;
   if (!validateFields([
     { id: 'sale-qty', test: v => (parseInt(v) || 0) > 0, msg: 'Enter a quantity greater than 0' },
     { id: 'sale-qty', test: v => (parseInt(v) || 0) <= st.outstanding, msg: `Only ${st.outstanding} outstanding` },
     { id: 'sale-price', test: v => (parseFloat(v) || 0) > 0, msg: 'Enter a price greater than 0' },
+    ...(saleCur !== bookCode ? [{ id: 'sale-fx-rate', test: v => (parseFloat(v) || 0) > 0, msg: `Enter how many ${bookCode} one ${saleCur} is worth` }] : []),
   ])) return;
-  const qty = parseInt($('sale-qty').value) || 0, date = $('sale-date').value, price = parseFloat($('sale-price').value) || book.listPrice, paid = $('sale-paid').value, notes = $('sale-notes').value.trim();
+  const qty = parseInt($('sale-qty').value) || 0, date = $('sale-date').value, paid = $('sale-paid').value, notes = $('sale-notes').value.trim();
+  const amounts = consignSaleFormAmounts();
+  if (!amounts) return;
   // Capture before closeM clears modal state: open a prefilled invoice afterward?
   const makeInvoice = invoicesVisibleHere() && $('sale-makeinvoice') && $('sale-makeinvoice').checked;
   const invoiceStoreId = st.id;
-  const gross = qty * price, pub = gross * (1 - st.rate / 100);
-  st.sold += qty; st.outstanding -= qty; st.amountOwed += paid === 'pending' ? pub : 0;
+  const pub = amounts.due;
+  st.sold += qty; st.outstanding -= qty; st.amountOwed = roundCents((st.amountOwed || 0) + (paid === 'pending' ? pub : 0));
   s.sold += qty; s.revenue += pub;
   if (!s.chStats['Consignment']) s.chStats['Consignment'] = { txns: 0, units: 0, revenue: 0 };
   s.chStats['Consignment'].txns++; s.chStats['Consignment'].units += qty; s.chStats['Consignment'].revenue += pub;
@@ -12211,12 +12300,23 @@ function confirmSale() {
   // map to the SAME row in Sheets — editing or voiding either updates the
   // single underlying row instead of producing duplicates.
   const sheetsId = makeEventId();
-  s.hist.unshift({ num, chan: 'Consignment', qty, price: pub / qty, after: s.stock, notes: st.name, date, sheetsId, consignmentLink: true, cur: bookCurrencyCode(book) });
-  s.ledger.push({ id: Date.now(), storeId: st.id, storeName: st.name, type: 'Sale', date, qty, rate: st.rate, amountDue: pub, paid, notes, status: paid, sheetsId, cur: bookCurrencyCode(book) });
+  const entry = { id: Date.now(), storeId: st.id, storeName: st.name, type: 'Sale', date, qty, rate: st.rate, amountDue: pub, paid, notes, status: paid, sheetsId, cur: bookCurrencyCode(book) };
+  if (amounts.sale) entry.sale = amounts.sale;
+  // Marked paid on the spot: the money came in the currency the shop sold in.
+  if (paid === 'paid') {
+    const exp = expectedConsignmentPayment(entry, bookCode);
+    const rec = consignmentPaymentRecord({ amountDue: pub, bookCur: bookCode, payCur: exp.currency, payAmount: exp.amount, fxRate: amounts.sale ? amounts.sale.rate : 1, date });
+    if (rec && rec.currency !== bookCode) entry.payment = rec;
+  }
+  const histRow = { num, chan: 'Consignment', qty, price: pub / qty, after: s.stock, notes: st.name, date, sheetsId, consignmentLink: true, cur: bookCurrencyCode(book) };
+  s.hist.unshift(histRow);
+  s.ledger.push(entry);
   recomputeAfters(s, book);
   closeM('record-sale'); renderStores(); renderLedger(); renderHist(); updateDash(); saveState(activeBook);
   syncToSheets({ type: 'consignment', book: book.title, date, store: st.name, event: 'Sale', qty, rate: st.rate, amountDue: pub, notes, status: paid, sheetsId, currency: getBookCurrencyCode(book) });
-  showToast(`✓ Sale recorded — ${fmt(pub, cur)} due to you`);
+  showToast(amounts.sale
+    ? `✓ Sale recorded — ${fmt(amounts.sale.due, amounts.sale.currency)} (≈ ${fmt(pub, cur)}) due to you`
+    : `✓ Sale recorded — ${fmt(pub, cur)} due to you`);
   // Hand straight off to the invoice editor, prefilled from this store's
   // unpaid sales (which now includes the one just recorded).
   if (makeInvoice) setTimeout(() => openCreateInvoice(invoiceStoreId), 160);
@@ -12282,22 +12382,86 @@ function invoiceBadgeHTML(invoiceId, invoiceNum) {
   return `<button class="pill gray" style="font-size:var(--text-2xs);cursor:pointer;margin-left:6px;" onclick="viewInvoice('${invoiceId}')">🧾 ${escapeHtml(invoiceNum)}</button>`;
 }
 
+// "Mark paid" asks what actually arrived: a shop abroad may pay in its own
+// currency (or the bank may convert it), so the amount, currency and rate are
+// recorded on the row and the store's owed balance clears either way.
+let _consignPaymentLid = null;
 function markPaid(lid) {
-  const s = getState(), book = getBook(), e = s.ledger.find(x => x.id === lid); if (!e) return;
+  const s = getState(), book = getBook(), e = s.ledger.find(x => x.id === lid);
+  if (!e || e.status !== 'pending' || e.voided) return;
+  _consignPaymentLid = lid;
+  const bookCode = getBookCurrencyCode(book);
+  const exp = expectedConsignmentPayment(e, bookCode);
+  $('cp-sname').textContent = e.storeName || '';
+  $('cp-expected').textContent = exp.currency !== bookCode
+    ? `Owed for this sale: ${fmt(exp.amount, exp.currency)} (recorded as ${fmt(e.amountDue, bookCode)}).`
+    : `Owed for this sale: ${fmt(e.amountDue, bookCode)}.`;
+  fillConsignCurrencySelect($('cp-cur'), bookCode, exp.currency);
+  $('cp-amount').value = exp.amount.toFixed(2);
+  openM('consign-payment');
+  $('cp-date').value = today();
+  $('cp-fx-row').hidden = true; $('cp-fx-rate').value = '';
+  onConsignPaymentCurrencyChange();
+}
+function onConsignPaymentCurrencyChange() {
+  const bookCode = getBookCurrencyCode(getBook());
+  refreshConsignRate('cp', $('cp-cur').value, bookCode, $('cp-date').value, updateConsignPaymentPreview);
+}
+function consignPaymentFormRecord() {
+  const e = getState().ledger.find(x => x.id === _consignPaymentLid);
+  if (!e) return null;
+  return consignmentPaymentRecord({
+    amountDue: e.amountDue,
+    bookCur: getBookCurrencyCode(getBook()),
+    payCur: $('cp-cur').value,
+    payAmount: parseFloat($('cp-amount').value) || 0,
+    fxRate: parseFloat($('cp-fx-rate').value),
+    date: $('cp-date').value,
+  });
+}
+function updateConsignPaymentPreview() {
+  const el = $('cp-preview'); if (!el) return;
+  const bookCode = getBookCurrencyCode(getBook());
+  const rec = consignPaymentFormRecord();
+  el.classList.remove('warn');
+  if (!rec) { el.textContent = $('cp-cur').value !== bookCode ? `Add an exchange rate to see what this is worth in ${bookCode}.` : ''; return; }
+  if (!rec.amount) { el.textContent = ''; return; }
+  const worth = rec.currency !== bookCode ? `Worth ${fmt(rec.convertedTotal, bookCode)}. ` : '';
+  if (Math.abs(rec.difference) < 0.01) { el.textContent = `${worth}Matches what’s owed.`; return; }
+  el.textContent = rec.difference < 0
+    ? `${worth}That’s ${fmt(-rec.difference, bookCode)} less than recorded — usually the exchange rate or a bank fee. The sale still counts as paid.`
+    : `${worth}That’s ${fmt(rec.difference, bookCode)} more than recorded.`;
+  if (rec.difference < 0) el.classList.add('warn');
+}
+function confirmConsignPayment() {
+  const s = getState(), book = getBook(), e = s.ledger.find(x => x.id === _consignPaymentLid);
+  if (!e) { closeM('consign-payment'); return; }
+  const bookCode = getBookCurrencyCode(book), payCur = $('cp-cur').value || bookCode;
+  if (!validateFields([
+    { id: 'cp-amount', test: v => (parseFloat(v) || 0) > 0, msg: 'Enter the amount you received' },
+    ...(payCur !== bookCode ? [{ id: 'cp-fx-rate', test: v => (parseFloat(v) || 0) > 0, msg: `Enter how many ${bookCode} one ${payCur} is worth` }] : []),
+  ])) return;
+  const rec = consignPaymentFormRecord();
+  if (!rec) return;
   // Canonical settle (reduces owed, flips ledger + hist mirror); then auto-flip
   // the invoice to paid if this was its last unpaid linked sale (decision #1).
-  settleLedgerSalePaid(s, e);
+  if (!settleLedgerSalePaid(s, e)) { closeM('consign-payment'); return; }
+  // Only stamp a payment that tells you something the row doesn't already:
+  // another currency, or a different amount than was owed.
+  if (rec.currency !== bookCode || Math.abs(rec.difference) >= 0.01) e.payment = rec;
   maybeAutoPayInvoiceForLedger(s, e);
   if (sheetsUrl && e.sheetsId) {
     try { syncToSheets(consignmentSyncPayload(book, e)); } catch (err) { console.error(err); }
   }
+  closeM('consign-payment');
   renderLedger(); renderStores(); renderInvoices(); renderHist(); updateDash(); saveState(activeBook);
-  showToast(`✓ Payment of ${fmt(e.amountDue, book.currency)} marked as received`);
+  showToast(rec.currency !== bookCode
+    ? `✓ ${fmt(rec.amount, rec.currency)} received (≈ ${fmt(rec.convertedTotal, bookCode)}) — sale marked paid`
+    : `✓ Payment of ${fmt(rec.amount, bookCode)} marked as received`);
 }
 
 async function markHistoryConsignmentPaid(num) {
   const s = getState();
-  const book = getBook();
   const h = s.hist.find(x => x.num === num);
   if (!h) return;
   let e = null;
@@ -12317,7 +12481,7 @@ async function markHistoryConsignmentPaid(num) {
     showToast('Could not find corresponding consignment entry in ledger', 'err');
     return;
   }
-  if (!(await confirmDialog(`Mark consignment sale "${num}" (${fmt(e.amountDue, book.currency)}) as paid?`, { title: 'Mark Consignment Paid', okLabel: 'Mark paid' }))) return;
+  // markPaid opens the payment form, which is its own confirmation.
   markPaid(e.id);
 }
 // The ledger sits directly under the Stores and Invoices panels, both of which
@@ -12508,6 +12672,14 @@ Object.assign(window, {
   showStoreLedger,
 });
 
+// Notes cell for a ledger row, with the shop's own currency and what was
+// actually received underneath when either differs from the book's.
+function consignNotesCell(e) {
+  const fx = consignmentFxSummary(e, bookCurrencyCode(getBook()));
+  const notes = escapeHtml(e.notes || '');
+  if (!fx) return notes || '—';
+  return `${notes ? notes + '<br>' : ''}<span class="mono-num" style="font-size:var(--text-xs);">${escapeHtml(fx)}</span>`;
+}
 function renderLedger() {
   const s = getState(), book = getBook(), cur = book.currency, b = $('ledger-body');
   const ledgerBookCode = bookCurrencyCode(book);
@@ -12561,7 +12733,7 @@ function renderLedger() {
     const editBtn = `<button class="edit-btn" onclick="openEditLedger(${i})" title="Edit entry" aria-label="Edit entry">✎</button>`;
     // Cross-link Sale rows back to the invoice that bills them (absent id → '').
     const invBadge = e.type === 'Sale' ? invoiceBadgeHTML(e.invoiceId, e.invoiceNum) : '';
-    html += `<tr class="${voided}"><td class="mono-num" style="font-size:var(--text-sm);color:var(--text3);">${fmtD(e.date)}</td><td style="font-weight:600;">${escapeHtml(e.storeName)}${editBtn}</td><td>${escapeHtml(e.type)}</td><td class="r">${e.qty}</td><td class="r">${e.type === 'Sale' ? e.rate + '%' : '—'}</td><td class="r" style="font-weight:600;">${e.amountDue > 0 ? fmt(e.amountDue, ledgerCur(e)) : '—'}</td><td style="font-size:var(--text-sm);color:var(--text3);">${escapeHtml(e.notes) || '—'}</td><td>${pill(e)}${e.status === 'pending' && !e.voided ? ` <button class="btn sm" style="margin-left:6px;" onclick="markPaid(${e.id})">Mark paid</button>` : ''}${invBadge}</td></tr>`;
+    html += `<tr class="${voided}"><td class="mono-num" style="font-size:var(--text-sm);color:var(--text3);">${fmtD(e.date)}</td><td style="font-weight:600;">${escapeHtml(e.storeName)}${editBtn}</td><td>${escapeHtml(e.type)}</td><td class="r">${e.qty}</td><td class="r">${e.type === 'Sale' ? e.rate + '%' : '—'}</td><td class="r" style="font-weight:600;">${e.amountDue > 0 ? fmt(e.amountDue, ledgerCur(e)) : '—'}</td><td style="font-size:var(--text-sm);color:var(--text3);">${consignNotesCell(e)}</td><td>${pill(e)}${e.status === 'pending' && !e.voided ? ` <button class="btn sm" style="margin-left:6px;" onclick="markPaid(${e.id})">Mark paid</button>` : ''}${invBadge}</td></tr>`;
   }
   b.innerHTML = html;
   if (foot) foot.innerHTML = consignmentLedgerFootHtml(consignmentLedgerTotals(matched, ledgerBookCode), ledgerTotalsScope(filter, storeName));
@@ -15001,6 +15173,15 @@ function saveLedgerEntryEdit(s, book) {
       }
       st.sold += (newQty - e.qty);
       e.amountDue = newDue;
+      // A sale recorded in the shop's own currency keeps that side in step,
+      // at the rate the row already carries (derived, so it survives a book
+      // currency change).
+      if (e.sale && Number(e.sale.due) > 0 && oldDue > 0 && newDue !== oldDue) {
+        const fx = oldDue / e.sale.due;
+        e.sale.unitPrice = roundCents(salePrice / fx);
+        e.sale.gross = roundCents(newQty * e.sale.unitPrice);
+        e.sale.due = roundCents(e.sale.gross * (1 - newRate / 100));
+      }
     }
     // Decision #2: editing a billed sale must NOT rewrite the invoice. Keep the
     // link, flag the invoice as diverged (its view shows a "ledger changed since
@@ -25982,7 +26163,7 @@ Object.assign(window, {
   fetchOrders, applyOne, applyAll, cancelOrder, restoreOrder, unapplyOne, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,
   onExpenseCurrencyChange, calcExpenseFx,
 
-  submitGratuity, openM, closeM, addStore, openEditStore, confirmEditStore, openSend, confirmSend, openSale, confirmSale,
+  submitGratuity, openM, closeM, addStore, openEditStore, confirmEditStore, openSend, confirmSend, openSale, confirmSale, onConsignSaleCurrencyChange, updateConsignSalePreview, onConsignPaymentCurrencyChange, updateConsignPaymentPreview, confirmConsignPayment,
   exportConsignmentLedgerCSV, openBulkSend, bulkApplyQty, bulkQtyChanged, bulkCheckChanged, updateBulkSendSummary, confirmBulkSend,
   openRet, confirmReturn, openEditHist, openEditLedger, saveEntryEdit, convertKeptAllToReceived, voidEntry,
   restoreBookDataFromSheets, resetBookData, connectSheets, disconnectSheets, testSheets, verifyUrl, checkSheetsVersion,
