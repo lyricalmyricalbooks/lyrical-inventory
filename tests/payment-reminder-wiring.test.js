@@ -325,20 +325,26 @@ describe('the day-before heads-up', () => {
 
 describe('the review list', () => {
   it('settles through the one existing writer, never its own', () => {
-    // There is exactly one writer of inv.status = 'paid' in this app.
+    // There is exactly one writer of inv.status = 'paid' in this app. The list
+    // opens the same payment form the invoice view uses; its confirm settles.
     const fn = extractDecl('reminderReviewMarkPaid', mainJs);
-    expect(fn).toContain('applyInvoicePaid(inv, bookId, s)');
+    expect(fn).toContain("openConsignPayment({ kind: 'invoice'");
     expect(fn).not.toContain("inv.status = 'paid'");
+    expect(extractDecl('confirmConsignPayment', mainJs)).toContain('applyInvoicePaid(t.inv, t.bookId, s)');
   });
 
-  it('confirms before touching the ledger', () => {
-    expect(extractDecl('reminderReviewMarkPaid', mainJs)).toContain('confirmDialog(');
+  it('asks before touching the ledger', () => {
+    // The payment form is the question: opening it writes nothing.
+    const fn = extractDecl('reminderReviewMarkPaid', mainJs);
+    expect(fn).not.toContain('applyInvoicePaid');
+    expect(fn).not.toContain('saveState');
   });
 
   it('repaints everything a settled invoice touches', () => {
-    const fn = extractDecl('reminderReviewMarkPaid', mainJs);
-    for (const call of ['renderReminderReview()', 'renderInvoices()', 'renderLedger()', 'updateDash()']) {
-      expect(fn).toContain(call);
+    expect(extractDecl('reminderReviewMarkPaid', mainJs)).toContain('renderReminderReview()');
+    const confirm = extractDecl('confirmConsignPayment', mainJs);
+    for (const call of ['renderInvoices()', 'renderLedger()', 'updateDash()', 'after()']) {
+      expect(confirm).toContain(call);
     }
   });
 

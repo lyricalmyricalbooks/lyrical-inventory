@@ -5105,7 +5105,7 @@
   <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="es-city">City</label><input id="es-city" placeholder="e.g. Milan"></div><div class="form-group"><label for="es-region">State / Province</label><input id="es-region" placeholder="e.g. ON"></div></div>
   <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="es-postal">Postal / ZIP code</label><input id="es-postal" placeholder="e.g. M5V 2J4"></div><div class="form-group"><label for="es-country">Country</label><input id="es-country" placeholder="e.g. Canada"></div></div>
   <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="es-website">Website</label><input id="es-website" placeholder="e.g. store.com"></div><div class="form-group"><label for="es-rate">Commission rate (%)</label><input id="es-rate" type="number" inputmode="decimal" step="any" value="40" min="0" max="100"></div></div>
-  <div class="form-group" style="margin-bottom:12px;"><label for="es-terms">Payment terms</label><input id="es-terms" placeholder="e.g. Net 30, paid on sale"></div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="es-terms">Payment terms</label><input id="es-terms" placeholder="e.g. Net 30, paid on sale"></div><div class="form-group"><label for="es-currency">Sells in</label><select id="es-currency"></select><div class="field-note">Sales for this store start in this currency.</div></div></div>
   <div class="form-group"><label for="es-notes">Notes</label><textarea id="es-notes" placeholder="Delivery info, special arrangements…"></textarea></div>
   <div class="modal-footer" role="dialog" aria-modal="true"><button class="btn" onclick="attemptCloseModal('edit-store')">Cancel</button><button class="btn gold" onclick="confirmEditStore()">Save changes</button></div>
 </div></div>
@@ -5153,8 +5153,14 @@
     </div>
     <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('record-sale')" aria-label="Close dialog" title="Close (Esc)">✕</button>
   </div>
-  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="sale-qty">Qty sold by store</label><input id="sale-qty" type="number" inputmode="numeric" value="1" min="1"></div><div class="form-group"><label for="sale-date">Date</label><input id="sale-date" type="date"></div></div>
-  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="sale-price">Sale price per unit</label><div class="price-wrap"><span class="sym" id="sale-sym">€</span><input id="sale-price" type="number" inputmode="decimal" value="40.00" step="0.01"></div></div><div class="form-group"><label for="sale-paid">Payment status</label><select id="sale-paid"><option value="pending">Pending</option><option value="paid">Paid</option></select></div></div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="sale-qty">Qty sold by store</label><input id="sale-qty" type="number" inputmode="numeric" value="1" min="1" oninput="updateConsignSalePreview()"></div><div class="form-group"><label for="sale-date">Date</label><input id="sale-date" type="date" onchange="onConsignSaleCurrencyChange()"></div></div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="sale-price">Sale price per unit</label><div class="price-inline"><select id="sale-cur" aria-label="Currency the store sold in" onchange="onConsignSaleCurrencyChange()"></select><input id="sale-price" type="number" inputmode="decimal" value="40.00" step="0.01" oninput="updateConsignSalePreview()"></div></div><div class="form-group"><label for="sale-paid">Payment status</label><select id="sale-paid"><option value="pending">Pending</option><option value="paid">Paid</option></select></div></div>
+  <div class="form-group consign-fx-row" id="sale-fx-row" hidden style="margin-bottom:12px;">
+    <label for="sale-fx-rate">Exchange rate</label>
+    <div class="consign-fx-rate"><span id="sale-fx-from">1 EUR =</span><input id="sale-fx-rate" type="number" inputmode="decimal" step="0.0001" min="0" placeholder="e.g. 1.5100" oninput="updateConsignSalePreview()"><span id="sale-fx-to">CAD</span></div>
+    <div class="field-note" id="sale-fx-note">Looked up for the sale date. Change it if your bank used a different rate.</div>
+  </div>
+  <div class="field-note consign-fx-preview" id="sale-preview" aria-live="polite" style="margin:-4px 0 12px;"></div>
   <div class="form-group"><label for="sale-notes">Notes</label><input id="sale-notes" placeholder="e.g. invoice ref, reporting period"></div>
   <div class="form-group" id="sale-invoice-row" style="display:none;margin-top:12px;">
     <label for="sale-makeinvoice" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;text-transform:none;letter-spacing:normal;">
@@ -5163,6 +5169,25 @@
     </label>
   </div>
   <div class="modal-footer" role="dialog" aria-modal="true"><button class="btn" onclick="attemptCloseModal('record-sale')">Cancel</button><button class="btn gold" onclick="confirmSale()">Record sale</button></div>
+</div></div>
+
+<div class="overlay" id="m-consign-payment" style="display:none;z-index:1250;"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="cp-title">
+  <div class="modal-title">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">💸</span>
+      <span id="cp-title">Record payment — <span id="cp-sname"></span></span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('consign-payment')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+  </div>
+  <p class="field-note" id="cp-expected" style="margin:0 0 12px;"></p>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="cp-amount">Amount received</label><div class="price-inline"><select id="cp-cur" aria-label="Currency the payment arrived in" onchange="onConsignPaymentCurrencyChange()"></select><input id="cp-amount" type="number" inputmode="decimal" step="0.01" min="0" oninput="updateConsignPaymentPreview()"></div></div><div class="form-group"><label for="cp-date">Date received</label><input id="cp-date" type="date" onchange="onConsignPaymentCurrencyChange()"></div></div>
+  <div class="form-group consign-fx-row" id="cp-fx-row" hidden style="margin-bottom:12px;">
+    <label for="cp-fx-rate">Exchange rate</label>
+    <div class="consign-fx-rate"><span id="cp-fx-from">1 EUR =</span><input id="cp-fx-rate" type="number" inputmode="decimal" step="0.0001" min="0" placeholder="e.g. 1.5100" oninput="updateConsignPaymentPreview()"><span id="cp-fx-to">CAD</span></div>
+    <div class="field-note" id="cp-fx-note">Looked up for the date received. Change it to match your bank statement.</div>
+  </div>
+  <div class="field-note consign-fx-preview" id="cp-preview" aria-live="polite" style="margin:0 0 4px;"></div>
+  <div class="modal-footer"><button class="btn" onclick="attemptCloseModal('consign-payment')">Cancel</button><button class="btn gold" onclick="confirmConsignPayment()">Mark paid</button></div>
 </div></div>
 
 <div class="overlay" id="m-return" style="display:none;"><div class="modal" role="dialog" aria-modal="true">

@@ -150,6 +150,15 @@ export function collectNativeAmounts(state, book) {
 
   for (const e of (s.ledger || [])) {
     push('ledger', `${e.type || 'Ledger'} · ${e.storeName || ''} amount due`, e, 'amountDue', e.date);
+    // A consignment payment that arrived in another currency (or short): the
+    // cash side (`payment.amount/currency`) stays, the book-currency side moves.
+    // The shop's own price (`e.sale`) is foreign cash and is left alone too.
+    if (e.payment && Number(e.payment.convertedTotal)) {
+      push('ledger', `${e.type || 'Ledger'} · ${e.storeName || ''} payment received`, e, 'convertedTotal', e.payment.date || e.date, e.payment);
+    }
+    if (e.payment && Number(e.payment.difference)) {
+      push('ledger', `${e.type || 'Ledger'} · ${e.storeName || ''} payment difference`, e, 'difference', e.payment.date || e.date, e.payment);
+    }
   }
 
   for (const st of (s.stores || [])) {
