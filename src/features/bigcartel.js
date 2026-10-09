@@ -73,6 +73,7 @@ import {
   bigCartelOrderLines,
   bigCartelOrderNumber,
   buildBigCartelOrderEntry,
+  splitGapByBook,
   describeGapSummary,
   findLedgerGaps,
   findRecoveredOrderConflicts,
@@ -1579,6 +1580,7 @@ async function checkBigCartelLedgerGaps({ silent = false } = {}) {
     const bcOrders = ordersRes.data || [];
     const included = ordersRes.included || [];
     bigCartelData.orders = bcOrders;
+    bigCartelData.included = included;
     cacheBigCartelOrders(bcOrders, included);
     applyBigCartelTracking(bcOrders, included).catch(e => console.warn('Big Cartel tracking sync failed', e));
 
@@ -1733,7 +1735,7 @@ function raiseStoreReversals(bcOrders = []) {
   const touched = new Set();
   found.forEach(item => {
     const row = (states[item.bookId]?.hist || []).find(h => h && h.sheetsId === item.sheetsId);
-    if (row) { row.storeReversalNoted = true; touched.add(item.bookId); }
+    if (row) { row.storeReversalNoted = item.full ? 'full' : 'partial'; touched.add(item.bookId); }
   });
   touched.forEach(bookId => window.saveState(bookId));
 
@@ -2363,13 +2365,39 @@ async function addBigCartelOrderToLedger(orderId) {
     ? gap.unitPrice
     : Number(BOOKS[bookId]?.listPrice || 0);
 
+  // An order with several different titles is split per book, unless the
+  // publisher picked a different book in the row (then they chose one on purpose).
+  const split = bookId === gap.bookId ? splitGapByBook(gap) : null;
+  if (split && split.blocked) {
+    showToast(`${gap.num} has several titles and at least one isn't in your catalogue, so it can't be added in one click. Record each book by hand.`, 'warn', 8000);
+    return;
+  }
+  const parts = split
+    ? split.parts.filter(part => BOOKS[part.bookId])
+    : [{ bookId, qty, price }];
+  if (!parts.length || (split && parts.length !== split.parts.length)) {
+    showToast('One of the books in this order is not in your catalogue anymore', 'warn');
+    return;
+  }
+
   let entry;
   try {
-    entry = commitRecoveredWebsiteOrder(bookId, { qty, price }, ({ stockAfter }) =>
-      buildBigCartelOrderEntry(gap, {
-        bookId, qty, price, stockAfter,
-        address: { ...address, email: gap.email || address.email },
-      }));
+    parts.forEach((part, index) => {
+      const partPrice = part.price != null && part.price > 0 ? part.price : Number(BOOKS[part.bookId]?.listPrice || 0);
+      const partGap = split
+        ? { ...gap, merchandiseTotal: partPrice * part.qty, shippingPaid: index === 0 ? gap.shippingPaid : 0, taxPaid: index === 0 ? gap.taxPaid : 0, totalPaid: 0 }
+        : gap;
+      const added = commitRecoveredWebsiteOrder(part.bookId, { qty: part.qty, price: partPrice }, ({ stockAfter }) => {
+        const built = buildBigCartelOrderEntry(partGap, {
+          bookId: part.bookId, qty: part.qty, price: partPrice, stockAfter,
+          address: { ...address, email: gap.email || address.email },
+        });
+        // Rows of one order share a number, so each later row needs its own sheet id.
+        if (index > 0) built.sheetsId = `${built.sheetsId}-${part.bookId}`;
+        return built;
+      });
+      if (index === 0) entry = added;
+    });
   } catch (error) {
     console.error('Big Cartel order add failed', error);
     showToast('Could not add that order. Please try again.', 'err');

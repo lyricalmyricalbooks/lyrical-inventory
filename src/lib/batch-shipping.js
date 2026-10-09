@@ -13,6 +13,7 @@
 import { addressValidationBlocker } from './address-verification.js';
 import { escapeHtml } from './html.js';
 import { normalizeShippingOrderNumber } from './shipping-reconciliation.js';
+import { withAutoLocalPickup } from './local-pickup.js';
 
 /** How far back an unshipped order is still worth offering. */
 export const BATCH_LOOKBACK_DAYS = 60;
@@ -21,10 +22,14 @@ export const BATCH_LOOKBACK_DAYS = 60;
  * Whether a history row is an order waiting to be shipped: a real, un-voided
  * sale with an order number and a street address, not yet marked shipped.
  */
-export function isBatchCandidate(entry, now = new Date()) {
+export function isBatchCandidate(entry, now = new Date(), { hidden = null } = {}) {
   if (!entry || entry.voided || entry.shipped) return false;
   if (String(entry.trackingNumber || '').trim()) return false;
   if (!normalizeShippingOrderNumber(entry.num)) return false;
+  // Same exclusions as the single-order "Ready to ship" queue: a parcel the
+  // customer collects, or an order the owner dismissed, never gets a label.
+  if (hidden && hidden.has(normalizeShippingOrderNumber(entry.num))) return false;
+  if (entry.excludeFromShipping || entry.localPickup || withAutoLocalPickup(entry)?.localPickup) return false;
   if (!String(entry.shipAddr1 || '').trim() || !String(entry.shipName || '').trim()) return false;
   const when = entry.date ? new Date(entry.date) : null;
   if (when && !Number.isNaN(when.getTime())) {

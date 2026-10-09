@@ -860,7 +860,7 @@ export function generateCanadaPostLabelSvg({
         <text x="0" y="45" font-size="12" font-weight="700" fill="#000000">CONTENTS: <tspan font-weight="800">${escapeXml(customs?.description || 'Printed Books / Livres imprimés')}</tspan></text>
         <text x="420" y="45" font-size="12" font-weight="700" fill="#000000">TARIFF HS: <tspan font-weight="900">${escapeXml(customs?.hsCode || '490199')}</tspan></text>
         
-        <text x="0" y="75" font-size="12" font-weight="700" fill="#000000">QTY: <tspan font-weight="800">${customs?.quantity || 1}</tspan> · VALUE: <tspan font-weight="900">$${parseFloat(customs?.declaredValue || 25).toFixed(2)} CAD</tspan></text>
+        <text x="0" y="75" font-size="12" font-weight="700" fill="#000000">QTY: <tspan font-weight="800">${customs?.quantity || 1}</tspan> · VALUE: <tspan font-weight="900">$${(parseFloat(customs?.declaredValue || 25) * Math.max(1, parseInt(customs?.quantity || 1, 10) || 1)).toFixed(2)} CAD</tspan></text>
         <text x="420" y="75" font-size="12" font-weight="700" fill="#000000">ORIGIN: <tspan font-weight="800">CANADA (CA)</tspan></text>
         
         ${declarationId ? `
@@ -1072,6 +1072,22 @@ function isDefinitiveProxyError(err) {
   return !/Failed to fetch|NetworkError|network error|load failed|aborted|ECONNREFUSED|fetch failed/i.test(msg);
 }
 
+/**
+ * A purchase request that may have reached Canada Post (relay timed out or
+ * the answer was lost) is NOT the same as one that never left the browser.
+ * The relay may already have created and billed the label, so the message
+ * must say the outcome is unknown and tell the owner to check before retrying.
+ */
+export function unknownPurchaseOutcomeError(detail) {
+  const err = new Error(
+    'We could not confirm whether Canada Post created this label' + (detail ? ` (${detail})` : '') + '. ' +
+    'It may have been purchased and billed already. Before buying again, check your Canada Post account (or the Shipments list there) ' +
+    'for a label to this address, and void it if you do not need it.'
+  );
+  err.outcomeUnknown = true;
+  return err;
+}
+
 /** Abort a proxy probe that never answers, so a hung host can't freeze the UI. */
 function withTimeout(ms) {
   try {
@@ -1134,7 +1150,10 @@ export async function executeCanadaPostProxy({
   // `if (proxyResp.ok)` guard) threw away the one answer that explains the
   // failure and left the publisher staring at a generic parse error.
   if (typeof window !== 'undefined') {
-    const probe = withTimeout(8000);
+    // A shipment call covers the OAuth exchange plus Canada Post's create call,
+    // so it gets a much longer window than a rate probe; an abort after the
+    // request left is an unknown outcome and is never replayed (see catch).
+    const probe = withTimeout(isShipment ? 60000 : 8000);
     try {
       const proxyResp = await fetch(localProxyUrl, {
         method: 'POST',
@@ -1163,6 +1182,11 @@ export async function executeCanadaPostProxy({
       // Anything else here means there is no local backend (a static host
       // answers this path with its own 404 page), so keep walking the chain.
     } catch (localErr) {
+      // The backend may still be buying the label after the browser gave up:
+      // replaying the POST through the relay could buy a second one.
+      if (isShipment && localErr && localErr.name === 'AbortError') {
+        throw unknownPurchaseOutcomeError('the backend took too long to answer');
+      }
       // A real answer from the proxy (bad credentials, Canada Post outage) is
       // the end of the road — retrying the same request through another hop
       // only produces the same rejection with a worse error message.
@@ -1218,6 +1242,12 @@ export async function executeCanadaPostProxy({
         }
         throw gasErr;
       }
+      // The relay may have created and billed the label before the answer was
+      // lost. A direct browser POST cannot succeed (CORS, no token), so there
+      // is nothing left to try: report the outcome as unknown.
+      if (isShipment && !(allowSimulation === null ? isSimulationAllowed({ isTest }) : !!allowSimulation)) {
+        throw unknownPurchaseOutcomeError(gasErr && gasErr.message);
+      }
     }
   }
 
@@ -1262,9 +1292,6 @@ export async function executeCanadaPostProxy({
     // A simulated shipment produces a tracking PIN that does not exist at Canada Post.
     // Handing that to a customer, billing it to the ledger, or marking an order shipped
     // would all be wrong, so simulation is confined to sandbox/demo-credential runs.
-    if (isShipment && (allowSimulation === null ? isSimulationAllowed({ isTest }) : !!allowSimulation)) {
-      return createSimulatedShipment(directErr.message || 'Canada Post gateway unreachable');
-    }
     if (isShipment && (allowSimulation === null ? isSimulationAllowed({ isTest }) : !!allowSimulation)) {
       return createSimulatedShipment(directErr.message || 'Canada Post gateway unreachable');
     }
@@ -2125,7 +2152,10 @@ export function buildNonContractShipmentJson({
   if (destCountry !== 'CA') {
     const qty = Math.max(1, parseInt(customs?.quantity || 1, 10));
     const rawVal = String(customs?.value ?? customs?.declaredValue ?? 25).replace(/[^0-9.]/g, '');
-    const declaredVal = Math.max(0.01, parseFloat(rawVal || '25'));
+    // customs.declaredValue / customs.value is the per-copy figure the form asks
+    // for ("Customs value per copy"), so it is used as-is for each unit; the
+    // parcel total is that figure times the copy count.
+    const unitValue = Math.max(0.01, parseFloat(rawVal || '25'));
     const customsDesc = String(customs?.description || 'Printed books').slice(0, 44);
     const hsCode = formatHsTariffCode(customs?.hsCode || '4901.99');
     const originProv = cleanSenderState || 'ON';
@@ -2139,7 +2169,7 @@ export function buildNonContractShipmentJson({
           customsNumberOfUnits: qty,
           customsDescription: customsDesc,
           unitWeight: Math.max(0.001, Number((weightKg / qty).toFixed(3))),
-          customsValuePerUnit: Math.max(0.01, Number((declaredVal / qty).toFixed(2))),
+          customsValuePerUnit: Math.max(0.01, Number(unitValue.toFixed(2))),
           hsTariffCode: hsCode,
           countryOfOrigin: 'CA',
           provinceOfOrigin: originProv
@@ -2795,13 +2825,14 @@ export async function refundCanadaPostShipment({
     }
   }
 
-  // Clean up cached PDF from IndexedDB upon refund
-  if (trackingPin) {
-    await deleteCachedLabelPdf(trackingPin).catch(() => {});
+  if (!refundSuccess && !isTest) {
+    // The label is still live and unrefunded: keep its offline-reprint copy.
+    throw new Error(`Canada Post refund request failed: ${errorMsg || 'Unable to process refund'}`);
   }
 
-  if (!refundSuccess && !isTest) {
-    throw new Error(`Canada Post refund request failed: ${errorMsg || 'Unable to process refund'}`);
+  // Clean up cached PDF from IndexedDB only once the refund really went through
+  if (trackingPin) {
+    await deleteCachedLabelPdf(trackingPin).catch(() => {});
   }
 
   return {
