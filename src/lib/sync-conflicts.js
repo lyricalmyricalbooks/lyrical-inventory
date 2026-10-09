@@ -373,7 +373,7 @@ const FIELD_LABELS = {
   ref: 'Reference', name: 'Name', contact: 'Contact', email: 'Email', phone: 'Phone',
   address: 'Address', city: 'City', region: 'Province / state', postal: 'Postal code',
   country: 'Country', website: 'Website', terms: 'Terms', amountOwed: 'Amount owed',
-  method: 'Method', total: 'Total', edited: 'Edited', editedAt: 'Last edited',
+  sale: "Store's own price", method: 'Method', total: 'Total', edited: 'Edited', editedAt: 'Last edited',
   sourceNum: 'From order', rateCad: 'Exchange rate', fxRate: 'Exchange rate',
   artistPaymentLink: 'Artist payment link', authorStock: 'Copies the author holds',
 };

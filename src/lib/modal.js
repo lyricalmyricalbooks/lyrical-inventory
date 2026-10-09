@@ -86,6 +86,18 @@ export function modalFieldsChanged(id) {
   return _modalSnapshots[id] !== undefined && _modalFieldSig(id) !== _modalSnapshots[id];
 }
 
+/**
+ * Accept the fields as they now stand as the dialog's starting point. For
+ * values the app fills in itself after opening (an exchange rate that arrives
+ * from a lookup): they are not the user's typing, so Cancel shouldn't ask
+ * about losing them. Does nothing once the user has changed something, so
+ * their edits are never quietly absorbed.
+ */
+export function rebaselineModal(id, wasClean) {
+  if (_modalSnapshots[id] === undefined || !wasClean) return;
+  _modalSnapshots[id] = _modalFieldSig(id);
+}
+
 let _modalReturnFocus = null;
 export function openM(id) {
   const el = $('m-' + id); if (!el) return;
