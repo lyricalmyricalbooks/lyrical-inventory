@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v51)
+/* Lyricalmyrical Inventory — Unified Backend (v52)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:
@@ -217,6 +217,10 @@
  *      v47-and-older as outdated so the publisher redeploys.
  *  49. v51: Complete the Chit Chats proxy with allowlisted shipment operations,
  *      staging support, official PDF artifacts, and upstream error reporting.
+ *  50. v52: the Chit Chats relay also accepts DELETE on a single shipment, so
+ *      the app can remove the unpaid rate-quote draft a changed parcel
+ *      replaced (Chit Chats itself refuses to delete anything with postage).
+ *      Bump flags v51-and-older as outdated so the publisher redeploys.
  *  47. v49: the "Monthly (CAD)" tab rebuilds itself on every sync instead of
  *      only from the menu, so it no longer goes stale (it was missing months
  *      and whole books). It leaves out test/connection-check rows, adds a
@@ -280,8 +284,8 @@ function doGet(e) {
   const receiptModel = receiptProps.getProperty('GEMINI_MODEL') || 'gemini-2.5-flash';
   const receiptModelValid = /^[a-zA-Z0-9.-]+$/.test(receiptModel);
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v51',
-    scriptVersion: 'v51',
+    service: 'lyrical-sheets-webhook-v52',
+    scriptVersion: 'v52',
     capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyChitChats: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, canadaPostRefund: true, graphicalEmails: true, authorPaymentEmails: true, dateOrderedRows: true, receiptExtraction: true, receiptSelfTest: true, receiptDailySweep: true, receiptBackupAi: true },
     receiptAi: {
       geminiApiKey: !!receiptProps.getProperty('GEMINI_API_KEY'),
@@ -753,7 +757,7 @@ function doPost(e) {
       return receiptDailySchedule_(payload.payload || {});
     }
 
-    // ── Proxy Canada Post Web Services API request (bypasses browser CORS) ──
+    // ── Proxy Chit Chats API v1 shipment requests (bypasses browser CORS) ──
     if (action === 'proxychitchats') {
       const d = payload.payload || {};
       const endpoint = String(d.endpoint || '');
@@ -765,7 +769,7 @@ function doPost(e) {
       const path = endpoint.split('?')[0];
       const allowedMethod = artifact ? method === 'GET'
         : /\/(buy|refund|refresh)$/.test(path) ? method === 'PATCH'
-        : /\/shipments$/.test(path) ? ['GET', 'POST'].indexOf(method) !== -1 : method === 'GET';
+        : /\/shipments$/.test(path) ? ['GET', 'POST'].indexOf(method) !== -1 : ['GET', 'DELETE'].indexOf(method) !== -1;
       if (!allowedMethod) return jsonOut_({ error: 'Invalid Chit Chats operation' });
       if (!d.apiKey) return jsonOut_({ error: 'Chit Chats API token required' });
       try {

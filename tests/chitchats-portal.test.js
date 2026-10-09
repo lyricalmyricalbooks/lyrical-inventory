@@ -77,4 +77,32 @@ describe('Chit Chats portal and accounts', () => {
     expect(app.main.TAX_CENTER.businessExpenses[0].amount).toBe(9.68);
     expect(fetch).not.toHaveBeenCalled();
   });
+  it('sends only documented fields and tidies the draft a changed parcel replaced', async () => {
+    const calls = [];
+    vi.stubGlobal('fetch', vi.fn(async (_url, options) => {
+      const call = JSON.parse(options.body).payload; calls.push(call);
+      const id = calls.filter(item => item.method === 'POST').length === 1 ? 'CCFIRST' : 'CCSECOND';
+      return reply({ shipment: { id, status: 'pending', rates: [{ postage_type: 'chit_chats_select', postage_description: 'Select', payment_amount: '9.68' }] } });
+    }));
+    document.getElementById('st-country').value = 'US'; document.getElementById('st-state').value = 'NY'; document.getElementById('st-zip').value = '10001';
+    document.getElementById('sp-customs-hs').value = '4901.99'; document.getElementById('cc-origin-country').value = 'ca';
+    await shipping.calculateChitChatsRatesHandler();
+    const created = calls[0].jsonPayload;
+    expect(created).not.toHaveProperty('order_store');
+    expect(Object.keys(created.line_items[0]).sort()).toEqual(['currency_code', 'description', 'hs_tariff_code', 'origin_country', 'quantity', 'value_amount']);
+    document.getElementById('sp-weight').value = '400';
+    await shipping.calculateChitChatsRatesHandler();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(calls.map(call => call.method)).toEqual(['POST', 'POST', 'DELETE']);
+    expect(calls[2].endpoint).toMatch(/\/shipments\/CCFIRST$/);
+  });
+  it('refuses a drop-off date in the past before contacting Chit Chats', async () => {
+    const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
+    document.getElementById('cc-ship-date').value = '2020-01-01';
+    await shipping.calculateChitChatsRatesHandler();
+    expect(fetch).not.toHaveBeenCalled();
+    expect(document.getElementById('chitchats-rates-card').textContent).toMatch(/drop-off date/i);
+    document.getElementById('cc-ship-date').value = '';
+  });
 });
+

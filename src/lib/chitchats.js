@@ -5,7 +5,11 @@ import { buildPostageExpense } from './postage-intake.js';
 import { getCachedLabelPdf, storeCachedLabelPdf } from './label-cache.js';
 
 const paidStatuses = new Set(['ready', 'in_transit', 'received', 'released', 'inducted', 'resolved', 'delivered', 'exception', 'voided', 'canceled']);
+// The documented state of a shipment whose postage was never bought.
+const DRAFT_STATUS = 'pending';
 const unpack = data => data?.shipment || data;
+// A 4xx other than a timeout or rate limit is a definite refusal: nothing ran.
+const isRefusal = error => error?.status >= 400 && error.status < 500 && ![408, 429].includes(error.status);
 const money = value => value == null || value === '' || !Number.isFinite(Number(value)) || Number(value) < 0 ? null : roundCents(Number(value));
 
 export async function executeChitChatsProxy({ endpoint, method = 'GET', payload = null, token = '', artifact = false }) {
@@ -24,16 +28,31 @@ export async function executeChitChatsProxy({ endpoint, method = 'GET', payload 
   if (result.error) throw new Error(String(result.error));
   if (!result.ok) {
     const error = new Error(result.status === 429 ? `Chit Chats is busy. Wait ${result.retryAfter || 'a few'} seconds before checking again.`
-      : `Chit Chats (${result.status || 'proxy unavailable'}): ${result.data?.error?.message || result.text || 'Update your Apps Script deployment and check your account settings.'}`);
+      : [401, 403].includes(result.status) ? 'Chit Chats did not accept this client ID and API token. Check them in Tax Centre → Integrations, and that the staging switch matches the account.'
+      : `Chit Chats (${result.status || 'proxy unavailable'}): ${chitChatsErrorMessage(result.data, result.text || 'Update your Apps Script deployment and check your account settings.')}`);
     error.status = result.status; throw error;
   }
   return artifact ? result : result.data;
 }
-export async function verifyChitChatsConnection({ clientId, token, isTest = false }) {
+// Chit Chats answers with Rails-style bodies: { error }, { errors: { field: [...] } } or { message }.
+export function chitChatsErrorMessage(data, fallback = '') {
+  const pick = value => {
+    if (value == null || value === '') return '';
+    if (typeof value === 'string' || typeof value === 'number') return String(value);
+    if (Array.isArray(value)) return value.map(pick).filter(Boolean).join(' ');
+    if (typeof value === 'object') return value.message ? pick(value.message)
+      : Object.entries(value).map(([key, item]) => `${key.replaceAll('_', ' ')} ${pick(item)}`.trim()).join('; ');
+    return '';
+  };
+  return (pick(data?.error) || pick(data?.errors) || pick(data?.message) || fallback).slice(0, 300);
+}
+export async function verifyChitChatsConnection({ clientId, token, isTest = false, request = executeChitChatsProxy }) {
   try {
-    await executeChitChatsProxy({ endpoint: `${resolveListShipmentsEndpoint(clientId, isTest)}?limit=1`, token });
+    await request({ endpoint: `${resolveListShipmentsEndpoint(clientId, isTest)}?limit=1`, token });
     return { ok: true, error: '' };
-  } catch (error) { return { ok: false, error: error.message }; }
+  } catch (error) {
+    return { ok: false, error: error.status === 404 ? `No ${isTest ? 'staging' : 'live'} Chit Chats account uses this client ID. Copy the number from your Chit Chats address bar after /clients/.` : error.message };
+  }
 }
 export function buildChitChatsShipment(input) {
   const payload = { ...input, postage_type: 'unknown' };
@@ -52,16 +71,47 @@ export function buildChitChatsShipment(input) {
   return payload;
 }
 export async function getChitChatsRates({ clientId, token, isTest = false, payload, shipmentId = '', request = executeChitChatsProxy }) {
-  const data = await request({ endpoint: resolveShipmentEndpoint(clientId, shipmentId, isTest), token,
-    method: shipmentId ? 'GET' : 'POST', payload: shipmentId ? null : buildChitChatsShipment(payload) });
-  const shipment = unpack(data);
-  if (!shipment?.id) throw new Error('Chit Chats did not return a shipment ID. Check your account before creating another draft.');
+  const body = buildChitChatsShipment(payload);
+  let shipment = null;
+  if (shipmentId) {
+    // Reuse the unchanged draft, unless it was deleted or bought on the website.
+    try { shipment = unpack(await request({ endpoint: resolveShipmentEndpoint(clientId, shipmentId, isTest), token, method: 'GET' })); }
+    catch (error) { if (error.status !== 404) throw error; }
+    if (shipment && shipment.id !== shipmentId) shipment = null;
+    if (shipment && (paidStatuses.has(shipment.status) || shipment.status === 'postage_requested')) {
+      const error = new Error('Chit Chats already has a label for this parcel. Choose Refresh shipments to bring it in. Do not buy another.');
+      error.alreadyBought = true; throw error;
+    }
+    if (shipment) shipment = await refreshChitChatsRates({ clientId, token, isTest, shipment, shipDate: body.ship_date, request });
+  }
+  if (!shipment) {
+    shipment = unpack(await request({ endpoint: resolveShipmentEndpoint(clientId, '', isTest), token, method: 'POST', payload: body }));
+    if (!shipment?.id) throw new Error('Chit Chats did not return a shipment ID. Check your account before creating another draft.');
+    // Rates can lag the new draft by a moment; one refresh asks for them again.
+    if (!shipment.rates?.length) shipment = await refreshChitChatsRates({ clientId, token, isTest, shipment, shipDate: body.ship_date, request });
+  }
   const rates = (shipment.rates || []).map(rate => ({
     postageType: rate.postage_type, serviceName: rate.postage_description || rate.postage_type,
     totalPrice: money(rate.payment_amount), taxes: roundCents((money(rate.federal_tax) || 0) + (money(rate.provincial_tax) || 0)),
     delivery: rate.delivery_time_description || '', tracking: rate.tracking_type_description || '',
   })).filter(rate => rate.postageType && rate.totalPrice !== null).sort((a, b) => a.totalPrice - b.totalPrice);
   return { shipment, rates };
+}
+// PATCH /refresh re-prices an unpaid draft. A refusal keeps the rates already in hand.
+async function refreshChitChatsRates({ clientId, token, isTest, shipment, shipDate, request }) {
+  try {
+    const fresh = unpack(await request({ endpoint: resolveShipmentEndpoint(clientId, shipment.id, isTest, 'refresh'), token, method: 'PATCH',
+      payload: shipDate ? { ship_date: shipDate } : null }));
+    return fresh?.id === shipment.id ? fresh : shipment;
+  } catch (error) {
+    if (!isRefusal(error)) throw error;
+    return shipment;
+  }
+}
+// Removes an unpaid draft the owner replaced. Chit Chats refuses to delete
+// anything with postage, so this can never void a bought label.
+export async function deleteChitChatsDraft({ clientId, token, isTest = false, shipmentId, request = executeChitChatsProxy }) {
+  return request({ endpoint: resolveShipmentEndpoint(clientId, shipmentId, isTest), token, method: 'DELETE' });
 }
 export async function getChitChatsShipment({ clientId, token, isTest = false, shipmentId, request = executeChitChatsProxy }) {
   return unpack(await request({ endpoint: resolveShipmentEndpoint(clientId, shipmentId, isTest), token, method: 'GET' }));
@@ -73,17 +123,30 @@ export async function buyChitChatsLabel({ clientId, token, isTest = false, shipm
   if (!resume) {
     if (!postageType || !onIntent) throw new Error('A saved purchase intent and selected service are required.');
     await onIntent();
-    await request({ endpoint: resolveShipmentEndpoint(clientId, shipmentId, isTest, 'buy'), method: 'PATCH', token, payload: { postage_type: postageType } });
+    try {
+      await request({ endpoint: resolveShipmentEndpoint(clientId, shipmentId, isTest, 'buy'), method: 'PATCH', token, payload: { postage_type: postageType } });
+    } catch (error) {
+      // A refusal (low balance, bad address) charged nothing; anything else may have.
+      if (isRefusal(error)) { error.message = `${error.message} No label was bought.`; error.purchaseFailed = true; }
+      throw error;
+    }
   }
+  let status = '';
   for (let index = 0; index < attempts; index++) {
     const shipment = await getChitChatsShipment({ clientId, token, isTest, shipmentId, request });
     if (!shipment || shipment.id !== shipmentId) throw new Error('Chit Chats returned a different shipment. Check the account before continuing.');
-    if (shipment.status === 'postage_purchase_failed') {
+    status = shipment.status;
+    if (status === 'postage_purchase_failed') {
       const error = new Error('Chit Chats could not buy this label. Check your balance and shipment in Chit Chats.');
       error.purchaseFailed = true; throw error;
     }
-    if (paidStatuses.has(shipment.status)) return shipment;
+    if (paidStatuses.has(status)) return shipment;
     if (index < attempts - 1) await wait(1500);
+  }
+  // Still an unpaid draft after every check: the buy never reached Chit Chats.
+  if (status === DRAFT_STATUS) {
+    const error = new Error('Chit Chats shows this label as not bought, so nothing was charged. Choose Buy label again when ready.');
+    error.purchaseFailed = true; throw error;
   }
   const error = new Error('The purchase is still being checked. Use Check purchase; do not buy a second label.');
   error.pending = true; throw error;
