@@ -15,7 +15,7 @@ initPhoneLayouts(document.body);
 import './firebase.js';
 import { registerSW } from 'virtual:pwa-register';
 import { canonicalExpenseCategory } from './lib/expense-categories.js';
-import { calcArtistEarnings, tierEffectiveCap, describePayout, payoutRequestCovered, planNetPayout, payoutNetted } from './lib/earnings.js';
+import { calcArtistEarnings, tierEffectiveCap, describePayout, payoutRequestCovered, planNetPayout, payoutNetted, unpaidSalesSummary } from './lib/earnings.js';
 import { planArtistSettlement, applyArtistSettlement, undoArtistSettlement, artistSettlementStatement, artistSettlementIssues, planSettlementForPayment } from './lib/artist-settlement.js';
 import { keyRows } from './lib/merge-state.js';
 import { createStripePriceAndLink } from './lib/stripe-payment-link.js';
@@ -7639,6 +7639,16 @@ function getRevenueProgressHtml(stats, tiers, nextTier, effectiveCap, cur) {
   return progressHtml;
 }
 
+// One line under the royalty owed saying where it comes from: the rate, the
+// slice of sales it was earned on, and how many copies since when.
+function owedFromSalesHtml(bookId, owed, cur) {
+  const u = unpaidSalesSummary(BOOKS[bookId], states[bookId], owed);
+  if (!u || u.copies <= 0) return '';
+  const rate = u.rates.length === 1 ? `${u.rates[0]}%` : `${u.rates[0]}–${u.rates[u.rates.length - 1]}%`;
+  const copies = `${u.copies} cop${u.copies === 1 ? 'y' : 'ies'} sold${u.since ? ` since ${fmtD(u.since)}` : ''}`;
+  return `<div class="ps-stat-detail">${rate} of ${fmt(u.revenue, cur)} · ${copies}</div>`;
+}
+
 function getOwedCardDetails(stats, cur, settle = null) {
   const owed = stats.owedToArtist;
   const artistOwesPublisher = owed < -0.01;
@@ -8047,6 +8057,7 @@ function renderProfitSharingBreakdown(bookId) {
     return `<div class="ps-stat-card tone-amber">
         <div class="ps-stat-label">${r.owedLabel.replace('⚠ ', '')}</div>
         <div class="ps-stat-val">${r.owedVal}</div>
+        ${r.owed > 0.01 ? owedFromSalesHtml(bookId, r.owed, cur) : ''}
         <div class="ps-stat-sub">${sub}</div>
       </div>`;
   })() : '';
@@ -8076,6 +8087,7 @@ function renderProfitSharingBreakdown(bookId) {
       <div class="ps-stat-card is-lead tone-${owedTone}">
         <div class="ps-stat-label">${owedLabel}</div>
         <div class="ps-stat-val">${owedVal}</div>
+        ${!settle.model && owed > 0.01 ? owedFromSalesHtml(bookId, owed, cur) : ''}
         <div class="ps-stat-sub">${owedSub}</div>
       </div>
     </div>
