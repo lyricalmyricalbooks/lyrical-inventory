@@ -73,7 +73,9 @@ function loadIntelThread() {
     for (const p of (Array.isArray(saved.proposals) ? saved.proposals : [])) {
       if (p && p.id) INTEL_PROPOSALS.set(p.id, p);
     }
-    proposalSeq = INTEL_PROPOSALS.size;
+    // Ids restart past the highest saved one, not the saved count — only the last
+    // 20 batches are kept, so the count can sit below an id that still exists.
+    proposalSeq = [...INTEL_PROPOSALS.keys()].reduce((m, id) => Math.max(m, parseInt(String(id).replace(/^b/, ''), 10) || 0), INTEL_PROPOSALS.size);
   } catch (_) {
     // A corrupt thread is not worth blocking the panel over — start a fresh one.
     INTEL_MESSAGES = []; INTEL_HISTORY = [];
@@ -798,11 +800,20 @@ async function applyIntelProposal(batchId) {
   }
 
   // Everything in memory first, so a failed save fails a whole family together.
+  // Each touched key's prior value is remembered so a failed family can be put
+  // back rather than left live in memory but unsaved.
+  const undo = new Map();
   for (const g of groups.values()) {
+    const restore = [];
+    undo.set(g, restore);
+    const set = (rec, key, val) => {
+      restore.push([rec, key, Object.prototype.hasOwnProperty.call(rec, key), rec[key]]);
+      rec[key] = val;
+    };
     for (const { item, rec } of g.items) {
-      if (item.target === 'tripBudget') rec[item.mapKey || item.id] = item.after;
-      else rec[item.field] = item.after;
-      if (item.sidePatch) Object.assign(rec, item.sidePatch);
+      if (item.target === 'tripBudget') set(rec, item.mapKey || item.id, item.after);
+      else set(rec, item.field, item.after);
+      if (item.sidePatch) for (const [k, v] of Object.entries(item.sidePatch)) set(rec, k, v);
     }
   }
 
@@ -816,19 +827,30 @@ async function applyIntelProposal(batchId) {
       saved += g.items.length;
     } catch (e) {
       console.error('Could not save changes for', g.key, e);
+      for (const [rec, key, had, prev] of (undo.get(g) || []).reverse()) {
+        if (had) rec[key] = prev; else delete rec[key];
+      }
       failed.push(g);
     }
   }
 
   if (failed.length) {
     const n = failed.reduce((t, g) => t + g.items.length, 0);
-    showToast(`${n} ${n === 1 ? 'change' : 'changes'} could not be saved — they are queued and will retry`, 'warn', 5200);
+    showToast(`${n} ${n === 1 ? 'change' : 'changes'} could not be saved, so they were left as they were — use the button again to retry`, 'warn', 5200);
   }
   if (missing.length) {
     showToast(`${missing.length} ${missing.length === 1 ? 'record was' : 'records were'} no longer there, so ${missing.length === 1 ? 'it was' : 'they were'} skipped`, 'warn', 5000);
   }
   if (saved && !failed.length) {
     showToast(`${saved} ${saved === 1 ? 'change' : 'changes'} saved`, 'ok', 3200);
+  }
+
+  if (failed.length) {
+    // Not "Done": the failed family was rolled back above, so the batch stays
+    // open and the publisher can try again.
+    setIntelStatus(`${saved} of ${live.length} ${live.length === 1 ? 'change' : 'changes'} saved — the rest can be retried.`);
+    renderIntel();
+    return;
   }
 
   b.status = 'applied';

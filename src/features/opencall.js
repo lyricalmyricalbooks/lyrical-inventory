@@ -2957,20 +2957,20 @@ function ocComposeStageEmail(cId, stageKey) {
     }
 
     subject = ocMergeTemplate(tmpl.subject, c, { project: proj.title, date: dl || 'July 15th' });
-    body = ocMergeTemplate(tmpl.body, c, { project: proj.title, date: dl || 'July 15th' });
+    body = ocMergeTemplate(ocTemplateBodyHtml_(tmpl.body), c, { project: proj.title, date: dl || 'July 15th' });
   } else {
     if (stageKey === 'selectionSent') {
       subject = `[Selected] Lyricalmyrical Collective Open Call`;
-      body = `Hi ${c.name || 'Artist'},\n\nCongratulations! Your work has been selected from our open call to be featured in our upcoming project. We're thrilled to include you!\n\nWe are now entering the layout phase and require one initial piece of info:\n1. The exact name you want to use in the credit index.\n\nPlease reply to this email to let us know.\n\nWarm regards,\nLyricalmyrical Books`;
+      body = ocTemplateBodyHtml_(`Hi ${c.name || 'Artist'},\n\nCongratulations! Your work has been selected from our open call to be featured in our upcoming project. We're thrilled to include you!\n\nWe are now entering the layout phase and require one initial piece of info:\n1. The exact name you want to use in the credit index.\n\nPlease reply to this email to let us know.\n\nWarm regards,\nLyricalmyrical Books`);
     } else if (stageKey === 'cmykSent') {
       subject = `[Files Requested] Lyricalmyrical Open Call - ${proj.title}`;
-      body = `Hi ${c.name || 'Artist'},\n\nWe are now preparing the print-ready files and require your high-resolution artwork.\n\nPlease send us your files (CMYK profile, 300 DPI, with 3mm bleed) as soon as possible.\n\nThank you again!\n\nWarm regards,\nLyricalmyrical Books`;
+      body = ocTemplateBodyHtml_(`Hi ${c.name || 'Artist'},\n\nWe are now preparing the print-ready files and require your high-resolution artwork.\n\nPlease send us your files (CMYK profile, 300 DPI, with 3mm bleed) as soon as possible.\n\nThank you again!\n\nWarm regards,\nLyricalmyrical Books`);
     } else if (stageKey === 'preorderSent') {
       subject = `[Pre-orders Open] Lyricalmyrical Collective Project - ${proj.title}`;
-      body = `Hi ${c.name || 'Artist'},\n\nWe are thrilled to announce that pre-orders for the collective project are now officially open!\n\nAs selected contributor, you receive a special 50% discount on any number of copies. Use code LMBCOLLECTIVE at checkout:\nhttps://www.lyricalmyricalbooks.com/product/collective-photobook\n\nThank you for being part of this project!\n\nWarm regards,\nLyricalmyrical Books`;
+      body = ocTemplateBodyHtml_(`Hi ${c.name || 'Artist'},\n\nWe are thrilled to announce that pre-orders for the collective project are now officially open!\n\nAs selected contributor, you receive a special 50% discount on any number of copies. Use code LMBCOLLECTIVE at checkout:\nhttps://www.lyricalmyricalbooks.com/product/collective-photobook\n\nThank you for being part of this project!\n\nWarm regards,\nLyricalmyrical Books`);
     } else {
       subject = `Regarding Open Call - ${proj.title}`;
-      body = `Hi ${c.name || 'Artist'},\n\n...`;
+      body = ocTemplateBodyHtml_(`Hi ${c.name || 'Artist'},\n\n...`);
     }
   }
 
