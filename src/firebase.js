@@ -151,6 +151,8 @@ window._fbDeleteReceipt = async (url) => {
 window._fbSignInWithGoogle = () => signInWithPopup(auth, googleProvider);
 window._fbSignOut = () => signOut(auth);
 window._fbOnAuthStateChanged = (cb) => onAuthStateChanged(auth, cb);
+// The signed-in user's ID token, for the Apps Script webhook (see lib/gas-auth.js).
+window._fbGetIdToken = async () => (auth.currentUser ? auth.currentUser.getIdToken() : '');
 
 // Gmail permission is incremental, separate from normal app sign-in.
 //
@@ -744,6 +746,11 @@ window._fbSaveBookOwners = async (owners) => {
     const email = String(owners[id] || '').toLowerCase().trim();
     if (email) clean[id] = email;
   });
+  // authorEmails: { <email, dots as commas>: true } — lets the settings read
+  // rules ask "is the caller an author of ANY book?" (RTDB keys can't hold '.').
+  const authorEmails = {};
+  Object.keys(clean).forEach(id => { authorEmails[clean[id].replace(/\./g, ',')] = true; });
+  if (Object.keys(authorEmails).length) clean.authorEmails = authorEmails;
   try { await set(ref(db, 'lyrical/settings/bookOwners'), clean); }
   catch (e) { console.error('fbSaveBookOwners (RTDB) failed', e); }
   try { await setDoc(doc(fs, 'settings', 'bookOwners'), clean); }

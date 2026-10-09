@@ -32,6 +32,19 @@ service cloud.firestore {
         && request.auth.token.email.lower() == bookOwnerEmail(bookId);
     }
 
+    // Any actual author: the caller's lowercased address (dots swapped for
+    // commas, because Realtime Database keys cannot contain dots and both
+    // stores share one encoding) is a key in settings/bookOwners.authorEmails,
+    // written by the publisher client alongside the bookId map. A bare Google
+    // account that is not an author is NOT one, so it reads no settings.
+    function isAnyAuthor() {
+      return request.auth != null
+        && request.auth.token.email != null
+        && exists(/databases/$(database)/documents/settings/bookOwners)
+        && request.auth.token.email.lower().replace('\\.', ',')
+           in get(/databases/$(database)/documents/settings/bookOwners).data.get('authorEmails', {});
+    }
+
     // Per-book data — readable ONLY by the publisher and the book's own author.
     // A signed-in author must not be able to read another author's sales
     // history, ledger, customers or payouts: authors are peers, not staff.
@@ -95,7 +108,7 @@ service cloud.firestore {
     // just the allowlisted docs above.
     match /settings/{document} {
       allow read: if isPublisher()
-        || (request.auth != null && isAuthorReadableSetting(document));
+        || (isAnyAuthor() && isAuthorReadableSetting(document));
       allow write: if isPublisher();
     }
 

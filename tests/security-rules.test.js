@@ -95,7 +95,7 @@ describe('settings read access', () => {
   });
 
   it('is an allowlist, so an unknown settings document is publisher-only', () => {
-    expect(firestoreRules).toMatch(/allow read: if isPublisher\(\)\s*\|\|\s*\(request\.auth != null && isAuthorReadableSetting\(document\)\)/);
+    expect(firestoreRules).toMatch(/allow read: if isPublisher\(\)\s*\|\|\s*\(isAnyAuthor\(\) && isAuthorReadableSetting\(document\)\)/);
     expect(firestoreRules).not.toMatch(/!\s*isPublisherOnlySetting/);
   });
 });
@@ -126,5 +126,19 @@ describe('publisher identity', () => {
       const guarded = e.split(`(auth.token.email === '${PUBLISHER}' && auth.token.email_verified === true)`).length - 1;
       expect(guarded, e).toBe(mentions);
     }
+  });
+});
+
+describe('author-only settings reads', () => {
+  it('Firestore requires an actual author, not just any signed-in account', () => {
+    expect(firestoreRules).toMatch(/function isAnyAuthor\(\)/);
+    expect(firestoreRules).toMatch(/allow read: if isPublisher\(\)\s*\|\|\s*\(isAnyAuthor\(\) && isAuthorReadableSetting\(document\)\)/);
+    expect(firestoreRules).toContain("'authorEmails'");
+  });
+  it('the Realtime Database checks the same authorEmails map before the allowlist', () => {
+    const expr = rtdbRules.rules.lyrical.settings.$key['.read'];
+    expect(expr).toContain('lyrical/settings/bookOwners/authorEmails');
+    expect(expr.slice(expr.indexOf('authorEmails'))).toContain("$key === 'catalog'");
+    expect(expr.slice(0, expr.indexOf('authorEmails'))).not.toMatch(/\$key ===/);
   });
 });

@@ -83,7 +83,7 @@ describe('doPost can reach a spreadsheet at all', () => {
     let output = null;
     const run = new Function(
       'SpreadsheetApp', 'HEADERS', 'COL', 'jsonOut_', 'processSheetsRow_',
-      'refreshOverviewSummary_', 'sortManagedSheets_', 'clearManagedSheets_', 'e',
+      'refreshOverviewSummary_', 'sortManagedSheets_', 'clearManagedSheets_', 'verifyFirebaseCaller_', 'requirePublisher_', 'LockService', 'e',
       `${doPostSource()}\nreturn doPost(e);`
     );
 
@@ -95,6 +95,8 @@ describe('doPost can reach a spreadsheet at all', () => {
       // only need to prove doPost reaches them without throwing.
       (ss, data) => { ssStub.getSheetByName('Overview'); appended.push({ sheet: 'Overview', data }); return { added: 1, replaced: 0 }; },
       () => {}, () => {}, () => 0,
+      () => ({ email: 'lyricalmyricalbooks@gmail.com' }), () => ({ email: 'lyricalmyricalbooks@gmail.com' }),
+      { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
       { postData: { contents: JSON.stringify({
         version: 2,
         eventId: 'evt-saqd-807649',

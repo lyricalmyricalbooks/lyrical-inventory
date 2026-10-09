@@ -45,7 +45,7 @@
         // secrets, the mailing list, unsubscribes, campaigns, open-call
         // contributors, and any key added later — is publisher-only.
         "$key": {
-          ".read": "auth != null && ((auth.token.email === 'lyricalmyricalbooks@gmail.com' && auth.token.email_verified === true) || $key === 'modeFlags' || $key === 'notifyEndpoint' || $key === 'analyticsConfig' || $key === 'catalog' || $key === 'paymentLinks' || $key === 'productionCosts' || $key === 'websitePaymentMethods')"
+          ".read": "auth != null && ((auth.token.email === 'lyricalmyricalbooks@gmail.com' && auth.token.email_verified === true) || (root.child('lyrical/settings/bookOwners/authorEmails').child(auth.token.email.toLowerCase().replace('.', ',')).exists() && ($key === 'modeFlags' || $key === 'notifyEndpoint' || $key === 'analyticsConfig' || $key === 'catalog' || $key === 'paymentLinks' || $key === 'productionCosts' || $key === 'websitePaymentMethods')))"
         }
       },
       "backups": {

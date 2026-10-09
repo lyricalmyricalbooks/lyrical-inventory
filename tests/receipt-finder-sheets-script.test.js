@@ -31,6 +31,8 @@ function sandbox({ properties = {}, authenticated = true, uid = 'publisher', out
     console,
   });
   vm.runInContext(source, ctx);
+  // Caller authentication has its own tests; these exercise what runs after it.
+  vm.runInContext("verifyFirebaseCaller_ = () => ({ uid: \"p\", email: \"lyricalmyricalbooks@gmail.com\" }); requirePublisher_ = verifyFirebaseCaller_;", ctx);
   const post = body => ctx.doPost({ postData: { contents: body } });
   return { ctx, post, fetch, appended, props };
 }
@@ -126,6 +128,8 @@ describe('unified Google Sheet script: receipt extraction (v44)', () => {
       console,
     });
     vm.runInContext(source, ctx);
+    // Caller authentication has its own tests; these exercise what runs after it.
+    vm.runInContext("verifyFirebaseCaller_ = () => ({ uid: \"p\", email: \"lyricalmyricalbooks@gmail.com\" }); requirePublisher_ = verifyFirebaseCaller_;", ctx);
     const result = ctx.doPost({ postData: { contents: JSON.stringify({ version: 2, action: 'testReceiptAi', idToken: 'id' }) } });
     expect(result).toMatchObject({ ok: true, aiOk: false, aiStatus: 403 });
     expect(JSON.stringify(result)).not.toContain('server-secret');
@@ -218,6 +222,8 @@ function sweepCtx({ properties = {}, messages = [], aiStatus = 200, receipts = [
     console,
   });
   vm.runInContext(source, ctx);
+  // Caller authentication has its own tests; these exercise what runs after it.
+  vm.runInContext("verifyFirebaseCaller_ = () => ({ uid: \"p\", email: \"lyricalmyricalbooks@gmail.com\" }); requirePublisher_ = verifyFirebaseCaller_;", ctx);
   return { ctx, props, written, created, aiCalls, triggers };
 }
 
