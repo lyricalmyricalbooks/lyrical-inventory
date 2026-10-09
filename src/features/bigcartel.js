@@ -889,7 +889,7 @@ function openBigCartelAddressPreview(orderId) {
   if (nameEl) nameEl.textContent = addr.name;
   if (linesEl) {
     const addrParts = [addr.company, addr.street1, addr.street2, [addr.city, addr.state, addr.zip].filter(Boolean).join(', '), addr.country].filter(Boolean);
-    linesEl.innerHTML = addrParts.join('<br>') || 'No street address provided';
+    linesEl.innerHTML = addrParts.map(escapeHtml).join('<br>') || 'No street address provided';
   }
   if (phoneEl) phoneEl.textContent = `Phone: ${addr.phone || '—'}`;
   if (emailEl) emailEl.textContent = `Email: ${email}`;
