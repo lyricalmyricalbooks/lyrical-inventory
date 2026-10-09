@@ -34,6 +34,7 @@ import {
   isAuthor,
   isPermissionDenied,
   reportClientError,
+  resolveExpenseRate,
   saveState,
   sheetsUrl,
   showToast,
@@ -78,11 +79,11 @@ import {
   startWatch,
 } from '../lib/watch-schedule.js';
 import { fmt, fmtD, getBookCurrencyCode, normalizeCurrencyCode, putCurrencyFirst, roundCents, setSelectCurrency } from '../lib/money.js';
-import { expenseLedgerTotals, expenseTotalsCopy } from '../lib/expense-totals.js';
+import { expenseLedgerTotals, expenseTotalsCopy, totalsByCurrency } from '../lib/expense-totals.js';
 import { closeM, confirmDialog, openM } from '../lib/modal.js';
 import { toCsv } from '../lib/csv.js';
 import { downloadBlob } from '../lib/download.js';
-import { createZip, textEntry } from '../lib/zip.js';
+import { createZip, textEntry, uniqueZipPath, zipEntryName } from '../lib/zip.js';
 import { planFile } from '../lib/receipt-match.js';
 import { renderTaxCenter, saveTaxCenter, switchTaxCenterSubTab, tcExpenseRowDrop } from './taxcentre.js';
 import {
@@ -122,7 +123,7 @@ import {
 import { isExpiringLabelUrl, isLabelUrlExpired, shippoTxIdFromRef } from '../lib/shippo-invoices.js';
 import { mountReceiptFinder, startReceiptFinder, stopReceiptFinder } from './receipt-finder.js';
 import { receiptTextForAi } from '../lib/receipt-finder-client.js';
-import { RECEIPT_QUERY, RECEIPT_NOISE } from '../lib/receipt-finder.js';
+import { RECEIPT_QUERY, RECEIPT_NOISE, receiptWorthReading } from '../lib/receipt-finder.js';
 
 function receiptFinderDependencies() {
   return {
@@ -139,11 +140,13 @@ function receiptFinderDependencies() {
     toast: showToast, confirm: confirmDialog,
     upload: (file, path) => window._fbUploadReceipt(file, path),
     commit: (expense, draft) => window._fbCommitFoundReceipt(expense, draft),
-    rate: async currency => {
+    // The rate published for the receipt's own date (else today's, else none) —
+    // what the manual expense form uses — so a receipt filed weeks after its
+    // invoice carries the CAD value it had on that day.
+    rate: async (currency, date) => {
       const base = (TAX_CENTER.settings?.baseCurrency || 'CAD').toUpperCase();
       if (currency === base) return 1;
-      const result = await fetchLiveRate(currency, base);
-      return result?.rate || null;
+      return (await resolveExpenseRate(currency, date, base)) || null;
     },
     accept: expense => {
       if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
@@ -233,6 +236,11 @@ function _setReceiptCamStatus(msg) {
   else { s.style.display = 'none'; s.textContent = ''; }
 }
 
+// Bumped each time the camera is opened or closed. A permission prompt answered
+// after the dialog was closed (or re-opened) belongs to an older request, and
+// its stream must be stopped rather than left running with the light on.
+let _receiptCamReq = 0;
+
 async function openReceiptCameraModal() {
   const modal = $('m-receipt-camera-modal');
   const video = $('receipt-cam-video');
@@ -253,14 +261,23 @@ async function openReceiptCameraModal() {
     return;
   }
   _setReceiptCamStatus('Requesting camera…');
+  _stopReceiptCamStream(); // opening twice must not orphan the earlier stream
+  const req = ++_receiptCamReq;
   try {
-    _receiptCamStream = await navigator.mediaDevices.getUserMedia({
+    const stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
       audio: false,
     });
+    if (req !== _receiptCamReq) {
+      // Closed (or reopened) while the permission prompt was up.
+      stream.getTracks().forEach(t => t.stop());
+      return;
+    }
+    _receiptCamStream = stream;
     video.srcObject = _receiptCamStream;
     _setReceiptCamStatus('');
   } catch (e) {
+    if (req !== _receiptCamReq) return;
     console.error('Camera error', e);
     const msg = e?.name === 'NotAllowedError'
       ? 'Camera permission denied. Allow access in your browser settings.'
@@ -280,6 +297,7 @@ function _stopReceiptCamStream() {
 }
 
 function closeReceiptCameraModal() {
+  _receiptCamReq++; // cancels a request still waiting on the permission prompt
   _stopReceiptCamStream();
   _receiptCamBlob = null;
   const modal = $('m-receipt-camera-modal');
@@ -487,8 +505,10 @@ async function batchScanAndRelinkReceipts() {
         const baseFilename = fn.split('/').pop();
         const existing = await findFileHandleInDir(handle, baseFilename);
         if (!existing && allDiskFiles.length > 0) {
-          const match = allDiskFiles.find(f => f.name.toLowerCase() === baseFilename.toLowerCase())
-            || allDiskFiles.find(f => exp.date && f.name.includes(exp.date));
+          // Same file name only. A name that merely contains the expense's date
+          // is just as likely another expense's receipt from that day, and
+          // attaching it would leave two expenses on one file.
+          const match = allDiskFiles.find(f => f.name.toLowerCase() === baseFilename.toLowerCase());
           if (match) {
             expModified = true;
             return `local://${match.path}`;
@@ -1174,11 +1194,12 @@ function cloudReceiptOwners() {
  * copy. Returns the new `local://` reference, or null if anything went wrong.
  *
  * Order matters and is the whole point: the cloud copy is deleted only once the
- * local write has come back clean. A failed fetch (offline, expired URL) leaves
+ * local write has come back clean (and, with keepCloud, once the caller has
+ * saved the expense's new link). A failed fetch (offline, expired URL) leaves
  * the receipt exactly where it was, so a reclaim that runs at a bad moment
  * costs nothing but a retry.
  */
-async function reclaimOneReceipt(url, meta, problems = null) {
+async function reclaimOneReceipt(url, meta, problems = null, { keepCloud = false } = {}) {
   // Record why this one failed rather than collapsing every cause into null.
   // A whole batch failing identically is the signature of a systemic problem —
   // an object that no longer exists, revoked access, a blocked request — and
@@ -1224,8 +1245,9 @@ async function reclaimOneReceipt(url, meta, problems = null) {
       return note('save', 'downloaded fine, but could not be written to the folder');
     }
 
-    // Safely on disk — now let go of the cloud copy.
-    await window._fbDeleteReceipt(url);
+    // Safely on disk — now let go of the cloud copy. A batch caller passes
+    // keepCloud and deletes it itself, once the new local link is saved.
+    if (!keepCloud) await window._fbDeleteReceipt(url);
     return toLocalRef(localRef);
   } catch (e) {
     return note('save', `${e.name || 'Error'}: ${e.message || 'could not save the file'}`);
@@ -1330,8 +1352,6 @@ async function reclaimCloudReceipts({ interactive = false } = {}) {
 
   let moved = 0;
   let failed = 0;
-  let taxTouched = false;
-  const booksTouched = new Set();
   const problems = [];
 
   for (const { exp, subfolder, scope, bid } of owners) {
@@ -1349,14 +1369,16 @@ async function reclaimCloudReceipts({ interactive = false } = {}) {
       book: scope === 'book' ? subfolder : '',
     };
 
+    const cloudToDelete = [];
     for (const ref of refs) {
       // Only our own stored files can be downloaded. An external link — a
       // Shippo label, a vendor's invoice page — belongs to another site, and a
       // browser cannot read its bytes however many times we ask.
       if (!isOurCloudReceipt(ref)) { next.push(ref); continue; }
-      const localRef = await reclaimOneReceipt(ref, { ...meta, index: next.length }, problems);
+      const localRef = await reclaimOneReceipt(ref, { ...meta, index: next.length }, problems, { keepCloud: true });
       if (localRef) {
         next.push(localRef);
+        cloudToDelete.push(ref);
         changed = true;
         moved++;
       } else {
@@ -1368,16 +1390,41 @@ async function reclaimCloudReceipts({ interactive = false } = {}) {
     }
 
     if (!changed) continue;
+    const prevFiles = Array.isArray(exp.receiptFiles) ? exp.receiptFiles.slice() : exp.receiptFiles;
+    const prevReceipt = exp.receipt;
+    const prevCloudAt = exp.receiptCloudAt;
     writeReceiptRefs(exp, next);
     // Once nothing of this expense is left in the cloud, its wait is over and
     // the age stamp would otherwise keep ageing forever.
     if (!cloudReceiptRefs(exp).length) delete exp.receiptCloudAt;
-    if (scope === 'tax') taxTouched = true;
-    else booksTouched.add(bid);
-  }
 
-  if (taxTouched) await saveTaxCenter();
-  for (const bid of booksTouched) await saveState(bid);
+    // Save the new local links BEFORE any cloud copy is deleted. Closing the tab
+    // or a failed save mid-batch must never leave a saved expense pointing at a
+    // cloud file that is already gone.
+    let saved = true;
+    try {
+      if (scope === 'tax') saved = (await saveTaxCenter()) !== false;
+      else await saveState(bid);
+    } catch (e) {
+      console.error('Receipt reclaim: could not save new links', e);
+      saved = false;
+    }
+    if (!saved) {
+      // Put the expense back as it was: the cloud copies are untouched, so the
+      // next reclaim can try again. (The local files stay in the folder.)
+      if (prevFiles === undefined) delete exp.receiptFiles; else exp.receiptFiles = prevFiles;
+      exp.receipt = prevReceipt;
+      if (prevCloudAt === undefined) delete exp.receiptCloudAt; else exp.receiptCloudAt = prevCloudAt;
+      moved -= cloudToDelete.length;
+      failed += cloudToDelete.length;
+      problems.push({ url: cloudToDelete[0], stage: 'save', detail: 'could not save the new receipt link, so the cloud copy was kept', desc: exp.desc });
+      continue;
+    }
+    for (const url of cloudToDelete) {
+      try { await window._fbDeleteReceipt(url); }
+      catch (e) { console.warn('Receipt reclaim: cloud copy not deleted', e, url); }
+    }
+  }
 
   if (btn) { btn.disabled = false; btn.textContent = btnText; }
 
@@ -1574,6 +1621,7 @@ async function exportReceiptsZip(year = null) {
   const files = [];
   const manifest = [['Date', 'Vendor', 'Description', 'Category', 'Book', 'Amount', 'Currency', 'File', 'Source']];
   let missing = 0;
+  const usedZipPaths = new Set(['manifest.csv']);
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
@@ -1595,7 +1643,9 @@ async function exportReceiptsZip(year = null) {
     }
 
     const name = receiptFileName({ ...row.meta, vendor, originalName: localRefPath(row.ref).split('/').pop(), mimeType: got.blob.type });
-    const path = [...receiptFolderPath(row.meta), name].join('/');
+    // The same name the zip will give it, so the manifest line points at the
+    // right file when two receipts collide (e.g. two identical parking tickets).
+    const path = uniqueZipPath(zipEntryName([...receiptFolderPath(row.meta), name].join('/')), usedZipPaths);
     files.push({ name: path, data: new Uint8Array(await got.blob.arrayBuffer()), date: new Date(row.exp.date || Date.now()) });
     manifest.push([
       row.exp.date || '', vendor, row.exp.desc || '', row.exp.cat || '', row.book,
@@ -1854,7 +1904,13 @@ async function runReceiptOrganizer() {
     if (e?.name !== 'AbortError') showToast('Could not open that folder', 'err');
     return;
   }
-  if (_organizerDest === _organizerSource) {
+  // Two picker calls hand back different handle objects even for the same
+  // folder, so compare with isSameEntry rather than ===.
+  let sameFolder = _organizerDest === _organizerSource;
+  if (!sameFolder && _organizerSource && typeof _organizerDest?.isSameEntry === 'function') {
+    try { sameFolder = await _organizerDest.isSameEntry(_organizerSource); } catch (_) { /* treat as different */ }
+  }
+  if (sameFolder) {
     showToast('⚠ Pick a different folder from the original', 'warn', 5000);
     return;
   }
@@ -2600,6 +2656,20 @@ function _inboxItemToDraft(item) {
 // only be there because the owner ran an extraction herself. Both auto
 // sources gate their own live re-render on this, so neither one yanks focus
 // or a half-typed edit out from under her.
+// Put a hand-run extraction's rows in the table WITHOUT discarding the rows the
+// Gmail add-on and the background sweep have waiting (and any edits made to
+// them): those stay, and the new rows follow. A freshly-read Gmail row for an
+// email the sweep already drafted is dropped, so nothing is listed twice.
+// Recomputed from the live list each call, so rows an auto source adds while a
+// slow extraction runs are kept too.
+function _setManualDrafts(manualDrafts) {
+  const waiting = (_emailReceiptDrafts || []).filter(d => d._inboxId || d._fromSweep);
+  const waitingRefs = new Set(waiting.filter(d => d.msgId && d.ref).map(d => d.ref));
+  const fresh = (manualDrafts || []).filter(d => !(d.msgId && d.ref && waitingRefs.has(d.ref)));
+  _emailReceiptDrafts = [...waiting, ...fresh];
+  return _emailReceiptDrafts;
+}
+
 function _emailDraftsHaveManualReview() {
   return _emailReceiptDrafts.some(d => !d._inboxId && !d._fromSweep);
 }
@@ -2622,44 +2692,53 @@ function loadGmailInboxDrafts() {
 
 // Pull the receipt file(s) the Gmail add-on staged in Firebase Storage into the
 // local receipts folder — the same place manually-attached email receipts go —
-// and return the local:// path of the first one. Returns '' when no folder is
-// connected, so the caller keeps the cloud URL as the receipt instead.
+// and return EVERY file's reference, in order: the local:// path for each one
+// that landed in the folder, and the cloud URL for any that couldn't (no folder
+// connected, a failed download), so no staged file is ever dropped from the
+// expense.
+//
+// The cloud staging copies of the files that did land locally are NOT deleted
+// here: they are listed on item._cloudToDelete for the caller to remove once
+// the expense that points at the local copies has been saved. Deleting first
+// would leave nothing to retry from if that save failed.
 async function localizeInboxReceiptFiles(item) {
-  if (typeof saveReceiptToLocalFile !== 'function') return '';
   const urls = (Array.isArray(item.receiptUrls) && item.receiptUrls.length)
     ? item.receiptUrls
     : (item.receipt && /^https?:/i.test(item.receipt) ? [item.receipt] : []);
-  if (!urls.length) return '';
+  if (!urls.length) return [];
+  item._cloudToDelete = [];
+  if (typeof saveReceiptToLocalFile !== 'function') return urls.slice();
 
   const downloadedFiles = await Promise.all(urls.map(async (url) => {
     try {
       const res = await fetch(url);
-      if (!res.ok) return null;
+      if (!res.ok) return { url, blob: null };
       const blob = await res.blob();
       // Filename from the Storage object path: …/o/receipts%2Femail-imports%2F<id>%2F<name>?…
       let name = decodeURIComponent((url.split('/o/')[1] || '').split('?')[0] || '').split('/').pop();
       name = (name || 'receipt').replace(/[^a-zA-Z0-9.\-_]/g, '') || 'receipt';
       return { url, blob, name };
     } catch (_) {
-      return null;
+      return { url, blob: null };
     }
   }));
 
-  let firstLocal = '';
+  const refs = [];
   for (const dl of downloadedFiles) {
-    if (!dl) continue;
     const { url, blob, name } = dl;
+    if (!blob) { refs.push(url); continue; }
     try {
       const file = new File([blob], name, { type: blob.type || 'application/octet-stream' });
       const local = await saveReceiptToLocalFile(file, 'email-imports');
       if (local) {
-        if (!firstLocal) firstLocal = local;
-        // The cloud copy was only a staging area — remove it now it's local.
-        try { await window._fbDeleteReceipt(url); } catch (_) { }
+        refs.push(local);
+        item._cloudToDelete.push(url);
+        continue;
       }
-    } catch (_) { /* skip this file, keep going */ }
+    } catch (_) { /* keep the cloud link below */ }
+    refs.push(url);
   }
-  return firstLocal;
+  return refs;
 }
 
 function switchEmailImportTab(tab) {
@@ -4936,7 +5015,8 @@ async function _postBatchToBusinessLedger(rows) {
     // The rate warmed for this batch (_warmBatchExpenseRates). None to be had
     // means no converted value yet, flagged and filled in by the Tax Centre
     // once online — not a silent 1:1.
-    const fxRate = currency === base ? 1 : (_fxRateCache[`${currency}_${base}`] || 0);
+    // The rate published for the receipt's own date, as on the manual form.
+    const fxRate = currency === base ? 1 : (await resolveExpenseRate(currency, row.date || today(), base).catch(() => 0));
     const entry = {
       id: idBase + logged,
       desc, cat, currency, amount, fxRate: fxRate || null,
@@ -5478,7 +5558,7 @@ async function extractReceiptsFromEmailText() {
         collected.push(...drafts);
         completed++;
         // Rows land as they arrive instead of after the whole batch.
-        _emailReceiptDrafts = collected.slice();
+        _setManualDrafts(collected);
         renderEmailReceiptDrafts(_emailReceiptDrafts);
         _renderExtractProgress({ completed, total: todo.length, found: collected.length });
         return drafts;
@@ -5491,7 +5571,7 @@ async function extractReceiptsFromEmailText() {
         if (btn) { btn.disabled = false; btn.textContent = prev; }
         _emailExtractAbort = null;
         clearTimeout(timeoutId);
-        _emailReceiptDrafts = collected.slice();
+        _setManualDrafts(collected);
         renderEmailReceiptDrafts(_emailReceiptDrafts);
         return;
       }
@@ -5502,7 +5582,7 @@ async function extractReceiptsFromEmailText() {
     }
 
     _renderExtractProgress({ done: true });
-    _emailReceiptDrafts = collected.slice();
+    _setManualDrafts(collected);
     renderEmailReceiptDrafts(_emailReceiptDrafts);
     _renderExtractSummary({
       total: todo.length,
@@ -5568,8 +5648,8 @@ async function extractReceiptsFromEmailText() {
     const parsed = _parseReceiptJson(out?.text || '{}');
     const { drafts, flagged } = _draftsFromReceiptRows(parsed.receipts, '');
 
-    _emailReceiptDrafts = drafts;
-    renderEmailReceiptDrafts(drafts);
+    _setManualDrafts(drafts);
+    renderEmailReceiptDrafts(_emailReceiptDrafts);
     if (!drafts.length) {
       showToast('No receipts detected — check your pasted text or files.', 'warn');
     } else {
@@ -5817,11 +5897,19 @@ function applyBulkCategoryToEmailDrafts() {
 // is the most receipt-like file). Saved once per source email via the shared
 // gmailSavedByMsg cache. Falls back to the add-on copy, a cloud URL, or a
 // manually-attached file when there are no Gmail files.
+// The slot in the attached-files list that a pasted/uploaded draft belongs to:
+// its row number in the AI's answer. Gmail, sweep and add-on drafts have their
+// own sources, so they have no slot.
+function _pastedDraftFileIndex(item) {
+  if (!item || item.msgId || item._inboxId || item._fromSweep) return null;
+  return Number.isInteger(item.rowIndex) ? item.rowIndex : null;
+}
+
 async function _saveDraftReceiptFiles(item, ctx) {
   const { gmailSavedByMsg, savedReceiptPaths, draftIdx } = ctx;
 
-  let addonLocal = '';
-  if (item._inboxId) addonLocal = await localizeInboxReceiptFiles(item);
+  let addonFiles = [];
+  if (item._inboxId) addonFiles = await localizeInboxReceiptFiles(item);
 
   let emailFiles = [];
   if (item.msgId && typeof saveReceiptToLocalFile === 'function') {
@@ -5858,7 +5946,20 @@ async function _saveDraftReceiptFiles(item, ctx) {
   }
 
   if (emailFiles.length) return emailFiles.slice();
-  const fallback = addonLocal || item.receipt || savedReceiptPaths[draftIdx] || savedReceiptPaths[0] || '';
+  // Every file the add-on staged stays on the expense, not just the first.
+  if (addonFiles.length) return addonFiles.slice();
+  // A pasted/uploaded draft is paired with its own file by the row's stable
+  // index (rowIndex), not by its position among the rows still ticked — so
+  // unticking a row or a failed save can't hand a draft its neighbour's file.
+  // A draft whose own file failed to save gets no receipt (it is flagged so the
+  // owner can attach it) — never a neighbour's. Only a draft numbered past the
+  // end of the list (one PDF holding several receipts) shares the first file.
+  const own = _pastedDraftFileIndex(item);
+  let paired;
+  if (own == null) paired = savedReceiptPaths[draftIdx] || savedReceiptPaths.find(Boolean);
+  else if (own < savedReceiptPaths.length) paired = savedReceiptPaths[own];
+  else paired = savedReceiptPaths.find(Boolean);
+  const fallback = item.receipt || paired || '';
   return fallback ? [fallback] : [];
 }
 
@@ -5957,16 +6058,18 @@ async function importEmailReceiptDrafts() {
     fallbackCat: $('email-receipt-default-cat')?.value || 'Other',
     attachedFiles: Array.from($('email-receipt-files')?.files || []),
   });
-  const { imported, importedNeedsAmount, relinked, skippedDup } = counts;
+  const { imported, importedNeedsAmount, relinked, skippedDup, attachedLost, saved } = counts;
 
   const msgParts = [];
   if (imported) msgParts.push(`✓ Imported ${imported} expense${imported > 1 ? 's' : ''}`);
   if (importedNeedsAmount) msgParts.push(`${importedNeedsAmount} need${importedNeedsAmount > 1 ? '' : 's'} an amount`);
   if (relinked) msgParts.push(`📎 ${relinked} receipt${relinked > 1 ? 's' : ''} linked to existing`);
   if (skippedDup) msgParts.push(`${skippedDup} duplicate${skippedDup > 1 ? 's' : ''} skipped`);
-  showToast(msgParts.join(' · ') || 'Nothing imported', (imported || relinked) ? 'ok' : 'warn');
+  if (attachedLost) msgParts.push(`⚠ ${attachedLost} attached file${attachedLost > 1 ? 's' : ''} could not be saved — attach from the ledger row`);
+  if (saved === false) msgParts.push('⚠ could not save — nothing was cleared, try again');
+  showToast(msgParts.join(' · ') || 'Nothing imported', (imported || relinked) && !attachedLost && saved !== false ? 'ok' : 'warn');
 
-  if (imported || relinked) closeEmailReceiptImportModal();
+  if ((imported || relinked) && saved !== false) closeEmailReceiptImportModal();
   else if (btn) { btn.disabled = false; btn.textContent = 'File selected receipts'; }
 }
 
@@ -5982,26 +6085,35 @@ async function _fileReceiptDrafts(drafts, { fallbackCat = 'Other', attachedFiles
   if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
   const baseCur = TAX_CENTER.settings?.baseCurrency || 'CAD';
 
-  // Save attached files to local receipt storage
-  const savedReceiptPaths = [];
-  if (attachedFiles.length) {
-    for (const file of attachedFiles) {
-      try {
-        const path = await saveReceiptToLocalFile(file, 'email-imports');
-        if (path) savedReceiptPaths.push(path);
-      } catch (_) { /* local folder may not be set up */ }
-    }
+  // Save attached files best-effort (folder, else cloud). One slot per attached
+  // file, left blank when a save fails, so a slot number always means the same
+  // file and a failure doesn't shift every later draft onto its neighbour's.
+  const savedReceiptPaths = attachedFiles.map(() => '');
+  for (let i = 0; i < attachedFiles.length; i++) {
+    try {
+      const saved = await saveReceiptBestEffort(attachedFiles[i], 'email-imports');
+      savedReceiptPaths[i] = saved.ref || '';
+    } catch (_) { /* leave this slot blank */ }
   }
+  const attachedLost = attachedFiles.length - savedReceiptPaths.filter(Boolean).length;
 
-  // Warm the FX cache for every distinct currency up front — previously the
-  // first draft of each currency blocked the whole import loop on its own
-  // await, one at a time, even though _fxRateCache already dedupes by pair.
+  // Look up each foreign draft's rate for ITS OWN date up front (in parallel,
+  // once per distinct currency+date) — an emailed invoice is usually weeks old,
+  // and the CAD value belongs to the day it was spent, as on the manual form.
   const baseCurUp = (TAX_CENTER.settings?.baseCurrency || 'CAD').toUpperCase();
-  const neededCurrencies = Array.from(new Set(
-    drafts.map(d => (d.currency || baseCurUp).toUpperCase()).filter(c => c !== baseCurUp)
-  )).filter(c => !_fxRateCache[`${c}_${baseCurUp}`]);
-  if (neededCurrencies.length) {
-    await Promise.all(neededCurrencies.map(c => fetchLiveRate(c, baseCurUp).catch(() => null)));
+  const datedRates = new Map();
+  const rateKeyOf = (cur, date) => `${cur}|${date}`;
+  const ratePairs = new Map();
+  drafts.forEach(d => {
+    const cur = (d.currency || baseCurUp).toUpperCase();
+    if (cur === baseCurUp) return;
+    const date = d.date || today();
+    ratePairs.set(rateKeyOf(cur, date), [cur, date]);
+  });
+  if (ratePairs.size) {
+    await Promise.all([...ratePairs].map(async ([key, [cur, date]]) => {
+      datedRates.set(key, await resolveExpenseRate(cur, date, baseCurUp).catch(() => 0));
+    }));
   }
 
   let imported = 0, skippedDup = 0, relinked = 0, importedNeedsAmount = 0;
@@ -6043,6 +6155,7 @@ async function _fileReceiptDrafts(drafts, { fallbackCat = 'Other', attachedFiles
       if (receiptFiles.length) {
         dup.receipt = receiptPath;
         dup.receiptFiles = receiptFiles;
+        if (receiptFiles.some(isOurCloudReceipt)) dup.receiptCloudAt = new Date().toISOString();
         if (item.msgId && !dup.emailMsgId) dup.emailMsgId = item.msgId;
         relinked++;
       } else {
@@ -6054,7 +6167,7 @@ async function _fileReceiptDrafts(drafts, { fallbackCat = 'Other', attachedFiles
     // Rates were warmed for the whole import above. None at all leaves the
     // converted value empty and flagged for the Tax Centre to fill in once
     // online, rather than booking a foreign amount 1:1.
-    const fxRate = currency === baseCur ? 1 : (_fxRateCache[`${currency}_${baseCur}`] || 0);
+    const fxRate = currency === baseCur ? 1 : (datedRates.get(rateKeyOf(currency, item.date || today())) || 0);
 
     const newExpense = {
       id: Date.now() + Math.floor(Math.random() * 100000),
@@ -6080,6 +6193,9 @@ async function _fileReceiptDrafts(drafts, { fallbackCat = 'Other', attachedFiles
       importedFromEmail: true,
       importedAt: new Date().toISOString()
     };
+    // A receipt that could only be kept in the cloud is stamped so the Tax
+    // Centre counts it as waiting to come down into the folder.
+    if (receiptFiles.some(isOurCloudReceipt)) newExpense.receiptCloudAt = new Date().toISOString();
     TAX_CENTER.businessExpenses.unshift(newExpense);
     // Keep the index in step so a later draft in this same batch that matches
     // this brand-new expense is still recognized as a duplicate.
@@ -6091,11 +6207,21 @@ async function _fileReceiptDrafts(drafts, { fallbackCat = 'Other', attachedFiles
     if (item.amountUnknown) importedNeedsAmount++;
   }
 
-  await saveTaxCenter();
+  const saved = (await saveTaxCenter()) !== false;
 
   // Drafts that came from the Gmail add-on carry an _inboxId — remove those
   // Firestore docs now that they've been reviewed so the queue stays clean.
-  const inboxIds = drafts.map(d => d._inboxId).filter(Boolean);
+  // Only once the expenses are saved: until then the staged cloud files and the
+  // inbox item are the only copy, and a failed save must leave them to retry.
+  if (saved) {
+    for (const d of drafts) {
+      for (const url of (d._cloudToDelete || [])) {
+        try { await window._fbDeleteReceipt(url); } catch (_) { /* a stray staging file is harmless */ }
+      }
+      delete d._cloudToDelete;
+    }
+  }
+  const inboxIds = saved ? drafts.map(d => d._inboxId).filter(Boolean) : [];
   if (inboxIds.length && typeof window._fbDeleteInboxItem === 'function') {
     await Promise.all(inboxIds.map(id => window._fbDeleteInboxItem(id)));
     // ⚡ Bolt Optimization: Replace O(N) Array.includes with O(1) Set.has inside filter loop
@@ -6108,14 +6234,15 @@ async function _fileReceiptDrafts(drafts, { fallbackCat = 'Other', attachedFiles
   // just-imported sweep-found row would sit in _emailReceiptDrafts as a stale
   // duplicate of the real ledger entry the next time the modal opens, since
   // reopening now preserves auto-sourced rows instead of clearing everything.
-  const processed = new Set(drafts);
+  // (After a failed save the rows stay, so nothing is lost and Import can be retried.)
+  const processed = new Set(saved ? drafts : []);
   _emailReceiptDrafts = _emailReceiptDrafts.filter(d => !processed.has(d));
-  _clearResolvedSweepPending(drafts);
+  if (saved) _clearResolvedSweepPending(drafts);
   writePersistedEmailReceiptDrafts(_emailReceiptDrafts);
   updateEmailInboxBadge();
 
   if (typeof renderTaxCenter === 'function') renderTaxCenter();
-  return { imported, importedNeedsAmount, relinked, skippedDup };
+  return { imported, importedNeedsAmount, relinked, skippedDup, attachedLost, saved };
 }
 
 // ── The receipt inbox scans itself ──────────────────────────────────────
@@ -6139,6 +6266,15 @@ const RECEIPT_SWEEP_LIST_LIMIT = 25;
 const RECEIPT_SWEEP_EXTRACT_CAP = 8;
 const RECEIPT_SWEEP_LAST_KEY = 'lm-receipt-sweep-last';
 const RECEIPT_SWEEP_PENDING_KEY = 'lm-receipt-sweep-pending';
+// The moment up to which every email in the window has actually been dealt
+// with. Unlike the last-run stamp (which only paces the 30-minute check), it
+// stays put on a run that was capped out or hit unreadable emails, so the next
+// window still reaches back to them.
+const RECEIPT_SWEEP_COVERED_KEY = 'lm-receipt-sweep-covered';
+// Emails the sweep has already read once (found receipts, found none, or was
+// dismissed), so a newsletter in the window isn't sent to the AI every run.
+const RECEIPT_SWEEP_SEEN_KEY = 'lm-receipt-sweep-seen';
+const RECEIPT_SWEEP_SEEN_MAX = 500;
 
 let _receiptSweepStarted = false;
 let _receiptSweeping = false;
@@ -6148,6 +6284,26 @@ function readReceiptSweepStamp() {
 }
 function writeReceiptSweepStamp(at) {
   try { localStorage.setItem(RECEIPT_SWEEP_LAST_KEY, String(at)); } catch (_) { /* private mode */ }
+}
+
+function readReceiptSweepCovered() {
+  try { return Number(localStorage.getItem(RECEIPT_SWEEP_COVERED_KEY)) || readReceiptSweepStamp(); } catch (_) { return 0; }
+}
+function writeReceiptSweepCovered(at) {
+  try { localStorage.setItem(RECEIPT_SWEEP_COVERED_KEY, String(at)); } catch (_) { /* private mode */ }
+}
+// msgId → when it was read. Capped to the newest entries so it can't grow forever.
+function readReceiptSweepSeen() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(RECEIPT_SWEEP_SEEN_KEY) || '{}');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch (_) { return {}; }
+}
+function writeReceiptSweepSeen(seen) {
+  try {
+    const newest = Object.entries(seen || {}).sort((a, b) => b[1] - a[1]).slice(0, RECEIPT_SWEEP_SEEN_MAX);
+    localStorage.setItem(RECEIPT_SWEEP_SEEN_KEY, JSON.stringify(Object.fromEntries(newest)));
+  } catch (_) { /* private mode */ }
 }
 
 // Every message the sweep has drafted at least one row from that is not yet
@@ -6286,9 +6442,11 @@ async function sweepReceiptEmails({ force = false } = {}) {
 
   _receiptSweeping = true;
   try {
+    const runStartedAt = Date.now();
     const pending = readReceiptSweepPending();
+    const coveredStamp = readReceiptSweepCovered();
     const since = receiptSweepWindowStart({
-      lastStamp: readReceiptSweepStamp(),
+      lastStamp: coveredStamp,
       pendingFoundAts: pending.map(p => p.foundAt),
       coldStartDays: RECEIPT_SWEEP_COLD_START_DAYS,
     });
@@ -6305,10 +6463,13 @@ async function sweepReceiptEmails({ force = false } = {}) {
       (TAX_CENTER.businessExpenses || []).map(e => e.emailMsgId).filter(Boolean)
     );
     const alreadyDrafted = new Set(_emailReceiptDrafts.map(d => d.msgId).filter(Boolean));
-    const todo = (listData.emails || [])
+    const seen = readReceiptSweepSeen();
+    const candidates = (listData.emails || [])
       .map(e => e.id)
-      .filter(id => id && !importedMsgIds.has(id) && !alreadyDrafted.has(id))
-      .slice(0, RECEIPT_SWEEP_EXTRACT_CAP);
+      .filter(id => id && !importedMsgIds.has(id) && !alreadyDrafted.has(id) && !seen[id]);
+    const todo = candidates.slice(0, RECEIPT_SWEEP_EXTRACT_CAP);
+    const cappedOut = candidates.length - todo.length;
+    let unreadable = 0;
 
     const foundDrafts = [];
     const newPendingEntries = [];
@@ -6319,8 +6480,11 @@ async function sweepReceiptEmails({ force = false } = {}) {
         if (caps && caps.batchEmailContent) await _batchFetchEmailContents(todo);
       } catch (_) { /* fall back to per-message fetch below */ }
 
-      await _runExtractionPool(todo, EMAIL_EXTRACT_CONCURRENCY, async (msgId) => {
+      const poolResults = await _runExtractionPool(todo, EMAIL_EXTRACT_CONCURRENCY, async (msgId) => {
         const email = await _fetchEmailContent(msgId);
+        // A delivery ping or a message naming no amount can't hold a receipt —
+        // remember it and don't pay for an AI read, now or on later runs.
+        if (!receiptWorthReading(email)) { seen[msgId] = Date.now(); return []; }
         const selected = _selectedFileParts(msgId, email);
         await _hydrateSelectedAttachmentBytes(msgId, selected);
         await Promise.all(selected.map(f => _shrinkInlineAttachment(f)));
@@ -6347,8 +6511,13 @@ async function sweepReceiptEmails({ force = false } = {}) {
           foundDrafts.push(...visibleDrafts.map(d => ({ ...d, _fromSweep: true })));
           newPendingEntries.push({ msgId, foundAt: Date.now() });
         }
+        // Read successfully: even a read that found nothing (or only receipts
+        // the owner already dismissed) is settled and isn't asked again.
+        seen[msgId] = Date.now();
         return drafts;
       });
+      unreadable = poolResults.filter(r => r && !r.ok).length;
+      writeReceiptSweepSeen(seen);
     }
 
     if (foundDrafts.length) {
@@ -6362,9 +6531,19 @@ async function sweepReceiptEmails({ force = false } = {}) {
       _showReceiptSweepAlert(foundDrafts);
     }
 
+    // The run time paces the next check; the covered time only moves when every
+    // email in the window was dealt with — not when some were capped out or
+    // couldn't be read, which the next window must still reach back to.
     writeReceiptSweepStamp(Date.now());
-    noteIntegrationSuccess('receipt-scan');
-    return { found: foundDrafts.length, flagged: foundDrafts.filter(d => d.amountUnknown).length };
+    const complete = cappedOut === 0 && unreadable === 0;
+    writeReceiptSweepCovered(complete ? runStartedAt : (coveredStamp || since));
+    if (unreadable > 0) {
+      const failure = new Error(`${unreadable} receipt email${unreadable === 1 ? '' : 's'} could not be read`);
+      noteIntegrationFailure('receipt-scan', failure, { online, configured });
+    } else {
+      noteIntegrationSuccess('receipt-scan');
+    }
+    return { found: foundDrafts.length, flagged: foundDrafts.filter(d => d.amountUnknown).length, unreadable, cappedOut };
   } catch (error) {
     console.warn('Receipt inbox sweep failed', error);
     noteIntegrationFailure('receipt-scan', error, { online, configured });
@@ -6388,6 +6567,10 @@ function startReceiptEmailSweep() {
 // other with nothing to catch it.
 
 let _expenseFxRate = null;
+// Which currency _expenseFxRate belongs to, and a counter that lets a slow
+// lookup for a currency the owner has since left be ignored when it lands.
+let _expenseFxRateCur = '';
+let _expenseFxReq = 0;
 function updateExpenseForm() {
   const book = getBook();
   $('exp-date').value = today();
@@ -6401,6 +6584,7 @@ function updateExpenseForm() {
   }
   if ($('exp-fx-inline-result')) $('exp-fx-inline-result').style.display = 'none';
   _expenseFxRate = null;
+  _expenseFxRateCur = '';
 
   if (window.IS_PUBLISHER) {
     if ($('exp-ai-btn')) $('exp-ai-btn').style.display = '';
@@ -6438,8 +6622,17 @@ async function submitExpense() {
   let currency = native;
   let fxNote = "";
 
-  if (cur !== native && _expenseFxRate) {
-    amount = rawAmount * _expenseFxRate;
+  // Only a rate that belongs to the currency now selected may convert the
+  // amount — the previous currency's rate can still be sitting there while a
+  // new lookup is in flight, and the form can open on a remembered foreign
+  // currency without ever having fetched one. In that case look it up now.
+  let expenseFxRate = (_expenseFxRateCur === cur) ? _expenseFxRate : null;
+  if (cur !== native && !expenseFxRate && rawAmount) {
+    try { expenseFxRate = (await resolveExpenseRate(cur, date, native)) || null; } catch (_) { expenseFxRate = null; }
+  }
+
+  if (cur !== native && expenseFxRate) {
+    amount = rawAmount * expenseFxRate;
     fxNote = ` (Paid ${cur} ${rawAmount.toFixed(2)})`;
   } else {
     currency = cur; // If no FX used, use the selected currency (should match native anyway)
@@ -6509,8 +6702,10 @@ async function submitExpense() {
 
   // Calculate CAD equivalence for publisher reporting (only once, at submission time)
   const cadRate = currency !== 'CAD' ? (_fxRateCache[`${currency}_CAD`] || null) : 1;
-  const baseAmount = cadRate ? (amount * cadRate) : amount;
-  const newExpense = { id: Date.now(), desc: finalDesc, cat, amount, currency, origAmount, origCurrency, date, ref, receipt: receiptUrl, fxRate: _expenseFxRate, baseAmount };
+  // No CAD rate known: leave the CAD value empty (like the batch path) so the
+  // Tax Centre fills it in at the expense's date's rate — never book it 1:1.
+  const baseAmount = cadRate ? roundCents(amount * cadRate) : null;
+  const newExpense = { id: Date.now(), desc: finalDesc, cat, amount, currency, origAmount, origCurrency, date, ref, receipt: receiptUrl, fxRate: cur !== native ? expenseFxRate : null, baseAmount };
   // Starts the clock the Tax Centre reads when it counts what's waiting.
   if (receiptStorage === 'cloud') newExpense.receiptCloudAt = new Date().toISOString();
 
@@ -6824,8 +7019,10 @@ async function requestBulkReimbursement() {
   const items = (s.expenses || []).filter(e => idSet.has(e.id));
   if (!items.length) { _expReimburseSelection.clear(); updateBulkReimburseButton(); return; }
 
-  const total = items.reduce((sum, e) => sum + (e.amount || 0), 0);
-  const summary = `Reimbursement requested for ${items.length} expense${items.length !== 1 ? 's' : ''} — ${fmt(total, cur)}`;
+  // Expenses are kept in the currency they were paid in, so each currency is
+  // totalled on its own rather than summed into one misleading figure.
+  const total = totalsByCurrency(items, cur).map(t => fmt(t.total, t.code)).join(' + ');
+  const summary = `Reimbursement requested for ${items.length} expense${items.length !== 1 ? 's' : ''} — ${total}`;
   const btn = $('exp-bulk-reimburse-btn');
   const oldText = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
@@ -6848,9 +7045,14 @@ async function onExpenseCurrencyChange() {
   const book = getBook();
   const native = getBookCurrencyCode(book);
 
+  // Whatever rate was held belongs to the previous currency. Drop it before any
+  // await so a Submit pressed mid-lookup can't convert with it.
+  _expenseFxRate = null;
+  _expenseFxRateCur = '';
+  const req = ++_expenseFxReq;
+
   if (cur === native) {
     if (resultSpan) resultSpan.style.display = 'none';
-    _expenseFxRate = null;
     return;
   }
 
@@ -6872,8 +7074,11 @@ async function onExpenseCurrencyChange() {
     } catch (e) { }
   }
 
+  // The owner has since picked another currency: that choice owns the display.
+  if (req !== _expenseFxReq) return;
   if (rate) {
     _expenseFxRate = rate;
+    _expenseFxRateCur = cur;
     calcExpenseFx();
   } else {
     if (resultSpan) {
@@ -6881,6 +7086,7 @@ async function onExpenseCurrencyChange() {
       resultSpan.style.color = 'var(--red)';
     }
     _expenseFxRate = null;
+    _expenseFxRateCur = '';
   }
 }
 

@@ -1232,13 +1232,19 @@ async function resumeReceiptImports() {
       files: async email => {
         const output = [];
         const body = new File([`From: ${email.from}\nSubject: ${email.subject}\nDate: ${email.date}\n\n${email.body}`], 'email.txt', { type: 'text/plain' });
+        // An attachment the reader had to skip (over 12 MB, or it would not
+        // download) has no bytes to file. It keeps its slot, empty, so the other
+        // files still line up with their attachments — and it must not block the
+        // receipt: the email body and the other files are filed, and the Gmail
+        // link on the expense still leads to the original.
         const files = [{ file: body, name: 'email.txt' }, ...email.fileParts.map((part, index) => {
-          if (!part.base64) throw new Error(`Original attachment missing: ${part.name}`);
+          if (!part.base64) return { skipped: true, name: '' };
           return { file: new File([decodeGmailBase64(part.base64)], part.name, { type: part.mime }), name: `${index}-${part.name.replace(/[^a-zA-Z0-9._-]/g, '_')}` };
         })];
         if (!email.savedFiles) email.savedFiles = {};
         for (const entry of files) {
           if (!active() || uid !== owner) throw new Error('Sign in as the same publisher to finish importing');
+          if (entry.skipped) { output.push(''); continue; }
           if (!email.savedFiles[entry.name]) {
             let timer;
             try {

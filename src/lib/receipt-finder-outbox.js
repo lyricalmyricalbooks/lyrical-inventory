@@ -15,7 +15,8 @@ export async function flushReceiptOutbox(state, deps) {
       }
       const source = state.emails[`${draft.account}:${draft.messageId}`];
       if (!source) throw new Error('Original email is missing. Scan this email again.');
-      const rate = await deps.rate(draft.currency);
+      // The rate for the invoice's own date, not whatever it is the day it is filed.
+      const rate = await deps.rate(draft.currency, draft.date);
       if (!Number.isFinite(rate) || rate <= 0) throw new Error('Waiting for a currency conversion rate');
       const receiptFiles = await deps.files(source);
       if (!deps.canSync()) break;

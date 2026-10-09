@@ -105,3 +105,24 @@ export function expenseTotalsCopy(bucket) {
     code,
   };
 }
+
+/**
+ * Total a set of expenses per currency, for a message that names a sum of money
+ * (the bulk reimbursement request). Raw amounts of different currencies are
+ * never added together: EUR 20 + CAD 30 is "EUR 20.00 + CAD 30.00", not 50.
+ * The book's own currency comes first, the rest alphabetically.
+ *
+ * @returns {Array<{code:string, total:number}>}
+ */
+export function totalsByCurrency(expenses, bookCode) {
+  const fallback = normalizeCurrencyCode(bookCode, 'CAD');
+  const byCurrency = new Map();
+  for (const e of expenses || []) {
+    if (!e || typeof e !== 'object') continue;
+    const code = normalizeCurrencyCode(e.currency, fallback);
+    byCurrency.set(code, (byCurrency.get(code) || 0) + (Number(e.amount) || 0));
+  }
+  return [...byCurrency.entries()]
+    .map(([code, total]) => ({ code, total: roundCents(total) }))
+    .sort((a, b) => (a.code === fallback ? -1 : b.code === fallback ? 1 : a.code.localeCompare(b.code)));
+}
