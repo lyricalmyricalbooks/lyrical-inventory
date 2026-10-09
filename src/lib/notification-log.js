@@ -170,12 +170,20 @@ export function clearNotificationLog() {
   writeLog([]);
 }
 
+// toLocaleDateString with options builds a fresh Intl.DateTimeFormat on every
+// call (~50x slower than reusing one), and the notifications panel asks for a
+// label once per logged item (up to LOG_LIMIT), so build the formatter once.
+const DAY_LABEL_FMT = new Intl.DateTimeFormat('en-CA', { weekday: 'short', month: 'short', day: 'numeric' });
+
 /** 'Today', 'Yesterday' or the date, for grouping the panel. */
 export function notificationDayLabel(at, now = Date.now()) {
   const day = (ms) => new Date(ms).toDateString();
-  if (day(at) === day(now)) return 'Today';
-  if (day(at) === day(now - 86400000)) return 'Yesterday';
-  return new Date(at).toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric' });
+  const atDay = day(at);
+  if (atDay === day(now)) return 'Today';
+  if (atDay === day(now - 86400000)) return 'Yesterday';
+  const d = new Date(at);
+  // format() throws on an invalid date where toLocaleDateString returned 'Invalid Date'.
+  return isNaN(d.getTime()) ? 'Invalid Date' : DAY_LABEL_FMT.format(d);
 }
 
 // ─── To-do items that became urgent ────────────────────────────────────────
