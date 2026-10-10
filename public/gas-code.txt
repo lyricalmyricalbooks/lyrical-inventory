@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v53)
+/* Lyricalmyrical Inventory — Unified Backend (v54)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:
@@ -235,6 +235,12 @@
  *      sweep no longer moves its watermark past mail it did not read or save,
  *      and Open Call reply detection only counts mail sent after the request.
  *      Bump flags v52-and-older as outdated so the publisher redeploys.
+ *  52. v54: the Gmail order scan reads the item quantity from the Big Cartel
+ *      receipt ("Quantity 3", "Qty: 3", "x 3", "3 x") and sends it as qty with
+ *      a per-copy price. Before this every order came through as one copy at
+ *      the whole merchandise total, so a 3-copy order took 1 off stock. With no
+ *      quantity on the receipt it still reports 1. Bump flags v53-and-older as
+ *      outdated so the publisher redeploys.
  *  47. v49: the "Monthly (CAD)" tab rebuilds itself on every sync instead of
  *      only from the menu, so it no longer goes stale (it was missing months
  *      and whole books). It leaves out test/connection-check rows, adds a
@@ -307,8 +313,8 @@ function doGet(e) {
   const receiptModel = receiptProps.getProperty('GEMINI_MODEL') || 'gemini-2.5-flash';
   const receiptModelValid = /^[a-zA-Z0-9.-]+$/.test(receiptModel);
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v53',
-    scriptVersion: 'v53',
+    service: 'lyrical-sheets-webhook-v54',
+    scriptVersion: 'v54',
     capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyChitChats: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, canadaPostRefund: true, graphicalEmails: true, authorPaymentEmails: true, dateOrderedRows: true, receiptExtraction: true, receiptSelfTest: true, receiptDailySweep: true, receiptBackupAi: true },
     receiptAi: {
       geminiApiKey: !!receiptProps.getProperty('GEMINI_API_KEY'),
@@ -372,7 +378,8 @@ function scanGmail_(e) {
       const dateMatch = body.match(/((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2}(?:st|nd|rd|th)?,\s+\d{4})/i);
       const subtotalMatch = body.match(/(?:\n|\r|^|\s)Subtotal[\s\n]*(?:[A-Z]{1,3}\$|\$)?\s*([0-9.,]+)/i);
       const subtotal = subtotalMatch ? parseBigCartelMoney_(subtotalMatch[1]) : 0;
-      const financials = extractBigCartelFinancials_(body, 1);
+      const qty = extractBigCartelQty_(body);
+      const financials = extractBigCartelFinancials_(body, qty);
 
       let shipName='', shipAddr1='', shipCity='', shipProvince='', shipPostal='', shipCountry='', shipEmail='';
       const shipBlock = body.match(/Shipping address\s*\n+([\s\S]*?)(?:\n\s*\n|\n\s*Contact)/i);
@@ -404,6 +411,7 @@ function scanGmail_(e) {
           orderNum: orderNumMatch[1].trim(),
           date: dateMatch ? dateMatch[1].trim() : msg.getDate().toISOString().split('T')[0],
           ...financials,
+          qty,
           customer: shipName,
           email: shipEmail,
           shipName, shipAddr1, shipCity, shipProvince, shipPostal, shipCountry,
@@ -420,6 +428,24 @@ function parseBigCartelMoney_(value) {
   if (!match) return 0;
   const n = parseFloat(match[1].replace(/,/g, ''));
   return isNaN(n) ? 0 : n;
+}
+
+// Total copies on a Big Cartel receipt. Reads explicit quantity markers only
+// ("Quantity 3", "Qty: 3", "x 3", "3 x Title"); anything else counts as 1 so a
+// receipt we cannot read behaves exactly as before.
+function extractBigCartelQty_(body) {
+  const lines = String(body || '').split(/\r?\n/).map(l => l.trim());
+  let total = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    let m = l.match(/^(?:Quantity|Qty)\s*:?\s*(\d{1,3})$/i)
+      || l.match(/^[x\u00d7]\s*(\d{1,3})$/i)
+      || l.match(/^(\d{1,3})\s*[x\u00d7]\s+\S/i)
+      || l.match(/\s[x\u00d7]\s*(\d{1,3})$/i);
+    if (!m && /^(?:Quantity|Qty)\s*:?$/i.test(l)) m = (lines[i + 1] || '').match(/^(\d{1,3})$/);
+    if (m) total += parseInt(m[1], 10);
+  }
+  return total >= 1 ? total : 1;
 }
 
 function extractBigCartelFinancials_(body, qty) {
@@ -2738,9 +2764,11 @@ function numOrBlank_(v) {
 //
 // FIREBASE_WEB_API_KEY + PUBLISHER_UID are optional hardening. When BOTH are
 // set the caller's Firebase ID token must resolve to that publisher; when they
-// are absent the action is reachable by anyone holding the deployment address,
-// exactly like every other action in this script. Adding the AI key alone must
-// be enough, so a missing publisher check is never treated as an error.
+// are absent this function itself skips the publisher check, but the webhook
+// entry points (v53) already require a verified Firebase ID token for every
+// action, so the URL alone is no longer enough to reach it. Adding the AI key
+// alone must be enough, so a missing publisher check is never treated as an
+// error.
 // ─────────────────────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────
 // CALLER AUTHENTICATION (v53)
