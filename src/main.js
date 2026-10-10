@@ -939,7 +939,7 @@ import { createInventoryDisposalExpense, createSection10Adjustment, inventoryAdj
 import { posStockView, posOversellSummary } from './lib/pos-stock.js';
 import { FAIR_SEARCH_OVER, FAIR_UNDO_MS, fairTileHtml, readLastMethod, rememberMethod, undoOpen, soldLabel, countLabel, keepScreenAwake, fairSyncPill, registerSalesForDay, fairDaySummary, readCurrentFair, saveCurrentFair } from './lib/fair-mode.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, notesWithInvoiceDiscount, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores, consignmentLedgerTotals, storeBalanceSlug, storeBalanceComparison } from './lib/consignment.js';
-import { deriveInvoiceBookIds, invoicesForBook, findInvoiceAcrossBooks, otherBookTitles, lineItemBookId, invoiceBookSplit, invoiceShareForBook, neutralInvoicePrefix, invoiceNumberPrefix, nextInvoiceSeq, buildInvoiceNumber, BILL_TO_STORE, BILL_TO_PERSON, invoiceBillToMode, billToPayload, billToPersonFrom, invoiceLineAmount, invoiceLineGross, invoiceHasLineDiscounts, computeInvoiceTotals, parseDiscountEntry, clampPercent, dueDateFromTerms, daysBetween, duplicateInvoiceContent } from './lib/invoices.js';
+import { deriveInvoiceBookIds, invoicesForBook, findInvoiceAcrossBooks, otherBookTitles, lineItemBookId, invoiceBookSplit, invoiceShareForBook, neutralInvoicePrefix, invoiceNumberPrefix, nextInvoiceSeq, buildInvoiceNumber, BILL_TO_STORE, BILL_TO_PERSON, invoiceBillToMode, billToPayload, billToPersonFrom, invoiceLineAmount, formatInvoiceUnitPrice, invoiceLineGross, invoiceHasLineDiscounts, computeInvoiceTotals, parseDiscountEntry, clampPercent, dueDateFromTerms, daysBetween, duplicateInvoiceContent } from './lib/invoices.js';
 import { reminderSettings, reminderBlockReason, invoiceReminderState, dueForReminder, dueForReminderTomorrow, buildReminderEmail, canSendNow, daysLate, describeReminderSweep, describeReminderArming, describeReminderNotice, sampleReminderInvoice } from './lib/payment-reminders.js';
 import { LEDGER_TYPE_FILTERS, emptyLedgerFilter, ledgerFilterIsActive, ledgerStoreOptions, filterLedgerEntries, ledgerTypeCounts, describeLedgerFilter, ledgerTotalsScope } from './lib/consignment-ledger-filter.js';
 import { filterHistoryRows, historySearchIsActive, describeHistorySearch } from './lib/order-history-search.js';
@@ -14482,7 +14482,7 @@ function renderInvoicePaperHTML(inv, { showChase = false } = {}) {
   const itemsHtml = (inv.items || []).map(it => `<tr>
     <td>${escapeHtml(it.description || '—')}</td>
     <td class="r">${(it.qty || 0)}</td>
-    <td class="r">${fmt(it.unitPrice || 0, cur)}</td>
+    <td class="r">${formatInvoiceUnitPrice(it.unitPrice, getSym(cur))}</td>
     ${lineDisc ? `<td class="r">${clampPercent(it.discountPct) > 0 ? `${clampPercent(it.discountPct)}%` : '—'}</td>` : ''}
     <td class="r"><strong>${fmt(invoiceLineAmount(it), cur)}</strong></td>
   </tr>`).join('');
@@ -14785,7 +14785,7 @@ function buildInvoiceEmailHTML(inv) {
     <tr>
       <td style="padding:12px 10px;border-bottom:1px solid #f1eadc;color:#1a1814;">${escapeHtml(it.description || '—')}</td>
       <td align="right" style="padding:12px 10px;border-bottom:1px solid #f1eadc;color:#1a1814;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${it.qty || 0}</td>
-      <td align="right" style="padding:12px 10px;border-bottom:1px solid #f1eadc;color:#1a1814;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${fmt(it.unitPrice || 0, cur)}</td>
+      <td align="right" style="padding:12px 10px;border-bottom:1px solid #f1eadc;color:#1a1814;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${formatInvoiceUnitPrice(it.unitPrice, getSym(cur))}</td>
       ${lineDisc ? `<td align="right" style="padding:12px 10px;border-bottom:1px solid #f1eadc;color:#1a1814;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${clampPercent(it.discountPct) > 0 ? `${clampPercent(it.discountPct)}%` : '—'}</td>` : ''}
       <td align="right" style="padding:12px 10px;border-bottom:1px solid #f1eadc;color:#1a1814;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:700;">${fmt(invoiceLineAmount(it), cur)}</td>
     </tr>`).join('');
