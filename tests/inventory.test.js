@@ -83,6 +83,30 @@ const dsale = (qty, date, extra = {}) => ({ qty, date, ...extra });
 const dship = (qty, date, extra = {}) => ({ type: 'Shipment', qty, date, ...extra });
 const dret = (qty, date, status, extra = {}) => ({ type: 'Return', qty, date, status, ...extra });
 
+describe('buildOrderTimeline with write-offs', () => {
+  it('ends at the records-true on-hand once a disposal exists', () => {
+    const s = state({
+      hist: [sale(2, { date: '2026-02-01' })],
+      ledger: [{ type: 'Inventory Disposal', qty: 10, date: '2026-03-01' }],
+    });
+    const t = buildOrderTimeline(s, book(100));
+    expect(t[0]._after).toBe(deriveOnHand(s, book(100)));
+    expect(t[0]._after).toBe(88);
+  });
+
+  it('applies a disposal only to rows on or after its date, and ignores voided ones', () => {
+    const s = state({
+      hist: [sale(1, { date: '2026-01-01' }), sale(1, { date: '2026-04-01' })],
+      ledger: [
+        { type: 'Inventory Disposal', qty: 10, date: '2026-02-01' },
+        { type: 'Inventory Disposal', qty: 50, date: '2026-02-01', voided: true },
+      ],
+    });
+    const t = buildOrderTimeline(s, book(100));
+    expect(t.map(r => r._after)).toEqual([88, 99]);
+  });
+});
+
 describe('buildOrderTimeline', () => {
   it('returns an empty timeline for an empty book', () => {
     expect(buildOrderTimeline(state(), book(100))).toEqual([]);
