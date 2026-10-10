@@ -40,7 +40,10 @@ export const SHEET_ROW_KINDS = Object.freeze({
   ORDER: 'order',
   SHIPPING: 'shipping',
   CONSIGNMENT: 'consignment',
+  EXPENSE: 'expense',
+  PAYOUT: 'payout',
   CONTROL: 'control',
+  RENAME: 'rename',
   BATCH: 'batch',
 });
 
@@ -49,7 +52,10 @@ const KIND_LABELS = Object.freeze({
   [SHEET_ROW_KINDS.ORDER]: 'Order',
   [SHEET_ROW_KINDS.SHIPPING]: 'Shipping',
   [SHEET_ROW_KINDS.CONSIGNMENT]: 'Consignment',
+  [SHEET_ROW_KINDS.EXPENSE]: 'Expense',
+  [SHEET_ROW_KINDS.PAYOUT]: 'Artist payment',
   [SHEET_ROW_KINDS.CONTROL]: 'Rebuild',
+  [SHEET_ROW_KINDS.RENAME]: 'Rename',
   [SHEET_ROW_KINDS.BATCH]: 'Batch',
 });
 
@@ -88,10 +94,13 @@ export function sheetRowKind(payload) {
   const action = text(payload.action).toLowerCase();
   if (action === 'reset' || action === 'rebuild') return SHEET_ROW_KINDS.CONTROL;
   if (action === 'batch') return SHEET_ROW_KINDS.BATCH;
+  if (action === 'renamebook') return SHEET_ROW_KINDS.RENAME;
 
   const type = text(payload.type).toLowerCase();
   if (type === 'shipping') return SHEET_ROW_KINDS.SHIPPING;
   if (type === 'consignment') return SHEET_ROW_KINDS.CONSIGNMENT;
+  if (type === 'expense') return SHEET_ROW_KINDS.EXPENSE;
+  if (type === 'payout') return SHEET_ROW_KINDS.PAYOUT;
   if (type === 'control') return SHEET_ROW_KINDS.CONTROL;
   if (type === 'batch') return SHEET_ROW_KINDS.BATCH;
   return SHEET_ROW_KINDS.ORDER;
@@ -112,6 +121,7 @@ export function sheetLogSummary(payload) {
 
   const kind = sheetRowKind(payload);
   if (kind === SHEET_ROW_KINDS.CONTROL) return 'Clear sheet for rebuild';
+  if (kind === SHEET_ROW_KINDS.RENAME) return `“${text(payload.from)}” → “${text(payload.to)}”`;
   if (kind === SHEET_ROW_KINDS.BATCH) {
     const rows = Array.isArray(payload.rows) ? payload.rows.length : 0;
     return `Bulk sync · ${rows} record${rows === 1 ? '' : 's'}`;
@@ -126,6 +136,14 @@ export function sheetLogSummary(payload) {
     const event = firstText([payload.event, payload.type], 'Movement');
     const qty = firstText([payload.qty], '0');
     return `${store} · ${event} · ${qty}×`;
+  }
+
+  if (kind === SHEET_ROW_KINDS.EXPENSE || kind === SHEET_ROW_KINDS.PAYOUT) {
+    const what = firstText([payload.chan], kind === SHEET_ROW_KINDS.EXPENSE ? 'Expense' : 'Payment to artist');
+    if (isRemoval) return `${what} · remove row`;
+    const amount = firstText([payload.total]);
+    const cur = firstText([payload.currency]);
+    return amount ? `${what} · ${amount}${cur ? ' ' + cur : ''}` : what;
   }
 
   if (kind === SHEET_ROW_KINDS.SHIPPING) {
@@ -194,4 +212,16 @@ export function sortSheetPayloads(rows) {
     .map((row, index) => ({ row, index }))
     .sort((a, b) => compareSheetPayloads(a.row, b.row) || (a.index - b.index))
     .map(entry => entry.row);
+}
+
+/**
+ * The key two book titles collide on in the Google Sheet. The sheet gives each
+ * title a tab named after it, without the characters a tab name cannot hold
+ * and cut to its length limit, and tab names ignore case — so "Book: One" and
+ * "book one" land on the same tab and their rows mix. Mirrors bookSheetName_
+ * in apps-script/Code.gs.
+ */
+export function sheetTabKey(title) {
+  const name = text(title).replace(/[:*?/[\]\\]/g, '').substring(0, 95);
+  return (name || 'Overview').toLowerCase();
 }

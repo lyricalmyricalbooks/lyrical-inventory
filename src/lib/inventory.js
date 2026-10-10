@@ -72,6 +72,8 @@ export function recordInventoryDisposal(s, disposal) {
     notes: String(disposal.notes || '').trim(),
     status: 'written off',
   };
+  // Lets the Google Sheet row for the write-off be matched later.
+  if (disposal.sheetsId) entry.sheetsId = String(disposal.sheetsId);
   s.ledger.unshift(entry);
   return entry;
 }
@@ -132,7 +134,19 @@ export function buildOrderTimeline(s, book) {
     return a._ord - b._ord;
   });
   let running = (book && Number.isFinite(book.maxPrint)) ? book.maxPrint : ((s && s.stock) || 0);
+  // Write-offs have no row of their own here, but they do reduce on-hand, so
+  // fold each one into the walk at its date (any dated after the newest row go
+  // into that row) and the newest Stock After agrees with deriveOnHand.
+  const disposals = ((s && s.ledger) || [])
+    .filter(e => e && e.type === 'Inventory Disposal' && !e.voided)
+    .sort((a, b) => ((a.date || '') < (b.date || '') ? -1 : (a.date || '') > (b.date || '') ? 1 : 0));
+  let di = 0;
   for (let k = timeline.length - 1; k >= 0; k--) {
+    const d = rowDate(timeline[k]);
+    while (di < disposals.length && (k === 0 || (disposals[di].date || '') <= d)) {
+      running -= (disposals[di].qty || 0);
+      di++;
+    }
     running += rowStockDelta(timeline[k]);
     timeline[k]._after = running;
   }

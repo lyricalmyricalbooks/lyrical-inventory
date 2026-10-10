@@ -305,9 +305,9 @@ describe('Apps Script date ordering (Code.gs v41)', () => {
   });
 
   it('collapses consecutive deletions into single deleteRows runs', () => {
-    const deleteRowsBulk_ = new Function(`${extract('deleteRowsBulk_')}\nreturn deleteRowsBulk_;`)();
+    const deleteRowsBulk_ = new Function(`${extract('deleteRowsBulk_')}\n${extract('keepSpareRow_')}\nreturn deleteRowsBulk_;`)();
     const calls = [];
-    const sheet = { deleteRows: (start, count) => calls.push([start, count]) };
+    const sheet = { deleteRows: (start, count) => calls.push([start, count]), getMaxRows: () => 1000, getFrozenRows: () => 1 };
 
     // Rows 2..5 plus a detached row 9 — two calls, not five round-trips.
     expect(deleteRowsBulk_(sheet, [3, 2, 5, 4, 9])).toBe(5);

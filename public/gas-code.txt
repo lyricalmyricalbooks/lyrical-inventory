@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v53)
+/* Lyricalmyrical Inventory — Unified Backend (v57)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:
@@ -235,6 +235,20 @@
  *      sweep no longer moves its watermark past mail it did not read or save,
  *      and Open Call reply detection only counts mail sent after the request.
  *      Bump flags v52-and-older as outdated so the publisher redeploys.
+ *  52. v54: the Gmail order scan reads the item quantity from the Big Cartel
+ *      receipt ("Quantity 3", "Qty: 3", "x 3", "3 x") and sends it as qty with
+ *      a per-copy price. Before this every order came through as one copy at
+ *      the whole merchandise total, so a 3-copy order took 1 off stock. With no
+ *      quantity on the receipt it still reports 1. Bump flags v53-and-older as
+ *      outdated so the publisher redeploys.
+ *  53. v55: Open Call reply detection also recognises an artist who answers
+ *      in a brand-new email thread. v53 only counted a reply that followed one
+ *      of our messages inside the same thread, so a fresh email with the credit
+ *      name or the high-res files was missed. It now also counts mail from the
+ *      artist in other threads dated after our first email to them (found in
+ *      Sent), which still leaves out their original submission, sent before
+ *      any outreach. With no sent email to the artist it counts nothing. Bump
+ *      flags v54-and-older as outdated so the publisher redeploys.
  *  47. v49: the "Monthly (CAD)" tab rebuilds itself on every sync instead of
  *      only from the menu, so it no longer goes stale (it was missing months
  *      and whole books). It leaves out test/connection-check rows, adds a
@@ -244,6 +258,35 @@
  *      into book sales and customer-paid shipping and counts only real sales
  *      plus shipping, matching the monthly tab. Bump flags v48-and-older as
  *      outdated so the publisher redeploys.
+ *  54. v56: Sheet sync repairs. (a) Clearing a tab that had grown past its
+ *      first 1000 rows failed with "not possible to delete all non-frozen
+ *      rows" — the grid fits the data exactly by then — so "Repair legacy
+ *      rows" never got past its first step; a spare row is now added first.
+ *      (b) A bulk batch is applied as if its rows arrived one at a time: the
+ *      last row for an id wins, so one record sent twice is one row, and an
+ *      add followed by a delete leaves nothing behind. (c) New 'prune' action:
+ *      after "Sync all data" the app lists the books it is sure of and every
+ *      id it holds for them, and rows of those books it no longer has are
+ *      removed (hand-typed rows without an id, other books and connection
+ *      checks are left alone). (d) Expense and artist-payout rows (types
+ *      'expense' and 'payout') are reported as Expenses / Paid to artists in
+ *      Key numbers, and the currency table on __Summary now sums income rows
+ *      only, so money going out is never added to revenue. (e) Overview no
+ *      longer takes the colour of the last book written, and tabs created by
+ *      a bulk sync get their book's colour. Bump flags v55-and-older as
+ *      outdated so the publisher redeploys.
+ *  55. v57: (a) 'prune' also removes a row without an id that is an exact
+ *      copy of a row the app owns in the same tab — the duplicates earlier
+ *      "Sync all data" presses left behind — so the next sync cleans them up
+ *      without a full rebuild; hand-typed rows that match nothing stay.
+ *      (b) New 'renamebook' action: the old tab takes the new title (or its
+ *      rows join an existing tab of that name) and every row's Book cell is
+ *      relabelled. (c) Writes are faster: __Summary is laid out once and later
+ *      writes only update Key numbers, Monthly (CAD) is only reformatted when
+ *      its months or books change, Overview is read once per refresh, and a
+ *      write sent with deferSummary:true (more queued behind it) skips the
+ *      refresh entirely. Bump flags v56-and-older as outdated so the
+ *      publisher redeploys.
  */
 
 const HEADERS = [
@@ -307,9 +350,9 @@ function doGet(e) {
   const receiptModel = receiptProps.getProperty('GEMINI_MODEL') || 'gemini-2.5-flash';
   const receiptModelValid = /^[a-zA-Z0-9.-]+$/.test(receiptModel);
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v53',
-    scriptVersion: 'v53',
-    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyChitChats: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, canadaPostRefund: true, graphicalEmails: true, authorPaymentEmails: true, dateOrderedRows: true, receiptExtraction: true, receiptSelfTest: true, receiptDailySweep: true, receiptBackupAi: true },
+    service: 'lyrical-sheets-webhook-v57',
+    scriptVersion: 'v57',
+    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyChitChats: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, canadaPostRefund: true, graphicalEmails: true, authorPaymentEmails: true, dateOrderedRows: true, receiptExtraction: true, receiptSelfTest: true, receiptDailySweep: true, receiptBackupAi: true, pruneOrphans: true, expenseRows: true, pruneDuplicates: true, renameBook: true, deferSummary: true },
     receiptAi: {
       geminiApiKey: !!receiptProps.getProperty('GEMINI_API_KEY'),
       model: receiptModelValid,
@@ -328,11 +371,7 @@ function getBookData_(e) {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     if (!ss) return jsonOut_({ error: 'Spreadsheet not active' });
     
-    const rawName = bookTitle.trim();
-    let sheetName = rawName.replace(/[:*?/\[\]\\]/g, '').substring(0, 95);
-    if (!sheetName) sheetName = 'Overview';
-    
-    const sheet = ss.getSheetByName(sheetName);
+    const sheet = ss.getSheetByName(bookSheetName_(bookTitle));
     if (!sheet) return jsonOut_({ book: bookTitle, rows: [] });
     
     const lastRow = sheet.getLastRow();
@@ -372,7 +411,8 @@ function scanGmail_(e) {
       const dateMatch = body.match(/((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2}(?:st|nd|rd|th)?,\s+\d{4})/i);
       const subtotalMatch = body.match(/(?:\n|\r|^|\s)Subtotal[\s\n]*(?:[A-Z]{1,3}\$|\$)?\s*([0-9.,]+)/i);
       const subtotal = subtotalMatch ? parseBigCartelMoney_(subtotalMatch[1]) : 0;
-      const financials = extractBigCartelFinancials_(body, 1);
+      const qty = extractBigCartelQty_(body);
+      const financials = extractBigCartelFinancials_(body, qty);
 
       let shipName='', shipAddr1='', shipCity='', shipProvince='', shipPostal='', shipCountry='', shipEmail='';
       const shipBlock = body.match(/Shipping address\s*\n+([\s\S]*?)(?:\n\s*\n|\n\s*Contact)/i);
@@ -404,6 +444,7 @@ function scanGmail_(e) {
           orderNum: orderNumMatch[1].trim(),
           date: dateMatch ? dateMatch[1].trim() : msg.getDate().toISOString().split('T')[0],
           ...financials,
+          qty,
           customer: shipName,
           email: shipEmail,
           shipName, shipAddr1, shipCity, shipProvince, shipPostal, shipCountry,
@@ -420,6 +461,24 @@ function parseBigCartelMoney_(value) {
   if (!match) return 0;
   const n = parseFloat(match[1].replace(/,/g, ''));
   return isNaN(n) ? 0 : n;
+}
+
+// Total copies on a Big Cartel receipt. Reads explicit quantity markers only
+// ("Quantity 3", "Qty: 3", "x 3", "3 x Title"); anything else counts as 1 so a
+// receipt we cannot read behaves exactly as before.
+function extractBigCartelQty_(body) {
+  const lines = String(body || '').split(/\r?\n/).map(l => l.trim());
+  let total = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    let m = l.match(/^(?:Quantity|Qty)\s*:?\s*(\d{1,3})$/i)
+      || l.match(/^[x\u00d7]\s*(\d{1,3})$/i)
+      || l.match(/^(\d{1,3})\s*[x\u00d7]\s+\S/i)
+      || l.match(/\s[x\u00d7]\s*(\d{1,3})$/i);
+    if (!m && /^(?:Quantity|Qty)\s*:?$/i.test(l)) m = (lines[i + 1] || '').match(/^(\d{1,3})$/);
+    if (m) total += parseInt(m[1], 10);
+  }
+  return total >= 1 ? total : 1;
 }
 
 function extractBigCartelFinancials_(body, qty) {
@@ -1499,6 +1558,11 @@ function doPost(e) {
     writeLock = LockService.getScriptLock();
     writeLock.waitLock(30000);
 
+    // The app sets this when more writes are queued right behind this one
+    // (v57): the totals tabs are then refreshed once, by the last write, rather
+    // than rebuilt after every sale of a busy fair day.
+    const deferSummary = payload.deferSummary === true;
+
     // ── Batch Sheets sync: process many add/delete rows in one Web App call ──
     if (action === 'batch') {
       const rows = (payload.payload && payload.payload.rows) || payload.rows || [];
@@ -1530,9 +1594,42 @@ function doPost(e) {
         }
       }
 
-      let added = 0, deleted = 0, voided = 0, replaced = 0;
+      let added = 0, deleted = 0, voided = 0, replaced = 0, superseded = 0;
       const rowsToDeleteBySheet = {}; // sheetName -> Array of rowIndices
       const rowsToAppendBySheet = {}; // sheetName -> Array of row arrays
+      const colorBySheet = {};        // book tab -> its accent colour
+
+      // A batch is applied as if its rows had arrived one by one: the last
+      // row for an id wins. Each existing sheet row is queued for removal once,
+      // and a row this same batch was about to append is dropped when a later
+      // row for that id replaces or removes it. Before v56 two rows for one id
+      // were both appended (a duplicate), and an add followed by a delete left
+      // the added row in place.
+      const existingQueued = {};      // id -> true once its sheet rows are queued for removal
+      const pendingAppend = {};       // id -> row arrays this batch would append
+      const dropped = new Set();
+      const removeEarlier = (stableId) => {
+        if (!stableId) return 0;
+        let count = 0;
+        if (!existingQueued[stableId]) {
+          existingQueued[stableId] = true;
+          const locations = existingRowLocations[stableId] || [];
+          for (let l = 0; l < locations.length; l++) {
+            const loc = locations[l];
+            if (!rowsToDeleteBySheet[loc.sheetName]) rowsToDeleteBySheet[loc.sheetName] = [];
+            rowsToDeleteBySheet[loc.sheetName].push(loc.rowIndex);
+            count++;
+          }
+        }
+        const pending = pendingAppend[stableId];
+        if (pending && pending.length) {
+          pending.forEach(r => dropped.add(r));
+          delete pendingAppend[stableId];
+          added--;
+          superseded++;
+        }
+        return count;
+      };
 
       for (let i = 0; i < rows.length; i++) {
         const item = rows[i] || {};
@@ -1541,48 +1638,18 @@ function doPost(e) {
 
         // 1. Check if it's a deletion/void
         if (rowAction === 'void' || rowAction === 'delete') {
-          if (stableId) {
-            const locations = existingRowLocations[stableId];
-            if (locations) {
-              for (let l = 0; l < locations.length; l++) {
-                const loc = locations[l];
-                if (!rowsToDeleteBySheet[loc.sheetName]) rowsToDeleteBySheet[loc.sheetName] = [];
-                rowsToDeleteBySheet[loc.sheetName].push(loc.rowIndex);
-                deleted++;
-              }
-            }
-          }
+          deleted += removeEarlier(stableId);
           continue;
         }
 
         if (/VOID|CANCEL/i.test(String(item.status || ''))) {
           voided++;
-          if (stableId) {
-            const locations = existingRowLocations[stableId];
-            if (locations) {
-              for (let l = 0; l < locations.length; l++) {
-                const loc = locations[l];
-                if (!rowsToDeleteBySheet[loc.sheetName]) rowsToDeleteBySheet[loc.sheetName] = [];
-                rowsToDeleteBySheet[loc.sheetName].push(loc.rowIndex);
-                deleted++;
-              }
-            }
-          }
+          deleted += removeEarlier(stableId);
           continue;
         }
 
         // 2. It's an add/edit (upsert)
-        if (stableId) {
-          const locations = existingRowLocations[stableId];
-          if (locations) {
-            for (let l = 0; l < locations.length; l++) {
-              const loc = locations[l];
-              if (!rowsToDeleteBySheet[loc.sheetName]) rowsToDeleteBySheet[loc.sheetName] = [];
-              rowsToDeleteBySheet[loc.sheetName].push(loc.rowIndex);
-              replaced++;
-            }
-          }
-        }
+        replaced += removeEarlier(stableId);
 
         // Build row array
         item._eventId = stableId;
@@ -1616,9 +1683,7 @@ function doPost(e) {
         row[COL.Notes - 1]           = item.notes ?? '';
         row[COL.Invoice - 1]         = item.invoiceNum ?? '';
 
-        const rawName = item.book ? String(item.book).trim() : 'Overview';
-        let sheetName = rawName.replace(/[:*?/\[\]\\]/g, '').substring(0, 95);
-        if (!sheetName) sheetName = 'Overview';
+        const sheetName = bookSheetName_(item.book);
 
         if (!rowsToAppendBySheet[sheetName]) rowsToAppendBySheet[sheetName] = [];
         rowsToAppendBySheet[sheetName].push(row);
@@ -1626,8 +1691,10 @@ function doPost(e) {
         if (sheetName !== 'Overview') {
           if (!rowsToAppendBySheet['Overview']) rowsToAppendBySheet['Overview'] = [];
           rowsToAppendBySheet['Overview'].push(row);
+          if (item.bookColor && !colorBySheet[sheetName]) colorBySheet[sheetName] = item.bookColor;
         }
 
+        if (stableId) pendingAppend[stableId] = [row];
         added++;
       }
 
@@ -1648,8 +1715,10 @@ function doPost(e) {
       const appendSheets = Object.keys(rowsToAppendBySheet);
       for (let s = 0; s < appendSheets.length; s++) {
         const sheetName = appendSheets[s];
+        const newRows = rowsToAppendBySheet[sheetName].filter(r => !dropped.has(r));
+        if (!newRows.length) continue;
         const sheet = ensureSheet_(ss, sheetName);
-        const newRows = rowsToAppendBySheet[sheetName];
+        applyBookTabColor_(sheet, colorBySheet[sheetName]);
         const lastRow = sheet.getLastRow();
         // New tabs have a 1000-row grid and setValues cannot write past it.
         const needRows = lastRow + newRows.length;
@@ -1662,8 +1731,8 @@ function doPost(e) {
       // months of backdated history. Re-order every tab this call wrote to.
       sortManagedSheets_(ss, Object.keys(touchedSheets));
 
-      refreshOverviewSummary_(ss);
-      return jsonOut_({ ok: true, count: rows.length, added, deleted, voided, replaced, sorted: true });
+      if (!deferSummary) refreshOverviewSummary_(ss);
+      return jsonOut_({ ok: true, count: rows.length, added, deleted, voided, replaced, superseded, sorted: true, summaryDeferred: deferSummary });
     }
 
     // ── Reset / rebuild: clear every managed sheet so the client can resend a
@@ -1675,9 +1744,27 @@ function doPost(e) {
       return jsonOut_({ ok: true, cleared });
     }
 
+    // ── Prune (v56): after "Sync all data", drop rows of the listed books whose
+    // ids the app no longer holds. See pruneOrphanRows_. ──
+    if (action === 'prune') {
+      const d = payload.payload || {};
+      const pruned = pruneOrphanRows_(ss, d.books, d.keepIds);
+      if (pruned.removed) refreshOverviewSummary_(ss);
+      return jsonOut_({ ok: true, removed: pruned.removed, duplicates: pruned.duplicates });
+    }
+
+    // ── Rename a book (v57): its tab and the Book column of its rows follow the
+    // new title, so its history stays in one place. ──
+    if (action === 'renamebook') {
+      const d = payload.payload || {};
+      const renamed = renameBookRows_(ss, d.from, d.to, d.bookColor);
+      if (renamed.rows && !deferSummary) refreshOverviewSummary_(ss);
+      return jsonOut_(Object.assign({ ok: true }, renamed));
+    }
+
     const result = processSheetsRow_(ss, payload.payload || {}, eventId);
-    refreshOverviewSummary_(ss);
-    return jsonOut_(Object.assign({ ok: true }, result));
+    if (!deferSummary) refreshOverviewSummary_(ss);
+    return jsonOut_(Object.assign({ ok: true, summaryDeferred: deferSummary }, result));
   } catch (err) {
     return jsonOut_({ error: String(err) });
   } finally {
@@ -1712,9 +1799,7 @@ function processSheetsRow_(ss, data, eventId) {
   let replaced = 0;
   if (stableId) replaced = removeByEventId_(ss, stableId);
 
-  const rawName = data.book ? String(data.book).trim() : 'Overview';
-  let sheetName = rawName.replace(/[:*?/\[\]\\]/g, '').substring(0, 95);
-  if (!sheetName) sheetName = 'Overview';
+  const sheetName = bookSheetName_(data.book);
 
   processSheetEntry_(ss, sheetName, data);
   if (sheetName !== 'Overview') {
@@ -1727,7 +1812,9 @@ function processSheetsRow_(ss, data, eventId) {
 
 function processSheetEntry_(ss, sheetName, data) {
   const sheet = ensureSheet_(ss, sheetName);
-  applyBookTabColor_(sheet, data.bookColor);
+  // Overview holds every book, so it never takes one book's colour (before v56
+  // it was repainted with whichever book was written last).
+  if (sheetName !== 'Overview') applyBookTabColor_(sheet, data.bookColor);
 
   const currency = normalizeCcy_(data.currency || data.paymentCurrency);
   const total = numOrBlank_(data.amountDue ?? data.total);
@@ -1763,6 +1850,14 @@ function processSheetEntry_(ss, sheetName, data) {
   row[COL.Invoice - 1]         = data.invoiceNum ?? '';
 
   sheet.appendRow(row);
+}
+
+// The tab a book's rows live on: its title without the characters Sheets
+// refuses in a tab name, kept under the 100-character limit. Rows without a
+// book go to Overview.
+function bookSheetName_(title) {
+  const raw = title ? String(title).trim() : 'Overview';
+  return raw.replace(/[:*?/\[\]\\]/g, '').substring(0, 95) || 'Overview';
 }
 
 function applyBookTabColor_(sheet, color) {
@@ -1910,7 +2005,8 @@ function formatSheet_(sheet) {
     ['TRANSFER', '#ede9fe', '#5b21b6'],
     ['REFUND',   '#fed7aa', '#9a3412'],
     ['STOCK',    '#cffafe', '#155e75'],
-    ['PRINT',    '#fce7f3', '#9d174d']
+    ['PRINT',    '#fce7f3', '#9d174d'],
+    ['PAYOUT',   '#ede9fe', '#5b21b6']
   ];
   typeColors.forEach(([word, bg, fg]) => {
     rules.push(SpreadsheetApp.newConditionalFormatRule()
@@ -2076,11 +2172,24 @@ function deleteRowsBulk_(sheet, rowIndices) {
     while (runEnd + 1 < unique.length && unique[runEnd + 1] === unique[runEnd] - 1) runEnd++;
     const start = unique[runEnd];
     const count = runEnd - i + 1;
+    keepSpareRow_(sheet, count);
     sheet.deleteRows(start, count);
     removed += count;
     i = runEnd + 1;
   }
   return removed;
+}
+
+// Sheets refuses to delete every non-frozen row of a tab ("Sorry, it is not
+// possible to delete all non-frozen rows"). A tab's grid fits its data exactly
+// once it has grown past its first 1000 rows — both the bulk append and
+// appendRow grow it one row at a time — so clearing such a tab for a rebuild
+// failed outright and the rebuild never ran. Add one blank row at the bottom
+// first; rows above it keep their numbers.
+function keepSpareRow_(sheet, deleteCount) {
+  if (deleteCount >= sheet.getMaxRows() - sheet.getFrozenRows()) {
+    sheet.insertRowsAfter(sheet.getMaxRows(), 1);
+  }
 }
 
 function removeByEventId_(ss, eventId) {
@@ -2115,6 +2224,7 @@ function clearManagedSheets_(ss) {
     if (sheet.getRange(1, 1).getValue() !== '_eventId') continue; // managed only
     const lastRow = sheet.getLastRow();
     if (lastRow >= 2) {
+      keepSpareRow_(sheet, lastRow - 1);
       sheet.deleteRows(2, lastRow - 1);
       cleared += (lastRow - 1);
     }
@@ -2122,21 +2232,193 @@ function clearManagedSheets_(ss) {
   return cleared;
 }
 
+// Remove rows the app no longer has (v56). "Sync all data" upserts every live
+// record, but a record that left the app without being voided — a duplicate
+// the app cleaned up, an order taken back to New, a sale moved to another
+// book — kept its row, so the sheet went on counting that money until a full
+// rebuild. The app sends the books it is sure of and every id it holds for
+// them; any other row of those books is gone from the app and is removed here.
+// Rows of books it did not list, hand-typed rows (no id) and connection checks
+// are never touched.
+function pruneOrphanRows_(ss, books, keepIds) {
+  if (!Array.isArray(books) || !Array.isArray(keepIds)) {
+    throw new Error('prune needs a list of books and a list of ids to keep');
+  }
+  const bookSet = {};
+  books.forEach(function (b) { const t = String(b == null ? '' : b).trim(); if (t) bookSet[t] = true; });
+  if (!Object.keys(bookSet).length) return { removed: 0 };
+  const keep = {};
+  keepIds.forEach(function (id) { if (id !== null && id !== undefined && id !== '') keep[String(id)] = true; });
+
+  let removed = 0, duplicates = 0;
+  const sheets = ss.getSheets();
+  for (const sheet of sheets) {
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2 || sheet.getLastColumn() < 1) continue;
+    if (sheet.getRange(1, 1).getValue() !== '_eventId') continue; // managed only
+    const values = sheet.getRange(2, 1, lastRow - 1, HEADERS.length).getValues();
+    const inScope = (r) => !!bookSet[String(r[COL.Book - 1] || '').trim()];
+    // What each row the app owns says, so a copy of it without an id can be
+    // recognised (v57). Before v56, "Sync all data" sent records that had no
+    // id — CSV-imported orders, write-offs — as new rows on every press, and
+    // those copies carry no id to match. They are exact copies of a row that
+    // now has one; a row typed into the sheet by hand is not, and stays.
+    const owned = {};
+    for (let i = 0; i < values.length; i++) {
+      const id = String(values[i][COL._eventId - 1] || '').trim();
+      if (id && keep[id] && inScope(values[i])) owned[rowFingerprint_(values[i])] = true;
+    }
+    const gone = [];
+    for (let i = 0; i < values.length; i++) {
+      const r = values[i];
+      if (!inScope(r)) continue;
+      const id = String(r[COL._eventId - 1] || '').trim();
+      if (!id) {
+        if (owned[rowFingerprint_(r)]) { gone.push(i + 2); duplicates++; }
+        continue;
+      }
+      if (keep[id] || /^conn-test-/.test(id)) continue;
+      gone.push(i + 2);
+    }
+    removed += deleteRowsBulk_(sheet, gone);
+  }
+  return { removed: removed, duplicates: duplicates };
+}
+
+// A book was renamed in the app (v57). Before this its old rows stayed on a tab
+// under the old title while new rows started a second tab, so the sheet split
+// the book in two and "Sync from Google Sheet" — which reads the tab named
+// after the current title — saw only the newer half. The old tab takes the new
+// name (or, when a tab with the new name already exists, its rows move there),
+// and every row carrying the old title is relabelled.
+const RESERVED_TABS_ = { 'Overview': true, '__Summary': true, 'Monthly (CAD)': true };
+function renameBookRows_(ss, from, to, color) {
+  const oldTitle = String(from == null ? '' : from).trim();
+  const newTitle = String(to == null ? '' : to).trim();
+  if (!oldTitle || !newTitle) throw new Error('renamebook needs the old and the new title');
+  if (oldTitle === newTitle) return { rows: 0, tab: false };
+
+  const fromTab = bookSheetName_(oldTitle);
+  const toTab = bookSheetName_(newTitle);
+  let tab = false;
+  let target = null;
+  if (fromTab !== toTab && !RESERVED_TABS_[fromTab] && !RESERVED_TABS_[toTab]) {
+    const src = ss.getSheetByName(fromTab);
+    if (src && src.getLastColumn() >= 1 && src.getRange(1, 1).getValue() === '_eventId') {
+      const dst = ss.getSheetByName(toTab);
+      if (!dst) {
+        src.setName(toTab);
+        target = src;
+      } else {
+        target = ensureSheet_(ss, toTab);
+        const last = src.getLastRow();
+        if (last >= 2) {
+          const moving = src.getRange(2, 1, last - 1, HEADERS.length).getValues();
+          const at = target.getLastRow();
+          if (target.getMaxRows() < at + moving.length) target.insertRowsAfter(target.getMaxRows(), at + moving.length - target.getMaxRows());
+          target.getRange(at + 1, 1, moving.length, HEADERS.length).setValues(moving);
+        }
+        ss.deleteSheet(src);
+      }
+      tab = true;
+    }
+  }
+
+  let rows = 0;
+  ss.getSheets().forEach(function (sheet) {
+    const last = sheet.getLastRow();
+    if (last < 2 || sheet.getLastColumn() < 1) return;
+    if (sheet.getRange(1, 1).getValue() !== '_eventId') return;
+    const range = sheet.getRange(2, COL.Book, last - 1, 1);
+    const books = range.getValues();
+    let changed = false;
+    for (let i = 0; i < books.length; i++) {
+      if (String(books[i][0] || '').trim() === oldTitle) { books[i][0] = newTitle; changed = true; rows++; }
+    }
+    if (changed) range.setValues(books);
+  });
+  const finalTab = target || ss.getSheetByName(toTab);
+  if (finalTab) {
+    applyBookTabColor_(finalTab, color);
+    sortSheetByDate_(finalTab);
+  }
+  return { rows: rows, tab: tab };
+}
+
+// Everything a row says except its hidden id, in comparable form.
+function rowFingerprint_(r) {
+  const cell = (c) => {
+    const v = r[COL[c] - 1];
+    if (c === 'Date') return rowSortKey_(v);
+    if (typeof v === 'number') return String(Math.round(v * 100) / 100);
+    return String(v == null ? '' : v).trim();
+  };
+  return ['Date', 'Book', 'Type', 'Event/Num', 'Store/Chan', 'Qty', 'Currency', 'Price/Rate', 'Total/Amount', 'Notes']
+    .map(cell).join('\u0001');
+}
+
 // ─────────────────────────────────────────────────────────────
 // Overview summary block — currency totals + CAD grand total
 // Lives in a separate sheet ("__Summary") so it doesn't clutter rows.
 // ─────────────────────────────────────────────────────────────
+// Bump when the __Summary layout below changes, so each deployment lays it
+// out afresh once.
+const SUMMARY_LAYOUT_ = 'v57';
+
 function refreshOverviewSummary_(ss) {
   const overview = ss.getSheetByName('Overview');
   if (!overview) return;
+  // Overview is read once; Key numbers and the monthly tab both work from it.
+  const lastRow = overview.getLastRow();
+  const values = lastRow >= 2 ? overview.getRange(2, 1, lastRow - 1, HEADERS.length).getValues() : [];
+  const kpi = computeOverviewKpis_(overview, ss.getSpreadsheetTimeZone(), values);
+
+  // Every write used to clear __Summary and lay it out again — headers, a
+  // dozen formats, borders, the currency formulas — though only the Key
+  // numbers ever change (the currency table is formulas that update by
+  // themselves). On a big sheet that made each sale slow enough to time out
+  // and be sent again. Now the layout is built once and later writes only put
+  // in the new numbers.
   let summary = ss.getSheetByName('__Summary');
-  if (!summary) {
-    summary = ss.insertSheet('__Summary');
+  const props = PropertiesService.getScriptProperties();
+  const laidOut = !!summary && props.getProperty('SUMMARY_LAYOUT') === SUMMARY_LAYOUT_ &&
+    summary.getRange(1, 1).getValue() === 'Currency' && summary.getRange(1, 6).getValue() === 'Key numbers';
+  if (laidOut) {
+    const rows = kpiRows_(kpi);
+    summary.getRange(2, 6, rows.length, 2).setValues(rows);
   } else {
-    summary.clear();
-    summary.clearConditionalFormatRules();
+    if (!summary) {
+      summary = ss.insertSheet('__Summary');
+    } else {
+      summary.clear();
+      summary.clearConditionalFormatRules();
+    }
+    layOutSummary_(summary, kpi);
+    props.setProperty('SUMMARY_LAYOUT', SUMMARY_LAYOUT_);
   }
 
+  // Keep the Month × Book tab in step with every sync so it can't go stale.
+  try { writeMonthlySummary_(ss, values); } catch (err) { console.warn('Monthly summary skipped: ' + err); }
+}
+
+// The Key numbers panel, label beside value (rows 2–11 of columns F–G).
+function kpiRows_(kpi) {
+  return [
+    ['Books sold (qty)', kpi.unitsSold],
+    ['Revenue (CAD)',    kpi.revenueCAD],
+    ['  Book sales',     kpi.bookCAD],
+    ['  Shipping paid by customers', kpi.shippingCAD],
+    ['Entries (live)',   kpi.entries],
+    ['Top book',         kpi.topBook || '—'],
+    ['Top channel',      kpi.topChannel || '—'],
+    [`This month (${kpi.monthLabel})`, kpi.monthCAD],
+    ['Expenses (CAD)',   kpi.expenseCAD],
+    ['Paid to artists (CAD)', kpi.payoutCAD]
+  ];
+}
+
+// Lay out __Summary from scratch: the currency table and the Key numbers panel.
+function layOutSummary_(summary, kpi) {
   const ovName = "'Overview'!";
   const ccyCol = columnLetter_(COL.Currency);
   const totCol = columnLetter_(COL['Total/Amount']);
@@ -2144,7 +2426,7 @@ function refreshOverviewSummary_(ss) {
   const statCol = columnLetter_(COL.Status);
 
   // Header
-  summary.getRange(1, 1, 1, 4).setValues([['Currency', 'Entries', 'Total (native)', 'Total (CAD)']]);
+  summary.getRange(1, 1, 1, 4).setValues([['Currency', 'Revenue rows', 'Revenue (native)', 'Revenue (CAD)']]);
   summary.getRange(1, 1, 1, 4)
     .setFontWeight('bold').setFontSize(11).setFontFamily('Inter')
     .setBackground('#0f172a').setFontColor('#ffffff')
@@ -2158,19 +2440,31 @@ function refreshOverviewSummary_(ss) {
   summary.setColumnWidth(4, 160);
 
   // One row per currency, generated as formulas so the sheet auto-updates
-  // when you edit data in Overview directly.
+  // when you edit data in Overview directly. Only income counts: book sales,
+  // customer-paid shipping and consignment sales — the rows Key numbers and
+  // Monthly (CAD) count. Since v56 the sheet also carries expenses and
+  // payments to artists, which are money going out, and consignment
+  // shipments/returns were never income, so each figure is a sum over the
+  // three income kinds rather than over every row.
+  const typeCol = columnLetter_(COL.Type);
+  const evCol = columnLetter_(COL['Event/Num']);
+  const bookCol = columnLetter_(COL.Book);
+  const incomeKinds = [
+    `${ovName}${typeCol}:${typeCol},"order"`,
+    `${ovName}${typeCol}:${typeCol},"shipping"`,
+    `${ovName}${typeCol}:${typeCol},"consignment",${ovName}${evCol}:${evCol},"Sale"`
+  ];
+  const live = `${ovName}${statCol}:${statCol},"<>VOID",${ovName}${bookCol}:${bookCol},"<>Connection check"`;
+  const incomeFormula = (c, valueCol) => '=' + incomeKinds.map(kind => valueCol
+    ? `SUMIFS(${ovName}${valueCol}:${valueCol},${ovName}${ccyCol}:${ccyCol},"${c}",${kind},${live})`
+    : `COUNTIFS(${ovName}${ccyCol}:${ccyCol},"${c}",${kind},${live})`).join('+');
   const ccyList = ['CAD', 'USD', 'EUR', 'GBP', 'AUD', 'JPY'];
-  const rows = ccyList.map(c => [
-    c,
-    `=COUNTIFS(${ovName}${ccyCol}:${ccyCol},"${c}",${ovName}${statCol}:${statCol},"<>VOID")`,
-    `=SUMIFS(${ovName}${totCol}:${totCol},${ovName}${ccyCol}:${ccyCol},"${c}",${ovName}${statCol}:${statCol},"<>VOID")`,
-    `=SUMIFS(${ovName}${cadCol}:${cadCol},${ovName}${ccyCol}:${ccyCol},"${c}",${ovName}${statCol}:${statCol},"<>VOID")`
-  ]);
+  const rows = ccyList.map(c => [c, incomeFormula(c), incomeFormula(c, totCol), incomeFormula(c, cadCol)]);
   summary.getRange(2, 1, rows.length, 4).setValues(rows);
 
   // Grand total in CAD
   const totalRow = rows.length + 2;
-  summary.getRange(totalRow, 1).setValue('TOTAL (CAD)').setFontWeight('bold');
+  summary.getRange(totalRow, 1).setValue('TOTAL REVENUE (CAD)').setFontWeight('bold');
   summary.getRange(totalRow, 4).setFormula(`=SUM(D2:D${rows.length + 1})`).setFontWeight('bold');
 
   // Formatting
@@ -2186,21 +2480,11 @@ function refreshOverviewSummary_(ss) {
 
   // ── KPI panel (columns F–G), computed from Overview so it stays robust
   // regardless of how dates/currencies are stored. Refreshed on every sync. ──
-  const kpi = computeOverviewKpis_(overview, ss.getSpreadsheetTimeZone());
   summary.getRange(1, 6, 1, 2).merge().setValue('Key numbers')
     .setFontWeight('bold').setFontSize(11).setFontFamily('Inter')
     .setBackground('#0f172a').setFontColor('#ffffff')
     .setHorizontalAlignment('center').setVerticalAlignment('middle');
-  const kpiRows = [
-    ['Books sold (qty)', kpi.unitsSold],
-    ['Revenue (CAD)',    kpi.revenueCAD],
-    ['  Book sales',     kpi.bookCAD],
-    ['  Shipping paid by customers', kpi.shippingCAD],
-    ['Entries (live)',   kpi.entries],
-    ['Top book',         kpi.topBook || '—'],
-    ['Top channel',      kpi.topChannel || '—'],
-    [`This month (${kpi.monthLabel})`, kpi.monthCAD]
-  ];
+  const kpiRows = kpiRows_(kpi);
   summary.getRange(2, 6, kpiRows.length, 2).setValues(kpiRows);
   summary.setColumnWidth(5, 24);   // slim gap between the two panels
   summary.setColumnWidth(6, 185);
@@ -2208,7 +2492,7 @@ function refreshOverviewSummary_(ss) {
   summary.getRange(2, 6, kpiRows.length, 1).setFontWeight('bold');
   summary.getRange(2, 7, kpiRows.length, 1).setHorizontalAlignment('right');
   // Rows: 2 Books sold · 3 Revenue · 4 Book sales · 5 Shipping · 6 Entries ·
-  // 7 Top book · 8 Top channel · 9 This month.
+  // 7 Top book · 8 Top channel · 9 This month · 10 Expenses · 11 Paid to artists.
   summary.getRange(2, 7).setNumberFormat('#,##0');                 // Books sold
   summary.getRange(6, 7).setNumberFormat('#,##0');                 // Entries
   summary.getRange(3, 7).setNumberFormat('"CA$"#,##0.00')          // Revenue
@@ -2217,27 +2501,31 @@ function refreshOverviewSummary_(ss) {
   summary.getRange(4, 6, 2, 2).setFontWeight('normal').setFontColor('#475569');
   summary.getRange(9, 7).setNumberFormat('"CA$"#,##0.00')          // This month
     .setFontColor('#064e3b').setFontWeight('bold').setBackground('#ecfdf5');
+  summary.getRange(10, 7, 2, 1).setNumberFormat('"CA$"#,##0.00')   // Expenses / paid to artists
+    .setFontColor('#991b1b');
   summary.getRange(1, 6, kpiRows.length + 1, 2)
     .setBorder(true, true, true, true, true, true, '#cbd5e1', SpreadsheetApp.BorderStyle.SOLID);
 
-  // Keep the Month × Book tab in step with every sync so it can't go stale.
-  try { writeMonthlySummary_(ss); } catch (err) { console.warn('Monthly summary skipped: ' + err); }
 }
 
 // Read the Overview tab and compute headline figures. "Books sold" counts only
 // real sales (orders, plus consignment rows whose Event is "Sale") so that
 // consignment shipments/returns don't inflate the tally. Revenue/top tallies
 // use CAD Equivalent, which is 0 for non-sale consignment rows anyway.
-function computeOverviewKpis_(overview, tz) {
+function computeOverviewKpis_(overview, tz, rows) {
   const zone = tz || 'America/Toronto';
   const out = {
     unitsSold: 0, revenueCAD: 0, bookCAD: 0, shippingCAD: 0, entries: 0,
+    expenseCAD: 0, payoutCAD: 0,
     topBook: '', topChannel: '', monthCAD: 0,
     monthLabel: Utilities.formatDate(new Date(), zone, 'yyyy-MM')
   };
-  const lastRow = overview.getLastRow();
-  if (lastRow < 2) return out;
-  const values = overview.getRange(2, 1, lastRow - 1, HEADERS.length).getValues();
+  let values = rows;
+  if (!values) {
+    const lastRow = overview.getLastRow();
+    if (lastRow < 2) return out;
+    values = overview.getRange(2, 1, lastRow - 1, HEADERS.length).getValues();
+  }
   const byBook = {}, byChan = {};
   for (const r of values) {
     const status = String(r[COL.Status - 1] || '').toUpperCase();
@@ -2255,6 +2543,9 @@ function computeOverviewKpis_(overview, tz) {
     // Revenue is real sales plus customer-paid shipping — the same rows the
     // Monthly (CAD) tab counts, so the two always agree. A consignment
     // shipment or return carrying a hand-typed amount is not income.
+    // Money going out (v56) is reported beside revenue, never inside it.
+    if (type === 'expense') { out.expenseCAD += cad; continue; }
+    if (type === 'payout') { out.payoutCAD += cad; continue; }
     if (type === 'shipping') out.shippingCAD += cad;
     else if (isSale) out.bookCAD += cad;
     else continue;
@@ -2518,11 +2809,11 @@ function nextMonthKey_(mk) {
 }
 
 // Writes the "Monthly (CAD)" tab. Returns null when there is nothing to show.
-function writeMonthlySummary_(ss) {
+function writeMonthlySummary_(ss, rows) {
   const overview = ss.getSheetByName('Overview');
   if (!overview || overview.getLastRow() < 2) return null;
   const zone = ss.getSpreadsheetTimeZone();
-  const values = overview.getRange(2, 1, overview.getLastRow() - 1, HEADERS.length).getValues();
+  const values = rows || overview.getRange(2, 1, overview.getLastRow() - 1, HEADERS.length).getValues();
 
   const byMonthBook = {};         // 'YYYY-MM' -> { book -> cad }
   const shipByMonth = {};         // 'YYYY-MM' -> customer-paid shipping (cad)
@@ -2591,7 +2882,21 @@ function writeMonthlySummary_(ss) {
     shipping += cents(shipByMonth[m] || 0);
   });
 
+  const result = {
+    months: months.length, books: books.length,
+    books$: cents(booksTotal), shipping: cents(shipping), grand: cents(booksTotal + shipping),
+    skippedTest, skippedUndated
+  };
+
+  // Same months and books as last time: the formatting already fits, so only
+  // the figures are written (this runs on every sync).
+  const props = PropertiesService.getScriptProperties();
+  const shape = SUMMARY_LAYOUT_ + '#' + nRows + '#' + header.join('|');
   let sheet = ss.getSheetByName('Monthly (CAD)');
+  if (sheet && props.getProperty('MONTHLY_SHAPE') === shape && sheet.getRange(1, 1).getValue() === 'Month') {
+    sheet.getRange(1, 1, nRows, nCols).setValues(grid);
+    return result;
+  }
   if (!sheet) sheet = ss.insertSheet('Monthly (CAD)');
   else { sheet.clear(); sheet.clearConditionalFormatRules(); }
 
@@ -2622,11 +2927,8 @@ function writeMonthlySummary_(ss) {
     'Voided sales and test rows are left out.'
   ).setFontColor('#64748b').setFontStyle('italic');
 
-  return {
-    months: months.length, books: books.length,
-    books$: cents(booksTotal), shipping: cents(shipping), grand: cents(booksTotal + shipping),
-    skippedTest, skippedUndated
-  };
+  props.setProperty('MONTHLY_SHAPE', shape);
+  return result;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -2738,9 +3040,11 @@ function numOrBlank_(v) {
 //
 // FIREBASE_WEB_API_KEY + PUBLISHER_UID are optional hardening. When BOTH are
 // set the caller's Firebase ID token must resolve to that publisher; when they
-// are absent the action is reachable by anyone holding the deployment address,
-// exactly like every other action in this script. Adding the AI key alone must
-// be enough, so a missing publisher check is never treated as an error.
+// are absent this function itself skips the publisher check, but the webhook
+// entry points (v53) already require a verified Firebase ID token for every
+// action, so the URL alone is no longer enough to reach it. Adding the AI key
+// alone must be enough, so a missing publisher check is never treated as an
+// error.
 // ─────────────────────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────
 // CALLER AUTHENTICATION (v53)
@@ -3933,10 +4237,51 @@ function ocFlagTruthy_(v) {
 // Their original submission email (low-res photos attached) is already in the
 // mailbox before any selection or CMYK request goes out, so a bare
 // "any mail from the artist" search flagged credit/files as received at once.
+// A reply in a brand-new thread also counts when it is dated after our first
+// email to the artist (ocOutreachDate_); their original submission predates it.
 // Returns { thread, message } for the first such reply, or null.
 function ocReplyAfterOurs_(email, extraQuery, daysBack, needAttachment) {
   const artist = String(email).toLowerCase();
   const threads = GmailApp.search('from:' + email + extraQuery + ' newer_than:' + daysBack + 'd', 0, 10);
+  const inThread = ocReplyInThreads_(threads, artist, needAttachment);
+  if (inThread) return inThread;
+  const outreach = ocOutreachDate_(email, daysBack);
+  if (!outreach) return null;
+  return ocReplyAfterDate_(threads, artist, outreach, needAttachment);
+}
+
+// First artist message dated strictly after `since`, in any of the threads.
+function ocReplyAfterDate_(threads, artist, since, needAttachment) {
+  for (let t = 0; t < threads.length; t++) {
+    const msgs = threads[t].getMessages();
+    for (let m = 0; m < msgs.length; m++) {
+      if (String(msgs[m].getFrom() || '').toLowerCase().indexOf(artist) < 0) continue;
+      if (msgs[m].getDate().getTime() <= since.getTime()) continue;
+      if (needAttachment && msgs[m].getAttachments({ includeInlineImages: false }).length === 0) continue;
+      return { thread: threads[t], message: msgs[m] };
+    }
+  }
+  return null;
+}
+
+// When we first emailed this artist (earliest message to them in Sent within the
+// window), or null when nothing was sent, so no new-thread reply can be judged.
+function ocOutreachDate_(email, daysBack) {
+  const artist = String(email).toLowerCase();
+  const sent = GmailApp.search('to:' + email + ' in:sent newer_than:' + daysBack + 'd', 0, 10);
+  let earliest = null;
+  for (let t = 0; t < sent.length; t++) {
+    const msgs = sent[t].getMessages();
+    for (let m = 0; m < msgs.length; m++) {
+      if (String(msgs[m].getFrom() || '').toLowerCase().indexOf(artist) >= 0) continue;
+      const d = msgs[m].getDate();
+      if (!earliest || d.getTime() < earliest.getTime()) earliest = d;
+    }
+  }
+  return earliest;
+}
+
+function ocReplyInThreads_(threads, artist, needAttachment) {
   for (let t = 0; t < threads.length; t++) {
     const msgs = threads[t].getMessages();
     let ourMessageSeen = false;

@@ -201,3 +201,15 @@ describe('durable import outbox', () => {
     expect(state.drafts.map(row => row.status)).toEqual(['queued', 'imported']);
   });
 });
+
+describe('receipt finder — a date that has not happened yet', () => {
+  it('sends an invoice dated in the future to review instead of filing it', async () => {
+    const { receiptProblems } = await import('../src/lib/receipt-finder.js');
+    const base = { vendor: 'Lulu', currency: 'CAD', amount: 20, subtotal: null, tax: null, shipping: null };
+    const next = new Date(); next.setDate(next.getDate() + 30);
+    const future = next.toISOString().slice(0, 10);
+    expect(receiptProblems({ ...base, date: future })).toContain('Invoice date is in the future — check the day, month and year');
+    expect(receiptProblems({ ...base, date: '2026-01-15' })).toEqual([]);
+  });
+});
+

@@ -41,6 +41,7 @@ import {
 } from '../main.js';
 import {
   _localReceiptCell,
+  clearReceiptScanReview,
   getPendingWebcamReceipt,
   loadReceiptFolderHandle,
   resolveLocalReceiptFile,
@@ -307,6 +308,13 @@ function downloadTaxReport() {
     csv += csvRow([`${year}-12-31`, 'Artist Share', bs.title, 'Royalty', 'Tiered Payout', '',
       0, 0, 0, bs.shares.toFixed(2), -bs.shares.toFixed(2)]) + '\n';
   });
+
+  const waiting = fin.fxWaitingCount || 0;
+  if (waiting) {
+    const note = `${waiting} expense${waiting === 1 ? ' is' : 's are'} still waiting for an exchange rate \u2014 counted as 0 in the CAD totals, so they are not final.`;
+    csv += csvRow([`${year}-12-31`, 'WARNING', '', '', note, '', 0, 0, 0, 0, 0]) + '\n';
+    showToast(`\u26a0 ${note}`, 'warn', 7000);
+  }
 
   downloadCsv(csv, `Lyrical_Tax_Report_${year}.csv`);
 }
@@ -4877,6 +4885,8 @@ function tcExpFileChosen() {
     aiBtn.disabled = !hasFile;
     aiBtn.title = hasFile ? 'Scan receipt with Gemini AI' : 'Select or capture a receipt first to enable AI scanning';
   }
+  // A summary of the last receipt read must never sit beside a different one.
+  clearReceiptScanReview('tc-exp-scan-read');
   // Get the photo ready now, while the rest of the form is being filled in.
   if (input?.files?.[0]) warmReceiptScan(input.files[0]);
 }

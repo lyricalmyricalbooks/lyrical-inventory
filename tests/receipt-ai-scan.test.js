@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { buildHarness, mainJs } from './helpers/extract-decl.js';
+import * as scanChecks from '../src/lib/receipt-scan-checks.js';
+import { setSelectCurrency } from '../src/lib/money.js';
+import { allCanonicalExpenses } from '../src/lib/expense-categories.js';
 
 // Covers the "✨ AI Scan" rework: the upload downscale that dominated scan
 // latency, the response schema that replaced prose-only JSON instructions, and
@@ -43,7 +49,7 @@ function mountForm({ prefix = 'exp', currencies = ['CAD', 'USD', 'EUR', 'GBP'] }
 
 // Harness for the full scan runner with the network and the image pipeline
 // stubbed, so the assertions are about what reaches the form.
-function scanHarness({ reply, prepare, apiKey = 'k-test' } = {}) {
+function scanHarness({ reply, prepare, apiKey = 'k-test', businessExpenses = [], bookExpenses = [] } = {}) {
   const toasts = [];
   const calls = [];
   return {
@@ -53,12 +59,24 @@ function scanHarness({ reply, prepare, apiKey = 'k-test' } = {}) {
       names: [
         '_runReceiptScan', '_extractReceiptFromFile', '_applyScanCurrency', '_applyScanCategory',
         '_buildReceiptScanPrompt', 'RECEIPT_SCAN_SCHEMA', 'RECEIPT_SCAN_TIMEOUT_MS',
-        '_friendlyScanError'
+        '_friendlyScanError', '_receiptScanHome', '_receiptHabitIndex', '_scanLedgerDuplicate',
+        'RECEIPT_SCAN_FIELD_IDS', 'RECEIPT_SCAN_FIELD_WORDS', '_markReceiptScanField', '_unmarkReceiptScanField',
+        'clearReceiptScanReview', '_paintReceiptScanPill', '_scanReadCheckItem',
+        '_applyReceiptScanFix', '_renderReceiptScanReview', '_duplicateExpenseKey', '_findDuplicateExpense'
       ],
       deps: {
         $: id => document.getElementById(id),
         showToast: (msg, type) => toasts.push({ msg, type }),
-        TAX_CENTER: { settings: { geminiKey: apiKey } },
+        TAX_CENTER: { settings: { geminiKey: apiKey }, businessExpenses },
+        states: { bk1: { expenses: bookExpenses } },
+        getState: () => ({ expenses: bookExpenses }),
+        getBook: () => ({ currency: 'CAD' }),
+        getBookCurrencyCode: () => 'CAD',
+        today: () => '2026-10-10',
+        fmtD: d => d,
+        allCanonicalExpenses,
+        setSelectCurrency,
+        ...scanChecks,
         EXPENSE_CATEGORIES: CATS,
         _prepareReceiptUploadOnce: prepare || (async () => ({ mime: 'image/jpeg', base64: 'AAAA', scaled: true })),
         // Nothing remembered: these suites are about a real read reaching the form.
@@ -89,7 +107,7 @@ function scanHarness({ reply, prepare, apiKey = 'k-test' } = {}) {
         AbortController, DOMException, Event, setTimeout, clearTimeout
       },
       moduleState: 'let _receiptScanAbort = null;',
-      returns: '_runReceiptScan'
+      returns: 'Object.assign(_runReceiptScan, { clear: clearReceiptScanReview })'
     })
   };
 }
@@ -123,11 +141,12 @@ describe('AI receipt scan — field application', () => {
     expect(form.el('date').value).toBe('2026-03-04');
   });
 
-  it('refuses to mislabel a currency the form cannot represent', async () => {
-    // The Tax Center select carries CAD/USD/EUR/GBP only. Assigning "AUD" is a
+  it('adds a real currency the form does not list instead of mislabelling it', async () => {
+    // The Tax Center select carries a short list. Assigning "AUD" to it is a
     // silent no-op in the DOM, so an Australian receipt used to be logged at
-    // whatever currency was already selected — a wrong number in the ledger
-    // with nothing on screen to hint at it.
+    // whatever currency was already selected — a wrong number in the ledger.
+    // Both ledgers convert any real currency when the expense is logged, so
+    // the receipt's own currency is added to the list and selected.
     const form = mountForm({ currencies: ['CAD', 'USD', 'EUR', 'GBP'] });
     form.el('cur').value = 'CAD';
     const h = scanHarness({
@@ -135,10 +154,23 @@ describe('AI receipt scan — field application', () => {
     });
     await h.run(form.cfg);
 
+    expect(form.el('cur').value).toBe('AUD');
+    expect(h.toasts.some(t => t.msg.includes('not available'))).toBe(false);
+  });
+
+  it('refuses a currency code that is not a real currency, and says so', async () => {
+    const form = mountForm({ currencies: ['CAD', 'USD', 'EUR', 'GBP'] });
+    form.el('cur').value = 'CAD';
+    const h = scanHarness({
+      reply: okReply({ vendor: 'Booktopia', date: '2026-03-04', amount: 50, currency: 'ZZZ' })
+    });
+    await h.run(form.cfg);
+
     expect(form.el('cur').value).toBe('CAD');
     const warn = h.toasts.find(t => t.type === 'warn');
     expect(warn, 'an unrepresentable currency must be surfaced').toBeTruthy();
-    expect(warn.msg).toContain('AUD');
+    expect(warn.msg).toContain('ZZZ');
+    expect(form.el('cur').classList.contains('scan-check')).toBe(true);
   });
 
   it('applies a currency the form does support', async () => {
@@ -216,6 +248,165 @@ describe('AI receipt scan — field application', () => {
     await h.run(form.cfg);
 
     expect(h.toasts[h.toasts.length - 1].type).toBe('err');
+  });
+});
+
+// The two real forms wrap their fields in a .card and keep the summary box
+// beside the scan button; the summary lives and clears within that card.
+function mountFormWithSummary(opts = {}) {
+  const form = mountForm(opts);
+  const card = document.createElement('div');
+  card.className = 'card';
+  while (document.body.firstChild) card.append(document.body.firstChild);
+  const box = document.createElement('div');
+  box.id = `${form.prefix}-scan-read`;
+  box.hidden = true;
+  card.append(box);
+  document.body.append(card);
+  form.cfg.resultId = box.id;
+  form.cfg.dest = 'business';
+  form.box = box;
+  form.checks = () => Array.from(box.querySelectorAll('.scan-read-checks li')).map(li => ({
+    tone: li.className, text: li.textContent,
+  }));
+  form.pill = () => box.querySelector('[data-scan-pill]');
+  return form;
+}
+
+describe('AI receipt scan — the summary left on the form', () => {
+  beforeEach(() => { document.body.innerHTML = ''; });
+
+  it('catches a pre-tax total and puts the real one in with one tap', async () => {
+    const form = mountFormWithSummary();
+    const h = scanHarness({
+      reply: okReply({ vendor: 'Staples', date: '2026-10-01', amount: 38.5, subtotal: 38.5, tax: 4.99, currency: 'CAD' })
+    });
+    await h.run(form.cfg);
+
+    expect(form.box.hidden).toBe(false);
+    expect(form.pill().textContent).toBe('● Check 1 thing');
+    expect(form.checks()[0].text).toMatch(/before tax/);
+    expect(form.el('amount').classList.contains('scan-check')).toBe(true);
+    // The toast agrees there is something to look at.
+    expect(h.toasts[h.toasts.length - 1].type).toBe('warn');
+
+    form.box.querySelector('.scan-read-checks .btn').click();
+    expect(form.el('amount').value).toBe('43.49');
+    // Focus stays in the summary rather than falling to the page.
+    expect(document.activeElement?.closest('.scan-read-checks')).toBeTruthy();
+    expect(form.el('amount').classList.contains('scan-check')).toBe(false);
+    expect(form.pill().textContent).toBe('✓ Adds up');
+    expect(form.checks()[0].text).toMatch(/Changed to CA\$43\.49/);
+  });
+
+  it('says a clean receipt adds up, and shows the tax the form has no box for', async () => {
+    const form = mountFormWithSummary();
+    const h = scanHarness({
+      reply: okReply({ vendor: 'Staples', date: '2026-10-01', amount: 43.49, subtotal: 38.5, tax: 4.99, currency: 'CAD' })
+    });
+    await h.run(form.cfg);
+
+    expect(form.pill().textContent).toBe('✓ Adds up');
+    expect(form.checks().every(c => c.tone === 'is-ok')).toBe(true);
+    expect(form.box.textContent).toMatch(/Tax on receipt\s*CA\$4\.99/);
+    expect(document.querySelectorAll('.scan-check')).toHaveLength(0);
+  });
+
+  it('warns before the same receipt is logged twice', async () => {
+    const form = mountFormWithSummary();
+    const h = scanHarness({
+      reply: okReply({ vendor: 'Lulu', date: '2026-09-02', amount: 120, currency: 'CAD' }),
+      businessExpenses: [{ desc: 'Lulu — proofs', date: '2026-09-02', amount: 120, currency: 'CAD', cat: 'Other' }],
+    });
+    await h.run(form.cfg);
+
+    expect(form.checks()[0].text).toMatch(/already in your ledger: “Lulu — proofs”/);
+    expect(form.pill().className).toContain('amber');
+  });
+
+  it("files a shop the way the owner always has, and the description's keyword listener can't undo it", async () => {
+    const form = mountFormWithSummary();
+    // The Tax Centre re-categorises by keyword whenever its description box
+    // gets an input event — which the scan itself fires.
+    form.el('desc').addEventListener('input', () => { form.el('cat').value = 'Software & Subscriptions'; });
+    const h = scanHarness({
+      reply: okReply({ vendor: 'Staples', description: 'Google Play card', date: '2026-10-01', amount: 25, currency: 'CAD', category: 'Other' }),
+      businessExpenses: [
+        { desc: 'Staples — paper', cat: 'Office Supplies' },
+        { desc: 'Staples — toner', cat: 'Office Supplies' },
+      ],
+    });
+    await h.run(form.cfg);
+
+    expect(form.el('cat').value).toBe('Office Supplies');
+    expect(form.checks().some(c => /the way you filed your last 2 Staples receipts/.test(c.text))).toBe(true);
+  });
+
+  it("outlines the fields the reader wasn't sure of until the owner edits them", async () => {
+    const form = mountFormWithSummary();
+    const h = scanHarness({
+      reply: okReply({ vendor: 'Blur', date: '2026-10-01', amount: 12, currency: 'CAD', uncertain: ['date'] })
+    });
+    await h.run(form.cfg);
+
+    const date = form.el('date');
+    expect(date.classList.contains('scan-check')).toBe(true);
+    expect(form.el('amount').classList.contains('scan-check')).toBe(false);
+    // Never colour alone: the outline has a sentence that names it.
+    expect(form.checks().some(c => /wasn't sure about the date/.test(c.text))).toBe(true);
+    expect(form.pill().textContent).toBe('● Check 1 thing');
+    date.value = '2026-10-02';
+    date.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(date.classList.contains('scan-check')).toBe(false);
+  });
+
+  it('offers the likely date when the reader lands in the future', async () => {
+    const form = mountFormWithSummary();
+    // today() is 2026-10-10 in this harness.
+    const h = scanHarness({ reply: okReply({ vendor: 'Lulu', date: '2026-12-03', amount: 20, currency: 'CAD' }) });
+    await h.run(form.cfg);
+
+    const fix = Array.from(form.box.querySelectorAll('.scan-read-checks .btn')).find(b => /2026-03-12/.test(b.textContent));
+    expect(fix).toBeTruthy();
+    fix.click();
+    expect(form.el('date').value).toBe('2026-03-12');
+  });
+
+  it('closes on its ✕, and is cleared with its marks when another receipt is picked', async () => {
+    const form = mountFormWithSummary();
+    const h = scanHarness({
+      reply: okReply({ vendor: 'Blur', date: '2026-10-01', amount: 12, currency: 'CAD', uncertain: ['amount'] })
+    });
+    await h.run(form.cfg);
+    form.box.querySelector('.card-x').click();
+    expect(form.box.hidden).toBe(true);
+    expect(document.activeElement).toBe(form.el('btn'));
+
+    await h.run(form.cfg);
+    expect(form.box.hidden).toBe(false);
+    h.run.clear(form.cfg.resultId);
+    expect(form.box.hidden).toBe(true);
+    expect(form.box.textContent).toBe('');
+    expect(document.querySelectorAll('.scan-check')).toHaveLength(0);
+  });
+
+  it('shows no summary when nothing at all was readable', async () => {
+    const form = mountFormWithSummary();
+    const h = scanHarness({ reply: okReply({}) });
+    await h.run(form.cfg);
+    expect(form.box.hidden).toBe(true);
+  });
+
+  it("puts shop names and references on the page as text, never as markup", async () => {
+    const form = mountFormWithSummary();
+    form.cfg.refId = undefined; // the Tax Centre form has no reference box
+    const h = scanHarness({
+      reply: okReply({ vendor: 'Evil', date: '2026-10-01', amount: 9, currency: 'CAD', reference: '<img src=x onerror=alert(1)>' }),
+      businessExpenses: [{ desc: '<b>x</b>', date: '2026-10-01', amount: 9, currency: 'CAD', cat: 'Other' }],
+    });
+    await h.run(form.cfg);
+    expect(form.box.querySelector('img, b')).toBeNull();
+    expect(form.box.textContent).toContain('<img src=x onerror=alert(1)>');
   });
 });
 
@@ -531,5 +722,17 @@ describe('AI scan wiring', () => {
 
   it('gives the Tax Center scan access to an unsaved key in the config box', () => {
     expect(mainJs).toMatch(/keyId:\s*'tc-api-key'/);
+  });
+
+  it('gives both forms a summary box, and says which ledger each one fills', () => {
+    const html = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../index.html'), 'utf8');
+    for (const id of ['exp-scan-read', 'tc-exp-scan-read']) {
+      expect(html).toMatch(new RegExp(`class="order-preview scan-read" id="${id}" hidden`));
+    }
+    expect(mainJs).toMatch(/resultId:\s*'exp-scan-read',\s*dest:\s*'project'/);
+    expect(mainJs).toMatch(/resultId:\s*'tc-exp-scan-read',\s*dest:\s*'business'/);
+    // A new receipt never sits beside the last one's summary.
+    expect(mainJs).toContain("clearReceiptScanReview('exp-scan-read')");
+    expect(mainJs).toContain("clearReceiptScanReview('tc-exp-scan-read')");
   });
 });

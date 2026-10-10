@@ -489,7 +489,7 @@
   .finder-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
   .finder-tab { flex: none; }
   .finder-actionbar { flex-wrap: wrap; justify-content: stretch; }
-  .finder-actionbar .btn { flex: 1; justify-content: center; }
+  .finder-actionbar .btn { flex: 1 1 auto; justify-content: center; }
 }
 
 @media (prefers-reduced-motion: reduce) {

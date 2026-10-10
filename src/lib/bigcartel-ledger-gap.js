@@ -308,9 +308,15 @@ export function findLedgerGaps(bcOrders = [], included = [], {
     const merch = bigCartelMerchandiseTotal(order);
     const qty = lines.reduce((sum, line) => sum + line.qty, 0) || 1;
     const primary = lines.find(line => line.bookId) || lines[0] || null;
-    const unitPrice = primary && primary.unitPrice != null
+    const listUnitPrice = primary && primary.unitPrice != null
       ? primary.unitPrice
       : (qty > 0 ? Math.round((merch / qty) * 100) / 100 : 0);
+    // Count the sale at what the customer paid: when a discount brought the
+    // merchandise total below the list prices, spread what was actually paid
+    // over the copies, the same net-of-discount price a scanned order records.
+    const listTotal = listTotalOf(lines);
+    const discounted = merch > 0 && listTotal > 0 && merch < listTotal - 0.005;
+    const unitPrice = discounted ? Math.round((merch / qty) * 100) / 100 : listUnitPrice;
 
     missing.push({
       num,
@@ -324,6 +330,8 @@ export function findLedgerGaps(bcOrders = [], included = [], {
       confidence: primary?.confidence || 'none',
       qty,
       unitPrice,
+      listUnitPrice,
+      listTotal: listTotal || listUnitPrice * qty,
       merchandiseTotal: merch,
       shippingPaid: Number.parseFloat(attr.shipping_total || 0) || 0,
       taxPaid: Number.parseFloat(attr.tax_total || 0) || 0,
@@ -364,6 +372,12 @@ export function buildBigCartelOrderEntry(gap = {}, {
   const price = Number.isFinite(priceValue) && priceValue >= 0 ? priceValue : 0;
   const num = normalizeShippingOrderNumber(gap.num) || clean(gap.num);
   const shippingPaid = Number(gap.shippingPaid) || 0;
+  // The storefront discount, when the merchandise paid fell short of list.
+  const merchPaid = Number(gap.merchandiseTotal) || 0;
+  const listTotal = Number(gap.listTotal) || 0;
+  const discount = merchPaid > 0 && listTotal > merchPaid + 0.005
+    ? Math.round((listTotal - merchPaid) * 100) / 100
+    : 0;
 
   return {
     num,
@@ -383,14 +397,14 @@ export function buildBigCartelOrderEntry(gap = {}, {
     shipCountry: clean(address.country) || 'Canada',
     shipPhone: clean(address.phone),
     shippingPaid,
-    subtotal: Number(gap.merchandiseTotal) || price * qty,
+    subtotal: discount > 0 ? listTotal : (Number(gap.merchandiseTotal) || price * qty),
     discountCode: '',
-    discountAmount: 0,
+    discountAmount: discount,
     merchandisePaid: Number(gap.merchandiseTotal) || price * qty,
     shippingMethod: '',
     taxPaid: Number(gap.taxPaid) || 0,
     totalPaid: Number(gap.totalPaid) || (price * qty + shippingPaid),
-    discountSource: '',
+    discountSource: discount > 0 ? 'storefront' : '',
     sourcedFromBigCartel: true,
     // The same deterministic id applyOne() derives, so the same order added on
     // a second device produces one Sheets row rather than two.
@@ -424,13 +438,29 @@ export function splitGapByBook(gap = {}) {
     if (Number.isFinite(unit) && unit > 0) { part.amount += unit * qty; part.priced += qty; }
     byBook.set(line.bookId, part);
   });
+  const parts = [...byBook.values()];
+  // A discount on a mixed order is shared across the books in proportion to
+  // their list value, so each book's revenue is what the customer paid for it.
+  const allPriced = parts.every(part => part.priced === part.qty);
+  const listTotal = parts.reduce((sum, part) => sum + part.amount, 0);
+  const merch = Number(gap.merchandiseTotal) || 0;
+  const scale = allPriced && merch > 0 && listTotal > merch + 0.005 ? merch / listTotal : 1;
   return {
-    parts: [...byBook.values()].map(part => ({
+    parts: parts.map(part => ({
       bookId: part.bookId,
       qty: part.qty,
-      price: part.priced === part.qty ? Math.round((part.amount / part.qty) * 100) / 100 : null,
+      price: part.priced === part.qty ? Math.round((part.amount * scale / part.qty) * 100) / 100 : null,
     })),
   };
+}
+
+/** List value of the itemized lines that carry a unit price (0 when none do). */
+function listTotalOf(lines = []) {
+  return lines.reduce((sum, line) => {
+    const unit = Number(line && line.unitPrice);
+    const qty = Math.max(1, Math.floor(Number(line && line.qty) || 1));
+    return Number.isFinite(unit) && unit > 0 ? sum + unit * qty : sum;
+  }, 0);
 }
 
 const RECOVERED_NUMBER = /^#?RECOV-/i;

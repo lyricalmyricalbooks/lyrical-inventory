@@ -2468,6 +2468,7 @@ async function ocOutboxSendAll() {
     const c = proj.contributors.find(x => x.id === e.contributorId);
     const tmpl = proj.templates ? proj.templates[e.stageKey] : null;
     if (!c || !c.email) return;
+    if (_isCustomerSuppressed(c.email)) { held.push({ c, why: 'unsubscribed, so it will not be emailed' }); return; }
     if (!tmpl) { held.push({ c, why: 'no template saved for this stage' }); return; }
     const missing = findUnfilledMergeFields((tmpl.subject || '') + '\n' + (tmpl.body || ''), c, ctx);
     if (missing.length) { held.push({ c, why: 'blank fields: ' + missing.join(', ') }); return; }

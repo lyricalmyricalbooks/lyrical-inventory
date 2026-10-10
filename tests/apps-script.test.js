@@ -115,6 +115,19 @@ describe('Apps Script Integration', () => {
       expect(extract('Subtotal\nCA$65.00\nDiscount code: LMBCOLLECTIVE\nTotal\nCA$64.50', 1)).toMatchObject({ discountAmount: 32.5, merchandisePaid: 32.5, discountSource: 'code-rule' });
     });
 
+    it('reads the copy count from the receipt, defaulting to 1', () => {
+      const code = fs.readFileSync(codeGsPath, 'utf8');
+      const fn = code.match(/function extractBigCartelQty_\(body\) \{[\s\S]+?\n\}/);
+      expect(fn).not.toBeNull();
+      const qty = new Function('body', fn[0] + '\nreturn extractBigCartelQty_(body);');
+      expect(qty('Some Book\nQuantity: 3\nCA$40.00')).toBe(3);
+      expect(qty('Some Book\nQty\n2\nCA$40.00')).toBe(2);
+      expect(qty('Some Book x 4\nCA$40.00')).toBe(4);
+      expect(qty('2 x Some Book\nCA$40.00')).toBe(2);
+      expect(qty('Some Book\nCA$40.00\nSubtotal\nCA$40.00')).toBe(1);
+      expect(qty('')).toBe(1);
+    });
+
     function loadShippingExtractor() {
       const codeContent = fs.readFileSync(codeGsPath, 'utf8');
       const moneyMatch = codeContent.match(/function parseBigCartelMoney_\(value\) \{[\s\S]+?\n\}/);

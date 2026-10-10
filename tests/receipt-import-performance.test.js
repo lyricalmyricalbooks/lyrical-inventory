@@ -4,6 +4,7 @@ import fs from 'fs';
 // the behaviour, not which file holds it, so they read the whole app source.
 import { appSource } from './helpers/extract-decl.js';
 import { needsReceiptAmount, receiptDraftRef } from '../src/lib/receipt-drafts.js';
+import { parseScannedAmount } from '../src/lib/receipt-scan-checks.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -70,11 +71,17 @@ describe('Receipt import performance & correctness fixes', () => {
 
   describe('_parseReceiptAmount — coerces what the schema still lets through', () => {
     const fnSrc = extractFn('_parseReceiptAmount');
-    const _parseReceiptAmount = new Function(`${fnSrc}\nreturn _parseReceiptAmount;`)();
+    const _parseReceiptAmount = new Function('parseScannedAmount', `${fnSrc}\nreturn _parseReceiptAmount;`)(parseScannedAmount);
 
     it('strips thousands separators and currency symbols', () => {
       expect(_parseReceiptAmount('1,234.56')).toBeCloseTo(1234.56);
       expect(_parseReceiptAmount('$45.00')).toBeCloseTo(45);
+    });
+
+    it('reads a decimal comma as a decimal, not a hundredfold amount', () => {
+      // The old strip-to-digits turned the French-Canadian "12,50 $" into 1250.
+      expect(_parseReceiptAmount('12,50 $')).toBeCloseTo(12.5);
+      expect(_parseReceiptAmount('1.234,56 €')).toBeCloseTo(1234.56);
     });
 
     it('passes a real number through unchanged', () => {
@@ -134,8 +141,8 @@ describe('Receipt import performance & correctness fixes', () => {
       ${fnSrc}
       return _draftsFromReceiptRows;
     `;
-    const _draftsFromReceiptRows = new Function('needsReceiptAmount', 'receiptDraftRef', harness)(
-      needsReceiptAmount, receiptDraftRef
+    const _draftsFromReceiptRows = new Function('needsReceiptAmount', 'receiptDraftRef', 'parseScannedAmount', harness)(
+      needsReceiptAmount, receiptDraftRef, parseScannedAmount
     );
 
     it('keeps a well-formed row, priced and unflagged', () => {

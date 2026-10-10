@@ -32,14 +32,6 @@ import { SYNC_TONES, formatSyncAge } from './sync-status.js';
 /** How many consecutive failures a transient fault must reach before it speaks. */
 export const TRANSIENT_ALARM_THRESHOLD = 3;
 
-export const HEALTH_CATEGORIES = Object.freeze([
-  'auth',
-  'throttled',
-  'server',
-  'network',
-  'unknown',
-]);
-
 /**
  * One sentence per situation, written for the shop owner rather than for
  * whoever reads the stack trace. `{label}` is the integration's own name, so

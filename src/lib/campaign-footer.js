@@ -19,6 +19,27 @@ export function campaignFooterHtml(replyTo) {
     + `${link} from this list.</div>`;
 }
 
+// Plain-text version of an HTML body: drop everything between '<' and '>',
+// turning <br>, </p>, </div> and </li> into line breaks. A single pass over the
+// characters, so it never re-parses the body as HTML and leaves no partial tag
+// behind; any '<' left unclosed at the end is dropped with what follows it.
+function htmlToPlainText(html) {
+  let out = '';
+  let tag = null;
+  for (const ch of html) {
+    if (tag === null) {
+      if (ch === '<') tag = '';
+      else if (ch !== '>') out += ch;
+    } else if (ch === '>') {
+      if (/^(br\b|\/(p|div|li)\b)/i.test(tag.trim())) out += '\n';
+      tag = null;
+    } else {
+      tag += ch;
+    }
+  }
+  return out;
+}
+
 // Returns { body, htmlBody } ready for sendSingleEmailViaBackend, with the
 // footer appended to both the plain and HTML versions. `toHtml` converts the
 // authored body (plain/markdown) to HTML.
@@ -26,11 +47,7 @@ export function withCampaignFooter(body, replyTo, toHtml) {
   const raw = String(body || '');
   const isHtml = raw.includes('<');
   let plain = raw;
-  if (isHtml) {
-    let prev;
-    do { prev = plain; plain = plain.replace(/<[^>]*>/g, ''); } while (plain !== prev);
-    plain = plain.replace(/[<>]/g, '');
-  }
+  if (isHtml) plain = htmlToPlainText(raw);
   return {
     body: `${plain}\n\n--\n${campaignFooterText(replyTo)}`,
     htmlBody: (isHtml ? raw : toHtml(raw)) + campaignFooterHtml(replyTo),

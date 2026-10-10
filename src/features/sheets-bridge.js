@@ -21,8 +21,8 @@ import {
   BOOKS,
   EXPECTED_SCRIPT_VERSION,
   activeBook,
+  bookInSyncWithCloud,
   checkSheetsVersion,
-  defaultState,
   getBook,
   isAuthor,
   isTestBook,
@@ -39,6 +39,8 @@ import { simulatePostToSheets } from './sheets-simulator.js';
 import { confirmDialog } from '../lib/modal.js';
 import { cadEquivalentForSale, getBookCurrencyCode, normalizeCurrencyCode } from '../lib/money.js';
 import { sheetLogLabel, sheetLogSummary, sortSheetPayloads } from '../lib/sheet-sync.js';
+import { consignmentSyncPayload } from '../lib/consignment.js';
+import { diffSheetRows, isMoneyOutRow, moneyOutSheetRows } from '../lib/sheet-rows.js';
 
 // Write one row and say what actually happened to it.
 //
@@ -150,7 +152,9 @@ async function backfillSheetsIds() {
   const touched = new Set();
   for (const bookId of Object.keys(states || {})) {
     const s = states[bookId];
-    if (!s) continue;
+    // A book that never loaded is a stand-in, not its data; the practice book
+    // never reaches the sheet.
+    if (!s || s._loadFailed || isTestBookId(bookId)) continue;
     let dirty = false;
     if (Array.isArray(s.hist)) {
       for (const h of s.hist) if (!h.sheetsId) { h.sheetsId = makeEventId(); hist++; dirty = true; }
@@ -158,8 +162,15 @@ async function backfillSheetsIds() {
     if (Array.isArray(s.ledger)) {
       for (const e of s.ledger) if (!e.sheetsId) { e.sheetsId = makeEventId(); ledger++; dirty = true; }
     }
+    // A held transfer is the same sheet row as its sale, so it takes the sale's
+    // id. A fresh id of its own made receiving the transfer write the sale to
+    // the sheet a second time.
     if (Array.isArray(s.artistTransfers)) {
-      for (const t of s.artistTransfers) if (!t.sheetsId) { t.sheetsId = makeEventId(); transfers++; dirty = true; }
+      for (const t of s.artistTransfers) {
+        if (t.sheetsId) continue;
+        const sale = (s.hist || []).find(h => h.sheetsId && h.artistPending && h.num === t.num);
+        if (sale) { t.sheetsId = sale.sheetsId; transfers++; dirty = true; }
+      }
     }
     if (dirty) touched.add(bookId);
   }
@@ -404,14 +415,35 @@ async function _processQueue() {
 
   _sheetsWriting = true;
   try {
+    let body = item.payload;
+    if (item.payload && item.payload.action === 'prune') {
+      // Worked out now, not when "Sync all data" was pressed: anything recorded
+      // since then — here or on another device — is in the list it keeps.
+      const scope = Date.now() - (item.queuedAt || 0) <= PRUNE_MAX_AGE_MS
+        ? pruneScope(item.payload.bookIds || [])
+        : null;
+      if (!scope || !scope.books.length) {
+        addSheetsLog(item.book, item.type, item.summary + (scope
+          ? ' · nothing to check'
+          : ' · skipped, it waited too long to send — tap Sync all data again'), scope ? 'ok' : 'err');
+        _sheetsQueue.shift();
+        persistSheetsQueue();
+        return;
+      }
+      body = { action: 'prune', books: scope.books, keepIds: scope.keepIds };
+    }
     let resp;
     try {
       resp = await postToSheets({
         version: 2,
         eventId: item.id,
-        action: item.payload && item.payload.action,
+        action: body && body.action,
         sentAt: new Date().toISOString(),
-        payload: item.payload
+        // More rows are waiting right behind this one: the sheet skips
+        // rebuilding its totals tabs, and the last write of the run does it
+        // once (v57; older scripts ignore it and refresh every time).
+        ...(moreWritesBehind(item) ? { deferSummary: true } : {}),
+        payload: body
       }, destination, {
         simulate: !!item.simulated,
         timeoutMs: item.count > 1 ? SHEETS_BATCH_TIMEOUT_MS : SHEETS_WRITE_TIMEOUT_MS
@@ -425,7 +457,9 @@ async function _processQueue() {
     const removed = resp && typeof resp.removed === 'number' ? resp.removed : 0;
     const count = item.count || 1;
     let suffix = '';
-    if (item.payload && (item.payload.action === 'delete' || item.payload.action === 'void')) {
+    if (item.payload && item.payload.action === 'prune') {
+      suffix = removed ? ` · removed ${removed}` : ' · nothing to remove';
+    } else if (item.payload && (item.payload.action === 'delete' || item.payload.action === 'void')) {
       suffix = removed ? ` · removed ${removed}` : ' · row not found';
     } else if (replaced > 0) {
       suffix = ` · replaced ${replaced}`;
@@ -443,13 +477,26 @@ async function _processQueue() {
     addSheetsLog(item.book, item.type, item.summary + suffix, 'ok');
     _sheetsQueue.shift();
     persistSheetsQueue();
-    updateBulkProgress(count);
+    // Only rows "Sync all data" queued move its progress bar; a sale recorded
+    // meanwhile used to count too, so the bar could finish before the sync.
+    if (item.bulk) updateBulkProgress(count);
   } finally {
     // Always, on every path. Leaving this set is what silently stopped Sheets
     // syncing for the rest of the session.
     _sheetsWriting = false;
     _scheduleQueueDrain();
   }
+}
+
+// True when the next queued write goes to the same sheet and is ready to send
+// now, so it will refresh the sheet's totals itself. A tidy-up request only
+// refreshes when it removes something, so it never stands in for this one.
+function moreWritesBehind(item) {
+  const next = _sheetsQueue[1];
+  if (!next || next.simulated || item.simulated) return false;
+  if ((next.url || '') !== (item.url || '')) return false;
+  if (next.payload && next.payload.action === 'prune') return false;
+  return !next.nextTryAt || next.nextTryAt <= Date.now();
 }
 
 // Book one failed attempt against the head item, retiring it once it has had
@@ -464,7 +511,10 @@ function _recordSheetsFailure(item, e) {
     addSheetsLog(item.book, item.type, `${item.summary} [gave up after ${MAX_SHEETS_RETRIES} tries · ${item.lastError}]`, 'err');
     _sheetsQueue.shift();
     persistSheetsQueue();
-    updateBulkProgress(item.count || 1);
+    if (item.bulk) {
+      _bulkFailed += item.count || 1;
+      updateBulkProgress(item.count || 1);
+    }
     _announceSheetsGiveUp();
     return;
   }
@@ -510,7 +560,7 @@ function sheetsDestination() {
   return { url: realSheetsUrl(), simulated: false };
 }
 
-function syncToSheets(payload) {
+function syncToSheets(payload, opts = {}) {
   if (!realSheetsUrl() || !payload) return;
   const bookIdent = payload.book || payload.bookId || payload.id;
   if ((bookIdent && isTestBookId(bookIdent)) || (payload.bookObj && isTestBook(payload.bookObj))) {
@@ -533,6 +583,7 @@ function syncToSheets(payload) {
     type: typeLabel,
     attempts: 0,
     nextTryAt: Date.now(),
+    ...(opts.bulk ? { bulk: true } : {}),
     ...sheetsDestination()
   });
   persistSheetsQueue();
@@ -540,7 +591,7 @@ function syncToSheets(payload) {
   _processQueue();
 }
 
-function syncBatchToSheets(rows, label = 'Bulk sync') {
+function syncBatchToSheets(rows, label = 'Bulk sync', opts = {}) {
   if (!realSheetsUrl() || !Array.isArray(rows) || !rows.length) return;
   const filteredRows = rows.filter(row => {
     if (!row) return false;
@@ -563,6 +614,7 @@ function syncBatchToSheets(rows, label = 'Bulk sync') {
     count: rows.length,
     attempts: 0,
     nextTryAt: Date.now(),
+    ...(opts.bulk ? { bulk: true } : {}),
     ...sheetsDestination()
   });
   persistSheetsQueue();
@@ -573,6 +625,7 @@ function syncBatchToSheets(rows, label = 'Bulk sync') {
 let _isBulkSync = false;
 let _bulkTotal = 0;
 let _bulkDone = 0;
+let _bulkFailed = 0;
 // One batch is one Apps Script execution: it scans every managed tab for
 // existing ids, deletes the rows it is replacing, appends the new ones and
 // re-sorts. At 200 rows that regularly ran past the point where the browser
@@ -591,17 +644,60 @@ async function fetchSheetsCapabilities() {
   }
   if (_sheetsCaps) return _sheetsCaps;
   if (!sheetsUrl) return {};
-  try {
-    const res = await fetch(sheetsUrl);
-    if (res.ok) {
-      const data = await res.json().catch(() => null);
-      // Only cache a backend that actually advertises capabilities. An older
-      // deployment returns none — leave the cache empty so a retry after the
-      // user redeploys can detect the new support without a page reload.
-      if (data && data.capabilities) { _sheetsCaps = data.capabilities; return _sheetsCaps; }
-    }
-  } catch (_) { /* offline / CORS — treat as no advertised capabilities */ }
+  // Only cache a backend that actually advertises capabilities. An older
+  // deployment returns none — leave the cache empty so a retry after the
+  // user redeploys can detect the new support without a page reload.
+  const caps = await readSheetsCapabilities(sheetsUrl);
+  if (caps && Object.keys(caps).length) { _sheetsCaps = caps; return _sheetsCaps; }
   return {};
+}
+
+// What the deployment at `url` says it can do, or null when it could not be
+// asked (offline, a blocked request, not our script). A successful answer is
+// remembered per address so the automatic expense rows can be queued offline,
+// when the deployment cannot be asked.
+const SHEETS_CAPS_KEY = 'lm-sheets-caps-v1';
+async function readSheetsCapabilities(url) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json().catch(() => null);
+    if (!data || typeof data.service !== 'string') return null;
+    const caps = data.capabilities || {};
+    try { localStorage.setItem(SHEETS_CAPS_KEY, JSON.stringify({ url, caps })); } catch (_) { /* keep going */ }
+    return caps;
+  } catch (_) { return null; }
+}
+function savedSheetsCaps(url) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SHEETS_CAPS_KEY) || 'null');
+    return saved && saved.url === url && saved.caps && typeof saved.caps === 'object' ? saved.caps : null;
+  } catch (_) { return null; }
+}
+// A deployment's answer is reused for this long before it is asked again, so an
+// old script that lacks a capability is not pinged on every save. The answer
+// belongs to one sheet address; connecting a different sheet asks afresh.
+const SHEETS_CAPS_RECHECK_MS = 10 * 60 * 1000;
+let _capsProbe = null;   // { url, promise } while a question is in flight
+let _capsAnswer = null;  // { url, at, caps } — the last answer that came back
+async function sheetsSupports(cap) {
+  const url = realSheetsUrl();
+  if (!url) return false;
+  const saved = savedSheetsCaps(url);
+  if (saved && saved[cap]) return true;
+  if (_capsAnswer && _capsAnswer.url === url && Date.now() - _capsAnswer.at < SHEETS_CAPS_RECHECK_MS) {
+    return !!_capsAnswer.caps[cap];
+  }
+  if (!_capsProbe || _capsProbe.url !== url) {
+    const promise = readSheetsCapabilities(url).then(caps => {
+      // No answer at all (offline): ask again next time rather than waiting.
+      if (caps) _capsAnswer = { url, at: Date.now(), caps };
+      return caps;
+    }).finally(() => { if (_capsProbe && _capsProbe.promise === promise) _capsProbe = null; });
+    _capsProbe = { url, promise };
+  }
+  const caps = await _capsProbe.promise;
+  return !!(caps && caps[cap]);
 }
 
 // Build the Sheets payload for one in-app order (history) entry. Voided entries
@@ -623,18 +719,167 @@ function orderRowPayload(book, nativeCur, h) {
   };
 }
 
+// Every row a book should have on the sheet right now, built by the same
+// helpers the live writes use: each sale, the postage a customer paid on it,
+// each consignment movement and, when asked, each expense and artist payment.
+// Null when this device is not sure of the book — it never loaded, or it is the
+// practice book — so nothing is sent, or removed, on its behalf.
+//
+// "Sync all data" used to build consignment rows with its own copy of this
+// code, which read a book with no currency set as CAD where every live write
+// (and the rest of the app) reads it as EUR.
+function liveSheetRowsForBook(bid, { moneyOut = false } = {}) {
+  const book = BOOKS[bid];
+  const s = states[bid];
+  if (!book || !s || s._loadFailed) return null;
+  if (isTestBook(book) || isTestBookId(bid)) return null;
+  const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
+  const rows = [];
+  (s.hist || []).forEach(h => {
+    if (h.consignmentLink || h.voided) return; // ledger is the canonical consignment row
+    rows.push(orderRowPayload(book, nativeCur, h));
+    if ((Number(h.shippingPaid || 0) || 0) > 0) rows.push(shippingPurchaseRowPayload(book, nativeCur, h));
+  });
+  (s.ledger || []).forEach(e => {
+    if (!e.voided) rows.push(consignmentSyncPayload(book, e));
+  });
+  if (moneyOut) rows.push(...moneyOutSheetRows(book, bid, s));
+  return rows;
+}
+
+// ── Tidying rows the app no longer has ─────────────────────────────────────
+// "Sync all data" adds and updates rows but never removed one whose record had
+// left the app without being voided: a duplicate the app cleaned up, a website
+// order taken back to New, a sale moved to another book. The sheet kept
+// counting that money until a full rebuild. After the sync, one more request
+// asks the sheet to drop any row of the synced books whose id the app does not
+// hold.
+//
+// The list of ids to keep is worked out when the request is sent, from the
+// books as they are then, so a sale recorded while the sync was running (here,
+// or on another device and already received) is kept. A request that sat
+// unsent for longer than this is dropped instead — after that long the app
+// could be missing records the sheet has.
+const PRUNE_MAX_AGE_MS = 15 * 60 * 1000;
+
+function queueSheetsPrune(bookIds) {
+  if (!realSheetsUrl() || !bookIds.length) return;
+  const summary = `Remove rows no longer in the app · ${bookIds.length} book${bookIds.length === 1 ? '' : 's'}`;
+  _sheetsQueue.push({
+    id: 'prune-' + makeEventId(),
+    payload: { action: 'prune', bookIds },
+    summary,
+    book: 'All books',
+    type: 'Tidy',
+    count: 0,
+    bulk: true,
+    queuedAt: Date.now(),
+    attempts: 0,
+    nextTryAt: Date.now(),
+    ...sheetsDestination()
+  });
+  persistSheetsQueue();
+  addSheetsLog('All books', 'Tidy', summary, 'queued');
+  _processQueue();
+}
+
+// The titles the sheet may tidy and every id to keep for them. A title is only
+// included when every book carrying it is one this device is sure of — loaded,
+// and with no change still waiting to upload — because two books can share a
+// title and the sheet tells them apart by title alone.
+function pruneScope(bookIds) {
+  const wanted = new Set(bookIds);
+  const titleSure = new Map();
+  const keepIds = [];
+  Object.keys(BOOKS || {}).forEach(bid => {
+    const book = BOOKS[bid];
+    const title = book && String(book.title || '').trim();
+    if (!title) return;
+    const sure = wanted.has(bid) && bookInSyncWithCloud(bid);
+    const rows = sure ? liveSheetRowsForBook(bid, { moneyOut: true }) : null;
+    if (!rows) { titleSure.set(title, false); return; }
+    if (!titleSure.has(title)) titleSure.set(title, true);
+    rows.forEach(r => { if (r.sheetsId) keepIds.push(String(r.sheetsId)); });
+  });
+  const books = [...titleSure].filter(([, sure]) => sure).map(([title]) => title);
+  return { books, keepIds };
+}
+
+// ── Expenses and artist payments, kept up to date automatically ────────────
+// A book's expenses and its payments to the artist are changed from more than
+// a dozen places (the expense form, receipt imports, gifted copies, shipping
+// labels, settlements…). Rather than a sheet write at each, every save of a
+// book compares the rows it should have (src/lib/sheet-rows.js) with what was
+// last sent for it, and queues only the difference. What was sent is
+// remembered per sheet address, so connecting a different sheet sends
+// everything again.
+const SHEETS_MONEY_OUT_KEY = 'lm-sheets-money-out-v1';
+function readMoneyOutSent(url) {
+  let v = null;
+  try { v = JSON.parse(localStorage.getItem(SHEETS_MONEY_OUT_KEY) || 'null'); } catch (_) { v = null; }
+  if (!v || typeof v !== 'object' || v.url !== url || !v.books || typeof v.books !== 'object') return { url, books: {} };
+  return v;
+}
+function writeMoneyOutSent(v) {
+  try { localStorage.setItem(SHEETS_MONEY_OUT_KEY, JSON.stringify(v)); } catch (e) { console.warn('Could not remember the expense rows sent', e); }
+}
+function rememberMoneyOutRows(rowsByBook) {
+  const url = realSheetsUrl();
+  if (!url) return;
+  const sent = readMoneyOutSent(url);
+  Object.keys(rowsByBook).forEach(bid => { sent.books[bid] = diffSheetRows({}, rowsByBook[bid]).next; });
+  writeMoneyOutSent(sent);
+}
+
+const _moneyOutTimers = new Map();
+function scheduleMoneyOutSheetSync(bid) {
+  if (!bid || !realSheetsUrl() || !BOOKS || !BOOKS[bid]) return;
+  if (_moneyOutTimers.has(bid)) clearTimeout(_moneyOutTimers.get(bid));
+  _moneyOutTimers.set(bid, setTimeout(() => {
+    _moneyOutTimers.delete(bid);
+    syncMoneyOutRows(bid).catch(e => console.warn('Expense rows for the sheet could not be queued', e));
+  }, 1500));
+}
+function scheduleMoneyOutSheetSyncAll() {
+  Object.keys(BOOKS || {}).forEach(scheduleMoneyOutSheetSync);
+}
+
+async function syncMoneyOutRows(bid) {
+  const url = realSheetsUrl();
+  if (!url) return;
+  const book = BOOKS[bid];
+  const s = states[bid];
+  if (!book || !s || s._loadFailed || isTestBook(book) || isTestBookId(bid)) return;
+  // An older script would add these to its revenue table. Nothing is sent, or
+  // remembered as sent, until the deployment says it understands them.
+  if (!(await sheetsSupports('expenseRows'))) return;
+  if (realSheetsUrl() !== url) return;
+  const sent = readMoneyOutSent(url);
+  const { changed, removed, next } = diffSheetRows(sent.books[bid], moneyOutSheetRows(book, bid, s));
+  if (!changed.length && !removed.length) return;
+  const deletes = removed.map(id => ({
+    action: 'delete', type: id.startsWith('payout-') ? 'payout' : 'expense', book: book.title, sheetsId: id
+  }));
+  const rows = deletes.concat(changed);
+  if (rows.length === 1) syncToSheets(rows[0]);
+  else syncBatchToSheets(rows, `${book.title} · expenses & artist payments`);
+  sent.books[bid] = next;
+  writeMoneyOutSent(sent);
+}
+
 // Push every live record to Sheets.
 //   • rebuild:true  → clear the managed sheets first (removes duplicates, stale
 //     VOID rows and blank-CAD legacy rows), then re-add a clean copy. Requires a
 //     backend that advertises the 'reset' capability; falls back to in-place.
-//   • rebuild:false → in-place upsert by stable id; voided entries are deleted.
+//   • rebuild:false → in-place upsert by stable id; voided entries are deleted,
+//     then rows the app no longer has are removed (see queueSheetsPrune).
 async function pushAllToSheets(opts = {}) {
   const { rebuild = false, skipConfirm = false } = opts;
   if (!sheetsUrl) { showToast('Connect Google Sheets first', 'warn'); return; }
   if (!skipConfirm) {
     const msg = rebuild
       ? 'Rebuild the Google Sheet from the app: this clears the current rows, then re-adds every live record so duplicates disappear, CAD equivalents refill, and voided entries drop off. Continue?'
-      : 'This will enqueue all live records for all books, then deliver them with retry. Voided entries are removed from the sheet. Continue?';
+      : 'This sends every live record for all books — sales, consignment, expenses and artist payments — and removes rows for anything no longer in the app. Continue?';
     if (!(await confirmDialog(msg, { okLabel: 'Continue' }))) return;
   }
 
@@ -660,54 +905,51 @@ async function pushAllToSheets(opts = {}) {
       showToast('Redeploy your Apps Script to enable a full rebuild — resyncing in place for now', 'warn', 5000);
     }
   }
+  // Expense and artist-payment rows need a script that keeps them out of its
+  // revenue totals (v56); an older one gets the sales rows only.
+  const withMoneyOut = !!caps.expenseRows;
+
+  // A record with no stable id cannot be matched to its row, so every sync
+  // appended it again — CSV-imported orders and inventory write-offs never had
+  // one. Give every record its id before building the rows.
+  try {
+    await backfillSheetsIds();
+  } catch (e) {
+    console.warn('Could not stamp sync ids before syncing', e);
+  }
 
   const control = [];
   if (willReset) control.push({ action: 'reset', type: 'control', book: 'Overview' });
 
   const toSync = [];
   const deletions = [];
+  const syncedBooks = [];
+  const moneyOutByBook = {};
   Object.keys(BOOKS).forEach(bid => {
+    const rows = liveSheetRowsForBook(bid, { moneyOut: withMoneyOut });
+    if (!rows) return;
     const book = BOOKS[bid];
-    if (isTestBook(book) || isTestBookId(bid)) return;
-    const s = states[bid] || defaultState(BOOKS[bid]);
-    const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
+    syncedBooks.push(bid);
+    toSync.push(...rows);
+    if (withMoneyOut) moneyOutByBook[bid] = rows.filter(isMoneyOutRow);
+    // A reset empties the sheet, so only the in-place path needs an explicit
+    // delete to clear a previously-synced voided row.
+    if (willReset) return;
+    const s = states[bid];
     (s.hist || []).forEach(h => {
-      if (h.consignmentLink) return; // ledger is the canonical row
-      if (h.voided) {
-        // A reset empties the sheet, so only the in-place path needs an explicit
-        // delete to clear a previously-synced row.
-        if (!willReset && h.sheetsId) {
-          deletions.push({ action: 'delete', type: 'order', book: book.title, sheetsId: h.sheetsId });
-          if ((Number(h.shippingPaid || 0) || 0) > 0) deletions.push({ action: 'delete', type: 'shipping', book: book.title, sheetsId: h.sheetsId + '-shipping' });
-        }
-        return;
-      }
-      toSync.push(orderRowPayload(book, nativeCur, h));
-      if ((Number(h.shippingPaid || 0) || 0) > 0) toSync.push(shippingPurchaseRowPayload(book, nativeCur, h));
+      if (h.consignmentLink || !h.voided || !h.sheetsId) return;
+      deletions.push({ action: 'delete', type: 'order', book: book.title, sheetsId: h.sheetsId });
+      if ((Number(h.shippingPaid || 0) || 0) > 0) deletions.push({ action: 'delete', type: 'shipping', book: book.title, sheetsId: h.sheetsId + '-shipping' });
     });
     (s.ledger || []).forEach(e => {
-      const ledgerCur = normalizeCurrencyCode(book.currency, 'CAD');
-      if (e.voided) {
-        if (!willReset && e.sheetsId) deletions.push({ action: 'delete', type: 'consignment', book: book.title, sheetsId: e.sheetsId });
-        return;
-      }
-      const totalNative = e.amountDue || 0;
-      const cadEquiv = cadEquivalentForSale({ nativeCurrency: ledgerCur, totalNative });
-      toSync.push({
-        type: 'consignment', book: book.title, date: e.date, store: e.storeName,
-        event: e.type, qty: e.qty, rate: e.rate, amountDue: totalNative,
-        notes: e.notes || '', status: e.status || 'OK',
-        invoiceNum: e.invoiceNum || '',
-        sheetsId: e.sheetsId || '',
-        currency: ledgerCur,
-        convertedTotal: cadEquiv
-      });
+      if (e.voided && e.sheetsId) deletions.push({ action: 'delete', type: 'consignment', book: book.title, sheetsId: e.sheetsId });
     });
   });
 
   const queue = control.concat(deletions, toSync);
   _bulkTotal = queue.length;
   _bulkDone = 0;
+  _bulkFailed = 0;
 
   if (_bulkTotal === 0) {
     showToast('No records found to sync', 'warn');
@@ -720,18 +962,70 @@ async function pushAllToSheets(opts = {}) {
 
   if (stats) stats.textContent = `Queueing ${_bulkTotal} records...`;
   if (canBatch) {
-    for (const row of control) syncToSheets(row);
+    for (const row of control) syncToSheets(row, { bulk: true });
     // Removals first (they clear the rows the additions replace), then the
     // additions oldest-first, so a rebuilt sheet comes back in date order
     // instead of in whichever order the books happened to be iterated.
     const dataRows = deletions.concat(sortSheetPayloads(toSync));
     for (let i = 0; i < dataRows.length; i += SHEETS_BULK_BATCH_SIZE) {
-      syncBatchToSheets(dataRows.slice(i, i + SHEETS_BULK_BATCH_SIZE), rebuild ? 'Rebuild batch' : 'Sync batch');
+      syncBatchToSheets(dataRows.slice(i, i + SHEETS_BULK_BATCH_SIZE), rebuild ? 'Rebuild batch' : 'Sync batch', { bulk: true });
     }
   } else {
-    for (const row of control.concat(deletions, sortSheetPayloads(toSync))) syncToSheets(row);
+    for (const row of control.concat(deletions, sortSheetPayloads(toSync))) syncToSheets(row, { bulk: true });
   }
+  // These rows are now on their way, so the automatic expense updates start
+  // from them rather than sending them a second time.
+  if (withMoneyOut) rememberMoneyOutRows(moneyOutByBook);
+  if (!willReset && caps.pruneOrphans) queueSheetsPrune(syncedBooks);
   if (btn) btn.textContent = canBatch ? 'Syncing batches...' : 'Syncing...';
+}
+
+// ── A book renamed in the app ──────────────────────────────────────────────
+// Its old rows sat on a tab under the old title while new ones started a
+// second tab, so the sheet showed the book in two halves and a restore from
+// the sheet saw only the newer one. The sheet now renames the tab and the rows
+// (v57). An older script cannot, so it is told nothing and the toast says why.
+async function queueSheetsRename(from, to, bookColor) {
+  if (!realSheetsUrl() || !from || !to || from === to) return;
+  if (!(await sheetsSupports('renameBook'))) {
+    showToast('Renamed. To move this book\'s older rows in your Google Sheet to the new name, update the sheet script on the Google Sheet screen, then tap Sync all data.', 'warn', 8000);
+    return;
+  }
+  syncToSheets({ action: 'renamebook', type: 'control', book: to, from, to, bookColor: bookColor || '' });
+}
+
+// ── When the sheet last matched the app ────────────────────────────────────
+// Remembered on this device when a "Sync all data" finishes, so the Google
+// Sheet screen can say whether the sheet is known to be complete.
+const SHEETS_LAST_FULL_SYNC_KEY = 'lm-sheets-last-full-sync-v1';
+function rememberFullSync(total, failed) {
+  try {
+    localStorage.setItem(SHEETS_LAST_FULL_SYNC_KEY, JSON.stringify({ url: realSheetsUrl(), at: Date.now(), total, failed }));
+  } catch (_) { /* the line just stays as it was */ }
+  renderLastFullSync();
+}
+function readLastFullSync() {
+  try {
+    const v = JSON.parse(localStorage.getItem(SHEETS_LAST_FULL_SYNC_KEY) || 'null');
+    return v && v.url === realSheetsUrl() && Number.isFinite(v.at) ? v : null;
+  } catch (_) { return null; }
+}
+const _lastSyncFormat = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+function lastFullSyncText(last, waiting) {
+  const pending = waiting ? ` ${waiting} change${waiting === 1 ? ' is' : 's are'} still waiting to send.` : '';
+  if (!last) return `This device hasn't run Sync all data on this sheet yet, so older records may be missing from it.${pending}`;
+  const when = _lastSyncFormat.format(new Date(last.at));
+  if (last.failed) {
+    return `Last Sync all data: ${when} — ${last.failed} record${last.failed === 1 ? '' : 's'} didn't reach the sheet. Tap Sync all data to send them again.${pending}`;
+  }
+  return `Last Sync all data: ${when} — every record reached the sheet.${pending}`;
+}
+function renderLastFullSync() {
+  const el = $('sheets-last-sync');
+  if (!el) return;
+  const last = readLastFullSync();
+  el.textContent = lastFullSyncText(last, _sheetsQueue.length);
+  el.classList.toggle('is-warn', !last || !!last.failed);
 }
 
 function updateBulkProgress(done = 1) {
@@ -747,6 +1041,7 @@ function updateBulkProgress(done = 1) {
 
   if (_bulkDone >= _bulkTotal) {
     _isBulkSync = false;
+    rememberFullSync(_bulkTotal, _bulkFailed);
     if (btn) { btn.disabled = false; btn.textContent = 'Sync all data'; }
     if (stats) stats.textContent = `✓ Queue processed: ${_bulkTotal} records.`;
     showToast(`✓ Sheets queue processed: ${_bulkTotal} records.`);
@@ -767,6 +1062,7 @@ function addSheetsLog(book, type, summary, status) {
 }
 let _syncLogPage = 0;
 function renderSheetsLog() {
+  renderLastFullSync();
   const b = $('sheets-log-body');
   if (!b) return;
   if (!sheetsLog.length) {
@@ -911,6 +1207,12 @@ async function verifyUrl() {
 export {
   _processQueue,
   _sheetsQueue,
+  lastFullSyncText,
+  queueSheetsRename,
+  renderLastFullSync,
+  scheduleMoneyOutSheetSync,
+  scheduleMoneyOutSheetSyncAll,
+  syncMoneyOutRows,
   addSheetsLog,
   backfillAndResync,
   backfillSheetsIds,

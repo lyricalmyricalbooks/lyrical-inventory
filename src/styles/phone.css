@@ -19,7 +19,11 @@
   .tab-panel .section-subcopy, .tab-panel .lead-note { display: block; overflow: visible; -webkit-line-clamp: unset; line-clamp: unset; }
   .tab-panel :is(.sec-head-badges, .row-between) { min-width: 0; flex-wrap: wrap; }
   .tab-panel :is(input:not([type=checkbox]):not([type=radio]), select, textarea) { min-width: 0; max-width: 100%; font-size: max(1rem, var(--text-base)); }
-  .tab-panel .btn { white-space: normal; overflow-wrap: anywhere; min-height: 44px; max-width: 100%; }
+  /* break-word, not anywhere: "anywhere" lets a button's minimum width shrink
+     to one letter, so a row of flex:1 buttons squeezed into one line and spelt
+     each label down the button ("SE/ND/BO/OK/S"). break-word keeps whole words
+     together and only splits a single word that is wider than the screen. */
+  .tab-panel .btn { white-space: normal; overflow-wrap: break-word; min-height: 44px; max-width: 100%; }
   .tab-panel :is(.card, .form-group, .sheets-setup) { min-width: 0; }
   .tab-panel .settings-sub-nav.has-phone-picker { display: none; }
   .phone-section-picker { display: grid; gap: var(--space-2); margin-bottom: var(--space-4); color: var(--content-secondary); font-size: var(--text-sm); }
@@ -446,7 +450,7 @@
   #tab-website .phone-order-details:not([open]) > .phone-order-contact { display: none; }
   #tab-website .phone-order-contact { font-size: var(--text-sm); overflow-wrap: anywhere; padding-bottom: var(--space-3); }
   #tab-website .order-actions { display: flex; flex-wrap: wrap; width: 100%; gap: var(--space-2); }
-  #tab-website .order-actions > .btn { flex: 1; min-height: 44px; }
+  #tab-website .order-actions > .btn { flex: 1 1 auto; min-height: 44px; }
   #tab-website .order-actions > .btn.gold { flex-basis: 100%; order: -1; }
   /* Consistent breathing room and reachable disclosure across the remaining
      customer, tax, consignment, stock and administration pages. */
@@ -711,4 +715,57 @@
 }
 @media (max-width: 768px) and (prefers-reduced-motion: reduce) {
   :is(.fm-tile-minus, .fm-line-minus) { transition: none; }
+}
+
+/* Two controls that sat in a modal (outside the page rule above) and ran off
+   the right edge of a phone: the book editor's three step tabs and the stock
+   hand-off direction pair. Both now fit inside the screen width. */
+@media (max-width: 768px) {
+  .book-modal-stepper { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .book-modal-stepper .modal-tab-btn {
+    flex-direction: column !important; gap: var(--space-1) !important;
+    padding: var(--space-2) var(--space-1) !important; min-width: 0; min-height: 44px;
+    white-space: normal !important; text-align: center; line-height: 1.2;
+    font-size: var(--text-xs) !important;
+  }
+  .st-dir-toggle { flex-direction: column; }
+  .st-dir-toggle .st-dir-btn { white-space: normal; text-align: center; }
+}
+
+/* Readability and reach on a phone.
+   The two smallest type steps (9px and 10px) were used for every form label,
+   table heading and stat caption. Held at arm's length on a phone they were
+   too small to read, so both steps start at 11px here. The desktop sizes
+   are unchanged. */
+@media (max-width: 768px) {
+  :root { --text-3xs: 11px; --text-2xs: 11px; }
+
+  /* Controls that were shorter than a fingertip (23–34px tall). */
+  .tab-panel summary, .modal summary { min-height: 44px; display: flex; align-items: center; }
+  .modal-tabs .modal-tab-btn, .tcc-filter-pill { min-height: 44px; }
+  .accent-swatch-btn { width: 40px; height: 40px; }
+  input[type=color] { min-width: 44px; min-height: 44px; }
+  /* Some checkboxes carried an inline width:auto that undid the 22px size. */
+  input[type=checkbox], input[type=radio] { width: 22px !important; height: 22px !important; flex-shrink: 0; }
+}
+
+/* Book dashboard header strip. The wrap rule above targets .dash-context, but
+   this strip is .dashboard-context, so its button row never wrapped and pushed
+   the whole page wider than the phone — everything slid sideways, the bottom
+   bar included. */
+@media (max-width: 768px) {
+  #book-context-dash { flex-wrap: wrap; gap: var(--space-3); }
+  #book-context-dash > div { min-width: 0; flex-wrap: wrap; }
+  #book-context-dash > div:last-child { flex: 1 1 100%; }
+  .metric-banner .rail-more, .rail-more { min-height: 44px; }
+  .cf-stat-sub, .pm-toggle-desc { font-size: var(--text-xs); }
+  #ship-analysis-hub :is(.shipping-pnl-kpi-label, .shipping-pnl-eyebrow, .shipping-pnl-freshness) { font-size: var(--text-xs); }
+  #tab-dashboard .tbl th { font-size: var(--text-xs); }
+}
+
+/* Touch screens have no hover, so controls revealed only on hover were
+   invisible on a phone — the to-do list's dismiss cross among them. */
+@media (max-width: 768px) {
+  .todo-dismiss { opacity: 1; width: 44px; height: 44px; }
+  .shipping-pnl-insight-table th, .shipping-pnl-ledger-table th { font-size: var(--text-xs); }
 }
