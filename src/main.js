@@ -7148,6 +7148,21 @@ function renderBookPendingAlert() {
 function heldGrossOf(s) {
   return (s.artistTransfers || []).reduce((sum, t) => sum + (transferAmount(t) || 0), 0);
 }
+// The book's per-channel rollup with the gross still held by the artist folded back
+// into each channel's revenue (direct-to-artist sales bump txns/units but not revenue
+// until forwarded). Its channel revenues sum to recognizedRevenueOf(s), so the
+// "Sales by channel" total agrees with the Revenue KPI.
+export function chStatsWithHeld(s) {
+  const out = {};
+  for (const [chan, cs] of Object.entries(s.chStats || {})) out[chan] = { ...cs };
+  (s.artistTransfers || []).forEach(t => {
+    const amt = transferAmount(t) || 0;
+    if (!amt) return;
+    const row = out[t.chan] = out[t.chan] || { txns: 0, units: 0, revenue: 0 };
+    row.revenue = (row.revenue || 0) + amt;
+  });
+  return out;
+}
 // Revenue recognized for a book: cash collected plus the gross still held by the
 // artist. A sale is complete the moment it happens, so its full value is recognized
 // immediately and the held cash is treated as a receivable — NOT as deferred revenue.
@@ -7329,7 +7344,7 @@ export function updateDash() {
   if (s.stock <= book.threshold) { al.className = 'stock-alert danger'; al.textContent = '⚠ Below threshold (' + book.threshold + ') — reorder now.'; }
   else if (s.stock <= book.threshold * 2) { al.className = 'stock-alert warn'; al.textContent = 'Getting low — ' + s.stock + ' units remaining.'; }
   else { al.className = 'stock-alert ok'; al.textContent = 'Stock is healthy.'; }
-  const chMix = channelMixRows(s.chStats);
+  const chMix = channelMixRows(chStatsWithHeld(s));
   const chFoot = $('ch-foot');
   $('ch-body').innerHTML = chMix.rows.length
     ? chMix.rows.map(r => channelMixRowHtml(r, cur)).join('')
