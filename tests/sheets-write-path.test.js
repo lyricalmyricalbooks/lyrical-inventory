@@ -139,7 +139,11 @@ describe('the client no longer reports an unwritten row as written', () => {
     expect(proc).toContain("if (resp === 'unknown') {");
     expect(proc).toContain('could not confirm the sheet received this row');
     const unknownAt = proc.indexOf("if (resp === 'unknown') {");
-    const shiftAt = proc.indexOf('_sheetsQueue.shift();');
+    // The delivered-row path: logged as written, then shifted off the queue.
+    // (A tidy-up request that is skipped unsent shifts earlier, before any POST.)
+    const writtenAt = proc.indexOf("item.summary + suffix, 'ok');");
+    const shiftAt = proc.indexOf('_sheetsQueue.shift();', writtenAt);
+    expect(writtenAt, 'the written log must be guarded by the unknown check').toBeGreaterThan(unknownAt);
     expect(shiftAt, 'the shift must be guarded by the unknown check').toBeGreaterThan(unknownAt);
   });
 });
