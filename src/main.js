@@ -1601,7 +1601,7 @@ function getAllTaxCentreExpensesForCalc() {
       date: e.date || '',
       desc: e.desc || e.description || e.vendor || 'Expense',
       vendor: e.vendor || '',
-      category: e.category || 'General',
+      category: e.cat || e.category || 'General',
       amount: Number(e.amount) || 0,
       currency: curCode,
       bookId: e.bookId || e.book || '',
@@ -1622,7 +1622,7 @@ function getAllTaxCentreExpensesForCalc() {
           date: e.date || '',
           desc: e.desc || e.description || 'Production Expense',
           vendor: e.vendor || '',
-          category: e.category || 'Production',
+          category: e.cat || e.category || 'Production',
           amount: Number(e.amount) || 0,
           currency: expCur,
           bookId: bId,
@@ -1694,7 +1694,9 @@ function openProductionCostCalculator() {
     const isTitleMatch = lowerTitle.length > 2 && (exp.desc.toLowerCase().includes(lowerTitle) || (exp.vendor && exp.vendor.toLowerCase().includes(lowerTitle)));
     const isProdCat = isProductionCategory(exp.category);
 
-    if (isDirectBook || (isProdCat && isTitleMatch)) {
+    // Only production spend is pre-ticked: shipping, travel and marketing on
+    // the same book would otherwise inflate the unit cost.
+    if (isProdCat && (isDirectBook || isTitleMatch)) {
       _tccSelectedExpenseIds.add(exp.id);
     }
   });
@@ -1914,7 +1916,9 @@ async function _ccFetchRates(from, to, dates) {
   // distinct days, and firing them all at once gets us rate-limited.
   for (const d of dates) {
     const r = await fetchHistoricalRate(from, to, d);
-    out[d] = (r && r.rate) ? r.rate : (out[''] || 0);
+    // A missed date is left unset so _ccRateFor falls back to the rate in the
+    // box, which the owner may have retyped.
+    if (r && r.rate) out[d] = r.rate;
   }
   return out;
 }
@@ -1924,9 +1928,10 @@ function _ccRateFor(date) {
   if (_ccCtx.rateMode === 'flat') return _ccCtx.flatRate || 0;
   const byDate = _ccCtx.rates || {};
   // Undated records and any date the FX API couldn't serve fall back to the
-  // flat/live rate, so a weekend sale or an offline lookup never silently
-  // drops an amount out of the conversion.
-  return byDate[date || ''] || byDate[''] || _ccCtx.flatRate || 0;
+  // rate in the box (prefilled with the live rate, but the owner may retype
+  // it), so a weekend sale or an offline lookup never silently drops an amount
+  // out of the conversion.
+  return (date && byDate[date]) || _ccCtx.flatRate || byDate[''] || 0;
 }
 
 // Build the plan for the current dialog state. Book-level fields the user
@@ -2522,7 +2527,15 @@ async function generateSingleBookStripeQR() {
   const book = BOOKS[activeBook];
   const curCode = $('pqr-currency')?.value || 'CAD';
   const overrideVal = parseFloat($('pqr-override-price')?.value);
-  const targetPrice = (!isNaN(overrideVal) && overrideVal > 0) ? overrideVal : (book.listPrice || 0);
+  // With no typed price, charge the list price converted into the chosen
+  // currency, never the bare number (40 EUR is not 40 USD).
+  const hasOverride = !isNaN(overrideVal) && overrideVal > 0;
+  const converted = hasOverride ? null : convertCurrency(book.listPrice || 0, currencyToCode(book.currency) || 'CAD', curCode);
+  if (!hasOverride && converted === null) {
+    showToast(`No exchange rate for ${curCode} yet. Type the price in ${curCode} and try again.`, 'warn', 6000);
+    return;
+  }
+  const targetPrice = hasOverride ? overrideVal : Math.round(converted * 100) / 100;
 
   const btn = $('pqr-gen-stripe-btn');
   const restoreText = btn ? btn.innerHTML : '';
@@ -2721,7 +2734,8 @@ function renderAuthorQRPage() {
 window.copyAuthorQR = function () {
   const book = BOOKS[activeBook];
   if (!book) return;
-  const url = book.stripeLink || book.paymentLink || '';
+  // The same link the QR above encodes.
+  const url = getEffectiveBookPaymentLink(book);
   if (!url) { showToast('No link configured for this book', 'warn'); return; }
   navigator.clipboard.writeText(url).then(() => showToast('Link copied')).catch(() => {
     const ta = document.createElement('textarea');
@@ -8716,6 +8730,20 @@ function renderAll() {
   // the hidden ones lose nothing by being left alone.
   const render = TAB_RENDERERS[visibleTabName()];
   if (render) render();
+  scheduleTodoBadgeRefresh();
+}
+
+// The sidebar To-do badge and notification bell are otherwise only repainted
+// from the all-books screen, so a sale inside a book (or a synced change) left
+// them stale. One trailing refresh after the burst of renders, off the sale's
+// critical path.
+let _todoBadgeTimer = null;
+function scheduleTodoBadgeRefresh() {
+  if (isAuthor() || _todoBadgeTimer) return;
+  _todoBadgeTimer = setTimeout(() => {
+    _todoBadgeTimer = null;
+    try { updateTodoBadge(visibleAttentionResult()); } catch (e) { console.warn('[todo badge] refresh failed', e); }
+  }, 400);
 }
 
 function renderCurrent() {
@@ -11319,11 +11347,14 @@ function ensureTransferLinks(bookId) {
   missing.forEach(t => _transferLinkInFlight.add(`${bookId}:${t.id}`));
   if (needBundle) _transferLinkInFlight.add(`${bookId}:bundle`);
   (async () => {
-    for (const t of missing) await mintArtistTransferPayLink(bookId, t.id, { quiet: true });
-    if (needBundle) await mintArtistTransferBundleLink(bookId);
-  })().finally(() => {
-    // Leave failures flagged for this session so a bad key doesn't loop.
-  });
+    // A minted link is cleared from the in-flight set so a later change to the
+    // amount or the "Pay all" set can re-mint it; failures stay flagged for this
+    // session so a bad key doesn't loop.
+    for (const t of missing) {
+      if (await mintArtistTransferPayLink(bookId, t.id, { quiet: true })) _transferLinkInFlight.delete(`${bookId}:${t.id}`);
+    }
+    if (needBundle && await mintArtistTransferBundleLink(bookId)) _transferLinkInFlight.delete(`${bookId}:bundle`);
+  })();
 }
 
 // Most recent "publisher received your payment" within the last 14 days.
@@ -12970,7 +13001,7 @@ function exportConsignmentLedgerCSV() {
       e.qty ?? '',
       e.type === 'Sale' ? (e.rate ?? '') : '',
       e.amountDue ? Number(e.amountDue).toFixed(2) : '',
-      curCode,
+      normalizeCurrencyCode(e.cur, curCode),
       e.voided ? 'VOID' : (e.status || ''),
       e.voided ? 'YES' : '',
       e.invoiceNum || '',
