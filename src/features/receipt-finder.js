@@ -1007,7 +1007,10 @@ async function readCandidate(id, signal, endpoint, force = false) {
     if (signal.aborted || !active() || owner !== uid) throw new DOMException('Stopped', 'AbortError');
     result.receipts.forEach((raw, index) => {
       const draft = normalizeFoundReceipt(raw, email, index);
-      if (!deps.categories.includes(draft.category)) draft.category = deps.inferCategory(draft.vendor, draft.description);
+      // How this shop has been filed before wins, as on the scan forms.
+      const learned = deps.habitCategory?.(draft.vendor) || '';
+      if (learned) draft.category = learned;
+      else if (!deps.categories.includes(draft.category)) draft.category = deps.inferCategory(draft.vendor, draft.description);
       if (!state.drafts.some(row => row.id === draft.id)) state.drafts.push(draft);
     });
     // An email with no receipt in it will never be looked at again, so its

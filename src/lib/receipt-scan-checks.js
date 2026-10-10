@@ -197,15 +197,23 @@ export function vendorHabitIndex(expenses) {
   for (const e of expenses || []) {
     if (!e || e.voided) continue;
     const cat = str(e._cat || e.cat);
-    const key = normalizeVendorKey(e.vendor || e.desc);
-    if (cat && key) out.push({ key, cat });
+    if (!cat) continue;
+    // A named shop — the expense's own vendor, or the part of a scanned
+    // description before " — " — must match the receipt's shop exactly, so
+    // "Amazon Web Services — hosting" is never taken for "Amazon". Only a
+    // hand-typed description with no separator ("Staples printer paper") is
+    // matched by its opening words.
+    const desc = str(e.desc);
+    const named = str(e.vendor) || (desc.includes(' — ') ? desc.split(' — ')[0] : '');
+    const key = normalizeVendorKey(named || desc);
+    if (key) out.push({ key, cat, exact: !!named });
   }
   return out;
 }
 
-// "staples" is the same shop as "staples business depot" (and the other way
-// round) only on a whole-word boundary, so "post" never matches "postnet".
-const sameVendor = (a, b) => a === b || b.startsWith(`${a} `) || a.startsWith(`${b} `);
+// A hand-typed description counts as the shop when it starts with the shop's
+// name on a whole-word boundary, so "post" never matches "postnet".
+const sameVendor = (key, row) => row.key === key || (!row.exact && row.key.startsWith(`${key} `));
 
 /** At least this many past receipts from the shop before it counts as a habit. */
 const HABIT_MIN = 2;
@@ -230,7 +238,7 @@ export function vendorFilingHabit(vendor, index, { allowed = null } = {}) {
   const counts = new Map();
   let matched = 0;
   for (const row of index || []) {
-    if (!sameVendor(key, row.key)) continue;
+    if (!sameVendor(key, row)) continue;
     matched++;
     counts.set(row.cat, (counts.get(row.cat) || 0) + 1);
   }

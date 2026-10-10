@@ -149,6 +149,7 @@ function receiptFinderDependencies() {
     hasAppAi: () => !!(TAX_CENTER.settings?.geminiKey || TAX_CENTER.settings?.openRouterKey?.trim()),
     readAi: (parts, opts) => _callAiForReceipts(TAX_CENTER.settings?.geminiKey, parts, opts),
     categories: EXPENSE_CATEGORIES, inferCategory: inferReceiptCategory,
+    habitCategory: vendor => vendorFilingHabit(vendor, _receiptHabitIndex(), { allowed: EXPENSE_CATEGORIES })?.category || '',
     toast: showToast, confirm: confirmDialog,
     upload: (file, path) => window._fbUploadReceipt(file, path),
     commit: (expense, draft) => window._fbCommitFoundReceipt(expense, draft),
