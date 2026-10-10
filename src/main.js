@@ -144,6 +144,7 @@ import {
   closeReceiptFolderAlert,
   renderReceiptProblemPanel,
   requestBulkReimbursement,
+  applyBatchScanFix,
   rescanBatchExpenseRow,
   resolveLocalReceiptFile,
   retakeReceiptPhoto,
@@ -19370,7 +19371,8 @@ async function scanReceiptWithAI() {
   return _runReceiptScan({
     fileId: 'tc-exp-file', btnId: 'tc-ai-scan-btn', keyId: 'tc-api-key',
     descId: 'tc-exp-desc', dateId: 'tc-exp-date', amountId: 'tc-exp-amount',
-    curId: 'tc-exp-cur', catId: 'tc-exp-cat'
+    curId: 'tc-exp-cur', catId: 'tc-exp-cat',
+    resultId: 'tc-exp-scan-read', dest: 'business'
   });
 }
 
@@ -26711,7 +26713,7 @@ Object.assign(window, {
   openReceiptCameraModal, closeReceiptCameraModal, captureReceiptPhoto, retakeReceiptPhoto, useReceiptPhoto,
   saveTaxCenterSettings, testOpenRouterConnectionFromSettings, scanReceiptWithAI, scanProjectReceiptWithAI,
   openBatchExpenseModal, closeBatchExpenseModal, setBatchExpenseDest, batchExpenseAddBlankRow,
-  removeBatchExpenseRow, rescanBatchExpenseRow, toggleAllBatchExpenses, deselectDuplicateBatchExpenses,
+  removeBatchExpenseRow, rescanBatchExpenseRow, applyBatchScanFix, toggleAllBatchExpenses, deselectDuplicateBatchExpenses,
   applyBatchExpenseBulk, scanAllBatchExpenses, submitBatchExpenses,
   openEmailReceiptImportModal, closeEmailReceiptImportModal, extractReceiptsFromEmailText, importEmailReceiptDrafts, importDirectGmailEmails, handleEmailImportPrimaryAction, toggleAllEmailDrafts,
   switchEmailImportTab, searchGmailEmails, applyGmailPresetQuery, applyDirectGmailPresetQuery, toggleEmailPreview, toggleEmailRowSelection, toggleAllGmailSelections,

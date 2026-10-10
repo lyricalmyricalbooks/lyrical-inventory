@@ -152,8 +152,26 @@ describe('receipt scan warm-up', () => {
 describe('receipt scan instructions', () => {
   it('stays short, since every word is paid for on every scan', () => {
     const text = memoryHarness({ reply: clean }).prompt();
-    // The previous wording ran to ~2,000 characters.
-    expect(text.length).toBeLessThan(1450);
+    // The previous wording ran to ~2,000 characters. The breakdown, the
+    // "which fields were unclear" list and the no-year rule added about 400 —
+    // a fraction of what the receipt image itself costs — and that is the
+    // budget: anything more has to earn its place.
+    expect(text.length).toBeLessThan(1800);
+  });
+
+  it('asks for the breakdown the total is checked against, and the fields it was unsure of', () => {
+    const text = memoryHarness({ reply: clean }).prompt();
+    expect(text).toMatch(/subtotal, tax, tip, shipping, discount/);
+    expect(text).toMatch(/taxIncluded/);
+    expect(text).toMatch(/uncertain:/);
+  });
+
+  it("dates a receipt with no year against today, and assumes the ledger's own currency", () => {
+    const h = memoryHarness({ reply: clean });
+    expect(h.prompt({ asOf: '2026-10-10', home: 'EUR' })).toMatch(/Today is 2026-10-10\./);
+    expect(h.prompt({ asOf: '2026-10-10', home: 'EUR' })).toMatch(/EUR only if nothing indicates otherwise/);
+    // Without a date the remembered-answers signature stays the same all year.
+    expect(h.prompt()).not.toMatch(/Today is/);
   });
 
   it('keeps every rule that decides which figure lands in the ledger', () => {

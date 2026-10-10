@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildHarness } from './helpers/extract-decl.js';
-import { roundCents } from '../src/lib/money.js';
+import { roundCents, setSelectCurrency } from '../src/lib/money.js';
+import * as scanChecks from '../src/lib/receipt-scan-checks.js';
 
 const INDEX_HTML = fs.readFileSync(
   path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../index.html'), 'utf8'
@@ -41,7 +42,8 @@ function harness({
   saveReceipt = async () => ({ ref: 'local://General/r.jpg', storage: 'local' }),
   uploadCloud = async () => 'https://cloud/r.jpg',
   confirmAnswer = true,
-  trip = ''
+  trip = '',
+  habits = []
 } = {}) {
   const toasts = [];
   const logs = [];
@@ -57,7 +59,7 @@ function harness({
       '_batchExpenseDuplicate', 'toggleAllBatchExpenses', 'deselectDuplicateBatchExpenses',
       '_applyBatchScanResult', '_warmBatchExpenseRates', 'scanAllBatchExpenses', '_friendlyScanError',
       'submitBatchExpenses', '_postBatchToBusinessLedger', '_postBatchToProjectLedger',
-      '_runExtractionPool'
+      '_runExtractionPool', 'applyBatchScanFix', '_batchErrorWithout'
     ],
     deps: {
       // ── rendering: stubbed, since none of it is what's under test here
@@ -134,6 +136,10 @@ function harness({
         return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
       },
       inferReceiptCategory: (vendor) => (/air|hotel|train/i.test(vendor || '') ? 'Travel & Meals' : 'Other'),
+      // ── what the reading is checked against: the real rules
+      ...scanChecks,
+      fmtD: (d) => d,
+      _receiptHabitIndex: () => habits,
       AbortController, DOMException
     },
     moduleState: `
@@ -152,6 +158,7 @@ function harness({
       currencies: _batchExpenseCurrencies,
       destinations: batchExpenseDestinations,
       applyScan: _applyBatchScanResult,
+      applyFix: applyBatchScanFix,
       deselectDuplicates: deselectDuplicateBatchExpenses,
       toggleAll: toggleAllBatchExpenses,
       scanAll: scanAllBatchExpenses,
@@ -291,11 +298,18 @@ describe('batch expense — applying a reading to a row', () => {
     expect(r.status).toBe('scanned');
   });
 
-  it('refuses a currency the batch cannot hold and says which one', () => {
+  it('keeps a real currency the list does not carry, rather than relabelling the money', () => {
     const r = row({ currency: 'CAD' });
     h.applyScan(r, { vendor: 'Loja', date: '2026-03-04', amount: 50, currency: 'BRL' });
+    expect(r.currency).toBe('BRL');
+    expect(r.error).toBe('');
+  });
+
+  it('refuses a code that is not a currency at all, and says which one', () => {
+    const r = row({ currency: 'CAD' });
+    h.applyScan(r, { vendor: 'Loja', date: '2026-03-04', amount: 50, currency: 'ZZZ' });
     expect(r.currency).toBe('CAD');
-    expect(r.error).toContain('BRL');
+    expect(r.error).toContain('ZZZ');
   });
 
   it('marks a reading that found nothing as failed, not as scanned-and-empty', () => {
@@ -311,6 +325,54 @@ describe('batch expense — applying a reading to a row', () => {
     const r = row({ category: '' });
     h.applyScan(r, { vendor: 'Air Canada', date: '2026-03-04', amount: 340, currency: 'CAD', category: 'Flights' });
     expect(r.category).toBe('Travel & Meals');
+  });
+});
+
+describe('batch expense — checking what the reader found', () => {
+  it('flags a total that is the price before tax, and one tap puts the real total in', () => {
+    const h = harness({ taxCenter: emptyTaxCenter(), bookState: { expenses: [] } });
+    const r = row({ amount: '', status: 'ready' });
+    h.setRows([r]);
+    h.applyScan(r, { vendor: 'Staples', date: '2026-08-01', amount: 38.5, subtotal: 38.5, tax: 5.01, currency: 'CAD' });
+
+    expect(r.amount).toBe('38.50');
+    const flag = r.scanFlags.find(f => f.field === 'amount');
+    expect(flag.text).toMatch(/before tax/);
+    expect(flag.fix.value).toBe('43.51');
+
+    h.applyFix(r.uid, r.scanFlags.indexOf(flag));
+    expect(r.amount).toBe('43.51');
+    expect(r.scanFlags.some(f => f.field === 'amount')).toBe(false);
+  });
+
+  it('files a shop the way this ledger has always filed it', () => {
+    const habits = scanChecks.vendorHabitIndex([
+      { desc: 'Staples — toner', cat: 'Software & Subscriptions' },
+      { desc: 'Staples — paper', cat: 'Software & Subscriptions' },
+    ]);
+    const h = harness({ taxCenter: emptyTaxCenter(), bookState: { expenses: [] }, habits });
+    const r = row({ category: '' });
+    h.applyScan(r, { vendor: 'STAPLES #1123', date: '2026-08-01', amount: 12, currency: 'CAD', category: 'Office Supplies' }, habits);
+    expect(r.category).toBe('Software & Subscriptions');
+    expect(r.scanFlags.some(f => f.field === 'category' && /filed like/.test(f.text))).toBe(true);
+  });
+
+  it('offers the likely real date when the reader lands in the future', () => {
+    const h = harness({ taxCenter: emptyTaxCenter(), bookState: { expenses: [] } });
+    const r = row();
+    // today() is 2026-08-14 in this harness; 2026-12-08 is 12/08 read the wrong way round.
+    h.applyScan(r, { vendor: 'Lulu', date: '2026-12-08', amount: 20, currency: 'CAD' });
+    const flag = r.scanFlags.find(f => f.field === 'date');
+    expect(flag.text).toMatch(/future/);
+    expect(flag.fix.value).toBe('2026-08-12');
+  });
+
+  it("names the fields the reader said it couldn't make out", () => {
+    const h = harness({ taxCenter: emptyTaxCenter(), bookState: { expenses: [] } });
+    const r = row();
+    h.applyScan(r, { vendor: 'Lulu', date: '2026-08-01', amount: 20, currency: 'CAD', uncertain: ['amount'] });
+    expect(r.status).toBe('scanned');
+    expect(r.error).toBe('check amount');
   });
 });
 
@@ -597,6 +659,8 @@ function domHarness() {
       _buildDuplicateExpenseIndex: () => null,
       rescanBatchExpenseRow: () => {},
       normalizeReceiptDate: (s) => s,
+      isCurrencyCode: scanChecks.isCurrencyCode,
+      setSelectCurrency,
       Event
     },
     moduleState: `

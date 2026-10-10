@@ -41,6 +41,7 @@ import {
 } from '../main.js';
 import {
   _localReceiptCell,
+  clearReceiptScanReview,
   getPendingWebcamReceipt,
   loadReceiptFolderHandle,
   resolveLocalReceiptFile,
@@ -4884,6 +4885,8 @@ function tcExpFileChosen() {
     aiBtn.disabled = !hasFile;
     aiBtn.title = hasFile ? 'Scan receipt with Gemini AI' : 'Select or capture a receipt first to enable AI scanning';
   }
+  // A summary of the last receipt read must never sit beside a different one.
+  clearReceiptScanReview('tc-exp-scan-read');
   // Get the photo ready now, while the rest of the form is being filled in.
   if (input?.files?.[0]) warmReceiptScan(input.files[0]);
 }

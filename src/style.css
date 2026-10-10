@@ -2690,6 +2690,29 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .tc-receipt-scan-actions{display:flex;gap:8px;flex-wrap:wrap;}
 .tc-receipt-scan-actions .btn,#tc-cam-btn,#tc-ai-scan-btn{min-height:var(--target-min,44px);padding:10px 18px;font-size:var(--text-sm);font-weight:600;transition:transform var(--dur-fast) var(--ease-spring),box-shadow var(--dur-fast) var(--ease-spring),background-color var(--dur-fast) var(--ease-standard);}
 .tc-receipt-scan-actions .btn:active,#tc-cam-btn:active,#tc-ai-scan-btn:active{transform:scale(.97);}
+/* What the AI read off a receipt. The .order-preview strip stacked into a
+   column — label, state pill and ✕; the figures the form has no box for; then
+   the checks — so it takes that strip's surface, labels, figures and its
+   :has(.pill.amber) tint rather than a second look of its own. */
+.scan-read{flex-direction:column;align-items:stretch;gap:var(--space-2);}
+.scan-read[hidden]{display:none;}
+.scan-read-head{display:flex;align-items:center;gap:var(--space-2);min-width:0;}
+.scan-read-head .card-x{margin:0 calc(-1 * var(--space-3)) 0 auto;}
+.scan-read-checks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:var(--space-2);}
+.scan-read-checks li{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--space-1) var(--space-2);font-size:var(--text-xs);line-height:var(--leading-snug);color:var(--content-secondary);}
+.scan-read-glyph{flex:none;width:1em;font-weight:700;text-align:center;}
+/* The sentence takes the row; a fix button drops beneath it, lined up with the
+   words, so a narrow panel never squeezes the sentence into a column. */
+.scan-read-text{flex:1 1 calc(100% - 1em - var(--space-2));min-width:0;text-wrap:pretty;}
+.scan-read-checks li.is-warn .scan-read-glyph{color:var(--status-active);}
+.scan-read-checks li.is-ok .scan-read-glyph{color:var(--status-positive);}
+.scan-read-checks .btn{flex:none;margin-left:calc(1em + var(--space-2));}
+.scan-read-note{margin-top:0;}
+/* A field the AI wasn't sure of keeps an amber edge until it is edited — the
+   review inbox marks a field to check the same way (.ri-field). */
+.form-group .scan-check,.scan-check{border-color:var(--status-active);}
+/* Under its flag, like the summary's fixes, never squeezed in beside it. */
+.bx-flag .bx-fix{display:flex;width:max-content;margin-top:var(--space-1);}
 .tc-storage-row{display:flex;flex-direction:column;gap:6px;font-size:var(--text-xs);color:var(--text3);margin-top:2px;}
 .tc-storage-actions{display:flex;gap:var(--space-2);flex-wrap:wrap;align-items:center;}
 

@@ -79,6 +79,18 @@ import {
   startWatch,
 } from '../lib/watch-schedule.js';
 import { fmt, fmtD, getBookCurrencyCode, normalizeCurrencyCode, putCurrencyFirst, roundCents, setSelectCurrency } from '../lib/money.js';
+import { allCanonicalExpenses } from '../lib/expense-categories.js';
+import {
+  checkReceiptMath,
+  isCurrencyCode,
+  parseScannedAmount,
+  scanDateConcern,
+  scanMoney,
+  scanReadChecks,
+  scanUncertainFields,
+  vendorFilingHabit,
+  vendorHabitIndex,
+} from '../lib/receipt-scan-checks.js';
 import { expenseLedgerTotals, expenseTotalsCopy, totalsByCurrency } from '../lib/expense-totals.js';
 import { closeM, confirmDialog, openM } from '../lib/modal.js';
 import { toCsv } from '../lib/csv.js';
@@ -2102,6 +2114,8 @@ function expFileChosen() {
   if (nameEl && hasFile) nameEl.textContent = input.files[0].name;
   if (chip) chip.style.display = hasFile ? 'flex' : 'none';
   if (dz) dz.style.display = hasFile ? 'none' : 'flex';
+  // A summary of the last receipt read must never sit beside a different one.
+  clearReceiptScanReview('exp-scan-read');
   if (hasFile) warmReceiptScan(input.files[0]);
 }
 function expFileClear(ev) {
@@ -2128,7 +2142,8 @@ async function scanProjectReceiptWithAI() {
   return _runReceiptScan({
     fileId: 'exp-file', btnId: 'exp-ai-btn',
     descId: 'exp-desc', dateId: 'exp-date', amountId: 'exp-amount',
-    curId: 'exp-cur', catId: 'exp-cat', refId: 'exp-ref'
+    curId: 'exp-cur', catId: 'exp-cat', refId: 'exp-ref',
+    resultId: 'exp-scan-read', dest: 'project'
   });
 }
 
@@ -3970,6 +3985,19 @@ const RECEIPT_SCAN_SCHEMA = {
     reference: { type: 'STRING' },
     category: { type: 'STRING', enum: EXPENSE_CATEGORIES },
     confidence: { type: 'NUMBER' },
+    // The breakdown printed above the total. Not logged anywhere on its own:
+    // it is what lets checkReceiptMath() catch the reader handing back the
+    // subtotal as the total — the single most common misread — and say what
+    // the real total probably is.
+    subtotal: { type: 'NUMBER' },
+    tax: { type: 'NUMBER' },
+    tip: { type: 'NUMBER' },
+    shipping: { type: 'NUMBER' },
+    discount: { type: 'NUMBER' },
+    taxIncluded: { type: 'BOOLEAN' },
+    // The reader's own "I couldn't make this out", per field, so the form can
+    // point at the one box to check instead of a blanket "low confidence".
+    uncertain: { type: 'ARRAY', items: { type: 'STRING', enum: ['vendor', 'date', 'amount', 'currency', 'category', 'reference'] } },
     // Shipping receipts only. On a postage receipt the addressee's name and
     // the tracking number are the only things that also identify the website
     // order it paid for, and they appear nowhere but on the paper — so the
@@ -3987,16 +4015,25 @@ const RECEIPT_SCAN_SCHEMA = {
 // leaves out what the schema already guarantees (the JSON shape, the category
 // list, which fields are numbers). The rules themselves are all still here:
 // cutting one is how the subtotal-vs-total coin flip came back last time.
-function _buildReceiptScanPrompt() {
-  return `Read this ONE receipt or invoice for a book publisher's bookkeeping.
+//
+// `asOf` is today's date. Without it a receipt with no year printed ("Mar 4")
+// was dated whatever year the model assumed. It is left out of the remembered-
+// answers signature (which calls this with no arguments), or every answer
+// would be forgotten at midnight. `home` is the currency of the ledger being
+// filled, used only when nothing on the receipt says otherwise.
+function _buildReceiptScanPrompt({ asOf = '', home = 'CAD' } = {}) {
+  return `Read this ONE receipt or invoice for a book publisher's bookkeeping.${asOf ? ` Today is ${asOf}.` : ''}
 amount: the grand total actually charged, incl. tax, tip and shipping; prefer "Balance due", "Amount paid" or "Total charged". Never the subtotal, a line item, or a pre-discount figure.
-currency: ISO 4217. Use a printed code; else "$" with GST/HST/QST or a Canadian address = CAD, "$" with a US state or "Sales Tax" = USD, A$ = AUD, £ = GBP, € = EUR. CAD only if nothing indicates otherwise.
-date: purchase date as YYYY-MM-DD, not the due date, print, delivery or statement date. Read NN/NN/YYYY in the vendor country's convention.
-vendor: the merchant paid, not the customer, nor a payment processor unless it is the merchant.
+subtotal, tax, tip, shipping, discount: as printed, else 0. tax = all sales taxes together (GST, PST, HST, QST, VAT). discount as a positive number.
+taxIncluded: true only if the prices already include the tax shown (e.g. "incl. VAT").
+currency: ISO 4217. Use a printed code; else "$" with GST/HST/QST or a Canadian address = CAD, "$" with a US state or "Sales Tax" = USD, A$ = AUD, £ = GBP, € = EUR. ${home} only if nothing indicates otherwise.
+date: purchase date as YYYY-MM-DD, not the due date, print, delivery or statement date. Read NN/NN/YYYY in the vendor country's convention. No year printed: the latest one not after today.
+vendor: the merchant paid, as its name is usually written (no store number), not the customer, nor a payment processor unless it is the merchant.
 description: what was bought, 60 characters max.
 reference: printed invoice/order/receipt number, else "".
 category: best fit.
 confidence: 0-1 for amount and date together. If blurry, cropped or partly unreadable, still give your best reading with confidence below 0.4.
+uncertain: the fields you could not read clearly, else [].
 Shipping/postage receipts or labels only, otherwise "":
 shipRecipient: full name the parcel is addressed TO. Never the sender, the publisher, or its business name.
 shipTracking: the tracking/article/barcode number exactly as printed, preferring one labelled "Tracking Number", "Numéro de repérage" or "Article". Not an order, authorization, postage-paid or account number.`;
@@ -4006,14 +4043,21 @@ shipTracking: the tracking/article/barcode number exactly as printed, preferring
 // `cur.value = 'AUD'` on the Tax Center form (CAD/USD/EUR/GBP only) therefore
 // left the PREVIOUS currency selected and logged an Australian receipt as
 // Canadian — a wrong number in the ledger with nothing on screen to hint at
-// it. Report the mismatch instead of quietly getting the money wrong.
+// it. A real currency the list doesn't carry is now added to it for this
+// receipt — both ledgers convert any currency the exchange-rate lookup knows
+// at the moment the expense is logged — and only a code that is not a real
+// currency at all is refused and reported.
 function _applyScanCurrency(el, code) {
   if (!el || !code) return null;
   const want = String(code).toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3);
   if (!want) return null;
   if (el.tagName === 'SELECT') {
     const match = Array.from(el.options).find(o => (o.value || o.textContent || '').trim().toUpperCase() === want);
-    if (!match) return { ok: false, code: want };
+    if (!match) {
+      if (!isCurrencyCode(want)) return { ok: false, code: want };
+      setSelectCurrency(el, want);
+      return { ok: true, code: want, added: true };
+    }
     el.value = match.value || match.textContent.trim();
     return { ok: true, code: want };
   }
@@ -4023,7 +4067,10 @@ function _applyScanCurrency(el, code) {
 
 function _applyScanCategory(el, category, vendor, description) {
   if (!el) return false;
-  const cat = EXPENSE_CATEGORIES.includes(category)
+  // A category this form offers is taken as it is, even one outside the AI's
+  // list — that is how a remembered filing habit ("Artist Royalties") lands.
+  const offered = Array.from(el.options || []).some(o => (o.value || o.textContent || '').trim() === category);
+  const cat = (EXPENSE_CATEGORIES.includes(category) || (category && offered))
     ? category
     : inferReceiptCategory(vendor, description);
   if (!cat) return false;
@@ -4042,7 +4089,7 @@ function _applyScanCategory(el, category, vendor, description) {
 // instead: no upload, no AI allowance spent, and it works offline. The answer
 // comes back with `fromMemory: true` so a screen can say why it was instant.
 async function _extractReceiptFromFile(apiKey, file, opts = {}) {
-  const { signal } = opts;
+  const { signal, asOf = '', home = 'CAD' } = opts;
   const fingerprint = await _receiptScanFingerprint(file);
   const remembered = _receiptScanRecall(fingerprint);
   if (remembered) return { ...remembered, fromMemory: true };
@@ -4051,7 +4098,7 @@ async function _extractReceiptFromFile(apiKey, file, opts = {}) {
   if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
   const out = await _callAiForReceipts(apiKey, [
-    { text: _buildReceiptScanPrompt() },
+    { text: _buildReceiptScanPrompt({ asOf, home }) },
     { inline_data: { mime_type: upload.mime, data: upload.base64 } }
   ], {
     signal,
@@ -4127,7 +4174,9 @@ async function readShippingFieldsFromReceipt(receiptRef, { signal } = {}) {
   if (!apiKey && !TAX_CENTER.settings?.openRouterKey?.trim()) throw new Error('add your Gemini or OpenRouter key in the Tax Centre config first');
   const file = await loadReceiptFileForScan(receiptRef);
   if (!file) throw new Error('the receipt file could not be opened from your folder');
-  const parsed = await _extractReceiptFromFile(apiKey, file, { signal });
+  const parsed = await _extractReceiptFromFile(apiKey, file, {
+    signal, asOf: today(), home: _receiptScanHome('business'),
+  });
   return {
     recipient: String(parsed?.shipRecipient || '').trim(),
     tracking: String(parsed?.shipTracking || '').trim(),
@@ -4138,9 +4187,230 @@ async function readShippingFieldsFromReceipt(receiptRef, { signal } = {}) {
 // In-flight scan, so a second click cancels instead of hitting a dead button.
 let _receiptScanAbort = null;
 
+// ── CHECKING WHAT THE READER FOUND
+// A scan used to end in a toast that was gone in three seconds, and that was
+// the only place it ever said what to double-check. What the reader found is
+// now checked in plain code (receipt-scan-checks.js) and the result stays on
+// the form, under the scan button, until the owner closes it or picks another
+// receipt: whether the figures on the receipt add up, whether it is already
+// logged, whether the date makes sense, and how this shop is usually filed.
+
+// The currency of the ledger a scan is filling — what the reader assumes when
+// the receipt itself gives no clue.
+function _receiptScanHome(dest) {
+  if (dest === 'project') {
+    const book = getBook();
+    if (book) return getBookCurrencyCode(book);
+  }
+  return String(TAX_CENTER.settings?.baseCurrency || 'CAD').toUpperCase();
+}
+
+// Every past expense by who it was paid to, across the business ledger and
+// every book. Built per scan (once per batch), never cached: it must reflect
+// whatever was filed a minute ago.
+function _receiptHabitIndex() {
+  return vendorHabitIndex(allCanonicalExpenses({ taxCenter: TAX_CENTER, states }));
+}
+
+// The expense a just-scanned receipt duplicates, or null. Same date + amount +
+// currency test the batch and the email import use, against the ledger the
+// form is about to write to.
+function _scanLedgerDuplicate(dest, { date, amount, currency }) {
+  if (!date || !(amount > 0)) return null;
+  const cur = String(currency || '').toUpperCase();
+  const hit = dest === 'project'
+    ? (getState()?.expenses || []).find(e =>
+      e.date === date &&
+      Math.abs(((e.origAmount ?? e.amount) || 0) - amount) < 0.005 &&
+      String(e.origCurrency || e.currency || '').toUpperCase() === cur)
+    : _findDuplicateExpense({ date, amount, currency: cur });
+  return hit ? { desc: hit.desc || '', date: hit.date || date } : null;
+}
+
+// Which form field each of the reader's field names lands in.
+const RECEIPT_SCAN_FIELD_IDS = {
+  vendor: 'descId', date: 'dateId', amount: 'amountId',
+  currency: 'curId', category: 'catId', reference: 'refId',
+};
+
+// The same fields as the owner knows them, by the form's own labels.
+const RECEIPT_SCAN_FIELD_WORDS = {
+  vendor: 'description', date: 'date', amount: 'total',
+  currency: 'currency', category: 'category', reference: 'receipt number',
+};
+
+// A field the reader was unsure of keeps an outline until the owner touches
+// it. Marked after the scan's own input/change events have fired, so only a
+// real edit — or a tap on one of the summary's fixes — clears it.
+function _markReceiptScanField(el) {
+  el.classList.add('scan-check');
+  if (!el.title) {
+    el.title = 'The AI wasn\'t sure about this one — check it against the receipt';
+    el.dataset.scanCheckTitle = '1';
+  }
+  const done = () => _unmarkReceiptScanField(el);
+  el.addEventListener('input', done, { once: true });
+  el.addEventListener('change', done, { once: true });
+}
+
+function _unmarkReceiptScanField(el) {
+  el.classList.remove('scan-check');
+  if (el.dataset.scanCheckTitle) {
+    el.removeAttribute('title');
+    delete el.dataset.scanCheckTitle;
+  }
+}
+
+/**
+ * Put the scan summary away and unmark its fields — a new receipt was picked,
+ * the old one removed, or the expense logged. Exported for the file pickers.
+ */
+function clearReceiptScanReview(resultId) {
+  const box = resultId && $(resultId);
+  if (!box) return;
+  box.hidden = true;
+  box.textContent = '';
+  (box.closest('.card') || document).querySelectorAll('.scan-check').forEach(_unmarkReceiptScanField);
+}
+
+// The summary's state pill, recounted whenever a fix is taken.
+function _paintReceiptScanPill(box) {
+  const pill = box.querySelector('[data-scan-pill]');
+  if (!pill) return;
+  const warn = box.querySelectorAll('.scan-read-checks li.is-warn').length;
+  const addsUp = box.dataset.addsUp === '1';
+  pill.className = `pill ${warn ? 'amber' : (addsUp ? 'green' : 'gray')}`;
+  pill.textContent = warn
+    ? `● Check ${warn} thing${warn > 1 ? 's' : ''}`
+    : (addsUp ? '✓ Adds up' : '✓ Read');
+}
+
+function _scanReadCheckItem(check) {
+  const li = document.createElement('li');
+  li.className = check.tone === 'warn' ? 'is-warn' : 'is-ok';
+  const glyph = document.createElement('span');
+  glyph.className = 'scan-read-glyph';
+  glyph.setAttribute('aria-hidden', 'true');
+  // The pill's own glyphs, so one strip never says "needs a look" two ways.
+  glyph.textContent = check.tone === 'warn' ? '●' : '✓';
+  const text = document.createElement('span');
+  text.className = 'scan-read-text';
+  text.textContent = check.text;
+  li.append(glyph, text);
+  return li;
+}
+
+// Take one of the summary's suggested figures: write it into the form exactly
+// as typing it would, and turn the check into a record of what changed.
+function _applyReceiptScanFix(cfg, box, fix, li) {
+  const id = fix.field === 'amount' ? cfg.amountId : cfg.dateId;
+  const input = id && $(id);
+  if (!input) return;
+  input.value = fix.value;
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+  if (fix.field === 'amount') box.dataset.addsUp = '1';
+  const done = _scanReadCheckItem({ tone: 'ok', text: `Changed to ${fix.label.replace(/^Use /, '')}.` });
+  // The tapped button is gone with its line; keep keyboard focus on the line
+  // that replaced it instead of dropping it to the top of the page.
+  done.tabIndex = -1;
+  li.replaceWith(done);
+  done.focus();
+  _paintReceiptScanPill(box);
+}
+
+/**
+ * Draw the scan summary into `cfg.resultId`. Built with DOM calls, never an
+ * HTML string: the shop name and reference come straight off a stranger's
+ * receipt.
+ */
+function _renderReceiptScanReview(cfg, review) {
+  const box = cfg.resultId && $(cfg.resultId);
+  if (!box) return;
+  const { checks = [], addsUp = false, currency = '', tax = 0, reference = '', fromMemory = false } = review;
+  box.textContent = '';
+  box.dataset.addsUp = addsUp ? '1' : '';
+  // Shown before it is filled, so the pill's live region below exists on a
+  // visible page when its words arrive and a screen reader announces them.
+  box.hidden = false;
+
+  const head = document.createElement('div');
+  head.className = 'scan-read-head';
+  const label = document.createElement('span');
+  label.className = 'order-preview-label';
+  label.textContent = 'Read from your receipt';
+  // Only the state is announced, as on the order preview — not every
+  // sentence and button again each time a fix is taken.
+  const pill = document.createElement('span');
+  pill.setAttribute('data-scan-pill', '');
+  pill.setAttribute('role', 'status');
+  pill.setAttribute('aria-live', 'polite');
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'card-x';
+  close.setAttribute('aria-label', 'Close the receipt summary');
+  close.title = 'Closes this summary. Nothing on the form changes, and scanning again brings it back.';
+  close.textContent = '✕';
+  // Focus goes back to the scan button rather than falling to the page.
+  close.addEventListener('click', () => { box.hidden = true; $(cfg.btnId)?.focus(); });
+  head.append(label, pill, close);
+  box.append(head);
+
+  // Figures the form has no box for: the tax paid, and the receipt number on
+  // a form with no reference field.
+  const figures = [];
+  if (tax > 0) figures.push(['Tax on receipt', scanMoney(tax, currency)]);
+  if (reference) figures.push(['Receipt no.', reference]);
+  if (figures.length) {
+    const row = document.createElement('div');
+    row.className = 'order-preview-figures';
+    for (const [name, value] of figures) {
+      const cell = document.createElement('div');
+      cell.className = 'order-preview-cell';
+      const k = document.createElement('span');
+      k.className = 'order-preview-label';
+      k.textContent = name;
+      const v = document.createElement('span');
+      v.className = 'order-preview-value';
+      v.textContent = value;
+      cell.append(k, v);
+      row.append(cell);
+    }
+    box.append(row);
+  }
+
+  if (checks.length) {
+    const list = document.createElement('ul');
+    list.className = 'scan-read-checks';
+    for (const check of checks) {
+      const li = _scanReadCheckItem(check);
+      if (check.fix) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn sm';
+        btn.textContent = check.fix.label;
+        btn.addEventListener('click', () => _applyReceiptScanFix(cfg, box, check.fix, li));
+        li.append(btn);
+      }
+      list.append(li);
+    }
+    box.append(list);
+  }
+
+  const note = document.createElement('p');
+  note.className = 'hint-text scan-read-note';
+  note.textContent = fromMemory
+    ? 'Read instantly — this receipt was scanned before. Nothing is saved until you log the expense.'
+    : 'Nothing is saved until you log the expense.';
+  box.append(note);
+
+  _paintReceiptScanPill(box);
+}
+
 // Single implementation behind both "✨ AI Scan" buttons. `cfg` names the form
 // field ids; everything else is shared so the two forms can't drift apart the
-// way their two hand-written prompts did.
+// way their two hand-written prompts did. `cfg.dest` ('business' | 'project')
+// says which ledger the form writes to, and `cfg.resultId` where the summary goes.
 async function _runReceiptScan(cfg) {
   const fileInput = $(cfg.fileId);
   const btn = $(cfg.btnId);
@@ -4165,13 +4435,17 @@ async function _runReceiptScan(cfg) {
   // Deliberately NOT disabled — a disabled button can't receive the cancel
   // click, which is how the old one became unrecoverable when a request hung.
   if (btn) btn.textContent = 'Scanning… (tap to cancel)';
+  clearReceiptScanReview(cfg.resultId);
 
   const shimmerFields = [cfg.descId, cfg.amountId, cfg.dateId, cfg.catId, cfg.curId]
     .map(id => id && $(id)).filter(Boolean);
   shimmerFields.forEach(el => el.classList.add('tc-field-shimmer'));
 
   try {
-    const parsed = await _extractReceiptFromFile(apiKey, file, { signal: ac.signal });
+    const asOf = today();
+    const parsed = await _extractReceiptFromFile(apiKey, file, {
+      signal: ac.signal, asOf, home: _receiptScanHome(cfg.dest),
+    });
     const applied = [];
     const warnings = [];
 
@@ -4181,7 +4455,7 @@ async function _runReceiptScan(cfg) {
     if (descEl && (vendor || description)) {
       const both = vendor && description && !description.toLowerCase().includes(vendor.toLowerCase());
       descEl.value = both ? `${vendor} — ${description}` : (vendor || description);
-      applied.push('vendor');
+      applied.push('description');
     }
 
     // Coerce before assigning: a number input rejects "1,234.56" outright and
@@ -4199,16 +4473,27 @@ async function _runReceiptScan(cfg) {
     if (dateEl && date) { dateEl.value = date; applied.push('date'); }
     else warnings.push('date');
 
-    const cur = _applyScanCurrency($(cfg.curId), parsed.currency);
+    const curEl = $(cfg.curId);
+    const cur = _applyScanCurrency(curEl, parsed.currency);
     if (cur?.ok) applied.push('currency');
     else if (cur) warnings.push(`${cur.code} not available here`);
+
+    // How this business has filed this shop before outranks the reader's guess:
+    // the reader knows what a shop sells, the ledger knows where the owner
+    // keeps it. Only categories this form offers can be a habit here.
+    const catEl = $(cfg.catId);
+    const offered = Array.from(catEl?.options || []).map(o => (o.value || o.textContent || '').trim());
+    const habit = vendor ? vendorFilingHabit(vendor, _receiptHabitIndex(), { allowed: offered }) : null;
+    const aiCategory = EXPENSE_CATEGORIES.includes(parsed.category) ? parsed.category : '';
 
     // Only when there is something to categorise. inferReceiptCategory falls
     // back to "Other", so running it on an empty extraction would set a field
     // and make a scan that read nothing at all report partial success.
     const haveSubject = vendor || description || EXPENSE_CATEGORIES.includes(parsed.category);
-    if (haveSubject && _applyScanCategory($(cfg.catId), parsed.category, vendor, description)) {
+    let chosenCategory = '';
+    if (haveSubject && _applyScanCategory(catEl, habit?.category || parsed.category, vendor, description)) {
       applied.push('category');
+      chosenCategory = catEl.value;
     }
 
     const refEl = cfg.refId && $(cfg.refId);
@@ -4224,6 +4509,11 @@ async function _runReceiptScan(cfg) {
       el.classList.add('tc-field-extracted');
       setTimeout(() => el.classList.remove('tc-field-extracted'), 2200);
     }
+    // The Tax Centre's description box re-categorises by keyword as it is
+    // typed into, and the input event above counts as typing — so "Google
+    // Ads" read and filed as Marketing was quietly refiled as Software by the
+    // word "google". What the scan chose stands.
+    if (chosenCategory && catEl.value !== chosenCategory) catEl.value = chosenCategory;
 
     if (!applied.length) {
       showToast('⚠ Could not read that receipt — try a sharper, straighter photo', 'err');
@@ -4231,12 +4521,61 @@ async function _runReceiptScan(cfg) {
     }
     const conf = Number(parsed.confidence);
     const lowConf = Number.isFinite(conf) && conf > 0 && conf < 0.5;
+
+    // Everything that deserves a second look, said once, on the form.
+    const currency = cur?.ok ? cur.code : String(curEl?.value || '').toUpperCase();
+    const math = amount > 0 ? checkReceiptMath({ ...parsed, amount }) : { status: 'unchecked' };
+    const dateConcern = date ? scanDateConcern(date, asOf) : null;
+    const missing = warnings.filter(w => w === 'amount' || w === 'date');
+    // The boxes to outline: the AI's own doubts, plus whatever the checks
+    // below question. Each one is explained by a sentence in the summary.
+    const aiUnsure = scanUncertainFields(parsed);
+    const explained = new Set(missing);
+    if (math.status === 'before-tax' || math.status === 'mismatch') explained.add('amount');
+    if (dateConcern) explained.add('date');
+    if (cur && !cur.ok) explained.add('currency');
+    const unexplained = [...aiUnsure].filter(f => !explained.has(f) && cfg[RECEIPT_SCAN_FIELD_IDS[f]] && $(cfg[RECEIPT_SCAN_FIELD_IDS[f]]));
+    const checks = scanReadChecks({
+      math,
+      dateConcern,
+      date,
+      duplicate: _scanLedgerDuplicate(cfg.dest, { date, amount, currency }),
+      habit,
+      habitOverrode: !!habit && habit.category !== aiCategory,
+      vendor,
+      currency,
+      home: _receiptScanHome(cfg.dest),
+      currencyAdded: cur?.added ? cur.code : '',
+      currencyRefused: cur && !cur.ok ? cur.code : '',
+      missing: missing.map(w => RECEIPT_SCAN_FIELD_WORDS[w]),
+      unsure: unexplained.map(f => RECEIPT_SCAN_FIELD_WORDS[f]),
+      lowConfidence: lowConf,
+      formatDate: fmtD,
+    });
+    const unsure = new Set([...aiUnsure, ...explained]);
+    if (lowConf) { unsure.add('amount'); unsure.add('date'); }
+    for (const field of unsure) {
+      const el = cfg[RECEIPT_SCAN_FIELD_IDS[field]] && $(cfg[RECEIPT_SCAN_FIELD_IDS[field]]);
+      if (el) _markReceiptScanField(el);
+    }
+    _renderReceiptScanReview(cfg, {
+      checks,
+      addsUp: math.status === 'adds-up',
+      currency,
+      tax: _parseReceiptAmount(parsed.tax),
+      // Shown in the summary only where the form has nowhere to put it.
+      reference: refEl ? '' : String(parsed.reference || '').trim(),
+      fromMemory: !!parsed.fromMemory,
+    });
+
     // The old blanket "✓ Receipt data extracted" fired even when three of four
     // fields were empty, which is exactly when the user needed to look.
+    // It agrees with the summary: never "✓" while the summary asks for a look.
+    const needsLook = warnings.length || lowConf || checks.some(c => c.tone === 'warn');
     showToast(
-      `✓ Read ${applied.join(', ')}${warnings.length ? ` · check ${warnings.join(', ')}` : ''}${lowConf ? ' · low confidence' : ''}${parsed.fromMemory ? ' · remembered from an earlier scan' : ''}`,
-      (warnings.length || lowConf) ? 'warn' : 'ok',
-      (warnings.length || lowConf) ? 4200 : 2800
+      `${needsLook ? '⚠' : '✓'} Read ${applied.join(', ')}${warnings.length ? ` · check ${warnings.join(', ')}` : ''}${lowConf ? ' · low confidence' : ''}${parsed.fromMemory ? ' · remembered from an earlier scan' : ''}${needsLook && cfg.resultId && $(cfg.resultId) ? ' · see the summary under the scan button' : ''}`,
+      needsLook ? 'warn' : 'ok',
+      needsLook ? 4200 : 2800
     );
   } catch (e) {
     if (e && e.name === 'AbortError') {
@@ -4613,6 +4952,12 @@ function _batchExpenseStatusCell(row, ledgerIndex) {
   }
   if (dup === 'ledger') bits.push(`<span class="bx-flag bx-flag-warn">already in the ledger</span>`);
   if (dup === 'batch') bits.push(`<span class="bx-flag bx-flag-warn">same as a row above</span>`);
+  (row.scanFlags || []).forEach((f, i) => {
+    const fix = f.fix
+      ? ` <button class="btn sm bx-fix" type="button" onclick="applyBatchScanFix('${row.uid}', ${i})">${escapeHtml(f.fix.label)}</button>`
+      : '';
+    bits.push(`<span class="bx-flag${f.tone === 'note' ? '' : ' bx-flag-warn'}">${escapeHtml(f.text)}${fix}</span>`);
+  });
   if (row.error) bits.push(`<span class="bx-flag bx-flag-bad">${escapeHtml(row.error)}</span>`);
   return bits.join('');
 }
@@ -4686,6 +5031,7 @@ function renderBatchExpenseRows() {
       // Editing a row is how a wrongly-flagged duplicate gets cleared, and how
       // a mistyped amount creates a new one — so the flags follow every edit.
       row.error = '';
+      if (row.scanFlags) row.scanFlags = row.scanFlags.filter(f => f.field !== field);
       _repaintBatchExpenseStatuses();
       _updateBatchExpenseSummary();
     });
@@ -4723,9 +5069,14 @@ function _paintBatchExpenseRow(row) {
     const el = document.querySelector(`[data-bx-uid="${row.uid}"][data-bx-field="${field}"]`);
     if (!el) return;
     // A <select> silently ignores a value it has no <option> for, which is how
-    // an AUD receipt used to end up logged as Canadian. Leave the field alone
-    // and let the row's own warning say so instead.
-    if (el.tagName === 'SELECT' && !Array.from(el.options).some(o => (o.value || o.textContent).trim() === value)) return;
+    // an AUD receipt used to end up logged as Canadian. A real currency the
+    // reader found gets its option; anything else leaves the field alone and
+    // the row's own warning says so.
+    if (el.tagName === 'SELECT' && !Array.from(el.options).some(o => (o.value || o.textContent).trim() === value)) {
+      if (field !== 'currency' || !isCurrencyCode(value)) return;
+      setSelectCurrency(el, value);
+      return;
+    }
     el.value = value;
   };
   set('date', row.date || '');
@@ -4786,8 +5137,11 @@ function _batchExpenseProgress(done, total, label) {
   if (text) text.textContent = `${label} ${done} of ${total}`;
 }
 
-/** Copy one Gemini reading onto a row, keeping whatever it couldn't determine. */
-function _applyBatchScanResult(row, parsed) {
+/**
+ * Copy one Gemini reading onto a row, keeping whatever it couldn't determine.
+ * `habits` is the vendorHabitIndex() for the run, built once for the pile.
+ */
+function _applyBatchScanResult(row, parsed, habits = null) {
   const vendor = String(parsed.vendor || '').trim();
   const description = String(parsed.description || '').trim();
   const amount = _parseReceiptAmount(parsed.amount);
@@ -4799,18 +5153,26 @@ function _applyBatchScanResult(row, parsed) {
   if (amount > 0) row.amount = amount.toFixed(2); else warn.push('amount');
   if (date) row.date = date; else warn.push('date');
 
+  // Any real currency is kept: the row's dropdown gains it as an option (see
+  // _paintBatchExpenseRow) and both ledgers convert it when the pile is logged.
+  // Only a code that is not a currency at all is refused.
   const want = String(parsed.currency || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3);
-  if (want && _batchExpenseCurrencies().includes(want)) row.currency = want;
+  if (want && (_batchExpenseCurrencies().includes(want) || isCurrencyCode(want))) row.currency = want;
   else if (want) warn.push(`currency (${want})`);
 
+  // How this shop has been filed before outranks the reader's guess, the same
+  // as on the single-receipt form.
   const cats = _batchExpenseCategories();
-  const cat = cats.includes(parsed.category) ? parsed.category : inferReceiptCategory(vendor, description);
+  const habit = vendor && habits ? vendorFilingHabit(vendor, habits, { allowed: cats }) : null;
+  const cat = habit ? habit.category
+    : (cats.includes(parsed.category) ? parsed.category : inferReceiptCategory(vendor, description));
   if (cat && cats.includes(cat)) row.category = cat;
 
   if (parsed.reference) row.reference = String(parsed.reference).trim();
 
   const conf = Number(parsed.confidence);
   row.confidence = Number.isFinite(conf) ? conf : null;
+  row.scanFlags = [];
   // Nothing usable came back at all — say so on the row rather than leaving it
   // looking scanned-and-empty, which reads as "the receipt had no total".
   if (!vendor && !description && amount <= 0 && !date) {
@@ -4819,7 +5181,55 @@ function _applyBatchScanResult(row, parsed) {
     return;
   }
   row.status = 'scanned';
+
+  // The reader's own doubts, and what the arithmetic and calendar say, as short
+  // flags on the row. A flag tied to a field goes away when that field is edited.
+  for (const field of scanUncertainFields(parsed)) {
+    if ((field === 'amount' || field === 'date') && !warn.includes(field)) warn.push(field);
+  }
+  const cur = String(row.currency || '').toUpperCase();
+  const math = amount > 0 ? checkReceiptMath({ ...parsed, amount }) : { status: 'unchecked' };
+  if (math.status === 'before-tax') {
+    row.scanFlags.push({
+      field: 'amount', text: `may be before tax — with tax it is ${scanMoney(math.expected, cur)}`,
+      fix: { field: 'amount', value: math.expected.toFixed(2), label: `Use ${scanMoney(math.expected, cur)}` },
+    });
+  } else if (math.status === 'mismatch') {
+    row.scanFlags.push({ field: 'amount', text: `receipt figures add up to ${scanMoney(math.expected, cur)}, not ${scanMoney(amount, cur)}` });
+  }
+  const dateConcern = date ? scanDateConcern(date, today()) : null;
+  if (dateConcern?.kind === 'future') {
+    row.scanFlags.push({
+      field: 'date', text: 'date is in the future',
+      ...(dateConcern.suggestion
+        ? { fix: { field: 'date', value: dateConcern.suggestion, label: `Use ${fmtD(dateConcern.suggestion)}` } }
+        : {}),
+    });
+  } else if (dateConcern?.kind === 'old') {
+    row.scanFlags.push({ field: 'date', text: 'date is over two years ago' });
+  }
+  if (habit) row.scanFlags.push({ field: 'category', tone: 'note', text: `filed like your other ${vendor} receipts` });
   row.error = warn.length ? `check ${warn.join(', ')}` : '';
+}
+
+// "check amount, date" with one field taken out, once the owner has dealt with it.
+function _batchErrorWithout(error, field) {
+  const text = String(error || '');
+  if (!text.startsWith('check ')) return text;
+  const left = text.slice(6).split(', ').filter(f => f !== field);
+  return left.length ? `check ${left.join(', ')}` : '';
+}
+
+/** Take one of a row's suggested fixes (the "Use …" button beside a flag). */
+function applyBatchScanFix(uid, index) {
+  const row = _batchExpenseRow(uid);
+  const flag = row?.scanFlags?.[index];
+  if (!flag?.fix) return;
+  const field = flag.fix.field;
+  row[field] = flag.fix.value;
+  row.scanFlags = row.scanFlags.filter(f => f.field !== field);
+  row.error = _batchErrorWithout(row.error, field);
+  _paintBatchExpenseRow(row);
 }
 
 async function scanAllBatchExpenses(force) {
@@ -4843,11 +5253,13 @@ async function scanAllBatchExpenses(force) {
 
   let done = 0;
   _batchExpenseProgress(0, targets.length, 'Read');
+  const readOpts = { signal: ac.signal, asOf: today(), home: _batchExpenseDefaultCurrency() };
+  const habits = _receiptHabitIndex();
 
   try {
     const results = await _runExtractionPool(targets, BATCH_SCAN_CONCURRENCY, async (row) => {
-      const parsed = await _extractReceiptFromFile(apiKey, row.file, { signal: ac.signal });
-      _applyBatchScanResult(row, parsed);
+      const parsed = await _extractReceiptFromFile(apiKey, row.file, readOpts);
+      _applyBatchScanResult(row, parsed, habits);
       _paintBatchExpenseRow(row);
       _batchExpenseProgress(++done, targets.length, 'Read');
       return true;
@@ -4856,6 +5268,7 @@ async function scanAllBatchExpenses(force) {
     const failed = results.filter(r => r && !r.ok);
     failed.forEach(r => {
       r.item.status = 'failed';
+      r.item.scanFlags = [];
       // Shown on the row itself, where there is no room and no console to
       // fall back on, so it gets the plain-language version too.
       r.item.error = (r.error ? _friendlyScanError(r.error) : 'Could not read this one').slice(0, 90);
@@ -4902,10 +5315,14 @@ async function rescanBatchExpenseRow(uid) {
   row.status = 'scanning'; row.error = '';
   _repaintBatchExpenseStatuses();
   try {
-    _applyBatchScanResult(row, await _extractReceiptFromFile(apiKey, row.file, { signal: ac.signal }));
+    const parsed = await _extractReceiptFromFile(apiKey, row.file, {
+      signal: ac.signal, asOf: today(), home: _batchExpenseDefaultCurrency(),
+    });
+    _applyBatchScanResult(row, parsed, _receiptHabitIndex());
     _paintBatchExpenseRow(row);
   } catch (e) {
     row.status = 'failed';
+    row.scanFlags = [];
     row.error = (e && e.name === 'AbortError') ? 'Cancelled' : String(e?.message || e).slice(0, 90);
     _repaintBatchExpenseStatuses();
   } finally {
@@ -5339,11 +5756,10 @@ function _trimEmailBodyForScan(body) {
 }
 
 // Gemini sometimes returns "1,234.56" or "$45.00" despite the NUMBER schema.
-// Coercing here beats the old silent `.filter()` drop.
+// Coercing here beats the old silent `.filter()` drop. The rules live in
+// receipt-scan-checks.js: the old strip-to-digits read "12,50 $" as 1250.
 function _parseReceiptAmount(v) {
-  if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
-  const n = Number(String(v == null ? '' : v).replace(/[^0-9.\-]/g, ''));
-  return Number.isFinite(n) ? n : 0;
+  return parseScannedAmount(v);
 }
 
 function _parseReceiptJson(text) {
@@ -7116,6 +7532,8 @@ function calcExpenseFx() {
 }
 
 export {
+  applyBatchScanFix,
+  clearReceiptScanReview,
   reviewableReceiptDrafts,
   editReviewedReceipt,
   fileReviewedReceipts,
