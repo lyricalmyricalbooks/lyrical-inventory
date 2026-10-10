@@ -1,5 +1,13 @@
 // Pure receipt discovery and review rules. Missing evidence stays missing.
 import { roundCents } from './money.js';
+import { scanDateConcern } from './receipt-scan-checks.js';
+
+// Today on the owner's own calendar, not UTC's: an evening receipt must not
+// read as tomorrow's.
+function localToday() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 // What the finder looks for when the keyword box is empty. Matching "order",
 // "tax", "payment" or "shipping" anywhere in an email found about 200
@@ -134,6 +142,7 @@ export function receiptProblems(draft) {
   const problems = [];
   if (!draft.vendor?.trim()) problems.push('Vendor is missing');
   if (!receiptDate(draft.date)) problems.push('Invoice date is missing or invalid');
+  else if (scanDateConcern(draft.date, localToday())?.kind === 'future') problems.push('Invoice date is in the future — check the day, month and year');
   if (!/^[A-Z]{3}$/.test(draft.currency || '')) problems.push('Choose the currency');
   if (receiptMoney(draft.amount) === null || draft.amount === 0) problems.push('Enter the total');
   if (draft.dueDate && !receiptDate(draft.dueDate)) problems.push('Due date is invalid');

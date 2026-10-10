@@ -148,8 +148,20 @@ describe('vendor habits — how this ledger has filed a shop before', () => {
   const index = vendorHabitIndex(ledger);
 
   it('finds a settled habit across the spellings', () => {
-    expect(vendorFilingHabit('STAPLES #0091', index)).toEqual({ category: 'Office Supplies', count: 3, of: 3 });
-    expect(vendorFilingHabit('Lulu Press Inc', index)).toEqual({ category: 'Printing & Production', count: 2, of: 2 });
+    expect(vendorFilingHabit('STAPLES #0091', index)).toEqual({ category: 'Office Supplies', count: 2, of: 2 });
+    expect(vendorFilingHabit('Lulu Inc', index)).toEqual({ category: 'Printing & Production', count: 2, of: 2 });
+  });
+
+  it('never takes a different shop that starts with the same name for this one', () => {
+    const aws = vendorHabitIndex([
+      { desc: 'Amazon Web Services — hosting', cat: 'Software & Subscriptions' },
+      { desc: 'Amazon Web Services — storage', cat: 'Software & Subscriptions' },
+      { vendor: 'Amazon Web Services', desc: 'Backups', cat: 'Software & Subscriptions' },
+    ]);
+    expect(vendorFilingHabit('Amazon.ca', aws)).toBeNull();
+    // …and a named shop is not stretched over a longer name either.
+    const amazon = vendorHabitIndex([{ desc: 'Amazon — ink', cat: 'Office Supplies' }, { desc: 'Amazon — tape', cat: 'Office Supplies' }]);
+    expect(vendorFilingHabit('Amazon Web Services', amazon)).toBeNull();
   });
 
   it('needs at least two past receipts', () => {
