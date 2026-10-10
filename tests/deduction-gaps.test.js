@@ -303,7 +303,7 @@ describe('putting something off', () => {
   });
 
   it('counts a snooze forward from today', () => {
-    expect(snoozeUntil(DEFAULT_SNOOZE_DAYS, new Date('2026-09-10T00:00:00Z'))).toBe('2026-10-10');
+    expect(snoozeUntil(DEFAULT_SNOOZE_DAYS, new Date(2026, 8, 10))).toBe('2026-10-10');
   });
 });
 
