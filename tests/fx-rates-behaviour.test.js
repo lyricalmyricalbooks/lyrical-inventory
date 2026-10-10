@@ -100,6 +100,24 @@ describe('healExpenseRates', () => {
     expect(app.cloud.settings.taxCenter.businessExpenses[0].baseAmount).toBe(140);
   });
 
+  it('fixes gifted-copy expenses on a foreign-currency book, leaving other book expenses alone', async () => {
+    app.main.TAX_CENTER.businessExpenses = [];
+    const s = app.main.states[EUR_BOOK];
+    s.expenses = [
+      { id: 21, gratuity: true, currency: 'EUR', amount: 40, baseAmount: 40, date: '2025-06-02' },
+      { id: 22, gratuity: true, currency: 'EUR', amount: 10, baseAmount: null, fxMissing: true, date: '2025-06-03' },
+      { id: 23, gratuity: true, currency: 'EUR', amount: 20, baseAmount: 30, date: '2025-06-02' },
+      { id: 24, currency: 'EUR', amount: 15, baseAmount: 15, fxRate: 1, date: '2025-06-02' },
+    ];
+    fakeRates({ byDate: { 'EUR@2025-06-02': 1.5, 'EUR@2025-06-03': 1.52 } });
+    expect(await app.main.healExpenseRates()).toBe(2);
+    const [booked1to1, offline, good, other] = s.expenses;
+    expect(booked1to1).toMatchObject({ baseAmount: 60, fxMissing: false });
+    expect(offline).toMatchObject({ baseAmount: 15.2, fxMissing: false });
+    expect(good.baseAmount).toBe(30);
+    expect(other.baseAmount).toBe(15);
+  });
+
   it('leaves an expense flagged when still offline', async () => {
     const tc = app.main.TAX_CENTER;
     tc.businessExpenses = [{ id: 9, currency: 'GBP', amount: 10, fxRate: null, baseAmount: null, fxMissing: true, date: '2025-05-05' }];
