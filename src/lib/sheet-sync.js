@@ -43,6 +43,7 @@ export const SHEET_ROW_KINDS = Object.freeze({
   EXPENSE: 'expense',
   PAYOUT: 'payout',
   CONTROL: 'control',
+  RENAME: 'rename',
   BATCH: 'batch',
 });
 
@@ -54,6 +55,7 @@ const KIND_LABELS = Object.freeze({
   [SHEET_ROW_KINDS.EXPENSE]: 'Expense',
   [SHEET_ROW_KINDS.PAYOUT]: 'Artist payment',
   [SHEET_ROW_KINDS.CONTROL]: 'Rebuild',
+  [SHEET_ROW_KINDS.RENAME]: 'Rename',
   [SHEET_ROW_KINDS.BATCH]: 'Batch',
 });
 
@@ -92,6 +94,7 @@ export function sheetRowKind(payload) {
   const action = text(payload.action).toLowerCase();
   if (action === 'reset' || action === 'rebuild') return SHEET_ROW_KINDS.CONTROL;
   if (action === 'batch') return SHEET_ROW_KINDS.BATCH;
+  if (action === 'renamebook') return SHEET_ROW_KINDS.RENAME;
 
   const type = text(payload.type).toLowerCase();
   if (type === 'shipping') return SHEET_ROW_KINDS.SHIPPING;
@@ -118,6 +121,7 @@ export function sheetLogSummary(payload) {
 
   const kind = sheetRowKind(payload);
   if (kind === SHEET_ROW_KINDS.CONTROL) return 'Clear sheet for rebuild';
+  if (kind === SHEET_ROW_KINDS.RENAME) return `“${text(payload.from)}” → “${text(payload.to)}”`;
   if (kind === SHEET_ROW_KINDS.BATCH) {
     const rows = Array.isArray(payload.rows) ? payload.rows.length : 0;
     return `Bulk sync · ${rows} record${rows === 1 ? '' : 's'}`;
@@ -208,4 +212,16 @@ export function sortSheetPayloads(rows) {
     .map((row, index) => ({ row, index }))
     .sort((a, b) => compareSheetPayloads(a.row, b.row) || (a.index - b.index))
     .map(entry => entry.row);
+}
+
+/**
+ * The key two book titles collide on in the Google Sheet. The sheet gives each
+ * title a tab named after it, without the characters a tab name cannot hold
+ * and cut to its length limit, and tab names ignore case — so "Book: One" and
+ * "book one" land on the same tab and their rows mix. Mirrors bookSheetName_
+ * in apps-script/Code.gs.
+ */
+export function sheetTabKey(title) {
+  const name = text(title).replace(/[:*?/[\]\\]/g, '').substring(0, 95);
+  return (name || 'Overview').toLowerCase();
 }

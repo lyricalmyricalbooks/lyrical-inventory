@@ -921,6 +921,7 @@ import {
   pushAllToSheets,
   renderSheetsLog,
   retryDelayMs,
+  queueSheetsRename,
   scheduleMoneyOutSheetSync,
   scheduleMoneyOutSheetSyncAll,
   sendTestNotification,
@@ -931,6 +932,7 @@ import {
   updateBulkProgress,
   verifyUrl,
 } from './features/sheets-bridge.js';
+import { sheetTabKey } from './lib/sheet-sync.js';
 import { channelMixRows } from './lib/channel-mix.js';
 import { csvCell, csvToObjects, toCsv } from './lib/csv.js';
 import { plainChanges, kindLabel, parseBuildDate, relativeWhen, dayHeading } from './lib/whats-new.js';
@@ -2227,7 +2229,19 @@ async function saveBookFromModal() {
     return;
   }
 
+  // Two books with one title share one tab on the Google Sheet, so their sales
+  // and expenses mix there (the sheet tells books apart by title alone).
+  const titleKey = sheetTabKey($('nb-title').value);
+  const titleTwin = Object.values(BOOKS).find(b => b && b.id !== editingBookId && b.id !== id && !isTestBook(b) && sheetTabKey(b.title) === titleKey);
+  if (titleTwin) {
+    fieldError('nb-title', `“${titleTwin.title}” already has this title. Add something to tell them apart, such as the edition — your Google Sheet keeps one tab per title.`);
+    switchBookModalTab('general');
+    $('nb-title').focus();
+    return;
+  }
+
   const currentBook = BOOKS[editingBookId] || BOOKS[id] || {};
+  const previousTitle = editingBookId ? String(currentBook.title || '').trim() : '';
   const thresholdInput = parseInt($('nb-thresh').value, 10);
   const book = {
     // Start from the stored book so fields this form doesn't list survive an edit.
@@ -2343,6 +2357,8 @@ async function saveBookFromModal() {
   localStorage.setItem('lm-payment-links', JSON.stringify(payLinks));
 
   await saveCatalogWithDeletions();
+  // The book's rows on the Google Sheet follow the new title.
+  if (previousTitle && previousTitle !== book.title && !isTestBook(book)) queueSheetsRename(previousTitle, book.title, book.accent);
 
   if ($('add-book-unsaved-indicator')) $('add-book-unsaved-indicator').classList.remove('show');
 
@@ -3274,7 +3290,7 @@ export let notifyUrl = localStorage.getItem('lm-notify-url') || '';
 // The Apps Script `scriptVersion` the client expects. Bump this (and the value
 // in apps-script/Code.gs) whenever Code.gs gains behaviour that needs a fresh
 // deploy — the connection card flags any older deployed version as outdated.
-export const EXPECTED_SCRIPT_VERSION = 'v56';
+export const EXPECTED_SCRIPT_VERSION = 'v57';
 // What the connected spreadsheet last told us it was running. Null until a
 // version check has actually answered — an unknown version is not a mismatch,
 // so the To-do list stays quiet rather than inventing a problem.
