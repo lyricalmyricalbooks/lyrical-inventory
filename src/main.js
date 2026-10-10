@@ -10232,9 +10232,10 @@ function refreshTaxCentreRates() {
  * Fill in the CAD value of Tax Centre expenses saved without one (`fxMissing`,
  * logged offline), and correct foreign-currency ones an older build booked at
  * 1:1 because no rate was cached (their CAD value equals the foreign amount).
- * Uses each expense's own date's rate. Business expenses only: there `fxRate`
- * always means "to CAD", while a book expense's can mean "to the book's
- * currency". Returns how many were updated.
+ * Uses each expense's own date's rate. Business expenses, plus gifted-copy
+ * book expenses (which never carry an fxRate); other book expenses are left
+ * alone because their `fxRate` can mean "to the book's currency" rather than
+ * "to CAD". Returns how many were updated.
  */
 export async function healExpenseRates() {
   if (isAuthor()) return 0;
@@ -10256,6 +10257,29 @@ export async function healExpenseRates() {
     fixed++;
   }
   if (fixed) await window._fbSaveSettings('taxCenter', TAX_CENTER);
+  // Gifted-copy expenses on a foreign-currency book: amount is in the book's
+  // currency and no fxRate is stored, so "booked 1:1" shows as a CAD value
+  // equal to the amount. Older builds did that whenever no rate was cached.
+  const needsGiftRate = (e) => {
+    if (!e || e.gratuity !== true || e.voided) return false;
+    const cur = String(e.currency || 'CAD').toUpperCase();
+    if (cur === 'CAD' || !(Number(e.amount) > 0) || e.fxRate != null) return false;
+    if (e.fxMissing === true || e.baseAmount == null) return true;
+    return Math.abs(Number(e.baseAmount) - Number(e.amount)) < 0.005;
+  };
+  for (const [bookId, st] of Object.entries(states || {})) {
+    if (isTestBookId(bookId)) continue;
+    let bookFixed = 0;
+    for (const e of (st && st.expenses) || []) {
+      if (!needsGiftRate(e)) continue;
+      const rate = await resolveExpenseRate(e.currency, e.date || today());
+      if (!rate || rate === 1) continue;
+      e.baseAmount = roundCents((Number(e.amount) || 0) * rate);
+      e.fxMissing = false;
+      bookFixed++;
+    }
+    if (bookFixed) { fixed += bookFixed; saveState(bookId); }
+  }
   return fixed;
 }
 
@@ -11868,8 +11892,10 @@ async function submitGratuity(ev) {
       const totalExp = qty * expVal;
 
       const currency = getBookCurrencyCode(book);
-      const cadRate = currency !== 'CAD' ? (_fxRateCache[`${currency}_CAD`] || null) : 1;
-      const baseAmount = cadRate ? (totalExp * cadRate) : totalExp;
+      // The rate for the gift's own date; with none to hand (offline) the CAD
+      // value is left empty and flagged for healExpenseRates — never 1:1.
+      const cadRate = await resolveExpenseRate(currency, date);
+      const baseAmount = cadRate ? roundCents(totalExp * cadRate) : null;
 
       s.expenses.unshift({
         id: Date.now(),
@@ -11880,6 +11906,7 @@ async function submitGratuity(ev) {
         origAmount: totalExp,
         origCurrency: currency,
         baseAmount: baseAmount,
+        ...(cadRate ? {} : { fxMissing: true }),
         date: date,
         ref: num,
         received: false,
@@ -11904,7 +11931,7 @@ async function submitGratuity(ev) {
   });
 }
 
-window.backfillGratuityExpenses = function () {
+window.backfillGratuityExpenses = async function () {
   const book = getBook();
   const s = getState();
   if (!s.hist) return;
@@ -11921,21 +11948,24 @@ window.backfillGratuityExpenses = function () {
   // find all gratuities in history
   const gratuities = s.hist.filter(h => h.gratuity && !h.voided);
 
-  gratuities.forEach(h => {
+  const currency = getBookCurrencyCode(book);
+  for (const h of gratuities) {
     const existing = s.expenses.find(e => e.ref === h.num || (e.date === h.date && e.desc.includes(h.notes || 'Gifted')));
+    if (existing && existing.currency) continue;
     const amount = h.qty * unitCost;
-    const currency = getBookCurrencyCode(book);
-    const cadRate = currency !== 'CAD' ? (_fxRateCache[`${currency}_CAD`] || null) : 1;
-    const baseAmount = cadRate ? (amount * cadRate) : amount;
+    // Each gift's own date's rate; none to hand leaves the CAD value empty and
+    // flagged for healExpenseRates rather than booking it 1:1.
+    const cadRate = await resolveExpenseRate(currency, h.date || today());
+    const baseAmount = cadRate ? roundCents(amount * cadRate) : null;
+    const fxFlag = cadRate ? {} : { fxMissing: true };
 
     if (existing) {
-      if (!existing.currency) {
-        existing.currency = currency;
-        existing.origAmount = amount;
-        existing.origCurrency = currency;
-        existing.baseAmount = baseAmount;
-        patched++;
-      }
+      existing.currency = currency;
+      existing.origAmount = amount;
+      existing.origCurrency = currency;
+      existing.baseAmount = baseAmount;
+      Object.assign(existing, fxFlag);
+      patched++;
     } else {
       s.expenses.push({
         id: Date.now() + Math.floor(Math.random() * 1000) + added,
@@ -11946,6 +11976,7 @@ window.backfillGratuityExpenses = function () {
         origAmount: amount,
         origCurrency: currency,
         baseAmount: baseAmount,
+        ...fxFlag,
         date: h.date,
         ref: h.num,
         received: false,
@@ -11953,7 +11984,7 @@ window.backfillGratuityExpenses = function () {
       });
       added++;
     }
-  });
+  }
 
   if (added > 0 || patched > 0) {
     // sort expenses to keep newest first
