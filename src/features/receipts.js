@@ -4233,6 +4233,12 @@ const RECEIPT_SCAN_FIELD_IDS = {
   currency: 'curId', category: 'catId', reference: 'refId',
 };
 
+// The same fields as the owner knows them, by the form's own labels.
+const RECEIPT_SCAN_FIELD_WORDS = {
+  vendor: 'description', date: 'date', amount: 'total',
+  currency: 'currency', category: 'category', reference: 'receipt number',
+};
+
 // A field the reader was unsure of keeps an outline until the owner touches
 // it. Marked after the scan's own input/change events have fired, so only a
 // real edit — or a tap on one of the summary's fixes — clears it.
@@ -4285,7 +4291,8 @@ function _scanReadCheckItem(check) {
   const glyph = document.createElement('span');
   glyph.className = 'scan-read-glyph';
   glyph.setAttribute('aria-hidden', 'true');
-  glyph.textContent = check.tone === 'warn' ? '!' : '✓';
+  // The pill's own glyphs, so one strip never says "needs a look" two ways.
+  glyph.textContent = check.tone === 'warn' ? '●' : '✓';
   const text = document.createElement('span');
   text.className = 'scan-read-text';
   text.textContent = check.text;
@@ -4303,7 +4310,12 @@ function _applyReceiptScanFix(cfg, box, fix, li) {
   input.dispatchEvent(new Event('input', { bubbles: true }));
   input.dispatchEvent(new Event('change', { bubbles: true }));
   if (fix.field === 'amount') box.dataset.addsUp = '1';
-  li.replaceWith(_scanReadCheckItem({ tone: 'ok', text: `Changed to ${fix.label.replace(/^Use /, '')}.` }));
+  const done = _scanReadCheckItem({ tone: 'ok', text: `Changed to ${fix.label.replace(/^Use /, '')}.` });
+  // The tapped button is gone with its line; keep keyboard focus on the line
+  // that replaced it instead of dropping it to the top of the page.
+  done.tabIndex = -1;
+  li.replaceWith(done);
+  done.focus();
   _paintReceiptScanPill(box);
 }
 
@@ -4318,21 +4330,29 @@ function _renderReceiptScanReview(cfg, review) {
   const { checks = [], addsUp = false, currency = '', tax = 0, reference = '', fromMemory = false } = review;
   box.textContent = '';
   box.dataset.addsUp = addsUp ? '1' : '';
+  // Shown before it is filled, so the pill's live region below exists on a
+  // visible page when its words arrive and a screen reader announces them.
+  box.hidden = false;
 
   const head = document.createElement('div');
   head.className = 'scan-read-head';
   const label = document.createElement('span');
   label.className = 'order-preview-label';
   label.textContent = 'Read from your receipt';
+  // Only the state is announced, as on the order preview — not every
+  // sentence and button again each time a fix is taken.
   const pill = document.createElement('span');
   pill.setAttribute('data-scan-pill', '');
+  pill.setAttribute('role', 'status');
+  pill.setAttribute('aria-live', 'polite');
   const close = document.createElement('button');
   close.type = 'button';
   close.className = 'card-x';
   close.setAttribute('aria-label', 'Close the receipt summary');
   close.title = 'Closes this summary. Nothing on the form changes, and scanning again brings it back.';
   close.textContent = '✕';
-  close.addEventListener('click', () => { box.hidden = true; });
+  // Focus goes back to the scan button rather than falling to the page.
+  close.addEventListener('click', () => { box.hidden = true; $(cfg.btnId)?.focus(); });
   head.append(label, pill, close);
   box.append(head);
 
@@ -4385,7 +4405,6 @@ function _renderReceiptScanReview(cfg, review) {
   box.append(note);
 
   _paintReceiptScanPill(box);
-  box.hidden = false;
 }
 
 // Single implementation behind both "✨ AI Scan" buttons. `cfg` names the form
@@ -4436,7 +4455,7 @@ async function _runReceiptScan(cfg) {
     if (descEl && (vendor || description)) {
       const both = vendor && description && !description.toLowerCase().includes(vendor.toLowerCase());
       descEl.value = both ? `${vendor} — ${description}` : (vendor || description);
-      applied.push('vendor');
+      applied.push('description');
     }
 
     // Coerce before assigning: a number input rejects "1,234.56" outright and
@@ -4507,25 +4526,34 @@ async function _runReceiptScan(cfg) {
     const currency = cur?.ok ? cur.code : String(curEl?.value || '').toUpperCase();
     const math = amount > 0 ? checkReceiptMath({ ...parsed, amount }) : { status: 'unchecked' };
     const dateConcern = date ? scanDateConcern(date, asOf) : null;
+    const missing = warnings.filter(w => w === 'amount' || w === 'date');
+    // The boxes to outline: the AI's own doubts, plus whatever the checks
+    // below question. Each one is explained by a sentence in the summary.
+    const aiUnsure = scanUncertainFields(parsed);
+    const explained = new Set(missing);
+    if (math.status === 'before-tax' || math.status === 'mismatch') explained.add('amount');
+    if (dateConcern) explained.add('date');
+    if (cur && !cur.ok) explained.add('currency');
+    const unexplained = [...aiUnsure].filter(f => !explained.has(f) && cfg[RECEIPT_SCAN_FIELD_IDS[f]] && $(cfg[RECEIPT_SCAN_FIELD_IDS[f]]));
     const checks = scanReadChecks({
       math,
       dateConcern,
+      date,
       duplicate: _scanLedgerDuplicate(cfg.dest, { date, amount, currency }),
       habit,
       habitOverrode: !!habit && habit.category !== aiCategory,
       vendor,
       currency,
+      home: _receiptScanHome(cfg.dest),
       currencyAdded: cur?.added ? cur.code : '',
       currencyRefused: cur && !cur.ok ? cur.code : '',
-      missing: warnings.filter(w => w === 'amount' || w === 'date').map(w => (w === 'amount' ? 'total' : w)),
+      missing: missing.map(w => RECEIPT_SCAN_FIELD_WORDS[w]),
+      unsure: unexplained.map(f => RECEIPT_SCAN_FIELD_WORDS[f]),
       lowConfidence: lowConf,
       formatDate: fmtD,
     });
-    const unsure = scanUncertainFields(parsed);
-    if (!(amount > 0) || math.status === 'before-tax' || math.status === 'mismatch') unsure.add('amount');
-    if (!date || dateConcern) unsure.add('date');
+    const unsure = new Set([...aiUnsure, ...explained]);
     if (lowConf) { unsure.add('amount'); unsure.add('date'); }
-    if (cur && !cur.ok) unsure.add('currency');
     for (const field of unsure) {
       const el = cfg[RECEIPT_SCAN_FIELD_IDS[field]] && $(cfg[RECEIPT_SCAN_FIELD_IDS[field]]);
       if (el) _markReceiptScanField(el);
@@ -4542,9 +4570,10 @@ async function _runReceiptScan(cfg) {
 
     // The old blanket "✓ Receipt data extracted" fired even when three of four
     // fields were empty, which is exactly when the user needed to look.
+    // It agrees with the summary: never "✓" while the summary asks for a look.
     const needsLook = warnings.length || lowConf || checks.some(c => c.tone === 'warn');
     showToast(
-      `✓ Read ${applied.join(', ')}${warnings.length ? ` · check ${warnings.join(', ')}` : ''}${lowConf ? ' · low confidence' : ''}${parsed.fromMemory ? ' · remembered from an earlier scan' : ''}`,
+      `${needsLook ? '⚠' : '✓'} Read ${applied.join(', ')}${warnings.length ? ` · check ${warnings.join(', ')}` : ''}${lowConf ? ' · low confidence' : ''}${parsed.fromMemory ? ' · remembered from an earlier scan' : ''}${needsLook && cfg.resultId && $(cfg.resultId) ? ' · see the summary under the scan button' : ''}`,
       needsLook ? 'warn' : 'ok',
       needsLook ? 4200 : 2800
     );
@@ -5166,7 +5195,7 @@ function _applyBatchScanResult(row, parsed, habits = null) {
       fix: { field: 'amount', value: math.expected.toFixed(2), label: `Use ${scanMoney(math.expected, cur)}` },
     });
   } else if (math.status === 'mismatch') {
-    row.scanFlags.push({ field: 'amount', text: `receipt figures add up to ${scanMoney(math.expected, cur)}` });
+    row.scanFlags.push({ field: 'amount', text: `receipt figures add up to ${scanMoney(math.expected, cur)}, not ${scanMoney(amount, cur)}` });
   }
   const dateConcern = date ? scanDateConcern(date, today()) : null;
   if (dateConcern?.kind === 'future') {

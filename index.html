@@ -1964,7 +1964,7 @@
         </div>
         <button class="btn gold" style="font-size:var(--text-sm);display:none;align-self:flex-start;" onclick="scanProjectReceiptWithAI()" id="exp-ai-btn">✨ AI Scan</button>
         <!-- What the AI read and what to double-check. Filled by _runReceiptScan(). -->
-        <div class="order-preview scan-read" id="exp-scan-read" role="status" aria-live="polite" hidden></div>
+        <div class="order-preview scan-read" id="exp-scan-read" hidden></div>
       </div>
     </div>
     <div class="card-actions">
@@ -2839,7 +2839,7 @@
           <button class="btn gold" onclick="scanReceiptWithAI()" id="tc-ai-scan-btn" disabled title="Select or capture a receipt first to enable AI scanning">✨ AI Scan</button>
         </div>
         <!-- What the AI read and what to double-check. Filled by _runReceiptScan(). -->
-        <div class="order-preview scan-read" id="tc-exp-scan-read" role="status" aria-live="polite" hidden></div>
+        <div class="order-preview scan-read" id="tc-exp-scan-read" hidden></div>
         <div id="tc-exp-file-preview" class="tc-field-hint"></div>
         <div id="tc-exp-storage-row" class="tc-storage-row">
           <span id="tc-exp-storage-status">Receipts are saved automatically.</span>

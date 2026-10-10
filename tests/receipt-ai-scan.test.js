@@ -60,7 +60,7 @@ function scanHarness({ reply, prepare, apiKey = 'k-test', businessExpenses = [],
         '_runReceiptScan', '_extractReceiptFromFile', '_applyScanCurrency', '_applyScanCategory',
         '_buildReceiptScanPrompt', 'RECEIPT_SCAN_SCHEMA', 'RECEIPT_SCAN_TIMEOUT_MS',
         '_friendlyScanError', '_receiptScanHome', '_receiptHabitIndex', '_scanLedgerDuplicate',
-        'RECEIPT_SCAN_FIELD_IDS', '_markReceiptScanField', '_unmarkReceiptScanField',
+        'RECEIPT_SCAN_FIELD_IDS', 'RECEIPT_SCAN_FIELD_WORDS', '_markReceiptScanField', '_unmarkReceiptScanField',
         'clearReceiptScanReview', '_paintReceiptScanPill', '_scanReadCheckItem',
         '_applyReceiptScanFix', '_renderReceiptScanReview', '_duplicateExpenseKey', '_findDuplicateExpense'
       ],
@@ -292,6 +292,8 @@ describe('AI receipt scan — the summary left on the form', () => {
 
     form.box.querySelector('.scan-read-checks .btn').click();
     expect(form.el('amount').value).toBe('43.49');
+    // Focus stays in the summary rather than falling to the page.
+    expect(document.activeElement?.closest('.scan-read-checks')).toBeTruthy();
     expect(form.el('amount').classList.contains('scan-check')).toBe(false);
     expect(form.pill().textContent).toBe('✓ Adds up');
     expect(form.checks()[0].text).toMatch(/Changed to CA\$43\.49/);
@@ -350,6 +352,9 @@ describe('AI receipt scan — the summary left on the form', () => {
     const date = form.el('date');
     expect(date.classList.contains('scan-check')).toBe(true);
     expect(form.el('amount').classList.contains('scan-check')).toBe(false);
+    // Never colour alone: the outline has a sentence that names it.
+    expect(form.checks().some(c => /wasn't sure about the date/.test(c.text))).toBe(true);
+    expect(form.pill().textContent).toBe('● Check 1 thing');
     date.value = '2026-10-02';
     date.dispatchEvent(new Event('input', { bubbles: true }));
     expect(date.classList.contains('scan-check')).toBe(false);
@@ -375,6 +380,7 @@ describe('AI receipt scan — the summary left on the form', () => {
     await h.run(form.cfg);
     form.box.querySelector('.card-x').click();
     expect(form.box.hidden).toBe(true);
+    expect(document.activeElement).toBe(form.el('btn'));
 
     await h.run(form.cfg);
     expect(form.box.hidden).toBe(false);
@@ -721,7 +727,7 @@ describe('AI scan wiring', () => {
   it('gives both forms a summary box, and says which ledger each one fills', () => {
     const html = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../index.html'), 'utf8');
     for (const id of ['exp-scan-read', 'tc-exp-scan-read']) {
-      expect(html).toMatch(new RegExp(`class="order-preview scan-read" id="${id}" role="status" aria-live="polite" hidden`));
+      expect(html).toMatch(new RegExp(`class="order-preview scan-read" id="${id}" hidden`));
     }
     expect(mainJs).toMatch(/resultId:\s*'exp-scan-read',\s*dest:\s*'project'/);
     expect(mainJs).toMatch(/resultId:\s*'tc-exp-scan-read',\s*dest:\s*'business'/);

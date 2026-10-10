@@ -225,8 +225,18 @@ describe('scanReadChecks — what the summary says', () => {
     expect(check.text).toMatch(/BRL 55\.00/);
   });
 
+  it('names every box the AI flagged that nothing else explains', () => {
+    const [check] = scanReadChecks({ unsure: ['category', 'receipt number'] });
+    expect(check).toMatchObject({ tone: 'warn', text: "The AI wasn't sure about the category and receipt number. Check those boxes against the receipt." });
+  });
+
+  it('says which date it read when the date looks wrong', () => {
+    const [check] = scanReadChecks({ date: '2026-12-03', dateConcern: { kind: 'future', suggestion: '2026-03-12' } });
+    expect(check.text).toBe("The AI read the date as 2026-12-03, which hasn't happened yet. It's probably 2026-03-12.");
+  });
+
   it('speaks to the fields it could not read at all', () => {
     const [check] = scanReadChecks({ missing: ['total', 'date'] });
-    expect(check.text).toBe("It couldn't read the total and date. Type them in from the receipt.");
+    expect(check.text).toBe("The AI couldn't read the total and date. Type them in from the receipt.");
   });
 });

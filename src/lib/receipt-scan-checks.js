@@ -275,6 +275,9 @@ export function scanMoney(n, cur) {
  * @param {string} [f.currencyRefused]  a currency the reader named that is not a real one
  * @param {string[]} [f.missing]  fields the reader could not fill at all
  * @param {boolean} [f.lowConfidence]
+ * @param {string[]} [f.unsure]  boxes the AI flagged that no other check explains, in words
+ * @param {string} [f.date]  the date the AI read, for the date checks
+ * @param {string} [f.home]  the ledger's own currency
  * @param {(d: string) => string} [f.formatDate]
  */
 export function scanReadChecks(f = {}) {
@@ -282,6 +285,7 @@ export function scanReadChecks(f = {}) {
   const cur = f.currency || 'CAD';
   const formatDate = f.formatDate || ((d) => d);
   const money = (n) => scanMoney(n, cur);
+  const readDate = f.date ? formatDate(f.date) : 'that';
 
   if (f.duplicate) {
     const what = str(f.duplicate.desc) || 'an expense';
@@ -309,25 +313,31 @@ export function scanReadChecks(f = {}) {
     checks.push({
       tone: 'warn',
       text: f.dateConcern.suggestion
-        ? `The date it read is in the future. It is probably ${formatDate(f.dateConcern.suggestion)}.`
-        : 'The date it read is in the future. Check the day, month and year on the receipt.',
+        ? `The AI read the date as ${readDate}, which hasn't happened yet. It's probably ${formatDate(f.dateConcern.suggestion)}.`
+        : `The AI read the date as ${readDate}, which hasn't happened yet. Check the day, month and year on the receipt.`,
       ...(f.dateConcern.suggestion
         ? { fix: { field: 'date', value: f.dateConcern.suggestion, label: `Use ${formatDate(f.dateConcern.suggestion)}` } }
         : {}),
     });
   } else if (f.dateConcern?.kind === 'old') {
-    checks.push({ tone: 'warn', text: 'The date it read is more than two years ago. Check the year on the receipt.' });
+    checks.push({ tone: 'warn', text: `The AI read the date as ${readDate}, more than two years ago. Check the year on the receipt.` });
   }
 
   if (f.currencyRefused) {
-    checks.push({ tone: 'warn', text: `It read the currency as “${f.currencyRefused}”, which isn't one it recognises. Pick the right one before logging.` });
+    checks.push({ tone: 'warn', text: `The AI read the currency as “${f.currencyRefused}”, which isn't a real currency. Pick the right one before logging.` });
   }
 
   const missing = (f.missing || []).filter(Boolean);
   if (missing.length) {
-    checks.push({ tone: 'warn', text: `It couldn't read the ${joinWords(missing)}. Type ${missing.length > 1 ? 'them' : 'it'} in from the receipt.` });
+    checks.push({ tone: 'warn', text: `The AI couldn't read the ${joinWords(missing)}. Type ${missing.length > 1 ? 'them' : 'it'} in from the receipt.` });
   } else if (f.lowConfidence) {
-    checks.push({ tone: 'warn', text: 'The photo was hard to read. Check the highlighted fields against the receipt.' });
+    checks.push({ tone: 'warn', text: 'The photo was hard to read. Check the boxes outlined in amber against the receipt.' });
+  }
+  // Every amber outline gets a sentence: a box the AI flagged that no check
+  // above already explains is named here, never left to the colour alone.
+  const unsure = (f.unsure || []).filter(w => w && !missing.includes(w));
+  if (unsure.length && !f.lowConfidence) {
+    checks.push({ tone: 'warn', text: `The AI wasn't sure about the ${joinWords(unsure)}. Check ${unsure.length > 1 ? 'those boxes' : 'that box'} against the receipt.` });
   }
 
   if (m.status === 'adds-up') {
@@ -354,7 +364,7 @@ export function scanReadChecks(f = {}) {
   }
 
   if (f.currencyAdded) {
-    checks.push({ tone: 'ok', text: `The receipt is in ${f.currencyAdded}, so ${f.currencyAdded} was added to the currency list. It is converted when you log it.` });
+    checks.push({ tone: 'ok', text: `The receipt is in ${f.currencyAdded}, so ${f.currencyAdded} was added to the currency list. It is converted to ${f.home || 'your own currency'} when you log it.` });
   }
 
   return checks;
