@@ -2385,7 +2385,7 @@ async function addBigCartelOrderToLedger(orderId) {
     parts.forEach((part, index) => {
       const partPrice = part.price != null && part.price > 0 ? part.price : Number(BOOKS[part.bookId]?.listPrice || 0);
       const partGap = split
-        ? { ...gap, merchandiseTotal: partPrice * part.qty, shippingPaid: index === 0 ? gap.shippingPaid : 0, taxPaid: index === 0 ? gap.taxPaid : 0, totalPaid: 0 }
+        ? { ...gap, merchandiseTotal: partPrice * part.qty, listTotal: 0, shippingPaid: index === 0 ? gap.shippingPaid : 0, taxPaid: index === 0 ? gap.taxPaid : 0, totalPaid: 0 }
         : gap;
       const added = commitRecoveredWebsiteOrder(part.bookId, { qty: part.qty, price: partPrice }, ({ stockAfter }) => {
         const built = buildBigCartelOrderEntry(partGap, {
