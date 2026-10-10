@@ -1170,16 +1170,16 @@ export function isTestBook(b) {
   if (!b) return false;
   const idLower = String(b.id || '').toLowerCase().trim();
   const titleLower = String(b.title || '').toLowerCase().trim();
-  // Exact test ids (or an explicit flag) only — a substring match hid real
-  // books such as "Greatest Hits" or "Contest" from reports and the picker.
-  return b.isTest === true || idLower === 'test1' || idLower === 'testpage' ||
-    titleLower === 'test1' || titleLower === 'testpage';
+  // Preserve the original TEST PAGE sandbox aliases without hiding real
+  // books such as "Greatest Hits" or "Contest" through substring matches.
+  const testNames = ['test', 'test1', 'testpage', 'test-page', 'test page'];
+  return b.isTest === true || testNames.includes(idLower) || testNames.includes(titleLower);
 }
 
 export function isTestBookId(bid) {
   if (!bid) return false;
   const str = String(bid).toLowerCase().trim();
-  if (str === 'test1' || str === 'testpage') return true;
+  if (isTestBook({ id: str })) return true;
   if (BOOKS && BOOKS[bid]) return isTestBook(BOOKS[bid]);
   if (BOOKS) {
     const found = Object.values(BOOKS).find(b => (b.id && String(b.id).toLowerCase() === str) || (b.title && String(b.title).toLowerCase() === str));

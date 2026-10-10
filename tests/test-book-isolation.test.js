@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { appSource } from './helpers/extract-decl.js';
+import { appSource, extractDecl } from './helpers/extract-decl.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -58,16 +58,44 @@ describe('Test Book Sandbox Isolation & Google Sheets Protection', () => {
   });
 
   it('executes function logic correctly for test books', () => {
-    const isTestBookFunc = new Function('b', `
-      if (!b) return false;
-      const idLower = String(b.id || '').toLowerCase().trim();
-      const titleLower = String(b.title || '').toLowerCase().trim();
-      return idLower === 'test1' || idLower === 'testpage' || idLower.includes('test') ||
-        titleLower === 'test1' || titleLower === 'testpage' || titleLower.includes('test');
-    `);
+    const isTestBookFunc = new Function(`${extractDecl('isTestBook')}; return isTestBook;`)();
 
     expect(isTestBookFunc({ id: 'test1', title: 'Test 1' })).toBe(true);
     expect(isTestBookFunc({ id: 'test-page', title: 'TEST PAGE' })).toBe(true);
     expect(isTestBookFunc({ id: 'hound', title: 'The Hound' })).toBe(false);
+    expect(isTestBookFunc({ id: 'test', title: 'TEST PAGE' })).toBe(true);
+    expect(isTestBookFunc({ id: 'legacy', title: '  Test Page  ' })).toBe(true);
+    expect(isTestBookFunc({ id: 'test', title: 'Renamed sandbox' })).toBe(true);
+    expect(isTestBookFunc({ id: 'greatest', title: 'Greatest Hits' })).toBe(false);
+    expect(isTestBookFunc({ id: 'contest', title: 'Contest' })).toBe(false);
+    expect(isTestBookFunc({ id: 'sample', title: 'Sample', isTest: true })).toBe(true);
+  });
+
+  it('recognizes sandbox IDs before catalog loading and renamed sandbox titles after loading', () => {
+    const books = { legacy: { id: 'legacy', title: 'TEST PAGE' } };
+    const isTestId = new Function('BOOKS', `${extractDecl('isTestBook')}\n${extractDecl('isTestBookId')}\nreturn isTestBookId;`)(books);
+    for (const id of ['test', ' TEST ', 'test-page', 'testpage', 'test1', 'legacy', 'TEST PAGE']) {
+      expect(isTestId(id), id).toBe(true);
+    }
+    expect(isTestId('contest')).toBe(false);
+    expect(isTestId('greatest')).toBe(false);
+  });
+
+  it('renders TEST PAGE only in the sandbox catalog while keeping real books in production', () => {
+    const containers = { 'catalog-list': { innerHTML: '' }, 'test-catalog-list': { innerHTML: '' } };
+    const books = [
+      { id: 'test', title: 'TEST PAGE', currency: '€', listPrice: 17 },
+      { id: 'greatest', title: 'Greatest Hits', currency: 'CA$', listPrice: 20 },
+    ];
+    const render = new Function('$', 'BOOK_LIST', 'escapeHtml', `${extractDecl('isTestBook')}\n${extractDecl('renderCatalogList')}\nreturn renderCatalogList;`)(
+      id => containers[id], books, text => String(text),
+    );
+    render();
+    const live = containers['catalog-list'].innerHTML;
+    const sandbox = containers['test-catalog-list'].innerHTML;
+    expect(live).not.toContain('TEST PAGE');
+    expect(live).toContain('Greatest Hits');
+    expect(sandbox).toContain('TEST PAGE');
+    expect(sandbox).not.toContain('Greatest Hits');
   });
 });

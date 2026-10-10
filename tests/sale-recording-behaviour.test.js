@@ -22,7 +22,10 @@ let app;
 let win;
 const state = (id) => app.main.states[id];
 const saved = (id) => app.cloud.lastSave(id)?.state;
-const todayIso = () => new Date().toISOString().split('T')[0];
+const todayIso = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+};
 
 async function sellAtRegister(lines, { method = 'Cash', currency = 'CAD' } = {}) {
   win.posSetCurrency(currency);

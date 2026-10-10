@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { localDay, localDayPlus } from '../src/lib/calendar-day.js';
 import { snoozeUntil } from '../src/lib/deduction-gaps.js';
 import { bigCartelOrderDate } from '../src/lib/bigcartel-ledger-gap.js';
@@ -12,9 +13,9 @@ afterEach(() => vi.useRealTimers());
 const root = resolve(import.meta.dirname, '..');
 function inToronto(body) {
   const script = `
-    import { localDay, localDayPlus } from ${JSON.stringify(resolve(root, 'src/lib/calendar-day.js'))};
-    import { snoozeUntil } from ${JSON.stringify(resolve(root, 'src/lib/deduction-gaps.js'))};
-    import { bigCartelOrderDate } from ${JSON.stringify(resolve(root, 'src/lib/bigcartel-ledger-gap.js'))};
+    import { localDay, localDayPlus } from ${JSON.stringify(pathToFileURL(resolve(root, 'src/lib/calendar-day.js')).href)};
+    import { snoozeUntil } from ${JSON.stringify(pathToFileURL(resolve(root, 'src/lib/deduction-gaps.js')).href)};
+    import { bigCartelOrderDate } from ${JSON.stringify(pathToFileURL(resolve(root, 'src/lib/bigcartel-ledger-gap.js')).href)};
     const out = {};
     ${body}
     console.log(JSON.stringify(out));
