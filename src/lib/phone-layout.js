@@ -5,6 +5,9 @@ const RECORDS = {
   'ml-body': { lead: 0, summary: [1, 4] },
   'all-con-body': { lead: 0, summary: [1, 4, 6] },
   'dash-con-body': { lead: 0, summary: [4, 5] },
+  // Artist expenses on the book dashboard: its Reference and Amount columns
+  // used to be cut off inside the banner on a phone.
+  'd-exp-body': { lead: 1, summary: [0, 4] },
   'ledger-body': { lead: 1, summary: [0, 2, 5, 7] },
   'hist-body': { lead: 1, summary: [0, 2, 4, 8, 9] },
   'exp-body': { lead: 'Description', summary: ['Date', 'Receipt', 'Amount', 'Amount (CAD)', 'Reimbursement', ''] },
