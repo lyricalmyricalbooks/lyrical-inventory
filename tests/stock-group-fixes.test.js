@@ -95,7 +95,7 @@ describe('remaining stock-group fixes', () => {
   });
   it('book expense edit keeps its CAD value offline and the export flags unconverted expenses', () => {
     expect(main).toContain('const sameBasis = !fxRate');
-    expect(main).toContain('rateWarnings.set(`expense-${cur}`');
+    expect(main).toContain("if (isExpenseAwaitingRate(e)) { waitingExpenses.add(e); return 0; }");
   });
   it('the invoice sweep reads several pages and only advances when complete', () => {
     expect(main).toContain('fetchStripePaymentsForReconcile(10,');

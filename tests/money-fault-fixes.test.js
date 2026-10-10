@@ -45,6 +45,6 @@ describe('main.js money guards', () => {
     expect(main).toMatch(/payload\.stripePartPayments = old\.stripePartPayments/);
   });
   it('approving a submission keeps its date and author', () => {
-    expect(main).toMatch(/\{ date: raw\.date, enteredBy: 'Artist' \}/);
+    expect(main).toMatch(/\{ date: raw\.date, enteredBy: 'Artist', extra:/);
   });
 });
