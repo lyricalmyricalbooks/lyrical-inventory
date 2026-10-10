@@ -939,7 +939,7 @@ import { createInventoryDisposalExpense, createSection10Adjustment, inventoryAdj
 import { posStockView, posOversellSummary } from './lib/pos-stock.js';
 import { FAIR_SEARCH_OVER, FAIR_UNDO_MS, fairTileHtml, readLastMethod, rememberMethod, undoOpen, soldLabel, countLabel, keepScreenAwake, fairSyncPill, registerSalesForDay, fairDaySummary, readCurrentFair, saveCurrentFair } from './lib/fair-mode.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, notesWithInvoiceDiscount, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores, consignmentLedgerTotals, storeBalanceSlug, storeBalanceComparison } from './lib/consignment.js';
-import { deriveInvoiceBookIds, invoicesForBook, findInvoiceAcrossBooks, otherBookTitles, lineItemBookId, invoiceBookSplit, invoiceShareForBook, neutralInvoicePrefix, invoiceNumberPrefix, nextInvoiceSeq, buildInvoiceNumber, BILL_TO_STORE, BILL_TO_PERSON, invoiceBillToMode, billToPayload, billToPersonFrom, invoiceLineAmount, invoiceLineGross, invoiceHasLineDiscounts, computeInvoiceTotals, parseDiscountEntry, clampPercent, dueDateFromTerms, daysBetween, duplicateInvoiceContent } from './lib/invoices.js';
+import { deriveInvoiceBookIds, invoicesForBook, findInvoiceAcrossBooks, otherBookTitles, lineItemBookId, invoiceBookSplit, invoiceShareForBook, neutralInvoicePrefix, invoiceNumberPrefix, nextInvoiceSeq, buildInvoiceNumber, BILL_TO_STORE, BILL_TO_PERSON, invoiceBillToMode, billToPayload, billToPersonFrom, invoiceLineAmount, formatInvoiceUnitPrice, invoiceLineGross, invoiceHasLineDiscounts, computeInvoiceTotals, parseDiscountEntry, clampPercent, dueDateFromTerms, daysBetween, duplicateInvoiceContent } from './lib/invoices.js';
 import { reminderSettings, reminderBlockReason, invoiceReminderState, dueForReminder, dueForReminderTomorrow, buildReminderEmail, canSendNow, daysLate, describeReminderSweep, describeReminderArming, describeReminderNotice, sampleReminderInvoice } from './lib/payment-reminders.js';
 import { LEDGER_TYPE_FILTERS, emptyLedgerFilter, ledgerFilterIsActive, ledgerStoreOptions, filterLedgerEntries, ledgerTypeCounts, describeLedgerFilter, ledgerTotalsScope } from './lib/consignment-ledger-filter.js';
 import { filterHistoryRows, historySearchIsActive, describeHistorySearch } from './lib/order-history-search.js';
@@ -2180,11 +2180,25 @@ async function saveBookFromModal() {
   const isValid = validateFields([
     { id: 'nb-id', test: val => val.trim().length > 0, msg: 'Book ID is required' },
     { id: 'nb-title', test: val => val.trim().length > 0, msg: 'Title is required' },
-    { id: 'nb-payment-link', test: val => isValidPaymentLink(val.trim()), msg: 'Must be a valid URL or email address' }
+    { id: 'nb-payment-link', test: val => isValidPaymentLink(val.trim()), msg: 'Must be a valid URL or email address' },
+    // A blank or nonsense price/print run used to be saved silently as 40 / 100.
+    // A price of 0 is allowed (a free or giveaway title); a print run must be at
+    // least 1 because unit cost and break-even divide by it.
+    { id: 'nb-price', test: val => val.trim() !== '' && Number.isFinite(Number(val)) && Number(val) >= 0, msg: 'Enter a list price (0 for a free title)' },
+    { id: 'nb-max', test: val => /^\s*\d+\s*$/.test(val) && parseInt(val, 10) >= 1, msg: 'Print run must be a whole number of at least 1' }
   ]);
 
   if (!isValid) {
-    if ($('nb-payment-link').closest('.form-group').classList.contains('invalid')) {
+    const badPanel = ['nb-price', 'nb-max']
+      .map(fid => $(fid)?.closest('.form-group'))
+      .find(g => g && g.classList.contains('invalid'));
+    if (badPanel && !$('nb-payment-link').closest('.form-group').classList.contains('invalid')
+      && !$('nb-id').closest('.form-group').classList.contains('invalid')
+      && !$('nb-title').closest('.form-group').classList.contains('invalid')) {
+      const panelId = (badPanel.closest('[id^="book-panel-"]') || {}).id || '';
+      const tab = panelId.replace('book-panel-', '');
+      if (['general', 'sales', 'costs'].includes(tab)) switchBookModalTab(tab);
+    } else if ($('nb-payment-link').closest('.form-group').classList.contains('invalid')) {
       switchBookModalTab('costs');
     } else if ($('nb-id').closest('.form-group').classList.contains('invalid') || $('nb-title').closest('.form-group').classList.contains('invalid')) {
       switchBookModalTab('general');
@@ -2220,8 +2234,8 @@ async function saveBookFromModal() {
     title: $('nb-title').value.trim(),
     author: $('nb-author').value.trim(),
     isbn: $('nb-isbn').value.trim() || '—',
-    maxPrint: parseInt($('nb-max').value) || 100,
-    listPrice: parseFloat($('nb-price').value) || 40,
+    maxPrint: parseInt($('nb-max').value, 10),
+    listPrice: parseFloat($('nb-price').value),
     currency: $('nb-cur').value || '€',
     threshold: Number.isFinite(thresholdInput) && thresholdInput >= 0 ? thresholdInput : 10,
     productionCost: parseFloat($('nb-prod').value) || 0,
@@ -3258,7 +3272,7 @@ export let notifyUrl = localStorage.getItem('lm-notify-url') || '';
 // The Apps Script `scriptVersion` the client expects. Bump this (and the value
 // in apps-script/Code.gs) whenever Code.gs gains behaviour that needs a fresh
 // deploy — the connection card flags any older deployed version as outdated.
-export const EXPECTED_SCRIPT_VERSION = 'v54';
+export const EXPECTED_SCRIPT_VERSION = 'v55';
 // What the connected spreadsheet last told us it was running. Null until a
 // version check has actually answered — an unknown version is not a mismatch,
 // so the To-do list stays quiet rather than inventing a problem.
@@ -5473,7 +5487,7 @@ function renderAllBooksStrips(allBooksVisible) {
     for (let i = 0; i < s.stores.length; i++) {
       owed += s.stores[i].amountOwed || 0;
     }
-    const pct = Math.max(0, s.stock / book.maxPrint * 100);
+    const pct = Math.max(0, s.stock / (book.maxPrint || 1) * 100);
     const stockClass = s.stock <= book.threshold ? 'danger' : s.stock <= book.threshold * 2 ? 'warn' : 'gold';
     const cost = book.productionCost || 0;
     const recognizedRev = recognizedRevenueOf(s);
@@ -7148,6 +7162,21 @@ function renderBookPendingAlert() {
 function heldGrossOf(s) {
   return (s.artistTransfers || []).reduce((sum, t) => sum + (transferAmount(t) || 0), 0);
 }
+// The book's per-channel rollup with the gross still held by the artist folded back
+// into each channel's revenue (direct-to-artist sales bump txns/units but not revenue
+// until forwarded). Its channel revenues sum to recognizedRevenueOf(s), so the
+// "Sales by channel" total agrees with the Revenue KPI.
+export function chStatsWithHeld(s) {
+  const out = {};
+  for (const [chan, cs] of Object.entries(s.chStats || {})) out[chan] = { ...cs };
+  (s.artistTransfers || []).forEach(t => {
+    const amt = transferAmount(t) || 0;
+    if (!amt) return;
+    const row = out[t.chan] = out[t.chan] || { txns: 0, units: 0, revenue: 0 };
+    row.revenue = (row.revenue || 0) + amt;
+  });
+  return out;
+}
 // Revenue recognized for a book: cash collected plus the gross still held by the
 // artist. A sale is complete the moment it happens, so its full value is recognized
 // immediately and the held cash is treated as a receivable — NOT as deferred revenue.
@@ -7329,7 +7358,7 @@ export function updateDash() {
   if (s.stock <= book.threshold) { al.className = 'stock-alert danger'; al.textContent = '⚠ Below threshold (' + book.threshold + ') — reorder now.'; }
   else if (s.stock <= book.threshold * 2) { al.className = 'stock-alert warn'; al.textContent = 'Getting low — ' + s.stock + ' units remaining.'; }
   else { al.className = 'stock-alert ok'; al.textContent = 'Stock is healthy.'; }
-  const chMix = channelMixRows(s.chStats);
+  const chMix = channelMixRows(chStatsWithHeld(s));
   const chFoot = $('ch-foot');
   $('ch-body').innerHTML = chMix.rows.length
     ? chMix.rows.map(r => channelMixRowHtml(r, cur)).join('')
@@ -8844,9 +8873,9 @@ export function scheduleRender() {
 
 // ── Ready-to-send outbox ───────────────────────────────────────────────────
 
-function recordOrder(num, chan, qty, price, notes, payment = null, { date, enteredBy: enteredByOverride } = {}) {
+function recordOrder(num, chan, qty, price, notes, payment = null, { date, enteredBy: enteredByOverride, extra } = {}) {
   const enteredBy = enteredByOverride || (isAuthor() ? 'Artist' : 'Publisher');
-  writeOrderToLedger(activeBook, { num, chan, qty, price, notes, payment, enteredBy, date });
+  writeOrderToLedger(activeBook, { num, chan, qty, price, notes, payment, enteredBy, date, extra });
   renderHist(); updateDash();
 }
 
@@ -10770,20 +10799,44 @@ const _submissionsInFlight = new Set();
 // refuse to approve them a second time this session.
 const _approvedSubmissionKeys = new Set();
 
+// The ledger row an approved submission became carries its queue key, so
+// "already approved" survives a reload even when clearing the queue entry failed.
+const submissionRef = (type, subKey) => `${type}:${subKey}`;
+export function isSubmissionApproved(s, type, subKey) {
+  const ref = submissionRef(type, subKey);
+  const rows = type === 'expenses' ? (s.expenses || []) : (s.hist || []);
+  return rows.some(r => r && r.fromSubmission === ref);
+}
+
 window.approveSubmission = async function (type, subKey) {
   const queue = window.authorSubmissions[activeBook]?.[type] || {};
   if (!queue[subKey]) return;
   const flightKey = `${activeBook}:${type}:${subKey}`;
   if (_submissionsInFlight.has(flightKey)) return;
-  if (_approvedSubmissionKeys.has(flightKey)) { showToast('⚠ Already added to the ledger - it just could not be cleared from the queue. Reload and reject it.', 'warn'); return; }
+  // Normally the ledger row itself proves a prior approval (handled below, which also
+  // retries clearing the queue entry); this is only the fallback for a row we can't see.
+  if (_approvedSubmissionKeys.has(flightKey) && !isSubmissionApproved(getState(), type, subKey)) { showToast('⚠ Already added to the ledger - it just could not be cleared from the queue. Reload and reject it.', 'warn'); return; }
   _submissionsInFlight.add(flightKey);
   try {
     const raw = JSON.parse(queue[subKey].data);
     const s = getState();
 
+    if (isSubmissionApproved(s, type, subKey)) {
+      // Recorded on an earlier approval whose queue entry could not be removed.
+      // Never record it again; just try to clear the leftover entry.
+      _approvedSubmissionKeys.add(flightKey);
+      const cleared = await window._fbDeleteSubmission(activeBook, type, subKey) !== false;
+      showToast(cleared
+        ? '\u2713 Already in the ledger - removed the leftover from the pending list'
+        : '\u26a0 Already in the ledger, but it could not be cleared from the pending list. Do not approve it again.', cleared ? 'ok' : 'warn');
+      updateDash();
+      return;
+    }
+
     if (type === 'expenses') {
       if (!s.expenses) s.expenses = [];
 
+      raw.fromSubmission = submissionRef(type, subKey);
       s.expenses.unshift(raw);
       saveState(activeBook);
       if (await window._fbDeleteSubmission(activeBook, type, subKey) === false) {
@@ -10799,7 +10852,7 @@ window.approveSubmission = async function (type, subKey) {
     } else if (type === 'sales') {
       let pendingTransfer = false;
       if (isDirectToArtistSale(raw)) {
-        recordOrderPendingTransfer(raw.num, raw.chan, raw.qty, raw.price, raw.notes, raw.payment, raw.date);
+        recordOrderPendingTransfer(raw.num, raw.chan, raw.qty, raw.price, raw.notes, raw.payment, raw.date, submissionRef(type, subKey));
         pendingTransfer = true;
         const newest = getState().artistTransfers.at(-1);
         if (newest) {
@@ -10807,7 +10860,7 @@ window.approveSubmission = async function (type, subKey) {
           mintArtistTransferPayLink(bookId, newest.id, { quiet: true }).then(() => mintArtistTransferBundleLink(bookId));
         }
       } else {
-        recordOrder(raw.num, raw.chan, raw.qty, raw.price, raw.notes, raw.payment, { date: raw.date, enteredBy: 'Artist' });
+        recordOrder(raw.num, raw.chan, raw.qty, raw.price, raw.notes, raw.payment, { date: raw.date, enteredBy: 'Artist', extra: { fromSubmission: submissionRef(type, subKey) } });
       }
       if (await window._fbDeleteSubmission(activeBook, type, subKey) === false) {
         _approvedSubmissionKeys.add(flightKey);
@@ -10844,7 +10897,7 @@ window.rejectSubmission = async function (type, subKey) {
   }
 }
 
-function recordOrderPendingTransfer(num, chan, qty, price, notes, payment = null, date = null) {
+function recordOrderPendingTransfer(num, chan, qty, price, notes, payment = null, date = null, fromSubmission = null) {
   const s = getState(), book = getBook();
   const when = date || today();
   deductSaleFromStockBreakdown(s, qty, true);
@@ -10858,7 +10911,7 @@ function recordOrderPendingTransfer(num, chan, qty, price, notes, payment = null
   // Add to history with pending flag. directToArtist marks this as cash the
   // artist collected directly (these only ever come from direct-to-artist sales).
   const sheetsId = makeEventId();
-  s.hist.unshift({ num, chan, qty, price, after: s.stock, notes: updatedNotes, date: when, artistPending: true, directToArtist: true, payment, sheetsId, cur: bookCurrencyCode(book) });
+  s.hist.unshift({ ...(fromSubmission ? { fromSubmission } : {}), num, chan, qty, price, after: s.stock, notes: updatedNotes, date: when, artistPending: true, directToArtist: true, payment, sheetsId, cur: bookCurrencyCode(book) });
   // Add to artistTransfers queue (share sheetsId so receipt updates the same sheet row)
   s.artistTransfers.push({ id: Date.now(), num, chan, qty, price, total: qty * price, notes: updatedNotes, date: when, payment, sheetsId, cur: bookCurrencyCode(book) });
   recomputeAfters(s, book);
@@ -14429,7 +14482,7 @@ function renderInvoicePaperHTML(inv, { showChase = false } = {}) {
   const itemsHtml = (inv.items || []).map(it => `<tr>
     <td>${escapeHtml(it.description || '—')}</td>
     <td class="r">${(it.qty || 0)}</td>
-    <td class="r">${fmt(it.unitPrice || 0, cur)}</td>
+    <td class="r">${formatInvoiceUnitPrice(it.unitPrice, getSym(cur))}</td>
     ${lineDisc ? `<td class="r">${clampPercent(it.discountPct) > 0 ? `${clampPercent(it.discountPct)}%` : '—'}</td>` : ''}
     <td class="r"><strong>${fmt(invoiceLineAmount(it), cur)}</strong></td>
   </tr>`).join('');
@@ -14732,7 +14785,7 @@ function buildInvoiceEmailHTML(inv) {
     <tr>
       <td style="padding:12px 10px;border-bottom:1px solid #f1eadc;color:#1a1814;">${escapeHtml(it.description || '—')}</td>
       <td align="right" style="padding:12px 10px;border-bottom:1px solid #f1eadc;color:#1a1814;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${it.qty || 0}</td>
-      <td align="right" style="padding:12px 10px;border-bottom:1px solid #f1eadc;color:#1a1814;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${fmt(it.unitPrice || 0, cur)}</td>
+      <td align="right" style="padding:12px 10px;border-bottom:1px solid #f1eadc;color:#1a1814;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${formatInvoiceUnitPrice(it.unitPrice, getSym(cur))}</td>
       ${lineDisc ? `<td align="right" style="padding:12px 10px;border-bottom:1px solid #f1eadc;color:#1a1814;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${clampPercent(it.discountPct) > 0 ? `${clampPercent(it.discountPct)}%` : '—'}</td>` : ''}
       <td align="right" style="padding:12px 10px;border-bottom:1px solid #f1eadc;color:#1a1814;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:700;">${fmt(invoiceLineAmount(it), cur)}</td>
     </tr>`).join('');
@@ -18248,6 +18301,18 @@ function calculateArtistEarnings(bookId) {
 }
 
 // ── FINANCIAL CENTER LOGIC
+/**
+ * A foreign-currency expense with no CAD value yet (logged offline, or saved
+ * before a rate could be found). Its raw foreign amount must never be added to
+ * CAD totals as if it were dollars; it counts 0 until healExpenseRates fills in
+ * its baseAmount, and the screens/exports say so.
+ */
+export function isExpenseAwaitingRate(e) {
+  if (!e) return false;
+  const cur = String(e.currency || e.origCurrency || 'CAD').toUpperCase();
+  return cur !== 'CAD' && !(e.baseAmount || e.amountCAD) && (parseFloat(e.amount) || 0) > 0;
+}
+
 export function calculateFinancials(year) {
   const result = {
     revenue: 0,
@@ -18257,13 +18322,18 @@ export function calculateFinancials(year) {
     profit: 0,
     bookStats: [],
     expCats: {},
-    missingReceiptsCount: 0
+    missingReceiptsCount: 0,
+    fxWaitingCount: 0
   };
 
   const yearStr = String(year);
 
-  // Helper for consistent amount extraction
-  const getAmt = (e) => e.baseAmount || e.amountCAD || e.amount || 0;
+  // Helper for consistent amount extraction. A foreign expense still waiting for
+  // its exchange rate counts 0 (and is tallied) rather than 1:1.
+  const getAmt = (e) => {
+    if (isExpenseAwaitingRate(e)) { result.fxWaitingCount++; return 0; }
+    return e.baseAmount || e.amountCAD || e.amount || 0;
+  };
 
   // 1. Process Book-specific data
   BOOK_LIST.forEach(book => {
@@ -23202,10 +23272,11 @@ window.downloadFullTaxSeasonExport = function () {
   // Track books exported with no saved CAD rate (fell back to 1.0 — a silently
   // wrong tax figure). Keyed by book id so a book is listed at most once.
   const rateWarnings = new Map();
+  // Foreign expenses still waiting for a CAD value count 0 here (never 1:1);
+  // each is counted once in the notice so the totals aren't mistaken for final.
+  const waitingExpenses = new Set();
   const getAmt = (e) => {
-    // A foreign-currency expense saved with no CAD amount is exported in its own currency: flag it.
-    const cur = String(e.currency || e.origCurrency || 'CAD').toUpperCase();
-    if (cur !== 'CAD' && !(e.baseAmount || e.amountCAD) && (parseFloat(e.amount) || 0) > 0) rateWarnings.set(`expense-${cur}`, { title: 'Expenses', cur });
+    if (isExpenseAwaitingRate(e)) { waitingExpenses.add(e); return 0; }
     return parseFloat(e.baseAmount || e.amountCAD || e.amount || 0);
   };
   const flagRateIfMissing = (book, cur, rawRate, hasAmount) => {
@@ -23347,8 +23418,18 @@ window.downloadFullTaxSeasonExport = function () {
     rateWarnings.forEach(w => { csv += `${esc(w.title)},${esc(w.cur)},1.00\n`; });
   }
 
+  if (waitingExpenses.size) {
+    const n = waitingExpenses.size;
+    csv += '\n--- ⚠ EXPENSES WAITING FOR AN EXCHANGE RATE ---\n';
+    csv += `${esc(`${n} expense${n === 1 ? ' is' : 's are'} still waiting for an exchange rate — counted as 0.00 CAD above, so the expense totals are NOT final. Open the Tax Centre while online to fill them in, then re-export.`)}\n`;
+  }
+
   downloadCsv('﻿' + csv, `Lyrical_Tax_Season_${isAllTime ? 'AllTime' : year}_Export.csv`);
 
+  if (waitingExpenses.size) {
+    const n = waitingExpenses.size;
+    showToast(`⚠ ${n} expense${n === 1 ? ' is' : 's are'} still waiting for an exchange rate — totals not final.`, 'warn', 7000);
+  }
   if (rateWarnings.size) {
     const names = Array.from(rateWarnings.values()).map(w => `${w.title} (${w.cur})`).join(', ');
     showToast(`⚠ Exported, but ${rateWarnings.size} book${rateWarnings.size === 1 ? '' : 's'} had no CAD rate — shown unconverted: ${names}. Refresh FX rates and re-export.`, 'warn', 7000);

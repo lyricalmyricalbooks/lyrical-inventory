@@ -429,6 +429,17 @@ export function clampPercent(v) {
   return Math.min(100, Math.max(0, n));
 }
 
+// The unit price as printed: whole cents when it is a whole-cent price, else four
+// decimals. A price imported from a consignment sale is the amount due divided by
+// the copies, e.g. 23.38 / 3 = 7.7933; printing it as 7.79 would put "3 x 7.79"
+// beside a 23.38 line total. The stored price and the billed total never change.
+export function formatInvoiceUnitPrice(unitPrice, symbol = '') {
+  const n = nonNeg(unitPrice);
+  const wholeCents = Math.abs(n - round2(n)) < 1e-9;
+  const [whole, frac] = n.toFixed(wholeCents ? 2 : 4).split('.');
+  return `${symbol}${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}.${frac}`;
+}
+
 // What a line is worth before its own discount: quantity × unit price.
 export function invoiceLineGross(item) {
   return round2(nonNeg(item && item.qty) * nonNeg(item && item.unitPrice));

@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v54)
+/* Lyricalmyrical Inventory — Unified Backend (v55)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:
@@ -241,6 +241,14 @@
  *      the whole merchandise total, so a 3-copy order took 1 off stock. With no
  *      quantity on the receipt it still reports 1. Bump flags v53-and-older as
  *      outdated so the publisher redeploys.
+ *  53. v55: Open Call reply detection also recognises an artist who answers
+ *      in a brand-new email thread. v53 only counted a reply that followed one
+ *      of our messages inside the same thread, so a fresh email with the credit
+ *      name or the high-res files was missed. It now also counts mail from the
+ *      artist in other threads dated after our first email to them (found in
+ *      Sent), which still leaves out their original submission, sent before
+ *      any outreach. With no sent email to the artist it counts nothing. Bump
+ *      flags v54-and-older as outdated so the publisher redeploys.
  *  47. v49: the "Monthly (CAD)" tab rebuilds itself on every sync instead of
  *      only from the menu, so it no longer goes stale (it was missing months
  *      and whole books). It leaves out test/connection-check rows, adds a
@@ -313,8 +321,8 @@ function doGet(e) {
   const receiptModel = receiptProps.getProperty('GEMINI_MODEL') || 'gemini-2.5-flash';
   const receiptModelValid = /^[a-zA-Z0-9.-]+$/.test(receiptModel);
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v54',
-    scriptVersion: 'v54',
+    service: 'lyrical-sheets-webhook-v55',
+    scriptVersion: 'v55',
     capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyChitChats: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, canadaPostRefund: true, graphicalEmails: true, authorPaymentEmails: true, dateOrderedRows: true, receiptExtraction: true, receiptSelfTest: true, receiptDailySweep: true, receiptBackupAi: true },
     receiptAi: {
       geminiApiKey: !!receiptProps.getProperty('GEMINI_API_KEY'),
@@ -3961,10 +3969,51 @@ function ocFlagTruthy_(v) {
 // Their original submission email (low-res photos attached) is already in the
 // mailbox before any selection or CMYK request goes out, so a bare
 // "any mail from the artist" search flagged credit/files as received at once.
+// A reply in a brand-new thread also counts when it is dated after our first
+// email to the artist (ocOutreachDate_); their original submission predates it.
 // Returns { thread, message } for the first such reply, or null.
 function ocReplyAfterOurs_(email, extraQuery, daysBack, needAttachment) {
   const artist = String(email).toLowerCase();
   const threads = GmailApp.search('from:' + email + extraQuery + ' newer_than:' + daysBack + 'd', 0, 10);
+  const inThread = ocReplyInThreads_(threads, artist, needAttachment);
+  if (inThread) return inThread;
+  const outreach = ocOutreachDate_(email, daysBack);
+  if (!outreach) return null;
+  return ocReplyAfterDate_(threads, artist, outreach, needAttachment);
+}
+
+// First artist message dated strictly after `since`, in any of the threads.
+function ocReplyAfterDate_(threads, artist, since, needAttachment) {
+  for (let t = 0; t < threads.length; t++) {
+    const msgs = threads[t].getMessages();
+    for (let m = 0; m < msgs.length; m++) {
+      if (String(msgs[m].getFrom() || '').toLowerCase().indexOf(artist) < 0) continue;
+      if (msgs[m].getDate().getTime() <= since.getTime()) continue;
+      if (needAttachment && msgs[m].getAttachments({ includeInlineImages: false }).length === 0) continue;
+      return { thread: threads[t], message: msgs[m] };
+    }
+  }
+  return null;
+}
+
+// When we first emailed this artist (earliest message to them in Sent within the
+// window), or null when nothing was sent, so no new-thread reply can be judged.
+function ocOutreachDate_(email, daysBack) {
+  const artist = String(email).toLowerCase();
+  const sent = GmailApp.search('to:' + email + ' in:sent newer_than:' + daysBack + 'd', 0, 10);
+  let earliest = null;
+  for (let t = 0; t < sent.length; t++) {
+    const msgs = sent[t].getMessages();
+    for (let m = 0; m < msgs.length; m++) {
+      if (String(msgs[m].getFrom() || '').toLowerCase().indexOf(artist) >= 0) continue;
+      const d = msgs[m].getDate();
+      if (!earliest || d.getTime() < earliest.getTime()) earliest = d;
+    }
+  }
+  return earliest;
+}
+
+function ocReplyInThreads_(threads, artist, needAttachment) {
   for (let t = 0; t < threads.length; t++) {
     const msgs = threads[t].getMessages();
     let ourMessageSeen = false;
