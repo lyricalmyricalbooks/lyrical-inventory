@@ -72,6 +72,8 @@ export function recordInventoryDisposal(s, disposal) {
     notes: String(disposal.notes || '').trim(),
     status: 'written off',
   };
+  // Lets the Google Sheet row for the write-off be matched later.
+  if (disposal.sheetsId) entry.sheetsId = String(disposal.sheetsId);
   s.ledger.unshift(entry);
   return entry;
 }

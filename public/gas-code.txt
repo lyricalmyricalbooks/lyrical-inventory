@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v55)
+/* Lyricalmyrical Inventory — Unified Backend (v56)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:
@@ -258,6 +258,23 @@
  *      into book sales and customer-paid shipping and counts only real sales
  *      plus shipping, matching the monthly tab. Bump flags v48-and-older as
  *      outdated so the publisher redeploys.
+ *  54. v56: Sheet sync repairs. (a) Clearing a tab that had grown past its
+ *      first 1000 rows failed with "not possible to delete all non-frozen
+ *      rows" — the grid fits the data exactly by then — so "Repair legacy
+ *      rows" never got past its first step; a spare row is now added first.
+ *      (b) A bulk batch is applied as if its rows arrived one at a time: the
+ *      last row for an id wins, so one record sent twice is one row, and an
+ *      add followed by a delete leaves nothing behind. (c) New 'prune' action:
+ *      after "Sync all data" the app lists the books it is sure of and every
+ *      id it holds for them, and rows of those books it no longer has are
+ *      removed (hand-typed rows without an id, other books and connection
+ *      checks are left alone). (d) Expense and artist-payout rows (types
+ *      'expense' and 'payout') are reported as Expenses / Paid to artists in
+ *      Key numbers, and the currency table on __Summary now sums income rows
+ *      only, so money going out is never added to revenue. (e) Overview no
+ *      longer takes the colour of the last book written, and tabs created by
+ *      a bulk sync get their book's colour. Bump flags v55-and-older as
+ *      outdated so the publisher redeploys.
  */
 
 const HEADERS = [
@@ -321,9 +338,9 @@ function doGet(e) {
   const receiptModel = receiptProps.getProperty('GEMINI_MODEL') || 'gemini-2.5-flash';
   const receiptModelValid = /^[a-zA-Z0-9.-]+$/.test(receiptModel);
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v55',
-    scriptVersion: 'v55',
-    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyChitChats: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, canadaPostRefund: true, graphicalEmails: true, authorPaymentEmails: true, dateOrderedRows: true, receiptExtraction: true, receiptSelfTest: true, receiptDailySweep: true, receiptBackupAi: true },
+    service: 'lyrical-sheets-webhook-v56',
+    scriptVersion: 'v56',
+    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyChitChats: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, canadaPostRefund: true, graphicalEmails: true, authorPaymentEmails: true, dateOrderedRows: true, receiptExtraction: true, receiptSelfTest: true, receiptDailySweep: true, receiptBackupAi: true, pruneOrphans: true, expenseRows: true },
     receiptAi: {
       geminiApiKey: !!receiptProps.getProperty('GEMINI_API_KEY'),
       model: receiptModelValid,
@@ -342,11 +359,7 @@ function getBookData_(e) {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     if (!ss) return jsonOut_({ error: 'Spreadsheet not active' });
     
-    const rawName = bookTitle.trim();
-    let sheetName = rawName.replace(/[:*?/\[\]\\]/g, '').substring(0, 95);
-    if (!sheetName) sheetName = 'Overview';
-    
-    const sheet = ss.getSheetByName(sheetName);
+    const sheet = ss.getSheetByName(bookSheetName_(bookTitle));
     if (!sheet) return jsonOut_({ book: bookTitle, rows: [] });
     
     const lastRow = sheet.getLastRow();
@@ -1564,9 +1577,42 @@ function doPost(e) {
         }
       }
 
-      let added = 0, deleted = 0, voided = 0, replaced = 0;
+      let added = 0, deleted = 0, voided = 0, replaced = 0, superseded = 0;
       const rowsToDeleteBySheet = {}; // sheetName -> Array of rowIndices
       const rowsToAppendBySheet = {}; // sheetName -> Array of row arrays
+      const colorBySheet = {};        // book tab -> its accent colour
+
+      // A batch is applied as if its rows had arrived one by one: the last
+      // row for an id wins. Each existing sheet row is queued for removal once,
+      // and a row this same batch was about to append is dropped when a later
+      // row for that id replaces or removes it. Before v56 two rows for one id
+      // were both appended (a duplicate), and an add followed by a delete left
+      // the added row in place.
+      const existingQueued = {};      // id -> true once its sheet rows are queued for removal
+      const pendingAppend = {};       // id -> row arrays this batch would append
+      const dropped = new Set();
+      const removeEarlier = (stableId) => {
+        if (!stableId) return 0;
+        let count = 0;
+        if (!existingQueued[stableId]) {
+          existingQueued[stableId] = true;
+          const locations = existingRowLocations[stableId] || [];
+          for (let l = 0; l < locations.length; l++) {
+            const loc = locations[l];
+            if (!rowsToDeleteBySheet[loc.sheetName]) rowsToDeleteBySheet[loc.sheetName] = [];
+            rowsToDeleteBySheet[loc.sheetName].push(loc.rowIndex);
+            count++;
+          }
+        }
+        const pending = pendingAppend[stableId];
+        if (pending && pending.length) {
+          pending.forEach(r => dropped.add(r));
+          delete pendingAppend[stableId];
+          added--;
+          superseded++;
+        }
+        return count;
+      };
 
       for (let i = 0; i < rows.length; i++) {
         const item = rows[i] || {};
@@ -1575,48 +1621,18 @@ function doPost(e) {
 
         // 1. Check if it's a deletion/void
         if (rowAction === 'void' || rowAction === 'delete') {
-          if (stableId) {
-            const locations = existingRowLocations[stableId];
-            if (locations) {
-              for (let l = 0; l < locations.length; l++) {
-                const loc = locations[l];
-                if (!rowsToDeleteBySheet[loc.sheetName]) rowsToDeleteBySheet[loc.sheetName] = [];
-                rowsToDeleteBySheet[loc.sheetName].push(loc.rowIndex);
-                deleted++;
-              }
-            }
-          }
+          deleted += removeEarlier(stableId);
           continue;
         }
 
         if (/VOID|CANCEL/i.test(String(item.status || ''))) {
           voided++;
-          if (stableId) {
-            const locations = existingRowLocations[stableId];
-            if (locations) {
-              for (let l = 0; l < locations.length; l++) {
-                const loc = locations[l];
-                if (!rowsToDeleteBySheet[loc.sheetName]) rowsToDeleteBySheet[loc.sheetName] = [];
-                rowsToDeleteBySheet[loc.sheetName].push(loc.rowIndex);
-                deleted++;
-              }
-            }
-          }
+          deleted += removeEarlier(stableId);
           continue;
         }
 
         // 2. It's an add/edit (upsert)
-        if (stableId) {
-          const locations = existingRowLocations[stableId];
-          if (locations) {
-            for (let l = 0; l < locations.length; l++) {
-              const loc = locations[l];
-              if (!rowsToDeleteBySheet[loc.sheetName]) rowsToDeleteBySheet[loc.sheetName] = [];
-              rowsToDeleteBySheet[loc.sheetName].push(loc.rowIndex);
-              replaced++;
-            }
-          }
-        }
+        replaced += removeEarlier(stableId);
 
         // Build row array
         item._eventId = stableId;
@@ -1650,9 +1666,7 @@ function doPost(e) {
         row[COL.Notes - 1]           = item.notes ?? '';
         row[COL.Invoice - 1]         = item.invoiceNum ?? '';
 
-        const rawName = item.book ? String(item.book).trim() : 'Overview';
-        let sheetName = rawName.replace(/[:*?/\[\]\\]/g, '').substring(0, 95);
-        if (!sheetName) sheetName = 'Overview';
+        const sheetName = bookSheetName_(item.book);
 
         if (!rowsToAppendBySheet[sheetName]) rowsToAppendBySheet[sheetName] = [];
         rowsToAppendBySheet[sheetName].push(row);
@@ -1660,8 +1674,10 @@ function doPost(e) {
         if (sheetName !== 'Overview') {
           if (!rowsToAppendBySheet['Overview']) rowsToAppendBySheet['Overview'] = [];
           rowsToAppendBySheet['Overview'].push(row);
+          if (item.bookColor && !colorBySheet[sheetName]) colorBySheet[sheetName] = item.bookColor;
         }
 
+        if (stableId) pendingAppend[stableId] = [row];
         added++;
       }
 
@@ -1682,8 +1698,10 @@ function doPost(e) {
       const appendSheets = Object.keys(rowsToAppendBySheet);
       for (let s = 0; s < appendSheets.length; s++) {
         const sheetName = appendSheets[s];
+        const newRows = rowsToAppendBySheet[sheetName].filter(r => !dropped.has(r));
+        if (!newRows.length) continue;
         const sheet = ensureSheet_(ss, sheetName);
-        const newRows = rowsToAppendBySheet[sheetName];
+        applyBookTabColor_(sheet, colorBySheet[sheetName]);
         const lastRow = sheet.getLastRow();
         // New tabs have a 1000-row grid and setValues cannot write past it.
         const needRows = lastRow + newRows.length;
@@ -1697,7 +1715,7 @@ function doPost(e) {
       sortManagedSheets_(ss, Object.keys(touchedSheets));
 
       refreshOverviewSummary_(ss);
-      return jsonOut_({ ok: true, count: rows.length, added, deleted, voided, replaced, sorted: true });
+      return jsonOut_({ ok: true, count: rows.length, added, deleted, voided, replaced, superseded, sorted: true });
     }
 
     // ── Reset / rebuild: clear every managed sheet so the client can resend a
@@ -1707,6 +1725,15 @@ function doPost(e) {
       const cleared = clearManagedSheets_(ss);
       refreshOverviewSummary_(ss);
       return jsonOut_({ ok: true, cleared });
+    }
+
+    // ── Prune (v56): after "Sync all data", drop rows of the listed books whose
+    // ids the app no longer holds. See pruneOrphanRows_. ──
+    if (action === 'prune') {
+      const d = payload.payload || {};
+      const pruned = pruneOrphanRows_(ss, d.books, d.keepIds);
+      if (pruned.removed) refreshOverviewSummary_(ss);
+      return jsonOut_({ ok: true, removed: pruned.removed });
     }
 
     const result = processSheetsRow_(ss, payload.payload || {}, eventId);
@@ -1746,9 +1773,7 @@ function processSheetsRow_(ss, data, eventId) {
   let replaced = 0;
   if (stableId) replaced = removeByEventId_(ss, stableId);
 
-  const rawName = data.book ? String(data.book).trim() : 'Overview';
-  let sheetName = rawName.replace(/[:*?/\[\]\\]/g, '').substring(0, 95);
-  if (!sheetName) sheetName = 'Overview';
+  const sheetName = bookSheetName_(data.book);
 
   processSheetEntry_(ss, sheetName, data);
   if (sheetName !== 'Overview') {
@@ -1761,7 +1786,9 @@ function processSheetsRow_(ss, data, eventId) {
 
 function processSheetEntry_(ss, sheetName, data) {
   const sheet = ensureSheet_(ss, sheetName);
-  applyBookTabColor_(sheet, data.bookColor);
+  // Overview holds every book, so it never takes one book's colour (before v56
+  // it was repainted with whichever book was written last).
+  if (sheetName !== 'Overview') applyBookTabColor_(sheet, data.bookColor);
 
   const currency = normalizeCcy_(data.currency || data.paymentCurrency);
   const total = numOrBlank_(data.amountDue ?? data.total);
@@ -1797,6 +1824,14 @@ function processSheetEntry_(ss, sheetName, data) {
   row[COL.Invoice - 1]         = data.invoiceNum ?? '';
 
   sheet.appendRow(row);
+}
+
+// The tab a book's rows live on: its title without the characters Sheets
+// refuses in a tab name, kept under the 100-character limit. Rows without a
+// book go to Overview.
+function bookSheetName_(title) {
+  const raw = title ? String(title).trim() : 'Overview';
+  return raw.replace(/[:*?/\[\]\\]/g, '').substring(0, 95) || 'Overview';
 }
 
 function applyBookTabColor_(sheet, color) {
@@ -1944,7 +1979,8 @@ function formatSheet_(sheet) {
     ['TRANSFER', '#ede9fe', '#5b21b6'],
     ['REFUND',   '#fed7aa', '#9a3412'],
     ['STOCK',    '#cffafe', '#155e75'],
-    ['PRINT',    '#fce7f3', '#9d174d']
+    ['PRINT',    '#fce7f3', '#9d174d'],
+    ['PAYOUT',   '#ede9fe', '#5b21b6']
   ];
   typeColors.forEach(([word, bg, fg]) => {
     rules.push(SpreadsheetApp.newConditionalFormatRule()
@@ -2110,11 +2146,24 @@ function deleteRowsBulk_(sheet, rowIndices) {
     while (runEnd + 1 < unique.length && unique[runEnd + 1] === unique[runEnd] - 1) runEnd++;
     const start = unique[runEnd];
     const count = runEnd - i + 1;
+    keepSpareRow_(sheet, count);
     sheet.deleteRows(start, count);
     removed += count;
     i = runEnd + 1;
   }
   return removed;
+}
+
+// Sheets refuses to delete every non-frozen row of a tab ("Sorry, it is not
+// possible to delete all non-frozen rows"). A tab's grid fits its data exactly
+// once it has grown past its first 1000 rows — both the bulk append and
+// appendRow grow it one row at a time — so clearing such a tab for a rebuild
+// failed outright and the rebuild never ran. Add one blank row at the bottom
+// first; rows above it keep their numbers.
+function keepSpareRow_(sheet, deleteCount) {
+  if (deleteCount >= sheet.getMaxRows() - sheet.getFrozenRows()) {
+    sheet.insertRowsAfter(sheet.getMaxRows(), 1);
+  }
 }
 
 function removeByEventId_(ss, eventId) {
@@ -2149,11 +2198,49 @@ function clearManagedSheets_(ss) {
     if (sheet.getRange(1, 1).getValue() !== '_eventId') continue; // managed only
     const lastRow = sheet.getLastRow();
     if (lastRow >= 2) {
+      keepSpareRow_(sheet, lastRow - 1);
       sheet.deleteRows(2, lastRow - 1);
       cleared += (lastRow - 1);
     }
   }
   return cleared;
+}
+
+// Remove rows the app no longer has (v56). "Sync all data" upserts every live
+// record, but a record that left the app without being voided — a duplicate
+// the app cleaned up, an order taken back to New, a sale moved to another
+// book — kept its row, so the sheet went on counting that money until a full
+// rebuild. The app sends the books it is sure of and every id it holds for
+// them; any other row of those books is gone from the app and is removed here.
+// Rows of books it did not list, hand-typed rows (no id) and connection checks
+// are never touched.
+function pruneOrphanRows_(ss, books, keepIds) {
+  if (!Array.isArray(books) || !Array.isArray(keepIds)) {
+    throw new Error('prune needs a list of books and a list of ids to keep');
+  }
+  const bookSet = {};
+  books.forEach(function (b) { const t = String(b == null ? '' : b).trim(); if (t) bookSet[t] = true; });
+  if (!Object.keys(bookSet).length) return { removed: 0 };
+  const keep = {};
+  keepIds.forEach(function (id) { if (id !== null && id !== undefined && id !== '') keep[String(id)] = true; });
+
+  let removed = 0;
+  const sheets = ss.getSheets();
+  for (const sheet of sheets) {
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2 || sheet.getLastColumn() < 1) continue;
+    if (sheet.getRange(1, 1).getValue() !== '_eventId') continue; // managed only
+    const values = sheet.getRange(2, 1, lastRow - 1, COL.Book).getValues();
+    const gone = [];
+    for (let i = 0; i < values.length; i++) {
+      const id = String(values[i][COL._eventId - 1] || '').trim();
+      if (!id || keep[id] || /^conn-test-/.test(id)) continue;
+      if (!bookSet[String(values[i][COL.Book - 1] || '').trim()]) continue;
+      gone.push(i + 2);
+    }
+    removed += deleteRowsBulk_(sheet, gone);
+  }
+  return { removed: removed };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -2178,7 +2265,7 @@ function refreshOverviewSummary_(ss) {
   const statCol = columnLetter_(COL.Status);
 
   // Header
-  summary.getRange(1, 1, 1, 4).setValues([['Currency', 'Entries', 'Total (native)', 'Total (CAD)']]);
+  summary.getRange(1, 1, 1, 4).setValues([['Currency', 'Revenue rows', 'Revenue (native)', 'Revenue (CAD)']]);
   summary.getRange(1, 1, 1, 4)
     .setFontWeight('bold').setFontSize(11).setFontFamily('Inter')
     .setBackground('#0f172a').setFontColor('#ffffff')
@@ -2192,19 +2279,31 @@ function refreshOverviewSummary_(ss) {
   summary.setColumnWidth(4, 160);
 
   // One row per currency, generated as formulas so the sheet auto-updates
-  // when you edit data in Overview directly.
+  // when you edit data in Overview directly. Only income counts: book sales,
+  // customer-paid shipping and consignment sales — the rows Key numbers and
+  // Monthly (CAD) count. Since v56 the sheet also carries expenses and
+  // payments to artists, which are money going out, and consignment
+  // shipments/returns were never income, so each figure is a sum over the
+  // three income kinds rather than over every row.
+  const typeCol = columnLetter_(COL.Type);
+  const evCol = columnLetter_(COL['Event/Num']);
+  const bookCol = columnLetter_(COL.Book);
+  const incomeKinds = [
+    `${ovName}${typeCol}:${typeCol},"order"`,
+    `${ovName}${typeCol}:${typeCol},"shipping"`,
+    `${ovName}${typeCol}:${typeCol},"consignment",${ovName}${evCol}:${evCol},"Sale"`
+  ];
+  const live = `${ovName}${statCol}:${statCol},"<>VOID",${ovName}${bookCol}:${bookCol},"<>Connection check"`;
+  const incomeFormula = (c, valueCol) => '=' + incomeKinds.map(kind => valueCol
+    ? `SUMIFS(${ovName}${valueCol}:${valueCol},${ovName}${ccyCol}:${ccyCol},"${c}",${kind},${live})`
+    : `COUNTIFS(${ovName}${ccyCol}:${ccyCol},"${c}",${kind},${live})`).join('+');
   const ccyList = ['CAD', 'USD', 'EUR', 'GBP', 'AUD', 'JPY'];
-  const rows = ccyList.map(c => [
-    c,
-    `=COUNTIFS(${ovName}${ccyCol}:${ccyCol},"${c}",${ovName}${statCol}:${statCol},"<>VOID")`,
-    `=SUMIFS(${ovName}${totCol}:${totCol},${ovName}${ccyCol}:${ccyCol},"${c}",${ovName}${statCol}:${statCol},"<>VOID")`,
-    `=SUMIFS(${ovName}${cadCol}:${cadCol},${ovName}${ccyCol}:${ccyCol},"${c}",${ovName}${statCol}:${statCol},"<>VOID")`
-  ]);
+  const rows = ccyList.map(c => [c, incomeFormula(c), incomeFormula(c, totCol), incomeFormula(c, cadCol)]);
   summary.getRange(2, 1, rows.length, 4).setValues(rows);
 
   // Grand total in CAD
   const totalRow = rows.length + 2;
-  summary.getRange(totalRow, 1).setValue('TOTAL (CAD)').setFontWeight('bold');
+  summary.getRange(totalRow, 1).setValue('TOTAL REVENUE (CAD)').setFontWeight('bold');
   summary.getRange(totalRow, 4).setFormula(`=SUM(D2:D${rows.length + 1})`).setFontWeight('bold');
 
   // Formatting
@@ -2233,7 +2332,9 @@ function refreshOverviewSummary_(ss) {
     ['Entries (live)',   kpi.entries],
     ['Top book',         kpi.topBook || '—'],
     ['Top channel',      kpi.topChannel || '—'],
-    [`This month (${kpi.monthLabel})`, kpi.monthCAD]
+    [`This month (${kpi.monthLabel})`, kpi.monthCAD],
+    ['Expenses (CAD)',   kpi.expenseCAD],
+    ['Paid to artists (CAD)', kpi.payoutCAD]
   ];
   summary.getRange(2, 6, kpiRows.length, 2).setValues(kpiRows);
   summary.setColumnWidth(5, 24);   // slim gap between the two panels
@@ -2242,7 +2343,7 @@ function refreshOverviewSummary_(ss) {
   summary.getRange(2, 6, kpiRows.length, 1).setFontWeight('bold');
   summary.getRange(2, 7, kpiRows.length, 1).setHorizontalAlignment('right');
   // Rows: 2 Books sold · 3 Revenue · 4 Book sales · 5 Shipping · 6 Entries ·
-  // 7 Top book · 8 Top channel · 9 This month.
+  // 7 Top book · 8 Top channel · 9 This month · 10 Expenses · 11 Paid to artists.
   summary.getRange(2, 7).setNumberFormat('#,##0');                 // Books sold
   summary.getRange(6, 7).setNumberFormat('#,##0');                 // Entries
   summary.getRange(3, 7).setNumberFormat('"CA$"#,##0.00')          // Revenue
@@ -2251,6 +2352,8 @@ function refreshOverviewSummary_(ss) {
   summary.getRange(4, 6, 2, 2).setFontWeight('normal').setFontColor('#475569');
   summary.getRange(9, 7).setNumberFormat('"CA$"#,##0.00')          // This month
     .setFontColor('#064e3b').setFontWeight('bold').setBackground('#ecfdf5');
+  summary.getRange(10, 7, 2, 1).setNumberFormat('"CA$"#,##0.00')   // Expenses / paid to artists
+    .setFontColor('#991b1b');
   summary.getRange(1, 6, kpiRows.length + 1, 2)
     .setBorder(true, true, true, true, true, true, '#cbd5e1', SpreadsheetApp.BorderStyle.SOLID);
 
@@ -2266,6 +2369,7 @@ function computeOverviewKpis_(overview, tz) {
   const zone = tz || 'America/Toronto';
   const out = {
     unitsSold: 0, revenueCAD: 0, bookCAD: 0, shippingCAD: 0, entries: 0,
+    expenseCAD: 0, payoutCAD: 0,
     topBook: '', topChannel: '', monthCAD: 0,
     monthLabel: Utilities.formatDate(new Date(), zone, 'yyyy-MM')
   };
@@ -2289,6 +2393,9 @@ function computeOverviewKpis_(overview, tz) {
     // Revenue is real sales plus customer-paid shipping — the same rows the
     // Monthly (CAD) tab counts, so the two always agree. A consignment
     // shipment or return carrying a hand-typed amount is not income.
+    // Money going out (v56) is reported beside revenue, never inside it.
+    if (type === 'expense') { out.expenseCAD += cad; continue; }
+    if (type === 'payout') { out.payoutCAD += cad; continue; }
     if (type === 'shipping') out.shippingCAD += cad;
     else if (isSale) out.bookCAD += cad;
     else continue;
