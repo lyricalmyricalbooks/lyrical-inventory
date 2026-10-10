@@ -40,6 +40,8 @@ export const SHEET_ROW_KINDS = Object.freeze({
   ORDER: 'order',
   SHIPPING: 'shipping',
   CONSIGNMENT: 'consignment',
+  EXPENSE: 'expense',
+  PAYOUT: 'payout',
   CONTROL: 'control',
   BATCH: 'batch',
 });
@@ -49,6 +51,8 @@ const KIND_LABELS = Object.freeze({
   [SHEET_ROW_KINDS.ORDER]: 'Order',
   [SHEET_ROW_KINDS.SHIPPING]: 'Shipping',
   [SHEET_ROW_KINDS.CONSIGNMENT]: 'Consignment',
+  [SHEET_ROW_KINDS.EXPENSE]: 'Expense',
+  [SHEET_ROW_KINDS.PAYOUT]: 'Artist payment',
   [SHEET_ROW_KINDS.CONTROL]: 'Rebuild',
   [SHEET_ROW_KINDS.BATCH]: 'Batch',
 });
@@ -92,6 +96,8 @@ export function sheetRowKind(payload) {
   const type = text(payload.type).toLowerCase();
   if (type === 'shipping') return SHEET_ROW_KINDS.SHIPPING;
   if (type === 'consignment') return SHEET_ROW_KINDS.CONSIGNMENT;
+  if (type === 'expense') return SHEET_ROW_KINDS.EXPENSE;
+  if (type === 'payout') return SHEET_ROW_KINDS.PAYOUT;
   if (type === 'control') return SHEET_ROW_KINDS.CONTROL;
   if (type === 'batch') return SHEET_ROW_KINDS.BATCH;
   return SHEET_ROW_KINDS.ORDER;
@@ -126,6 +132,14 @@ export function sheetLogSummary(payload) {
     const event = firstText([payload.event, payload.type], 'Movement');
     const qty = firstText([payload.qty], '0');
     return `${store} · ${event} · ${qty}×`;
+  }
+
+  if (kind === SHEET_ROW_KINDS.EXPENSE || kind === SHEET_ROW_KINDS.PAYOUT) {
+    const what = firstText([payload.chan], kind === SHEET_ROW_KINDS.EXPENSE ? 'Expense' : 'Payment to artist');
+    if (isRemoval) return `${what} · remove row`;
+    const amount = firstText([payload.total]);
+    const cur = firstText([payload.currency]);
+    return amount ? `${what} · ${amount}${cur ? ' ' + cur : ''}` : what;
   }
 
   if (kind === SHEET_ROW_KINDS.SHIPPING) {

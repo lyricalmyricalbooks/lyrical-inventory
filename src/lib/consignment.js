@@ -229,9 +229,11 @@ export function reconcileConsignmentMirrors(s) {
 export function consignmentSyncPayload(book, e) {
   return {
     type: 'consignment', book: book.title,
-    date: e.date, store: e.storeName, event: e.type,
+    date: e.date, store: e.storeName || '', event: e.type,
     qty: e.qty, rate: e.rate, amountDue: e.amountDue || 0,
-    notes: e.notes || '', status: e.status || 'OK',
+    // An inventory write-off has no store; its reason ("water damaged") is
+    // what the sheet row needs to say.
+    notes: [e.reason, e.notes].filter(Boolean).join(' · '), status: e.status || 'OK',
     invoiceNum: e.invoiceNum || '',
     sheetsId: e.sheetsId,
     currency: getBookCurrencyCode(book)

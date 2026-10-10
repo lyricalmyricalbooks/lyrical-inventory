@@ -2601,15 +2601,18 @@
        closed the dialog one level too far out — ending #pw-app early and
        leaving every panel below (Tax Centre, POS, Shipping, Settings…) outside
        the app column, sliding under the sidebar. -->
-  <div class="modal-footer" style="justify-content:space-between;flex-wrap:wrap;">
-    <div style="display:flex; gap:8px; align-items:center;">
-      <button type="button" class="btn tag" onclick="openInventoryWriteOffModal()" style="color:var(--red); border-color:var(--border);" title="Document a Section 10 valuation or physical inventory disposal">📉 Adjust Inventory</button>
-      <div style="font-size:var(--text-xs); color:var(--text3);">* FX conversion rates applied automatically to non-CAD currencies.</div>
-    </div>
-    <div style="display:flex; gap:8px;">
+  <div style="font-size:var(--text-xs); color:var(--text3); margin-top:var(--space-2);">* FX conversion rates applied automatically to non-CAD currencies.</div>
+
+  <!-- One button group, so a phone keeps Close and Download in view and folds
+       Print and Adjust behind "More actions" instead of pinning five rows over
+       the book list. Adjust is last in reading order but sits on the left on a
+       wide screen, as it always has. -->
+  <div class="modal-footer">
+    <div class="iv-footer-actions" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; width:100%; justify-content:flex-end;">
       <button type="button" class="btn" onclick="attemptCloseModal('inventory-valuation-modal')">Close</button>
-      <button type="button" class="btn gold outline" onclick="printInventoryValuationReport()">🖨️ Print Report</button>
       <button type="button" class="btn gold" onclick="downloadInventoryValuationCSV()">📥 Download CSV / Excel</button>
+      <button type="button" class="btn gold outline" onclick="printInventoryValuationReport()">🖨️ Print Report</button>
+      <button type="button" class="btn tag iv-adjust-btn" onclick="openInventoryWriteOffModal()" style="color:var(--red); border-color:var(--border);" title="Document a Section 10 valuation or physical inventory disposal">📉 Adjust Inventory</button>
     </div>
   </div>
 </div></div>
@@ -4866,7 +4869,7 @@
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
             <div>
               <div style="font-weight:700;font-size:var(--text-base);color:var(--text2);">Sync all existing records</div>
-              <div style="font-size:var(--text-xs);color:var(--text3);margin-top:2px;">Populate your sheet with all historical data from every book.</div>
+              <div style="font-size:var(--text-xs);color:var(--text3);margin-top:2px;">Send every book's sales, consignment, expenses and artist payments, and clear out rows for anything no longer in the app.</div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
               <button class="btn ink sm" id="push-all-btn" onclick="pushAllToSheets()">Sync all data</button>

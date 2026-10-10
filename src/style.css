@@ -4145,6 +4145,9 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   line-height:1.45;
 }
 .inventory-adjustment-history strong{color:var(--text);white-space:nowrap;}
+/* Inventory valuation footer: Adjust stays on the left of a wide footer even
+   though it comes last in the markup (last is what a phone folds away). */
+.iv-footer-actions .iv-adjust-btn{order:-1;margin-right:auto;}
 @media (max-width:600px){
   .inventory-adjustment-modes{grid-template-columns:1fr;}
   .inventory-adjustment-history{flex-direction:column;gap:var(--space-1);}
@@ -20094,6 +20097,10 @@ button[onclick="refreshUmamiStats()"]:active {
   .tab-panel:not(#tab-history) .tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;}
   .tab-panel:not(#tab-history) .tbl th:first-child,
   .tab-panel:not(#tab-history) .tbl td:first-child{position:sticky;left:0;z-index:var(--z-base);background:var(--surface-page);box-shadow:1px 0 0 var(--border-subtle);}
+  /* The header row is dark ink with light text; the pinned first heading took
+     the page's pale background above, which made it invisible ("Channel",
+     "Store"…). It keeps the header's own ink. */
+  .tab-panel:not(#tab-history) .tbl thead th:first-child{background:var(--surface-inverse);}
 
   /* Sub-tabs (Tax Centre, settings): one swipeable row of pills. */
   .tab-panel .settings-sub-nav{

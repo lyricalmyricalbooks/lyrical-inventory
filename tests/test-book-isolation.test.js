@@ -19,14 +19,14 @@ describe('Test Book Sandbox Isolation & Google Sheets Protection', () => {
   });
 
   it('includes test book check in syncToSheets to prevent queuing test books to Google Sheets', () => {
-    const syncToSheetsMatch = mainContent.match(/function syncToSheets\(payload\)\s*\{([\s\S]+?)\n\}/);
+    const syncToSheetsMatch = mainContent.match(/function syncToSheets\(payload, opts = \{\}\)\s*\{([\s\S]+?)\n\}/);
     expect(syncToSheetsMatch).not.toBeNull();
     const syncFnBody = syncToSheetsMatch[1];
     expect(syncFnBody).toContain('isTestBookId');
   });
 
   it('includes test book filter in syncBatchToSheets', () => {
-    const syncBatchMatch = mainContent.match(/function syncBatchToSheets\(rows, label = 'Bulk sync'\)\s*\{([\s\S]+?)\n\}/);
+    const syncBatchMatch = mainContent.match(/function syncBatchToSheets\(rows, label = 'Bulk sync', opts = \{\}\)\s*\{([\s\S]+?)\n\}/);
     expect(syncBatchMatch).not.toBeNull();
     const batchFnBody = syncBatchMatch[1];
     expect(batchFnBody).toContain('isTestBookId');
@@ -36,7 +36,11 @@ describe('Test Book Sandbox Isolation & Google Sheets Protection', () => {
     const pushAllMatch = mainContent.match(/async function pushAllToSheets\(opts = \{\}\)\s*\{([\s\S]+?)\n\}/);
     expect(pushAllMatch).not.toBeNull();
     const pushAllBody = pushAllMatch[1];
-    expect(pushAllBody).toContain('isTestBook(book)');
+    // Every row comes from liveSheetRowsForBook, which refuses the practice book.
+    expect(pushAllBody).toContain('liveSheetRowsForBook(bid');
+    const rowsMatch = mainContent.match(/function liveSheetRowsForBook\(bid[^)]*\)\s*\{([\s\S]+?)\n\}/);
+    expect(rowsMatch).not.toBeNull();
+    expect(rowsMatch[1]).toContain('isTestBook(book) || isTestBookId(bid)');
   });
 
   it('excludes test books from calculateFinancials report calculation', () => {
