@@ -8873,9 +8873,9 @@ export function scheduleRender() {
 
 // ── Ready-to-send outbox ───────────────────────────────────────────────────
 
-function recordOrder(num, chan, qty, price, notes, payment = null, { date, enteredBy: enteredByOverride } = {}) {
+function recordOrder(num, chan, qty, price, notes, payment = null, { date, enteredBy: enteredByOverride, extra } = {}) {
   const enteredBy = enteredByOverride || (isAuthor() ? 'Artist' : 'Publisher');
-  writeOrderToLedger(activeBook, { num, chan, qty, price, notes, payment, enteredBy, date });
+  writeOrderToLedger(activeBook, { num, chan, qty, price, notes, payment, enteredBy, date, extra });
   renderHist(); updateDash();
 }
 
@@ -10799,20 +10799,44 @@ const _submissionsInFlight = new Set();
 // refuse to approve them a second time this session.
 const _approvedSubmissionKeys = new Set();
 
+// The ledger row an approved submission became carries its queue key, so
+// "already approved" survives a reload even when clearing the queue entry failed.
+const submissionRef = (type, subKey) => `${type}:${subKey}`;
+export function isSubmissionApproved(s, type, subKey) {
+  const ref = submissionRef(type, subKey);
+  const rows = type === 'expenses' ? (s.expenses || []) : (s.hist || []);
+  return rows.some(r => r && r.fromSubmission === ref);
+}
+
 window.approveSubmission = async function (type, subKey) {
   const queue = window.authorSubmissions[activeBook]?.[type] || {};
   if (!queue[subKey]) return;
   const flightKey = `${activeBook}:${type}:${subKey}`;
   if (_submissionsInFlight.has(flightKey)) return;
-  if (_approvedSubmissionKeys.has(flightKey)) { showToast('⚠ Already added to the ledger - it just could not be cleared from the queue. Reload and reject it.', 'warn'); return; }
+  // Normally the ledger row itself proves a prior approval (handled below, which also
+  // retries clearing the queue entry); this is only the fallback for a row we can't see.
+  if (_approvedSubmissionKeys.has(flightKey) && !isSubmissionApproved(getState(), type, subKey)) { showToast('⚠ Already added to the ledger - it just could not be cleared from the queue. Reload and reject it.', 'warn'); return; }
   _submissionsInFlight.add(flightKey);
   try {
     const raw = JSON.parse(queue[subKey].data);
     const s = getState();
 
+    if (isSubmissionApproved(s, type, subKey)) {
+      // Recorded on an earlier approval whose queue entry could not be removed.
+      // Never record it again; just try to clear the leftover entry.
+      _approvedSubmissionKeys.add(flightKey);
+      const cleared = await window._fbDeleteSubmission(activeBook, type, subKey) !== false;
+      showToast(cleared
+        ? '\u2713 Already in the ledger - removed the leftover from the pending list'
+        : '\u26a0 Already in the ledger, but it could not be cleared from the pending list. Do not approve it again.', cleared ? 'ok' : 'warn');
+      updateDash();
+      return;
+    }
+
     if (type === 'expenses') {
       if (!s.expenses) s.expenses = [];
 
+      raw.fromSubmission = submissionRef(type, subKey);
       s.expenses.unshift(raw);
       saveState(activeBook);
       if (await window._fbDeleteSubmission(activeBook, type, subKey) === false) {
@@ -10828,7 +10852,7 @@ window.approveSubmission = async function (type, subKey) {
     } else if (type === 'sales') {
       let pendingTransfer = false;
       if (isDirectToArtistSale(raw)) {
-        recordOrderPendingTransfer(raw.num, raw.chan, raw.qty, raw.price, raw.notes, raw.payment, raw.date);
+        recordOrderPendingTransfer(raw.num, raw.chan, raw.qty, raw.price, raw.notes, raw.payment, raw.date, submissionRef(type, subKey));
         pendingTransfer = true;
         const newest = getState().artistTransfers.at(-1);
         if (newest) {
@@ -10836,7 +10860,7 @@ window.approveSubmission = async function (type, subKey) {
           mintArtistTransferPayLink(bookId, newest.id, { quiet: true }).then(() => mintArtistTransferBundleLink(bookId));
         }
       } else {
-        recordOrder(raw.num, raw.chan, raw.qty, raw.price, raw.notes, raw.payment, { date: raw.date, enteredBy: 'Artist' });
+        recordOrder(raw.num, raw.chan, raw.qty, raw.price, raw.notes, raw.payment, { date: raw.date, enteredBy: 'Artist', extra: { fromSubmission: submissionRef(type, subKey) } });
       }
       if (await window._fbDeleteSubmission(activeBook, type, subKey) === false) {
         _approvedSubmissionKeys.add(flightKey);
@@ -10873,7 +10897,7 @@ window.rejectSubmission = async function (type, subKey) {
   }
 }
 
-function recordOrderPendingTransfer(num, chan, qty, price, notes, payment = null, date = null) {
+function recordOrderPendingTransfer(num, chan, qty, price, notes, payment = null, date = null, fromSubmission = null) {
   const s = getState(), book = getBook();
   const when = date || today();
   deductSaleFromStockBreakdown(s, qty, true);
@@ -10887,7 +10911,7 @@ function recordOrderPendingTransfer(num, chan, qty, price, notes, payment = null
   // Add to history with pending flag. directToArtist marks this as cash the
   // artist collected directly (these only ever come from direct-to-artist sales).
   const sheetsId = makeEventId();
-  s.hist.unshift({ num, chan, qty, price, after: s.stock, notes: updatedNotes, date: when, artistPending: true, directToArtist: true, payment, sheetsId, cur: bookCurrencyCode(book) });
+  s.hist.unshift({ ...(fromSubmission ? { fromSubmission } : {}), num, chan, qty, price, after: s.stock, notes: updatedNotes, date: when, artistPending: true, directToArtist: true, payment, sheetsId, cur: bookCurrencyCode(book) });
   // Add to artistTransfers queue (share sheetsId so receipt updates the same sheet row)
   s.artistTransfers.push({ id: Date.now(), num, chan, qty, price, total: qty * price, notes: updatedNotes, date: when, payment, sheetsId, cur: bookCurrencyCode(book) });
   recomputeAfters(s, book);
