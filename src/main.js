@@ -2180,11 +2180,25 @@ async function saveBookFromModal() {
   const isValid = validateFields([
     { id: 'nb-id', test: val => val.trim().length > 0, msg: 'Book ID is required' },
     { id: 'nb-title', test: val => val.trim().length > 0, msg: 'Title is required' },
-    { id: 'nb-payment-link', test: val => isValidPaymentLink(val.trim()), msg: 'Must be a valid URL or email address' }
+    { id: 'nb-payment-link', test: val => isValidPaymentLink(val.trim()), msg: 'Must be a valid URL or email address' },
+    // A blank or nonsense price/print run used to be saved silently as 40 / 100.
+    // A price of 0 is allowed (a free or giveaway title); a print run must be at
+    // least 1 because unit cost and break-even divide by it.
+    { id: 'nb-price', test: val => val.trim() !== '' && Number.isFinite(Number(val)) && Number(val) >= 0, msg: 'Enter a list price (0 for a free title)' },
+    { id: 'nb-max', test: val => /^\s*\d+\s*$/.test(val) && parseInt(val, 10) >= 1, msg: 'Print run must be a whole number of at least 1' }
   ]);
 
   if (!isValid) {
-    if ($('nb-payment-link').closest('.form-group').classList.contains('invalid')) {
+    const badPanel = ['nb-price', 'nb-max']
+      .map(fid => $(fid)?.closest('.form-group'))
+      .find(g => g && g.classList.contains('invalid'));
+    if (badPanel && !$('nb-payment-link').closest('.form-group').classList.contains('invalid')
+      && !$('nb-id').closest('.form-group').classList.contains('invalid')
+      && !$('nb-title').closest('.form-group').classList.contains('invalid')) {
+      const panelId = (badPanel.closest('[id^="book-panel-"]') || {}).id || '';
+      const tab = panelId.replace('book-panel-', '');
+      if (['general', 'sales', 'costs'].includes(tab)) switchBookModalTab(tab);
+    } else if ($('nb-payment-link').closest('.form-group').classList.contains('invalid')) {
       switchBookModalTab('costs');
     } else if ($('nb-id').closest('.form-group').classList.contains('invalid') || $('nb-title').closest('.form-group').classList.contains('invalid')) {
       switchBookModalTab('general');
@@ -2220,8 +2234,8 @@ async function saveBookFromModal() {
     title: $('nb-title').value.trim(),
     author: $('nb-author').value.trim(),
     isbn: $('nb-isbn').value.trim() || '—',
-    maxPrint: parseInt($('nb-max').value) || 100,
-    listPrice: parseFloat($('nb-price').value) || 40,
+    maxPrint: parseInt($('nb-max').value, 10),
+    listPrice: parseFloat($('nb-price').value),
     currency: $('nb-cur').value || '€',
     threshold: Number.isFinite(thresholdInput) && thresholdInput >= 0 ? thresholdInput : 10,
     productionCost: parseFloat($('nb-prod').value) || 0,
@@ -5473,7 +5487,7 @@ function renderAllBooksStrips(allBooksVisible) {
     for (let i = 0; i < s.stores.length; i++) {
       owed += s.stores[i].amountOwed || 0;
     }
-    const pct = Math.max(0, s.stock / book.maxPrint * 100);
+    const pct = Math.max(0, s.stock / (book.maxPrint || 1) * 100);
     const stockClass = s.stock <= book.threshold ? 'danger' : s.stock <= book.threshold * 2 ? 'warn' : 'gold';
     const cost = book.productionCost || 0;
     const recognizedRev = recognizedRevenueOf(s);
