@@ -19,18 +19,25 @@ export function campaignFooterHtml(replyTo) {
     + `${link} from this list.</div>`;
 }
 
-// Plain-text version of an HTML body. Uses the browser's parser (which never
-// runs scripts in a detached document) instead of a tag-stripping regex, then
-// drops any stray angle brackets so the plain part can't carry markup.
+// Plain-text version of an HTML body: drop everything between '<' and '>',
+// turning <br>, </p>, </div> and </li> into line breaks. A single pass over the
+// characters, so it never re-parses the body as HTML and leaves no partial tag
+// behind; any '<' left unclosed at the end is dropped with what follows it.
 function htmlToPlainText(html) {
-  let text = html;
-  if (typeof DOMParser !== 'undefined') {
-    const doc = new DOMParser().parseFromString(html, 'text/html');
-    doc.querySelectorAll('br').forEach(br => br.replaceWith('\n'));
-    doc.querySelectorAll('p,div,li').forEach(el => el.append('\n'));
-    text = doc.body ? doc.body.textContent || '' : '';
+  let out = '';
+  let tag = null;
+  for (const ch of html) {
+    if (tag === null) {
+      if (ch === '<') tag = '';
+      else if (ch !== '>') out += ch;
+    } else if (ch === '>') {
+      if (/^(br\b|\/(p|div|li)\b)/i.test(tag.trim())) out += '\n';
+      tag = null;
+    } else {
+      tag += ch;
+    }
   }
-  return text.replace(/[<>]/g, '');
+  return out;
 }
 
 // Returns { body, htmlBody } ready for sendSingleEmailViaBackend, with the
