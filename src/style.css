@@ -4019,6 +4019,17 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   letter-spacing: -0.01em;
 }
 
+/* When the Google Sheet last matched the app — one quiet line under the sync
+   controls; amber when the sheet may be missing records. */
+.sheets-last-sync {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--text3);
+}
+.sheets-last-sync:empty { display: none; }
+.sheets-last-sync.is-warn { color: var(--status-active); font-weight: 600; }
+
 /* MODALS */
 /* No backdrop-filter here, deliberately. A full-viewport blur behind a dialog
    is re-rasterised on EVERY frame that any content above it paints, so it was
