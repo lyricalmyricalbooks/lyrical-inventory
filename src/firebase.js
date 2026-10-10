@@ -583,11 +583,10 @@ window._fbDeleteBook = async (bookId) => {
       ALL_PARTS.forEach(name => batch.delete(doc(fs, 'books', bookId, 'data', name)));
       await batch.commit().catch(e => console.error('fbDeleteBook parts failed', e));
       for (const type of subTypes) {
-        const snap = await get(ref(db, `lyrical/submissions/${bookId}/${type}`)).catch(() => null);
-        if (snap && snap.exists()) {
-          await Promise.all(Object.keys(snap.val()).map(id =>
-            deleteDoc(doc(fs, 'submissions', bookId, type, id)).catch(() => {})
-          ));
+        // A Firestore book's submissions live in Firestore, so list them there.
+        const snap = await getDocs(collection(fs, 'submissions', bookId, type)).catch(() => null);
+        if (snap && !snap.empty) {
+          await Promise.all(snap.docs.map(d => deleteDoc(d.ref).catch(() => {})));
         }
       }
     }
