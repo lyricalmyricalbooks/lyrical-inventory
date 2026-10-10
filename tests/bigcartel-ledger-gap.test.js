@@ -15,6 +15,7 @@ import {
   findRecoveredOrderConflicts,
   pendingGaps,
   describeGapSummary,
+  splitGapByBook,
 } from '../src/lib/bigcartel-ledger-gap.js';
 
 const BOOKS = {
@@ -418,5 +419,45 @@ describe('setting an order aside', () => {
   it('survives a missing or empty result', () => {
     expect(pendingGaps(null)).toEqual([]);
     expect(pendingGaps({})).toEqual([]);
+  });
+});
+
+describe('discounted storefront orders count at what the customer paid', () => {
+  // Two copies of a $40 book with a $20 discount code: $60 merchandise + $12 shipping.
+  const discounted = findLedgerGaps(
+    [order('DISC-100001', { items: [{ product_name: 'The Hound', quantity: 2, price: '40.00' }], total: '72.00', tax_total: '0', shipping_total: '12.00' })],
+    [], { books: BOOKS },
+  ).missing[0];
+
+  it('prices each copy net of the discount', () => {
+    expect(discounted).toMatchObject({ qty: 2, unitPrice: 30, listUnitPrice: 40, listTotal: 80, merchandiseTotal: 60 });
+  });
+
+  it('records the discount on the ledger entry', () => {
+    const entry = buildBigCartelOrderEntry(discounted, { stockAfter: 10 });
+    expect(entry).toMatchObject({ price: 30, qty: 2, subtotal: 80, discountAmount: 20, merchandisePaid: 60, discountSource: 'storefront' });
+  });
+
+  it('leaves an undiscounted order at list price with no discount', () => {
+    const full = findLedgerGaps(
+      [order('FULL-100002', { items: [{ product_name: 'The Hound', quantity: 2, price: '40.00' }], total: '92.00', tax_total: '0', shipping_total: '12.00' })],
+      [], { books: BOOKS },
+    ).missing[0];
+    expect(full.unitPrice).toBe(40);
+    const entry = buildBigCartelOrderEntry(full, { stockAfter: 10 });
+    expect(entry).toMatchObject({ price: 40, subtotal: 80, discountAmount: 0, discountSource: '' });
+  });
+
+  it('shares a discount on a mixed order across the books by list value', () => {
+    const out = splitGapByBook({
+      merchandiseTotal: 58.25, // list 32.50 + 40.00 = 72.50, less $14.25
+      lines: [
+        { bookId: 'altrove', qty: 1, unitPrice: 32.5 },
+        { bookId: 'hound', qty: 1, unitPrice: 40 },
+      ],
+    });
+    const byBook = Object.fromEntries(out.parts.map(p => [p.bookId, p.price]));
+    expect(byBook.altrove).toBeCloseTo(26.11, 2);
+    expect(byBook.hound).toBeCloseTo(32.14, 2);
   });
 });
