@@ -439,6 +439,10 @@ async function _processQueue() {
         eventId: item.id,
         action: body && body.action,
         sentAt: new Date().toISOString(),
+        // More rows are waiting right behind this one: the sheet skips
+        // rebuilding its totals tabs, and the last write of the run does it
+        // once (v57; older scripts ignore it and refresh every time).
+        ...(moreWritesBehind(item) ? { deferSummary: true } : {}),
         payload: body
       }, destination, {
         simulate: !!item.simulated,
@@ -484,6 +488,17 @@ async function _processQueue() {
   }
 }
 
+// True when the next queued write goes to the same sheet and is ready to send
+// now, so it will refresh the sheet's totals itself. A tidy-up request only
+// refreshes when it removes something, so it never stands in for this one.
+function moreWritesBehind(item) {
+  const next = _sheetsQueue[1];
+  if (!next || next.simulated || item.simulated) return false;
+  if ((next.url || '') !== (item.url || '')) return false;
+  if (next.payload && next.payload.action === 'prune') return false;
+  return !next.nextTryAt || next.nextTryAt <= Date.now();
+}
+
 // Book one failed attempt against the head item, retiring it once it has had
 // its full allowance so a single poison row cannot block the queue forever.
 function _recordSheetsFailure(item, e) {
@@ -496,7 +511,10 @@ function _recordSheetsFailure(item, e) {
     addSheetsLog(item.book, item.type, `${item.summary} [gave up after ${MAX_SHEETS_RETRIES} tries · ${item.lastError}]`, 'err');
     _sheetsQueue.shift();
     persistSheetsQueue();
-    if (item.bulk) updateBulkProgress(item.count || 1);
+    if (item.bulk) {
+      _bulkFailed += item.count || 1;
+      updateBulkProgress(item.count || 1);
+    }
     _announceSheetsGiveUp();
     return;
   }
@@ -607,6 +625,7 @@ function syncBatchToSheets(rows, label = 'Bulk sync', opts = {}) {
 let _isBulkSync = false;
 let _bulkTotal = 0;
 let _bulkDone = 0;
+let _bulkFailed = 0;
 // One batch is one Apps Script execution: it scans every managed tab for
 // existing ids, deletes the rows it is replacing, appends the new ones and
 // re-sorts. At 200 rows that regularly ran past the point where the browser
@@ -930,6 +949,7 @@ async function pushAllToSheets(opts = {}) {
   const queue = control.concat(deletions, toSync);
   _bulkTotal = queue.length;
   _bulkDone = 0;
+  _bulkFailed = 0;
 
   if (_bulkTotal === 0) {
     showToast('No records found to sync', 'warn');
@@ -960,6 +980,54 @@ async function pushAllToSheets(opts = {}) {
   if (btn) btn.textContent = canBatch ? 'Syncing batches...' : 'Syncing...';
 }
 
+// ── A book renamed in the app ──────────────────────────────────────────────
+// Its old rows sat on a tab under the old title while new ones started a
+// second tab, so the sheet showed the book in two halves and a restore from
+// the sheet saw only the newer one. The sheet now renames the tab and the rows
+// (v57). An older script cannot, so it is told nothing and the toast says why.
+async function queueSheetsRename(from, to, bookColor) {
+  if (!realSheetsUrl() || !from || !to || from === to) return;
+  if (!(await sheetsSupports('renameBook'))) {
+    showToast('Renamed. To move this book\'s older rows in your Google Sheet to the new name, update the sheet script on the Google Sheet screen, then tap Sync all data.', 'warn', 8000);
+    return;
+  }
+  syncToSheets({ action: 'renamebook', type: 'control', book: to, from, to, bookColor: bookColor || '' });
+}
+
+// ── When the sheet last matched the app ────────────────────────────────────
+// Remembered on this device when a "Sync all data" finishes, so the Google
+// Sheet screen can say whether the sheet is known to be complete.
+const SHEETS_LAST_FULL_SYNC_KEY = 'lm-sheets-last-full-sync-v1';
+function rememberFullSync(total, failed) {
+  try {
+    localStorage.setItem(SHEETS_LAST_FULL_SYNC_KEY, JSON.stringify({ url: realSheetsUrl(), at: Date.now(), total, failed }));
+  } catch (_) { /* the line just stays as it was */ }
+  renderLastFullSync();
+}
+function readLastFullSync() {
+  try {
+    const v = JSON.parse(localStorage.getItem(SHEETS_LAST_FULL_SYNC_KEY) || 'null');
+    return v && v.url === realSheetsUrl() && Number.isFinite(v.at) ? v : null;
+  } catch (_) { return null; }
+}
+const _lastSyncFormat = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+function lastFullSyncText(last, waiting) {
+  const pending = waiting ? ` ${waiting} change${waiting === 1 ? ' is' : 's are'} still waiting to send.` : '';
+  if (!last) return `This device hasn't run Sync all data on this sheet yet, so older records may be missing from it.${pending}`;
+  const when = _lastSyncFormat.format(new Date(last.at));
+  if (last.failed) {
+    return `Last Sync all data: ${when} — ${last.failed} record${last.failed === 1 ? '' : 's'} didn't reach the sheet. Tap Sync all data to send them again.${pending}`;
+  }
+  return `Last Sync all data: ${when} — every record reached the sheet.${pending}`;
+}
+function renderLastFullSync() {
+  const el = $('sheets-last-sync');
+  if (!el) return;
+  const last = readLastFullSync();
+  el.textContent = lastFullSyncText(last, _sheetsQueue.length);
+  el.classList.toggle('is-warn', !last || !!last.failed);
+}
+
 function updateBulkProgress(done = 1) {
   if (!_isBulkSync) return;
   _bulkDone += done;
@@ -973,6 +1041,7 @@ function updateBulkProgress(done = 1) {
 
   if (_bulkDone >= _bulkTotal) {
     _isBulkSync = false;
+    rememberFullSync(_bulkTotal, _bulkFailed);
     if (btn) { btn.disabled = false; btn.textContent = 'Sync all data'; }
     if (stats) stats.textContent = `✓ Queue processed: ${_bulkTotal} records.`;
     showToast(`✓ Sheets queue processed: ${_bulkTotal} records.`);
@@ -993,6 +1062,7 @@ function addSheetsLog(book, type, summary, status) {
 }
 let _syncLogPage = 0;
 function renderSheetsLog() {
+  renderLastFullSync();
   const b = $('sheets-log-body');
   if (!b) return;
   if (!sheetsLog.length) {
@@ -1137,6 +1207,9 @@ async function verifyUrl() {
 export {
   _processQueue,
   _sheetsQueue,
+  lastFullSyncText,
+  queueSheetsRename,
+  renderLastFullSync,
   scheduleMoneyOutSheetSync,
   scheduleMoneyOutSheetSyncAll,
   syncMoneyOutRows,

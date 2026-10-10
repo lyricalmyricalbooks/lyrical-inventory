@@ -116,3 +116,26 @@ describe('sync log wording for the new rows', () => {
     expect(sheetLogSummary(pay)).toBe('E-transfer · 50 CAD');
   });
 });
+
+describe('titles that would share a Google Sheet tab', () => {
+  it('collide when they differ only by case or characters a tab name drops', async () => {
+    const { sheetTabKey } = await import('../src/lib/sheet-sync.js');
+    expect(sheetTabKey('Night Zine')).toBe(sheetTabKey('night zine'));
+    expect(sheetTabKey('Book: One')).toBe(sheetTabKey('Book One'));
+    expect(sheetTabKey('Night Zine')).not.toBe(sheetTabKey('Night Zine (2nd ed.)'));
+    expect(sheetTabKey('')).toBe('overview');
+  });
+
+  it('the book form refuses a second book with the same title', async () => {
+    const { appSource } = await import('./helpers/extract-decl.js');
+    const save = appSource.match(/async function saveBookFromModal\(\)[\s\S]+?\n\}/)[0];
+    expect(save).toContain('sheetTabKey(b.title) === titleKey');
+    expect(save.indexOf('titleTwin')).toBeLessThan(save.indexOf('BOOKS[id] = book;'));
+    expect(save).toContain('queueSheetsRename(previousTitle, book.title');
+  });
+
+  it('a rename reads as one in the sync log', () => {
+    expect(sheetLogLabel({ action: 'renamebook', type: 'control' })).toBe('Rename');
+    expect(sheetLogSummary({ action: 'renamebook', type: 'control', from: 'Old', to: 'New' })).toBe('“Old” → “New”');
+  });
+});

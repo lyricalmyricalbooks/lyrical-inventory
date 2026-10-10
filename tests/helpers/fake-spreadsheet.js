@@ -29,12 +29,15 @@ function chainable(target) {
 }
 
 const ISO_DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
+// Date cells are created with the script's own Date, as they would be in Apps
+// Script; a Date from this file's realm would fail `instanceof Date` inside it.
+let ScriptDate = Date;
 
 // Sheets turns a typed "2026-09-01" into a real date cell; so does setValues.
 function cellValue(v) {
   if (typeof v === 'string') {
     const m = v.match(ISO_DAY);
-    if (m) return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+    if (m) return new ScriptDate(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
   }
   return v === undefined || v === null ? '' : v;
 }
@@ -49,6 +52,7 @@ function createSheet(name) {
     frozenRows: 0,
     tabColor: null,
     getName: () => sheet.name,
+    setName(n) { sheet.name = n; return sheet.api; },
     getLastRow() {
       for (let i = sheet.rows.length - 1; i >= 0; i--) {
         if ((sheet.rows[i] || []).some(v => !isBlank(v))) return i + 1;
@@ -101,7 +105,7 @@ function createSheet(name) {
       sheet.rows[at] = values.map(cellValue);
       return sheet.api;
     },
-    clear() { sheet.rows = []; return sheet.api; },
+    clear() { sheet.rows = []; sheet.clearCalls = (sheet.clearCalls || 0) + 1; return sheet.api; },
     getProtections: () => [],
     getConditionalFormatRules: () => [],
   };
@@ -234,6 +238,7 @@ export function loadAppsScript({ ss = createFakeSpreadsheet(), source } = {}) {
     },
   };
   vm.createContext(ctx);
+  ScriptDate = vm.runInContext('Date', ctx);
   vm.runInContext(`${code}\n;this.__gs = { HEADERS, COL };`, ctx, { filename: 'Code.gs' });
   ctx.requirePublisher_ = () => ({ uid: 'publisher', email: 'lyricalmyricalbooks@gmail.com' });
   ctx.verifyFirebaseCaller_ = ctx.requirePublisher_;

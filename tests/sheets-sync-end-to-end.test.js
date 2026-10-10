@@ -19,7 +19,7 @@ const app = vi.hoisted(() => ({ BOOKS: {}, states: {}, unsent: new Set() }));
 vi.mock('../src/main.js', () => ({
   $: () => null,
   BOOKS: app.BOOKS,
-  EXPECTED_SCRIPT_VERSION: 'v56',
+  EXPECTED_SCRIPT_VERSION: 'v57',
   activeBook: 'zine',
   bookInSyncWithCloud: (id) => !app.unsent.has(id),
   checkSheetsVersion: () => {},
@@ -282,9 +282,9 @@ describe('expenses and artist payments reach the sheet on their own', () => {
 });
 
 describe('the sheet itself', () => {
-  it('advertises v56 and the new abilities', () => {
+  it('advertises v57 and the sync abilities', () => {
     const caps = gs.get({});
-    expect(caps.scriptVersion).toBe('v56');
+    expect(caps.scriptVersion).toBe('v57');
     expect(caps.capabilities.pruneOrphans).toBe(true);
     expect(caps.capabilities.expenseRows).toBe(true);
   });
@@ -374,3 +374,103 @@ describe('restore from the sheet', () => {
   });
 });
 
+
+describe('v57: duplicates, renames, speed and the last-sync line', () => {
+  const order = (over = {}) => ({ action: 'add', type: 'order', book: 'Night Zine', date: '2026-09-01', num: '#1001', chan: 'Website', qty: 1, price: 30, total: 30, currency: 'CAD', sheetsId: 'evt-s1', ...over });
+
+  it('Sync all data removes id-less copies an older sync left behind, and keeps hand-typed rows', async () => {
+    app.states.zine.hist.push(sale());
+    await bridge.pushAllToSheets({ skipConfirm: true });
+    await drainQueue();
+    // Two copies of #1001 written before ids existed, plus a hand-typed row.
+    const tab = gs.ss.raw('Night Zine');
+    const copy = [...tab.rows[1]];
+    copy[0] = '';
+    tab.appendRow(copy);
+    tab.appendRow(copy);
+    gs.ss.raw('Overview').appendRow(copy);
+    tab.appendRow(['', '2026-09-01', 'Night Zine', 'order', 'HAND-1', 'Fair', 1, 'CAD', 30, 30, 30, 'OK', '', '']);
+
+    await bridge.pushAllToSheets({ skipConfirm: true });
+    await drainQueue();
+    expect(gs.ss.dataRows('Night Zine').map(r => r[0] || r[4]).sort()).toEqual(['HAND-1', 'evt-s1']);
+    expect(gs.ss.dataRows('Overview').map(r => r[0] || r[4]).sort()).toEqual(['evt-s1']);
+  });
+
+  it('renaming a book moves its tab and relabels its rows', async () => {
+    gs.post({ eventId: 'b', action: 'batch', payload: { action: 'batch', rows: [order(), order({ sheetsId: 'evt-s2', num: '#1002' })] } });
+    await bridge.queueSheetsRename('Night Zine', 'Night Zine (2nd ed.)', '#aa3344');
+    await drainQueue();
+    expect(gs.ss.raw('Night Zine')).toBeNull();
+    const renamed = gs.ss.dataRows('Night Zine (2nd ed.)');
+    expect(renamed.map(r => r[gs.COL.Book - 1])).toEqual(['Night Zine (2nd ed.)', 'Night Zine (2nd ed.)']);
+    expect(gs.ss.dataRows('Overview').every(r => r[gs.COL.Book - 1] === 'Night Zine (2nd ed.)')).toBe(true);
+    expect(gs.ss.raw('Night Zine (2nd ed.)').tabColor).toBe('#aa3344');
+    // A restore under the new title finds the whole history.
+    expect(gs.get({ action: 'getBookData', book: 'Night Zine (2nd ed.)' }).rows).toHaveLength(2);
+  });
+
+  it('a rename onto a title that already has a tab joins the two', () => {
+    gs.post({ eventId: 'a', action: 'add', payload: order() });
+    gs.post({ eventId: 'b', action: 'add', payload: order({ book: 'Day Zine', sheetsId: 'evt-d1', date: '2026-08-01' }) });
+    const res = gs.post({ eventId: 'r', action: 'renamebook', payload: { action: 'renamebook', from: 'Night Zine', to: 'Day Zine' } });
+    expect(res).toMatchObject({ ok: true, rows: 2, tab: true });
+    expect(gs.ss.raw('Night Zine')).toBeNull();
+    expect(ids('Day Zine')).toEqual(['evt-d1', 'evt-s1']);
+  });
+
+  it('an older script is not sent a rename it would mistake for a sale', async () => {
+    deployment = (caps) => { const c = { ...caps }; delete c.renameBook; return c; };
+    gs.post({ eventId: 'a', action: 'add', payload: order() });
+    await bridge.queueSheetsRename('Night Zine', 'New Title');
+    expect(bridge._sheetsQueue).toHaveLength(0);
+  });
+
+  it('lays out the summary once, then only updates its numbers', () => {
+    gs.post({ eventId: 'a', action: 'add', payload: order() });
+    const summary = gs.ss.raw('__Summary');
+    const clearsAfterFirst = summary.clearCalls || 0;
+    gs.post({ eventId: 'b', action: 'add', payload: order({ sheetsId: 'evt-s2', num: '#1002', total: 20, price: 20 }) });
+    gs.post({ eventId: 'c', action: 'add', payload: order({ sheetsId: 'evt-s3', num: '#1003', total: 5, price: 5 }) });
+    expect(summary.clearCalls || 0).toBe(clearsAfterFirst);
+    const revenue = summary.rows.find(r => r && r[5] === 'Revenue (CAD)');
+    expect(revenue[6]).toBe(55);
+    const monthly = gs.ss.raw('Monthly (CAD)');
+    expect(monthly.rows[1][0]).toBe('2026-09');
+    expect(monthly.rows[1][1]).toBe(55);
+  });
+
+  it('a write sent with more queued behind it leaves the totals to the last one', () => {
+    gs.post({ eventId: 'a', action: 'add', payload: order() });
+    const revenue = () => gs.ss.raw('__Summary').rows.find(r => r && r[5] === 'Revenue (CAD)')[6];
+    const res = gs.post({ eventId: 'b', action: 'add', deferSummary: true, payload: order({ sheetsId: 'evt-s2', num: '#1002' }) });
+    expect(res.summaryDeferred).toBe(true);
+    expect(revenue()).toBe(30);
+    gs.post({ eventId: 'c', action: 'add', payload: order({ sheetsId: 'evt-s3', num: '#1003' }) });
+    expect(revenue()).toBe(90);
+  });
+
+  it('the app marks a write as deferrable only while another waits behind it', async () => {
+    for (const n of [1, 2, 3]) bridge.syncToSheets(order({ sheetsId: 'evt-q' + n, num: '#' + n }));
+    await drainQueue();
+    const posts = globalThis.fetch.mock.calls
+      .filter(([, init]) => init && init.method === 'POST')
+      .map(([, init]) => JSON.parse(init.body));
+    // The first sale goes out alone, before the next two are queued; the second
+    // has the third behind it; the third is last and refreshes the totals.
+    expect(posts.map(p => !!p.deferSummary)).toEqual([false, true, false]);
+    expect(gs.ss.raw('__Summary').rows.find(r => r && r[5] === 'Revenue (CAD)')[6]).toBe(90);
+  });
+
+  it('remembers when a Sync all data finished and whether everything arrived', async () => {
+    app.states.zine.hist.push(sale());
+    expect(bridge.lastFullSyncText(null, 0)).toMatch(/hasn't run Sync all data/);
+    await bridge.pushAllToSheets({ skipConfirm: true });
+    await drainQueue();
+    const saved = JSON.parse(localStorage.getItem('lm-sheets-last-full-sync-v1'));
+    expect(saved).toMatchObject({ url: SHEET_URL, total: 1, failed: 0 });
+    expect(bridge.lastFullSyncText(saved, 0)).toMatch(/every record reached the sheet\.$/);
+    expect(bridge.lastFullSyncText({ ...saved, failed: 2 }, 3))
+      .toMatch(/2 records didn't reach the sheet\. Tap Sync all data to send them again\. 3 changes are still waiting to send\.$/);
+  });
+});
