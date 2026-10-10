@@ -2183,6 +2183,19 @@ let _gmailSelectedIds = new Set();
 let _directGmailEmailsFetched = [];
 let _directGmailSearchMeta = null;
 let _directGmailSelectedIds = new Set();
+
+// toLocaleDateString with options builds a fresh Intl.DateTimeFormat on every
+// call, and both Gmail lists run it once per email on every re-render (each
+// search, and each "Select all" in the archive list), so build the two
+// formatters once. format() throws on an invalid date where
+// toLocaleDateString returned "Invalid Date", so keep that output for an
+// unparseable email date.
+const GMAIL_DATE_FMT = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: '2-digit' });
+const DIRECT_GMAIL_DATE_FMT = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+function formatEmailDate(formatter, value) {
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? 'Invalid Date' : formatter.format(d);
+}
 // Receipts pushed in by the Gmail add-on (Firestore `emailReceiptInbox`).
 let _emailInboxItems = [];
 let _emailInboxSeen = null; // Set of seen ids; null until the first snapshot.
@@ -2963,7 +2976,7 @@ function renderGmailEmailsList() {
   // one truncated line each. A card lets the action size itself and gives the
   // text two lines to breathe.
   const rowsHtml = _gmailEmailsFetched.map((email) => {
-    const dateStr = new Date(email.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' });
+    const dateStr = formatEmailDate(GMAIL_DATE_FMT, email.date);
     const attNames = Array.isArray(email.attachmentNames) ? email.attachmentNames : [];
     const attachmentBadge = email.hasAttachments
       ? `<span class="pill gray email-card-att" title="${esc(attNames.join(', ')) || 'Attachments'}">📎 ${email.attachmentCount}</span>`
@@ -3198,7 +3211,7 @@ function renderDirectGmailEmailsList() {
   const allSelected = _directGmailEmailsFetched.every(email => _directGmailSelectedIds.has(email.id));
   const rows = _directGmailEmailsFetched.map(email => {
     const selected = _directGmailSelectedIds.has(email.id);
-    const date = email.date ? new Date(email.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'Date unavailable';
+    const date = email.date ? formatEmailDate(DIRECT_GMAIL_DATE_FMT, email.date) : 'Date unavailable';
     const subject = email.subject || '(No subject)';
     return `<li class="email-card${selected ? ' selected' : ''}" id="direct-email-row-${email.id}">
       <div class="email-card-main">
