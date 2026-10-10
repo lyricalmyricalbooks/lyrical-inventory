@@ -4645,7 +4645,10 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   /* Section flex resets */
   .row-between,.store-head,.order-row{flex-direction:column;align-items:flex-start;gap:10px;}
   .store-actions{width:100%;}
-  .store-actions .btn{flex:1;}
+  /* 1 1 auto, not 1: a zero starting width never triggers the wrap, so all six
+     buttons crushed onto one line. Starting from the label's own width lets
+     them wrap onto a second row and then share each row's space. */
+  .store-actions .btn{flex:1 1 auto;justify-content:center;}
 
   /* Settings ▸ Book Catalog: the title/ID/price group and the Edit/Remove
      pair used to share one row with no stacking rule at all, so on a phone
@@ -4654,7 +4657,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
      — usually Remove. Same fix as .store-head/.store-actions above. */
   .catalog-card{flex-direction:column;align-items:stretch;gap:var(--space-3);}
   .catalog-actions{width:100%;}
-  .catalog-actions .btn{flex:1;}
+  .catalog-actions .btn{flex:1 1 auto;justify-content:center;}
 
   /* POS */
   .pos-layout{grid-template-columns:1fr !important;gap:.75rem !important;}
@@ -4683,7 +4686,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   .modal:not(:has(.modal-footer)){padding-bottom:var(--space-4);}
   .modal-title{font-size:20px;padding:var(--space-4) 0 var(--space-3);margin-bottom:var(--space-4);}
   .modal-footer{position:sticky;bottom:0;background:var(--surface-page);padding:var(--space-3) 0 var(--space-4);flex-wrap:wrap;}
-  .modal-footer .btn{flex:1;}
+  .modal-footer .btn{flex:1 1 auto;justify-content:center;}
   /* On a phone the buttons already fill the row, so the unsaved flag takes its
      own line above them rather than squeezing Cancel and Save narrower. */
   .modal-footer .save-indicator{flex-basis:100%;justify-content:center;margin-right:0;}
@@ -6115,7 +6118,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .order-actions{display:flex;gap:.45rem;align-items:center;}
 .order-done{font-size:var(--text-xs);color:var(--text3);}
 .orders-hidden-note{text-align:center;font-size:var(--text-xs);color:var(--text3);padding:12px 0;}
-@media(max-width:760px){.web-orders-hero{align-items:stretch;flex-direction:column;padding:1.2rem;}.web-orders-actions{justify-content:stretch;}.web-orders-actions .btn{flex:1;justify-content:center;}.web-orders-status{grid-template-columns:1fr;}.order-row{align-items:flex-start;flex-direction:column;}.order-actions{width:100%;}.order-actions .btn{flex:1;justify-content:center;}.shipping-reconciliation-row{grid-template-columns:1fr;}.shipping-reconciliation-row .btn{min-height:44px;justify-content:center;}}
+@media(max-width:760px){.web-orders-hero{align-items:stretch;flex-direction:column;padding:1.2rem;}.web-orders-actions{justify-content:stretch;}.web-orders-actions .btn{flex:1 1 auto;justify-content:center;}.web-orders-status{grid-template-columns:1fr;}.order-row{align-items:flex-start;flex-direction:column;}.order-actions{width:100%;}.order-actions .btn{flex:1 1 auto;justify-content:center;}.shipping-reconciliation-row{grid-template-columns:1fr;}.shipping-reconciliation-row .btn{min-height:44px;justify-content:center;}}
 
 /* ── Section heads on the "All books" landing screen ──────────────────────
    The home screen used to run: a 9px uppercase micro-label + a list of book
@@ -16324,7 +16327,7 @@ button[onclick="refreshUmamiStats()"]:active {
   .fk-preset-btn{width:100%;justify-content:center;}
   .fk-list-head .fk-search-input{flex-basis:100%;}
   .fk-list-actions{flex:1;}
-  .fk-list-actions .btn{flex:1;justify-content:center;}
+  .fk-list-actions .btn{flex:1 1 auto;justify-content:center;}
   .fk-preview{grid-template-columns:minmax(0,1fr);}
   .fk-sheets{display:none;}
 }
@@ -17578,7 +17581,7 @@ button[onclick="refreshUmamiStats()"]:active {
 @container postage-match (max-width: 900px) {
   .postage-match-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .postage-match-actions { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; }
-  .postage-match-actions .btn { flex: 1; }
+  .postage-match-actions .btn { flex: 1 1 auto; justify-content: center; }
 }
 
 @container postage-match (max-width: 560px) {
@@ -18323,7 +18326,7 @@ button[onclick="refreshUmamiStats()"]:active {
   .bc-gap-decision,
   .bc-gap-head { flex-direction: column; align-items: stretch; }
   .bc-gap-decision { justify-content: stretch; }
-  .bc-gap-actions .btn { flex: 1; justify-content: center; }
+  .bc-gap-actions .btn { flex: 1 1 auto; justify-content: center; }
   .bc-gap-strip .btn { margin-left: 0; width: 100%; justify-content: center; }
 }
 
@@ -19787,7 +19790,13 @@ button[onclick="refreshUmamiStats()"]:active {
   .pub-shell .hs-val{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 
   .pub-shell .app{padding-bottom:calc(88px + env(safe-area-inset-bottom));}
-  .pub-shell .tab-panel{min-width:0;overflow-wrap:anywhere;}
+  /* break-word, not anywhere. Both stop a long email or link from pushing the
+     page sideways, but "anywhere" is inherited by every label on the page and
+     also lets a label's minimum width shrink to a single letter — so filter
+     chips and button rows got squeezed until words were spelt down the screen
+     ("SETTL/ED", "SE/ND/BO/OK/S"). break-word only splits a word that would
+     otherwise overflow. */
+  .pub-shell .tab-panel{min-width:0;overflow-wrap:break-word;}
   .pub-shell .more-sheet-body .pub-nav{grid-template-columns:repeat(2,minmax(0,1fr));}
   .pub-shell .more-sheet-body .snav{min-height:68px;}
 
