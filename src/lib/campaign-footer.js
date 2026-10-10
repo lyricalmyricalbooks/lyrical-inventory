@@ -19,6 +19,20 @@ export function campaignFooterHtml(replyTo) {
     + `${link} from this list.</div>`;
 }
 
+// Plain-text version of an HTML body. Uses the browser's parser (which never
+// runs scripts in a detached document) instead of a tag-stripping regex, then
+// drops any stray angle brackets so the plain part can't carry markup.
+function htmlToPlainText(html) {
+  let text = html;
+  if (typeof DOMParser !== 'undefined') {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    doc.querySelectorAll('br').forEach(br => br.replaceWith('\n'));
+    doc.querySelectorAll('p,div,li').forEach(el => el.append('\n'));
+    text = doc.body ? doc.body.textContent || '' : '';
+  }
+  return text.replace(/[<>]/g, '');
+}
+
 // Returns { body, htmlBody } ready for sendSingleEmailViaBackend, with the
 // footer appended to both the plain and HTML versions. `toHtml` converts the
 // authored body (plain/markdown) to HTML.
@@ -26,11 +40,7 @@ export function withCampaignFooter(body, replyTo, toHtml) {
   const raw = String(body || '');
   const isHtml = raw.includes('<');
   let plain = raw;
-  if (isHtml) {
-    let prev;
-    do { prev = plain; plain = plain.replace(/<[^>]*>/g, ''); } while (plain !== prev);
-    plain = plain.replace(/[<>]/g, '');
-  }
+  if (isHtml) plain = htmlToPlainText(raw);
   return {
     body: `${plain}\n\n--\n${campaignFooterText(replyTo)}`,
     htmlBody: (isHtml ? raw : toHtml(raw)) + campaignFooterHtml(replyTo),
