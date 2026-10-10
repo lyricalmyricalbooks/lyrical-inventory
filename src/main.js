@@ -18248,6 +18248,18 @@ function calculateArtistEarnings(bookId) {
 }
 
 // ── FINANCIAL CENTER LOGIC
+/**
+ * A foreign-currency expense with no CAD value yet (logged offline, or saved
+ * before a rate could be found). Its raw foreign amount must never be added to
+ * CAD totals as if it were dollars; it counts 0 until healExpenseRates fills in
+ * its baseAmount, and the screens/exports say so.
+ */
+export function isExpenseAwaitingRate(e) {
+  if (!e) return false;
+  const cur = String(e.currency || e.origCurrency || 'CAD').toUpperCase();
+  return cur !== 'CAD' && !(e.baseAmount || e.amountCAD) && (parseFloat(e.amount) || 0) > 0;
+}
+
 export function calculateFinancials(year) {
   const result = {
     revenue: 0,
@@ -18257,13 +18269,18 @@ export function calculateFinancials(year) {
     profit: 0,
     bookStats: [],
     expCats: {},
-    missingReceiptsCount: 0
+    missingReceiptsCount: 0,
+    fxWaitingCount: 0
   };
 
   const yearStr = String(year);
 
-  // Helper for consistent amount extraction
-  const getAmt = (e) => e.baseAmount || e.amountCAD || e.amount || 0;
+  // Helper for consistent amount extraction. A foreign expense still waiting for
+  // its exchange rate counts 0 (and is tallied) rather than 1:1.
+  const getAmt = (e) => {
+    if (isExpenseAwaitingRate(e)) { result.fxWaitingCount++; return 0; }
+    return e.baseAmount || e.amountCAD || e.amount || 0;
+  };
 
   // 1. Process Book-specific data
   BOOK_LIST.forEach(book => {
@@ -23202,10 +23219,11 @@ window.downloadFullTaxSeasonExport = function () {
   // Track books exported with no saved CAD rate (fell back to 1.0 — a silently
   // wrong tax figure). Keyed by book id so a book is listed at most once.
   const rateWarnings = new Map();
+  // Foreign expenses still waiting for a CAD value count 0 here (never 1:1);
+  // each is counted once in the notice so the totals aren't mistaken for final.
+  const waitingExpenses = new Set();
   const getAmt = (e) => {
-    // A foreign-currency expense saved with no CAD amount is exported in its own currency: flag it.
-    const cur = String(e.currency || e.origCurrency || 'CAD').toUpperCase();
-    if (cur !== 'CAD' && !(e.baseAmount || e.amountCAD) && (parseFloat(e.amount) || 0) > 0) rateWarnings.set(`expense-${cur}`, { title: 'Expenses', cur });
+    if (isExpenseAwaitingRate(e)) { waitingExpenses.add(e); return 0; }
     return parseFloat(e.baseAmount || e.amountCAD || e.amount || 0);
   };
   const flagRateIfMissing = (book, cur, rawRate, hasAmount) => {
@@ -23347,8 +23365,18 @@ window.downloadFullTaxSeasonExport = function () {
     rateWarnings.forEach(w => { csv += `${esc(w.title)},${esc(w.cur)},1.00\n`; });
   }
 
+  if (waitingExpenses.size) {
+    const n = waitingExpenses.size;
+    csv += '\n--- ⚠ EXPENSES WAITING FOR AN EXCHANGE RATE ---\n';
+    csv += `${esc(`${n} expense${n === 1 ? ' is' : 's are'} still waiting for an exchange rate — counted as 0.00 CAD above, so the expense totals are NOT final. Open the Tax Centre while online to fill them in, then re-export.`)}\n`;
+  }
+
   downloadCsv('﻿' + csv, `Lyrical_Tax_Season_${isAllTime ? 'AllTime' : year}_Export.csv`);
 
+  if (waitingExpenses.size) {
+    const n = waitingExpenses.size;
+    showToast(`⚠ ${n} expense${n === 1 ? ' is' : 's are'} still waiting for an exchange rate — totals not final.`, 'warn', 7000);
+  }
   if (rateWarnings.size) {
     const names = Array.from(rateWarnings.values()).map(w => `${w.title} (${w.cur})`).join(', ');
     showToast(`⚠ Exported, but ${rateWarnings.size} book${rateWarnings.size === 1 ? '' : 's'} had no CAD rate — shown unconverted: ${names}. Refresh FX rates and re-export.`, 'warn', 7000);
