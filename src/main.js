@@ -22773,7 +22773,11 @@ function _section10RecordsForBook(bookId) {
   return (TAX_CENTER.businessExpenses || [])
     .filter(entry => entry?.inventoryAdjustment?.type === 'section10' &&
       entry.inventoryAdjustment.bookId === bookId && entry.date)
-    .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    .sort((a, b) => {
+      const da = String(a.date);
+      const db = String(b.date);
+      return db < da ? -1 : (db > da ? 1 : 0);
+    });
 }
 
 function _priorSection10WriteDown(bookId, date) {
@@ -22982,7 +22986,11 @@ function openInventoryValuationModal() {
   if (historyEl) {
     const records = (TAX_CENTER.businessExpenses || [])
       .filter(entry => entry.inventoryAdjustment)
-      .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+      .sort((a, b) => {
+        const da = String(a.date || '');
+        const db = String(b.date || '');
+        return db < da ? -1 : (db > da ? 1 : 0);
+      });
     if (!records.length) {
       historyEl.innerHTML = '<strong>No valuation adjustments recorded.</strong><span>Use “Adjust Inventory” to document a Section 10 year-end value or a physical disposal.</span>';
     } else {
@@ -25790,7 +25798,11 @@ function invoicesChaseable() {
       out.push({ bookId, inv });
     }
   }
-  out.sort((a, b) => String(a.inv.dueDate || '').localeCompare(String(b.inv.dueDate || '')));
+  out.sort((a, b) => {
+    const da = String(a.inv.dueDate || '');
+    const db = String(b.inv.dueDate || '');
+    return da < db ? -1 : (da > db ? 1 : 0);
+  });
   return out;
 }
 
@@ -25801,7 +25813,11 @@ function invoicesAwaitingReminder(days, max = 0) {
     const due = dueForReminder((states[bookId] || {}).invoices || [], { today: today(), days, max: 0 });
     for (const inv of due) out.push({ bookId, inv });
   }
-  out.sort((a, b) => String(a.inv.dueDate || '').localeCompare(String(b.inv.dueDate || '')));
+  out.sort((a, b) => {
+    const da = String(a.inv.dueDate || '');
+    const db = String(b.inv.dueDate || '');
+    return da < db ? -1 : (da > db ? 1 : 0);
+  });
   return max > 0 ? out.slice(0, max) : out;
 }
 
@@ -25937,7 +25953,11 @@ function invoicesDueTomorrow(days) {
       out.push({ bookId, inv });
     }
   }
-  out.sort((a, b) => String(a.inv.dueDate || '').localeCompare(String(b.inv.dueDate || '')));
+  out.sort((a, b) => {
+    const da = String(a.inv.dueDate || '');
+    const db = String(b.inv.dueDate || '');
+    return da < db ? -1 : (da > db ? 1 : 0);
+  });
   return out;
 }
 
