@@ -67,6 +67,13 @@ const MAIN_IMPORT_BUDGET = {
   // data. From main.js it needs only the DOM lookup, the role check, the toast,
   // and the call that repaints the landing page after something is filed.
   'review-inbox.js': 4,
+  // Set at creation. The website link writes website orders into the ledger
+  // through the same five calls a hand-entered sale and a void use
+  // (writeOrderToLedger, voidHistEntry, unvoidHistEntry, recomputeAfters,
+  // syncHistRowToSheets), saves through saveState, reads the books, states, the
+  // Tax Centre postage and dated FX rates (with the fetch that fills them), and
+  // repaints with scheduleRender — plus $ / showToast.
+  'website-link.js': 14,
   // Set at extraction: the practice book's fake spreadsheet reads which book is
   // open, whether it is the test book, and the real sheet's two URLs (for the
   // cards it hides and shows), plus the usual $ / showToast.
@@ -210,6 +217,10 @@ const MIN_EXPORTS = {
   // three handlers its card needs. Small, but a whole feature with no other
   // home — it only ever ran for the test book.
   'sheets-simulator.js': 5,
+  // Written as a feature module from the start, like intel.js: start it,
+  // schedule and run a publish, run an import, paint its card, and the two
+  // answers other screens ask of it (is the link on, where is this parcel).
+  'website-link.js': 7,
 };
 
 describe('feature modules are the only home of what they own', () => {

@@ -14,6 +14,7 @@ import { addressValidationBlocker } from './address-verification.js';
 import { escapeHtml } from './html.js';
 import { normalizeShippingOrderNumber } from './shipping-reconciliation.js';
 import { withAutoLocalPickup } from './local-pickup.js';
+import { isWebsiteFulfilled } from './website-link.js';
 
 /** How far back an unshipped order is still worth offering. */
 export const BATCH_LOOKBACK_DAYS = 60;
@@ -21,9 +22,15 @@ export const BATCH_LOOKBACK_DAYS = 60;
 /**
  * Whether a history row is an order waiting to be shipped: a real, un-voided
  * sale with an order number and a street address, not yet marked shipped.
+ *
+ * An order from the shop's own website is the website's to pack, so it is not
+ * a candidate — unless the caller asks for those too (`includeWebsite`): the
+ * batch screen still lists them, unticked and tagged, for the times the owner
+ * buys that postage here.
  */
-export function isBatchCandidate(entry, now = new Date(), { hidden = null } = {}) {
+export function isBatchCandidate(entry, now = new Date(), { hidden = null, includeWebsite = false } = {}) {
   if (!entry || entry.voided || entry.shipped) return false;
+  if (!includeWebsite && isWebsiteFulfilled(entry)) return false;
   if (String(entry.trackingNumber || '').trim()) return false;
   if (!normalizeShippingOrderNumber(entry.num)) return false;
   // Same exclusions as the single-order "Ready to ship" queue: a parcel the
@@ -128,6 +135,11 @@ export function originBlocker(origin = {}) {
  */
 export function preflightBlocker({ address, plan, existing, originCountry = 'CA', phone = '' }) {
   if (existing) {
+    if (existing.fromWebsite) {
+      return existing.tracking
+        ? `Already shipped from the website (tracking ${existing.tracking}). A new label makes a second parcel.`
+        : 'Already shipped from the website. A new label makes a second parcel.';
+    }
     return existing.tracking
       ? `Already has a label (tracking ${existing.tracking}).`
       : 'Already has a label in your expenses.';

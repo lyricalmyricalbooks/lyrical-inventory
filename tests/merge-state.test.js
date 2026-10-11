@@ -403,3 +403,54 @@ describe('mergeSettingDoc (catalog, Tax Centre)', () => {
     expect(mergeSettingDoc(null, J(base), local)).toMatchObject({ value: local, merged: false });
   });
 });
+
+// Website orders (src/lib/website-link.js) carry the deterministic uid
+// web-<orderId>-<bookId>. These pin that the merge turns every device's copy of
+// one website sale into one row — never two — including a hand-entered sale
+// the link adopted (tagged with that uid) on one device while another device,
+// not yet synced, wrote the website's row fresh.
+describe('mergeRows — website order rows', () => {
+  const uid = 'web-ABCD-123456-WXYZ-hound';
+  const webRow = (over = {}) => sale('#ABCD-123456-WXYZ', { chan: 'Website', qty: 2, price: 40, date: '2026-10-11', uid, sheetsId: uid, webOrderId: 'ABCD-123456-WXYZ', ...over });
+
+  it('the same uid written on two devices is one row', () => {
+    const base = [sale(1)];
+    const local = [webRow({ after: 7 }), sale(1)];
+    const remote = [webRow({ after: 9 }), sale(1)];
+    const { rows, conflicts } = mergeRows('hist', base, remote, local);
+    expect(rows.filter(r => r.uid === uid)).toHaveLength(1);
+    expect(rows).toHaveLength(2);
+    expect(conflicts.filter(c => c.key === `uid:${uid}`)).toHaveLength(1); // `after` differed: reported, local kept
+  });
+
+  it('an adopted hand row and a fresh website row on another device do not duplicate', () => {
+    const hand = sale('#ABCD-123456-WXYZ', { chan: 'Website', qty: 2, price: 40, date: '2026-10-11', sheetsId: 'stripe-ch_9' });
+    const base = [hand];
+    // Device A adopted the hand row: same row, now tagged with the uid.
+    const adopted = { ...hand, uid, webOrderId: 'ABCD-123456-WXYZ', fulfilledOnWebsite: true };
+    // Device B never saw the adoption and wrote the website's row next to the
+    // hand row it still holds.
+    const remote = [adopted];
+    const local = [webRow(), hand];
+    const { rows } = mergeRows('hist', base, remote, local);
+    expect(rows.filter(r => r.uid === uid)).toHaveLength(1);
+    // The hand row's untagged copy is gone: A replaced it, B did not edit it.
+    expect(rows.filter(r => !r.uid)).toHaveLength(0);
+    expect(rows).toHaveLength(1);
+  });
+
+  it('two devices adopting the same hand row give one row', () => {
+    const hand = sale('#ABCD-123456-WXYZ', { chan: 'Website', qty: 2, price: 40, date: '2026-10-11', sheetsId: 'bc-ABCD-123456-WXYZ' });
+    const tagged = { ...hand, uid, webOrderId: 'ABCD-123456-WXYZ' };
+    const { rows } = mergeRows('hist', [hand], [tagged], [{ ...tagged }]);
+    expect(rows).toEqual([tagged]);
+  });
+
+  it('a website row added offline on one device survives the other device’s sales', () => {
+    const base = [sale(1)];
+    const local = [webRow(), sale(1)];
+    const remote = [sale(2), sale(1)];
+    const { rows } = mergeRows('hist', base, remote, local);
+    expect(rows.map(r => String(r.uid || r.num)).sort()).toEqual(['1', '2', uid].sort());
+  });
+});

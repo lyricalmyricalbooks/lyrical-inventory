@@ -818,3 +818,17 @@ describe('planWebsitePublish — the transaction’s decisions', () => {
     expect(Object.keys(res.orderUpdates[0].data).sort()).toEqual(['app.shipment', 'app.shipmentWaiting', 'imported', 'pending']);
   });
 });
+
+describe('rememberChargeIntents', () => {
+  it('keeps each Stripe charge’s PaymentIntent, newest kept within the limit', async () => {
+    const { rememberChargeIntents, STRIPE_CHARGE_PI_KEY } = await import('../src/lib/website-link.js');
+    expect(STRIPE_CHARGE_PI_KEY).toBe('lm-stripe-charge-pi');
+    const first = rememberChargeIntents({}, [{ id: 'ch_1', piId: 'pi_1' }, { id: 'ch_2', piId: '' }, { id: '', piId: 'pi_x' }]);
+    expect(first).toEqual({ ch_1: 'pi_1' });
+    const capped = rememberChargeIntents(first, [{ id: 'ch_2', piId: 'pi_2' }, { id: 'ch_3', piId: 'pi_3' }], 2);
+    expect(capped).toEqual({ ch_2: 'pi_2', ch_3: 'pi_3' });
+    // Seen again: moves to the newest end instead of being dropped.
+    expect(Object.keys(rememberChargeIntents(capped, [{ id: 'ch_2', piId: 'pi_2' }, { id: 'ch_4', piId: 'pi_4' }], 2))).toEqual(['ch_2', 'ch_4']);
+    expect(rememberChargeIntents(null, null)).toEqual({});
+  });
+});

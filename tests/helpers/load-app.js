@@ -128,8 +128,11 @@ const settle = async (rounds = 5) => {
  *                                the app fills the rest from defaultState)
  * @param {boolean} [opts.quiet]  capture the app's console output into
  *                                `app.logs` instead of printing it (default)
+ * @param {object}  [opts.overrides] extra window._fb* fakes, installed after
+ *                                the defaults and before sign-in, so code that
+ *                                starts at boot (the website link) uses them
  */
-export async function loadApp({ books = [makeBook()], states: initialStates = {}, quiet = true } = {}) {
+export async function loadApp({ books = [makeBook()], states: initialStates = {}, quiet = true, overrides = {} } = {}) {
   // The app narrates freely to the console (failed FX lookups with no network,
   // retries, …). That's expected under test and buries a real failure, so by
   // default it is captured into `app.logs` instead of printed.
@@ -216,6 +219,7 @@ export async function loadApp({ books = [makeBook()], states: initialStates = {}
       return cloud.saveImpl(bookId, json);
     },
   });
+  Object.assign(window, overrides);
 
   // Sign in as the publisher: runs the real startup path against the fakes.
   const authCallbacks = globalThis.__firebaseStub.authCallbacks;

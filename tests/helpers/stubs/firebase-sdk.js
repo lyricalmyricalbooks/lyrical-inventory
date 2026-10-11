@@ -61,6 +61,8 @@ export const persistentMultipleTabManager = () => ({});
 export const memoryLocalCache = () => ({});
 export const doc = (...parts) => handle('doc:' + parts.slice(1).join('/'));
 export const collection = (...parts) => handle('col:' + parts.slice(1).join('/'));
+export const query = (ref) => ref;
+export const where = () => handle('where');
 export const setDoc = async () => {};
 export const getDoc = async () => emptySnap();
 export const getDocs = async () => emptySnap();

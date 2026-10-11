@@ -81,3 +81,20 @@ describe('whether shipping paid for itself', () => {
     expect(describePostageReport(report).count).toBe(0);
   });
 });
+
+describe('website orders on the waiting-to-be-sent list', () => {
+  it('leaves a website order alone while the website packs it', () => {
+    expect(unshippedOrders([order({ webOrderId: 'AB-1', fulfilledOnWebsite: true })], { now: NOW })).toEqual([]);
+  });
+
+  it('chases it like any order when the website is not packing it', () => {
+    // `fulfilledOnWebsite: false` switches the exception off; the row then
+    // follows the ordinary rules instead of being hidden for good.
+    const relabelled = order({ webOrderId: 'AB-1', fulfilledOnWebsite: false });
+    expect(unshippedOrders([relabelled], { now: NOW })).toHaveLength(1);
+  });
+
+  it('a tracking number from the website still counts as sent', () => {
+    expect(unshippedOrders([order({ webOrderId: 'AB-1', trackingNumber: 'W1', webTracking: 'W1' })], { now: NOW })).toEqual([]);
+  });
+});

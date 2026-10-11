@@ -12,17 +12,25 @@
 import { normalizeShippingOrderNumber } from './shipping-reconciliation.js';
 import { isPostageExpense, isPostageLinked } from './postage-matching.js';
 import { refundState } from './label-refunds.js';
+import { WEBSITE_SHIPPED_STATES } from './website-link.js';
 
 /**
  * Every sign that `orderNumber` already has a label.
- * @returns {{ tracking: string, shippedDate: string, labels: Array<{ desc: string, amount: number, currency: string, date: string }> } | null}
+ *
+ * `fromWebsite` is set when the shop's website already bought a label for the
+ * order or sent it — a label bought here then makes a second parcel.
+ * @returns {{ tracking: string, shippedDate: string, fromWebsite: boolean, labels: Array<{ desc: string, amount: number, currency: string, date: string }> } | null}
  */
 export function findExistingLabel(orderNumber, { hist = [], expenses = [] } = {}) {
   const wanted = normalizeShippingOrderNumber(orderNumber);
   if (!wanted) return null;
 
-  const order = hist.find(h => normalizeShippingOrderNumber(h?.num) === wanted);
+  const order = hist.find(h => normalizeShippingOrderNumber(h?.num) === wanted && !h?.voided)
+    || hist.find(h => normalizeShippingOrderNumber(h?.num) === wanted);
   const tracking = String(order?.trackingNumber || '').trim();
+  const websiteTracking = String(order?.webTracking || '').trim();
+  const fromWebsite = !!order?.webOrderId
+    && ((!!websiteTracking && tracking === websiteTracking) || WEBSITE_SHIPPED_STATES.has(order.webFulfillmentStatus));
 
   // Test-mode rehearsals are stamped `simulated` and never cost anything.
   const labels = expenses
@@ -37,14 +45,17 @@ export function findExistingLabel(orderNumber, { hist = [], expenses = [] } = {}
       date: String(e.date || ''),
     }));
 
-  if (!tracking && labels.length === 0) return null;
-  return { tracking, shippedDate: String(order?.shippedDate || ''), labels };
+  if (!tracking && labels.length === 0 && !fromWebsite) return null;
+  return { tracking, shippedDate: String(order?.shippedDate || ''), fromWebsite, labels };
 }
 
 /** The rows the "already has a label" confirmation shows. */
 export function describeExistingLabel(found) {
   if (!found) return [];
   const rows = [];
+  if (found.fromWebsite) {
+    rows.push(['Website', `Already shipped from the website${found.tracking ? ` (tracking ${found.tracking})` : ''}. A new label makes a second parcel.`]);
+  }
   if (found.tracking) rows.push(['Tracking', found.tracking]);
   if (found.shippedDate) rows.push(['Shipped', found.shippedDate]);
   found.labels.slice(0, 3).forEach(l => {

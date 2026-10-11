@@ -895,6 +895,12 @@ import {
   reviewInboxIsOpen,
   reviewQueueSnapshot,
 } from './features/review-inbox.js';
+import {
+  scheduleWebsiteFeedPublish,
+  startWebsiteLink,
+  websiteLinkActive,
+} from './features/website-link.js';
+import { STRIPE_CHARGE_PI_KEY, isWebsiteFulfilled, rememberChargeIntents } from './lib/website-link.js';
 import { reviewTaskStillOpen } from './lib/review-queue.js';
 import {
   clearSimulatedSheet,
@@ -1260,7 +1266,12 @@ export function saveCatalogWithDeletions() {
   if (window.IS_PUBLISHER && typeof window._fbSaveBookOwners === 'function') {
     window._fbSaveBookOwners(ownersFromBooks());
   }
-  return window._fbSaveCatalog({ ...BOOKS, _deletedDefaults: deletedDefaultIds, _posExtra: posExtraBooks });
+  return Promise.resolve(window._fbSaveCatalog({ ...BOOKS, _deletedDefaults: deletedDefaultIds, _posExtra: posExtraBooks }))
+    .then(saved => {
+      // A reprint changes a book's print run, and so the stock the website follows.
+      if (saved) scheduleWebsiteFeedPublish('all');
+      return saved;
+    });
 }
 const DEFAULT_BOOKS = {
   altrove: { id: 'altrove', title: 'Un Fantastico Altrove', author: 'Silvia Clo Di Gregorio', isbn: '—', maxPrint: 120, listPrice: 40, currency: '€', threshold: 15, productionCost: 0, paymentLink: 'https://paypal.me/lyricalmyricalbooks', accent: '#c8913a', accentBg: 'rgba(200,145,58,.1)', urlParam: 'altrove', authorPassword: 'silvia2025' },
@@ -3220,6 +3231,7 @@ async function processSyncQueue() {
     }
     _syncFlushing = false;
     markCloudSynced();
+    scheduleWebsiteFeedPublish(item.bookId);
     if (syncQueue.length) {
       updatePendingIndicator();
       processSyncQueue();
@@ -3689,6 +3701,7 @@ async function saveStateNow(bookId, rebase) {
         _saveAgain.add(bookId);
         lastSaveTimes[bookId] = Date.now();
         markCloudSynced();
+        scheduleWebsiteFeedPublish(bookId);
         return partHashesOf(JSON.parse(json));
       }
       adoptMergedState(bookId, res);
@@ -3699,6 +3712,9 @@ async function saveStateNow(bookId, rebase) {
     // A confirmed cloud write — this is what "Last upload …" on the sync chip
     // measures from, so the next offline stretch can say how stale the cloud is.
     markCloudSynced();
+    // The cloud now holds this book as saved: the stock number the website
+    // follows is published from that saved copy (see features/website-link.js).
+    scheduleWebsiteFeedPublish(bookId);
     setSyncState('ok', '<b>Firestore</b> · saved · live sync on');
     const ind = $('save-ind'); if (ind) { ind.classList.add('show'); setTimeout(() => ind.classList.remove('show'), 2000); }
   } catch (e) {
@@ -3992,6 +4008,8 @@ export async function loadBook(bookId) {
       // An expense or payout changed on another device reaches the sheet even
       // if that device has no sheet connected.
       scheduleMoneyOutSheetSync(bookId);
+      // Another device saved this book: the website's stock follows the cloud copy.
+      scheduleWebsiteFeedPublish(bookId);
       _appliedIdsCache = null;
       if (activeBook === bookId || activeBook === 'all') scheduleRender();
       // Suppress the echo-toast that fires right after a local save is written to Firestore
@@ -4216,6 +4234,8 @@ async function loadAllBooks() {
   scheduleMoneyOutSheetSyncAll();
   _attentionReady = true;
   startEmailInboxWatcher();
+  // Orders from the shop's website, once every book is here to match them against.
+  startWebsiteLink();
   setSyncState('ok', '<b>Firestore</b> · connected · live sync on');
   updateSubheader(new Date().toLocaleTimeString());
   renderCurrent();
@@ -8930,7 +8950,7 @@ function recordOrder(num, chan, qty, price, notes, payment = null, { date, enter
  * passes its own (the charge id keeps it from being recorded twice, and the
  * payment's date is when the sale happened). `extra` is merged onto the row.
  */
-function writeOrderToLedger(bookId, { num = '', chan, qty, price, notes = '', payment = null, enteredBy = 'Publisher', date, sheetsId, extra = {} } = {}) {
+export function writeOrderToLedger(bookId, { num = '', chan, qty, price, notes = '', payment = null, enteredBy = 'Publisher', date, sheetsId, extra = {} } = {}) {
   const s = states[bookId], book = BOOKS[bookId];
   if (!s || !book) throw new Error('Unknown book');
   if (enteredBy === 'Artist') {
@@ -8946,6 +8966,8 @@ function writeOrderToLedger(bookId, { num = '', chan, qty, price, notes = '', pa
   const when = date || today();
   const row = { recordedAt: new Date().toISOString(), ...extra, num, chan, qty, price, after: s.stock, notes: updatedNotes, date: when, payment, enteredBy, sheetsId: id, cur: bookCurrencyCode(book) };
   s.hist.unshift(row);
+  // Its order number now counts as applied (the Orders tab hides applied ones).
+  _appliedIdsCache = null;
   recomputeAfters(s, book);
   saveState(bookId);
   const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
@@ -9277,7 +9299,9 @@ function renderHistRowHtml(row, { cur, bookCode, book, formatChannelBadge }) {
   const labelBtn = isWebsite
     ? (h.shipped
       ? `<button class="btn-hist-action shipped" onclick="openLabelModal(${i})" title="Shipped${h.shippedDate ? ' on ' + fmtD(h.shippedDate) : ''}">✓ Shipped</button>`
-      : `<button class="btn-hist-action ship" onclick="openLabelModal(${i})" title="Print shipping label">📦 Ship</button>`)
+      : isWebsiteFulfilled(h)
+        ? `<button class="btn-hist-action ship" onclick="openLabelModal(${i})" title="Packed on your website. Open this only if you are sending this one from here.">🌐 On website</button>`
+        : `<button class="btn-hist-action ship" onclick="openLabelModal(${i})" title="Print shipping label">📦 Ship</button>`)
     : '';
 
   const paymentInfo = paymentSummary(h.payment, book, h);
@@ -15410,7 +15434,25 @@ function openEditHist(idx) {
     $('edit-void-btn').textContent = 'Void this entry';
     $('edit-void-body').textContent = 'Voiding reverses all stock and revenue effects. The entry stays visible as struck-through for your records.';
   }
+  setEditWebsiteLock(!!h.webOrderId);
   openM('edit-entry');
+}
+
+// A sale that came from the website: its copies, channel, order number and
+// void follow the website, which refunds and restocks it there. Changing them
+// here would put this ledger out of step with the order it mirrors.
+function setEditWebsiteLock(locked) {
+  ['edit-qty', 'edit-chan', 'edit-num'].forEach(id => {
+    const el = $(id);
+    if (!el) return;
+    el.disabled = locked;
+    if (locked) el.setAttribute('aria-describedby', 'edit-web-note');
+    else el.removeAttribute('aria-describedby');
+  });
+  const note = $('edit-web-note');
+  if (note) note.hidden = !locked;
+  const voidZone = $('edit-void-zone');
+  if (voidZone) voidZone.style.display = locked ? 'none' : '';
 }
 
 function openEditLedger(idx) {
@@ -15446,16 +15488,20 @@ function openEditLedger(idx) {
     $('edit-void-btn').textContent = 'Void this entry';
     $('edit-void-body').textContent = 'Voiding reverses the qty and payment effects of this entry. It stays visible as struck-through.';
   }
+  setEditWebsiteLock(false);
   openM('edit-entry');
 }
 
 function saveHistEntryEdit(s, book) {
   const old = editCtx.snapshot;
   const h = s.hist[editCtx.idx];
-  const newQty = parseInt($('edit-qty').value) || old.qty;
+  // A website sale's copies, channel and order number follow the website (the
+  // dialog shows them read-only); only price, date and notes are the owner's.
+  const fromWebsite = !!h.webOrderId;
+  const newQty = fromWebsite ? old.qty : (parseInt($('edit-qty').value) || old.qty);
   const newPrice = parseFloat($('edit-price').value) || old.price;
-  const newChan = $('edit-chan').value;
-  const newNum = $('edit-num').value.trim() || old.num;
+  const newChan = fromWebsite ? old.chan : $('edit-chan').value;
+  const newNum = fromWebsite ? old.num : ($('edit-num').value.trim() || old.num);
   const newDate = $('edit-date').value || old.date;
   const newNotes = $('edit-notes').value.trim();
 
@@ -15492,24 +15538,47 @@ function saveHistEntryEdit(s, book) {
       // A voided entry has no row in the sheet — remove any match, don't re-add.
       syncHistoryVoidDeletion(h, true);
     } else {
-      const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
-      const totalNative = h.qty * h.price;
-      const cadEquiv = cadEquivalentForSale({ nativeCurrency: nativeCur, totalNative, payment: h.payment });
-      syncToSheets({
-        type: 'order', book: book.title,
-        date: h.date, num: h.num, chan: h.chan,
-        qty: h.qty, price: h.price, total: totalNative,
-        stockAfter: h.after, notes: h.notes,
-        sheetsId: h.sheetsId || '',
-        currency: nativeCur,
-        paymentCurrency: normalizeCurrencyCode(h.payment?.currency || nativeCur, 'CAD'),
-        paymentAmount: h.payment?.amount ?? totalNative,
-        paymentRate: h.payment?.rate ?? '',
-        convertedTotal: cadEquiv,
-        enteredBy: h.enteredBy || '',
-        status: 'OK'
-      });
+      syncHistRowToSheets(h, book, { shipping: false });
     }
+  }
+}
+
+/**
+ * Upsert one sale's Google Sheet row (and, with `shipping`, the row for the
+ * shipping its customer paid), keyed by the row's own sheetsId. Shared by the
+ * edit dialog, un-voiding, and website orders the website changed later.
+ * `order: false` sends only the shipping row. Consignment mirrors are skipped:
+ * their ledger row is the record that reaches the sheet.
+ */
+export function syncHistRowToSheets(h, book, { order = true, shipping = true } = {}) {
+  if (!h || !book || !sheetsUrl || h.consignmentLink) return;
+  const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
+  if (order) {
+    const totalNative = h.qty * h.price;
+    const cadEquiv = cadEquivalentForSale({ nativeCurrency: nativeCur, totalNative, payment: h.payment });
+    syncToSheets({
+      type: 'order',
+      book: book.title,
+      date: h.date,
+      num: h.num,
+      chan: h.chan,
+      qty: h.qty,
+      price: h.price,
+      total: totalNative,
+      stockAfter: h.after,
+      notes: h.notes || '',
+      sheetsId: h.sheetsId || '',
+      currency: nativeCur,
+      paymentCurrency: normalizeCurrencyCode(h.payment?.currency || nativeCur, 'CAD'),
+      paymentAmount: h.payment?.amount ?? totalNative,
+      paymentRate: h.payment?.rate ?? '',
+      convertedTotal: cadEquiv,
+      enteredBy: h.enteredBy || '',
+      status: 'OK'
+    });
+  }
+  if (shipping && (Number(h.shippingPaid || 0) || 0) > 0) {
+    syncToSheets(shippingPurchaseRowPayload(book, nativeCur, h));
   }
 }
 
@@ -15708,7 +15777,7 @@ function reconcileStores(s) {
   }
 }
 
-function recomputeAfters(s, book) {
+export function recomputeAfters(s, book) {
   const bk = book || (typeof getBook === 'function' ? getBook() : null);
   deduplicateDirectConsignmentSales(s);
   // Re-derive consignment mirrors from their canonical ledger rows BEFORE the
@@ -15906,32 +15975,7 @@ function syncHistoryVoidDeletion(h, isVoided, book = getBook()) {
     return;
   }
   // Unvoid: re-sync the full entry (upsert will replace the row)
-  const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
-  const totalNative = h.qty * h.price;
-  const cadEquiv = cadEquivalentForSale({ nativeCurrency: nativeCur, totalNative, payment: h.payment });
-  syncToSheets({
-    type: 'order',
-    book: book.title,
-    date: h.date,
-    num: h.num,
-    chan: h.chan,
-    qty: h.qty,
-    price: h.price,
-    total: totalNative,
-    stockAfter: h.after,
-    notes: h.notes || '',
-    sheetsId: h.sheetsId || '',
-    currency: nativeCur,
-    paymentCurrency: normalizeCurrencyCode(h.payment?.currency || nativeCur, 'CAD'),
-    paymentAmount: h.payment?.amount ?? totalNative,
-    paymentRate: h.payment?.rate ?? '',
-    convertedTotal: cadEquiv,
-    enteredBy: h.enteredBy || '',
-    status: 'OK'
-  });
-  if ((Number(h.shippingPaid || 0) || 0) > 0) {
-    syncToSheets(shippingPurchaseRowPayload(book, nativeCur, h));
-  }
+  syncHistRowToSheets(h, book);
 }
 
 /**
@@ -15940,7 +15984,7 @@ function syncHistoryVoidDeletion(h, isVoided, book = getBook()) {
  * Stripe refund alert, so a refunded sale is reversed exactly the way a
  * hand-voided one is.
  */
-function voidHistEntry(s, book, h) {
+export function voidHistEntry(s, book, h) {
   // A held-cash (direct-to-artist) sale never added revenue; it only sits in
   // the pending-transfer queue. Pull that transfer so the artist is not left
   // owing a cut (and a later "received" can't add revenue) for a voided sale.
@@ -15970,7 +16014,7 @@ function voidHistEntry(s, book, h) {
 }
 
 /** The exact reverse of voidHistEntry: the sale counts again. */
-function unvoidHistEntry(s, book, h) {
+export function unvoidHistEntry(s, book, h) {
   s.stock = Math.max(0, s.stock - h.qty);
   if (!h.gratuity) {
     s.sold += h.qty;
@@ -16001,6 +16045,7 @@ function voidEntry() {
     const h = s.hist[editCtx.idx];
     if (!h) return;
     if (h.artistSettlementId) { showToast('Undo the author settlement before voiding this sale.', 'warn'); return; }
+    if (h.webOrderId) { showToast('This sale follows your website — refund it there and it updates here by itself.', 'warn', 5000); return; }
     if (!h.voided) {
       voidHistEntry(s, book, h);
       showToast('Entry voided — stock & revenue reversed (Sheets row delete queued)', 'warn');
@@ -24341,6 +24386,12 @@ export async function fetchStripePaymentsForReconcile(maxPages = 3, { since = 0 
     starting_after = json.data[json.data.length - 1].id;
     if (page === maxPages - 1) out.truncated = true; // older charges in the window were not read
   }
+  // Remember which PaymentIntent each charge belongs to, so a sale recorded
+  // from Stripe can be recognised later as a website order (website-link.js).
+  try {
+    const known = JSON.parse(localStorage.getItem(STRIPE_CHARGE_PI_KEY) || '{}');
+    localStorage.setItem(STRIPE_CHARGE_PI_KEY, JSON.stringify(rememberChargeIntents(known, out)));
+  } catch (_) { /* storage full or blocked: only the link's matching is less sure */ }
   return out;
 }
 
@@ -24394,6 +24445,13 @@ export function classifyStripePayment(p) {
 
   if (mem.dismissed[p.id]) return { kind: 'dismissed' };
   if (mem.recorded[p.id] || recordedIds.has(p.id)) return { kind: 'recorded', bookId: mem.recorded[p.id]?.bookId };
+
+  // A payment taken by the shop's website. Once the website link is running
+  // the website sends the order itself, with its books and copies, so the
+  // payment is never recorded here by hand (or automatically) as well.
+  if (p.metadata?.order_id && websiteLinkActive()) {
+    return { kind: 'website', ref: String(p.metadata.order_id) };
+  }
 
   // An author forwarding cash they collected for an already-recorded sale.
   // Never a new book sale — it only settles an artistTransfers row.
@@ -24802,6 +24860,7 @@ export function renderReconcile() {
     if (c.kind === 'recorded') { matched.push({ p, c, label: 'Logged', tone: 'green', note: c.bookId && BOOKS[c.bookId] ? `Recorded against ${BOOKS[c.bookId].title}.` : 'Recorded in inventory.' }); continue; }
     if (c.kind === 'artist_transfer') { matched.push({ p, c, label: 'Author transfer', tone: 'green', note: `An author sent you money for sale ${c.ref || ''} they collected. Mark it received on that book's dashboard — it is not a new sale.`.replace(/\s+/g, ' ') }); continue; }
     if (c.kind === 'likely') { matched.push({ p, c, label: 'Likely logged', tone: 'gray', note: 'Matches a sale you already recorded (same amount & date).' }); continue; }
+    if (c.kind === 'website') { matched.push({ p, c, label: 'Website', tone: 'green', note: 'Comes in from your website — it reaches your books by itself (see “From your website” on the Orders tab), so there is nothing to record here.' }); continue; }
     if (p.refunded && p.fullyRefunded !== false) { matched.push({ p, c, label: 'Refunded', tone: 'gray', note: 'Refunded in Stripe — no stock to deduct.' }); continue; }
     if (c.kind === 'invoice' && c.inv && c.inv.status === 'paid') { matched.push({ p, c, label: 'Invoice paid', tone: 'green', note: `${c.ref} already marked paid.` }); continue; }
     if (c.kind === 'bigcartel' && c.applied) { matched.push({ p, c, label: 'Big Cartel', tone: 'green', note: `Order ${c.ref} already applied to stock.` }); continue; }
@@ -25631,6 +25690,9 @@ function stripeRecordedSales() {
   Object.entries(states).forEach(([bookId, st]) => {
     (st?.hist || []).forEach(h => {
       if (typeof h?.sheetsId !== 'string' || !h.sheetsId.startsWith('stripe-')) return;
+      // Linked to a website order: the website sends its refunds and restocks,
+      // so offering to void it here as well would reverse the sale twice.
+      if (h.webOrderId) return;
       sales.push({
         bookId,
         sheetsId: h.sheetsId,
