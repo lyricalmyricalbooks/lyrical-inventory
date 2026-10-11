@@ -598,6 +598,26 @@ async function rehearsePostage(orderId) {
   else showToast('Couldn’t send it. Once you’re online, press Rehearse the postage again.', 'err', 5000);
 }
 
+/** Take a rehearsal order off the list (the website never counted it either). */
+async function clearRehearsal(orderId, button) {
+  const doc = _docs.get(orderId);
+  if (!doc || !doc.web || doc.web.test !== true) return;
+  if (button) button.disabled = true;
+  const reply = doc.shipmentReply && typeof doc.shipmentReply === 'object' ? doc.shipmentReply : null;
+  const res = await publishWebsiteLinkNow({
+    marks: [{ orderId, hash: doc.web.hash, effect: {}, decisions: {}, replyAt: (reply && reply.at) || '', test: true }],
+  });
+  if (res && Array.isArray(res.accepted) && res.accepted.includes(orderId)) {
+    _docs.delete(orderId);
+    _tests = _tests.filter(p => p.orderId !== orderId);
+    renderWebsiteLinkCard();
+    showToast('Rehearsal order cleared', 'ok');
+    return;
+  }
+  if (button) button.disabled = false;
+  showToast('Couldn’t clear it just now. Once you’re online, press ✕ again.', 'warn', 5000);
+}
+
 function wireCard() {
   if (_wired) return;
   const card = $('web-link-card');
@@ -615,6 +635,7 @@ function wireCard() {
     else if (action === 'consent') acceptConsent(btn);
     else if (action === 'consent-later') { _consentDismissed = true; renderWebsiteLinkCard(); }
     else if (action === 'rehearse') rehearsePostage(order);
+    else if (action === 'clear-test') clearRehearsal(order, btn);
     else if (action === 'hide-unlinked') { writeJson(UNLINKED_KEY, {}); renderWebsiteLinkCard(); }
   });
 }
@@ -788,6 +809,7 @@ function testsHtml() {
         <p class="wl-why">${escapeHtml(`Would take ${preview} off your stock.`)}</p>
         ${reply}
         <div class="wl-actions"><button class="btn sm" type="button" data-wl-action="rehearse" data-order="${escapeHtml(plan.orderId)}">Rehearse the postage</button></div>
+        <button class="card-x wl-item-x" type="button" data-wl-action="clear-test" data-order="${escapeHtml(plan.orderId)}" aria-label="Clear rehearsal order ${escapeHtml(plan.num || plan.orderId)}" title="Comes back if the website sends it again">✕</button>
       </li>`;
   }).join('');
   return `<div class="wl-section">

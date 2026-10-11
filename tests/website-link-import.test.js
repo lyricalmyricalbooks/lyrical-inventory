@@ -236,6 +236,12 @@ describe('rehearsal orders', () => {
     await waitFor(() => expect(card.textContent).toContain('Would take 2 copies of Harbour Lights off your stock.'));
     expect(state().hist).toHaveLength(0);
     expect(link.docs['WEB-TEST'].pending).toBe(true);
+
+    card.querySelector('[data-wl-action="clear-test"][data-order="WEB-TEST"]').click();
+    await waitFor(() => expect(link.docs['WEB-TEST'].pending).toBe(false));
+    expect(link.docs['WEB-TEST'].imported.effect).toEqual({});
+    await waitFor(() => expect(card.textContent).not.toContain('WEB-TEST'));
+    expect(state().hist).toHaveLength(0);
   });
 });
 

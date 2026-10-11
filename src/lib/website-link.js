@@ -789,6 +789,12 @@ export function markRefusal(mark = {}, doc = null, books = {}) {
   if (clean(doc.web.hash) !== clean(mark.hash)) return 'changed';
   const reply = doc.shipmentReply && typeof doc.shipmentReply === 'object' ? doc.shipmentReply : null;
   if (clean(reply && reply.at) !== clean(mark.replyAt)) return 'changed';
+  // A rehearsal order is never recorded, so there are no rows to check: the
+  // owner clearing it from the list is enough. A real order can never be
+  // cleared this way, and a rehearsal can never be marked as brought in.
+  if (doc.web.test === true || mark.test === true) {
+    return doc.web.test === true && mark.test === true && !Object.keys(mark.effect || {}).length ? '' : 'test';
+  }
   const withRows = webBookIdsWithRows(doc.web);
   const ids = new Set([...withRows, ...Object.keys(mark.effect || {})]);
   const hist = {};

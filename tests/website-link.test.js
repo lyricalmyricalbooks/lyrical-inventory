@@ -770,6 +770,16 @@ describe('planWebsitePublish — the transaction’s decisions', () => {
     expect(markRefusal(mark({ replyAt: reply.at }), doc, books([savedRow({ webShipment: reply })]))).toBe('');
   });
 
+  it('lets the owner clear a rehearsal order, and nothing else that way', () => {
+    const test = docOf(makeWeb({ test: true }));
+    expect(markRefusal(mark({ test: true, effect: {} }), test, {})).toBe('');
+    expect(markRefusal(mark({ test: true, effect: { hound: 2 } }), test, {})).toBe('test');
+    expect(markRefusal(mark({ effect: {} }), test, {})).toBe('test');
+    expect(markRefusal(mark({ test: true, effect: {} }), docOf(), books())).toBe('test');
+    const res = planWebsitePublish({ orderDocs: { [orderId]: test }, marks: [mark({ test: true, effect: {} })], now: NOW });
+    expect(res.orderUpdates[0].data).toMatchObject({ pending: false, imported: { effect: {} } });
+  });
+
   it('marks a voided refund once its row is voided on the server', () => {
     const refunded = makeWeb({ paymentStatus: 'refunded', refundState: 'full', books: { hound: { net: 0, sold: 2, restocked: 2, unitCAD: 40, merchCAD: 80 } } });
     const res = planWebsitePublish({ books: books([savedRow({ voided: true })]), catalog, orderDocs: { [orderId]: docOf(refunded) }, marks: [mark({ effect: { hound: 0 } })] });
