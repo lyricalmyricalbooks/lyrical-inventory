@@ -153,6 +153,10 @@ target = max(0, min(feed.base − webTotal(B), feed.onHand))
 
 - **ON HAND in the inventory app is what the website sells from**, copies held by the author included.
 - `webTotal(B)` is the sum of `net[B]` over the website's own `inventoryPushes`.
+- **Editions that are the same copies share one pile.** Two editions of one website book (The Hound's Signed and
+  Unsigned hardcovers) may be linked to the same inventory book; two different website books may not. Both editions
+  get the same target, a sale or refund of either moves both (`functions/stockPools.js`, read from `links` inside
+  `readBooks`), and checkout holds count both editions' lines against the one pile.
 - Importing an order lowers `onHand` and raises `webCopies` by the same amount, so `base` does
   not move. The target is right whether or not the app has imported the order yet.
 
