@@ -899,6 +899,7 @@ import {
   scheduleWebsiteFeedPublish,
   startWebsiteLink,
   websiteLinkActive,
+  websiteLinkTodo,
 } from './features/website-link.js';
 import { STRIPE_CHARGE_PI_KEY, isWebsiteFulfilled, rememberChargeIntents } from './lib/website-link.js';
 import { reviewTaskStillOpen } from './lib/review-queue.js';
@@ -3963,7 +3964,16 @@ export async function loadBook(bookId) {
     // A book added after the move to the new storage still lives in the old one,
     // out of the website link's reach: move it over before reading it.
     if (window.IS_PUBLISHER && typeof window._fbAdoptBook === 'function') {
-      try { await window._fbAdoptBook(bookId); } catch (e) { console.warn('Could not move book to the new storage', bookId, e); }
+      try {
+        const moved = await window._fbAdoptBook(bookId);
+        // Moved, and the copy was checked record by record against the old one.
+        if (moved && moved.decision === 'adopted' && moved.state) {
+          const title = (BOOKS[bookId] && BOOKS[bookId].title) || bookId;
+          const sales = (moved.state.hist || []).filter(h => h && !h.voided).length;
+          const onHand = deriveOnHand(moved.state, BOOKS[bookId]);
+          showToast(`✓ ${title} moved to the new storage — ${sales} sale${sales === 1 ? '' : 's'} and ${onHand} on hand, checked against the old copy`, 'ok', 7000);
+        }
+      } catch (e) { console.warn('Could not move book to the new storage', bookId, e); }
     }
     const json = await window._fbLoad(bookId);
     const book = BOOKS[bookId];
@@ -6375,6 +6385,7 @@ function automationTodoInput() {
     receiptsReady: safe(() => reviewQueueSnapshot().items.filter(i => i.kind === 'receipt' && i.state === 'ready').length, 0),
     labelsToMatch: review.labels,
     syncConflicts: safe(() => listConflicts(syncConflictStorage()).length, 0),
+    websiteLink: safe(() => websiteLinkTodo(), null),
   };
 }
 
@@ -6568,6 +6579,8 @@ export function refreshAttentionSurfaces() {
   renderTodoTab();
   renderOverviewRail();
 }
+// The website link's waiting orders and storage check feed the To-do list.
+if (typeof window !== 'undefined') window.addEventListener('website-link-todo', () => { try { refreshAttentionSurfaces(); } catch (_) { /* next render picks it up */ } });
 
 /** Tick one order off as sent, from the to-do list or the landing page. */
 function markOrderSentFromTodo(bookId, num) {

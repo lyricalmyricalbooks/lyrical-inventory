@@ -217,16 +217,12 @@ describe('refunds from the website', () => {
 });
 
 describe('the first time', () => {
-  it('asks before adding anything, then brings the orders in', async () => {
+  it('brings the orders in by itself and records when the link was switched on', async () => {
     setStatus({ website: { at: new Date().toISOString() }, app: {} });
     push(webOrder('WEB-FIRST'));
-    const card = document.getElementById('web-link-card');
-    await waitFor(() => expect(card.textContent).toContain('1 new · 0 already in your books (will be linked) · 0 need you'));
-    expect(state().hist).toHaveLength(0);
-
-    card.querySelector('[data-wl-action="consent"]').click();
     await waitFor(() => expect(state().hist).toHaveLength(1));
     expect(link.consentWrites[0].importConsentAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(document.getElementById('web-link-card').querySelector('[data-wl-action="consent"]')).toBeNull();
   });
 });
 
@@ -383,5 +379,34 @@ describe('review fixes, through the real app', () => {
     row.trackingNumber = 'TRK';
     row.webShipment = { hash: 'TRK||', result: 'dispatched', reason: '', at: 'x' };
     expect(feature.websiteShipmentNote(sibling).text).toBe('Website dispatched it — customer emailed');
+  });
+});
+
+describe('the storage check', () => {
+  const doc = () => app.window.document;
+  const card = () => doc().getElementById('web-link-card');
+
+  it('says every book is in the new storage when its old copy has nothing the new one lacks', async () => {
+    await app.resetBook(BOOK, { hist: [{ uid: 'a', chan: 'Book Fair', qty: 1, price: 20, date: '2026-06-01' }] });
+    app.window._fbReadOldBookCopy = async () => ({ hist: [{ uid: 'a', chan: 'Book Fair', qty: 1, price: 20, date: '2026-06-01' }] });
+    card().querySelector('[data-wl-action="storage-check"]').click();
+    await waitFor(() => expect(card().textContent).toContain('books are in the new storage, with every record from the old one'));
+    expect(card().textContent).toContain('Harbour Lights — 1 sale');
+  });
+
+  it('lists records only the old copy has, and copies them over only when asked', async () => {
+    await app.resetBook(BOOK, { hist: [{ uid: 'a', chan: 'Book Fair', qty: 1, price: 20, date: '2026-06-01' }] });
+    const missing = { uid: 'b', chan: 'In Person', qty: 2, price: 20, date: '2026-07-01' };
+    app.window._fbReadOldBookCopy = async () => ({ hist: [missing, { uid: 'a', chan: 'Book Fair', qty: 1, price: 20, date: '2026-06-01' }] });
+    card().querySelector('[data-wl-action="storage-check"]').click();
+    await waitFor(() => expect(card().textContent).toContain('1 record is only in the old storage'));
+    expect(state().hist).toHaveLength(1);
+
+    card().querySelector('[data-wl-action="copy-old"]').click();
+    await waitFor(() => expect(doc().getElementById('m-confirm-ok').textContent).toBe('Copy them over'));
+    doc().getElementById('m-confirm-ok').click();
+    await waitFor(() => expect(state().hist.map(h => h.uid)).toEqual(['b', 'a']));
+    expect(app.cloud.lastSave(BOOK).state.hist.some(h => h.uid === 'b')).toBe(true);
+    await waitFor(() => expect(card().textContent).toContain('with every record from the old one'));
   });
 });

@@ -6,7 +6,7 @@ import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager
 import { receiptDuplicate } from './lib/receipt-finder.js';
 import { ALL_PARTS, LIST_PARTS, assembleParts, emptyPart, splitState, stitchState, mergePart, mergeSettingDoc } from './lib/merge-state.js';
 import { planWebsitePublish } from './lib/website-link.js';
-import { adoptDecision, movedElsewhere } from './lib/storage-mode.js';
+import { adoptDecision, compareCopies, movedElsewhere } from './lib/storage-mode.js';
 
 const firebaseConfig = {
   apiKey:"AIzaSyB0BTOjfUFZKCVth9eR8iN0mvfkpRIFKSI",
@@ -108,16 +108,23 @@ window._setBookFirestoreMode = (bookId, enabled) => {
 
 // A book added after the one-time move to Firestore was never flagged, so it
 // kept saving to the old Realtime Database, where the website link can't read
-// it. When it loads, move it over: flag it, and _fbLoad's self-heal copies its
-// old-storage records into Firestore. Only when Firestore holds nothing for it
-// (storage-mode.js adoptDecision). Returns the decision.
+// it. When it loads, move it over — copy, check, then switch:
+//   1. copy its old-storage records into Firestore, in one transaction that
+//      refuses if any Firestore part appeared meanwhile;
+//   2. read the copy back from the server and compare it with the old copy
+//      (storage-mode.js compareCopies) — it must be identical;
+//   3. only then flag the book, so nothing ever reads a half-made copy.
+// Anything short of an identical copy removes what was written and leaves the
+// book where it was, to try again next time. The old copy is never deleted.
+// Returns { decision, state? }: 'adopted' (state = the checked copy), 'kept',
+// 'skip' or 'unknown'.
 window._fbAdoptBook = async (bookId) => {
   const base = {
     publisher: !!(auth.currentUser && window.IS_PUBLISHER),
     global: window._useFirestoreGlobal(),
     flagged: window._useFirestoreForBook(bookId),
   };
-  if (adoptDecision({ ...base, hasFirestoreData: false }) === 'skip') return 'skip';
+  if (adoptDecision({ ...base, hasFirestoreData: false }) === 'skip') return { decision: 'skip' };
   let hasFirestoreData = null;
   try {
     const snap = await getDocsFromServer(collection(fs, 'books', bookId, 'data'));
@@ -126,11 +133,56 @@ window._fbAdoptBook = async (bookId) => {
     console.warn(`[FB] could not check the new storage for ${bookId}; trying next time`, e);
   }
   const decision = adoptDecision({ ...base, hasFirestoreData });
-  if (decision === 'adopt') {
+  if (decision !== 'adopt') return { decision };
+  const partRefs = ALL_PARTS.map(p => doc(fs, 'books', bookId, 'data', p));
+  let wrote = false;
+  try {
+    const old = await get(ref(db, `lyrical/books/${bookId}`));
+    const oldJson = old.exists() ? (old.val() || {}).data : null;
+    if (!oldJson) {
+      // A new book with nothing saved anywhere yet: its first save goes to Firestore.
+      window._setBookFirestoreMode(bookId, true);
+      return { decision: 'adopted', state: null };
+    }
+    const oldState = JSON.parse(oldJson);
+    const parts = splitState(oldState);
+    const ts = Date.now();
+    wrote = await runTransaction(fs, async (tx) => {
+      const snaps = await Promise.all(partRefs.map(r => tx.get(r)));
+      if (snaps.some(s => s.exists())) return false;
+      partRefs.forEach((r, i) => tx.set(r, { data: JSON.stringify(parts[ALL_PARTS[i]]), ts }));
+      return true;
+    });
+    if (!wrote) return { decision: 'unknown' };
+    const back = await getDocsFromServer(collection(fs, 'books', bookId, 'data'));
+    const raw = {};
+    back.forEach(d => { raw[d.id] = (d.data() || {}).data; });
+    const copy = stitchState(assembleParts(raw).parts);
+    if (!compareCopies(oldState, copy).identical) throw new Error('the copy did not match the old records');
+    if (!window._fsHashes) window._fsHashes = {};
+    window._fsHashes[bookId] = Object.fromEntries(ALL_PARTS.map(p => [p, raw[p]]));
     window._setBookFirestoreMode(bookId, true);
-    console.info(`[FB] ${bookId} moved to the new storage`);
+    console.info(`[FB] ${bookId} moved to the new storage and checked`);
+    return { decision: 'adopted', state: copy };
+  } catch (e) {
+    console.warn(`[FB] could not move ${bookId} to the new storage; it stays where it was`, e);
+    if (wrote) {
+      try {
+        const batch = writeBatch(fs);
+        partRefs.forEach(r => batch.delete(r));
+        await batch.commit();
+      } catch (cleanup) { console.warn(`[FB] could not remove the unchecked copy of ${bookId}`, cleanup); }
+    }
+    return { decision: 'unknown' };
   }
-  return decision;
+};
+
+// A book's old-storage (Realtime Database) copy, parsed, or null. Read-only:
+// the storage check compares it with the copy the app now uses.
+window._fbReadOldBookCopy = async (bookId) => {
+  const snap = await get(ref(db, `lyrical/books/${bookId}`));
+  const json = snap.exists() ? (snap.val() || {}).data : null;
+  return json ? JSON.parse(json) : null;
 };
 
 // ─────────────────────────────────────────────

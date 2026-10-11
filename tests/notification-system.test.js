@@ -141,6 +141,19 @@ describe('the to-do list knows what the automations left', () => {
     ]));
   });
 
+  it('website orders the app couldn’t match, and records only in the old storage, go on the list', () => {
+    const all = buildAttentionSignals({
+      books: [book], states: { hound: { stock: 50, hist: [] } }, today: '2026-09-23',
+      automation: { websiteLink: { needYou: 1, storageMissing: [{ title: 'Injured', count: 2 }] } },
+    });
+    const review = all.signals.find(s => s.id === 'orders-website-link-review');
+    expect(review).toMatchObject({ status: 'blocked', label: '1 order from your website needs you', fix: { kind: 'tab', tab: 'website' } });
+    const storage = all.signals.find(s => s.id === 'setup-storage-missing-injured');
+    expect(storage).toMatchObject({ group: 'setup', status: 'warn', label: 'Injured has 2 records only in the old storage' });
+    const none = buildAttentionSignals({ books: [book], states: { hound: { stock: 50, hist: [] } }, today: '2026-09-23', automation: { websiteLink: { needYou: 0, storageMissing: [] } } });
+    expect(none.signals.some(s => s.id.startsWith('orders-website-link') || s.id.startsWith('setup-storage'))).toBe(false);
+  });
+
   it('reads unsent orders and problem parcels straight from the ledger', () => {
     const hist = [
       { chan: 'Website', num: '#AB-1', date: '2026-09-15', shipName: 'Dana', shipAddr1: '1 Main' },

@@ -141,7 +141,7 @@ function groupRows(part, rows) {
 // hist reads newest-first (entries are unshifted), so a row arriving from
 // another device belongs at its date position rather than tacked on the end.
 // Everything else is append-ordered and keeps that.
-function insertRow(part, rows, row) {
+export function insertRow(part, rows, row) {
   if (part !== 'hist') { rows.push(row); return; }
   const date = row && row.date;
   if (!date) { rows.push(row); return; }
