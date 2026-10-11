@@ -871,7 +871,12 @@ function _localReceiptCell(item) {
     return '';
   }
   const multi = files.length > 1;
-  return files.map((r, idx) => {
+  // A Shippo postage row carries the label and, once Shippo bills it, the
+  // invoice — the actual receipt. Name each by what it is, and when only the
+  // label is there, offer the lookup right on the row.
+  const shippoRow = !!shippoTxIdFromRef(item.ref);
+  const hasShippoReceipt = shippoRow && (!!item.invoiceId || files.some(r => typeof r === 'string' && !r.startsWith('local://') && !isExpiringLabelUrl(r)));
+  const cells = files.map((r, idx) => {
     if (typeof r === 'string' && r.startsWith('local://')) {
       const fn = r.replace('local://', '');
       const base = fn.split('/').pop();
@@ -885,15 +890,19 @@ function _localReceiptCell(item) {
     const shippoTx = shippoTxIdFromRef(item.ref);
     if (shippoTx && isExpiringLabelUrl(r)) {
       const expired = isLabelUrlExpired(r);
-      const label = multi ? `Label ${idx + 1}` : 'Label';
+      const label = multi && !shippoRow ? `Label ${idx + 1}` : 'Label';
       return `<a href="#" title="${expired ? 'This saved link has expired — opens a fresh one from Shippo' : 'Opens a fresh link from Shippo'}" onclick="event.preventDefault(); openShippoLabel('${escapeHtml(String(item.ref))}')" style="color:var(--gold3);text-decoration:underline;">${label}${expired ? ' ↻' : ''}</a>`;
     }
-    const label = multi ? `Receipt ${idx + 1}` : 'Receipt';
+    const label = multi && !shippoRow ? `Receipt ${idx + 1}` : 'Receipt';
     const href = followableUrl(r);
     return href
       ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener" style="color:var(--gold3);">${label}</a>`
       : `<span style="color:var(--text3);" title="This receipt reference cannot be opened">${label}</span>`;
-  }).join(' · ');
+  });
+  if (shippoRow && !hasShippoReceipt) {
+    cells.push(`<a href="#" title="Look up the Shippo invoice that paid for this label and attach it" onclick="event.preventDefault(); findShippoReceipts(this)" style="color:var(--gold3);text-decoration:underline;">Find receipt</a>`);
+  }
+  return cells.join(' · ');
 }
 
 // Find one receipt file inside the connected folder and hand back the File.
