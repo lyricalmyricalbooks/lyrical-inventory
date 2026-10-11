@@ -20,6 +20,7 @@ import { canonicalExpenseCategory } from './lib/expense-categories.js';
 import { calcArtistEarnings, tierEffectiveCap, describePayout, payoutRequestCovered, planNetPayout, payoutNetted, unpaidSalesSummary } from './lib/earnings.js';
 import { planArtistSettlement, applyArtistSettlement, undoArtistSettlement, artistSettlementStatement, artistSettlementIssues, planSettlementForPayment } from './lib/artist-settlement.js';
 import { keyRows } from './lib/merge-state.js';
+import { restoreRecords } from './lib/storage-mode.js';
 import { createStripePriceAndLink } from './lib/stripe-payment-link.js';
 import { createStripeRateResolver, stripeOrderNumber } from './lib/stripe-sale-defaults.js';
 import { calculateBreakEven, breakEvenTierMove, applyBreakEvenTierMove, readProductionCostInput } from './lib/breakeven.js';
@@ -3963,9 +3964,11 @@ export async function loadBook(bookId) {
     if (!fbReady) throw new Error('not ready');
     // A book added after the move to the new storage still lives in the old one,
     // out of the website link's reach: move it over before reading it.
+    let lateRecords = [];
     if (window.IS_PUBLISHER && typeof window._fbAdoptBook === 'function') {
       try {
         const moved = await window._fbAdoptBook(bookId);
+        if (moved && Array.isArray(moved.late)) lateRecords = moved.late;
         // Moved, and the copy was checked record by record against the old one.
         if (moved && moved.decision === 'adopted' && moved.state) {
           const title = (BOOKS[bookId] && BOOKS[bookId].title) || bookId;
@@ -3998,6 +4001,12 @@ export async function loadBook(bookId) {
     if (states[bookId].artistPaymentLink) BOOKS[bookId].artistPaymentLink = states[bookId].artistPaymentLink;
     recomputeAfters(states[bookId], BOOKS[bookId]);
     lastSavedHashes[bookId] = pending && json ? json : JSON.stringify(states[bookId]);
+    // Sales another device saved to the old storage while this book was moving:
+    // add them through the normal save, which only adds to the cloud copy.
+    if (lateRecords.length && restoreRecords(states[bookId], lateRecords)) {
+      recomputeAfters(states[bookId], BOOKS[bookId]);
+      saveState(bookId).catch(e => console.warn('Could not save records found during the move', bookId, e));
+    }
     // Watch for live updates
     window._fbWatchSubmissions(bookId, data => {
       window.authorSubmissions[bookId] = data || {};
