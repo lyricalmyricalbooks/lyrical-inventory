@@ -2,10 +2,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/fireba
 import { getDatabase, ref, set, onValue, get, push, remove } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js";
 import { getAuth, signInWithPopup, reauthenticateWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import { getStorage, ref as sRef, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-storage.js";
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, setDoc, getDoc, getDocs, getDocFromServer, collection, onSnapshot, deleteDoc, writeBatch, runTransaction, query, where } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, setDoc, getDoc, getDocs, getDocFromServer, getDocsFromServer, collection, onSnapshot, deleteDoc, writeBatch, runTransaction, query, where } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 import { receiptDuplicate } from './lib/receipt-finder.js';
 import { ALL_PARTS, LIST_PARTS, assembleParts, emptyPart, splitState, stitchState, mergePart, mergeSettingDoc } from './lib/merge-state.js';
 import { planWebsitePublish } from './lib/website-link.js';
+import { adoptDecision, movedElsewhere } from './lib/storage-mode.js';
 
 const firebaseConfig = {
   apiKey:"AIzaSyB0BTOjfUFZKCVth9eR8iN0mvfkpRIFKSI",
@@ -103,6 +104,33 @@ window._setBookFirestoreMode = (bookId, enabled) => {
   _modeFlags['fs_mode_' + bookId] = enabled;
   localStorage.setItem('fs_mode_' + bookId, String(enabled));
   window._fbSaveModeFlags();
+};
+
+// A book added after the one-time move to Firestore was never flagged, so it
+// kept saving to the old Realtime Database, where the website link can't read
+// it. When it loads, move it over: flag it, and _fbLoad's self-heal copies its
+// old-storage records into Firestore. Only when Firestore holds nothing for it
+// (storage-mode.js adoptDecision). Returns the decision.
+window._fbAdoptBook = async (bookId) => {
+  const base = {
+    publisher: !!(auth.currentUser && window.IS_PUBLISHER),
+    global: window._useFirestoreGlobal(),
+    flagged: window._useFirestoreForBook(bookId),
+  };
+  if (adoptDecision({ ...base, hasFirestoreData: false }) === 'skip') return 'skip';
+  let hasFirestoreData = null;
+  try {
+    const snap = await getDocsFromServer(collection(fs, 'books', bookId, 'data'));
+    hasFirestoreData = !snap.empty;
+  } catch (e) {
+    console.warn(`[FB] could not check the new storage for ${bookId}; trying next time`, e);
+  }
+  const decision = adoptDecision({ ...base, hasFirestoreData });
+  if (decision === 'adopt') {
+    window._setBookFirestoreMode(bookId, true);
+    console.info(`[FB] ${bookId} moved to the new storage`);
+  }
+  return decision;
 };
 
 // ─────────────────────────────────────────────
@@ -326,6 +354,22 @@ window._fbSave = async (bookId, json, opts = {}) => {
       pending.forEach(({ part, partJson }) => { hashes[part] = partJson; });
 
       return { ok: true, merged: didMerge, state: didMerge ? stitched : null, conflicts };
+    }
+    // Another device may have moved this book to Firestore since this one read
+    // its flags (_fbAdoptBook). Writing here then would strand the change in the
+    // old storage: switch this device over and let the queue send it to
+    // Firestore instead (an ok:false save is kept and retried, never dropped).
+    if (window._useFirestoreGlobal()) {
+      let serverFlags = null;
+      try { serverFlags = (await getDocFromServer(doc(fs, 'settings', 'modeFlags'))).data() || {}; } catch (_) { /* offline: the old path as before */ }
+      if (movedElsewhere({ global: true, flaggedHere: false, serverFlags, bookId })) {
+        _modeFlags['fs_mode_' + bookId] = true;
+        localStorage.setItem('fs_mode_' + bookId, 'true');
+        if (typeof window.showToast === 'function') {
+          window.showToast('This book moved to the new storage on another device. Your change is saved and will upload; reload the app to see live updates.', 'warn', 7000);
+        }
+        return { ok: false, merged: false, reason: 'moved' };
+      }
     }
     await set(ref(db, `lyrical/books/${bookId}`), { data: json, ts: Date.now() });
     return { ok: true, merged: false };

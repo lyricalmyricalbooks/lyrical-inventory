@@ -3960,6 +3960,11 @@ export async function loadBook(bookId) {
   setSyncState('syncing', '<b>Firestore</b> · loading…');
   try {
     if (!fbReady) throw new Error('not ready');
+    // A book added after the move to the new storage still lives in the old one,
+    // out of the website link's reach: move it over before reading it.
+    if (window.IS_PUBLISHER && typeof window._fbAdoptBook === 'function') {
+      try { await window._fbAdoptBook(bookId); } catch (e) { console.warn('Could not move book to the new storage', bookId, e); }
+    }
     const json = await window._fbLoad(bookId);
     const book = BOOKS[bookId];
     if (json) {

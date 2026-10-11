@@ -152,6 +152,12 @@ target = max(0, min(feed.base − webTotal(B), feed.onHand))
 ```
 
 - **ON HAND in the inventory app is what the website sells from**, copies held by the author included.
+- **A book with no count stays as it is** (hold `no-feed`). The app publishes counts only for books in its new
+  (Firestore) storage. A book added after the app's one-time move was left in the old storage; the app now moves
+  such a book over by itself when it opens online (`_fbAdoptBook`, `src/lib/storage-mode.js` in the inventory app),
+  unless both storages hold a copy.
+- **The owner's confirmed Apply switches counting on** for a matched book that isn't counted yet, even when its
+  number is already right.
 - `webTotal(B)` is the sum of `net[B]` over the website's own `inventoryPushes`.
 - **Editions that are the same copies share one pile.** Two editions of one website book (The Hound's Signed and
   Unsigned hardcovers) may be linked to the same inventory book; two different website books may not. Both editions

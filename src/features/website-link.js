@@ -802,8 +802,8 @@ function blockedHtml() {
     : '';
   if (!ids.length) return waiting ? `<div class="wl-section">${waiting}</div>` : '';
   return `<div class="wl-section">
-      <h4 class="wl-subhead">Move to the new storage first</h4>
-      <p class="wl-note">${escapeHtml(`These books are still in the old storage, so the website can’t follow their stock and their website orders wait: ${ids.map(titleOf).join(', ')}.`)}</p>
+      <h4 class="wl-subhead">Still in the old storage</h4>
+      <p class="wl-note">${escapeHtml(`The website can’t follow these books’ stock yet, and their website orders wait: ${ids.map(titleOf).join(', ')}. Books move to the new storage by themselves when the app opens online; one that stays here has a copy in both storages, so it isn’t moved automatically in case the newer copy is lost. Send us its name and we’ll move it for you.`)}</p>
       ${waiting}
     </div>`;
 }
