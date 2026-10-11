@@ -8,8 +8,10 @@ three things:
    dispatch) is written to an inbox, `websiteOrders/{orderId}`, in the **inventory** project.
    The inventory app turns it into ledger rows through its own save path.
 2. **Inventory count → website.** After each saved change, the inventory app publishes
-   `websiteStockFeed/{inventoryBookId}`. Every 15 minutes the website sets the stock of every
-   linked edition from that feed.
+   `websiteStockFeed/{inventoryBookId}`. Once the owner has applied a first preview and switched on
+   automatic updates, the website sets linked editions' stock from that feed every 15 minutes.
+   Big changes, books not counted on the website and books with no print run wait for the
+   owner's preview. Stock is never set while any recent website sale is still unrecorded.
 3. **Postage bought in the inventory app → website.** The app writes the label onto
    `websiteOrders/{orderId}.app`. The website attaches it to the order and, once the parcel is
    marked shipped, dispatches the order with the same safety checks as Orders › Dispatch.
@@ -42,6 +44,7 @@ Website Cloud Functions open a second Admin SDK app:
 | --- | --- | --- |
 | `web` | website | The order as the website sees it now. Replaced as a whole on every push. |
 | `pending` | both | `true` when the app has something to look at (website sets it on a new `web.hash` or a new `shipmentReply`); the app sets `false` when done. |
+| `pendingSince` | website | When the order started waiting for the app (kept while `pending` stays true). The app never writes it. |
 | `shipmentReply` | website | The website's answer to the last `app.shipment`. |
 | `imported` | app | What the app last applied: `{ hash, at, device, effect: { [invBookId]: copies }, decisions }`. |
 | `app` | app | `{ shipment, shipmentWaiting }` (the website only ever sets `app.shipmentWaiting = false`, in the same transaction as its `shipmentReply`). |
