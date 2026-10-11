@@ -9710,6 +9710,7 @@ function unapplyOne(id) {
     return;
   }
   const h = state.hist[histIndex];
+  if (h.webOrderId) { showToast(WEBSITE_SALE_LOCKED, 'warn', 5000); return; }
 
   if (!h.voided) {
     state.stock += h.qty;
@@ -15438,6 +15439,9 @@ function openEditHist(idx) {
   openM('edit-entry');
 }
 
+// What the owner is told when they try to void or delete a website sale.
+const WEBSITE_SALE_LOCKED = 'This sale follows your website — refund it there and it updates here by itself.';
+
 // A sale that came from the website: its copies, channel, order number and
 // void follow the website, which refunds and restocks it there. Changing them
 // here would put this ledger out of step with the order it mirrors.
@@ -16045,7 +16049,7 @@ function voidEntry() {
     const h = s.hist[editCtx.idx];
     if (!h) return;
     if (h.artistSettlementId) { showToast('Undo the author settlement before voiding this sale.', 'warn'); return; }
-    if (h.webOrderId) { showToast('This sale follows your website — refund it there and it updates here by itself.', 'warn', 5000); return; }
+    if (h.webOrderId) { showToast(WEBSITE_SALE_LOCKED, 'warn', 5000); return; }
     if (!h.voided) {
       voidHistEntry(s, book, h);
       showToast('Entry voided — stock & revenue reversed (Sheets row delete queued)', 'warn');
@@ -18927,6 +18931,9 @@ export async function removeLedgerEntry(type, bid, id) {
   }
   if (type === 'sale' && (states[bid]?.hist || []).find(h => String(h.id ?? h.num) === String(id))?.artistSettlementId) {
     showToast('Undo the author settlement before deleting this sale.', 'warn'); return;
+  }
+  if (type === 'sale' && (states[bid]?.hist || []).some(h => String(h.id ?? h.num) === String(id) && h.webOrderId)) {
+    showToast(WEBSITE_SALE_LOCKED, 'warn', 5000); return;
   }
   if (!(await confirmDialog('Are you sure you want to permanently delete this entry from the ledger?', { okLabel: 'Delete entry', danger: true }))) return;
   let reopenedDebt = false;
@@ -24438,6 +24445,12 @@ function _reconLikelyAlreadyLogged(p, { near = false } = {}) {
   return false;
 }
 
+/** A website order with this id is already in some book's history. */
+function websiteOrderInBooks(orderId) {
+  const id = String(orderId || '');
+  return !!id && Object.values(states).some(s => (s?.hist || []).some(h => h && h.webOrderId === id));
+}
+
 // Classify a payment into one of the matchable channels.
 export function classifyStripePayment(p) {
   const mem = getReconMemory();
@@ -24449,7 +24462,9 @@ export function classifyStripePayment(p) {
   // A payment taken by the shop's website. Once the website link is running
   // the website sends the order itself, with its books and copies, so the
   // payment is never recorded here by hand (or automatically) as well.
-  if (p.metadata?.order_id && websiteLinkActive()) {
+  // The "link is running" mark is per device, so a sale already brought in
+  // from the website on another device counts too.
+  if (p.metadata?.order_id && (websiteLinkActive() || websiteOrderInBooks(p.metadata.order_id))) {
     return { kind: 'website', ref: String(p.metadata.order_id) };
   }
 

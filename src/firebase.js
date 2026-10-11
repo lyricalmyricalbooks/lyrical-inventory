@@ -793,7 +793,7 @@ const WEB_LINK_PARTS = ['hist', 'ledger', 'metadata'];
 //           app.* only) and websiteLink/app
 // Books still in the Realtime Database can't be read inside a Firestore
 // transaction; they come back in `blocked` and nothing is published for them.
-window._fbPublishWebsiteLink = async ({ bookIds = [], marks = [], shipments = [], testShipments = [], build = '', device = '' } = {}) => {
+window._fbPublishWebsiteLink = async ({ bookIds = [], marks = [], shipments = [], testShipments = [], heldOrders = [], build = '', device = '' } = {}) => {
   if (!auth.currentUser || !window.IS_PUBLISHER) throw new Error('Publisher access required');
   const empty = { feeds: 0, accepted: [], refused: [], sent: [], current: [], blocked: [], unavailable: [] };
   if (!window._useFirestoreGlobal()) return { ok: false, reason: 'old-storage', ...empty };
@@ -838,7 +838,7 @@ window._fbPublishWebsiteLink = async ({ bookIds = [], marks = [], shipments = []
     });
     const catalog = catalogSnap.exists() ? (safeParse((catalogSnap.data() || {}).data) || {}) : {};
 
-    const plan = planWebsitePublish({ bookIds: requested, books, catalog, orderDocs, marks, shipments, testShipments, now, build, device });
+    const plan = planWebsitePublish({ bookIds: requested, books, catalog, orderDocs, marks, shipments, testShipments, heldOrders, now, build, device });
     plan.feeds.forEach(f => tx.set(doc(fs, 'websiteStockFeed', f.bookId), f.doc));
     plan.orderUpdates.forEach(u => tx.update(doc(fs, 'websiteOrders', u.orderId), u.data));
     const app = { build: String(build || '') };

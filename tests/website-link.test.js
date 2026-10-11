@@ -105,7 +105,9 @@ describe('desiredWebsiteRows', () => {
       num: '#ABCD-123456-WXYZ',
       date: '2026-10-11',
       qty: 2,
-      price: 40,
+      // 80 of books less the 8 discount, per copy.
+      price: 36,
+      merchandisePaid: 72,
       cur: 'CAD',
       fulfilledOnWebsite: true,
       voided: false,
@@ -138,7 +140,13 @@ describe('desiredWebsiteRows', () => {
     expect(rows.map(r => r.bookId)).toEqual(['hound', 'altrove']);
     const [first, second] = rows.map(r => r.row);
     expect(first).toMatchObject({ shippingPaid: 12, taxPaid: 4.68, totalPaid: 88.68, discountAmount: 8, discountCode: 'FALL', discountSource: 'website', subtotal: 80 });
-    expect(second).toMatchObject({ shippingPaid: 0, taxPaid: 0, totalPaid: 0, discountAmount: 0, discountCode: '', discountSource: '', subtotal: 0, merchandisePaid: 30 });
+    // The 8 discount split by value (30 : 80), whole cents: 2.18 and 5.82.
+    expect(second).toMatchObject({ shippingPaid: 0, taxPaid: 0, totalPaid: 0, discountAmount: 0, discountCode: '', discountSource: '', subtotal: 0, merchandisePaid: 27.82 });
+    expect(first.merchandisePaid).toBe(74.18);
+    // The address and the website's postage answer ride on the first row only.
+    expect(first.shipName).toBe('Dana Reader');
+    expect(second.shipName).toBeUndefined();
+    expect(second.shipAddr1).toBeUndefined();
   });
 
   it('converts a book priced in another currency at the stamped dated rate', () => {
@@ -148,8 +156,8 @@ describe('desiredWebsiteRows', () => {
       cadRateFor: (cur, day) => (cur === 'EUR' && day === '2026-10-11' ? 1.5 : null),
     });
     expect(needsRate).toEqual([]);
-    expect(rows[0].row).toMatchObject({ price: 26.67, cur: 'EUR', cadRate: 1.5 });
-    expect(rows[0].row.payment).toMatchObject({ currency: 'CAD', amount: 80, convertedTotal: 53.34, rateSource: 'dated', rateDate: '2026-10-11' });
+    expect(rows[0].row).toMatchObject({ price: 24, cur: 'EUR', cadRate: 1.5, merchandisePaid: 72 });
+    expect(rows[0].row.payment).toMatchObject({ currency: 'CAD', amount: 72, convertedTotal: 48, rateSource: 'dated', rateDate: '2026-10-11' });
   });
 
   it('never guesses a rate: a foreign-priced sale with no rate waits', () => {
@@ -185,7 +193,9 @@ describe('desiredWebsiteRows', () => {
 
   it('a partial refund keeps the sale for the copies that stayed gone', () => {
     const web = makeWeb({ refundState: 'partial', refund: { amountMinor: 4000, currency: 'CAD' }, books: { hound: { net: 1, sold: 2, restocked: 1, unitCAD: 40, merchCAD: 80 } } });
-    expect(rowFor(web)).toMatchObject({ voided: false, qty: 1, price: 40, gratuity: false, webRefundState: 'partial' });
+    // 72 after discount → 36 a copy. The 40 refund pays for the copy that came
+    // back (36); the other 4 comes off the copy kept.
+    expect(rowFor(web)).toMatchObject({ voided: false, qty: 1, price: 32, merchandisePaid: 32, gratuity: false, webRefundState: 'partial', webRefundCAD: 40, totalPaid: 48.68 });
   });
 
   it('a bank-rejected refund comes back as an ordinary sale', () => {
@@ -840,5 +850,172 @@ describe('rememberChargeIntents', () => {
     // Seen again: moves to the newest end instead of being dropped.
     expect(Object.keys(rememberChargeIntents(capped, [{ id: 'ch_2', piId: 'pi_2' }, { id: 'ch_4', piId: 'pi_4' }], 2))).toEqual(['ch_2', 'ch_4']);
     expect(rememberChargeIntents(null, null)).toEqual({});
+  });
+});
+
+describe('review fixes — money', () => {
+  it('spreads the order discount over the books by value, in whole cents that add up', async () => {
+    const { splitCents, websiteBookMoney } = await import('../src/lib/website-link.js');
+    expect(splitCents(100, [1, 1, 1])).toEqual([34, 33, 33]);
+    expect(splitCents(0, [5, 5])).toEqual([0, 0]);
+    expect(splitCents(5, [0, 0])).toEqual([0, 0]);
+    const web = makeWeb({
+      totals: { subtotal: 100, discount: 10, shipping: 0, tax: 0, total: 90 },
+      books: { a: { net: 3, sold: 3, unitCAD: 20, merchCAD: 60 }, b: { net: 1, sold: 1, unitCAD: 40, merchCAD: 40 } },
+      firstBook: 'a',
+    });
+    const m = websiteBookMoney(web);
+    expect(m.books.a.kept + m.books.b.kept).toBe(9000);
+    const rows = rowsOf(web);
+    const total = rows.reduce((sum, { row }) => sum + row.qty * row.price, 0);
+    expect(Math.round(total * 100)).toBe(9000);
+    // 54 over 3 copies is 18 each; the order's exact merchandise is kept too.
+    expect(rows.find(r => r.bookId === 'a').row).toMatchObject({ price: 18, merchandisePaid: 54 });
+  });
+
+  it('a discount shared with unlinked copies only takes the linked books’ part', () => {
+    const web = makeWeb({ totals: { subtotal: 100, discount: 20, total: 80 }, books: { hound: { net: 1, sold: 1, unitCAD: 50, merchCAD: 50 } } });
+    expect(rowFor(web)).toMatchObject({ price: 40, merchandisePaid: 40 });
+  });
+
+  it('a free gift line is priced 0 by the discount', () => {
+    const web = makeWeb({
+      totals: { subtotal: 70, discount: 30, total: 40 },
+      books: { hound: { net: 1, sold: 1, unitCAD: 40, merchCAD: 40 }, gift: { net: 1, sold: 1, unitCAD: 30, merchCAD: 30 } },
+    });
+    // Without per-line discounts the website's discount is shared by value; the
+    // books still add up to what was paid for them.
+    const rows = rowsOf(web);
+    expect(Math.round(rows.reduce((t, { row }) => t + row.qty * row.price, 0) * 100)).toBe(4000);
+  });
+
+  it('keeps per-copy prices exact when the total does not divide evenly', () => {
+    const web = makeWeb({ totals: { subtotal: 100, discount: 0, total: 100 }, books: { hound: { net: 3, sold: 3, unitCAD: 33.33, merchCAD: 100 } } });
+    const row = rowFor(web);
+    expect(row.merchandisePaid).toBe(100);
+    expect(roundCentsOf(row.qty * row.price)).toBe(100);
+  });
+
+  it('a refund in another currency converts at the order’s own rate, or waits for a person', () => {
+    const base = {
+      refundState: 'partial',
+      charged: { currency: 'USD', amountMinor: 6000 },
+      totals: { subtotal: 80, discount: 0, shipping: 0, tax: 0, total: 80 },
+      books: { hound: { net: 2, sold: 2, restocked: 0, unitCAD: 40, merchCAD: 80 } },
+    };
+    // 15 USD back of 60 charged is a quarter of the 80 CAD order.
+    expect(rowFor(makeWeb({ ...base, refund: { amountMinor: 1500, currency: 'USD' } }))).toMatchObject({ merchandisePaid: 60, price: 30 });
+    const plan = planWebsiteOrder({ id: 'x', web: makeWeb({ ...base, refund: { amountMinor: 1500, currency: 'EUR' } }) }, { histByBook: { hound: [] }, bookCurrencyOf: cadBook });
+    expect(plan).toMatchObject({ status: 'review', reasons: [{ reason: 'refund-currency', currency: 'EUR' }] });
+  });
+
+  it('a gratuity row (refunded, copies kept) carries no money at all', () => {
+    const web = makeWeb({ paymentStatus: 'refunded', refundState: 'full', books: { hound: { net: 1, sold: 1, restocked: 0, unitCAD: 40, merchCAD: 40 } } });
+    expect(rowFor(web)).toMatchObject({ gratuity: true, price: 0, merchandisePaid: 0, shippingPaid: 0, taxPaid: 0, totalPaid: 0, subtotal: 0, discountAmount: 0, giftCardPaid: 0 });
+  });
+
+  it('linking a hand sale keeps its own price, date and totals; only link, copies and refund state change', () => {
+    const hand = { num: '#ABCD-123456-WXYZ', chan: 'Website', qty: 2, price: 50, date: '2026-10-09', sheetsId: 'h1', shippingPaid: 9, totalPaid: 109 };
+    const patch = rowPatch(hand, rowFor(makeWeb()));
+    for (const k of ['price', 'date', 'shippingPaid', 'totalPaid', 'merchandisePaid', 'cur']) expect(patch[k], k).toBeUndefined();
+    expect(patch).toMatchObject({ webOrderId: 'ABCD-123456-WXYZ', voided: false, gratuity: false });
+    expect(patch.webMoney).toBeTruthy();
+    // Refunded in full later with the copies kept: the money goes, whoever entered it.
+    const refunded = rowFor(makeWeb({ paymentStatus: 'refunded', refundState: 'full', books: { hound: { net: 2, sold: 2, unitCAD: 40, merchCAD: 80 } } }));
+    expect(rowPatch(hand, refunded)).toMatchObject({ gratuity: true, price: 0 });
+  });
+
+  it('a price the owner corrected stays until the website’s money for that book changes', () => {
+    const d = rowFor(makeWeb());
+    const edited = { ...d, price: 30 };
+    expect(rowPatch(edited, rowFor(makeWeb({ hash: 'h2', fulfillment: { status: 'processing' } })))).toEqual(expect.not.objectContaining({ price: expect.anything() }));
+    expect(rowPatch(edited, rowFor(makeWeb({ hash: 'h2', fulfillment: { status: 'processing' } }))).price).toBeUndefined();
+    const discounted = rowFor(makeWeb({ hash: 'h3', totals: { subtotal: 80, discount: 10, shipping: 12, tax: 0, total: 82 } }));
+    expect(rowPatch(edited, discounted)).toMatchObject({ price: 35 });
+  });
+});
+
+describe('review fixes — tracking', () => {
+  it('clears the website’s tracking when the website drops its label, and never sends it back', () => {
+    const shipped = rowFor(makeWeb({ fulfillment: { status: 'processing', trackingNumber: 'W1', labelSource: 'website' } }));
+    expect(shipped.webTrackingSeen).toEqual(['W1']);
+    const dropped = rowFor(makeWeb({ hash: 'h2', fulfillment: { status: 'processing', trackingNumber: '', labelSource: null } }));
+    const patch = rowPatch(shipped, dropped);
+    expect(patch).toMatchObject({ trackingNumber: '', trackingSource: '', webTracking: '' });
+    const after = { ...shipped, ...patch };
+    expect(hasAppTracking(after)).toBe(false);
+    expect(appShipmentFor([after], null, { fulfillment: {} })).toBeNull();
+    // Even if the cleared number were still on the row, it was the website's.
+    expect(hasAppTracking({ webOrderId: 'x', trackingNumber: 'W1', webTracking: '', webTrackingSeen: ['W1'] })).toBe(false);
+  });
+
+  it('tracking already on a linked hand sale is sent as a label unless the parcel is old or the website shipped it', () => {
+    const hand = (over) => ({ num: '#ABCD-123456-WXYZ', qty: 2, price: 40, trackingNumber: 'T9', shipped: true, ...over });
+    const d = rowFor(makeWeb());
+    expect(rowPatch(hand({ shippedDate: '2026-10-12' }), d, { consentDay: '2026-10-10' }).webBaselineTracking).toBeUndefined();
+    expect(rowPatch(hand({ shippedDate: '2026-10-01' }), d, { consentDay: '2026-10-10' }).webBaselineTracking).toBe('T9');
+    expect(rowPatch(hand({ shippedDate: '2026-10-12' }), d, {}).webBaselineTracking).toBe('T9');
+    const websiteShipped = rowFor(makeWeb({ fulfillment: { status: 'shipped', trackingNumber: 'W1', labelSource: 'website' } }));
+    expect(rowPatch(hand({ shippedDate: '2026-10-12' }), websiteShipped, { consentDay: '2026-10-10' }).webBaselineTracking).toBe('T9');
+  });
+});
+
+describe('review fixes — order freshness and row size', () => {
+  it('never patches a row with an older copy of the order', async () => {
+    const { rowIsNewer } = await import('../src/lib/website-link.js');
+    const newer = rowFor(makeWeb({ sourceUpdatedAt: '2026-10-12T00:00:00.000Z', paymentStatus: 'refunded', refundState: 'full', books: { hound: { net: 0, sold: 2, restocked: 2, unitCAD: 40, merchCAD: 80 } } }));
+    const older = rowFor(makeWeb({ sourceUpdatedAt: '2026-10-11T00:00:00.000Z' }));
+    expect(rowPatch(newer, older)).toBeNull();
+    expect(rowIsNewer(newer, { sourceUpdatedAt: '2026-10-11T00:00:00.000Z' })).toBe(true);
+    const plan = planWebsiteOrder({ id: 'ABCD-123456-WXYZ', web: makeWeb({ sourceUpdatedAt: '2026-10-11T00:00:00.000Z' }) }, { histByBook: { hound: [newer] }, bookCurrencyOf: cadBook });
+    expect(plan.status).toBe('stale');
+  });
+
+  it('keeps a long website reason short on the row', () => {
+    const reply = { hash: 'x', result: 'refused', reason: 'r'.repeat(500), at: 'z' };
+    expect(rowFor(makeWeb(), 'hound', { shipmentReply: reply }).webShipment.reason).toHaveLength(200);
+  });
+});
+
+describe('review fixes — the feed while orders wait', () => {
+  it('sends a book as not trustworthy while one of its website orders waits here', () => {
+    const books = { hound: { hist: [], ledger: [], metadata: {} } };
+    const catalog = { hound: { id: 'hound', title: 'The Hound', maxPrint: 10 } };
+    const held = planWebsitePublish({ bookIds: ['hound'], books, catalog, heldOrders: [{ orderId: 'W1', books: ['hound'] }] });
+    expect(held.feeds[0].doc.derived).toBe(false);
+    expect(held.held).toEqual(['hound']);
+    const free = planWebsitePublish({ bookIds: ['hound'], books, catalog, heldOrders: [] });
+    expect(free.feeds[0].doc.derived).toBe(true);
+  });
+
+  it('an order marked done in the same transaction no longer holds its book', () => {
+    const saved = rowFor(makeWeb());
+    const res = planWebsitePublish({
+      bookIds: ['hound'],
+      books: { hound: { hist: [saved], ledger: [], metadata: {} } },
+      catalog: { hound: { id: 'hound', title: 'H', maxPrint: 10 } },
+      orderDocs: { 'ABCD-123456-WXYZ': { web: makeWeb(), pending: true } },
+      marks: [{ orderId: 'ABCD-123456-WXYZ', hash: 'h1', effect: { hound: 2 }, replyAt: '' }],
+      heldOrders: [{ orderId: 'ABCD-123456-WXYZ', books: ['hound'] }],
+    });
+    expect(res.accepted).toEqual(['ABCD-123456-WXYZ']);
+    expect(res.feeds[0].doc.derived).toBe(true);
+  });
+});
+
+function roundCentsOf(n) { return Math.round(n * 100) / 100; }
+
+describe('isShippoTestKey', () => {
+  it('knows a Shippo test key from a live one', async () => {
+    const { isShippoTestKey } = await import('../src/lib/website-link.js');
+    expect(isShippoTestKey('shippo_test_abc')).toBe(true);
+    expect(isShippoTestKey(' shippo_test_abc')).toBe(true);
+    expect(isShippoTestKey('shippo_live_abc')).toBe(false);
+    expect(isShippoTestKey('')).toBe(false);
+  });
+
+  it('a test label never counts as a label for the website', () => {
+    const row = { webOrderId: 'A', trackingNumber: 'T1', trackingSimulated: true, shipped: true };
+    expect(appShipmentFor([row], null, null)).toBeNull();
   });
 });

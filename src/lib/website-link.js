@@ -48,11 +48,45 @@ const wholeCopies = (value) => {
   const n = Math.floor(Number(value));
   return Number.isFinite(n) && n > 0 ? n : 0;
 };
-const money = (value) => roundCents(Number(value) || 0);
+const money_ = (value) => roundCents(Number(value) || 0);
 const dayOf = (value) => (/^\d{4}-\d{2}-\d{2}/.test(String(value || '')) ? String(value).slice(0, 10) : '');
 const same = (a, b) => stableStringify(a) === stableStringify(b);
 const httpUrl = (value) => (/^https?:\/\//i.test(clean(value)) ? clean(value) : '');
 const dayMs = (day) => Date.parse(`${day}T12:00:00Z`);
+const cents = (value) => Math.round((Number(value) || 0) * 100);
+const fromCents = (n) => roundCents(n / 100);
+/** Short stable fingerprint of a value (FNV-1a), to tell "the website's money changed". */
+function fingerprint(value) {
+  const text = stableStringify(value);
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h.toString(16).padStart(8, '0');
+}
+/** Longest a website reason is kept on a row (the row lives in a size-limited document). */
+const REPLY_REASON_MAX = 200;
+
+/**
+ * Splits `total` cents over `weights` in proportion, by largest remainder, so
+ * the parts are whole cents and add back to exactly `total`.
+ */
+export function splitCents(total, weights = []) {
+  const w = weights.map(x => Math.max(0, Number(x) || 0));
+  const sum = w.reduce((a, b) => a + b, 0);
+  const t = Math.max(0, Math.round(Number(total) || 0));
+  if (!t || !sum) return w.map(() => 0);
+  const exact = w.map(x => (t * x) / sum);
+  const parts = exact.map(Math.floor);
+  let left = t - parts.reduce((a, b) => a + b, 0);
+  const order = exact.map((e, i) => ({ i, r: e - parts[i] })).sort((a, b) => b.r - a.r || a.i - b.i);
+  for (let k = 0; left > 0 && k < order.length; k++, left--) parts[order[k].i]++;
+  return parts;
+}
+
+/** The tracking numbers the website has ever sent for a row (never app tracking). */
+function websiteTrackingSeen(row) {
+  const list = Array.isArray(row && row.webTrackingSeen) ? row.webTrackingSeen : [];
+  return [...new Set([...list, row && row.webTracking].map(clean).filter(Boolean))];
+}
 
 /**
  * Device storage for "this Stripe charge belongs to that PaymentIntent", kept
@@ -76,6 +110,11 @@ export function rememberChargeIntents(map = {}, payments = [], limit = CHARGE_PI
   const keys = Object.keys(out);
   if (keys.length > limit) keys.slice(0, keys.length - limit).forEach(k => { delete out[k]; });
   return out;
+}
+
+/** A Shippo test-mode key: its labels are rehearsals and never ship anything. */
+export function isShippoTestKey(key) {
+  return /^shippo_test_/i.test(clean(key));
 }
 
 /** The deterministic row id for one order and one book, the same on every device. */
@@ -110,7 +149,9 @@ export function isWebsiteRow(row) {
 export function hasAppTracking(row) {
   const tracking = clean(row && row.trackingNumber);
   if (!tracking || (row && row.trackingSimulated)) return false;
-  return tracking !== clean(row.webTracking) && tracking !== clean(row.webBaselineTracking);
+  // Not trackingSource: the app's label flows overwrite the number but leave
+  // that tag alone, so only the numbers the website actually sent count.
+  return !websiteTrackingSeen(row).includes(tracking) && tracking !== clean(row.webBaselineTracking);
 }
 
 /**
@@ -149,27 +190,96 @@ function shippingMethodOf(method) {
 }
 
 /**
+ * What each book on the order actually brought in, in whole CAD cents, after
+ * the order discount and any partial refund — so revenue and the author's
+ * share are what the customer really paid.
+ *
+ * - The discount is shared over the order's lines by their value
+ *   (`merchCAD` against the order subtotal, which also holds unlinked copies),
+ *   largest remainder, so the cents add back up. A free gift line is simply a
+ *   line the discount covered.
+ * - A partial refund (in CAD, or converted at the order's own CAD/charged
+ *   ratio) first pays for the copies that came back; anything over that comes
+ *   off the copies kept, shared the same way. Refunds of shipping or tax beyond
+ *   the merchandise are not taken out of the books' sales.
+ *
+ * @returns {{ books: { [bookId]: { kept: number, unitNet: number } }, refundCAD: number, refundUnknown: boolean }}
+ */
+export function websiteBookMoney(web = {}, ids = webBookIdsWithRows(web)) {
+  const books = web.books && typeof web.books === 'object' ? web.books : {};
+  const totals = web.totals && typeof web.totals === 'object' ? web.totals : {};
+  const merch = ids.map(id => Math.max(0, cents((books[id] || {}).merchCAD)));
+  const sumMerch = merch.reduce((a, b) => a + b, 0);
+  const subtotal = Math.max(cents(totals.subtotal), sumMerch);
+  const discount = Math.max(0, cents(totals.discount));
+  const linkedDiscount = subtotal > 0 ? Math.min(sumMerch, Math.round((discount * sumMerch) / subtotal)) : 0;
+  const shares = splitCents(linkedDiscount, merch);
+  const unitNet = ids.map((id, i) => {
+    const sold = wholeCopies((books[id] || {}).sold);
+    return sold ? (merch[i] - shares[i]) / sold : 0;
+  });
+  const netOf = id => {
+    const b = books[id] || {};
+    return Number.isFinite(Number(b.net)) ? wholeCopies(b.net) : Math.max(0, wholeCopies(b.sold) - wholeCopies(b.restocked));
+  };
+  const keptValue = ids.map((id, i) => {
+    const b = books[id] || {};
+    const net = netOf(id);
+    // All copies kept: exactly what was paid for them, no rounding drift.
+    return net === wholeCopies(b.sold) ? merch[i] - shares[i] : Math.round(net * unitNet[i]);
+  });
+
+  let refundCAD = 0;
+  let refundUnknown = false;
+  if (web.refundState === 'partial' && web.refund && typeof web.refund === 'object') {
+    const amount = Math.max(0, Math.round(Number(web.refund.amountMinor) || 0));
+    const cur = normalizeCurrencyCode(web.refund.currency, '');
+    const charged = web.charged && typeof web.charged === 'object' ? web.charged : {};
+    if (cur === 'CAD') refundCAD = amount;
+    else if (cur && normalizeCurrencyCode(charged.currency, '') === cur && Number(charged.amountMinor) > 0 && cents(totals.total) > 0) {
+      refundCAD = Math.round((amount * cents(totals.total)) / Number(charged.amountMinor));
+    } else if (amount > 0) refundUnknown = true;
+  }
+  const restockedValue = ids.reduce((sum, id, i) => sum + Math.round(wholeCopies((books[id] || {}).restocked) * unitNet[i]), 0);
+  const extra = Math.max(0, refundCAD - restockedValue);
+  const extraShares = splitCents(Math.min(extra, keptValue.reduce((a, b) => a + b, 0)), keptValue);
+  const out = {};
+  ids.forEach((id, i) => { out[id] = { kept: Math.max(0, keptValue[i] - extraShares[i]), unitNet: unitNet[i] }; });
+  return { books: out, refundCAD, refundUnknown };
+}
+
+// Order-level money, carried on the first book's row only.
+const ORDER_MONEY = ['subtotal', 'discountAmount', 'discountCode', 'discountSource', 'shippingPaid', 'taxPaid', 'totalPaid', 'giftCardPaid', 'webRefundCAD'];
+// Everything about what a row is worth. A hand-entered sale keeps its own when
+// it is linked, and a price the owner edits stays until the website's money
+// for that book changes (`webMoney` is the fingerprint of the website's).
+const MONEY_KEYS = new Set(['price', 'cur', 'merchandisePaid', 'payment', 'cadRate', 'date', ...ORDER_MONEY]);
+
+/**
  * The `hist` row each book on a website order should have, built from `web`
  * alone.
  *
  * - One row per book (inventory book id), `qty` = copies that left the shelf
  *   and stayed gone (`net`).
- * - CAD books are priced at `unitCAD`. A book priced in another currency is
- *   converted with the dated rate `cadRateFor(currency, day)` returns (CAD per
- *   one unit of that currency), and the rate is stamped on the row. With no
- *   rate the book goes to `needsRate` instead of being guessed.
+ * - The price is what was paid per copy after the order discount and any
+ *   partial refund (websiteBookMoney); `merchandisePaid` holds the exact total.
+ *   CAD books are priced in CAD. A book priced in another currency is converted
+ *   with the dated rate `cadRateFor(currency, day)` returns (CAD per one unit of
+ *   that currency), and the rate is stamped on the row. With no rate the book
+ *   goes to `needsRate` instead of being guessed.
  * - Refunded with every copy back on the shelf (`net` 0): the row is voided.
  *   Refunded in full with copies still gone: the row stays, `gratuity:true`,
- *   price 0 — the copies are gone and no money stayed.
- * - The order's shipping, tax, discount and totals ride on the first book's
- *   row only, so a two-book order is not charged shipping twice.
+ *   price 0 and no money at all — the copies are gone and no money stayed.
+ * - The order's shipping, tax, discount and totals — and the customer's
+ *   address and the website's answer about postage — ride on the first book's
+ *   row only, so a two-book order is not counted twice and its rows stay small.
  * - Tracking and the shipped flag come from `web.fulfillment`, except a label
  *   this app sent the website itself (`labelSource: 'inventory-app'`).
  *
- * @returns {{ rows: Array<{bookId: string, row: object}>, needsRate: Array<{bookId, currency, day}> }}
+ * @returns {{ rows: Array<{bookId: string, row: object}>, needsRate: Array<{bookId, currency, day}>, refundUnknown: boolean }}
  */
 export function desiredWebsiteRows(web = {}, { bookCurrencyOf = () => 'CAD', cadRateFor = () => null, shipmentReply = null } = {}) {
-  const out = { rows: [], needsRate: [] };
+  const out = { rows: [], needsRate: [], refundUnknown: false };
   const orderId = clean(web && web.orderId);
   if (!orderId) return out;
   const books = web.books && typeof web.books === 'object' ? web.books : {};
@@ -186,8 +296,10 @@ export function desiredWebsiteRows(web = {}, { bookCurrencyOf = () => 'CAD', cad
   const shipped = WEBSITE_SHIPPED_STATES.has(ff.status);
   const voidedAt = Date.parse(web.sourceUpdatedAt || '') || Date.parse(web.paidAt || '') || 0;
   const reply = shipmentReply && typeof shipmentReply === 'object' && clean(shipmentReply.hash)
-    ? { hash: clean(shipmentReply.hash), result: clean(shipmentReply.result), reason: clean(shipmentReply.reason), at: clean(shipmentReply.at) }
+    ? { hash: clean(shipmentReply.hash), result: clean(shipmentReply.result), reason: clean(shipmentReply.reason).slice(0, REPLY_REASON_MAX), at: clean(shipmentReply.at) }
     : null;
+  const money = websiteBookMoney(web, ids);
+  out.refundUnknown = money.refundUnknown;
 
   for (const bookId of ids) {
     const b = books[bookId] || {};
@@ -196,7 +308,11 @@ export function desiredWebsiteRows(web = {}, { bookCurrencyOf = () => 'CAD', cad
     const voided = net <= 0;
     const gratuity = !voided && refundedFull;
     const cur = normalizeCurrencyCode(bookCurrencyOf(bookId), 'CAD');
-    const unitCAD = money(b.unitCAD);
+    const keptCents = gratuity ? 0 : money.books[bookId].kept;
+    // Per copy, precise enough that copies × price adds back to the exact total.
+    const unitCAD = voided
+      ? money.books[bookId].unitNet / 100
+      : (net ? keptCents / net / 100 : 0);
     const qty = voided ? Math.max(1, sold) : net;
 
     let price = 0;
@@ -204,17 +320,17 @@ export function desiredWebsiteRows(web = {}, { bookCurrencyOf = () => 'CAD', cad
     let cadRate;
     if (!gratuity) {
       if (cur === 'CAD') {
-        price = unitCAD;
+        price = Math.round(unitCAD * 1e6) / 1e6;
       } else {
         const rate = Number(cadRateFor(cur, day));
         if (rate > 0 && Number.isFinite(rate)) {
           cadRate = rate;
-          price = money(unitCAD / rate);
+          price = Math.round((unitCAD / rate) * 1e6) / 1e6;
           payment = {
             currency: 'CAD',
-            amount: money(qty * unitCAD),
+            amount: fromCents(voided ? Math.round(qty * unitCAD * 100) : keptCents),
             rate: Math.round((1 / rate) * 1e6) / 1e6,
-            convertedTotal: money(qty * price),
+            convertedTotal: roundCents(qty * price),
             rateSource: 'dated',
             rateDate: day,
           };
@@ -228,12 +344,15 @@ export function desiredWebsiteRows(web = {}, { bookCurrencyOf = () => 'CAD', cad
     }
 
     const isFirst = bookId === first;
+    // A fully refunded order kept no money at all: none of it is income.
+    const orderMoney = isFirst && !refundedFull;
     const uid = webRowUid(orderId, bookId);
     const row = {
       uid,
       sheetsId: uid,
       webOrderId: orderId,
       webHash: clean(web.hash),
+      webSourceUpdatedAt: clean(web.sourceUpdatedAt),
       chan: 'Website',
       num,
       date: day,
@@ -249,26 +368,32 @@ export function desiredWebsiteRows(web = {}, { bookCurrencyOf = () => 'CAD', cad
       webPaymentStatus: clean(web.paymentStatus),
       webFulfillmentStatus: clean(ff.status),
       webTracking: websiteTracking,
-      shipName: clean(customer.name),
-      shipEmail: clean(customer.email),
-      shipPhone: clean(customer.phone),
-      shipAddr1: clean(address.street),
-      shipAddr2: clean(address.unit),
-      shipCity: clean(address.city),
-      shipProvince: clean(address.state),
-      shipPostal: clean(address.zip),
-      shipCountry: clean(address.country) ? countryName(address.country) : '',
       shippingMethod: shippingMethodOf(clean(ff.method)),
-      merchandisePaid: gratuity ? 0 : money(b.merchCAD),
-      subtotal: isFirst ? money(totals.subtotal) : 0,
-      discountAmount: isFirst ? money(totals.discount) : 0,
-      discountCode: isFirst ? clean(totals.discountCode) : '',
-      discountSource: isFirst && money(totals.discount) > 0 ? 'website' : '',
-      shippingPaid: isFirst ? money(totals.shipping) : 0,
-      taxPaid: isFirst ? money(totals.tax) : 0,
-      totalPaid: isFirst ? money(totals.total) : 0,
-      giftCardPaid: isFirst ? money(totals.giftCard) : 0,
+      merchandisePaid: fromCents(keptCents),
+      subtotal: orderMoney ? money_(totals.subtotal) : 0,
+      discountAmount: orderMoney ? money_(totals.discount) : 0,
+      discountCode: orderMoney ? clean(totals.discountCode) : '',
+      discountSource: orderMoney && money_(totals.discount) > 0 ? 'website' : '',
+      shippingPaid: orderMoney ? money_(totals.shipping) : 0,
+      taxPaid: orderMoney ? money_(totals.tax) : 0,
+      totalPaid: orderMoney ? fromCents(Math.max(0, cents(totals.total) - money.refundCAD)) : 0,
+      giftCardPaid: orderMoney ? money_(totals.giftCard) : 0,
+      webRefundCAD: orderMoney ? fromCents(money.refundCAD) : 0,
     };
+    if (isFirst) {
+      Object.assign(row, {
+        shipName: clean(customer.name),
+        shipEmail: clean(customer.email),
+        shipPhone: clean(customer.phone),
+        shipAddr1: clean(address.street),
+        shipAddr2: clean(address.unit),
+        shipCity: clean(address.city),
+        shipProvince: clean(address.state),
+        shipPostal: clean(address.zip),
+        shipCountry: clean(address.country) ? countryName(address.country) : '',
+      });
+      if (reply) row.webShipment = reply;
+    }
     // Every value comes from `web`, so two devices bringing in the same order
     // write the same row and the merge sees one sale, not a clash.
     if (clean(web.paidAt)) row.recordedAt = clean(web.paidAt);
@@ -277,6 +402,7 @@ export function desiredWebsiteRows(web = {}, { bookCurrencyOf = () => 'CAD', cad
     if (payment) row.payment = payment;
     if (b.preorder) row.preorder = true;
     if (websiteTracking) {
+      row.webTrackingSeen = [websiteTracking];
       row.trackingNumber = websiteTracking;
       row.trackingSource = 'website';
       if (clean(ff.trackingCarrier)) row.trackingCarrier = clean(ff.trackingCarrier);
@@ -286,7 +412,7 @@ export function desiredWebsiteRows(web = {}, { bookCurrencyOf = () => 'CAD', cad
       row.shipped = true;
       row.shippedDate = dayOf(ff.shippedDay) || day;
     }
-    if (reply) row.webShipment = reply;
+    row.webMoney = fingerprint(Object.fromEntries([...MONEY_KEYS].map(k => [k, row[k] ?? null]).concat([['gratuity', gratuity]])));
     out.rows.push({ bookId, row });
   }
   return out;
@@ -297,35 +423,75 @@ const APP_OWNED = new Set(['notes', 'after', 'recordedAt', 'enteredBy']);
 // Fields that only follow the website while the row has no tracking of its own.
 const TRACKING_KEYS = new Set(['trackingNumber', 'trackingCarrier', 'trackingUrl', 'trackingSource', 'shipped', 'shippedDate']);
 
+/** True when a newer copy of the order is already on the row than `web` is. */
+export function rowIsNewer(existing, web) {
+  const had = clean(existing && existing.webSourceUpdatedAt);
+  const now = clean(web && web.sourceUpdatedAt);
+  return !!had && !!now && had > now;
+}
+
 /**
  * What has to change on `existing` to make it the website's row. `null` when
  * nothing does.
  *
+ * - A row never goes back to an older copy of the order than it holds
+ *   (`webSourceUpdatedAt`): a cached, out-of-date snapshot can't undo a refund.
  * - A linked row keeps its own `sheetsId`, so its Google Sheet row and the
  *   Stripe "already recorded" check stay attached to it.
  * - Notes and who entered it stay as the owner left them.
- * - Tracking set in this app (or already on a row when it is linked) is never
- *   overwritten by the website's, and a row the website once called shipped is
- *   never un-shipped by a later push.
+ * - Money: a hand-entered sale keeps its own price, date and totals when it is
+ *   linked (only its link, copies and refund state follow the website); after
+ *   that, the website's money is applied only when it changes, so a price the
+ *   owner corrected by hand is not put back on every push.
+ * - Tracking set in this app is never overwritten by the website's. Tracking
+ *   the website sent is replaced — or cleared, when the website drops its
+ *   label — and is never mistaken for a label bought here.
  * - A row linked with a tracking number already on it remembers that number
- *   (`webBaselineTracking`), so an old parcel is never sent to the website as
- *   new postage — that would email the customer about a parcel long gone.
+ *   (`webBaselineTracking`) when the website already shipped the order or the
+ *   parcel went before the link was switched on, so an old parcel is never
+ *   sent as new postage. Otherwise it is a label for this order and is sent.
+ *
+ * `opts.consentDay` is the day the owner switched the link on (YYYY-MM-DD).
  */
-export function rowPatch(existing = {}, desired = {}) {
+export function rowPatch(existing = {}, desired = {}, { consentDay = '' } = {}) {
   const ex = existing || {};
+  if (rowIsNewer(ex, { sourceUpdatedAt: desired.webSourceUpdatedAt })) return null;
   const patch = {};
+  const adopting = !ex.webOrderId;
+  const seen = [...new Set([...websiteTrackingSeen(ex), clean(desired.webTracking)].filter(Boolean))];
   const tracking = clean(ex.trackingNumber);
-  const ownTracking = !!tracking && tracking !== clean(ex.webTracking) && tracking !== clean(desired.webTracking);
-  if (!ex.webOrderId && ownTracking && !ex.webBaselineTracking) patch.webBaselineTracking = tracking;
+  const fromWebsite = !!tracking && seen.includes(tracking);
+  const ownTracking = !!tracking && !fromWebsite && tracking !== clean(ex.webBaselineTracking);
+  if (adopting && ownTracking && !ex.webBaselineTracking) {
+    const websiteShipped = WEBSITE_SHIPPED_STATES.has(desired.webFulfillmentStatus);
+    const sent = dayOf(ex.shippedDate) || dayOf(ex.date);
+    if (websiteShipped || !consentDay || !sent || sent < consentDay) patch.webBaselineTracking = tracking;
+  }
+  const keepTracking = !!tracking && !fromWebsite;
+  if (seen.length && !same(seen, Array.isArray(ex.webTrackingSeen) ? ex.webTrackingSeen : [])) patch.webTrackingSeen = seen;
+
+  // A hand sale keeps its own money when linked (unless the order was refunded
+  // in full, which takes every cent of it away); a website row takes the
+  // website's only when the website's changed.
+  const moneyFollows = adopting ? !!desired.gratuity : !same(ex.webMoney, desired.webMoney);
 
   for (const [key, value] of Object.entries(desired || {})) {
     if (value === undefined || APP_OWNED.has(key)) continue;
     if (key === 'sheetsId' && clean(ex.sheetsId)) continue;
+    if (key === 'webTrackingSeen') continue; // merged above, never replaced
+    if (MONEY_KEYS.has(key) && !moneyFollows) continue;
     if (TRACKING_KEYS.has(key)) {
-      if (ownTracking) continue;
+      if (keepTracking) continue;
       if (key === 'shipped' && ex.shipped && !value) continue;
     }
     if (!same(ex[key], value)) patch[key] = value;
+  }
+  // The website dropped the label it had sent (a voided label): clear it here
+  // too, or it would later read as a label bought in this app.
+  if (fromWebsite && !clean(desired.trackingNumber)) {
+    ['trackingNumber', 'trackingCarrier', 'trackingUrl', 'trackingSource'].forEach(k => {
+      if (clean(ex[k])) patch[k] = '';
+    });
   }
   return Object.keys(patch).length ? patch : null;
 }
@@ -521,6 +687,10 @@ export function sameEffect(a = {}, b = {}) {
  *   review  — `reasons` say what a person has to decide
  *   blocked — `blocked` lists books that must move to the new storage first
  *   test    — a website rehearsal order; `preview` says what it would do
+ *   stale   — this device already holds a newer copy of the order; skip it
+ *
+ * `ctx.consentAt` (when the owner switched the link on) decides whether
+ * tracking already on a hand-entered sale is an old parcel or a new label.
  */
 export function planWebsiteOrder(doc = {}, ctx = {}) {
   const web = doc && doc.web && typeof doc.web === 'object' ? doc.web : {};
@@ -571,6 +741,7 @@ export function planWebsiteOrder(doc = {}, ctx = {}) {
   if (desired.needsRate.length) {
     return { ...base, status: 'review', reasons: desired.needsRate.map(n => ({ bookId: n.bookId, reason: 'rate', currency: n.currency, day: n.day })) };
   }
+  if (desired.refundUnknown) return { ...base, status: 'review', reasons: [{ reason: 'refund-currency', currency: clean(web.refund && web.refund.currency) }] };
 
   const histByBook = ctx.histByBook || {};
   const match = matchExistingRows({ ...web, orderId }, desired.rows, histByBook, {
@@ -579,12 +750,17 @@ export function planWebsiteOrder(doc = {}, ctx = {}) {
   if (match.review.length) return { ...base, status: 'review', reasons: match.review };
 
   const desiredBy = new Map(desired.rows.map(r => [r.bookId, r.row]));
+  // This device already holds a newer copy of the order (the inbox handed over
+  // an out-of-date one): leave it, and don't mark it done either.
+  if (match.results.some(r => (r.kind === 'own') && rowIsNewer((histByBook[r.bookId] || [])[r.index], web))) {
+    return { ...base, status: 'stale' };
+  }
   const actions = [];
   for (const r of match.results) {
     if (r.kind === 'new') { actions.push({ kind: 'new', bookId: r.bookId, row: desiredBy.get(r.bookId) }); continue; }
     if (r.kind === 'replace') { actions.push({ kind: 'replace', bookId: r.bookId, key: r.key, replacedBy: orderId }); continue; }
     const existing = (histByBook[r.bookId] || [])[r.index];
-    const patch = rowPatch(existing, desiredBy.get(r.bookId));
+    const patch = rowPatch(existing, desiredBy.get(r.bookId), { consentDay: dayOf(ctx.consentAt) });
     actions.push({ kind: r.kind, bookId: r.bookId, key: r.key, uid: desiredBy.get(r.bookId).uid, patch });
   }
   return { ...base, status: 'ready', actions, effect: plannedEffect(desired.rows) };
@@ -831,9 +1007,29 @@ export function markRefusal(mark = {}, doc = null, books = {}) {
  */
 export function planWebsitePublish({
   bookIds = [], books = {}, catalog = {}, orderDocs = {}, marks = [], shipments = [], testShipments = [],
-  now = new Date().toISOString(), build = '', device = '',
+  heldOrders = [], now = new Date().toISOString(), build = '', device = '',
 } = {}) {
   const feeds = [];
+  // Marks are decided first: a held order this transaction marks done no
+  // longer holds its books' count.
+  const accepted = [];
+  const refused = [];
+  for (const mark of marks || []) {
+    if (!mark || !clean(mark.orderId)) continue;
+    const reason = markRefusal(mark, orderDocs[mark.orderId], books);
+    if (reason) refused.push({ orderId: mark.orderId, reason });
+    else accepted.push(mark);
+  }
+  const acceptedIds = new Set(accepted.map(m => m.orderId));
+  // A website order still waiting here (for a decision, the first go-ahead,
+  // or a move to the new storage) may be a sale already typed in by hand: the
+  // count would then be short by it, so those books are sent as not to be
+  // trusted until it is in.
+  const held = new Set();
+  for (const h of heldOrders || []) {
+    if (!h || acceptedIds.has(h.orderId)) continue;
+    (h.books || []).forEach(id => held.add(String(id)));
+  }
   for (const id of [...new Set(bookIds || [])]) {
     const parts = books[id];
     const book = catalog && typeof catalog[id] === 'object' && catalog[id] ? catalog[id] : null;
@@ -843,6 +1039,7 @@ export function planWebsitePublish({
       { hist: parts.hist || [], ledger: parts.ledger || [], stock: meta.stock, authorStock: meta.authorStock },
       { ...book, id },
     );
+    if (held.has(id)) feed.derived = false;
     feeds.push({ bookId: id, doc: { ...feed, bookId: id, at: now, build: clean(build) } });
   }
 
@@ -851,15 +1048,10 @@ export function planWebsitePublish({
     if (!updates.has(orderId)) updates.set(orderId, {});
     return updates.get(orderId);
   };
-  const accepted = [];
-  const refused = [];
   const sent = [];
   const current = []; // labels the website already has: nothing to write
 
-  for (const mark of marks || []) {
-    if (!mark || !clean(mark.orderId)) continue;
-    const reason = markRefusal(mark, orderDocs[mark.orderId], books);
-    if (reason) { refused.push({ orderId: mark.orderId, reason }); continue; }
+  for (const mark of accepted) {
     Object.assign(update(mark.orderId), {
       imported: {
         hash: clean(mark.hash),
@@ -870,7 +1062,6 @@ export function planWebsitePublish({
       },
       pending: false,
     });
-    accepted.push(mark.orderId);
   }
 
   const already = (doc) => clean(doc && doc.app && doc.app.shipment && doc.app.shipment.hash);
@@ -911,7 +1102,8 @@ export function planWebsitePublish({
   return {
     feeds,
     orderUpdates: [...updates.entries()].map(([orderId, data]) => ({ orderId, data })),
-    accepted,
+    accepted: [...acceptedIds],
+    held: [...held],
     refused,
     sent,
     current,

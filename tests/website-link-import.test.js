@@ -142,7 +142,8 @@ describe('an order already in the books by hand', () => {
     push(webOrder('WEB-HAND'));
     await waitFor(() => expect(state().hist[0].webOrderId).toBe('WEB-HAND'));
     expect(state().hist).toHaveLength(1);
-    expect(state().hist[0]).toMatchObject({ uid: `web-WEB-HAND-${BOOK}`, sheetsId: 'stripe-ch_9', price: 40, notes: 'Stripe' });
+    // Linked, not repriced: the hand-entered sale keeps the money it recorded.
+    expect(state().hist[0]).toMatchObject({ uid: `web-WEB-HAND-${BOOK}`, sheetsId: 'stripe-ch_9', price: 38, notes: 'Stripe' });
     expect(state().stock).toBe(98);
     await waitFor(() => expect(link.docs['WEB-HAND'].pending).toBe(false));
   });
@@ -181,7 +182,7 @@ describe('an order already in the books by hand', () => {
     card.querySelector('[data-wl-action="same"][data-order="WEB-SAME"]').click();
     await waitFor(() => expect(state().hist[0].webOrderId).toBe('WEB-SAME'));
     expect(state().hist).toHaveLength(1);
-    expect(state().hist[0]).toMatchObject({ chan: 'Website', price: 40, sheetsId: 'pos-2' });
+    expect(state().hist[0]).toMatchObject({ chan: 'Website', price: 35, sheetsId: 'pos-2' });
     expect(state().stock).toBe(98);
   });
 });
@@ -304,5 +305,83 @@ describe('the rest of the app around a website sale', () => {
   it('classifies a website Stripe payment as coming in from the website', async () => {
     const c = app.main.classifyStripePayment({ id: 'ch_new', piId: 'pi_x', amount: 92, currency: 'CAD', created: Date.now(), description: '', metadata: { order_id: 'WEB-STRIPE' } });
     expect(c).toEqual({ kind: 'website', ref: 'WEB-STRIPE' });
+  });
+});
+
+describe('review fixes, through the real app', () => {
+  it('never applies an order from a cached snapshot; the server’s snapshot brings it in', async () => {
+    link.docs['WEB-CACHE'] = { web: webOrder('WEB-CACHE'), pending: true };
+    const pending = [{ id: 'WEB-CACHE', ...JSON.parse(JSON.stringify(link.docs['WEB-CACHE'])) }];
+    link.ordersCb(pending, { fromCache: true });
+    await new Promise(r => setTimeout(r, 50));
+    expect(state().hist).toHaveLength(0);
+    link.ordersCb(pending, { fromCache: false });
+    await waitFor(() => expect(state().hist).toHaveLength(1));
+  });
+
+  it('a newer copy already on the row is never undone by an older one', async () => {
+    push(webOrder('WEB-OLD', { sourceUpdatedAt: '2026-10-11T15:00:00.000Z' }));
+    await waitFor(() => expect(link.docs['WEB-OLD'].pending).toBe(false));
+    push(webOrder('WEB-OLD', { hash: 'h2', sourceUpdatedAt: '2026-10-12T15:00:00.000Z', paymentStatus: 'refunded', refundState: 'full', books: { [BOOK]: { net: 0, sold: 2, restocked: 2, unitCAD: 40, merchCAD: 80 } } }));
+    await waitFor(() => expect(state().hist.find(h => h.webOrderId === 'WEB-OLD').voided).toBe(true));
+    push(webOrder('WEB-OLD', { hash: 'h1', sourceUpdatedAt: '2026-10-11T15:00:00.000Z' }));
+    await new Promise(r => setTimeout(r, 80));
+    expect(state().hist.find(h => h.webOrderId === 'WEB-OLD').voided).toBe(true);
+    expect(state().stock).toBe(100);
+  });
+
+  it('orders waiting for a decision don’t hold back new ones', async () => {
+    await app.resetBook(BOOK, { hist: [{ num: '', chan: 'In Person', qty: 2, price: 35, date: '2026-10-10', shipEmail: 'dana@example.com', sheetsId: 'look' }] });
+    for (let i = 0; i < 3; i++) link.docs[`WEB-R${i}`] = { web: webOrder(`WEB-R${i}`, { paidAt: `2026-10-0${i + 1}T00:00:00Z`, paidDay: '2026-10-11' }), pending: true };
+    link.docs['WEB-LATE'] = { web: webOrder('WEB-LATE', { paidAt: '2026-10-11T23:00:00Z', paidDay: '2026-10-20', customer: { name: 'Lee', email: 'lee@example.com', address: {} } }), pending: true };
+    deliver();
+    await waitFor(() => expect(state().hist.some(h => h.webOrderId === 'WEB-LATE')).toBe(true));
+    expect(link.docs['WEB-R0'].pending).toBe(true);
+  });
+
+  it('sends a book as not trustworthy while one of its orders waits for a decision', async () => {
+    await app.resetBook(BOOK, { hist: [{ num: '', chan: 'In Person', qty: 2, price: 35, date: '2026-10-10', shipEmail: 'dana@example.com', sheetsId: 'look2' }] });
+    push(webOrder('WEB-HELD'));
+    await waitFor(() => expect(document.getElementById('web-link-card').textContent).toMatch(/Needs you/));
+    const before = link.publishes.length;
+    await feature.publishWebsiteLinkNow({ books: [BOOK] });
+    const args = link.publishes.slice(before).at(-1);
+    expect(args.heldOrders).toContainEqual({ orderId: 'WEB-HELD', books: [BOOK] });
+  });
+
+  it('refuses to delete a website sale from the Tax Centre ledger or the Orders tab', async () => {
+    push(webOrder('WEB-DEL'));
+    await waitFor(() => expect(state().hist.some(h => h.webOrderId === 'WEB-DEL')).toBe(true));
+    await app.main.removeLedgerEntry('sale', BOOK, '#WEB-DEL');
+    expect(state().hist.some(h => h.webOrderId === 'WEB-DEL')).toBe(true);
+    expect(app.toast()).toMatch(/follows your website/);
+  });
+
+  it('classifies a charge as website when its order is already in the books, even on a fresh device', async () => {
+    push(webOrder('WEB-FRESH'));
+    await waitFor(() => expect(state().hist.some(h => h.webOrderId === 'WEB-FRESH')).toBe(true));
+    localStorage.removeItem('lm-website-link-seen');
+    expect(app.main.classifyStripePayment({ id: 'ch_f', amount: 1, currency: 'CAD', created: Date.now(), description: '', metadata: { order_id: 'WEB-FRESH' } }).kind).toBe('website');
+    expect(app.main.classifyStripePayment({ id: 'ch_g', amount: 1, currency: 'CAD', created: Date.now(), description: '', metadata: { order_id: 'WEB-NOPE' } }).kind).not.toBe('website');
+  });
+
+  it('says "Needs a look", not "Up to date", while orders are set aside', async () => {
+    await app.resetBook(BOOK, { hist: [{ num: '', chan: 'In Person', qty: 2, price: 35, date: '2026-10-10', shipEmail: 'dana@example.com', sheetsId: 'look3' }] });
+    push(webOrder('WEB-LATER'));
+    const card = document.getElementById('web-link-card');
+    await waitFor(() => expect(card.querySelector('[data-wl-action="later"][data-order="WEB-LATER"]')).not.toBeNull());
+    card.querySelector('[data-wl-action="later"][data-order="WEB-LATER"]').click();
+    expect(document.getElementById('wl-status').textContent).toMatch(/1 set aside for later/);
+    expect(document.getElementById('wl-state').textContent).toMatch(/Needs a look/);
+  });
+
+  it('shows the website’s postage answer on every book of a two-book order', async () => {
+    push(webOrder('WEB-2B'));
+    await waitFor(() => expect(link.docs['WEB-2B'].pending).toBe(false));
+    const row = state().hist.find(h => h.webOrderId === 'WEB-2B');
+    const sibling = { webOrderId: 'WEB-2B', num: row.num, fulfilledOnWebsite: true, trackingNumber: 'TRK', qty: 1 };
+    row.trackingNumber = 'TRK';
+    row.webShipment = { hash: 'TRK||', result: 'dispatched', reason: '', at: 'x' };
+    expect(feature.websiteShipmentNote(sibling).text).toBe('Website dispatched it — customer emailed');
   });
 });

@@ -454,3 +454,34 @@ describe('mergeRows — website order rows', () => {
     expect(rows.map(r => String(r.uid || r.num)).sort()).toEqual(['1', '2', uid].sort());
   });
 });
+
+describe('mergeRows — a website row changed on both devices', () => {
+  const uid = 'web-A-1-hound';
+  const row = (over = {}) => ({ uid, webOrderId: 'A-1', num: '#A-1', chan: 'Website', qty: 2, price: 40, date: '2026-10-11', notes: 'Website', webSourceUpdatedAt: '2026-10-11T10:00:00Z', ...over });
+
+  it('takes the newer copy of the order, not "local wins", keeping local notes', () => {
+    const base = [row()];
+    const local = [row({ notes: 'signed copy', webSourceUpdatedAt: '2026-10-11T10:00:00Z', price: 41 })];
+    const remote = [row({ voided: true, webSourceUpdatedAt: '2026-10-12T09:00:00Z' })];
+    const { rows, conflicts } = mergeRows('hist', base, remote, local);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ voided: true, notes: 'signed copy', webSourceUpdatedAt: '2026-10-12T09:00:00Z' });
+    expect(conflicts).toEqual([]);
+  });
+
+  it('keeps a label bought on this device when the other side only has the website’s copy', () => {
+    const base = [row()];
+    const local = [row({ trackingNumber: 'APP1', shipped: true, shippedDate: '2026-10-12' })];
+    const remote = [row({ webSourceUpdatedAt: '2026-10-12T09:00:00Z', webFulfillmentStatus: 'processing' })];
+    const { rows } = mergeRows('hist', base, remote, local);
+    expect(rows[0]).toMatchObject({ trackingNumber: 'APP1', shipped: true, webFulfillmentStatus: 'processing' });
+  });
+
+  it('keeps local when local holds the newer copy', () => {
+    const base = [row()];
+    const local = [row({ voided: true, webSourceUpdatedAt: '2026-10-12T09:00:00Z' })];
+    const remote = [row({ notes: 'other', webSourceUpdatedAt: '2026-10-11T10:00:00Z' })];
+    const { rows } = mergeRows('hist', base, remote, local);
+    expect(rows[0].voided).toBe(true);
+  });
+});

@@ -29,8 +29,9 @@ export function findExistingLabel(orderNumber, { hist = [], expenses = [] } = {}
     || hist.find(h => normalizeShippingOrderNumber(h?.num) === wanted);
   const tracking = String(order?.trackingNumber || '').trim();
   const websiteTracking = String(order?.webTracking || '').trim();
+  const websiteShipped = !!order?.webOrderId && WEBSITE_SHIPPED_STATES.has(order.webFulfillmentStatus);
   const fromWebsite = !!order?.webOrderId
-    && ((!!websiteTracking && tracking === websiteTracking) || WEBSITE_SHIPPED_STATES.has(order.webFulfillmentStatus));
+    && ((!!websiteTracking && tracking === websiteTracking) || websiteShipped);
 
   // Test-mode rehearsals are stamped `simulated` and never cost anything.
   const labels = expenses
@@ -46,7 +47,7 @@ export function findExistingLabel(orderNumber, { hist = [], expenses = [] } = {}
     }));
 
   if (!tracking && labels.length === 0 && !fromWebsite) return null;
-  return { tracking, shippedDate: String(order?.shippedDate || ''), fromWebsite, labels };
+  return { tracking, shippedDate: String(order?.shippedDate || ''), fromWebsite, websiteShipped, labels };
 }
 
 /** The rows the "already has a label" confirmation shows. */
@@ -54,7 +55,7 @@ export function describeExistingLabel(found) {
   if (!found) return [];
   const rows = [];
   if (found.fromWebsite) {
-    rows.push(['Website', `Already shipped from the website${found.tracking ? ` (tracking ${found.tracking})` : ''}. A new label makes a second parcel.`]);
+    rows.push(['Website', websiteLabelWords(found)]);
   }
   if (found.tracking) rows.push(['Tracking', found.tracking]);
   if (found.shippedDate) rows.push(['Shipped', found.shippedDate]);
@@ -63,4 +64,15 @@ export function describeExistingLabel(found) {
   });
   if (found.labels.length > 3) rows.push(['', `…and ${found.labels.length - 3} more`]);
   return rows;
+}
+
+/**
+ * What the website has done about this parcel, in words. "Shipped" only once
+ * the website says it went; a label bought there but not sent yet is a label.
+ */
+export function websiteLabelWords(found) {
+  const tracking = found && found.tracking ? ` (tracking ${found.tracking})` : '';
+  return found && found.websiteShipped === false && found.tracking
+    ? `The website already has a label${tracking}. A new label makes a second parcel.`
+    : `Already shipped from the website${tracking}. A new label makes a second parcel.`;
 }

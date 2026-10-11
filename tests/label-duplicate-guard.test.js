@@ -39,7 +39,7 @@ describe('findExistingLabel — the website already shipped it', () => {
   const webOrder = (over = {}) => ({ num: '#LMB-1001', webOrderId: 'LMB-1001', ...over });
 
   it('warns when the tracking came from the website', () => {
-    const found = findExistingLabel('LMB-1001', { hist: [webOrder({ trackingNumber: 'W1', webTracking: 'W1', shipped: true })] });
+    const found = findExistingLabel('LMB-1001', { hist: [webOrder({ trackingNumber: 'W1', webTracking: 'W1', shipped: true, webFulfillmentStatus: 'shipped' })] });
     expect(found).toMatchObject({ tracking: 'W1', fromWebsite: true });
     expect(describeExistingLabel(found)[0]).toEqual(['Website', 'Already shipped from the website (tracking W1). A new label makes a second parcel.']);
   });
@@ -62,5 +62,13 @@ describe('findExistingLabel — the website already shipped it', () => {
   it('reads the live row before a voided one with the same number', () => {
     const hist = [{ num: '#LMB-1001', voided: true, trackingNumber: 'OLD' }, webOrder({ trackingNumber: 'W1', webTracking: 'W1' })];
     expect(findExistingLabel('LMB-1001', { hist }).tracking).toBe('W1');
+  });
+});
+
+describe('findExistingLabel — a website label not yet sent', () => {
+  it('says the website has a label, not that it shipped', () => {
+    const found = findExistingLabel('LMB-1001', { hist: [{ num: '#LMB-1001', webOrderId: 'LMB-1001', trackingNumber: 'W1', webTracking: 'W1', webFulfillmentStatus: 'processing' }] });
+    expect(found).toMatchObject({ fromWebsite: true, websiteShipped: false });
+    expect(describeExistingLabel(found)[0][1]).toBe('The website already has a label (tracking W1). A new label makes a second parcel.');
   });
 });

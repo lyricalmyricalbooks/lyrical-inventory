@@ -15,6 +15,7 @@ import { escapeHtml } from './html.js';
 import { normalizeShippingOrderNumber } from './shipping-reconciliation.js';
 import { withAutoLocalPickup } from './local-pickup.js';
 import { isWebsiteFulfilled } from './website-link.js';
+import { websiteLabelWords } from './label-duplicate-guard.js';
 
 /** How far back an unshipped order is still worth offering. */
 export const BATCH_LOOKBACK_DAYS = 60;
@@ -135,11 +136,7 @@ export function originBlocker(origin = {}) {
  */
 export function preflightBlocker({ address, plan, existing, originCountry = 'CA', phone = '' }) {
   if (existing) {
-    if (existing.fromWebsite) {
-      return existing.tracking
-        ? `Already shipped from the website (tracking ${existing.tracking}). A new label makes a second parcel.`
-        : 'Already shipped from the website. A new label makes a second parcel.';
-    }
+    if (existing.fromWebsite) return websiteLabelWords(existing);
     return existing.tracking
       ? `Already has a label (tracking ${existing.tracking}).`
       : 'Already has a label in your expenses.';

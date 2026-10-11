@@ -66,6 +66,7 @@ let _started = false;
 let _wired = false;
 let _docs = new Map();          // orderId → pending websiteOrders doc
 let _ordersSeen = false;
+let _docsFromCache = false;     // the last snapshot came from this device's cache
 let _link = { website: null, app: null };
 let _linkKnown = false;
 let _watchError = '';
@@ -87,6 +88,7 @@ let _blockedBooks = new Set();
 let _moreWaiting = 0;
 let _waitingOnLoad = 0;
 let _lastRun = null;            // { at, added, linked, updated }
+let _refusedMarks = 0;          // orders the last publish couldn't mark done yet
 let _lastFeedAt = '';
 let _lastImportAt = '';
 let _sent = null;               // orderId → shipment hash this device sent
@@ -182,11 +184,14 @@ function noteLinkSeen() {
   try { if (!localStorage.getItem(SEEN_KEY)) localStorage.setItem(SEEN_KEY, new Date().toISOString()); } catch (_) { /* fine */ }
 }
 
-/** Stripe charge → PaymentIntent, from this session's Stripe pull and the device's memory. */
-function piOfCharge(chargeId) {
-  const live = (window._reconPayments || []).find(p => p && p.id === chargeId);
-  if (live && live.piId) return live.piId;
-  return readJson(STRIPE_CHARGE_PI_KEY, {})[chargeId] || '';
+/**
+ * Stripe charge → PaymentIntent, from this session's Stripe pull and the
+ * device's memory, read once per planning pass rather than once per row.
+ */
+function chargeIntentLookup() {
+  const map = { ...readJson(STRIPE_CHARGE_PI_KEY, {}) };
+  (window._reconPayments || []).forEach(p => { if (p && p.id && p.piId) map[p.id] = p.piId; });
+  return (chargeId) => map[chargeId] || '';
 }
 
 function cadRateFor(cur, day) {
@@ -205,7 +210,8 @@ function planContext() {
     // "corrects" a currency it just wrote.
     bookCurrencyOf: id => bookCurrencyCode(BOOKS[id]),
     cadRateFor,
-    piOfCharge,
+    piOfCharge: chargeIntentLookup(),
+    consentAt: (_link.app && _link.app.importConsentAt) || '',
   };
 }
 
@@ -253,9 +259,13 @@ function onWatchError(err) {
   renderWebsiteLinkCard();
 }
 
-function onOrders(docs) {
+function onOrders(docs, meta = {}) {
   _watchError = '';
   _ordersSeen = true;
+  // A snapshot from this device's cache can be older than the books it has
+  // since saved (a refund already brought in, say). It is shown, never applied:
+  // the server's own snapshot follows and is the one imported.
+  _docsFromCache = !!(meta && meta.fromCache);
   _docs = new Map((docs || []).filter(d => d && d.id).map(d => [d.id, d]));
   if (_docs.size) noteLinkSeen();
   noteUnlinked(docs || []);
@@ -333,6 +343,14 @@ function byPaidAt(a, b) {
   return x < y ? -1 : x > y ? 1 : 0;
 }
 
+/** Real (not rehearsal) pending orders not yet brought in at their current version, with their books. */
+function heldOrders() {
+  return [..._docs.values()]
+    .filter(d => d && d.web && d.web.test !== true)
+    .filter(d => !(d.imported && d.imported.hash && d.imported.hash === d.web.hash))
+    .map(d => ({ orderId: d.id, books: Object.keys(d.web.books || {}) }));
+}
+
 async function importOnce() {
   const all = [..._docs.values()].filter(d => d && d.web);
   const ctx0 = planContext();
@@ -342,32 +360,35 @@ async function importOnce() {
   // A book that failed to load is not its real data: leave its orders waiting.
   const waiting = real.filter(d => Object.keys(d.web.books || {}).some(id => BOOKS[id] && !bookLoaded(id)));
   _waitingOnLoad = waiting.length;
-  const ready = real.filter(d => !waiting.includes(d));
-  const batch = ready.slice(0, WEBSITE_IMPORT_BATCH);
-  _moreWaiting = ready.length - batch.length;
+  const candidates = real.filter(d => !waiting.includes(d));
 
-  await prefetchRates(batch);
+  await prefetchRates(candidates);
   // Plan and apply in the same tick from here on: no await may sit between
-  // reading the books and writing them.
+  // reading the books and writing them. Every pending order is planned, so
+  // orders waiting for a decision never hold back new ones; at most
+  // WEBSITE_IMPORT_BATCH ready ones are applied per run.
   const ctx = planContext();
   // Choices made before (kept on the order as imported.decisions) still hold
   // when the website pushes the order again — a refund, a dispatch — so the
   // owner is never asked the same question twice.
-  const plans = batch.map(doc => planWebsiteOrder(doc, {
+  const plans = candidates.map(doc => planWebsiteOrder(doc, {
     ...ctx,
     decisions: { ...((doc.imported && doc.imported.decisions) || {}), ...(_decisions[doc.id] || {}) },
   }));
   _review = plans.filter(p => p.status === 'review');
   _blockedBooks = new Set([...plans.filter(p => p.status === 'blocked').flatMap(p => p.blocked)]);
+  const ready = plans.filter(p => p.status === 'ready');
+  const go = ready.slice(0, WEBSITE_IMPORT_BATCH);
+  _moreWaiting = ready.length - go.length;
 
   if (!_linkKnown) return; // wait to learn whether the owner has said yes before
-  const go = plans.filter(p => p.status === 'ready');
   if (!(_link.app && _link.app.importConsentAt)) {
-    _consent = go.length || _review.length ? { ...summarizePlans(plans), more: _moreWaiting } : null;
+    _consent = ready.length || _review.length ? { ...summarizePlans([...go, ..._review]), more: _moreWaiting } : null;
     return;
   }
   _consent = null;
-  if (!go.length) return;
+  // A cached snapshot can be behind this device's own saved rows: wait for the server's.
+  if (_docsFromCache || !go.length) return;
 
   const touched = new Set();
   const counts = { added: 0, linked: 0, updated: 0 };
@@ -394,9 +415,12 @@ async function importOnce() {
     if (counts.updated) parts.push(`${counts.updated} updated from the website`);
     showToast(`🛍 ${parts.join(' · ')}`, 'ok', 4500);
   }
+  _refusedMarks = res && Array.isArray(res.refused) ? res.refused.filter(r => r.reason !== 'changed').length : 0;
   if (res && Array.isArray(res.refused) && res.refused.some(r => r.reason === 'not-saved' || r.reason === 'book-unavailable')) {
     scheduleImport(RETRY_MS);
   }
+  // The rest come in on the next run: marking these done changes the inbox,
+  // and that snapshot starts it.
 }
 
 /** Apply one planned change to the books. Returns what it counted as, or ''. */
@@ -522,7 +546,7 @@ async function doPublish({ marks = [], books = [], testShipments = [] } = {}) {
 
   let res;
   try {
-    res = await window._fbPublishWebsiteLink({ bookIds, marks, shipments, testShipments, build: build(), device: deviceLabel() });
+    res = await window._fbPublishWebsiteLink({ bookIds, marks, shipments, testShipments, heldOrders: heldOrders(), build: build(), device: deviceLabel() });
   } catch (e) {
     bookIds.forEach(id => _publishBooks.add(id));
     const denied = e && (e.code === 'permission-denied' || e.code === 'PERMISSION_DENIED');
@@ -673,6 +697,7 @@ const REASON_WORDS = {
   several: (r) => `More than one sale of ${titleOf(r.bookId)} has this order number. Pick the one that is this order, or add the website’s as a separate sale.`,
   book: (r, plan) => `This order is also recorded under “${titleOf(r.bookId)}”, which the website didn’t sell on it${plan.unlinked.length ? ' — it may be a copy the website hasn’t linked to a book here yet' : ''}.`,
   rate: (r) => `${titleOf(r.bookId)} is priced in ${r.currency}, and the exchange rate for ${fmtD(r.day)} couldn’t be loaded yet, so its price can’t be worked out. It tries again by itself when you’re online.`,
+  'refund-currency': (r) => `The website refunded part of this order in ${r.currency || 'another currency'}, and this app can’t tell what that is in Canadian dollars, so the sale’s money can’t be worked out. Check the refund on the website.`,
   'unknown-book': () => 'The website sold a book that isn’t in your catalogue here any more. Check the book links on the website.',
   version: () => 'This order came from a newer version of the website. Reload this app to update it, and the order comes in by itself.',
   status: () => 'The website sent a payment state this app doesn’t know yet. Reload the app to update it.',
@@ -690,7 +715,7 @@ function reasonActions(plan, r) {
   const b = escapeHtml(r.bookId || '');
   const later = `<button class="btn sm" type="button" data-wl-action="later" data-order="${o}">Decide later</button>`;
   if (['weak', 'qty', 'voided', 'several', 'book'].includes(r.reason)) {
-    const same = (r.candidates || []).map((c, i, all) => `<button class="btn sm ink" type="button" data-wl-action="same" data-order="${o}" data-book="${b}" data-key="${escapeHtml(c.key)}">${all.length > 1 ? `Same sale as #${i + 1} — use the website’s numbers` : 'Same sale — use the website’s numbers'}</button>`).join('');
+    const same = (r.candidates || []).map((c, i, all) => `<button class="btn sm ink" type="button" data-wl-action="same" data-order="${o}" data-book="${b}" data-key="${escapeHtml(c.key)}">${all.length > 1 ? `Same sale as #${i + 1} — link them` : 'Same sale — link them'}</button>`).join('');
     const different = `<button class="btn sm" type="button" data-wl-action="different" data-order="${o}" data-book="${b}">${r.reason === 'book' ? 'Different sales — keep that one' : 'Different sales — add it'}</button>`;
     return `${same}${different}${later}`;
   }
@@ -825,9 +850,21 @@ function statusLine() {
   if (!online()) return { tone: 'neutral', glyph: '◌', word: 'Offline', text: 'Website orders come in when you’re back online.' };
   if (!_ordersSeen) return { tone: 'neutral', glyph: '◌', word: 'Checking', text: 'Looking for orders from your website…' };
   if (_running) return { tone: 'active', glyph: '●', word: 'Working', text: 'Bringing in website orders…' };
+  if (_docsFromCache) return { tone: 'neutral', glyph: '◌', word: 'Checking', text: 'Checking the website’s orders with the cloud…' };
   if (_consent && !_consentDismissed) return { tone: 'active', glyph: '●', word: 'Ready', text: 'Your website’s orders are ready to bring in.' };
   const shown = _review.filter(p => !_later.has(p.orderId)).length;
   if (shown) return { tone: 'needs-you', glyph: '!', word: 'Needs you', text: `${shown} website order${shown === 1 ? ' needs' : 's need'} you below.` };
+  // Anything still waiting is said plainly, never "up to date".
+  const waiting = [];
+  if (_consent && _consentDismissed) waiting.push('past orders wait for you to press Bring them in');
+  const setAside = _review.length - shown;
+  if (setAside) waiting.push(`${setAside} set aside for later`);
+  const blocked = [..._blockedBooks].filter(id => BOOKS[id]).length;
+  if (blocked) waiting.push(`${blocked} book${blocked === 1 ? '' : 's'} still in the old storage`);
+  if (_waitingOnLoad) waiting.push(`${_waitingOnLoad} waiting for a book to load`);
+  if (_refusedMarks) waiting.push(`${_refusedMarks} not confirmed by the cloud yet — trying again`);
+  if (_moreWaiting) waiting.push(`${_moreWaiting} more coming in`);
+  if (waiting.length) return { tone: 'active', glyph: '!', word: 'Needs a look', text: `Website orders: ${waiting.join(' · ')}.` };
   return { tone: 'positive', glyph: '✓', word: 'Up to date', text: 'Every website order is in your books.' };
 }
 
@@ -860,7 +897,10 @@ function websiteShipmentNote(row) {
   const rows = found.length ? found : [row];
   const expenses = (TAX_CENTER && TAX_CENTER.businessExpenses) || [];
   const shipment = appShipmentFor(rows, linkedPostageFor(row.num, expenses), null);
-  return describeWebShipment(row, shipment, { sentHash: sentMap()[row.webOrderId] || '' });
+  // The website's answer is kept on the order's first row only.
+  const replyRow = rows.find(r => r && r.webShipment);
+  const view = replyRow && !row.webShipment ? { ...row, webShipment: replyRow.webShipment } : row;
+  return describeWebShipment(view, shipment, { sentHash: sentMap()[row.webOrderId] || '' });
 }
 
 export {

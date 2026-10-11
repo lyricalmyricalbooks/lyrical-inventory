@@ -62,8 +62,8 @@ import {
 } from '../main.js';
 import { renderExpenses, saveReceiptToLocalFile, readShippingFieldsFromReceipt } from './receipts.js';
 import { openReviewInbox } from './review-inbox.js';
-import { findExistingLabel, describeExistingLabel } from '../lib/label-duplicate-guard.js';
-import { isWebsiteFulfilled } from '../lib/website-link.js';
+import { findExistingLabel, describeExistingLabel, websiteLabelWords } from '../lib/label-duplicate-guard.js';
+import { isShippoTestKey, isWebsiteFulfilled } from '../lib/website-link.js';
 import { websiteShipmentNote } from './website-link.js';
 import {
   refundCarrier, refundState, canRequestRefund, shippoTransactionId, refundCredit,
@@ -281,7 +281,12 @@ function getShippingReconciliationOrders() {
   const byNumber = new Map();
   Object.values(states).forEach(state => (state?.hist || []).forEach(history => {
     const number = normalizeShippingOrderNumber(history.num);
-    if (number && history.chan === 'Website' && !history.voided) byNumber.set(number, history);
+    if (!number || history.chan !== 'Website' || history.voided) return;
+    // An order filed under several books keeps its address (and its shipping
+    // money) on one row; never let a bare sibling row stand for the order.
+    const held = byNumber.get(number);
+    if (held && String(held.shipAddr1 || held.shipName || '').trim() && !String(history.shipAddr1 || history.shipName || '').trim()) return;
+    byNumber.set(number, history);
   }));
   (orders || []).forEach(order => {
     const number = normalizeShippingOrderNumber(order.orderNum || order.num);
@@ -1661,7 +1666,8 @@ function writeTrackingBackToOrders(expenses = []) {
   expenses.forEach(expense => {
     const orderNumber = normalizeShippingOrderNumber(expense?.shippingOrderNumber);
     const tracking = cpText(expense?.trackingNumber);
-    if (orderNumber && tracking && expense.shippingMatchStatus === 'matched') {
+    // A test-mode label's number never scans; it must not mark an order sent.
+    if (orderNumber && tracking && expense.shippingMatchStatus === 'matched' && !expense.simulated) {
       wanted.set(orderNumber, { tracking, date: cpText(expense.date) });
     }
   });
@@ -7075,7 +7081,7 @@ async function confirmNoExistingLabel(orderNumber) {
   if (!found) return true;
   return confirmDialog(
     found.fromWebsite
-      ? `Order ${normalizeShippingOrderNumber(orderNumber)} was already shipped from the website. A new label makes a second parcel and charges you again.`
+      ? `Order ${normalizeShippingOrderNumber(orderNumber)}: ${websiteLabelWords(found)} It also charges you again.`
       : `Order ${normalizeShippingOrderNumber(orderNumber)} already has a shipping label. `
         + 'Buying another charges you again for the same parcel.',
     {
@@ -7201,6 +7207,10 @@ async function purchaseShippoRate({ rateId, provider, serviceName, amount, curre
     found.entry.shipped = true;
     found.entry.shippedDate = today();
     found.entry.trackingNumber = trackingNumber || '';
+    // A Shippo test key buys a label that never scans: say so on the order,
+    // so it is never treated (or sent to the website) as a real parcel.
+    if (isShippoTestKey(shippoKey)) found.entry.trackingSimulated = true;
+    else delete found.entry.trackingSimulated;
     saveState(found.bookId);
     renderHist();
     if (String(currency || '').toUpperCase() === 'CAD') {
