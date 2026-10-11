@@ -7844,7 +7844,15 @@ function getOwedCardDetails(stats, cur, settle = null) {
   } else {
     owedLabel = 'Owed to artist';
     owedVal = fmt(0, cur);
-    const last = (stats.payouts || []).filter(p => p.settlement).reduce((a, p) => (!a || (p.date || '') > (a.date || '') ? p : a), null);
+    // ⚡ Bolt Optimization: Replace .filter().reduce() with an imperative loop to prevent intermediate array allocations and multiple passes
+    let last = null;
+    const payouts = stats.payouts || [];
+    for (let i = 0; i < payouts.length; i++) {
+      const p = payouts[i];
+      if (p.settlement && (!last || (p.date || '') > (last.date || ''))) {
+        last = p;
+      }
+    }
     owedSub = last ? `all square · settled ${fmtD(last.date)} ✓` : 'all settled ✓';
     owedTone = 'green';
   }

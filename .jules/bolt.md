@@ -17,3 +17,6 @@
 ## 2025-02-14 - Bypass localeCompare for ISO Date Sorting
 **Learning:** `String.prototype.localeCompare` evaluates Intl collators and locale-aware sorting rules, which is heavily unoptimized compared to ASCII comparison. Sorting standard ISO formats (YYYY-MM-DD) natively chronologically via operators (`<`, `>`) runs approximately ~25x faster.
 **Action:** When sorting strict ISO strings such as dates, bypass `localeCompare` entirely in favor of an inline comparator using `a < b ? -1 : (a > b ? 1 : 0)`.
+## 2024-11-20 - Finding maximum payout date
+**Learning:** Chaining `.filter().reduce()` for finding a max object in an array (like maximum payout date) allocates a new array and causes an extra O(N) iteration. In frontend code iterating over larger data structures, switching to an imperative single-pass loop is much faster and reduces garbage collection pressure.
+**Action:** When finding a minimum/maximum value subject to a condition, avoid `filter().reduce()`. Use a single `for` loop to check the condition and update the running max/min.
