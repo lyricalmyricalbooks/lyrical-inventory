@@ -4,6 +4,7 @@ import { createReceiptFinderClient, extractFoundReceipts, decodeGmailBase64, che
 import { createReceiptFinderStore } from '../lib/receipt-finder-store.js';
 import { flushReceiptOutbox } from '../lib/receipt-finder-outbox.js';
 import { downloadBlob } from '../lib/download.js';
+import { localDayPlus } from '../lib/calendar-day.js';
 import '../styles/receipt-finder.css';
 
 const LABELS = { all: 'All', ready: 'Ready', review: 'Needs review', duplicate: 'Duplicates', queued: 'Waiting to file', imported: 'Filed', ignored: 'Dismissed' };
@@ -15,13 +16,6 @@ const PILES = {
   aside: { label: 'Not receipts', statuses: ['ignored'] },
   filed: { label: 'Filed', statuses: ['imported'] },
 };
-
-// A calendar day in the publisher's own time zone. toISOString() gives the UTC
-// day, which in a Canadian evening is already tomorrow.
-function localDay(offset = 0) {
-  const date = new Date(); date.setDate(date.getDate() + offset);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-}
 
 const emptyState = () => ({ drafts: [], emails: {}, scans: {}, endpoint: '', account: '', lastScan: '', pageToken: '', lastQuery: '', lastEndpoint: '', lastHalt: '' });
 
@@ -280,7 +274,7 @@ async function mountReceiptFinder(element, dependencies) {
             <div class="form-group finder-sender"><label for="finder-sender">Only from this sender</label>
               <input type="text" id="finder-sender" inputmode="email" autocomplete="off" placeholder="supplier@example.com"></div>
             <div class="form-group finder-date-from"><label for="finder-from">From</label>
-              <input type="date" id="finder-from" value="${localDay(-30)}"></div>
+              <input type="date" id="finder-from" value="${localDayPlus(-30)}"></div>
             <div class="form-group finder-date-to"><label for="finder-to">Through</label>
               <input type="date" id="finder-to"></div>
           </div>
@@ -720,7 +714,7 @@ function applyPreset(preset) {
     host.querySelector('#finder-from').focus();
     return;
   }
-  host.querySelector('#finder-from').value = localDay(-Number(preset));
+  host.querySelector('#finder-from').value = localDayPlus(-Number(preset));
   host.querySelector('#finder-to').value = '';
 }
 
@@ -1067,8 +1061,8 @@ async function runPool(items, limit, worker) {
 async function scanOneDay(offset) {
   if (busy) return;
   markPeriod('');
-  host.querySelector('#finder-from').value = localDay(offset);
-  host.querySelector('#finder-to').value = localDay(offset);
+  host.querySelector('#finder-from').value = localDayPlus(offset);
+  host.querySelector('#finder-to').value = localDayPlus(offset);
   await scan(false);
 }
 
