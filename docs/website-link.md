@@ -169,10 +169,20 @@ target = max(0, min(feed.base − webTotal(B), feed.onHand))
 ### `websiteLink/website` and `websiteLink/app`
 
 - `website`: `{ at, serviceAccount, version, pastFrom, pastFromAt }`. A heartbeat the website writes on every sweep.
-  `pastFrom`/`pastFromAt` are written when the owner moves the start day earlier, **before** the start day changes:
-  the app then asks for "Bring them in" again (`importConsentNeeded`) before adding any order, so older sales typed
-  in by hand can be checked first. On that press the app saves `importConsentAt` no earlier than `pastFromAt`.
-- `app`: `{ importConsentAt, lastImportAt, lastFeedAt, build }`. Written by the app.
+  `pastFrom`/`pastFromAt` are written when the owner moves the start day earlier, before the start day changes
+  (informational; the app no longer waits on them).
+- `app`: `{ importConsentAt, lastImportAt, lastFeedAt, build }`. Written by the app. `importConsentAt` is when website
+  orders first came in; the app records it by itself on its first import.
+
+**Orders come in by themselves.** The app adds every website order it can match for certain without asking: new ones
+as sales, ones already entered by hand (same order number, Stripe charge or uid) linked, never counted twice. Anything
+unclear waits under **Needs you** (Website orders tab) and on the app's To-do list. Nothing is guessed.
+
+**Books move to the new storage safely.** A book still in the old (Realtime Database) storage is copied into Firestore,
+the copy is read back and compared record by record with the old one (`compareCopies`, `src/lib/storage-mode.js`), and
+only an identical copy switches the book over (`_fbAdoptBook`); otherwise the copy is removed and the book stays put.
+The old copy is never deleted. The Website orders card's **Storage check** compares every book's old copy with the one
+in use and lists any record only the old copy has, with **Copy these over** (add-only) for the owner to decide.
 
 ## Documents in the website project
 

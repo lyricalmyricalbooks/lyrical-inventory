@@ -124,18 +124,10 @@
 .wl-count { font-size: var(--text-xs); color: var(--content-secondary); }
 .wl-note { margin: 0; font-size: var(--text-sm); color: var(--content-secondary); text-wrap: pretty; }
 
-/* First-run summary: the one place on this card that spends the flare button. */
-.wl-consent {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  background: var(--surface-sunken);
-  border: var(--stroke-hair) solid var(--border-default);
-  border-radius: var(--r2);
-  box-shadow: inset 3px 0 0 var(--status-active);
-}
-.wl-consent-line { margin: 0; font-size: var(--text-base); color: var(--content-primary); }
+/* Storage check: the books checked, folded away until asked for. */
+.wl-details { font-size: var(--text-sm); color: var(--content-secondary); }
+.wl-details > summary { cursor: pointer; min-height: var(--target-min); display: flex; align-items: center; color: var(--content-primary); }
+.wl-details > .wl-points { margin-top: var(--space-1); }
 .wl-points { margin: 0; padding-left: var(--space-5); font-size: var(--text-sm); color: var(--content-secondary); }
 .wl-points li + li { margin-top: var(--space-1); }
 

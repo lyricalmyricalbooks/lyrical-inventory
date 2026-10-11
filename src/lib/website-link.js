@@ -767,28 +767,6 @@ export function planWebsiteOrder(doc = {}, ctx = {}) {
 }
 
 /**
- * Whether the owner must press "Bring them in" before website orders are added: they never have, or
- * the website has since started sending older orders (its start day moved earlier and it stamped
- * websiteLink/website.pastFromAt), so they can check sales already typed in by hand first.
- * `link` = { website, app } from websiteLink.
- */
-export function importConsentNeeded(link = {}) {
-  const consentAt = String((link && link.app && link.app.importConsentAt) || '');
-  if (!consentAt) return true;
-  const pastAt = String((link && link.website && link.website.pastFromAt) || '');
-  return !!pastAt && pastAt > consentAt;
-}
-
-/**
- * The importConsentAt to save when the owner presses "Bring them in": now, but never earlier than the
- * website's pastFromAt (the two clocks differ; a device running behind would otherwise be asked again).
- */
-export function consentStamp(nowIso, link = {}) {
-  const pastAt = String((link && link.website && link.website.pastFromAt) || '');
-  return pastAt && pastAt > nowIso ? pastAt : nowIso;
-}
-
-/**
  * One line per plan for the first-run summary:
  * "X new · Y already in your books (will be linked) · Z need you".
  */

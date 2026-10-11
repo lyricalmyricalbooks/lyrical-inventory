@@ -26,18 +26,18 @@ import { fmt, fmtD, getSym, normalizeCurrencyCode } from '../lib/money.js';
 import { datedRateKey } from '../lib/sale-fx.js';
 import { localDay } from '../lib/calendar-day.js';
 import { bookCurrencyCode } from '../lib/currency-migration.js';
+import { compareCopies, restoreRecords } from '../lib/storage-mode.js';
+import { deriveOnHand } from '../lib/inventory.js';
+import { confirmDialog } from '../lib/modal.js';
 import {
   STRIPE_CHARGE_PI_KEY,
   WEBSITE_IMPORT_BATCH,
   appShipmentFor,
   describeWebShipment,
-  consentStamp,
   hasAppTracking,
-  importConsentNeeded,
   linkedPostageFor,
   planWebsiteOrder,
   rowKey,
-  summarizePlans,
 } from '../lib/website-link.js';
 import {
   $,
@@ -82,8 +82,9 @@ let _publishBooks = new Set();
 let _publishAll = false;
 let _decisions = {};            // orderId → { bookId: { choice, key } }
 let _later = new Set();         // orderIds set aside this session
-let _consentDismissed = false;
-let _consent = null;            // the first-run summary, while it waits
+let _storage = null;            // the last storage check: { at, books: [...] }
+let _storageRunning = false;
+let _todoSig = '';              // what the To-do list was last told
 let _review = [];               // plans that need a person
 let _tests = [];                // rehearsal orders (dry run)
 let _blockedBooks = new Set();
@@ -251,6 +252,7 @@ function startWebsiteLink() {
   window.addEventListener('online', () => { scheduleImport(0); scheduleWebsiteFeedPublish('all'); });
   scheduleWebsiteFeedPublish('all');
   renderWebsiteLinkCard();
+  runStorageCheck();
 }
 
 function onWatchError(err) {
@@ -354,6 +356,10 @@ function heldOrders() {
 }
 
 async function importOnce() {
+  // Website orders come in by themselves. The first time, record when the link
+  // was switched on: rowPatch keeps tracking already on a hand-entered sale from
+  // before that day as the sale's own, never sent to the website as a label.
+  if (_linkKnown && !(_link.app && _link.app.importConsentAt)) await markLinkSwitchedOn();
   const all = [..._docs.values()].filter(d => d && d.web);
   const ctx0 = planContext();
   _tests = all.filter(d => d.web.test === true).map(doc => planWebsiteOrder(doc, ctx0));
@@ -383,12 +389,8 @@ async function importOnce() {
   const go = ready.slice(0, WEBSITE_IMPORT_BATCH);
   _moreWaiting = ready.length - go.length;
 
-  if (!_linkKnown) return; // wait to learn whether the owner has said yes before
-  if (importConsentNeeded(_link)) {
-    _consent = ready.length || _review.length ? { ...summarizePlans([...go, ..._review]), more: _moreWaiting, older: !!(_link.app && _link.app.importConsentAt) } : null;
-    return;
-  }
-  _consent = null;
+  noteTodo();
+  if (!_linkKnown) return; // wait for the link's own status (it holds the day the link was switched on)
   // A cached snapshot can be behind this device's own saved rows: wait for the server's.
   if (_docsFromCache || !go.length) return;
 
@@ -589,21 +591,107 @@ function decide(orderId, bookId, choice, key = '') {
   renderWebsiteLinkCard();
 }
 
-async function acceptConsent(button) {
+/** Record, once, when website orders started coming in (websiteLink/app.importConsentAt). */
+async function markLinkSwitchedOn() {
   if (typeof window._fbSaveWebsiteLinkApp !== 'function') return;
-  if (button) button.disabled = true;
-  const at = consentStamp(new Date().toISOString(), _link);
+  const at = new Date().toISOString();
   try {
     await window._fbSaveWebsiteLinkApp({ importConsentAt: at, build: build() });
+    _link = { ..._link, app: { ...(_link.app || {}), importConsentAt: at } };
   } catch (e) {
-    if (button) button.disabled = false;
-    showToast('Couldn’t save that — check your connection and press it again.', 'err', 5000);
-    return;
+    // Not saved: carry on. With no day recorded, tracking already on a
+    // hand-entered sale is always treated as the sale's own — the safe side.
+    console.warn('[website link] could not record when the link was switched on', e);
   }
-  _link = { ..._link, app: { ...(_link.app || {}), importConsentAt: at } };
-  _consent = null;
-  scheduleImport(0);
+}
+
+// ── Storage check ──────────────────────────────────────────────────────────
+// Proof, book by book, that what the app uses now (the new storage) holds every
+// record the old storage had. Read-only: it never changes either copy. A book
+// with records only in the old copy is listed with them, and the owner decides.
+
+function bookTitle(id) {
+  return (BOOKS[id] && BOOKS[id].title) || id;
+}
+
+function sold(state) {
+  return ((state && state.hist) || []).filter(h => h && !h.voided).length;
+}
+
+async function runStorageCheck() {
+  if (_storageRunning || !online() || typeof window._fbReadOldBookCopy !== 'function') return;
+  if (!Object.keys(BOOKS).every(id => states[id])) return;
+  _storageRunning = true;
   renderWebsiteLinkCard();
+  const books = [];
+  try {
+    for (const id of Object.keys(BOOKS)) {
+      const entry = { id, title: bookTitle(id), sales: sold(states[id]), onHand: deriveOnHand(states[id], BOOKS[id]) };
+      if (!bookLoaded(id)) { books.push({ ...entry, status: 'not-loaded' }); continue; }
+      if (!(typeof window._useFirestoreForBook !== 'function' || window._useFirestoreForBook(id))) {
+        books.push({ ...entry, status: 'old-storage' });
+        continue;
+      }
+      let old = null;
+      try { old = await window._fbReadOldBookCopy(id); } catch (e) { books.push({ ...entry, status: 'unreadable' }); continue; }
+      if (!old) { books.push({ ...entry, status: 'ok' }); continue; }
+      const cmp = compareCopies(old, states[id]);
+      books.push({ ...entry, status: cmp.ok ? 'ok' : 'missing', missing: cmp.onlyInOld });
+    }
+    _storage = { at: new Date().toISOString(), books };
+  } finally {
+    _storageRunning = false;
+    noteTodo();
+    renderWebsiteLinkCard();
+  }
+}
+
+async function copyOldRecords(bookId, button) {
+  const entry = _storage && _storage.books.find(b => b.id === bookId);
+  if (!entry || !entry.missing || !entry.missing.length) return;
+  const n = entry.missing.length;
+  const ok = await confirmDialog(
+    `Add ${n} record${n === 1 ? '' : 's'} from the old storage to ${entry.title}?\n\nOnly do this if ${n === 1 ? 'it belongs' : 'they belong'} in the book: a record you deleted after the move would come back.`,
+    { title: 'Copy records over', okLabel: 'Copy them over' },
+  );
+  if (!ok) return;
+  if (button) button.disabled = true;
+  try {
+    // Compare again right now, so only what is still missing is added.
+    const old = await window._fbReadOldBookCopy(bookId);
+    const s = states[bookId];
+    const added = old && s ? restoreRecords(s, compareCopies(old, s).onlyInOld) : 0;
+    if (added) {
+      recomputeAfters(s, BOOKS[bookId]);
+      scheduleRender();
+      await saveState(bookId);
+    }
+    showToast(added ? `✓ ${added} record${added === 1 ? '' : 's'} copied into ${entry.title}` : `${entry.title} already has them all`, 'ok', 5000);
+  } catch (e) {
+    console.error('[storage check] copy failed', e);
+    showToast('Couldn’t copy them just now. Once you’re online, press it again.', 'err', 5000);
+  }
+  await runStorageCheck();
+}
+
+/** What the To-do list should show for website orders and the storage check. */
+function websiteLinkTodo() {
+  const needYou = _review.filter(p => !_later.has(p.orderId)).length;
+  const books = (_storage && _storage.books) || [];
+  return {
+    needYou,
+    storageMissing: books.filter(b => b.status === 'missing').map(b => ({ title: b.title, count: b.missing.length })),
+  };
+}
+
+// Tell the To-do list and the landing rail when what they show has changed.
+function noteTodo() {
+  const todo = websiteLinkTodo();
+  const sig = JSON.stringify(todo);
+  if (sig === _todoSig) return;
+  _todoSig = sig;
+  // main.js listens and redraws the To-do list and landing rail.
+  try { window.dispatchEvent(new CustomEvent('website-link-todo')); } catch (_) { /* they refresh on their own later */ }
 }
 
 async function rehearsePostage(orderId) {
@@ -658,8 +746,8 @@ function wireCard() {
     else if (action === 'later') { _later.add(order); renderWebsiteLinkCard(); }
     else if (action === 'unlater') { _later.clear(); renderWebsiteLinkCard(); }
     else if (action === 'retry') { scheduleImport(0); scheduleWebsiteFeedPublish('all'); }
-    else if (action === 'consent') acceptConsent(btn);
-    else if (action === 'consent-later') { _consentDismissed = true; renderWebsiteLinkCard(); }
+    else if (action === 'storage-check') runStorageCheck();
+    else if (action === 'copy-old') copyOldRecords(book, btn);
     else if (action === 'rehearse') rehearsePostage(order);
     else if (action === 'clear-test') clearRehearsal(order, btn);
     else if (action === 'hide-unlinked') { writeJson(UNLINKED_KEY, {}); renderWebsiteLinkCard(); }
@@ -760,30 +848,42 @@ function factsHtml() {
     </dl>`;
 }
 
-function pastFromDay() {
-  return String((_link.website && _link.website.pastFrom) || '');
+function oldRecordLine({ part, row }) {
+  const r = row || {};
+  if (part === 'hist') {
+    return [fmtD(r.date) || r.date, r.chan, r.num, r.qty != null ? `${Math.abs(Number(r.qty) || 0)} cop${Math.abs(Number(r.qty) || 0) === 1 ? 'y' : 'ies'}` : ''].filter(Boolean).join(' · ');
+  }
+  const label = { ledger: 'Stock record', expenses: 'Expense', stores: 'Store', artistTransfers: 'Artist transfer', artistPayouts: 'Artist payout', artistReceivables: 'Artist receivable' }[part] || part;
+  return [label, fmtD(r.date) || r.date, r.type, r.qty != null ? String(r.qty) : '', r.note || r.desc || ''].filter(Boolean).join(' · ');
 }
 
-function consentHtml() {
-  if (!_consent || _consentDismissed) return '';
-  const c = _consent;
-  const line = `${c.fresh} new · ${c.linked} already in your books (will be linked) · ${c.needYou} need you`;
-  return `<div class="wl-consent" role="group" aria-labelledby="wl-consent-title">
-      <h4 class="wl-subhead" id="wl-consent-title">${c.older ? 'Bring in your older website orders?' : 'Bring in your website orders?'}</h4>
-      ${c.older ? `<p class="wl-note">${escapeHtml(`The website is now sending orders paid from ${pastFromDay() || 'an earlier day'}. Check them before they’re added.`)}</p>` : ''}
-      <p class="wl-consent-line wl-mono">${escapeHtml(line)}</p>
-      <ul class="wl-points">
-        <li><strong>New</strong> orders are added as sales, so your stock goes down by the copies sold.</li>
-        <li>Orders <strong>already in your books</strong> — ones you entered by hand or recorded from Stripe — are linked to the website’s copy, never counted twice.</li>
-        <li>Anything unclear waits under <strong>Needs you</strong>; nothing is guessed.</li>
-      </ul>
-      ${c.more ? `<p class="wl-note">${escapeHtml(`${c.more} more come in after these, ${WEBSITE_IMPORT_BATCH} at a time.`)}</p>` : ''}
-      <p class="wl-note">After this, new website orders come in by themselves.</p>
-      <div class="wl-actions">
-        <button class="btn gold" type="button" data-wl-action="consent">Bring them in</button>
-        <button class="btn" type="button" data-wl-action="consent-later">Not now</button>
-      </div>
-    </div>`;
+function storageHtml() {
+  const head = `<h4 class="wl-subhead">Storage check</h4>`;
+  const again = `<button class="btn sm" type="button" data-wl-action="storage-check"${_storageRunning ? ' disabled' : ''}>${_storageRunning ? 'Checking…' : 'Check again'}</button>`;
+  if (!_storage) {
+    return `<div class="wl-section">${head}<p class="wl-note">${_storageRunning ? 'Checking every book’s records against the old storage…' : 'Not checked yet on this device.'}</p><div class="wl-actions">${again}</div></div>`;
+  }
+  const books = _storage.books;
+  const good = books.filter(b => b.status === 'ok');
+  const problems = books.filter(b => b.status !== 'ok');
+  const line = b => `${b.title} — ${b.sales} sale${b.sales === 1 ? '' : 's'}, ${b.onHand} on hand`;
+  const summary = problems.length
+    ? `<p class="wl-note">${chip('active', '!', 'Needs a look')} ${escapeHtml(`${good.length} of ${books.length} books are in the new storage with every record.`)}</p>`
+    : `<p class="wl-note">${chip('positive', '✓', 'All good')} ${escapeHtml(`All ${books.length} books are in the new storage, with every record from the old one. Checked ${ago(_storage.at)}.`)}</p>`;
+  const problemList = problems.map(b => {
+    if (b.status === 'missing') {
+      const shown = b.missing.slice(0, 10).map(m => `<li>${escapeHtml(oldRecordLine(m))}</li>`).join('');
+      const more = b.missing.length > 10 ? `<li>${escapeHtml(`…and ${b.missing.length - 10} more`)}</li>` : '';
+      return `<li class="wl-item"><strong>${escapeHtml(b.title)}</strong>: ${escapeHtml(`${b.missing.length} record${b.missing.length === 1 ? ' is' : 's are'} only in the old storage`)}
+          <ul class="wl-points">${shown}${more}</ul>
+          <p class="wl-note">These may be records you deleted after the move. Copy them only if they belong in the book.</p>
+          <div class="wl-actions"><button class="btn gold sm" type="button" data-wl-action="copy-old" data-book="${escapeHtml(b.id)}">Copy these over</button></div></li>`;
+    }
+    const why = { 'old-storage': 'still in the old storage — it moves by itself the next time the app opens online', unreadable: 'its old copy couldn’t be read just now — check again once you’re online', 'not-loaded': 'didn’t load — reload the app' }[b.status] || b.status;
+    return `<li class="wl-item"><strong>${escapeHtml(b.title)}</strong>: ${escapeHtml(why)}</li>`;
+  }).join('');
+  const goodList = good.length ? `<details class="wl-details"><summary>${escapeHtml(`Books checked (${good.length})`)}</summary><ul class="wl-points">${good.map(b => `<li>✓ ${escapeHtml(line(b))}</li>`).join('')}</ul></details>` : '';
+  return `<div class="wl-section">${head}${summary}${problemList ? `<ul class="wl-list">${problemList}</ul>` : ''}${goodList}<div class="wl-actions">${again}</div></div>`;
 }
 
 function reviewHtml() {
@@ -858,12 +958,10 @@ function statusLine() {
   if (!_ordersSeen) return { tone: 'neutral', glyph: '◌', word: 'Checking', text: 'Looking for orders from your website…' };
   if (_running) return { tone: 'active', glyph: '●', word: 'Working', text: 'Bringing in website orders…' };
   if (_docsFromCache) return { tone: 'neutral', glyph: '◌', word: 'Checking', text: 'Checking the website’s orders with the cloud…' };
-  if (_consent && !_consentDismissed) return { tone: 'active', glyph: '●', word: 'Ready', text: 'Your website’s orders are ready to bring in.' };
   const shown = _review.filter(p => !_later.has(p.orderId)).length;
   if (shown) return { tone: 'needs-you', glyph: '!', word: 'Needs you', text: `${shown} website order${shown === 1 ? ' needs' : 's need'} you below.` };
   // Anything still waiting is said plainly, never "up to date".
   const waiting = [];
-  if (_consent && _consentDismissed) waiting.push('past orders wait for you to press Bring them in');
   const setAside = _review.length - shown;
   if (setAside) waiting.push(`${setAside} set aside for later`);
   const blocked = [..._blockedBooks].filter(id => BOOKS[id]).length;
@@ -889,7 +987,7 @@ function renderWebsiteLinkCard() {
   const statusEl = $('wl-status');
   if (statusEl && statusEl.textContent !== s.text) statusEl.textContent = s.text;
   const body = $('wl-body');
-  if (body) body.innerHTML = [factsHtml(), consentHtml(), reviewHtml(), blockedHtml(), unlinkedHtml(), testsHtml()].join('');
+  if (body) body.innerHTML = [factsHtml(), reviewHtml(), blockedHtml(), unlinkedHtml(), storageHtml(), testsHtml()].join('');
 }
 
 // ── For the order screens ──────────────────────────────────────────────────
@@ -917,5 +1015,6 @@ export {
   scheduleWebsiteFeedPublish,
   startWebsiteLink,
   websiteLinkActive,
+  websiteLinkTodo,
   websiteShipmentNote,
 };
