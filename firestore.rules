@@ -149,5 +149,49 @@ service cloud.firestore {
     match /emailReceiptInbox/{document} {
       allow read, write: if isPublisher();
     }
+
+    // ── Website link (docs/website-link.md) ───────────────────────────────
+    // The shop's website writes these with the Admin SDK from its own Cloud
+    // Functions, which bypasses these rules; ownership of each field is by the
+    // contract. The rules below govern only the publisher's browser.
+
+    // Website orders inbox. The website owns `web`, `shipmentReply` and sets
+    // `pending`; the app may only record what it applied (`imported`), clear
+    // `pending`, and send a label (`app`). It never creates or deletes orders,
+    // and never rewrites the website's copy of one.
+    match /websiteOrders/{orderId} {
+      allow read: if isPublisher();
+      allow update: if isPublisher()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['imported', 'pending', 'app'])
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['pending'])
+            || request.resource.data.pending == false);
+      allow create, delete: if false;
+    }
+
+    // The stock number the website follows, one document per inventory book.
+    // Written only by the publish transaction, from the server's saved books.
+    match /websiteStockFeed/{bookId} {
+      allow read: if isPublisher();
+      allow create, update: if isPublisher()
+        && request.resource.data.keys().hasOnly(['bookId', 'title', 'onHand', 'webCopies', 'base', 'derived', 'at', 'build'])
+        && request.resource.data.bookId == bookId
+        && request.resource.data.title is string
+        && request.resource.data.onHand is int && request.resource.data.onHand >= 0
+        && request.resource.data.webCopies is int && request.resource.data.webCopies >= 0
+        && request.resource.data.base is int
+        && request.resource.data.derived is bool
+        && request.resource.data.at is string
+        && request.resource.data.build is string;
+      allow delete: if isPublisher();
+    }
+
+    // websiteLink/website is the website's heartbeat (read-only here);
+    // websiteLink/app is this app's own status.
+    match /websiteLink/{docId} {
+      allow read: if isPublisher();
+      allow create, update: if isPublisher() && docId == 'app'
+        && request.resource.data.keys().hasOnly(['importConsentAt', 'lastImportAt', 'lastFeedAt', 'build']);
+      allow delete: if false;
+    }
   }
 }

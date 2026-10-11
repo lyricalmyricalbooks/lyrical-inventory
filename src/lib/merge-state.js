@@ -149,6 +149,40 @@ function insertRow(part, rows, row) {
   if (at === -1) rows.push(row); else rows.splice(at, 0, row);
 }
 
+// What the owner sets on a website-order row in this app; everything else on
+// it is the website's copy of the order.
+const WEBSITE_ROW_APP_FIELDS = ['notes', 'enteredBy'];
+const WEBSITE_ROW_TRACKING_FIELDS = ['trackingNumber', 'trackingCarrier', 'trackingUrl', 'trackingSource', 'carrier',
+  'shipped', 'shippedDate', 'trackingSimulated', 'postagePaid', 'declarationId', 'webBaselineTracking'];
+
+/**
+ * Both devices changed the same website-order row (src/lib/website-link.js).
+ * "Local wins" could put back an older copy of the order — a refund undone —
+ * so the side holding the newer website copy (`webSourceUpdatedAt`) wins,
+ * keeping this device's notes and any tracking it set itself. Null when the
+ * rule doesn't apply (not website rows, or no newer side), so the ordinary
+ * conflict handling runs.
+ */
+function resolveWebsiteRow(local, remote) {
+  if (!local || !remote || typeof local !== 'object' || typeof remote !== 'object') return null;
+  if (!local.webOrderId || local.webOrderId !== remote.webOrderId) return null;
+  const l = String(local.webSourceUpdatedAt || '');
+  const r = String(remote.webSourceUpdatedAt || '');
+  if (!r || r <= l) return null;
+  const out = { ...remote };
+  WEBSITE_ROW_APP_FIELDS.forEach(f => { if (Object.prototype.hasOwnProperty.call(local, f)) out[f] = local[f]; });
+  // A label bought here on this device: keep it unless the other side has its own.
+  const localTracking = String(local.trackingNumber || '').trim();
+  const websiteSent = new Set([remote.webTracking, local.webTracking, ...(remote.webTrackingSeen || []), ...(local.webTrackingSeen || [])]
+    .map(v => String(v || '').trim()).filter(Boolean));
+  if (localTracking && !websiteSent.has(localTracking)) {
+    WEBSITE_ROW_TRACKING_FIELDS.forEach(f => {
+      if (Object.prototype.hasOwnProperty.call(local, f)) out[f] = local[f]; else delete out[f];
+    });
+  }
+  return out;
+}
+
 /**
  * Three-way merge of one list part.
  *
@@ -184,6 +218,8 @@ export function mergeRows(part, base, remote, local, { baseKnown = true } = {}) 
       if (same(lr, rr)) return lr;
       if (br && same(br, lr)) return rr;  // only remote edited
       if (br && same(br, rr)) return lr;  // only local edited
+      const web = part === 'hist' ? resolveWebsiteRow(lr, rr) : null;
+      if (web) return web;
       conflicts.push({ part, key, local: lr, remote: rr });
       return lr;                          // both edited — local wins, but loudly
     };

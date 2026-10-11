@@ -11,6 +11,7 @@
 
 import { DAY, dayMs } from './calendar-day.js';
 import { LOSS_MARGIN, money } from './shipping-price-check.js';
+import { isWebsiteFulfilled } from './website-link.js';
 
 /** Whether this order is meant to go in the post at all. */
 function hasAddress(entry) {
@@ -23,12 +24,15 @@ function hasAddress(entry) {
  * An order counts as sent when it is marked shipped, carries a tracking
  * number, or has a postage label matched to it. Orders with no address
  * (picked up, handed over) are never nagged about, and ones older than
- * `withinDays` are history rather than a to-do.
+ * `withinDays` are history rather than a to-do. Orders from the shop's own
+ * website are packed and sent there, so they are not this list's to chase —
+ * unless a label was bought for one here.
  */
 export function unshippedOrders(rows = [], { now = Date.now(), afterDays = 3, withinDays = 60, labelled = new Set() } = {}) {
   const out = [];
   (Array.isArray(rows) ? rows : []).forEach(({ bookId, entry, bookTitle }) => {
     if (!entry || entry.voided || entry.chan !== 'Website') return;
+    if (isWebsiteFulfilled(entry)) return;
     if (entry.shipped || entry.trackingNumber || entry.trackingPin) return;
     if (!hasAddress(entry)) return;
     if (entry.num && labelled.has(entry.num)) return;

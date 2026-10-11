@@ -2,9 +2,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/fireba
 import { getDatabase, ref, set, onValue, get, push, remove } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js";
 import { getAuth, signInWithPopup, reauthenticateWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import { getStorage, ref as sRef, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-storage.js";
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, setDoc, getDoc, getDocs, getDocFromServer, collection, onSnapshot, deleteDoc, writeBatch, runTransaction } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, setDoc, getDoc, getDocs, getDocFromServer, collection, onSnapshot, deleteDoc, writeBatch, runTransaction, query, where } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 import { receiptDuplicate } from './lib/receipt-finder.js';
 import { ALL_PARTS, LIST_PARTS, assembleParts, emptyPart, splitState, stitchState, mergePart, mergeSettingDoc } from './lib/merge-state.js';
+import { planWebsitePublish } from './lib/website-link.js';
 
 const firebaseConfig = {
   apiKey:"AIzaSyB0BTOjfUFZKCVth9eR8iN0mvfkpRIFKSI",
@@ -718,6 +719,144 @@ window._fbWatchEmailInbox = (cb) => {
 window._fbDeleteInboxItem = async (id) => {
   try { await deleteDoc(doc(fs, 'emailReceiptInbox', id)); }
   catch (e) { console.error('fbDeleteInboxItem failed', e); }
+};
+
+// ─────────────────────────────────────────────
+// WEBSITE LINK  (website ↔ inventory app — docs/website-link.md)
+// The website's Cloud Functions write each paid order into websiteOrders/{id}
+// and set `pending`. This app turns it into ledger rows through its normal
+// save path, then — in ONE transaction that re-reads the server's copy of the
+// books — publishes the stock feed, marks the orders it brought in, and sends
+// back any label bought here. Nothing outside writes into a book's own data.
+// ─────────────────────────────────────────────
+let _webOrdersUnsub = null;
+window._fbWatchWebsiteOrders = (cb, onErr) => {
+  try {
+    if (_webOrdersUnsub) { try { _webOrdersUnsub(); } catch (_) {} _webOrdersUnsub = null; }
+    const pendingOrders = query(collection(fs, 'websiteOrders'), where('pending', '==', true));
+    _webOrdersUnsub = onSnapshot(pendingOrders, (snap) => {
+      const docs = [];
+      snap.forEach(d => docs.push({ id: d.id, ...(d.data() || {}) }));
+      cb(docs, { fromCache: !!(snap.metadata && snap.metadata.fromCache) });
+    }, (err) => {
+      console.error('website orders watch failed', err);
+      if (typeof onErr === 'function') onErr(err);
+    });
+    return () => { if (_webOrdersUnsub) { try { _webOrdersUnsub(); } catch (_) {} _webOrdersUnsub = null; } };
+  } catch (e) {
+    console.error('fbWatchWebsiteOrders failed', e);
+    if (typeof onErr === 'function') onErr(e);
+    return null;
+  }
+};
+
+// websiteLink/website is the website's heartbeat; websiteLink/app is ours.
+let _webLinkUnsub = null;
+window._fbWatchWebsiteLinkStatus = (cb, onErr) => {
+  try {
+    if (_webLinkUnsub) { try { _webLinkUnsub(); } catch (_) {} _webLinkUnsub = null; }
+    _webLinkUnsub = onSnapshot(collection(fs, 'websiteLink'), (snap) => {
+      const out = { website: null, app: null };
+      snap.forEach(d => { if (d.id === 'website' || d.id === 'app') out[d.id] = d.data() || {}; });
+      cb(out);
+    }, (err) => {
+      console.error('website link status watch failed', err);
+      if (typeof onErr === 'function') onErr(err);
+    });
+    return () => { if (_webLinkUnsub) { try { _webLinkUnsub(); } catch (_) {} _webLinkUnsub = null; } };
+  } catch (e) {
+    console.error('fbWatchWebsiteLinkStatus failed', e);
+    if (typeof onErr === 'function') onErr(e);
+    return null;
+  }
+};
+
+// Throws on failure: the one caller is the first-run "bring them in" button,
+// which must not proceed as if the owner's go-ahead had been recorded.
+window._fbSaveWebsiteLinkApp = async (data) => {
+  if (!auth.currentUser || !window.IS_PUBLISHER) throw new Error('Publisher access required');
+  const allowed = ['importConsentAt', 'lastImportAt', 'lastFeedAt', 'build'];
+  const clean = {};
+  allowed.forEach(k => { if (data && typeof data[k] === 'string') clean[k] = data[k]; });
+  await setDoc(doc(fs, 'websiteLink', 'app'), clean, { merge: true });
+};
+
+const WEB_LINK_PARTS = ['hist', 'ledger', 'metadata'];
+
+// One transaction:
+//   reads   settings/catalog, the involved websiteOrders docs, and the hist /
+//           ledger / metadata parts of every book involved — all from the
+//           SERVER, so a device holding a stale copy can't send the stock feed
+//           backwards or mark an order it never actually saved
+//   decides with planWebsitePublish (src/lib/website-link.js, unit-tested)
+//   writes  websiteStockFeed/{book}, websiteOrders/{id} (imported, pending,
+//           app.* only) and websiteLink/app
+// Books still in the Realtime Database can't be read inside a Firestore
+// transaction; they come back in `blocked` and nothing is published for them.
+window._fbPublishWebsiteLink = async ({ bookIds = [], marks = [], shipments = [], testShipments = [], heldOrders = [], build = '', device = '' } = {}) => {
+  if (!auth.currentUser || !window.IS_PUBLISHER) throw new Error('Publisher access required');
+  const empty = { feeds: 0, accepted: [], refused: [], sent: [], current: [], blocked: [], unavailable: [] };
+  if (!window._useFirestoreGlobal()) return { ok: false, reason: 'old-storage', ...empty };
+  const orderIds = [...new Set([
+    ...marks.map(m => m && m.orderId),
+    ...shipments.map(s => s && s.orderId),
+    ...testShipments.map(t => t && t.orderId),
+  ].filter(Boolean).map(String))];
+  const requested = [...new Set((bookIds || []).filter(Boolean).map(String))];
+
+  return runTransaction(fs, async (tx) => {
+    const now = new Date().toISOString();
+    const orderSnaps = await Promise.all(orderIds.map(id => tx.get(doc(fs, 'websiteOrders', id))));
+    const orderDocs = {};
+    orderIds.forEach((id, i) => { orderDocs[id] = orderSnaps[i].exists() ? orderSnaps[i].data() : null; });
+
+    const involved = new Set(requested);
+    marks.forEach(m => Object.keys((m && m.effect) || {}).forEach(id => involved.add(id)));
+    Object.values(orderDocs).forEach(d => {
+      if (d && d.web && d.web.books && typeof d.web.books === 'object') Object.keys(d.web.books).forEach(id => involved.add(id));
+    });
+    const blocked = [...involved].filter(id => !window._useFirestoreForBook(id));
+    const readable = [...involved].filter(id => window._useFirestoreForBook(id));
+
+    const catalogSnap = await tx.get(doc(fs, 'settings', 'catalog'));
+    const partSnaps = await Promise.all(readable.flatMap(id => WEB_LINK_PARTS.map(p => tx.get(doc(fs, 'books', id, 'data', p)))));
+    const books = {};
+    readable.forEach((id, i) => {
+      const snaps = partSnaps.slice(i * WEB_LINK_PARTS.length, (i + 1) * WEB_LINK_PARTS.length);
+      // No documents at all: this book's data still lives in the old storage
+      // (see _fbLoad's fallback), so the server has nothing trustworthy yet.
+      if (!snaps.some(s => s.exists())) return;
+      const parts = {};
+      let ok = true;
+      WEB_LINK_PARTS.forEach((p, j) => {
+        const s = snaps[j];
+        if (!s.exists()) { parts[p] = emptyPart(p); return; }
+        const value = safeParse((s.data() || {}).data);
+        if (value == null) ok = false; else parts[p] = value;
+      });
+      if (ok) books[id] = parts;
+    });
+    const catalog = catalogSnap.exists() ? (safeParse((catalogSnap.data() || {}).data) || {}) : {};
+
+    const plan = planWebsitePublish({ bookIds: requested, books, catalog, orderDocs, marks, shipments, testShipments, heldOrders, now, build, device });
+    plan.feeds.forEach(f => tx.set(doc(fs, 'websiteStockFeed', f.bookId), f.doc));
+    plan.orderUpdates.forEach(u => tx.update(doc(fs, 'websiteOrders', u.orderId), u.data));
+    const app = { build: String(build || '') };
+    if (plan.feeds.length) app.lastFeedAt = now;
+    if (plan.accepted.length) app.lastImportAt = now;
+    tx.set(doc(fs, 'websiteLink', 'app'), app, { merge: true });
+    return {
+      ok: true,
+      at: now,
+      feeds: plan.feeds.length,
+      accepted: plan.accepted,
+      refused: plan.refused,
+      sent: plan.sent,
+      current: plan.current,
+      blocked,
+      unavailable: readable.filter(id => !books[id]),
+    };
+  });
 };
 
 // Same contract as _fbSaveSettings. A dropped catalog write loses a book's

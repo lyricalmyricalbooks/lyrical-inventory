@@ -1239,6 +1239,21 @@
 <!-- WEBSITE -->
 <div class="tab-panel" id="tab-website" style="display:none;">
   <div class="web-orders-shell">
+    <!-- The website link: orders from the shop's own website arrive here by
+         themselves (docs/website-link.md). Filled by src/features/website-link.js
+         for the publisher; stays hidden until the link starts. The status line
+         is a permanent live region, so its updates are announced. -->
+    <section class="wl-card" id="web-link-card" aria-labelledby="wl-title" hidden>
+      <div class="wl-head">
+        <div class="wl-head-titles">
+          <span class="wl-eyebrow">Linked to your website</span>
+          <h3 class="wl-title" id="wl-title">From your website</h3>
+        </div>
+        <span class="wl-chip is-neutral" id="wl-state"><span aria-hidden="true">◌</span> Checking</span>
+      </div>
+      <p class="wl-status" id="wl-status" role="status" aria-live="polite">Looking for orders from your website…</p>
+      <div class="wl-body" id="wl-body"></div>
+    </section>
     <div class="web-orders-hero">
       <div class="web-orders-copy">
         <div class="eyebrow">From order to inventory</div>
@@ -5218,6 +5233,7 @@
 
   <!-- ORDER EDIT FIELDS -->
   <div id="edit-order-fields">
+    <p class="wl-edit-note" id="edit-web-note" hidden>This sale came from your website. Its copies, order number and refunds follow the website, so they can’t be changed here — refund or change the order on the website and it updates by itself. A price or date you change here stays, unless the website later changes what this order paid.</p>
     <div class="g2" style="margin-bottom:12px;">
       <div class="form-group"><label for="edit-num">Order #</label><input id="edit-num" type="text"></div>
       <div class="form-group"><label for="edit-date">Date</label><input id="edit-date" type="date"></div>

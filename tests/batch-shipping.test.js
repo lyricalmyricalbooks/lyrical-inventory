@@ -125,3 +125,21 @@ describe('buildLabelPrintPage', () => {
     expect(html).toContain('rel="noopener"></a>');
   });
 });
+
+describe('isBatchCandidate — website orders', () => {
+  const web = (over = {}) => order({ webOrderId: 'LMB-1001', fulfilledOnWebsite: true, ...over });
+  it('leaves out an order the website packs, by default', () => {
+    expect(isBatchCandidate(web(), now)).toBe(false);
+  });
+  it('still offers it to the batch screen when asked, for postage bought here', () => {
+    expect(isBatchCandidate(web(), now, { includeWebsite: true })).toBe(true);
+  });
+  it('never offers one already shipped by the website', () => {
+    expect(isBatchCandidate(web({ shipped: true, trackingNumber: 'W1', webTracking: 'W1' }), now, { includeWebsite: true })).toBe(false);
+  });
+  it('blocks buying a second label when the website already shipped it', () => {
+    const reason = preflightBlocker({ address, plan, existing: { tracking: 'W1', fromWebsite: true, labels: [] } });
+    expect(reason).toMatch(/Already shipped from the website \(tracking W1\)\. A new label makes a second parcel\./);
+    expect(preflightBlocker({ address, plan, existing: { tracking: '', fromWebsite: true, labels: [] } })).toMatch(/^Already shipped from the website\./);
+  });
+});

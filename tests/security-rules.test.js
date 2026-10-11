@@ -142,3 +142,61 @@ describe('author-only settings reads', () => {
     expect(expr.slice(0, expr.indexOf('authorEmails'))).not.toMatch(/\$key ===/);
   });
 });
+
+// The website link (docs/website-link.md). The website writes with the Admin
+// SDK and bypasses rules; these pin what the publisher's browser may do, so a
+// later edit can't quietly let the app rewrite the website's copy of an order.
+describe('website link rules', () => {
+  const block = (name) => {
+    const at = firestoreRules.indexOf(`match /${name}/`);
+    expect(at, name).toBeGreaterThan(-1);
+    // The block's own brace, not the `{orderId}` wildcard in its path.
+    const open = firestoreRules.indexOf('} {', at) + 2;
+    let depth = 0;
+    for (let i = open; i < firestoreRules.length; i++) {
+      if (firestoreRules[i] === '{') depth++;
+      else if (firestoreRules[i] === '}' && --depth === 0) return firestoreRules.slice(at, i + 1);
+    }
+    throw new Error(`unterminated block ${name}`);
+  };
+
+  it('websiteOrders: publisher reads, may change only imported/pending/app, never creates or deletes', () => {
+    const rules = block('websiteOrders');
+    expect(rules).toMatch(/allow read: if isPublisher\(\);/);
+    expect(rules).toContain(".diff(resource.data).affectedKeys().hasOnly(['imported', 'pending', 'app'])");
+    expect(rules).toMatch(/allow create, delete: if false;/);
+    // The app only ever clears `pending`; setting it is the website's signal.
+    expect(rules).toContain('request.resource.data.pending == false');
+    expect(rules).not.toMatch(/allow (read, )?write/);
+  });
+
+  it('websiteStockFeed: publisher writes, shape-checked to the contract’s fields', () => {
+    const rules = block('websiteStockFeed');
+    expect(rules).toMatch(/allow read: if isPublisher\(\);/);
+    expect(rules).toContain("keys().hasOnly(['bookId', 'title', 'onHand', 'webCopies', 'base', 'derived', 'at', 'build'])");
+    expect(rules).toContain('request.resource.data.bookId == bookId');
+    expect(rules).toContain('request.resource.data.onHand is int && request.resource.data.onHand >= 0');
+    expect(rules).toContain('request.resource.data.base is int');
+    expect(rules).toContain('request.resource.data.derived is bool');
+  });
+
+  it('websiteLink: publisher reads both, writes only its own app document', () => {
+    const rules = block('websiteLink');
+    expect(rules).toMatch(/allow read: if isPublisher\(\);/);
+    expect(rules).toContain("isPublisher() && docId == 'app'");
+    expect(rules).toContain("keys().hasOnly(['importConsentAt', 'lastImportAt', 'lastFeedAt', 'build'])");
+    expect(rules).toMatch(/allow delete: if false;/);
+  });
+
+  it('the app writes exactly those fields (src/firebase.js and the pure planner agree with the rules)', () => {
+    const fb = read('src/firebase.js');
+    const lib = read('src/lib/website-link.js');
+    // Orders: only imported, pending and dotted app.* paths.
+    expect(lib).toMatch(/imported: \{/);
+    expect(lib).toContain("'app.shipment': shipment, 'app.shipmentWaiting': true");
+    expect(fb).toContain("tx.update(doc(fs, 'websiteOrders', u.orderId), u.data)");
+    // websiteLink/app is the only websiteLink doc the app writes.
+    expect([...fb.matchAll(/doc\(fs, 'websiteLink', '([a-z]+)'\)/g)].map(m => m[1])).toEqual(['app', 'app']);
+    expect(fb).toContain("const allowed = ['importConsentAt', 'lastImportAt', 'lastFeedAt', 'build'];");
+  });
+});

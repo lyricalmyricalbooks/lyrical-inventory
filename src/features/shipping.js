@@ -62,7 +62,9 @@ import {
 } from '../main.js';
 import { renderExpenses, saveReceiptToLocalFile, readShippingFieldsFromReceipt } from './receipts.js';
 import { openReviewInbox } from './review-inbox.js';
-import { findExistingLabel, describeExistingLabel } from '../lib/label-duplicate-guard.js';
+import { findExistingLabel, describeExistingLabel, websiteLabelWords } from '../lib/label-duplicate-guard.js';
+import { isShippoTestKey, isWebsiteFulfilled } from '../lib/website-link.js';
+import { websiteShipmentNote } from './website-link.js';
 import {
   refundCarrier, refundState, canRequestRefund, shippoTransactionId, refundCredit,
   unshipOrderForRefund, describeRefundRefusal,
@@ -279,7 +281,12 @@ function getShippingReconciliationOrders() {
   const byNumber = new Map();
   Object.values(states).forEach(state => (state?.hist || []).forEach(history => {
     const number = normalizeShippingOrderNumber(history.num);
-    if (number && history.chan === 'Website' && !history.voided) byNumber.set(number, history);
+    if (!number || history.chan !== 'Website' || history.voided) return;
+    // An order filed under several books keeps its address (and its shipping
+    // money) on one row; never let a bare sibling row stand for the order.
+    const held = byNumber.get(number);
+    if (held && String(held.shipAddr1 || held.shipName || '').trim() && !String(history.shipAddr1 || history.shipName || '').trim()) return;
+    byNumber.set(number, history);
   }));
   (orders || []).forEach(order => {
     const number = normalizeShippingOrderNumber(order.orderNum || order.num);
@@ -307,8 +314,15 @@ function renderOrderShippingSummary(order) {
   if (customerPaidVal > 0) {
     parts.push(`Shipping paid ${fmt(customerPaidVal, 'CAD')}`);
   }
-  if (summary.postageBase == null && !order.shipped) {
+  // A website order is packed on the website unless postage was bought here.
+  const packedOnWebsite = isWebsiteFulfilled(order) && !summary.linkedCount;
+  if (summary.postageBase == null && !order.shipped && !packedOnWebsite) {
     parts.push(summary.linkedCount ? 'Postage linked' : 'Postage not linked');
+  }
+  const web = websiteShipmentNote(order);
+  if (web) {
+    const glyph = { positive: '✓', critical: '✕', active: '●', neutral: '◌' }[web.tone] || '●';
+    parts.push(`<span class="wl-ship"><span aria-hidden="true">${glyph}</span> ${escapeHtml(web.text)}</span>${web.next ? `<span class="wl-ship-next">${escapeHtml(web.next)}</span>` : ''}`);
   }
   // What the parcel-following watch last heard, in words, so a waiting or
   // returning parcel is visible on the order itself, not only in a passing card.
@@ -1240,7 +1254,7 @@ function postageOrderChoices() {
   return getShippingReconciliationOrders()
     .map(order => ({
       number: normalizeShippingOrderNumber(order.num || order.orderNum),
-      name: order.shipName || order.customer || 'Customer',
+      name: `${order.shipName || order.customer || 'Customer'}${order.webOrderId ? ' · Website order' : ''}`,
     }))
     .filter(choice => choice.number);
 }
@@ -1652,7 +1666,8 @@ function writeTrackingBackToOrders(expenses = []) {
   expenses.forEach(expense => {
     const orderNumber = normalizeShippingOrderNumber(expense?.shippingOrderNumber);
     const tracking = cpText(expense?.trackingNumber);
-    if (orderNumber && tracking && expense.shippingMatchStatus === 'matched') {
+    // A test-mode label's number never scans; it must not mark an order sent.
+    if (orderNumber && tracking && expense.shippingMatchStatus === 'matched' && !expense.simulated) {
       wanted.set(orderNumber, { tracking, date: cpText(expense.date) });
     }
   });
@@ -3245,17 +3260,21 @@ function renderCustomShippoDestPicker() {
       countryRaw: h.shipCountry || '',
     };
 
+    // A website order stays pickable — the owner sometimes buys its postage
+    // here — but it is the website's to pack, so it never counts as waiting.
+    const websiteOrder = isWebsiteFulfilled(h);
     items.push({
       category: 'orders',
-      catLabel: 'Order',
+      catLabel: websiteOrder ? 'Website order' : 'Order',
       icon: '📦',
       title: `${h.num ? 'Order #' + h.num + ' · ' : ''}${h.shipName}`,
       sub: `${h.shipAddr1 ? h.shipAddr1 + ', ' : ''}${h.shipCity || ''} ${h.shipCountry || ''}`,
       parcelSummary: describeParcelPlan(orderParcelPlan(parcelLines, BOOKS)),
       value: JSON.stringify(addrObj),
       orderNumber: h.num,
+      websiteOrder,
       missingPhone: !getFallbackShippingPhone(addrObj.phone),
-      searchText: `${h.num || ''} ${h.shipName} ${h.shipCity || ''} ${h.shipCountry || ''}`.toLowerCase()
+      searchText: `${h.num || ''} ${h.shipName} ${h.shipCity || ''} ${h.shipCountry || ''}${websiteOrder ? ' website' : ''}`.toLowerCase()
     });
   });
 
@@ -3268,6 +3287,7 @@ function renderCustomShippoDestPicker() {
     const num = normalizeShippingOrderNumber(item.orderNumber);
     item.shipped = Boolean(item.storefrontShipped || (num && shipped.has(num)));
     if (num && (pickups.has(num) || hiddenNums.has(num))) item.skipQueue = true;
+    if (item.websiteOrder) item.skipQueue = true;
   });
   // Big Cartel orders waiting to ship come first, oldest at the top, so the
   // picker and "Ship next order" follow the same queue as the Ready to ship card.
@@ -7052,14 +7072,18 @@ function renderShippoDiagnostics(data, fallbackMessage) {
  * Resolves true when the purchase should go ahead.
  */
 async function confirmNoExistingLabel(orderNumber) {
+  // Every book, not just the open one: a website order for another book, or
+  // one the website already shipped, must be caught too.
   const found = findExistingLabel(orderNumber, {
-    hist: getState().hist || [],
+    hist: allOrderHistory(),
     expenses: TAX_CENTER.businessExpenses || [],
   });
   if (!found) return true;
   return confirmDialog(
-    `Order ${normalizeShippingOrderNumber(orderNumber)} already has a shipping label. `
-      + 'Buying another charges you again for the same parcel.',
+    found.fromWebsite
+      ? `Order ${normalizeShippingOrderNumber(orderNumber)}: ${websiteLabelWords(found)} It also charges you again.`
+      : `Order ${normalizeShippingOrderNumber(orderNumber)} already has a shipping label. `
+        + 'Buying another charges you again for the same parcel.',
     {
       title: 'This order already has a label',
       details: describeExistingLabel(found),
@@ -7183,6 +7207,10 @@ async function purchaseShippoRate({ rateId, provider, serviceName, amount, curre
     found.entry.shipped = true;
     found.entry.shippedDate = today();
     found.entry.trackingNumber = trackingNumber || '';
+    // A Shippo test key buys a label that never scans: say so on the order,
+    // so it is never treated (or sent to the website) as a real parcel.
+    if (isShippoTestKey(shippoKey)) found.entry.trackingSimulated = true;
+    else delete found.entry.trackingSimulated;
     saveState(found.bookId);
     renderHist();
     if (String(currency || '').toUpperCase() === 'CAD') {
@@ -7287,13 +7315,17 @@ function openBatchShipping() {
   const pickupOrders = localPickupOrderNumbers();
   Object.entries(states).forEach(([bookId, state]) => {
     (state?.hist || []).forEach(entry => {
-      if (!isBatchCandidate(entry, now, { hidden: hiddenOrders })) return;
+      if (!isBatchCandidate(entry, now, { hidden: hiddenOrders, includeWebsite: true })) return;
       if (pickupOrders.has(normalizeShippingOrderNumber(entry.num))) return;
+      // Packed on the website as a rule, so listed for the odd time its postage
+      // is bought here — but never ticked for you.
+      const website = isWebsiteFulfilled(entry);
       rows.push({
         bookId,
         entry,
         orderNumber: normalizeShippingOrderNumber(entry.num),
-        selected: true,
+        website,
+        selected: !website,
         status: 'waiting',
         reason: '',
         rate: null,
@@ -7357,7 +7389,7 @@ function renderBatchShipping() {
     }
     return `<tr>
       <td><input type="checkbox" aria-label="Include order ${escapeHtml(row.orderNumber)}" ${row.selected && (tickable || row.status === 'bought' || row.status === 'buying') ? 'checked' : ''} ${tickable ? '' : 'disabled'} onchange="toggleBatchRow(${i}, this.checked)" style="width:20px;height:20px;"></td>
-      <td><strong>${escapeHtml(row.orderNumber)}</strong> · ${escapeHtml(entry.shipName || '')}<br><span style="color:var(--text3);font-size:var(--text-sm);">${escapeHtml(batchRowPlace(entry))}</span></td>
+      <td><strong>${escapeHtml(row.orderNumber)}</strong> · ${escapeHtml(entry.shipName || '')}${row.website ? ' <span class="chip-status sm gray" title="Packed on the website as a rule — tick it only if you are buying its postage here">Website order</span>' : ''}<br><span style="color:var(--text3);font-size:var(--text-sm);">${escapeHtml(batchRowPlace(entry))}</span></td>
       <td>${BATCH_STATUS_PILLS[row.status] || ''}${row.reason ? `<div style="font-size:var(--text-sm);color:var(--text2);margin-top:4px;line-height:1.4;">${escapeHtml(row.reason)}</div>` : ''}${row.tracking ? `<div style="font-size:var(--text-sm);margin-top:4px;">Tracking ${escapeHtml(row.tracking)}</div>` : ''}</td>
       <td class="r" style="font-family:inherit;">${price}</td>
       <td>${action}</td>

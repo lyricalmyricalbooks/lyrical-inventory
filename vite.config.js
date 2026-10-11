@@ -115,6 +115,13 @@ export default defineConfig({
       // that tab working offline without bloating the initial HTML parse.
       includeAssets: ['favicon.ico', 'apple-touch-icon-180x180.png', 'maskable-icon-512x512.png', 'gas-code.txt'],
       workbox: {
+        // The app is one main script (src/main.js and everything it imports),
+        // and it is the one file the app cannot start without. Workbox skips
+        // precaching any file over its 2 MiB default — silently, apart from a
+        // build error — which would leave the app unable to open offline. The
+        // bundle passed 2 MiB with the website link; 3 MiB keeps it precached
+        // with room to spare. Splitting the bundle is the longer-term fix.
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         // The Firebase SDK is imported from www.gstatic.com by src/firebase.js,
         // which main.js imports statically — if those modules can't load, no
         // app code runs and the app opens blank. Precaching them guarantees the
