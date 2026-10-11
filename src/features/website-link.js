@@ -592,11 +592,12 @@ function decide(orderId, bookId, choice, key = '') {
 }
 
 /** Record, once, when website orders started coming in (websiteLink/app.importConsentAt). */
+// The server keeps the first day recorded: a device whose cached status hasn't
+// caught up yet gets that day back instead of overwriting it with today.
 async function markLinkSwitchedOn() {
-  if (typeof window._fbSaveWebsiteLinkApp !== 'function') return;
-  const at = new Date().toISOString();
+  if (typeof window._fbMarkLinkSwitchedOn !== 'function') return;
   try {
-    await window._fbSaveWebsiteLinkApp({ importConsentAt: at, build: build() });
+    const at = await window._fbMarkLinkSwitchedOn(new Date().toISOString());
     _link = { ..._link, app: { ...(_link.app || {}), importConsentAt: at } };
   } catch (e) {
     // Not saved: carry on. With no day recorded, tracking already on a
@@ -619,7 +620,7 @@ function sold(state) {
 }
 
 async function runStorageCheck() {
-  if (_storageRunning || !online() || typeof window._fbReadOldBookCopy !== 'function') return;
+  if (_storageRunning || !online() || typeof window._fbReadOldBookCopy !== 'function' || typeof window._fbReadNewBookCopy !== 'function') return;
   if (!Object.keys(BOOKS).every(id => states[id])) return;
   _storageRunning = true;
   renderWebsiteLinkCard();
@@ -633,9 +634,15 @@ async function runStorageCheck() {
         continue;
       }
       let old = null;
-      try { old = await window._fbReadOldBookCopy(id); } catch (e) { books.push({ ...entry, status: 'unreadable' }); continue; }
+      let saved = null;
+      try {
+        old = await window._fbReadOldBookCopy(id);
+        // Compare with what the server holds, not this device's copy: a save
+        // still waiting to upload isn't in the new storage yet.
+        if (old) saved = await window._fbReadNewBookCopy(id);
+      } catch (e) { books.push({ ...entry, status: 'unreadable' }); continue; }
       if (!old) { books.push({ ...entry, status: 'ok' }); continue; }
-      const cmp = compareCopies(old, states[id]);
+      const cmp = compareCopies(old, saved);
       books.push({ ...entry, status: cmp.ok ? 'ok' : 'missing', missing: cmp.onlyInOld });
     }
     _storage = { at: new Date().toISOString(), books };
