@@ -31,7 +31,9 @@ import {
   WEBSITE_IMPORT_BATCH,
   appShipmentFor,
   describeWebShipment,
+  consentStamp,
   hasAppTracking,
+  importConsentNeeded,
   linkedPostageFor,
   planWebsiteOrder,
   rowKey,
@@ -382,8 +384,8 @@ async function importOnce() {
   _moreWaiting = ready.length - go.length;
 
   if (!_linkKnown) return; // wait to learn whether the owner has said yes before
-  if (!(_link.app && _link.app.importConsentAt)) {
-    _consent = ready.length || _review.length ? { ...summarizePlans([...go, ..._review]), more: _moreWaiting } : null;
+  if (importConsentNeeded(_link)) {
+    _consent = ready.length || _review.length ? { ...summarizePlans([...go, ..._review]), more: _moreWaiting, older: !!(_link.app && _link.app.importConsentAt) } : null;
     return;
   }
   _consent = null;
@@ -590,7 +592,7 @@ function decide(orderId, bookId, choice, key = '') {
 async function acceptConsent(button) {
   if (typeof window._fbSaveWebsiteLinkApp !== 'function') return;
   if (button) button.disabled = true;
-  const at = new Date().toISOString();
+  const at = consentStamp(new Date().toISOString(), _link);
   try {
     await window._fbSaveWebsiteLinkApp({ importConsentAt: at, build: build() });
   } catch (e) {
@@ -758,12 +760,17 @@ function factsHtml() {
     </dl>`;
 }
 
+function pastFromDay() {
+  return String((_link.website && _link.website.pastFrom) || '');
+}
+
 function consentHtml() {
   if (!_consent || _consentDismissed) return '';
   const c = _consent;
   const line = `${c.fresh} new · ${c.linked} already in your books (will be linked) · ${c.needYou} need you`;
   return `<div class="wl-consent" role="group" aria-labelledby="wl-consent-title">
-      <h4 class="wl-subhead" id="wl-consent-title">Bring in your website orders?</h4>
+      <h4 class="wl-subhead" id="wl-consent-title">${c.older ? 'Bring in your older website orders?' : 'Bring in your website orders?'}</h4>
+      ${c.older ? `<p class="wl-note">${escapeHtml(`The website is now sending orders paid from ${pastFromDay() || 'an earlier day'}. Check them before they’re added.`)}</p>` : ''}
       <p class="wl-consent-line wl-mono">${escapeHtml(line)}</p>
       <ul class="wl-points">
         <li><strong>New</strong> orders are added as sales, so your stock goes down by the copies sold.</li>

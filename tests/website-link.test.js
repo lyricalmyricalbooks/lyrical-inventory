@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   WEBSITE_IMPORT_BATCH,
   appShipmentFor,
+  consentStamp,
+  importConsentNeeded,
   carrierLabel,
   describeWebShipment,
   desiredWebsiteRows,
@@ -1019,5 +1021,21 @@ describe('isShippoTestKey', () => {
   it('a test label never counts as a label for the website', () => {
     const row = { webOrderId: 'A', trackingNumber: 'T1', trackingSimulated: true, shipped: true };
     expect(appShipmentFor([row], null, null)).toBeNull();
+  });
+});
+
+describe('importConsentNeeded / consentStamp', () => {
+  it('asks before the first import, and again when the website starts sending older orders', () => {
+    expect(importConsentNeeded({})).toBe(true);
+    expect(importConsentNeeded({ app: { importConsentAt: '2026-10-11T10:00:00Z' } })).toBe(false);
+    expect(importConsentNeeded({ app: { importConsentAt: '2026-10-11T10:00:00Z' }, website: { pastFrom: '2025-01-01', pastFromAt: '2026-10-11T13:00:00Z' } })).toBe(true);
+    expect(importConsentNeeded({ app: { importConsentAt: '2026-10-11T14:00:00Z' }, website: { pastFrom: '2025-01-01', pastFromAt: '2026-10-11T13:00:00Z' } })).toBe(false);
+  });
+  it('a device whose clock runs behind is not asked twice', () => {
+    const link = { website: { pastFromAt: '2026-10-11T13:00:05Z' } };
+    const stamp = consentStamp('2026-10-11T13:00:00Z', link);
+    expect(stamp).toBe('2026-10-11T13:00:05Z');
+    expect(importConsentNeeded({ ...link, app: { importConsentAt: stamp } })).toBe(false);
+    expect(consentStamp('2026-10-11T14:00:00Z', link)).toBe('2026-10-11T14:00:00Z');
   });
 });

@@ -168,14 +168,17 @@ target = max(0, min(feed.base − webTotal(B), feed.onHand))
 
 ### `websiteLink/website` and `websiteLink/app`
 
-- `website`: `{ at, serviceAccount, version }`. A heartbeat the website writes on every sweep.
+- `website`: `{ at, serviceAccount, version, pastFrom, pastFromAt }`. A heartbeat the website writes on every sweep.
+  `pastFrom`/`pastFromAt` are written when the owner moves the start day earlier, **before** the start day changes:
+  the app then asks for "Bring them in" again (`importConsentNeeded`) before adding any order, so older sales typed
+  in by hand can be checked first. On that press the app saves `importConsentAt` no earlier than `pastFromAt`.
 - `app`: `{ importConsentAt, lastImportAt, lastFeedAt, build }`. Written by the app.
 
 ## Documents in the website project
 
 - `systemStatus/inventoryLink` (admin-read, server-write) holds:
   - `links { [websiteBookId]: { "_" | variantId: inventoryBookId } }`
-  - options: `startDay`, `autoSync`, `rehearsalUntil`
+  - options: `startDay` (can move earlier, never later; a move restarts the past-order backfill), `autoSync`, `rehearsalUntil`
   - the run lease, backfill cursor, connection check and last sync result
 - `inventoryPushes/{orderId}` (server-only) holds:
   - `net { [inventoryBookId]: copies }`
