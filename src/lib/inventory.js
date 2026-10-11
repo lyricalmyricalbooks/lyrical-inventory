@@ -12,6 +12,17 @@ export function deriveOnHand(s, book) {
   if (!book || !Number.isFinite(book.maxPrint)) {
     return (s && s.stock) || 0;
   }
+  return Math.max(0, deriveOnHandRaw(s, book));
+}
+
+// The same walk without the floor at zero. A count below zero is a records
+// problem rather than a shelf, so the screens never show it — but the website
+// link sends this number, because the website subtracts its own sales from it
+// and a floor here would hide copies it has already counted.
+export function deriveOnHandRaw(s, book) {
+  if (!book || !Number.isFinite(book.maxPrint)) {
+    return (s && s.stock) || 0;
+  }
   let stock = book.maxPrint;
   for (const h of ((s && s.hist) || [])) {
     if (h.voided || h.consignmentLink) continue;
@@ -23,7 +34,7 @@ export function deriveOnHand(s, book) {
     else if (e.type === 'Return' && e.status === 'restocked') stock += (e.qty || 0);
     else if (e.type === 'Inventory Disposal') stock -= (e.qty || 0);
   }
-  return Math.max(0, stock);
+  return stock;
 }
 
 // Full accounting of a print run: where every copy is right now. By identity
