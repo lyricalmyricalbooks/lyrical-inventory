@@ -173,6 +173,8 @@ import {
   shipmentsToFollow,
 } from '../lib/delivery-watch.js';
 import {
+  SHIPPO_RECEIPT_EMAIL_QUERY,
+  attachEmailReceipts,
   attachInvoiceReceipts,
   describeInvoiceAvailability,
   invoiceIndexByTransaction,
@@ -180,6 +182,7 @@ import {
   parseInvoice,
   parseInvoiceItem,
   parseRefund,
+  parseShippoReceiptEmail,
   shippoTxIdFromRef,
 } from '../lib/shippo-invoices.js';
 import {
@@ -740,6 +743,22 @@ async function fetchShippoInvoices(token) {
   return { byId, unavailable: '' };
 }
 
+/** Every "Your Shippo Invoice Receipt" email from the last ~13 months, parsed. */
+async function fetchShippoReceiptEmails() {
+  const found = await gmailJson('listReceiptEmails', `limit=100&q=${encodeURIComponent(`${SHIPPO_RECEIPT_EMAIL_QUERY} newer_than:400d`)}`);
+  const ids = (found.emails || []).map(e => e?.id).filter(Boolean);
+  const receipts = [];
+  // The batch reader takes twelve messages per call.
+  for (let i = 0; i < ids.length; i += 12) {
+    const batch = await gmailJson('getEmailContents', `ids=${encodeURIComponent(ids.slice(i, i + 12).join(','))}`);
+    (batch.emails || []).forEach(email => {
+      const r = email && parseShippoReceiptEmail({ id: email.id, body: email.body || '', date: email.date || '' });
+      if (r) receipts.push(r);
+    });
+  }
+  return receipts;
+}
+
 /**
  * "Find the real receipts" for postage: attach each label's Shippo invoice as
  * the receipt of record, keeping the label behind it. Runs from the Receipts
@@ -755,12 +774,25 @@ async function findShippoReceipts(btn) {
     const [items, invoices] = await Promise.all([fetchShippoInvoiceItems(token), fetchShippoInvoices(token)]);
     const unavailable = items.unavailable || invoices.unavailable;
     const { changed, noInvoice } = attachInvoiceReceipts(TAX_CENTER.businessExpenses || [], items.index, invoices.byId);
+    // Shippo emails a receipt for every payment, so when its invoice list can't
+    // be read (or hasn't caught up), the emails fill the gap.
+    if ((unavailable || noInvoice) && sheetsUrl) {
+      if (btn) btn.textContent = 'Checking your email for Shippo receipts…';
+      try {
+        const fromEmail = attachEmailReceipts(TAX_CENTER.businessExpenses || [], await fetchShippoReceiptEmails());
+        changed.push(...fromEmail.changed);
+      } catch (e) {
+        console.warn('Shippo receipt emails unavailable', e);
+      }
+    }
     if (changed.length) {
       await saveTaxCenter({ rethrow: true });
       renderTaxCenter();
       showToast(`✓ Attached the Shippo receipt to ${changed.length} postage expense${changed.length === 1 ? '' : 's'}.`);
     } else if (unavailable) {
-      showToast(unavailable, 'warn');
+      showToast(sheetsUrl
+        ? 'No matching Shippo receipt emails were found in your Gmail yet. Shippo emails one after each payment — try again once it arrives.'
+        : `${unavailable} Connect your Google Sheet in Settings and the app can read Shippo's receipt emails instead.`, 'warn');
     } else {
       showToast(noInvoice
         ? `Shippo hasn’t issued a receipt yet for ${noInvoice} label${noInvoice === 1 ? '' : 's'} — it bills weekly, so try again later.`
