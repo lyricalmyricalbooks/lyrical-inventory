@@ -172,7 +172,8 @@ target = max(0, min(feed.base − webTotal(B), feed.onHand))
   `pastFrom`/`pastFromAt` are written when the owner moves the start day earlier, before the start day changes
   (informational; the app no longer waits on them).
 - `app`: `{ importConsentAt, lastImportAt, lastFeedAt, build }`. Written by the app. `importConsentAt` is when website
-  orders first came in; the app records it by itself on its first import.
+  orders first came in; the app records it by itself on its first import, in a server-read transaction that keeps a
+  day already recorded (`_fbMarkLinkSwitchedOn`), so a device with a stale cache never moves it later.
 
 **Orders come in by themselves.** The app adds every website order it can match for certain without asking: new ones
 as sales, ones already entered by hand (same order number, Stripe charge or uid) linked, never counted twice. Anything
@@ -181,8 +182,10 @@ unclear waits under **Needs you** (Website orders tab) and on the app's To-do li
 **Books move to the new storage safely.** A book still in the old (Realtime Database) storage is copied into Firestore,
 the copy is read back and compared record by record with the old one (`compareCopies`, `src/lib/storage-mode.js`), and
 only an identical copy switches the book over (`_fbAdoptBook`); otherwise the copy is removed and the book stays put.
-The old copy is never deleted. The Website orders card's **Storage check** compares every book's old copy with the one
-in use and lists any record only the old copy has, with **Copy these over** (add-only) for the owner to decide.
+The switch is written to the server before this device uses it; then the old copy is read again, and any sale another
+device saved there meanwhile is added through the normal (add-only) save. The old copy is never deleted. The Website
+orders card's **Storage check** compares every book's old copy with the new storage as the server holds it (never this
+device's cache) and lists any record only the old copy has, with **Copy these over** (add-only) for the owner to decide.
 
 ## Documents in the website project
 
