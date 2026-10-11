@@ -137,9 +137,9 @@ The app sets `app.shipmentWaiting = true` whenever it writes a new `hash`.
 ```js
 {
   bookId, title,
-  onHand: 12,      // publisher-held copies now (deriveStockBreakdown().publisherOnHand), >= 0
+  onHand: 12,      // ON HAND as the app shows it, author-held copies included (deriveStockBreakdown().totalOnHand), >= 0
   webCopies: 30,   // copies on non-voided website rows (webOrderId set) in this book
-  base: 42,        // unfloored deriveOnHand + webCopies − author-held copies (may be negative)
+  base: 42,        // unfloored deriveOnHand + webCopies (may be negative)
   derived: true,   // false when the book has no print run (maxPrint), so the count is not trustworthy
   at: "ISO", build: "<app build>",
 }
@@ -151,6 +151,7 @@ The app sets `app.shipmentWaiting = true` whenever it writes a new `hash`.
 target = max(0, min(feed.base − webTotal(B), feed.onHand))
 ```
 
+- **ON HAND in the inventory app is what the website sells from**, copies held by the author included.
 - `webTotal(B)` is the sum of `net[B]` over the website's own `inventoryPushes`.
 - Importing an order lowers `onHand` and raises `webCopies` by the same amount, so `base` does
   not move. The target is right whether or not the app has imported the order yet.
