@@ -507,11 +507,16 @@ export function describeRecord(entry) {
   }
 }
 
+// Date.toLocaleString with options builds a fresh Intl.DateTimeFormat on every
+// call (~30x slower than reusing one), and formatConflictWhen runs once per card
+// on the sync-conflict review screen, so build the formatter once.
+const CONFLICT_WHEN_FMT = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
 /** "22 Sep 2026, 14:05" — when the clash was noticed on this device. */
 export function formatConflictWhen(at) {
   const d = new Date(Number(at));
   if (isNaN(d.getTime())) return '—';
-  return d.toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return CONFLICT_WHEN_FMT.format(d);
 }
 
 // ── REVIEW SCREEN MARKUP ────────────────────────────────────────────────────
