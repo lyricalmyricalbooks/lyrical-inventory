@@ -565,6 +565,30 @@ function automationSignals(ctx, out) {
     });
   }
 
+  // Orders from the shop's own website (Website orders tab) come in by
+  // themselves; the ones the app couldn't match for certain wait for a person.
+  const site = a.websiteLink || {};
+  const siteReview = Number(site.needYou) || 0;
+  if (siteReview) {
+    out.push({
+      id: 'orders-website-link-review', group: 'orders', status: 'blocked', icon: '🛍',
+      label: `${siteReview} ${plural(siteReview, 'order', 'orders')} from your website ${plural(siteReview, 'needs', 'need')} you`,
+      detail: 'The app couldn’t tell for certain whether these are sales you already entered by hand, so it hasn’t added them yet. Stock hasn’t been taken off for them here.',
+      fix: { label: 'Open Website orders', ...openTab('website') },
+    });
+  }
+  for (const book of (site.storageMissing || [])) {
+    const n = Number(book && book.count) || 0;
+    if (!n) continue;
+    out.push({
+      id: `setup-storage-missing-${String(book.title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+      group: 'setup', status: 'warn', icon: '🗄',
+      label: `${book.title} has ${n} ${plural(n, 'record', 'records')} only in the old storage`,
+      detail: 'The storage check found records the book’s old copy has and the one the app uses now doesn’t. Look at them, and copy them over if they belong.',
+      fix: { label: 'Open Website orders', ...openTab('website') },
+    });
+  }
+
   const labelled = new Set(a.labelledOrderNums || []);
   const waiting = unshippedOrders(rows, { now: Date.parse(`${ctx.today}T12:00:00`) || Date.now(), labelled });
   if (waiting.length) {

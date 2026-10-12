@@ -53,6 +53,7 @@ import {
 import { openM, closeM, confirmDialog } from '../lib/modal.js';
 import { renderShippingReconciliationWorklist } from './shipping.js';
 import { escapeHtml } from '../lib/html.js';
+import { localDayPlus } from '../lib/calendar-day.js';
 import { csvRow, toCsv } from '../lib/csv.js';
 import { downloadCsv } from '../lib/download.js';
 import { fmt, getSym, getBookCurrencyCode, roundCents, setSelectCurrency } from '../lib/money.js';
@@ -1363,9 +1364,7 @@ function tcPendingRemindIn(days) {
   const el = $('tc-pending-remind');
   if (!el) return;
   if (days === null || days === undefined) { el.value = ''; return; }
-  const d = new Date(`${today()}T00:00:00`);
-  d.setDate(d.getDate() + days);
-  el.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  el.value = localDayPlus(days, new Date(`${today()}T00:00:00`));
 }
 
 function openPendingExpense(id, prefillTrip) {
@@ -1459,9 +1458,7 @@ async function deletePendingExpense(id) {
 async function snoozePendingExpense(id, days = 7) {
   const item = _tcFindPending(id);
   if (!item) return;
-  const d = new Date(`${today()}T00:00:00`);
-  d.setDate(d.getDate() + days);
-  item.remindOn = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  item.remindOn = localDayPlus(days, new Date(`${today()}T00:00:00`));
   await saveTaxCenter();
   renderTaxCenter();
   showToast(`✓ Reminder moved to ${item.remindOn}`);

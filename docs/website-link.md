@@ -152,6 +152,12 @@ target = max(0, min(feed.base − webTotal(B), feed.onHand))
 ```
 
 - **ON HAND in the inventory app is what the website sells from**, copies held by the author included.
+- **A book with no count stays as it is** (hold `no-feed`). The app publishes counts only for books in its new
+  (Firestore) storage. A book added after the app's one-time move was left in the old storage; the app now moves
+  such a book over by itself when it opens online (`_fbAdoptBook`, `src/lib/storage-mode.js` in the inventory app),
+  unless both storages hold a copy.
+- **The owner's confirmed Apply switches counting on** for a matched book that isn't counted yet, even when its
+  number is already right.
 - `webTotal(B)` is the sum of `net[B]` over the website's own `inventoryPushes`.
 - **Editions that are the same copies share one pile.** Two editions of one website book (The Hound's Signed and
   Unsigned hardcovers) may be linked to the same inventory book; two different website books may not. Both editions
@@ -162,14 +168,30 @@ target = max(0, min(feed.base − webTotal(B), feed.onHand))
 
 ### `websiteLink/website` and `websiteLink/app`
 
-- `website`: `{ at, serviceAccount, version }`. A heartbeat the website writes on every sweep.
-- `app`: `{ importConsentAt, lastImportAt, lastFeedAt, build }`. Written by the app.
+- `website`: `{ at, serviceAccount, version, pastFrom, pastFromAt }`. A heartbeat the website writes on every sweep.
+  `pastFrom`/`pastFromAt` are written when the owner moves the start day earlier, before the start day changes
+  (informational; the app no longer waits on them).
+- `app`: `{ importConsentAt, lastImportAt, lastFeedAt, build }`. Written by the app. `importConsentAt` is when website
+  orders first came in; the app records it by itself on its first import, in a server-read transaction that keeps a
+  day already recorded (`_fbMarkLinkSwitchedOn`), so a device with a stale cache never moves it later.
+
+**Orders come in by themselves.** The app adds every website order it can match for certain without asking: new ones
+as sales, ones already entered by hand (same order number, Stripe charge or uid) linked, never counted twice. Anything
+unclear waits under **Needs you** (Website orders tab) and on the app's To-do list. Nothing is guessed.
+
+**Books move to the new storage safely.** A book still in the old (Realtime Database) storage is copied into Firestore,
+the copy is read back and compared record by record with the old one (`compareCopies`, `src/lib/storage-mode.js`), and
+only an identical copy switches the book over (`_fbAdoptBook`); otherwise the copy is removed and the book stays put.
+The switch is written to the server before this device uses it; then the old copy is read again, and any sale another
+device saved there meanwhile is added through the normal (add-only) save. The old copy is never deleted. The Website
+orders card's **Storage check** compares every book's old copy with the new storage as the server holds it (never this
+device's cache) and lists any record only the old copy has, with **Copy these over** (add-only) for the owner to decide.
 
 ## Documents in the website project
 
 - `systemStatus/inventoryLink` (admin-read, server-write) holds:
   - `links { [websiteBookId]: { "_" | variantId: inventoryBookId } }`
-  - options: `startDay`, `autoSync`, `rehearsalUntil`
+  - options: `startDay` (can move earlier, never later; a move restarts the past-order backfill), `autoSync`, `rehearsalUntil`
   - the run lease, backfill cursor, connection check and last sync result
 - `inventoryPushes/{orderId}` (server-only) holds:
   - `net { [inventoryBookId]: copies }`
