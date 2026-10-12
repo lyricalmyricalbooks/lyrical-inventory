@@ -20372,6 +20372,12 @@ function fairTotalsText(totals) {
   return parts.join(' + ');
 }
 
+// Date.toLocaleTimeString with options builds a fresh Intl.DateTimeFormat on
+// every call (~200× slower than reusing one), and the today list formats one
+// time per register sale, re-rendered after every sale and void on a busy
+// fair day, so build the formatter once.
+const _FAIR_SALE_TIME_FMT = new Intl.DateTimeFormat([], { hour: 'numeric', minute: '2-digit' });
+
 function renderFairToday() {
   const sum = $('fm-today-sum');
   if (!sum) return;
@@ -20384,7 +20390,7 @@ function renderFairToday() {
     : 'No register sales yet today.';
   $('fm-today-list').innerHTML = day.sales.map((sale) => {
     const lines = sale.lines.map((l) => `${escapeHtml(l.title)}${l.qty > 1 ? ` ×${l.qty}` : ''}`).join(', ');
-    const time = sale.at ? new Date(sale.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
+    const time = sale.at ? _FAIR_SALE_TIME_FMT.format(new Date(sale.at)) : '';
     const num = escapeHtml(JSON.stringify(String(sale.num)));
     return `<li class="fm-today-sale"><div class="fm-today-main"><span class="fm-today-lines">${lines}</span><span class="fm-today-meta">${escapeHtml(time)}</span></div><span class="fm-today-amt tnum">${escapeHtml(fairTotalsText(sale.totals))}</span><button type="button" class="fm-today-void" onclick="fairVoidSale(${num})" aria-label="Void this sale: ${lines}">Void</button></li>`;
   }).join('');
