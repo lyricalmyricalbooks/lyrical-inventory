@@ -2,10 +2,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/fireba
 import { getDatabase, ref, set, onValue, get, push, remove } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js";
 import { getAuth, signInWithPopup, reauthenticateWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import { getStorage, ref as sRef, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-storage.js";
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, setDoc, getDoc, getDocs, getDocFromServer, collection, onSnapshot, deleteDoc, writeBatch, runTransaction, query, where } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, setDoc, getDoc, getDocs, getDocFromServer, getDocsFromServer, collection, onSnapshot, deleteDoc, writeBatch, runTransaction, query, where } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 import { receiptDuplicate } from './lib/receipt-finder.js';
 import { ALL_PARTS, LIST_PARTS, assembleParts, emptyPart, splitState, stitchState, mergePart, mergeSettingDoc } from './lib/merge-state.js';
 import { planWebsitePublish } from './lib/website-link.js';
+import { adoptDecision, compareCopies, movedElsewhere } from './lib/storage-mode.js';
 
 const firebaseConfig = {
   apiKey:"AIzaSyB0BTOjfUFZKCVth9eR8iN0mvfkpRIFKSI",
@@ -103,6 +104,126 @@ window._setBookFirestoreMode = (bookId, enabled) => {
   _modeFlags['fs_mode_' + bookId] = enabled;
   localStorage.setItem('fs_mode_' + bookId, String(enabled));
   window._fbSaveModeFlags();
+};
+
+// A book added after the one-time move to Firestore was never flagged, so it
+// kept saving to the old Realtime Database, where the website link can't read
+// it. When it loads, move it over — copy, check, then switch:
+//   1. copy its old-storage records into Firestore, in one transaction that
+//      refuses if any Firestore part appeared meanwhile;
+//   2. read the copy back from the server and compare it with the old copy
+//      (storage-mode.js compareCopies) — it must be identical;
+//   3. only then flag the book, so nothing ever reads a half-made copy.
+// Anything short of an identical copy removes what was written and leaves the
+// book where it was, to try again next time. The old copy is never deleted.
+// Returns { decision, state? }: 'adopted' (state = the checked copy), 'kept',
+// 'skip' or 'unknown'.
+window._fbAdoptBook = async (bookId) => {
+  const base = {
+    publisher: !!(auth.currentUser && window.IS_PUBLISHER),
+    global: window._useFirestoreGlobal(),
+    flagged: window._useFirestoreForBook(bookId),
+  };
+  if (adoptDecision({ ...base, hasFirestoreData: false }) === 'skip') return { decision: 'skip' };
+  let hasFirestoreData = null;
+  try {
+    const snap = await getDocsFromServer(collection(fs, 'books', bookId, 'data'));
+    hasFirestoreData = !snap.empty;
+  } catch (e) {
+    console.warn(`[FB] could not check the new storage for ${bookId}; trying next time`, e);
+  }
+  const decision = adoptDecision({ ...base, hasFirestoreData });
+  if (decision !== 'adopt') return { decision };
+  const partRefs = ALL_PARTS.map(p => doc(fs, 'books', bookId, 'data', p));
+  let wrote = false;
+  try {
+    const old = await get(ref(db, `lyrical/books/${bookId}`));
+    const oldJson = old.exists() ? (old.val() || {}).data : null;
+    if (!oldJson) {
+      // A new book with nothing saved anywhere yet: its first save goes to Firestore.
+      window._setBookFirestoreMode(bookId, true);
+      return { decision: 'adopted', state: null };
+    }
+    const oldState = JSON.parse(oldJson);
+    const parts = splitState(oldState);
+    const ts = Date.now();
+    wrote = await runTransaction(fs, async (tx) => {
+      const snaps = await Promise.all(partRefs.map(r => tx.get(r)));
+      if (snaps.some(s => s.exists())) return false;
+      partRefs.forEach((r, i) => tx.set(r, { data: JSON.stringify(parts[ALL_PARTS[i]]), ts }));
+      return true;
+    });
+    if (!wrote) return { decision: 'unknown' };
+    const back = await getDocsFromServer(collection(fs, 'books', bookId, 'data'));
+    const raw = {};
+    back.forEach(d => { raw[d.id] = (d.data() || {}).data; });
+    const copy = stitchState(assembleParts(raw).parts);
+    if (!compareCopies(oldState, copy).identical) throw new Error('the copy did not match the old records');
+    if (!window._fsHashes) window._fsHashes = {};
+    window._fsHashes[bookId] = Object.fromEntries(ALL_PARTS.map(p => [p, raw[p]]));
+    // Switch over durably (throws if the flag can't be saved, so the unflagged
+    // copy is removed below), and only then switch this device.
+    await setDoc(doc(fs, 'settings', 'modeFlags'), { ['fs_mode_' + bookId]: true }, { merge: true });
+    _modeFlags['fs_mode_' + bookId] = true;
+    try { localStorage.setItem('fs_mode_' + bookId, 'true'); } catch (_) { /* the server flag is what counts */ }
+    // Another device that read the flags before the switch may have saved a
+    // sale to the old storage after it was read above. Read it again now the
+    // switch is on the server: anything new is handed back (`late`) for the
+    // caller to add through the normal save. Later stragglers still show up
+    // in the Storage check.
+    let late = [];
+    try {
+      const again = await get(ref(db, `lyrical/books/${bookId}`));
+      const againJson = again.exists() ? (again.val() || {}).data : null;
+      if (againJson && againJson !== oldJson) late = compareCopies(JSON.parse(againJson), copy).onlyInOld;
+    } catch (e) { console.warn(`[FB] could not re-read the old storage for ${bookId}; the Storage check will compare it`, e); }
+    console.info(`[FB] ${bookId} moved to the new storage and checked`);
+    return { decision: 'adopted', state: copy, late };
+  } catch (e) {
+    console.warn(`[FB] could not move ${bookId} to the new storage; it stays where it was`, e);
+    if (wrote) {
+      try {
+        const batch = writeBatch(fs);
+        partRefs.forEach(r => batch.delete(r));
+        await batch.commit();
+      } catch (cleanup) { console.warn(`[FB] could not remove the unchecked copy of ${bookId}`, cleanup); }
+    }
+    return { decision: 'unknown' };
+  }
+};
+
+// A book's new-storage (Firestore) copy as the SERVER holds it, or null when
+// it has none. Read-only: the storage check must not trust this device's cache
+// or a save still waiting to upload.
+window._fbReadNewBookCopy = async (bookId) => {
+  const snap = await getDocsFromServer(collection(fs, 'books', bookId, 'data'));
+  if (snap.empty) return null;
+  const raw = {};
+  snap.forEach(d => { raw[d.id] = (d.data() || {}).data; });
+  return stitchState(assembleParts(raw).parts);
+};
+
+// Record, once, when website orders started coming in. Read from the server in
+// a transaction, so a device whose cache hasn't seen the saved day yet can't
+// overwrite it. Returns the day that is on record.
+window._fbMarkLinkSwitchedOn = async (at) => {
+  if (!auth.currentUser || !window.IS_PUBLISHER) throw new Error('Publisher access required');
+  const r = doc(fs, 'websiteLink', 'app');
+  return runTransaction(fs, async (tx) => {
+    const snap = await tx.get(r);
+    const existing = snap.exists() ? (snap.data() || {}).importConsentAt : '';
+    if (typeof existing === 'string' && existing) return existing;
+    tx.set(r, { importConsentAt: String(at) }, { merge: true });
+    return String(at);
+  });
+};
+
+// A book's old-storage (Realtime Database) copy, parsed, or null. Read-only:
+// the storage check compares it with the copy the app now uses.
+window._fbReadOldBookCopy = async (bookId) => {
+  const snap = await get(ref(db, `lyrical/books/${bookId}`));
+  const json = snap.exists() ? (snap.val() || {}).data : null;
+  return json ? JSON.parse(json) : null;
 };
 
 // ─────────────────────────────────────────────
@@ -326,6 +447,22 @@ window._fbSave = async (bookId, json, opts = {}) => {
       pending.forEach(({ part, partJson }) => { hashes[part] = partJson; });
 
       return { ok: true, merged: didMerge, state: didMerge ? stitched : null, conflicts };
+    }
+    // Another device may have moved this book to Firestore since this one read
+    // its flags (_fbAdoptBook). Writing here then would strand the change in the
+    // old storage: switch this device over and let the queue send it to
+    // Firestore instead (an ok:false save is kept and retried, never dropped).
+    if (window._useFirestoreGlobal()) {
+      let serverFlags = null;
+      try { serverFlags = (await getDocFromServer(doc(fs, 'settings', 'modeFlags'))).data() || {}; } catch (_) { /* offline: the old path as before */ }
+      if (movedElsewhere({ global: true, flaggedHere: false, serverFlags, bookId })) {
+        _modeFlags['fs_mode_' + bookId] = true;
+        try { localStorage.setItem('fs_mode_' + bookId, 'true'); } catch (_) { /* the server flag is what counts */ }
+        if (typeof window.showToast === 'function') {
+          window.showToast('This book moved to the new storage on another device. Your change is saved and will upload; reload the app to see live updates.', 'warn', 7000);
+        }
+        return { ok: false, merged: false, reason: 'moved' };
+      }
     }
     await set(ref(db, `lyrical/books/${bookId}`), { data: json, ts: Date.now() });
     return { ok: true, merged: false };
@@ -769,16 +906,6 @@ window._fbWatchWebsiteLinkStatus = (cb, onErr) => {
     if (typeof onErr === 'function') onErr(e);
     return null;
   }
-};
-
-// Throws on failure: the one caller is the first-run "bring them in" button,
-// which must not proceed as if the owner's go-ahead had been recorded.
-window._fbSaveWebsiteLinkApp = async (data) => {
-  if (!auth.currentUser || !window.IS_PUBLISHER) throw new Error('Publisher access required');
-  const allowed = ['importConsentAt', 'lastImportAt', 'lastFeedAt', 'build'];
-  const clean = {};
-  allowed.forEach(k => { if (data && typeof data[k] === 'string') clean[k] = data[k]; });
-  await setDoc(doc(fs, 'websiteLink', 'app'), clean, { merge: true });
 };
 
 const WEB_LINK_PARTS = ['hist', 'ledger', 'metadata'];

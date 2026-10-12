@@ -197,6 +197,10 @@ describe('website link rules', () => {
     expect(fb).toContain("tx.update(doc(fs, 'websiteOrders', u.orderId), u.data)");
     // websiteLink/app is the only websiteLink doc the app writes.
     expect([...fb.matchAll(/doc\(fs, 'websiteLink', '([a-z]+)'\)/g)].map(m => m[1])).toEqual(['app', 'app']);
-    expect(fb).toContain("const allowed = ['importConsentAt', 'lastImportAt', 'lastFeedAt', 'build'];");
+    // The two writes stay inside the rule's field list.
+    expect(fb).toContain("tx.set(r, { importConsentAt: String(at) }, { merge: true });");
+    expect(fb).toContain("const app = { build: String(build || '') };");
+    expect(fb).toContain('if (plan.feeds.length) app.lastFeedAt = now;');
+    expect(fb).toContain('if (plan.accepted.length) app.lastImportAt = now;');
   });
 });
