@@ -101,7 +101,7 @@ import {
 import { csvCell } from '../lib/csv.js';
 import { downloadBlob, downloadCsv } from '../lib/download.js';
 import { fmt, fmtD, roundCents, cadEquivalentForSale, getBookCurrencyCode } from '../lib/money.js';
-import { localDay } from '../lib/calendar-day.js';
+import { localDay, localDayPlus } from '../lib/calendar-day.js';
 import {
   buildRecoveredOrderEntry,
   recoveredOrderPrefill,
@@ -5455,9 +5455,7 @@ function chitChatsAccount() {
 // Chit Chats takes today or a date up to a week ahead, on the owner's own
 // calendar (the app's today() is UTC, a day ahead on Canadian evenings).
 function chitChatsShipDateRange(now = new Date()) {
-  const localDay = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-  const weekOut = new Date(now); weekOut.setDate(now.getDate() + 7);
-  return { first: localDay(now), last: localDay(weekOut) };
+  return { first: localDay(now), last: localDayPlus(7, now) };
 }
 
 function limitChitChatsShipDate() {
