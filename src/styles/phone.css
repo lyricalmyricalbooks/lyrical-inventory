@@ -542,6 +542,18 @@
   .fm-undo-btn:disabled { box-shadow: none; }
 }
 
+/* Register (Fair Mode), Riso Press: the pinned Charge and Undo bars kept a rounded corner and
+   a round green check, and the charge sheet's labels were plain sentence case. The bars are now
+   square slabs, the check an inked square stamp, and the sheet's section labels small caps. */
+@media (max-width: 768px) {
+  #tab-pos .pos-layout[data-mobile-view="books"] .fm-bar:not([hidden]),
+  #tab-pos .fm-undo:not([hidden]) { border-radius: var(--r2); }
+  .fm-undo-check { border-radius: var(--r2); border: var(--stroke) solid var(--rule-ink); box-shadow: var(--elev-1); }
+  .fm-bar-count, .fm-pay-label { font-size: var(--text-xs); font-weight: 800; text-transform: uppercase; letter-spacing: var(--tracking-caps); }
+  .fm-bar-total { font-size: var(--text-xl); font-variant-numeric: tabular-nums; }
+  .fm-line-amt { font-variant-numeric: tabular-nums; }
+}
+
 /* Phone home (Today), Riso Press: the four big job cards and the rows under them still wore
    the pre-repaint look: a hairline border, a soft press that shrank the card, and a round
    count badge. Each card now has the 2px ink outline and hard offset shadow of every other

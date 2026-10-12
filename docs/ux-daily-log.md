@@ -126,6 +126,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-09 | visual | Phone header — book switcher | Gave the "which book am I in" button on a phone a firm outline, an offset shadow, caps lettering and a visible arrow, pressing in when tapped, instead of a faint see-through box | — |
 | 2026-10-09 | visual | Phone register — take-back (−) buttons and in-cart count | Made the round − buttons on the register tiles and cart lines, and the copy-count badge, square inked stamps with the offset shadow, pressing in when tapped, to match the rest of the register | — |
 | 2026-10-12 | visual | Phone section picker (Tax Centre, Settings, Customers) | Gave the section dropdown on a phone a small caps label, an inked outline with the offset shadow, a bold name that no longer runs under the arrow, and a press-in when tapped | — |
+| 2026-10-12 | visual | Phone register — Charge and Undo bars, charge sheet | Made the pinned Charge and Undo bars square slabs, turned the round green check into an inked square stamp, and made the total larger with small caps labels | — |
 
 ---
 
