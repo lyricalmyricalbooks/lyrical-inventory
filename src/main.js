@@ -20,6 +20,7 @@ import { canonicalExpenseCategory } from './lib/expense-categories.js';
 import { calcArtistEarnings, tierEffectiveCap, describePayout, payoutRequestCovered, planNetPayout, payoutNetted, unpaidSalesSummary } from './lib/earnings.js';
 import { planArtistSettlement, applyArtistSettlement, undoArtistSettlement, artistSettlementStatement, artistSettlementIssues, planSettlementForPayment } from './lib/artist-settlement.js';
 import { keyRows } from './lib/merge-state.js';
+import { restoreRecords } from './lib/storage-mode.js';
 import { createStripePriceAndLink } from './lib/stripe-payment-link.js';
 import { createStripeRateResolver, stripeOrderNumber } from './lib/stripe-sale-defaults.js';
 import { calculateBreakEven, breakEvenTierMove, applyBreakEvenTierMove, readProductionCostInput } from './lib/breakeven.js';
@@ -899,6 +900,7 @@ import {
   scheduleWebsiteFeedPublish,
   startWebsiteLink,
   websiteLinkActive,
+  websiteLinkTodo,
 } from './features/website-link.js';
 import { STRIPE_CHARGE_PI_KEY, isWebsiteFulfilled, rememberChargeIntents } from './lib/website-link.js';
 import { reviewTaskStillOpen } from './lib/review-queue.js';
@@ -3960,6 +3962,22 @@ export async function loadBook(bookId) {
   setSyncState('syncing', '<b>Firestore</b> · loading…');
   try {
     if (!fbReady) throw new Error('not ready');
+    // A book added after the move to the new storage still lives in the old one,
+    // out of the website link's reach: move it over before reading it.
+    let lateRecords = [];
+    if (window.IS_PUBLISHER && typeof window._fbAdoptBook === 'function') {
+      try {
+        const moved = await window._fbAdoptBook(bookId);
+        if (moved && Array.isArray(moved.late)) lateRecords = moved.late;
+        // Moved, and the copy was checked record by record against the old one.
+        if (moved && moved.decision === 'adopted' && moved.state) {
+          const title = (BOOKS[bookId] && BOOKS[bookId].title) || bookId;
+          const sales = (moved.state.hist || []).filter(h => h && !h.voided).length;
+          const onHand = deriveOnHand(moved.state, BOOKS[bookId]);
+          showToast(`✓ ${title} moved to the new storage — ${sales} sale${sales === 1 ? '' : 's'} and ${onHand} on hand, checked against the old copy`, 'ok', 7000);
+        }
+      } catch (e) { console.warn('Could not move book to the new storage', bookId, e); }
+    }
     const json = await window._fbLoad(bookId);
     const book = BOOKS[bookId];
     if (json) {
@@ -3983,6 +4001,12 @@ export async function loadBook(bookId) {
     if (states[bookId].artistPaymentLink) BOOKS[bookId].artistPaymentLink = states[bookId].artistPaymentLink;
     recomputeAfters(states[bookId], BOOKS[bookId]);
     lastSavedHashes[bookId] = pending && json ? json : JSON.stringify(states[bookId]);
+    // Sales another device saved to the old storage while this book was moving:
+    // add them through the normal save, which only adds to the cloud copy.
+    if (lateRecords.length && restoreRecords(states[bookId], lateRecords)) {
+      recomputeAfters(states[bookId], BOOKS[bookId]);
+      saveState(bookId).catch(e => console.warn('Could not save records found during the move', bookId, e));
+    }
     // Watch for live updates
     window._fbWatchSubmissions(bookId, data => {
       window.authorSubmissions[bookId] = data || {};
@@ -6370,6 +6394,7 @@ function automationTodoInput() {
     receiptsReady: safe(() => reviewQueueSnapshot().items.filter(i => i.kind === 'receipt' && i.state === 'ready').length, 0),
     labelsToMatch: review.labels,
     syncConflicts: safe(() => listConflicts(syncConflictStorage()).length, 0),
+    websiteLink: safe(() => websiteLinkTodo(), null),
   };
 }
 
@@ -6563,6 +6588,8 @@ export function refreshAttentionSurfaces() {
   renderTodoTab();
   renderOverviewRail();
 }
+// The website link's waiting orders and storage check feed the To-do list.
+if (typeof window !== 'undefined') window.addEventListener('website-link-todo', () => { try { refreshAttentionSurfaces(); } catch (_) { /* next render picks it up */ } });
 
 /** Tick one order off as sent, from the to-do list or the landing page. */
 function markOrderSentFromTodo(bookId, num) {

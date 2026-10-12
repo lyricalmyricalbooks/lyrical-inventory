@@ -547,7 +547,7 @@ describe('websiteStockFeed', () => {
   const book = { id: 'hound', title: 'The Hound', maxPrint: 100 };
   const sale = (qty, over = {}) => ({ chan: 'Website', qty, price: 40, ...over });
 
-  it('sends publisher on-hand, website copies and an unfloored base', () => {
+  it('sends total on-hand, website copies and an unfloored base', () => {
     const s = { hist: [sale(2, { webOrderId: 'A' }), sale(3)], ledger: [] };
     expect(websiteStockFeed(s, book)).toEqual({ bookId: 'hound', title: 'The Hound', onHand: 95, webCopies: 2, base: 97, derived: true });
   });
@@ -560,9 +560,11 @@ describe('websiteStockFeed', () => {
     expect(after.webCopies).toBe(2);
   });
 
-  it('takes author-held copies off both onHand and base', () => {
-    const feed = websiteStockFeed({ hist: [], ledger: [], authorStock: 10 }, book);
-    expect(feed).toMatchObject({ onHand: 90, base: 90 });
+  it('counts copies held by the author as on hand (the ON HAND the app shows)', () => {
+    expect(websiteStockFeed({ hist: [], ledger: [], authorStock: 10 }, book)).toMatchObject({ onHand: 100, base: 100 });
+    // More with the author than on hand (Un Fantastico Altrove: 89 on hand, 93 with author) still sends 89.
+    const s = { hist: [sale(11)], ledger: [], authorStock: 93 };
+    expect(websiteStockFeed(s, book)).toMatchObject({ onHand: 89, base: 89 });
   });
 
   it('counts copies out on consignment as gone, but not consignment sales twice', () => {

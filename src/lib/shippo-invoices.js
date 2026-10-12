@@ -252,3 +252,125 @@ export function attachInvoiceReceipts(expenses, itemIndex, invoicesById) {
   });
   return { changed, noInvoice };
 }
+
+// ── Receipts from email ─────────────────────────────────────────────────────
+//
+// Shippo's invoices endpoint is not reachable from the browser on every
+// account, but Shippo emails a "Your Shippo Invoice Receipt" for every payment.
+// Those emails are read through the connected Google Sheet and matched back to
+// the postage expenses they paid for.
+
+/** Gmail search that finds Shippo's payment receipts. */
+export const SHIPPO_RECEIPT_EMAIL_QUERY = 'from:noreply@shippo.com subject:"Shippo Invoice Receipt"';
+
+const MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+
+function decodeBase64Url(s) {
+  try {
+    const b64 = s.replace(/-/g, '+').replace(/_/g, '/');
+    return typeof atob === 'function' ? atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4)) : '';
+  } catch (_) { return ''; }
+}
+
+/**
+ * The link to the invoice on Shippo's billing page. The email wraps it in a
+ * click-tracking redirect whose payload carries the real address, so look in
+ * both the plain text and the decoded payloads.
+ */
+function shippoInvoiceLink(body) {
+  const pattern = /billing\W{1,12}invoices\W{1,12}([a-f0-9]{16,64})/i;
+  const plain = String(body).match(pattern);
+  if (plain) return `https://apps.goshippo.com/settings/account/billing/invoices/${plain[1]}`;
+  for (const m of String(body).matchAll(/[?&]p=([A-Za-z0-9_-]{20,})/g)) {
+    const hit = decodeBase64Url(m[1]).match(pattern);
+    if (hit) return `https://apps.goshippo.com/settings/account/billing/invoices/${hit[1]}`;
+  }
+  return '';
+}
+
+/**
+ * Read one "Your Shippo Invoice Receipt" email. Returns null for anything that
+ * isn't one, so other Shippo mail never lands in the ledger.
+ */
+export function parseShippoReceiptEmail({ id = '', body = '', date = '' } = {}) {
+  const text = String(body || '');
+  const totalMatch = text.match(/total of\W*\$?\s*([0-9][0-9,]*\.?[0-9]*)\s*([A-Z]{3})/i);
+  if (!totalMatch) return null;
+  const total = num(totalMatch[1]);
+  if (total === null) return null;
+  const invoiceNumber = (text.match(/Invoice\s*#\s*(\d+)/i) || [])[1] || '';
+  const countMatch = text.match(/for\s+(\d+)\s+transactions?/i);
+  const paidOn = text.match(/payment for\W*([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2}),\s*(\d{4})/i);
+  let paidDate = '';
+  if (paidOn && MONTHS[paidOn[1].toLowerCase()]) {
+    paidDate = `${paidOn[3]}-${String(MONTHS[paidOn[1].toLowerCase()]).padStart(2, '0')}-${paidOn[2].padStart(2, '0')}`;
+  }
+  return {
+    messageId: String(id || ''),
+    invoiceNumber,
+    date: paidDate || isoDate(date),
+    total,
+    currency: totalMatch[2].toUpperCase(),
+    count: countMatch ? Number(countMatch[1]) : 1,
+    url: shippoInvoiceLink(text) || (id ? `https://mail.google.com/mail/u/0/#all/${id}` : ''),
+  };
+}
+
+function dayGap(a, b) {
+  const ta = Date.parse(a); const tb = Date.parse(b);
+  return Number.isFinite(ta) && Number.isFinite(tb) ? Math.abs(ta - tb) / 86400000 : Infinity;
+}
+
+/** Put a receipt in front of an expense's files, keeping the label behind it. */
+function attachReceipt(e, url, invoiceId) {
+  const files = Array.isArray(e.receiptFiles) && e.receiptFiles.length
+    ? e.receiptFiles.filter(r => typeof r === 'string' && r)
+    : (e.receipt ? [e.receipt] : []);
+  const others = files.filter(r => r !== url);
+  e.invoiceId = invoiceId;
+  e.receiptFiles = [url, ...others];
+  e.receipt = url;
+  const support = Array.isArray(e.supportingFiles) ? e.supportingFiles : [];
+  e.supportingFiles = [...new Set([...support, ...others])];
+}
+
+/**
+ * Match emailed Shippo receipts to the postage expenses they paid for.
+ *
+ * Matching is by what the receipt states: its date (a day either side, for time
+ * zones), its currency and its total. A receipt covering one label must equal
+ * that label's original amount; one covering several must equal the sum of
+ * exactly that many unreceipted labels from the same day. Anything ambiguous is
+ * left alone rather than guessed. Each receipt is used once, and an expense
+ * that already has a receipt is never touched.
+ */
+export function attachEmailReceipts(expenses, receipts) {
+  const changed = [];
+  const open = (expenses || []).filter(e => shippoTxIdFromRef(e?.ref) && !e.invoiceId);
+  const cents = v => Math.round(Number(v) * 100);
+  const amountOf = e => cents(e.origAmount ?? e.amount);
+  const currencyOf = e => String(e.origCurrency || e.currency || '').toUpperCase();
+
+  // A receipt already on any expense was matched on an earlier run.
+  const used = new Set((expenses || []).map(e => e?.invoiceId).filter(Boolean));
+  for (const r of receipts || []) {
+    if (!r || !r.url || !r.date) continue;
+    if (used.has(r.invoiceNumber || r.messageId)) continue;
+    const pool = open.filter(e => !changed.includes(e)
+      && currencyOf(e) === r.currency && dayGap(e.date, r.date) <= 1);
+    let picked = null;
+    if (r.count === 1) {
+      const hits = pool.filter(e => amountOf(e) === cents(r.total));
+      // Two identical labels on the same day: either fits, so take the closest
+      // date; the receipt is honest proof for the amount either way.
+      if (hits.length) picked = [hits.sort((a, b) => dayGap(a.date, r.date) - dayGap(b.date, r.date))[0]];
+    } else if (pool.length === r.count
+      && pool.reduce((s, e) => s + amountOf(e), 0) === cents(r.total)) {
+      picked = pool;
+    }
+    if (!picked) continue;
+    const invoiceId = r.invoiceNumber || r.messageId;
+    picked.forEach(e => { attachReceipt(e, r.url, invoiceId); changed.push(e); });
+  }
+  return { changed, unmatched: open.length - changed.length };
+}

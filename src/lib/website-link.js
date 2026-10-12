@@ -789,10 +789,10 @@ export function summarizePlans(plans = []) {
 /**
  * The numbers the website sets its stock from, for one book.
  *
- *   onHand    publisher-held copies now (author-held copies aren't the
- *             website's to sell), never below 0
+ *   onHand    copies on hand now — the ON HAND number the app shows,
+ *             including copies held by the author — never below 0
  *   webCopies copies on this book's non-voided website rows
- *   base      unfloored on-hand + webCopies − author-held copies. Importing a
+ *   base      unfloored on-hand + webCopies. Importing a
  *             website order lowers on-hand and raises webCopies by the same
  *             amount, so base doesn't move: the website's figure is right
  *             whether or not the order has been brought in yet.
@@ -803,7 +803,8 @@ export function websiteStockFeed(state = {}, book = {}) {
   const s = state && typeof state === 'object' ? state : {};
   const bk = book && typeof book === 'object' ? book : {};
   const raw = deriveOnHandRaw(s, bk);
-  const { publisherOnHand, authorHeld } = deriveStockBreakdown(s, bk);
+  // ON HAND as the app shows it: every copy, including those with the author.
+  const { totalOnHand } = deriveStockBreakdown(s, bk);
   let webCopies = 0;
   for (const h of (Array.isArray(s.hist) ? s.hist : [])) {
     if (h && h.webOrderId && !h.voided && !h.consignmentLink) webCopies += wholeCopies(h.qty);
@@ -811,11 +812,11 @@ export function websiteStockFeed(state = {}, book = {}) {
   return {
     bookId: clean(bk.id),
     title: clean(bk.title),
-    onHand: Math.max(0, Math.floor(Number(publisherOnHand) || 0)),
+    onHand: Math.max(0, Math.floor(Number(totalOnHand) || 0)),
     webCopies,
     // `|| 0` turns a -0 into 0: Firestore stores -0 as a double, and the
     // security rules require whole numbers here.
-    base: Math.floor((Number(raw) || 0) + webCopies - (Number(authorHeld) || 0)) || 0,
+    base: Math.floor((Number(raw) || 0) + webCopies) || 0,
     derived: Number.isFinite(bk.maxPrint),
   };
 }
