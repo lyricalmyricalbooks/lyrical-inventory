@@ -4545,6 +4545,11 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
      full-width under the whole toolbar so they never overflow. */
   .header-menu{flex:1 1 calc(33.333% - 4px);min-width:96px;position:static;display:flex;}
   .header-menu .header-menu-trigger{flex:1 1 auto;width:100%;}
+  /* The account menu is just the round avatar. The 96px floor above is for the
+     grouped text menus; on the account menu it pushed the header 3px past the
+     screen, so every author-view screen scrolled sideways on a phone. */
+  #hmenu-account.header-menu{flex:0 0 auto;min-width:var(--target-min);}
+  #hmenu-account .acct-trigger{width:auto;min-width:var(--target-min);min-height:var(--target-min);justify-content:center;}
   .header-menu-panel{top:100%;left:0;right:0;min-width:0;width:auto;margin-top:6px;}
   .header-menu-item{padding:11px 12px;}
   .header-menu-item .hmi-label{font-size:var(--text-base);}
