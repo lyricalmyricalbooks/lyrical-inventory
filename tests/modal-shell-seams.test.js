@@ -107,7 +107,9 @@ test('every dialog still opens with its title, bar the two that have none', () =
     const cls = first && /class="([^"]*)"/.exec(first[2]);
     if (!cls || !cls[1].split(/\s+/).includes('modal-title')) headless.push(m[1]);
   }
-  expect(headless.sort()).toEqual(['modal invoice-view-modal', 'modal tc-lightbox-modal']);
+  // The height-cap class (modal-max-94 / modal-max-90) was moved onto these two
+  // from an inline style in the phone-shell pass; the allowlist names them as they now are.
+  expect(headless.sort()).toEqual(['modal invoice-view-modal modal-max-94', 'modal tc-lightbox-modal modal-max-90']);
 });
 
 // Twelve footers used to hand-pick their own 14/16/18px top gap, so no two

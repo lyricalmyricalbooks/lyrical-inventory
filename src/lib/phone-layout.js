@@ -5,16 +5,28 @@ const RECORDS = {
   'ml-body': { lead: 0, summary: [1, 4] },
   'all-con-body': { lead: 0, summary: [1, 4, 6] },
   'dash-con-body': { lead: 0, summary: [4, 5] },
+  // Sales by channel on the Dashboard: Channel leads, Units / Revenue / Share
+  // carry the card, Transactions folds away. Its Revenue column was cut off.
+  'ch-body': { lead: 0, summary: [2, 3, 4] },
+  // Tax Centre: category and trip totals were cut off at the right edge.
+  'tc-category-body': { lead: 0, summary: [1, 3] },
+  'tc-trip-body': { lead: 0, summary: [1, 2] },
   // Artist expenses on the book dashboard: its Reference and Amount columns
   // used to be cut off inside the banner on a phone.
   'd-exp-body': { lead: 1, summary: [0, 4] },
   'ledger-body': { lead: 1, summary: [0, 2, 5, 7] },
-  'hist-body': { lead: 1, summary: [0, 2, 4, 8, 9] },
+  // Order History: the summary is order #, channel, total, date and the action.
+  // Qty moves behind the disclosure with the unit price and stock after. `card`
+  // makes a tap anywhere on the order's card open it, not just the small button.
+  'hist-body': { lead: 1, summary: [0, 4, 8, 9], card: true },
   'exp-body': { lead: 'Description', summary: ['Date', 'Receipt', 'Amount', 'Amount (CAD)', 'Reimbursement', ''] },
   'tc-ledger-body': { lead: 2, summary: [0, 4, 6, 7] },
   'tc-recurring-body': { lead: 0, summary: [2, 4, 5, 6] },
   'bc-orders-list': { lead: 0, summary: [1, 2, 6, 7, 8] },
   'sheets-log-body': { lead: 0, summary: [1, 4] },
+  // Payments: reconciled list. Customer leads; Date, Amount, Status and Undo
+  // stay visible on the card, so the Undo button never scrolls off-screen.
+  'recon-matched-body': { lead: 2, summary: [0, 1, 3, 4] },
   'system-backup-list': { lead: 0, summary: [1, 2, 3] },
   // Pop-up windows sit outside the page panels but get the same record cards.
   'tc-trip-detail-body': { lead: 1, summary: [0, 5, 6] },
@@ -74,6 +86,14 @@ function enhanceRecords(table) {
       button.setAttribute('aria-label', `${open ? 'Hide' : 'Show'} details`);
     });
     row.cells[rowLead].append(button);
+    if (config.card) {
+      row.addEventListener('click', event => {
+        // Controls inside the card (edit, ship, approve) keep their own taps.
+        if (event.target.closest('button, a, input, select, textarea, label')) return;
+        if (!window.matchMedia?.('(max-width: 768px)')?.matches) return;
+        button.click();
+      });
+    }
   }
 }
 
@@ -108,17 +128,26 @@ function enhanceSections(nav) {
 // first two in view and fold the rest behind "More actions" on a phone. The
 // original buttons are moved, never copied, so their handlers stay the same;
 // on a wide screen the wrapper is display:contents and nothing changes.
+// Never folded: the gold main action (Save Book sat behind "More actions"),
+// and a button that is hidden for now — a wizard's Back shows up on a later
+// step and must appear in place, not inside the fold. A fold that would hold
+// a single button is not worth the extra tap, so the footer is left alone.
 const FOLD_AFTER = 2;
 let foldId = 0;
-function foldFooterActions(group) {
+export function foldFooterActions(group) {
   if (group.dataset.phoneFolded) return;
   const buttons = [...group.children].filter(el => el.matches('button, .btn'));
   if (buttons.length <= FOLD_AFTER + 1) return;
+  const hiddenNow = (el) => el.hidden || el.style.display === 'none';
+  const shown = buttons.filter(el => !hiddenNow(el));
+  const kept = new Set(shown.slice(0, FOLD_AFTER));
+  const toFold = shown.filter(el => !kept.has(el) && !el.classList.contains('gold'));
+  if (toFold.length < 2) return;
   group.dataset.phoneFolded = '1';
   const panel = document.createElement('div');
   panel.className = 'phone-more-panel';
   panel.id = `phone-more-${++foldId}`;
-  buttons.slice(FOLD_AFTER).forEach(btn => panel.append(btn));
+  toFold.forEach(btn => panel.append(btn));
   const toggle = document.createElement('button');
   toggle.type = 'button';
   toggle.className = 'btn phone-more-toggle';

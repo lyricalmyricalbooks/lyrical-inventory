@@ -577,6 +577,20 @@
   background: var(--surface-card);
   border-color: var(--border);
 }
+/* The pinned title and footer are filled with the page colour in daylight, which
+   is a step darker than the sheet at night and showed as a strip across the top
+   of every pop-up. Match them to the sheet; the hairlines still mark the seams,
+   and the scroll-edge fades fade into the same colour. */
+.theme-dark .modal-title,
+.theme-dark .modal-footer {
+  background: var(--surface-card);
+}
+.theme-dark .modal-title::after {
+  background: linear-gradient(to bottom, var(--surface-card), transparent);
+}
+.theme-dark .modal-footer::before {
+  background: linear-gradient(to top, var(--surface-card), transparent);
+}
 
 /* The author's Riso pay box and its thank-you slip are "newsprint" --cream in
    light mode, a step below the white card. Here --cream IS the page, so both

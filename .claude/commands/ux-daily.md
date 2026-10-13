@@ -217,10 +217,12 @@ only thing standing between the design system and token drift, so never skip it.
 Fix failures rather than pushing broken work. If you cannot get them green, stop, push nothing, and
 report what broke.
 
-**Optional, best-effort:** if time allows, `npm run preview` and screenshot the screen you changed
-in both light and dark using the preinstalled Chromium at `/opt/pw-browsers/chromium`, and attach
-the images to the pull request. This is a nice-to-have — a screenshot that won't capture must never
-block a change the five checks above already verified.
+**Look at it, best-effort:** `npm run shots -- --only=<tab> --widths=375 --out=shots/after` boots
+the real app signed in with demo data (no Google sign-in, no network) and saves one picture per
+screenful, light and dark, plus `shots/after/report.json` (sideways scroll, small tap targets, tiny
+text). Take a `--out=shots/before` run first to compare. Tab names are the `switchTab()` names
+(`reconcile`, `consignment`, …). A screenshot that won't capture must never block a change the five
+checks above already verified.
 
 ## 6. Ship it
 

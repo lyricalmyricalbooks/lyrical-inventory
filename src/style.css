@@ -13,6 +13,10 @@
    scripts/check-contrast.mjs, in both themes.
    ═══════════════════════════════════════════════════════════════════════════ */
 :root {
+  /* Height of the phone's bottom nav, border included: 60px buttons, 6px padding
+     above and below, and the 2px ink rule on its top edge. Anything that sits
+     above the nav is positioned from this, so a nav change moves them together. */
+  --mnav-h: 74px;
   --ink:#100F0D; --ink2:#1C1A17; --ink3:#2B2823; --ink4:#3E3A33;
   --cream:#FAF6EC; --cream2:#F0E9DA; --cream3:#E4DAC5; --cream4:#D3C6AB;
   --surface-card:#FFFFFF;
@@ -239,11 +243,6 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   border:var(--stroke-hair) solid var(--border2);
 }
 
-.hist-kpi-card.highlight-gold .hist-kpi-icon {
-  background: var(--gold-bg);
-  border-color: var(--gold-line);
-}
-
 .hist-kpi-card.highlight-green .hist-kpi-icon {
   background: var(--green-bg);
 }
@@ -295,14 +294,10 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
    opens this screen to act on; the print run beside it is fixed context and
    the sell-through beside that is a rate. Step size AND colour together —
    one size step alone reads as an accident rather than a hierarchy. */
-.hist-kpi-card.is-lead {
-  border-color: var(--gold-line);
-  box-shadow: var(--elev-2);
-}
-
+/* The lead figure is ink like the others: its accent is the bottom bar alone,
+   so red keeps meaning a problem rather than "the important number". */
 .hist-kpi-card.is-lead .hist-kpi-val {
   font-size: var(--text-2xl);
-  color: var(--gold-text);
 }
 
 .hist-progress-bar-wrap {
@@ -355,12 +350,9 @@ tr.hist-row:hover {
   white-space: nowrap;
 }
 
-.ch-badge.ch-bc {
-  background: color-mix(in srgb, var(--violet) 8%, transparent);
-  border-color: color-mix(in srgb, var(--violet) 20%, transparent);
-  color: var(--violet-deep);
-}
-
+/* Channel tags are categories, not alerts: Website and Direct keep the neutral
+   base tag above. Red and amber are reserved for owed, void and needs-you;
+   Store is an info tag (blue), so a consignment sale no longer reads as a problem. */
 .ch-badge.ch-pos {
   background: color-mix(in srgb, var(--green) 8%, transparent);
   border-color: color-mix(in srgb, var(--green) 20%, transparent);
@@ -368,15 +360,9 @@ tr.hist-row:hover {
 }
 
 .ch-badge.ch-store {
-  background: color-mix(in srgb, var(--gold) 8%, transparent);
-  border-color: color-mix(in srgb, var(--gold) 20%, transparent);
-  color: var(--gold-text);
-}
-
-.ch-badge.ch-direct {
-  background: color-mix(in srgb, var(--slate) 8%, transparent);
-  border-color: color-mix(in srgb, var(--slate) 20%, transparent);
-  color: var(--slate);
+  background: color-mix(in srgb, var(--status-info) 8%, transparent);
+  border-color: color-mix(in srgb, var(--status-info) 20%, transparent);
+  color: var(--status-info);
 }
 
 .chip-status {
@@ -4056,6 +4042,21 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .modal{background:var(--surface-page);border-radius:var(--r3);border:var(--stroke) solid var(--rule-ink);padding:0 var(--space-6);width:100%;max-width:500px;max-height:88vh;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;box-shadow:var(--elev-4);animation:modalIn 0.35s var(--ease-spring);}
 .modal:not(:has(.modal-title)){padding-top:var(--space-6);}
 .modal:not(:has(.modal-footer)){padding-bottom:var(--space-6);}
+/* Dialogs with a fixed height cap. These are classes, not inline styles, so the
+   phone sheet rules (92dvh and the keyboard inset, at 600px and below) can win
+   over them. An inline max-height would beat every stylesheet. */
+.modal.modal-max-80{max-height:80vh;}
+.modal.modal-max-85{max-height:85vh;}
+.modal.modal-max-90{max-height:90vh;}
+.modal.modal-max-92{max-height:92vh;}
+.modal.modal-max-94{max-height:94vh;}
+@supports (height:1dvh){
+  .modal.modal-max-80{max-height:80dvh;}
+  .modal.modal-max-85{max-height:85dvh;}
+  .modal.modal-max-90{max-height:90dvh;}
+  .modal.modal-max-92{max-height:92dvh;}
+  .modal.modal-max-94{max-height:94dvh;}
+}
 @keyframes modalIn{from{opacity:0;transform:scale(.95) translateY(12px)}to{opacity:1;transform:scale(1) translateY(0)}}
 @keyframes overlayIn{from{opacity:0}to{opacity:1}}
 @keyframes modalOut{from{opacity:1;transform:scale(1) translateY(0)}to{opacity:0;transform:scale(.95) translateY(12px)}}
@@ -4209,6 +4210,17 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   line-height:var(--leading-snug);
 }
 .field-warn::before{content:'⚠';line-height:var(--leading-snug);}
+/* .field-warn sets display:flex, which beats the UA's [hidden] rule, so a hidden
+   warning still drew its triangle. */
+.field-warn[hidden]{display:none;}
+
+/* Shown in the import pop-up until a file is chosen (setImportReady in main.js). */
+.import-empty-hint{
+  margin:0 0 var(--space-3);
+  font-family:var(--font-ui);
+  font-size:var(--text-sm);
+  color:var(--content-secondary);
+}
 
 /* Author payment banner, in Riso: newsprint with a halftone grain, a poster
    headline and amount printed with a mis-registered second pass, and each
@@ -4489,7 +4501,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   .header-grow{display:none;}
   .header-brand{padding:.7rem 0 .15rem;flex:1;min-width:0;}
   .header-wordmark{font-size:16px;}
-  .header-tag{font-size:8px;letter-spacing:.18em;}
+  .header-tag{font-size:var(--text-3xs);letter-spacing:.18em;}
   .header-right{
     display:flex;
     width:100%;
@@ -4508,7 +4520,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   }
   .header-stat:last-child{border-right:none;}
   .hs-val{font-size:var(--text-md);}
-  .hs-label{font-size:8px;margin-top:3px;letter-spacing:.1em;}
+  .hs-label{font-size:var(--text-3xs);margin-top:3px;letter-spacing:.1em;}
   .header-actions{padding:0;width:100%;order:3;display:flex;flex-wrap:wrap;gap:6px;position:relative;}
   .header-action-btn{
     flex:1 1 calc(50% - 3px);
@@ -4731,7 +4743,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   /* Toasts above bottom nav */
   .toast{
     left:.75rem;right:.75rem;
-    bottom:calc(80px + env(safe-area-inset-bottom));
+    bottom:calc(var(--mnav-h) + 6px + env(safe-area-inset-bottom));
     max-width:none;
   }
 }
@@ -4811,6 +4823,13 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
     padding-bottom:env(safe-area-inset-bottom);
   }
   .modal-footer{padding-bottom:max(var(--space-4),env(safe-area-inset-bottom));}
+}
+
+/* Touch screens wider than 768px (landscape phones, small tablets) skip the
+   phone block above, but iOS still zooms on focus for any field under 16px.
+   Same floor, touch pointers only. */
+@media (pointer: coarse){
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]), select, textarea{font-size:max(16px,1em) !important;}
 }
 
 /* Do not let content become difficult to scan on cinema-width monitors. */
@@ -5261,6 +5280,11 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .hist-search-field {
   flex: 1 1 260px;
 }
+/* The "Clear search" button is a .btn, whose display rule would otherwise
+   show it while the bar is hidden or the search is empty. */
+.ledger-filter-row > .btn[hidden] {
+  display: none;
+}
 .ledger-filter-row > .btn {
   min-height: var(--target-min);
   padding: 8px 16px;
@@ -5338,7 +5362,22 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
     min-width: 0;
     width: 100%;
   }
+  /* Its 260px basis is a width in the row but a height once the row stacks,
+     which left an empty box above the field. Size it to its content instead. */
+  .hist-search-field {
+    flex: 0 0 auto;
+  }
 }
+
+/* ─── CONSIGNMENT: PHONE-ONLY CONTROLS (desktop side) ────────────────────────
+   The section tabs and the ledger's "Filter" button exist for a phone only.
+   Hidden here, so the wide screen keeps all three sections on the page; the
+   phone styles in phone.css (≤768px) bring them in and fold the rest. */
+.con-section-tabs { display: none; }
+.con-ledger-filter-toggle { display: none; }
+/* The store card's "More actions" toggle is a .btn, which outranks the shared
+   .phone-more-toggle{display:none}; this keeps it out of the wide layout. */
+.store-actions .phone-more-toggle { display: none; }
 
 /* ─── DASHBOARD — SALES BY CHANNEL ────────────────────────────────────────
    Same four numbers as before plus the proportion between them. The bar is
@@ -7555,6 +7594,62 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .recon-toggle input{margin:0;accent-color:var(--gold);}
 .recon-progress{height:5px;border-radius:var(--r-pill);background:var(--cream3);overflow:hidden;margin:8px 0 0;max-width:420px;}
 .recon-progress > i{display:block;height:100%;background:var(--gold);border-radius:var(--r-pill);transition:width .3s ease;}
+
+/* ── Payments screen (#tab-reconcile): layout, settings folds, cards ─────── */
+.recon-layout{display:block;}
+.recon-summary{margin-bottom:14px;}
+.recon-kpis{margin-bottom:10px;}
+.recon-sess{font-size:var(--text-sm);color:var(--text2);margin-top:8px;}
+.recon-sess-txt{color:var(--green);}
+.recon-status{font-size:var(--text-sm);color:var(--text3);margin-bottom:8px;min-height:16px;}
+.recon-keyrow{display:flex;gap:8px;align-items:center;}
+.recon-keyrow input{flex:1;}
+.recon-key-saved{font-size:var(--text-sm);color:var(--text2);}
+.recon-key-mask{font-family:var(--font-mono);color:var(--text3);}
+.recon-fold > summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);
+  min-height:var(--target-min);padding:var(--space-2) var(--space-4);cursor:pointer;
+  background:var(--surface-card);border:var(--stroke) solid var(--rule-ink);border-radius:var(--r2);box-shadow:var(--elev-1);
+  font-family:var(--font-ui);font-size:var(--text-xs);font-weight:800;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--content-primary);}
+.recon-fold > summary::-webkit-details-marker{display:none;}
+.recon-fold > summary::after{content:'+';font-family:var(--font-mono);font-size:var(--text-base);line-height:1;}
+.recon-fold[open] > summary::after{content:'−';}
+.recon-fold > summary:hover{box-shadow:var(--elev-hover);}
+.recon-fold-body{display:flex;flex-direction:column;gap:var(--space-3);padding-top:var(--space-3);}
+.recon-fold-body .sale-codes-box{margin-top:0;}
+.recon-note-block{display:block;margin-top:2px;}
+.recon-matched-toggle{background:transparent;border:var(--stroke-hair) dashed var(--gold-line);margin-top:16px;}
+.recon-nowrap{white-space:nowrap;}
+.recon-status-note{font-size:var(--text-xs);color:var(--text3);}
+.recon-card{margin-bottom:10px;padding:12px 14px;}
+.recon-info{min-width:0;}
+.recon-amount{font-family:var(--font-mono);font-weight:600;font-size:var(--text-base);}
+.recon-meta{font-size:var(--text-sm);color:var(--text2);margin-top:3px;}
+.recon-meta-desc{font-size:var(--text-xs);color:var(--text3);margin-top:2px;}
+.recon-count{font-size:var(--text-sm);color:var(--text2);font-weight:600;}
+.recon-pill{font-size:var(--text-2xs);}
+.recon-suggest{font-size:var(--text-2xs);color:var(--green);margin-left:6px;}
+.recon-warn{font-size:var(--text-xs);color:var(--amber);}
+.recon-variant{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--space-3);}
+.recon-variant > .recon-info{flex:1 1 auto;}
+.recon-fields{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-top:10px;}
+.recon-fields .form-group{margin:0;}
+.recon-fields .form-group label{font-size:var(--text-2xs);}
+.recon-fields input,.recon-fields select{width:100%;}
+.recon-f-book{flex:1 1 0;min-width:160px;}
+.recon-f-qty{width:70px;}
+.recon-group .recon-f-qty{width:80px;}
+.recon-f-num{width:280px;max-width:100%;}
+.recon-f-amt{width:120px;}
+.recon-f-cur{width:90px;}
+.recon-f-rate{width:130px;}
+.recon-actions{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;}
+.recon-actions .btn{height:38px;}
+.recon-variant .recon-actions{align-items:center;flex-shrink:0;gap:6px;}
+.recon-variant .recon-actions .btn{height:auto;}
+.recon-hint{font-size:var(--text-xs);color:var(--text2);margin-top:6px;}
+.recon-fx{font-size:var(--text-xs);color:var(--text2);margin-top:6px;}
+.recon-note{font-size:var(--text-xs);color:var(--text3);margin-top:6px;}
+.recon-note-once{margin:0 0 10px;line-height:1.5;}
 
 /* ── Accepted Payment Methods Config (AGENTS.md styled) ──────────────── */
 .payment-methods-card {
@@ -19702,11 +19797,16 @@ button[onclick="refreshUmamiStats()"]:active {
 .more-sheet{display:none;}
 .pos-mobile-steps{display:none;}
 
-@media (max-width: 768px){
+@media (max-width: 860px){
+  /* Publishers from 769px to 860px: the sidebar only starts at 861px, so they
+     get this bottom nav instead of the old horizontal tab bar. The nav is the
+     same height at every width here (--mnav-h), so content clears it the same way. */
   .pub-shell .tab-bar{display:none;}
+  .pub-shell .tab-panel{padding-bottom:calc(var(--mnav-h) + 30px + env(safe-area-inset-bottom));}
   .pub-shell .mnav{
-    display:grid;grid-template-columns:repeat(5,1fr);align-items:end;
+    display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-items:end;
     position:fixed;left:0;right:0;bottom:0;z-index:calc(var(--z-sticky) + 60);
+    height:calc(var(--mnav-h) + env(safe-area-inset-bottom));
     padding:6px max(6px,env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(6px,env(safe-area-inset-left));
     background:var(--ink2);
     /* Riso: a printed ink rule along the top edge, not a soft glow. */
@@ -19715,7 +19815,7 @@ button[onclick="refreshUmamiStats()"]:active {
   }
   .mnav-btn{
     position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
-    min-height:54px;padding:4px 2px;border:0;border-radius:var(--r2);background:transparent;
+    min-height:60px;padding:4px 2px;border:0;border-radius:var(--r2);background:transparent;
     color:var(--on-inverse-2);font-family:var(--font-ui);cursor:pointer;touch-action:manipulation;
     transition:color .15s var(--ease-standard),background-color .15s var(--ease-standard);
   }
@@ -19778,6 +19878,18 @@ button[onclick="refreshUmamiStats()"]:active {
   .more-sheet-body .bc-gap-badge,
   .more-sheet-body .health-badge{position:absolute;top:6px;right:6px;margin:0 !important;}
 
+}
+
+/* 769-860px: the bottom nav shows here too (above), but toasts and the "new
+   version" prompt keep their desktop corner placement, which the nav covers.
+   Lift them above it, the way the phone rules do at 768px and below. */
+@media (min-width: 769px) and (max-width: 860px){
+  #pw-app.pub-shell ~ .toast,
+  #pw-app.pub-shell ~ .pwa-prompt{bottom:calc(var(--mnav-h) + var(--space-3) + env(safe-area-inset-bottom));}
+}
+
+/* Phone-only header: the slimmer one-row-plus-picker layout stops at 768px. */
+@media (max-width: 768px){
   /* ---- Slimmer header: one brand row + book picker, not sticky, so
      the content gets the screen back once you scroll. ---- */
   .pub-shell .app-header{
@@ -19989,7 +20101,7 @@ button[onclick="refreshUmamiStats()"]:active {
   #tab-pos .pos-layout[data-mobile-view="books"] #pos-mobile-books{padding-bottom:80px;}
   .pos-review-bar:not([hidden]){
     display:flex;align-items:center;gap:var(--space-3);
-    position:fixed;left:12px;right:12px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:calc(var(--z-sticky) + 50);
+    position:fixed;left:12px;right:12px;bottom:calc(var(--mnav-h) + 10px + env(safe-area-inset-bottom));z-index:calc(var(--z-sticky) + 50);
     min-height:60px;padding:0 18px;border:0;border-radius:var(--r3);
     background:var(--gold);color:var(--ink);font-family:var(--font-ui);cursor:pointer;box-shadow:var(--elev-3);
   }
@@ -20006,7 +20118,7 @@ button[onclick="refreshUmamiStats()"]:active {
   #tab-pos .pos-pay-select{display:none;}
   #tab-pos .pos-checkout-total{font-size:var(--text-3xl);}
   #tab-pos #pos-checkout-btn{
-    position:sticky;bottom:calc(84px + env(safe-area-inset-bottom));z-index:var(--z-raised);
+    position:sticky;bottom:calc(var(--mnav-h) + 10px + env(safe-area-inset-bottom));z-index:var(--z-raised);
     width:100%;min-height:60px;font-size:var(--text-md);box-shadow:var(--elev-3);
   }
 
@@ -20036,7 +20148,7 @@ button[onclick="refreshUmamiStats()"]:active {
   #tab-website .web-orders-status .web-stat{padding:var(--space-2);grid-column:auto !important;}
   #tab-website .web-orders-status .web-stat-sub{display:none;}
   #tab-website .apply-all-cta:not(:disabled){
-    position:sticky;bottom:calc(84px + env(safe-area-inset-bottom));z-index:var(--z-raised);
+    position:sticky;bottom:calc(var(--mnav-h) + 10px + env(safe-area-inset-bottom));z-index:var(--z-raised);
     width:100%;min-height:56px;box-shadow:var(--elev-3);
   }
 
@@ -20044,24 +20156,54 @@ button[onclick="refreshUmamiStats()"]:active {
   #tab-history .tbl-wrap{overflow:visible;border:0;background:transparent;}
   #tab-history .tbl thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);}
   #tab-history .tbl,#tab-history .tbl tbody{display:block;width:100%;}
+  /* Compact order card. Two columns: the left holds the channel and Details toggle,
+     the order # and then the date; the right is a fixed 112px column holding the
+     total and the action, so amounts line up down the list. grid-area is
+     !important because the record-card rules in phone.css set it to auto. */
   #tab-history .tbl tr.hist-row{
-    display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:var(--space-3);row-gap:4px;
-    padding:var(--space-3);border-bottom:var(--stroke-hair) solid var(--border-subtle);
+    display:grid;grid-template-columns:minmax(0,1fr) 112px;
+    column-gap:var(--space-3);row-gap:var(--space-1);align-items:center;
   }
   #tab-history .tbl tr.hist-row > td{display:block;padding:0;border:0;min-width:0;text-align:left;}
   /* Column order is fixed across every row template: 1 order #, 2 channel,
      3 qty, 4 unit price, 5 total, 6 stock after, 7 notes, 8 entered by, 9 date, 10 actions. */
-  #tab-history .tbl tr.hist-row > td:nth-child(2){grid-column:1;grid-row:1;font-weight:700;}
-  #tab-history .tbl tr.hist-row > td:nth-child(5){grid-column:2;grid-row:1;text-align:right;font-size:var(--text-base);}
-  #tab-history .tbl tr.hist-row > td:nth-child(1){grid-column:1;grid-row:2;font-size:var(--text-xs);color:var(--content-secondary);}
-  #tab-history .tbl tr.hist-row > td:nth-child(3){grid-column:2;grid-row:2;text-align:right;font-size:var(--text-xs);color:var(--content-secondary);}
-  #tab-history .tbl tr.hist-row > td:nth-child(9){grid-column:1;grid-row:3;font-size:var(--text-xs) !important;}
-  #tab-history .tbl tr.hist-row > td:nth-child(10){grid-column:2;grid-row:3;text-align:right;}
-  #tab-history .tbl tr.hist-row > td:nth-child(7){grid-column:1 / -1;grid-row:4;font-size:var(--text-xs) !important;}
+  #tab-history .tbl tr.hist-row > td:nth-child(2){grid-area:1 / 1 / 2 / 2 !important;display:flex !important;flex-wrap:wrap;align-items:center;gap:var(--space-2);font-weight:700;border-bottom:0 !important;padding:0 !important;}
+  #tab-history .tbl tr.hist-row > td:nth-child(5){grid-area:1 / 2 / 2 / 3 !important;text-align:right !important;}
+  #tab-history .tbl tr.hist-row > td:nth-child(1){grid-area:2 / 1 / 3 / 2 !important;font-size:var(--text-xs);color:var(--content-secondary);}
+  #tab-history .tbl tr.hist-row > td:nth-child(10){grid-area:2 / 2 / 3 / 3 !important;text-align:right !important;}
+  #tab-history .tbl tr.hist-row > td:nth-child(9){grid-area:3 / 1 / 4 / 2 !important;justify-self:start;font-size:var(--text-xs) !important;}
+  /* The record-card rules let spans wrap; a channel tag stays on one line. */
+  #tab-history #hist-body .ch-badge{white-space:nowrap;}
+  /* Details (qty, unit price, stock after, notes, entered by) open as full-width
+     lines under the summary, each with its label on the same line. */
+  #tab-history .tbl tr.hist-row > td:nth-child(3),
   #tab-history .tbl tr.hist-row > td:nth-child(4),
   #tab-history .tbl tr.hist-row > td:nth-child(6),
-  #tab-history .tbl tr.hist-row > td:nth-child(8){display:none;}
+  #tab-history .tbl tr.hist-row > td:nth-child(7),
+  #tab-history .tbl tr.hist-row > td:nth-child(8){grid-area:auto / 1 / auto / -1 !important;text-align:left !important;font-size:var(--text-xs);}
+  #tab-history .tbl tr.hist-row > td::before{display:none;}
+  #tab-history .tbl tr.hist-row > td.phone-record-detail::before{display:inline;margin:0 var(--space-2) 0 0;}
+  /* The card is the disclosure (phone-layout.js makes a tap anywhere on it press
+     this button); the button stays a real control with aria-expanded. */
+  #tab-history #hist-body .phone-record-toggle{
+    display:inline-flex;align-items:center;gap:var(--space-1);
+    min-height:44px;margin:0;padding:0;width:auto;
+    border:0;border-radius:0;background:transparent;box-shadow:none;
+    color:var(--content-secondary);font:800 var(--text-2xs) var(--font-ui);
+    letter-spacing:var(--tracking-caps);text-transform:uppercase;
+  }
+  #tab-history #hist-body .phone-record-toggle::before{content:'▸';font-size:var(--text-sm);line-height:1;}
+  #tab-history #hist-body tr.phone-record-open .phone-record-toggle::before{content:'▾';}
   #tab-history .tbl tr.hist-row > td:nth-child(10) .btn{min-height:44px;}
+  /* Summary tiles: one compact row of three, so the first order fits on the first screen. */
+  #tab-history .hist-kpi-container{grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-2);margin-bottom:var(--space-3);}
+  #tab-history .hist-kpi-card{flex-direction:column;gap:var(--space-1);min-width:0;padding:var(--space-2) var(--space-1);}
+  #tab-history .hist-kpi-icon{display:none;}
+  /* The house 9px label with narrower tracking, so DISTRIBUTED fits a third-width tile. */
+  #tab-history .hist-kpi-label{white-space:normal;overflow-wrap:break-word;font-size:var(--text-3xs);letter-spacing:var(--tracking-caps);line-height:var(--leading-snug);}
+  #tab-history .hist-kpi-val{font-size:var(--text-lg);}
+  #tab-history .hist-kpi-card.is-lead .hist-kpi-val{font-size:var(--text-xl);}
+  #tab-history .hist-kpi-sub{font-size:var(--text-2xs);line-height:var(--leading-snug);padding-top:0;}
 }
 
 /* ============================================================
@@ -20094,9 +20236,9 @@ button[onclick="refreshUmamiStats()"]:active {
      card: a sticky button inside its own button-tall box never moved. It bleeds
      to the card's edges and sits on an ink rule, like a pinned footer. */
   #tab-manual .card > .card-actions{
-    /* 72px = the bottom bar (60px buttons + 6px padding above and below), so the
-       save bar sits right on it with no strip of form showing between them. */
-    position:sticky;bottom:calc(72px + env(safe-area-inset-bottom));z-index:var(--z-raised);
+    /* Sits flush on the bottom nav: --mnav-h less the 2px ink rule along the nav's
+       top edge, which the save bar overlaps, so no strip of form shows between them. */
+    position:sticky;bottom:calc(var(--mnav-h) - 2px + env(safe-area-inset-bottom));z-index:var(--z-raised);
     margin:var(--space-4) calc(-1 * var(--space-4)) calc(-1 * var(--space-4));
     padding:var(--space-3) var(--space-4);
     background:var(--surface-raised);border-top:var(--stroke) solid var(--rule-ink);
@@ -20138,7 +20280,7 @@ button[onclick="refreshUmamiStats()"]:active {
   #tab-intel .intel-layout{display:block;}
   #tab-intel .intel-rail{display:none;}
   #tab-intel .intel-composer{
-    position:sticky;bottom:calc(84px + env(safe-area-inset-bottom));z-index:var(--z-raised);
+    position:sticky;bottom:calc(var(--mnav-h) + 10px + env(safe-area-inset-bottom));z-index:var(--z-raised);
     background:var(--surface-page);padding-top:var(--space-2);box-shadow:0 -1px 0 var(--border-subtle);
   }
   #tab-intel .intel-send{min-height:48px;}

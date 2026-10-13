@@ -13,7 +13,7 @@
   .pub-shell .profile-toggle-group { grid-column: 1 / -1; }
   .pub-shell #book-dropdown-btn > div { min-width: 0; }
   .pub-shell #book-dropdown-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .pub-shell .tab-panel { padding-bottom: calc(104px + env(safe-area-inset-bottom)); }
+  .pub-shell .tab-panel { padding-bottom: calc(var(--mnav-h) + 30px + env(safe-area-inset-bottom)); }
   .tab-panel .sec-head { flex-direction: column; align-items: stretch; gap: var(--space-3); }
   .tab-panel .sec-head-titles { flex: 0 1 auto; }
   .tab-panel .section-subcopy, .tab-panel .lead-note { display: block; overflow: visible; -webkit-line-clamp: unset; line-clamp: unset; }
@@ -141,6 +141,8 @@
    zone, a bottom-sheet to pick how they paid, and a short Undo bar. Heavy
    ink borders and large type so it reads in daylight at an outdoor stall. */
 .fm-tiles, .fm-bar, .fm-undo { display: none; }
+/* Phone-only short name for the Fair Print Kit toggle; desktop keeps the full label. */
+.pos-subtab-short { display: none; }
 
 @media (max-width: 768px) {
   /* The step toggle, desktop-style cards and review bar give way to tiles.
@@ -149,15 +151,17 @@
   #tab-pos .pos-mobile-steps:has(+ .pos-layout[data-mobile-view="books"]) { display: none; }
   #tab-pos .pos-layout[data-mobile-view="books"] :is(#pos-grid, .pos-review-bar) { display: none !important; }
   #tab-pos .pos-layout[data-mobile-view="books"]:not(.fm-searchable) .pos-search-wrapper { display: none; }
-  #tab-pos .pos-layout[data-mobile-view="books"] #pos-mobile-books { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+  #tab-pos .pos-layout[data-mobile-view="books"] #pos-mobile-books { padding-bottom: calc(var(--mnav-h) + 22px + env(safe-area-inset-bottom)); }
 
   #tab-pos .pos-layout[data-mobile-view="books"] .fm-tiles {
     display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3);
   }
   .fm-tile { position: relative; min-width: 0; }
+  /* 88px is the tap-area floor; the content (title, price, stock) sets the rest,
+     so two rows of books fit where one used to. */
   .fm-tile-add {
     display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1);
-    width: 100%; min-height: 128px; padding: var(--space-4) var(--space-3) var(--space-3);
+    width: 100%; min-height: 88px; padding: var(--space-3);
     border: var(--stroke) solid var(--rule-ink); border-radius: var(--r2);
     background: var(--surface-raised); color: var(--content-primary);
     font: inherit; text-align: left; cursor: pointer;
@@ -197,7 +201,7 @@
   #tab-pos .pos-layout[data-mobile-view="books"] .fm-bar:not([hidden]),
   #tab-pos .fm-undo:not([hidden]) {
     display: flex; align-items: center; gap: var(--space-3);
-    position: fixed; left: 12px; right: 12px; bottom: calc(84px + env(safe-area-inset-bottom));
+    position: fixed; left: 12px; right: 12px; bottom: calc(var(--mnav-h) + 10px + env(safe-area-inset-bottom));
     z-index: calc(var(--z-sticky) + 50);
     padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
     border: var(--stroke) solid var(--rule-ink); border-radius: var(--r3);
@@ -263,9 +267,15 @@
 /* Fair Mode, phase 2: upload status, today's sales, printed-QR fallback. */
 .fm-top { display: none; }
 @media (max-width: 768px) {
+  /* Two slim rows: the fair and currency, then upload status and today's total. */
   #tab-pos .pos-layout[data-mobile-view="books"] .fm-top {
     display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2);
   }
+  .fm-row { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+  .fm-row-fair > .fm-fair-btn { flex: 1 1 auto; min-width: 0; }
+  .fm-row-fair > .fm-ccy { flex: none; }
+  .fm-row-status > .fm-sync { flex: none; }
+  .fm-row-status > .fm-today-btn { flex: 1 1 auto; min-width: 0; }
   .fm-sync {
     display: flex; align-items: center; gap: var(--space-2); min-height: 36px;
     padding: var(--space-1) var(--space-3); border-radius: var(--r-pill);
@@ -280,13 +290,21 @@
   .fm-sync[data-tone="failed"] { border-color: var(--red); }
   .fm-sync[data-tone="failed"]::before { background: var(--red); }
   .fm-sync:empty { display: none; }
+  /* On the Sell screen the upload status is a square slab that sits in one row
+     with today's total, so it matches that row's ink outline and height. */
+  #tab-pos .fm-sync {
+    min-height: 44px; border-radius: var(--r2); border: var(--stroke) solid var(--rule-ink);
+    padding: var(--space-1) var(--space-3); font-size: var(--text-sm); white-space: nowrap;
+  }
+  #tab-pos .fm-sync[data-tone="offline"] { border-color: var(--gold-text); background: var(--gold-bg); }
+  #tab-pos .fm-sync[data-tone="failed"] { border-color: var(--red); }
 
   .fm-today-btn {
-    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-3);
-    min-height: 52px; padding: 0 var(--space-4);
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-2);
+    min-height: 44px; padding: 0 var(--space-3);
     border: var(--stroke) solid var(--rule-ink); border-radius: var(--r2);
     background: var(--surface-raised); color: var(--content-primary);
-    font: 600 var(--text-base) var(--font-ui); text-align: left; cursor: pointer;
+    font: 600 var(--text-sm) var(--font-ui); text-align: left; cursor: pointer;
   }
   .fm-today-btn:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
   .fm-today-label { font: 800 var(--text-xs) var(--font-ui); text-transform: uppercase; letter-spacing: .08em; color: var(--content-secondary); }
@@ -325,6 +343,8 @@
     text-decoration: underline dotted; text-underline-offset: 4px;
   }
   .fm-fair-btn.is-set { color: var(--content-primary); font-size: var(--text-md); text-decoration: none; }
+  /* A long fair name wraps inside its share of the row instead of pushing the currency off-screen. */
+  #tab-pos #fm-fair-name { min-width: 0; overflow-wrap: anywhere; line-height: 1.2; }
   .fm-summary-btn { display: block; width: 100%; min-height: 52px; margin: var(--space-4) 0; }
   .fm-sum-hero { display: grid; gap: var(--space-1); margin-bottom: var(--space-3); color: var(--content-secondary); font-weight: 600; }
   .fm-sum-big { font: 800 var(--text-2xl) / 1.1 var(--font-ui); color: var(--content-primary); }
@@ -429,11 +449,22 @@
   #tab-today .today-receipt-card { grid-column: 1 / -1; min-height: 106px; }
   #tab-today .today-card-sub { line-height: 1.4; }
   #tab-today .today-row { min-height: 76px; padding-block: var(--space-4); }
-  .phone-sell-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-4); }
-  .phone-sell-head .btn { max-width: 48%; font-size: var(--text-xs); }
+  /* Sell's heading is one line: the title and a small "Record another sale"
+     button. The "At the counter" eyebrow goes; the screen already says where it is. */
+  #tab-pos .phone-sell-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
+  #tab-pos .phone-sell-head .phone-eyebrow { display: none; }
+  #tab-pos .phone-sell-head h1 { font: 400 var(--text-2xl) / 1.1 var(--font-display); text-transform: none; letter-spacing: -.03em; margin: 0; }
+  #tab-pos .phone-sell-head .btn { flex: none; min-height: 44px; max-width: none; padding: 0 var(--space-3); font-size: var(--text-xs); white-space: nowrap; }
   #tab-pos #pos-subpanel-register > .row-between { display: none; }
-  #tab-pos .pos-subtab-nav { margin-bottom: var(--space-4); }
-  #tab-pos .pos-subtab-btn { font-size: var(--text-xs); padding: var(--space-3); min-height: 48px; }
+  #tab-pos .pos-subtab-nav { margin-bottom: var(--space-3); }
+  #tab-pos .pos-subtab-btn { font-size: var(--text-xs); padding: var(--space-3); min-height: 44px; }
+  /* "Fair Print Kit & Stall Prep" wrapped to two lines; the phone shows "Fair kit"
+     and the full name stays for screen readers, as a visually hidden span. */
+  #tab-pos .pos-subtab-short { display: inline; }
+  #tab-pos .pos-subtab-full {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
   #tab-website .web-orders-hero { gap: var(--space-4); padding: var(--space-4); }
   #tab-website .web-orders-copy h2 { font: 400 var(--text-3xl) / 1.1 var(--font-display); text-transform: none; }
   #tab-website .web-orders-copy p { font-size: var(--text-sm); max-width: 38ch; }
@@ -581,12 +612,12 @@
      the same moment. The message sat right over Undo; while the Charge or Undo
      bar is up, messages sit above it instead (bar: 56px button, padding, outline). */
   #pw-app:has(#tab-pos.active :is(.pos-layout[data-mobile-view="books"] .fm-bar:not([hidden]), .fm-undo:not([hidden]))) ~ .toast {
-    bottom: calc(84px + 76px + var(--space-2) + env(safe-area-inset-bottom));
+    bottom: calc(var(--mnav-h) + 10px + 76px + var(--space-2) + env(safe-area-inset-bottom));
   }
   /* "New version available" covered the bottom bar's buttons. It now sits just
      above the bar, inked like the rest of the app, and no longer grows on hover. */
   .pwa-prompt { left: var(--space-3); right: var(--space-3); bottom: calc(var(--space-4) + env(safe-area-inset-bottom)); max-width: none; }
-  #pw-app.pub-shell ~ .pwa-prompt { bottom: calc(72px + var(--space-3) + env(safe-area-inset-bottom)); }
+  #pw-app.pub-shell ~ .pwa-prompt { bottom: calc(var(--mnav-h) - 2px + var(--space-3) + env(safe-area-inset-bottom)); }
   .pwa-prompt { border: var(--stroke) solid var(--rule-ink); border-radius: var(--r2); box-shadow: var(--elev-3); }
   .pwa-prompt:is(:hover, :focus-visible) { transform: none; }
   .pwa-prompt:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
@@ -825,4 +856,249 @@
 }
 @media (max-width: 768px) and (prefers-reduced-motion: reduce) {
   #tab-history .tbl tr.hist-row { transition: none; }
+}
+
+/* Payments (#tab-reconcile): the worklist comes first and the settings fold
+   away at the bottom. Order: sync, status, summary, toolbar, payments to
+   review, reconciled, payment settings, accepted payment methods. */
+@media (max-width: 768px) {
+  #tab-reconcile .recon-layout { display: flex; flex-direction: column; gap: var(--space-5); }
+  #tab-reconcile .recon-layout > * { margin: 0; }
+  #tab-reconcile .sec-head { order: 1; }
+  #tab-reconcile #recon-status { order: 2; }
+  #tab-reconcile #recon-status:empty { display: none; }
+  #tab-reconcile #recon-summary { order: 3; }
+  #tab-reconcile #recon-toolbar { order: 4; }
+  #tab-reconcile #recon-needs { order: 5; }
+  #tab-reconcile #recon-matched { order: 6; }
+  #tab-reconcile #recon-settings { order: 7; }
+  #tab-reconcile .recon-divider { display: none; }
+  #tab-reconcile #pm-settings { order: 8; }
+
+  /* Sync: full-width, a finger-sized target, its status line under it. */
+  #tab-reconcile .sec-head-badges { display: grid; gap: var(--space-2); width: 100%; }
+  #tab-reconcile #recon-sync-btn { width: 100%; min-height: var(--target-min); justify-content: center; }
+  #tab-reconcile #recon-last-sync { display: block; }
+
+  /* Folds: full-width summary rows, a finger-sized target. */
+  #tab-reconcile .recon-fold > summary { min-height: var(--target-min); }
+  #tab-reconcile .recon-keyrow { flex-wrap: wrap; }
+  #tab-reconcile .recon-keyrow input { min-height: var(--target-min); }
+
+  /* KPI strip: the lead figure takes the first row, the other two share the second. */
+  /* The global .kpi-grid phone rule forces one column with !important; this
+     screen wants the lead on its own row and the two others side by side. */
+  #tab-reconcile .recon-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: var(--space-2); }
+  #tab-reconcile .recon-kpis .kpi { padding: var(--space-3); }
+  #tab-reconcile .recon-kpis .kpi.is-lead { grid-column: 1 / -1; }
+
+  /* Toolbar: static (not stuck under the app header), search full width,
+     type and sort side by side, the group toggle and dismiss on one row. */
+  #tab-reconcile .recon-toolbar { position: static; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-2); padding: var(--space-3); }
+  #tab-reconcile .recon-search { grid-column: 1 / -1; width: 100%; min-width: 0; min-height: var(--target-min); }
+  #tab-reconcile .recon-chips { grid-column: 1 / -1; }
+  #tab-reconcile .recon-chips:empty { display: none; }
+  #tab-reconcile .recon-chip { min-height: var(--target-min); display: inline-flex; align-items: center; }
+  #tab-reconcile .recon-mini { width: 100%; min-width: 0; min-height: var(--target-min); }
+  #tab-reconcile .recon-toggle { min-height: var(--target-min); grid-column: 1; }
+  #tab-reconcile .recon-toolbar > .btn { grid-column: 2; min-height: var(--target-min); justify-content: center; }
+
+  /* Need cards: one column of fields, book first, Qty beside the amount,
+     Currency beside the rate, Order # last, then the actions. */
+  #tab-reconcile .recon-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); align-items: start; }
+  #tab-reconcile .recon-fields > .form-group,
+  #tab-reconcile .recon-fields > .recon-actions { width: auto; max-width: none; min-width: 0; flex: none; }
+  #tab-reconcile .recon-fields > .recon-f-book,
+  #tab-reconcile .recon-fields > .recon-f-num,
+  #tab-reconcile .recon-fields > .recon-actions { grid-column: 1 / -1; }
+  #tab-reconcile .recon-f-book { order: 1; }
+  #tab-reconcile .recon-f-qty { order: 2; }
+  #tab-reconcile .recon-f-amt { order: 3; }
+  #tab-reconcile .recon-f-cur { order: 4; }
+  #tab-reconcile .recon-f-rate { order: 5; }
+  #tab-reconcile .recon-f-num { order: 6; }
+  #tab-reconcile .recon-actions { order: 7; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+  #tab-reconcile .recon-fields input,
+  #tab-reconcile .recon-fields select { min-height: var(--target-min); }
+  #tab-reconcile .recon-actions .btn { width: 100%; height: auto; min-height: var(--target-min); justify-content: center; }
+  #tab-reconcile .recon-hint { margin-top: var(--space-2); }
+
+  /* Invoice and Big Cartel cards: the detail stacks above full-width buttons. */
+  #tab-reconcile .recon-variant { flex-direction: column; align-items: stretch; }
+  #tab-reconcile .recon-variant .recon-actions { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+  #tab-reconcile .recon-variant .recon-actions .btn { min-height: var(--target-min); }
+  #tab-reconcile .recon-matched-toggle { width: 100%; min-height: var(--target-min); justify-content: center; }
+}
+
+/* ─── CONSIGNMENT ON A PHONE ──────────────────────────────────────────────
+   One section at a time under a square segmented tab row. Store cards keep
+   their two main actions in view and fold the rest; invoices get a full-width
+   action row; the ledger's filters fold behind a button that counts them and
+   its totals sit above the list. Tokens only; square corners; ink outlines. */
+@media (max-width: 768px) {
+  /* Section tabs */
+  #tab-consignment .con-section-tabs {
+    display: flex;
+    margin-bottom: var(--space-4);
+    border: var(--stroke) solid var(--rule-ink);
+    background: var(--surface-card);
+  }
+  #tab-consignment .con-section-tab {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: var(--target-min);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-1);
+    padding: var(--space-2) var(--space-1);
+    border: 0;
+    border-right: var(--stroke) solid var(--rule-ink);
+    border-radius: var(--r2);
+    background: transparent;
+    color: var(--content-secondary);
+    font-family: var(--font-ui);
+    font-size: var(--text-xs);
+    font-weight: 800;
+    letter-spacing: var(--tracking-caps);
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background-color var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard);
+  }
+  #tab-consignment .con-section-tab:last-child { border-right: 0; }
+  #tab-consignment .con-section-tab[hidden] { display: none; }
+  #tab-consignment .con-section-tab:not([aria-selected="true"]):hover { color: var(--content-primary); }
+  #tab-consignment .con-section-tab:active { transform: scale(0.98); }
+  #tab-consignment .con-section-tab:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: calc(var(--focus-ring-offset) * -1); }
+  #tab-consignment .con-section-tab[aria-selected="true"] { background: var(--surface-inverse); color: var(--on-inverse); }
+  #tab-consignment .con-tab-count {
+    font-family: var(--font-mono);
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1, "zero" 1;
+    padding: 1px 6px;
+    border-radius: var(--r-pill);
+    background: var(--surface-inset);
+    color: var(--content-primary);
+  }
+  #tab-consignment .con-tab-count:empty { display: none; }
+  #tab-consignment .con-section-tab[aria-selected="true"] .con-tab-count { background: var(--on-inverse); color: var(--surface-inverse); }
+
+  /* Only the chosen section shows. Invoices keeps its own inline display, so a
+     non-publisher's hidden bills stay hidden even on the Invoices choice. */
+  #tab-consignment[data-con-active="stores"] :is([data-con-section="invoices"], [data-con-section="ledger"]),
+  #tab-consignment[data-con-active="invoices"] :is([data-con-section="stores"], [data-con-section="ledger"]),
+  #tab-consignment[data-con-active="ledger"] :is([data-con-section="stores"], [data-con-section="invoices"]) { display: none !important; }
+
+  /* Section heads: one compact action row under each title. */
+  #tab-consignment .sec-head { gap: var(--space-2); }
+  #tab-consignment .sec-head-badges { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+  #tab-consignment .sec-head-badges > .btn { min-height: var(--target-min); flex: 1 1 auto; justify-content: center; }
+  #tab-consignment #inv-summary { flex: 1 1 100%; }
+  #tab-consignment .inv-sum-part { display: block; }
+  #tab-consignment .inv-sum-sep { display: none; }
+
+  /* Store cards: tighter, two figures per row, the two main actions side by side. */
+  #tab-consignment .store-card { padding: var(--space-4); margin-bottom: var(--space-3); }
+  #tab-consignment .store-head { margin-bottom: var(--space-3); }
+  #tab-consignment .store-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: var(--space-3); }
+  #tab-consignment .store-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+  #tab-consignment .store-actions[data-phone-folded] .phone-more-toggle { display: inline-flex; grid-column: 1 / -1; justify-content: center; min-height: var(--target-min); }
+  #tab-consignment .store-actions[data-phone-folded]:not(.phone-more-open) .phone-more-panel { display: none; }
+  #tab-consignment .store-actions[data-phone-folded].phone-more-open .phone-more-panel { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+  /* Remove sits last in the fold as an outlined, red-ink button, not a slab. */
+  #tab-consignment .store-actions .phone-more-panel > .danger-btn { background: transparent; border-color: var(--status-critical); color: var(--status-critical); box-shadow: none; }
+  #tab-consignment .store-actions .phone-more-panel > .danger-btn:hover { background: var(--status-critical-bg); }
+
+  /* Invoices: status, then a full-width action row; Remind/Chase leads. */
+  #invoices-list .invoice-card .inv-c-actions { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-2); }
+  #invoices-list .invoice-card .inv-status { align-self: flex-start; }
+  #invoices-list .invoice-card .inv-c-btns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); flex: none; }
+  #invoices-list .invoice-card .inv-c-btns .btn { min-height: var(--target-min); justify-content: center; padding: var(--space-2) var(--space-3); }
+  #invoices-list .invoice-card .inv-c-btns > .btn:first-child:nth-last-child(3) { grid-column: 1 / -1; }
+
+  /* Ledger filter: folded behind a full-width button; chips at touch size. */
+  #con-ledger-filter .con-ledger-filter-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    min-height: var(--target-min);
+    padding: var(--space-2) var(--space-3);
+    border: var(--stroke-hair) solid var(--border-default);
+    border-radius: var(--r2);
+    background: var(--surface-raised);
+    color: var(--content-primary);
+    font-family: var(--font-ui);
+    font-size: var(--text-xs);
+    font-weight: 800;
+    letter-spacing: var(--tracking-caps);
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  #con-ledger-filter .con-ledger-filter-toggle::after { content: "▾"; font-size: var(--text-sm); transition: transform var(--dur-fast) var(--ease-standard); }
+  #con-ledger-filter.is-open .con-ledger-filter-toggle::after { transform: rotate(180deg); }
+  #con-ledger-filter .con-ledger-filter-toggle:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: var(--focus-ring-offset); }
+  #con-ledger-filter:not(.is-open) #con-ledger-controls { display: none; }
+  #con-ledger-filter.is-open #con-ledger-controls { margin-top: var(--space-3); }
+  #con-ledger-filter .ledger-toggle-btn,
+  #con-ledger-filter .ledger-filter-chips .btn { min-height: var(--target-min); }
+  #con-ledger-filter .ledger-toggle-btn { border-radius: var(--r2); }
+
+  /* Ledger totals sit above the cards, not after the last one. */
+  #tab-consignment table.phone-records { display: flex; flex-direction: column; }
+  #tab-consignment #ledger-foot { order: -1; margin-bottom: var(--space-3); }
+  /* Each total is one band: the sentence on its own line, the amount left and
+     its status right. The desktop cells would each draw a box of their own. */
+  #tab-consignment #ledger-foot .ledger-total-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-2) var(--space-3); padding: var(--space-3) var(--space-4); background: var(--surface-sunken); border-top: var(--stroke) solid var(--border-default); }
+  #tab-consignment #ledger-foot .ledger-total-row > td { background: transparent; border: 0; box-shadow: none; padding: 0; }
+  #tab-consignment #ledger-foot .ledger-total-label { grid-column: 1 / -1; }
+  #tab-consignment #ledger-foot .ledger-total-val { text-align: left; }
+  #tab-consignment #ledger-foot .ledger-total-row > td:last-child { justify-self: end; }
+}
+
+/* To-do rows on a phone: the sentence gets the full width beside its icon, the
+   actions drop to their own line with the fix button filling it, and the dismiss
+   cross stays in the top corner. On a desktop the row is still one flex line. */
+@media (max-width: 768px) {
+  .todo-row {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    row-gap: var(--space-2);
+    align-items: start;
+  }
+  .todo-ico { grid-column: 1; grid-row: 1; }
+  .todo-copy { grid-column: 2; grid-row: 1; padding-right: var(--target-min); }
+  .todo-row-actions {
+    grid-column: 1 / -1; grid-row: 2;
+    flex-direction: column; align-items: stretch; align-self: stretch; gap: var(--space-2);
+  }
+  .todo-row-actions > .btn { width: 100%; justify-content: center; }
+  .todo-dismiss { position: absolute; top: var(--space-1); right: var(--space-1); }
+}
+
+/* The combined consignment summary's toolbar on a phone: the search takes the
+   full width at its natural height (it was given a 220px basis, which became a
+   220px-tall empty box once the toolbar stacked), the filter tabs wrap inside
+   the panel instead of running past its edge, and "Group by book" gets its own row. */
+@media (max-width: 768px) {
+  .con-table-toolbar { flex-direction: column; align-items: stretch; gap: var(--space-2); }
+  .con-toolbar-search { flex: none; width: 100%; min-width: 0; max-width: none; }
+  /* The three status tabs share the row as equal columns; a wrapped row left them uneven. */
+  .con-toolbar-filters { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); width: 100%; min-width: 0; box-sizing: border-box; }
+  /* A tab too narrow for "Settled" and its count drops the count to a second line, rather than past the edge. */
+  .con-filter-btn { justify-content: center; flex-wrap: wrap; row-gap: 2px; min-width: 0; padding-inline: var(--space-1); white-space: nowrap; }
+  .con-toolbar-actions { width: 100%; margin-left: 0; flex-wrap: wrap; }
+  .con-toolbar-actions > .con-action-btn { flex: 1 1 auto; justify-content: center; }
+  .con-toolbar-actions > .con-group-toggle-btn { flex: 1 1 100%; justify-content: center; }
+}
+
+/* A channel card's share is a figure on its own line, so it reads from the left
+   like Units and Revenue; the table-cell right alignment (and the label's minimum
+   width that goes with it) does not apply in a card. */
+@media (max-width: 768px) {
+  .ch-mix-tbl.phone-records .ch-mix-share { justify-content: flex-start; }
+  .ch-mix-tbl.phone-records .ch-mix-pct { min-width: 0; text-align: left; }
 }

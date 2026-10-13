@@ -93,8 +93,13 @@ test('phone-only pieces stay hidden on a computer', () => {
 test('history cards keep order, channel, total, date and actions visible', () => {
   const header = [...document.querySelectorAll('#tab-history thead th')].map((th) => th.textContent);
   expect(header).toEqual(['Order #', 'Channel', 'Qty', 'Unit price', 'Total', 'Stock after', 'Notes', 'Entered by', 'Date', '']);
-  for (const col of [1, 2, 3, 5, 7, 9, 10]) {
-    expect(styles).toMatch(new RegExp(`#tab-history \\.tbl tr\\.hist-row > td:nth-child\\(${col}\\)\\{grid-column`));
+  // Summary columns are placed by grid-area (order #, channel, total, action, date);
+  // the detail columns open as full-width lines. Updated with the compact order card.
+  for (const col of [1, 2, 5, 9, 10]) {
+    expect(styles).toMatch(new RegExp(`#tab-history \\.tbl tr\\.hist-row > td:nth-child\\(${col}\\)\\{grid-area`));
+  }
+  for (const col of [3, 7]) {
+    expect(styles).toMatch(new RegExp(`tr\\.hist-row > td:nth-child\\(${col}\\),[\\s\\S]{0,400}?grid-area:auto / 1 / auto / -1`));
   }
 });
 
@@ -115,7 +120,7 @@ test('phone pass: Add sale keeps its save button in reach and tables keep their 
   const block = styles.slice(styles.indexOf('PHONE PASS, EVERY OTHER SCREEN'));
   // The whole save bar is sticky inside the card: a sticky button inside its
   // own button-tall box had nowhere to travel, so it never stayed in reach.
-  expect(block).toMatch(/#tab-manual \.card > \.card-actions\{[\s\S]{0,300}?position:sticky;bottom:calc\(72px \+ env\(safe-area-inset-bottom\)\)/);
+  expect(block).toMatch(/#tab-manual \.card > \.card-actions\{[\s\S]{0,300}?position:sticky;bottom:calc\(var\(--mnav-h\) - 2px \+ env\(safe-area-inset-bottom\)\)/);
   expect(block).not.toMatch(/#tab-manual \.card-actions \.btn\.gold\.lg\{\s*position:sticky/);
   expect(block).toMatch(/\.tab-panel:not\(#tab-history\) \.tbl td:first-child\{position:sticky;left:0;/);
   // The Save-preset button on Shipping no longer forces a 28px height.

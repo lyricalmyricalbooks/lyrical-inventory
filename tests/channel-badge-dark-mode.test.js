@@ -10,17 +10,17 @@ import { expect, test } from 'vitest';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const styles = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
 
-// The channel badge on every Order History row (.ch-bc/.ch-pos/.ch-store/.ch-direct)
-// used to fill and border itself with a literal rgba() copied from the LIGHT theme's
-// hex for that colour. `color` used the themed token and repainted correctly in dark
-// mode, but the frozen rgba() fill/border did not, so a bright dark-mode label ended
-// up on an almost-invisible near-black tint. Pinning color-mix() against the same
-// token the label text uses keeps both in step across themes.
+// The channel badge on every Order History row (.ch-pos/.ch-store) fills and
+// borders itself with a color-mix() of the same token its label uses, so the fill
+// repaints with the theme. A frozen rgba() here left dark-mode labels on a
+// near-black tint they could not be read against.
+//
+// Colour rule for channel tags: red and amber are reserved for problems, so Store
+// is an info tag (blue, --status-info) and Website / Direct keep the neutral base
+// tag with no hue of their own.
 const modifiers = [
-  { selector: '.ch-badge.ch-bc', token: 'violet' },
   { selector: '.ch-badge.ch-pos', token: 'green' },
-  { selector: '.ch-badge.ch-store', token: 'gold' },
-  { selector: '.ch-badge.ch-direct', token: 'slate' },
+  { selector: '.ch-badge.ch-store', token: 'status-info' },
 ];
 
 for (const { selector, token } of modifiers) {
@@ -33,3 +33,9 @@ for (const { selector, token } of modifiers) {
     expect(rule[1]).not.toMatch(/rgba\(/);
   });
 }
+
+test('Website and Direct channel tags are neutral, not violet or slate', () => {
+  expect(styles).not.toMatch(/\.ch-badge\.ch-(bc|direct)\s*\{/);
+  const store = styles.match(/\.ch-badge\.ch-store\s*\{([\s\S]*?)\n\}/);
+  expect(store[1]).not.toMatch(/--gold|--violet|--slate/);
+});

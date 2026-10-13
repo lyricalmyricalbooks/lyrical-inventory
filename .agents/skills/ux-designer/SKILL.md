@@ -166,6 +166,11 @@ On narrow viewports (< 768px), a bottom sheet (`padding-bottom: env(safe-area-in
 
 ---
 
+**Seeing a screen on a phone.** `npm run shots -- --only=<tab>` (scripts/phone-shots/) renders the
+real app at 375px and 414px, light and dark, signed in against demo data, and writes one PNG per
+screenful plus a report of sideways scroll, under-sized tap targets and sub-11px text. Use it before
+and after any change to what a phone shows; `--widths=1280` checks the desktop didn't move.
+
 ## 7. A quick self-check, when it's worth running
 
 For a new screen or a significant redesign:
