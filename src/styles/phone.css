@@ -813,11 +813,13 @@
   #tab-history .tbl tr.hist-row {
     margin-bottom: var(--space-3); padding: var(--space-3) var(--space-4);
     border: var(--stroke) solid var(--rule-ink); border-radius: var(--r2);
-    background: var(--surface-card); box-shadow: var(--elev-1);
     transition: transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast) var(--ease-spring);
   }
-  #tab-history .tbl tr.hist-row:hover { background: var(--surface-card) !important; }
-  #tab-history .tbl tr.hist-row:active { transform: translate(2px, 2px); box-shadow: none; }
+  /* Rows waiting for approval keep their own amber wash and status stripe (.is-awaiting above). */
+  #tab-history .tbl tr.hist-row:not(.is-awaiting) { background: var(--surface-card); box-shadow: var(--elev-1); }
+  #tab-history .tbl tr.hist-row:not(.is-awaiting):hover { background: var(--surface-card) !important; }
+  #tab-history .tbl tr.hist-row:active { transform: translate(2px, 2px); }
+  #tab-history .tbl tr.hist-row:not(.is-awaiting):active { box-shadow: none; }
   #tab-history .tbl tr.hist-row > td:nth-child(5) { font-size: var(--text-md); font-weight: 800; font-variant-numeric: tabular-nums; }
   #tab-history .tbl tr.hist-row > td:nth-child(2) { letter-spacing: var(--tracking-caps); text-transform: uppercase; }
 }
