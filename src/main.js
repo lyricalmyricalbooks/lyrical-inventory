@@ -492,6 +492,7 @@ import {
 } from './features/bigcartel.js';
 import {
   acceptIntelDisclosure,
+  toggleIntelPrivacyDetails,
   applyIntelProposal,
   askIntelStarter,
   clearIntelThread,
@@ -884,6 +885,7 @@ import {
   updateCampaignSendFinishedSummary,
   renderCampaigns,
   filterCustomers,
+  toggleCustFold,
   customerPullStripe,
   customerPullDeeper,
   copyCustomerEmails,
@@ -1352,16 +1354,6 @@ const BOOK_PARCEL_PRESETS = {
   boxset: { length: 32, width: 26, height: 8, dimUnit: 'cm', weight: 2.50, weightUnit: 'kg' }
 };
 
-function rgbToHex(rgb) {
-  if (!rgb || typeof rgb !== 'string' || !rgb.startsWith('rgb')) return rgb || '';
-  const rgbValues = rgb.match(/\d+/g);
-  if (!rgbValues || rgbValues.length < 3) return rgb;
-  const r = parseInt(rgbValues[0]).toString(16).padStart(2, '0');
-  const g = parseInt(rgbValues[1]).toString(16).padStart(2, '0');
-  const b = parseInt(rgbValues[2]).toString(16).padStart(2, '0');
-  return `#${r}${g}${b}`;
-}
-
 function selectBookAccentPreset(color) {
   const accentInput = $('nb-accent');
   if (accentInput) {
@@ -1374,13 +1366,19 @@ function onCustomAccentInput(color) {
   const hexDisplay = $('nb-accent-hex');
   if (hexDisplay) hexDisplay.textContent = color;
 
+  // Match on the stored hex (data-accent), not the swatch's CSS colour: the
+  // swatches are painted with ink tokens, so their inline colour never equals a hex.
+  const wanted = String(color || '').toLowerCase();
+  let matchedName = '';
   const swatches = document.querySelectorAll('#nb-accent-swatches .accent-swatch-btn');
   swatches.forEach(btn => {
-    const bg = btn.style.backgroundColor;
-    const isSelected = !!bg && (bg.toLowerCase() === color.toLowerCase() || rgbToHex(bg).toLowerCase() === color.toLowerCase());
+    const isSelected = (btn.dataset.accent || '').toLowerCase() === wanted;
     btn.classList.toggle('active', isSelected);
     btn.setAttribute('aria-pressed', String(isSelected));
+    if (isSelected) matchedName = btn.dataset.name || '';
   });
+  const nameEl = $('nb-accent-name');
+  if (nameEl) nameEl.textContent = matchedName || 'Custom colour';
 
   const accentInput = $('nb-accent');
   if (accentInput) updateModalAccentPreview(accentInput);
@@ -2437,6 +2435,8 @@ function renderCatalogList() {
           <div class="e-icon" aria-hidden="true">🧪</div>
           <strong style="color:var(--content-primary);font-size:var(--text-sm);">No Test Books Found</strong>
           <p style="color:var(--content-secondary);font-size:var(--text-xs);margin-top:2px;">Books created for sandbox and testing environments appear here, isolated from your live production catalogue.</p>
+          <p style="color:var(--content-muted);font-size:var(--text-xs);margin:var(--space-2) 0 var(--space-3);">To keep a book here, give it the title or ID “test”.</p>
+          <button type="button" class="btn sm" onclick="openAddBookModal()">+ Add a test book</button>
         </div>`;
     } else {
       testContainer.innerHTML = testBooks.map(b => `
@@ -2664,6 +2664,8 @@ function renderAllQRCodes() {
     const author = escapeHtml(book.author) || '—';
     const header = document.createElement('header');
     header.className = 'qr-card-head';
+    // Status pill: phone-only (CSS hides it on desktop). Says at a glance
+    // whether this book already has a link to show.
     header.innerHTML = `
       <span class="qr-card-accent" aria-hidden="true"></span>
       <div class="qr-card-heading">
@@ -2672,38 +2674,56 @@ function renderAllQRCodes() {
           <span class="qr-card-author">${author}</span>
           <span class="qr-card-price" aria-label="List price">${escapeHtml(priceLabel)}</span>
         </div>
+        <span class="qr-card-status pill ${url ? 'green' : 'amber'}">${url ? '✓ Link set' : '! No link yet'}</span>
       </div>`;
     card.appendChild(header);
+
+    if (!url) {
+      // No link yet: there is no code to show, so the card offers the one
+      // useful step instead — open this book's editor where the link is set.
+      const empty = document.createElement('div');
+      empty.className = 'qr-card-empty';
+      empty.innerHTML = `
+        <p class="qr-card-empty-note">Add this book's Stripe payment link and its QR code appears here.</p>
+        <button type="button" class="btn gold qr-card-setlink">Set payment link</button>`;
+      empty.querySelector('.qr-card-setlink').addEventListener('click', () => window.openEditBookModal(book.id));
+      card.appendChild(empty);
+      grid.appendChild(card);
+      return;
+    }
 
     // QR plate — kept as a bright white square regardless of theme; a QR
     // scanned by a phone camera needs the light background whatever the app
     // paints around it.
     const qrWrap = document.createElement('div');
-    qrWrap.className = 'qr-frame' + (url ? '' : ' qr-frame-empty');
+    qrWrap.className = 'qr-frame';
     const qrEl = document.createElement('div');
     qrEl.id = `qr-all-${book.id}`;
     qrEl.className = 'qr-frame-target';
     qrWrap.appendChild(qrEl);
     card.appendChild(qrWrap);
 
-    if (url && typeof QRCode !== 'undefined') {
+    if (typeof QRCode !== 'undefined') {
       new QRCode(qrEl, { text: url, width: 168, height: 168, colorDark: '#000', colorLight: '#fff', correctLevel: QRCode.CorrectLevel.H });
     } else {
-      qrEl.innerHTML = `<div class="qr-frame-message">${url ? 'QR library not ready' : 'No Stripe link set.<br>Edit this book to add one.'}</div>`;
+      qrEl.innerHTML = '<div class="qr-frame-message">QR library not ready</div>';
     }
 
     // Actions column — url line above, buttons below. Download leads (gold),
     // Copy is the secondary (ink), so the primary action reads first in an
-    // event line-up. Disabled state is inherited from `.btn:disabled`.
+    // event line-up.
     const linkRow = document.createElement('div');
     linkRow.className = 'qr-card-footer';
-    const safeUrl = (url || '').replace(/'/g, "\\'");
+    // The link goes to the handler as a value, never spliced into an inline
+    // onclick string, so a quote or backslash in it can't break out.
     linkRow.innerHTML = `
-      <div class="qr-card-link" title="${escapeHtml(url || 'No link configured')}">${escapeHtml(url || 'No link configured')}</div>
+      <div class="qr-card-link" title="${escapeHtml(url)}">${escapeHtml(url)}</div>
       <div class="qr-card-actions">
-        <button class="btn ink sm" ${url ? '' : 'disabled'} onclick="window.copyBookQR('${book.id}','${safeUrl}')">Copy link</button>
-        <button class="btn gold sm" ${url ? '' : 'disabled'} onclick="window.downloadBookQR('${book.id}')">Download</button>
+        <button type="button" class="btn ink sm" data-qr-action="copy">Copy link</button>
+        <button type="button" class="btn gold sm" data-qr-action="download">Download</button>
       </div>`;
+    linkRow.querySelector('[data-qr-action="copy"]').addEventListener('click', () => window.copyBookQR(book.id, url));
+    linkRow.querySelector('[data-qr-action="download"]').addEventListener('click', () => window.downloadBookQR(book.id));
     card.appendChild(linkRow);
     grid.appendChild(card);
   });
@@ -9322,7 +9342,7 @@ function renderHistRowHtml(row, { cur, bookCode, book, formatChannelBadge }) {
   const isGrat = h.gratuity || h.chan === 'Gratuity';
   const isPending = h.artistPending;
 
-  const chanCell = isGrat ? `<span class="chip-status violet">🎁 Gratuity</span>` : isPending ? `${formatChannelBadge(h.chan)} <span class="chip-status amber">⏳ pending</span>` : formatChannelBadge(h.chan);
+  const chanCell = isGrat ? `<span class="ch-badge">🎁 Gratuity</span>` : isPending ? `${formatChannelBadge(h.chan)} <span class="chip-status amber">⏳ pending</span>` : formatChannelBadge(h.chan);
   // A row's amounts belong to the currency it was RECORDED in, not the one
   // the book carries today. Formatting a €32 sale with the book's current
   // CA$ makes it read as CA$32 — same digits, ~50% wrong. Rows stamped with
@@ -9639,9 +9659,10 @@ export function renderOrders() {
   if (!visible.length) {
     const msg = hiddenCount > 0
       ? `<div class="empty-state web-empty success"><div class="e-icon">✅</div><strong>Everything is up to date</strong><span>All ${hiddenCount} found order(s) are already applied or hidden. Scan again to check for newer receipts.</span></div>`
-      : `<div class="empty-state web-empty"><div class="e-icon">📬</div><strong>No orders found for this book</strong><span>Make sure Google Sheets is connected, then scan Gmail for recent Big Cartel receipts.</span><button class="btn ink sm" onclick="fetchOrders()">Scan Gmail</button></div>`;
+      : `<div class="empty-state web-empty"><div class="e-icon">📬</div><strong>No orders found for this book</strong><span>Make sure Google Sheets is connected, then press Scan Gmail at the top of this screen.</span></div>`;
     list.innerHTML = msg;
     $('apply-all-btn').disabled = true;
+    setApplyAllHint(hiddenCount > 0 ? 'Nothing new to apply. Scan Gmail again for newer receipts.' : 'Scan Gmail first to find new orders.');
     return;
   }
 
@@ -9713,7 +9734,17 @@ export function renderOrders() {
     list.innerHTML += `<div class="orders-hidden-note">${hiddenCount} already-applied or hidden order(s) hidden.</div>`;
   }
 
-  $('apply-all-btn').disabled = !visible.some(o => !isApplied(o) && !isCancelled(o));
+  const canApply = visible.some(o => !isApplied(o) && !isCancelled(o));
+  $('apply-all-btn').disabled = !canApply;
+  setApplyAllHint(canApply ? '' : 'Nothing new to apply. Scan Gmail again for newer receipts.');
+}
+
+// The reason line under Apply all: shown only while the button is greyed out.
+function setApplyAllHint(text) {
+  const hint = $('apply-all-hint');
+  if (!hint) return;
+  hint.textContent = text || '';
+  hint.hidden = !text;
 }
 
 function cancelOrder(orderNum) {
@@ -12194,6 +12225,8 @@ export function getConsignmentStoresAcrossBooks() {
   return collectUniqueConsignmentStores(states, BOOK_LIST);
 }
 
+const STORE_QUICK_CHIP_LIMIT = 6;
+
 export function populateAddStoreDirectory() {
   const wrap = $('add-store-preset-wrap');
   if (!wrap) return;
@@ -12213,7 +12246,7 @@ export function populateAddStoreDirectory() {
 
   const select = $('ns-existing-store-select');
   if (select) {
-    select.innerHTML = `<option value="">— Select an existing store to auto-fill —</option>` +
+    select.innerHTML = `<option value="">— Choose a store to auto-fill —</option>` +
       allStores.map(st => {
         const inThisBook = currentStores.includes(st.name.toLowerCase());
         const loc = [st.city, st.country].filter(Boolean).join(', ');
@@ -12226,16 +12259,24 @@ export function populateAddStoreDirectory() {
 
   const chipsList = $('add-store-quick-chips');
   if (chipsList) {
-    chipsList.innerHTML = allStores.map(st => {
+    // Only the first few stores get a quick-select row; the dropdown above
+    // lists every store, and the note below says how many are left out.
+    const shown = allStores.slice(0, STORE_QUICK_CHIP_LIMIT);
+    const hiddenCount = allStores.length - shown.length;
+    chipsList.innerHTML = shown.map(st => {
       const inThisBook = currentStores.includes(st.name.toLowerCase());
       const loc = st.city || st.country || '';
       return `<button type="button" class="store-quick-chip" data-store-name="${escapeHtml(st.name)}" onclick="handleSelectExistingStore('${escapeHtml(st.name.replace(/'/g, "\\'"))}')" title="${escapeHtml(st.name)}${loc ? ` · ${escapeHtml(loc)}` : ''}">
-        <span class="chip-dot"></span>
-        <span class="chip-name">${escapeHtml(st.name)}</span>
-        ${loc ? `<span class="chip-meta">${escapeHtml(loc)}</span>` : ''}
-        ${inThisBook ? `<span class="chip-badge">In book</span>` : ''}
+        <span class="chip-dot" aria-hidden="true"></span>
+        <span class="chip-copy">
+          <span class="chip-name">${escapeHtml(st.name)}</span>
+          ${loc ? `<span class="chip-meta">${escapeHtml(loc)}</span>` : ''}
+          ${inThisBook ? `<span class="chip-status gray sm">In book</span>` : ''}
+        </span>
       </button>`;
-    }).join('');
+    }).join('') + (hiddenCount > 0
+      ? `<div class="add-store-more" role="note">+ ${hiddenCount} more. Pick them from the list above.</div>`
+      : '');
   }
 
   const banner = $('add-store-selected-banner');
@@ -26995,7 +27036,7 @@ async function generateBookStripeLink() {
 // Global exposure for HTML handlers (cleaned up)
 Object.assign(window, {
   confirmDialog, promptDialog, notify,
-  renderCustomers, filterCustomers, customerPullStripe, copyCustomerEmails, exportCustomersCSV,
+  renderCustomers, filterCustomers, toggleCustFold, customerPullStripe, copyCustomerEmails, exportCustomersCSV,
   toggleCustomerSuppress, setCustomerBookFilter, customerPullDeeper,
   clearCustomerFilter, clearCustomerFilters,
   addManualSubscriber, addBuyerToMailingList, removeFromMailingList, addAllBuyersToMailingList,
@@ -27727,7 +27768,7 @@ function exposeLegacyInlineHandlers() {
   // every one of its handlers has to be reachable off window at click time.
   // Its names lead the list below.
   Object.assign(window, {
-    acceptIntelDisclosure, applyIntelProposal, askIntelStarter, clearIntelThread,
+    acceptIntelDisclosure, toggleIntelPrivacyDetails, applyIntelProposal, askIntelStarter, clearIntelThread,
     copyIntelAnswer, dismissIntelProposal, intelComposerKey, renderIntel, retryIntelQuestion,
     scrollToIntelMessage, sendIntelMessage, setIntelProviderPref, stopIntelTurn,
     dismissDeductionGap, renderDeductionGaps, restoreDeductionGaps, snoozeDeductionGap,

@@ -426,7 +426,13 @@ function renderIntel() {
   if (modelSwitch) modelSwitch.innerHTML = intelModelSwitchHtml();
 
   const gate = $i('intel-disclosure');
-  if (gate) gate.hidden = disclosureAccepted();
+  const accepted = disclosureAccepted();
+  if (gate) gate.hidden = accepted && !intelPrivacyDetailsOpen;
+  // Once accepted, the one-line summary stands in for the card (phone CSS shows it).
+  const privacyLine = $i('intel-privacy-line');
+  if (privacyLine) privacyLine.hidden = !accepted;
+  const privacyToggle = $i('intel-privacy-toggle');
+  if (privacyToggle) privacyToggle.setAttribute('aria-expanded', String(intelPrivacyDetailsOpen));
 
   const blocker = intelBlocker();
   const notice = $i('intel-notice');
@@ -699,8 +705,17 @@ async function clearIntelThread() {
   renderIntel();
 }
 
+// Whether the owner has reopened the full privacy card from its one-line summary.
+let intelPrivacyDetailsOpen = false;
+
+function toggleIntelPrivacyDetails() {
+  intelPrivacyDetailsOpen = !intelPrivacyDetailsOpen;
+  renderIntel();
+}
+
 function acceptIntelDisclosure() {
   try { localStorage.setItem(DISCLOSURE_KEY, 'yes'); } catch (_) { /* nothing to do */ }
+  intelPrivacyDetailsOpen = false;
   const gate = $i('intel-disclosure');
   if (gate) gate.hidden = true;
   renderIntel();
@@ -881,6 +896,7 @@ loadIntelThread();
 export {
   INTEL_PROPOSALS,
   acceptIntelDisclosure,
+  toggleIntelPrivacyDetails,
   askWithFallback,
   backupProvider,
   applyIntelProposal,

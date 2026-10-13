@@ -2385,6 +2385,7 @@ tr.hist-row:hover {
   color: var(--content-primary);
   line-height: var(--leading-normal);
 }
+.st-preview-box:empty { display: none; }
 
 /* A bar that sweeps across the screen on every re-render is exactly the motion
    someone with vestibular sensitivity asks to be spared. */
@@ -3889,6 +3890,24 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   font-size: var(--text-2xs);
   color: var(--text3);
   font-weight: 500;
+}
+.store-quick-chip .chip-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+.apply-all-hint {
+  margin: 6px 0 0;
+  font-size: var(--text-xs);
+  color: var(--content-muted);
+}
+.apply-all-hint[hidden] { display: none; }
+.add-store-more {
+  font-size: var(--text-2xs);
+  color: var(--content-muted);
+  padding: 4px 2px;
 }
 .store-quick-chip .chip-badge {
   font-size: var(--text-3xs);
@@ -7123,6 +7142,22 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   line-height: var(--leading-snug);
 }
 .qr-card.is-empty .qr-frame { box-shadow: inset 0 0 0 1px var(--border-default); }
+/* A book with no payment link: no code box, just the note and one full-width
+   Set payment link button. The status pill is a phone-only summary. */
+.qr-card-empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: auto;
+}
+.qr-card-empty-note {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--content-secondary);
+  line-height: var(--leading-snug);
+}
+.qr-card-setlink { width: 100%; justify-content: center; }
+.qr-card-status { display: none; }
 .qr-card-footer {
   display: flex;
   flex-direction: column;
@@ -7846,6 +7881,11 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 
    Rendered only when at least one filter is on: a permanent "no filters" strip
    is noise, and noise is what teaches people to stop reading the warning. */
+/* Phone-only folds (Customers filter and export, Intelligence privacy line).
+   Desktop keeps every control visible: the toggles and the one-line summary
+   stay out of the layout. Phone rules live in styles/phone.css. */
+.cust-fold-toggle { display: none; }
+.intel-privacy-line { display: none; }
 .seg-filter-bar {
   container-type: inline-size;
   display: flex;
@@ -10827,7 +10867,8 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .ship-cc-details[open] > summary::before { content: '▾'; }
 .ship-cc-details[open] > * + * { margin-top: var(--space-3); }
 .ship-cc-details .btn.sm { align-self: flex-start; }
-.ship-flow-batch { width: 100%; border-style: dashed; }
+.ship-flow-batch { width: 100%; }
+.ship-preset-save-row { display: flex; margin-top: var(--space-2); }
 .cc-panel-results { margin-bottom: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
 .cc-panel-results[hidden] { display: none !important; }
 .cc-panel-results p { margin: 0; font-size: var(--text-sm); color: var(--content-muted); }
@@ -13303,6 +13344,22 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   background: linear-gradient(135deg, var(--bg2, var(--cream2)), var(--border));
   color: var(--text2);
   border:var(--stroke-hair) solid var(--border);
+}
+.wa-setup-card { max-width: 680px; margin: 2rem auto; padding: 3rem 2rem; }
+.wa-setup-hero { text-align: center; margin-bottom: 2rem; }
+.wa-setup-icon { display: inline-flex; margin-bottom: 1rem; color: var(--content-primary); }
+.wa-setup-intro { font-size: var(--text-base); color: var(--text3); line-height: 1.6; max-width: 480px; margin: 0 auto; }
+.wa-setup-panel { background: var(--surface-sunken); border: var(--stroke-hair) solid var(--border-subtle); padding: 1.5rem; border-radius: var(--r2); margin-bottom: 2rem; }
+.bk-action { display: flex; flex-direction: column; gap: 4px; }
+.bk-action-note { margin: 0; font-size: var(--text-xs); line-height: 1.5; color: var(--content-muted); }
+.bk-howto { margin-bottom: 1.25rem; font-size: var(--text-sm); color: var(--content-secondary); line-height: 1.6; }
+.bk-howto > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; color: var(--content-primary); font-weight: 700; }
+.bk-howto > p { margin: 0 0 var(--space-2); }
+.bc-field-hint {
+  margin-top: 4px;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--content-muted);
 }
 .bc-connection-status {
   display: flex;
@@ -20466,6 +20523,7 @@ button[onclick="refreshUmamiStats()"]:active {
 .oc-meter > span { display: block; height: 100%; background: var(--emerald); }
 .oc-meter-pct { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text2); }
 .oc-topbar-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.oc-topbar-hint { font-size: var(--text-xs); color: var(--content-muted); }
 .oc-topbar-foot { font-size: var(--text-xs); color: var(--text3); padding-left: 10px; }
 
 /* Popover menus (More ▾, project ⋯). Placed under their button by

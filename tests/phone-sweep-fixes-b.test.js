@@ -59,8 +59,10 @@ describe('sweep B phone section', () => {
   });
 
   it('shortens the Duties option label without touching its value', () => {
-    expect(html).toContain('<option value="auto">Auto (DDP US, DDU elsewhere)</option>');
+    // Round 4 (#40) shortened this further to 'Auto'; the helper text under the select explains DDP and DDU.
+    expect(html).toContain('<option value="auto">Auto</option>');
     expect(html).not.toContain('Auto — DDP to the US, DDU elsewhere');
+    expect(html).not.toContain('Auto (DDP US, DDU elsewhere)');
     expect(html).toContain('<select id="sp-incoterm" onchange="onShippoIncotermChange()">');
   });
 

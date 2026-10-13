@@ -1300,3 +1300,221 @@
   #artist-reimburse-banner .metric-banner-actions { align-items: stretch; width: 100%; }
   #artist-reimburse-banner .metric-banner-hint { text-align: left; }
 }
+
+/* ─── QR + CUSTOMERS + INTEL (round 4) ─── */
+/* Phone only. Payment QR cards become compact rows (code left, title, price,
+   status and actions right). Customers: the buyer list leads, with the filter
+   panel and the export buttons folded behind toggles. Intelligence: once the
+   privacy note is acknowledged it collapses to one line, so the question box
+   sits in the first screenful. */
+@media (max-width: 768px) {
+  /* QR cards: a compact row. The code sits in the left column, spanning the
+     header and the footer, so title, price, status and actions stack on the right. */
+  #tab-qrcodes .qr-grid { gap: var(--space-3); }
+  #tab-qrcodes .qr-card:not(.is-empty) {
+    display: grid;
+    grid-template-columns: 124px minmax(0, 1fr);
+    align-items: start;
+    gap: var(--space-2) var(--space-3);
+    padding: var(--space-3);
+  }
+  #tab-qrcodes .qr-card:not(.is-empty) > .qr-card-head { grid-column: 2; grid-row: 1; }
+  #tab-qrcodes .qr-card:not(.is-empty) > .qr-frame {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    align-self: start;
+    width: 124px;
+    height: 124px;
+    padding: 6px;
+  }
+  #tab-qrcodes .qr-frame-target { width: 100%; height: 100%; }
+  #tab-qrcodes .qr-frame canvas,
+  #tab-qrcodes .qr-frame img { width: 100% !important; height: auto !important; }
+  #tab-qrcodes .qr-card:not(.is-empty) > .qr-card-footer { grid-column: 2; grid-row: 2; margin-top: 0; gap: var(--space-2); }
+  #tab-qrcodes .qr-card-status { display: inline-flex; align-self: flex-start; margin-top: var(--space-2); }
+  #tab-qrcodes .qr-card-actions { flex-wrap: wrap; }
+  #tab-qrcodes .qr-card-actions .btn { flex: 1 1 auto; }
+  #tab-qrcodes .qr-card-empty { gap: var(--space-2); }
+  #tab-qrcodes .qr-card-empty-note { font-size: var(--text-sm); }
+
+  /* Customers: the filter panel and the export buttons fold away; the buyer
+     list is what the owner sees first. Desktop keeps both open. */
+  #tab-customers .cust-fold { display: block; }
+  #tab-customers .cust-fold-toggle { display: inline-flex; }
+  #tab-customers .cust-fold-body { display: block; margin-top: var(--space-3); }
+  #tab-customers .cust-fold:not(.is-open) > .cust-fold-body { display: none; }
+  #tab-customers .cust-filter-fold { margin-bottom: var(--space-3); }
+  #tab-customers .cust-filter-grid { margin-top: 0; }
+  #tab-customers .cust-export-fold .cust-fold-body { margin-top: var(--space-2); }
+  #tab-customers .cust-export-fold .cust-fold-body > div { flex-wrap: wrap; }
+
+  /* Intelligence: the acknowledged privacy note is one line with a Details
+     toggle, and the full card stays hidden until it is opened. */
+  #tab-intel .intel-privacy-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border: var(--stroke-hair) solid var(--border-subtle);
+    background: var(--surface-sunken);
+  }
+  #tab-intel .intel-privacy-line[hidden] { display: none; }
+  #tab-intel .intel-privacy-text {
+    min-width: 0;
+    font-size: var(--text-xs);
+    line-height: var(--leading-snug);
+    color: var(--content-secondary);
+  }
+  #tab-intel .intel-privacy-line .btn { flex: 0 0 auto; }
+
+  /* Intelligence: the conversation and the question box come first; the quick
+     asks follow beneath them, so the box is in the first screenful. */
+  #tab-intel .intel-layout { display: flex; flex-direction: column; }
+  #tab-intel .intel-main { order: 0; }
+  #tab-intel .intel-rail { order: 1; }
+}
+
+/* ─── MANUAL ENTRY + HOME (round 4) ─── */
+/* Desktop keeps the optional fields visible: the fold never shows its summary,
+   and the order number takes the Qty and price row's left-hand share. */
+@media (min-width: 769px) {
+  #tab-manual .order-grid { grid-template-columns: .65fr 1.6fr; }
+  #tab-manual .manual-more { margin-top: 14px; }
+  #tab-manual .manual-more > summary { display: none; }
+  #tab-manual .manual-more::details-content { content-visibility: visible; display: block; }
+}
+
+@media (max-width: 768px) {
+  /* Order form: Qty and price one under the other, the optional pair folded away. */
+  #tab-manual .order-grid { grid-template-columns: minmax(0, 1fr) !important; }
+  #tab-manual .manual-more { margin-top: var(--space-4); }
+  #tab-manual .manual-more > summary {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+    min-height: 44px; padding: var(--space-2) var(--space-3); cursor: pointer; list-style: none;
+    border: var(--stroke) solid var(--rule-ink); background: var(--surface-raised); color: var(--content-primary);
+    font: 700 var(--text-sm) / 1.2 var(--font-ui); letter-spacing: var(--tracking-caps); text-transform: uppercase;
+  }
+  #tab-manual .manual-more > summary::-webkit-details-marker { display: none; }
+  #tab-manual .manual-more > summary::after { content: '+'; font-size: var(--text-lg); line-height: 1; }
+  #tab-manual .manual-more[open] > summary::after { content: '−'; }
+  #tab-manual .manual-more > summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+  #tab-manual .manual-more[open] > .form-group { margin-top: var(--space-3); }
+
+  /* Home, night mode: the Sell card's fill is deepened toward the ink so the
+     light caption on it clears 4.5 to 1. Day mode keeps the bright red. */
+  .theme-dark #tab-today .today-card-ink { background: color-mix(in srgb, var(--gold) 55%, var(--ink)); }
+
+  /* Home: the upload strip is the same square, inked slab the Sell screen uses. */
+  #tab-today .fm-sync {
+    min-height: 44px; border-radius: var(--r2); border: var(--stroke) solid var(--rule-ink);
+    padding: var(--space-1) var(--space-3); font-size: var(--text-sm);
+  }
+  #tab-today .fm-sync[data-tone="offline"] { border-color: var(--gold-text); background: var(--gold-bg); }
+  #tab-today .fm-sync[data-tone="failed"] { border-color: var(--red); }
+}
+
+/* ─── SHIPPING (round 4) ─── */
+/* Desktop keeps every field on screen: the fold rows hide and the bodies show. */
+@media (min-width: 769px) {
+  #tab-shipping .ship-sender-fold > summary,
+  #tab-shipping .ship-more-options > summary { display: none; }
+  #tab-shipping .ship-sender-fold::details-content,
+  #tab-shipping .ship-more-options::details-content { content-visibility: visible; display: block; }
+}
+
+@media (max-width: 768px) {
+  /* The sender address is one line you can tap; the nine fields sit behind it. */
+  #tab-shipping .ship-sender-fold > summary,
+  #tab-shipping .ship-more-options > summary {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+    min-height: 44px; padding: var(--space-2) var(--space-3); cursor: pointer; list-style: none;
+    border: var(--stroke) solid var(--rule-ink); background: var(--surface-raised); color: var(--content-primary);
+    font: 600 var(--text-sm) / 1.3 var(--font-ui);
+  }
+  #tab-shipping .ship-sender-fold > summary::-webkit-details-marker,
+  #tab-shipping .ship-more-options > summary::-webkit-details-marker { display: none; }
+  #tab-shipping .ship-sender-fold > summary::after,
+  #tab-shipping .ship-more-options > summary::after { content: '+'; flex: none; font-size: var(--text-lg); line-height: 1; }
+  #tab-shipping .ship-sender-fold[open] > summary::after,
+  #tab-shipping .ship-more-options[open] > summary::after { content: '−'; }
+  #tab-shipping .ship-sender-fold > summary:focus-visible,
+  #tab-shipping .ship-more-options > summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+  #tab-shipping .ship-sender-fold-line {
+    flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #tab-shipping .ship-sender-fold-edit {
+    flex: none; font-size: var(--text-2xs); font-weight: 700;
+    text-transform: uppercase; letter-spacing: var(--tracking-caps);
+  }
+  #tab-shipping .ship-sender-fold { margin-bottom: var(--space-3); }
+  #tab-shipping .ship-sender-fold[open] > summary + .form-group { margin-top: var(--space-3); }
+  #tab-shipping .ship-more-options { margin-top: var(--space-4); }
+  #tab-shipping .ship-more-options > .shipping-predictor-settings { margin: var(--space-3) 0 0; padding-top: 0; border-top: 0; }
+
+  /* Selects: the arrow keeps its own room, so long option text stops short of it. */
+  #tab-shipping select { padding-right: 40px; background-position: right 14px center; }
+
+  /* Outlines are solid ink on phone, not a broken line: the batch button and the verify chips. */
+  #tab-shipping .ship-flow-batch,
+  #tab-shipping #ship-analysis-hub .ship-verify-mini { border-style: solid; }
+
+  /* Profit-and-loss tiles use the app's status tokens, not literal colours. */
+  #tab-shipping #ship-analysis-hub {
+    --shipping-pnl-success: var(--green);
+    --shipping-pnl-warning: var(--amber);
+    --shipping-pnl-danger: var(--red);
+  }
+  #tab-shipping #ship-analysis-hub .shipping-pnl-status.matched { background: var(--green-bg); }
+  #tab-shipping #ship-analysis-hub .shipping-pnl-status.needs-link { background: var(--amber-bg); }
+  #tab-shipping #ship-analysis-hub .shipping-pnl-status.undercharged { background: var(--red-bg); }
+  #tab-shipping #ship-analysis-hub .shipping-pnl-status.suggested { background: var(--gold-bg); color: var(--amber); }
+  #tab-shipping #ship-analysis-hub .shipping-pnl-ledger-row.suggested td { background: color-mix(in srgb, var(--gold) 4%, transparent); }
+  #tab-shipping .shipping-money.margin.positive { border-color: color-mix(in srgb, var(--green) 24%, transparent); }
+  #tab-shipping .shipping-money.margin.negative { border-color: color-mix(in srgb, var(--red) 24%, transparent); }
+}
+
+
+/* ─── POLISH SWEEP (round 4) ─── */
+@media (max-width: 768px) {
+  /* Consignment store picker: one store per full-width row, name on one line,
+     'In book' under it. Overflow is said in words by the note under the list. */
+  .add-store-preset-box .add-store-chips-list { flex-direction: column; flex-wrap: nowrap; gap: 0; max-height: none; border: var(--stroke-hair) solid var(--border-default); border-radius: var(--r2); overflow: hidden; }
+  .add-store-preset-box .store-quick-chip { width: 100%; min-height: 44px; border: 0; border-bottom: var(--stroke-hair) solid var(--border-subtle); border-radius: 0; padding: var(--space-2) var(--space-3); justify-content: flex-start; align-items: center; box-shadow: none; transform: none; }
+  .add-store-preset-box .store-quick-chip:last-of-type { border-bottom: 0; }
+  .add-store-preset-box .store-quick-chip .chip-copy { min-width: 0; flex: 1; }
+  .add-store-preset-box .store-quick-chip .chip-name { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .add-store-preset-box .add-store-more { padding: var(--space-2) var(--space-3); border-top: var(--stroke-hair) solid var(--border-subtle); }
+  #ns-existing-store-select { padding-right: 2.5rem; }
+
+  /* Accent swatches: the row keeps room for the circles, and the name of the
+     chosen colour sits under it. */
+  #nb-accent-swatches { padding: var(--space-1) 0; }
+  .accent-name-caption { font-size: var(--text-xs); color: var(--content-muted); margin-top: var(--space-1); }
+
+  /* Big Cartel: the two buttons stack, each full width, so neither wraps. */
+  #tab-bigcartel .phone-connection-actions { flex-direction: column; }
+  #tab-bigcartel .phone-connection-actions .btn { width: 100%; white-space: nowrap; }
+
+  /* Website tab: the four figures line up because each label reserves three lines. */
+  #tab-website .wl-fact dt { min-height: 3lh; }
+  #tab-website #web-orders-status .web-stat-label { min-height: 2lh; }
+
+  /* Web Analytics setup: the dashboard field starts near the top of the screen. */
+  #tab-webanalytics .wa-setup-card { margin: var(--space-3) auto; padding: var(--space-4); }
+  #tab-webanalytics .wa-setup-hero { margin-bottom: var(--space-3); }
+  #tab-webanalytics .wa-setup-icon { margin-bottom: var(--space-1); }
+  #tab-webanalytics .wa-setup-panel { padding: var(--space-3); margin-bottom: var(--space-3); }
+
+  /* Help: each question is a list row with a hairline, not a heavy boxed button. */
+  #tab-help .help-q { border: var(--stroke-hair) solid var(--border-default); box-shadow: none; }
+
+  /* Book Catalog: every title starts at the same left edge. */
+  #tab-sheets .catalog-card { flex-direction: column; align-items: stretch; justify-content: flex-start; text-align: left; }
+  #tab-sheets .catalog-card > div:first-child { justify-content: flex-start; width: 100%; min-width: 0; }
+  #tab-sheets .catalog-dot { flex: none; }
+
+  /* Shipping: the preset save button sits on its own line under the dropdown. */
+  #tab-shipping .ship-preset-save-row { justify-content: flex-start; }
+}
