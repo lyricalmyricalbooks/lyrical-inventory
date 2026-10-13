@@ -7399,7 +7399,9 @@ export function updateDash() {
   $('d-thresh-label').textContent = 'Alert at ' + book.threshold + ' units';
   animateCountValue('d-stock', s.stock); animateCountValue('h-stock', s.stock);
   renderStockDriftBanner(s, book);
-  animateCountValue('d-sold', s.sold);
+  animateCountValue('d-sold', s.sold + inventory.gratuities);
+  const soldSplit = $('d-sold-split');
+  if (soldSplit) soldSplit.textContent = `${s.sold} sold · ${inventory.gratuities} gifted`;
   animateCountValue('d-gratuities', inventory.gratuities);
   const heldGross = heldGrossOf(s);
   const recognizedRev = recognizedRevenueOf(s);
@@ -7408,7 +7410,7 @@ export function updateDash() {
   if (revSub) revSub.textContent = heldGross > 0.01
     ? `${fmtWhole(s.revenue, cur)} collected · ${fmtWhole(heldGross, cur)} held by artist`
     : 'total collected';
-  $('d-avg-sub').textContent = 'avg ' + (s.sold > 0 ? fmt(recognizedRev / s.sold, cur) : '—');
+  $('d-avg-sub').textContent = 'avg sale ' + (s.sold > 0 ? fmt(recognizedRev / s.sold, cur) : '—');
   // ⚡ Bolt Optimization: Calculate consigned and owed in a single loop
   let consigned = 0, owed = 0;
   for (let i = 0; i < s.stores.length; i++) {
