@@ -140,6 +140,10 @@ for (const theme of themes) {
       isMobile: phone,
       hasTouch: phone,
       colorScheme: theme,
+      // The shop is in Canada: the register picks its charging currency (and dates
+      // their format) from the device, so shoot as a Canadian phone would.
+      locale: 'en-CA',
+      timezoneId: 'America/Halifax',
     });
     const page = await context.newPage();
     const errors = [];

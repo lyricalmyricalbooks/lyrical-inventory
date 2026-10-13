@@ -357,5 +357,7 @@ export const demoReconPayments = [
   { id: 'pi_demo_donation', amount: 15, currency: 'CAD', created: at('2026-10-03'), date: '2026-10-03', customer: 'A friend', email: '', description: 'Donation', metadata: {} },
 ];
 export const demoLocalStorageExtra = {
+  // The register remembers the currency it last charged in; a shop in Canada.
+  'lm-pos-currency': 'CAD',
   'lm-stripe-reconcile': JSON.stringify({ recorded: {}, dismissed: { pi_demo_donation: { at: '2026-10-04T12:00:00Z' } }, lastSync: '2026-10-10T14:00:00Z' }),
 };
