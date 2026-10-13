@@ -111,17 +111,26 @@ function enhanceSections(nav) {
 // first two in view and fold the rest behind "More actions" on a phone. The
 // original buttons are moved, never copied, so their handlers stay the same;
 // on a wide screen the wrapper is display:contents and nothing changes.
+// Never folded: the gold main action (Save Book sat behind "More actions"),
+// and a button that is hidden for now — a wizard's Back shows up on a later
+// step and must appear in place, not inside the fold. A fold that would hold
+// a single button is not worth the extra tap, so the footer is left alone.
 const FOLD_AFTER = 2;
 let foldId = 0;
 export function foldFooterActions(group) {
   if (group.dataset.phoneFolded) return;
   const buttons = [...group.children].filter(el => el.matches('button, .btn'));
   if (buttons.length <= FOLD_AFTER + 1) return;
+  const hiddenNow = (el) => el.hidden || el.style.display === 'none';
+  const shown = buttons.filter(el => !hiddenNow(el));
+  const kept = new Set(shown.slice(0, FOLD_AFTER));
+  const toFold = shown.filter(el => !kept.has(el) && !el.classList.contains('gold'));
+  if (toFold.length < 2) return;
   group.dataset.phoneFolded = '1';
   const panel = document.createElement('div');
   panel.className = 'phone-more-panel';
   panel.id = `phone-more-${++foldId}`;
-  buttons.slice(FOLD_AFTER).forEach(btn => panel.append(btn));
+  toFold.forEach(btn => panel.append(btn));
   const toggle = document.createElement('button');
   toggle.type = 'button';
   toggle.className = 'btn phone-more-toggle';

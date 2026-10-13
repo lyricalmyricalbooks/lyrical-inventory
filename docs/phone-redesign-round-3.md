@@ -19,7 +19,7 @@ snapshot and drift.
 **Evidence:** shots/before/light-375/tab-todo-01.png, tab-todo-02.png, tab-todo-03.png, tab-todo-04.png (also dark-375/tab-todo-01.png, tab-todo-02.png); src/style.css:18802-18815 (.todo-row is a single non-wrapping flex row), src/style.css:18832 (.todo-copy flex:1 with no minimum width), src/style.css:18846 (.todo-row-actions flex:none); no phone-width override for .todo-row in src/styles/phone.css
 
 ### 2. Add new book (sheet, Identity step) — broken, redesign
-**Status:** Open  
+**Status:** Done — the fold keeps gold and not-yet-shown buttons in place  
 **Problem:** The save button is hidden on a phone. The footer shows only Cancel and a "More actions" button. "Next" and "Save Book" are folded behind that toggle, so the main action of the sheet is not visible until the owner finds the toggle. The Back button is also counted in the fold even though it is hidden on this step.  
 **Fix:** Exempt the primary action from the fold: keep the gold Save Book, or the Next button on steps 1 and 2, pinned in view. Fold only secondary actions such as Back, and stop counting display:none buttons toward the limit. Alternatively, stack Cancel above a full-width primary button in the footer.  
 **Evidence:** shots/before/light-375/modal-add-book-01.png and modal-add-book-02.png (footer shows only CANCEL and MORE ACTIONS); index.html:6053-6063 (footer holds Cancel, Back, Next and Save Book in that order); src/lib/phone-layout.js:111 (FOLD_AFTER = 2) and 113-131 (every footer button after the second is moved behind More actions)

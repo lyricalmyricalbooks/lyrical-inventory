@@ -91,6 +91,28 @@ test('a crowded pop-up footer keeps two actions and folds the rest, moving the r
   document.getElementById('b5').click(); expect(clicks).toBe(1);
 });
 
+test('the fold never hides the main gold action or a step button that is hidden for now', () => {
+  // The Add new book footer: Cancel, a Back button hidden on the first step,
+  // Next, and the gold Save Book. Folding by position used to leave only
+  // Cancel and "More actions" in view, with Save Book out of sight.
+  document.body.innerHTML = `<div class="modal"><div class="modal-footer"><div>
+    <button class="btn" id="cancel">Cancel</button>
+    <button class="btn" id="back" style="display:none;">Back</button>
+    <button class="btn" id="next">Next</button>
+    <button class="btn gold" id="save">Save Book</button>
+  </div></div></div>`;
+  stop = initPhoneLayouts(document.body);
+  expect(document.querySelector('.phone-more-toggle')).toBeNull();
+  const group = document.querySelector('.modal-footer > div');
+  for (const id of ['cancel', 'back', 'next', 'save']) expect(document.getElementById(id).parentElement).toBe(group);
+});
+
+test('a fold that would hold only one button is not made', () => {
+  document.body.innerHTML = '<div class="modal"><div class="modal-footer"><div><button class="btn">A</button><button class="btn">B</button><button class="btn gold">C</button><button class="btn">D</button></div></div></div>';
+  stop = initPhoneLayouts(document.body);
+  expect(document.querySelector('.phone-more-toggle')).toBeNull();
+});
+
 test('a short footer is left alone', () => {
   document.body.innerHTML = '<div class="modal"><div class="modal-footer"><div><button class="btn">A</button><button class="btn">B</button><button class="btn">C</button></div></div></div>';
   stop = initPhoneLayouts(document.body);
