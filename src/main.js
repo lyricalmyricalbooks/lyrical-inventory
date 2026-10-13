@@ -2687,7 +2687,8 @@ function renderAllQRCodes() {
       empty.className = 'qr-card-empty';
       empty.innerHTML = `
         <p class="qr-card-empty-note">Add this book's Stripe payment link and its QR code appears here.</p>
-        <button type="button" class="btn gold qr-card-setlink" onclick="openEditBookModal('${escapeHtml(book.id)}')">Set payment link</button>`;
+        <button type="button" class="btn gold qr-card-setlink">Set payment link</button>`;
+      empty.querySelector('.qr-card-setlink').addEventListener('click', () => window.openEditBookModal(book.id));
       card.appendChild(empty);
       grid.appendChild(card);
       return;
@@ -2715,13 +2716,16 @@ function renderAllQRCodes() {
     // event line-up.
     const linkRow = document.createElement('div');
     linkRow.className = 'qr-card-footer';
-    const safeUrl = url.replace(/'/g, "\\'");
+    // The link goes to the handler as a value, never spliced into an inline
+    // onclick string, so a quote or backslash in it can't break out.
     linkRow.innerHTML = `
       <div class="qr-card-link" title="${escapeHtml(url)}">${escapeHtml(url)}</div>
       <div class="qr-card-actions">
-        <button class="btn ink sm" onclick="window.copyBookQR('${book.id}','${safeUrl}')">Copy link</button>
-        <button class="btn gold sm" onclick="window.downloadBookQR('${book.id}')">Download</button>
+        <button type="button" class="btn ink sm" data-qr-action="copy">Copy link</button>
+        <button type="button" class="btn gold sm" data-qr-action="download">Download</button>
       </div>`;
+    linkRow.querySelector('[data-qr-action="copy"]').addEventListener('click', () => window.copyBookQR(book.id, url));
+    linkRow.querySelector('[data-qr-action="download"]').addEventListener('click', () => window.downloadBookQR(book.id));
     card.appendChild(linkRow);
     grid.appendChild(card);
   });

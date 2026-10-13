@@ -36,7 +36,7 @@ describe('QR codes: a book without a payment link', () => {
   const render = mainJs.match(/function renderAllQRCodes\(\)[\s\S]*?\n\}\n/)[0];
 
   it('offers one "Set payment link" action that opens the book editor', () => {
-    expect(render).toMatch(/class="btn gold qr-card-setlink"[^>]*openEditBookModal\('\$\{escapeHtml\(book\.id\)\}'\)/);
+    expect(render).toMatch(/addEventListener\('click', \(\) => window\.openEditBookModal\(book\.id\)\)/);
     expect(render).toMatch(/>Set payment link<\/button>/);
     expect(render).toMatch(/qr-card-empty-note/);
     expect(render).not.toMatch(/No Stripe link set/);
