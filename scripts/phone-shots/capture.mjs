@@ -9,6 +9,7 @@
 //   npm run shots -- --widths=1280 --only=reconcile      (desktop sanity check)
 //   --slices=N  screenfuls per screen (default 6)   --full  also one tall picture
 //   --storage=key=value,…  extra device settings, e.g. --storage=allConGrouped=1
+//   --session=key=value,…  per-visit choices, e.g. --session=lm-con-section=ledger
 //
 // Output (gitignored): <out>/<theme>-<width>/<screen>-NN.png (one per screenful)
 // and <out>/report.json.
@@ -176,7 +177,10 @@ for (const theme of themes) {
       window.__shotsErrors = [];
       window.addEventListener('error', e => window.__shotsErrors.push(String(e.message)));
     });
-    const storage = list(args.storage, []).map(pair => 'ls=' + encodeURIComponent(pair)).join('&');
+    const storage = [
+      ...list(args.storage, []).map(pair => 'ls=' + encodeURIComponent(pair)),
+      ...list(args.session, []).map(pair => 'ss=' + encodeURIComponent(pair)),
+    ].join('&');
     await page.goto(storage ? `${base}?${storage}` : base, { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => window.__shotsReady === true, null, { timeout: 30000 });
     await page.evaluate(() => document.fonts.ready);
