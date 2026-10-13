@@ -41,12 +41,15 @@ let detailId = 0;
 // numbers fell down the screen as bare figures; each total now carries its
 // column's name and the row reads as a compact summary strip. A single cell
 // spanning the whole row is a message, not a heading, and stays as it is.
+// Footer total rows get the same labelled strip. A figure that spans several
+// columns gets no label rather than the first column's name — the Expenses
+// totals pill read "Amount (CAD)".
 function labelGroupRow(row, names) {
   const cells = [...row.cells];
   if (cells.length < 2 || cells.some(c => c.rowSpan !== 1)) return;
   let col = 0;
   cells.forEach((cell, index) => {
-    cell.dataset.phoneLabel = names[col] || '';
+    cell.dataset.phoneLabel = index > 0 && cell.colSpan > 1 ? '' : (names[col] || '');
     cell.classList.toggle('phone-record-lead', index === 0);
     col += cell.colSpan;
   });
@@ -67,6 +70,7 @@ function enhanceRecords(table) {
   table.tHead.rows[0].setAttribute('role', 'row');
   [...headers].forEach(h => { h.scope = 'col'; h.setAttribute('role', 'columnheader'); });
   body.setAttribute('role', 'rowgroup');
+  for (const row of table.tFoot?.rows || []) labelGroupRow(row, names);
   for (const row of body.rows) {
     // Empty states and grouped rows keep their full-width message, without controls.
     if (row.cells.length !== headers.length || [...row.cells].some(c => c.colSpan !== 1 || c.rowSpan !== 1)) {

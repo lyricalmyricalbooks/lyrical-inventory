@@ -89,6 +89,22 @@ test('a grouped heading row (one cell spanning two columns) gets column labels, 
   expect(empty.classList.contains('phone-group-row')).toBe(false);
 });
 
+test('footer total rows get column labels too, and a cell spanning several columns is not given the wrong one', () => {
+  // Dashboard → Sales by channel: the totals row in <tfoot> showed its
+  // transactions, units and revenue as bare figures on a phone.
+  document.body.innerHTML = '<div id="app"><table><thead><tr><th>Channel</th><th>Transactions</th><th>Units</th><th>Revenue</th><th>Share</th></tr></thead>'
+    + '<tbody id="ch-body"><tr><td>Book Fair</td><td>3</td><td>10</td><td>CA$240.00</td><td>36%</td></tr></tbody>'
+    + '<tfoot id="ch-foot"><tr><td>4 channels</td><td>9</td><td>27</td><td>CA$660.00</td><td>100%</td></tr></tfoot></table>'
+    + '<table><thead><tr><th>Date</th><th>Description</th><th>Amount</th><th>Amount (CAD)</th><th>Reimbursement</th><th></th></tr></thead>'
+    + '<tbody id="exp-body"><tr><td colspan="3">Total</td><td>CA$706.80</td><td colspan="2">Outstanding</td></tr></tbody></table></div>';
+  stop = initPhoneLayouts(document.getElementById('app'));
+  const foot = document.querySelector('#ch-foot tr');
+  expect([...foot.cells].map(c => c.dataset.phoneLabel)).toEqual(['Channel', 'Transactions', 'Units', 'Revenue', 'Share']);
+  expect(foot.cells[0].classList.contains('phone-record-lead')).toBe(true);
+  const totals = document.querySelector('#exp-body tr');
+  expect([...totals.cells].map(c => c.dataset.phoneLabel)).toEqual(['Date', 'Amount (CAD)', '']);
+});
+
 test('a crowded pop-up footer keeps two actions and folds the rest, moving the real buttons', () => {
   document.body.innerHTML = `<div class="overlay" id="m-trip"><div class="modal"><div class="modal-footer"><div>
     ${[1, 2, 3, 4, 5, 6, 7].map(n => `<button class="btn" id="b${n}">B${n}</button>`).join('')}

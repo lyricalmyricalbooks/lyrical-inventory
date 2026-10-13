@@ -127,7 +127,7 @@ function measure() {
   // down the screen as unlabelled blocks. Found by the owner on All books →
   // Group by book; flagged here so every run catches the next one.
   const unlabelledRows = [];
-  for (const row of scope.querySelectorAll('table.phone-records tbody > tr')) {
+  for (const row of scope.querySelectorAll('table.phone-records :is(tbody, tfoot) > tr')) {
     if (!visible(row) || row.matches('.phone-record, .phone-group-row')) continue;
     const cells = [...row.cells].filter(visible);
     if (cells.length < 2) continue; // a single full-width message row is fine
