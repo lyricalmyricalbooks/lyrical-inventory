@@ -8,6 +8,7 @@
 //   npm run shots -- --widths=375 --themes=light --modals=none --out=shots/before
 //   npm run shots -- --widths=1280 --only=reconcile      (desktop sanity check)
 //   --slices=N  screenfuls per screen (default 6)   --full  also one tall picture
+//   --storage=key=value,…  extra device settings, e.g. --storage=allConGrouped=1
 //
 // Output (gitignored): <out>/<theme>-<width>/<screen>-NN.png (one per screenful)
 // and <out>/report.json.
@@ -153,7 +154,8 @@ for (const theme of themes) {
       window.__shotsErrors = [];
       window.addEventListener('error', e => window.__shotsErrors.push(String(e.message)));
     });
-    await page.goto(base, { waitUntil: 'domcontentloaded' });
+    const storage = list(args.storage, []).map(pair => 'ls=' + encodeURIComponent(pair)).join('&');
+    await page.goto(storage ? `${base}?${storage}` : base, { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => window.__shotsReady === true, null, { timeout: 30000 });
     await page.evaluate(() => document.fonts.ready);
     const dir = path.join(outDir, `${theme}-${width}`);

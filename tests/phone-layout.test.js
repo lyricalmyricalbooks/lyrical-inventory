@@ -73,6 +73,22 @@ test('pop-up window tables outside the app shell become record cards', () => {
   expect(row.cells[2].classList.contains('phone-record-detail')).toBe(true);
 });
 
+test('a grouped heading row (one cell spanning two columns) gets column labels, not bare stacked numbers', () => {
+  // All books → consignment, "Group by book": each book's heading row spans
+  // Book + Store in one cell, then Sent, Sold, Outstanding, Sell-through, Status.
+  document.body.innerHTML = '<div id="app"><table><thead><tr><th>Book</th><th>Store</th><th>Sent</th><th>Sold</th><th>Outstanding</th><th>Sell-through</th><th>Status</th></tr></thead><tbody id="all-con-body">'
+    + '<tr class="con-group-row"><td colspan="2">The Hound</td><td>38</td><td>34</td><td>4</td><td>89%</td><td>1 active</td></tr>'
+    + '<tr><td colspan="7">No stores yet.</td></tr></tbody></table></div>';
+  stop = initPhoneLayouts(document.getElementById('app'));
+  const [group, empty] = document.querySelectorAll('#all-con-body tr');
+  expect(group.classList.contains('phone-group-row')).toBe(true);
+  expect(group.classList.contains('phone-record')).toBe(false);
+  expect([...group.cells].map(c => c.dataset.phoneLabel)).toEqual(['Book', 'Sent', 'Sold', 'Outstanding', 'Sell-through', 'Status']);
+  expect(group.cells[0].classList.contains('phone-record-lead')).toBe(true);
+  // A full-width message row stays a plain message.
+  expect(empty.classList.contains('phone-group-row')).toBe(false);
+});
+
 test('a crowded pop-up footer keeps two actions and folds the rest, moving the real buttons', () => {
   document.body.innerHTML = `<div class="overlay" id="m-trip"><div class="modal"><div class="modal-footer"><div>
     ${[1, 2, 3, 4, 5, 6, 7].map(n => `<button class="btn" id="b${n}">B${n}</button>`).join('')}
@@ -182,4 +198,11 @@ describe('swipe down to close', () => {
     drag(document.querySelector('.modal p'), 100, 300);
     expect(closed).toEqual([]);
   });
+});
+
+test('grouped heading rows lay out as a labelled strip that the generic non-record rule leaves alone', async () => {
+  const { readFileSync } = await import('node:fs');
+  const css = readFileSync(`${process.cwd()}/src/styles/phone.css`, 'utf8');
+  expect(css).toMatch(/\.phone-records tr\.phone-group-row \{[^}]*display: grid;/);
+  expect(css).toMatch(/tbody > tr:not\(\.phone-record, \.phone-group-row\) > td \{ display: block;/);
 });

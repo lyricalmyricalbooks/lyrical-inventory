@@ -36,6 +36,23 @@ const RECORDS = {
 };
 let detailId = 0;
 
+// A grouped heading row (All books → consignment, "Group by book") opens with
+// one cell spanning the first columns, then the book's totals. Left alone its
+// numbers fell down the screen as bare figures; each total now carries its
+// column's name and the row reads as a compact summary strip. A single cell
+// spanning the whole row is a message, not a heading, and stays as it is.
+function labelGroupRow(row, names) {
+  const cells = [...row.cells];
+  if (cells.length < 2 || cells.some(c => c.rowSpan !== 1)) return;
+  let col = 0;
+  cells.forEach((cell, index) => {
+    cell.dataset.phoneLabel = names[col] || '';
+    cell.classList.toggle('phone-record-lead', index === 0);
+    col += cell.colSpan;
+  });
+  row.classList.add('phone-group-row');
+}
+
 function enhanceRecords(table) {
   const body = table.tBodies[0];
   const config = RECORDS[body?.id];
@@ -52,7 +69,10 @@ function enhanceRecords(table) {
   body.setAttribute('role', 'rowgroup');
   for (const row of body.rows) {
     // Empty states and grouped rows keep their full-width message, without controls.
-    if (row.cells.length !== headers.length || [...row.cells].some(c => c.colSpan !== 1 || c.rowSpan !== 1)) continue;
+    if (row.cells.length !== headers.length || [...row.cells].some(c => c.colSpan !== 1 || c.rowSpan !== 1)) {
+      labelGroupRow(row, names);
+      continue;
+    }
     const rowLead = row.cells[lead].getAttribute('aria-hidden') === 'true'
       ? [...row.cells].findIndex(cell => cell.getAttribute('aria-hidden') !== 'true') : lead;
     if (rowLead < 0) continue;

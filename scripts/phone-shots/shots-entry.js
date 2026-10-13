@@ -10,6 +10,12 @@ try {
   // Opening the app once a day downloads a JSON backup; mark today's as done.
   localStorage.setItem('lm-last-backup-ts', String(Date.now()));
   for (const [k, v] of Object.entries({ ...demoLocalStorage, ...demoLocalStorageExtra })) localStorage.setItem(k, v);
+  // capture.mjs --storage=key=value,… : extra device settings for one run
+  // (e.g. allConGrouped=1 to shoot All books grouped by book).
+  for (const pair of new URLSearchParams(location.search).getAll('ls')) {
+    const at = pair.indexOf('=');
+    if (at > 0) localStorage.setItem(pair.slice(0, at), pair.slice(at + 1));
+  }
 } catch { /* storage unavailable */ }
 
 // A device with no network: the app's own fetches fail the way they do offline.
