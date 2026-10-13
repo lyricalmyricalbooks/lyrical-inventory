@@ -67,9 +67,11 @@ function cachedFetch(url) {
   return fs.readFileSync(file);
 }
 
-const server = await createServer({ configFile: path.join(HERE, 'vite.shots.config.js'), server: { port } });
+// strictPort off: when several runs (or agents) shoot at once, each takes the
+// next free port instead of failing.
+const server = await createServer({ configFile: path.join(HERE, 'vite.shots.config.js'), server: { port, strictPort: false } });
 await server.listen();
-const base = `http://localhost:${port}/`;
+const base = new URL('/', server.resolvedUrls?.local?.[0] || `http://localhost:${port}/`).href;
 const browser = await chromium.launch({ executablePath: chromePath });
 const report = [];
 
