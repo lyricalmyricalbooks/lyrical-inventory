@@ -1120,3 +1120,41 @@
   .ch-mix-tbl.phone-records .ch-mix-share { justify-content: flex-start; }
   .ch-mix-tbl.phone-records .ch-mix-pct { min-width: 0; text-align: left; }
 }
+
+/* ─── TAX CENTRE (round 4) ─── */
+@media (max-width: 768px) {
+  /* Log a business expense is the first thing on the screen; the cash-flow summary
+     follows it, then the Pending, Recurring and Trips sections. Desktop keeps its order. */
+  #tab-taxcenter #tc-sec-ledger { display: flex; flex-direction: column; }
+  #tab-taxcenter #tc-sec-ledger > #tc-expense-form-card { order: 0; }
+  #tab-taxcenter #tc-sec-ledger > .cf-card { order: 1; }
+  #tab-taxcenter #tc-sec-ledger > :not(#tc-expense-form-card):not(.cf-card) { order: 2; }
+
+  /* An empty section is one line of text with its one button, not a tall dashed box. */
+  #tab-taxcenter #tc-pending-list .tc-pending-empty { padding: 0; background: none; border: 0; text-align: left; }
+  #tab-taxcenter #tc-pending-list .tc-pending-empty-icon,
+  #tab-taxcenter #tc-pending-list .tc-pending-empty-sub { display: none; }
+  #tab-taxcenter #tc-pending-list .tc-pending-empty-title { margin: 0; font-size: var(--text-sm); }
+  #tab-taxcenter #tc-recurring-empty .empty-state { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: 0; text-align: left; }
+  #tab-taxcenter #tc-recurring-empty .empty-state > .e-icon,
+  #tab-taxcenter #tc-recurring-empty .tc-empty-desk { display: none; }
+  #tab-taxcenter #tc-recurring-empty .tc-empty-phone { display: inline; }
+  /* The card header already carries "+ Add subscription", so the empty line does not repeat it. */
+  #tab-taxcenter #tc-recurring-empty .tc-empty-action { display: none; }
+  #tab-taxcenter .tc-trip-empty-state { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: 0; background: none; border: 0; text-align: left; }
+  #tab-taxcenter .tc-trip-empty-state > .e-icon,
+  #tab-taxcenter .tc-trip-empty-state > p { display: none; }
+
+  /* The chart on a phone: each period is a row, its bars run left to right in the same
+     share of the tallest figure, and the printed figure sits just past the bar it belongs to. */
+  #tab-taxcenter .cf-chart-plot { flex-direction: column; height: auto; gap: var(--space-2); }
+  #tab-taxcenter .cf-chart-col { display: grid; grid-template-columns: 3.25rem minmax(0, 1fr); align-items: center; column-gap: var(--space-2); }
+  #tab-taxcenter .cf-chart-lane { grid-column: 2; grid-row: 1; flex-direction: column; align-items: stretch; justify-content: center; gap: var(--space-1); padding-right: 6.5rem; border-bottom: 0; }
+  #tab-taxcenter .cf-chart-axis { grid-column: 1; grid-row: 1; padding-top: 0; text-align: left; }
+  #tab-taxcenter .cf-chart-bar { flex: none; align-self: flex-start; width: var(--cf-v); max-width: none; height: 14px; min-width: 2px; }
+  #tab-taxcenter .cf-chart-val { display: block; position: absolute; left: calc(100% + var(--space-2)); top: 50%; transform: translateY(-50%); white-space: nowrap; font-family: var(--font-mono); font-size: var(--text-xs); font-variant-numeric: tabular-nums; color: var(--content-primary); }
+
+  /* Currency and amount share one row instead of the currency sitting above the amount. */
+  #tab-taxcenter .amount-field .price-wrap { display: flex; align-items: stretch; }
+  #tab-taxcenter #tc-exp-cur { flex: 0 0 5.5rem !important; margin-right: 0 !important; }
+}

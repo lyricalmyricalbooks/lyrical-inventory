@@ -97,7 +97,7 @@ snapshot and drift.
 **Evidence:** shots/before/light-375/tab-shipping-02.png to tab-shipping-06.png; shots/before/report.json pageHeight 13,819px for tab-shipping; index.html:3833 (Origin block with Save default), index.html:3865 (Destination block), index.html:4066 (Compare button)
 
 ### 15. tab-taxcenter — ugly, redesign
-**Status:** Open  
+**Status:** Done (Tax Centre round 4) — the expense form leads on a phone, the summary follows it, and each empty section folds to one line  
 **Problem:** The Tax Center is about 12,400 px tall. The Log Business Expense form, the screen's most-used action, starts after a full Cash Flow summary (three tall cards, six stat tiles and a chart). Then three empty sections (Pending, Recurring, Trips) each show a large dashed box with an icon and a blue button, so a new user scrolls past about two screens before reaching anything to act on.  
 **Fix:** Move the Log Business Expense card above the Cash Flow summary, or fold the summary behind a disclosure that keeps its headline net figure visible. Collapse each empty section to one line of text with its single button, rather than a full-height dashed panel.  
 **Evidence:** shots/before/light-375/tab-taxcenter-01.png to tab-taxcenter-05.png; index.html:2800 (Log Business Expense section, placed after the summary), index.html:2891 (Pending and To Confirm card), index.html:2902 (Recurring Subscriptions card), index.html:2927 (Trip tracking toggle and empty state)
@@ -163,13 +163,13 @@ snapshot and drift.
 **Evidence:** shots/before/light-375/modal-shipping-label-02.png (triangle at about y 1395-1415 under 'Canada'). src/style.css:4221-4230 (.field-warn sets display:flex, which overrides the browser's hidden attribute, and .field-warn::before adds the triangle). index.html:5681 (sl-country-hint has the hidden attribute). src/features/shipping.js:483-493 (hint text is cleared while hidden).
 
 ### 26. tab-taxcenter — ugly, polish
-**Status:** Open  
+**Status:** Done (Tax Centre round 4) — the reason AI Scan is greyed out now shows as text under the button  
 **Problem:** The AI Scan button on the expense form looks washed out and cannot be pressed until a receipt is added. The only explanation ('Select or capture a receipt first') is a hover tooltip, and a phone never shows that, so the owner sees a faded button with no reason why.  
 **Fix:** Keep the button looking enabled and show the reason as visible helper text under the button, reusing the existing small helper-text line that reads 'Storage: Cloud'. Do not rely on the title attribute for the explanation.  
 **Evidence:** shots/before/light-375/tab-taxcenter-03.png (pale AI Scan beside the blue Camera button); index.html:2857 (button is disabled and its reason lives only in the title attribute); style.css:2524 (.btn:disabled sets opacity .35)
 
 ### 27. tab-taxcenter — ugly, polish
-**Status:** Open  
+**Status:** Done (Tax Centre round 4) — flat fills, an undistorted year label, and the income and expense figures printed beside each bar  
 **Problem:** The Income vs Expenses chart squashes its year label into a thin sliver because the drawing is stretched to fit. Its bars use shiny top-to-bottom gradients rather than the flat ink fills used across the app, and it has no value scale, so the two bars give the owner no number to read.  
 **Fix:** Replace the two gradients with flat fills from the existing green and red tokens. Remove preserveAspectRatio none, or draw the year label as HTML so it keeps its shape. Print the income and expense totals as numbers beside each bar.  
 **Evidence:** shots/before/light-375/tab-taxcenter-02.png; src/features/taxcentre.js:3866 (svg uses preserveAspectRatio none, which distorts the label); src/features/taxcentre.js:3868-3875 (income-grad and expense-grad linear gradients)

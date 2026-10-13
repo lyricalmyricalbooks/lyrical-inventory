@@ -6036,12 +6036,22 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .cf-legend{display:flex;gap:12px;}
 .cf-legend-item{display:inline-flex;align-items:center;gap:5px;font-size:var(--text-xs);color:var(--text2);}
 .cf-legend-dot{width:9px;height:9px;border-radius:var(--r);display:inline-block;}
-.cf-chart-svg{width:100%;height:200px;display:block;}
-.cf-chart-base{stroke:var(--border);stroke-width:1;}
-.cf-chart-axis{font-family:var(--font-mono);font-size:var(--text-xs);fill:var(--text3);}
-.cf-chart-bar{cursor:pointer;transition:opacity .15s ease,filter .15s ease;outline:none;}
-.cf-chart-bar:hover,.cf-chart-bar:focus{opacity:.82;filter:drop-shadow(0 2px 4px rgba(16,15,13,.18));}
-.cf-chart-bar:focus-visible{stroke:var(--gold);stroke-width:2;}
+.cf-legend-dot.is-income{background:var(--green);}
+.cf-legend-dot.is-expense{background:var(--red);}
+/* Flat bars, one column per period. Each bar's height is a share of the tallest figure (--cf-v). */
+.cf-chart-plot{display:flex;gap:var(--space-2);height:200px;}
+.cf-chart-plot .cf-chart-col{display:flex;flex-direction:column;flex:1 1 0;min-width:0;}
+.cf-chart-lane{flex:1 1 0;min-height:0;display:flex;align-items:flex-end;justify-content:center;gap:var(--space-1);border-bottom:var(--stroke-hair) solid var(--border);}
+.cf-chart-bar{position:relative;flex:0 1 26px;max-width:26px;min-width:0;height:var(--cf-v);min-height:2px;cursor:pointer;transition:opacity var(--dur-fast) var(--ease-standard);}
+.cf-chart-bar.is-income{background:var(--green);}
+.cf-chart-bar.is-expense{background:var(--red);}
+.cf-chart-bar:hover{opacity:.82;}
+.cf-chart-bar:focus-visible{outline:var(--focus-ring-width) solid var(--focus-ring-color);outline-offset:var(--focus-ring-offset);}
+/* The printed figure only shows on a phone, beside its bar (see the Tax Centre phone section). */
+.cf-chart-val{display:none;}
+.cf-chart-axis{padding-top:var(--space-1);text-align:center;font-family:var(--font-mono);font-size:var(--text-xs);color:var(--text3);white-space:nowrap;}
+.tc-empty-phone{display:none;}
+.tc-empty-action{margin-top:12px;}
 .cf-chart-detail{margin-top:10px;}
 .cf-chart-hint{font-size:var(--text-sm);color:var(--text3);background:var(--cream);border:var(--stroke-hair) dashed var(--border);border-radius:var(--r2);padding:10px 12px;}
 .cf-detail-card{background:var(--cream);border:var(--stroke-hair) solid var(--border);border-radius:var(--r2);padding:12px;box-shadow:var(--elev-1);}
