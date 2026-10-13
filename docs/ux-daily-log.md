@@ -127,6 +127,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-09 | visual | Phone register — take-back (−) buttons and in-cart count | Made the round − buttons on the register tiles and cart lines, and the copy-count badge, square inked stamps with the offset shadow, pressing in when tapped, to match the rest of the register | — |
 | 2026-10-12 | visual | Phone section picker (Tax Centre, Settings, Customers) | Gave the section dropdown on a phone a small caps label, an inked outline with the offset shadow, a bold name that no longer runs under the arrow, and a press-in when tapped | — |
 | 2026-10-12 | visual | Phone register — Charge and Undo bars, charge sheet | Made the pinned Charge and Undo bars square slabs, turned the round green check into an inked square stamp, and made the total larger with small caps labels | — |
+| 2026-10-13 | visual | Phone Order History | Turned each order on a phone into its own inked card with an offset shadow and a gap between, with the amount leading and the channel in small caps, pressing in when tapped | — |
 
 ---
 

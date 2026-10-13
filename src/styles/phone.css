@@ -804,3 +804,23 @@
 @media (max-width: 768px) and (prefers-reduced-motion: reduce) {
   .phone-section-picker select { transition: none; }
 }
+
+/* Order History on a phone, Riso Press: every other record list became an inked card, but the
+   order rows stayed hairline-divided table rows, so the busiest list in the app was the one
+   screen that read as a spreadsheet. Each order is now its own card - ink outline, offset
+   shadow, a gap between cards - and the amount leads it (larger, heavier) over the channel. */
+@media (max-width: 768px) {
+  #tab-history .tbl tr.hist-row {
+    margin-bottom: var(--space-3); padding: var(--space-3) var(--space-4);
+    border: var(--stroke) solid var(--rule-ink); border-radius: var(--r2);
+    background: var(--surface-card); box-shadow: var(--elev-1);
+    transition: transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast) var(--ease-spring);
+  }
+  #tab-history .tbl tr.hist-row:hover { background: var(--surface-card) !important; }
+  #tab-history .tbl tr.hist-row:active { transform: translate(2px, 2px); box-shadow: none; }
+  #tab-history .tbl tr.hist-row > td:nth-child(5) { font-size: var(--text-md); font-weight: 800; font-variant-numeric: tabular-nums; }
+  #tab-history .tbl tr.hist-row > td:nth-child(2) { letter-spacing: var(--tracking-caps); text-transform: uppercase; }
+}
+@media (max-width: 768px) and (prefers-reduced-motion: reduce) {
+  #tab-history .tbl tr.hist-row { transition: none; }
+}
