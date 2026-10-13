@@ -6563,6 +6563,12 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   .all-consignment-table .tbl td{padding-left:10px;padding-right:10px;}
   .all-consignment-table .tbl th{letter-spacing:.08em;}
 }
+/* With the Returned column the ledger is eight wide; at the narrowest panel the
+   cells give up a little more padding so Status still fits, rather than a column hiding. */
+@container con-summary (max-width: 720px){
+  .all-consignment-table .tbl th,
+  .all-consignment-table .tbl td{padding-left:6px;padding-right:6px;}
+}
 @container con-summary (max-width: 580px){
   .all-consignment-table .col-sellthrough{display:none;}
 }

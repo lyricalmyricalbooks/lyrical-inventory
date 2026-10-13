@@ -1225,3 +1225,35 @@
   .exp-receipt-row .btn.exp-file-btn { min-height: var(--target-min); }
   .exp-receipt-row .exp-file-name { flex-basis: 0; }
 }
+
+/* ─── SWEEP FIXES A (round 4) ─── */
+@media (max-width: 768px) {
+  /* Intelligence quick asks: the list takes the panel's full width and shows every
+     question. The old 10rem cap cut the third one off with no scroll cue. */
+  #tab-intel .intel-rail { flex: 0 0 auto; width: 100%; max-height: none; overflow: visible; flex-direction: column; flex-wrap: nowrap; padding: var(--space-3) var(--space-4); }
+  #tab-intel .intel-rail-group { width: 100%; }
+  /* Each quick ask fills the panel's width (the wider layout capped it at 16rem) and
+     uses the app's typeface like the rest of the screen, not the system button font. */
+  #tab-intel .intel-rail-btn { display: block; width: 100%; max-width: none; white-space: normal; margin: 0 0 var(--space-2); font-family: inherit; }
+
+  /* All books → Group by book: the book name gets the full row, and Manage sits on
+     its own line under it, always visible (touch screens have no hover to reveal it). */
+  .con-group-lead-wrap { flex-wrap: wrap; row-gap: var(--space-1); }
+  .con-group-title { flex: 1 1 0; min-width: 0; overflow-wrap: anywhere; }
+  .con-group-jump-btn { opacity: 1; visibility: visible; flex: 0 1 100%; margin-left: 40px; min-height: var(--target-min); }
+
+  /* The three status tabs stay on one line; the count sits beside its word. */
+  .con-filter-btn { flex-wrap: nowrap; white-space: nowrap; gap: 3px; padding-inline: 2px; letter-spacing: 0.04em; }
+
+  /* A desktop table's sticky first column draws a 1px rule down its right edge. On a
+     phone card that rule reads as a stray line beside the title, so the card drops it. */
+  :is(.tab-panel, .modal) .phone-records :is(tr.phone-record, tr.phone-group-row) > td:first-child { box-shadow: none !important; }
+
+  /* The indented tree line belongs to the desktop table; a phone card has no room for it. */
+  .con-tree-guide { display: none; }
+
+  /* Return tags in History: the tag wraps inside its own box instead of spilling past
+     the bottom or right border. Channel tags keep their one-line rule. */
+  #tab-history #hist-body .ch-badge.ch-pos,
+  #tab-history #hist-body .chip-status.amber { white-space: normal; height: auto; min-height: 22px; max-width: 100%; line-height: var(--leading-snug); text-align: left; }
+}

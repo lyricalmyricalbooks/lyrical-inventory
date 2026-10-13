@@ -3,7 +3,9 @@
 const RECORDS = {
   'cust-body': { lead: 0, summary: [1, 5, 8] },
   'ml-body': { lead: 0, summary: [1, 4] },
-  'all-con-body': { lead: 0, summary: [1, 4, 6] },
+  // All books → consignment: Book leads; Store, Returned, Outstanding and Status show on the card.
+  // Returned sits before Outstanding so Sent = Sold + Returned + Outstanding reads down the card.
+  'all-con-body': { lead: 0, summary: [1, 4, 5, 7] },
   'dash-con-body': { lead: 0, summary: [4, 5] },
   // Sales by channel on the Dashboard: Channel leads, Units / Revenue / Share
   // carry the card, Transactions folds away. Its Revenue column was cut off.

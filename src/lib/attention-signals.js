@@ -326,7 +326,7 @@ function catalogueSignals(book, s, out) {
   if (missing > 0) {
     out.push({
       id: `catalogue-receipts:${book.id}`,
-      group: 'catalogue',
+      group: 'money',
       status: 'warn',
       icon: '📎',
       label: 'Expenses with no receipt',
