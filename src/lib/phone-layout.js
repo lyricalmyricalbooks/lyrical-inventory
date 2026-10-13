@@ -255,6 +255,30 @@ function trackKeyboard(win) {
   return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); };
 }
 
+// The bottom menu scrolls sideways when its tabs don't fit (the author view has
+// more than a phone can show). Mark the strip while tabs remain off to the
+// right, so the stylesheet can fade that edge as a "there's more" cue.
+function trackStripMore(strip) {
+  const win = strip.ownerDocument.defaultView;
+  const update = () => {
+    const hidden = strip.scrollWidth - strip.clientWidth - strip.scrollLeft;
+    const more = hidden > 4;
+    // Only write on a change: the observer below also sees this class.
+    if (strip.classList.contains('has-more-right') !== more) strip.classList.toggle('has-more-right', more);
+  };
+  strip.addEventListener('scroll', update, { passive: true });
+  win?.addEventListener('resize', update);
+  // Tabs appear and disappear as the role or book changes.
+  const observer = new MutationObserver(update);
+  observer.observe(strip, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style', 'hidden'] });
+  update();
+  return () => {
+    strip.removeEventListener('scroll', update);
+    win?.removeEventListener('resize', update);
+    observer.disconnect();
+  };
+}
+
 export function initPhoneLayouts(root, { closeModal = (id) => globalThis.attemptCloseModal?.(id) } = {}) {
   if (!root) return () => {};
   root.querySelectorAll('table').forEach(enhanceRecords);
@@ -264,6 +288,7 @@ export function initPhoneLayouts(root, { closeModal = (id) => globalThis.attempt
   const isPhone = () => globalThis.matchMedia?.('(max-width: 600px)').matches ?? false;
   cleanups.push(enableSwipeToClose(root, closeModal, isPhone));
   if (root.ownerDocument?.defaultView) cleanups.push(trackKeyboard(root.ownerDocument.defaultView));
+  root.querySelectorAll('.tab-bar').forEach(strip => cleanups.push(trackStripMore(strip)));
   // Renderers replace tbody contents after filtering or syncing. Only revisit
   // affected tables, never rebuild records or duplicate the desktop data model.
   const observer = new MutationObserver(mutations => {
