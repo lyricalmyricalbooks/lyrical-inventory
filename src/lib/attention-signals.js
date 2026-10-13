@@ -363,7 +363,8 @@ function printedQrSignals({ states, booksById }, out) {
     }
   }
   if (!sales.size) return;
-  const list = [...sales.values()].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  // ⚡ Bolt Optimization: Replaced localeCompare with native string comparison operators for a significant speedup in ISO date sorting.
+  const list = [...sales.values()].sort((a, b) => b.date < a.date ? -1 : (b.date > a.date ? 1 : 0));
   const n = list.length;
   out.push({
     id: 'orders-printed-qr',
