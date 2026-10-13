@@ -1354,16 +1354,6 @@ const BOOK_PARCEL_PRESETS = {
   boxset: { length: 32, width: 26, height: 8, dimUnit: 'cm', weight: 2.50, weightUnit: 'kg' }
 };
 
-function rgbToHex(rgb) {
-  if (!rgb || typeof rgb !== 'string' || !rgb.startsWith('rgb')) return rgb || '';
-  const rgbValues = rgb.match(/\d+/g);
-  if (!rgbValues || rgbValues.length < 3) return rgb;
-  const r = parseInt(rgbValues[0]).toString(16).padStart(2, '0');
-  const g = parseInt(rgbValues[1]).toString(16).padStart(2, '0');
-  const b = parseInt(rgbValues[2]).toString(16).padStart(2, '0');
-  return `#${r}${g}${b}`;
-}
-
 function selectBookAccentPreset(color) {
   const accentInput = $('nb-accent');
   if (accentInput) {
@@ -1376,13 +1366,19 @@ function onCustomAccentInput(color) {
   const hexDisplay = $('nb-accent-hex');
   if (hexDisplay) hexDisplay.textContent = color;
 
+  // Match on the stored hex (data-accent), not the swatch's CSS colour: the
+  // swatches are painted with ink tokens, so their inline colour never equals a hex.
+  const wanted = String(color || '').toLowerCase();
+  let matchedName = '';
   const swatches = document.querySelectorAll('#nb-accent-swatches .accent-swatch-btn');
   swatches.forEach(btn => {
-    const bg = btn.style.backgroundColor;
-    const isSelected = !!bg && (bg.toLowerCase() === color.toLowerCase() || rgbToHex(bg).toLowerCase() === color.toLowerCase());
+    const isSelected = (btn.dataset.accent || '').toLowerCase() === wanted;
     btn.classList.toggle('active', isSelected);
     btn.setAttribute('aria-pressed', String(isSelected));
+    if (isSelected) matchedName = btn.dataset.name || '';
   });
+  const nameEl = $('nb-accent-name');
+  if (nameEl) nameEl.textContent = matchedName || 'Custom colour';
 
   const accentInput = $('nb-accent');
   if (accentInput) updateModalAccentPreview(accentInput);
@@ -2439,6 +2435,8 @@ function renderCatalogList() {
           <div class="e-icon" aria-hidden="true">🧪</div>
           <strong style="color:var(--content-primary);font-size:var(--text-sm);">No Test Books Found</strong>
           <p style="color:var(--content-secondary);font-size:var(--text-xs);margin-top:2px;">Books created for sandbox and testing environments appear here, isolated from your live production catalogue.</p>
+          <p style="color:var(--content-muted);font-size:var(--text-xs);margin:var(--space-2) 0 var(--space-3);">To keep a book here, give it the title or ID “test”.</p>
+          <button type="button" class="btn sm" onclick="openAddBookModal()">+ Add a test book</button>
         </div>`;
     } else {
       testContainer.innerHTML = testBooks.map(b => `
@@ -9661,9 +9659,10 @@ export function renderOrders() {
   if (!visible.length) {
     const msg = hiddenCount > 0
       ? `<div class="empty-state web-empty success"><div class="e-icon">✅</div><strong>Everything is up to date</strong><span>All ${hiddenCount} found order(s) are already applied or hidden. Scan again to check for newer receipts.</span></div>`
-      : `<div class="empty-state web-empty"><div class="e-icon">📬</div><strong>No orders found for this book</strong><span>Make sure Google Sheets is connected, then scan Gmail for recent Big Cartel receipts.</span><button class="btn ink sm" onclick="fetchOrders()">Scan Gmail</button></div>`;
+      : `<div class="empty-state web-empty"><div class="e-icon">📬</div><strong>No orders found for this book</strong><span>Make sure Google Sheets is connected, then press Scan Gmail at the top of this screen.</span></div>`;
     list.innerHTML = msg;
     $('apply-all-btn').disabled = true;
+    setApplyAllHint(hiddenCount > 0 ? 'Nothing new to apply. Scan Gmail again for newer receipts.' : 'Scan Gmail first to find new orders.');
     return;
   }
 
@@ -9735,7 +9734,17 @@ export function renderOrders() {
     list.innerHTML += `<div class="orders-hidden-note">${hiddenCount} already-applied or hidden order(s) hidden.</div>`;
   }
 
-  $('apply-all-btn').disabled = !visible.some(o => !isApplied(o) && !isCancelled(o));
+  const canApply = visible.some(o => !isApplied(o) && !isCancelled(o));
+  $('apply-all-btn').disabled = !canApply;
+  setApplyAllHint(canApply ? '' : 'Nothing new to apply. Scan Gmail again for newer receipts.');
+}
+
+// The reason line under Apply all: shown only while the button is greyed out.
+function setApplyAllHint(text) {
+  const hint = $('apply-all-hint');
+  if (!hint) return;
+  hint.textContent = text || '';
+  hint.hidden = !text;
 }
 
 function cancelOrder(orderNum) {
@@ -12216,6 +12225,8 @@ export function getConsignmentStoresAcrossBooks() {
   return collectUniqueConsignmentStores(states, BOOK_LIST);
 }
 
+const STORE_QUICK_CHIP_LIMIT = 6;
+
 export function populateAddStoreDirectory() {
   const wrap = $('add-store-preset-wrap');
   if (!wrap) return;
@@ -12235,7 +12246,7 @@ export function populateAddStoreDirectory() {
 
   const select = $('ns-existing-store-select');
   if (select) {
-    select.innerHTML = `<option value="">— Select an existing store to auto-fill —</option>` +
+    select.innerHTML = `<option value="">— Choose a store to auto-fill —</option>` +
       allStores.map(st => {
         const inThisBook = currentStores.includes(st.name.toLowerCase());
         const loc = [st.city, st.country].filter(Boolean).join(', ');
@@ -12248,16 +12259,24 @@ export function populateAddStoreDirectory() {
 
   const chipsList = $('add-store-quick-chips');
   if (chipsList) {
-    chipsList.innerHTML = allStores.map(st => {
+    // Only the first few stores get a quick-select row; the dropdown above
+    // lists every store, and the note below says how many are left out.
+    const shown = allStores.slice(0, STORE_QUICK_CHIP_LIMIT);
+    const hiddenCount = allStores.length - shown.length;
+    chipsList.innerHTML = shown.map(st => {
       const inThisBook = currentStores.includes(st.name.toLowerCase());
       const loc = st.city || st.country || '';
       return `<button type="button" class="store-quick-chip" data-store-name="${escapeHtml(st.name)}" onclick="handleSelectExistingStore('${escapeHtml(st.name.replace(/'/g, "\\'"))}')" title="${escapeHtml(st.name)}${loc ? ` · ${escapeHtml(loc)}` : ''}">
-        <span class="chip-dot"></span>
-        <span class="chip-name">${escapeHtml(st.name)}</span>
-        ${loc ? `<span class="chip-meta">${escapeHtml(loc)}</span>` : ''}
-        ${inThisBook ? `<span class="chip-badge">In book</span>` : ''}
+        <span class="chip-dot" aria-hidden="true"></span>
+        <span class="chip-copy">
+          <span class="chip-name">${escapeHtml(st.name)}</span>
+          ${loc ? `<span class="chip-meta">${escapeHtml(loc)}</span>` : ''}
+          ${inThisBook ? `<span class="chip-status gray sm">In book</span>` : ''}
+        </span>
       </button>`;
-    }).join('');
+    }).join('') + (hiddenCount > 0
+      ? `<div class="add-store-more" role="note">+ ${hiddenCount} more. Pick them from the list above.</div>`
+      : '');
   }
 
   const banner = $('add-store-selected-banner');

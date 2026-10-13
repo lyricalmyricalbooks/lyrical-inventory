@@ -121,7 +121,7 @@ snapshot and drift.
 **Evidence:** shots/before/light-375/tab-customers-01.png, tab-customers-02.png, tab-customers-03.png; shots/before/dark-375/tab-customers-01.png; index.html:1477 (top Stripe button); src/features/customers.js:768-772 (the empty state repeats the Stripe button and adds Open checkout); src/features/customers.js:704 and 710 (the source list falls back to an em dash after 'from')
 
 ### 19. Add consignment store (choose from existing stores) — ugly, redesign
-**Status:** Open  
+**Status:** Done (polish sweep round 4) — the quick-select shows each store on one full-width row with 'In book' under the name; the first six are listed and a '+ N more' note points to the dropdown
 **Problem:** The quick-select list is a small scrolling box inside the form. Store names wrap onto two lines, the 'In book' tag squeezes onto two lines, and the third store is cut off mid-row with no scroll cue, so the owner has to guess that more stores are below. The dropdown placeholder also runs into its arrow.  
 **Fix:** Replace the scrolling chip box with a one-line-per-store list that fits the phone width, or a search field showing a few results. Keep each store name on one line, show 'In book' under the name as a small .chip-status.gray, and make the list's overflow visible with a '+ N more' line or a search.  
 **Evidence:** shots/before/light-375/modal-add-store-01.png and shots/before/dark-375/modal-add-store-01.png; src/style.css:3835-3841 (the quick list is capped at 120px and scrolls); src/main.js:12217 ('In book' badge); src/main.js:12197 (dropdown placeholder text)
@@ -145,7 +145,7 @@ snapshot and drift.
 **Evidence:** shots/before/light-375/modal-batch-expense-01.png and modal-batch-expense-02.png (empty unlabelled dropdown, two Apply buttons flanking the date box); index.html:2371-2379 (Select all, Select none, Deselect duplicates, and two buttons both labelled Apply)
 
 ### 23. Add new book (sheet, Project Accent Theme swatches) — ugly, polish
-**Status:** Open  
+**Status:** Done (polish sweep round 4) — one swatch per colour (the second red and second purple are dropped; stored hex values are unchanged), and the chosen colour's name shows under the row. Not verified: the circles look cut at the bottom in the 375px shot; this appears to be the scroll edge of the form, not a clipping bug
 **Problem:** The colour choices are near-duplicates: two reds and two purples. They are told apart only by a hover tooltip, so the owner cannot pick reliably by sight. The circles also look sliced off along their bottom edge in the screenshot, and several colours (bright violet, sky blue, orange) are outside the app's printed-ink palette.  
 **Fix:** Keep one swatch per distinct colour and drop the second red and the second purple. Use Riso ink tokens rather than the extra bright hues. Show the chosen colour's name as a caption under the row, and make sure the swatch container does not clip the circles.  
 **Evidence:** shots/before/light-375/modal-add-book-01.png and modal-add-book-02.png (swatch row cut flat along the bottom); index.html:5884-5892 (eight swatch buttons; two use var(--gold)/var(--rose) reds and two use var(--violet) purples); src/style.css:10149-10160 (swatches are 28 px circles that wrap); src/styles/phone.css:757 (phone size 40 px)
@@ -187,49 +187,49 @@ snapshot and drift.
 **Evidence:** shots/before/light-375/tab-history-01.png and tab-history-02.png (the order number column starts at different positions on the Store, Book Fair, Direct and Website cards). src/style.css:20091 (the card grid uses an auto-sized right column, so its width changes with each card's content).
 
 ### 30. tab-bigcartel — ugly, polish
-**Status:** Open  
+**Status:** Done (polish sweep round 4) — the password box says 'Paste your token here', each field has a one-line hint, and the two buttons stack full width
 **Problem:** The Big Cartel setup form is confusing before anything is typed. The password box shows a row of dots, which looks like a saved password even when none is saved. There is no line saying where to find the subdomain, username or token. The two buttons share one row, so 'Test Connection' wraps onto two lines.  
 **Fix:** Use a plain text placeholder such as 'Paste your token here' in the password box, add a short line under the fields saying where each value is found in the Big Cartel dashboard, and stack the two buttons full-width so neither wraps.  
 **Evidence:** shots/before/light-375/tab-bigcartel-01.png (dots in the password box; Test Connection on two lines). index.html:3616 (password placeholder is a row of dots). index.html:3605-3622 (three fields and two buttons with no help text). src/styles/phone.css:105-106 (the buttons share the row and grow to fill it).
 
 ### 31. tab-website — ugly, polish
-**Status:** Open  
+**Status:** Done (polish sweep round 4) — each label reserves three lines so the figures line up, and 'Website orders in your books' is now 'Website orders'
 **Problem:** The four status boxes at the top of the Website tab don't line up. Labels such as 'Website orders in your books' wrap onto three lines, so the numbers sit at different heights from box to box and the row looks ragged.  
 **Fix:** Give each label a fixed-height area, or move the value above the label, so every number sits on the same line. Shorten the longest labels too.  
 **Evidence:** shots/before/light-375/tab-website-01.png (values sit at different heights across the four boxes). src/styles/website-link.css:86-101 (labels have no fixed height, so the value moves with the label). src/features/website-link.js:851-854 (the label text).
 
 ### 32. tab-website — ugly, polish
-**Status:** Open  
+**Status:** Done (polish sweep round 4) — the empty box no longer repeats Scan Gmail, and a reason line sits under Apply all new orders while it is greyed out
 **Problem:** The Website tab shows two identical 'Scan Gmail' buttons on one screen. The main 'Apply all new orders' button sits greyed out at the bottom with no line saying what it is waiting for, so it reads as broken.  
 **Fix:** Keep one Scan Gmail button at the top and point the empty-state box to it. Show a one-line reason under Apply all new orders, such as 'Scan Gmail first to find new orders.'  
 **Evidence:** shots/before/light-375/tab-website-02.png (full-width Scan Gmail near the top, a second one in the empty-state box, and the disabled apply button at the bottom). index.html:1295 (apply button is disabled with no explanation beside it).
 
 ### 33. tab-webanalytics — ugly, polish
-**Status:** Open  
+**Status:** Done (polish sweep round 4) — shorter intro, a flat line icon instead of the emoji, a palette surface for the link panel, and tighter padding on phone
 **Problem:** The Web Analytics setup screen puts a large hero (big chart icon, long title, paragraph) across the first screen, so the one box the owner needs, the dashboard link field, starts about three-quarters of the way down. Its panel is tinted pink with a colour that is not part of the app's palette, and it turns muddy brown at night.  
 **Fix:** Shorten the intro to a line or two and cut the top padding so the link field sits near the top. Use a palette surface token in place of the pink tint, and swap the full-colour emoji for a flat icon in the app's ink style.  
 **Evidence:** shots/before/light-375/tab-webanalytics-01.png (link field near the bottom of the first screen). shots/before/dark-375/tab-webanalytics-01.png (panel tinted reddish-brown). index.html:4588 (48px emoji). index.html:4589 (large heading styled inline). index.html:4592 (hard-coded rgba tint instead of a palette token). index.html:4598 (button height set inline).
 
 ### 34. Open call (contributors) — ugly, polish
-**Status:** Open  
+**Status:** Done (polish sweep round 4) — Add and Import show once (in the empty box while the list is empty), and Check replies becomes a line of text. Not reproduced: the search placeholder is not cut off at 375px, so it was left as 'Search contributors'
 **Problem:** The same two actions, 'Add contributors' and 'Import from Gmail', appear in the top card and again in the empty box directly below. 'Check replies' is faded and unexplained until a contributor exists, and in night mode it nearly disappears. The search placeholder is cut off mid-word, so the owner cannot read what the search covers.  
 **Fix:** Show the add and import buttons once: keep them in the empty box and leave them out of the top card while the list is empty. Shorten the search placeholder to 'Search name or email…' and replace the faded Check replies button with a line of plain text such as 'Add a contributor to check for replies'.  
 **Evidence:** shots/before/light-375/tab-opencall-01.png and tab-opencall-02.png; shots/before/dark-375/tab-opencall-01.png; src/features/opencall.js:1032-1034 (top-card actions; Check replies is disabled when there are no contributors); src/features/opencall.js:1231-1232 (the empty state repeats both actions); src/features/opencall.js:947 (placeholder text too long for the field)
 
 ### 35. Help and questions — ugly, polish
-**Status:** Open  
+**Status:** Done (polish sweep round 4) — phone rows use a hairline border and no shadow; the category tiles keep their heavy outline
 **Problem:** Each of the 21 questions is its own box with a heavy black outline and a hard shadow, so the list reads like twenty-one buttons stacked on top of each other. Heavy outlines are meant for big objects, and list rows are supposed to use a thin line, so the page is loud and hard to scan.  
 **Fix:** Change .help-q to the hairline border (var(--stroke-hair) in var(--border-default)) and drop its shadow, keeping the 44px summary target. Keep the heavy 2px outline on the category tiles, which are the real buttons.  
 **Evidence:** shots/before/light-375/tab-help-01.png through tab-help-04.png; shots/before/dark-375/tab-help-02.png; src/style.css:21003-21004 (.help-q has a 2px ink border and a shadow around each 44px summary row)
 
 ### 36. Backups — ugly, polish
-**Status:** Open  
+**Status:** Done (polish sweep round 4) — plain wording (no Firestore or Publisher mode), a one-line note under each backup button, the heading in the content colour, and 'How restoring works' folded. Two backup buttons remain, each explained
 **Problem:** The page uses words an owner will not know, such as 'Firestore' and 'Publisher mode'. It has two backup buttons, 'Create backup now' and 'Save backup to my computer', with no line explaining how they differ. The section heading is printed in the red used for errors, and the restore section opens with several paragraphs before any button.  
 **Fix:** Rewrite the intro lines in plain words (for example 'The app keeps an automatic daily copy online' and 'Save a copy to your computer'). Put one short sentence under each backup button saying what it does, set the section heading in the content colour instead of red, and move the restore detail behind a 'How restoring works' disclosure.  
 **Evidence:** shots/before/light-375/tab-backups-01.png through tab-backups-04.png; index.html:4946 (heading in the gold-text red); index.html:4947 and 4960 ('Firestore' and 'Publisher mode' copy); index.html:4950 ('Create backup now'); index.html:4986 ('Save backup to my computer')
 
 ### 37. Sheets settings (Book Catalog and Sandbox) — ugly, polish
-**Status:** Open  
+**Status:** Done (polish sweep round 4) — catalogue cards left-aligned on phone, and the Sandbox empty state has '+ Add a test book' and a neutral tag. Test books are matched on the exact title or ID 'test'
 **Problem:** In the Book Catalog, each title starts at a slightly different left position because its dot-and-name block sits centred in the card, so the list looks uneven. The Sandbox empty state explains what would appear there but offers no button to add a test book. Its 'Isolated test sandbox' tag uses a lilac colour that is not part of the day or night palette.  
 **Fix:** Left-align the catalog card contents, with a fixed-width dot column before the title, so the names line up. Add a next-step button to the Sandbox empty state that leads to adding a test book. Replace the lilac tag with an existing .chip-status tone such as .gray.  
 **Evidence:** shots/before/light-375/tab-sheets-01.png and tab-sheets-02.png; shots/before/dark-375/tab-sheets-02.png; src/style.css:6894-6897 (.catalog-card centres its contents; the exact cause of the offset was not fully traced); src/main.js:2432-2441 (empty-state text with no action button); index.html:4694 (inline lilac tag)
@@ -241,19 +241,19 @@ snapshot and drift.
 **Evidence:** shots/before/light-375/tab-today-01.png (tile icons at about y 790-840 and 1070-1130). shots/before/light-375/tab-today-02.png (workspace rows at about y 870-1350). index.html:1323, 1329, 1337 (tile icons), index.html:1346-1347 (workspace row icons).
 
 ### 39. Transfer stock (pop-up) — polish, polish
-**Status:** Open  
+**Status:** Done (polish sweep round 4) — the empty preview box is hidden, and the label reads 'On hand'
 **Problem:** The Transfer stock form shows an empty outlined box between the note field and the buttons until a quantity is entered. It looks like a missing message. The 'Publisher On-Hand' label also breaks at its hyphen onto two lines.  
 **Fix:** Hide the preview box while it is empty by adding .st-preview-box:empty{display:none} next to the rule at src/style.css:2396. Shorten the 'Publisher on-hand' label to 'On hand' so it fits on one line.  
 **Evidence:** shots/before/light-375/modal-stock-transfer-01.png (empty box at about y 1380-1425). index.html:6697 (empty st-preview-box is always rendered). src/style.css:2396 (.st-preview-box styling).
 
 ### 40. tab-shipping — polish, polish
-**Status:** Partly done — the select arrow no longer runs over text on the shipping screen; the Duties label and the Save to preset line are still open  
+**Status:** Done (polish sweep round 4) — Save to Preset sits on its own line under the preset dropdown, and the Duties option reads 'Auto'
 **Problem:** Small layout collisions. The Duties dropdown cuts its selected text off with an ellipsis ('Auto, DDP to the US, DDU elsewh...') and the arrow sits on the last letters. The Save to preset button is jammed onto the 'Load package from' label line rather than sitting beside the dropdown it saves.  
 **Fix:** Shorten the option label to 'Auto' because the helper text directly below already explains DDP and DDU. Move the Save to preset button onto its own line under the preset dropdown, using the same outline button style as Save to book preset.  
 **Evidence:** shots/before/light-375/tab-shipping-05.png (Duties dropdown) and tab-shipping-01.png (preset row); index.html:3953 (long option text that truncates), index.html:3811-3812 (Load Package From label with the Save button inline on the same line)
 
 ### 41. tab-shipping — polish, polish
-**Status:** Partly done — Ship several orders at once and the verify chips are solid on phone, and raw colours in the shipping profit tiles are now tokens; the expense category swatches are still open  
+**Status:** Partly done — the batch button is now a solid ink outline. The expense category swatches are on the Tax Centre screen, not the shipping screen, so they are left for that screen
 **Problem:** Off-system styling creeps in. The 'Ship several orders at once' button uses a dashed border, while Riso Press outlines are solid. The six expense categories each get their own swatch colour (blue, orange, pink, green, grey), and category names are underlined red links. The app's rule is that only two inks stand out and the rest report.  
 **Fix:** Give .ship-flow-batch a solid 2px ink outline like the other outline buttons. Use one neutral swatch for categories, or the press blue and flare inks only. Make category names plain text with a chevron as the tap cue, not underlined red links.  
 **Evidence:** shots/before/light-375/tab-shipping-06.png (dashed batch button); style.css:10725 (.ship-flow-batch sets border-style dashed); shots/before/light-375/tab-taxcenter-06.png (six swatch colours and red underlined category links); src/features/taxcentre.js:983 (per-category dotColor swatch and tc-cat-link)

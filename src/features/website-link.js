@@ -849,7 +849,7 @@ function factsHtml() {
   ].filter(Boolean).join(' · ') : '';
   return `<dl class="wl-facts">
       ${fact('Last brought in', lastImport ? ago(lastImport) : 'Not yet', run)}
-      ${fact('Website orders in your books', String(orders))}
+      ${fact('Website orders', String(orders))}
       ${fact('Stock sent to the website', lastFeed ? ago(lastFeed) : 'Not yet')}
       ${fact('Website last checked in', heartbeat ? ago(heartbeat) : 'Not yet', heartbeat ? '' : 'It checks in every few minutes once it’s connected.')}
     </dl>`;

@@ -153,3 +153,4 @@ looked at, and re-proposing it costs a run.
 | CSS anchor positioning for dropdowns and tooltips | **Not yet.** The right model, but support is still Chromium-led. Revisit later. See `.agents/UX_PATTERNS.md` §8. |
 | Scroll-driven animations | **Rejected.** This is a dense financial tool; scroll-jacking hurts more than it delights. See `.agents/UX_PATTERNS.md` §8. |
 | 2026-10-13 | behavioural | Shipping (phone) | Sender address folds to one line once saved; pricing options fold under More options; selects clear their arrow; batch button and chips get solid outlines | pending |
+| 2026-10-13 | behavioural | Phone polish round 4 | Help is a plain list; Backups uses plain words with one note under each backup button; Website figures line up and Apply all explains itself; Open Call shows Add and Import once; Big Cartel fields have hints; store picker, accent swatches, Book Catalog, transfer and shipping preset tidied | pending |

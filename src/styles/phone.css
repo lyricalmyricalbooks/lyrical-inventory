@@ -1474,3 +1474,47 @@
   #tab-shipping .shipping-money.margin.positive { border-color: color-mix(in srgb, var(--green) 24%, transparent); }
   #tab-shipping .shipping-money.margin.negative { border-color: color-mix(in srgb, var(--red) 24%, transparent); }
 }
+
+
+/* ─── POLISH SWEEP (round 4) ─── */
+@media (max-width: 768px) {
+  /* Consignment store picker: one store per full-width row, name on one line,
+     'In book' under it. Overflow is said in words by the note under the list. */
+  .add-store-preset-box .add-store-chips-list { flex-direction: column; flex-wrap: nowrap; gap: 0; max-height: none; border: var(--stroke-hair) solid var(--border-default); border-radius: var(--r2); overflow: hidden; }
+  .add-store-preset-box .store-quick-chip { width: 100%; min-height: 44px; border: 0; border-bottom: var(--stroke-hair) solid var(--border-subtle); border-radius: 0; padding: var(--space-2) var(--space-3); justify-content: flex-start; align-items: center; box-shadow: none; transform: none; }
+  .add-store-preset-box .store-quick-chip:last-of-type { border-bottom: 0; }
+  .add-store-preset-box .store-quick-chip .chip-copy { min-width: 0; flex: 1; }
+  .add-store-preset-box .store-quick-chip .chip-name { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .add-store-preset-box .add-store-more { padding: var(--space-2) var(--space-3); border-top: var(--stroke-hair) solid var(--border-subtle); }
+  #ns-existing-store-select { padding-right: 2.5rem; }
+
+  /* Accent swatches: the row keeps room for the circles, and the name of the
+     chosen colour sits under it. */
+  #nb-accent-swatches { padding: var(--space-1) 0; }
+  .accent-name-caption { font-size: var(--text-xs); color: var(--content-muted); margin-top: var(--space-1); }
+
+  /* Big Cartel: the two buttons stack, each full width, so neither wraps. */
+  #tab-bigcartel .phone-connection-actions { flex-direction: column; }
+  #tab-bigcartel .phone-connection-actions .btn { width: 100%; white-space: nowrap; }
+
+  /* Website tab: the four figures line up because each label reserves three lines. */
+  #tab-website .wl-fact dt { min-height: 3lh; }
+  #tab-website #web-orders-status .web-stat-label { min-height: 2lh; }
+
+  /* Web Analytics setup: the dashboard field starts near the top of the screen. */
+  #tab-webanalytics .wa-setup-card { margin: var(--space-3) auto; padding: var(--space-4); }
+  #tab-webanalytics .wa-setup-hero { margin-bottom: var(--space-3); }
+  #tab-webanalytics .wa-setup-icon { margin-bottom: var(--space-1); }
+  #tab-webanalytics .wa-setup-panel { padding: var(--space-3); margin-bottom: var(--space-3); }
+
+  /* Help: each question is a list row with a hairline, not a heavy boxed button. */
+  #tab-help .help-q { border: var(--stroke-hair) solid var(--border-default); box-shadow: none; }
+
+  /* Book Catalog: every title starts at the same left edge. */
+  #tab-sheets .catalog-card { flex-direction: column; align-items: stretch; justify-content: flex-start; text-align: left; }
+  #tab-sheets .catalog-card > div:first-child { justify-content: flex-start; width: 100%; min-width: 0; }
+  #tab-sheets .catalog-dot { flex: none; }
+
+  /* Shipping: the preset save button sits on its own line under the dropdown. */
+  #tab-shipping .ship-preset-save-row { justify-content: flex-start; }
+}
