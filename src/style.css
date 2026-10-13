@@ -7123,6 +7123,22 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   line-height: var(--leading-snug);
 }
 .qr-card.is-empty .qr-frame { box-shadow: inset 0 0 0 1px var(--border-default); }
+/* A book with no payment link: no code box, just the note and one full-width
+   Set payment link button. The status pill is a phone-only summary. */
+.qr-card-empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: auto;
+}
+.qr-card-empty-note {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--content-secondary);
+  line-height: var(--leading-snug);
+}
+.qr-card-setlink { width: 100%; justify-content: center; }
+.qr-card-status { display: none; }
 .qr-card-footer {
   display: flex;
   flex-direction: column;
@@ -7846,6 +7862,11 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 
    Rendered only when at least one filter is on: a permanent "no filters" strip
    is noise, and noise is what teaches people to stop reading the warning. */
+/* Phone-only folds (Customers filter and export, Intelligence privacy line).
+   Desktop keeps every control visible: the toggles and the one-line summary
+   stay out of the layout. Phone rules live in styles/phone.css. */
+.cust-fold-toggle { display: none; }
+.intel-privacy-line { display: none; }
 .seg-filter-bar {
   container-type: inline-size;
   display: flex;

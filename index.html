@@ -817,6 +817,12 @@
     </div>
   </div>
 
+  <!-- Once the privacy note is acknowledged, this one line stands in for it (phone). -->
+  <div class="intel-privacy-line" id="intel-privacy-line" hidden>
+    <span class="intel-privacy-text">Privacy: your figures go to Gemini only when you ask</span>
+    <button type="button" class="btn ghost sm sys-target" id="intel-privacy-toggle" aria-expanded="false" aria-controls="intel-disclosure" onclick="toggleIntelPrivacyDetails()">Details</button>
+  </div>
+
   <p class="intel-notice" id="intel-notice" hidden></p>
   <p class="sr-only" id="intel-status" role="status" aria-live="polite"></p>
 
@@ -1490,7 +1496,10 @@
       </div>
     </div>
 
-    <!-- Filters Panel -->
+    <!-- Filters Panel. On phone it folds behind the Filter toggle (closed by default). -->
+    <div class="cust-fold cust-filter-fold">
+    <button type="button" class="btn sm cust-fold-toggle" id="cust-filter-toggle" aria-expanded="false" aria-controls="cust-filter-body" onclick="toggleCustFold(this)">Filter</button>
+    <div class="cust-fold-body" id="cust-filter-body">
     <div class="cust-filter-grid">
       <div class="form-group" style="margin:0;">
         <label for="cust-search">Search Text</label>
@@ -1530,6 +1539,8 @@
         </select>
       </div>
     </div>
+    </div>
+    </div>
 
     <!-- Which filters are narrowing the segment, and how many buyers Copy /
          Export / Email will actually reach. Populated by _renderCustFilterBar()
@@ -1537,10 +1548,15 @@
     <div id="cust-active-filters" class="seg-filter-bar" role="status" aria-live="polite" hidden></div>
 
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:12px;">
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <button class="btn" onclick="copyCustomerEmails()">📋 Copy segment</button>
-        <button class="btn" onclick="exportCustomersCSV()">⬇ Export segment</button>
-        <button class="btn gold" onclick="emailCustomerSegment()" title="Open Gmail with the filtered segment pre-filled as BCC">✉ Email segment</button>
+      <div class="cust-fold cust-export-fold">
+        <button type="button" class="btn sm cust-fold-toggle" aria-expanded="false" aria-controls="cust-export-body" onclick="toggleCustFold(this)">Export</button>
+        <div class="cust-fold-body" id="cust-export-body">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <button class="btn" onclick="copyCustomerEmails()">📋 Copy segment</button>
+            <button class="btn" onclick="exportCustomersCSV()">⬇ Export segment</button>
+            <button class="btn gold" onclick="emailCustomerSegment()" title="Open Gmail with the filtered segment pre-filled as BCC">✉ Email segment</button>
+          </div>
+        </div>
       </div>
       <span id="cust-summary" style="font-size:var(--text-sm);color:var(--text3);font-weight:500;"></span>
     </div>

@@ -43,7 +43,7 @@ snapshot and drift.
 **Evidence:** shots/before/light-375/tab-taxcenter-06.png; index.html:2950-2954 (tbl-wrap around tc-cat-tbl); style.css:2174 (.tbl-wrap overflow-x:auto, so the money column scrolls out of view); src/lib/phone-layout.js RECORDS map has no entry for tc-category-body, so the table never becomes stacked cards on a phone
 
 ### 6. Payment QR codes (QR codes tab) — broken, redesign
-**Status:** Open  
+**Status:** Done (round 4: QR codes, Customers and Intelligence phone pass)  
 **Problem:** Each book shows an empty box that says no Stripe link is set, plus two action buttons that look washed out and are hard to read. There is no button on the card to set the link, so the owner has to leave for the book editor. Three books make a long scroll of mostly empty boxes, and in night mode the empty box is a stark white block. (This is the QR codes tab, not the Payments screen.)  
 **Fix:** When a book has no link, replace the placeholder with one full-width 'Set payment link' .btn.gold that opens the book editor, and show each card as a compact row (title, price, status pill) instead of a tall card. Give the empty placeholder a --surface-inset fill so night mode is not white.  
 **Evidence:** shots/before/light-375/tab-qrcodes-01.png, tab-qrcodes-02.png, tab-qrcodes-03.png; shots/before/dark-375/tab-qrcodes-01.png; src/main.js:2692 (empty placeholder text with no action); src/main.js:2704-2705 (Copy link and Download are disabled, so they take the faded disabled style)
@@ -73,7 +73,7 @@ snapshot and drift.
 **Evidence:** shots/before/light-375/tab-all-overview-01.png through tab-all-overview-06.png (page height 7923 px in shots/before/report.json); index.html:883 (Combined sales by channel section); src/main.js:6261 (per-book channel legend rendered for each book)
 
 ### 11. Intelligence (tab-intel) — ugly, redesign
-**Status:** Open  
+**Status:** Done (round 4: QR codes, Customers and Intelligence phone pass)  
 **Problem:** Before the owner can type a question, they scroll past a data-privacy notice, a consent box with an "I understand" button, a blue setup notice, and three quick-ask buttons. The setup notice says to add an AI key in Tax Centre, but it is plain text with no button to get there, and the message box below is greyed out. The quick-ask buttons also use a different typeface from the rest of the app.  
 **Fix:** When no AI key is saved, show the setup notice as one row with a .btn that opens Tax Centre settings. Collapse the consent card once it has been acknowledged. Move the message box above the quick asks, and set the quick-ask buttons to inherit the app font.  
 **Evidence:** shots/before/light-375/tab-intel-01.png and tab-intel-02.png (typing box sits about 1,400 px down); shots/before/dark-375/tab-intel-01.png; src/features/intel.js:386 (setup notice is text only); index.html:825-834 (quick-ask rail above the message box); src/style.css:18976-18992 (.intel-rail-btn sets no font-family, so the buttons fall back to the system font)
@@ -115,7 +115,7 @@ snapshot and drift.
 **Evidence:** shots/before/light-375/tab-history-02.png through tab-history-06.png (six screens for 19 orders). src/lib/phone-layout.js:65 (adds a Details button to every order). src/styles/phone.css:466-472 (draws that button as a full-width box with a heavy ink outline and shadow). Note: the report's 22px pencil and arrow targets are enlarged by CSS (src/style.css:4392, an enlarged hit area), so that flag overstates the problem.
 
 ### 18. Customers (All discovered buyers) — ugly, redesign
-**Status:** Open  
+**Status:** Done (round 4: QR codes, Customers and Intelligence phone pass)  
 **Problem:** Before the owner sees any buyer or a clear next step, they must scroll past a four-field filter panel and three export buttons. The summary line ends in a dangling 'from —' when there is no source, and the 'Pull buyers from Stripe' button appears twice on the screen. Because the list sits far down the page, the screen feels long and unfinished.  
 **Fix:** On phones, fold the filter panel behind one 'Filters (n)' .btn.sm disclosure so the results or the empty state sit directly under the main action. Show the 'from …' clause only when there is at least one source, and hide the top Stripe button while the empty state with its own Stripe button is showing.  
 **Evidence:** shots/before/light-375/tab-customers-01.png, tab-customers-02.png, tab-customers-03.png; shots/before/dark-375/tab-customers-01.png; index.html:1477 (top Stripe button); src/features/customers.js:768-772 (the empty state repeats the Stripe button and adds Open checkout); src/features/customers.js:704 and 710 (the source list falls back to an em dash after 'from')

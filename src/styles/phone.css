@@ -1300,3 +1300,78 @@
   #artist-reimburse-banner .metric-banner-actions { align-items: stretch; width: 100%; }
   #artist-reimburse-banner .metric-banner-hint { text-align: left; }
 }
+
+/* ─── QR + CUSTOMERS + INTEL (round 4) ─── */
+/* Phone only. Payment QR cards become compact rows (code left, title, price,
+   status and actions right). Customers: the buyer list leads, with the filter
+   panel and the export buttons folded behind toggles. Intelligence: once the
+   privacy note is acknowledged it collapses to one line, so the question box
+   sits in the first screenful. */
+@media (max-width: 768px) {
+  /* QR cards: a compact row. The code sits in the left column, spanning the
+     header and the footer, so title, price, status and actions stack on the right. */
+  #tab-qrcodes .qr-grid { gap: var(--space-3); }
+  #tab-qrcodes .qr-card:not(.is-empty) {
+    display: grid;
+    grid-template-columns: 124px minmax(0, 1fr);
+    align-items: start;
+    gap: var(--space-2) var(--space-3);
+    padding: var(--space-3);
+  }
+  #tab-qrcodes .qr-card:not(.is-empty) > .qr-card-head { grid-column: 2; grid-row: 1; }
+  #tab-qrcodes .qr-card:not(.is-empty) > .qr-frame {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    align-self: start;
+    width: 124px;
+    height: 124px;
+    padding: 6px;
+  }
+  #tab-qrcodes .qr-frame-target { width: 100%; height: 100%; }
+  #tab-qrcodes .qr-frame canvas,
+  #tab-qrcodes .qr-frame img { width: 100% !important; height: auto !important; }
+  #tab-qrcodes .qr-card:not(.is-empty) > .qr-card-footer { grid-column: 2; grid-row: 2; margin-top: 0; gap: var(--space-2); }
+  #tab-qrcodes .qr-card-status { display: inline-flex; align-self: flex-start; margin-top: var(--space-2); }
+  #tab-qrcodes .qr-card-actions { flex-wrap: wrap; }
+  #tab-qrcodes .qr-card-actions .btn { flex: 1 1 auto; }
+  #tab-qrcodes .qr-card-empty { gap: var(--space-2); }
+  #tab-qrcodes .qr-card-empty-note { font-size: var(--text-sm); }
+
+  /* Customers: the filter panel and the export buttons fold away; the buyer
+     list is what the owner sees first. Desktop keeps both open. */
+  #tab-customers .cust-fold { display: block; }
+  #tab-customers .cust-fold-toggle { display: inline-flex; }
+  #tab-customers .cust-fold-body { display: block; margin-top: var(--space-3); }
+  #tab-customers .cust-fold:not(.is-open) > .cust-fold-body { display: none; }
+  #tab-customers .cust-filter-fold { margin-bottom: var(--space-3); }
+  #tab-customers .cust-filter-grid { margin-top: 0; }
+  #tab-customers .cust-export-fold .cust-fold-body { margin-top: var(--space-2); }
+  #tab-customers .cust-export-fold .cust-fold-body > div { flex-wrap: wrap; }
+
+  /* Intelligence: the acknowledged privacy note is one line with a Details
+     toggle, and the full card stays hidden until it is opened. */
+  #tab-intel .intel-privacy-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border: var(--stroke-hair) solid var(--border-subtle);
+    background: var(--surface-sunken);
+  }
+  #tab-intel .intel-privacy-line[hidden] { display: none; }
+  #tab-intel .intel-privacy-text {
+    min-width: 0;
+    font-size: var(--text-xs);
+    line-height: var(--leading-snug);
+    color: var(--content-secondary);
+  }
+  #tab-intel .intel-privacy-line .btn { flex: 0 0 auto; }
+
+  /* Intelligence: the conversation and the question box come first; the quick
+     asks follow beneath them, so the box is in the first screenful. */
+  #tab-intel .intel-layout { display: flex; flex-direction: column; }
+  #tab-intel .intel-main { order: 0; }
+  #tab-intel .intel-rail { order: 1; }
+}

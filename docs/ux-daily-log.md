@@ -135,6 +135,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-13 | visual | Phone Tax Centre | Put Log business expense first on a phone, folded the empty Pending, Recurring and Trips sections to one line each, said why AI Scan is greyed out, and printed the income and expense figures beside the cash-flow bars | — |
 | 2026-10-13 | visual | Phone Order History | Made each order on a phone a compact card: the channel and a Details tap (anywhere on the card) sit on top, the order number and date below, and the total and action line up in one right-hand column; the three summary figures now sit in one row so the first order shows on the first screen. Store tags are blue rather than red, Website and Direct are neutral, and Stock on Hand is ink with only its accent bar | — |
 | 2026-10-13 | visual | Expenses (phone, round 4) | Made each expense a compact card with its amount up top, a proper receipt button, and labelled bulk controls in the batch sheet | pending |
+| 2026-10-13 | visual | QR codes, Customers, Intelligence (phone, round 4) | A book with no payment link shows one Set payment link button instead of an empty box, payment QR cards are compact rows with a status pill, Customers puts the buyer list first with Filter and Export folded behind toggles, and Intelligence collapses the acknowledged privacy note to one line with the question box in the first screen | pending |
 
 ---
 

@@ -492,6 +492,7 @@ import {
 } from './features/bigcartel.js';
 import {
   acceptIntelDisclosure,
+  toggleIntelPrivacyDetails,
   applyIntelProposal,
   askIntelStarter,
   clearIntelThread,
@@ -884,6 +885,7 @@ import {
   updateCampaignSendFinishedSummary,
   renderCampaigns,
   filterCustomers,
+  toggleCustFold,
   customerPullStripe,
   customerPullDeeper,
   copyCustomerEmails,
@@ -2664,6 +2666,8 @@ function renderAllQRCodes() {
     const author = escapeHtml(book.author) || '—';
     const header = document.createElement('header');
     header.className = 'qr-card-head';
+    // Status pill: phone-only (CSS hides it on desktop). Says at a glance
+    // whether this book already has a link to show.
     header.innerHTML = `
       <span class="qr-card-accent" aria-hidden="true"></span>
       <div class="qr-card-heading">
@@ -2672,37 +2676,51 @@ function renderAllQRCodes() {
           <span class="qr-card-author">${author}</span>
           <span class="qr-card-price" aria-label="List price">${escapeHtml(priceLabel)}</span>
         </div>
+        <span class="qr-card-status pill ${url ? 'green' : 'amber'}">${url ? '✓ Link set' : '! No link yet'}</span>
       </div>`;
     card.appendChild(header);
+
+    if (!url) {
+      // No link yet: there is no code to show, so the card offers the one
+      // useful step instead — open this book's editor where the link is set.
+      const empty = document.createElement('div');
+      empty.className = 'qr-card-empty';
+      empty.innerHTML = `
+        <p class="qr-card-empty-note">Add this book's Stripe payment link and its QR code appears here.</p>
+        <button type="button" class="btn gold qr-card-setlink" onclick="openEditBookModal('${escapeHtml(book.id)}')">Set payment link</button>`;
+      card.appendChild(empty);
+      grid.appendChild(card);
+      return;
+    }
 
     // QR plate — kept as a bright white square regardless of theme; a QR
     // scanned by a phone camera needs the light background whatever the app
     // paints around it.
     const qrWrap = document.createElement('div');
-    qrWrap.className = 'qr-frame' + (url ? '' : ' qr-frame-empty');
+    qrWrap.className = 'qr-frame';
     const qrEl = document.createElement('div');
     qrEl.id = `qr-all-${book.id}`;
     qrEl.className = 'qr-frame-target';
     qrWrap.appendChild(qrEl);
     card.appendChild(qrWrap);
 
-    if (url && typeof QRCode !== 'undefined') {
+    if (typeof QRCode !== 'undefined') {
       new QRCode(qrEl, { text: url, width: 168, height: 168, colorDark: '#000', colorLight: '#fff', correctLevel: QRCode.CorrectLevel.H });
     } else {
-      qrEl.innerHTML = `<div class="qr-frame-message">${url ? 'QR library not ready' : 'No Stripe link set.<br>Edit this book to add one.'}</div>`;
+      qrEl.innerHTML = '<div class="qr-frame-message">QR library not ready</div>';
     }
 
     // Actions column — url line above, buttons below. Download leads (gold),
     // Copy is the secondary (ink), so the primary action reads first in an
-    // event line-up. Disabled state is inherited from `.btn:disabled`.
+    // event line-up.
     const linkRow = document.createElement('div');
     linkRow.className = 'qr-card-footer';
-    const safeUrl = (url || '').replace(/'/g, "\\'");
+    const safeUrl = url.replace(/'/g, "\\'");
     linkRow.innerHTML = `
-      <div class="qr-card-link" title="${escapeHtml(url || 'No link configured')}">${escapeHtml(url || 'No link configured')}</div>
+      <div class="qr-card-link" title="${escapeHtml(url)}">${escapeHtml(url)}</div>
       <div class="qr-card-actions">
-        <button class="btn ink sm" ${url ? '' : 'disabled'} onclick="window.copyBookQR('${book.id}','${safeUrl}')">Copy link</button>
-        <button class="btn gold sm" ${url ? '' : 'disabled'} onclick="window.downloadBookQR('${book.id}')">Download</button>
+        <button class="btn ink sm" onclick="window.copyBookQR('${book.id}','${safeUrl}')">Copy link</button>
+        <button class="btn gold sm" onclick="window.downloadBookQR('${book.id}')">Download</button>
       </div>`;
     card.appendChild(linkRow);
     grid.appendChild(card);
@@ -26995,7 +27013,7 @@ async function generateBookStripeLink() {
 // Global exposure for HTML handlers (cleaned up)
 Object.assign(window, {
   confirmDialog, promptDialog, notify,
-  renderCustomers, filterCustomers, customerPullStripe, copyCustomerEmails, exportCustomersCSV,
+  renderCustomers, filterCustomers, toggleCustFold, customerPullStripe, copyCustomerEmails, exportCustomersCSV,
   toggleCustomerSuppress, setCustomerBookFilter, customerPullDeeper,
   clearCustomerFilter, clearCustomerFilters,
   addManualSubscriber, addBuyerToMailingList, removeFromMailingList, addAllBuyersToMailingList,
@@ -27727,7 +27745,7 @@ function exposeLegacyInlineHandlers() {
   // every one of its handlers has to be reachable off window at click time.
   // Its names lead the list below.
   Object.assign(window, {
-    acceptIntelDisclosure, applyIntelProposal, askIntelStarter, clearIntelThread,
+    acceptIntelDisclosure, toggleIntelPrivacyDetails, applyIntelProposal, askIntelStarter, clearIntelThread,
     copyIntelAnswer, dismissIntelProposal, intelComposerKey, renderIntel, retryIntelQuestion,
     scrollToIntelMessage, sendIntelMessage, setIntelProviderPref, stopIntelTurn,
     dismissDeductionGap, renderDeductionGaps, restoreDeductionGaps, snoozeDeductionGap,
