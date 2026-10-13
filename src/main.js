@@ -6,7 +6,7 @@ import './style.css';
 // against, and its component corrections have to out-specify style.css.
 import './styles/theme-dark.css';
 import './styles/phone.css';
-import { initPhoneLayouts } from './lib/phone-layout.js';
+import { foldFooterActions, initPhoneLayouts } from './lib/phone-layout.js';
 import { createPhonePageMemory, initPhoneWorkspace, observeSidebarBadges } from './lib/phone-workspace.js';
 const phonePages = createPhonePageMemory(window);
 initPhoneWorkspace(document.getElementById('pw-app'));
@@ -12321,6 +12321,7 @@ function addStore() {
 }
 function renderStores() {
   const s = getState(), el = $('stores-list'), book = getBook(), cur = book.currency;
+  setConTabCount('stores', s.stores.length);
   if (!s.stores.length) {
     el.innerHTML = `<div class="empty-state sys-empty">
       <div class="empty-icon" aria-hidden="true">🏪</div>
@@ -12395,6 +12396,9 @@ function renderStores() {
 
     return `<div class="store-card"><div class="store-head"><div><div class="store-name">${escapeHtml(st.name)}</div><div class="store-meta">${[st.city, st.contact, st.email].filter(Boolean).map(escapeHtml).join(' · ')} · ${st.rate}% commission</div></div><div class="store-head-flags">${sp}${unbalancedBadge}</div></div><div class="store-kpis"><div class="sk"><div class="sk-l">Sent</div>${sentCell}</div><div class="sk"><div class="sk-l">Sold</div>${soldCell}</div><div class="sk"><div class="sk-l">Outstanding</div>${outstandingCell}</div><div class="sk"><div class="sk-l">Owed</div><div class="sk-v ${st.amountOwed > 0 ? 'warn' : ''}">${st.amountOwed > 0 ? fmt(st.amountOwed, cur) : '—'}</div></div></div><div class="store-actions"><button class="btn sm gold" onclick="openSend(${escapeHtml(JSON.stringify(st.id))})">Send books</button><button class="btn sm ink" onclick="openSale(${escapeHtml(JSON.stringify(st.id))})" ${!st.outstanding ? 'disabled' : ''}>Record sale</button><button class="btn sm" onclick="openRet(${escapeHtml(JSON.stringify(st.id))})" ${!st.outstanding ? 'disabled' : ''}>Return</button><button class="btn sm" onclick="showStoreLedger(${escapeHtml(JSON.stringify(st.id))})" ${ledgerRows ? '' : 'disabled'} title="${ledgerRows ? `Show this store's ${ledgerRows} ledger entr${ledgerRows === 1 ? 'y' : 'ies'} below` : 'Nothing in the ledger for this store yet'}">📒 Ledger</button><button class="btn sm" onclick="openEditStore(${escapeHtml(JSON.stringify(st.id))})">Edit</button><button class="btn sm danger-btn" onclick="removeStore(${escapeHtml(JSON.stringify(st.id))})">Remove</button></div>${unbalancedPopover}</div>`;
   }).join('');
+  // Phone: Return, Ledger, Edit and Remove fold behind "More actions". A fresh
+  // innerHTML means fresh buttons, so every card is folded again here.
+  el.querySelectorAll('.store-actions').forEach(foldFooterActions);
 }
 async function removeStore(id) {
   if (!(await confirmDialog('Remove this store?', { okLabel: 'Remove', danger: true }))) return;
@@ -13019,6 +13023,10 @@ function clearConLedgerFilter() {
 // that shows which sales that is.
 function showStoreLedger(storeId) {
   setConLedgerFilter({ storeId: storeId ? String(storeId) : null, type: null, unpaidOnly: false });
+  // On a phone the ledger is its own section and its filter starts folded, so
+  // open both before scrolling, or the jump lands on a hidden control.
+  setConSection('ledger');
+  setConLedgerFilterOpen(true);
   const wrap = $('con-ledger-filter');
   if (wrap && typeof wrap.scrollIntoView === 'function') {
     wrap.scrollIntoView({ behavior: _prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' });
@@ -13032,6 +13040,77 @@ function showStoreLedger(storeId) {
  * picker and the chip counts can never describe a ledger that has since changed
  * underneath them.
  */
+// ── Consignment sections on a phone ─────────────────────────────────────
+// Stores, Invoices and Ledger take turns on a phone (the tab row is in
+// index.html). Above 768px the CSS shows all three and this state is unused.
+// The choice is remembered for the session, so a reload comes back to it. An
+// Invoices choice falls back to Stores while the bills are not shown (non-
+// publisher, or no single title open), and comes back once they are.
+const CON_SECTIONS = ['stores', 'invoices', 'ledger'];
+const CON_SECTION_KEY = 'lm-con-section';
+function readConSectionChoice() {
+  try {
+    const v = sessionStorage.getItem(CON_SECTION_KEY);
+    return CON_SECTIONS.includes(v) ? v : 'stores';
+  } catch (_) {
+    return 'stores';
+  }
+}
+let conSectionChoice = readConSectionChoice();
+function applyConSection() {
+  const panel = $('tab-consignment');
+  if (!panel) return;
+  const invoicesSec = $('invoices-section');
+  const invoicesShown = !!invoicesSec && invoicesSec.style.display !== 'none';
+  const invoicesTab = $('con-tab-invoices');
+  if (invoicesTab) invoicesTab.hidden = !invoicesShown;
+  const active = conSectionChoice === 'invoices' && !invoicesShown ? 'stores' : conSectionChoice;
+  panel.dataset.conActive = active;
+  panel.querySelectorAll('[role="tab"][data-con-tab]').forEach((tab) => {
+    const on = tab.dataset.conTab === active;
+    tab.setAttribute('aria-selected', String(on));
+    tab.tabIndex = on ? 0 : -1;
+  });
+}
+function setConSection(name) {
+  conSectionChoice = CON_SECTIONS.includes(name) ? name : 'stores';
+  try { sessionStorage.setItem(CON_SECTION_KEY, conSectionChoice); } catch (_) { /* blocked: the choice lasts this visit */ }
+  applyConSection();
+}
+// Arrow keys move between the tabs, as a tablist does; the focused tab opens.
+function onConSectionTabKey(e) {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+  const tabs = [...e.currentTarget.querySelectorAll('[role="tab"]')].filter((t) => !t.hidden);
+  const at = tabs.indexOf(e.target);
+  if (at < 0) return;
+  const to = e.key === 'Home' ? 0
+    : e.key === 'End' ? tabs.length - 1
+      : (at + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length;
+  e.preventDefault();
+  tabs[to].focus();
+  setConSection(tabs[to].dataset.conTab);
+}
+// The count on each tab is the length the screen has just rendered, so it
+// cannot disagree with the list under it. Empty when there is nothing to say.
+function setConTabCount(name, n) {
+  const el = document.querySelector(`[data-con-count="${name}"]`);
+  if (el) el.textContent = Number.isFinite(n) && n > 0 ? String(n) : '';
+}
+// Phone: the ledger's filter controls start folded. The status line stays
+// outside the fold so its live region keeps announcing.
+function setConLedgerFilterOpen(open) {
+  const bar = $('con-ledger-filter');
+  if (!bar) return;
+  bar.classList.toggle('is-open', !!open);
+  $('con-ledger-filter-toggle')?.setAttribute('aria-expanded', String(!!open));
+}
+function toggleConLedgerFilter() {
+  setConLedgerFilterOpen(!$('con-ledger-filter')?.classList.contains('is-open'));
+}
+Object.assign(window, { setConSection, toggleConLedgerFilter });
+applyConSection();
+$('con-section-tabs')?.addEventListener('keydown', onConSectionTabKey);
+
 function renderLedgerFilterBar(entries, filter, stores, described) {
   const bar = $('con-ledger-filter');
   const controls = $('con-ledger-controls');
@@ -13048,6 +13127,11 @@ function renderLedgerFilterBar(entries, filter, stores, described) {
     return;
   }
   bar.hidden = false;
+
+  // Phone: the controls fold behind a button that says how many filters are on.
+  const activeFilters = (filter.storeId ? 1 : 0) + (filter.type ? 1 : 0) + (filter.unpaidOnly ? 1 : 0);
+  const toggle = $('con-ledger-filter-toggle');
+  if (toggle) toggle.textContent = activeFilters ? `Filter · ${activeFilters} active` : 'Filter';
 
   const counts = ledgerTypeCounts(entries, { ...filter, type: null });
   const storeOpts = stores.map((st) => {
@@ -13127,6 +13211,7 @@ function renderLedger() {
   // was recorded in, so a pre-change entry can't masquerade as the new one.
   const ledgerCur = e => (e.cur && normalizeCurrencyCode(e.cur, ledgerBookCode) !== ledgerBookCode) ? getSym(e.cur) : cur;
   const foot = $('ledger-foot');
+  setConTabCount('ledger', s.ledger.length);
   if (!s.ledger.length) {
     const bar = $('con-ledger-filter');
     if (bar) { bar.innerHTML = ''; bar.hidden = true; }
@@ -13390,8 +13475,9 @@ function invoiceHome(id) {
 function renderInvoices() {
   const section = $('invoices-section');
   if (!section) return;
-  if (!invoicesVisibleHere()) { section.style.display = 'none'; return; }
+  if (!invoicesVisibleHere()) { section.style.display = 'none'; applyConSection(); return; }
   section.style.display = '';
+  applyConSection();
 
   const book = getBook(), cur = book.currency, list = $('invoices-list'), summary = $('inv-summary');
   // An invoice bills a store, and one invoice can list several titles. Gather
@@ -13403,6 +13489,7 @@ function renderInvoices() {
   // ⚡ Bolt Optimization: Use string comparison instead of localeCompare for sorting ISO "YYYY-MM-DD" dates
   rows.sort((a, b) => { const dA = a.inv.date || ''; const dB = b.inv.date || ''; return dA > dB ? -1 : (dA < dB ? 1 : ((b.inv.createdAt || 0) - (a.inv.createdAt || 0))); });
   const invs = rows.map(r => r.inv);
+  setConTabCount('invoices', invs.length);
 
   // Mark overdue automatically (visual only, not persisted)
   const todayStr = today();
@@ -13427,7 +13514,22 @@ function renderInvoices() {
     else if (i.status === 'draft') drafts++;
   }
   const sumText = m => m.size ? [...m].map(([c, v]) => fmt(v, c)).join(' + ') : fmt(0, cur);
-  summary.textContent = `${invs.length} total · ${sumText(outByCur)} outstanding · ${sumText(paidByCur)} collected${drafts ? ` · ${drafts} draft${drafts > 1 ? 's' : ''}` : ''}${shared ? ` · ${shared} shared with another title` : ''}`;
+  // One figure per span, so a phone can stack them. The separators are kept in
+  // the DOM (hidden on a phone) so the line reads the same everywhere.
+  const sumParts = [`${invs.length} total`, `${sumText(outByCur)} outstanding`, `${sumText(paidByCur)} collected`];
+  if (drafts) sumParts.push(`${drafts} draft${drafts > 1 ? 's' : ''}`);
+  if (shared) sumParts.push(`${shared} shared with another title`);
+  summary.replaceChildren(...sumParts.flatMap((text, i) => {
+    const part = document.createElement('span');
+    part.className = 'inv-sum-part';
+    part.textContent = text;
+    if (!i) return [part];
+    const sep = document.createElement('span');
+    sep.className = 'inv-sum-sep';
+    sep.setAttribute('aria-hidden', 'true');
+    sep.textContent = ' · ';
+    return [sep, part];
+  }));
 
   if (!invs.length) {
     list.innerHTML = '<div class="empty-state"><div class="e-icon">📄</div>No invoices yet. Click <strong>+ New invoice</strong> to bill a consignment store — or anyone else who owes you.<div style="margin-top:12px;"><button class="btn gold" onclick="openCreateInvoice()">+ New invoice</button></div></div>';

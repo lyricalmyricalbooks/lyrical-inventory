@@ -1819,10 +1819,19 @@
 </div>
 
 <!-- CONSIGNMENT -->
-<div class="tab-panel" id="tab-consignment" style="display:none;">
+<div class="tab-panel" id="tab-consignment" data-con-active="stores" style="display:none;">
   <div class="book-context" id="book-context-con">
     <div class="book-context-dot"></div>
     <div><div class="book-context-title" id="bc-title-con">—</div><div class="book-context-meta">Consignment accounts & ledger</div></div>
+  </div>
+  <!-- Phone only: one section at a time, so Invoices and the Ledger are not
+       buried under every store card. Above 768px this row is display:none and
+       all three sections stay on the page, as they always have. Counts are
+       filled in by renderStores / renderInvoices / renderLedger. -->
+  <div class="con-section-tabs" id="con-section-tabs" role="tablist" aria-label="Consignment sections">
+    <button type="button" class="con-section-tab" role="tab" id="con-tab-stores" data-con-tab="stores" aria-controls="con-sec-stores" aria-selected="true" tabindex="0" onclick="setConSection('stores')"><span class="con-tab-label">Stores</span><span class="con-tab-count mono-num" data-con-count="stores"></span></button>
+    <button type="button" class="con-section-tab" role="tab" id="con-tab-invoices" data-con-tab="invoices" aria-controls="invoices-section" aria-selected="false" tabindex="-1" onclick="setConSection('invoices')" hidden><span class="con-tab-label">Invoices</span><span class="con-tab-count mono-num" data-con-count="invoices"></span></button>
+    <button type="button" class="con-section-tab" role="tab" id="con-tab-ledger" data-con-tab="ledger" aria-controls="con-sec-ledger" aria-selected="false" tabindex="-1" onclick="setConSection('ledger')"><span class="con-tab-label">Ledger</span><span class="con-tab-count mono-num" data-con-count="ledger"></span></button>
   </div>
   <!-- Three sections, one head system. This screen used to run two serif
        `.section-hed` heads and then drop the ledger — the longest and most
@@ -1830,7 +1839,7 @@
        hairline `.divider`s standing in for a spacing rhythm. `.sec-head` +
        `.overview-section` is the furniture the landing screen already proved;
        gold is spent once, on the accounts the screen exists to manage. -->
-  <div class="overview-section">
+  <div class="overview-section" id="con-sec-stores" data-con-section="stores">
     <div class="sec-head">
       <div class="sec-head-titles">
         <div class="sec-kicker"><span class="sec-kicker-dot"></span>Retail Partners</div>
@@ -1846,7 +1855,7 @@
   </div>
 
   <!-- INVOICES (publisher only) -->
-  <div class="overview-section" id="invoices-section" style="display:none;">
+  <div class="overview-section" data-con-section="invoices" id="invoices-section" style="display:none;">
     <div class="sec-head is-muted">
       <div class="sec-head-titles">
         <div class="sec-kicker"><span class="sec-kicker-dot"></span>Billing</div>
@@ -1862,7 +1871,7 @@
     <div id="invoices-list"><div class="empty-state"><div class="e-icon">📄</div>No invoices yet. Click <strong>+ New invoice</strong> to bill a consignment store.<div style="margin-top:12px;"><button class="btn gold" onclick="openCreateInvoice()">+ New invoice</button></div></div></div>
   </div>
 
-  <div class="overview-section">
+  <div class="overview-section" id="con-sec-ledger" data-con-section="ledger">
     <div class="sec-head is-muted">
       <div class="sec-head-titles">
         <div class="sec-kicker"><span class="sec-kicker-dot"></span>Audit Trail</div>
@@ -1878,6 +1887,9 @@
          survives each rebuild — a live region replaced wholesale announces
          nothing. -->
     <div class="ledger-filter-bar" id="con-ledger-filter" role="group" aria-label="Narrow the consignment ledger" hidden>
+      <!-- Phone only: the controls fold behind this button. Its label is
+           written by renderLedgerFilterBar, which counts the active filters. -->
+      <button type="button" class="con-ledger-filter-toggle" id="con-ledger-filter-toggle" aria-expanded="false" aria-controls="con-ledger-controls" onclick="toggleConLedgerFilter()">Filter</button>
       <div class="ledger-filter-row" id="con-ledger-controls"></div>
       <p class="ledger-filter-status" id="con-ledger-status" aria-live="polite"></p>
     </div>

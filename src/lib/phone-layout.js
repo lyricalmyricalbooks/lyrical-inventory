@@ -113,7 +113,7 @@ function enhanceSections(nav) {
 // on a wide screen the wrapper is display:contents and nothing changes.
 const FOLD_AFTER = 2;
 let foldId = 0;
-function foldFooterActions(group) {
+export function foldFooterActions(group) {
   if (group.dataset.phoneFolded) return;
   const buttons = [...group.children].filter(el => el.matches('button, .btn'));
   if (buttons.length <= FOLD_AFTER + 1) return;

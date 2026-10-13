@@ -64,7 +64,9 @@ test('the rhythm comes from the section gap, not from hairline dividers', () => 
   expect(panel.match(/class="overview-section"/g) || []).toHaveLength(3);
   // The invoices section keeps its id (renderInvoices() toggles it) while
   // wearing the wrapper.
-  expect(panel).toMatch(/<div class="overview-section" id="invoices-section" style="display:none;">/);
+  // (It now also carries data-con-section="invoices" for the phone tab row,
+  // added with the phone consignment redesign.)
+  expect(panel).toMatch(/<div class="overview-section" data-con-section="invoices" id="invoices-section" style="display:none;">/);
 
   // The `.divider` hairlines that used to stand in for the spacing are gone;
   // space between sections now beats space within one on its own.

@@ -5366,6 +5366,16 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   }
 }
 
+/* ─── CONSIGNMENT: PHONE-ONLY CONTROLS (desktop side) ────────────────────────
+   The section tabs and the ledger's "Filter" button exist for a phone only.
+   Hidden here, so the wide screen keeps all three sections on the page; the
+   phone styles in phone.css (≤768px) bring them in and fold the rest. */
+.con-section-tabs { display: none; }
+.con-ledger-filter-toggle { display: none; }
+/* The store card's "More actions" toggle is a .btn, which outranks the shared
+   .phone-more-toggle{display:none}; this keeps it out of the wide layout. */
+.store-actions .phone-more-toggle { display: none; }
+
 /* ─── DASHBOARD — SALES BY CHANNEL ────────────────────────────────────────
    Same four numbers as before plus the proportion between them. The bar is
    scaled to the leading channel (not to the total) so a minor channel still
