@@ -77,3 +77,12 @@ test('the installed app opens standalone, with the night-mode page colour as its
   expect(viteConfig).toMatch(/background_color:\s*'#262624'/);
   expect(darkTheme).toMatch(/:root\[data-theme="dark"\] \{[\s\S]*?--cream: #262624;/);
 });
+
+test('toasts and the update prompt clear the bottom nav on 769-860px screens too', () => {
+  const css = read('src/style.css');
+  const block = css.match(/@media \(min-width: 769px\) and \(max-width: 860px\)\{([\s\S]*?)\n\}/);
+  expect(block).not.toBeNull();
+  expect(block[1]).toMatch(/#pw-app\.pub-shell ~ \.toast/);
+  expect(block[1]).toMatch(/#pw-app\.pub-shell ~ \.pwa-prompt/);
+  expect(block[1]).toMatch(/var\(--mnav-h\)/);
+});

@@ -4750,7 +4750,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   /* Toasts above bottom nav */
   .toast{
     left:.75rem;right:.75rem;
-    bottom:calc(80px + env(safe-area-inset-bottom));
+    bottom:calc(var(--mnav-h) + 6px + env(safe-area-inset-bottom));
     max-width:none;
   }
 }
@@ -19809,6 +19809,14 @@ button[onclick="refreshUmamiStats()"]:active {
   .more-sheet-body .bc-gap-badge,
   .more-sheet-body .health-badge{position:absolute;top:6px;right:6px;margin:0 !important;}
 
+}
+
+/* 769-860px: the bottom nav shows here too (above), but toasts and the "new
+   version" prompt keep their desktop corner placement, which the nav covers.
+   Lift them above it, the way the phone rules do at 768px and below. */
+@media (min-width: 769px) and (max-width: 860px){
+  #pw-app.pub-shell ~ .toast,
+  #pw-app.pub-shell ~ .pwa-prompt{bottom:calc(var(--mnav-h) + var(--space-3) + env(safe-area-inset-bottom));}
 }
 
 /* Phone-only header: the slimmer one-row-plus-picker layout stops at 768px. */
