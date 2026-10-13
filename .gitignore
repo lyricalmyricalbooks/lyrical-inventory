@@ -4,3 +4,7 @@ backend/data/*.json
 backend/uploads/*
 backend/.env
 rtdb_backup.json
+
+# Phone screenshot rig output (npm run shots)
+/shots/
+/.claude/worktrees/

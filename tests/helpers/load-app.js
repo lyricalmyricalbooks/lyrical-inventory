@@ -75,15 +75,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { vi } from 'vitest';
+import { PUBLISHER_EMAIL, createFakeCloud, installFakeFirebase, signInAsPublisher } from './fake-cloud.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '../..');
 
-export const PUBLISHER_EMAIL = 'lyricalmyricalbooks@gmail.com';
-
-// The app merges these built-in titles into any catalog that doesn't list
-// them as deleted. Deleting them keeps each suite's catalog to its own books.
-const DEFAULT_BOOK_IDS = ['altrove', 'hound', 'archaeology', 'sistema', 'nobody', 'collective'];
+export { PUBLISHER_EMAIL };
 
 /** A catalog entry with every field the screens read, overridable per test. */
 export function makeBook(overrides = {}) {
@@ -169,62 +166,16 @@ export async function loadApp({ books = [makeBook()], states: initialStates = {}
   let online = true;
   Object.defineProperty(window.navigator, 'onLine', { configurable: true, get: () => online });
 
-  const catalog = { _deletedDefaults: DEFAULT_BOOK_IDS.slice() };
-  for (const b of books) catalog[b.id] = b;
-
-  const cloud = {
-    catalog,
-    books: {},
-    settings: {},
-    /** Every _fbSave call, in order: { bookId, json, state }. */
-    saves: [],
-    /** Every fault the app reported through reportClientError. */
-    errorReports: [],
-    /** How _fbSave answers. Default: accept the write verbatim. */
-    saveImpl: null,
-    savesFor(bookId) { return cloud.saves.filter(s => s.bookId === bookId); },
-    lastSave(bookId) { const list = cloud.savesFor(bookId); return list[list.length - 1]; },
-  };
-  const defaultSaveImpl = (bookId, json) => { cloud.books[bookId] = json; return { ok: true }; };
-  cloud.saveImpl = defaultSaveImpl;
-  for (const [id, st] of Object.entries(initialStates)) cloud.books[id] = JSON.stringify(st);
+  const cloud = createFakeCloud(books, initialStates);
+  const defaultSaveImpl = cloud.defaultSaveImpl;
 
   const main = await import('../../src/main.js');
 
-  // Replace every Firebase-backed global with a harmless async no-op first, so
-  // an unanticipated call can't reach the SDK stubs and throw; then give the
-  // ones whose results matter a real in-memory implementation.
-  for (const key of Object.keys(window)) {
-    if (key.startsWith('_fb') && typeof window[key] === 'function') {
-      window[key] = async () => null;
-    }
-  }
-  const unsub = () => {};
-  Object.assign(window, {
-    _fbLoadModeFlags: async () => {},
-    _useFirestoreForBook: () => true,
-    _useFirestoreGlobal: () => true,
-    _fbLoadCatalog: async () => JSON.parse(JSON.stringify(cloud.catalog)),
-    _fbSaveCatalog: async (cat) => { cloud.catalog = JSON.parse(JSON.stringify(cat)); },
-    _fbLoadSettings: async (key) => cloud.settings[key] ?? null,
-    _fbSaveSettings: async (key, data) => { cloud.settings[key] = data; },
-    _fbLoad: async (bookId) => cloud.books[bookId] ?? null,
-    _fbWatch: () => unsub,
-    _fbWatchSubmissions: () => unsub,
-    _fbWatchEmailInbox: () => unsub,
-    _fbOnAuthStateChanged: () => unsub,
-    _fbLogClientError: async (entry) => { cloud.errorReports.push(entry); },
-    _fbSave: async (bookId, json) => {
-      cloud.saves.push({ bookId, json, state: JSON.parse(json) });
-      return cloud.saveImpl(bookId, json);
-    },
-  });
+  installFakeFirebase(window, cloud);
   Object.assign(window, overrides);
 
   // Sign in as the publisher: runs the real startup path against the fakes.
-  const authCallbacks = globalThis.__firebaseStub.authCallbacks;
-  if (!authCallbacks.length) throw new Error('load-app: main.js never subscribed to auth state');
-  await authCallbacks[authCallbacks.length - 1]({ email: PUBLISHER_EMAIL, uid: 'publisher', emailVerified: true });
+  await signInAsPublisher();
   await vi.waitFor(() => {
     for (const b of books) if (!main.states[b.id]) throw new Error(`book ${b.id} not loaded yet`);
   }, { timeout: 10000, interval: 10 });
