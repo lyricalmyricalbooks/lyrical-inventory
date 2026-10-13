@@ -16489,12 +16489,23 @@ async function confirmRestoreBookDataFromSheets() {
 
     // Postage rows carry their order's id with "-shipping" on the end (or, for
     // an order that had no id, its order number).
+    // Index the direct orders once rather than rescanning the whole restored
+    // history for every postage row (two passes each), which grew with
+    // orders × postage rows. First match wins, as Array#find did; the loop only
+    // sets shippingPaid, so the keys never change under it.
+    const ordersBySheetsId = new Map();
+    const ordersByNum = new Map();
+    for (const h of newHist) {
+      if (h.consignmentLink) continue;
+      if (!ordersBySheetsId.has(h.sheetsId)) ordersBySheetsId.set(h.sheetsId, h);
+      if (!ordersByNum.has(h.num)) ordersByNum.set(h.num, h);
+    }
     postageRows.forEach(row => {
       const paid = roundCents(parseFloat(row['Total/Amount']) || 0);
       if (!(paid > 0)) return;
       const orderId = String(row._eventId || '').replace(/-shipping$/, '');
-      const order = newHist.find(h => !h.consignmentLink && orderId && h.sheetsId === orderId)
-        || newHist.find(h => !h.consignmentLink && row['Event/Num'] && h.num === row['Event/Num']);
+      const order = (orderId && ordersBySheetsId.get(orderId))
+        || (row['Event/Num'] && ordersByNum.get(row['Event/Num']));
       if (order) order.shippingPaid = paid;
     });
 
