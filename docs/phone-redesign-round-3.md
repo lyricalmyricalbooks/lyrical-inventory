@@ -55,7 +55,7 @@ snapshot and drift.
 **Evidence:** shots/before/light-375/modal-import-01.png and shots/before/dark-375/modal-import-01.png; index.html:5709 (eight table columns); index.html:5719 (the confirm button is never disabled and shows a count of 0)
 
 ### 8. tab-expenses — broken, polish
-**Status:** Open  
+**Status:** Done (round 4) — removing asks first, naming the expense and amount  
 **Problem:** Removing an expense is a single tiny, unlabeled X about the size of a fingernail. One tap deletes the expense straight away with no 'are you sure?' step, and the same tiny X sits on every expense card, including the Tax Center's own expense list.  
 **Fix:** Replace the bare X with a labeled Remove control in the card's action row, sized to the 44px target class (.sys-target), styled as a destructive outline button. Put a confirm step in front of voidExpense using the modal shell, with Cancel and a destructive Remove button on the far left as the modal-footer rule describes.  
 **Evidence:** shots/before/light-375/tab-expenses-03.png and tab-expenses-04.png; src/features/receipts.js:7332 (edit-btn with the X, onclick calls voidExpense directly, aria-label Remove); src/features/receipts.js:7184-7190 (voidExpense filters the expense out, saves and shows a toast with no confirmation); style.css:4391 (.edit-btn is 22x22); the phone report lists the X buttons at 22x22 on tab-expenses and tab-taxcenter
@@ -259,11 +259,11 @@ snapshot and drift.
 **Evidence:** shots/before/light-375/tab-shipping-06.png (dashed batch button); style.css:10725 (.ship-flow-batch sets border-style dashed); shots/before/light-375/tab-taxcenter-06.png (six swatch colours and red underlined category links); src/features/taxcentre.js:983 (per-category dotColor swatch and tc-cat-link)
 ### Found while fixing (not from the screenshot audit)
 
-- **Import after a Google Sheets restore** — open. The restore path overwrites the import
+- **Import after a Google Sheets restore** — done (round 4, reproduced and fixed). The restore path overwrites the import
   window's confirm button (removing `#import-count`), so the next spreadsheet import can fail
   with "Could not read file". Found by reading the code (`src/main.js`, the Sheets restore path
   near `setImportReady`); not yet reproduced.
-- **Register currency on a fresh device** — open. Before the books load, the register falls
+- **Register currency on a fresh device** — done (round 4). Before the books load, the register falls
   back to EUR (`_getPosDefaultCurrency` in `src/main.js`), so a brand-new phone opens the Sell
   screen charging in euros until a currency is picked once.
 
