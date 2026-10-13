@@ -928,7 +928,7 @@
       </div>
     </div>
     <div class="tbl-wrap all-consignment-table">
-      <table class="tbl"><thead><tr><th>Book</th><th>Store</th><th class="r col-sent">Sent</th><th class="r">Sold</th><th class="r">Outstanding</th><th class="col-sellthrough">Sell-through</th><th>Status</th></tr></thead>
+      <table class="tbl"><thead><tr><th>Book</th><th>Store</th><th class="r col-sent">Sent</th><th class="r">Sold</th><th class="r">Returned</th><th class="r">Outstanding</th><th class="col-sellthrough">Sell-through</th><th>Status</th></tr></thead>
       <tbody id="all-con-body"></tbody></table>
     </div>
   </div>
@@ -2903,7 +2903,7 @@
     <div style="margin-top:16px;">
       <button class="btn gold" style="width:100%;height:48px;font-size:var(--text-md);font-weight:600;letter-spacing:.02em;" onclick="submitTaxExpense()" id="tc-submit-exp-btn">Log Business Expense</button>
       <div style="margin-top:8px;text-align:center;display:flex;gap:6px;justify-content:center;flex-wrap:wrap;">
-        <button class="btn tx" style="font-size:var(--text-sm);padding:4px 12px;color:var(--text3);" onclick="openBatchExpenseModal('business')" title="Drop in a whole pile of receipts, scan them together and log them in one pass">🧾 Log several at once</button>
+        <button class="btn tx tc-batch-btn" style="font-size:var(--text-sm);padding:4px 12px;color:var(--text3);" onclick="openBatchExpenseModal('business')" title="Drop in a whole pile of receipts, scan them together and log them in one pass">🧾 Log several at once</button>
       </div>
     </div>
   </div>
@@ -3974,7 +3974,7 @@
           <div class="form-group">
             <label>Duties (incoterm)</label>
             <select id="sp-incoterm" onchange="onShippoIncotermChange()">
-              <option value="auto">Auto — DDP to the US, DDU elsewhere</option>
+              <option value="auto">Auto (DDP US, DDU elsewhere)</option>
               <option value="DDP">DDP — you prepay duties &amp; taxes</option>
               <option value="DDU">DDU — recipient pays on delivery</option>
               <option value="DAP">DAP — delivered at place</option>

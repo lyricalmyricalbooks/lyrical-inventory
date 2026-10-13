@@ -5738,13 +5738,14 @@ function renderCombinedConsignmentSummary(allBooksVisible) {
       conTotals.sent += sent;
       conTotals.sold += sold;
       conTotals.outstanding += st.outstanding || 0;
-      return { store: st.name, sent, sold, outstanding: st.outstanding || 0, isActive, pct: sent ? Math.round((sold / sent) * 100) : 0 };
+      return { store: st.name, sent, sold, returned: st.returned || 0, outstanding: st.outstanding || 0, isActive, pct: sent ? Math.round((sold / sent) * 100) : 0 };
     });
     // ⚡ Bolt: Imperative loops instead of .reduce() avoid array allocations in rendering functions
-  const totals = { sent: 0, sold: 0, outstanding: 0, active: 0 };
+  const totals = { sent: 0, sold: 0, returned: 0, outstanding: 0, active: 0 };
     for (const r of rows) {
       totals.sent += r.sent;
       totals.sold += r.sold;
+      totals.returned += r.returned;
       totals.outstanding += r.outstanding;
       if (r.isActive) totals.active += 1;
     }
@@ -5892,6 +5893,7 @@ function conAccountRowHtml(bookId, bookTitle, r, nested, bookAccent) {
     + storeCell
     + `<td class="r col-sent tnum">${r.sent}</td>`
     + `<td class="r tnum">${r.sold}</td>`
+    + `<td class="r tnum">${r.returned ?? 0}</td>`
     + `<td class="r outstanding-cell tnum">${outstandingDisplay}</td>`
     + `<td class="col-sellthrough"><div class="con-sellthrough-wrap"><div class="con-row-progress con-row-progress-link" role="button" tabindex="0" title="${r.pct}% sold-through (${r.sold} of ${r.sent}) — view ${escapeHtml(bookTitle)} consignment" onclick="${jump}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${jump}}"><div class="con-row-progress-bar" style="width:${r.pct}%;"></div></div><span class="con-row-pct tnum">${r.pct}%</span></div></td>`
     + `<td>${r.isActive ? '<span class="pill amber">● Active</span>' : '<span class="pill gray">✓ Settled</span>'}</td>`
@@ -5903,7 +5905,7 @@ function renderConsignmentTable() {
   if (!body) return;
   const conBooks = window._allConBooks || [];
   if (!conBooks.length) {
-    body.innerHTML = '<tr><td colspan="7"><div class="empty-state con-empty-state"><div class="e-icon">🏪</div><p class="con-empty-msg">No consignment accounts found across the catalogue.</p></div></td></tr>';
+    body.innerHTML = '<tr><td colspan="8"><div class="empty-state con-empty-state"><div class="e-icon">🏪</div><p class="con-empty-msg">No consignment accounts found across the catalogue.</p></div></td></tr>';
     return;
   }
 
@@ -5936,7 +5938,7 @@ function renderConsignmentTable() {
       });
     });
     if (!flat.length) {
-      body.innerHTML = '<tr><td colspan="7"><div class="empty-state con-empty-state"><div class="e-icon">🔍</div><p class="con-empty-msg">No consignment accounts matching filters.</p><button type="button" class="btn sm ink" onclick="clearConSearchAndFilter()">Reset filters</button></div></td></tr>';
+      body.innerHTML = '<tr><td colspan="8"><div class="empty-state con-empty-state"><div class="e-icon">🔍</div><p class="con-empty-msg">No consignment accounts matching filters.</p><button type="button" class="btn sm ink" onclick="clearConSearchAndFilter()">Reset filters</button></div></td></tr>';
       return;
     }
     flat.sort((a, b) => (b.r.isActive - a.r.isActive));
@@ -5949,10 +5951,11 @@ function renderConsignmentTable() {
   conBooks.forEach(b => {
     const filteredRows = b.rows.filter(r => rowMatches(r, b.title));
     if (filteredRows.length > 0) {
-      const totals = { sent: 0, sold: 0, outstanding: 0, active: 0 };
+      const totals = { sent: 0, sold: 0, returned: 0, outstanding: 0, active: 0 };
       for (const r of filteredRows) {
         totals.sent += r.sent;
         totals.sold += r.sold;
+        totals.returned += r.returned;
         totals.outstanding += r.outstanding;
         if (r.isActive) totals.active += 1;
       }
@@ -5961,7 +5964,7 @@ function renderConsignmentTable() {
   });
 
   if (!matchingBooks.length) {
-    body.innerHTML = '<tr><td colspan="7"><div class="empty-state con-empty-state"><div class="e-icon">🔍</div><p class="con-empty-msg">No consignment accounts matching filters.</p><button type="button" class="btn sm ink" onclick="clearConSearchAndFilter()">Reset filters</button></div></td></tr>';
+    body.innerHTML = '<tr><td colspan="8"><div class="empty-state con-empty-state"><div class="e-icon">🔍</div><p class="con-empty-msg">No consignment accounts matching filters.</p><button type="button" class="btn sm ink" onclick="clearConSearchAndFilter()">Reset filters</button></div></td></tr>';
     return;
   }
 
@@ -5994,6 +5997,7 @@ function renderConsignmentTable() {
       + `</td>`
       + `<td class="r col-sent tnum">${b.totals.sent}</td>`
       + `<td class="r tnum">${b.totals.sold}</td>`
+      + `<td class="r tnum">${b.totals.returned}</td>`
       + `<td class="r outstanding-cell tnum">${outstandingDisplay}</td>`
       + `<td class="col-sellthrough"><div class="con-sellthrough-wrap"><div class="con-row-progress" title="${pct}% sold-through (${b.totals.sold} of ${b.totals.sent})"><div class="con-row-progress-bar" style="width:${pct}%;"></div></div><span class="con-row-pct tnum">${pct}%</span></div></td>`
       + `<td><span class="pill ${b.totals.active ? 'amber' : 'gray'}">${b.totals.active ? '● ' : '✓ '}${statusLabel}</span></td>`

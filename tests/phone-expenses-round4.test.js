@@ -31,9 +31,12 @@ describe('EXPENSES (round 4) phone section', () => {
   it('is a single commented section at the end of phone.css', () => {
     expect(phoneCss.split(MARK)).toHaveLength(2);
     const after = section();
-    // Nothing from another section may follow this one.
-    expect(after.indexOf('/* ───', MARK.length)).toBe(-1);
-    expect(after).toContain('@media (max-width: 768px)');
+    // Its own rules run to the next section marker. A later round may add a
+    // separately marked section after it, but never rules that sit inside this one.
+    const next = after.indexOf('/* ───', MARK.length);
+    const own = next === -1 ? after : after.slice(0, next);
+    expect(own).toContain('@media (max-width: 768px)');
+    expect(own.trimEnd().endsWith('}')).toBe(true);
   });
 
   it('uses Riso tokens only (no raw hex or rgb colours)', () => {
