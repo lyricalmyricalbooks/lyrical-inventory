@@ -121,15 +121,25 @@ test('Download leads Copy in the actions row', () => {
 
   // The action buttons use the shared .btn sizes and semantic modifiers, not
   // an inline `style="flex:1;font-size:11px;"` bypass.
-  expect(src).toMatch(/class="btn ink sm"[^>]*copyBookQR/);
-  expect(src).toMatch(/class="btn gold sm"[^>]*downloadBookQR/);
-  // Both buttons are disabled when there is no link — copying an empty
-  // string is a footgun; letting a disabled Download but an enabled Copy
-  // sit on the same row is the visible bug the old version had.
-  const copyBtn = src.match(/class="btn ink sm"[^>]*copyBookQR[^>]*/);
-  const dlBtn = src.match(/class="btn gold sm"[^>]*downloadBookQR[^>]*/);
-  expect(copyBtn[0]).toMatch(/\$\{url \? '' : 'disabled'\}/);
-  expect(dlBtn[0]).toMatch(/\$\{url \? '' : 'disabled'\}/);
+  // The handlers are attached in code with the link passed as a value — never
+  // spliced into an inline onclick string, where a quote or backslash in the
+  // link could break out (CodeQL: incomplete string escaping).
+  expect(src).toMatch(/class="btn ink sm" data-qr-action="copy"/);
+  expect(src).toMatch(/class="btn gold sm" data-qr-action="download"/);
+  expect(src).toMatch(/addEventListener\('click', \(\) => window\.copyBookQR\(book\.id, url\)\)/);
+  expect(src).toMatch(/addEventListener\('click', \(\) => window\.downloadBookQR\(book\.id\)\)/);
+  expect(src).not.toMatch(/onclick="window\.copyBookQR/);
+  // With no link there is no code and no dead buttons: the card offers one
+  // "Set payment link" action that opens the book editor instead. The action
+  // buttons only render once a link exists, so Copy never gets an empty string.
+  const copyBtn = src.match(/class="btn ink sm" data-qr-action="copy"[^>]*/);
+  const dlBtn = src.match(/class="btn gold sm" data-qr-action="download"[^>]*/);
+  expect(copyBtn[0]).not.toMatch(/disabled/);
+  expect(dlBtn[0]).not.toMatch(/disabled/);
+  expect(src).toMatch(/class="btn gold qr-card-setlink">Set payment link<\/button>/);
+  expect(src).toMatch(/addEventListener\('click', \(\) => window\.openEditBookModal\(book\.id\)\)/);
+  expect(src).toMatch(/>Set payment link<\/button>/);
+  expect(src).not.toMatch(/No Stripe link set/);
 });
 
 test('renderAllQRCodes writes no inline background/border/font/color styles', () => {

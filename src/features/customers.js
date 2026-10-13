@@ -577,6 +577,25 @@ function _renderCustFilterBar(shown, total, activeFilters) {
     <button type="button" class="btn sm" onclick="clearCustomerFilters()">✕ Clear all filters</button>`;
 }
 
+// Phone only: the filter fold's toggle says how many filters are narrowing the
+// list, so a closed fold still tells the owner the list is filtered.
+function _renderCustFilterToggle(activeCount) {
+  const btn = $('cust-filter-toggle');
+  if (!btn) return;
+  const n = Number(activeCount) || 0;
+  btn.textContent = n ? `Filter · ${n} active` : 'Filter';
+}
+
+// Opens or closes a fold (the filter panel or the export buttons). The fold's
+// contents stay in the DOM when closed, so the filters keep working.
+function toggleCustFold(btn) {
+  const fold = btn && btn.closest('.cust-fold');
+  if (!fold) return;
+  const open = !fold.classList.contains('is-open');
+  fold.classList.toggle('is-open', open);
+  btn.setAttribute('aria-expanded', String(open));
+}
+
 // ── Email Typo Correction
 let _lastMailingCorrection = '';
 
@@ -696,6 +715,7 @@ function renderCustomersAudience() {
 
   const activeFilters = _custActiveFilters();
   _renderCustFilterBar(list.length, all.length, activeFilters);
+  _renderCustFilterToggle(activeFilters.length);
 
   const summary = $('cust-summary');
   if (summary) {
@@ -1555,6 +1575,7 @@ export {
   clearCustomerFilter,
   clearCustomerFilters,
   _renderCustFilterBar,
+  toggleCustFold,
   checkMailingEmailTypo,
   suggestEmailTypo,
   applyMailingEmailCorrection,

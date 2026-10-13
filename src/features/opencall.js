@@ -1029,9 +1029,11 @@ function ocTopbarHtml_(activeProj, { total, done, pct, sched, lastScannedVal }) 
           </div>
         </div>
         <div class="oc-topbar-actions">
-          <button type="button" class="btn gold" onclick="ocToggleAddPanel()" aria-expanded="${ocAddOpen}">${ocAddOpen ? '✕ Close' : '＋ Add contributors'}</button>
-          <button type="button" class="btn" id="oc-import-gmail-btn" onclick="openOcImportGmailModal()" title="Find artists' submission emails in Gmail and import them as contributors — capturing their submission thread so every stage email replies into it">📨 Import from Gmail</button>
-          <button type="button" class="btn" id="oc-scan-btn" onclick="ocScanReplies()" ${total ? '' : 'disabled'} title="Look through Gmail for credit-name replies, files and bounces. Findings wait for your approval.">📥 Check replies</button>
+          ${total || ocAddOpen ? `<button type="button" class="btn gold" onclick="ocToggleAddPanel()" aria-expanded="${ocAddOpen}">${ocAddOpen ? '✕ Close' : '＋ Add contributors'}</button>` : ''}
+          ${total ? `<button type="button" class="btn" id="oc-import-gmail-btn" onclick="openOcImportGmailModal()" title="Find artists' submission emails in Gmail and import them as contributors — capturing their submission thread so every stage email replies into it">📨 Import from Gmail</button>` : ''}
+          ${total
+            ? `<button type="button" class="btn" id="oc-scan-btn" onclick="ocScanReplies()" title="Look through Gmail for credit-name replies, files and bounces. Findings wait for your approval.">📥 Check replies</button>`
+            : '<span class="oc-topbar-hint">Add a contributor to check for replies.</span>'}
           <button type="button" class="btn" popovertarget="oc-more-menu" aria-label="More actions">More ▾</button>
           <div id="oc-more-menu" class="oc-menu" popover ontoggle="ocPlaceMenu(event)">
             <button type="button" class="oc-menu-item" popovertarget="oc-more-menu" popovertargetaction="hide" onclick="openOcBulkModal()" ${total ? '' : 'disabled'}>✉ Email a stage in bulk…</button>

@@ -135,6 +135,8 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-13 | visual | Phone Tax Centre | Put Log business expense first on a phone, folded the empty Pending, Recurring and Trips sections to one line each, said why AI Scan is greyed out, and printed the income and expense figures beside the cash-flow bars | — |
 | 2026-10-13 | visual | Phone Order History | Made each order on a phone a compact card: the channel and a Details tap (anywhere on the card) sit on top, the order number and date below, and the total and action line up in one right-hand column; the three summary figures now sit in one row so the first order shows on the first screen. Store tags are blue rather than red, Website and Direct are neutral, and Stock on Hand is ink with only its accent bar | — |
 | 2026-10-13 | visual | Expenses (phone, round 4) | Made each expense a compact card with its amount up top, a proper receipt button, and labelled bulk controls in the batch sheet | pending |
+| 2026-10-13 | visual | QR codes, Customers, Intelligence (phone, round 4) | A book with no payment link shows one Set payment link button instead of an empty box, payment QR cards are compact rows with a status pill, Customers puts the buyer list first with Filter and Export folded behind toggles, and Intelligence collapses the acknowledged privacy note to one line with the question box in the first screen | pending |
+| 2026-10-13 | visual | Manual entry + Home (phone, round 4) | Tucked the order number and notes under "More details" on a phone, made the Sell card readable at night, squared the upload strip on Home, and made the gratuity tag neutral in History | pending |
 
 ---
 
@@ -150,3 +152,6 @@ looked at, and re-proposing it costs a run.
 | Raising `.btn` to a 44px minimum height | **Rejected.** Deliberately ~33px; raising it reflows every screen and the density is wanted. Use `.sys-target` on individual controls that genuinely need a full target. See `.agents/UX_PATTERNS.md` → Decisions on record. |
 | CSS anchor positioning for dropdowns and tooltips | **Not yet.** The right model, but support is still Chromium-led. Revisit later. See `.agents/UX_PATTERNS.md` §8. |
 | Scroll-driven animations | **Rejected.** This is a dense financial tool; scroll-jacking hurts more than it delights. See `.agents/UX_PATTERNS.md` §8. |
+| 2026-10-13 | behavioural | Shipping (phone) | Sender address folds to one line once saved; pricing options fold under More options; selects clear their arrow; batch button and chips get solid outlines | pending |
+| 2026-10-13 | behavioural | Phone polish round 4 | Help is a plain list; Backups uses plain words with one note under each backup button; Website figures line up and Apply all explains itself; Open Call shows Add and Import once; Big Cartel fields have hints; store picker, accent swatches, Book Catalog, transfer and shipping preset tidied | pending |
+| 2026-10-13 | behavioural | Bottom menu (phone, author view) | When the bottom menu has more tabs than fit, its right edge fades so it reads as "swipe for more"; the fade disappears at the end of the strip | pending |

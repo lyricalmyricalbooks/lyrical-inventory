@@ -817,6 +817,12 @@
     </div>
   </div>
 
+  <!-- Once the privacy note is acknowledged, this one line stands in for it (phone). -->
+  <div class="intel-privacy-line" id="intel-privacy-line" hidden>
+    <span class="intel-privacy-text">Privacy: your figures go to Gemini only when you ask</span>
+    <button type="button" class="btn ghost sm sys-target" id="intel-privacy-toggle" aria-expanded="false" aria-controls="intel-disclosure" onclick="toggleIntelPrivacyDetails()">Details</button>
+  </div>
+
   <p class="intel-notice" id="intel-notice" hidden></p>
   <p class="sr-only" id="intel-status" role="status" aria-live="polite"></p>
 
@@ -1291,8 +1297,9 @@
       <div class="web-stat web-stat-live"><span class="web-stat-label">Already applied</span><strong class="web-stat-value">0</strong><span class="web-stat-sub">None recorded from this scan</span></div>
       <div class="web-stat web-stat-live"><span class="web-stat-label">Last Gmail scan</span><strong class="web-stat-value">Never</strong><span class="web-stat-sub">Press Scan Gmail to check</span></div>
     </div>
-    <div id="orders-list" class="orders-list"><div class="empty-state web-empty"><div class="e-icon">📬</div><strong>Ready to scan for new orders</strong><span>Press “Scan Gmail” to pull in recent Big Cartel receipts for this book.</span><button class="btn ink sm" onclick="fetchOrders()">Scan Gmail</button></div></div>
-    <button class="btn gold apply-all-cta" id="apply-all-btn" onclick="applyAll()" disabled>Apply all new orders</button>
+    <div id="orders-list" class="orders-list"><div class="empty-state web-empty"><div class="e-icon">📬</div><strong>Ready to scan for new orders</strong><span>Press “Scan Gmail” at the top of this screen to pull in recent Big Cartel receipts for this book.</span></div></div>
+    <button class="btn gold apply-all-cta" id="apply-all-btn" onclick="applyAll()" disabled aria-describedby="apply-all-hint">Apply all new orders</button>
+    <p class="apply-all-hint" id="apply-all-hint">Scan Gmail first to find new orders.</p>
     <div class="log-console" id="log-web"></div>
   </div>
 </div>
@@ -1490,7 +1497,10 @@
       </div>
     </div>
 
-    <!-- Filters Panel -->
+    <!-- Filters Panel. On phone it folds behind the Filter toggle (closed by default). -->
+    <div class="cust-fold cust-filter-fold">
+    <button type="button" class="btn sm cust-fold-toggle" id="cust-filter-toggle" aria-expanded="false" aria-controls="cust-filter-body" onclick="toggleCustFold(this)">Filter</button>
+    <div class="cust-fold-body" id="cust-filter-body">
     <div class="cust-filter-grid">
       <div class="form-group" style="margin:0;">
         <label for="cust-search">Search Text</label>
@@ -1530,6 +1540,8 @@
         </select>
       </div>
     </div>
+    </div>
+    </div>
 
     <!-- Which filters are narrowing the segment, and how many buyers Copy /
          Export / Email will actually reach. Populated by _renderCustFilterBar()
@@ -1537,10 +1549,15 @@
     <div id="cust-active-filters" class="seg-filter-bar" role="status" aria-live="polite" hidden></div>
 
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:12px;">
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <button class="btn" onclick="copyCustomerEmails()">📋 Copy segment</button>
-        <button class="btn" onclick="exportCustomersCSV()">⬇ Export segment</button>
-        <button class="btn gold" onclick="emailCustomerSegment()" title="Open Gmail with the filtered segment pre-filled as BCC">✉ Email segment</button>
+      <div class="cust-fold cust-export-fold">
+        <button type="button" class="btn sm cust-fold-toggle" aria-expanded="false" aria-controls="cust-export-body" onclick="toggleCustFold(this)">Export</button>
+        <div class="cust-fold-body" id="cust-export-body">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <button class="btn" onclick="copyCustomerEmails()">📋 Copy segment</button>
+            <button class="btn" onclick="exportCustomersCSV()">⬇ Export segment</button>
+            <button class="btn gold" onclick="emailCustomerSegment()" title="Open Gmail with the filtered segment pre-filled as BCC">✉ Email segment</button>
+          </div>
+        </div>
       </div>
       <span id="cust-summary" style="font-size:var(--text-sm);color:var(--text3);font-weight:500;"></span>
     </div>
@@ -1708,7 +1725,6 @@
   <div class="section-hed" style="margin-bottom:1.1rem;">Log an order</div>
   <div class="card">
     <div class="order-grid">
-      <div class="form-group"><label for="m-num">Order #<span class="tip tip-mark" tabindex="0" role="img" aria-label="Help: Type the order or receipt number if you have one. No number? Leave it empty." data-tip="Type the order or receipt number if you have one. No number? Leave it empty.">?</span></label><input type="text" id="m-num" placeholder="optional"></div>
       <div class="form-group"><label for="m-qty">Qty<span class="tip tip-mark" tabindex="0" role="img" aria-label="Help: How many copies did you sell in this sale? Type the number." data-tip="How many copies did you sell in this sale? Type the number.">?</span></label><input type="number" inputmode="numeric" id="m-qty" value="1" min="1" oninput="phint()"></div>
       <div class="form-group">
         <label id="m-price-label" for="m-price">Price paid<span class="tip tip-mark" tabindex="0" role="img" aria-label="Help: The price for ONE copy, not the total. Paid in another currency? Choose it in the box on the left first." data-tip="The price for ONE copy, not the total. Paid in another currency? Choose it in the box on the left first.">?</span> <span id="m-fx-inline-result" style="display:none;color:var(--gold-text);font-weight:600;margin-left:8px;"></span></label>
@@ -1745,7 +1761,13 @@
         </select>
       </div>
     </div>
-    <div class="form-group" style="margin-top:14px;"><label for="m-notes">Notes<span class="tip tip-mark" tabindex="0" role="img" aria-label="Help: Anything worth remembering, like a discount or the event name. You can leave it empty." data-tip="Anything worth remembering, like a discount or the event name. You can leave it empty.">?</span></label><input type="text" id="m-notes" placeholder="e.g. promo, event"></div>
+    <!-- Order # and Notes are optional, so a phone folds them behind "More details".
+         They stay in the DOM: Save reads both fields even while the fold is shut. -->
+    <details class="manual-more" id="man-more">
+      <summary>More details (order number, notes)</summary>
+      <div class="form-group"><label for="m-num">Order #<span class="tip tip-mark" tabindex="0" role="img" aria-label="Help: Type the order or receipt number if you have one. No number? Leave it empty." data-tip="Type the order or receipt number if you have one. No number? Leave it empty.">?</span></label><input type="text" id="m-num" placeholder="optional"></div>
+      <div class="form-group"><label for="m-notes">Notes<span class="tip tip-mark" tabindex="0" role="img" aria-label="Help: Anything worth remembering, like a discount or the event name. You can leave it empty." data-tip="Anything worth remembering, like a discount or the event name. You can leave it empty.">?</span></label><input type="text" id="m-notes" placeholder="e.g. promo, event"></div>
+    </details>
     <!-- Live order preview — what this order costs and what it leaves on the
          shelf, shown before "Add order" is pressed. Populated by phint(). -->
     <div class="order-preview-wrap">
@@ -3630,14 +3652,17 @@
       <div class="form-group" style="margin:0;">
         <label for="bc-subdomain">Store Subdomain</label>
         <input type="text" id="bc-subdomain" placeholder="my-store-name" style="padding:6px 12px; font-size:var(--text-sm); border:var(--stroke-hair) solid var(--border); border-radius:var(--r2); background:var(--cream); outline:none;">
+        <div class="bc-field-hint">The first part of your store address. If your store is my-store.bigcartel.com, type my-store.</div>
       </div>
       <div class="form-group" style="margin:0;">
         <label for="bc-username">API Username / Login</label>
         <input type="text" id="bc-username" placeholder="Subdomain or Username" style="padding:6px 12px; font-size:var(--text-sm); border:var(--stroke-hair) solid var(--border); border-radius:var(--r2); background:var(--cream); outline:none;">
+        <div class="bc-field-hint">The username you sign in to Big Cartel with.</div>
       </div>
       <div class="form-group" style="margin:0;">
         <label for="bc-password">API Password / Token</label>
-        <input type="password" id="bc-password" placeholder="••••••••••••••••" style="padding:6px 12px; font-size:var(--text-sm); border:var(--stroke-hair) solid var(--border); border-radius:var(--r2); background:var(--cream); outline:none;">
+        <input type="password" id="bc-password" placeholder="Paste your token here" autocomplete="off" style="padding:6px 12px; font-size:var(--text-sm); border:var(--stroke-hair) solid var(--border); border-radius:var(--r2); background:var(--cream); outline:none;">
+        <div class="bc-field-hint">The API token from your Big Cartel account. It is shown as dots.</div>
       </div>
       <div class="phone-connection-actions" style="display:flex; gap:8px;">
         <button id="bc-test-btn" class="btn sm" onclick="testBigCartelConnection()" style="flex:1;">Test Connection</button>
@@ -3833,11 +3858,13 @@
           <div class="form-group">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
               <label style="margin-bottom:0;">Load Package From</label>
-              <button type="button" class="btn sm tag" id="ship-save-preset-quick-btn" onclick="openSaveBookPresetModal()" style="font-size:var(--text-2xs); padding:2px 8px;" title="Save current specifications to a book preset">💾 Save to Preset</button>
             </div>
             <select id="ship-preset-book" onchange="onShippoBookPresetChange()">
               <option value="">— Select book preset —</option>
             </select>
+            <div class="ship-preset-save-row">
+              <button type="button" class="btn sm outline" id="ship-save-preset-quick-btn" onclick="openSaveBookPresetModal()" title="Save current specifications to a book preset">💾 Save to Preset</button>
+            </div>
           </div>
         </div>
         <div id="ship-order-prefill-summary" class="ship-readiness ship-order-prefill" role="status" aria-live="polite" style="display:none;"></div>
@@ -3859,6 +3886,11 @@
               <input type="checkbox" id="ship-save-origin" checked style="width:auto; margin:0;"> Save default
             </label>
           </div>
+          <details class="ship-sender-fold" id="ship-sender-fold">
+            <summary class="ship-sender-fold-summary">
+              <span id="ship-sender-fold-line" class="ship-sender-fold-line">From: add your sender address</span>
+              <span class="ship-sender-fold-edit">Edit</span>
+            </summary>
           <div class="form-group" style="margin-bottom:8px;"><label>Sender Name</label><input type="text" id="sf-name" placeholder="Lyricalmyrical Books"></div>
           <div class="form-group" style="margin-bottom:8px;"><label>Company</label><input type="text" id="sf-company" placeholder="Optional"></div>
           <div class="form-group" style="margin-bottom:8px;"><label>Phone <span style="font-size:var(--text-2xs);color:var(--text3);text-transform:none;letter-spacing:0;">required for international</span></label><input type="tel" id="sf-phone" placeholder="+1 416 555 0123"></div>
@@ -3881,6 +3913,7 @@
               </select>
             </div>
           </div>
+          </details>
         </div>
 
         <!-- Destination Card -->
@@ -3974,7 +4007,7 @@
           <div class="form-group">
             <label>Duties (incoterm)</label>
             <select id="sp-incoterm" onchange="onShippoIncotermChange()">
-              <option value="auto">Auto (DDP US, DDU elsewhere)</option>
+              <option value="auto">Auto</option>
               <option value="DDP">DDP — you prepay duties &amp; taxes</option>
               <option value="DDU">DDU — recipient pays on delivery</option>
               <option value="DAP">DAP — delivered at place</option>
@@ -4058,6 +4091,8 @@
 
         </div>
 
+        <details class="ship-more-options" id="ship-more-options">
+          <summary class="ship-more-options-summary"><span>More options</span></summary>
         <div class="shipping-predictor-settings">
           <div class="form-group">
             <label>Packaging / handling buffer (CAD)</label>
@@ -4082,6 +4117,7 @@
             </select>
           </div>
         </div>
+        </details>
 
         <!-- Live "what's still missing" line, filled in by renderShippoRateReadiness(). -->
         <div id="ship-rate-readiness" class="ship-readiness" role="status" aria-live="polite"></div>
@@ -4613,14 +4649,14 @@
 
   <!-- Setup State -->
   <div id="webanalytics-setup-view" style="display:none;">
-    <div class="card" style="max-width:680px; margin: 2rem auto; padding: 3rem 2rem;">
-      <div style="text-align:center; margin-bottom:2rem;">
-        <div style="font-size:48px; margin-bottom:1rem;">📈</div>
+    <div class="card wa-setup-card">
+      <div class="wa-setup-hero">
+        <span class="wa-setup-icon" aria-hidden="true"><svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="square"><path d="M6 34h28M10 28v-8M18 28V12M26 28v-5M34 28V6"/></svg></span>
         <h2 style="font-family:var(--font-display); font-size:24px; color:var(--text); margin:0 0 8px;">Monitor Website Traffic in Real-Time</h2>
-        <p style="font-size:var(--text-base); color:var(--text3); line-height:1.6; max-width:480px; margin:0 auto;">Connect an external analytics dashboard (like Umami, Plausible, or any shared iframe report) to track visits, referrer paths, and checkout conversions directly from this panel.</p>
+        <p class="wa-setup-intro">Connect a shared analytics dashboard, such as Umami or Plausible, to see visits and checkout activity here.</p>
       </div>
 
-      <div style="background:rgba(232, 64, 42,.04); border:var(--stroke-hair) solid rgba(232, 64, 42,.15); padding:1.5rem; border-radius:var(--r2); margin-bottom:2rem;">
+      <div class="wa-setup-panel">
         <div class="form-group" style="margin-bottom:1.25rem;">
           <label for="webanalytics-url-input" style="font-size:var(--text-3xs); font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:var(--text2); display:block; margin-bottom:6px;">Shareable Dashboard URL</label>
           <input type="url" id="webanalytics-url-input" placeholder="https://cloud.umami.is/share/... ">
@@ -4721,7 +4757,7 @@
           <p class="section-subcopy">Manage test books in an isolated sandbox environment. Test book activity is strictly blocked from syncing to Google Sheets and excluded from financial ledgers.</p>
         </div>
         <div class="sec-head-badges">
-          <span style="font-size:var(--text-2xs);font-family:sans-serif;background:rgba(109,40,217,0.1);color:var(--violet-deep);padding:2px 8px;border-radius:var(--r);font-weight:600;letter-spacing:0.5px;border:var(--stroke-hair) solid rgba(109,40,217,0.25);">ISOLATED TEST SANDBOX</span>
+          <span class="chip-status gray sm">ISOLATED TEST SANDBOX</span>
         </div>
       </div>
       <div id="test-catalog-list" style="display:flex;flex-direction:column;gap:12px;"></div>
@@ -4973,11 +5009,14 @@
   <div class="sheets-setup" style="padding:1.25rem;margin-bottom:1rem;">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
       <div>
-        <div style="font-weight:700;font-size:14px;color:var(--gold-text);margin-bottom:4px;">System backups (daily, automatic)</div>
-        <div style="font-size:var(--text-sm);color:var(--content-secondary);line-height:1.5;">Publisher mode now keeps a daily snapshot in Firestore so you can restore to a previous system state without needing a local file.</div>
+        <div style="font-weight:700;font-size:14px;color:var(--content-primary);margin-bottom:4px;">Automatic online copy (daily)</div>
+        <div style="font-size:var(--text-sm);color:var(--content-secondary);line-height:1.5;">The app keeps an automatic daily copy online, so you can go back to an earlier state without a file on your computer.</div>
         <div id="system-backup-status" style="font-size:var(--text-xs);color:var(--content-muted);margin-top:8px;">Loading system backups…</div>
       </div>
-      <button class="btn sm" onclick="createSystemBackupNow()">Create backup now</button>
+      <div class="bk-action">
+        <button class="btn sm" onclick="createSystemBackupNow()">Make an online copy now</button>
+        <p class="bk-action-note">Copies are made by the app each day. Use this to make one right away.</p>
+      </div>
     </div>
     <div class="tbl-wrap" style="margin-top:12px;">
       <table class="tbl">
@@ -4987,7 +5026,7 @@
             <div class="empty-state sys-empty" style="padding:var(--space-5);text-align:center;">
               <div class="e-icon" aria-hidden="true">💾</div>
               <strong style="color:var(--content-primary);font-size:var(--text-sm);">No Cloud Snapshots Saved Yet</strong>
-              <p style="color:var(--content-secondary);font-size:var(--text-xs);margin:4px 0 12px;line-height:var(--leading-snug);">Daily Firestore snapshots run automatically in Publisher mode to protect your entire catalog, inventory, and ledgers.</p>
+              <p style="color:var(--content-secondary);font-size:var(--text-xs);margin:4px 0 12px;line-height:var(--leading-snug);">An automatic daily online copy protects your whole catalogue, stock and ledgers.</p>
               <button class="btn gold sm" onclick="createSystemBackupNow()">Create first backup now</button>
             </div>
           </td></tr>
@@ -5013,7 +5052,10 @@
       </div>
       <p style="font-size:var(--text-sm);color:var(--content-secondary);line-height:1.6;margin-bottom:1.25rem;">Saves one file to your computer with <strong>everything</strong> in the app: your books, stock counts, sales history and settings. Keep it somewhere safe. If anything ever goes wrong, you can use it to bring your data back. Nothing in the app changes when you do this.</p>
       <div style="display:flex;flex-direction:column;gap:12px;">
-        <button class="btn gold" style="width:100%;" onclick="exportToJSON(event)">Save backup to my computer</button>
+        <div class="bk-action">
+          <button class="btn gold" style="width:100%;" onclick="exportToJSON(event)">Save backup to my computer</button>
+          <p class="bk-action-note">Saves one file to this computer. Keep it somewhere safe.</p>
+        </div>
         <button class="btn sm" style="width:100%;" onclick="chooseBackupFolder()">Change where backups are saved</button>
         <div style="font-size:var(--text-xs);color:var(--content-muted);text-align:center;line-height:1.5;margin-top:-6px;">Optional: pick a folder once, and future backups go straight there.</div>
         <div id="backup-folder-display" style="font-size:var(--text-xs);color:var(--content-muted);text-align:center;">Backup folder: Browser Downloads (default)</div>
@@ -5026,7 +5068,10 @@
         <div style="width:36px;height:36px;border-radius:var(--r);background:var(--surface-inset);color:var(--content-primary);display:flex;align-items:center;justify-content:center;font-size:var(--text-lg);">📤</div>
         <h3 style="margin:0;font-family:var(--font-ui);font-size:16px;font-weight:700;color:var(--content-primary);">Bring back data from a backup</h3>
       </div>
-      <p style="font-size:var(--text-sm);color:var(--content-secondary);line-height:1.6;margin-bottom:1.25rem;">Use a backup file you saved earlier (from the card on the left) to undo mistakes or recover lost data. Choose the option that fits:</p>
+      <details class="bk-howto">
+        <summary>How restoring works</summary>
+        <p>Use a backup file you saved earlier (from the card on the left) to undo mistakes or recover lost data. Choose the option that fits:</p>
+      </details>
       <div style="display:flex;flex-direction:column;gap:10px;">
         <div style="font-size:var(--text-sm);font-weight:700;color:var(--content-primary);">Fix just one book</div>
         <div style="font-size:var(--text-xs);color:var(--content-muted);line-height:1.5;margin-bottom:2px;">Use this if one book's numbers look wrong. You pick a backup file, then pick the book. Only that book goes back to how it was. Everything else stays as it is now, and a safety copy is saved first.</div>
@@ -5109,7 +5154,7 @@
     <div class="form-group" style="margin-bottom:8px;">
       <label for="ns-existing-store-select" class="sr-only">Select an existing store</label>
       <select id="ns-existing-store-select" onchange="handleSelectExistingStore(this.value)">
-        <option value="">— Select an existing store to auto-fill —</option>
+        <option value="">— Choose a store to auto-fill —</option>
       </select>
     </div>
     <div id="add-store-chips-wrap" class="add-store-chips-wrap">
@@ -5914,21 +5959,20 @@
       <div class="form-group">
         <label for="nb-accent">Project Accent Theme</label>
         <div class="accent-picker-wrap">
-          <div class="accent-swatches" id="nb-accent-swatches">
-            <button type="button" class="accent-swatch-btn" style="background:var(--gold);" onclick="selectBookAccentPreset('#E8402A')" title="Lyrical Gold" aria-label="Lyrical Gold accent color" aria-pressed="false"></button>
-            <button type="button" class="accent-swatch-btn" style="background:var(--emerald);" onclick="selectBookAccentPreset('#10b981')" title="Emerald" aria-label="Emerald accent color" aria-pressed="false"></button>
-            <button type="button" class="accent-swatch-btn" style="background:var(--violet);" onclick="selectBookAccentPreset('#6366f1')" title="Indigo" aria-label="Indigo accent color" aria-pressed="false"></button>
-            <button type="button" class="accent-swatch-btn" style="background:var(--rose);" onclick="selectBookAccentPreset('#f43f5e')" title="Rose / Crimson" aria-label="Rose / Crimson accent color" aria-pressed="false"></button>
-            <button type="button" class="accent-swatch-btn" style="background:var(--orange);" onclick="selectBookAccentPreset('#f59e0b')" title="Warm Amber" aria-label="Warm Amber accent color" aria-pressed="false"></button>
-            <button type="button" class="accent-swatch-btn" style="background:var(--violet);" onclick="selectBookAccentPreset('#8b5cf6')" title="Amethyst / Velvet" aria-label="Amethyst / Velvet accent color" aria-pressed="false"></button>
-            <button type="button" class="accent-swatch-btn" style="background:var(--blue);" onclick="selectBookAccentPreset('#0ea5e9')" title="Sky" aria-label="Sky accent color" aria-pressed="false"></button>
-            <button type="button" class="accent-swatch-btn" style="background:var(--slate);" onclick="selectBookAccentPreset('#64748b')" title="Slate Neutral" aria-label="Slate Neutral accent color" aria-pressed="false"></button>
+          <div class="accent-swatches" id="nb-accent-swatches" role="group" aria-label="Accent colour presets">
+            <button type="button" class="accent-swatch-btn" data-accent="#E8402A" data-name="Lyrical Gold" style="background:var(--gold);" onclick="selectBookAccentPreset('#E8402A')" title="Lyrical Gold" aria-label="Lyrical Gold accent color" aria-pressed="false"></button>
+            <button type="button" class="accent-swatch-btn" data-accent="#10b981" data-name="Emerald" style="background:var(--emerald);" onclick="selectBookAccentPreset('#10b981')" title="Emerald" aria-label="Emerald accent color" aria-pressed="false"></button>
+            <button type="button" class="accent-swatch-btn" data-accent="#6366f1" data-name="Indigo" style="background:var(--violet);" onclick="selectBookAccentPreset('#6366f1')" title="Indigo" aria-label="Indigo accent color" aria-pressed="false"></button>
+            <button type="button" class="accent-swatch-btn" data-accent="#f59e0b" data-name="Warm Amber" style="background:var(--orange);" onclick="selectBookAccentPreset('#f59e0b')" title="Warm Amber" aria-label="Warm Amber accent color" aria-pressed="false"></button>
+            <button type="button" class="accent-swatch-btn" data-accent="#0ea5e9" data-name="Sky" style="background:var(--blue);" onclick="selectBookAccentPreset('#0ea5e9')" title="Sky" aria-label="Sky accent color" aria-pressed="false"></button>
+            <button type="button" class="accent-swatch-btn" data-accent="#64748b" data-name="Slate Neutral" style="background:var(--slate);" onclick="selectBookAccentPreset('#64748b')" title="Slate Neutral" aria-label="Slate Neutral accent color" aria-pressed="false"></button>
           </div>
           <div class="accent-custom-picker">
             <input id="nb-accent" type="color" value="#E8402A" oninput="onCustomAccentInput(this.value)">
             <span class="accent-hex-display" id="nb-accent-hex">#E8402A</span>
           </div>
         </div>
+        <div class="accent-name-caption" id="nb-accent-name" aria-live="polite">Lyrical Gold</div>
       </div>
       <div class="form-group">
         <label for="nb-thresh">Low Stock Alert Threshold</label>
@@ -6694,7 +6738,7 @@
     
     <div class="st-balance-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
       <div class="st-balance-card">
-        <div class="st-balance-label">Publisher On-Hand</div>
+        <div class="st-balance-label">On hand</div>
         <div id="st-cur-publisher" class="st-balance-val gold-val">—</div>
       </div>
       <div class="st-balance-card">
