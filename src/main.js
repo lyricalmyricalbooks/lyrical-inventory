@@ -24655,9 +24655,13 @@ async function reconUpdateDefaults(id, grouped = false, reset = false, retry = f
   const request = String(Number(input.dataset.request || 0) + 1);
   input.dataset.request = request;
   if (reset) { input.value = ''; delete input.dataset.manual; }
+  // "Choose a book to record this sale" stays visible until a book is picked.
+  const hint = document.getElementById(`${prefix}hint-${id}`);
+  if (hint) hint.hidden = !!(bookId && BOOKS[bookId]);
   if (!bookId || !BOOKS[bookId]) {
     button.disabled = true;
-    status.textContent = 'Choose a book to calculate the converted total.';
+    // The "Choose a book to record this sale" hint already says what is missing.
+    status.textContent = '';
     return;
   }
   // A different book has a different price, so the copy count follows it
@@ -24714,16 +24718,33 @@ function _reconBookOptions(selectedId, includeBlank) {
 
 // Collapse the key field to a tidy "saved" chip once a key exists anywhere; the
 // publisher only ever pastes it once (Tax Centre / Invoices / here all share it).
+function _reconSavedKey() {
+  return (TAX_CENTER?.settings?.stripeKey || getInvoiceSettings().stripeKey || '').trim();
+}
 function reconRenderKeyRow(forceEdit) {
   const row = document.getElementById('recon-keyrow');
   if (!row) return;
-  const saved = (TAX_CENTER?.settings?.stripeKey || getInvoiceSettings().stripeKey || '').trim();
+  const saved = _reconSavedKey();
   if (saved && !forceEdit && !row.dataset.editing) {
-    row.innerHTML = `<span style="font-size:var(--text-sm);color:var(--text2);">🔒 Stripe key saved <span style="font-family:var(--font-mono);color:var(--text3);">••••${escapeHtml(saved.slice(-4))}</span></span>
+    row.innerHTML = `<span class="recon-key-saved">🔒 Stripe key saved <span class="recon-key-mask">••••${escapeHtml(saved.slice(-4))}</span></span>
       <button class="btn tag sm" onclick="reconEditKey()">Change</button>`;
   } else {
-    row.innerHTML = `<input type="password" id="recon-key" placeholder="rk_live_… or sk_live_… (reused from Tax Centre / Invoices if already saved)" style="flex:1;" autocomplete="off" value="${escapeHtml(saved)}">`;
+    row.innerHTML = `<input type="password" id="recon-key" placeholder="rk_live_… or sk_live_… (reused from Tax Centre / Invoices if already saved)" autocomplete="off" value="${escapeHtml(saved)}">`;
   }
+}
+
+// The two settings folds open once per visit to this screen. They start open on
+// a wide screen, and on a phone only while no Stripe key is saved, so first-time
+// setup is never hidden. The data flag keeps the user's own toggling from being
+// reset by the next render.
+function _reconInitFolds(hasKey) {
+  const wide = globalThis.matchMedia?.('(min-width: 769px)').matches ?? false;
+  ['recon-settings', 'pm-settings'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el || el.dataset.foldInit) return;
+    el.dataset.foldInit = '1';
+    el.open = wide || !hasKey;
+  });
 }
 function reconEditKey() {
   const row = document.getElementById('recon-keyrow');
@@ -24772,39 +24793,43 @@ const _RECON_SORTERS = {
 };
 
 // ── Card fragments shared by single + grouped rendering
+// Layout lives in CSS (.recon-fields / .recon-f-* / .recon-actions); the markup
+// only says which field is which.
 function _reconAmountBadge(p) {
-  return `<span style="font-family:var(--font-mono);font-weight:600;font-size:16px;">${_stripeFmtMoney(p.amount, p.currency)}</span>`;
+  return `<span class="recon-amount">${_stripeFmtMoney(p.amount, p.currency)}</span>`;
 }
 function _reconMeta(p) {
   const who = [p.customer, p.email].filter(Boolean).join(' · ') || '—';
-  const desc = p.description ? `<div style="font-size:var(--text-xs);color:var(--text3);margin-top:2px;">${escapeHtml(p.description)}</div>` : '';
-  return `<div style="font-size:var(--text-sm);color:var(--text2);margin-top:3px;">${escapeHtml(p.date)} · ${escapeHtml(who)}</div>${desc}`;
+  const desc = p.description ? `<div class="recon-meta-desc">${escapeHtml(p.description)}</div>` : '';
+  return `<div class="recon-meta">${escapeHtml(p.date)} · ${escapeHtml(who)}</div>${desc}`;
 }
+// The paid-amount explanation, shown once above the worklist instead of on every card.
+const _RECON_PAID_NOTE_HTML = '<p class="recon-note recon-note-once">Stripe’s paid amount is preserved. A payment-date reference rate, the number of copies and an order number fill automatically; you can edit them. The reference rate may differ from Stripe’s payout conversion.</p>';
 
 // One needs-review card.
 function _reconNeedCard(p, c) {
   const idSafe = p.id.replace(/[^A-Za-z0-9_]/g, '');
-  const disputed = p.disputed ? ` <span class="pill" style="font-size:var(--text-2xs);background:var(--red-bg);color:var(--red);">⚠ Disputed</span>` : '';
+  const disputed = p.disputed ? ` <span class="pill red recon-pill">⚠ Disputed</span>` : '';
 
   // Invoice not yet marked paid → send her to the proper invoice flow.
   if (c.kind === 'invoice') {
     const goBtn = c.bookId
       ? `<button class="btn gold sm" onclick="reconcileOpenInvoice('${idSafe}')">Open invoice ${escapeHtml(c.ref)} →</button>`
-      : `<span style="font-size:var(--text-xs);color:var(--amber);">Invoice ${escapeHtml(c.ref)} not found in this app</span>`;
-    return `<div class="card" style="margin-bottom:10px;padding:12px 14px;">
-      <div class="row-between" style="align-items:flex-start;">
-        <div><div>${_reconAmountBadge(p)} <span class="pill" style="font-size:var(--text-2xs);background:var(--blue-bg);color:var(--blue);">Invoice</span>${disputed}</div>${_reconMeta(p)}</div>
-        <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">${goBtn}
+      : `<span class="recon-warn">Invoice ${escapeHtml(c.ref)} not found in this app</span>`;
+    return `<div class="card recon-card">
+      <div class="recon-variant">
+        <div class="recon-info"><div>${_reconAmountBadge(p)} <span class="pill blue recon-pill">Invoice</span>${disputed}</div>${_reconMeta(p)}</div>
+        <div class="recon-actions">${goBtn}
           <button class="btn tag sm" onclick="reconcileDismiss('${idSafe}')" title="Not an inventory sale">Dismiss</button></div>
       </div></div>`;
   }
 
   // Big Cartel order that was scanned but not yet applied → one-click apply.
   if (c.kind === 'bigcartel' && c.scanned) {
-    return `<div class="card" style="margin-bottom:10px;padding:12px 14px;">
-      <div class="row-between" style="align-items:flex-start;">
-        <div><div>${_reconAmountBadge(p)} <span class="pill" style="font-size:var(--text-2xs);background:var(--green-bg);color:var(--green);">Big Cartel ${escapeHtml(c.ref)}</span>${disputed}</div>${_reconMeta(p)}</div>
-        <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
+    return `<div class="card recon-card">
+      <div class="recon-variant">
+        <div class="recon-info"><div>${_reconAmountBadge(p)} <span class="pill green recon-pill">Big Cartel ${escapeHtml(c.ref)}</span>${disputed}</div>${_reconMeta(p)}</div>
+        <div class="recon-actions">
           <button class="btn gold sm" onclick="reconcileApplyBigCartel('${idSafe}')">Apply order</button>
           <button class="btn tag sm" onclick="reconcileDismiss('${idSafe}')">Dismiss</button></div>
       </div></div>`;
@@ -24812,89 +24837,90 @@ function _reconNeedCard(p, c) {
 
   // Direct sale (bare pi_…) or Big Cartel order we never scanned → pick a book.
   const kindPill = c.kind === 'bigcartel'
-    ? `<span class="pill" style="font-size:var(--text-2xs);background:var(--green-bg);color:var(--green);">Big Cartel ${escapeHtml(c.ref)}</span>`
-    : `<span class="pill gold" style="font-size:var(--text-2xs);">Direct sale</span>`;
-  const suggest = c.bookId ? `<span style="font-size:var(--text-2xs);color:var(--green);margin-left:6px;">SKU match → ${escapeHtml(BOOKS[c.bookId].title)}</span>` : '';
+    ? `<span class="pill green recon-pill">Big Cartel ${escapeHtml(c.ref)}</span>`
+    : `<span class="pill gold recon-pill">Direct sale</span>`;
+  const suggest = c.bookId ? `<span class="recon-suggest">SKU match → ${escapeHtml(BOOKS[c.bookId].title)}</span>` : '';
   const recDisabled = c.bookId ? '' : ' disabled';
-  return `<div class="card" style="margin-bottom:10px;padding:12px 14px;">
-    <div class="row-between" style="align-items:flex-start;">
-      <div><div>${_reconAmountBadge(p)} ${kindPill}${suggest}${disputed}</div>${_reconMeta(p)}</div>
-    </div>
-    <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:10px;">
-      <div class="form-group" style="margin:0;flex:1;min-width:160px;">
-        <label style="font-size:var(--text-2xs);">Book</label>
+  return `<div class="card recon-card">
+    <div class="recon-info"><div>${_reconAmountBadge(p)} ${kindPill}${suggest}${disputed}</div>${_reconMeta(p)}</div>
+    <div class="recon-fields">
+      <div class="form-group recon-f-book">
+        <label for="recon-book-${idSafe}">Book</label>
         <select id="recon-book-${idSafe}" onchange="reconUpdateDefaults('${idSafe}', false, true)">${_reconBookOptions(c.bookId, !c.bookId)}</select>
       </div>
-      <div class="form-group" style="margin:0;width:70px;">
-        <label style="font-size:var(--text-2xs);">Qty</label>
-        <input type="number" inputmode="numeric" id="recon-qty-${idSafe}" value="${_reconDefaultQty(p, c.bookId)}" min="1" oninput="this.dataset.manual='1'" style="width:100%;">
+      <div class="form-group recon-f-qty">
+        <label for="recon-qty-${idSafe}">Qty</label>
+        <input type="number" inputmode="numeric" id="recon-qty-${idSafe}" value="${_reconDefaultQty(p, c.bookId)}" min="1" oninput="this.dataset.manual='1'">
       </div>
-      <div class="form-group" style="margin:0;width:280px;max-width:100%;">
-        <label for="recon-num-${idSafe}" style="font-size:var(--text-2xs);">Order #</label>
-        <input type="text" id="recon-num-${idSafe}" maxlength="80" value="${escapeHtml(stripeOrderNumber(p))}" autocomplete="off" style="width:100%;">
+      <div class="form-group recon-f-num">
+        <label for="recon-num-${idSafe}">Order #</label>
+        <input type="text" id="recon-num-${idSafe}" maxlength="80" value="${escapeHtml(stripeOrderNumber(p))}" autocomplete="off">
       </div>
-      <div class="form-group" style="margin:0;width:120px;">
-        <label style="font-size:var(--text-2xs);">Stripe amount paid</label>
-        <input type="number" id="recon-amount-${idSafe}" value="${Number(p.amount).toFixed(2)}" min="0.01" step="0.01" inputmode="decimal" oninput="reconUpdateDefaults('${idSafe}')" style="width:100%;">
+      <div class="form-group recon-f-amt">
+        <label for="recon-amount-${idSafe}">Stripe amount paid</label>
+        <input type="number" id="recon-amount-${idSafe}" value="${Number(p.amount).toFixed(2)}" min="0.01" step="0.01" inputmode="decimal" oninput="reconUpdateDefaults('${idSafe}')">
       </div>
-      <div class="form-group" style="margin:0;width:90px;">
-        <label style="font-size:var(--text-2xs);">Currency</label>
-        <input type="text" id="recon-currency-${idSafe}" value="${escapeHtml(p.currency)}" maxlength="3" pattern="[A-Za-z]{3}" autocapitalize="characters" autocomplete="off" onchange="reconUpdateDefaults('${idSafe}', false, true)" style="width:100%;">
+      <div class="form-group recon-f-cur">
+        <label for="recon-currency-${idSafe}">Currency</label>
+        <input type="text" id="recon-currency-${idSafe}" value="${escapeHtml(p.currency)}" maxlength="3" pattern="[A-Za-z]{3}" autocapitalize="characters" autocomplete="off" onchange="reconUpdateDefaults('${idSafe}', false, true)">
       </div>
-      <div class="form-group" style="margin:0;width:130px;">
-        <label for="recon-rate-${idSafe}" style="font-size:var(--text-2xs);">Automatic exchange rate</label>
-        <input type="number" id="recon-rate-${idSafe}" data-recon-default="${idSafe}" min="0.000001" step="any" inputmode="decimal" placeholder="Automatic" oninput="this.dataset.manual='1';reconUpdateDefaults('${idSafe}')" aria-describedby="recon-fx-${idSafe}" style="width:100%;">
+      <div class="form-group recon-f-rate">
+        <label for="recon-rate-${idSafe}">Automatic exchange rate</label>
+        <input type="number" id="recon-rate-${idSafe}" data-recon-default="${idSafe}" min="0.000001" step="any" inputmode="decimal" placeholder="Automatic" oninput="this.dataset.manual='1';reconUpdateDefaults('${idSafe}')" aria-describedby="recon-fx-${idSafe}">
       </div>
-      <button class="btn gold sm" id="recon-rec-${idSafe}" style="height:38px;"${recDisabled} onclick="reconcileRecordSale('${idSafe}')">Record sale</button>
-      <button class="btn tag sm" style="height:38px;" onclick="reconcileDismiss('${idSafe}')" title="Not an inventory sale (donation, test charge, etc.)">Dismiss</button>
+      <div class="recon-actions">
+        <button class="btn gold sm recon-rec" id="recon-rec-${idSafe}"${recDisabled} aria-describedby="recon-hint-${idSafe}" onclick="reconcileRecordSale('${idSafe}')">Record sale</button>
+        <button class="btn tag sm" onclick="reconcileDismiss('${idSafe}')" title="Not an inventory sale (donation, test charge, etc.)">Dismiss</button>
+      </div>
     </div>
-    <div id="recon-fx-${idSafe}" role="status" aria-live="polite" style="font-size:var(--text-xs);color:var(--text2);margin-top:6px;">Preparing the exchange rate…</div>
-    <div style="font-size:var(--text-xs);color:var(--text3);margin-top:6px;">Stripe’s paid amount is preserved. A payment-date reference rate, the number of copies and an order number fill automatically; you can edit them. The reference rate may differ from Stripe’s payout conversion.</div>
-    </div>`;
+    <div class="recon-hint" id="recon-hint-${idSafe}"${c.bookId ? ' hidden' : ''}>Choose a book to record this sale.</div>
+    <div id="recon-fx-${idSafe}" class="recon-fx" role="status" aria-live="polite">Preparing the exchange rate…</div>
+  </div>`;
 }
 
 // A grouped card standing in for N identical pickable payments.
 function _reconGroupCard(items, gi) {
   const p = items[0].p, c = items[0].c, n = items.length;
   const kindPill = c.kind === 'bigcartel'
-    ? `<span class="pill" style="font-size:var(--text-2xs);background:var(--green-bg);color:var(--green);">Big Cartel</span>`
-    : `<span class="pill gold" style="font-size:var(--text-2xs);">Direct sale</span>`;
-  const suggest = c.bookId ? `<span style="font-size:var(--text-2xs);color:var(--green);margin-left:6px;">SKU match → ${escapeHtml(BOOKS[c.bookId].title)}</span>` : '';
+    ? `<span class="pill green recon-pill">Big Cartel</span>`
+    : `<span class="pill gold recon-pill">Direct sale</span>`;
+  const suggest = c.bookId ? `<span class="recon-suggest">SKU match → ${escapeHtml(BOOKS[c.bookId].title)}</span>` : '';
   const total = _stripeFmtMoney(items.reduce((s, it) => s + it.p.amount, 0), p.currency);
-  const desc = p.description ? `<div style="font-size:var(--text-xs);color:var(--text3);margin-top:2px;">${escapeHtml(p.description)}</div>` : '';
+  const desc = p.description ? `<div class="recon-meta-desc">${escapeHtml(p.description)}</div>` : '';
   const recDisabled = c.bookId ? '' : ' disabled';
-  return `<div class="card" style="margin-bottom:10px;padding:12px 14px;">
-    <div class="row-between" style="align-items:flex-start;">
-      <div><div>${_reconAmountBadge(p)} <span style="font-size:var(--text-sm);color:var(--text2);font-weight:600;">× ${n}</span> ${kindPill}${suggest}</div>
-        <div style="font-size:var(--text-sm);color:var(--text2);margin-top:3px;">${n} identical payments · ${escapeHtml(total)} total</div>${desc}</div>
-    </div>
-    <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:10px;">
-      <div class="form-group" style="margin:0;flex:1;min-width:160px;">
-        <label style="font-size:var(--text-2xs);">Book (applies to all ${n})</label>
+  return `<div class="card recon-card recon-group">
+    <div class="recon-info"><div>${_reconAmountBadge(p)} <span class="recon-count">× ${n}</span> ${kindPill}${suggest}</div>
+      <div class="recon-meta">${n} identical payments · ${escapeHtml(total)} total</div>${desc}</div>
+    <div class="recon-fields">
+      <div class="form-group recon-f-book">
+        <label for="recon-gbook-${gi}">Book (applies to all ${n})</label>
         <select id="recon-gbook-${gi}" onchange="reconUpdateDefaults('${gi}', true, true)">${_reconBookOptions(c.bookId, !c.bookId)}</select>
       </div>
-      <div class="form-group" style="margin:0;width:80px;">
-        <label style="font-size:var(--text-2xs);">Qty each</label>
-        <input type="number" inputmode="numeric" id="recon-gqty-${gi}" value="${_reconDefaultQty(p, c.bookId)}" min="1" oninput="this.dataset.manual='1'" style="width:100%;">
+      <div class="form-group recon-f-qty">
+        <label for="recon-gqty-${gi}">Qty each</label>
+        <input type="number" inputmode="numeric" id="recon-gqty-${gi}" value="${_reconDefaultQty(p, c.bookId)}" min="1" oninput="this.dataset.manual='1'">
       </div>
-      <div class="form-group" style="margin:0;width:120px;">
-        <label style="font-size:var(--text-2xs);">Stripe amount paid</label>
-        <input type="number" id="recon-gamount-${gi}" value="${Number(p.amount).toFixed(2)}" min="0.01" step="0.01" inputmode="decimal" oninput="reconUpdateDefaults('${gi}', true)" style="width:100%;">
+      <div class="form-group recon-f-amt">
+        <label for="recon-gamount-${gi}">Stripe amount paid</label>
+        <input type="number" id="recon-gamount-${gi}" value="${Number(p.amount).toFixed(2)}" min="0.01" step="0.01" inputmode="decimal" oninput="reconUpdateDefaults('${gi}', true)">
       </div>
-      <div class="form-group" style="margin:0;width:90px;">
-        <label style="font-size:var(--text-2xs);">Currency</label>
-        <input type="text" id="recon-gcurrency-${gi}" value="${escapeHtml(p.currency)}" maxlength="3" pattern="[A-Za-z]{3}" autocapitalize="characters" autocomplete="off" onchange="reconUpdateDefaults('${gi}', true, true)" style="width:100%;">
+      <div class="form-group recon-f-cur">
+        <label for="recon-gcurrency-${gi}">Currency</label>
+        <input type="text" id="recon-gcurrency-${gi}" value="${escapeHtml(p.currency)}" maxlength="3" pattern="[A-Za-z]{3}" autocapitalize="characters" autocomplete="off" onchange="reconUpdateDefaults('${gi}', true, true)">
       </div>
-      <div class="form-group" style="margin:0;width:130px;">
-        <label for="recon-grate-${gi}" style="font-size:var(--text-2xs);">Automatic exchange rate</label>
-        <input type="number" id="recon-grate-${gi}" data-recon-default="${gi}" data-grouped="1" min="0.000001" step="any" inputmode="decimal" placeholder="Automatic" oninput="this.dataset.manual='1';reconUpdateDefaults('${gi}', true)" aria-describedby="recon-gfx-${gi}" style="width:100%;">
+      <div class="form-group recon-f-rate">
+        <label for="recon-grate-${gi}">Automatic exchange rate</label>
+        <input type="number" id="recon-grate-${gi}" data-recon-default="${gi}" data-grouped="1" min="0.000001" step="any" inputmode="decimal" placeholder="Automatic" oninput="this.dataset.manual='1';reconUpdateDefaults('${gi}', true)" aria-describedby="recon-gfx-${gi}">
       </div>
-      <button class="btn gold sm" id="recon-grec-${gi}" style="height:38px;"${recDisabled} onclick="reconRecordGroup(${gi})">Record all ${n}</button>
-      <button class="btn tag sm" style="height:38px;" onclick="reconDismissGroup(${gi})">Dismiss all ${n}</button>
+      <div class="recon-actions">
+        <button class="btn gold sm recon-rec" id="recon-grec-${gi}"${recDisabled} aria-describedby="recon-ghint-${gi}" onclick="reconRecordGroup(${gi})">Record all ${n}</button>
+        <button class="btn tag sm" onclick="reconDismissGroup(${gi})">Dismiss all ${n}</button>
+      </div>
     </div>
-    <div id="recon-gfx-${gi}" role="status" aria-live="polite" style="font-size:var(--text-xs);color:var(--text2);margin-top:6px;">Preparing the exchange rate…</div>
-    <div style="font-size:var(--text-xs);color:var(--text3);margin-top:6px;">${escapeHtml(p.date)} · Each payment keeps its own order number. The paid amount and reference exchange rate apply to each sale. Ungroup to edit individual orders.</div>
-    </div>`;
+    <div class="recon-hint" id="recon-ghint-${gi}"${c.bookId ? ' hidden' : ''}>Choose a book to record these sales.</div>
+    <div id="recon-gfx-${gi}" class="recon-fx" role="status" aria-live="polite">Preparing the exchange rate…</div>
+    <div class="recon-note">${escapeHtml(p.date)} · Each payment keeps its own order number.</div>
+  </div>`;
 }
 
 export function renderReconcile() {
@@ -24905,6 +24931,7 @@ export function renderReconcile() {
   if (!needsEl) return;
 
   reconRenderKeyRow();
+  _reconInitFolds(!!_reconSavedKey());
   renderPaymentConfig();
   renderStripePaidNotifyToggle();
 
@@ -24947,7 +24974,8 @@ export function renderReconcile() {
     curs.forEach(cur => { chips += chip(cur, `${cur} · ${curCounts[cur]}`); });
     chipsEl.innerHTML = curs.length > 1 ? chips : '';   // one currency → no need for chips
   }
-  if (toolbarEl) toolbarEl.style.display = needs.length ? 'flex' : 'none';
+  // Blank, not 'flex': the stylesheet owns the toolbar's layout (flex on desktop, grid on a phone).
+  if (toolbarEl) toolbarEl.style.display = needs.length ? '' : 'none';
 
   // Apply search / currency / type filters, then sort.
   const shown = needs.filter(({ p, c }) => _reconMatchesFilter(p, c));
@@ -24961,9 +24989,14 @@ export function renderReconcile() {
     const moneyStr = Object.entries(reviewMoney).map(([cur, amt]) => _stripeFmtMoney(amt, cur)).join(' · ') || '—';
     const filtering = shown.length !== needs.length;
     const sess = (_reconSession.logged || _reconSession.dismissed)
-      ? ` · <span style="color:var(--green);">${_reconSession.logged} logged · ${_reconSession.dismissed} dismissed this session</span>` : '';
+      ? `<span class="recon-sess-txt">${_reconSession.logged} logged · ${_reconSession.dismissed} dismissed this session</span>` : '';
     const pct = payments.length ? Math.round((matched.length / payments.length) * 100) : 0;
-    summaryEl.innerHTML = `<strong style="color:var(--gold);">${needs.length}</strong> need review (${moneyStr})${filtering ? ` · <span style="color:var(--text3);">showing ${shown.length}</span>` : ''} · <strong>${matched.length}</strong> reconciled · ${payments.length} total${sess}
+    summaryEl.innerHTML = `<div class="kpi-grid recon-kpis">
+        <div class="kpi is-lead"><div class="kpi-label">Need review</div><div class="kpi-value">${needs.length}</div><div class="kpi-sub">${moneyStr}${filtering ? ` · showing ${shown.length}` : ''}</div></div>
+        <div class="kpi"><div class="kpi-label">Reconciled</div><div class="kpi-value">${matched.length}</div><div class="kpi-sub">${pct}%</div></div>
+        <div class="kpi"><div class="kpi-label">Total</div><div class="kpi-value">${payments.length}</div></div>
+      </div>
+      ${sess ? `<div class="recon-sess">${sess}</div>` : ''}
       <div class="recon-progress" title="${pct}% of payments reconciled"><i style="width:${pct}%;"></i></div>`;
   }
 
@@ -24991,9 +25024,9 @@ export function renderReconcile() {
       gi++;
     });
     singles.forEach(it => { html += _reconNeedCard(it.p, it.c); });
-    needsEl.innerHTML = html;
+    needsEl.innerHTML = _RECON_PAID_NOTE_HTML + html;
   } else {
-    needsEl.innerHTML = shown.map(({ p, c }) => _reconNeedCard(p, c)).join('');
+    needsEl.innerHTML = _RECON_PAID_NOTE_HTML + shown.map(({ p, c }) => _reconNeedCard(p, c)).join('');
   }
 
   needsEl.querySelectorAll('[data-recon-default]').forEach(input => {
@@ -25003,16 +25036,16 @@ export function renderReconcile() {
   // ── Reconciled (collapsed detail)
   if (!matched.length) { matchedEl.innerHTML = ''; return; }
   const rows = matched.map(({ p, label, tone, note }) => `<tr>
-    <td style="white-space:nowrap;">${escapeHtml(p.date)}</td>
-    <td class="r" style="font-family:var(--font-mono);white-space:nowrap;">${_stripeFmtMoney(p.amount, p.currency)}</td>
+    <td class="recon-nowrap">${escapeHtml(p.date)}</td>
+    <td class="r money-cell recon-nowrap">${_stripeFmtMoney(p.amount, p.currency)}</td>
     <td>${escapeHtml([p.customer, p.email].filter(Boolean).join(' · ') || p.description || '—')}</td>
-    <td><span class="pill ${tone}" style="font-size:var(--text-2xs);">${label}</span> <span style="font-size:var(--text-xs);color:var(--text3);">${escapeHtml(note)}</span></td>
+    <td><span class="pill ${tone} recon-pill">${label}</span> <span class="recon-status-note">${escapeHtml(note)}</span></td>
     <td class="r">${getReconMemory().recorded[p.id] || getReconMemory().dismissed[p.id] ? `<button class="btn tag sm" onclick="reconcileUndo('${p.id.replace(/[^A-Za-z0-9_]/g, '')}')">Undo</button>` : ''}</td>
   </tr>`).join('');
   matchedEl.innerHTML = `
-    <button type="button" class="btn tag" style="background:transparent;border:var(--stroke-hair) dashed var(--gold-line);margin-top:16px;" onclick="(function(el){const d=document.getElementById('recon-matched-tbl');const open=d.style.display!=='none';d.style.display=open?'none':'';el.textContent=(open?'▸':'▾')+' Reconciled payments (${matched.length})';})(this)">▸ Reconciled payments (${matched.length})</button>
-    <div id="recon-matched-tbl" style="display:none;margin-top:10px;">
-      <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Date</th><th class="r">Amount</th><th>Customer</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+    <button type="button" class="btn tag recon-matched-toggle" onclick="(function(el){const d=document.getElementById('recon-matched-tbl');const open=d.style.display!=='none';d.style.display=open?'none':'';el.textContent=(open?'▸':'▾')+' Reconciled payments (${matched.length})';})(this)">▸ Reconciled payments (${matched.length})</button>
+    <div id="recon-matched-tbl" style="display:none;">
+      <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Date</th><th class="r">Amount</th><th>Customer</th><th>Status</th><th></th></tr></thead><tbody id="recon-matched-body">${rows}</tbody></table></div>
     </div>`;
 }
 

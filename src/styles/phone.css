@@ -826,3 +826,75 @@
 @media (max-width: 768px) and (prefers-reduced-motion: reduce) {
   #tab-history .tbl tr.hist-row { transition: none; }
 }
+
+/* Payments (#tab-reconcile): the worklist comes first and the settings fold
+   away at the bottom. Order: sync, status, summary, toolbar, payments to
+   review, reconciled, payment settings, accepted payment methods. */
+@media (max-width: 768px) {
+  #tab-reconcile .recon-layout { display: flex; flex-direction: column; gap: var(--space-5); }
+  #tab-reconcile .recon-layout > * { margin: 0; }
+  #tab-reconcile .sec-head { order: 1; }
+  #tab-reconcile #recon-status { order: 2; }
+  #tab-reconcile #recon-status:empty { display: none; }
+  #tab-reconcile #recon-summary { order: 3; }
+  #tab-reconcile #recon-toolbar { order: 4; }
+  #tab-reconcile #recon-needs { order: 5; }
+  #tab-reconcile #recon-matched { order: 6; }
+  #tab-reconcile #recon-settings { order: 7; }
+  #tab-reconcile .recon-divider { display: none; }
+  #tab-reconcile #pm-settings { order: 8; }
+
+  /* Sync: full-width, a finger-sized target, its status line under it. */
+  #tab-reconcile .sec-head-badges { display: grid; gap: var(--space-2); width: 100%; }
+  #tab-reconcile #recon-sync-btn { width: 100%; min-height: var(--target-min); justify-content: center; }
+  #tab-reconcile #recon-last-sync { display: block; }
+
+  /* Folds: full-width summary rows, a finger-sized target. */
+  #tab-reconcile .recon-fold > summary { min-height: var(--target-min); }
+  #tab-reconcile .recon-keyrow { flex-wrap: wrap; }
+  #tab-reconcile .recon-keyrow input { min-height: var(--target-min); }
+
+  /* KPI strip: the lead figure takes the first row, the other two share the second. */
+  /* The global .kpi-grid phone rule forces one column with !important; this
+     screen wants the lead on its own row and the two others side by side. */
+  #tab-reconcile .recon-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: var(--space-2); }
+  #tab-reconcile .recon-kpis .kpi { padding: var(--space-3); }
+  #tab-reconcile .recon-kpis .kpi.is-lead { grid-column: 1 / -1; }
+
+  /* Toolbar: static (not stuck under the app header), search full width,
+     type and sort side by side, the group toggle and dismiss on one row. */
+  #tab-reconcile .recon-toolbar { position: static; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-2); padding: var(--space-3); }
+  #tab-reconcile .recon-search { grid-column: 1 / -1; width: 100%; min-width: 0; min-height: var(--target-min); }
+  #tab-reconcile .recon-chips { grid-column: 1 / -1; }
+  #tab-reconcile .recon-chips:empty { display: none; }
+  #tab-reconcile .recon-chip { min-height: var(--target-min); display: inline-flex; align-items: center; }
+  #tab-reconcile .recon-mini { width: 100%; min-width: 0; min-height: var(--target-min); }
+  #tab-reconcile .recon-toggle { min-height: var(--target-min); grid-column: 1; }
+  #tab-reconcile .recon-toolbar > .btn { grid-column: 2; min-height: var(--target-min); justify-content: center; }
+
+  /* Need cards: one column of fields, book first, Qty beside the amount,
+     Currency beside the rate, Order # last, then the actions. */
+  #tab-reconcile .recon-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); align-items: start; }
+  #tab-reconcile .recon-fields > .form-group,
+  #tab-reconcile .recon-fields > .recon-actions { width: auto; max-width: none; min-width: 0; flex: none; }
+  #tab-reconcile .recon-fields > .recon-f-book,
+  #tab-reconcile .recon-fields > .recon-f-num,
+  #tab-reconcile .recon-fields > .recon-actions { grid-column: 1 / -1; }
+  #tab-reconcile .recon-f-book { order: 1; }
+  #tab-reconcile .recon-f-qty { order: 2; }
+  #tab-reconcile .recon-f-amt { order: 3; }
+  #tab-reconcile .recon-f-cur { order: 4; }
+  #tab-reconcile .recon-f-rate { order: 5; }
+  #tab-reconcile .recon-f-num { order: 6; }
+  #tab-reconcile .recon-actions { order: 7; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+  #tab-reconcile .recon-fields input,
+  #tab-reconcile .recon-fields select { min-height: var(--target-min); }
+  #tab-reconcile .recon-actions .btn { width: 100%; height: auto; min-height: var(--target-min); justify-content: center; }
+  #tab-reconcile .recon-hint { margin-top: var(--space-2); }
+
+  /* Invoice and Big Cartel cards: the detail stacks above full-width buttons. */
+  #tab-reconcile .recon-variant { flex-direction: column; align-items: stretch; }
+  #tab-reconcile .recon-variant .recon-actions { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+  #tab-reconcile .recon-variant .recon-actions .btn { min-height: var(--target-min); }
+  #tab-reconcile .recon-matched-toggle { width: 100%; min-height: var(--target-min); justify-content: center; }
+}

@@ -15,6 +15,9 @@ const RECORDS = {
   'tc-recurring-body': { lead: 0, summary: [2, 4, 5, 6] },
   'bc-orders-list': { lead: 0, summary: [1, 2, 6, 7, 8] },
   'sheets-log-body': { lead: 0, summary: [1, 4] },
+  // Payments: reconciled list. Customer leads; Date, Amount, Status and Undo
+  // stay visible on the card, so the Undo button never scrolls off-screen.
+  'recon-matched-body': { lead: 2, summary: [0, 1, 3, 4] },
   'system-backup-list': { lead: 0, summary: [1, 2, 3] },
   // Pop-up windows sit outside the page panels but get the same record cards.
   'tc-trip-detail-body': { lead: 1, summary: [0, 5, 6] },
