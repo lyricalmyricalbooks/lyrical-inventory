@@ -93,8 +93,13 @@ test('phone-only pieces stay hidden on a computer', () => {
 test('history cards keep order, channel, total, date and actions visible', () => {
   const header = [...document.querySelectorAll('#tab-history thead th')].map((th) => th.textContent);
   expect(header).toEqual(['Order #', 'Channel', 'Qty', 'Unit price', 'Total', 'Stock after', 'Notes', 'Entered by', 'Date', '']);
-  for (const col of [1, 2, 3, 5, 7, 9, 10]) {
-    expect(styles).toMatch(new RegExp(`#tab-history \\.tbl tr\\.hist-row > td:nth-child\\(${col}\\)\\{grid-column`));
+  // Summary columns are placed by grid-area (order #, channel, total, action, date);
+  // the detail columns open as full-width lines. Updated with the compact order card.
+  for (const col of [1, 2, 5, 9, 10]) {
+    expect(styles).toMatch(new RegExp(`#tab-history \\.tbl tr\\.hist-row > td:nth-child\\(${col}\\)\\{grid-area`));
+  }
+  for (const col of [3, 7]) {
+    expect(styles).toMatch(new RegExp(`tr\\.hist-row > td:nth-child\\(${col}\\),[\\s\\S]{0,400}?grid-area:auto / 1 / auto / -1`));
   }
 });
 

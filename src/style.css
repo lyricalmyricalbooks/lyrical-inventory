@@ -243,11 +243,6 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   border:var(--stroke-hair) solid var(--border2);
 }
 
-.hist-kpi-card.highlight-gold .hist-kpi-icon {
-  background: var(--gold-bg);
-  border-color: var(--gold-line);
-}
-
 .hist-kpi-card.highlight-green .hist-kpi-icon {
   background: var(--green-bg);
 }
@@ -299,14 +294,10 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
    opens this screen to act on; the print run beside it is fixed context and
    the sell-through beside that is a rate. Step size AND colour together —
    one size step alone reads as an accident rather than a hierarchy. */
-.hist-kpi-card.is-lead {
-  border-color: var(--gold-line);
-  box-shadow: var(--elev-2);
-}
-
+/* The lead figure is ink like the others: its accent is the bottom bar alone,
+   so red keeps meaning a problem rather than "the important number". */
 .hist-kpi-card.is-lead .hist-kpi-val {
   font-size: var(--text-2xl);
-  color: var(--gold-text);
 }
 
 .hist-progress-bar-wrap {
@@ -359,12 +350,9 @@ tr.hist-row:hover {
   white-space: nowrap;
 }
 
-.ch-badge.ch-bc {
-  background: color-mix(in srgb, var(--violet) 8%, transparent);
-  border-color: color-mix(in srgb, var(--violet) 20%, transparent);
-  color: var(--violet-deep);
-}
-
+/* Channel tags are categories, not alerts: Website and Direct keep the neutral
+   base tag above. Red and amber are reserved for owed, void and needs-you;
+   Store is an info tag (blue), so a consignment sale no longer reads as a problem. */
 .ch-badge.ch-pos {
   background: color-mix(in srgb, var(--green) 8%, transparent);
   border-color: color-mix(in srgb, var(--green) 20%, transparent);
@@ -372,15 +360,9 @@ tr.hist-row:hover {
 }
 
 .ch-badge.ch-store {
-  background: color-mix(in srgb, var(--gold) 8%, transparent);
-  border-color: color-mix(in srgb, var(--gold) 20%, transparent);
-  color: var(--gold-text);
-}
-
-.ch-badge.ch-direct {
-  background: color-mix(in srgb, var(--slate) 8%, transparent);
-  border-color: color-mix(in srgb, var(--slate) 20%, transparent);
-  color: var(--slate);
+  background: color-mix(in srgb, var(--status-info) 8%, transparent);
+  border-color: color-mix(in srgb, var(--status-info) 20%, transparent);
+  color: var(--status-info);
 }
 
 .chip-status {
@@ -20174,24 +20156,54 @@ button[onclick="refreshUmamiStats()"]:active {
   #tab-history .tbl-wrap{overflow:visible;border:0;background:transparent;}
   #tab-history .tbl thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);}
   #tab-history .tbl,#tab-history .tbl tbody{display:block;width:100%;}
+  /* Compact order card. Two columns: the left holds the channel and Details toggle,
+     the order # and then the date; the right is a fixed 112px column holding the
+     total and the action, so amounts line up down the list. grid-area is
+     !important because the record-card rules in phone.css set it to auto. */
   #tab-history .tbl tr.hist-row{
-    display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:var(--space-3);row-gap:4px;
-    padding:var(--space-3);border-bottom:var(--stroke-hair) solid var(--border-subtle);
+    display:grid;grid-template-columns:minmax(0,1fr) 112px;
+    column-gap:var(--space-3);row-gap:var(--space-1);align-items:center;
   }
   #tab-history .tbl tr.hist-row > td{display:block;padding:0;border:0;min-width:0;text-align:left;}
   /* Column order is fixed across every row template: 1 order #, 2 channel,
      3 qty, 4 unit price, 5 total, 6 stock after, 7 notes, 8 entered by, 9 date, 10 actions. */
-  #tab-history .tbl tr.hist-row > td:nth-child(2){grid-column:1;grid-row:1;font-weight:700;}
-  #tab-history .tbl tr.hist-row > td:nth-child(5){grid-column:2;grid-row:1;text-align:right;font-size:var(--text-base);}
-  #tab-history .tbl tr.hist-row > td:nth-child(1){grid-column:1;grid-row:2;font-size:var(--text-xs);color:var(--content-secondary);}
-  #tab-history .tbl tr.hist-row > td:nth-child(3){grid-column:2;grid-row:2;text-align:right;font-size:var(--text-xs);color:var(--content-secondary);}
-  #tab-history .tbl tr.hist-row > td:nth-child(9){grid-column:1;grid-row:3;font-size:var(--text-xs) !important;}
-  #tab-history .tbl tr.hist-row > td:nth-child(10){grid-column:2;grid-row:3;text-align:right;}
-  #tab-history .tbl tr.hist-row > td:nth-child(7){grid-column:1 / -1;grid-row:4;font-size:var(--text-xs) !important;}
+  #tab-history .tbl tr.hist-row > td:nth-child(2){grid-area:1 / 1 / 2 / 2 !important;display:flex !important;flex-wrap:wrap;align-items:center;gap:var(--space-2);font-weight:700;border-bottom:0 !important;padding:0 !important;}
+  #tab-history .tbl tr.hist-row > td:nth-child(5){grid-area:1 / 2 / 2 / 3 !important;text-align:right !important;}
+  #tab-history .tbl tr.hist-row > td:nth-child(1){grid-area:2 / 1 / 3 / 2 !important;font-size:var(--text-xs);color:var(--content-secondary);}
+  #tab-history .tbl tr.hist-row > td:nth-child(10){grid-area:2 / 2 / 3 / 3 !important;text-align:right !important;}
+  #tab-history .tbl tr.hist-row > td:nth-child(9){grid-area:3 / 1 / 4 / 2 !important;justify-self:start;font-size:var(--text-xs) !important;}
+  /* The record-card rules let spans wrap; a channel tag stays on one line. */
+  #tab-history #hist-body .ch-badge{white-space:nowrap;}
+  /* Details (qty, unit price, stock after, notes, entered by) open as full-width
+     lines under the summary, each with its label on the same line. */
+  #tab-history .tbl tr.hist-row > td:nth-child(3),
   #tab-history .tbl tr.hist-row > td:nth-child(4),
   #tab-history .tbl tr.hist-row > td:nth-child(6),
-  #tab-history .tbl tr.hist-row > td:nth-child(8){display:none;}
+  #tab-history .tbl tr.hist-row > td:nth-child(7),
+  #tab-history .tbl tr.hist-row > td:nth-child(8){grid-area:auto / 1 / auto / -1 !important;text-align:left !important;font-size:var(--text-xs);}
+  #tab-history .tbl tr.hist-row > td::before{display:none;}
+  #tab-history .tbl tr.hist-row > td.phone-record-detail::before{display:inline;margin:0 var(--space-2) 0 0;}
+  /* The card is the disclosure (phone-layout.js makes a tap anywhere on it press
+     this button); the button stays a real control with aria-expanded. */
+  #tab-history #hist-body .phone-record-toggle{
+    display:inline-flex;align-items:center;gap:var(--space-1);
+    min-height:44px;margin:0;padding:0;width:auto;
+    border:0;border-radius:0;background:transparent;box-shadow:none;
+    color:var(--content-secondary);font:800 var(--text-2xs) var(--font-ui);
+    letter-spacing:var(--tracking-caps);text-transform:uppercase;
+  }
+  #tab-history #hist-body .phone-record-toggle::before{content:'▸';font-size:var(--text-sm);line-height:1;}
+  #tab-history #hist-body tr.phone-record-open .phone-record-toggle::before{content:'▾';}
   #tab-history .tbl tr.hist-row > td:nth-child(10) .btn{min-height:44px;}
+  /* Summary tiles: one compact row of three, so the first order fits on the first screen. */
+  #tab-history .hist-kpi-container{grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-2);margin-bottom:var(--space-3);}
+  #tab-history .hist-kpi-card{flex-direction:column;gap:var(--space-1);min-width:0;padding:var(--space-2) var(--space-1);}
+  #tab-history .hist-kpi-icon{display:none;}
+  /* The house 9px label with narrower tracking, so DISTRIBUTED fits a third-width tile. */
+  #tab-history .hist-kpi-label{white-space:normal;overflow-wrap:break-word;font-size:var(--text-3xs);letter-spacing:var(--tracking-caps);line-height:var(--leading-snug);}
+  #tab-history .hist-kpi-val{font-size:var(--text-lg);}
+  #tab-history .hist-kpi-card.is-lead .hist-kpi-val{font-size:var(--text-xl);}
+  #tab-history .hist-kpi-sub{font-size:var(--text-2xs);line-height:var(--leading-snug);padding-top:0;}
 }
 
 /* ============================================================

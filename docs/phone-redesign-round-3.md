@@ -79,7 +79,7 @@ snapshot and drift.
 **Evidence:** shots/before/light-375/tab-intel-01.png and tab-intel-02.png (typing box sits about 1,400 px down); shots/before/dark-375/tab-intel-01.png; src/features/intel.js:386 (setup notice is text only); index.html:825-834 (quick-ask rail above the message box); src/style.css:18976-18992 (.intel-rail-btn sets no font-family, so the buttons fall back to the system font)
 
 ### 12. Sell tab (point of sale) — ugly, redesign
-**Status:** Open  
+**Status:** Done (Sell redesign)  
 **Problem:** Five rows of controls sit above the first book: the sale/fair toggle, the fair name, the currency box, the sync status and today's total. On a phone, the books the shop actually sells start about halfway down the screen. The fair toggle label also wraps with 'Prep' alone on its second line.  
 **Fix:** Combine the fair name and currency into one compact line, move the sync status and today's total into a single slim row, and bring the book grid up directly under the register toggle. Shorten the 'Fair Print Kit & Stall Prep' label so it fits on one line at phone width.  
 **Evidence:** shots/before/light-375/tab-pos-01.png (controls at about y 420-880 at 2x; first book tile starts near y 1010). The first book appears roughly 270 CSS px below the controls' start.
@@ -109,7 +109,7 @@ snapshot and drift.
 **Evidence:** shots/before/light-375/tab-expenses-02.png to tab-expenses-05.png; src/lib/phone-layout.js:13 (exp-body summary list includes Amount (CAD), Receipt, Reimbursement and Actions); src/styles/phone.css:461-466 (record card and Details toggle styling)
 
 ### 17. tab-history — ugly, redesign
-**Status:** Open  
+**Status:** Done (History redesign)  
 **Problem:** Each order is a tall box with a full-width DETAILS button repeated on every card. Nineteen orders take about six screens of scrolling, and the same outlined button on each card gives the eye nothing to scan by. To find one order, the owner has to scroll past most of the list.  
 **Fix:** Show each order as one compact row (order number, channel, amount, date) that opens its details when tapped, with no separate Details button. Fold the three summary tiles into a short collapsible header so the list starts higher on the screen.  
 **Evidence:** shots/before/light-375/tab-history-02.png through tab-history-06.png (six screens for 19 orders). src/lib/phone-layout.js:65 (adds a Details button to every order). src/styles/phone.css:466-472 (draws that button as a full-width box with a heavy ink outline and shadow). Note: the report's 22px pencil and arrow targets are enlarged by CSS (src/style.css:4392, an enlarged hit area), so that flag overstates the problem.
@@ -175,13 +175,13 @@ snapshot and drift.
 **Evidence:** shots/before/light-375/tab-taxcenter-02.png; src/features/taxcentre.js:3866 (svg uses preserveAspectRatio none, which distorts the label); src/features/taxcentre.js:3868-3875 (income-grad and expense-grad linear gradients)
 
 ### 28. tab-history — ugly, polish
-**Status:** Open  
+**Status:** Done (History redesign) — Gratuity tag is still violet  
 **Problem:** Red is used for normal things. Every Store sale gets a red tag, and the Stock on Hand number is in the same red as an alert. The app's own colour rule reserves red for owed, voided or error, so a healthy store sale looks like a problem to the owner.  
 **Fix:** Give Store a neutral or blue tag, keep red for real problems, and show the Stock on Hand figure in the normal ink with only the accent bar. Map the Website and Direct tags into the four existing status colours.  
 **Evidence:** shots/before/light-375/tab-history-01.png (Stock on Hand 68 in red). shots/before/light-375/tab-history-02.png (STORE tags in red). src/main.js:9419-9427 (formatChannelBadge sends Store to the gold tone, which is the red ink). src/style.css:374-378 (.ch-badge.ch-store uses the red ink). src/style.css:223-225 (highlight accent on the Stock on Hand tile). Website (violet) and Direct (slate) tags use hues outside the four status colours (src/style.css:362-366 and 380-384).
 
 ### 29. tab-history — ugly, polish
-**Status:** Open  
+**Status:** Done (History redesign)  
 **Problem:** On each order card the right-hand column (order number, total, and the edit or ship button) starts at a different horizontal position from card to card. Amounts and order numbers don't line up as you scroll, so the eye has to re-find the column on every card.  
 **Fix:** Give the right-hand column a fixed width that fits the largest total, so amounts and order numbers sit on one vertical line down the list.  
 **Evidence:** shots/before/light-375/tab-history-01.png and tab-history-02.png (the order number column starts at different positions on the Store, Book Fair, Direct and Website cards). src/style.css:20091 (the card grid uses an auto-sized right column, so its width changes with each card's content).
@@ -266,3 +266,6 @@ snapshot and drift.
 - **Register currency on a fresh device** — open. Before the books load, the register falls
   back to EUR (`_getPosDefaultCurrency` in `src/main.js`), so a brand-new phone opens the Sell
   screen charging in euros until a currency is picked once.
+
+- **History return entries** — open. Consignment return rows on a phone use a different card
+  layout (big store name, a lone dash) from sale rows after the History redesign.

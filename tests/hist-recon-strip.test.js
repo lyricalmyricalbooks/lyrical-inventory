@@ -33,10 +33,12 @@ test('the three reconciliation cards share one left edge', () => {
   expect(block('.hist-kpi-card.highlight-green::after')).toMatch(/background:\s*var\(--emerald\);/);
 });
 
-test('exactly one card leads the strip, by size and colour together', () => {
+test('exactly one card leads the strip, by size alone; its figure stays ink', () => {
+  // Red means a problem. The lead card's accent is its bottom bar, not its figure.
   const lead = block('.hist-kpi-card.is-lead .hist-kpi-val');
   expect(lead).toMatch(/font-size:\s*var\(--text-2xl\);/);
-  expect(lead).toMatch(/color:\s*var\(--gold-text\);/);
+  expect(lead).not.toMatch(/color:/);
+  expect(styles).not.toMatch(/\.hist-kpi-card\.highlight-gold \.hist-kpi-icon/);
   // The other two stay a full step down, or the lead stops leading.
   expect(block('.hist-kpi-val')).toMatch(/font-size:\s*var\(--text-xl\);/);
   // Only Stock On Hand carries it.

@@ -15,7 +15,10 @@ const RECORDS = {
   // used to be cut off inside the banner on a phone.
   'd-exp-body': { lead: 1, summary: [0, 4] },
   'ledger-body': { lead: 1, summary: [0, 2, 5, 7] },
-  'hist-body': { lead: 1, summary: [0, 2, 4, 8, 9] },
+  // Order History: the summary is order #, channel, total, date and the action.
+  // Qty moves behind the disclosure with the unit price and stock after. `card`
+  // makes a tap anywhere on the order's card open it, not just the small button.
+  'hist-body': { lead: 1, summary: [0, 4, 8, 9], card: true },
   'exp-body': { lead: 'Description', summary: ['Date', 'Receipt', 'Amount', 'Amount (CAD)', 'Reimbursement', ''] },
   'tc-ledger-body': { lead: 2, summary: [0, 4, 6, 7] },
   'tc-recurring-body': { lead: 0, summary: [2, 4, 5, 6] },
@@ -83,6 +86,14 @@ function enhanceRecords(table) {
       button.setAttribute('aria-label', `${open ? 'Hide' : 'Show'} details`);
     });
     row.cells[rowLead].append(button);
+    if (config.card) {
+      row.addEventListener('click', event => {
+        // Controls inside the card (edit, ship, approve) keep their own taps.
+        if (event.target.closest('button, a, input, select, textarea, label')) return;
+        if (!window.matchMedia?.('(max-width: 768px)')?.matches) return;
+        button.click();
+      });
+    }
   }
 }
 
