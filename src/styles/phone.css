@@ -1518,3 +1518,26 @@
   /* Shipping: the preset save button sits on its own line under the dropdown. */
   #tab-shipping .ship-preset-save-row { justify-content: flex-start; }
 }
+
+/* ── Batch 4H — bottom menu fade ──────────────────────────────────────────
+   When the bottom menu holds more tabs than fit (the author view), its right
+   edge fades into the menu's own colour while tabs remain off-screen, so it
+   reads as "swipe for more". The fade sticks to the right edge as the strip
+   scrolls and lets taps through to the tab beneath it. */
+@media (max-width: 768px) {
+  .tab-bar::after {
+    content: "";
+    position: sticky;
+    /* Stick to the screen edge, not inside the strip's side padding. */
+    right: calc(-1 * max(10px, env(safe-area-inset-right)));
+    flex: 0 0 56px;
+    margin-left: -56px;
+    margin-right: calc(-1 * max(10px, env(safe-area-inset-right)));
+    align-self: stretch;
+    background: linear-gradient(to right, transparent, var(--ink2) 85%);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .15s ease;
+  }
+  .tab-bar.has-more-right::after { opacity: 1; }
+}

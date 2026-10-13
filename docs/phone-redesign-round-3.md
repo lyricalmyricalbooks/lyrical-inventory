@@ -269,3 +269,7 @@ snapshot and drift.
 
 - **History return entries** — open. Consignment return rows on a phone use a different card
   layout (big store name, a lone dash) from sale rows after the History redesign.
+- **Author view bottom menu** — done (round 4, owner chose "fade at the edge"). The author
+  view's bottom menu holds more tabs than a phone can show, with no sign that it scrolls.
+  Its right edge now fades into the menu while more tabs sit off-screen, and the fade goes
+  once the strip is scrolled to the end.
