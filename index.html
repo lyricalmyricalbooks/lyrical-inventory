@@ -2389,24 +2389,24 @@
     <div class="bx-progress-text" id="bx-progress-text"></div>
   </div>
 
+  <div class="bx-toolbar bx-toolbar-trip" id="bx-trip-wrap">
+    <label for="bx-trip">Trip / project <span class="bx-opt">optional — applied to every expense in this batch</span></label>
+    <input type="text" id="bx-trip" list="bx-trip-options" autocomplete="off" placeholder="e.g. Toronto Book Fair · Oct 2025">
+    <datalist id="bx-trip-options"></datalist>
+  </div>
+
   <div class="bx-toolbar">
     <div class="bx-toolbar-group">
       <button class="btn sm" type="button" onclick="toggleAllBatchExpenses(true)">Select all</button>
       <button class="btn sm" type="button" onclick="toggleAllBatchExpenses(false)">Select none</button>
       <button class="btn sm" type="button" onclick="deselectDuplicateBatchExpenses()" title="Untick every row that matches something already recorded">Deselect duplicates</button>
     </div>
-    <div class="bx-toolbar-group">
-      <select id="bx-bulk-cat" aria-label="Category to apply to the selected rows"></select>
-      <button class="btn sm" type="button" onclick="applyBatchExpenseBulk('category')">Apply</button>
-      <input type="date" id="bx-bulk-date" aria-label="Date to apply to the selected rows">
-      <button class="btn sm" type="button" onclick="applyBatchExpenseBulk('date')">Apply</button>
+    <div class="bx-toolbar-group bx-bulk-group">
+      <label class="bx-bulk-field" for="bx-bulk-cat"><span>Set category</span><select id="bx-bulk-cat"></select></label>
+      <button class="btn sm" type="button" onclick="applyBatchExpenseBulk('category')">Apply category</button>
+      <label class="bx-bulk-field" for="bx-bulk-date"><span>Set date</span><input type="date" id="bx-bulk-date"></label>
+      <button class="btn sm" type="button" onclick="applyBatchExpenseBulk('date')">Apply date</button>
     </div>
-  </div>
-
-  <div class="bx-toolbar bx-toolbar-trip" id="bx-trip-wrap">
-    <label for="bx-trip">Trip / project <span class="bx-opt">optional — applied to every expense in this batch</span></label>
-    <input type="text" id="bx-trip" list="bx-trip-options" autocomplete="off" placeholder="e.g. Toronto Book Fair · Oct 2025">
-    <datalist id="bx-trip-options"></datalist>
   </div>
 
   <div id="bx-rows"></div>
@@ -2850,9 +2850,9 @@
           </div>
           <div class="form-group"><label for="tc-exp-date">Date</label><input type="date" id="tc-exp-date"></div>
         </div>
-        <div class="form-group amount-field"><label>Amount</label>
+        <div class="form-group amount-field"><label for="tc-exp-amount">Amount</label>
           <div class="price-wrap">
-            <select id="tc-exp-cur" style="flex:0 0 66px;margin-right:4px;">
+            <select id="tc-exp-cur" aria-label="Amount currency" style="flex:0 0 66px;margin-right:4px;">
               <option value="CAD">CAD</option>
               <option value="USD">USD</option>
               <option value="EUR">EUR</option>
@@ -2879,6 +2879,7 @@
           <button class="btn gold outline" onclick="openReceiptCameraModal()" id="tc-cam-btn" title="Take a photo of the receipt with your webcam">📷 Camera</button>
           <button class="btn gold" onclick="scanReceiptWithAI()" id="tc-ai-scan-btn" disabled title="Select or capture a receipt first to enable AI scanning">✨ AI Scan</button>
         </div>
+        <div class="tc-field-hint" id="tc-ai-scan-hint">AI Scan turns on once you add a receipt above.</div>
         <!-- What the AI read and what to double-check. Filled by _runReceiptScan(). -->
         <div class="order-preview scan-read" id="tc-exp-scan-read" hidden></div>
         <div id="tc-exp-file-preview" class="tc-field-hint"></div>
@@ -5337,7 +5338,7 @@
     <div class="g2" style="margin-bottom:12px;">
       <div class="form-group"><label for="edit-exp-amount">Amount</label>
         <div style="display:flex;gap:4px;">
-          <select id="edit-exp-cur" style="max-width:70px;">
+          <select id="edit-exp-cur" class="exp-cur-select">
             <option value="CAD">CAD</option>
             <option value="USD">USD</option>
             <option value="EUR">EUR</option>
@@ -5360,9 +5361,11 @@
     </div>
     <div class="form-group" id="edit-exp-file-group" style="margin-bottom:12px;"><label>Receipts</label>
       <div id="edit-exp-receipts-preview" style="margin-bottom:8px;font-size:var(--text-sm);display:flex;flex-direction:column;gap:4px;"></div>
-      <div style="display:flex;gap:4px;flex-wrap:wrap;">
-        <input type="file" id="edit-exp-file" accept="image/*,.pdf" style="font-size:var(--text-xs); margin-top: 6px;flex:1;min-width:140px;">
-        <button class="btn gold outline" style="padding: 0 8px; font-size:var(--text-sm); margin-top: 6px;" onclick="openReceiptCameraModal()" id="edit-exp-cam-btn" title="Take a photo of the receipt with your webcam">📷 Camera</button>
+      <div class="exp-receipt-row">
+        <input type="file" id="edit-exp-file" class="sr-only exp-file-input" accept="image/*,.pdf">
+        <label for="edit-exp-file" class="btn exp-file-btn">Choose receipt</label>
+        <span id="edit-exp-file-name" class="exp-file-name" aria-live="polite">No file chosen</span>
+        <button class="btn gold outline" style="padding: 0 8px; font-size:var(--text-sm);" onclick="openReceiptCameraModal()" id="edit-exp-cam-btn" title="Take a photo of the receipt with your webcam">📷 Camera</button>
       </div>
       <div id="edit-exp-file-preview" style="font-size:var(--text-xs);color:var(--text3);margin-top:4px;"></div>
     </div>

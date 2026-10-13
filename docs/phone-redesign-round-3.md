@@ -55,7 +55,7 @@ snapshot and drift.
 **Evidence:** shots/before/light-375/modal-import-01.png and shots/before/dark-375/modal-import-01.png; index.html:5709 (eight table columns); index.html:5719 (the confirm button is never disabled and shows a count of 0)
 
 ### 8. tab-expenses — broken, polish
-**Status:** Open  
+**Status:** Done (round 4) — removing asks first, naming the expense and amount  
 **Problem:** Removing an expense is a single tiny, unlabeled X about the size of a fingernail. One tap deletes the expense straight away with no 'are you sure?' step, and the same tiny X sits on every expense card, including the Tax Center's own expense list.  
 **Fix:** Replace the bare X with a labeled Remove control in the card's action row, sized to the 44px target class (.sys-target), styled as a destructive outline button. Put a confirm step in front of voidExpense using the modal shell, with Cancel and a destructive Remove button on the far left as the modal-footer rule describes.  
 **Evidence:** shots/before/light-375/tab-expenses-03.png and tab-expenses-04.png; src/features/receipts.js:7332 (edit-btn with the X, onclick calls voidExpense directly, aria-label Remove); src/features/receipts.js:7184-7190 (voidExpense filters the expense out, saves and shows a toast with no confirmation); style.css:4391 (.edit-btn is 22x22); the phone report lists the X buttons at 22x22 on tab-expenses and tab-taxcenter
@@ -97,13 +97,13 @@ snapshot and drift.
 **Evidence:** shots/before/light-375/tab-shipping-02.png to tab-shipping-06.png; shots/before/report.json pageHeight 13,819px for tab-shipping; index.html:3833 (Origin block with Save default), index.html:3865 (Destination block), index.html:4066 (Compare button)
 
 ### 15. tab-taxcenter — ugly, redesign
-**Status:** Open  
+**Status:** Done (Tax Centre round 4) — the expense form leads on a phone, the summary follows it, and each empty section folds to one line  
 **Problem:** The Tax Center is about 12,400 px tall. The Log Business Expense form, the screen's most-used action, starts after a full Cash Flow summary (three tall cards, six stat tiles and a chart). Then three empty sections (Pending, Recurring, Trips) each show a large dashed box with an icon and a blue button, so a new user scrolls past about two screens before reaching anything to act on.  
 **Fix:** Move the Log Business Expense card above the Cash Flow summary, or fold the summary behind a disclosure that keeps its headline net figure visible. Collapse each empty section to one line of text with its single button, rather than a full-height dashed panel.  
 **Evidence:** shots/before/light-375/tab-taxcenter-01.png to tab-taxcenter-05.png; index.html:2800 (Log Business Expense section, placed after the summary), index.html:2891 (Pending and To Confirm card), index.html:2902 (Recurring Subscriptions card), index.html:2927 (Trip tracking toggle and empty state)
 
 ### 16. tab-expenses — ugly, redesign
-**Status:** Open  
+**Status:** Done (round 4) — each expense is a compact card: description and amount on top, date and receipt beneath, the rest behind Details. Amount shows in its own currency, since the CAD column exists only for publishers.  
 **Problem:** Each expense takes about 375 pixels of phone height. Six stacked label-and-value rows (Date, Receipt, Amount, Amount CAD, Reimbursement, Actions) plus a full-width Details button repeat on every card. The Amount CAD row shows a bare dash on every card. Five expenses mean a long scroll of near-identical boxes.  
 **Fix:** Show each expense as one compact row: description in bold, amount in DM Mono on the right, and the receipt state as the existing amber or grey status pill. Drop the Amount CAD field from the summary when there is no separate CAD value, and move date and reimbursement into the expanded Details.  
 **Evidence:** shots/before/light-375/tab-expenses-02.png to tab-expenses-05.png; src/lib/phone-layout.js:13 (exp-body summary list includes Amount (CAD), Receipt, Reimbursement and Actions); src/styles/phone.css:461-466 (record card and Details toggle styling)
@@ -133,13 +133,13 @@ snapshot and drift.
 **Evidence:** shots/before/dark-375/modal-add-book-01.png, modal-edit-expense-01.png and modal-notifications-01.png (title band inset from both edges, with hard corners); src/style.css:4094-4101 (.modal-title background is var(--surface-page)); src/style.css:4109-4118 (.modal-footer background is var(--surface-page)); src/styles/theme-dark.css:576-578 (.theme-dark .modal background is var(--surface-card))
 
 ### 21. Edit expense (sheet) — ugly, polish
-**Status:** Open  
+**Status:** Done (round 4) — "Choose receipt" button with the file name beside it, and the currency select has room for CAD.  
 **Problem:** The receipt picker is the browser's default grey "Choose File / No file chosen" box in the system font, placed beside a Riso-styled Camera button, so the two look like they came from different apps. The currency selector (CAD) is squeezed to 70 px and its arrow runs into the letters.  
 **Fix:** Hide the native file input and put a .btn labelled "Choose receipt" in its place that opens the file picker, the same way the batch expense sheet's browse link works. Widen the currency selector to match the other inputs in the row so its arrow is clear of the text.  
 **Evidence:** shots/before/light-375/modal-edit-expense-01.png and shots/before/dark-375/modal-edit-expense-01.png; index.html:5335 (native file input with inline styling); index.html:5311 (select#edit-exp-cur with max-width:70px)
 
 ### 22. Log several expenses at once (sheet, bulk tools row) — ugly, polish
-**Status:** Open  
+**Status:** Done (round 4) — each bulk control has a caption, the Apply buttons say what they set, and the trip field sits above the bulk bar. Not done: the bulk row still shows on an empty sheet.  
 **Problem:** The bulk tools sit between the receipt drop zone and the list of expenses. There are two identical "Apply" buttons with an empty dropdown that has no label, and a date box between them. Nothing explains that the first Apply sets the category for ticked rows and the second sets the date, so the owner has to guess before picking receipts.  
 **Fix:** Give each bulk control a short caption above it, such as "Category for all ticked rows" and "Date for all ticked rows", and place its own Apply directly beside it. Show the bulk row only once at least one expense row exists, so the empty sheet opens on the receipt drop zone.  
 **Evidence:** shots/before/light-375/modal-batch-expense-01.png and modal-batch-expense-02.png (empty unlabelled dropdown, two Apply buttons flanking the date box); index.html:2371-2379 (Select all, Select none, Deselect duplicates, and two buttons both labelled Apply)
@@ -163,13 +163,13 @@ snapshot and drift.
 **Evidence:** shots/before/light-375/modal-shipping-label-02.png (triangle at about y 1395-1415 under 'Canada'). src/style.css:4221-4230 (.field-warn sets display:flex, which overrides the browser's hidden attribute, and .field-warn::before adds the triangle). index.html:5681 (sl-country-hint has the hidden attribute). src/features/shipping.js:483-493 (hint text is cleared while hidden).
 
 ### 26. tab-taxcenter — ugly, polish
-**Status:** Open  
+**Status:** Done (Tax Centre round 4) — the reason AI Scan is greyed out now shows as text under the button  
 **Problem:** The AI Scan button on the expense form looks washed out and cannot be pressed until a receipt is added. The only explanation ('Select or capture a receipt first') is a hover tooltip, and a phone never shows that, so the owner sees a faded button with no reason why.  
 **Fix:** Keep the button looking enabled and show the reason as visible helper text under the button, reusing the existing small helper-text line that reads 'Storage: Cloud'. Do not rely on the title attribute for the explanation.  
 **Evidence:** shots/before/light-375/tab-taxcenter-03.png (pale AI Scan beside the blue Camera button); index.html:2857 (button is disabled and its reason lives only in the title attribute); style.css:2524 (.btn:disabled sets opacity .35)
 
 ### 27. tab-taxcenter — ugly, polish
-**Status:** Open  
+**Status:** Done (Tax Centre round 4) — flat fills, an undistorted year label, and the income and expense figures printed beside each bar  
 **Problem:** The Income vs Expenses chart squashes its year label into a thin sliver because the drawing is stretched to fit. Its bars use shiny top-to-bottom gradients rather than the flat ink fills used across the app, and it has no value scale, so the two bars give the owner no number to read.  
 **Fix:** Replace the two gradients with flat fills from the existing green and red tokens. Remove preserveAspectRatio none, or draw the year label as HTML so it keeps its shape. Print the income and expense totals as numbers beside each bar.  
 **Evidence:** shots/before/light-375/tab-taxcenter-02.png; src/features/taxcentre.js:3866 (svg uses preserveAspectRatio none, which distorts the label); src/features/taxcentre.js:3868-3875 (income-grad and expense-grad linear gradients)
@@ -259,11 +259,11 @@ snapshot and drift.
 **Evidence:** shots/before/light-375/tab-shipping-06.png (dashed batch button); style.css:10725 (.ship-flow-batch sets border-style dashed); shots/before/light-375/tab-taxcenter-06.png (six swatch colours and red underlined category links); src/features/taxcentre.js:983 (per-category dotColor swatch and tc-cat-link)
 ### Found while fixing (not from the screenshot audit)
 
-- **Import after a Google Sheets restore** — open. The restore path overwrites the import
+- **Import after a Google Sheets restore** — done (round 4, reproduced and fixed). The restore path overwrites the import
   window's confirm button (removing `#import-count`), so the next spreadsheet import can fail
   with "Could not read file". Found by reading the code (`src/main.js`, the Sheets restore path
   near `setImportReady`); not yet reproduced.
-- **Register currency on a fresh device** — open. Before the books load, the register falls
+- **Register currency on a fresh device** — done (round 4). Before the books load, the register falls
   back to EUR (`_getPosDefaultCurrency` in `src/main.js`), so a brand-new phone opens the Sell
   screen charging in euros until a currency is picked once.
 

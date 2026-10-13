@@ -19,7 +19,11 @@ const RECORDS = {
   // Qty moves behind the disclosure with the unit price and stock after. `card`
   // makes a tap anywhere on the order's card open it, not just the small button.
   'hist-body': { lead: 1, summary: [0, 4, 8, 9], card: true },
-  'exp-body': { lead: 'Description', summary: ['Date', 'Receipt', 'Amount', 'Amount (CAD)', 'Reimbursement', ''] },
+  // Expenses: description leads, with the amount on the top line and date and receipt
+  // beneath. Category, reference, CAD value and reimbursement fold behind Details.
+  // '' is the bulk-select box (author view) and the actions cell; the CSS keeps the
+  // actions behind Details unless the row awaits approval.
+  'exp-body': { lead: 'Description', summary: ['Date', 'Receipt', 'Amount', ''] },
   'tc-ledger-body': { lead: 2, summary: [0, 4, 6, 7] },
   'tc-recurring-body': { lead: 0, summary: [2, 4, 5, 6] },
   'bc-orders-list': { lead: 0, summary: [1, 2, 6, 7, 8] },
@@ -41,12 +45,15 @@ let detailId = 0;
 // numbers fell down the screen as bare figures; each total now carries its
 // column's name and the row reads as a compact summary strip. A single cell
 // spanning the whole row is a message, not a heading, and stays as it is.
+// Footer total rows get the same labelled strip. A figure that spans several
+// columns gets no label rather than the first column's name — the Expenses
+// totals pill read "Amount (CAD)".
 function labelGroupRow(row, names) {
   const cells = [...row.cells];
   if (cells.length < 2 || cells.some(c => c.rowSpan !== 1)) return;
   let col = 0;
   cells.forEach((cell, index) => {
-    cell.dataset.phoneLabel = names[col] || '';
+    cell.dataset.phoneLabel = index > 0 && cell.colSpan > 1 ? '' : (names[col] || '');
     cell.classList.toggle('phone-record-lead', index === 0);
     col += cell.colSpan;
   });
@@ -67,6 +74,7 @@ function enhanceRecords(table) {
   table.tHead.rows[0].setAttribute('role', 'row');
   [...headers].forEach(h => { h.scope = 'col'; h.setAttribute('role', 'columnheader'); });
   body.setAttribute('role', 'rowgroup');
+  for (const row of table.tFoot?.rows || []) labelGroupRow(row, names);
   for (const row of body.rows) {
     // Empty states and grouped rows keep their full-width message, without controls.
     if (row.cells.length !== headers.length || [...row.cells].some(c => c.colSpan !== 1 || c.rowSpan !== 1)) {

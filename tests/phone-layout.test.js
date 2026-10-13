@@ -51,7 +51,10 @@ test.each([false, true])('expense cards keep description, selection and actions 
   const row = document.querySelector('tbody tr');
   expect(row.querySelector('.phone-record-lead').textContent).toContain('Print run');
   for (const cell of row.cells) {
-    if (cell.querySelector('input, button:not(.phone-record-toggle)') || cell.textContent === 'CA$200.00') {
+    // Round 4: the CAD value folds behind Details; the select box and actions stay on the card.
+    if (cell.textContent === 'CA$200.00') {
+      expect(cell.classList.contains('phone-record-detail')).toBe(true);
+    } else if (cell.querySelector('input, button:not(.phone-record-toggle)')) {
       expect(cell.classList.contains('phone-record-detail')).toBe(false);
     }
   }
@@ -87,6 +90,22 @@ test('a grouped heading row (one cell spanning two columns) gets column labels, 
   expect(group.cells[0].classList.contains('phone-record-lead')).toBe(true);
   // A full-width message row stays a plain message.
   expect(empty.classList.contains('phone-group-row')).toBe(false);
+});
+
+test('footer total rows get column labels too, and a cell spanning several columns is not given the wrong one', () => {
+  // Dashboard → Sales by channel: the totals row in <tfoot> showed its
+  // transactions, units and revenue as bare figures on a phone.
+  document.body.innerHTML = '<div id="app"><table><thead><tr><th>Channel</th><th>Transactions</th><th>Units</th><th>Revenue</th><th>Share</th></tr></thead>'
+    + '<tbody id="ch-body"><tr><td>Book Fair</td><td>3</td><td>10</td><td>CA$240.00</td><td>36%</td></tr></tbody>'
+    + '<tfoot id="ch-foot"><tr><td>4 channels</td><td>9</td><td>27</td><td>CA$660.00</td><td>100%</td></tr></tfoot></table>'
+    + '<table><thead><tr><th>Date</th><th>Description</th><th>Amount</th><th>Amount (CAD)</th><th>Reimbursement</th><th></th></tr></thead>'
+    + '<tbody id="exp-body"><tr><td colspan="3">Total</td><td>CA$706.80</td><td colspan="2">Outstanding</td></tr></tbody></table></div>';
+  stop = initPhoneLayouts(document.getElementById('app'));
+  const foot = document.querySelector('#ch-foot tr');
+  expect([...foot.cells].map(c => c.dataset.phoneLabel)).toEqual(['Channel', 'Transactions', 'Units', 'Revenue', 'Share']);
+  expect(foot.cells[0].classList.contains('phone-record-lead')).toBe(true);
+  const totals = document.querySelector('#exp-body tr');
+  expect([...totals.cells].map(c => c.dataset.phoneLabel)).toEqual(['Date', 'Amount (CAD)', '']);
 });
 
 test('a crowded pop-up footer keeps two actions and folds the rest, moving the real buttons', () => {

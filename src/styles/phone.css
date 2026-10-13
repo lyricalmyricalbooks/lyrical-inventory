@@ -57,7 +57,8 @@
   }
   :is(.tab-panel, .modal) .phone-records tr.phone-group-row > td.phone-record-lead { grid-column: 1 / -1; padding-bottom: var(--space-2) !important; border-bottom: var(--stroke-hair) solid var(--border-subtle) !important; }
   :is(.tab-panel, .modal) .phone-records tr.phone-group-row > td:nth-child(5) { grid-column: span 2; }
-  :is(.tab-panel, .modal) .phone-records tr.phone-group-row > td::before { white-space: nowrap; overflow-wrap: normal; letter-spacing: var(--tracking-caps); }
+  :is(.tab-panel, .modal) .phone-records tr.phone-group-row > td:empty { display: none !important; }
+  :is(.tab-panel, .modal) .phone-records tr.phone-group-row > td::before { white-space: normal; overflow-wrap: normal; word-break: normal; letter-spacing: var(--tracking-caps); }
   :is(.tab-panel, .modal) .phone-records tr.phone-record > td {
     display: block !important; position: static !important; grid-area: auto !important;
     width: auto; max-width: none; min-width: 0; padding: 0 !important; border: 0;
@@ -1118,4 +1119,109 @@
 @media (max-width: 768px) {
   .ch-mix-tbl.phone-records .ch-mix-share { justify-content: flex-start; }
   .ch-mix-tbl.phone-records .ch-mix-pct { min-width: 0; text-align: left; }
+}
+
+/* ─── TAX CENTRE (round 4) ─── */
+@media (max-width: 768px) {
+  /* Log a business expense is the first thing on the screen; the cash-flow summary
+     follows it, then the Pending, Recurring and Trips sections. Desktop keeps its order. */
+  #tab-taxcenter #tc-sec-ledger { display: flex; flex-direction: column; }
+  #tab-taxcenter #tc-sec-ledger > #tc-expense-form-card { order: 0; }
+  #tab-taxcenter #tc-sec-ledger > .cf-card { order: 1; }
+  #tab-taxcenter #tc-sec-ledger > :not(#tc-expense-form-card):not(.cf-card) { order: 2; }
+
+  /* An empty section is one line of text with its one button, not a tall dashed box. */
+  #tab-taxcenter #tc-pending-list .tc-pending-empty { padding: 0; background: none; border: 0; text-align: left; }
+  #tab-taxcenter #tc-pending-list .tc-pending-empty-icon,
+  #tab-taxcenter #tc-pending-list .tc-pending-empty-sub { display: none; }
+  #tab-taxcenter #tc-pending-list .tc-pending-empty-title { margin: 0; font-size: var(--text-sm); }
+  #tab-taxcenter #tc-recurring-empty .empty-state { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: 0; text-align: left; }
+  #tab-taxcenter #tc-recurring-empty .empty-state > .e-icon,
+  #tab-taxcenter #tc-recurring-empty .tc-empty-desk { display: none; }
+  #tab-taxcenter #tc-recurring-empty .tc-empty-phone { display: inline; }
+  /* The card header already carries "+ Add subscription", so the empty line does not repeat it. */
+  #tab-taxcenter #tc-recurring-empty .tc-empty-action { display: none; }
+  #tab-taxcenter .tc-trip-empty-state { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: 0; background: none; border: 0; text-align: left; }
+  #tab-taxcenter .tc-trip-empty-state > .e-icon,
+  #tab-taxcenter .tc-trip-empty-state > p { display: none; }
+
+  /* The chart on a phone: each period is a row, its bars run left to right in the same
+     share of the tallest figure, and the printed figure sits just past the bar it belongs to. */
+  #tab-taxcenter .cf-chart-plot { flex-direction: column; height: auto; gap: var(--space-2); }
+  #tab-taxcenter .cf-chart-col { display: grid; grid-template-columns: 3.25rem minmax(0, 1fr); align-items: center; column-gap: var(--space-2); }
+  #tab-taxcenter .cf-chart-lane { grid-column: 2; grid-row: 1; flex-direction: column; align-items: stretch; justify-content: center; gap: var(--space-1); padding-right: 6.5rem; border-bottom: 0; }
+  #tab-taxcenter .cf-chart-axis { grid-column: 1; grid-row: 1; padding-top: 0; text-align: left; }
+  #tab-taxcenter .cf-chart-bar { flex: none; align-self: flex-start; width: var(--cf-v); max-width: none; height: 14px; min-width: 2px; }
+  #tab-taxcenter .cf-chart-val { display: block; position: absolute; left: calc(100% + var(--space-2)); top: 50%; transform: translateY(-50%); white-space: nowrap; font-family: var(--font-mono); font-size: var(--text-xs); font-variant-numeric: tabular-nums; color: var(--content-primary); }
+
+  /* Currency and amount share one row instead of the currency sitting above the amount. */
+  #tab-taxcenter .amount-field .price-wrap { display: flex; align-items: stretch; }
+  #tab-taxcenter #tc-exp-cur { flex: 0 0 5.5rem !important; margin-right: 0 !important; }
+}
+
+/* ─── HISTORY: artist approvals (round 4) ───
+   An artist's sale waiting for approval carries Approve and Reject, which
+   were too wide for the card's fixed right-hand column and pushed the whole
+   page sideways. That action gets its own full-width row instead. */
+@media (max-width: 768px) {
+  #tab-history .tbl tr.hist-row > td:nth-child(10):has(.approval-actions) { grid-area: auto / 1 / auto / -1 !important; text-align: left !important; }
+  #tab-history .approval-actions { display: flex; width: 100%; }
+  #tab-history .approval-actions .appr-btn { min-height: var(--target-min); }
+  #tab-history .approval-actions .appr-btn.approve { flex: 1; justify-content: center; }
+  #tab-history .approval-actions .appr-btn.reject { width: var(--target-min); }
+}
+
+/* ─── EXPENSES (round 4) ─── */
+/* Phone only. Expense cards, the edit-expense select and the receipt picker.
+   Scoped to #exp-body so the other record cards are untouched. */
+@media (max-width: 768px) {
+  /* A compact card: description and amount on the top line, date and receipt
+     beneath, Details across the foot. Category, reference, the CAD value and
+     reimbursement stay behind Details. Two columns; with the bulk-select box
+     (author view) a narrow third column is added for it. */
+  #exp-body > tr.phone-record {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-2) var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    align-items: center;
+  }
+  #exp-body > tr.phone-record:has(> td > input[type="checkbox"]) {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  /* The description cell hands its text and its Details button to the card grid. */
+  #exp-body > tr.phone-record > td { border: 0 !important; }
+  /* The table's sticky first-column edge would draw a hairline down the card. */
+  #exp-body > tr.phone-record > td:first-child { position: static !important; box-shadow: none !important; background: transparent !important; }
+  #exp-body > tr.phone-record > td.phone-record-lead { display: contents !important; }
+  #exp-body > tr.phone-record > td.phone-record-lead > .phone-record-toggle { grid-column: 1 / -1 !important; grid-row: 3 !important; min-height: 44px; margin-top: 0; }
+  #exp-body > tr.phone-record:has(> td > input[type="checkbox"]) > td.phone-record-lead > .phone-record-toggle { grid-column: 2 / -1 !important; }
+  #exp-body > tr.phone-record > td[data-phone-label="Amount"] { grid-column: 2 !important; grid-row: 1 !important; text-align: right !important; font-weight: 700; font-size: var(--text-md); align-self: center; }
+  #exp-body > tr.phone-record > td[data-phone-label="Amount"]::before { display: none; }
+  #exp-body > tr.phone-record > td[data-phone-label="Date"] { grid-column: 1 !important; grid-row: 2 !important; }
+  #exp-body > tr.phone-record > td[data-phone-label="Receipt"] { grid-column: 2 !important; grid-row: 2 !important; }
+  #exp-body > tr.phone-record:has(> td > input[type="checkbox"]) > td[data-phone-label="Select"] { grid-column: 1 !important; grid-row: 1 / span 3 !important; align-self: center; }
+  #exp-body > tr.phone-record:has(> td > input[type="checkbox"]) > td.phone-record-lead { grid-column: 2 !important; grid-row: 1 !important; }
+  #exp-body > tr.phone-record:has(> td > input[type="checkbox"]) > td[data-phone-label="Amount"] { grid-column: 3 !important; }
+  #exp-body > tr.phone-record:has(> td > input[type="checkbox"]) > td[data-phone-label="Date"] { grid-column: 2 !important; }
+  #exp-body > tr.phone-record:has(> td > input[type="checkbox"]) > td[data-phone-label="Receipt"] { grid-column: 3 !important; }
+  #exp-body > tr.phone-record:has(> td > input[type="checkbox"]) > td[data-phone-label="Select"] input[type="checkbox"] { width: var(--target-min); height: var(--target-min); margin: 0; }
+  /* With the bulk-select box, detail fields stack down the right-hand two columns
+     so the description keeps its width when Details is open. */
+  #exp-body > tr.phone-record:has(> td > input[type="checkbox"]) > td.phone-record-detail,
+  #exp-body > tr.phone-record:has(> td > input[type="checkbox"]) > td[data-phone-label="Actions"] { grid-column: 2 / -1 !important; }
+  /* The actions cell (Remove, or Approve / Reject on a pending row) sits behind
+     Details, except on a pending row where approval must stay in view. */
+  #exp-body > tr.phone-record:not(.phone-record-open):not(.is-awaiting) > td[data-phone-label="Actions"] { display: none !important; }
+  #exp-body > tr.phone-record > td[data-phone-label="Actions"] { grid-column: 1 / -1 !important; justify-self: start; }
+  /* The ✕ keeps its small glyph, but its box is a full 44px tap target. */
+  #exp-body .edit-btn { width: var(--target-min); height: var(--target-min); margin: 0; opacity: 1; }
+  #exp-body .edit-btn::after { inset: 0; min-width: 0; min-height: 0; }
+  /* Edit expense: the currency select widens so its arrow clears "CAD". */
+  /* Outranks the shared .modal select clamp (max-width 100%, min-width 0). */
+  .modal .form-group select.exp-cur-select { flex: 0 0 auto; width: auto; min-width: 88px; max-width: none; }
+  .form-group:has(> div > #edit-exp-cur) { min-width: 0; }
+  #edit-exp-amount { min-width: 0; width: 100%; }
+  /* Receipt picker: the chosen file name sits beside the button and gives way to it first. */
+  .exp-receipt-row .btn.exp-file-btn { min-height: var(--target-min); }
+  .exp-receipt-row .exp-file-name { flex-basis: 0; }
 }

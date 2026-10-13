@@ -9,11 +9,13 @@
 //   npm run shots -- --widths=1280 --only=reconcile      (desktop sanity check)
 //   --slices=N  screenfuls per screen (default 6)   --full  also one tall picture
 //   --storage=key=value,…  extra device settings, e.g. --storage=allConGrouped=1
+//   --session=key=value,…  per-visit choices, e.g. --session=lm-con-section=ledger
 //
 // Output (gitignored): <out>/<theme>-<width>/<screen>-NN.png (one per screenful)
 // and <out>/report.json.
 // The report lists, per shot: sideways overflow, primary controls smaller than
-// a fingertip, text under 11px, and boxes that poke past the screen edge.
+// a fingertip, text under 11px, boxes that poke past the screen edge, table
+// rows left as unlabelled stacked cells on a phone, and silently clipped text.
 // Dev-only: needs playwright-core (devDependency) and a local Chromium.
 import { createServer } from 'vite';
 import { chromium } from 'playwright-core';
@@ -121,8 +123,29 @@ function measure() {
     const r = el.getBoundingClientRect();
     if (r.right > vw + 1 && !el.closest('.tbl-wrap, [style*="overflow"], .recon-chips, .sys-scroll-x')) offscreen.push(`${label(el)} right=${Math.round(r.right)}`);
   }
+  // The "bare stacked numbers" signature: a row of a phone-card table that was
+  // not turned into a card (or a labelled heading strip), so its cells fall
+  // down the screen as unlabelled blocks. Found by the owner on All books →
+  // Group by book; flagged here so every run catches the next one.
+  const unlabelledRows = [];
+  for (const row of scope.querySelectorAll('table.phone-records :is(tbody, tfoot) > tr')) {
+    if (!visible(row) || row.matches('.phone-record, .phone-group-row')) continue;
+    const cells = [...row.cells].filter(visible);
+    if (cells.length < 2) continue; // a single full-width message row is fine
+    unlabelledRows.push(`${label(row)} — ${cells.length} cells stacked without labels`);
+  }
+  // Text cut off by a box that hides its overflow (no ellipsis = silently lost).
+  const clipped = [];
+  for (const el of scope.querySelectorAll('*')) {
+    if (!visible(el) || el.children.length) continue;
+    const cs = getComputedStyle(el);
+    if (cs.overflow === 'visible' || cs.textOverflow === 'ellipsis') continue;
+    if (el.scrollWidth > el.clientWidth + 2 && (el.textContent || '').trim()) clipped.push(`${label(el)} ${el.scrollWidth}>${el.clientWidth}`);
+  }
   return {
     viewport: vw,
+    unlabelledRows: unlabelledRows.slice(0, 30),
+    clipped: clipped.slice(0, 30),
     pageWidth: document.documentElement.scrollWidth,
     sidewaysOverflow: document.documentElement.scrollWidth > vw + 1,
     smallTargets: smallTargets.slice(0, 40),
@@ -154,7 +177,10 @@ for (const theme of themes) {
       window.__shotsErrors = [];
       window.addEventListener('error', e => window.__shotsErrors.push(String(e.message)));
     });
-    const storage = list(args.storage, []).map(pair => 'ls=' + encodeURIComponent(pair)).join('&');
+    const storage = [
+      ...list(args.storage, []).map(pair => 'ls=' + encodeURIComponent(pair)),
+      ...list(args.session, []).map(pair => 'ss=' + encodeURIComponent(pair)),
+    ].join('&');
     await page.goto(storage ? `${base}?${storage}` : base, { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => window.__shotsReady === true, null, { timeout: 30000 });
     await page.evaluate(() => document.fonts.ready);
@@ -221,6 +247,8 @@ for (const theme of themes) {
 fs.mkdirSync(outDir, { recursive: true });
 fs.writeFileSync(path.join(outDir, 'report.json'), JSON.stringify(report, null, 2));
 const flagged = report.filter(r => r.sidewaysOverflow || r.pageErrors.length);
-console.log(`\n${report.length} shots → ${path.relative(ROOT, outDir)}/  (${flagged.length} with sideways scroll or page errors)`);
+const unlabelled = report.filter(r => r.unlabelledRows?.length);
+console.log(`\n${report.length} shots → ${path.relative(ROOT, outDir)}/  (${flagged.length} with sideways scroll or page errors, ${unlabelled.length} with unlabelled stacked rows)`);
+for (const r of unlabelled) console.log(`  ⚠ ${r.theme}-${r.width} ${r.screen}: ${r.unlabelledRows[0]}${r.unlabelledRows.length > 1 ? ` (+${r.unlabelledRows.length - 1} more)` : ''}`);
 await browser.close();
 await server.close();

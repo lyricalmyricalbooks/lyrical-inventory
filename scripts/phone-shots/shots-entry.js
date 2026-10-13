@@ -3,7 +3,7 @@
 // as the publisher, and offline. Sets window.__shotsReady when the books have
 // loaded; capture.mjs waits on it.
 import { createFakeCloud, installFakeFirebase, signInAsPublisher } from '../../tests/helpers/fake-cloud.js';
-import { demoBooks, demoStates, demoLocalStorage, demoLocalStorageExtra, demoReconPayments } from './seed.js';
+import { demoBooks, demoStates, demoSettings, demoLocalStorage, demoLocalStorageExtra, demoReconPayments } from './seed.js';
 
 try {
   localStorage.clear();
@@ -16,6 +16,12 @@ try {
     const at = pair.indexOf('=');
     if (at > 0) localStorage.setItem(pair.slice(0, at), pair.slice(at + 1));
   }
+  // --session=key=value,… : per-visit choices kept in sessionStorage
+  // (e.g. lm-con-section=ledger for the Consignment Ledger tab on a phone).
+  for (const pair of new URLSearchParams(location.search).getAll('ss')) {
+    const at = pair.indexOf('=');
+    if (at > 0) sessionStorage.setItem(pair.slice(0, at), pair.slice(at + 1));
+  }
 } catch { /* storage unavailable */ }
 
 // A device with no network: the app's own fetches fail the way they do offline.
@@ -23,6 +29,8 @@ window.fetch = () => Promise.reject(new Error('network disabled in phone-shots')
 window.open = () => null;
 
 const cloud = createFakeCloud(demoBooks, demoStates);
+// Tax Centre settings, read at sign-in by loadTaxCenter (src/main.js:4206).
+for (const [key, value] of Object.entries(demoSettings)) cloud.settings[key] = value;
 window.__shotsCloud = cloud;
 
 const main = await import('../../src/main.js');
@@ -37,4 +45,9 @@ while (demoBooks.some(b => !main.states[b.id])) {
 }
 // Payments only exist after a live Stripe sync; stand in for one.
 window._reconPayments = demoReconPayments;
+// An artist's sale waiting for approval only arrives through the live
+// submissions watch (window.authorSubmissions, filled by Firebase), so stand in
+// for one, then repaint History with it.
+window.authorSubmissions = { harbour: { sales: { demoArt8: { data: JSON.stringify({ num: 'ART-0008', chan: 'Direct', qty: 1, price: 24, date: '2026-10-08', notes: 'Sold at the Saturday market' }) } } } };
+main.renderHist?.();
 window.__shotsReady = true;

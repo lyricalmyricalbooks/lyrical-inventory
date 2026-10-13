@@ -7181,8 +7181,17 @@ async function submitExpense() {
   $('exp-desc').focus();
 }
 
-function voidExpense(id) {
+// The ✕ on an expense is small and one stray tap used to delete it outright —
+// a receipt needed at tax time simply vanished. Ask first, naming it.
+async function voidExpense(id) {
   const s = getState();
+  const target = (s.expenses || []).find(e => e.id === id);
+  if (!target) return;
+  const ok = await confirmDialog(
+    `Remove “${target.desc || 'this expense'}” (${fmt(target.amount, target.currency)})? It comes off this book's expenses and totals.`,
+    { title: 'Remove expense', okLabel: 'Remove', cancelLabel: 'Keep it', danger: true },
+  );
+  if (!ok) return;
   s.expenses = (s.expenses || []).filter(e => e.id !== id);
   renderExpenses();
   updateDash();

@@ -10670,6 +10670,9 @@ async function handleImportFile(event) {
       const confirmBtn = $('import-confirm-btn');
       if (confirmBtn) {
         confirmBtn.setAttribute('onclick', 'confirmImport()');
+        // The Sheets restore preview rewrites this button's label (dropping the
+        // count inside it); put the import label back before filling it in.
+        confirmBtn.innerHTML = 'Import <span id="import-count">0</span> orders';
       }
 
       // Build preview
@@ -19321,11 +19324,23 @@ export function openEditExpense(type, bid, id) {
   $('edit-exp-date').value = exp.date || today();
   $('edit-exp-trip').value = exp.trip || '';
   $('edit-exp-file').value = '';
+  syncEditExpFileName();
   if ($('edit-exp-file-preview')) $('edit-exp-file-preview').textContent = '';
 
   renderEditExpenseReceipts();
   openM('edit-expense');
 }
+
+// The receipt picker is a button-styled label over a visually hidden file input,
+// so the chosen file's name is written beside the button here.
+function syncEditExpFileName() {
+  const name = $('edit-exp-file-name');
+  const file = $('edit-exp-file')?.files?.[0];
+  if (name) name.textContent = file ? file.name : 'No file chosen';
+}
+document.addEventListener('DOMContentLoaded', () => {
+  $('edit-exp-file')?.addEventListener('change', syncEditExpFileName);
+});
 
 async function saveExpenseEdit() {
   if (!_editingExpense) return;
@@ -19990,6 +20005,9 @@ function _getPosDefaultCurrency() {
   return firstBook ? currencyToCode(firstBook.currency) : 'EUR';
 }
 let posTransactionCurrency = _getPosDefaultCurrency();
+function posCurrencyChosenOnDevice() {
+  try { return !!localStorage.getItem(POS_CURRENCY_KEY); } catch (_) { return false; }
+}
 
 function loadPosExchangeRates() {
   try {
@@ -20315,6 +20333,11 @@ function renderPOS() {
   const totalEl = $('pos-total');
   const totalNoteEl = $('pos-total-note');
   const selectorEl = $('pos-currency');
+  // The default was picked when the app started, before the books loaded, so
+  // a device that never chose a currency was left on the EUR fallback. Until
+  // one is chosen here, follow the books (only with an empty sale, so a sale
+  // in progress never changes currency under the seller).
+  if (!posCurrencyChosenOnDevice() && !cartRows.length) posTransactionCurrency = _getPosDefaultCurrency();
   const currencyOptions = getPOSCurrencies();
   if (!currencyOptions.includes(posTransactionCurrency)) posTransactionCurrency = currencyOptions[0] || 'EUR';
 

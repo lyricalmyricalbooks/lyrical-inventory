@@ -756,9 +756,10 @@ function _tcRenderRecurringSubscriptions() {
       empty.innerHTML = `
         <div class="empty-state">
           <div class="e-icon">🔁</div>
-          No recurring costs tracked yet. Add hosting, software or rent once and it
-          posts itself to the ledger every period.
-          <div style="margin-top:12px;">
+          <span class="tc-empty-desk">No recurring costs tracked yet. Add hosting, software or rent once and it
+          posts itself to the ledger every period.</span>
+          <span class="tc-empty-phone">No subscriptions yet.</span>
+          <div class="tc-empty-action">
             <button class="btn gold" onclick="openRecurringEditor()">+ Add subscription</button>
           </div>
         </div>`;
@@ -3814,16 +3815,7 @@ function _tcBuildCashFlowChart(allLedger, selectedYear, baseCurrency) {
   const hasData = buckets.some(b => b.income > 0 || b.expense > 0);
   if (!buckets.length || !hasData) return '';
 
-  const W = 720, H = 200;
-  const padL = 8, padR = 8, padTop = 14, padBottom = 26;
-  const plotW = W - padL - padR;
-  const plotH = H - padTop - padBottom;
-  const baseY = padTop + plotH;
   const max = Math.max(1, ...buckets.map(b => Math.max(b.income, b.expense)));
-  const n = buckets.length;
-  const groupW = plotW / n;
-  const barGap = Math.min(4, groupW * 0.08);
-  const barW = Math.max(2, (groupW - barGap * 3) / 2);
 
   window._tcCashFlowChartDetail = {
     ledger: allLedger || [],
@@ -3837,47 +3829,31 @@ function _tcBuildCashFlowChart(allLedger, selectedYear, baseCurrency) {
     window._tcCashFlowChartDetail.selectedKey = '';
   }
 
-  let bars = '';
-  let labels = '';
-  buckets.forEach((b, i) => {
-    const gx = padL + i * groupW;
-    const incH = (b.income / max) * plotH;
-    const expH = (b.expense / max) * plotH;
-    const x1 = gx + barGap;
-    const x2 = x1 + barW + barGap;
-    if (b.income > 0) {
-      bars += `<rect class="cf-chart-bar" tabindex="0" role="button" aria-label="View ${escapeHtml(b.label)} cash flow details" onclick="tcSelectCashFlowBucket('${escapeHtml(b.key)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();tcSelectCashFlowBucket('${escapeHtml(b.key)}')}" x="${x1.toFixed(1)}" y="${(baseY - incH).toFixed(1)}" width="${barW.toFixed(1)}" height="${incH.toFixed(1)}" rx="2" fill="url(#income-grad)"><title>${escapeHtml(b.label)} income: ${escapeHtml(fmt(b.income, baseCurrency))}</title></rect>`;
-    }
-    if (b.expense > 0) {
-      bars += `<rect class="cf-chart-bar" tabindex="0" role="button" aria-label="View ${escapeHtml(b.label)} cash flow details" onclick="tcSelectCashFlowBucket('${escapeHtml(b.key)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();tcSelectCashFlowBucket('${escapeHtml(b.key)}')}" x="${x2.toFixed(1)}" y="${(baseY - expH).toFixed(1)}" width="${barW.toFixed(1)}" height="${expH.toFixed(1)}" rx="2" fill="url(#expense-grad)"><title>${escapeHtml(b.label)} expenses: ${escapeHtml(fmt(b.expense, baseCurrency))}</title></rect>`;
-    }
-    labels += `<text x="${(gx + groupW / 2).toFixed(1)}" y="${(H - 8).toFixed(1)}" text-anchor="middle" class="cf-chart-axis">${escapeHtml(b.label)}</text>`;
-  });
+  // Bars are flat boxes sized against the tallest figure. They are HTML rather
+  // than an SVG so the year label and the printed totals are never stretched.
+  const cols = buckets.map((b) => {
+    const label = escapeHtml(b.label);
+    const key = escapeHtml(b.key);
+    const openKey = `onclick="tcSelectCashFlowBucket('${key}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();tcSelectCashFlowBucket('${key}')}"`;
+    const bar = (kind, word, value) => {
+      const text = escapeHtml(fmt(value, baseCurrency));
+      return `<div class="cf-chart-bar is-${kind}" tabindex="0" role="button" aria-label="View ${label} cash flow details" ${openKey} style="--cf-v:${((value / max) * 100).toFixed(2)}%" title="${label} ${word}: ${text}"><span class="cf-chart-val">${text}</span></div>`;
+    };
+    const incBar = b.income > 0 ? bar('income', 'income', b.income) : '';
+    const expBar = b.expense > 0 ? bar('expense', 'expenses', b.expense) : '';
+    return `<div class="cf-chart-col"><div class="cf-chart-lane">${incBar}${expBar}</div><span class="cf-chart-axis">${label}</span></div>`;
+  }).join('');
 
   const title = selectedYear === 'all' ? 'Income vs expenses by year' : `Income vs expenses by month — ${selectedYear}`;
   return `
     <div class="cf-chart-head">
       <span class="cf-chart-title">${escapeHtml(title)}</span>
       <span class="cf-legend">
-        <span class="cf-legend-item"><span class="cf-legend-dot" style="background:linear-gradient(135deg, var(--green-light), var(--green));"></span>Income</span>
-        <span class="cf-legend-item"><span class="cf-legend-dot" style="background:linear-gradient(135deg, var(--red-light), var(--red));"></span>Expenses</span>
+        <span class="cf-legend-item"><span class="cf-legend-dot is-income"></span>Income</span>
+        <span class="cf-legend-item"><span class="cf-legend-dot is-expense"></span>Expenses</span>
       </span>
     </div>
-    <svg class="cf-chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${escapeHtml(title)}">
-      <defs>
-        <linearGradient id="income-grad" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stop-color="var(--green-light, #3ba75c)"/>
-          <stop offset="100%" stop-color="var(--green, #1e5631)"/>
-        </linearGradient>
-        <linearGradient id="expense-grad" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stop-color="var(--red-light, #e05e4d)"/>
-          <stop offset="100%" stop-color="var(--red, #a63a2b)"/>
-        </linearGradient>
-      </defs>
-      <line x1="${padL}" y1="${baseY}" x2="${W - padR}" y2="${baseY}" class="cf-chart-base"/>
-      ${bars}
-      ${labels}
-    </svg>
+    <div class="cf-chart-plot" role="group" aria-label="${escapeHtml(title)}">${cols}</div>
     <div id="tc-cf-chart-detail" class="cf-chart-detail" aria-live="polite"></div>`;
 }
 
@@ -4882,6 +4858,9 @@ function tcExpFileChosen() {
     aiBtn.disabled = !hasFile;
     aiBtn.title = hasFile ? 'Scan receipt with Gemini AI' : 'Select or capture a receipt first to enable AI scanning';
   }
+  // The reason the button is greyed out, visible on a phone (which never shows a title tooltip).
+  const aiHint = $('tc-ai-scan-hint');
+  if (aiHint) aiHint.style.display = hasFile ? 'none' : '';
   // A summary of the last receipt read must never sit beside a different one.
   clearReceiptScanReview('tc-exp-scan-read');
   // Get the photo ready now, while the rest of the form is being filled in.
