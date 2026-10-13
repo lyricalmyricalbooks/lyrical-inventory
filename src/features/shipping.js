@@ -3018,6 +3018,56 @@ function populateCountryDatalist(listId) {
   list.dataset.isoPopulated = '1';
 }
 
+// Phone: the sender address folds to one summary line once it is filled in, and
+// the pricing preferences fold under "More options". Presentation only: these
+// functions read the sender fields and set the folds' open state; they never
+// write a field's value, id or name, and never touch what is sent to a carrier.
+const SHIP_SENDER_REQUIRED_IDS = ['sf-name', 'sf-phone', 'sf-street1', 'sf-city', 'sf-state', 'sf-zip', 'sf-country'];
+const SHIP_DESKTOP_QUERY = '(min-width: 769px)';
+let shipFoldsWired = false;
+
+function shipFieldValue(id) {
+  return String(document.getElementById(id)?.value ?? '').trim();
+}
+
+function shipSenderHasEmpty() {
+  return SHIP_SENDER_REQUIRED_IDS.some((id) => !shipFieldValue(id));
+}
+
+function paintShipSenderLine() {
+  const line = document.getElementById('ship-sender-fold-line');
+  if (!line) return;
+  const name = shipFieldValue('sf-name');
+  const city = shipFieldValue('sf-city');
+  line.textContent = name || city
+    ? `From: ${[name, city].filter(Boolean).join(', ')}`
+    : 'From: add your sender address';
+}
+
+// Typing in the sender fields only ever opens the fold (never closes it under the thumb).
+function onShipSenderEdit() {
+  paintShipSenderLine();
+  const senderFold = document.getElementById('ship-sender-fold');
+  if (senderFold && shipSenderHasEmpty()) senderFold.open = true;
+}
+
+function syncShipFolds() {
+  const senderFold = document.getElementById('ship-sender-fold');
+  const moreFold = document.getElementById('ship-more-options');
+  const desktop = window.matchMedia(SHIP_DESKTOP_QUERY).matches;
+  if (!shipFoldsWired && senderFold) {
+    shipFoldsWired = true;
+    senderFold.addEventListener('input', onShipSenderEdit);
+    senderFold.addEventListener('change', onShipSenderEdit);
+    window.matchMedia(SHIP_DESKTOP_QUERY).addEventListener('change', syncShipFolds);
+  }
+  paintShipSenderLine();
+  // Desktop always shows the sender fields; on phone the fold opens only while a required field is empty.
+  if (senderFold) senderFold.open = desktop || shipSenderHasEmpty();
+  // Desktop always shows the pricing preferences; on phone they stay as the owner left them.
+  if (moreFold && desktop) moreFold.open = true;
+}
+
 function initShippingTab() {
   populateCountrySelect('sf-country');
   populateCountrySelect('st-country');
@@ -3056,6 +3106,7 @@ function initShippingTab() {
   $('sf-state').value = savedOrigin.state || '';
   $('sf-zip').value = savedOrigin.zip || '';
   $('sf-country').value = savedOrigin.country || 'CA';
+  syncShipFolds();
 
   // Populate pre-fill dropdowns
   const bcGroup = $('ship-prefill-bc-group');

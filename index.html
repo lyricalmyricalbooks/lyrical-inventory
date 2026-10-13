@@ -3880,6 +3880,11 @@
               <input type="checkbox" id="ship-save-origin" checked style="width:auto; margin:0;"> Save default
             </label>
           </div>
+          <details class="ship-sender-fold" id="ship-sender-fold">
+            <summary class="ship-sender-fold-summary">
+              <span id="ship-sender-fold-line" class="ship-sender-fold-line">From: add your sender address</span>
+              <span class="ship-sender-fold-edit">Edit</span>
+            </summary>
           <div class="form-group" style="margin-bottom:8px;"><label>Sender Name</label><input type="text" id="sf-name" placeholder="Lyricalmyrical Books"></div>
           <div class="form-group" style="margin-bottom:8px;"><label>Company</label><input type="text" id="sf-company" placeholder="Optional"></div>
           <div class="form-group" style="margin-bottom:8px;"><label>Phone <span style="font-size:var(--text-2xs);color:var(--text3);text-transform:none;letter-spacing:0;">required for international</span></label><input type="tel" id="sf-phone" placeholder="+1 416 555 0123"></div>
@@ -3902,6 +3907,7 @@
               </select>
             </div>
           </div>
+          </details>
         </div>
 
         <!-- Destination Card -->
@@ -4079,6 +4085,8 @@
 
         </div>
 
+        <details class="ship-more-options" id="ship-more-options">
+          <summary class="ship-more-options-summary"><span>More options</span></summary>
         <div class="shipping-predictor-settings">
           <div class="form-group">
             <label>Packaging / handling buffer (CAD)</label>
@@ -4103,6 +4111,7 @@
             </select>
           </div>
         </div>
+        </details>
 
         <!-- Live "what's still missing" line, filled in by renderShippoRateReadiness(). -->
         <div id="ship-rate-readiness" class="ship-readiness" role="status" aria-live="polite"></div>

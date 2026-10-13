@@ -152,3 +152,4 @@ looked at, and re-proposing it costs a run.
 | Raising `.btn` to a 44px minimum height | **Rejected.** Deliberately ~33px; raising it reflows every screen and the density is wanted. Use `.sys-target` on individual controls that genuinely need a full target. See `.agents/UX_PATTERNS.md` → Decisions on record. |
 | CSS anchor positioning for dropdowns and tooltips | **Not yet.** The right model, but support is still Chromium-led. Revisit later. See `.agents/UX_PATTERNS.md` §8. |
 | Scroll-driven animations | **Rejected.** This is a dense financial tool; scroll-jacking hurts more than it delights. See `.agents/UX_PATTERNS.md` §8. |
+| 2026-10-13 | behavioural | Shipping (phone) | Sender address folds to one line once saved; pricing options fold under More options; selects clear their arrow; batch button and chips get solid outlines | pending |

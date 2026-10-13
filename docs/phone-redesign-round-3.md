@@ -91,7 +91,7 @@ snapshot and drift.
 **Evidence:** shots/before/light-375/tab-manual-01.png and tab-manual-02.png (form about 1,330 CSS px tall). index.html:1735-1760 (order form with optional Notes and the channel and payment blocks).
 
 ### 14. tab-shipping — ugly, redesign
-**Status:** Open  
+**Status:** Done — the sender address folds to one line on phone; More options folds the pricing preferences  
 **Problem:** The shipping screen is about five phone screens of form before the main 'Compare all rates' button. The sender address (nine boxes) repeats on every visit even though it is ticked as the saved default, then the recipient, parcel and customs boxes stack up. The owner has to scroll a long way before the screen does anything useful.  
 **Fix:** Once Save default is ticked, collapse the Origin block to a one-line summary with an Edit control. Move Customs and the packaging buffer behind one 'More details' disclosure, using the same pattern as the existing Chit Chats details row. Keep the Compare button directly under Destination and Parcel.  
 **Evidence:** shots/before/light-375/tab-shipping-02.png to tab-shipping-06.png; shots/before/report.json pageHeight 13,819px for tab-shipping; index.html:3833 (Origin block with Save default), index.html:3865 (Destination block), index.html:4066 (Compare button)
@@ -247,13 +247,13 @@ snapshot and drift.
 **Evidence:** shots/before/light-375/modal-stock-transfer-01.png (empty box at about y 1380-1425). index.html:6697 (empty st-preview-box is always rendered). src/style.css:2396 (.st-preview-box styling).
 
 ### 40. tab-shipping — polish, polish
-**Status:** Open  
+**Status:** Partly done — the select arrow no longer runs over text on the shipping screen; the Duties label and the Save to preset line are still open  
 **Problem:** Small layout collisions. The Duties dropdown cuts its selected text off with an ellipsis ('Auto, DDP to the US, DDU elsewh...') and the arrow sits on the last letters. The Save to preset button is jammed onto the 'Load package from' label line rather than sitting beside the dropdown it saves.  
 **Fix:** Shorten the option label to 'Auto' because the helper text directly below already explains DDP and DDU. Move the Save to preset button onto its own line under the preset dropdown, using the same outline button style as Save to book preset.  
 **Evidence:** shots/before/light-375/tab-shipping-05.png (Duties dropdown) and tab-shipping-01.png (preset row); index.html:3953 (long option text that truncates), index.html:3811-3812 (Load Package From label with the Save button inline on the same line)
 
 ### 41. tab-shipping — polish, polish
-**Status:** Open  
+**Status:** Partly done — Ship several orders at once and the verify chips are solid on phone, and raw colours in the shipping profit tiles are now tokens; the expense category swatches are still open  
 **Problem:** Off-system styling creeps in. The 'Ship several orders at once' button uses a dashed border, while Riso Press outlines are solid. The six expense categories each get their own swatch colour (blue, orange, pink, green, grey), and category names are underlined red links. The app's rule is that only two inks stand out and the rest report.  
 **Fix:** Give .ship-flow-batch a solid 2px ink outline like the other outline buttons. Use one neutral swatch for categories, or the press blue and flare inks only. Make category names plain text with a chevron as the tap cue, not underlined red links.  
 **Evidence:** shots/before/light-375/tab-shipping-06.png (dashed batch button); style.css:10725 (.ship-flow-batch sets border-style dashed); shots/before/light-375/tab-taxcenter-06.png (six swatch colours and red underlined category links); src/features/taxcentre.js:983 (per-category dotColor swatch and tc-cat-link)
