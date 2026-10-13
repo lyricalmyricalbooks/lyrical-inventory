@@ -44,8 +44,14 @@ export function normalizeCurrencyCode(cur, fallback = 'CAD') {
   return /^[A-Z]{3}$/.test(upper) ? upper : fallback;
 }
 
-export const fmt = (n, cur = '€') =>
-  getSym(cur) + Number(n).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+// A negative amount reads "-CA$138.69", sign first like fmtWhole; it used to
+// print "CA$-138.69". An amount that rounds to zero never shows a minus.
+export const fmt = (n, cur = '€') => {
+  const fixed = Number(n).toFixed(2);
+  const negative = fixed.startsWith('-') && Number(fixed) !== 0;
+  const digits = fixed.replace(/^-/, '').replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return (negative ? '-' : '') + getSym(cur) + digits;
+};
 
 export const fmtWhole = (n, cur = '€') => {
   const num = Math.round(Number(n) || 0);

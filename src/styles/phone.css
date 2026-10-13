@@ -58,7 +58,7 @@
   :is(.tab-panel, .modal) .phone-records tr.phone-group-row > td.phone-record-lead { grid-column: 1 / -1; padding-bottom: var(--space-2) !important; border-bottom: var(--stroke-hair) solid var(--border-subtle) !important; }
   :is(.tab-panel, .modal) .phone-records tr.phone-group-row > td:nth-child(5) { grid-column: span 2; }
   :is(.tab-panel, .modal) .phone-records tr.phone-group-row > td:empty { display: none !important; }
-  :is(.tab-panel, .modal) .phone-records tr.phone-group-row > td::before { white-space: nowrap; overflow-wrap: normal; letter-spacing: var(--tracking-caps); }
+  :is(.tab-panel, .modal) .phone-records tr.phone-group-row > td::before { white-space: normal; overflow-wrap: normal; word-break: normal; letter-spacing: var(--tracking-caps); }
   :is(.tab-panel, .modal) .phone-records tr.phone-record > td {
     display: block !important; position: static !important; grid-area: auto !important;
     width: auto; max-width: none; min-width: 0; padding: 0 !important; border: 0;
