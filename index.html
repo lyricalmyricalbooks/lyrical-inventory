@@ -4160,7 +4160,7 @@
     </button>
     <button type="button" class="pos-subtab-btn" id="btn-pos-subtab-fairkit" role="tab" aria-selected="false" aria-controls="pos-subpanel-fairkit" onclick="switchPOSSubTab('fairkit')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
-      <span>Fair Print Kit &amp; Stall Prep</span>
+      <span class="pos-subtab-full">Fair Print Kit &amp; Stall Prep</span><span class="pos-subtab-short" aria-hidden="true">Fair kit</span>
     </button>
   </div>
 
@@ -4191,20 +4191,26 @@
         </div>
         <!-- Phone only: is everything uploaded, and how today is going. -->
         <div class="fm-top">
-          <button type="button" class="fm-fair-btn" id="fm-fair-btn" onclick="fairSetName()">
-            <span aria-hidden="true">📍</span> <span id="fm-fair-name">Name today's fair</span>
-          </button>
-          <div class="fm-ccy">
-            <label class="fm-ccy-label" for="fm-currency">Charging in</label>
-            <select id="fm-currency" class="fm-ccy-select" onchange="fairSetCurrency(this.value)"></select>
-            <button type="button" class="fm-ccy-rates" id="fm-ccy-rates" onclick="posConfigureRates()" hidden>Get exchange rates</button>
+          <!-- Row 1: the fair's name and the currency it is charged in. -->
+          <div class="fm-row fm-row-fair">
+            <button type="button" class="fm-fair-btn" id="fm-fair-btn" onclick="fairSetName()">
+              <span aria-hidden="true">📍</span> <span id="fm-fair-name">Name today's fair</span>
+            </button>
+            <div class="fm-ccy">
+              <label class="fm-ccy-label" for="fm-currency">Charging in</label>
+              <select id="fm-currency" class="fm-ccy-select" onchange="fairSetCurrency(this.value)"></select>
+              <button type="button" class="fm-ccy-rates" id="fm-ccy-rates" onclick="posConfigureRates()" hidden>Get exchange rates</button>
+            </div>
           </div>
-          <span class="fm-sync" id="fm-sync" role="status" aria-live="polite"></span>
-          <button type="button" class="fm-today-btn" id="fm-today-btn" onclick="fairOpenToday()" aria-label="Today's register sales">
-            <span class="fm-today-label">Today</span>
-            <span class="fm-today-sum" id="fm-today-sum">No sales yet</span>
-            <span aria-hidden="true">›</span>
-          </button>
+          <!-- Row 2: is everything uploaded, and how today is going. -->
+          <div class="fm-row fm-row-status">
+            <span class="fm-sync" id="fm-sync" role="status" aria-live="polite"></span>
+            <button type="button" class="fm-today-btn" id="fm-today-btn" onclick="fairOpenToday()" aria-label="Today's register sales">
+              <span class="fm-today-label">Today</span>
+              <span class="fm-today-sum" id="fm-today-sum">No sales yet</span>
+              <span aria-hidden="true">›</span>
+            </button>
+          </div>
         </div>
         <!-- Phone only: Fair Mode tiles. One tap adds a copy. Painted by renderPOS(). -->
         <div class="fm-tiles" id="fm-tiles" role="list" aria-label="Books to sell"></div>

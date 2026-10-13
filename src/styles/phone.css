@@ -141,6 +141,8 @@
    zone, a bottom-sheet to pick how they paid, and a short Undo bar. Heavy
    ink borders and large type so it reads in daylight at an outdoor stall. */
 .fm-tiles, .fm-bar, .fm-undo { display: none; }
+/* Phone-only short name for the Fair Print Kit toggle; desktop keeps the full label. */
+.pos-subtab-short { display: none; }
 
 @media (max-width: 768px) {
   /* The step toggle, desktop-style cards and review bar give way to tiles.
@@ -155,9 +157,11 @@
     display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3);
   }
   .fm-tile { position: relative; min-width: 0; }
+  /* 88px is the tap-area floor; the content (title, price, stock) sets the rest,
+     so two rows of books fit where one used to. */
   .fm-tile-add {
     display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1);
-    width: 100%; min-height: 128px; padding: var(--space-4) var(--space-3) var(--space-3);
+    width: 100%; min-height: 88px; padding: var(--space-3);
     border: var(--stroke) solid var(--rule-ink); border-radius: var(--r2);
     background: var(--surface-raised); color: var(--content-primary);
     font: inherit; text-align: left; cursor: pointer;
@@ -263,9 +267,15 @@
 /* Fair Mode, phase 2: upload status, today's sales, printed-QR fallback. */
 .fm-top { display: none; }
 @media (max-width: 768px) {
+  /* Two slim rows: the fair and currency, then upload status and today's total. */
   #tab-pos .pos-layout[data-mobile-view="books"] .fm-top {
     display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2);
   }
+  .fm-row { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+  .fm-row-fair > .fm-fair-btn { flex: 1 1 auto; min-width: 0; }
+  .fm-row-fair > .fm-ccy { flex: none; }
+  .fm-row-status > .fm-sync { flex: none; }
+  .fm-row-status > .fm-today-btn { flex: 1 1 auto; min-width: 0; }
   .fm-sync {
     display: flex; align-items: center; gap: var(--space-2); min-height: 36px;
     padding: var(--space-1) var(--space-3); border-radius: var(--r-pill);
@@ -280,13 +290,21 @@
   .fm-sync[data-tone="failed"] { border-color: var(--red); }
   .fm-sync[data-tone="failed"]::before { background: var(--red); }
   .fm-sync:empty { display: none; }
+  /* On the Sell screen the upload status is a square slab that sits in one row
+     with today's total, so it matches that row's ink outline and height. */
+  #tab-pos .fm-sync {
+    min-height: 44px; border-radius: var(--r2); border: var(--stroke) solid var(--rule-ink);
+    padding: var(--space-1) var(--space-3); font-size: var(--text-sm); white-space: nowrap;
+  }
+  #tab-pos .fm-sync[data-tone="offline"] { border-color: var(--gold-text); background: var(--gold-bg); }
+  #tab-pos .fm-sync[data-tone="failed"] { border-color: var(--red); }
 
   .fm-today-btn {
-    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-3);
-    min-height: 52px; padding: 0 var(--space-4);
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-2);
+    min-height: 44px; padding: 0 var(--space-3);
     border: var(--stroke) solid var(--rule-ink); border-radius: var(--r2);
     background: var(--surface-raised); color: var(--content-primary);
-    font: 600 var(--text-base) var(--font-ui); text-align: left; cursor: pointer;
+    font: 600 var(--text-sm) var(--font-ui); text-align: left; cursor: pointer;
   }
   .fm-today-btn:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
   .fm-today-label { font: 800 var(--text-xs) var(--font-ui); text-transform: uppercase; letter-spacing: .08em; color: var(--content-secondary); }
@@ -325,6 +343,8 @@
     text-decoration: underline dotted; text-underline-offset: 4px;
   }
   .fm-fair-btn.is-set { color: var(--content-primary); font-size: var(--text-md); text-decoration: none; }
+  /* A long fair name wraps inside its share of the row instead of pushing the currency off-screen. */
+  #tab-pos #fm-fair-name { min-width: 0; overflow-wrap: anywhere; line-height: 1.2; }
   .fm-summary-btn { display: block; width: 100%; min-height: 52px; margin: var(--space-4) 0; }
   .fm-sum-hero { display: grid; gap: var(--space-1); margin-bottom: var(--space-3); color: var(--content-secondary); font-weight: 600; }
   .fm-sum-big { font: 800 var(--text-2xl) / 1.1 var(--font-ui); color: var(--content-primary); }
@@ -429,11 +449,22 @@
   #tab-today .today-receipt-card { grid-column: 1 / -1; min-height: 106px; }
   #tab-today .today-card-sub { line-height: 1.4; }
   #tab-today .today-row { min-height: 76px; padding-block: var(--space-4); }
-  .phone-sell-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-4); }
-  .phone-sell-head .btn { max-width: 48%; font-size: var(--text-xs); }
+  /* Sell's heading is one line: the title and a small "Record another sale"
+     button. The "At the counter" eyebrow goes; the screen already says where it is. */
+  #tab-pos .phone-sell-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
+  #tab-pos .phone-sell-head .phone-eyebrow { display: none; }
+  #tab-pos .phone-sell-head h1 { font: 400 var(--text-2xl) / 1.1 var(--font-display); text-transform: none; letter-spacing: -.03em; margin: 0; }
+  #tab-pos .phone-sell-head .btn { flex: none; min-height: 44px; max-width: none; padding: 0 var(--space-3); font-size: var(--text-xs); white-space: nowrap; }
   #tab-pos #pos-subpanel-register > .row-between { display: none; }
-  #tab-pos .pos-subtab-nav { margin-bottom: var(--space-4); }
-  #tab-pos .pos-subtab-btn { font-size: var(--text-xs); padding: var(--space-3); min-height: 48px; }
+  #tab-pos .pos-subtab-nav { margin-bottom: var(--space-3); }
+  #tab-pos .pos-subtab-btn { font-size: var(--text-xs); padding: var(--space-3); min-height: 44px; }
+  /* "Fair Print Kit & Stall Prep" wrapped to two lines; the phone shows "Fair kit"
+     and the full name stays for screen readers, as a visually hidden span. */
+  #tab-pos .pos-subtab-short { display: inline; }
+  #tab-pos .pos-subtab-full {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
   #tab-website .web-orders-hero { gap: var(--space-4); padding: var(--space-4); }
   #tab-website .web-orders-copy h2 { font: 400 var(--text-3xl) / 1.1 var(--font-display); text-transform: none; }
   #tab-website .web-orders-copy p { font-size: var(--text-sm); max-width: 38ch; }

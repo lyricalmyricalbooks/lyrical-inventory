@@ -131,6 +131,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-13 | visual | Phone Payments (Stripe reconcile) | Put the payments that still need you at the top of the Payments screen on a phone, each one a tidy form with a full-width Record sale button and a plain hint when no book is chosen, and folded the Stripe key, card-reader codes, alerts and accepted payment methods into sections you open when needed | — |
 | 2026-10-13 | visual | Phone Consignment | Split the consignment screen on a phone into Stores, Invoices and Ledger tabs with counts, folded each store's secondary actions and the ledger's filters behind a button, and put the ledger totals above the list | — |
 | 2026-10-13 | fix | Phone To-do, All Books, Dashboard, Tax Centre, Order History, import and night-mode pop-ups | Stopped the to-do text being squeezed beside its buttons, the consignment toolbar overflowing, the channel and tax tables being cut off at the right edge and the empty boxes and stray warning sign on a phone; night-mode pop-up headers match their sheet, and the import button stays off until a file is read | — |
+| 2026-10-13 | visual | Phone Sell (top of the register) | Put the fair name and currency on one line, upload status and today's total on another, shortened the fair-kit toggle to "Fair kit" on a phone, and made the book tiles shorter, so the first book now shows near the top of the screen | — |
 
 ---
 
