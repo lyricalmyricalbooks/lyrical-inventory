@@ -12,7 +12,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 export default defineConfig({
   root: ROOT,
   configFile: false,
-  logLevel: 'warn',
+  // The app narrates freely to the console offline (FX lookups etc.); keep the run readable.
+  logLevel: 'error',
   define: { __GIT_COMMIT_DATE__: JSON.stringify('2026-10-10T00:00:00Z') },
   resolve: {
     alias: [

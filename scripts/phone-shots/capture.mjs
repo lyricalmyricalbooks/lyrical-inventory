@@ -7,8 +7,10 @@
 //   npm run shots -- --only=reconcile,consignment
 //   npm run shots -- --widths=375 --themes=light --modals=none --out=shots/before
 //   npm run shots -- --widths=1280 --only=reconcile      (desktop sanity check)
+//   --slices=N  screenfuls per screen (default 6)   --full  also one tall picture
 //
-// Output (gitignored): <out>/<theme>-<width>/<screen>.png and <out>/report.json.
+// Output (gitignored): <out>/<theme>-<width>/<screen>-NN.png (one per screenful)
+// and <out>/report.json.
 // The report lists, per shot: sideways overflow, primary controls smaller than
 // a fingertip, text under 11px, and boxes that poke past the screen edge.
 // Dev-only: needs playwright-core (devDependency) and a local Chromium.
@@ -43,6 +45,7 @@ const tabs = list(args.only, ALL_TABS);
 const modals = args.modals === 'none' ? [] : list(args.modals, args.only ? [] : ALL_MODALS);
 const outDir = path.resolve(ROOT, args.out || 'shots');
 const port = Number(args.port || 5199);
+const maxSlices = Number(args.slices || 6);
 const chromePath = process.env.CHROME_PATH
   || ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome', '/opt/pw-browsers/chromium/chrome-linux/chrome']
     .find(p => fs.existsSync(p));
@@ -152,10 +155,32 @@ for (const theme of themes) {
 
     const shoot = async (name) => {
       await page.waitForTimeout(350);
-      const file = path.join(dir, `${name}.png`);
-      await page.screenshot({ path: file, fullPage: true, animations: 'disabled' });
+      // One picture per screenful, scrolled the way a thumb would, so the
+      // sticky header and bottom menu sit where they really do. --full also
+      // keeps one tall picture of the whole page.
+      await page.evaluate(() => { const t = document.getElementById('toast'); if (t) t.classList.remove('show'); });
       const facts = await page.evaluate(measure);
-      report.push({ theme, width, screen: name, file: path.relative(ROOT, file), ...facts, pageErrors: errors.splice(0) });
+      const scroller = name.startsWith('modal-')
+        ? `document.querySelector('.overlay[style*="flex"] .modal-body') || document.querySelector('.overlay[style*="flex"] .modal')`
+        : 'document.scrollingElement';
+      const { total, view } = await page.evaluate((expr) => { const el = eval(expr); return { total: el.scrollHeight, view: el.clientHeight }; }, scroller);
+      const step = Math.max(200, view - 96);
+      const files = [];
+      for (let i = 0, y = 0; i < maxSlices && (i === 0 || y < total - view + step); i++, y += step) {
+        await page.evaluate(([expr, top]) => { eval(expr).scrollTop = top; window.scrollTo(0, top); }, [scroller, y]);
+        await page.waitForTimeout(120);
+        const file = path.join(dir, `${name}-${String(i + 1).padStart(2, '0')}.png`);
+        await page.screenshot({ path: file, animations: 'disabled' });
+        files.push(path.relative(ROOT, file));
+        if (y + view >= total) break;
+      }
+      if (args.full) {
+        const file = path.join(dir, `${name}-full.png`);
+        await page.screenshot({ path: file, fullPage: true, animations: 'disabled' });
+        files.push(path.relative(ROOT, file));
+      }
+      await page.evaluate((expr) => { eval(expr).scrollTop = 0; window.scrollTo(0, 0); }, scroller);
+      report.push({ theme, width, screen: name, files, pageHeight: total, ...facts, pageErrors: errors.splice(0) });
       process.stdout.write(`  ${theme}-${width} ${name}${facts.sidewaysOverflow ? '  ⚠ sideways scroll' : ''}\n`);
     };
     const closeOverlays = () => page.evaluate(() => {
