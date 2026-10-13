@@ -115,7 +115,7 @@ test('phone pass: Add sale keeps its save button in reach and tables keep their 
   const block = styles.slice(styles.indexOf('PHONE PASS, EVERY OTHER SCREEN'));
   // The whole save bar is sticky inside the card: a sticky button inside its
   // own button-tall box had nowhere to travel, so it never stayed in reach.
-  expect(block).toMatch(/#tab-manual \.card > \.card-actions\{[\s\S]{0,300}?position:sticky;bottom:calc\(72px \+ env\(safe-area-inset-bottom\)\)/);
+  expect(block).toMatch(/#tab-manual \.card > \.card-actions\{[\s\S]{0,300}?position:sticky;bottom:calc\(var\(--mnav-h\) - 2px \+ env\(safe-area-inset-bottom\)\)/);
   expect(block).not.toMatch(/#tab-manual \.card-actions \.btn\.gold\.lg\{\s*position:sticky/);
   expect(block).toMatch(/\.tab-panel:not\(#tab-history\) \.tbl td:first-child\{position:sticky;left:0;/);
   // The Save-preset button on Shipping no longer forces a 28px height.

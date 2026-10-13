@@ -22,11 +22,11 @@ test('messages rise above the register Charge / Undo bar while it is showing', (
   expect(m).not.toBeNull();
   expect(m[1]).toContain('.fm-bar:not([hidden])');
   expect(m[1]).toContain('.fm-undo:not([hidden])');
-  expect(m[2]).toBe('calc(84px + 76px + var(--space-2) + env(safe-area-inset-bottom))');
+  expect(m[2]).toBe('calc(var(--mnav-h) + 10px + 76px + var(--space-2) + env(safe-area-inset-bottom))');
 });
 
 test('the update banner sits above the bottom bar on a phone, inked and square', () => {
-  expect(phone).toMatch(/#pw-app\.pub-shell ~ \.pwa-prompt \{ bottom: calc\(72px \+ var\(--space-3\) \+ env\(safe-area-inset-bottom\)\); \}/);
+  expect(phone).toMatch(/#pw-app\.pub-shell ~ \.pwa-prompt \{ bottom: calc\(var\(--mnav-h\) - 2px \+ var\(--space-3\) \+ env\(safe-area-inset-bottom\)\); \}/);
   expect(phone).toMatch(/\.pwa-prompt \{ border: var\(--stroke\) solid var\(--rule-ink\); border-radius: var\(--r2\); box-shadow: var\(--elev-3\); \}/);
   expect(phone).toMatch(/\.pwa-prompt:is\(:hover, :focus-visible\) \{ transform: none; \}/);
 });

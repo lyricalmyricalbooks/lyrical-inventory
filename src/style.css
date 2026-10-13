@@ -13,6 +13,10 @@
    scripts/check-contrast.mjs, in both themes.
    ═══════════════════════════════════════════════════════════════════════════ */
 :root {
+  /* Height of the phone's bottom nav, border included: 60px buttons, 6px padding
+     above and below, and the 2px ink rule on its top edge. Anything that sits
+     above the nav is positioned from this, so a nav change moves them together. */
+  --mnav-h: 74px;
   --ink:#100F0D; --ink2:#1C1A17; --ink3:#2B2823; --ink4:#3E3A33;
   --cream:#FAF6EC; --cream2:#F0E9DA; --cream3:#E4DAC5; --cream4:#D3C6AB;
   --surface-card:#FFFFFF;
@@ -4056,6 +4060,21 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .modal{background:var(--surface-page);border-radius:var(--r3);border:var(--stroke) solid var(--rule-ink);padding:0 var(--space-6);width:100%;max-width:500px;max-height:88vh;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;box-shadow:var(--elev-4);animation:modalIn 0.35s var(--ease-spring);}
 .modal:not(:has(.modal-title)){padding-top:var(--space-6);}
 .modal:not(:has(.modal-footer)){padding-bottom:var(--space-6);}
+/* Dialogs with a fixed height cap. These are classes, not inline styles, so the
+   phone sheet rules (92dvh and the keyboard inset, at 600px and below) can win
+   over them. An inline max-height would beat every stylesheet. */
+.modal.modal-max-80{max-height:80vh;}
+.modal.modal-max-85{max-height:85vh;}
+.modal.modal-max-90{max-height:90vh;}
+.modal.modal-max-92{max-height:92vh;}
+.modal.modal-max-94{max-height:94vh;}
+@supports (height:1dvh){
+  .modal.modal-max-80{max-height:80dvh;}
+  .modal.modal-max-85{max-height:85dvh;}
+  .modal.modal-max-90{max-height:90dvh;}
+  .modal.modal-max-92{max-height:92dvh;}
+  .modal.modal-max-94{max-height:94dvh;}
+}
 @keyframes modalIn{from{opacity:0;transform:scale(.95) translateY(12px)}to{opacity:1;transform:scale(1) translateY(0)}}
 @keyframes overlayIn{from{opacity:0}to{opacity:1}}
 @keyframes modalOut{from{opacity:1;transform:scale(1) translateY(0)}to{opacity:0;transform:scale(.95) translateY(12px)}}
@@ -4489,7 +4508,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   .header-grow{display:none;}
   .header-brand{padding:.7rem 0 .15rem;flex:1;min-width:0;}
   .header-wordmark{font-size:16px;}
-  .header-tag{font-size:8px;letter-spacing:.18em;}
+  .header-tag{font-size:var(--text-3xs);letter-spacing:.18em;}
   .header-right{
     display:flex;
     width:100%;
@@ -4508,7 +4527,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   }
   .header-stat:last-child{border-right:none;}
   .hs-val{font-size:var(--text-md);}
-  .hs-label{font-size:8px;margin-top:3px;letter-spacing:.1em;}
+  .hs-label{font-size:var(--text-3xs);margin-top:3px;letter-spacing:.1em;}
   .header-actions{padding:0;width:100%;order:3;display:flex;flex-wrap:wrap;gap:6px;position:relative;}
   .header-action-btn{
     flex:1 1 calc(50% - 3px);
@@ -4811,6 +4830,13 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
     padding-bottom:env(safe-area-inset-bottom);
   }
   .modal-footer{padding-bottom:max(var(--space-4),env(safe-area-inset-bottom));}
+}
+
+/* Touch screens wider than 768px (landscape phones, small tablets) skip the
+   phone block above, but iOS still zooms on focus for any field under 16px.
+   Same floor, touch pointers only. */
+@media (pointer: coarse){
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]), select, textarea{font-size:max(16px,1em) !important;}
 }
 
 /* Do not let content become difficult to scan on cinema-width monitors. */
@@ -19702,11 +19728,16 @@ button[onclick="refreshUmamiStats()"]:active {
 .more-sheet{display:none;}
 .pos-mobile-steps{display:none;}
 
-@media (max-width: 768px){
+@media (max-width: 860px){
+  /* Publishers from 769px to 860px: the sidebar only starts at 861px, so they
+     get this bottom nav instead of the old horizontal tab bar. The nav is the
+     same height at every width here (--mnav-h), so content clears it the same way. */
   .pub-shell .tab-bar{display:none;}
+  .pub-shell .tab-panel{padding-bottom:calc(var(--mnav-h) + 30px + env(safe-area-inset-bottom));}
   .pub-shell .mnav{
-    display:grid;grid-template-columns:repeat(5,1fr);align-items:end;
+    display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-items:end;
     position:fixed;left:0;right:0;bottom:0;z-index:calc(var(--z-sticky) + 60);
+    height:calc(var(--mnav-h) + env(safe-area-inset-bottom));
     padding:6px max(6px,env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(6px,env(safe-area-inset-left));
     background:var(--ink2);
     /* Riso: a printed ink rule along the top edge, not a soft glow. */
@@ -19715,7 +19746,7 @@ button[onclick="refreshUmamiStats()"]:active {
   }
   .mnav-btn{
     position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
-    min-height:54px;padding:4px 2px;border:0;border-radius:var(--r2);background:transparent;
+    min-height:60px;padding:4px 2px;border:0;border-radius:var(--r2);background:transparent;
     color:var(--on-inverse-2);font-family:var(--font-ui);cursor:pointer;touch-action:manipulation;
     transition:color .15s var(--ease-standard),background-color .15s var(--ease-standard);
   }
@@ -19778,6 +19809,10 @@ button[onclick="refreshUmamiStats()"]:active {
   .more-sheet-body .bc-gap-badge,
   .more-sheet-body .health-badge{position:absolute;top:6px;right:6px;margin:0 !important;}
 
+}
+
+/* Phone-only header: the slimmer one-row-plus-picker layout stops at 768px. */
+@media (max-width: 768px){
   /* ---- Slimmer header: one brand row + book picker, not sticky, so
      the content gets the screen back once you scroll. ---- */
   .pub-shell .app-header{
@@ -19989,7 +20024,7 @@ button[onclick="refreshUmamiStats()"]:active {
   #tab-pos .pos-layout[data-mobile-view="books"] #pos-mobile-books{padding-bottom:80px;}
   .pos-review-bar:not([hidden]){
     display:flex;align-items:center;gap:var(--space-3);
-    position:fixed;left:12px;right:12px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:calc(var(--z-sticky) + 50);
+    position:fixed;left:12px;right:12px;bottom:calc(var(--mnav-h) + 10px + env(safe-area-inset-bottom));z-index:calc(var(--z-sticky) + 50);
     min-height:60px;padding:0 18px;border:0;border-radius:var(--r3);
     background:var(--gold);color:var(--ink);font-family:var(--font-ui);cursor:pointer;box-shadow:var(--elev-3);
   }
@@ -20006,7 +20041,7 @@ button[onclick="refreshUmamiStats()"]:active {
   #tab-pos .pos-pay-select{display:none;}
   #tab-pos .pos-checkout-total{font-size:var(--text-3xl);}
   #tab-pos #pos-checkout-btn{
-    position:sticky;bottom:calc(84px + env(safe-area-inset-bottom));z-index:var(--z-raised);
+    position:sticky;bottom:calc(var(--mnav-h) + 10px + env(safe-area-inset-bottom));z-index:var(--z-raised);
     width:100%;min-height:60px;font-size:var(--text-md);box-shadow:var(--elev-3);
   }
 
@@ -20036,7 +20071,7 @@ button[onclick="refreshUmamiStats()"]:active {
   #tab-website .web-orders-status .web-stat{padding:var(--space-2);grid-column:auto !important;}
   #tab-website .web-orders-status .web-stat-sub{display:none;}
   #tab-website .apply-all-cta:not(:disabled){
-    position:sticky;bottom:calc(84px + env(safe-area-inset-bottom));z-index:var(--z-raised);
+    position:sticky;bottom:calc(var(--mnav-h) + 10px + env(safe-area-inset-bottom));z-index:var(--z-raised);
     width:100%;min-height:56px;box-shadow:var(--elev-3);
   }
 
@@ -20094,9 +20129,9 @@ button[onclick="refreshUmamiStats()"]:active {
      card: a sticky button inside its own button-tall box never moved. It bleeds
      to the card's edges and sits on an ink rule, like a pinned footer. */
   #tab-manual .card > .card-actions{
-    /* 72px = the bottom bar (60px buttons + 6px padding above and below), so the
-       save bar sits right on it with no strip of form showing between them. */
-    position:sticky;bottom:calc(72px + env(safe-area-inset-bottom));z-index:var(--z-raised);
+    /* Sits flush on the bottom nav: --mnav-h less the 2px ink rule along the nav's
+       top edge, which the save bar overlaps, so no strip of form shows between them. */
+    position:sticky;bottom:calc(var(--mnav-h) - 2px + env(safe-area-inset-bottom));z-index:var(--z-raised);
     margin:var(--space-4) calc(-1 * var(--space-4)) calc(-1 * var(--space-4));
     padding:var(--space-3) var(--space-4);
     background:var(--surface-raised);border-top:var(--stroke) solid var(--rule-ink);
@@ -20138,7 +20173,7 @@ button[onclick="refreshUmamiStats()"]:active {
   #tab-intel .intel-layout{display:block;}
   #tab-intel .intel-rail{display:none;}
   #tab-intel .intel-composer{
-    position:sticky;bottom:calc(84px + env(safe-area-inset-bottom));z-index:var(--z-raised);
+    position:sticky;bottom:calc(var(--mnav-h) + 10px + env(safe-area-inset-bottom));z-index:var(--z-raised);
     background:var(--surface-page);padding-top:var(--space-2);box-shadow:0 -1px 0 var(--border-subtle);
   }
   #tab-intel .intel-send{min-height:48px;}

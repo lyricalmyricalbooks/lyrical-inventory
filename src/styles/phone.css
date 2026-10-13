@@ -13,7 +13,7 @@
   .pub-shell .profile-toggle-group { grid-column: 1 / -1; }
   .pub-shell #book-dropdown-btn > div { min-width: 0; }
   .pub-shell #book-dropdown-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .pub-shell .tab-panel { padding-bottom: calc(104px + env(safe-area-inset-bottom)); }
+  .pub-shell .tab-panel { padding-bottom: calc(var(--mnav-h) + 30px + env(safe-area-inset-bottom)); }
   .tab-panel .sec-head { flex-direction: column; align-items: stretch; gap: var(--space-3); }
   .tab-panel .sec-head-titles { flex: 0 1 auto; }
   .tab-panel .section-subcopy, .tab-panel .lead-note { display: block; overflow: visible; -webkit-line-clamp: unset; line-clamp: unset; }
@@ -149,7 +149,7 @@
   #tab-pos .pos-mobile-steps:has(+ .pos-layout[data-mobile-view="books"]) { display: none; }
   #tab-pos .pos-layout[data-mobile-view="books"] :is(#pos-grid, .pos-review-bar) { display: none !important; }
   #tab-pos .pos-layout[data-mobile-view="books"]:not(.fm-searchable) .pos-search-wrapper { display: none; }
-  #tab-pos .pos-layout[data-mobile-view="books"] #pos-mobile-books { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+  #tab-pos .pos-layout[data-mobile-view="books"] #pos-mobile-books { padding-bottom: calc(var(--mnav-h) + 22px + env(safe-area-inset-bottom)); }
 
   #tab-pos .pos-layout[data-mobile-view="books"] .fm-tiles {
     display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3);
@@ -197,7 +197,7 @@
   #tab-pos .pos-layout[data-mobile-view="books"] .fm-bar:not([hidden]),
   #tab-pos .fm-undo:not([hidden]) {
     display: flex; align-items: center; gap: var(--space-3);
-    position: fixed; left: 12px; right: 12px; bottom: calc(84px + env(safe-area-inset-bottom));
+    position: fixed; left: 12px; right: 12px; bottom: calc(var(--mnav-h) + 10px + env(safe-area-inset-bottom));
     z-index: calc(var(--z-sticky) + 50);
     padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
     border: var(--stroke) solid var(--rule-ink); border-radius: var(--r3);
@@ -581,12 +581,12 @@
      the same moment. The message sat right over Undo; while the Charge or Undo
      bar is up, messages sit above it instead (bar: 56px button, padding, outline). */
   #pw-app:has(#tab-pos.active :is(.pos-layout[data-mobile-view="books"] .fm-bar:not([hidden]), .fm-undo:not([hidden]))) ~ .toast {
-    bottom: calc(84px + 76px + var(--space-2) + env(safe-area-inset-bottom));
+    bottom: calc(var(--mnav-h) + 10px + 76px + var(--space-2) + env(safe-area-inset-bottom));
   }
   /* "New version available" covered the bottom bar's buttons. It now sits just
      above the bar, inked like the rest of the app, and no longer grows on hover. */
   .pwa-prompt { left: var(--space-3); right: var(--space-3); bottom: calc(var(--space-4) + env(safe-area-inset-bottom)); max-width: none; }
-  #pw-app.pub-shell ~ .pwa-prompt { bottom: calc(72px + var(--space-3) + env(safe-area-inset-bottom)); }
+  #pw-app.pub-shell ~ .pwa-prompt { bottom: calc(var(--mnav-h) - 2px + var(--space-3) + env(safe-area-inset-bottom)); }
   .pwa-prompt { border: var(--stroke) solid var(--rule-ink); border-radius: var(--r2); box-shadow: var(--elev-3); }
   .pwa-prompt:is(:hover, :focus-visible) { transform: none; }
   .pwa-prompt:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }

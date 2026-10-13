@@ -175,6 +175,9 @@ export default defineConfig({
         short_name: 'Lyrical-Inv',
         description: 'Inventory management for Lyricalmyrical Books',
         theme_color: '#100F0D',
+        background_color: '#262624',
+        display: 'standalone',
+        start_url: './',
         icons: [
           {
             src: 'pwa-64x64.png',
