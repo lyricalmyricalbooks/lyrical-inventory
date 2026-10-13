@@ -33,6 +33,7 @@ test('the update banner sits above the bottom bar on a phone, inked and square',
 
 test('Add sale outlines the payment tap buttons in red when the answer is missing', () => {
   expect(phone).toMatch(/\.form-group\.invalid \.phone-seg-opt \{ border: var\(--stroke\) solid var\(--red\); \}/);
-  // Order # and Qty sit side by side again: the phone layer no longer flattens them.
-  expect(phone).not.toMatch(/#tab-manual \.order-grid/);
+  // Order # now sits in the "More details" fold (round 4), so the phone grid no longer
+  // puts two fields side by side in a two-column row.
+  expect(phone).not.toMatch(/#tab-manual \.order-grid \{[^}]*repeat\(2/);
 });

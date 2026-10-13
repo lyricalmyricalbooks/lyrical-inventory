@@ -1375,3 +1375,42 @@
   #tab-intel .intel-main { order: 0; }
   #tab-intel .intel-rail { order: 1; }
 }
+
+/* ─── MANUAL ENTRY + HOME (round 4) ─── */
+/* Desktop keeps the optional fields visible: the fold never shows its summary,
+   and the order number takes the Qty and price row's left-hand share. */
+@media (min-width: 769px) {
+  #tab-manual .order-grid { grid-template-columns: .65fr 1.6fr; }
+  #tab-manual .manual-more { margin-top: 14px; }
+  #tab-manual .manual-more > summary { display: none; }
+  #tab-manual .manual-more::details-content { content-visibility: visible; display: block; }
+}
+
+@media (max-width: 768px) {
+  /* Order form: Qty and price one under the other, the optional pair folded away. */
+  #tab-manual .order-grid { grid-template-columns: minmax(0, 1fr) !important; }
+  #tab-manual .manual-more { margin-top: var(--space-4); }
+  #tab-manual .manual-more > summary {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+    min-height: 44px; padding: var(--space-2) var(--space-3); cursor: pointer; list-style: none;
+    border: var(--stroke) solid var(--rule-ink); background: var(--surface-raised); color: var(--content-primary);
+    font: 700 var(--text-sm) / 1.2 var(--font-ui); letter-spacing: var(--tracking-caps); text-transform: uppercase;
+  }
+  #tab-manual .manual-more > summary::-webkit-details-marker { display: none; }
+  #tab-manual .manual-more > summary::after { content: '+'; font-size: var(--text-lg); line-height: 1; }
+  #tab-manual .manual-more[open] > summary::after { content: '−'; }
+  #tab-manual .manual-more > summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+  #tab-manual .manual-more[open] > .form-group { margin-top: var(--space-3); }
+
+  /* Home, night mode: the Sell card's fill is deepened toward the ink so the
+     light caption on it clears 4.5 to 1. Day mode keeps the bright red. */
+  .theme-dark #tab-today .today-card-ink { background: color-mix(in srgb, var(--gold) 55%, var(--ink)); }
+
+  /* Home: the upload strip is the same square, inked slab the Sell screen uses. */
+  #tab-today .fm-sync {
+    min-height: 44px; border-radius: var(--r2); border: var(--stroke) solid var(--rule-ink);
+    padding: var(--space-1) var(--space-3); font-size: var(--text-sm);
+  }
+  #tab-today .fm-sync[data-tone="offline"] { border-color: var(--gold-text); background: var(--gold-bg); }
+  #tab-today .fm-sync[data-tone="failed"] { border-color: var(--red); }
+}

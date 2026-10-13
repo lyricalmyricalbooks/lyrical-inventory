@@ -85,7 +85,7 @@ snapshot and drift.
 **Evidence:** shots/before/light-375/tab-pos-01.png (controls at about y 420-880 at 2x; first book tile starts near y 1010). The first book appears roughly 270 CSS px below the controls' start.
 
 ### 13. Manual entry (Log an order) — ugly, redesign
-**Status:** Open  
+**Status:** Done (round 4, Manual entry + Home) — Order # and Notes sit under 'More details' on a phone; Qty, price, Channel and Payment type stay in view  
 **Problem:** The Manual entry form is one long column of about nine blocks before the Add order button. Optional fields such as Order number and Notes look as important as required ones, so the phone screen is long to scroll through.  
 **Fix:** Move Order # and Notes under a collapsed 'More details' disclosure, using the existing disclosure pattern, and keep Channel, Payment type and the price block visible. Keep the pinned save bar as it is.  
 **Evidence:** shots/before/light-375/tab-manual-01.png and tab-manual-02.png (form about 1,330 CSS px tall). index.html:1735-1760 (order form with optional Notes and the channel and payment blocks).
@@ -151,7 +151,7 @@ snapshot and drift.
 **Evidence:** shots/before/light-375/modal-add-book-01.png and modal-add-book-02.png (swatch row cut flat along the bottom); index.html:5884-5892 (eight swatch buttons; two use var(--gold)/var(--rose) reds and two use var(--violet) purples); src/style.css:10149-10160 (swatches are 28 px circles that wrap); src/styles/phone.css:757 (phone size 40 px)
 
 ### 24. Today (home) tab, night mode — ugly, polish
-**Status:** Open  
+**Status:** Done (round 4, Manual entry + Home) — the night Sell card has a deeper clay fill, and the upload strip is square and inked  
 **Problem:** In night mode the big red SELL card turns a pale salmon, and its small caption 'Open your register' is faint and hard to read against it. The main action looks washed out compared with the daytime version.  
 **Fix:** In the dark theme, give the Sell card a deeper ink-red fill (for example var(--gold-text) or a darker riso red) instead of the pale salmon token, keeping the light text at 4.5 to 1 or better.  
 **Evidence:** shots/before/dark-375/tab-today-01.png (card at about y 760-1015 at 2x). Sampled caption contrast is about 2.5 to 1 from the screenshot, versus about 3 to 1 in daytime; the 4.5 to 1 target applies to small text. src/styles/theme-dark.css:79 (dark --gold #D97757) used by src/styles/phone.css:427 (#tab-today .today-card-ink uses var(--gold) with var(--on-accent) text).
@@ -175,7 +175,7 @@ snapshot and drift.
 **Evidence:** shots/before/light-375/tab-taxcenter-02.png; src/features/taxcentre.js:3866 (svg uses preserveAspectRatio none, which distorts the label); src/features/taxcentre.js:3868-3875 (income-grad and expense-grad linear gradients)
 
 ### 28. tab-history — ugly, polish
-**Status:** Done (History redesign) — Gratuity tag is still violet  
+**Status:** Done (History redesign; round 4) — Gratuity tag is now the neutral channel tag  
 **Problem:** Red is used for normal things. Every Store sale gets a red tag, and the Stock on Hand number is in the same red as an alert. The app's own colour rule reserves red for owed, voided or error, so a healthy store sale looks like a problem to the owner.  
 **Fix:** Give Store a neutral or blue tag, keep red for real problems, and show the Stock on Hand figure in the normal ink with only the accent bar. Map the Website and Direct tags into the four existing status colours.  
 **Evidence:** shots/before/light-375/tab-history-01.png (Stock on Hand 68 in red). shots/before/light-375/tab-history-02.png (STORE tags in red). src/main.js:9419-9427 (formatChannelBadge sends Store to the gold tone, which is the red ink). src/style.css:374-378 (.ch-badge.ch-store uses the red ink). src/style.css:223-225 (highlight accent on the Stock on Hand tile). Website (violet) and Direct (slate) tags use hues outside the four status colours (src/style.css:362-366 and 380-384).

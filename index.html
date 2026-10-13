@@ -1724,7 +1724,6 @@
   <div class="section-hed" style="margin-bottom:1.1rem;">Log an order</div>
   <div class="card">
     <div class="order-grid">
-      <div class="form-group"><label for="m-num">Order #<span class="tip tip-mark" tabindex="0" role="img" aria-label="Help: Type the order or receipt number if you have one. No number? Leave it empty." data-tip="Type the order or receipt number if you have one. No number? Leave it empty.">?</span></label><input type="text" id="m-num" placeholder="optional"></div>
       <div class="form-group"><label for="m-qty">Qty<span class="tip tip-mark" tabindex="0" role="img" aria-label="Help: How many copies did you sell in this sale? Type the number." data-tip="How many copies did you sell in this sale? Type the number.">?</span></label><input type="number" inputmode="numeric" id="m-qty" value="1" min="1" oninput="phint()"></div>
       <div class="form-group">
         <label id="m-price-label" for="m-price">Price paid<span class="tip tip-mark" tabindex="0" role="img" aria-label="Help: The price for ONE copy, not the total. Paid in another currency? Choose it in the box on the left first." data-tip="The price for ONE copy, not the total. Paid in another currency? Choose it in the box on the left first.">?</span> <span id="m-fx-inline-result" style="display:none;color:var(--gold-text);font-weight:600;margin-left:8px;"></span></label>
@@ -1761,7 +1760,13 @@
         </select>
       </div>
     </div>
-    <div class="form-group" style="margin-top:14px;"><label for="m-notes">Notes<span class="tip tip-mark" tabindex="0" role="img" aria-label="Help: Anything worth remembering, like a discount or the event name. You can leave it empty." data-tip="Anything worth remembering, like a discount or the event name. You can leave it empty.">?</span></label><input type="text" id="m-notes" placeholder="e.g. promo, event"></div>
+    <!-- Order # and Notes are optional, so a phone folds them behind "More details".
+         They stay in the DOM: Save reads both fields even while the fold is shut. -->
+    <details class="manual-more" id="man-more">
+      <summary>More details (order number, notes)</summary>
+      <div class="form-group"><label for="m-num">Order #<span class="tip tip-mark" tabindex="0" role="img" aria-label="Help: Type the order or receipt number if you have one. No number? Leave it empty." data-tip="Type the order or receipt number if you have one. No number? Leave it empty.">?</span></label><input type="text" id="m-num" placeholder="optional"></div>
+      <div class="form-group"><label for="m-notes">Notes<span class="tip tip-mark" tabindex="0" role="img" aria-label="Help: Anything worth remembering, like a discount or the event name. You can leave it empty." data-tip="Anything worth remembering, like a discount or the event name. You can leave it empty.">?</span></label><input type="text" id="m-notes" placeholder="e.g. promo, event"></div>
+    </details>
     <!-- Live order preview — what this order costs and what it leaves on the
          shelf, shown before "Add order" is pressed. Populated by phint(). -->
     <div class="order-preview-wrap">

@@ -9340,7 +9340,7 @@ function renderHistRowHtml(row, { cur, bookCode, book, formatChannelBadge }) {
   const isGrat = h.gratuity || h.chan === 'Gratuity';
   const isPending = h.artistPending;
 
-  const chanCell = isGrat ? `<span class="chip-status violet">🎁 Gratuity</span>` : isPending ? `${formatChannelBadge(h.chan)} <span class="chip-status amber">⏳ pending</span>` : formatChannelBadge(h.chan);
+  const chanCell = isGrat ? `<span class="ch-badge">🎁 Gratuity</span>` : isPending ? `${formatChannelBadge(h.chan)} <span class="chip-status amber">⏳ pending</span>` : formatChannelBadge(h.chan);
   // A row's amounts belong to the currency it was RECORDED in, not the one
   // the book carries today. Formatting a €32 sale with the book's current
   // CA$ makes it read as CA$32 — same digits, ~50% wrong. Rows stamped with
