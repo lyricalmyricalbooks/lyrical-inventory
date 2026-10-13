@@ -5,6 +5,12 @@ const RECORDS = {
   'ml-body': { lead: 0, summary: [1, 4] },
   'all-con-body': { lead: 0, summary: [1, 4, 6] },
   'dash-con-body': { lead: 0, summary: [4, 5] },
+  // Sales by channel on the Dashboard: Channel leads, Units / Revenue / Share
+  // carry the card, Transactions folds away. Its Revenue column was cut off.
+  'ch-body': { lead: 0, summary: [2, 3, 4] },
+  // Tax Centre: category and trip totals were cut off at the right edge.
+  'tc-category-body': { lead: 0, summary: [1, 3] },
+  'tc-trip-body': { lead: 0, summary: [1, 2] },
   // Artist expenses on the book dashboard: its Reference and Amount columns
   // used to be cut off inside the banner on a phone.
   'd-exp-body': { lead: 1, summary: [0, 4] },

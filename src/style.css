@@ -4228,6 +4228,17 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   line-height:var(--leading-snug);
 }
 .field-warn::before{content:'⚠';line-height:var(--leading-snug);}
+/* .field-warn sets display:flex, which beats the UA's [hidden] rule, so a hidden
+   warning still drew its triangle. */
+.field-warn[hidden]{display:none;}
+
+/* Shown in the import pop-up until a file is chosen (setImportReady in main.js). */
+.import-empty-hint{
+  margin:0 0 var(--space-3);
+  font-family:var(--font-ui);
+  font-size:var(--text-sm);
+  color:var(--content-secondary);
+}
 
 /* Author payment banner, in Riso: newsprint with a halftone grain, a poster
    headline and amount printed with a mis-registered second pass, and each
@@ -5287,6 +5298,11 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .hist-search-field {
   flex: 1 1 260px;
 }
+/* The "Clear search" button is a .btn, whose display rule would otherwise
+   show it while the bar is hidden or the search is empty. */
+.ledger-filter-row > .btn[hidden] {
+  display: none;
+}
 .ledger-filter-row > .btn {
   min-height: var(--target-min);
   padding: 8px 16px;
@@ -5363,6 +5379,11 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   .ledger-filter-input {
     min-width: 0;
     width: 100%;
+  }
+  /* Its 260px basis is a width in the row but a height once the row stacks,
+     which left an empty box above the field. Size it to its content instead. */
+  .hist-search-field {
+    flex: 0 0 auto;
   }
 }
 

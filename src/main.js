@@ -10557,6 +10557,16 @@ function renderArtistReimburseBanner() {
 // ── SPREADSHEET IMPORT
 let _importRows = [];
 
+// The confirm button has nothing to import until a file has been read. The
+// hint says what to do instead. The Sheets restore path reuses this pop-up and
+// calls this with true, because its own confirm is never empty.
+function setImportReady(ready) {
+  const btn = $('import-confirm-btn');
+  if (btn) btn.disabled = !ready;
+  const hint = $('import-empty-hint');
+  if (hint) hint.hidden = ready;
+}
+
 // A spreadsheet cell as a number. Excel cells usually arrive as numbers
 // already; CSV cells are always text, so drop the currency symbols and
 // thousands separators a formatted export carries ("$1,250.00") rather than
@@ -10665,6 +10675,7 @@ async function handleImportFile(event) {
       // Build preview
       $('import-summary').innerHTML = `Found <strong>${_importRows.length} orders</strong> in ${isCsv ? 'file' : 'sheet'} <em>"${escapeHtml(sheetName)}"</em> — review below then confirm.`;
       $('import-count').textContent = _importRows.length;
+      setImportReady(_importRows.length > 0);
       $('import-preview-body').innerHTML = _importRows.map(r => `
         <tr>
           <td class="mono">${escapeHtml(r.num)}</td>
@@ -10722,6 +10733,7 @@ function confirmImport() {
   updateDash();
   closeM('import');
   _importRows = [];
+  setImportReady(false);
   const msg = skipped > 0
     ? `✓ Imported ${imported} orders (${skipped} duplicates skipped)`
     : `✓ Imported ${imported} orders`;
@@ -16370,6 +16382,7 @@ async function restoreBookDataFromSheets() {
       confirmBtn.setAttribute('onclick', 'confirmRestoreBookDataFromSheets()');
       confirmBtn.innerHTML = `Restore database (${recordRows.length} rows)`;
     }
+    setImportReady(true);
 
     // Build preview table rows
     $('import-preview-body').innerHTML = recordRows.map(r => {

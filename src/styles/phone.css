@@ -1026,3 +1026,48 @@
   #tab-consignment #ledger-foot .ledger-total-val { text-align: left; }
   #tab-consignment #ledger-foot .ledger-total-row > td:last-child { justify-self: end; }
 }
+
+/* To-do rows on a phone: the sentence gets the full width beside its icon, the
+   actions drop to their own line with the fix button filling it, and the dismiss
+   cross stays in the top corner. On a desktop the row is still one flex line. */
+@media (max-width: 768px) {
+  .todo-row {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    row-gap: var(--space-2);
+    align-items: start;
+  }
+  .todo-ico { grid-column: 1; grid-row: 1; }
+  .todo-copy { grid-column: 2; grid-row: 1; padding-right: var(--target-min); }
+  .todo-row-actions {
+    grid-column: 1 / -1; grid-row: 2;
+    flex-direction: column; align-items: stretch; align-self: stretch; gap: var(--space-2);
+  }
+  .todo-row-actions > .btn { width: 100%; justify-content: center; }
+  .todo-dismiss { position: absolute; top: var(--space-1); right: var(--space-1); }
+}
+
+/* The combined consignment summary's toolbar on a phone: the search takes the
+   full width at its natural height (it was given a 220px basis, which became a
+   220px-tall empty box once the toolbar stacked), the filter tabs wrap inside
+   the panel instead of running past its edge, and "Group by book" gets its own row. */
+@media (max-width: 768px) {
+  .con-table-toolbar { flex-direction: column; align-items: stretch; gap: var(--space-2); }
+  .con-toolbar-search { flex: none; width: 100%; min-width: 0; max-width: none; }
+  /* The three status tabs share the row as equal columns; a wrapped row left them uneven. */
+  .con-toolbar-filters { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); width: 100%; min-width: 0; box-sizing: border-box; }
+  /* A tab too narrow for "Settled" and its count drops the count to a second line, rather than past the edge. */
+  .con-filter-btn { justify-content: center; flex-wrap: wrap; row-gap: 2px; min-width: 0; padding-inline: var(--space-1); white-space: nowrap; }
+  .con-toolbar-actions { width: 100%; margin-left: 0; flex-wrap: wrap; }
+  .con-toolbar-actions > .con-action-btn { flex: 1 1 auto; justify-content: center; }
+  .con-toolbar-actions > .con-group-toggle-btn { flex: 1 1 100%; justify-content: center; }
+}
+
+/* A channel card's share is a figure on its own line, so it reads from the left
+   like Units and Revenue; the table-cell right alignment (and the label's minimum
+   width that goes with it) does not apply in a card. */
+@media (max-width: 768px) {
+  .ch-mix-tbl.phone-records .ch-mix-share { justify-content: flex-start; }
+  .ch-mix-tbl.phone-records .ch-mix-pct { min-width: 0; text-align: left; }
+}

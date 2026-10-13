@@ -5726,6 +5726,7 @@
       <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('import')" aria-label="Close dialog" title="Close (Esc)">✕</button>
     </div>
     <div id="import-summary" style="font-size:var(--text-base);color:var(--text2);margin-bottom:1rem;"></div>
+    <p id="import-empty-hint" class="import-empty-hint">Choose a file to see its orders here</p>
     <div style="flex:1;overflow-y:auto;min-height:0;">
       <div class="tbl-wrap" style="margin-bottom:0;">
         <table class="tbl">
@@ -5739,7 +5740,7 @@
     </div>
     <div class="modal-footer" role="dialog" aria-modal="true">
       <button class="btn" onclick="attemptCloseModal('import')">Cancel</button>
-      <button class="btn gold" id="import-confirm-btn" onclick="confirmImport()">Import <span id="import-count">0</span> orders</button>
+      <button class="btn gold" id="import-confirm-btn" onclick="confirmImport()" disabled>Import <span id="import-count">0</span> orders</button>
     </div>
   </div>
 </div>

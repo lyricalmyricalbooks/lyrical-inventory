@@ -13,7 +13,7 @@ Before picking one up: re-run `npm run shots -- --only=<tab>` — the line numbe
 snapshot and drift.
 
 ### 1. To-do (tab-todo) — broken, redesign
-**Status:** In progress — batch F  
+**Status:** Done (batch F)  
 **Problem:** Each to-do item squeezes its explanation into a strip about a fifth of the card's width, so sentences break one word per line ("A / st / or / e / ow..."). The action button takes the rest of the row. Items with long explanations are close to unreadable on a phone, so the owner cannot tell what needs doing.  
 **Fix:** Under the phone breakpoint, let .todo-row wrap or stack: the text (.todo-copy) takes the full card width, and .todo-row-actions drops to its own line beneath it with the .todo-fix button at full row width. Keep the dismiss control in the top corner, as it already is on hover.  
 **Evidence:** shots/before/light-375/tab-todo-01.png, tab-todo-02.png, tab-todo-03.png, tab-todo-04.png (also dark-375/tab-todo-01.png, tab-todo-02.png); src/style.css:18802-18815 (.todo-row is a single non-wrapping flex row), src/style.css:18832 (.todo-copy flex:1 with no minimum width), src/style.css:18846 (.todo-row-actions flex:none); no phone-width override for .todo-row in src/styles/phone.css
@@ -25,19 +25,19 @@ snapshot and drift.
 **Evidence:** shots/before/light-375/modal-add-book-01.png and modal-add-book-02.png (footer shows only CANCEL and MORE ACTIONS); index.html:6053-6063 (footer holds Cancel, Back, Next and Save Book in that order); src/lib/phone-layout.js:111 (FOLD_AFTER = 2) and 113-131 (every footer button after the second is moved behind More actions)
 
 ### 3. All Books overview (Combined consignment summary block) — broken, redesign
-**Status:** In progress — batch F  
+**Status:** Done (batch F)  
 **Problem:** The filter box, the All / Active / Settled tabs and the "Group by book" button run past the right edge of their card, so their right ends are cut off. A large empty gap sits between the filter and the tabs. The block reads as broken on a phone.  
 **Fix:** At phone width, make the filter tabs wrap or scroll inside their own bounded box with a visible edge, and set the search box to full width with no minimum width. Let "Group by book" take its own full row. Remove the empty gap by not reserving table height before data arrives.  
 **Evidence:** shots/before/light-375/tab-all-overview-05.png (filter field and tabs cut at the right edge, blank gap below the filter); index.html:894-906 (toolbar markup); src/style.css:6259-6261 (.consignment-summary-panel has overflow:hidden, so anything too wide is clipped silently); src/style.css:6311 (.con-toolbar-search has a 220px basis and 180px minimum); src/style.css:6326 and 6481 (.con-toolbar-filters is inline-flex with no wrap)
 
 ### 4. Dashboard (Sales by channel table) — broken, redesign
-**Status:** In progress — batch F  
+**Status:** Done (batch F)  
 **Problem:** The Revenue column, the most important figure in the table, is cut off at the right edge of the screen. The table simply stops, with no sign that it scrolls sideways, so the owner may never see the total. Five columns is too many for a phone.  
 **Fix:** On phone, show each channel as a stacked row instead of a five-column grid: channel name and revenue on one line, transactions and units underneath, with the share as a small figure. Reuse the legend pattern already used for the All Books channel breakdown (src/main.js:6261) so the two screens match.  
 **Evidence:** shots/before/light-375/tab-dashboard-04.png (REVENUE cut to "REVENU" and the amounts clipped at the edge); index.html:1143 (table with Channel, Transactions, Units, Revenue and Share columns); src/style.css:2174 (.tbl-wrap uses overflow-x:auto, so it scrolls silently with no cue); src/style.css:5392 (.ch-mix-share-col)
 
 ### 5. tab-taxcenter — broken, redesign
-**Status:** In progress — batch F  
+**Status:** Done (batch F)  
 **Problem:** The Expense Categorization table is the number that matters at tax time, but on a phone its last column (Total Deductible, CAD) is cut off at the right edge. The table also runs edge to edge while everything around it has a margin, and nothing shows that more columns are hidden to the right.  
 **Fix:** Add an entry for tc-category-body to the RECORDS map in src/lib/phone-layout.js with the category name as the lead and Txns and Total Deductible as the summary fields, so each category becomes a stacked card with the deductible total fully visible. Keep the table for wider screens.  
 **Evidence:** shots/before/light-375/tab-taxcenter-06.png; index.html:2950-2954 (tbl-wrap around tc-cat-tbl); style.css:2174 (.tbl-wrap overflow-x:auto, so the money column scrolls out of view); src/lib/phone-layout.js RECORDS map has no entry for tc-category-body, so the table never becomes stacked cards on a phone
@@ -49,7 +49,7 @@ snapshot and drift.
 **Evidence:** shots/before/light-375/tab-qrcodes-01.png, tab-qrcodes-02.png, tab-qrcodes-03.png; shots/before/dark-375/tab-qrcodes-01.png; src/main.js:2692 (empty placeholder text with no action); src/main.js:2704-2705 (Copy link and Download are disabled, so they take the faded disabled style)
 
 ### 7. Import order history (book sales import pop-up) — broken, redesign
-**Status:** In progress — batch F  
+**Status:** Done (batch F)  
 **Problem:** The import preview is an eight-column table squeezed into a phone pop-up, so the owner sees only a cut-off strip of column names and no rows, and the strip scrolls sideways. The 'Import 0 orders' button is still active even though there is nothing to import, so pressing it does nothing useful.  
 **Fix:** Disable the confirm button while the count is 0, with a one-line hint such as 'Choose a file to see its orders here'. On phones, show each parsed order as a compact card (order number, date, total, status) rather than the table, reusing the phone-records card pattern already in src/styles/phone.css.  
 **Evidence:** shots/before/light-375/modal-import-01.png and shots/before/dark-375/modal-import-01.png; index.html:5709 (eight table columns); index.html:5719 (the confirm button is never disabled and shows a count of 0)
@@ -61,7 +61,7 @@ snapshot and drift.
 **Evidence:** shots/before/light-375/tab-expenses-03.png and tab-expenses-04.png; src/features/receipts.js:7332 (edit-btn with the X, onclick calls voidExpense directly, aria-label Remove); src/features/receipts.js:7184-7190 (voidExpense filters the expense out, saves and shows a toast with no confirmation); style.css:4391 (.edit-btn is 22x22); the phone report lists the X buttons at 22x22 on tab-expenses and tab-taxcenter
 
 ### 9. tab-history — broken, polish
-**Status:** In progress — batch F  
+**Status:** Done (batch F)  
 **Problem:** The order search box at the top of Order History turns into a large empty block on a phone, so the first screen is mostly blank before any order appears. A 'Clear search' button also sits in that box even when nothing has been searched, so it looks like something to press when there is nothing to clear.  
 **Fix:** Remove the fixed 260px basis from the search field when the bar stacks so it sizes to its content, and add a rule so hidden buttons stay hidden even when a button class sets display, e.g. .ledger-filter-row > .btn[hidden]{display:none}.  
 **Evidence:** shots/before/light-375/tab-history-01.png (empty block between the search box and Clear search, and Clear search visible with no search typed). src/style.css:5287-5289 (search field has a 260px flex basis, which becomes a 260px height once the bar stacks in the narrow container rule at src/style.css:5357-5366). index.html:1903 (Clear search starts hidden, but the display rule at src/style.css:5290 overrides the hidden state).
@@ -127,7 +127,7 @@ snapshot and drift.
 **Evidence:** shots/before/light-375/modal-add-store-01.png and shots/before/dark-375/modal-add-store-01.png; src/style.css:3835-3841 (the quick list is capped at 120px and scrolls); src/main.js:12217 ('In book' badge); src/main.js:12197 (dropdown placeholder text)
 
 ### 20. Sheets in night mode (title and footer bands, e.g. Add new book, Edit expense, Notifications) — ugly, polish
-**Status:** In progress — batch F  
+**Status:** Done (batch F)  
 **Problem:** In night mode, the pinned title and footer of every sheet show as a darker box inset from the sheet's edges, so each sheet looks like it has a stuck-on panel. In daytime the same bands blend in, so the problem only appears when the owner switches to night mode.  
 **Fix:** In src/styles/theme-dark.css, give .modal-title and .modal-footer the sheet's own surface (var(--surface-card)), and let each band bleed to the sheet's edges by cancelling the sheet's side padding on those two elements. The bands then match the sheet and the header icon is no longer cut at the left edge.  
 **Evidence:** shots/before/dark-375/modal-add-book-01.png, modal-edit-expense-01.png and modal-notifications-01.png (title band inset from both edges, with hard corners); src/style.css:4094-4101 (.modal-title background is var(--surface-page)); src/style.css:4109-4118 (.modal-footer background is var(--surface-page)); src/styles/theme-dark.css:576-578 (.theme-dark .modal background is var(--surface-card))
@@ -157,7 +157,7 @@ snapshot and drift.
 **Evidence:** shots/before/dark-375/tab-today-01.png (card at about y 760-1015 at 2x). Sampled caption contrast is about 2.5 to 1 from the screenshot, versus about 3 to 1 in daytime; the 4.5 to 1 target applies to small text. src/styles/theme-dark.css:79 (dark --gold #D97757) used by src/styles/phone.css:427 (#tab-today .today-card-ink uses var(--gold) with var(--on-accent) text).
 
 ### 25. Shipping label (pop-up) — ugly, polish
-**Status:** In progress — batch F  
+**Status:** Done (batch F)  
 **Problem:** The Shipping label form shows a stray warning triangle under the Country box even when the country is fine. There are no words beside it, so it looks like an error the owner has to fix.  
 **Fix:** Add .field-warn[hidden]{display:none} next to the .field-warn rule at src/style.css:4221 so the hidden attribute is respected. This also fixes any other field warnings that rely on hidden.  
 **Evidence:** shots/before/light-375/modal-shipping-label-02.png (triangle at about y 1395-1415 under 'Canada'). src/style.css:4221-4230 (.field-warn sets display:flex, which overrides the browser's hidden attribute, and .field-warn::before adds the triangle). index.html:5681 (sl-country-hint has the hidden attribute). src/features/shipping.js:483-493 (hint text is cleared while hidden).
@@ -257,3 +257,12 @@ snapshot and drift.
 **Problem:** Off-system styling creeps in. The 'Ship several orders at once' button uses a dashed border, while Riso Press outlines are solid. The six expense categories each get their own swatch colour (blue, orange, pink, green, grey), and category names are underlined red links. The app's rule is that only two inks stand out and the rest report.  
 **Fix:** Give .ship-flow-batch a solid 2px ink outline like the other outline buttons. Use one neutral swatch for categories, or the press blue and flare inks only. Make category names plain text with a chevron as the tap cue, not underlined red links.  
 **Evidence:** shots/before/light-375/tab-shipping-06.png (dashed batch button); style.css:10725 (.ship-flow-batch sets border-style dashed); shots/before/light-375/tab-taxcenter-06.png (six swatch colours and red underlined category links); src/features/taxcentre.js:983 (per-category dotColor swatch and tc-cat-link)
+### Found while fixing (not from the screenshot audit)
+
+- **Import after a Google Sheets restore** — open. The restore path overwrites the import
+  window's confirm button (removing `#import-count`), so the next spreadsheet import can fail
+  with "Could not read file". Found by reading the code (`src/main.js`, the Sheets restore path
+  near `setImportReady`); not yet reproduced.
+- **Register currency on a fresh device** — open. Before the books load, the register falls
+  back to EUR (`_getPosDefaultCurrency` in `src/main.js`), so a brand-new phone opens the Sell
+  screen charging in euros until a currency is picked once.
