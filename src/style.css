@@ -6568,6 +6568,10 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 @container con-summary (max-width: 720px){
   .all-consignment-table .tbl th,
   .all-consignment-table .tbl td{padding-left:6px;padding-right:6px;}
+  /* The panel clips anything wider than itself, so make room for Status by
+     letting Sell-through go here (it already went below 580px); the overall
+     sell-through still shows in the tiles above the table. */
+  .all-consignment-table .col-sellthrough{display:none;}
 }
 @container con-summary (max-width: 580px){
   .all-consignment-table .col-sellthrough{display:none;}
