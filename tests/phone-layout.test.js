@@ -51,7 +51,10 @@ test.each([false, true])('expense cards keep description, selection and actions 
   const row = document.querySelector('tbody tr');
   expect(row.querySelector('.phone-record-lead').textContent).toContain('Print run');
   for (const cell of row.cells) {
-    if (cell.querySelector('input, button:not(.phone-record-toggle)') || cell.textContent === 'CA$200.00') {
+    // Round 4: the CAD value folds behind Details; the select box and actions stay on the card.
+    if (cell.textContent === 'CA$200.00') {
+      expect(cell.classList.contains('phone-record-detail')).toBe(true);
+    } else if (cell.querySelector('input, button:not(.phone-record-toggle)')) {
       expect(cell.classList.contains('phone-record-detail')).toBe(false);
     }
   }

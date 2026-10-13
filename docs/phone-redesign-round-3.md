@@ -103,7 +103,7 @@ snapshot and drift.
 **Evidence:** shots/before/light-375/tab-taxcenter-01.png to tab-taxcenter-05.png; index.html:2800 (Log Business Expense section, placed after the summary), index.html:2891 (Pending and To Confirm card), index.html:2902 (Recurring Subscriptions card), index.html:2927 (Trip tracking toggle and empty state)
 
 ### 16. tab-expenses — ugly, redesign
-**Status:** Open  
+**Status:** Done (round 4) — each expense is a compact card: description and amount on top, date and receipt beneath, the rest behind Details. Amount shows in its own currency, since the CAD column exists only for publishers.  
 **Problem:** Each expense takes about 375 pixels of phone height. Six stacked label-and-value rows (Date, Receipt, Amount, Amount CAD, Reimbursement, Actions) plus a full-width Details button repeat on every card. The Amount CAD row shows a bare dash on every card. Five expenses mean a long scroll of near-identical boxes.  
 **Fix:** Show each expense as one compact row: description in bold, amount in DM Mono on the right, and the receipt state as the existing amber or grey status pill. Drop the Amount CAD field from the summary when there is no separate CAD value, and move date and reimbursement into the expanded Details.  
 **Evidence:** shots/before/light-375/tab-expenses-02.png to tab-expenses-05.png; src/lib/phone-layout.js:13 (exp-body summary list includes Amount (CAD), Receipt, Reimbursement and Actions); src/styles/phone.css:461-466 (record card and Details toggle styling)
@@ -133,13 +133,13 @@ snapshot and drift.
 **Evidence:** shots/before/dark-375/modal-add-book-01.png, modal-edit-expense-01.png and modal-notifications-01.png (title band inset from both edges, with hard corners); src/style.css:4094-4101 (.modal-title background is var(--surface-page)); src/style.css:4109-4118 (.modal-footer background is var(--surface-page)); src/styles/theme-dark.css:576-578 (.theme-dark .modal background is var(--surface-card))
 
 ### 21. Edit expense (sheet) — ugly, polish
-**Status:** Open  
+**Status:** Done (round 4) — "Choose receipt" button with the file name beside it, and the currency select has room for CAD.  
 **Problem:** The receipt picker is the browser's default grey "Choose File / No file chosen" box in the system font, placed beside a Riso-styled Camera button, so the two look like they came from different apps. The currency selector (CAD) is squeezed to 70 px and its arrow runs into the letters.  
 **Fix:** Hide the native file input and put a .btn labelled "Choose receipt" in its place that opens the file picker, the same way the batch expense sheet's browse link works. Widen the currency selector to match the other inputs in the row so its arrow is clear of the text.  
 **Evidence:** shots/before/light-375/modal-edit-expense-01.png and shots/before/dark-375/modal-edit-expense-01.png; index.html:5335 (native file input with inline styling); index.html:5311 (select#edit-exp-cur with max-width:70px)
 
 ### 22. Log several expenses at once (sheet, bulk tools row) — ugly, polish
-**Status:** Open  
+**Status:** Done (round 4) — each bulk control has a caption, the Apply buttons say what they set, and the trip field sits above the bulk bar. Not done: the bulk row still shows on an empty sheet.  
 **Problem:** The bulk tools sit between the receipt drop zone and the list of expenses. There are two identical "Apply" buttons with an empty dropdown that has no label, and a date box between them. Nothing explains that the first Apply sets the category for ticked rows and the second sets the date, so the owner has to guess before picking receipts.  
 **Fix:** Give each bulk control a short caption above it, such as "Category for all ticked rows" and "Date for all ticked rows", and place its own Apply directly beside it. Show the bulk row only once at least one expense row exists, so the empty sheet opens on the receipt drop zone.  
 **Evidence:** shots/before/light-375/modal-batch-expense-01.png and modal-batch-expense-02.png (empty unlabelled dropdown, two Apply buttons flanking the date box); index.html:2371-2379 (Select all, Select none, Deselect duplicates, and two buttons both labelled Apply)

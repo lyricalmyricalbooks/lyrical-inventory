@@ -19,7 +19,11 @@ const RECORDS = {
   // Qty moves behind the disclosure with the unit price and stock after. `card`
   // makes a tap anywhere on the order's card open it, not just the small button.
   'hist-body': { lead: 1, summary: [0, 4, 8, 9], card: true },
-  'exp-body': { lead: 'Description', summary: ['Date', 'Receipt', 'Amount', 'Amount (CAD)', 'Reimbursement', ''] },
+  // Expenses: description leads, with the amount on the top line and date and receipt
+  // beneath. Category, reference, CAD value and reimbursement fold behind Details.
+  // '' is the bulk-select box (author view) and the actions cell; the CSS keeps the
+  // actions behind Details unless the row awaits approval.
+  'exp-body': { lead: 'Description', summary: ['Date', 'Receipt', 'Amount', ''] },
   'tc-ledger-body': { lead: 2, summary: [0, 4, 6, 7] },
   'tc-recurring-body': { lead: 0, summary: [2, 4, 5, 6] },
   'bc-orders-list': { lead: 0, summary: [1, 2, 6, 7, 8] },

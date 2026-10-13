@@ -134,6 +134,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-13 | visual | Phone Sell (top of the register) | Put the fair name and currency on one line, upload status and today's total on another, shortened the fair-kit toggle to "Fair kit" on a phone, and made the book tiles shorter, so the first book now shows near the top of the screen | — |
 | 2026-10-13 | visual | Phone Tax Centre | Put Log business expense first on a phone, folded the empty Pending, Recurring and Trips sections to one line each, said why AI Scan is greyed out, and printed the income and expense figures beside the cash-flow bars | — |
 | 2026-10-13 | visual | Phone Order History | Made each order on a phone a compact card: the channel and a Details tap (anywhere on the card) sit on top, the order number and date below, and the total and action line up in one right-hand column; the three summary figures now sit in one row so the first order shows on the first screen. Store tags are blue rather than red, Website and Direct are neutral, and Stock on Hand is ink with only its accent bar | — |
+| 2026-10-13 | visual | Expenses (phone, round 4) | Made each expense a compact card with its amount up top, a proper receipt button, and labelled bulk controls in the batch sheet | pending |
 
 ---
 

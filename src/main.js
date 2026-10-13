@@ -19324,11 +19324,23 @@ export function openEditExpense(type, bid, id) {
   $('edit-exp-date').value = exp.date || today();
   $('edit-exp-trip').value = exp.trip || '';
   $('edit-exp-file').value = '';
+  syncEditExpFileName();
   if ($('edit-exp-file-preview')) $('edit-exp-file-preview').textContent = '';
 
   renderEditExpenseReceipts();
   openM('edit-expense');
 }
+
+// The receipt picker is a button-styled label over a visually hidden file input,
+// so the chosen file's name is written beside the button here.
+function syncEditExpFileName() {
+  const name = $('edit-exp-file-name');
+  const file = $('edit-exp-file')?.files?.[0];
+  if (name) name.textContent = file ? file.name : 'No file chosen';
+}
+document.addEventListener('DOMContentLoaded', () => {
+  $('edit-exp-file')?.addEventListener('change', syncEditExpFileName);
+});
 
 async function saveExpenseEdit() {
   if (!_editingExpense) return;

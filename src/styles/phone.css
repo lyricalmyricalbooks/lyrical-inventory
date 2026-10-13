@@ -1170,3 +1170,58 @@
   #tab-history .approval-actions .appr-btn.approve { flex: 1; justify-content: center; }
   #tab-history .approval-actions .appr-btn.reject { width: var(--target-min); }
 }
+
+/* ─── EXPENSES (round 4) ─── */
+/* Phone only. Expense cards, the edit-expense select and the receipt picker.
+   Scoped to #exp-body so the other record cards are untouched. */
+@media (max-width: 768px) {
+  /* A compact card: description and amount on the top line, date and receipt
+     beneath, Details across the foot. Category, reference, the CAD value and
+     reimbursement stay behind Details. Two columns; with the bulk-select box
+     (author view) a narrow third column is added for it. */
+  #exp-body > tr.phone-record {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-2) var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    align-items: center;
+  }
+  #exp-body > tr.phone-record:has(> td > input[type="checkbox"]) {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  /* The description cell hands its text and its Details button to the card grid. */
+  #exp-body > tr.phone-record > td { border: 0 !important; }
+  /* The table's sticky first-column edge would draw a hairline down the card. */
+  #exp-body > tr.phone-record > td:first-child { position: static !important; box-shadow: none !important; background: transparent !important; }
+  #exp-body > tr.phone-record > td.phone-record-lead { display: contents !important; }
+  #exp-body > tr.phone-record > td.phone-record-lead > .phone-record-toggle { grid-column: 1 / -1 !important; grid-row: 3 !important; min-height: 44px; margin-top: 0; }
+  #exp-body > tr.phone-record:has(> td > input[type="checkbox"]) > td.phone-record-lead > .phone-record-toggle { grid-column: 2 / -1 !important; }
+  #exp-body > tr.phone-record > td[data-phone-label="Amount"] { grid-column: 2 !important; grid-row: 1 !important; text-align: right !important; font-weight: 700; font-size: var(--text-md); align-self: center; }
+  #exp-body > tr.phone-record > td[data-phone-label="Amount"]::before { display: none; }
+  #exp-body > tr.phone-record > td[data-phone-label="Date"] { grid-column: 1 !important; grid-row: 2 !important; }
+  #exp-body > tr.phone-record > td[data-phone-label="Receipt"] { grid-column: 2 !important; grid-row: 2 !important; }
+  #exp-body > tr.phone-record:has(> td > input[type="checkbox"]) > td[data-phone-label="Select"] { grid-column: 1 !important; grid-row: 1 / span 3 !important; align-self: center; }
+  #exp-body > tr.phone-record:has(> td > input[type="checkbox"]) > td.phone-record-lead { grid-column: 2 !important; grid-row: 1 !important; }
+  #exp-body > tr.phone-record:has(> td > input[type="checkbox"]) > td[data-phone-label="Amount"] { grid-column: 3 !important; }
+  #exp-body > tr.phone-record:has(> td > input[type="checkbox"]) > td[data-phone-label="Date"] { grid-column: 2 !important; }
+  #exp-body > tr.phone-record:has(> td > input[type="checkbox"]) > td[data-phone-label="Receipt"] { grid-column: 3 !important; }
+  #exp-body > tr.phone-record:has(> td > input[type="checkbox"]) > td[data-phone-label="Select"] input[type="checkbox"] { width: var(--target-min); height: var(--target-min); margin: 0; }
+  /* With the bulk-select box, detail fields stack down the right-hand two columns
+     so the description keeps its width when Details is open. */
+  #exp-body > tr.phone-record:has(> td > input[type="checkbox"]) > td.phone-record-detail,
+  #exp-body > tr.phone-record:has(> td > input[type="checkbox"]) > td[data-phone-label="Actions"] { grid-column: 2 / -1 !important; }
+  /* The actions cell (Remove, or Approve / Reject on a pending row) sits behind
+     Details, except on a pending row where approval must stay in view. */
+  #exp-body > tr.phone-record:not(.phone-record-open):not(.is-awaiting) > td[data-phone-label="Actions"] { display: none !important; }
+  #exp-body > tr.phone-record > td[data-phone-label="Actions"] { grid-column: 1 / -1 !important; justify-self: start; }
+  /* The ✕ keeps its small glyph, but its box is a full 44px tap target. */
+  #exp-body .edit-btn { width: var(--target-min); height: var(--target-min); margin: 0; opacity: 1; }
+  #exp-body .edit-btn::after { inset: 0; min-width: 0; min-height: 0; }
+  /* Edit expense: the currency select widens so its arrow clears "CAD". */
+  /* Outranks the shared .modal select clamp (max-width 100%, min-width 0). */
+  .modal .form-group select.exp-cur-select { flex: 0 0 auto; width: auto; min-width: 88px; max-width: none; }
+  .form-group:has(> div > #edit-exp-cur) { min-width: 0; }
+  #edit-exp-amount { min-width: 0; width: 100%; }
+  /* Receipt picker: the chosen file name sits beside the button and gives way to it first. */
+  .exp-receipt-row .btn.exp-file-btn { min-height: var(--target-min); }
+  .exp-receipt-row .exp-file-name { flex-basis: 0; }
+}
