@@ -1257,3 +1257,46 @@
   #tab-history #hist-body .ch-badge.ch-pos,
   #tab-history #hist-body .chip-status.amber { white-space: normal; height: auto; min-height: 22px; max-width: 100%; line-height: var(--leading-snug); text-align: left; }
 }
+
+/* ─── SWEEP FIXES B (round 4) ─── */
+/* Phone only. Shipping performance header and search, Open Call settings
+   headers and search, the Tax Centre batch button, the author view's top gap
+   and bottom clearance, the import preview, the payment QR buttons and the
+   payment-link hint. */
+@media (max-width: 768px) {
+  /* Shipping performance: the header actions take the full width, and the
+     Big Cartel sync button keeps its whole label instead of a squeezed pill. */
+  #ship-analysis-hub .shipping-pnl-header > div:last-child { align-items: stretch !important; width: 100%; }
+  #ship-analysis-hub .shipping-pnl-header > div:last-child > div:first-child { flex-wrap: wrap; width: 100%; }
+  #ship-bc-sync-btn { height: auto !important; min-height: 38px; padding: 8px 14px !important; white-space: normal; line-height: 1.3; text-align: center; flex: 1 1 auto; justify-content: center; }
+  /* The order search takes the row, so its placeholder is not cut off. */
+  #ship-analysis-hub .search-group > div { width: 100%; }
+  #ship-analysis-hub .pill-search-input { width: 100%; min-width: 0; }
+
+  /* Open Call settings cards: one header layout for both. The title sits on
+     the left and the open/close arrow stays on the right. */
+  #tab-opencall .oc-settings-card > .oc-collapse-head { flex-direction: row !important; flex-wrap: nowrap !important; align-items: center; }
+  #tab-opencall .oc-settings-card > .oc-collapse-head > div:first-child { min-width: 0; flex: 1 1 auto; }
+  #tab-opencall .oc-settings-card .oc-collapse-chevron { flex: 0 0 auto; }
+
+  /* Tax Centre: the secondary batch button spans the same width as the primary
+     button above it, and its outline is drawn in light mode too. */
+  .tc-batch-btn.btn.tx { width: 100%; padding: 10px 12px !important; border-color: var(--border-strong); background: var(--surface-card); color: var(--text2); }
+
+  /* Author view (not the publisher shell): the store strip sits directly under
+     the header. The bottom spacer on the app root sat above the pages, so the
+     bottom clearance for the fixed menu moves onto the pages themselves. */
+  #pw-app:not(.pub-shell) > #main-app.app { padding-bottom: 0; }
+  #pw-app:not(.pub-shell) > .tab-panel { padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
+
+  /* Import: the empty order preview table stays hidden until a file fills it. */
+  .tbl-wrap:has(#import-preview-body:empty) { display: none; }
+
+  /* Payment QR: a disabled Copy link or Download keeps a readable label. It is
+     still plainly disabled, on a quiet fill with a muted label. */
+  .qr-card-actions .btn:disabled { opacity: 1; background: var(--surface-inset); color: var(--content-muted); border-color: var(--border-default); }
+
+  /* Payment-link hint: left-aligned under the amount, like the lines above it. */
+  #artist-reimburse-banner .metric-banner-actions { align-items: stretch; width: 100%; }
+  #artist-reimburse-banner .metric-banner-hint { text-align: left; }
+}

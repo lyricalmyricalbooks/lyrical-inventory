@@ -944,7 +944,7 @@ function renderOpenCall() {
         <div class="oc-ledger">
           <div class="card oc-list-card">
             <div class="oc-list-toolbar">
-              <input type="search" id="oc-search" placeholder="Search name, email, credit, photo, notes…" value="${escapeHtml(ocSearchQuery)}" oninput="ocSearch(this.value)" aria-label="Search contributors">
+              <input type="search" id="oc-search" placeholder="Search contributors" value="${escapeHtml(ocSearchQuery)}" oninput="ocSearch(this.value)" aria-label="Search contributors">
               <select id="oc-stage-filter" class="oc-stage-select" onchange="ocFilterByStage(this.value)" aria-label="Show one step">
                 ${OC_TAB_DEFS.map(t => `<option value="${t.key}" ${ocFilterStage === t.key ? 'selected' : ''}>${t.key ? `Next step: ${t.label}` : 'Any step'}</option>`).join('')}
               </select>
