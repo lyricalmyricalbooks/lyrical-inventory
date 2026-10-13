@@ -2873,15 +2873,6 @@ export const formatDateTime = (isoString) => {
   return d.toLocaleDateString() + ' ' + d.toTimeString().slice(0, 5);
 };
 
-// LOCAL calendar day (YYYY-MM-DD) for a timestamp — unlike today()'s UTC date,
-// this matches the dates the user sees (toLocaleString), so "one backup per
-// day" lines up with their calendar instead of rolling over at UTC midnight.
-const localDayFromTs = (ts) => {
-  const d = new Date(ts);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
-const localDayKey = () => localDayFromTs(Date.now());
-
 // ── PER-BOOK STATE
 // states[bookId] = { stock, sold, revenue, chStats, hist, stores, ledger, doneIds }
 export let states = {};
@@ -17068,11 +17059,11 @@ function gotoSysBackupPage(delta) {
 }
 
 async function createSystemBackup(type = 'auto') {
-  const dayKey = localDayKey();
+  const dayKey = localDay();
   // Dedup against each existing backup's LOCAL creation day, so a backup made
   // in the evening (past UTC midnight) doesn't create a second row for the same
   // calendar day. Derive from createdAt so legacy UTC-keyed entries dedup too.
-  if (type === 'auto' && systemBackups.some(b => b.createdAt && localDayFromTs(b.createdAt) === dayKey)) return false;
+  if (type === 'auto' && systemBackups.some(b => b.createdAt && localDay(b.createdAt) === dayKey)) return false;
 
   const id = `sb-${Date.now()}`;
   const snapshot = buildBackupPayload();
