@@ -9494,6 +9494,11 @@ export function saveScanMemory(mem) {
  * "Never" / "Just now" / "12 min ago" / "3 hours ago" / "6 Aug" for the
  * last-scan tile. `now` is a parameter so the boundaries stay testable.
  */
+// toLocaleDateString with options builds a fresh Intl.DateTimeFormat per call
+// (~200x slower than reusing one), and this runs once per activity-feed line
+// and notification older than a week, so build it once.
+const _WEB_SCAN_DAY_FMT = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' });
+
 function webScanRelativeTime(iso, now = Date.now()) {
   if (!iso) return 'Never';
   const then = new Date(iso).getTime();
@@ -9507,7 +9512,7 @@ function webScanRelativeTime(iso, now = Date.now()) {
   if (hrs < 24) return `${hrs} hour${hrs === 1 ? '' : 's'} ago`;
   const days = Math.floor(hrs / 24);
   if (days < 7) return `${days} day${days === 1 ? '' : 's'} ago`;
-  return new Date(then).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  return _WEB_SCAN_DAY_FMT.format(new Date(then));
 }
 
 /** One tile. `tone` drives the accent: 'ready' = gold, '' = neutral. */
