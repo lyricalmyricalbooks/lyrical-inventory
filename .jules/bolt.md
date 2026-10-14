@@ -1,4 +1,4 @@
-## $(date +%Y-%m-%d) - Replaced O(N*M) nested array loop with O(1) Set in Open Call filter
+## 2026-10-14 - Replaced O(N*M) nested array loop with O(1) Set in Open Call filter
 **Learning:** Checking existence iteratively against an array from within another loop using chained declarative methods (`filter().some()`) is an unoptimized O(N*M) lookup that scales poorly. We observed this in Open Call selection filtering and achieved a >100x speedup in the worst case by hoisting a pre-computed Set.
 **Action:** When determining differences between two datasets or iterating to check for missing items, proactively use an imperative loop traversing the primary array while checking against a pre-instantiated `Set` created from the secondary array.
 
@@ -20,3 +20,6 @@
 ## 2024-11-20 - Finding maximum payout date
 **Learning:** Chaining `.filter().reduce()` for finding a max object in an array (like maximum payout date) allocates a new array and causes an extra O(N) iteration. In frontend code iterating over larger data structures, switching to an imperative single-pass loop is much faster and reduces garbage collection pressure.
 **Action:** When finding a minimum/maximum value subject to a condition, avoid `filter().reduce()`. Use a single `for` loop to check the condition and update the running max/min.
+## 2026-10-14 - Loop Fusion in channel analytics calculation
+**Learning:** During profiling of `renderCombinedChannelAnalytics`, the `entries.reduce` operation repeatedly constructs closures and processes data already in memory, which adds unnecessary loop overhead compared to a basic `for` loop. When calculating sum values across entries array that handles heavy objects or large amounts of rendering updates, `.reduce` performs measurably slower than an imperative approach.
+**Action:** Replace `.reduce` operations on hot rendering paths with simple imperative loops `for (let i = 0; i < entries.length; i++)` to avoid function allocations and intermediate performance bottlenecks.

@@ -5720,7 +5720,12 @@ function renderCombinedChannelAnalytics(allBooksVisible) {
     const heldByChan = {};
     (s.artistTransfers || []).forEach(t => { heldByChan[t.chan] = (heldByChan[t.chan] || 0) + (transferAmount(t) || 0); });
     const revOf = (chan, cs) => (cs.revenue || 0) + (heldByChan[chan] || 0);
-    const bookRev = entries.reduce((a, [chan, cs]) => a + revOf(chan, cs), 0);
+
+    // ⚡ Bolt Optimization: Imperative loop instead of .reduce() avoids array allocations in rendering functions
+    let bookRev = 0;
+    for (let i = 0; i < entries.length; i++) {
+      bookRev += revOf(entries[i][0], entries[i][1]);
+    }
     const cur = book.currency;
     const cd = byCur[cur] = byCur[cur] || { books: [], channelTotals: {} };
     const channels = entries.map(([chan, cs]) => {
