@@ -1226,6 +1226,27 @@
   .exp-receipt-row .exp-file-name { flex-basis: 0; }
 }
 
+/* ─── DASHBOARD: expenses owed to the artist (phone) ─── */
+/* Eight expenses used to be eight tall stacked cards that pushed the book's own
+   dashboard three screens down. Each is now a compact card — description and
+   amount on the top line, date beneath, Details across the foot — so the list is
+   about half the height. Category and reference stay behind Details. */
+@media (max-width: 768px) {
+  #d-exp-body > tr.phone-record {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-2) var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    align-items: center;
+  }
+  #d-exp-body > tr.phone-record > td { border: 0 !important; }
+  #d-exp-body > tr.phone-record > td.phone-record-lead { display: contents !important; }
+  #d-exp-body > tr.phone-record > td.phone-record-lead > .phone-record-toggle { grid-column: 1 / -1 !important; grid-row: 3 !important; min-height: var(--target-min); margin-top: 0; }
+  #d-exp-body > tr.phone-record > td[data-phone-label="Amount"] { grid-column: 2 !important; grid-row: 1 !important; text-align: right !important; font-weight: 700; font-size: var(--text-md); font-variant-numeric: tabular-nums; }
+  #d-exp-body > tr.phone-record > td[data-phone-label="Amount"]::before { display: none; }
+  #d-exp-body > tr.phone-record > td[data-phone-label="Date"] { grid-column: 1 / -1 !important; grid-row: 2 !important; font-size: var(--text-xs); color: var(--text3); }
+  #d-exp-body > tr.phone-record > td[data-phone-label="Date"]::before { display: none; }
+}
+
 /* ─── SWEEP FIXES A (round 4) ─── */
 @media (max-width: 768px) {
   /* Intelligence quick asks: the list takes the panel's full width and shows every

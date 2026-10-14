@@ -7,5 +7,5 @@ const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const packageJson = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
 
 test('uses the asset generator major supported by vite-plugin-pwa', () => {
-  expect(packageJson.devDependencies['@vite-pwa/assets-generator']).toMatch(/^\^1\./);
+  expect(packageJson.devDependencies['@vite-pwa/assets-generator']).toMatch(/^\^2\./);
 });

@@ -2731,13 +2731,20 @@ function renderAllQRCodes() {
 
 window.renderAllQRCodes = renderAllQRCodes;
 
+// Copy text to the clipboard, falling back to a hidden textarea and the legacy
+// copy command when the async clipboard write is refused. Resolves once
+// either path has run; the copy-link buttons toast on that.
+function copyTextWithFallback(text) {
+  return navigator.clipboard.writeText(text).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta);
+  });
+}
+
 window.copyBookQR = function (bookId, url) {
   if (!url) { showToast('No link set for this book', 'warn'); return; }
-  navigator.clipboard.writeText(url).then(() => showToast('Link copied')).catch(() => {
-    const ta = document.createElement('textarea');
-    ta.value = url; document.body.appendChild(ta); ta.select(); document.execCommand('copy');
-    document.body.removeChild(ta); showToast('Link copied');
-  });
+  copyTextWithFallback(url).then(() => showToast('Link copied'));
 };
 
 window.downloadBookQR = function (bookId) {
@@ -2803,11 +2810,7 @@ window.copyAuthorQR = function () {
   // The same link the QR above encodes.
   const url = getEffectiveBookPaymentLink(book);
   if (!url) { showToast('No link configured for this book', 'warn'); return; }
-  navigator.clipboard.writeText(url).then(() => showToast('Link copied')).catch(() => {
-    const ta = document.createElement('textarea');
-    ta.value = url; document.body.appendChild(ta); ta.select(); document.execCommand('copy');
-    document.body.removeChild(ta); showToast('Link copied');
-  });
+  copyTextWithFallback(url).then(() => showToast('Link copied'));
 };
 
 window.downloadAuthorQR = function () {
@@ -5717,7 +5720,12 @@ function renderCombinedChannelAnalytics(allBooksVisible) {
     const heldByChan = {};
     (s.artistTransfers || []).forEach(t => { heldByChan[t.chan] = (heldByChan[t.chan] || 0) + (transferAmount(t) || 0); });
     const revOf = (chan, cs) => (cs.revenue || 0) + (heldByChan[chan] || 0);
-    const bookRev = entries.reduce((a, [chan, cs]) => a + revOf(chan, cs), 0);
+
+    // ⚡ Bolt Optimization: Imperative loop instead of .reduce() avoids array allocations in rendering functions
+    let bookRev = 0;
+    for (let i = 0; i < entries.length; i++) {
+      bookRev += revOf(entries[i][0], entries[i][1]);
+    }
     const cur = book.currency;
     const cd = byCur[cur] = byCur[cur] || { books: [], channelTotals: {} };
     const channels = entries.map(([chan, cs]) => {
@@ -9494,6 +9502,11 @@ export function saveScanMemory(mem) {
  * "Never" / "Just now" / "12 min ago" / "3 hours ago" / "6 Aug" for the
  * last-scan tile. `now` is a parameter so the boundaries stay testable.
  */
+// toLocaleDateString with options builds a fresh Intl.DateTimeFormat per call
+// (~200x slower than reusing one), and this runs once per activity-feed line
+// and notification older than a week, so build it once.
+const _WEB_SCAN_DAY_FMT = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' });
+
 function webScanRelativeTime(iso, now = Date.now()) {
   if (!iso) return 'Never';
   const then = new Date(iso).getTime();
@@ -9507,7 +9520,7 @@ function webScanRelativeTime(iso, now = Date.now()) {
   if (hrs < 24) return `${hrs} hour${hrs === 1 ? '' : 's'} ago`;
   const days = Math.floor(hrs / 24);
   if (days < 7) return `${days} day${days === 1 ? '' : 's'} ago`;
-  return new Date(then).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  return _WEB_SCAN_DAY_FMT.format(new Date(then));
 }
 
 /** One tile. `tone` drives the accent: 'ready' = gold, '' = neutral. */
@@ -20989,9 +21002,7 @@ function _showPosQR(url, amountLabel, sub) {
 
 window.copyPosQRLink = function () {
   if (!_posQRLink) { showToast('No link yet', 'warn'); return; }
-  navigator.clipboard.writeText(_posQRLink).then(() => showToast('Payment link copied')).catch(() => {
-    const ta = document.createElement('textarea'); ta.value = _posQRLink; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); showToast('Payment link copied');
-  });
+  copyTextWithFallback(_posQRLink).then(() => showToast('Payment link copied'));
 };
 
 window.downloadPosQR = function () {
@@ -23060,9 +23071,7 @@ window.generatePosBookStripeLink = async function () {
 window.copyPosBookLink = function () {
   const url = ($('pb-paylink')?.value || '').trim();
   if (!url) { showToast('No link to copy', 'warn'); return; }
-  navigator.clipboard.writeText(url).then(() => showToast('Link copied')).catch(() => {
-    const ta = document.createElement('textarea'); ta.value = url; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); showToast('Link copied');
-  });
+  copyTextWithFallback(url).then(() => showToast('Link copied'));
 };
 
 window.downloadPosBookQR = function () {
