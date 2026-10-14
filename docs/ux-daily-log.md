@@ -137,9 +137,9 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-13 | visual | Expenses (phone, round 4) | Made each expense a compact card with its amount up top, a proper receipt button, and labelled bulk controls in the batch sheet | pending |
 | 2026-10-13 | visual | QR codes, Customers, Intelligence (phone, round 4) | A book with no payment link shows one Set payment link button instead of an empty box, payment QR cards are compact rows with a status pill, Customers puts the buyer list first with Filter and Export folded behind toggles, and Intelligence collapses the acknowledged privacy note to one line with the question box in the first screen | pending |
 | 2026-10-13 | visual | Manual entry + Home (phone, round 4) | Tucked the order number and notes under "More details" on a phone, made the Sell card readable at night, squared the upload strip on Home, and made the gratuity tag neutral in History | pending |
+| 2026-10-14 | visual | Phone Dashboard — expenses owed to artist | Made each expense on a phone a compact card (description and amount on top, date beneath, tap anywhere for details) so the list is about a quarter shorter and the book's own dashboard comes into view sooner | pending |
 
 ---
-| 2026-10-14 | visual | Phone Dashboard — expenses owed to artist | Made each expense on a phone a compact card (description and amount on top, date beneath, tap anywhere for details) so the list is about a quarter shorter and the book's own dashboard comes into view sooner | pending |
 
 ## Considered and rejected
 
