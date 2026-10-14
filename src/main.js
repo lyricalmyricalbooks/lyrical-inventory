@@ -2731,13 +2731,20 @@ function renderAllQRCodes() {
 
 window.renderAllQRCodes = renderAllQRCodes;
 
+// Copy text to the clipboard, falling back to a hidden textarea and the legacy
+// copy command when the async clipboard write is refused. Resolves once
+// either path has run; the copy-link buttons toast on that.
+function copyTextWithFallback(text) {
+  return navigator.clipboard.writeText(text).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta);
+  });
+}
+
 window.copyBookQR = function (bookId, url) {
   if (!url) { showToast('No link set for this book', 'warn'); return; }
-  navigator.clipboard.writeText(url).then(() => showToast('Link copied')).catch(() => {
-    const ta = document.createElement('textarea');
-    ta.value = url; document.body.appendChild(ta); ta.select(); document.execCommand('copy');
-    document.body.removeChild(ta); showToast('Link copied');
-  });
+  copyTextWithFallback(url).then(() => showToast('Link copied'));
 };
 
 window.downloadBookQR = function (bookId) {
@@ -2803,11 +2810,7 @@ window.copyAuthorQR = function () {
   // The same link the QR above encodes.
   const url = getEffectiveBookPaymentLink(book);
   if (!url) { showToast('No link configured for this book', 'warn'); return; }
-  navigator.clipboard.writeText(url).then(() => showToast('Link copied')).catch(() => {
-    const ta = document.createElement('textarea');
-    ta.value = url; document.body.appendChild(ta); ta.select(); document.execCommand('copy');
-    document.body.removeChild(ta); showToast('Link copied');
-  });
+  copyTextWithFallback(url).then(() => showToast('Link copied'));
 };
 
 window.downloadAuthorQR = function () {
@@ -20994,9 +20997,7 @@ function _showPosQR(url, amountLabel, sub) {
 
 window.copyPosQRLink = function () {
   if (!_posQRLink) { showToast('No link yet', 'warn'); return; }
-  navigator.clipboard.writeText(_posQRLink).then(() => showToast('Payment link copied')).catch(() => {
-    const ta = document.createElement('textarea'); ta.value = _posQRLink; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); showToast('Payment link copied');
-  });
+  copyTextWithFallback(_posQRLink).then(() => showToast('Payment link copied'));
 };
 
 window.downloadPosQR = function () {
@@ -23065,9 +23066,7 @@ window.generatePosBookStripeLink = async function () {
 window.copyPosBookLink = function () {
   const url = ($('pb-paylink')?.value || '').trim();
   if (!url) { showToast('No link to copy', 'warn'); return; }
-  navigator.clipboard.writeText(url).then(() => showToast('Link copied')).catch(() => {
-    const ta = document.createElement('textarea'); ta.value = url; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); showToast('Link copied');
-  });
+  copyTextWithFallback(url).then(() => showToast('Link copied'));
 };
 
 window.downloadPosBookQR = function () {
