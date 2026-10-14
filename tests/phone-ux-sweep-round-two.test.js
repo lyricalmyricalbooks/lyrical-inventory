@@ -31,7 +31,7 @@ test('the book dashboard header strip wraps instead of widening the page', () =>
 
 test('artist expenses on the dashboard become phone cards instead of clipping', () => {
   expect(html).toMatch(/<tbody id="d-exp-body"/);
-  expect(layout).toMatch(/'d-exp-body': \{ lead: 1, summary: \[0, 4\] \}/);
+  expect(layout).toMatch(/'d-exp-body': \{ lead: 1, summary: \[0, 4\], card: true \}/);
 });
 
 test('the to-do dismiss cross is visible and full-size on touch screens', () => {
