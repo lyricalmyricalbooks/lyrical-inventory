@@ -15,7 +15,7 @@ const RECORDS = {
   'tc-trip-body': { lead: 0, summary: [1, 2] },
   // Artist expenses on the book dashboard: its Reference and Amount columns
   // used to be cut off inside the banner on a phone.
-  'd-exp-body': { lead: 1, summary: [0, 4] },
+  'd-exp-body': { lead: 1, summary: [0, 4], card: true },
   'ledger-body': { lead: 1, summary: [0, 2, 5, 7] },
   // Order History: the summary is order #, channel, total, date and the action.
   // Qty moves behind the disclosure with the unit price and stock after. `card`
