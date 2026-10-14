@@ -12,7 +12,7 @@ import { buildHarness } from './helpers/extract-decl.js';
 
 function makeHarness() {
   return buildHarness({
-    names: ['webScanRelativeTime', 'webScanStatTile', 'webScanStatusHtml', 'webOrdersSkeletonHtml'],
+    names: ['_WEB_SCAN_DAY_FMT', 'webScanRelativeTime', 'webScanStatTile', 'webScanStatusHtml', 'webOrdersSkeletonHtml'],
     deps: { escapeHtml: (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
     }[c])) },
