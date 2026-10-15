@@ -795,7 +795,11 @@ function extractBigCartelOrderItems(order, included = [], customBooks = null) {
   return '—';
 }
 
-function matchBigCartelOrderToCatalog(order, included = [], customBooks = null) {
+// `itemsText` lets a caller that already ran extractBigCartelOrderItems() for
+// the same order and catalogue pass the result in. That extraction re-indexes
+// the whole `included` payload on every call, so the orders table would
+// otherwise do it twice per row.
+function matchBigCartelOrderToCatalog(order, included = [], customBooks = null, itemsText = null) {
   const booksMap = customBooks || (typeof BOOKS !== 'undefined' ? BOOKS : {});
   const catalogBooks = Object.values(booksMap);
   const catalogTitles = catalogBooks.map(b => (b.title || '').toLowerCase().trim()).filter(Boolean);
@@ -806,11 +810,12 @@ function matchBigCartelOrderToCatalog(order, included = [], customBooks = null) 
 
   const matchedBooks = [];
 
-  const itemsText = extractBigCartelOrderItems(order, included, booksMap);
+  if (itemsText == null) itemsText = extractBigCartelOrderItems(order, included, booksMap);
   if (itemsText && itemsText !== '—') {
+    const itemsLower = itemsText.toLowerCase();
     catalogBooks.forEach(b => {
       const titleLower = (b.title || '').toLowerCase().trim();
-      if (titleLower && itemsText.toLowerCase().includes(titleLower)) {
+      if (titleLower && itemsLower.includes(titleLower)) {
         if (!matchedBooks.includes(b.title)) matchedBooks.push(b.title);
       }
     });
@@ -1029,7 +1034,8 @@ function renderBigCartelOrders(orders, included = []) {
     if (attr.status === 'pending') statusPill = 'pill gold';
     if (attr.status === 'cancelled') statusPill = 'pill red';
 
-    const matchInfo = matchBigCartelOrderToCatalog(o, included);
+    const itemsText = extractBigCartelOrderItems(o, included);
+    const matchInfo = matchBigCartelOrderToCatalog(o, included, null, itemsText);
     let matchPillHtml = '';
     if (matchInfo.matched) {
       matchPillHtml = `<br><span class="bc-match-pill matched" title="Matches catalog inventory">✓ Matched: ${escapeHtml(matchInfo.matchedBooks.join(', '))}</span>`;
@@ -1042,7 +1048,7 @@ function renderBigCartelOrders(orders, included = []) {
     // ends up with postage, a customer and no order behind it.
     matchPillHtml += ledgerBadgeHtml(o);
 
-    const itemsHtml = extractBigCartelOrderItems(o, included) + matchPillHtml;
+    const itemsHtml = itemsText + matchPillHtml;
 
     const total = parseFloat(attr.total || 0).toFixed(2);
     const tax = parseFloat(attr.tax_total || 0).toFixed(2);
