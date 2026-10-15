@@ -2637,7 +2637,6 @@ async function loadOpenCalls() {
       activeProjectId: 'default'
     };
   }
-  await migrateLegacyOpenCalls();
   updateOpenCallBadges();
 }
 
@@ -2657,33 +2656,34 @@ async function _persistOpenCalls() {
   ocScheduleSnapshotPush_();
 }
 
-async function migrateLegacyOpenCalls() {
+// Older builds kept a book's open-call contributors on the book itself. Move
+// any still there into their own project. Runs on the books main.js has just
+// loaded (loadAllBooks), so it costs no reads of its own: it used to re-read
+// every book from Firestore on every start, before the books themselves loaded.
+async function migrateLegacyOpenCalls(bookStates = {}, saveBook = async () => {}) {
   let migrated = false;
   const promises = Object.keys(BOOKS).map(async (bid) => {
     const book = BOOKS[bid];
     try {
-      const json = await window._fbLoad(bid);
-      if (json) {
-        const stateObj = JSON.parse(json);
-        if (stateObj && Array.isArray(stateObj.openCall) && stateObj.openCall.length > 0) {
-          const projId = 'oc-migrated-' + bid;
-          let localMigrated = false;
-          if (!OPENCALL_DATA.projects[projId]) {
-            OPENCALL_DATA.projects[projId] = {
-              id: projId,
-              title: (book.title || bid) + ' Open Call',
-              createdAt: today(),
-              contributors: stateObj.openCall
-            };
-            if (OPENCALL_DATA.activeProjectId === 'default' && OPENCALL_DATA.projects['default'].contributors.length === 0) {
-              OPENCALL_DATA.activeProjectId = projId;
-            }
-            localMigrated = true;
+      const stateObj = bookStates[bid];
+      if (stateObj && !stateObj._loadFailed && Array.isArray(stateObj.openCall) && stateObj.openCall.length > 0) {
+        const projId = 'oc-migrated-' + bid;
+        let localMigrated = false;
+        if (!OPENCALL_DATA.projects[projId]) {
+          OPENCALL_DATA.projects[projId] = {
+            id: projId,
+            title: (book.title || bid) + ' Open Call',
+            createdAt: today(),
+            contributors: stateObj.openCall
+          };
+          if (OPENCALL_DATA.activeProjectId === 'default' && OPENCALL_DATA.projects['default'].contributors.length === 0) {
+            OPENCALL_DATA.activeProjectId = projId;
           }
-          stateObj.openCall = [];
-          await window._fbSave(bid, JSON.stringify(stateObj));
-          return localMigrated;
+          localMigrated = true;
         }
+        stateObj.openCall = [];
+        await saveBook(bid);
+        return localMigrated;
       }
     } catch (_) { }
     return false;

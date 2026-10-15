@@ -4,7 +4,8 @@ import { getAuth, signInWithPopup, reauthenticateWithPopup, GoogleAuthProvider, 
 import { getStorage, ref as sRef, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-storage.js";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, setDoc, getDoc, getDocs, getDocFromServer, getDocsFromServer, collection, onSnapshot, deleteDoc, writeBatch, runTransaction, query, where } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 import { receiptDuplicate } from './lib/receipt-finder.js';
-import { ALL_PARTS, LIST_PARTS, assembleParts, emptyPart, splitState, stitchState, mergePart, mergeSettingDoc } from './lib/merge-state.js';
+import { ALL_PARTS, LIST_PARTS, assembleParts, emptyPart, splitState, stitchState, mergePart, mergeSettingDoc, stableStringify } from './lib/merge-state.js';
+import { readOldCopyCached, oldCopyCache } from './lib/old-copy-cache.js';
 import { planWebsitePublish } from './lib/website-link.js';
 import { adoptDecision, compareCopies, movedElsewhere } from './lib/storage-mode.js';
 
@@ -219,10 +220,24 @@ window._fbMarkLinkSwitchedOn = async (at) => {
 };
 
 // A book's old-storage (Realtime Database) copy, parsed, or null. Read-only:
-// the storage check compares it with the copy the app now uses.
+// the storage check compares it with the copy the app now uses. Only the
+// record's `ts` stamp is downloaded when this device already holds the copy
+// with that stamp (lib/old-copy-cache.js) — the whole record otherwise.
 window._fbReadOldBookCopy = async (bookId) => {
-  const snap = await get(ref(db, `lyrical/books/${bookId}`));
-  const json = snap.exists() ? (snap.val() || {}).data : null;
+  const path = `lyrical/books/${bookId}`;
+  const json = await readOldCopyCached(bookId, {
+    readTs: async () => {
+      const s = await get(ref(db, `${path}/ts`));
+      const ts = s.exists() ? s.val() : null;
+      return typeof ts === 'number' ? ts : null;
+    },
+    readFull: async () => {
+      const s = await get(ref(db, path));
+      const v = s.exists() ? (s.val() || {}) : {};
+      return v.data ? { json: v.data, ts: v.ts } : null;
+    },
+    cache: oldCopyCache,
+  });
   return json ? JSON.parse(json) : null;
 };
 
@@ -771,6 +786,11 @@ function noteSettingsBase(key, json) {
 async function writeMergedSetting(key, data) {
   const target = doc(fs, 'settings', key);
   const localJson = JSON.stringify(data);
+  // Unchanged since this device loaded it or last saved it: the merge below
+  // would keep whatever the cloud holds now and write it straight back, so
+  // skip the read and the write. Several background checks (postage sweeps,
+  // start-up repairs) save the Tax Centre whether or not they changed it.
+  if (_settingsBase[key] === localJson) return data;
   let value = data;
   if (Object.prototype.hasOwnProperty.call(_settingsBase, key)) {
     try {
@@ -1025,7 +1045,17 @@ window._fbSaveBookOwners = async (owners) => {
   if (Object.keys(authorEmails).length) clean.authorEmails = authorEmails;
   try { await set(ref(db, 'lyrical/settings/bookOwners'), clean); }
   catch (e) { console.error('fbSaveBookOwners (RTDB) failed', e); }
-  try { await setDoc(doc(fs, 'settings', 'bookOwners'), clean); }
+  // Sent on every publisher sign-in and every catalog save, but the owners
+  // rarely change: check the server's copy and only write when it differs. A
+  // read costs a third of a write. Offline or unreadable: write, as before.
+  try {
+    let same = false;
+    try {
+      const current = await getDocFromServer(doc(fs, 'settings', 'bookOwners'));
+      same = current.exists() && stableStringify(current.data()) === stableStringify(clean);
+    } catch (_) { /* can't see the server copy */ }
+    if (!same) await setDoc(doc(fs, 'settings', 'bookOwners'), clean);
+  }
   catch (e) { console.error('fbSaveBookOwners (Firestore) failed', e); }
 };
 
