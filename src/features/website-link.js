@@ -37,7 +37,9 @@ import {
   hasAppTracking,
   linkedPostageFor,
   planWebsiteOrder,
+  promisedPreorders,
   rowKey,
+  websiteQuietSince,
 } from '../lib/website-link.js';
 import {
   $,
@@ -63,6 +65,7 @@ const DEVICE_KEY = 'lm-website-link-device';
 const PUBLISH_DEBOUNCE_MS = 4000;
 const RETRY_MS = 30000;
 const RATE_LOOKUPS_PER_RUN = 10;
+const QUIET_CHECK_MS = 5 * 60 * 1000;
 
 let _started = false;
 let _wired = false;
@@ -253,6 +256,13 @@ function startWebsiteLink() {
   scheduleWebsiteFeedPublish('all');
   renderWebsiteLinkCard();
   runStorageCheck();
+  // A link that goes quiet only shows as time passes: look again every few minutes.
+  setInterval(() => { renderWebsiteLinkCard(); noteTodo(); }, QUIET_CHECK_MS);
+}
+
+/** When the website last checked in, if it has gone quiet; else ''. */
+function quietSince() {
+  return websiteQuietSince(_link.website && _link.website.at, { online: online() });
 }
 
 function onWatchError(err) {
@@ -261,6 +271,7 @@ function onWatchError(err) {
     ? 'This app isn’t allowed to read the website’s orders yet. Publish the new database rules (see the setup steps), then reload.'
     : 'The connection to the website’s orders dropped. Reload the app once you’re back online.';
   renderWebsiteLinkCard();
+  noteTodo();
 }
 
 function onOrders(docs, meta = {}) {
@@ -282,6 +293,7 @@ function onLinkStatus(status) {
   if (_link.website) noteLinkSeen();
   scheduleImport(0);
   renderWebsiteLinkCard();
+  noteTodo();
 }
 
 /** Copies the website sold of editions not linked to a book here, per order. */
@@ -688,6 +700,8 @@ function websiteLinkTodo() {
   return {
     needYou,
     storageMissing: books.filter(b => b.status === 'missing').map(b => ({ title: b.title, count: b.missing.length })),
+    quietSince: _watchError ? '' : quietSince(),
+    problem: _watchError || _publishError || '',
   };
 }
 
@@ -851,7 +865,7 @@ function factsHtml() {
       ${fact('Last brought in', lastImport ? ago(lastImport) : 'Not yet', run)}
       ${fact('Website orders', String(orders))}
       ${fact('Stock sent to the website', lastFeed ? ago(lastFeed) : 'Not yet')}
-      ${fact('Website last checked in', heartbeat ? ago(heartbeat) : 'Not yet', heartbeat ? '' : 'It checks in every few minutes once it’s connected.')}
+      ${fact('Website last checked in', heartbeat ? ago(heartbeat) : 'Not yet', !heartbeat ? 'It checks in every few minutes once it’s connected.' : quietSince() ? 'That’s too long: it normally checks in every five minutes.' : '')}
     </dl>`;
 }
 
@@ -909,6 +923,21 @@ function reviewHtml() {
     </div>`;
 }
 
+/** Books with website pre-orders still to send: copies of the print run already spoken for. */
+function promisedHtml() {
+  const books = Object.keys(BOOKS)
+    .map(id => ({ id, ...promisedPreorders(((states[id] || {}).hist) || []) }))
+    .filter(b => b.copies > 0)
+    .sort((a, b) => b.copies - a.copies);
+  if (!books.length) return '';
+  const items = books.map(b => `<li>${escapeHtml(`${titleOf(b.id)}: ${copies(b.copies)} promised to ${b.orders} pre-order${b.orders === 1 ? '' : 's'}`)}</li>`).join('');
+  return `<div class="wl-section">
+      <h4 class="wl-subhead">Pre-orders promised</h4>
+      <p class="wl-note">Copies pre-ordered on the website and not sent yet. They’re already taken off on hand, so plan the print run with them in mind.</p>
+      <ul class="wl-points">${items}</ul>
+    </div>`;
+}
+
 function blockedHtml() {
   const ids = [..._blockedBooks].filter(id => BOOKS[id]);
   const waiting = _waitingOnLoad
@@ -962,6 +991,8 @@ function statusLine() {
   if (_watchError) return { tone: 'critical', glyph: '✕', word: 'Not connected', text: _watchError };
   if (_publishError) return { tone: 'critical', glyph: '!', word: 'Needs a look', text: _publishError };
   if (!online()) return { tone: 'neutral', glyph: '◌', word: 'Offline', text: 'Website orders come in when you’re back online.' };
+  const quiet = quietSince();
+  if (quiet) return { tone: 'critical', glyph: '!', word: 'Website quiet', text: `The website last checked in ${ago(quiet)}. Until it does again, new website orders don’t reach you and the website’s stock isn’t updated. Open the website’s admin › Inventory › Inventory app link to see why.` };
   if (!_ordersSeen) return { tone: 'neutral', glyph: '◌', word: 'Checking', text: 'Looking for orders from your website…' };
   if (_running) return { tone: 'active', glyph: '●', word: 'Working', text: 'Bringing in website orders…' };
   if (_docsFromCache) return { tone: 'neutral', glyph: '◌', word: 'Checking', text: 'Checking the website’s orders with the cloud…' };
@@ -994,7 +1025,7 @@ function renderWebsiteLinkCard() {
   const statusEl = $('wl-status');
   if (statusEl && statusEl.textContent !== s.text) statusEl.textContent = s.text;
   const body = $('wl-body');
-  if (body) body.innerHTML = [factsHtml(), reviewHtml(), blockedHtml(), unlinkedHtml(), storageHtml(), testsHtml()].join('');
+  if (body) body.innerHTML = [factsHtml(), reviewHtml(), promisedHtml(), blockedHtml(), unlinkedHtml(), storageHtml(), testsHtml()].join('');
 }
 
 // ── For the order screens ──────────────────────────────────────────────────

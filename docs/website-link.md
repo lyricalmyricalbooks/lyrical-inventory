@@ -187,6 +187,22 @@ device saved there meanwhile is added through the normal (add-only) save. The ol
 orders card's **Storage check** compares every book's old copy with the new storage as the server holds it (never this
 device's cache) and lists any record only the old copy has, with **Copy these over** (add-only) for the owner to decide.
 
+**Keeping watch both ways.**
+
+- **The link going quiet.** The website's heartbeat (`websiteLink/website.at`) is written every five minutes. When it is more
+  than an hour old and the device is online, the app's Website orders card says **Website quiet** and its To-do list adds
+  *Your website has stopped checking in* (`websiteQuietSince`, `src/lib/website-link.js`). A dropped connection or a failed
+  publish shows on the To-do list too. The website side already alerts when its own sweep stalls, the connection fails,
+  sales can't be sent, or orders wait over a day for the app.
+- **New books to match.** Once a book is matched, the website sweep checks once an hour for unmatched, unarchived printed
+  editions it can pair by ISBN or exact title (`newMatchList`, the same rule as the panel's `suggestLinks`;
+  `inventoryLinkSuggest.parity.test.ts`). It stores them as `newMatches { at, count, items }`. An admin alert
+  (`inventory-link-new-books`) and step 2's **New books to match** box offer one-click **Match these** or **Not these**
+  (`ignoredMatches { editionKey: inventoryBookId }`, op `ignoreMatches`).
+- **Pre-orders promised.** Rows with `preorder: true` that are not voided, refunded, given away or shipped count as copies
+  promised (`promisedPreorders`). The app shows them on the book's strip and under **Pre-orders promised** on the Website
+  orders card. They are already taken off on hand.
+
 ## Documents in the website project
 
 - `systemStatus/inventoryLink` (admin-read, server-write) holds:
