@@ -892,10 +892,12 @@ let _webLinkUnsub = null;
 window._fbWatchWebsiteLinkStatus = (cb, onErr) => {
   try {
     if (_webLinkUnsub) { try { _webLinkUnsub(); } catch (_) {} _webLinkUnsub = null; }
-    _webLinkUnsub = onSnapshot(collection(fs, 'websiteLink'), (snap) => {
+    // With metadata changes, so the caller also hears when this device's saved copy is confirmed by
+    // the server (the website's heartbeat in a saved copy can be hours old).
+    _webLinkUnsub = onSnapshot(collection(fs, 'websiteLink'), { includeMetadataChanges: true }, (snap) => {
       const out = { website: null, app: null };
       snap.forEach(d => { if (d.id === 'website' || d.id === 'app') out[d.id] = d.data() || {}; });
-      cb(out);
+      cb(out, { fromCache: !!(snap.metadata && snap.metadata.fromCache) });
     }, (err) => {
       console.error('website link status watch failed', err);
       if (typeof onErr === 'function') onErr(err);

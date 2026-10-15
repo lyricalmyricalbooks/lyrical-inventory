@@ -74,6 +74,9 @@ let _ordersSeen = false;
 let _docsFromCache = false;     // the last snapshot came from this device's cache
 let _link = { website: null, app: null };
 let _linkKnown = false;
+let _linkFromServer = false;    // the heartbeat has been read from the server, not only this device's copy
+let _importError = '';          // the last import failed; cleared by the next one that works
+let _publishLasting = false;    // _publishError needs the owner (rules, old storage), not just a retry
 let _watchError = '';
 let _publishError = '';
 let _running = false;
@@ -262,6 +265,8 @@ function startWebsiteLink() {
 
 /** When the website last checked in, if it has gone quiet; else ''. */
 function quietSince() {
+  // A copy saved on this device can hold yesterday's check-in: only judge from the server's.
+  if (!_linkFromServer) return '';
   return websiteQuietSince(_link.website && _link.website.at, { online: online() });
 }
 
@@ -287,11 +292,15 @@ function onOrders(docs, meta = {}) {
   scheduleImport(0);
 }
 
-function onLinkStatus(status) {
-  _link = { website: (status && status.website) || null, app: (status && status.app) || null };
+function onLinkStatus(status, meta = {}) {
+  const next = { website: (status && status.website) || null, app: (status && status.app) || null };
+  // The watch also reports when only the copy's state changed (saved copy → server): no new import then.
+  const changed = !_linkKnown || JSON.stringify(next) !== JSON.stringify(_link);
+  _link = next;
   _linkKnown = true;
+  if (!(meta && meta.fromCache)) _linkFromServer = true;
   if (_link.website) noteLinkSeen();
-  scheduleImport(0);
+  if (changed) scheduleImport(0);
   renderWebsiteLinkCard();
   noteTodo();
 }
@@ -328,9 +337,10 @@ async function runWebsiteImport() {
       _again = false;
       await importOnce();
     } while (_again && online());
+    _importError = '';
   } catch (e) {
     console.error('[website link] import failed', e);
-    _publishError = 'Something went wrong bringing in website orders. It tries again by itself; reload if it keeps happening.';
+    _importError = 'Something went wrong bringing in website orders. It tries again by itself; reload if it keeps happening.';
   } finally {
     _running = false;
     renderWebsiteLinkCard();
@@ -569,16 +579,19 @@ async function doPublish({ marks = [], books = [], testShipments = [] } = {}) {
     _publishError = denied
       ? 'The website link isn’t allowed to save yet. Publish the new database rules (see the setup steps).'
       : 'Couldn’t reach the website link just now. It tries again after your next change.';
+    _publishLasting = !!denied;
     renderWebsiteLinkCard();
     return null;
   }
   if (!res || typeof res !== 'object') return null;
   if (res.ok === false) {
     _publishError = 'Your settings still live in the old storage, so the website link can’t run yet.';
+    _publishLasting = true;
     renderWebsiteLinkCard();
     return res;
   }
   _publishError = '';
+  _publishLasting = false;
   const sent = sentMap();
   [...(res.sent || []), ...(res.current || [])].forEach(s => { sent[s.orderId] = s.hash; });
   writeJson(SENT_KEY, sent);
@@ -701,7 +714,8 @@ function websiteLinkTodo() {
     needYou,
     storageMissing: books.filter(b => b.status === 'missing').map(b => ({ title: b.title, count: b.missing.length })),
     quietSince: _watchError ? '' : quietSince(),
-    problem: _watchError || _publishError || '',
+    // Only what needs the owner goes on the To-do list; a one-off failure retries by itself.
+    problem: _watchError || (_publishLasting ? _publishError : '') || '',
   };
 }
 
@@ -990,6 +1004,7 @@ function testsHtml() {
 function statusLine() {
   if (_watchError) return { tone: 'critical', glyph: '✕', word: 'Not connected', text: _watchError };
   if (_publishError) return { tone: 'critical', glyph: '!', word: 'Needs a look', text: _publishError };
+  if (_importError) return { tone: 'critical', glyph: '!', word: 'Needs a look', text: _importError };
   if (!online()) return { tone: 'neutral', glyph: '◌', word: 'Offline', text: 'Website orders come in when you’re back online.' };
   const quiet = quietSince();
   if (quiet) return { tone: 'critical', glyph: '!', word: 'Website quiet', text: `The website last checked in ${ago(quiet)}. Until it does again, new website orders don’t reach you and the website’s stock isn’t updated. Open the website’s admin › Inventory › Inventory app link to see why.` };
