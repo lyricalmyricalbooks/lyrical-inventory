@@ -300,9 +300,7 @@ function emailMailingList() { _openGmailBcc(_uniqueMailable(mailingSubsArray()),
 function copyMailingListEmails() {
   const emails = _uniqueMailable(mailingSubsArray());
   if (!emails.length) { showToast('No mailable emails on your list', 'warn'); return; }
-  const done = () => showToast(`✓ Copied ${emails.length} email${emails.length === 1 ? '' : 's'}`);
-  if (navigator.clipboard?.writeText) navigator.clipboard.writeText(emails.join(', ')).then(done).catch(() => { _custFallbackCopy(emails.join(', ')); done(); });
-  else { _custFallbackCopy(emails.join(', ')); done(); }
+  _custCopyEmailList(emails);
 }
 function exportMailingListCSV() {
   const subs = mailingSubsArray().filter(s => !_isCustomerSuppressed(s.email));
@@ -1492,6 +1490,12 @@ async function customerPullDeeper() {
 function copyCustomerEmails() {
   const emails = Array.from(new Set(_custMailable(buildCustomerList()).map(r => r.email)));
   if (!emails.length) { showToast('No mailable emails here (unsubscribed are excluded)', 'warn'); return; }
+  _custCopyEmailList(emails);
+}
+// Copy a comma-separated address list and toast the count. Falls back to the
+// hidden-textarea copy when the async clipboard is missing or refuses, and
+// toasts either way — the fallback can't report failure.
+function _custCopyEmailList(emails) {
   const text = emails.join(', ');
   const done = () => showToast(`✓ Copied ${emails.length} email${emails.length === 1 ? '' : 's'}`);
   if (navigator.clipboard?.writeText) {
