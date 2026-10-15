@@ -4671,15 +4671,25 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   .kpi{padding:1rem 1.1rem;}
   .kpi-value{font-size:24px;}
 
+  /* Phone: the cover sits beside the title instead of on a row of its own, so
+     each book is one compact card rather than a screen and a half. The info
+     column dissolves (display: contents) so its title, meta and bars become
+     grid items of the strip itself. */
   .book-strip {
-    padding: 1.25rem 1rem;
-    gap: 1.25rem;
-    align-items: stretch;
+    display: grid;
+    grid-template-columns: 3.5rem minmax(0, 1fr);
+    column-gap: var(--space-3);
+    row-gap: var(--space-3);
+    align-items: start;
+    padding: var(--space-4) var(--space-4) var(--space-4) 1.25rem;
   }
-  .book-strip-info {
-    min-width: 0;
-    flex: 1 1 100%;
-  }
+  .book-strip-info { display: contents; }
+  .book-strip .book-cover-3d { grid-column: 1; grid-row: 1 / span 2; justify-self: center; }
+  .book-strip .book-strip-title { grid-column: 2; grid-row: 1; align-self: end; margin-bottom: 0; }
+  .book-strip .book-strip-meta { grid-column: 2; grid-row: 2; align-self: start; margin-bottom: 0; }
+  .book-strip .book-progress-wrapper { grid-column: 1 / -1; margin-top: 0; }
+  .book-strip .book-strip-kpis,
+  .book-strip .book-strip-actions { grid-column: 1 / -1; }
   .book-strip-kpis {
     grid-template-columns: repeat(2, 1fr) !important;
     flex: 1 1 100%;
