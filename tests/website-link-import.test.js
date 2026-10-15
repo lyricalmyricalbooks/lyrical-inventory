@@ -442,3 +442,14 @@ describe('the storage check', () => {
     await waitFor(() => expect(card().textContent).toContain('with every record from the old one'));
   });
 });
+
+describe('the website going quiet', () => {
+  it('is said on the card and the To-do list, and clears when the website checks in again', async () => {
+    const old = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+    link.statusCb({ ...CONSENTED, website: { at: old } }, { fromCache: false });
+    await waitFor(() => expect(document.getElementById('wl-status').textContent).toMatch(/website last checked in/i));
+    expect(feature.websiteLinkTodo().quietSince).toBe(old);
+    setStatus(CONSENTED);
+    await waitFor(() => expect(feature.websiteLinkTodo().quietSince).toBe(''));
+  });
+});

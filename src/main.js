@@ -904,7 +904,7 @@ import {
   websiteLinkActive,
   websiteLinkTodo,
 } from './features/website-link.js';
-import { STRIPE_CHARGE_PI_KEY, isWebsiteFulfilled, rememberChargeIntents } from './lib/website-link.js';
+import { STRIPE_CHARGE_PI_KEY, isWebsiteFulfilled, promisedPreorders, rememberChargeIntents } from './lib/website-link.js';
 import { reviewTaskStillOpen } from './lib/review-queue.js';
 import {
   clearSimulatedSheet,
@@ -5643,6 +5643,7 @@ function renderAllBooksStrips(allBooksVisible) {
     // costs nothing and stops this template needing a per-field audit again.
     const accent = escapeHtml(book.accent);
     const idAttr = escapeHtml(book.id);
+    const promised = promisedPreorders(s.hist);
     const accentPair = getAccentFillPair(book.accent);
     return `<div class="book-strip" style="--accent-color: ${accent}; --accent-color-bg: ${escapeHtml(book.accentBg)}; --accent-color-light: ${escapeHtml(lightenColor(book.accent, 0.25))}; --accent-text: ${escapeHtml(getPaperSafeText(book.accent))}; --accent-fill: ${escapeHtml(accentPair.fill)}; --accent-contrast: ${escapeHtml(accentPair.label)};">
       <div class="book-cover-3d" aria-hidden="true">
@@ -5658,6 +5659,7 @@ function renderAllBooksStrips(allBooksVisible) {
           <span>&nbsp;·&nbsp; 🏷 ${escapeHtml(book.currency)}${escapeHtml(book.listPrice)}</span>
           <span>&nbsp;·&nbsp; 🖨 ${escapeHtml(book.maxPrint)} printed</span>
           ${!isAuthor() && s.authorStock > 0 ? `<span>&nbsp;·&nbsp; 👤 ${escapeHtml(s.authorStock)} with author</span>` : ''}
+          ${promised.copies > 0 ? `<span title="Pre-ordered on your website and not sent yet. These copies are already taken off on hand.">&nbsp;·&nbsp; 📌 ${escapeHtml(promised.copies)} pre-ordered, not sent</span>` : ''}
         </div>
         <div class="book-progress-wrapper" title="${escapeHtml(s.stock)} units on hand of ${escapeHtml(book.maxPrint)} total printed (${pct.toFixed(0)}%)">
           <div class="book-progress-header">

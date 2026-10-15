@@ -1110,3 +1110,42 @@ export function planWebsitePublish({
     current,
   };
 }
+
+// ── The link going quiet ──────────────────────────────────────────────────
+
+// The website checks in every five minutes while the link is on. An hour of
+// silence means its link job stopped (a failed deploy, a revoked permission),
+// so new website orders and stock updates aren't moving.
+export const WEBSITE_QUIET_MS = 60 * 60 * 1000;
+
+/**
+ * When the website last checked in, if that was too long ago: the time as an
+ * ISO string, else ''. A website that never checked in isn't "quiet" — the
+ * link was never switched on — and nothing is said while this device is offline.
+ */
+export function websiteQuietSince(heartbeatAt, { now = Date.now(), online = true } = {}) {
+  if (!online) return '';
+  const at = Date.parse(String(heartbeatAt || ''));
+  if (!Number.isFinite(at)) return '';
+  return now - at > WEBSITE_QUIET_MS ? new Date(at).toISOString() : '';
+}
+
+// ── Pre-orders promised ───────────────────────────────────────────────────
+
+/**
+ * Copies of a book pre-ordered on the website and not sent yet: they're
+ * already taken off on hand, and are copies of the print run that are spoken
+ * for. Voided, refunded and given-away rows don't count.
+ */
+export function promisedPreorders(hist = []) {
+  let copies = 0;
+  let orders = 0;
+  for (const h of hist || []) {
+    if (!h || h.preorder !== true || h.voided || h.gratuity || h.webRefunded || h.shipped) continue;
+    const qty = Math.max(0, Math.floor(Number(h.qty) || 0));
+    if (!qty) continue;
+    copies += qty;
+    orders += 1;
+  }
+  return { copies, orders };
+}

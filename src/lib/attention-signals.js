@@ -578,6 +578,22 @@ function automationSignals(ctx, out) {
       fix: { label: 'Open Website orders', ...openTab('website') },
     });
   }
+  // The link itself stopped: nothing moves either way until it's fixed.
+  if (site.problem) {
+    out.push({
+      id: 'setup-website-link-problem', group: 'setup', status: 'blocked', icon: '🔌',
+      label: 'The link to your website needs a look',
+      detail: String(site.problem),
+      fix: { label: 'Open Website orders', ...openTab('website') },
+    });
+  } else if (site.quietSince) {
+    out.push({
+      id: 'setup-website-link-quiet', group: 'setup', status: 'warn', icon: '🔇',
+      label: 'Your website has stopped checking in',
+      detail: 'It normally checks in every five minutes. Until it does again, new website orders don’t reach this app and the website’s stock isn’t updated. Open the website’s admin › Inventory › Inventory app link to see why.',
+      fix: { label: 'Open Website orders', ...openTab('website') },
+    });
+  }
   for (const book of (site.storageMissing || [])) {
     const n = Number(book && book.count) || 0;
     if (!n) continue;
