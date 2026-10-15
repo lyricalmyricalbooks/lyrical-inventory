@@ -4275,6 +4275,9 @@ async function refreshDailyRates() {
 async function loadAllBooks() {
   setSyncState('syncing', '<b>Firestore</b> · loading all books.');
   await Promise.all(Object.keys(BOOKS).map(id => loadBook(id)));
+  // Open-call contributors older builds kept on the book itself move to their
+  // own project, from the books just loaded (no extra reads).
+  if (isPublisherSession()) await migrateLegacyOpenCalls(states, saveState).catch(e => console.warn('Open call migration failed', e));
   await loadTaxCenter();
   // Catch the sheet up on expenses and artist payments — the first time after
   // this update that is every one of them; afterwards only what changed.
