@@ -139,6 +139,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-13 | visual | Manual entry + Home (phone, round 4) | Tucked the order number and notes under "More details" on a phone, made the Sell card readable at night, squared the upload strip on Home, and made the gratuity tag neutral in History | pending |
 | 2026-10-14 | visual | Phone Dashboard — expenses owed to artist | Made each expense on a phone a compact card (description and amount on top, date beneath, tap anywhere for details) so the list is about a quarter shorter and the book's own dashboard comes into view sooner | pending |
 | 2026-10-15 | visual | Phone All Books overview | Put each book's cover beside its title instead of on a row of its own, so every book card on a phone is about a third shorter and the next book comes into view sooner | pending |
+| 2026-10-16 | visual | Phone Order History | Made the pencil beside each order number easy to tap (a 44px touch area around a slightly larger square, was a tiny 22px one) without making the cards taller, and stretched the Import button across the row | pending |
 
 ---
 
