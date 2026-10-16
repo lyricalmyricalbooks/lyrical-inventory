@@ -1277,6 +1277,13 @@
      the bottom or right border. Channel tags keep their one-line rule. */
   #tab-history #hist-body .ch-badge.ch-pos,
   #tab-history #hist-body .chip-status.amber { white-space: normal; height: auto; min-height: 22px; max-width: 100%; line-height: var(--leading-snug); text-align: left; }
+
+  /* Order History: the pencil beside each order number keeps a modest 28px square but gets
+     a full 44px tap area from its invisible ::after (it was 22px, and hidden until hover on
+     desktop). The import button spans the row instead of floating at the right. */
+  #tab-history #hist-body .edit-btn { width: 28px; height: 28px; margin: 0 0 0 var(--space-2); opacity: 1; }
+  #tab-history #hist-body .edit-btn::after { inset: -8px; min-width: var(--target-min); min-height: var(--target-min); }
+  #tab-history #import-btn { width: 100%; justify-content: center; }
 }
 
 /* ─── SWEEP FIXES B (round 4) ─── */
