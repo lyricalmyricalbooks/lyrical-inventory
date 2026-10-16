@@ -12806,12 +12806,24 @@ function maybeAutoPayInvoiceForLedger(s, e) {
   if (!e || !e.invoiceId) return;
   const inv = (s.invoices || []).find(i => i.id === e.invoiceId);
   if (!inv || (inv.status !== 'draft' && inv.status !== 'sent')) return;
-  // Resolve the invoice's linked, non-voided ledger sales.
-  const linked = (inv.items || [])
-    .map(it => it._ledgerId ? (s.ledger || []).find(x => x.id === it._ledgerId) : null)
-    .filter(x => x && !x.voided);
-  if (!linked.length) return;                         // nothing resolvable → skip
-  if (linked.some(x => x.status !== 'paid')) return;  // not all paid yet → wait
+  // ⚡ Bolt Optimization: Loop fusion - Combine map, filter, and some into a single loop
+  // to avoid intermediate array allocations and multiple passes over the ledger.
+  let hasLinked = false;
+  let allPaid = true;
+  for (const it of (inv.items || [])) {
+    if (it._ledgerId) {
+      const e = (s.ledger || []).find(x => x.id === it._ledgerId);
+      if (e && !e.voided) {
+        hasLinked = true;
+        if (e.status !== 'paid') {
+          allPaid = false;
+          break; // Early exit once an unpaid linked sale is found
+        }
+      }
+    }
+  }
+
+  if (!hasLinked || !allPaid) return;
   inv.status = 'paid'; inv.paidAt = Date.now(); inv.paidMethod = 'Ledger';
 }
 
@@ -12846,13 +12858,25 @@ function consignPaymentTarget() {
   if (!inv) return null;
   const book = BOOKS[bookId] || getBook(), bookCode = getBookCurrencyCode(book);
   const invCode = normalizeCurrencyCode(inv.currencyCode || getBookCurrencyCode({ currency: inv.currency || book.currency }), bookCode);
-  const rows = (inv.items || [])
-    .map(it => it._ledgerId ? (s.ledger || []).find(x => x.id === it._ledgerId) : null)
-    .filter(e => e && e.status === 'pending' && !e.voided);
+
+  // ⚡ Bolt Optimization: Loop fusion - Combine map, filter, and reduce into a single loop
+  // to avoid intermediate array allocations and multiple passes over the items.
+  const rows = [];
+  let sumAmountDue = 0;
+  for (const it of (inv.items || [])) {
+    if (it._ledgerId) {
+      const e = (s.ledger || []).find(x => x.id === it._ledgerId);
+      if (e && e.status === 'pending' && !e.voided) {
+        rows.push(e);
+        sumAmountDue += (Number(e.amountDue) || 0);
+      }
+    }
+  }
+
   // What the ledger expects in the book's currency: the linked sales it will
   // clear, or — with none linked — the invoice total when it's already in
   // the book's currency. Otherwise there's nothing to measure a shortfall by.
-  const baseDue = rows.length ? roundCents(rows.reduce((a, e) => a + (Number(e.amountDue) || 0), 0))
+  const baseDue = rows.length ? roundCents(sumAmountDue)
     : (invCode === bookCode ? Number(inv.total) || 0 : null);
   return { s, book, bookId, bookCode, inv, rows, baseDue, expected: { currency: invCode, amount: roundCents(Number(inv.total) || 0) }, name: inv.num || '' };
 }
