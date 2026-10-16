@@ -91,7 +91,7 @@ describe('Test Book Sandbox Isolation & Google Sheets Protection', () => {
       { id: 'test', title: 'TEST PAGE', currency: '€', listPrice: 17 },
       { id: 'greatest', title: 'Greatest Hits', currency: 'CA$', listPrice: 20 },
     ];
-    const render = new Function('$', 'BOOK_LIST', 'escapeHtml', `${extractDecl('isTestBook')}\n${extractDecl('renderCatalogList')}\nreturn renderCatalogList;`)(
+    const render = new Function('$', 'BOOK_LIST', 'escapeHtml', `${extractDecl('isTestBook')}\n${extractDecl('catalogCardHtml')}\n${extractDecl('renderCatalogList')}\nreturn renderCatalogList;`)(
       id => containers[id], books, text => String(text),
     );
     render();
