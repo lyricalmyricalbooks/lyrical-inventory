@@ -2393,6 +2393,25 @@ async function saveBookFromModal() {
   if (currencyResult) await offerSheetsResyncAfterRestate(currencyResult.to);
 }
 
+// One title's row in Settings → Catalogue. Live and test books share it, so
+// the two lists can't drift apart.
+function catalogCardHtml(b) {
+  return `
+      <div class="catalog-card">
+         <div style="display:flex;align-items:center;gap:14px;">
+           <div class="catalog-dot" style="background:${b.accent}"></div>
+           <div class="catalog-info">
+             <h4>${escapeHtml(b.title)}</h4>
+             <p><span class="tnum" style="font-family:var(--font-mono);font-size:var(--text-sm);">${escapeHtml(b.id)}</span> · <strong class="tnum" style="font-family:var(--font-mono);">${b.currency}${b.listPrice}</strong></p>
+           </div>
+         </div>
+         <div class="catalog-actions">
+           <button class="btn sm" onclick="openEditBookModal('${escapeHtml(b.id)}')">Edit</button>
+           <button class="btn sm danger-btn" onclick="deleteBook('${escapeHtml(b.id)}')">Remove</button>
+         </div>
+      </div>`;
+}
+
 function renderCatalogList() {
   const container = $('catalog-list');
   if (!container) return;
@@ -2412,20 +2431,7 @@ function renderCatalogList() {
         <button class="btn gold lg" onclick="openAddBookModal()">+ Add your first book</button>
       </div>`;
   } else {
-    container.innerHTML = regularBooks.map(b => `
-      <div class="catalog-card">
-         <div style="display:flex;align-items:center;gap:14px;">
-           <div class="catalog-dot" style="background:${b.accent}"></div>
-           <div class="catalog-info">
-             <h4>${escapeHtml(b.title)}</h4>
-             <p><span class="tnum" style="font-family:var(--font-mono);font-size:var(--text-sm);">${escapeHtml(b.id)}</span> · <strong class="tnum" style="font-family:var(--font-mono);">${b.currency}${b.listPrice}</strong></p>
-           </div>
-         </div>
-         <div class="catalog-actions">
-           <button class="btn sm" onclick="openEditBookModal('${escapeHtml(b.id)}')">Edit</button>
-           <button class="btn sm danger-btn" onclick="deleteBook('${escapeHtml(b.id)}')">Remove</button>
-         </div>
-      </div>`).join('');
+    container.innerHTML = regularBooks.map(catalogCardHtml).join('');
   }
 
   if (testContainer) {
@@ -2439,20 +2445,7 @@ function renderCatalogList() {
           <button type="button" class="btn sm" onclick="openAddBookModal()">+ Add a test book</button>
         </div>`;
     } else {
-      testContainer.innerHTML = testBooks.map(b => `
-        <div class="catalog-card">
-           <div style="display:flex;align-items:center;gap:14px;">
-             <div class="catalog-dot" style="background:${b.accent}"></div>
-             <div class="catalog-info">
-               <h4>${escapeHtml(b.title)}</h4>
-               <p><span class="tnum" style="font-family:var(--font-mono);font-size:var(--text-sm);">${escapeHtml(b.id)}</span> · <strong class="tnum" style="font-family:var(--font-mono);">${b.currency}${b.listPrice}</strong></p>
-             </div>
-           </div>
-           <div class="catalog-actions">
-             <button class="btn sm" onclick="openEditBookModal('${escapeHtml(b.id)}')">Edit</button>
-             <button class="btn sm danger-btn" onclick="deleteBook('${escapeHtml(b.id)}')">Remove</button>
-           </div>
-        </div>`).join('');
+      testContainer.innerHTML = testBooks.map(catalogCardHtml).join('');
     }
   }
 }
