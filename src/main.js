@@ -26160,8 +26160,12 @@ function showMarketDaySummaryIfDue() {
   try { shownFor = localStorage.getItem(MARKET_DAY_SHOWN_KEY) || ''; } catch (_) { /* storage blocked */ }
   const day = latestMarketDay(rows, { today: today(), shownFor });
   if (!day) return;
+  // Scanning every book's history for recorded charges is the costly part, so
+  // build that set at most once here instead of once per unmatched payment.
+  let recordedIds = null;
+  const recordedCharges = () => (recordedIds ||= _reconRecordedChargeIds());
   const unmatched = (readUnmatchedReaderPayments()[day] || [])
-    .filter(id => !_reconRecordedChargeIds().has(id)).length;
+    .filter(id => !recordedCharges().has(id)).length;
   const summary = summariseMarketDay(rows, day, {
     books: BOOKS,
     stockOf: (bookId) => (states[bookId] ? Number(states[bookId].stock) : null),
@@ -26174,7 +26178,7 @@ function showMarketDaySummaryIfDue() {
   // it every card sale would look like one with no payment behind it.
   let cardNote = '';
   if (getReconStripeKey()) {
-    const recorded = _reconRecordedChargeIds();
+    const recorded = recordedCharges();
     const reader = (readReaderPaymentsByDay()[day] || []).map(p => ({ ...p, recorded: recorded.has(p.id) }));
     cardNote = describeMarketCards(checkMarketCards(rows, day, reader));
   }
