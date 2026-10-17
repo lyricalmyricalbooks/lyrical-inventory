@@ -944,7 +944,7 @@ import {
   verifyUrl,
 } from './features/sheets-bridge.js';
 import { sheetTabKey } from './lib/sheet-sync.js';
-import { channelMixRows } from './lib/channel-mix.js';
+import { IN_PERSON_CHANNELS, channelMixRows } from './lib/channel-mix.js';
 import { csvCell, csvToObjects, toCsv } from './lib/csv.js';
 import { plainChanges, kindLabel, parseBuildDate, relativeWhen, dayHeading } from './lib/whats-new.js';
 import { downloadText, downloadCsv } from './lib/download.js';
@@ -9450,7 +9450,7 @@ export function renderHist() {
     if (!chanName) return '<span class="ch-badge">—</span>';
     const c = String(chanName).trim();
     if (c === 'Website' || c === 'Big Cartel') return `<span class="ch-badge ch-bc"><span class="ch-icon">🌐</span> Website</span>`;
-    if (c === 'POS' || c === 'Fair' || c === 'Event' || c === 'In Person') return `<span class="ch-badge ch-pos"><span class="ch-icon">💳</span> In Person</span>`;
+    if (IN_PERSON_CHANNELS.includes(c)) return `<span class="ch-badge ch-pos"><span class="ch-icon">💳</span> In Person</span>`;
     if (c === 'Consignment' || c === 'Store') return `<span class="ch-badge ch-store"><span class="ch-icon">🏬</span> Store</span>`;
     if (c === 'Direct') return `<span class="ch-badge ch-direct"><span class="ch-icon">🤝</span> Direct</span>`;
     return `<span class="ch-badge">${escapeHtml(c)}</span>`;
