@@ -19,7 +19,7 @@ import { registerSW } from 'virtual:pwa-register';
 import { canonicalExpenseCategory } from './lib/expense-categories.js';
 import { calcArtistEarnings, tierEffectiveCap, describePayout, payoutRequestCovered, planNetPayout, payoutNetted, unpaidSalesSummary } from './lib/earnings.js';
 import { planArtistSettlement, applyArtistSettlement, undoArtistSettlement, artistSettlementStatement, artistSettlementIssues, planSettlementForPayment } from './lib/artist-settlement.js';
-import { keyRows } from './lib/merge-state.js';
+import { rowsByKey } from './lib/merge-state.js';
 import { restoreRecords } from './lib/storage-mode.js';
 import { createStripePriceAndLink } from './lib/stripe-payment-link.js';
 import { createStripeRateResolver, stripeOrderNumber } from './lib/stripe-sale-defaults.js';
@@ -8053,9 +8053,9 @@ Object.assign(window, { toggleArtistSettlementForm, copyArtistSettlement, record
 function syncArtistSettlementSales(bookId, record) {
   if (!sheetsUrl) return;
   const state = states[bookId], book = BOOKS[bookId];
-  const keys = keyRows('hist', state.hist || []);
+  const byKey = rowsByKey('hist', state.hist || []);
   for (const link of record.settlement.heldSales) {
-    const h = state.hist[keys.indexOf(link.key)];
+    const h = byKey.get(link.key);
     if (!h || h.consignmentLink) continue;
     const nativeCur = getBookCurrencyCode(book);
     const totalNative = roundCents(h.qty * h.price);

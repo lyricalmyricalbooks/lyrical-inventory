@@ -1,7 +1,7 @@
 // One reversible, offline-safe record for both sides of an author's account.
 import { calcArtistEarnings, describeArtistSettlement, appliedOffsets, appliedReceivablePayments, receivableOpen } from './earnings.js';
 import { roundCents, fmt, getBookCurrencyCode } from './money.js';
-import { keyRows, stableStringify } from './merge-state.js';
+import { keyRows, rowsByKey, stableStringify } from './merge-state.js';
 import { recalculateBookStatsFromHistory } from './inventory.js';
 
 function fingerprint(book, state) {
@@ -28,11 +28,11 @@ function settlementId(value) {
 // review/Undo instead of silently pretending that both royalty credits fit.
 export function artistSettlementIssues(state) {
   const active = (state.artistPayouts || []).filter(p => p.settlement && !p.voided);
-  const keys = keyRows('hist', state.hist || []);
+  const byKey = rowsByKey('hist', state.hist || []);
   const issues = new Set();
   for (const p of active) {
     if (p.settlement.heldSales.some(link => {
-      const h = state.hist[keys.indexOf(link.key)];
+      const h = byKey.get(link.key);
       return !h || h.voided || h.artistPending || h.artistSettlementId !== p.id;
     })) issues.add(p.id);
   }
@@ -100,8 +100,8 @@ export function applyArtistSettlement(book, state, plan, { date, method = '', no
   if (!plan?.hasWork || state._loadFailed || fingerprint(book, state) !== plan.signature) return { ok: false, reason: 'changed' };
   const parsedDate = Date.parse(`${date}T12:00:00Z`);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '') || !Number.isFinite(parsedDate) || new Date(parsedDate).toISOString().slice(0, 10) !== date) return { ok: false, reason: 'date' };
-  const keys = keyRows('hist', state.hist || []);
-  const rows = plan.heldSales.map(r => state.hist[keys.indexOf(r.key)]);
+  const byKey = rowsByKey('hist', state.hist || []);
+  const rows = plan.heldSales.map(r => byKey.get(r.key));
   if (rows.some(h => !h || !h.artistPending || h.artistSettlementId)) return { ok: false, reason: 'changed' };
   const settlement = {
     balance: structuredClone(plan.balance), heldSales: plan.heldSales,
@@ -160,8 +160,8 @@ export function undoArtistSettlement(state, id) {
   if (state._loadFailed) return { ok: false, reason: 'load' };
   const record = (state.artistPayouts || []).find(p => String(p.id) === String(id));
   if (!record?.settlement || record.voided) return { ok: false, reason: 'missing' };
-  const keys = keyRows('hist', state.hist || []);
-  const rows = record.settlement.heldSales.map(r => state.hist[keys.indexOf(r.key)]);
+  const byKey = rowsByKey('hist', state.hist || []);
+  const rows = record.settlement.heldSales.map(r => byKey.get(r.key));
   const keepers = record.settlement.heldSales.map(link => (state.artistPayouts || []).find(p =>
     p.id !== record.id && !p.voided && p.settlement?.heldSales.some(other => other.key === link.key)));
   if (rows.some((h, i) => !h || h.voided || h.artistPending ||

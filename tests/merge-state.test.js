@@ -6,6 +6,7 @@ import {
   emptyPart,
   stableStringify,
   keyRows,
+  rowsByKey,
   mergeRows,
   mergeMetadata,
   mergePart,
@@ -28,6 +29,17 @@ describe('stableStringify', () => {
   it('handles null and nested objects', () => {
     expect(stableStringify({ a: null, b: { d: 1, c: 2 } }))
       .toBe('{"a":null,"b":{"c":2,"d":1}}');
+  });
+});
+
+describe('rowsByKey', () => {
+  it('resolves every keyRows key to the same row keys.indexOf would', () => {
+    const rows = [sale(null), sale(null), sale(1, { uid: 'x' })];
+    const keys = keyRows('hist', rows);
+    const byKey = rowsByKey('hist', rows);
+    for (const k of keys) expect(byKey.get(k)).toBe(rows[keys.indexOf(k)]);
+    expect(byKey.get(keys[1])).toBe(rows[1]);
+    expect(byKey.get('uid:missing')).toBeUndefined();
   });
 });
 
