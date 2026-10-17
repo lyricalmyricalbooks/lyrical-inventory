@@ -13,6 +13,17 @@
  */
 
 /**
+ * The sales channels that mean a sale was made face to face. The order history
+ * badges all four as "In Person", and the deduction-gap scan and the assistant's
+ * event tools read the same list, so it lives here rather than as copies that
+ * have to be kept in step by hand.
+ *
+ * 'Book Fair' is deliberately not in it: the history shows it under its own
+ * name. The market-day summary adds it on top (see market-day.js).
+ */
+export const IN_PERSON_CHANNELS = Object.freeze(['POS', 'Fair', 'Event', 'In Person']);
+
+/**
  * Shape a book's `chStats` rollup ({ [channel]: { txns, units, revenue } })
  * into display rows plus the footer totals.
  *

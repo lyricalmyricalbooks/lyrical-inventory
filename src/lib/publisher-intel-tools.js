@@ -24,7 +24,10 @@ import { findDeductionGaps as scanDeductionGaps } from './deduction-gaps.js';
 import { expenseLedgerTotals } from './expense-totals.js';
 import { deriveOnHand, deriveStockBreakdown, inventoryBreakdown } from './inventory.js';
 import { calculateBreakEven } from './breakeven.js';
-import { channelMixRows } from './channel-mix.js';
+import { IN_PERSON_CHANNELS, channelMixRows } from './channel-mix.js';
+
+// Re-exported so the assistant's event tools keep naming what they count as in person.
+export { IN_PERSON_CHANNELS };
 import { filterHistoryRows } from './order-history-search.js';
 import { getBookCurrencyCode, normalizeCurrencyCode, roundCents } from './money.js';
 import {
@@ -43,11 +46,6 @@ import {
 // than quietly describing 200 of them as if they were all of them.
 export const MAX_TOOL_ROWS = 200;
 
-// What the app calls a sale made face to face. Kept in step with the channel
-// badge mapping in main.js (renderHist's `ch-badge` branch) — these four all
-// render as "In Person" there, and a fair or market sale lands under one of
-// them.
-export const IN_PERSON_CHANNELS = ['POS', 'Fair', 'Event', 'In Person'];
 
 // How many changes may be put up for approval at once.
 //

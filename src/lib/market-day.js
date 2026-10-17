@@ -8,7 +8,10 @@
 //
 // Pure: no DOM, no ledger writes.
 
-export const IN_PERSON_CHANNELS = new Set(['Book Fair', 'POS', 'Fair', 'Event', 'In Person']);
+import { IN_PERSON_CHANNELS as FACE_TO_FACE_CHANNELS } from './channel-mix.js';
+
+// A market day's register sales are recorded as 'Book Fair', so it counts too.
+export const IN_PERSON_CHANNELS = new Set(['Book Fair', ...FACE_TO_FACE_CHANNELS]);
 
 /** How far back a day can be and still be worth summarising. */
 export const MARKET_DAY_LOOKBACK_DAYS = 4;
