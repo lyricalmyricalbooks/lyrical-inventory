@@ -9,6 +9,7 @@ import { reconcileConsignmentMirrors } from '../src/lib/consignment.js';
 import { linkedShippingSummary } from '../src/lib/shipping-reconciliation.js';
 import { filterHistoryRows, historySearchIsActive, describeHistorySearch } from '../src/lib/order-history-search.js';
 import { isWebsiteFulfilled } from '../src/lib/website-link.js';
+import { IN_PERSON_CHANNELS } from '../src/lib/channel-mix.js';
 
 // Order History is where a mis-rendered row reads as a sale that didn't happen
 // or stock the publisher doesn't have, so this covers what it actually puts on
@@ -61,7 +62,7 @@ function makeHarness({ state, book = BOOK, isPublisher = true, submissions = {} 
       buildOrderTimeline, inventoryBreakdown, isVoidStale,
       reconcileConsignmentMirrors, linkedShippingSummary,
       filterHistoryRows, historySearchIsActive, describeHistorySearch,
-      isWebsiteFulfilled,
+      isWebsiteFulfilled, IN_PERSON_CHANNELS,
       // The website link's parcel line reads every book; none here is from the website.
       websiteShipmentNote: () => null,
     },

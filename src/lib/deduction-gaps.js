@@ -28,9 +28,8 @@
 
 import { allCanonicalExpenses } from './expense-categories.js';
 import { roundCents } from './money.js';
-
-/** Channels that mean a sale happened face to face, where cash is likeliest. */
-const IN_PERSON_CHANNELS = ['POS', 'Fair', 'Event', 'In Person'];
+// Channels that mean a sale happened face to face, where cash is likeliest.
+import { IN_PERSON_CHANNELS } from './channel-mix.js';
 
 /** Below this, a gap is not worth interrupting anybody about. */
 export const MIN_GAP_AMOUNT = 5;

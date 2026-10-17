@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { channelMixRows } from '../src/lib/channel-mix.js';
+import { IN_PERSON_CHANNELS, channelMixRows } from '../src/lib/channel-mix.js';
+import { IN_PERSON_CHANNELS as MARKET_DAY_CHANNELS } from '../src/lib/market-day.js';
 
 // "Sales by channel" is the dashboard's answer to where the money comes from.
 // A wrong total or a mis-scaled bar would have the publisher push effort at the
@@ -118,5 +119,16 @@ describe('channelMixRows', () => {
       expect(totals.channels).toBe(0);
       expect(totals.leader).toBeNull();
     }
+  });
+});
+
+describe('IN_PERSON_CHANNELS', () => {
+  it('names the four channels the history badges as "In Person"', () => {
+    expect([...IN_PERSON_CHANNELS]).toEqual(['POS', 'Fair', 'Event', 'In Person']);
+    expect(Object.isFrozen(IN_PERSON_CHANNELS)).toBe(true);
+  });
+
+  it('is what the market-day summary builds on, plus Book Fair', () => {
+    expect([...MARKET_DAY_CHANNELS].sort()).toEqual(['Book Fair', ...IN_PERSON_CHANNELS].sort());
   });
 });
