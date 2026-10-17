@@ -21,7 +21,7 @@
 // browser. main.js owns the dialog, the rate fetching and the persistence.
 
 import { roundCents, normalizeCurrencyCode, CODE_TO_SYMBOL } from './money.js';
-import { keyRows } from './merge-state.js';
+import { keyRows, rowsByKey } from './merge-state.js';
 
 // Amounts that are NOT the book's native currency and must never be swept up in
 // a restatement:
@@ -261,9 +261,9 @@ export function planCurrencyChange({ state, book, from, to, rateFor, skip }) {
     changes.push({ field: f, rate, before, after: roundCents(before * rate) });
   }
 
-  const keys = keyRows('hist', state?.hist || []);
+  const byKey = rowsByKey('hist', state?.hist || []);
   const settlementLinks = (state?.artistPayouts || []).flatMap(p =>
-    !p.voided && p.settlement ? p.settlement.heldSales.map(link => ({ link, row: state.hist[keys.indexOf(link.key)] })) : []);
+    !p.voided && p.settlement ? p.settlement.heldSales.map(link => ({ link, row: byKey.get(link.key) })) : []);
   return {
     state, settlementLinks,
     from: fromCode,

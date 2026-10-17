@@ -120,6 +120,16 @@ export function keyRows(part, rows) {
   });
 }
 
+// The same keys as keyRows, indexed to their rows so a caller resolving many
+// stored keys (settlement links) does one lookup each instead of a scan of the
+// whole list. keyRows never repeats a key, so this matches keys.indexOf.
+export function rowsByKey(part, rows) {
+  const keys = keyRows(part, rows);
+  const map = new Map();
+  for (let i = 0; i < keys.length; i++) map.set(keys[i], rows[i]);
+  return map;
+}
+
 // A uid/id key names one specific row, so at most one can exist per side and
 // "present on both sides" means the same row. A content key only says "a row
 // that looks like this", so several may legitimately coexist and the sides have
