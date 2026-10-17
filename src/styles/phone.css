@@ -1171,6 +1171,29 @@
   #tab-history .approval-actions .appr-btn.reject { width: var(--target-min); }
 }
 
+/* ─── CUSTOMERS — buyer cards ─── */
+/* Phone only. Name leads with what they spent beside it; the email is its own
+   full-width row (a 44px tap, was a 14px-tall link); the list buttons share the
+   foot. The labels that stacked every value (Email / Spend / Action) go, since
+   the card's shape already says which is which. Scoped to #cust-body. */
+@media (max-width: 768px) {
+  #cust-body > tr.phone-record {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-1) var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    align-items: center;
+  }
+  #cust-body > tr.phone-record > td { border: 0 !important; }
+  #cust-body > tr.phone-record > td.phone-record-lead { display: contents !important; }
+  #cust-body > tr.phone-record > td.phone-record-lead > .phone-record-toggle { grid-column: 1 / -1 !important; grid-row: 4 !important; margin-top: var(--space-1); }
+  #cust-body > tr.phone-record > td::before { display: none; }
+  #cust-body > tr.phone-record > td[data-phone-label="Spend"] { grid-column: 2 !important; grid-row: 1 !important; text-align: right !important; font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 500; font-size: var(--text-md); }
+  #cust-body > tr.phone-record > td[data-phone-label="Email"] { grid-column: 1 / -1 !important; grid-row: 2 !important; }
+  #cust-body > tr.phone-record > td[data-phone-label="Email"] > a { display: flex; align-items: center; min-height: var(--target-min); font-size: var(--text-sm); }
+  #cust-body > tr.phone-record > td[data-phone-label="Action"] { grid-column: 1 / -1 !important; grid-row: 3 !important; }
+  #cust-body > tr.phone-record > td[data-phone-label="Action"] > div { display: grid !important; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: var(--space-2) !important; }
+}
+
 /* ─── EXPENSES (round 4) ─── */
 /* Phone only. Expense cards, the edit-expense select and the receipt picker.
    Scoped to #exp-body so the other record cards are untouched. */

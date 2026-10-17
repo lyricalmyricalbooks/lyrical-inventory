@@ -140,6 +140,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-14 | visual | Phone Dashboard — expenses owed to artist | Made each expense on a phone a compact card (description and amount on top, date beneath, tap anywhere for details) so the list is about a quarter shorter and the book's own dashboard comes into view sooner | pending |
 | 2026-10-15 | visual | Phone All Books overview | Put each book's cover beside its title instead of on a row of its own, so every book card on a phone is about a third shorter and the next book comes into view sooner | pending |
 | 2026-10-16 | visual | Phone Order History | Made the pencil beside each order number easy to tap (a 44px touch area around a slightly larger square, was a tiny 22px one) without making the cards taller, and stretched the Import button across the row | pending |
+| 2026-10-17 | visual | Phone Customers | Made each buyer a compact card: the name with what they spent beside it, the email a full-size tap (was a 14px-tall link), and the list buttons side by side, so each card is about a quarter shorter | pending |
 
 ---
 
