@@ -35,6 +35,9 @@ const SHARED_SENDER_DOMAINS = [
   'stripe.com', 'paypal.com', 'paypal.ca', 'squareup.com', 'square.com',
   'apple.com', 'itunes.com', 'shopify.com', 'shopifyemail.com', 'intuit.com',
   'wave.com', 'waveapps.com', 'interac.ca', 'payments.interac.ca',
+  // One address for a subscription and everything else the company sells:
+  // Prime and every Amazon order, Workspace and every Google Ads bill.
+  'amazon.ca', 'amazon.com', 'amazon.co.uk', 'google.com',
 ];
 
 /** How many learned addresses a subscription keeps. */
@@ -99,10 +102,13 @@ export function receiptIdentity(receipt = {}, sub = {}) {
   const names = [sub.vendor, sub.desc].filter(Boolean);
   let strength = '';
   if (names.some(name => vendorWithin(vendorText, name))) strength = 'name';
-  else {
+  else if (names.some(name => textSimilarity(vendorText, name) >= 0.5)) strength = 'similar';
+  else if (!tokens(vendorText).length) {
+    // Only with no vendor name to go on does the sending domain stand in for
+    // one: a receipt that names "Google Ads" is not "Google Workspace" just
+    // because both come from google.com.
     const brand = address && !isSharedSender(address) ? senderBrand(address) : '';
     if (brand.length >= 4 && names.some(name => squash(name).includes(brand))) strength = 'name';
-    else if (names.some(name => textSimilarity(vendorText, name) >= 0.5)) strength = 'similar';
   }
   // Once a subscription has learned where its receipts come from, a receipt
   // from some other address has to earn the match with its amount.
@@ -159,7 +165,7 @@ function postedLineFor(lines, charge) {
  * filing the receipt on its own is right. A charge that already has a receipt
  * is offered only as a likely second copy, when the amount is the same.
  */
-export function subscriptionCandidate(receipt = {}, sub = {}, expenses = []) {
+export function subscriptionCandidate(receipt = {}, sub = {}, expenses = [], { lines: ownLines = null } = {}) {
   const s = normalizeRecurring(sub);
   if (!s.id || !parseYmd(receipt.date)) return null;
   const identity = receiptIdentity(receipt, s);
@@ -168,7 +174,7 @@ export function subscriptionCandidate(receipt = {}, sub = {}, expenses = []) {
   const window = receiptWindowDays(s);
   const charges = chargesBetween(s, shiftDays(receipt.date, -window), shiftDays(receipt.date, window));
   if (!charges.length) return null;
-  const lines = subscriptionLines(s, expenses);
+  const lines = ownLines || subscriptionLines(s, expenses);
   const next = firstUnpostedCharge(s);
   const receiptCurrency = upper(receipt.currency);
   const receiptAmount = Number(receipt.amount);
@@ -309,6 +315,13 @@ export function priceChangeFrom(sub, date, amount) {
 export function findSubscriptionDoubles(subscriptions = [], expenses = []) {
   const subs = (subscriptions || []).map(normalizeRecurring).filter(s => s.id);
   if (!subs.length) return [];
+  // Each subscription's own lines, found once rather than once per expense
+  // scanned: this runs on every look at the review queue, over the whole ledger.
+  const linesBySub = new Map(subs.map(s => [s.id, subscriptionLines(s, expenses)]));
+  // A copy has a charge's exact amount, so only an expense at an amount one of
+  // a subscription's lines carries is worth matching against its schedule.
+  const moneyKey = (amount, currency) => `${upper(currency)}|${Math.round((Number(amount) || 0) * 100)}`;
+  const amountsBySub = new Map(subs.map(s => [s.id, new Set(linesBySub.get(s.id).map(l => moneyKey(l.amount, l.currency || s.currency)))]));
   const paired = new Set();
   const out = [];
   for (const e of expenses || []) {
@@ -319,8 +332,10 @@ export function findSubscriptionDoubles(subscriptions = [], expenses = []) {
       amount: e.origAmount ?? e.amount,
       currency: e.origCurrency || e.currency,
     };
+    const key = moneyKey(asReceipt.amount, asReceipt.currency);
     const best = subs
-      .map(sub => subscriptionCandidate(asReceipt, sub, expenses))
+      .filter(sub => amountsBySub.get(sub.id).has(key))
+      .map(sub => subscriptionCandidate(asReceipt, sub, expenses, { lines: linesBySub.get(sub.id) }))
       .filter(c => c && c.posted && c.line && c.amountMatches && c.identity === 'name' && !paired.has(c.line))
       .sort((a, b) => a.gapDays - b.gapDays)[0];
     if (!best) continue;
@@ -370,14 +385,16 @@ export function subscriptionMatchLine(result) {
   const name = m.sub.desc || 'subscription';
   if (result.ambiguous) {
     const names = result.candidates.map(c => c.sub.desc).filter(Boolean);
-    return { tone: 'warn', text: `Fits more than one subscription (${names.join(', ')}) — pick one in the Review inbox before filing` };
+    return { tone: 'warn', text: `Fits more than one subscription (${names.join(', ')}) — choose which below before filing` };
   }
   if (m.paused) return { tone: 'warn', text: `Your ${name} subscription is paused, but this says you were charged — files as its own expense` };
   if (m.covered) return { tone: 'info', text: `${chargePeriodName(m.charge.date)} of ${name} already has its receipt — skipped as a copy` };
-  const keeps = m.amountMatches ? '' : ' (keeps the subscription’s amount)';
+  if (!m.amountMatches) {
+    return { tone: 'warn', text: `Looks like ${chargePeriodName(m.charge.date)} of your ${name} subscription, but the amount differs — choose what it is below` };
+  }
   return m.posted
-    ? { tone: 'info', text: `Kept as proof for ${chargePeriodName(m.charge.date)} of ${name}, already counted on ${m.line.date}${keeps} — not added twice` }
-    : { tone: 'info', text: `Counts the next ${name} charge (due ${m.charge.date}) now, with this receipt as proof${keeps}` };
+    ? { tone: 'info', text: `Kept as proof for ${chargePeriodName(m.charge.date)} of ${name}, already counted on ${m.line.date} — not added twice` }
+    : { tone: 'info', text: `Counts the next ${name} charge on its due date, ${m.charge.date}, with this receipt as proof` };
 }
 
 /** "the 16th", for a day of the month. */

@@ -1225,6 +1225,7 @@ async function resumeReceiptImports() {
     await flushReceiptOutbox(state, {
       canSync: () => active() && uid === owner && navigator.onLine,
       expenses: deps.expenses, rate: deps.rate, commit: deps.commit, accept: deps.accept,
+      subscription: deps.subscription,
       save: persist, render,
       files: async email => {
         const output = [];

@@ -205,22 +205,35 @@ function processRecurringExpenses() {
 }
 
 /**
- * Count a subscription's next charge now, because its receipt arrived before
- * the day it was due — the phone bill emailed a week early. The line is dated
- * the day on the receipt and priced at `amount`, and the period is marked
- * posted so the subscription doesn't add it again on the due date.
+ * Post the subscription charges that are due on a fresh copy of the books.
+ * Reloading first matters when another device has posted (or counted early) a
+ * charge since this one last loaded: the auto-poster run on the stale copy
+ * would post that period a second time, and the save merge keeps both lines.
+ * Offline, the load keeps what is held and the posting still runs.
+ */
+async function refreshRecurringCharges() {
+  await loadTaxCenter();
+  processRecurringExpenses();
+}
+
+/**
+ * Count a subscription's next charge now, because its bill arrived before the
+ * day it is due — the phone bill emailed a week early. The line is priced at
+ * `amount` and dated on the charge's own due date, not the bill's: a January
+ * renewal invoiced in December belongs to January, and to January's tax year.
+ * The period is marked posted so the subscription doesn't add it again.
  *
  * Only the very next charge: counting a later one would mark the one before it
  * posted without ever posting it. Returns the new line, or null. The caller
  * saves.
  */
-function postSubscriptionChargeEarly(subId, monthKey, { date, amount }) {
+function postSubscriptionChargeEarly(subId, monthKey, { amount }) {
   const sub = _tcFindRecurring(subId);
   if (!sub || sub.paused) return null;
   const next = firstUnpostedCharge(sub);
-  if (!next || next.monthKey !== monthKey || !date) return null;
+  if (!next || next.monthKey !== monthKey) return null;
   if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
-  const line = _tcRecurringLine(sub, { ...next, date, amount: Number(amount) || next.amount });
+  const line = _tcRecurringLine(sub, { ...next, amount: Number(amount) || next.amount });
   TAX_CENTER.businessExpenses.unshift(line);
   sub.lastInjected = next.monthKey;
   return line;
@@ -5119,6 +5132,7 @@ export {
   openTaxSeasonPreflightModal,
   postSubscriptionChargeEarly,
   processRecurringExpenses,
+  refreshRecurringCharges,
   removeRecurring,
   removeRecurringRateChange,
   renderTaxCenter,

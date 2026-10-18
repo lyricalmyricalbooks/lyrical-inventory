@@ -15,6 +15,22 @@ export async function flushReceiptOutbox(state, deps) {
       }
       const source = state.emails[`${draft.account}:${draft.messageId}`];
       if (!source) throw new Error('Original email is missing. Scan this email again.');
+      // A receipt for a charge a subscription already counts is that charge's
+      // proof, not a second expense: kept with it, skipped as a copy, or held
+      // with a reason when only the owner can say what it is.
+      const subscription = deps.subscription ? await deps.subscription(draft, source) : null;
+      if (subscription?.kind === 'hold') throw new Error(subscription.message);
+      if (subscription?.kind === 'skip' || subscription?.kind === 'attach') {
+        if (subscription.kind === 'attach') {
+          const files = await deps.files(source);
+          if (!deps.canSync()) break;
+          await subscription.attach(files);
+        }
+        draft.status = 'imported'; draft.error = ''; draft.selected = false; draft.updatedAt = Date.now();
+        await deps.save();
+        deps.render();
+        continue;
+      }
       // The rate for the invoice's own date, not whatever it is the day it is filed.
       const rate = await deps.rate(draft.currency, draft.date);
       if (!Number.isFinite(rate) || rate <= 0) throw new Error('Waiting for a currency conversion rate');
