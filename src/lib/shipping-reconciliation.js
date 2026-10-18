@@ -210,9 +210,13 @@ export function enrichShippoExpense(expense, transaction = {}, shipment = {}, sh
   const shippoOrderNumber = normalizeShippingOrderNumber(shippoOrder.order_number);
   const sourceOrderNumber = metadataOrderNumber || shippoOrderNumber;
   const recipient = shipment.address_to || shippoOrder.to_address || {};
+  const trackingNumber = normalizeTrackingNumber(transaction.tracking_number || expense.trackingNumber);
   const source = {
     sourceOrderNumber,
     sourceOrderMethod: metadataOrderNumber ? 'metadata' : (shippoOrderNumber ? 'shippo-order' : ''),
+    // The parcel's own number: when the order isn't named, the order carrying
+    // this tracking number is the strongest match there is.
+    trackingNumber,
     recipientEmail: recipient.email || '',
     recipientName: recipient.name || '',
     recipientPostal: recipient.zip || '',
@@ -232,6 +236,7 @@ export function enrichShippoExpense(expense, transaction = {}, shipment = {}, sh
   };
   return {
     ...accountingFields,
+    ...(trackingNumber ? { trackingNumber } : {}),
     shippoTransactionId: String(transaction.object_id || '').trim(),
     shippoShipmentId: String(shipment.object_id || (typeof transaction.shipment === 'string' ? transaction.shipment : '') || '').trim(),
     shippoOrderId: String(shippoOrder.object_id || (typeof transaction.order === 'string' ? transaction.order : '') || '').trim(),

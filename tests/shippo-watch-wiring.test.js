@@ -161,7 +161,7 @@ describe('the import can run with no screen in front of it', () => {
     // The two settings stamps always differ from last time, so an unconditional
     // save would push the whole tax document to Firestore every few minutes
     // just to record that nothing happened.
-    expect(importSource).toContain('const changed = imported > 0 || enrichedCount > 0 || autoLinked > 0 || refundsAdded > 0;');
+    expect(importSource).toContain('const changed = imported > 0 || enrichedCount > 0 || autoLinked > 0 || refundsAdded > 0 || duplicatesRemoved > 0;');
     expect(importSource).toContain('if (!silent || changed) {');
     const saveIndex = importSource.indexOf('await saveTaxCenter();', importSource.indexOf('const changed ='));
     const guardIndex = importSource.indexOf('if (!silent || changed) {');

@@ -262,3 +262,124 @@ export function buildPostageExpense(entry = {}, { id = Date.now() } = {}) {
     trip: '',
   };
 }
+
+// ── One label, one cost ───────────────────────────────────────────────────
+//
+// The same parcel can reach the ledger by several roads at once: a label the
+// website bought through Shippo is polled from Shippo (`shippo:<transaction>`),
+// can show up on the Canada Post account the sweep reads, and can be described
+// again by an email (`postage:<tracking>`). Each road deduplicated only against
+// its own references, so one parcel became two postage costs — and with two
+// labels claiming one order, the automatic linker (rightly) linked neither.
+//
+// The tracking number is the one thing every road agrees on verbatim, so it is
+// what decides "same label" across all of them.
+
+/** Where a postage row came from. */
+export function postageRowSource(expense = {}) {
+  const ref = clean(expense && expense.ref);
+  if (ref.startsWith('shippo:')) return 'shippo';
+  if (ref.startsWith('chitchats:')) return 'chitchats';
+  // A Canada Post label bought in this app: the carrier's own price.
+  if (ref.startsWith('canadapost:')) return 'canadapost';
+  const source = clean(expense && expense.postageSource);
+  if (source) return source;
+  return ref.startsWith('postage') ? 'email' : '';
+}
+
+/**
+ * The tracking number a postage row is for, or ''. Older Shippo rows carry it
+ * only in their description ("Shippo shipping label #LE…CA").
+ */
+export function postageRowTracking(expense = {}) {
+  const e = expense || {};
+  const own = normalizeTrackingNumber(e.trackingNumber) || normalizeTrackingNumber(e.trackingPin);
+  if (own) return own;
+  const ref = clean(e.ref);
+  if (ref.startsWith('postage:')) return normalizeTrackingNumber(ref.slice('postage:'.length));
+  // (A `canadapost:` ref falls back to the shipment id when there is no PIN, so
+  // only its `trackingPin` field is read, above.)
+  if (ref.startsWith('shippo:')) {
+    const fromDesc = clean(e.desc).match(/#\s*([A-Za-z0-9 ]{8,40})\s*$/);
+    if (fromDesc) return normalizeTrackingNumber(fromDesc[1]);
+  }
+  return '';
+}
+
+const SWEPT_PREFIXES = ['shippo:', 'postage:', 'postage-', 'chitchats:', 'canadapost:'];
+
+/** A postage row a sweep filed (not a refund credit, not a hand-typed expense). */
+function isSweptPostage(expense) {
+  const ref = clean(expense && expense.ref);
+  return !!expense && !expense.simulated && SWEPT_PREFIXES.some(p => ref.startsWith(p));
+}
+
+/** Tracking number → the postage row already filed for it. */
+export function postageTrackingIndex(expenses = []) {
+  const index = new Map();
+  (expenses || []).forEach(expense => {
+    if (!isSweptPostage(expense)) return;
+    const tracking = postageRowTracking(expense);
+    if (tracking && !index.has(tracking)) index.set(tracking, expense);
+  });
+  return index;
+}
+
+// Read off a document (an email, a photographed receipt): the weakest record,
+// and the one that gives way when a carrier or Shippo record of the same label
+// exists.
+const READ_SOURCES = new Set(['email', 'receipt']);
+
+/**
+ * The rows that are a second copy of a label already in the ledger.
+ *
+ * Only a copy read off a document is ever dropped, and only when another row
+ * has the same tracking number: Shippo's and Canada Post's own records are the
+ * money of record and are never removed here. When two documents describe the
+ * same label and nothing better exists, the first one filed is kept.
+ *
+ * Returns `[{ keep, drop }]`; nothing is changed.
+ */
+export function duplicatePostageRows(expenses = []) {
+  const groups = new Map();
+  (expenses || []).forEach(expense => {
+    if (!isSweptPostage(expense)) return;
+    const tracking = postageRowTracking(expense);
+    if (!tracking) return;
+    if (!groups.has(tracking)) groups.set(tracking, []);
+    groups.get(tracking).push(expense);
+  });
+  const out = [];
+  groups.forEach(rows => {
+    if (rows.length < 2) return;
+    const records = rows.filter(r => !READ_SOURCES.has(postageRowSource(r)));
+    const read = rows.filter(r => READ_SOURCES.has(postageRowSource(r)));
+    if (!read.length) return; // two carrier records: left for the owner, never guessed
+    const keep = records[0] || read[0];
+    read.filter(r => r !== keep).forEach(drop => out.push({ keep, drop }));
+  });
+  return out;
+}
+
+/**
+ * Fold a dropped copy into the row that stays: its link to an order (when the
+ * kept row has none) and its receipt (when the kept row has none). Mutates
+ * `keep`; returns it.
+ */
+export function absorbDuplicatePostage(keep, drop) {
+  if (!keep || !drop) return keep;
+  const keepLinked = keep.shippingMatchStatus === 'matched' || keep.shippingMatchStatus === 'dismissed';
+  if (!keepLinked && drop.shippingMatchStatus === 'matched' && clean(drop.shippingOrderNumber)) {
+    keep.shippingOrderNumber = drop.shippingOrderNumber;
+    keep.shippingMatchMethod = drop.shippingMatchMethod || 'tracking';
+    keep.shippingMatchStatus = 'matched';
+    delete keep.shippingSuggestedOrderNumber;
+    delete keep.shippingCandidateOrderNumbers;
+  }
+  if (!clean(keep.receipt) && clean(drop.receipt)) keep.receipt = drop.receipt;
+  if (!normalizeTrackingNumber(keep.trackingNumber)) {
+    const tracking = postageRowTracking(keep) || postageRowTracking(drop);
+    if (tracking) keep.trackingNumber = tracking;
+  }
+  return keep;
+}

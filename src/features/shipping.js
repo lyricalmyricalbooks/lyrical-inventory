@@ -235,12 +235,16 @@ import {
   resolveShipmentReceiptEndpoint,
 } from '../lib/canadapost-endpoints.js';
 import {
+  absorbDuplicatePostage,
   buildPostageExpense,
+  duplicatePostageRows,
   mergePostageCandidates,
   needsAmount,
   normalizeCanadaPostShipment,
   normalizeShippingEmail,
   postageCandidateRef,
+  postageRowSource,
+  postageTrackingIndex,
 } from '../lib/postage-intake.js';
 import { parseShippingEmail, shippingEmailQuery, trackingEmailQuery } from '../lib/shipping-email.js';
 import {
@@ -925,6 +929,29 @@ function knownImportedPostageRefs() {
   ].filter(Boolean));
 }
 
+/**
+ * Remove second copies of a label (same tracking number, filed again from an
+ * email or receipt) and fold their order link and receipt into the row that
+ * stays. Returns how many were removed. The removed refs are remembered so a
+ * later sweep doesn't file them again.
+ */
+function dropDuplicatePostage() {
+  const list = TAX_CENTER.businessExpenses || [];
+  const pairs = duplicatePostageRows(list);
+  if (!pairs.length) return 0;
+  const dropped = new Set();
+  pairs.forEach(({ keep, drop }) => {
+    absorbDuplicatePostage(keep, drop);
+    dropped.add(drop);
+  });
+  TAX_CENTER.businessExpenses = list.filter(expense => !dropped.has(expense));
+  TAX_CENTER.discardedPostageRefs = [...new Set([
+    ...(TAX_CENTER.discardedPostageRefs || []),
+    ...[...dropped].map(expense => cpText(expense.ref)).filter(Boolean),
+  ])];
+  return dropped.size;
+}
+
 async function discardImportedPostageExpense(ref) {
   const expense = (TAX_CENTER.businessExpenses || []).find(item =>
     String(item.ref) === String(ref) && needsAmountAttention(item));
@@ -1335,6 +1362,9 @@ async function processShippoTxToExpense(tx, token, txId, ref, importedCount, con
     supportingFiles: label ? [label] : [],
     invoiceId: invoiceItem?.invoiceId || '',
     trackingUrl: tx.tracking_url_provider || '',
+    // The parcel's identity across every road postage arrives by (emails, the
+    // Canada Post sweep): without it the same label was filed twice.
+    trackingNumber: normalizeTrackingNumber(tx.tracking_number),
     trip: '',
   };
   return enrichShippoExpense(expense, tx, context.shipment, context.shippoOrder, knownOrders);
@@ -1597,6 +1627,8 @@ async function sweepCanadaPostShipments({ force = false, pins = [] } = {}) {
       cpShipmentIdsFrom(one).forEach(id => { if (!ids.includes(id)) ids.push(id); });
     }
     const known = knownImportedPostageRefs();
+    // A label already filed under another road (a Shippo label on this account).
+    const tracked = postageTrackingIndex(TAX_CENTER.businessExpenses || []);
     const knownOrders = getShippingReconciliationOrders();
 
     let filed = 0;
@@ -1612,7 +1644,7 @@ async function sweepCanadaPostShipments({ force = false, pins = [] } = {}) {
       // shipment already in the ledger costs one read rather than three.
       const details = await cpRead(resolveShipmentDetailsEndpoint(args), credentials, isTest);
       let candidate = normalizeCanadaPostShipment({ shipmentId }, details, {}, {});
-      if (!candidate.trackingNumber || known.has(postageCandidateRef(candidate))) continue;
+      if (!candidate.trackingNumber || known.has(postageCandidateRef(candidate)) || tracked.has(candidate.trackingNumber)) continue;
 
       const receipt = await cpRead(resolveShipmentReceiptEndpoint(args), credentials, isTest)
         .catch(() => null);
@@ -1625,7 +1657,7 @@ async function sweepCanadaPostShipments({ force = false, pins = [] } = {}) {
       );
 
       const ref = postageCandidateRef(candidate);
-      if (!ref || known.has(ref) || TAX_CENTER.discardedPostageRefs?.includes(ref)) continue;
+      if (!ref || known.has(ref) || TAX_CENTER.discardedPostageRefs?.includes(ref) || tracked.has(candidate.trackingNumber)) continue;
       known.add(ref);
       if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
 
@@ -1966,6 +1998,9 @@ async function sweepShippingEmails({ force = false, pins = [] } = {}) {
 
     const bodies = await gmailJson('getEmailContents', `ids=${encodeURIComponent(ids.join(','))}`);
     const known = knownImportedPostageRefs();
+    // The website's Shippo labels are already in the ledger as `shippo:` rows:
+    // an email about the same parcel is the same cost, not a second one.
+    const tracked = postageTrackingIndex(TAX_CENTER.businessExpenses || []);
     const knownOrders = getShippingReconciliationOrders();
 
     let filed = 0;
@@ -1986,7 +2021,7 @@ async function sweepShippingEmails({ force = false, pins = [] } = {}) {
 
       const candidate = normalizeShippingEmail(parsed, { messageId: email.id });
       const ref = postageCandidateRef(candidate);
-      if (!ref || known.has(ref)) return;
+      if (!ref || known.has(ref) || tracked.has(candidate.trackingNumber)) return;
       known.add(ref);
 
       const expense = buildPostageExpense(candidate);
@@ -2681,6 +2716,8 @@ async function importShippoShippingFromApi({
   const pendingExpenses = [];
   const stagedExistingEnrichments = [];
   const knownOrders = getShippingReconciliationOrders();
+  // Labels already filed by another road, by tracking number.
+  const trackedPostage = postageTrackingIndex(TAX_CENTER.businessExpenses || []);
   let enrichedCount = 0;
   let contextFailureCount = 0;
 
@@ -2733,6 +2770,14 @@ async function importShippoShippingFromApi({
           fetchedIds.add(txId);
 
           const existingExpense = existingExpensesByRef.get(ref);
+          // The Canada Post sweep already filed this parcel from the carrier's own
+          // record: that is the cost of record, so Shippo's copy isn't a second one.
+          // (A copy read off an email gives way to this label instead, below.)
+          const sameLabel = !existingExpense && trackedPostage.get(normalizeTrackingNumber(tx.tracking_number));
+          if (sameLabel && postageRowSource(sameLabel) === 'canadapost') {
+            result.alreadyImported = true;
+            return result;
+          }
           // A dismissed label was set aside on purpose (hand sale, personal parcel):
           // re-enriching it would wipe that and could auto-link it to an order.
           if (existingExpense && (existingExpense.shippingMatchStatus === 'matched' || existingExpense.shippingMatchStatus === 'dismissed')) {
@@ -2850,6 +2895,10 @@ async function importShippoShippingFromApi({
 
     applyShippoExpenseEnrichments(stagedExistingEnrichments);
     if (pendingExpenses.length > 0) TAX_CENTER.businessExpenses.unshift(...pendingExpenses.reverse());
+    // An email or receipt that described one of these labels was filed as its
+    // own cost; it gives way to the Shippo record (its order link carried over),
+    // which also lets the label below link to its order on its own.
+    const duplicatesRemoved = dropDuplicatePostage();
 
     // Link what is exact enough to link without asking. Runs over the whole
     // ledger rather than just this batch, because the guard that matters —
@@ -2870,7 +2919,7 @@ async function importShippoShippingFromApi({
     // that nothing had happened, costing quota, battery and sync churn for no
     // information. The manual sweep still always stamps, because a publisher who
     // pressed the button is owed a "last synced" time either way.
-    const changed = imported > 0 || enrichedCount > 0 || autoLinked > 0 || refundsAdded > 0;
+    const changed = imported > 0 || enrichedCount > 0 || autoLinked > 0 || refundsAdded > 0 || duplicatesRemoved > 0;
     if (!silent || changed) {
       TAX_CENTER.settings.shippoImportedObjectIds = Array.from(importedIds).slice(-10000);
       TAX_CENTER.settings.shippoLastImportAt = new Date().toISOString();
@@ -2886,7 +2935,8 @@ async function importShippoShippingFromApi({
     const invoiceNote = invoiceResult.unavailable
       ? ` ${invoiceResult.unavailable}`
       : (invoiceResult.count ? ` Matched ${invoiceResult.count} invoice line${invoiceResult.count === 1 ? '' : 's'}.` : '');
-    const reconciliationNote = `${enrichNote}${contextNote}${refundNote}${invoiceNote}`;
+    const duplicateNote = duplicatesRemoved ? ` ${duplicatesRemoved} label${duplicatesRemoved === 1 ? ' was' : 's were'} counted twice (also filed from an email) — the extra cost${duplicatesRemoved === 1 ? '' : 's'} removed.` : '';
+    const reconciliationNote = `${enrichNote}${contextNote}${refundNote}${duplicateNote}${invoiceNote}`;
     if (statusEl) statusEl.textContent = imported
       ? `Imported ${imported} new Shippo transactions.${dupNote}${skipped ? ` ${skipped} skipped.` : ''}${totalUsd ? ` USD imported: ${totalUsd.toFixed(2)}.` : ''}${reconciliationNote}`
       : `No new Shippo transactions to import.${dupNote}${skipped ? ` ${skipped} skipped.` : ''}${reconciliationNote}`;
