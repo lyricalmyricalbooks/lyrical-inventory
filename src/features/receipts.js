@@ -900,7 +900,7 @@ function _localReceiptCell(item) {
       : `<span style="color:var(--text3);" title="This receipt reference cannot be opened">${label}</span>`;
   });
   if (shippoRow && !hasShippoReceipt) {
-    cells.push(`<a href="#" title="Look up the Shippo invoice that paid for this label and attach it" onclick="event.preventDefault(); findShippoReceipts(this)" style="color:var(--gold3);text-decoration:underline;">Find receipt</a>`);
+    cells.push(`<a href="#" data-ref="${escapeHtml(String(item.ref))}" title="Look up the Shippo invoice that paid for this label and attach it" onclick="event.preventDefault(); findShippoReceipts(this)" style="color:var(--gold3);text-decoration:underline;">Find receipt</a>`);
   }
   return cells.join(' · ');
 }

@@ -179,10 +179,10 @@ import {
   describeInvoiceAvailability,
   invoiceIndexByTransaction,
   isSettledRefund,
-  parseInvoice,
   parseInvoiceItem,
   parseRefund,
   parseShippoReceiptEmail,
+  shippoInvoicePageUrl,
   shippoTxIdFromRef,
 } from '../lib/shippo-invoices.js';
 import {
@@ -701,7 +701,10 @@ async function fetchShippoInvoiceItems(token) {
   let page = 1;
   try {
     while (page <= 50) {
-      const resp = await fetch(`https://api.goshippo.com/invoices/items/?page=${page}&results=100`, {
+      // Documented path is /invoice-items. The app used to ask for
+      // /invoices/items/, which does not exist, so every lookup came back
+      // "unavailable" and Find receipt never reached Shippo's own records.
+      const resp = await fetch(`https://api.goshippo.com/invoice-items?page=${page}&results=100`, {
         headers: { Authorization: `ShippoToken ${token}`, 'Content-Type': 'application/json' },
       });
       if (!resp.ok) {
@@ -718,29 +721,6 @@ async function fetchShippoInvoiceItems(token) {
     return { index: new Map(), unavailable: describeInvoiceAvailability(0), status: 0 };
   }
   return { index: invoiceIndexByTransaction(items), unavailable: '', status: 200, count: items.length };
-}
-
-/** Every Shippo invoice, keyed by id — the documents that carry a download link. */
-async function fetchShippoInvoices(token) {
-  const byId = new Map();
-  let page = 1;
-  try {
-    while (page <= 50) {
-      const resp = await fetch(`https://api.goshippo.com/invoices/?page=${page}&results=100`, {
-        headers: { Authorization: `ShippoToken ${token}`, 'Content-Type': 'application/json' },
-      });
-      if (!resp.ok) return { byId, unavailable: describeInvoiceAvailability(resp.status) };
-      const json = await resp.json();
-      const rows = Array.isArray(json?.results) ? json.results : [];
-      rows.forEach(r => { const inv = parseInvoice(r); if (inv) byId.set(inv.id, inv); });
-      if (!json?.next || !rows.length) break;
-      page++;
-    }
-  } catch (e) {
-    console.warn('Shippo invoices unavailable', e);
-    return { byId, unavailable: describeInvoiceAvailability(0) };
-  }
-  return { byId, unavailable: '' };
 }
 
 /** Every "Your Shippo Invoice Receipt" email from the last ~13 months, parsed. */
@@ -760,34 +740,76 @@ async function fetchShippoReceiptEmails() {
 }
 
 /**
+ * When each unreceipted label was bought, read back from Shippo.
+ *
+ * Emailed receipts are matched to labels by purchase time, and expenses
+ * imported before that time was kept only have a day. Returns how many
+ * expenses gained a time, so the caller knows there is something to save.
+ */
+async function backfillLabelPurchaseTimes(token, expenses) {
+  const missing = (expenses || []).filter(e => shippoTxIdFromRef(e?.ref) && !e.invoiceId && !e.labelCreatedAt);
+  let filled = 0;
+  for (let i = 0; i < missing.length; i += 5) {
+    await Promise.all(missing.slice(i, i + 5).map(async e => {
+      try {
+        const tx = await fetchShippoObject(token, 'transactions', shippoTxIdFromRef(e.ref));
+        if (tx?.object_created) { e.labelCreatedAt = tx.object_created; filled++; }
+      } catch (err) {
+        console.warn('Could not read when a Shippo label was bought', err);
+      }
+    }));
+  }
+  return filled;
+}
+
+/**
  * "Find the real receipts" for postage: attach each label's Shippo invoice as
- * the receipt of record, keeping the label behind it. Runs from the Receipts
- * card's "Shipping label only" notice; best-effort because the endpoint is beta.
+ * the receipt of record, keeping the label behind it. Asks Shippo's invoice
+ * records first, then Shippo's receipt emails. Runs from the Receipts card's
+ * "Shipping label only" notice and from a single row's "Find receipt" link,
+ * which carries that row's ref so the answer can be about that row.
  */
 async function findShippoReceipts(btn) {
   const token = (TAX_CENTER.settings?.shippoKey || '').trim();
   if (!token) { showToast('Connect Shippo in Settings first, then try again.', 'warn'); return; }
   if (!navigator.onLine) { showToast('You’re offline — connect to the internet to fetch Shippo receipts.', 'warn'); return; }
+  // The row link is an <a>, which `disabled` doesn't stop, so guard a second click here.
+  if (btn?.dataset?.busy) return;
   const label = btn?.textContent;
-  if (btn) { btn.disabled = true; btn.textContent = 'Looking up Shippo receipts…'; }
+  if (btn) { btn.disabled = true; btn.dataset.busy = '1'; btn.textContent = 'Looking up Shippo receipts…'; }
+  const expenses = TAX_CENTER.businessExpenses || [];
+  const rowRef = btn?.dataset?.ref || '';
+  const row = rowRef ? expenses.find(e => e?.ref === rowRef) : null;
   try {
-    const [items, invoices] = await Promise.all([fetchShippoInvoiceItems(token), fetchShippoInvoices(token)]);
-    const unavailable = items.unavailable || invoices.unavailable;
-    const { changed, noInvoice } = attachInvoiceReceipts(TAX_CENTER.businessExpenses || [], items.index, invoices.byId);
+    const items = await fetchShippoInvoiceItems(token);
+    const unavailable = items.unavailable;
+    const { changed, noInvoice } = attachInvoiceReceipts(expenses, items.index);
+    let timesFilled = 0;
     // Shippo emails a receipt for every payment, so when its invoice list can't
     // be read (or hasn't caught up), the emails fill the gap.
     if ((unavailable || noInvoice) && sheetsUrl) {
       if (btn) btn.textContent = 'Checking your email for Shippo receipts…';
       try {
-        const fromEmail = attachEmailReceipts(TAX_CENTER.businessExpenses || [], await fetchShippoReceiptEmails());
+        timesFilled = await backfillLabelPurchaseTimes(token, expenses);
+        const fromEmail = attachEmailReceipts(expenses, await fetchShippoReceiptEmails());
         changed.push(...fromEmail.changed);
       } catch (e) {
         console.warn('Shippo receipt emails unavailable', e);
       }
     }
-    if (changed.length) {
+    if (changed.length || timesFilled) {
       await saveTaxCenter({ rethrow: true });
       renderTaxCenter();
+    }
+    if (row && changed.includes(row)) {
+      showToast(changed.length === 1
+        ? '✓ Found the Shippo receipt for this label and attached it.'
+        : `✓ Found the Shippo receipt for this label, and ${changed.length - 1} other${changed.length === 2 ? '' : 's'}.`);
+    } else if (row && !unavailable) {
+      showToast(sheetsUrl
+        ? 'Couldn’t find Shippo’s receipt for this label yet. Shippo emails one when it charges you — try again once it’s in your inbox.'
+        : 'Shippo hasn’t listed a receipt for this label yet. Connect your Google Sheet in Settings so the app can also read the receipt Shippo emails you.', 'warn', 7000);
+    } else if (changed.length) {
       showToast(`✓ Attached the Shippo receipt to ${changed.length} postage expense${changed.length === 1 ? '' : 's'}.`);
     } else if (unavailable) {
       showToast(sheetsUrl
@@ -795,14 +817,15 @@ async function findShippoReceipts(btn) {
         : `${unavailable} Connect your Google Sheet in Settings and the app can read Shippo's receipt emails instead.`, 'warn');
     } else {
       showToast(noInvoice
-        ? `Shippo hasn’t issued a receipt yet for ${noInvoice} label${noInvoice === 1 ? '' : 's'} — it bills weekly, so try again later.`
+        ? `Shippo hasn’t issued a receipt yet for ${noInvoice} label${noInvoice === 1 ? '' : 's'} — try again once Shippo has charged you for ${noInvoice === 1 ? 'it' : 'them'}.`
         : 'Every postage expense already has its Shippo receipt.');
     }
   } catch (e) {
     console.warn('Finding Shippo receipts failed', e);
     showToast('Couldn’t save the Shippo receipts — nothing was changed. Try again.', 'error');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = label; }
+    // The re-render may already have replaced the link; restoring a detached one is harmless.
+    if (btn) { btn.disabled = false; delete btn.dataset.busy; btn.textContent = label; }
   }
 }
 
@@ -1316,6 +1339,7 @@ async function processShippoTxToExpense(tx, token, txId, ref, importedCount, con
   // what proves the money left the account, so when we know which invoice
   // billed this label, that reference goes first and the label follows.
   const invoiceItem = invoiceIndex ? invoiceIndex.get(txId) : null;
+  const invoiceUrl = shippoInvoicePageUrl(invoiceItem?.invoiceId);
 
   const expense = {
     id: Date.now() + importedCount + 1,
@@ -1330,10 +1354,13 @@ async function processShippoTxToExpense(tx, token, txId, ref, importedCount, con
     fxMissing,
     date,
     ref,
-    receipt: label,
+    receipt: invoiceUrl || label,
+    ...(invoiceUrl ? { receiptFiles: label ? [invoiceUrl, label] : [invoiceUrl] } : {}),
     // Kept separate so the ledger can show what each document actually is.
     supportingFiles: label ? [label] : [],
     invoiceId: invoiceItem?.invoiceId || '',
+    // To the second, so the receipt Shippo emails moments later can be matched to it.
+    labelCreatedAt: tx.object_created || '',
     trackingUrl: tx.tracking_url_provider || '',
     trip: '',
   };
