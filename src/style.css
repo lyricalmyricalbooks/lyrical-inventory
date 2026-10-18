@@ -5058,7 +5058,14 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .pill.ch-top{font-size:8px;padding:0 5px;line-height:1.5;}
 
 @media(max-width:640px){
-  .ch-book-grid{grid-template-columns:1fr;}
+  .ch-book-grid{grid-template-columns:1fr;gap:var(--space-4);}
+  /* Upright phone: the title is the entry point of each card. It was regular-weight
+     body type, so the channel names under it (600) outweighed it and the stack
+     of near-identical cards had no landmarks. Inked outline + hard shadow match
+     the other phone cards; the title steps up to the display face. */
+  .ch-book-card{border:var(--stroke) solid var(--rule-ink);box-shadow:var(--elev-3);}
+  .ch-book-head{align-items:center;padding-bottom:var(--space-2);border-bottom:var(--stroke-hair) solid var(--border2);}
+  .ch-book-title{font-family:var(--font-display);font-size:var(--text-xl);font-weight:400;letter-spacing:.01em;text-transform:uppercase;line-height:1.1;min-width:0;overflow-wrap:anywhere;}
   .ch-panel{padding:14px;}
   .ch-summary{gap:14px;}
   .ch-summary-stats{gap:18px;}
