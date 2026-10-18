@@ -52,6 +52,15 @@ import {
 } from './receipts.js';
 import { openM, closeM, confirmDialog } from '../lib/modal.js';
 import { renderShippingReconciliationWorklist } from './shipping.js';
+import { openReviewInbox } from './review-inbox.js';
+import { doubleKey } from '../lib/review-queue.js';
+import {
+  findSubscriptionDoubles,
+  hasReceiptProof,
+  ordinalDay,
+  receiptDayHint,
+  subscriptionLines,
+} from '../lib/subscription-receipts.js';
 import { escapeHtml } from '../lib/html.js';
 import { localDayPlus } from '../lib/calendar-day.js';
 import { csvRow, toCsv } from '../lib/csv.js';
@@ -79,6 +88,7 @@ import {
   RECURRING_FREQUENCIES,
   amountOnDate,
   currentAmount,
+  firstUnpostedCharge,
   frequencyLabel,
   frequencyMonths,
   frequencySuffix,
@@ -131,6 +141,45 @@ function _tcFindRecurring(id) {
   return (TAX_CENTER.recurring || []).find(s => String(s.id) === String(id)) || null;
 }
 
+/**
+ * The ledger line for one subscription charge. `recurringPeriod` names the
+ * billing period it pays for, so a receipt can find it even when the line's
+ * date isn't the schedule's (a charge counted early, on its receipt's date).
+ */
+function _tcRecurringLine(sub, charge) {
+  const origCur = sub.currency || 'CAD';
+  // The charge's own date's rate, else today's. With neither, the charge is
+  // flagged and healExpenseRates fills it in online — not booked 1:1.
+  let fxRate = datedCadRate(origCur, charge.date, _fxRateCache);
+  // Today's rate is a fair stand-in only for a charge dated today. A back-
+  // charge (a subscription that began months ago, or the app was closed for
+  // a while) valued at today's rate would be permanent — the rate healer
+  // only revisits expenses flagged as missing one — so a past charge
+  // without its own date's rate is flagged and healed with the historical
+  // rate once online, exactly like an expense logged offline.
+  if (fxRate.estimated && !fxRate.missing && String(charge.date || '') < today()) {
+    fxRate = { rate: 1, estimated: true, missing: true };
+  }
+  const chargeAmount = Number(charge.amount) || 0;
+  const baseAmount = fxRate.missing ? null : roundCents(chargeAmount * fxRate.rate);
+
+  return {
+    id: Date.now() + Math.random(),
+    desc: sub.desc + ' (Recurring)',
+    cat: sub.cat,
+    currency: origCur,
+    amount: chargeAmount,
+    fxRate: fxRate.missing ? null : fxRate.rate,
+    baseAmount: baseAmount,
+    ...(fxRate.missing ? { fxMissing: true } : {}),
+    date: charge.date,
+    ref: 'Auto-Injected',
+    recurringId: sub.id || '',
+    recurringPeriod: charge.monthKey || '',
+    receipt: ''
+  };
+}
+
 function processRecurringExpenses() {
   if (isAuthor() || !TAX_CENTER.recurring || TAX_CENTER.recurring.length === 0) return;
   const now = new Date();
@@ -143,37 +192,7 @@ function processRecurringExpenses() {
     // a rent increase posts the old rate for the old months.
     recurringDueCharges(sub, now).forEach(charge => {
       if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
-      const origCur = sub.currency || 'CAD';
-      // The charge's own date's rate, else today's. With neither, the charge is
-      // flagged and healExpenseRates fills it in online — not booked 1:1.
-      let fxRate = datedCadRate(origCur, charge.date, _fxRateCache);
-      // Today's rate is a fair stand-in only for a charge dated today. A back-
-      // charge (a subscription that began months ago, or the app was closed for
-      // a while) valued at today's rate would be permanent — the rate healer
-      // only revisits expenses flagged as missing one — so a past charge
-      // without its own date's rate is flagged and healed with the historical
-      // rate once online, exactly like an expense logged offline.
-      if (fxRate.estimated && !fxRate.missing && String(charge.date || '') < today()) {
-        fxRate = { rate: 1, estimated: true, missing: true };
-      }
-      const chargeAmount = Number(charge.amount) || 0;
-      const baseAmount = fxRate.missing ? null : roundCents(chargeAmount * fxRate.rate);
-
-      TAX_CENTER.businessExpenses.unshift({
-        id: Date.now() + Math.random(),
-        desc: sub.desc + ' (Recurring)',
-        cat: sub.cat,
-        currency: origCur,
-        amount: chargeAmount,
-        fxRate: fxRate.missing ? null : fxRate.rate,
-        baseAmount: baseAmount,
-        ...(fxRate.missing ? { fxMissing: true } : {}),
-        date: charge.date,
-        ref: 'Auto-Injected',
-        recurringId: sub.id || '',
-        receipt: ''
-      });
-
+      TAX_CENTER.businessExpenses.unshift(_tcRecurringLine(sub, charge));
       sub.lastInjected = charge.monthKey;
       modified = true;
     });
@@ -183,6 +202,28 @@ function processRecurringExpenses() {
     saveTaxCenter();
     renderTaxCenter();
   }
+}
+
+/**
+ * Count a subscription's next charge now, because its receipt arrived before
+ * the day it was due — the phone bill emailed a week early. The line is dated
+ * the day on the receipt and priced at `amount`, and the period is marked
+ * posted so the subscription doesn't add it again on the due date.
+ *
+ * Only the very next charge: counting a later one would mark the one before it
+ * posted without ever posting it. Returns the new line, or null. The caller
+ * saves.
+ */
+function postSubscriptionChargeEarly(subId, monthKey, { date, amount }) {
+  const sub = _tcFindRecurring(subId);
+  if (!sub || sub.paused) return null;
+  const next = firstUnpostedCharge(sub);
+  if (!next || next.monthKey !== monthKey || !date) return null;
+  if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
+  const line = _tcRecurringLine(sub, { ...next, date, amount: Number(amount) || next.amount });
+  TAX_CENTER.businessExpenses.unshift(line);
+  sub.lastInjected = next.monthKey;
+  return line;
 }
 
 function tcExpenseRowDragOver(e, row) {
@@ -615,10 +656,27 @@ function _tcRecurringRowHtml(raw, now, baseCurrency) {
         ? `<span class="rec-dim">Ended ${escapeHtml(s.endDate || '')}</span>`
         : '<span class="rec-dim">—</span>';
 
-  const charges = _tcRecurringChargeCount(s);
+  const lines = subscriptionLines(s, TAX_CENTER.businessExpenses || []);
+  const charges = lines.length;
+  // How many of those charges have their receipt — the proof the tax return
+  // leans on. Receipts the vendor emails are kept on the charge they pay for.
+  const proven = lines.filter(hasReceiptProof).length;
+  const proofNote = charges
+    ? `<span class="rec-dim" title="Receipts kept with this subscription’s charges">· ${proven === charges ? `all ${charges}` : proven || 'none'} with ${proven === 1 && charges !== 1 ? 'a receipt' : 'receipts'}</span>`
+    : '';
   const chargeLink = charges
-    ? `<button type="button" class="rec-charge-link" onclick="tcShowRecurringCharges('${escapeHtml(s.id)}')" title="Show these ${charges} posted charges in the ledger below">${charges} charge${charges === 1 ? '' : 's'} logged →</button>`
+    ? `<button type="button" class="rec-charge-link" onclick="tcShowRecurringCharges('${escapeHtml(s.id)}')" title="Show these ${charges} posted charges in the ledger below">${charges} charge${charges === 1 ? '' : 's'} logged →</button> ${proofNote}`
     : '<span class="rec-dim">Nothing posted yet</span>';
+
+  // When the vendor's receipts keep landing later in the month than the
+  // subscription posts, offer to move the charge day to match.
+  const dayHint = receiptDayHint(s, TAX_CENTER.businessExpenses || []);
+  const dayHintHtml = dayHint
+    ? `<div class="rec-meta rec-day-hint">Its last two receipts are dated ${escapeHtml(ordinalDay(dayHint.day))}.
+<button type="button" class="rec-charge-link" onclick="tcMoveRecurringDay('${escapeHtml(s.id)}', ${dayHint.day})"
+           title="From ${escapeHtml(dayHint.nextDate)} on. Charges already posted keep their dates.">Charge on ${escapeHtml(ordinalDay(dayHint.day))} →</button> · <button type="button" class="rec-charge-link" onclick="tcKeepRecurringDay('${escapeHtml(s.id)}', ${dayHint.day})">Keep as is</button>
+       </div>`
+    : '';
 
   const subline = [s.vendor, s.cat].filter(Boolean).map(escapeHtml).join(' · ');
 
@@ -628,6 +686,7 @@ function _tcRecurringRowHtml(raw, now, baseCurrency) {
         <div class="rec-name">${escapeHtml(s.desc || 'Untitled')}</div>
         <div class="rec-meta">${subline}</div>
         <div class="rec-meta">${chargeLink}</div>
+        ${dayHintHtml}
         ${s.notes ? `<div class="rec-note">${escapeHtml(s.notes)}</div>` : ''}
       </td>
       <td><span class="pill gray">${escapeHtml(frequencyLabel(s.frequency))}</span>
@@ -696,6 +755,72 @@ function _tcRenderRecurringSummary(subs, summary, baseCurrency) {
     </div>`;
 }
 
+let _tcDoublesNoteClosed = false;
+
+/**
+ * A note above the subscriptions when a receipt was filed on its own for a
+ * charge a subscription already counts, so that cost is in the books twice.
+ * The pairs themselves are settled one at a time in the Review inbox.
+ */
+function _tcRenderSubscriptionDoublesNote(subs) {
+  const el = $('tc-recurring-doubles');
+  if (!el) return;
+  const doubles = subs.length && !_tcDoublesNoteClosed ? findSubscriptionDoubles(subs, TAX_CENTER.businessExpenses || []) : [];
+  if (!doubles.length) { el.hidden = true; el.innerHTML = ''; return; }
+  const n = doubles.length;
+  el.innerHTML = `<div class="rec-alert-inner">
+      <span class="rec-alert-icon" aria-hidden="true">📑</span>
+      <div class="rec-alert-text"><strong>${n === 1 ? 'One cost looks' : `${n} costs look`} counted twice.</strong>
+        A receipt was filed as its own expense for a charge a subscription already counts.</div>
+      <button type="button" class="btn sm gold" onclick="tcReviewSubscriptionDoubles()">Review ${n === 1 ? 'it' : 'them'}</button>
+      <button class="card-x" type="button" onclick="tcCloseSubscriptionDoublesNote()" aria-label="Close this note"
+        title="Close for now — ${n === 1 ? 'it stays' : 'they stay'} in the Review inbox, and this note comes back next time the app opens">✕</button>
+    </div>`;
+  el.hidden = false;
+}
+
+/** Open the Review inbox on the first of those pairs. */
+function tcReviewSubscriptionDoubles() {
+  const first = findSubscriptionDoubles(TAX_CENTER.recurring || [], TAX_CENTER.businessExpenses || [])[0];
+  openReviewInbox({ filter: 'receipt', key: first ? doubleKey(first.expense) : '' });
+}
+
+function tcCloseSubscriptionDoublesNote() {
+  _tcDoublesNoteClosed = true;
+  _tcRenderSubscriptionDoublesNote(TAX_CENTER.recurring || []);
+}
+
+/**
+ * Move a subscription's charge day to the one its receipts show, from the next
+ * charge on. Posted charges keep their dates; the move is recorded as a dated
+ * change, the same as one made in the editor.
+ */
+async function tcMoveRecurringDay(id, day) {
+  await loadTaxCenter();
+  const sub = _tcFindRecurring(id);
+  const hint = sub ? receiptDayHint(sub, TAX_CENTER.businessExpenses || []) : null;
+  if (!hint || hint.day !== Number(day)) { showToast('That suggestion no longer applies.', 'warn'); renderTaxCenter(); return; }
+  const previous = sub.rateChanges;
+  sub.rateChanges = hint.rateChanges;
+  if ((await saveTaxCenter()) === false) {
+    sub.rateChanges = previous;
+    showToast('⚠ Could not save the new charge day', 'err');
+    return;
+  }
+  renderTaxCenter();
+  showToast(`✓ ${sub.desc} now charges on ${ordinalDay(hint.day)}, from ${hint.nextDate}`);
+}
+
+/** Leave the charge day where it is; the suggestion for this day stops showing. */
+async function tcKeepRecurringDay(id, day) {
+  await loadTaxCenter();
+  const sub = _tcFindRecurring(id);
+  if (!sub) return;
+  sub.dayHintDismissed = Number(day);
+  await saveTaxCenter();
+  renderTaxCenter();
+}
+
 function _tcRenderRecurringFilters(counts) {
   const el = $('tc-recurring-filters');
   if (!el) return;
@@ -724,6 +849,7 @@ function _tcRenderRecurringSubscriptions() {
 
   const summary = summarizeRecurring(subs, _fxRateCache, baseCurrency, now);
   _tcRenderRecurringSummary(subs, summary, baseCurrency);
+  _tcRenderSubscriptionDoublesNote(subs);
   _tcRenderRecurringFilters({
     all: subs.length,
     active: summary.activeCount + summary.scheduledCount,
@@ -4984,6 +5110,7 @@ export {
   openReceiptLightbox,
   openRecurringEditor,
   openTaxSeasonPreflightModal,
+  postSubscriptionChargeEarly,
   processRecurringExpenses,
   removeRecurring,
   removeRecurringRateChange,
@@ -5044,6 +5171,10 @@ export {
   tcSetTripsView,
   tcSetVaultView,
   tcShowRecurringCharges,
+  tcCloseSubscriptionDoublesNote,
+  tcKeepRecurringDay,
+  tcMoveRecurringDay,
+  tcReviewSubscriptionDoubles,
   tcSubNavKeydown,
   tcToggleTripDropdown,
   tcUpdateTripSelectedPreview,

@@ -13,6 +13,8 @@
 // check, so nothing here can change a figure in the books.
 
 import { isReadyToFile, READY_CONFIDENCE } from './receipt-ready.js';
+import { frequencyLabel } from './recurring.js';
+import { chargePeriodName } from './subscription-receipts.js';
 
 /** How an item is judged: a quick win, a look, or something only the owner can supply. */
 export const REVIEW_STATE = { ready: 'ready', check: 'check', needsYou: 'needs-you' };
@@ -38,16 +40,109 @@ export function labelKey(expense) {
   return `label:${expense?.ref || ''}`;
 }
 
+export function doubleKey(expense) {
+  return `double:${expense?.id ?? ''}`;
+}
+
+/**
+ * What the review screen needs to know about a receipt that belongs to a
+ * subscription charge (a match from lib/subscription-receipts.js), in words.
+ * `null` when it doesn't belong to one.
+ */
+function subscriptionDetails(draft, result) {
+  const m = result?.match;
+  if (!m || m.paused) return null;
+  const name = m.sub.desc || 'subscription';
+  const chargeMoney = money(m.amount, m.currency);
+  const receiptMoney = money(draft.amount, draft.currency);
+  const amountMissing = !!draft.amountUnknown || !(Number(draft.amount) > 0);
+  // The owner picks between amounts only when there are two comparable ones.
+  const amountDiffers = !result.ambiguous && !m.covered && !m.amountMatches && m.sameCurrency && !amountMissing;
+  return {
+    subId: m.subId,
+    name,
+    posted: m.posted,
+    covered: m.covered,
+    ambiguous: !!result.ambiguous,
+    amountDiffers,
+    // A new price "from here on" only reads right from the newest charge.
+    canChangePrice: amountDiffers && (!m.posted || m.charge.monthKey >= (m.sub.lastInjected || '')),
+    period: chargePeriodName(m.charge.date),
+    chargeDate: m.posted ? m.line.date : m.charge.date,
+    dueDate: m.charge.date,
+    chargeMoney,
+    receiptMoney,
+    amountMissing,
+    sameCurrency: m.sameCurrency,
+    currency: m.currency,
+    cadence: frequencyLabel(m.sub.frequency),
+    choices: result.candidates.map(c => ({
+      subId: c.subId,
+      label: `${c.sub.desc || 'Subscription'} · ${money(c.amount, c.currency)} ${c.posted ? 'on' : 'due'} ${c.posted ? c.line.date : c.charge.date}`,
+    })),
+  };
+}
+
+/** The reasons, steps and state for a receipt that belongs to a subscription charge. */
+function subscriptionReceiptWords(draft, sub) {
+  const reasons = [];
+  const steps = [];
+  const separate = 'If it really is a separate purchase, press “It’s a separate purchase” to file it on its own.';
+  if (sub.ambiguous) {
+    const names = sub.choices.map(c => c.label.split(' · ')[0]);
+    reasons.push(`It could be the charge of more than one of your subscriptions: ${names.join(' or ')}. Filing it on its own would count that cost twice.`);
+    steps.push('Pick the subscription this receipt is for, under “Which subscription”.');
+    steps.push('Then check the details and keep it as proof of that charge.');
+    steps.push(separate);
+    return { reasons, steps, state: REVIEW_STATE.needsYou };
+  }
+  if (sub.covered) {
+    reasons.push(`${capitalize(sub.period)} of your ${sub.name} subscription (${sub.chargeMoney} on ${sub.chargeDate}) already has its receipt. This looks like a second copy.`);
+    steps.push('Compare it with the receipt already kept on that charge.');
+    steps.push('If it is the same one, press “Already in my books”. It leaves this list and nothing in your books changes.');
+    steps.push(separate);
+    return { reasons, steps, state: REVIEW_STATE.check };
+  }
+  reasons.push(sub.posted
+    ? `This is ${sub.period} of your ${sub.name} subscription (${sub.chargeMoney} on ${sub.chargeDate}). It is already counted in your books, so filing it again would count it twice.`
+    : `This is the bill for the next charge of your ${sub.name} subscription (${sub.chargeMoney}, due ${sub.dueDate}). It has not been counted yet.`);
+  if (sub.amountDiffers) {
+    reasons.push(`The receipt says ${sub.receiptMoney}, but ${sub.posted ? 'the charge in your books is' : 'the subscription charges'} ${sub.chargeMoney}.`);
+  } else if (sub.amountMissing) {
+    reasons.push(`The amount could not be read from the email, so ${sub.posted ? 'the charge keeps' : 'it is counted at'} ${sub.chargeMoney}.`);
+  } else if (!sub.sameCurrency) {
+    reasons.push(`The receipt is in ${String(draft.currency || 'CAD').toUpperCase()} and the subscription is in ${sub.currency}, so ${sub.posted ? 'the charge keeps' : 'it is counted at'} ${sub.chargeMoney}.`);
+  }
+  steps.push('Check the vendor, date and amount against the receipt.');
+  if (sub.amountDiffers) steps.push('Choose the amount your books should keep, under “Which amount”.');
+  steps.push(sub.posted
+    ? 'Press “Attach as proof”. Nothing new goes into your books. The email is kept as proof for that charge.'
+    : `Press “Count it now”. The charge goes into your books dated ${draft.date}, the date on the receipt, with the email as its proof. The subscription will not add it again on ${sub.dueDate}.`);
+  steps.push(separate);
+  const settled = !sub.amountDiffers && sub.sameCurrency && !sub.amountMissing;
+  return { reasons, steps, state: settled ? REVIEW_STATE.ready : REVIEW_STATE.check };
+}
+
+function capitalize(text) {
+  return text ? text[0].toUpperCase() + text.slice(1) : text;
+}
+
 /**
  * One drafted receipt as a review item.
  *
  * The reasons are the ways filing it untouched could put something wrong in
  * the books — the same conditions isReadyToFile() uses, said in words.
  */
-export function receiptReviewItem(draft = {}, { duplicate = false, index = 0 } = {}) {
+export function receiptReviewItem(draft = {}, { duplicate = false, index = 0, subscription = null, separateFrom = '' } = {}) {
+  const sub = subscriptionDetails(draft, subscription);
+  if (sub) return subscriptionReceiptItem(draft, sub, index);
+
   const reasons = [];
   const amountMissing = !!draft.amountUnknown || !(Number(draft.amount) > 0);
   const category = String(draft.category || '').trim();
+  const paused = subscription?.match?.paused ? subscription.match.sub.desc : '';
+  if (paused) reasons.push(`Your ${paused} subscription is paused, but this receipt says you were charged. Check that it was really cancelled. Filing this counts the charge on its own.`);
+  if (separateFrom) reasons.push(`You said this is separate from your ${separateFrom} subscription, so filing it adds a new expense.`);
   if (duplicate) reasons.push('It looks like an expense already in your books (same date and amount). Filing it again would count the cost twice.');
   if (amountMissing) reasons.push('The amount could not be read from the email. Type it in from the receipt.');
   if (!category || category === 'Other') reasons.push('No clear category was found. Pick the one that fits.');
@@ -100,6 +195,76 @@ export function receiptReviewItem(draft = {}, { duplicate = false, index = 0 } =
     steps,
     duplicate,
     index,
+    subscription: null,
+    separateFrom,
+  };
+}
+
+/** A receipt that belongs to a subscription charge: kept as its proof, not filed beside it. */
+function subscriptionReceiptItem(draft, sub, index) {
+  const { reasons, steps, state } = subscriptionReceiptWords(draft, sub);
+  const amountMissing = sub.amountMissing;
+  const facts = [
+    ['Vendor', draft.vendor || '—'],
+    ['Date', draft.date || '—'],
+    ['Amount', amountMissing ? 'Not read' : money(draft.amount, draft.currency)],
+    ['Category', String(draft.category || '').trim() || '—'],
+  ];
+  if (!sub.ambiguous) {
+    facts.push(['Subscription', `${sub.name} · ${sub.cadence}`]);
+    facts.push(sub.posted ? ['In your books', `${sub.chargeMoney} on ${sub.chargeDate}`] : ['Next charge', `${sub.chargeMoney} due ${sub.dueDate} · not counted yet`]);
+  }
+  if (draft.emailFrom) facts.push(['From', draft.emailFrom]);
+  if (draft.emailSubject) facts.push(['Email subject', draft.emailSubject]);
+  return {
+    key: receiptKey(draft, index),
+    kind: 'receipt',
+    state,
+    icon: '🔁',
+    title: draft.vendor || draft.description || 'Receipt',
+    subtitle: `${amountMissing ? 'Amount not read' : money(draft.amount, draft.currency)} · ${sub.ambiguous ? 'which subscription?' : `${sub.name} subscription`}`,
+    reasons,
+    facts,
+    steps,
+    duplicate: false,
+    index,
+    subscription: sub,
+    separateFrom: '',
+  };
+}
+
+/**
+ * An expense filed beside a subscription charge for the same payment
+ * (a pair from findSubscriptionDoubles), as a review item.
+ */
+export function doubleReviewItem(pair = {}) {
+  const { expense = {}, line = {}, sub = {} } = pair;
+  const name = sub.desc || 'subscription';
+  const amount = money(expense.origAmount ?? expense.amount, expense.origCurrency || expense.currency);
+  const chargeMoney = money(line.amount, line.currency);
+  const hasReceipt = !!((Array.isArray(expense.receiptFiles) && expense.receiptFiles.length) || expense.receipt);
+  return {
+    key: doubleKey(expense),
+    kind: 'double',
+    group: 'receipt',
+    state: REVIEW_STATE.check,
+    icon: '📑',
+    title: expense.vendor || expense.desc || 'Expense',
+    subtitle: `${amount} · counted twice?`,
+    reasons: [
+      `This expense (${amount} on ${expense.date || '—'}) looks like a second copy of ${chargePeriodName(line.date)} of your ${name} subscription (${chargeMoney} on ${line.date || '—'}). Right now your books count that cost twice.`,
+    ],
+    facts: [
+      ['Expense', `${expense.desc || expense.vendor || 'Expense'} · ${amount} on ${expense.date || '—'}`],
+      ['Its receipt', hasReceipt ? 'Kept on the expense' : 'None'],
+      ['Subscription', `${name} · ${chargeMoney} on ${line.date || '—'}`],
+    ],
+    steps: [
+      'Check that both are the same payment.',
+      `Press “Merge them”. The extra expense is removed${hasReceipt ? ' and its receipt is kept on the subscription charge' : ''}, so the cost is counted once.`,
+      'If they really are two different costs, press “They’re different”. Both stay, and this pair is not raised again.',
+    ],
+    expenseId: expense.id,
   };
 }
 
@@ -164,10 +329,25 @@ export function labelReviewItem(expense = {}, { needsAmount = false, needsOrder 
  * — the caller decides what counts as unfinished, so this and the worklists it
  * links to can never disagree about it.
  */
-export function buildReviewQueue({ receiptDrafts = [], isDuplicate = () => false, labels = [] } = {}) {
+export function buildReviewQueue({
+  receiptDrafts = [],
+  isDuplicate = () => false,
+  subscriptionMatch = () => null,
+  labels = [],
+  doubles = [],
+} = {}) {
   const items = [];
   (Array.isArray(receiptDrafts) ? receiptDrafts : []).forEach((draft, index) => {
-    if (draft) items.push(receiptReviewItem(draft, { duplicate: !!isDuplicate(draft), index }));
+    if (!draft) return;
+    const subscription = subscriptionMatch(draft);
+    // A receipt the owner set apart from a subscription says which one, so the
+    // choice can be seen and taken back.
+    const separateFrom = draft.notSubscription ? (subscriptionMatch({ ...draft, notSubscription: false })?.match?.sub?.desc || '') : '';
+    const keptWithCharge = !!subscription && !subscription.match?.paused;
+    items.push(receiptReviewItem(draft, { duplicate: !keptWithCharge && !!isDuplicate(draft), index, subscription, separateFrom }));
+  });
+  (Array.isArray(doubles) ? doubles : []).forEach(pair => {
+    if (pair?.expense) items.push(doubleReviewItem(pair));
   });
   (Array.isArray(labels) ? labels : []).forEach(entry => {
     if (entry?.expense) items.push(labelReviewItem(entry.expense, entry));
@@ -183,14 +363,16 @@ export function summarizeReviewQueue(items = []) {
   const list = Array.isArray(items) ? items : [];
   const receipts = list.filter(i => i.kind === 'receipt').length;
   const labels = list.filter(i => i.kind === 'label').length;
+  const doubles = list.filter(i => i.kind === 'double').length;
   const ready = list.filter(i => i.state === REVIEW_STATE.ready).length;
   const needsYou = list.filter(i => i.state === REVIEW_STATE.needsYou).length;
   const total = list.length;
 
   const parts = [];
   if (receipts) parts.push(`${receipts} ${plural(receipts, 'receipt', 'receipts')}`);
+  if (doubles) parts.push(`${doubles} ${plural(doubles, 'cost', 'costs')} counted twice`);
   if (labels) parts.push(`${labels} shipping ${plural(labels, 'label', 'labels')}`);
-  const what = parts.join(' and ');
+  const what = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts.join('');
 
   let headline = 'Nothing to review';
   let detail = 'Receipts and labels the app finds will wait here until you have looked at them.';
@@ -203,7 +385,7 @@ export function summarizeReviewQueue(items = []) {
     if (rest) bits.push(`${rest} ${plural(rest, 'needs', 'need')} a quick check`);
     detail = `${bits.join(', ')}.`;
   }
-  return { total, receipts, labels, ready, needsYou, headline, detail };
+  return { total, receipts, labels, doubles, ready, needsYou, headline, detail };
 }
 
 /**
