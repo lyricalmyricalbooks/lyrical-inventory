@@ -2650,6 +2650,8 @@ function editReviewedReceipt(draft, field, value) {
   if (field === 'date') v = normalizeReceiptDate(v) || v;
   if (field === 'notSubscription') v = v === true || v === 'true';
   if (field === 'subscriptionAmount' && !['keep', 'receipt', 'price'].includes(v)) v = 'keep';
+  // An amount answer was given for the subscription it was asked about.
+  if (field === 'subscriptionId' && v !== draft.subscriptionId) draft.subscriptionAmount = 'keep';
   draft[field] = v;
   if (field === 'amount') draft.amountUnknown = needsReceiptAmount(draft);
   writePersistedEmailReceiptDrafts(_emailReceiptDrafts);
@@ -6291,6 +6293,38 @@ function _expenseHasReceipt(e) {
   return !!(e && ((Array.isArray(e.receiptFiles) && e.receiptFiles.length) || e.receipt));
 }
 
+/**
+ * For a row that belongs to a subscription charge, the same answers the Review
+ * inbox asks for: keep it as that charge's proof (which charge, when two fit),
+ * use its amount for the charge, or file it on its own. A receipt filed from
+ * this table is never kept with a charge without a visible choice — the one-off
+ * purchase from a subscription's company has to be able to stay an expense.
+ */
+function _subscriptionPickHtml(r, i) {
+  const result = _subscriptionMatch({ ...r, notSubscription: false });
+  const m = result?.match;
+  if (!m || m.paused || m.covered) return '';
+  const money = (amount, currency) => `${String(currency || 'CAD').toUpperCase()} ${(Number(amount) || 0).toFixed(2)}`;
+  const multiple = result.candidates.length > 1;
+  const opts = [];
+  if (result.ambiguous) opts.push(['', 'Which subscription is this for?']);
+  (multiple ? result.candidates : [m]).forEach(c => {
+    const when = c.posted ? `on ${c.line.date}` : `due ${c.charge.date}`;
+    opts.push([multiple ? `sub:${c.subId}` : 'keep', `Proof for ${c.sub.desc} — ${money(c.amount, c.currency)} ${when}`]);
+  });
+  const comparable = !result.ambiguous && !m.amountMatches && m.sameCurrency && !r.amountUnknown && Number(r.amount) > 0;
+  if (comparable) opts.push(['receipt', `Use ${money(r.amount, r.currency)} for that charge`]);
+  opts.push(['separate', 'A separate purchase — file it on its own']);
+
+  let chosen = multiple ? `sub:${m.subId}` : 'keep';
+  if (r.notSubscription) chosen = 'separate';
+  else if (result.ambiguous) chosen = '';
+  else if (comparable && r.subscriptionAmount === 'receipt') chosen = 'receipt';
+  return `<select data-erd-field="subscriptionPick" data-erd-i="${i}" aria-label="What filing this receipt does" style="font-size:var(--text-xs);width:100%;margin-top:4px;">${opts
+    .map(([value, label]) => `<option value="${escapeHtml(value)}"${value === chosen ? ' selected' : ''}${value ? '' : ' disabled'}>${escapeHtml(label)}</option>`)
+    .join('')}</select>`;
+}
+
 function renderEmailReceiptDrafts(receipts) {
   const wrap = $('email-receipt-results');
   const bulkCatBar = $('email-bulk-category-bar');
@@ -6345,6 +6379,7 @@ function renderEmailReceiptDrafts(receipts) {
               <input type="text" data-erd-field="description" data-erd-i="${i}" value="${esc(r.description)}" placeholder="Description" style="font-size:var(--text-xs);width:100%;color:var(--content-secondary);">
               ${dup ? `<div style="font-size:var(--text-2xs);color:var(--amber);margin-top:2px;font-weight:600;">⚠ matches an existing expense</div>` : ''}
               ${subByRow[i] ? `<div style="font-size:var(--text-2xs);color:var(${subByRow[i].tone === 'warn' ? '--amber' : '--blue'});margin-top:2px;font-weight:600;">🔁 ${esc(subByRow[i].text)}</div>` : ''}
+              ${_subscriptionPickHtml(r, i)}
               ${r.amountUnknown ? `<div style="font-size:var(--text-2xs);color:var(--amber);margin-top:2px;font-weight:600;">⚠ no confident amount — check before importing</div>` : ''}
               ${lowConf ? `<div style="font-size:var(--text-2xs);color:var(--content-muted);margin-top:2px;">low confidence (${(r.confidence * 100 | 0)}%)</div>` : ''}
               ${r.msgId
@@ -6384,7 +6419,7 @@ function renderEmailReceiptDrafts(receipts) {
 
   // Selects carry the shared option markup, so their current value is applied
   // here rather than baked into the string.
-  wrap.querySelectorAll('select[data-erd-field]').forEach(sel => {
+  wrap.querySelectorAll('select[data-erd-field="category"], select[data-erd-field="currency"]').forEach(sel => {
     const i = Number(sel.getAttribute('data-erd-i'));
     const r = receipts[i];
     if (!r) return;
@@ -6415,6 +6450,17 @@ function renderEmailReceiptDrafts(receipts) {
     const i = Number(el.getAttribute('data-erd-i'));
     if (!_emailReceiptDrafts[i]) return;
     let v = el.value;
+    if (f === 'subscriptionPick') {
+      // Stored as the same answers the Review inbox stores, then redrawn: the
+      // row's note and choices depend on them.
+      const d = _emailReceiptDrafts[i];
+      d.notSubscription = v === 'separate';
+      if (v.startsWith('sub:')) { d.subscriptionId = v.slice(4); d.subscriptionAmount = 'keep'; }
+      else if (v === 'keep' || v === 'receipt') d.subscriptionAmount = v;
+      writePersistedEmailReceiptDrafts(_emailReceiptDrafts);
+      renderEmailReceiptDrafts(_emailReceiptDrafts);
+      return;
+    }
     if (f === 'amount') v = Number(v) || 0;
     if (f === 'currency') v = String(v).toUpperCase();
     if (f === 'date') v = normalizeReceiptDate(v) || v;

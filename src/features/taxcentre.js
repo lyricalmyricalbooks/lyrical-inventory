@@ -661,8 +661,10 @@ function _tcRecurringRowHtml(raw, now, baseCurrency) {
   // How many of those charges have their receipt — the proof the tax return
   // leans on. Receipts the vendor emails are kept on the charge they pay for.
   const proven = lines.filter(hasReceiptProof).length;
+  let proofWords = proven === charges ? `all ${charges} with receipts` : proven === 1 ? '1 with a receipt' : `${proven || 'none'} with receipts`;
+  if (charges === 1) proofWords = proven ? 'has its receipt' : 'no receipt yet';
   const proofNote = charges
-    ? `<span class="rec-dim" title="Receipts kept with this subscription’s charges">· ${proven === charges ? `all ${charges}` : proven || 'none'} with ${proven === 1 && charges !== 1 ? 'a receipt' : 'receipts'}</span>`
+    ? `<span class="rec-dim" title="Receipts kept with this subscription’s charges">· ${proofWords}</span>`
     : '';
   const chargeLink = charges
     ? `<button type="button" class="rec-charge-link" onclick="tcShowRecurringCharges('${escapeHtml(s.id)}')" title="Show these ${charges} posted charges in the ledger below">${charges} charge${charges === 1 ? '' : 's'} logged →</button> ${proofNote}`
@@ -672,7 +674,7 @@ function _tcRecurringRowHtml(raw, now, baseCurrency) {
   // subscription posts, offer to move the charge day to match.
   const dayHint = receiptDayHint(s, TAX_CENTER.businessExpenses || []);
   const dayHintHtml = dayHint
-    ? `<div class="rec-meta rec-day-hint">Its last two receipts are dated ${escapeHtml(ordinalDay(dayHint.day))}.
+    ? `<div class="rec-meta">Its last two receipts are dated ${escapeHtml(ordinalDay(dayHint.day))}.
 <button type="button" class="rec-charge-link" onclick="tcMoveRecurringDay('${escapeHtml(s.id)}', ${dayHint.day})"
            title="From ${escapeHtml(dayHint.nextDate)} on. Charges already posted keep their dates.">Charge on ${escapeHtml(ordinalDay(dayHint.day))} →</button> · <button type="button" class="rec-charge-link" onclick="tcKeepRecurringDay('${escapeHtml(s.id)}', ${dayHint.day})">Keep as is</button>
        </div>`
@@ -816,8 +818,13 @@ async function tcKeepRecurringDay(id, day) {
   await loadTaxCenter();
   const sub = _tcFindRecurring(id);
   if (!sub) return;
+  const previous = sub.dayHintDismissed;
   sub.dayHintDismissed = Number(day);
-  await saveTaxCenter();
+  if ((await saveTaxCenter()) === false) {
+    sub.dayHintDismissed = previous;
+    showToast('⚠ Could not save that', 'err');
+    return;
+  }
   renderTaxCenter();
 }
 

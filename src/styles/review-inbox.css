@@ -122,13 +122,14 @@
 .ri-money select { flex: none; width: 88px; }
 .ri-money input { flex: 1; min-width: 0; text-align: right; font-variant-numeric: tabular-nums; }
 /* "Which amount" for a subscription receipt: one choice card per answer, the way the
-   currency-change and stock-adjustment dialogs ask theirs. The picked card is outlined. */
+   currency-change and stock-adjustment dialogs ask theirs. The picked card takes the
+   flare line, as .cc-mode's does — an ink outline vanishes into the pane at night. */
 .ri-choices { display: flex; flex-direction: column; gap: var(--space-2); }
 .ri-choice {
   display: flex;
   align-items: flex-start;
   gap: var(--space-3);
-  min-height: 44px;
+  min-height: var(--target-min);
   padding: var(--space-3);
   background: var(--surface-sunken);
   border: var(--stroke-hair) solid var(--border-default);
@@ -137,7 +138,7 @@
   transition: border-color var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard);
 }
 .ri-choice:hover { background: var(--surface-inset); }
-.ri-choice:has(input:checked) { border-color: var(--border-strong); background: var(--surface-raised); box-shadow: var(--elev-1); }
+.ri-choice:has(input:checked) { border-color: var(--gold); box-shadow: var(--elev-1); }
 .ri-choice:has(input:focus-visible) { outline: 2px solid var(--gold-text); outline-offset: 2px; }
 .ri-choice input { flex: none; margin-top: 3px; accent-color: var(--gold); }
 .ri-choice-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
