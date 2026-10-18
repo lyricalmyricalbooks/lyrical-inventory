@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildHarness } from './helpers/extract-decl.js';
-import { roundCents, setSelectCurrency } from '../src/lib/money.js';
+import { PICKER_CURRENCIES, roundCents, setSelectCurrency } from '../src/lib/money.js';
 import * as scanChecks from '../src/lib/receipt-scan-checks.js';
 
 const INDEX_HTML = fs.readFileSync(
@@ -53,7 +53,7 @@ function harness({
 
   const h = buildHarness({
     names: [
-      'BATCH_EXPENSE_CURRENCIES', 'BATCH_SCAN_CONCURRENCY', '_batchExpenseCurrencies',
+      'BATCH_SCAN_CONCURRENCY', '_batchExpenseCurrencies',
       'batchExpenseDestinations', '_batchExpenseDefaultCurrency', '_batchExpenseCategories',
       '_batchExpenseNewRow', '_batchExpenseRow', '_batchExpenseDescription',
       '_batchExpenseDuplicate', 'toggleAllBatchExpenses', 'deselectDuplicateBatchExpenses',
@@ -62,6 +62,7 @@ function harness({
       '_runExtractionPool', 'applyBatchScanFix', '_batchErrorWithout'
     ],
     deps: {
+      PICKER_CURRENCIES,
       // ── rendering: stubbed, since none of it is what's under test here
       $: (id) => (id === 'bx-trip' ? { value: trip } : null),
       renderBatchExpenseRows: () => {},
@@ -625,7 +626,7 @@ function domHarness() {
   document.documentElement.innerHTML = INDEX_HTML;
   return buildHarness({
     names: [
-      'BATCH_EXPENSE_CURRENCIES', 'BATCH_STATUS_LABEL', '_batchExpenseCurrencies',
+      'BATCH_STATUS_LABEL', '_batchExpenseCurrencies',
       'batchExpenseDestinations', '_batchExpenseDefaultCurrency', '_batchExpenseCategories',
       '_batchExpenseNewRow', '_batchExpenseRow', '_batchExpenseDescription',
       '_batchExpenseDuplicate', '_batchExpenseStatusCell', 'renderBatchExpenseRows',
@@ -635,6 +636,7 @@ function domHarness() {
       'applyBatchExpenseBulk'
     ],
     deps: {
+      PICKER_CURRENCIES,
       $: (id) => document.getElementById(id),
       document,
       escapeHtml: (s) => String(s ?? '').replace(/[&<>"']/g,

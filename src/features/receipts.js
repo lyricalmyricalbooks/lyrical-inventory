@@ -78,7 +78,7 @@ import {
   effectiveInterval,
   startWatch,
 } from '../lib/watch-schedule.js';
-import { fmt, fmtD, getBookCurrencyCode, normalizeCurrencyCode, putCurrencyFirst, roundCents, setSelectCurrency } from '../lib/money.js';
+import { PICKER_CURRENCIES, fmt, fmtD, getBookCurrencyCode, normalizeCurrencyCode, putCurrencyFirst, roundCents, setSelectCurrency } from '../lib/money.js';
 import { allCanonicalExpenses } from '../lib/expense-categories.js';
 import {
   checkReceiptMath,
@@ -4621,8 +4621,6 @@ let _batchScanAbort = null;
 // True while scanning or logging — blocks a second run over the same rows.
 let _batchExpenseBusy = false;
 
-const BATCH_EXPENSE_CURRENCIES = ['CAD', 'EUR', 'USD', 'MXN'];
-
 // Receipts read in parallel. Three was the safe number back when a rate limit
 // meant every worker independently retried into the same congestion window.
 // _geminiNoteThrottle now pauses the whole pool together on the first 429, so
@@ -4679,7 +4677,7 @@ function _batchExpenseCategories() {
  */
 function _batchExpenseCurrencies() {
   const own = _batchExpenseDefaultCurrency();
-  return [own, ...BATCH_EXPENSE_CURRENCIES.filter((c) => c !== own)];
+  return [own, ...PICKER_CURRENCIES.filter((c) => c !== own)];
 }
 
 function _batchExpenseNewRow(file) {
@@ -6110,10 +6108,6 @@ async function extractReceiptsFromEmailText() {
 // The existing expense a draft would duplicate (same date, amount, currency),
 // or null. Used both to flag duplicates and to attach receipt files to an
 // already-imported expense that has none yet.
-// The currencies a draft row can be switched to. Module scope so the option
-// markup is built from one list rather than re-declared per render.
-const DRAFT_CURRENCIES = ['CAD', 'EUR', 'USD', 'MXN'];
-
 function _duplicateExpenseKey(date, amount, currency) {
   return `${date}|${Number(amount).toFixed(2)}|${String(currency || 'CAD').toUpperCase()}`;
 }
@@ -6167,7 +6161,7 @@ function renderEmailReceiptDrafts(receipts) {
   // the chosen value on the element afterwards, instead of re-serialising 28
   // <option>s per draft. Twelve drafts used to mean 336 option strings.
   const catOptionsHtml = EXPENSE_CATEGORIES.map(c => `<option>${esc(c)}</option>`).join('');
-  const curOptionsHtml = DRAFT_CURRENCIES.map(c => `<option>${esc(c)}</option>`).join('');
+  const curOptionsHtml = PICKER_CURRENCIES.map(c => `<option>${esc(c)}</option>`).join('');
 
   // One index over the ledger for the whole render. Duplicate state used to be
   // recomputed by a full scan of every expense, twice per draft — once for the
