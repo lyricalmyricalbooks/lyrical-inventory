@@ -39,6 +39,9 @@ export function emptyPart(name) {
 }
 
 // Parts whose rows carry a stable `id` (minted as Date.now() at creation).
+/** Metadata string lists merged as a union (see mergeMetadata). */
+export const UNION_METADATA_KEYS = new Set(['discardedPostageRefs']);
+
 export const ID_KEYED_PARTS = new Set([
   'ledger', 'expenses', 'stores', 'artistTransfers', 'artistPayouts', 'artistReceivables',
 ]);
@@ -318,6 +321,15 @@ export function mergeMetadata(base, remote, local) {
     if (COUNTER_METADATA_KEYS.has(key)) {
       const nums = [b[key], r[key], l[key]].map(Number).filter(Number.isFinite);
       if (nums.length) out[key] = Math.max(...nums);
+      continue;
+    }
+
+    // Lists that only ever grow (refs the owner discarded): keep everything
+    // either device added, or a discard made on one device is lost to a save
+    // from the other and the label is filed again.
+    if (UNION_METADATA_KEYS.has(key)) {
+      const lists = [r[key], l[key]].filter(Array.isArray);
+      if (lists.length) out[key] = [...new Set(lists.flat())];
       continue;
     }
 
