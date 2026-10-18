@@ -3,6 +3,7 @@
 // instead of being filed as a second copy of the same cost.
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { loadApp, makeBook } from './helpers/load-app.js';
+import { modalFieldsChanged } from '../src/lib/modal.js';
 
 let app, win, TC;
 
@@ -289,5 +290,61 @@ describe('the subscriptions panel', () => {
 
     win.tcCloseSubscriptionDoublesNote();
     expect(note.hidden).toBe(true);
+  });
+});
+
+describe('answers that stay changeable', () => {
+  it('keeps the subscription picker after a choice, and the answers never count as unsaved work', async () => {
+    const internet = { id: 'rec_net', desc: 'Internet', vendor: 'Freedom mobile', cat: 'Home Office', currency: 'CAD', amount: 51, startDate: `${monthBack(2)}-01`, frequency: 'monthly', lastInjected: '' };
+    const phone = { id: 'rec_phone', desc: 'Phone Bill', vendor: 'Freedom mobile', cat: 'Home Office', currency: 'CAD', amount: 56.5, startDate: `${monthBack(2)}-01`, frequency: 'monthly', lastInjected: '' };
+    await setup({
+      recurring: [internet, phone],
+      drafts: [receipt({ msgId: 'fm5', vendor: 'Freedom Mobile', amount: 60.1, currency: 'CAD', category: 'Home Office', date: `${thisMonth}-03`, emailFrom: '' })],
+    });
+    win.openReviewInbox({ filter: 'receipt' });
+    let pick = detail().querySelector('[data-ri-field="subscriptionId"]');
+    pick.value = 'rec_phone';
+    pick.dispatchEvent(new win.Event('change', { bubbles: true }));
+    await app.settle();
+    const price = detail().querySelector('[value="price"]');
+    price.checked = true;
+    price.dispatchEvent(new win.Event('change', { bubbles: true }));
+
+    pick = detail().querySelector('[data-ri-field="subscriptionId"]');
+    expect(pick.value).toBe('rec_phone');
+    pick.value = 'rec_net';
+    pick.dispatchEvent(new win.Event('change', { bubbles: true }));
+    await app.settle();
+    expect(detail().textContent).toContain('of your Internet subscription');
+    // The amount answer was for the other subscription, so it starts over.
+    expect(detail().querySelector('[value="keep"]').checked).toBe(true);
+    expect(modalFieldsChanged('review-inbox')).toBe(false);
+    button('file').click();
+    await app.settle(10);
+    expect(subLines('rec_net').find(e => e.date === `${thisMonth}-01`).receiptAmount).toBe(60.1);
+    win.closeM('review-inbox');
+  });
+});
+
+describe('the full receipts table', () => {
+  it('asks what filing a subscription receipt does, and can file it on its own', async () => {
+    await setup({ drafts: [receipt({ msgId: 'tb1', amount: 29.99, date: `${thisMonth}-06` })] });
+    win.openEmailReceiptImportModal({ review: true });
+    await app.settle();
+    const pick = document.querySelector('[data-erd-field="subscriptionPick"]');
+    expect([...pick.options].map(o => o.value)).toEqual(['keep', 'receipt', 'separate']);
+    expect(pick.value).toBe('keep');
+
+    pick.value = 'separate';
+    pick.dispatchEvent(new win.Event('change', { bubbles: true }));
+    await app.settle();
+    expect(document.querySelector('[data-erd-field="subscriptionPick"]').value).toBe('separate');
+
+    const before = TC().businessExpenses.length;
+    await win.importEmailReceiptDrafts();
+    await app.settle(10);
+    expect(TC().businessExpenses).toHaveLength(before + 1);
+    expect(TC().businessExpenses[0].amount).toBe(29.99);
+    expect(subLines('rec_bc').every(e => !e.receipt)).toBe(true);
   });
 });

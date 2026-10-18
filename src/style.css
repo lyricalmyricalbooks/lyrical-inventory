@@ -15745,7 +15745,7 @@ button[onclick="refreshUmamiStats()"]:active {
 .rec-alert[hidden]{display:none;}
 .rec-alert-inner{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);flex-wrap:wrap;}
 .rec-alert-icon{font-size:var(--text-base);line-height:1;flex-shrink:0;}
-.rec-alert-text{font-size:var(--text-xs);line-height:var(--leading-snug);color:var(--content-primary);flex:1;min-width:220px;}
+.rec-alert-text{font-size:var(--text-xs);line-height:var(--leading-snug);color:var(--status-active);flex:1;min-width:220px;}
 .rec-alert-text strong{font-weight:700;}
 .rec-filter{
   display:inline-flex;align-items:center;gap:6px;

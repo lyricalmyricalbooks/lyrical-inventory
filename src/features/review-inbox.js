@@ -182,19 +182,22 @@ function receiptFormHtml(item, draft) {
  */
 function subscriptionFormHtml(item, draft) {
   const sub = item.subscription;
-  if (!sub || (!sub.ambiguous && !sub.amountDiffers)) return '';
+  if (!sub) return '';
   const key = escapeHtml(item.key);
-  if (sub.ambiguous) {
-    return `<section class="ri-section">
+  // Both answers save as they change, like the boxes above, so they are
+  // marked autosave and never read as unsaved work when the window closes.
+  const picker = sub.choosable
+    ? `<section class="ri-section" data-autosave>
       <h4>Which subscription</h4>
       <label class="ri-field">The subscription this receipt is for
         <select data-ri-field="subscriptionId" data-ri-key="${key}">
-          <option value="" selected disabled>Choose a subscription…</option>
-          ${sub.choices.map(c => `<option value="${escapeHtml(c.subId)}">${escapeHtml(c.label)}</option>`).join('')}
+          ${sub.ambiguous ? '<option value="" selected disabled>Choose a subscription…</option>' : ''}
+          ${sub.choices.map(c => `<option value="${escapeHtml(c.subId)}"${!sub.ambiguous && c.subId === sub.subId ? ' selected' : ''}>${escapeHtml(c.label)}</option>`).join('')}
         </select>
       </label>
-    </section>`;
-  }
+    </section>`
+    : '';
+  if (!sub.amountDiffers) return picker;
   const chosen = ['keep', 'receipt', 'price'].includes(draft.subscriptionAmount) ? draft.subscriptionAmount : 'keep';
   const name = `ri-amount-${item.index}`;
   const choice = (value, title, sub) => `<label class="ri-choice">
@@ -214,7 +217,7 @@ function subscriptionFormHtml(item, draft) {
     options.push(choice('price', `The price is now ${escapeHtml(sub.receiptMoney)}`,
       'Use it for this charge and every charge after it.'));
   }
-  return `<section class="ri-section">
+  return `${picker}<section class="ri-section" data-autosave>
       <h4 id="ri-amount-head">Which amount</h4>
       <div class="ri-choices" role="radiogroup" aria-labelledby="ri-amount-head">${options.join('')}</div>
     </section>`;
@@ -283,7 +286,7 @@ function labelActionsHtml(item) {
 
 const KIND_WORDS = {
   receipt: 'Receipt found in your inbox',
-  double: 'In your books twice',
+  double: 'Counted twice',
   label: 'Shipping label bought outside the app',
 };
 

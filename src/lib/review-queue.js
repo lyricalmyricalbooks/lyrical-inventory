@@ -76,6 +76,9 @@ function subscriptionDetails(draft, result) {
     sameCurrency: m.sameCurrency,
     currency: m.currency,
     cadence: frequencyLabel(m.sub.frequency),
+    // Which subscription stays changeable while more than one fits, not only
+    // until the first answer.
+    choosable: result.candidates.length > 1,
     choices: result.candidates.map(c => ({
       subId: c.subId,
       label: `${c.sub.desc || 'Subscription'} · ${money(c.amount, c.currency)} ${c.posted ? 'on' : 'due'} ${c.posted ? c.line.date : c.charge.date}`,
