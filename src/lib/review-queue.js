@@ -56,17 +56,25 @@ function subscriptionDetails(draft, result) {
   const chargeMoney = money(m.amount, m.currency);
   const receiptMoney = money(draft.amount, draft.currency);
   const amountMissing = !!draft.amountUnknown || !(Number(draft.amount) > 0);
-  // The owner picks between amounts only when there are two comparable ones.
-  const amountDiffers = !result.ambiguous && !m.covered && !m.amountMatches && m.sameCurrency && !amountMissing;
+  // A receipt from the right company for a different amount may be that charge
+  // at another price — or a separate purchase (an Amazon order next to Prime).
+  // Nothing is assumed: the owner says which, with no answer picked for them.
+  const needsAnswer = !result.ambiguous && !m.covered && !m.amountMatches;
+  // Using the receipt's own amount needs two amounts in one currency.
+  const amountDiffers = needsAnswer && m.sameCurrency && !amountMissing;
+  // A new price "from here on" only reads right from the newest charge.
+  const canChangePrice = amountDiffers && (!m.posted || m.charge.monthKey >= (m.sub.lastInjected || ''));
+  const answers = ['keep', ...(amountDiffers ? ['receipt'] : []), ...(canChangePrice ? ['price'] : [])];
   return {
     subId: m.subId,
     name,
     posted: m.posted,
     covered: m.covered,
     ambiguous: !!result.ambiguous,
+    needsAnswer,
+    answer: needsAnswer && answers.includes(draft.subscriptionAmount) ? draft.subscriptionAmount : '',
     amountDiffers,
-    // A new price "from here on" only reads right from the newest charge.
-    canChangePrice: amountDiffers && (!m.posted || m.charge.monthKey >= (m.sub.lastInjected || '')),
+    canChangePrice,
     period: chargePeriodName(m.charge.date),
     chargeDate: m.posted ? m.line.date : m.charge.date,
     dueDate: m.charge.date,
@@ -91,6 +99,9 @@ function subscriptionReceiptWords(draft, sub) {
   const reasons = [];
   const steps = [];
   const separate = 'If it really is a separate purchase, press “It’s a separate purchase” to file it on its own.';
+  const attach = sub.posted
+    ? 'Press “Attach as proof”. Nothing new goes into your books. The email is kept as proof for that charge.'
+    : `Press “Attach as proof”. That charge goes into your books on its due date, ${sub.dueDate}, with the email as its proof, and the subscription will not add it again.`;
   if (sub.ambiguous) {
     const names = sub.choices.map(c => c.label.split(' · ')[0]);
     reasons.push(`It could be the charge of more than one of your subscriptions: ${names.join(' or ')}. Filing it on its own would count that cost twice.`);
@@ -106,24 +117,25 @@ function subscriptionReceiptWords(draft, sub) {
     steps.push(separate);
     return { reasons, steps, state: REVIEW_STATE.check };
   }
+  if (sub.needsAnswer) {
+    reasons.push(sub.posted
+      ? `It looks like ${sub.period} of your ${sub.name} subscription (${sub.chargeMoney} on ${sub.chargeDate}), which is already counted in your books.`
+      : `It looks like the bill for the next charge of your ${sub.name} subscription (${sub.chargeMoney}, due ${sub.dueDate}).`);
+    if (sub.amountDiffers) reasons.push(`But the receipt says ${sub.receiptMoney}. It may be that charge at a different amount, or a separate purchase from the same company.`);
+    else if (sub.amountMissing) reasons.push('But the amount could not be read from the email, so it cannot be checked against the charge.');
+    else reasons.push(`But the receipt is in ${String(draft.currency || 'CAD').toUpperCase()} and the subscription is in ${sub.currency}, so the amounts cannot be compared.`);
+    steps.push('Check the receipt against the charge.');
+    steps.push('Choose what it is, under “What this receipt is”.');
+    steps.push(attach);
+    return { reasons, steps, state: sub.answer ? REVIEW_STATE.check : REVIEW_STATE.needsYou };
+  }
   reasons.push(sub.posted
     ? `This is ${sub.period} of your ${sub.name} subscription (${sub.chargeMoney} on ${sub.chargeDate}). It is already counted in your books, so filing it again would count it twice.`
     : `This is the bill for the next charge of your ${sub.name} subscription (${sub.chargeMoney}, due ${sub.dueDate}). It has not been counted yet.`);
-  if (sub.amountDiffers) {
-    reasons.push(`The receipt says ${sub.receiptMoney}, but ${sub.posted ? 'the charge in your books is' : 'the subscription charges'} ${sub.chargeMoney}.`);
-  } else if (sub.amountMissing) {
-    reasons.push(`The amount could not be read from the email, so ${sub.posted ? 'the charge keeps' : 'it is counted at'} ${sub.chargeMoney}.`);
-  } else if (!sub.sameCurrency) {
-    reasons.push(`The receipt is in ${String(draft.currency || 'CAD').toUpperCase()} and the subscription is in ${sub.currency}, so ${sub.posted ? 'the charge keeps' : 'it is counted at'} ${sub.chargeMoney}.`);
-  }
   steps.push('Check the vendor, date and amount against the receipt.');
-  if (sub.amountDiffers) steps.push('Choose the amount your books should keep, under “Which amount”.');
-  steps.push(sub.posted
-    ? 'Press “Attach as proof”. Nothing new goes into your books. The email is kept as proof for that charge.'
-    : `Press “Count it now”. The charge goes into your books dated ${draft.date}, the date on the receipt, with the email as its proof. The subscription will not add it again on ${sub.dueDate}.`);
+  steps.push(attach);
   steps.push(separate);
-  const settled = !sub.amountDiffers && sub.sameCurrency && !sub.amountMissing;
-  return { reasons, steps, state: settled ? REVIEW_STATE.ready : REVIEW_STATE.check };
+  return { reasons, steps, state: REVIEW_STATE.ready };
 }
 
 function capitalize(text) {

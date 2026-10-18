@@ -195,10 +195,16 @@ export function currentAmount(sub, now = new Date()) {
 export function nextRateChange(sub, now = new Date()) {
   const s = normalizeRecurring(sub);
   const todayStr = localYmd(now);
-  const upcoming = s.rateChanges.find(r => r.effectiveFrom > todayStr);
-  if (!upcoming) return null;
   const from = amountAt(s, todayStr);
-  return { ...upcoming, from, to: upcoming.amount, delta: upcoming.amount - from };
+  // A change at the same price only moves the charge day (the receipts said the
+  // vendor bills later in the month). It is not news about the price.
+  let price = from;
+  for (const r of s.rateChanges) {
+    if (r.effectiveFrom <= todayStr) continue;
+    if (Math.abs(r.amount - price) < 0.005) { price = r.amount; continue; }
+    return { ...r, from, to: r.amount, delta: r.amount - from };
+  }
+  return null;
 }
 
 /**

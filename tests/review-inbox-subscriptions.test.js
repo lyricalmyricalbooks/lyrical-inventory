@@ -83,19 +83,32 @@ describe('a receipt for a subscription charge already in the books', () => {
     expect(document.getElementById('ri-summary').textContent).toBe('Nothing is waiting for review.');
   });
 
-  it('asks which amount to keep when they differ, and uses the one picked', async () => {
+  it('asks what a receipt at another amount is, picks nothing for the owner, and uses the answer', async () => {
     const prev = monthBack(1);
     await setup({ drafts: [receipt({ msgId: 'bc2', amount: 16.2, date: `${prev}-06` })] });
     win.openReviewInbox({ filter: 'receipt' });
-    expect(detail().textContent).toContain('The receipt says USD 16.20, but the charge in your books is USD 15.00.');
+    expect(detail().textContent).toContain('It looks like');
+    expect(detail().textContent).toContain('But the receipt says USD 16.20. It may be that charge at a different amount, or a separate purchase from the same company.');
     const choices = [...detail().querySelectorAll('[data-ri-field="subscriptionAmount"]')].map(r => r.value);
     // An older charge can't start a new price "from here on".
-    expect(choices).toEqual(['keep', 'receipt']);
-    expect(detail().querySelector('[value="keep"]').checked).toBe(true);
+    expect(choices).toEqual(['keep', 'receipt', 'separate']);
+    expect(choices.some(v => detail().querySelector(`[value="${v}"]`).checked)).toBe(false);
+    expect(button('file').disabled).toBe(true);
+    expect(detail().textContent).toContain('Choose what this receipt is above first.');
+    expect(button('separate')).toBeNull();
+    // Nothing reaches the books while it is unanswered.
+    const before = JSON.stringify(TC().businessExpenses);
+    await win.importEmailReceiptDrafts?.();
+    await app.settle(10);
+    expect(JSON.stringify(TC().businessExpenses)).toBe(before);
+    win.closeM('email-receipt-import-modal');
+    win.openReviewInbox({ filter: 'receipt' });
 
     const useReceipt = detail().querySelector('[value="receipt"]');
     useReceipt.checked = true;
     useReceipt.dispatchEvent(new win.Event('change', { bubbles: true }));
+    await app.settle();
+    expect(button('file').disabled).toBe(false);
     button('file').click();
     await app.settle(10);
 
@@ -104,6 +117,24 @@ describe('a receipt for a subscription charge already in the books', () => {
     expect(line.amountFromReceipt).toBe(true);
     expect(line.receiptAmount).toBe(16.2);
     expect(subLines('rec_bc')).toHaveLength(4);
+    // Vouched for by the owner, not matched on amount: its sender is not learned.
+    expect(TC().recurring[0].receiptSenders).toBeUndefined();
+  });
+
+  it('files the receipt on its own when "A separate purchase" is the answer', async () => {
+    await setup({ drafts: [receipt({ msgId: 'bc9', vendor: 'Big Cartel', amount: 84.5, date: `${thisMonth}-09` })] });
+    win.openReviewInbox({ filter: 'receipt' });
+    const separate = detail().querySelector('[value="separate"]');
+    separate.checked = true;
+    separate.dispatchEvent(new win.Event('change', { bubbles: true }));
+    await app.settle();
+    expect(button('file').textContent).toBe('File this receipt');
+    const before = TC().businessExpenses.length;
+    button('file').click();
+    await app.settle(10);
+    expect(TC().businessExpenses).toHaveLength(before + 1);
+    expect(TC().businessExpenses[0].amount).toBe(84.5);
+    expect(subLines('rec_bc').every(e => !e.receipt)).toBe(true);
   });
 
   it('files a separate purchase on its own when the owner says so, and can take that back', async () => {
@@ -130,8 +161,28 @@ describe('a receipt for a subscription charge already in the books', () => {
   });
 });
 
+describe('two devices', () => {
+  it('does not post a charge again that another device already posted', async () => {
+    await setup({ drafts: [receipt({ msgId: 'cp1', vendor: 'Canada Post', amount: 12.4, currency: 'CAD', category: 'Shipping & Postage', emailFrom: '' })] });
+    // The other device's saved books carry this month's charge…
+    const remote = JSON.parse(JSON.stringify(TC()));
+    remote.businessExpenses.find(e => e.recurringId === 'rec_bc' && e.recurringPeriod === thisMonth).id = 'from-other-device';
+    app.cloud.settings.taxCenter = remote;
+    // …while this one was opened before it was posted and never reloaded.
+    TC().businessExpenses = TC().businessExpenses.filter(e => e.recurringPeriod !== thisMonth);
+    TC().recurring[0].lastInjected = monthBack(1);
+
+    win.openReviewInbox({ filter: 'receipt' });
+    button('file').click();
+    await app.settle(10);
+    expect(subLines('rec_bc').filter(e => e.recurringPeriod === thisMonth).map(e => e.id)).toEqual(['from-other-device']);
+    expect(TC().businessExpenses.some(e => e.vendor === 'Canada Post')).toBe(true);
+    win.closeM('review-inbox');
+  });
+});
+
 describe('a bill that arrives before its charge is due', () => {
-  it('counts the charge now, dated on the receipt, and the subscription does not add it again', async () => {
+  it('counts the charge now on its own due date, and the subscription does not add it again', async () => {
     let due = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7);
     if (due.getDate() > 28) due = new Date(due.getFullYear(), due.getMonth(), 28);
     const start = new Date(due.getFullYear(), due.getMonth() - 3, due.getDate());
@@ -146,14 +197,18 @@ describe('a bill that arrives before its charge is due', () => {
     const posted = subLines('rec_phone').length;
     win.openReviewInbox({ filter: 'receipt' });
     expect(detail().textContent).toContain('It has not been counted yet.');
-    expect(button('file').textContent).toBe('Count it now');
+    expect(detail().textContent).toContain(`goes into your books on its due date, ${ymdOf(due)}`);
+    expect(button('file').textContent).toBe('Attach as proof');
 
     button('file').click();
     await app.settle(10);
     const lines = subLines('rec_phone');
     expect(lines).toHaveLength(posted + 1);
     const early = lines.find(e => e.recurringPeriod === ymdOf(due).slice(0, 7));
-    expect(early.date).toBe(ymdOf(now));
+    // Dated when it is due, not when the bill was sent, so it can never land in
+    // the month (or tax year) before; the bill's date is kept beside it.
+    expect(early.date).toBe(ymdOf(due));
+    expect(early.receiptDate).toBe(ymdOf(now));
     expect(early.amount).toBe(56.5);
     expect(early.receipt).toBe('https://example.com/bc.pdf');
     expect(TC().recurring[0].lastInjected).toBe(ymdOf(due).slice(0, 7));
@@ -180,9 +235,15 @@ describe('two subscriptions from the same company', () => {
     pick.value = 'rec_phone';
     pick.dispatchEvent(new win.Event('change', { bubbles: true }));
     await app.settle();
-    expect(button('file').disabled).toBe(false);
     expect(detail().textContent).toContain('of your Phone Bill subscription');
     expect(detail().querySelector('[value="price"]')).not.toBeNull();
+    // Picked the subscription; what the different amount is still waits.
+    expect(button('file').disabled).toBe(true);
+    const keep = detail().querySelector('[value="keep"]');
+    keep.checked = true;
+    keep.dispatchEvent(new win.Event('change', { bubbles: true }));
+    await app.settle();
+    expect(button('file').disabled).toBe(false);
 
     const before = TC().businessExpenses.length;
     button('file').click();
@@ -316,9 +377,14 @@ describe('answers that stay changeable', () => {
     pick.dispatchEvent(new win.Event('change', { bubbles: true }));
     await app.settle();
     expect(detail().textContent).toContain('of your Internet subscription');
-    // The amount answer was for the other subscription, so it starts over.
-    expect(detail().querySelector('[value="keep"]').checked).toBe(true);
+    // The answer was for the other subscription, so it is asked again.
+    expect(detail().querySelector('[value="keep"]').checked).toBe(false);
+    expect(button('file').disabled).toBe(true);
     expect(modalFieldsChanged('review-inbox')).toBe(false);
+    const keep = detail().querySelector('[value="keep"]');
+    keep.checked = true;
+    keep.dispatchEvent(new win.Event('change', { bubbles: true }));
+    await app.settle();
     button('file').click();
     await app.settle(10);
     expect(subLines('rec_net').find(e => e.date === `${thisMonth}-01`).receiptAmount).toBe(60.1);
@@ -332,8 +398,9 @@ describe('the full receipts table', () => {
     win.openEmailReceiptImportModal({ review: true });
     await app.settle();
     const pick = document.querySelector('[data-erd-field="subscriptionPick"]');
-    expect([...pick.options].map(o => o.value)).toEqual(['keep', 'receipt', 'separate']);
-    expect(pick.value).toBe('keep');
+    expect([...pick.options].map(o => o.value)).toEqual(['', 'sub:rec_bc:keep', 'sub:rec_bc:receipt', 'separate']);
+    // A different amount from the right company: nothing is chosen for the owner.
+    expect(pick.value).toBe('');
 
     pick.value = 'separate';
     pick.dispatchEvent(new win.Event('change', { bubbles: true }));

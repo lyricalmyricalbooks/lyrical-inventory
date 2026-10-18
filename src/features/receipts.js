@@ -99,7 +99,7 @@ import { createZip, textEntry, uniqueZipPath, zipEntryName } from '../lib/zip.js
 import { planFile } from '../lib/receipt-match.js';
 import {
   postSubscriptionChargeEarly,
-  processRecurringExpenses,
+  refreshRecurringCharges,
   renderTaxCenter,
   saveTaxCenter,
   switchTaxCenterSubTab,
@@ -179,6 +179,53 @@ function receiptFinderDependencies() {
     accept: expense => {
       if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
       if (!TAX_CENTER.businessExpenses.some(row => row.id === expense.id)) TAX_CENTER.businessExpenses.unshift(expense);
+      renderTaxCenter();
+    },
+    subscription: _finderSubscriptionOutcome,
+  };
+}
+
+/**
+ * What the Gmail finder does with a found receipt that belongs to a
+ * subscription charge, instead of filing it as a new expense. Only a receipt
+ * at the charge's own amount is kept with it here; anything the owner has to
+ * answer for (which subscription, or what a different amount is) is held with
+ * a reason, because the finder has no place to ask.
+ */
+async function _finderSubscriptionOutcome(draft, email) {
+  const receipt = {
+    vendor: draft.vendor, description: draft.description, date: draft.date,
+    amount: draft.amount, currency: draft.currency, emailFrom: email?.from || '',
+  };
+  if (!_subscriptionMatch(receipt)) return null;
+  // Matched against a fresh copy of the books, so a charge another device has
+  // already posted is found rather than posted again.
+  await refreshRecurringCharges();
+  const result = _subscriptionMatch(receipt);
+  const m = result?.match;
+  if (!m || m.paused) return null;
+  const name = m.sub.desc || 'a subscription';
+  if (m.covered) return { kind: 'skip' };
+  if (result.ambiguous || !m.amountMatches) {
+    return {
+      kind: 'hold',
+      message: result.ambiguous
+        ? 'This may be the charge of more than one of your subscriptions. Remove it here and add it by hand, choosing which one.'
+        : `This looks like part of your ${name} subscription, but the amount differs from its charge. Remove it here if it is that charge’s receipt, or add it by hand if it is a separate purchase.`,
+    };
+  }
+  return {
+    kind: 'attach',
+    attach: async files => {
+      const item = { ...receipt, msgId: draft.messageId, ref: draft.reference || '', receiptImportId: draft.id };
+      const kept = _keepReceiptWithSubscription(item, m, {
+        currency: String(draft.currency || '').toUpperCase(),
+        amount: Number(draft.amount) || 0,
+        receiptFiles: (files || []).filter(Boolean),
+        choice: 'keep',
+      });
+      if (!kept) throw new Error(`The ${name} charge changed while this was saving. Try again.`);
+      if ((await saveTaxCenter()) === false) throw new Error('Could not save. Retry when connected.');
       renderTaxCenter();
     },
   };
@@ -2649,9 +2696,20 @@ function editReviewedReceipt(draft, field, value) {
   if (field === 'currency') v = String(v).toUpperCase();
   if (field === 'date') v = normalizeReceiptDate(v) || v;
   if (field === 'notSubscription') v = v === true || v === 'true';
-  if (field === 'subscriptionAmount' && !['keep', 'receipt', 'price'].includes(v)) v = 'keep';
-  // An amount answer was given for the subscription it was asked about.
-  if (field === 'subscriptionId' && v !== draft.subscriptionId) draft.subscriptionAmount = 'keep';
+  if (field === 'subscriptionAmount') {
+    // "A separate purchase" is one of the answers to "what this receipt is".
+    if (v === 'separate') {
+      draft.notSubscription = true;
+      delete draft.subscriptionAmount;
+      writePersistedEmailReceiptDrafts(_emailReceiptDrafts);
+      return true;
+    }
+    if (!['keep', 'receipt', 'price'].includes(v)) return false;
+  }
+  // An answer was given about the subscription it was asked about; a new
+  // subscription asks again.
+  if (field === 'subscriptionId' && v !== draft.subscriptionId) delete draft.subscriptionAmount;
+  if (field === 'notSubscription' && !v) delete draft.subscriptionAmount;
   draft[field] = v;
   if (field === 'amount') draft.amountUnknown = needsReceiptAmount(draft);
   writePersistedEmailReceiptDrafts(_emailReceiptDrafts);
@@ -6227,24 +6285,36 @@ function _subscriptionMatch(draft) {
 }
 
 /**
+ * What the owner said this receipt is, against the charge it was matched to:
+ * 'keep' (the charge stays as it is, with the receipt as its proof), 'receipt'
+ * (this charge takes the receipt's amount), 'price' (and every charge after
+ * it), or '' when they have not said.
+ *
+ * A receipt at the charge's amount needs no answer. One from the right company
+ * at another amount always does — rent counted at the business share against
+ * the whole rent, or an Amazon order beside Prime — and nothing is assumed.
+ */
+function _subscriptionAnswer(item, match, amount) {
+  if (match.amountMatches) return 'keep';
+  const comparable = match.sameCurrency && amount > 0 && !item.amountUnknown;
+  const answer = item.subscriptionAmount;
+  if (answer === 'keep') return 'keep';
+  if (comparable && (answer === 'receipt' || answer === 'price')) return answer;
+  return '';
+}
+
+/**
  * Keep a receipt with the subscription charge it pays for, instead of filing
  * it as an expense of its own. A posted charge gets the receipt as its proof;
- * the next charge, when its bill arrives early, is counted now on the
- * receipt's date. Returns 'attached', 'counted', or '' when the charge is no
- * longer there to keep it with.
- *
- * `subscriptionAmount` is the owner's answer when the receipt's amount and the
- * charge's differ: 'keep' the charge's (rent counted at the business share
- * while the receipt is the whole rent), use the 'receipt' amount for this
- * charge only (a phone bill with an overage), or record a new 'price' from
- * this charge on. Without a comparable amount, the charge's is kept.
+ * the next charge, when its bill arrives early, is posted now on its own due
+ * date (never the bill's, which can sit in the year before). Returns
+ * 'attached', 'counted', or '' when the charge is no longer there to keep it
+ * with. `choice` is from _subscriptionAnswer.
  */
-function _keepReceiptWithSubscription(item, match, { currency, amount, receiptFiles }) {
+function _keepReceiptWithSubscription(item, match, { currency, amount, receiptFiles, choice }) {
   const sub = (TAX_CENTER.recurring || []).find(s => s.id === match.subId);
-  if (!sub) return '';
+  if (!sub || !choice) return '';
   const baseCur = (TAX_CENTER.settings?.baseCurrency || 'CAD').toUpperCase();
-  const comparable = match.sameCurrency && amount > 0 && !item.amountUnknown && !match.amountMatches;
-  const choice = comparable ? (item.subscriptionAmount || 'keep') : 'keep';
   const useReceipt = choice === 'receipt' || choice === 'price';
   const value = roundCents(amount);
 
@@ -6252,7 +6322,6 @@ function _keepReceiptWithSubscription(item, match, { currency, amount, receiptFi
   let outcome = 'attached';
   if (!match.posted) {
     line = postSubscriptionChargeEarly(sub.id, match.charge.monthKey, {
-      date: item.date,
       amount: useReceipt ? value : match.amount,
     });
     if (!line) return '';
@@ -6283,8 +6352,15 @@ function _keepReceiptWithSubscription(item, match, { currency, amount, receiptFi
     receiptAmount: item.amountUnknown ? null : value,
     receiptCurrency: currency,
   }));
-  const senders = learnedSenders(sub, item.emailFrom);
-  if (senders.length) sub.receiptSenders = senders;
+  // The Gmail finder knows the receipts it filed by this id (its duplicate check).
+  if (item.receiptImportId && !line.receiptImportId) line.receiptImportId = item.receiptImportId;
+  // Only a receipt at the charge's own amount teaches the subscription its
+  // sender: learning from one the owner had to vouch for would let every later
+  // email from that address (every Amazon order) pass as the subscription's.
+  if (match.amountMatches) {
+    const senders = learnedSenders(sub, item.emailFrom);
+    if (senders.length) sub.receiptSenders = senders;
+  }
   return outcome;
 }
 
@@ -6303,24 +6379,31 @@ function _expenseHasReceipt(e) {
 function _subscriptionPickHtml(r, i) {
   const result = _subscriptionMatch({ ...r, notSubscription: false });
   const m = result?.match;
-  if (!m || m.paused || m.covered) return '';
+  if (!m || m.paused) return '';
   const money = (amount, currency) => `${String(currency || 'CAD').toUpperCase()} ${(Number(amount) || 0).toFixed(2)}`;
-  const multiple = result.candidates.length > 1;
+  const receiptAmount = !r.amountUnknown && Number(r.amount) > 0;
+  // One value carries both answers — which subscription, and what the receipt
+  // is against its charge — as "sub:<id>:<answer>".
   const opts = [];
-  if (result.ambiguous) opts.push(['', 'Which subscription is this for?']);
-  (multiple ? result.candidates : [m]).forEach(c => {
+  result.candidates.forEach(c => {
     const when = c.posted ? `on ${c.line.date}` : `due ${c.charge.date}`;
-    opts.push([multiple ? `sub:${c.subId}` : 'keep', `Proof for ${c.sub.desc} — ${money(c.amount, c.currency)} ${when}`]);
+    const charge = `${c.sub.desc} — ${money(c.amount, c.currency)} ${when}`;
+    if (c.covered) { opts.push([`sub:${c.subId}:keep`, `Already in my books (${charge} has its receipt) — skip it`]); return; }
+    if (c.amountMatches) { opts.push([`sub:${c.subId}:keep`, `Proof for ${charge}`]); return; }
+    opts.push([`sub:${c.subId}:keep`, `Proof for ${charge} — keep ${money(c.amount, c.currency)}`]);
+    if (c.sameCurrency && receiptAmount) opts.push([`sub:${c.subId}:receipt`, `Proof for ${charge} — use ${money(r.amount, r.currency)} this time`]);
   });
-  const comparable = !result.ambiguous && !m.amountMatches && m.sameCurrency && !r.amountUnknown && Number(r.amount) > 0;
-  if (comparable) opts.push(['receipt', `Use ${money(r.amount, r.currency)} for that charge`]);
   opts.push(['separate', 'A separate purchase — file it on its own']);
 
-  let chosen = multiple ? `sub:${m.subId}` : 'keep';
+  // Only a receipt at the charge's own amount (or a plain second copy) has an
+  // answer to start from; anything else waits for the owner to choose.
+  let chosen = '';
   if (r.notSubscription) chosen = 'separate';
-  else if (result.ambiguous) chosen = '';
-  else if (comparable && r.subscriptionAmount === 'receipt') chosen = 'receipt';
-  return `<select data-erd-field="subscriptionPick" data-erd-i="${i}" aria-label="What filing this receipt does" style="font-size:var(--text-xs);width:100%;margin-top:4px;">${opts
+  else if (!result.ambiguous && (m.amountMatches || m.covered)) chosen = `sub:${m.subId}:keep`;
+  else if (!result.ambiguous && r.subscriptionAmount) chosen = `sub:${m.subId}:${r.subscriptionAmount}`;
+  if (chosen && !opts.some(([value]) => value === chosen)) chosen = '';
+  if (!chosen) opts.unshift(['', 'What is this receipt? Choose before filing']);
+  return `<select data-erd-field="subscriptionPick" data-erd-i="${i}" aria-label="What this receipt is" style="font-size:var(--text-xs);width:100%;margin-top:4px;">${opts
     .map(([value, label]) => `<option value="${escapeHtml(value)}"${value === chosen ? ' selected' : ''}${value ? '' : ' disabled'}>${escapeHtml(label)}</option>`)
     .join('')}</select>`;
 }
@@ -6455,8 +6538,9 @@ function renderEmailReceiptDrafts(receipts) {
       // row's note and choices depend on them.
       const d = _emailReceiptDrafts[i];
       d.notSubscription = v === 'separate';
-      if (v.startsWith('sub:')) { d.subscriptionId = v.slice(4); d.subscriptionAmount = 'keep'; }
-      else if (v === 'keep' || v === 'receipt') d.subscriptionAmount = v;
+      const [, subId, answer] = /^sub:(.+):(keep|receipt)$/.exec(v) || [];
+      if (subId) { d.subscriptionId = subId; d.subscriptionAmount = answer; }
+      else delete d.subscriptionAmount;
       writePersistedEmailReceiptDrafts(_emailReceiptDrafts);
       renderEmailReceiptDrafts(_emailReceiptDrafts);
       return;
@@ -6695,7 +6779,7 @@ async function importEmailReceiptDrafts() {
   if (attached) msgParts.push(`🔁 ${attached} kept as proof for subscription charges already counted`);
   if (countedEarly) msgParts.push(`🔁 ${countedEarly} subscription charge${countedEarly > 1 ? 's' : ''} counted now`);
   if (skippedDup) msgParts.push(`${skippedDup} duplicate${skippedDup > 1 ? 's' : ''} skipped`);
-  if (held) msgParts.push(`${held} left to review — ${held > 1 ? 'they match' : 'it matches'} more than one subscription`);
+  if (held) msgParts.push(`${held} left waiting — choose what ${held > 1 ? 'each one is' : 'it is'} in the list`);
   if (attachedLost) msgParts.push(`⚠ ${attachedLost} attached file${attachedLost > 1 ? 's' : ''} could not be saved — attach from the ledger row`);
   if (saved === false) msgParts.push('⚠ could not save — nothing was cleared, try again');
   const filedAny = imported || relinked || attached || countedEarly;
@@ -6749,9 +6833,12 @@ async function _fileReceiptDrafts(drafts, { fallbackCat = 'Other', attachedFiles
     }));
   }
 
-  // Post any subscription charge that has come due first, so a receipt for it
-  // is kept with that charge below rather than filed beside it.
-  processRecurringExpenses();
+  // Bring the books up to date first — another device may have posted (or
+  // counted early) a subscription charge since this one last looked, and the
+  // auto-poster run on a stale copy would post it again — then post anything
+  // due, so a receipt for it is kept with that charge below.
+  await refreshRecurringCharges();
+  if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
 
   let imported = 0, skippedDup = 0, relinked = 0, importedNeedsAmount = 0;
   let attached = 0, countedEarly = 0;
@@ -6781,11 +6868,13 @@ async function _fileReceiptDrafts(drafts, { fallbackCat = 'Other', attachedFiles
     // filed as usual: nothing in the books counts it.
     const subMatch = _subscriptionMatch({ ...item, currency });
     if (subMatch && !subMatch.match.paused) {
-      if (subMatch.ambiguous) { held.push(item); continue; }
       if (subMatch.match.covered) { skippedDup++; draftIdx++; continue; }
+      // Which subscription, and what the receipt is, are the owner's to say.
+      const choice = subMatch.ambiguous ? '' : _subscriptionAnswer(item, subMatch.match, amount);
+      if (!choice) { held.push(item); continue; }
       const receiptFiles = await _saveDraftReceiptFiles(item, { gmailSavedByMsg, savedReceiptPaths, draftIdx });
       draftIdx++;
-      const kept = _keepReceiptWithSubscription(item, subMatch.match, { currency, amount, receiptFiles });
+      const kept = _keepReceiptWithSubscription(item, subMatch.match, { currency, amount, receiptFiles, choice });
       if (kept === 'attached') { attached++; continue; }
       if (kept === 'counted') { countedEarly++; continue; }
       // The charge changed while the files were saving (a sync landed). Leave

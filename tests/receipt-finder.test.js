@@ -193,6 +193,24 @@ describe('durable import outbox', () => {
     await flushReceiptOutbox(state, deps); await flushReceiptOutbox(state, deps);
     expect(row.status).toBe('imported'); expect(deps.commit).toHaveBeenCalledOnce(); expect(deps.accept).toHaveBeenCalledOnce();
   });
+  it('keeps a subscription receipt with its charge instead of filing a second expense', async () => {
+    const attach = vi.fn(async () => {});
+    const { state, row, deps } = fixture({ subscription: vi.fn(async () => ({ kind: 'attach', attach })) });
+    await flushReceiptOutbox(state, deps);
+    expect(attach).toHaveBeenCalledWith(['receipt.pdf']);
+    expect(deps.commit).not.toHaveBeenCalled();
+    expect(row.status).toBe('imported');
+  });
+  it('skips a second copy of a subscription receipt, and holds one only the owner can place', async () => {
+    const skip = fixture({ subscription: async () => ({ kind: 'skip' }) });
+    await flushReceiptOutbox(skip.state, skip.deps);
+    expect(skip.row.status).toBe('imported'); expect(skip.deps.commit).not.toHaveBeenCalled();
+
+    const hold = fixture({ subscription: async () => ({ kind: 'hold', message: 'Amount differs from the subscription' }) });
+    await flushReceiptOutbox(hold.state, hold.deps);
+    expect(hold.row.status).toBe('queued'); expect(hold.row.error).toBe('Amount differs from the subscription');
+    expect(hold.deps.commit).not.toHaveBeenCalled();
+  });
   it('continues after one receipt fails', async () => {
     const { state, deps } = fixture();
     state.drafts.push(draft({ id: 'second', reference: 'INV-2', status: 'queued' }));

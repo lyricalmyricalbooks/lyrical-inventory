@@ -16,6 +16,7 @@ import {
   chargesBetween,
   firstUnpostedCharge,
   laterChargeDayChange,
+  nextRateChange,
   nextRecurringDate,
   recurringDueCharges,
 } from '../src/lib/recurring.js';
@@ -90,6 +91,25 @@ describe('who a receipt is from', () => {
 
   it('matches on the sending domain when the vendor name is missing', () => {
     expect(receiptIdentity({ vendor: '', emailFrom: 'billing@bigcartel.com' }, bigCartel)).toBe('name');
+  });
+
+  it('does not let a company-wide sending domain stand in for a named vendor', () => {
+    const workspace = { id: 'rec_ws', desc: 'Google Workspace', vendor: '', currency: 'CAD', amount: 8.4 };
+    expect(receiptIdentity({ vendor: 'Google Ads', emailFrom: 'payments-noreply@google.com' }, workspace)).toBe('similar');
+    expect(isSharedSender('auto-confirm@amazon.ca')).toBe(true);
+    expect(learnedSenders({}, 'auto-confirm@amazon.ca')).toEqual([]);
+  });
+
+  it('never treats an order from the same company as the subscription without an answer', () => {
+    const prime = { id: 'rec_prime', desc: 'Amazon Prime', vendor: 'Amazon', cat: 'Software & Subscriptions', currency: 'CAD', amount: 9.99, startDate: '2026-01-02', frequency: 'monthly', lastInjected: '2026-10' };
+    const books = [line(prime, '2026-10-02')];
+    const order = { vendor: 'Amazon.ca', date: '2026-10-09', amount: 84.5, currency: 'CAD', emailFrom: 'auto-confirm@amazon.ca' };
+    const result = matchReceiptToSubscription(order, [prime], books);
+    // It is offered, but as a mismatch the owner must answer — never a ready match.
+    expect(result.match.amountMatches).toBe(false);
+    const ads = { vendor: 'Google Ads', date: '2026-10-20', amount: 250, currency: 'CAD', emailFrom: 'payments-noreply@google.com' };
+    const workspace = { id: 'rec_ws', desc: 'Google Workspace', vendor: '', currency: 'CAD', amount: 8.4, startDate: '2026-01-15', frequency: 'monthly', lastInjected: '2026-10' };
+    expect(matchReceiptToSubscription(ads, [workspace], [line(workspace, '2026-10-15')])).toBeNull();
   });
 
   it('only calls a vendor that shares a word "similar", not the same', () => {
@@ -271,6 +291,14 @@ describe('moving the charge day to match the receipts', () => {
     expect(recurringDueCharges(moved, new Date(2026, 10, 15))).toEqual([]);
     expect(recurringDueCharges(moved, new Date(2026, 10, 16))).toEqual([{ date: '2026-11-16', monthKey: '2026-11', amount: 15 }]);
     expect(chargesBetween(moved, '2026-10-01', '2026-10-31')).toEqual([{ date: '2026-10-05', monthKey: '2026-10', amount: 15, posted: true }]);
+  });
+
+  it('does not show a day move as a price change', () => {
+    const change = laterChargeDayChange(bigCartel, 16);
+    const moved = { ...bigCartel, rateChanges: change.rateChanges };
+    expect(nextRateChange(moved, new Date(2026, 9, 8))).toBeNull();
+    const rise = { ...moved, rateChanges: [...change.rateChanges, { effectiveFrom: '2026-12-16', amount: 18 }] };
+    expect(nextRateChange(rise, new Date(2026, 9, 8))).toMatchObject({ effectiveFrom: '2026-12-16', from: 15, to: 18 });
   });
 
   it('refuses an earlier day, which would skip a month', () => {

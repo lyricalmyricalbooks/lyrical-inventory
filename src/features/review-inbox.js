@@ -180,7 +180,7 @@ function receiptFormHtml(item, draft) {
  * For a receipt that belongs to a subscription charge: which subscription,
  * when two fit, and which amount, when the receipt and the charge differ.
  */
-function subscriptionFormHtml(item, draft) {
+function subscriptionFormHtml(item) {
   const sub = item.subscription;
   if (!sub) return '';
   const key = escapeHtml(item.key);
@@ -197,9 +197,11 @@ function subscriptionFormHtml(item, draft) {
       </label>
     </section>`
     : '';
-  if (!sub.amountDiffers) return picker;
-  const chosen = ['keep', 'receipt', 'price'].includes(draft.subscriptionAmount) ? draft.subscriptionAmount : 'keep';
-  const name = `ri-amount-${item.index}`;
+  if (!sub.needsAnswer) return picker;
+  // Nothing is picked for the owner: a different amount from the right company
+  // is as likely a separate purchase as this charge at another price.
+  const chosen = sub.answer;
+  const name = `ri-what-${item.index}`;
   const choice = (value, title, sub) => `<label class="ri-choice">
         <input type="radio" name="${escapeHtml(name)}" value="${value}" data-ri-field="subscriptionAmount" data-ri-key="${key}"${chosen === value ? ' checked' : ''}>
         <span class="ri-choice-body">
@@ -207,19 +209,24 @@ function subscriptionFormHtml(item, draft) {
           <span class="ri-choice-sub">${sub}</span>
         </span>
       </label>`;
+  const charge = sub.posted ? 'that charge' : 'the next charge';
   const options = [
-    choice('keep', `Keep ${escapeHtml(sub.chargeMoney)}`,
-      'The receipt is kept as proof only. Pick this when your books count a share of the bill, like the business part of the rent.'),
-    choice('receipt', `Use ${escapeHtml(sub.receiptMoney)} for this charge`,
-      `Just this once, like a bill with extra usage. Later charges stay at ${escapeHtml(sub.chargeMoney)}.`),
+    choice('keep', `Proof for ${charge} — keep ${escapeHtml(sub.chargeMoney)}`,
+      'The charge stays as it is, with this receipt as its proof. Pick this when your books count a share of the bill, like the business part of the rent.'),
   ];
+  if (sub.amountDiffers) {
+    options.push(choice('receipt', `Proof for ${charge} — use ${escapeHtml(sub.receiptMoney)} this time`,
+      `Just this once, like a bill with extra usage. Later charges stay at ${escapeHtml(sub.chargeMoney)}.`));
+  }
   if (sub.canChangePrice) {
-    options.push(choice('price', `The price is now ${escapeHtml(sub.receiptMoney)}`,
+    options.push(choice('price', `Proof for ${charge} — the price is now ${escapeHtml(sub.receiptMoney)}`,
       'Use it for this charge and every charge after it.'));
   }
+  options.push(choice('separate', 'A separate purchase',
+    `Not your ${escapeHtml(sub.name)} subscription. It is filed on its own as a new expense.`));
   return `${picker}<section class="ri-section" data-autosave>
-      <h4 id="ri-amount-head">Which amount</h4>
-      <div class="ri-choices" role="radiogroup" aria-labelledby="ri-amount-head">${options.join('')}</div>
+      <h4 id="ri-what-head">What this receipt is</h4>
+      <div class="ri-choices" role="radiogroup" aria-labelledby="ri-what-head">${options.join('')}</div>
     </section>`;
 }
 
@@ -258,11 +265,13 @@ function receiptActionsHtml(item) {
   const blocked = item.state === REVIEW_STATE.needsYou;
   const sub = item.subscription;
   let primary = item.duplicate ? 'Already in my books' : 'File this receipt';
-  if (sub) primary = sub.covered ? 'Already in my books' : sub.posted ? 'Attach as proof' : 'Count it now';
-  const hint = sub?.ambiguous ? 'Choose the subscription above first.' : 'Fill in the missing details above to file it.';
+  if (sub) primary = sub.covered ? 'Already in my books' : 'Attach as proof';
+  let hint = 'Fill in the missing details above to file it.';
+  if (sub?.ambiguous) hint = 'Choose the subscription above first.';
+  else if (sub?.needsAnswer) hint = 'Choose what this receipt is above first.';
   return `<div class="ri-actions">
       <button type="button" class="btn gold" data-ri-action="file" data-ri-key="${key}"${blocked ? ' disabled' : ''}>${primary}</button>
-      ${sub ? `<button type="button" class="btn" data-ri-action="separate" data-ri-key="${key}">It’s a separate purchase</button>` : ''}
+      ${sub && !sub.needsAnswer ? `<button type="button" class="btn" data-ri-action="separate" data-ri-key="${key}">It’s a separate purchase</button>` : ''}
       ${item.separateFrom ? `<button type="button" class="btn ghost" data-ri-action="unseparate" data-ri-key="${key}">It’s part of ${escapeHtml(item.separateFrom)}</button>` : ''}
       <button type="button" class="btn danger-btn" data-ri-action="discard" data-ri-key="${key}">Not needed</button>
       ${blocked ? `<span class="ri-hint" role="note">${hint}</span>` : ''}
@@ -295,7 +304,7 @@ function detailHtml(item) {
   let form = '';
   let actions = '';
   if (item.kind === 'receipt') {
-    form = receiptFormHtml(item, row.draft || {}) + subscriptionFormHtml(item, row.draft || {});
+    form = receiptFormHtml(item, row.draft || {}) + subscriptionFormHtml(item);
     actions = receiptActionsHtml(item);
   } else if (item.kind === 'double') {
     actions = doubleActionsHtml(item);
@@ -405,7 +414,7 @@ function renderAfterEdit() {
 function subscriptionShape(item) {
   const sub = item?.subscription;
   return JSON.stringify([
-    sub ? [sub.subId, sub.ambiguous, sub.amountDiffers, sub.canChangePrice, sub.covered, sub.posted] : null,
+    sub ? [sub.subId, sub.ambiguous, sub.needsAnswer, sub.amountDiffers, sub.canChangePrice, sub.covered, sub.posted] : null,
     item?.separateFrom || '',
   ]);
 }
@@ -448,9 +457,9 @@ async function fileOne(key) {
   const sub = item.subscription;
   const counts = await fileReviewedReceipts([draft]);
   if (!counts) { showToast('That receipt is no longer waiting.', 'warn'); }
-  else if (counts.held) showToast('Choose which subscription it is for first.', 'warn');
+  else if (counts.held) showToast('It is still waiting — choose what it is first.', 'warn');
   else if (counts.attached) showToast(`Kept as proof for ${sub?.period || 'the charge'} of ${sub?.name || 'your subscription'}. Nothing was counted twice.`, 'ok');
-  else if (counts.countedEarly) showToast(`Counted the ${sub?.name || 'subscription'} charge now, with this receipt as its proof.`, 'ok');
+  else if (counts.countedEarly) showToast(`Counted the ${sub?.name || 'subscription'} charge due ${sub?.dueDate || 'next'}, with this receipt as its proof.`, 'ok');
   else if (counts.imported) showToast(`Filed: ${item.title} — ${item.subtitle}`, 'ok');
   else if (counts.relinked) showToast('Receipt attached to the expense already in your books.', 'ok');
   else showToast('That one was already in your books, so nothing new was added.', 'ok');
