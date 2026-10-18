@@ -1524,25 +1524,38 @@ function _tcRenderPendingPanel() {
   }
 
   const cur = TAX_CENTER.settings?.baseCurrency || 'CAD';
-  const estTotal = rows.reduce((sum, r) => {
-    const amt = Number(r.item.estAmount) || 0;
-    if (!amt) return sum;
-    return sum + amt * (_fxRateCache[`${(r.item.currency || 'CAD')}_${cur}`] || _fxRateCache[`${(r.item.currency || 'CAD')}_CAD`] || 1);
-  }, 0);
-  const withoutAmount = rows.filter(r => !Number(r.item.estAmount)).length;
 
-  const body = rows.map(({ item, due }) => {
+  // ⚡ Bolt Optimization: Loop fusion - Combine .reduce(), .filter(), and .map().join() passes
+  // into a single imperative loop to eliminate intermediate array allocations
+  let estTotal = 0;
+  let withoutAmount = 0;
+  let body = '';
+
+  for (const { item, due } of rows) {
+    const amt = Number(item.estAmount) || 0;
+    if (amt) {
+      estTotal += amt * (_fxRateCache[`${(item.currency || 'CAD')}_${cur}`] || _fxRateCache[`${(item.currency || 'CAD')}_CAD`] || 1);
+    } else {
+      withoutAmount++;
+    }
+
     const safeId = String(item.id).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-    const amount = Number(item.estAmount)
-      ? `<span class="tc-pending-amt">~${getSym(item.currency || 'CAD')}${Number(item.estAmount).toFixed(2)}</span>`
+    const amount = amt
+      ? `<span class="tc-pending-amt">~${getSym(item.currency || 'CAD')}${amt.toFixed(2)}</span>`
       : `<span class="tc-pending-amt is-unknown">Amount unknown</span>`;
-    const bits = [
-      item.cat ? escapeHtml(item.cat) : '',
-      item.expectedDate ? `📅 ${escapeHtml(item.expectedDate)}` : '',
-      item.trip ? `✈ ${escapeHtml(item.trip)}` : '',
-    ].filter(Boolean).join(' &nbsp;·&nbsp; ');
 
-    return `<div class="tc-pending-row tc-due-${due.state}">
+    let bits = '';
+    if (item.cat) bits += escapeHtml(item.cat);
+    if (item.expectedDate) {
+      if (bits) bits += ' &nbsp;·&nbsp; ';
+      bits += `📅 ${escapeHtml(item.expectedDate)}`;
+    }
+    if (item.trip) {
+      if (bits) bits += ' &nbsp;·&nbsp; ';
+      bits += `✈ ${escapeHtml(item.trip)}`;
+    }
+
+    body += `<div class="tc-pending-row tc-due-${due.state}">
       <div class="tc-pending-main">
         <div class="tc-pending-top">
           <span class="tc-pending-desc">${escapeHtml(item.desc)}</span>
@@ -1561,7 +1574,7 @@ function _tcRenderPendingPanel() {
         </div>
       </div>
     </div>`;
-  }).join('');
+  }
 
   const foot = `<div class="tc-pending-foot">
     <span>${rows.length} pending note${rows.length === 1 ? '' : 's'}${withoutAmount ? ` · ${withoutAmount} without an amount` : ''}</span>
