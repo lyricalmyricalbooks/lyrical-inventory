@@ -15739,6 +15739,14 @@ button[onclick="refreshUmamiStats()"]:active {
 /* Lifecycle filter — same pill/is-on grammar as .con-group-toggle-btn. */
 .rec-filters{display:flex;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-3);}
 .rec-filters:empty{display:none;}
+/* "Counted twice" note: the Tax Centre's alert-strip shape (see .tc-folder-alert) in the
+   needs-you ink, since nothing is broken — a cost just needs looking at. */
+.rec-alert{background:var(--status-active-bg);border:var(--stroke-hair) solid var(--status-active);border-radius:var(--r2);padding:var(--space-2) var(--space-3);margin-bottom:var(--space-3);}
+.rec-alert[hidden]{display:none;}
+.rec-alert-inner{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);flex-wrap:wrap;}
+.rec-alert-icon{font-size:var(--text-base);line-height:1;flex-shrink:0;}
+.rec-alert-text{font-size:var(--text-xs);line-height:var(--leading-snug);color:var(--content-primary);flex:1;min-width:220px;}
+.rec-alert-text strong{font-weight:700;}
 .rec-filter{
   display:inline-flex;align-items:center;gap:6px;
   padding:5px 12px;border-radius:var(--r-pill);cursor:pointer;

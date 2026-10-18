@@ -97,7 +97,22 @@ import { toCsv } from '../lib/csv.js';
 import { downloadBlob } from '../lib/download.js';
 import { createZip, textEntry, uniqueZipPath, zipEntryName } from '../lib/zip.js';
 import { planFile } from '../lib/receipt-match.js';
-import { renderTaxCenter, saveTaxCenter, switchTaxCenterSubTab, tcExpenseRowDrop } from './taxcentre.js';
+import {
+  postSubscriptionChargeEarly,
+  processRecurringExpenses,
+  renderTaxCenter,
+  saveTaxCenter,
+  switchTaxCenterSubTab,
+  tcExpenseRowDrop,
+} from './taxcentre.js';
+import {
+  findSubscriptionDoubles,
+  learnedSenders,
+  matchReceiptToSubscription,
+  priceChangeFrom,
+  receiptProofFields,
+  subscriptionMatchLine,
+} from '../lib/subscription-receipts.js';
 import {
   cloudReceiptRefs,
   expenseMissingReceipt,
@@ -2185,7 +2200,9 @@ function writePersistedEmailReceiptDrafts(drafts) {
 function _filterAlreadyImportedDrafts(drafts) {
   if (!Array.isArray(drafts) || !drafts.length) return [];
   const expenses = (typeof TAX_CENTER !== 'undefined' && TAX_CENTER.businessExpenses) || [];
-  const importedRefs = new Set(expenses.map(e => e.ref).filter(Boolean));
+  // A receipt kept as a subscription charge's proof sits on that charge under
+  // receiptRef, since the charge's own ref says where the charge came from.
+  const importedRefs = new Set(expenses.flatMap(e => [e.ref, e.receiptRef]).filter(Boolean));
   const importedMsgIds = new Set(expenses.map(e => e.emailMsgId).filter(Boolean));
   return drafts.filter(d => {
     if (d.ref && importedRefs.has(d.ref)) return false;
@@ -2620,6 +2637,7 @@ function reviewableReceiptDrafts({ refresh = true } = {}) {
   return {
     drafts: _emailReceiptDrafts.slice(),
     isDuplicate: (draft) => _isLikelyDuplicateExpense(draft, dupIndex),
+    subscriptionMatch: _subscriptionMatch,
   };
 }
 
@@ -2630,6 +2648,8 @@ function editReviewedReceipt(draft, field, value) {
   if (field === 'amount') v = Number(v) || 0;
   if (field === 'currency') v = String(v).toUpperCase();
   if (field === 'date') v = normalizeReceiptDate(v) || v;
+  if (field === 'notSubscription') v = v === true || v === 'true';
+  if (field === 'subscriptionAmount' && !['keep', 'receipt', 'price'].includes(v)) v = 'keep';
   draft[field] = v;
   if (field === 'amount') draft.amountUnknown = needsReceiptAmount(draft);
   writePersistedEmailReceiptDrafts(_emailReceiptDrafts);
@@ -2641,6 +2661,53 @@ async function fileReviewedReceipts(drafts) {
   const waiting = (drafts || []).filter(draft => _emailReceiptDrafts.includes(draft));
   if (!waiting.length) return null;
   return _fileReceiptDrafts(waiting, { fallbackCat: 'Other' });
+}
+
+/**
+ * Expenses filed beside a subscription charge for the same payment, so the
+ * cost is in the books twice — see findSubscriptionDoubles.
+ */
+function subscriptionDoubleEntries() {
+  return findSubscriptionDoubles(TAX_CENTER.recurring || [], TAX_CENTER.businessExpenses || []);
+}
+
+/**
+ * Settle one of those: merge the extra expense into the subscription's charge
+ * (its receipt moves onto the charge, the extra line goes), or keep the two
+ * apart for good. Re-finds the pair from the books first, so a stale screen
+ * can never remove an expense that is no longer a copy of anything.
+ * Returns false when the pair is gone or the save fails.
+ */
+async function settleSubscriptionDouble(expenseId, { merge }) {
+  const pair = subscriptionDoubleEntries().find(p => String(p.expense.id) === String(expenseId));
+  if (!pair) return false;
+  const { expense, line, sub } = pair;
+  const before = TAX_CENTER.businessExpenses.slice();
+  const lineBefore = { ...line };
+  if (merge) {
+    Object.assign(line, receiptProofFields(line, {
+      receipt: expense.receipt,
+      receiptFiles: expense.receiptFiles,
+      receiptCloudAt: expense.receiptCloudAt,
+      emailMsgId: expense.emailMsgId,
+      receiptRef: expense.ref && expense.ref.startsWith('receipt-email:') ? expense.ref : '',
+      receiptDate: expense.date,
+      receiptAmount: expense.origAmount ?? expense.amount,
+      receiptCurrency: expense.origCurrency || expense.currency,
+    }));
+    TAX_CENTER.businessExpenses = TAX_CENTER.businessExpenses.filter(e => e !== expense);
+  } else {
+    expense.notSubscriptionDouble = sub.id || true;
+  }
+  if ((await saveTaxCenter()) === false) {
+    TAX_CENTER.businessExpenses = before;
+    Object.keys(line).forEach(k => { if (!(k in lineBefore)) delete line[k]; });
+    Object.assign(line, lineBefore);
+    if (!merge) delete expense.notSubscriptionDouble;
+    return false;
+  }
+  if (typeof renderTaxCenter === 'function') renderTaxCenter();
+  return true;
 }
 
 /** Discard one drafted receipt for good. */
@@ -6141,6 +6208,84 @@ function _isLikelyDuplicateExpense(draft, index) {
   return !!_findDuplicateExpense(draft, index);
 }
 
+/**
+ * The subscription charge a drafted receipt belongs to, from what the books
+ * hold right now, or null — see lib/subscription-receipts.js. The owner's
+ * answers ride on the draft: which subscription (`subscriptionId`) when two
+ * fit, and `notSubscription` when it is a separate purchase.
+ */
+function _subscriptionMatch(draft) {
+  if (!draft || draft.notSubscription) return null;
+  return matchReceiptToSubscription(
+    draft,
+    TAX_CENTER.recurring || [],
+    TAX_CENTER.businessExpenses || [],
+    { chosenId: draft.subscriptionId || '' },
+  );
+}
+
+/**
+ * Keep a receipt with the subscription charge it pays for, instead of filing
+ * it as an expense of its own. A posted charge gets the receipt as its proof;
+ * the next charge, when its bill arrives early, is counted now on the
+ * receipt's date. Returns 'attached', 'counted', or '' when the charge is no
+ * longer there to keep it with.
+ *
+ * `subscriptionAmount` is the owner's answer when the receipt's amount and the
+ * charge's differ: 'keep' the charge's (rent counted at the business share
+ * while the receipt is the whole rent), use the 'receipt' amount for this
+ * charge only (a phone bill with an overage), or record a new 'price' from
+ * this charge on. Without a comparable amount, the charge's is kept.
+ */
+function _keepReceiptWithSubscription(item, match, { currency, amount, receiptFiles }) {
+  const sub = (TAX_CENTER.recurring || []).find(s => s.id === match.subId);
+  if (!sub) return '';
+  const baseCur = (TAX_CENTER.settings?.baseCurrency || 'CAD').toUpperCase();
+  const comparable = match.sameCurrency && amount > 0 && !item.amountUnknown && !match.amountMatches;
+  const choice = comparable ? (item.subscriptionAmount || 'keep') : 'keep';
+  const useReceipt = choice === 'receipt' || choice === 'price';
+  const value = roundCents(amount);
+
+  let line = match.line;
+  let outcome = 'attached';
+  if (!match.posted) {
+    line = postSubscriptionChargeEarly(sub.id, match.charge.monthKey, {
+      date: item.date,
+      amount: useReceipt ? value : match.amount,
+    });
+    if (!line) return '';
+    outcome = 'counted';
+  } else {
+    if (!(TAX_CENTER.businessExpenses || []).includes(line)) return '';
+    if (useReceipt) {
+      line.amount = value;
+      line.amountFromReceipt = true;
+      if (line.fxRate) line.baseAmount = roundCents(value * line.fxRate);
+      else if (String(line.currency || baseCur).toUpperCase() === baseCur) line.baseAmount = value;
+      else { line.baseAmount = null; line.fxMissing = true; }
+    }
+  }
+
+  // A new price only from the newest charge on: from an older one it would
+  // leave the charges posted since at the old price, which isn't "from here on".
+  if (choice === 'price' && (!match.posted || match.charge.monthKey >= (sub.lastInjected || ''))) {
+    Object.assign(sub, priceChangeFrom(sub, match.charge.date, value) || {});
+  }
+
+  Object.assign(line, receiptProofFields(line, {
+    receiptFiles,
+    receiptCloudAt: receiptFiles.some(isOurCloudReceipt) ? new Date().toISOString() : '',
+    emailMsgId: item.msgId || '',
+    receiptRef: item.ref || '',
+    receiptDate: item.date,
+    receiptAmount: item.amountUnknown ? null : value,
+    receiptCurrency: currency,
+  }));
+  const senders = learnedSenders(sub, item.emailFrom);
+  if (senders.length) sub.receiptSenders = senders;
+  return outcome;
+}
+
 // True when an expense already has at least one viewable receipt on file.
 function _expenseHasReceipt(e) {
   return !!(e && ((Array.isArray(e.receiptFiles) && e.receiptFiles.length) || e.receipt));
@@ -6167,7 +6312,10 @@ function renderEmailReceiptDrafts(receipts) {
   // recomputed by a full scan of every expense, twice per draft — once for the
   // header count and once for the row.
   const dupIndex = _buildDuplicateExpenseIndex();
-  const dupByRow = receipts.map(r => _isLikelyDuplicateExpense(r, dupIndex));
+  const subByRow = receipts.map(r => subscriptionMatchLine(_subscriptionMatch(r)));
+  // A receipt kept with its subscription charge is not a duplicate to untick:
+  // filing it adds nothing, so it isn't counted or flagged as one.
+  const dupByRow = receipts.map((r, i) => !subByRow[i] && _isLikelyDuplicateExpense(r, dupIndex));
   const dupCount = dupByRow.filter(Boolean).length;
 
   wrap.innerHTML = `
@@ -6196,6 +6344,7 @@ function renderEmailReceiptDrafts(receipts) {
               <input type="text" data-erd-field="vendor" data-erd-i="${i}" value="${esc(r.vendor)}" placeholder="Vendor" style="font-size:var(--text-sm);width:100%;margin-bottom:2px;">
               <input type="text" data-erd-field="description" data-erd-i="${i}" value="${esc(r.description)}" placeholder="Description" style="font-size:var(--text-xs);width:100%;color:var(--content-secondary);">
               ${dup ? `<div style="font-size:var(--text-2xs);color:var(--amber);margin-top:2px;font-weight:600;">⚠ matches an existing expense</div>` : ''}
+              ${subByRow[i] ? `<div style="font-size:var(--text-2xs);color:var(${subByRow[i].tone === 'warn' ? '--amber' : '--blue'});margin-top:2px;font-weight:600;">🔁 ${esc(subByRow[i].text)}</div>` : ''}
               ${r.amountUnknown ? `<div style="font-size:var(--text-2xs);color:var(--amber);margin-top:2px;font-weight:600;">⚠ no confident amount — check before importing</div>` : ''}
               ${lowConf ? `<div style="font-size:var(--text-2xs);color:var(--content-muted);margin-top:2px;">low confidence (${(r.confidence * 100 | 0)}%)</div>` : ''}
               ${r.msgId
@@ -6293,7 +6442,7 @@ function deselectDuplicateEmailDrafts() {
   let n = 0;
   const dupIndex = _buildDuplicateExpenseIndex();
   _emailReceiptDrafts.forEach((d, i) => {
-    if (_isLikelyDuplicateExpense(d, dupIndex)) {
+    if (!_subscriptionMatch(d) && _isLikelyDuplicateExpense(d, dupIndex)) {
       d.include = false;
       n++;
       const cb = document.querySelector(`[data-erd-include="${i}"]`);
@@ -6491,18 +6640,23 @@ async function importEmailReceiptDrafts() {
     fallbackCat: $('email-receipt-default-cat')?.value || 'Other',
     attachedFiles: Array.from($('email-receipt-files')?.files || []),
   });
-  const { imported, importedNeedsAmount, relinked, skippedDup, attachedLost, saved } = counts;
+  const { imported, importedNeedsAmount, relinked, skippedDup, attachedLost, saved, attached, countedEarly, held } = counts;
 
   const msgParts = [];
   if (imported) msgParts.push(`✓ Imported ${imported} expense${imported > 1 ? 's' : ''}`);
   if (importedNeedsAmount) msgParts.push(`${importedNeedsAmount} need${importedNeedsAmount > 1 ? '' : 's'} an amount`);
   if (relinked) msgParts.push(`📎 ${relinked} receipt${relinked > 1 ? 's' : ''} linked to existing`);
+  if (attached) msgParts.push(`🔁 ${attached} kept as proof for subscription charges already counted`);
+  if (countedEarly) msgParts.push(`🔁 ${countedEarly} subscription charge${countedEarly > 1 ? 's' : ''} counted now`);
   if (skippedDup) msgParts.push(`${skippedDup} duplicate${skippedDup > 1 ? 's' : ''} skipped`);
+  if (held) msgParts.push(`${held} left to review — ${held > 1 ? 'they match' : 'it matches'} more than one subscription`);
   if (attachedLost) msgParts.push(`⚠ ${attachedLost} attached file${attachedLost > 1 ? 's' : ''} could not be saved — attach from the ledger row`);
   if (saved === false) msgParts.push('⚠ could not save — nothing was cleared, try again');
-  showToast(msgParts.join(' · ') || 'Nothing imported', (imported || relinked) && !attachedLost && saved !== false ? 'ok' : 'warn');
+  const filedAny = imported || relinked || attached || countedEarly;
+  showToast(msgParts.join(' · ') || 'Nothing imported', filedAny && !attachedLost && !held && saved !== false ? 'ok' : 'warn');
 
-  if ((imported || relinked) && saved !== false) closeEmailReceiptImportModal();
+  if (filedAny && !held && saved !== false) closeEmailReceiptImportModal();
+  else if (held) renderEmailReceiptDrafts(_emailReceiptDrafts);
   else if (btn) { btn.disabled = false; btn.textContent = 'File selected receipts'; }
 }
 
@@ -6549,7 +6703,15 @@ async function _fileReceiptDrafts(drafts, { fallbackCat = 'Other', attachedFiles
     }));
   }
 
+  // Post any subscription charge that has come due first, so a receipt for it
+  // is kept with that charge below rather than filed beside it.
+  processRecurringExpenses();
+
   let imported = 0, skippedDup = 0, relinked = 0, importedNeedsAmount = 0;
+  let attached = 0, countedEarly = 0;
+  // Receipts that fit two subscriptions equally well wait for the owner to
+  // say which — filing either way could count a cost twice or not at all.
+  const held = [];
   let draftIdx = 0;
   const gmailSavedByMsg = {}; // msgId → [saved local:// paths] for that email
   // ⚡ Bolt Optimization: build the ledger index once instead of letting
@@ -6567,6 +6729,24 @@ async function _fileReceiptDrafts(drafts, { fallbackCat = 'Other', attachedFiles
     // no-op'ing here would be the exact "vanished with no trace" failure this
     // whole change exists to remove, just relocated from extraction to import.
     if (!amount && !item.amountUnknown) continue;
+
+    // A receipt for a charge a subscription already counts is that charge's
+    // proof, not an expense of its own. A paused subscription's receipt is
+    // filed as usual: nothing in the books counts it.
+    const subMatch = _subscriptionMatch({ ...item, currency });
+    if (subMatch && !subMatch.match.paused) {
+      if (subMatch.ambiguous) { held.push(item); continue; }
+      if (subMatch.match.covered) { skippedDup++; draftIdx++; continue; }
+      const receiptFiles = await _saveDraftReceiptFiles(item, { gmailSavedByMsg, savedReceiptPaths, draftIdx });
+      draftIdx++;
+      const kept = _keepReceiptWithSubscription(item, subMatch.match, { currency, amount, receiptFiles });
+      if (kept === 'attached') { attached++; continue; }
+      if (kept === 'counted') { countedEarly++; continue; }
+      // The charge changed while the files were saving (a sync landed). Leave
+      // the receipt waiting rather than guess: the next look matches it afresh.
+      held.push(item);
+      continue;
+    }
 
     // If this draft matches an existing expense that already has a receipt,
     // there's nothing to do. If it matches one that has NO receipt yet, fall
@@ -6624,7 +6804,10 @@ async function _fileReceiptDrafts(drafts, { fallbackCat = 'Other', attachedFiles
       emailMsgId: item.msgId || '',
       sourceSnippet: item.sourceSnippet || '',
       importedFromEmail: true,
-      importedAt: new Date().toISOString()
+      importedAt: new Date().toISOString(),
+      // The owner said it is separate from the subscription it resembles, so
+      // it is never raised as that charge counted twice.
+      ...(item.notSubscription ? { notSubscriptionDouble: true } : {}),
     };
     // A receipt that could only be kept in the cloud is stamped so the Tax
     // Centre counts it as waiting to come down into the folder.
@@ -6641,20 +6824,22 @@ async function _fileReceiptDrafts(drafts, { fallbackCat = 'Other', attachedFiles
   }
 
   const saved = (await saveTaxCenter()) !== false;
+  // A held receipt is still waiting, so everything below leaves it alone.
+  const done = drafts.filter(d => !held.includes(d));
 
   // Drafts that came from the Gmail add-on carry an _inboxId — remove those
   // Firestore docs now that they've been reviewed so the queue stays clean.
   // Only once the expenses are saved: until then the staged cloud files and the
   // inbox item are the only copy, and a failed save must leave them to retry.
   if (saved) {
-    for (const d of drafts) {
+    for (const d of done) {
       for (const url of (d._cloudToDelete || [])) {
         try { await window._fbDeleteReceipt(url); } catch (_) { /* a stray staging file is harmless */ }
       }
       delete d._cloudToDelete;
     }
   }
-  const inboxIds = saved ? drafts.map(d => d._inboxId).filter(Boolean) : [];
+  const inboxIds = saved ? done.map(d => d._inboxId).filter(Boolean) : [];
   if (inboxIds.length && typeof window._fbDeleteInboxItem === 'function') {
     await Promise.all(inboxIds.map(id => window._fbDeleteInboxItem(id)));
     // ⚡ Bolt Optimization: Replace O(N) Array.includes with O(1) Set.has inside filter loop
@@ -6668,14 +6853,14 @@ async function _fileReceiptDrafts(drafts, { fallbackCat = 'Other', attachedFiles
   // duplicate of the real ledger entry the next time the modal opens, since
   // reopening now preserves auto-sourced rows instead of clearing everything.
   // (After a failed save the rows stay, so nothing is lost and Import can be retried.)
-  const processed = new Set(saved ? drafts : []);
+  const processed = new Set(saved ? done : []);
   _emailReceiptDrafts = _emailReceiptDrafts.filter(d => !processed.has(d));
-  if (saved) _clearResolvedSweepPending(drafts);
+  if (saved) _clearResolvedSweepPending(done);
   writePersistedEmailReceiptDrafts(_emailReceiptDrafts);
   updateEmailInboxBadge();
 
   if (typeof renderTaxCenter === 'function') renderTaxCenter();
-  return { imported, importedNeedsAmount, relinked, skippedDup, attachedLost, saved };
+  return { imported, importedNeedsAmount, relinked, skippedDup, attachedLost, saved, attached, countedEarly, held: held.length };
 }
 
 // ── The receipt inbox scans itself ──────────────────────────────────────
@@ -7551,6 +7736,8 @@ export {
   editReviewedReceipt,
   fileReviewedReceipts,
   discardReviewedReceipt,
+  subscriptionDoubleEntries,
+  settleSubscriptionDouble,
   calcExpenseFx,
   loadReceiptFileForScan,
   onExpenseCurrencyChange,

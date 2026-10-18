@@ -18,6 +18,7 @@ import { PICKER_CURRENCIES } from '../lib/money.js';
 import {
   REVIEW_STATE,
   buildReviewQueue,
+  doubleKey,
   receiptKey,
   summarizeReviewQueue,
 } from '../lib/review-queue.js';
@@ -29,6 +30,8 @@ import {
   fileReviewedReceipts,
   openEmailReceiptImportModal,
   reviewableReceiptDrafts,
+  settleSubscriptionDouble,
+  subscriptionDoubleEntries,
 } from './receipts.js';
 import {
   discardImportedPostageExpense,
@@ -56,7 +59,7 @@ let _view = 'list';
 let _busy = false;
 let _returnToInbox = false;
 let _wired = false;
-// key → { item, draft?, entry? } for the render in front of the owner.
+// key → { item, draft?, entry?, pair? } for the render in front of the owner.
 let _rows = new Map();
 let _items = [];
 
@@ -71,14 +74,17 @@ function isNarrow() {
 
 /** What is waiting right now, for the inbox and for the landing page's counts. */
 function reviewQueueSnapshot({ refresh = false } = {}) {
-  const { drafts, isDuplicate } = reviewableReceiptDrafts({ refresh });
+  const { drafts, isDuplicate, subscriptionMatch } = reviewableReceiptDrafts({ refresh });
   const entries = labelReviewEntries();
-  const items = buildReviewQueue({ receiptDrafts: drafts, isDuplicate, labels: entries });
+  const doubles = subscriptionDoubleEntries();
+  const items = buildReviewQueue({ receiptDrafts: drafts, isDuplicate, subscriptionMatch, labels: entries, doubles });
   const rows = new Map();
   items.forEach(item => {
     if (item.kind === 'receipt') {
       const draft = drafts.find((d, i) => receiptKey(d, i) === item.key);
       rows.set(item.key, { item, draft });
+    } else if (item.kind === 'double') {
+      rows.set(item.key, { item, pair: doubles.find(p => doubleKey(p.expense) === item.key) });
     } else {
       rows.set(item.key, { item, entry: entries.find(e => e.expense.ref === item.ref) });
     }
@@ -87,7 +93,7 @@ function reviewQueueSnapshot({ refresh = false } = {}) {
 }
 
 function visibleItems() {
-  return _filter === 'all' ? _items : _items.filter(item => item.kind === _filter);
+  return _filter === 'all' ? _items : _items.filter(item => item.kind === _filter || item.group === _filter);
 }
 
 // ── Rendering ─────────────────────────────────────────────────────────────
@@ -170,6 +176,50 @@ function receiptFormHtml(item, draft) {
     </section>`;
 }
 
+/**
+ * For a receipt that belongs to a subscription charge: which subscription,
+ * when two fit, and which amount, when the receipt and the charge differ.
+ */
+function subscriptionFormHtml(item, draft) {
+  const sub = item.subscription;
+  if (!sub || (!sub.ambiguous && !sub.amountDiffers)) return '';
+  const key = escapeHtml(item.key);
+  if (sub.ambiguous) {
+    return `<section class="ri-section">
+      <h4>Which subscription</h4>
+      <label class="ri-field">The subscription this receipt is for
+        <select data-ri-field="subscriptionId" data-ri-key="${key}">
+          <option value="" selected disabled>Choose a subscription…</option>
+          ${sub.choices.map(c => `<option value="${escapeHtml(c.subId)}">${escapeHtml(c.label)}</option>`).join('')}
+        </select>
+      </label>
+    </section>`;
+  }
+  const chosen = ['keep', 'receipt', 'price'].includes(draft.subscriptionAmount) ? draft.subscriptionAmount : 'keep';
+  const name = `ri-amount-${item.index}`;
+  const choice = (value, title, sub) => `<label class="ri-choice">
+        <input type="radio" name="${escapeHtml(name)}" value="${value}" data-ri-field="subscriptionAmount" data-ri-key="${key}"${chosen === value ? ' checked' : ''}>
+        <span class="ri-choice-body">
+          <span class="ri-choice-title">${title}</span>
+          <span class="ri-choice-sub">${sub}</span>
+        </span>
+      </label>`;
+  const options = [
+    choice('keep', `Keep ${escapeHtml(sub.chargeMoney)}`,
+      'The receipt is kept as proof only. Pick this when your books count a share of the bill, like the business part of the rent.'),
+    choice('receipt', `Use ${escapeHtml(sub.receiptMoney)} for this charge`,
+      `Just this once, like a bill with extra usage. Later charges stay at ${escapeHtml(sub.chargeMoney)}.`),
+  ];
+  if (sub.canChangePrice) {
+    options.push(choice('price', `The price is now ${escapeHtml(sub.receiptMoney)}`,
+      'Use it for this charge and every charge after it.'));
+  }
+  return `<section class="ri-section">
+      <h4 id="ri-amount-head">Which amount</h4>
+      <div class="ri-choices" role="radiogroup" aria-labelledby="ri-amount-head">${options.join('')}</div>
+    </section>`;
+}
+
 function labelFormHtml(item, entry) {
   const key = escapeHtml(item.key);
   const parts = [];
@@ -203,11 +253,24 @@ function labelFormHtml(item, entry) {
 function receiptActionsHtml(item) {
   const key = escapeHtml(item.key);
   const blocked = item.state === REVIEW_STATE.needsYou;
-  const primary = item.duplicate ? 'Already in my books' : 'File this receipt';
+  const sub = item.subscription;
+  let primary = item.duplicate ? 'Already in my books' : 'File this receipt';
+  if (sub) primary = sub.covered ? 'Already in my books' : sub.posted ? 'Attach as proof' : 'Count it now';
+  const hint = sub?.ambiguous ? 'Choose the subscription above first.' : 'Fill in the missing details above to file it.';
   return `<div class="ri-actions">
       <button type="button" class="btn gold" data-ri-action="file" data-ri-key="${key}"${blocked ? ' disabled' : ''}>${primary}</button>
+      ${sub ? `<button type="button" class="btn" data-ri-action="separate" data-ri-key="${key}">It’s a separate purchase</button>` : ''}
+      ${item.separateFrom ? `<button type="button" class="btn ghost" data-ri-action="unseparate" data-ri-key="${key}">It’s part of ${escapeHtml(item.separateFrom)}</button>` : ''}
       <button type="button" class="btn danger-btn" data-ri-action="discard" data-ri-key="${key}">Not needed</button>
-      ${blocked ? '<span class="ri-hint" role="note">Fill in the missing details above to file it.</span>' : ''}
+      ${blocked ? `<span class="ri-hint" role="note">${hint}</span>` : ''}
+    </div>`;
+}
+
+function doubleActionsHtml(item) {
+  const key = escapeHtml(item.key);
+  return `<div class="ri-actions">
+      <button type="button" class="btn gold" data-ri-action="merge" data-ri-key="${key}">Merge them</button>
+      <button type="button" class="btn" data-ri-action="keepApart" data-ri-key="${key}">They’re different</button>
     </div>`;
 }
 
@@ -218,16 +281,31 @@ function labelActionsHtml(item) {
     </div>`;
 }
 
+const KIND_WORDS = {
+  receipt: 'Receipt found in your inbox',
+  double: 'In your books twice',
+  label: 'Shipping label bought outside the app',
+};
+
 function detailHtml(item) {
   const row = _rows.get(item.key) || {};
-  const form = item.kind === 'receipt' ? receiptFormHtml(item, row.draft || {}) : labelFormHtml(item, row.entry);
-  const actions = item.kind === 'receipt' ? receiptActionsHtml(item) : labelActionsHtml(item);
+  let form = '';
+  let actions = '';
+  if (item.kind === 'receipt') {
+    form = receiptFormHtml(item, row.draft || {}) + subscriptionFormHtml(item, row.draft || {});
+    actions = receiptActionsHtml(item);
+  } else if (item.kind === 'double') {
+    actions = doubleActionsHtml(item);
+  } else {
+    form = labelFormHtml(item, row.entry);
+    actions = labelActionsHtml(item);
+  }
   return `<button type="button" class="ri-back btn ghost sm" data-ri-action="back">← Back to the list</button>
     <header class="ri-detail-head">
       <span class="ri-detail-ico" aria-hidden="true">${escapeHtml(item.icon)}</span>
       <div>
         <h3 id="ri-detail-title" tabindex="-1">${escapeHtml(item.title)}</h3>
-        <p class="ri-kind">${item.kind === 'receipt' ? 'Receipt found in your inbox' : 'Shipping label bought outside the app'}</p>
+        <p class="ri-kind">${KIND_WORDS[item.kind] || KIND_WORDS.label}</p>
       </div>
       <span data-ri-live>${chipHtml(item.state)}</span>
     </header>
@@ -264,7 +342,7 @@ function renderReviewInbox({ focusDetail = false } = {}) {
   if (!_selectedKey) _view = 'list';
 
   $('ri-summary').textContent = summary.total ? `${summary.headline}. ${summary.detail}` : 'Nothing is waiting for review.';
-  const counts = { all: summary.total, receipt: summary.receipts, label: summary.labels };
+  const counts = { all: summary.total, receipt: summary.receipts + summary.doubles, label: summary.labels };
   host.querySelectorAll('[data-ri-filter]').forEach(btn => {
     const on = btn.dataset.riFilter === _filter;
     btn.classList.toggle('is-active', on);
@@ -320,6 +398,15 @@ function renderAfterEdit() {
 
 // ── Actions ───────────────────────────────────────────────────────────────
 
+/** What decides the pane's shape for a subscription receipt, as one comparable string. */
+function subscriptionShape(item) {
+  const sub = item?.subscription;
+  return JSON.stringify([
+    sub ? [sub.subId, sub.ambiguous, sub.amountDiffers, sub.canChangePrice, sub.covered, sub.posted] : null,
+    item?.separateFrom || '',
+  ]);
+}
+
 function nextKeyAfter(key) {
   const shown = visibleItems();
   const at = shown.findIndex(item => item.key === key);
@@ -355,8 +442,12 @@ async function fileOne(key) {
   const row = _rows.get(key);
   if (!row?.draft) return;
   const { item, draft } = row;
+  const sub = item.subscription;
   const counts = await fileReviewedReceipts([draft]);
   if (!counts) { showToast('That receipt is no longer waiting.', 'warn'); }
+  else if (counts.held) showToast('Choose which subscription it is for first.', 'warn');
+  else if (counts.attached) showToast(`Kept as proof for ${sub?.period || 'the charge'} of ${sub?.name || 'your subscription'}. Nothing was counted twice.`, 'ok');
+  else if (counts.countedEarly) showToast(`Counted the ${sub?.name || 'subscription'} charge now, with this receipt as its proof.`, 'ok');
   else if (counts.imported) showToast(`Filed: ${item.title} — ${item.subtitle}`, 'ok');
   else if (counts.relinked) showToast('Receipt attached to the expense already in your books.', 'ok');
   else showToast('That one was already in your books, so nothing new was added.', 'ok');
@@ -367,14 +458,16 @@ async function fileAllReady() {
   const ready = _items.filter(i => i.kind === 'receipt' && i.state === REVIEW_STATE.ready);
   if (!ready.length) return;
   const list = ready.map(i => `• ${i.title} — ${i.subtitle}`).join('\n');
+  const forSubs = ready.some(i => i.subscription);
   const ok = await confirmDialog(
-    `File ${ready.length} receipts?\n\n${list}\n\nEach goes into your books under the category shown, with its email saved as proof.`,
+    `File ${ready.length} receipts?\n\n${list}\n\nEach goes into your books under the category shown, with its email saved as proof.${forSubs ? ' A receipt for a subscription is kept with that charge instead, so nothing is counted twice.' : ''}`,
     { title: 'File the ready receipts', okLabel: `File ${ready.length}` },
   );
   if (!ok) return;
   const drafts = ready.map(i => _rows.get(i.key)?.draft).filter(Boolean);
   const counts = await fileReviewedReceipts(drafts);
-  showToast(counts ? `Filed ${counts.imported} receipt${counts.imported === 1 ? '' : 's'}.` : 'Those receipts are no longer waiting.', counts?.imported ? 'ok' : 'warn');
+  const done = counts ? counts.imported + counts.attached + counts.countedEarly : 0;
+  showToast(counts ? `Filed ${done} receipt${done === 1 ? '' : 's'}.` : 'Those receipts are no longer waiting.', done ? 'ok' : 'warn');
   await afterChange(_selectedKey);
 }
 
@@ -387,6 +480,34 @@ async function discardOne(key) {
   );
   if (!ok) return;
   await discardReviewedReceipt(row.draft);
+  await afterChange(key);
+}
+
+async function setSeparate(key, separate) {
+  const draft = _rows.get(key)?.draft;
+  if (!draft || !editReviewedReceipt(draft, 'notSubscription', separate)) return;
+  renderReviewInbox({ focusDetail: true });
+  refreshAttentionSurfaces();
+}
+
+async function mergeDouble(key) {
+  const item = _rows.get(key)?.item;
+  if (!item) return;
+  const ok = await confirmDialog(
+    `Merge “${item.title}” into the subscription charge?\n\nThe extra expense is removed and anything kept on it moves to the subscription charge. The cost is then counted once.`,
+    { title: 'Counted twice', okLabel: 'Merge them' },
+  );
+  if (!ok) return;
+  if (await settleSubscriptionDouble(item.expenseId, { merge: true })) showToast('Merged. That cost is now counted once.', 'ok');
+  else showToast('That pair is no longer in your books, or the change could not be saved.', 'warn');
+  await afterChange(key);
+}
+
+async function keepDoubleApart(key) {
+  const item = _rows.get(key)?.item;
+  if (!item) return;
+  if (await settleSubscriptionDouble(item.expenseId, { merge: false })) showToast('Kept as two separate costs.', 'ok');
+  else showToast('That pair is no longer in your books, or the change could not be saved.', 'warn');
   await afterChange(key);
 }
 
@@ -419,6 +540,10 @@ const ACTIONS = {
   back() { _view = 'list'; renderReviewInbox(); },
   file: key => run('file', () => fileOne(key)),
   discard: key => run('discard', () => discardOne(key)),
+  separate: key => run('separate', () => setSeparate(key, true)),
+  unseparate: key => run('unseparate', () => setSeparate(key, false)),
+  merge: key => run('merge', () => mergeDouble(key)),
+  keepApart: key => run('keepApart', () => keepDoubleApart(key)),
   link: key => run('link', () => linkOne(key)),
   setAside: key => run('setAside', () => setAside(key)),
   removeLabel: key => run('removeLabel', () => removeLabel(key)),
@@ -451,8 +576,19 @@ function wire() {
   host.addEventListener('change', event => {
     const field = event.target.closest?.('[data-ri-field]');
     if (!field) return;
-    const draft = _rows.get(field.dataset.riKey)?.draft;
-    if (draft && editReviewedReceipt(draft, field.dataset.riField, field.value)) renderAfterEdit();
+    const key = field.dataset.riKey;
+    const draft = _rows.get(key)?.draft;
+    const before = subscriptionShape(_rows.get(key)?.item);
+    if (!draft || !editReviewedReceipt(draft, field.dataset.riField, field.value)) return;
+    // An edit can change what the receipt is — a typed amount that now differs
+    // from the subscription's, a subscription chosen. Then the whole pane is
+    // redrawn, and the cursor goes back to the box that was changed.
+    const after = subscriptionShape(reviewQueueSnapshot().rows.get(key)?.item);
+    if (after === before) { renderAfterEdit(); return; }
+    renderReviewInbox();
+    const sel = `[data-ri-field="${CSS.escape(field.dataset.riField)}"][data-ri-key="${CSS.escape(key)}"]`;
+    const again = host.querySelector(`${sel}:checked`) || host.querySelector(sel) || $('ri-detail-title');
+    again?.focus?.();
   });
   // A hand-off comes back when the modal it opened closes. Capture, because the
   // close event does not bubble.

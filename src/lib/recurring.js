@@ -337,6 +337,86 @@ export function nextRecurringDate(sub, now = new Date()) {
 }
 
 /**
+ * Every billing date from `fromYmd` to `toYmd` inclusive, posted or not, each
+ * with its period key, the price in force on it and whether the ledger already
+ * has it. A receipt belongs to a billing period rather than to an exact day —
+ * the vendor's email can land a week either side of the date the schedule
+ * says — so receipts are matched against these.
+ */
+export function chargesBetween(sub, fromYmd, toYmd) {
+  const s = normalizeRecurring(sub);
+  const out = [];
+  walkCharges(s, (dateStr, key) => {
+    if (dateStr > toYmd) return false;
+    if (dateStr >= fromYmd) {
+      out.push({ date: dateStr, monthKey: key, amount: amountAt(s, dateStr), posted: !!s.lastInjected && key <= s.lastInjected });
+    }
+    return true;
+  });
+  return out;
+}
+
+/**
+ * The first charge the ledger doesn't have yet, whatever its date — the one a
+ * bill that arrives early belongs to. Null when the schedule has ended.
+ */
+export function firstUnpostedCharge(sub) {
+  const s = normalizeRecurring(sub);
+  let first = null;
+  walkCharges(s, (dateStr, key) => {
+    if (s.lastInjected && key <= s.lastInjected) return true;
+    first = { date: dateStr, monthKey: key, amount: amountAt(s, dateStr) };
+    return false;
+  });
+  return first;
+}
+
+/**
+ * The price-change list that moves this subscription's charge to `day` of the
+ * month from its next unposted charge on, or null when it can't be moved that
+ * way.
+ *
+ * Only a later day. walkCharges never bills one period twice, so a move to an
+ * earlier day pushes the first charge on the new day a whole cadence out and
+ * the next period is never billed. An earlier real billing day doesn't need a
+ * move anyway: the receipt arrives before the charge is due, and filing it
+ * counts that charge then.
+ *
+ * The move is dated one cadence before the next charge, after the last posted
+ * one, which is what lets the walker land the very next charge on the new day.
+ * The result is checked by walking it rather than trusted.
+ */
+export function laterChargeDayChange(sub, day) {
+  const s = normalizeRecurring(sub);
+  const next = firstUnpostedCharge(s);
+  const n = next && parseYmd(next.date);
+  const d = Math.floor(Number(day));
+  if (!n || !(d >= 1 && d <= 31) || d <= n.d) return null;
+
+  const step = frequencyMonths(s.frequency);
+  let py = n.y, pm = n.m - step;
+  while (pm < 1) { pm += 12; py -= 1; }
+  const effectiveFrom = ymd(py, pm, Math.min(d, daysInMonth(py, pm)));
+  const lastPosted = lastPostedChargeDate(s);
+  if (effectiveFrom <= s.startDate || (lastPosted && effectiveFrom <= lastPosted)) return null;
+
+  const existing = s.rateChanges.find(r => r.effectiveFrom === effectiveFrom);
+  const rateChanges = normalizeRateChanges([
+    ...s.rateChanges.filter(r => r.effectiveFrom !== effectiveFrom),
+    {
+      effectiveFrom,
+      amount: existing ? existing.amount : amountAt(s, effectiveFrom),
+      note: existing?.note || 'Charge day moved to match the receipts',
+      movesCharge: true,
+    },
+  ]);
+  const target = ymd(n.y, n.m, Math.min(d, daysInMonth(n.y, n.m)));
+  const moved = firstUnpostedCharge({ ...s, rateChanges });
+  if (!moved || moved.date !== target || moved.monthKey !== next.monthKey) return null;
+  return { rateChanges, effectiveFrom, nextDate: target };
+}
+
+/**
  * The next `count` charges this subscription will bill, each with the price in
  * force on its own date. The editor previews these because a change that moves
  * the charge day rearranges the calendar, and the owner should see the actual
