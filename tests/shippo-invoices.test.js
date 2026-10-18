@@ -13,6 +13,8 @@ import {
   parseInvoiceItem,
   parseRefund,
   refundExpense,
+  shippoInvoicePageUrl,
+  attachInvoiceReceipts,
 } from '../src/lib/shippo-invoices.js';
 
 describe('parsing invoices from a beta API', () => {
@@ -216,5 +218,37 @@ describe('wiring', () => {
   it('opens labels by minting a fresh link rather than a stored expiring one', () => {
     expect(appSource).toContain('async function openShippoLabel');
     expect(appSource).toContain("onclick=\"event.preventDefault(); openShippoLabel(");
+  });
+});
+
+describe('the receipt straight from Shippo', () => {
+  it('reads the documented invoice shape, where money is nested', () => {
+    const inv = parseInvoice({
+      object_id: 'c575fc2f879843a28aa1425eaccf0f03', invoice_number: '681904607', status: 'POSTED',
+      total_charged: { amount: '7.97', currency: 'USD' },
+    });
+    expect(inv).toMatchObject({ total: 7.97, currency: 'USD', number: '681904607' });
+    expect(inv.url).toBe('https://apps.goshippo.com/settings/account/billing/invoices/c575fc2f879843a28aa1425eaccf0f03');
+  });
+
+  it('points at the invoice page Shippo itself links to', () => {
+    expect(shippoInvoicePageUrl('c575fc2f879843a28aa1425eaccf0f03'))
+      .toBe('https://apps.goshippo.com/settings/account/billing/invoices/c575fc2f879843a28aa1425eaccf0f03');
+    expect(shippoInvoicePageUrl('')).toBe('');
+    expect(shippoInvoicePageUrl('../../x')).toBe('');
+  });
+
+  it('attaches the invoice from its item alone, without a list of invoices', () => {
+    const e = { ref: 'shippo:c40d0264d41c4aac89e5d8fc79912ce6', receipt: 'https://deliver.goshippo.com/c40d.pdf?Expires=1' };
+    const items = invoiceIndexByTransaction([{ invoice: 'c575fc2f879843a28aa1425eaccf0f03', transaction: 'c40d0264d41c4aac89e5d8fc79912ce6' }]);
+    expect(attachInvoiceReceipts([e], items).changed).toEqual([e]);
+    expect(e.receiptFiles[0]).toBe(shippoInvoicePageUrl('c575fc2f879843a28aa1425eaccf0f03'));
+    expect(e.receiptFiles[1]).toMatch(/deliver\.goshippo\.com/);
+  });
+
+  it('asks Shippo at its documented invoice-items address', () => {
+    const src = appSource;
+    expect(src).toContain('api.goshippo.com/invoice-items?');
+    expect(src).not.toContain('api.goshippo.com/invoices/items/');
   });
 });

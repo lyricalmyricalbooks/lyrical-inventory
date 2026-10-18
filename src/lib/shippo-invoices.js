@@ -57,17 +57,32 @@ export function parseInvoice(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const id = pick(raw, 'object_id', 'id', 'invoice_id');
   if (!id) return null;
+  // The documented shape nests money as { amount, currency }.
+  const charged = pick(raw, 'total_charged', 'total_invoiced');
 
   return {
     id: String(id),
     date: isoDate(pick(raw, 'invoice_date', 'object_created', 'created', 'date')),
     periodStart: isoDate(pick(raw, 'period_start', 'start_date')),
     periodEnd: isoDate(pick(raw, 'period_end', 'end_date')),
-    total: num(pick(raw, 'total', 'amount', 'total_amount', 'gross_amount')),
-    currency: String(pick(raw, 'currency', 'currency_code') || '').toUpperCase() || 'USD',
+    total: num(pick(raw, 'total', 'amount', 'total_amount', 'gross_amount') ?? charged?.amount),
+    currency: String(pick(raw, 'currency', 'currency_code') || charged?.currency || '').toUpperCase() || 'USD',
     status: String(pick(raw, 'status', 'state') || '').toUpperCase(),
-    url: String(pick(raw, 'invoice_url', 'pdf_url', 'download_url', 'url') || ''),
+    number: String(pick(raw, 'invoice_number', 'number') || ''),
+    url: String(pick(raw, 'invoice_url', 'pdf_url', 'download_url', 'url') || '') || shippoInvoicePageUrl(id),
   };
+}
+
+/**
+ * The invoice's page in the Shippo dashboard.
+ *
+ * Shippo's documented invoice object has no PDF or download field — the
+ * dashboard page is the receipt, and it is exactly where Shippo's own receipt
+ * email links. So an invoice id is all it takes to point at the receipt.
+ */
+export function shippoInvoicePageUrl(invoiceId) {
+  const id = String(invoiceId || '').trim();
+  return /^[A-Za-z0-9]{8,64}$/.test(id) ? `https://apps.goshippo.com/settings/account/billing/invoices/${id}` : '';
 }
 
 /**
@@ -223,7 +238,8 @@ export function describeInvoiceAvailability(status) {
  * Put the Shippo invoice in front of each label as the receipt of record.
  *
  * `itemIndex` maps a transaction to its invoice item (invoiceIndexByTransaction)
- * and `invoicesById` maps an invoice id to a parsed invoice. The label stays
+ * and `invoicesById` optionally maps an invoice id to a parsed invoice; without
+ * one, the receipt is the invoice's Shippo dashboard page. The label stays
  * attached after the invoice, and in `supportingFiles`, because it is still the
  * evidence of what was shipped. Only expenses that change are returned, so the
  * caller can save once and report an honest count. Idempotent: an invoice
@@ -236,7 +252,7 @@ export function attachInvoiceReceipts(expenses, itemIndex, invoicesById) {
     const txId = shippoTxIdFromRef(e?.ref);
     if (!txId) return;
     const invoiceId = e.invoiceId || itemIndex?.get(txId)?.invoiceId || '';
-    const url = invoiceId ? (invoicesById?.get(invoiceId)?.url || '') : '';
+    const url = invoiceId ? (invoicesById?.get(invoiceId)?.url || shippoInvoicePageUrl(invoiceId)) : '';
     if (!url) { noInvoice++; return; }
     const files = Array.isArray(e.receiptFiles) && e.receiptFiles.length
       ? e.receiptFiles.filter(r => typeof r === 'string' && r)
@@ -312,6 +328,9 @@ export function parseShippoReceiptEmail({ id = '', body = '', date = '' } = {}) 
     total,
     currency: totalMatch[2].toUpperCase(),
     count: countMatch ? Number(countMatch[1]) : 1,
+    // When Shippo sent it, to the second. It arrives seconds after the label is
+    // bought, which is what ties it to a label it was charged in another currency for.
+    sentAt: /T\d{2}:\d{2}/.test(String(date)) && !isNaN(Date.parse(date)) ? new Date(date).toISOString() : '',
     url: shippoInvoiceLink(text) || (id ? `https://mail.google.com/mail/u/0/#all/${id}` : ''),
   };
 }
@@ -334,10 +353,37 @@ function attachReceipt(e, url, invoiceId) {
   e.supportingFiles = [...new Set([...support, ...others])];
 }
 
+/** How long after a label is bought its receipt email can still be its own. */
+export const RECEIPT_EMAIL_WINDOW_MS = 2 * 60 * 1000;
+
+/**
+ * The one label a single-label receipt email was sent for, judged by time.
+ *
+ * Shippo charges in US dollars even when the label is priced in Canadian
+ * dollars (a CA$11.28 label arrives as a $7.97 USD receipt), so amounts cannot
+ * be compared. But it bills each purchase on its own and emails the receipt
+ * within seconds, so the label bought just before the email is the one it paid
+ * for. Two labels bought within half a minute of each other are too close to
+ * tell apart, and are left alone rather than guessed.
+ */
+function closestByPurchaseTime(candidates, sentAt) {
+  const sent = Date.parse(sentAt || '');
+  if (!Number.isFinite(sent)) return null;
+  const fits = candidates
+    .map(e => ({ e, lag: sent - Date.parse(e?.labelCreatedAt || '') }))
+    .filter(c => Number.isFinite(c.lag) && c.lag >= -60000 && c.lag <= RECEIPT_EMAIL_WINDOW_MS)
+    .sort((a, b) => Math.abs(a.lag) - Math.abs(b.lag));
+  if (!fits.length) return null;
+  if (fits.length > 1 && Math.abs(fits[1].lag) - Math.abs(fits[0].lag) < 30000) return null;
+  return fits[0].e;
+}
+
 /**
  * Match emailed Shippo receipts to the postage expenses they paid for.
  *
- * Matching is by what the receipt states: its date (a day either side, for time
+ * A single-label receipt is matched first by when it was sent against when each
+ * label was bought (closestByPurchaseTime), which works across currencies.
+ * Otherwise matching is by what the receipt states: its date (a day either side, for time
  * zones), its currency and its total. A receipt covering one label must equal
  * that label's original amount; one covering several must equal the sum of
  * exactly that many unreceipted labels from the same day. Anything ambiguous is
@@ -359,7 +405,12 @@ export function attachEmailReceipts(expenses, receipts) {
     const pool = open.filter(e => !changed.includes(e)
       && currencyOf(e) === r.currency && dayGap(e.date, r.date) <= 1);
     let picked = null;
-    if (r.count === 1) {
+    const byTime = r.count === 1 ? closestByPurchaseTime(open.filter(e => !changed.includes(e)), r.sentAt) : null;
+    // In the same currency the amounts must still agree; only a cross-currency
+    // charge is taken on timing alone.
+    if (byTime && (currencyOf(byTime) !== r.currency || amountOf(byTime) === cents(r.total))) {
+      picked = [byTime];
+    } else if (r.count === 1) {
       const hits = pool.filter(e => amountOf(e) === cents(r.total));
       // Two identical labels on the same day: either fits, so take the closest
       // date; the receipt is honest proof for the amount either way.
