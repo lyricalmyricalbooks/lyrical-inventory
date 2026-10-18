@@ -14,6 +14,7 @@
 import '../styles/review-inbox.css';
 import { escapeHtml } from '../lib/html.js';
 import { closeM, confirmDialog, openM } from '../lib/modal.js';
+import { PICKER_CURRENCIES } from '../lib/money.js';
 import {
   REVIEW_STATE,
   buildReviewQueue,
@@ -40,7 +41,6 @@ import {
   setAsideLabelFromReview,
 } from './shipping.js';
 
-const CURRENCIES = ['CAD', 'EUR', 'USD', 'MXN'];
 /** Modals the inbox steps aside for; it comes back when they close. */
 const HAND_OFF_MODALS = ['edit-expense', 'recover-website-order'];
 
@@ -144,7 +144,7 @@ function guideHtml(item) {
 function receiptFormHtml(item, draft) {
   const key = escapeHtml(item.key);
   const cats = [...new Set([...(EXPENSE_CATEGORIES || []), draft.category].filter(Boolean))];
-  const curs = [...new Set([...CURRENCIES, String(draft.currency || 'CAD').toUpperCase()])];
+  const curs = [...new Set([...PICKER_CURRENCIES, String(draft.currency || 'CAD').toUpperCase()])];
   const missingAmount = draft.amountUnknown || !(Number(draft.amount) > 0);
   const opt = (value, chosen) => `<option${value === chosen ? ' selected' : ''}>${escapeHtml(value)}</option>`;
   return `<section class="ri-section" data-autosave>
