@@ -118,6 +118,12 @@ function calendarDaysAgo(date, now) {
   return Math.round((startOfDay(now) - startOfDay(date)) / 86400000);
 }
 
+// toLocaleDateString with options builds a fresh Intl.DateTimeFormat on every
+// call, and dayHeading runs once per entry in the What's new list, so build
+// both formatters once.
+const SHORT_DAY_FMT = new Intl.DateTimeFormat([], { day: 'numeric', month: 'short' });
+const LONG_DAY_FMT = new Intl.DateTimeFormat([], { weekday: 'long', day: 'numeric', month: 'long' });
+
 /** "just now" / "3 hours ago" / "yesterday" / "4 days ago" / "on 2 Sep". */
 export function relativeWhen(date, now = new Date()) {
   if (!(date instanceof Date) || isNaN(date)) return '';
@@ -129,7 +135,7 @@ export function relativeWhen(date, now = new Date()) {
   if (days === 0) return hours === 1 ? '1 hour ago' : `${hours} hours ago`;
   if (days === 1) return 'yesterday';
   if (days < 7) return `${days} days ago`;
-  return 'on ' + date.toLocaleDateString([], { day: 'numeric', month: 'short' });
+  return 'on ' + SHORT_DAY_FMT.format(date);
 }
 
 /** Day heading for grouping notes: "Today", "Yesterday", "Monday 21 September". */
@@ -138,5 +144,5 @@ export function dayHeading(date, now = new Date()) {
   const days = calendarDaysAgo(date, now);
   if (days === 0) return 'Today';
   if (days === 1) return 'Yesterday';
-  return date.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' });
+  return LONG_DAY_FMT.format(date);
 }
