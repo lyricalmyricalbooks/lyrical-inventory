@@ -6,6 +6,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { appSource, buildHarness } from './helpers/extract-decl.js';
+import { refundState } from '../src/lib/label-refunds.js';
 import {
   autoLinkConfidentShippingMatches,
   isUnresolvedShippoPostage,
@@ -130,6 +131,7 @@ describe('the tracking number goes back onto the order', () => {
         saveState: (id) => { saved.push(id); },
         renderHist: () => {},
         today: () => '2026-09-05',
+        refundState,
       },
       returns: '{ writeTrackingBackToOrders }',
     });
@@ -161,6 +163,13 @@ describe('the tracking number goes back onto the order', () => {
     expect(writeTrackingBackToOrders([linked(CP_TRACKING)])).toBe(0);
     expect(hist[0].trackingNumber).toBe('ALREADY-THERE');
     expect(saved).toEqual([]);
+  });
+
+  it('never writes back a refunded label (the refund put the order back on the to-ship list)', () => {
+    const hist = [{ num: '#AAAA-1' }];
+    const { writeTrackingBackToOrders } = backHarness(hist);
+    expect(writeTrackingBackToOrders([{ ...linked(CP_TRACKING), refundRequest: { at: '2026-09-03' } }])).toBe(0);
+    expect(hist[0].shipped).toBeUndefined();
   });
 
   it('leaves a voided order alone', () => {

@@ -945,6 +945,23 @@ function dropDuplicatePostage() {
     dropped.add(drop);
   });
   TAX_CENTER.businessExpenses = list.filter(expense => !dropped.has(expense));
+  // What was removed, so it can be checked later (Tax Centre has no undo for it).
+  const at = new Date().toISOString();
+  TAX_CENTER.removedDuplicatePostage = [
+    ...pairs.map(({ keep, drop }) => ({
+      id: `dup-${cpText(drop.ref) || drop.id}-${at}`,
+      ref: cpText(drop.ref), desc: cpText(drop.desc), amount: Number(drop.amount) || 0, currency: cpText(drop.currency) || 'CAD',
+      date: cpText(drop.date), keptRef: cpText(keep.ref), removedAt: at,
+    })),
+    ...(TAX_CENTER.removedDuplicatePostage || []),
+  ].slice(0, 100);
+  const total = pairs.reduce((sum, { drop }) => sum + (Number(drop.baseAmount ?? drop.amount) || 0), 0);
+  pushAppAlert({
+    id: 'postage-duplicates-removed',
+    icon: '📮',
+    title: `${pairs.length} shipping cost${pairs.length === 1 ? ' was' : 's were'} counted twice`,
+    detail: `The same label had been filed twice (from an email, or by two devices at once). The extra cost${pairs.length === 1 ? '' : 's'} (${total.toFixed(2)} CAD in all) ${pairs.length === 1 ? 'was' : 'were'} removed; the Shippo or Canada Post record stays, with its order link and receipt.`,
+  });
   TAX_CENTER.discardedPostageRefs = [...new Set([
     ...(TAX_CENTER.discardedPostageRefs || []),
     ...[...dropped].map(expense => cpText(expense.ref)).filter(Boolean),
@@ -1657,7 +1674,9 @@ async function sweepCanadaPostShipments({ force = false, pins = [] } = {}) {
       );
 
       const ref = postageCandidateRef(candidate);
-      if (!ref || known.has(ref) || TAX_CENTER.discardedPostageRefs?.includes(ref) || tracked.has(candidate.trackingNumber)) continue;
+      // Read again after the network calls: the Shippo watch may have filed it meanwhile.
+      if (!ref || known.has(ref) || TAX_CENTER.discardedPostageRefs?.includes(ref) || tracked.has(candidate.trackingNumber)
+        || postageTrackingIndex(TAX_CENTER.businessExpenses || []).has(candidate.trackingNumber)) continue;
       known.add(ref);
       if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
 
@@ -1731,7 +1750,11 @@ function writeTrackingBackToOrders(expenses = []) {
     const orderNumber = normalizeShippingOrderNumber(expense?.shippingOrderNumber);
     const tracking = cpText(expense?.trackingNumber);
     // A test-mode label's number never scans; it must not mark an order sent.
-    if (orderNumber && tracking && expense.shippingMatchStatus === 'matched' && !expense.simulated) {
+    // A refunded (or refund-requested) label no longer ships anything: its
+    // number must not put an order the refund put back on the to-ship list
+    // back to "sent".
+    if (orderNumber && tracking && expense.shippingMatchStatus === 'matched' && !expense.simulated
+      && !expense.refundRequest && refundState(expense, expenses) === 'none') {
       wanted.set(orderNumber, { tracking, date: cpText(expense.date) });
     }
   });
@@ -2720,6 +2743,7 @@ async function importShippoShippingFromApi({
   const trackedPostage = postageTrackingIndex(TAX_CENTER.businessExpenses || []);
   let enrichedCount = 0;
   let contextFailureCount = 0;
+  let amountsFilled = 0;
 
   let imported = 0;
   let skipped = 0;
@@ -2775,6 +2799,18 @@ async function importShippoShippingFromApi({
           // (A copy read off an email gives way to this label instead, below.)
           const sameLabel = !existingExpense && trackedPostage.get(normalizeTrackingNumber(tx.tracking_number));
           if (sameLabel && postageRowSource(sameLabel) === 'canadapost') {
+            // Canada Post gave no price for it: Shippo's is the figure we have.
+            if (sameLabel.amountUnknown) {
+              const cost = await getShippoTxCost(tx, token).catch(() => null);
+              if (cost && cost.currency === 'CAD' && Number.isFinite(cost.amount) && cost.amount > 0) {
+                Object.assign(sameLabel, {
+                  amount: cost.amount, origAmount: cost.amount, baseAmount: roundCents(cost.amount),
+                  currency: 'CAD', origCurrency: 'CAD', amountUnknown: false,
+                });
+                if (!cpText(sameLabel.receipt) && tx.label_url) sameLabel.receipt = tx.label_url;
+                result.filledAmount = true;
+              }
+            }
             result.alreadyImported = true;
             return result;
           }
@@ -2819,6 +2855,7 @@ async function importShippoShippingFromApi({
 
         for (const res of chunkResults) {
           if (res.contextFailure) contextFailureCount++;
+          if (res.filledAmount) amountsFilled++;
           if (res.skipped) { skipped++; continue; }
           if (res.alreadyImported) {
             alreadyImported++;
@@ -2919,7 +2956,7 @@ async function importShippoShippingFromApi({
     // that nothing had happened, costing quota, battery and sync churn for no
     // information. The manual sweep still always stamps, because a publisher who
     // pressed the button is owed a "last synced" time either way.
-    const changed = imported > 0 || enrichedCount > 0 || autoLinked > 0 || refundsAdded > 0 || duplicatesRemoved > 0;
+    const changed = imported > 0 || enrichedCount > 0 || autoLinked > 0 || refundsAdded > 0 || duplicatesRemoved > 0 || amountsFilled > 0;
     if (!silent || changed) {
       TAX_CENTER.settings.shippoImportedObjectIds = Array.from(importedIds).slice(-10000);
       TAX_CENTER.settings.shippoLastImportAt = new Date().toISOString();

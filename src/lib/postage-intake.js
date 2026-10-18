@@ -300,7 +300,8 @@ export function postageRowTracking(expense = {}) {
   // (A `canadapost:` ref falls back to the shipment id when there is no PIN, so
   // only its `trackingPin` field is read, above.)
   if (ref.startsWith('shippo:')) {
-    const fromDesc = clean(e.desc).match(/#\s*([A-Za-z0-9 ]{8,40})\s*$/);
+    // "… label #LE055214725CA", optionally followed by " — Canada Post Expedited Parcel".
+    const fromDesc = clean(e.desc).match(/#\s*([A-Za-z0-9 ]{8,40}?)\s*(?:[—–-]\s.*)?$/);
     if (fromDesc) return normalizeTrackingNumber(fromDesc[1]);
   }
   return '';
@@ -325,6 +326,10 @@ export function postageTrackingIndex(expenses = []) {
   return index;
 }
 
+// Refs that name one carrier or Shippo record each.
+const RECORD_REF_PREFIXES = ['shippo:', 'canadapost:', 'chitchats:'];
+const isLinked = (e) => e && e.shippingMatchStatus === 'matched' && !!clean(e.shippingOrderNumber);
+
 // Read off a document (an email, a photographed receipt): the weakest record,
 // and the one that gives way when a carrier or Shippo record of the same label
 // exists.
@@ -341,15 +346,32 @@ const READ_SOURCES = new Set(['email', 'receipt']);
  * Returns `[{ keep, drop }]`; nothing is changed.
  */
 export function duplicatePostageRows(expenses = []) {
-  const groups = new Map();
+  const out = [];
+  // The same record twice (two devices imported the same Shippo label before
+  // either had synced): one ref is one label by definition. The linked copy
+  // stays, else the first filed.
+  const byRef = new Map();
+  const dropped = new Set();
   (expenses || []).forEach(expense => {
     if (!isSweptPostage(expense)) return;
+    const ref = clean(expense.ref);
+    if (!RECORD_REF_PREFIXES.some(p => ref.startsWith(p))) return;
+    const held = byRef.get(ref);
+    if (!held) { byRef.set(ref, expense); return; }
+    const keep = isLinked(expense) && !isLinked(held) ? expense : held;
+    const drop = keep === held ? expense : held;
+    byRef.set(ref, keep);
+    out.push({ keep, drop });
+    dropped.add(drop);
+  });
+  const groups = new Map();
+  (expenses || []).forEach(expense => {
+    if (!isSweptPostage(expense) || dropped.has(expense)) return;
     const tracking = postageRowTracking(expense);
     if (!tracking) return;
     if (!groups.has(tracking)) groups.set(tracking, []);
     groups.get(tracking).push(expense);
   });
-  const out = [];
   groups.forEach(rows => {
     if (rows.length < 2) return;
     const records = rows.filter(r => !READ_SOURCES.has(postageRowSource(r)));
@@ -368,8 +390,8 @@ export function duplicatePostageRows(expenses = []) {
  */
 export function absorbDuplicatePostage(keep, drop) {
   if (!keep || !drop) return keep;
-  const keepLinked = keep.shippingMatchStatus === 'matched' || keep.shippingMatchStatus === 'dismissed';
-  if (!keepLinked && drop.shippingMatchStatus === 'matched' && clean(drop.shippingOrderNumber)) {
+  // A set-aside (dismissed) row isn't linked: a link the owner made on the copy wins.
+  if (!isLinked(keep) && isLinked(drop)) {
     keep.shippingOrderNumber = drop.shippingOrderNumber;
     keep.shippingMatchMethod = drop.shippingMatchMethod || 'tracking';
     keep.shippingMatchStatus = 'matched';
@@ -377,6 +399,16 @@ export function absorbDuplicatePostage(keep, drop) {
     delete keep.shippingCandidateOrderNumbers;
   }
   if (!clean(keep.receipt) && clean(drop.receipt)) keep.receipt = drop.receipt;
+  // Receipts the owner attached to the copy stay with the cost.
+  const files = [...(Array.isArray(keep.receiptFiles) ? keep.receiptFiles : []), ...(Array.isArray(drop.receiptFiles) ? drop.receiptFiles : [])];
+  if (files.length) {
+    const seen = new Set();
+    keep.receiptFiles = files.filter(f => { const k = typeof f === 'string' ? f : JSON.stringify(f); if (seen.has(k)) return false; seen.add(k); return true; });
+  }
+  if (keep.amountUnknown && !drop.amountUnknown && Number(drop.amount) > 0) {
+    ['amount', 'origAmount', 'baseAmount', 'currency', 'origCurrency', 'fxRate'].forEach(k => { if (drop[k] != null) keep[k] = drop[k]; });
+    keep.amountUnknown = false;
+  }
   if (!normalizeTrackingNumber(keep.trackingNumber)) {
     const tracking = postageRowTracking(keep) || postageRowTracking(drop);
     if (tracking) keep.trackingNumber = tracking;

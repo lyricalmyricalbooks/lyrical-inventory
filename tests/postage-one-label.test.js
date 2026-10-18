@@ -83,13 +83,45 @@ describe('a website label links to its order', () => {
 });
 
 import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { mergeMetadata } from '../src/lib/merge-state.js';
 describe('every road checks the tracking number', () => {
-  const src = readFileSync(new URL('../src/features/shipping.js', import.meta.url), 'utf8');
+  const src = readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src/features/shipping.js'), 'utf8');
   it('the email and Canada Post sweeps skip a label already filed under another road', () => {
     expect(src.match(/tracked\.has\(candidate\.trackingNumber\)/g)).toHaveLength(3);
   });
   it('the Shippo import gives way to a Canada Post record and removes email copies', () => {
     expect(src).toMatch(/postageRowSource\(sameLabel\) === 'canadapost'/);
     expect(src).toMatch(/const duplicatesRemoved = dropDuplicatePostage\(\);/);
+  });
+  it("a refunded label's number is never written back onto its order", () => {
+    expect(src).toMatch(/!expense\.refundRequest && refundState\(expense, expenses\) === 'none'/);
+  });
+});
+
+describe('review follow-ups', () => {
+  it('one Shippo label imported twice (two devices) is one cost; the linked copy stays', () => {
+    const a = shippoRow({ id: 1 });
+    const b = shippoRow({ id: 2, shippingMatchStatus: 'matched', shippingOrderNumber: '#AB-1' });
+    expect(duplicatePostageRows([a, b])).toEqual([{ keep: b, drop: a }]);
+    expect(duplicatePostageRows([a, b, emailRow()])).toHaveLength(2);
+  });
+  it('a link made on the copy wins over a set-aside Shippo row', () => {
+    const keep = shippoRow({ shippingMatchStatus: 'dismissed' });
+    absorbDuplicatePostage(keep, emailRow({ shippingMatchStatus: 'matched', shippingOrderNumber: '#AB-1' }));
+    expect(keep).toMatchObject({ shippingMatchStatus: 'matched', shippingOrderNumber: '#AB-1' });
+  });
+  it("keeps receipts attached to the copy, and the copy's amount when the record has none", () => {
+    const keep = shippoRow({ receiptFiles: ['a.pdf'], amountUnknown: true, amount: 0 });
+    absorbDuplicatePostage(keep, emailRow({ receiptFiles: ['a.pdf', 'b.jpg'], amount: 9.5, baseAmount: 9.5, currency: 'CAD' }));
+    expect(keep).toMatchObject({ receiptFiles: ['a.pdf', 'b.jpg'], amount: 9.5, amountUnknown: false });
+  });
+  it('reads the tracking number of in-app Shippo labels named with their service', () => {
+    expect(postageRowTracking(shippoRow({ desc: `Shippo shipping label #${TRACK} — Canada Post Expedited Parcel` }))).toBe(TRACK);
+  });
+  it('discarded labels made on either device are all kept', () => {
+    const { value } = mergeMetadata({ discardedPostageRefs: ['a'] }, { discardedPostageRefs: ['a', 'b'] }, { discardedPostageRefs: ['a', 'c'] });
+    expect(value.discardedPostageRefs.sort()).toEqual(['a', 'b', 'c']);
   });
 });
