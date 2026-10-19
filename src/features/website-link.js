@@ -388,9 +388,17 @@ async function importOnce() {
 
   const real = all.filter(d => d.web.test !== true).sort(byPaidAt);
   // A book that failed to load is not its real data: leave its orders waiting.
-  const waiting = real.filter(d => Object.keys(d.web.books || {}).some(id => BOOKS[id] && !bookLoaded(id)));
+  // ⚡ Bolt Optimization: Replace multiple .filter passes with a single imperative loop to eliminate intermediate array allocations
+  const waiting = [];
+  const candidates = [];
+  for (const d of real) {
+    if (Object.keys(d.web.books || {}).some(id => BOOKS[id] && !bookLoaded(id))) {
+      waiting.push(d);
+    } else {
+      candidates.push(d);
+    }
+  }
   _waitingOnLoad = waiting.length;
-  const candidates = real.filter(d => !waiting.includes(d));
 
   await prefetchRates(candidates);
   // Plan and apply in the same tick from here on: no await may sit between
