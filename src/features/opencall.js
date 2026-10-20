@@ -35,6 +35,7 @@ import {
 } from './customers.js';
 import { confirmDialog } from '../lib/modal.js';
 import { escapeHtml } from '../lib/html.js';
+import { legacyCopy } from '../lib/clipboard.js';
 import { toCsv } from '../lib/csv.js';
 import { downloadBlob, downloadCsv } from '../lib/download.js';
 import { ensureXlsx } from '../lib/external-scripts.js';
@@ -2556,7 +2557,7 @@ function ocCopyEmails(onlySelected = false) {
   const text = emails.join(', ');
   const done = () => showToast(`Copied ${emails.length} email${emails.length > 1 ? 's' : ''}`);
   if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(done, () => showToast('Copy failed', 'err'));
-  else { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); done(); }
+  else { legacyCopy(text); done(); }
 }
 
 // Both redraw only the list, so the search box keeps its focus while typing.
