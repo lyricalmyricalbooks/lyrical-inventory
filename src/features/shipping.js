@@ -10515,6 +10515,22 @@ function renderLedgerVerifyCell(order) {
 }
 
 function buildShippingLedgerHtml(allOrders, shippoExpenses) {
+  // Index matched postage by order number and books by id once, so the
+  // filters and rows below don't rescan every expense (a regex each) and
+  // every book for each order. Buckets keep the expenses' original order and
+  // the first book with an id wins, exactly as the old filter()/find() did.
+  const matchedByOrder = new Map();
+  for (const e of shippoExpenses) {
+    if (e.shippingMatchStatus !== 'matched') continue;
+    const key = normalizeShippingOrderNumber(e.shippingOrderNumber);
+    if (!key) continue;
+    const bucket = matchedByOrder.get(key);
+    if (bucket) bucket.push(e); else matchedByOrder.set(key, [e]);
+  }
+  const linkedExpensesFor = (orderNumber) => (orderNumber && matchedByOrder.get(orderNumber)) || [];
+  const booksById = new Map();
+  for (const b of BOOK_LIST) if (!booksById.has(b.id)) booksById.set(b.id, b);
+  const bookFor = (id) => booksById.get(id);
   // ── 5. Side-by-Side Shipping Ledger Pagination ──
   // Apply all interactive filters before pagination
   const filteredLedgerOrders = allOrders.filter(o => {
@@ -10525,9 +10541,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
     if (shipAnalysisMarginFilter !== 'all') {
       const customerPaidBase = Number(o.shippingPaid) || 0;
       const orderNumber = normalizeShippingOrderNumber(o.num);
-      const linked = orderNumber ? shippoExpenses.filter(e =>
-        e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
-      ) : [];
+      const linked = linkedExpensesFor(orderNumber);
 
       if (shipAnalysisMarginFilter === 'missing') {
         if (customerPaidBase !== 0) return false;
@@ -10548,9 +10562,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
     // B. Carrier filter
     if (shipAnalysisCarrierFilter !== 'all') {
       const orderNumber = normalizeShippingOrderNumber(o.num);
-      const linked = orderNumber ? shippoExpenses.filter(e =>
-        e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
-      ) : [];
+      const linked = linkedExpensesFor(orderNumber);
       const carrier = o.manualPostagePaid
         ? 'Manual Override'
         : (linked.length > 0 ? parseCarrierInfo(linked[0].desc).provider : 'Unlinked');
@@ -10564,7 +10576,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
 
     // D. Weight filter
     if (shipAnalysisWeightFilter !== 'all') {
-      const book = BOOK_LIST.find(b => b.id === o.bookId);
+      const book = bookFor(o.bookId);
       const weightKg = getWeightInKg(o.qty || 1, book);
       let band = 'Over 2 kg';
       if (weightKg < 0.5) band = 'Under 0.5 kg';
@@ -10591,9 +10603,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
   let ledgerRowsHtml = '';
   paginatedOrders.forEach(o => {
     const orderNumber = normalizeShippingOrderNumber(o.num);
-    const linked = orderNumber ? shippoExpenses.filter(e =>
-      e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
-    ) : [];
+    const linked = linkedExpensesFor(orderNumber);
 
     const isLinked = linked.length > 0;
     
@@ -10629,7 +10639,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
               ? { label: 'Undercharged', className: 'undercharged' }
               : { label: 'Matched', className: 'matched' });
 
-    const book = BOOK_LIST.find(b => b.id === o.bookId);
+    const book = bookFor(o.bookId);
     const isSavedSuccess = (o.id === shipAnalysisRecentlySavedOrderId || o.num === shipAnalysisRecentlySavedOrderId);
 
     let linkBtn = '';
