@@ -63,6 +63,7 @@ import {
   seedSeenOrders,
 } from '../lib/order-watch.js';
 import { escapeHtml } from '../lib/html.js';
+import { legacyCopy } from '../lib/clipboard.js';
 import { pushAppAlert } from '../lib/app-alert.js';
 import { logNotification } from '../lib/notification-log.js';
 import { storeReversalsToRaise } from '../lib/store-reversals.js';
@@ -864,12 +865,7 @@ function copyBigCartelOrderAddress(orderId) {
       showToast('Failed to copy to clipboard', 'err');
     });
   } else {
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    document.body.removeChild(ta);
+    legacyCopy(text);
     showToast('✓ Shipping address copied to clipboard', 'ok');
   }
 }

@@ -36,6 +36,7 @@ import { parseMarkdownToHtml, renderOpenCall } from './opencall.js';
 import { withCampaignFooter, campaignFooterHtml } from '../lib/campaign-footer.js';
 import { confirmDialog } from '../lib/modal.js';
 import { escapeHtml } from '../lib/html.js';
+import { legacyCopy } from '../lib/clipboard.js';
 import { toCsv } from '../lib/csv.js';
 import { downloadCsv } from '../lib/download.js';
 import { fmtD, getBookCurrencyCode, normalizeCurrencyCode } from '../lib/money.js';
@@ -289,7 +290,7 @@ function _openGmailBcc(emails, label) {
   if (cur.length) chunks.push(cur);
   window.open('https://mail.google.com/mail/?view=cm&fs=1&bcc=' + encodeURIComponent(chunks[0].join(',')), '_blank', 'noopener');
   if (chunks.length > 1) {
-    _custFallbackCopy(emails.join(', '));
+    legacyCopy(emails.join(', '));
     showToast(`Opened Gmail with ${chunks[0].length} of ${emails.length}. Full list copied — send in batches (Gmail caps recipients per email).`, 'warn');
   } else {
     showToast(`Opened Gmail · ${emails.length} recipient${emails.length === 1 ? '' : 's'} in BCC`);
@@ -1499,15 +1500,8 @@ function _custCopyEmailList(emails) {
   const text = emails.join(', ');
   const done = () => showToast(`✓ Copied ${emails.length} email${emails.length === 1 ? '' : 's'}`);
   if (navigator.clipboard?.writeText) {
-    navigator.clipboard.writeText(text).then(done).catch(() => { _custFallbackCopy(text); done(); });
-  } else { _custFallbackCopy(text); done(); }
-}
-function _custFallbackCopy(text) {
-  const ta = document.createElement('textarea');
-  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
-  document.body.appendChild(ta); ta.select();
-  try { document.execCommand('copy'); } catch (_) { }
-  ta.remove();
+    navigator.clipboard.writeText(text).then(done).catch(() => { legacyCopy(text); done(); });
+  } else { legacyCopy(text); done(); }
 }
 
 function exportCustomersCSV() {
@@ -1613,6 +1607,5 @@ export {
   customerPullStripe,
   customerPullDeeper,
   copyCustomerEmails,
-  _custFallbackCopy,
   exportCustomersCSV,
 };
