@@ -392,6 +392,7 @@ function closestByPurchaseTime(candidates, sentAt) {
  */
 export function attachEmailReceipts(expenses, receipts) {
   const changed = [];
+  const taken = new Set();
   const open = (expenses || []).filter(e => shippoTxIdFromRef(e?.ref) && !e.invoiceId);
   const cents = v => Math.round(Number(v) * 100);
   const amountOf = e => cents(e.origAmount ?? e.amount);
@@ -402,10 +403,12 @@ export function attachEmailReceipts(expenses, receipts) {
   for (const r of receipts || []) {
     if (!r || !r.url || !r.date) continue;
     if (used.has(r.invoiceNumber || r.messageId)) continue;
-    const pool = open.filter(e => !changed.includes(e)
-      && currencyOf(e) === r.currency && dayGap(e.date, r.date) <= 1);
+    // Filter out already-matched labels once per receipt, with a Set lookup
+    // instead of scanning the matched list for every label.
+    const available = open.filter(e => !taken.has(e));
+    const pool = available.filter(e => currencyOf(e) === r.currency && dayGap(e.date, r.date) <= 1);
     let picked = null;
-    const byTime = r.count === 1 ? closestByPurchaseTime(open.filter(e => !changed.includes(e)), r.sentAt) : null;
+    const byTime = r.count === 1 ? closestByPurchaseTime(available, r.sentAt) : null;
     // In the same currency the amounts must still agree; only a cross-currency
     // charge is taken on timing alone.
     if (byTime && (currencyOf(byTime) !== r.currency || amountOf(byTime) === cents(r.total))) {
@@ -421,7 +424,7 @@ export function attachEmailReceipts(expenses, receipts) {
     }
     if (!picked) continue;
     const invoiceId = r.invoiceNumber || r.messageId;
-    picked.forEach(e => { attachReceipt(e, r.url, invoiceId); changed.push(e); });
+    picked.forEach(e => { attachReceipt(e, r.url, invoiceId); changed.push(e); taken.add(e); });
   }
   return { changed, unmatched: open.length - changed.length };
 }

@@ -7125,7 +7125,7 @@ function renderTodoTab() {
     const items = result.byGroup[group] || [];
     if (!items.length) return '';
     return `<section class="overview-section todo-group">
-        <div class="sec-head is-muted">
+        <div class="sec-head is-muted is-inline">
           <div class="sec-head-titles">
             <div class="sec-kicker"><span class="sec-kicker-dot"></span>${escapeHtml(GROUP_ICONS[group] || '')} ${escapeHtml(GROUP_LABELS[group] || group)}</div>
           </div>
