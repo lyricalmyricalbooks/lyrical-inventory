@@ -14752,15 +14752,7 @@ function effectivePaymentLink(inv) {
     }
   }
 
-  if (!url) {
-    if (acceptedMethods.includes('stripe') && book.stripeLink) {
-      url = book.stripeLink;
-    } else if (acceptedMethods.includes('paypal') && book.paymentLink && /paypal/i.test(book.paymentLink)) {
-      url = book.paymentLink;
-    } else if (acceptedMethods.includes('interac') && book.paymentLink && /^[^\s@]+@[^\s@]+$/.test(book.paymentLink)) {
-      url = book.paymentLink;
-    }
-  }
+  if (!url) url = acceptedBookPaymentLink(book, acceptedMethods);
 
   if (!url) return '';
 
@@ -17969,19 +17961,20 @@ function getAcceptedPaymentMethodsForBook(bookId) {
   return book.acceptedMethods || ['stripe', 'paypal', 'interac', 'cash_card'];
 }
 
+// The book's own payment link, but only one whose method the book accepts:
+// Stripe first, then a PayPal link, then an Interac e-Transfer email. Empty
+// when none qualifies. Shared by the book's checkout links and by invoices
+// that carry no link of their own, so the two always pick the same one.
+function acceptedBookPaymentLink(book, acceptedMethods) {
+  if (acceptedMethods.includes('stripe') && book.stripeLink) return book.stripeLink;
+  if (acceptedMethods.includes('paypal') && book.paymentLink && /paypal/i.test(book.paymentLink)) return book.paymentLink;
+  if (acceptedMethods.includes('interac') && book.paymentLink && /^[^\s@]+@[^\s@]+$/.test(book.paymentLink)) return book.paymentLink;
+  return '';
+}
+
 function getEffectiveBookPaymentLink(book) {
   if (!book) return '';
-  const acceptedMethods = getAcceptedPaymentMethodsForBook(book.id);
-
-  let url = '';
-  if (acceptedMethods.includes('stripe') && book.stripeLink) {
-    url = book.stripeLink;
-  } else if (acceptedMethods.includes('paypal') && book.paymentLink && /paypal/i.test(book.paymentLink)) {
-    url = book.paymentLink;
-  } else if (acceptedMethods.includes('interac') && book.paymentLink && /^[^\s@]+@[^\s@]+$/.test(book.paymentLink)) {
-    url = book.paymentLink;
-  }
-
+  const url = acceptedBookPaymentLink(book, getAcceptedPaymentMethodsForBook(book.id));
   return url || book.stripeLink || book.paymentLink || '';
 }
 
