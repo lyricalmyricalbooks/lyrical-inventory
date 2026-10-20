@@ -26,6 +26,7 @@ import { createStripeRateResolver, stripeOrderNumber } from './lib/stripe-sale-d
 import { calculateBreakEven, breakEvenTierMove, applyBreakEvenTierMove, readProductionCostInput } from './lib/breakeven.js';
 import { computeTallyRowHeights, computeQrCardSize, estimateTallyPages, estimateQrPages } from './lib/print-sheet-layout.js';
 import { escapeHtml, safeHttpUrl } from './lib/html.js';
+import { legacyCopy } from './lib/clipboard.js';
 import { needsSettleUp, settleUpModel, settleUpHeadline, settleUpHtml, settlementPayoutSummary } from './lib/settle-up-view.js';
 import { normalizeLetterhead, renderLetterhead } from './lib/letterhead.js';
 import { ensureXlsx, loadExternalScript } from './lib/external-scripts.js';
@@ -893,7 +894,6 @@ import {
   customerPullStripe,
   customerPullDeeper,
   copyCustomerEmails,
-  _custFallbackCopy,
   exportCustomersCSV,
 } from './features/customers.js';
 import {
@@ -2732,11 +2732,7 @@ window.renderAllQRCodes = renderAllQRCodes;
 // copy command when the async clipboard write is refused. Resolves once
 // either path has run; the copy-link buttons toast on that.
 function copyTextWithFallback(text) {
-  return navigator.clipboard.writeText(text).catch(() => {
-    const ta = document.createElement('textarea');
-    ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy');
-    document.body.removeChild(ta);
-  });
+  return navigator.clipboard.writeText(text).catch(() => legacyCopy(text));
 }
 
 window.copyBookQR = function (bookId, url) {
@@ -28033,7 +28029,7 @@ function exposeLegacyInlineHandlers() {
     saveCampaignDraft, editCampaignDraft, deleteCampaign, sendSingleEmailViaBackend,
     sendTestEmailCampaign, cancelCampaignSending, sendCampaignLaunch, sendNextCampaignEmail,
     finishCampaignSend, retryCampaignEmail, updateCampaignSendFinishedSummary, renderCampaigns,
-    filterCustomers, customerPullStripe, customerPullDeeper, copyCustomerEmails, _custFallbackCopy,
+    filterCustomers, customerPullStripe, customerPullDeeper, copyCustomerEmails,
     exportCustomersCSV, checkAppUpdate, dismissAppUpdate, fetchRecentChanges, showWhatsNew,
     initStartup, setupGate, renderWebAnalytics, updateModalAccentPreview, normalizeCountryCode,
     getAllStores, getBookPresetSpecs, initShippingTab, getRecentShippingOrders, saveShippoApiKey,
