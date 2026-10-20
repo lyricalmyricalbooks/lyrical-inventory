@@ -123,22 +123,45 @@ function customsUnitValue(line, book) {
  */
 export function orderParcelPlan(rawLines = [], rawBooks = {}) {
   const books = rawBooks && typeof rawBooks === 'object' ? rawBooks : {};
-  const lines = (Array.isArray(rawLines) ? rawLines : [])
-    .map(line => ({ ...(line || {}), qty: positiveQty(line?.qty) }))
-    .filter(line => line.qty > 0);
+  const rawArray = Array.isArray(rawLines) ? rawLines : [];
 
-  const matched = lines.filter(line => line.bookId && books[line.bookId]);
-  const unmatchedTitles = lines
-    .filter(line => !line.bookId || !books[line.bookId])
-    .map(line => clean(line.title) || 'an unnamed item')
-    .filter(Boolean);
+  // ⚡ Bolt Optimization: Replace 8 array iterations (.map, .filter, .reduce, .some, etc) with a single imperative loop
+  const lines = [];
+  const matched = [];
+  const unmatchedTitles = [];
+  let totalQty = 0;
+  let matchedQty = 0;
+  let distinctBooksSet = new Set();
+  let guessed = false;
+
+  for (let i = 0; i < rawArray.length; i++) {
+    const rawLine = rawArray[i] || {};
+    const qty = positiveQty(rawLine.qty);
+    if (qty > 0) {
+      const line = { ...rawLine, qty };
+      lines.push(line);
+      totalQty += qty;
+
+      if (line.bookId && books[line.bookId]) {
+        matched.push(line);
+        matchedQty += qty;
+        distinctBooksSet.add(line.bookId);
+        if (!guessed && line.confidence !== 'exact') {
+          guessed = true;
+        }
+      } else {
+        const title = clean(line.title) || 'an unnamed item';
+        if (title) unmatchedTitles.push(title);
+      }
+    }
+  }
 
   const empty = {
     presetBookId: '',
     presetTitle: '',
-    totalQty: 0,
-    matchedQty: 0,
-    distinctBooks: 0,
+    totalQty,
+    matchedQty,
+    distinctBooks: distinctBooksSet.size,
     unmatchedTitles,
     customsUnitValue: 0,
     customsDescription: '',
@@ -152,10 +175,7 @@ export function orderParcelPlan(rawLines = [], rawBooks = {}) {
   if (!primary) return empty;
 
   const book = books[primary.bookId];
-  const distinctBooks = new Set(matched.map(line => line.bookId)).size;
-  const totalQty = lines.reduce((sum, line) => sum + line.qty, 0);
-  const matchedQty = matched.reduce((sum, line) => sum + line.qty, 0);
-  const guessed = matched.some(line => line.confidence !== 'exact');
+  const distinctBooks = distinctBooksSet.size;
 
   let confidence = 'exact';
   if (unmatchedTitles.length || guessed) confidence = 'partial';
