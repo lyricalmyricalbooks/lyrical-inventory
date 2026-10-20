@@ -414,6 +414,20 @@ inset) and republishes on resize. It falls back to `0px` everywhere it can't mea
 wrap falls back to `overflow:hidden` on engines without `overflow: clip`, so both degrade to
 today's plain header rather than to a broken one.
 
+### Several action buttons in a table row — one line, stacked only when it must
+
+Two full-target buttons in an Action cell that are left to `flex-wrap` fold into a stack the
+moment the table is squeezed, and every row becomes two tap targets tall — twice the height of
+the figures beside it. The buyer table (`#cust-body`) settles it:
+
+- Put the buttons in a `nowrap` flex row and give the cell `width:1%; white-space:nowrap`.
+- Make room by tightening the *gutters* between columns (8px a side), never the table's outer
+  edges, which keep 16px so the first and last columns still line up with the card.
+- Make the wrap a size container (`container: <name> / inline-size`) and, below the width where
+  one line no longer fits, switch to `flex-direction:column; align-items:stretch` so the stack
+  shares one width and the column keeps a straight right edge.
+- Scope both to `min-width: 768px`: on a phone the row is a card and `phone.css` re-grids it.
+
 ---
 
 ## Metric bands — `.kpi-grid` / `.kpi` / `.kpi.is-lead`
