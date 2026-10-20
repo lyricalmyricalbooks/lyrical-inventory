@@ -142,6 +142,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-16 | visual | Phone Order History | Made the pencil beside each order number easy to tap (a 44px touch area around a slightly larger square, was a tiny 22px one) without making the cards taller, and stretched the Import button across the row | pending |
 | 2026-10-17 | visual | Phone Customers | Made each buyer a compact card: the name with what they spent beside it, the email a full-size tap (was a 14px-tall link), and the list buttons side by side, so each card is about a quarter shorter | pending |
 | 2026-10-18 | visual | Phone All Books — sales by book cards | Made each book's name lead its card in big title lettering with an inked outline and offset shadow, instead of being outweighed by the channel names under it | pending |
+| 2026-10-20 | visual | Phone To-do | Put each group's count beside its label (Stock, Money to chase…) instead of on a line of its own, so every group is a row shorter and the first items come into view sooner | pending |
 
 ---
 
