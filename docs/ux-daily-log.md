@@ -143,6 +143,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-17 | visual | Phone Customers | Made each buyer a compact card: the name with what they spent beside it, the email a full-size tap (was a 14px-tall link), and the list buttons side by side, so each card is about a quarter shorter | pending |
 | 2026-10-18 | visual | Phone All Books — sales by book cards | Made each book's name lead its card in big title lettering with an inked outline and offset shadow, instead of being outweighed by the channel names under it | pending |
 | 2026-10-20 | visual | Phone To-do | Put each group's count beside its label (Stock, Money to chase…) instead of on a line of its own, so every group is a row shorter and the first items come into view sooner | pending |
+| 2026-10-20 | visual | Phone book dashboard — headline numbers | Stock on hand and Revenue keep a row each and the smaller counts (units sold, on consignment) now sit two to a row instead of four full-width slabs, so the book's own sections come into view a screen sooner | pending |
 
 ---
 
