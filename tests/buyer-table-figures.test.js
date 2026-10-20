@@ -98,6 +98,6 @@ test('the mailing list date column gets the same figure treatment', () => {
 test('both customer tables pin their column labels while the page scrolls', () => {
   // Nine columns of anonymous figures are unreadable once the labels scroll
   // away, and the buyer list is as long as the shop's whole history.
-  expect(markup).toMatch(/<div class="tbl-wrap sys-sticky-head"><table class="tbl">\s*<thead><tr><th>Name<\/th><th>Email<\/th><th class="r">Orders<\/th>/);
+  expect(markup).toMatch(/<div class="tbl-wrap sys-sticky-head(?: cust-tbl-wrap)?"><table class="tbl">\s*<thead><tr><th>Name<\/th><th>Email<\/th><th class="r">Orders<\/th>/);
   expect(markup).toMatch(/<div class="tbl-wrap sys-sticky-head" style="margin-top:14px;"><table class="tbl">\s*<thead><tr><th>Name<\/th><th>Email<\/th><th>Added<\/th>/);
 });

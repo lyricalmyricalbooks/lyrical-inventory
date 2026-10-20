@@ -2206,16 +2206,51 @@ tr.hist-row:hover {
 #cust-body .btn,
 #ml-body .btn,
 .cust-action-btn {
+  /* The house full-target small button (the same size .btn.sm takes on a
+     phone): caps at the .btn scale's text-xs and the .btn weight, instead of
+     an oversized 600-weight caption that made "Unsubscribe" the widest thing
+     in the row and pushed the column off the table. */
   min-height: var(--target-min, 44px);
-  padding: 8px 14px;
-  font-size: var(--text-sm);
-  font-weight: 600;
+  padding: 8px 12px;
+  font-size: var(--text-xs);
+  justify-content: center;
   transition: transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast) var(--ease-spring), background-color var(--dur-fast) var(--ease-standard);
 }
 #cust-body .btn:active,
 #ml-body .btn:active,
 .cust-action-btn:active {
   transform: scale(0.96);
+}
+
+/* The buyer row's two actions sit on one line. Stacked, they made every row
+   two full tap targets tall — about twice the height of the figures beside
+   it — and their different widths left a ragged right edge down the column.
+   One line keeps each row a single target tall; nowrap stops the table's
+   squeeze from folding them back into a stack. The phone card re-grids this
+   div in phone.css. */
+.cust-tbl-wrap{container:cust-table / inline-size;}
+.tbl td.cust-actions-cell{width:1%;white-space:nowrap;}
+.cust-actions{
+  display:flex;
+  flex-wrap:nowrap;
+  align-items:center;
+  gap:var(--space-2);
+}
+/* Nine columns: 8px each side between columns (a 16px gutter) instead of
+   the house 16px (a 32px gutter), so the row fits a laptop with the sidebar
+   open. The table's outer edges keep 16px so the first and last columns
+   still line up with the card. Not on a phone, where phone.css turns each
+   row into a card with its own spacing. */
+@container cust-table (min-width: 768px){
+  .cust-tbl-wrap .tbl th,
+  .cust-tbl-wrap .tbl td{padding-inline:var(--space-2);}
+  .cust-tbl-wrap .tbl :is(th, td):first-child{padding-left:var(--space-4);}
+  .cust-tbl-wrap .tbl :is(th, td):last-child{padding-right:var(--space-4);}
+}
+/* Too narrow for one line: stack the two actions at one shared width, so the
+   column keeps a straight right edge instead of a short and a long button. */
+@container cust-table (min-width: 768px) and (max-width: 940px){
+  .cust-actions{flex-direction:column;align-items:stretch;}
 }
 
 .cust-export-btn {

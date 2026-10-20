@@ -750,7 +750,7 @@ function renderCustomersAudience() {
         <td class="r money-cell">${_custSpendStr(r.spend) || '—'}</td>
         <td class="date-cell">${r.last ? fmtD(r.last) : '—'}</td>
         <td>${Array.from(r.sources).map(s => `<span class="pill gray" style="font-size:var(--text-2xs);">${escapeHtml(s)}</span>`).join(' ')}</td>
-        <td><div style="display:flex;gap:6px;flex-wrap:wrap;">${listBtn}${supBtn}</div></td>
+        <td class="cust-actions-cell"><div class="cust-actions">${listBtn}${supBtn}</div></td>
       </tr>`;
     }).join('')
     : `<tr class="sys-empty-row"><td colspan="9">${_custEmptyHtml(all.length, activeFilters)}</td></tr>`;
