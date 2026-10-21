@@ -254,8 +254,19 @@ function intelMessageHtml(msg, i) {
 function intelBatchHtml(b) {
   if (!b) return '';
   const settled = b.status === 'applied' || b.status === 'dismissed';
-  const live = b.items.filter(it => !b.skipped.includes(it.ref));
-  const money = live.filter(it => it.risk === 'money').length;
+
+  // ⚡ Bolt Optimization: Use O(1) Set lookup and Loop Fusion
+  // to avoid O(N*M) complexity with .includes() and multiple array passes
+  const skippedSet = new Set(b.skipped || []);
+  const live = [];
+  let money = 0;
+  for (let i = 0; i < b.items.length; i++) {
+    const it = b.items[i];
+    if (!skippedSet.has(it.ref)) {
+      live.push(it);
+      if (it.risk === 'money') money++;
+    }
+  }
 
   const pill = b.status === 'applied'
     ? '<span class="pill green">✓ Done</span>'
@@ -781,10 +792,21 @@ async function applyIntelProposal(batchId) {
   const b = INTEL_PROPOSALS.get(batchId);
   if (!b || b.status !== 'open' || isAuthor()) return;
 
-  const live = b.items.filter(it => !b.skipped.includes(it.ref));
+  // ⚡ Bolt Optimization: Use O(1) Set lookup and Loop Fusion
+  // to avoid O(N*M) complexity with .includes() and multiple array passes
+  const skippedSet = new Set(b.skipped || []);
+  const live = [];
+  const money = [];
+  for (let i = 0; i < b.items.length; i++) {
+    const it = b.items[i];
+    if (!skippedSet.has(it.ref)) {
+      live.push(it);
+      if (it.risk === 'money') money.push(it);
+    }
+  }
+
   if (!live.length) return;
 
-  const money = live.filter(it => it.risk === 'money');
   const ok = await confirmDialog(
     `This edits ${live.length === 1 ? 'a record' : 'records'} in your books. You can change ${live.length === 1 ? 'it' : 'them'} back any time from the screen ${live.length === 1 ? 'it lives' : 'they live'} on.`
     + (money.length ? `\n\n${money.length === 1 ? 'One change affects' : `${money.length} changes affect`} money — prices, shares, amounts or a shop's commission.` : ''),
