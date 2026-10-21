@@ -427,6 +427,10 @@ the figures beside it. The buyer table (`#cust-body`) settles it:
   one line no longer fits, switch to `flex-direction:column; align-items:stretch` so the stack
   shares one width and the column keeps a straight right edge.
 - Scope both to `min-width: 768px`: on a phone the row is a card and `phone.css` re-grids it.
+- The same gutter rule frees width across a whole wide ledger. Order History (`.tbl.hist-ledger`)
+  keeps its order numbers and dates `nowrap`, gives the notes a `min-width` so they don't fall to a
+  word per line, and lets the one header that sits over a tiny figure ("Stock after") wrap to two
+  lines. That is what keeps Approve / ✕ in view at a laptop width without a sideways scroll.
 
 ---
 

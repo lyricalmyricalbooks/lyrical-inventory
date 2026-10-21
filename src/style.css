@@ -2222,6 +2222,30 @@ tr.hist-row:hover {
   font-variant-numeric:tabular-nums;
 }
 
+/* Order History ledger (computer width). The order number ("CON-VLNB-1461")
+   was splitting at every hyphen into three lines and the date into two, so a
+   single sale stood four or five lines tall, while the notes were squeezed to
+   a word per line and the Approve button on an artist's sale was pushed past
+   the table's right edge. Order numbers and dates now hold one line, and the
+   width that buys comes out of the gutters between columns (8px a side), not
+   the table's outer edges, which keep 16px so the first and last columns still
+   line up with the card. At a laptop width that keeps all ten columns,
+   approval buttons included, in view.
+   Scoped above the phone breakpoint: on a phone these rows are cards laid out
+   on their own grid (the max-width: 768px block below and styles/phone.css). */
+@media (min-width: 769px){
+  .tbl.hist-ledger th,
+  .tbl.hist-ledger td{padding-inline:8px;}
+  .tbl.hist-ledger :is(th, td):first-child{padding-left:16px;}
+  .tbl.hist-ledger :is(th, td):last-child{padding-right:16px;}
+  .tbl.hist-ledger tr.hist-row > td:nth-child(1),
+  .tbl.hist-ledger tr.hist-row > td:nth-child(9){white-space:nowrap;font-variant-numeric:tabular-nums;}
+  .tbl.hist-ledger tr.hist-row > td:nth-child(7){min-width:12ch;text-wrap:pretty;}
+  /* "Stock after" sits over a two-digit figure; letting its label take two
+     lines gives that width back to the row instead of to the header. */
+  .tbl.hist-ledger th:nth-child(6){white-space:normal;}
+}
+
 /* Customer & Mailing List action geometry, tabular alignment & spring kinetics */
 #cust-body .btn,
 #ml-body .btn,
