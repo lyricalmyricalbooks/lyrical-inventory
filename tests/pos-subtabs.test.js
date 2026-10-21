@@ -1,12 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+import { appSource, MAIN_JS_PATH } from './helpers/extract-decl.js';
 
 describe('POS Subtabs & Fair Print Kit Workspace Integration', () => {
   const htmlPath = path.join(process.cwd(), 'index.html');
   const html = fs.readFileSync(htmlPath, 'utf8');
-  const jsPath = path.join(process.cwd(), 'src/main.js');
-  const js = fs.readFileSync(jsPath, 'utf8');
+  // main.js plus the feature modules: the sub-tab switcher moved to
+  // src/features/fair-kit.js, while its window registration stays in main.js.
+  const js = appSource;
+  const mainOnly = fs.readFileSync(MAIN_JS_PATH, 'utf8');
 
   it('declares POS subtab navigation elements and subpanels in index.html', () => {
     expect(html).toContain('id="btn-pos-subtab-register"');
@@ -20,10 +23,10 @@ describe('POS Subtabs & Fair Print Kit Workspace Integration', () => {
     expect(html).toContain('onclick="switchPOSSubTab(\'fairkit\')"');
   });
 
-  it('declares switchPOSSubTab and fairKitSearchFilter in main.js', () => {
-    expect(js).toContain('export function switchPOSSubTab');
-    expect(js).toContain('export function fairKitSearchFilter');
-    expect(js).toContain('window.fairKitSearchFilter = fairKitSearchFilter');
+  it('declares switchPOSSubTab and fairKitSearchFilter, and main.js imports them', () => {
+    expect(js).toContain('function switchPOSSubTab(');
+    expect(js).toContain('function fairKitSearchFilter(');
+    expect(mainOnly).toMatch(/import \{[^}]*\bswitchPOSSubTab\b[^}]*\bfairKitSearchFilter\b[^}]*\} from '\.\/features\/fair-kit\.js'/);
     expect(js).toContain('switchPOSSubTab(activePOSSubTab)');
   });
 
