@@ -2202,6 +2202,26 @@ tr.hist-row:hover {
 .tbl td.text-cell{font-size:var(--text-sm);color:var(--content-muted);}
 .tbl td.text-cell > span{display:block;max-width:26ch;}
 
+/* Expense ledger (computer width). Dates and receipt refs stay on one line —
+   "22 Sept 2026" was breaking over three lines and "RCPT-1233" splitting at
+   its hyphen — and the description is the row's subject, so it is given room
+   to read in one or two lines instead of being squeezed to a word per line
+   while the columns beside it sat half empty. Phone cards (styles/phone.css)
+   lay these cells out on their own grid and are unaffected. */
+/* Ten columns at a laptop width: a tighter side gutter than the house 16px
+   is what lets the description keep its room and the remove button stay in
+   view instead of scrolling the table sideways. */
+.tbl.exp-ledger th,
+.tbl.exp-ledger td{padding-inline:10px;}
+.tbl.exp-ledger td.exp-desc{min-width:18ch;text-wrap:pretty;}
+.tbl.exp-ledger td.exp-ref{
+  font-family:var(--font-mono);
+  font-size:var(--text-xs);
+  color:var(--content-muted);
+  white-space:nowrap;
+  font-variant-numeric:tabular-nums;
+}
+
 /* Customer & Mailing List action geometry, tabular alignment & spring kinetics */
 #cust-body .btn,
 #ml-body .btn,
