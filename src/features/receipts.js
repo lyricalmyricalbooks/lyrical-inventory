@@ -7633,12 +7633,12 @@ function renderExpenses() {
         : `<span style="font-size:var(--text-2xs);color:var(--amber);">Awaiting Publisher</span>`;
       return `<tr class="is-awaiting">
         ${showSelectCol ? '<td></td>' : ''}
-        <td class="mono" style="color:var(--text3);">${fmtD(e.date) ?? '—'}</td>
-        <td style="font-weight:600;">${escapeHtml(e.desc)}</td>
+        <td class="date-cell">${fmtD(e.date) ?? '—'}</td>
+        <td class="lead-cell exp-desc">${escapeHtml(e.desc)}</td>
         <td><span class="pill gray" style="font-size:var(--text-2xs);">${escapeHtml(e.cat)}</span></td>
-        <td class="mono" style="font-size:var(--text-xs);color:var(--text3);">${escapeHtml(e.ref) || '—'}</td>
+        <td class="exp-ref">${escapeHtml(e.ref) || '—'}</td>
         <td>—</td>
-        <td class="r" style="font-weight:600;">${fmt(e.amount, e.currency)}</td>
+        <td class="r money-cell">${fmt(e.amount, e.currency)}</td>
         ${window.IS_PUBLISHER ? '<td class="r">—</td>' : ''}
         <td></td>
         <td class="r">${actionCell}</td>
@@ -7714,12 +7714,12 @@ function renderExpenses() {
     const isSettledReimbursable = e.received && !isGratuity;
     return `<tr style="${isSettledReimbursable ? 'opacity:.5;' : ''}">
       ${selectCell}
-      <td class="mono" style="color:var(--text3);">${fmtD(e.date) ?? '—'}</td>
-      <td style="font-weight:600;">${escapeHtml(e.desc)}</td>
+      <td class="date-cell">${fmtD(e.date) ?? '—'}</td>
+      <td class="lead-cell exp-desc">${escapeHtml(e.desc)}</td>
       <td><span class="pill gray" style="font-size:var(--text-2xs);">${escapeHtml(e.cat)}</span></td>
-      <td class="mono" style="font-size:var(--text-xs);color:var(--text3);">${escapeHtml(e.ref) || '—'}</td>
+      <td class="exp-ref">${escapeHtml(e.ref) || '—'}</td>
       <td>${receiptCell}</td>
-      <td class="r" style="color:${isSettledReimbursable ? 'var(--text4)' : 'var(--red)'};font-family:var(--font-mono);">${fmt(e.amount, eCur)}</td>
+      <td class="r money-cell" style="color:${isSettledReimbursable ? 'var(--text4)' : 'var(--red)'};">${fmt(e.amount, eCur)}</td>
       ${window.IS_PUBLISHER ? `<td class="r" style="font-family:var(--font-mono);color:var(--text3);"${baseAmountTitle ? ` title="${baseAmountTitle}"` : ''}>${baseAmountText}</td>` : ''}
       <td>${statusCell}</td>
       <td>${actionCell}</td>
