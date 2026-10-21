@@ -568,6 +568,7 @@ tr.hist-row:hover {
 .acct-status .sync-label b{color:var(--on-inverse);}
 .acct-status-row{display:flex;align-items:center;gap:8px;margin-top:7px;flex-wrap:wrap;}
 .acct-status .sync-time{color:rgba(255,255,255,.4);font-size:var(--text-2xs);}
+.acct-status .acct-startup{margin-top:5px;color:rgba(255,255,255,.55);font-size:var(--text-2xs);font-family:var(--font-mono);}
 .acct-status .author-watermark{display:block;margin-top:7px;font-size:var(--text-2xs);color:var(--gold2);font-family:var(--font-mono);}
 .header-menu-sep{height:1px;background:rgba(255,255,255,.08);margin:6px 4px;}
 .header-menu-item.danger-item .hmi-label,.header-menu-item.danger-item .hmi-ico{color:var(--rose-mist);}
@@ -6119,6 +6120,9 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .cf-title{font-family:var(--font-ui);font-size:var(--text-lg);color:var(--text);}
 .cf-head select#tc-year{appearance:none;-webkit-appearance:none;font-family:var(--font-ui);font-size:var(--text-base);padding:5px 28px 5px 10px;border-radius:var(--r);border:var(--stroke-hair) solid var(--gold-line);background-color:var(--cream2);background-image:var(--select-arrow);background-repeat:no-repeat;background-position:right 8px center;background-size:12px;color:var(--text);cursor:pointer;min-width:90px;}
 .cf-head select#tc-year:focus{outline:none;border-color:var(--gold);background-image:var(--select-arrow-gold);box-shadow:var(--elev-1);}
+/* "Updating today's exchange rates…" — shown only while the day's rates download after startup. */
+.cf-head-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.cf-rates-note{font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--content-secondary);}
 .cf-cad-badge{font-size:var(--text-xs);font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gold-text);background:var(--gold-bg);border:var(--stroke-hair) solid var(--gold-line);padding:3px 10px;border-radius:var(--r-pill);}
 
 /* Headline stat cards */

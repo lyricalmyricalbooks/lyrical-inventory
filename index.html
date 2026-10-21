@@ -572,6 +572,7 @@
             <span class="sheets-badge off" id="sheets-badge">📊 Sheets: not set up</span>
             <a id="sheets-open-link" href="#" target="_blank" style="display:none;font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--gold3);text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">↗ Open</a>
           </div>
+          <div class="acct-startup" id="acct-startup" hidden></div>
           <span class="author-watermark" id="author-watermark" style="display:none;"></span>
         </div>
         <div class="header-menu-sep"></div>
@@ -2797,7 +2798,10 @@
                 <option value="2023">2023</option>
             </select>
         </div>
-        <span class="cf-cad-badge">Values in CAD</span>
+        <span class="cf-head-right">
+            <span class="cf-rates-note" id="tc-rates-note" role="status" hidden>Updating today's exchange rates…</span>
+            <span class="cf-cad-badge">Values in CAD</span>
+        </span>
     </div>
 
     <!-- FX rate-staleness banner (populated by renderTaxCenter) -->
