@@ -1261,6 +1261,9 @@ function ownersFromBooks() {
 }
 
 let catalogLoadFailed = false;
+// Open until the server's catalogue is in (loadCatalog); see showStartupPreview.
+let _startupPreviewOpen = true;
+let _startupPreviewShown = false;
 
 export function saveCatalogWithDeletions() {
   // The last catalog read failed, so BOOKS may be the built-in defaults rather
@@ -1296,22 +1299,11 @@ async function loadCatalog(early = null) {
   try {
     const stored = await (early || window._fbLoadCatalog()); // handles FS → RTDB fallback internally
     catalogLoadFailed = false;
+    // The server's catalog is in: the on-device preview (showStartupPreview)
+    // must not paint over it from here on.
+    _startupPreviewOpen = false;
     if (stored) {
-      deletedDefaultIds = Array.isArray(stored._deletedDefaults) ? stored._deletedDefaults.slice() : [];
-      posExtraBooks = (stored._posExtra && typeof stored._posExtra === 'object') ? { ...stored._posExtra } : {};
-      const storedBooks = { ...stored };
-      delete storedBooks._deletedDefaults;
-      delete storedBooks._posExtra;
-      const filteredDefaults = {};
-      Object.keys(DEFAULT_BOOKS).forEach(id => {
-        if (!deletedDefaultIds.includes(id)) filteredDefaults[id] = DEFAULT_BOOKS[id];
-      });
-      BOOKS = { ...filteredDefaults, ...storedBooks };
-      BOOK_LIST = Object.values(BOOKS);
-      normalizeTestBookAccents();
-      if (Object.keys(BOOKS).length > Object.keys(storedBooks).length) {
-        await saveCatalogWithDeletions();
-      }
+      if (applyStoredCatalog(stored)) await saveCatalogWithDeletions();
     } else {
       BOOKS = { ...DEFAULT_BOOKS };
       BOOK_LIST = Object.values(BOOKS);
@@ -1322,6 +1314,7 @@ async function loadCatalog(early = null) {
     }
   } catch (e) {
     console.error('Critical error loading catalog', e);
+    _startupPreviewOpen = false;
     // A failed read is not an empty catalog: never save from here. Keep any
     // catalog already in memory; only fall back to the defaults on a cold start.
     catalogLoadFailed = true;
@@ -1334,6 +1327,25 @@ async function loadCatalog(early = null) {
     }
     showToast('⚠ Could not load the book catalog — showing what is saved on this device. Reload once you are back online.', 'err', 7000);
   }
+}
+
+// Install a stored catalog as BOOKS. Returns true when built-in titles had to
+// be added to it (the caller saves that back). Writes nothing itself, so the
+// startup preview can use it on the device's cached copy.
+function applyStoredCatalog(stored) {
+  deletedDefaultIds = Array.isArray(stored._deletedDefaults) ? stored._deletedDefaults.slice() : [];
+  posExtraBooks = (stored._posExtra && typeof stored._posExtra === 'object') ? { ...stored._posExtra } : {};
+  const storedBooks = { ...stored };
+  delete storedBooks._deletedDefaults;
+  delete storedBooks._posExtra;
+  const filteredDefaults = {};
+  Object.keys(DEFAULT_BOOKS).forEach(id => {
+    if (!deletedDefaultIds.includes(id)) filteredDefaults[id] = DEFAULT_BOOKS[id];
+  });
+  BOOKS = { ...filteredDefaults, ...storedBooks };
+  BOOK_LIST = Object.values(BOOKS);
+  normalizeTestBookAccents();
+  return Object.keys(BOOKS).length > Object.keys(storedBooks).length;
 }
 
 async function syncCatalog() {
@@ -4070,7 +4082,9 @@ export async function loadBook(bookId) {
     console.error('loadBook failed', bookId, e);
     reportClientError('load-book-failed', e && e.message, { stack: e && e.stack });
     const priorState = states[bookId];
-    if (priorState && !priorState._loadFailed) {
+    // A copy shown from the device while starting up was never loaded: a
+    // failed first load says so, the same as with nothing on screen.
+    if (priorState && !priorState._loadFailed && !priorState._preview) {
       // A reload that failed leaves the book already on screen untouched; the
       // real data is still there, so don't swap it for an empty ledger.
       setSyncState('error', '<b>Firestore</b> · reload failed');
@@ -4349,6 +4363,8 @@ function setRatesUpdating(on) {
 }
 
 async function forceSync() {
+  // Still starting up: the first load is already on its way.
+  if (!fbReady) { showToast('Still loading — the latest copy is on its way'); return; }
   if (isAuthor() && activeBook) { await loadBook(activeBook); renderCurrent(); }
   else {
     // loadAllBooks() already awaits loadTaxCenter(). Calling it again here
@@ -18938,6 +18954,12 @@ function logout() {
 }
 
 function showApp(role, bookId) {
+  showAppShell(role, bookId);
+  boot(bookId || ACTIVE_BOOK_FORCED);
+}
+
+// The app's frame for a role, without loading anything (boot does that).
+function showAppShell(role, bookId) {
   $('pw-gate').style.display = 'none';
   $('pw-app').style.display = '';
   if (role === 'author' || IS_AUTHOR_MODE) {
@@ -18966,7 +18988,6 @@ function showApp(role, bookId) {
   }
   updateRoleToggleButton();
   syncRoleUI();
-  boot(bookId || ACTIVE_BOOK_FORCED);
 }
 
 async function boot(forcedBook) {
@@ -19034,8 +19055,8 @@ async function boot(forcedBook) {
         window.posConfigureRates({ silent: true });
       });
     } else {
-      // Publisher
-      activeBook = 'all';
+      // Publisher. A book opened during the startup preview stays open.
+      if (!_startupPreviewShown) activeBook = 'all';
       // Painted before the await so the landing screen shows the catalogue
       // arriving rather than nothing at all. Replaced by updateAllOverview()
       // the moment loadAllBooks() resolves.
@@ -27410,6 +27431,14 @@ async function initStartup() {
       // again from the right store. The early reads write nothing; loadCatalog
       // still does any saving itself, after the flags are in.
       const cachedGlobal = startupCachedGlobalMode();
+      // The publisher, on a device that has opened the app before: show the
+      // copy this device already holds while the server is asked.
+      const publisherAccount = (user.email || '').toLowerCase().trim() === publisherEmail && user.emailVerified === true;
+      if (publisherAccount && cachedGlobal === true) {
+        showStartupPreview()
+          .then(shown => { if (shown) dismissSplash(); })
+          .catch(e => console.warn('Startup preview skipped', e));
+      }
       const flagsLoaded = window._fbLoadModeFlags();
       const early = cachedGlobal === null ? null : {
         global: cachedGlobal,
@@ -27487,6 +27516,56 @@ async function initStartup() {
       dismissSplash();
     }
   });
+}
+
+// ── STARTUP PREVIEW
+// A device that has opened the app before keeps the last copy of the catalogue
+// and of every book in Firestore's on-device cache. Reading that takes a
+// moment, where the server can take seconds on a weak signal, so the overview
+// is painted from it first, marked as updating, and the normal startup then
+// replaces every figure with the server's copy.
+//
+// Only for the publisher, only when this device's flags put the catalogue and
+// every book in Firestore, and only when the device holds a copy of every
+// book — a book missing from the cache would read as an empty ledger. It
+// writes nothing. A change made in these first moments goes to the offline
+// queue, as it would with no signal, and is sent and merged once the books
+// have loaded. Shown copies are marked `_preview`, so a first load that then
+// fails reports it rather than keeping the device's copy as if it were loaded.
+async function showStartupPreview() {
+  const stored = await window._fbPeekCachedCatalog();
+  if (!stored || typeof stored !== 'object' || !_startupPreviewOpen) return false;
+  const deleted = Array.isArray(stored._deletedDefaults) ? stored._deletedDefaults : [];
+  const ids = [...new Set([
+    ...Object.keys(DEFAULT_BOOKS).filter(id => !deleted.includes(id)),
+    ...Object.keys(stored).filter(k => k !== '_deletedDefaults' && k !== '_posExtra'),
+  ])];
+  let flagged = false;
+  try { flagged = ids.every(id => localStorage.getItem('fs_mode_' + id) === 'true'); } catch (_) { }
+  if (!ids.length || !flagged) return false;
+  const copies = await Promise.all(ids.map(id => window._fbPeekCachedBook(id)));
+  if (copies.some(c => !c || typeof c !== 'object')) return false;
+  // The server's catalogue may have arrived while the device was being read.
+  if (!_startupPreviewOpen) return false;
+
+  applyStoredCatalog(stored);
+  ids.forEach((id, i) => {
+    if (states[id]) return;
+    const book = BOOKS[id];
+    const st = { ...defaultState(book), ...copies[i] };
+    ['doneIds', 'artistTransfers', 'artistPayouts', 'expenses'].forEach(k => { if (!st[k]) st[k] = []; });
+    recomputeAfters(st, book);
+    Object.defineProperty(st, '_preview', { value: true, enumerable: false, configurable: true });
+    states[id] = st;
+  });
+  window.IS_PUBLISHER = true;
+  IS_AUTHOR_MODE = false;
+  activeBook = 'all';
+  _startupPreviewShown = true;
+  showAppShell('publisher', null);
+  setSyncState('syncing', '<b>Firestore</b> · showing this device\'s copy · updating…');
+  renderCurrent();
+  return true;
 }
 
 // Which database this device's mode flags chose last time (_fbLoadModeFlags

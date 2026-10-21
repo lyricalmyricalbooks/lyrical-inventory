@@ -68,6 +68,8 @@ export const getDoc = async () => emptySnap();
 export const getDocs = async () => emptySnap();
 export const getDocFromServer = async () => emptySnap();
 export const getDocsFromServer = async () => emptySnap();
+export const getDocFromCache = async () => emptySnap();
+export const getDocsFromCache = async () => emptySnap();
 export const deleteDoc = async () => {};
 export const onSnapshot = () => noop;
 export const writeBatch = () => ({ set: noop, update: noop, delete: noop, commit: async () => {} });

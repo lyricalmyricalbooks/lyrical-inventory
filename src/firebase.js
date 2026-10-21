@@ -2,7 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/fireba
 import { getDatabase, ref, set, onValue, get, push, remove } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js";
 import { getAuth, signInWithPopup, reauthenticateWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import { getStorage, ref as sRef, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-storage.js";
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, setDoc, getDoc, getDocs, getDocFromServer, getDocsFromServer, collection, onSnapshot, deleteDoc, writeBatch, runTransaction, query, where } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, setDoc, getDoc, getDocs, getDocFromServer, getDocsFromServer, getDocFromCache, getDocsFromCache, collection, onSnapshot, deleteDoc, writeBatch, runTransaction, query, where } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 import { receiptDuplicate } from './lib/receipt-finder.js';
 import { ALL_PARTS, LIST_PARTS, assembleParts, emptyPart, splitState, stitchState, mergePart, mergeSettingDoc, stableStringify } from './lib/merge-state.js';
 import { readOldCopyCached, oldCopyCache } from './lib/old-copy-cache.js';
@@ -1117,6 +1117,28 @@ window._fbLoadCatalog = async (opts) => {
     // so the caller never writes the default books over the real catalog.
     console.error("fbLoadCatalog failed", e); throw e;
   }
+};
+
+// What this device's Firestore cache holds for the catalogue and for one book,
+// read without the network, or null. Only for the startup preview in main.js
+// (showStartupPreview), which paints it while the server copy loads and never
+// saves it.
+window._fbPeekCachedCatalog = async () => {
+  try {
+    const s = await getDocFromCache(doc(fs, 'settings', 'catalog'));
+    return s.exists() ? safeParse(s.data().data) : null;
+  } catch (_) { return null; } // not cached on this device
+};
+
+window._fbPeekCachedBook = async (bookId) => {
+  try {
+    const snap = await getDocsFromCache(collection(fs, 'books', bookId, 'data'));
+    if (snap.empty) return null;
+    const raw = {};
+    snap.forEach(d => { raw[d.id] = (d.data() || {}).data; });
+    const { parts, present } = assembleParts(raw);
+    return present.length ? stitchState(parts) : null;
+  } catch (_) { return null; }
 };
 
 // ─────────────────────────────────────────────
