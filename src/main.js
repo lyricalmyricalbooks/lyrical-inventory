@@ -1265,7 +1265,7 @@ export function saveCatalogWithDeletions() {
   // The last catalog read failed, so BOOKS may be the built-in defaults rather
   // than the real catalog. Writing it would overwrite the real one.
   if (catalogLoadFailed) {
-    if (typeof showToast === 'function') showToast('⚠ Not saving — the book catalog never loaded. Reload first.', 'err', 6000);
+    showToast('⚠ Not saving — the book catalog never loaded. Reload first.', 'err', 6000);
     return Promise.resolve();
   }
   // Keep the rules-readable ownership map in step with the catalog so the
@@ -1329,7 +1329,7 @@ async function loadCatalog() {
       deletedDefaultIds = [];
       posExtraBooks = {};
     }
-    if (typeof showToast === 'function') showToast('⚠ Could not load the book catalog — showing what is saved on this device. Reload once you are back online.', 'err', 7000);
+    showToast('⚠ Could not load the book catalog — showing what is saved on this device. Reload once you are back online.', 'err', 7000);
   }
 }
 
@@ -4568,7 +4568,7 @@ function syncRoleUI() {
   if (!authorNow && $('tab-myqr')?.classList.contains('active')) switchTab('dashboard');
 
   // Invoices section: publisher-only inside the Consignment tab
-  if (typeof renderInvoices === 'function') renderInvoices();
+  renderInvoices();
 
   // Update badge visibility when changing views (publisher view vs author preview)
   const badge = $('pub-update-badge');
@@ -4949,9 +4949,7 @@ function switchBook(bookId) {
       window._realSheetsUrlSaved = false;
     }
   }
-  if (typeof updateSheetsTabUI === 'function') {
-    updateSheetsTabUI();
-  }
+  updateSheetsTabUI();
 
   const seedBtn = $('d-seed-test-btn');
   if (seedBtn) {
@@ -5278,7 +5276,7 @@ export function switchTab(name) {
   if (name === 'reconcile') renderReconcile();
   if (name === 'customers') renderCustomers();
   if (name === 'taxcenter') { renderTaxCenter(); refreshTaxCentreRates(); }
-  if (name === 'sheets') { loadGasCode(); renderSheetsLog(); renderProfitSettings(); switchSettingsSubTab(activeSettingsSubTab); if (typeof updateSheetsTabUI === 'function') updateSheetsTabUI(); }
+  if (name === 'sheets') { loadGasCode(); renderSheetsLog(); renderProfitSettings(); switchSettingsSubTab(activeSettingsSubTab); updateSheetsTabUI(); }
   if (name === 'qrcodes') renderAllQRCodes();
   if (name === 'myqr') renderAuthorQRPage();
   if (name === 'pos') { renderPOS(); renderPOSFxStatus(); switchPOSSubTab(activePOSSubTab); }
@@ -12223,7 +12221,7 @@ window.backfillGratuityExpenses = async function () {
     renderExpenses();
     updateDash();
     saveState(activeBook);
-    if (typeof renderTaxCenter === 'function') renderTaxCenter();
+    renderTaxCenter();
     showToast(`✓ Backfilled ${added} and fixed ${patched} past gratuity expenses`);
   } else {
     showToast('All past gratuities are already accounted for properly');
@@ -16008,7 +16006,7 @@ function reconcileStores(s) {
 }
 
 export function recomputeAfters(s, book) {
-  const bk = book || (typeof getBook === 'function' ? getBook() : null);
+  const bk = book || getBook();
   deduplicateDirectConsignmentSales(s);
   // Re-derive consignment mirrors from their canonical ledger rows BEFORE the
   // stats are rebuilt below — recalculateBookStatsFromHistory reads s.hist, so
@@ -18232,7 +18230,7 @@ function switchSettingsSubTab(subTabName) {
       }
     }
   });
-  if (subTabName === 'sync' && typeof updateSheetsTabUI === 'function') {
+  if (subTabName === 'sync') {
     updateSheetsTabUI();
   }
   if (subTabName === 'letterhead') loadLetterhead();
@@ -23176,9 +23174,9 @@ function calculateInventoryValuationData() {
   let marginCount = 0;
 
   BOOK_LIST.forEach(book => {
-    if (typeof isTestBook === 'function' && isTestBook(book)) return;
+    if (isTestBook(book)) return;
 
-    const s = states[book.id] || (typeof defaultState === 'function' ? defaultState(book) : { stock: 0, stores: [], hist: [] });
+    const s = states[book.id] || defaultState(book);
 
     const stockOnHand = Math.max(0, parseInt(s.stock, 10) || 0);
 
@@ -23216,7 +23214,7 @@ function calculateInventoryValuationData() {
     const printRun = parseInt(book.maxPrint || book.totalPrinted || 0, 10) || (totalUnsold + totalSold);
     const compsDamaged = Math.max(0, printRun - totalUnsold - totalSold);
 
-    const cur = typeof getBookCurrencyCode === 'function' ? getBookCurrencyCode(book) : (book.currency || 'CAD');
+    const cur = getBookCurrencyCode(book);
     const isCAD = cur === 'CAD';
     const fxRate = isCAD ? 1 : (_fxRateCache[`${cur}_CAD`] || 1);
 
@@ -23559,7 +23557,7 @@ function openInventoryValuationModal() {
         ? `<span class="tag amber" style="font-size:var(--text-2xs); cursor:help;"${storesTooltip}>${item.stockConsigned} in ${item.storeBreakdown.length} store${item.storeBreakdown.length === 1 ? '' : 's'}</span>`
         : '<span style="color:var(--text3);">0</span>';
 
-      const curSym = typeof getSym === 'function' ? getSym(item.currency) : '$';
+      const curSym = getSym(item.currency);
 
       return `
         <tr>
@@ -23605,7 +23603,7 @@ function printInventoryValuationReport() {
   }
 
   const rows = items.map(item => {
-    const curSym = typeof getSym === 'function' ? getSym(item.currency) : '$';
+    const curSym = getSym(item.currency);
     return `
     <tr>
       <td><strong>${escapeHtml(item.title)}</strong><br><small>${escapeHtml(item.isbn)} | ${escapeHtml(item.format)}</small></td>
@@ -23745,10 +23743,10 @@ window.downloadFullTaxSeasonExport = function () {
     // Royalty
     let shares = 0;
     if (isAllTime) {
-      const earn = (typeof calculateArtistEarnings === 'function') ? calculateArtistEarnings(book.id) : null;
+      const earn = calculateArtistEarnings(book.id);
       shares = (earn && typeof earn === 'object') ? (earn.totalArtistEarned || 0) : (earn || 0);
     } else {
-      shares = (typeof filterArtistEarningsByYear === 'function') ? filterArtistEarningsByYear(book.id, parseInt(year)) : 0;
+      shares = filterArtistEarningsByYear(book.id, parseInt(year));
     }
 
     // expTotal is already CAD (uses each expense's stored baseAmount); convert
@@ -24128,7 +24126,7 @@ async function fetchStripeFeesByYear() {
     if (!TAX_CENTER.settings) TAX_CENTER.settings = {};
     if (TAX_CENTER.settings.stripeKey !== key) {
       TAX_CENTER.settings.stripeKey = key;
-      if (typeof saveTaxCenter === 'function') saveTaxCenter().catch(e => console.warn('Stripe key save failed:', e));
+      saveTaxCenter().catch(e => console.warn('Stripe key save failed:', e));
     }
   } catch (e) { console.warn('Stripe key persist failed:', e); }
 
@@ -24474,7 +24472,7 @@ async function reconcileStripeAgainstSales() {
   // Recorded sales per year from the app's per-book history.
   const salesByYear = {};
   for (const book of BOOK_LIST) {
-    const s = states[book.id] || (typeof defaultState === 'function' ? defaultState(book) : { hist: [] });
+    const s = states[book.id] || defaultState(book);
     for (const h of (s.hist || [])) {
       if (h.voided || h.gratuity || !h.date) continue;
       const y = Number(String(h.date).slice(0, 4));
@@ -24524,7 +24522,7 @@ async function clearStoredStripeKey() {
     if (TAX_CENTER.settings) delete TAX_CENTER.settings.stripeKey;
     const keyEl = document.getElementById('stripe-fees-key');
     if (keyEl) keyEl.value = '';
-    if (typeof saveTaxCenter === 'function') await saveTaxCenter();
+    await saveTaxCenter();
     showToast('Stripe key cleared.');
   } catch (e) {
     console.error(e);
@@ -24591,7 +24589,7 @@ async function _reconPersistKey(key) {
     if (!TAX_CENTER.settings) TAX_CENTER.settings = {};
     if (TAX_CENTER.settings.stripeKey !== key) {
       TAX_CENTER.settings.stripeKey = key;
-      if (typeof saveTaxCenter === 'function') await saveTaxCenter();
+      await saveTaxCenter();
     }
   } catch (e) { console.warn('Stripe key persist failed:', e); }
 }
@@ -25363,7 +25361,7 @@ function reconcileOpenInvoice(idSafe) {
   if (!p) return;
   const c = classifyStripePayment(p);
   if (!c.bookId) { showToast('Invoice not found in this app', 'warn'); return; }
-  if (typeof switchBook === 'function') switchBook(c.bookId);
+  switchBook(c.bookId);
   switchTab('consignment');
   setTimeout(() => { try { if (c.inv) viewInvoice(c.inv.id); } catch (_) { } }, 60);
 }
@@ -25560,7 +25558,7 @@ function openInvoiceFromAlert(invoiceId) {
   if (!invoiceId) return;
   const found = invoiceHome(invoiceId);
   if (!found?.inv) { showToast('That invoice is no longer here', 'warn'); return; }
-  if (typeof switchBook === 'function' && found.bookId) switchBook(found.bookId);
+  if (found.bookId) switchBook(found.bookId);
   switchTab('consignment');
   setTimeout(() => { try { viewInvoice(invoiceId); } catch (_) { } }, 60);
 }
@@ -26324,7 +26322,7 @@ function openStripeWorklistFromAlert(event) {
   if (event) event.stopPropagation();
   dismissAppAlert('stripe-card-sales');
   switchTab('reconcile');
-  if (typeof reconcileSync === 'function' && getReconStripeKey()) reconcileSync();
+  if (getReconStripeKey()) reconcileSync();
 }
 window.openStripeWorklistFromAlert = openStripeWorklistFromAlert;
 
