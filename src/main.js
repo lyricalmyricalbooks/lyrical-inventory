@@ -327,6 +327,7 @@ import {
 } from './lib/theme.js';
 import { initStickyOffset } from './lib/sticky-header.js';
 import { SYNC_TONES, describeSyncStatus } from './lib/sync-status.js';
+import { STARTUP_HISTORY_KEY, recordStartup, describeStartup } from './lib/startup-timing.js';
 import {
   getLocalStorage, loadSyncQueue, persistSyncQueue, queueKeyFor, getSyncTabId, markTabAlive, markTabGone,
   readOrphanQueues, releaseOrphanKeys, pickNextSyncItem, SYNC_TAB_HEARTBEAT_MS,
@@ -4237,12 +4238,15 @@ export async function loadTaxCenter({ ratesInBackground = false } = {}) {
     if (TAX_CENTER.settings?.rates) Object.assign(_fxRateCache, TAX_CENTER.settings.rates);
     if (ratesInBackground) {
       const syncedBefore = TAX_CENTER.settings?.lastRateSync;
+      // Already fetched today: nothing is pending, so nothing to say.
+      setRatesUpdating(!(syncedBefore === today() && TAX_CENTER.settings?.rates));
       refreshDailyRates()
         .then(() => {
           processRecurringExpenses();
           if (TAX_CENTER.settings?.lastRateSync !== syncedBefore) renderCurrent();
         })
-        .catch(e => console.warn('Failed to refresh daily rates', e));
+        .catch(e => console.warn('Failed to refresh daily rates', e))
+        .finally(() => setRatesUpdating(false));
       return;
     }
     await refreshDailyRates();
@@ -4311,6 +4315,37 @@ async function loadAllBooks({ settingsLoaded } = {}) {
   setSyncState('ok', '<b>Firestore</b> · connected · live sync on');
   updateSubheader(new Date().toLocaleTimeString());
   renderCurrent();
+  noteStartupFinished();
+}
+
+// How long this start took to reach real figures, kept per device (see
+// lib/startup-timing.js) and shown in the account menu. Once per page load:
+// a later Refresh sync is not a start.
+let _startupNoted = false;
+function noteStartupFinished() {
+  if (_startupNoted) return;
+  _startupNoted = true;
+  let history = [];
+  try {
+    const ms = typeof performance !== 'undefined' && performance.now ? performance.now() : NaN;
+    const ls = getLocalStorage();
+    try { history = JSON.parse(ls?.getItem(STARTUP_HISTORY_KEY) || '[]'); } catch (_) { history = []; }
+    history = recordStartup(history, ms, Date.now());
+    ls?.setItem(STARTUP_HISTORY_KEY, JSON.stringify(history));
+  } catch (_) { /* storage unavailable: show this start only */ }
+  const line = $('acct-startup');
+  if (line) {
+    const text = describeStartup(history);
+    line.textContent = text;
+    line.hidden = !text;
+  }
+}
+
+// "Updating today's exchange rates…" beside the Tax Centre's "Values in CAD",
+// while the day's rates are still downloading after the screen has shown.
+function setRatesUpdating(on) {
+  const note = $('tc-rates-note');
+  if (note) note.hidden = !on;
 }
 
 async function forceSync() {
@@ -18990,6 +19025,7 @@ async function boot(forcedBook) {
         setSyncState('ok', '<b>Firestore</b> · connected');
         updateSubheader(new Date().toLocaleTimeString());
         renderAll(); updateHeader(); updateRoleToggleButton(); syncRoleUI();
+        noteStartupFinished();
         // Send anything queued before the app was last closed. The call before
         // initFn runs while Firestore isn't ready yet, so it can't.
         processSyncQueue();

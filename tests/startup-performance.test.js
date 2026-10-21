@@ -78,6 +78,17 @@ describe('startup does not wait on one read before starting the next', () => {
     expect(app.main.states.harbour).toBeTruthy();
     expect(document.getElementById('all-books-list').dataset.loaded).toBe('1');
   });
+
+  it('says the exchange rates are still updating while they download', () => {
+    expect(document.getElementById('tc-rates-note').hidden).toBe(false);
+  });
+
+  it('records how long the start took and shows it in the account menu', () => {
+    const line = document.getElementById('acct-startup');
+    expect(line.hidden).toBe(false);
+    expect(line.textContent).toMatch(/^Opened in \d+(\.\d)? s$/);
+    expect(JSON.parse(localStorage.getItem('lm-startup-times'))).toHaveLength(1);
+  });
 });
 
 describe('startup wiring', () => {
