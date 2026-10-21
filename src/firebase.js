@@ -834,9 +834,13 @@ window._fbSaveSettings = async (key, data) => {
   }
 };
 
-window._fbLoadSettings = async (key) => {
+// `opts.global` reads from the store a startup read guessed before the mode
+// flags arrived (see initStartup in main.js); left out, the loaded flags decide.
+const useGlobalStore = (opts) => (opts && typeof opts.global === 'boolean' ? opts.global : window._useFirestoreGlobal());
+
+window._fbLoadSettings = async (key, opts) => {
   try {
-    if (window._useFirestoreGlobal()) {
+    if (useGlobalStore(opts)) {
       const s = await getDoc(doc(fs, 'settings', key));
       if (s.exists()) { noteSettingsBase(key, s.data().data); return safeParse(s.data().data); }
       // Transparent fallback: Firestore doc missing — read from RTDB
@@ -1096,9 +1100,9 @@ window._fbDeleteBackupSnapshot = async (id) => {
   try { await remove(ref(db, `lyrical/backups/${id}`)); } catch (e) { /* ignore */ }
 };
 
-window._fbLoadCatalog = async () => {
+window._fbLoadCatalog = async (opts) => {
   try {
-    if (window._useFirestoreGlobal()) {
+    if (useGlobalStore(opts)) {
       const s = await getDoc(doc(fs, 'settings', 'catalog'));
       if (s.exists()) { noteSettingsBase('catalog', s.data().data); return safeParse(s.data().data); }
       // Transparent fallback: Firestore doc missing — read from RTDB
