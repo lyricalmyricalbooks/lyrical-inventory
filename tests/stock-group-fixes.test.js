@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { appSource } from './helpers/extract-decl.js';
 import { inventoryBreakdown } from '../src/lib/inventory.js';
 import { tierEffectiveCap } from '../src/lib/earnings.js';
 import { reminderBlockReason } from '../src/lib/payment-reminders.js';
 import { refundsToRaise } from '../src/lib/stripe-sale-autorecord.js';
 
-const main = readFileSync('src/main.js', 'utf8');
+// main.js first, then the feature and lib modules (the QR sheet now lives in
+// src/features/fair-kit.js).
+const main = appSource;
 const fn = (name) => { const i = main.indexOf(name); return main.slice(i, i + 2600); };
 
 describe('inventoryBreakdown with disposals', () => {

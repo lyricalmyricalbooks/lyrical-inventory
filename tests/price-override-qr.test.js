@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+import { appSource } from './helpers/extract-decl.js';
 
 describe('Manual Price Override & Payment QR Code Integration Tests', () => {
   it('verifies HTML elements for single-book and printable payment QR price overrides exist', () => {
@@ -16,9 +17,8 @@ describe('Manual Price Override & Payment QR Code Integration Tests', () => {
     expect(html).toContain('id="pqr-gen-stripe-btn"');
   });
 
-  it('verifies price override and Stripe link creation functions are defined in main.js', () => {
-    const jsPath = path.join(process.cwd(), 'src/main.js');
-    const js = fs.readFileSync(jsPath, 'utf8');
+  it('verifies price override and Stripe link creation functions are defined in the app', () => {
+    const js = appSource;
 
     expect(js).toContain('function updateSingleBookPaymentQR');
     expect(js).toContain('function generateSingleBookStripeQR');

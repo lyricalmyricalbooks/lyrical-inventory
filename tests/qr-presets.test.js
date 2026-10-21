@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+import { appSource } from './helpers/extract-decl.js';
 import {
   QR_PRESET_STORAGE_KEY,
   QR_PRESET_PRICE_CURRENCIES,
@@ -233,7 +234,8 @@ describe('sortQrPresets', () => {
 describe('QR fair preset wiring', () => {
   const root = process.cwd();
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-  const mainJs = fs.readFileSync(path.join(root, 'src/main.js'), 'utf8');
+  // main.js plus the feature modules: the fair kit lives in src/features/fair-kit.js.
+  const mainJs = appSource;
 
   // Both sheets are set up in one dialog now, so the QR sheet's preset controls
   // are the fair kit's — one saved fair carries both halves.
@@ -253,7 +255,7 @@ describe('QR fair preset wiring', () => {
   });
 
   it('loads presets when the modal opens, so a fair survives a page reload', () => {
-    expect(mainJs).toMatch(/window\.openFairKitModal[\s\S]{0,300}loadQrPresets/);
+    expect(mainJs).toMatch(/function openFairKitModal\(\)[\s\S]{0,300}loadQrPresets/);
   });
 
   it('re-renders the book list before imposing a preset selection on it', () => {

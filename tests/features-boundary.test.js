@@ -78,6 +78,11 @@ const MAIN_IMPORT_BUDGET = {
   // open, whether it is the test book, and the real sheet's two URLs (for the
   // cards it hides and shows), plus the usual $ / showToast.
   'sheets-simulator.js': 6,
+  // Set at extraction: the fair kit reads the POS book list and currency
+  // helpers (posBooksMap, posResolveBook, currencyToCode, codeToSymbol,
+  // convertCurrency), mints door-price links through the Stripe helper and its
+  // key, jumps to the POS tab, and shows toasts.
+  'fair-kit.js': 9,
 };
 
 const featureFiles = fs.existsSync(featureDir)

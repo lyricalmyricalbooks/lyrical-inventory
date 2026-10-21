@@ -1,14 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
+import { appSource } from './helpers/extract-decl.js';
 
-const mainJs = fs.readFileSync(path.join(process.cwd(), 'src/main.js'), 'utf8');
+// The fair kit lives in src/features/fair-kit.js now; appSource spans main.js
+// and every feature module, so these lifts find it wherever it sits.
+const mainJs = appSource;
 
 describe('Fair Print Kit — Adaptive Space and Sizing', () => {
   describe('Printable Payment QR Codes (printPaymentQRCodes)', () => {
     it('contains adaptive sizing logic based on card count and row count', () => {
       const fn = mainJs.slice(mainJs.indexOf('async function printPaymentQRCodes('));
-      const body = fn.slice(0, fn.indexOf('\nwindow.printPaymentQRCodes ='));
+      const body = fn.slice(0, fn.indexOf('\n// ── PRINT THE KIT ──'));
 
       expect(body).toContain('const rowCount = Math.ceil(count / effectiveCols);');
       expect(body).toContain('effectiveCols = Math.min(effectiveCols, Math.max(1, count));');
@@ -17,7 +20,7 @@ describe('Fair Print Kit — Adaptive Space and Sizing', () => {
 
     it('renders author line when book has author', () => {
       const fn = mainJs.slice(mainJs.indexOf('async function printPaymentQRCodes('));
-      const body = fn.slice(0, fn.indexOf('\nwindow.printPaymentQRCodes ='));
+      const body = fn.slice(0, fn.indexOf('\n// ── PRINT THE KIT ──'));
 
       expect(body).toContain('card-author');
       expect(body).toContain('book.author');
@@ -25,7 +28,7 @@ describe('Fair Print Kit — Adaptive Space and Sizing', () => {
 
     it('uses a full-page flex layout pinning the footer at the bottom', () => {
       const fn = mainJs.slice(mainJs.indexOf('async function printPaymentQRCodes('));
-      const body = fn.slice(0, fn.indexOf('\nwindow.printPaymentQRCodes ='));
+      const body = fn.slice(0, fn.indexOf('\n// ── PRINT THE KIT ──'));
 
       expect(body).toContain('page-main');
       expect(body).toContain('min-height: 100vh;');
@@ -68,14 +71,14 @@ describe('Fair Print Kit — Adaptive Space and Sizing', () => {
   describe('Book Sales Tracker (printSalesTracker)', () => {
     it('calculates total visual rows taking includeNotes into account', () => {
       const fn = mainJs.slice(mainJs.indexOf('function printSalesTracker('));
-      const body = fn.slice(0, fn.indexOf('\nwindow.printSalesTracker ='));
+      const body = fn.slice(0, fn.indexOf('\n// ── PRINTABLE PAYMENT QR CODES ──'));
 
       expect(body).toContain('const visualRows = numBooks * (includeNotes ? 2 : 1);');
     });
 
     it('delegates row/font sizing to computeSalesTrackerLayoutSizes', () => {
       const fn = mainJs.slice(mainJs.indexOf('function printSalesTracker('));
-      const body = fn.slice(0, fn.indexOf('\nwindow.printSalesTracker ='));
+      const body = fn.slice(0, fn.indexOf('\n// ── PRINTABLE PAYMENT QR CODES ──'));
 
       expect(body).toContain('computeSalesTrackerLayoutSizes(visualRows, includeNotes)');
     });
@@ -105,7 +108,7 @@ describe('Fair Print Kit — Adaptive Space and Sizing', () => {
 
     it('applies effective row heights dynamically in the tally and total cells', () => {
       const fn = mainJs.slice(mainJs.indexOf('function printSalesTracker('));
-      const body = fn.slice(0, fn.indexOf('\nwindow.printSalesTracker ='));
+      const body = fn.slice(0, fn.indexOf('\n// ── PRINTABLE PAYMENT QR CODES ──'));
 
       expect(body).toContain('td.tally { background: #fff; height: ${effectiveTallyRowHeight}px; }');
       expect(body).toContain('td.total { background: #f4ded8; height: ${effectiveTallyRowHeight}px; }');
@@ -114,15 +117,15 @@ describe('Fair Print Kit — Adaptive Space and Sizing', () => {
 
     it('keeps the Date underline bar persistent with &nbsp; when date is omitted for handwriting', () => {
       const fn = mainJs.slice(mainJs.indexOf('function printSalesTracker('));
-      const body = fn.slice(0, fn.indexOf('\nwindow.printSalesTracker ='));
+      const body = fn.slice(0, fn.indexOf('\n// ── PRINTABLE PAYMENT QR CODES ──'));
 
       expect(body).toContain('dateLabel ? escapeHtml(dateLabel) : \'&nbsp;\'');
       expect(body).toContain('border-bottom: 1.5px solid #17130f;');
     });
 
     it('makes date input optional without forcing today() on modal open', () => {
-      const openFn = mainJs.slice(mainJs.indexOf('window.openFairKitModal = function () {'));
-      const openBody = openFn.slice(0, openFn.indexOf('};\n'));
+      const openFn = mainJs.slice(mainJs.indexOf('function openFairKitModal() {'));
+      const openBody = openFn.slice(0, openFn.indexOf('\n}\n'));
       expect(openBody).not.toContain('dateInput.value = today()');
 
       const html = fs.readFileSync(path.join(process.cwd(), 'index.html'), 'utf8');
