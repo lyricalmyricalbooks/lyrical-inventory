@@ -147,6 +147,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-20 | visual | Customers (computer) | Put "+ List" and "Unsubscribe" side by side on each buyer row instead of stacked, so every row is about half as tall and the buttons line up down the column; on a narrower screen they stack at one shared width | pending |
 | 2026-10-21 | visual | Expenses (computer) — expense history table | Dates and receipt numbers now stay on one line (a date was breaking over three), the description reads in one or two lines instead of a word per line, and a slightly tighter gutter keeps all ten columns, including the remove button, in view without scrolling sideways | pending |
 | 2026-10-21 | visual | Phone Settings — Book Catalog | Made each book card snugger with the title in big display lettering and Edit / Remove sharing the width evenly, so more books fit on screen | pending |
+| 2026-10-21 | visual | Order History (computer) | Order numbers and dates now sit on one line (an order number was breaking over three), so each sale is a shorter row, and the Approve button on an artist's sale fits inside the table instead of being cut off at its right edge | pending |
 
 ---
 
