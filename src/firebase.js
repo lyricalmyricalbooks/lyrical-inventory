@@ -51,7 +51,20 @@ window._firestore = fs;
 // ─────────────────────────────────────────────
 let _modeFlags = {}; // in-memory cache after _fbLoadModeFlags() resolves
 
-window._fbLoadModeFlags = async () => {
+// While the flags are loading, the app can already be on screen (the startup
+// preview in main.js) and a change made there must not be saved to the store
+// the still-empty flags would pick. The writes below that choose a store by
+// the flags wait for a load that is in progress; with none in progress they
+// go ahead as before.
+let _modeFlagsLoading = null;
+const modeFlagsSettled = () => _modeFlagsLoading || Promise.resolve();
+
+window._fbLoadModeFlags = () => {
+  _modeFlagsLoading = loadModeFlags().finally(() => { _modeFlagsLoading = null; });
+  return _modeFlagsLoading;
+};
+
+async function loadModeFlags() {
   try {
     const snap = await getDoc(doc(fs, 'settings', 'modeFlags'));
     if (snap.exists()) {
@@ -73,7 +86,7 @@ window._fbLoadModeFlags = async () => {
     const keys = Object.keys(localStorage).filter(k => k.startsWith('fs_mode_'));
     keys.forEach(k => { _modeFlags[k] = localStorage.getItem(k) === 'true'; });
   }
-};
+}
 
 window._fbSaveModeFlags = async () => {
   try {
@@ -814,7 +827,14 @@ async function writeMergedSetting(key, data) {
 }
 
 window._fbSaveSettings = async (key, data) => {
+  // A Tax Centre still showing the device's copy from startup (main.js marks
+  // it _preview) is not saved: it may be missing what another device added.
+  if (key === 'taxCenter' && data && data._preview) {
+    if (typeof window.showToast === 'function') window.showToast('Still loading the latest Tax Centre — try again in a moment', 'warn', 4000);
+    return false;
+  }
   try {
+    await modeFlagsSettled();
     if (window._useFirestoreGlobal()) {
       if (MERGED_SETTINGS.has(key)) {
         await writeMergedSetting(key, data);
@@ -1016,6 +1036,7 @@ window._fbPublishWebsiteLink = async ({ bookIds = [], marks = [], shipments = []
 // title, price, print run or artist split, so it must not fail quietly either.
 window._fbSaveCatalog = async (catalog) => {
   try {
+    await modeFlagsSettled();
     if (window._useFirestoreGlobal()) {
       await writeMergedSetting('catalog', catalog);
       return true;
@@ -1073,6 +1094,7 @@ window._fbSaveBookOwners = async (owners) => {
 // ─────────────────────────────────────────────
 window._fbSaveBackupSnapshot = async (id, snapshot) => {
   const payload = { data: JSON.stringify(snapshot), ts: Date.now() };
+  await modeFlagsSettled();
   if (window._useFirestoreGlobal()) {
     await setDoc(doc(fs, 'backups', id), payload);
   } else {
@@ -1128,6 +1150,13 @@ window._fbPeekCachedCatalog = async () => {
     const s = await getDocFromCache(doc(fs, 'settings', 'catalog'));
     return s.exists() ? safeParse(s.data().data) : null;
   } catch (_) { return null; } // not cached on this device
+};
+
+window._fbPeekCachedSetting = async (key) => {
+  try {
+    const s = await getDocFromCache(doc(fs, 'settings', key));
+    return s.exists() ? safeParse(s.data().data) : null;
+  } catch (_) { return null; }
 };
 
 window._fbPeekCachedBook = async (bookId) => {

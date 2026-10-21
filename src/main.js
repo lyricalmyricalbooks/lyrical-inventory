@@ -328,6 +328,7 @@ import {
 import { initStickyOffset } from './lib/sticky-header.js';
 import { SYNC_TONES, describeSyncStatus } from './lib/sync-status.js';
 import { STARTUP_HISTORY_KEY, recordStartup, describeStartup } from './lib/startup-timing.js';
+import { DEVICE_COPY_KEY, describeCopyAge } from './lib/device-copy.js';
 import {
   getLocalStorage, loadSyncQueue, persistSyncQueue, queueKeyFor, getSyncTabId, markTabAlive, markTabGone,
   readOrphanQueues, releaseOrphanKeys, pickNextSyncItem, SYNC_TAB_HEARTBEAT_MS,
@@ -1271,6 +1272,12 @@ export function saveCatalogWithDeletions() {
   if (catalogLoadFailed) {
     showToast('⚠ Not saving — the book catalog never loaded. Reload first.', 'err', 6000);
     return Promise.resolve();
+  }
+  // Still the device's copy from startup: the server's may hold changes this
+  // one lacks, and saving now would overwrite them.
+  if (_startupPreviewShown && _startupPreviewOpen) {
+    showToast('Still loading the latest catalogue — try again in a moment', 'warn', 4000);
+    return Promise.resolve(false);
   }
   // Keep the rules-readable ownership map in step with the catalog so the
   // tightened security rules can verify author→book ownership. Publisher-only —
@@ -4046,6 +4053,7 @@ export async function loadBook(bookId) {
     });
 
     window._fbWatch(bookId, json2 => {
+      noteDeviceCopyFresh();
       if (json2 === lastSavedHashes[bookId]) return;
       // This book has an unsent change. Replacing the screen with the cloud
       // copy would hide it until the flush; the flush merges the two and
@@ -4330,6 +4338,23 @@ async function loadAllBooks({ settingsLoaded } = {}) {
   updateSubheader(new Date().toLocaleTimeString());
   renderCurrent();
   noteStartupFinished();
+  noteDeviceCopyFresh();
+}
+
+// When this device last held the latest copy of everything: a full load, or
+// a live update since. The startup preview says how old its copy is from this
+// (lib/device-copy.js). Written at most once a minute.
+let _deviceCopyNotedAt = 0;
+function noteDeviceCopyFresh() {
+  const now = Date.now();
+  if (now - _deviceCopyNotedAt < 60 * 1000) return;
+  _deviceCopyNotedAt = now;
+  try { getLocalStorage()?.setItem(DEVICE_COPY_KEY, String(now)); } catch (_) { /* storage unavailable */ }
+}
+
+// True while the startup preview's copy is still what's on screen.
+function startupPreviewActive() {
+  return _startupPreviewShown && !_startupNoted;
 }
 
 // How long this start took to reach real figures, kept per device (see
@@ -18977,7 +19002,8 @@ function showAppShell(role, bookId) {
       websitePanel.classList.remove('active');
     }
     const openLink = $('sheets-open-link'); if (openLink) openLink.style.display = 'none !important';
-    const style = document.createElement('style');
+    const style = document.getElementById('author-mode-hides') || document.createElement('style');
+    style.id = 'author-mode-hides';
     style.textContent = '#sheets-open-link{display:none!important;}#side-sheets-open{display:none!important;}#open-sheet-link{display:none!important;}#d-breakeven-kpi{display:none!important;}#d-breakeven-block{display:none!important;}#d-reimburse-sect{display:none!important;}#d-expenses-sect{display:none!important;}#d-expenses-kpi{display:none!important;}#d-reimburse-kpi{display:none!important;}#danger-zone-sect{display:none!important;}#danger-zone-block{display:none!important;}#import-btn{display:none!important;}#tab-all-overview{display:none!important;}#backups-tab-btn{display:none!important;}#exp-ai-btn{display:none!important;}';
     document.head.appendChild(style);
   } else {
@@ -19034,19 +19060,14 @@ async function boot(forcedBook) {
     if (forcedBook) {
       // Author mode — load only this book
       activeBook = forcedBook;
-      const book = BOOKS[forcedBook];
-      if (!book) { showToast('Book not found', 'err'); return; }
-      applyBookAccentTokens(forcedBook);
-      $('tab-all-overview').style.display = 'none';
-      $('tab-all-overview').classList.remove('active');
-      $('tab-bar').style.display = '';
-      $('tab-dashboard').style.display = 'block';
-      $('tab-dashboard').classList.add('active');
+      if (!BOOKS[forcedBook]) { showToast('Book not found', 'err'); return; }
+      showAuthorBookFrame(forcedBook);
       Promise.all([loadBook(forcedBook), settingsLoaded]).then(() => {
         setSyncState('ok', '<b>Firestore</b> · connected');
         updateSubheader(new Date().toLocaleTimeString());
         renderAll(); updateHeader(); updateRoleToggleButton(); syncRoleUI();
         noteStartupFinished();
+        noteDeviceCopyFresh();
         // Send anything queued before the app was last closed. The call before
         // initFn runs while Firestore isn't ready yet, so it can't.
         processSyncQueue();
@@ -19121,6 +19142,17 @@ async function boot(forcedBook) {
       syncRoleUI();
     }
   }
+}
+
+// An artist's own book on its dashboard tab, nothing else (boot, and the
+// startup preview before boot).
+function showAuthorBookFrame(bookId) {
+  applyBookAccentTokens(bookId);
+  $('tab-all-overview').style.display = 'none';
+  $('tab-all-overview').classList.remove('active');
+  $('tab-bar').style.display = '';
+  $('tab-dashboard').style.display = 'block';
+  $('tab-dashboard').classList.add('active');
 }
 
 // ── TAX CENTER LOGIC
@@ -21309,6 +21341,14 @@ function _posItemToManualPayload(book, qty, paymentMethod, basePrice, txnCurCode
 // Freezes the cart into posPendingSale. Shared by the desktop confirm dialog
 // and Fair Mode, which records straight away.
 function posPreparePendingSale() {
+  // The device's own copy is still on screen from startup (showStartupPreview).
+  // A sale recorded on it would be merged in once the latest copy arrives, and
+  // that merge can bring back an entry another device removed meanwhile. The
+  // wait is a second or two on any signal the sale could be sent on anyway.
+  if (startupPreviewActive()) {
+    showToast('Getting the latest figures — one moment, then try again', 'warn', 3500);
+    return false;
+  }
   const method = $('pos-payment-method').value;
   const rows = buildPOSCartRows();
 
@@ -27431,11 +27471,11 @@ async function initStartup() {
       // again from the right store. The early reads write nothing; loadCatalog
       // still does any saving itself, after the flags are in.
       const cachedGlobal = startupCachedGlobalMode();
-      // The publisher, on a device that has opened the app before: show the
-      // copy this device already holds while the server is asked.
+      // On a device that has opened the app before: show the copy this device
+      // already holds while the server is asked.
       const publisherAccount = (user.email || '').toLowerCase().trim() === publisherEmail && user.emailVerified === true;
-      if (publisherAccount && cachedGlobal === true) {
-        showStartupPreview()
+      if (cachedGlobal === true) {
+        showStartupPreview(user, publisherAccount)
           .then(shown => { if (shown) dismissSplash(); })
           .catch(e => console.warn('Startup preview skipped', e));
       }
@@ -27519,31 +27559,46 @@ async function initStartup() {
 }
 
 // ── STARTUP PREVIEW
-// A device that has opened the app before keeps the last copy of the catalogue
-// and of every book in Firestore's on-device cache. Reading that takes a
-// moment, where the server can take seconds on a weak signal, so the overview
-// is painted from it first, marked as updating, and the normal startup then
-// replaces every figure with the server's copy.
+// A device that has opened the app before keeps the last copy of the catalogue,
+// the books and the Tax Centre in Firestore's on-device cache. Reading that
+// takes a moment, where the server can take seconds on a weak signal, so the
+// screen is painted from it first, marked as updating (with how old the copy
+// is), and the normal startup then replaces every figure with the server's.
 //
-// Only for the publisher, only when this device's flags put the catalogue and
-// every book in Firestore, and only when the device holds a copy of every
-// book — a book missing from the cache would read as an empty ledger. It
-// writes nothing. A change made in these first moments goes to the offline
-// queue, as it would with no signal, and is sent and merged once the books
-// have loaded. Shown copies are marked `_preview`, so a first load that then
-// fails reports it rather than keeping the device's copy as if it were loaded.
-async function showStartupPreview() {
+// For the publisher (every book, and the Tax Centre) and for an artist (their
+// own book, found by their email in the cached catalogue). Only when this
+// device's flags put the catalogue and those books in Firestore, and only when
+// the device holds a copy of every book shown — one missing would read as an
+// empty ledger. It writes nothing, and the copies it shows can't be written
+// back: the register waits (posPreparePendingSale), and the catalogue and Tax
+// Centre refuse to save (saveCatalogWithDeletions, _fbSaveSettings) until the
+// server's copies are in. Shown book copies are marked `_preview`, so a first
+// load that then fails reports it rather than keeping them as if loaded.
+async function showStartupPreview(user, publisherAccount) {
   const stored = await window._fbPeekCachedCatalog();
   if (!stored || typeof stored !== 'object' || !_startupPreviewOpen) return false;
   const deleted = Array.isArray(stored._deletedDefaults) ? stored._deletedDefaults : [];
-  const ids = [...new Set([
+  const allIds = [...new Set([
     ...Object.keys(DEFAULT_BOOKS).filter(id => !deleted.includes(id)),
     ...Object.keys(stored).filter(k => k !== '_deletedDefaults' && k !== '_posExtra'),
   ])];
+  let authorBookId = null;
+  if (!publisherAccount) {
+    const email = (user.email || '').toLowerCase().trim();
+    authorBookId = allIds.find(id => {
+      const entry = stored[id] || DEFAULT_BOOKS[id];
+      return !!email && ((entry && entry.authorEmail) || '').toLowerCase().trim() === email;
+    }) || null;
+    if (!authorBookId) return false;
+  }
+  const ids = publisherAccount ? allIds : [authorBookId];
   let flagged = false;
   try { flagged = ids.every(id => localStorage.getItem('fs_mode_' + id) === 'true'); } catch (_) { }
   if (!ids.length || !flagged) return false;
-  const copies = await Promise.all(ids.map(id => window._fbPeekCachedBook(id)));
+  const [copies, taxCenter] = await Promise.all([
+    Promise.all(ids.map(id => window._fbPeekCachedBook(id))),
+    publisherAccount ? window._fbPeekCachedSetting('taxCenter') : null,
+  ]);
   if (copies.some(c => !c || typeof c !== 'object')) return false;
   // The server's catalogue may have arrived while the device was being read.
   if (!_startupPreviewOpen) return false;
@@ -27558,12 +27613,29 @@ async function showStartupPreview() {
     Object.defineProperty(st, '_preview', { value: true, enumerable: false, configurable: true });
     states[id] = st;
   });
-  window.IS_PUBLISHER = true;
-  IS_AUTHOR_MODE = false;
-  activeBook = 'all';
+  // The Tax Centre's own load replaces this object, and the mark with it.
+  if (taxCenter && typeof taxCenter === 'object') {
+    TAX_CENTER = { businessExpenses: [], recurring: [], settings: { baseCurrency: 'CAD', geminiKey: '' }, ...taxCenter };
+    if (TAX_CENTER.settings?.rates) Object.assign(_fxRateCache, TAX_CENTER.settings.rates);
+    Object.defineProperty(TAX_CENTER, '_preview', { value: true, enumerable: false, configurable: true });
+  }
   _startupPreviewShown = true;
-  showAppShell('publisher', null);
-  setSyncState('syncing', '<b>Firestore</b> · showing this device\'s copy · updating…');
+  if (publisherAccount) {
+    window.IS_PUBLISHER = true;
+    IS_AUTHOR_MODE = false;
+    activeBook = 'all';
+    showAppShell('publisher', null);
+  } else {
+    window.IS_PUBLISHER = false;
+    IS_AUTHOR_MODE = true;
+    ACTIVE_BOOK_FORCED = authorBookId;
+    activeBook = authorBookId;
+    showAppShell('author', authorBookId);
+    showAuthorBookFrame(authorBookId);
+  }
+  let age = '';
+  try { age = describeCopyAge(getLocalStorage()?.getItem(DEVICE_COPY_KEY), Date.now()); } catch (_) { }
+  setSyncState('syncing', `<b>Firestore</b> · showing this device's copy${age ? ' ' + age : ''} · updating…`);
   renderCurrent();
   return true;
 }

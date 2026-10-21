@@ -75,7 +75,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { vi } from 'vitest';
-import { PUBLISHER_EMAIL, createFakeCloud, installFakeFirebase, signInAsPublisher } from './fake-cloud.js';
+import { PUBLISHER_EMAIL, createFakeCloud, installFakeFirebase, signInAs, signInAsPublisher } from './fake-cloud.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '../..');
@@ -130,8 +130,10 @@ const settle = async (rounds = 5) => {
  *                                starts at boot (the website link) uses them
  * @param {object}  [opts.storage] localStorage entries the device already
  *                                holds when the app starts
+ * @param {object}  [opts.user]   sign in as this account instead of the
+ *                                publisher ({ email, uid, emailVerified })
  */
-export async function loadApp({ books = [makeBook()], states: initialStates = {}, quiet = true, overrides = {}, storage = {} } = {}) {
+export async function loadApp({ books = [makeBook()], states: initialStates = {}, quiet = true, overrides = {}, storage = {}, user = null } = {}) {
   // The app narrates freely to the console (failed FX lookups with no network,
   // retries, …). That's expected under test and buries a real failure, so by
   // default it is captured into `app.logs` instead of printed.
@@ -178,7 +180,7 @@ export async function loadApp({ books = [makeBook()], states: initialStates = {}
   Object.assign(window, overrides);
 
   // Sign in as the publisher: runs the real startup path against the fakes.
-  await signInAsPublisher();
+  await (user ? signInAs(user) : signInAsPublisher());
   await vi.waitFor(() => {
     for (const b of books) if (!main.states[b.id]) throw new Error(`book ${b.id} not loaded yet`);
   }, { timeout: 10000, interval: 10 });
