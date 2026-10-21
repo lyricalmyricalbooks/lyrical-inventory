@@ -24712,10 +24712,11 @@ function websiteOrderInBooks(orderId) {
   return !!id && Object.values(states).some(s => (s?.hist || []).some(h => h && h.webOrderId === id));
 }
 
-// Classify a payment into one of the matchable channels.
-export function classifyStripePayment(p) {
-  const mem = getReconMemory();
-  const recordedIds = _reconRecordedChargeIds();
+// Classify a payment into one of the matchable channels. A caller classifying
+// a whole list without recording anything in between may pass the memory and
+// recorded-charge set it built once, so each payment doesn't re-read storage
+// and re-scan every book's history.
+export function classifyStripePayment(p, { mem = getReconMemory(), recordedIds = _reconRecordedChargeIds() } = {}) {
 
   if (mem.dismissed[p.id]) return { kind: 'dismissed' };
   if (mem.recorded[p.id] || recordedIds.has(p.id)) return { kind: 'recorded', bookId: mem.recorded[p.id]?.bookId };
@@ -25157,8 +25158,10 @@ export function renderReconcile() {
 
   const needs = [];
   const matched = [];
+  // Nothing is recorded while the list is drawn, so one scan serves every row.
+  const classifyCtx = { mem, recordedIds: _reconRecordedChargeIds() };
   for (const p of payments) {
-    const c = classifyStripePayment(p);
+    const c = classifyStripePayment(p, classifyCtx);
     if (c.kind === 'dismissed') { matched.push({ p, c, label: 'Dismissed', tone: 'gray', note: 'Marked "not inventory".' }); continue; }
     if (c.kind === 'recorded') { matched.push({ p, c, label: 'Logged', tone: 'green', note: c.bookId && BOOKS[c.bookId] ? `Recorded against ${BOOKS[c.bookId].title}.` : 'Recorded in inventory.' }); continue; }
     if (c.kind === 'artist_transfer') { matched.push({ p, c, label: 'Author transfer', tone: 'green', note: `An author sent you money for sale ${c.ref || ''} they collected. Mark it received on that book's dashboard — it is not a new sale.`.replace(/\s+/g, ' ') }); continue; }
