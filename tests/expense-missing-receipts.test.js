@@ -88,8 +88,10 @@ describe('expense ledger — missing receipt affordances', () => {
   });
 
   it('gives dates and refs tabular figures so the column reads as a column', () => {
-    expect(receipts).toContain('<td class="mono" style="color:var(--text3);">${fmtD(e.date) ?? \'—\'}</td>');
-    expect(receipts).toContain('<td class="mono" style="font-size:var(--text-xs);color:var(--text3);">${escapeHtml(e.ref) || \'—\'}</td>');
+    // Dates ride the shared DM Mono `.date-cell`; refs get `.exp-ref`, the
+    // ledger's own mono, tabular, one-line cell (see style.css).
+    expect(receipts).toContain('<td class="date-cell">${fmtD(e.date) ?? \'—\'}</td>');
+    expect(receipts).toContain('<td class="exp-ref">${escapeHtml(e.ref) || \'—\'}</td>');
   });
 });
 

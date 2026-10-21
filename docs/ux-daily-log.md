@@ -145,6 +145,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-20 | visual | Phone To-do | Put each group's count beside its label (Stock, Money to chase…) instead of on a line of its own, so every group is a row shorter and the first items come into view sooner | pending |
 | 2026-10-20 | visual | Phone book dashboard — headline numbers | Stock on hand and Revenue keep a row each and the smaller counts (units sold, on consignment) now sit two to a row instead of four full-width slabs, so the book's own sections come into view a screen sooner | pending |
 | 2026-10-20 | visual | Customers (computer) | Put "+ List" and "Unsubscribe" side by side on each buyer row instead of stacked, so every row is about half as tall and the buttons line up down the column; on a narrower screen they stack at one shared width | pending |
+| 2026-10-21 | visual | Expenses (computer) — expense history table | Dates and receipt numbers now stay on one line (a date was breaking over three), the description reads in one or two lines instead of a word per line, and a slightly tighter gutter keeps all ten columns, including the remove button, in view without scrolling sideways | pending |
 
 ---
 
