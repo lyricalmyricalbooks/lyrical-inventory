@@ -1585,6 +1585,14 @@
   #tab-sheets .catalog-card { flex-direction: column; align-items: stretch; justify-content: flex-start; text-align: left; }
   #tab-sheets .catalog-card > div:first-child { justify-content: flex-start; width: 100%; min-width: 0; }
   #tab-sheets .catalog-dot { flex: none; }
+  /* Book Catalog, tighter: a snug card, the title leading in display type, and
+     Edit / Remove sharing the width evenly so the pair reads as one footer. */
+  #tab-sheets .catalog-card { padding: var(--space-3) var(--space-4); gap: var(--space-2); }
+  #tab-sheets .catalog-card > div:first-child { gap: var(--space-3) !important; }
+  #tab-sheets .catalog-info h4 { font-family: var(--font-display); font-size: var(--text-lg); text-transform: uppercase; letter-spacing: .02em; line-height: 1.1; }
+  #tab-sheets .catalog-info p { margin-top: var(--space-1); }
+  #tab-sheets .catalog-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+  #tab-sheets .catalog-actions .btn { justify-content: center; }
 
   /* Shipping: the preset save button sits on its own line under the dropdown. */
   #tab-shipping .ship-preset-save-row { justify-content: flex-start; }
