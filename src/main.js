@@ -12780,6 +12780,15 @@ function confirmReturn() {
 
 // Canonical "mark this sale paid": guards pending/non-voided, reduces the store's
 // owed, flips ledger + hist mirror state. Returns true if it actually changed.
+// Looks ledger rows up by id in one pass, so walking an invoice's lines costs
+// one scan of the ledger instead of one scan per line. Keeps the first row for
+// a repeated id, exactly like the `.find` it replaces.
+function ledgerById(s) {
+  const map = new Map();
+  for (const x of (s.ledger || [])) if (x && !map.has(x.id)) map.set(x.id, x);
+  return map;
+}
+
 function settleLedgerSalePaid(s, e) {
   if (!e || e.status !== 'pending' || e.voided) return false;
   const st = (s.stores || []).find(x => x.id === e.storeId);
@@ -12801,9 +12810,10 @@ function maybeAutoPayInvoiceForLedger(s, e) {
   // to avoid intermediate array allocations and multiple passes over the ledger.
   let hasLinked = false;
   let allPaid = true;
+  const ledger = ledgerById(s);
   for (const it of (inv.items || [])) {
     if (it._ledgerId) {
-      const e = (s.ledger || []).find(x => x.id === it._ledgerId);
+      const e = ledger.get(it._ledgerId);
       if (e && !e.voided) {
         hasLinked = true;
         if (e.status !== 'paid') {
@@ -12854,9 +12864,10 @@ function consignPaymentTarget() {
   // to avoid intermediate array allocations and multiple passes over the items.
   const rows = [];
   let sumAmountDue = 0;
+  const ledger = ledgerById(s);
   for (const it of (inv.items || [])) {
     if (it._ledgerId) {
-      const e = (s.ledger || []).find(x => x.id === it._ledgerId);
+      const e = ledger.get(it._ledgerId);
       if (e && e.status === 'pending' && !e.voided) {
         rows.push(e);
         sumAmountDue += (Number(e.amountDue) || 0);
@@ -14514,8 +14525,9 @@ function saveInvoice(status) {
   // …then point each current line item's ledger sale at this invoice. Decision #3:
   // if a sale is already on a DIFFERENT live invoice, warn but proceed (last writer
   // wins — the ledger tracks the most-recent invoice link).
+  const ledger = ledgerById(s);
   for (const id of newLedgerIds) {
-    const le = (s.ledger || []).find(x => x.id === id);
+    const le = ledger.get(id);
     if (le && le.invoiceId && le.invoiceId !== payload.id) {
       const other = (s.invoices || []).find(i => i.id === le.invoiceId);
       if (other && other.status !== 'cancelled')
@@ -14531,7 +14543,7 @@ function saveInvoice(status) {
   if (sheetsUrl) {
     const affected = new Set([...oldLedgerIds, ...newLedgerIds]);
     for (const id of affected) {
-      const le = (s.ledger || []).find(x => x.id === id);
+      const le = ledger.get(id);
       if (le && le.sheetsId && !le.voided) syncToSheets(consignmentSyncPayload(book, le));
     }
   }
@@ -14966,9 +14978,10 @@ function applyInvoicePaid(inv, bookId, s, { method = '', chargeId = '', paidAt =
   if (inv.stripe?.paymentLinkId) deactivateStripePaymentLink(inv.stripe.paymentLinkId);
   // settle any linked pending ledger entries via the canonical helper, so the
   // ledger row, store owed, and hist mirror paidState all flip together.
+  const ledger = ledgerById(s);
   for (const it of (inv.items || [])) {
     if (it._ledgerId) {
-      const e = (s.ledger || []).find(x => x.id === it._ledgerId);
+      const e = ledger.get(it._ledgerId);
       if (e) settleLedgerSalePaid(s, e);
     }
   }

@@ -22,7 +22,7 @@ function paidHarness({ book = { id: 'hound', stripeLink: '' } } = {}) {
   const saved = [];
   const deactivated = [];
   const harness = buildHarness({
-    names: ['invoicePaidMethod', 'settleLedgerSalePaid', 'applyInvoicePaid'],
+    names: ['invoicePaidMethod', 'ledgerById', 'settleLedgerSalePaid', 'applyInvoicePaid'],
     deps: {
       BOOKS: { [book.id]: book },
       histMirrorForLedger,
@@ -365,5 +365,19 @@ describe('the zero-decimal currency list is named once', () => {
     // rounding error, so there must not be a second list to drift from.
     expect(appSource).not.toContain('_STRIPE_ZERO_DECIMAL');
     expect(appSource).toContain('isZeroDecimalCurrency(');
+  });
+});
+
+describe('ledgerById', () => {
+  const { ledgerById } = buildHarness({ names: ['ledgerById'], deps: {}, returns: '{ ledgerById }' });
+  it('finds the same row the old per-line search did: the first one with that id', () => {
+    const first = { id: 'a', n: 1 };
+    const map = ledgerById({ ledger: [null, first, { id: 'a', n: 2 }, { id: 'b' }] });
+    expect(map.get('a')).toBe(first);
+    expect(map.get('b')).toEqual({ id: 'b' });
+    expect(map.get('zz')).toBeUndefined();
+  });
+  it('copes with a book that has no ledger yet', () => {
+    expect(ledgerById({}).size).toBe(0);
   });
 });
