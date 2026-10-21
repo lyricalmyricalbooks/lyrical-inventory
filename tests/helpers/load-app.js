@@ -128,8 +128,10 @@ const settle = async (rounds = 5) => {
  * @param {object}  [opts.overrides] extra window._fb* fakes, installed after
  *                                the defaults and before sign-in, so code that
  *                                starts at boot (the website link) uses them
+ * @param {object}  [opts.storage] localStorage entries the device already
+ *                                holds when the app starts
  */
-export async function loadApp({ books = [makeBook()], states: initialStates = {}, quiet = true, overrides = {} } = {}) {
+export async function loadApp({ books = [makeBook()], states: initialStates = {}, quiet = true, overrides = {}, storage = {} } = {}) {
   // The app narrates freely to the console (failed FX lookups with no network,
   // retries, …). That's expected under test and buries a real failure, so by
   // default it is captured into `app.logs` instead of printed.
@@ -145,6 +147,7 @@ export async function loadApp({ books = [makeBook()], states: initialStates = {}
     // Opening the app once a day downloads a JSON backup; mark today's as
     // done so boot doesn't try to save a file.
     localStorage.setItem('lm-last-backup-ts', String(Date.now()));
+    for (const [k, v] of Object.entries(storage)) localStorage.setItem(k, v);
   } catch { /* storage unavailable */ }
 
   // A device with no network: anything the app fetches (FX rates, Big Cartel,

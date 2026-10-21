@@ -1289,9 +1289,11 @@ const DEFAULT_BOOKS = {
   collective: { id: 'collective', title: 'Collective Photobook', author: 'Lyricalmyrical Books', isbn: '—', maxPrint: 100, listPrice: 40, currency: '€', threshold: 10, productionCost: 0, paymentLink: 'https://paypal.me/lyricalmyricalbooks', accent: '#c8913a', accentBg: 'rgba(200,145,58,.1)', urlParam: 'collective', authorPassword: 'collective2025' }
 };
 
-async function loadCatalog() {
+// `early` is a catalog read startup began before the mode flags arrived, from
+// the store they then confirmed (initStartup); otherwise this reads it now.
+async function loadCatalog(early = null) {
   try {
-    const stored = await window._fbLoadCatalog(); // handles FS → RTDB fallback internally
+    const stored = await (early || window._fbLoadCatalog()); // handles FS → RTDB fallback internally
     catalogLoadFailed = false;
     if (stored) {
       deletedDefaultIds = Array.isArray(stored._deletedDefaults) ? stored._deletedDefaults.slice() : [];
@@ -4216,7 +4218,13 @@ Object.assign(_fxRateCache, loadFxHistory(getLocalStorage()));
 const _fxHistoricalDates = {};
 const _fxHistoricalSources = {};
 
-export async function loadTaxCenter() {
+// `ratesInBackground` (startup only): the first open of each day downloads
+// that day's exchange rates from an outside service. Waited for, it held the
+// whole dashboard back for as long as that service took — the "sometimes slow"
+// start. In the background, the screen shows with the rates saved yesterday,
+// then today's rates and any recurring charges due follow, in the same order
+// as before, and the screen redraws once they're in.
+export async function loadTaxCenter({ ratesInBackground = false } = {}) {
   if (isAuthor()) return;
   try {
     const json = await window._fbLoadSettings('taxCenter'); // handles FS → RTDB fallback internally
@@ -4227,6 +4235,16 @@ export async function loadTaxCenter() {
       }
     }
     if (TAX_CENTER.settings?.rates) Object.assign(_fxRateCache, TAX_CENTER.settings.rates);
+    if (ratesInBackground) {
+      const syncedBefore = TAX_CENTER.settings?.lastRateSync;
+      refreshDailyRates()
+        .then(() => {
+          processRecurringExpenses();
+          if (TAX_CENTER.settings?.lastRateSync !== syncedBefore) renderCurrent();
+        })
+        .catch(e => console.warn('Failed to refresh daily rates', e));
+      return;
+    }
     await refreshDailyRates();
     processRecurringExpenses();
   } catch (e) {
@@ -4243,7 +4261,10 @@ async function refreshDailyRates() {
   }
 
   try {
-    const res = await fetch(`https://open.er-api.com/v6/latest/CAD`);
+    // A stalled connection gives up after 15 s instead of hanging on forever;
+    // yesterday's saved rates stay in use until the next try.
+    const signal = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined;
+    const res = await fetch(`https://open.er-api.com/v6/latest/CAD`, { signal });
     if (res.ok) {
       const json = await res.json();
       const rates = {};
@@ -4265,13 +4286,21 @@ async function refreshDailyRates() {
   }
 }
 
-async function loadAllBooks() {
+// `settingsLoaded` is boot's read of the shared settings, running alongside the
+// books; the open-call migration and the render wait for it.
+async function loadAllBooks({ settingsLoaded } = {}) {
   setSyncState('syncing', '<b>Firestore</b> · loading all books.');
-  await Promise.all(Object.keys(BOOKS).map(id => loadBook(id)));
+  // The Tax Centre is read alongside the books (it needs nothing from them),
+  // and the day's exchange-rate download finishes after the first render
+  // instead of before it — see loadTaxCenter.
+  await Promise.all([
+    Promise.all(Object.keys(BOOKS).map(id => loadBook(id))),
+    loadTaxCenter({ ratesInBackground: true }),
+    settingsLoaded,
+  ]);
   // Open-call contributors older builds kept on the book itself move to their
   // own project, from the books just loaded (no extra reads).
   if (isPublisherSession()) await migrateLegacyOpenCalls(states, saveState).catch(e => console.warn('Open call migration failed', e));
-  await loadTaxCenter();
   // Catch the sheet up on expenses and artist payments — the first time after
   // this update that is every one of them; afterwards only what changed.
   scheduleMoneyOutSheetSyncAll();
@@ -18916,7 +18945,13 @@ async function boot(forcedBook) {
   if (isPublisherSession()) {
     bootLoads.push(loadCustomerSuppression(), loadMailingList(), loadCampaigns(), loadOpenCalls());
   }
-  await Promise.all(bootLoads);
+  // The books start loading alongside these settings rather than after them
+  // (initFn, run now): nothing in a book's read needs them, and waiting cost a
+  // full round trip before the first sale figure could load. What does need
+  // them — the first full render, the open-call migration — waits on this.
+  const settingsLoaded = Promise.all(bootLoads);
+  initFn(settingsLoaded);
+  await settingsLoaded;
   // loadOpenCalls() counts its nav badge as soon as it lands, which can be
   // before the suppression list has — recount now that both are in, or
   // suppressed contributors show as waiting on you until the next edit.
@@ -18935,9 +18970,10 @@ async function boot(forcedBook) {
   initializeBackupFolderDisplay();
   checkDailyBackup();
   maybeAutoDownloadDailyBackup();
-  processSyncQueue();
+  // No processSyncQueue() here: the books are loading by now, and a queued
+  // change is sent once its book has loaded (initFn), not raced against it.
 
-  const initFn = () => {
+  function initFn(settingsLoaded) {
     fbReady = true;
     if (forcedBook) {
       // Author mode — load only this book
@@ -18950,7 +18986,7 @@ async function boot(forcedBook) {
       $('tab-bar').style.display = '';
       $('tab-dashboard').style.display = 'block';
       $('tab-dashboard').classList.add('active');
-      loadBook(forcedBook).then(() => {
+      Promise.all([loadBook(forcedBook), settingsLoaded]).then(() => {
         setSyncState('ok', '<b>Firestore</b> · connected');
         updateSubheader(new Date().toLocaleTimeString());
         renderAll(); updateHeader(); updateRoleToggleButton(); syncRoleUI();
@@ -18968,7 +19004,7 @@ async function boot(forcedBook) {
       // arriving rather than nothing at all. Replaced by updateAllOverview()
       // the moment loadAllBooks() resolves.
       showCatalogueSkeleton();
-      loadAllBooks().then(() => {
+      loadAllBooks({ settingsLoaded }).then(() => {
         // Send anything queued before the app was last closed (see author branch).
         processSyncQueue();
         maybeRunDailyBackup(true); startDailyBackupWatcher();
@@ -19027,9 +19063,7 @@ async function boot(forcedBook) {
       updateRoleToggleButton();
       syncRoleUI();
     }
-  };
-
-  initFn();
+  }
 }
 
 // ── TAX CENTER LOGIC
@@ -27330,23 +27364,38 @@ async function initStartup() {
         return;
       }
 
-      // Load shared Firestore mode flags FIRST — before any data reads.
-      // This ensures all devices agree on which database to use.
-      await window._fbLoadModeFlags();
+      // The shared mode flags decide which database every read below uses, so
+      // all devices agree. Waiting for them before starting those reads cost a
+      // whole extra round trip behind the splash screen on every start — on
+      // market-stall signal, seconds. So the reads start at once, from the
+      // store this device's flags named last time, and are only used if the
+      // flags that arrive name the same store. If they don't (the move to
+      // Firestore, once, ever), the early answers are dropped unread and read
+      // again from the right store. The early reads write nothing; loadCatalog
+      // still does any saving itself, after the flags are in.
+      const cachedGlobal = startupCachedGlobalMode();
+      const flagsLoaded = window._fbLoadModeFlags();
+      const early = cachedGlobal === null ? null : {
+        global: cachedGlobal,
+        catalog: window._fbLoadCatalog({ global: cachedGlobal }),
+        notify: window._fbLoadSettings('notifyEndpoint', { global: cachedGlobal }),
+        analytics: window._fbLoadSettings('analyticsConfig', { global: cachedGlobal }),
+      };
+      // A dropped early read that fails must not surface as an unhandled rejection.
+      if (early) [early.catalog, early.notify, early.analytics].forEach(p => p.catch(() => {}));
+      await flagsLoaded;
+      const useEarly = !!early && window._useFirestoreGlobal() === early.global;
 
-      // These independent reads start together after the mode flags choose the
-      // backing store. On a cold connection this costs one round trip instead
-      // of three before the app can dismiss its splash screen.
       const loadNotifySettings = async () => {
         try {
-          const ep = await window._fbLoadSettings('notifyEndpoint');
+          const ep = await (useEarly ? early.notify : window._fbLoadSettings('notifyEndpoint'));
           if (ep && ep.url) { notifyUrl = ep.url; localStorage.setItem('lm-notify-url', ep.url); }
         } catch (_) { }
       };
 
       const loadAnalyticsSettings = async () => {
         try {
-          const ac = await window._fbLoadSettings('analyticsConfig');
+          const ac = await (useEarly ? early.analytics : window._fbLoadSettings('analyticsConfig'));
           if (ac && ac.url) {
             localStorage.setItem('lm-analytics-url', ac.url);
           }
@@ -27354,7 +27403,7 @@ async function initStartup() {
       };
 
       // NOW that we have a valid token, we pull the protected catalog.
-      await Promise.all([loadCatalog(), loadNotifySettings(), loadAnalyticsSettings()]);
+      await Promise.all([loadCatalog(useEarly ? early.catalog : null), loadNotifySettings(), loadAnalyticsSettings()]);
       loadAuthorViewOverrides();
 
       // Check access
@@ -27402,6 +27451,16 @@ async function initStartup() {
       dismissSplash();
     }
   });
+}
+
+// Which database this device's mode flags chose last time (_fbLoadModeFlags
+// keeps a copy in localStorage): true/false, or null when it has never loaded
+// them and startup has no guess to make.
+function startupCachedGlobalMode() {
+  try {
+    const v = localStorage.getItem('fs_mode_global');
+    return v === 'true' ? true : v === 'false' ? false : null;
+  } catch (_) { return null; }
 }
 
 let _pendingGateMsg = null;
