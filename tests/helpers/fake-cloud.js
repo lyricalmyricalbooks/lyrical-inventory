@@ -79,7 +79,12 @@ export function installFakeFirebase(win, cloud) {
 
 /** Run the app's real startup by answering its auth subscription as the publisher. */
 export async function signInAsPublisher() {
+  await signInAs({ email: PUBLISHER_EMAIL, uid: 'publisher', emailVerified: true });
+}
+
+/** Run the app's real startup signed in as `user` (an artist's account, say). */
+export async function signInAs(user) {
   const authCallbacks = globalThis.__firebaseStub?.authCallbacks || [];
   if (!authCallbacks.length) throw new Error('fake-cloud: main.js never subscribed to auth state');
-  await authCallbacks[authCallbacks.length - 1]({ email: PUBLISHER_EMAIL, uid: 'publisher', emailVerified: true });
+  await authCallbacks[authCallbacks.length - 1](user);
 }
