@@ -5,17 +5,19 @@ import { deriveStockBreakdown } from '../src/lib/inventory.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { appSource } from './helpers/extract-decl.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 describe('Robust Inventory Valuation Suite & CSV Export', () => {
-  const mainJsPath = path.resolve(__dirname, '../src/main.js');
   const indexHtmlPath = path.resolve(__dirname, '../index.html');
-  const mainContent = fs.readFileSync(mainJsPath, 'utf8');
+  // main.js plus the feature modules: the valuation now lives in
+  // src/features/inventory-valuation.js.
+  const mainContent = appSource;
   const indexContent = fs.readFileSync(indexHtmlPath, 'utf8');
 
-  it('declares calculateInventoryValuationData, openInventoryValuationModal, and printInventoryValuationReport in main.js', () => {
+  it('declares calculateInventoryValuationData, openInventoryValuationModal, and printInventoryValuationReport', () => {
     // Declared as plain functions (not `window.x = function`) so eslint's
     // no-undef can see them — they reach the inline onclick handlers via
     // exposeLegacyInlineHandlers like every other handler.

@@ -83,6 +83,11 @@ const MAIN_IMPORT_BUDGET = {
   // convertCurrency), mints door-price links through the Stripe helper and its
   // key, jumps to the POS tab, and shows toasts.
   'fair-kit.js': 9,
+  // Set at extraction: the valuation reads every book's state (BOOKS,
+  // BOOK_LIST, states, defaultState, activeBook, isTestBook), the dated FX
+  // cache, and writes write-offs into TAX_CENTER and through saveState; the
+  // role check gates the adjustment form. The rest is $ / showToast / today.
+  'inventory-valuation.js': 13,
 };
 
 const featureFiles = fs.existsSync(featureDir)
@@ -226,6 +231,10 @@ const MIN_EXPORTS = {
   // schedule and run a publish, run an import, paint its card, and the two
   // answers other screens ask of it (is the link on, where is this parcel).
   'website-link.js': 7,
+  // A carve-out, but a small one: the report and its two exports, and the
+  // adjustment form's five handlers. Every export is a button's entry point;
+  // the rest are private helpers nothing outside the module calls.
+  'inventory-valuation.js': 9,
 };
 
 describe('feature modules are the only home of what they own', () => {
