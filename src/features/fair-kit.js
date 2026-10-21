@@ -802,7 +802,7 @@ function printSalesTracker(opts = {}) {
       td.tally { background: #fff; height: ${effectiveTallyRowHeight}px; }
       td.total { background: #f4ded8; height: ${effectiveTallyRowHeight}px; }
       td.price-paid { background: #fafafa; height: ${effectivePriceRowHeight}px; font-size: 9pt; color: #666; text-align: center; vertical-align: middle; }
-      tr.price-row td.price-paid::before { content: "${currencySymbol} ___"; color: #bbb; font-size: 8pt; }
+      tr.price-row td.price-paid::before { content: "${escapeHtml(currencySymbol)} ___"; color: #bbb; font-size: 8pt; }
       tfoot td { border: none; padding-top: 14px; }
       .grand-row { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: ${grandMarginTop}; }
       .grand-label { font-size: ${grandLabelFontSize}; font-weight: 800; }
