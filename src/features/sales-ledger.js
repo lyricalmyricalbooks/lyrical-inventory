@@ -1,9 +1,11 @@
 // The sale ledger: the one way a sale enters or leaves a book's history.
 //
 // writeOrderToLedger is the single write path for a sale (order form, Stripe
-// payment, register, website order): stock, sold, revenue, channel totals,
+// payment, register, website link): stock, sold, revenue, channel totals,
 // the invoice-discount note, the running Stock After and the Google Sheet
-// row all move together. recordOrder is its on-screen wrapper (the open book,
+// row all move together. addSaleToState is its state half, which the website
+// orders from the scan, recovered orders and spreadsheet imports share, since
+// they send their Sheet rows their own way. recordOrder is its on-screen wrapper (the open book,
 // then repaint); recordOrderPendingTransfer is the direct-to-artist variant
 // that counts the copies sold but holds the revenue until the artist forwards
 // it. voidHistEntry / unvoidHistEntry are the exact reverse and its undo, and
@@ -57,9 +59,44 @@ function recordOrder(num, chan, qty, price, notes, payment = null, { date, enter
  * passes its own (the charge id keeps it from being recorded twice, and the
  * payment's date is when the sale happened). `extra` is merged onto the row.
  */
-function writeOrderToLedger(bookId, { num = '', chan, qty, price, notes = '', payment = null, enteredBy = 'Publisher', date, sheetsId, extra = {} } = {}) {
+function writeOrderToLedger(bookId, opts = {}) {
   const s = states[bookId], book = BOOKS[bookId];
   if (!s || !book) throw new Error('Unknown book');
+  const row = addSaleToState(s, book, opts);
+  recomputeAfters(s, book);
+  saveState(bookId);
+  const { num, chan, qty, price, notes, date, payment, sheetsId } = row;
+  const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
+  const totalNative = qty * price;
+  const cadEquiv = cadEquivalentForSale({ nativeCurrency: nativeCur, totalNative, payment });
+  syncToSheets({
+    // The row's own running balance: a backdated sale (a Stripe payment from
+    // last week) sits earlier in the timeline than today's on-hand count.
+    type: 'order', book: book.title, date, num, chan, qty, price, total: totalNative, stockAfter: row.after ?? s.stock, notes,
+    sheetsId,
+    currency: nativeCur,
+    paymentCurrency: normalizeCurrencyCode(payment?.currency || nativeCur, 'CAD'),
+    paymentAmount: payment?.amount ?? totalNative,
+    paymentRate: payment?.rate ?? '',
+    convertedTotal: cadEquiv
+  });
+  return row;
+}
+
+/**
+ * The state half of a sale: stock, copies sold, revenue and the channel
+ * totals, plus the history row (invoice-discount note, book currency, a
+ * Sheets id) and the applied-order-number cache. It doesn't save, recompute
+ * Stock After or send anything to the Sheet: writeOrderToLedger does all
+ * three for one sale; a website order adds its postage row, and an import
+ * sends its rows as one batch.
+ *
+ * `stamp: false` leaves out recordedAt, for a sale filled in after the fact
+ * (an order from the scan, a recovered order, an import), so the activity
+ * feed files it under the sale's own date rather than the moment it was typed.
+ * Returns the new row.
+ */
+function addSaleToState(s, book, { num = '', chan, qty, price, notes = '', payment = null, enteredBy = 'Publisher', date, sheetsId, extra = {}, stamp = true } = {}) {
   if (enteredBy === 'Artist') {
     deductSaleFromStockBreakdown(s, qty, true);
   }
@@ -67,30 +104,16 @@ function writeOrderToLedger(bookId, { num = '', chan, qty, price, notes = '', pa
   s.sold += qty; s.revenue += qty * price;
   if (!s.chStats[chan]) s.chStats[chan] = { txns: 0, units: 0, revenue: 0 };
   s.chStats[chan].txns++; s.chStats[chan].units += qty; s.chStats[chan].revenue += qty * price;
-  const updatedNotes = notesWithInvoiceDiscount(s.invoices, num, notes);
-
-  const id = sheetsId || makeEventId();
-  const when = date || today();
-  const row = { recordedAt: new Date().toISOString(), ...extra, num, chan, qty, price, after: s.stock, notes: updatedNotes, date: when, payment, enteredBy, sheetsId: id, cur: bookCurrencyCode(book) };
+  const row = {
+    ...(stamp ? { recordedAt: new Date().toISOString() } : {}),
+    ...extra,
+    num, chan, qty, price, after: s.stock, notes: notesWithInvoiceDiscount(s.invoices, num, notes),
+    date: date || today(), payment, enteredBy, sheetsId: sheetsId || makeEventId(), cur: bookCurrencyCode(book),
+  };
   s.hist.unshift(row);
   // Its order number now counts as applied (the Orders tab hides applied ones).
   invalidateAppliedIds();
-  recomputeAfters(s, book);
-  saveState(bookId);
-  const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
-  const totalNative = qty * price;
-  const cadEquiv = cadEquivalentForSale({ nativeCurrency: nativeCur, totalNative, payment });
-  syncToSheets({
-    // The row's own running balance: a backdated sale (a Stripe payment from
-    // last week) sits earlier in the timeline than today's on-hand count.
-    type: 'order', book: book.title, date: when, num, chan, qty, price, total: totalNative, stockAfter: row.after ?? s.stock, notes: updatedNotes,
-    sheetsId: id,
-    currency: nativeCur,
-    paymentCurrency: normalizeCurrencyCode(payment?.currency || nativeCur, 'CAD'),
-    paymentAmount: payment?.amount ?? totalNative,
-    paymentRate: payment?.rate ?? '',
-    convertedTotal: cadEquiv
-  });
+  return row;
 }
 
 function recordOrderPendingTransfer(num, chan, qty, price, notes, payment = null, date = null, fromSubmission = null) {
@@ -219,6 +242,7 @@ function unvoidHistEntry(s, book, h) {
 }
 
 export {
+  addSaleToState,
   recordOrder,
   writeOrderToLedger,
   voidHistEntry,

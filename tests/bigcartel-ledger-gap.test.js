@@ -208,11 +208,13 @@ describe('the ledger entry a recovered order becomes', () => {
     const mainJs = fs.readFileSync(path.resolve(__dirname, '../src/main.js'), 'utf8');
     const start = mainJs.indexOf('export function applyOne(');
     expect(start).toBeGreaterThan(-1);
-    const body = mainJs.slice(start, mainJs.indexOf('targetState.hist.unshift(entry);', start));
-    const literal = body.slice(body.indexOf('const entry = {'));
+    // applyOne lists the shipping details in `extra` and hands the core
+    // fields to the shared sale step (addSaleToState) by name.
+    const body = mainJs.slice(start, mainJs.indexOf('const entry = addSaleToState(', start));
+    const literal = body.slice(body.indexOf('const extra = {'));
     const fields = new Set(Array.from(literal.matchAll(/^\s{4}(\w+):/gm), m => m[1]));
-    fields.add('num');
-    fields.add('sheetsId');
+    expect(fields.size).toBeGreaterThan(10);
+    for (const core of ['num', 'chan', 'qty', 'price', 'notes', 'date', 'sheetsId']) fields.add(core);
 
     const entry = buildBigCartelOrderEntry(gap, { stockAfter: 1 });
     const missing = Array.from(fields).filter(field => !(field in entry));

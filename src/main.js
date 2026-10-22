@@ -1110,6 +1110,7 @@ import {
   updateDash,
 } from './features/dashboard.js';
 import {
+  addSaleToState,
   recordOrder,
   recordOrderPendingTransfer,
   syncHistoryVoidDeletion,
@@ -8569,19 +8570,6 @@ function reapplyOne(id) {
   showToast(`✓ ${o.orderNum} updated with receipt totals`, 'ok');
 }
 
-// Shared by applyOne() and commitRecoveredWebsiteOrder(): both decrement stock
-// (clamped at 0), credit sold/revenue, and roll the sale into the Website
-// channel's running stats — identically, just from different qty/price sources.
-function applyWebsiteSaleToState(targetState, qty, price) {
-  targetState.stock = Math.max(0, targetState.stock - qty);
-  targetState.sold += qty;
-  targetState.revenue += qty * price;
-  if (!targetState.chStats['Website']) targetState.chStats['Website'] = { txns: 0, units: 0, revenue: 0 };
-  targetState.chStats['Website'].txns++;
-  targetState.chStats['Website'].units += qty;
-  targetState.chStats['Website'].revenue += qty * price;
-}
-
 // Shared by applyOne() and commitRecoveredWebsiteOrder(): both record the
 // order number as seen in scan memory and un-cancel it if it was previously
 // marked cancelled. Does not call saveScanMemory() — the caller does that
@@ -8608,10 +8596,9 @@ export function applyOne(id, { deferRender = false } = {}) {
   if (!targetState || !targetBk) { showToast('Cannot find book for this order', 'err'); return; }
   // Use target book's price if not on order
   const price = o.price || targetBk.listPrice;
-  applyWebsiteSaleToState(targetState, o.qty, price);
-  const entry = {
-    num: o.orderNum, chan: 'Website', qty: o.qty, price, after: targetState.stock,
-    notes: 'Big Cartel', date: (o.date && o.date !== '—') ? o.date : today(),
+  if (!targetState.doneIds) targetState.doneIds = [];
+  targetState.doneIds.push(id);
+  const extra = {
     shipName: o.shipName || o.customer || '', shipEmail: o.email || '',
     shipAddr1: o.shipAddr1 || '', shipAddr2: o.shipAddr2 || '',
     shipCity: o.shipCity || '', shipProvince: o.shipProvince || '',
@@ -8626,18 +8613,23 @@ export function applyOne(id, { deferRender = false } = {}) {
     totalPaid: Number(o.totalPaid || 0) || 0,
     discountSource: o.discountSource || ''
   };
-  // Deterministic id derived from the Big Cartel order number so the same
-  // import on a different device produces the same id (no duplicate rows).
-  entry.sheetsId = 'bc-' + String(o.orderNum).replace(/^#/, '').replace(/[^A-Za-z0-9-]/g, '');
-  targetState.hist.unshift(entry);
-  if (!targetState.doneIds) targetState.doneIds = [];
-  targetState.doneIds.push(id);
-  _appliedIdsCache = null;
+  // The shared sale step moves stock, revenue and the Website totals and
+  // writes the row. Deterministic id derived from the Big Cartel order number
+  // so the same import on a different device produces the same id (no
+  // duplicate rows).
+  const entry = addSaleToState(targetState, targetBk, {
+    num: o.orderNum, chan: 'Website', qty: o.qty, price, notes: 'Big Cartel',
+    date: (o.date && o.date !== '—') ? o.date : today(),
+    sheetsId: 'bc-' + String(o.orderNum).replace(/^#/, '').replace(/[^A-Za-z0-9-]/g, ''),
+    extra, stamp: false,
+  });
+  // An older order lands in date order, so its Stock After is its own.
+  recomputeAfters(targetState, targetBk);
   // Save scan memory — record this order num as seen
   const mem = getScanMemory();
   recordOrderNumApplied(mem, o.orderNum, { touchLastScan: true });
   saveScanMemory(mem);
-  syncToSheets({ type: 'order', book: targetBk.title, date: entry.date, num: o.orderNum, chan: 'Website', qty: o.qty, price, total: o.qty * price, stockAfter: targetState.stock, notes: 'Big Cartel', sheetsId: entry.sheetsId, currency: getBookCurrencyCode(targetBk) });
+  syncToSheets({ type: 'order', book: targetBk.title, date: entry.date, num: o.orderNum, chan: 'Website', qty: o.qty, price, total: o.qty * price, stockAfter: entry.after, notes: entry.notes, sheetsId: entry.sheetsId, currency: getBookCurrencyCode(targetBk) });
   if (entry.shippingPaid > 0) {
     syncToSheets(shippingPurchaseRowPayload(targetBk, getBookCurrencyCode(targetBk), entry));
   }
@@ -8670,11 +8662,12 @@ export function commitRecoveredWebsiteOrder(bookId, form, buildEntry) {
   const qty = Math.max(1, Math.floor(Number(form.qty) || 1));
   const price = Number(form.price) || 0;
 
-  applyWebsiteSaleToState(targetState, qty, price);
-
-  const entry = buildEntry({ stockAfter: targetState.stock });
-  targetState.hist.unshift(entry);
-  _appliedIdsCache = null;
+  // The builder fills in the shipping details; the shared sale step moves
+  // stock, revenue and the Website totals and writes the row, in date order.
+  const { num, notes, date, sheetsId, chan: _chan, qty: _qty, price: _price, after: _after, ...extra } =
+    buildEntry({ stockAfter: Math.max(0, targetState.stock - qty) });
+  const entry = addSaleToState(targetState, targetBook, { num, chan: 'Website', qty, price, notes, date, sheetsId, extra, stamp: false });
+  recomputeAfters(targetState, targetBook);
 
   // Record the number as seen so a later Gmail scan that finally turns up the
   // original confirmation email doesn't offer it as a new order to apply.
@@ -8684,7 +8677,7 @@ export function commitRecoveredWebsiteOrder(bookId, form, buildEntry) {
 
   syncToSheets({
     type: 'order', book: targetBook.title, date: entry.date, num: entry.num, chan: 'Website',
-    qty, price, total: qty * price, stockAfter: targetState.stock, notes: entry.notes,
+    qty, price, total: qty * price, stockAfter: entry.after, notes: entry.notes,
     sheetsId: entry.sheetsId, currency: getBookCurrencyCode(targetBook),
   });
   if (entry.shippingPaid > 0) {
@@ -9457,19 +9450,11 @@ function confirmImport() {
   [..._importRows].reverse().forEach(r => {
     if (existingNums.has(r.num)) { skipped++; return; } // skip duplicates
     existingNums.add(r.num); // also catches repeats inside the same file
-    s.stock = Math.max(0, s.stock - r.qty);
-    s.sold += r.qty;
-    s.revenue += r.qty * r.price;
-    if (!s.chStats[r.chan]) s.chStats[r.chan] = { txns: 0, units: 0, revenue: 0 };
-    s.chStats[r.chan].txns++;
-    s.chStats[r.chan].units += r.qty;
-    s.chStats[r.chan].revenue += r.qty * r.price;
-    // An id of its own, so the sheet row can be updated or removed later. These
-    // used to arrive with none and were never sent: they only reached the sheet
-    // through Sync all data, which appended them again on every press.
-    const entry = { num: r.num, chan: r.chan, qty: r.qty, price: r.price, after: s.stock, notes: r.notes, date: r.date, sheetsId: makeEventId(), cur: bookCurrencyCode(book) };
-    s.hist.unshift(entry);
-    added.push(entry);
+    // The shared sale step gives each row an id of its own, so the sheet row
+    // can be updated or removed later. These used to arrive with none and were
+    // never sent: they only reached the sheet through Sync all data, which
+    // appended them again on every press.
+    added.push(addSaleToState(s, book, { num: r.num, chan: r.chan, qty: r.qty, price: r.price, notes: r.notes, date: r.date, stamp: false }));
     imported++;
   });
 
@@ -11391,6 +11376,9 @@ function confirmSale() {
   const makeInvoice = invoicesVisibleHere() && $('sale-makeinvoice') && $('sale-makeinvoice').checked;
   const invoiceStoreId = st.id;
   const pub = amounts.due;
+  // Not the shared sale step (addSaleToState): these copies left stock when
+  // they were shipped to the store, so a store sale moves revenue and the
+  // store's counts but never the stock on hand.
   st.sold += qty; st.outstanding -= qty; st.amountOwed = roundCents((st.amountOwed || 0) + (paid === 'pending' ? pub : 0));
   s.sold += qty; s.revenue += pub;
   if (!s.chStats['Consignment']) s.chStats['Consignment'] = { txns: 0, units: 0, revenue: 0 };
