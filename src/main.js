@@ -15801,20 +15801,34 @@ function _reconFindInvoice(num) {
 // `near` widens "same amount" to within 10%: before recording on its own, a
 // register row in euros holds a live-converted figure (€37.42 for a €40 copy),
 // so an exact match would miss the very sale it is guarding against.
-function _reconLikelyAlreadyLogged(p, { near = false } = {}) {
+// A caller checking a whole list without recording anything in between may
+// pass `logged` from _reconLoggedPayments(), so each payment doesn't re-walk
+// every book's history (and re-parse every row's date).
+function _reconLikelyAlreadyLogged(p, { near = false, logged = _reconLoggedPayments() } = {}) {
   const target = Math.round(p.amount * 100);
   const slack = near ? target * 0.1 : 0;
+  for (const { cents, time } of logged.get(p.currency) || []) {
+    if (Math.abs(cents - target) > slack) continue;
+    if (Math.abs((time - p.created) / 86400000) <= 3) return true;
+  }
+  return false;
+}
+
+// The paid history rows _reconLikelyAlreadyLogged compares against, read in
+// one pass: per currency, each row's amount in cents and its sale day's time.
+function _reconLoggedPayments() {
+  const byCurrency = new Map();
   for (const s of Object.values(states)) {
     for (const h of (s.hist || [])) {
       if (h.voided || h.gratuity) continue;
       const pay = h.payment;
-      if (!pay || !pay.amount || normalizeCurrencyCode(pay.currency || '', '') !== p.currency) continue;
-      if (Math.abs(Math.round(pay.amount * 100) - target) > slack) continue;
-      const dDays = Math.abs((new Date(h.date).getTime() - p.created) / 86400000);
-      if (dDays <= 3) return true;
+      if (!pay || !pay.amount) continue;
+      const cur = normalizeCurrencyCode(pay.currency || '', '');
+      if (!byCurrency.has(cur)) byCurrency.set(cur, []);
+      byCurrency.get(cur).push({ cents: Math.round(pay.amount * 100), time: new Date(h.date).getTime() });
     }
   }
-  return false;
+  return byCurrency;
 }
 
 /** A website order with this id is already in some book's history. */
@@ -15825,9 +15839,9 @@ function websiteOrderInBooks(orderId) {
 
 // Classify a payment into one of the matchable channels. A caller classifying
 // a whole list without recording anything in between may pass the memory and
-// recorded-charge set it built once, so each payment doesn't re-read storage
-// and re-scan every book's history.
-export function classifyStripePayment(p, { mem = getReconMemory(), recordedIds = _reconRecordedChargeIds() } = {}) {
+// recorded-charge set (and logged payments) it built once, so each payment
+// doesn't re-read storage and re-scan every book's history.
+export function classifyStripePayment(p, { mem = getReconMemory(), recordedIds = _reconRecordedChargeIds(), logged } = {}) {
 
   if (mem.dismissed[p.id]) return { kind: 'dismissed' };
   if (mem.recorded[p.id] || recordedIds.has(p.id)) return { kind: 'recorded', bookId: mem.recorded[p.id]?.bookId };
@@ -15870,7 +15884,7 @@ export function classifyStripePayment(p, { mem = getReconMemory(), recordedIds =
   // A direct charge we can identify by metadata still needs a confirm-click.
   if (metaBookId) return { kind: 'direct', bookId: metaBookId };
 
-  if (_reconLikelyAlreadyLogged(p)) return { kind: 'likely' };
+  if (_reconLikelyAlreadyLogged(p, { logged })) return { kind: 'likely' };
 
   return { kind: 'direct', bookId: null };
 }
@@ -16270,7 +16284,7 @@ export function renderReconcile() {
   const needs = [];
   const matched = [];
   // Nothing is recorded while the list is drawn, so one scan serves every row.
-  const classifyCtx = { mem, recordedIds: _reconRecordedChargeIds() };
+  const classifyCtx = { mem, recordedIds: _reconRecordedChargeIds(), logged: _reconLoggedPayments() };
   for (const p of payments) {
     const c = classifyStripePayment(p, classifyCtx);
     if (c.kind === 'dismissed') { matched.push({ p, c, label: 'Dismissed', tone: 'gray', note: 'Marked "not inventory".' }); continue; }
@@ -19254,7 +19268,7 @@ function exposeLegacyInlineHandlers() {
     renderStripeFeesCards, fetchStripeFeesByYear, insertStripeFeesIntoLedger,
     reconcileStripeAgainstSales, clearStoredStripeKey, downloadStripeFeesAuditCSV, getReconMemory,
     saveReconMemory, getReconStripeKey, _reconPersistKey, fetchStripePaymentsForReconcile,
-    _reconRecordedChargeIds, _reconFindInvoice, _reconLikelyAlreadyLogged, classifyStripePayment,
+    _reconRecordedChargeIds, _reconFindInvoice, _reconLikelyAlreadyLogged, _reconLoggedPayments, classifyStripePayment,
     _reconApplySaleToBook, reconcileSync, _reconBookOptions, reconRenderKeyRow, reconEditKey,
     reconOnFilter, reconSetCurrency, reconClearFilters, _reconIsPickable, _reconMatchesFilter,
     _reconAmountBadge, _reconMeta, _reconNeedCard, _reconGroupCard, renderReconcile,
