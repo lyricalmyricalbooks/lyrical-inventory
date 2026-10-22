@@ -9293,11 +9293,13 @@ function renderArtistReimburseBanner() {
   // to the link on their own.
   const settle = expensesInSettleUp(book, s);
   const inSettle = owed.filter(e => settle.ids.has(String(e.id))).length;
-  $('arb-hint').textContent = inSettle === owed.length && !settle.publisherPays
-    ? 'These come off what you send your publisher in Settle up'
-    : inSettle === owed.length
-      ? 'Counted in Settle up · your publisher pays you one net amount'
-      : s.artistPaymentLink ? 'Your publisher pays this to your saved payment link' : 'Add your payment link below so your publisher can pay you';
+  const linkNote = s.artistPaymentLink ? 'Your publisher pays this to your saved payment link' : 'Add your payment link below so your publisher can pay you';
+  const settleNote = n => settle.publisherPays
+    ? `${n === 1 ? 'is' : 'are'} counted in Settle up, where your publisher pays you one net amount`
+    : `come${n === 1 ? 's' : ''} off what you send your publisher in Settle up`;
+  $('arb-hint').textContent = !inSettle ? linkNote
+    : inSettle === owed.length ? `${owed.length === 1 ? 'This' : 'These'} ${settleNote(owed.length)}`
+      : `${inSettle} of these ${settleNote(inSettle)} · ${s.artistPaymentLink ? 'the rest go to your saved payment link' : 'add your payment link below for the rest'}`;
   $('arb-items').innerHTML = owed.map(e => `
     <div class="mbi-row">
       <div class="mbi-desc">${escapeHtml(e.desc)} · ${fmtD(e.date)} · <span class="metric-banner-cat">${escapeHtml(e.cat)}</span></div>

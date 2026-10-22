@@ -21,18 +21,22 @@ export function openAuthorExpenses(state, book) {
   let leftOut = 0;
   for (const e of expensesWithSettlements(state)) {
     if (!e || e.received || e.voided || e.pendingAuth || e.amountUnknown || isGratuityExpense(e) || e.id == null) continue;
-    const raw = Number(e.amount) || 0;
-    if (!(raw > 0)) continue;
-    let amount = null;
-    if (normalizeCurrencyCode(e.currency, bookCode) === bookCode) amount = roundCents(raw);
-    else if (bookCode === 'CAD' && Number(e.baseAmount) > 0) amount = roundCents(Number(e.baseAmount));
-    else if (bookCode === 'CAD' && Number(e.fxRate) > 0) amount = roundCents(raw * Number(e.fxRate));
+    if (!((Number(e.amount) || 0) > 0)) continue;
+    const amount = expenseInBookCurrency(e, bookCode);
     if (amount == null) { leftOut++; continue; }
     rows.push({ id: e.id, amount, desc: String(e.desc || ''), date: String(e.date || '') });
   }
   // Oldest first, the order they're itemised in.
   rows.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
   return { rows, leftOut };
+}
+
+function expenseInBookCurrency(e, bookCode) {
+  const raw = Number(e.amount) || 0;
+  if (normalizeCurrencyCode(e.currency, bookCode) === bookCode) return roundCents(raw);
+  if (bookCode === 'CAD' && Number(e.baseAmount) > 0) return roundCents(Number(e.baseAmount));
+  if (bookCode === 'CAD' && Number(e.fxRate) > 0) return roundCents(raw * Number(e.fxRate));
+  return null;
 }
 
 function fingerprint(book, state) {
@@ -74,10 +78,13 @@ export function artistSettlementIssues(state) {
     // An expense this settlement paid back that was also marked received by
     // hand (say, an e-Transfer recorded on another device while this one was
     // offline), or that another settlement paid back too, may have been paid
-    // back twice. One that has gone from the ledger can't be checked at all.
+    // back twice. One whose amount was edited since was paid back the wrong
+    // amount. One that has gone from the ledger can't be checked at all.
     if ((p.settlement.expenses || []).some(link => {
       const e = expenseById.get(String(link.id));
-      return !e || e.received || repaid.get(String(link.id))?.settlementId !== p.id;
+      if (!e || e.received || repaid.get(String(link.id))?.settlementId !== p.id) return true;
+      const now = expenseInBookCurrency(e, normalizeCurrencyCode(p.settlement.cur, 'CAD'));
+      return now == null || Math.abs(now - (Number(link.amount) || 0)) > 0.005;
     })) issues.add(p.id);
   }
   for (let i = 0; i < active.length; i++) {

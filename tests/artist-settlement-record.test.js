@@ -420,3 +420,15 @@ describe('unpaid author expenses in a settlement', () => {
     expect(net(after) - net(before)).toBeCloseTo(232.21, 2);
   });
 });
+
+describe('a repaid expense edited afterwards', () => {
+  it('puts the settlement up for review when its amount changes', () => {
+    const s = { ...makeState(), expenses: [{ id: 501, desc: 'Shipping', amount: 28.17, currency: 'CAD', date: '2025-10-08' }] };
+    applyArtistSettlement(book, s, planArtistSettlement(book, s), { date: '2026-10-08' });
+    expect(artistSettlementIssues(s).size).toBe(0);
+    s.expenses[0].desc = 'Shipping to the fair'; // a wording fix is fine
+    expect(artistSettlementIssues(s).size).toBe(0);
+    s.expenses[0].amount = 38.17;
+    expect(artistSettlementIssues(s).size).toBe(1);
+  });
+});

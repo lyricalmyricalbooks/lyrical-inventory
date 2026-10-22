@@ -22,7 +22,7 @@
 import { canonicalExpenseCategory } from './expense-categories.js';
 import { findDeductionGaps as scanDeductionGaps } from './deduction-gaps.js';
 import { expenseLedgerTotals } from './expense-totals.js';
-import { expensesWithSettlements } from './receipt-storage.js';
+import { expensesRepaidBySettlement, expensesWithSettlements } from './receipt-storage.js';
 import { deriveOnHand, deriveStockBreakdown, inventoryBreakdown } from './inventory.js';
 import { calculateBreakEven } from './breakeven.js';
 import { IN_PERSON_CHANNELS, channelMixRows } from './channel-mix.js';
@@ -813,6 +813,15 @@ function proposeEdits(args = {}, ctx = {}) {
       return;
     }
     seen.add(slot);
+
+    // Paid back by an author settlement: that record is what says so, and
+    // marking the row by hand as well would read as a second payment.
+    const repaid = target === 'bookExpense' && spec.key === 'received'
+      && expensesRepaidBySettlement(stateFor(ctx, found.bookId)?.artistPayouts).get(str(edit.id));
+    if (repaid) {
+      rejected.push({ at, reason: `"${found.label}" was paid back in the author settlement of ${repaid.date}. Undo that settlement on the book's dashboard to change this.` });
+      return;
+    }
 
     const before = spec.key === null ? found.record[found.mapKey] : found.record[spec.key];
     if (String(before ?? '') === String(value ?? '')) {
