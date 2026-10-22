@@ -3,13 +3,15 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, expect, test } from 'vitest';
+import { appSource } from './helpers/extract-decl.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(path.join(__dirname, '../index.html'), 'utf8');
 const styles = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
-const mainJs = readFileSync(path.join(__dirname, '../src/main.js'), 'utf8').replace(/\r\n/g, '\n');
+// main.js plus the feature and lib modules (the register lives in features/pos.js).
+const mainJs = appSource.replace(/\r\n/g, '\n');
 
-// Pull one top-level block of main.js out by its first and last markers and
+// Pull one top-level block of the app source out by its first and last markers and
 // run it against the real markup, without booting Firebase.
 function slice(startMarker, endMarker) {
   const start = mainJs.indexOf(startMarker);
@@ -26,8 +28,8 @@ beforeEach(() => {
 const $ = (id) => document.getElementById(id);
 
 function posApi() {
-  const src = slice('function posSyncReviewBar', 'window.posMobileView = function');
-  return new Function('$', `${src}; return { posSyncReviewBar, posSyncPaymentSeg, pick: window.posPickPayment };`)($);
+  const src = slice('function posSyncReviewBar', 'function posMobileView');
+  return new Function('$', `${src}; return { posSyncReviewBar, posSyncPaymentSeg, pick: posPickPayment };`)($);
 }
 
 test('review bar mirrors the cart count and the total checkout already computed', () => {

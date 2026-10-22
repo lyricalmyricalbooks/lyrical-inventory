@@ -21,14 +21,13 @@ import {
   BOOKS,
   copyTextWithFallback,
   createStripePaymentLinkForBook,
-  posCart,
   posExtraBooks,
-  renderPOS,
   saveCatalogWithDeletions,
   showToast,
   syncCatalog,
   updateModalAccentPreview,
 } from '../main.js';
+import { posCart, renderPOS } from './pos.js';
 import { closeM, confirmDialog, openM } from '../lib/modal.js';
 import { hexToRgba, setSelectCurrency } from '../lib/money.js';
 

@@ -2,11 +2,13 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
+import { appSource } from './helpers/extract-decl.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(path.join(__dirname, '../index.html'), 'utf8');
 const styleCss = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
-const mainJs = readFileSync(path.join(__dirname, '../src/main.js'), 'utf8');
+// main.js plus the feature and lib modules (the register lives in features/pos.js).
+const mainJs = appSource;
 const customersJs = readFileSync(path.join(__dirname, '../src/features/customers.js'), 'utf8');
 
 describe('10 Additional UX/UI Improvements Suite (/ux-designer)', () => {

@@ -51,7 +51,7 @@ describe('stock-group wiring', () => {
     expect(r).toContain("type === 'shippingIncome'");
   });
   it('POS minus-to-zero drops the price override', () => {
-    expect(fn('window.posUpdateQty = function')).toContain('delete posPriceOverrides[bookId]');
+    expect(fn('function posUpdateQty')).toContain('delete posPriceOverrides[bookId]');
   });
   it('CSV export skips consignment mirrors and keeps void status', () => {
     expect(fn('function exportAllToCSV')).toContain('if (h.consignmentLink) return;');

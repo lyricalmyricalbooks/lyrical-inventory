@@ -21,7 +21,6 @@ import {
   $,
   BOOKS,
   BOOK_LIST,
-  codeToSymbol,
   fetchStripePaymentsForReconcile,
   getAllAppliedIds,
   getReconStripeKey,
@@ -32,6 +31,7 @@ import {
   states,
   today,
 } from '../main.js';
+import { codeToSymbol } from './pos.js';
 import { parseMarkdownToHtml, renderOpenCall } from './opencall.js';
 import { withCampaignFooter, campaignFooterHtml } from '../lib/campaign-footer.js';
 import { confirmDialog } from '../lib/modal.js';
