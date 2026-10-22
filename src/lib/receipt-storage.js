@@ -266,6 +266,43 @@ export function isGratuityExpense(item) {
 }
 
 /**
+ * Expenses an author settlement paid back by taking them off its net, keyed by
+ * expense id: { settlementId, date }.
+ *
+ * Read from the settlement records, never written onto the expense row. That
+ * way undoing the settlement reopens them by itself, and a "Mark received"
+ * made on another device while this one was offline can't be silently
+ * overwritten when the settlement syncs: the two would otherwise be one row
+ * edited twice, and the merge keeps only one of them.
+ */
+export function expensesRepaidBySettlement(payouts) {
+  const out = new Map();
+  for (const p of payouts || []) {
+    if (!p || p.voided || !p.settlement) continue;
+    for (const link of p.settlement.expenses || []) {
+      if (link?.id != null && !out.has(String(link.id))) out.set(String(link.id), { settlementId: p.id, date: p.date });
+    }
+  }
+  return out;
+}
+
+/**
+ * A book's expenses as every screen should read them: one a standing author
+ * settlement paid back reads as received, on that settlement's date. Only
+ * those rows are copies; the rest are the stored objects, so write to
+ * `state.expenses`, never to this list.
+ */
+export function expensesWithSettlements(state) {
+  const list = state?.expenses || [];
+  const repaid = expensesRepaidBySettlement(state?.artistPayouts);
+  if (!repaid.size) return list;
+  return list.map(e => {
+    const r = e && !e.received && repaid.get(String(e.id));
+    return r ? { ...e, received: true, receivedDate: r.date, settlementId: r.settlementId } : e;
+  });
+}
+
+/**
  * Returns true if an expense does not require a digital store receipt (e.g. rent/lease or gratuity copies).
  */
 export function isReceiptExemptExpense(item) {

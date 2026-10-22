@@ -6,7 +6,7 @@
 // facing columns with one total each, so the subtraction happens once, in the
 // result bar, instead of a list that subtracts, subtotals and subtracts again.
 // Pure — no DOM, no app state — so the wording in both voices is testable.
-import { roundCents, fmt } from './money.js';
+import { roundCents, fmt, fmtD } from './money.js';
 import { escapeHtml } from './html.js';
 
 // Does this account run toward the publisher at all? Only then is there
@@ -37,6 +37,15 @@ export function settleUpModel(balance, { author = false } = {}) {
   if (b.royaltiesOwed > 0.005) owesArtist.push({
     key: 'royalties', label: author ? 'Your unpaid earnings' : 'Their unpaid earnings', amount: b.royaltiesOwed,
   });
+  // Receipts the author paid and is owed back: one line for the total, with
+  // each receipt itemised under it so the figure can be checked by eye.
+  const expenses = b.expenses || [];
+  if (b.expensesOwed > 0.005) owesArtist.push({
+    key: 'expenses',
+    label: author ? 'Expenses you paid, owed back to you' : 'Expenses they paid, owed back',
+    amount: b.expensesOwed,
+    items: expenses.map(e => ({ label: [fmtD(e.date) === '—' ? '' : fmtD(e.date), e.desc || 'Expense'].filter(Boolean).join(' · '), amount: e.amount })),
+  });
   const sum = rows => rows.reduce((t, r) => roundCents(t + r.amount), 0);
   const pubTotal = sum(owesPub), artistTotal = sum(owesArtist);
   const direction = b.direction || 'settled';
@@ -53,6 +62,8 @@ export function settleUpModel(balance, { author = false } = {}) {
     recordLabel: direction === 'to-publisher' ? 'Record payment received'
       : direction === 'to-artist' ? 'Record payment sent' : 'Record offset',
     overpaid: b.overpaid > 0.005,
+    expensesOwed: roundCents(b.expensesOwed || 0),
+    expensesLeftOut: b.expensesLeftOut || 0,
   };
 }
 
@@ -63,6 +74,9 @@ export function settleUpHeadline(model, cur) {
     label: 'Net balance',
     value: fmt(model.amount, cur),
     sub: model.direction === 'settled' ? 'the two sides cancel out'
+      : model.expensesOwed > 0.005 && model.direction === 'to-publisher'
+        ? `${model.result.toLowerCase()} · after ${model.right.rows.some(r => r.key === 'royalties') ? 'earnings and ' : ''}${fmt(model.expensesOwed, cur)} of expenses come off`
+      : model.expensesOwed > 0.005 ? `${model.result.toLowerCase()} · includes ${fmt(model.expensesOwed, cur)} of expenses owed back`
       : `${model.result.toLowerCase()} · after both sides are offset`,
   };
 }
@@ -70,16 +84,43 @@ export function settleUpHeadline(model, cur) {
 // Direction 1, "Receipt": the answer first, as one big figure, then the sum
 // laid out like a till slip — the author's side added (+), your side taken
 // away (−), a double rule, and the result (=). One primary action.
+// Itemised receipts under a line: the first few by name, the rest counted.
+// One receipt needs no amount of its own — the line already shows it.
+const SLIP_ITEMS_SHOWN = 3;
+function slipItems(items, cur) {
+  if (!items?.length) return '';
+  const shown = items.slice(0, SLIP_ITEMS_SHOWN).map(i =>
+    `<small class="ps-slip-detail">${escapeHtml(i.label)}${items.length > 1 ? ` · ${fmt(i.amount, cur)}` : ''}</small>`);
+  const more = items.length - SLIP_ITEMS_SHOWN;
+  if (more > 0) shown.push(`<small class="ps-slip-detail">and ${more} more — every one is listed in the statement</small>`);
+  return shown.join('');
+}
+
+// The side that is paying sits first so the slip reads top-down to its result.
+function slipSides(model) {
+  return model.direction === 'to-artist' ? [model.right, model.left] : [model.left, model.right];
+}
+
 function slipLines(model, cur) {
   const line = (sign, r) => {
     const detail = r.detail
       ? `<small class="ps-slip-detail">${escapeHtml(r.detail.replace('{gross}', fmt(model.heldGross, cur)).replace('{share}', fmt(model.heldShare, cur)))}</small>`
       : '';
-    return `<li class="ps-slip-line"><span class="ps-slip-label">${escapeHtml(r.label)}${detail}</span><span class="ps-slip-dots" aria-hidden="true"></span><span class="ps-slip-amt">${sign} ${fmt(r.amount, cur)}</span></li>`;
+    return `<li class="ps-slip-line"><span class="ps-slip-label">${escapeHtml(r.label)}${detail}${slipItems(r.items, cur)}</span><span class="ps-slip-dots" aria-hidden="true"></span><span class="ps-slip-amt">${sign} ${fmt(r.amount, cur)}</span></li>`;
   };
-  // The side that is paying sits first so the slip reads top-down to its result.
-  const [first, second] = model.direction === 'to-artist' ? [model.right, model.left] : [model.left, model.right];
+  const [first, second] = slipSides(model);
   return [...first.rows.map(r => line('+', r)), ...second.rows.map(r => line('−', r))].join('');
+}
+
+// The sum under the big figure, one term per slip line, so each number on the
+// slip can be found in it: "CA$555.48 − CA$312.55 − CA$28.17".
+function slipEquation(model, cur) {
+  const [first, second] = slipSides(model);
+  const terms = [
+    first.rows.map(r => fmt(r.amount, cur)).join(' + ') || fmt(0, cur),
+    ...second.rows.map(r => fmt(r.amount, cur)),
+  ];
+  return `${terms.join(' − ')}${model.direction === 'settled' ? ` = ${fmt(0, cur)}` : ''}`;
 }
 
 // opts: { bookId, cur, date, payLinkReady, canRecord, hasWork, reviewError, pendingSync, statement }
@@ -87,8 +128,7 @@ export function settleUpHtml(model, opts) {
   const { bookId, cur, date = '', payLinkReady = false, canRecord = false, hasWork = false, reviewError = false, pendingSync = 0, statement = '' } = opts;
   const id = escapeHtml(String(bookId));
   const tone = model.direction === 'settled' ? 'is-settled' : 'is-due';
-  const [big, small] = model.direction === 'to-artist' ? [model.right.total, model.left.total] : [model.left.total, model.right.total];
-  const equation = `${fmt(big, cur)} − ${fmt(small, cur)}${model.direction === 'settled' ? ` = ${fmt(0, cur)}` : ''}`;
+  const equation = slipEquation(model, cur);
   const syncNote = pendingSync > 0
     ? `<p class="ps-payout-preview is-warn">${pendingSync} change${pendingSync === 1 ? '' : 's'} on this device ${pendingSync === 1 ? "hasn't" : "haven't"} synced yet. Let them sync before agreeing the amount.</p>`
     : '<p class="ps-settle-note">Based on the records on this device. If another device has new sales or payments, let it sync first.</p>';
@@ -96,6 +136,10 @@ export function settleUpHtml(model, opts) {
     ? '<p class="ps-settle-note">This counts an earlier overpayment as money to recover. If you agreed to leave it as credit against future earnings, use the payout form instead.</p>'
     : '';
   const record = canRecord && hasWork && !reviewError;
+  const leftOut = model.expensesLeftOut;
+  const leftOutNote = leftOut > 0
+    ? `<p class="ps-settle-note">${leftOut} unpaid expense${leftOut === 1 ? ' is' : 's are'} in another currency with no exchange rate to this book's, so ${leftOut === 1 ? "it isn't" : "they aren't"} in this sum. ${model.author ? 'Your publisher pays' : 'Pay'} ${leftOut === 1 ? 'it' : 'them'} back separately.</p>`
+    : '';
   const stripeNote = payLinkReady && !model.author
     ? `<p class="ps-settle-note">Their app already shows a Stripe button for exactly ${fmt(model.amount, cur)}. If they pay with it, this records itself.</p>`
     : '';
@@ -113,6 +157,7 @@ export function settleUpHtml(model, opts) {
     </ul>
     ${syncNote}
     ${overpaidNote}
+    ${leftOutNote}
     ${stripeNote}
     ${reviewError && canRecord ? '<p class="ps-payout-preview is-warn">An earlier settlement needs review. Check the payment history below and undo the wrong one before recording another.</p>' : ''}
     <div class="ps-payout-actions ps-receipt-actions">
@@ -127,7 +172,7 @@ export function settleUpHtml(model, opts) {
       <textarea id="artist-settlement-text-${id}" rows="11" readonly>${escapeHtml(statement)}</textarea>
     </details>
     ${record ? `<div id="artist-settlement-form-${id}" class="ps-payout-form ps-settle-form" hidden>
-      <p class="ps-settle-note">Records the full ${fmt(model.amount, cur)} shown above and clears both sides. Only save once the payment has actually ${model.direction === 'to-publisher' ? 'arrived' : model.direction === 'to-artist' ? 'been sent' : 'been agreed'}.</p>
+      <p class="ps-settle-note">Records the full ${fmt(model.amount, cur)} shown above and clears both sides${model.expensesOwed > 0.005 ? `, marking the ${fmt(model.expensesOwed, cur)} of expenses as paid back` : ''}. Only save once the payment has actually ${model.direction === 'to-publisher' ? 'arrived' : model.direction === 'to-artist' ? 'been sent' : 'been agreed'}.</p>
       <div class="ps-payout-fields">
         <div class="form-group"><label for="as-date-${id}">Payment date</label><input id="as-date-${id}" type="date" value="${escapeHtml(date)}"></div>
         <div class="form-group"><label for="as-method-${id}">Payment method (optional)</label><input id="as-method-${id}" placeholder="e-Transfer, cash…"></div>
@@ -152,9 +197,13 @@ export function settleUpHtml(model, opts) {
 export function settlementPayoutSummary(balance, credit, money, { author = false } = {}) {
   const b = balance || {};
   const cashToArtist = b.direction === 'to-artist' ? roundCents(b.amount || 0) : 0;
-  const offset = Math.max(0, roundCents((b.royaltiesOwed || 0) - cashToArtist));
+  const expenses = roundCents(b.expensesOwed || 0);
+  // Everything the publisher owed — earnings and expenses — that didn't go out
+  // as cash was taken off what the author owed instead.
+  const offset = Math.max(0, roundCents((b.royaltiesOwed || 0) + expenses - cashToArtist));
   const parts = [];
   if (b.heldShare > 0.005) parts.push(author ? `You kept ${money(b.heldShare)} of the sales money you collected` : `They kept ${money(b.heldShare)} of the sales money they collected`);
+  if (expenses > 0.005) parts.push(author ? `${money(expenses)} of expenses you paid was paid back` : `${money(expenses)} of expenses they paid was paid back`);
   if (offset > 0.005) parts.push(author ? `${money(offset)} came off what you owed the publisher` : `${money(offset)} came off what they owed you`);
   if (cashToArtist > 0.005) parts.push(author ? `the publisher sent you ${money(cashToArtist)}` : `you sent them ${money(cashToArtist)}`);
   if (b.overpaid > 0.005) parts.push(`${money(b.overpaid)} of an earlier overpayment was recovered`);

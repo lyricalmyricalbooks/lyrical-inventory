@@ -8,7 +8,7 @@ import { refundsToRaise } from '../src/lib/stripe-sale-autorecord.js';
 // main.js first, then the feature and lib modules (the QR sheet now lives in
 // src/features/fair-kit.js).
 const main = appSource;
-const fn = (name) => { const i = main.indexOf(name); return main.slice(i, i + 2600); };
+const fn = (name) => { const i = main.indexOf(name); return main.slice(i, i + 3200); };
 
 describe('inventoryBreakdown with disposals', () => {
   it('does not take publisher write-offs out of the consignment count', () => {

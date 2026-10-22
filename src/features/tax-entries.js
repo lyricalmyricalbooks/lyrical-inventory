@@ -54,6 +54,7 @@ import { csvCell, toCsv } from '../lib/csv.js';
 import { downloadCsv } from '../lib/download.js';
 import { payoutNetted } from '../lib/earnings.js';
 import { canonicalExpenseCategory } from '../lib/expense-categories.js';
+import { expensesRepaidBySettlement } from '../lib/receipt-storage.js';
 import { escapeHtml } from '../lib/html.js';
 import { closeM, confirmDialog, openM, promptDialog } from '../lib/modal.js';
 import { fmt, getBookCurrencyCode, getSym, roundCents, setSelectCurrency } from '../lib/money.js';
@@ -224,6 +225,9 @@ async function removeLedgerEntry(type, bid, id) {
   }
   if (type === 'sale' && (states[bid]?.hist || []).find(h => String(h.id ?? h.num) === String(id))?.artistSettlementId) {
     showToast('Undo the author settlement before deleting this sale.', 'warn'); return;
+  }
+  if (type === 'bookExpense' && expensesRepaidBySettlement(states[bid]?.artistPayouts).has(String(id))) {
+    showToast('Undo the author settlement that paid this expense back before deleting it.', 'warn'); return;
   }
   if (type === 'sale' && (states[bid]?.hist || []).some(h => String(h.id ?? h.num) === String(id) && h.webOrderId)) {
     showToast(WEBSITE_SALE_LOCKED, 'warn', 5000); return;
@@ -1143,14 +1147,14 @@ function downloadFullTaxSeasonExport() {
 
   // Actual settlement transfers are separate from royalty credits and sales.
   csv += '\n--- AUTHOR SETTLEMENT CASH (NOT ADDITIONAL SALES OR EXPENSES) ---\n';
-  csv += 'Date,Book,Currency,Money Held,Author Cut Kept,Remaining Earnings,Other Debt Repaid,Overpayment Recovered,Cash Received,Cash Sent,Method\n';
+  csv += 'Date,Book,Currency,Money Held,Author Cut Kept,Remaining Earnings,Expenses Repaid,Other Debt Repaid,Overpayment Recovered,Cash Received,Cash Sent,Method\n';
   BOOK_LIST.forEach(book => {
     if (isTestBook(book) || isTestBookId(book.id)) return;
     (states[book.id]?.artistPayouts || []).forEach(p => {
       if (!p.settlement || p.voided || (!isAllTime && !p.date?.startsWith(year))) return;
       const b = p.settlement.balance;
       csv += [p.date, esc(book.title), esc(p.settlement.cur), b.heldGross, b.heldShare, b.royaltiesOwed,
-        b.otherDebt, b.overpaid, b.direction === 'to-publisher' ? b.amount : 0,
+        b.expensesOwed || 0, b.otherDebt, b.overpaid, b.direction === 'to-publisher' ? b.amount : 0,
         b.direction === 'to-artist' ? b.amount : 0, esc(p.method || '')].join(',') + '\n';
     });
   });

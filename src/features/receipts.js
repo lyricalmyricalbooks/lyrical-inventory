@@ -93,6 +93,7 @@ import {
   vendorHabitIndex,
 } from '../lib/receipt-scan-checks.js';
 import { expenseLedgerTotals, expenseTotalsCopy, totalsByCurrency } from '../lib/expense-totals.js';
+import { expensesInSettleUp } from '../lib/artist-settlement.js';
 import { closeM, confirmDialog, openM } from '../lib/modal.js';
 import { toCsv } from '../lib/csv.js';
 import { downloadBlob } from '../lib/download.js';
@@ -117,6 +118,7 @@ import {
 import {
   cloudReceiptRefs,
   expenseMissingReceipt,
+  expensesWithSettlements,
   externalLinkRefs,
   isCloudReceipt,
   isExternalLink,
@@ -7897,7 +7899,7 @@ function renderExpenses() {
   // on a housekeeping call to have a receipt read.
   if (TAX_CENTER?.settings?.geminiKey) _warmGeminiModelCache(TAX_CENTER.settings.geminiKey);
   const s = getState(), book = getBook(), cur = book.currency;
-  const expenses = s.expenses || [];
+  const expenses = expensesWithSettlements(s);
   const body = $('exp-body');
   if (!body) return;
   const pbExp = window.authorSubmissions[activeBook]?.expenses || {};
@@ -7910,7 +7912,10 @@ function renderExpenses() {
 
   // Selection can only ever contain currently-eligible ids; drop anything
   // that got received/voided elsewhere since the last render.
-  const eligibleIds = new Set(combined.filter(e => !e.received && !e.pendingAuth && !isGratuityExpense(e)).map(e => e.id));
+  // Ones in an open Settle up come off that one net payment, so asking for
+  // them on their own as well would get them paid back twice.
+  const inSettle = expensesInSettleUp(book, s).ids;
+  const eligibleIds = new Set(combined.filter(e => !e.received && !e.pendingAuth && !isGratuityExpense(e) && !inSettle.has(String(e.id))).map(e => e.id));
   for (const id of _expReimburseSelection) if (!eligibleIds.has(id)) _expReimburseSelection.delete(id);
 
   // The gap an accountant asks about: money out, nothing filed against it.
@@ -7977,7 +7982,7 @@ function renderExpenses() {
     const statusCell = isGratuity
       ? '<span class="pill gray" style="font-size:var(--text-2xs);" title="Gifted-copy cost — publisher absorbed, not reimbursed to author">Publisher expense</span>'
       : e.received
-        ? '<span class="pill green" style="font-size:var(--text-2xs);">✓ Received</span>'
+        ? `<span class="pill green" style="font-size:var(--text-2xs);"${e.settlementId ? ` title="Paid back in the author settlement of ${escapeHtml(fmtD(e.receivedDate))}"` : ''}>✓ Received</span>`
         : '<span style="font-size:var(--text-xs);color:var(--text3);">Pending</span>';
     const actionCell = (!e.received && !isAuthor() && !isGratuity)
       ? `<button class="edit-btn" onclick="voidExpense(${e.id})" title="Remove" aria-label="Remove" style="opacity:1;color:var(--red);">✕</button>` : '';
