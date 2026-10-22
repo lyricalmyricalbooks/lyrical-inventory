@@ -8,6 +8,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { loadApp, makeBook } from './helpers/load-app.js';
 import { MAX_RECEIPT_PICKS, mergeReceiptPicks, receiptLinkLabel, removeReceiptPick } from '../src/lib/receipt-picks.js';
 import { createSandboxBackend } from '../src/lib/test-profile.js';
+import { applyReceiptAddition, receiptAdditionApplied, receiptAdditionPayload, receiptRefName, removeExpenseReceipt } from '../src/lib/expense-receipts.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BOOK = 'harbour';
@@ -39,6 +40,31 @@ describe('receipt picks', () => {
   it('numbers links only when there are several', () => {
     expect(receiptLinkLabel(0, 1)).toBe('View');
     expect(receiptLinkLabel(1, 3)).toBe('View 2');
+  });
+});
+
+describe('receipts on a logged expense', () => {
+  it('names a receipt by its file, not its storage address', () => {
+    expect(receiptRefName('local://Harbour/2026/Other/2026-03-01_invoice.pdf')).toBe('2026-03-01_invoice.pdf');
+    expect(receiptRefName('https://firebasestorage.googleapis.com/v0/b/x/o/harbour%2F1761140000000_slip.jpg?alt=media')).toBe('slip.jpg');
+  });
+
+  it('folds an artist request into the expense once, skipping files it already has', () => {
+    const expenses = [{ id: 3, desc: 'Fair', receipt: 'a', receiptFiles: ['a'] }];
+    const raw = receiptAdditionPayload(expenses[0], ['a', 'b']);
+    expect(raw.amount).toBe(0);
+    const out = applyReceiptAddition(expenses, raw, 'expenses:k');
+    expect(out.added).toBe(1);
+    expect(expenses[0].receiptFiles).toEqual(['a', 'b']);
+    expect(receiptAdditionApplied(expenses, 'expenses:k')).toBe(true);
+    expect(applyReceiptAddition([], raw, 'x').reason).toBe('missing');
+  });
+
+  it('removes only the named receipt and keeps the single field in step', () => {
+    const e = { receipt: 'a', receiptFiles: ['a', 'b'] };
+    expect(removeExpenseReceipt(e, 'a')).toBe(true);
+    expect(e).toMatchObject({ receipt: 'b', receiptFiles: ['b'] });
+    expect(removeExpenseReceipt(e, 'zzz')).toBe(false);
   });
 });
 
@@ -118,33 +144,73 @@ describe('Several receipts on one expense (publisher)', () => {
     expect(document.querySelectorAll('#exp-file-list .dz-file')).toHaveLength(0);
   });
 
-  it('still shows an old single-receipt expense', async () => {
+  it('still shows an old single-receipt expense, with a way to manage it', async () => {
     await app.resetBook(BOOK, { expenses: [{ id: 1, desc: 'Old', cat: 'Other', amount: 5, currency: 'CAD', date: '2026-01-02', receipt: 'https://example.com/r.pdf' }] });
     win.renderExpenses();
     const row = document.querySelector('#exp-body tr');
-    expect(row.querySelector('a[href="https://example.com/r.pdf"]').textContent).toBe('View');
-    expect(row.querySelector('.exp-add-receipt')).not.toBeNull();
+    const link = row.querySelector('a[href="https://example.com/r.pdf"]');
+    expect(link.textContent).toContain('View');
+    expect(link.title).toBe('r.pdf');
+    expect(row.querySelector('.exp-add-receipt').textContent).toBe('Manage');
   });
+
+  function interceptPicker() {
+    const realCreate = document.createElement.bind(document);
+    const box = {};
+    document.createElement = (tag) => {
+      const el = realCreate(tag);
+      if (tag === 'input') { box.picker = el; el.click = () => {}; document.createElement = realCreate; }
+      return el;
+    };
+    return box;
+  }
 
   it('attaches more receipts to an expense already in the ledger', async () => {
     await app.resetBook(BOOK, { expenses: [{ id: 7, desc: 'Fair table', cat: 'Other', amount: 40, currency: 'CAD', date: '2026-02-03', receipt: 'https://example.com/one.pdf' }] });
     win.renderExpenses();
-    const realCreate = document.createElement.bind(document);
-    let picker;
-    document.createElement = (tag) => {
-      const el = realCreate(tag);
-      if (tag === 'input') { picker = el; el.click = () => {}; }
-      return el;
-    };
-    try { await win.addReceiptsToExpense(7); } finally { document.createElement = realCreate; }
-    expect(picker.multiple).toBe(true);
-    Object.defineProperty(picker, 'files', { value: [new win.File(['b'], 'two.jpg'), new win.File(['c'], 'three.jpg')] });
-    await picker.onchange();
+    const box = interceptPicker();
+    const done = win.addReceiptsToExpense(7);
+    expect(box.picker.multiple).toBe(true);
+    Object.defineProperty(box.picker, 'files', { value: [new win.File(['b'], 'two.jpg'), new win.File(['c'], 'three.jpg')] });
+    box.picker.onchange();
+    await done;
     await app.settle();
     const exp = app.main.states[BOOK].expenses[0];
     expect(exp.receiptFiles[0]).toBe('https://example.com/one.pdf');
     expect(exp.receiptFiles).toHaveLength(3);
     expect(exp.receipt).toBe('https://example.com/one.pdf');
     expect(app.cloud.lastSave(BOOK).state.expenses[0].receiptFiles).toHaveLength(3);
+  });
+
+  it('takes one wrong receipt off, keeping the others, after asking', async () => {
+    await app.resetBook(BOOK, { expenses: [{ id: 9, desc: 'Freight', cat: 'Other', amount: 12, currency: 'CAD', date: '2026-03-01', receipt: 'https://example.com/a.jpg', receiptFiles: ['https://example.com/a.jpg', 'https://example.com/wrong.jpg'] }] });
+    win.renderExpenses();
+    win.openExpenseReceipts(9);
+    expect(document.querySelectorAll('#exp-receipts-list .exp-receipt-item')).toHaveLength(2);
+    const removing = win.removeReceiptFromExpense(1);
+    await app.settle();
+    app.answerConfirm(true);
+    await removing;
+    await app.settle();
+    const exp = app.main.states[BOOK].expenses[0];
+    expect(exp.receiptFiles).toEqual(['https://example.com/a.jpg']);
+    expect(exp.receipt).toBe('https://example.com/a.jpg');
+    expect(document.querySelectorAll('#exp-receipts-list .exp-receipt-item')).toHaveLength(1);
+    win.closeM('exp-receipts');
+  });
+
+  it('turns an artist receipt request into receipts on the expense when approved', async () => {
+    await app.resetBook(BOOK, { expenses: [{ id: 11, desc: 'Booth', cat: 'Other', amount: 30, currency: 'CAD', date: '2026-04-01', receipt: 'https://example.com/one.pdf' }] });
+    const payload = receiptAdditionPayload({ id: 11, desc: 'Booth', currency: 'CAD' }, ['https://example.com/forgot.jpg']);
+    win.authorSubmissions[BOOK] = { expenses: { sub1: { data: JSON.stringify(payload) } } };
+    win.renderExpenses();
+    const pending = document.querySelector('#exp-body tr.is-awaiting');
+    expect(pending.textContent).toContain('Adds receipts');
+    await win.approveSubmission('expenses', 'sub1');
+    await app.settle();
+    const exps = app.main.states[BOOK].expenses;
+    expect(exps).toHaveLength(1);
+    expect(exps[0].receiptFiles).toEqual(['https://example.com/one.pdf', 'https://example.com/forgot.jpg']);
+    win.authorSubmissions[BOOK] = {};
   });
 });
