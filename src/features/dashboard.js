@@ -1010,9 +1010,18 @@ function getPayoutRequestHtml(bookId, stats, cur, owed) {
 function getPayoutHistoryHtml(stats, bookId, cur) {
   const payouts = stats.payouts || [];
   const issues = artistSettlementIssues(states[bookId] || {});
-  const undone = (states[bookId]?.artistPayouts || []).filter(p => p.voided && p.settlement).map(p =>
-    `<div class="ps-payout-row"><span class="ps-payout-row-main"><strong>Undone author settlement</strong><span class="ps-payout-row-meta">${fmtD(p.date)} · Original amount ${fmt(p.settlement.balance.amount, p.settlement.cur)} · balances recalculated</span></span></div>`
-  ).join('');
+
+  // ⚡ Bolt Optimization: Replace chained .filter().map().join() with a single imperative loop to prevent intermediate array allocations
+  let undone = '';
+  const _artistPayouts = states[bookId]?.artistPayouts;
+  if (_artistPayouts) {
+    for (const p of _artistPayouts) {
+      if (p.voided && p.settlement) {
+        undone += `<div class="ps-payout-row"><span class="ps-payout-row-main"><strong>Undone author settlement</strong><span class="ps-payout-row-meta">${fmtD(p.date)} · Original amount ${fmt(p.settlement.balance.amount, p.settlement.cur)} · balances recalculated</span></span></div>`;
+      }
+    }
+  }
+
   if (!payouts.length) {
     return `<div class="ps-payout-empty">
       <span class="ps-payout-empty-icon" aria-hidden="true">💸</span>
