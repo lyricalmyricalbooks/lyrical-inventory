@@ -104,6 +104,15 @@ it. Derive the state with `:has()` where the figure already carries a class
 rules so critical comes *after* active, or a tile that is both owed-money and
 off-ledger paints amber.
 
+### An odd number of tiles — let the lead one span, never leave an orphan
+
+`repeat(auto-fit, minmax(…))` wraps three tiles into a row of two and a lone third with a
+hole beside it — the carrier tiles on Shipping did exactly that in the desktop column. When a
+group has a known, small number of tiles and one of them leads, lay it out by the group's own
+width with a named container query: one column when narrow, the lead tile spanning
+(`grid-column: 1 / -1`) over the rest side by side, then all in one row once there is room.
+`.ship-carrier-grid` is the specimen; `tests/ship-carrier-tile-layout.test.js` pins it.
+
 ### A row that needs you is flagged, never faded
 
 Opacity is how this app says *spent* — `.tbl tbody tr.voided td{opacity:.35}`. A row

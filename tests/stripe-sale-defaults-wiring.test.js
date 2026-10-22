@@ -301,9 +301,32 @@ it('leaves the one-time alert alone when Sync finds a payment that needs her', a
 
 it('treats a register row in the same currency within 10% as possibly the same sale', () => {
   const states = { b1: { hist: [{ date: '2026-10-08', payment: { currency: 'EUR', amount: 37.42 } }] } };
-  const api = buildHarness({ names: ['_reconLikelyAlreadyLogged'], deps: { states, normalizeCurrencyCode: currencyDeps.normalizeCurrencyCode }, returns: '{ _reconLikelyAlreadyLogged }' });
+  const api = buildHarness({ names: ['_reconLikelyAlreadyLogged', '_reconLoggedPayments'], deps: { states, normalizeCurrencyCode: currencyDeps.normalizeCurrencyCode }, returns: '{ _reconLikelyAlreadyLogged }' });
   const pay = { ...payment, created: Date.parse('2026-10-08T15:00:00Z') };
   expect(api._reconLikelyAlreadyLogged(pay, { near: true })).toBe(true);
   expect(api._reconLikelyAlreadyLogged(pay)).toBe(false);
   expect(api._reconLikelyAlreadyLogged({ ...pay, amount: 55 }, { near: true })).toBe(false);
+});
+
+it('answers the same from a prebuilt list of logged payments as from a fresh scan', () => {
+  const states = {
+    b1: { hist: [{ date: '2026-10-08', payment: { currency: 'eur', amount: 40 } }, { date: '2026-10-08', voided: true, payment: { currency: 'EUR', amount: 12 } }] },
+    b2: { hist: [{ date: '2026-09-01', payment: { currency: 'CAD', amount: 25 } }, { date: '2026-10-08', gratuity: true, payment: { currency: 'CAD', amount: 9 } }] },
+  };
+  const api = buildHarness({ names: ['_reconLikelyAlreadyLogged', '_reconLoggedPayments'], deps: { states, normalizeCurrencyCode: currencyDeps.normalizeCurrencyCode }, returns: '{ _reconLikelyAlreadyLogged, _reconLoggedPayments }' });
+  const logged = api._reconLoggedPayments();
+  const created = Date.parse('2026-10-08T15:00:00Z');
+  const cases = [
+    { ...payment, currency: 'EUR', amount: 40, created },
+    { ...payment, currency: 'EUR', amount: 12, created },
+    { ...payment, currency: 'CAD', amount: 25, created },
+    { ...payment, currency: 'CAD', amount: 9, created },
+    { ...payment, currency: 'USD', amount: 40, created },
+  ];
+  for (const pay of cases) {
+    for (const near of [false, true]) {
+      expect(api._reconLikelyAlreadyLogged(pay, { near, logged })).toBe(api._reconLikelyAlreadyLogged(pay, { near }));
+    }
+  }
+  expect(cases.map(pay => api._reconLikelyAlreadyLogged(pay, { logged }))).toEqual([true, false, false, false, false]);
 });
