@@ -929,6 +929,18 @@ import {
   printInventoryValuationReport,
 } from './features/inventory-valuation.js';
 import {
+  _posSlugId,
+  renderPosBookModalQR,
+  openPosBookModal,
+  closePosBookModal,
+  generatePosBookStripeLink,
+  copyPosBookLink,
+  downloadPosBookQR,
+  savePosBook,
+  removeCurrentPosBook,
+  removePosBook,
+} from './features/pos-books.js';
+import {
   openReviewInbox,
   renderReviewInbox,
   reviewInboxIsOpen,
@@ -1213,8 +1225,7 @@ let deletedDefaultIds = [];
 // and the printable payment-QR sheet. Keyed by id. Each carries an isolated
 // `sold`/`revenue` tally updated at checkout. Persisted in the catalog doc
 // under `_posExtra` so it syncs across devices and survives offline.
-let posExtraBooks = {};
-let editingPosBookId = null;
+export let posExtraBooks = {};
 
 export function isTestBook(b) {
   if (!b) return false;
@@ -1384,7 +1395,7 @@ function applyStoredCatalog(stored) {
   return Object.keys(BOOKS).length > Object.keys(storedBooks).length;
 }
 
-async function syncCatalog() {
+export async function syncCatalog() {
   await loadCatalog();
   await loadPaymentLinks();
   await loadProductionCosts();
@@ -2782,7 +2793,7 @@ window.renderAllQRCodes = renderAllQRCodes;
 // Copy text to the clipboard, falling back to a hidden textarea and the legacy
 // copy command when the async clipboard write is refused. Resolves once
 // either path has run; the copy-link buttons toast on that.
-function copyTextWithFallback(text) {
+export function copyTextWithFallback(text) {
   return navigator.clipboard.writeText(text).catch(() => legacyCopy(text));
 }
 
@@ -20198,7 +20209,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ── EVENT POS ──
-let posCart = {};
+export let posCart = {};
 // Per-book custom unit price (in the book's native currency), keyed by book id.
 // Set via the "Adjust price" control on a cart line. Lets the seller discount
 // or hand-price a title at the table. Cleared when the item is removed or the
@@ -20557,7 +20568,7 @@ function posRenderOversellNote(hostId, summary) {
   host.innerHTML = `<span class="pos-oversell-ico" aria-hidden="true">⚠</span><span><strong>More copies than you have on hand.</strong> ${escapeHtml(summary.message)} ${escapeHtml(summary.note)}</span>`;
 }
 
-function renderPOS() {
+export function renderPOS() {
   const grid = $('pos-grid');
   if (!grid) return;
 
@@ -21601,153 +21612,6 @@ window.posPrintReceipt = function () {
   win.document.close();
   win.focus();
   win.print();
-};
-
-// ─────────────────────────────────────────────────────────────────────────
-// POS-ONLY BOOKS — add / edit / remove + instant Stripe link & QR
-// These books live entirely in posExtraBooks (persisted in the catalog doc
-// under _posExtra). They surface only at the POS, the printable sales tracker,
-// and the printable QR sheet — never in the catalog, inventory, ledger, or
-// financials. Each can mint a Stripe Payment Link (and matching QR) on the spot.
-// ─────────────────────────────────────────────────────────────────────────
-// Build a collision-free, URL-safe id, prefixed so it can never shadow a
-// catalog book in posResolveBook (which checks BOOKS first).
-function _posSlugId(title) {
-  let base = 'pos-' + ((title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'book');
-  let id = base, n = 2;
-  while (BOOKS[id] || (posExtraBooks[id] && id !== editingPosBookId)) { id = base + '-' + (n++); }
-  return id;
-}
-
-window.openPosBookModal = function (id) {
-  editingPosBookId = id || null;
-  const book = id ? posExtraBooks[id] : null;
-  $('pb-modal-title').textContent = book ? `Edit POS-only book · ${book.title}` : 'Add POS-only book';
-  $('pb-save-btn').textContent = book ? 'Save changes' : 'Add to POS';
-  $('pb-title').value = book?.title || '';
-  $('pb-author').value = book?.author || '';
-  $('pb-price').value = book?.listPrice ?? 40;
-  setSelectCurrency($('pb-cur'), book?.currency || '€');
-  $('pb-accent').value = book?.accent || '#c8913a';
-  $('pb-paylink').value = book?.stripeLink || book?.paymentLink || '';
-  const removeBtn = $('pb-remove-btn');
-  if (removeBtn) removeBtn.style.display = book ? '' : 'none';
-  renderPosBookModalQR();
-  updateModalAccentPreview($('pb-accent'));
-  openM('pos-book');
-};
-
-window.closePosBookModal = function () { closeM('pos-book'); editingPosBookId = null; };
-
-function renderPosBookModalQR() {
-  const wrap = $('pb-qr-canvas');
-  if (!wrap) return;
-  const url = ($('pb-paylink')?.value || '').trim();
-  const note = $('pb-qr-note');
-  wrap.innerHTML = '';
-  if (!url) {
-    wrap.innerHTML = '<div style="color:var(--text3);font-size:var(--text-xs);text-align:center;padding:1rem;">Add or generate a payment link to preview its QR.</div>';
-    if (note) note.textContent = '';
-    return;
-  }
-  if (typeof QRCode !== 'undefined') {
-    new QRCode(wrap, { text: url, width: 180, height: 180, colorDark: '#000', colorLight: '#fff', correctLevel: QRCode.CorrectLevel.H });
-    if (note) note.textContent = 'Customers scan this to pay via Stripe.';
-  } else {
-    wrap.innerHTML = '<div style="color:var(--text3);font-size:var(--text-xs);">QR library not ready.</div>';
-  }
-}
-window.renderPosBookModalQR = renderPosBookModalQR;
-
-window.generatePosBookStripeLink = async function () {
-  const btn = $('pb-gen-stripe-btn');
-  const title = ($('pb-title')?.value || '').trim();
-  const listPrice = parseFloat($('pb-price')?.value) || 0;
-  const currency = $('pb-cur')?.value || '€';
-  if (!title) { showToast('Set a title first', 'warn'); return; }
-  if (!(listPrice > 0)) { showToast('Set a price first', 'warn'); return; }
-  const id = editingPosBookId || _posSlugId(title);
-  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Creating…'; }
-  try {
-    const url = await createStripePaymentLinkForBook({ id, title, listPrice, currency, isbn: '' });
-    if ($('pb-paylink')) $('pb-paylink').value = url;
-    renderPosBookModalQR();
-    showToast('✓ Stripe link & QR ready — Save to keep it');
-  } catch (e) {
-    showToast('Stripe: ' + (e.message || e), 'err', 6000);
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '⚡ Generate Stripe link'; }
-  }
-};
-
-window.copyPosBookLink = function () {
-  const url = ($('pb-paylink')?.value || '').trim();
-  if (!url) { showToast('No link to copy', 'warn'); return; }
-  copyTextWithFallback(url).then(() => showToast('Link copied'));
-};
-
-window.downloadPosBookQR = function () {
-  const canvas = document.querySelector('#pb-qr-canvas canvas');
-  if (!canvas) { showToast('Generate or add a link first', 'warn'); return; }
-  const a = document.createElement('a');
-  a.href = canvas.toDataURL('image/png');
-  a.download = `${editingPosBookId || _posSlugId($('pb-title')?.value || 'book')}-payment-qr.png`;
-  a.click();
-  showToast('Downloading QR Code image');
-};
-
-window.savePosBook = async function () {
-  const title = ($('pb-title')?.value || '').trim();
-  if (!title) { showToast('Title is required', 'warn'); $('pb-title')?.focus(); return; }
-  const listPrice = parseFloat($('pb-price')?.value) || 0;
-  const currency = $('pb-cur')?.value || '€';
-  const accent = $('pb-accent')?.value || '#c8913a';
-  const link = ($('pb-paylink')?.value || '').trim();
-  const id = editingPosBookId || _posSlugId(title);
-
-  await syncCatalog();
-
-  const existing = posExtraBooks[id] || {};
-  posExtraBooks[id] = {
-    ...existing,
-    id,
-    title,
-    author: ($('pb-author')?.value || '').trim(),
-    isbn: existing.isbn || '—',
-    listPrice,
-    currency,
-    accent,
-    accentBg: hexToRgba(accent, 0.1),
-    stripeLink: link,
-    paymentLink: existing.paymentLink || '',
-    maxPrint: 999999,
-    threshold: 0,
-    posOnly: true,
-    sold: existing.sold || 0,
-    revenue: existing.revenue || 0,
-  };
-  try { await saveCatalogWithDeletions(); } catch (e) { console.warn('POS-only save failed', e); }
-  showToast(editingPosBookId ? '✓ POS-only book updated' : '✓ POS-only book added');
-  editingPosBookId = null;
-  closeM('pos-book');
-  renderPOS();
-};
-
-window.removeCurrentPosBook = function () { if (editingPosBookId) window.removePosBook(editingPosBookId); };
-
-window.removePosBook = async function (id) {
-  const book = posExtraBooks[id];
-  if (!book) return;
-  if (!(await confirmDialog(`Remove POS-only book "${book.title}"?\n\nIt will disappear from the POS, the sales tracker, and the QR sheet. Its isolated sales tally is discarded.`, { danger: true, okLabel: 'Remove' }))) return;
-
-  await syncCatalog();
-
-  delete posExtraBooks[id];
-  delete posCart[id];
-  try { await saveCatalogWithDeletions(); } catch (e) { console.warn('POS-only remove failed', e); }
-  if (editingPosBookId === id) { editingPosBookId = null; closeM('pos-book'); }
-  showToast('POS-only book removed');
-  renderPOS();
 };
 
 
@@ -25033,7 +24897,7 @@ function reconcileUndo(idSafe) {
 // book_id/sku/isbn metadata so future direct sales self-identify in the
 // reconcile worklist above (no manual book-picking needed next time).
 // ─────────────────────────────────────────────────────────────────────────
-async function createStripePaymentLinkForBook(book) {
+export async function createStripePaymentLinkForBook(book) {
   const key = getReconStripeKey();
   if (!key) throw new Error('Stripe key not set — add one in Invoice Settings, the Tax Centre, or the Payments tab.');
   if (!/^(rk|sk)_/.test(key)) throw new Error("That doesn't look like a Stripe restricted/secret key (expected rk_… or sk_…).");
@@ -25235,6 +25099,18 @@ Object.assign(window, {
   printSalesTracker,
   printPaymentQRCodes,
   printFairKit,
+});
+// Declared in features/pos-books.js, likewise free of import-time side
+// effects, so the register-only book dialog's handlers are registered here.
+Object.assign(window, {
+  openPosBookModal,
+  closePosBookModal,
+  generatePosBookStripeLink,
+  copyPosBookLink,
+  downloadPosBookQR,
+  savePosBook,
+  removeCurrentPosBook,
+  removePosBook,
 });
 
 // ── APP UPDATE NOTIFICATION FOR PUBLISHER ──
@@ -25893,7 +25769,7 @@ window.IS_PUBLISHER = false;
 window.isPublisherSession = () => window.IS_PUBLISHER;
 window.isAuthor = () => IS_AUTHOR_MODE || (window.IS_PUBLISHER && activeBook && activeBook !== 'all' && AUTHOR_VIEW_BY_BOOK[activeBook]);
 
-function updateModalAccentPreview(inputEl) {
+export function updateModalAccentPreview(inputEl) {
   if (!inputEl) return;
   const color = inputEl.value;
   const colorBg = hexToRgba(color, 0.1);
