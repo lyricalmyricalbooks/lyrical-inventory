@@ -3601,7 +3601,7 @@
               <div class="tc-service-badge badge-stripe" aria-hidden="true">💳</div>
               <div class="tc-service-meta">
                 <strong class="tc-service-title">Stripe Processing Fees</strong>
-                <div class="tc-service-desc">Fetch annual balance transaction processing fees straight into your ledger.</div>
+                <div class="tc-service-desc">What Stripe took from your sales each year, month by month, and whether your ledger has it.</div>
               </div>
             </div>
             <div class="tc-service-header-right">
@@ -3618,17 +3618,16 @@
               </div>
             </div>
             <div class="tc-form-actions-row">
-              <button class="btn gold" onclick="fetchStripeFeesByYear()" id="stripe-fees-btn">Fetch Stripe Fees</button>
+              <button class="btn gold" onclick="fetchStripeFeesByYear()" id="stripe-fees-btn">Fetch Stripe fees</button>
             </div>
-            <div id="stripe-fees-status" class="tc-status-msg"></div>
-            <div id="stripe-fees-reconcile-wrap" style="display:none;"></div>
+            <div id="stripe-fees-status" class="tc-status-msg" role="status" aria-live="polite"></div>
             <div id="stripe-fees-results-wrap" style="display:none;"></div>
+            <div id="stripe-fees-reconcile-wrap" style="display:none;"></div>
             <div class="tc-form-actions-row">
-              <select id="stripe-fees-year" class="tc-form-select" style="display:none;width:auto;"><option value="all">All years</option></select>
               <div class="tc-form-actions-buttons">
-                <button class="btn gold outline" id="stripe-fees-insert-btn" onclick="insertStripeFeesIntoLedger()" style="display:none;">➕ Insert fees into ledger</button>
-                <button class="btn tag" id="stripe-fees-reconcile-btn" onclick="reconcileStripeAgainstSales()" style="display:none;">⚖ Reconcile against sales</button>
-                <button class="btn tag" id="stripe-fees-download-btn" onclick="downloadStripeFeesAuditCSV()" style="display:none;">⬇ Download audit CSV</button>
+                <button class="btn gold outline" id="stripe-fees-insert-btn" onclick="insertStripeFeesIntoLedger()" style="display:none;">➕ File in ledger</button>
+                <button class="btn tag" id="stripe-fees-reconcile-btn" onclick="reconcileStripeAgainstSales()" style="display:none;">⚖ Compare with sales</button>
+                <button class="btn tag" id="stripe-fees-download-btn" onclick="downloadStripeFeesAuditCSV()" style="display:none;">⬇ Download transactions (CSV)</button>
                 <button class="btn tag" id="stripe-fees-clear-btn" onclick="clearStoredStripeKey()" style="display:none;">Forget key</button>
               </div>
             </div>
