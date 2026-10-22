@@ -5402,6 +5402,23 @@
 </div></div>
 
 <!-- EXPENSE EDIT MODAL -->
+<!-- The receipts on one ledger expense. Filled by _renderExpenseReceiptsModal(). -->
+<div class="overlay" id="m-exp-receipts" style="display:none;"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="exp-receipts-heading" style="max-width:560px;">
+  <div class="modal-title">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">🧾</span>
+      <span id="exp-receipts-heading">Receipts</span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('exp-receipts')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+  </div>
+  <div class="field-note" id="exp-receipts-sub"></div>
+  <div class="exp-receipts-list" id="exp-receipts-list" aria-live="polite"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="attemptCloseModal('exp-receipts')">Done</button>
+    <button class="btn gold" id="exp-receipts-add-btn" onclick="addReceiptsFromModal()">＋ Add receipts</button>
+  </div>
+</div></div>
+
 <div class="overlay" id="m-edit-expense" style="display:none;"><div class="modal edit-modal" role="dialog" aria-modal="true">
   <div class="modal-title" role="dialog" aria-modal="true">
     <div class="modal-title-left">

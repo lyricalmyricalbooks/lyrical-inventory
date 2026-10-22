@@ -15,6 +15,7 @@ initPhoneWorkspace(document.getElementById('pw-app'));
 // Body, not #pw-app: the pop-up windows are siblings of the app shell.
 initPhoneLayouts(document.body);
 import './firebase.js';
+import { applyReceiptAddition, isReceiptAddition, receiptAdditionApplied } from './lib/expense-receipts.js';
 import { TEST_PROFILE_FLAG, SAMPLE_BOOK_ID, clearTestStorage, isSampleDataSeeded, markSampleDataSeeded } from './lib/test-profile.js';
 import { installGasAuth } from './lib/gas-auth.js';
 installGasAuth(() => (typeof window._fbGetIdToken === 'function' ? window._fbGetIdToken() : ''));
@@ -57,6 +58,7 @@ import {
   applyBatchExpenseBulk,
   applyBulkCategoryToEmailDrafts,
   applyDirectGmailPresetQuery,
+  addReceiptsFromModal,
   addReceiptsToExpense,
   applyGmailPresetQuery,
   attachReceiptToExpenseRow,
@@ -112,6 +114,7 @@ import {
   openBlobInTab,
   openCloudReceiptsModal,
   openEmailReceiptImportModal,
+  openExpenseReceipts,
   openExportReceiptsModal,
   openReceiptCacheDb,
   openReceiptCameraModal,
@@ -131,6 +134,7 @@ import {
   reclaimCloudReceiptsNow,
   reclaimOneReceipt,
   removeBatchExpenseRow,
+  removeReceiptFromExpense,
   renderBatchExpenseModal,
   renderBatchExpenseRows,
   renderEmailPreviewContent,
@@ -9666,7 +9670,7 @@ const submissionRef = (type, subKey) => `${type}:${subKey}`;
 export function isSubmissionApproved(s, type, subKey) {
   const ref = submissionRef(type, subKey);
   const rows = type === 'expenses' ? (s.expenses || []) : (s.hist || []);
-  return rows.some(r => r && r.fromSubmission === ref);
+  return rows.some(r => r && r.fromSubmission === ref) || (type === 'expenses' && receiptAdditionApplied(rows, ref));
 }
 
 window.approveSubmission = async function (type, subKey) {
@@ -9694,7 +9698,24 @@ window.approveSubmission = async function (type, subKey) {
       return;
     }
 
-    if (type === 'expenses') {
+    if (type === 'expenses' && isReceiptAddition(raw)) {
+      // An artist's forgotten receipt: it joins the expense it names rather
+      // than becoming an expense of its own.
+      const done = applyReceiptAddition(s.expenses, raw, submissionRef(type, subKey));
+      if (!done.ok) {
+        showToast(done.reason === 'missing'
+          ? '⚠ The expense these receipts belong to is no longer in the ledger. Reject the request instead.'
+          : '⚠ This request has no receipts in it. Reject it instead.', 'warn', 6000);
+        return;
+      }
+      saveState(activeBook);
+      if (await window._fbDeleteSubmission(activeBook, type, subKey) === false) {
+        _approvedSubmissionKeys.add(flightKey);
+        showToast('⚠ Receipts added, but the request could not be cleared from the pending list. Do not approve it again.', 'warn');
+      } else showToast(`✓ ${done.added} receipt${done.added === 1 ? '' : 's'} added to "${done.expense.desc}"`);
+      updateDash();
+      renderExpenses();
+    } else if (type === 'expenses') {
       if (!s.expenses) s.expenses = [];
 
       raw.fromSubmission = submissionRef(type, subKey);
@@ -19141,7 +19162,7 @@ function exposeLegacyInlineHandlers() {
     // which runs at import time — not allowed once they move into a feature
     // module. They are plain declarations now and reach the inline on*=
     // attributes in index.html the same way every other handler here does.
-    addReceiptsToExpense, expFileChosen, expFileClear, expFileDragOver, expFileDragLeave, expFileDrop,
+    addReceiptsFromModal, addReceiptsToExpense, openExpenseReceipts, removeReceiptFromExpense, expFileChosen, expFileClear, expFileDragOver, expFileDragLeave, expFileDrop,
     tcExpFileChosen, tcExpFileClear, tcExpFileDragOver, tcExpFileDragLeave, tcExpFileDrop,
     batchExpenseFilesChosen, batchExpenseDragOver, batchExpenseDragLeave, batchExpenseDrop,
     toggleAllBatchExpenses, deselectDuplicateBatchExpenses, applyBatchExpenseBulk,
