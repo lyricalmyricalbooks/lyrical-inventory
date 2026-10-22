@@ -8,8 +8,30 @@ describe('author payment after both balances are offset', () => {
     expect(describeArtistSettlement(screenshot)).toEqual({
       heldGross: 574.68, heldShare: 74.71, publisherHeld: 499.97,
       otherDebt: 0, royaltiesOwed: 267.76, overpaid: 0,
+      expensesOwed: 0, expenses: [], expensesLeftOut: 0,
       netToPublisher: 232.21, amount: 232.21, direction: 'to-publisher',
     });
+  });
+
+  // The owner's screenshot: they hold 638.49 and keep 83.01, so owe 555.48;
+  // the publisher owes 312.55 in earnings and a 28.17 shipping receipt.
+  it('takes unpaid expenses off the net, on the same side as earnings', () => {
+    const owner = { heldByArtistGross: 638.49, heldByArtistShare: 83.01, owedToArtist: 312.55, owedByArtist: 0 };
+    const expenses = [{ id: 7, amount: 28.17, desc: 'Shipping Cost (Paid EUR 17.85)', date: '2025-10-08' }];
+    expect(describeArtistSettlement(owner, { expenses })).toMatchObject({
+      publisherHeld: 555.48, royaltiesOwed: 312.55, expensesOwed: 28.17,
+      netToPublisher: 214.76, amount: 214.76, direction: 'to-publisher',
+    });
+    // Earnings are untouched: expenses are paid back at cost, not as pay.
+    expect(describeArtistSettlement(owner, { expenses }).royaltiesOwed).toBe(312.55);
+  });
+
+  it('flips to the publisher paying when expenses outweigh what the author owes', () => {
+    const owner = { heldByArtistGross: 100, heldByArtistShare: 20, owedToArtist: 30, owedByArtist: 0 };
+    expect(describeArtistSettlement(owner, { expenses: [{ id: 1, amount: 45.5 }, { id: 2, amount: 10.1 }] }))
+      .toMatchObject({ expensesOwed: 55.6, netToPublisher: -5.6, amount: 5.6, direction: 'to-artist' });
+    expect(describeArtistSettlement(owner, { expenses: [{ id: 1, amount: 50 }] }))
+      .toMatchObject({ amount: 0, direction: 'settled' });
   });
 
   it('includes only remaining manual debts and royalties, after existing offsets', () => {

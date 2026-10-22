@@ -43,6 +43,7 @@ import {
   applyArtistSettlement,
   artistSettlementIssues,
   artistSettlementStatement,
+  expensesInSettleUp,
   planArtistSettlement,
   undoArtistSettlement,
 } from '../lib/artist-settlement.js';
@@ -75,7 +76,7 @@ import {
   roundCents,
   transferAmount,
 } from '../lib/money.js';
-import { isGratuityExpense } from '../lib/receipt-storage.js';
+import { expensesWithSettlements, isGratuityExpense } from '../lib/receipt-storage.js';
 import {
   needsSettleUp,
   settlementPayoutSummary,
@@ -443,7 +444,7 @@ function renderStockAllocationBar(s, book, breakdown) {
 // reimbursed for yet (gratuities excluded — those never carry a receivable).
 function renderExpensesSummaryBlock(s, cur) {
   renderPendingExpenses();
-  const expenses = s.expenses || [];
+  const expenses = expensesWithSettlements(s);
   const unreceivedExp = [];
   let expTotal = 0;
   for (const e of expenses) {
@@ -473,19 +474,27 @@ function renderExpensesSummaryBlock(s, cur) {
           <td class="mb-amt">${fmt(e.amount, cur)}</td>
         </tr>`).join('');
       // Payment button
-      const artistLink = (s.artistPaymentLink || '').trim();
+      const safeLink = safeHttpUrl((s.artistPaymentLink || '').trim());
       const payBtn = $('d-exp-pay-btn');
       const payHint = $('d-exp-pay-hint');
+      // While the author also owes money, these come off the Settle up below.
+      // A separate payment as well would pay them back twice. The link stays
+      // for any still paid on their own, and for the difference when the
+      // Settle up has you paying the author.
+      const settle = expensesInSettleUp(BOOKS[activeBook], s);
+      const inSettle = unreceivedExp.filter(e => settle.ids.has(String(e.id))).length;
+      const rest = unreceivedExp.length - inSettle;
+      const showLink = !!safeLink && (rest > 0 || settle.publisherPays);
       if (payBtn) {
-        const safeLink = safeHttpUrl(artistLink);
-        if (safeLink) {
-          payBtn.href = safeLink;
-          payBtn.style.display = '';
-          if (payHint) payHint.textContent = 'Opens payment link in a new tab';
-        } else {
-          payBtn.style.display = 'none';
-          if (payHint) payHint.textContent = 'Artist has not set a payment link yet';
-        }
+        payBtn.style.display = showLink ? '' : 'none';
+        if (showLink) payBtn.href = safeLink;
+      }
+      if (payHint) {
+        payHint.textContent = !inSettle
+          ? (safeLink ? 'Opens payment link in a new tab' : 'Artist has not set a payment link yet')
+          : rest ? `${inSettle} ${inSettle === 1 ? 'is' : 'are'} in the Settle up below · pay the other ${rest} on ${rest === 1 ? 'its' : 'their'} own`
+          : settle.publisherPays ? 'In the Settle up below · pay the author its one net amount, not these on their own'
+          : 'Comes off what the author owes you in the Settle up below · no separate payment';
       }
     }
   } else {
@@ -1042,7 +1051,7 @@ function getPayoutHistoryHtml(stats, bookId, cur) {
       const credit = parseFloat(p.amount) || 0;
       const summary = settlementPayoutSummary(balance, credit, n => fmt(n, cur), { author: isAuthor() });
       return `<div class="ps-payout-form">
-        ${issues.has(p.id) ? '<p class="ps-payout-preview is-warn">Needs review: this settlement overlaps another payment or a linked sale changed. Check the actual payments and undo the incorrect record.</p>' : ''}
+        ${issues.has(p.id) ? '<p class="ps-payout-preview is-warn">Needs review: this settlement overlaps another payment, or a sale or expense it covered changed. Check the actual payments and undo the incorrect record.</p>' : ''}
         <div class="ps-payout-row">
           <span class="ps-payout-row-main"><strong>${summary.title}</strong><span class="ps-payout-row-meta">${fmtD(p.date)}${p.method ? ' · ' + escapeHtml(p.method) : ''}</span></span>
           <span class="ps-payout-row-amt">${credit < 0 ? '−' : ''}${fmt(Math.abs(credit), cur)}</span>

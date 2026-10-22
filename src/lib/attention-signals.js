@@ -26,7 +26,7 @@
 
 import { deriveOnHand } from './inventory.js';
 import { calcArtistEarnings } from './earnings.js';
-import { expenseMissingReceipt } from './receipt-storage.js';
+import { expenseMissingReceipt, expensesWithSettlements } from './receipt-storage.js';
 import { fmt, getBookCurrencyCode } from './money.js';
 import { findDeductionGaps } from './deduction-gaps.js';
 import { recurringStatus } from './recurring.js';
@@ -228,7 +228,7 @@ function moneySignals(book, s, out, ctx) {
   // Expenses the artist paid for and hasn't been paid back.
   let owedToArtist = 0;
   let owedCount = 0;
-  for (const e of (s.expenses || [])) {
+  for (const e of expensesWithSettlements(s)) {
     if (!e || e.received || e.gratuity) continue;
     owedToArtist += Math.abs(num(e.amount));
     owedCount++;

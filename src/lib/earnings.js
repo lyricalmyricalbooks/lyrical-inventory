@@ -239,7 +239,14 @@ export function calcArtistEarnings(book, state) {
 // payout or clearing held sales. owedToArtist already excludes the held share
 // and applied offsets; deduct only that remaining balance from the publisher's
 // held cut plus open debts. Keep the signed balance so overpayments are visible.
-export function describeArtistSettlement(stats = {}) {
+//
+// `expenses` are receipts the author paid for the book and hasn't been paid
+// back for ([{ id, amount, desc, date }], amounts in the book's currency). The
+// publisher owes those just as it owes earnings, so they sit on the same side
+// and come off the same net. They are not earnings: they never touch
+// owedToArtist or the payout total. `expensesLeftOut` counts unpaid expenses
+// that couldn't be put in the book's currency, so the panel can say so.
+export function describeArtistSettlement(stats = {}, { expenses = [], expensesLeftOut = 0 } = {}) {
   const heldGross = roundCents(stats.heldByArtistGross || 0);
   const heldShare = roundCents(stats.heldByArtistShare || 0);
   const publisherHeld = roundCents(heldGross - heldShare);
@@ -247,9 +254,12 @@ export function describeArtistSettlement(stats = {}) {
   const owed = roundCents(stats.owedToArtist || 0);
   const royaltiesOwed = Math.max(0, owed);
   const overpaid = Math.max(0, roundCents(-owed));
-  const netToPublisher = roundCents(roundCents(publisherHeld + otherDebt) - owed);
+  let expensesOwed = 0;
+  for (const e of expenses) expensesOwed = roundCents(expensesOwed + e.amount);
+  const netToPublisher = roundCents(roundCents(publisherHeld + otherDebt) - owed - expensesOwed);
   return {
     heldGross, heldShare, publisherHeld, otherDebt, royaltiesOwed, overpaid,
+    expensesOwed, expenses: expenses.map(e => ({ ...e })), expensesLeftOut,
     netToPublisher,
     amount: Math.abs(netToPublisher),
     direction: netToPublisher > 0 ? 'to-publisher' : netToPublisher < 0 ? 'to-artist' : 'settled',

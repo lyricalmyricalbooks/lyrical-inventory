@@ -93,7 +93,11 @@ export function computeCashFlowMetrics(sources, yearFilter) {
         const cashRate = fxRateCache[`${receipt.cur}_CAD`] || 1;
         const cash = receipt.balance.direction === 'to-publisher' ? receipt.balance.amount
           : receipt.balance.direction === 'to-artist' ? -receipt.balance.amount : 0;
-        artistSettlementCashAdjustment = roundCents(artistSettlementCashAdjustment + cash * cashRate
+        // Expenses it paid back are already operating expenses on their own
+        // dates; the smaller cash figure must not take them off a second time.
+        // Stored in the settlement's currency, like the cash.
+        const expensesRepaid = Number(receipt.balance.expensesOwed) || 0;
+        artistSettlementCashAdjustment = roundCents(artistSettlementCashAdjustment + (cash + expensesRepaid) * cashRate
           + ((Number(p.amount) || 0) - payoutDebtCollected(p)) * hRate);
       }
     });

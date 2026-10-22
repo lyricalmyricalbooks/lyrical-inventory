@@ -122,3 +122,59 @@ describe("the author's view of a recorded settlement", () => {
     expect(s.detail).toBe('You kept CA$74.71 of the sales money you collected, CA$267.76 came off what you owed the publisher. You sent the publisher CA$232.21. CA$8.27 from newer sales is still owed to you.');
   });
 });
+
+describe('unpaid expenses on the slip', () => {
+  // The owner's screenshot: 555.48 owed by the author, 312.55 in earnings and
+  // a 28.17 shipping receipt owed back to them → author sends 214.76.
+  const owner = { heldByArtistGross: 638.49, heldByArtistShare: 83.01, owedToArtist: 312.55, owedByArtist: 0 };
+  const shipping = { id: 1, amount: 28.17, desc: 'Shipping Cost (Paid EUR 17.85)', date: '2025-10-08' };
+  const withExpenses = (expenses, over = {}) => describeArtistSettlement({ ...owner, ...over }, { expenses });
+
+  it('gets its own line on your side, with the receipt named under it', () => {
+    const m = settleUpModel(withExpenses([shipping]));
+    expect(m.right.rows.map(r => [r.key, r.amount])).toEqual([['royalties', 312.55], ['expenses', 28.17]]);
+    expect([m.amount, m.result]).toEqual([214.76, 'Author sends you']);
+    const html = render(m);
+    expect([...html.querySelectorAll('.ps-slip-amt')].map(a => a.textContent)).toEqual(['+ CA$555.48', '− CA$312.55', '− CA$28.17', '= CA$214.76']);
+    expect(html.textContent).toContain('Expenses they paid, owed back');
+    expect(html.textContent).toContain('8 Oct 2025 · Shipping Cost (Paid EUR 17.85)');
+    // Every slip figure appears in the sum under the big number.
+    expect(html.querySelector('.ps-settle-result .ps-stat-sub').textContent).toBe('CA$555.48 − CA$312.55 − CA$28.17');
+    expect(html.textContent).toContain('marking the CA$28.17 of expenses as paid back');
+    expect(settleUpHeadline(m, 'CA$').sub).toBe('author sends you · after earnings and CA$28.17 of expenses come off');
+  });
+
+  it('lists a few receipts with their amounts and counts the rest', () => {
+    const many = [1, 2, 3, 4, 5].map(i => ({ id: i, amount: 10, desc: `Receipt ${i}`, date: `2025-10-0${i}` }));
+    const html = render(settleUpModel(withExpenses(many)));
+    expect(html.textContent).toContain('Receipt 1 · CA$10.00');
+    expect(html.textContent).not.toContain('Receipt 4');
+    expect(html.textContent).toContain('and 2 more — every one is listed in the statement');
+  });
+
+  it('reverses when the expenses tip the balance toward the author', () => {
+    const m = settleUpModel(withExpenses([{ ...shipping, amount: 300 }]));
+    expect([m.direction, m.amount, m.result]).toEqual(['to-artist', 57.07, 'You send the author']);
+    expect(render(m).querySelector('.ps-settle-result .ps-stat-sub').textContent).toBe('CA$312.55 + CA$300.00 − CA$555.48');
+    expect(settleUpHeadline(m, 'CA$').sub).toBe('you send the author · includes CA$300.00 of expenses owed back');
+  });
+
+  it('speaks from the author side', () => {
+    const m = settleUpModel(withExpenses([shipping]), { author: true });
+    expect(render(m, { canRecord: false }).textContent).toContain('Expenses you paid, owed back to you');
+  });
+
+  it('says when a receipt in another currency was left out of the sum', () => {
+    const m = settleUpModel(describeArtistSettlement(owner, { expenses: [shipping], expensesLeftOut: 1 }));
+    expect(render(m).textContent).toContain("1 unpaid expense is in another currency with no exchange rate to this book's, so it isn't in this sum. Pay it back separately.");
+    expect(render(settleUpModel(withExpenses([shipping]))).textContent).not.toContain('another currency');
+  });
+
+  it('names the repaid expenses in the recorded settlement', () => {
+    const money = n => `CA$${n.toFixed(2)}`;
+    const s = settlementPayoutSummary(withExpenses([shipping]), 395.56, money);
+    expect(s.detail).toBe('They kept CA$83.01 of the sales money they collected, CA$28.17 of expenses they paid was paid back, CA$340.72 came off what they owed you. They sent you CA$214.76.');
+    const flipped = settlementPayoutSummary(withExpenses([{ ...shipping, amount: 300 }]), 395.56, money);
+    expect(flipped.detail).toBe('They kept CA$83.01 of the sales money they collected, CA$300.00 of expenses they paid was paid back, CA$555.48 came off what they owed you, you sent them CA$57.07.');
+  });
+});

@@ -21,7 +21,7 @@ import { installGasAuth } from './lib/gas-auth.js';
 installGasAuth(() => (typeof window._fbGetIdToken === 'function' ? window._fbGetIdToken() : ''));
 import { registerSW } from 'virtual:pwa-register';
 import { calcArtistEarnings, tierEffectiveCap } from './lib/earnings.js';
-import { planArtistSettlement, applyArtistSettlement, planSettlementForPayment } from './lib/artist-settlement.js';
+import { planArtistSettlement, applyArtistSettlement, planSettlementForPayment, expensesInSettleUp, pricedExpensesTag, pricedExpensesFromTag } from './lib/artist-settlement.js';
 import { restoreRecords } from './lib/storage-mode.js';
 import { createStripePriceAndLink } from './lib/stripe-payment-link.js';
 import { createStripeRateResolver, stripeOrderNumber } from './lib/stripe-sale-defaults.js';
@@ -266,7 +266,7 @@ import {
   effectiveInterval,
   startWatch,
 } from './lib/watch-schedule.js';
-import { isGratuityExpense } from './lib/receipt-storage.js';
+import { expensesWithSettlements, isGratuityExpense } from './lib/receipt-storage.js';
 import {
   SYNC_CONFLICTS_KEY, recordConflicts, listConflicts, dismissConflict, locateConflictTarget,
   applyConflictRestore, describeRecord, renderConflictListHtml, describeConflictCount,
@@ -9279,7 +9279,7 @@ function renderArtistReimburseBanner() {
   if (!isAuthor()) { banner.style.display = 'none'; return; }
   const owed = [];
   let total = 0;
-  for (const e of (s.expenses || [])) {
+  for (const e of expensesWithSettlements(s)) {
     if (!e.received && !isGratuityExpense(e)) {
       owed.push(e);
       total += (Number(e.amount) || 0);
@@ -9289,7 +9289,15 @@ function renderArtistReimburseBanner() {
   banner.style.display = '';
   $('arb-amount').textContent = fmt(total, cur);
   $('arb-detail').textContent = `${owed.length} expense${owed.length !== 1 ? 's' : ''} your publisher will pay you back for`;
-  $('arb-hint').textContent = s.artistPaymentLink ? 'Your publisher pays this to your saved payment link' : 'Add your payment link below so your publisher can pay you';
+  // In a Settle up these come off the one net payment instead of being paid
+  // to the link on their own.
+  const settle = expensesInSettleUp(book, s);
+  const inSettle = owed.filter(e => settle.ids.has(String(e.id))).length;
+  $('arb-hint').textContent = inSettle === owed.length && !settle.publisherPays
+    ? 'These come off what you send your publisher in Settle up'
+    : inSettle === owed.length
+      ? 'Counted in Settle up · your publisher pays you one net amount'
+      : s.artistPaymentLink ? 'Your publisher pays this to your saved payment link' : 'Add your payment link below so your publisher can pay you';
   $('arb-items').innerHTML = owed.map(e => `
     <div class="mbi-row">
       <div class="mbi-desc">${escapeHtml(e.desc)} · ${fmtD(e.date)} · <span class="metric-banner-cat">${escapeHtml(e.cat)}</span></div>
@@ -9908,7 +9916,9 @@ async function mintArtistSettlementLink(bookId) {
       amountMajor: amount,
       currencyCode: bookCurrencyCode(book),
       description: `${book.title} — author settlement (both sides offset)`,
-      metadata: { kind: 'artist_transfer', settlement: '1', settlement_amount: String(amount), transfer_book: bookId },
+      // The expenses this amount paid back, so a payment that arrives after
+      // another one was logged doesn't count that one as paid too.
+      metadata: { kind: 'artist_transfer', settlement: '1', settlement_amount: String(amount), settlement_expenses: pricedExpensesTag(due.plan), transfer_book: bookId },
       afterPaidUrl: transferPaidReturnUrl([key]),
     });
     s.settlementLink = { url, amount, key, v: TRANSFER_LINK_VERSION };
@@ -9940,7 +9950,7 @@ function settleArtistSettlementFromStripe(payment, bookId) {
   // offsets fewer earnings — the rest stays owed to them (see
   // planSettlementForPayment). Anything else is left for a person.
   const due = authorSettlementDue(bookId);
-  const plan = due ? planSettlementForPayment(due.plan, paid) : null;
+  const plan = due ? planSettlementForPayment(due.plan, paid, { pricedExpenseIds: pricedExpensesFromTag(payment.metadata?.settlement_expenses) }) : null;
   if (!plan) return { bookId, settled: 0, problem: 'changed' };
   const date = /^\d{4}-\d{2}-\d{2}$/.test(payment.date || '') ? payment.date : today();
   const outcome = applyArtistSettlement(book, s, plan, { date, method: 'Stripe', notes: `Paid by the author through Stripe (${payment.id})` });
@@ -10445,14 +10455,17 @@ function renderAuthorSettlementBanner(banner, s, settle, transfers, cur) {
     if (b.otherDebt > 0) parts.push(`${parts.length ? 'plus' : 'You owe'} ${money(b.otherDebt)} for other things`);
     if (b.overpaid > 0) parts.push(`plus ${money(b.overpaid)} you were paid ahead of your earnings`);
     if (b.royaltiesOwed > 0) parts.push(`the ${money(b.royaltiesOwed)} your publisher owes you comes off`);
+    if (b.expensesOwed > 0) parts.push(`${b.royaltiesOwed > 0 ? 'and so does' : 'the'} ${money(b.expensesOwed)} in expenses they owe you back${b.royaltiesOwed > 0 ? '' : ' comes off'}`);
     detail = `${parts.join(', ')} — so you send ${money(b.amount)}. One payment settles both sides.`;
     detail = detail.charAt(0).toUpperCase() + detail.slice(1);
     if (paid) detail = '✓ Paid — thank you! It clears once your publisher\'s app records it.';
     else if (!link) detail += ' Your payment link is on its way — your publisher\'s app is preparing it.';
   } else if (b.direction === 'to-artist') {
-    detail = `Your publisher owes you ${money(b.amount)} once the ${money(roundCents(b.publisherHeld + b.otherDebt))} you collected for them comes off. Nothing to send — they'll pay you the difference.`;
+    detail = b.expensesOwed > 0
+      ? `Your publisher owes you ${money(b.amount)}: ${b.royaltiesOwed > 0 ? 'your earnings and ' : ''}the ${money(b.expensesOwed)} in expenses they owe you back, less the ${money(roundCents(b.publisherHeld + b.otherDebt))} you collected for them. Nothing to send — they'll pay you the difference.`
+      : `Your publisher owes you ${money(b.amount)} once the ${money(roundCents(b.publisherHeld + b.otherDebt))} you collected for them comes off. Nothing to send — they'll pay you the difference.`;
   } else {
-    detail = 'What you collected for your publisher and the earnings they owe you cancel out. Nothing to send.';
+    detail = `What you collected for your publisher and the ${b.expensesOwed > 0 ? 'earnings and expenses' : 'earnings'} they owe you cancel out. Nothing to send.`;
   }
   const waiting = transfers.filter(t => t.status === 'pending');
   if (waiting.length) detail += ` ${waiting.length} more ${waiting.length === 1 ? 'sale' : 'sales'} waiting for your publisher to check — nothing to do yet.`;
@@ -10696,7 +10709,7 @@ function markExpenseReceived(id) {
 export function renderPendingExpenses() {
   const s = getState(), book = getBook(), cur = book.currency;
   const pending = [];
-  for (const e of (s.expenses || [])) {
+  for (const e of expensesWithSettlements(s)) {
     if (!e.received && !isGratuityExpense(e)) {
       pending.push(e);
     }
@@ -10705,6 +10718,10 @@ export function renderPendingExpenses() {
   if (!sect) return;
   if (!pending.length) { sect.style.display = 'none'; return; }
   sect.style.display = '';
+  // In the Settle up, one net payment covers these. The payment link stays
+  // only when that net runs to the author.
+  const settle = expensesInSettleUp(book, s);
+  const settleHtml = `<span class="pill gray" title="Counted in Settle up — one payment covers both sides">In Settle up</span>`;
   const fullLink = safeHttpUrl(s.artistPaymentLink);
   const payHtml = fullLink
     ? `<a href="${escapeHtml(fullLink)}" target="_blank" rel="noopener" class="btn sm" style="text-decoration:none;background:var(--green-bg);color:var(--green);border-color:rgba(42,99,72,.2);">↗ Payment link</a>`
@@ -10722,7 +10739,7 @@ export function renderPendingExpenses() {
         <div class="pending-card-note">${escapeHtml(e.ref) || ''}</div>
       </div>
       <div class="pending-card-actions">
-        ${payHtml}
+        ${settle.ids.has(String(e.id)) ? settleHtml + (settle.publisherPays ? payHtml : '') : payHtml}
         <button class="btn gold" onclick="markExpenseReceived(${e.id})">✓ Mark received</button>
       </div>
     </div>`).join('');
@@ -14213,7 +14230,7 @@ function exportAllToCSV() {
     });
 
     // Expenses
-    (s.expenses || []).forEach(e => {
+    expensesWithSettlements(s).forEach(e => {
       rows.push([
         loggedAt,
         e.id || '',

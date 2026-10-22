@@ -22,6 +22,7 @@
 import { canonicalExpenseCategory } from './expense-categories.js';
 import { findDeductionGaps as scanDeductionGaps } from './deduction-gaps.js';
 import { expenseLedgerTotals } from './expense-totals.js';
+import { expensesWithSettlements } from './receipt-storage.js';
 import { deriveOnHand, deriveStockBreakdown, inventoryBreakdown } from './inventory.js';
 import { calculateBreakEven } from './breakeven.js';
 import { IN_PERSON_CHANNELS, channelMixRows } from './channel-mix.js';
@@ -328,9 +329,12 @@ function collectExpenses(ctx, args) {
     for (const [bookId, book] of selectedBooks(ctx, args.bookId)) {
       const s = stateFor(ctx, bookId);
       const cur = getBookCurrencyCode(book);
-      for (const e of (s?.expenses || [])) {
-        if (e) out.push({ row: expenseRow(e, 'book', bookId, str(book.title), cur), raw: e, bookId, bookCode: cur });
-      }
+      // `view` reads an expense a settlement paid back as received; `raw`
+      // stays the stored row, which is what a write goes to.
+      const view = expensesWithSettlements(s);
+      (s?.expenses || []).forEach((e, i) => {
+        if (e) out.push({ row: expenseRow(e, 'book', bookId, str(book.title), cur), raw: e, view: view[i], bookId, bookCode: cur });
+      });
     }
   }
   return out;
@@ -363,7 +367,7 @@ function queryExpenses(args = {}, ctx = {}) {
   for (const m of matches) {
     if (m.row.scope !== 'book') continue;
     const bucket = rawByBook.get(m.bookId) || { bookId: m.bookId, book: m.row.book, code: m.bookCode, raw: [] };
-    bucket.raw.push(m.raw);
+    bucket.raw.push(m.view);
     rawByBook.set(m.bookId, bucket);
   }
   for (const b of rawByBook.values()) {
