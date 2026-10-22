@@ -85,10 +85,10 @@ describe('5 High-Impact UX Improvements Suite', () => {
       expect(indexHtml).toContain('class="tc-search-kbd"');
     });
 
-    it('main.js binds keyboard shortcuts for "/" to focus ledger search', () => {
-      const mainJs = readFileSync(path.join(__dirname, '../src/main.js'), 'utf8');
-      expect(mainJs).toContain("e.key === '/'");
-      expect(mainJs).toContain('tc-ledger-search');
+    it('tax-entries.js binds keyboard shortcuts for "/" to focus ledger search', () => {
+      const taxEntriesJs = readFileSync(path.join(__dirname, '../src/features/tax-entries.js'), 'utf8');
+      expect(taxEntriesJs).toContain("e.key === '/'");
+      expect(taxEntriesJs).toContain('tc-ledger-search');
     });
   });
 });

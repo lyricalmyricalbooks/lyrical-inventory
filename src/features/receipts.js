@@ -21,10 +21,7 @@
 import {
   $,
   BOOKS,
-  TAX_CATEGORIES,
   TAX_CENTER,
-  TC_CATEGORIES,
-  _editingExpense,
   _fxRateCache,
   activeBook,
   addLog,
@@ -43,6 +40,7 @@ import {
   today,
   updateDash,
 } from '../main.js';
+import { TAX_CATEGORIES, TC_CATEGORIES, _editingExpense } from './tax-entries.js';
 import { fetchSheetsCapabilities, notifyPublisherSubmission } from './sheets-bridge.js';
 import { escapeHtml } from '../lib/html.js';
 import { runOpenRouterRead, friendlyOpenRouterError } from '../lib/openrouter-chat.js';
