@@ -8093,11 +8093,24 @@ function carrierConnections(settings = TAX_CENTER.settings || {}) {
   };
 }
 
+// The carriers whose current price is lowest, once at least two have been
+// quoted for this form. Only real quotes in the same currency are compared:
+// a Canada Post estimate is a guess, and CAD against USD is not a like-for-like
+// figure. Ties mark every carrier on the lowest price.
+function cheapestCarriers(fingerprint = shippingFormFingerprint()) {
+  const quoted = Object.entries(_carrierTilePrices)
+    .filter(([, p]) => p && p.fingerprint === fingerprint && !p.estimate && p.currency === 'CAD');
+  if (quoted.length < 2) return [];
+  const low = Math.min(...quoted.map(([, p]) => p.amount));
+  return quoted.filter(([, p]) => Math.abs(p.amount - low) < 0.005).map(([key]) => key);
+}
+
 function renderCarrierTiles() {
   const tiles = document.querySelectorAll('#tab-shipping .ship-carrier[data-carrier]');
   if (!tiles.length) return;
   const connected = carrierConnections();
   const fingerprint = shippingFormFingerprint();
+  const cheapest = cheapestCarriers(fingerprint);
   tiles.forEach(tile => {
     const key = tile.dataset.carrier;
     const off = !connected[key];
@@ -8113,6 +8126,10 @@ function renderCarrierTiles() {
     if (priceEl) priceEl.textContent = fresh
       ? `${price.estimate ? 'About ' : 'From '}${price.amount.toFixed(2)} ${price.currency}`
       : '';
+    const best = cheapest.includes(key);
+    tile.classList.toggle('is-cheapest', best);
+    const badge = tile.querySelector('.ship-carrier-badge');
+    if (badge) badge.hidden = !best;
   });
   const abroad = $('ship-abroad-group');
   if (abroad) abroad.hidden = !shippoRateFormState().international;
@@ -11889,6 +11906,8 @@ export {
   markLabelRefundArrived,
   printBatchLabels,
   calculateShippoRates,
+  setCarrierTilePrice,
+  renderCarrierTiles,
   calculateZonosDutiesHandler,
   renderZonosDutyCard,
   onZonosDeclarationIdInput,
