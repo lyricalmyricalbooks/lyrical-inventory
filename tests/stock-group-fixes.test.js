@@ -46,7 +46,7 @@ describe('stock-group wiring', () => {
     expect(v).toContain('s.artistTransfers.splice');
   });
   it('ledger delete of a live sale reverses it via voidHistEntry', () => {
-    const r = fn('export async function removeLedgerEntry');
+    const r = fn('async function removeLedgerEntry');
     expect(r).toContain('voidHistEntry(s, BOOKS[bid], h)');
     expect(r).toContain("type === 'shippingIncome'");
   });

@@ -23,9 +23,7 @@ import {
   BOOKS,
   BOOK_LIST,
   TAX_CENTER,
-  TC_CATEGORIES,
   _fxRateCache,
-  _tcOpenTripName,
   calculateFinancials,
   defaultState,
   ensurePdfJs,
@@ -33,12 +31,12 @@ import {
   isTestBook,
   isTestBookId,
   loadTaxCenter,
-  openArtistPayoutEditor,
   saveState,
   showToast,
   states,
   today,
 } from '../main.js';
+import { TC_CATEGORIES, _tcOpenTripName, openArtistPayoutEditor } from './tax-entries.js';
 import {
   _localReceiptCell,
   clearReceiptScanReview,

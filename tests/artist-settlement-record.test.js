@@ -159,7 +159,7 @@ describe('a linked author settlement', () => {
     const s = makeState();
     s.artistReceivables = [{ id: 'd', amount: 100 }];
     applyArtistSettlement(book, s, planArtistSettlement(book, s), { date: '2026-10-08', method: 'e-Transfer' });
-    const source = appSource.match(/window\.downloadFullTaxSeasonExport = function \(\) \{([\s\S]*?)\n\};/)[1];
+    const source = appSource.match(/function downloadFullTaxSeasonExport\(\) \{([\s\S]*?)\n\}\n/)[1];
     let csv = '';
     const deps = { document: { getElementById: () => ({ value: '2026' }) }, today: () => '2026-10-08',
       csvCell, BOOK_LIST: [{ ...book, id: 'harbour' }], states: { harbour: s }, defaultState: () => ({}),

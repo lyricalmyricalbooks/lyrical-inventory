@@ -224,7 +224,8 @@ describe('recording and explaining a combined settlement', () => {
     const saved = win.recordArtistSettlement(BOOK);
     await app.answerConfirm(true); await saved;
     const record = payouts().at(-1);
-    const deleted = app.main.removeLedgerEntry('artistPayout', BOOK, record.id);
+    const { removeLedgerEntry } = await import('../src/features/tax-entries.js');
+    const deleted = removeLedgerEntry('artistPayout', BOOK, record.id);
     await app.answerConfirm(true); await deleted;
     expect(record.voided).toBe(true);
     expect(app.main.states[BOOK].hist[0].artistPending).toBe(true);

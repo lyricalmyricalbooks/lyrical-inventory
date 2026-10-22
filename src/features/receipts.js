@@ -21,10 +21,7 @@
 import {
   $,
   BOOKS,
-  TAX_CATEGORIES,
   TAX_CENTER,
-  TC_CATEGORIES,
-  _editingExpense,
   _fxRateCache,
   activeBook,
   addLog,
@@ -43,6 +40,7 @@ import {
   today,
   updateDash,
 } from '../main.js';
+import { TAX_CATEGORIES, TC_CATEGORIES, _editingExpense } from './tax-entries.js';
 import { fetchSheetsCapabilities, notifyPublisherSubmission } from './sheets-bridge.js';
 import { escapeHtml } from '../lib/html.js';
 import { runOpenRouterRead, friendlyOpenRouterError } from '../lib/openrouter-chat.js';
@@ -943,7 +941,7 @@ function _localReceiptCell(item) {
       const fn = r.replace('local://', '');
       const base = fn.split('/').pop();
       const label = multi ? `View ${idx + 1}` : 'View Local';
-      return `<a href="#" title="${escapeHtml(base)}" onclick="event.preventDefault(); viewLocalReceipt('${fn.replace(/'/g, "\\'")}')" style="color:var(--gold3);text-decoration:underline;">${label}</a>`;
+      return `<a href="#" title="${escapeHtml(base)}" onclick="event.preventDefault(); viewLocalReceipt(${escapeHtml(JSON.stringify(fn))})" style="color:var(--gold3);text-decoration:underline;">${label}</a>`;
     }
     // A stored Shippo label link is signed and expires a year after the label
     // was created, so linking to it directly hands the owner a link that dies

@@ -364,7 +364,8 @@ describe('review fixes, through the real app', () => {
   it('refuses to delete a website sale from the Tax Centre ledger or the Orders tab', async () => {
     push(webOrder('WEB-DEL'));
     await waitFor(() => expect(state().hist.some(h => h.webOrderId === 'WEB-DEL')).toBe(true));
-    await app.main.removeLedgerEntry('sale', BOOK, '#WEB-DEL');
+    const { removeLedgerEntry } = await import('../src/features/tax-entries.js');
+    await removeLedgerEntry('sale', BOOK, '#WEB-DEL');
     expect(state().hist.some(h => h.webOrderId === 'WEB-DEL')).toBe(true);
     expect(app.toast()).toMatch(/follows your website/);
   });
