@@ -30,6 +30,15 @@ beforeEach(async () => {
   await app.resetBook(HARBOUR, {});
   await app.resetBook(FABLE, {});
   if (app.main.activeBook !== HARBOUR) win.switchBook(HARBOUR);
+  // A dialog closed by the previous test is still playing its close animation:
+  // closeM hides it on a 240ms timer, and settle() only drains zero-delay ones.
+  // Left alone, the sale-confirm dialog from the last checkout still reads as
+  // open here whenever the tests run faster than that timer, so finish the
+  // animation now rather than let a test's result depend on the clock.
+  for (const el of document.querySelectorAll('.overlay.closing')) {
+    el.style.display = 'none';
+    el.classList.remove('closing');
+  }
 });
 
 afterEach(() => { vi.restoreAllMocks(); });
