@@ -44,10 +44,10 @@ import {
   switchTab,
   TAX_CENTER,
   today,
-  voidHistEntry,
   WEBSITE_SALE_LOCKED,
   withActiveBook,
 } from '../main.js';
+import { voidHistEntry } from './sales-ledger.js';
 import { editArtistPayout, findArtistPayout, settlePayoutRequests, undoRecordedArtistSettlement } from './dashboard.js';
 import { ledgerSaleIndexForHistMirror } from '../lib/consignment.js';
 import { csvCell, toCsv } from '../lib/csv.js';

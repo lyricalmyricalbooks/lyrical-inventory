@@ -26,6 +26,7 @@ function harness({ currency = 'CAD', invoices = [] } = {}) {
       return '';
     },
     recomputeAfters: vi.fn(),
+    invalidateAppliedIds: vi.fn(),
     saveState: vi.fn(),
     syncToSheets: vi.fn(),
     renderHist: vi.fn(),

@@ -32,7 +32,6 @@ import {
   fetchLiveRate,
   isAuthor,
   posExtraBooks,
-  recordOrder,
   renderFairSyncPill,
   renderHist,
   saveCatalogWithDeletions,
@@ -44,8 +43,8 @@ import {
   syncQueue,
   today,
   updateHeader,
-  voidHistEntry,
 } from '../main.js';
+import { recordOrder, voidHistEntry } from './sales-ledger.js';
 import { updateDash } from './dashboard.js';
 import { escapeHtml } from '../lib/html.js';
 import { closeM, confirmDialog, openM, promptDialog } from '../lib/modal.js';

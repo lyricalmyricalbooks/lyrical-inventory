@@ -53,10 +53,8 @@ import {
   showToast,
   states,
   syncHistRowToSheets,
-  unvoidHistEntry,
-  voidHistEntry,
-  writeOrderToLedger,
 } from '../main.js';
+import { unvoidHistEntry, voidHistEntry, writeOrderToLedger } from './sales-ledger.js';
 
 const SENT_KEY = 'lm-website-shipments-sent';
 const SEEN_KEY = 'lm-website-link-seen';
