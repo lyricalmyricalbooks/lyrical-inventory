@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { appSource } from './helpers/extract-decl.js';
 
 // Round 4 of the phone redesign, Expenses: compact expense cards, the edit-expense
 // sheet (currency room, receipt button) and the batch sheet (labelled bulk bar,
@@ -9,7 +10,8 @@ const read = (rel) => readFileSync(rel, 'utf8');
 const phoneCss = read('src/styles/phone.css');
 const phoneLayout = read('src/lib/phone-layout.js');
 const indexHtml = read('index.html');
-const mainJs = read('src/main.js');
+// main.js plus the feature and lib modules (the expense editor lives in features/tax-entries.js).
+const mainJs = appSource;
 const styleCss = read('src/style.css');
 
 const MARK = '/* ─── EXPENSES (round 4) ─── */';

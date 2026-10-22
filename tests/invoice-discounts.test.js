@@ -14,6 +14,7 @@ import {
   duplicateInvoiceContent,
   invoiceBookSplit,
 } from '../src/lib/invoices.js';
+import { appSource } from './helpers/extract-decl.js';
 
 // Percentage discounts were hard to enter: hidden behind a dropdown, a box
 // that started at "0", and no way to type "12,5". These pin down the math the
@@ -170,7 +171,8 @@ describe('per-title split with line discounts', () => {
 
 describe('editor wiring', () => {
   const html = readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf8');
-  const app = readFileSync(path.resolve(process.cwd(), 'src/main.js'), 'utf8');
+  // main.js plus the feature and lib modules (invoices live in features/invoices.js).
+  const app = appSource;
 
   it('offers one-tap percentage presets and a %/amount toggle instead of a dropdown', () => {
     expect(html).toContain('onclick="applyDiscountPreset(40)"');

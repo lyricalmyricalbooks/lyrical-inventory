@@ -2,12 +2,14 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vitest';
+import { appSource } from './helpers/extract-decl.js';
 
 // Resolved via __dirname rather than `new URL(..., import.meta.url)` — jsdom's
 // global URL is not a node file URL and node:fs rejects it. Matches the rest
 // of tests/.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const mainJs = readFileSync(path.join(__dirname, '../src/main.js'), 'utf8');
+// main.js plus the feature and lib modules (invoices live in features/invoices.js).
+const mainJs = appSource;
 const contrastScript = readFileSync(path.join(__dirname, '../scripts/check-contrast.mjs'), 'utf8');
 
 const fnBody = (name) => {
