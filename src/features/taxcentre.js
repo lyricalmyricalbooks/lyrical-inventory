@@ -53,6 +53,7 @@ import {
 import { openM, closeM, confirmDialog } from '../lib/modal.js';
 import { renderShippingReconciliationWorklist } from './shipping.js';
 import { openReviewInbox } from './review-inbox.js';
+import { renderStripeFeesReport } from './stripe-fees.js';
 import { doubleKey } from '../lib/review-queue.js';
 import {
   findSubscriptionDoubles,
@@ -2664,9 +2665,12 @@ function _tcRenderStatusHeaders() {
     if (!isNaN(last)) {
       const days = Math.floor((Date.now() - last.getTime()) / 86400000);
       const ago = days <= 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`;
-      _stripeStatusEl.textContent = `Fees last inserted into ledger ${ago} (${last.toISOString().slice(0, 10)}). Fetch again to refresh.`;
+      _stripeStatusEl.textContent = `Fees last filed in your ledger ${ago} (${last.toISOString().slice(0, 10)}). Fetch again to refresh.`;
     }
   }
+  // The saved report, so the section opens on the last figures (and their
+  // ledger status against the ledger just loaded) without a fetch.
+  renderStripeFeesReport();
   if ($('tc-shippo-key') && TAX_CENTER.settings?.shippoKey) $('tc-shippo-key').value = TAX_CENTER.settings.shippoKey;
   const _shippoStatusEl = $('tc-shippo-status');
   if (_shippoStatusEl && TAX_CENTER.settings?.shippoLastImportAt) {
