@@ -79,7 +79,9 @@ const MAIN_IMPORT_BUDGET = {
   // syncHistRowToSheets), saves through saveState, reads the books, states, the
   // Tax Centre postage and dated FX rates (with the fetch that fills them), and
   // repaints with scheduleRender — plus $ / showToast.
-  'website-link.js': 14,
+  // 14 -> 11 when the sale write path moved out: writeOrderToLedger and the
+  // void / un-void come from sales-ledger.js.
+  'website-link.js': 11,
   // Set at extraction: the practice book's fake spreadsheet reads which book is
   // open, whether it is the test book, and the real sheet's two URLs (for the
   // cards it hides and shows), plus the usual $ / showToast.
@@ -114,7 +116,9 @@ const MAIN_IMPORT_BUDGET = {
   // startupPreviewActive), converts with the FX cache and live rate, mints
   // sale links through the Stripe helper; plus $ / showToast / today / copy.
   // 26 -> 25 when the dashboard moved out: updateDash comes from dashboard.js.
-  'pos.js': 25,
+  // 25 -> 23 when the sale write path moved out: recordOrder and
+  // voidHistEntry come from sales-ledger.js.
+  'pos.js': 23,
   // Set at extraction: entering and correcting ledger lines reaches into
   // every book's state (BOOKS, BOOK_LIST, states, defaultState, saveState,
   // switchBook), the other ledger editors it hands off to (openEditHist,
@@ -125,7 +129,9 @@ const MAIN_IMPORT_BUDGET = {
   // showToast / today / switchTab / the test-book filters.
   // 28 -> 24 when the dashboard moved out: the four author-payout helpers
   // (find / edit / settle / undo the settlement) come from dashboard.js.
-  'tax-entries.js': 24,
+  // 24 -> 23 when the sale write path moved out: voidHistEntry comes from
+  // sales-ledger.js.
+  'tax-entries.js': 23,
   // Set at extraction: invoices read and write every book's state and its
   // ledger (BOOKS, BOOK_LIST, getBook, getState, states, saveState,
   // ledgerById, settleLedgerSalePaid, renderLedger, renderHist), the book's
@@ -141,6 +147,12 @@ const MAIN_IMPORT_BUDGET = {
   // payout request, and repaints history, expenses and the context banners;
   // plus $ / showToast / today / the role checks / the count animation.
   'dashboard.js': 24,
+  // Set at extraction: a sale reads and writes the book's state (BOOKS,
+  // states, getBook, getState, saveState), recomputes the running Stock After,
+  // repaints history, re-syncs an un-voided row to the Sheet, forgets the
+  // applied-order cache, and reads the open book and role for recordOrder;
+  // plus today / sheetsUrl.
+  'sales-ledger.js': 13,
 };
 
 const featureFiles = fs.existsSync(featureDir)
@@ -294,6 +306,9 @@ const MIN_EXPORTS = {
   // The fees report, filing, the background sweep and the charges cross-check,
   // plus the three money helpers the payment reconciliation in main.js shares.
   'stripe-fees.js': 13,
+  // The sale write path and its reverse: record (on-screen and by book id),
+  // the direct-to-artist variant, void, un-void and the void's Sheets sync.
+  'sales-ledger.js': 6,
 };
 
 describe('feature modules are the only home of what they own', () => {
