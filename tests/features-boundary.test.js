@@ -94,6 +94,11 @@ const MAIN_IMPORT_BUDGET = {
   // BOOKS, mints a Stripe link, repaints the register, previews the accent and
   // copies the link; plus $ / showToast.
   'pos-books.js': 11,
+  // Set at extraction: filing fees reads every book's state (BOOK_LIST,
+  // states, defaultState) and writes TAX_CENTER, converts with the FX cache and
+  // the live / dated rate fetches, reads the Stripe key, and gates the sweep on
+  // the role check; plus showToast / today.
+  'stripe-fees.js': 11,
 };
 
 const featureFiles = fs.existsSync(featureDir)
@@ -244,6 +249,9 @@ const MIN_EXPORTS = {
   // One dialog: open, close, save, remove (two entry points), its QR preview,
   // the Stripe link, copy and download, and the id helper the register shares.
   'pos-books.js': 10,
+  // The fees report, filing, the background sweep and the charges cross-check,
+  // plus the three money helpers the payment reconciliation in main.js shares.
+  'stripe-fees.js': 13,
 };
 
 describe('feature modules are the only home of what they own', () => {
