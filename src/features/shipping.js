@@ -5587,6 +5587,7 @@ async function calculateChitChatsRatesHandler() {
   try {
     const payload = chitChatsFormPayload();
     const fingerprint = JSON.stringify(payload);
+    const quotedFor = shippingFormFingerprint();
     const state = readChitChatsState(account);
     const sameDraft = state.draft?.fingerprint === fingerprint && state.draft?.clientId === account.clientId;
     const replaced = sameDraft ? '' : state.draft?.id;
@@ -5598,6 +5599,7 @@ async function calculateChitChatsRatesHandler() {
     }
     state.draft = { id: result.shipment.id, clientId: account.clientId, fingerprint, payload, rates: result.rates, quotedAt: Date.now() };
     saveChitChatsState(account, state);
+    setCarrierTilePrice('chitchats', result.rates.map(rate => rate.totalPrice), { fingerprint: quotedFor });
     renderChitChatsPortal(result.rates.length ? '' : 'Chit Chats offered no services for this parcel. Check its address, size, weight, and customs details.');
     // Tidy the draft this parcel replaced so the Chit Chats account doesn't
     // fill with unpaid shipments. Never one that a purchase may be using.
@@ -5943,6 +5945,7 @@ async function calculateCanadaPostRatesHandler() {
   const { apiKey, apiSecret, customerNumber, contractId } = resolveCanadaPostCredentials(TAX_CENTER.settings || {});
   const isTest = !!TAX_CENTER.settings?.cpTestMode;
   const isEnabled = TAX_CENTER.settings?.cpEnabled !== false;
+  const quotedFor = shippingFormFingerprint();
 
   card.style.display = 'block';
   card.innerHTML = `
@@ -5991,6 +5994,9 @@ async function calculateCanadaPostRatesHandler() {
     // quotes above came from the offline estimate table, and leaving it out
     // stamped guessed prices with a "Live Direct Rates" badge and offered a
     // Buy Label button beside each one.
+    setCarrierTilePrice('canadapost', (quotes || []).map(q => q.totalPrice), {
+      estimate: !apiKey || !apiSecret || !isEnabled || !navigator.onLine, fingerprint: quotedFor,
+    });
     renderCanadaPostRatesCard(quotes, {
       stCountryCode,
       isOffline: !apiKey || !apiSecret || !isEnabled || !navigator.onLine,
@@ -6004,6 +6010,7 @@ async function calculateCanadaPostRatesHandler() {
       weightKg,
       isCommercial: !!customerNumber
     });
+    setCarrierTilePrice('canadapost', (offlineQuotes || []).map(q => q.totalPrice), { estimate: true, fingerprint: quotedFor });
     renderCanadaPostRatesCard(offlineQuotes, { stCountryCode, isOffline: true, isDisabled: !isEnabled, errorNote: err.message, isTest });
   }
 }
@@ -8055,6 +8062,62 @@ function shippoRateFormState() {
   return { rules, missing, international };
 }
 
+// The carrier tiles under "Get rates": whether each carrier is connected, the
+// cheapest price its last quote found, and the duties group only for parcels
+// leaving the sender's country. A price is kept with a snapshot of the form it
+// was quoted for, so it disappears as soon as the address or parcel changes.
+const _carrierTilePrices = {};
+
+function shippingFormFingerprint() {
+  const fields = document.querySelectorAll('#tab-shipping :is(input, select, textarea)[id]');
+  return JSON.stringify([...fields]
+    .filter(el => /^(sf|st|sp|cc)-/.test(el.id))
+    .map(el => [el.id, el.type === 'checkbox' ? el.checked : el.value]));
+}
+
+function setCarrierTilePrice(carrier, amounts, { currency = 'CAD', estimate = false, fingerprint } = {}) {
+  const valid = (amounts || []).map(Number).filter(n => Number.isFinite(n) && n > 0);
+  _carrierTilePrices[carrier] = valid.length
+    ? { amount: Math.min(...valid), currency, estimate, fingerprint: fingerprint ?? shippingFormFingerprint() }
+    : null;
+  renderCarrierTiles();
+}
+
+function carrierConnections(settings = TAX_CENTER.settings || {}) {
+  const cp = resolveCanadaPostCredentials(settings);
+  const cc = chitChatsAccount();
+  return {
+    shippo: !!String(settings.shippoKey || '').trim(),
+    canadapost: !!(cp.apiKey && cp.apiSecret) && settings.cpEnabled !== false,
+    chitchats: !!(cc.clientId && cc.token) && settings.ccEnabled !== false,
+  };
+}
+
+function renderCarrierTiles() {
+  const tiles = document.querySelectorAll('#tab-shipping .ship-carrier[data-carrier]');
+  if (!tiles.length) return;
+  const connected = carrierConnections();
+  const fingerprint = shippingFormFingerprint();
+  tiles.forEach(tile => {
+    const key = tile.dataset.carrier;
+    const off = !connected[key];
+    tile.classList.toggle('is-unconnected', off);
+    const status = tile.querySelector('.ship-carrier-status');
+    // Canada Post still answers without an account, from its estimate table.
+    if (status) status.textContent = !off ? ''
+      : key === 'canadapost' ? 'Not connected: rough estimates only'
+        : 'Not connected yet. Add it in Tax Centre, Integrations.';
+    const price = _carrierTilePrices[key];
+    const fresh = !!price && price.fingerprint === fingerprint;
+    const priceEl = tile.querySelector('.ship-carrier-price');
+    if (priceEl) priceEl.textContent = fresh
+      ? `${price.estimate ? 'About ' : 'From '}${price.amount.toFixed(2)} ${price.currency}`
+      : '';
+  });
+  const abroad = $('ship-abroad-group');
+  if (abroad) abroad.hidden = !shippoRateFormState().international;
+}
+
 /**
  * The line above the Calculate button: what the form still needs, updated as it
  * is typed, so nothing is discovered only after pressing the button.
@@ -8062,6 +8125,7 @@ function shippoRateFormState() {
 function renderShippoRateReadiness() {
   const host = $('ship-rate-readiness');
   if (!host) return;
+  renderCarrierTiles();
   const { missing } = shippoRateFormState();
   if (!missing.length) {
     host.innerHTML = '<span class="pill green">✓ Ready to quote</span>'
@@ -8149,6 +8213,8 @@ async function calculateShippoRates() {
     return;
   }
   renderShippoRateReadiness();
+  // The tile price belongs to the form as it was when the quote was asked for.
+  const quotedFor = shippingFormFingerprint();
 
   const isInternational = isInternationalShipment(sfCountryCode, stCountryCode);
 
@@ -8285,6 +8351,10 @@ async function calculateShippoRates() {
         }
       }
     }
+
+    setCarrierTilePrice('shippo', cheapestRate ? [cheapestRate.amount] : [], {
+      currency: String(cheapestRate?.currency || 'CAD').toUpperCase(), fingerprint: quotedFor,
+    });
 
     if (isInternational) {
       calculateZonosDutiesHandler({ shippingAmount: cheapestRate ? parseFloat(cheapestRate.amount) : 15.00, carrierName: cheapestRate?.provider || '' }).catch(() => {});
