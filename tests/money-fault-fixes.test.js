@@ -1,10 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { parseLooseNumber, booksNamedInText } from '../src/lib/invoices.js';
+import { appSource } from './helpers/extract-decl.js';
 
-const main = readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src/main.js'), 'utf8');
+// main.js plus the feature and lib modules (invoices live in features/invoices.js).
+const main = appSource;
 
 describe('invoice number parsing', () => {
   it('reads thousands commas as thousands', () => {

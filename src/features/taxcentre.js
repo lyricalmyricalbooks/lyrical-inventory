@@ -26,7 +26,6 @@ import {
   _fxRateCache,
   calculateFinancials,
   defaultState,
-  ensurePdfJs,
   isAuthor,
   isTestBook,
   isTestBookId,
@@ -36,6 +35,7 @@ import {
   states,
   today,
 } from '../main.js';
+import { ensurePdfJs } from './invoices.js';
 import { TC_CATEGORIES, _tcOpenTripName, openArtistPayoutEditor } from './tax-entries.js';
 import {
   _localReceiptCell,
