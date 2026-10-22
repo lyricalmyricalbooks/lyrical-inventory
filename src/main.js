@@ -21595,7 +21595,7 @@ window.posPrintReceipt = function () {
   if (!posPendingSale) return;
   const rowsHtml = posPendingSale.rows.map((row) => {
     const line = row.convertedLine === null ? posFormat(row.sourceLine, row.sourceCode) : posFormat(row.convertedLine, posPendingSale.currency);
-    return `<tr><td>${escapeHtml(row.book.title)}</td><td>${row.qty}</td><td style="text-align:right;">${line}</td></tr>`;
+    return `<tr><td>${escapeHtml(row.book.title)}</td><td>${row.qty}</td><td style="text-align:right;">${escapeHtml(line)}</td></tr>`;
   }).join('');
   const win = window.open('', '_blank', 'width=420,height=600');
   if (!win) return;
@@ -21603,17 +21603,16 @@ window.posPrintReceipt = function () {
     <html><head><title>POS Receipt</title><style>body{font-family:Arial,sans-serif;padding:16px;} table{width:100%;border-collapse:collapse;} td,th{padding:6px 0;border-bottom:var(--stroke-hair) solid #ddd;} .r{text-align:right;} .mt{margin-top:12px;}</style></head>
     <body>
       <h2>Lyricalmyrical Books</h2>
-      <div>Timestamp: ${posPendingSale.timestampLabel}</div>
-      <div>Payment: ${posPendingSale.method}</div>
+      <div>Timestamp: ${escapeHtml(posPendingSale.timestampLabel)}</div>
+      <div>Payment: ${escapeHtml(posPendingSale.method)}</div>
       <table class="mt"><thead><tr><th>Item</th><th>Qty</th><th class="r">Line</th></tr></thead><tbody>${rowsHtml}</tbody></table>
-      <h3 class="r">Total: ${posPendingSale.totalCharged}</h3>
+      <h3 class="r">Total: ${escapeHtml(posPendingSale.totalCharged)}</h3>
     </body></html>
   `);
   win.document.close();
   win.focus();
   win.print();
 };
-
 
 // ── TAX SEASON EXPORT ──
 window.downloadFullTaxSeasonExport = function () {
