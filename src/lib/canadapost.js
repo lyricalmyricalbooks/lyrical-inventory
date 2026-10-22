@@ -860,7 +860,7 @@ export function generateCanadaPostLabelSvg({
         <text x="0" y="45" font-size="12" font-weight="700" fill="#000000">CONTENTS: <tspan font-weight="800">${escapeXml(customs?.description || 'Printed Books / Livres imprimés')}</tspan></text>
         <text x="420" y="45" font-size="12" font-weight="700" fill="#000000">TARIFF HS: <tspan font-weight="900">${escapeXml(customs?.hsCode || '490199')}</tspan></text>
         
-        <text x="0" y="75" font-size="12" font-weight="700" fill="#000000">QTY: <tspan font-weight="800">${customs?.quantity || 1}</tspan> · VALUE: <tspan font-weight="900">$${(parseFloat(customs?.declaredValue || 25) * Math.max(1, parseInt(customs?.quantity || 1, 10) || 1)).toFixed(2)} CAD</tspan></text>
+        <text x="0" y="75" font-size="12" font-weight="700" fill="#000000">QTY: <tspan font-weight="800">${Math.max(1, parseInt(customs?.quantity || 1, 10) || 1)}</tspan> · VALUE: <tspan font-weight="900">$${(parseFloat(customs?.declaredValue || 25) * Math.max(1, parseInt(customs?.quantity || 1, 10) || 1)).toFixed(2)} CAD</tspan></text>
         <text x="420" y="75" font-size="12" font-weight="700" fill="#000000">ORIGIN: <tspan font-weight="800">CANADA (CA)</tspan></text>
         
         ${declarationId ? `

@@ -2040,7 +2040,7 @@ function renderProdCostCalcList() {
     const origSymbol = getCurSymbolForCode(exp.currency);
 
     const origDisplay = isDifferentCur
-      ? `<span class="tcc-amount-orig">Orig: ${origSymbol}${exp.amount.toFixed(2)} ${exp.currency}</span>`
+      ? `<span class="tcc-amount-orig">Orig: ${escapeHtml(origSymbol)}${exp.amount.toFixed(2)} ${escapeHtml(exp.currency)}</span>`
       : '';
 
     const bookBadge = exp.bookId
@@ -2060,7 +2060,7 @@ function renderProdCostCalcList() {
           ${exp.vendor ? `<div class="tcc-row-sub">Vendor: ${escapeHtml(exp.vendor)}</div>` : ''}
         </div>
         <div class="tcc-row-amount">
-          <div class="tcc-amount-main">${curSymbol}${converted.toFixed(2)}</div>
+          <div class="tcc-amount-main">${escapeHtml(curSymbol)}${converted.toFixed(2)}</div>
           ${origDisplay}
         </div>
       </div>
@@ -6484,7 +6484,7 @@ function renderChannelAnalytics() {
     toggle = `<div class="ch-cur-toggle" role="tablist" aria-label="Currency selection">` + curKeys.map(c => {
       const tot = (byCur[c].books || []).reduce((a, b) => a + (b.total || 0), 0);
       const isAct = c === cur;
-      return `<button type="button" role="tab" aria-selected="${isAct}" class="ch-cur-btn${isAct ? ' active' : ''}" onclick="selectAllChCurrency('${c.replace(/'/g, "\\'")}')">
+      return `<button type="button" role="tab" aria-selected="${isAct}" class="ch-cur-btn${isAct ? ' active' : ''}" onclick="selectAllChCurrency(${escapeHtml(JSON.stringify(c))})">
         <span class="ch-cur-code">${escapeHtml(c)}</span>
         <span class="ch-cur-amt">${fmt(tot, c)}</span>
       </button>`;
@@ -12570,7 +12570,7 @@ export function populateAddStoreDirectory() {
     chipsList.innerHTML = shown.map(st => {
       const inThisBook = currentStores.includes(st.name.toLowerCase());
       const loc = st.city || st.country || '';
-      return `<button type="button" class="store-quick-chip" data-store-name="${escapeHtml(st.name)}" onclick="handleSelectExistingStore('${escapeHtml(st.name.replace(/'/g, "\\'"))}')" title="${escapeHtml(st.name)}${loc ? ` · ${escapeHtml(loc)}` : ''}">
+      return `<button type="button" class="store-quick-chip" data-store-name="${escapeHtml(st.name)}" onclick="handleSelectExistingStore(${escapeHtml(JSON.stringify(st.name))})" title="${escapeHtml(st.name)}${loc ? ` · ${escapeHtml(loc)}` : ''}">
         <span class="chip-dot" aria-hidden="true"></span>
         <span class="chip-copy">
           <span class="chip-name">${escapeHtml(st.name)}</span>
@@ -14926,10 +14926,12 @@ function updateSheetsBadge() {
     b.textContent = sheetsUrl ? '📊 Sheets: live' : '📊 Sheets: not set up';
     b.className = sheetsUrl ? 'sheets-badge' : 'sheets-badge off';
   });
-  const openLink = $('sheets-open-link'); if (openLink) { if (sheetsSpreadsheetUrl) { openLink.href = sheetsSpreadsheetUrl; openLink.style.display = ''; } else openLink.style.display = 'none'; }
-  const cardLink = $('open-sheet-link'); if (cardLink) { if (sheetsSpreadsheetUrl) { cardLink.href = sheetsSpreadsheetUrl; cardLink.style.display = ''; } else cardLink.style.display = 'none'; }
+  // Only a real web address becomes a link; anything else hides the button.
+  const sheetUrl = safeHttpUrl(sheetsSpreadsheetUrl);
+  const openLink = $('sheets-open-link'); if (openLink) { if (sheetUrl) { openLink.href = sheetUrl; openLink.style.display = ''; } else openLink.style.display = 'none'; }
+  const cardLink = $('open-sheet-link'); if (cardLink) { if (sheetUrl) { cardLink.href = sheetUrl; cardLink.style.display = ''; } else cardLink.style.display = 'none'; }
   // Sidebar footer "Open Google Sheet" (publisher app-shell) — mirror sheets-open-link.
-  const sideLink = $('side-sheets-open'); if (sideLink) { if (sheetsSpreadsheetUrl) { sideLink.href = sheetsSpreadsheetUrl; sideLink.style.display = ''; } else sideLink.style.display = 'none'; }
+  const sideLink = $('side-sheets-open'); if (sideLink) { if (sheetUrl) { sideLink.href = sheetUrl; sideLink.style.display = ''; } else sideLink.style.display = 'none'; }
 }
 function normalizeAppsScriptUrl(rawUrl) {
   const cleaned = (rawUrl || '').trim();
@@ -15949,7 +15951,7 @@ function _renderProductionCostFields() {
   container.innerHTML = BOOK_LIST.map(book => `
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
       <div style="display:flex;align-items:center;gap:8px;min-width:220px;">
-        <div style="width:8px;height:8px;border-radius:50%;background:${book.accent};flex-shrink:0;"></div>
+        <div style="width:8px;height:8px;border-radius:50%;background:${escapeHtml(book.accent || '')};flex-shrink:0;"></div>
         <span style="font-size:var(--text-base);font-weight:600;color:var(--text);">${escapeHtml(book.title)}</span>
         <span style="font-size:var(--text-xs);color:var(--text3);">${book.currency}</span>
       </div>
@@ -16055,11 +16057,11 @@ function _renderPaymentLinkFields() {
   container.innerHTML = BOOK_LIST.map(book => `
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
       <div style="display:flex;align-items:center;gap:8px;min-width:200px;">
-        <div style="width:8px;height:8px;border-radius:50%;background:${book.accent};flex-shrink:0;"></div>
+        <div style="width:8px;height:8px;border-radius:50%;background:${escapeHtml(book.accent || '')};flex-shrink:0;"></div>
         <span style="font-size:var(--text-base);font-weight:600;color:var(--text);">${escapeHtml(book.title)}</span>
       </div>
       <div class="form-group" style="flex:1;margin:0;">
-        <input type="text" id="pl-${book.id}" value="${book.paymentLink || ''}" placeholder="https://paypal.me/… or email@interac.ca">
+        <input type="text" id="pl-${book.id}" value="${escapeHtml(book.paymentLink || '')}" placeholder="https://paypal.me/… or email@interac.ca">
       </div>
     </div>`).join('');
 }
@@ -20585,11 +20587,14 @@ function renderWebAnalytics() {
       if (domainLabel) domainLabel.textContent = 'External Dashboard';
     }
 
-    if (iframe && iframe.src !== url) {
-      iframe.src = url;
+    // Only an http(s) address is loaded or linked; a pasted javascript: or
+    // data: value stays out of the frame and the link.
+    const safeUrl = safeHttpUrl(url);
+    if (iframe && safeUrl && iframe.src !== safeUrl) {
+      iframe.src = safeUrl;
     }
-    if (externalLink) {
-      externalLink.href = url;
+    if (externalLink && safeUrl) {
+      externalLink.href = safeUrl;
     }
 
     renderUmamiStats(url);
