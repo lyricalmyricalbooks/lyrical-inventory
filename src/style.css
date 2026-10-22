@@ -10981,15 +10981,22 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   flex-direction: column;
   height: 100%;
 }
-/* Shipping actions run top to bottom in the order you use them: one main
-   "compare everything" button, single-carrier quotes side by side, the extra
-   Chit Chats fields folded away, and batch shipping last. */
+/* Shipping actions run top to bottom in the order you use them: one tile per
+   carrier (Shippo leads, since it compares them all), the extra Chit Chats
+   fields folded away, duties for parcels leaving Canada, and batch shipping last. */
 .ship-flow { margin-top: var(--space-4); display: flex; flex-direction: column; gap: var(--space-4); }
 .ship-flow .btn { justify-content: center; text-align: center; }
-.ship-flow-primary { width: 100%; }
 .ship-flow-group .sect { margin-bottom: var(--space-2); }
-.ship-carrier-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--space-2); }
+.ship-carrier-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: var(--space-2); }
+/* Every carrier tile has the same anatomy: the name in caps, then a plain-case
+   line on what it gives you. */
+.ship-flow .btn.ship-carrier { flex-direction: column; align-items: flex-start; justify-content: flex-start; text-align: left; gap: var(--space-1); padding: var(--space-3); white-space: normal; min-height: 72px; }
+.ship-carrier-name { font-size: var(--text-sm); }
+.ship-carrier-note { font-size: var(--text-xs); font-weight: 500; letter-spacing: 0; text-transform: none; line-height: 1.35; }
+.ship-flow .btn.ship-carrier--wide { width: 100%; min-height: 0; }
 .ship-cc-details { display: flex; flex-direction: column; gap: var(--space-3); }
+/* Closed, the hidden fields must not leave a gap under the summary. */
+.ship-cc-details:not([open]) { gap: 0; }
 .ship-cc-details > summary { cursor: pointer; list-style: none; margin-bottom: 0; min-height: 32px; }
 .ship-cc-details > summary::-webkit-details-marker { display: none; }
 .ship-cc-details > summary::before { content: '▸'; }
