@@ -324,7 +324,7 @@ function renderEditExpenseReceipts() {
       const fn = r.replace('local://', '');
       const base = fn.split('/').pop();
       name = base;
-      viewLink = `<a href="#" onclick="event.preventDefault(); viewLocalReceipt('${fn.replace(/'/g, "\\'")}')" style="color:var(--gold3);text-decoration:underline;">${escapeHtml(base)}</a>`;
+      viewLink = `<a href="#" onclick="event.preventDefault(); viewLocalReceipt(${escapeHtml(JSON.stringify(fn))})" style="color:var(--gold3);text-decoration:underline;">${escapeHtml(base)}</a>`;
     } else {
       name = String(r).split('/').pop() || 'Remote Receipt';
       const href = followableUrl(r);
