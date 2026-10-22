@@ -37,6 +37,7 @@ import {
 import { shippingPurchaseRowPayload } from './shipping.js';
 import { simulatePostToSheets } from './sheets-simulator.js';
 import { confirmDialog } from '../lib/modal.js';
+import { escapeHtml } from '../lib/html.js';
 import { cadEquivalentForSale, getBookCurrencyCode, normalizeCurrencyCode } from '../lib/money.js';
 import { sheetLogLabel, sheetLogSummary, sortSheetPayloads } from '../lib/sheet-sync.js';
 import { consignmentSyncPayload } from '../lib/consignment.js';
@@ -1095,10 +1096,10 @@ function renderSheetsLog() {
   const iconFor = (st) => st === 'ok' ? '✓' : st === 'unknown' ? '~' : st === 'queued' ? '…' : st === 'retry' ? '↻' : '⚠';
 
   let html = pageItems.map(l => `<tr>
-      <td class="sheets-time tnum">${l.time}</td>
-      <td class="sheets-book">${l.book}</td>
-      <td><span class="sheets-type">${l.type}</span></td>
-      <td class="sheets-summary">${l.summary}</td>
+      <td class="sheets-time tnum">${escapeHtml(l.time)}</td>
+      <td class="sheets-book">${escapeHtml(l.book)}</td>
+      <td><span class="sheets-type">${escapeHtml(l.type)}</span></td>
+      <td class="sheets-summary">${escapeHtml(l.summary)}</td>
       <td>
         <span class="log-status ${classFor(l.status)}"></span>
         <span class="sheets-status ${classFor(l.status)}">${iconFor(l.status)} ${labelFor(l.status)}</span>

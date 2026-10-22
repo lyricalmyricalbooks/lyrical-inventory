@@ -47,7 +47,7 @@ describe('App-Wide 5 UX Enhancements Suite (/ux-designer)', () => {
     });
 
     it('applies tabular monospace figures to sync log timestamps', () => {
-      expect(mainJs).toContain('<td class="sheets-time tnum">${l.time}</td>');
+      expect(mainJs).toContain('<td class="sheets-time tnum">${escapeHtml(l.time)}</td>');
     });
   });
 
