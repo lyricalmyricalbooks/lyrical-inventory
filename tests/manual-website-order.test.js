@@ -237,8 +237,9 @@ describe('the worklist offers a way out of an unmatched label', () => {
 
   it('writes the recovered order through the ledger path, not a bare push', () => {
     expect(appSource).toContain('commitRecoveredWebsiteOrder');
-    // Stock, channel stats and the Sheets row must all move together.
-    expect(appSource).toMatch(/commitRecoveredWebsiteOrder[\s\S]{0,2600}chStats\['Website'\]/);
+    // Stock, channel stats and the Sheets row must all move together: the
+    // shared sale step moves the first two, the Website postage row follows.
+    expect(appSource).toMatch(/commitRecoveredWebsiteOrder[\s\S]{0,2600}addSaleToState\(targetState, targetBook, \{ num, chan: 'Website'/);
     expect(appSource).toMatch(/commitRecoveredWebsiteOrder[\s\S]{0,2600}syncToSheets/);
   });
 });

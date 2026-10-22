@@ -33,7 +33,7 @@ function harness({ currency = 'CAD', invoices = [] } = {}) {
     updateDash: vi.fn(),
   };
   const api = buildHarness({
-    names: ['recordOrder', 'writeOrderToLedger', '_reconApplySaleToBook'],
+    names: ['recordOrder', 'writeOrderToLedger', 'addSaleToState', '_reconApplySaleToBook'],
     deps,
     returns: '{ recordOrder, _reconApplySaleToBook }',
   });
