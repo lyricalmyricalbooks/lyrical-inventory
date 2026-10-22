@@ -3267,19 +3267,7 @@ function initShippingTab() {
       storesGroup.appendChild(opt);
     } else {
       stores.forEach(st => {
-        const rawPhone = st.phone || st.contactPhone || st.mobile || st.telephone || '';
-        const addrObj = {
-          name: st.contact || st.name,
-          company: st.name,
-          phone: getFallbackShippingPhone(rawPhone),
-          street1: st.address || '',
-          street2: '',
-          city: st.city || '',
-          state: st.region || '',
-          zip: st.postal || '',
-          country: st.country ? resolveCountryCode(st.country) : 'CA',
-          countryRaw: st.country || '',
-        };
+        const addrObj = storeShippingAddress(st);
         const opt = document.createElement('option');
         opt.value = JSON.stringify(addrObj);
         opt.textContent = `${st.name} (${st.city || ''}, ${st.country || ''})`;
@@ -3298,21 +3286,7 @@ function initShippingTab() {
       ordersGroup.appendChild(opt);
     } else {
       orders.slice(0, 20).forEach(h => {
-        const rawPhone = h.shipPhone || h.phone || h.contactPhone || h.buyerPhone || '';
-        const addrObj = {
-          orderNumber: h.num,
-          parcelLines: recentOrderParcelLines(h),
-          name: h.shipName,
-          company: '',
-          phone: getFallbackShippingPhone(rawPhone),
-          street1: h.shipAddr1,
-          street2: h.shipAddr2 || '',
-          city: h.shipCity,
-          state: h.shipProvince,
-          zip: h.shipPostal,
-          country: h.shipCountry ? resolveCountryCode(h.shipCountry) : 'CA',
-          countryRaw: h.shipCountry || '',
-        };
+        const addrObj = recentOrderShippingAddress(h, recentOrderParcelLines(h));
         const opt = document.createElement('option');
         opt.value = JSON.stringify(addrObj);
         opt.textContent = `${h.shipName} (${h.shipCity || ''}, ${h.shipCountry || ''}) - ${h.date || ''}`;
@@ -3369,6 +3343,44 @@ function getFallbackShippingPhone(preferredPhone) {
   return (preferredPhone || '').toString().trim();
 }
 
+// The ship-to address for a consignment store, shared by the destination
+// dropdown and the searchable picker so both fill the form the same way.
+function storeShippingAddress(st) {
+  const rawPhone = st.phone || st.contactPhone || st.mobile || st.telephone || '';
+  return {
+    name: st.contact || st.name,
+    company: st.name,
+    phone: getFallbackShippingPhone(rawPhone),
+    street1: st.address || '',
+    street2: '',
+    city: st.city || '',
+    state: st.region || '',
+    zip: st.postal || '',
+    country: st.country ? resolveCountryCode(st.country) : 'CA',
+    countryRaw: st.country || '',
+  };
+}
+
+// The ship-to address for a recent ledger order, with the books it carries,
+// shared by the destination dropdown and the searchable picker.
+function recentOrderShippingAddress(h, parcelLines) {
+  const rawPhone = h.shipPhone || h.phone || h.contactPhone || h.buyerPhone || '';
+  return {
+    orderNumber: h.num,
+    parcelLines,
+    name: h.shipName,
+    company: '',
+    phone: getFallbackShippingPhone(rawPhone),
+    street1: h.shipAddr1,
+    street2: h.shipAddr2 || '',
+    city: h.shipCity,
+    state: h.shipProvince,
+    zip: h.shipPostal,
+    country: h.shipCountry ? resolveCountryCode(h.shipCountry) : 'CA',
+    countryRaw: h.shipCountry || '',
+  };
+}
+
 let _shippoDestMasterList = [];
 let _shippoDestActiveCat = 'all';
 
@@ -3410,19 +3422,7 @@ function renderCustomShippoDestPicker() {
   // 2. Consignment Stores
   const stores = typeof getAllStores === 'function' ? getAllStores() : [];
   stores.forEach(st => {
-    const rawPhone = st.phone || st.contactPhone || st.mobile || st.telephone || '';
-    const addrObj = {
-      name: st.contact || st.name,
-      company: st.name,
-      phone: getFallbackShippingPhone(rawPhone),
-      street1: st.address || '',
-      street2: '',
-      city: st.city || '',
-      state: st.region || '',
-      zip: st.postal || '',
-      country: st.country ? resolveCountryCode(st.country) : 'CA',
-      countryRaw: st.country || '',
-    };
+    const addrObj = storeShippingAddress(st);
 
     items.push({
       category: 'stores',
@@ -3440,22 +3440,8 @@ function renderCustomShippoDestPicker() {
   // 3. Ledger Orders
   const recentOrders = typeof getRecentShippingOrders === 'function' ? getRecentShippingOrders() : [];
   recentOrders.slice(0, 20).forEach(h => {
-    const rawPhone = h.shipPhone || h.phone || h.contactPhone || h.buyerPhone || '';
     const parcelLines = recentOrderParcelLines(h);
-    const addrObj = {
-      orderNumber: h.num,
-      parcelLines,
-      name: h.shipName,
-      company: '',
-      phone: getFallbackShippingPhone(rawPhone),
-      street1: h.shipAddr1,
-      street2: h.shipAddr2 || '',
-      city: h.shipCity,
-      state: h.shipProvince,
-      zip: h.shipPostal,
-      country: h.shipCountry ? resolveCountryCode(h.shipCountry) : 'CA',
-      countryRaw: h.shipCountry || '',
-    };
+    const addrObj = recentOrderShippingAddress(h, parcelLines);
 
     // A website order stays pickable — the owner sometimes buys its postage
     // here — but it is the website's to pack, so it never counts as waiting.
