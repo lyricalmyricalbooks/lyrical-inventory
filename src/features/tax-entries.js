@@ -29,9 +29,7 @@ import {
   BOOKS,
   calculateArtistEarnings,
   defaultState,
-  editArtistPayout,
   filterArtistEarningsByYear,
-  findArtistPayout,
   isExpenseAwaitingRate,
   isTestBook,
   isTestBookId,
@@ -40,18 +38,17 @@ import {
   openEditLedger,
   resolveExpenseRate,
   saveState,
-  settlePayoutRequests,
   showToast,
   states,
   switchBook,
   switchTab,
   TAX_CENTER,
   today,
-  undoRecordedArtistSettlement,
   voidHistEntry,
   WEBSITE_SALE_LOCKED,
   withActiveBook,
 } from '../main.js';
+import { editArtistPayout, findArtistPayout, settlePayoutRequests, undoRecordedArtistSettlement } from './dashboard.js';
 import { ledgerSaleIndexForHistMirror } from '../lib/consignment.js';
 import { csvCell, toCsv } from '../lib/csv.js';
 import { downloadCsv } from '../lib/download.js';

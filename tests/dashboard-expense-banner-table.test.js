@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vitest';
+import { appSource } from './helpers/extract-decl.js';
 
 // Resolved via __dirname rather than `new URL(..., import.meta.url)`: under the
 // jsdom test environment the global URL is jsdom's, and node:fs / fileURLToPath
@@ -10,7 +11,8 @@ import { expect, test } from 'vitest';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const styles = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
 const html = readFileSync(path.join(__dirname, '../index.html'), 'utf8');
-const mainJs = readFileSync(path.join(__dirname, '../src/main.js'), 'utf8');
+// main.js plus the feature and lib modules (the dashboard lives in features/dashboard.js).
+const mainJs = appSource;
 
 test('the dashboard expense-owed table has a real header row', () => {
   // The table used to be a bare <tbody> with no column labels at all.
