@@ -2,11 +2,13 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
+import { appSource } from './helpers/extract-decl.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(path.join(__dirname, '../index.html'), 'utf8');
 const css = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
-const js = readFileSync(path.join(__dirname, '../src/main.js'), 'utf8');
+// main.js plus the feature and lib modules (invoices live in features/invoices.js).
+const js = appSource;
 const customersJs = readFileSync(path.join(__dirname, '../src/features/customers.js'), 'utf8');
 
 describe('Challenger 1 Adversarial Suite: Touch Target Verification (>= 44px)', () => {

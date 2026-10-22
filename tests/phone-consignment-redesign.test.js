@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { loadApp, makeBook } from './helpers/load-app.js';
+import { appSource } from './helpers/extract-decl.js';
 
 // The phone Consignment screen: Stores, Invoices and Ledger take turns under a
 // tab row, store cards fold their secondary actions, invoices get a full-width
@@ -16,7 +17,8 @@ const html = read('index.html');
 const style = read('src/style.css');
 const phone = read('src/styles/phone.css');
 const system = read('src/styles/system.css');
-const main = read('src/main.js');
+// main.js plus the feature and lib modules (invoices live in features/invoices.js).
+const main = appSource;
 const layout = read('src/lib/phone-layout.js');
 
 /** The per-book Consignment tab, sliced out of index.html by its panel id. */

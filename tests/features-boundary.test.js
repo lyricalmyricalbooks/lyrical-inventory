@@ -122,6 +122,14 @@ const MAIN_IMPORT_BUDGET = {
   // the rate-waiting checks, and TAX_CENTER / loadTaxCenter; plus $ /
   // showToast / today / switchTab / the test-book filters.
   'tax-entries.js': 28,
+  // Set at extraction: invoices read and write every book's state and its
+  // ledger (BOOKS, BOOK_LIST, getBook, getState, states, saveState,
+  // ledgerById, settleLedgerSalePaid, renderLedger, renderHist), the book's
+  // accepted payment methods and link, the Consignment tab's section and count
+  // helpers and its payment dialog, the reminder sweep, and the Sheets URL
+  // for the emailed copy; plus $ / showToast / today / the role and test-book
+  // checks.
+  'invoices.js': 25,
 };
 
 const featureFiles = fs.existsSync(featureDir)
