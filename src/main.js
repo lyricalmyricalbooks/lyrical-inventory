@@ -1,3 +1,5 @@
+// Must stay the first import: isolates the Test Profile before anything else runs.
+import { TEST_PROFILE_ACTIVE } from './test-profile-boot.js';
 // Design system foundation (tokens + interaction baseline) loads first so that
 // unlayered legacy rules in style.css keep winning on any conflict.
 import './styles/system.css';
@@ -13,6 +15,7 @@ initPhoneWorkspace(document.getElementById('pw-app'));
 // Body, not #pw-app: the pop-up windows are siblings of the app shell.
 initPhoneLayouts(document.body);
 import './firebase.js';
+import { TEST_PROFILE_FLAG, SAMPLE_BOOK_ID, clearTestStorage, isSampleDataSeeded, markSampleDataSeeded } from './lib/test-profile.js';
 import { installGasAuth } from './lib/gas-auth.js';
 installGasAuth(() => (typeof window._fbGetIdToken === 'function' ? window._fbGetIdToken() : ''));
 import { registerSW } from 'virtual:pwa-register';
@@ -1520,7 +1523,8 @@ function applyStoredCatalog(stored) {
   delete storedBooks._deletedDefaults;
   delete storedBooks._posExtra;
   const filteredDefaults = {};
-  Object.keys(DEFAULT_BOOKS).forEach(id => {
+  // The Test Profile holds sample books only; the built-in titles are real ones.
+  if (!TEST_PROFILE_ACTIVE) Object.keys(DEFAULT_BOOKS).forEach(id => {
     if (!deletedDefaultIds.includes(id)) filteredDefaults[id] = DEFAULT_BOOKS[id];
   });
   BOOKS = { ...filteredDefaults, ...storedBooks };
@@ -4894,6 +4898,8 @@ function updateProfileTabs(type) {
   const activeTab = $('profile-tab-active');
   const testTab = $('profile-tab-test');
   if (!activeTab || !testTab) return;
+  // Inside the Test Profile every book is a sample book: the tab stays lit.
+  if (TEST_PROFILE_ACTIVE) type = 'test';
 
   if (type === 'test') {
     activeTab.classList.remove('active');
@@ -4906,6 +4912,13 @@ function updateProfileTabs(type) {
 
 function selectProfileTab(type) {
   if (!isPublisherSession() || isAuthor()) return;
+
+  // The Test Profile is a separate copy of the app (lib/test-profile.js), so
+  // moving between it and the real books is a reload, never a book switch:
+  // real and sample data are never in memory together.
+  if (type === 'test' && !TEST_PROFILE_ACTIVE) { enterTestProfile(); return; }
+  if (type !== 'test' && TEST_PROFILE_ACTIVE) { leaveTestProfile(); return; }
+  if (TEST_PROFILE_ACTIVE) return;
 
   const testBook = BOOK_LIST.find(isTestBook);
 
@@ -4931,47 +4944,59 @@ function selectProfileTab(type) {
 }
 window.selectProfileTab = selectProfileTab;
 
-// ── SEED MOCK TEST DATA FOR LEGIT TEST PROFILE ──
-async function seedMockTestData() {
-  const testBook = BOOK_LIST.find(isTestBook);
-  if (!testBook) {
-    showToast('⚠ Test book not found in catalog', 'err');
+// ── THE TEST PROFILE: enter, leave, reset ──
+// See lib/test-profile.js. Each is a reload, so the page that comes back is
+// wholly one side or the other.
+function enterTestProfile() {
+  try { sessionStorage.setItem(TEST_PROFILE_FLAG, '1'); } catch (_) {
+    showToast('⚠ This browser blocked the Test Profile (private mode?)', 'err');
     return;
   }
-  const testBookId = testBook.id;
-
-  if (activeBook !== testBookId) return;
-
+  location.reload();
+}
+function leaveTestProfile() {
+  try { sessionStorage.removeItem(TEST_PROFILE_FLAG); } catch (_) { /* reload decides */ }
+  location.reload();
+}
+async function resetTestProfile() {
+  if (!TEST_PROFILE_ACTIVE) return;
   if (!(await confirmDialog(
-    `Reset and seed the Test Profile with rich, realistic sample data?\n\n` +
-    `• This will overwrite any existing sales, consignment, and expenses for this book.\n` +
-    `• It will configure a production cost of €300, 2 consignment stores, multiple sales channels, pending/received artist expenses, and a stock drift warning.`,
-    { title: 'Seed Mock Test Data', okLabel: 'Seed Data' }
+    'Throw away everything done in the Test Profile and start again from the sample books?\n\nYour real books are not affected.',
+    { title: 'Reset sample data', okLabel: 'Reset' }
   ))) return;
+  clearTestStorage(window.__realLocalStorage || localStorage);
+  location.reload();
+}
+window.enterTestProfile = enterTestProfile;
+window.leaveTestProfile = leaveTestProfile;
+window.resetTestProfile = resetTestProfile;
 
-  // 1. Reconfigure book properties in catalog
-  const book = BOOKS[testBookId];
-  if (!book) {
-    showToast('⚠ Test book not found in catalog', 'err');
-    return;
+// First visit to the Test Profile (or the first after a reset): fill the
+// sample book with a realistic history, then open it.
+async function prepareTestProfile() {
+  if (!TEST_PROFILE_ACTIVE) return;
+  showTestProfileBanner();
+  if (BOOKS[SAMPLE_BOOK_ID] && !isSampleDataSeeded(localStorage)) {
+    await applySampleTestData(SAMPLE_BOOK_ID);
+    markSampleDataSeeded(localStorage);
   }
+  if (BOOKS[SAMPLE_BOOK_ID] && activeBook === 'all') switchBook(SAMPLE_BOOK_ID);
+}
 
-  book.maxPrint = 15;
-  book.listPrice = 17;
-  book.currency = '€';
-  book.threshold = 5;
-  book.productionCost = 300;
-  book.author = 'Test Author';
-  book.isbn = '978-3-16-148410-0';
-  book.accent = '#10b981'; // Green
-  book.accentBg = 'rgba(16, 185, 129, 0.1)';
-  book.paymentLink = 'https://paypal.me/testauthor';
-  book.authorPaymentLink = 'https://paypal.me/testauthor';
-  book.authorPassword = 'test1password';
+function showTestProfileBanner() {
+  const banner = $('test-profile-banner');
+  if (banner) banner.hidden = false;
+}
 
-  await saveCatalogWithDeletions();
+// Rich, realistic sample history for one book: two consignment stores, sales
+// on several channels, artist expenses (one owed, one repaid), an artist
+// transfer due and a deliberate stock drift. Only ever run inside the Test
+// Profile, whose saves never leave this device.
+async function applySampleTestData(testBookId) {
+  const book = BOOKS[testBookId];
+  if (!TEST_PROFILE_ACTIVE || !book) return;
 
-  // 2. Build mock state
+  // Build mock state
   const testState = defaultState(book);
   testState.stock = 15; // Set starting stock on hand in database (we'll intentionally drift this from derived count of 9)
 
@@ -5146,11 +5171,7 @@ async function seedMockTestData() {
   states[testBookId].stock = 15;
 
   await saveState(testBookId);
-
-  showToast('✓ Test profile seeded successfully!');
-  switchBook(testBookId); // Force redraw
 }
-window.seedMockTestData = seedMockTestData;
 
 export function switchBook(bookId) {
   // Author sessions are locked to a single book; never switch them.
@@ -5229,11 +5250,6 @@ export function switchBook(bookId) {
     }
   }
   updateSheetsTabUI();
-
-  const seedBtn = $('d-seed-test-btn');
-  if (seedBtn) {
-    seedBtn.style.display = (testBook && bookId === testBook.id) ? 'inline-flex' : 'none';
-  }
 
   updateRoleToggleButton();
   syncRoleUI();
@@ -15218,7 +15234,9 @@ async function exportToJSON(ev) {
   return withButtonLoading(ev, 'Saving…', async () => {
     const data = buildBackupPayload();
     const filename = backupFileName();
-    const savedToFolder = await writeBackupToChosenFolder(data, filename);
+    // The chosen backup folder is shared with the real books: sample data
+    // is only ever downloaded, never put next to the real backups.
+    const savedToFolder = TEST_PROFILE_ACTIVE ? false : await writeBackupToChosenFolder(data, filename);
 
     if (!savedToFolder) {
       downloadText(JSON.stringify(data, null, 2), filename, 'application/json');
@@ -15232,6 +15250,8 @@ async function exportToJSON(ev) {
 }
 
 function maybeAutoDownloadDailyBackup() {
+  // A backup of sample data dropped in the real backup folder is a trap.
+  if (TEST_PROFILE_ACTIVE) return;
   // Auto-download once per calendar day (local time) when app is opened.
   // This still requires the app to be open on that day.
   const todayKey = new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD
@@ -17107,7 +17127,8 @@ async function boot(forcedBook) {
       // arriving rather than nothing at all. Replaced by updateAllOverview()
       // the moment loadAllBooks() resolves.
       showCatalogueSkeleton();
-      loadAllBooks({ settingsLoaded }).then(() => {
+      loadAllBooks({ settingsLoaded }).then(async () => {
+        await prepareTestProfile();
         // Send anything queued before the app was last closed (see author branch).
         processSyncQueue();
         maybeRunDailyBackup(true); startDailyBackupWatcher();
@@ -20778,7 +20799,7 @@ function exposeLegacyInlineHandlers() {
     refreshDailyRates, loadAllBooks, forceSync, buildBookSwitcher, toggleBookDropdown,
     closeBookDropdown, toggleHeaderMenu, closeHeaderMenus, closeSideAccount, toggleSideAccount,
     updateRoleToggleButton, updateSubheader, placeKpiStrip, bindKpiResize, syncRoleUI,
-    toggleCurrentBookView, updateProfileTabs, selectProfileTab, seedMockTestData, switchBook,
+    toggleCurrentBookView, updateProfileTabs, selectProfileTab, switchBook,
     switchTab, updateHeader, updateAllOverview, renderCustomersStat, channelColor,
     renderChannelAnalytics, selectAllChCurrency, setChChannelFilter, clearChChannelFilter, setChBookSort, setChBookSearch, renderOverviewRail, renderTodoTab, updateContextBanners,
     restoreDismissedTodoSignals, toggleSidebarAlerts,

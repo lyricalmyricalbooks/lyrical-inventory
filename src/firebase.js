@@ -8,6 +8,7 @@ import { ALL_PARTS, LIST_PARTS, assembleParts, emptyPart, splitState, stitchStat
 import { readOldCopyCached, oldCopyCache } from './lib/old-copy-cache.js';
 import { planWebsitePublish } from './lib/website-link.js';
 import { adoptDecision, compareCopies, movedElsewhere } from './lib/storage-mode.js';
+import { isTestProfileActive, installSandboxBackend } from './lib/test-profile.js';
 
 const firebaseConfig = {
   apiKey:"AIzaSyB0BTOjfUFZKCVth9eR8iN0mvfkpRIFKSI",
@@ -1236,6 +1237,11 @@ window._fbMassMigrate = async (BOOKS) => {
   await Promise.all(promises);
   return true;
 };
+
+// The Test Profile never reads or writes the real cloud: every function above
+// (sign-in aside) is swapped for a copy kept on this device. Installed last so
+// it covers everything defined in this file, including anything added later.
+if (isTestProfileActive()) installSandboxBackend(window, window.localStorage);
 
 window._fbReady = true;
 document.dispatchEvent(new Event('firebase-ready'));

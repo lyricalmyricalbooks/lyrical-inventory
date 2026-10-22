@@ -594,6 +594,19 @@
   </div>
 </header>
 
+<!-- Shown only inside the Test Profile (lib/test-profile.js). Never dismissible:
+     the whole point is that sample data can't be mistaken for real books. -->
+<div id="test-profile-banner" class="test-profile-banner" role="status" hidden>
+  <div class="tpb-text">
+    <div class="tpb-title">Test Profile · sample data</div>
+    <div class="tpb-sub">Nothing here touches your real books. No sales are saved to the cloud, and no emails, payments, labels or sheet updates are sent.</div>
+  </div>
+  <div class="tpb-actions">
+    <button type="button" class="tpb-btn" onclick="resetTestProfile()">Reset sample data</button>
+    <button type="button" class="tpb-btn tpb-leave" onclick="leaveTestProfile()">Leave test profile</button>
+  </div>
+</div>
+
 <div id="publisher-action-banner" class="publisher-action-banner" style="display:none;" role="alert" aria-live="polite">
   <div class="pab-pulse" aria-hidden="true"></div>
   <div class="pab-icon" aria-hidden="true">⚠</div>
@@ -1023,7 +1036,6 @@
     <div style="display:flex;align-items:center;gap:12px;">
       <button class="btn gold sm" id="d-email-artist-btn" onclick="emailArtistForPayment()" style="font-size:var(--text-xs);display:none;">✉ Email artist for payment</button>
       <button class="btn gold sm" id="d-qr-btn" onclick="openPaymentQRModal()" style="font-size:var(--text-xs);">Payment QR Code</button>
-      <button class="btn sm" id="d-seed-test-btn" onclick="seedMockTestData()" style="font-size:var(--text-xs);display:none;background:linear-gradient(135deg,#a78bfa,#8b5cf6);color:var(--on-accent);border:none;box-shadow:var(--elev-2);">🧪 Seed Mock Test Data</button>
       <span id="d-notify-status" class="pill gray" style="font-size:var(--text-2xs);display:none;" title="Whether artist submissions can email you for approval"></span>
       <div class="dash-context-meta">Dashboard overview</div>
     </div>

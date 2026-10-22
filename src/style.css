@@ -804,7 +804,7 @@ tr.hist-row:hover {
   display:flex;align-items:center;gap:14px;
   padding:14px 22px;
   background:#B4271A; /* token-ok: the Riso red's ink grade as a fixed alert band — white on it is 6.9:1 and it must not soften in either theme */
-  color:#fff;
+  color:var(--on-inverse);
   border-bottom:2px solid #FFC93C; /* token-ok: the Riso yellow as a solid rule — --amber-bg is its 30% tint */
   box-shadow:var(--elev-3);
   font-family:var(--font-ui);
@@ -835,6 +835,35 @@ tr.hist-row:hover {
   cursor:pointer;padding:4px 8px;opacity:.7;
 }
 .publisher-action-banner .pab-dismiss:hover{opacity:1;}
+.test-profile-banner{
+  position:sticky;top:0;z-index:var(--z-sticky);
+  display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+  padding:12px 22px;
+  background:#4A2FC4; /* token-ok: --violet-deep, fixed — the violet tokens lighten in night mode and white on them would drop below 4.5:1; this band must read the same in both themes */
+  color:var(--on-inverse);
+  border-bottom:2px solid var(--rule-ink);
+  font-family:var(--font-ui);
+}
+.test-profile-banner[hidden]{display:none;}
+.test-profile-banner .tpb-text{flex:1;min-width:220px;}
+.test-profile-banner .tpb-title{font-family:var(--font-display);font-size:var(--text-lg);letter-spacing:.04em;text-transform:uppercase;}
+.test-profile-banner .tpb-sub{font-size:var(--text-sm);opacity:.92;margin-top:2px;line-height:var(--leading-snug);}
+.test-profile-banner .tpb-actions{display:flex;gap:8px;flex-wrap:wrap;}
+.test-profile-banner .tpb-btn{
+  min-height:44px;padding:8px 14px;
+  background:transparent;color:var(--on-inverse);
+  border:2px solid var(--on-inverse);border-radius:var(--r);
+  font:700 var(--text-sm)/1 var(--font-ui);cursor:pointer;white-space:nowrap;
+}
+.test-profile-banner .tpb-btn:hover{background:rgba(255,255,255,.14);}
+.test-profile-banner .tpb-btn:focus-visible{outline:2px solid #FFC93C;outline-offset:2px;} /* token-ok: Riso yellow focus ring on the fixed violet band */
+.test-profile-banner .tpb-leave{background:#fff;color:#4A2FC4;} /* token-ok: inverse of the fixed band */
+.test-profile-banner .tpb-leave:hover{background:#EDE8FF;} /* token-ok: tint of the fixed band */
+@media (max-width:768px){
+  .test-profile-banner{padding:10px 16px;}
+  .test-profile-banner .tpb-actions{width:100%;}
+  .test-profile-banner .tpb-btn{flex:1;}
+}
 @keyframes pab-shimmer{0%{background-position:0% 0;}100%{background-position:200% 0;}}
 @keyframes pab-glow{0%,100%{opacity:.4;}50%{opacity:1;}}
 @keyframes pab-shake{0%,100%{transform:rotate(0);}25%{transform:rotate(-8deg);}75%{transform:rotate(8deg);}}
