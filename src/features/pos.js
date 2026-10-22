@@ -43,10 +43,10 @@ import {
   syncCatalog,
   syncQueue,
   today,
-  updateDash,
   updateHeader,
   voidHistEntry,
 } from '../main.js';
+import { updateDash } from './dashboard.js';
 import { escapeHtml } from '../lib/html.js';
 import { closeM, confirmDialog, openM, promptDialog } from '../lib/modal.js';
 import { buildPaymentMeta, getBookCurrencyCode, getSym, normalizeCurrencyCode } from '../lib/money.js';

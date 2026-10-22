@@ -38,8 +38,8 @@ import {
   states,
   switchTab,
   today,
-  updateDash,
 } from '../main.js';
+import { updateDash } from './dashboard.js';
 import { TAX_CATEGORIES, TC_CATEGORIES, _editingExpense } from './tax-entries.js';
 import { fetchSheetsCapabilities, notifyPublisherSubmission } from './sheets-bridge.js';
 import { escapeHtml } from '../lib/html.js';

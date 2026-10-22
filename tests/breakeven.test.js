@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { calculateBreakEven } from '../src/lib/breakeven.js';
+import { appSource } from './helpers/extract-decl.js';
 
 describe('calculateBreakEven — explicit units needed at list price and realized pace', () => {
   it('accurately calculates user screenshot scenario: 57 units at CA$65.00 list price', () => {
@@ -113,7 +114,8 @@ describe('calculateBreakEven — explicit units needed at list price and realize
 
   it('enforces that break-even alert markup uses paper text tokens, not the on-inverse tiers', async () => {
     const fs = await import('fs');
-    const mainJs = fs.readFileSync('src/main.js', 'utf8');
+    // main.js plus the feature and lib modules (the dashboard lives in features/dashboard.js).
+    const mainJs = appSource;
     const styleCss = fs.readFileSync('src/style.css', 'utf8');
 
     // This test used to assert the exact OPPOSITE, and it was right to: the

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vitest';
+import { appSource } from './helpers/extract-decl.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const styles = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
@@ -43,7 +44,8 @@ test('exactly one profit sharing card leads, by size, and its tone is a token mo
 });
 
 test('the grid step is a class modifier, not an inline template-computed column count', () => {
-  const mainJs = readFileSync(path.join(__dirname, '../src/main.js'), 'utf8');
+  // main.js plus the feature and lib modules (the dashboard lives in features/dashboard.js).
+  const mainJs = appSource;
   expect(mainJs).not.toMatch(/grid-template-columns:repeat\(\$\{hasHeld/);
   expect(mainJs).toMatch(/ps-stat-grid \$\{statCols\}/);
   expect(mainJs).toMatch(/statCols = `cols-\$\{3 \+/);

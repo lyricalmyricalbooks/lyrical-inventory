@@ -65,7 +65,8 @@ const MAIN_IMPORT_BUDGET = {
   // it came with needs the book/state helpers in its place.
   // 24 -> 20 when the expense editor moved out to tax-entries.js: the two
   // category lists and the expense being edited now come from that sibling.
-  'receipts.js': 20,
+  // 20 -> 19 when the dashboard moved out: updateDash comes from dashboard.js.
+  'receipts.js': 19,
   // Composed by receipts.js with injected adapters; no main.js cycle at all.
   'receipt-finder.js': 0,
   // The review inbox is a window over receipts.js and shipping.js, which hold its
@@ -112,7 +113,8 @@ const MAIN_IMPORT_BUDGET = {
   // pill (syncQueue, _syncQueueHeldInMemory, _syncRetrying, renderFairSyncPill,
   // startupPreviewActive), converts with the FX cache and live rate, mints
   // sale links through the Stripe helper; plus $ / showToast / today / copy.
-  'pos.js': 26,
+  // 26 -> 25 when the dashboard moved out: updateDash comes from dashboard.js.
+  'pos.js': 25,
   // Set at extraction: entering and correcting ledger lines reaches into
   // every book's state (BOOKS, BOOK_LIST, states, defaultState, saveState,
   // switchBook), the other ledger editors it hands off to (openEditHist,
@@ -121,7 +123,9 @@ const MAIN_IMPORT_BUDGET = {
   // (voidHistEntry, withActiveBook), the website-sale lock, the FX cache and
   // the rate-waiting checks, and TAX_CENTER / loadTaxCenter; plus $ /
   // showToast / today / switchTab / the test-book filters.
-  'tax-entries.js': 28,
+  // 28 -> 24 when the dashboard moved out: the four author-payout helpers
+  // (find / edit / settle / undo the settlement) come from dashboard.js.
+  'tax-entries.js': 24,
   // Set at extraction: invoices read and write every book's state and its
   // ledger (BOOKS, BOOK_LIST, getBook, getState, states, saveState,
   // ledgerById, settleLedgerSalePaid, renderLedger, renderHist), the book's
@@ -130,6 +134,13 @@ const MAIN_IMPORT_BUDGET = {
   // for the emailed copy; plus $ / showToast / today / the role and test-book
   // checks.
   'invoices.js': 25,
+  // Set at extraction: the dashboard reads every book's state (BOOKS, getBook,
+  // getState, states, saveState) and the author earnings and transfers, the
+  // channel labels and colours, the live FX rate for a foreign payout, the
+  // settlement link and notify URL, the Sheets URL and sync queue for the
+  // payout request, and repaints history, expenses and the context banners;
+  // plus $ / showToast / today / the role checks / the count animation.
+  'dashboard.js': 24,
 };
 
 const featureFiles = fs.existsSync(featureDir)

@@ -2,11 +2,13 @@ import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { appSource } from './helpers/extract-decl.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const mainJs = fs.readFileSync(path.resolve(__dirname, '../src/main.js'), 'utf8');
+// main.js plus the feature and lib modules (the dashboard lives in features/dashboard.js).
+const mainJs = appSource;
 const codeGs = fs.readFileSync(path.resolve(__dirname, '../apps-script/Code.gs'), 'utf8');
 
 describe('artist payout request', () => {
@@ -36,7 +38,8 @@ describe('artist payout request', () => {
   });
 
   it('exposes requestArtistPayout for the inline onclick handler', () => {
-    expect(mainJs).toContain('window.requestArtistPayout = requestArtistPayout;');
+    // The dashboard module declares it; main.js puts it on window.
+    expect(mainJs).toMatch(/Object\.assign\(window, \{[^}]*\brequestArtistPayout,/);
   });
 
   it('Code.gs flags payout/reimbursement kinds as action-required', () => {

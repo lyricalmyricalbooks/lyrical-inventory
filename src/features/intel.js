@@ -18,11 +18,11 @@ import {
   attentionInput,
   isAuthor,
   saveCatalogWithDeletions,
-  recognizedRevenueOf,
   saveState,
   showToast,
   states,
 } from '../main.js';
+import { recognizedRevenueOf } from './dashboard.js';
 import { escapeHtml } from '../lib/html.js';
 import { localDay } from '../lib/calendar-day.js';
 import { confirmDialog } from '../lib/modal.js';

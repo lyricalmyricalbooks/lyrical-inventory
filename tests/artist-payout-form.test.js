@@ -3,10 +3,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describePayout } from '../src/lib/earnings.js';
+import { appSource } from './helpers/extract-decl.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
-const mainJs = fs.readFileSync(path.join(root, 'src/main.js'), 'utf8').replace(/\r\n/g, '\n');
+// main.js plus the feature and lib modules (the dashboard lives in features/dashboard.js).
+const mainJs = appSource.replace(/\r\n/g, '\n');
 const styleCss = fs.readFileSync(path.join(root, 'src/style.css'), 'utf8').replace(/\r\n/g, '\n');
 
 // ---------------------------------------------------------------------------

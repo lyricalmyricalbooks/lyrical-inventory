@@ -2,12 +2,13 @@ import { beforeAll, expect, test } from 'vitest';
 import { loadApp, makeBook } from './helpers/load-app.js';
 
 const bookId = 'harbour';
-let app;
+let app, dash;
 
 const visible = id => document.getElementById(id).style.display !== 'none';
 
 beforeAll(async () => {
   app = await loadApp({ books: [makeBook({ id: bookId, currency: '€' })] });
+  dash = await import('../src/features/dashboard.js');
   app.window.switchBook(bookId);
   app.window.switchTab('dashboard');
   await app.resetBook(bookId, {
@@ -16,7 +17,7 @@ beforeAll(async () => {
 }, 30000);
 
 test('switching views shows only the reimbursement field for the current role', () => {
-  app.main.updateDash();
+  dash.updateDash();
   expect(visible('d-expenses-sect')).toBe(true);
   expect(visible('d-expenses-kpi')).toBe(true);
   expect(visible('artist-reimburse-banner')).toBe(false);
