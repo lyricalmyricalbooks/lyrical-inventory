@@ -80,8 +80,9 @@ const MAIN_IMPORT_BUDGET = {
   // Tax Centre postage and dated FX rates (with the fetch that fills them), and
   // repaints with scheduleRender — plus $ / showToast.
   // 14 -> 11 when the sale write path moved out: writeOrderToLedger and the
-  // void / un-void come from sales-ledger.js.
-  'website-link.js': 11,
+  // void / un-void come from sales-ledger.js. 11 -> 12: isTestBook, so the
+  // storage check keeps the test book's old copy off the To-do list.
+  'website-link.js': 12,
   // Set at extraction: the practice book's fake spreadsheet reads which book is
   // open, whether it is the test book, and the real sheet's two URLs (for the
   // cards it hides and shows), plus the usual $ / showToast.

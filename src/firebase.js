@@ -237,22 +237,28 @@ window._fbMarkLinkSwitchedOn = async (at) => {
 // the storage check compares it with the copy the app now uses. Only the
 // record's `ts` stamp is downloaded when this device already holds the copy
 // with that stamp (lib/old-copy-cache.js) — the whole record otherwise.
-window._fbReadOldBookCopy = async (bookId) => {
+// With { withStamp: true } it returns { state, ts }: `ts` is when the old copy
+// was last written, which says whether it has changed since the owner looked.
+window._fbReadOldBookCopy = async (bookId, { withStamp = false } = {}) => {
   const path = `lyrical/books/${bookId}`;
+  let stamp = null;
   const json = await readOldCopyCached(bookId, {
     readTs: async () => {
       const s = await get(ref(db, `${path}/ts`));
       const ts = s.exists() ? s.val() : null;
-      return typeof ts === 'number' ? ts : null;
+      stamp = typeof ts === 'number' ? ts : null;
+      return stamp;
     },
     readFull: async () => {
       const s = await get(ref(db, path));
       const v = s.exists() ? (s.val() || {}) : {};
+      if (typeof v.ts === 'number') stamp = v.ts;
       return v.data ? { json: v.data, ts: v.ts } : null;
     },
     cache: oldCopyCache,
   });
-  return json ? JSON.parse(json) : null;
+  const state = json ? JSON.parse(json) : null;
+  return withStamp ? { state, ts: stamp } : state;
 };
 
 // ─────────────────────────────────────────────

@@ -402,10 +402,12 @@ describe('review fixes, through the real app', () => {
 describe('the storage check', () => {
   const doc = () => app.window.document;
   const card = () => doc().getElementById('web-link-card');
+  // The old copy as _fbReadOldBookCopy returns it, with the time it was last written.
+  const oldCopy = (state, ts = 1700000000000) => async (_id, { withStamp = false } = {}) => (withStamp ? { state, ts } : state);
 
   it('says every book is in the new storage when its old copy has nothing the new one lacks', async () => {
     await app.resetBook(BOOK, { hist: [{ uid: 'a', chan: 'Book Fair', qty: 1, price: 20, date: '2026-06-01' }] });
-    app.window._fbReadOldBookCopy = async () => ({ hist: [{ uid: 'a', chan: 'Book Fair', qty: 1, price: 20, date: '2026-06-01' }] });
+    app.window._fbReadOldBookCopy = oldCopy({ hist: [{ uid: 'a', chan: 'Book Fair', qty: 1, price: 20, date: '2026-06-01' }] });
     app.window._fbReadNewBookCopy = async () => ({ hist: [{ uid: 'a', chan: 'Book Fair', qty: 1, price: 20, date: '2026-06-01' }] });
     card().querySelector('[data-wl-action="storage-check"]').click();
     await waitFor(() => expect(card().textContent).toContain('Harbour Lights — 1 sale'));
@@ -415,7 +417,7 @@ describe('the storage check', () => {
   it('checks the server’s copy, not this device’s: a record not uploaded yet still counts as missing', async () => {
     const sale = { uid: 'a', chan: 'Book Fair', qty: 1, price: 20, date: '2026-06-01' };
     await app.resetBook(BOOK, { hist: [sale] });
-    app.window._fbReadOldBookCopy = async () => ({ hist: [sale] });
+    app.window._fbReadOldBookCopy = oldCopy({ hist: [sale] });
     app.window._fbReadNewBookCopy = async () => ({ hist: [] });
     card().querySelector('[data-wl-action="storage-check"]').click();
     await waitFor(() => expect(card().textContent).toContain('1 record is only in the old storage'));
@@ -424,7 +426,7 @@ describe('the storage check', () => {
   it('lists records only the old copy has, and copies them over only when asked', async () => {
     await app.resetBook(BOOK, { hist: [{ uid: 'a', chan: 'Book Fair', qty: 1, price: 20, date: '2026-06-01' }] });
     const missing = { uid: 'b', chan: 'In Person', qty: 2, price: 20, date: '2026-07-01' };
-    app.window._fbReadOldBookCopy = async () => ({ hist: [missing, { uid: 'a', chan: 'Book Fair', qty: 1, price: 20, date: '2026-06-01' }] });
+    app.window._fbReadOldBookCopy = oldCopy({ hist: [missing, { uid: 'a', chan: 'Book Fair', qty: 1, price: 20, date: '2026-06-01' }] });
     // The server holds the last save made after the check started, else the book as it was.
     const before = app.cloud.lastSave(BOOK);
     app.window._fbReadNewBookCopy = async () => {
@@ -441,6 +443,31 @@ describe('the storage check', () => {
     await waitFor(() => expect(state().hist.map(h => h.uid)).toEqual(['b', 'a']));
     expect(app.cloud.lastSave(BOOK).state.hist.some(h => h.uid === 'b')).toBe(true);
     await waitFor(() => expect(card().textContent).toContain('with every record from the old one'));
+  });
+
+  it('leaves the records out when the book is right, until the old copy changes again', async () => {
+    const kept = { uid: 'a', chan: 'Book Fair', qty: 1, price: 20, date: '2026-06-01' };
+    const deleted = { uid: 'gone', chan: 'In Person', qty: 1, price: 20, date: '2026-05-01' };
+    await app.resetBook(BOOK, { hist: [kept] });
+    app.window._fbReadOldBookCopy = oldCopy({ hist: [deleted, kept] }, 111);
+    app.window._fbReadNewBookCopy = async () => {
+      const saved = app.cloud.lastSave(BOOK);
+      return saved ? saved.state : { hist: [kept] };
+    };
+    card().querySelector('[data-wl-action="storage-check"]').click();
+    await waitFor(() => expect(card().textContent).toContain('1 record is only in the old storage'));
+
+    card().querySelector('[data-wl-action="leave-old"]').click();
+    await waitFor(() => expect(doc().getElementById('m-confirm-ok').textContent).toBe('Leave them out'));
+    doc().getElementById('m-confirm-ok').click();
+    await waitFor(() => expect(card().textContent).toContain('with every record from the old one'));
+    expect(state().hist.map(h => h.uid)).toEqual(['a']);
+    expect(app.cloud.lastSave(BOOK).state.oldCopyReviewedTs).toBe(111);
+
+    // Something new written to the old storage brings the warning back.
+    app.window._fbReadOldBookCopy = oldCopy({ hist: [deleted, kept] }, 222);
+    card().querySelector('[data-wl-action="storage-check"]').click();
+    await waitFor(() => expect(card().textContent).toContain('1 record is only in the old storage'));
   });
 });
 

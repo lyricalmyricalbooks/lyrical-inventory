@@ -26,7 +26,7 @@ import { fmt, fmtD, getSym, normalizeCurrencyCode } from '../lib/money.js';
 import { datedRateKey } from '../lib/sale-fx.js';
 import { localDay } from '../lib/calendar-day.js';
 import { bookCurrencyCode } from '../lib/currency-migration.js';
-import { compareCopies, restoreRecords } from '../lib/storage-mode.js';
+import { missingFromNew, restoreRecords } from '../lib/storage-mode.js';
 import { deriveOnHand } from '../lib/inventory.js';
 import { confirmDialog } from '../lib/modal.js';
 import {
@@ -47,6 +47,7 @@ import {
   TAX_CENTER,
   _fxRateCache,
   fetchHistoricalRate,
+  isTestBook,
   recomputeAfters,
   saveState,
   scheduleRender,
@@ -640,7 +641,13 @@ async function markLinkSwitchedOn() {
 // ── Storage check ──────────────────────────────────────────────────────────
 // Proof, book by book, that what the app uses now (the new storage) holds every
 // record the old storage had. Read-only: it never changes either copy. A book
-// with records only in the old copy is listed with them, and the owner decides.
+// with records only in the old copy is listed with them, and the owner decides:
+// copy them over, or leave them out. Leaving them out remembers when the old
+// copy was last written (OLD_COPY_REVIEWED, kept with the book so every device
+// knows): the old storage stopped changing when the book moved, so until
+// something new is written there, there is nothing new to show.
+
+const OLD_COPY_REVIEWED = 'oldCopyReviewedTs';
 
 function bookTitle(id) {
   return (BOOKS[id] && BOOKS[id].title) || id;
@@ -665,16 +672,18 @@ async function runStorageCheck() {
         continue;
       }
       let old = null;
+      let oldTs = null;
       let saved = null;
       try {
-        old = await window._fbReadOldBookCopy(id);
+        ({ state: old, ts: oldTs } = await window._fbReadOldBookCopy(id, { withStamp: true }));
         // Compare with what the server holds, not this device's copy: a save
         // still waiting to upload isn't in the new storage yet.
         if (old) saved = await window._fbReadNewBookCopy(id);
       } catch (e) { books.push({ ...entry, status: 'unreadable' }); continue; }
       if (!old) { books.push({ ...entry, status: 'ok' }); continue; }
-      const cmp = compareCopies(old, saved);
-      books.push({ ...entry, status: cmp.ok ? 'ok' : 'missing', missing: cmp.onlyInOld });
+      if (oldTs != null && states[id][OLD_COPY_REVIEWED] === oldTs) { books.push({ ...entry, status: 'ok', reviewed: true }); continue; }
+      const missing = missingFromNew(old, saved);
+      books.push({ ...entry, status: missing.length ? 'missing' : 'ok', missing, oldTs });
     }
     _storage = { at: new Date().toISOString(), books };
   } finally {
@@ -698,7 +707,7 @@ async function copyOldRecords(bookId, button) {
     // Compare again right now, so only what is still missing is added.
     const old = await window._fbReadOldBookCopy(bookId);
     const s = states[bookId];
-    const added = old && s ? restoreRecords(s, compareCopies(old, s).onlyInOld) : 0;
+    const added = old && s ? restoreRecords(s, missingFromNew(old, s)) : 0;
     if (added) {
       recomputeAfters(s, BOOKS[bookId]);
       scheduleRender();
@@ -712,13 +721,37 @@ async function copyOldRecords(bookId, button) {
   await runStorageCheck();
 }
 
+/** Keep the book as it is: stop showing these records until the old copy changes again. */
+async function leaveOldRecords(bookId, button) {
+  const entry = _storage && _storage.books.find(b => b.id === bookId);
+  const s = states[bookId];
+  if (!entry || !entry.missing || !entry.missing.length || typeof entry.oldTs !== 'number' || !s) return;
+  const n = entry.missing.length;
+  const ok = await confirmDialog(
+    `Keep ${entry.title} as it is now, without ${n === 1 ? 'this record' : `these ${n} records`} from the old storage?\n\nNothing is deleted: the old copy stays where it is. The warning comes back by itself if anything new is ever saved to the old storage for this book.`,
+    { title: 'Leave them out', okLabel: 'Leave them out' },
+  );
+  if (!ok) return;
+  if (button) button.disabled = true;
+  s[OLD_COPY_REVIEWED] = entry.oldTs;
+  try {
+    await saveState(bookId);
+    showToast(`✓ ${entry.title} kept as it is`, 'ok', 4000);
+  } catch (e) {
+    console.error('[storage check] could not save the choice', e);
+    showToast('Saved on this device; it reaches your other devices once you’re online.', 'warn', 5000);
+  }
+  await runStorageCheck();
+}
+
 /** What the To-do list should show for website orders and the storage check. */
 function websiteLinkTodo() {
   const needYou = _review.filter(p => !_later.has(p.orderId)).length;
   const books = (_storage && _storage.books) || [];
   return {
     needYou,
-    storageMissing: books.filter(b => b.status === 'missing').map(b => ({ title: b.title, count: b.missing.length })),
+    // The test book is a sandbox: what's in its old copy never matters to the business.
+    storageMissing: books.filter(b => b.status === 'missing' && !isTestBook(BOOKS[b.id])).map(b => ({ title: b.title, count: b.missing.length })),
     quietSince: _watchError ? '' : quietSince(),
     // Only what needs the owner goes on the To-do list; a one-off failure retries by itself.
     problem: _watchError || (_publishLasting ? _publishError : '') || '',
@@ -789,6 +822,7 @@ function wireCard() {
     else if (action === 'retry') { scheduleImport(0); scheduleWebsiteFeedPublish('all'); }
     else if (action === 'storage-check') runStorageCheck();
     else if (action === 'copy-old') copyOldRecords(book, btn);
+    else if (action === 'leave-old') leaveOldRecords(book, btn);
     else if (action === 'rehearse') rehearsePostage(order);
     else if (action === 'clear-test') clearRehearsal(order, btn);
     else if (action === 'hide-unlinked') { writeJson(UNLINKED_KEY, {}); renderWebsiteLinkCard(); }
@@ -917,8 +951,8 @@ function storageHtml() {
       const more = b.missing.length > 10 ? `<li>${escapeHtml(`…and ${b.missing.length - 10} more`)}</li>` : '';
       return `<li class="wl-item"><strong>${escapeHtml(b.title)}</strong>: ${escapeHtml(`${b.missing.length} record${b.missing.length === 1 ? ' is' : 's are'} only in the old storage`)}
           <ul class="wl-points">${shown}${more}</ul>
-          <p class="wl-note">These may be records you deleted after the move. Copy them only if they belong in the book.</p>
-          <div class="wl-actions"><button class="btn gold sm" type="button" data-wl-action="copy-old" data-book="${escapeHtml(b.id)}">Copy these over</button></div></li>`;
+          <p class="wl-note">Usually these are records you deleted or changed after the book moved: the old storage still has them as they were then. If the book looks right to you, leave them out. Copy them only if they belong in the book.</p>
+          <div class="wl-actions">${typeof b.oldTs === 'number' ? `<button class="btn sm" type="button" data-wl-action="leave-old" data-book="${escapeHtml(b.id)}">The book is right — leave them out</button>` : ''}<button class="btn gold sm" type="button" data-wl-action="copy-old" data-book="${escapeHtml(b.id)}">Copy these over</button></div></li>`;
     }
     const why = { 'old-storage': 'still in the old storage — it moves by itself the next time the app opens online', unreadable: 'its old copy couldn’t be read just now — check again once you’re online', 'not-loaded': 'didn’t load — reload the app' }[b.status] || b.status;
     return `<li class="wl-item"><strong>${escapeHtml(b.title)}</strong>: ${escapeHtml(why)}</li>`;

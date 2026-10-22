@@ -66,6 +66,49 @@ export function compareCopies(oldState, newState) {
   return { identical, ok: onlyInOld.length === 0, onlyInOld, oldRows, newRows };
 }
 
+// What names one sale even after it is edited: its own id, the order it was
+// imported from, or a typed order number on its day. A cash sale with none of
+// these can only be told apart by everything it says, so an edit to it can't
+// be recognised here.
+function saleIdentity(row) {
+  if (!row || typeof row !== 'object') return '';
+  if (row.uid) return 'uid:' + row.uid;
+  if (row.sheetsId) return 'sheet:' + row.sheetsId;
+  const num = row.num == null ? '' : String(row.num).trim();
+  return num ? `num:${num}|${row.date ?? ''}` : '';
+}
+
+/**
+ * The records the storage check should show: compareCopies' onlyInOld, less
+ * the old copy's version of a sale that was edited after the move. The old
+ * storage stopped changing when the book moved, so a sale edited since (a
+ * price, a note, a quantity) looks like a different sale there. When the new
+ * copy has a sale with the same identity (saleIdentity) that the old copy
+ * doesn't, that is the edited one: copying the old version over would add the
+ * sale twice. Counted one for one, so two edited sales of one order need two.
+ */
+export function missingFromNew(oldState, newState) {
+  const { onlyInOld } = compareCopies(oldState, newState);
+  if (!onlyInOld.some(m => m.part === 'hist')) return onlyInOld;
+  const oldHist = splitState(oldState || {}).hist;
+  const newHist = splitState(newState || {}).hist;
+  const oldKeys = new Set(keyRows('hist', oldHist));
+  const edited = new Map();
+  keyRows('hist', newHist).forEach((key, i) => {
+    if (oldKeys.has(key)) return;
+    const id = saleIdentity(newHist[i]);
+    if (id) edited.set(id, (edited.get(id) || 0) + 1);
+  });
+  return onlyInOld.filter(({ part, row }) => {
+    if (part !== 'hist') return true;
+    const id = saleIdentity(row);
+    const n = id ? edited.get(id) || 0 : 0;
+    if (!n) return true;
+    edited.set(id, n - 1);
+    return false;
+  });
+}
+
 /**
  * Put records the old copy has back into a book's state (in place): sales go
  * to their date position, everything else on the end — the same placement the
