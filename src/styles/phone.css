@@ -1568,8 +1568,9 @@
   #tab-bigcartel .phone-connection-actions { flex-direction: column; }
   #tab-bigcartel .phone-connection-actions .btn { width: 100%; white-space: nowrap; }
 
-  /* Website tab: the four figures line up because each label reserves three lines. */
-  #tab-website .wl-fact dt { min-height: 3lh; }
+  /* Website tab: the four figures line up because each label reserves two lines;
+     the tighter tracking keeps "Stock sent to the website" inside them. */
+  #tab-website .wl-fact dt { min-height: 2lh; letter-spacing: .06em; }
   #tab-website #web-orders-status .web-stat-label { min-height: 2lh; }
 
   /* Web Analytics setup: the dashboard field starts near the top of the screen. */

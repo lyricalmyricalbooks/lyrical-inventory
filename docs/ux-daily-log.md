@@ -149,6 +149,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-21 | visual | Phone Settings — Book Catalog | Made each book card snugger with the title in big display lettering and Edit / Remove sharing the width evenly, so more books fit on screen | pending |
 | 2026-10-21 | visual | Order History (computer) | Order numbers and dates now sit on one line (an order number was breaking over three), so each sale is a shorter row, and the Approve button on an artist's sale fits inside the table instead of being cut off at its right edge | pending |
 | 2026-10-22 | visual | Shipping — carrier price tiles | Once you get rates, each carrier's price is now the biggest thing on its tile instead of the same size as its name, and on a computer Shippo runs across the top with Canada Post and Chit Chats side by side underneath, instead of two tiles and a lonely third with a gap beside it | pending |
+| 2026-10-22 | visual | Phone Website orders — status tiles | Tightened the small captions on the four website facts (Last brought in, Stock sent…) so each fits two lines, so the figures start on the same line instead of dropping lower under each wrapped caption | pending |
 
 ---
 

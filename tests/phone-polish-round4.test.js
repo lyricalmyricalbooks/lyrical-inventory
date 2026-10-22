@@ -87,7 +87,7 @@ describe('Phone polish sweep (round 4)', () => {
 
   describe('#31 Website status figures', () => {
     it('reserves three lines for each figure label so the values line up', () => {
-      expect(phoneSection).toMatch(/#tab-website \.wl-fact dt \{ min-height: 3lh; \}/);
+      expect(phoneSection).toMatch(/#tab-website \.wl-fact dt \{ min-height: 2lh; letter-spacing: \.06em; \}/);
     });
 
     it('shortens the longest label', () => {
