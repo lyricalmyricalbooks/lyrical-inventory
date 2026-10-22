@@ -2778,6 +2778,27 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .dz-sub{font-size:var(--text-xs);color:var(--text3);line-height:1.5;}
 .dz-link{color:var(--gold-text);font-weight:700;text-decoration:underline;}
 .dz-file{display:none;align-items:center;gap:10px;padding:10px 12px;background:var(--cream);border:var(--stroke-hair) solid var(--border);border-radius:var(--r2);}
+/* Several receipts on one expense: a stack of chips above the dropzone, which
+   shrinks to an "add another" strip once the first one is in. */
+.dz-file-list{display:flex;flex-direction:column;gap:6px;}
+.dz-file-list:empty{display:none;}
+.dz-file-list .dz-file{display:flex;}
+.dropzone.is-compact{min-height:0;padding:10px 16px;flex-direction:row;gap:10px;}
+.dropzone.is-compact .dz-icon{font-size:var(--text-md);}
+.dropzone.is-compact .dz-sub{display:none;}
+/* Receipts in the expense ledger: a small picture of each beside its link. */
+.exp-receipt-link{display:inline-flex;align-items:center;gap:6px;font-size:var(--text-xs);color:var(--gold-text);text-decoration:underline;}
+.exp-receipt-thumb{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;flex-shrink:0;overflow:hidden;background:var(--gold-bg);border:var(--stroke-hair) solid var(--border);font-size:var(--text-sm);line-height:1;text-decoration:none;}
+.exp-receipt-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+.exp-receipt-thumb--lg{width:56px;height:56px;font-size:var(--text-lg);}
+.exp-add-receipt{margin-left:4px;}
+.exp-receipts-list{display:flex;flex-direction:column;gap:8px;margin:12px 0;}
+.exp-receipt-item{display:flex;align-items:center;gap:12px;padding:8px;border:var(--stroke-hair) solid var(--border);background:var(--surface-card);}
+.exp-receipt-name{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;font-size:var(--text-sm);}
+.exp-receipt-name strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--content-primary);}
+.exp-receipt-name span{font-size:var(--text-xs);color:var(--content-secondary);}
+.exp-receipt-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;}
+.exp-receipts-empty{padding:16px;text-align:center;font-size:var(--text-sm);color:var(--content-secondary);}
 .dz-thumb{width:34px;height:34px;border-radius:var(--r);background:var(--gold-bg);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
 .dz-fname{flex:1;min-width:0;font-size:var(--text-sm);color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .dz-remove{min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;line-height:1;padding:0;border-radius:var(--r);transition:background-color var(--dur-fast) var(--ease-standard),color var(--dur-fast) var(--ease-standard),transform var(--dur-fast) var(--ease-spring);}

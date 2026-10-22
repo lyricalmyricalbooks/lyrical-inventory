@@ -2023,18 +2023,15 @@
         </div>
       </div>
       <div class="receipt-panel" id="exp-file-group">
-        <div class="panel-label">Receipt <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3);">(optional)</span></div>
+        <div class="panel-label">Receipts <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3);">(optional — add as many as you need)</span></div>
+        <!-- One chip per picked receipt. Filled by renderExpFileList(). -->
+        <div class="dz-file-list" id="exp-file-list" aria-live="polite"></div>
         <label class="dropzone" id="exp-dropzone" ondragover="expFileDragOver(event)" ondragleave="expFileDragLeave(event)" ondrop="expFileDrop(event)">
           <div class="dz-icon">🧾</div>
-          <div class="dz-title">Add a receipt</div>
-          <div class="dz-sub">Drop an image or PDF here, or <span class="dz-link">browse</span></div>
-          <input type="file" id="exp-file" accept="image/*,.pdf" hidden onchange="expFileChosen()">
+          <div class="dz-title" id="exp-dropzone-title">Add a receipt</div>
+          <div class="dz-sub">Drop images or PDFs here, or <span class="dz-link">browse</span></div>
+          <input type="file" id="exp-file" accept="image/*,.pdf" multiple hidden onchange="expFileChosen()">
         </label>
-        <div class="dz-file" id="exp-file-chip">
-          <div class="dz-thumb">📄</div>
-          <div class="dz-fname" id="exp-file-name"></div>
-          <button class="dz-remove" type="button" title="Remove file" aria-label="Remove receipt file" onclick="expFileClear(event)">×</button>
-        </div>
         <button class="btn gold" style="font-size:var(--text-sm);display:none;align-self:flex-start;" onclick="scanProjectReceiptWithAI()" id="exp-ai-btn">✨ AI Scan</button>
         <!-- What the AI read and what to double-check. Filled by _runReceiptScan(). -->
         <div class="order-preview scan-read" id="exp-scan-read" hidden></div>
@@ -5405,6 +5402,23 @@
 </div></div>
 
 <!-- EXPENSE EDIT MODAL -->
+<!-- The receipts on one ledger expense. Filled by _renderExpenseReceiptsModal(). -->
+<div class="overlay" id="m-exp-receipts" style="display:none;"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="exp-receipts-heading" style="max-width:560px;">
+  <div class="modal-title">
+    <div class="modal-title-left">
+      <span class="modal-title-badge" aria-hidden="true">🧾</span>
+      <span id="exp-receipts-heading">Receipts</span>
+    </div>
+    <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('exp-receipts')" aria-label="Close dialog" title="Close (Esc)">✕</button>
+  </div>
+  <div class="field-note" id="exp-receipts-sub"></div>
+  <div class="exp-receipts-list" id="exp-receipts-list" aria-live="polite"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="attemptCloseModal('exp-receipts')">Done</button>
+    <button class="btn gold" id="exp-receipts-add-btn" onclick="addReceiptsFromModal()">＋ Add receipts</button>
+  </div>
+</div></div>
+
 <div class="overlay" id="m-edit-expense" style="display:none;"><div class="modal edit-modal" role="dialog" aria-modal="true">
   <div class="modal-title" role="dialog" aria-modal="true">
     <div class="modal-title-left">

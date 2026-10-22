@@ -275,7 +275,16 @@ export function createSandboxBackend(store) {
     _fbSaveBackupSnapshot: async (id, snap) => { write('sbx:backup:' + id, snap); },
     _fbLoadBackupSnapshot: async (id) => read('sbx:backup:' + id),
     _fbDeleteBackupSnapshot: async (id) => { store.removeItem('sbx:backup:' + id); },
-    _fbUploadReceipt: async () => { throw new Error('Receipts are not uploaded from the Test Profile'); },
+    // A receipt picked in the Test Profile stays in this tab as a temporary
+    // link, so attaching (and opening) several receipts can be tried without
+    // anything reaching the real cloud. It is gone after a reload.
+    _fbUploadReceipt: async (file) => {
+      const URLs = globalThis.URL;
+      if (!file || !URLs || typeof URLs.createObjectURL !== 'function') {
+        throw new Error('Receipts are not uploaded from the Test Profile');
+      }
+      return URLs.createObjectURL(file);
+    },
     _fbConnectReceiptGmail: async () => { throw new Error('Gmail is not connected in the Test Profile'); },
     _fbPublishWebsiteLink: async () => { throw new Error('The website is not updated from the Test Profile'); },
   };

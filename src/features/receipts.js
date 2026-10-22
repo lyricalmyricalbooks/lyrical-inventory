@@ -55,6 +55,9 @@ import {
   _warmGeminiModelCache,
 } from '../lib/gemini-quota.js';
 import { followableUrl } from '../lib/receipt-links.js';
+import { MAX_RECEIPT_PICKS, mergeReceiptPicks, receiptLinkLabel, removeReceiptPick } from '../lib/receipt-picks.js';
+import { isReceiptAddition, receiptAdditionPayload, receiptLooksLikeImage, receiptRefName, removeExpenseReceipt } from '../lib/expense-receipts.js';
+import { isTestProfileActive } from '../lib/test-profile.js';
 import {
   mergeReceiptDrafts,
   needsReceiptAmount,
@@ -247,7 +250,13 @@ async function openReceiptHandleDb() {
   });
 }
 
+// The Test Profile is a sandbox: the folder handle sits in device storage the
+// sandbox does not namespace, so reading it there would file test receipts in
+// (and open files from) the owner's real receipt folder. It never sees one.
+const RECEIPT_FOLDER_SANDBOXED = isTestProfileActive();
+
 async function saveReceiptFolderHandle(handle) {
+  if (RECEIPT_FOLDER_SANDBOXED) return;
   const db = await openReceiptHandleDb();
   await new Promise((resolve, reject) => {
     const tx = db.transaction(RECEIPT_FOLDER_STORE, 'readwrite');
@@ -258,6 +267,7 @@ async function saveReceiptFolderHandle(handle) {
 }
 
 async function loadReceiptFolderHandle() {
+  if (RECEIPT_FOLDER_SANDBOXED) return null;
   const db = await openReceiptHandleDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(RECEIPT_FOLDER_STORE, 'readonly');
@@ -268,6 +278,10 @@ async function loadReceiptFolderHandle() {
 }
 
 async function setupReceiptFolder({ reclaim = true } = {}) {
+  if (RECEIPT_FOLDER_SANDBOXED) {
+    showToast('The Test Profile does not connect a receipt folder — receipts stay on this device until you reload', 'warn', 5000);
+    return null;
+  }
   if (!('showDirectoryPicker' in window)) {
     showToast('Folder selection is not supported in this browser', 'warn');
     return null;
@@ -2174,25 +2188,86 @@ function closeCloudReceiptsModal() {
 // entry. Moved here in the step after the filing half, which is why the AI
 // scanner no longer crosses the seam: the organiser calls it directly now.
 
-// ── Receipt dropzone (expense form) — styled file chip + drag-and-drop.
-// Reflects the chosen file into a chip and toggles the dropzone prompt. The
-// underlying #exp-file input stays the single source of truth that
-// submitExpense / scanProjectReceiptWithAI read from.
-function expFileChosen() {
-  const input = $('exp-file'), chip = $('exp-file-chip'), nameEl = $('exp-file-name'), dz = $('exp-dropzone');
-  const hasFile = input && input.files && input.files.length > 0;
-  if (nameEl && hasFile) nameEl.textContent = input.files[0].name;
-  if (chip) chip.style.display = hasFile ? 'flex' : 'none';
-  if (dz) dz.style.display = hasFile ? 'none' : 'flex';
-  // A summary of the last receipt read must never sit beside a different one.
-  clearReceiptScanReview('exp-scan-read');
-  if (hasFile) warmReceiptScan(input.files[0]);
+// ── Receipt dropzone (expense form) — one chip per receipt + drag-and-drop.
+// An expense can carry several receipts (an invoice and its packing slip, a
+// two-page bill). A file input forgets its last pick each time it reopens, so
+// the running list lives in _expReceiptPicks and is mirrored back into
+// #exp-file, keeping `files[0]` the receipt the AI scan reads.
+let _expReceiptPicks = [];
+
+function _syncExpFileInput() {
+  const input = $('exp-file');
+  if (!input) return;
+  try {
+    const dt = new DataTransfer();
+    _expReceiptPicks.forEach(f => dt.items.add(f));
+    input.files = dt.files;
+  } catch (_) { /* no DataTransfer: submit reads _expReceiptPicks directly */ }
 }
-function expFileClear(ev) {
+
+function renderExpFileList() {
+  const list = $('exp-file-list'), dz = $('exp-dropzone'), title = $('exp-dropzone-title');
+  const n = _expReceiptPicks.length;
+  if (list) {
+    list.innerHTML = _expReceiptPicks.map((f, i) => `<div class="dz-file">
+      <div class="dz-thumb" aria-hidden="true">${/pdf/i.test(f.type || f.name) ? '📄' : '🧾'}</div>
+      <div class="dz-fname" title="${escapeHtml(f.name)}">${n > 1 ? `${i + 1}. ` : ''}${escapeHtml(f.name)}</div>
+      <button class="dz-remove" type="button" title="Remove this receipt" aria-label="Remove receipt ${escapeHtml(f.name)}" onclick="expFileClear(event, ${i})">×</button>
+    </div>`).join('');
+  }
+  if (dz) {
+    dz.style.display = n >= MAX_RECEIPT_PICKS ? 'none' : 'flex';
+    dz.classList.toggle('is-compact', n > 0);
+  }
+  if (title) title.textContent = n ? 'Add another receipt' : 'Add a receipt';
+}
+
+// Picked receipts live only in this page until the expense is logged. Closing
+// or reloading the tab with some still waiting asks first, so a pile of files
+// gathered from three folders isn't lost to one stray tap. Wired on the first
+// pick, not at import, so the guard costs nothing on pages that never use it.
+let _expUnloadGuarded = false;
+function _guardUnloggedReceipts() {
+  if (_expUnloadGuarded || typeof window === 'undefined') return;
+  _expUnloadGuarded = true;
+  window.addEventListener('beforeunload', (ev) => {
+    if (!_expReceiptPicks.length) return;
+    ev.preventDefault();
+    ev.returnValue = '';
+  });
+}
+
+function expFileChosen() {
+  _guardUnloggedReceipts();
+  const input = $('exp-file');
+  const before = _expReceiptPicks.slice();
+  const picked = input && input.files ? Array.from(input.files) : [];
+  // The mirrored list comes back through `change` on some browsers; only
+  // files not already in the list are new.
+  const { files, overLimit } = mergeReceiptPicks(_expReceiptPicks, picked);
+  _expReceiptPicks = files;
+  if (overLimit) showToast(`One expense takes up to ${MAX_RECEIPT_PICKS} receipts — ${overLimit} left off`, 'warn');
+  _syncExpFileInput();
+  renderExpFileList();
+  _expReceiptsChanged(before);
+}
+// A summary of the last reading must never sit beside a different set of
+// receipts, and the scan reads them all, so any change to the list clears it.
+function _expReceiptsChanged(before) {
+  const now = _expReceiptPicks;
+  if (now.length === before.length && now.every((f, i) => f === before[i])) return;
+  clearReceiptScanReview('exp-scan-read');
+  now.forEach(f => { if (!before.includes(f)) warmReceiptScan(f); });
+}
+function expFileClear(ev, index) {
   if (ev) ev.preventDefault();
+  const before = _expReceiptPicks.slice();
+  _expReceiptPicks = Number.isInteger(index) ? removeReceiptPick(_expReceiptPicks, index) : [];
   const input = $('exp-file');
   if (input) input.value = '';
-  expFileChosen();
+  _syncExpFileInput();
+  renderExpFileList();
+  _expReceiptsChanged(before);
 }
 function expFileDragOver(ev) { ev.preventDefault(); const dz = $('exp-dropzone'); if (dz) dz.classList.add('drag'); }
 function expFileDragLeave(ev) { ev.preventDefault(); const dz = $('exp-dropzone'); if (dz) dz.classList.remove('drag'); }
@@ -2213,7 +2288,7 @@ async function scanProjectReceiptWithAI() {
     fileId: 'exp-file', btnId: 'exp-ai-btn',
     descId: 'exp-desc', dateId: 'exp-date', amountId: 'exp-amount',
     curId: 'exp-cur', catId: 'exp-cat', refId: 'exp-ref',
-    resultId: 'exp-scan-read', dest: 'project'
+    resultId: 'exp-scan-read', dest: 'project', allFiles: true
   });
 }
 
@@ -4156,8 +4231,11 @@ const RECEIPT_SCAN_SCHEMA = {
 // answers signature (which calls this with no arguments), or every answer
 // would be forgotten at midnight. `home` is the currency of the ledger being
 // filled, used only when nothing on the receipt says otherwise.
-function _buildReceiptScanPrompt({ asOf = '', home = 'CAD' } = {}) {
-  return `Read this ONE receipt or invoice for a book publisher's bookkeeping.${asOf ? ` Today is ${asOf}.` : ''}
+function _buildReceiptScanPrompt({ asOf = '', home = 'CAD', pages = 1 } = {}) {
+  const intro = pages > 1
+    ? `These ${pages} images are parts of ONE purchase (e.g. an invoice and its payment receipt, or the pages of one bill) for a book publisher's bookkeeping. Read them together and answer once for the purchase; the total may be on any of them. Never add up the same total printed on two of them.`
+    : 'Read this ONE receipt or invoice for a book publisher\'s bookkeeping.';
+  return `${intro}${asOf ? ` Today is ${asOf}.` : ''}
 amount: the grand total actually charged, incl. tax, tip and shipping; prefer "Balance due", "Amount paid" or "Total charged". Never the subtotal, a line item, or a pre-discount figure.
 subtotal, tax, tip, shipping, discount: as printed, else 0. tax = all sales taxes together (GST, PST, HST, QST, VAT). discount as a positive number.
 taxIncluded: true only if the prices already include the tax shown (e.g. "incl. VAT").
@@ -4223,18 +4301,25 @@ function _applyScanCategory(el, category, vendor, description) {
 // A receipt this browser has already read confidently is answered from memory
 // instead: no upload, no AI allowance spent, and it works offline. The answer
 // comes back with `fromMemory: true` so a screen can say why it was instant.
+// `file` may be one File or several that make up ONE purchase (an invoice and
+// its payment slip, a two-page bill): they are read together in one request
+// and answered with one combined reading.
 async function _extractReceiptFromFile(apiKey, file, opts = {}) {
   const { signal, asOf = '', home = 'CAD' } = opts;
-  const fingerprint = await _receiptScanFingerprint(file);
+  const files = (Array.isArray(file) ? file : [file]).filter(Boolean);
+  const prints = await Promise.all(files.map(_receiptScanFingerprint));
+  // A remembered answer is only good for the same set of files: one missing
+  // fingerprint means the set can't be recognised, so it is read afresh.
+  const fingerprint = prints.every(Boolean) ? prints.join('+') : '';
   const remembered = _receiptScanRecall(fingerprint);
   if (remembered) return { ...remembered, fromMemory: true };
 
-  const upload = await _prepareReceiptUploadOnce(file);
+  const uploads = await Promise.all(files.map(_prepareReceiptUploadOnce));
   if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
   const out = await _callAiForReceipts(apiKey, [
-    { text: _buildReceiptScanPrompt({ asOf, home }) },
-    { inline_data: { mime_type: upload.mime, data: upload.base64 } }
+    { text: _buildReceiptScanPrompt({ asOf, home, pages: files.length }) },
+    ...uploads.map(upload => ({ inline_data: { mime_type: upload.mime, data: upload.base64 } }))
   ], {
     signal,
     schema: RECEIPT_SCAN_SCHEMA,
@@ -4561,7 +4646,11 @@ async function _runReceiptScan(cfg) {
     || '';
   if (!apiKey && !TAX_CENTER.settings?.openRouterKey?.trim()) { showToast('⚠ Gemini or OpenRouter API key required in Config', 'err'); return; }
 
-  const file = fileInput.files[0];
+  // The Expenses tab reads every receipt picked for the expense together;
+  // the other forms hold one file.
+  const file = cfg.allFiles && fileInput.files.length > 1
+    ? Array.from(fileInput.files)
+    : fileInput.files[0];
   const oldText = btn ? btn.textContent : '';
   const ac = new AbortController();
   let timedOut = false;
@@ -7409,39 +7498,50 @@ async function submitExpense() {
   }
 
   const fileInput = $('exp-file');
-  let receiptUrl = '';
-  let receiptStorage = 'none';
-  if (fileInput && fileInput.files.length > 0) {
-    const file = fileInput.files[0];
+  // Every picked receipt is saved; the first stays in `receipt` for the screens
+  // and exports that only read that field (writeReceiptRefs keeps both shapes).
+  const picks = _expReceiptPicks.length
+    ? _expReceiptPicks.slice()
+    : (fileInput && fileInput.files ? Array.from(fileInput.files) : []);
+  const receiptRefs = [];
+  let anyCloud = false;
+  let lost = 0;
+  if (picks.length) {
     const submitBtn = $('submit-exp-btn');
     const oldText = submitBtn.textContent;
-
-    if (window.IS_PUBLISHER) {
-      // Folder first, cloud as the safety net — same deal as the Tax Centre.
-      // A publisher on a machine with no folder connected used to lose the
-      // receipt here without a word.
-      submitBtn.textContent = 'Saving receipt…'; submitBtn.disabled = true;
-      const saved = await saveReceiptBestEffort(file, book.title, {
-        date, desc: finalDesc, cat, amount: rawAmount, currency: cur, book: book.title,
-      });
-      receiptUrl = saved.ref;
-      receiptStorage = saved.storage;
-      if (receiptStorage === 'cloud') {
-        showToast('Receipt saved to the cloud — it moves to your folder when it\'s available', 'warn', 5000);
-      } else if (receiptStorage === 'none') {
-        showToast('⚠ Receipt could not be saved — logging the expense without it', 'err', 5000);
-      }
-    } else {
-      submitBtn.textContent = 'Uploading to cloud...'; submitBtn.disabled = true;
-      try {
-        receiptUrl = await uploadReceiptToCloud(file, activeBook);
-        receiptStorage = receiptUrl ? 'cloud' : 'none';
-      } catch (e) {
-        console.error(e);
-        showToast('⚠ Cloud upload failed — submitting without receipt', 'err');
+    submitBtn.disabled = true;
+    for (let i = 0; i < picks.length; i++) {
+      const file = picks[i];
+      const of = picks.length > 1 ? ` ${i + 1} of ${picks.length}` : '';
+      if (window.IS_PUBLISHER) {
+        // Folder first, cloud as the safety net — same deal as the Tax Centre.
+        // A publisher on a machine with no folder connected used to lose the
+        // receipt here without a word.
+        submitBtn.textContent = `Saving receipt${of}…`;
+        const saved = await saveReceiptBestEffort(file, book.title, {
+          date, desc: finalDesc, cat, amount: rawAmount, currency: cur, book: book.title, index: i,
+        });
+        if (saved.ref) receiptRefs.push(saved.ref); else lost++;
+        if (saved.storage === 'cloud') anyCloud = true;
+      } else {
+        submitBtn.textContent = `Uploading receipt${of}…`;
+        try {
+          const url = await uploadReceiptToCloud(file, activeBook);
+          if (url) { receiptRefs.push(url); anyCloud = true; } else lost++;
+        } catch (e) {
+          console.error(e);
+          lost++;
+        }
       }
     }
     submitBtn.textContent = oldText; submitBtn.disabled = false;
+    if (lost) {
+      showToast(lost === picks.length
+        ? `⚠ ${picks.length > 1 ? 'The receipts' : 'The receipt'} could not be saved — logging the expense without ${picks.length > 1 ? 'them' : 'it'}`
+        : `⚠ ${lost} of ${picks.length} receipts could not be saved — logging the expense with the rest`, 'err', 5000);
+    } else if (anyCloud && window.IS_PUBLISHER) {
+      showToast('Receipt saved to the cloud — it moves to your folder when it\'s available', 'warn', 5000);
+    }
   }
 
   const s = getState();
@@ -7456,9 +7556,10 @@ async function submitExpense() {
   // No CAD rate known: leave the CAD value empty (like the batch path) so the
   // Tax Centre fills it in at the expense's date's rate — never book it 1:1.
   const baseAmount = cadRate ? roundCents(amount * cadRate) : null;
-  const newExpense = { id: Date.now(), desc: finalDesc, cat, amount, currency, origAmount, origCurrency, date, ref, receipt: receiptUrl, fxRate: cur !== native ? expenseFxRate : null, baseAmount };
+  const newExpense = { id: Date.now(), desc: finalDesc, cat, amount, currency, origAmount, origCurrency, date, ref, fxRate: cur !== native ? expenseFxRate : null, baseAmount };
+  writeReceiptRefs(newExpense, receiptRefs);
   // Starts the clock the Tax Centre reads when it counts what's waiting.
-  if (receiptStorage === 'cloud') newExpense.receiptCloudAt = new Date().toISOString();
+  if (receiptRefs.some(isOurCloudReceipt)) newExpense.receiptCloudAt = new Date().toISOString();
 
   if (isAuthor()) {
     try {
@@ -7488,8 +7589,7 @@ async function submitExpense() {
   renderExpenses();
   updateDash();
   $('exp-desc').value = ''; $('exp-amount').value = ''; $('exp-ref').value = ''; $('exp-date').value = today();
-  if (fileInput) fileInput.value = '';
-  if (typeof window.expFileChosen === 'function') window.expFileChosen();
+  expFileClear();
   $('exp-desc').focus();
 }
 
@@ -7562,6 +7662,222 @@ function expenseTotalsFootHtml(totals, showSelectCol) {
   }).join('');
 }
 
+// Every receipt on a ledger row, each openable on its own: "View" for one,
+// "View 1 · View 2" once an expense carries several. Each link carries a small
+// picture of the receipt where one can be shown (filled in after the row
+// renders, see _hydrateReceiptThumbs) and its file name on hover, so an
+// invoice and its packing slip can be told apart without opening both.
+function _expenseReceiptLinks(refs) {
+  return refs.map((r, i) => {
+    const label = receiptLinkLabel(i, refs.length);
+    const name = receiptRefName(r);
+    const thumb = `<span class="exp-receipt-thumb" data-thumb-ref="${escapeHtml(r)}" aria-hidden="true">${receiptLooksLikeImage(r) || isLocalReceipt(r) ? '🧾' : '📄'}</span>`;
+    if (isLocalReceipt(r)) {
+      return `<a href="#" class="exp-receipt-link" title="${escapeHtml(name)}" onclick="event.preventDefault(); viewLocalReceipt(${escapeHtml(JSON.stringify(localRefPath(r)))})">${thumb}${refs.length > 1 ? label : 'View Local'}</a>`;
+    }
+    const href = followableUrl(r);
+    return href
+      ? `<a href="${escapeHtml(href)}" class="exp-receipt-link" title="${escapeHtml(name)}" target="_blank" rel="noopener">${thumb}${label}</a>`
+      // Not local and not a followable address — a link here would look
+      // ordinary and do nothing, which is how the shipping ledger's dead
+      // reference link went unnoticed for so long.
+      : `<span class="pill gray" style="font-size:var(--text-2xs);" title="This receipt reference cannot be opened">Unopenable ref</span>`;
+  }).join(' · ');
+}
+
+// Pictures for receipts, kept for the session so a re-render never fetches or
+// decodes the same one twice. A web image is used directly; a receipt in the
+// folder only shows when this device already holds a copy (never prompting for
+// folder access just to draw a list). PDFs keep their icon.
+const _receiptThumbUrls = new Map();
+async function _receiptThumbUrl(ref) {
+  if (_receiptThumbUrls.has(ref)) return _receiptThumbUrls.get(ref);
+  let url = '';
+  if (isLocalReceipt(ref)) {
+    const cached = await readCachedReceipt(localRefPath(ref)).catch(() => null);
+    if (cached && cached.blob && /^image\//i.test(cached.type || cached.blob.type || '')) {
+      try { url = URL.createObjectURL(cached.blob); } catch (_) { url = ''; }
+    }
+  } else if (followableUrl(ref) && (receiptLooksLikeImage(ref) || /^blob:/i.test(ref))) {
+    url = followableUrl(ref);
+  }
+  _receiptThumbUrls.set(ref, url);
+  return url;
+}
+function _hydrateReceiptThumbs(root) {
+  if (!root) return;
+  root.querySelectorAll('[data-thumb-ref]').forEach(async (slot) => {
+    const url = await _receiptThumbUrl(slot.getAttribute('data-thumb-ref'));
+    if (!url || !slot.isConnected) return;
+    const img = document.createElement('img');
+    img.alt = '';
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    // A blob link from an earlier session, or a file the browser can't draw:
+    // the icon stays.
+    img.onerror = () => { img.remove(); };
+    img.onload = () => { slot.textContent = ''; slot.appendChild(img); };
+    img.src = url;
+  });
+}
+
+// Who may attach receipts to an expense already in the ledger. The publisher
+// writes it straight in; an artist's request goes to the publisher to approve,
+// since the ledger is the publisher's record.
+function _canAddExpenseReceipt(e) {
+  if (!e || e.pendingAuth || isGratuityExpense(e)) return false;
+  if (receiptRefsOf(e).length >= MAX_RECEIPT_PICKS) return false;
+  return (window.IS_PUBLISHER && !isAuthor()) || isAuthor();
+}
+function _canManageExpenseReceipts(e) {
+  return !!(e && !e.pendingAuth && window.IS_PUBLISHER && !isAuthor() && receiptRefsOf(e).length);
+}
+function _addExpenseReceiptButton(id) {
+  return `<button type="button" class="btn sm outline exp-add-receipt" onclick="addReceiptsToExpense(${Number(id)})" title="${isAuthor() ? 'Send another receipt for this expense to the publisher' : 'Attach another receipt to this expense'}" aria-label="Add a receipt to this expense">＋ Receipt</button>`;
+}
+function _manageExpenseReceiptsButton(id) {
+  return `<button type="button" class="btn sm outline exp-add-receipt" onclick="openExpenseReceipts(${Number(id)})" title="See, add or remove this expense's receipts" aria-label="Manage this expense's receipts">Manage</button>`;
+}
+
+// Save picked files as receipts for an expense already logged. Folder first
+// with the cloud as the fallback for the publisher; the cloud for an artist.
+async function _saveReceiptsForExpense(target, files, startIndex) {
+  const book = BOOKS[activeBook] || getBook();
+  const refs = [];
+  let cloud = false;
+  for (let i = 0; i < files.length; i++) {
+    if (window.IS_PUBLISHER && !isAuthor()) {
+      const saved = await saveReceiptBestEffort(files[i], book.title, {
+        date: target.date, desc: target.desc, cat: target.cat,
+        amount: target.origAmount ?? target.amount, currency: target.origCurrency || target.currency,
+        book: book.title, index: startIndex + i,
+      });
+      if (saved.ref) refs.push(saved.ref);
+      if (saved.storage === 'cloud') cloud = true;
+    } else {
+      try {
+        const url = await uploadReceiptToCloud(files[i], activeBook);
+        if (url) { refs.push(url); cloud = true; }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  }
+  return { refs, cloud };
+}
+
+function _pickReceiptFiles() {
+  return new Promise(resolve => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*,.pdf';
+    input.multiple = true;
+    input.onchange = () => resolve(Array.from(input.files || []));
+    input.click();
+  });
+}
+
+// Attach one or more receipts to an expense already in the ledger. The
+// publisher's go straight onto the expense; an artist's go to the publisher
+// as a request, and join the expense once approved.
+async function addReceiptsToExpense(id) {
+  const bid = activeBook;
+  const target = (getState().expenses || []).find(x => x.id === id);
+  if (!target) return;
+  const picked = await _pickReceiptFiles();
+  const existing = receiptRefsOf(target);
+  const room = Math.max(0, MAX_RECEIPT_PICKS - existing.length);
+  const files = picked.slice(0, room);
+  if (!files.length) return;
+  const skipped = picked.length - files.length;
+  const { refs: added, cloud } = await _saveReceiptsForExpense(target, files, existing.length);
+  if (!added.length) { showToast('⚠ The receipt could not be saved — nothing was attached', 'err', 5000); return; }
+  const over = skipped > 0 ? ` (${skipped} over the ${MAX_RECEIPT_PICKS}-receipt limit left off)` : '';
+
+  if (isAuthor()) {
+    const payload = receiptAdditionPayload(target, added);
+    try {
+      await window._fbSubmitActivity(bid, 'expenses', payload);
+      showToast(`✓ ${added.length} receipt${added.length === 1 ? '' : 's'} sent to the publisher to add${over}`, 'ok');
+      notifyPublisherSubmission('Expense receipts', payload, `${payload.desc} — ${added.length} receipt${added.length === 1 ? '' : 's'}`);
+      renderExpenses();
+    } catch (e) {
+      console.error('Receipt request failed', e);
+      showToast(isPermissionDenied(e)
+        ? '⚠ Permission denied — this book is not linked to your account. Nothing was sent.'
+        : '⚠ The receipts were not sent — try again once you are back online.', 'err', 6000);
+    }
+    return;
+  }
+
+  // Re-read: the ledger may have re-rendered (or synced) while files saved.
+  const exp = (states[bid]?.expenses || []).find(x => x.id === id);
+  if (!exp) { showToast('⚠ That expense was removed while the receipt saved', 'warn'); return; }
+  writeReceiptRefs(exp, [...receiptRefsOf(exp), ...added]);
+  if (cloud && added.some(isOurCloudReceipt) && !exp.receiptCloudAt) exp.receiptCloudAt = new Date().toISOString();
+  await saveState(bid);
+  if (bid === activeBook) renderExpenses();
+  if (_openReceiptsExpenseId === id) _renderExpenseReceiptsModal();
+  showToast(`✓ ${added.length} receipt${added.length === 1 ? '' : 's'} attached${over}`, 'ok');
+}
+
+// ── The receipts on one expense (publisher): see each one, add more, or take
+// off one that was attached by mistake.
+let _openReceiptsExpenseId = null;
+
+function _renderExpenseReceiptsModal() {
+  const body = $('exp-receipts-list'), sub = $('exp-receipts-sub'), addBtn = $('exp-receipts-add-btn');
+  const exp = (getState().expenses || []).find(x => x.id === _openReceiptsExpenseId);
+  if (!body) return;
+  if (!exp) { body.innerHTML = '<div class="empty-state">This expense is no longer in the ledger.</div>'; return; }
+  if (sub) sub.textContent = `${exp.desc || 'Expense'} · ${fmtD(exp.date) ?? ''} · ${fmt(exp.origAmount ?? exp.amount, exp.origCurrency || exp.currency)}`;
+  const refs = receiptRefsOf(exp);
+  if (addBtn) addBtn.disabled = refs.length >= MAX_RECEIPT_PICKS;
+  body.innerHTML = refs.length ? refs.map((r, i) => {
+    const name = receiptRefName(r);
+    const open = isLocalReceipt(r)
+      ? `<button type="button" class="btn sm" onclick="viewLocalReceipt(${escapeHtml(JSON.stringify(localRefPath(r)))})">Open</button>`
+      : (followableUrl(r) ? `<a class="btn sm" href="${escapeHtml(followableUrl(r))}" target="_blank" rel="noopener">Open</a>` : '');
+    return `<div class="exp-receipt-item">
+      <span class="exp-receipt-thumb exp-receipt-thumb--lg" data-thumb-ref="${escapeHtml(r)}" aria-hidden="true">${receiptLooksLikeImage(r) || isLocalReceipt(r) ? '🧾' : '📄'}</span>
+      <div class="exp-receipt-name"><strong>${refs.length > 1 ? `${i + 1}. ` : ''}${escapeHtml(name)}</strong><span>${isLocalReceipt(r) ? 'In your receipts folder' : (isOurCloudReceipt(r) ? 'Saved in the cloud' : 'Linked file')}</span></div>
+      <div class="exp-receipt-actions">${open}<button type="button" class="btn sm danger-btn" onclick="removeReceiptFromExpense(${i})" aria-label="Remove receipt ${escapeHtml(name)}">Remove</button></div>
+    </div>`;
+  }).join('') : '<div class="exp-receipts-empty">No receipts on this expense yet.</div>';
+  _hydrateReceiptThumbs(body);
+}
+
+function openExpenseReceipts(id) {
+  _openReceiptsExpenseId = id;
+  _renderExpenseReceiptsModal();
+  openM('exp-receipts');
+}
+
+async function addReceiptsFromModal() {
+  if (_openReceiptsExpenseId == null) return;
+  await addReceiptsToExpense(_openReceiptsExpenseId);
+}
+
+// Unlinks only: the file itself stays in the folder or the cloud, so a receipt
+// taken off by mistake is still there to attach again.
+async function removeReceiptFromExpense(index) {
+  const bid = activeBook;
+  const exp = (states[bid]?.expenses || []).find(x => x.id === _openReceiptsExpenseId);
+  if (!exp) return;
+  const ref = receiptRefsOf(exp)[index];
+  if (!ref) return;
+  const ok = await confirmDialog(
+    `Take "${receiptRefName(ref)}" off "${exp.desc}"? The file itself is kept — only its link to this expense is removed.`,
+    { title: 'Remove receipt', okLabel: 'Remove', danger: true }
+  );
+  if (!ok) return;
+  if (!removeExpenseReceipt(exp, ref)) return;
+  await saveState(bid);
+  renderExpenses();
+  _renderExpenseReceiptsModal();
+  showToast('Receipt removed from this expense', 'ok');
+}
+
 function renderExpenses() {
   // The expense screen is where the single "AI Scan" button lives. Opening it
   // is the idle moment to find out whether a newer reader has appeared —
@@ -7620,6 +7936,8 @@ function renderExpenses() {
   // raw sum printed in the book's currency. The form offers six currencies and
   // defaults to CAD whatever the book is priced in, so the old single figure
   // could carry a euro sign over dollars, or add the two together.
+  // A queued request to add receipts carries an amount of zero, so it never
+  // moves these totals.
   const expTotals = expenseLedgerTotals(combined, getBookCurrencyCode(book));
 
   $('exp-head-row').innerHTML = `<tr>${showSelectCol ? '<th></th>' : ''}<th>Date</th><th>Description</th><th>Category</th><th>Ref</th><th>Receipt</th><th class="r">Amount</th>${window.IS_PUBLISHER ? '<th class="r">Amount (CAD)</th>' : ''}<th>Reimbursement</th><th></th></tr>`;
@@ -7632,11 +7950,11 @@ function renderExpenses() {
       return `<tr class="is-awaiting">
         ${showSelectCol ? '<td></td>' : ''}
         <td class="date-cell">${fmtD(e.date) ?? '—'}</td>
-        <td class="lead-cell exp-desc">${escapeHtml(e.desc)}</td>
+        <td class="lead-cell exp-desc">${escapeHtml(e.desc)}${isReceiptAddition(e) ? ' <span class="pill amber" style="font-size:var(--text-2xs);" title="Approving adds these receipts to the existing expense — no new expense is logged">Adds receipts</span>' : ''}</td>
         <td><span class="pill gray" style="font-size:var(--text-2xs);">${escapeHtml(e.cat)}</span></td>
         <td class="exp-ref">${escapeHtml(e.ref) || '—'}</td>
-        <td>—</td>
-        <td class="r money-cell">${fmt(e.amount, e.currency)}</td>
+        <td>${receiptRefsOf(e).length ? _expenseReceiptLinks(receiptRefsOf(e)) : '—'}</td>
+        <td class="r money-cell">${isReceiptAddition(e) ? '—' : fmt(e.amount, e.currency)}</td>
         ${window.IS_PUBLISHER ? '<td class="r">—</td>' : ''}
         <td></td>
         <td class="r">${actionCell}</td>
@@ -7651,15 +7969,11 @@ function renderExpenses() {
         : '<span style="font-size:var(--text-xs);color:var(--text3);">Pending</span>';
     const actionCell = (!e.received && !isAuthor() && !isGratuity)
       ? `<button class="edit-btn" onclick="voidExpense(${e.id})" title="Remove" aria-label="Remove" style="opacity:1;color:var(--red);">✕</button>` : '';
-    const baseReceiptLink = e.receipt ? (
-      e.receipt.startsWith('local://')
-        ? `<a href="#" onclick="event.preventDefault(); viewLocalReceipt('${escapeHtml(e.receipt.replace('local://', ''))}')" style="font-size:var(--text-xs);color:var(--gold);text-decoration:underline;">View Local</a>`
-        : (followableUrl(e.receipt)
-          ? `<a href="${escapeHtml(followableUrl(e.receipt))}" target="_blank" rel="noopener" style="font-size:var(--text-xs);color:var(--gold);">View</a>`
-          // Not local and not a followable address — a link here would look
-          // ordinary and do nothing, which is how the shipping ledger's dead
-          // reference link went unnoticed for so long.
-          : `<span class="pill gray" style="font-size:var(--text-2xs);" title="This receipt reference cannot be opened">Unopenable ref</span>`)
+    const receiptRefs = receiptRefsOf(e);
+    const baseReceiptLink = receiptRefs.length ? (
+      _expenseReceiptLinks(receiptRefs)
+        + (_canManageExpenseReceipts(e) ? ` ${_manageExpenseReceiptsButton(e.id)}`
+          : (_canAddExpenseReceipt(e) ? ` ${_addExpenseReceiptButton(e.id)}` : ''))
     ) : isGratuity
       ? `<span class="pill gray" style="font-size:var(--text-2xs);" title="Gifted / promotional author copy (receipt exempt)">Gratuity copy</span>`
       : isRentExpense(e)
@@ -7667,9 +7981,10 @@ function renderExpenses() {
         // A gap in the paper trail is the one thing on this row that costs money
         // later, so it gets the same amber needs-attention pill the rest of the
         // app uses — not the faintest text in the row, which is what it was.
-        : expenseMissingReceipt(e)
+        : (expenseMissingReceipt(e)
           ? `<span class="pill amber" style="font-size:var(--text-2xs);" title="No receipt attached — this is the expense an accountant will ask you to produce at tax time">⚠ No receipt</span>`
-          : `<span class="pill gray" style="font-size:var(--text-2xs);" title="Backed by the reference in the Ref column">Ref on file</span>`;
+          : `<span class="pill gray" style="font-size:var(--text-2xs);" title="Backed by the reference in the Ref column">Ref on file</span>`)
+          + (_canAddExpenseReceipt(e) ? ` ${_addExpenseReceiptButton(e.id)}` : '');
     // A tracking URL can arrive straight from a carrier API response, so it is
     // external text reaching an href — allow-listed and escaped like any other.
     const trackHref = followableUrl(e.trackingUrl);
@@ -7725,6 +8040,7 @@ function renderExpenses() {
   }).join('')
     + expenseTotalsFootHtml(expTotals, showSelectCol);
 
+  _hydrateReceiptThumbs(body);
   updateBulkReimburseButton();
 }
 
@@ -7933,8 +8249,12 @@ export {
   deselectDuplicateBatchExpenses,
   deselectDuplicateEmailDrafts,
   evictReceiptCacheToBudget,
+  addReceiptsFromModal,
+  addReceiptsToExpense,
   expFileChosen,
   expFileClear,
+  openExpenseReceipts,
+  removeReceiptFromExpense,
   expFileDragLeave,
   expFileDragOver,
   expFileDrop,
