@@ -88,6 +88,12 @@ const MAIN_IMPORT_BUDGET = {
   // cache, and writes write-offs into TAX_CENTER and through saveState; the
   // role check gates the adjustment form. The rest is $ / showToast / today.
   'inventory-valuation.js': 13,
+  // Set at extraction: the register-only book dialog reads and writes the
+  // register's own book list and cart (posExtraBooks, posCart), saves through
+  // the catalog (syncCatalog, saveCatalogWithDeletions), checks ids against
+  // BOOKS, mints a Stripe link, repaints the register, previews the accent and
+  // copies the link; plus $ / showToast.
+  'pos-books.js': 11,
 };
 
 const featureFiles = fs.existsSync(featureDir)
@@ -235,6 +241,9 @@ const MIN_EXPORTS = {
   // adjustment form's five handlers. Every export is a button's entry point;
   // the rest are private helpers nothing outside the module calls.
   'inventory-valuation.js': 9,
+  // One dialog: open, close, save, remove (two entry points), its QR preview,
+  // the Stripe link, copy and download, and the id helper the register shares.
+  'pos-books.js': 10,
 };
 
 describe('feature modules are the only home of what they own', () => {
