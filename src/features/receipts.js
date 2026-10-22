@@ -7671,7 +7671,7 @@ function _expenseReceiptLinks(refs) {
   return refs.map((r, i) => {
     const label = receiptLinkLabel(i, refs.length);
     const name = receiptRefName(r);
-    const thumb = `<span class="exp-receipt-thumb" data-thumb-ref="${escapeHtml(r)}" aria-hidden="true">${receiptLooksLikeImage(r) || isLocalReceipt(r) ? '🧾' : '📄'}</span>`;
+    const thumb = `<span class="exp-receipt-thumb" data-thumb-key="${_receiptThumbKey(r)}" aria-hidden="true">${receiptLooksLikeImage(r) || isLocalReceipt(r) ? '🧾' : '📄'}</span>`;
     if (isLocalReceipt(r)) {
       return `<a href="#" class="exp-receipt-link" title="${escapeHtml(name)}" onclick="event.preventDefault(); viewLocalReceipt(${escapeHtml(JSON.stringify(localRefPath(r)))})">${thumb}${refs.length > 1 ? label : 'View Local'}</a>`;
     }
@@ -7690,6 +7690,14 @@ function _expenseReceiptLinks(refs) {
 // folder only shows when this device already holds a copy (never prompting for
 // folder access just to draw a list). PDFs keep their icon.
 const _receiptThumbUrls = new Map();
+// The page holds a number, not the reference: the reference comes back from
+// this list, so nothing read out of the page ever becomes a picture source.
+const _receiptThumbRefs = [];
+function _receiptThumbKey(ref) {
+  let i = _receiptThumbRefs.indexOf(ref);
+  if (i < 0) { _receiptThumbRefs.push(ref); i = _receiptThumbRefs.length - 1; }
+  return i;
+}
 async function _receiptThumbUrl(ref) {
   if (_receiptThumbUrls.has(ref)) return _receiptThumbUrls.get(ref);
   let url = '';
@@ -7706,9 +7714,13 @@ async function _receiptThumbUrl(ref) {
 }
 function _hydrateReceiptThumbs(root) {
   if (!root) return;
-  root.querySelectorAll('[data-thumb-ref]').forEach(async (slot) => {
-    const url = await _receiptThumbUrl(slot.getAttribute('data-thumb-ref'));
-    if (!url || !slot.isConnected) return;
+  root.querySelectorAll('[data-thumb-key]').forEach(async (slot) => {
+    const ref = _receiptThumbRefs[Number(slot.getAttribute('data-thumb-key'))];
+    if (!ref) return;
+    const url = await _receiptThumbUrl(ref);
+    // Only a web address or this page's own object URL becomes a picture
+    // source; anything else read back from the page keeps its icon.
+    if (!url || !slot.isConnected || !/^(https?:\/\/|blob:)/i.test(url)) return;
     const img = document.createElement('img');
     img.alt = '';
     img.loading = 'lazy';
@@ -7839,7 +7851,7 @@ function _renderExpenseReceiptsModal() {
       ? `<button type="button" class="btn sm" onclick="viewLocalReceipt(${escapeHtml(JSON.stringify(localRefPath(r)))})">Open</button>`
       : (followableUrl(r) ? `<a class="btn sm" href="${escapeHtml(followableUrl(r))}" target="_blank" rel="noopener">Open</a>` : '');
     return `<div class="exp-receipt-item">
-      <span class="exp-receipt-thumb exp-receipt-thumb--lg" data-thumb-ref="${escapeHtml(r)}" aria-hidden="true">${receiptLooksLikeImage(r) || isLocalReceipt(r) ? '🧾' : '📄'}</span>
+      <span class="exp-receipt-thumb exp-receipt-thumb--lg" data-thumb-key="${_receiptThumbKey(r)}" aria-hidden="true">${receiptLooksLikeImage(r) || isLocalReceipt(r) ? '🧾' : '📄'}</span>
       <div class="exp-receipt-name"><strong>${refs.length > 1 ? `${i + 1}. ` : ''}${escapeHtml(name)}</strong><span>${isLocalReceipt(r) ? 'In your receipts folder' : (isOurCloudReceipt(r) ? 'Saved in the cloud' : 'Linked file')}</span></div>
       <div class="exp-receipt-actions">${open}<button type="button" class="btn sm danger-btn" onclick="removeReceiptFromExpense(${i})" aria-label="Remove receipt ${escapeHtml(name)}">Remove</button></div>
     </div>`;
