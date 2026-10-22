@@ -2778,6 +2778,14 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .dz-sub{font-size:var(--text-xs);color:var(--text3);line-height:1.5;}
 .dz-link{color:var(--gold-text);font-weight:700;text-decoration:underline;}
 .dz-file{display:none;align-items:center;gap:10px;padding:10px 12px;background:var(--cream);border:var(--stroke-hair) solid var(--border);border-radius:var(--r2);}
+/* Several receipts on one expense: a stack of chips above the dropzone, which
+   shrinks to an "add another" strip once the first one is in. */
+.dz-file-list{display:flex;flex-direction:column;gap:6px;}
+.dz-file-list:empty{display:none;}
+.dz-file-list .dz-file{display:flex;}
+.dropzone.is-compact{min-height:0;padding:10px 16px;flex-direction:row;gap:10px;}
+.dropzone.is-compact .dz-icon{font-size:var(--text-md);}
+.dropzone.is-compact .dz-sub{display:none;}
 .dz-thumb{width:34px;height:34px;border-radius:var(--r);background:var(--gold-bg);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
 .dz-fname{flex:1;min-width:0;font-size:var(--text-sm);color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .dz-remove{min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;line-height:1;padding:0;border-radius:var(--r);transition:background-color var(--dur-fast) var(--ease-standard),color var(--dur-fast) var(--ease-standard),transform var(--dur-fast) var(--ease-spring);}
