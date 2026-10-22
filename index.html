@@ -4139,19 +4139,28 @@
         <div id="ship-rate-readiness" class="ship-readiness" role="status" aria-live="polite"></div>
 
         <div class="ship-flow">
-          <button class="btn gold lg ship-flow-primary" id="ship-calc-main-btn" type="button" onclick="calculateShippoRates()">Compare all rates &amp; predict customer charge</button>
-
+          <!-- One tile per carrier, same anatomy each: name, then what it gives you.
+               Shippo leads because it searches every carrier and predicts the charge. -->
           <div class="ship-flow-group">
-            <div class="sect">Or quote one carrier directly</div>
+            <div class="sect">Get rates</div>
             <div class="ship-carrier-grid">
-              <button class="btn" type="button" onclick="calculateCanadaPostRatesHandler()" title="Rates and official labels straight from Canada Post">Canada Post</button>
-              <button class="btn" type="button" onclick="calculateChitChatsRatesHandler()" title="Creates an unpaid draft; nothing is charged until you choose Buy label">Chit Chats</button>
-              <button class="btn" type="button" onclick="calculateZonosDutiesHandler()" title="Destination duties and import taxes with Zonos">Duties &amp; taxes</button>
+              <button class="btn gold ship-carrier" id="ship-calc-main-btn" type="button" onclick="calculateShippoRates()" title="Compare every carrier on your Shippo account and predict what to charge the customer">
+                <span class="ship-carrier-name">Shippo</span>
+                <span class="ship-carrier-note">Compares all carriers and predicts the customer charge</span>
+              </button>
+              <button class="btn ship-carrier" type="button" onclick="calculateCanadaPostRatesHandler()" title="Rates and official labels straight from Canada Post">
+                <span class="ship-carrier-name">Canada Post</span>
+                <span class="ship-carrier-note">Official rates and labels, straight from Canada Post</span>
+              </button>
+              <button class="btn ship-carrier" type="button" onclick="calculateChitChatsRatesHandler()" title="Creates an unpaid draft; nothing is charged until you choose Buy label">
+                <span class="ship-carrier-name">Chit Chats</span>
+                <span class="ship-carrier-note">Saves a free draft; you pay only when you buy the label</span>
+              </button>
             </div>
           </div>
 
           <details class="ship-flow-group ship-cc-details">
-            <summary class="sect">Chit Chats details</summary>
+            <summary class="sect">Chit Chats options</summary>
             <div class="tc-form-grid">
               <div class="tc-form-group"><label class="tc-form-label" for="cc-ship-date">Drop-off date</label><input id="cc-ship-date" type="date" class="tc-form-input"></div>
               <div class="tc-form-group"><label class="tc-form-label" for="cc-origin-country">Country printed in</label><input id="cc-origin-country" class="tc-form-input" maxlength="2" placeholder="CA" autocomplete="off" autocapitalize="characters"></div>
@@ -4159,6 +4168,15 @@
             <div class="tc-form-hint">Two-letter country code, needed for parcels leaving Canada. Getting rates saves an unpaid draft — nothing is charged until you choose Buy label.</div>
             <button class="btn sm" type="button" onclick="importChitChatsShippingHandler()">Refresh Chit Chats shipments</button>
           </details>
+
+          <!-- Duties are not a carrier: they apply to any parcel leaving Canada, whichever one carries it. -->
+          <div class="ship-flow-group">
+            <div class="sect">Shipping abroad</div>
+            <button class="btn ship-carrier ship-carrier--wide" type="button" onclick="calculateZonosDutiesHandler()" title="Destination duties and import taxes with Zonos">
+              <span class="ship-carrier-name">Duties &amp; taxes</span>
+              <span class="ship-carrier-note">What the customer may owe at the border, for any carrier</span>
+            </button>
+          </div>
 
           <button class="btn ship-flow-batch" type="button" onclick="openBatchShipping()" title="Check addresses, find the cheapest rate and buy labels for several orders at once">Ship several orders at once →</button>
         </div>
@@ -4179,7 +4197,7 @@
         <div class="sect">Carrier rates comparison</div>
         <div id="ship-results-placeholder" style="flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:2rem; color:var(--text3);">
           <div style="font-size:32px; margin-bottom:12px;">📦</div>
-          <div>Enter origin, destination, and package specs, then choose <strong>Compare all rates</strong> or one carrier on the left.</div>
+          <div>Enter origin, destination, and package specs, then choose <strong>Shippo</strong> to compare every carrier, or Canada Post or Chit Chats on the left.</div>
         </div>
         
         <!-- Loading State -->
