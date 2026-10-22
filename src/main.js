@@ -57,6 +57,7 @@ import {
   applyBatchExpenseBulk,
   applyBulkCategoryToEmailDrafts,
   applyDirectGmailPresetQuery,
+  addReceiptsToExpense,
   applyGmailPresetQuery,
   attachReceiptToExpenseRow,
   authorizeReceiptFolder,
@@ -19140,7 +19141,7 @@ function exposeLegacyInlineHandlers() {
     // which runs at import time — not allowed once they move into a feature
     // module. They are plain declarations now and reach the inline on*=
     // attributes in index.html the same way every other handler here does.
-    expFileChosen, expFileClear, expFileDragOver, expFileDragLeave, expFileDrop,
+    addReceiptsToExpense, expFileChosen, expFileClear, expFileDragOver, expFileDragLeave, expFileDrop,
     tcExpFileChosen, tcExpFileClear, tcExpFileDragOver, tcExpFileDragLeave, tcExpFileDrop,
     batchExpenseFilesChosen, batchExpenseDragOver, batchExpenseDragLeave, batchExpenseDrop,
     toggleAllBatchExpenses, deselectDuplicateBatchExpenses, applyBatchExpenseBulk,
