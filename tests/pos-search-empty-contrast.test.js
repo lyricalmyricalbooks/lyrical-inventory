@@ -2,10 +2,12 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vitest';
+import { appSource } from './helpers/extract-decl.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const styles = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
-const mainJs = readFileSync(path.join(__dirname, '../src/main.js'), 'utf8');
+// main.js plus the feature and lib modules (the register lives in features/pos.js).
+const mainJs = appSource;
 
 test('POS search-empty state keeps the quoted term readable on the page background', () => {
   const wrapper = styles.match(/\.pos-search-empty\s*\{([\s\S]*?)\n\}/);

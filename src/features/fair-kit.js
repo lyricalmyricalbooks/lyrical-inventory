@@ -19,16 +19,12 @@
 // honest: an identifier that isn't imported fails the build rather than
 // throwing at click time.
 import {
-  codeToSymbol,
-  convertCurrency,
   createStripePaymentLinkForAmount,
-  currencyToCode,
   getReconStripeKey,
-  posBooksMap,
-  posResolveBook,
   showToast,
   switchTab,
 } from '../main.js';
+import { codeToSymbol, convertCurrency, currencyToCode, posBooksMap, posResolveBook } from './pos.js';
 import { closeM, confirmDialog, openM, promptDialog } from '../lib/modal.js';
 import { escapeHtml } from '../lib/html.js';
 import { deriveOnHand } from '../lib/inventory.js';

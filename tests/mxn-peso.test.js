@@ -9,10 +9,12 @@ import {
   normalizeCurrencyCode,
   getBookCurrencyCode,
 } from '../src/lib/money.js';
+import { appSource } from './helpers/extract-decl.js';
 
 const root = process.cwd();
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-const mainJs = fs.readFileSync(path.join(root, 'src/main.js'), 'utf8');
+// main.js plus the feature and lib modules (the register lives in features/pos.js).
+const mainJs = appSource;
 
 describe('Mexican peso in the money helpers', () => {
   it('has a symbol, so an MXN price never renders as a bare code', () => {
@@ -84,7 +86,7 @@ describe('Live FX rates fetch automatically on app load', () => {
   });
 
   it('suppresses the toast on a silent fetch but keeps it for a manual click', () => {
-    const fn = mainJs.slice(mainJs.indexOf('window.posConfigureRates = async function'));
+    const fn = mainJs.slice(mainJs.indexOf('async function posConfigureRates'));
     const body = fn.slice(0, fn.indexOf('\n// Render a small status line'));
     expect(body).toMatch(/if\s*\(silent\)\s*return;/);
     // The manual path (onclick="posConfigureRates()", no args) still defaults

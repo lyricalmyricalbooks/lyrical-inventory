@@ -78,27 +78,36 @@ const MAIN_IMPORT_BUDGET = {
   // open, whether it is the test book, and the real sheet's two URLs (for the
   // cards it hides and shows), plus the usual $ / showToast.
   'sheets-simulator.js': 6,
-  // Set at extraction: the fair kit reads the POS book list and currency
-  // helpers (posBooksMap, posResolveBook, currencyToCode, codeToSymbol,
-  // convertCurrency), mints door-price links through the Stripe helper and its
-  // key, jumps to the POS tab, and shows toasts.
-  'fair-kit.js': 9,
+  // 9 -> 4 when the register moved out to pos.js: the POS book list and
+  // currency helpers now come from that sibling. What is left mints door-price
+  // links through the Stripe helper and its key, jumps to the POS tab, and
+  // shows toasts.
+  'fair-kit.js': 4,
   // Set at extraction: the valuation reads every book's state (BOOKS,
   // BOOK_LIST, states, defaultState, activeBook, isTestBook), the dated FX
   // cache, and writes write-offs into TAX_CENTER and through saveState; the
   // role check gates the adjustment form. The rest is $ / showToast / today.
   'inventory-valuation.js': 13,
-  // Set at extraction: the register-only book dialog reads and writes the
-  // register's own book list and cart (posExtraBooks, posCart), saves through
-  // the catalog (syncCatalog, saveCatalogWithDeletions), checks ids against
-  // BOOKS, mints a Stripe link, repaints the register, previews the accent and
-  // copies the link; plus $ / showToast.
-  'pos-books.js': 11,
+  // 11 -> 9 when the register moved out to pos.js (the cart and renderPOS come
+  // from that sibling). The register-only book dialog reads and writes the
+  // register-only book list (posExtraBooks), saves through the catalog
+  // (syncCatalog, saveCatalogWithDeletions), checks ids against BOOKS, mints a
+  // Stripe link, previews the accent and copies the link; plus $ / showToast.
+  'pos-books.js': 9,
   // Set at extraction: filing fees reads every book's state (BOOK_LIST,
   // states, defaultState) and writes TAX_CENTER, converts with the FX cache and
   // the live / dated rate fetches, reads the Stripe key, and gates the sweep on
   // the role check; plus showToast / today.
   'stripe-fees.js': 11,
+  // Set at extraction, one over the default: the register records each line
+  // through the shared sale writer (recordOrder, withActiveBook, activeBook,
+  // states, saveState, voidHistEntry), repaints history, dashboard and header,
+  // reads the catalog it sells from (BOOKS, posExtraBooks, syncCatalog,
+  // saveCatalogWithDeletions, isAuthor), shows the offline queue on the fair
+  // pill (syncQueue, _syncQueueHeldInMemory, _syncRetrying, renderFairSyncPill,
+  // startupPreviewActive), converts with the FX cache and live rate, mints
+  // sale links through the Stripe helper; plus $ / showToast / today / copy.
+  'pos.js': 26,
 };
 
 const featureFiles = fs.existsSync(featureDir)
