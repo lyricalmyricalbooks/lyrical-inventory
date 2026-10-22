@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { adoptDecision, compareCopies, movedElsewhere, restoreRecords } from '../src/lib/storage-mode.js';
+import { adoptDecision, compareCopies, missingFromNew, movedElsewhere, restoreRecords } from '../src/lib/storage-mode.js';
 
 describe('adoptDecision', () => {
   const base = { publisher: true, global: true, flagged: false };
@@ -67,6 +67,34 @@ describe('compareCopies', () => {
 
   it('a change to the book’s own details is not identical, but nothing is missing', () => {
     expect(compareCopies(old, { ...old, stock: 99 })).toMatchObject({ identical: false, ok: true });
+  });
+});
+
+describe('missingFromNew', () => {
+  const sale = (over = {}) => ({ chan: 'Website', qty: 1, price: 20, date: '2026-08-15', ...over });
+
+  it('a sale edited since the move is not shown as missing', () => {
+    const old = { hist: [sale({ num: '#1001', notes: '' }), sale({ sheetsId: 'bc-77' })] };
+    const now = { hist: [sale({ num: '#1001', notes: 'gift wrap' }), sale({ sheetsId: 'bc-77', price: 18 })] };
+    expect(compareCopies(old, now).onlyInOld).toHaveLength(2);
+    expect(missingFromNew(old, now)).toEqual([]);
+  });
+
+  it('a sale that is gone, or a cash sale with nothing to name it, still shows', () => {
+    const cash = sale({ chan: 'Book Fair' });
+    const old = { hist: [sale({ num: '#1002' }), cash], ledger: [{ id: 'L1' }] };
+    const now = { hist: [{ ...cash, price: 15 }], ledger: [] };
+    expect(missingFromNew(old, now).map(m => m.row.num || m.row.id || m.row.chan)).toEqual(['#1002', 'Book Fair', 'L1']);
+  });
+
+  it('one edited sale only accounts for one old version', () => {
+    const old = { hist: [sale({ num: '#1003' }), sale({ num: '#1003', qty: 2 })] };
+    const now = { hist: [sale({ num: '#1003', qty: 3 })] };
+    expect(missingFromNew(old, now)).toHaveLength(1);
+  });
+
+  it('a sale whose order number moved to another day still shows', () => {
+    expect(missingFromNew({ hist: [sale({ num: '#1004' })] }, { hist: [sale({ num: '#1004', date: '2026-08-16' })] })).toHaveLength(1);
   });
 });
 
