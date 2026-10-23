@@ -96,7 +96,15 @@
 
   /* Shipping: recipient and parcel inputs stay legible at 320px. */
   #tab-shipping .shipping-form-container, #tab-shipping .shipping-results-container { min-width: 0; }
-  #tab-shipping .phone-address-grid, #tab-shipping .phone-parcel-grid { display: grid; grid-template-columns: minmax(0, 1fr) !important; }
+  #tab-shipping .phone-address-grid { display: grid; grid-template-columns: minmax(0, 1fr) !important; }
+  /* Parcel size reads as one row: Length / Width / Height side by side, the unit under them;
+     copies and weight share a row, their unit under. Stacking all of them ran ~700px. */
+  #tab-shipping .phone-parcel-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)) !important; gap: var(--space-3) var(--space-2) !important; }
+  #tab-shipping .phone-parcel-grid > .form-group { grid-column: span 2; min-width: 0; margin-bottom: 0; }
+  #tab-shipping .phone-parcel-grid:not(:has(> :nth-child(4))) > .form-group:nth-child(-n+2) { grid-column: span 3; }
+  #tab-shipping .phone-parcel-grid:not(:has(> :nth-child(4))) > .form-group:nth-child(3),
+  #tab-shipping .phone-parcel-grid > .form-group:nth-child(4) { grid-column: 1 / -1; }
+  #tab-shipping .phone-parcel-grid input { text-align: center; font-family: var(--font-mono); font-variant-numeric: tabular-nums; padding-inline: var(--space-2); }
   #tab-shipping #ship-analysis-hub :is(.shipping-pnl-header, .shipping-pnl-toolbar) { display: flex; flex-direction: column; align-items: stretch; }
   #tab-shipping #ship-analysis-hub .toolbar-group { min-width: 0; max-width: 100%; }
   #tab-shipping .filter-segmented-control { display: flex; flex-wrap: wrap; width: 100%; }
@@ -1275,6 +1283,33 @@
   #d-exp-body > tr.phone-record > td[data-phone-label="Date"]::before { display: none; }
 }
 
+/* ─── ALL BOOKS: consignment accounts (phone) ─── */
+/* Each account used to be a 300px stack — book, a full-width Details bar, then Store,
+   Returned, Outstanding and Status one under another, four screens for ten accounts.
+   The book now leads with its status beside it, the store sits under as one line,
+   Returned and Outstanding share a row, and Details closes the card. The book and
+   store links get a full 44px row each, they were 14–16px strips. Grouped (nested)
+   rows keep the generic card. */
+@media (max-width: 768px) {
+  #all-con-body > tr.phone-record:not(.con-nested-row) {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-1) var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    align-items: center;
+  }
+  #all-con-body > tr.phone-record:not(.con-nested-row) > td { border: 0 !important; }
+  #all-con-body > tr.phone-record:not(.con-nested-row) > td.phone-record-lead { display: contents !important; }
+  #all-con-body > tr.phone-record:not(.con-nested-row) .con-row-book-title { grid-column: 1; grid-row: 1; min-height: var(--target-min); font-size: var(--text-md); }
+  #all-con-body > tr.phone-record:not(.con-nested-row) > td[data-phone-label="Status"] { grid-column: 2 !important; grid-row: 1 !important; text-align: right !important; }
+  #all-con-body > tr.phone-record:not(.con-nested-row) > td[data-phone-label="Status"]::before,
+  #all-con-body > tr.phone-record:not(.con-nested-row) > td[data-phone-label="Store"]::before { display: none; }
+  #all-con-body > tr.phone-record:not(.con-nested-row) > td[data-phone-label="Store"] { grid-column: 1 / -1 !important; grid-row: 2 !important; color: var(--content-secondary); }
+  #all-con-body > tr.phone-record:not(.con-nested-row) .store-jump-link { display: inline-flex; align-items: center; min-height: var(--target-min); }
+  #all-con-body > tr.phone-record:not(.con-nested-row) > td[data-phone-label="Returned"] { grid-column: 1 !important; grid-row: 3 !important; font-variant-numeric: tabular-nums; }
+  #all-con-body > tr.phone-record:not(.con-nested-row) > td[data-phone-label="Outstanding"] { grid-column: 2 !important; grid-row: 3 !important; text-align: right !important; }
+  #all-con-body > tr.phone-record:not(.con-nested-row) > td.phone-record-lead > .phone-record-toggle { grid-column: 1 / -1 !important; grid-row: 4 !important; margin-top: var(--space-2); }
+}
+
 /* ─── DASHBOARD: the headline numbers (phone) ─── */
 /* Four numbers used to be four full-width slabs, about 100 screen-px each, so the book's
    first screen was all KPI and nothing else. Stock on hand still leads on its own row and
@@ -1349,6 +1384,26 @@
   #tab-opencall .oc-settings-card > .oc-collapse-head { flex-direction: row !important; flex-wrap: nowrap !important; align-items: center; }
   #tab-opencall .oc-settings-card > .oc-collapse-head > div:first-child { min-width: 0; flex: 1 1 auto; }
   #tab-opencall .oc-settings-card .oc-collapse-chevron { flex: 0 0 auto; }
+
+  /* Open Call, held upright: every card is an inked Riso slab with snug
+     padding; the project card's buttons share one row and the search and sort
+     boxes take the full width instead of sitting half-width with dead space. */
+  #tab-opencall :is(.oc-topbar, .oc-list-card, .oc-settings-card) {
+    border: var(--stroke) solid var(--rule-ink); box-shadow: var(--elev-2);
+  }
+  #tab-opencall .oc-list-card { padding: 0; }
+  #tab-opencall .oc-topbar { padding: var(--space-4); gap: var(--space-3); }
+  #tab-opencall .oc-topbar-main { gap: var(--space-3); }
+  #tab-opencall .oc-topbar-actions { width: 100%; }
+  #tab-opencall .oc-topbar-actions .btn { flex: 1 1 auto; justify-content: center; }
+  #tab-opencall .oc-topbar-hint { flex: 1 1 100%; order: 3; }
+  #tab-opencall .oc-project-picker .oc-project-select { flex: 1 1 auto; min-width: 0; }
+  #tab-opencall .oc-list-toolbar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); padding: var(--space-3); }
+  #tab-opencall .oc-list-toolbar #oc-search { grid-column: 1 / -1; }
+  #tab-opencall .oc-list-toolbar select { width: 100%; min-width: 0; }
+  #tab-opencall .oc-settings-card > .oc-collapse-head { padding: var(--space-3) var(--space-4); }
+  #tab-opencall .oc-list-head:empty { display: none; }
+  #tab-opencall .oc-list > .oc-empty-state { margin: var(--space-3); }
 
   /* Tax Centre: the secondary batch button spans the same width as the primary
      button above it, and its outline is drawn in light mode too. */
@@ -1620,4 +1675,28 @@
     transition: opacity .15s ease;
   }
   .tab-bar.has-more-right::after { opacity: 1; }
+}
+
+/* Tax Centre text links held upright. The expense-breakdown category links (16px tall) and the
+   subscription "charges logged" / "Adjust price" links (14px tall) were far under a fingertip.
+   Vertical padding grows the tappable box and an equal negative margin cancels it, so every row
+   keeps the height it had; the filter tabs above them get the full 44px. */
+@media (max-width: 768px) {
+  .tc-cat-link, .rec-charge-link {
+    display: inline-block;
+    padding-block: calc((var(--target-min) - 1lh) / 2);
+    margin-block: calc((var(--target-min) - 1lh) / -2);
+  }
+  .rec-filter { min-height: var(--target-min); }
+}
+
+/* Setup and status cards held upright (Backups, Google Sheet, Big Cartel, Web Analytics). These
+   still wore the pre-repaint hairline outline and a soft grey shadow, so they read as faded next
+   to every other card on a phone. They now take the 2px ink outline and hard offset shadow, the
+   "Edits made on two devices" card keeps its amber edge stripe on top of that shadow, and the
+   Connected / Not Connected badge is a square inked tag instead of a soft pill. */
+@media (max-width: 768px) {
+  .tab-panel :is(.sheets-setup, .sync-review-card) { border: var(--stroke) solid var(--border-strong); box-shadow: var(--elev-1); }
+  .tab-panel .sync-review-card.has-items { box-shadow: inset 3px 0 0 var(--status-active), var(--elev-1); }
+  .tab-panel .sheets-badge { border: var(--stroke) solid currentColor; border-radius: var(--r2); font-weight: 800; text-transform: uppercase; letter-spacing: var(--tracking-caps); }
 }
