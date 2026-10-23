@@ -1841,7 +1841,9 @@ tr.hist-row:hover {
   margin-bottom: 6px;
   display: flex;
   align-items: center;
-  gap: 6px;
+  /* Facts are separated by space, not a typed "·": a dot ends up stranded at the
+     start of the second line the moment the facts wrap on a phone. */
+  gap: 2px var(--space-4);
   flex-wrap: wrap;
 }
 .book-strip-meta span {

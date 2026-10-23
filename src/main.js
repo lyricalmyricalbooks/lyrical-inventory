@@ -5989,10 +5989,10 @@ function renderAllBooksStrips(allBooksVisible) {
         <div class="book-strip-title">${escapeHtml(book.title)}</div>
         <div class="book-strip-meta">
           <span>✍ ${escapeHtml(book.author) || '—'}</span>
-          <span>&nbsp;·&nbsp; 🏷 ${escapeHtml(book.currency)}${escapeHtml(book.listPrice)}</span>
-          <span>&nbsp;·&nbsp; 🖨 ${escapeHtml(book.maxPrint)} printed</span>
-          ${!isAuthor() && s.authorStock > 0 ? `<span>&nbsp;·&nbsp; 👤 ${escapeHtml(s.authorStock)} with author</span>` : ''}
-          ${promised.copies > 0 ? `<span title="Pre-ordered on your website and not sent yet. These copies are already taken off on hand.">&nbsp;·&nbsp; 📌 ${escapeHtml(promised.copies)} pre-ordered, not sent</span>` : ''}
+          <span> 🏷 ${escapeHtml(book.currency)}${escapeHtml(book.listPrice)}</span>
+          <span> 🖨 ${escapeHtml(book.maxPrint)} printed</span>
+          ${!isAuthor() && s.authorStock > 0 ? `<span> 👤 ${escapeHtml(s.authorStock)} with author</span>` : ''}
+          ${promised.copies > 0 ? `<span title="Pre-ordered on your website and not sent yet. These copies are already taken off on hand."> 📌 ${escapeHtml(promised.copies)} pre-ordered, not sent</span>` : ''}
         </div>
         <div class="book-progress-wrapper" title="${escapeHtml(s.stock)} units on hand of ${escapeHtml(book.maxPrint)} total printed (${pct.toFixed(0)}%)">
           <div class="book-progress-header">
