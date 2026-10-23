@@ -153,6 +153,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-23 | visual | Phone Shipping — parcel specifications | Put Length, Width and Height side by side (and copies beside weight) with centred figures, instead of six full-width boxes in a column, so the parcel card is about a third shorter | pending |
 | 2026-10-23 | visual | Phone All Books — book card facts | The author, price and print-run line on each book card now separates its facts with space instead of typed dots, so a dot no longer lands alone at the start of the second line | pending |
 | 2026-10-23 | visual | Phone All Books — consignment summary | Put Outstanding stock on a row of its own and Active accounts beside Sell-through, instead of three full-width slabs, so the store filter and list come into view a screen sooner | (this PR) |
+| 2026-10-23 | visual | Phone Expenses — amount | Put the currency picker (CAD, USD…) and the amount on one row, same height, instead of a full-width picker stacked over the amount box, so the Log an expense form is a row shorter | (this PR) |
 
 ---
 
