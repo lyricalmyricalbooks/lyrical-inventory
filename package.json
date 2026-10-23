@@ -19,7 +19,8 @@
     "lint:tokens": "node scripts/check-tokens.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "shots": "node scripts/phone-shots/capture.mjs"
+    "shots": "node scripts/phone-shots/capture.mjs",
+    "android:assets": "node scripts/android-assets.mjs"
   },
   "devDependencies": {
     "@vite-pwa/assets-generator": "^2.0.0",
