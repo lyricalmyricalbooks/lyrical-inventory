@@ -386,6 +386,14 @@
     </div>
   </div>
 
+  <!-- Website · Inventory switcher (publisher only; src/features/app-switch.js).
+       The Website half is a real link, so long-press and middle-click work;
+       a plain click reuses the website's tab. docs/website-link.md › Switching. -->
+  <div class="app-switch" data-app-switch role="group" aria-label="Switch between the website and the inventory app" hidden>
+    <a class="app-switch-seg" data-app-switch-link href="https://lyricalmyrical-web-v2.web.app/admin" target="lm-website-admin" aria-label="Open the website admin" title="Open the website admin"><span class="app-switch-label">Website</span><span class="app-switch-glyph" aria-hidden="true">↗</span><span class="app-switch-state">Offline</span><span class="nav-badge app-switch-badge" hidden></span></a>
+    <span class="app-switch-seg is-current" aria-current="page"><span class="app-switch-label">Inventory</span></span>
+  </div>
+
   <nav class="pub-nav" aria-label="Books">
     <button type="button" class="snav" title="Dashboard" onclick="switchTab('dashboard')"><span class="snav-ic" data-ink="▦">▦</span><span class="snav-label">Dashboard</span></button>
     <button type="button" class="snav" id="todo-sidebar-btn" title="To-do" onclick="switchTab('todo')"><span class="snav-ic" data-ink="!">✅</span><span class="snav-label">To-do</span><span class="nav-badge todo-nav-badge" aria-label="things needing attention" hidden></span></button>
@@ -524,6 +532,9 @@
        those destinations already lives in the left sidebar (with the same
        badges), so keeping a second copy here only doubled up the same nav. -->
   <div class="header-right">
+    <!-- Phone and tablet way to the website admin (≤860px, no sidebar there).
+         Publisher only: kept current by refreshAppSwitch(). -->
+    <a class="app-switch-pill" data-app-switch-link href="https://lyricalmyrical-web-v2.web.app/admin" target="lm-website-admin" aria-label="Open the website admin" title="Open the website admin" hidden><span class="app-switch-label">Website</span><span class="app-switch-glyph" aria-hidden="true">↗</span><span class="nav-badge app-switch-badge" hidden></span></a>
     <div class="kpi-cluster">
       <div class="header-stat"><div class="hs-val" id="h-stock">—</div><div class="hs-label">On hand</div></div>
       <div class="header-stat"><div class="hs-val" id="h-revenue">—</div><div class="hs-label">Revenue</div></div>
@@ -637,6 +648,10 @@
     <h2 class="more-sheet-title" id="more-sheet-title">All tools</h2>
     <button type="button" class="more-sheet-close" onclick="closeMoreSheet()" aria-label="Close">✕</button>
   </div>
+  <div class="app-switch" data-app-switch role="group" aria-label="Switch between the website and the inventory app" hidden>
+    <a class="app-switch-seg" data-app-switch-link href="https://lyricalmyrical-web-v2.web.app/admin" target="lm-website-admin" aria-label="Open the website admin" title="Open the website admin"><span class="app-switch-label">Website</span><span class="app-switch-glyph" aria-hidden="true">↗</span><span class="app-switch-state">Offline</span><span class="nav-badge app-switch-badge" hidden></span></a>
+    <span class="app-switch-seg is-current" aria-current="page"><span class="app-switch-label">Inventory</span></span>
+  </div>
   <div class="more-sheet-body" id="more-sheet-body"></div>
 </dialog>
 <nav class="tab-bar" id="tab-bar">
@@ -744,6 +759,7 @@
       <details class="help-q"><summary>What can I see that artists can’t?</summary><div class="help-a"><p>Artists only see their own book and the everyday tabs: Dashboard, Manual entry, Consignment, History, Expenses and their QR code. You see every book, plus the business tabs — Website orders, Event POS, Payments, Tax Centre, Customers, Shipping, Big Cartel, Sheets and Backups.</p></div></details>
       <details class="help-q"><summary>How do I see exactly what an artist sees?</summary><div class="help-a"><p>Choose their book, then press <b>Author view</b> at the top of the screen. A note reminds you that you’re previewing. Press it again to get your full view back.</p></div></details>
       <details class="help-q"><summary>Where do I start each day?</summary><div class="help-a"><ol><li>Open <b>Dashboard</b> and read any <b>Action required</b> note first.</li><li>Open <b>Website orders</b> and apply the ones marked ready.</li><li>Check <b>To-do</b> for anything still waiting on you.</li></ol><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="todo">Open To-do →</button></p></div></details>
+      <details class="help-q"><summary>How do I get to the website’s admin?</summary><div class="help-a"><p>Use the <b>Website · Inventory</b> switch: at the top of the left menu on a computer, the <b>Website ↗</b> button at the top of the screen on a phone or tablet, or the top of <b>More</b>. The red number on it is how many website orders are paid and not sent yet.</p><p>On a computer the website opens in its own tab, and pressing <b>Inventory</b> there brings you back to this tab — no pile of new tabs. A website sale in <b>History</b> has an <b>Open on the website</b> link that goes straight to that order, and the website’s orders link back here the same way.</p><p>It needs the internet: offline, the switch says so and opens nothing.</p></div></details>
       <details class="help-q"><summary>How do I switch between books?</summary><div class="help-a"><p>Use the book picker at the top. Some tabs need one book chosen; others, like the Dashboard, can show <b>all books</b> together.</p></div></details>
     </section>
     <section class="help-sec" id="help-approvals" data-audience="publisher">
@@ -5353,6 +5369,7 @@
   <!-- ORDER EDIT FIELDS -->
   <div id="edit-order-fields">
     <p class="wl-edit-note" id="edit-web-note" hidden>This sale came from your website. Its copies, order number and refunds follow the website, so they can’t be changed here — refund or change the order on the website and it updates by itself. A price or date you change here stays, unless the website later changes what this order paid.</p>
+    <p class="wl-edit-open"><a class="open-on-website" id="edit-web-open" href="https://lyricalmyrical-web-v2.web.app/admin" target="lm-website-admin" hidden>Open this order on the website <span aria-hidden="true">↗</span></a></p>
     <div class="g2" style="margin-bottom:12px;">
       <div class="form-group"><label for="edit-num">Order #</label><input id="edit-num" type="text"></div>
       <div class="form-group"><label for="edit-date">Date</label><input id="edit-date" type="date"></div>

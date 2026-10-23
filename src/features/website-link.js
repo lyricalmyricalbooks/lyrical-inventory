@@ -29,6 +29,7 @@ import { bookCurrencyCode } from '../lib/currency-migration.js';
 import { missingFromNew, restoreRecords } from '../lib/storage-mode.js';
 import { deriveOnHand } from '../lib/inventory.js';
 import { confirmDialog } from '../lib/modal.js';
+import { countWebsiteOrdersNotSent, openOnWebsiteHtml } from '../lib/app-switch.js';
 import {
   STRIPE_CHARGE_PI_KEY,
   WEBSITE_IMPORT_BATCH,
@@ -897,7 +898,7 @@ function reviewItemHtml(plan) {
     return `<div class="wl-reason"><p class="wl-why">${escapeHtml(words)}</p>${cands}<div class="wl-actions">${reasonActions(plan, r)}</div></div>`;
   }).join('');
   return `<li class="wl-item is-needs-you">
-      <div class="wl-item-head">${chip('needs-you', '!', 'Needs you')}<strong class="wl-num">${escapeHtml(plan.num || plan.orderId)}</strong><span class="wl-sub">${escapeHtml([plan.customer, fmtD(plan.day)].filter(Boolean).join(' · '))}</span></div>
+      <div class="wl-item-head">${chip('needs-you', '!', 'Needs you')}<strong class="wl-num">${escapeHtml(plan.num || plan.orderId)}</strong><span class="wl-sub">${escapeHtml([plan.customer, fmtD(plan.day)].filter(Boolean).join(' · '))}</span>${openOnWebsiteHtml(plan.orderId)}</div>
       ${reasons}
     </li>`;
 }
@@ -1083,6 +1084,30 @@ function renderWebsiteLinkCard() {
   if (statusEl && statusEl.textContent !== s.text) statusEl.textContent = s.text;
   const body = $('wl-body');
   if (body) body.innerHTML = [factsHtml(), reviewHtml(), promisedHtml(), blockedHtml(), unlinkedHtml(), storageHtml(), testsHtml()].join('');
+  // The app switcher's "not sent yet" count follows the same orders.
+  try { window.dispatchEvent(new Event('website-link-changed')); } catch (_) { /* old browser */ }
+}
+
+// ── For the app switcher ───────────────────────────────────────────────────
+
+/**
+ * Website orders paid and not sent yet (lib/app-switch.js), or null before the
+ * link has had its first look — no count is shown then, never a made-up 0.
+ * Reads the orders still waiting here and the sales the others became.
+ */
+function websiteNotSentCount() {
+  if (!_started || !_ordersSeen) return null;
+  const rows = [];
+  Object.keys(states).forEach((bookId) => {
+    if (!BOOKS[bookId] || isTestBook(BOOKS[bookId])) return;
+    ((states[bookId] && states[bookId].hist) || []).forEach((h) => { if (h && h.webOrderId) rows.push(h); });
+  });
+  return countWebsiteOrdersNotSent({ docs: [..._docs.values()], rows });
+}
+
+/** The waiting websiteOrders document for one order, or null. */
+function websiteOrderDoc(orderId) {
+  return _docs.get(String(orderId || '')) || null;
 }
 
 // ── For the order screens ──────────────────────────────────────────────────
@@ -1111,5 +1136,7 @@ export {
   startWebsiteLink,
   websiteLinkActive,
   websiteLinkTodo,
+  websiteNotSentCount,
+  websiteOrderDoc,
   websiteShipmentNote,
 };

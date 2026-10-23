@@ -637,6 +637,15 @@
 .theme-dark .kpi.is-lead .kpi-label,
 .theme-dark .kpi.is-lead .kpi-value { color: var(--book-accent-contrast, var(--ink)); }
 
+/* Website · Inventory switcher (src/styles/app-switch.css). At night the
+   current half steps up to the raised warm grey instead of a bright cream
+   block, and the More sheet's pair takes the quiet outline ink. The extra
+   .pub-shell keeps these ahead of app-switch.css, which loads later. */
+.theme-dark .pub-shell .app-switch-seg.is-current { background: var(--ink4); color: var(--on-inverse); }
+.theme-dark .pub-shell .more-sheet .app-switch { border-color: var(--border); }
+.theme-dark .pub-shell .more-sheet .app-switch-seg + .app-switch-seg { border-left-color: var(--border); }
+.theme-dark .pub-shell .more-sheet .app-switch-seg.is-current { background: var(--cream4); color: var(--text); }
+
 } /* end @media screen — component corrections */
 
 /* Belt and braces: the pre-paint bootstrap in index.html paints <html> inline
