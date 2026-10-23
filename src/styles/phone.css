@@ -1749,8 +1749,12 @@
     border: var(--stroke) solid var(--rule-ink); background: var(--surface-card); color: var(--content-primary);
     font: 900 var(--text-xs) / 1 var(--font-ui);
   }
-  .publisher-action-banner .pab-short { font: 700 var(--text-sm) / 1.3 var(--font-ui); min-width: 0; }
-  .publisher-action-banner .pab-short::first-letter { text-transform: uppercase; }
+  .publisher-action-banner .pab-text { min-width: 0; flex: 1 1 auto; }
+  .publisher-action-banner .pab-short { min-width: 0; }
+  .publisher-action-banner .pab-short > * { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .publisher-action-banner .pab-short b { font: 700 var(--text-sm) / 1.25 var(--font-ui); }
+  .publisher-action-banner .pab-short b::first-letter { text-transform: uppercase; }
+  .publisher-action-banner .pab-where { font: 500 var(--text-2xs) / 1.3 var(--font-mono); color: var(--content-secondary); }
   .publisher-action-banner .pab-actions { flex-wrap: nowrap; }
   .publisher-action-banner .pab-btn {
     min-height: 36px; padding: var(--space-1) var(--space-3); white-space: nowrap;
@@ -1866,4 +1870,13 @@
 @media (max-width: 768px) {
   #tab-expenses .price-inline { grid-template-columns: minmax(5.5rem, 30%) minmax(0, 1fr); gap: var(--space-2); align-items: stretch; }
   #tab-expenses .price-inline > * { min-width: 0; width: 100%; }
+}
+
+/* Phone polish, round 6: picture icons that stand alone in a tile (to-do items,
+   receipt rows, empty states, the store picker) print in one ink, so they sit
+   with the ink marks instead of reading as colour clip-art. */
+@media (max-width: 768px) {
+  :is(.todo-ico, .ri-item-ico, .ri-detail-ico, .preset-icon, .intel-disclosure-ic, .oc-empty-icon, .dz-icon) { filter: grayscale(1) contrast(1.15); }
+  /* Channel pills in order history say the channel in words; the picture is extra. */
+  .ch-badge .ch-icon { display: none; }
 }

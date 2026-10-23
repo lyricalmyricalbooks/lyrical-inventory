@@ -7541,7 +7541,9 @@ function updatePublisherActionBanner() {
   // The phone shows this one line instead of the title and sub, which wrap to
   // four lines at phone width and push the screen's own content down.
   const shortEl = document.getElementById('pab-short');
-  if (shortEl) shortEl.textContent = `${parts.join(' · ')}${artistPaymentCount > 0 && parts.length === 1 ? '' : ' to approve'}`;
+  // It names the book (or how many) so an approval is never mistaken for another book's.
+  const where = booksWithPending.length === 1 ? (BOOKS[booksWithPending[0].bookId]?.title || '') : `${booksWithPending.length} books`;
+  if (shortEl) shortEl.innerHTML = `<b>${escapeHtml(`${parts.join(' · ')}${artistPaymentCount > 0 && parts.length === 1 ? '' : ' to approve'}`)}</b>${where ? `<span class="pab-where">${escapeHtml(where)}</span>` : ''}`;
 
   // Build action buttons: jump straight to the first pending book, plus per-section buttons if a single book has pending
   actEl.innerHTML = '';
@@ -11656,28 +11658,40 @@ function withoutDifferenceIfUnmeasured(rec, t) {
   if (rec && t && t.baseDue == null) rec.difference = 0;
   return rec;
 }
+// "Harbour Lights owes $40.00 → $0.00": what marking these sales paid takes off
+// the store's Owed figure. Only when they all belong to one store.
+function consignPaymentOwedLine(t) {
+  const drop = new Map();
+  for (const e of t.rows) if (e.status === 'pending' && !e.voided) drop.set(e.storeId, (drop.get(e.storeId) || 0) + (Number(e.amountDue) || 0));
+  if (drop.size !== 1) return '';
+  const [[id, amount]] = drop;
+  const st = (t.s.stores || []).find(x => x.id === id);
+  if (!st) return '';
+  const before = roundCents(st.amountOwed || 0);
+  return `${st.name} owes ${fmt(before, t.bookCode)} → ${fmt(roundCents(Math.max(0, before - amount)), t.bookCode)}.`;
+}
 function updateConsignPaymentPreview() {
   const el = $('cp-preview'); if (!el) return;
   const t = consignPaymentTarget(); if (!t) return;
+  const owed = consignPaymentOwedLine(t);
+  const show = (text, warn = false) => { el.textContent = [owed, text].filter(Boolean).join(' '); el.classList.toggle('warn', warn); };
   const bookCode = t.bookCode;
   const rec = withoutDifferenceIfUnmeasured(consignPaymentFormRecord(t), t);
-  el.classList.remove('warn');
-  if (!rec) { el.textContent = $('cp-cur').value !== bookCode ? `Add an exchange rate to see what this is worth in ${bookCode}.` : ''; return; }
-  if (!rec.amount) { el.textContent = ''; return; }
+  if (!rec) { show($('cp-cur').value !== bookCode ? `Add an exchange rate to see what this is worth in ${bookCode}.` : ''); return; }
+  if (!rec.amount) { show(''); return; }
   const worth = rec.currency !== bookCode ? `Worth ${fmt(rec.convertedTotal, bookCode)}. ` : '';
   // Paid in the invoice's own currency: compare with the invoice total
   // directly, so a partial payment shows in the number the shop was billed.
   if (t.inv && rec.currency === t.expected.currency) {
     const gap = roundCents(rec.amount - t.expected.amount);
-    if (gap < 0) { el.textContent = `${worth}That’s ${fmt(-gap, rec.currency)} less than the invoice total. It still counts as paid in full.`; el.classList.add('warn'); return; }
-    if (gap > 0) { el.textContent = `${worth}That’s ${fmt(gap, rec.currency)} more than the invoice total.`; return; }
-    el.textContent = `${worth}Matches the invoice total.`; return;
+    if (gap < 0) { show(`${worth}That’s ${fmt(-gap, rec.currency)} less than the invoice total. It still counts as paid in full.`, true); return; }
+    if (gap > 0) { show(`${worth}That’s ${fmt(gap, rec.currency)} more than the invoice total.`); return; }
+    show(`${worth}Matches the invoice total.`); return;
   }
-  if (t.baseDue == null || Math.abs(rec.difference) < 0.01) { el.textContent = `${worth}${t.baseDue == null ? '' : 'Matches what’s owed.'}`.trim(); return; }
-  el.textContent = rec.difference < 0
+  if (t.baseDue == null || Math.abs(rec.difference) < 0.01) { show(`${worth}${t.baseDue == null ? '' : 'Matches what’s owed.'}`.trim()); return; }
+  show(rec.difference < 0
     ? `${worth}That’s ${fmt(-rec.difference, bookCode)} less than recorded — usually the exchange rate or a bank fee. It still counts as paid.`
-    : `${worth}That’s ${fmt(rec.difference, bookCode)} more than recorded.`;
-  if (rec.difference < 0) el.classList.add('warn');
+    : `${worth}That’s ${fmt(rec.difference, bookCode)} more than recorded.`, rec.difference < 0);
 }
 function confirmConsignPayment() {
   const t = consignPaymentTarget();
