@@ -1137,6 +1137,8 @@ import {
   websiteLinkTodo,
 } from './features/website-link.js';
 import { STRIPE_CHARGE_PI_KEY, isWebsiteFulfilled, promisedPreorders, rememberChargeIntents } from './lib/website-link.js';
+import { appSwitchBooksReady, refreshAppSwitch, startAppSwitch } from './features/app-switch.js';
+import { WEBSITE_TAB_NAME, openOnWebsiteHtml, websiteOrderUrl } from './lib/app-switch.js';
 import { reviewTaskStillOpen } from './lib/review-queue.js';
 import {
   clearSimulatedSheet,
@@ -4557,6 +4559,8 @@ async function loadAllBooks({ settingsLoaded } = {}) {
   startEmailInboxWatcher();
   // Orders from the shop's website, once every book is here to match them against.
   startWebsiteLink();
+  // A link from the website to one of its orders can open now.
+  appSwitchBooksReady();
   setSyncState('ok', '<b>Firestore</b> · connected · live sync on');
   updateSubheader(new Date().toLocaleTimeString());
   renderCurrent();
@@ -4854,6 +4858,8 @@ function syncRoleUI() {
   // see the unchanged header + tab bar. (Desktop only — CSS reverts < 861px.)
   const pwApp = document.getElementById('pw-app');
   if (pwApp) pwApp.classList.toggle('pub-shell', !authorNow && isPublisherSession());
+  // The Website · Inventory switcher follows the same rule (publisher, own view).
+  try { refreshAppSwitch(); } catch (e) { console.warn('[app switch] refresh failed', e); }
   updateSubheader();
   placeKpiStrip();
   bindKpiResize();
@@ -6809,6 +6815,7 @@ function toggleSidebarAlerts() {
     localStorage.setItem(SIDEBAR_ALERTS_HIDDEN_KEY, String(_sidebarAlertsHidden));
   } catch (_) { /* the in-memory preference still works for this session */ }
   renderSidebarAlertPreference();
+  refreshAppSwitch();
   showToast(wasHidden ? 'Navigation alerts are visible again' : 'Navigation alerts hidden', 'ok', 2600);
 }
 
@@ -7670,6 +7677,8 @@ function renderCurrent() {
   if (activeBook === 'all') { updateAllOverview(); updateHeader(); }
   else renderAll();
   try { updatePublisherActionBanner(); } catch (_) { }
+  // A sale the website shipped (or a new one) changes the switcher's count.
+  try { refreshAppSwitch(); } catch (_) { /* next render picks it up */ }
 
   // Firestore DB status indicator update
   const fsBtn = document.getElementById('fs-toggle-btn');
@@ -7804,6 +7813,23 @@ function histSearchInput(v) {
   _histSearchBook = activeBook;
   clearTimeout(_histSearchTimer);
   _histSearchTimer = setTimeout(() => { renderHist(); }, 200);
+}
+
+/**
+ * Open one book's History already searched for `query` (an order number), the
+ * landing spot for a link from the website to one of its orders.
+ */
+export function showHistoryOrder(bookId, query) {
+  if (!BOOKS[bookId]) return;
+  if (activeBook !== bookId) switchBook(bookId);
+  clearTimeout(_histSearchTimer);
+  _histSearchTimer = null;
+  _histSearch = String(query || '');
+  _histSearchBook = bookId;
+  histChanFilter = null;
+  const input = $('hist-search');
+  if (input) input.value = _histSearch;
+  switchTab('history');
 }
 
 /** Clear and hand focus back, so the next search starts where the last ended. */
@@ -8088,10 +8114,13 @@ function renderHistRowHtml(row, { cur, bookCode, book, formatChannelBadge }) {
   const paymentInfo = paymentSummary(h.payment, book, h);
   const shippingInfo = isWebsite ? renderOrderShippingSummary(h) : '';
   const notesText = escapeHtml(h.notes) || '—';
+  // The publisher can open a website sale's order on the website itself.
+  const websiteLink = h.webOrderId && window.IS_PUBLISHER && !isAuthor() ? openOnWebsiteHtml(h.webOrderId) : '';
   const notesCell = [
     notesText,
     paymentInfo ? `<span style="font-size:var(--text-xs);color:var(--text3);">${escapeHtml(paymentInfo)}</span>` : '',
     shippingInfo,
+    websiteLink,
   ].filter(Boolean).join('<br>');
   const enteredBy = h.enteredBy || (h.artistPending ? 'Artist' : 'Publisher');
   const enteredByPill = `<span class="chip-status gray">${escapeHtml(enteredBy)}</span>`;
@@ -10269,6 +10298,10 @@ function consumeTransferPaidReturn() {
   try { history.replaceState(null, '', `${location.pathname}${q ? `?${q}` : ''}${location.hash}`); } catch (_) { /* old browser */ }
 }
 consumeTransferPaidReturn();
+// The Website · Inventory switcher, and links from the website to one of its
+// orders (#website-order=<id>). It drops a leftover ?mode=admin (nothing reads
+// it) and leaves every other part of the address as it is.
+startAppSwitch();
 // The return lands in the tab Stripe opened; refresh any other open tab too.
 window.addEventListener('storage', e => { if (e.key === PAID_TAP_KEY) { try { renderArtistTransfers(); } catch (_) { /* still loading */ } } });
 
@@ -12258,7 +12291,7 @@ export function openEditHist(idx) {
     $('edit-void-btn').textContent = 'Void this entry';
     $('edit-void-body').textContent = 'Voiding reverses all stock and revenue effects. The entry stays visible as struck-through for your records.';
   }
-  setEditWebsiteLock(!!h.webOrderId);
+  setEditWebsiteLock(!!h.webOrderId, h.webOrderId);
   openM('edit-entry');
 }
 
@@ -12268,7 +12301,7 @@ export const WEBSITE_SALE_LOCKED = 'This sale follows your website — refund it
 // A sale that came from the website: its copies, channel, order number and
 // void follow the website, which refunds and restocks it there. Changing them
 // here would put this ledger out of step with the order it mirrors.
-function setEditWebsiteLock(locked) {
+function setEditWebsiteLock(locked, webOrderId = '') {
   ['edit-qty', 'edit-chan', 'edit-num'].forEach(id => {
     const el = $(id);
     if (!el) return;
@@ -12278,6 +12311,16 @@ function setEditWebsiteLock(locked) {
   });
   const note = $('edit-web-note');
   if (note) note.hidden = !locked;
+  // "Open on the website ↗": the publisher's way to the order this sale follows.
+  const open = $('edit-web-open');
+  if (open) {
+    const show = locked && !!webOrderId && window.IS_PUBLISHER && !isAuthor();
+    open.hidden = !show;
+    open.href = show ? websiteOrderUrl(webOrderId) : websiteOrderUrl('');
+    open.target = WEBSITE_TAB_NAME;
+    if (show) open.dataset.openWebsite = String(webOrderId);
+    else delete open.dataset.openWebsite;
+  }
   const voidZone = $('edit-void-zone');
   if (voidZone) voidZone.style.display = locked ? 'none' : '';
 }

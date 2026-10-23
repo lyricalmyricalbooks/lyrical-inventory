@@ -154,6 +154,12 @@ const MAIN_IMPORT_BUDGET = {
   // applied-order cache, and reads the open book and role for recordOrder;
   // plus today / sheetsUrl.
   'sales-ledger.js': 13,
+  // Set at creation. The switcher shows only for the publisher in their own
+  // view (isPublisherSession, isAuthor) and says so with a toast; a deep link
+  // from the website finds the order's sales in the books (BOOKS, BOOK_LIST,
+  // states, isTestBook, activeBook) and opens them (showHistoryOrder, or
+  // switchBook + switchTab for the Website orders card).
+  'app-switch.js': 11,
 };
 
 const featureFiles = fs.existsSync(featureDir)
@@ -310,6 +316,9 @@ const MIN_EXPORTS = {
   // The sale write path and its reverse: record (on-screen and by book id),
   // the direct-to-artist variant, void, un-void and the void's Sheets sync.
   'sales-ledger.js': 6,
+  // Written as a feature module from the start: start it, repaint the
+  // switchers, and open a deep link once the books have loaded.
+  'app-switch.js': 3,
 };
 
 describe('feature modules are the only home of what they own', () => {

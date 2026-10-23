@@ -225,3 +225,26 @@ device's cache) and lists any record only the old copy has, with **Copy these ov
 - **Money:** `price: unitCAD`, converted for books priced in another currency. Order money (shipping, tax, discount, totals) goes on `firstBook`'s row only.
 - **Refunded, all copies back on the shelf:** the row is voided.
 - **Refunded, copies gone:** the row becomes `gratuity: true, price: 0`.
+
+## Switching between the apps
+
+Both apps carry the same **Website · Inventory** switch, for the publisher only (the website admin is the owner's alone;
+the inventory app shows it only in a publisher session, never in author view). It lives in the website's
+`src/app/admin/appSwitch.ts` and the app's `src/lib/app-switch.js`; change both together.
+
+- **Addresses.** Website admin: `https://lyricalmyrical-web-v2.web.app/admin`, an order is `#orders/<orderId>`. Inventory
+  app: `https://lyricalmyricalbooks.github.io/lyrical-inventory/`, a website order is `#website-order=<orderId>` (URL-encoded).
+  When the inventory app was opened from the website, it sends its deep links to the website origin it came from.
+- **Tabs.** The website admin's tab is named `lm-website-admin`, the inventory app's `lm-inventory-app`. A click on the
+  other app goes, in order, to the tab this page opened before, else `window.open("", <other name>)` (which also finds the
+  tab that opened this one), else a new tab. Never `window.opener.focus()`: browsers ignore a page raising its opener. The
+  opener is kept on purpose (same browser group for the name lookup).
+- **No reloads.** A deep link changes only the `#fragment`; both apps follow `hashchange` and tidy the hash away once
+  handled. The inventory app drops a leftover `?mode=admin` from its address so its address stays what deep links expect.
+- **Installed apps** (home screen, the Android app, "Install app"): the plain link opens instead, so the phone hands it to
+  the other installed app or a browser tab.
+- **Counts.** The website's Inventory half shows `pendingImport.count` (website orders waiting for the app; no badge when
+  the link isn't connected). The app's Website half shows website orders paid and not yet sent.
+- **Order links.** The website offers "See it in the inventory app" only for orders the link sent (the server's
+  `countsForInventory`: real, accepted payment, paid on or after `startDay`). The app offers "Open on the website" on
+  website sales.
