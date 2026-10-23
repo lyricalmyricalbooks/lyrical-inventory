@@ -4846,6 +4846,7 @@
       <div style="margin-bottom:1.5rem;">
         <div style="font-family:var(--font-ui);font-size:var(--text-lg);margin-bottom:8px;">Connect Google Sheets</div>
         <div style="font-size:var(--text-base);color:var(--text2);line-height:1.7;">Uses a Google Apps Script webhook — paste your Web App URL once and every order syncs automatically. One connection covers all books.</div>
+        <div style="font-size:var(--text-sm);color:var(--text3);line-height:1.6;margin-top:6px;">Already connected on your computer? Sign in here with the same publisher account and the connection copies over by itself, so there is nothing to paste.</div>
       </div>
 
       <!-- Connection Inputs at the Top -->
@@ -4978,7 +4979,7 @@
               ⚠ Outdated script version detected (running <span id="sheets-deployed-version"></span>, expected <span id="sheets-expected-version">v29</span>). Please copy the latest code below and deploy a new version.
             </div>
           </div>
-          <div style="display:flex;gap:8px;align-items:center;">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
             <a id="open-sheet-link" href="#" target="_blank" class="btn gold" style="text-decoration:none;display:none;">↗ Open sheet</a>
             <button class="btn sm" onclick="testSheets()">Test connection</button>
             <button class="btn sm" id="test-notify-btn" onclick="sendTestNotification()" title="Send yourself a test approval-notification email to confirm alerts work end-to-end"><span class="lead-emoji" aria-hidden="true">✉ </span>Send test notification</button>

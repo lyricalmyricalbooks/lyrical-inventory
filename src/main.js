@@ -27,6 +27,7 @@ import { createStripePriceAndLink } from './lib/stripe-payment-link.js';
 import { createStripeRateResolver, stripeOrderNumber } from './lib/stripe-sale-defaults.js';
 import { calculateBreakEven, breakEvenTierMove, applyBreakEvenTierMove, readProductionCostInput } from './lib/breakeven.js';
 import { escapeHtml, safeHttpUrl } from './lib/html.js';
+import { planSheetsConnectionSync } from './lib/sheets-url.js';
 import { legacyCopy } from './lib/clipboard.js';
 import { needsSettleUp } from './lib/settle-up-view.js';
 import { normalizeLetterhead, renderLetterhead } from './lib/letterhead.js';
@@ -13365,6 +13366,9 @@ async function connectSheets() {
   // approval-needed email when they submit a payment/expense.
   notifyUrl = normalizedUrl; localStorage.setItem('lm-notify-url', normalizedUrl);
   await window._fbSaveSettings('notifyEndpoint', { url: normalizedUrl });
+  // Publisher-only copy of the whole connection, so the publisher's other
+  // devices (a phone) pick it up at sign-in instead of re-pasting both links.
+  await window._fbSaveSettings('sheetsConnection', { url: normalizedUrl, spreadsheetUrl: spreadUrl || '' });
   if (spreadUrl) {
     sheetsSpreadsheetUrl = spreadUrl;
     localStorage.setItem('lm-sheets-spreadsheet-url', spreadUrl);
@@ -13391,12 +13395,52 @@ async function disconnectSheets() {
   localStorage.removeItem('lm-sheets-secret');
   localStorage.removeItem('lm-notify-url');
   await window._fbSaveSettings('notifyEndpoint', { url: '' });
+  await window._fbSaveSettings('sheetsConnection', { url: '', spreadsheetUrl: '' });
   $('sheets-setup-card').style.display = '';
   $('sheets-connected-card').style.display = 'none';
   const warningEl = $('sheets-version-warning');
   if (warningEl) warningEl.style.display = 'none';
   updateSheetsBadge();
   showToast('Sheets disconnected', 'warn');
+}
+// The Sheets connection lives in each device's own storage, so a publisher who
+// set it up on the computer used to face pasting two long links on the phone.
+// At publisher sign-in this squares the device with the cloud copy.
+async function syncSheetsConnectionWithCloud() {
+  try {
+    const plan = planSheetsConnectionSync({
+      localUrl: localStorage.getItem('lm-sheets-url') || '',
+      localSpreadsheetUrl: localStorage.getItem('lm-sheets-spreadsheet-url') || '',
+      conn: await window._fbLoadSettings('sheetsConnection'),
+      notifyUrl,
+      normalize: normalizeAppsScriptUrl,
+    });
+    if (plan.action === 'backfill') {
+      await window._fbSaveSettings('sheetsConnection', { url: plan.url, spreadsheetUrl: plan.spreadsheetUrl });
+      return;
+    }
+    if (plan.action !== 'adopt') return;
+    const cloudUrl = plan.url;
+    const spreadUrl = safeHttpUrl(plan.spreadsheetUrl);
+    localStorage.setItem('lm-sheets-url', cloudUrl);
+    localStorage.setItem('lm-last-sheets-url', cloudUrl);
+    if (spreadUrl) {
+      localStorage.setItem('lm-sheets-spreadsheet-url', spreadUrl);
+      localStorage.setItem('lm-last-spreadsheet-url', spreadUrl);
+    }
+    if (window._realSheetsUrlSaved) {
+      // The test book is open and holds the mock link; switching back restores these.
+      window._realSheetsUrl = cloudUrl;
+      window._realSheetsSpreadsheetUrl = spreadUrl;
+    } else {
+      sheetsUrl = cloudUrl;
+      sheetsSpreadsheetUrl = spreadUrl;
+      showSheetsConnected();
+    }
+    showToast('✓ Google Sheet connected — copied from your other device');
+  } catch (e) {
+    console.warn('Sheets connection sync skipped', e);
+  }
 }
 function showSheetsConnected() {
   $('sheets-setup-card').style.display = 'none';
@@ -18586,6 +18630,7 @@ async function initStartup() {
         // even if the catalog isn't edited this session.
         if (typeof window._fbSaveBookOwners === 'function') window._fbSaveBookOwners(ownersFromBooks());
         showApp('publisher', null);
+        syncSheetsConnectionWithCloud();
         checkAppUpdate();
         dismissSplash();
         return;
