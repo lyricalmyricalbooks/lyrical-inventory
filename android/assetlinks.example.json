@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "io.github.lyricalmyricalbooks.inventory",
+      "sha256_cert_fingerprints": [
+        "PASTE:THE:SHA256:FINGERPRINT:FROM:PLAY:CONSOLE:APP:SIGNING:KEY"
+      ]
+    }
+  }
+]

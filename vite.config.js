@@ -174,6 +174,13 @@ export default defineConfig({
         name: 'Lyricalmyrical Inventory',
         short_name: 'Lyrical-Inv',
         description: 'Inventory management for Lyricalmyrical Books',
+        // id and scope pin the app's identity to this folder. The Android app
+        // (android/twa-manifest.json) opens this same address, and an installed
+        // copy is matched to its web app by id, so neither should change.
+        id: './',
+        scope: './',
+        lang: 'en',
+        categories: ['business', 'productivity'],
         theme_color: '#100F0D',
         background_color: '#262624',
         display: 'standalone',
@@ -195,10 +202,20 @@ export default defineConfig({
             type: 'image/png'
           },
           {
+            // Opaque, for places that show the icon as a plain square (the
+            // Android app's launcher icon on older phones, the Play listing).
+            src: 'android-icon-512x512.png',
+            sizes: '512x512',
+            type: 'image/png'
+          },
+          {
+            // Maskable only: "any maskable" let browsers use this padded
+            // version where the full-bleed one belongs. Regenerate both with
+            // npm run android:assets.
             src: 'maskable-icon-512x512.png',
             sizes: '512x512',
             type: 'image/png',
-            purpose: 'any maskable'
+            purpose: 'maskable'
           }
         ]
       }
