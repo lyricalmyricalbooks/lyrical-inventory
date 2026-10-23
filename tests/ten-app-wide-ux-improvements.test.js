@@ -64,7 +64,7 @@ describe('10 Additional UX/UI Improvements Suite (/ux-designer)', () => {
   describe('5. Customer Directory: Segment 1-Tap CSV Export Action', () => {
     it('renders .cust-export-btn in index.html with onclick="exportMailingListCsv()"', () => {
       expect(html).toContain('class="btn outline cust-export-btn" onclick="exportMailingListCsv()"');
-      expect(html).toContain('📥 Export CSV');
+      expect(html).toContain('<span class="lead-emoji" aria-hidden="true">📥 </span>Export CSV');
     });
 
     it('enforces var(--target-min) and spring active scale on .cust-export-btn', () => {

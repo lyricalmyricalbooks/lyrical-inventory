@@ -1700,3 +1700,137 @@
   .tab-panel .sync-review-card.has-items { box-shadow: inset 3px 0 0 var(--status-active), var(--elev-1); }
   .tab-panel .sheets-badge { border: var(--stroke) solid currentColor; border-radius: var(--r2); font-weight: 800; text-transform: uppercase; letter-spacing: var(--tracking-caps); }
 }
+
+/* Phone polish, round 5 — the same screens and controls, finished to the Riso Press rules.
+   Ink marks instead of emoji, square header buttons, a one-line approval banner, a Home that
+   fits its four jobs on the first screen, store cards at half the height, and pop-up sheets
+   that pair their short fields. Nothing moves or disappears: an emoji that led a label is
+   hidden (the label still says it), and an icon with an ink mark shows the mark instead. */
+@media (max-width: 768px) {
+  /* Emoji in a flat ink design. Leading emoji on buttons, sub-tabs and section heads are
+     wrapped as .lead-emoji in the markup; the pop-up title tile is the same thing. */
+  .lead-emoji, .modal .modal-title-badge { display: none; }
+  .pub-shell [data-ink] { font-size: 0 !important; line-height: 1; }
+  .pub-shell [data-ink]::before { content: attr(data-ink); font: 500 var(--text-base) / 1 var(--font-mono); letter-spacing: 0; }
+  .pub-shell .more-sheet-body .snav-ic { width: 28px; display: grid; place-items: center; }
+  .pub-shell .more-sheet-body .snav-ic[data-ink]::before {
+    display: grid; place-items: center; width: 28px; height: 28px; box-sizing: border-box;
+    border: var(--stroke) solid currentColor; font-size: var(--text-3xs);
+  }
+  .pub-shell :is(.mnav-ic, .ttb-ico)[data-ink]::before { font-size: var(--text-lg); }
+
+  /* Header: the theme, bell, inbox and account buttons are squares like every other button,
+     and their counts are square stamps. */
+  .pub-shell .app-header .theme-toggle-btn, .pub-shell .acct-avatar { border-radius: var(--r2); }
+  .pub-shell .app-header :is(.hdr-notif-badge, .hdr-review-badge) { border-radius: var(--r2); border: var(--stroke-hair) solid var(--rule-ink); }
+  .pub-shell .acct-dot { border-radius: 0; }
+
+  /* The approval banner: one line in the "needs you" yellow, with the same Review button
+     and ×. Red stays for things that are broken. The title and sub wrap to four lines at
+     phone width, so the phone reads the one-line summary instead. */
+  .publisher-action-banner {
+    gap: var(--space-2); padding: var(--space-2) var(--space-3); flex-wrap: nowrap;
+    background: linear-gradient(var(--status-active-bg), var(--status-active-bg)), var(--surface-page);
+    color: var(--content-primary); border-bottom: var(--stroke) solid var(--rule-ink);
+    border-left: 6px solid var(--status-active); box-shadow: none;
+  }
+  .publisher-action-banner :is(.pab-pulse, .pab-title, .pab-sub) { display: none; }
+  .publisher-action-banner .pab-icon {
+    display: grid; place-items: center; width: 24px; height: 24px; flex: none; animation: none;
+    border: var(--stroke) solid var(--rule-ink); background: var(--surface-card); color: var(--content-primary);
+    font: 900 var(--text-xs) / 1 var(--font-ui);
+  }
+  .publisher-action-banner .pab-short { font: 700 var(--text-sm) / 1.3 var(--font-ui); min-width: 0; }
+  .publisher-action-banner .pab-short::first-letter { text-transform: uppercase; }
+  .publisher-action-banner .pab-actions { flex-wrap: nowrap; }
+  .publisher-action-banner .pab-btn {
+    min-height: 36px; padding: var(--space-1) var(--space-3); white-space: nowrap;
+    background: var(--surface-card); color: var(--content-primary); border: var(--stroke) solid var(--rule-ink);
+    border-radius: var(--r2); box-shadow: var(--elev-1); font: 800 var(--text-2xs) var(--font-ui);
+    text-transform: uppercase; letter-spacing: var(--tracking-caps);
+  }
+  .publisher-action-banner .pab-btn:hover { background: var(--surface-card); transform: none; }
+  .publisher-action-banner .pab-btn:active { transform: translate(2px, 2px); box-shadow: none; }
+  .publisher-action-banner .pab-dismiss { color: var(--content-secondary); min-width: 32px; min-height: 36px; padding: 0; }
+}
+@media (min-width: 769px) { .publisher-action-banner .pab-short { display: none; } }
+@media (max-width: 768px) and (prefers-reduced-motion: reduce) {
+  .publisher-action-banner .pab-btn { transition: none; }
+}
+
+/* Home: the four jobs fit on the first screen. The Sell card is dark ink on the flare fill
+   (white on it fell short of the reading rule), the cards lose the empty band above their
+   names, and "Sold today" is one slip: three figures over its upload line. */
+@media (max-width: 768px) {
+  #tab-today .today-head { margin-bottom: var(--space-4); gap: var(--space-2); }
+  #tab-today .today-card { min-height: 0; padding: var(--space-3) var(--space-4); gap: var(--space-1); }
+  #tab-today .today-card-ic {
+    display: grid; place-items: center; width: 32px; height: 32px; margin-bottom: var(--space-2); box-sizing: border-box;
+    border: var(--stroke) solid currentColor; font: 500 var(--text-sm) / 1 var(--font-mono);
+  }
+  #tab-today :is(.today-card-ink, .today-receipt-card) {
+    display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: var(--space-3); align-items: center; min-height: 0;
+  }
+  #tab-today :is(.today-card-ink, .today-receipt-card) .today-card-ic { grid-row: 1 / 3; margin: 0; }
+  #tab-today .today-card-ink { color: var(--ink); padding-block: var(--space-4); }
+  #tab-today .today-card-ink .today-card-ic { width: 44px; height: 44px; font-size: var(--text-lg); }
+  #tab-today .today-card-ink .today-card-sub { opacity: 1; }
+  .theme-dark #tab-today .today-card-ink { color: var(--on-accent); }
+  #tab-today .today-row { min-height: 60px; padding-block: var(--space-3); }
+  #tab-today .today-row-ic { font: 500 var(--text-sm) / 1 var(--font-mono); }
+  #tab-today .today-label { margin-top: var(--space-5); }
+
+  #tab-today .today-sofar { gap: 0; border: var(--stroke) solid var(--rule-ink); background: var(--surface-raised); box-shadow: var(--elev-1); }
+  #tab-today .today-sold { border: 0; box-shadow: none; }
+  #tab-today .today-sold-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); }
+  #tab-today .today-sold-fig { display: grid; gap: 2px; min-width: 0; }
+  #tab-today .today-sold-fig b { font: 500 var(--text-lg) / 1.15 var(--font-mono); overflow-wrap: anywhere; }
+  #tab-today .today-sold-fig span { font: 800 var(--text-3xs) var(--font-ui); text-transform: uppercase; letter-spacing: var(--tracking-caps); color: var(--content-secondary); }
+  #tab-today .today-sync {
+    min-height: 32px; border: 0; border-top: var(--stroke-hair) solid var(--border-subtle); border-radius: 0;
+    background: transparent; padding: var(--space-1) var(--space-4); font-size: var(--text-xs);
+  }
+  #tab-today .today-sync::before { border-radius: 0; width: 8px; height: 8px; }
+}
+
+/* Consignment store cards at half the height: the name and its status tag on one line, the
+   contact line on one line (the email is one tap away under Edit), the four figures as one
+   row like a line on a statement, and Send / Record sale / ⋯ in one row. */
+@media (max-width: 768px) {
+  #tab-consignment .store-card { padding: 0; border: var(--stroke) solid var(--rule-ink); box-shadow: var(--elev-1); border-radius: var(--r2); overflow: hidden; }
+  #tab-consignment .store-card:hover { border-color: var(--rule-ink); }
+  #tab-consignment .store-head { padding: var(--space-3) var(--space-3) var(--space-2); margin: 0; align-items: flex-start; }
+  #tab-consignment .store-head > div:first-child { min-width: 0; }
+  #tab-consignment .store-name { font-size: var(--text-lg); text-transform: uppercase; }
+  #tab-consignment .store-meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #tab-consignment .store-meta-email { display: none; }
+  #tab-consignment .store-head-flags { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-1); flex: none; }
+  #tab-consignment .store-head-flags .pill { border-radius: var(--r2); border: var(--stroke) solid currentColor; font-size: var(--text-3xs); text-transform: uppercase; letter-spacing: var(--tracking-caps); }
+  #tab-consignment .store-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.5fr) !important; gap: 0; margin: 0;
+    border-block: var(--stroke-hair) solid var(--border-subtle);
+  }
+  #tab-consignment .store-kpis .sk { border: 0; border-radius: 0; background: transparent; box-shadow: none; padding: var(--space-2) var(--space-3); gap: 0; }
+  #tab-consignment .store-kpis .sk + .sk { border-left: var(--stroke-hair) solid var(--border-subtle); }
+  #tab-consignment .store-kpis .sk:last-child:has(.sk-v.warn) { background: var(--status-active-bg); }
+  #tab-consignment .store-kpis .sk-v { font-size: var(--text-md); }
+  #tab-consignment .store-actions { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px; padding: var(--space-3); }
+  #tab-consignment .store-actions[data-phone-folded] .phone-more-toggle { grid-column: auto; grid-row: 1; grid-column-start: 3; min-width: 44px; padding: 0; font-size: 0; }
+  #tab-consignment .store-actions[data-phone-folded] .phone-more-toggle::before { content: '⋯'; font: 800 var(--text-lg) / 1 var(--font-ui); }
+  #tab-consignment .store-actions[data-phone-folded] .phone-more-toggle[aria-expanded="true"]::before { content: '×'; }
+  #tab-consignment .store-actions.phone-more-open .phone-more-panel { grid-row: 2; }
+}
+
+/* Pop-up sheets: short fields that were stretched across a whole row sit in pairs again
+   (a count beside a date, an issue date beside a due date). Only pairs of number, date
+   and dropdown boxes: a text box squeezed to half width hides what you type, and a pair
+   holding a price-and-currency group or an inline button keeps one column. The preview
+   line above the buttons says what the save will move. */
+@media (max-width: 768px) {
+  .modal .g2:not(:has(input:not([type="number"]):not([type="date"]):not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), textarea, .price-inline, .btn)) {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)) !important;
+  }
+  .tab-icon { display: none; }
+  .modal .modal-preview { margin: var(--space-3) 0 0; }
+  .modal .modal-preview:empty { display: none; }
+}
