@@ -7800,8 +7800,12 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   font-family:var(--font-ui);border:var(--stroke-hair) solid var(--border);border-radius:var(--r2);
   background:var(--cream2);color:var(--text);outline:none;transition:border-color .15s,box-shadow .15s;}
 .recon-search:focus{border-color:var(--gold);box-shadow:var(--elev-1);}
-.recon-mini{padding:7px 10px;font-size:var(--text-sm);font-family:var(--font-ui);
-  border:var(--stroke-hair) solid var(--border);border-radius:var(--r2);background:var(--cream2);
+/* The bare `select{width:100%}` reset (~2637) gave each of these a whole row,
+   so the toolbar stacked into three slabs on a computer. Sized to their
+   options, search, chips, both selects and the actions share one line.
+   Phones still lay them out in a grid (phone.css #tab-reconcile). */
+.recon-mini{flex:0 0 auto;width:auto;max-width:14rem;padding:7px 34px 7px 10px;font-size:var(--text-sm);font-family:var(--font-ui);
+  border:var(--stroke-hair) solid var(--border);border-radius:var(--r2);background-color:var(--cream2);
   color:var(--text);cursor:pointer;outline:none;}
 .recon-mini:focus{border-color:var(--gold);}
 .recon-chips{display:flex;flex-wrap:wrap;gap:6px;}

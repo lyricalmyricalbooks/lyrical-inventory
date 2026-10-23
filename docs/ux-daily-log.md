@@ -150,6 +150,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-21 | visual | Order History (computer) | Order numbers and dates now sit on one line (an order number was breaking over three), so each sale is a shorter row, and the Approve button on an artist's sale fits inside the table instead of being cut off at its right edge | pending |
 | 2026-10-22 | visual | Shipping — carrier price tiles | Once you get rates, each carrier's price is now the biggest thing on its tile instead of the same size as its name, and on a computer Shippo runs across the top with Canada Post and Chit Chats side by side underneath, instead of two tiles and a lonely third with a gap beside it | pending |
 | 2026-10-22 | visual | Phone Website orders — status tiles | Tightened the small captions on the four website facts (Last brought in, Stock sent…) so each fits two lines, so the figures start on the same line instead of dropping lower under each wrapped caption | pending |
+| 2026-10-23 | visual | Payments (computer) — worklist filter bar | Search, currency, type, sort, Group identical and Dismiss all shown now sit on one line instead of the two dropdowns each stretching across the whole screen, so the bar is about a quarter of its old height and the first payment shows a screen sooner; the dropdowns also got their arrow back | pending |
 
 ---
 
