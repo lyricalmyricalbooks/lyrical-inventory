@@ -1857,3 +1857,13 @@
   .consignment-stat-card .con-stat-sub { margin-top: var(--space-1); }
   .consignment-stat-card .con-stat-bar-track { margin-top: var(--space-2); }
 }
+
+/* Expenses — Amount. The currency code (CAD, USD…) is three letters in a full-width box stacked
+   over the amount, which made the form one row taller than it needs to be and parted the two
+   halves of a single figure. Held upright they now share a row: a narrow currency picker and the
+   amount taking the rest. Scoped to this form — the manual-entry picker says "Book currency" and
+   needs its own row. */
+@media (max-width: 768px) {
+  #tab-expenses .price-inline { grid-template-columns: minmax(5.5rem, 30%) minmax(0, 1fr); gap: var(--space-2); align-items: stretch; }
+  #tab-expenses .price-inline > * { min-width: 0; width: 100%; }
+}
