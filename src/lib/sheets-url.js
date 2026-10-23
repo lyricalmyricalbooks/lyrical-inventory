@@ -20,3 +20,23 @@ export function getSavedSheetsUrl() {
   } catch (_) {}
   return '';
 }
+
+// What a publisher device should do with the Sheets connection saved in the
+// cloud (settings/sheetsConnection) when it signs in:
+//   'backfill' — this device is connected and the cloud has no copy yet, so
+//                save this device's links for the others;
+//   'adopt'    — this device has no connection, so take the cloud one;
+//   'none'     — nothing to do.
+// A cleared copy ({ url: '' }) means the publisher disconnected, so a device
+// with no connection stays off. No copy at all predates the cloud copy; the
+// approval-email endpoint (notifyUrl) holds the same web-app link then.
+// `normalize` turns a pasted link into a clean web-app address, or '' if it
+// isn't one.
+export function planSheetsConnectionSync({ localUrl, localSpreadsheetUrl, conn, notifyUrl, normalize }) {
+  if (localUrl) {
+    return conn ? { action: 'none' } : { action: 'backfill', url: localUrl, spreadsheetUrl: localSpreadsheetUrl || '' };
+  }
+  const url = normalize(conn ? conn.url : (notifyUrl || ''));
+  if (!url) return { action: 'none' };
+  return { action: 'adopt', url, spreadsheetUrl: (conn && conn.spreadsheetUrl) || '' };
+}
