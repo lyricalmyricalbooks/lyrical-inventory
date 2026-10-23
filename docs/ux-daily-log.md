@@ -152,6 +152,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-22 | visual | Phone Website orders — status tiles | Tightened the small captions on the four website facts (Last brought in, Stock sent…) so each fits two lines, so the figures start on the same line instead of dropping lower under each wrapped caption | pending |
 | 2026-10-23 | visual | Phone Shipping — parcel specifications | Put Length, Width and Height side by side (and copies beside weight) with centred figures, instead of six full-width boxes in a column, so the parcel card is about a third shorter | pending |
 | 2026-10-23 | visual | Phone All Books — book card facts | The author, price and print-run line on each book card now separates its facts with space instead of typed dots, so a dot no longer lands alone at the start of the second line | pending |
+| 2026-10-23 | visual | Phone All Books — consignment summary | Put Outstanding stock on a row of its own and Active accounts beside Sell-through, instead of three full-width slabs, so the store filter and list come into view a screen sooner | (this PR) |
 
 ---
 

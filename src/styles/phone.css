@@ -1843,3 +1843,17 @@
   .modal .modal-preview { margin: var(--space-3) 0 0; }
   .modal .modal-preview:empty { display: none; }
 }
+
+/* All Books — combined consignment summary. Three full-width slabs (~230px each) pushed the
+   store filter and list off the first screen. Outstanding stock still leads on a row of its own;
+   Active accounts and Sell-through share the next row, their icon plates dropped so the figure
+   and its caption get the width. */
+@media (max-width: 768px) {
+  .consignment-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+  .consignment-stat-card { padding: var(--space-3); gap: var(--space-3); }
+  .consignment-stat-card.focus { grid-column: 1 / -1; }
+  .consignment-stat-card:not(.focus) .consignment-stat-icon-wrap { display: none; }
+  .consignment-stat-card:not(.focus) .con-stat-label { white-space: normal; letter-spacing: var(--tracking-caps); }
+  .consignment-stat-card .con-stat-sub { margin-top: var(--space-1); }
+  .consignment-stat-card .con-stat-bar-track { margin-top: var(--space-2); }
+}
