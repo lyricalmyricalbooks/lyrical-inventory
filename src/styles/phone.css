@@ -1350,6 +1350,26 @@
   #tab-opencall .oc-settings-card > .oc-collapse-head > div:first-child { min-width: 0; flex: 1 1 auto; }
   #tab-opencall .oc-settings-card .oc-collapse-chevron { flex: 0 0 auto; }
 
+  /* Open Call, held upright: every card is an inked Riso slab with snug
+     padding; the project card's buttons share one row and the search and sort
+     boxes take the full width instead of sitting half-width with dead space. */
+  #tab-opencall :is(.oc-topbar, .oc-list-card, .oc-settings-card) {
+    border: var(--stroke) solid var(--rule-ink); box-shadow: var(--elev-2);
+  }
+  #tab-opencall .oc-list-card { padding: 0; }
+  #tab-opencall .oc-topbar { padding: var(--space-4); gap: var(--space-3); }
+  #tab-opencall .oc-topbar-main { gap: var(--space-3); }
+  #tab-opencall .oc-topbar-actions { width: 100%; }
+  #tab-opencall .oc-topbar-actions .btn { flex: 1 1 auto; justify-content: center; }
+  #tab-opencall .oc-topbar-hint { flex: 1 1 100%; order: 3; }
+  #tab-opencall .oc-project-picker .oc-project-select { flex: 1 1 auto; min-width: 0; }
+  #tab-opencall .oc-list-toolbar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); padding: var(--space-3); }
+  #tab-opencall .oc-list-toolbar #oc-search { grid-column: 1 / -1; }
+  #tab-opencall .oc-list-toolbar select { width: 100%; min-width: 0; }
+  #tab-opencall .oc-settings-card > .oc-collapse-head { padding: var(--space-3) var(--space-4); }
+  #tab-opencall .oc-list-head:empty { display: none; }
+  #tab-opencall .oc-list > .oc-empty-state { margin: var(--space-3); }
+
   /* Tax Centre: the secondary batch button spans the same width as the primary
      button above it, and its outline is drawn in light mode too. */
   .tc-batch-btn.btn.tx { width: 100%; padding: 10px 12px !important; border-color: var(--border-strong); background: var(--surface-card); color: var(--text2); }
