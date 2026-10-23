@@ -1188,6 +1188,8 @@ import { LEDGER_TYPE_FILTERS, emptyLedgerFilter, ledgerFilterIsActive, ledgerSto
 import { filterHistoryRows, historySearchIsActive, describeHistorySearch } from './lib/order-history-search.js';
 import { resolveCountryCode } from './lib/countries.js';
 import { PUBLISHER_ONLY_TABS, AUTHOR_ONLY_TABS, helpTabOpenFor, helpQueryWords, helpMatches } from './lib/help-guide.js';
+import { readStoredList } from './lib/stored-list.js';
+import { STORE_REVERSAL_PENDING_KEY } from './lib/store-reversals.js';
 
 
 // Tells the boot watchdog in index.html that the bundle and every import it
@@ -6736,10 +6738,7 @@ function automationTodoInput() {
     return !!row && !row.voided;
   };
   const refundsToReverse = safe(() => readPendingRefundReversals().filter(stillCounted).length, 0);
-  const storeReversals = safe(() => {
-    const list = JSON.parse(localStorage.getItem(STORE_REVERSAL_PENDING_KEY) || '[]');
-    return Array.isArray(list) ? list.filter(item => item.full && stillCounted(item)).length : 0;
-  }, 0);
+  const storeReversals = safe(() => readStoredList(STORE_REVERSAL_PENDING_KEY).filter(item => item.full && stillCounted(item)).length, 0);
   // Only the orders that would otherwise be flagged are checked for labels.
   const labelledOrderNums = safe(() => {
     const rows = [];
@@ -7023,9 +7022,7 @@ function runTodoAction(name, { bookId = '', num = '' } = {}) {
   if (name === 'shipping-worklist') { openReviewInbox({ filter: 'label' }); return; }
   if (name === 'reverse-sales') {
     const refunds = readPendingRefundReversals();
-    let store = [];
-    try { store = JSON.parse(localStorage.getItem(STORE_REVERSAL_PENDING_KEY) || '[]'); } catch (_) { store = []; }
-    const all = [...refunds, ...(Array.isArray(store) ? store.filter(item => item.full) : [])];
+    const all = [...refunds, ...readStoredList(STORE_REVERSAL_PENDING_KEY).filter(item => item.full)];
     if (!all.length) { showToast('Nothing left to reverse', 'ok'); return; }
     const copies = all.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
     confirmDialog(
@@ -16989,10 +16986,7 @@ function stripeSaleRulesSince() {
 }
 
 function readRaisedStripeSales() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(STRIPE_SALE_RAISED_KEY) || '[]');
-    return Array.isArray(raw) ? raw : [];
-  } catch (_) { return []; }
+  return readStoredList(STRIPE_SALE_RAISED_KEY);
 }
 
 function noteRaisedStripeSale(chargeId) {
@@ -17152,10 +17146,7 @@ async function fetchStripeRefundsSince(since) {
 const STRIPE_REFUND_PENDING_KEY = 'lm-stripe-refund-pending';
 
 function readPendingRefundReversals() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(STRIPE_REFUND_PENDING_KEY) || '[]');
-    return Array.isArray(raw) ? raw : [];
-  } catch (_) { return []; }
+  return readStoredList(STRIPE_REFUND_PENDING_KEY);
 }
 
 function writePendingRefundReversals(list) {
@@ -17322,15 +17313,12 @@ window.undoLastReversalFromAlert = undoLastReversalFromAlert;
 // The storefront check (features/bigcartel.js) finds them and keeps the list;
 // the reversal happens here because voiding a sale is the ledger's job.
 
-const STORE_REVERSAL_PENDING_KEY = 'lm-store-reversal-pending';
-
 function reverseStoreOrdersFromAlert(event) {
   if (event) event.stopPropagation();
   dismissAppAlert('store-reversals');
-  let pending = [];
-  try { pending = JSON.parse(localStorage.getItem(STORE_REVERSAL_PENDING_KEY) || '[]'); } catch (_) { pending = []; }
+  const pending = readStoredList(STORE_REVERSAL_PENDING_KEY);
   try { localStorage.setItem(STORE_REVERSAL_PENDING_KEY, '[]'); } catch (_) { /* storage blocked */ }
-  reverseSalesWithUndo(Array.isArray(pending) ? pending.filter(item => item.full) : [], 'Refunded or cancelled on the store');
+  reverseSalesWithUndo(pending.filter(item => item.full), 'Refunded or cancelled on the store');
 }
 window.reverseStoreOrdersFromAlert = reverseStoreOrdersFromAlert;
 
