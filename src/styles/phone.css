@@ -1654,3 +1654,14 @@
   }
   .rec-filter { min-height: var(--target-min); }
 }
+
+/* Setup and status cards held upright (Backups, Google Sheet, Big Cartel, Web Analytics). These
+   still wore the pre-repaint hairline outline and a soft grey shadow, so they read as faded next
+   to every other card on a phone. They now take the 2px ink outline and hard offset shadow, the
+   "Edits made on two devices" card keeps its amber edge stripe on top of that shadow, and the
+   Connected / Not Connected badge is a square inked tag instead of a soft pill. */
+@media (max-width: 768px) {
+  .tab-panel :is(.sheets-setup, .sync-review-card) { border: var(--stroke) solid var(--border-strong); box-shadow: var(--elev-1); }
+  .tab-panel .sync-review-card.has-items { box-shadow: inset 3px 0 0 var(--status-active), var(--elev-1); }
+  .tab-panel .sheets-badge { border: var(--stroke) solid currentColor; border-radius: var(--r2); font-weight: 800; text-transform: uppercase; letter-spacing: var(--tracking-caps); }
+}
