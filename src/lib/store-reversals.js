@@ -50,3 +50,6 @@ export function storeReversalsToRaise(bcOrders = [], rows = []) {
   });
   return out;
 }
+
+/** Where the reversals waiting for the publisher are kept in this browser. */
+export const STORE_REVERSAL_PENDING_KEY = 'lm-store-reversal-pending';
