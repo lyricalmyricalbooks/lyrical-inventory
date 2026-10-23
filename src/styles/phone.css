@@ -1641,3 +1641,16 @@
   }
   .tab-bar.has-more-right::after { opacity: 1; }
 }
+
+/* Tax Centre text links held upright. The expense-breakdown category links (16px tall) and the
+   subscription "charges logged" / "Adjust price" links (14px tall) were far under a fingertip.
+   Vertical padding grows the tappable box and an equal negative margin cancels it, so every row
+   keeps the height it had; the filter tabs above them get the full 44px. */
+@media (max-width: 768px) {
+  .tc-cat-link, .rec-charge-link {
+    display: inline-block;
+    padding-block: calc((var(--target-min) - 1lh) / 2);
+    margin-block: calc((var(--target-min) - 1lh) / -2);
+  }
+  .rec-filter { min-height: var(--target-min); }
+}
