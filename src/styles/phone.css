@@ -1599,6 +1599,15 @@
   #tab-shipping #ship-analysis-hub .shipping-pnl-ledger-row.suggested td { background: color-mix(in srgb, var(--gold) 4%, transparent); }
   #tab-shipping .shipping-money.margin.positive { border-color: color-mix(in srgb, var(--green) 24%, transparent); }
   #tab-shipping .shipping-money.margin.negative { border-color: color-mix(in srgb, var(--red) 24%, transparent); }
+
+  /* Order tick-boxes in the shipping ledger: the box stays 22px, but the label around it
+     is a full 44px fingertip, so ticking an order no longer takes a few tries. */
+  #tab-shipping #ship-analysis-hub .ship-check-hit {
+    display: flex; align-items: center; justify-content: center;
+    width: 44px; height: 44px; margin: -11px auto; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #tab-shipping #ship-analysis-hub .ship-check-hit:has(input:focus-visible) { outline: 2px solid var(--gold); outline-offset: -2px; }
 }
 
 
