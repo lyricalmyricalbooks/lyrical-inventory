@@ -1646,6 +1646,12 @@
   /* Help: each question is a list row with a hairline, not a heavy boxed button. */
   #tab-help .help-q { border: var(--stroke-hair) solid var(--border-default); box-shadow: none; }
 
+  /* Help topic buttons: an even two-column grid instead of a ragged wrapped row;
+     an odd last topic runs the full width so no tile is left hanging. */
+  #tab-help .help-topics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+  #tab-help .help-topics .help-tool-btn { min-width: 0; padding: 8px 10px; text-align: center; line-height: 1.2; }
+  #tab-help .help-topics .help-tool-btn:last-child:nth-child(odd) { grid-column: 1 / -1; }
+
   /* Book Catalog: every title starts at the same left edge. */
   #tab-sheets .catalog-card { flex-direction: column; align-items: stretch; justify-content: flex-start; text-align: left; }
   #tab-sheets .catalog-card > div:first-child { justify-content: flex-start; width: 100%; min-width: 0; }
