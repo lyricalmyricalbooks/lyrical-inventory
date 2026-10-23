@@ -151,6 +151,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-22 | visual | Shipping — carrier price tiles | Once you get rates, each carrier's price is now the biggest thing on its tile instead of the same size as its name, and on a computer Shippo runs across the top with Canada Post and Chit Chats side by side underneath, instead of two tiles and a lonely third with a gap beside it | pending |
 | 2026-10-22 | visual | Phone Website orders — status tiles | Tightened the small captions on the four website facts (Last brought in, Stock sent…) so each fits two lines, so the figures start on the same line instead of dropping lower under each wrapped caption | pending |
 | 2026-10-23 | visual | Phone Shipping — parcel specifications | Put Length, Width and Height side by side (and copies beside weight) with centred figures, instead of six full-width boxes in a column, so the parcel card is about a third shorter | pending |
+| 2026-10-23 | visual | Phone All Books — book card facts | The author, price and print-run line on each book card now separates its facts with space instead of typed dots, so a dot no longer lands alone at the start of the second line | pending |
 
 ---
 

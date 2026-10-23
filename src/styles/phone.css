@@ -1709,7 +1709,7 @@
 @media (max-width: 768px) {
   /* Emoji in a flat ink design. Leading emoji on buttons, sub-tabs and section heads are
      wrapped as .lead-emoji in the markup; the pop-up title tile is the same thing. */
-  .lead-emoji, .modal .modal-title-badge { display: none; }
+  .lead-emoji, .book-strip-meta .lead-emoji, .modal .modal-title-badge { display: none; }
   .pub-shell [data-ink] { font-size: 0 !important; line-height: 1; }
   .pub-shell [data-ink]::before { content: attr(data-ink); font: 500 var(--text-base) / 1 var(--font-mono); letter-spacing: 0; }
   .pub-shell .more-sheet-body .snav-ic { width: 28px; display: grid; place-items: center; }
