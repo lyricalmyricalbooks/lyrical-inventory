@@ -36,7 +36,7 @@ test('only buttons, links, pills, badges, titles and headings are touched', () =
 
 test('the one-line approval bar names the book under the count', async () => {
   const { readFileSync } = await import('node:fs');
-  const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  const main = readFileSync(`${process.cwd()}/src/main.js`, 'utf8');
   expect(main).toMatch(/<span class="pab-where">\$\{escapeHtml\(where\)\}<\/span>/);
   expect(main).toMatch(/booksWithPending\.length === 1 \? \(BOOKS\[booksWithPending\[0\]\.bookId\]\?\.title/);
 });
