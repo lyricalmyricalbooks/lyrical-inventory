@@ -10807,7 +10807,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
     }
 
     const checkboxHtml = !o.excludeFromShipping
-      ? `<input type="checkbox" class="ship-order-checkbox" value="${escapeHtml(o.bookId + '|' + (o.id || o.num))}" onchange="updateShipAnalysisBatchActionUI()" />`
+      ? `<label class="ship-check-hit"><input type="checkbox" class="ship-order-checkbox" value="${escapeHtml(o.bookId + '|' + (o.id || o.num))}" aria-label="Select order ${escapeHtml(o.num)}" onchange="updateShipAnalysisBatchActionUI()" /></label>`
       : '';
 
     ledgerRowsHtml += `
@@ -10906,7 +10906,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
         <table class="shipping-pnl-ledger-table">
           <thead>
             <tr>
-              <th style="width: 40px; text-align: center;"><input type="checkbox" id="selectAllShipOrders" onchange="toggleAllShipAnalysisOrders(this.checked)" /></th>
+              <th style="width: 40px; text-align: center;"><label class="ship-check-hit"><input type="checkbox" id="selectAllShipOrders" aria-label="Select all orders" onchange="toggleAllShipAnalysisOrders(this.checked)" /></label></th>
               <th>Order</th>
               <th>Recipient</th>
               <th>Status</th>
