@@ -1886,3 +1886,26 @@
   /* Channel pills in order history say the channel in words; the picture is extra. */
   .ch-badge .ch-icon { display: none; }
 }
+
+/* Intelligence — the two notes above the question box. "Add your AI key…" was a pale blue wash
+   in tight, small type with no edge, and the "Before you start" card a thin grey hairline, so
+   the screen's first two blocks looked like a different app next to its inked panel below.
+   Held upright both become inked slabs: a 2px ink outline, the offset shadow, and the flagged-
+   tile accent bar for the key notice (the house device — no tinted fill to lose contrast on). */
+@media (max-width: 768px) {
+  #tab-intel .intel-notice,
+  #tab-intel .intel-disclosure {
+    background: var(--surface-card);
+    border: var(--stroke) solid var(--rule-ink);
+    border-radius: var(--r);
+    box-shadow: var(--elev-1);
+  }
+  #tab-intel .intel-notice {
+    padding: var(--space-3) var(--space-4);
+    box-shadow: var(--elev-1), inset 4px 0 0 var(--status-info);
+    padding-left: calc(var(--space-4) + 4px);
+    font-size: var(--text-sm);
+    line-height: var(--leading-normal);
+    color: var(--content-primary);
+  }
+}

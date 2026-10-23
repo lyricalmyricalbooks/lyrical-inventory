@@ -155,6 +155,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-23 | visual | Phone All Books — consignment summary | Put Outstanding stock on a row of its own and Active accounts beside Sell-through, instead of three full-width slabs, so the store filter and list come into view a screen sooner | (this PR) |
 | 2026-10-23 | visual | Phone Expenses — amount | Put the currency picker (CAD, USD…) and the amount on one row, same height, instead of a full-width picker stacked over the amount box, so the Log an expense form is a row shorter | (this PR) |
 | 2026-10-23 | visual | Phone Help — topic buttons | Laid the five topic buttons (Running the press, Sales & orders…) out as an even two-column grid with the odd last one full width, instead of a ragged wrapped row with uneven widths | (this PR) |
+| 2026-10-23 | visual | Phone Intelligence — the two notes above the question box | Turned the pale blue "Add your AI key…" strip and the thin-lined "Before you start" card into the same bold outlined, offset-shadow slabs as the rest of the app, with easier-to-read type | (this PR) |
 
 ---
 
