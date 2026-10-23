@@ -94,9 +94,9 @@ function todayApi({ activeBook, renderOrders = () => {}, books = {}, states = {}
   expect(start).toBeGreaterThan(-1);
   const src = mainJs.slice(start, end).replace('export function', 'function') + '; return { renderTodayHub, renderTodaySoFar };';
   const sync = [];
-  const api = new Function('$', 'activeBook', 'renderOrders', 'BOOKS', 'states', 'getBookCurrencyCode', 'salesForDay', 'today', 'fairTotalsText', 'renderFairSyncPill', src)(
+  const api = new Function('$', 'activeBook', 'renderOrders', 'BOOKS', 'states', 'getBookCurrencyCode', 'salesForDay', 'today', 'fairTotalsText', 'renderFairSyncPill', 'escapeHtml', src)(
     (id) => document.getElementById(id), activeBook, renderOrders, books, states, () => 'CAD',
-    salesForDayFn, () => '2026-10-08', (t) => Object.entries(t).map(([c, a]) => `${c} ${a.toFixed(2)}`).join(' + '), () => sync.push(1));
+    salesForDayFn, () => '2026-10-08', (t) => Object.entries(t).map(([c, a]) => `${c} ${a.toFixed(2)}`).join(' + '), () => sync.push(1), (v) => String(v).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`));
   return { ...api, sync };
 }
 
@@ -184,13 +184,17 @@ test('Today so far totals the day across every book and refreshes the upload pil
     },
   });
   renderTodaySoFar();
-  expect(document.getElementById('today-sold-sum').textContent).toBe('2 sales · 3 books · CAD 55.00');
+  const sum = document.getElementById('today-sold-sum');
+  expect(sum.getAttribute('aria-label')).toBe('2 sales · 3 books · CAD 55.00');
+  expect([...sum.querySelectorAll('.today-sold-fig')].map(f => f.textContent)).toEqual(['2sales', '3books', 'CAD 55.00taken']);
   expect(sync).toHaveLength(1);
 });
 
 test('Today so far says so when nothing has sold yet', () => {
   const { renderTodaySoFar } = todayApi({ activeBook: 'all', books: { a: {} }, states: { a: { hist: [] } } });
   renderTodaySoFar();
-  expect(document.getElementById('today-sold-sum').textContent).toBe('No sales yet today');
+  const sum = document.getElementById('today-sold-sum');
+  expect(sum.getAttribute('aria-label')).toBe('No sales yet today');
+  expect([...sum.querySelectorAll('.today-sold-fig b')].map(f => f.textContent)).toEqual(['0', '0', '—']);
 });
 

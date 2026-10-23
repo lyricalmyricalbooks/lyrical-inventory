@@ -387,36 +387,36 @@
   </div>
 
   <nav class="pub-nav" aria-label="Books">
-    <button type="button" class="snav" title="Dashboard" onclick="switchTab('dashboard')"><span class="snav-ic">▦</span><span class="snav-label">Dashboard</span></button>
-    <button type="button" class="snav" id="todo-sidebar-btn" title="To-do" onclick="switchTab('todo')"><span class="snav-ic">✅</span><span class="snav-label">To-do</span><span class="nav-badge todo-nav-badge" aria-label="things needing attention" hidden></span></button>
-    <button type="button" class="snav" title="Website orders" onclick="switchTab('website')"><span class="snav-ic">🛍</span><span class="snav-label">Website orders</span></button>
-    <button type="button" class="snav" title="Manual entry" onclick="switchTab('manual')"><span class="snav-ic">✎</span><span class="snav-label">Manual entry</span></button>
-    <button type="button" class="snav" title="Consignment" onclick="switchTab('consignment')"><span class="snav-ic">🏪</span><span class="snav-label">Consignment</span><span class="health-badge" data-health-badge="stripe" aria-label="Stripe is not answering, so invoice payments may be missed" hidden></span></button>
-    <button type="button" class="snav" title="History" onclick="switchTab('history')"><span class="snav-ic">🕘</span><span class="snav-label">History</span></button>
-    <button type="button" class="snav" title="Expenses" onclick="switchTab('expenses')"><span class="snav-ic">🧾</span><span class="snav-label">Expenses</span></button>
+    <button type="button" class="snav" title="Dashboard" onclick="switchTab('dashboard')"><span class="snav-ic" data-ink="▦">▦</span><span class="snav-label">Dashboard</span></button>
+    <button type="button" class="snav" id="todo-sidebar-btn" title="To-do" onclick="switchTab('todo')"><span class="snav-ic" data-ink="!">✅</span><span class="snav-label">To-do</span><span class="nav-badge todo-nav-badge" aria-label="things needing attention" hidden></span></button>
+    <button type="button" class="snav" title="Website orders" onclick="switchTab('website')"><span class="snav-ic" data-ink="WO">🛍</span><span class="snav-label">Website orders</span></button>
+    <button type="button" class="snav" title="Manual entry" onclick="switchTab('manual')"><span class="snav-ic" data-ink="✎">✎</span><span class="snav-label">Manual entry</span></button>
+    <button type="button" class="snav" title="Consignment" onclick="switchTab('consignment')"><span class="snav-ic" data-ink="CS">🏪</span><span class="snav-label">Consignment</span><span class="health-badge" data-health-badge="stripe" aria-label="Stripe is not answering, so invoice payments may be missed" hidden></span></button>
+    <button type="button" class="snav" title="History" onclick="switchTab('history')"><span class="snav-ic" data-ink="HI">🕘</span><span class="snav-label">History</span></button>
+    <button type="button" class="snav" title="Expenses" onclick="switchTab('expenses')"><span class="snav-ic" data-ink="EX">🧾</span><span class="snav-label">Expenses</span></button>
   </nav>
 
   <div class="o3-grouplabel">Tools</div>
   <nav class="pub-nav" aria-label="Tools">
-    <button type="button" class="snav" title="Intelligence" onclick="switchTab('intel')"><span class="snav-ic">💬</span><span class="snav-label">Intelligence</span></button>
-    <button type="button" class="snav" title="Event POS" onclick="switchTab('pos')"><span class="snav-ic">🛒</span><span class="snav-label">Event POS</span></button>
-    <button type="button" class="snav" title="Tax Centre" onclick="switchTab('taxcenter')"><span class="snav-ic">⚖️</span><span class="snav-label">Tax Centre</span><span class="health-badge" data-health-badge="shippo,canadapost,shipping-email,stripe-fees,receipt-scan" aria-label="A shipping service is not answering" hidden></span></button>
+    <button type="button" class="snav" title="Intelligence" onclick="switchTab('intel')"><span class="snav-ic" data-ink="IN">💬</span><span class="snav-label">Intelligence</span></button>
+    <button type="button" class="snav" title="Event POS" onclick="switchTab('pos')"><span class="snav-ic" data-ink="$">🛒</span><span class="snav-label">Event POS</span></button>
+    <button type="button" class="snav" title="Tax Centre" onclick="switchTab('taxcenter')"><span class="snav-ic" data-ink="TX">⚖️</span><span class="snav-label">Tax Centre</span><span class="health-badge" data-health-badge="shippo,canadapost,shipping-email,stripe-fees,receipt-scan" aria-label="A shipping service is not answering" hidden></span></button>
 
     <div class="o3-subgrouplabel">Money</div>
-    <button type="button" class="snav" title="Payments" onclick="switchTab('reconcile')"><span class="snav-ic">💳</span><span class="snav-label">Payments</span></button>
-    <button type="button" class="snav" title="QR Codes" onclick="switchTab('qrcodes')"><span class="snav-ic">📱</span><span class="snav-label">QR Codes</span></button>
+    <button type="button" class="snav" title="Payments" onclick="switchTab('reconcile')"><span class="snav-ic" data-ink="PY">💳</span><span class="snav-label">Payments</span></button>
+    <button type="button" class="snav" title="QR Codes" onclick="switchTab('qrcodes')"><span class="snav-ic" data-ink="QR">📱</span><span class="snav-label">QR Codes</span></button>
 
     <div class="o3-subgrouplabel">Audience</div>
-    <button type="button" class="snav" title="Customers" onclick="switchTab('customers')"><span class="snav-ic">👥</span><span class="snav-label">Customers</span></button>
-    <button type="button" class="snav" title="Open Call" onclick="switchTab('opencall')"><span class="snav-ic">📣</span><span class="snav-label">Open Call</span><span class="nav-badge" id="oc-nav-badge" style="display:none;margin-left:8px;">0</span></button>
-    <button type="button" class="snav" id="sidebar-webanalytics-btn" title="Web Analytics" onclick="switchTab('webanalytics')"><span class="snav-ic">📈</span><span class="snav-label">Web Analytics</span></button>
+    <button type="button" class="snav" title="Customers" onclick="switchTab('customers')"><span class="snav-ic" data-ink="CU">👥</span><span class="snav-label">Customers</span></button>
+    <button type="button" class="snav" title="Open Call" onclick="switchTab('opencall')"><span class="snav-ic" data-ink="OC">📣</span><span class="snav-label">Open Call</span><span class="nav-badge" id="oc-nav-badge" style="display:none;margin-left:8px;">0</span></button>
+    <button type="button" class="snav" id="sidebar-webanalytics-btn" title="Web Analytics" onclick="switchTab('webanalytics')"><span class="snav-ic" data-ink="WA">📈</span><span class="snav-label">Web Analytics</span></button>
 
     <div class="o3-subgrouplabel">Data</div>
-    <button type="button" class="snav" title="Shipping" onclick="switchTab('shipping')"><span class="snav-ic">📦</span><span class="snav-label">Shipping</span></button>
-    <button type="button" class="snav" title="Sheets" onclick="switchTab('sheets')"><span class="snav-ic">⚙️</span><span class="snav-label">Sheets</span></button>
-    <button type="button" class="snav" id="sidebar-bigcartel-btn" title="Big Cartel" onclick="switchTab('bigcartel')"><span class="snav-ic">🏪</span><span class="snav-label">Big Cartel</span><span class="bc-gap-badge pill red" aria-label="orders missing from your ledger" hidden></span><span class="health-badge" data-health-badge="bigcartel" aria-label="Big Cartel is not answering" hidden></span></button>
-    <button type="button" class="snav" title="Backups" onclick="switchTab('backups')"><span class="snav-ic">💾</span><span class="snav-label">Backups</span></button>
-    <button type="button" class="snav" title="Help" onclick="switchTab('help')"><span class="snav-ic">❓</span><span class="snav-label">Help</span></button>
+    <button type="button" class="snav" title="Shipping" onclick="switchTab('shipping')"><span class="snav-ic" data-ink="SH">📦</span><span class="snav-label">Shipping</span></button>
+    <button type="button" class="snav" title="Sheets" onclick="switchTab('sheets')"><span class="snav-ic" data-ink="GS">⚙️</span><span class="snav-label">Sheets</span></button>
+    <button type="button" class="snav" id="sidebar-bigcartel-btn" title="Big Cartel" onclick="switchTab('bigcartel')"><span class="snav-ic" data-ink="BC">🏪</span><span class="snav-label">Big Cartel</span><span class="bc-gap-badge pill red" aria-label="orders missing from your ledger" hidden></span><span class="health-badge" data-health-badge="bigcartel" aria-label="Big Cartel is not answering" hidden></span></button>
+    <button type="button" class="snav" title="Backups" onclick="switchTab('backups')"><span class="snav-ic" data-ink="BK">💾</span><span class="snav-label">Backups</span></button>
+    <button type="button" class="snav" title="Help" onclick="switchTab('help')"><span class="snav-ic" data-ink="?">❓</span><span class="snav-label">Help</span></button>
   </nav>
 
   <div class="pub-side-spacer"></div>
@@ -546,14 +546,14 @@
          Title and badge are kept current by renderNotificationBell(). -->
     <button type="button" class="theme-toggle-btn hdr-notif-btn" id="notif-header-btn"
             onclick="openNotificationsPanel()" title="Notifications" aria-label="Notifications">
-      <span class="ttb-ico" aria-hidden="true">🔔</span>
+      <span class="ttb-ico" aria-hidden="true" data-ink="◔">🔔</span>
       <span class="nav-badge notif-unread-badge hdr-notif-badge" aria-label="unread notifications" hidden></span>
     </button>
 
     <!-- Review inbox stays one tap away from every publisher screen. -->
     <button type="button" class="theme-toggle-btn hdr-review-btn" id="review-inbox-header-btn"
             onclick="openReviewInbox()" title="Review inbox" aria-label="Review inbox">
-      <span class="ttb-ico" aria-hidden="true">📥</span>
+      <span class="ttb-ico" aria-hidden="true" data-ink="▤">📥</span>
       <span class="nav-badge hdr-review-badge" id="review-inbox-header-badge"
             aria-label="items waiting for review" hidden></span>
     </button>
@@ -613,6 +613,7 @@
   <div class="pab-text">
     <div class="pab-title" id="pab-title">Action required</div>
     <div class="pab-sub" id="pab-sub">You have pending author submissions awaiting your approval.</div>
+    <div class="pab-short" id="pab-short"></div>
   </div>
   <div class="pab-actions" id="pab-actions"></div>
   <button type="button" class="pab-dismiss" id="pab-dismiss" title="Snooze until next change" aria-label="Dismiss">×</button>
@@ -626,7 +627,7 @@
      sidebar so badges and grouping stay in one place). -->
 <nav class="mnav" id="mnav" aria-label="Main">
   <button type="button" class="mnav-btn" onclick="switchTab('today')"><span class="mnav-ic" aria-hidden="true">▦</span><span class="mnav-label">Home</span></button>
-  <button type="button" class="mnav-btn" onclick="switchTab('pos')"><span class="mnav-ic" aria-hidden="true">🛒</span><span class="mnav-label">Sell</span></button>
+  <button type="button" class="mnav-btn" onclick="switchTab('pos')"><span class="mnav-ic" aria-hidden="true" data-ink="$">🛒</span><span class="mnav-label">Sell</span></button>
   <button type="button" class="mnav-btn" onclick="switchTab('manual')"><span class="mnav-ic" aria-hidden="true">✎</span><span class="mnav-label">Manual entry</span></button>
   <button type="button" class="mnav-btn" id="mnav-more" onclick="openMoreSheet()" aria-haspopup="dialog" aria-controls="more-sheet" aria-expanded="false"><span class="mnav-ic" aria-hidden="true">☰</span><span class="mnav-label">More</span><span class="mnav-dot" id="mnav-more-dot" hidden></span></button>
 </nav>
@@ -646,9 +647,9 @@
   <button class="tab-btn" onclick="switchTab('history')">History</button>
   <button class="tab-btn" onclick="switchTab('expenses')">Expenses</button>
   <button class="tab-btn" id="webanalytics-tab-btn" onclick="switchTab('webanalytics')">Web Analytics</button>
-  <button class="tab-btn" onclick="switchTab('myqr')" id="myqr-tab-btn" style="display:none;">📲 My QR Code</button>
-  <button class="tab-btn" id="help-tab-btn" onclick="switchTab('help')">❓ Help</button>
-  <button class="tab-btn" id="shipping-tab-btn" onclick="switchTab('shipping')">📦 Shipping Rates</button>
+  <button class="tab-btn" onclick="switchTab('myqr')" id="myqr-tab-btn" style="display:none;"><span class="lead-emoji" aria-hidden="true">📲 </span>My QR Code</button>
+  <button class="tab-btn" id="help-tab-btn" onclick="switchTab('help')"><span class="lead-emoji" aria-hidden="true">❓ </span>Help</button>
+  <button class="tab-btn" id="shipping-tab-btn" onclick="switchTab('shipping')"><span class="lead-emoji" aria-hidden="true">📦 </span>Shipping Rates</button>
   <button class="tab-btn" id="bigcartel-tab-btn" onclick="switchTab('bigcartel')">Big Cartel<span class="bc-gap-badge pill red" aria-label="orders missing from your ledger" hidden></span><span class="health-badge" data-health-badge="bigcartel" aria-label="Big Cartel is not answering" hidden></span></button>
   <span class="tab-author" id="tab-author"></span>
   <span class="tab-updated" id="tab-updated"></span>
@@ -1034,7 +1035,7 @@
       <div><div class="book-context-title" id="bc-title-dash">—</div><div class="book-context-meta" id="bc-meta-dash">—</div></div>
     </div>
     <div style="display:flex;align-items:center;gap:12px;">
-      <button class="btn gold sm" id="d-email-artist-btn" onclick="emailArtistForPayment()" style="font-size:var(--text-xs);display:none;">✉ Email artist for payment</button>
+      <button class="btn gold sm" id="d-email-artist-btn" onclick="emailArtistForPayment()" style="font-size:var(--text-xs);display:none;"><span class="lead-emoji" aria-hidden="true">✉ </span>Email artist for payment</button>
       <button class="btn gold sm" id="d-qr-btn" onclick="openPaymentQRModal()" style="font-size:var(--text-xs);">Payment QR Code</button>
       <span id="d-notify-status" class="pill gray" style="font-size:var(--text-2xs);display:none;" title="Whether artist submissions can email you for approval"></span>
       <div class="dash-context-meta">Dashboard overview</div>
@@ -1335,18 +1336,18 @@
   </div>
   <div class="today-grid">
     <button type="button" class="today-card today-card-ink" onclick="switchTab('pos')">
-      <span class="today-card-ic" aria-hidden="true">🛒</span>
+      <span class="today-card-ic" aria-hidden="true">$</span>
       <span class="today-card-name">Sell</span>
       <span class="today-card-sub">Open your register</span>
     </button>
     <button type="button" class="today-card" onclick="switchTab('website')">
-      <span class="today-card-ic" aria-hidden="true">🛍</span>
+      <span class="today-card-ic" aria-hidden="true">WO</span>
       <span class="today-card-count" id="today-orders-count" hidden></span>
       <span class="today-card-name">Orders</span>
       <span class="today-card-sub" id="today-orders-sub">Website orders</span>
     </button>
     <button type="button" class="today-card" onclick="switchTab('todo')">
-      <span class="today-card-ic" aria-hidden="true">✅</span>
+      <span class="today-card-ic" aria-hidden="true">!</span>
       <span class="today-card-count todo-nav-badge" hidden></span>
       <span class="today-card-name">To-do</span>
       <span class="today-card-sub">What needs you</span>
@@ -1354,7 +1355,7 @@
     <!-- Opens the phone's own camera; the photo is scanned and lands in a
          filled-in expense form to check and save. -->
     <button type="button" class="today-card today-receipt-card" onclick="snapReceipt()">
-      <span class="today-card-ic" aria-hidden="true">🧾</span>
+      <span class="today-card-ic" aria-hidden="true">RC</span>
       <span class="today-card-name">Snap a receipt</span>
       <span class="today-card-sub">Take a photo, check it, save</span>
     </button>
@@ -1363,9 +1364,9 @@
   <div class="today-label">Your workspace</div>
   <div class="today-rows">
     <button type="button" class="today-row" onclick="switchTab('dashboard')"><span class="today-row-ic" aria-hidden="true">▦</span><span class="today-row-txt"><span class="today-row-name">Books &amp; stock</span><span class="today-row-sub">Dashboard, catalogue, figures</span></span><span class="today-row-chev" aria-hidden="true">›</span></button>
-    <button type="button" class="today-row" onclick="switchTab('reconcile')"><span class="today-row-ic" aria-hidden="true">💳</span><span class="today-row-txt"><span class="today-row-name">Money</span><span class="today-row-sub">Payments, expenses, tax</span></span><span class="today-row-chev" aria-hidden="true">›</span></button>
-    <button type="button" class="today-row" onclick="switchTab('customers')"><span class="today-row-ic" aria-hidden="true">👥</span><span class="today-row-txt"><span class="today-row-name">Audience</span><span class="today-row-sub">Customers, open call</span></span><span class="today-row-chev" aria-hidden="true">›</span></button>
-    <button type="button" class="today-row" onclick="openMoreSheet()"><span class="today-row-ic" aria-hidden="true">☰</span><span class="today-row-txt"><span class="today-row-name">All tools</span><span class="today-row-sub">Shipping, sheets, backups and more</span></span><span class="today-row-chev" aria-hidden="true">›</span></button>
+    <button type="button" class="today-row" onclick="switchTab('reconcile')"><span class="today-row-ic" aria-hidden="true">$</span><span class="today-row-txt"><span class="today-row-name">Money</span><span class="today-row-sub">Payments, expenses, tax</span></span><span class="today-row-chev" aria-hidden="true">›</span></button>
+    <button type="button" class="today-row" onclick="switchTab('customers')"><span class="today-row-ic" aria-hidden="true">CU</span><span class="today-row-txt"><span class="today-row-name">Audience</span><span class="today-row-sub">Customers, open call</span></span><span class="today-row-chev" aria-hidden="true">›</span></button>
+    <button type="button" class="today-row" onclick="openMoreSheet()"><span class="today-row-ic" aria-hidden="true">≡</span><span class="today-row-txt"><span class="today-row-name">All tools</span><span class="today-row-sub">Shipping, sheets, backups and more</span></span><span class="today-row-chev" aria-hidden="true">›</span></button>
   </div>
 </div>
 
@@ -1491,9 +1492,9 @@
 
   <!-- Customers Page Sub-navigation -->
   <div class="settings-sub-nav" style="margin-bottom:1.5rem;">
-    <button class="settings-sub-tab active" id="btn-custtab-audience" onclick="switchCustomersSubTab('audience')">👥 Audience &amp; Customers</button>
-    <button class="settings-sub-tab" id="btn-custtab-mailing" onclick="switchCustomersSubTab('mailing')">✉️ Mailing List</button>
-    <button class="settings-sub-tab" id="btn-custtab-campaign" onclick="switchCustomersSubTab('campaign')">📣 Email Campaigns</button>
+    <button class="settings-sub-tab active" id="btn-custtab-audience" onclick="switchCustomersSubTab('audience')"><span class="lead-emoji" aria-hidden="true">👥 </span>Audience &amp; Customers</button>
+    <button class="settings-sub-tab" id="btn-custtab-mailing" onclick="switchCustomersSubTab('mailing')"><span class="lead-emoji" aria-hidden="true">✉️ </span>Mailing List</button>
+    <button class="settings-sub-tab" id="btn-custtab-campaign" onclick="switchCustomersSubTab('campaign')"><span class="lead-emoji" aria-hidden="true">📣 </span>Email Campaigns</button>
   </div>
 
   <!-- 1. AUDIENCE & CUSTOMERS PANEL -->
@@ -1566,9 +1567,9 @@
         <button type="button" class="btn sm cust-fold-toggle" aria-expanded="false" aria-controls="cust-export-body" onclick="toggleCustFold(this)">Export</button>
         <div class="cust-fold-body" id="cust-export-body">
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-            <button class="btn" onclick="copyCustomerEmails()">📋 Copy segment</button>
+            <button class="btn" onclick="copyCustomerEmails()"><span class="lead-emoji" aria-hidden="true">📋 </span>Copy segment</button>
             <button class="btn" onclick="exportCustomersCSV()">⬇ Export segment</button>
-            <button class="btn gold" onclick="emailCustomerSegment()" title="Open Gmail with the filtered segment pre-filled as BCC">✉ Email segment</button>
+            <button class="btn gold" onclick="emailCustomerSegment()" title="Open Gmail with the filtered segment pre-filled as BCC"><span class="lead-emoji" aria-hidden="true">✉ </span>Email segment</button>
           </div>
         </div>
       </div>
@@ -1594,9 +1595,9 @@
           <div id="ml-count" style="font-size:var(--text-sm);color:var(--text3);margin-top:2px;">0 subscribers</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
-          <button class="btn" onclick="copyMailingListEmails()">📋 Copy emails</button>
+          <button class="btn" onclick="copyMailingListEmails()"><span class="lead-emoji" aria-hidden="true">📋 </span>Copy emails</button>
           <button class="btn" onclick="exportMailingListCSV()">⬇ Export CSV</button>
-          <button class="btn gold" onclick="emailMailingList()" title="Open Gmail with your whole list pre-filled as BCC">✉ Email these</button>
+          <button class="btn gold" onclick="emailMailingList()" title="Open Gmail with your whole list pre-filled as BCC"><span class="lead-emoji" aria-hidden="true">✉ </span>Email these</button>
         </div>
       </div>
 
@@ -1612,7 +1613,7 @@
 
       <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding-top:10px;border-top:var(--stroke-hair) dashed var(--border);">
         <button class="btn ink" onclick="addAllBuyersToMailingList()" title="Add every buyer we found to your mailing list">↓ Add all buyers</button>
-        <button class="btn outline cust-export-btn" onclick="exportMailingListCsv()" title="Export current segment to CSV">📥 Export CSV</button>
+        <button class="btn outline cust-export-btn" onclick="exportMailingListCsv()" title="Export current segment to CSV"><span class="lead-emoji" aria-hidden="true">📥 </span>Export CSV</button>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;font-size:var(--text-sm);color:var(--text2);">
           <input type="checkbox" id="ml-autoadd" onchange="toggleMailingAutoAdd(this)" style="width:16px;height:16px;accent-color:var(--gold);">
           Auto-add new buyers as they appear
@@ -1705,7 +1706,7 @@
         </div>
         <div style="display:flex;gap:8px;">
           <button class="btn" onclick="saveCampaignDraft()">Save Draft</button>
-          <button class="btn gold" id="c-btn-send" onclick="sendCampaignLaunch()">🚀 Send Campaign</button>
+          <button class="btn gold" id="c-btn-send" onclick="sendCampaignLaunch()"><span class="lead-emoji" aria-hidden="true">🚀 </span>Send Campaign</button>
         </div>
       </div>
     </div>
@@ -1882,7 +1883,7 @@
         <p class="section-subcopy">Every store holding copies of this title — what they still have on their shelves and what they owe you for.</p>
       </div>
       <div class="sec-head-badges">
-        <button class="btn" onclick="openBulkSend()" title="Send books to several stores at once">📦 Bulk send</button>
+        <button class="btn" onclick="openBulkSend()" title="Send books to several stores at once"><span class="lead-emoji" aria-hidden="true">📦 </span>Bulk send</button>
         <button class="btn gold" onclick="openM('add-store')">+ Add store</button>
       </div>
     </div>
@@ -1899,7 +1900,7 @@
       </div>
       <div class="sec-head-badges">
         <div id="inv-summary" class="sec-head-note"></div>
-        <button class="btn ink" onclick="openInvoiceTemplateSettings()" title="Edit publisher details & default terms">⚙ Settings</button>
+        <button class="btn ink" onclick="openInvoiceTemplateSettings()" title="Edit publisher details & default terms"><span class="lead-emoji" aria-hidden="true">⚙ </span>Settings</button>
         <button class="btn gold" onclick="openCreateInvoice()">+ New invoice</button>
       </div>
     </div>
@@ -2032,7 +2033,7 @@
           <div class="dz-sub">Drop images or PDFs here, or <span class="dz-link">browse</span></div>
           <input type="file" id="exp-file" accept="image/*,.pdf" multiple hidden onchange="expFileChosen()">
         </label>
-        <button class="btn gold" style="font-size:var(--text-sm);display:none;align-self:flex-start;" onclick="scanProjectReceiptWithAI()" id="exp-ai-btn">✨ AI Scan</button>
+        <button class="btn gold" style="font-size:var(--text-sm);display:none;align-self:flex-start;" onclick="scanProjectReceiptWithAI()" id="exp-ai-btn"><span class="lead-emoji" aria-hidden="true">✨ </span>AI Scan</button>
         <!-- What the AI read and what to double-check. Filled by _runReceiptScan(). -->
         <div class="order-preview scan-read" id="exp-scan-read" hidden></div>
       </div>
@@ -2040,7 +2041,7 @@
     <div class="card-actions">
       <div class="field-note">Logged to this project's ledger. Reimbursable expenses can be claimed from the publisher later.</div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <button class="btn outline" onclick="openBatchExpenseModal('project')" title="Drop in a whole pile of receipts, scan them together and log them in one pass">🧾 Log several at once</button>
+        <button class="btn outline" onclick="openBatchExpenseModal('project')" title="Drop in a whole pile of receipts, scan them together and log them in one pass"><span class="lead-emoji" aria-hidden="true">🧾 </span>Log several at once</button>
         <button class="btn gold lg" onclick="submitExpense()" id="submit-exp-btn">Log expense</button>
       </div>
     </div>
@@ -2050,7 +2051,7 @@
     <span>Expense history</span>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
       <button type="button" class="ledger-toggle-btn is-alert" id="exp-missing-receipt-btn" style="display:none;" aria-pressed="false" onclick="toggleExpenseReceiptFilter()"><span class="con-group-toggle-icon" aria-hidden="true">⚠</span><span id="exp-missing-receipt-label">0 without a receipt</span></button>
-      <button class="btn gold outline sm" id="exp-bulk-reimburse-btn" style="display:none;font-size:var(--text-xs);" onclick="requestBulkReimbursement()">💸 Request reimbursement for selected (<span id="exp-bulk-reimburse-count">0</span>)</button>
+      <button class="btn gold outline sm" id="exp-bulk-reimburse-btn" style="display:none;font-size:var(--text-xs);" onclick="requestBulkReimbursement()"><span class="lead-emoji" aria-hidden="true">💸 </span>Request reimbursement for selected (<span id="exp-bulk-reimburse-count">0</span>)</button>
     </div>
   </div>
   <div class="tbl-wrap"><table class="tbl exp-ledger">
@@ -2089,13 +2090,13 @@
   </div>
   <div class="modal-footer" role="dialog" aria-modal="true" style="justify-content:space-between;flex-wrap:wrap;">
     <div style="display:flex;gap:8px;align-items:center;">
-      <button class="btn gold" onclick="logExpenseForTrip()">➕ Log expense to this trip</button>
-      <button class="btn" onclick="openPendingExpense(null, _tcOpenTripName)">🕑 Note a pending expense</button>
+      <button class="btn gold" onclick="logExpenseForTrip()"><span class="lead-emoji" aria-hidden="true">➕ </span>Log expense to this trip</button>
+      <button class="btn" onclick="openPendingExpense(null, _tcOpenTripName)"><span class="lead-emoji" aria-hidden="true">🕑 </span>Note a pending expense</button>
       <button class="btn" onclick="openEditTripDetails()">✎ Edit trip details</button>
       <button class="btn" onclick="renameTripPrompt()">✎ Rename trip</button>
-      <button class="btn gold outline" onclick="exportTripPDF()">🖨 Trip report (PDF)</button>
+      <button class="btn gold outline" onclick="exportTripPDF()"><span class="lead-emoji" aria-hidden="true">🖨 </span>Trip report (PDF)</button>
       <button class="btn gold outline" onclick="exportTripCSV(_tcOpenTripName)">⬇ Export CSV</button>
-      <button class="btn tag" onclick="setTripBudgetPrompt(_tcOpenTripName)">🎯 Set budget</button>
+      <button class="btn tag" onclick="setTripBudgetPrompt(_tcOpenTripName)"><span class="lead-emoji" aria-hidden="true">🎯 </span>Set budget</button>
     </div>
     <button class="btn" onclick="attemptCloseModal('tc-trip-detail')">Close</button>
   </div>
@@ -2175,7 +2176,7 @@
   <div class="tc-trip-form-err" id="tc-pending-err" style="display:none;"></div>
 
   <div class="modal-footer" role="dialog" aria-modal="true" style="justify-content:space-between;flex-wrap:wrap;">
-    <button class="btn danger-btn" id="tc-pending-delete" onclick="deletePendingExpense()" style="display:none;">🗑 Delete note</button>
+    <button class="btn danger-btn" id="tc-pending-delete" onclick="deletePendingExpense()" style="display:none;"><span class="lead-emoji" aria-hidden="true">🗑 </span>Delete note</button>
     <div style="display:flex;gap:8px;margin-left:auto;">
       <button class="btn" onclick="attemptCloseModal('tc-pending')">Cancel</button>
       <button class="btn gold" id="tc-pending-save" onclick="savePendingExpense()">Save note</button>
@@ -2247,7 +2248,7 @@
   <div class="tc-trip-form-err" id="tc-new-trip-err" style="display:none;"></div>
 
   <div class="modal-footer" role="dialog" aria-modal="true" style="justify-content:space-between;flex-wrap:wrap;">
-    <button class="btn danger-btn" id="tc-new-trip-delete" onclick="deleteTripRecord()" style="display:none;">🗑 Delete trip</button>
+    <button class="btn danger-btn" id="tc-new-trip-delete" onclick="deleteTripRecord()" style="display:none;"><span class="lead-emoji" aria-hidden="true">🗑 </span>Delete trip</button>
     <div style="display:flex;gap:8px;margin-left:auto;">
       <button class="btn" onclick="attemptCloseModal('tc-new-trip')">Cancel</button>
       <button class="btn gold" id="tc-new-trip-save" onclick="saveNewTrip()">Create trip</button>
@@ -2409,9 +2410,9 @@
       <input type="file" id="bx-files" accept="image/*,.pdf" multiple hidden onchange="batchExpenseFilesChosen()">
     </label>
     <div class="bx-intake-side">
-      <button class="btn gold" type="button" id="bx-scan-btn" onclick="scanAllBatchExpenses()">✨ AI Scan</button>
+      <button class="btn gold" type="button" id="bx-scan-btn" onclick="scanAllBatchExpenses()"><span class="lead-emoji" aria-hidden="true">✨ </span>AI Scan</button>
       <div class="bx-hint" id="bx-scan-hint"></div>
-      <button class="btn outline" type="button" onclick="batchExpenseAddBlankRow()">➕ Add a row with no receipt</button>
+      <button class="btn outline" type="button" onclick="batchExpenseAddBlankRow()"><span class="lead-emoji" aria-hidden="true">➕ </span>Add a row with no receipt</button>
       <div class="bx-hint">For anything you paid without getting a receipt — parking, a market table fee, a cash purchase.</div>
     </div>
   </div>
@@ -2465,7 +2466,7 @@
   <div class="modal-footer" style="justify-content:space-between;align-items:center;flex-wrap:wrap;">
     <button class="btn" type="button" onclick="attemptCloseModal('tc-preflight')">Cancel</button>
     <div style="display:flex;gap:8px;">
-      <button class="btn tag" type="button" id="tc-preflight-fix-btn" onclick="tcJumpToFixPreflightIssues()" style="display:none;">🔍 Review &amp; Fix Missing Receipts</button>
+      <button class="btn tag" type="button" id="tc-preflight-fix-btn" onclick="tcJumpToFixPreflightIssues()" style="display:none;"><span class="lead-emoji" aria-hidden="true">🔍 </span>Review &amp; Fix Missing Receipts</button>
       <button class="btn gold" type="button" id="tc-preflight-export-btn" onclick="executeFullTaxSeasonExport()">⬇ Download Tax Season Export</button>
     </div>
   </div>
@@ -2479,8 +2480,8 @@
       <div class="tc-lightbox-meta" id="tc-lightbox-meta" style="font-size:var(--text-sm);color:var(--content-secondary);margin-top:3px;"></div>
     </div>
     <div class="tc-lightbox-actions" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-      <button class="btn sm" type="button" onclick="tcLightboxZoom(-0.25)" title="Zoom Out" aria-label="Zoom out">🔍−</button>
-      <button class="btn sm" type="button" onclick="tcLightboxZoom(0.25)" title="Zoom In" aria-label="Zoom in">🔍+</button>
+      <button class="btn sm" type="button" onclick="tcLightboxZoom(-0.25)" title="Zoom Out" aria-label="Zoom out"><span class="lead-emoji" aria-hidden="true">🔍</span>−</button>
+      <button class="btn sm" type="button" onclick="tcLightboxZoom(0.25)" title="Zoom In" aria-label="Zoom in"><span class="lead-emoji" aria-hidden="true">🔍</span>+</button>
       <button class="btn sm" type="button" onclick="tcLightboxRotate()" title="Rotate 90°" aria-label="Rotate 90 degrees">↻ Rotate</button>
       <button class="btn sm" type="button" onclick="tcLightboxReset()" title="Reset Zoom &amp; Rotation">↺ Reset</button>
       <a class="btn sm" id="tc-lightbox-open-external" href="#" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;" title="Open in new window">↗ Open</a>
@@ -2536,7 +2537,7 @@
   <div class="modal-footer" role="dialog" aria-modal="true">
     <button class="btn" onclick="closeReceiptCameraModal()">Cancel</button>
     <button class="btn gold outline" onclick="retakeReceiptPhoto()" id="receipt-cam-retake-btn" style="display:none;">↻ Retake</button>
-    <button class="btn gold" onclick="captureReceiptPhoto()" id="receipt-cam-capture-btn">📷 Snap</button>
+    <button class="btn gold" onclick="captureReceiptPhoto()" id="receipt-cam-capture-btn"><span class="lead-emoji" aria-hidden="true">📷 </span>Snap</button>
     <button class="btn gold" onclick="useReceiptPhoto()" id="receipt-cam-use-btn" style="display:none;">✓ Use Photo</button>
   </div>
 </div></div>
@@ -2555,14 +2556,14 @@
     <strong>Your original folder is never changed.</strong> Nothing is renamed, moved or deleted there.
   </div>
   <div class="organizer-actions">
-    <button class="btn gold outline sm" type="button" onclick="chooseOrganizerSource()">📁 Choose the folder…</button>
-    <button class="btn gold outline sm" type="button" onclick="organizerReadUnclear()" id="organizer-ocr-btn" title="Read the files whose names don't say enough, using AI">✨ Read the unclear ones</button>
+    <button class="btn gold outline sm" type="button" onclick="chooseOrganizerSource()"><span class="lead-emoji" aria-hidden="true">📁 </span>Choose the folder…</button>
+    <button class="btn gold outline sm" type="button" onclick="organizerReadUnclear()" id="organizer-ocr-btn" title="Read the files whose names don't say enough, using AI"><span class="lead-emoji" aria-hidden="true">✨ </span>Read the unclear ones</button>
   </div>
   <div id="organizer-status" class="tc-field-hint" aria-live="polite"></div>
   <div id="organizer-body" class="organizer-body"></div>
   <div class="modal-footer" role="dialog" aria-modal="true">
     <button class="btn" onclick="closeReceiptOrganizer()">Cancel</button>
-    <button class="btn gold" onclick="runReceiptOrganizer()" id="organizer-run-btn" style="display:none;">🗃 Copy into a tidy folder</button>
+    <button class="btn gold" onclick="runReceiptOrganizer()" id="organizer-run-btn" style="display:none;"><span class="lead-emoji" aria-hidden="true">🗃 </span>Copy into a tidy folder</button>
   </div>
 </div></div>
 
@@ -2604,7 +2605,7 @@
   <div id="cloud-receipts-body" class="cloud-receipts-list"></div>
   <div class="modal-footer" role="dialog" aria-modal="true">
     <button class="btn" onclick="closeCloudReceiptsModal()">Close</button>
-    <button class="btn gold" onclick="closeCloudReceiptsModal(); reclaimCloudReceiptsNow();">☁️ Move them all to my folder</button>
+    <button class="btn gold" onclick="closeCloudReceiptsModal(); reclaimCloudReceiptsNow();"><span class="lead-emoji" aria-hidden="true">☁️ </span>Move them all to my folder</button>
   </div>
 </div></div>
 
@@ -2680,9 +2681,9 @@
   <div class="modal-footer">
     <div class="iv-footer-actions" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; width:100%; justify-content:flex-end;">
       <button type="button" class="btn" onclick="attemptCloseModal('inventory-valuation-modal')">Close</button>
-      <button type="button" class="btn gold" onclick="downloadInventoryValuationCSV()">📥 Download CSV / Excel</button>
-      <button type="button" class="btn gold outline" onclick="printInventoryValuationReport()">🖨️ Print Report</button>
-      <button type="button" class="btn tag iv-adjust-btn" onclick="openInventoryWriteOffModal()" style="color:var(--red); border-color:var(--border);" title="Document a Section 10 valuation or physical inventory disposal">📉 Adjust Inventory</button>
+      <button type="button" class="btn gold" onclick="downloadInventoryValuationCSV()"><span class="lead-emoji" aria-hidden="true">📥 </span>Download CSV / Excel</button>
+      <button type="button" class="btn gold outline" onclick="printInventoryValuationReport()"><span class="lead-emoji" aria-hidden="true">🖨️ </span>Print Report</button>
+      <button type="button" class="btn tag iv-adjust-btn" onclick="openInventoryWriteOffModal()" style="color:var(--red); border-color:var(--border);" title="Document a Section 10 valuation or physical inventory disposal"><span class="lead-emoji" aria-hidden="true">📉 </span>Adjust Inventory</button>
     </div>
   </div>
 </div></div>
@@ -2786,11 +2787,11 @@
 
   <!-- Tax Center Sub-navigation -->
   <div class="settings-sub-nav tc-sub-nav" role="tablist" aria-label="Tax Centre Navigation" onkeydown="tcSubNavKeydown(event)">
-    <button class="settings-sub-tab active" id="btn-tctab-ledger" role="tab" aria-selected="true" aria-controls="tc-sec-ledger" tabindex="0" onclick="switchTaxCenterSubTab('ledger')">📊 Expenses &amp; Ledger</button>
-    <button class="settings-sub-tab" id="btn-tctab-receipts" role="tab" aria-selected="false" aria-controls="tc-sec-receipts" tabindex="-1" onclick="switchTaxCenterSubTab('receipts')">🗂️ Receipts Vault</button>
-    <button class="settings-sub-tab" id="btn-tctab-deductions" role="tab" aria-selected="false" aria-controls="tc-sec-deductions" tabindex="-1" onclick="switchTaxCenterSubTab('deductions')">🔎 Missing Costs</button>
-    <button class="settings-sub-tab" id="btn-tctab-integrations" role="tab" aria-selected="false" aria-controls="tc-sec-integrations" tabindex="-1" onclick="switchTaxCenterSubTab('integrations')">🔌 Integrations &amp; APIs</button>
-    <button class="settings-sub-tab tc-email-import-tab" id="btn-tctab-email-import" role="tab" aria-selected="false" aria-controls="tc-sec-email-import" tabindex="-1" onclick="switchTaxCenterSubTab('email-import')">📧 Email Receipt Import<span id="email-inbox-badge" class="tc-email-import-badge" style="display:none;"></span></button>
+    <button class="settings-sub-tab active" id="btn-tctab-ledger" role="tab" aria-selected="true" aria-controls="tc-sec-ledger" tabindex="0" onclick="switchTaxCenterSubTab('ledger')"><span class="lead-emoji" aria-hidden="true">📊 </span>Expenses &amp; Ledger</button>
+    <button class="settings-sub-tab" id="btn-tctab-receipts" role="tab" aria-selected="false" aria-controls="tc-sec-receipts" tabindex="-1" onclick="switchTaxCenterSubTab('receipts')"><span class="lead-emoji" aria-hidden="true">🗂️ </span>Receipts Vault</button>
+    <button class="settings-sub-tab" id="btn-tctab-deductions" role="tab" aria-selected="false" aria-controls="tc-sec-deductions" tabindex="-1" onclick="switchTaxCenterSubTab('deductions')"><span class="lead-emoji" aria-hidden="true">🔎 </span>Missing Costs</button>
+    <button class="settings-sub-tab" id="btn-tctab-integrations" role="tab" aria-selected="false" aria-controls="tc-sec-integrations" tabindex="-1" onclick="switchTaxCenterSubTab('integrations')"><span class="lead-emoji" aria-hidden="true">🔌 </span>Integrations &amp; APIs</button>
+    <button class="settings-sub-tab tc-email-import-tab" id="btn-tctab-email-import" role="tab" aria-selected="false" aria-controls="tc-sec-email-import" tabindex="-1" onclick="switchTaxCenterSubTab('email-import')"><span class="lead-emoji" aria-hidden="true">📧 </span>Email Receipt Import<span id="email-inbox-badge" class="tc-email-import-badge" style="display:none;"></span></button>
   </div>
 
   <!-- 1. EXPENSES & LEDGER SECTION -->
@@ -2911,8 +2912,8 @@
           <button class="dz-remove" type="button" title="Remove file" aria-label="Remove receipt file" onclick="tcExpFileClear(event)">×</button>
         </div>
         <div class="tc-receipt-scan-actions">
-          <button class="btn gold outline" onclick="openReceiptCameraModal()" id="tc-cam-btn" title="Take a photo of the receipt with your webcam">📷 Camera</button>
-          <button class="btn gold" onclick="scanReceiptWithAI()" id="tc-ai-scan-btn" disabled title="Select or capture a receipt first to enable AI scanning">✨ AI Scan</button>
+          <button class="btn gold outline" onclick="openReceiptCameraModal()" id="tc-cam-btn" title="Take a photo of the receipt with your webcam"><span class="lead-emoji" aria-hidden="true">📷 </span>Camera</button>
+          <button class="btn gold" onclick="scanReceiptWithAI()" id="tc-ai-scan-btn" disabled title="Select or capture a receipt first to enable AI scanning"><span class="lead-emoji" aria-hidden="true">✨ </span>AI Scan</button>
         </div>
         <div class="tc-field-hint" id="tc-ai-scan-hint">AI Scan turns on once you add a receipt above.</div>
         <!-- What the AI read and what to double-check. Filled by _runReceiptScan(). -->
@@ -2938,7 +2939,7 @@
     <div style="margin-top:16px;">
       <button class="btn gold" style="width:100%;height:48px;font-size:var(--text-md);font-weight:600;letter-spacing:.02em;" onclick="submitTaxExpense()" id="tc-submit-exp-btn">Log Business Expense</button>
       <div style="margin-top:8px;text-align:center;display:flex;gap:6px;justify-content:center;flex-wrap:wrap;">
-        <button class="btn tx tc-batch-btn" style="font-size:var(--text-sm);padding:4px 12px;color:var(--text3);" onclick="openBatchExpenseModal('business')" title="Drop in a whole pile of receipts, scan them together and log them in one pass">🧾 Log several at once</button>
+        <button class="btn tx tc-batch-btn" style="font-size:var(--text-sm);padding:4px 12px;color:var(--text3);" onclick="openBatchExpenseModal('business')" title="Drop in a whole pile of receipts, scan them together and log them in one pass"><span class="lead-emoji" aria-hidden="true">🧾 </span>Log several at once</button>
       </div>
     </div>
   </div>
@@ -2987,7 +2988,7 @@
         <button class="tc-trips-view-btn active" id="tc-trips-btn-cards" onclick="tcSetTripsView('cards')">🖼 Cards</button>
         <button class="tc-trips-view-btn" id="tc-trips-btn-table" onclick="tcSetTripsView('table')">📋 Table</button>
       </div>
-      <button class="btn gold" id="tc-new-trip-btn" onclick="openNewTrip()" title="Create a business trip you can assign expenses to">✈ New trip</button>
+      <button class="btn gold" id="tc-new-trip-btn" onclick="openNewTrip()" title="Create a business trip you can assign expenses to"><span class="lead-emoji" aria-hidden="true">✈ </span>New trip</button>
     </div>
   </div>
 
@@ -3024,8 +3025,8 @@
         <option value="2023">2023</option>
       </select>
       <button class="btn tag" onclick="downloadTaxLedgerCSV()">Export Ledger CSV</button>
-      <button class="btn tag" onclick="openInventoryValuationModal()" style="color:var(--gold-text); border-color:var(--gold-line);" title="Open comprehensive Inventory Valuation Asset Report & Export">📦 Inventory Valuation</button>
-      <button class="btn gold" onclick="openTaxSeasonPreflightModal()">📦 Tax Season Export</button>
+      <button class="btn tag" onclick="openInventoryValuationModal()" style="color:var(--gold-text); border-color:var(--gold-line);" title="Open comprehensive Inventory Valuation Asset Report & Export"><span class="lead-emoji" aria-hidden="true">📦 </span>Inventory Valuation</button>
+      <button class="btn gold" onclick="openTaxSeasonPreflightModal()"><span class="lead-emoji" aria-hidden="true">📦 </span>Tax Season Export</button>
     </div>
   </div>
   <div class="tc-search-bar">
@@ -3104,10 +3105,10 @@
           </summary>
           <div class="tc-folder-drawer">
             <div class="tc-storage-actions">
-              <button class="btn sm" type="button" onclick="setupReceiptFolder()">📁 Choose folder…</button>
+              <button class="btn sm" type="button" onclick="setupReceiptFolder()"><span class="lead-emoji" aria-hidden="true">📁 </span>Choose folder…</button>
               <button class="btn gold sm" type="button" id="tc-exp-storage-auth-btn" onclick="authorizeReceiptFolder()" style="display:none;">Authorize access</button>
-              <button class="btn sm" type="button" onclick="reclaimCloudReceiptsNow()" id="tc-reclaim-btn" title="Also write cloud receipts into your local folder">☁️ Copy cloud receipts to my folder</button>
-              <button class="btn sm" type="button" onclick="batchScanAndRelinkReceipts()" id="tc-relink-batch-btn" title="Scan and automatically repair mislinked receipt files across all expenses">🔍 Re-link all receipts</button>
+              <button class="btn sm" type="button" onclick="reclaimCloudReceiptsNow()" id="tc-reclaim-btn" title="Also write cloud receipts into your local folder"><span class="lead-emoji" aria-hidden="true">☁️ </span>Copy cloud receipts to my folder</button>
+              <button class="btn sm" type="button" onclick="batchScanAndRelinkReceipts()" id="tc-relink-batch-btn" title="Scan and automatically repair mislinked receipt files across all expenses"><span class="lead-emoji" aria-hidden="true">🔍 </span>Re-link all receipts</button>
               <button class="btn sm" type="button" onclick="resetDismissedReceiptNotices()" id="tc-reset-notices-btn" style="display:none;" title="Restore dismissed receipt alert notices">↺ Restore dismissed notices</button>
             </div>
           </div>
@@ -3276,7 +3277,7 @@
 
       <!-- Primary Action -->
       <div class="tc-form-actions-row">
-        <button type="button" class="btn gold" onclick="handleEmailImportPrimaryAction()" id="email-receipt-scan-btn">✨ Select emails to extract</button>
+        <button type="button" class="btn gold" onclick="handleEmailImportPrimaryAction()" id="email-receipt-scan-btn"><span class="lead-emoji" aria-hidden="true">✨ </span>Select emails to extract</button>
       </div>
     </div>
   </div> <!-- /#tc-sec-email-import -->
@@ -3634,8 +3635,8 @@
             <div id="stripe-fees-reconcile-wrap" style="display:none;"></div>
             <div class="tc-form-actions-row">
               <div class="tc-form-actions-buttons">
-                <button class="btn gold outline" id="stripe-fees-insert-btn" onclick="insertStripeFeesIntoLedger()" style="display:none;">➕ File in ledger</button>
-                <button class="btn tag" id="stripe-fees-reconcile-btn" onclick="reconcileStripeAgainstSales()" style="display:none;">⚖ Compare with sales</button>
+                <button class="btn gold outline" id="stripe-fees-insert-btn" onclick="insertStripeFeesIntoLedger()" style="display:none;"><span class="lead-emoji" aria-hidden="true">➕ </span>File in ledger</button>
+                <button class="btn tag" id="stripe-fees-reconcile-btn" onclick="reconcileStripeAgainstSales()" style="display:none;"><span class="lead-emoji" aria-hidden="true">⚖ </span>Compare with sales</button>
                 <button class="btn tag" id="stripe-fees-download-btn" onclick="downloadStripeFeesAuditCSV()" style="display:none;">⬇ Download transactions (CSV)</button>
                 <button class="btn tag" id="stripe-fees-clear-btn" onclick="clearStoredStripeKey()" style="display:none;">Forget key</button>
               </div>
@@ -3651,7 +3652,7 @@
 <!-- BIG CARTEL DASHBOARD -->
 <div class="tab-panel" id="tab-bigcartel" style="display:none;">
   <div class="row-between" style="margin-bottom:0.5rem;">
-    <div class="section-hed">🏪 Big Cartel Sync & Dashboard</div>
+    <div class="section-hed"><span class="lead-emoji" aria-hidden="true">🏪 </span>Big Cartel Sync & Dashboard</div>
     <div class="bc-connection-status">
       <div id="bc-status-dot" class="bc-dot disconnected"></div>
       <span id="bc-status-text">Disconnected</span>
@@ -3722,7 +3723,7 @@
     <div class="card bc-gap-panel" id="bc-gap-panel" style="margin-bottom:1.5rem;">
       <div class="bc-gap-head">
         <div>
-          <div class="section-hed" style="margin:0;">📥 Missing from your ledger</div>
+          <div class="section-hed" style="margin:0;"><span class="lead-emoji" aria-hidden="true">📥 </span>Missing from your ledger</div>
           <div class="bc-gap-summary" id="bc-gap-summary">Not checked yet.</div>
         </div>
         <div class="bc-gap-head-actions">
@@ -3746,7 +3747,7 @@
       </div>
       <div class="bc-gap-list" id="bc-gap-list"></div>
       <div id="bc-gap-repairs-wrap" hidden>
-        <div class="section-hed" style="margin:1.25rem 0 .5rem;">🔧 Orders recorded under a placeholder number</div>
+        <div class="section-hed" style="margin:1.25rem 0 .5rem;"><span class="lead-emoji" aria-hidden="true">🔧 </span>Orders recorded under a placeholder number</div>
         <div style="font-size:var(--text-sm);color:var(--text3);margin-bottom:.75rem;">These sales were added from a shipping label before the storefront could be consulted, so they carry an invented order number. Giving each one its real number keeps a single record per sale.</div>
         <div class="bc-gap-list" id="bc-gap-repairs"></div>
       </div>
@@ -3800,7 +3801,7 @@
 
 <!-- SHIPPING RATES CALCULATOR -->
 <div class="tab-panel" id="tab-shipping" style="display:none;">
-  <div class="section-hed" style="margin-bottom:0.5rem;">📦 Shipping Specs & Rate Predictor</div>
+  <div class="section-hed" style="margin-bottom:0.5rem;"><span class="lead-emoji" aria-hidden="true">📦 </span>Shipping Specs & Rate Predictor</div>
   <div style="font-size:var(--text-sm);color:var(--text3);margin-bottom:1.5rem;">Store package specs, compare live Shippo rates, highlight Canada Post options, and predict what to charge customers for website shipping.</div>
 
   <!-- API Key Status Row -->
@@ -3853,9 +3854,9 @@
                 </div>
                 <div class="custom-dest-chips" id="custom-ship-dest-chips">
                   <button type="button" class="dest-chip active" data-cat="all" onclick="setShippoDestCategoryFilter('all', event)">All</button>
-                  <button type="button" class="dest-chip" data-cat="bc" onclick="setShippoDestCategoryFilter('bc', event)">🛒 Big Cartel</button>
-                  <button type="button" class="dest-chip" data-cat="stores" onclick="setShippoDestCategoryFilter('stores', event)">🏬 Stores</button>
-                  <button type="button" class="dest-chip" data-cat="orders" onclick="setShippoDestCategoryFilter('orders', event)">📦 Orders</button>
+                  <button type="button" class="dest-chip" data-cat="bc" onclick="setShippoDestCategoryFilter('bc', event)"><span class="lead-emoji" aria-hidden="true">🛒 </span>Big Cartel</button>
+                  <button type="button" class="dest-chip" data-cat="stores" onclick="setShippoDestCategoryFilter('stores', event)"><span class="lead-emoji" aria-hidden="true">🏬 </span>Stores</button>
+                  <button type="button" class="dest-chip" data-cat="orders" onclick="setShippoDestCategoryFilter('orders', event)"><span class="lead-emoji" aria-hidden="true">📦 </span>Orders</button>
                 </div>
                 <div id="custom-ship-dest-list" class="custom-dest-list"></div>
               </div>
@@ -3876,7 +3877,7 @@
               <option value="">— Select book preset —</option>
             </select>
             <div class="ship-preset-save-row">
-              <button type="button" class="btn sm outline" id="ship-save-preset-quick-btn" onclick="openSaveBookPresetModal()" title="Save current specifications to a book preset">💾 Save to Preset</button>
+              <button type="button" class="btn sm outline" id="ship-save-preset-quick-btn" onclick="openSaveBookPresetModal()" title="Save current specifications to a book preset"><span class="lead-emoji" aria-hidden="true">💾 </span>Save to Preset</button>
             </div>
           </div>
         </div>
@@ -3933,7 +3934,7 @@
         <div class="card" style="margin-bottom:0; height:100%;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
             <div style="font-size:var(--text-sm); font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3);">Destination (To)</div>
-            <button class="btn sm tag" id="ship-verify-btn" onclick="verifyDestinationAddress()" style="margin:0; padding:4px 10px; font-size:var(--text-2xs); font-weight:600;">🔍 Verify Address</button>
+            <button class="btn sm tag" id="ship-verify-btn" onclick="verifyDestinationAddress()" style="margin:0; padding:4px 10px; font-size:var(--text-2xs); font-weight:600;"><span class="lead-emoji" aria-hidden="true">🔍 </span>Verify Address</button>
           </div>
           <div class="form-group" style="margin-bottom:8px;"><label>Recipient Name</label><input type="text" id="st-name" placeholder="John Doe"></div>
           <div class="form-group" style="margin-bottom:8px;"><label>Company</label><input type="text" id="st-company" placeholder="Optional"></div>
@@ -3968,7 +3969,7 @@
         <div style="font-size:var(--text-sm); font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
           <div style="display:flex; align-items:center; gap:8px;">
             <span>Parcel Specifications</span>
-            <button type="button" class="btn sm outline" onclick="openSaveBookPresetModal()" style="font-size:var(--text-xs); padding:3px 10px; display:inline-flex; align-items:center; gap:4px;" title="Save these dimensions, weight, and customs info into a book preset">💾 Save to Book Preset</button>
+            <button type="button" class="btn sm outline" onclick="openSaveBookPresetModal()" style="font-size:var(--text-xs); padding:3px 10px; display:inline-flex; align-items:center; gap:4px;" title="Save these dimensions, weight, and customs info into a book preset"><span class="lead-emoji" aria-hidden="true">💾 </span>Save to Book Preset</button>
           </div>
           <span style="font-size:var(--text-2xs); font-weight:400; text-transform:none; color:var(--text3);">Auto-scales height &amp; weight with quantity</span>
         </div>
@@ -4387,7 +4388,7 @@
     <div class="fk-workspace" id="m-fair-kit">
       <div class="fk-top">
         <div class="fk-top-id">
-          <div class="section-hed fk-title" id="fk-title">🖨️ Fair Print Kit</div>
+          <div class="section-hed fk-title" id="fk-title"><span class="lead-emoji" aria-hidden="true">🖨️ </span>Fair Print Kit</div>
           <div class="fk-sub">Pick your titles once — the paper tally sheet and the scan-to-pay QR sheet both print from this one list.</div>
         </div>
         <button type="button" class="btn outline sm" onclick="switchPOSSubTab('register')">← Back to Register</button>
@@ -4421,7 +4422,7 @@
           <input type="date" id="st-date">
         </div>
 
-        <button type="button" class="btn sm fk-preset-btn" popovertarget="fk-presets-pop" id="fk-preset-btn">🗂 <span id="fk-preset-btn-label">Saved fairs</span></button>
+        <button type="button" class="btn sm fk-preset-btn" popovertarget="fk-presets-pop" id="fk-preset-btn"><span class="lead-emoji" aria-hidden="true">🗂 </span><span id="fk-preset-btn-label">Saved fairs</span></button>
         <div id="fk-presets-pop" class="fk-pop" popover>
           <div class="fk-pop-head">
             <span class="fk-eyebrow gold">Saved fairs</span>
@@ -4431,7 +4432,7 @@
             <option value="">No saved fairs yet</option>
           </select>
           <div class="fk-pop-actions">
-            <button type="button" class="btn sm" onclick="fkSaveFairPreset()">💾 Save this setup…</button>
+            <button type="button" class="btn sm" onclick="fkSaveFairPreset()"><span class="lead-emoji" aria-hidden="true">💾 </span>Save this setup…</button>
             <button type="button" class="btn sm" id="fk-preset-delete" onclick="fkDeleteFairPreset()" disabled>Delete</button>
           </div>
           <div id="fk-preset-note" class="fk-note">Set the whole kit up once, save it under the fair&rsquo;s name, and recall it next time.</div>
@@ -4501,7 +4502,7 @@
               </div>
             </div>
             <div id="fk-summary" class="fk-summary" aria-live="polite"></div>
-            <button type="button" class="btn gold fk-print-btn" id="fk-print-btn" onclick="printFairKit()">🖨 Print both sheets</button>
+            <button type="button" class="btn gold fk-print-btn" id="fk-print-btn" onclick="printFairKit()"><span class="lead-emoji" aria-hidden="true">🖨 </span>Print both sheets</button>
           </div>
 
           <details class="fk-acc" id="fk-opts-tracker">
@@ -4727,10 +4728,10 @@
 
   <!-- Settings Page Sub-navigation -->
   <div class="settings-sub-nav">
-    <button class="settings-sub-tab active" id="btn-subtab-catalog" onclick="switchSettingsSubTab('catalog')">📚 Book Catalog</button>
-    <button class="settings-sub-tab" id="btn-subtab-profit" onclick="switchSettingsSubTab('profit')">⚖️ Profit Tiers</button>
-    <button class="settings-sub-tab" id="btn-subtab-sync" onclick="switchSettingsSubTab('sync')">📊 Sheets Connection</button>
-    <button class="settings-sub-tab" id="btn-subtab-letterhead" onclick="switchSettingsSubTab('letterhead')">✉️ Letterhead</button>
+    <button class="settings-sub-tab active" id="btn-subtab-catalog" onclick="switchSettingsSubTab('catalog')"><span class="lead-emoji" aria-hidden="true">📚 </span>Book Catalog</button>
+    <button class="settings-sub-tab" id="btn-subtab-profit" onclick="switchSettingsSubTab('profit')"><span class="lead-emoji" aria-hidden="true">⚖️ </span>Profit Tiers</button>
+    <button class="settings-sub-tab" id="btn-subtab-sync" onclick="switchSettingsSubTab('sync')"><span class="lead-emoji" aria-hidden="true">📊 </span>Sheets Connection</button>
+    <button class="settings-sub-tab" id="btn-subtab-letterhead" onclick="switchSettingsSubTab('letterhead')"><span class="lead-emoji" aria-hidden="true">✉️ </span>Letterhead</button>
   </div>
 
   <div id="settings-sec-letterhead" class="settings-section" style="display:none;">
@@ -4759,9 +4760,9 @@
             <button type="button" class="btn sm" aria-label="Bulleted list" title="Bulleted list" onclick="formatLetterhead('insertUnorderedList')">• List</button>
             <button type="button" class="btn sm" aria-label="Numbered list" title="Numbered list" onclick="formatLetterhead('insertOrderedList')">1. List</button>
             <span class="letterhead-toolbar-divider" aria-hidden="true"></span>
-            <button type="button" class="btn sm" aria-label="Align left" title="Align left" onclick="formatLetterhead('justifyLeft')">☰</button>
+            <button type="button" class="btn sm" aria-label="Align left" title="Align left" onclick="formatLetterhead('justifyLeft')"><span class="lead-emoji" aria-hidden="true">☰</span></button>
             <button type="button" class="btn sm" aria-label="Align center" title="Align center" onclick="formatLetterhead('justifyCenter')">≡</button>
-            <button type="button" class="btn sm" aria-label="Align right" title="Align right" onclick="formatLetterhead('justifyRight')">☷</button>
+            <button type="button" class="btn sm" aria-label="Align right" title="Align right" onclick="formatLetterhead('justifyRight')"><span class="lead-emoji" aria-hidden="true">☷</span></button>
             <button type="button" class="btn sm" aria-label="Clear formatting" title="Clear formatting" onclick="formatLetterhead('removeFormat')">Clear</button>
           </div>
           <div id="lh-body" class="letterhead-editor" contenteditable="true" role="textbox" aria-multiline="true" aria-labelledby="lh-body-label" onpaste="pasteLetterheadPlainText(event)"></div>
@@ -4980,7 +4981,7 @@
           <div style="display:flex;gap:8px;align-items:center;">
             <a id="open-sheet-link" href="#" target="_blank" class="btn gold" style="text-decoration:none;display:none;">↗ Open sheet</a>
             <button class="btn sm" onclick="testSheets()">Test connection</button>
-            <button class="btn sm" id="test-notify-btn" onclick="sendTestNotification()" title="Send yourself a test approval-notification email to confirm alerts work end-to-end">✉ Send test notification</button>
+            <button class="btn sm" id="test-notify-btn" onclick="sendTestNotification()" title="Send yourself a test approval-notification email to confirm alerts work end-to-end"><span class="lead-emoji" aria-hidden="true">✉ </span>Send test notification</button>
             <button class="btn sm" id="verify-url-btn" onclick="verifyUrl()" style="font-size:var(--text-2xs);">↗ Verify URL</button>
             <button class="btn sm danger-btn" onclick="disconnectSheets()">Disconnect</button>
           </div>
@@ -5169,8 +5170,8 @@
     <div class="modal-footer" role="dialog" aria-modal="true" style="justify-content:space-between;">
       <button class="btn" onclick="attemptCloseModal('bc-address-preview')">Close</button>
       <div style="display:flex; gap:8px;">
-        <button class="btn gold" id="bc-addr-copy-btn">📋 Copy Address</button>
-        <button class="btn gold" id="bc-addr-ship-btn">📦 Open in Shipping</button>
+        <button class="btn gold" id="bc-addr-copy-btn"><span class="lead-emoji" aria-hidden="true">📋 </span>Copy Address</button>
+        <button class="btn gold" id="bc-addr-ship-btn"><span class="lead-emoji" aria-hidden="true">📦 </span>Open in Shipping</button>
       </div>
     </div>
   </div>
@@ -5249,9 +5250,10 @@
     </div>
     <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('send-books')" aria-label="Close dialog" title="Close (Esc)">✕</button>
   </div>
-  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="send-qty">Qty to send</label><input id="send-qty" type="number" inputmode="numeric" value="10" min="1"></div><div class="form-group"><label for="send-date">Date sent</label><input id="send-date" type="date"></div></div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="send-qty">Qty to send</label><input id="send-qty" type="number" inputmode="numeric" value="10" min="1" oninput="updateSendPreview()"></div><div class="form-group"><label for="send-date">Date sent</label><input id="send-date" type="date"></div></div>
   <div class="form-group" style="margin-bottom:12px;"><label for="send-rate">Commission rate (%)</label><input id="send-rate" type="number" inputmode="decimal" step="any" value="40" min="0" max="100"></div>
   <div class="form-group"><label for="send-notes">Notes</label><input id="send-notes" placeholder="e.g. delivery ref, batch #"></div>
+  <div class="field-note modal-preview" id="send-preview" aria-live="polite"></div>
   <div class="modal-footer" role="dialog" aria-modal="true"><button class="btn" onclick="attemptCloseModal('send-books')">Cancel</button><button class="btn gold" onclick="confirmSend()">Send books</button></div>
 </div></div>
 
@@ -5468,7 +5470,7 @@
         <input type="file" id="edit-exp-file" class="sr-only exp-file-input" accept="image/*,.pdf">
         <label for="edit-exp-file" class="btn exp-file-btn">Choose receipt</label>
         <span id="edit-exp-file-name" class="exp-file-name" aria-live="polite">No file chosen</span>
-        <button class="btn gold outline" style="padding: 0 8px; font-size:var(--text-sm);" onclick="openReceiptCameraModal()" id="edit-exp-cam-btn" title="Take a photo of the receipt with your webcam">📷 Camera</button>
+        <button class="btn gold outline" style="padding: 0 8px; font-size:var(--text-sm);" onclick="openReceiptCameraModal()" id="edit-exp-cam-btn" title="Take a photo of the receipt with your webcam"><span class="lead-emoji" aria-hidden="true">📷 </span>Camera</button>
       </div>
       <div id="edit-exp-file-preview" style="font-size:var(--text-xs);color:var(--text3);margin-top:4px;"></div>
     </div>
@@ -5561,7 +5563,7 @@
        so long titles are readable, and the line's total sits large on the right. -->
   <div class="inv-lines-head">
     <span class="inv-lines-title">What you're billing</span>
-    <button class="btn sm ink" type="button" id="inv-import-pending-btn" onclick="prefillFromPendingSales()" title="Pull all unpaid consignment sales for the selected store">⚡ Import pending sales</button>
+    <button class="btn sm ink" type="button" id="inv-import-pending-btn" onclick="prefillFromPendingSales()" title="Pull all unpaid consignment sales for the selected store"><span class="lead-emoji" aria-hidden="true">⚡ </span>Import pending sales</button>
   </div>
   <div id="inv-items-body" class="inv-lines"></div>
   <div class="inv-lines-add">
@@ -5646,14 +5648,14 @@
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <button class="btn" onclick="editInvoiceFromView()">✎ Edit</button>
       <button class="btn" onclick="duplicateInvoiceFromView()" title="Start a new invoice with the same customer, lines and discount">⧉ Duplicate</button>
-      <button class="btn" onclick="emailInvoice()">✉ Email</button>
-      <button class="btn" onclick="copyInvoicePayLink()">🔗 Copy pay link</button>
-      <button class="btn" id="inv-stripe-btn" onclick="regenerateStripeLinkFromView()" title="Create a Stripe Payment Link with the exact invoice amount">💳 Stripe link</button>
+      <button class="btn" onclick="emailInvoice()"><span class="lead-emoji" aria-hidden="true">✉ </span>Email</button>
+      <button class="btn" onclick="copyInvoicePayLink()"><span class="lead-emoji" aria-hidden="true">🔗 </span>Copy pay link</button>
+      <button class="btn" id="inv-stripe-btn" onclick="regenerateStripeLinkFromView()" title="Create a Stripe Payment Link with the exact invoice amount"><span class="lead-emoji" aria-hidden="true">💳 </span>Stripe link</button>
       <button class="btn" id="inv-pdf-btn" onclick="downloadInvoicePDF()" title="Download a ready-to-send PDF — no print dialog">⬇ PDF</button>
       <button class="btn" onclick="downloadInvoiceHTML()" title="Download the invoice as an HTML file">⬇ HTML</button>
-      <button class="btn" onclick="printInvoice()">🖨 Print</button>
+      <button class="btn" onclick="printInvoice()"><span class="lead-emoji" aria-hidden="true">🖨 </span>Print</button>
       <button class="btn" id="inv-remind-btn" onclick="remindInvoiceFromView()" title="Email this customer a reminder with a link to pay">⏰ Remind now</button>
-      <button class="btn" id="inv-snooze-btn" onclick="snoozeInvoiceFromView()" title="They told you when they'll pay — hold off chasing until then">📅 Promised to pay</button>
+      <button class="btn" id="inv-snooze-btn" onclick="snoozeInvoiceFromView()" title="They told you when they'll pay — hold off chasing until then"><span class="lead-emoji" aria-hidden="true">📅 </span>Promised to pay</button>
       <button class="btn gold" id="inv-mark-paid-btn" onclick="markInvoicePaidFromView()">✓ Mark paid</button>
       <button class="btn" onclick="attemptCloseModal('invoice-view')">Close</button>
     </div>
@@ -5744,7 +5746,7 @@
       <textarea id="ivs-remind-msg" rows="2" placeholder="Just a gentle nudge in case this one slipped through…"></textarea>
     </div>
     <div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-      <button class="btn sm ink" type="button" id="ivs-remind-test" onclick="sendTestReminderEmail()">✉ Send me a test reminder</button>
+      <button class="btn sm ink" type="button" id="ivs-remind-test" onclick="sendTestReminderEmail()"><span class="lead-emoji" aria-hidden="true">✉ </span>Send me a test reminder</button>
       <div style="font-size:var(--text-2xs);color:var(--text3);line-height:1.5;flex:1 1 200px;min-width:0;">
         Emails a real reminder to you, using the wording above even before you save it — built from a <strong>real outstanding invoice</strong> where you have one, so the customer, the amount, the pay link and the attached PDF are the live ones. Its subject is marked <strong>[TEST]</strong>, and no invoice is touched or counted as chased.
       </div>
@@ -5822,7 +5824,7 @@
     <div class="modal-footer" role="dialog" aria-modal="true">
       <button class="btn" onclick="attemptCloseModal('shipping-label')">Cancel</button>
       <button class="btn" id="sl-toggle-shipped-btn" onclick="toggleShipped()" style="display:none;">Mark as shipped</button>
-      <button class="btn gold" onclick="printShippingLabel()">🖨 Print &amp; mark shipped</button>
+      <button class="btn gold" onclick="printShippingLabel()"><span class="lead-emoji" aria-hidden="true">🖨 </span>Print &amp; mark shipped</button>
     </div>
   </div>
 </div>
@@ -5954,7 +5956,7 @@
 
     <div class="modal-footer" role="dialog" aria-modal="true" style="justify-content:space-between;">
       <button class="btn" type="button" onclick="attemptCloseModal('save-book-preset')">Cancel</button>
-      <button class="btn gold" id="sbp-confirm-btn" type="button" onclick="confirmSaveBookPreset()">💾 Save Preset to Book</button>
+      <button class="btn gold" id="sbp-confirm-btn" type="button" onclick="confirmSaveBookPreset()"><span class="lead-emoji" aria-hidden="true">💾 </span>Save Preset to Book</button>
     </div>
   </div>
 </div>
@@ -6094,7 +6096,7 @@
       <label>Stripe Direct Payment Link <span style="font-weight:400;font-size:var(--text-2xs);color:var(--text3);">(Embedded in QR Codes &amp; POS)</span></label>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">
         <input type="url" id="nb-paylink" placeholder="https://buy.stripe.com/…" style="flex:1;font-family:var(--font-mono);font-size:var(--text-sm);">
-        <button type="button" class="btn gold sm" id="nb-gen-stripe-btn" onclick="generateBookStripeLink()" style="white-space:nowrap;">⚡ Generate SKU link</button>
+        <button type="button" class="btn gold sm" id="nb-gen-stripe-btn" onclick="generateBookStripeLink()" style="white-space:nowrap;"><span class="lead-emoji" aria-hidden="true">⚡ </span>Generate SKU link</button>
       </div>
       <div style="font-size:var(--text-xs);color:var(--text3);line-height:1.45;">
         Paste from your <a href="https://dashboard.stripe.com/payment-links" target="_blank" style="color:var(--gold-text);">Stripe Dashboard</a> or click <strong>Generate SKU link</strong> to create an auto-tagged payment link.
@@ -6109,10 +6111,10 @@
     <!-- Quick Preset Parcel Chips -->
     <div class="preset-chips-wrap">
       <span style="font-size:10.5px;color:var(--text3);align-self:center;margin-right:2px;">Presets:</span>
-      <button type="button" class="preset-chip-btn" onclick="applyBookParcelPreset('trade')">📘 Standard Trade (22×15×2 cm · 450g)</button>
-      <button type="button" class="preset-chip-btn" onclick="applyBookParcelPreset('monograph')">📖 Hardcover (30×24×3 cm · 1.1kg)</button>
-      <button type="button" class="preset-chip-btn" onclick="applyBookParcelPreset('zine')">📄 Zine (21×14×0.5 cm · 120g)</button>
-      <button type="button" class="preset-chip-btn" onclick="applyBookParcelPreset('boxset')">📦 Box Set (32×26×8 cm · 2.5kg)</button>
+      <button type="button" class="preset-chip-btn" onclick="applyBookParcelPreset('trade')"><span class="lead-emoji" aria-hidden="true">📘 </span>Standard Trade (22×15×2 cm · 450g)</button>
+      <button type="button" class="preset-chip-btn" onclick="applyBookParcelPreset('monograph')"><span class="lead-emoji" aria-hidden="true">📖 </span>Hardcover (30×24×3 cm · 1.1kg)</button>
+      <button type="button" class="preset-chip-btn" onclick="applyBookParcelPreset('zine')"><span class="lead-emoji" aria-hidden="true">📄 </span>Zine (21×14×0.5 cm · 120g)</button>
+      <button type="button" class="preset-chip-btn" onclick="applyBookParcelPreset('boxset')"><span class="lead-emoji" aria-hidden="true">📦 </span>Box Set (32×26×8 cm · 2.5kg)</button>
     </div>
 
     <div class="shipping-dims-grid">
@@ -6279,7 +6281,7 @@
       </div>
     </div>
     <button class="btn gold outline pqr-gen-btn" id="pqr-gen-stripe-btn" onclick="generateSingleBookStripeQR()">
-      ⚡ Create Stripe Link for Override Price & Currency
+      <span class="lead-emoji" aria-hidden="true">⚡ </span>Create Stripe Link for Override Price & Currency
     </button>
   </div>
 
@@ -6333,7 +6335,7 @@
     <label>Stripe Payment Link <span style="font-weight:400;font-size:var(--text-2xs);color:var(--text3);">(used for the QR code)</span></label>
     <div style="display:flex;gap:8px;align-items:center;">
       <input type="url" id="pb-paylink" placeholder="https://buy.stripe.com/…" style="flex:1;" oninput="renderPosBookModalQR()">
-      <button type="button" class="btn gold sm" id="pb-gen-stripe-btn" onclick="generatePosBookStripeLink()" style="white-space:nowrap;">⚡ Generate Stripe link</button>
+      <button type="button" class="btn gold sm" id="pb-gen-stripe-btn" onclick="generatePosBookStripeLink()" style="white-space:nowrap;"><span class="lead-emoji" aria-hidden="true">⚡ </span>Generate Stripe link</button>
     </div>
     <div style="font-size:var(--text-xs);color:var(--text3);margin-top:5px;line-height:1.5;">
       Paste a link from your <a href="https://dashboard.stripe.com/payment-links" target="_blank" style="color:var(--gold-text);">Stripe Dashboard</a>, or click <strong>Generate Stripe link</strong> to mint one at this price instantly (needs your Stripe restricted key saved in the Payments tab or Invoice Settings).
@@ -6600,7 +6602,7 @@
     <span class="new-order-alert-detail" id="new-order-alert-detail"></span>
     <div class="new-order-alert-actions">
       <button type="button" class="btn gold sm" id="new-order-alert-ship"
-              onclick="shipNewOrderFromAlert(event)">📦 Ship it</button>
+              onclick="shipNewOrderFromAlert(event)"><span class="lead-emoji" aria-hidden="true">📦 </span>Ship it</button>
       <button type="button" class="btn sm" id="new-order-alert-record"
               onclick="recordNewOrderFromAlert(event)">Record it</button>
       <button type="button" class="btn sm" id="new-order-alert-review"
@@ -6808,8 +6810,8 @@
     <div class="form-group" style="margin-bottom:12px;">
       <label>Transfer Direction</label>
       <div class="st-dir-toggle" style="display:flex;gap:8px;margin-top:4px;">
-        <button type="button" class="btn sm is-on st-dir-btn" id="st-dir-to-author" onclick="setStockTransferDirection('to_author')" style="flex:1;">🏢 → 👤 Hand off to Author</button>
-        <button type="button" class="btn sm st-dir-btn" id="st-dir-from-author" onclick="setStockTransferDirection('from_author')" style="flex:1;">👤 → 🏢 Return to Publisher</button>
+        <button type="button" class="btn sm is-on st-dir-btn" id="st-dir-to-author" onclick="setStockTransferDirection('to_author')" style="flex:1;"><span class="lead-emoji" aria-hidden="true">🏢 </span>→ 👤 Hand off to Author</button>
+        <button type="button" class="btn sm st-dir-btn" id="st-dir-from-author" onclick="setStockTransferDirection('from_author')" style="flex:1;"><span class="lead-emoji" aria-hidden="true">👤 </span>→ 🏢 Return to Publisher</button>
       </div>
     </div>
 

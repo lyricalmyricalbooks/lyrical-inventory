@@ -949,13 +949,15 @@ function storageHtml() {
     if (b.status === 'missing') {
       const shown = b.missing.slice(0, 10).map(m => `<li>${escapeHtml(oldRecordLine(m))}</li>`).join('');
       const more = b.missing.length > 10 ? `<li>${escapeHtml(`…and ${b.missing.length - 10} more`)}</li>` : '';
-      return `<li class="wl-item"><strong>${escapeHtml(b.title)}</strong>: ${escapeHtml(`${b.missing.length} record${b.missing.length === 1 ? ' is' : 's are'} only in the old storage`)}
+      return `<li class="wl-item"><strong>${escapeHtml(b.title)}</strong><span>${escapeHtml(`${b.missing.length} record${b.missing.length === 1 ? ' is' : 's are'} only in the old storage`)}</span>
           <ul class="wl-points">${shown}${more}</ul>
           <p class="wl-note">Usually these are records you deleted or changed after the book moved: the old storage still has them as they were then. If the book looks right to you, leave them out. Copy them only if they belong in the book.</p>
           <div class="wl-actions">${typeof b.oldTs === 'number' ? `<button class="btn sm" type="button" data-wl-action="leave-old" data-book="${escapeHtml(b.id)}">The book is right — leave them out</button>` : ''}<button class="btn gold sm" type="button" data-wl-action="copy-old" data-book="${escapeHtml(b.id)}">Copy these over</button></div></li>`;
     }
-    const why = { 'old-storage': 'still in the old storage — it moves by itself the next time the app opens online', unreadable: 'its old copy couldn’t be read just now — check again once you’re online', 'not-loaded': 'didn’t load — reload the app' }[b.status] || b.status;
-    return `<li class="wl-item"><strong>${escapeHtml(b.title)}</strong>: ${escapeHtml(why)}</li>`;
+    // The row lays out as a column, so the reason reads as its own line under
+    // the title and starts with a capital, not as ": its old copy…".
+    const why = { 'old-storage': 'Still in the old storage — it moves by itself the next time the app opens online', unreadable: 'Its old copy couldn’t be read just now — check again once you’re online', 'not-loaded': 'Didn’t load — reload the app' }[b.status] || b.status;
+    return `<li class="wl-item"><strong>${escapeHtml(b.title)}</strong><span>${escapeHtml(why)}</span></li>`;
   }).join('');
   const goodList = good.length ? `<details class="wl-details"><summary>${escapeHtml(`Books checked (${good.length})`)}</summary><ul class="wl-points">${good.map(b => `<li>✓ ${escapeHtml(line(b))}</li>`).join('')}</ul></details>` : '';
   return `<div class="wl-section">${head}${summary}${problemList ? `<ul class="wl-list">${problemList}</ul>` : ''}${goodList}<div class="wl-actions">${again}</div></div>`;

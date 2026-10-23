@@ -21406,3 +21406,7 @@ button[onclick="refreshUmamiStats()"]:active {
 .help-sec { scroll-margin-top:96px; }
 /* "Open Manual entry →" under an answer: straight to the tab it describes. */
 .help-a .help-go-row { margin-top:var(--space-3); }
+/* Store card contact line: each part is its own span so the phone can drop the
+   email; the dots between them come from here. */
+.store-meta > span + span::before{content:" · ";}
+.lead-emoji{display:inline;}

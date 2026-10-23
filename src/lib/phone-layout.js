@@ -140,7 +140,10 @@ function enhanceSections(nav) {
   const sync = () => {
     buttons = [...nav.querySelectorAll('.settings-sub-tab')];
     const options = buttons.map((button, index) => {
-      const option = new Option(button.textContent.trim(), String(index));
+      // A leading emoji is decoration the phone hides; the option is the words.
+      const words = button.cloneNode(true);
+      words.querySelectorAll('.lead-emoji').forEach(el => el.remove());
+      const option = new Option(words.textContent.trim(), String(index));
       option.disabled = button.disabled || button.hidden || button.style.display === 'none';
       option.selected = button.classList.contains('active') || button.getAttribute('aria-selected') === 'true';
       return option;

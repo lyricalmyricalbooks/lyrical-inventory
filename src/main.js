@@ -5332,9 +5332,15 @@ function renderTodaySoFar() {
   if (!sum) return;
   const books = Object.keys(BOOKS).map((id) => ({ id, currency: getBookCurrencyCode(BOOKS[id]), hist: states[id]?.hist }));
   const day = salesForDay(books, today());
-  sum.textContent = day.sales
+  // Three figures on the slip (sales, books, money taken), zeros included, so
+  // the day's numbers fill in where you expect them. The sentence is kept as
+  // the accessible name, which is what a screen reader reads out.
+  const said = day.sales
     ? `${day.sales} ${day.sales === 1 ? 'sale' : 'sales'} · ${day.units} ${day.units === 1 ? 'book' : 'books'} · ${fairTotalsText(day.totals)}`
     : 'No sales yet today';
+  const figs = [[day.sales, day.sales === 1 ? 'sale' : 'sales'], [day.units, day.units === 1 ? 'book' : 'books'], [day.sales ? fairTotalsText(day.totals) : '—', 'taken']];
+  sum.innerHTML = figs.map(([v, label]) => `<span class="today-sold-fig"><b>${escapeHtml(String(v))}</b><span>${label}</span></span>`).join('');
+  sum.setAttribute('aria-label', said);
   renderFairSyncPill();
 }
 
@@ -5988,11 +5994,11 @@ function renderAllBooksStrips(allBooksVisible) {
       <div class="book-strip-info">
         <div class="book-strip-title">${escapeHtml(book.title)}</div>
         <div class="book-strip-meta">
-          <span>✍ ${escapeHtml(book.author) || '—'}</span>
-          <span> 🏷 ${escapeHtml(book.currency)}${escapeHtml(book.listPrice)}</span>
-          <span> 🖨 ${escapeHtml(book.maxPrint)} printed</span>
-          ${!isAuthor() && s.authorStock > 0 ? `<span> 👤 ${escapeHtml(s.authorStock)} with author</span>` : ''}
-          ${promised.copies > 0 ? `<span title="Pre-ordered on your website and not sent yet. These copies are already taken off on hand."> 📌 ${escapeHtml(promised.copies)} pre-ordered, not sent</span>` : ''}
+          <span><span class="lead-emoji" aria-hidden="true">✍ </span>${escapeHtml(book.author) || '—'}</span>
+          <span> <span class="lead-emoji" aria-hidden="true">🏷 </span>${escapeHtml(book.currency)}${escapeHtml(book.listPrice)}</span>
+          <span> <span class="lead-emoji" aria-hidden="true">🖨 </span>${escapeHtml(book.maxPrint)} printed</span>
+          ${!isAuthor() && s.authorStock > 0 ? `<span> <span class="lead-emoji" aria-hidden="true">👤 </span>${escapeHtml(s.authorStock)} with author</span>` : ''}
+          ${promised.copies > 0 ? `<span title="Pre-ordered on your website and not sent yet. These copies are already taken off on hand."> <span class="lead-emoji" aria-hidden="true">📌 </span>${escapeHtml(promised.copies)} pre-ordered, not sent</span>` : ''}
         </div>
         <div class="book-progress-wrapper" title="${escapeHtml(s.stock)} units on hand of ${escapeHtml(book.maxPrint)} total printed (${pct.toFixed(0)}%)">
           <div class="book-progress-header">
@@ -7455,7 +7461,7 @@ function renderTodoTab() {
     return `<section class="overview-section todo-group">
         <div class="sec-head is-muted is-inline">
           <div class="sec-head-titles">
-            <div class="sec-kicker"><span class="sec-kicker-dot"></span>${escapeHtml(GROUP_ICONS[group] || '')} ${escapeHtml(GROUP_LABELS[group] || group)}</div>
+            <div class="sec-kicker"><span class="sec-kicker-dot"></span><span class="lead-emoji" aria-hidden="true">${escapeHtml(GROUP_ICONS[group] || '')} </span>${escapeHtml(GROUP_LABELS[group] || group)}</div>
           </div>
           <div class="sec-head-badges"><span class="pill gray">${items.length}</span></div>
         </div>
@@ -7531,6 +7537,10 @@ function updatePublisherActionBanner() {
     ? `Action required · ${artistPaymentCount} artist payment${artistPaymentCount > 1 ? 's' : ''} awaiting approval`
     : `Action required · ${total} pending submission${total > 1 ? 's' : ''}`;
   subEl.textContent = parts.join(' · ') + ` — across ${booksWithPending.length} book${booksWithPending.length > 1 ? 's' : ''}.`;
+  // The phone shows this one line instead of the title and sub, which wrap to
+  // four lines at phone width and push the screen's own content down.
+  const shortEl = document.getElementById('pab-short');
+  if (shortEl) shortEl.textContent = `${parts.join(' · ')}${artistPaymentCount > 0 && parts.length === 1 ? '' : ' to approve'}`;
 
   // Build action buttons: jump straight to the first pending book, plus per-section buttons if a single book has pending
   actEl.innerHTML = '';
@@ -11158,7 +11168,7 @@ function renderStores() {
     const sentCell = `<div class="sk-v${rowOff('sent')}">${st.sent ?? 0}</div>`;
     const soldCell = `<div class="sk-v${rowOff('sold')}">${st.sold ?? 0}</div>`;
 
-    return `<div class="store-card"><div class="store-head"><div><div class="store-name">${escapeHtml(st.name)}</div><div class="store-meta">${[st.city, st.contact, st.email].filter(Boolean).map(escapeHtml).join(' · ')} · ${st.rate}% commission</div></div><div class="store-head-flags">${sp}${unbalancedBadge}</div></div><div class="store-kpis"><div class="sk"><div class="sk-l">Sent</div>${sentCell}</div><div class="sk"><div class="sk-l">Sold</div>${soldCell}</div><div class="sk"><div class="sk-l">Outstanding</div>${outstandingCell}</div><div class="sk"><div class="sk-l">Owed</div><div class="sk-v ${st.amountOwed > 0 ? 'warn' : ''}">${st.amountOwed > 0 ? fmt(st.amountOwed, cur) : '—'}</div></div></div><div class="store-actions"><button class="btn sm gold" onclick="openSend(${escapeHtml(JSON.stringify(st.id))})">Send books</button><button class="btn sm ink" onclick="openSale(${escapeHtml(JSON.stringify(st.id))})" ${!st.outstanding ? 'disabled' : ''}>Record sale</button><button class="btn sm" onclick="openRet(${escapeHtml(JSON.stringify(st.id))})" ${!st.outstanding ? 'disabled' : ''}>Return</button><button class="btn sm" onclick="showStoreLedger(${escapeHtml(JSON.stringify(st.id))})" ${ledgerRows ? '' : 'disabled'} title="${ledgerRows ? `Show this store's ${ledgerRows} ledger entr${ledgerRows === 1 ? 'y' : 'ies'} below` : 'Nothing in the ledger for this store yet'}">📒 Ledger</button><button class="btn sm" onclick="openEditStore(${escapeHtml(JSON.stringify(st.id))})">Edit</button><button class="btn sm danger-btn" onclick="removeStore(${escapeHtml(JSON.stringify(st.id))})">Remove</button></div>${unbalancedPopover}</div>`;
+    return `<div class="store-card"><div class="store-head"><div><div class="store-name">${escapeHtml(st.name)}</div><div class="store-meta">${[[st.city, 'city'], [st.contact, 'contact'], [st.email, 'email']].filter(([v]) => v).map(([v, k]) => `<span class="store-meta-${k}">${escapeHtml(v)}</span>`).join('')}<span class="store-meta-rate">${st.rate}% commission</span></div></div><div class="store-head-flags">${sp}${unbalancedBadge}</div></div><div class="store-kpis"><div class="sk"><div class="sk-l">Sent</div>${sentCell}</div><div class="sk"><div class="sk-l">Sold</div>${soldCell}</div><div class="sk"><div class="sk-l">On shelf</div>${outstandingCell}</div><div class="sk"><div class="sk-l">Owed</div><div class="sk-v ${st.amountOwed > 0 ? 'warn' : ''}">${st.amountOwed > 0 ? fmt(st.amountOwed, cur) : '—'}</div></div></div><div class="store-actions"><button class="btn sm gold" onclick="openSend(${escapeHtml(JSON.stringify(st.id))})">Send books</button><button class="btn sm ink" onclick="openSale(${escapeHtml(JSON.stringify(st.id))})" ${!st.outstanding ? 'disabled' : ''}>Record sale</button><button class="btn sm" onclick="openRet(${escapeHtml(JSON.stringify(st.id))})" ${!st.outstanding ? 'disabled' : ''}>Return</button><button class="btn sm" onclick="showStoreLedger(${escapeHtml(JSON.stringify(st.id))})" ${ledgerRows ? '' : 'disabled'} title="${ledgerRows ? `Show this store's ${ledgerRows} ledger entr${ledgerRows === 1 ? 'y' : 'ies'} below` : 'Nothing in the ledger for this store yet'}">📒 Ledger</button><button class="btn sm" onclick="openEditStore(${escapeHtml(JSON.stringify(st.id))})">Edit</button><button class="btn sm danger-btn" onclick="removeStore(${escapeHtml(JSON.stringify(st.id))})">Remove</button></div>${unbalancedPopover}</div>`;
   }).join('');
   // Phone: Return, Ledger, Edit and Remove fold behind "More actions". A fresh
   // innerHTML means fresh buttons, so every card is folded again here.
@@ -11181,7 +11191,17 @@ function confirmEditStore() {
   { const bookCode = getBookCurrencyCode(getBook()), code = $('es-currency') ? $('es-currency').value : ''; if (code && code !== bookCode) st.currency = code; else delete st.currency; }
   closeM('edit-store'); renderStores(); updateDash(); saveState(activeBook); showToast('✓ Store updated');
 }
-function openSend(id) { activeId = id; const st = storeById(id); $('send-sname').textContent = st.name; $('send-rate').value = st.rate; openM('send-books'); }
+function openSend(id) { activeId = id; const st = storeById(id); $('send-sname').textContent = st.name; $('send-rate').value = st.rate; openM('send-books'); updateSendPreview(); }
+// One line above the buttons saying what the send will move, so a wrong count
+// or the wrong store is caught before it reaches the stock figures.
+function updateSendPreview() {
+  const el = $('send-preview'); if (!el) return;
+  const s = getState(), st = storeById(activeId), qty = parseInt($('send-qty').value) || 0;
+  if (!st || qty <= 0) { el.textContent = ''; return; }
+  el.textContent = qty > s.stock
+    ? `Only ${s.stock} in stock`
+    : `Stock on hand ${s.stock} → ${s.stock - qty} · ${st.name}'s shelf ${st.outstanding} → ${st.outstanding + qty}`;
+}
 function confirmSend() {
   const s = getState(), book = getBook(), st = storeById(activeId);
   if (!validateFields([
@@ -11394,9 +11414,11 @@ function updateConsignSalePreview() {
   const a = consignSaleFormAmounts();
   if (!st || !a) { el.textContent = $('sale-cur').value !== bookCode ? 'Add an exchange rate to see what this is worth in ' + bookCode + '.' : ''; return; }
   if (!a.gross) { el.textContent = ''; return; }
-  el.textContent = a.sale
+  const qty = parseInt($('sale-qty').value) || 0;
+  const shelf = qty > 0 && qty <= st.outstanding ? `Shelf ${st.outstanding} → ${st.outstanding - qty} · ` : '';
+  el.textContent = shelf + (a.sale
     ? `Store keeps ${st.rate}% · you’re owed ${fmt(a.sale.due, a.sale.currency)} ≈ ${fmt(a.due, bookCode)}`
-    : `Store keeps ${st.rate}% · you’re owed ${fmt(a.due, bookCode)}`;
+    : `Store keeps ${st.rate}% · you’re owed ${fmt(a.due, bookCode)}`);
 }
 function confirmSale() {
   const s = getState(), book = getBook(), cur = book.currency, st = storeById(activeId);
@@ -18252,7 +18274,7 @@ Object.assign(window, {
   fetchOrders, applyOne, applyAll, cancelOrder, restoreOrder, unapplyOne, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,
   onExpenseCurrencyChange, calcExpenseFx,
 
-  submitGratuity, openM, closeM, addStore, openEditStore, confirmEditStore, openSend, confirmSend, openSale, confirmSale, onConsignSaleCurrencyChange, updateConsignSalePreview, onConsignPaymentCurrencyChange, updateConsignPaymentPreview, confirmConsignPayment,
+  submitGratuity, openM, closeM, addStore, openEditStore, confirmEditStore, openSend, confirmSend, openSale, confirmSale, onConsignSaleCurrencyChange, updateConsignSalePreview, updateSendPreview, onConsignPaymentCurrencyChange, updateConsignPaymentPreview, confirmConsignPayment,
   exportConsignmentLedgerCSV, openBulkSend, bulkApplyQty, bulkQtyChanged, bulkCheckChanged, updateBulkSendSummary, confirmBulkSend,
   openRet, confirmReturn, openEditHist, openEditLedger, saveEntryEdit, convertKeptAllToReceived, voidEntry,
   restoreBookDataFromSheets, resetBookData, connectSheets, disconnectSheets, testSheets, verifyUrl, checkSheetsVersion,
