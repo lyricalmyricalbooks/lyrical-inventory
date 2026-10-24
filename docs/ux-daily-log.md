@@ -171,6 +171,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-24 | visual | Phone Dashboard — pending reimbursement cards | Put what the expense was on its own line first, with the date and category chip on one line beneath, instead of a ragged run with a stranded dot at each wrap | (this PR) |
 | 2026-10-24 | visual | Phone Order History — header | Made the Import button reach the same right edge as the search card and cards beneath, and closed the ~50px dead gap under the "Order history" heading so the first order shows on the first screen | (this PR) |
 | 2026-10-24 | visual | Phone Tax Centre — cash-flow cards | Put the arrow icon beside the label and figure on Money in, Money out and Net cash flow instead of above them, so each card is about a third shorter, and let the odd last small figure (Net after payouts) fill its row instead of leaving a gap | (this PR) |
+| 2026-10-24 | visual | Phone book banner (Manual entry, Expenses and other book screens) | Made the book banner at the top an inked slab with the offset shadow and the book's colour as an edge stripe, with the book's name in big display lettering, instead of a pale tinted band matching nothing around it | (this PR) |
 
 ---
 
