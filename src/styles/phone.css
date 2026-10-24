@@ -1451,6 +1451,16 @@
   /* Payment-link hint: left-aligned under the amount, like the lines above it. */
   #artist-reimburse-banner .metric-banner-actions { align-items: stretch; width: 100%; }
   #artist-reimburse-banner .metric-banner-hint { text-align: left; }
+
+  /* Pending reimbursements: each expense is an inked slab like the other phone
+     cards, the amount leads the head, and the two buttons share one full width
+     instead of a wide outline bar over a half-width fill. */
+  #d-pending-expenses-list .pending-card { display: grid; align-items: stretch; border: var(--stroke) solid var(--rule-ink); box-shadow: var(--elev-1), inset 3px 0 0 var(--status-active); gap: var(--space-3); }
+  #d-pending-expenses-list .pending-card-head { justify-content: space-between; flex-wrap: nowrap; }
+  #d-pending-expenses-list .pending-card-num { font-size: var(--text-lg); font-weight: 500; font-variant-numeric: tabular-nums; }
+  #d-pending-expenses-list .pending-card-actions { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+  #d-pending-expenses-list .pending-card-actions .btn { width: 100%; justify-content: center; text-align: center; white-space: normal; }
+  #d-pending-expenses-list .pending-card:active { transform: translate(1px, 1px); box-shadow: inset 3px 0 0 var(--status-active); }
 }
 
 /* ─── QR + CUSTOMERS + INTEL (round 4) ─── */
