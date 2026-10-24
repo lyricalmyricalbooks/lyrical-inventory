@@ -1869,6 +1869,13 @@
   #tab-consignment .store-kpis .sk + .sk { border-left: var(--stroke-hair) solid var(--border-subtle); }
   #tab-consignment .store-kpis .sk:last-child:has(.sk-v.warn) { background: var(--status-active-bg); }
   #tab-consignment .store-kpis .sk-v { font-size: var(--text-md); }
+  /* One-line captions: "On shelf" used to wrap in its narrow column and drop its
+     figure a line below Sent and Sold. Tighter side padding and caps tracking
+     give the caption room; nowrap keeps all four figures on one baseline. */
+  #tab-consignment .store-kpis .sk { padding-inline: var(--space-2); }
+  #tab-consignment .store-kpis .sk-l { white-space: nowrap; letter-spacing: var(--tracking-caps); }
+  /* Very narrow phones can't fit "On shelf" on a line; let it wrap rather than spill into Owed. */
+  @media (max-width: 350px) { #tab-consignment .store-kpis .sk-l { white-space: normal; } }
   #tab-consignment .store-actions { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px; padding: var(--space-3); }
   #tab-consignment .store-actions[data-phone-folded] .phone-more-toggle { grid-column: auto; grid-row: 1; grid-column-start: 3; min-width: 44px; padding: 0; font-size: 0; }
   #tab-consignment .store-actions[data-phone-folded] .phone-more-toggle::before { content: '⋯'; font: 800 var(--text-lg) / 1 var(--font-ui); }
