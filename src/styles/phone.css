@@ -1965,3 +1965,18 @@
     color: var(--content-primary);
   }
 }
+
+/* Notifications (All Books and the bell panel) — held upright, each notice was a pale hairline
+   box with a thin stripe, much quieter than the inked consignment cards above it. Each is now
+   the same inked slab with the offset shadow; the tone stripe moves inside so it still reads,
+   the title steps up so it leads the source line, and the action link is bold and underlined so
+   it reads as something to press. */
+@media (max-width: 768px) {
+  .notif-list { gap: var(--space-3); }
+  .notif-item { border: var(--stroke) solid var(--rule-ink); border-radius: var(--r2); background: var(--surface-card); box-shadow: var(--elev-1), inset 4px 0 0 var(--status-neutral); padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4); }
+  .notif-item.tone-red { box-shadow: var(--elev-1), inset 4px 0 0 var(--status-critical); }
+  .notif-item.tone-amber { box-shadow: var(--elev-1), inset 4px 0 0 var(--status-active); }
+  .notif-item.tone-blue { box-shadow: var(--elev-1), inset 4px 0 0 var(--status-info); }
+  .notif-item .notif-title { font-size: var(--text-base); }
+  .notif-item .notif-action { font-size: var(--text-sm); text-decoration: underline; text-underline-offset: 3px; }
+}
