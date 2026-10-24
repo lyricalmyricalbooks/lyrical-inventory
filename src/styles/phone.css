@@ -1832,7 +1832,11 @@
   #tab-today .today-card-ink .today-card-sub { opacity: 1; }
   .theme-dark #tab-today .today-card-ink { color: var(--on-accent); }
   #tab-today .today-row { min-height: 60px; padding-block: var(--space-3); }
-  #tab-today .today-row-ic { font: 500 var(--text-sm) / 1 var(--font-mono); }
+  /* Workspace rows carry the same inked stamp as the job cards above, so the four icons share one square and edge. */
+  #tab-today .today-row-ic {
+    display: grid; place-items: center; flex: 0 0 32px; width: 32px; height: 32px; box-sizing: border-box;
+    border: var(--stroke) solid currentColor; font: 500 var(--text-sm) / 1 var(--font-mono);
+  }
   #tab-today .today-label { margin-top: var(--space-5); }
 
   #tab-today .today-sofar { gap: 0; border: var(--stroke) solid var(--rule-ink); background: var(--surface-raised); box-shadow: var(--elev-1); }
