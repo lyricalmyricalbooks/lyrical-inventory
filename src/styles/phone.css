@@ -1767,8 +1767,11 @@
   #tab-sheets .catalog-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
   #tab-sheets .catalog-actions .btn { justify-content: center; }
 
-  /* Shipping: the preset save button sits on its own line under the dropdown. */
-  #tab-shipping .ship-preset-save-row { justify-content: flex-start; }
+  /* Shipping: the preset save button sits on its own line under the dropdown,
+     reaching the same edges as the dropdown and a full fingertip tall, not a
+     half-width stub hanging off the left. */
+  #tab-shipping .ship-preset-save-row { justify-content: stretch; }
+  #tab-shipping #ship-save-preset-quick-btn { flex: 1; justify-content: center; min-height: 44px; }
 }
 
 /* ── Batch 4H — bottom menu fade ──────────────────────────────────────────
