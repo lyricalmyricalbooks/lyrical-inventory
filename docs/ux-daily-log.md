@@ -177,6 +177,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-24 | visual | Phone Web Analytics — setup card | Set the setup title in the same capital display lettering as other card titles (it was smeared mixed-case) and put the Not Connected tag beside the page heading instead of a line below | (this PR) |
 | 2026-10-24 | visual | Phone Shipping — Save to Preset | Stretched the Save to Preset button to the same width as the dropdown above it and a full fingertip tall, instead of a half-width stub hanging off the left | (this PR) |
 | 2026-10-24 | visual | Phone Payment QR codes — cards | Gave every code card the same light offset shadow as the other cards, trimmed the roomy "No link yet" card to the compact padding of its neighbours, and made its status tag a square tag instead of a soft lozenge | (this PR) |
+| 2026-10-24 | visual | Phone Intelligence — question box | Lined the question box and the note under it up with the messages and Quick asks above, instead of the box sticking out wider than everything else in the panel | (this PR) |
 
 ---
 

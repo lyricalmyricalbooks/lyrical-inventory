@@ -19744,7 +19744,10 @@ button[onclick="refreshUmamiStats()"]:active {
   .intel-msg-content { max-width: 100%; }
   .intel-proposal-diff { grid-template-columns: 1fr; gap: 0; }
   .intel-proposal-diff dt { margin-top: var(--space-2); }
-  .intel-composer { margin: 0 var(--space-2) var(--space-2); }
+  /* Share the thread's side padding so the question box, the footnote and the
+     messages above all hang from one left edge (the box used to sit 8px wider). */
+  .intel-composer { margin: 0 var(--space-4) var(--space-3); }
+  .intel-foot { margin-inline: var(--space-4); }
   .intel-composer-hint { display: none; }
   .intel-composer-actions .btn:not(.intel-send) { flex: 1 1 auto; }
 }
