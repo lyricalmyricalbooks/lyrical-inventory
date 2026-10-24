@@ -2037,3 +2037,14 @@
 @media (max-width: 768px) {
   #tab-manual .price-inline { grid-template-columns: minmax(9.5rem, 54%) minmax(0, 1fr); gap: var(--space-2); align-items: stretch; }
 }
+
+/* The book banner at the head of Manual entry, Expenses and the other book screens — held upright it
+   was a pale tinted band with a thin stripe, quieter than the inked cards under it, and the book name
+   read at the same weight as its own caption. It is now the same inked slab with the offset shadow:
+   the book's colour moves inside as an edge stripe so the outline stays one even line, and the name
+   steps up into the display lettering the Book Catalog cards use so the book leads. */
+@media (max-width: 768px) {
+  .book-context { border: var(--stroke) solid var(--rule-ink); border-radius: var(--r2); background: var(--surface-card); box-shadow: var(--elev-1), inset 4px 0 0 var(--book-accent); padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4); }
+  .book-context-title { font-family: var(--font-display); font-size: var(--text-lg); font-weight: 400; text-transform: uppercase; letter-spacing: .02em; line-height: 1.1; }
+  .book-context-meta { margin-top: var(--space-1); }
+}
