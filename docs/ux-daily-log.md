@@ -162,6 +162,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-24 | visual | Phone Dashboard — pending expense reimbursements | Made each pending reimbursement an inked slab with the amount larger and the two buttons (payment link, Mark received) sharing one full width, instead of a wide outline bar over a half-width fill | (this PR) |
 | 2026-10-24 | visual | Phone Consignment — store card figures | Kept "On shelf" on one line so Sent, Sold, On shelf and Owed all line up on the same row of figures, and the store card is a line shorter | (this PR) |
 | 2026-10-24 | visual | Phone Home — workspace rows | Gave the four workspace rows (Books & stock, Money, Audience, All tools) the same square inked stamp as the job cards above, instead of four loose glyphs of different widths | (this PR) |
+| 2026-10-24 | visual | Phone Audience — action buttons | Made Pull buyers, Filter and Export share one full width, with Filter and Export a full fingertip tall, instead of a wide button over two small orphaned stubs each on its own row | (this PR) |
 
 ---
 
