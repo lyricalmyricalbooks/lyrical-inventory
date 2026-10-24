@@ -173,6 +173,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-24 | visual | Phone Tax Centre — cash-flow cards | Put the arrow icon beside the label and figure on Money in, Money out and Net cash flow instead of above them, so each card is about a third shorter, and let the odd last small figure (Net after payouts) fill its row instead of leaving a gap | (this PR) |
 | 2026-10-24 | visual | Phone book banner (Manual entry, Expenses and other book screens) | Made the book banner at the top an inked slab with the offset shadow and the book's colour as an edge stripe, with the book's name in big display lettering, instead of a pale tinted band matching nothing around it | (this PR) |
 | 2026-10-24 | visual | Phone Payments — payment cards | Lined up the paired boxes on each payment to check (Quantity beside Stripe amount, Currency beside Exchange rate) so they sit level, instead of one box dropping below its neighbour whenever its caption wrapped to two lines | (this PR) |
+| 2026-10-24 | visual | Phone Order History — edit pencil | Parked the edit pencil in the bottom-right corner of every order card, lined up with the arrow on return cards, instead of trailing each order number at a different spot on every card | (this PR) |
 
 ---
 
