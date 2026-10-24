@@ -1403,6 +1403,11 @@
   #tab-history #hist-body .edit-btn { width: 28px; height: 28px; margin: 0 0 0 var(--space-2); opacity: 1; }
   #tab-history #hist-body .edit-btn::after { inset: -8px; min-width: var(--target-min); min-height: var(--target-min); }
   #tab-history #import-btn { width: 100%; justify-content: center; }
+  /* The header row stacks heading over button; stretch it so the Import button reaches the
+     same right edge as the search card and cards beneath instead of stopping short of it. */
+  #tab-history > .row-between { align-items: stretch; gap: var(--space-3); }
+  #tab-history > .row-between > div { width: 100%; }
+  #tab-history > .row-between .save-indicator:not(.show) { display: none; }
 }
 
 /* ─── SWEEP FIXES B (round 4) ─── */
