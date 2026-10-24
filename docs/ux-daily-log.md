@@ -168,6 +168,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-24 | visual | Phone Manual entry — price paid | Put the currency picker (Book currency, USD…) and the price on one row, same height, instead of a full-width picker stacked over the price box, so the Log an order form is a row shorter | (this PR) |
 | 2026-10-24 | visual | Phone To-do — attention cards | Made each To-do card an inked slab with the offset shadow and a coloured edge stripe, a bolder title, and a wider gap between cards, instead of a pale hairline box matching nothing around it | (this PR) |
 | 2026-10-24 | visual | Phone Payment QR codes — book titles | Put each book's title in the big display lettering the Book Catalog cards use, so the book leads its card instead of reading like the author line under it | (this PR) |
+| 2026-10-23 | visual | Payments (computer) — worklist filter bar | Search, currency, type, sort, Group identical and Dismiss all shown now sit on one line instead of the two dropdowns each stretching across the whole screen, so the bar is about a quarter of its old height and the first payment shows a screen sooner; the dropdowns also got their arrow back | pending |
 
 ---
 
