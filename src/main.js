@@ -10779,7 +10779,7 @@ export function renderPendingExpenses() {
           <span class="pill amber">⏳ Awaiting payment</span>
           <span class="pending-card-num">${fmt(e.amount, cur)}</span>
         </div>
-        <div class="pending-card-meta">${fmtD(e.date)} · <span class="pile-chip">${escapeHtml(e.cat)}</span> · <strong class="pending-card-desc">${escapeHtml(e.desc)}</strong></div>
+        <div class="pending-card-meta"><span class="pending-card-when">${fmtD(e.date)}</span><span class="pending-card-sep" aria-hidden="true"> · </span><span class="pile-chip">${escapeHtml(e.cat)}</span><span class="pending-card-sep" aria-hidden="true"> · </span><strong class="pending-card-desc">${escapeHtml(e.desc)}</strong></div>
         <div class="pending-card-note">${escapeHtml(e.ref) || ''}</div>
       </div>
       <div class="pending-card-actions">

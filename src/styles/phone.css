@@ -1475,6 +1475,12 @@
   #d-pending-expenses-list .pending-card-num { font-size: var(--text-lg); font-weight: 500; font-variant-numeric: tabular-nums; }
   #d-pending-expenses-list .pending-card-actions { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
   #d-pending-expenses-list .pending-card-actions .btn { width: 100%; justify-content: center; text-align: center; white-space: normal; }
+  /* What it was leads (full width, bold), then the date and category share one line
+     beneath, with space instead of typed dots so no dot is stranded at a wrap. */
+  #d-pending-expenses-list .pending-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); }
+  #d-pending-expenses-list .pending-card-sep { display: none; }
+  #d-pending-expenses-list .pending-card-desc { order: -1; flex: 1 0 100%; min-width: 0; font-size: var(--text-sm); color: var(--content-primary); }
+  #d-pending-expenses-list .pending-card-when { font-variant-numeric: tabular-nums; }
   #d-pending-expenses-list .pending-card:active { transform: translate(1px, 1px); box-shadow: inset 3px 0 0 var(--status-active); }
 }
 
