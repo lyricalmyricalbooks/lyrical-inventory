@@ -1415,8 +1415,15 @@
   /* Order History: the pencil beside each order number keeps a modest 28px square but gets
      a full 44px tap area from its invisible ::after (it was 22px, and hidden until hover on
      desktop). The import button spans the row instead of floating at the right. */
-  #tab-history #hist-body .edit-btn { width: 28px; height: 28px; margin: 0 0 0 var(--space-2); opacity: 1; }
+  #tab-history #hist-body .edit-btn { width: 28px; height: 28px; margin: 0; opacity: 1; }
   #tab-history #hist-body .edit-btn::after { inset: -8px; min-width: var(--target-min); min-height: var(--target-min); }
+  /* The pencil used to trail the order number, so it landed at a different spot on every
+     card. It now rests in the card's bottom-right corner, under the total, where the thumb
+     finds it in the same place every time. When a Ship / Shipped button sits above it, the
+     date row grows to the pencil's height so the two never overlap. */
+  #tab-history .tbl tr.hist-row { position: relative; }
+  #tab-history #hist-body tr.hist-row .edit-btn { position: absolute; right: var(--space-4); bottom: var(--space-3); }
+  #tab-history .tbl tr.hist-row:has(.btn-hist-action) > td:nth-child(9) { display: flex; align-items: center; min-height: 28px; }
   #tab-history #import-btn { width: 100%; justify-content: center; }
   /* The header row stacks heading over button; stretch it so the Import button reaches the
      same right edge as the search card and cards beneath instead of stopping short of it. */
