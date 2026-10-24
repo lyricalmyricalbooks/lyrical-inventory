@@ -7527,11 +7527,14 @@ function openBatchShipping() {
   const rowsPerOrder = new Map();
   rows.forEach(row => rowsPerOrder.set(row.orderNumber, (rowsPerOrder.get(row.orderNumber) || 0) + 1));
   rows.forEach(row => { row.multiTitle = rowsPerOrder.get(row.orderNumber) > 1; });
+  // ⚡ Bolt Optimization: read each sale's date once, not twice per comparison
+  // (the sort used to build two Date objects on every one of its n·log n steps).
+  const timeOf = new Map(rows.map(row => [row, new Date(row.entry.date || 0).getTime()]));
   const seen = new Set();
   _batch = {
     phase: 'idle',
     rows: rows
-      .sort((a, b) => new Date(a.entry.date || 0) - new Date(b.entry.date || 0))
+      .sort((a, b) => timeOf.get(a) - timeOf.get(b))
       .filter(row => (seen.has(row.orderNumber) ? false : seen.add(row.orderNumber))),
   };
   renderBatchShipping();
@@ -10804,7 +10807,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
     }
 
     const checkboxHtml = !o.excludeFromShipping
-      ? `<input type="checkbox" class="ship-order-checkbox" value="${escapeHtml(o.bookId + '|' + (o.id || o.num))}" onchange="updateShipAnalysisBatchActionUI()" />`
+      ? `<label class="ship-check-hit"><input type="checkbox" class="ship-order-checkbox" value="${escapeHtml(o.bookId + '|' + (o.id || o.num))}" aria-label="Select order ${escapeHtml(o.num)}" onchange="updateShipAnalysisBatchActionUI()" /></label>`
       : '';
 
     ledgerRowsHtml += `
@@ -10903,7 +10906,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
         <table class="shipping-pnl-ledger-table">
           <thead>
             <tr>
-              <th style="width: 40px; text-align: center;"><input type="checkbox" id="selectAllShipOrders" onchange="toggleAllShipAnalysisOrders(this.checked)" /></th>
+              <th style="width: 40px; text-align: center;"><label class="ship-check-hit"><input type="checkbox" id="selectAllShipOrders" aria-label="Select all orders" onchange="toggleAllShipAnalysisOrders(this.checked)" /></label></th>
               <th>Order</th>
               <th>Recipient</th>
               <th>Status</th>

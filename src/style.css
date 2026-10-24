@@ -1841,7 +1841,9 @@ tr.hist-row:hover {
   margin-bottom: 6px;
   display: flex;
   align-items: center;
-  gap: 6px;
+  /* Facts are separated by space, not a typed "·": a dot ends up stranded at the
+     start of the second line the moment the facts wrap on a phone. */
+  gap: 2px var(--space-4);
   flex-wrap: wrap;
 }
 .book-strip-meta span {
@@ -21408,3 +21410,12 @@ button[onclick="refreshUmamiStats()"]:active {
 .help-sec { scroll-margin-top:96px; }
 /* "Open Manual entry →" under an answer: straight to the tab it describes. */
 .help-a .help-go-row { margin-top:var(--space-3); }
+/* Store card contact line: each part is its own span so the phone can drop the
+   email; the dots between them come from here. */
+.store-meta > span + span::before{content:" · ";}
+.lead-emoji{display:inline;}
+
+/* Dashboard "Author Submissions" notice. Layout lives here (not inline) so the
+   phone treatment in styles/phone.css can restyle it. */
+.author-subs-card { background: var(--surface-card); border: var(--stroke-hair) solid var(--border); border-left: var(--stroke) solid var(--amber); border-radius: var(--r2); padding: 1.25rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
+.author-subs-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }

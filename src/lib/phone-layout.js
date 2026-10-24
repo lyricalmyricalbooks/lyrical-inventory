@@ -140,7 +140,10 @@ function enhanceSections(nav) {
   const sync = () => {
     buttons = [...nav.querySelectorAll('.settings-sub-tab')];
     const options = buttons.map((button, index) => {
-      const option = new Option(button.textContent.trim(), String(index));
+      // A leading emoji is decoration the phone hides; the option is the words.
+      const words = button.cloneNode(true);
+      words.querySelectorAll('.lead-emoji').forEach(el => el.remove());
+      const option = new Option(words.textContent.trim(), String(index));
       option.disabled = button.disabled || button.hidden || button.style.display === 'none';
       option.selected = button.classList.contains('active') || button.getAttribute('aria-selected') === 'true';
       return option;
@@ -279,6 +282,36 @@ function trackStripMore(strip) {
   };
 }
 
+// Rendered buttons, pills and headings often start with an emoji ("📒 Ledger").
+// On a phone those read as clip-art next to the ink marks, so the emoji goes in
+// the same hidden .lead-emoji span the static markup uses. Status marks the
+// words rely on (✕ ✓ ⚠ ★ arrows) and icon-only buttons are left alone.
+const LEAD_EMOJI_HOSTS = 'button, a, summary, h2, h3, h4, h5, label, [class*="pill"], [class*="badge"], [class*="-title"], [class*="-meta"]';
+const LEAD_EMOJI = /^(\s*)((?:\p{Extended_Pictographic}\uFE0F?(?:\u200D\p{Extended_Pictographic}\uFE0F?)*)\s+)(?=\S)/u;
+const KEEP_MARKS = /^[\u2190-\u21FF\u2713-\u2718\u26A0\u2605\u2606\u270E]/u;
+
+export function wrapLeadEmoji(el) {
+  const first = el.firstChild;
+  if (!first || first.nodeType !== 3) return false;
+  const m = LEAD_EMOJI.exec(first.nodeValue);
+  if (!m || KEEP_MARKS.test(m[2])) return false;
+  const doc = el.ownerDocument;
+  const span = doc.createElement('span');
+  span.className = 'lead-emoji';
+  span.setAttribute('aria-hidden', 'true');
+  span.textContent = m[2];
+  first.nodeValue = first.nodeValue.slice(m[0].length);
+  el.insertBefore(span, first);
+  if (m[1]) el.insertBefore(doc.createTextNode(m[1]), span);
+  return true;
+}
+
+export function wrapLeadEmojiIn(root) {
+  if (root.nodeType !== 1) return;
+  if (root.matches(LEAD_EMOJI_HOSTS)) wrapLeadEmoji(root);
+  root.querySelectorAll(LEAD_EMOJI_HOSTS).forEach(wrapLeadEmoji);
+}
+
 export function initPhoneLayouts(root, { closeModal = (id) => globalThis.attemptCloseModal?.(id) } = {}) {
   if (!root) return () => {};
   root.querySelectorAll('table').forEach(enhanceRecords);
@@ -291,15 +324,21 @@ export function initPhoneLayouts(root, { closeModal = (id) => globalThis.attempt
   root.querySelectorAll('.tab-bar').forEach(strip => cleanups.push(trackStripMore(strip)));
   // Renderers replace tbody contents after filtering or syncing. Only revisit
   // affected tables, never rebuild records or duplicate the desktop data model.
+  const phoneWidth = globalThis.matchMedia?.('(max-width: 768px)');
+  if (phoneWidth?.matches) wrapLeadEmojiIn(root);
+  phoneWidth?.addEventListener?.('change', e => { if (e.matches) wrapLeadEmojiIn(root); });
   const observer = new MutationObserver(mutations => {
     const tables = new Set();
+    const phone = phoneWidth?.matches;
     for (const mutation of mutations) {
       const table = mutation.target.closest?.('table');
       if (table) tables.add(table);
+      if (phone && mutation.target.matches?.(LEAD_EMOJI_HOSTS)) wrapLeadEmoji(mutation.target);
       for (const node of mutation.addedNodes) {
         if (node.nodeType !== 1) continue;
         if (node.matches('table')) tables.add(node);
         node.querySelectorAll('table').forEach(t => tables.add(t));
+        if (phone) wrapLeadEmojiIn(node);
       }
     }
     tables.forEach(enhanceRecords);

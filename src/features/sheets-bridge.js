@@ -42,6 +42,7 @@ import { cadEquivalentForSale, getBookCurrencyCode, normalizeCurrencyCode } from
 import { sheetLogLabel, sheetLogSummary, sortSheetPayloads } from '../lib/sheet-sync.js';
 import { consignmentSyncPayload } from '../lib/consignment.js';
 import { diffSheetRows, isMoneyOutRow, moneyOutSheetRows } from '../lib/sheet-rows.js';
+import { readStoredList } from '../lib/stored-list.js';
 
 // Write one row and say what actually happened to it.
 //
@@ -110,12 +111,6 @@ const SHEETS_WRITE_TIMEOUT_MS = 45000;
 const SHEETS_BATCH_TIMEOUT_MS = 120000;
 // Read at module load: a truncated or corrupt saved value used to throw here,
 // and since main.js imports this module, the whole app failed to start.
-function readStoredList(key) {
-  try {
-    const v = JSON.parse(localStorage.getItem(key) || '[]');
-    return Array.isArray(v) ? v : [];
-  } catch (_) { return []; }
-}
 let _sheetsQueue = (() => readStoredList(SHEETS_QUEUE_KEY))();
 let _sheetsWriting = false;
 let sheetsLog = (() => readStoredList(SHEETS_LOG_KEY))();

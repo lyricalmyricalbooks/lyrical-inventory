@@ -33,7 +33,7 @@ const AUTHOR_READS = [
 // Secrets, business records and customer personal data.
 const PUBLISHER_ONLY = [
   'taxCenter', 'bigCartelConfig', 'systemBackups', 'bookOwners',
-  'mailingList', 'customerSuppress', 'campaigns', 'openCalls',
+  'mailingList', 'customerSuppress', 'campaigns', 'openCalls', 'sheetsConnection',
 ];
 
 function firestoreAllowlist() {

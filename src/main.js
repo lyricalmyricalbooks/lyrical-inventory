@@ -27,6 +27,7 @@ import { createStripePriceAndLink } from './lib/stripe-payment-link.js';
 import { createStripeRateResolver, stripeOrderNumber } from './lib/stripe-sale-defaults.js';
 import { calculateBreakEven, breakEvenTierMove, applyBreakEvenTierMove, readProductionCostInput } from './lib/breakeven.js';
 import { escapeHtml, safeHttpUrl } from './lib/html.js';
+import { planSheetsConnectionSync } from './lib/sheets-url.js';
 import { legacyCopy } from './lib/clipboard.js';
 import { needsSettleUp } from './lib/settle-up-view.js';
 import { normalizeLetterhead, renderLetterhead } from './lib/letterhead.js';
@@ -1136,6 +1137,8 @@ import {
   websiteLinkTodo,
 } from './features/website-link.js';
 import { STRIPE_CHARGE_PI_KEY, isWebsiteFulfilled, promisedPreorders, rememberChargeIntents } from './lib/website-link.js';
+import { appSwitchBooksReady, refreshAppSwitch, startAppSwitch } from './features/app-switch.js';
+import { WEBSITE_TAB_NAME, openOnWebsiteHtml, websiteOrderUrl } from './lib/app-switch.js';
 import { reviewTaskStillOpen } from './lib/review-queue.js';
 import {
   clearSimulatedSheet,
@@ -1188,6 +1191,8 @@ import { LEDGER_TYPE_FILTERS, emptyLedgerFilter, ledgerFilterIsActive, ledgerSto
 import { filterHistoryRows, historySearchIsActive, describeHistorySearch } from './lib/order-history-search.js';
 import { resolveCountryCode } from './lib/countries.js';
 import { PUBLISHER_ONLY_TABS, AUTHOR_ONLY_TABS, helpTabOpenFor, helpQueryWords, helpMatches } from './lib/help-guide.js';
+import { readStoredList } from './lib/stored-list.js';
+import { STORE_REVERSAL_PENDING_KEY } from './lib/store-reversals.js';
 
 
 // Tells the boot watchdog in index.html that the bundle and every import it
@@ -4554,6 +4559,8 @@ async function loadAllBooks({ settingsLoaded } = {}) {
   startEmailInboxWatcher();
   // Orders from the shop's website, once every book is here to match them against.
   startWebsiteLink();
+  // A link from the website to one of its orders can open now.
+  appSwitchBooksReady();
   setSyncState('ok', '<b>Firestore</b> · connected · live sync on');
   updateSubheader(new Date().toLocaleTimeString());
   renderCurrent();
@@ -4851,6 +4858,8 @@ function syncRoleUI() {
   // see the unchanged header + tab bar. (Desktop only — CSS reverts < 861px.)
   const pwApp = document.getElementById('pw-app');
   if (pwApp) pwApp.classList.toggle('pub-shell', !authorNow && isPublisherSession());
+  // The Website · Inventory switcher follows the same rule (publisher, own view).
+  try { refreshAppSwitch(); } catch (e) { console.warn('[app switch] refresh failed', e); }
   updateSubheader();
   placeKpiStrip();
   bindKpiResize();
@@ -5330,9 +5339,15 @@ function renderTodaySoFar() {
   if (!sum) return;
   const books = Object.keys(BOOKS).map((id) => ({ id, currency: getBookCurrencyCode(BOOKS[id]), hist: states[id]?.hist }));
   const day = salesForDay(books, today());
-  sum.textContent = day.sales
+  // Three figures on the slip (sales, books, money taken), zeros included, so
+  // the day's numbers fill in where you expect them. The sentence is kept as
+  // the accessible name, which is what a screen reader reads out.
+  const said = day.sales
     ? `${day.sales} ${day.sales === 1 ? 'sale' : 'sales'} · ${day.units} ${day.units === 1 ? 'book' : 'books'} · ${fairTotalsText(day.totals)}`
     : 'No sales yet today';
+  const figs = [[day.sales, day.sales === 1 ? 'sale' : 'sales'], [day.units, day.units === 1 ? 'book' : 'books'], [day.sales ? fairTotalsText(day.totals) : '—', 'taken']];
+  sum.innerHTML = figs.map(([v, label]) => `<span class="today-sold-fig"><b>${escapeHtml(String(v))}</b><span>${label}</span></span>`).join('');
+  sum.setAttribute('aria-label', said);
   renderFairSyncPill();
 }
 
@@ -5986,11 +6001,11 @@ function renderAllBooksStrips(allBooksVisible) {
       <div class="book-strip-info">
         <div class="book-strip-title">${escapeHtml(book.title)}</div>
         <div class="book-strip-meta">
-          <span>✍ ${escapeHtml(book.author) || '—'}</span>
-          <span>&nbsp;·&nbsp; 🏷 ${escapeHtml(book.currency)}${escapeHtml(book.listPrice)}</span>
-          <span>&nbsp;·&nbsp; 🖨 ${escapeHtml(book.maxPrint)} printed</span>
-          ${!isAuthor() && s.authorStock > 0 ? `<span>&nbsp;·&nbsp; 👤 ${escapeHtml(s.authorStock)} with author</span>` : ''}
-          ${promised.copies > 0 ? `<span title="Pre-ordered on your website and not sent yet. These copies are already taken off on hand.">&nbsp;·&nbsp; 📌 ${escapeHtml(promised.copies)} pre-ordered, not sent</span>` : ''}
+          <span><span class="lead-emoji" aria-hidden="true">✍ </span>${escapeHtml(book.author) || '—'}</span>
+          <span> <span class="lead-emoji" aria-hidden="true">🏷 </span>${escapeHtml(book.currency)}${escapeHtml(book.listPrice)}</span>
+          <span> <span class="lead-emoji" aria-hidden="true">🖨 </span>${escapeHtml(book.maxPrint)} printed</span>
+          ${!isAuthor() && s.authorStock > 0 ? `<span> <span class="lead-emoji" aria-hidden="true">👤 </span>${escapeHtml(s.authorStock)} with author</span>` : ''}
+          ${promised.copies > 0 ? `<span title="Pre-ordered on your website and not sent yet. These copies are already taken off on hand."> <span class="lead-emoji" aria-hidden="true">📌 </span>${escapeHtml(promised.copies)} pre-ordered, not sent</span>` : ''}
         </div>
         <div class="book-progress-wrapper" title="${escapeHtml(s.stock)} units on hand of ${escapeHtml(book.maxPrint)} total printed (${pct.toFixed(0)}%)">
           <div class="book-progress-header">
@@ -6736,10 +6751,7 @@ function automationTodoInput() {
     return !!row && !row.voided;
   };
   const refundsToReverse = safe(() => readPendingRefundReversals().filter(stillCounted).length, 0);
-  const storeReversals = safe(() => {
-    const list = JSON.parse(localStorage.getItem(STORE_REVERSAL_PENDING_KEY) || '[]');
-    return Array.isArray(list) ? list.filter(item => item.full && stillCounted(item)).length : 0;
-  }, 0);
+  const storeReversals = safe(() => readStoredList(STORE_REVERSAL_PENDING_KEY).filter(item => item.full && stillCounted(item)).length, 0);
   // Only the orders that would otherwise be flagged are checked for labels.
   const labelledOrderNums = safe(() => {
     const rows = [];
@@ -6803,6 +6815,7 @@ function toggleSidebarAlerts() {
     localStorage.setItem(SIDEBAR_ALERTS_HIDDEN_KEY, String(_sidebarAlertsHidden));
   } catch (_) { /* the in-memory preference still works for this session */ }
   renderSidebarAlertPreference();
+  refreshAppSwitch();
   showToast(wasHidden ? 'Navigation alerts are visible again' : 'Navigation alerts hidden', 'ok', 2600);
 }
 
@@ -7023,9 +7036,7 @@ function runTodoAction(name, { bookId = '', num = '' } = {}) {
   if (name === 'shipping-worklist') { openReviewInbox({ filter: 'label' }); return; }
   if (name === 'reverse-sales') {
     const refunds = readPendingRefundReversals();
-    let store = [];
-    try { store = JSON.parse(localStorage.getItem(STORE_REVERSAL_PENDING_KEY) || '[]'); } catch (_) { store = []; }
-    const all = [...refunds, ...(Array.isArray(store) ? store.filter(item => item.full) : [])];
+    const all = [...refunds, ...readStoredList(STORE_REVERSAL_PENDING_KEY).filter(item => item.full)];
     if (!all.length) { showToast('Nothing left to reverse', 'ok'); return; }
     const copies = all.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
     confirmDialog(
@@ -7458,7 +7469,7 @@ function renderTodoTab() {
     return `<section class="overview-section todo-group">
         <div class="sec-head is-muted is-inline">
           <div class="sec-head-titles">
-            <div class="sec-kicker"><span class="sec-kicker-dot"></span>${escapeHtml(GROUP_ICONS[group] || '')} ${escapeHtml(GROUP_LABELS[group] || group)}</div>
+            <div class="sec-kicker"><span class="sec-kicker-dot"></span><span class="lead-emoji" aria-hidden="true">${escapeHtml(GROUP_ICONS[group] || '')} </span>${escapeHtml(GROUP_LABELS[group] || group)}</div>
           </div>
           <div class="sec-head-badges"><span class="pill gray">${items.length}</span></div>
         </div>
@@ -7534,6 +7545,12 @@ function updatePublisherActionBanner() {
     ? `Action required · ${artistPaymentCount} artist payment${artistPaymentCount > 1 ? 's' : ''} awaiting approval`
     : `Action required · ${total} pending submission${total > 1 ? 's' : ''}`;
   subEl.textContent = parts.join(' · ') + ` — across ${booksWithPending.length} book${booksWithPending.length > 1 ? 's' : ''}.`;
+  // The phone shows this one line instead of the title and sub, which wrap to
+  // four lines at phone width and push the screen's own content down.
+  const shortEl = document.getElementById('pab-short');
+  // It names the book (or how many) so an approval is never mistaken for another book's.
+  const where = booksWithPending.length === 1 ? (BOOKS[booksWithPending[0].bookId]?.title || '') : `${booksWithPending.length} books`;
+  if (shortEl) shortEl.innerHTML = `<b>${escapeHtml(`${parts.join(' · ')}${artistPaymentCount > 0 && parts.length === 1 ? '' : ' to approve'}`)}</b>${where ? `<span class="pab-where">${escapeHtml(where)}</span>` : ''}`;
 
   // Build action buttons: jump straight to the first pending book, plus per-section buttons if a single book has pending
   actEl.innerHTML = '';
@@ -7660,6 +7677,8 @@ function renderCurrent() {
   if (activeBook === 'all') { updateAllOverview(); updateHeader(); }
   else renderAll();
   try { updatePublisherActionBanner(); } catch (_) { }
+  // A sale the website shipped (or a new one) changes the switcher's count.
+  try { refreshAppSwitch(); } catch (_) { /* next render picks it up */ }
 
   // Firestore DB status indicator update
   const fsBtn = document.getElementById('fs-toggle-btn');
@@ -7794,6 +7813,23 @@ function histSearchInput(v) {
   _histSearchBook = activeBook;
   clearTimeout(_histSearchTimer);
   _histSearchTimer = setTimeout(() => { renderHist(); }, 200);
+}
+
+/**
+ * Open one book's History already searched for `query` (an order number), the
+ * landing spot for a link from the website to one of its orders.
+ */
+export function showHistoryOrder(bookId, query) {
+  if (!BOOKS[bookId]) return;
+  if (activeBook !== bookId) switchBook(bookId);
+  clearTimeout(_histSearchTimer);
+  _histSearchTimer = null;
+  _histSearch = String(query || '');
+  _histSearchBook = bookId;
+  histChanFilter = null;
+  const input = $('hist-search');
+  if (input) input.value = _histSearch;
+  switchTab('history');
 }
 
 /** Clear and hand focus back, so the next search starts where the last ended. */
@@ -8078,10 +8114,13 @@ function renderHistRowHtml(row, { cur, bookCode, book, formatChannelBadge }) {
   const paymentInfo = paymentSummary(h.payment, book, h);
   const shippingInfo = isWebsite ? renderOrderShippingSummary(h) : '';
   const notesText = escapeHtml(h.notes) || '—';
+  // The publisher can open a website sale's order on the website itself.
+  const websiteLink = h.webOrderId && window.IS_PUBLISHER && !isAuthor() ? openOnWebsiteHtml(h.webOrderId) : '';
   const notesCell = [
     notesText,
     paymentInfo ? `<span style="font-size:var(--text-xs);color:var(--text3);">${escapeHtml(paymentInfo)}</span>` : '',
     shippingInfo,
+    websiteLink,
   ].filter(Boolean).join('<br>');
   const enteredBy = h.enteredBy || (h.artistPending ? 'Artist' : 'Publisher');
   const enteredByPill = `<span class="chip-status gray">${escapeHtml(enteredBy)}</span>`;
@@ -10259,6 +10298,10 @@ function consumeTransferPaidReturn() {
   try { history.replaceState(null, '', `${location.pathname}${q ? `?${q}` : ''}${location.hash}`); } catch (_) { /* old browser */ }
 }
 consumeTransferPaidReturn();
+// The Website · Inventory switcher, and links from the website to one of its
+// orders (#website-order=<id>). It drops a leftover ?mode=admin (nothing reads
+// it) and leaves every other part of the address as it is.
+startAppSwitch();
 // The return lands in the tab Stripe opened; refresh any other open tab too.
 window.addEventListener('storage', e => { if (e.key === PAID_TAP_KEY) { try { renderArtistTransfers(); } catch (_) { /* still loading */ } } });
 
@@ -11161,7 +11204,7 @@ function renderStores() {
     const sentCell = `<div class="sk-v${rowOff('sent')}">${st.sent ?? 0}</div>`;
     const soldCell = `<div class="sk-v${rowOff('sold')}">${st.sold ?? 0}</div>`;
 
-    return `<div class="store-card"><div class="store-head"><div><div class="store-name">${escapeHtml(st.name)}</div><div class="store-meta">${[st.city, st.contact, st.email].filter(Boolean).map(escapeHtml).join(' · ')} · ${st.rate}% commission</div></div><div class="store-head-flags">${sp}${unbalancedBadge}</div></div><div class="store-kpis"><div class="sk"><div class="sk-l">Sent</div>${sentCell}</div><div class="sk"><div class="sk-l">Sold</div>${soldCell}</div><div class="sk"><div class="sk-l">Outstanding</div>${outstandingCell}</div><div class="sk"><div class="sk-l">Owed</div><div class="sk-v ${st.amountOwed > 0 ? 'warn' : ''}">${st.amountOwed > 0 ? fmt(st.amountOwed, cur) : '—'}</div></div></div><div class="store-actions"><button class="btn sm gold" onclick="openSend(${escapeHtml(JSON.stringify(st.id))})">Send books</button><button class="btn sm ink" onclick="openSale(${escapeHtml(JSON.stringify(st.id))})" ${!st.outstanding ? 'disabled' : ''}>Record sale</button><button class="btn sm" onclick="openRet(${escapeHtml(JSON.stringify(st.id))})" ${!st.outstanding ? 'disabled' : ''}>Return</button><button class="btn sm" onclick="showStoreLedger(${escapeHtml(JSON.stringify(st.id))})" ${ledgerRows ? '' : 'disabled'} title="${ledgerRows ? `Show this store's ${ledgerRows} ledger entr${ledgerRows === 1 ? 'y' : 'ies'} below` : 'Nothing in the ledger for this store yet'}">📒 Ledger</button><button class="btn sm" onclick="openEditStore(${escapeHtml(JSON.stringify(st.id))})">Edit</button><button class="btn sm danger-btn" onclick="removeStore(${escapeHtml(JSON.stringify(st.id))})">Remove</button></div>${unbalancedPopover}</div>`;
+    return `<div class="store-card"><div class="store-head"><div><div class="store-name">${escapeHtml(st.name)}</div><div class="store-meta">${[[st.city, 'city'], [st.contact, 'contact'], [st.email, 'email']].filter(([v]) => v).map(([v, k]) => `<span class="store-meta-${k}">${escapeHtml(v)}</span>`).join('')}<span class="store-meta-rate">${st.rate}% commission</span></div></div><div class="store-head-flags">${sp}${unbalancedBadge}</div></div><div class="store-kpis"><div class="sk"><div class="sk-l">Sent</div>${sentCell}</div><div class="sk"><div class="sk-l">Sold</div>${soldCell}</div><div class="sk"><div class="sk-l">On shelf</div>${outstandingCell}</div><div class="sk"><div class="sk-l">Owed</div><div class="sk-v ${st.amountOwed > 0 ? 'warn' : ''}">${st.amountOwed > 0 ? fmt(st.amountOwed, cur) : '—'}</div></div></div><div class="store-actions"><button class="btn sm gold" onclick="openSend(${escapeHtml(JSON.stringify(st.id))})">Send books</button><button class="btn sm ink" onclick="openSale(${escapeHtml(JSON.stringify(st.id))})" ${!st.outstanding ? 'disabled' : ''}>Record sale</button><button class="btn sm" onclick="openRet(${escapeHtml(JSON.stringify(st.id))})" ${!st.outstanding ? 'disabled' : ''}>Return</button><button class="btn sm" onclick="showStoreLedger(${escapeHtml(JSON.stringify(st.id))})" ${ledgerRows ? '' : 'disabled'} title="${ledgerRows ? `Show this store's ${ledgerRows} ledger entr${ledgerRows === 1 ? 'y' : 'ies'} below` : 'Nothing in the ledger for this store yet'}">📒 Ledger</button><button class="btn sm" onclick="openEditStore(${escapeHtml(JSON.stringify(st.id))})">Edit</button><button class="btn sm danger-btn" onclick="removeStore(${escapeHtml(JSON.stringify(st.id))})">Remove</button></div>${unbalancedPopover}</div>`;
   }).join('');
   // Phone: Return, Ledger, Edit and Remove fold behind "More actions". A fresh
   // innerHTML means fresh buttons, so every card is folded again here.
@@ -11184,7 +11227,17 @@ function confirmEditStore() {
   { const bookCode = getBookCurrencyCode(getBook()), code = $('es-currency') ? $('es-currency').value : ''; if (code && code !== bookCode) st.currency = code; else delete st.currency; }
   closeM('edit-store'); renderStores(); updateDash(); saveState(activeBook); showToast('✓ Store updated');
 }
-function openSend(id) { activeId = id; const st = storeById(id); $('send-sname').textContent = st.name; $('send-rate').value = st.rate; openM('send-books'); }
+function openSend(id) { activeId = id; const st = storeById(id); $('send-sname').textContent = st.name; $('send-rate').value = st.rate; openM('send-books'); updateSendPreview(); }
+// One line above the buttons saying what the send will move, so a wrong count
+// or the wrong store is caught before it reaches the stock figures.
+function updateSendPreview() {
+  const el = $('send-preview'); if (!el) return;
+  const s = getState(), st = storeById(activeId), qty = parseInt($('send-qty').value) || 0;
+  if (!st || qty <= 0) { el.textContent = ''; return; }
+  el.textContent = qty > s.stock
+    ? `Only ${s.stock} in stock`
+    : `Stock on hand ${s.stock} → ${s.stock - qty} · ${st.name}'s shelf ${st.outstanding} → ${st.outstanding + qty}`;
+}
 function confirmSend() {
   const s = getState(), book = getBook(), st = storeById(activeId);
   if (!validateFields([
@@ -11397,9 +11450,11 @@ function updateConsignSalePreview() {
   const a = consignSaleFormAmounts();
   if (!st || !a) { el.textContent = $('sale-cur').value !== bookCode ? 'Add an exchange rate to see what this is worth in ' + bookCode + '.' : ''; return; }
   if (!a.gross) { el.textContent = ''; return; }
-  el.textContent = a.sale
+  const qty = parseInt($('sale-qty').value) || 0;
+  const shelf = qty > 0 && qty <= st.outstanding ? `Shelf ${st.outstanding} → ${st.outstanding - qty} · ` : '';
+  el.textContent = shelf + (a.sale
     ? `Store keeps ${st.rate}% · you’re owed ${fmt(a.sale.due, a.sale.currency)} ≈ ${fmt(a.due, bookCode)}`
-    : `Store keeps ${st.rate}% · you’re owed ${fmt(a.due, bookCode)}`;
+    : `Store keeps ${st.rate}% · you’re owed ${fmt(a.due, bookCode)}`);
 }
 function confirmSale() {
   const s = getState(), book = getBook(), cur = book.currency, st = storeById(activeId);
@@ -11636,28 +11691,40 @@ function withoutDifferenceIfUnmeasured(rec, t) {
   if (rec && t && t.baseDue == null) rec.difference = 0;
   return rec;
 }
+// "Harbour Lights owes $40.00 → $0.00": what marking these sales paid takes off
+// the store's Owed figure. Only when they all belong to one store.
+function consignPaymentOwedLine(t) {
+  const drop = new Map();
+  for (const e of t.rows) if (e.status === 'pending' && !e.voided) drop.set(e.storeId, (drop.get(e.storeId) || 0) + (Number(e.amountDue) || 0));
+  if (drop.size !== 1) return '';
+  const [[id, amount]] = drop;
+  const st = (t.s.stores || []).find(x => x.id === id);
+  if (!st) return '';
+  const before = roundCents(st.amountOwed || 0);
+  return `${st.name} owes ${fmt(before, t.bookCode)} → ${fmt(roundCents(Math.max(0, before - amount)), t.bookCode)}.`;
+}
 function updateConsignPaymentPreview() {
   const el = $('cp-preview'); if (!el) return;
   const t = consignPaymentTarget(); if (!t) return;
+  const owed = consignPaymentOwedLine(t);
+  const show = (text, warn = false) => { el.textContent = [owed, text].filter(Boolean).join(' '); el.classList.toggle('warn', warn); };
   const bookCode = t.bookCode;
   const rec = withoutDifferenceIfUnmeasured(consignPaymentFormRecord(t), t);
-  el.classList.remove('warn');
-  if (!rec) { el.textContent = $('cp-cur').value !== bookCode ? `Add an exchange rate to see what this is worth in ${bookCode}.` : ''; return; }
-  if (!rec.amount) { el.textContent = ''; return; }
+  if (!rec) { show($('cp-cur').value !== bookCode ? `Add an exchange rate to see what this is worth in ${bookCode}.` : ''); return; }
+  if (!rec.amount) { show(''); return; }
   const worth = rec.currency !== bookCode ? `Worth ${fmt(rec.convertedTotal, bookCode)}. ` : '';
   // Paid in the invoice's own currency: compare with the invoice total
   // directly, so a partial payment shows in the number the shop was billed.
   if (t.inv && rec.currency === t.expected.currency) {
     const gap = roundCents(rec.amount - t.expected.amount);
-    if (gap < 0) { el.textContent = `${worth}That’s ${fmt(-gap, rec.currency)} less than the invoice total. It still counts as paid in full.`; el.classList.add('warn'); return; }
-    if (gap > 0) { el.textContent = `${worth}That’s ${fmt(gap, rec.currency)} more than the invoice total.`; return; }
-    el.textContent = `${worth}Matches the invoice total.`; return;
+    if (gap < 0) { show(`${worth}That’s ${fmt(-gap, rec.currency)} less than the invoice total. It still counts as paid in full.`, true); return; }
+    if (gap > 0) { show(`${worth}That’s ${fmt(gap, rec.currency)} more than the invoice total.`); return; }
+    show(`${worth}Matches the invoice total.`); return;
   }
-  if (t.baseDue == null || Math.abs(rec.difference) < 0.01) { el.textContent = `${worth}${t.baseDue == null ? '' : 'Matches what’s owed.'}`.trim(); return; }
-  el.textContent = rec.difference < 0
+  if (t.baseDue == null || Math.abs(rec.difference) < 0.01) { show(`${worth}${t.baseDue == null ? '' : 'Matches what’s owed.'}`.trim()); return; }
+  show(rec.difference < 0
     ? `${worth}That’s ${fmt(-rec.difference, bookCode)} less than recorded — usually the exchange rate or a bank fee. It still counts as paid.`
-    : `${worth}That’s ${fmt(rec.difference, bookCode)} more than recorded.`;
-  if (rec.difference < 0) el.classList.add('warn');
+    : `${worth}That’s ${fmt(rec.difference, bookCode)} more than recorded.`, rec.difference < 0);
 }
 function confirmConsignPayment() {
   const t = consignPaymentTarget();
@@ -12224,7 +12291,7 @@ export function openEditHist(idx) {
     $('edit-void-btn').textContent = 'Void this entry';
     $('edit-void-body').textContent = 'Voiding reverses all stock and revenue effects. The entry stays visible as struck-through for your records.';
   }
-  setEditWebsiteLock(!!h.webOrderId);
+  setEditWebsiteLock(!!h.webOrderId, h.webOrderId);
   openM('edit-entry');
 }
 
@@ -12234,7 +12301,7 @@ export const WEBSITE_SALE_LOCKED = 'This sale follows your website — refund it
 // A sale that came from the website: its copies, channel, order number and
 // void follow the website, which refunds and restocks it there. Changing them
 // here would put this ledger out of step with the order it mirrors.
-function setEditWebsiteLock(locked) {
+function setEditWebsiteLock(locked, webOrderId = '') {
   ['edit-qty', 'edit-chan', 'edit-num'].forEach(id => {
     const el = $(id);
     if (!el) return;
@@ -12244,6 +12311,16 @@ function setEditWebsiteLock(locked) {
   });
   const note = $('edit-web-note');
   if (note) note.hidden = !locked;
+  // "Open on the website ↗": the publisher's way to the order this sale follows.
+  const open = $('edit-web-open');
+  if (open) {
+    const show = locked && !!webOrderId && window.IS_PUBLISHER && !isAuthor();
+    open.hidden = !show;
+    open.href = show ? websiteOrderUrl(webOrderId) : websiteOrderUrl('');
+    open.target = WEBSITE_TAB_NAME;
+    if (show) open.dataset.openWebsite = String(webOrderId);
+    else delete open.dataset.openWebsite;
+  }
   const voidZone = $('edit-void-zone');
   if (voidZone) voidZone.style.display = locked ? 'none' : '';
 }
@@ -13346,6 +13423,9 @@ async function connectSheets() {
   // approval-needed email when they submit a payment/expense.
   notifyUrl = normalizedUrl; localStorage.setItem('lm-notify-url', normalizedUrl);
   await window._fbSaveSettings('notifyEndpoint', { url: normalizedUrl });
+  // Publisher-only copy of the whole connection, so the publisher's other
+  // devices (a phone) pick it up at sign-in instead of re-pasting both links.
+  await window._fbSaveSettings('sheetsConnection', { url: normalizedUrl, spreadsheetUrl: spreadUrl || '' });
   if (spreadUrl) {
     sheetsSpreadsheetUrl = spreadUrl;
     localStorage.setItem('lm-sheets-spreadsheet-url', spreadUrl);
@@ -13372,12 +13452,52 @@ async function disconnectSheets() {
   localStorage.removeItem('lm-sheets-secret');
   localStorage.removeItem('lm-notify-url');
   await window._fbSaveSettings('notifyEndpoint', { url: '' });
+  await window._fbSaveSettings('sheetsConnection', { url: '', spreadsheetUrl: '' });
   $('sheets-setup-card').style.display = '';
   $('sheets-connected-card').style.display = 'none';
   const warningEl = $('sheets-version-warning');
   if (warningEl) warningEl.style.display = 'none';
   updateSheetsBadge();
   showToast('Sheets disconnected', 'warn');
+}
+// The Sheets connection lives in each device's own storage, so a publisher who
+// set it up on the computer used to face pasting two long links on the phone.
+// At publisher sign-in this squares the device with the cloud copy.
+async function syncSheetsConnectionWithCloud() {
+  try {
+    const plan = planSheetsConnectionSync({
+      localUrl: localStorage.getItem('lm-sheets-url') || '',
+      localSpreadsheetUrl: localStorage.getItem('lm-sheets-spreadsheet-url') || '',
+      conn: await window._fbLoadSettings('sheetsConnection'),
+      notifyUrl,
+      normalize: normalizeAppsScriptUrl,
+    });
+    if (plan.action === 'backfill') {
+      await window._fbSaveSettings('sheetsConnection', { url: plan.url, spreadsheetUrl: plan.spreadsheetUrl });
+      return;
+    }
+    if (plan.action !== 'adopt') return;
+    const cloudUrl = plan.url;
+    const spreadUrl = safeHttpUrl(plan.spreadsheetUrl);
+    localStorage.setItem('lm-sheets-url', cloudUrl);
+    localStorage.setItem('lm-last-sheets-url', cloudUrl);
+    if (spreadUrl) {
+      localStorage.setItem('lm-sheets-spreadsheet-url', spreadUrl);
+      localStorage.setItem('lm-last-spreadsheet-url', spreadUrl);
+    }
+    if (window._realSheetsUrlSaved) {
+      // The test book is open and holds the mock link; switching back restores these.
+      window._realSheetsUrl = cloudUrl;
+      window._realSheetsSpreadsheetUrl = spreadUrl;
+    } else {
+      sheetsUrl = cloudUrl;
+      sheetsSpreadsheetUrl = spreadUrl;
+      showSheetsConnected();
+    }
+    showToast('✓ Google Sheet connected — copied from your other device');
+  } catch (e) {
+    console.warn('Sheets connection sync skipped', e);
+  }
 }
 function showSheetsConnected() {
   $('sheets-setup-card').style.display = 'none';
@@ -16989,10 +17109,7 @@ function stripeSaleRulesSince() {
 }
 
 function readRaisedStripeSales() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(STRIPE_SALE_RAISED_KEY) || '[]');
-    return Array.isArray(raw) ? raw : [];
-  } catch (_) { return []; }
+  return readStoredList(STRIPE_SALE_RAISED_KEY);
 }
 
 function noteRaisedStripeSale(chargeId) {
@@ -17152,10 +17269,7 @@ async function fetchStripeRefundsSince(since) {
 const STRIPE_REFUND_PENDING_KEY = 'lm-stripe-refund-pending';
 
 function readPendingRefundReversals() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(STRIPE_REFUND_PENDING_KEY) || '[]');
-    return Array.isArray(raw) ? raw : [];
-  } catch (_) { return []; }
+  return readStoredList(STRIPE_REFUND_PENDING_KEY);
 }
 
 function writePendingRefundReversals(list) {
@@ -17322,15 +17436,12 @@ window.undoLastReversalFromAlert = undoLastReversalFromAlert;
 // The storefront check (features/bigcartel.js) finds them and keeps the list;
 // the reversal happens here because voiding a sale is the ledger's job.
 
-const STORE_REVERSAL_PENDING_KEY = 'lm-store-reversal-pending';
-
 function reverseStoreOrdersFromAlert(event) {
   if (event) event.stopPropagation();
   dismissAppAlert('store-reversals');
-  let pending = [];
-  try { pending = JSON.parse(localStorage.getItem(STORE_REVERSAL_PENDING_KEY) || '[]'); } catch (_) { pending = []; }
+  const pending = readStoredList(STORE_REVERSAL_PENDING_KEY);
   try { localStorage.setItem(STORE_REVERSAL_PENDING_KEY, '[]'); } catch (_) { /* storage blocked */ }
-  reverseSalesWithUndo(Array.isArray(pending) ? pending.filter(item => item.full) : [], 'Refunded or cancelled on the store');
+  reverseSalesWithUndo(pending.filter(item => item.full), 'Refunded or cancelled on the store');
 }
 window.reverseStoreOrdersFromAlert = reverseStoreOrdersFromAlert;
 
@@ -18264,7 +18375,7 @@ Object.assign(window, {
   fetchOrders, applyOne, applyAll, cancelOrder, restoreOrder, unapplyOne, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,
   onExpenseCurrencyChange, calcExpenseFx,
 
-  submitGratuity, openM, closeM, addStore, openEditStore, confirmEditStore, openSend, confirmSend, openSale, confirmSale, onConsignSaleCurrencyChange, updateConsignSalePreview, onConsignPaymentCurrencyChange, updateConsignPaymentPreview, confirmConsignPayment,
+  submitGratuity, openM, closeM, addStore, openEditStore, confirmEditStore, openSend, confirmSend, openSale, confirmSale, onConsignSaleCurrencyChange, updateConsignSalePreview, updateSendPreview, onConsignPaymentCurrencyChange, updateConsignPaymentPreview, confirmConsignPayment,
   exportConsignmentLedgerCSV, openBulkSend, bulkApplyQty, bulkQtyChanged, bulkCheckChanged, updateBulkSendSummary, confirmBulkSend,
   openRet, confirmReturn, openEditHist, openEditLedger, saveEntryEdit, convertKeptAllToReceived, voidEntry,
   restoreBookDataFromSheets, resetBookData, connectSheets, disconnectSheets, testSheets, verifyUrl, checkSheetsVersion,
@@ -18576,6 +18687,7 @@ async function initStartup() {
         // even if the catalog isn't edited this session.
         if (typeof window._fbSaveBookOwners === 'function') window._fbSaveBookOwners(ownersFromBooks());
         showApp('publisher', null);
+        syncSheetsConnectionWithCloud();
         checkAppUpdate();
         dismissSplash();
         return;

@@ -1,0 +1,13 @@
+# Bubblewrap writes the whole Android project next to twa-manifest.json. It is
+# regenerated from that file, so only the manifest and the store pictures are
+# kept. The signing key must NEVER be committed: anyone holding it can publish
+# updates as you. Keep it (and its passwords) in a password manager instead.
+*
+!.gitignore
+!README.md
+!twa-manifest.json
+!assetlinks.example.json
+!store/
+!store/**
+*.keystore
+*.jks

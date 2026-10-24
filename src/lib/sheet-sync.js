@@ -190,15 +190,16 @@ export function sheetRowSortKey(payload) {
  * Deletions sort ahead of additions on the same date so that a re-sync which
  * replaces a row never appends the new copy and then deletes it again.
  */
-export function compareSheetPayloads(a, b) {
-  const keyA = sheetRowSortKey(a);
-  const keyB = sheetRowSortKey(b);
-  if (keyA !== keyB) return keyA < keyB ? -1 : 1;
+const removalRank = payload => (/^(delete|void)$/i.test(text(payload && payload.action)) ? 0 : 1);
 
-  const removalA = /^(delete|void)$/i.test(text(a && a.action)) ? 0 : 1;
-  const removalB = /^(delete|void)$/i.test(text(b && b.action)) ? 0 : 1;
+const compareSortParts = (keyA, removalA, keyB, removalB) => {
+  if (keyA !== keyB) return keyA < keyB ? -1 : 1;
   if (removalA !== removalB) return removalA - removalB;
   return 0;
+};
+
+export function compareSheetPayloads(a, b) {
+  return compareSortParts(sheetRowSortKey(a), removalRank(a), sheetRowSortKey(b), removalRank(b));
 }
 
 /**
@@ -208,9 +209,12 @@ export function compareSheetPayloads(a, b) {
  */
 export function sortSheetPayloads(rows) {
   if (!Array.isArray(rows)) return [];
+  // Each row's date key and removal rank are worked out once up front: a full
+  // resync sorts every row on every book, and re-parsing both dates (sometimes
+  // through `new Date`) on each of the n·log n comparisons dominated the sort.
   return rows
-    .map((row, index) => ({ row, index }))
-    .sort((a, b) => compareSheetPayloads(a.row, b.row) || (a.index - b.index))
+    .map((row, index) => ({ row, index, key: sheetRowSortKey(row), removal: removalRank(row) }))
+    .sort((a, b) => compareSortParts(a.key, a.removal, b.key, b.removal) || (a.index - b.index))
     .map(entry => entry.row);
 }
 

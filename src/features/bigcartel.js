@@ -66,7 +66,8 @@ import { escapeHtml } from '../lib/html.js';
 import { legacyCopy } from '../lib/clipboard.js';
 import { pushAppAlert } from '../lib/app-alert.js';
 import { logNotification } from '../lib/notification-log.js';
-import { storeReversalsToRaise } from '../lib/store-reversals.js';
+import { STORE_REVERSAL_PENDING_KEY, storeReversalsToRaise } from '../lib/store-reversals.js';
+import { readStoredList } from '../lib/stored-list.js';
 import { resolveCountryCode } from '../lib/countries.js';
 import { fmt, getBookCurrencyCode } from '../lib/money.js';
 import { normalizeShippingOrderNumber } from '../lib/shipping-reconciliation.js';
@@ -1464,10 +1465,7 @@ let _bcGapChecking = false;
 let _bcLastCheckFailed = false;
 
 function readBcGapDismissed() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(BC_GAP_DISMISSED_KEY) || '[]');
-    return Array.isArray(raw) ? raw : [];
-  } catch (e) { return []; }
+  return readStoredList(BC_GAP_DISMISSED_KEY);
 }
 
 function writeBcGapDismissed(nums) {
@@ -1715,8 +1713,6 @@ function announceNewBigCartelOrders(bcOrders = []) {
   return fresh;
 }
 
-const STORE_REVERSAL_PENDING_KEY = 'lm-store-reversal-pending';
-
 /**
  * Recorded website sales the store has since refunded or cancelled.
  *
@@ -1741,9 +1737,7 @@ function raiseStoreReversals(bcOrders = []) {
   });
   touched.forEach(bookId => window.saveState(bookId));
 
-  let pending = [];
-  try { pending = JSON.parse(localStorage.getItem(STORE_REVERSAL_PENDING_KEY) || '[]'); } catch (e) { pending = []; }
-  if (!Array.isArray(pending)) pending = [];
+  const pending = readStoredList(STORE_REVERSAL_PENDING_KEY);
   found.forEach(item => { if (!pending.some(p => p.sheetsId === item.sheetsId)) pending.push(item); });
   try { localStorage.setItem(STORE_REVERSAL_PENDING_KEY, JSON.stringify(pending)); } catch (e) { /* storage full */ }
 

@@ -96,7 +96,15 @@
 
   /* Shipping: recipient and parcel inputs stay legible at 320px. */
   #tab-shipping .shipping-form-container, #tab-shipping .shipping-results-container { min-width: 0; }
-  #tab-shipping .phone-address-grid, #tab-shipping .phone-parcel-grid { display: grid; grid-template-columns: minmax(0, 1fr) !important; }
+  #tab-shipping .phone-address-grid { display: grid; grid-template-columns: minmax(0, 1fr) !important; }
+  /* Parcel size reads as one row: Length / Width / Height side by side, the unit under them;
+     copies and weight share a row, their unit under. Stacking all of them ran ~700px. */
+  #tab-shipping .phone-parcel-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)) !important; gap: var(--space-3) var(--space-2) !important; }
+  #tab-shipping .phone-parcel-grid > .form-group { grid-column: span 2; min-width: 0; margin-bottom: 0; }
+  #tab-shipping .phone-parcel-grid:not(:has(> :nth-child(4))) > .form-group:nth-child(-n+2) { grid-column: span 3; }
+  #tab-shipping .phone-parcel-grid:not(:has(> :nth-child(4))) > .form-group:nth-child(3),
+  #tab-shipping .phone-parcel-grid > .form-group:nth-child(4) { grid-column: 1 / -1; }
+  #tab-shipping .phone-parcel-grid input { text-align: center; font-family: var(--font-mono); font-variant-numeric: tabular-nums; padding-inline: var(--space-2); }
   #tab-shipping #ship-analysis-hub :is(.shipping-pnl-header, .shipping-pnl-toolbar) { display: flex; flex-direction: column; align-items: stretch; }
   #tab-shipping #ship-analysis-hub .toolbar-group { min-width: 0; max-width: 100%; }
   #tab-shipping .filter-segmented-control { display: flex; flex-wrap: wrap; width: 100%; }
@@ -533,8 +541,10 @@
   :is(.tab-panel, .modal) .phone-records tr.phone-record.is-awaiting > td { box-shadow: none; }
   :is(.tab-panel, .modal) .phone-records .appr-btn { height: var(--target-min); }
   :is(.tab-panel, .modal) .phone-records .appr-btn.reject { width: var(--target-min); }
-  .pub-shell .more-sheet-body .pub-nav { grid-template-columns: minmax(0, 1fr); }
-  .pub-shell .more-sheet-body .snav { min-height: 52px; }
+  /* Two tiles to a row: with one full-width tile per screen the All tools sheet ran
+     to about fourteen thumb-scrolls; a label plus its icon fits half the width. */
+  .pub-shell .more-sheet-body .pub-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pub-shell .more-sheet-body .snav { min-height: 56px; }
   .pub-shell :is(button, summary):focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
 }
 
@@ -552,9 +562,9 @@
   #tab-website .web-orders-actions #backfill-shipping-btn { grid-column: 2; box-shadow: none; font-size: var(--text-xs); }
   #tab-website .order-card-top { flex-direction: row; }
   #tab-website .order-card-top > .pill { flex: none; }
-  .pub-shell .more-sheet-body .snav { flex-direction: row; justify-content: flex-start; text-align: left; gap: var(--space-3); padding: var(--space-3) var(--space-4); }
+  .pub-shell .more-sheet-body .snav { flex-direction: row; justify-content: flex-start; text-align: left; gap: var(--space-2); padding: var(--space-2) var(--space-3); }
   .pub-shell .more-sheet-body .snav-ic { width: 24px; flex: none; }
-  .pub-shell .more-sheet-body .snav-label { font-size: var(--text-sm); }
+  .pub-shell .more-sheet-body .snav-label { min-width: 0; font-size: var(--text-sm); line-height: 1.2; overflow-wrap: break-word; }
 }
 
 /* More sheet, Riso Press: it still wore the pre-repaint soft look (round close button,
@@ -567,7 +577,7 @@
   .more-sheet-title { font-family: var(--font-display); font-weight: 400; font-size: var(--text-xl); text-transform: uppercase; letter-spacing: var(--tracking-caps); }
   .more-sheet-close { border-radius: var(--r2); border: var(--stroke) solid var(--rule-ink); background: var(--surface-card); color: var(--content-primary); box-shadow: var(--elev-1); }
   .more-sheet-close:active { transform: translate(2px, 2px); box-shadow: none; }
-  .pub-shell .more-sheet-body .pub-nav { gap: var(--space-3); }
+  .pub-shell .more-sheet-body .pub-nav { gap: var(--space-2) var(--space-3); }
   .pub-shell .more-sheet-body .snav { border: var(--stroke) solid var(--rule-ink); background: var(--surface-card); box-shadow: var(--elev-1); transition: background .15s var(--ease-standard), transform .1s var(--ease-standard), box-shadow .1s var(--ease-standard); }
   .pub-shell .more-sheet-body .snav:active { transform: translate(2px, 2px); box-shadow: none; }
   .pub-shell .more-sheet-body .snav.active::before { display: none; }
@@ -1102,6 +1112,21 @@
   .todo-dismiss { position: absolute; top: var(--space-1); right: var(--space-1); }
 }
 
+/* To-do cards held upright — each was a pale hairline box with a thin stripe, much quieter than the
+   inked cards on every other screen, and the label sat at the same weight as its own sentence. Each
+   is now the same inked slab with the offset shadow; the tone stripe moves inside so it still reads
+   and the border stays one even outline, the label steps up so it leads the sentence, and the list
+   gap opens a step so one card's shadow doesn't touch the next card. */
+@media (max-width: 768px) {
+  .todo-list { gap: var(--space-3); }
+  .todo-row { border: var(--stroke) solid var(--rule-ink); background: var(--surface-card); padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4); box-shadow: var(--elev-1), inset 4px 0 0 var(--status-neutral); }
+  .todo-row.tone-red { box-shadow: var(--elev-1), inset 4px 0 0 var(--status-critical); }
+  .todo-row.tone-amber { box-shadow: var(--elev-1), inset 4px 0 0 var(--status-active); }
+  .todo-row.tone-gray { box-shadow: var(--elev-1), inset 4px 0 0 var(--cream4); }
+  .todo-row:hover { transform: none; }
+  .todo-label { font-weight: 800; }
+}
+
 /* The combined consignment summary's toolbar on a phone: the search takes the
    full width at its natural height (it was given a 220px basis, which became a
    220px-tall empty box once the toolbar stacked), the filter tabs wrap inside
@@ -1227,6 +1252,12 @@
   #exp-body > tr.phone-record > td[data-phone-label="Amount"]::before { display: none; }
   #exp-body > tr.phone-record > td[data-phone-label="Date"] { grid-column: 1 !important; grid-row: 2 !important; }
   #exp-body > tr.phone-record > td[data-phone-label="Receipt"] { grid-column: 2 !important; grid-row: 2 !important; }
+  /* The receipt status and its "+ Receipt" button stack, right-aligned under the amount, instead of
+     sitting side by side: side by side they made the amount column ~200px wide and squeezed the
+     description into a quarter-width strip that wrapped to four lines. */
+  #exp-body > tr.phone-record > td[data-phone-label="Receipt"] { display: flex !important; flex-direction: column; align-items: flex-end; gap: var(--space-1); }
+  #exp-body > tr.phone-record > td[data-phone-label="Receipt"]::before { margin-bottom: 0; }
+  #exp-body > tr.phone-record > td[data-phone-label="Receipt"] > .exp-add-receipt { margin-left: 0; }
   #exp-body > tr.phone-record:has(> td > input[type="checkbox"]) > td[data-phone-label="Select"] { grid-column: 1 !important; grid-row: 1 / span 3 !important; align-self: center; }
   #exp-body > tr.phone-record:has(> td > input[type="checkbox"]) > td.phone-record-lead { grid-column: 2 !important; grid-row: 1 !important; }
   #exp-body > tr.phone-record:has(> td > input[type="checkbox"]) > td[data-phone-label="Amount"] { grid-column: 3 !important; }
@@ -1273,6 +1304,51 @@
   #d-exp-body > tr.phone-record > td[data-phone-label="Amount"]::before { display: none; }
   #d-exp-body > tr.phone-record > td[data-phone-label="Date"] { grid-column: 1 / -1 !important; grid-row: 2 !important; font-size: var(--text-xs); color: var(--text3); }
   #d-exp-body > tr.phone-record > td[data-phone-label="Date"]::before { display: none; }
+}
+
+/* ─── ALL BOOKS: consignment accounts (phone) ─── */
+/* Each account used to be a 300px stack — book, a full-width Details bar, then Store,
+   Returned, Outstanding and Status one under another, four screens for ten accounts.
+   The book now leads with its status beside it, the store sits under as one line,
+   Returned and Outstanding share a row, and Details closes the card. The book and
+   store links get a full 44px row each, they were 14–16px strips. Grouped (nested)
+   rows keep the generic card. */
+@media (max-width: 768px) {
+  #all-con-body > tr.phone-record:not(.con-nested-row) {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-1) var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    align-items: center;
+  }
+  #all-con-body > tr.phone-record:not(.con-nested-row) > td { border: 0 !important; }
+  #all-con-body > tr.phone-record:not(.con-nested-row) > td.phone-record-lead { display: contents !important; }
+  #all-con-body > tr.phone-record:not(.con-nested-row) .con-row-book-title { grid-column: 1; grid-row: 1; min-height: var(--target-min); font-size: var(--text-md); }
+  #all-con-body > tr.phone-record:not(.con-nested-row) > td[data-phone-label="Status"] { grid-column: 2 !important; grid-row: 1 !important; text-align: right !important; }
+  #all-con-body > tr.phone-record:not(.con-nested-row) > td[data-phone-label="Status"]::before,
+  #all-con-body > tr.phone-record:not(.con-nested-row) > td[data-phone-label="Store"]::before { display: none; }
+  #all-con-body > tr.phone-record:not(.con-nested-row) > td[data-phone-label="Store"] { grid-column: 1 / -1 !important; grid-row: 2 !important; color: var(--content-secondary); }
+  #all-con-body > tr.phone-record:not(.con-nested-row) .store-jump-link { display: inline-flex; align-items: center; min-height: var(--target-min); }
+  #all-con-body > tr.phone-record:not(.con-nested-row) > td[data-phone-label="Returned"] { grid-column: 1 !important; grid-row: 3 !important; font-variant-numeric: tabular-nums; }
+  #all-con-body > tr.phone-record:not(.con-nested-row) > td[data-phone-label="Outstanding"] { grid-column: 2 !important; grid-row: 3 !important; text-align: right !important; }
+  #all-con-body > tr.phone-record:not(.con-nested-row) > td.phone-record-lead > .phone-record-toggle { grid-column: 1 / -1 !important; grid-row: 4 !important; margin-top: var(--space-2); }
+}
+
+/* ─── DASHBOARD: sales by channel cards (phone) ─── */
+/* Each channel used to be a 250px stack — name, a full-width Details bar, then Units, Revenue
+   and Share one under another. The channel now leads on its own line with Details beside it,
+   and the three figures share one row beneath so the channels compare at a glance. */
+@media (max-width: 768px) {
+  #ch-body > tr.phone-record {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-2) var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    align-items: end;
+  }
+  #ch-body > tr.phone-record > td { border: 0 !important; padding: 0 !important; min-width: 0; font-variant-numeric: tabular-nums; }
+  #ch-body > tr.phone-record > td.phone-record-lead { display: contents !important; }
+  #ch-body > tr.phone-record > td.phone-record-lead > :not(.phone-record-toggle) { grid-column: 1 / 3; grid-row: 1; align-self: center; min-width: 0; }
+  #ch-body > tr.phone-record > td.phone-record-lead > .phone-record-toggle { grid-column: 3 !important; grid-row: 1 !important; width: auto; min-height: var(--target-min); margin: 0; padding-inline: var(--space-3); }
+  #ch-body > tr.phone-record > td[data-phone-label="Revenue"] { font-weight: 700; }
 }
 
 /* ─── DASHBOARD: the headline numbers (phone) ─── */
@@ -1350,6 +1426,26 @@
   #tab-opencall .oc-settings-card > .oc-collapse-head > div:first-child { min-width: 0; flex: 1 1 auto; }
   #tab-opencall .oc-settings-card .oc-collapse-chevron { flex: 0 0 auto; }
 
+  /* Open Call, held upright: every card is an inked Riso slab with snug
+     padding; the project card's buttons share one row and the search and sort
+     boxes take the full width instead of sitting half-width with dead space. */
+  #tab-opencall :is(.oc-topbar, .oc-list-card, .oc-settings-card) {
+    border: var(--stroke) solid var(--rule-ink); box-shadow: var(--elev-2);
+  }
+  #tab-opencall .oc-list-card { padding: 0; }
+  #tab-opencall .oc-topbar { padding: var(--space-4); gap: var(--space-3); }
+  #tab-opencall .oc-topbar-main { gap: var(--space-3); }
+  #tab-opencall .oc-topbar-actions { width: 100%; }
+  #tab-opencall .oc-topbar-actions .btn { flex: 1 1 auto; justify-content: center; }
+  #tab-opencall .oc-topbar-hint { flex: 1 1 100%; order: 3; }
+  #tab-opencall .oc-project-picker .oc-project-select { flex: 1 1 auto; min-width: 0; }
+  #tab-opencall .oc-list-toolbar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); padding: var(--space-3); }
+  #tab-opencall .oc-list-toolbar #oc-search { grid-column: 1 / -1; }
+  #tab-opencall .oc-list-toolbar select { width: 100%; min-width: 0; }
+  #tab-opencall .oc-settings-card > .oc-collapse-head { padding: var(--space-3) var(--space-4); }
+  #tab-opencall .oc-list-head:empty { display: none; }
+  #tab-opencall .oc-list > .oc-empty-state { margin: var(--space-3); }
+
   /* Tax Centre: the secondary batch button spans the same width as the primary
      button above it, and its outline is drawn in light mode too. */
   .tc-batch-btn.btn.tx { width: 100%; padding: 10px 12px !important; border-color: var(--border-strong); background: var(--surface-card); color: var(--text2); }
@@ -1370,6 +1466,16 @@
   /* Payment-link hint: left-aligned under the amount, like the lines above it. */
   #artist-reimburse-banner .metric-banner-actions { align-items: stretch; width: 100%; }
   #artist-reimburse-banner .metric-banner-hint { text-align: left; }
+
+  /* Pending reimbursements: each expense is an inked slab like the other phone
+     cards, the amount leads the head, and the two buttons share one full width
+     instead of a wide outline bar over a half-width fill. */
+  #d-pending-expenses-list .pending-card { display: grid; align-items: stretch; border: var(--stroke) solid var(--rule-ink); box-shadow: var(--elev-1), inset 3px 0 0 var(--status-active); gap: var(--space-3); }
+  #d-pending-expenses-list .pending-card-head { justify-content: space-between; flex-wrap: nowrap; }
+  #d-pending-expenses-list .pending-card-num { font-size: var(--text-lg); font-weight: 500; font-variant-numeric: tabular-nums; }
+  #d-pending-expenses-list .pending-card-actions { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+  #d-pending-expenses-list .pending-card-actions .btn { width: 100%; justify-content: center; text-align: center; white-space: normal; }
+  #d-pending-expenses-list .pending-card:active { transform: translate(1px, 1px); box-shadow: inset 3px 0 0 var(--status-active); }
 }
 
 /* ─── QR + CUSTOMERS + INTEL (round 4) ─── */
@@ -1402,6 +1508,10 @@
   #tab-qrcodes .qr-frame canvas,
   #tab-qrcodes .qr-frame img { width: 100% !important; height: auto !important; }
   #tab-qrcodes .qr-card:not(.is-empty) > .qr-card-footer { grid-column: 2; grid-row: 2; margin-top: 0; gap: var(--space-2); }
+  /* Title leads: the same display lettering the Book Catalog cards use, so the book
+     reads first and the author and price sit under it as secondary lines. */
+  #tab-qrcodes .qr-card-title { font-family: var(--font-display); font-size: var(--text-lg); font-weight: 400; text-transform: uppercase; letter-spacing: .02em; line-height: 1.1; }
+  #tab-qrcodes .qr-card-meta { margin-top: var(--space-2); }
   #tab-qrcodes .qr-card-status { display: inline-flex; align-self: flex-start; margin-top: var(--space-2); }
   #tab-qrcodes .qr-card-actions { flex-wrap: wrap; }
   #tab-qrcodes .qr-card-actions .btn { flex: 1 1 auto; }
@@ -1418,6 +1528,15 @@
   #tab-customers .cust-filter-grid { margin-top: 0; }
   #tab-customers .cust-export-fold .cust-fold-body { margin-top: var(--space-2); }
   #tab-customers .cust-export-fold .cust-fold-body > div { flex-wrap: wrap; }
+
+  /* The three actions above the buyer list share one left and right edge, so
+     the pull button leads and Filter / Export read as its quieter siblings
+     instead of two orphaned half-width stubs. */
+  #tab-customers .row-between:has(#cust-stripe-btn) { flex-direction: column; align-items: stretch !important; }
+  #tab-customers div:has(> #cust-stripe-btn) { width: 100%; }
+  #tab-customers #cust-stripe-btn { flex: 1 1 100%; justify-content: center; }
+  #tab-customers .cust-fold-toggle { width: 100%; min-height: 44px; justify-content: center; }
+  #tab-customers .cust-export-fold { flex: 1 1 100%; }
 
   /* Intelligence: the acknowledged privacy note is one line with a Details
      toggle, and the full card stays hidden until it is opened. */
@@ -1544,6 +1663,15 @@
   #tab-shipping #ship-analysis-hub .shipping-pnl-ledger-row.suggested td { background: color-mix(in srgb, var(--gold) 4%, transparent); }
   #tab-shipping .shipping-money.margin.positive { border-color: color-mix(in srgb, var(--green) 24%, transparent); }
   #tab-shipping .shipping-money.margin.negative { border-color: color-mix(in srgb, var(--red) 24%, transparent); }
+
+  /* Order tick-boxes in the shipping ledger: the box stays 22px, but the label around it
+     is a full 44px fingertip, so ticking an order no longer takes a few tries. */
+  #tab-shipping #ship-analysis-hub .ship-check-hit {
+    display: flex; align-items: center; justify-content: center;
+    width: 44px; height: 44px; margin: -11px auto; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #tab-shipping #ship-analysis-hub .ship-check-hit:has(input:focus-visible) { outline: 2px solid var(--gold); outline-offset: -2px; }
 }
 
 
@@ -1581,6 +1709,12 @@
 
   /* Help: each question is a list row with a hairline, not a heavy boxed button. */
   #tab-help .help-q { border: var(--stroke-hair) solid var(--border-default); box-shadow: none; }
+
+  /* Help topic buttons: an even two-column grid instead of a ragged wrapped row;
+     an odd last topic runs the full width so no tile is left hanging. */
+  #tab-help .help-topics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+  #tab-help .help-topics .help-tool-btn { min-width: 0; padding: 8px 10px; text-align: center; line-height: 1.2; }
+  #tab-help .help-topics .help-tool-btn:last-child:nth-child(odd) { grid-column: 1 / -1; }
 
   /* Book Catalog: every title starts at the same left edge. */
   #tab-sheets .catalog-card { flex-direction: column; align-items: stretch; justify-content: flex-start; text-align: left; }
@@ -1620,4 +1754,262 @@
     transition: opacity .15s ease;
   }
   .tab-bar.has-more-right::after { opacity: 1; }
+}
+
+/* Tax Centre text links held upright. The expense-breakdown category links (16px tall) and the
+   subscription "charges logged" / "Adjust price" links (14px tall) were far under a fingertip.
+   Vertical padding grows the tappable box and an equal negative margin cancels it, so every row
+   keeps the height it had; the filter tabs above them get the full 44px. */
+@media (max-width: 768px) {
+  .tc-cat-link, .rec-charge-link {
+    display: inline-block;
+    padding-block: calc((var(--target-min) - 1lh) / 2);
+    margin-block: calc((var(--target-min) - 1lh) / -2);
+  }
+  .rec-filter { min-height: var(--target-min); }
+}
+
+/* Setup and status cards held upright (Backups, Google Sheet, Big Cartel, Web Analytics). These
+   still wore the pre-repaint hairline outline and a soft grey shadow, so they read as faded next
+   to every other card on a phone. They now take the 2px ink outline and hard offset shadow, the
+   "Edits made on two devices" card keeps its amber edge stripe on top of that shadow, and the
+   Connected / Not Connected badge is a square inked tag instead of a soft pill. */
+@media (max-width: 768px) {
+  .tab-panel :is(.sheets-setup, .sync-review-card) { border: var(--stroke) solid var(--border-strong); box-shadow: var(--elev-1); }
+  .tab-panel .sync-review-card.has-items { box-shadow: inset 3px 0 0 var(--status-active), var(--elev-1); }
+  .tab-panel .sheets-badge { border: var(--stroke) solid currentColor; border-radius: var(--r2); font-weight: 800; text-transform: uppercase; letter-spacing: var(--tracking-caps); }
+}
+
+/* Phone polish, round 5 — the same screens and controls, finished to the Riso Press rules.
+   Ink marks instead of emoji, square header buttons, a one-line approval banner, a Home that
+   fits its four jobs on the first screen, store cards at half the height, and pop-up sheets
+   that pair their short fields. Nothing moves or disappears: an emoji that led a label is
+   hidden (the label still says it), and an icon with an ink mark shows the mark instead. */
+@media (max-width: 768px) {
+  /* Emoji in a flat ink design. Leading emoji on buttons, sub-tabs and section heads are
+     wrapped as .lead-emoji in the markup; the pop-up title tile is the same thing. */
+  .lead-emoji, .book-strip-meta .lead-emoji, .modal .modal-title-badge { display: none; }
+  .pub-shell [data-ink] { font-size: 0 !important; line-height: 1; }
+  .pub-shell [data-ink]::before { content: attr(data-ink); font: 500 var(--text-base) / 1 var(--font-mono); letter-spacing: 0; }
+  .pub-shell .more-sheet-body .snav-ic { width: 28px; display: grid; place-items: center; }
+  .pub-shell .more-sheet-body .snav-ic[data-ink]::before {
+    display: grid; place-items: center; width: 28px; height: 28px; box-sizing: border-box;
+    border: var(--stroke) solid currentColor; font-size: var(--text-3xs);
+  }
+  .pub-shell :is(.mnav-ic, .ttb-ico)[data-ink]::before { font-size: var(--text-lg); }
+
+  /* Header: the theme, bell, inbox and account buttons are squares like every other button,
+     and their counts are square stamps. */
+  .pub-shell .app-header .theme-toggle-btn, .pub-shell .acct-avatar { border-radius: var(--r2); }
+  .pub-shell .app-header :is(.hdr-notif-badge, .hdr-review-badge) { border-radius: var(--r2); border: var(--stroke-hair) solid var(--rule-ink); }
+  .pub-shell .acct-dot { border-radius: 0; }
+
+  /* The approval banner: one line in the "needs you" yellow, with the same Review button
+     and ×. Red stays for things that are broken. The title and sub wrap to four lines at
+     phone width, so the phone reads the one-line summary instead. */
+  .publisher-action-banner {
+    gap: var(--space-2); padding: var(--space-2) var(--space-3); flex-wrap: nowrap;
+    background: linear-gradient(var(--status-active-bg), var(--status-active-bg)), var(--surface-page);
+    color: var(--content-primary); border-bottom: var(--stroke) solid var(--rule-ink);
+    border-left: 6px solid var(--status-active); box-shadow: none;
+  }
+  .publisher-action-banner :is(.pab-pulse, .pab-title, .pab-sub) { display: none; }
+  .publisher-action-banner .pab-icon {
+    display: grid; place-items: center; width: 24px; height: 24px; flex: none; animation: none;
+    border: var(--stroke) solid var(--rule-ink); background: var(--surface-card); color: var(--content-primary);
+    font: 900 var(--text-xs) / 1 var(--font-ui);
+  }
+  .publisher-action-banner .pab-text { min-width: 0; flex: 1 1 auto; }
+  .publisher-action-banner .pab-short { min-width: 0; }
+  .publisher-action-banner .pab-short > * { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .publisher-action-banner .pab-short b { font: 700 var(--text-sm) / 1.25 var(--font-ui); }
+  .publisher-action-banner .pab-short b::first-letter { text-transform: uppercase; }
+  .publisher-action-banner .pab-where { font: 500 var(--text-2xs) / 1.3 var(--font-mono); color: var(--content-secondary); }
+  .publisher-action-banner .pab-actions { flex-wrap: nowrap; }
+  .publisher-action-banner .pab-btn {
+    min-height: 36px; padding: var(--space-1) var(--space-3); white-space: nowrap;
+    background: var(--surface-card); color: var(--content-primary); border: var(--stroke) solid var(--rule-ink);
+    border-radius: var(--r2); box-shadow: var(--elev-1); font: 800 var(--text-2xs) var(--font-ui);
+    text-transform: uppercase; letter-spacing: var(--tracking-caps);
+  }
+  .publisher-action-banner .pab-btn:hover { background: var(--surface-card); transform: none; }
+  .publisher-action-banner .pab-btn:active { transform: translate(2px, 2px); box-shadow: none; }
+  .publisher-action-banner .pab-dismiss { color: var(--content-secondary); min-width: 32px; min-height: 36px; padding: 0; }
+}
+@media (min-width: 769px) { .publisher-action-banner .pab-short { display: none; } }
+@media (max-width: 768px) and (prefers-reduced-motion: reduce) {
+  .publisher-action-banner .pab-btn { transition: none; }
+}
+
+/* Home: the four jobs fit on the first screen. The Sell card is dark ink on the flare fill
+   (white on it fell short of the reading rule), the cards lose the empty band above their
+   names, and "Sold today" is one slip: three figures over its upload line. */
+@media (max-width: 768px) {
+  #tab-today .today-head { margin-bottom: var(--space-4); gap: var(--space-2); }
+  #tab-today .today-card { min-height: 0; padding: var(--space-3) var(--space-4); gap: var(--space-1); }
+  #tab-today .today-card-ic {
+    display: grid; place-items: center; width: 32px; height: 32px; margin-bottom: var(--space-2); box-sizing: border-box;
+    border: var(--stroke) solid currentColor; font: 500 var(--text-sm) / 1 var(--font-mono);
+  }
+  #tab-today :is(.today-card-ink, .today-receipt-card) {
+    display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: var(--space-3); align-items: center; min-height: 0;
+  }
+  #tab-today :is(.today-card-ink, .today-receipt-card) .today-card-ic { grid-row: 1 / 3; margin: 0; }
+  #tab-today .today-card-ink { color: var(--ink); padding-block: var(--space-4); }
+  #tab-today .today-card-ink .today-card-ic { width: 44px; height: 44px; font-size: var(--text-lg); }
+  #tab-today .today-card-ink .today-card-sub { opacity: 1; }
+  .theme-dark #tab-today .today-card-ink { color: var(--on-accent); }
+  #tab-today .today-row { min-height: 60px; padding-block: var(--space-3); }
+  /* Workspace rows carry the same inked stamp as the job cards above, so the four icons share one square and edge. */
+  #tab-today .today-row-ic {
+    display: grid; place-items: center; flex: 0 0 32px; width: 32px; height: 32px; box-sizing: border-box;
+    border: var(--stroke) solid currentColor; font: 500 var(--text-sm) / 1 var(--font-mono);
+  }
+  #tab-today .today-label { margin-top: var(--space-5); }
+
+  #tab-today .today-sofar { gap: 0; border: var(--stroke) solid var(--rule-ink); background: var(--surface-raised); box-shadow: var(--elev-1); }
+  #tab-today .today-sold { border: 0; box-shadow: none; }
+  #tab-today .today-sold-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); }
+  #tab-today .today-sold-fig { display: grid; gap: 2px; min-width: 0; }
+  #tab-today .today-sold-fig b { font: 500 var(--text-lg) / 1.15 var(--font-mono); overflow-wrap: anywhere; }
+  #tab-today .today-sold-fig span { font: 800 var(--text-3xs) var(--font-ui); text-transform: uppercase; letter-spacing: var(--tracking-caps); color: var(--content-secondary); }
+  #tab-today .today-sync {
+    min-height: 32px; border: 0; border-top: var(--stroke-hair) solid var(--border-subtle); border-radius: 0;
+    background: transparent; padding: var(--space-1) var(--space-4); font-size: var(--text-xs);
+  }
+  #tab-today .today-sync::before { border-radius: 0; width: 8px; height: 8px; }
+}
+
+/* Consignment store cards at half the height: the name and its status tag on one line, the
+   contact line on one line (the email is one tap away under Edit), the four figures as one
+   row like a line on a statement, and Send / Record sale / ⋯ in one row. */
+@media (max-width: 768px) {
+  #tab-consignment .store-card { padding: 0; border: var(--stroke) solid var(--rule-ink); box-shadow: var(--elev-1); border-radius: var(--r2); overflow: hidden; }
+  #tab-consignment .store-card:hover { border-color: var(--rule-ink); }
+  #tab-consignment .store-head { padding: var(--space-3) var(--space-3) var(--space-2); margin: 0; align-items: flex-start; }
+  #tab-consignment .store-head > div:first-child { min-width: 0; }
+  #tab-consignment .store-name { font-size: var(--text-lg); text-transform: uppercase; }
+  #tab-consignment .store-meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #tab-consignment .store-meta-email { display: none; }
+  #tab-consignment .store-head-flags { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-1); flex: none; }
+  #tab-consignment .store-head-flags .pill { border-radius: var(--r2); border: var(--stroke) solid currentColor; font-size: var(--text-3xs); text-transform: uppercase; letter-spacing: var(--tracking-caps); }
+  #tab-consignment .store-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.5fr) !important; gap: 0; margin: 0;
+    border-block: var(--stroke-hair) solid var(--border-subtle);
+  }
+  #tab-consignment .store-kpis .sk { border: 0; border-radius: 0; background: transparent; box-shadow: none; padding: var(--space-2) var(--space-3); gap: 0; }
+  #tab-consignment .store-kpis .sk + .sk { border-left: var(--stroke-hair) solid var(--border-subtle); }
+  #tab-consignment .store-kpis .sk:last-child:has(.sk-v.warn) { background: var(--status-active-bg); }
+  #tab-consignment .store-kpis .sk-v { font-size: var(--text-md); }
+  /* One-line captions: "On shelf" used to wrap in its narrow column and drop its
+     figure a line below Sent and Sold. Tighter side padding and caps tracking
+     give the caption room; nowrap keeps all four figures on one baseline. */
+  #tab-consignment .store-kpis .sk { padding-inline: var(--space-2); }
+  #tab-consignment .store-kpis .sk-l { white-space: nowrap; letter-spacing: var(--tracking-caps); }
+  /* Very narrow phones can't fit "On shelf" on a line; let it wrap rather than spill into Owed. */
+  @media (max-width: 350px) { #tab-consignment .store-kpis .sk-l { white-space: normal; } }
+  #tab-consignment .store-actions { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px; padding: var(--space-3); }
+  #tab-consignment .store-actions[data-phone-folded] .phone-more-toggle { grid-column: auto; grid-row: 1; grid-column-start: 3; min-width: 44px; padding: 0; font-size: 0; }
+  #tab-consignment .store-actions[data-phone-folded] .phone-more-toggle::before { content: '⋯'; font: 800 var(--text-lg) / 1 var(--font-ui); }
+  #tab-consignment .store-actions[data-phone-folded] .phone-more-toggle[aria-expanded="true"]::before { content: '×'; }
+  #tab-consignment .store-actions.phone-more-open .phone-more-panel { grid-row: 2; }
+}
+
+/* Pop-up sheets: short fields that were stretched across a whole row sit in pairs again
+   (a count beside a date, an issue date beside a due date). Only pairs of number, date
+   and dropdown boxes: a text box squeezed to half width hides what you type, and a pair
+   holding a price-and-currency group or an inline button keeps one column. The preview
+   line above the buttons says what the save will move. */
+@media (max-width: 768px) {
+  .modal .g2:not(:has(input:not([type="number"]):not([type="date"]):not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), textarea, .price-inline, .btn)) {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)) !important;
+  }
+  .tab-icon { display: none; }
+  .modal .modal-preview { margin: var(--space-3) 0 0; }
+  .modal .modal-preview:empty { display: none; }
+}
+
+/* All Books — combined consignment summary. Three full-width slabs (~230px each) pushed the
+   store filter and list off the first screen. Outstanding stock still leads on a row of its own;
+   Active accounts and Sell-through share the next row, their icon plates dropped so the figure
+   and its caption get the width. */
+@media (max-width: 768px) {
+  .consignment-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+  .consignment-stat-card { padding: var(--space-3); gap: var(--space-3); }
+  .consignment-stat-card.focus { grid-column: 1 / -1; }
+  .consignment-stat-card:not(.focus) .consignment-stat-icon-wrap { display: none; }
+  .consignment-stat-card:not(.focus) .con-stat-label { white-space: normal; letter-spacing: var(--tracking-caps); }
+  .consignment-stat-card .con-stat-sub { margin-top: var(--space-1); }
+  .consignment-stat-card .con-stat-bar-track { margin-top: var(--space-2); }
+}
+
+/* Expenses — Amount. The currency code (CAD, USD…) is three letters in a full-width box stacked
+   over the amount, which made the form one row taller than it needs to be and parted the two
+   halves of a single figure. Held upright they now share a row: a narrow currency picker and the
+   amount taking the rest. Scoped to this form — the manual-entry picker says "Book currency" and
+   needs its own row. */
+@media (max-width: 768px) {
+  #tab-expenses .price-inline { grid-template-columns: minmax(5.5rem, 30%) minmax(0, 1fr); gap: var(--space-2); align-items: stretch; }
+  #tab-expenses .price-inline > * { min-width: 0; width: 100%; }
+}
+
+/* Phone polish, round 6: picture icons that stand alone in a tile (to-do items,
+   receipt rows, empty states, the store picker) print in one ink, so they sit
+   with the ink marks instead of reading as colour clip-art. */
+@media (max-width: 768px) {
+  :is(.todo-ico, .ri-item-ico, .ri-detail-ico, .preset-icon, .intel-disclosure-ic, .oc-empty-icon, .dz-icon) { filter: grayscale(1) contrast(1.15); }
+  /* Channel pills in order history say the channel in words; the picture is extra. */
+  .ch-badge .ch-icon { display: none; }
+}
+
+/* Intelligence — the two notes above the question box. "Add your AI key…" was a pale blue wash
+   in tight, small type with no edge, and the "Before you start" card a thin grey hairline, so
+   the screen's first two blocks looked like a different app next to its inked panel below.
+   Held upright both become inked slabs: a 2px ink outline, the offset shadow, and the flagged-
+   tile accent bar for the key notice (the house device — no tinted fill to lose contrast on). */
+@media (max-width: 768px) {
+  #tab-intel .intel-notice,
+  #tab-intel .intel-disclosure {
+    background: var(--surface-card);
+    border: var(--stroke) solid var(--rule-ink);
+    border-radius: var(--r);
+    box-shadow: var(--elev-1);
+  }
+  #tab-intel .intel-notice {
+    padding: var(--space-3) var(--space-4);
+    box-shadow: var(--elev-1), inset 4px 0 0 var(--status-info);
+    padding-left: calc(var(--space-4) + 4px);
+    font-size: var(--text-sm);
+    line-height: var(--leading-normal);
+    color: var(--content-primary);
+  }
+}
+
+/* Notifications (All Books and the bell panel) — held upright, each notice was a pale hairline
+   box with a thin stripe, much quieter than the inked consignment cards above it. Each is now
+   the same inked slab with the offset shadow; the tone stripe moves inside so it still reads,
+   the title steps up so it leads the source line, and the action link is bold and underlined so
+   it reads as something to press. */
+@media (max-width: 768px) {
+  .notif-list { gap: var(--space-3); }
+  .notif-item { border: var(--stroke) solid var(--rule-ink); border-radius: var(--r2); background: var(--surface-card); box-shadow: var(--elev-1), inset 4px 0 0 var(--status-neutral); padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4); }
+  .notif-item.tone-red { box-shadow: var(--elev-1), inset 4px 0 0 var(--status-critical); }
+  .notif-item.tone-amber { box-shadow: var(--elev-1), inset 4px 0 0 var(--status-active); }
+  .notif-item.tone-blue { box-shadow: var(--elev-1), inset 4px 0 0 var(--status-info); }
+  .notif-item .notif-title { font-size: var(--text-base); }
+  .notif-item .notif-action { font-size: var(--text-sm); text-decoration: underline; text-underline-offset: 3px; }
+
+  /* Dashboard "Author Submissions": an inked slab like the cards around it, with
+     the review buttons sharing one full width instead of a lone half-width stub. */
+  .author-subs-card { display: grid; align-items: stretch; gap: var(--space-3); border: var(--stroke) solid var(--rule-ink); box-shadow: var(--elev-1), inset 4px 0 0 var(--status-active); padding: var(--space-4); }
+  .author-subs-actions { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+  .author-subs-btn { width: 100%; justify-content: center; text-align: center; white-space: normal; }
+}
+
+/* Manual entry — Price paid. The "Book currency" picker stacked over the price put the two halves of
+   one figure on separate rows. Held upright they share a row: a picker wide enough to say "Book
+   currency" on one line, and the price taking the rest. The Expenses form does the same with a
+   narrower picker because its options are three-letter codes. */
+@media (max-width: 768px) {
+  #tab-manual .price-inline { grid-template-columns: minmax(9.5rem, 54%) minmax(0, 1fr); gap: var(--space-2); align-items: stretch; }
 }
