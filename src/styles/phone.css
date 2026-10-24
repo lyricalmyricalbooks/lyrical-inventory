@@ -1376,6 +1376,10 @@
   .kpi-grid-primary > .kpi.is-lead,
   .kpi-grid-primary > .kpi:nth-child(2) { grid-column: 1 / -1; }
   .kpi-grid-primary > .kpi:not(.is-lead) .kpi-label { margin-bottom: var(--space-1); letter-spacing: var(--tracking-caps); }
+  /* "Units sold & gifted" wraps to two lines on a phone while "On consignment" takes one, which
+     dropped one figure ~13px below its neighbour. Both labels reserve two lines so the pair's
+     figures sit level; Revenue (full width, never wraps) is left out. */
+  .kpi-grid-primary > .kpi:not(.is-lead):not(:nth-child(2)) .kpi-label { min-height: 2lh; }
   .kpi-grid-primary > .kpi:not(.is-lead) .kpi-value { font-size: var(--text-lg); }
   .kpi-grid-primary > .kpi:nth-child(2) .kpi-value { font-size: var(--text-xl); }
   .kpi-grid-primary > .kpi .kpi-sub { margin-top: var(--space-1); }
