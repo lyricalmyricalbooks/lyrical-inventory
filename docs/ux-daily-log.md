@@ -156,6 +156,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-23 | visual | Phone Expenses — amount | Put the currency picker (CAD, USD…) and the amount on one row, same height, instead of a full-width picker stacked over the amount box, so the Log an expense form is a row shorter | (this PR) |
 | 2026-10-23 | visual | Phone Help — topic buttons | Laid the five topic buttons (Running the press, Sales & orders…) out as an even two-column grid with the odd last one full width, instead of a ragged wrapped row with uneven widths | (this PR) |
 | 2026-10-23 | visual | Phone Intelligence — the two notes above the question box | Turned the pale blue "Add your AI key…" strip and the thin-lined "Before you start" card into the same bold outlined, offset-shadow slabs as the rest of the app, with easier-to-read type | (this PR) |
+| 2026-10-24 | visual | Phone Dashboard — sales by channel | Put Units, Revenue and Share of revenue side by side with Details beside the channel name, instead of a name, a full-width Details bar and three figures stacked, so each channel card is about half as tall | (this PR) |
 
 ---
 
