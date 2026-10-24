@@ -1235,6 +1235,12 @@
   #exp-body > tr.phone-record > td[data-phone-label="Amount"]::before { display: none; }
   #exp-body > tr.phone-record > td[data-phone-label="Date"] { grid-column: 1 !important; grid-row: 2 !important; }
   #exp-body > tr.phone-record > td[data-phone-label="Receipt"] { grid-column: 2 !important; grid-row: 2 !important; }
+  /* The receipt status and its "+ Receipt" button stack, right-aligned under the amount, instead of
+     sitting side by side: side by side they made the amount column ~200px wide and squeezed the
+     description into a quarter-width strip that wrapped to four lines. */
+  #exp-body > tr.phone-record > td[data-phone-label="Receipt"] { display: flex !important; flex-direction: column; align-items: flex-end; gap: var(--space-1); }
+  #exp-body > tr.phone-record > td[data-phone-label="Receipt"]::before { margin-bottom: 0; }
+  #exp-body > tr.phone-record > td[data-phone-label="Receipt"] > .exp-add-receipt { margin-left: 0; }
   #exp-body > tr.phone-record:has(> td > input[type="checkbox"]) > td[data-phone-label="Select"] { grid-column: 1 !important; grid-row: 1 / span 3 !important; align-self: center; }
   #exp-body > tr.phone-record:has(> td > input[type="checkbox"]) > td.phone-record-lead { grid-column: 2 !important; grid-row: 1 !important; }
   #exp-body > tr.phone-record:has(> td > input[type="checkbox"]) > td[data-phone-label="Amount"] { grid-column: 3 !important; }
