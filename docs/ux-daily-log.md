@@ -160,6 +160,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-24 | visual | Phone Expenses — expense cards | Stacked the receipt status above its "+ Receipt" button on each expense card, instead of side by side, so the expense description gets the full width (one or two lines, not four) | (this PR) |
 | 2026-10-24 | visual | Phone All tools sheet (More menu) | Laid the menu tiles out two to a row instead of one full-width tile each, so the whole list is about half as tall and far less scrolling to reach a screen | (this PR) |
 | 2026-10-24 | visual | Phone Dashboard — pending expense reimbursements | Made each pending reimbursement an inked slab with the amount larger and the two buttons (payment link, Mark received) sharing one full width, instead of a wide outline bar over a half-width fill | (this PR) |
+| 2026-10-24 | visual | Phone Consignment — store card figures | Kept "On shelf" on one line so Sent, Sold, On shelf and Owed all line up on the same row of figures, and the store card is a line shorter | (this PR) |
 
 ---
 
