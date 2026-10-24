@@ -169,6 +169,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-24 | visual | Phone To-do — attention cards | Made each To-do card an inked slab with the offset shadow and a coloured edge stripe, a bolder title, and a wider gap between cards, instead of a pale hairline box matching nothing around it | (this PR) |
 | 2026-10-24 | visual | Phone Payment QR codes — book titles | Put each book's title in the big display lettering the Book Catalog cards use, so the book leads its card instead of reading like the author line under it | (this PR) |
 | 2026-10-24 | visual | Phone Dashboard — pending reimbursement cards | Put what the expense was on its own line first, with the date and category chip on one line beneath, instead of a ragged run with a stranded dot at each wrap | (this PR) |
+| 2026-10-24 | visual | Phone Order History — header | Made the Import button reach the same right edge as the search card and cards beneath, and closed the ~50px dead gap under the "Order history" heading so the first order shows on the first screen | (this PR) |
 
 ---
 
