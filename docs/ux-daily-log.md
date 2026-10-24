@@ -175,6 +175,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-24 | visual | Phone Payments — payment cards | Lined up the paired boxes on each payment to check (Quantity beside Stripe amount, Currency beside Exchange rate) so they sit level, instead of one box dropping below its neighbour whenever its caption wrapped to two lines | (this PR) |
 | 2026-10-24 | visual | Phone Order History — edit pencil | Parked the edit pencil in the bottom-right corner of every order card, lined up with the arrow on return cards, instead of trailing each order number at a different spot on every card | (this PR) |
 | 2026-10-24 | visual | Phone Web Analytics — setup card | Set the setup title in the same capital display lettering as other card titles (it was smeared mixed-case) and put the Not Connected tag beside the page heading instead of a line below | (this PR) |
+| 2026-10-24 | visual | Phone Shipping — Save to Preset | Stretched the Save to Preset button to the same width as the dropdown above it and a full fingertip tall, instead of a half-width stub hanging off the left | (this PR) |
 
 ---
 
