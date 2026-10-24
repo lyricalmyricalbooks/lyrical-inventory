@@ -164,6 +164,10 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-24 | visual | Phone Home — workspace rows | Gave the four workspace rows (Books & stock, Money, Audience, All tools) the same square inked stamp as the job cards above, instead of four loose glyphs of different widths | (this PR) |
 | 2026-10-24 | visual | Phone Audience — action buttons | Made Pull buyers, Filter and Export share one full width, with Filter and Export a full fingertip tall, instead of a wide button over two small orphaned stubs each on its own row | (this PR) |
 | 2026-10-24 | visual | Phone All Books — notifications | Made each notification an inked slab with the offset shadow and a coloured edge stripe, a bigger title and an underlined action link, instead of a pale hairline box matching nothing around it | (this PR) |
+| 2026-10-24 | visual | Phone Dashboard — author submissions notice | Made the "Author Submissions" notice an inked slab with an amber edge and its review buttons sharing one full width, instead of a pale hairline box with a half-width stub button | (this PR) |
+| 2026-10-24 | visual | Phone Manual entry — price paid | Put the currency picker (Book currency, USD…) and the price on one row, same height, instead of a full-width picker stacked over the price box, so the Log an order form is a row shorter | (this PR) |
+| 2026-10-24 | visual | Phone To-do — attention cards | Made each To-do card an inked slab with the offset shadow and a coloured edge stripe, a bolder title, and a wider gap between cards, instead of a pale hairline box matching nothing around it | (this PR) |
+| 2026-10-24 | visual | Phone Payment QR codes — book titles | Put each book's title in the big display lettering the Book Catalog cards use, so the book leads its card instead of reading like the author line under it | (this PR) |
 
 ---
 
