@@ -1112,6 +1112,21 @@
   .todo-dismiss { position: absolute; top: var(--space-1); right: var(--space-1); }
 }
 
+/* To-do cards held upright — each was a pale hairline box with a thin stripe, much quieter than the
+   inked cards on every other screen, and the label sat at the same weight as its own sentence. Each
+   is now the same inked slab with the offset shadow; the tone stripe moves inside so it still reads
+   and the border stays one even outline, the label steps up so it leads the sentence, and the list
+   gap opens a step so one card's shadow doesn't touch the next card. */
+@media (max-width: 768px) {
+  .todo-list { gap: var(--space-3); }
+  .todo-row { border: var(--stroke) solid var(--rule-ink); background: var(--surface-card); padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4); box-shadow: var(--elev-1), inset 4px 0 0 var(--status-neutral); }
+  .todo-row.tone-red { box-shadow: var(--elev-1), inset 4px 0 0 var(--status-critical); }
+  .todo-row.tone-amber { box-shadow: var(--elev-1), inset 4px 0 0 var(--status-active); }
+  .todo-row.tone-gray { box-shadow: var(--elev-1), inset 4px 0 0 var(--cream4); }
+  .todo-row:hover { transform: none; }
+  .todo-label { font-weight: 800; }
+}
+
 /* The combined consignment summary's toolbar on a phone: the search takes the
    full width at its natural height (it was given a 220px basis, which became a
    220px-tall empty box once the toolbar stacked), the filter tabs wrap inside
@@ -1493,6 +1508,10 @@
   #tab-qrcodes .qr-frame canvas,
   #tab-qrcodes .qr-frame img { width: 100% !important; height: auto !important; }
   #tab-qrcodes .qr-card:not(.is-empty) > .qr-card-footer { grid-column: 2; grid-row: 2; margin-top: 0; gap: var(--space-2); }
+  /* Title leads: the same display lettering the Book Catalog cards use, so the book
+     reads first and the author and price sit under it as secondary lines. */
+  #tab-qrcodes .qr-card-title { font-family: var(--font-display); font-size: var(--text-lg); font-weight: 400; text-transform: uppercase; letter-spacing: .02em; line-height: 1.1; }
+  #tab-qrcodes .qr-card-meta { margin-top: var(--space-2); }
   #tab-qrcodes .qr-card-status { display: inline-flex; align-self: flex-start; margin-top: var(--space-2); }
   #tab-qrcodes .qr-card-actions { flex-wrap: wrap; }
   #tab-qrcodes .qr-card-actions .btn { flex: 1 1 auto; }
@@ -1979,4 +1998,18 @@
   .notif-item.tone-blue { box-shadow: var(--elev-1), inset 4px 0 0 var(--status-info); }
   .notif-item .notif-title { font-size: var(--text-base); }
   .notif-item .notif-action { font-size: var(--text-sm); text-decoration: underline; text-underline-offset: 3px; }
+
+  /* Dashboard "Author Submissions": an inked slab like the cards around it, with
+     the review buttons sharing one full width instead of a lone half-width stub. */
+  .author-subs-card { display: grid; align-items: stretch; gap: var(--space-3); border: var(--stroke) solid var(--rule-ink); box-shadow: var(--elev-1), inset 4px 0 0 var(--status-active); padding: var(--space-4); }
+  .author-subs-actions { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+  .author-subs-btn { width: 100%; justify-content: center; text-align: center; white-space: normal; }
+}
+
+/* Manual entry — Price paid. The "Book currency" picker stacked over the price put the two halves of
+   one figure on separate rows. Held upright they share a row: a picker wide enough to say "Book
+   currency" on one line, and the price taking the rest. The Expenses form does the same with a
+   narrower picker because its options are three-letter codes. */
+@media (max-width: 768px) {
+  #tab-manual .price-inline { grid-template-columns: minmax(9.5rem, 54%) minmax(0, 1fr); gap: var(--space-2); align-items: stretch; }
 }
