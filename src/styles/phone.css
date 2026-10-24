@@ -1160,6 +1160,19 @@
   #tab-taxcenter #tc-sec-ledger > .cf-card { order: 1; }
   #tab-taxcenter #tc-sec-ledger > :not(#tc-expense-form-card):not(.cf-card) { order: 2; }
 
+  /* Cash-flow headline cards: the icon sits beside the label and figure instead of
+     stacked above them, so each card is about half as tall; the three now read as one
+     compact set. An odd last small figure takes the full row rather than leaving a gap. */
+  #tab-taxcenter #tc-cf-stats { gap: var(--space-3); }
+  #tab-taxcenter #tc-cf-stats .cf-stat { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; column-gap: var(--space-3); align-items: center; padding: var(--space-3) var(--space-4); }
+  #tab-taxcenter #tc-cf-stats .cf-stat-top { display: contents; }
+  #tab-taxcenter #tc-cf-stats .cf-ic { grid-column: 1; grid-row: 1 / span 3; align-self: start; }
+  #tab-taxcenter #tc-cf-stats .cf-stat-delta { grid-column: 3; grid-row: 2; }
+  #tab-taxcenter #tc-cf-stats .cf-stat-label { grid-column: 2 / -1; margin: 0; }
+  #tab-taxcenter #tc-cf-stats .cf-stat-val { grid-column: 2; grid-row: 2; min-width: 0; }
+  #tab-taxcenter #tc-cf-stats .cf-stat-sub { grid-column: 2 / -1; margin-top: 2px; }
+  #tab-taxcenter #tc-cf-kpis > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+
   /* An empty section is one line of text with its one button, not a tall dashed box. */
   #tab-taxcenter #tc-pending-list .tc-pending-empty { padding: 0; background: none; border: 0; text-align: left; }
   #tab-taxcenter #tc-pending-list .tc-pending-empty-icon,
