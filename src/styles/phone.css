@@ -937,8 +937,10 @@
   #tab-reconcile .recon-toolbar > .btn { grid-column: 2; min-height: var(--target-min); justify-content: center; }
 
   /* Need cards: one column of fields, book first, Qty beside the amount,
-     Currency beside the rate, Order # last, then the actions. */
-  #tab-reconcile .recon-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); align-items: start; }
+     Currency beside the rate, Order # last, then the actions. Cells sit on the
+     bottom edge so a label that wraps to two lines (Stripe amount paid, Automatic
+     exchange rate) doesn't push its box below its neighbour's. */
+  #tab-reconcile .recon-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); align-items: end; }
   #tab-reconcile .recon-fields > .form-group,
   #tab-reconcile .recon-fields > .recon-actions { width: auto; max-width: none; min-width: 0; flex: none; }
   #tab-reconcile .recon-fields > .recon-f-book,
