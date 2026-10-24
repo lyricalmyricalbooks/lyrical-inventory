@@ -1739,6 +1739,11 @@
   #tab-webanalytics .wa-setup-hero { margin-bottom: var(--space-3); }
   #tab-webanalytics .wa-setup-icon { margin-bottom: var(--space-1); }
   #tab-webanalytics .wa-setup-panel { padding: var(--space-3); margin-bottom: var(--space-3); }
+  /* The setup title is Anton, which has no bold: the heading's default bold was being faked and
+     smeared it, and it ran in mixed case where every other card title is capitals. The heading
+     and its Not Connected tag share one row instead of the tag dropping a line below. */
+  #tab-webanalytics .wa-setup-title { font-weight: 400; text-transform: uppercase; letter-spacing: .01em; line-height: 1.1; text-wrap: balance; }
+  #tab-webanalytics > .row-between { flex-direction: row; align-items: center; flex-wrap: nowrap; gap: var(--space-3); margin-bottom: var(--space-4) !important; }
 
   /* Help: each question is a list row with a hairline, not a heavy boxed button. */
   #tab-help .help-q { border: var(--stroke-hair) solid var(--border-default); box-shadow: none; }
