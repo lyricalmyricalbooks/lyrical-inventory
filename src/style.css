@@ -2103,9 +2103,15 @@ tr.hist-row:hover {
    opens up on a desktop and never inverts on a phone (where .kpi-value drops
    to 22px at the ≤480px breakpoint). */
 .kpi.is-lead .kpi-value{font-size:var(--text-3xl);}
-.kpi-more{margin-bottom:1.5rem;background:var(--surface-card);border:var(--stroke-hair) solid var(--border);border-radius:var(--r2);padding:.35rem .85rem;box-shadow:var(--shadow);}
-.kpi-more summary{cursor:pointer;list-style:none;font-size:var(--text-2xs);font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);padding:.55rem 0;}
+.kpi-more{margin-bottom:1.5rem;background:var(--surface-card);border:var(--stroke) solid var(--rule-ink);border-radius:var(--r);padding:0 1.15rem;box-shadow:var(--elev-2);}
+/* One full-width 44px row, the same ink outline and offset shadow as the tiles
+   above it, with a +/− marker (as .recon-fold) so it reads as a control. */
+.kpi-more summary{cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:.75rem;min-height:44px;font-size:var(--text-2xs);font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--text2);}
 .kpi-more summary::-webkit-details-marker{display:none;}
+.kpi-more summary::after{content:'+';font-family:var(--font-mono);font-size:var(--text-base);line-height:1;}
+.kpi-more[open] summary::after{content:'−';}
+.kpi-more summary:hover{color:var(--text);}
+.kpi-more summary:focus-visible{outline:var(--stroke) solid var(--rule-ink);outline-offset:2px;}
 .kpi-grid-secondary{margin-top:.5rem;margin-bottom:.5rem;}
 
 /* METRIC BANNERS */
