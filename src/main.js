@@ -12129,8 +12129,12 @@ export function renderLedger() {
     const voided = e.voided ? ' voided' : '';
     const editBtn = `<button class="edit-btn" onclick="openEditLedger(${i})" title="Edit entry" aria-label="Edit entry">✎</button>`;
     // Cross-link Sale rows back to the invoice that bills them (absent id → '').
+    // Date, store and amount use the shared .tbl cell roles: the date in DM
+    // Mono on one line (it was breaking to two in Archivo, so rows stood
+    // uneven heights), the amount at DM Mono's real 500 weight instead of a
+    // synthesised 600 that smeared the digits.
     const invBadge = e.type === 'Sale' ? invoiceBadgeHTML(e.invoiceId, e.invoiceNum) : '';
-    html += `<tr class="${voided}"><td class="mono-num" style="font-size:var(--text-sm);color:var(--text3);">${fmtD(e.date)}</td><td style="font-weight:600;">${escapeHtml(e.storeName)}${editBtn}</td><td>${escapeHtml(e.type)}</td><td class="r">${e.qty}</td><td class="r">${e.type === 'Sale' ? e.rate + '%' : '—'}</td><td class="r" style="font-weight:600;">${e.amountDue > 0 ? fmt(e.amountDue, ledgerCur(e)) : '—'}</td><td style="font-size:var(--text-sm);color:var(--text3);">${consignNotesCell(e)}</td><td>${pill(e)}${e.status === 'pending' && !e.voided ? ` <button class="btn sm" style="margin-left:6px;" onclick="markPaid(${e.id})">Mark paid</button>` : ''}${invBadge}</td></tr>`;
+    html += `<tr class="${voided}"><td class="date-cell">${fmtD(e.date)}</td><td class="lead-cell">${escapeHtml(e.storeName)}${editBtn}</td><td>${escapeHtml(e.type)}</td><td class="r">${e.qty}</td><td class="r">${e.type === 'Sale' ? e.rate + '%' : '—'}</td><td class="r money-cell">${e.amountDue > 0 ? fmt(e.amountDue, ledgerCur(e)) : '—'}</td><td style="font-size:var(--text-sm);color:var(--text3);">${consignNotesCell(e)}</td><td>${pill(e)}${e.status === 'pending' && !e.voided ? ` <button class="btn sm" style="margin-left:6px;" onclick="markPaid(${e.id})">Mark paid</button>` : ''}${invBadge}</td></tr>`;
   }
   b.innerHTML = html;
   if (foot) foot.innerHTML = consignmentLedgerFootHtml(consignmentLedgerTotals(matched, ledgerBookCode), ledgerTotalsScope(filter, storeName));
