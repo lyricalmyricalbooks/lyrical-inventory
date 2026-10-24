@@ -1979,4 +1979,10 @@
   .notif-item.tone-blue { box-shadow: var(--elev-1), inset 4px 0 0 var(--status-info); }
   .notif-item .notif-title { font-size: var(--text-base); }
   .notif-item .notif-action { font-size: var(--text-sm); text-decoration: underline; text-underline-offset: 3px; }
+
+  /* Dashboard "Author Submissions": an inked slab like the cards around it, with
+     the review buttons sharing one full width instead of a lone half-width stub. */
+  .author-subs-card { display: grid; align-items: stretch; gap: var(--space-3); border: var(--stroke) solid var(--rule-ink); box-shadow: var(--elev-1), inset 4px 0 0 var(--status-active); padding: var(--space-4); }
+  .author-subs-actions { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+  .author-subs-btn { width: 100%; justify-content: center; text-align: center; white-space: normal; }
 }

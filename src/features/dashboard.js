@@ -100,21 +100,21 @@ function renderBookPendingAlert() {
     alertDiv.style.display = 'block';
     let contentHtml = '';
     if (sCount > 0) {
-      contentHtml += `<button class="btn gold outline sm" onclick="switchTab('history')">Review ${sCount} pending sale(s) →</button>`;
+      contentHtml += `<button class="btn gold outline sm author-subs-btn" onclick="switchTab('history')">Review ${sCount} pending sale(s) →</button>`;
     }
     if (eCount > 0) {
-      contentHtml += `<button class="btn gold outline sm" style="margin-left:8px;" onclick="switchTab('expenses')">Review ${eCount} pending expense(s) →</button>`;
+      contentHtml += `<button class="btn gold outline sm author-subs-btn" onclick="switchTab('expenses')">Review ${eCount} pending expense(s) →</button>`;
     }
 
     alertDiv.innerHTML = `
-      <div style="background:var(--surface-card); border:var(--stroke-hair) solid var(--border); border-left:var(--stroke) solid var(--amber); border-radius:var(--r2); padding:1.25rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+      <div class="author-subs-card">
         <div>
           <div style="font-weight:600; color:var(--text2); margin-bottom:4px; display:flex; align-items:center; gap:8px;">
             <span class="pill amber">Pending</span> Author Submissions
           </div>
           <div style="font-size:var(--text-sm); color:var(--text3);">There are entries from the author waiting for your approval.</div>
         </div>
-        <div>
+        <div class="author-subs-actions">
           ${contentHtml}
         </div>
       </div>
