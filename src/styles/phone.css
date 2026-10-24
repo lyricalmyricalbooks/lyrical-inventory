@@ -1548,6 +1548,13 @@
   #tab-qrcodes .qr-card-status { display: inline-flex; align-self: flex-start; margin-top: var(--space-2); }
   #tab-qrcodes .qr-card-actions { flex-wrap: wrap; }
   #tab-qrcodes .qr-card-actions .btn { flex: 1 1 auto; }
+  /* Every code card holds the same inked slab as the cards around it: the offset shadow drops to the
+     one step the other phone cards use (it was the largest, so these read heaviest on the screen), the
+     "no link yet" card takes the compact padding of its sibling instead of the roomy desktop padding,
+     and the status tag is a square tag like Payment due rather than a soft lozenge. */
+  #tab-qrcodes .qr-card { box-shadow: var(--elev-1); }
+  #tab-qrcodes .qr-card.is-empty { padding: var(--space-4); gap: var(--space-3); }
+  #tab-qrcodes .qr-card-status { border-radius: var(--r2); border: var(--stroke-hair) solid currentColor; }
   #tab-qrcodes .qr-card-empty { gap: var(--space-2); }
   #tab-qrcodes .qr-card-empty-note { font-size: var(--text-sm); }
 
