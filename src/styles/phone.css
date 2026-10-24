@@ -541,8 +541,10 @@
   :is(.tab-panel, .modal) .phone-records tr.phone-record.is-awaiting > td { box-shadow: none; }
   :is(.tab-panel, .modal) .phone-records .appr-btn { height: var(--target-min); }
   :is(.tab-panel, .modal) .phone-records .appr-btn.reject { width: var(--target-min); }
-  .pub-shell .more-sheet-body .pub-nav { grid-template-columns: minmax(0, 1fr); }
-  .pub-shell .more-sheet-body .snav { min-height: 52px; }
+  /* Two tiles to a row: with one full-width tile per screen the All tools sheet ran
+     to about fourteen thumb-scrolls; a label plus its icon fits half the width. */
+  .pub-shell .more-sheet-body .pub-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pub-shell .more-sheet-body .snav { min-height: 56px; }
   .pub-shell :is(button, summary):focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
 }
 
@@ -560,9 +562,9 @@
   #tab-website .web-orders-actions #backfill-shipping-btn { grid-column: 2; box-shadow: none; font-size: var(--text-xs); }
   #tab-website .order-card-top { flex-direction: row; }
   #tab-website .order-card-top > .pill { flex: none; }
-  .pub-shell .more-sheet-body .snav { flex-direction: row; justify-content: flex-start; text-align: left; gap: var(--space-3); padding: var(--space-3) var(--space-4); }
+  .pub-shell .more-sheet-body .snav { flex-direction: row; justify-content: flex-start; text-align: left; gap: var(--space-2); padding: var(--space-2) var(--space-3); }
   .pub-shell .more-sheet-body .snav-ic { width: 24px; flex: none; }
-  .pub-shell .more-sheet-body .snav-label { font-size: var(--text-sm); }
+  .pub-shell .more-sheet-body .snav-label { min-width: 0; font-size: var(--text-sm); line-height: 1.2; overflow-wrap: break-word; }
 }
 
 /* More sheet, Riso Press: it still wore the pre-repaint soft look (round close button,
@@ -575,7 +577,7 @@
   .more-sheet-title { font-family: var(--font-display); font-weight: 400; font-size: var(--text-xl); text-transform: uppercase; letter-spacing: var(--tracking-caps); }
   .more-sheet-close { border-radius: var(--r2); border: var(--stroke) solid var(--rule-ink); background: var(--surface-card); color: var(--content-primary); box-shadow: var(--elev-1); }
   .more-sheet-close:active { transform: translate(2px, 2px); box-shadow: none; }
-  .pub-shell .more-sheet-body .pub-nav { gap: var(--space-3); }
+  .pub-shell .more-sheet-body .pub-nav { gap: var(--space-2) var(--space-3); }
   .pub-shell .more-sheet-body .snav { border: var(--stroke) solid var(--rule-ink); background: var(--surface-card); box-shadow: var(--elev-1); transition: background .15s var(--ease-standard), transform .1s var(--ease-standard), box-shadow .1s var(--ease-standard); }
   .pub-shell .more-sheet-body .snav:active { transform: translate(2px, 2px); box-shadow: none; }
   .pub-shell .more-sheet-body .snav.active::before { display: none; }
