@@ -1508,6 +1508,10 @@
   #tab-qrcodes .qr-frame canvas,
   #tab-qrcodes .qr-frame img { width: 100% !important; height: auto !important; }
   #tab-qrcodes .qr-card:not(.is-empty) > .qr-card-footer { grid-column: 2; grid-row: 2; margin-top: 0; gap: var(--space-2); }
+  /* Title leads: the same display lettering the Book Catalog cards use, so the book
+     reads first and the author and price sit under it as secondary lines. */
+  #tab-qrcodes .qr-card-title { font-family: var(--font-display); font-size: var(--text-lg); font-weight: 400; text-transform: uppercase; letter-spacing: .02em; line-height: 1.1; }
+  #tab-qrcodes .qr-card-meta { margin-top: var(--space-2); }
   #tab-qrcodes .qr-card-status { display: inline-flex; align-self: flex-start; margin-top: var(--space-2); }
   #tab-qrcodes .qr-card-actions { flex-wrap: wrap; }
   #tab-qrcodes .qr-card-actions .btn { flex: 1 1 auto; }
