@@ -1510,6 +1510,15 @@
   #tab-customers .cust-export-fold .cust-fold-body { margin-top: var(--space-2); }
   #tab-customers .cust-export-fold .cust-fold-body > div { flex-wrap: wrap; }
 
+  /* The three actions above the buyer list share one left and right edge, so
+     the pull button leads and Filter / Export read as its quieter siblings
+     instead of two orphaned half-width stubs. */
+  #tab-customers .row-between:has(#cust-stripe-btn) { flex-direction: column; align-items: stretch !important; }
+  #tab-customers div:has(> #cust-stripe-btn) { width: 100%; }
+  #tab-customers #cust-stripe-btn { flex: 1 1 100%; justify-content: center; }
+  #tab-customers .cust-fold-toggle { width: 100%; min-height: 44px; justify-content: center; }
+  #tab-customers .cust-export-fold { flex: 1 1 100%; }
+
   /* Intelligence: the acknowledged privacy note is one line with a Details
      toggle, and the full card stays hidden until it is opened. */
   #tab-intel .intel-privacy-line {
