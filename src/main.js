@@ -2857,10 +2857,9 @@ async function generateSingleBookStripeQR() {
 }
 
 function copyPaymentLink() {
-  const link = $('qr-payment-link');
-  link.select();
-  document.execCommand('copy');
-  showToast('Payment link copied');
+  const url = $('qr-payment-link')?.value;
+  if (!url) { showToast('No payment link to copy yet', 'warn'); return; }
+  copyTextWithFallback(url).then(() => showToast('Payment link copied'));
 }
 
 function downloadPaymentQR() {
