@@ -1112,6 +1112,21 @@
   .todo-dismiss { position: absolute; top: var(--space-1); right: var(--space-1); }
 }
 
+/* To-do cards held upright — each was a pale hairline box with a thin stripe, much quieter than the
+   inked cards on every other screen, and the label sat at the same weight as its own sentence. Each
+   is now the same inked slab with the offset shadow; the tone stripe moves inside so it still reads
+   and the border stays one even outline, the label steps up so it leads the sentence, and the list
+   gap opens a step so one card's shadow doesn't touch the next card. */
+@media (max-width: 768px) {
+  .todo-list { gap: var(--space-3); }
+  .todo-row { border: var(--stroke) solid var(--rule-ink); background: var(--surface-card); padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4); box-shadow: var(--elev-1), inset 4px 0 0 var(--status-neutral); }
+  .todo-row.tone-red { box-shadow: var(--elev-1), inset 4px 0 0 var(--status-critical); }
+  .todo-row.tone-amber { box-shadow: var(--elev-1), inset 4px 0 0 var(--status-active); }
+  .todo-row.tone-gray { box-shadow: var(--elev-1), inset 4px 0 0 var(--cream4); }
+  .todo-row:hover { transform: none; }
+  .todo-label { font-weight: 800; }
+}
+
 /* The combined consignment summary's toolbar on a phone: the search takes the
    full width at its natural height (it was given a 220px basis, which became a
    220px-tall empty box once the toolbar stacked), the filter tabs wrap inside
