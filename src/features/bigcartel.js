@@ -567,7 +567,7 @@ async function loadBigCartelData() {
                 <strong class="bc-empty-title">Failed to Load Orders</strong>
                 <p class="bc-empty-msg">${escapeHtml(msg)}</p>
                 <div class="bc-empty-actions">
-                  <button type="button" class="btn sm outline" onclick="loadBigCartelData()" style="min-height:var(--target-min);display:inline-flex;align-items:center;gap:6px;">
+                  <button type="button" class="btn sm outline" data-action="bc.load" style="min-height:var(--target-min);display:inline-flex;align-items:center;gap:6px;">
                     <span aria-hidden="true">🔄</span>
                     <span>Retry Connection</span>
                   </button>
@@ -1021,7 +1021,7 @@ function renderBigCartelOrders(orders, included = []) {
             <strong class="bc-empty-title">No Big Cartel Orders Found</strong>
             <p class="bc-empty-msg">No customer transactions found for this account. Make sure your Big Cartel account is connected, then fetch your latest store orders.</p>
             <div class="bc-empty-actions">
-              <button type="button" class="btn sm gold" onclick="loadBigCartelData()" style="min-height:var(--target-min);display:inline-flex;align-items:center;gap:6px;" title="Fetch latest orders from Big Cartel">
+              <button type="button" class="btn sm gold" data-action="bc.load" style="min-height:var(--target-min);display:inline-flex;align-items:center;gap:6px;" title="Fetch latest orders from Big Cartel">
                 <span aria-hidden="true">🔄</span>
                 <span>Fetch Orders</span>
               </button>
@@ -1070,17 +1070,17 @@ function renderBigCartelOrders(orders, included = []) {
     row.innerHTML = `
       <td style="font-family:var(--font-mono); font-size:var(--text-xs);">#${escapeHtml(o.id)}</td>
       <td>${dateStr}</td>
-      <td style="font-weight:600;"><a class="bc-customer-link" onclick="openBigCartelAddressPreview('${o.id}')" title="Click to view full shipping address">${escapeHtml(customer)}</a>${email ? `<br><span style="font-size:var(--text-xs); color:var(--text3); font-weight:normal;">${escapeHtml(email)}</span>` : ''}</td>
+      <td style="font-weight:600;"><a class="bc-customer-link" data-action="bc.address" data-order="${escapeHtml(o.id)}" title="Click to view full shipping address">${escapeHtml(customer)}</a>${email ? `<br><span style="font-size:var(--text-xs); color:var(--text3); font-weight:normal;">${escapeHtml(email)}</span>` : ''}</td>
       <td style="font-size:var(--text-sm); line-height:1.45;">${itemsHtml}</td>
       <td class="r" style="font-family:var(--font-mono);">$${tax}</td>
       <td class="r" style="font-family:var(--font-mono);">$${shipping}</td>
       <td class="r" style="font-family:var(--font-mono); font-weight:700; color:var(--gold);">$${total}</td>
       <td><span class="${statusPill}" style="font-size:var(--text-2xs); padding:3px 8px;">${attr.status || 'unknown'}</span></td>
       <td class="r" style="white-space:nowrap;">
-        <button class="btn sm" onclick="copyBigCartelOrderAddress('${o.id}')" title="Copy recipient shipping address to clipboard" style="margin-right:4px;">
+        <button class="btn sm" data-action="bc.copyAddress" data-order="${escapeHtml(o.id)}" title="Copy recipient shipping address to clipboard" style="margin-right:4px;">
           📋 Copy
         </button>
-        <button class="btn gold sm" onclick="prefillShippingFromBigCartelOrder('${o.id}')" style="margin:0; display:inline-flex; align-items:center; gap:4px;">
+        <button class="btn gold sm" data-action="bc.ship" data-order="${escapeHtml(o.id)}" style="margin:0; display:inline-flex; align-items:center; gap:4px;">
           <span>📦</span> Ship
         </button>
       </td>
@@ -2273,7 +2273,7 @@ function gapRowHtml(gap) {
         <span>Set aside · ${escapeHtml(gap.customer || gap.email || 'Customer')}</span>
       </div>
       <div class="bc-gap-decision">
-        <button class="btn sm" type="button" data-order="${idSafe}" onclick="undoBigCartelGapDismiss(this.dataset.order)">Undo</button>
+        <button class="btn sm" type="button" data-order="${idSafe}" data-action="bc.undoSetAside">Undo</button>
       </div>
     </div>`;
   }
@@ -2293,7 +2293,7 @@ function gapRowHtml(gap) {
   // expensive one to give. The Undo above is what makes skipping the dialog safe.
   return `<div class="bc-gap-row" data-order="${idSafe}">
     <button class="bc-gap-dismiss" type="button" data-order="${idSafe}"
-      onclick="dismissBigCartelGap(this.dataset.order)"
+      data-action="bc.setAside"
       title="Set aside — already recorded, or not a sale"
       aria-label="Set aside order ${escapeHtml(gap.num)} — already recorded, or not a sale">&#10005;</button>
     <div class="bc-gap-copy">
@@ -2308,7 +2308,7 @@ function gapRowHtml(gap) {
       <label for="bc-gap-qty-${idSafe}">Copies</label>
       <input id="bc-gap-qty-${idSafe}" type="number" inputmode="numeric" min="1" step="1" value="${gap.qty || 1}" aria-label="Copies sold on order ${escapeHtml(gap.num)}">
       <div class="bc-gap-actions">
-        <button class="btn gold sm" type="button" data-order="${idSafe}" onclick="addBigCartelOrderToLedger(this.dataset.order)">Add to ledger</button>
+        <button class="btn gold sm" type="button" data-order="${idSafe}" data-action="bc.addToLedger">Add to ledger</button>
       </div>
     </div>
   </div>`;
@@ -2327,8 +2327,8 @@ function repairRowHtml(conflict, kind) {
     <div class="bc-gap-decision">
       <div class="bc-gap-actions">
         ${isDuplicate
-          ? `<button class="btn danger-btn sm" type="button" data-placeholder="${escapeHtml(conflict.placeholderNum)}" onclick="voidPlaceholderDuplicate(this.dataset.placeholder)">Void the duplicate</button>`
-          : `<button class="btn gold sm" type="button" data-placeholder="${escapeHtml(conflict.placeholderNum)}" data-real="${escapeHtml(conflict.realNum)}" onclick="renumberPlaceholderOrder(this.dataset.placeholder, this.dataset.real)">Use the real order number</button>`}
+          ? `<button class="btn danger-btn sm" type="button" data-placeholder="${escapeHtml(conflict.placeholderNum)}" data-action="bc.voidDuplicate">Void the duplicate</button>`
+          : `<button class="btn gold sm" type="button" data-placeholder="${escapeHtml(conflict.placeholderNum)}" data-real="${escapeHtml(conflict.realNum)}" data-action="bc.renumber">Use the real order number</button>`}
       </div>
     </div>
   </div>`;
@@ -2785,7 +2785,22 @@ async function triggerBigCartelShippingSync() {
     }
   }
 }
+// The buttons this screen draws, by name (see lib/actions.js). Order ids come
+// from Big Cartel and ride in data-* attributes, read back as text.
+const bigCartelActions = {
+  'bc.load': () => loadBigCartelData(),
+  'bc.address': (el) => openBigCartelAddressPreview(el.dataset.order),
+  'bc.copyAddress': (el) => copyBigCartelOrderAddress(el.dataset.order),
+  'bc.ship': (el) => prefillShippingFromBigCartelOrder(el.dataset.order),
+  'bc.setAside': (el) => dismissBigCartelGap(el.dataset.order),
+  'bc.undoSetAside': (el) => undoBigCartelGapDismiss(el.dataset.order),
+  'bc.addToLedger': (el) => addBigCartelOrderToLedger(el.dataset.order),
+  'bc.voidDuplicate': (el) => voidPlaceholderDuplicate(el.dataset.placeholder),
+  'bc.renumber': (el) => renumberPlaceholderOrder(el.dataset.placeholder, el.dataset.real),
+};
+
 export {
+  bigCartelActions,
   addBigCartelOrderToLedger,
   announceNewBigCartelOrders,
   showNewOrderAlert,

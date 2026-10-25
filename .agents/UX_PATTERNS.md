@@ -26,9 +26,17 @@ Modifiers (compose, don't reinvent):
 
 ```html
 <button class="btn gold">+ Add store</button>
-<button class="btn sm ink" onclick="switchBook('${book.id}')">Manage →</button>
-<button class="btn danger-btn sm" onclick="voidEntry('${id}')">Void</button>
+<button class="btn sm ink" data-action="books.manage" data-book="${escapeHtml(book.id)}">Manage →</button>
+<button class="btn danger-btn sm" data-action="ledger.void" data-id="${escapeHtml(id)}">Void</button>
 ```
+
+**Wiring a button: name an action, don't write code into the markup.** New buttons use
+`data-action="screen.verb"` (or `data-on-change` / `data-on-input` for fields) with the
+values in `data-*` attributes, and the screen registers its handlers with `registerActions`
+from `src/lib/actions.js` (see `intelActions` in `features/intel.js`). Don't add new
+`onclick="fn('${value}')"` attributes: a value pasted into one is a quote away from running as
+script, even when escaped for HTML. `tests/actions.test.js` stops the count of inline
+handlers from growing.
 
 Row-level icon actions (edit/manage buttons that appear on hover) use `.edit-btn` —
 see `.tbl tbody tr:hover .edit-btn` (`style.css:1821`) for the reveal-on-hover convention.

@@ -219,7 +219,7 @@ function intelErrorHtml(msg) {
   return `<div class="intel-error">
       <div class="intel-error-body">${intelText(msg.text)}</div>
       <button type="button" class="btn gold sm sys-target" data-question="${escapeHtml(msg.question || '')}"
-        onclick="retryIntelQuestion(this.dataset.question)" ${msg.question ? '' : 'disabled'}>Try again</button>
+        data-action="intel.retry" ${msg.question ? '' : 'disabled'}>Try again</button>
     </div>`;
 }
 
@@ -234,7 +234,7 @@ function intelMessageHtml(msg, i) {
         ${isError ? intelErrorHtml(msg) : `<div class="intel-msg-body">${body}</div>
         ${mine ? '' : toolTrace(msg.tools, msg)}
         ${mine ? '' : `<div class="intel-msg-actions">
-          <button type="button" class="intel-msg-action" onclick="copyIntelAnswer(this)" aria-label="Copy this answer" title="Copy">⧉</button>
+          <button type="button" class="intel-msg-action" data-action="intel.copy" aria-label="Copy this answer" title="Copy">⧉</button>
         </div>`}`}
         ${(msg.proposals || []).map(id => intelBatchHtml(INTEL_PROPOSALS.get(id))).join('')}
       </div>
@@ -280,7 +280,7 @@ function intelBatchHtml(b) {
         <td class="intel-edit-tick">${settled
           ? (applied ? '<span aria-label="changed">✓</span>' : '<span aria-label="not changed">—</span>')
           : `<button type="button" class="intel-tick ${off ? '' : 'is-on'}" role="switch" aria-checked="${off ? 'false' : 'true'}"
-               aria-label="Include this change" onclick="toggleIntelEdit('${escapeHtml(b.id)}','${escapeHtml(it.ref)}')">${off ? '' : '✓'}</button>`}</td>
+               aria-label="Include this change" data-action="intel.toggle" data-batch="${escapeHtml(b.id)}" data-ref="${escapeHtml(it.ref)}">${off ? '' : '✓'}</button>`}</td>
         <td class="intel-edit-what">
           <span class="intel-edit-record">${escapeHtml(it.record)}</span>
           <span class="intel-edit-field">${escapeHtml(it.fieldLabel)}${it.risk === 'money' ? ' <span class="intel-money-flag" title="This one changes money">$</span>' : ''}</span>
@@ -310,10 +310,10 @@ function intelBatchHtml(b) {
       </details>` : ''}
 
       ${settled ? '' : `<div class="intel-proposal-actions">
-        <button type="button" class="btn gold sm sys-target" onclick="applyIntelProposal('${escapeHtml(b.id)}')" ${live.length ? '' : 'disabled'}>
+        <button type="button" class="btn gold sm sys-target" data-action="intel.apply" data-batch="${escapeHtml(b.id)}" ${live.length ? '' : 'disabled'}>
           ${live.length === 1 ? 'Make this change' : `Make these ${live.length} changes`}
         </button>
-        <button type="button" class="btn ghost sm sys-target" onclick="dismissIntelProposal('${escapeHtml(b.id)}')">Leave everything as it is</button>
+        <button type="button" class="btn ghost sm sys-target" data-action="intel.dismiss" data-batch="${escapeHtml(b.id)}">Leave everything as it is</button>
       </div>`}
     </div>`;
 }
@@ -344,7 +344,7 @@ function intelEmptyHtml() {
  */
 function intelRailHtml() {
   const quick = STARTERS
-    .map(q => `<button type="button" class="intel-rail-btn sys-target" onclick="askIntelStarter(this)">${escapeHtml(q)}</button>`)
+    .map(q => `<button type="button" class="intel-rail-btn sys-target" data-action="intel.starter">${escapeHtml(q)}</button>`)
     .join('');
 
   const asked = [];
@@ -352,7 +352,7 @@ function intelRailHtml() {
   const recent = asked.length > 1
     ? asked.slice(-8).reverse()
       .map(({ text, i }) => `<button type="button" class="intel-rail-btn intel-rail-recent sys-target" data-target="intel-msg-${i}"
-          onclick="scrollToIntelMessage(this.dataset.target)" title="${escapeHtml(text)}">${escapeHtml(text)}</button>`)
+          data-action="intel.scrollTo" title="${escapeHtml(text)}">${escapeHtml(text)}</button>`)
       .join('')
     : '';
 
@@ -413,7 +413,7 @@ function intelModelSwitchHtml() {
   const pref = intelProviderPref();
   const backupLabel = backup.model.length > 20 ? `${backup.model.slice(0, 19)}…` : backup.model;
   const pill = (value, text, title) => `<button type="button" class="intel-model-pill ${pref === value ? 'is-active' : ''}"
-      role="radio" aria-checked="${pref === value}" title="${escapeHtml(title)}" onclick="setIntelProviderPref('${value}')">${escapeHtml(text)}</button>`;
+      role="radio" aria-checked="${pref === value}" title="${escapeHtml(title)}" data-action="intel.provider" data-value="${value}">${escapeHtml(text)}</button>`;
   return pill('auto', 'Auto', 'Ask Gemini, and switch to your backup automatically if Gemini can’t answer')
     + pill('gemini', 'Gemini', 'Always ask Gemini')
     + pill('backup', backupLabel, `Always ask your backup model (${backup.model})`);
@@ -914,8 +914,23 @@ function dismissIntelProposal(batchId) {
 
 loadIntelThread();
 
+// The buttons this panel draws, by name (see lib/actions.js). Values travel in
+// data-* attributes: a batch id or change ref written by the assistant can't
+// break out of a JS string the way it could inside an inline onclick.
+const intelActions = {
+  'intel.retry': (el) => retryIntelQuestion(el.dataset.question),
+  'intel.copy': (el) => copyIntelAnswer(el),
+  'intel.toggle': (el) => toggleIntelEdit(el.dataset.batch, el.dataset.ref),
+  'intel.apply': (el) => applyIntelProposal(el.dataset.batch),
+  'intel.dismiss': (el) => dismissIntelProposal(el.dataset.batch),
+  'intel.starter': (el) => askIntelStarter(el),
+  'intel.scrollTo': (el) => scrollToIntelMessage(el.dataset.target),
+  'intel.provider': (el) => setIntelProviderPref(el.dataset.value),
+};
+
 export {
   INTEL_PROPOSALS,
+  intelActions,
   acceptIntelDisclosure,
   toggleIntelPrivacyDetails,
   askWithFallback,
