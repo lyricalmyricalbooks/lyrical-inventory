@@ -205,6 +205,9 @@
   .pub-shell .ledger-sub { font: 400 var(--text-xs) var(--font-mono); color: var(--content-muted); }
   .pub-shell .ledger-fig.is-owed .ledger-value { color: var(--gold-text); }
   .pub-shell .ledger-fig.is-low .ledger-value { color: var(--amber); }
+  /* A sale on this phone that hasn't reached the cloud yet. */
+  .pub-shell .ledger-fig.is-waiting .ledger-sub { color: var(--amber); font-weight: 500; }
+  .pub-shell .ledger-fig.is-waiting .ledger-sub::before { content: "↑ "; }
 
   /* ── Today ─────────────────────────────────────────────────────────── */
   .pub-shell #tab-today { padding-inline: var(--phone-gutter); }

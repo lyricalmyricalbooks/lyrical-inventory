@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, expect, test } from 'vitest';
-import { salesForDay as salesForDayFn } from '../src/lib/today-summary.js';
+import { salesForDay as salesForDayFn, unsentSalesForDay as unsentSalesForDayFn } from '../src/lib/today-summary.js';
 import { PUBLISHER_ONLY_TABS } from '../src/lib/help-guide.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -93,16 +93,16 @@ test('Today gives selling, orders, tasks and receipt capture a real button', () 
 
 // Run the Today renderers from main.js against the real markup, with the app's
 // own state stood in for.
-function todayApi({ activeBook, renderOrders = () => {}, books = {}, states = {} }) {
+function todayApi({ activeBook, renderOrders = () => {}, books = {}, states = {}, syncQueue = [], lastSavedHashes = {} }) {
   const start = mainJs.indexOf('// "Sold today · all books" on the phone home.');
   const end = mainJs.indexOf('// ── Phone "More" sheet');
   expect(start).toBeGreaterThan(-1);
   const src = mainJs.slice(start, end).replace('export function', 'function') + '; return { renderTodayHub, renderTodaySoFar };';
   const sync = [];
-  const api = new Function('$', 'activeBook', 'renderOrders', 'BOOKS', 'states', 'getBookCurrencyCode', 'salesForDay', 'today', 'fairTotalsText', 'renderFairSyncPill', 'escapeHtml', 'isTestBook', 'fmtWhole', 'renderBookChips', src)(
+  const api = new Function('$', 'activeBook', 'renderOrders', 'BOOKS', 'states', 'getBookCurrencyCode', 'salesForDay', 'today', 'fairTotalsText', 'renderFairSyncPill', 'escapeHtml', 'isTestBook', 'fmtWhole', 'renderBookChips', 'unsentSalesForDay', 'syncQueue', 'lastSavedHashes', src)(
     (id) => document.getElementById(id), activeBook, renderOrders, books, states, () => 'CAD',
     salesForDayFn, () => '2026-10-08', (t) => Object.entries(t).map(([c, a]) => `${c} ${a.toFixed(2)}`).join(' + '), () => sync.push(1), (v) => String(v).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`),
-    (b) => !!b?.isTest, (v, c) => `${c}${Math.round(v)}`, () => {});
+    (b) => !!b?.isTest, (v, c) => `${c}${Math.round(v)}`, () => {}, unsentSalesForDayFn, syncQueue, lastSavedHashes);
   return { ...api, sync };
 }
 
@@ -252,4 +252,21 @@ test('Today ledger: sold, taken, on hand and what stores owe, money kept per cur
   expect(figs[3].querySelector('.ledger-value').textContent).toBe('CA$20 + €12');
   expect(figs[3].querySelector('.ledger-sub').textContent).toBe('From 2 stores');
   expect(figs[3].getAttribute('onclick')).toBe("switchTab('consignment')");
+});
+
+test('Today ledger: a sale made offline says it is waiting to upload, until the cloud has it', () => {
+  const sold = { chan: 'Book Fair', num: 'F-1', date: '2026-10-08', qty: 2, price: 10, sheetsId: 'evt-1' };
+  const offline = { chan: 'Book Fair', num: 'F-2', date: '2026-10-08', qty: 1, price: 10, sheetsId: 'evt-2' };
+  const books = { a: { currency: 'CA$' } };
+  const states = { a: { stock: 5, hist: [sold, offline], stores: [] } };
+  const saved = JSON.stringify({ hist: [sold] });
+  todayApi({ activeBook: 'all', books, states, syncQueue: [{ bookId: 'a' }], lastSavedHashes: { a: saved } }).renderTodayHub();
+  let fig = document.querySelector('#today-ledger .ledger-fig');
+  expect(fig.classList.contains('is-waiting')).toBe(true);
+  expect(fig.querySelector('.ledger-sub').textContent).toBe('1 sale waiting to upload');
+  // Uploaded: nothing queued for the book, so the line goes back to the count.
+  todayApi({ activeBook: 'all', books, states, syncQueue: [], lastSavedHashes: { a: saved } }).renderTodayHub();
+  fig = document.querySelector('#today-ledger .ledger-fig');
+  expect(fig.classList.contains('is-waiting')).toBe(false);
+  expect(fig.querySelector('.ledger-sub').textContent).toBe('2 sales');
 });

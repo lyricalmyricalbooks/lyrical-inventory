@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { salesForDay } from '../src/lib/today-summary.js';
+import { salesForDay, unsentSalesForDay } from '../src/lib/today-summary.js';
 
 const DAY = '2026-10-08';
 const row = (o) => ({ num: 'A1', chan: 'In Person', qty: 1, price: 10, date: DAY, ...o });
@@ -53,5 +53,28 @@ describe('Today so far: what counts as sold today', () => {
       row({ num: 'C1', chan: 'Consignment', consignmentLink: true, qty: 4, price: 6 }),
     ] }];
     expect(salesForDay(books, DAY)).toEqual({ sales: 2, units: 5, totals: { CAD: 54 } });
+  });
+});
+
+describe('unsentSalesForDay', () => {
+  const day = '2026-10-08';
+  const row = (id, extra = {}) => ({ chan: 'Book Fair', num: `F-${id}`, date: day, qty: 1, price: 10, sheetsId: `evt-${id}`, ...extra });
+
+  test('counts only rows the cloud copy does not have, one sale per checkout', () => {
+    const a1 = row(1), a2 = row(2), a3 = row(3, { num: 'F-2', sheetsId: 'evt-3' });
+    const r = unsentSalesForDay([{ id: 'a', hist: [a1, a2, a3], savedHist: [a1] }], day);
+    expect(r).toEqual({ sales: 1, units: 2 });
+  });
+  test('skips books with nothing waiting, other days, voids and free copies', () => {
+    const books = [
+      { id: 'a', hist: [row(1)] },
+      { id: 'b', hist: [row(2, { date: '2026-10-07' }), row(3, { voided: true }), row(4, { gratuity: true })], savedHist: [] },
+    ];
+    expect(unsentSalesForDay(books, day)).toEqual({ sales: 0, units: 0 });
+  });
+  test('matches rows without an event id by what they are made of', () => {
+    const plain = { chan: 'Manual', num: 'M-1', date: day, qty: 2, price: 5 };
+    expect(unsentSalesForDay([{ id: 'a', hist: [plain], savedHist: [{ ...plain }] }], day).sales).toBe(0);
+    expect(unsentSalesForDay([{ id: 'a', hist: [plain], savedHist: [] }], day).sales).toBe(1);
   });
 });
