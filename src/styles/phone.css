@@ -187,7 +187,10 @@
   #tab-pos .pos-layout[data-mobile-view="books"] .fm-tiles {
     display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3);
   }
-  .fm-tile { position: relative; min-width: 0; }
+  /* Flex so the button fills the grid row: both tiles in a row end level, and
+     the price (margin-top: auto) sits on one shared line across the row
+     however many lines each title takes. */
+  .fm-tile { position: relative; min-width: 0; display: flex; }
   /* 88px is the tap-area floor; the content (title, price, stock) sets the rest,
      so two rows of books fit where one used to. */
   .fm-tile-add {
@@ -201,11 +204,13 @@
   }
   .fm-tile-add:active { transform: scale(.97); }
   .fm-tile-add:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+  /* The book leads in display lettering, like the Book Catalog cards; the
+     price is a figure, so it reads in mono. */
   .fm-tile-title {
-    font: 700 var(--text-md) / 1.2 var(--font-ui); overflow-wrap: anywhere;
+    font: 400 var(--text-lg) / 1.1 var(--font-display); text-transform: uppercase; letter-spacing: .02em; overflow-wrap: anywhere;
     display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden;
   }
-  .fm-tile-price { margin-top: auto; font: 700 var(--text-xl) / 1.1 var(--font-ui); font-variant-numeric: tabular-nums; }
+  .fm-tile-price { margin-top: auto; padding-top: var(--space-2); font: 500 var(--text-xl) / 1.1 var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
   .fm-tile-stock { font: 600 var(--text-xs) var(--font-ui); color: var(--content-secondary); }
   .fm-tile.is-in-cart .fm-tile-add { background: var(--gold-bg); border-color: var(--gold-text); }
   /* Room under the price for the − button, so it never covers the amount. */
