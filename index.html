@@ -485,6 +485,13 @@
 <div class="app" id="main-app">
 
 <header class="app-header">
+  <!-- Phone menu (≤768px, publisher): opens the ink side menu (#more-sheet),
+       which holds every screen. Its dot follows the same badges as the old
+       bottom-bar More button. -->
+  <button type="button" class="phone-menu-btn" id="phone-menu-btn" onclick="openMoreSheet()" aria-haspopup="dialog" aria-controls="more-sheet" aria-expanded="false" aria-label="Open menu">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="square" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+    <span class="phone-menu-dot" id="phone-menu-dot" hidden></span>
+  </button>
   <div class="header-brand" onclick="switchBook('all')">
     <div class="header-mark riso-mark"><span class="riso-mark-ghost" aria-hidden="true">L</span><span class="riso-mark-letter">L</span></div>
     <div class="header-brand-text">
@@ -541,6 +548,9 @@
       <div class="header-stat"><div class="hs-val" id="h-consigned">—</div><div class="hs-label">Consigned</div></div>
     </div>
     <div class="hsep" id="kpi-hsep"></div>
+
+    <!-- Phone sync mark: one word and a square, kept current by setSyncState(). -->
+    <span class="phone-sync-mark" role="status" aria-live="polite"><span class="sync-dot syncing" id="phone-sync-dot" aria-hidden="true"></span><span id="sync-pill-text">Connecting…</span></span>
 
     <!-- One-tap light/dark. The Auto option lives in the account menu's
          three-way control; this is the fast path, so it flips straight between
@@ -645,14 +655,29 @@
 <dialog class="more-sheet" id="more-sheet" aria-labelledby="more-sheet-title">
   <div class="more-sheet-head">
     <span class="more-sheet-grip" aria-hidden="true"></span>
-    <h2 class="more-sheet-title" id="more-sheet-title">All tools</h2>
+    <h2 class="more-sheet-title" id="more-sheet-title">All tools<span class="more-sheet-title-sub">Inventory &amp; ledger</span></h2>
     <button type="button" class="more-sheet-close" onclick="closeMoreSheet()" aria-label="Close">✕</button>
   </div>
   <div class="app-switch" data-app-switch role="group" aria-label="Switch between the website and the inventory app" hidden>
     <a class="app-switch-seg" data-app-switch-link href="https://lyricalmyrical-web-v2.web.app/admin" target="lm-website-admin" aria-label="Open the website admin" title="Open the website admin"><span class="app-switch-label">Website</span><span class="app-switch-glyph" aria-hidden="true">↗</span><span class="app-switch-state">Offline</span><span class="nav-badge app-switch-badge" hidden></span></a>
     <span class="app-switch-seg is-current" aria-current="page"><span class="app-switch-label">Inventory</span></span>
   </div>
+  <!-- Book chips: built by openMoreSheet() from the same list as the book switcher. -->
+  <div class="more-sheet-books" id="more-sheet-books" role="group" aria-label="Book"></div>
   <div class="more-sheet-body" id="more-sheet-body"></div>
+  <!-- Account row: the header's account, theme and review buttons live here on a phone. -->
+  <div class="more-sheet-foot">
+    <button type="button" class="more-sheet-row" onclick="closeMoreSheet();openReviewInbox()"><span class="snav-ic" data-ink="RV" aria-hidden="true">📥</span><span class="snav-label">Review inbox</span><span class="nav-badge" id="more-sheet-review-badge" hidden></span></button>
+    <div class="more-sheet-acct">
+      <span class="more-sheet-avatar" aria-hidden="true">LM</span>
+      <span class="more-sheet-who"><b>Lyricalmyrical</b><span id="more-sheet-sync">Connecting…</span></span>
+      <button type="button" class="more-sheet-link" id="more-sheet-theme" onclick="toggleTheme()">Night mode</button>
+    </div>
+    <div class="more-sheet-acct-actions">
+      <button type="button" class="more-sheet-link" onclick="forceSync()">Refresh sync</button>
+      <button type="button" class="more-sheet-link" onclick="logout()">Log out</button>
+    </div>
+  </div>
 </dialog>
 <nav class="tab-bar" id="tab-bar">
   <button class="tab-btn active" onclick="switchTab('dashboard')">Dashboard</button>
@@ -910,6 +935,8 @@
         <p class="section-subcopy">Every title you publish, with its print run, stock on hand and where those copies currently sit.</p>
       </div>
     </div>
+    <!-- Phone: masthead, figures, filter chips and one row per title (renderPhoneBooks). -->
+    <div class="phone-books" id="all-books-phone"></div>
     <div id="all-books-list"><!-- rendered by JS --></div>
   </div>
 
@@ -1338,9 +1365,13 @@
      what's waiting on each, then one row per group of everything else. -->
 <div class="tab-panel" id="tab-today" style="display:none;">
   <div class="today-head">
-    <div><div class="phone-eyebrow">Your shop, at a glance</div><h1 class="today-title">Let’s get to it.</h1></div>
+    <div><div class="phone-eyebrow">Your shop, at a glance</div><h1 class="today-title"><span class="today-title-wide">Let’s get to it.</span><span class="today-title-phone">Today</span></h1></div>
     <span class="today-date" id="today-date"></span>
   </div>
+  <!-- Phone: the book picker as chips, then the day as a ledger of figures
+       under an ink rule. Filled by renderTodayHub(); hidden on wider screens. -->
+  <div class="today-books" id="today-books" role="group" aria-label="Book"></div>
+  <div class="phone-ledger today-ledger" id="today-ledger"></div>
   <!-- Today so far, across every book: what was sold, and whether it has all
        reached the cloud. Filled by renderTodaySoFar() and renderFairSyncPill(). -->
   <div class="today-sofar">
@@ -1350,6 +1381,7 @@
     </button>
     <span class="fm-sync today-sync" id="today-sync" role="status" aria-live="polite"></span>
   </div>
+  <h2 class="today-next-head">Next up</h2>
   <div class="today-grid">
     <button type="button" class="today-card today-card-ink" onclick="switchTab('pos')">
       <span class="today-card-ic" aria-hidden="true">$</span>
@@ -1518,7 +1550,7 @@
     <!-- DISCOVERED BUYERS -->
     <div class="row-between" style="align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:1rem;">
       <div>
-        <div style="font-family:var(--font-ui);font-size:17px;font-weight:700;">All Discovered Buyers</div>
+        <div class="cust-buyers-title" style="font-family:var(--font-ui);font-size:17px;font-weight:700;">All Discovered Buyers</div>
         <div style="font-size:var(--text-sm);color:var(--text3);max-width:560px;line-height:1.5;margin-top:2px;">Everyone who has purchased from you across your channels (Website, POS, Stripe, Consignment).</div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
@@ -1874,7 +1906,7 @@
 <div class="tab-panel" id="tab-consignment" data-con-active="stores" style="display:none;">
   <div class="book-context" id="book-context-con">
     <div class="book-context-dot"></div>
-    <div><div class="book-context-title" id="bc-title-con">—</div><div class="book-context-meta">Consignment accounts & ledger</div></div>
+    <div><div class="book-context-title" id="bc-title-con">—</div><div class="book-context-meta">Consignment accounts & ledger</div><h1 class="book-context-masthead">Stores</h1></div>
   </div>
   <!-- Phone only: one section at a time, so Invoices and the Ledger are not
        buried under every store card. Above 768px this row is display:none and
@@ -1903,6 +1935,8 @@
         <button class="btn gold" onclick="openM('add-store')">+ Add store</button>
       </div>
     </div>
+    <!-- Phone: figures and filter chips above the store queue (renderStoresPhoneHead). -->
+    <div class="stores-phone-head" id="stores-phone-head"></div>
     <div id="stores-list"><div class="empty-state"><div class="e-icon">🏪</div>No stores yet.<div style="margin-top:12px;"><button class="btn gold" onclick="openM('add-store')">+ Add store</button></div></div></div>
   </div>
 
@@ -1973,7 +2007,7 @@
       <label class="ledger-filter-field hist-search-field">
         <span class="ledger-filter-label">Find an order</span>
         <input type="search" id="hist-search" class="ledger-filter-input" autocomplete="off"
-          placeholder="Order number, channel, note, store, name…" oninput="histSearchInput(this.value)">
+          placeholder="Order #, channel, note…" oninput="histSearchInput(this.value)">
       </label>
       <button type="button" class="btn sm" id="hist-search-clear" onclick="clearHistSearch()" hidden>✕ Clear search</button>
     </div>

@@ -52,25 +52,33 @@ export function countLabel(count) {
 }
 
 /**
- * One tile. The whole tile adds a copy; the − chip (only once something is in
- * the cart) takes one back. `stock` is a posStockView() result.
+ * One register row. The row itself adds a copy; beside it a − / count / +
+ * stepper (the − only once something is in the cart) changes the count in
+ * place. `stock` is a posStockView() result; `accent` is the book's colour,
+ * drawn as a small cover swatch.
  */
-export function fairTileHtml({ id, title, priceText, qty = 0, stock = null }) {
+export function fairTileHtml({ id, title, priceText, qty = 0, stock = null, accent = '' }) {
   const idJs = esc(JSON.stringify(String(id)));
   const left = stock && stock.tracked ? Math.max(0, stock.remaining) : null;
   const out = left === 0 && qty === 0 && stock?.onHand === 0;
   // Records say every copy is already sold or in this sale: ask before adding.
   const noneLeft = left !== null && left <= 0;
+  const add = noneLeft ? `fairTileNoneLeft(${idJs})` : `posUpdateQty(${idJs}, 1)`;
   const stockText = left === null ? '' : out ? 'Sold out' : left === 1 ? 'Last copy' : `${left} left`;
-  const cls = ['fm-tile', qty > 0 ? 'is-in-cart' : '', out ? 'is-out' : '', stock?.level === 'short' ? 'is-short' : ''].filter(Boolean).join(' ');
+  const cls = ['fm-tile', qty > 0 ? 'is-in-cart' : '', out ? 'is-out' : '', stock?.level === 'short' ? 'is-short' : '', stock?.level === 'low' || stock?.level === 'last' ? 'is-low' : ''].filter(Boolean).join(' ');
+  // Only a plain colour value reaches the style attribute.
+  const cover = /^(#[0-9a-f]{3,8}|rgba?\([\d\s.,%]+\))$/i.test(String(accent).trim()) ? String(accent).trim() : '';
   return `<div class="${cls}" role="listitem">
-  <button type="button" class="fm-tile-add" onclick="${noneLeft ? `fairTileNoneLeft(${idJs})` : `posUpdateQty(${idJs}, 1)`}" aria-label="${noneLeft ? 'None left' : 'Add one'}: ${esc(title)}, ${esc(priceText)}${qty ? `, ${qty} in sale` : ''}">
+  <button type="button" class="fm-tile-add" onclick="${add}" aria-label="${noneLeft ? 'None left' : 'Add one'}: ${esc(title)}, ${esc(priceText)}${qty ? `, ${qty} in sale` : ''}">
+    <span class="fm-tile-cover" aria-hidden="true"${cover ? ` style="background:${cover}"` : ''}></span>
     <span class="fm-tile-title">${esc(title)}</span>
-    <span class="fm-tile-price">${esc(priceText)}</span>
-    ${stockText ? `<span class="fm-tile-stock">${esc(stockText)}</span>` : ''}
-    ${qty > 0 ? `<span class="fm-tile-qty" aria-hidden="true">${qty}</span>` : ''}
+    <span class="fm-tile-meta"><span class="fm-tile-price">${esc(priceText)}</span>${stockText ? `<span class="fm-tile-stock">${esc(stockText)}</span>` : ''}</span>
   </button>
-  ${qty > 0 ? `<button type="button" class="fm-tile-minus" onclick="posUpdateQty(${idJs}, -1)" aria-label="Remove one: ${esc(title)}">−</button>` : ''}
+  <span class="fm-tile-step">
+    ${qty > 0 ? `<button type="button" class="fm-tile-minus" onclick="posUpdateQty(${idJs}, -1)" aria-label="Remove one: ${esc(title)}">−</button>` : '<span class="fm-step-off" aria-hidden="true">−</span>'}
+    <span class="fm-tile-qty" aria-hidden="true">${qty}</span>
+    <button type="button" class="fm-tile-plus" onclick="${add}" tabindex="-1" aria-hidden="true">+</button>
+  </span>
 </div>`;
 }
 
