@@ -189,10 +189,12 @@
   }
   .fm-tile { position: relative; min-width: 0; }
   /* 88px is the tap-area floor; the content (title, price, stock) sets the rest,
-     so two rows of books fit where one used to. */
+     so two rows of books fit where one used to. height:100% stretches the
+     button to its grid cell so both tiles in a row share one bottom edge,
+     with the price pinned to it by margin-top:auto. */
   .fm-tile-add {
     display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1);
-    width: 100%; min-height: 88px; padding: var(--space-3);
+    width: 100%; height: 100%; min-height: 88px; padding: var(--space-3);
     border: var(--stroke) solid var(--rule-ink); border-radius: var(--r2);
     background: var(--surface-raised); color: var(--content-primary);
     font: inherit; text-align: left; cursor: pointer;
