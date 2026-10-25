@@ -30,8 +30,16 @@ export const LIB_PATHS = fs.existsSync(LIB_DIR)
       .map(f => path.join(LIB_DIR, f))
   : [];
 
-/** main.js and every feature and lib module, concatenated. */
-export const appSource = [MAIN_JS_PATH, ...FEATURE_PATHS, ...LIB_PATHS]
+// src/core holds the shared book data (core/store.js: BOOKS, states,
+// getState, defaultState, …), moved out of main.js for the same reason.
+const CORE_DIR = path.resolve(__dirname, '../../src/core');
+export const CORE_PATHS = fs.existsSync(CORE_DIR)
+  ? fs.readdirSync(CORE_DIR).filter(f => f.endsWith('.js'))
+      .map(f => path.join(CORE_DIR, f))
+  : [];
+
+/** main.js and every feature, lib and core module, concatenated. */
+export const appSource = [MAIN_JS_PATH, ...FEATURE_PATHS, ...LIB_PATHS, ...CORE_PATHS]
   .map(p => fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n'))
   .join('\n');
 

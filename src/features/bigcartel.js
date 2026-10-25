@@ -17,7 +17,6 @@
 // time, so no import is read before it is initialised.
 import {
   $,
-  BOOKS,
   _reconFindPayment,
   _reconSession,
   applyOne,
@@ -32,9 +31,9 @@ import {
   scheduleRender,
   sheetsUrl,
   showToast,
-  states,
   switchTab,
 } from '../main.js';
+import { BOOKS, states } from '../core/store.js';
 import { syncToSheets } from './sheets-bridge.js';
 import { openM, closeM, confirmDialog } from '../lib/modal.js';
 import {

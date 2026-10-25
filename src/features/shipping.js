@@ -35,18 +35,13 @@ import { HAND_LABEL_ORIENTATION_KEY, buildHandLabelDocument, returnLines } from 
 import { bigCartelTrackingByOrder, shipmentDate, trackingToStamp } from '../lib/bigcartel-tracking.js';
 import {
   $,
-  BOOKS,
-  BOOK_LIST,
   TAX_CENTER,
   commitRecoveredWebsiteOrder,
   _fxRateCache,
-  activeBook,
   addLog,
   fetchHistoricalRate,
   fetchLiveRate,
   getAllStores,
-  getBook,
-  getState,
   isAuthor,
   normalizeCountryCode,
   orders,
@@ -56,10 +51,10 @@ import {
   saveState,
   sheetsUrl,
   showToast,
-  states,
   switchTab,
   today,
 } from '../main.js';
+import { BOOKS, BOOK_LIST, states, activeBook, getState, getBook } from '../core/store.js';
 import { renderExpenses, saveReceiptToLocalFile, readShippingFieldsFromReceipt } from './receipts.js';
 import { openReviewInbox } from './review-inbox.js';
 import { findExistingLabel, describeExistingLabel, websiteLabelWords } from '../lib/label-duplicate-guard.js';

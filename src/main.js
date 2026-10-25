@@ -664,6 +664,10 @@ import {
   applyLedgerAddressCorrections,
   ordersWithLabels,
 } from './features/shipping.js';
+import {
+  BOOKS, BOOK_LIST, states, activeBook, setBooks, refreshBookList, setActiveBook,
+  defaultState, getState, getBook, withActiveBook,
+} from './core/store.js';
 import { lazyFeature } from './lib/lazy-feature.js';
 import { OPEN_CALL_EXPORTS } from './lib/opencall-handlers.js';
 import { parseMarkdownToHtml } from './lib/markdown.js';
@@ -673,6 +677,10 @@ import { parseMarkdownToHtml } from './lib/markdown.js';
 // download. Inline handlers reach it through window stubs until it arrives
 // (registered with the other handlers below); main.js and customers.js call it
 // through openCallScreen.call / .get.
+// Still re-exported for the screens that take them from main.js; new code
+// imports them from ./core/store.js directly.
+export { BOOKS, BOOK_LIST, states, activeBook, defaultState, getState, getBook, withActiveBook };
+
 export const openCallScreen = lazyFeature(() => import('./features/opencall.js'), OPEN_CALL_EXPORTS, {
   onError: (e) => {
     console.warn('Open Call failed to load', e);
@@ -1287,8 +1295,7 @@ window.dismissPwaUpdate = function (event) {
 // ═══════════════════════════════════════════════════════
 //  BOOK CATALOGUE (Dynamicly loaded from Firebase)
 // ═══════════════════════════════════════════════════════
-export let BOOKS = {};
-export let BOOK_LIST = []; // always mirrors Object.values(BOOKS) — updated at every BOOKS mutation
+// BOOKS / BOOK_LIST live in ./core/store.js (setBooks keeps them in step).
 let editingBookId = null;
 let WEBSITE_PAYMENT_METHODS = ['stripe', 'paypal', 'interac', 'cash_card'];
 let pmSelectedBookId = '';
@@ -1352,7 +1359,7 @@ function normalizeTestBookAccents() {
       b.accentBg = TEST_BOOK_ACCENT_BG;
     }
   });
-  BOOK_LIST = Object.values(BOOKS);
+  refreshBookList();
 }
 
 // A 6% wash of the active book's accent behind the whole page. Read by
@@ -1428,8 +1435,7 @@ async function loadCatalog(early = null) {
     if (stored) {
       if (applyStoredCatalog(stored)) await saveCatalogWithDeletions();
     } else {
-      BOOKS = { ...DEFAULT_BOOKS };
-      BOOK_LIST = Object.values(BOOKS);
+      setBooks({ ...DEFAULT_BOOKS });
       normalizeTestBookAccents();
       deletedDefaultIds = [];
       posExtraBooks = {};
@@ -1442,8 +1448,7 @@ async function loadCatalog(early = null) {
     // catalog already in memory; only fall back to the defaults on a cold start.
     catalogLoadFailed = true;
     if (!BOOKS || !Object.keys(BOOKS).length) {
-      BOOKS = { ...DEFAULT_BOOKS };
-      BOOK_LIST = Object.values(BOOKS);
+      setBooks({ ...DEFAULT_BOOKS });
       normalizeTestBookAccents();
       deletedDefaultIds = [];
       posExtraBooks = {};
@@ -1466,8 +1471,7 @@ function applyStoredCatalog(stored) {
   if (!TEST_PROFILE_ACTIVE) Object.keys(DEFAULT_BOOKS).forEach(id => {
     if (!deletedDefaultIds.includes(id)) filteredDefaults[id] = DEFAULT_BOOKS[id];
   });
-  BOOKS = { ...filteredDefaults, ...storedBooks };
-  BOOK_LIST = Object.values(BOOKS);
+  setBooks({ ...filteredDefaults, ...storedBooks });
   normalizeTestBookAccents();
   return Object.keys(BOOKS).length > Object.keys(storedBooks).length;
 }
@@ -2513,7 +2517,7 @@ async function saveBookFromModal() {
     }
   }
   BOOKS[id] = book;
-  BOOK_LIST = Object.values(BOOKS);
+  refreshBookList();
   if (!states[id]) states[id] = defaultState(book);
 
   const inputAuthorStock = parseInt($('nb-author-stock')?.value, 10);
@@ -2642,7 +2646,7 @@ async function deleteBook(id) {
   }
   if (!(await confirmDialog(`Permanently remove "${BOOKS[id].title}" and all its inventory records?`, { danger: true, okLabel: 'Remove book' }))) return;
   delete BOOKS[id];
-  BOOK_LIST = Object.values(BOOKS);
+  refreshBookList();
   delete states[id];
   if (DEFAULT_BOOKS[id] && !deletedDefaultIds.includes(id)) {
     deletedDefaultIds.push(id);
@@ -3076,9 +3080,7 @@ const localDayKey = () => localDayFromTs(Date.now());
 
 // ── PER-BOOK STATE
 // states[bookId] = { stock, sold, revenue, chStats, hist, stores, ledger, doneIds }
-export let states = {};
 window.authorSubmissions = {}; // Tracks pending expenses/sales by Authors
-export let activeBook = null;   // currently viewed bookId, or 'all'
 export let orders = [], activeId = null;
 let fbReady = false, lastSavedHashes = {}, lastSaveTimes = {};
 // Loaded through a guard: an unreadable stored queue (or storage that throws on
@@ -3512,17 +3514,6 @@ if (sheetsUrl) {
   }
 }
 
-export function defaultState(book) {
-  return { stock: book.maxPrint, authorStock: 0, stockTransfers: [], sold: 0, revenue: 0, chStats: {}, hist: [], stores: [], ledger: [], doneIds: [], artistTransfers: [], artistPayouts: [], artistReceivables: [], payoutRequests: [], expenses: [], artistPaymentLink: '', invoices: [], invoiceSeq: 0, openCall: [] };
-}
-
-export function getState() {
-  if (!states[activeBook]) {
-    states[activeBook] = defaultState(BOOKS[activeBook] || BOOK_LIST[0]);
-  }
-  return states[activeBook];
-}
-export function getBook() { return BOOKS[activeBook] || BOOK_LIST[0]; }
 
 // ── TOAST
 export function showToast(msg, type = 'ok', dur = 2800) {
@@ -5219,7 +5210,7 @@ export function switchBook(bookId) {
   // If a non-'all' bookId no longer exists (e.g. just deleted), fall back to 'all'.
   if (bookId !== 'all' && !BOOKS[bookId]) bookId = 'all';
   closeBookDropdown();
-  activeBook = bookId;
+  setActiveBook(bookId);
   // Update custom dropdown label + dot
   const label = $('book-dropdown-label');
   const dot = $('book-dropdown-dot');
@@ -14122,8 +14113,7 @@ async function applyBackupData(data) {
   }
 
   // 1. Restore Catalog
-  BOOKS = data.BOOKS;
-  BOOK_LIST = Object.values(BOOKS);
+  setBooks(data.BOOKS);
   // Rebuild the default-deletion tombstones from the restored catalog so
   // defaults missing from the backup don't reappear after the next load.
   deletedDefaultIds = Object.keys(DEFAULT_BOOKS).filter(id => !BOOKS[id]);
@@ -14336,7 +14326,7 @@ async function applyBookRestore(bid) {
 
     // 1. Catalog entry — restore just this book, leaving the rest of BOOKS as-is.
     BOOKS[bid] = JSON.parse(JSON.stringify(book));
-    BOOK_LIST = Object.values(BOOKS);
+    refreshBookList();
     // If this id was a tombstoned default, un-delete it so the restore sticks
     // (otherwise loadCatalog would filter the default back out next reload).
     deletedDefaultIds = deletedDefaultIds.filter(x => x !== bid);
@@ -15705,7 +15695,7 @@ async function boot(forcedBook) {
     fbReady = true;
     if (forcedBook) {
       // Author mode — load only this book
-      activeBook = forcedBook;
+      setActiveBook(forcedBook);
       if (!BOOKS[forcedBook]) { showToast('Book not found', 'err'); return; }
       showAuthorBookFrame(forcedBook);
       Promise.all([loadBook(forcedBook), settingsLoaded]).then(() => {
@@ -15723,7 +15713,7 @@ async function boot(forcedBook) {
       });
     } else {
       // Publisher. A book opened during the startup preview stays open.
-      if (!_startupPreviewShown) activeBook = 'all';
+      if (!_startupPreviewShown) setActiveBook('all');
       // Painted before the await so the landing screen shows the catalogue
       // arriving rather than nothing at all. Replaced by updateAllOverview()
       // the moment loadAllBooks() resolves.
@@ -17529,13 +17519,6 @@ let _lastReversal = [];
  * safety net for a mis-tap on a small screen: it restores exactly the rows
  * this reversal voided and nothing else.
  */
-// The void/unvoid Sheets sync names the on-screen book, so point it at this sale's book.
-export function withActiveBook(bookId, fn) {
-  const prev = activeBook;
-  activeBook = bookId;
-  try { fn(); } finally { activeBook = prev; }
-}
-
 function reverseSalesWithUndo(items, reason) {
   let reversed = 0;
   let copies = 0;
@@ -18761,8 +18744,7 @@ async function initStartup() {
           try {
             await loadCatalog();
           } catch (e) {
-            BOOKS = { ...DEFAULT_BOOKS };
-            BOOK_LIST = Object.values(BOOKS);
+            setBooks({ ...DEFAULT_BOOKS });
           }
           loadAuthorViewOverrides();
           showApp('publisher', null);
@@ -18941,13 +18923,13 @@ async function showStartupPreview(user, publisherAccount) {
   if (publisherAccount) {
     window.IS_PUBLISHER = true;
     IS_AUTHOR_MODE = false;
-    activeBook = 'all';
+    setActiveBook('all');
     showAppShell('publisher', null);
   } else {
     window.IS_PUBLISHER = false;
     IS_AUTHOR_MODE = true;
     ACTIVE_BOOK_FORCED = authorBookId;
-    activeBook = authorBookId;
+    setActiveBook(authorBookId);
     showAppShell('author', authorBookId);
     showAuthorBookFrame(authorBookId);
   }

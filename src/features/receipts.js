@@ -20,14 +20,10 @@
 // module-evaluation time, so no import is read before it is initialised.
 import {
   $,
-  BOOKS,
   TAX_CENTER,
   _fxRateCache,
-  activeBook,
   addLog,
   fetchLiveRate,
-  getBook,
-  getState,
   isAuthor,
   isPermissionDenied,
   reportClientError,
@@ -35,10 +31,10 @@ import {
   saveState,
   sheetsUrl,
   showToast,
-  states,
   switchTab,
   today,
 } from '../main.js';
+import { BOOKS, states, activeBook, getState, getBook } from '../core/store.js';
 import { updateDash } from './dashboard.js';
 import { TAX_CATEGORIES, TC_CATEGORIES, _editingExpense } from './tax-entries.js';
 import { fetchSheetsCapabilities, notifyPublisherSubmission } from './sheets-bridge.js';

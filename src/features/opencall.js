@@ -17,7 +17,6 @@
 // throwing at click time.
 import {
   $,
-  BOOKS,
   formatDateTime,
   isAuthor,
   sheetsUrl,
@@ -25,6 +24,7 @@ import {
   switchTab,
   today,
 } from '../main.js';
+import { BOOKS } from '../core/store.js';
 import {
   _isCustomerSuppressed,
   mailingListHas,

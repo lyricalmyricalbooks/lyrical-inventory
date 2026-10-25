@@ -24,9 +24,6 @@ import {
   _fxRateCache,
   _syncQueueHeldInMemory,
   _syncRetrying,
-  activeBook,
-  withActiveBook,
-  BOOKS,
   copyTextWithFallback,
   createStripePaymentLinkForAmount,
   fetchLiveRate,
@@ -38,12 +35,12 @@ import {
   saveState,
   showToast,
   startupPreviewActive,
-  states,
   syncCatalog,
   syncQueue,
   today,
   updateHeader,
 } from '../main.js';
+import { BOOKS, states, activeBook, withActiveBook } from '../core/store.js';
 import { recordOrder, voidHistEntry } from './sales-ledger.js';
 import { updateDash } from './dashboard.js';
 import { escapeHtml } from '../lib/html.js';

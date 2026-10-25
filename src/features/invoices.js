@@ -17,13 +17,8 @@
 import {
   $,
   acceptedBookPaymentLink,
-  activeBook,
   applyConSection,
-  BOOK_LIST,
-  BOOKS,
   getAcceptedPaymentMethodsForBook,
-  getBook,
-  getState,
   invoicesAwaitingReminder,
   isAuthor,
   isTestBook,
@@ -37,10 +32,10 @@ import {
   settleLedgerSalePaid,
   sheetsUrl,
   showToast,
-  states,
   sweepPaymentReminders,
   today,
 } from '../main.js';
+import { BOOKS, BOOK_LIST, states, activeBook, getState, getBook } from '../core/store.js';
 import { localDayPlus } from '../lib/calendar-day.js';
 import { consignmentSyncPayload, stampLedgerInvoiceLink } from '../lib/consignment.js';
 import { downloadText } from '../lib/download.js';

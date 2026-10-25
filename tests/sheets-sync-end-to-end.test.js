@@ -35,6 +35,14 @@ vi.mock('../src/main.js', () => ({
   today: () => '2026-10-10',
 }));
 
+// The shared book data the bridge reads now comes from core/store.js.
+vi.mock('../src/core/store.js', () => ({
+  BOOKS: app.BOOKS,
+  activeBook: 'zine',
+  getBook: () => app.BOOKS.zine,
+  states: app.states,
+}));
+
 vi.mock('../src/features/shipping.js', async () => {
   const money = await import('../src/lib/money.js');
   const src = extractDecl('shippingPurchaseRowPayload');

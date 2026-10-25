@@ -55,7 +55,6 @@ import {
 } from '../lib/website-link.js';
 import {
   $,
-  BOOKS,
   TAX_CENTER,
   openAddBookFromWebsite,
   _fxRateCache,
@@ -65,9 +64,9 @@ import {
   saveState,
   scheduleRender,
   showToast,
-  states,
   syncHistRowToSheets,
 } from '../main.js';
+import { BOOKS, states } from '../core/store.js';
 import { unvoidHistEntry, voidHistEntry, writeOrderToLedger } from './sales-ledger.js';
 
 const SENT_KEY = 'lm-website-shipments-sent';
