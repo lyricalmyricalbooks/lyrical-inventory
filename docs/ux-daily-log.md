@@ -180,6 +180,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-24 | visual | Phone Intelligence — question box | Lined the question box and the note under it up with the messages and Quick asks above, instead of the box sticking out wider than everything else in the panel | (this PR) |
 | 2026-10-24 | visual | Phone Dashboard — count tiles | Lined up the figures on Units sold & gifted and On consignment so they sit level, instead of one dropping below its neighbour because its title wraps to two lines | (this PR) |
 | 2026-10-25 | visual | Phone All Books — book cards | Made each book card an inked slab with the bold outline, square corner and offset shadow (a wider colour stripe still names the book), instead of a pale hairline box with a soft corner matching nothing around it | (this PR) |
+| 2026-10-25 | visual | Phone Stripe payments — filter box | Kept "Dismiss all shown" on one line instead of folding to two cramped lines, and made the "Group identical" label a readable size beside its tick-box | (this PR) |
 
 ---
 
