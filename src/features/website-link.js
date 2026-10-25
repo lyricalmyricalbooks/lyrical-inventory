@@ -66,7 +66,7 @@ import {
   showToast,
   syncHistRowToSheets,
 } from '../main.js';
-import { BOOKS, states } from '../core/store.js';
+import { BOOKS, states, onBookEvent } from '../core/store.js';
 import { unvoidHistEntry, voidHistEntry, writeOrderToLedger } from './sales-ledger.js';
 
 const SENT_KEY = 'lm-website-shipments-sent';
@@ -279,6 +279,10 @@ function startWebsiteLink() {
     if (typeof window._fbWatchWebsiteLinkStatus === 'function') window._fbWatchWebsiteLinkStatus(onLinkStatus, onWatchError);
   } catch (e) { onWatchError(e); }
   window.addEventListener('online', () => { scheduleImport(0); scheduleWebsiteFeedPublish('all'); resendLinkRequests(); });
+  // The website's stock follows the cloud copy: publish when this device's
+  // save lands, or when another device's save replaces the copy here.
+  onBookEvent('book-saved', ({ bookId }) => scheduleWebsiteFeedPublish(bookId));
+  onBookEvent('book-changed', ({ bookId, source }) => { if (source === 'remote') scheduleWebsiteFeedPublish(bookId); });
   scheduleWebsiteFeedPublish('all');
   renderWebsiteLinkCard();
   runStorageCheck();
