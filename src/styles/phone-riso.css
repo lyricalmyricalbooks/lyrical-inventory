@@ -246,7 +246,7 @@
   .pub-shell #tab-today .today-grid > .today-card:active { transform: none; background: var(--surface-inset); }
   .pub-shell #tab-today .today-card .today-card-ic {
     grid-area: ic; display: grid; place-items: center; width: 26px; height: 26px; margin: 0;
-    border: var(--stroke) solid currentColor; font: 500 10px / 1 var(--font-mono);
+    border: var(--stroke) solid currentColor; font: 500 var(--text-xs) / 1 var(--font-mono);
   }
   .pub-shell #tab-today .today-card .today-card-name { grid-area: name; font: 600 var(--text-md) / 1.25 var(--font-ui); text-transform: none; letter-spacing: 0; }
   .pub-shell #tab-today .today-card .today-card-sub { grid-area: sub; font: 400 var(--text-sm) var(--font-mono); color: var(--content-muted); opacity: 1; }
@@ -267,7 +267,7 @@
   .pub-shell #tab-today .today-rows { border: var(--stroke) solid var(--rule-ink); background: var(--surface-card); box-shadow: var(--riso-off); }
   .pub-shell #tab-today .today-row { min-height: 56px; padding: var(--space-2) 14px; border: 0; border-top: var(--stroke-hair) solid var(--border2); }
   .pub-shell #tab-today .today-row:first-child { border-top: 0; }
-  .pub-shell #tab-today .today-row-ic { width: 26px; height: 26px; border: var(--stroke) solid currentColor; display: grid; place-items: center; font: 500 10px / 1 var(--font-mono); }
+  .pub-shell #tab-today .today-row-ic { width: 26px; height: 26px; border: var(--stroke) solid currentColor; display: grid; place-items: center; font: 500 var(--text-xs) / 1 var(--font-mono); }
   .pub-shell #tab-today .today-row-name { font: 600 var(--text-md) / 1.25 var(--font-ui); }
   .pub-shell #tab-today .today-row-sub { font: 400 var(--text-sm) var(--font-mono); color: var(--content-muted); }
 }
