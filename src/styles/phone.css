@@ -1546,9 +1546,11 @@
      still plainly disabled, on a quiet fill with a muted label. */
   .qr-card-actions .btn:disabled { opacity: 1; background: var(--surface-inset); color: var(--content-muted); border-color: var(--border-default); }
 
-  /* Payment-link hint: left-aligned under the amount, like the lines above it. */
+  /* Payment-link hint: left-aligned under the amount, like the lines above it — on the
+     publisher's "Expenses owed to artist" banner too, where it floated right, alone. */
   #artist-reimburse-banner .metric-banner-actions { align-items: stretch; width: 100%; }
   #artist-reimburse-banner .metric-banner-hint { text-align: left; }
+  #d-expenses-sect .metric-banner-hint { text-align: left; font-size: var(--text-xs); }
 
   /* Pending reimbursements: each expense is an inked slab like the other phone
      cards, the amount leads the head, and the two buttons share one full width
