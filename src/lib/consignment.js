@@ -14,6 +14,11 @@
 
 import { getBookCurrencyCode, normalizeCurrencyCode } from './money.js';
 
+/** @typedef {import('../types/ledger').BookState} BookState */
+/** @typedef {import('../types/ledger').Book} Book */
+/** @typedef {import('../types/ledger').HistRow} HistRow */
+/** @typedef {import('../types/ledger').LedgerRow} LedgerRow */
+
 // The s.hist mirror row for a ledger Sale. The mirror and its ledger entry are
 // minted sharing one sheetsId (see confirmSale), so that's the primary join.
 // BUT legacy rows created before sheetsId existed were later backfilled with
@@ -25,6 +30,7 @@ import { getBookCurrencyCode, normalizeCurrencyCode } from './money.js';
 // Two identical sales at the same store on the same day are indistinguishable
 // to the shape fallback, so a caller walking the whole ledger passes it to stop
 // both rows from resolving to the same mirror.
+/** @param {BookState} s @param {LedgerRow} e @param {Set<HistRow>} [claimed] @returns {HistRow | null} */
 export function histMirrorForLedger(s, e, claimed) {
   if (!e) return null;
   const hist = s.hist || [];
@@ -40,7 +46,7 @@ export function histMirrorForLedger(s, e, claimed) {
     h.notes === e.storeName &&
     h.date === e.date &&
     (h.qty || 0) === (e.qty || 0) &&
-    Math.abs((h.price || 0) * (h.qty || 0) - (e.amountDue || 0)) < 0.01
+    Math.abs(Number(h.price || 0) * Number(h.qty || 0) - Number(e.amountDue || 0)) < 0.01
   ) || null;
 }
 
@@ -58,6 +64,7 @@ export function histMirrorForLedger(s, e, claimed) {
 // (it's the History "Notes" column, and the fallback join keys on it), whereas
 // the ledger's notes are the entry's own free text. Returns true if it changed
 // anything.
+/** @param {BookState} s @param {LedgerRow} e @param {HistRow} mirror */
 export function syncHistMirrorFromLedger(s, e, mirror) {
   if (!e || e.type !== 'Sale') return false;
   const h = mirror || histMirrorForLedger(s, e);
@@ -66,7 +73,7 @@ export function syncHistMirrorFromLedger(s, e, mirror) {
   const qty = e.qty || 0;
   // The mirror is a per-unit record of YOUR share, so amountDue (already net of
   // the store's commission) divided across the units it covers.
-  const price = qty > 0 ? (e.amountDue || 0) / qty : 0;
+  const price = Number(qty) > 0 ? Number(e.amountDue || 0) / Number(qty) : 0;
   const voided = !!e.voided;
 
   let changed = false;
@@ -74,7 +81,7 @@ export function syncHistMirrorFromLedger(s, e, mirror) {
   // than a shape comparison that this very edit may have just invalidated.
   if (e.sheetsId && h.sheetsId !== e.sheetsId) { h.sheetsId = e.sheetsId; changed = true; }
   if ((h.qty || 0) !== qty) { h.qty = qty; changed = true; }
-  if (Math.abs((h.price || 0) - price) > 1e-9) { h.price = price; changed = true; }
+  if (Math.abs(Number(h.price || 0) - price) > 1e-9) { h.price = price; changed = true; }
   if (e.date && h.date !== e.date) { h.date = e.date; changed = true; }
   if (!!h.voided !== voided) { h.voided = voided; changed = true; }
   return changed;
@@ -84,6 +91,7 @@ export function syncHistMirrorFromLedger(s, e, mirror) {
 // histMirrorForLedger, for the edit handlers that start from a hist row and
 // need to redirect to the row that actually owns the numbers. Returns the index
 // into s.ledger, or -1 when the mirror is orphaned.
+/** @param {BookState} s @param {HistRow} h @returns {number} */
 export function ledgerSaleIndexForHistMirror(s, h) {
   if (!h || !h.consignmentLink || !Array.isArray(s && s.ledger)) return -1;
   if (h.sheetsId) {
@@ -124,6 +132,7 @@ export function notesWithInvoiceDiscount(invoices, num, notes) {
 
 // The only writer of the invoice back-pointers: sets (or clears, when inv===null)
 // invoiceId/invoiceNum on a ledger entry AND its hist mirror in lockstep.
+/** @param {BookState} s @param {string} ledgerId */
 export function stampLedgerInvoiceLink(s, ledgerId, inv) {
   const e = (s.ledger || []).find(x => x.id === ledgerId);
   if (!e) return;
@@ -167,6 +176,7 @@ function pushBucket(map, key, value) {
 // Tax Center ledger, the tax CSV, channel revenue) and an invoice rename reach
 // the History tab, even for rows whose link was previously broken, without
 // forcing a re-save. Idempotent and cheap; safe to call at the top of a render.
+/** @param {BookState} s */
 export function reconcileConsignmentMirrors(s) {
   if (!s || !Array.isArray(s.ledger)) return;
   // Index invoices once instead of rescanning the list for every linked sale
@@ -202,7 +212,7 @@ export function reconcileConsignmentMirrors(s) {
       h.notes === e.storeName &&
       h.date === e.date &&
       (h.qty || 0) === (e.qty || 0) &&
-      Math.abs((h.price || 0) * (h.qty || 0) - (e.amountDue || 0)) < 0.01
+      Math.abs(Number(h.price || 0) * Number(h.qty || 0) - Number(e.amountDue || 0)) < 0.01
     ) || null;
   };
   for (const e of s.ledger) {
@@ -226,6 +236,7 @@ export function reconcileConsignmentMirrors(s) {
 // Build the Google Sheets payload for a consignment ledger row. Centralised so
 // the invoice number (and every other field) syncs identically from confirmSale,
 // edits, voids, invoice renames and the full resync.
+/** @param {Book} book @param {LedgerRow} e */
 export function consignmentSyncPayload(book, e) {
   return {
     type: 'consignment', book: book.title,
@@ -245,7 +256,7 @@ export function consignmentSyncPayload(book, e) {
  * Preserves the richest available contact and location information while tracking
  * catalogue-wide inventory numbers (sent, sold, outstanding) and associated book titles.
  *
- * @param {Record<string, {stores?: Array<object>}>} states - State map keyed by bookId
+ * @param {Record<string, import('../types/ledger').BookState>} states - State map keyed by bookId
  * @param {Array<{id: string, title: string}>} bookList - List of book definitions
  * @returns {Array<object>} Sorted list of unique consignment stores
  */
@@ -337,6 +348,7 @@ export function collectUniqueConsignmentStores(states, bookList) {
 //
 // Voided rows are excluded: a void didn't move money, and counting it would
 // overstate what a store owes.
+/** @param {LedgerRow[]} ledger @param {string} bookCode */
 export function consignmentLedgerTotals(ledger, bookCode) {
   const fallback = normalizeCurrencyCode(bookCode, 'CAD');
   const byCurrency = new Map();

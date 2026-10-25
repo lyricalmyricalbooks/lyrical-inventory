@@ -3,11 +3,28 @@
 
 import { roundCents } from './money.js';
 
+/** @typedef {import('../types/ledger').BookState} BookState */
+/** @typedef {import('../types/ledger').Book} Book */
+/** @typedef {import('../types/ledger').StockTransfer} StockTransfer */
+/**
+ * A History row (`h`, at index `i`) or a consignment ledger row (`e`), with
+ * its insertion order and the on-hand count right after it.
+ * @typedef {{ type: 'hist' | 'consign', h?: import('../types/ledger').HistRow, i?: number,
+ *   e?: import('../types/ledger').LedgerRow, _ord?: number, _after?: number }} TimelineRow
+ */
+
+// A stored count or price as a number. Rows saved from a form, an import or a
+// Sheet can hold "2" rather than 2; `total += "2"` would turn a running count
+// into text ("02"), so every sum below goes through this. Blank or garbled
+// values count as 0, as `|| 0` already treated them.
+const num = (v) => Number(v) || 0;
+
 // Derive on-hand stock purely from a book's records: everything ever printed,
 // minus direct sales, minus books currently out on consignment, plus any good
 // returns that came back. Consignment SALES are excluded — those copies already
 // left inventory as a Shipment, so counting them again would double-subtract.
 // (There is no "restock" action in the app, so maxPrint is the only baseline.)
+/** @param {BookState} s @param {Book} book @returns {number} */
 export function deriveOnHand(s, book) {
   if (!book || !Number.isFinite(book.maxPrint)) {
     return (s && s.stock) || 0;
@@ -19,6 +36,7 @@ export function deriveOnHand(s, book) {
 // problem rather than a shelf, so the screens never show it — but the website
 // link sends this number, because the website subtracts its own sales from it
 // and a floor here would hide copies it has already counted.
+/** @param {BookState} s @param {Book} book @returns {number} */
 export function deriveOnHandRaw(s, book) {
   if (!book || !Number.isFinite(book.maxPrint)) {
     return (s && s.stock) || 0;
@@ -26,13 +44,13 @@ export function deriveOnHandRaw(s, book) {
   let stock = book.maxPrint;
   for (const h of ((s && s.hist) || [])) {
     if (h.voided || h.consignmentLink) continue;
-    stock -= (h.qty || 0);
+    stock -= num(h.qty);
   }
   for (const e of ((s && s.ledger) || [])) {
     if (e.voided) continue;
-    if (e.type === 'Shipment') stock -= (e.qty || 0);
-    else if (e.type === 'Return' && e.status === 'restocked') stock += (e.qty || 0);
-    else if (e.type === 'Inventory Disposal') stock -= (e.qty || 0);
+    if (e.type === 'Shipment') stock -= num(e.qty);
+    else if (e.type === 'Return' && e.status === 'restocked') stock += num(e.qty);
+    else if (e.type === 'Inventory Disposal') stock -= num(e.qty);
   }
   return stock;
 }
@@ -41,23 +59,24 @@ export function deriveOnHandRaw(s, book) {
 // printed === onHand + directSold + consignSold + onConsignment + writtenOff, so
 // `unaccounted` is normally 0 — a non-zero value flags drift the records can't
 // explain (e.g. maxPrint was edited after sales began).
+/** @param {BookState} s @param {Book} book */
 export function inventoryBreakdown(s, book) {
   const printed = (book && Number.isFinite(book.maxPrint)) ? book.maxPrint : ((s && s.stock) || 0);
   let directSold = 0, consignSold = 0, gratuities = 0;
   for (const h of ((s && s.hist) || [])) {
     if (h.voided) continue;
-    if (h.gratuity) gratuities += (h.qty || 0);
-    else if (h.consignmentLink) consignSold += (h.qty || 0); // sold through a store
-    else directSold += (h.qty || 0);                    // website / manual / etc.
+    if (h.gratuity) gratuities += num(h.qty);
+    else if (h.consignmentLink) consignSold += num(h.qty); // sold through a store
+    else directSold += num(h.qty);                    // website / manual / etc.
   }
   let shipped = 0, restocked = 0, writtenOff = 0, returnedOut = 0;
   for (const e of ((s && s.ledger) || [])) {
     if (e.voided) continue;
-    if (e.type === 'Shipment') shipped += (e.qty || 0);
-    else if (e.type === 'Inventory Disposal') writtenOff += (e.qty || 0);
+    if (e.type === 'Shipment') shipped += num(e.qty);
+    else if (e.type === 'Inventory Disposal') writtenOff += num(e.qty);
     else if (e.type === 'Return') {
-      if (e.status === 'restocked') restocked += (e.qty || 0);
-      else { writtenOff += (e.qty || 0); returnedOut += (e.qty || 0); }
+      if (e.status === 'restocked') restocked += num(e.qty);
+      else { writtenOff += num(e.qty); returnedOut += num(e.qty); }
     }
   }
   // Publisher-side disposals never sat on consignment, so only unrestocked
@@ -93,17 +112,18 @@ export function recordInventoryDisposal(s, disposal) {
 // (a direct sale or a consignment shipment); positive = a good return came back.
 // Voided rows and consignment SALES are no-ops: the latter's copies already left
 // as a Shipment, so the sale itself doesn't move your on-hand again.
+/** @param {TimelineRow} r @returns {number} */
 function rowStockDelta(r) {
   if (r.type === 'consign') {
     const e = r.e;
     if (e.voided) return 0;
-    if (e.type === 'Shipment') return -(e.qty || 0);
-    if (e.type === 'Return' && e.status === 'restocked') return (e.qty || 0);
+    if (e.type === 'Shipment') return -num(e.qty);
+    if (e.type === 'Return' && e.status === 'restocked') return num(e.qty);
     return 0;
   }
   const h = r.h;
   if (h.voided || h.consignmentLink) return 0;
-  return -(h.qty || 0);
+  return -num(h.qty);
 }
 
 // How long a voided row stays visible in the History list before it's swept
@@ -131,8 +151,10 @@ export function isVoidStale(entry, now = Date.now()) {
 // records-true on-hand, so the column always reconciles the whole journey from
 // the full print run down to now — no book silently disappears between them.
 // Returned rows are descriptors: { type:'hist', h, i } or { type:'consign', e }.
+/** @param {BookState} s @param {Book} book */
 export function buildOrderTimeline(s, book) {
   const rowDate = r => r.type === 'consign' ? (r.e.date || '') : (r.h.date || '');
+  /** @type {TimelineRow[]} */
   const timeline = ((s && s.hist) || []).map((h, i) => ({ type: 'hist', h, i }));
   for (const e of ((s && s.ledger) || [])) {
     if (e.type === 'Shipment' || e.type === 'Return') timeline.push({ type: 'consign', e });
@@ -155,7 +177,7 @@ export function buildOrderTimeline(s, book) {
   for (let k = timeline.length - 1; k >= 0; k--) {
     const d = rowDate(timeline[k]);
     while (di < disposals.length && (k === 0 || (disposals[di].date || '') <= d)) {
-      running -= (disposals[di].qty || 0);
+      running -= num(disposals[di].qty);
       di++;
     }
     running += rowStockDelta(timeline[k]);
@@ -171,6 +193,7 @@ export function buildOrderTimeline(s, book) {
 // behavior is unchanged: pass 1 prefers an exact same-date match, and pass 2 falls back
 // to a qty+price match on any date for consignment sales still without a partner. Each
 // consignment sale consumes at most one direct duplicate across both passes.
+/** @param {BookState} s */
 export function deduplicateDirectConsignmentSales(s) {
   if (!s || !Array.isArray(s.hist)) return;
 
@@ -222,7 +245,7 @@ export function deduplicateDirectConsignmentSales(s) {
       : (byQty.get(c.qty) || []);
     for (const idx of candidates) {
       if (toRemove.has(idx)) continue;
-      if (Math.abs((s.hist[idx].price || 0) - (c.price || 0)) < 0.01) return idx;
+      if (Math.abs(Number(s.hist[idx].price || 0) - Number(c.price || 0)) < 0.01) return idx;
     }
     return -1;
   };
@@ -253,6 +276,7 @@ export function deduplicateDirectConsignmentSales(s) {
 }
 
 // Recalculate book stats (sold, revenue, chStats) purely from the current s.hist.
+/** @param {BookState} s */
 export function recalculateBookStatsFromHistory(s) {
   s.sold = 0;
   s.revenue = 0;
@@ -264,12 +288,12 @@ export function recalculateBookStatsFromHistory(s) {
     const chan = h.chan || 'Manual';
     if (!s.chStats[chan]) s.chStats[chan] = { txns: 0, units: 0, revenue: 0 };
     s.chStats[chan].txns++;
-    s.chStats[chan].units += (h.qty || 0);
-    if (!h.artistPending) s.chStats[chan].revenue = roundCents(s.chStats[chan].revenue + (h.qty || 0) * (h.price || 0));
+    s.chStats[chan].units += num(h.qty);
+    if (!h.artistPending) s.chStats[chan].revenue = roundCents(s.chStats[chan].revenue + num(h.qty) * num(h.price));
 
     if (h.gratuity) return;
-    s.sold += (h.qty || 0);
-    if (!h.artistPending) s.revenue = roundCents(s.revenue + (h.qty || 0) * (h.price || 0));
+    s.sold += num(h.qty);
+    if (!h.artistPending) s.revenue = roundCents(s.revenue + num(h.qty) * num(h.price));
   });
 }
 
@@ -332,8 +356,8 @@ export function orderStockPreviewCopy(preview, threshold) {
  * Invariant: totalOnHand === publisherOnHand + authorHeld.
  * Author-held stock is bounded within [0, totalOnHand].
  *
- * @param {object} s - Book state
- * @param {object} book - Book catalog definition
+ * @param {BookState} s - Book state
+ * @param {Book} book - Book catalog definition
  * @returns {{ totalOnHand: number, publisherOnHand: number, authorHeld: number, pctPublisher: number, pctAuthor: number }}
  */
 export function deriveStockBreakdown(s, book) {
@@ -357,12 +381,12 @@ export function deriveStockBreakdown(s, book) {
 /**
  * Transfer physical copies between the Publisher and Author.
  *
- * @param {object} s - Book state
- * @param {object} book - Book catalog definition
+ * @param {BookState} s - Book state
+ * @param {Book} book - Book catalog definition
  * @param {number} delta - Positive = hand off to author; Negative = return from author
  * @param {string} [note] - Optional reason/memo for the transfer
  * @param {string} [isoDate] - Optional ISO date string (defaults to today)
- * @returns {{ breakdown: object, transfer: object }}
+ * @returns {{ breakdown: ReturnType<typeof deriveStockBreakdown>, transfer: StockTransfer | null }}
  */
 export function transferAuthorStock(s, book, delta, note = '', isoDate = '') {
   if (!s) return { breakdown: deriveStockBreakdown(s, book), transfer: null };
@@ -385,6 +409,7 @@ export function transferAuthorStock(s, book, delta, note = '', isoDate = '') {
   s.authorStock = Math.max(0, Math.min(currentBreakdown.totalOnHand, newAuthorStock));
   const newBreakdown = deriveStockBreakdown(s, book);
 
+  /** @type {StockTransfer} */
   const transfer = {
     id: 'st_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
     date: (isoDate && isoDate.slice(0, 10)) || new Date().toISOString().slice(0, 10),
@@ -407,7 +432,7 @@ export function transferAuthorStock(s, book, delta, note = '', isoDate = '') {
 /**
  * Automatically adjust author-held inventory when a sale is fulfilled directly by the author.
  *
- * @param {object} s - Book state
+ * @param {BookState} s - Book state
  * @param {number} qty - Units sold
  * @param {boolean} isAuthorSale - True if this transaction was submitted/fulfilled by the author
  */

@@ -1,0 +1,27 @@
+// Type checking for the money, stock and sync rules — `npm run typecheck`,
+// run in CI. Dev-only: tsc never emits anything, Vite doesn't read this, and
+// nothing here reaches the app. The files are plain JS with JSDoc types; the
+// shared record shapes live in src/types/ledger.d.ts.
+//
+// Grows file by file: add a file to "files", fix what it reports, commit.
+// "strict" is off for now — strictNullChecks alone reports ~40 places where a
+// record field may be missing, which is the next ratchet.
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "target": "es2022",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "lib": ["es2022", "dom"],
+    "strict": false,
+    "skipLibCheck": true
+  },
+  "files": [
+    "src/lib/money.js",
+    "src/lib/inventory.js",
+    "src/lib/consignment.js",
+    "src/lib/merge-state.js"
+  ]
+}
