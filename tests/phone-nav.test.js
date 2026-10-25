@@ -16,12 +16,17 @@ const mainJs = readFileSync(path.join(__dirname, '../src/main.js'), 'utf8');
 const start = mainJs.indexOf('const MNAV_TABS');
 const end = mainJs.indexOf('Object.assign(window, { openMoreSheet, closeMoreSheet });');
 const block = mainJs.slice(start, end).replace(/export function/g, 'function');
-const api = new Function(`${block}; return { openMoreSheet, closeMoreSheet, syncMoreNavState, refreshMoreDot };`);
+// renderBookChips lives with the book switcher; the side menu only calls it.
+const api = new Function('renderBookChips', `${block}; return { openMoreSheet, closeMoreSheet, syncMoreNavState, refreshMoreDot };`);
+let chipCalls = [];
+const renderBookChips = (container, opts) => chipCalls.push({ container, opts });
 
 let nav;
 beforeEach(() => {
   document.body.innerHTML = html.slice(html.indexOf('<body'), html.lastIndexOf('</body>')).replace(/^<body[^>]*>/, '');
-  nav = api();
+  chipCalls = [];
+  window.matchMedia = (q) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {} });
+  nav = api(renderBookChips);
 });
 
 const moreLabels = () => [...document.querySelectorAll('#more-sheet-body .snav:not([hidden]) .snav-label')].map((n) => n.textContent);
@@ -94,9 +99,10 @@ function todayApi({ activeBook, renderOrders = () => {}, books = {}, states = {}
   expect(start).toBeGreaterThan(-1);
   const src = mainJs.slice(start, end).replace('export function', 'function') + '; return { renderTodayHub, renderTodaySoFar };';
   const sync = [];
-  const api = new Function('$', 'activeBook', 'renderOrders', 'BOOKS', 'states', 'getBookCurrencyCode', 'salesForDay', 'today', 'fairTotalsText', 'renderFairSyncPill', 'escapeHtml', src)(
+  const api = new Function('$', 'activeBook', 'renderOrders', 'BOOKS', 'states', 'getBookCurrencyCode', 'salesForDay', 'today', 'fairTotalsText', 'renderFairSyncPill', 'escapeHtml', 'isTestBook', 'fmtWhole', 'renderBookChips', src)(
     (id) => document.getElementById(id), activeBook, renderOrders, books, states, () => 'CAD',
-    salesForDayFn, () => '2026-10-08', (t) => Object.entries(t).map(([c, a]) => `${c} ${a.toFixed(2)}`).join(' + '), () => sync.push(1), (v) => String(v).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`));
+    salesForDayFn, () => '2026-10-08', (t) => Object.entries(t).map(([c, a]) => `${c} ${a.toFixed(2)}`).join(' + '), () => sync.push(1), (v) => String(v).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`),
+    (b) => !!b?.isTest, (v, c) => `${c}${Math.round(v)}`, () => {});
   return { ...api, sync };
 }
 
@@ -198,3 +204,52 @@ test('Today so far says so when nothing has sold yet', () => {
   expect([...sum.querySelectorAll('.today-sold-fig b')].map(f => f.textContent)).toEqual(['0', '0', '—']);
 });
 
+
+test('phone side menu: the top bar menu button opens it, with book chips and Today first', () => {
+  window.matchMedia = (q) => ({ matches: q.includes('max-width: 768px'), media: q, addEventListener() {}, removeEventListener() {} });
+  const button = document.getElementById('phone-menu-btn');
+  expect(button.getAttribute('onclick')).toBe('openMoreSheet()');
+  expect(button.getAttribute('aria-controls')).toBe('more-sheet');
+  nav.openMoreSheet();
+  expect(button.getAttribute('aria-expanded')).toBe('true');
+  expect(chipCalls).toHaveLength(1);
+  expect(chipCalls[0].container.id).toBe('more-sheet-books');
+  const labels = moreLabels();
+  expect(labels[0]).toBe('Today');
+  // The phone bar holds only Sell and Manual entry, so the menu keeps every screen.
+  expect(labels).toContain('Event POS');
+  expect(labels).toContain('Manual entry');
+  nav.closeMoreSheet();
+  expect(button.getAttribute('aria-expanded')).toBe('false');
+});
+
+test('the menu button carries the "something needs you" dot', () => {
+  expect(mainJs).toMatch(/getElementById\('phone-menu-dot'\)/);
+  expect(html).toMatch(/id="phone-menu-dot" hidden/);
+});
+
+test('the phone top bar mirrors the sync word and the side menu holds the account', () => {
+  expect(html).toMatch(/id="phone-sync-dot"/);
+  expect(html).toMatch(/id="sync-pill-text"/);
+  expect(mainJs).toMatch(/\$\('phone-sync-dot'\)/);
+  const foot = document.querySelector('#more-sheet .more-sheet-foot');
+  expect(foot.querySelector('[onclick*="openReviewInbox"]')).not.toBeNull();
+  expect(foot.querySelector('[onclick="toggleTheme()"]')).not.toBeNull();
+  expect(foot.querySelector('[onclick="logout()"]')).not.toBeNull();
+});
+
+test('Today ledger: sold, taken, on hand and what stores owe, money kept per currency', () => {
+  const books = { a: { currency: 'CA$' }, b: { currency: '€' }, t: { currency: 'CA$', isTest: true } };
+  const states = {
+    a: { stock: 40, hist: [], stores: [{ amountOwed: 20 }, { amountOwed: 0 }] },
+    b: { stock: 5, hist: [], stores: [{ amountOwed: 12 }] },
+    t: { stock: 999, hist: [], stores: [{ amountOwed: 500 }] },
+  };
+  todayApi({ activeBook: 'all', books, states }).renderTodayHub();
+  const figs = [...document.querySelectorAll('#today-ledger .ledger-fig')];
+  expect(figs.map((f) => f.querySelector('.ledger-label').textContent)).toEqual(['Sold today', 'Taken', 'On hand', 'Stores owe']);
+  expect(figs[2].querySelector('.ledger-value').textContent).toBe('45');
+  expect(figs[3].querySelector('.ledger-value').textContent).toBe('CA$20 + €12');
+  expect(figs[3].querySelector('.ledger-sub').textContent).toBe('From 2 stores');
+  expect(figs[3].getAttribute('onclick')).toBe("switchTab('consignment')");
+});
