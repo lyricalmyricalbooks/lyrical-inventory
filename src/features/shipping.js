@@ -9736,6 +9736,60 @@ function applySmartShippingRates(region, base, addon) {
   showToast(`Applied recommended rates for ${region === 'ON' ? 'Ontario' : region === 'CA' ? 'Rest of Canada' : region === 'US' ? 'United States' : 'International'}`);
 }
 
+// The weight bucket an order falls in: the rows of the weight-band table and
+// the values its weight filter toggles between.
+function shipAnalysisWeightBand(weightKg) {
+  if (weightKg < 0.5) return 'Under 0.5 kg';
+  if (weightKg <= 1) return '0.5 - 1 kg';
+  if (weightKg <= 2) return '1 - 2 kg';
+  return 'Over 2 kg';
+}
+
+// Whether one order passes the hub's margin, carrier, region and weight
+// filters. The P&L cards, the ledger and its CSV export all apply these, so
+// each screen counts the same orders. `linkedFor(orderNumber)` gives the
+// order's matched postage, `bookFor(id)` its book.
+function passesShipAnalysisFilters(o, linkedFor, bookFor) {
+  if (shipAnalysisMarginFilter !== 'all') {
+    const customerPaidBase = Number(o.shippingPaid) || 0;
+    const linked = linkedFor(normalizeShippingOrderNumber(o.num));
+
+    if (shipAnalysisMarginFilter === 'missing') {
+      if (customerPaidBase !== 0) return false;
+    } else {
+      const hasPostage = linked.length > 0 || !!o.manualPostagePaid;
+      if (!hasPostage) return false;
+
+      const postageCostCAD = o.manualPostagePaid
+        ? (Number(o.postagePaid) || 0)
+        : linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
+      const margin = customerPaidBase - postageCostCAD;
+
+      if (shipAnalysisMarginFilter === 'loss' && margin >= 0) return false;
+      if (shipAnalysisMarginFilter === 'profit' && margin < 0) return false;
+    }
+  }
+
+  if (shipAnalysisCarrierFilter !== 'all') {
+    const linked = linkedFor(normalizeShippingOrderNumber(o.num));
+    const carrier = o.manualPostagePaid
+      ? 'Manual Override'
+      : (linked.length > 0 ? parseCarrierInfo(linked[0].desc).provider : 'Unlinked');
+    if (carrier !== shipAnalysisCarrierFilter) return false;
+  }
+
+  if (shipAnalysisRegionFilter !== 'all') {
+    if (shipmentRegion(o.shipCountry) !== shipAnalysisRegionFilter) return false;
+  }
+
+  if (shipAnalysisWeightFilter !== 'all') {
+    const weightKg = getWeightInKg(o.qty || 1, bookFor(o.bookId));
+    if (shipAnalysisWeightBand(weightKg) !== shipAnalysisWeightFilter) return false;
+  }
+
+  return true;
+}
+
 function buildShippingPnLHtml(allOrders, relevantExpenses, shippoExpenses, bookFilterOptions, marginFilterOptions, isPub) {
 
   // ⚡ Bolt Optimization: Pre-compute expenses grouped by order number to avoid O(N*M) lookups
@@ -9764,6 +9818,8 @@ function buildShippingPnLHtml(allOrders, relevantExpenses, shippoExpenses, bookF
   // First book per id wins, as find() did.
   const booksById = new Map();
   for (const book of BOOK_LIST) if (!booksById.has(book.id)) booksById.set(book.id, book);
+  const linkedExpensesFor = (orderNumber) => (orderNumber && shippoExpensesByOrder.get(orderNumber)) || [];
+  const bookFor = (id) => booksById.get(id);
 
   // Calculate dynamic counts for Margin Health filters based on active Book Filter (using allOrders)
   let countAll = 0;
@@ -9807,57 +9863,7 @@ function buildShippingPnLHtml(allOrders, relevantExpenses, shippoExpenses, bookF
     const activeOrders = allOrders.filter(o => !o.excludeFromShipping);
 
     // Apply all interactive filters to compute current P&L totals
-    const kpiOrders = activeOrders.filter(o => {
-      // A. Margin health filter
-      if (shipAnalysisMarginFilter !== 'all') {
-        const customerPaidBase = Number(o.shippingPaid) || 0;
-        const orderNumber = normalizeShippingOrderNumber(o.num);
-        const linked = orderNumber ? (shippoExpensesByOrder.get(orderNumber) || []) : [];
-
-        if (shipAnalysisMarginFilter === 'missing') {
-          if (customerPaidBase !== 0) return false;
-        } else {
-          const hasPostage = linked.length > 0 || !!o.manualPostagePaid;
-          if (!hasPostage) return false;
-
-          const postageCostCAD = o.manualPostagePaid
-            ? (Number(o.postagePaid) || 0)
-            : linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
-          const margin = customerPaidBase - postageCostCAD;
-
-          if (shipAnalysisMarginFilter === 'loss' && margin >= 0) return false;
-          if (shipAnalysisMarginFilter === 'profit' && margin < 0) return false;
-        }
-      }
-
-      // B. Carrier filter
-      if (shipAnalysisCarrierFilter !== 'all') {
-        const orderNumber = normalizeShippingOrderNumber(o.num);
-        const linked = orderNumber ? (shippoExpensesByOrder.get(orderNumber) || []) : [];
-        const carrier = o.manualPostagePaid
-          ? 'Manual Override'
-          : (linked.length > 0 ? parseCarrierInfo(linked[0].desc).provider : 'Unlinked');
-        if (carrier !== shipAnalysisCarrierFilter) return false;
-      }
-
-      // C. Region filter
-      if (shipAnalysisRegionFilter !== 'all') {
-        if (shipmentRegion(o.shipCountry) !== shipAnalysisRegionFilter) return false;
-      }
-
-      // D. Weight filter
-      if (shipAnalysisWeightFilter !== 'all') {
-        const book = booksById.get(o.bookId);
-        const weightKg = getWeightInKg(o.qty || 1, book);
-        let band = 'Over 2 kg';
-        if (weightKg < 0.5) band = 'Under 0.5 kg';
-        else if (weightKg <= 1) band = '0.5 - 1 kg';
-        else if (weightKg <= 2) band = '1 - 2 kg';
-        if (band !== shipAnalysisWeightFilter) return false;
-      }
-
-      return true;
-    });
+    const kpiOrders = activeOrders.filter(o => passesShipAnalysisFilters(o, linkedExpensesFor, bookFor));
 
     // ⚡ Bolt Optimization: Loop Fusion
     // Combined multiple passes over kpiOrders into a single imperative loop
@@ -10294,10 +10300,7 @@ function buildShippingWeightBandHtml(allOrders, shippoExpenses) {
       
       const revenue = Number(o.shippingPaid) || 0;
 
-      let band = 'Over 2 kg';
-      if (weightKg < 0.5) band = 'Under 0.5 kg';
-      else if (weightKg <= 1) band = '0.5 - 1 kg';
-      else if (weightKg <= 2) band = '1 - 2 kg';
+      const band = shipAnalysisWeightBand(weightKg);
 
       weightBands[band].count++;
       weightBands[band].totalCost += cost;
@@ -10617,55 +10620,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
     if (shipAnalysisMarginFilter === 'dismissed') return o.excludeFromShipping === true;
     if (o.excludeFromShipping) return false;
 
-    // A. Margin health filter
-    if (shipAnalysisMarginFilter !== 'all') {
-      const customerPaidBase = Number(o.shippingPaid) || 0;
-      const orderNumber = normalizeShippingOrderNumber(o.num);
-      const linked = linkedExpensesFor(orderNumber);
-
-      if (shipAnalysisMarginFilter === 'missing') {
-        if (customerPaidBase !== 0) return false;
-      } else {
-        const hasPostage = linked.length > 0 || !!o.manualPostagePaid;
-        if (!hasPostage) return false;
-
-        const postageCostCAD = o.manualPostagePaid
-          ? (Number(o.postagePaid) || 0)
-          : linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
-        const margin = customerPaidBase - postageCostCAD;
-
-        if (shipAnalysisMarginFilter === 'loss' && margin >= 0) return false;
-        if (shipAnalysisMarginFilter === 'profit' && margin < 0) return false;
-      }
-    }
-
-    // B. Carrier filter
-    if (shipAnalysisCarrierFilter !== 'all') {
-      const orderNumber = normalizeShippingOrderNumber(o.num);
-      const linked = linkedExpensesFor(orderNumber);
-      const carrier = o.manualPostagePaid
-        ? 'Manual Override'
-        : (linked.length > 0 ? parseCarrierInfo(linked[0].desc).provider : 'Unlinked');
-      if (carrier !== shipAnalysisCarrierFilter) return false;
-    }
-
-    // C. Region filter
-      if (shipAnalysisRegionFilter !== 'all') {
-        if (shipmentRegion(o.shipCountry) !== shipAnalysisRegionFilter) return false;
-      }
-
-    // D. Weight filter
-    if (shipAnalysisWeightFilter !== 'all') {
-      const book = bookFor(o.bookId);
-      const weightKg = getWeightInKg(o.qty || 1, book);
-      let band = 'Over 2 kg';
-      if (weightKg < 0.5) band = 'Under 0.5 kg';
-      else if (weightKg <= 1) band = '0.5 - 1 kg';
-      else if (weightKg <= 2) band = '1 - 2 kg';
-      if (band !== shipAnalysisWeightFilter) return false;
-    }
-
-    return true;
+    return passesShipAnalysisFilters(o, linkedExpensesFor, bookFor);
   }).filter(o => {
     if (!shipAnalysisSearchQuery) return true;
     const orderNum = String(o.num || '').toLowerCase();
@@ -11528,6 +11483,8 @@ function downloadFilteredShippingLedgerCSV() {
   }
   const booksById = new Map();
   for (const book of BOOK_LIST) if (!booksById.has(book.id)) booksById.set(book.id, book);
+  const linkedExpensesFor = (orderNumber) => (orderNumber && shippoExpensesByOrder.get(orderNumber)) || [];
+  const bookFor = (id) => booksById.get(id);
 
   const allOrders = [];
   Object.keys(states).forEach(bookId => {
@@ -11551,55 +11508,7 @@ function downloadFilteredShippingLedgerCSV() {
     if (shipAnalysisMarginFilter === 'dismissed') return o.excludeFromShipping === true;
     if (o.excludeFromShipping) return false;
 
-    // A. Margin health filter
-    if (shipAnalysisMarginFilter !== 'all') {
-      const customerPaidBase = Number(o.shippingPaid) || 0;
-      const orderNumber = normalizeShippingOrderNumber(o.num);
-      const linked = orderNumber ? (shippoExpensesByOrder.get(orderNumber) || []) : [];
-
-      if (shipAnalysisMarginFilter === 'missing') {
-        if (customerPaidBase !== 0) return false;
-      } else {
-        const hasPostage = linked.length > 0 || !!o.manualPostagePaid;
-        if (!hasPostage) return false;
-
-        const postageCostCAD = o.manualPostagePaid
-          ? (Number(o.postagePaid) || 0)
-          : linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
-        const margin = customerPaidBase - postageCostCAD;
-
-        if (shipAnalysisMarginFilter === 'loss' && margin >= 0) return false;
-        if (shipAnalysisMarginFilter === 'profit' && margin < 0) return false;
-      }
-    }
-
-    // B. Carrier filter
-    if (shipAnalysisCarrierFilter !== 'all') {
-      const orderNumber = normalizeShippingOrderNumber(o.num);
-      const linked = orderNumber ? (shippoExpensesByOrder.get(orderNumber) || []) : [];
-      const carrier = o.manualPostagePaid
-        ? 'Manual Override'
-        : (linked.length > 0 ? parseCarrierInfo(linked[0].desc).provider : 'Unlinked');
-      if (carrier !== shipAnalysisCarrierFilter) return false;
-    }
-
-    // C. Region filter
-      if (shipAnalysisRegionFilter !== 'all') {
-        if (shipmentRegion(o.shipCountry) !== shipAnalysisRegionFilter) return false;
-      }
-
-    // D. Weight filter
-    if (shipAnalysisWeightFilter !== 'all') {
-      const book = booksById.get(o.bookId);
-      const weightKg = getWeightInKg(o.qty || 1, book);
-      let band = 'Over 2 kg';
-      if (weightKg < 0.5) band = 'Under 0.5 kg';
-      else if (weightKg <= 1) band = '0.5 - 1 kg';
-      else if (weightKg <= 2) band = '1 - 2 kg';
-      if (band !== shipAnalysisWeightFilter) return false;
-    }
-
-    return true;
+    return passesShipAnalysisFilters(o, linkedExpensesFor, bookFor);
   });
 
   if (filteredOrders.length === 0) {
