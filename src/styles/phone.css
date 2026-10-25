@@ -1221,6 +1221,14 @@
   /* Currency and amount share one row instead of the currency sitting above the amount. */
   #tab-taxcenter .amount-field .price-wrap { display: flex; align-items: stretch; }
   #tab-taxcenter #tc-exp-cur { flex: 0 0 5.5rem !important; margin-right: 0 !important; }
+
+  /* Camera and AI Scan share the card's width in two equal halves, not two stubs hanging off the left. */
+  #tab-taxcenter .tc-receipt-scan-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #tab-taxcenter .tc-receipt-scan-actions .btn { width: 100%; min-width: 0; padding-inline: var(--space-2); }
+
+  /* Cash Flow Summary heads its card in the display lettering the other card titles use, with a square currency tag. */
+  #tab-taxcenter .cf-title { font-family: var(--font-display); font-weight: 400; font-size: var(--text-xl); text-transform: uppercase; letter-spacing: .02em; line-height: 1.1; }
+  #tab-taxcenter .cf-cad-badge { border-radius: var(--r); }
 }
 
 /* ─── HISTORY: artist approvals (round 4) ───

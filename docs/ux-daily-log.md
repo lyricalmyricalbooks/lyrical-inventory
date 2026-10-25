@@ -188,6 +188,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-25 | visual | Phone Audience — buyer cards | Put +List, Unsubscribe and Details on one row at the foot of each buyer card instead of two rows, so every card is about a quarter shorter and more buyers show per screen | (this PR) |
 | 2026-10-25 | visual | Phone bottom bar | Made the four icons in the bottom bar sit in same-height boxes so the Sell label no longer rides a few pixels above Home, Manual entry and More | (this PR) |
 | 2026-10-25 | visual | Phone Help — audience switch | Made the "For artists / For the publisher" switch run the full width in two equal halves, like the search box and topic tiles under it, instead of stopping two-thirds across | (this PR) |
+| 2026-10-25 | visual | Phone Tax Centre — receipt buttons and Cash Flow head | Made Camera and AI Scan share the card width in two equal halves instead of two stubs on the left, and set the Cash Flow Summary title in capital display lettering with a square currency tag | (this PR) |
 
 ---
 
