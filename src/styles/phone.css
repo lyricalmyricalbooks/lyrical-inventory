@@ -681,6 +681,22 @@
   .pub-shell #book-dropdown-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
 }
 
+/* The Website button beside the book picker was left as a thin, see-through
+   outline next to it. Same printed-button treatment: firm cream outline, hard
+   offset shadow, caps, and a press-in on tap. */
+@media (max-width: 768px) {
+  .pub-shell .app-header .app-switch-pill {
+    border-color: var(--on-inverse-3);
+    box-shadow: 3px 3px 0 color-mix(in srgb, var(--on-inverse) 26%, transparent);
+    font-weight: 800; text-transform: uppercase; letter-spacing: var(--tracking-caps);
+    -webkit-tap-highlight-color: transparent;
+    transition: transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast) var(--ease-spring),
+      background-color var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard);
+  }
+  .pub-shell .app-header .app-switch-pill:active { transform: translate(3px, 3px); box-shadow: none; }
+  .pub-shell .app-header .app-switch-pill.is-offline { box-shadow: none; }
+}
+
 /* Pop-up sheets, Riso Press: they kept the pre-repaint soft look after the More
    sheet moved on: a pale rounded grab handle, rounded top corners and a round
    close button that grew on hover. They now match the More sheet: a square ink
