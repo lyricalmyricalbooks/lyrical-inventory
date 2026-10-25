@@ -1,0 +1,23 @@
+import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+
+const phone = readFileSync('src/styles/phone.css', 'utf8');
+const rule = (sel) => phone.match(new RegExp(sel.replace(/[.*+?^${}()|[\]\\>]/g, '\\$&') + '\\s*\\{([^}]*)\\}'))?.[1] ?? '';
+
+describe('phone Big Cartel heading row', () => {
+  it('keeps the title and the connection state on one row', () => {
+    const r = rule('#tab-bigcartel > .row-between');
+    expect(r).toMatch(/flex-direction:\s*row/);
+    expect(r).toMatch(/flex-wrap:\s*nowrap/);
+  });
+  it('lets the title shrink so the state tag never pushes it off screen', () => {
+    expect(rule('#tab-bigcartel > .row-between .section-hed')).toMatch(/min-width:\s*0/);
+  });
+  it('draws the connection state as a square outlined tag that does not shrink', () => {
+    const r = rule('#tab-bigcartel .bc-connection-status');
+    expect(r).toMatch(/flex:\s*none/);
+    expect(r).toMatch(/border:\s*var\(--stroke-hair\)/);
+    expect(r).toMatch(/border-radius:\s*var\(--r2\)/);
+    expect(r).toMatch(/text-transform:\s*uppercase/);
+  });
+});

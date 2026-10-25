@@ -1812,6 +1812,13 @@
   #tab-webanalytics .wa-setup-title { font-weight: 400; text-transform: uppercase; letter-spacing: .01em; line-height: 1.1; text-wrap: balance; }
   #tab-webanalytics > .row-between { flex-direction: row; align-items: center; flex-wrap: nowrap; gap: var(--space-3); margin-bottom: var(--space-4) !important; }
 
+  /* Big Cartel: the connection state was a loose dot and mixed-case word dropped on its own line
+     under the heading. It now shares the heading's row as a square tag, like the Web Analytics one,
+     so the screen opens with title and state together and the intro starts a line sooner. */
+  #tab-bigcartel > .row-between { flex-direction: row; align-items: center; flex-wrap: nowrap; gap: var(--space-3); margin-bottom: var(--space-3) !important; }
+  #tab-bigcartel > .row-between .section-hed { min-width: 0; text-wrap: balance; }
+  #tab-bigcartel .bc-connection-status { flex: none; gap: var(--space-2); padding: var(--space-1) var(--space-2); border: var(--stroke-hair) solid var(--border-default); border-radius: var(--r2); font-family: var(--font-mono); font-size: var(--text-xs); font-weight: 500; text-transform: uppercase; letter-spacing: .06em; }
+
   /* Help: each question is a list row with a hairline, not a heavy boxed button. */
   #tab-help .help-q { border: var(--stroke-hair) solid var(--border-default); box-shadow: none; }
 

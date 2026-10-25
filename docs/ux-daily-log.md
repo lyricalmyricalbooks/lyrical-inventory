@@ -194,6 +194,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-25 | visual | Phone header — Website button | Gave the Website button beside the book picker the same firm outline, offset shadow, caps lettering and press-in as the picker, instead of a thin see-through outline that matched nothing beside it | (this PR) |
 | 2026-10-25 | behavioural | Phone Order History — search box | Shortened the hint inside the "Find an order" box so it fits on a phone instead of being cut off mid-phrase; the full list of what it searches stays in the line beneath | (this PR) |
 | 2026-10-25 | visual | Phone Sell — book tiles | Made the two book tiles in each row the same height with prices on one line, instead of a shorter tile hanging beside a taller one | (this PR) |
+| 2026-10-25 | visual | Phone Big Cartel — heading | Put the Disconnected / Connected state beside the heading as a square tag instead of a loose dot and word on a line of its own, so the intro starts a line sooner | (this PR) |
 
 ---
 
