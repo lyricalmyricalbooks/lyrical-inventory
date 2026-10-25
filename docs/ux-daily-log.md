@@ -187,6 +187,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-25 | visual | Phone Expenses — receipt column | Dropped the repeated "Receipt" caps label above the "No receipt" tag and "+ Receipt" button, and gave the tag the square corner of other tags, so each expense card is a line shorter and the tag leads | (this PR) |
 | 2026-10-25 | visual | Phone Audience — buyer cards | Put +List, Unsubscribe and Details on one row at the foot of each buyer card instead of two rows, so every card is about a quarter shorter and more buyers show per screen | (this PR) |
 | 2026-10-25 | visual | Phone bottom bar | Made the four icons in the bottom bar sit in same-height boxes so the Sell label no longer rides a few pixels above Home, Manual entry and More | (this PR) |
+| 2026-10-25 | visual | Phone Help — audience switch | Made the "For artists / For the publisher" switch run the full width in two equal halves, like the search box and topic tiles under it, instead of stopping two-thirds across | (this PR) |
 
 ---
 
