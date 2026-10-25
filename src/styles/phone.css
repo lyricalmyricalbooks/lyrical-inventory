@@ -2170,3 +2170,13 @@
   .book-context-title { font-family: var(--font-display); font-size: var(--text-lg); font-weight: 400; text-transform: uppercase; letter-spacing: .02em; line-height: 1.1; }
   .book-context-meta { margin-top: var(--space-1); }
 }
+
+/* Expenses, held upright — the "7 without a receipt" filter was a big rounded lozenge with a faint
+   outline, the one soft shape among square tags and inked cards, and the AI Scan button stopped short
+   as a stub under the drop box while Log several / Log expense under it run the full card width.
+   The filter is now a square tag with the 2px ink outline, and AI Scan shares the card width. The
+   inline start-alignment on AI Scan is for desktop, so the stretch needs !important to override it. */
+@media (max-width: 768px) {
+  #exp-missing-receipt-btn { border-radius: var(--r2); border-width: var(--stroke); }
+  #exp-ai-btn { align-self: stretch !important; }
+}
