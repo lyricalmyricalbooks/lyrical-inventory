@@ -36,3 +36,36 @@ export function salesForDay(books, day) {
   }
   return { sales: seen.size, units, totals };
 }
+
+// A row's identity across two copies of the same ledger: its event id when it
+// has one, otherwise the fields a sale is made of.
+function rowKey(h) {
+  return h.sheetsId ? `id|${h.sheetsId}` : `row|${h.chan}|${h.num}|${h.date}|${h.qty}|${h.price}`;
+}
+
+/**
+ * Today's sales that are on this phone but not yet in the cloud. Only books
+ * with a change waiting are passed a `savedHist` — the ledger as the cloud last
+ * confirmed it; every other book is skipped. Counted the same way as
+ * salesForDay, so "3 sold, 1 waiting" can't add up to more than was sold.
+ *
+ * @param {{ id: string, hist?: object[], savedHist?: object[] }[]} books
+ * @param {string} day  YYYY-MM-DD
+ * @returns {{ sales: number, units: number }}
+ */
+export function unsentSalesForDay(books, day) {
+  const seen = new Set();
+  let units = 0;
+  for (const book of books || []) {
+    if (!Array.isArray(book.savedHist)) continue;
+    const saved = new Set(book.savedHist.filter(Boolean).map(rowKey));
+    for (const h of book.hist || []) {
+      if (!h || h.voided || h.gratuity || h.chan === 'Gratuity' || h.date !== day) continue;
+      const qty = Number(h.qty) || 0;
+      if (qty <= 0 || saved.has(rowKey(h))) continue;
+      units += qty;
+      seen.add(h.num ? `${h.chan}|${h.num}` : `row|${book.id}|${seen.size}`);
+    }
+  }
+  return { sales: seen.size, units };
+}

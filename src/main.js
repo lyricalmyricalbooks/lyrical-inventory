@@ -228,7 +228,7 @@ import {
   validateFields,
 } from './lib/modal.js';
 import { installBackClose } from './lib/back-close.js';
-import { salesForDay } from './lib/today-summary.js';
+import { salesForDay, unsentSalesForDay } from './lib/today-summary.js';
 import { dismissAppAlert, markAppAlertReviewed, pushAppAlert } from './lib/app-alert.js';
 import { booksInDescription, saleCodes, splitSalePlan } from './lib/sale-codes.js';
 import { describeMarketDay, latestMarketDay, summariseMarketDay } from './lib/market-day.js';
@@ -3269,6 +3269,8 @@ function renderSyncChip() {
   });
 
   renderFairSyncPill();
+  // Today's "waiting to upload" line follows the queue as it fills and drains.
+  if (document.getElementById('tab-today')?.classList.contains('active')) renderTodayLedger();
   host.hidden = !view.visible;
   host.classList.toggle('is-offline', view.tone === 'offline');
   host.classList.toggle('is-pending', view.tone === 'pending');
@@ -5391,6 +5393,25 @@ function renderTodaySoFar() {
   renderFairSyncPill();
 }
 
+// The books with a change still waiting to upload, each with its ledger as the
+// cloud last confirmed it (lastSavedHashes). Parsed once per saved copy.
+const _savedHistCache = new Map();
+function todayUnsentBooks(books) {
+  const waiting = new Set(syncQueue.map((item) => item.bookId));
+  return books.filter((b) => waiting.has(b.id)).map((b) => {
+    const json = lastSavedHashes[b.id];
+    if (!json) return { ...b, savedHist: [] };
+    let hit = _savedHistCache.get(b.id);
+    if (!hit || hit.json !== json) {
+      let hist = [];
+      try { hist = JSON.parse(json).hist || []; } catch (_) { /* unreadable: treat every row as unsent */ }
+      hit = { json, hist };
+      _savedHistCache.set(b.id, hit);
+    }
+    return { ...b, savedHist: hit.hist };
+  });
+}
+
 // The phone Today's ledger: four figures across every book, each a way in to
 // the screen that explains it. Money is summed per currency, never across.
 function renderTodayLedger() {
@@ -5413,8 +5434,12 @@ function renderTodayLedger() {
   }
   const titles = Object.values(BOOKS).filter((b) => !isTestBook(b)).length;
   const owed = [...owedByCur].map(([c, v]) => fmtWhole(v, c)).join(' + ');
+  const unsent = unsentSalesForDay(todayUnsentBooks(books), today()).sales;
+  const soldSub = unsent
+    ? `${unsent} ${unsent === 1 ? 'sale' : 'sales'} waiting to upload`
+    : day.sales ? `${day.sales} ${day.sales === 1 ? 'sale' : 'sales'}` : 'No sales yet';
   const figs = [
-    { label: 'Sold today', value: String(day.units), sub: day.sales ? `${day.sales} ${day.sales === 1 ? 'sale' : 'sales'}` : 'No sales yet', tab: 'history' },
+    { label: 'Sold today', value: String(day.units), sub: soldSub, tab: 'history', tone: unsent ? 'waiting' : '' },
     { label: 'Taken', value: day.sales ? fairTotalsText(day.totals) : '—', sub: 'Cash and card', tab: 'history' },
     { label: 'On hand', value: String(stock), sub: `Across ${titles} ${titles === 1 ? 'title' : 'titles'}`, tab: 'dashboard' },
     { label: 'Stores owe', value: owed || '—', sub: storesOwing ? `From ${storesOwing} ${storesOwing === 1 ? 'store' : 'stores'}` : 'Nothing owed', tab: 'consignment', tone: owed ? 'owed' : '' },
