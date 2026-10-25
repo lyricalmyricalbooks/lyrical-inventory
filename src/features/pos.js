@@ -502,7 +502,7 @@ function renderFairMode(booksArr, titleCount, cartRows, totalText) {
     const converted = convertCurrency(book.listPrice || 0, sourceCode, posTransactionCurrency);
     const priceText = converted === null ? posFormat(book.listPrice || 0, sourceCode) : posFormat(converted, posTransactionCurrency);
     const stock = posStockView({ onHand: posOnHandFor(book.id), inCart: qty });
-    return fairTileHtml({ id: book.id, title: book.title || 'Untitled', priceText, qty, stock });
+    return fairTileHtml({ id: book.id, title: book.title || 'Untitled', priceText, qty, stock, accent: book.accent });
   }).join('') || '<p class="fm-empty">No books to sell yet. Add a book to your catalogue, or add a POS-only book on a larger screen.</p>';
   // Currency switch: same list and state as the full checkout's selector.
   const ccy = $('fm-currency');
