@@ -984,12 +984,26 @@ function getCachedBigCartelOrder(orderId) {
  * cheap; when no check has run yet the badge is omitted entirely rather than
  * claiming an order is fine on no evidence.
  */
-function ledgerBadgeHtml(order) {
+// The cleaned-up numbers of every order the ledger check found missing. Built
+// once per table draw: checking each row against the raw list re-cleaned every
+// missing number for every order (orders × gaps regex runs on a long history).
+// bigCartelOrderNumber already returns a cleaned number, and cleaning is
+// idempotent, so a Set lookup gives exactly what sameOrderNumber did.
+function missingLedgerNumbers() {
+  const set = new Set();
+  for (const gap of (_bcGapResult?.missing || [])) {
+    const num = normalizeShippingOrderNumber(gap.num);
+    if (num) set.add(num);
+  }
+  return set;
+}
+
+function ledgerBadgeHtml(order, missingNums = missingLedgerNumbers()) {
   if (!_bcGapResult) return '';
   const num = bigCartelOrderNumber(order);
   if (!num) return '';
   if (isCancelledStatus(order)) return '';
-  const missing = (_bcGapResult.missing || []).some(gap => sameOrderNumber(gap.num, num));
+  const missing = missingNums.has(num);
   return missing
     ? '<br><span class="bc-match-pill unmatched" title="This sale has never been recorded — no stock was deducted">⚠️ Not in ledger</span>'
     : '<br><span class="bc-match-pill matched" title="Recorded in your ledger">✓ In ledger</span>';
@@ -1020,6 +1034,8 @@ function renderBigCartelOrders(orders, included = []) {
     return;
   }
 
+  const missingNums = missingLedgerNumbers();
+  const rows = document.createDocumentFragment();
   orders.forEach(o => {
     const attr = o.attributes || {};
     const dateStr = attr.created_at ? new Date(attr.created_at).toLocaleDateString() : '—';
@@ -1043,7 +1059,7 @@ function renderBigCartelOrders(orders, included = []) {
     // Whether this sale is in the ledger at all — the fact the table never
     // showed. Buying a label for an order that was never recorded is how a sale
     // ends up with postage, a customer and no order behind it.
-    matchPillHtml += ledgerBadgeHtml(o);
+    matchPillHtml += ledgerBadgeHtml(o, missingNums);
 
     const itemsHtml = itemsText + matchPillHtml;
 
@@ -1070,8 +1086,9 @@ function renderBigCartelOrders(orders, included = []) {
         </button>
       </td>
     `;
-    list.appendChild(row);
+    rows.appendChild(row);
   });
+  list.appendChild(rows);
 }
 
 /**
