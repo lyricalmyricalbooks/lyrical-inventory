@@ -20,6 +20,7 @@
   },
   "files": [
     "src/lib/money.js",
+    "src/lib/cents.js",
     "src/lib/inventory.js",
     "src/lib/consignment.js",
     "src/lib/merge-state.js",

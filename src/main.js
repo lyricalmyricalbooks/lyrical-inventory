@@ -300,6 +300,7 @@ import {
   setSelectCurrency,
   PICKER_CURRENCIES,
 } from './lib/money.js';
+import { sumMoney } from './lib/cents.js';
 import { localDay, localDayPlus } from './lib/calendar-day.js';
 import {
   buildPartPaymentNote,
@@ -6012,10 +6013,7 @@ function renderAllBooksStrips(allBooksVisible) {
   } else {
     list.innerHTML = allBooksVisible.map(book => {
     const s = states[book.id] || defaultState(book);
-    let owed = 0;
-    for (let i = 0; i < s.stores.length; i++) {
-      owed += s.stores[i].amountOwed || 0;
-    }
+    const owed = sumMoney(s.stores, st => st.amountOwed);
     const pct = Math.max(0, s.stock / (book.maxPrint || 1) * 100);
     const stockClass = s.stock <= book.threshold ? 'danger' : s.stock <= book.threshold * 2 ? 'warn' : 'gold';
     const cost = book.productionCost || 0;
@@ -6053,7 +6051,8 @@ function renderAllBooksStrips(allBooksVisible) {
     })}
       </div>` : '';
 
-    const expTotal = (s.expenses || []).reduce((a, e) => a + (e.amount || 0), 0);
+    // Amounts can arrive as text from a Sheet; sumMoney reads them as numbers.
+    const expTotal = sumMoney(s.expenses || [], e => e.amount);
 
     // Every one of these reaches innerHTML. book.id, book.currency and
     // book.accent are stored verbatim from the Add-book form's inputs
@@ -6614,7 +6613,7 @@ function renderChannelAnalytics() {
   let toggle = '';
   if (curKeys.length > 1) {
     toggle = `<div class="ch-cur-toggle" role="tablist" aria-label="Currency selection">` + curKeys.map(c => {
-      const tot = (byCur[c].books || []).reduce((a, b) => a + (b.total || 0), 0);
+      const tot = sumMoney(byCur[c].books || [], b => b.total);
       const isAct = c === cur;
       return `<button type="button" role="tab" aria-selected="${isAct}" class="ch-cur-btn${isAct ? ' active' : ''}" onclick="selectAllChCurrency(${escapeHtml(JSON.stringify(c))})">
         <span class="ch-cur-code">${escapeHtml(c)}</span>

@@ -62,6 +62,7 @@ import { localDayPlus } from '../lib/calendar-day.js';
 import { csvRow, toCsv } from '../lib/csv.js';
 import { downloadCsv } from '../lib/download.js';
 import { fmt, getSym, getBookCurrencyCode, roundCents, setSelectCurrency } from '../lib/money.js';
+import { sumMoney } from '../lib/cents.js';
 import { payoutNetted, payoutDebtCollected } from '../lib/earnings.js';
 import { reconcileConsignmentMirrors } from '../lib/consignment.js';
 import { buildCashFlowBuckets, cashFlowDelta, computeCashFlowMetrics } from '../lib/cashflow.js';
@@ -2256,7 +2257,7 @@ function _tcRenderTripsPanel(selectedYear, baseCurrency) {
   // Render Stats Bar
   if (statsBar) {
     const totalTrips = tripList.length;
-    const totalSpent = tripList.reduce((sum, t) => sum + t.total, 0);
+    const totalSpent = sumMoney(tripList, t => t.total);
     const topTrip = tripList[0];
     const avgSpent = totalTrips > 0 ? totalSpent / totalTrips : 0;
 
@@ -4762,7 +4763,7 @@ function updateRecurringPreview() {
   // missed period at once on save. Better said here than discovered after.
   const dueNow = recurringDueCharges({ ...draft, lastInjected: _tcEditingRecurring ? (_tcFindRecurring(_tcEditingRecurring)?.lastInjected || '') : '' });
   const missed = dueNow.length;
-  const missedTotal = dueNow.reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
+  const missedTotal = sumMoney(dueNow, c => c.amount);
   const backfill = missed
     ? `<div class="rec-preview-warn">⚠ ${missed} past charge${missed === 1 ? '' : 's'} (${escapeHtml(fmt(missedTotal, draft.currency))}) will be posted to the ledger immediately.</div>`
     : '';
