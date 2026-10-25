@@ -20580,8 +20580,14 @@ button[onclick="refreshUmamiStats()"]:active {
   #tab-intel .intel-rail{display:none;}
   #tab-intel .intel-composer{
     position:sticky;bottom:calc(var(--mnav-h) + 10px + env(safe-area-inset-bottom));z-index:var(--z-raised);
-    background:var(--surface-page);padding-top:var(--space-2);box-shadow:0 -1px 0 var(--border-subtle);
+    background:var(--surface-card);padding-top:var(--space-2);box-shadow:0 -1px 0 var(--border-subtle);
+    /* Messaging-app bar: the field and Send share one inked box on one row
+       (Send used to hang on a second row, leaving a tall empty box). */
+    display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;
+    column-gap:var(--space-2);padding:var(--space-2);
   }
+  #tab-intel .intel-composer .intel-input{grid-column:1;min-width:0;background:transparent;border:0;box-shadow:none;}
+  #tab-intel .intel-composer-actions{grid-column:2;}
   #tab-intel .intel-send{min-height:48px;}
 }
 

@@ -197,6 +197,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-25 | visual | Phone Big Cartel — heading | Put the Disconnected / Connected state beside the heading as a square tag instead of a loose dot and word on a line of its own, so the intro starts a line sooner | (this PR) |
 | 2026-10-25 | visual | Phone Dashboard — Expenses owed to artist | Moved the "Artist has not set a payment link yet" line to the left under the expense count, at a readable size, instead of floating alone at the right edge of the banner | (this PR) |
 | 2026-10-25 | visual | Phone Manual entry — Channel buttons | Let the last Channel button (Other) run the full width of the row instead of sitting alone beside an empty gap | (this PR) |
+| 2026-10-25 | visual | Phone Intelligence — question box | Put the Send arrow inside the question box beside what you type, like a messaging app, instead of a tall empty box with Send on a row of its own, and cleared the dark-mode field's second dark box | (this PR) |
 
 ---
 
