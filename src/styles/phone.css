@@ -2037,6 +2037,16 @@
   }
 }
 
+/* All Books — book cards. Held upright, each book was a pale hairline box with a soft corner,
+   quieter than the inked notices and consignment cards around it. It is now the same inked slab
+   (bold outline, square corner, offset shadow); the book's colour stripe on the left still names
+   the book, and the card no longer lifts on touch. */
+@media (max-width: 768px) {
+  .book-strip { border: var(--stroke) solid var(--rule-ink); border-radius: var(--r2); box-shadow: var(--elev-1); }
+  .book-strip:hover { transform: none; box-shadow: var(--elev-1); border-color: var(--rule-ink); }
+  .book-strip::before { width: 6px; }
+}
+
 /* Notifications (All Books and the bell panel) — held upright, each notice was a pale hairline
    box with a thin stripe, much quieter than the inked consignment cards above it. Each is now
    the same inked slab with the offset shadow; the tone stripe moves inside so it still reads,
