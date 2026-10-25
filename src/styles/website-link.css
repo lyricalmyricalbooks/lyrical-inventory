@@ -142,6 +142,12 @@
   border-radius: var(--r2);
   min-width: 0;
 }
+/* Storage-check rows: the book leads (bold, base size) and the reason steps
+   down beneath it. Bare strong/span children only, so the order rows' own
+   .wl-num / .wl-sub classes keep their sizes. Without this both inherited the
+   phone body size and the title and its reason read as one same-weight block. */
+.wl-item > strong:not([class]) { font-size: var(--text-base); font-weight: 700; line-height: 1.3; color: var(--content-primary); }
+.wl-item > span:not([class]) { font-size: var(--text-sm); line-height: 1.45; color: var(--content-secondary); text-wrap: pretty; }
 /* A rehearsal row carries its own close button in the corner. */
 .wl-item:has(.wl-item-x) { position: relative; padding-right: calc(var(--space-3) + var(--target-min)); }
 .wl-item-x { position: absolute; top: 0; right: 0; }
