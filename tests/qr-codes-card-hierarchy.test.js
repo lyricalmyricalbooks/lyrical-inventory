@@ -9,6 +9,7 @@ import { expect, test } from 'vitest';
 const styles = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8').replace(/\r\n/g, '\n');
 const mainJs = readFileSync(path.join(__dirname, '../src/main.js'), 'utf8').replace(/\r\n/g, '\n');
 const indexHtml = readFileSync(path.join(__dirname, '../index.html'), 'utf8').replace(/\r\n/g, '\n');
+const phoneCss = readFileSync(path.join(__dirname, '../src/styles/phone.css'), 'utf8').replace(/\r\n/g, '\n');
 
 // The all-books QR page used to be one long inline-style string per card:
 // title, author and price all read at the same weight, two equal-weight
@@ -155,4 +156,12 @@ test('renderAllQRCodes writes no inline background/border/font/color styles', ()
   // The one style.* call is a custom-property write for the per-book accent
   // dot — that is a data pipe, not a styling override.
   expect(src).toMatch(/style\.setProperty\(['"]--qr-accent['"]/);
+});
+
+test('Payment QR codes title tail sits on its own line on a phone, with no stranded dash', () => {
+  expect(indexHtml).toMatch(/Payment QR codes<span class="hed-tail">all books<\/span>/);
+  // Desktop keeps the dash inline; the phone drops it and breaks the line.
+  expect(styles).toMatch(/\.qr-page \.hed-tail::before\s*\{[^}]*content:\s*' \\2014/);
+  expect(phoneCss).toMatch(/#tab-qrcodes \.hed-tail\s*\{[^}]*display:\s*block;/);
+  expect(phoneCss).toMatch(/#tab-qrcodes \.hed-tail::before\s*\{\s*content:\s*none;/);
 });

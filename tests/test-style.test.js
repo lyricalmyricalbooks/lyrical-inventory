@@ -34,7 +34,7 @@ const sourceReading = testFiles.filter(f => {
 
 describe('test style', () => {
   it('does not add tests that read the app as text', () => {
-    expect(sourceReading.length, 'Write the new test against behaviour (call the code, or loadApp and use the screen) rather than matching source text.')
+    expect(sourceReading.length, 'A new test file reads app code as text. Test the behaviour instead (call the code, or loadApp and use the screen); if it has to read source, add it to an existing test file for the same screen.')
       .toBeLessThanOrEqual(MAX_SOURCE_READING_FILES);
   });
 
