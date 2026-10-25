@@ -21,6 +21,7 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
+    "e2e": "node scripts/e2e/fair-day.mjs",
     "shots": "node scripts/phone-shots/capture.mjs",
     "android:assets": "node scripts/android-assets.mjs"
   },

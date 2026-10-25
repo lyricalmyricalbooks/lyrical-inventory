@@ -72,3 +72,28 @@ jobs:
       # Fail while there is still headroom.
       - name: Bundle size
         run: npm run check:size
+
+  # One fair day in a real browser (scripts/e2e/fair-day.mjs): sell at the
+  # phone register, undo, void from History, no page errors. The unit tests
+  # run in a simulated page; this catches what only breaks in a real one.
+  fair-day:
+    name: Fair day in a browser
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright-core install --with-deps chromium
+
+      - name: Fair day
+        run: npm run e2e
