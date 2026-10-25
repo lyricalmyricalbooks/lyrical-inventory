@@ -918,6 +918,25 @@
   #tab-reconcile .recon-keyrow { flex-wrap: wrap; }
   #tab-reconcile .recon-keyrow input { min-height: var(--target-min); }
 
+  /* Payment settings: the key box and the three settings cards read as the same
+     inked slabs as the payment cards above them. The key box was a bare field with
+     no padding, and its long hint ran off the edge of the screen. */
+  #tab-reconcile .recon-keyrow input {
+    flex: 1 1 100%; width: 100%; min-width: 0; padding: var(--space-2) var(--space-3);
+    background: var(--surface-card); color: var(--content-primary);
+    border: var(--stroke) solid var(--rule-ink); border-radius: var(--r2);
+    text-overflow: ellipsis;
+  }
+  #tab-reconcile .recon-keyrow input:focus-visible { outline: var(--stroke) solid var(--rule-ink); outline-offset: 2px; }
+  #tab-reconcile .recon-fold-body .toggle-row,
+  #tab-reconcile .recon-fold-body .sale-codes-box {
+    margin-top: 0; padding: var(--space-3) var(--space-4);
+    background: var(--surface-card); border: var(--stroke) solid var(--rule-ink);
+    box-shadow: var(--elev-1);
+  }
+  #tab-reconcile .recon-fold-body .toggle-row { gap: var(--space-3); }
+  #tab-reconcile .recon-fold-body .toggle-title { font-weight: 800; }
+
   /* KPI strip: the lead figure takes the first row, the other two share the second. */
   /* The global .kpi-grid phone rule forces one column with !important; this
      screen wants the lead on its own row and the two others side by side. */
