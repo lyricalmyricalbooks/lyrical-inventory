@@ -198,6 +198,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-25 | visual | Phone Dashboard — Expenses owed to artist | Moved the "Artist has not set a payment link yet" line to the left under the expense count, at a readable size, instead of floating alone at the right edge of the banner | (this PR) |
 | 2026-10-25 | visual | Phone Manual entry — Channel buttons | Let the last Channel button (Other) run the full width of the row instead of sitting alone beside an empty gap | (this PR) |
 | 2026-10-25 | visual | Phone Intelligence — question box | Put the Send arrow inside the question box beside what you type, like a messaging app, instead of a tall empty box with Send on a row of its own, and cleared the dark-mode field's second dark box | (this PR) |
+| 2026-10-25 | visual | Phone Expenses — receipt controls | Made the "7 without a receipt" filter a square outlined tag like the other tags instead of a big soft lozenge, and let AI Scan run the full card width like the buttons under it instead of a stub on the left | (this PR) |
 
 ---
 
