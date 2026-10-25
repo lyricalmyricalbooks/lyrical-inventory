@@ -470,3 +470,49 @@
   /* The row's pill already says it; an open card keeps only the ledger warning. */
   .pub-shell #tab-consignment .store-card.is-open .store-head-flags > .pill:not(.store-balance-flag) { display: none; }
 }
+
+/* ── Every other screen: the same gutter, kicker, titles and figures ─── */
+@media (max-width: 768px) {
+  .pub-shell .tab-panel { padding-inline: var(--phone-gutter); }
+
+  /* The boxed book banner becomes the kicker; what the screen is, the masthead. */
+  .pub-shell .tab-panel > .book-context:not(#book-context-dash):not(#book-context-con) {
+    display: block; margin: 0 0 var(--space-4); padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none;
+  }
+  .pub-shell .tab-panel > .book-context:not(#book-context-dash):not(#book-context-con) .book-context-dot { display: none; }
+  .pub-shell .tab-panel > .book-context:not(#book-context-dash):not(#book-context-con) .book-context-title {
+    display: flex; align-items: center; gap: var(--space-2);
+    font: 800 var(--text-2xs) var(--font-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--gold-text);
+  }
+  .pub-shell .tab-panel > .book-context:not(#book-context-dash):not(#book-context-con) .book-context-title::before {
+    content: ""; width: 8px; height: 8px; flex: none; background: var(--book-accent, var(--gold)); outline: var(--stroke-hair) solid var(--rule-ink);
+  }
+  .pub-shell .tab-panel > .book-context:not(#book-context-dash):not(#book-context-con) .book-context-meta {
+    margin: 6px 0 0; font: 400 40px / .95 var(--font-display); letter-spacing: 0; text-transform: uppercase; color: var(--content-primary); text-wrap: balance;
+  }
+
+  /* Section heads: a square flare dot, and a bigger Anton title. */
+  .pub-shell .tab-panel .sec-kicker-dot { width: 8px; height: 8px; border-radius: 0; }
+  .pub-shell .tab-panel :is(.section-hed, .sec-head-title) { font-size: 28px; line-height: 1; }
+
+  /* Figures as a ledger, the same as Today's: no boxes, a thick rule above each. */
+  .pub-shell .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; column-gap: var(--space-4); row-gap: var(--space-4); }
+  .pub-shell .kpi-grid > .kpi,
+  .pub-shell .kpi-grid > .kpi.is-lead,
+  .pub-shell #tab-reconcile .recon-kpis > .kpi {
+    padding: var(--space-2) 0 0; border: 0; border-top: var(--stroke) solid var(--rule-ink); border-radius: 0;
+    background: none; box-shadow: none; transform: none;
+  }
+  /* style.css paints the lead tile with the book colour (!important); here it is a thicker rule instead. */
+  .pub-shell .tab-panel :is(.kpi-grid, .recon-kpis) > .kpi.is-lead { grid-column: 1 / -1; border-top: 4px solid var(--book-accent, var(--gold)); background: none !important; }
+  .pub-shell :is(.kpi-grid, #tab-reconcile .recon-kpis) > .kpi.is-lead :is(.kpi-label, .kpi-sub) { color: var(--content-muted); opacity: 1; }
+  .pub-shell .tab-panel :is(.kpi-grid, .recon-kpis) > .kpi.is-lead .kpi-value { color: var(--content-primary) !important; font-size: 40px; }
+  .pub-shell .kpi-grid > .kpi .kpi-label { min-height: 0; margin-bottom: var(--space-1); }
+
+  .pub-shell .hist-kpi-container { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
+  .pub-shell .hist-kpi-card {
+    padding: var(--space-2) 0 0; border: 0; border-top: var(--stroke) solid var(--rule-ink); border-radius: 0; background: none; box-shadow: none;
+  }
+  .pub-shell .hist-kpi-card::after, .pub-shell .hist-kpi-icon { display: none; }
+  .pub-shell .hist-kpi-card.is-lead { border-top: 4px solid var(--book-accent, var(--gold)); }
+}

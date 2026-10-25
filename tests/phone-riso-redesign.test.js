@@ -87,3 +87,12 @@ describe('Today and Stores', () => {
     }
   });
 });
+
+describe('Other screens', () => {
+  test('the boxed book banner turns into a kicker over a masthead', () => {
+    expect(riso).toMatch(/\.tab-panel > \.book-context:not\(#book-context-dash\):not\(#book-context-con\) \{/);
+  });
+  test('the lead figure loses its book-colour fill, which style.css forces with !important', () => {
+    expect(riso).toMatch(/:is\(\.kpi-grid, \.recon-kpis\) > \.kpi\.is-lead \{[^}]*background: none !important;/);
+  });
+});
