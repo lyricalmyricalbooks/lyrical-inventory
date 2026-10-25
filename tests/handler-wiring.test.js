@@ -27,7 +27,14 @@ const libSources = fs.existsSync(libDir)
   ? fs.readdirSync(libDir).filter(f => f.endsWith('.js'))
       .map(f => fs.readFileSync(path.join(libDir, f), 'utf8'))
   : [];
-const appSources = [mainJs, ...featureSources, ...libSources];
+// src/core too: the shared book data and its helpers (getState, getBook, …)
+// are defined in core/store.js and re-exposed on window by main.js.
+const coreDir = path.join(root, 'src/core');
+const coreSources = fs.existsSync(coreDir)
+  ? fs.readdirSync(coreDir).filter(f => f.endsWith('.js'))
+      .map(f => fs.readFileSync(path.join(coreDir, f), 'utf8'))
+  : [];
+const appSources = [mainJs, ...featureSources, ...libSources, ...coreSources];
 const union = (fn) => appSources.reduce((acc, src) => {
   for (const name of fn(src)) acc.add(name);
   return acc;

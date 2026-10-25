@@ -20,21 +20,18 @@
 // the exports. That is the part nothing else in the app reaches into.
 import {
   $,
-  BOOKS,
-  BOOK_LIST,
   TAX_CENTER,
   _fxRateCache,
   calculateFinancials,
-  defaultState,
   isAuthor,
   isTestBook,
   isTestBookId,
   loadTaxCenter,
   saveState,
   showToast,
-  states,
   today,
 } from '../main.js';
+import { BOOKS, BOOK_LIST, states, defaultState } from '../core/store.js';
 import { ensurePdfJs } from './invoices.js';
 import { TC_CATEGORIES, _tcOpenTripName, openArtistPayoutEditor } from './tax-entries.js';
 import {

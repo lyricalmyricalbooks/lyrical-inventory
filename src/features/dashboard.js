@@ -15,15 +15,11 @@
 // throwing at click time.
 import {
   $,
-  activeBook,
   animateCountValue,
-  BOOKS,
   calculateArtistEarnings,
   chanLabel,
   channelColor,
   fetchLiveRate,
-  getBook,
-  getState,
   isAuthor,
   isPublisherSession,
   notifyUrl,
@@ -34,11 +30,11 @@ import {
   settlementLinkFor,
   sheetsUrl,
   showToast,
-  states,
   syncQueue,
   today,
   updateContextBanners,
 } from '../main.js';
+import { BOOKS, states, activeBook, getState, getBook } from '../core/store.js';
 import {
   applyArtistSettlement,
   artistSettlementIssues,

@@ -36,6 +36,10 @@ export default [
         caughtErrors: 'none',
       }],
       'no-implicit-globals': 'error',
+      // The shared book data (src/core/store.js) is reassigned only through
+      // its setters. Assigning to an imported binding throws at runtime, and
+      // only on the path that runs it — this makes it a lint error instead.
+      'no-import-assign': 'error',
       'no-redeclare': 'error',
       'no-dupe-keys': 'error',
       'no-dupe-args': 'error',

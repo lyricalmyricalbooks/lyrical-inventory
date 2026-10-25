@@ -10,12 +10,12 @@
 // list in main.js's startup, as before.
 import {
   $,
-  activeBook,
   isTestBookId,
   sheetsSpreadsheetUrl,
   sheetsUrl,
   showToast,
 } from '../main.js';
+import { activeBook } from '../core/store.js';
 import { escapeHtml } from '../lib/html.js';
 
 let activeSimTab = 'Overview';

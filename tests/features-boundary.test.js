@@ -11,12 +11,15 @@ const featureDir = path.join(root, 'src/features');
 // Lowered across the board when the modal primitives moved to src/lib/modal.js:
 // openM/closeM/confirmDialog are now imported from that leaf module instead of
 // from main.js, so they no longer count against any feature's seam.
+// Lowered again when the shared book data moved to src/core/store.js: BOOKS,
+// BOOK_LIST, states, activeBook and the getState/getBook/defaultState/
+// withActiveBook helpers come from there now, which imports nothing.
 const MAIN_IMPORT_BUDGET = {
   // 17 -> 8 when the Customers tab moved out to customers.js: the six
   // mailing-list / campaign names Open Call used now come from that sibling,
   // and the template-editor helpers (parseMarkdownToHtml and friends) moved in
   // here, where their only other caller lives.
-  'opencall.js': 8,
+  'opencall.js': 7,
   // Set at extraction. The buyer list reads the order history (orders, states,
   // BOOKS, BOOK_LIST), the Stripe reconciliation fetch and key, the applied-ids
   // cache, the audience summary card and the POS currency symbol; the rest is
@@ -25,7 +28,7 @@ const MAIN_IMPORT_BUDGET = {
   // mailing-list change goes through main.js's openCallScreen loader instead of
   // a static import of opencall.js, which would have pulled the whole screen
   // back into the first download.
-  'customers.js': 14,
+  'customers.js': 10,
   // 23 -> 24 for commitRecoveredWebsiteOrder: the reconciliation worklist can
   // now rebuild a website order the Gmail scan missed, and writing one to the
   // ledger touches the applied-ids cache, the scan memory and the Sheets sync —
@@ -38,7 +41,7 @@ const MAIN_IMPORT_BUDGET = {
   // revealed behind whatever the publisher is actually looking at — a button
   // that appears to do nothing. No cheaper route exists: app-shell navigation
   // is main.js's, and nothing already across this seam can perform it.
-  'shipping.js': 25,
+  'shipping.js': 19,
   // 16 -> 19 when the storefront became the ledger's reconciliation source.
   // Comparing Big Cartel's orders against the ledger and adding a missing one
   // needs three main.js internals and no more: commitRecoveredWebsiteOrder (the
@@ -50,7 +53,7 @@ const MAIN_IMPORT_BUDGET = {
   // 19 -> 20 for isAuthor, when new orders started being recorded without a
   // button press: an unattended ledger write has to check the role itself,
   // because no person is there to have been refused the button.
-  'bigcartel.js': 20,
+  'bigcartel.js': 16,
   // +1 for ensurePdfJs: the printable trip report rasterises PDF receipts, and
   // that primitive stays in main.js. The receipt-file primitives it used to
   // take from main.js now come from receipts.js instead. Dropped again when the
@@ -60,7 +63,7 @@ const MAIN_IMPORT_BUDGET = {
   // 19 -> 16 when the rest of the Tax Centre moved out to tax-entries.js:
   // the category list, the open trip and the payout editor now come from that
   // sibling.
-  'taxcentre.js': 16,
+  'taxcentre.js': 11,
   // Went 15 -> 24 when receipt capture joined: the AI-scanner names stopped
   // crossing the seam as predicted, but capture brought fourteen dependencies
   // of its own, because it talks to the expense ledger, the FX rates and the
@@ -70,7 +73,7 @@ const MAIN_IMPORT_BUDGET = {
   // 24 -> 20 when the expense editor moved out to tax-entries.js: the two
   // category lists and the expense being edited now come from that sibling.
   // 20 -> 19 when the dashboard moved out: updateDash comes from dashboard.js.
-  'receipts.js': 19,
+  'receipts.js': 14,
   // Composed by receipts.js with injected adapters; no main.js cycle at all.
   'receipt-finder.js': 0,
   // The review inbox is a window over receipts.js and shipping.js, which hold its
@@ -91,11 +94,11 @@ const MAIN_IMPORT_BUDGET = {
   // validation and its save stay main.js's, so one name crosses the seam
   // instead of the form's dozen fields. (Moving to the Website orders tab
   // lives in app-switch.js, which already reaches the navigation.)
-  'website-link.js': 13,
+  'website-link.js': 11,
   // Set at extraction: the practice book's fake spreadsheet reads which book is
   // open, whether it is the test book, and the real sheet's two URLs (for the
   // cards it hides and shows), plus the usual $ / showToast.
-  'sheets-simulator.js': 6,
+  'sheets-simulator.js': 5,
   // 9 -> 4 when the register moved out to pos.js: the POS book list and
   // currency helpers now come from that sibling. What is left mints door-price
   // links through the Stripe helper and its key, jumps to the POS tab, and
@@ -105,18 +108,18 @@ const MAIN_IMPORT_BUDGET = {
   // BOOK_LIST, states, defaultState, activeBook, isTestBook), the dated FX
   // cache, and writes write-offs into TAX_CENTER and through saveState; the
   // role check gates the adjustment form. The rest is $ / showToast / today.
-  'inventory-valuation.js': 13,
+  'inventory-valuation.js': 8,
   // 11 -> 9 when the register moved out to pos.js (the cart and renderPOS come
   // from that sibling). The register-only book dialog reads and writes the
   // register-only book list (posExtraBooks), saves through the catalog
   // (syncCatalog, saveCatalogWithDeletions), checks ids against BOOKS, mints a
   // Stripe link, previews the accent and copies the link; plus $ / showToast.
-  'pos-books.js': 9,
+  'pos-books.js': 8,
   // Set at extraction: filing fees reads every book's state (BOOK_LIST,
   // states, defaultState) and writes TAX_CENTER, converts with the FX cache and
   // the live / dated rate fetches, reads the Stripe key, and gates the sweep on
   // the role check; plus showToast / today.
-  'stripe-fees.js': 11,
+  'stripe-fees.js': 8,
   // Set at extraction, one over the default: the register records each line
   // through the shared sale writer (recordOrder, withActiveBook, activeBook,
   // states, saveState, voidHistEntry), repaints history, dashboard and header,
@@ -128,7 +131,7 @@ const MAIN_IMPORT_BUDGET = {
   // 26 -> 25 when the dashboard moved out: updateDash comes from dashboard.js.
   // 25 -> 23 when the sale write path moved out: recordOrder and
   // voidHistEntry come from sales-ledger.js.
-  'pos.js': 23,
+  'pos.js': 19,
   // Set at extraction: entering and correcting ledger lines reaches into
   // every book's state (BOOKS, BOOK_LIST, states, defaultState, saveState,
   // switchBook), the other ledger editors it hands off to (openEditHist,
@@ -141,7 +144,7 @@ const MAIN_IMPORT_BUDGET = {
   // (find / edit / settle / undo the settlement) come from dashboard.js.
   // 24 -> 23 when the sale write path moved out: voidHistEntry comes from
   // sales-ledger.js.
-  'tax-entries.js': 23,
+  'tax-entries.js': 18,
   // Set at extraction: invoices read and write every book's state and its
   // ledger (BOOKS, BOOK_LIST, getBook, getState, states, saveState,
   // ledgerById, settleLedgerSalePaid, renderLedger, renderHist), the book's
@@ -149,26 +152,26 @@ const MAIN_IMPORT_BUDGET = {
   // helpers and its payment dialog, the reminder sweep, and the Sheets URL
   // for the emailed copy; plus $ / showToast / today / the role and test-book
   // checks.
-  'invoices.js': 25,
+  'invoices.js': 19,
   // Set at extraction: the dashboard reads every book's state (BOOKS, getBook,
   // getState, states, saveState) and the author earnings and transfers, the
   // channel labels and colours, the live FX rate for a foreign payout, the
   // settlement link and notify URL, the Sheets URL and sync queue for the
   // payout request, and repaints history, expenses and the context banners;
   // plus $ / showToast / today / the role checks / the count animation.
-  'dashboard.js': 24,
+  'dashboard.js': 19,
   // Set at extraction: a sale reads and writes the book's state (BOOKS,
   // states, getBook, getState, saveState), recomputes the running Stock After,
   // repaints history, re-syncs an un-voided row to the Sheet, forgets the
   // applied-order cache, and reads the open book and role for recordOrder;
   // plus today / sheetsUrl.
-  'sales-ledger.js': 13,
+  'sales-ledger.js': 8,
   // Set at creation. The switcher shows only for the publisher in their own
   // view (isPublisherSession, isAuthor) and says so with a toast; a deep link
   // from the website finds the order's sales in the books (BOOKS, BOOK_LIST,
   // states, isTestBook, activeBook) and opens them (showHistoryOrder, or
   // switchBook + switchTab for the Website orders card).
-  'app-switch.js': 11,
+  'app-switch.js': 7,
 };
 
 const featureFiles = fs.existsSync(featureDir)

@@ -25,10 +25,7 @@
 import {
   $,
   _fxRateCache,
-  BOOK_LIST,
-  BOOKS,
   calculateArtistEarnings,
-  defaultState,
   filterArtistEarningsByYear,
   isExpenseAwaitingRate,
   isTestBook,
@@ -39,14 +36,13 @@ import {
   resolveExpenseRate,
   saveState,
   showToast,
-  states,
   switchBook,
   switchTab,
   TAX_CENTER,
   today,
   WEBSITE_SALE_LOCKED,
-  withActiveBook,
 } from '../main.js';
+import { BOOKS, BOOK_LIST, states, defaultState, withActiveBook } from '../core/store.js';
 import { voidHistEntry } from './sales-ledger.js';
 import { editArtistPayout, findArtistPayout, settlePayoutRequests, undoRecordedArtistSettlement } from './dashboard.js';
 import { ledgerSaleIndexForHistMirror } from '../lib/consignment.js';

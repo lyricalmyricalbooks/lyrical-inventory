@@ -48,8 +48,9 @@ function loadThemeHelpers(books) {
   };
 
   // eslint-disable-next-line no-new-func
+  // refreshBookList is core/store.js's: BOOK_LIST = Object.values(BOOKS).
   const factory = new Function('BOOKS', 'BOOK_LIST', 'document', 'hexToRgba',
-    `${src}\n return { normalizeTestBookAccents, applyBodyTint, get BOOK_LIST() { return BOOK_LIST; } };`);
+    `const refreshBookList = () => { BOOK_LIST = Object.values(BOOKS); };\n${src}\n return { normalizeTestBookAccents, applyBodyTint, get BOOK_LIST() { return BOOK_LIST; } };`);
   const api = factory(books, Object.values(books), documentStub, hexToRgba);
   return { ...api, setProps, books };
 }

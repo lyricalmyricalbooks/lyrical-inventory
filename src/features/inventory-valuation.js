@@ -15,19 +15,15 @@
 // throwing at click time.
 import {
   $,
-  BOOKS,
-  BOOK_LIST,
   TAX_CENTER,
   _fxRateCache,
-  activeBook,
-  defaultState,
   isAuthor,
   isTestBook,
   saveState,
   showToast,
-  states,
   today,
 } from '../main.js';
+import { BOOKS, BOOK_LIST, states, activeBook, defaultState } from '../core/store.js';
 import { renderTaxCenter } from './taxcentre.js';
 import { makeEventId, syncToSheets } from './sheets-bridge.js';
 import { closeM, openM } from '../lib/modal.js';

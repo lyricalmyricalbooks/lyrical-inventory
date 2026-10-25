@@ -19,8 +19,6 @@
 // throwing at click time.
 import {
   $,
-  BOOKS,
-  BOOK_LIST,
   fetchStripePaymentsForReconcile,
   getAllAppliedIds,
   getReconStripeKey,
@@ -29,9 +27,9 @@ import {
   renderCustomersStat,
   sheetsUrl,
   showToast,
-  states,
   today,
 } from '../main.js';
+import { BOOKS, BOOK_LIST, states } from '../core/store.js';
 import { codeToSymbol } from './pos.js';
 import { parseMarkdownToHtml } from '../lib/markdown.js';
 import { withCampaignFooter, campaignFooterHtml } from '../lib/campaign-footer.js';

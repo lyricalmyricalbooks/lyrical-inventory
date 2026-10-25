@@ -29,6 +29,8 @@ describe('main.js window binding verification', () => {
   const appSource = [mainContent]
     .concat(readDir(path.resolve(__dirname, '../src/features')))
     .concat(readDir(path.resolve(__dirname, '../src/lib')))
+    // ...and src/core, where getState, defaultState and the shared book data live.
+    .concat(readDir(path.resolve(__dirname, '../src/core')))
     .join('\n');
 
   it('declares every variable/function bound to window in exposeLegacyInlineHandlers', () => {

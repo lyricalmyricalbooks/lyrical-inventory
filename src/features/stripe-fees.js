@@ -15,18 +15,16 @@
 // honest: an identifier that isn't imported fails the build rather than
 // throwing at click time.
 import {
-  BOOK_LIST,
   TAX_CENTER,
   _fxRateCache,
-  defaultState,
   fetchHistoricalRate,
   fetchLiveRate,
   getReconStripeKey,
   isAuthor,
   showToast,
-  states,
   today,
 } from '../main.js';
+import { BOOK_LIST, states, defaultState } from '../core/store.js';
 import { renderTaxCenter, saveTaxCenter } from './taxcentre.js';
 import { confirmDialog } from '../lib/modal.js';
 import { pushAppAlert } from '../lib/app-alert.js';

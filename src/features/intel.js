@@ -13,15 +13,14 @@
 // so an author session cannot read any of this whatever the UI does.
 
 import {
-  BOOKS,
   TAX_CENTER,
   attentionInput,
   isAuthor,
   saveCatalogWithDeletions,
   saveState,
   showToast,
-  states,
 } from '../main.js';
+import { BOOKS, states } from '../core/store.js';
 import { recognizedRevenueOf } from './dashboard.js';
 import { escapeHtml } from '../lib/html.js';
 import { localDay } from '../lib/calendar-day.js';

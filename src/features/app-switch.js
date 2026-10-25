@@ -24,18 +24,15 @@ import {
 import { isTestProfileActive } from '../lib/test-profile.js';
 import { parseAppRouteHash } from '../lib/website-todo.js';
 import {
-  BOOKS,
-  BOOK_LIST,
-  activeBook,
   isAuthor,
   isPublisherSession,
   isTestBook,
   showHistoryOrder,
   showToast,
-  states,
   switchBook,
   switchTab,
 } from '../main.js';
+import { BOOKS, BOOK_LIST, states, activeBook } from '../core/store.js';
 import { renderWebsiteLinkCard, websiteNotSentCount, websiteOrderDoc } from './website-link.js';
 
 const TWA_KEY = 'lm-in-android-app';

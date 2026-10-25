@@ -18,12 +18,9 @@
 // read; only this module ever reassigns it.
 import {
   $,
-  BOOKS,
   EXPECTED_SCRIPT_VERSION,
-  activeBook,
   bookInSyncWithCloud,
   checkSheetsVersion,
-  getBook,
   isAuthor,
   isTestBook,
   isTestBookId,
@@ -31,9 +28,9 @@ import {
   saveState,
   sheetsUrl,
   showToast,
-  states,
   today,
 } from '../main.js';
+import { BOOKS, states, activeBook, getBook } from '../core/store.js';
 import { shippingPurchaseRowPayload } from './shipping.js';
 import { simulatePostToSheets } from './sheets-simulator.js';
 import { confirmDialog } from '../lib/modal.js';

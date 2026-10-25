@@ -22,20 +22,16 @@
 // honest: an identifier that isn't imported fails the build rather than
 // throwing at click time.
 import {
-  activeBook,
-  BOOKS,
-  getBook,
-  getState,
   invalidateAppliedIds,
   isAuthor,
   recomputeAfters,
   renderHist,
   saveState,
   sheetsUrl,
-  states,
   syncHistRowToSheets,
   today,
 } from '../main.js';
+import { BOOKS, states, activeBook, getState, getBook } from '../core/store.js';
 import { notesWithInvoiceDiscount } from '../lib/consignment.js';
 import { bookCurrencyCode } from '../lib/currency-migration.js';
 import { deductSaleFromStockBreakdown } from '../lib/inventory.js';

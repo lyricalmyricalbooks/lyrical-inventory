@@ -18,7 +18,6 @@
 // throwing at click time.
 import {
   $,
-  BOOKS,
   copyTextWithFallback,
   createStripePaymentLinkForBook,
   posExtraBooks,
@@ -27,6 +26,7 @@ import {
   syncCatalog,
   updateModalAccentPreview,
 } from '../main.js';
+import { BOOKS } from '../core/store.js';
 import { posCart, renderPOS } from './pos.js';
 import { closeM, confirmDialog, openM } from '../lib/modal.js';
 import { hexToRgba, setSelectCurrency } from '../lib/money.js';
