@@ -762,6 +762,9 @@
     transition: transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast) var(--ease-spring);
   }
   .phone-seg { gap: var(--space-2); }
+  /* An odd option count (Channel has five) would leave the last button alone in a half-empty row;
+     it takes the full row instead. */
+  .phone-seg-opt:last-child:nth-child(odd) { grid-column: 1 / -1; }
   :is(.phone-mode-opt[aria-selected="true"], .phone-seg-opt[aria-checked="true"]) { border-color: var(--rule-ink); }
   :is(.phone-mode-opt, .phone-seg-opt):active { transform: translate(2px, 2px); box-shadow: none; }
 }
