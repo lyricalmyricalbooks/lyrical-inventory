@@ -1539,7 +1539,7 @@
   #d-pending-expenses-list .pending-card-head { justify-content: space-between; flex-wrap: nowrap; }
   #d-pending-expenses-list .pending-card-num { font-size: var(--text-lg); font-weight: 500; font-variant-numeric: tabular-nums; }
   #d-pending-expenses-list .pending-card-actions { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
-  #d-pending-expenses-list .pending-card-actions .btn { width: 100%; justify-content: center; text-align: center; white-space: normal; }
+  #d-pending-expenses-list .pending-card-actions .btn { width: 100%; justify-content: center; text-align: center; white-space: normal; line-height: var(--leading-snug); padding-block: var(--space-2); text-wrap: balance; }
   /* What it was leads (full width, bold), then the date and category share one line
      beneath, with space instead of typed dots so no dot is stranded at a wrap. */
   #d-pending-expenses-list .pending-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); }

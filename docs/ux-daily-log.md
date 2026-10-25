@@ -189,6 +189,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-25 | visual | Phone bottom bar | Made the four icons in the bottom bar sit in same-height boxes so the Sell label no longer rides a few pixels above Home, Manual entry and More | (this PR) |
 | 2026-10-25 | visual | Phone Help — audience switch | Made the "For artists / For the publisher" switch run the full width in two equal halves, like the search box and topic tiles under it, instead of stopping two-thirds across | (this PR) |
 | 2026-10-25 | visual | Phone Tax Centre — receipt buttons and Cash Flow head | Made Camera and AI Scan share the card width in two equal halves instead of two stubs on the left, and set the Cash Flow Summary title in capital display lettering with a square currency tag | (this PR) |
+| 2026-10-25 | visual | Phone Dashboard — pending reimbursement buttons | Gave the two-line "Ask author to add payment link" button even line spacing, roomier top and bottom, and an even split of its words, instead of two cramped lines with one stranded word | (this PR) |
 
 ---
 
