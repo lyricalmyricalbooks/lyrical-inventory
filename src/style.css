@@ -7194,6 +7194,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
    The QR frame stays a bright white square in both themes because a phone
    camera needs the light background whatever the app paints around it. */
 .qr-page .sec-head { margin-bottom: var(--space-5); }
+.qr-page .hed-tail::before { content: ' \2014  '; white-space: pre; }
 .qr-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
