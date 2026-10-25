@@ -2022,8 +2022,10 @@
   #tab-consignment .store-meta-email { display: none; }
   #tab-consignment .store-head-flags { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-1); flex: none; }
   #tab-consignment .store-head-flags .pill { border-radius: var(--r2); border: var(--stroke) solid currentColor; font-size: var(--text-3xs); text-transform: uppercase; letter-spacing: var(--tracking-caps); }
+  /* Column widths follow the captions: Sent and Sold are short, "On shelf" is the
+     widest caption and used to touch the Owed divider, Owed carries a money figure. */
   #tab-consignment .store-kpis {
-    grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.5fr) !important; gap: 0; margin: 0;
+    grid-template-columns: minmax(0, .8fr) minmax(0, .8fr) minmax(0, 1.1fr) minmax(0, 1.4fr) !important; gap: 0; margin: 0;
     border-block: var(--stroke-hair) solid var(--border-subtle);
   }
   #tab-consignment .store-kpis .sk { border: 0; border-radius: 0; background: transparent; box-shadow: none; padding: var(--space-2) var(--space-3); gap: 0; }
