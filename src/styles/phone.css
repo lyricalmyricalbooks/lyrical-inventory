@@ -1791,6 +1791,12 @@
   #tab-help .help-topics .help-tool-btn { min-width: 0; padding: 8px 10px; text-align: center; line-height: 1.2; }
   #tab-help .help-topics .help-tool-btn:last-child:nth-child(odd) { grid-column: 1 / -1; }
 
+  /* Help: the "For artists / For the publisher" switch stopped two-thirds across, a stub next to the
+     full-width search and topic tiles under it. It now splits the row into two equal halves so
+     every control on the screen shares one left and right edge. */
+  #tab-help .help-aud { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #tab-help .help-aud-btn { min-width: 0; padding-inline: var(--space-2); }
+
   /* Book Catalog: every title starts at the same left edge. */
   #tab-sheets .catalog-card { flex-direction: column; align-items: stretch; justify-content: flex-start; text-align: left; }
   #tab-sheets .catalog-card > div:first-child { justify-content: flex-start; width: 100%; min-width: 0; }
