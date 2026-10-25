@@ -175,6 +175,13 @@ export async function loadApp({ books = [makeBook()], states: initialStates = {}
   const defaultSaveImpl = cloud.defaultSaveImpl;
 
   const main = await import('../../src/main.js');
+  // Screens main.js loads on demand (src/lib/lazy-feature.js) are fetched
+  // during start-up. In the installed app that fetch comes from the offline
+  // copy and finishes long before the books' cloud reads; here the first import
+  // has to compile the file, which can outlast the fake cloud and leave boot
+  // half-done when a suite starts. Compiling it up front keeps start-up's order
+  // the same as on a phone.
+  await import('../../src/features/opencall.js');
 
   installFakeFirebase(window, cloud);
   Object.assign(window, overrides);

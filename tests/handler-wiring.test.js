@@ -143,6 +143,16 @@ function exposedNames(source) {
       if (/^[A-Za-z_$][\w$]*$/.test(key)) names.add(key);
     }
   }
+  // Object.assign(window, screen.stubs) — a screen loaded on demand
+  // (src/lib/lazy-feature.js). Its names are the list handed to lazyFeature,
+  // an exported array of strings in src/lib.
+  for (const m of source.matchAll(/Object\.assign\(\s*window\s*,\s*([A-Za-z_$][\w$]*)\.stubs\s*\)/g)) {
+    const decl = source.match(new RegExp(`const ${m[1]} = lazyFeature\\([^,]+,\\s*([A-Za-z_$][\\w$]*)`));
+    const listSrc = decl && libSources.find(src => src.includes(`export const ${decl[1]} = [`));
+    if (!listSrc) continue;
+    const list = listSrc.slice(listSrc.indexOf(`export const ${decl[1]} = [`)).match(/\[([\s\S]*?)\]/)[1];
+    for (const q of list.matchAll(/'([A-Za-z_$][\w$]*)'/g)) names.add(q[1]);
+  }
   return names;
 }
 

@@ -11,6 +11,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "check:size": "node scripts/check-bundle-size.mjs",
     "preview": "vite preview",
     "dev:backend": "node backend/server.js",
     "dev:all": "sh -c \"npm run dev:backend & npm run dev\"",
