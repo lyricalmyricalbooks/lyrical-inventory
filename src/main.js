@@ -667,6 +667,7 @@ import {
 import {
   BOOKS, BOOK_LIST, states, activeBook, setBooks, refreshBookList, setActiveBook,
   defaultState, getState, getBook, withActiveBook,
+  announceBookChanged, announceBookSaved, onBookEvent,
 } from './core/store.js';
 import { lazyFeature } from './lib/lazy-feature.js';
 import { OPEN_CALL_EXPORTS } from './lib/opencall-handlers.js';
@@ -3429,7 +3430,7 @@ async function processSyncQueue() {
     }
     _syncFlushing = false;
     markCloudSynced();
-    scheduleWebsiteFeedPublish(item.bookId);
+    announceBookSaved(item.bookId);
     if (syncQueue.length) {
       updatePendingIndicator();
       processSyncQueue();
@@ -3797,9 +3798,10 @@ const _saveRuns = new Map();
 const _saveAgain = new Set();
 
 export async function saveState(bookId) {
-  // Expenses and artist payments reach the Google Sheet from here: whatever
-  // changed them, the book is being saved, and the sheet gets the difference.
-  scheduleMoneyOutSheetSync(bookId);
+  // Whatever changed the book, it is being saved: everything that follows a
+  // change (the Google Sheet's expense rows, the header counts) hears it here.
+  // See wireBookEvents.
+  announceBookChanged(bookId);
   if (_saveRuns.has(bookId)) {
     _saveAgain.add(bookId);
     return _saveRuns.get(bookId);
@@ -3899,7 +3901,7 @@ async function saveStateNow(bookId, rebase) {
         _saveAgain.add(bookId);
         lastSaveTimes[bookId] = Date.now();
         markCloudSynced();
-        scheduleWebsiteFeedPublish(bookId);
+        announceBookSaved(bookId);
         return partHashesOf(JSON.parse(json));
       }
       adoptMergedState(bookId, res);
@@ -3912,7 +3914,7 @@ async function saveStateNow(bookId, rebase) {
     markCloudSynced();
     // The cloud now holds this book as saved: the stock number the website
     // follows is published from that saved copy (see features/website-link.js).
-    scheduleWebsiteFeedPublish(bookId);
+    announceBookSaved(bookId);
     setSyncState('ok', '<b>Firestore</b> · saved · live sync on');
     const ind = $('save-ind'); if (ind) { ind.classList.add('show'); setTimeout(() => ind.classList.remove('show'), 2000); }
   } catch (e) {
@@ -4245,11 +4247,10 @@ export async function loadBook(bookId) {
       if (!states[bookId].artistPayouts) states[bookId].artistPayouts = [];
       recomputeAfters(states[bookId], BOOKS[bookId]);
       lastSavedHashes[bookId] = json2;
-      // An expense or payout changed on another device reaches the sheet even
-      // if that device has no sheet connected.
-      scheduleMoneyOutSheetSync(bookId);
-      // Another device saved this book: the website's stock follows the cloud copy.
-      scheduleWebsiteFeedPublish(bookId);
+      // Another device saved this book. Its expense rows reach the sheet even if
+      // that device has no sheet connected, and the website's stock follows the
+      // cloud copy (wireBookEvents, startWebsiteLink).
+      announceBookChanged(bookId, 'remote');
       _appliedIdsCache = null;
       if (activeBook === bookId || activeBook === 'all') scheduleRender();
       // Suppress the echo-toast that fires right after a local save is written to Firestore
@@ -7799,6 +7800,39 @@ function renderCurrent() {
 // triggers a full renderCurrent(). rAF collapses all of them into one render
 // on the next frame. State is mutated synchronously before each call, so the
 // single deferred render always reflects the latest data.
+// What follows a change to a book, in one place. Actions announce the change
+// once (saveState, the live listener — see core/store.js); they no longer each
+// have to remember the sheet sync and the header.
+//
+// The header counts, the To-do badge, the publisher banner and the app
+// switcher's count sit outside every tab, so they repaint on any change to the
+// book on screen. The tab itself is left to its own render: repainting it
+// under someone typing into one of its forms would wipe what they typed.
+let _chromeScheduled = false;
+function scheduleChromeRefresh() {
+  if (_chromeScheduled) return;
+  _chromeScheduled = true;
+  const run = () => {
+    _chromeScheduled = false;
+    try { updateHeader(); } catch (e) { console.warn('[header] refresh failed', e); }
+    try { updatePublisherActionBanner(); } catch (_) { /* next render picks it up */ }
+    try { refreshAppSwitch(); } catch (_) { /* next render picks it up */ }
+    scheduleTodoBadgeRefresh();
+  };
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+  else setTimeout(run, 16);
+}
+
+function wireBookEvents() {
+  onBookEvent('book-changed', ({ bookId }) => {
+    // Expenses and artist payments reach the Google Sheet whichever device
+    // changed them; the sheet gets the difference.
+    scheduleMoneyOutSheetSync(bookId);
+    if (activeBook === bookId || activeBook === 'all') scheduleChromeRefresh();
+  });
+}
+wireBookEvents();
+
 let _renderScheduled = false;
 export function scheduleRender() {
   if (_renderScheduled) return;

@@ -63,3 +63,41 @@ export function withActiveBook(bookId, fn) {
   activeBook = bookId;
   try { fn(); } finally { activeBook = prev; }
 }
+
+// ── Change notices ────────────────────────────────────────────────────────
+// "This book changed" and "the cloud now holds this book", announced once by
+// the code that knows, so the things that follow a change (the header counts,
+// the Google Sheet, the website's stock) subscribe instead of every action
+// having to remember to call each of them by hand.
+//
+//   book-changed  { bookId, source: 'local' | 'remote' }
+//                 A change on this device is being saved (saveState), or
+//                 another device's change has just replaced this device's copy.
+//   book-saved    { bookId }
+//                 The cloud confirmed it holds this book as this device has it.
+const bookEvents = new EventTarget();
+
+/** @param {string} bookId @param {'local' | 'remote'} [source] */
+export function announceBookChanged(bookId, source = 'local') {
+  bookEvents.dispatchEvent(new CustomEvent('book-changed', { detail: { bookId, source } }));
+}
+
+/** @param {string} bookId */
+export function announceBookSaved(bookId) {
+  bookEvents.dispatchEvent(new CustomEvent('book-saved', { detail: { bookId } }));
+}
+
+/**
+ * Subscribe to a change notice. A listener that throws is reported and the
+ * others still run, so one broken screen can't stop the sheet sync.
+ * @param {'book-changed' | 'book-saved'} type
+ * @param {(detail: { bookId: string, source?: 'local' | 'remote' }) => void} fn
+ * @returns {() => void} unsubscribe
+ */
+export function onBookEvent(type, fn) {
+  const listener = (e) => {
+    try { fn(/** @type {CustomEvent} */ (e).detail); } catch (err) { console.error(`[${type}] listener failed`, err); }
+  };
+  bookEvents.addEventListener(type, listener);
+  return () => bookEvents.removeEventListener(type, listener);
+}
