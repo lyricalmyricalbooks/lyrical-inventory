@@ -200,6 +200,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-25 | visual | Phone Intelligence — question box | Put the Send arrow inside the question box beside what you type, like a messaging app, instead of a tall empty box with Send on a row of its own, and cleared the dark-mode field's second dark box | (this PR) |
 | 2026-10-25 | visual | Phone Expenses — receipt controls | Made the "7 without a receipt" filter a square outlined tag like the other tags instead of a big soft lozenge, and let AI Scan run the full card width like the buttons under it instead of a stub on the left | (this PR) |
 | 2026-10-25 | visual | Phone Today — icon stamps | Made the two-letter stamps beside Orders, To-do, Snap a receipt and the workspace rows a readable size instead of tiny 10px lettering | (this PR) |
+| 2026-10-25 | visual | Phone Payment QR codes — title | Stopped the page title wrapping with a stray dash at the start of its second line; "All books" now sits as its own quieter line under the title | (this PR) |
 
 ---
 

@@ -91,6 +91,10 @@
   /* QR codes need a whole phone row: two columns clipped the download action. */
   #tab-qrcodes .qr-grid { grid-template-columns: minmax(0, 1fr) !important; }
   #tab-qrcodes .qr-card { min-width: 0; }
+  /* The title's tail would wrap with a dash stranded at the start of line two
+     ("– ALL BOOKS"). On a phone it steps down to its own quiet line instead. */
+  #tab-qrcodes .hed-tail { display: block; margin-top: var(--space-1); font-family: var(--font-ui); font-size: var(--text-base); font-weight: 800; letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--content-muted); }
+  #tab-qrcodes .hed-tail::before { content: none; }
   #tab-qrcodes .qr-frame { max-width: 100%; box-sizing: border-box; }
   #tab-qrcodes .qr-actions { flex-wrap: wrap; }
 
