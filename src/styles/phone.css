@@ -933,8 +933,8 @@
   #tab-reconcile .recon-chips:empty { display: none; }
   #tab-reconcile .recon-chip { min-height: var(--target-min); display: inline-flex; align-items: center; }
   #tab-reconcile .recon-mini { width: 100%; min-width: 0; min-height: var(--target-min); }
-  #tab-reconcile .recon-toggle { min-height: var(--target-min); grid-column: 1; }
-  #tab-reconcile .recon-toolbar > .btn { grid-column: 2; min-height: var(--target-min); justify-content: center; }
+  #tab-reconcile .recon-toggle { min-height: var(--target-min); grid-column: 1; gap: var(--space-2); font-size: var(--text-sm); white-space: nowrap; }
+  #tab-reconcile .recon-toolbar > .btn { grid-column: 2; min-height: var(--target-min); justify-content: center; white-space: nowrap; padding-inline: var(--space-2); }
 
   /* Need cards: one column of fields, book first, Qty beside the amount,
      Currency beside the rate, Order # last, then the actions. Cells sit on the
