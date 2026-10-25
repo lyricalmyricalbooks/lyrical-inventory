@@ -1880,6 +1880,10 @@
   }
   .pub-shell :is(.mnav-ic, .ttb-ico)[data-ink]::before { font-size: var(--text-lg); }
 
+  /* Bottom bar — every icon sits in one same-height box, so the Sell "$" (a smaller printed
+     glyph) no longer pulls its label a few px above Home, Manual entry and More. */
+  .pub-shell .mnav-ic { display: grid; place-items: center; height: var(--text-xl); min-width: var(--text-xl); }
+
   /* Header: the theme, bell, inbox and account buttons are squares like every other button,
      and their counts are square stamps. */
   .pub-shell .app-header .theme-toggle-btn, .pub-shell .acct-avatar { border-radius: var(--r2); }
