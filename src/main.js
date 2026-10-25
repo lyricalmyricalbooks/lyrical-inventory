@@ -34,6 +34,7 @@ import { planSheetsConnectionSync } from './lib/sheets-url.js';
 import { legacyCopy } from './lib/clipboard.js';
 import { needsSettleUp } from './lib/settle-up-view.js';
 import { normalizeLetterhead, renderLetterhead } from './lib/letterhead.js';
+import { bookSizeMessage, bookSizeReport } from './lib/book-size.js';
 import { ensureXlsx, loadExternalScript } from './lib/external-scripts.js';
 import { buildActivityFeed } from './lib/activity-feed.js';
 import { buildAttentionSignals, SIGNAL_GROUPS, GROUP_LABELS, GROUP_ICONS, isUrgent } from './lib/attention-signals.js';
@@ -3944,6 +3945,7 @@ async function saveStateNow(bookId, rebase) {
 
   const json = JSON.stringify(state);
   if (json === lastSavedHashes[bookId]) return;
+  const size = checkBookSize(bookId, state, json);
   setSyncState('syncing', '<b>Firestore</b> · saving…');
   try {
     // A change for this book is already waiting in the queue: this edit was
@@ -4000,8 +4002,27 @@ async function saveStateNow(bookId, rebase) {
     // failed. Queue it (with backoff retry) so the change is never lost
     // and reconciles automatically instead of silently diverging.
     queueSync(bookId, states[bookId] || state, rebase);
+    // Too big for one cloud record: say that, not a generic retry, since
+    // retrying alone won't get it through.
+    if (size.level === 'over') setSyncState('error', '<b>Firestore</b> · book too big to save · kept on this device');
   }
   return undefined;
+}
+
+// Warn once per session per book when its fullest cloud record passes 70% of
+// the size cap, and again if it goes over. A save past the cap is refused
+// whole (see lib/book-size.js), so this is the only notice the owner gets
+// before a book stops saving.
+const _bookSizeWarned = new Map();
+function checkBookSize(bookId, state, json) {
+  const firestore = typeof window._useFirestoreForBook === 'function' ? !!window._useFirestoreForBook(bookId) : true;
+  const report = bookSizeReport(state, { firestore, json });
+  if (report.level === 'ok' || _bookSizeWarned.get(bookId) === report.level) return report;
+  _bookSizeWarned.set(bookId, report.level);
+  const title = (BOOKS[bookId] && BOOKS[bookId].title) || bookId;
+  showToast(bookSizeMessage(report, title), report.level === 'over' ? 'err' : 'warn', 9000);
+  reportClientError('book-size', `${report.part} ${report.bytes}/${report.limit} bytes (${report.level})`, { source: bookId });
+  return report;
 }
 
 // Called by _fbSave once a three-way merge has produced a combined state, before
