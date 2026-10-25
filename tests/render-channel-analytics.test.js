@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { buildHarness } from './helpers/extract-decl.js';
 import { escapeHtml } from '../src/lib/html.js';
 import { fmt } from '../src/lib/money.js';
+import { sumMoney } from '../src/lib/cents.js';
 
 // The combined "sales by channel" panel on the all-books overview.
 //
@@ -22,6 +23,7 @@ function makeHarness({ data, cur = 'CA$' } = {}) {
       $: (id) => document.getElementById(id),
       escapeHtml,
       fmt,
+      sumMoney,
       window: { _allChData: data, _allChCur: cur },
     },
     returns: '{ renderChannelAnalytics }',
