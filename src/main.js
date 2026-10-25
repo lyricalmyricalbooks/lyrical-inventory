@@ -445,7 +445,6 @@ import {
 } from './features/taxcentre.js';
 import {
   reconcileApplyBigCartel,
-  addBigCartelOrderToLedger,
   autoCheckBigCartelLedgerGaps,
   startBigCartelOrderWatch,
   refreshBigCartelOrdersIfDue,
@@ -456,43 +455,31 @@ import {
   shipNewOrderFromAlert,
   reviewNewOrdersFromAlert,
   checkBigCartelLedgerGaps,
-  dismissBigCartelGap,
   extractBigCartelAddress,
   renderBigCartelLedgerGaps,
   renderBigCartelTab,
-  renumberPlaceholderOrder,
   restoreBigCartelGaps,
   dismissAllBigCartelGaps,
   testBigCartelConnection,
   saveBigCartelSettings,
   loadBigCartelData,
-  copyBigCartelOrderAddress,
-  openBigCartelAddressPreview,
   prefillShippingFromBigCartelOrder,
   switchBigCartelSubTab,
   syncBigCartelShippingPaid,
   toggleBigCartelGapPanel,
   triggerBigCartelShippingSync,
-  undoBigCartelGapDismiss,
-  voidPlaceholderDuplicate,
   bigCartelOrdersToReview,
+  bigCartelActions,
 } from './features/bigcartel.js';
 import {
   acceptIntelDisclosure,
   toggleIntelPrivacyDetails,
-  applyIntelProposal,
-  askIntelStarter,
   clearIntelThread,
-  copyIntelAnswer,
-  dismissIntelProposal,
+  intelActions,
   intelComposerKey,
   renderIntel,
-  retryIntelQuestion,
-  scrollToIntelMessage,
   sendIntelMessage,
-  setIntelProviderPref,
   stopIntelTurn,
-  toggleIntelEdit,
 } from './features/intel.js';
 import {
   getShippingReconciliationOrders,
@@ -670,6 +657,7 @@ import {
   announceBookChanged, announceBookSaved, onBookEvent,
 } from './core/store.js';
 import { lazyFeature } from './lib/lazy-feature.js';
+import { registerActions } from './lib/actions.js';
 import { OPEN_CALL_EXPORTS } from './lib/opencall-handlers.js';
 import { parseMarkdownToHtml } from './lib/markdown.js';
 
@@ -681,6 +669,10 @@ import { parseMarkdownToHtml } from './lib/markdown.js';
 // Still re-exported for the screens that take them from main.js; new code
 // imports them from ./core/store.js directly.
 export { BOOKS, BOOK_LIST, states, activeBook, defaultState, getState, getBook, withActiveBook };
+
+// Buttons that name an action (data-action) instead of carrying inline code;
+// see lib/actions.js. Screens move onto this one at a time.
+registerActions({ ...intelActions, ...bigCartelActions });
 
 export const openCallScreen = lazyFeature(() => import('./features/opencall.js'), OPEN_CALL_EXPORTS, {
   onError: (e) => {
@@ -19394,11 +19386,9 @@ function exposeLegacyInlineHandlers() {
   // every one of its handlers has to be reachable off window at click time.
   // Its names lead the list below.
   Object.assign(window, {
-    acceptIntelDisclosure, toggleIntelPrivacyDetails, applyIntelProposal, askIntelStarter, clearIntelThread,
-    copyIntelAnswer, dismissIntelProposal, intelComposerKey, renderIntel, retryIntelQuestion,
-    scrollToIntelMessage, sendIntelMessage, setIntelProviderPref, stopIntelTurn,
+    acceptIntelDisclosure, toggleIntelPrivacyDetails, clearIntelThread,
+    intelComposerKey, renderIntel, sendIntelMessage, stopIntelTurn,
     dismissDeductionGap, renderDeductionGaps, restoreDeductionGaps, snoozeDeductionGap,
-    toggleIntelEdit,
     revealUpdatingScreen, hideUpdatePrompt, bindUpdatePromptInteractions, isTestBook, isTestBookId,
     ownersFromBooks, saveCatalogWithDeletions, loadCatalog, syncCatalog, switchBookModalTab,
     stepBookModal, updateBookModalFinancials, onBookTitleInput, selectBookAccentPreset, onCustomAccentInput, applyBookParcelPreset,
@@ -19650,14 +19640,9 @@ exposeLegacyInlineHandlers();
 window.testBigCartelConnection = testBigCartelConnection;
 window.saveBigCartelSettings = saveBigCartelSettings;
 window.checkBigCartelLedgerGaps = checkBigCartelLedgerGaps;
-window.addBigCartelOrderToLedger = addBigCartelOrderToLedger;
-window.dismissBigCartelGap = dismissBigCartelGap;
-window.undoBigCartelGapDismiss = undoBigCartelGapDismiss;
 window.toggleBigCartelGapPanel = toggleBigCartelGapPanel;
 window.restoreBigCartelGaps = restoreBigCartelGaps;
 window.dismissAllBigCartelGaps = dismissAllBigCartelGaps;
-window.renumberPlaceholderOrder = renumberPlaceholderOrder;
-window.voidPlaceholderDuplicate = voidPlaceholderDuplicate;
 window.renderBigCartelLedgerGaps = renderBigCartelLedgerGaps;
 window.autoCheckBigCartelLedgerGaps = autoCheckBigCartelLedgerGaps;
 window.dismissNewOrderAlert = dismissNewOrderAlert;
@@ -19704,8 +19689,6 @@ window.switchBigCartelSubTab = switchBigCartelSubTab;
 window.loadBigCartelData = loadBigCartelData;
 window.renderBigCartelTab = renderBigCartelTab;
 window.prefillShippingFromBigCartelOrder = prefillShippingFromBigCartelOrder;
-window.copyBigCartelOrderAddress = copyBigCartelOrderAddress;
-window.openBigCartelAddressPreview = openBigCartelAddressPreview;
 
 window.extractBigCartelAddress = extractBigCartelAddress;
 window.getFallbackShippingPhone = getFallbackShippingPhone;

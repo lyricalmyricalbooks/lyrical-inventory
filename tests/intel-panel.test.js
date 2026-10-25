@@ -98,7 +98,7 @@ describe('a staged batch on screen', () => {
 
   it('lets a single row be unticked without losing the rest', () => {
     const html = intelBatchHtml(batch());
-    expect(html).toContain("toggleIntelEdit('b1','e1')");
+    expect(html).toContain('data-action="intel.toggle" data-batch="b1" data-ref="e1"');
     const one = intelBatchHtml(batch({ skipped: ['e1'] }));
     expect(one).toContain('1 change needs your OK');
     expect(one).toContain('Make this change');
@@ -128,8 +128,8 @@ describe('a staged batch on screen', () => {
   it('stops offering the buttons once it is settled', () => {
     for (const status of ['applied', 'dismissed']) {
       const html = intelBatchHtml(batch({ status }));
-      expect(html).not.toContain('applyIntelProposal');
-      expect(html).not.toContain('toggleIntelEdit');
+      expect(html).not.toContain('data-action="intel.apply"');
+      expect(html).not.toContain('data-action="intel.toggle"');
     }
   });
 
@@ -142,6 +142,19 @@ describe('a staged batch on screen', () => {
     expect(html).not.toContain('<img');
     expect(html).not.toContain('<script');
     expect(html).not.toContain('<b>x</b>');
+  });
+
+  it('carries ids the model wrote as text, never as code a quote could break out of', () => {
+    // Inside onclick="toggleIntelEdit('…','…')", escaping for HTML did not
+    // help: the browser decodes &#39; back to a quote before running the JS.
+    const ref = "e1');alert(document.cookie);('";
+    const html = intelBatchHtml(batch({
+      items: [{ ref, target: 'book', id: 'h', record: 'Book', fieldLabel: 'ISBN', risk: 'descriptive', beforeText: '—', afterText: 'x' }],
+    }));
+    expect(html).not.toMatch(/\son[a-z]+\s*=/i);
+    const box = document.createElement('div');
+    box.innerHTML = html;
+    expect(box.querySelector('[data-action="intel.toggle"]').dataset.ref).toBe(ref);
   });
 
   it('sets values in tabular figures so a column of them lines up', () => {
