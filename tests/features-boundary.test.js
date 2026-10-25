@@ -82,7 +82,12 @@ const MAIN_IMPORT_BUDGET = {
   // 14 -> 11 when the sale write path moved out: writeOrderToLedger and the
   // void / un-void come from sales-ledger.js. 11 -> 12: isTestBook, so the
   // storage check keeps the test book's old copy off the To-do list.
-  'website-link.js': 12,
+  // 12 -> 13: openAddBookFromWebsite. "Add to the app" on a book the website
+  // sells opens main.js's own Add new book form, filled in; the form, its
+  // validation and its save stay main.js's, so one name crosses the seam
+  // instead of the form's dozen fields. (Moving to the Website orders tab
+  // lives in app-switch.js, which already reaches the navigation.)
+  'website-link.js': 13,
   // Set at extraction: the practice book's fake spreadsheet reads which book is
   // open, whether it is the test book, and the real sheet's two URLs (for the
   // cards it hides and shows), plus the usual $ / showToast.

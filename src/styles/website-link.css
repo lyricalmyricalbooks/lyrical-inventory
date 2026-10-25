@@ -166,9 +166,55 @@
 .wl-unlinked { flex-direction: row; align-items: flex-start; }
 .wl-unlinked .wl-note { flex: 1; }
 
+/* "On the website, not in this app yet": cover, the book, its two choices.
+   Side by side when the card has room, the choices under the book when not. */
+.wl-shop-item {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  grid-template-areas: "cover copy actions";
+  align-items: center;
+  column-gap: var(--space-3);
+  row-gap: var(--space-2);
+}
+.wl-shop-cover {
+  grid-area: cover;
+  display: block;
+  width: 40px;
+  height: 56px;
+  object-fit: cover;
+  background: var(--surface-inset);
+  border: var(--stroke-hair) solid var(--border-subtle);
+  border-radius: var(--r2);
+}
+.wl-shop-cover.is-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-base);
+  color: var(--content-muted);
+}
+.wl-shop-copy { grid-area: copy; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.wl-shop-title {
+  font-size: var(--text-base);
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--content-primary);
+  overflow-wrap: anywhere;
+}
+.wl-shop-price { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); font-size: var(--text-sm); color: var(--content-primary); }
+.wl-shop-actions { grid-area: actions; margin-top: 0; justify-content: flex-end; }
+@container wl (max-width: 620px) {
+  .wl-shop-item { grid-template-columns: 40px minmax(0, 1fr); grid-template-areas: "cover copy" "actions actions"; align-items: start; }
+  .wl-shop-actions { justify-content: flex-start; }
+}
+.wl-shop-undo { flex-direction: row; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.wl-section:focus { outline: none; }
+.wl-section:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: var(--focus-ring-offset); }
+
 /* Phones press these: give the decision buttons a full target. */
 @media (pointer: coarse) {
-  .wl-actions .btn { min-height: var(--target-min); }
+  .wl-actions .btn,
+  .wl-shop-undo .btn { min-height: var(--target-min); }
 }
 
 /* Per-order parcel line under a website order (Order History, order lists). */

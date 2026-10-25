@@ -75,3 +75,4 @@ export const onSnapshot = () => noop;
 export const writeBatch = () => ({ set: noop, update: noop, delete: noop, commit: async () => {} });
 export const runTransaction = async (_fs, fn) =>
   fn({ get: async () => emptySnap(), set: noop, update: noop, delete: noop });
+export const deleteField = () => ({ __deleteField: true });

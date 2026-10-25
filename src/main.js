@@ -1135,13 +1135,14 @@ import {
   reviewQueueSnapshot,
 } from './features/review-inbox.js';
 import {
+  noteBookAddedFromWebsite,
   scheduleWebsiteFeedPublish,
   startWebsiteLink,
   websiteLinkActive,
   websiteLinkTodo,
 } from './features/website-link.js';
 import { STRIPE_CHARGE_PI_KEY, isWebsiteFulfilled, promisedPreorders, rememberChargeIntents } from './lib/website-link.js';
-import { appSwitchBooksReady, refreshAppSwitch, startAppSwitch } from './features/app-switch.js';
+import { appSwitchBooksReady, openWebsiteShopBooks, refreshAppSwitch, startAppSwitch } from './features/app-switch.js';
 import { WEBSITE_TAB_NAME, openOnWebsiteHtml, websiteOrderUrl } from './lib/app-switch.js';
 import { reviewTaskStillOpen } from './lib/review-queue.js';
 import {
@@ -1749,6 +1750,9 @@ function stepBookModal(delta) {
 
 function resetBookForm() {
   editingBookId = null;
+  // A website book offered here is linked only when its form is saved; a
+  // closed or cancelled form forgets it.
+  _bookFromWebsiteKey = '';
   if ($('book-modal-badge')) $('book-modal-badge').textContent = '✨ New Release';
   $('add-book-modal-title').textContent = 'Add new book';
   $('add-book-save-btn').textContent = 'Save Book';
@@ -1785,6 +1789,35 @@ function resetBookForm() {
 function openAddBookModal() {
   resetBookForm();
   updateModalAccentPreview($('nb-accent'));
+  openM('add-book');
+}
+
+// The website edition ("<bookId>|<variantId>") the open Add new book form was
+// filled from, so its save can ask the website to link the two. Empty otherwise.
+let _bookFromWebsiteKey = '';
+
+/**
+ * "Add to the app" on a book the website sells that isn't here yet: the usual
+ * Add new book form, filled with its name, author, ISBN and price in CA$. The
+ * print run is left empty for the owner, who checks everything and saves as
+ * usual — nothing is added until they do.
+ */
+export function openAddBookFromWebsite(prefill, key) {
+  if (!isPublisherSession() || isAuthor()) return;
+  resetBookForm();
+  const p = prefill || {};
+  if ($('book-modal-badge')) $('book-modal-badge').textContent = '🛍 From your website';
+  $('nb-title').value = p.title || '';
+  onBookTitleInput($('nb-title').value);
+  $('nb-author').value = p.author || '';
+  $('nb-isbn').value = p.isbn || '';
+  if (p.price !== '' && p.price != null) $('nb-price').value = String(p.price);
+  setSelectCurrency($('nb-cur'), p.currency || 'CA$');
+  // The print run is the owner's to fill in: the form won't save without it.
+  $('nb-max').value = '';
+  _bookFromWebsiteKey = String(key || '');
+  updateModalAccentPreview($('nb-accent'));
+  updateBookModalFinancials();
   openM('add-book');
 }
 
@@ -2629,8 +2662,14 @@ async function saveBookFromModal() {
 
   if ($('add-book-unsaved-indicator')) $('add-book-unsaved-indicator').classList.remove('show');
 
+  // A new book filled in from the website: ask the website to link its edition
+  // to this book (read before the form closes, which forgets it).
+  const fromWebsiteKey = !editingBookId ? _bookFromWebsiteKey : '';
+  _bookFromWebsiteKey = '';
+
   showToast(editingBookId ? '✓ Book updated' : '✓ Book added to catalog');
   closeAddBookModal();
+  if (fromWebsiteKey) noteBookAddedFromWebsite(fromWebsiteKey, id);
   buildBookSwitcher();
   renderCatalogList();
   renderProfitSettings();
@@ -7071,6 +7110,20 @@ function visibleAttentionResult() {
  * reads the code, so a book id containing a quote in an onclick would break out
  * of the JS string and run. Book ids are free text from the Add-book form.
  */
+/**
+ * A fix that opens the website (its own to-do items, website orders not sent
+ * yet) is a real link: the app switch (features/app-switch.js) handles the
+ * click so the website's tab is reused, and long-press / middle-click work.
+ * Only website addresses reach here (lib/website-todo.js isWebsiteHref).
+ */
+function fixControlHtml(fix, cls, { arrow = true, quick = false } = {}) {
+  if (!fix) return '';
+  if (fix.kind === 'website' && fix.href) {
+    return `<a class="${cls}${quick ? ' is-quick' : ''}" href="${escapeHtml(fix.href)}" target="${WEBSITE_TAB_NAME}" data-open-website="todo">${escapeHtml(fix.label)} <span aria-hidden="true">↗</span></a>`;
+  }
+  return `<button type="button" class="${cls}${quick ? ' is-quick' : ''}" ${fixAttrs(fix)}>${escapeHtml(fix.label)}${arrow && !quick ? ' →' : ''}</button>`;
+}
+
 function fixAttrs(fix) {
   return `data-fix="${escapeHtml(fix.kind || '')}"`
     + (fix.bookId ? ` data-fix-book="${escapeHtml(fix.bookId)}"` : '')
@@ -7085,9 +7138,7 @@ function fixAttrs(fix) {
  * buttons as the fix, so nothing typed can become code.
  */
 function signalExtrasHtml(sig, btnClass) {
-  const quick = sig.quick
-    ? `<button type="button" class="${btnClass} is-quick" ${fixAttrs(sig.quick)}>${escapeHtml(sig.quick.label)}</button>`
-    : '';
+  const quick = sig.quick ? fixControlHtml(sig.quick, btnClass, { quick: true }) : '';
   const items = (sig.items || []).length
     ? `<ul class="signal-items">${sig.items.map(item => `<li>
           <span>${escapeHtml(item.label)}</span>
@@ -7199,6 +7250,8 @@ function runTodoAction(name, { bookId = '', num = '' } = {}) {
   if (name === 'qr-arrived') { confirmPrintedQrArrived(num); return; }
   if (name === 'sync-conflicts') { openSyncConflicts(); return; }
   if (name === 'shipping-worklist') { openReviewInbox({ filter: 'label' }); return; }
+  // The website's books that aren't in this app yet, on the Website orders card.
+  if (name === 'website-shop-books') { openWebsiteShopBooks(); return; }
   if (name === 'reverse-sales') {
     const refunds = readPendingRefundReversals();
     const all = [...refunds, ...readStoredList(STORE_REVERSAL_PENDING_KEY).filter(item => item.full)];
@@ -7223,9 +7276,7 @@ function runTodoAction(name, { bookId = '', num = '' } = {}) {
 /** One notification card. Tone follows the house amber/red/blue convention. */
 function notificationHtml(sig) {
   const tone = sig.status === 'blocked' ? 'red' : sig.status === 'warn' ? 'amber' : 'blue';
-  const action = sig.fix
-    ? `<button type="button" class="notif-action" ${fixAttrs(sig.fix)}>${escapeHtml(sig.fix.label)} →</button>`
-    : '';
+  const action = sig.fix ? fixControlHtml(sig.fix, 'notif-action') : '';
   const extras = signalExtrasHtml(sig, 'notif-action');
   return `<div class="notif-item tone-${tone}">
       <span class="notif-ico" aria-hidden="true">${escapeHtml(sig.icon || '')}</span>
@@ -7574,9 +7625,7 @@ window.onNotificationLogged = () => {
 /** One row of the To-do tab. */
 function todoRowHtml(sig) {
   const tone = sig.status === 'blocked' ? 'red' : sig.status === 'warn' ? 'amber' : 'gray';
-  const action = sig.fix
-    ? `<button type="button" class="btn sm ghost todo-fix" ${fixAttrs(sig.fix)}>${escapeHtml(sig.fix.label)} →</button>`
-    : '';
+  const action = sig.fix ? fixControlHtml(sig.fix, 'btn sm ghost todo-fix') : '';
   // The signal's id can embed a book id, which is free text a publisher typed
   // into the Add-book form and may contain a quote — exactly why fixAttrs
   // above carries its destination as data rather than a JS-string argument.

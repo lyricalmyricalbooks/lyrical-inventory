@@ -184,8 +184,22 @@ describe('website link rules', () => {
     const rules = block('websiteLink');
     expect(rules).toMatch(/allow read: if isPublisher\(\);/);
     expect(rules).toContain("isPublisher() && docId == 'app'");
-    expect(rules).toContain("keys().hasOnly(['importConsentAt', 'lastImportAt', 'lastFeedAt', 'build'])");
+    expect(rules).toContain("keys().hasOnly(['importConsentAt', 'lastImportAt', 'lastFeedAt', 'build', 'todo', 'linkRequests', 'dismissedShopBooks'])");
+    expect(rules).toContain('appTodoOk(request.resource.data)');
+    expect(rules).toContain("linkMapOk(request.resource.data, 'linkRequests')");
+    expect(rules).toContain("linkMapOk(request.resource.data, 'dismissedShopBooks')");
     expect(rules).toMatch(/allow delete: if false;/);
+  });
+
+  it('websiteLink/app: the to-do list and the two maps are bounded as the contract says', () => {
+    // ≤ 10 to-do items, `at` + `items` only; each map ≤ 300 website editions.
+    expect(firestoreRules).toContain("data.todo.keys().hasOnly(['at', 'items'])");
+    expect(firestoreRules).toContain('data.todo.items is list && data.todo.items.size() <= 10');
+    expect(firestoreRules).toContain('data[field] is map && data[field].size() <= 300');
+    // The pure side keeps within them (src/lib/website-todo.js).
+    const lib = read('src/lib/website-todo.js');
+    expect(lib).toContain('export const TODO_MAX_ITEMS = 10;');
+    expect(lib).toContain('export const LINK_MAP_MAX = 300;');
   });
 
   it('the app writes exactly those fields (src/firebase.js and the pure planner agree with the rules)', () => {
@@ -196,7 +210,13 @@ describe('website link rules', () => {
     expect(lib).toContain("'app.shipment': shipment, 'app.shipmentWaiting': true");
     expect(fb).toContain("tx.update(doc(fs, 'websiteOrders', u.orderId), u.data)");
     // websiteLink/app is the only websiteLink doc the app writes.
-    expect([...fb.matchAll(/doc\(fs, 'websiteLink', '([a-z]+)'\)/g)].map(m => m[1])).toEqual(['app', 'app']);
+    const linkDocs = [...fb.matchAll(/doc\(fs, 'websiteLink', '([a-z]+)'\)/g)].map(m => m[1]);
+    expect(linkDocs.length).toBeGreaterThanOrEqual(2);
+    expect(linkDocs.every(d => d === 'app')).toBe(true);
+    // The to-do list and the two maps go only into the fields the rule allows.
+    expect(fb).toContain("{ todo }, { mergeFields: ['todo'] }");
+    expect(fb).toContain('{ linkRequests }, { merge: true }');
+    expect(fb).toContain('{ dismissedShopBooks }, { merge: true }');
     // The two writes stay inside the rule's field list.
     expect(fb).toContain("tx.set(r, { importConsentAt: String(at) }, { merge: true });");
     expect(fb).toContain("const app = { build: String(build || '') };");

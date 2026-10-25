@@ -29,7 +29,18 @@ import { bookCurrencyCode } from '../lib/currency-migration.js';
 import { missingFromNew, restoreRecords } from '../lib/storage-mode.js';
 import { deriveOnHand } from '../lib/inventory.js';
 import { confirmDialog } from '../lib/modal.js';
-import { countWebsiteOrdersNotSent, openOnWebsiteHtml } from '../lib/app-switch.js';
+import { countWebsiteOrdersNotSent, openOnWebsiteHtml, websiteAdmin } from '../lib/app-switch.js';
+import { isTestProfileActive } from '../lib/test-profile.js';
+import {
+  bookPrefill,
+  buildAppTodo,
+  cleanWebsiteTodo,
+  prunableKeys,
+  recentLinkRequests,
+  shopBookName,
+  shopBooksToOffer,
+  todoSignature,
+} from '../lib/website-todo.js';
 import {
   STRIPE_CHARGE_PI_KEY,
   WEBSITE_IMPORT_BATCH,
@@ -46,6 +57,7 @@ import {
   $,
   BOOKS,
   TAX_CENTER,
+  openAddBookFromWebsite,
   _fxRateCache,
   fetchHistoricalRate,
   isTestBook,
@@ -66,13 +78,20 @@ const PUBLISH_DEBOUNCE_MS = 4000;
 const RETRY_MS = 30000;
 const RATE_LOOKUPS_PER_RUN = 10;
 const QUIET_CHECK_MS = 5 * 60 * 1000;
+// "Add to the app" requests this device made, kept until the website has them
+// ({ key: { inventoryBookId, at, state: 'sending' | 'sent' | 'rules' } }).
+const LINK_ASKS_KEY = 'lm-website-link-requests';
+// "Not a book for the app", remembered here too, so a refusal by old rules
+// (or a write still waiting offline) never brings the book back on this device.
+const SHOP_DISMISSED_KEY = 'lm-website-shop-dismissed';
+const SHOP_LIST_SHOWN = 6;
 
 let _started = false;
 let _wired = false;
 let _docs = new Map();          // orderId → pending websiteOrders doc
 let _ordersSeen = false;
 let _docsFromCache = false;     // the last snapshot came from this device's cache
-let _link = { website: null, app: null };
+let _link = { website: null, app: null, catalog: null };
 let _linkKnown = false;
 let _linkFromServer = false;    // the heartbeat has been read from the server, not only this device's copy
 let _importError = '';          // the last import failed; cleared by the next one that works
@@ -101,6 +120,11 @@ let _refusedMarks = 0;          // orders the last publish couldn't mark done ye
 let _lastFeedAt = '';
 let _lastImportAt = '';
 let _sent = null;               // orderId → shipment hash this device sent
+let _appTodoSig = null;         // what websiteLink/app.todo says (as last written or read)
+let _appTodoRefused = false;    // the rules refused it: stop until the app reloads
+let _asking = new Set();        // link requests being sent right now
+let _setAside = [];             // books set aside this session, for Undo: [{ key, name }]
+let _shopOpen = false;          // the long list of website books is unfolded
 
 // ── Small helpers ──────────────────────────────────────────────────────────
 
@@ -255,7 +279,7 @@ function startWebsiteLink() {
   try {
     if (typeof window._fbWatchWebsiteLinkStatus === 'function') window._fbWatchWebsiteLinkStatus(onLinkStatus, onWatchError);
   } catch (e) { onWatchError(e); }
-  window.addEventListener('online', () => { scheduleImport(0); scheduleWebsiteFeedPublish('all'); });
+  window.addEventListener('online', () => { scheduleImport(0); scheduleWebsiteFeedPublish('all'); resendLinkRequests(); });
   scheduleWebsiteFeedPublish('all');
   renderWebsiteLinkCard();
   runStorageCheck();
@@ -292,13 +316,27 @@ function onOrders(docs, meta = {}) {
   scheduleImport(0);
 }
 
+/** The parts of the link documents an import depends on (not the to-do lists or the books offered). */
+function importView(link) {
+  const app = { ...((link && link.app) || {}) };
+  delete app.todo; delete app.linkRequests; delete app.dismissedShopBooks;
+  return JSON.stringify({ website: (link && link.website) || null, app });
+}
+
 function onLinkStatus(status, meta = {}) {
-  const next = { website: (status && status.website) || null, app: (status && status.app) || null };
+  const next = {
+    website: (status && status.website) || null,
+    app: (status && status.app) || null,
+    catalog: (status && status.catalog) || null,
+  };
   // The watch also reports when only the copy's state changed (saved copy → server): no new import then.
-  const changed = !_linkKnown || JSON.stringify(next) !== JSON.stringify(_link);
+  const changed = !_linkKnown || importView(next) !== importView(_link);
   _link = next;
   _linkKnown = true;
-  if (!(meta && meta.fromCache)) _linkFromServer = true;
+  if (!(meta && meta.fromCache)) {
+    _linkFromServer = true;
+    resendLinkRequests();
+  }
   if (_link.website) noteLinkSeen();
   if (changed) scheduleImport(0);
   renderWebsiteLinkCard();
@@ -606,6 +644,7 @@ async function doPublish({ marks = [], books = [], testShipments = [] } = {}) {
   if (res.feeds) _lastFeedAt = res.at;
   if (res.accepted && res.accepted.length) _lastImportAt = res.at;
   (res.blocked || []).forEach(id => _blockedBooks.add(id));
+  noteTodo();
   if (res.sent && res.sent.length) scheduleRender();
   renderWebsiteLinkCard();
   return res;
@@ -756,12 +795,19 @@ function websiteLinkTodo() {
     quietSince: _watchError ? '' : quietSince(),
     // Only what needs the owner goes on the To-do list; a one-off failure retries by itself.
     problem: _watchError || (_publishLasting ? _publishError : '') || '',
+    // What waits on the website: its own to-do items, the website orders not
+    // sent yet (none before the link's first look) and its books not here yet.
+    websiteItems: shopHere() ? cleanWebsiteTodo(_link.website) : [],
+    notSent: shopHere() ? websiteNotSentCount() : null,
+    notSentHref: `${websiteAdmin()}#orders`,
+    shopBooks: shopHere() ? offeredShopBooks().length : 0,
   };
 }
 
 // Tell the To-do list and the landing rail when what they show has changed.
 function noteTodo() {
   const todo = websiteLinkTodo();
+  publishAppTodo(todo);
   const sig = JSON.stringify(todo);
   if (sig === _todoSig) return;
   _todoSig = sig;
@@ -827,6 +873,10 @@ function wireCard() {
     else if (action === 'rehearse') rehearsePostage(order);
     else if (action === 'clear-test') clearRehearsal(order, btn);
     else if (action === 'hide-unlinked') { writeJson(UNLINKED_KEY, {}); renderWebsiteLinkCard(); }
+    else if (action === 'shop-add') addShopBook(key);
+    else if (action === 'shop-dismiss') dismissShopBook(key, btn);
+    else if (action === 'shop-undo') undoDismissShopBook(key);
+    else if (action === 'shop-more') { _shopOpen = !_shopOpen; renderWebsiteLinkCard(); }
   });
 }
 
@@ -1083,9 +1133,261 @@ function renderWebsiteLinkCard() {
   const statusEl = $('wl-status');
   if (statusEl && statusEl.textContent !== s.text) statusEl.textContent = s.text;
   const body = $('wl-body');
-  if (body) body.innerHTML = [factsHtml(), reviewHtml(), promisedHtml(), blockedHtml(), unlinkedHtml(), storageHtml(), testsHtml()].join('');
+  if (body) body.innerHTML = [factsHtml(), reviewHtml(), shopBooksHtml(), promisedHtml(), blockedHtml(), unlinkedHtml(), storageHtml(), testsHtml()].join('');
   // The app switcher's "not sent yet" count follows the same orders.
   try { window.dispatchEvent(new Event('website-link-changed')); } catch (_) { /* old browser */ }
+}
+
+// ── One to-do list, and books from the website ─────────────────────────────
+// docs/website-link.md › "One to-do list and new books". Publisher only, in
+// their own view; never in the Test Profile (nothing reaches the website from it).
+
+/**
+ * The publisher, outside the Test Profile. Author view needs no check here:
+ * the To-do list and the Website orders tab are never drawn in it, and the
+ * Add new book form refuses to open there (openAddBookFromWebsite).
+ */
+function shopHere() {
+  return _started && !!window.IS_PUBLISHER && !isTestProfileActive();
+}
+
+function denied(e) {
+  return !!e && (e.code === 'permission-denied' || e.code === 'PERMISSION_DENIED');
+}
+
+function linkAsks() {
+  return readJson(LINK_ASKS_KEY, {});
+}
+
+function saveLinkAsks(map) {
+  // Requests the website has answered long ago aren't needed here any more.
+  const cutoff = Date.now() - 60 * 24 * 60 * 60 * 1000;
+  Object.keys(map).forEach((k) => { if (!(Date.parse(map[k] && map[k].at) > cutoff)) delete map[k]; });
+  writeJson(LINK_ASKS_KEY, map);
+}
+
+function serverMap(field) {
+  const m = _link.app && _link.app[field];
+  return m && typeof m === 'object' ? m : {};
+}
+
+/** Books set aside, on the website link and on this device. */
+function dismissedKeys() {
+  return { ...serverMap('dismissedShopBooks'), ...readJson(SHOP_DISMISSED_KEY, {}) };
+}
+
+/** The website's books to offer here (lib/website-todo.js shopBooksToOffer). */
+function offeredShopBooks() {
+  if (!_link.catalog) return [];
+  return shopBooksToOffer(_link.catalog, {
+    dismissed: dismissedKeys(),
+    requested: { ...serverMap('linkRequests'), ...linkAsks() },
+  });
+}
+
+function findShopBook(key) {
+  const books = (_link.catalog && Array.isArray(_link.catalog.books)) ? _link.catalog.books : [];
+  return shopBooksToOffer({ books }, {}).find(b => b.key === key) || null;
+}
+
+/** "Add to the app": the Add new book form, filled in from the website. */
+function addShopBook(key) {
+  if (!shopHere()) return;
+  const book = findShopBook(key);
+  if (!book) { showToast('That book is no longer on the website’s list', 'warn'); renderWebsiteLinkCard(); return; }
+  openAddBookFromWebsite(bookPrefill(book), key);
+}
+
+/**
+ * The Add new book form filled from website edition `key` was saved as
+ * `bookId`: ask the website to link the two. Called by the form's save only
+ * after the book is in the catalogue; a cancelled form never gets here.
+ */
+function noteBookAddedFromWebsite(key, bookId) {
+  if (!key || !bookId || !shopHere()) return;
+  const asks = linkAsks();
+  asks[key] = { inventoryBookId: String(bookId), at: new Date().toISOString(), state: 'sending' };
+  saveLinkAsks(asks);
+  renderWebsiteLinkCard();
+  noteTodo();
+  sendLinkRequest(key, { announce: true });
+}
+
+function sendLinkRequest(key, { announce = false } = {}) {
+  const asks = linkAsks();
+  const ask = asks[key];
+  if (!ask || ask.state !== 'sending' || _asking.has(key) || typeof window._fbRequestWebsiteLink !== 'function') return;
+  _asking.add(key);
+  if (announce) {
+    showToast(online()
+      ? '✓ Book added. The website links it to this book on its next check.'
+      : '✓ Book added. The link is sent to the website once you’re back online.', 'ok', 5000);
+  }
+  const drop = prunableKeys(serverMap('linkRequests'), { adding: 1 });
+  Promise.resolve()
+    .then(() => window._fbRequestWebsiteLink(key, { inventoryBookId: ask.inventoryBookId, at: ask.at }, drop))
+    .then(() => {
+      const now = linkAsks();
+      if (now[key]) { now[key].state = 'sent'; saveLinkAsks(now); }
+    })
+    .catch((e) => {
+      if (denied(e)) {
+        // The rules on the database don't allow this yet: the website's own
+        // matcher still pairs the new book by its ISBN or exact title.
+        const now = linkAsks();
+        if (now[key]) { now[key].state = 'rules'; saveLinkAsks(now); }
+        showToast('Saved in this app. The website will offer to match it under New books to match.', 'warn', 6500);
+      } else {
+        console.warn('[website link] link request not sent yet', e);
+      }
+    })
+    .finally(() => { _asking.delete(key); renderWebsiteLinkCard(); });
+}
+
+/** Link requests saved here that the website link doesn't have yet: send them again. */
+function resendLinkRequests() {
+  if (!shopHere() || !_linkFromServer || !online()) return;
+  const server = serverMap('linkRequests');
+  Object.entries(linkAsks()).forEach(([key, ask]) => {
+    if (ask && ask.state === 'sending' && !(server[key] && server[key].inventoryBookId === ask.inventoryBookId)) sendLinkRequest(key);
+  });
+}
+
+/** "Not a book for the app": set aside here and on the website link, with an Undo on the card. */
+function dismissShopBook(key, button) {
+  if (!shopHere() || !key) return;
+  const book = findShopBook(key);
+  const at = new Date().toISOString();
+  const local = readJson(SHOP_DISMISSED_KEY, {});
+  local[key] = at;
+  writeJson(SHOP_DISMISSED_KEY, local);
+  _setAside = [{ key, name: book ? shopBookName(book) : 'That book' }, ..._setAside.filter(x => x.key !== key)].slice(0, 3);
+  if (button) button.disabled = true;
+  renderWebsiteLinkCard();
+  noteTodo();
+  showToast(`${book ? shopBookName(book) : 'That book'} won’t be offered again. Undo is on the Website orders card.`, 'ok', 4000);
+  if (typeof window._fbSetShopBookDismissed !== 'function') return;
+  const drop = prunableKeys(serverMap('dismissedShopBooks'), { keepDays: 0, adding: 1 });
+  Promise.resolve()
+    .then(() => window._fbSetShopBookDismissed(key, at, drop))
+    .catch((e) => {
+      // Still remembered on this device, so the book stays set aside here.
+      if (!denied(e)) console.warn('[website link] could not set the book aside on the website link', e);
+    });
+}
+
+function undoDismissShopBook(key) {
+  if (!shopHere() || !key) return;
+  const local = readJson(SHOP_DISMISSED_KEY, {});
+  delete local[key];
+  writeJson(SHOP_DISMISSED_KEY, local);
+  _setAside = _setAside.filter(x => x.key !== key);
+  renderWebsiteLinkCard();
+  noteTodo();
+  showToast('Back on the list', 'ok', 2400);
+  if (typeof window._fbSetShopBookDismissed !== 'function') return;
+  Promise.resolve()
+    .then(() => window._fbSetShopBookDismissed(key, null))
+    .catch((e) => { if (!denied(e)) console.warn('[website link] could not undo setting the book aside', e); });
+}
+
+/**
+ * Keep websiteLink/app.todo — what waits here, for the website's admin alerts —
+ * in step with this app's To-do list. Written only when what it says changed,
+ * compared with the server's copy, never on every render.
+ */
+function publishAppTodo(todo) {
+  if (!_started || _appTodoRefused || isTestProfileActive() || !window.IS_PUBLISHER) return;
+  if (!_linkFromServer || !_ordersSeen || typeof window._fbWriteAppTodo !== 'function') return;
+  if (_appTodoSig === null) _appTodoSig = _link.app && _link.app.todo ? todoSignature(_link.app.todo) : '';
+  const next = buildAppTodo({
+    needYou: todo.needYou,
+    storageMissing: todo.storageMissing,
+    oldStorageBooks: [..._blockedBooks].filter(id => BOOKS[id] && !isTestBook(BOOKS[id])).length,
+    problem: todo.problem,
+  });
+  const sig = todoSignature(next);
+  if (sig === _appTodoSig) return;
+  const before = _appTodoSig;
+  _appTodoSig = sig;
+  Promise.resolve()
+    .then(() => window._fbWriteAppTodo(next))
+    .catch((e) => {
+      if (denied(e)) { _appTodoRefused = true; return; } // rules not deployed yet: try again after a reload
+      if (_appTodoSig === sig) _appTodoSig = before; // try again with the next change
+      console.warn('[website link] could not send the to-do list to the website', e);
+    });
+}
+
+const SHOP_STATE_WORDS = { draft: 'Draft on the website', scheduled: 'Scheduled on the website' };
+const ASK_CHIPS = {
+  linked: ['positive', '✓', 'Linked'],
+  refused: ['critical', '✕', 'Not linked'],
+  rules: ['neutral', '◌', 'To match on the website'],
+  offline: ['neutral', '◌', 'Offline'],
+  waiting: ['active', '●', 'Sent'],
+};
+
+function shopBookItemHtml(b) {
+  const k = escapeHtml(b.key);
+  const name = shopBookName(b);
+  const cover = b.cover
+    ? `<img class="wl-shop-cover" src="${escapeHtml(b.cover)}" alt="" width="40" height="56" loading="lazy" decoding="async" referrerpolicy="no-referrer">`
+    : '<span class="wl-shop-cover is-empty" aria-hidden="true">📖</span>';
+  const meta = [b.author, b.isbn ? `ISBN ${b.isbn}` : ''].filter(Boolean).join(' · ');
+  const price = b.price == null ? 'No price yet' : fmt(b.price, getSym('CAD'));
+  const state = SHOP_STATE_WORDS[b.status] ? chip('neutral', '◌', SHOP_STATE_WORDS[b.status]) : '';
+  return `<li class="wl-item wl-shop-item">
+      ${cover}
+      <div class="wl-shop-copy">
+        <strong class="wl-shop-title">${escapeHtml(name)}</strong>
+        ${meta ? `<span class="wl-sub">${escapeHtml(meta)}</span>` : ''}
+        <span class="wl-shop-price"><span class="wl-mono">${escapeHtml(price)}</span>${state}</span>
+      </div>
+      <div class="wl-actions wl-shop-actions">
+        <button class="btn gold sm" type="button" data-wl-action="shop-add" data-key="${k}" aria-label="Add ${escapeHtml(name)} to the app">Add to the app</button>
+        <button class="btn sm" type="button" data-wl-action="shop-dismiss" data-key="${k}" aria-label="${escapeHtml(name)} is not a book for the app">Not a book for the app</button>
+      </div>
+    </li>`;
+}
+
+function shopBooksHtml() {
+  if (!shopHere()) return '';
+  const books = offeredShopBooks();
+  const asks = recentLinkRequests({
+    requests: serverMap('linkRequests'),
+    replies: (_link.website && _link.website.linkReplies) || {},
+    local: linkAsks(),
+  }).map(a => ({ ...a, ...(!online() && linkAsks()[a.key] && linkAsks()[a.key].state === 'sending'
+    ? { state: 'offline', text: 'Saved in this app. It’s sent to the website once you’re back online.' } : {}) }));
+  const undo = _setAside.filter(x => dismissedKeys()[x.key]);
+  if (!_link.catalog && !asks.length && !undo.length) return '';
+
+  const shown = _shopOpen ? books : books.slice(0, SHOP_LIST_SHOWN);
+  const more = books.length - shown.length;
+  const list = books.length
+    ? `<ul class="wl-list">${shown.map(shopBookItemHtml).join('')}</ul>
+       ${more > 0 || _shopOpen && books.length > SHOP_LIST_SHOWN
+          ? `<div class="wl-actions"><button class="btn sm" type="button" data-wl-action="shop-more" aria-expanded="${_shopOpen}">${_shopOpen ? 'Show fewer' : `Show ${more} more`}</button></div>` : ''}`
+    : (_link.catalog ? `<p class="wl-note">${chip('positive', '✓', 'All here')} Every printed book on your website is in this app.</p>` : '');
+  const undoHtml = undo.length
+    ? `<ul class="wl-list">${undo.map(x => `<li class="wl-item wl-shop-undo"><span>${escapeHtml(`${x.name} won’t be offered again.`)}</span><button class="btn sm" type="button" data-wl-action="shop-undo" data-key="${escapeHtml(x.key)}">Undo</button></li>`).join('')}</ul>`
+    : '';
+  const asksHtml = asks.length
+    ? `<h4 class="wl-subhead">Added from the website</h4>
+       <ul class="wl-list">${asks.map(a => {
+         const [tone, glyph, word] = ASK_CHIPS[a.state] || ASK_CHIPS.waiting;
+         const title = (BOOKS[a.inventoryBookId] && BOOKS[a.inventoryBookId].title) || a.inventoryBookId || 'A book';
+         return `<li class="wl-item"><div class="wl-item-head">${chip(tone, glyph, word)}<strong class="wl-shop-title">${escapeHtml(title)}</strong></div><p class="wl-reply">${escapeHtml(a.text)}</p></li>`;
+       }).join('')}</ul>`
+    : '';
+  return `<div class="wl-section" id="wl-shop-books" tabindex="-1">
+      <h4 class="wl-subhead">On the website, not in this app yet${books.length ? ` <span class="wl-count wl-mono">${books.length}</span>` : ''}</h4>
+      ${books.length ? '<p class="wl-note">Printed books your website sells that this app doesn’t have. Add to the app opens the Add new book form filled in from the website: add the print run, check the rest and save. Nothing is added until you do.</p>' : ''}
+      ${list}
+      ${undoHtml}
+      ${asksHtml}
+    </div>`;
 }
 
 // ── For the app switcher ───────────────────────────────────────────────────
@@ -1129,6 +1431,7 @@ function websiteShipmentNote(row) {
 }
 
 export {
+  noteBookAddedFromWebsite,
   publishWebsiteLinkNow,
   renderWebsiteLinkCard,
   runWebsiteImport,

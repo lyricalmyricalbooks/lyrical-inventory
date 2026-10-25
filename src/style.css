@@ -19210,6 +19210,9 @@ button[onclick="refreshUmamiStats()"]:active {
 }
 .todo-row-actions { flex: none; align-self: center; display: flex; align-items: center; gap: var(--space-2); }
 .todo-fix { flex: none; }
+/* A fix that opens the website is a link styled as the same button. */
+a.todo-fix, a.notif-action { text-decoration: none; }
+a.notif-action:hover { text-decoration: underline; }
 
 /* A quiet "not for me" — distinct from the fix button so a stray tap can't be
    mistaken for taking care of the thing. Only appears on hover/focus so a

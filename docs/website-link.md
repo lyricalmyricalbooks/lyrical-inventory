@@ -248,3 +248,60 @@ the inventory app shows it only in a publisher session, never in author view). I
 - **Order links.** The website offers "See it in the inventory app" only for orders the link sent (the server's
   `countsForInventory`: real, accepted payment, paid on or after `startDay`). The app offers "Open on the website" on
   website sales.
+
+## One to-do list and new books (25 October 2026)
+
+Each app's to-do list also shows what waits in the other, and a book added in one app is offered to the other.
+Everything below is publisher-only, plain words, and never moves stock or money by itself.
+
+### `websiteLink/website.todo` (written by the website on every sweep, replaced whole)
+
+```js
+{ at: "ISO", items: [ { id: "stock-held" | "new-matches" | "app-books", count: 2,
+  title: "Stock for 2 books waits for your OK on the website", href: "https://<website>/admin#inventory/link" } ] }  // ≤ 10 items
+```
+
+The app lists these on its To-do list as they are (text only), each with a button that opens `href` through the app switch.
+It shows only items whose `href` is on a website origin. "Website orders not sent yet" is counted by the app itself
+(see *Switching between the apps*), not sent here.
+
+### `websiteLink/catalog` (written by the website, at most hourly, replaced whole)
+
+```js
+{ v: 1, at: "ISO", books: [ {            // ≤ 200: printed website editions not linked, not archived,
+  key: "<bookId>|<variantId or ''>",     // with no match suggestion, not dismissed in the app
+  bookId, variantId: null | "…", title, edition: "" | "Signed", author: "", isbn: "",
+  price: 40 | null,                       // CAD, the regular price (no sale), null when none
+  cover: "https://…" | "",                // a small copy of the first photo
+  status: "published" | "draft" | "scheduled",
+} ] }
+```
+
+The app lists them as **On the website, not in this app yet** with **Add to the app** (opens its Add new book form filled
+with title, author, ISBN, price in CA$; the owner adds the print run and saves) and **Not a book for the app** (dismiss).
+
+### `websiteLink/app` additions (written by the app)
+
+```js
+todo: { at: "ISO", items: [ { id: "needs-you" | "storage" | "…", count, title: "2 website orders need your decision", hash: "#website-orders" } ] }, // ≤ 10
+linkRequests: { "<key>": { inventoryBookId, at: "ISO" } },   // "Add to the app" saved: link this website edition to that book
+dismissedShopBooks: { "<key>": "ISO" },                       // "Not a book for the app"
+```
+
+- **The website shows `todo` items** as admin alerts with **Open the inventory app** (the app switch, `INVENTORY_APP_URL + hash`).
+  It keeps only items whose `hash` is `#` followed by letters, digits, `-`, `_`, `=` (≤ 100), titles ≤ 200 characters, ≤ 10.
+  The app handles `#todo` and `#website-orders`.
+- **Link requests are applied by the website's sweep** with the same guards as **Match these**: the edition exists, is
+  printed and unmatched, the inventory book is in the app's catalog and not matched to anything, and no existing match
+  changes. The answer is `websiteLink/website.linkReplies["<key>"] = { inventoryBookId, result: "linked" | "refused",
+  reason: "plain sentence", at }` (kept 30 days). A request already answered for the same inventory book is not tried again.
+- If the app can't write these keys (its rules not deployed yet), the new book still turns up on the website under
+  **New books to match** by its ISBN or exact title.
+
+### Inventory app books not in the shop (website only)
+
+The website's hourly check also lists the app's books that no website edition is matched to, that aren't a match
+suggestion and that the owner hasn't marked **Not for the shop** (`systemStatus/inventoryLink.appOnlyBooks
+{ at, items: [{ id, title, author, isbn, price, currency }] }`, ≤ 100; `ignoredAppBooks { id: ISO }`). Inventory ›
+Inventory app link lists them with **Add to the shop**: a new *draft* book filled with title, author, ISBN and price (when
+the app's currency is CA$), matched to that app book once saved (op `linkNewBook`). Nothing is published by itself.
