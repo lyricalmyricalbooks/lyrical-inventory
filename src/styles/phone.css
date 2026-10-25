@@ -1616,6 +1616,10 @@
   #tab-customers .cust-fold-toggle { width: 100%; min-height: 44px; justify-content: center; }
   #tab-customers .cust-export-fold { flex: 1 1 100%; }
 
+  /* The buyers heading takes the display capitals the other phone card titles use (it was plain
+     mixed-case body type), so the list it introduces has a real entry point. */
+  #tab-customers .cust-buyers-title { font-family: var(--font-display) !important; font-size: var(--text-xl) !important; font-weight: 400 !important; text-transform: uppercase; letter-spacing: .02em; line-height: 1.1; }
+
   /* Intelligence: the acknowledged privacy note is one line with a Details
      toggle, and the full card stays hidden until it is opened. */
   #tab-intel .intel-privacy-line {
