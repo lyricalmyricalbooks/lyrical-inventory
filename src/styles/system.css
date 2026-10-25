@@ -15,6 +15,16 @@
    Baseline it replaces (measured on the pre-system codebase):
      47 distinct font sizes · 105 distinct raw hex colours · 139 ad-hoc
      box-shadows · 8 easing curves across 157 transitions · 15 z-index values.
+
+   SCREEN SIZES. A custom property can't sit inside a media query, so the
+   names are written here and enforced by scripts/check-tokens.mjs:
+     phone           @media (max-width: 768px)
+                     @media (min-width: 769px) for anything wider
+     small phone     @media (max-width: 480px)
+     narrow desktop  @media (max-width: 1100px)
+   Any other width counts as drift. The 42 older ones are accepted in
+   scripts/token-baseline.json; move one onto a named size when you are
+   already editing it, and check the screen at that width.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 :root {

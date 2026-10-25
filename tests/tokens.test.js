@@ -54,6 +54,14 @@ describe('scanCss rules', () => {
       .toEqual(['cubic-bezier(.4,0,.2,1)']);
   });
 
+  it('flags a media query width that is not one of the named screen sizes', () => {
+    expect(only('@media (max-width: 760px) { .a{} }', 'off-scale-breakpoint')).toEqual(['(max-width: 760px)']);
+    expect(only('@media (max-width:768px) and (min-width:600px) { .a{} }', 'off-scale-breakpoint')).toEqual(['(min-width:600px)']);
+    expect(only('@media (max-width: 768px) { .a{} }\n@media (min-width: 769px) {}\n@media (max-width: 480px) {}\n@media (max-width: 1100px) {}', 'off-scale-breakpoint')).toEqual([]);
+    // Container sizes and plain declarations aren't screen sizes.
+    expect(only('.a{max-width:760px;}', 'off-scale-breakpoint')).toEqual([]);
+  });
+
   it('accepts tokenised equivalents', () => {
     expect(scanCss(
       '.a{color:var(--content-primary);z-index:var(--z-modal);font-size:var(--text-base);'
