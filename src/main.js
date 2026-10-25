@@ -8,6 +8,8 @@ import './style.css';
 // against, and its component corrections have to out-specify style.css.
 import './styles/theme-dark.css';
 import './styles/phone.css';
+// The Riso phone redesign sits on top of the phone layer above.
+import './styles/phone-riso.css';
 import { foldFooterActions, initPhoneLayouts } from './lib/phone-layout.js';
 import { createPhonePageMemory, initPhoneWorkspace, observeSidebarBadges } from './lib/phone-workspace.js';
 const phonePages = createPhonePageMemory(window);
@@ -3666,6 +3668,12 @@ function renderThemeControls() {
     // the destination.
     toggle.setAttribute('aria-pressed', resolvedTheme === 'dark' ? 'true' : 'false');
   }
+  // The phone side menu names the mode it switches TO, like the toggle's icon.
+  const drawerTheme = document.getElementById('more-sheet-theme');
+  if (drawerTheme) {
+    drawerTheme.textContent = resolvedTheme === 'dark' ? 'Day mode' : 'Night mode';
+    drawerTheme.setAttribute('aria-pressed', resolvedTheme === 'dark' ? 'true' : 'false');
+  }
 }
 
 /**
@@ -3848,6 +3856,10 @@ function setSyncState(status, msg) {
   const sideDot = $('side-sync-dot'), sideText = $('side-sync-text');
   if (sideDot) sideDot.className = dotCls;
   if (sideText) sideText.textContent = word;
+  // Phone top bar and side menu carry the same word and square.
+  const phoneDot = $('phone-sync-dot'), drawerSync = $('more-sheet-sync');
+  if (phoneDot) phoneDot.className = dotCls;
+  if (drawerSync) drawerSync.textContent = word;
   // The chip reads the same three facts this function is reacting to, so keep
   // the two in lockstep rather than letting a caller update one and not the
   // other. It is a no-op whenever there is nothing outstanding to say.
@@ -4630,13 +4642,41 @@ async function forceSync() {
 // ── BOOK SWITCHER (build custom dropdown)
 let _bookDropdownOutsideHandler = null;
 
+function bookSwitcherItems() {
+  return [{ id: 'all', title: 'All books', accent: 'rgba(255,255,255,.25)' }]
+    .concat(BOOK_LIST.filter(b => !isTestBook(b)).map(b => ({ id: b.id, title: b.title, accent: b.accent })));
+}
+
+// The phone's book picker: a row of outlined chips (the side menu and Today
+// both use it), each a plain button with the book's colour square. The
+// header dropdown above stays the desktop control; both call switchBook().
+function renderBookChips(container, { onPick } = {}) {
+  if (!container) return;
+  const active = activeBook || 'all';
+  container.replaceChildren(...bookSwitcherItems().map((it) => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'book-chip' + (it.id === active ? ' is-on' : '');
+    chip.setAttribute('aria-pressed', String(it.id === active));
+    if (it.id !== 'all') {
+      const sw = document.createElement('span');
+      sw.className = 'book-chip-sw';
+      sw.setAttribute('aria-hidden', 'true');
+      sw.style.background = it.accent;
+      chip.appendChild(sw);
+    }
+    chip.append(it.title);
+    chip.addEventListener('click', () => { switchBook(it.id); onPick?.(); });
+    return chip;
+  }));
+}
+
 function buildBookSwitcher() {
   const menu = $('book-dropdown-menu');
   if (!menu) return;
   menu.innerHTML = '';
 
-  const items = [{ id: 'all', title: 'All books', accent: 'rgba(255,255,255,.25)' }]
-    .concat(BOOK_LIST.filter(b => !isTestBook(b)).map(b => ({ id: b.id, title: b.title, accent: b.accent })));
+  const items = bookSwitcherItems();
 
   items.forEach((it) => {
     const isActive = (activeBook || 'all') === it.id;
@@ -5394,6 +5434,9 @@ function refreshMoreDot() {
   const more = document.getElementById('mnav-more');
   if (hasBadge) more?.setAttribute('aria-label', 'More, something needs your attention');
   else more?.removeAttribute('aria-label');
+  const phoneDot = document.getElementById('phone-menu-dot');
+  if (phoneDot) phoneDot.hidden = !hasBadge;
+  document.getElementById('phone-menu-btn')?.setAttribute('aria-label', hasBadge ? 'Open menu, something needs your attention' : 'Open menu');
 }
 
 
@@ -5403,21 +5446,35 @@ export function openMoreSheet() {
   const sidebar = document.getElementById('pub-sidebar');
   if (!sheet || !body || !sidebar) return;
   body.replaceChildren();
+  renderBookChips(document.getElementById('more-sheet-books'), { onPick: closeMoreSheet });
   const first = document.createElement('div');
   first.className = 'o3-grouplabel';
   first.textContent = 'Inventory';
   body.appendChild(first);
+  // The phone side menu replaces the bottom bar's Home button, so Today leads it.
+  const home = document.createElement('button');
+  home.type = 'button';
+  home.className = 'snav more-sheet-home';
+  home.setAttribute('onclick', "switchTab('today')");
+  home.innerHTML = '<span class="snav-ic" data-ink="TD" aria-hidden="true">▦</span><span class="snav-label">Today</span>';
+  body.appendChild(home);
   sidebar.querySelectorAll(':scope > .pub-nav, :scope > .o3-grouplabel').forEach((node) => {
     const copy = node.cloneNode(true);
     copy.querySelectorAll('[id]').forEach((el) => el.removeAttribute('id'));
     body.appendChild(copy);
   });
-  // Hide the destinations already on the bottom bar.
+  // Hide the destinations already on the bottom bar. A phone's side menu keeps
+  // them all, since its bar holds only the two pinned actions.
+  const phone = window.matchMedia?.('(max-width: 768px)').matches;
   body.querySelectorAll('.snav').forEach((b) => {
-    if (MNAV_TABS.some((t) => b.getAttribute('onclick')?.includes(`'${t}'`))) b.hidden = true;
+    if (b.classList.contains('more-sheet-home')) b.hidden = !phone;
+    else if (!phone && MNAV_TABS.some((t) => b.getAttribute('onclick')?.includes(`'${t}'`))) b.hidden = true;
+    const current = document.querySelector('.tab-panel.active')?.id?.replace(/^tab-/, '');
+    if (current && b.getAttribute('onclick')?.includes(`'${current}'`)) b.setAttribute('aria-current', 'page');
   });
   if (typeof sheet.showModal === 'function') sheet.showModal(); else sheet.setAttribute('open', '');
   document.getElementById('mnav-more')?.setAttribute('aria-expanded', 'true');
+  document.getElementById('phone-menu-btn')?.setAttribute('aria-expanded', 'true');
 }
 
 export function closeMoreSheet() {
@@ -5425,6 +5482,7 @@ export function closeMoreSheet() {
   if (!sheet) return;
   if (typeof sheet.close === 'function' && sheet.open) sheet.close(); else sheet.removeAttribute('open');
   document.getElementById('mnav-more')?.setAttribute('aria-expanded', 'false');
+  document.getElementById('phone-menu-btn')?.setAttribute('aria-expanded', 'false');
 }
 
 document.addEventListener('click', (e) => {
@@ -5436,6 +5494,7 @@ document.addEventListener('click', (e) => {
 
 document.getElementById('more-sheet')?.addEventListener('close', () => {
   document.getElementById('mnav-more')?.setAttribute('aria-expanded', 'false');
+  document.getElementById('phone-menu-btn')?.setAttribute('aria-expanded', 'false');
 });
 
 Object.assign(window, { openMoreSheet, closeMoreSheet });
@@ -7255,6 +7314,9 @@ function renderReviewInboxButton() {
     : 'Review inbox — nothing waiting';
   btn.title = label;
   btn.setAttribute('aria-label', label);
+  // The phone side menu's copy of the same shortcut.
+  const drawerBadge = $('more-sheet-review-badge');
+  if (drawerBadge) { drawerBadge.textContent = badge.textContent; drawerBadge.hidden = badge.hidden; }
 }
 
 // ── Notification history ───────────────────────────────────────────────────

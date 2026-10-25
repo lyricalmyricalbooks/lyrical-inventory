@@ -16,12 +16,17 @@ const mainJs = readFileSync(path.join(__dirname, '../src/main.js'), 'utf8');
 const start = mainJs.indexOf('const MNAV_TABS');
 const end = mainJs.indexOf('Object.assign(window, { openMoreSheet, closeMoreSheet });');
 const block = mainJs.slice(start, end).replace(/export function/g, 'function');
-const api = new Function(`${block}; return { openMoreSheet, closeMoreSheet, syncMoreNavState, refreshMoreDot };`);
+// renderBookChips lives with the book switcher; the side menu only calls it.
+const api = new Function('renderBookChips', `${block}; return { openMoreSheet, closeMoreSheet, syncMoreNavState, refreshMoreDot };`);
+let chipCalls = [];
+const renderBookChips = (container, opts) => chipCalls.push({ container, opts });
 
 let nav;
 beforeEach(() => {
   document.body.innerHTML = html.slice(html.indexOf('<body'), html.lastIndexOf('</body>')).replace(/^<body[^>]*>/, '');
-  nav = api();
+  chipCalls = [];
+  window.matchMedia = (q) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {} });
+  nav = api(renderBookChips);
 });
 
 const moreLabels = () => [...document.querySelectorAll('#more-sheet-body .snav:not([hidden]) .snav-label')].map((n) => n.textContent);
@@ -198,3 +203,36 @@ test('Today so far says so when nothing has sold yet', () => {
   expect([...sum.querySelectorAll('.today-sold-fig b')].map(f => f.textContent)).toEqual(['0', '0', '—']);
 });
 
+
+test('phone side menu: the top bar menu button opens it, with book chips and Today first', () => {
+  window.matchMedia = (q) => ({ matches: q.includes('max-width: 768px'), media: q, addEventListener() {}, removeEventListener() {} });
+  const button = document.getElementById('phone-menu-btn');
+  expect(button.getAttribute('onclick')).toBe('openMoreSheet()');
+  expect(button.getAttribute('aria-controls')).toBe('more-sheet');
+  nav.openMoreSheet();
+  expect(button.getAttribute('aria-expanded')).toBe('true');
+  expect(chipCalls).toHaveLength(1);
+  expect(chipCalls[0].container.id).toBe('more-sheet-books');
+  const labels = moreLabels();
+  expect(labels[0]).toBe('Today');
+  // The phone bar holds only Sell and Manual entry, so the menu keeps every screen.
+  expect(labels).toContain('Event POS');
+  expect(labels).toContain('Manual entry');
+  nav.closeMoreSheet();
+  expect(button.getAttribute('aria-expanded')).toBe('false');
+});
+
+test('the menu button carries the "something needs you" dot', () => {
+  expect(mainJs).toMatch(/getElementById\('phone-menu-dot'\)/);
+  expect(html).toMatch(/id="phone-menu-dot" hidden/);
+});
+
+test('the phone top bar mirrors the sync word and the side menu holds the account', () => {
+  expect(html).toMatch(/id="phone-sync-dot"/);
+  expect(html).toMatch(/id="sync-pill-text"/);
+  expect(mainJs).toMatch(/\$\('phone-sync-dot'\)/);
+  const foot = document.querySelector('#more-sheet .more-sheet-foot');
+  expect(foot.querySelector('[onclick*="openReviewInbox"]')).not.toBeNull();
+  expect(foot.querySelector('[onclick="toggleTheme()"]')).not.toBeNull();
+  expect(foot.querySelector('[onclick="logout()"]')).not.toBeNull();
+});

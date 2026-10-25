@@ -34,6 +34,7 @@ const args = Object.fromEntries(process.argv.slice(2).map(a => {
 const list = (v, fallback) => (v ? v.split(',').map(s => s.trim()).filter(Boolean) : fallback);
 
 // Every tab panel the publisher can reach (SHELL_TAB_LABELS in src/main.js).
+// --only=menu also shoots the phone side menu, opened over Today.
 const ALL_TABS = ['today', 'pos', 'manual', 'dashboard', 'all-overview', 'todo', 'intel', 'website',
   'consignment', 'history', 'expenses', 'reconcile', 'customers', 'opencall', 'taxcenter', 'shipping',
   'bigcartel', 'webanalytics', 'sheets', 'backups', 'help', 'qrcodes'];
@@ -226,8 +227,10 @@ for (const theme of themes) {
       await closeOverlays();
       await page.evaluate((t) => {
         window.switchBook?.(t === 'all-overview' ? 'all' : 'harbour');
-        window.switchTab?.(t === 'all-overview' ? 'dashboard' : t);
+        // 'menu' is not a screen: it is Today with the phone side menu open.
+        window.switchTab?.(t === 'all-overview' ? 'dashboard' : t === 'menu' ? 'today' : t);
         window.scrollTo(0, 0);
+        if (t === 'menu') window.openMoreSheet?.();
       }, tab);
       await shoot(`tab-${tab}`);
     }
