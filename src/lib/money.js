@@ -2,6 +2,11 @@
 // Kept dependency-free so they can be imported anywhere and unit-tested
 // without a DOM or Firestore stub.
 
+/** @typedef {import('../types/ledger').NumberLike} NumberLike */
+/** @typedef {import('../types/ledger').Payment} Payment */
+/** @typedef {import('../types/ledger').Book} Book */
+/** @typedef {import('../types/ledger').HistRow} HistRow */
+
 export const CURRENCY_SYMBOL_TO_CODE = {
   '€': 'EUR',
   '$': 'CAD',
@@ -31,6 +36,7 @@ export const CODE_TO_SYMBOL = {
 
 export const getSym = (c) => CODE_TO_SYMBOL[c] || c;
 
+/** @param {unknown} cur @param {string} [fallback] @returns {string} */
 export function normalizeCurrencyCode(cur, fallback = 'CAD') {
   const raw = String(cur || '').trim();
   if (!raw) return fallback;
@@ -46,6 +52,7 @@ export function normalizeCurrencyCode(cur, fallback = 'CAD') {
 
 // A negative amount reads "-CA$138.69", sign first like fmtWhole; it used to
 // print "CA$-138.69". An amount that rounds to zero never shows a minus.
+/** @param {NumberLike} n @param {string} [cur] @returns {string} */
 export const fmt = (n, cur = '€') => {
   const fixed = Number(n).toFixed(2);
   const negative = fixed.startsWith('-') && Number(fixed) !== 0;
@@ -53,6 +60,7 @@ export const fmt = (n, cur = '€') => {
   return (negative ? '-' : '') + getSym(cur) + digits;
 };
 
+/** @param {NumberLike} n @param {string} [cur] @returns {string} */
 export const fmtWhole = (n, cur = '€') => {
   const num = Math.round(Number(n) || 0);
   const formatted = Math.abs(num).toLocaleString('en-US');
@@ -60,11 +68,13 @@ export const fmtWhole = (n, cur = '€') => {
   return num < 0 ? `-${sym}${formatted}` : `${sym}${formatted}`;
 };
 
+/** @param {NumberLike} n @returns {string} */
 export const fmtNum = (n) => Number(n).toFixed(2);
 
 // Round a currency amount to whole cents, killing binary floating-point drift
 // (e.g. 0.1 + 0.2 = 0.30000000000000004). Use this around any running total of
 // money so accumulated error can't grow as the number of transactions grows.
+/** @param {NumberLike} n @returns {number} */
 export const roundCents = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
 // Date.toLocaleDateString with options builds a fresh Intl.DateTimeFormat on
@@ -83,6 +93,7 @@ export const fmtD = (d) => {
   return DATE_FMT_EN_GB.format(dt);
 };
 
+/** @param {Book | null | undefined} book @returns {string} */
 export function getBookCurrencyCode(book) {
   const c = (book && book.currency) || 'EUR';
   return CURRENCY_SYMBOL_TO_CODE[c] || (String(c).length === 3 ? c : 'EUR');
@@ -122,6 +133,7 @@ export function setSelectCurrency(sel, code) {
 // the book's current currency for legacy rows recorded before stamping existed.
 // That fallback is precisely what breaks when a book's currency is edited, so
 // anything relying on it should be restated via lib/currency-migration.js.
+/** @param {{ cur?: string } | null | undefined} entry @param {Book | null | undefined} book @returns {string} */
 export function entryNativeCode(entry, book) {
   if (entry && entry.cur) return normalizeCurrencyCode(entry.cur, 'CAD');
   return getBookCurrencyCode(book);
@@ -132,6 +144,7 @@ export function entryNativeCode(entry, book) {
 // today. Reading it against the book's current currency is what turns a €32
 // sale into the nonsense line "Paid EUR 32.00 → CA$32.00" after a currency
 // change, so resolve the symbol from the entry's stamp when it has one.
+/** @param {Payment | null | undefined} payment @param {Book | null | undefined} book @param {{ cur?: string } | null} [entry] @returns {string} */
 export function paymentSummary(payment, book, entry = null) {
   if (!payment || !payment.currency) return '';
   const native = entryNativeCode(entry, book);
@@ -146,6 +159,11 @@ export function paymentSummary(payment, book, entry = null) {
   return `Paid ${payment.currency} ${fmtNum(amount)}${ratePart} → ${fmt(converted, native)}`;
 }
 
+/**
+ * @param {{ book: Book | null | undefined, qty: NumberLike, unitPrice: NumberLike, fxEnabled?: boolean,
+ *   fxCur?: string, fxAmt?: NumberLike, fxRate?: NumberLike }} sale
+ * @returns {{ currency: string, amount: number, rate: number | null, convertedTotal: number }}
+ */
 export function buildPaymentMeta({ book, qty, unitPrice, fxEnabled, fxCur, fxAmt, fxRate }) {
   const total = (Number(qty) || 0) * (Number(unitPrice) || 0);
   if (fxEnabled) {
@@ -172,6 +190,11 @@ export function buildPaymentMeta({ book, qty, unitPrice, fxEnabled, fxCur, fxAmt
 //   • anything else                 → '' (blank); the Sheets backend fills it
 //     from the stored converted total or a live FX lookup.
 // Returns a Number, or '' when the CAD value can't be determined client-side.
+/**
+ * @param {{ nativeCurrency?: string, totalNative?: import('../types/ledger').NumberLike,
+ *   payment?: import('../types/ledger').Payment | null }} [sale]
+ * @returns {number | ''}
+ */
 export function cadEquivalentForSale({ nativeCurrency, totalNative, payment } = {}) {
   const native = normalizeCurrencyCode(nativeCurrency, 'CAD');
   const total = Number(totalNative) || 0;
@@ -191,6 +214,7 @@ export const PAYMENT_TYPE_DIRECT_TO_ARTIST = 'Payment directly to artist';
 // and still owes the publisher their cut. Prefers the structured `directToArtist`
 // flag; falls back to the legacy paymentType / payment.type / notes text so
 // records created before the flag existed are still recognised.
+/** @param {HistRow | null | undefined} entry @returns {boolean} */
 export function isDirectToArtistSale(entry) {
   if (!entry) return false;
   if (entry.directToArtist === true) return true;
@@ -202,6 +226,7 @@ export function isDirectToArtistSale(entry) {
 // Amount of a direct-to-artist transfer, or null when the record doesn't carry
 // one it can be trusted for (missing/garbled total AND no usable qty × price).
 // Callers show "amount missing" instead of summing NaN into a banner or ledger.
+/** @param {{ total?: NumberLike | null, qty?: NumberLike | null, price?: NumberLike | null } | null | undefined} t @returns {number | null} */
 export function transferAmount(t) {
   if (!t) return null;
   const total = Number(t.total);

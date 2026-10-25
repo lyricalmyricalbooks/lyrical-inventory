@@ -53,6 +53,11 @@ jobs:
       - name: Contrast check
         run: npm run lint:contrast
 
+      # JSDoc types on the money, stock and consignment rules (tsconfig.json).
+      # Catches a count or price that could be text being summed as a number.
+      - name: Type check
+        run: npm run typecheck
+
       - name: Tests
         run: npm test
 

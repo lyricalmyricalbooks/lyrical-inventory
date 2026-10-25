@@ -18,6 +18,7 @@
     "lint": "eslint src --ext .js",
     "lint:contrast": "node scripts/check-contrast.mjs",
     "lint:tokens": "node scripts/check-tokens.mjs",
+    "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "shots": "node scripts/phone-shots/capture.mjs",
@@ -31,6 +32,7 @@
     "playwright-core": "1.64.1",
     "postcss": "^8.5.31",
     "sharp": "^0.35.5",
+    "typescript": "^7.0.2",
     "vite": "^8.3.5",
     "vite-plugin-pwa": "^2.0.0",
     "vitest": "^5.0.5"
