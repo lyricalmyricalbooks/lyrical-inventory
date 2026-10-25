@@ -1249,13 +1249,16 @@
   }
   #cust-body > tr.phone-record > td { border: 0 !important; }
   #cust-body > tr.phone-record > td.phone-record-lead { display: contents !important; }
-  #cust-body > tr.phone-record > td.phone-record-lead > .phone-record-toggle { grid-column: 1 / -1 !important; grid-row: 4 !important; margin-top: var(--space-1); }
+  #cust-body > tr.phone-record > td.phone-record-lead > .phone-record-toggle { grid-column: 2 !important; grid-row: 3 !important; margin-top: 0; padding-inline: var(--space-3); }
   #cust-body > tr.phone-record > td::before { display: none; }
   #cust-body > tr.phone-record > td[data-phone-label="Spend"] { grid-column: 2 !important; grid-row: 1 !important; text-align: right !important; font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 500; font-size: var(--text-md); }
   #cust-body > tr.phone-record > td[data-phone-label="Email"] { grid-column: 1 / -1 !important; grid-row: 2 !important; }
   #cust-body > tr.phone-record > td[data-phone-label="Email"] > a { display: flex; align-items: center; min-height: var(--target-min); font-size: var(--text-sm); }
-  #cust-body > tr.phone-record > td[data-phone-label="Action"] { grid-column: 1 / -1 !important; grid-row: 3 !important; }
+  #cust-body > tr.phone-record > td[data-phone-label="Action"] { grid-column: 1 !important; grid-row: 3 !important; }
   #cust-body > tr.phone-record > td[data-phone-label="Action"] > div { display: grid !important; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: var(--space-2) !important; }
+  /* +List, Unsubscribe and Details share one row, so the labels tighten a
+     touch instead of the longest one touching its border. */
+  #cust-body > tr.phone-record > td[data-phone-label="Action"] .btn { padding-inline: var(--space-2); letter-spacing: 0.04em; min-width: 0; }
 }
 
 /* ─── EXPENSES (round 4) ─── */
