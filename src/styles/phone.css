@@ -1290,7 +1290,11 @@
      sitting side by side: side by side they made the amount column ~200px wide and squeezed the
      description into a quarter-width strip that wrapped to four lines. */
   #exp-body > tr.phone-record > td[data-phone-label="Receipt"] { display: flex !important; flex-direction: column; align-items: flex-end; gap: var(--space-1); }
-  #exp-body > tr.phone-record > td[data-phone-label="Receipt"]::before { margin-bottom: 0; }
+  /* The "Receipt" caps label sat above a tag and a button that both already say "receipt", so it
+     is dropped: the card is a line shorter and the tag leads the cell. The tag takes the square
+     corner every other phone status tag has, instead of a soft lozenge. */
+  #exp-body > tr.phone-record > td[data-phone-label="Receipt"]::before { display: none; }
+  #exp-body > tr.phone-record > td[data-phone-label="Receipt"] > .pill { border-radius: var(--r2); border: var(--stroke-hair) solid currentColor; }
   #exp-body > tr.phone-record > td[data-phone-label="Receipt"] > .exp-add-receipt { margin-left: 0; }
   #exp-body > tr.phone-record:has(> td > input[type="checkbox"]) > td[data-phone-label="Select"] { grid-column: 1 !important; grid-row: 1 / span 3 !important; align-self: center; }
   #exp-body > tr.phone-record:has(> td > input[type="checkbox"]) > td.phone-record-lead { grid-column: 2 !important; grid-row: 1 !important; }

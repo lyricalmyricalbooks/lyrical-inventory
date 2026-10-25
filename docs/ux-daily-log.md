@@ -184,6 +184,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-25 | visual | Phone Payments — payment settings | Made the Stripe key box and the three settings cards (automatic recording, short codes, notify me) inked slabs with the bold outline and offset shadow, and gave the key box proper padding so its long hint no longer runs off the edge | (this PR) |
 | 2026-10-25 | visual | Phone Settings — Book Catalog rows | Made each book in the Book Catalog an inked slab with the bold outline, square corner and offset shadow, instead of a pale hairline box with a soft corner matching nothing around it | (this PR) |
 | 2026-10-25 | visual | Phone Website orders — Storage check | Made each book in the Storage check lead with its name in bold and the reason sit smaller and softer beneath, instead of the name and the sentence under it reading as one same-size block | (this PR) |
+| 2026-10-25 | visual | Phone Expenses — receipt column | Dropped the repeated "Receipt" caps label above the "No receipt" tag and "+ Receipt" button, and gave the tag the square corner of other tags, so each expense card is a line shorter and the tag leads | (this PR) |
 
 ---
 
