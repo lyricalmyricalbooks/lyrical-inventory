@@ -33,10 +33,11 @@ import { recurringStatus } from './recurring.js';
 import { unshippedOrders } from './order-followups.js';
 
 /** The four buckets the To-do tab groups by, in display order. */
-export const SIGNAL_GROUPS = ['orders', 'stock', 'money', 'catalogue', 'setup'];
+export const SIGNAL_GROUPS = ['orders', 'website', 'stock', 'money', 'catalogue', 'setup'];
 
 export const GROUP_LABELS = {
   orders: 'Orders & payments to sort',
+  website: 'Waiting on your website',
   stock: 'Stock & reordering',
   money: 'Money to chase',
   catalogue: 'Missing book details',
@@ -45,6 +46,7 @@ export const GROUP_LABELS = {
 
 export const GROUP_ICONS = {
   orders: '📬',
+  website: '🌐',
   stock: '📚',
   money: '💰',
   catalogue: '✍',
@@ -592,6 +594,36 @@ function automationSignals(ctx, out) {
       label: 'Your website has stopped checking in',
       detail: 'It normally checks in every five minutes. Until it does again, new website orders don’t reach this app and the website’s stock isn’t updated. Open the website’s admin › Inventory › Inventory app link to see why.',
       fix: { label: 'Open Website orders', ...openTab('website') },
+    });
+  }
+  // What waits on the website (its own to-do list, sent here as it is), the
+  // website orders not sent yet, and the website's books not in this app.
+  for (const item of (site.websiteItems || [])) {
+    if (!item || !item.id || !item.title || !item.href) continue;
+    out.push({
+      id: `website-todo-${item.id}`, group: 'website', status: 'warn', icon: '🌐',
+      label: String(item.title),
+      detail: 'Waiting for you in the website’s admin. It goes away by itself once it’s done there.',
+      fix: { label: 'Open on the website', kind: 'website', href: item.href },
+    });
+  }
+  const notSent = Number(site.notSent) || 0;
+  if (notSent > 0 && site.notSentHref) {
+    out.push({
+      // An info item: the Website switch in the menu already counts these.
+      id: 'website-orders-not-sent', group: 'website', status: 'info', icon: '📦',
+      label: `${notSent} website ${plural(notSent, 'order', 'orders')} not sent yet`,
+      detail: 'Paid on the website and not marked as sent there yet. The website’s Orders page has them.',
+      fix: { label: 'Open on the website', kind: 'website', href: site.notSentHref },
+    });
+  }
+  const shopBooks = Number(site.shopBooks) || 0;
+  if (shopBooks > 0) {
+    out.push({
+      id: 'website-shop-books', group: 'website', status: 'info', icon: '📚',
+      label: `${shopBooks} ${plural(shopBooks, 'book', 'books')} on your website ${plural(shopBooks, 'isn’t', 'aren’t')} in this app yet`,
+      detail: 'Add each one here with its details filled in from the website, or say it isn’t a book for the app. Nothing is added until you save it.',
+      fix: openAction('website-shop-books', 'See them'),
     });
   }
   for (const book of (site.storageMissing || [])) {

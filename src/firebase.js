@@ -2,7 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/fireba
 import { getDatabase, ref, set, onValue, get, push, remove } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js";
 import { getAuth, signInWithPopup, reauthenticateWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import { getStorage, ref as sRef, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-storage.js";
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, setDoc, getDoc, getDocs, getDocFromServer, getDocsFromServer, getDocFromCache, getDocsFromCache, collection, onSnapshot, deleteDoc, writeBatch, runTransaction, query, where } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, setDoc, getDoc, getDocs, getDocFromServer, getDocsFromServer, getDocFromCache, getDocsFromCache, collection, onSnapshot, deleteDoc, writeBatch, runTransaction, query, where, deleteField } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 import { receiptDuplicate } from './lib/receipt-finder.js';
 import { ALL_PARTS, LIST_PARTS, assembleParts, emptyPart, splitState, stitchState, mergePart, mergeSettingDoc, stableStringify } from './lib/merge-state.js';
 import { readOldCopyCached, oldCopyCache } from './lib/old-copy-cache.js';
@@ -946,8 +946,8 @@ window._fbWatchWebsiteLinkStatus = (cb, onErr) => {
     // With metadata changes, so the caller also hears when this device's saved copy is confirmed by
     // the server (the website's heartbeat in a saved copy can be hours old).
     _webLinkUnsub = onSnapshot(collection(fs, 'websiteLink'), { includeMetadataChanges: true }, (snap) => {
-      const out = { website: null, app: null };
-      snap.forEach(d => { if (d.id === 'website' || d.id === 'app') out[d.id] = d.data() || {}; });
+      const out = { website: null, app: null, catalog: null };
+      snap.forEach(d => { if (d.id === 'website' || d.id === 'app' || d.id === 'catalog') out[d.id] = d.data() || {}; });
       cb(out, { fromCache: !!(snap.metadata && snap.metadata.fromCache) });
     }, (err) => {
       console.error('website link status watch failed', err);
@@ -959,6 +959,35 @@ window._fbWatchWebsiteLinkStatus = (cb, onErr) => {
     if (typeof onErr === 'function') onErr(e);
     return null;
   }
+};
+
+// This app's to-do list for the website (websiteLink/app.todo), replaced whole.
+// Like every Firestore write it is kept on this device while offline and sent
+// when the connection is back; the promise settles once the server answers.
+window._fbWriteAppTodo = async (todo) => {
+  if (!auth.currentUser || !window.IS_PUBLISHER) throw new Error('Publisher access required');
+  await setDoc(doc(fs, 'websiteLink', 'app'), { todo }, { mergeFields: ['todo'] });
+  return true;
+};
+
+// "Add to the app" saved a book: ask the website to link its edition `key` to
+// it (websiteLink/app.linkRequests[key]). Other keys are kept (a merge), and
+// `drop` lists old requests to remove so the map stays within the rules' bound.
+window._fbRequestWebsiteLink = async (key, value, drop = []) => {
+  if (!auth.currentUser || !window.IS_PUBLISHER) throw new Error('Publisher access required');
+  const linkRequests = { [String(key)]: { inventoryBookId: String(value.inventoryBookId), at: String(value.at) } };
+  (drop || []).forEach(k => { if (k !== key) linkRequests[String(k)] = deleteField(); });
+  await setDoc(doc(fs, 'websiteLink', 'app'), { linkRequests }, { merge: true });
+  return true;
+};
+
+// "Not a book for the app" (at = ISO) or its undo (at = null) for one website edition.
+window._fbSetShopBookDismissed = async (key, at, drop = []) => {
+  if (!auth.currentUser || !window.IS_PUBLISHER) throw new Error('Publisher access required');
+  const dismissedShopBooks = { [String(key)]: at ? String(at) : deleteField() };
+  (drop || []).forEach(k => { if (k !== key) dismissedShopBooks[String(k)] = deleteField(); });
+  await setDoc(doc(fs, 'websiteLink', 'app'), { dismissedShopBooks }, { merge: true });
+  return true;
 };
 
 const WEB_LINK_PARTS = ['hist', 'ledger', 'metadata'];

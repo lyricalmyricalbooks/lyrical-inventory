@@ -22,6 +22,7 @@ import {
   websiteAdmin,
 } from '../lib/app-switch.js';
 import { isTestProfileActive } from '../lib/test-profile.js';
+import { parseAppRouteHash } from '../lib/website-todo.js';
 import {
   BOOKS,
   BOOK_LIST,
@@ -35,7 +36,7 @@ import {
   switchBook,
   switchTab,
 } from '../main.js';
-import { websiteNotSentCount, websiteOrderDoc } from './website-link.js';
+import { renderWebsiteLinkCard, websiteNotSentCount, websiteOrderDoc } from './website-link.js';
 
 const TWA_KEY = 'lm-in-android-app';
 const OFFLINE_WORDS = 'You’re offline. The website opens once you’re back online.';
@@ -47,6 +48,7 @@ const FIND_EVERY_MS = 1000;
 let _started = false;
 let _booksReady = false;
 let _pending = null;      // the website order a link asked for, until it is opened
+let _route = null;        // 'todo' | 'website-orders': a screen a link from the website asked for
 let _finding = 0;         // a search for a just-arrived order is running
 
 function online() {
@@ -108,7 +110,7 @@ function refreshAppSwitch() {
   } catch (_) { /* some embedded browsers refuse */ }
 
   // A link from the website meant for the publisher opens nothing for an artist.
-  if (_pending && !isPublisherSession() && isAuthor()) { _pending = null; tidyHash(); }
+  if ((_pending || _route) && !isPublisherSession() && isAuthor()) { _pending = null; _route = null; tidyHash(); }
 
   const off = !online();
   let count = null;
@@ -175,10 +177,42 @@ function onDocumentClick(event) {
   if (how !== 'opened') showToast('The website admin is open in your other tab.', 'ok', 3200);
 }
 
+// ── The Website orders tab, from a link or the To-do list ─────────────────
+
+/** The book whose Website orders tab to open: the one on screen, else the first real one. */
+function bookForWebsiteTab() {
+  if (activeBook && activeBook !== 'all' && BOOKS[activeBook]) return activeBook;
+  const first = BOOK_LIST.find(b => b && b.id && !isTestBook(b));
+  return first ? first.id : '';
+}
+
+/**
+ * Open the Website orders tab (the website link's card lives there), scrolled
+ * to the website's books not in this app yet when `shopBooks` is set.
+ * Publisher only, in their own view.
+ */
+function openWebsiteOrdersTab({ shopBooks = false } = {}) {
+  if (!publisherHere()) return;
+  const bookId = bookForWebsiteTab();
+  if (bookId) switchBook(bookId);
+  switchTab('website');
+  renderWebsiteLinkCard();
+  const target = (shopBooks && document.getElementById('wl-shop-books')) || document.getElementById('web-link-card');
+  if (!target || target.hidden) return;
+  try { target.scrollIntoView({ block: 'start' }); } catch (_) { /* old browser */ }
+  if (target.id === 'wl-shop-books') { try { target.focus({ preventScroll: true }); } catch (_) { /* fine */ } }
+}
+
+/** The To-do list's "See them": the website's books not in this app yet. */
+function openWebsiteShopBooks() {
+  openWebsiteOrdersTab({ shopBooks: true });
+}
+
 // ── Deep link from the website: #website-order=<orderId> ──────────────────
 
 function tidyHash() {
-  if (typeof location === 'undefined' || !parseWebsiteOrderHash(location.hash)) return;
+  if (typeof location === 'undefined') return;
+  if (!parseWebsiteOrderHash(location.hash) && !parseAppRouteHash(location.hash)) return;
   try { history.replaceState(history.state, '', `${location.pathname}${location.search}`); } catch (_) { /* old browser */ }
 }
 
@@ -195,9 +229,27 @@ function tidyAdminMode() {
 }
 
 function takeHash() {
-  const id = typeof location === 'undefined' ? null : parseWebsiteOrderHash(location.hash);
+  const hash = typeof location === 'undefined' ? '' : location.hash;
+  const id = parseWebsiteOrderHash(hash);
   if (id) _pending = id;
-  return id;
+  // `#todo` and `#website-orders`: the website's alerts open these screens here.
+  const route = parseAppRouteHash(hash);
+  if (route) _route = route;
+  return id || route;
+}
+
+/** Open the screen a `#todo` / `#website-orders` link asked for, once the books are in. */
+function openRoute() {
+  if (!_route || !_booksReady || !isPublisherSession()) return;
+  const route = _route;
+  _route = null;
+  tidyHash();
+  if (isAuthor()) return;
+  if (route === 'todo') {
+    switchTab('todo');
+  } else if (route === 'website-orders') {
+    openWebsiteOrdersTab();
+  }
 }
 
 /** Sale rows a website order became, live ones first. */
@@ -285,13 +337,14 @@ function openPending() {
 }
 
 function onHashChange() {
-  if (takeHash()) openPending();
+  if (takeHash()) { openPending(); openRoute(); }
 }
 
 /** Every book has loaded: a deep link that arrived meanwhile can open now. */
 function appSwitchBooksReady() {
   _booksReady = true;
   openPending();
+  openRoute();
   refreshAppSwitch();
 }
 
@@ -313,6 +366,7 @@ function startAppSwitch() {
 
 export {
   appSwitchBooksReady,
+  openWebsiteShopBooks,
   refreshAppSwitch,
   startAppSwitch,
 };

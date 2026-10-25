@@ -185,12 +185,32 @@ service cloud.firestore {
       allow delete: if isPublisher();
     }
 
-    // websiteLink/website is the website's heartbeat (read-only here);
-    // websiteLink/app is this app's own status.
+    // todo = { at, items: [≤ 10] }.
+    function appTodoOk(data) {
+      return !('todo' in data)
+        || (data.todo is map
+            && data.todo.keys().hasOnly(['at', 'items'])
+            && (!('at' in data.todo) || data.todo.at is string)
+            && (!('items' in data.todo) || (data.todo.items is list && data.todo.items.size() <= 10)));
+    }
+
+    // linkRequests / dismissedShopBooks: maps of at most 300 website editions.
+    function linkMapOk(data, field) {
+      return !(field in data) || (data[field] is map && data[field].size() <= 300);
+    }
+
+    // websiteLink/website is the website's heartbeat and its to-do list, and
+    // websiteLink/catalog its books not in this app yet (both read-only here);
+    // websiteLink/app is this app's own status, its to-do list for the
+    // website, the books it asked the website to link and the ones the owner
+    // set aside ("One to-do list and new books" in docs/website-link.md).
     match /websiteLink/{docId} {
       allow read: if isPublisher();
       allow create, update: if isPublisher() && docId == 'app'
-        && request.resource.data.keys().hasOnly(['importConsentAt', 'lastImportAt', 'lastFeedAt', 'build']);
+        && request.resource.data.keys().hasOnly(['importConsentAt', 'lastImportAt', 'lastFeedAt', 'build', 'todo', 'linkRequests', 'dismissedShopBooks'])
+        && appTodoOk(request.resource.data)
+        && linkMapOk(request.resource.data, 'linkRequests')
+        && linkMapOk(request.resource.data, 'dismissedShopBooks');
       allow delete: if false;
     }
   }

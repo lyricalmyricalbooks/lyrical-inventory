@@ -33,6 +33,16 @@ describe('the app switcher for an artist', () => {
     expect(window.location.search).toBe('?keep=1');
   });
 
+  it('never shows the website’s to-do items or books', async () => {
+    window.location.hash = '#todo';
+    window.dispatchEvent(new window.HashChangeEvent('hashchange'));
+    await app.settle(5);
+    expect(document.querySelectorAll('a[data-open-website="todo"]').length).toBe(0);
+    expect(document.getElementById('wl-shop-books')).toBeNull();
+    expect(document.getElementById('tab-todo').classList.contains('active')).toBe(false);
+    window.location.hash = '';
+  });
+
   it('drops a website order link instead of opening it', () => {
     expect(hashAfterBoot).toBe('');
     expect(document.getElementById('tab-history').classList.contains('active')).toBe(false);
