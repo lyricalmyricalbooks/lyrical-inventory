@@ -105,7 +105,7 @@ describe('startup wiring', () => {
     const bootStart = mainContent.indexOf('async function boot(forcedBook)');
     const boot = mainContent.slice(bootStart, bootStart + 5000);
     const loaded = boot.indexOf('await settingsLoaded');
-    const recount = boot.indexOf('updateOpenCallBadges()');
+    const recount = boot.indexOf("openCallScreen.call('updateOpenCallBadges')");
     expect(boot).toContain('loadCustomerSuppression()');
     expect(recount).toBeGreaterThan(loaded);
   });

@@ -24,6 +24,7 @@ import {
   fetchStripePaymentsForReconcile,
   getAllAppliedIds,
   getReconStripeKey,
+  openCallScreen,
   orders,
   renderCustomersStat,
   sheetsUrl,
@@ -32,7 +33,7 @@ import {
   today,
 } from '../main.js';
 import { codeToSymbol } from './pos.js';
-import { parseMarkdownToHtml, renderOpenCall } from './opencall.js';
+import { parseMarkdownToHtml } from '../lib/markdown.js';
 import { withCampaignFooter, campaignFooterHtml } from '../lib/campaign-footer.js';
 import { confirmDialog } from '../lib/modal.js';
 import { escapeHtml } from '../lib/html.js';
@@ -58,6 +59,11 @@ let _customerStripeMaybeMore = false;
 
 // Opt-out (suppression) list — Firestore-backed so an unsubscribe on one device
 // is honoured everywhere, with a localStorage fallback so it still works offline.
+// Open Call shows who is suppressed or on the mailing list, so a change here
+// repaints it — but only once it has been opened. Until then there is nothing
+// on screen to refresh, and no reason to fetch the screen just to skip it.
+function refreshOpenCall() { openCallScreen.module()?.renderOpenCall(); }
+
 function _isCustomerSuppressed(email) { return _customerSuppress.has(_custEmailKey(email)); }
 async function loadCustomerSuppression() {
   try {
@@ -78,7 +84,7 @@ async function toggleCustomerSuppress(encEmail) {
   const key = _custEmailKey(decodeURIComponent(encEmail));
   if (!key) return;
   if (_customerSuppress.has(key)) _customerSuppress.delete(key); else _customerSuppress.add(key);
-  renderCustomers(); renderOpenCall();
+  renderCustomers(); refreshOpenCall();
   await _persistCustomerSuppression();
 }
 function setCustomerBookFilter(v) { _customerBookFilter = v || ''; renderCustomers(); }
@@ -138,7 +144,7 @@ async function addManualSubscriber() {
   if (emailEl) emailEl.value = '';
   if (nameEl) nameEl.value = '';
   await _persistMailingList();
-  renderMailingList(); renderCustomers(); renderOpenCall();
+  renderMailingList(); renderCustomers(); refreshOpenCall();
   showToast(isNew ? '✓ Added to mailing list' : 'Already on the list — name updated');
 }
 
@@ -148,7 +154,7 @@ async function addBuyerToMailingList(encEmail) {
   const rec = buildCustomerList().find(r => _custEmailKey(r.email) === _custEmailKey(email));
   const isNew = _mailingUpsert(email, rec?.name || '', 'Buyer');
   if (isNew) await _persistMailingList();
-  renderMailingList(); renderCustomers(); renderOpenCall();
+  renderMailingList(); renderCustomers(); refreshOpenCall();
   showToast(isNew ? '✓ Added to mailing list' : 'Already on your list');
 }
 
@@ -160,7 +166,7 @@ async function removeFromMailingList(encEmail) {
   if (!MAILING_LIST.removed) MAILING_LIST.removed = {};
   MAILING_LIST.removed[key] = today();
   await _persistMailingList();
-  renderMailingList(); renderCustomers(); renderOpenCall();
+  renderMailingList(); renderCustomers(); refreshOpenCall();
 }
 
 // Merge every non-suppressed discovered buyer into the list. Returns count added.
@@ -177,7 +183,7 @@ function _mailingMergeBuyers(list, { respectRemoved = false } = {}) {
 async function addAllBuyersToMailingList() {
   const added = _mailingMergeBuyers();
   if (added) await _persistMailingList();
-  renderMailingList(); renderCustomers(); renderOpenCall();
+  renderMailingList(); renderCustomers(); refreshOpenCall();
   showToast(added ? `✓ Added ${added} buyer${added === 1 ? '' : 's'} to your mailing list` : 'All buyers are already on your list');
 }
 
@@ -203,7 +209,7 @@ async function toggleMailingAutoAdd(cb) {
   let added = 0;
   if (MAILING_LIST.autoAdd) added = _mailingMergeBuyers(null, { respectRemoved: true });
   await _persistMailingList();
-  renderMailingList(); renderCustomers(); renderOpenCall();
+  renderMailingList(); renderCustomers(); refreshOpenCall();
   showToast(MAILING_LIST.autoAdd
     ? `Auto-add on — new buyers join automatically${added ? ` (added ${added} now)` : ''}`
     : 'Auto-add off');

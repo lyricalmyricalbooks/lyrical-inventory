@@ -35,6 +35,7 @@ import {
 } from './customers.js';
 import { confirmDialog } from '../lib/modal.js';
 import { escapeHtml } from '../lib/html.js';
+import { parseMarkdownToHtml } from '../lib/markdown.js';
 import { legacyCopy } from '../lib/clipboard.js';
 import { toCsv } from '../lib/csv.js';
 import { downloadBlob, downloadCsv } from '../lib/download.js';
@@ -3779,37 +3780,6 @@ function exportOpenCallCSV() {
 
 // Project Actions
 
-function parseMarkdownToHtml(text) {
-  let html = escapeHtml(text);
-
-  // Restore safe HTML tags that might have been escaped
-  // 1. Restore <mark style="..."> and </mark>
-  html = html.replace(/&lt;mark style=&quot;(.*?)&quot;&gt;/gi, '<mark style="$1">');
-  html = html.replace(/&lt;mark&gt;/gi, '<mark>');
-  html = html.replace(/&lt;\/mark&gt;/gi, '</mark>');
-
-  // 2. Restore <span style="..."> and </span>
-  html = html.replace(/&lt;span style=&quot;(.*?)&quot;&gt;/gi, '<span style="$1">');
-  html = html.replace(/&lt;span&gt;/gi, '<span>');
-  html = html.replace(/&lt;\/span&gt;/gi, '</span>');
-
-  // 3. Restore other basic tags if they typed them
-  html = html.replace(/&lt;strong&gt;/gi, '<strong>').replace(/&lt;\/strong&gt;/gi, '</strong>');
-  html = html.replace(/&lt;em&gt;/gi, '<em>').replace(/&lt;\/em&gt;/gi, '</em>');
-  html = html.replace(/&lt;br&gt;/gi, '<br>');
-
-  // bold **text** or __text__
-  html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-  html = html.replace(/__(.*?)__/g, '<strong>$1</strong>');
-  // italic *text* or _text_
-  html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
-  html = html.replace(/_(.*?)_/g, '<em>$1</em>');
-  // links [label](url)
-  html = html.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" style="color:var(--gold2);text-decoration:underline;">$1</a>');
-  // line breaks
-  html = html.replace(/\n/g, '<br>');
-  return html;
-}
 
 function insertFormattingTag(tag) {
   const editor = $('oc-tmpl-body');
@@ -4040,7 +4010,6 @@ export {
   ocUpdateBulkPreview,
   ocSaveTemplates,
   exportOpenCallCSV,
-  parseMarkdownToHtml,
   insertFormattingTag,
   serializeEditorHtml,
   deserializeHtmlToEditor,

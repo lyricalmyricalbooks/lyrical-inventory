@@ -21,7 +21,11 @@ const MAIN_IMPORT_BUDGET = {
   // BOOKS, BOOK_LIST), the Stripe reconciliation fetch and key, the applied-ids
   // cache, the audience summary card and the POS currency symbol; the rest is
   // the usual $ / showToast / today / sheetsUrl.
-  'customers.js': 13,
+  // 13 -> 14 when Open Call started loading on demand: the repaint after a
+  // mailing-list change goes through main.js's openCallScreen loader instead of
+  // a static import of opencall.js, which would have pulled the whole screen
+  // back into the first download.
+  'customers.js': 14,
   // 23 -> 24 for commitRecoveredWebsiteOrder: the reconciliation worklist can
   // now rebuild a website order the Gmail scan missed, and writing one to the
   // ledger touches the applied-ids cache, the scan memory and the Sheets sync —
@@ -342,7 +346,17 @@ describe('feature modules are the only home of what they own', () => {
         expect(duplicated).toEqual([]);
       });
 
+      // A screen loaded on demand has no static import in main.js on purpose —
+      // one would pull it back into the first download. Its wiring is checked
+      // in tests/lazy-screens.test.js instead.
+      const lazy = new RegExp(`lazyFeature\\(\\(\\) => import\\('\\./features/${file.replace('.', '\\.')}'\\)`).test(mainJs);
+
       it('has everything main.js still uses imported back', () => {
+        if (lazy) {
+          // ...and must keep it that way.
+          expect(mainJs).not.toMatch(new RegExp(`from '\\./features/${file.replace('.', '\\.')}'`));
+          return;
+        }
         // exposeLegacyInlineHandlers lists handlers as shorthand properties, so
         // a name main.js references but never imported is a build error. This
         // guards the inverse: that the import block is real and non-empty.

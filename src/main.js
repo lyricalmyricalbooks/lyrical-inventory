@@ -664,134 +664,21 @@ import {
   applyLedgerAddressCorrections,
   ordersWithLabels,
 } from './features/shipping.js';
-import {
-  ocList,
-  ocBlockedForAuthor_,
-  ocEnsureQueues_,
-  ocQueueNextStep_,
-  ocStamp_,
-  ocUiOpen_,
-  ocToggleSection,
-  ocTogglePhotoPick,
-  ocSetSort,
-  ocSetTmplTab,
-  ocUpdateTmplPreview,
-  ocThreadForStage,
-  openOcBulkModal,
-  ocBulkModalEscHandler,
-  closeOcBulkModal,
-  renderOcBulkModalContent,
-  ocBulkSelectAll,
-  ocBulkUpdateCount,
-  sendOcBulkTestEmail,
-  onOcBulkStageChange,
-  sendOcBulkEmails,
-  cancelOcBulkSend,
-  ocInitials,
-  openOcBulkRemoveModal,
-  closeOcBulkRemoveModal,
-  renderOcBulkRemoveModalContent,
-  ocBulkRemoveSelectAll,
-  ocBulkRemoveUpdateCount,
-  ocBulkRemoveFilter,
-  executeOcBulkRemove,
-  renderOpenCall,
-  ocPlaceMenu,
-  ocMarkTmplDirty,
-  ocSelectArtist,
-  ocBackToRow,
-  ocRefreshLatestEmails,
-  ocReplyDraft,
-  ocSendQuickReply,
-  ocToggleSelect,
-  ocSelectAllVisible,
-  ocClearSelection,
-  ocClearFilters,
-  ocEmailSelected,
-  ocRemoveSelected,
-  ocToggleAddPanel,
-  ocComposeNudge,
-  ocToggleResend,
-  ocSaveResendConfig,
-  ocSaveSenderConfig,
-  ocFetchMailSenderInfo,
-  _ocScheduleCache,
-  _ocScheduleCacheSet,
-  _ocScheduleRequest,
-  ocSnapshotContributors_,
-  ocPushSnapshot_,
-  ocScheduleSnapshotPush_,
-  ocSetServerSchedule,
-  ocRefreshScheduleStatus_,
-  ocLoadSenderAliases,
-  handleOcPhotoKeydown,
-  addOcPhotoChip,
-  removeOcPhotoChip,
-  renderOcPhotoChips,
-  ocAddPhotoToContributor,
-  ocRemovePhotoFromContributor,
-  ocAdd,
-  ocToggleImport,
-  ocRunImport,
-  ocToggle,
-  ocDelete,
-  ocReadProposalCreditEdit_,
-  ocFlashCard_,
-  ocApproveProposal,
-  ocDismissProposal,
-  ocApproveAllProposals,
-  ocOutboxRemove,
-  ocOutboxSendAll,
-  ocCopyEmails,
-  ocSearch,
-  ocFilterByStage,
-  checkOcEmailTypo,
-  applyOcEmailCorrection,
-  loadOpenCalls,
-  _persistOpenCalls,
-  migrateLegacyOpenCalls,
-  ocCreateProject,
-  ocRenameProject,
-  ocDeleteProject,
-  ocSwitchProject,
-  ocToggleColorPalette,
-  ocApplyColor,
-  updateOpenCallBadges,
-  ocApplyParsedImport_,
-  handleOcCsvFile,
-  triggerOcCsvUpload,
-  handleOcCsvUpload,
-  handleOcCsvDragOver,
-  handleOcCsvDragLeave,
-  handleOcCsvDrop,
-  ocComposeStageEmail,
-  openOcEmailPreviewModal,
-  closeOcEmailPreviewModal,
-  ocPreviewModalSend,
-  ocPreviewModalEditInWizard,
-  ocScanReplies,
-  openOcImportGmailModal,
-  closeOcImportGmailModal,
-  renderOcImportGmailModal,
-  ocImportGmailSearch,
-  ocImportGmailSelectAll,
-  ocImportGmailConfirm,
-  ocScanRepliesSingle,
-  ocToggleInlineThread,
-  openOcEditModal,
-  closeOcEditModal,
-  renderOcEditModalContent,
-  ocClearUndeliverable,
-  saveOcContributor,
-  downloadOcAttachment,
-  ocUpdateBulkPreview,
-  ocSaveTemplates,
-  exportOpenCallCSV,
-  parseMarkdownToHtml,
-  insertFormattingTag,
-  serializeEditorHtml,
-  deserializeHtmlToEditor,
-} from './features/opencall.js';
+import { lazyFeature } from './lib/lazy-feature.js';
+import { OPEN_CALL_EXPORTS } from './lib/opencall-handlers.js';
+import { parseMarkdownToHtml } from './lib/markdown.js';
+
+// Open Call is a publisher-only screen and a sixth of the app's code, so it is
+// its own file, fetched after the first paint rather than inside the first
+// download. Inline handlers reach it through window stubs until it arrives
+// (registered with the other handlers below); main.js and customers.js call it
+// through openCallScreen.call / .get.
+export const openCallScreen = lazyFeature(() => import('./features/opencall.js'), OPEN_CALL_EXPORTS, {
+  onError: (e) => {
+    console.warn('Open Call failed to load', e);
+    showToast('⚠ Open Call couldn’t load. Check your connection and try again, or reload the app.', 'err', 7000);
+  },
+});
 import {
   MAILING_LIST,
   _customerSuppress,
@@ -4586,7 +4473,7 @@ async function loadAllBooks({ settingsLoaded } = {}) {
   ]);
   // Open-call contributors older builds kept on the book itself move to their
   // own project, from the books just loaded (no extra reads).
-  if (isPublisherSession()) await migrateLegacyOpenCalls(states, saveState).catch(e => console.warn('Open call migration failed', e));
+  if (isPublisherSession()) await openCallScreen.get().then(m => m.migrateLegacyOpenCalls(states, saveState)).catch(e => console.warn('Open call migration failed', e));
   // Catch the sheet up on expenses and artist payments — the first time after
   // this update that is every one of them; afterwards only what changed.
   scheduleMoneyOutSheetSyncAll();
@@ -5763,7 +5650,7 @@ export function switchTab(name) {
   // via renderAll()'s unconditional sweep. Now that the sweep is tab-aware,
   // entering the tab has to render it.
   if (name === 'expenses') { renderExpenses(); renderArtistReimburseBanner(); updateExpenseForm(); }
-  if (name === 'opencall') renderOpenCall();
+  if (name === 'opencall') openCallScreen.call('renderOpenCall');
   if (name === 'reconcile') renderReconcile();
   if (name === 'customers') renderCustomers();
   if (name === 'taxcenter') { renderTaxCenter(); refreshTaxCentreRates(); }
@@ -15735,7 +15622,7 @@ async function boot(forcedBook) {
   // isAuthor(): the publisher previewing "Author view" must still load them, or
   // a later save from the Customers tab would write back an empty list.
   if (isPublisherSession()) {
-    bootLoads.push(loadCustomerSuppression(), loadMailingList(), loadCampaigns(), loadOpenCalls());
+    bootLoads.push(loadCustomerSuppression(), loadMailingList(), loadCampaigns(), openCallScreen.call('loadOpenCalls'));
   }
   // The books start loading alongside these settings rather than after them
   // (initFn, run now): nothing in a book's read needs them, and waiting cost a
@@ -15747,7 +15634,7 @@ async function boot(forcedBook) {
   // loadOpenCalls() counts its nav badge as soon as it lands, which can be
   // before the suppression list has — recount now that both are in, or
   // suppressed contributors show as waiting on you until the next edit.
-  if (isPublisherSession()) updateOpenCallBadges();
+  if (isPublisherSession()) openCallScreen.call('updateOpenCallBadges');
   renderCatalogList();
   renderProfitSettings();
 
@@ -18568,6 +18455,7 @@ async function generateBookStripeLink() {
 }
 
 // Global exposure for HTML handlers (cleaned up)
+Object.assign(window, openCallScreen.stubs);
 Object.assign(window, {
   confirmDialog, promptDialog, notify,
   renderCustomers, filterCustomers, toggleCustFold, customerPullStripe, copyCustomerEmails, exportCustomersCSV,
@@ -18586,17 +18474,6 @@ Object.assign(window, {
   logout, switchTab, filterHelp, setHelpAudience, toggleAllHelp, toggleBookDropdown, toggleHeaderMenu, closeHeaderMenus, toggleSideAccount, switchBook, forceSync, recalcOnHand, dismissStockDrift,
   showMoreHist, showAllHist,
   restateBookCurrency, onCurrencyModeChange, onCurrencyRateModeChange, refreshCurrencyPreview,
-  renderOpenCall, ocAdd, ocToggle, ocDelete, ocCopyEmails, ocToggleImport, ocRunImport, checkOcEmailTypo, applyOcEmailCorrection,
-  ocCreateProject, ocRenameProject, ocDeleteProject, ocSwitchProject, ocComposeStageEmail, ocSearch, ocFilterByStage, ocScanReplies, ocScanRepliesSingle, ocToggleInlineThread, ocSaveTemplates, exportOpenCallCSV, ocSetSort, ocSetTmplTab, ocUpdateTmplPreview, openOcBulkModal, closeOcBulkModal, onOcBulkStageChange, sendOcBulkEmails, ocBulkSelectAll, ocBulkUpdateCount, sendOcBulkTestEmail, cancelOcBulkSend, ocToggleResend, ocSaveResendConfig, ocSaveSenderConfig, ocLoadSenderAliases, insertFormattingTag, triggerOcCsvUpload, handleOcCsvUpload, handleOcCsvDragOver, handleOcCsvDragLeave, handleOcCsvDrop, handleOcPhotoKeydown, addOcPhotoChip, removeOcPhotoChip, ocAddPhotoToContributor, ocRemovePhotoFromContributor,
-  openOcBulkRemoveModal, closeOcBulkRemoveModal, ocBulkRemoveSelectAll, ocBulkRemoveUpdateCount, ocBulkRemoveFilter, executeOcBulkRemove,
-  openOcEditModal, saveOcContributor, downloadOcAttachment, ocUpdateBulkPreview, ocClearUndeliverable,
-  ocToggleColorPalette, ocApplyColor,
-  openOcEmailPreviewModal, closeOcEmailPreviewModal, ocPreviewModalSend, ocPreviewModalEditInWizard,
-  openOcImportGmailModal, closeOcImportGmailModal, ocImportGmailSearch, ocImportGmailSelectAll, ocImportGmailConfirm,
-  ocApproveProposal, ocDismissProposal, ocApproveAllProposals, ocOutboxRemove, ocOutboxSendAll, ocSetServerSchedule,
-  ocToggleSection, ocTogglePhotoPick,
-  ocPlaceMenu, ocMarkTmplDirty, ocSelectArtist, ocBackToRow, ocRefreshLatestEmails, ocReplyDraft, ocSendQuickReply, ocToggleSelect, ocSelectAllVisible, ocClearSelection,
-  ocClearFilters, ocEmailSelected, ocRemoveSelected, ocToggleAddPanel, ocComposeNudge,
   toggleCurrentBookView,
   fetchOrders, applyOne, applyAll, cancelOrder, restoreOrder, unapplyOne, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,
   onExpenseCurrencyChange, calcExpenseFx,
@@ -19481,22 +19358,8 @@ function exposeLegacyInlineHandlers() {
     updatePublisherActionBanner, renderBookPendingAlert, heldGrossOf, recognizedRevenueOf,
     dismissStockDrift, updateDash, getProfitTiersHtml, getRevenueProgressHtml, getOwedCardDetails,
     getArtistHeldHtml, getPayoutHistoryHtml, renderProfitSharingBreakdown, toggleArtistPayoutForm,
-    saveArtistPayout, editArtistPayout, deleteArtistPayout, renderAll, renderCurrent, scheduleRender, ocList,
-    ocBlockedForAuthor_, ocEnsureQueues_, ocQueueNextStep_, ocStamp_, ocUiOpen_, ocToggleSection,
-    ocTogglePhotoPick, ocSetSort, ocSetTmplTab, ocUpdateTmplPreview, ocThreadForStage,
-    openOcBulkModal, ocBulkModalEscHandler, closeOcBulkModal, renderOcBulkModalContent,
-    ocBulkSelectAll, ocBulkUpdateCount, sendOcBulkTestEmail, onOcBulkStageChange, sendOcBulkEmails,
-    cancelOcBulkSend, ocInitials, openOcBulkRemoveModal, closeOcBulkRemoveModal,
-    renderOcBulkRemoveModalContent, ocBulkRemoveSelectAll, ocBulkRemoveUpdateCount,
-    ocBulkRemoveFilter, executeOcBulkRemove, renderOpenCall, ocToggleResend, ocSaveResendConfig,
-    ocSaveSenderConfig, ocFetchMailSenderInfo, _ocScheduleCache, _ocScheduleCacheSet,
-    _ocScheduleRequest, ocSnapshotContributors_, ocPushSnapshot_, ocScheduleSnapshotPush_,
-    ocSetServerSchedule, ocRefreshScheduleStatus_, ocLoadSenderAliases, handleOcPhotoKeydown,
-    addOcPhotoChip, removeOcPhotoChip, renderOcPhotoChips, ocAddPhotoToContributor,
-    ocRemovePhotoFromContributor, ocAdd, ocToggleImport, ocRunImport, ocToggle, ocDelete,
-    ocReadProposalCreditEdit_, ocFlashCard_, ocApproveProposal, ocDismissProposal,
-    ocApproveAllProposals, ocOutboxRemove, ocOutboxSendAll, ocCopyEmails, ocSearch,
-    ocFilterByStage, recordOrder, showMoreHist, showAllHist, renderConsignHistRow, renderHist,
+    saveArtistPayout, editArtistPayout, deleteArtistPayout, renderAll, renderCurrent, scheduleRender,
+    recordOrder, showMoreHist, showAllHist, renderConsignHistRow, renderHist,
     getScanMemory, saveScanMemory, getAllAppliedIds, renderOrders, applyOne, reapplyOne, applyAll, fetchOrders, cancelOrder, restoreOrder, unapplyOne,
     backfillShipping, fetchLiveRate, fetchHistoricalRate, onManualCurrencyChange, calcFx,
     calcManualFxRate, onExpenseCurrencyChange, calcExpenseFx, _toggleShippingPanel, openLabelModal,
@@ -19666,19 +19529,10 @@ function exposeLegacyInlineHandlers() {
     _custFilterState, _custActiveFilters, _custEmptyHtml, _renderCustFilterBar,
     clearCustomerFilter, clearCustomerFilters,
     setCustomerChannelFilter, setCustomerSpendFilter, setCustomerOrdersFilter,
-    checkMailingEmailTypo, suggestEmailTypo, applyMailingEmailCorrection, checkOcEmailTypo,
-    applyOcEmailCorrection, loadCampaigns, _persistCampaigns, loadOpenCalls, _persistOpenCalls,
-    migrateLegacyOpenCalls, ocCreateProject, ocRenameProject, ocDeleteProject, ocSwitchProject,
-    parseMarkdownToHtml, insertFormattingTag, serializeEditorHtml, deserializeHtmlToEditor,
-    ocToggleColorPalette, ocApplyColor, updateOpenCallBadges, ocApplyParsedImport_,
-    handleOcCsvFile, triggerOcCsvUpload, handleOcCsvUpload, handleOcCsvDragOver,
-    handleOcCsvDragLeave, handleOcCsvDrop, ocComposeStageEmail, openOcEmailPreviewModal,
-    closeOcEmailPreviewModal, ocPreviewModalSend, ocPreviewModalEditInWizard, ocScanReplies,
-    openOcImportGmailModal, closeOcImportGmailModal, renderOcImportGmailModal, ocImportGmailSearch,
-    ocImportGmailSelectAll, ocImportGmailConfirm, ocScanRepliesSingle, ocToggleInlineThread,
-    openOcEditModal, closeOcEditModal, renderOcEditModalContent, ocClearUndeliverable,
-    saveOcContributor, downloadOcAttachment, ocUpdateBulkPreview, ocSaveTemplates,
-    exportOpenCallCSV, switchCustomersSubTab, renderCustomers, renderCustomersAudience,
+    checkMailingEmailTypo, suggestEmailTypo, applyMailingEmailCorrection,
+    loadCampaigns, _persistCampaigns,
+    parseMarkdownToHtml,
+    switchCustomersSubTab, renderCustomers, renderCustomersAudience,
     openCampaignWizard, closeCampaignWizard, updateCampaignModeStatus, onForceMockChange,
     insertTemplateTag, updateCampaignPreview, onCampaignSegmentChange, getSegmentRecipients,
     saveCampaignDraft, editCampaignDraft, deleteCampaign, sendSingleEmailViaBackend,

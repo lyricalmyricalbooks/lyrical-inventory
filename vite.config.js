@@ -120,7 +120,9 @@ export default defineConfig({
         // precaching any file over its 2 MiB default — silently, apart from a
         // build error — which would leave the app unable to open offline. The
         // bundle passed 2 MiB with the website link; 3 MiB keeps it precached
-        // with room to spare. Splitting the bundle is the longer-term fix.
+        // with room to spare. Splitting the bundle is the longer-term fix: Open
+        // Call now loads on demand, and scripts/check-bundle-size.mjs fails CI
+        // when any file passes 85% of this limit.
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         // The Firebase SDK is imported from www.gstatic.com by src/firebase.js,
         // which main.js imports statically — if those modules can't load, no

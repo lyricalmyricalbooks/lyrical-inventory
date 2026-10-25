@@ -61,3 +61,9 @@ jobs:
       # considerably cheaper.
       - name: Build
         run: npm run build
+
+      # A built file over the service worker's precache limit is silently left
+      # out of the offline copy, so the app stops opening without a signal.
+      # Fail while there is still headroom.
+      - name: Bundle size
+        run: npm run check:size
