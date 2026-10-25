@@ -192,6 +192,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-25 | visual | Phone Dashboard — pending reimbursement buttons | Gave the two-line "Ask author to add payment link" button even line spacing, roomier top and bottom, and an even split of its words, instead of two cramped lines with one stranded word | (this PR) |
 | 2026-10-25 | visual | Phone Customers — buyers heading | Set the "All Discovered Buyers" heading in the same capital display lettering as the other card titles instead of plain mixed-case text, so the buyer list has a clear entry point | (this PR) |
 | 2026-10-25 | visual | Phone header — Website button | Gave the Website button beside the book picker the same firm outline, offset shadow, caps lettering and press-in as the picker, instead of a thin see-through outline that matched nothing beside it | (this PR) |
+| 2026-10-25 | behavioural | Phone Order History — search box | Shortened the hint inside the "Find an order" box so it fits on a phone instead of being cut off mid-phrase; the full list of what it searches stays in the line beneath | (this PR) |
 
 ---
 

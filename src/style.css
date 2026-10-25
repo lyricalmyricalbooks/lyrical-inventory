@@ -5453,10 +5453,13 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   color: var(--content-primary);
   font-family:var(--font-mono);
   font-size: var(--text-sm);
+  text-overflow: ellipsis;
   transition: border-color var(--dur-fast) var(--ease-standard);
 }
 .ledger-filter-input::placeholder {
   color: var(--content-muted);
+  /* A hint wider than the field ends in a dot-dot-dot, never mid-phrase. */
+  text-overflow: ellipsis;
 }
 .ledger-filter-input:hover {
   border-color: var(--gold2);
