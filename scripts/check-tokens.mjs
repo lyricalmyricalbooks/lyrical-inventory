@@ -65,6 +65,15 @@ function onlyScrimColours(decl) {
   return colours.length > 0 && colours.every((c) => OVERLAY_RGBA.test(c));
 }
 
+/**
+ * The named screen sizes. CSS can't put a custom property inside a media
+ * query, so the names live here and in the comment atop src/styles/system.css:
+ *   phone           (max-width: 768px)  /  (min-width: 769px) for "not a phone"
+ *   small phone     (max-width: 480px)
+ *   narrow desktop  (max-width: 1100px)
+ */
+export const NAMED_BREAKPOINTS = { max: [480, 768, 1100], min: [769] };
+
 export const RULES = [
   {
     id: 'raw-hex',
@@ -91,6 +100,14 @@ export const RULES = [
     label: 'literal easing curve',
     hint: 'use --ease-standard/--ease-entrance/--ease-exit/--ease-spring',
     match: (line) => (line.match(/cubic-bezier\([^)]*\)/g) || []),
+  },
+  {
+    id: 'off-scale-breakpoint',
+    label: 'unnamed screen-size breakpoint',
+    hint: 'use a named size: (max-width: 768px) phone, (min-width: 769px), (max-width: 480px), (max-width: 1100px)',
+    match: (line) => [...line.matchAll(/\((min|max)-width:\s*(\d+)px\)/g)]
+      .filter((m) => /@media/.test(line) && !NAMED_BREAKPOINTS[m[1]].includes(Number(m[2])))
+      .map((m) => m[0]),
   },
   {
     id: 'raw-shadow',
