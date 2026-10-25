@@ -35,6 +35,7 @@ const list = (v, fallback) => (v ? v.split(',').map(s => s.trim()).filter(Boolea
 
 // Every tab panel the publisher can reach (SHELL_TAB_LABELS in src/main.js).
 // --only=menu also shoots the phone side menu, opened over Today.
+// --click=.store-row taps the first match on each screen before shooting.
 const ALL_TABS = ['today', 'pos', 'manual', 'dashboard', 'all-overview', 'todo', 'intel', 'website',
   'consignment', 'history', 'expenses', 'reconcile', 'customers', 'opencall', 'taxcenter', 'shipping',
   'bigcartel', 'webanalytics', 'sheets', 'backups', 'help', 'qrcodes'];
@@ -232,6 +233,10 @@ for (const theme of themes) {
         window.scrollTo(0, 0);
         if (t === 'menu') window.openMoreSheet?.();
       }, tab);
+      // --click=selector[,selector…] taps those controls first (e.g. open a store row).
+      for (const sel of list(args.click, [])) {
+        await page.evaluate((q) => document.querySelector(`.tab-panel.active ${q}`)?.click(), sel);
+      }
       await shoot(`tab-${tab}`);
     }
     for (const id of modals) {

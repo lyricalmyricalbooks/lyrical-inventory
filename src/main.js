@@ -10,6 +10,7 @@ import './styles/theme-dark.css';
 import './styles/phone.css';
 // The Riso phone redesign sits on top of the phone layer above.
 import './styles/phone-riso.css';
+import { phoneBooksHtml } from './lib/phone-books.js';
 import { foldFooterActions, initPhoneLayouts } from './lib/phone-layout.js';
 import { createPhonePageMemory, initPhoneWorkspace, observeSidebarBadges } from './lib/phone-workspace.js';
 const phonePages = createPhonePageMemory(window);
@@ -5390,8 +5391,42 @@ function renderTodaySoFar() {
   renderFairSyncPill();
 }
 
+// The phone Today's ledger: four figures across every book, each a way in to
+// the screen that explains it. Money is summed per currency, never across.
+function renderTodayLedger() {
+  const el = $('today-ledger');
+  if (!el) return;
+  const books = Object.keys(BOOKS).map((id) => ({ id, currency: getBookCurrencyCode(BOOKS[id]), hist: states[id]?.hist }));
+  const day = salesForDay(books, today());
+  let stock = 0, storesOwing = 0;
+  const owedByCur = new Map();
+  for (const [bid, s] of Object.entries(states)) {
+    if (isTestBook(BOOKS[bid])) continue;
+    stock += s.stock || 0;
+    const cur = BOOKS[bid]?.currency || '';
+    let owed = 0;
+    for (let i = 0; i < (s.stores || []).length; i++) {
+      const due = s.stores[i].amountOwed || 0;
+      if (due > 0) { owed += due; storesOwing += 1; }
+    }
+    if (owed > 0) owedByCur.set(cur, (owedByCur.get(cur) || 0) + owed);
+  }
+  const titles = Object.values(BOOKS).filter((b) => !isTestBook(b)).length;
+  const owed = [...owedByCur].map(([c, v]) => fmtWhole(v, c)).join(' + ');
+  const figs = [
+    { label: 'Sold today', value: String(day.units), sub: day.sales ? `${day.sales} ${day.sales === 1 ? 'sale' : 'sales'}` : 'No sales yet', tab: 'history' },
+    { label: 'Taken', value: day.sales ? fairTotalsText(day.totals) : '—', sub: 'Cash and card', tab: 'history' },
+    { label: 'On hand', value: String(stock), sub: `Across ${titles} ${titles === 1 ? 'title' : 'titles'}`, tab: 'dashboard' },
+    { label: 'Stores owe', value: owed || '—', sub: storesOwing ? `From ${storesOwing} ${storesOwing === 1 ? 'store' : 'stores'}` : 'Nothing owed', tab: 'consignment', tone: owed ? 'owed' : '' },
+  ];
+  el.innerHTML = figs.map((f) => `<button type="button" class="ledger-fig${f.tone ? ` is-${f.tone}` : ''}" onclick="switchTab('${f.tab}')">
+    <span class="ledger-label">${f.label}</span><span class="ledger-value tnum">${escapeHtml(f.value)}</span><span class="ledger-sub">${escapeHtml(f.sub)}</span></button>`).join('');
+}
+
 export function renderTodayHub() {
   renderTodaySoFar();
+  renderTodayLedger();
+  renderBookChips($('today-books'));
   const date = $('today-date');
   if (date) date.textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
   if (activeBook !== 'all') renderOrders();
@@ -5984,8 +6019,34 @@ function updateAllOverview() {
   renderOverviewRail();
 }
 
+// The phone's All Books: one row per title (lib/phone-books.js). The chip
+// choice lasts for the visit; the desktop strips below are untouched.
+let phoneBooksFilter = 'all';
+function renderPhoneBooks(allBooksVisible) {
+  const el = $('all-books-phone');
+  if (!el) return;
+  el.innerHTML = phoneBooksHtml(allBooksVisible.map((book) => {
+    const s = states[book.id] || defaultState(book);
+    let atStores = 0;
+    for (let i = 0; i < s.stores.length; i++) atStores += s.stores[i].outstanding || 0;
+    const cost = book.productionCost || 0;
+    const brokeEven = cost > 0 && calculateBreakEven({ cost, recognizedRev: recognizedRevenueOf(s), listPrice: book.listPrice, sold: s.sold, stock: s.stock, currency: book.currency }).broken;
+    return {
+      id: book.id, title: book.title, author: book.author, accent: book.accent,
+      priceText: book.listPrice ? fmtWhole(book.listPrice, book.currency) : '',
+      printed: book.maxPrint, onHand: s.stock || 0, threshold: book.threshold || 0, brokeEven, atStores,
+    };
+  }), phoneBooksFilter);
+}
+export function setPhoneBooksFilter(key) {
+  phoneBooksFilter = key;
+  renderPhoneBooks(BOOK_LIST.filter(b => !isTestBook(b)));
+}
+window.setPhoneBooksFilter = setPhoneBooksFilter;
+
 // Book strips on the combined "All Books" overview.
 function renderAllBooksStrips(allBooksVisible) {
+  renderPhoneBooks(allBooksVisible);
   const list = $('all-books-list');
   // Stamped so showCatalogueSkeleton() can never paint over real content if a
   // later boot step calls it again.
@@ -11265,12 +11326,70 @@ function renderStores() {
     const sentCell = `<div class="sk-v${rowOff('sent')}">${st.sent ?? 0}</div>`;
     const soldCell = `<div class="sk-v${rowOff('sold')}">${st.sold ?? 0}</div>`;
 
-    return `<div class="store-card"><div class="store-head"><div><div class="store-name">${escapeHtml(st.name)}</div><div class="store-meta">${[[st.city, 'city'], [st.contact, 'contact'], [st.email, 'email']].filter(([v]) => v).map(([v, k]) => `<span class="store-meta-${k}">${escapeHtml(v)}</span>`).join('')}<span class="store-meta-rate">${st.rate}% commission</span></div></div><div class="store-head-flags">${sp}${unbalancedBadge}</div></div><div class="store-kpis"><div class="sk"><div class="sk-l">Sent</div>${sentCell}</div><div class="sk"><div class="sk-l">Sold</div>${soldCell}</div><div class="sk"><div class="sk-l">On shelf</div>${outstandingCell}</div><div class="sk"><div class="sk-l">Owed</div><div class="sk-v ${st.amountOwed > 0 ? 'warn' : ''}">${st.amountOwed > 0 ? fmt(st.amountOwed, cur) : '—'}</div></div></div><div class="store-actions"><button class="btn sm gold" onclick="openSend(${escapeHtml(JSON.stringify(st.id))})">Send books</button><button class="btn sm ink" onclick="openSale(${escapeHtml(JSON.stringify(st.id))})" ${!st.outstanding ? 'disabled' : ''}>Record sale</button><button class="btn sm" onclick="openRet(${escapeHtml(JSON.stringify(st.id))})" ${!st.outstanding ? 'disabled' : ''}>Return</button><button class="btn sm" onclick="showStoreLedger(${escapeHtml(JSON.stringify(st.id))})" ${ledgerRows ? '' : 'disabled'} title="${ledgerRows ? `Show this store's ${ledgerRows} ledger entr${ledgerRows === 1 ? 'y' : 'ies'} below` : 'Nothing in the ledger for this store yet'}">📒 Ledger</button><button class="btn sm" onclick="openEditStore(${escapeHtml(JSON.stringify(st.id))})">Edit</button><button class="btn sm danger-btn" onclick="removeStore(${escapeHtml(JSON.stringify(st.id))})">Remove</button></div>${unbalancedPopover}</div>`;
+    return `<div class="store-card" data-owes="${st.amountOwed > 0 ? 1 : 0}" data-holds="${st.outstanding > 0 ? 1 : 0}">${storePhoneRowHtml(st, cur, isUnbalanced)}<div class="store-head"><div><div class="store-name">${escapeHtml(st.name)}</div><div class="store-meta">${[[st.city, 'city'], [st.contact, 'contact'], [st.email, 'email']].filter(([v]) => v).map(([v, k]) => `<span class="store-meta-${k}">${escapeHtml(v)}</span>`).join('')}<span class="store-meta-rate">${st.rate}% commission</span></div></div><div class="store-head-flags">${sp}${unbalancedBadge}</div></div><div class="store-kpis"><div class="sk"><div class="sk-l">Sent</div>${sentCell}</div><div class="sk"><div class="sk-l">Sold</div>${soldCell}</div><div class="sk"><div class="sk-l">On shelf</div>${outstandingCell}</div><div class="sk"><div class="sk-l">Owed</div><div class="sk-v ${st.amountOwed > 0 ? 'warn' : ''}">${st.amountOwed > 0 ? fmt(st.amountOwed, cur) : '—'}</div></div></div><div class="store-actions"><button class="btn sm gold" onclick="openSend(${escapeHtml(JSON.stringify(st.id))})">Send books</button><button class="btn sm ink" onclick="openSale(${escapeHtml(JSON.stringify(st.id))})" ${!st.outstanding ? 'disabled' : ''}>Record sale</button><button class="btn sm" onclick="openRet(${escapeHtml(JSON.stringify(st.id))})" ${!st.outstanding ? 'disabled' : ''}>Return</button><button class="btn sm" onclick="showStoreLedger(${escapeHtml(JSON.stringify(st.id))})" ${ledgerRows ? '' : 'disabled'} title="${ledgerRows ? `Show this store's ${ledgerRows} ledger entr${ledgerRows === 1 ? 'y' : 'ies'} below` : 'Nothing in the ledger for this store yet'}">📒 Ledger</button><button class="btn sm" onclick="openEditStore(${escapeHtml(JSON.stringify(st.id))})">Edit</button><button class="btn sm danger-btn" onclick="removeStore(${escapeHtml(JSON.stringify(st.id))})">Remove</button></div>${unbalancedPopover}</div>`;
   }).join('');
   // Phone: Return, Ledger, Edit and Remove fold behind "More actions". A fresh
   // innerHTML means fresh buttons, so every card is folded again here.
   el.querySelectorAll('.store-actions').forEach(foldFooterActions);
+  renderStoresPhoneHead(s.stores, cur);
 }
+
+// ── Phone Stores: a work queue ─────────────────────────────────────────
+// Each store card leads with one summary row (initials, city, copies on the
+// shelf, what it owes and one status word). On a phone the rest of the card
+// stays folded until that row is tapped; wider screens never show the row.
+function storeInitials(name) {
+  const words = String(name || '').replace(/^the\s+/i, '').split(/\s+/).filter(Boolean);
+  return ((words[0]?.[0] || '') + (words[1]?.[0] || words[0]?.[1] || '')).toUpperCase() || '··';
+}
+function storePhoneStatus(st, unbalanced) {
+  if (unbalanced) return { text: "⚠ Doesn't match", tone: 'red' };
+  if (st.amountOwed > 0) return { text: '! Payment due', tone: 'amber' };
+  if (st.outstanding === 0 && st.sent > 0) return { text: '✓ Settled', tone: 'plain' };
+  if (st.outstanding > 0) return { text: '● On shelf', tone: 'green' };
+  return { text: '○ No books yet', tone: 'plain' };
+}
+function storePhoneRowHtml(st, cur, unbalanced) {
+  const status = storePhoneStatus(st, unbalanced);
+  const meta = [st.city, `${st.outstanding ?? 0} on shelf`].filter(Boolean).map(escapeHtml).join(' · ');
+  return `<button type="button" class="store-row" aria-expanded="false" onclick="toggleStoreRow(this)">
+    <span class="store-row-tag is-${status.tone}" aria-hidden="true">${escapeHtml(storeInitials(st.name))}</span>
+    <span class="store-row-txt"><span class="store-row-name">${escapeHtml(st.name)}</span><span class="store-row-meta">${meta}</span></span>
+    <span class="store-row-end"><span class="store-row-owed tnum">${st.amountOwed > 0 ? escapeHtml(fmt(st.amountOwed, cur)) : '—'}</span><span class="phone-pill is-${status.tone}">${escapeHtml(status.text)}</span></span>
+  </button>`;
+}
+export function toggleStoreRow(button) {
+  const card = button.closest('.store-card');
+  const open = card.classList.toggle('is-open');
+  button.setAttribute('aria-expanded', String(open));
+}
+
+let storesPhoneFilter = 'all';
+function renderStoresPhoneHead(stores, cur) {
+  const head = $('stores-phone-head');
+  const list = $('stores-list');
+  if (!head || !list) return;
+  let owed = 0, shelf = 0, owing = 0, holding = 0;
+  for (const st of stores) {
+    owed += st.amountOwed || 0; shelf += st.outstanding || 0;
+    if (st.amountOwed > 0) owing += 1;
+    if (st.outstanding > 0) holding += 1;
+  }
+  const chip = (key, label, n) => `<button type="button" class="book-chip${storesPhoneFilter === key ? ' is-on' : ''}" aria-pressed="${storesPhoneFilter === key}" onclick="setStoresPhoneFilter('${key}')">${label} <span class="tnum">${n}</span></button>`;
+  head.innerHTML = stores.length ? `<div class="phone-ledger is-three">
+      <div class="ledger-fig${owed > 0 ? ' is-owed' : ''}"><span class="ledger-label">Owed</span><span class="ledger-value tnum">${owed > 0 ? escapeHtml(fmtWhole(owed, cur)) : '—'}</span></div>
+      <div class="ledger-fig"><span class="ledger-label">On shelves</span><span class="ledger-value tnum">${shelf}</span></div>
+      <div class="ledger-fig"><span class="ledger-label">Stores</span><span class="ledger-value tnum">${stores.length}</span></div>
+    </div>
+    <div class="phone-chips" role="group" aria-label="Show stores">${chip('owe', 'Owe you', owing)}${chip('holds', 'Holding books', holding)}${chip('all', 'All', stores.length)}</div>` : '';
+  list.dataset.phoneFilter = storesPhoneFilter;
+}
+export function setStoresPhoneFilter(key) {
+  storesPhoneFilter = ['owe', 'holds'].includes(key) ? key : 'all';
+  const s = getState();
+  renderStoresPhoneHead(s.stores, getBook().currency);
+}
+Object.assign(window, { toggleStoreRow, setStoresPhoneFilter });
 async function removeStore(id) {
   if (!(await confirmDialog('Remove this store?', { okLabel: 'Remove', danger: true }))) return;
   getState().stores = getState().stores.filter(s => s.id !== id);

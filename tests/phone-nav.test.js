@@ -99,9 +99,10 @@ function todayApi({ activeBook, renderOrders = () => {}, books = {}, states = {}
   expect(start).toBeGreaterThan(-1);
   const src = mainJs.slice(start, end).replace('export function', 'function') + '; return { renderTodayHub, renderTodaySoFar };';
   const sync = [];
-  const api = new Function('$', 'activeBook', 'renderOrders', 'BOOKS', 'states', 'getBookCurrencyCode', 'salesForDay', 'today', 'fairTotalsText', 'renderFairSyncPill', 'escapeHtml', src)(
+  const api = new Function('$', 'activeBook', 'renderOrders', 'BOOKS', 'states', 'getBookCurrencyCode', 'salesForDay', 'today', 'fairTotalsText', 'renderFairSyncPill', 'escapeHtml', 'isTestBook', 'fmtWhole', 'renderBookChips', src)(
     (id) => document.getElementById(id), activeBook, renderOrders, books, states, () => 'CAD',
-    salesForDayFn, () => '2026-10-08', (t) => Object.entries(t).map(([c, a]) => `${c} ${a.toFixed(2)}`).join(' + '), () => sync.push(1), (v) => String(v).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`));
+    salesForDayFn, () => '2026-10-08', (t) => Object.entries(t).map(([c, a]) => `${c} ${a.toFixed(2)}`).join(' + '), () => sync.push(1), (v) => String(v).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`),
+    (b) => !!b?.isTest, (v, c) => `${c}${Math.round(v)}`, () => {});
   return { ...api, sync };
 }
 
@@ -235,4 +236,20 @@ test('the phone top bar mirrors the sync word and the side menu holds the accoun
   expect(foot.querySelector('[onclick*="openReviewInbox"]')).not.toBeNull();
   expect(foot.querySelector('[onclick="toggleTheme()"]')).not.toBeNull();
   expect(foot.querySelector('[onclick="logout()"]')).not.toBeNull();
+});
+
+test('Today ledger: sold, taken, on hand and what stores owe, money kept per currency', () => {
+  const books = { a: { currency: 'CA$' }, b: { currency: '€' }, t: { currency: 'CA$', isTest: true } };
+  const states = {
+    a: { stock: 40, hist: [], stores: [{ amountOwed: 20 }, { amountOwed: 0 }] },
+    b: { stock: 5, hist: [], stores: [{ amountOwed: 12 }] },
+    t: { stock: 999, hist: [], stores: [{ amountOwed: 500 }] },
+  };
+  todayApi({ activeBook: 'all', books, states }).renderTodayHub();
+  const figs = [...document.querySelectorAll('#today-ledger .ledger-fig')];
+  expect(figs.map((f) => f.querySelector('.ledger-label').textContent)).toEqual(['Sold today', 'Taken', 'On hand', 'Stores owe']);
+  expect(figs[2].querySelector('.ledger-value').textContent).toBe('45');
+  expect(figs[3].querySelector('.ledger-value').textContent).toBe('CA$20 + €12');
+  expect(figs[3].querySelector('.ledger-sub').textContent).toBe('From 2 stores');
+  expect(figs[3].getAttribute('onclick')).toBe("switchTab('consignment')");
 });

@@ -176,3 +176,297 @@
     .pub-shell .more-sheet[open] { animation: none; }
   }
 }
+
+/* ── Shared pieces: masthead, ledger figures, flat sheet ──────────────── */
+.today-books, .today-ledger, .today-next-head, .today-title-phone { display: none; }
+@media (max-width: 768px) {
+  /* Kicker: a flare square and a red caps line above an Anton masthead. */
+  .pub-shell .phone-kicker {
+    display: flex; align-items: center; gap: var(--space-2);
+    font: 800 var(--text-2xs) var(--font-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--gold-text);
+  }
+  .pub-shell .phone-kicker::before { content: ""; width: 8px; height: 8px; flex: none; background: var(--gold); }
+  .pub-shell .phone-masthead { margin: 6px 0 0; font: 400 52px / .95 var(--font-display); letter-spacing: 0; text-transform: uppercase; color: var(--content-primary); }
+
+  /* Figures as a ledger: no boxes, a thick ink rule above each. */
+  .pub-shell .phone-ledger { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+  .pub-shell .ledger-fig {
+    display: grid; align-content: start; gap: 0; min-width: 0; padding: var(--space-2) 0 0; margin: 0;
+    border: 0; border-top: var(--stroke) solid var(--rule-ink); border-radius: 0; background: none; box-shadow: none;
+    color: var(--content-primary); text-align: left; font: inherit; cursor: pointer;
+  }
+  .pub-shell .ledger-fig:focus-visible { outline: 2px solid var(--gold-text); outline-offset: 2px; }
+  .pub-shell .ledger-fig:active { background: var(--surface-inset); }
+  .pub-shell .ledger-label { font: 700 var(--text-3xs) var(--font-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--content-muted); }
+  .pub-shell .ledger-value {
+    margin-top: var(--space-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font: 500 28px / 1.15 var(--font-mono); letter-spacing: -.02em;
+  }
+  .pub-shell .ledger-sub { font: 400 var(--text-xs) var(--font-mono); color: var(--content-muted); }
+  .pub-shell .ledger-fig.is-owed .ledger-value { color: var(--gold-text); }
+  .pub-shell .ledger-fig.is-low .ledger-value { color: var(--amber); }
+
+  /* ── Today ─────────────────────────────────────────────────────────── */
+  .pub-shell #tab-today { padding-inline: var(--phone-gutter); }
+  .pub-shell #tab-today .today-head { flex-direction: column-reverse; align-items: stretch; gap: 6px; margin: 0; }
+  .pub-shell #tab-today .phone-eyebrow, .pub-shell #tab-today .today-title-wide { display: none; }
+  .pub-shell #tab-today .today-title-phone { display: inline; }
+  .pub-shell #tab-today .today-title { margin: 0; font: 400 52px / .95 var(--font-display); letter-spacing: 0; text-transform: uppercase; color: var(--content-primary); }
+  .pub-shell #tab-today .today-date {
+    display: flex; align-items: center; gap: var(--space-2);
+    font: 800 var(--text-2xs) var(--font-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--gold-text);
+  }
+  .pub-shell #tab-today .today-date::before { content: ""; width: 8px; height: 8px; flex: none; background: var(--gold); }
+  .pub-shell #tab-today .today-books { display: flex; gap: 6px; margin: 14px calc(-1 * var(--phone-gutter)) 0; padding: 0 var(--phone-gutter) var(--space-1); overflow-x: auto; scrollbar-width: none; }
+  .pub-shell #tab-today .today-ledger { display: grid; margin-top: 18px; }
+  /* The ledger carries the day now; the old slip keeps only its upload line. */
+  .pub-shell #tab-today .today-sofar { display: flex; margin: var(--space-3) 0 0; border: 0; background: none; box-shadow: none; }
+  .pub-shell #tab-today .today-sold { display: none; }
+  .pub-shell #tab-today .today-sync { padding: 0; border: 0; }
+
+  /* Next up: one outlined sheet of rows. Sell is the pinned bar's job now. */
+  .pub-shell #tab-today .today-next-head {
+    display: block; position: relative; margin: 22px 0 0; padding: 10px 14px;
+    border: var(--stroke) solid var(--rule-ink); border-bottom: 0; background: var(--surface-card); box-shadow: var(--riso-off);
+    font: 400 var(--text-lg) var(--font-display); letter-spacing: .02em; text-transform: uppercase; color: var(--content-primary);
+  }
+  .pub-shell #tab-today .today-grid {
+    position: relative; display: block; border: var(--stroke) solid var(--rule-ink); background: var(--surface-card); box-shadow: var(--riso-off);
+  }
+  .pub-shell #tab-today .today-grid > .today-card {
+    display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; grid-template-areas: "ic name count" "ic sub count";
+    align-items: center; column-gap: var(--space-3); row-gap: 0; width: 100%; min-height: 56px; padding: var(--space-2) 14px;
+    border: 0; border-radius: 0; border-top: var(--stroke-hair) solid var(--border2); box-shadow: none; background: transparent; color: var(--content-primary); text-align: left;
+  }
+  .pub-shell #tab-today .today-grid > .today-card-ink { display: none; }
+  .pub-shell #tab-today .today-grid > .today-card-ink + .today-card { border-top: 0; }
+  .pub-shell #tab-today .today-grid > .today-card:active { transform: none; background: var(--surface-inset); }
+  .pub-shell #tab-today .today-card .today-card-ic {
+    grid-area: ic; display: grid; place-items: center; width: 26px; height: 26px; margin: 0;
+    border: var(--stroke) solid currentColor; font: 500 10px / 1 var(--font-mono);
+  }
+  .pub-shell #tab-today .today-card .today-card-name { grid-area: name; font: 600 var(--text-md) / 1.25 var(--font-ui); text-transform: none; letter-spacing: 0; }
+  .pub-shell #tab-today .today-card .today-card-sub { grid-area: sub; font: 400 var(--text-sm) var(--font-mono); color: var(--content-muted); opacity: 1; }
+  .pub-shell #tab-today .today-card .today-card-count {
+    grid-area: count; position: static; display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px;
+    border: var(--stroke-hair) solid var(--gold-text); border-radius: var(--r-pill); background: var(--gold-bg); color: var(--gold-text);
+    font: 800 var(--text-2xs) var(--font-ui); letter-spacing: .08em; text-transform: uppercase;
+  }
+  .pub-shell #tab-today .today-card .today-card-count::before { content: "●"; }
+  .pub-shell #tab-today .today-card .today-card-count::after { content: " open"; }
+  .pub-shell #tab-today .today-card .today-card-count[hidden] { display: none; }
+
+  /* Your workspace: the same sheet, quieter. */
+  .pub-shell #tab-today .today-label {
+    margin: 26px 0 var(--space-2); padding: 0; border: 0;
+    font: 700 var(--text-3xs) var(--font-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--content-muted);
+  }
+  .pub-shell #tab-today .today-rows { border: var(--stroke) solid var(--rule-ink); background: var(--surface-card); box-shadow: var(--riso-off); }
+  .pub-shell #tab-today .today-row { min-height: 56px; padding: var(--space-2) 14px; border: 0; border-top: var(--stroke-hair) solid var(--border2); }
+  .pub-shell #tab-today .today-row:first-child { border-top: 0; }
+  .pub-shell #tab-today .today-row-ic { width: 26px; height: 26px; border: var(--stroke) solid currentColor; display: grid; place-items: center; font: 500 10px / 1 var(--font-mono); }
+  .pub-shell #tab-today .today-row-name { font: 600 var(--text-md) / 1.25 var(--font-ui); }
+  .pub-shell #tab-today .today-row-sub { font: 400 var(--text-sm) var(--font-mono); color: var(--content-muted); }
+}
+
+/* ── Sell: the register as one flat list with − / + ─────────────────── */
+.fm-tile-step, .fm-tile-cover { display: none; }
+@media (max-width: 768px) {
+  .pub-shell #tab-pos { padding-inline: var(--phone-gutter); }
+  /* Masthead: a kicker and SELL, with the way to a manual sale beside it. */
+  .pub-shell #tab-pos .phone-sell-head { align-items: flex-end; margin: 0; }
+  .pub-shell #tab-pos .phone-sell-head > div { flex: 1 1 auto; min-width: 0; }
+  .pub-shell #tab-pos .phone-sell-head .phone-eyebrow {
+    display: flex; align-items: center; gap: var(--space-2); margin: 0; white-space: nowrap;
+    font: 800 var(--text-2xs) var(--font-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--gold-text);
+  }
+  .pub-shell #tab-pos .phone-sell-head .phone-eyebrow::before { content: ""; width: 8px; height: 8px; flex: none; background: var(--gold); }
+  .pub-shell #tab-pos .phone-sell-head h1 { margin: 6px 0 0; font: 400 52px / .95 var(--font-display); letter-spacing: 0; text-transform: uppercase; }
+  .pub-shell #tab-pos .phone-sell-head .btn { min-height: 40px; box-shadow: var(--riso-off-sm); }
+
+  /* Register / Fair kit: underline tabs on a thick rule, not a boxed toggle. */
+  .pub-shell #tab-pos .pos-subtab-nav {
+    display: flex; gap: 22px; width: auto; max-width: none; margin: 14px calc(-1 * var(--phone-gutter)) var(--space-4); padding: 0 var(--phone-gutter);
+    border: 0; border-bottom: var(--stroke) solid var(--rule-ink); border-radius: 0; background: none;
+  }
+  .pub-shell #tab-pos .pos-subtab-btn, .pub-shell #tab-pos .pos-subtab-btn.active {
+    flex: none; min-height: 44px; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none;
+    color: var(--content-muted); font: 800 var(--text-xs) var(--font-ui); letter-spacing: var(--tracking-caps); text-transform: uppercase;
+  }
+  .pub-shell #tab-pos .pos-subtab-btn svg { display: none; }
+  .pub-shell #tab-pos .pos-subtab-btn.active { color: var(--content-primary); box-shadow: inset 0 -4px 0 var(--gold); }
+  .pub-shell #tab-pos .pos-subtab-btn:active { transform: none; }
+
+  /* The list: one outlined sheet, a row per book. */
+  .pub-shell #tab-pos .pos-layout[data-mobile-view="books"] .fm-tiles {
+    display: block; border: var(--stroke) solid var(--rule-ink); background: var(--surface-card); box-shadow: var(--riso-off);
+  }
+  .pub-shell #tab-pos .fm-tile {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
+    border-top: var(--stroke-hair) solid var(--border2);
+  }
+  .pub-shell #tab-pos .fm-tile:first-child { border-top: 0; }
+  .pub-shell #tab-pos .fm-tile .fm-tile-add, .pub-shell #tab-pos .fm-tile.is-in-cart .fm-tile-add {
+    display: grid; grid-template-columns: 36px minmax(0, 1fr); grid-template-areas: "cover title" "cover meta";
+    column-gap: var(--space-3); row-gap: 0; align-items: center; justify-items: start;
+    height: auto; min-height: 68px; padding: 10px 0 10px var(--space-3);
+    border: 0; border-radius: 0; box-shadow: none; background: transparent; transform: none;
+  }
+  .pub-shell #tab-pos .fm-tile .fm-tile-add:active { background: var(--surface-inset); }
+  .pub-shell #tab-pos .fm-tile-cover {
+    grid-area: cover; display: block; width: 36px; height: 48px; box-sizing: border-box;
+    border: var(--stroke) solid var(--rule-ink); background: var(--surface-inset); box-shadow: var(--riso-off-sm);
+  }
+  .pub-shell #tab-pos .fm-tile-title { grid-area: title; font: 700 var(--text-md) / 1.25 var(--font-ui); -webkit-line-clamp: 2; line-clamp: 2; }
+  /* Price and copies left share one mono line under the title. */
+  .pub-shell #tab-pos .fm-tile-meta { grid-area: meta; display: flex; flex-wrap: wrap; column-gap: 0; font: 400 var(--text-sm) var(--font-mono); color: var(--content-muted); }
+  .pub-shell #tab-pos .fm-tile-meta .fm-tile-price, .pub-shell #tab-pos .fm-tile-meta .fm-tile-stock { margin: 0; font: inherit; color: inherit; }
+  .pub-shell #tab-pos .fm-tile-stock::before { content: "\00a0·\00a0"; color: var(--content-muted); }
+  .pub-shell #tab-pos .fm-tile.is-low .fm-tile-stock { color: var(--amber); }
+  .pub-shell #tab-pos .fm-tile.is-low .fm-tile-stock::after { content: none; }
+  .pub-shell #tab-pos .fm-tile.is-short .fm-tile-stock { color: var(--red); }
+  .pub-shell #tab-pos .fm-tile.is-out .fm-tile-add { opacity: .55; }
+
+  /* − count + : 44px targets, the count box turns yellow once in the sale. */
+  .pub-shell #tab-pos .fm-tile-step { display: flex; align-items: center; gap: 2px; padding-right: 6px; }
+  .pub-shell #tab-pos .fm-tile .fm-tile-minus, .pub-shell #tab-pos .fm-step-off, .pub-shell #tab-pos .fm-tile-plus {
+    position: static; display: grid; place-items: center; width: 40px; height: 44px; padding: 0;
+    border: 0; border-radius: 0; background: none; box-shadow: none; color: var(--content-primary);
+    font: 800 20px / 1 var(--font-ui); cursor: pointer; touch-action: manipulation;
+  }
+  .pub-shell #tab-pos .fm-step-off { color: var(--content-faint); cursor: default; }
+  .pub-shell #tab-pos .fm-tile .fm-tile-qty {
+    position: static; display: grid; place-items: center; width: 30px; min-width: 0; height: 30px; padding: 0; box-sizing: border-box;
+    border: var(--stroke) solid var(--rule-ink); border-radius: 0; background: var(--surface-card); color: var(--content-primary);
+    font: 500 var(--text-md) var(--font-mono);
+  }
+  .pub-shell #tab-pos .fm-tile.is-in-cart .fm-tile-qty { background: #FFC93C; color: var(--ink); }
+  .pub-shell #tab-pos .fm-tile :is(.fm-tile-minus, .fm-tile-plus):active { background: var(--surface-inset); transform: none; }
+  .pub-shell #tab-pos .fm-tile :is(.fm-tile-minus, .fm-tile-plus):focus-visible { outline: 2px solid var(--gold-text); outline-offset: -2px; }
+
+  /* The total, pinned to the bottom in place of the Sell / Manual entry bar. */
+  .pub-shell:has(#tab-pos.active .pos-layout[data-mobile-view="books"] .fm-bar:not([hidden])) .mnav { display: none; }
+  .pub-shell #tab-pos .pos-layout[data-mobile-view="books"] .fm-bar:not([hidden]) {
+    left: 0; right: 0; bottom: 0; gap: var(--space-3);
+    padding: var(--space-3) max(var(--phone-gutter), env(safe-area-inset-right)) calc(var(--space-3) + env(safe-area-inset-bottom)) max(var(--phone-gutter), env(safe-area-inset-left));
+    border: 0; border-top: var(--stroke) solid var(--rule-ink); border-radius: 0; background: var(--surface-page); box-shadow: none;
+  }
+  .pub-shell #tab-pos .fm-bar-sum { flex: 1 1 auto; }
+  .pub-shell #tab-pos .fm-bar-count { font: 700 var(--text-3xs) var(--font-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--content-muted); }
+  .pub-shell #tab-pos .fm-bar-total { font: 500 24px / 1.1 var(--font-mono); letter-spacing: -.02em; }
+  .pub-shell #tab-pos .fm-charge-btn {
+    flex: none; min-height: 48px !important; height: 48px; padding: 0 var(--space-5);
+    border: var(--stroke) solid var(--rule-ink); background: var(--gold); color: var(--ink); box-shadow: var(--riso-off);
+    font: 800 var(--text-base) var(--font-ui) !important; letter-spacing: var(--tracking-caps); text-transform: uppercase;
+  }
+}
+
+/* ── Flat sheet, chips and pills (All Books, Stores) ─────────────────── */
+.phone-books { display: none; }
+@media (max-width: 768px) {
+  .pub-shell .phone-ledger.is-three { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  .pub-shell .phone-chips { display: flex; gap: 6px; margin: 18px calc(-1 * var(--phone-gutter)) 0; padding: 0 var(--phone-gutter) var(--space-1); overflow-x: auto; scrollbar-width: none; }
+  .pub-shell .phone-sheet { margin-top: 14px; border: var(--stroke) solid var(--rule-ink); background: var(--surface-card); box-shadow: var(--riso-off); }
+  .pub-shell .phone-sheet-empty { margin: 0; padding: var(--space-5) var(--space-4); color: var(--content-muted); font-size: var(--text-base); text-align: center; }
+  .pub-shell .phone-pill {
+    display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; white-space: nowrap;
+    border: var(--stroke-hair) solid currentColor; border-radius: var(--r-pill); background: var(--surface-card); color: var(--content-primary);
+    font: 800 var(--text-3xs) var(--font-ui); letter-spacing: .08em; text-transform: uppercase;
+  }
+  .pub-shell .phone-pill.is-green { color: var(--green); background: var(--green-bg); }
+  .pub-shell .phone-pill.is-amber { color: var(--amber); background: var(--amber-bg); }
+  .pub-shell .phone-pill.is-red { color: var(--red); background: var(--red-bg); }
+
+  /* All Books */
+  .pub-shell #tab-all-overview { padding-inline: var(--phone-gutter); }
+  .pub-shell .phone-books { display: block; margin-bottom: var(--space-6); }
+  .pub-shell #tab-all-overview .overview-section:first-child > .sec-head, .pub-shell #all-books-list { display: none; }
+  .pub-shell .phone-books .phone-ledger { margin-top: 18px; }
+  .pub-shell .phone-book-row {
+    display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; column-gap: var(--space-3); align-items: center;
+    width: 100%; min-height: 68px; padding: 10px 14px 10px var(--space-3); margin: 0;
+    border: 0; border-top: var(--stroke-hair) solid var(--border2); border-radius: 0; background: none; box-shadow: none;
+    color: var(--content-primary); font: inherit; text-align: left; cursor: pointer;
+  }
+  .pub-shell .phone-book-row:first-child { border-top: 0; }
+  .pub-shell .phone-book-row:active { background: var(--surface-inset); }
+  .pub-shell .phone-book-row:focus-visible { outline: 2px solid var(--gold-text); outline-offset: -2px; }
+  .pub-shell .phone-book-cover { width: 36px; height: 48px; box-sizing: border-box; border: var(--stroke) solid var(--rule-ink); background: var(--surface-inset); box-shadow: var(--riso-off-sm); }
+  .pub-shell .phone-book-txt { display: grid; justify-items: start; gap: 2px; min-width: 0; }
+  .pub-shell .phone-book-txt .phone-pill { margin-top: 2px; }
+  .pub-shell .phone-book-title { font: 700 var(--text-md) / 1.25 var(--font-ui); overflow-wrap: anywhere; }
+  .pub-shell .phone-book-meta { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 var(--text-sm) var(--font-mono); color: var(--content-muted); }
+  .pub-shell .phone-book-end { display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-1); }
+  .pub-shell .phone-book-unit { font: 700 var(--text-3xs) var(--font-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--content-muted); }
+  .pub-shell .phone-book-count { font: 500 20px / 1 var(--font-mono); letter-spacing: -.02em; }
+}
+
+/* ── Stores: a work queue, each store opening in place ──────────────── */
+.book-context-masthead, .stores-phone-head, .store-row { display: none; }
+@media (max-width: 768px) {
+  .pub-shell #tab-consignment { padding-inline: var(--phone-gutter); }
+  /* Masthead: the book as a kicker over STORES. */
+  .pub-shell #book-context-con { display: block; margin: 0; padding: 0; border: 0; background: none; box-shadow: none; }
+  .pub-shell #book-context-con .book-context-dot, .pub-shell #book-context-con .book-context-meta { display: none; }
+  .pub-shell #book-context-con .book-context-title {
+    display: flex; align-items: center; gap: var(--space-2);
+    font: 800 var(--text-2xs) var(--font-ui) !important; letter-spacing: .16em !important; text-transform: uppercase; color: var(--gold-text) !important;
+  }
+  .pub-shell #book-context-con .book-context-title::before { content: ""; width: 8px; height: 8px; flex: none; background: var(--book-accent, var(--gold)); outline: var(--stroke-hair) solid var(--rule-ink); }
+  .pub-shell #book-context-con .book-context-masthead { display: block; margin: 6px 0 0; font: 400 52px / .95 var(--font-display); letter-spacing: 0; text-transform: uppercase; color: var(--content-primary); }
+
+  /* Stores · Invoices · Ledger as underline tabs on a thick rule. */
+  .pub-shell #tab-consignment .con-section-tabs {
+    gap: 22px; margin: 14px calc(-1 * var(--phone-gutter)) var(--space-4); padding: 0 var(--phone-gutter);
+    border: 0; border-bottom: var(--stroke) solid var(--rule-ink); background: none; overflow-x: auto; scrollbar-width: none;
+  }
+  .pub-shell #tab-consignment .con-section-tab, .pub-shell #tab-consignment .con-section-tab[aria-selected="true"] {
+    flex: none; padding: 0; border: 0; background: none; color: var(--content-muted); box-shadow: none;
+  }
+  .pub-shell #tab-consignment .con-section-tab[aria-selected="true"] { color: var(--content-primary); box-shadow: inset 0 -4px 0 var(--gold); }
+  .pub-shell #tab-consignment .con-section-tab .con-tab-count, .pub-shell #tab-consignment .con-section-tab[aria-selected="true"] .con-tab-count { padding: 0; background: none; color: inherit; font-size: var(--text-sm); }
+  .pub-shell #tab-consignment .con-section-tab:active { transform: none; }
+
+  /* The stores section head keeps only its two buttons. */
+  .pub-shell #con-sec-stores > .sec-head { margin: 0 0 var(--space-2); }
+  .pub-shell #con-sec-stores > .sec-head .sec-head-titles { display: none; }
+  .pub-shell #con-sec-stores > .sec-head .sec-head-badges { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
+
+  .pub-shell .stores-phone-head { display: block; }
+  .pub-shell .stores-phone-head .phone-ledger { margin-top: var(--space-4); }
+  .pub-shell .stores-phone-head .phone-chips { margin-bottom: 14px; }
+  .pub-shell .stores-phone-head .book-chip .tnum { font-family: var(--font-mono); font-weight: 500; }
+
+  /* One sheet: each store card is a row until it is opened. */
+  .pub-shell #stores-list:has(.store-card) { border: var(--stroke) solid var(--rule-ink); background: var(--surface-card); box-shadow: var(--riso-off); }
+  .pub-shell #stores-list[data-phone-filter="owe"] .store-card[data-owes="0"],
+  .pub-shell #stores-list[data-phone-filter="holds"] .store-card[data-holds="0"] { display: none; }
+  .pub-shell #tab-consignment #stores-list .store-card { margin: 0; border: 0; border-top: var(--stroke-hair) solid var(--border2); border-radius: 0; box-shadow: none; background: transparent; }
+  .pub-shell #tab-consignment #stores-list .store-card:first-child { border-top: 0; }
+  .pub-shell #tab-consignment .store-card:not(.is-open) > :not(.store-row) { display: none; }
+  .pub-shell #tab-consignment .store-card.is-open { background: var(--surface-sunken); }
+  .pub-shell #tab-consignment .store-card.is-open .store-name { display: none; }
+  .pub-shell .store-row {
+    display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; column-gap: var(--space-3); align-items: center;
+    width: 100%; min-height: 64px; padding: 10px 14px 10px var(--space-3); margin: 0;
+    border: 0; border-radius: 0; background: none; box-shadow: none; color: var(--content-primary); font: inherit; text-align: left; cursor: pointer;
+  }
+  .pub-shell .store-row:active { background: var(--surface-inset); }
+  .pub-shell .store-row:focus-visible { outline: 2px solid var(--gold-text); outline-offset: -2px; }
+  .pub-shell .store-row-tag {
+    width: 32px; height: 32px; box-sizing: border-box; display: grid; place-items: center;
+    border: var(--stroke) solid var(--rule-ink); background: var(--surface-card); font: 500 var(--text-xs) var(--font-mono);
+  }
+  .pub-shell .store-row-tag.is-amber { background: #FFC93C; color: var(--ink); }
+  .pub-shell .store-row-tag.is-red { background: var(--gold); color: var(--ink); }
+  .pub-shell .store-row-txt { display: grid; min-width: 0; }
+  .pub-shell .store-row-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 var(--text-md) / 1.25 var(--font-ui); }
+  .pub-shell .store-row-meta { font: 400 var(--text-sm) var(--font-mono); color: var(--content-muted); }
+  .pub-shell .store-row-end { display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-1); }
+  .pub-shell .store-row-owed { font: 500 var(--text-md) / 1 var(--font-mono); }
+  .pub-shell .store-card.is-open .store-row { border-bottom: var(--stroke-hair) solid var(--border2); }
+}
+@media (max-width: 768px) {
+  /* The row's pill already says it; an open card keeps only the ledger warning. */
+  .pub-shell #tab-consignment .store-card.is-open .store-head-flags > .pill:not(.store-balance-flag) { display: none; }
+}
