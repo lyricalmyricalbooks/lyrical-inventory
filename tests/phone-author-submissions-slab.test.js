@@ -16,3 +16,14 @@ describe('phone Author Submissions notice', () => {
     expect(rule('.author-subs-btn')).toContain('width: 100%');
   });
 });
+
+describe('phone approval banner ("1 sale to approve")', () => {
+  const riso = readFileSync('src/styles/phone-riso.css', 'utf8');
+  const banner = riso.match(/\.pub-shell \.publisher-action-banner\s*\{([^}]*)\}/)?.[1] ?? '';
+  it('is an inked slab with an amber edge stripe', () => {
+    expect(banner).toMatch(/border:\s*var\(--stroke\)\s+solid\s+var\(--rule-ink\)/);
+    expect(banner).toMatch(/border-left:\s*6px\s+solid\s+var\(--status-active\)/);
+    expect(banner).toContain('box-shadow: var(--elev-1)');
+    expect(banner).not.toContain('stroke-hair');
+  });
+});
