@@ -115,10 +115,10 @@ describe('the author paying the net link', () => {
 });
 
 describe("the publisher's awaiting-transfer card", () => {
-  it('points to Settle up instead of a full-price Stripe link', () => {
+  it('is not listed twice: the sale sits in the Settle up ledger, with no full-price Stripe link', () => {
     app.main.renderArtistTransfers();
+    expect($('artist-transfers-sect').style.display).toBe('none');
     const list = $('artist-transfers-list');
-    expect(list.textContent).toContain('In Settle up');
     expect(list.textContent).not.toContain('Stripe link ready');
     expect(list.textContent).not.toContain('Make Stripe link');
   });

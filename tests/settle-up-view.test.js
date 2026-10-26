@@ -31,8 +31,12 @@ describe('the two columns', () => {
     expect(html.querySelector('.ps-settle-result .ps-stat-val').textContent).toBe('CA$232.21');
     expect(html.querySelector('.ps-settle-result .ps-stat-sub').textContent).toBe('CA$499.97 − CA$267.76');
     expect(html.textContent).toContain('They collected CA$574.68 and keep their CA$74.71 share');
-    // The slip reads top-down: their side added, yours taken away, then the result.
-    expect([...html.querySelectorAll('.ps-slip-amt')].map(a => a.textContent)).toEqual(['+ CA$499.97', '− CA$267.76', '= CA$232.21']);
+    // The ledger reads top-down: their side added, yours taken away, then the result.
+    expect([...html.querySelectorAll('.ps-ledger-amt')].map(a => a.textContent)).toEqual(['+ CA$499.97', '− CA$267.76', '= CA$232.21']);
+    // Each side is a group with its own subtotal, named from your side.
+    expect([...html.querySelectorAll('.ps-ledger-group')].map(g => [...g.children].map(c => c.textContent)))
+      .toEqual([['The author owes you', 'CA$499.97'], ['You owe the author', 'CA$267.76']]);
+    expect(html.textContent).toContain('Accrued');
   });
 
   it('reverses when the publisher owes more', () => {
@@ -67,6 +71,31 @@ describe("the author's read-only view", () => {
     expect(html.textContent).toContain('Copy statement');
     expect(html.querySelector('[id^="artist-settlement-record-button"]')).toBeNull();
     expect(html.querySelector('[id^="artist-settlement-form"]')).toBeNull();
+  });
+});
+
+describe('the sales behind the held line', () => {
+  it('lists each held sale with its own Settle by hand menu for the publisher', () => {
+    const t = { id: 7, num: 'S-2', date: '2026-03-01', chan: 'In Person', qty: 10, total: 400 };
+    const html = render(settleUpModel(balance()), { transfers: [t] });
+    const sub = html.querySelector('.ps-ledger-row.is-sub');
+    expect(sub.textContent).toContain('CA$400.00 held');
+    expect(sub.textContent).toContain('⏳ Awaiting transfer');
+    expect(sub.textContent).toContain('S-2 · 1 Mar 2026 · In Person · 10×');
+    const opts = [...sub.querySelectorAll('.settle-opt')].map(b => b.getAttribute('onclick'));
+    expect(opts.map(o => o.split(';')[1])).toEqual(['markArtistTransferReceived(7)', 'settleArtistTransferKeepShare(7)', 'settleArtistTransferKeepAll(7)']);
+  });
+
+  it("says when a held sale has no amount it can trust", () => {
+    const html = render(settleUpModel(balance()), { transfers: [{ id: 8, num: 'S-3', total: 'x' }] });
+    expect(html.querySelector('.ps-ledger-row.is-sub').textContent).toContain('Amount missing, check this sale');
+  });
+});
+
+describe('the colour of the answer', () => {
+  it('is due (amber band) while money has to move, and settled (green) when it cancels out', () => {
+    expect(render(settleUpModel(balance())).querySelector('.ps-ledger-top').classList.contains('is-due')).toBe(true);
+    expect(render(settleUpModel(balance({ owedToArtist: 499.97 }))).querySelector('.ps-ledger-top').classList.contains('is-settled')).toBe(true);
   });
 });
 
@@ -135,21 +164,31 @@ describe('unpaid expenses on the slip', () => {
     expect(m.right.rows.map(r => [r.key, r.amount])).toEqual([['royalties', 312.55], ['expenses', 28.17]]);
     expect([m.amount, m.result]).toEqual([214.76, 'Author sends you']);
     const html = render(m);
-    expect([...html.querySelectorAll('.ps-slip-amt')].map(a => a.textContent)).toEqual(['+ CA$555.48', '− CA$312.55', '− CA$28.17', '= CA$214.76']);
+    expect([...html.querySelectorAll('.ps-ledger-amt')].map(a => a.textContent)).toEqual(['+ CA$555.48', '− CA$312.55', '− CA$28.17', '= CA$214.76']);
     expect(html.textContent).toContain('Expenses they paid, owed back');
     expect(html.textContent).toContain('8 Oct 2025 · Shipping Cost (Paid EUR 17.85)');
-    // Every slip figure appears in the sum under the big number.
+    // Every ledger figure appears in the sum under the big number.
     expect(html.querySelector('.ps-settle-result .ps-stat-sub').textContent).toBe('CA$555.48 − CA$312.55 − CA$28.17');
     expect(html.textContent).toContain('marking the CA$28.17 of expenses as paid back');
     expect(settleUpHeadline(m, 'CA$').sub).toBe('author sends you · after earnings and CA$28.17 of expenses come off');
   });
 
-  it('lists a few receipts with their amounts and counts the rest', () => {
+  it('gives every receipt its own row and Mark received button, because the separate list no longer shows them', () => {
     const many = [1, 2, 3, 4, 5].map(i => ({ id: i, amount: 10, desc: `Receipt ${i}`, date: `2025-10-0${i}` }));
     const html = render(settleUpModel(withExpenses(many)));
     expect(html.textContent).toContain('Receipt 1 · CA$10.00');
-    expect(html.textContent).not.toContain('Receipt 4');
-    expect(html.textContent).toContain('and 2 more — every one is listed in the statement');
+    expect(html.textContent).toContain('Receipt 5 · CA$10.00');
+    const marks = [...html.querySelectorAll('button')].filter(b => b.textContent.includes('Mark received'));
+    expect(marks.map(b => [b.dataset.action, b.dataset.id])).toEqual([1, 2, 3, 4, 5].map(i => ['settleUp.markExpenseReceived', String(i)]));
+  });
+
+  it("gives the author no buttons on the lines, only what each one is waiting on", () => {
+    const m = settleUpModel(withExpenses([shipping]), { author: true });
+    const html = render(m, { canRecord: false, transfers: [{ id: 7, num: 'S-2', date: '2026-03-01', chan: 'In Person', qty: 10, total: 400 }] });
+    expect(html.querySelector('.ps-ledger button')).toBeNull();
+    expect(html.querySelector('.settle-chooser')).toBeNull();
+    expect(html.textContent).toContain('In your one payment');
+    expect(html.textContent).toContain('Paid back with it');
   });
 
   it('reverses when the expenses tip the balance toward the author', () => {
