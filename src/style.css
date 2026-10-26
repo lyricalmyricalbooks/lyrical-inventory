@@ -17129,18 +17129,29 @@ button[onclick="refreshUmamiStats()"]:active {
   color:var(--content-muted);
 }
 
-/* ── Settle up — Receipt ───────────────────────────────────────────────────
-   The answer first, as one big figure; then the sum as a till slip: the
-   paying side added (+), the other taken away (−), a double rule, and the
-   result (=). One primary action, sharing as the secondary. */
+/* ── Settle up — Statement ledger ──────────────────────────────────────────
+   The answer first, as one big figure on an amber band (something to act
+   on) with its buttons beside it; then one statement: who owes whom in two
+   groups with a subtotal each, the records behind every line with their own
+   status and button, and the total at the foot. Every line has the same four
+   columns, so the buttons that still need pressing line up. Green is kept
+   for "all settled". */
 .ps-settle{
   margin-bottom:var(--space-5);
-  padding:var(--space-5);
   background:var(--surface-card);
   border:var(--stroke) solid var(--border-strong);
   border-radius:var(--r2);
   box-shadow:var(--elev-2);
+  overflow:hidden;
 }
+.ps-ledger-top{
+  display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:var(--space-4);
+  padding:var(--space-5);
+  background:var(--amber-bg);
+  border-bottom:var(--stroke) solid var(--border-strong);
+}
+.ps-ledger-top.is-settled{background:var(--surface-card);}
+.ps-ledger-answer{min-width:0;}
 .ps-settle-result .ps-stat-label{
   font-size:var(--text-2xs);font-weight:800;letter-spacing:var(--tracking-label);
   text-transform:uppercase;color:var(--content-muted);
@@ -17148,31 +17159,61 @@ button[onclick="refreshUmamiStats()"]:active {
 .ps-settle-result .ps-stat-val{
   font-family:var(--font-display,'Anton',Impact,sans-serif);font-weight:400;
   font-size:clamp(44px,7vw,72px);line-height:.95;letter-spacing:.01em;
-  color:var(--gold-text);margin:var(--space-1) 0;
+  color:var(--content-primary);margin:var(--space-1) 0;
 }
 .ps-settle-result.is-settled .ps-stat-val{color:var(--status-positive);}
 .ps-settle-result .ps-stat-sub{
   font-family:var(--font-mono);font-feature-settings:"tnum" 1;
-  font-size:var(--text-xs);color:var(--content-muted);
+  font-size:var(--text-xs);color:var(--content-secondary);
 }
 .ps-receipt-kicker{margin:var(--space-1) 0 0;font-size:var(--text-sm);color:var(--content-secondary);}
-.ps-slip{
-  list-style:none;margin:var(--space-4) 0;padding:var(--space-3) 0 0;
-  max-width:520px;
-  border-top:var(--stroke) dashed var(--border-strong);
-  font-family:var(--font-mono);font-feature-settings:"tnum" 1,"zero" 1;
-  font-size:var(--text-sm);color:var(--content-primary);
+.ps-ledger-top .ps-receipt-actions{margin:0;}
+.ps-settle-form{margin:0;padding:var(--space-4) var(--space-5);border-bottom:var(--stroke-hair) solid var(--border-default);}
+.ps-ledger{font-size:var(--text-sm);color:var(--content-primary);}
+.ps-ledger-head,.ps-ledger-row{
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(170px,240px) minmax(140px,180px) 120px;
+  gap:var(--space-2) var(--space-4);align-items:center;padding:var(--space-3) var(--space-5);
 }
-.ps-slip-line{display:flex;align-items:baseline;gap:var(--space-2);padding:6px 0;}
-.ps-slip-label{display:flex;flex-direction:column;gap:2px;min-width:0;font-family:var(--font-ui);}
-.ps-slip-detail{font-size:var(--text-2xs);color:var(--content-muted);}
-.ps-slip-dots{flex:1;min-width:16px;border-bottom:var(--stroke) dotted var(--border-default);transform:translateY(-4px);}
-.ps-slip-amt{white-space:nowrap;}
-.ps-slip-total{
-  margin-top:var(--space-1);padding-top:var(--space-2);
-  border-top:4px double var(--border-strong);font-weight:700;
+.ps-ledger-head{
+  padding-block:var(--space-2);
+  font-size:var(--text-2xs);font-weight:800;letter-spacing:var(--tracking-label);
+  text-transform:uppercase;color:var(--content-muted);
+  border-bottom:var(--stroke) solid var(--border-strong);
 }
-.ps-slip-total .ps-slip-label{font-weight:800;}
+.ps-ledger-head > :last-child{text-align:right;}
+.ps-ledger-group,.ps-ledger-total{
+  display:flex;justify-content:space-between;gap:var(--space-3);
+  padding:var(--space-2) var(--space-5);
+  background:var(--surface-sunken);
+  border-bottom:var(--stroke-hair) solid var(--border-default);
+  font-size:var(--text-2xs);font-weight:800;letter-spacing:var(--tracking-label);text-transform:uppercase;
+}
+.ps-ledger-sub-total,.ps-ledger-amt{font-family:var(--font-mono);font-feature-settings:"tnum" 1,"zero" 1;white-space:nowrap;}
+.ps-ledger-row{border-bottom:var(--stroke-hair) solid var(--border-default);}
+.ps-ledger-row.is-sub{padding-block:var(--space-2);background:var(--surface-sunken);}
+.ps-ledger-row.is-sub .is-what{padding-left:var(--space-4);}
+.ps-ledger-cell{min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:2px;}
+.ps-ledger-cell.is-amt{align-items:flex-end;}
+.ps-ledger-cell.is-amt .ps-ledger-amt{font-size:var(--text-base);}
+.ps-ledger-label{font-weight:600;}
+.ps-ledger-detail,.ps-ledger-meta{font-size:var(--text-2xs);color:var(--content-muted);}
+.ps-ledger-total{
+  padding-block:var(--space-3);
+  border-top:var(--stroke) solid var(--border-strong);border-bottom:0;
+  font-size:var(--text-sm);
+}
+.ps-ledger-total .ps-ledger-amt{font-size:var(--text-lg);}
+.ps-ledger-foot{padding:var(--space-4) var(--space-5) var(--space-2);border-top:var(--stroke) solid var(--border-strong);}
+.ps-ledger-card > .ps-settle-note{padding:0 var(--space-5);}
+@media (max-width:768px){
+  .ps-ledger-head{display:none;}
+  .ps-ledger-cell:empty{display:none;}
+  .ps-ledger-row{grid-template-columns:minmax(0,1fr) auto;padding:var(--space-3) var(--space-4);}
+  .ps-ledger-cell.is-status,.ps-ledger-cell.is-act{grid-column:1 / -1;}
+  .ps-ledger-cell.is-amt{grid-column:2;grid-row:1;}
+  .ps-ledger-row.is-sub .is-what{padding-left:0;}
+  .ps-ledger-group,.ps-ledger-total,.ps-ledger-top,.ps-ledger-foot,.ps-settle-form{padding-inline:var(--space-4);}
+}
 .ps-settle-note{margin:0 0 var(--space-3);font-size:var(--text-xs);line-height:var(--leading-snug);color:var(--content-muted);max-width:64ch;}
 .ps-settle-note:empty{display:none;}
 .ps-settle .ps-payout-preview{margin:0 0 var(--space-3);}
@@ -17191,7 +17232,6 @@ button[onclick="refreshUmamiStats()"]:active {
   border:var(--stroke-hair) solid var(--border-default);border-radius:var(--r2);
   padding:var(--space-3);resize:vertical;
 }
-.ps-settle-form{margin:var(--space-3) 0 0;}
 
 /* The motion tokens already collapse to 1ms; the transforms still need
    standing down for anyone who asked for reduced motion. */
