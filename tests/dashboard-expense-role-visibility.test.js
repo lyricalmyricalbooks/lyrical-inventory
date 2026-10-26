@@ -16,20 +16,28 @@ beforeAll(async () => {
   });
 }, 30000);
 
+// The publisher's expenses owed to the artist now live in the Settle up card
+// at the top (#d-settle-desk); the old red banner stays hidden in both views.
+const deskShown = () => !document.getElementById('d-settle-desk').hidden;
+
 test('switching views shows only the reimbursement field for the current role', () => {
   dash.updateDash();
-  expect(visible('d-expenses-sect')).toBe(true);
+  expect(deskShown()).toBe(true);
+  expect(document.getElementById('sd-owe-amt').textContent).toContain('80.00');
+  expect(visible('d-expenses-sect')).toBe(false);
   expect(visible('d-expenses-kpi')).toBe(true);
   expect(visible('artist-reimburse-banner')).toBe(false);
 
   app.window.toggleCurrentBookView();
+  expect(deskShown()).toBe(false);
   expect(visible('d-expenses-sect')).toBe(false);
   expect(visible('d-expenses-kpi')).toBe(false);
   expect(visible('artist-reimburse-banner')).toBe(true);
   expect(document.getElementById('arb-amount').textContent).toContain('80.00');
 
   app.window.toggleCurrentBookView();
-  expect(visible('d-expenses-sect')).toBe(true);
+  expect(deskShown()).toBe(true);
+  expect(visible('d-expenses-sect')).toBe(false);
   expect(visible('d-expenses-kpi')).toBe(true);
   expect(visible('artist-reimburse-banner')).toBe(false);
 });

@@ -33,6 +33,7 @@ import { escapeHtml, safeHttpUrl } from './lib/html.js';
 import { planSheetsConnectionSync } from './lib/sheets-url.js';
 import { legacyCopy } from './lib/clipboard.js';
 import { needsSettleUp } from './lib/settle-up-view.js';
+import { settleDeskModel } from './lib/settle-desk.js';
 import { normalizeLetterhead, renderLetterhead } from './lib/letterhead.js';
 import { bookSizeMessage, bookSizeReport } from './lib/book-size.js';
 import { ensureXlsx, loadExternalScript } from './lib/external-scripts.js';
@@ -10820,7 +10821,13 @@ function renderAuthorSettlementBanner(banner, s, settle, transfers, cur) {
   }).join('');
 }
 
+// The list and the Settle up card above it always redraw together.
 export function renderArtistTransfers() {
+  renderArtistTransfersList();
+  renderSettleDesk();
+}
+
+function renderArtistTransfersList() {
   const s = getState(), book = getBook(), cur = book.currency;
   let transfers = [...(s.artistTransfers || [])].map(t => ({ ...t, status: 'approved' }));
 
@@ -11017,7 +11024,68 @@ function markExpenseReceived(id) {
   showToast(`✓ Expense marked as received — ${fmt(e.amount, cur)}`);
 }
 
+// The publisher's "Settle up with your artist" card (see lib/settle-desk.js).
+// Its two columns hold the existing expense and transfer lists, which keep
+// their own buttons; this fills in the totals, the net and the actions.
+function renderSettleDesk() {
+  const desk = $('d-settle-desk');
+  if (!desk) return;
+  const book = getBook(), s = getState();
+  if (isAuthor() || !book || !s || activeBook === 'all') { desk.hidden = true; return; }
+  const cur = book.currency;
+  const expenses = expensesWithSettlements(s).filter(e => !e.received && !isGratuityExpense(e))
+    .map(e => ({ amount: Number(e.amount) || 0 }));
+  const transfers = (s.artistTransfers || []).map(t => ({ amount: transferAmount(t), pending: false }));
+  const subs = window.authorSubmissions?.[activeBook]?.sales || {};
+  for (const k of Object.keys(subs)) {
+    let raw = subs[k].data;
+    try { raw = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch (_) { continue; }
+    if (raw && isDirectToArtistSale(raw)) transfers.push({ amount: null, pending: true });
+  }
+  const plan = planArtistSettlement(book, s);
+  const settle = plan && needsSettleUp(plan.balance) ? plan.balance : null;
+  const link = safeHttpUrl((s.artistPaymentLink || '').trim());
+  const m = settleDeskModel({ expenses, transfers, settle, cur, hasPayLink: !!link });
+  desk.hidden = !m.show;
+  // The old red "Expenses owed to artist" banner said the same thing as the
+  // left column; the card replaces it.
+  const oldBanner = $('d-expenses-sect');
+  if (oldBanner) oldBanner.style.display = 'none';
+  if (!m.show) return;
+  $('sd-sub').textContent = link ? 'Payment link saved' : "Artist hasn't added a payment link yet";
+  $('sd-col-owe').hidden = !m.owe.count;
+  $('sd-col-owed').hidden = !m.owed.count;
+  $('sd-owe-amt').textContent = fmt(m.owe.total, cur);
+  $('sd-owed-amt').textContent = fmt(m.owed.total, cur);
+  $('sd-net').className = `sd-net is-${m.direction}`;
+  $('sd-net-kicker').textContent = m.kicker;
+  $('sd-net-amt').textContent = m.value;
+  $('sd-net-note').textContent = m.note;
+  const acts = [];
+  if (m.inSettleUp) acts.push(`<button type="button" class="btn gold" data-action="settleDesk.open">Open Settle up</button>`);
+  if (m.askForLink) acts.push(`<button type="button" class="btn ${m.inSettleUp ? '' : 'gold'}" data-action="settleDesk.askLink">Ask artist to add link</button>`);
+  if (m.openLink) acts.push(`<a class="btn ${m.inSettleUp ? '' : 'gold'}" href="${escapeHtml(link)}" target="_blank" rel="noopener">Open their payment link ↗</a>`);
+  $('sd-actions').innerHTML = acts.join('');
+}
+
+// Settle up lives in the profit-sharing block further down; bring it into view.
+function openSettleUpPanel() {
+  const panel = document.getElementById(`artist-settlement-${activeBook}`);
+  if (!panel) return;
+  panel.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+  panel.querySelector('button')?.focus({ preventScroll: true });
+}
+registerActions({
+  'settleDesk.open': () => openSettleUpPanel(),
+  'settleDesk.askLink': () => askAuthorForPayLink(),
+});
+
 export function renderPendingExpenses() {
+  renderPendingExpensesList();
+  renderSettleDesk();
+}
+
+function renderPendingExpensesList() {
   const s = getState(), book = getBook(), cur = book.currency;
   const pending = [];
   for (const e of expensesWithSettlements(s)) {
