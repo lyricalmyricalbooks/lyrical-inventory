@@ -313,7 +313,13 @@ function onOrders(docs, meta = {}) {
   // since saved (a refund already brought in, say). It is shown, never applied:
   // the server's own snapshot follows and is the one imported.
   _docsFromCache = !!(meta && meta.fromCache);
-  _docs = new Map((docs || []).filter(d => d && d.id).map(d => [d.id, d]));
+  // ⚡ Bolt Optimization: Replace chained .filter().map() with a single imperative loop to eliminate intermediate array allocations
+  _docs = new Map();
+  for (const d of docs || []) {
+    if (d && d.id) {
+      _docs.set(d.id, d);
+    }
+  }
   if (_docs.size) noteLinkSeen();
   noteUnlinked(docs || []);
   scheduleImport(0);
