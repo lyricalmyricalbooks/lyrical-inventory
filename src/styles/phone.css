@@ -2184,3 +2184,11 @@
   #exp-missing-receipt-btn { border-radius: var(--r2); border-width: var(--stroke); }
   #exp-ai-btn { align-self: stretch !important; }
 }
+
+/* Cards carrying a left accent stripe (Settings, Big Cartel, Tax Centre cash flow…): the stripe is set
+   inline in a 45% tint, so against the 2px ink outline it read as a faded pink smudge, and its mitred
+   join with the 4px-rounded corner left the top-left looking chipped. Solid ink-red stripe and square
+   corners now, like every other inked slab on a phone. Only !important can recolour an inline border. */
+@media (max-width: 768px) {
+  .tab-panel .card[style*="border-left"] { border-radius: 0; border-left-color: var(--gold) !important; }
+}

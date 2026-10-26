@@ -21,3 +21,11 @@ describe('phone Big Cartel heading row', () => {
     expect(r).toMatch(/text-transform:\s*uppercase/);
   });
 });
+
+describe('phone cards with a left accent stripe (Big Cartel store card, Settings…)', () => {
+  it('draws the stripe solid and squares the corners', () => {
+    const r = rule('.tab-panel .card[style*="border-left"]');
+    expect(r).toMatch(/border-radius:\s*0/);
+    expect(r).toMatch(/border-left-color:\s*var\(--gold\)\s*!important/);
+  });
+});
