@@ -803,6 +803,7 @@ function getSettleUpHtml(bookId) {
     hasWork: plan.hasWork, reviewError: !!plan.error,
     pendingSync: syncQueue.filter(q => q.bookId === bookId).length,
     statement: artistSettlementStatement(book, plan.balance, today()),
+    transfers: plan.transfers,
   });
   return { html, model };
 }

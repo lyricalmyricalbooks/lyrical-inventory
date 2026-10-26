@@ -14,3 +14,13 @@ describe('phone Tax Centre link tap targets', () => {
     expect(block).toMatch(/\.rec-filter\s*\{\s*min-height:\s*var\(--target-min\)/);
   });
 });
+
+describe('phone Tax Centre card titles', () => {
+  const rule = css.match(/#tab-taxcenter \.rec-card-title\s*\{[^}]*\}/)?.[0] ?? '';
+
+  it('leads in the Anton display face, capitals, no faked bold', () => {
+    expect(rule).toMatch(/font-family:\s*'Anton'/);
+    expect(rule).toMatch(/font-weight:\s*400/);
+    expect(rule).toMatch(/text-transform:\s*uppercase/);
+  });
+});
