@@ -29,3 +29,12 @@ describe('phone cards with a left accent stripe (Big Cartel store card, Settings
     expect(r).toMatch(/border-left-color:\s*var\(--gold\)\s*!important/);
   });
 });
+
+describe('phone To-do count tags', () => {
+  it('draws the total and each group count as square inked tags, not soft lozenges', () => {
+    const r = phone.match(/#tab-todo #todo-total-chip,\s*#tab-todo \.todo-group \.sec-head-badges > \.pill\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(r).toMatch(/border-radius:\s*var\(--r2\)/);
+    expect(r).toMatch(/border:\s*var\(--stroke\)\s+solid\s+currentColor/);
+    expect(r).toMatch(/font-variant-numeric:\s*tabular-nums/);
+  });
+});
