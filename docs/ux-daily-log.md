@@ -228,3 +228,4 @@ looked at, and re-proposing it costs a run.
 | 2026-10-24 | visual | Phone Dashboard — More metrics | Made the "More metrics" fold-out match the inked tiles above it (bold outline, offset shadow), with a +/− marker and a full fingertip-tall row | pending |
 | 2026-10-25 | visual | Phone Consignment — store cards | Gave the "On shelf" figure strip on each store card wider room so its caption no longer touches the Owed box beside it, and trimmed Sent and Sold, which only hold a short number | (this PR) |
 | 2026-10-26 | visual | Phone To-do — count tags | Made the "23 to do" total and each group's count square inked tags like the other tags on a phone, instead of soft rounded lozenges | (this PR) |
+| 2026-10-26 | visual | Phone forms — Expenses, Manual Order Entry and every other form | Gave the text boxes and drop-downs on a phone the same bold ink outline as the cards and buttons around them, instead of a faint grey hairline | (this PR) |
