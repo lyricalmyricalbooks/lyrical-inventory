@@ -12,3 +12,11 @@ test('phone website fact captions reserve two lines with tighter tracking', () =
   expect(rule[1]).toMatch(/min-height:\s*2lh/);
   expect(rule[1]).toMatch(/letter-spacing:\s*\.06em/);
 });
+
+test('phone website status tags are square outlined tags at a readable size', () => {
+  const rule = phone.match(/#tab-website \.wl-chip\s*\{([^}]*)\}/)?.[1] ?? '';
+  expect(rule).toMatch(/border:\s*var\(--stroke-hair\) solid currentColor/);
+  expect(rule).toMatch(/border-radius:\s*var\(--r2\)/);
+  expect(rule).not.toMatch(/r-pill/);
+  expect(rule).toMatch(/font-size:\s*var\(--text-xs\)/);
+});
