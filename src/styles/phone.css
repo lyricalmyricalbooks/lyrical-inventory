@@ -2228,3 +2228,10 @@
 @media (max-width: 768px) {
   .tab-panel .card[style*="border-left"] { border-radius: 0; border-left-color: var(--gold) !important; }
 }
+
+/* Tax Centre card titles ("Pending & To Confirm", "Recurring Subscriptions", "Receipts & Proof of
+   Payment") lead in the capital display lettering the other phone card titles use, instead of a
+   light body-weight line that read like a caption. Anton has no bold, so the weight stays 400. */
+@media (max-width: 768px) {
+  #tab-taxcenter .rec-card-title { font-family: 'Anton', sans-serif; font-weight: 400; font-size: var(--text-xl); text-transform: uppercase; letter-spacing: var(--tracking-caps); line-height: 1.1; color: var(--content-primary); }
+}
