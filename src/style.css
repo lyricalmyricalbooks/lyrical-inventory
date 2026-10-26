@@ -21448,3 +21448,4 @@ a.notif-action:hover { text-decoration: underline; }
    phone treatment in styles/phone.css can restyle it. */
 .author-subs-card { background: var(--surface-card); border: var(--stroke-hair) solid var(--border); border-left: var(--stroke) solid var(--amber); border-radius: var(--r2); padding: 1.25rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
 .author-subs-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.author-subs-title { font-weight: 600; color: var(--text2); margin-bottom: var(--space-1); display: flex; align-items: center; gap: var(--space-2); }

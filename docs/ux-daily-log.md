@@ -234,3 +234,4 @@ looked at, and re-proposing it costs a run.
 | 2026-10-26 | visual | Phone Settings — Test Book Catalog tag | Made the "Isolated test sandbox" tag a square inked caps tag like the other tags on a phone, instead of a pale hairline chip | (this PR) |
 | 2026-10-26 | visual | Phone Order History — edit pencil | Gave the pencil on each order card the same bold ink outline as the Approve and Ship buttons instead of a faint beige square that looked switched off | (this PR) |
 | 2026-10-26 | visual | Phone Intelligence — quick asks | Made the four starter questions on the Intelligence screen white slabs with the bold ink outline and a full fingertip height, instead of faint grey boxes | (this PR) |
+| 2026-10-26 | visual | Phone Dashboard — Author Submissions card | Set the "Author Submissions" title in the same capital display lettering as the other card titles and made the "Pending" tag a square inked tag instead of a soft rounded lozenge | (this PR) |
