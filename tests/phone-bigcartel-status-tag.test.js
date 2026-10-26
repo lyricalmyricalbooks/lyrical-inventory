@@ -48,3 +48,12 @@ describe('phone All Books / Stores status tags', () => {
     expect(r).not.toMatch(/--r-pill/);
   });
 });
+
+describe('phone Shipping readiness tag', () => {
+  it('draws "N still needed" as a square inked caps tag, not a soft pill', () => {
+    const r = phone.match(/#tab-shipping \.ship-readiness > \.pill\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(r).toMatch(/border-radius:\s*var\(--r2\)/);
+    expect(r).toMatch(/border:\s*var\(--stroke\)\s+solid\s+currentColor/);
+    expect(r).toMatch(/text-transform:\s*uppercase/);
+  });
+});
