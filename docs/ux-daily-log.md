@@ -204,6 +204,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-25 | visual | Phone Settings, Big Cartel, Tax Centre — accent-stripe cards | Made the left stripe on these cards a solid red instead of a faded pink smudge and squared the rounded corners, so they match the other inked cards | (this PR) |
 | 2026-10-26 | visual | Phone Payments — worklist toolbar | Gave the search box, type and sort drop-downs, currency chips and the frame around them the bold ink outline, and made the chips and "Direct sale" style tags square instead of soft lozenges | (this PR) |
 | 2026-10-26 | visual | Phone Consignment — store rows | Moved the "Payment due" tag under each store's name and city so the city line no longer folds onto two lines, and the amount now sits level with the store name | (this PR) |
+| 2026-10-26 | visual | Phone Shipping — readiness tag | Made the "10 still needed" / "Ready to quote" tag above Get rates a square inked caps tag like the other tags on a phone, instead of the one soft rounded pill on the screen | (this PR) |
 
 ---
 
