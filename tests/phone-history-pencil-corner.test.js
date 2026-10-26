@@ -19,4 +19,8 @@ describe('phone Order History — pencil rests in the card corner', () => {
   it('grows the date row only when a Ship button sits above the pencil', () => {
     expect(css).toMatch(/tr\.hist-row:has\(\.btn-hist-action\) > td:nth-child\(9\) \{[^}]*min-height: 28px/);
   });
+
+  it('inks the pencil like the buttons around it instead of a faint beige square', () => {
+    expect(css).toMatch(/#tab-history #hist-body \.edit-btn \{ background: var\(--surface-card\); border: var\(--stroke\) solid var\(--rule-ink\);/);
+  });
 });

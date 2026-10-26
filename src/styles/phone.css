@@ -1480,6 +1480,9 @@
      desktop). The import button spans the row instead of floating at the right. */
   #tab-history #hist-body .edit-btn { width: 28px; height: 28px; margin: 0; opacity: 1; }
   #tab-history #hist-body .edit-btn::after { inset: -8px; min-width: var(--target-min); min-height: var(--target-min); }
+  /* Held upright the pencil is inked like the Approve / Ship buttons around it: a bold
+     outline on a solid face, not a faint beige square that reads as disabled. */
+  #tab-history #hist-body .edit-btn { background: var(--surface-card); border: var(--stroke) solid var(--rule-ink); color: var(--content-primary); }
   /* The pencil used to trail the order number, so it landed at a different spot on every
      card. It now rests in the card's bottom-right corner, under the total, where the thumb
      finds it in the same place every time. When a Ship / Shipped button sits above it, the
