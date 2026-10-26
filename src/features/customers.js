@@ -316,8 +316,23 @@ function exportMailingListCSV() {
   showToast(`✓ Exported ${subs.length} subscriber${subs.length === 1 ? '' : 's'}`);
 }
 
+// ⚡ Bolt Optimization: buildCustomerList() reads this on every buyer-table
+// render (each debounced search keystroke and filter change), and a full pull
+// is up to 500 payments of JSON. Re-parse only when the stored text changed —
+// comparing against the last raw string still picks up a pull saved from
+// another tab. Each call gets its own shallow copy of the array, as before.
+let _custStripeRaw = null;
+let _custStripeRows = [];
 function _loadCustomerStripeCache() {
-  try { return JSON.parse(localStorage.getItem(CUSTOMER_STRIPE_KEY) || '[]'); }
+  try {
+    const raw = localStorage.getItem(CUSTOMER_STRIPE_KEY) || '[]';
+    if (raw !== _custStripeRaw) {
+      const parsed = JSON.parse(raw);
+      _custStripeRows = Array.isArray(parsed) ? parsed : [];
+      _custStripeRaw = raw;
+    }
+    return _custStripeRows.slice();
+  }
   catch (_) { return []; }
 }
 function _saveCustomerStripeCache(rows) {
