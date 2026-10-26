@@ -149,3 +149,16 @@ describe('new CSS uses tokens only', () => {
     expect(styleBlock).toMatch(/border-radius:var\(--r2\)/);
   });
 });
+
+describe('Payments toolbar is inked on a phone', () => {
+  const css = readFileSync('src/styles/phone.css', 'utf8');
+  const rule = (sel) => [...css.matchAll(new RegExp('(?:^|\\n)\\s*' + sel.replace(/[.*+?^${}()|[\]\\>]/g, '\\$&') + '\\s*\\{([^}]*)\\}', 'g'))].map((m) => m[1]).join(' ');
+  test('frame, search and drop-downs use the 2px ink outline', () => {
+    expect(rule('#tab-reconcile .recon-toolbar')).toMatch(/border:\s*var\(--stroke\) solid var\(--border-strong\)/);
+    expect(rule('#tab-reconcile .recon-search, #tab-reconcile .recon-mini')).toMatch(/border:\s*var\(--stroke\) solid var\(--border-strong\)/);
+  });
+  test('filter chips and tags are square, not lozenges', () => {
+    expect(rule('#tab-reconcile .recon-chip')).toMatch(/border-radius:\s*var\(--r2\)/);
+    expect(rule('#tab-reconcile .recon-pill')).toMatch(/border-radius:\s*var\(--r2\)/);
+  });
+});

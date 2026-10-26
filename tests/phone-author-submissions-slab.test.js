@@ -15,6 +15,18 @@ describe('phone Author Submissions notice', () => {
     expect(rule('.author-subs-actions')).toContain('grid-template-columns: minmax(0, 1fr)');
     expect(rule('.author-subs-btn')).toContain('width: 100%');
   });
+  it('leads with a display-face title and a square Pending tag', () => {
+    const title = rule('.author-subs-title');
+    expect(title).toContain("font-family: 'Anton'");
+    expect(title).toContain('text-transform: uppercase');
+    expect(title).toContain('flex-wrap: wrap');
+    const tag = rule('.author-subs-title .pill');
+    expect(tag).toContain('border-radius: var(--r2)');
+    expect(tag).toContain('border: var(--stroke)');
+  });
+  it('styles the title by class so the phone rule can restyle it', () => {
+    expect(readFileSync('src/features/dashboard.js', 'utf8')).toContain('<div class="author-subs-title">');
+  });
 });
 
 describe('phone approval banner ("1 sale to approve")', () => {

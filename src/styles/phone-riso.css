@@ -373,8 +373,8 @@
   .pub-shell .phone-sheet { margin-top: 14px; border: var(--stroke) solid var(--rule-ink); background: var(--surface-card); box-shadow: var(--riso-off); }
   .pub-shell .phone-sheet-empty { margin: 0; padding: var(--space-5) var(--space-4); color: var(--content-muted); font-size: var(--text-base); text-align: center; }
   .pub-shell .phone-pill {
-    display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; white-space: nowrap;
-    border: var(--stroke-hair) solid currentColor; border-radius: var(--r-pill); background: var(--surface-card); color: var(--content-primary);
+    display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; white-space: nowrap;
+    border: var(--stroke) solid currentColor; border-radius: var(--r2); background: var(--surface-card); color: var(--content-primary);
     font: 800 var(--text-3xs) var(--font-ui); letter-spacing: .08em; text-transform: uppercase;
   }
   .pub-shell .phone-pill.is-green { color: var(--green); background: var(--green-bg); }
@@ -452,7 +452,7 @@
   .pub-shell #tab-consignment .store-card.is-open .store-name { display: none; }
   .pub-shell .store-row {
     display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; column-gap: var(--space-3); align-items: center;
-    width: 100%; min-height: 64px; padding: 10px 14px 10px var(--space-3); margin: 0;
+    width: 100%; min-height: 64px; padding: 10px 14px 10px var(--space-3); row-gap: 0; margin: 0;
     border: 0; border-radius: 0; background: none; box-shadow: none; color: var(--content-primary); font: inherit; text-align: left; cursor: pointer;
   }
   .pub-shell .store-row:active { background: var(--surface-inset); }
@@ -466,8 +466,14 @@
   .pub-shell .store-row-txt { display: grid; min-width: 0; }
   .pub-shell .store-row-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 var(--text-md) / 1.25 var(--font-ui); }
   .pub-shell .store-row-meta { font: 400 var(--text-sm) var(--font-mono); color: var(--content-muted); }
-  .pub-shell .store-row-end { display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-1); }
-  .pub-shell .store-row-owed { font: 500 var(--text-md) / 1 var(--font-mono); }
+  /* The status tag sits under the name and city, not beside the amount: squeezed into the right-hand
+     column it left the city line only ~130px, so "Halifax · 6 on shelf" folded onto two lines on every
+     row. The end wrapper dissolves so the amount shares the name's line and the tag takes the row below. */
+  .pub-shell .store-row-tag { grid-row: 1 / span 2; align-self: start; margin-top: 2px; }
+  .pub-shell .store-row-txt { grid-column: 2; grid-row: 1; }
+  .pub-shell .store-row-end { display: contents; }
+  .pub-shell .store-row-owed { grid-column: 3; grid-row: 1; justify-self: end; font: 500 var(--text-md) / 1.25 var(--font-mono); }
+  .pub-shell .store-row-end .phone-pill { grid-column: 2 / -1; grid-row: 2; justify-self: start; margin-top: var(--space-1); }
   .pub-shell .store-card.is-open .store-row { border-bottom: var(--stroke-hair) solid var(--border2); }
 }
 @media (max-width: 768px) {
@@ -493,6 +499,12 @@
   }
   .pub-shell .tab-panel > .book-context:not(#book-context-dash):not(#book-context-con) .book-context-meta {
     margin: 6px 0 0; font: 400 40px / .95 var(--font-display); letter-spacing: 0; text-transform: uppercase; color: var(--content-primary); text-wrap: balance;
+  }
+
+  /* Order history: the masthead above already says "Full order history", so the
+     second Anton heading under it is dropped from view (kept for screen readers). */
+  .pub-shell #tab-history > .row-between > .section-hed {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
   }
 
   /* Section heads: a square flare dot, and a bigger Anton title. */

@@ -32,7 +32,7 @@ import { calculateBreakEven, breakEvenTierMove, applyBreakEvenTierMove, readProd
 import { escapeHtml, safeHttpUrl } from './lib/html.js';
 import { planSheetsConnectionSync } from './lib/sheets-url.js';
 import { legacyCopy } from './lib/clipboard.js';
-import { needsSettleUp } from './lib/settle-up-view.js';
+import { needsSettleUp, settleByHandMenu } from './lib/settle-up-view.js';
 import { normalizeLetterhead, renderLetterhead } from './lib/letterhead.js';
 import { bookSizeMessage, bookSizeReport } from './lib/book-size.js';
 import { ensureXlsx, loadExternalScript } from './lib/external-scripts.js';
@@ -681,7 +681,24 @@ export { BOOKS, BOOK_LIST, states, activeBook, defaultState, getState, getBook, 
 
 // Buttons that name an action (data-action) instead of carrying inline code;
 // see lib/actions.js. Screens move onto this one at a time.
-registerActions({ ...intelActions, ...bigCartelActions });
+registerActions({
+  ...intelActions, ...bigCartelActions,
+  // The Settle up ledger's per-receipt button. Ids come back as strings from
+  // the data attribute, so the expense is found by its string form.
+  'settleUp.markExpenseReceived': el => {
+    const e = (getState().expenses || []).find(x => String(x.id) === el.dataset.id);
+    if (e) markExpenseReceived(e.id);
+  },
+  // On a phone the records under a ledger line start folded.
+  'settleUp.toggleItems': el => {
+    const list = document.getElementById(el.getAttribute('aria-controls'));
+    if (!list) return;
+    const open = list.hidden;
+    list.hidden = !open;
+    el.setAttribute('aria-expanded', String(open));
+    el.firstChild.textContent = open ? el.firstChild.textContent.replace(/^Show/, 'Hide') : el.firstChild.textContent.replace(/^Hide/, 'Show');
+  },
+});
 
 export const openCallScreen = lazyFeature(() => import('./features/opencall.js'), OPEN_CALL_EXPORTS, {
   onError: (e) => {
@@ -5040,7 +5057,7 @@ async function applySampleTestData(testBookId) {
 
   // Build mock state
   const testState = defaultState(book);
-  testState.stock = 15; // Set starting stock on hand in database (we'll intentionally drift this from derived count of 9)
+  testState.stock = 15; // Set starting stock on hand in database (we'll intentionally drift this from derived count of 8)
 
   // Consignment stores
   testState.stores = [
@@ -5155,6 +5172,20 @@ async function applySampleTestData(testBookId) {
       date: '2026-07-06',
       sheetsId: 'evt_hist_3',
       consignmentLink: true
+    },
+    {
+      // A copy the artist sold and kept the cash for: the held sale behind
+      // the artist transfer below, which Settle up nets against their earnings.
+      num: 'TEST-4',
+      chan: 'In Person',
+      qty: 1,
+      price: 17,
+      after: 8,
+      notes: 'Direct sale collected by author',
+      date: '2026-07-06',
+      sheetsId: 'evt_hist_4',
+      artistPending: true,
+      directToArtist: true
     }
   ];
 
@@ -5209,7 +5240,7 @@ async function applySampleTestData(testBookId) {
   // Recompute statistics
   recomputeAfters(states[testBookId], book);
 
-  // Intentionally set stock to 15 (instead of derived 9) to showcase stock drift banner!
+  // Intentionally set stock to 15 (instead of derived 8) to showcase stock drift banner!
   states[testBookId].stock = 15;
 
   await saveState(testBookId);
@@ -10958,11 +10989,19 @@ export function renderArtistTransfers() {
   // ── PUBLISHER PANEL
   const sect = $('artist-transfers-sect'), list = $('artist-transfers-list');
   if (!sect) return;
-  if (!transfers.length) { sect.style.display = 'none'; return; }
-  sect.style.display = '';
   // Both sides owe money: the author pays one net figure from Settle up, so a
   // full-price Stripe link per sale would ask for the wrong amount.
-  const netMode = !!authorSettlementDue(activeBook);
+  const due = authorSettlementDue(activeBook);
+  const netMode = !!due;
+  // On a profit-sharing book the Settle up ledger lists these sales with their
+  // own Settle by hand button, so they aren't listed a second time here. Sales
+  // still waiting for approval aren't in the ledger and stay.
+  if (due && book.profitTiers?.length) {
+    const inLedger = new Set((due.plan.transfers || []).map(t => String(t.id)));
+    transfers = transfers.filter(t => t.status === 'pending' || !inLedger.has(String(t.id)));
+  }
+  if (!transfers.length) { sect.style.display = 'none'; return; }
+  sect.style.display = '';
   list.innerHTML = transfers.map(t => `
     <div class="pending-card${t.status === 'pending' ? ' is-pending' : ''}">
       <div>
@@ -10984,24 +11023,7 @@ export function renderArtistTransfers() {
           : transferPayUrl(t)
           ? `<span class="pill green" title="The author's Send button opens Stripe with this amount filled in">Stripe link ready</span>`
           : (getReconStripeKey() && transferAmount(t) > 0 ? `<button class="btn sm outline" onclick="mintArtistTransferPayLink(${t.id})" title="Make a Stripe link for exactly this amount, so the author doesn't have to type it">Make Stripe link</button>` : '')}
-             <details class="settle-chooser">
-               <summary class="btn sm outline">Settle by hand <span aria-hidden="true">▾</span></summary>
-               <div class="settle-menu" role="group" aria-label="How did this sale end?">
-                 <p class="settle-q">How did this sale end?</p>
-                 <button type="button" class="settle-opt" onclick="this.closest('details').open=false;markArtistTransferReceived(${t.id})">
-                   <strong>They sent me the full ${escapeHtml(transferAmount(t) != null ? fmt(transferAmount(t), cur) : 'amount')}</strong>
-                   <span>All of it goes into your revenue. (Stripe payments do this for you automatically.)</span>
-                 </button>
-                 <button type="button" class="settle-opt" onclick="this.closest('details').open=false;settleArtistTransferKeepShare(${t.id})">
-                   <strong>They kept their share and sent me my cut</strong>
-                   <span>Their share counts as already paid to them. You'll see the exact split before confirming.</span>
-                 </button>
-                 <button type="button" class="settle-opt" onclick="this.closest('details').open=false;settleArtistTransferKeepAll(${t.id})">
-                   <strong>They keep all of it</strong>
-                   <span>You let them keep your cut too. The sale still counts, and the whole amount is recorded as paid to them.</span>
-                 </button>
-               </div>
-             </details>`}
+             ${settleByHandMenu(t, cur)}`}
       </div>
     </div>`).join('');
 }
@@ -11027,11 +11049,17 @@ export function renderPendingExpenses() {
   }
   const sect = $('d-pending-expenses-sect'), list = $('d-pending-expenses-list');
   if (!sect) return;
-  if (!pending.length) { sect.style.display = 'none'; return; }
-  sect.style.display = '';
   // In the Settle up, one net payment covers these. The payment link stays
   // only when that net runs to the author.
   const settle = expensesInSettleUp(book, s);
+  // On a profit-sharing book the Settle up ledger lists these receipts with
+  // their own Mark received button; while the author pays the net there is
+  // nothing else to do with them here, so they aren't listed twice.
+  if (book.profitTiers?.length && !settle.publisherPays) {
+    for (let i = pending.length - 1; i >= 0; i--) if (settle.ids.has(String(pending[i].id))) pending.splice(i, 1);
+  }
+  if (!pending.length) { sect.style.display = 'none'; return; }
+  sect.style.display = '';
   const settleHtml = `<span class="pill gray" title="Counted in Settle up — one payment covers both sides">In Settle up</span>`;
   const fullLink = safeHttpUrl(s.artistPaymentLink);
   const payHtml = fullLink

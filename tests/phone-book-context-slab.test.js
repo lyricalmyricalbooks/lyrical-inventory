@@ -20,3 +20,12 @@ test('the book name leads in display lettering', () => {
   expect(title[1]).toMatch(/font-family:\s*var\(--font-display\)/);
   expect(title[1]).toMatch(/text-transform:\s*uppercase/);
 });
+
+test('Order History keeps one big title on a phone: the second heading is visually hidden, not removed', () => {
+  const riso = readFileSync(path.join(__dirname, '../src/styles/phone-riso.css'), 'utf8');
+  const rule = riso.match(/\.pub-shell #tab-history > \.row-between > \.section-hed\s*\{([^}]*)\}/);
+  expect(rule).not.toBeNull();
+  expect(rule[1]).toMatch(/position:\s*absolute/);
+  expect(rule[1]).toMatch(/clip-path:\s*inset\(50%\)/);
+  expect(rule[1]).not.toMatch(/display:\s*none/);
+});

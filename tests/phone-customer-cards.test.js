@@ -24,4 +24,10 @@ describe('phone buyer cards (Customers)', () => {
   it('drops the stacked field labels on the card', () => {
     expect(rule('#cust-body > tr.phone-record > td::before')).toMatch(/display:\s*none/);
   });
+
+  it('never makes an action button narrower than its own label', () => {
+    const row = rule('#cust-body > tr.phone-record > td[data-phone-label="Action"] > div');
+    expect(row).toMatch(/grid-auto-columns:\s*minmax\(max-content,\s*1fr\)/);
+    expect(row).not.toMatch(/repeat\(auto-fit/);
+  });
 });

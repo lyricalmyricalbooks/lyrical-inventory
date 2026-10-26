@@ -202,6 +202,9 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-25 | visual | Phone Today — icon stamps | Made the two-letter stamps beside Orders, To-do, Snap a receipt and the workspace rows a readable size instead of tiny 10px lettering | (this PR) |
 | 2026-10-25 | visual | Phone Payment QR codes — title | Stopped the page title wrapping with a stray dash at the start of its second line; "All books" now sits as its own quieter line under the title | (this PR) |
 | 2026-10-25 | visual | Phone Settings, Big Cartel, Tax Centre — accent-stripe cards | Made the left stripe on these cards a solid red instead of a faded pink smudge and squared the rounded corners, so they match the other inked cards | (this PR) |
+| 2026-10-26 | visual | Phone Payments — worklist toolbar | Gave the search box, type and sort drop-downs, currency chips and the frame around them the bold ink outline, and made the chips and "Direct sale" style tags square instead of soft lozenges | (this PR) |
+| 2026-10-26 | visual | Phone Consignment — store rows | Moved the "Payment due" tag under each store's name and city so the city line no longer folds onto two lines, and the amount now sits level with the store name | (this PR) |
+| 2026-10-26 | visual | Phone Shipping — readiness tag | Made the "10 still needed" / "Ready to quote" tag above Get rates a square inked caps tag like the other tags on a phone, instead of the one soft rounded pill on the screen | (this PR) |
 
 ---
 
@@ -234,3 +237,9 @@ looked at, and re-proposing it costs a run.
 | 2026-10-26 | visual | Phone Settings — Test Book Catalog tag | Made the "Isolated test sandbox" tag a square inked caps tag like the other tags on a phone, instead of a pale hairline chip | (this PR) |
 | 2026-10-26 | visual | Phone Order History — edit pencil | Gave the pencil on each order card the same bold ink outline as the Approve and Ship buttons instead of a faint beige square that looked switched off | (this PR) |
 | 2026-10-26 | visual | Phone Intelligence — quick asks | Made the four starter questions on the Intelligence screen white slabs with the bold ink outline and a full fingertip height, instead of faint grey boxes | (this PR) |
+| 2026-10-26 | visual | Phone Dashboard — Author Submissions card | Set the "Author Submissions" title in the same capital display lettering as the other card titles and made the "Pending" tag a square inked tag instead of a soft rounded lozenge | (this PR) |
+| 2026-10-26 | visual | Phone All Books — status tags | Made the "Paid for itself", "Low" and "Selling" tags on each book (and the same tags on the Stores list) square inked tags with the bold outline instead of soft hairline lozenges | (this PR) |
+| 2026-10-26 | visual | Phone Tax Centre — card titles | Set "Pending & To Confirm", "Recurring Subscriptions" and "Receipts & Proof of Payment" in the same bold capital lettering as the other card titles instead of a thin caption-weight line | (this PR) |
+| 2026-10-26 | visual | Phone Order History — heading | Dropped the second big "Order history" title stacked under "Full order history" so the screen has one title and the first order and the Import button sit about 80px higher | (this PR) |
+| 2026-10-26 | visual | Phone Customers — buyer card buttons | Gave the + List, Unsubscribe and Details buttons on each buyer card room for their own words, so "Unsubscribe" no longer touches its border | (this PR) |
+| 2026-10-26 | visual | Phone ledger lists — record cards | Squared the corners on the cards that make up every phone list (expenses, orders, consignment, owed-to-artist), so they match the square inked cards around them instead of being the one slightly rounded shape | (this PR) |

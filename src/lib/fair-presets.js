@@ -30,7 +30,10 @@ export function normalizePresetIdentity(raw) {
   return { id, name };
 }
 
-export function normalizeCurrencyCode(value) {
+// A bare three-letter code, or '' when the stored value isn't one, so each
+// preset can choose its own default. Deliberately stricter than money.js's
+// normalizeCurrencyCode, which maps symbols ("CA$") and falls back to CAD.
+export function threeLetterCurrencyCode(value) {
   const code = String(value || '').trim().toUpperCase();
   return /^[A-Z]{3}$/.test(code) ? code : '';
 }

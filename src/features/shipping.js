@@ -8076,7 +8076,14 @@ function cheapestCarriers(fingerprint = shippingFormFingerprint()) {
     .filter(([, p]) => p && p.fingerprint === fingerprint && !p.estimate && p.currency === 'CAD');
   if (quoted.length < 2) return [];
   const low = Math.min(...quoted.map(([, p]) => p.amount));
-  return quoted.filter(([, p]) => Math.abs(p.amount - low) < 0.005).map(([key]) => key);
+  // ⚡ Bolt Optimization: Replace chained .filter().map() with a single imperative loop to eliminate intermediate array allocations
+  const cheapest = [];
+  for (const [key, p] of quoted) {
+    if (Math.abs(p.amount - low) < 0.005) {
+      cheapest.push(key);
+    }
+  }
+  return cheapest;
 }
 
 function renderCarrierTiles() {
@@ -9624,7 +9631,13 @@ function getSmartShippingRecommendations(allOrders, shippoExpenses, optWeightOve
     });
 
     const N = values.length;
-    const singleCosts = values.filter(v => v.qty === 1).map(v => v.cost);
+    // ⚡ Bolt Optimization: Replace chained .filter().map() with a single imperative loop to eliminate intermediate array allocations
+    const singleCosts = [];
+    for (const v of values) {
+      if (v.qty === 1) {
+        singleCosts.push(v.cost);
+      }
+    }
     
     const pctFn = typeof getShipRecoPercentile === 'function' ? getShipRecoPercentile : () => 75;
     const pct = pctFn();

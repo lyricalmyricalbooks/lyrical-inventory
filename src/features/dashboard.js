@@ -105,7 +105,7 @@ function renderBookPendingAlert() {
     alertDiv.innerHTML = `
       <div class="author-subs-card">
         <div>
-          <div style="font-weight:600; color:var(--text2); margin-bottom:4px; display:flex; align-items:center; gap:8px;">
+          <div class="author-subs-title">
             <span class="pill amber">Pending</span> Author Submissions
           </div>
           <div style="font-size:var(--text-sm); color:var(--text3);">There are entries from the author waiting for your approval.</div>
@@ -803,6 +803,7 @@ function getSettleUpHtml(bookId) {
     hasWork: plan.hasWork, reviewError: !!plan.error,
     pendingSync: syncQueue.filter(q => q.bookId === bookId).length,
     statement: artistSettlementStatement(book, plan.balance, today()),
+    transfers: plan.transfers,
   });
   return { html, model };
 }
