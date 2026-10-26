@@ -2139,6 +2139,25 @@
   }
 }
 
+/* Intelligence quick asks held upright: the four starter questions were hairline-grey boxes
+   beside an inked composer. Each is now a white slab with the 2px ink outline, a full-height
+   tap target, and a small press-in, so they read as the buttons they are. */
+@media (max-width: 768px) {
+  #tab-intel .intel-rail-btn:not(.intel-rail-recent) {
+    background: var(--surface-card);
+    border: var(--stroke) solid var(--rule-ink);
+    border-radius: var(--r);
+    min-height: var(--target-min);
+    padding: var(--space-3) var(--space-4);
+    font-weight: 600;
+    color: var(--content-primary);
+  }
+  #tab-intel .intel-rail-btn:not(.intel-rail-recent):active { transform: translate(1px, 1px); }
+}
+@media (max-width: 768px) and (prefers-reduced-motion: reduce) {
+  #tab-intel .intel-rail-btn:not(.intel-rail-recent):active { transform: none; }
+}
+
 /* All Books — book cards. Held upright, each book was a pale hairline box with a soft corner,
    quieter than the inked notices and consignment cards around it. It is now the same inked slab
    (bold outline, square corner, offset shadow); the book's colour stripe on the left still names

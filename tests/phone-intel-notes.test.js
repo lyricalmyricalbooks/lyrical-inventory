@@ -16,3 +16,11 @@ test('phone Intelligence notes are inked slabs, not a pale wash and a hairline',
   expect(notice[1]).toMatch(/inset 4px 0 0 var\(--status-info\)/);
   expect(notice[1]).toMatch(/line-height:\s*var\(--leading-normal\)/);
 });
+
+test('phone Intelligence quick asks are inked, fingertip-tall slabs', () => {
+  const rule = phone.match(/#tab-intel \.intel-rail-btn:not\(\.intel-rail-recent\)\s*\{([\s\S]*?)\n  \}/);
+  expect(rule).not.toBeNull();
+  expect(rule[1]).toMatch(/border:\s*var\(--stroke\)\s+solid\s+var\(--rule-ink\)/);
+  expect(rule[1]).toMatch(/min-height:\s*var\(--target-min\)/);
+  expect(phone).toMatch(/prefers-reduced-motion: reduce\) \{\s*#tab-intel \.intel-rail-btn/);
+});
