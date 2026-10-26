@@ -1093,57 +1093,6 @@
     </div>
   </div>
 
-  <!-- SETTLE UP WITH YOUR ARTIST (publisher only). Both directions of money
-       between you and the artist in one card: expenses you owe them on one
-       side, sales they collected for you on the other, and the one figure that
-       settles both. The two lists keep their own rows and buttons; filled by
-       renderSettleDesk() in main.js. -->
-  <section id="d-settle-desk" class="settle-desk" aria-labelledby="sd-title" hidden>
-    <div class="sd-head">
-      <h2 class="sd-title" id="sd-title">Settle up with your artist</h2>
-      <span class="sd-sub" id="sd-sub"></span>
-    </div>
-    <div class="sd-cols">
-      <div class="sd-col" id="sd-col-owe">
-        <div class="sd-kicker">You owe the artist</div>
-        <div class="sd-amt is-out tnum" id="sd-owe-amt">—</div>
-        <div id="d-pending-expenses-sect" class="overview-section" style="display:none;">
-          <div class="sec-head is-muted">
-            <div class="sec-head-titles">
-              <div class="sec-kicker"><span class="sec-kicker-dot"></span>Reimbursements</div>
-              <div class="section-hed sec-head-title">Pending expense reimbursements</div>
-              <p class="section-subcopy">Expenses the artist covered that haven't been paid back yet.</p>
-            </div>
-          </div>
-          <div id="d-pending-expenses-list"></div>
-        </div>
-      </div>
-      <div class="sd-col" id="sd-col-owed">
-        <div class="sd-kicker">The artist owes you</div>
-        <div class="sd-amt is-in tnum" id="sd-owed-amt">—</div>
-        <div id="artist-transfers-sect" class="overview-section" style="display:none;">
-          <div class="sec-head is-muted">
-            <div class="sec-head-titles">
-              <div class="sec-kicker"><span class="sec-kicker-dot"></span>Payouts</div>
-              <div class="section-hed sec-head-title">Pending artist transfers</div>
-              <p class="section-subcopy">Sales already collected where the artist's share hasn't been sent yet.</p>
-            </div>
-          </div>
-          <div id="artist-transfers-list"></div>
-        </div>
-      </div>
-    </div>
-    <div class="sd-net" id="sd-net">
-      <div class="sd-net-copy">
-        <div class="sd-kicker" id="sd-net-kicker">So you pay</div>
-        <div class="sd-net-amt tnum" id="sd-net-amt">—</div>
-        <p class="sd-net-note" id="sd-net-note"></p>
-      </div>
-      <div class="sd-actions" id="sd-actions"></div>
-    </div>
-  </section>
-  <div class="dash-heads-up" id="d-heads-up" role="status" hidden></div>
-
   <!-- AUTHOR PAYMENT BANNER — shown in author mode when transfers are pending -->
   <div id="author-payment-banner" class="metric-banner metric-banner-gold" style="display:none;">
     <div class="metric-banner-overlay"></div>
@@ -1234,6 +1183,26 @@
        `.overview-section` is the same furniture that fixed those two screens;
        muted here because the KPI grid above already spends this screen's one
        gold accent on Stock on hand. -->
+  <div id="artist-transfers-sect" class="overview-section" style="display:none;">
+    <div class="sec-head is-muted">
+      <div class="sec-head-titles">
+        <div class="sec-kicker"><span class="sec-kicker-dot"></span>Payouts</div>
+        <div class="section-hed sec-head-title">Pending artist transfers</div>
+        <p class="section-subcopy">Sales already collected where the artist's share hasn't been sent yet.</p>
+      </div>
+    </div>
+    <div id="artist-transfers-list"></div>
+  </div>
+  <div id="d-pending-expenses-sect" class="overview-section" style="display:none;">
+    <div class="sec-head is-muted">
+      <div class="sec-head-titles">
+        <div class="sec-kicker"><span class="sec-kicker-dot"></span>Reimbursements</div>
+        <div class="section-hed sec-head-title">Pending expense reimbursements</div>
+        <p class="section-subcopy">Expenses the artist covered that haven't been paid back yet.</p>
+      </div>
+    </div>
+    <div id="d-pending-expenses-list"></div>
+  </div>
   <div class="overview-section">
     <div class="sec-head is-muted">
       <div class="sec-head-titles">
@@ -1321,8 +1290,6 @@
         <p class="section-subcopy">Actions here change or overwrite this book's records and can't be undone.</p>
       </div>
     </div>
-    <details class="dz-fold">
-      <summary class="btn sm">Show admin tools</summary>
     <div id="danger-zone-block" style="display:none;background:var(--surface-card);border-radius:var(--r3);border:var(--stroke-hair) solid var(--border);padding:1.25rem;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:1.25rem;">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;">
         <div style="flex:1;min-width:200px;"><div style="font-weight:700;font-size:var(--text-base);margin-bottom:3px;">Reset all sales data for this book</div><div style="font-size:var(--text-sm);color:var(--text3);">Clears orders, history and consignment for this book only. Your Google Sheet is untouched.</div></div>
@@ -1337,7 +1304,6 @@
         <button class="btn gold outline" id="d-restore-sheets-btn" onclick="restoreBookDataFromSheets()">Sync from Google Sheet</button>
       </div>
     </div>
-    </details>
   </div>
 </div>
 
