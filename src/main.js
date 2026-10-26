@@ -236,7 +236,7 @@ import {
   notifyDevice,
   renderDeviceNotifySwitches,
   setAppIconBadge,
-  setDeviceNotifyFallback,
+  setDeviceNotifyOpener,
   toggleDeviceNotify,
 } from './lib/device-notify.js';
 import { booksInDescription, saleCodes, splitSalePlan } from './lib/sale-codes.js';
@@ -7502,9 +7502,34 @@ async function clearNotificationHistory() {
 }
 
 window.openNotificationsPanel = openNotificationsPanel;
-// A pressed phone/desktop notification whose own handler is gone (the app was
-// closed and the press reopened it) lands on the list of what was said.
-setDeviceNotifyFallback(() => { if (!isAuthor()) openNotificationsPanel(); });
+/** Resolves once every book's records have arrived (or after a while regardless). */
+function whenBooksLoaded(limitMs = 20000) {
+  if (_attentionReady) return Promise.resolve(true);
+  return new Promise(resolve => {
+    const started = Date.now();
+    const tick = setInterval(() => {
+      if (_attentionReady || Date.now() - started > limitMs) { clearInterval(tick); resolve(_attentionReady); }
+    }, 250);
+  });
+}
+
+/**
+ * Go where a pressed phone/desktop notification points: the invoice that was
+ * paid, the book an author paid for, the labels that filed themselves, or the
+ * screen the news is about. It may have just reopened the app from closed, so
+ * it waits for the books to load before looking anything up. With nowhere in
+ * particular to go, it shows the list of what was said.
+ */
+async function openNotificationTarget(target) {
+  await whenBooksLoaded();
+  if (isAuthor()) return;
+  if (!target) { openNotificationsPanel(); return; }
+  if (target.to === 'invoice') { openInvoiceFromAlert(target.id); return; }
+  if (target.to === 'labels') { openShippingReconciliationFromAlert(null, target.source); return; }
+  if (target.to === 'book' && Object.prototype.hasOwnProperty.call(BOOKS, target.book)) switchBook(target.book);
+  switchTab(target.tab);
+}
+setDeviceNotifyOpener(openNotificationTarget);
 initDeviceNotify();
 window.openReviewInbox = openReviewInbox;
 window.clearNotificationHistory = clearNotificationHistory;
@@ -10220,7 +10245,7 @@ function notifyAuthorPaid(r, payment) {
     title,
     body: detail,
     tag: `lm-author-paid-${payment.id}`,
-    onClick: () => { switchBook(r.bookId); switchTab('dashboard'); },
+    open: { to: 'book', book: r.bookId, tab: 'dashboard' },
   });
 }
 
@@ -16923,7 +16948,7 @@ function notifyDeviceInvoicePayment(said, firstInvoiceId) {
     title: said.title,
     body: said.detail,
     tag: 'lm-stripe-invoice-payments',
-    onClick: () => { if (firstInvoiceId) openInvoiceFromAlert(firstInvoiceId); },
+    open: firstInvoiceId ? { to: 'invoice', id: firstInvoiceId } : { to: 'tab', tab: 'consignment' },
   });
 }
 

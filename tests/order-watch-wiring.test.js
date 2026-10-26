@@ -481,6 +481,9 @@ describe('device notification wiring', () => {
     const sw = read('public/sw-notify.js');
     expect(sw).toContain("addEventListener('notificationclick'");
     expect(sw).toContain("type: 'lm-notification-click'");
+    // The destination rides along, both to an open app and on the address of a reopened one.
+    expect(sw).toContain("type: 'lm-notification-click', tag, open");
+    expect(sw).toContain("url.searchParams.set('open', JSON.stringify(open))");
   });
 
   it('the notifications panel carries both switches and a test button', () => {

@@ -126,13 +126,45 @@ export function renderDeviceNotifySwitches(root = typeof document === 'undefined
 
 // ── Sending ────────────────────────────────────────────────────────────────
 
-/** What to do when a notification is pressed, keyed by its tag. Lost on reload. */
-const _clickHandlers = new Map();
-let _fallbackClick = null;
+/**
+ * Where pressing a notification takes the owner.
+ *
+ * A press used to run a function kept in memory, so it only worked while the
+ * page that sent the notification was still open. On a phone the system closes
+ * the app freely, and a press then reopened it on the list of notifications
+ * instead of on the order or invoice the notification was about. Now the
+ * destination travels inside the notification itself as plain data, and the
+ * app goes there however it was opened.
+ *
+ * That data can come back on the app's address, so only these shapes are
+ * trusted, and each value is checked:
+ *   { to: 'tab', tab }            one of NOTIFY_TABS
+ *   { to: 'invoice', id }         an invoice, opened once the books have loaded
+ *   { to: 'book', book, tab }     a book's screen
+ *   { to: 'labels', source }      labels waiting in the review inbox
+ */
+export const NOTIFY_TABS = ['bigcartel', 'shipping', 'dashboard', 'consignment', 'todo'];
+const LABEL_SOURCES = ['email', 'canadapost'];
 
-/** What a press does when its own handler is gone (the app was closed and reopened by it). */
-export function setDeviceNotifyFallback(fn) {
-  _fallbackClick = typeof fn === 'function' ? fn : null;
+// Book ids can be text a publisher typed, so any short string passes here; the
+// app still looks each one up in its own records before going anywhere.
+const shortId = (v) => (typeof v === 'string' && v.length > 0 && v.length <= 120 ? v : '');
+
+/** A destination the app can safely go to, or null. */
+export function notificationTarget(open) {
+  if (!open || typeof open !== 'object') return null;
+  if (open.to === 'tab' && NOTIFY_TABS.includes(open.tab)) return { to: 'tab', tab: open.tab };
+  if (open.to === 'invoice' && shortId(open.id)) return { to: 'invoice', id: open.id };
+  if (open.to === 'book' && shortId(open.book) && NOTIFY_TABS.includes(open.tab)) return { to: 'book', book: open.book, tab: open.tab };
+  if (open.to === 'labels' && LABEL_SOURCES.includes(open.source)) return { to: 'labels', source: open.source };
+  return null;
+}
+
+let _opener = null;
+
+/** What the app does with a pressed notification's destination (null when it has none). */
+export function setDeviceNotifyOpener(fn) {
+  _opener = typeof fn === 'function' ? fn : null;
 }
 
 /**
@@ -146,10 +178,9 @@ export function appInView() {
   try { return typeof document.hasFocus !== 'function' || document.hasFocus(); } catch (_) { return true; }
 }
 
-export function runDeviceNotifyClick(tag) {
-  const fn = _clickHandlers.get(tag) || _fallbackClick;
+export function runDeviceNotifyClick(open) {
   try { if (typeof window !== 'undefined') window.focus(); } catch (_) { /* not focusable from here */ }
-  try { fn?.(tag); } catch (_) { /* the app may still be loading */ }
+  try { _opener?.(notificationTarget(open)); } catch (_) { /* the app may still be loading */ }
 }
 
 async function workerRegistration() {
@@ -163,23 +194,24 @@ async function workerRegistration() {
  * Put one piece of news on the device, if the owner asked for this kind.
  * Returns whether it was sent.
  *
- * `force` skips the "already looking at the app" check, for the test button.
+ * `open` is where a press should go (see notificationTarget); without one, a
+ * press shows the list of notifications. `force` skips the "already looking at
+ * the app" check, for the test button.
  */
-export async function notifyDevice({ kind, title, body = '', tag, onClick, force = false } = {}) {
+export async function notifyDevice({ kind, title, body = '', tag, open = null, force = false } = {}) {
   if (!title || !tag) return false;
   if (kind && !deviceNotifyPrefOn(kind)) return false;
   if (deviceNotificationPermission() !== 'granted') return false;
   if (!force && appInView()) return false;
-  if (onClick) _clickHandlers.set(tag, onClick);
-  else _clickHandlers.delete(tag);
-  const options = { body, icon: ICON, badge: ICON, tag, data: { tag } };
+  const target = notificationTarget(open);
+  const options = { body, icon: ICON, badge: ICON, tag, data: { tag, open: target } };
   const reg = await workerRegistration();
   if (reg?.showNotification) {
     try { await reg.showNotification(title, options); return true; } catch (_) { /* fall through */ }
   }
   try {
     const n = new Notification(title, options);
-    n.onclick = () => { runDeviceNotifyClick(tag); n.close(); };
+    n.onclick = () => { runDeviceNotifyClick(target); n.close(); };
     return true;
   } catch (_) {
     // Android refuses the constructor; with no worker running there is no other way.
@@ -187,27 +219,36 @@ export async function notifyDevice({ kind, title, body = '', tag, onClick, force
   }
 }
 
+/** The destination carried on the address when a press opened the app from closed. */
+export function targetFromAddress(search) {
+  try {
+    const params = new URLSearchParams(search);
+    if (!params.has('notif')) return undefined;
+    return notificationTarget(JSON.parse(params.get('open') || 'null'));
+  } catch (_) { return null; }
+}
+
 /**
  * Listen for presses the service worker passes back (see public/sw-notify.js),
  * and handle the one that opened the app from closed, which arrives as
- * `?notif=<tag>` on the address.
+ * `?notif=<tag>&open=<destination>` on the address.
  */
 export function initDeviceNotify() {
   if (typeof navigator !== 'undefined' && navigator.serviceWorker?.addEventListener) {
     navigator.serviceWorker.addEventListener('message', event => {
-      if (event?.data?.type === CLICK_MESSAGE) runDeviceNotifyClick(String(event.data.tag || ''));
+      if (event?.data?.type === CLICK_MESSAGE) runDeviceNotifyClick(event.data.open);
     });
   }
   if (typeof location === 'undefined' || typeof history === 'undefined') return;
+  const target = targetFromAddress(location.search);
+  if (target === undefined) return;
   try {
     const url = new URL(location.href);
-    if (!url.searchParams.has('notif')) return;
-    const tag = url.searchParams.get('notif') || '';
     url.searchParams.delete('notif');
+    url.searchParams.delete('open');
     history.replaceState(history.state, '', url.pathname + url.search + url.hash);
-    // Give the app a moment to finish starting before opening anything.
-    setTimeout(() => runDeviceNotifyClick(tag), 1200);
-  } catch (_) { /* an address the app cannot parse is not worth failing over */ }
+  } catch (_) { /* leaving the address as it is costs nothing */ }
+  runDeviceNotifyClick(target);
 }
 
 // ── The app icon's count ───────────────────────────────────────────────────
