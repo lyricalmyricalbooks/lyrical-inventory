@@ -226,10 +226,18 @@ export const SAMPLE_BOOK = Object.freeze({
   accentBg: 'rgba(107,79,232,.1)',
   urlParam: 'paper-garden',
   authorPassword: 'sample-password',
+  // Profit-sharing, like a real co-published book, so the Test Profile shows
+  // the Settle up statement: the artist earns 15% until the production cost is
+  // back, then half.
+  profitTiers: Object.freeze([
+    Object.freeze({ label: 'Until costs are back', revenueUpTo: 300, artistPct: 15 }),
+    Object.freeze({ label: 'After', revenueUpTo: null, artistPct: 50 }),
+  ]),
 });
 
+// Each catalog gets its own copy of the tiers: the app edits them in place.
 export function sampleCatalog() {
-  return { [SAMPLE_BOOK_ID]: { ...SAMPLE_BOOK } };
+  return { [SAMPLE_BOOK_ID]: { ...SAMPLE_BOOK, profitTiers: SAMPLE_BOOK.profitTiers.map(t => ({ ...t })) } };
 }
 
 const parse = (s) => { if (s == null) return null; try { return JSON.parse(s); } catch (_) { return null; } };

@@ -693,10 +693,10 @@ registerActions({
   'settleUp.toggleItems': el => {
     const list = document.getElementById(el.getAttribute('aria-controls'));
     if (!list) return;
-    const open = !list.classList.contains('is-open');
-    list.classList.toggle('is-open', open);
+    const open = list.hidden;
+    list.hidden = !open;
     el.setAttribute('aria-expanded', String(open));
-    el.textContent = open ? el.textContent.replace(/^Show/, 'Hide') : el.textContent.replace(/^Hide/, 'Show');
+    el.firstChild.textContent = open ? el.firstChild.textContent.replace(/^Show/, 'Hide') : el.firstChild.textContent.replace(/^Hide/, 'Show');
   },
 });
 
@@ -5057,7 +5057,7 @@ async function applySampleTestData(testBookId) {
 
   // Build mock state
   const testState = defaultState(book);
-  testState.stock = 15; // Set starting stock on hand in database (we'll intentionally drift this from derived count of 9)
+  testState.stock = 15; // Set starting stock on hand in database (we'll intentionally drift this from derived count of 8)
 
   // Consignment stores
   testState.stores = [
@@ -5172,6 +5172,20 @@ async function applySampleTestData(testBookId) {
       date: '2026-07-06',
       sheetsId: 'evt_hist_3',
       consignmentLink: true
+    },
+    {
+      // A copy the artist sold and kept the cash for: the held sale behind
+      // the artist transfer below, which Settle up nets against their earnings.
+      num: 'TEST-4',
+      chan: 'In Person',
+      qty: 1,
+      price: 17,
+      after: 8,
+      notes: 'Direct sale collected by author',
+      date: '2026-07-06',
+      sheetsId: 'evt_hist_4',
+      artistPending: true,
+      directToArtist: true
     }
   ];
 
@@ -5226,7 +5240,7 @@ async function applySampleTestData(testBookId) {
   // Recompute statistics
   recomputeAfters(states[testBookId], book);
 
-  // Intentionally set stock to 15 (instead of derived 9) to showcase stock drift banner!
+  // Intentionally set stock to 15 (instead of derived 8) to showcase stock drift banner!
   states[testBookId].stock = 15;
 
   await saveState(testBookId);
