@@ -4780,6 +4780,9 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 
   /* Forms */
   .form-group input, .form-group select, .form-group textarea{font-size:16px;padding:12px 14px;}
+  /* Form fields take the same 2px ink outline as the cards and buttons around them, instead of a
+     faint hairline that disappears next to them. Focus keeps its gold border (higher specificity). */
+  .form-group input, .form-group select, .form-group textarea{border-width:var(--stroke);border-color:var(--border-strong);}
   /* Fields outside a .form-group (search boxes, API-key rows, year pickers)
      get the same 16px floor, or iOS Safari zooms the page on focus and
      leaves it zoomed after the keyboard closes. */
