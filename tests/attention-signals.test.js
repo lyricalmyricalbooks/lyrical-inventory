@@ -203,6 +203,15 @@ describe('catalogue signals', () => {
     expect(cost.detail).toContain('paid for itself');
   });
 
+  it('sends each missing detail straight to its own field in the book settings', () => {
+    const fixes = Object.fromEntries(scan({ book: { productionCost: 0, isbn: '', stripeLink: '' } }).signals
+      .filter(sig => sig.id.startsWith('catalogue-'))
+      .map(sig => [sig.id.split(':')[0], sig.fix]));
+    expect(fixes['catalogue-cost']).toMatchObject({ kind: 'edit-book', bookId: 'hound', tab: 'cost' });
+    expect(fixes['catalogue-isbn']).toMatchObject({ kind: 'edit-book', bookId: 'hound', tab: 'isbn', label: 'Add ISBN' });
+    expect(fixes['catalogue-paylink']).toMatchObject({ kind: 'edit-book', bookId: 'hound', tab: 'paylink' });
+  });
+
   it("flags the app's own em-dash placeholder as a missing ISBN", () => {
     expect(ids(scan({ book: { isbn: '—' } }))).toContain('catalogue-isbn:hound');
     expect(ids(scan({ book: { isbn: '' } }))).toContain('catalogue-isbn:hound');
@@ -392,7 +401,7 @@ describe('the result as a whole', () => {
     expect(withFix.length).toBeGreaterThan(0);
     for (const signal of withFix) {
       expect(signal.fix).not.toHaveProperty('action');
-      expect(['book', 'tab', 'retry-sync', 'taxcenter']).toContain(signal.fix.kind);
+      expect(['book', 'edit-book', 'tab', 'retry-sync', 'taxcenter']).toContain(signal.fix.kind);
       // The id is never spliced into a call — no code is built here at all.
       expect(JSON.stringify(signal.fix)).not.toContain('switchBook(');
       expect(JSON.stringify(signal.fix)).not.toContain('switchTab(');

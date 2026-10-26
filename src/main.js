@@ -7015,7 +7015,8 @@ function fixAttrs(fix) {
   return `data-fix="${escapeHtml(fix.kind || '')}"`
     + (fix.bookId ? ` data-fix-book="${escapeHtml(fix.bookId)}"` : '')
     + (fix.tab ? ` data-fix-tab="${escapeHtml(fix.tab)}"` : '')
-    + (fix.num ? ` data-fix-num="${escapeHtml(fix.num)}"` : '');
+    + (fix.num ? ` data-fix-num="${escapeHtml(fix.num)}"` : '')
+    + (fix.section ? ` data-fix-section="${escapeHtml(fix.section)}"` : '');
 }
 
 /**
@@ -7044,17 +7045,35 @@ document.addEventListener('click', (event) => {
   const dismissBtn = event.target.closest?.('[data-dismiss-signal]');
   if (dismissBtn) { dismissTodoSignal(dismissBtn.dataset.dismissSignal); return; }
 
-  const btn = event.target.closest?.('[data-fix]');
+  const todoBtn = event.target.closest?.('[data-open-todo]');
+  const btn = todoBtn || event.target.closest?.('[data-fix]');
   if (!btn) return;
-  const { fix, fixBook = '', fixTab = '', fixNum = '' } = btn.dataset;
+  // From the notifications window: count the message as seen and get the
+  // window out of the way of where the button leads.
+  if (btn.closest('#m-notifications')) {
+    if (btn.dataset.notifKind) reviewNotification(btn.dataset.notifKind);
+    closeM('notifications');
+  } else if (btn.dataset.notifKind) {
+    reviewNotification(btn.dataset.notifKind);
+  }
+  if (todoBtn) { openTodoItem(todoBtn.dataset.openTodo); return; }
+  const { fix, fixBook = '', fixTab = '', fixNum = '', fixSection = '' } = btn.dataset;
   if (fix === 'retry-sync') { retrySyncNow(); return; }
   if (fix === 'tab' && fixTab) { switchTab(fixTab); return; }
   if (fix === 'book' && fixBook) {
     // switchBook first: switchTab alone cannot leave the all-books screen.
     switchBook(fixBook);
-    if (fixTab) setTimeout(() => switchTab(fixTab), 50);
+    if (fixTab) setTimeout(() => {
+      switchTab(fixTab);
+      // Land on the part of the tab the item is about, not its first section.
+      if (fixTab === 'consignment' && fixSection) {
+        setConSection(fixSection);
+        $(`${fixSection}-section`)?.scrollIntoView({ block: 'start', behavior: _prefersReducedMotion() ? 'auto' : 'smooth' });
+      }
+    }, 50);
     return;
   }
+  if (fix === 'edit-book' && fixBook) { openEditBookField(fixBook, fixTab); return; }
   if (fix === 'taxcenter') {
     switchTab('taxcenter');
     if (fixTab) setTimeout(() => switchTaxCenterSubTab(fixTab), 50);
@@ -7163,9 +7182,11 @@ function runTodoAction(name, { bookId = '', num = '' } = {}) {
 /** One notification card. Tone follows the house amber/red/blue convention. */
 function notificationHtml(sig) {
   const tone = sig.status === 'blocked' ? 'red' : sig.status === 'warn' ? 'amber' : 'blue';
-  const action = sig.fix ? fixControlHtml(sig.fix, 'notif-action') : '';
+  // Every item leads somewhere: its own fix when it has one, otherwise its row
+  // in the to-do list, picked out, rather than the top of a long list.
+  const action = sig.fix ? fixControlHtml(sig.fix, 'notif-action') : openTodoItemButton(sig.id);
   const extras = signalExtrasHtml(sig, 'notif-action');
-  return `<div class="notif-item tone-${tone}">
+  return `<div class="notif-item tone-${tone}" data-signal="${escapeHtml(sig.id || '')}">
       <span class="notif-ico" aria-hidden="true">${escapeHtml(sig.icon || '')}</span>
       <div class="notif-body">
         <div class="notif-source">From To-do list</div>
@@ -7175,6 +7196,45 @@ function notificationHtml(sig) {
         ${action || extras.quick ? `<div class="notif-meta">${extras.quick}${action}</div>` : ''}
       </div>
     </div>`;
+}
+
+/** The book-settings fields a to-do item can open straight onto. A fixed list: ids arrive as page data. */
+const EDIT_BOOK_FIELDS = { cost: 'nb-prod', isbn: 'nb-isbn', paylink: 'nb-payment-link' };
+
+/** Open a book's settings with the missing field in view and ready to type in. */
+function openEditBookField(bookId, field) {
+  if (!BOOKS[bookId]) return;
+  openEditBookModal(bookId);
+  const input = $(EDIT_BOOK_FIELDS[field] || '');
+  if (!input) return;
+  setTimeout(() => {
+    input.scrollIntoView({ block: 'center', behavior: _prefersReducedMotion() ? 'auto' : 'smooth' });
+    try { input.focus({ preventScroll: true }); } catch (_) { input.focus(); }
+    if (typeof input.select === 'function' && (input.value === '—' || input.value === '0')) input.select();
+  }, 80);
+}
+
+/** A link straight to one item's row in the To-do tab. Data only: ids can hold text a publisher typed. */
+function openTodoItemButton(signalId, cls = 'notif-action') {
+  return `<button type="button" class="${cls}" data-open-todo="${escapeHtml(signalId || '')}">See it in your to-do list →</button>`;
+}
+
+/**
+ * Open the To-do tab on one item: scrolled into view and picked out for a
+ * moment, so a link from a notification lands on the thing it was about
+ * instead of the top of the list. Falls back to the list when the item has
+ * since been dealt with.
+ */
+function openTodoItem(signalId) {
+  switchTab('todo');
+  setTimeout(() => {
+    const row = [...document.querySelectorAll('#todo-groups .todo-row[data-signal]')]
+      .find(el => el.dataset.signal === signalId);
+    if (!row) { showToast('That one is already dealt with — here is the rest of your to-do list'); return; }
+    row.scrollIntoView({ block: 'center', behavior: _prefersReducedMotion() ? 'auto' : 'smooth' });
+    row.classList.add('is-spotlit');
+    setTimeout(() => row.classList.remove('is-spotlit'), 2400);
+  }, 60);
 }
 
 /** The landing page's card for everything waiting in the review inbox. */
@@ -7302,9 +7362,14 @@ function renderOverviewRail() {
     }
     const moreEl = $('all-notif-more');
     if (moreEl) {
+      // Say what kind of "more" it is: more that need you, or only the
+      // calmer items. "1 more" under a count of 1 read as a contradiction.
       const rest = result.total - shown.length;
+      const urgentLeft = urgent.length - shown.length;
       moreEl.hidden = rest <= 0;
-      moreEl.textContent = `${rest} more in your to-do list →`;
+      moreEl.textContent = urgentLeft > 0
+        ? `${urgentLeft} more ${urgentLeft === 1 ? 'needs' : 'need'} you · see all ${result.total} in your to-do list →`
+        : `${rest} less urgent ${rest === 1 ? 'item' : 'items'} in your to-do list →`;
     }
     // Permanent live region — only its TEXT changes, so screen readers keep it.
     const statusEl = $('all-notif-status');
@@ -7391,10 +7456,31 @@ function reviewTaskForNotification(item, review) {
   return { done: false, label: `Review ${n} ${noun}${n === 1 ? '' : 's'}`, action: `openReviewInbox({filter:'${noun}'})` };
 }
 
-function notificationLogItemHtml(item, review = { receipts: 0, labels: 0 }) {
+/**
+ * What a logged to-do message should offer now: the item's own fix while it is
+ * still open (the same button the to-do list shows), a link to its row when it
+ * has no fix, or "done" once it is gone — never a generic "Open to-do".
+ */
+function todoActionForNotification(item, signals) {
+  if (!signals || !String(item.kind || '').startsWith('todo:')) return null;
+  const sig = signals.get(item.kind.slice(5));
+  if (!sig) return { done: true };
+  const kindAttr = ` data-notif-kind="${escapeHtml(item.kind)}"`;
+  const html = sig.fix ? fixControlHtml(sig.fix, 'notif-action') : openTodoItemButton(sig.id);
+  // Both builders open with `<a class=` or `<button type="button" class=`; tag
+  // the opening element so the click also marks this message as seen.
+  return { done: false, html: html.replace(/^<(a|button)\b/, `<$1${kindAttr}`) };
+}
+
+/** The open to-do items by id, for messages that point at one. */
+function openSignalsById(result = visibleAttentionResult()) {
+  return new Map(result.signals.map(sig => [sig.id, sig]));
+}
+
+function notificationLogItemHtml(item, review = { receipts: 0, labels: 0 }, signals = null) {
   const tone = item.tone === 'pending' || item.tone === 'warn' ? 'amber' : item.tone === 'failed' ? 'red' : 'blue';
   const when = webScanRelativeTime(new Date(item.at).toISOString()) || new Date(item.at).toLocaleString();
-  const task = reviewTaskForNotification(item, review);
+  let task = reviewTaskForNotification(item, review);
   // The action is written by the app itself (an alert's own handler), never by
   // anything a publisher typed; it closes the panel before it runs.
   let action = item.action && item.actionLabel
@@ -7404,6 +7490,14 @@ function notificationLogItemHtml(item, review = { receipts: 0, labels: 0 }) {
     action = task.done
       ? '<span class="notif-done"><span aria-hidden="true">✓</span> All reviewed. Nothing left to do here.</span>'
       : `<button type="button" class="notif-action" onclick="reviewNotification('${escapeHtml(item.kind)}');closeM('notifications');${escapeHtml(task.action)}">${escapeHtml(task.label)} →</button>`;
+  } else {
+    const todo = todoActionForNotification(item, signals);
+    if (todo) {
+      action = todo.done
+        ? '<span class="notif-done"><span aria-hidden="true">✓</span> Done. Nothing left to do here.</span>'
+        : todo.html;
+      if (todo.done) task = { done: true };
+    }
   }
   return `<div class="notif-item tone-${task?.done ? 'blue' : tone}${item.read || task?.done ? '' : ' is-unread'}${task?.done ? ' is-done' : ''}">
       <span class="notif-ico" aria-hidden="true">${escapeHtml(item.icon || '🔔')}</span>
@@ -7437,10 +7531,15 @@ function renderRailLatestNotifications() {
   const wrap = $('all-notif-latest-wrap');
   const host = $('all-notif-latest');
   if (!wrap || !host) return;
-  const latest = readNotificationLog().slice(0, RAIL_LATEST_LIMIT);
+  const result = visibleAttentionResult();
+  const signals = openSignalsById(result);
+  // A to-do item already listed under "Needs you now" is not repeated here:
+  // the same words twice in one card read as two different problems.
+  const shownAbove = new Set(result.signals.filter(isUrgent).slice(0, RAIL_NOTIFICATION_LIMIT).map(sig => `todo:${sig.id}`));
+  const latest = readNotificationLog().filter(item => !shownAbove.has(item.kind)).slice(0, RAIL_LATEST_LIMIT);
   wrap.hidden = !latest.length;
   const review = reviewQueueSnapshot().summary;
-  host.innerHTML = latest.map(item => notificationLogItemHtml(item, review)).join('');
+  host.innerHTML = latest.map(item => notificationLogItemHtml(item, review, signals)).join('');
 }
 
 function renderNotificationsPanel() {
@@ -7456,12 +7555,13 @@ function renderNotificationsPanel() {
       </div>`;
     return;
   }
+  const signals = openSignalsById();
   let lastDay = '';
   host.innerHTML = list.map(item => {
     const day = notificationDayLabel(item.at);
     const head = day !== lastDay ? `<div class="notif-log-day">${escapeHtml(day)}</div>` : '';
     lastDay = day;
-    return head + notificationLogItemHtml(item, review);
+    return head + notificationLogItemHtml(item, review, signals);
   }).join('');
 }
 
@@ -7552,7 +7652,7 @@ function todoRowHtml(sig) {
   // so the id travels as a data-attribute for the delegated handler to read,
   // never spliced into an onclick string.
   const extras = signalExtrasHtml(sig, 'btn sm todo-fix');
-  return `<div class="todo-row tone-${tone}">
+  return `<div class="todo-row tone-${tone}" data-signal="${escapeHtml(sig.id || '')}">
       <span class="todo-ico" aria-hidden="true">${escapeHtml(sig.icon || '')}</span>
       <div class="todo-copy">
         <div class="todo-label">${escapeHtml(sig.label || '')}</div>

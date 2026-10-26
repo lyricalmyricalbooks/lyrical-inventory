@@ -78,9 +78,17 @@ const isoToday = () => new Date().toISOString().slice(0, 10);
 // is reachable. Describing the destination instead means nothing a publisher
 // types can ever become executable.
 
-/** Open a book, optionally landing on one of its tabs. */
-function openBook(bookId, tab) {
-  return { kind: 'book', bookId, tab: tab || '' };
+/**
+ * Open a book, optionally landing on one of its tabs, and on one section of
+ * that tab (`invoices` on Consignment), so a link lands on the thing itself.
+ */
+function openBook(bookId, tab, section) {
+  return { kind: 'book', bookId, tab: tab || '', ...(section ? { section } : {}) };
+}
+
+/** Open the book's settings with one field ready to fill in (see EDIT_BOOK_FIELDS in main.js). */
+function editBookField(bookId, field) {
+  return { kind: 'edit-book', bookId, tab: field };
 }
 
 /** Open a top-level tab that isn't tied to a book. */
@@ -199,7 +207,7 @@ function moneySignals(book, s, out, ctx) {
       label: 'Invoice past its due date',
       detail: `${overdue} ${overdue === 1 ? 'invoice' : 'invoices'} for ${book.title} ${overdue === 1 ? 'is' : 'are'} past the date you asked to be paid by.`,
       bookId: book.id,
-      fix: { label: 'Open invoices', ...openBook(book.id, 'consignment') },
+      fix: { label: 'Open invoices', ...openBook(book.id, 'consignment', 'invoices') },
     });
   }
   if (noDueDate > 0) {
@@ -211,7 +219,7 @@ function moneySignals(book, s, out, ctx) {
       label: 'Invoice sent, no due date set',
       detail: `${noDueDate} ${noDueDate === 1 ? 'invoice was' : 'invoices were'} sent for ${book.title} with no due date, so nothing here can say when it is overdue — only that it hasn't been marked paid yet.`,
       bookId: book.id,
-      fix: { label: 'Open invoices', ...openBook(book.id, 'consignment') },
+      fix: { label: 'Open invoices', ...openBook(book.id, 'consignment', 'invoices') },
     });
   }
   if (drafts > 0) {
@@ -223,7 +231,7 @@ function moneySignals(book, s, out, ctx) {
       label: 'Invoice never sent',
       detail: `${drafts} ${drafts === 1 ? 'invoice is' : 'invoices are'} still a draft for ${book.title} — nobody has been asked to pay ${drafts === 1 ? 'it' : 'them'} yet.`,
       bookId: book.id,
-      fix: { label: 'Open invoices', ...openBook(book.id, 'consignment') },
+      fix: { label: 'Open invoices', ...openBook(book.id, 'consignment', 'invoices') },
     });
   }
 
@@ -275,7 +283,7 @@ function catalogueSignals(book, s, out) {
       label: 'Production cost not entered',
       detail: `${book.title} has no printing cost recorded, so the app can't work out when it has paid for itself or what the artist is owed.`,
       bookId: book.id,
-      fix: { label: 'Add cost', ...openBook(book.id) },
+      fix: { label: 'Add cost', ...editBookField(book.id, 'cost') },
     });
   }
 
@@ -289,7 +297,7 @@ function catalogueSignals(book, s, out) {
       label: 'No ISBN recorded',
       detail: `${book.title} has no ISBN saved. Shops and distributors usually ask for one.`,
       bookId: book.id,
-      fix: { label: 'Open book', ...openBook(book.id) },
+      fix: { label: 'Add ISBN', ...editBookField(book.id, 'isbn') },
     });
   }
 
@@ -302,7 +310,7 @@ function catalogueSignals(book, s, out) {
       label: 'No payment link',
       detail: `${book.title} has no payment link, so it can't be sold by QR code at an event.`,
       bookId: book.id,
-      fix: { label: 'Open book', ...openBook(book.id) },
+      fix: { label: 'Add payment link', ...editBookField(book.id, 'paylink') },
     });
   }
 
@@ -727,7 +735,7 @@ function automationSignals(ctx, out) {
         label: `Invoice ${inv.num || ''} was only partly paid`.replace('  ', ' '),
         detail: `${inv.storeName || 'The store'} paid ${cur} ${paid.toFixed(2)} by card${due ? ` of ${cur} ${due.toFixed(2)}` : ''}. The rest is still owed, so the invoice stays open.`,
         bookId,
-        fix: { label: 'Open the invoice', ...openBook(bookId, 'consignment') },
+        fix: { label: 'Open the invoice', ...openBook(bookId, 'consignment', 'invoices') },
       });
     }
   }
