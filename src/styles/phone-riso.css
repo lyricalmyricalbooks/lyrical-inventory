@@ -373,8 +373,8 @@
   .pub-shell .phone-sheet { margin-top: 14px; border: var(--stroke) solid var(--rule-ink); background: var(--surface-card); box-shadow: var(--riso-off); }
   .pub-shell .phone-sheet-empty { margin: 0; padding: var(--space-5) var(--space-4); color: var(--content-muted); font-size: var(--text-base); text-align: center; }
   .pub-shell .phone-pill {
-    display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; white-space: nowrap;
-    border: var(--stroke-hair) solid currentColor; border-radius: var(--r-pill); background: var(--surface-card); color: var(--content-primary);
+    display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; white-space: nowrap;
+    border: var(--stroke) solid currentColor; border-radius: var(--r2); background: var(--surface-card); color: var(--content-primary);
     font: 800 var(--text-3xs) var(--font-ui); letter-spacing: .08em; text-transform: uppercase;
   }
   .pub-shell .phone-pill.is-green { color: var(--green); background: var(--green-bg); }
