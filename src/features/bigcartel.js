@@ -1865,7 +1865,9 @@ function notifyDeviceNewOrders(outcomes) {
     title: said.title,
     body: said.detail,
     tag: 'lm-bc-new-orders',
-    onClick: () => { if (said.needsYou) switchTab('bigcartel'); },
+    // Orders that need a decision open the website orders screen; news that
+    // needs nothing opens the list of what was said.
+    open: said.needsYou ? { to: 'tab', tab: 'bigcartel' } : null,
   });
 }
 

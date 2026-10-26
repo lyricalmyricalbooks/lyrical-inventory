@@ -1900,8 +1900,8 @@ async function applyBigCartelTracking(orders = [], included = []) {
  * notifications, so there is one setting, not two. Best-effort: a browser that
  * blocks notifications changes nothing here.
  */
-function notifyDeviceShipping(title, body, tag, onClick) {
-  notifyDevice({ kind: 'orders', title, body, tag, onClick: onClick || (() => switchTab('shipping')) });
+function notifyDeviceShipping(title, body, tag, open = { to: 'tab', tab: 'shipping' }) {
+  notifyDevice({ kind: 'orders', title, body, tag, open });
 }
 
 /** The card announcing labels bought elsewhere that filed themselves. */
@@ -1916,7 +1916,7 @@ function showPostageSweepAlert({ filed, linked, blank, needsReview, source = 'Ca
     ? `Added to Shipping & Postage from ${source}; ${parts.join(', ')}. Press Review to finish them.`
     : `Found in ${source} and added to Shipping & Postage.`;
   notifyDeviceShipping(`${labels} found in ${source}`, detail, 'lm-postage-sweep',
-    () => openShippingReconciliationFromAlert(null, source === 'your email' ? 'email' : 'canadapost'));
+    { to: 'labels', source: source === 'your email' ? 'email' : 'canadapost' });
   pushAppAlert({
     // Keyed per source, so a Canada Post sweep and an email sweep finding
     // labels minutes apart do not overwrite each other's news.

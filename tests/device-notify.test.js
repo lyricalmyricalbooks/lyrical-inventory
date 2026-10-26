@@ -6,9 +6,11 @@ import {
   deviceNotifyNote,
   notifyDevice,
   renderDeviceNotifySwitches,
+  notificationTarget,
   runDeviceNotifyClick,
   setAppIconBadge,
-  setDeviceNotifyFallback,
+  setDeviceNotifyOpener,
+  targetFromAddress,
   switchDeviceNotify,
 } from '../src/lib/device-notify.js';
 
@@ -46,7 +48,7 @@ beforeEach(() => {
 afterEach(() => {
   delete globalThis.Notification;
   delete navigator.serviceWorker;
-  setDeviceNotifyFallback(null);
+  setDeviceNotifyOpener(null);
 });
 
 describe('sending a notification to the device', () => {
@@ -60,7 +62,7 @@ describe('sending a notification to the device', () => {
 
     expect(sent).toBe(true);
     expect(built).toHaveLength(0);
-    expect(shown).toEqual([{ title: '2 new orders', options: expect.objectContaining({ body: 'Recorded', tag: 'lm-bc-new-orders', data: { tag: 'lm-bc-new-orders' } }) }]);
+    expect(shown).toEqual([{ title: '2 new orders', options: expect.objectContaining({ body: 'Recorded', tag: 'lm-bc-new-orders', data: { tag: 'lm-bc-new-orders', open: null } }) }]);
   });
 
   it('falls back to a plain notification where no worker is running', async () => {
@@ -97,14 +99,44 @@ describe('sending a notification to the device', () => {
     await expect(notifyDevice({ kind: 'orders', title: 'x', tag: 't' })).resolves.toBe(false);
   });
 
-  it('runs the press handler for that notification, or opens the list when it is gone', async () => {
-    installNotification('granted');
-    const pressed = [];
-    setDeviceNotifyFallback(tag => pressed.push(`fallback:${tag}`));
-    await notifyDevice({ title: 'x', tag: 'known', force: true, onClick: () => pressed.push('known') });
-    runDeviceNotifyClick('known');
-    runDeviceNotifyClick('from-before-a-reload');
-    expect(pressed).toEqual(['known', 'fallback:from-before-a-reload']);
+  it('carries where a press should land inside the notification, so it survives the app closing', async () => {
+    const shown = [];
+    installNotification('granted', { throws: true });
+    installWorker(async (title, options) => { shown.push(options); });
+    await notifyDevice({ title: 'Invoice paid', tag: 'lm-stripe', force: true, open: { to: 'invoice', id: 'inv-42' } });
+    expect(shown[0].data).toEqual({ tag: 'lm-stripe', open: { to: 'invoice', id: 'inv-42' } });
+  });
+
+  it('a press goes to its destination, or to the list when it has none', async () => {
+    const { built } = installNotification('granted');
+    const went = [];
+    setDeviceNotifyOpener(target => went.push(target));
+    await notifyDevice({ title: 'Labels', tag: 'lm-postage', force: true, open: { to: 'labels', source: 'canadapost' } });
+    built.length = 0;
+    runDeviceNotifyClick({ to: 'tab', tab: 'shipping' });
+    runDeviceNotifyClick(undefined);
+    expect(went).toEqual([{ to: 'tab', tab: 'shipping' }, null]);
+  });
+});
+
+describe('where a press can go', () => {
+  it('only trusts the known destinations', () => {
+    expect(notificationTarget({ to: 'tab', tab: 'bigcartel' })).toEqual({ to: 'tab', tab: 'bigcartel' });
+    expect(notificationTarget({ to: 'book', book: 'The Hound', tab: 'dashboard', extra: 1 })).toEqual({ to: 'book', book: 'The Hound', tab: 'dashboard' });
+    expect(notificationTarget({ to: 'labels', source: 'email' })).toEqual({ to: 'labels', source: 'email' });
+    expect(notificationTarget({ to: 'tab', tab: 'settings-danger-zone' })).toBeNull();
+    expect(notificationTarget({ to: 'labels', source: 'anything' })).toBeNull();
+    expect(notificationTarget({ to: 'invoice', id: '' })).toBeNull();
+    expect(notificationTarget({ to: 'eval', code: 'alert(1)' })).toBeNull();
+    expect(notificationTarget('tab')).toBeNull();
+  });
+
+  it('reads the destination off the address the app was reopened on', () => {
+    const open = encodeURIComponent(JSON.stringify({ to: 'invoice', id: 'inv-42' }));
+    expect(targetFromAddress(`?notif=lm-stripe&open=${open}`)).toEqual({ to: 'invoice', id: 'inv-42' });
+    expect(targetFromAddress('?notif=lm-test')).toBeNull();
+    expect(targetFromAddress('?notif=x&open=not-json')).toBeNull();
+    expect(targetFromAddress('?ls=a')).toBeUndefined();
   });
 });
 
