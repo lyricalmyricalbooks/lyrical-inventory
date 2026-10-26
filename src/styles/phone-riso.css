@@ -495,6 +495,12 @@
     margin: 6px 0 0; font: 400 40px / .95 var(--font-display); letter-spacing: 0; text-transform: uppercase; color: var(--content-primary); text-wrap: balance;
   }
 
+  /* Order history: the masthead above already says "Full order history", so the
+     second Anton heading under it is dropped from view (kept for screen readers). */
+  .pub-shell #tab-history > .row-between > .section-hed {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+
   /* Section heads: a square flare dot, and a bigger Anton title. */
   .pub-shell .tab-panel .sec-kicker-dot { width: 8px; height: 8px; border-radius: 0; }
   .pub-shell .tab-panel :is(.section-hed, .sec-head-title) { font-size: 28px; line-height: 1; }
