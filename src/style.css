@@ -17131,11 +17131,11 @@ button[onclick="refreshUmamiStats()"]:active {
 
 /* ── Settle up — Statement ledger ──────────────────────────────────────────
    The answer first, as one big figure on an amber band (something to act
-   on) with its buttons beside it; then one statement: who owes whom in two
-   groups with a subtotal each, the records behind every line with their own
-   status and button, and the total at the foot. Every line has the same four
-   columns, so the buttons that still need pressing line up. Green is kept
-   for "all settled". */
+   on) with its two buttons under it; then one statement: who owes whom in
+   two groups, each under a sunken band with its subtotal, one row per line
+   with its sign, where it stands as a single pill, and its amount on the
+   right. The records behind a line fold away under it. Green is kept for
+   "all settled". */
 .ps-settle{
   margin-bottom:var(--space-5);
   background:var(--surface-card);
@@ -17145,7 +17145,7 @@ button[onclick="refreshUmamiStats()"]:active {
   overflow:hidden;
 }
 .ps-ledger-top{
-  display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:var(--space-4);
+  display:flex;flex-direction:column;align-items:flex-start;gap:var(--space-4);
   padding:var(--space-5);
   background:var(--amber-bg);
   border-bottom:var(--stroke) solid var(--border-strong);
@@ -17154,7 +17154,7 @@ button[onclick="refreshUmamiStats()"]:active {
 .ps-ledger-answer{min-width:0;}
 .ps-settle-result .ps-stat-label{
   font-size:var(--text-2xs);font-weight:800;letter-spacing:var(--tracking-label);
-  text-transform:uppercase;color:var(--content-muted);
+  text-transform:uppercase;color:var(--content-secondary);
 }
 .ps-settle-result .ps-stat-val{
   font-family:var(--font-display,'Anton',Impact,sans-serif);font-weight:400;
@@ -17166,53 +17166,69 @@ button[onclick="refreshUmamiStats()"]:active {
   font-family:var(--font-mono);font-feature-settings:"tnum" 1;
   font-size:var(--text-xs);color:var(--content-secondary);
 }
-.ps-receipt-kicker{margin:var(--space-1) 0 0;font-size:var(--text-sm);color:var(--content-secondary);}
 .ps-ledger-top .ps-receipt-actions{margin:0;}
 .ps-settle-form{margin:0;padding:var(--space-4) var(--space-5);border-bottom:var(--stroke-hair) solid var(--border-default);}
 .ps-ledger{font-size:var(--text-sm);color:var(--content-primary);}
-.ps-ledger-head,.ps-ledger-row{
-  display:grid;grid-template-columns:minmax(0,1fr) minmax(170px,240px) minmax(140px,180px) 120px;
-  gap:var(--space-2) var(--space-4);align-items:center;padding:var(--space-3) var(--space-5);
-}
-.ps-ledger-head{
-  padding-block:var(--space-2);
-  font-size:var(--text-2xs);font-weight:800;letter-spacing:var(--tracking-label);
-  text-transform:uppercase;color:var(--content-muted);
-  border-bottom:var(--stroke) solid var(--border-strong);
-}
-.ps-ledger-head > :last-child{text-align:right;}
-.ps-ledger-group,.ps-ledger-total{
-  display:flex;justify-content:space-between;gap:var(--space-3);
-  padding:var(--space-2) var(--space-5);
-  background:var(--surface-sunken);
-  border-bottom:var(--stroke-hair) solid var(--border-default);
+.ps-ledger-group-head{
+  display:flex;justify-content:space-between;gap:var(--space-3);align-items:baseline;
+  padding:var(--space-3) var(--space-5);
+  background:var(--surface-sunken);border-bottom:var(--stroke-hair) solid var(--border-strong);
   font-size:var(--text-2xs);font-weight:800;letter-spacing:var(--tracking-label);text-transform:uppercase;
 }
-.ps-ledger-sub-total,.ps-ledger-amt{font-family:var(--font-mono);font-feature-settings:"tnum" 1,"zero" 1;white-space:nowrap;}
-.ps-ledger-row{border-bottom:var(--stroke-hair) solid var(--border-default);}
-.ps-ledger-row.is-sub{padding-block:var(--space-2);background:var(--surface-sunken);}
-.ps-ledger-row.is-sub .is-what{padding-left:var(--space-4);}
-.ps-ledger-cell{min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:2px;}
-.ps-ledger-cell.is-amt{align-items:flex-end;}
-.ps-ledger-cell.is-amt .ps-ledger-amt{font-size:var(--text-base);}
-.ps-ledger-label{font-weight:600;}
-.ps-ledger-detail,.ps-ledger-meta{font-size:var(--text-2xs);color:var(--content-muted);}
-.ps-ledger-total{
-  padding-block:var(--space-3);
-  border-top:var(--stroke) solid var(--border-strong);border-bottom:0;
-  font-size:var(--text-sm);
+.ps-ledger-group + .ps-ledger-group .ps-ledger-group-head{border-top:var(--stroke-hair) solid var(--border-strong);}
+.ps-ledger-sub-total,.ps-ledger-amt{font-family:var(--font-mono);font-feature-settings:"tnum" 1,"zero" 1;white-space:nowrap;text-align:right;}
+.ps-ledger-sub-total{font-size:var(--text-sm);font-weight:700;letter-spacing:.04em;}
+.ps-ledger-line{
+  display:grid;grid-template-columns:var(--space-5) minmax(0,1fr) auto;gap:var(--space-1) var(--space-3);align-items:baseline;
+  padding:var(--space-4) var(--space-5);border-bottom:var(--stroke-hair) solid var(--border-default);
 }
-.ps-ledger-total .ps-ledger-amt{font-size:var(--text-lg);}
-.ps-ledger-foot{padding:var(--space-4) var(--space-5) var(--space-2);border-top:var(--stroke) solid var(--border-strong);}
+.ps-ledger-sign{font-family:var(--font-mono);color:var(--content-secondary);}
+.ps-ledger-text{min-width:0;display:flex;flex-direction:column;gap:var(--space-1);}
+.ps-ledger-label{font-weight:600;font-size:var(--text-base);}
+.ps-ledger-detail{font-size:var(--text-xs);color:var(--content-secondary);line-height:1.6;}
+.ps-ledger-wait{font-size:var(--text-2xs);letter-spacing:0;}
+.ps-ledger-amt.is-line{font-size:var(--text-lg);}
+.ps-ledger-line:has(.ps-ledger-act) .ps-ledger-text{grid-row:span 2;}
+.ps-ledger-act{grid-column:3;display:flex;justify-content:flex-end;align-self:end;}
+.ps-ledger-records{padding:var(--space-2) var(--space-5);border-bottom:var(--stroke-hair) solid var(--border-default);}
+.ps-ledger-items{list-style:none;margin:var(--space-2) 0 0;padding:0;}
+.ps-ledger-items[hidden]{display:none;}
+.ps-ledger-item{
+  display:grid;grid-template-columns:96px minmax(0,1fr) 40px 110px 96px;gap:var(--space-3);align-items:center;
+  min-height:var(--target-min);padding:2px 0;border-top:var(--stroke-hair) solid var(--border-default);
+  font-size:var(--text-xs);
+}
+.ps-ledger-when,.ps-ledger-qty{color:var(--content-muted);white-space:nowrap;}
+.ps-ledger-qty{text-align:right;}
+.ps-ledger-what{min-width:0;overflow-wrap:anywhere;font-weight:600;}
+.ps-ledger-do{display:flex;justify-content:flex-end;}
+.ps-ledger-item .settle-chooser{position:relative;}
+.ps-ledger-link,.ps-ledger-toggle{
+  display:inline-flex;align-items:center;gap:4px;min-height:var(--target-min);padding:0 2px;
+  background:none;border:0;cursor:pointer;list-style:none;white-space:nowrap;
+  font:600 var(--text-xs) var(--font-ui);color:var(--content-primary);
+  text-decoration:underline;text-underline-offset:3px;
+}
+.ps-ledger-toggle{font-size:var(--text-sm);}
+.ps-ledger-link::-webkit-details-marker{display:none;}
+.ps-ledger-link:focus-visible,.ps-ledger-toggle:focus-visible{outline:var(--focus-ring-width) solid var(--focus-ring-color);outline-offset:2px;}
+.ps-ledger-foot{
+  display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:var(--space-3) var(--space-4);
+  padding:var(--space-4) var(--space-5);
+}
+.ps-ledger-foot > .ps-settle-note,.ps-ledger-foot > .ps-payout-preview{margin:0;flex:1 1 320px;}
+.ps-ledger-foot > .ps-settle-preview[open]{flex-basis:100%;}
+.ps-ledger-foot .ps-settle-preview > summary{
+  gap:var(--space-1);padding:0 var(--space-3);border:var(--stroke) solid var(--border-strong);
+  color:var(--content-primary);font-size:var(--text-xs);font-weight:700;
+}
 .ps-ledger-card > .ps-settle-note{padding:0 var(--space-5);}
 @media (max-width:768px){
-  .ps-ledger-head{display:none;}
-  .ps-ledger-cell:empty{display:none;}
-  .ps-ledger-row{grid-template-columns:minmax(0,1fr) auto;padding:var(--space-3) var(--space-4);}
-  .ps-ledger-cell.is-status,.ps-ledger-cell.is-act{grid-column:1 / -1;}
-  .ps-ledger-cell.is-amt{grid-column:2;grid-row:1;}
-  .ps-ledger-row.is-sub .is-what{padding-left:0;}
-  .ps-ledger-group,.ps-ledger-total,.ps-ledger-top,.ps-ledger-foot,.ps-settle-form{padding-inline:var(--space-4);}
+  .ps-ledger-group-head,.ps-ledger-line,.ps-ledger-records,.ps-ledger-top,.ps-ledger-foot,.ps-settle-form{padding-inline:var(--space-4);}
+  .ps-ledger-line:has(.ps-ledger-act) .ps-ledger-text{grid-row:auto;}
+  .ps-ledger-act{grid-column:2 / -1;justify-content:flex-start;}
+  .ps-ledger-item{grid-template-columns:minmax(0,1fr) auto auto;}
+  .ps-ledger-when,.ps-ledger-qty{display:none;}
 }
 .ps-settle-note{margin:0 0 var(--space-3);font-size:var(--text-xs);line-height:var(--leading-snug);color:var(--content-muted);max-width:64ch;}
 .ps-settle-note:empty{display:none;}
