@@ -20512,6 +20512,20 @@ a.notif-action:hover { text-decoration: underline; }
   #tab-history .hist-kpi-val{font-size:var(--text-lg);}
   #tab-history .hist-kpi-card.is-lead .hist-kpi-val{font-size:var(--text-xl);}
   #tab-history .hist-kpi-sub{font-size:var(--text-2xs);line-height:var(--leading-snug);padding-top:0;}
+  /* One shared label / figure / sub-line row across the three tiles. Stacked
+     per tile, the lead tile's thicker top rule and larger figure dropped its
+     number below the other two, and a sub-line that wrapped started higher
+     than the one-line sub-lines beside it. On subgrid rows every label, every
+     figure and every sub-line starts on one line, figures sit level on the
+     row's foot, and the lead still leads by size alone. */
+  @supports (grid-template-rows: subgrid){
+    #tab-history .hist-kpi-container{grid-template-rows:auto auto auto;row-gap:var(--space-1);}
+    #tab-history .hist-kpi-card{display:grid;grid-row:span 3;grid-template-rows:subgrid;row-gap:var(--space-1);}
+    #tab-history .hist-kpi-content{display:contents;}
+    #tab-history .hist-kpi-label{margin-bottom:0;}
+    #tab-history .hist-kpi-val{align-self:end;}
+    #tab-history .hist-kpi-sub{margin-top:0;}
+  }
 }
 
 /* ============================================================

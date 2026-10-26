@@ -56,3 +56,18 @@ test('the phone history block uses tokens only, with no raw colour values', () =
   expect(historyPhone).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
   expect(historyPhone).not.toMatch(/rgba?\(/);
 });
+
+test('on a phone the three summary tiles share label, figure and sub-line rows', () => {
+  // Stacked per tile, the lead tile's thicker rule and bigger figure dropped its
+  // number below the other two. Subgrid rows keep all three figures level.
+  const sub = historyPhone.match(/@supports \(grid-template-rows: subgrid\)\{([\s\S]*?)\n  \}/);
+  expect(sub).not.toBeNull();
+  const css = sub[1];
+  expect(css).toMatch(/#tab-history \.hist-kpi-container\{[^}]*grid-template-rows:auto auto auto;/);
+  expect(css).toMatch(/#tab-history \.hist-kpi-card\{[^}]*grid-row:span 3;[^}]*grid-template-rows:subgrid;/);
+  // The content wrapper must step aside, or label/figure/sub never reach the subgrid.
+  expect(css).toMatch(/#tab-history \.hist-kpi-content\{display:contents;\}/);
+  expect(css).toMatch(/#tab-history \.hist-kpi-val\{align-self:end;\}/);
+  // The desktop margin-top:auto would push the sub-lines apart again.
+  expect(css).toMatch(/#tab-history \.hist-kpi-sub\{margin-top:0;\}/);
+});

@@ -251,6 +251,16 @@ instead of flagging both sides. Columns stack below 680px through a `@container`
 Follow-up actions are a numbered `.ps-settle-steps` list (check → share → record), and the record step
 only renders for a role that can write.
 
+**Tiles side by side with a lead — share the rows with `subgrid`.** When a row of stat tiles stacks
+label / figure / sub-line inside each tile and one tile leads (bigger figure, thicker rule), each
+tile's column drifts on its own: the lead figure drops below its neighbours, and a sub-line that wraps
+starts higher than the one-line ones beside it. Give the container three `auto` rows, make each tile
+`display:grid; grid-row:span 3; grid-template-rows:subgrid`, set the content wrapper to
+`display:contents`, and `align-self:end` the figure. Every label, figure and sub-line then starts on one
+line and the lead leads by size alone. Wrap it in `@supports (grid-template-rows: subgrid)` so the
+stacked layout is the fallback. Reference: the phone Order History tiles (`#tab-history .hist-kpi-*`,
+pinned in `tests/phone-history-compact.test.js`).
+
 ---
 
 ## Permanently-dark banner tables — `.metric-banner-table`
