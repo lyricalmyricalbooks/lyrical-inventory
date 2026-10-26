@@ -17,6 +17,7 @@
 // tests/features-boundary.test.js: nothing here runs at module-evaluation
 // time. eslint's no-undef, an error in CI, keeps the import list below honest.
 import { withAutoLocalPickup } from '../lib/local-pickup.js';
+import { notifyDevice } from '../lib/device-notify.js';
 import { buildChitChatsShipment, getChitChatsRates, buyChitChatsLabel, normalizeChitChatsShipment,
   listChitChatsShipments, refundChitChatsShipment, fetchChitChatsLabelArtifact, deleteChitChatsDraft, chitChatsCharge } from '../lib/chitchats.js';
 import { readChitChatsState, saveChitChatsState, safeChitChatsRecord } from '../lib/chitchats-state.js';
@@ -80,7 +81,6 @@ import {
   getBigCartelIncluded,
   getBigCartelOrders,
   hydrateShippingDestinationPhone,
-  orderNotifyEnabled,
   refreshBigCartelOrdersIfDue,
 } from './bigcartel.js';
 import { renderTaxCenter, saveTaxCenter } from './taxcentre.js';
@@ -1889,7 +1889,7 @@ async function applyBigCartelTracking(orders = [], included = []) {
       ? `Tracking added, and ${linked} postage cost${linked === 1 ? '' : 's'} matched to ${linked === 1 ? 'its order' : 'their orders'}.`
       : 'Tracking added. The postage cost is added once Canada Post reports the label.';
     pushAppAlert({ id: 'bigcartel-tracking', icon: '📦', title, detail });
-    notifyDevice(title, detail, 'lm-bc-tracking');
+    notifyDeviceShipping(title, detail, 'lm-bc-tracking');
   }
   return { stamped: changes.length, linked };
 }
@@ -1897,21 +1897,11 @@ async function applyBigCartelTracking(orders = [], included = []) {
 /**
  * The same news as a phone or desktop notification, for when the app is in a
  * background tab. Uses the switch that already exists for new-order
- * notifications on the Big Cartel tab, so there is one setting, not two.
- * Best-effort: a browser that blocks notifications changes nothing here.
+ * notifications, so there is one setting, not two. Best-effort: a browser that
+ * blocks notifications changes nothing here.
  */
-function notifyDevice(title, body, tag, onClick) {
-  if (!orderNotifyEnabled()) return;
-  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
-  try {
-    const n = new Notification(title, { body, icon: '/pwa-192x192.png', tag });
-    n.onclick = () => {
-      try { window.focus(); } catch (_) { /* not focusable from here in every browser */ }
-      if (onClick) onClick();
-      else switchTab('shipping');
-      n.close();
-    };
-  } catch (_) { /* unsupported context (e.g. iOS Safari outside an installed PWA) */ }
+function notifyDeviceShipping(title, body, tag, onClick) {
+  notifyDevice({ kind: 'orders', title, body, tag, onClick: onClick || (() => switchTab('shipping')) });
 }
 
 /** The card announcing labels bought elsewhere that filed themselves. */
@@ -1925,7 +1915,7 @@ function showPostageSweepAlert({ filed, linked, blank, needsReview, source = 'Ca
   const detail = parts.length
     ? `Added to Shipping & Postage from ${source}; ${parts.join(', ')}. Press Review to finish them.`
     : `Found in ${source} and added to Shipping & Postage.`;
-  notifyDevice(`${labels} found in ${source}`, detail, 'lm-postage-sweep',
+  notifyDeviceShipping(`${labels} found in ${source}`, detail, 'lm-postage-sweep',
     () => openShippingReconciliationFromAlert(null, source === 'your email' ? 'email' : 'canadapost'));
   pushAppAlert({
     // Keyed per source, so a Canada Post sweep and an email sweep finding

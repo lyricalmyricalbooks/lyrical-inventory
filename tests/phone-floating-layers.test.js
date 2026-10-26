@@ -12,7 +12,7 @@ test('the toast and the update banner are siblings after the app, so ~ selectors
   const appEnd = html.indexOf('<div id="pwa-update-prompt"');
   expect(app).toBeGreaterThan(-1);
   expect(appEnd).toBeGreaterThan(app);
-  expect(html.indexOf('<div class="toast" id="toast">')).toBeGreaterThan(appEnd);
+  expect(html.indexOf('<div class="toast" id="toast"')).toBeGreaterThan(appEnd);
 });
 
 // After a register sale the Undo bar and the "Sale complete" message appear

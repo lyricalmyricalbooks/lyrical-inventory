@@ -34,6 +34,7 @@ import {
   switchTab,
 } from '../main.js';
 import { BOOKS, states } from '../core/store.js';
+import { deviceNotifyPrefOn, notifyDevice, renderDeviceNotifySwitches, toggleDeviceNotify } from '../lib/device-notify.js';
 import { syncToSheets } from './sheets-bridge.js';
 import { openM, closeM, confirmDialog } from '../lib/modal.js';
 import {
@@ -1778,7 +1779,6 @@ function raiseStoreReversals(bcOrders = []) {
 }
 
 const BC_AUTO_RECORD_KEY = 'lm-bc-auto-record';
-const BC_ORDER_NOTIFY_KEY = 'lm-bc-order-notify';
 
 /**
  * Whether new orders are recorded the moment they are spotted. On unless the
@@ -1791,7 +1791,7 @@ function autoRecordEnabled() {
 
 /** Whether she asked for a notification on this device when an order comes in. */
 function orderNotifyEnabled() {
-  try { return localStorage.getItem(BC_ORDER_NOTIFY_KEY) === '1'; } catch (e) { return false; }
+  return deviceNotifyPrefOn('orders');
 }
 
 /**
@@ -1858,40 +1858,22 @@ async function handleNewBigCartelOrders(fresh = [], bcOrders = []) {
  * must never get in the way of the ledger write that already happened.
  */
 function notifyDeviceNewOrders(outcomes) {
-  if (!outcomes?.length || !orderNotifyEnabled()) return;
-  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+  if (!outcomes?.length) return;
   const said = describeOrderOutcomes(outcomes);
-  try {
-    const n = new Notification(said.title, {
-      body: said.detail,
-      icon: '/pwa-192x192.png',
-      tag: 'lm-bc-new-orders',
-    });
-    n.onclick = () => {
-      try { window.focus(); } catch (e) { /* not focusable from here in every browser */ }
-      if (said.needsYou) switchTab('bigcartel');
-      n.close();
-    };
-  } catch (e) { /* unsupported context (e.g. iOS Safari outside an installed PWA) */ }
+  notifyDevice({
+    kind: 'orders',
+    title: said.title,
+    body: said.detail,
+    tag: 'lm-bc-new-orders',
+    onClick: () => { if (said.needsYou) switchTab('bigcartel'); },
+  });
 }
 
 /** Reflect both switches on the Big Cartel tab, including a permission revoked outside the app. */
 function renderOrderAutomationToggles() {
   const auto = $('bc-auto-record-cb');
   if (auto) auto.checked = autoRecordEnabled();
-  const cb = $('bc-order-notify-cb');
-  if (!cb) return;
-  const supported = typeof Notification !== 'undefined';
-  cb.disabled = !supported;
-  cb.checked = supported && orderNotifyEnabled() && Notification.permission === 'granted';
-  const note = $('bc-order-notify-note');
-  if (note) {
-    note.textContent = !supported
-      ? 'Not supported in this browser.'
-      : Notification.permission === 'denied'
-        ? 'Blocked — allow notifications for this site in your browser settings, then try again.'
-        : 'Pops up on this device when an order comes in or a parcel is marked shipped, even while the app is in a background tab.';
-  }
+  renderDeviceNotifySwitches();
 }
 
 function toggleBigCartelAutoRecord() {
@@ -1903,27 +1885,9 @@ function toggleBigCartelAutoRecord() {
     : 'New website orders will wait for you to record them');
 }
 
-async function toggleBigCartelOrderNotify() {
+function toggleBigCartelOrderNotify() {
   const cb = $('bc-order-notify-cb');
-  if (!cb) return;
-  if (!cb.checked) {
-    try { localStorage.setItem(BC_ORDER_NOTIFY_KEY, '0'); } catch (e) { /* storage blocked */ }
-    return;
-  }
-  if (typeof Notification === 'undefined') {
-    cb.checked = false;
-    showToast('This browser does not support notifications', 'warn');
-    return;
-  }
-  const permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
-  if (permission !== 'granted') {
-    cb.checked = false;
-    showToast('Notifications were blocked — nothing will be sent to this device', 'warn');
-    renderOrderAutomationToggles();
-    return;
-  }
-  try { localStorage.setItem(BC_ORDER_NOTIFY_KEY, '1'); } catch (e) { /* storage blocked */ }
-  showToast('✓ You’ll be notified on this device when a website order comes in');
+  if (cb) return toggleDeviceNotify('orders', cb.checked, showToast);
 }
 
 /**
