@@ -49,7 +49,8 @@
   /* ── Approval / action banner: one tinted line, the fix at its end ─── */
   .pub-shell .publisher-action-banner {
     margin: var(--space-3) var(--phone-gutter) 0; padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
-    border: var(--stroke-hair) solid var(--border); border-radius: 0; box-shadow: none; background: var(--amber-bg);
+    border: var(--stroke) solid var(--rule-ink); border-left: 6px solid var(--status-active); border-radius: 0;
+    box-shadow: var(--elev-1); background: var(--amber-bg);
   }
   .pub-shell .publisher-action-banner .pab-icon { width: auto; height: auto; border: 0; background: none; }
   .pub-shell .publisher-action-banner .pab-short b { font: 600 var(--text-base) / 1.3 var(--font-ui); }
