@@ -20647,6 +20647,8 @@ a.notif-action:hover { text-decoration: underline; }
 .notif-device-fold { margin-bottom: var(--space-3); }
 .notif-device-fold .toggle-row { margin-top: 0; }
 .notif-device-lede { margin: 0; }
+/* A to-do row reached from a notification, picked out for a moment so the eye lands on it. */
+.todo-row.is-spotlit { outline: var(--stroke) solid var(--rule-ink); outline-offset: 2px; background: var(--amber-bg); }
 .notif-item.is-unread { background: var(--status-active-bg); }
 .notif-new-dot { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: var(--status-active); vertical-align: middle; }
 .notif-when { font-size: var(--text-2xs); color: var(--content-muted); margin-right: var(--space-2); }
