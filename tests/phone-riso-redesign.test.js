@@ -96,3 +96,12 @@ describe('Other screens', () => {
     expect(riso).toMatch(/:is\(\.kpi-grid, \.recon-kpis\) > \.kpi\.is-lead \{[^}]*background: none !important;/);
   });
 });
+
+describe('Stores rows on a phone', () => {
+  test('the status tag sits under the name so the city line stays on one line', () => {
+    expect(riso).toMatch(/\.pub-shell \.store-row-end \{ display: contents; \}/);
+    expect(riso).toMatch(/\.pub-shell \.store-row-owed \{[^}]*grid-row: 1;/);
+    expect(riso).toMatch(/\.pub-shell \.store-row-end \.phone-pill \{[^}]*grid-row: 2; justify-self: start;/);
+    expect(riso).toMatch(/\.pub-shell \.store-row-tag \{ grid-row: 1 \/ span 2;/);
+  });
+});
