@@ -980,6 +980,16 @@
   #tab-reconcile .recon-toggle { min-height: var(--target-min); grid-column: 1; gap: var(--space-2); font-size: var(--text-sm); white-space: nowrap; }
   #tab-reconcile .recon-toolbar > .btn { grid-column: 2; min-height: var(--target-min); justify-content: center; white-space: nowrap; padding-inline: var(--space-2); }
 
+  /* Toolbar reads as one inked slab: the frame, search, drop-downs and filter chips take the 2px ink
+     outline of the cards and buttons around them (not a faint hairline); chips are square, not lozenges.
+     Focus keeps its gold border (the base :focus rules are the same specificity or lower here). */
+  #tab-reconcile .recon-toolbar { border: var(--stroke) solid var(--border-strong); }
+  #tab-reconcile .recon-search, #tab-reconcile .recon-mini { border: var(--stroke) solid var(--border-strong); background: var(--surface-raised); }
+  #tab-reconcile .recon-search:focus, #tab-reconcile .recon-mini:focus { border-color: var(--gold); }
+  #tab-reconcile .recon-chip { border: var(--stroke) solid var(--border-strong); border-radius: var(--r2); background: var(--surface-raised); }
+  #tab-reconcile .recon-chip.active { background: var(--ink); border-color: var(--ink); }
+  #tab-reconcile .recon-pill { border-radius: var(--r2); border: var(--stroke-hair) solid currentColor; text-transform: uppercase; letter-spacing: var(--tracking-caps); }
+
   /* Need cards: one column of fields, book first, Qty beside the amount,
      Currency beside the rate, Order # last, then the actions. Cells sit on the
      bottom edge so a label that wraps to two lines (Stripe amount paid, Automatic
