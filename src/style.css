@@ -4546,6 +4546,8 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .toast.show{opacity:1;transform:translateY(0);}
 .toast.warn{border-left-color:var(--orange);}
 .toast.err{border-left-color:var(--rose);}
+/* A problem can be pressed away (see showToast); good news stays click-through. */
+.toast.show.warn,.toast.show.err{pointer-events:auto;cursor:pointer;}
 
 /* EDIT / VOID */
 .tbl tbody tr.voided td{opacity:.35;}
@@ -20641,6 +20643,10 @@ a.notif-action:hover { text-decoration: underline; }
 .notif-log { display: flex; flex-direction: column; gap: var(--space-2); max-height: min(60vh, 560px); overflow-y: auto; padding-right: 2px; }
 .notif-log-day { margin: var(--space-3) 0 2px; font-size: var(--text-2xs); font-weight: 700; letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--content-muted); }
 .notif-log-day:first-child { margin-top: 0; }
+/* "Notify me on this device" — both device switches in one place, above the list. */
+.notif-device-fold { margin-bottom: var(--space-3); }
+.notif-device-fold .toggle-row { margin-top: 0; }
+.notif-device-lede { margin: 0; }
 .notif-item.is-unread { background: var(--status-active-bg); }
 .notif-new-dot { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: var(--status-active); vertical-align: middle; }
 .notif-when { font-size: var(--text-2xs); color: var(--content-muted); margin-right: var(--space-2); }

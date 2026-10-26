@@ -231,6 +231,14 @@ import {
 import { installBackClose } from './lib/back-close.js';
 import { salesForDay, unsentSalesForDay } from './lib/today-summary.js';
 import { dismissAppAlert, markAppAlertReviewed, pushAppAlert } from './lib/app-alert.js';
+import {
+  initDeviceNotify,
+  notifyDevice,
+  renderDeviceNotifySwitches,
+  setAppIconBadge,
+  setDeviceNotifyFallback,
+  toggleDeviceNotify,
+} from './lib/device-notify.js';
 import { booksInDescription, saleCodes, splitSalePlan } from './lib/sale-codes.js';
 import { describeMarketDay, latestMarketDay, summariseMarketDay } from './lib/market-day.js';
 import { checkMarketCards, describeMarketCards } from './lib/market-card-check.js';
@@ -3510,10 +3518,19 @@ if (sheetsUrl) {
 
 
 // ── TOAST
+// A problem stays up long enough to read: an error that vanished in under
+// three seconds was often gone before anyone looked down at it. Problems can
+// also be pressed away, so a long one never sits over a button.
+const TOAST_MIN_MS = { warn: 5000, err: 7000 };
+
 export function showToast(msg, type = 'ok', dur = 2800) {
   const t = $('toast'); t.textContent = msg;
   t.className = 'toast show' + (type === 'warn' ? ' warn' : type === 'err' ? ' err' : '');
-  clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), dur);
+  if (!t._bound) {
+    t._bound = true;
+    t.addEventListener('click', () => { clearTimeout(t._t); t.classList.remove('show'); });
+  }
+  clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), Math.max(dur, TOAST_MIN_MS[type] || 0));
 }
 // Expose so modules loaded before main.js completes (firebase.js) can call back.
 window.showToast = showToast;
@@ -7402,6 +7419,8 @@ function notificationLogItemHtml(item, review = { receipts: 0, labels: 0 }) {
 
 function renderNotificationBell() {
   const unread = unreadNotificationCount();
+  // The same count on the installed app's icon, where the device shows one.
+  setAppIconBadge(unread);
   document.querySelectorAll('.notif-unread-badge').forEach(el => {
     el.textContent = unread > 99 ? '99+' : String(unread);
     el.hidden = unread === 0;
@@ -7448,6 +7467,7 @@ function renderNotificationsPanel() {
 
 function openNotificationsPanel() {
   renderNotificationsPanel();
+  renderDeviceNotifySwitches();
   openM('notifications');
   // Tasks stay unread until the publisher opens their review destination.
   markInformationalNotificationsRead();
@@ -7482,6 +7502,10 @@ async function clearNotificationHistory() {
 }
 
 window.openNotificationsPanel = openNotificationsPanel;
+// A pressed phone/desktop notification whose own handler is gone (the app was
+// closed and the press reopened it) lands on the list of what was said.
+setDeviceNotifyFallback(() => { if (!isAuthor()) openNotificationsPanel(); });
+initDeviceNotify();
 window.openReviewInbox = openReviewInbox;
 window.clearNotificationHistory = clearNotificationHistory;
 window.onNotificationLogged = () => {
@@ -10191,16 +10215,13 @@ function notifyAuthorPaid(r, payment) {
     actionLabel: 'Open book',
     action: `switchBook(${JSON.stringify(r.bookId)}); switchTab('dashboard')`,
   });
-  if (stripePaidNotifyEnabled() && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-    try {
-      const n = new Notification(title, { body: detail, icon: '/pwa-192x192.png', tag: `lm-author-paid-${payment.id}` });
-      n.onclick = () => {
-        try { window.focus(); } catch (_) { /* not focusable here */ }
-        try { switchBook(r.bookId); switchTab('dashboard'); } catch (_) { /* app still loading */ }
-        n.close();
-      };
-    } catch (_) { /* unsupported context */ }
-  }
+  notifyDevice({
+    kind: 'payments',
+    title,
+    body: detail,
+    tag: `lm-author-paid-${payment.id}`,
+    onClick: () => { switchBook(r.bookId); switchTab('dashboard'); },
+  });
 }
 
 // An author paid through one of the app's own transfer links (single sale or
@@ -16850,15 +16871,9 @@ function reconcileOpenInvoice(idSafe) {
 const STRIPE_INVOICE_WATCH_INTERVAL_MS = 5 * 60 * 1000;
 const STRIPE_INVOICE_COLD_START_DAYS = 30;
 const STRIPE_INVOICE_LAST_KEY = 'lm-stripe-invoice-sweep-last';
-const STRIPE_PAID_NOTIFY_KEY = 'lm-stripe-paid-notify';
 
 let _stripeInvoiceWatchStarted = false;
 let _stripeInvoiceSweeping = false;
-
-/** Whether she has opted in to a device notification when the sweep settles something. */
-function stripePaidNotifyEnabled() {
-  try { return localStorage.getItem(STRIPE_PAID_NOTIFY_KEY) === '1'; } catch (_) { return false; }
-}
 
 /**
  * Reflect the saved preference (and whatever the browser's permission actually
@@ -16868,44 +16883,31 @@ function stripePaidNotifyEnabled() {
  */
 function renderStripePaidNotifyToggle() {
   renderStripeSaleAutoToggle();
-  const cb = document.getElementById('stripe-paid-notify-cb');
-  if (!cb) return;
-  const supported = typeof Notification !== 'undefined';
-  cb.disabled = !supported;
-  cb.checked = supported && stripePaidNotifyEnabled() && Notification.permission === 'granted';
-  const note = document.getElementById('stripe-paid-notify-note');
-  if (note) {
-    note.textContent = !supported
-      ? 'Not supported in this browser.'
-      : Notification.permission === 'denied'
-        ? 'Blocked — allow notifications for this site in your browser settings, then try again.'
-        : 'Puts a notification on this device the moment a Stripe payment settles an invoice — even if this tab is in the background.';
-  }
+  renderDeviceNotifySwitches();
 }
 
 /** The switch in the Payments tab that turns the device notification on/off. */
-async function toggleStripePaidNotify() {
+function toggleStripePaidNotify() {
   const cb = document.getElementById('stripe-paid-notify-cb');
-  if (!cb) return;
-  if (!cb.checked) {
-    try { localStorage.setItem(STRIPE_PAID_NOTIFY_KEY, '0'); } catch (_) { /* private mode */ }
-    return;
-  }
-  if (typeof Notification === 'undefined') {
-    cb.checked = false;
-    showToast('This browser does not support notifications', 'warn');
-    return;
-  }
-  const permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
-  if (permission !== 'granted') {
-    cb.checked = false;
-    showToast('Notifications were blocked — nothing will be sent to this device', 'warn');
-    renderStripePaidNotifyToggle();
-    return;
-  }
-  try { localStorage.setItem(STRIPE_PAID_NOTIFY_KEY, '1'); } catch (_) { /* private mode */ }
-  showToast('✓ You’ll be notified on this device when an invoice is paid');
+  if (cb) return toggleDeviceNotify('payments', cb.checked, showToast);
 }
+
+/** The panel's "Send a test" button, so the owner can see one arrive. */
+async function sendTestDeviceNotification() {
+  const sent = await notifyDevice({
+    title: 'Notifications are working',
+    body: 'This is how news from Lyrical Inventory will look on this device.',
+    tag: 'lm-test',
+    force: true,
+  });
+  showToast(sent ? '✓ Test sent — look for it on this device' : 'Could not send one — check that notifications are allowed for this app', sent ? 'ok' : 'warn');
+}
+
+// The notifications panel's copies of the two switches, and its test button.
+registerActions({
+  'notify.switch': (el) => toggleDeviceNotify(el.dataset.deviceNotify, el.checked, showToast),
+  'notify.test': () => sendTestDeviceNotification(),
+});
 
 /**
  * Put the same news the in-app card shows onto the device itself.
@@ -16915,20 +16917,14 @@ async function toggleStripePaidNotify() {
  * ledger regardless of whether anyone is watching.
  */
 function notifyDeviceInvoicePayment(said, firstInvoiceId) {
-  if (!said || !stripePaidNotifyEnabled()) return;
-  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
-  try {
-    const n = new Notification(said.title, {
-      body: said.detail,
-      icon: '/pwa-192x192.png',
-      tag: 'lm-stripe-invoice-payments',
-    });
-    n.onclick = () => {
-      try { window.focus(); } catch (_) { /* not focusable from here in every browser */ }
-      if (firstInvoiceId) openInvoiceFromAlert(firstInvoiceId);
-      n.close();
-    };
-  } catch (_) { /* unsupported context (e.g. iOS Safari outside an installed PWA) */ }
+  if (!said) return;
+  notifyDevice({
+    kind: 'payments',
+    title: said.title,
+    body: said.detail,
+    tag: 'lm-stripe-invoice-payments',
+    onClick: () => { if (firstInvoiceId) openInvoiceFromAlert(firstInvoiceId); },
+  });
 }
 
 function readStripeInvoiceStamp() {

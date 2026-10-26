@@ -113,8 +113,12 @@ export default defineConfig({
       // gas-code.txt is lazy-fetched by the "Connect your Google Sheet" tab;
       // precaching it (a background fetch after load, not render-blocking) keeps
       // that tab working offline without bloating the initial HTML parse.
-      includeAssets: ['favicon.ico', 'apple-touch-icon-180x180.png', 'maskable-icon-512x512.png', 'gas-code.txt'],
+      includeAssets: ['favicon.ico', 'apple-touch-icon-180x180.png', 'maskable-icon-512x512.png', 'gas-code.txt', 'sw-notify.js', 'pwa-192x192.png'],
       workbox: {
+        // What happens when one of the app's phone/desktop notifications is
+        // pressed. Android only shows notifications sent by the service worker,
+        // so the press is handled there; see public/sw-notify.js.
+        importScripts: ['sw-notify.js'],
         // The app is one main script (src/main.js and everything it imports),
         // and it is the one file the app cannot start without. Workbox skips
         // precaching any file over its 2 MiB default — silently, apart from a

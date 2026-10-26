@@ -464,3 +464,34 @@ describe('recording a fresh order without opening the shipping form', () => {
     expect(appSource).toContain('window.recordNewOrderFromAlert = recordNewOrderFromAlert;');
   });
 });
+
+// Device notifications (the phone's or computer's own pop-ups) go through
+// lib/device-notify.js; the behaviour is in tests/device-notify.test.js.
+describe('device notification wiring', () => {
+  const read = (rel) => fs.readFileSync(path.resolve(__dirname, '..', rel), 'utf8');
+
+  it('no feature builds a notification by hand, which Android refuses', () => {
+    for (const file of ['src/main.js', 'src/features/bigcartel.js', 'src/features/shipping.js']) {
+      expect(read(file)).not.toContain('new Notification(');
+    }
+  });
+
+  it('the service worker handles a press, and loads the script that does it', () => {
+    expect(read('vite.config.js')).toContain("importScripts: ['sw-notify.js']");
+    const sw = read('public/sw-notify.js');
+    expect(sw).toContain("addEventListener('notificationclick'");
+    expect(sw).toContain("type: 'lm-notification-click'");
+  });
+
+  it('the notifications panel carries both switches and a test button', () => {
+    const panel = indexContent.slice(indexContent.indexOf('id="m-notifications"'), indexContent.indexOf('id="m-confirm"'));
+    expect(panel).toContain('data-device-notify="orders" data-on-change="notify.switch"');
+    expect(panel).toContain('data-device-notify="payments" data-on-change="notify.switch"');
+    expect(panel).toContain('data-action="notify.test"');
+    expect(appSource).toContain("'notify.switch':");
+  });
+
+  it('short messages are announced to screen readers', () => {
+    expect(indexContent).toContain('<div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>');
+  });
+});
