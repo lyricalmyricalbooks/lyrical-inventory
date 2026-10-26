@@ -13,4 +13,11 @@ describe('phone Book Catalog cards', () => {
     expect(rule).toMatch(/border-radius: 0/);
     expect(rule).toMatch(/box-shadow: var\(--elev-1\)/);
   });
+
+  it('gives the Test Book Catalog sandbox tag a square inked caps look', () => {
+    const rule = line('.cat-settings-head .sec-head-badges > .chip-status {');
+    expect(rule).toMatch(/border-radius: var\(--r2\)/);
+    expect(rule).toMatch(/border: var\(--stroke\) solid currentColor/);
+    expect(rule).toMatch(/letter-spacing: var\(--tracking-caps\)/);
+  });
 });

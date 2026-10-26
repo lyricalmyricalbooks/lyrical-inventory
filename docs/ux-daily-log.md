@@ -231,3 +231,4 @@ looked at, and re-proposing it costs a run.
 | 2026-10-26 | visual | Phone forms — Expenses, Manual Order Entry and every other form | Gave the text boxes and drop-downs on a phone the same bold ink outline as the cards and buttons around them, instead of a faint grey hairline | (this PR) |
 | 2026-10-26 | visual | Phone approval banner ("1 sale to approve", every screen) | Made the yellow "sale to approve" notice an inked slab with the bold outline, offset shadow and amber edge stripe, instead of a pale hairline box matching nothing around it | (this PR) |
 | 2026-10-26 | visual | Phone Website — status tags | Made the Checking / Needs a look / Connected tags on the Website screen square outlined tags at a readable size instead of tiny pale lozenges | (this PR) |
+| 2026-10-26 | visual | Phone Settings — Test Book Catalog tag | Made the "Isolated test sandbox" tag a square inked caps tag like the other tags on a phone, instead of a pale hairline chip | (this PR) |
