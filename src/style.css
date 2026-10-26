@@ -21445,3 +21445,51 @@ a.notif-action:hover { text-decoration: underline; }
    phone treatment in styles/phone.css can restyle it. */
 .author-subs-card { background: var(--surface-card); border: var(--stroke-hair) solid var(--border); border-left: var(--stroke) solid var(--amber); border-radius: var(--r2); padding: 1.25rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
 .author-subs-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+/* ── Settle up with your artist (publisher dashboard) ─────────────────────
+   One card for both directions of money: expenses owed to the artist on the
+   left, sales they collected for you on the right, the net underneath. The
+   two columns hold the existing expense and transfer lists, so their own
+   section headings step aside here — the column says what they are. */
+.settle-desk{background:var(--surface-card);border:var(--stroke) solid var(--rule-ink);box-shadow:var(--elev-3);margin-bottom:var(--space-5);}
+.sd-head{display:flex;justify-content:space-between;align-items:baseline;gap:var(--space-3);flex-wrap:wrap;padding:var(--space-4) var(--space-5) var(--space-3);border-bottom:var(--stroke) solid var(--rule-ink);}
+.sd-title{font-family:var(--font-display);font-weight:400;font-size:var(--text-xl);text-transform:uppercase;letter-spacing:.01em;margin:0;}
+.sd-sub{font-size:var(--text-sm);color:var(--text3);}
+.sd-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));}
+.sd-col{padding:var(--space-4) var(--space-5);display:flex;flex-direction:column;gap:var(--space-2);min-width:0;}
+.sd-col + .sd-col{border-left:var(--stroke) solid var(--rule-ink);}
+.sd-col[hidden]{display:none;}
+.sd-kicker{font-size:var(--text-2xs);font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);}
+.sd-amt{font-family:var(--font-mono);font-size:var(--text-2xl);font-weight:500;}
+.sd-amt.is-out{color:var(--gold-text);}
+.sd-amt.is-in{color:var(--green);}
+.settle-desk .overview-section{margin:0;}
+/* Out-ranks the phone's tinted panel these lists had when they stood alone. */
+#tab-dashboard .settle-desk #d-pending-expenses-sect,
+#tab-dashboard .settle-desk #artist-transfers-sect{padding:0;background:none;border:0;border-radius:0;}
+.settle-desk .overview-section > .sec-head{display:none;}
+.settle-desk .pending-card{box-shadow:none;margin-bottom:var(--space-2);}
+.sd-net{display:flex;justify-content:space-between;align-items:center;gap:var(--space-4);flex-wrap:wrap;padding:var(--space-5);border-top:var(--stroke) solid var(--rule-ink);background:var(--gold-bg);}
+.sd-net.is-to-publisher{background:var(--green-bg);}
+.sd-net.is-settled{background:var(--cream2);}
+.sd-net-copy{min-width:0;max-width:60ch;}
+.sd-net-amt{font-family:var(--font-display);font-size:56px;line-height:.95;color:var(--gold-text);text-shadow:3px 3px 0 rgba(27,63,224,.22);} /* token-ok: poster-scale Riso amount, matches the author's banner */
+.sd-net.is-to-publisher .sd-net-amt{color:var(--green);}
+.sd-net.is-settled .sd-net-amt{color:var(--text);text-shadow:none;}
+.sd-net-note{margin:var(--space-2) 0 0;font-size:var(--text-sm);color:var(--text2);}
+.sd-actions{display:flex;gap:var(--space-2);flex-wrap:wrap;}
+.sd-actions:empty{display:none;}
+@media (max-width:768px){
+  .sd-col + .sd-col{border-left:0;border-top:var(--stroke) solid var(--rule-ink);}
+  .sd-net-amt{font-size:44px;} /* token-ok: phone step of the poster amount */
+  .sd-head,.sd-col,.sd-net{padding-left:var(--space-4);padding-right:var(--space-4);}
+}
+
+/* One calm line for low stock and costs still to recover. */
+.dash-heads-up{display:flex;justify-content:space-between;gap:var(--space-2) var(--space-4);flex-wrap:wrap;background:var(--gold-bg);color:var(--text);font-size:var(--text-sm);padding:var(--space-2) var(--space-3);margin-bottom:var(--space-5);}
+.dash-heads-up[hidden]{display:none;}
+
+/* Danger zone folded away so its tools can't be tapped by accident. */
+.dz-fold > summary{list-style:none;cursor:pointer;width:max-content;}
+.dz-fold > summary::-webkit-details-marker{display:none;}
+.dz-fold[open] > summary{margin-bottom:var(--space-3);}
