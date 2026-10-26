@@ -80,7 +80,6 @@ import {
   settleUpHtml,
   settleUpModel,
 } from '../lib/settle-up-view.js';
-import { dashHeadsUp } from '../lib/settle-desk.js';
 import { makeEventId, notifyPublisherSubmission, syncToSheets } from './sheets-bridge.js';
 
 // ── DASHBOARD (per book)
@@ -352,16 +351,7 @@ function updateDash() {
   }
 
   // ── BREAK-EVEN (publisher only)
-  const breakEven = renderBreakEvenBlock(s, book, cur, cost, recognizedRev);
-
-  // ── HEADS-UP LINE (publisher only): low stock and costs still to recover,
-  // said once under the Settle up card instead of as two more alarms.
-  const headsUp = $('d-heads-up');
-  if (headsUp) {
-    const parts = isAuthor() ? [] : dashHeadsUp({ stock: s.stock, threshold: book.threshold, breakEven, cur });
-    headsUp.hidden = !parts.length;
-    headsUp.innerHTML = parts.map(t => `<span>${escapeHtml(t)}</span>`).join('');
-  }
+  renderBreakEvenBlock(s, book, cur, cost, recognizedRev);
 
   // ── NET TO PUBLISHER KPI (only shown when profit sharing is configured)
   if (book.profitTiers && book.profitTiers.length > 0) {
@@ -468,9 +458,7 @@ function renderExpensesSummaryBlock(s, cur) {
     $('d-expenses-owed-sub').textContent = `${unreceivedExp.length} expense${unreceivedExp.length !== 1 ? 's' : ''} outstanding`;
     // Detail table — dark banner style
     if (expSect) {
-      // Kept filled for anything that still reads it, but no longer shown:
-      // the Settle up card at the top lists these expenses now.
-      expSect.style.display = 'none';
+      expSect.style.display = '';
       animateCountValue('d-exp-total', fmtWhole(expTotal, cur));
       $('d-exp-count').textContent = `${expenses.length} expense${expenses.length !== 1 ? 's' : ''} logged`;
       $('d-exp-body').innerHTML = unreceivedExp.map(e => `
@@ -517,7 +505,7 @@ function renderBreakEvenBlock(s, book, cur, cost, recognizedRev) {
   if (isAuthor() || !(cost > 0)) {
     $('d-breakeven-kpi').style.display = 'none';
     $('d-breakeven-block').style.display = 'none';
-    return null;
+    return;
   }
 
   $('d-breakeven-kpi').style.display = '';
@@ -618,7 +606,6 @@ function renderBreakEvenBlock(s, book, cur, cost, recognizedRev) {
       ${captionParts.length ? `<div class="be-caption">${captionParts.join(' ')}</div>` : ''}
     `;
   }
-  return be;
 }
 
 function getProfitTiersHtml(book, stats, cur) {
