@@ -12,7 +12,7 @@
 
 import {
   createPresetList,
-  normalizeCurrencyCode,
+  threeLetterCurrencyCode,
   normalizeIdList,
   normalizePresetIdentity,
   normalizeSavedAt,
@@ -45,12 +45,12 @@ export function normalizeQrPreset(raw) {
   if (!identity) return null;
 
   const baseCurRaw = String(raw.baseCur || 'auto').trim();
-  const baseCur = baseCurRaw.toLowerCase() === 'auto' ? 'auto' : (normalizeCurrencyCode(baseCurRaw) || 'auto');
+  const baseCur = baseCurRaw.toLowerCase() === 'auto' ? 'auto' : (threeLetterCurrencyCode(baseCurRaw) || 'auto');
 
   const currencies = [];
   if (Array.isArray(raw.currencies)) {
     for (const entry of raw.currencies) {
-      const code = normalizeCurrencyCode(entry);
+      const code = threeLetterCurrencyCode(entry);
       if (code && !currencies.includes(code)) currencies.push(code);
     }
   }

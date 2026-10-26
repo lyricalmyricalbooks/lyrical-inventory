@@ -12,7 +12,7 @@
 
 import {
   createPresetList,
-  normalizeCurrencyCode,
+  threeLetterCurrencyCode,
   normalizeIdList,
   normalizePresetIdentity,
   normalizeSavedAt,
@@ -77,7 +77,7 @@ export function normalizeStPreset(raw) {
   return {
     ...identity,
     cols: clampCols(raw.cols),
-    currencyCode: normalizeCurrencyCode(raw.currencyCode) || 'EUR',
+    currencyCode: threeLetterCurrencyCode(raw.currencyCode) || 'EUR',
     includeNotes: raw.includeNotes === true,
     bookIds: normalizeIdList(raw.bookIds),
     qtyBrought,
