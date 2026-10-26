@@ -84,10 +84,10 @@ export function settleUpHeadline(model, cur) {
 // The sale behind a held line ends in one of three ways, and the publisher
 // says which. Shared by the ledger and the pending-transfers list so the two
 // can never offer different choices.
-export function settleByHandMenu(t, cur) {
+export function settleByHandMenu(t, cur, { quiet = false } = {}) {
   const amt = transferAmount(t);
   return `<details class="settle-chooser">
-               <summary class="btn sm outline">Settle by hand <span aria-hidden="true">▾</span></summary>
+               <summary class="${quiet ? 'ps-ledger-link' : 'btn sm outline'}">${quiet ? 'Settle' : 'Settle by hand'} <span aria-hidden="true">▾</span></summary>
                <div class="settle-menu" role="group" aria-label="How did this sale end?">
                  <p class="settle-q">How did this sale end?</p>
                  <button type="button" class="settle-opt" onclick="this.closest('details').open=false;markArtistTransferReceived(${t.id})">
@@ -122,74 +122,84 @@ function ledgerEquation(model, cur) {
   return `${terms.join(' − ')}${model.direction === 'settled' ? ` = ${fmt(0, cur)}` : ''}`;
 }
 
-const cell = (cls, html) => `<div class="ps-ledger-cell ${cls}" role="cell">${html}</div>`;
-const statusHtml = (pill, tone, meta) =>
-  `<span class="pill ${tone}">${pill}</span>${meta ? `<span class="ps-ledger-meta">${escapeHtml(meta)}</span>` : ''}`;
-
-// The records behind one line: each held sale, each unpaid receipt. Every one
-// says where it stands and, for the publisher, carries the button that
-// settles it on its own.
-// Every receipt gets its own row: on a profit-sharing book this is the only
-// place its Mark received button lives.
-function ledgerSubRows(r, model, cur, ctx) {
+// The records behind one line — each held sale, each unpaid receipt — as a
+// compact list: date, what, copies, amount, and for the publisher a quiet
+// link that settles that one record on its own. Where they stand is said once
+// on the line above, not repeated on every record.
+function ledgerItems(r, model, cur, ctx, listId) {
   const act = ctx.canAct;
+  let rows = [];
   if (r.key === 'held') {
-    return (ctx.transfers || []).map(t => {
+    rows = (ctx.transfers || []).map(t => {
       const amt = transferAmount(t);
-      const meta = [t.num, fmtD(t.date) === '—' ? '' : fmtD(t.date), t.chan, transferQtyLabel(t)].filter(Boolean).join(' · ');
-      return `<div class="ps-ledger-row is-sub" role="row">
-        ${cell('is-what', `<span class="ps-ledger-meta">${amt == null ? 'Amount missing, check this sale' : `${escapeHtml(fmt(amt, cur))} held`}</span>`)}
-        ${cell('is-status', statusHtml('⏳ Awaiting transfer', 'amber', meta))}
-        ${cell('is-act', act ? settleByHandMenu(t, cur) : `<span class="ps-ledger-meta">${model.author ? 'In your one payment' : 'In the one payment'}</span>`)}
-        ${cell('is-amt', '')}
-      </div>`;
-    }).join('');
+      return `<li class="ps-ledger-item">
+        <span class="ps-ledger-when">${fmtD(t.date) === '—' ? '' : escapeHtml(fmtD(t.date))}</span>
+        <span class="ps-ledger-what">${escapeHtml([t.num, t.chan].filter(Boolean).join(' · '))}</span>
+        <span class="ps-ledger-qty">${escapeHtml(transferQtyLabel(t))}</span>
+        <span class="ps-ledger-amt">${amt == null ? 'Amount missing, check this sale' : escapeHtml(fmt(amt, cur))}</span>
+        <span class="ps-ledger-do">${act ? settleByHandMenu(t, cur, { quiet: true }) : ''}</span>
+      </li>`;
+    });
+  } else if (r.key === 'expenses') {
+    // Every receipt gets its own row: on a profit-sharing book this is the
+    // only place its Mark received button lives.
+    rows = (r.items || []).map(i => `<li class="ps-ledger-item">
+        <span class="ps-ledger-when"></span>
+        <span class="ps-ledger-what">${escapeHtml(i.label)}</span>
+        <span class="ps-ledger-qty"></span>
+        <span class="ps-ledger-amt">${escapeHtml(fmt(i.amount, cur))}</span>
+        <span class="ps-ledger-do">${act && i.id != null
+          ? `<button type="button" class="ps-ledger-link" data-action="settleUp.markExpenseReceived" data-id="${escapeHtml(String(i.id))}" title="Only if you paid this one back on its own. It then comes out of the sum.">Mark received</button>`
+          : ''}</span>
+      </li>`);
   }
-  if (r.key === 'expenses' && r.items?.length) {
-    return r.items.map(i => `<div class="ps-ledger-row is-sub" role="row">
-        ${cell('is-what', `<span class="ps-ledger-meta">${escapeHtml(i.label)}${r.items.length > 1 ? ` · ${escapeHtml(fmt(i.amount, cur))}` : ''}</span>`)}
-        ${cell('is-status', statusHtml('⏳ Awaiting payment', 'amber', ''))}
-        ${cell('is-act', act && i.id != null
-          ? `<button type="button" class="btn sm gold" data-action="settleUp.markExpenseReceived" data-id="${escapeHtml(String(i.id))}" title="Only if you paid this one back on its own. It then comes out of the sum.">✓ Mark received</button>`
-          : `<span class="ps-ledger-meta">${model.author ? 'Paid back with it' : 'Paid back in the one payment'}</span>`)}
-        ${cell('is-amt', '')}
-      </div>`).join('');
-  }
-  return '';
+  if (!rows.length) return '';
+  const n = rows.length;
+  const noun = r.key === 'held' ? (n === 1 ? 'sale' : 'sales') : (n === 1 ? 'receipt' : 'receipts');
+  // Open on a wide screen; on a phone the list folds behind this toggle so
+  // the answer and its lines fit on one screen.
+  return `<button type="button" class="ps-ledger-toggle" data-action="settleUp.toggleItems" aria-expanded="false" aria-controls="${listId}">Show the ${n} ${noun}</button>
+      <ul class="ps-ledger-items" id="${listId}">${rows.join('')}</ul>`;
 }
 
-// Where a line stands when no record sits under it.
-function lineStatus(r, model) {
-  if (r.key === 'royalties') return statusHtml('Accrued', 'green', model.author ? 'Nothing for you to do' : 'Nothing to confirm');
-  if (r.key === 'debt') return statusHtml('Recorded', 'gray', '');
-  if (r.key === 'overpaid') return statusHtml('To recover', 'gray', '');
+// Where a line stands, said once, in words.
+function lineState(r, model, ctx) {
+  const n = r.key === 'held' ? (ctx.transfers || []).length : r.key === 'expenses' ? (r.items || []).length : 0;
+  const wait = (word, count) => `<span class="ps-ledger-wait">⏳ ${count > 1 ? `all ${count} ` : ''}${word}</span>`;
+  if (r.key === 'held') return n ? wait('awaiting transfer', n) : '';
+  if (r.key === 'expenses') return n ? wait('awaiting payment', n) : '';
+  if (r.key === 'royalties') return model.author ? 'Accrued · nothing for you to do' : 'Accrued · nothing to confirm';
   return '';
 }
 
 function ledgerBody(model, cur, ctx) {
+  let k = 0;
   const line = (sign, r) => {
     const detail = r.detail
-      ? `<small class="ps-ledger-detail">${escapeHtml(r.detail.replace('{gross}', fmt(model.heldGross, cur)).replace('{share}', fmt(model.heldShare, cur)))}</small>`
+      ? escapeHtml(r.detail.replace('{gross}', fmt(model.heldGross, cur)).replace('{share}', fmt(model.heldShare, cur)))
       : '';
-    const subs = ledgerSubRows(r, model, cur, ctx);
-    return `<div class="ps-ledger-row" role="row">
-        ${cell('is-what', `<span class="ps-ledger-label">${escapeHtml(r.label)}</span>${detail}`)}
-        ${cell('is-status', subs ? '' : lineStatus(r, model))}
-        ${cell('is-act', '')}
-        ${cell('is-amt', `<span class="ps-ledger-amt">${sign} ${fmt(r.amount, cur)}</span>`)}
-      </div>${subs}`;
+    const state = lineState(r, model, ctx);
+    const sub = [detail, state].filter(Boolean).join(' · ');
+    const items = ledgerItems(r, model, cur, ctx, `artist-settlement-items-${ctx.id}-${k++}`);
+    return `<div class="ps-ledger-line">
+        <div class="ps-ledger-text"><span class="ps-ledger-label">${escapeHtml(r.label)}</span>${sub ? `<small class="ps-ledger-detail">${sub}</small>` : ''}</div>
+        <span class="ps-ledger-amt is-line">${sign} ${fmt(r.amount, cur)}</span>
+        ${items ? `<div class="ps-ledger-records">${items}</div>` : ''}
+      </div>`;
   };
-  const group = (side, sign) => side.rows.length ? `<div class="ps-ledger-group" role="row">
-        <span role="cell">${escapeHtml(side.title)}</span><span role="cell" class="ps-ledger-sub-total">${fmt(side.total, cur)}</span>
-      </div>${side.rows.map(r => line(sign, r)).join('')}` : '';
+  const group = (side, sign) => side.rows.length ? `<section class="ps-ledger-group" aria-label="${escapeHtml(side.title)}">
+        <div class="ps-ledger-group-head"><span>${escapeHtml(side.title)}</span><span class="ps-ledger-sub-total">${fmt(side.total, cur)}</span></div>
+        ${side.rows.map(r => line(sign, r)).join('')}
+      </section>` : '';
   const [first, second] = ledgerSides(model);
   return group(first, '+') + group(second, '−');
 }
 
-// The statement ledger: the answer first, as one big figure with the buttons
-// that act on it; then every line with the same four columns — what it is,
-// where it stands, what to do, the amount — grouped by who owes whom, each
-// group with its subtotal, and the total at the foot.
+// The statement ledger: the answer first, as one big figure with the one
+// button that acts on it; then each line once — what it is, where it stands,
+// the amount on the right — grouped by who owes whom with a subtotal each,
+// the records behind a line listed compactly under it, and the total at the
+// foot.
 // opts: { bookId, cur, date, payLinkReady, canRecord, hasWork, reviewError, pendingSync, statement, transfers }
 export function settleUpHtml(model, opts) {
   const { bookId, cur, date = '', payLinkReady = false, canRecord = false, hasWork = false, reviewError = false, pendingSync = 0, statement = '', transfers = [] } = opts;
@@ -238,13 +248,10 @@ export function settleUpHtml(model, opts) {
         <button type="button" class="btn tx" onclick="toggleArtistSettlementForm('${id}')">Cancel</button>
       </div>
     </div>` : ''}
-    <div class="ps-ledger" role="table" aria-label="How the amount adds up">
-      <div class="ps-ledger-head" role="row">
-        <span role="columnheader">What</span><span role="columnheader">Where it stands</span><span role="columnheader">What to do</span><span role="columnheader">Amount</span>
-      </div>
-      ${ledgerBody(model, cur, { canAct: canRecord && !model.author, transfers })}
-      <div class="ps-ledger-total" role="row">
-        <span role="cell">${escapeHtml(model.result)}</span><span role="cell" class="ps-ledger-amt">= ${fmt(model.amount, cur)}</span>
+    <div class="ps-ledger" aria-label="How the amount adds up">
+      ${ledgerBody(model, cur, { canAct: canRecord && !model.author, transfers, id })}
+      <div class="ps-ledger-total">
+        <span>${escapeHtml(model.result)}</span><span class="ps-ledger-amt">= ${fmt(model.amount, cur)}</span>
       </div>
     </div>
     <div class="ps-ledger-foot">

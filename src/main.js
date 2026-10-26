@@ -689,6 +689,15 @@ registerActions({
     const e = (getState().expenses || []).find(x => String(x.id) === el.dataset.id);
     if (e) markExpenseReceived(e.id);
   },
+  // On a phone the records under a ledger line start folded.
+  'settleUp.toggleItems': el => {
+    const list = document.getElementById(el.getAttribute('aria-controls'));
+    if (!list) return;
+    const open = !list.classList.contains('is-open');
+    list.classList.toggle('is-open', open);
+    el.setAttribute('aria-expanded', String(open));
+    el.textContent = open ? el.textContent.replace(/^Show/, 'Hide') : el.textContent.replace(/^Hide/, 'Show');
+  },
 });
 
 export const openCallScreen = lazyFeature(() => import('./features/opencall.js'), OPEN_CALL_EXPORTS, {
