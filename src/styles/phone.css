@@ -1298,10 +1298,10 @@
   #cust-body > tr.phone-record > td[data-phone-label="Email"] { grid-column: 1 / -1 !important; grid-row: 2 !important; }
   #cust-body > tr.phone-record > td[data-phone-label="Email"] > a { display: flex; align-items: center; min-height: var(--target-min); font-size: var(--text-sm); }
   #cust-body > tr.phone-record > td[data-phone-label="Action"] { grid-column: 1 !important; grid-row: 3 !important; }
-  #cust-body > tr.phone-record > td[data-phone-label="Action"] > div { display: grid !important; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: var(--space-2) !important; }
-  /* +List, Unsubscribe and Details share one row, so the labels tighten a
-     touch instead of the longest one touching its border. */
-  #cust-body > tr.phone-record > td[data-phone-label="Action"] .btn { padding-inline: var(--space-2); letter-spacing: 0.04em; min-width: 0; }
+  #cust-body > tr.phone-record > td[data-phone-label="Action"] > div { display: grid !important; grid-auto-flow: column; grid-auto-columns: minmax(max-content, 1fr); gap: var(--space-2) !important; }
+  /* Each button is at least as wide as its own label (the longest, Unsubscribe,
+     used to touch its border in an equal split); spare width is shared out. */
+  #cust-body > tr.phone-record > td[data-phone-label="Action"] .btn { padding-inline: var(--space-3); letter-spacing: 0.04em; min-width: 0; }
 }
 
 /* ─── EXPENSES (round 4) ─── */
