@@ -563,7 +563,7 @@ describe('netting what the artist owes against a payout', () => {
     const lead = document.querySelector('#ps-dash-content .ps-stat-card.is-lead');
     expect(lead.querySelector('.ps-stat-val').textContent).toBe('CA$50.00');
     expect(lead.querySelector('.ps-stat-sub').textContent).toMatch(/you send the author/);
-    expect(el('artist-settlement').querySelector('.ps-settle-result .ps-stat-sub').textContent).toBe('CA$80.00 − CA$30.00');
+    expect(el('artist-settlement').querySelector('.ps-settle-result .ps-stat-sub').textContent).toBe('CA$80.00 − CA$30.00 · one payment clears both sides');
   });
 
   it('"Pay full balance" fills the net cash and the preview says what clears', async () => {

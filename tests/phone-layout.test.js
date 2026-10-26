@@ -225,3 +225,12 @@ test('grouped heading rows lay out as a labelled strip that the generic non-reco
   expect(css).toMatch(/\.phone-records tr\.phone-group-row \{[^}]*display: grid;/);
   expect(css).toMatch(/tbody > tr:not\(\.phone-record, \.phone-group-row\) > td \{ display: block;/);
 });
+
+test('phone record cards are square like every other inked slab', async () => {
+  const { readFileSync } = await import('node:fs');
+  const css = readFileSync(`${process.cwd()}/src/styles/phone.css`, 'utf8');
+  const inked = [...css.matchAll(/\.phone-records tr\.phone-record \{([^}]*)\}/g)]
+    .map(m => m[1]).find(r => /border:\s*var\(--stroke\)\s+solid\s+var\(--border-strong\)/.test(r));
+  expect(inked).toBeDefined();
+  expect(inked).toMatch(/border-radius:\s*var\(--r2\);/);
+});

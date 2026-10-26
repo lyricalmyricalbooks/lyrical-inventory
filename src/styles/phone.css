@@ -522,11 +522,11 @@
   #tab-website .order-actions > .btn.gold { flex-basis: 100%; order: -1; }
   /* Consistent breathing room and reachable disclosure across the remaining
      customer, tax, consignment, stock and administration pages. */
-  /* Record cards match .card: 2px ink outline + hard offset shadow, so a list of
+  /* Record cards match .card: square corners, 2px ink outline + hard offset shadow, so a list of
      records reads as a stack of printed slips. Labels drop to the micro-caps
      tier so the lead line and the values carry the hierarchy; the gap between
      cards (space-4) beats the gap inside one (space-3). */
-  :is(.tab-panel, .modal) .phone-records tr.phone-record { border: var(--stroke) solid var(--border-strong); border-radius: var(--r3); padding: var(--space-4); gap: var(--space-3); margin-bottom: var(--space-4); box-shadow: var(--elev-1); }
+  :is(.tab-panel, .modal) .phone-records tr.phone-record { border: var(--stroke) solid var(--border-strong); border-radius: var(--r2); padding: var(--space-4); gap: var(--space-3); margin-bottom: var(--space-4); box-shadow: var(--elev-1); }
   :is(.tab-panel, .modal) .phone-records td::before { font: 800 var(--text-2xs) var(--font-ui); text-transform: uppercase; letter-spacing: var(--tracking-caps); }
   :is(.tab-panel, .modal) .phone-records td.phone-record-lead { font-size: var(--text-md); border-bottom: var(--stroke) solid var(--border-strong); }
   /* The Show/Hide details button on a record card: square inked outline, caps label and a
@@ -980,6 +980,16 @@
   #tab-reconcile .recon-toggle { min-height: var(--target-min); grid-column: 1; gap: var(--space-2); font-size: var(--text-sm); white-space: nowrap; }
   #tab-reconcile .recon-toolbar > .btn { grid-column: 2; min-height: var(--target-min); justify-content: center; white-space: nowrap; padding-inline: var(--space-2); }
 
+  /* Toolbar reads as one inked slab: the frame, search, drop-downs and filter chips take the 2px ink
+     outline of the cards and buttons around them (not a faint hairline); chips are square, not lozenges.
+     Focus keeps its gold border (the base :focus rules are the same specificity or lower here). */
+  #tab-reconcile .recon-toolbar { border: var(--stroke) solid var(--border-strong); }
+  #tab-reconcile .recon-search, #tab-reconcile .recon-mini { border: var(--stroke) solid var(--border-strong); background: var(--surface-raised); }
+  #tab-reconcile .recon-search:focus, #tab-reconcile .recon-mini:focus { border-color: var(--gold); }
+  #tab-reconcile .recon-chip { border: var(--stroke) solid var(--border-strong); border-radius: var(--r2); background: var(--surface-raised); }
+  #tab-reconcile .recon-chip.active { background: var(--ink); border-color: var(--ink); }
+  #tab-reconcile .recon-pill { border-radius: var(--r2); border: var(--stroke-hair) solid currentColor; text-transform: uppercase; letter-spacing: var(--tracking-caps); }
+
   /* Need cards: one column of fields, book first, Qty beside the amount,
      Currency beside the rate, Order # last, then the actions. Cells sit on the
      bottom edge so a label that wraps to two lines (Stripe amount paid, Automatic
@@ -1288,10 +1298,10 @@
   #cust-body > tr.phone-record > td[data-phone-label="Email"] { grid-column: 1 / -1 !important; grid-row: 2 !important; }
   #cust-body > tr.phone-record > td[data-phone-label="Email"] > a { display: flex; align-items: center; min-height: var(--target-min); font-size: var(--text-sm); }
   #cust-body > tr.phone-record > td[data-phone-label="Action"] { grid-column: 1 !important; grid-row: 3 !important; }
-  #cust-body > tr.phone-record > td[data-phone-label="Action"] > div { display: grid !important; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: var(--space-2) !important; }
-  /* +List, Unsubscribe and Details share one row, so the labels tighten a
-     touch instead of the longest one touching its border. */
-  #cust-body > tr.phone-record > td[data-phone-label="Action"] .btn { padding-inline: var(--space-2); letter-spacing: 0.04em; min-width: 0; }
+  #cust-body > tr.phone-record > td[data-phone-label="Action"] > div { display: grid !important; grid-auto-flow: column; grid-auto-columns: minmax(max-content, 1fr); gap: var(--space-2) !important; }
+  /* Each button is at least as wide as its own label (the longest, Unsubscribe,
+     used to touch its border in an equal split); spare width is shared out. */
+  #cust-body > tr.phone-record > td[data-phone-label="Action"] .btn { padding-inline: var(--space-3); letter-spacing: 0.04em; min-width: 0; }
 }
 
 /* ─── EXPENSES (round 4) ─── */
@@ -2045,6 +2055,9 @@
   /* Settings > Test Book Catalog: the "Isolated test sandbox" tag was a pale, hairline-outlined
      chip. It is now the same square inked caps tag as the other phone tags. */
   .cat-settings-head .sec-head-badges > .chip-status { border-radius: var(--r2); border: var(--stroke) solid currentColor; font-size: var(--text-3xs); font-weight: 800; letter-spacing: var(--tracking-caps); }
+  /* Shipping: the "10 still needed" / "Ready to quote" tag above Get rates was a soft pill, the one
+     rounded shape on a screen of square inked cards. Square inked caps tag, like the others. */
+  #tab-shipping .ship-readiness > .pill { border-radius: var(--r2); border: var(--stroke) solid currentColor; text-transform: uppercase; letter-spacing: var(--tracking-caps); font-variant-numeric: tabular-nums; }
   /* Column widths follow the captions: Sent and Sold are short, "On shelf" is the
      widest caption and used to touch the Owed divider, Owed carries a money figure. */
   #tab-consignment .store-kpis {
