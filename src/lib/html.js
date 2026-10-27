@@ -15,8 +15,15 @@ const ESCAPE_MAP = {
   "'": '&#39;',
 };
 
+// Most text (titles, names, prices) has nothing to escape, and testing for a
+// special character first is about twice as fast as running the replace
+// callback over it; escapeHtml runs for every cell of every table render.
+const NEEDS_ESCAPE = /[&<>"']/;
+const ESCAPE_CHARS = /[&<>"']/g;
+
 export function escapeHtml(s) {
-  return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ESCAPE_MAP[c]);
+  const str = String(s == null ? '' : s);
+  return NEEDS_ESCAPE.test(str) ? str.replace(ESCAPE_CHARS, (c) => ESCAPE_MAP[c]) : str;
 }
 
 // Returns a normalised http(s) URL string, or '' when the value is not a
