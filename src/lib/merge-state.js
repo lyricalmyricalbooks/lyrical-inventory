@@ -81,11 +81,10 @@ const same = (a, b) => stableStringify(a) === stableStringify(b);
 // with one at creation. Imported rows already have deterministic cross-device
 // identity via sheetsId, and stamping a random uid over that would turn one
 // order imported on two devices into two rows — the opposite of the intent.
-// Consequence: for two uid-less rows edited concurrently on both devices, the
-// content key changes on both sides and the merge keeps both versions rather
-// than reporting a conflict. Recording sales (the offline case that loses
-// money) is handled exactly; concurrent edits of the same historical row are
-// the rarer, softer failure.
+// Rows with neither a uid nor a sheetsId (very old ones) are still matched by
+// content in the merge, so two devices editing one of those at the same time
+// keep both versions. Every row the app records now has a sheetsId, and the
+// merge matches those by it (mergeKeyFor below).
 function histContentKey(row) {
   if (!row || typeof row !== 'object') return 'v:' + stableStringify(row);
   if (row.uid) return 'uid:' + row.uid;
@@ -141,10 +140,40 @@ function isStableKey(key) {
   return key.startsWith('uid:') || key.startsWith('id:');
 }
 
+// Inside the merge only, a hist row carrying a sheetsId is that row wherever
+// it is, whatever else changed on it. Keyed by content, a sale corrected on one
+// device while the other voided it (or corrected it too) looked like two
+// different sales: both were kept, the sale counted twice, and the void was
+// undone. Found by the two-device test (tests/sync-two-devices-model.test.js).
+// keyRows/rowsByKey keep the content key: settlement links store those keys.
+function mergeKeyFor(part, row) {
+  if (part === 'hist' && row && typeof row === 'object' && !row.uid
+    && row.sheetsId != null && row.sheetsId !== '') return 'sid:' + String(row.sheetsId);
+  return baseKeyFor(part, row);
+}
+
+// The same hist row changed on both devices: each field takes the side that
+// changed it, so a void on one and a corrected note on the other both stick.
+// Only a field both sides changed differently is a clash (local wins).
+function mergeRowFields(base, local, remote) {
+  const out = {};
+  let clash = false;
+  for (const f of new Set([...Object.keys(base), ...Object.keys(local), ...Object.keys(remote)])) {
+    const has = (o) => Object.prototype.hasOwnProperty.call(o, f);
+    const b = base[f], l = local[f], r = remote[f];
+    let pick;
+    if (same(l, b) && has(local) === has(base)) pick = remote;
+    else if (same(r, b) && has(remote) === has(base)) pick = local;
+    else { pick = local; if (!same(l, r) || has(local) !== has(remote)) clash = true; }
+    if (has(pick)) out[f] = pick[f];
+  }
+  return { row: out, clash };
+}
+
 function groupRows(part, rows) {
   const map = new Map();
   (rows || []).forEach(row => {
-    const k = baseKeyFor(part, row);
+    const k = mergeKeyFor(part, row);
     if (!map.has(k)) map.set(k, []);
     map.get(k).push(row);
   });
@@ -233,6 +262,11 @@ export function mergeRows(part, base, remote, local, { baseKnown = true } = {}) 
       if (br && same(br, rr)) return lr;  // only local edited
       const web = part === 'hist' ? resolveWebsiteRow(lr, rr) : null;
       if (web) return web;
+      if (br && key.startsWith('sid:') && typeof br === 'object' && typeof lr === 'object' && typeof rr === 'object') {
+        const { row, clash } = mergeRowFields(br, lr, rr);
+        if (clash) conflicts.push({ part, key, local: lr, remote: rr });
+        return row;
+      }
       conflicts.push({ part, key, local: lr, remote: rr });
       return lr;                          // both edited — local wins, but loudly
     };
@@ -286,7 +320,7 @@ export function mergeRows(part, base, remote, local, { baseKnown = true } = {}) 
   const out = [];
   const used = new Map();
   const take = (row, insert) => {
-    const key = baseKeyFor(part, row);
+    const key = mergeKeyFor(part, row);
     const pool = survivors.get(key) || [];
     const n = used.get(key) || 0;
     if (n >= pool.length) return;          // budget spent — row didn't survive

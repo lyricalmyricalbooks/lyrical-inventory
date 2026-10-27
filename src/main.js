@@ -9055,13 +9055,8 @@ function reapplyOne(id) {
   if (!state || !book) { showToast('Cannot find book for this order', 'err'); return; }
   const history = (state.hist || []).find(h => h.num === o.orderNum && h.chan === 'Website');
   if (!history) { showToast('Applied order history not found', 'warn'); return; }
-  const oldRevenue = (Number(history.qty) || 0) * (Number(history.price) || 0);
   const newPrice = Number(o.price) || Number(history.price) || Number(book.listPrice) || 0;
   const newQty = Number(history.qty) || Number(o.qty) || 1;
-  const delta = newQty * newPrice - oldRevenue;
-  state.revenue = (Number(state.revenue) || 0) + delta;
-  if (!state.chStats.Website) state.chStats.Website = { txns: 0, units: 0, revenue: 0 };
-  state.chStats.Website.revenue = (Number(state.chStats.Website.revenue) || 0) + delta;
   Object.assign(history, {
     price: newPrice,
     subtotal: Number(o.subtotal || 0) || 0,
@@ -9074,6 +9069,9 @@ function reapplyOne(id) {
     taxPaid: Number(o.taxPaid || 0) || 0,
     totalPaid: Number(o.totalPaid || 0) || 0
   });
+  // Revenue follows the corrected price, worked out from the history as every
+  // load does, rather than nudged by the difference.
+  recomputeAfters(state, book);
   saveState(targetBook);
   syncToSheets({ type: 'order', book: book.title, date: history.date, num: history.num, chan: 'Website', qty: history.qty, price: history.price, total: history.qty * history.price, stockAfter: history.after, notes: 'Big Cartel', sheetsId: history.sheetsId, currency: getBookCurrencyCode(book) });
   if (history.shippingPaid > 0) syncToSheets(shippingPurchaseRowPayload(book, getBookCurrencyCode(book), history));
@@ -10593,13 +10591,11 @@ function markArtistTransferReceived(transferId, bookId = activeBook, { chargeId 
     return false;
   }
   t.total = transferAmount(t);
-  // Now credit the revenue
-  s.revenue += t.total;
-  if (!s.chStats[t.chan]) s.chStats[t.chan] = { txns: 0, units: 0, revenue: 0 };
-  s.chStats[t.chan].revenue += t.total;
-  // Mark history entry as resolved
+  // Mark history entry as resolved; the revenue it now counts for is worked
+  // out from the history below, the same way every load does.
   const h = s.hist.find(x => x.num === t.num && x.artistPending);
   if (h) { h.artistPending = false; h.notes = (h.notes ? h.notes + ' · ' : '') + (chargeId ? `Transfer received via Stripe (${chargeId})` : 'Transfer received'); }
+  recomputeAfters(s, book);
   // Remove from pending queue
   s.artistTransfers = s.artistTransfers.filter(x => x.id !== transferId);
   saveState(bookId);
@@ -10734,11 +10730,10 @@ async function settleArtistTransferKeepShare(transferId) {
     { okLabel: 'Settle' }
   ))) return;
 
-  // Credit the sale to revenue and resolve the pending history entry.
-  s.revenue += t.total;
-  if (!s.chStats[t.chan]) s.chStats[t.chan] = { txns: 0, units: 0, revenue: 0 };
-  s.chStats[t.chan].revenue += t.total;
+  // Resolve the pending history entry; it counts as revenue from now on
+  // (worked out from the history, as every load does).
   if (h) { h.artistPending = false; h.notes = (h.notes ? h.notes + ' · ' : '') + 'Artist kept their share'; }
+  recomputeAfters(s, book);
 
   // Record the artist's share as a payout — they already hold that cash.
   if (!s.artistPayouts) s.artistPayouts = [];
@@ -10793,11 +10788,10 @@ async function settleArtistTransferKeepAll(transferId) {
 
   const h = s.hist.find(x => x.num === t.num && x.artistPending);
 
-  // Credit the full gross to revenue and resolve the pending history entry.
-  s.revenue += t.total;
-  if (!s.chStats[t.chan]) s.chStats[t.chan] = { txns: 0, units: 0, revenue: 0 };
-  s.chStats[t.chan].revenue += t.total;
+  // Resolve the pending history entry; it counts as revenue from now on
+  // (worked out from the history, as every load does).
   if (h) { h.artistPending = false; h.notes = (h.notes ? h.notes + ' · ' : '') + 'Artist kept full amount (publisher cut forgiven)'; }
+  recomputeAfters(s, book);
 
   // Record the full gross as a payout — artist held all of it.
   if (!s.artistPayouts) s.artistPayouts = [];
