@@ -29,7 +29,15 @@ test('tight gutters keep the approve buttons in view, outer edges keep 16px', ()
   expect(block).toMatch(/:is\(th, td\):first-child\{padding-left:16px;\}/);
   expect(block).toMatch(/:is\(th, td\):last-child\{padding-right:16px;\}/);
   // The short figure under "Stock after" should not hold the column open for its label.
-  expect(block).toMatch(/th:nth-child\(6\)\{white-space:normal;\}/);
+  expect(block).toMatch(/th:nth-child\(6\)\{white-space:normal;/);
+});
+
+test('"Stock after" wraps between its words, never inside one', () => {
+  // Every column is at its narrowest at laptop width, so the label was
+  // splitting "STOC / K / AFTER". Whole words only, and the header row's caps
+  // tracking is what lets "STOCK" fit within the figure's width.
+  expect(block).toMatch(/th:nth-child\(6\)\{white-space:normal;overflow-wrap:normal;\}/);
+  expect(block).toMatch(/\.tbl\.hist-ledger th\{letter-spacing:var\(--tracking-caps\);\}/);
 });
 
 test('notes keep a readable minimum instead of a word per line', () => {

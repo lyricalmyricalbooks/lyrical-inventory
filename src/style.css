@@ -2282,8 +2282,14 @@ tr.hist-row:hover {
   .tbl.hist-ledger tr.hist-row > td:nth-child(9){white-space:nowrap;font-variant-numeric:tabular-nums;}
   .tbl.hist-ledger tr.hist-row > td:nth-child(7){min-width:12ch;text-wrap:pretty;}
   /* "Stock after" sits over a two-digit figure; letting its label take two
-     lines gives that width back to the row instead of to the header. */
-  .tbl.hist-ledger th:nth-child(6){white-space:normal;}
+     lines gives that width back to the row instead of to the header. Every
+     other column here is already at its narrowest at a laptop width, so the
+     label is held to whole words (it was splitting "STOC / K / AFTER") and
+     the header row takes the caps tracking rather than the wide table
+     tracking, which lets "STOCK" sit inside the figure's width instead of
+     pushing the table past its card. */
+  .tbl.hist-ledger th{letter-spacing:var(--tracking-caps);}
+  .tbl.hist-ledger th:nth-child(6){white-space:normal;overflow-wrap:normal;}
 }
 
 /* Customer & Mailing List action geometry, tabular alignment & spring kinetics */
