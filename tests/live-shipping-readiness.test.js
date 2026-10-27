@@ -16,7 +16,7 @@ import {
   buildNonContractShipmentJson,
   buyCanadaPostLabel,
   validateCanadaPostAccount,
-} from '../src/lib/canadapost.js';
+} from '../src/lib/carriers/canadapost.js';
 import { resolveDutyPrepaymentRoute } from '../src/lib/zonos.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

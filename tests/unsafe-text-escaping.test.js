@@ -4,7 +4,7 @@
 // plain text or a safe web link, never as markup or a javascript: link.
 import { beforeAll, describe, expect, it } from 'vitest';
 import { loadApp, makeBook } from './helpers/load-app.js';
-import { generateCanadaPostLabelSvg } from '../src/lib/canadapost.js';
+import { generateCanadaPostLabelSvg } from '../src/lib/carriers/canadapost.js';
 
 const EVIL = '<img src=x onerror="window.__pwned=1">';
 

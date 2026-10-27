@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-vi.mock('../src/lib/label-cache.js', async (importOriginal) => {
+vi.mock('../src/lib/carriers/label-cache.js', async (importOriginal) => {
   const actual = await importOriginal();
   return { ...actual, deleteCachedLabelPdf: vi.fn(async () => {}) };
 });
@@ -9,8 +9,8 @@ import {
   buildNonContractShipmentJson,
   executeCanadaPostProxy,
   refundCanadaPostShipment,
-} from '../src/lib/canadapost.js';
-import { deleteCachedLabelPdf } from '../src/lib/label-cache.js';
+} from '../src/lib/carriers/canadapost.js';
+import { deleteCachedLabelPdf } from '../src/lib/carriers/label-cache.js';
 import { extractAmount, parseShippingEmail } from '../src/lib/shipping-email.js';
 import { isBatchCandidate } from '../src/lib/batch-shipping.js';
 import { splitGapByBook } from '../src/lib/bigcartel-ledger-gap.js';

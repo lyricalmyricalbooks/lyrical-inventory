@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { buildChitChatsShipment, getChitChatsRates, buyChitChatsLabel, executeChitChatsProxy, normalizeChitChatsShipment, listChitChatsShipments, chitChatsErrorMessage, verifyChitChatsConnection, chitChatsCharge } from '../src/lib/chitchats.js';
+import { buildChitChatsShipment, getChitChatsRates, buyChitChatsLabel, executeChitChatsProxy, normalizeChitChatsShipment, listChitChatsShipments, chitChatsErrorMessage, verifyChitChatsConnection, chitChatsCharge } from '../src/lib/carriers/chitchats.js';
 
 const credentials = { clientId: '123', token: 'test-token', isTest: true };
 const parcel = { name: 'Jane', address_1: '1 Main St', city: 'Toronto', province_code: 'ON', postal_code: 'M1M1M1', country_code: 'CA', description: 'Books', value: '25.00', value_currency: 'cad', package_type: 'parcel', weight: 250, weight_unit: 'g', size_x: 20, size_y: 15, size_z: 2, size_unit: 'cm', postage_type: 'unknown' };

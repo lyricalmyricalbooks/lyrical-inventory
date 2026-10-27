@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   refundCarrier, refundState, canRequestRefund, shippoTransactionId, refundCredit,
   unshipOrderForRefund, describeRefundRefusal,
-} from '../src/lib/label-refunds.js';
-import { findExistingLabel } from '../src/lib/label-duplicate-guard.js';
+} from '../src/lib/carriers/label-refunds.js';
+import { findExistingLabel } from '../src/lib/carriers/label-duplicate-guard.js';
 
 const label = (over = {}) => ({
   id: 1, ref: 'shippo:tx123', cat: 'Shipping & Postage', desc: 'Shippo shipping label #T1',

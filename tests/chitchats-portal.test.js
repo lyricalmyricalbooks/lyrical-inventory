@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadApp, makeBook } from './helpers/load-app.js';
-import { readChitChatsState, saveChitChatsState } from '../src/lib/chitchats-state.js';
+import { readChitChatsState, saveChitChatsState } from '../src/lib/carriers/chitchats-state.js';
 let app, shipping;
 const account = { clientId: '123', token: 'fake', isTest: false };
 const paid = { id: 'CCABC123', status: 'ready', purchase_amount: '9.68', order_id: 'LM-701', to_name: 'Jane', to_postal_code: 'M1M1M1', carrier_tracking_code: 'CCABC123', postage_type: 'chit_chats_select', created_at: '2026-10-01T10:00:00Z', ship_date: '2026-10-02', tracking_url: 'https://chitchats.com/tracking/ccabc123' };

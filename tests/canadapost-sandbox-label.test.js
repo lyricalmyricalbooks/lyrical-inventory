@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { buyCanadaPostLabel } from '../src/lib/canadapost.js';
+import { buyCanadaPostLabel } from '../src/lib/carriers/canadapost.js';
 
 describe('Canada Post Sandbox Label Purchasing with false 503 gateway signals', () => {
   const testSender = {

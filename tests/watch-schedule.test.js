@@ -10,7 +10,7 @@ import {
   startWatch,
 } from '../src/lib/watch-schedule.js';
 import { dueForRefresh } from '../src/lib/order-watch.js';
-import { dueForShippoCheck } from '../src/lib/shippo-watch.js';
+import { dueForShippoCheck } from '../src/lib/carriers/shippo-watch.js';
 
 describe('whether a check is worth making', () => {
   const base = {

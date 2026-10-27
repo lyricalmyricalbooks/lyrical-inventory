@@ -15,8 +15,8 @@ import {
   classifyCanadaPostCode,
   classifyCanadaPostFailure,
   canadaPostBackoffMs,
-} from '../src/lib/canadapost-errors.js';
-import { CANADAPOST_THROTTLE_COOLDOWN_MS } from '../src/lib/canadapost-throttle.js';
+} from '../src/lib/carriers/canadapost-errors.js';
+import { CANADAPOST_THROTTLE_COOLDOWN_MS } from '../src/lib/carriers/canadapost-throttle.js';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Why this file exists:

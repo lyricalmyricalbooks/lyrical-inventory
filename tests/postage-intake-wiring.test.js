@@ -6,7 +6,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { appSource, buildHarness } from './helpers/extract-decl.js';
-import { refundState } from '../src/lib/label-refunds.js';
+import { refundState } from '../src/lib/carriers/label-refunds.js';
 import {
   autoLinkConfidentShippingMatches,
   isUnresolvedShippoPostage,

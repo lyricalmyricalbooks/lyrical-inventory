@@ -5,7 +5,7 @@ import {
   parseCanadaPostPriceQuotes,
   estimateOfflineCanadaPostRates,
   CANADAPOST_SERVICES
-} from '../src/lib/canadapost.js';
+} from '../src/lib/carriers/canadapost.js';
 
 describe('Canada Post XML & Postal Code Helpers', () => {
   it('cleans Canadian postal codes to 6 alphanumeric characters', () => {
@@ -144,7 +144,7 @@ describe('Offline Canada Post Rate Estimator', () => {
 
 describe('Canada Post Label & Shipment Creation', () => {
   it('builds valid Non-Contract Shipment JSON with sender, recipient, and customs', async () => {
-    const { buildNonContractShipmentJson } = await import('../src/lib/canadapost.js');
+    const { buildNonContractShipmentJson } = await import('../src/lib/carriers/canadapost.js');
     const jsonStr = buildNonContractShipmentJson({
       serviceCode: 'USA.TP',
       sender: {
@@ -192,7 +192,7 @@ describe('Canada Post Label & Shipment Creation', () => {
   });
 
   it('builds valid Developer Portal shipment payload with settlementInfo', async () => {
-    const { buildNonContractShipmentJson } = await import('../src/lib/canadapost.js');
+    const { buildNonContractShipmentJson } = await import('../src/lib/carriers/canadapost.js');
     const contractPayload = JSON.parse(buildNonContractShipmentJson({
       serviceCode: 'DOM.EP',
       sender: { postalCode: 'M4B1B3' },
@@ -222,7 +222,7 @@ describe('Canada Post Label & Shipment Creation', () => {
   });
 
   it('parses successful shipment response with tracking PIN and label artifact link', async () => {
-    const { parseCanadaPostShipmentResponse } = await import('../src/lib/canadapost.js');
+    const { parseCanadaPostShipmentResponse } = await import('../src/lib/carriers/canadapost.js');
     const sampleShipmentJson = JSON.stringify({
       "nonContractShipmentInfo": {
         "shipmentId": "123456789012345678",
@@ -246,7 +246,7 @@ describe('Canada Post Label & Shipment Creation', () => {
   });
 
   it('parses modern Developer Portal shipping v1 JSON response', async () => {
-    const { parseCanadaPostShipmentResponse } = await import('../src/lib/canadapost.js');
+    const { parseCanadaPostShipmentResponse } = await import('../src/lib/carriers/canadapost.js');
     const devPortalJson = JSON.stringify({
       "shipmentId": "987654321",
       "trackingPin": "7012787522410271",
@@ -272,8 +272,8 @@ describe('Canada Post Label & Shipment Creation', () => {
   });
 
   it('serves PDF label directly from IndexedDB cache when available', async () => {
-    const { fetchCanadaPostLabelArtifact } = await import('../src/lib/canadapost.js');
-    const { storeCachedLabelPdf } = await import('../src/lib/label-cache.js');
+    const { fetchCanadaPostLabelArtifact } = await import('../src/lib/carriers/canadapost.js');
+    const { storeCachedLabelPdf } = await import('../src/lib/carriers/label-cache.js');
 
     const fakePdfBlob = new Blob(['%PDF-1.4 test'], { type: 'application/pdf' });
     const pin = '7012999988887777';
@@ -321,7 +321,7 @@ describe('Canada Post Label & Shipment Creation', () => {
   });
 
   it('submits refund request for a Canada Post shipment', async () => {
-    const { refundCanadaPostShipment } = await import('../src/lib/canadapost.js');
+    const { refundCanadaPostShipment } = await import('../src/lib/carriers/canadapost.js');
 
     const origFetch = global.fetch;
     global.fetch = vi.fn().mockResolvedValue({
@@ -347,7 +347,7 @@ describe('Canada Post Label & Shipment Creation', () => {
   });
 
   it('shares one Declaration ID format rule with zonos.js', async () => {
-    const cp = await import('../src/lib/canadapost.js');
+    const cp = await import('../src/lib/carriers/canadapost.js');
     const zonos = await import('../src/lib/zonos.js');
     // Label purchase and the Tax Centre must agree on what a valid ID is.
     expect(cp.formatDeclarationId).toBe(zonos.formatDeclarationId);
@@ -355,7 +355,7 @@ describe('Canada Post Label & Shipment Creation', () => {
   });
 
   it('validates 13-character Zonos Declaration ID format and embeds it in customs XML', async () => {
-    const { validateDeclarationId, formatDeclarationId, buildNonContractShipmentJson } = await import('../src/lib/canadapost.js');
+    const { validateDeclarationId, formatDeclarationId, buildNonContractShipmentJson } = await import('../src/lib/carriers/canadapost.js');
 
     expect(validateDeclarationId('0rd4dpkrvc1y9')).toBe(true);
     expect(validateDeclarationId('0RD4DPKRVC1Y9')).toBe(true);
@@ -394,7 +394,7 @@ describe('Canada Post Label & Shipment Creation', () => {
   });
 
   it('omits both declaration fields entirely when no Declaration ID is supplied', async () => {
-    const { buildNonContractShipmentJson } = await import('../src/lib/canadapost.js');
+    const { buildNonContractShipmentJson } = await import('../src/lib/carriers/canadapost.js');
     const jsonStr = buildNonContractShipmentJson({
       serviceCode: 'USA.TP',
       destination: { countryCode: 'US', postalCode: '90210' },
@@ -407,7 +407,7 @@ describe('Canada Post Label & Shipment Creation', () => {
   });
 
   it('does not attach a declaration to a domestic shipment', async () => {
-    const { buildNonContractShipmentJson } = await import('../src/lib/canadapost.js');
+    const { buildNonContractShipmentJson } = await import('../src/lib/carriers/canadapost.js');
     const jsonStr = buildNonContractShipmentJson({
       serviceCode: 'DOM.EP',
       destination: { countryCode: 'CA', postalCode: 'M4B1B3' },
@@ -420,7 +420,7 @@ describe('Canada Post Label & Shipment Creation', () => {
   });
 
   it('keeps a Zonos Declaration ID lowercase even when it arrives upper-cased', async () => {
-    const { buildNonContractShipmentJson } = await import('../src/lib/canadapost.js');
+    const { buildNonContractShipmentJson } = await import('../src/lib/carriers/canadapost.js');
     const jsonStr = buildNonContractShipmentJson({
       serviceCode: 'USA.TP',
       destination: { countryCode: 'US', postalCode: '90210' },
@@ -432,7 +432,7 @@ describe('Canada Post Label & Shipment Creation', () => {
   });
 
   it('normalizes full state and province names to 2-letter postal codes', async () => {
-    const { normalizeStateOrProvince } = await import('../src/lib/canadapost.js');
+    const { normalizeStateOrProvince } = await import('../src/lib/carriers/canadapost.js');
     expect(normalizeStateOrProvince('Arizona', 'US')).toBe('AZ');
     expect(normalizeStateOrProvince('arizona')).toBe('AZ');
     expect(normalizeStateOrProvince('California', 'US')).toBe('CA');
@@ -444,7 +444,7 @@ describe('Canada Post Label & Shipment Creation', () => {
   });
 
   it('correctly formats multi-line addresses and normalized states in shipment JSON', async () => {
-    const { buildNonContractShipmentJson } = await import('../src/lib/canadapost.js');
+    const { buildNonContractShipmentJson } = await import('../src/lib/carriers/canadapost.js');
     const jsonStr = buildNonContractShipmentJson({
       serviceCode: 'USA.TP',
       sender: {
@@ -479,14 +479,14 @@ describe('Canada Post Label & Shipment Creation', () => {
   });
 
   it('generates authentic Code 128 barcode SVG rect elements', async () => {
-    const { generateCode128SvgBars } = await import('../src/lib/canadapost.js');
+    const { generateCode128SvgBars } = await import('../src/lib/carriers/canadapost.js');
     const svgBars = generateCode128SvgBars('7012345678901234');
     expect(svgBars).toContain('<rect');
     expect(svgBars).toContain('fill="#000000"');
   });
 
   it('generates full 4x6 vector Canada Post shipping label SVG with customs and Zonos DDP', async () => {
-    const { generateCanadaPostLabelSvg } = await import('../src/lib/canadapost.js');
+    const { generateCanadaPostLabelSvg } = await import('../src/lib/carriers/canadapost.js');
     const svg = generateCanadaPostLabelSvg({
       serviceCode: 'USA.TP',
       serviceName: 'Tracked Packet - USA',
@@ -509,7 +509,7 @@ describe('Canada Post Label & Shipment Creation', () => {
   });
 
   it('escapes markup-significant characters in label text', async () => {
-    const { generateCanadaPostLabelSvg } = await import('../src/lib/canadapost.js');
+    const { generateCanadaPostLabelSvg } = await import('../src/lib/carriers/canadapost.js');
     const svg = generateCanadaPostLabelSvg({
       orderNum: '#12 "rush"',
       destination: { name: "O'Brien & <Sons>", address1: '1 Rue', city: 'Montréal', state: 'QC', postalCode: 'H2X 1Y4' },
@@ -520,7 +520,7 @@ describe('Canada Post Label & Shipment Creation', () => {
   });
 
   it('generates vector printable Blob from shipment context with zero network errors', async () => {
-    const { generateClientCanadaPostLabelBlob, fetchCanadaPostLabelBlob, setLastPurchasedShipmentContext } = await import('../src/lib/canadapost.js');
+    const { generateClientCanadaPostLabelBlob, fetchCanadaPostLabelBlob, setLastPurchasedShipmentContext } = await import('../src/lib/carriers/canadapost.js');
     const context = {
       serviceCode: 'DOM.EP',
       trackingPin: '7012999988881111',
@@ -553,7 +553,7 @@ const realSender = {
 
 describe('Canada Post Account & Environment Validation', () => {
   it('serves both modes from one gateway and never promises a free sandbox', async () => {
-    const { resolveCanadaPostEnvironment } = await import('../src/lib/canadapost.js');
+    const { resolveCanadaPostEnvironment } = await import('../src/lib/carriers/canadapost.js');
     const live = resolveCanadaPostEnvironment({ isTest: false });
     expect(live.mode).toBe('live');
     expect(live.hostname).toBe('api.canadapost-postescanada.ca');
@@ -578,7 +578,7 @@ describe('Canada Post Account & Environment Validation', () => {
   });
 
   it('accepts 7 to 10 digit Canada Post customer numbers only', async () => {
-    const { isValidCustomerNumber, normalizeCustomerNumber } = await import('../src/lib/canadapost.js');
+    const { isValidCustomerNumber, normalizeCustomerNumber } = await import('../src/lib/carriers/canadapost.js');
 
     expect(isValidCustomerNumber('0007123456')).toBe(true);
     expect(isValidCustomerNumber('1234567')).toBe(true);
@@ -596,7 +596,7 @@ describe('Canada Post Account & Environment Validation', () => {
       DEFAULT_CP_CUSTOMER_NUMBER,
       hasCanadaPostCredentials,
       validateCanadaPostAccount
-    } = await import('../src/lib/canadapost.js');
+    } = await import('../src/lib/carriers/canadapost.js');
 
     // This bundle is served publicly; a credential here would be a published one.
     expect(DEFAULT_CP_API_KEY).toBe('');
@@ -625,7 +625,7 @@ describe('Canada Post Account & Environment Validation', () => {
   });
 
   it('flags a malformed customer number and warns while in sandbox mode', async () => {
-    const { validateCanadaPostAccount } = await import('../src/lib/canadapost.js');
+    const { validateCanadaPostAccount } = await import('../src/lib/carriers/canadapost.js');
 
     const badCust = validateCanadaPostAccount({
       apiKey: 'merchant_key_abc',
@@ -670,7 +670,7 @@ describe('Canada Post Shipment Simulation Guardrail', () => {
   });
 
   it('never invents a tracking PIN for a live shipment when the gateway is unreachable', async () => {
-    const { executeCanadaPostProxy } = await import('../src/lib/canadapost.js');
+    const { executeCanadaPostProxy } = await import('../src/lib/carriers/canadapost.js');
     global.fetch = vi.fn().mockRejectedValue(new Error('Failed to fetch'));
 
     await expect(executeCanadaPostProxy({
@@ -682,7 +682,7 @@ describe('Canada Post Shipment Simulation Guardrail', () => {
   });
 
   it('still simulates a shipment in sandbox mode and marks it as simulated', async () => {
-    const { executeCanadaPostProxy } = await import('../src/lib/canadapost.js');
+    const { executeCanadaPostProxy } = await import('../src/lib/carriers/canadapost.js');
     global.fetch = vi.fn().mockRejectedValue(new Error('Failed to fetch'));
 
     const result = await executeCanadaPostProxy({
@@ -698,7 +698,7 @@ describe('Canada Post Shipment Simulation Guardrail', () => {
   });
 
   it('refuses to buy a label with no credentials configured, before any network call', async () => {
-    const { buyCanadaPostLabel } = await import('../src/lib/canadapost.js');
+    const { buyCanadaPostLabel } = await import('../src/lib/carriers/canadapost.js');
     global.fetch = vi.fn().mockRejectedValue(new Error('should never be called'));
 
     await expect(buyCanadaPostLabel({
@@ -712,7 +712,7 @@ describe('Canada Post Shipment Simulation Guardrail', () => {
   });
 
   it('does not simulate a shipment outside sandbox mode even with no credentials', async () => {
-    const { executeCanadaPostProxy } = await import('../src/lib/canadapost.js');
+    const { executeCanadaPostProxy } = await import('../src/lib/carriers/canadapost.js');
     global.fetch = vi.fn().mockRejectedValue(new Error('Failed to fetch'));
 
     await expect(executeCanadaPostProxy({
@@ -723,7 +723,7 @@ describe('Canada Post Shipment Simulation Guardrail', () => {
   });
 
   it('routes a purchase through the documented Shipping API endpoint', async () => {
-    const { buyCanadaPostLabel } = await import('../src/lib/canadapost.js');
+    const { buyCanadaPostLabel } = await import('../src/lib/carriers/canadapost.js');
     const successJson = JSON.stringify({
       "nonContractShipmentInfo": {
         "shipmentId": "406951321983787352",
@@ -786,7 +786,7 @@ describe('Purchased labels stay reprintable offline', () => {
   });
 
   const buy = async (pin, orderNum) => {
-    const { buyCanadaPostLabel } = await import('../src/lib/canadapost.js');
+    const { buyCanadaPostLabel } = await import('../src/lib/carriers/canadapost.js');
     const jsonStr = shipmentJson(pin);
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -829,7 +829,7 @@ describe('Purchased labels stay reprintable offline', () => {
   });
 
   it('keeps an earlier label reachable after a later one is bought', async () => {
-    const { getArchivedShipmentContext, listArchivedShipments } = await import('../src/lib/canadapost.js');
+    const { getArchivedShipmentContext, listArchivedShipments } = await import('../src/lib/carriers/canadapost.js');
 
     await buy('70123456789000001', 'ORD-1');
     await buy('70123456789000002', 'ORD-2');
@@ -846,14 +846,14 @@ describe('Purchased labels stay reprintable offline', () => {
   });
 
   it('returns null for a parcel that was never bought here', async () => {
-    const { getArchivedShipmentContext } = await import('../src/lib/canadapost.js');
+    const { getArchivedShipmentContext } = await import('../src/lib/carriers/canadapost.js');
     await buy('70123456789000001', 'ORD-1');
     expect(getArchivedShipmentContext('70123456789009999')).toBe(null);
   });
 
   it('offers a test-mode shipment for reprint, marked as one', async () => {
     const { executeCanadaPostProxy, setLastPurchasedShipmentContext, listArchivedShipments } =
-      await import('../src/lib/canadapost.js');
+      await import('../src/lib/carriers/canadapost.js');
 
     global.fetch = vi.fn().mockRejectedValue(new Error('Failed to fetch'));
     const sim = await executeCanadaPostProxy({
@@ -881,7 +881,7 @@ describe('Zonos Verified Account key reaches Canada Post', () => {
   });
 
   it('sends the account key on the shipment request so Canada Post can issue the Declaration ID', async () => {
-    const { buyCanadaPostLabel } = await import('../src/lib/canadapost.js');
+    const { buyCanadaPostLabel } = await import('../src/lib/carriers/canadapost.js');
     const jsonStr = JSON.stringify({
       "nonContractShipmentInfo": {
         "shipmentId": "1",
@@ -919,7 +919,7 @@ describe('Zonos Verified Account key reaches Canada Post', () => {
   });
 
   it('keeps a Declaration ID bought by hand when the carrier issues none', async () => {
-    const { buyCanadaPostLabel } = await import('../src/lib/canadapost.js');
+    const { buyCanadaPostLabel } = await import('../src/lib/carriers/canadapost.js');
     const jsonStr = JSON.stringify({
       "nonContractShipmentInfo": {
         "shipmentId": "1",
@@ -951,7 +951,7 @@ describe('Zonos Verified Account key reaches Canada Post', () => {
   });
 
   it('ignores a malformed declaration id in the response', async () => {
-    const { parseCanadaPostShipmentResponse } = await import('../src/lib/canadapost.js');
+    const { parseCanadaPostShipmentResponse } = await import('../src/lib/carriers/canadapost.js');
     const parsed = parseCanadaPostShipmentResponse(
       JSON.stringify({
         "nonContractShipment-info": {
@@ -972,7 +972,7 @@ describe('Canada Post Tracking PIN Verification', () => {
   });
 
   it('parses a tracking summary into a shipment status record', async () => {
-    const { parseCanadaPostTrackingSummary } = await import('../src/lib/canadapost.js');
+    const { parseCanadaPostTrackingSummary } = await import('../src/lib/carriers/canadapost.js');
     const jsonStr = JSON.stringify({
       trackingSummary: {
         pinSummary: {
@@ -998,7 +998,7 @@ describe('Canada Post Tracking PIN Verification', () => {
   });
 
   it('surfaces a Canada Post error document rather than reporting a phantom shipment', async () => {
-    const { parseCanadaPostTrackingSummary } = await import('../src/lib/canadapost.js');
+    const { parseCanadaPostTrackingSummary } = await import('../src/lib/carriers/canadapost.js');
     const errJson = JSON.stringify({
       messages: {
         message: {
@@ -1013,7 +1013,7 @@ describe('Canada Post Tracking PIN Verification', () => {
   });
 
   it('verifies a tracking PIN against the correct environment endpoint', async () => {
-    const { verifyCanadaPostTrackingPin } = await import('../src/lib/canadapost.js');
+    const { verifyCanadaPostTrackingPin } = await import('../src/lib/carriers/canadapost.js');
     const jsonStr = JSON.stringify({ trackingSummary: { pinSummary: { pin: '70123456789012345', eventDescription: 'In Transit' } } });
 
     global.fetch = vi.fn().mockResolvedValue({
@@ -1036,14 +1036,14 @@ describe('Canada Post Tracking PIN Verification', () => {
   });
 
   it('requires a tracking PIN', async () => {
-    const { verifyCanadaPostTrackingPin } = await import('../src/lib/canadapost.js');
+    const { verifyCanadaPostTrackingPin } = await import('../src/lib/carriers/canadapost.js');
     await expect(verifyCanadaPostTrackingPin({ pin: '' })).rejects.toThrow(/required/i);
   });
 });
 
 describe('Canada Post authentication routing', () => {
   it('uses HTTP Basic for the Web Services gateways regardless of key shape', async () => {
-    const { resolveCanadaPostAuthStrategy } = await import('../src/lib/canadapost.js');
+    const { resolveCanadaPostAuthStrategy } = await import('../src/lib/carriers/canadapost.js');
     // A 32-char hex string is a perfectly ordinary Developer Program API
     // username; it must not be mistaken for an OAuth client ID.
     expect(resolveCanadaPostAuthStrategy('https://soa-gw.canadapost.ca/rs/ship/price')).toBe('basic');
@@ -1052,7 +1052,7 @@ describe('Canada Post authentication routing', () => {
   });
 
   it('uses OAuth only for the Developer Portal host, or when asked explicitly', async () => {
-    const { resolveCanadaPostAuthStrategy } = await import('../src/lib/canadapost.js');
+    const { resolveCanadaPostAuthStrategy } = await import('../src/lib/carriers/canadapost.js');
     expect(resolveCanadaPostAuthStrategy('https://api.canadapost-postescanada.ca/rating/v1/quote')).toBe('oauth');
     expect(resolveCanadaPostAuthStrategy('https://soa-gw.canadapost.ca/rs/ship/price', { authType: 'oauth' })).toBe('oauth');
     expect(resolveCanadaPostAuthStrategy('https://api.canadapost-postescanada.ca/x', { authType: 'basic' })).toBe('basic');
@@ -1061,7 +1061,7 @@ describe('Canada Post authentication routing', () => {
 
 describe('Canada Post failure reporting', () => {
   it('explains a rejected credential instead of reporting an empty response', async () => {
-    const { describeCanadaPostFailure } = await import('../src/lib/canadapost.js');
+    const { describeCanadaPostFailure } = await import('../src/lib/carriers/canadapost.js');
     const msg = describeCanadaPostFailure({ status: 401, body: '', isTest: false });
     expect(msg).toMatch(/401/);
     expect(msg).toMatch(/Sandbox Environment toggle/i);
@@ -1069,13 +1069,13 @@ describe('Canada Post failure reporting', () => {
   });
 
   it('separates a missing entitlement from a bad password', async () => {
-    const { describeCanadaPostFailure } = await import('../src/lib/canadapost.js');
+    const { describeCanadaPostFailure } = await import('../src/lib/carriers/canadapost.js');
     expect(describeCanadaPostFailure({ status: 403 })).toMatch(/entitlement|refused this request/i);
     expect(describeCanadaPostFailure({ status: 503 })).toMatch(/outage on their side/i);
   });
 
   it('prefers Canada Post’s own error document when one is present', async () => {
-    const { describeCanadaPostFailure } = await import('../src/lib/canadapost.js');
+    const { describeCanadaPostFailure } = await import('../src/lib/carriers/canadapost.js');
     const xml = '<messages><message><code>E002</code><description>Authentication Failure</description></message></messages>';
     expect(describeCanadaPostFailure({ status: 400, body: xml })).toBe('Canada Post [E002]: Authentication Failure');
   });
@@ -1088,7 +1088,7 @@ describe('Proxy failures reach the publisher instead of being swallowed', () => 
   });
 
   it('reports a 401 relayed by the Apps Script proxy rather than a parse error', async () => {
-    const { executeCanadaPostProxy } = await import('../src/lib/canadapost.js');
+    const { executeCanadaPostProxy } = await import('../src/lib/carriers/canadapost.js');
     localStorage.setItem('lm-sheets-url', 'https://script.google.com/macros/s/real/exec');
 
     global.fetch = vi.fn(async (url) => {
@@ -1114,7 +1114,7 @@ describe('Proxy failures reach the publisher instead of being swallowed', () => 
   });
 
   it('does not simulate a sandbox shipment that Canada Post actually refused', async () => {
-    const { executeCanadaPostProxy } = await import('../src/lib/canadapost.js');
+    const { executeCanadaPostProxy } = await import('../src/lib/carriers/canadapost.js');
     global.fetch = vi.fn(async (url) => {
       if (String(url).startsWith('/api/')) throw new Error('Failed to fetch');
       return { ok: false, status: 403, text: async () => '', json: async () => { throw new Error('not json'); } };
@@ -1130,7 +1130,7 @@ describe('Proxy failures reach the publisher instead of being swallowed', () => 
   });
 
   it('walks past a static host that has no local proxy', async () => {
-    const { executeCanadaPostProxy } = await import('../src/lib/canadapost.js');
+    const { executeCanadaPostProxy } = await import('../src/lib/carriers/canadapost.js');
     const priceJson = JSON.stringify({ priceQuotes: { priceQuote: { serviceCode: 'DOM.EP', priceDetails: { base: 12.00, due: 13.56 } } } });
 
     global.fetch = vi.fn(async (url) => {
@@ -1158,7 +1158,7 @@ describe('Proxy failures reach the publisher instead of being swallowed', () => 
   });
 
   it('never puts the API secret in the label-download URL', async () => {
-    const { fetchCanadaPostLabelBlob } = await import('../src/lib/canadapost.js');
+    const { fetchCanadaPostLabelBlob } = await import('../src/lib/carriers/canadapost.js');
     global.fetch = vi.fn().mockRejectedValue(new Error('Failed to fetch'));
 
     await fetchCanadaPostLabelBlob({
@@ -1176,7 +1176,7 @@ describe('Proxy failures reach the publisher instead of being swallowed', () => 
 
 describe('Canada Post credential inspection', () => {
   it('strips hidden characters that survive trim and break authentication', async () => {
-    const { sanitizeCanadaPostCredential } = await import('../src/lib/canadapost.js');
+    const { sanitizeCanadaPostCredential } = await import('../src/lib/carriers/canadapost.js');
     // A zero-width space pasted into the middle of a key is invisible on
     // screen but makes Canada Post answer E002.
     const dirty = '1ed63baea​3162824ee820aa20130a893 ';
@@ -1187,7 +1187,7 @@ describe('Canada Post credential inspection', () => {
   });
 
   it('leaves a clean credential completely untouched', async () => {
-    const { sanitizeCanadaPostCredential } = await import('../src/lib/canadapost.js');
+    const { sanitizeCanadaPostCredential } = await import('../src/lib/carriers/canadapost.js');
     const result = sanitizeCanadaPostCredential('1ed63baea3162824ee820aa20130a893');
     expect(result.value).toBe('1ed63baea3162824ee820aa20130a893');
     expect(result.issues).toEqual([]);
@@ -1195,13 +1195,13 @@ describe('Canada Post credential inspection', () => {
   });
 
   it('catches a key and password pasted together as one value', async () => {
-    const { inspectCanadaPostCredentials } = await import('../src/lib/canadapost.js');
+    const { inspectCanadaPostCredentials } = await import('../src/lib/carriers/canadapost.js');
     const { findings } = inspectCanadaPostCredentials({ apiKey: '6e93d5:0bfa9f', apiSecret: 'x' });
     expect(findings.join(' ')).toMatch(/colon/i);
   });
 
   it('passes a well-formed key and password with nothing to report', async () => {
-    const { inspectCanadaPostCredentials } = await import('../src/lib/canadapost.js');
+    const { inspectCanadaPostCredentials } = await import('../src/lib/carriers/canadapost.js');
     // A Developer Program username — the half before the colon of the key
     // Canada Post issues. A bare 32-hex string is a Developer Portal client
     // ID instead, and is reported as such rather than passed as clean.
@@ -1221,7 +1221,7 @@ describe('Canada Post connection diagnosis', () => {
   const authError = () => { throw new Error('Canada Post [E002]: AAA Authentication Failure'); };
 
   it('identifies a development key being used against the live gateway', async () => {
-    const { diagnoseCanadaPostConnection } = await import('../src/lib/canadapost.js');
+    const { diagnoseCanadaPostConnection } = await import('../src/lib/carriers/canadapost.js');
     const result = await diagnoseCanadaPostConnection({
       ...creds,
       customerNumber: '0001298882',
@@ -1236,7 +1236,7 @@ describe('Canada Post connection diagnosis', () => {
   });
 
   it('identifies a customer number the key is not entitled to', async () => {
-    const { diagnoseCanadaPostConnection } = await import('../src/lib/canadapost.js');
+    const { diagnoseCanadaPostConnection } = await import('../src/lib/carriers/canadapost.js');
     const result = await diagnoseCanadaPostConnection({
       ...creds,
       customerNumber: '0001298882',
@@ -1251,7 +1251,7 @@ describe('Canada Post connection diagnosis', () => {
   });
 
   it('says plainly when the key itself is refused everywhere', async () => {
-    const { diagnoseCanadaPostConnection } = await import('../src/lib/canadapost.js');
+    const { diagnoseCanadaPostConnection } = await import('../src/lib/carriers/canadapost.js');
     const result = await diagnoseCanadaPostConnection({
       apiKey: '1ed63baea3162824ee820aa20130a893', // Use a portal key to trigger auth failure
       apiSecret: 'aSecretFromTheDeveloperPortal',
@@ -1265,7 +1265,7 @@ describe('Canada Post connection diagnosis', () => {
   });
 
   it('reports success without asking the owner to change anything', async () => {
-    const { diagnoseCanadaPostConnection } = await import('../src/lib/canadapost.js');
+    const { diagnoseCanadaPostConnection } = await import('../src/lib/carriers/canadapost.js');
     const result = await diagnoseCanadaPostConnection({
       ...creds,
       customerNumber: '0001298882',
@@ -1279,7 +1279,7 @@ describe('Canada Post connection diagnosis', () => {
   });
 
   it('does not blame the credentials for a non-authentication failure', async () => {
-    const { diagnoseCanadaPostConnection } = await import('../src/lib/canadapost.js');
+    const { diagnoseCanadaPostConnection } = await import('../src/lib/carriers/canadapost.js');
     const result = await diagnoseCanadaPostConnection({
       ...creds,
       isTest: false,
@@ -1290,7 +1290,7 @@ describe('Canada Post connection diagnosis', () => {
   });
 
   it('sanitizes the credentials before probing with them', async () => {
-    const { diagnoseCanadaPostConnection } = await import('../src/lib/canadapost.js');
+    const { diagnoseCanadaPostConnection } = await import('../src/lib/carriers/canadapost.js');
     const seen = [];
     await diagnoseCanadaPostConnection({
       apiKey: ' 1ed63baea3162824ee820aa20130a893 ',
@@ -1298,7 +1298,7 @@ describe('Canada Post connection diagnosis', () => {
       isTest: false,
       probe: async () => { seen.push('called'); return [{ serviceCode: 'DOM.EP' }]; }
     });
-    const { inspectCanadaPostCredentials } = await import('../src/lib/canadapost.js');
+    const { inspectCanadaPostCredentials } = await import('../src/lib/carriers/canadapost.js');
     const insp = inspectCanadaPostCredentials({ apiKey: ' 1ed63baea3162824ee820aa20130a893 ', apiSecret: ' secret﻿value ' });
     expect(insp.apiKey.value).toBe('1ed63baea3162824ee820aa20130a893');
     expect(insp.apiSecret.value).toBe('secretvalue');
@@ -1308,18 +1308,18 @@ describe('Canada Post connection diagnosis', () => {
 
 describe('Canada Post key system detection', () => {
   it('recognises a Developer Portal client ID, which this app cannot use', async () => {
-    const { classifyCanadaPostKeyKind } = await import('../src/lib/canadapost.js');
+    const { classifyCanadaPostKeyKind } = await import('../src/lib/carriers/canadapost.js');
     expect(classifyCanadaPostKeyKind('1ed63baea3162824ee820aa20130a893')).toBe('portal-client-id');
     expect(classifyCanadaPostKeyKind('cc42b40f9036917c8e2fd928c65df5de')).toBe('portal-client-id');
   });
 
   it('recognises a Developer Program key still joined to its password', async () => {
-    const { classifyCanadaPostKeyKind } = await import('../src/lib/canadapost.js');
+    const { classifyCanadaPostKeyKind } = await import('../src/lib/carriers/canadapost.js');
     expect(classifyCanadaPostKeyKind('6e93d53968881714:0bfa9fcb9853d1f51ee57a')).toBe('legacy-combined');
   });
 
   it('splits a whole key:password paste into its two halves', async () => {
-    const { splitCanadaPostApiKey } = await import('../src/lib/canadapost.js');
+    const { splitCanadaPostApiKey } = await import('../src/lib/carriers/canadapost.js');
     const pair = splitCanadaPostApiKey('6e93d53968881714:0bfa9fcb9853d1f51ee57a', '');
     expect(pair).toEqual({
       apiKey: '6e93d53968881714',
@@ -1329,7 +1329,7 @@ describe('Canada Post key system detection', () => {
   });
 
   it('leaves an already-separated key and password alone', async () => {
-    const { splitCanadaPostApiKey } = await import('../src/lib/canadapost.js');
+    const { splitCanadaPostApiKey } = await import('../src/lib/carriers/canadapost.js');
     const pair = splitCanadaPostApiKey('6e93d53968881714', '0bfa9fcb9853d1f51ee57a');
     expect(pair.split).toBe(false);
     expect(pair.apiKey).toBe('6e93d53968881714');
@@ -1337,7 +1337,7 @@ describe('Canada Post key system detection', () => {
   });
 
   it('tells the owner they have the wrong kind of key rather than to re-check the password', async () => {
-    const { diagnoseCanadaPostConnection } = await import('../src/lib/canadapost.js');
+    const { diagnoseCanadaPostConnection } = await import('../src/lib/carriers/canadapost.js');
     const result = await diagnoseCanadaPostConnection({
       apiKey: '6e93d53968881714',
       apiSecret: '0bfa9fcb9853d1f51ee57a',
@@ -1350,7 +1350,7 @@ describe('Canada Post key system detection', () => {
   });
 
   it('still reports a plain bad password as a bad password', async () => {
-    const { diagnoseCanadaPostConnection } = await import('../src/lib/canadapost.js');
+    const { diagnoseCanadaPostConnection } = await import('../src/lib/carriers/canadapost.js');
     const result = await diagnoseCanadaPostConnection({
       apiKey: '1ed63baea3162824ee820aa20130a893',
       apiSecret: 'wrongpassword',
@@ -1362,7 +1362,7 @@ describe('Canada Post key system detection', () => {
   });
 
   it('diagnoses a whole key:password paste by testing its split halves', async () => {
-    const { diagnoseCanadaPostConnection } = await import('../src/lib/canadapost.js');
+    const { diagnoseCanadaPostConnection } = await import('../src/lib/carriers/canadapost.js');
     const seen = [];
     const result = await diagnoseCanadaPostConnection({
       apiKey: '1ed63baea3162824ee820aa20130a893:aSecretFromTheDeveloperPortal',
@@ -1397,7 +1397,7 @@ describe('A Google Sheet relay that answers with a web page is reported, not hid
     '<body><form action="https://accounts.google.com/ServiceLogin">Sign in</form></body></html>';
 
   it('names the deployment problem instead of blaming browser CORS', async () => {
-    const { executeCanadaPostProxy } = await import('../src/lib/canadapost.js');
+    const { executeCanadaPostProxy } = await import('../src/lib/carriers/canadapost.js');
     localStorage.setItem('lm-sheets-url', 'https://script.google.com/macros/s/real/exec');
 
     global.fetch = vi.fn(async (url) => {
@@ -1418,7 +1418,7 @@ describe('A Google Sheet relay that answers with a web page is reported, not hid
   });
 
   it('does not tell the owner to connect a sheet that is already connected', async () => {
-    const { executeCanadaPostProxy } = await import('../src/lib/canadapost.js');
+    const { executeCanadaPostProxy } = await import('../src/lib/carriers/canadapost.js');
     localStorage.setItem('lm-sheets-url', 'https://script.google.com/macros/s/real/exec');
 
     global.fetch = vi.fn(async (url) => {
@@ -1440,7 +1440,7 @@ describe('A Google Sheet relay that answers with a web page is reported, not hid
   });
 
   it('still keeps walking past a static host that has no local backend', async () => {
-    const { executeCanadaPostProxy } = await import('../src/lib/canadapost.js');
+    const { executeCanadaPostProxy } = await import('../src/lib/carriers/canadapost.js');
     const priceXml = '<priceQuotes><priceQuote><serviceCode>DOM.EP</serviceCode></priceQuote></priceQuotes>';
 
     global.fetch = vi.fn(async (url) => {
@@ -1464,7 +1464,7 @@ describe('A Google Sheet relay that answers with a web page is reported, not hid
   });
 
   it('keeps the original advice when no sheet is configured at all', async () => {
-    const { executeCanadaPostProxy } = await import('../src/lib/canadapost.js');
+    const { executeCanadaPostProxy } = await import('../src/lib/carriers/canadapost.js');
     global.fetch = vi.fn().mockRejectedValue(new Error('Failed to fetch'));
 
     await expect(executeCanadaPostProxy({
@@ -1477,7 +1477,7 @@ describe('A Google Sheet relay that answers with a web page is reported, not hid
   });
 
   it('relays a real Canada Post answer through the sheet unchanged', async () => {
-    const { executeCanadaPostProxy } = await import('../src/lib/canadapost.js');
+    const { executeCanadaPostProxy } = await import('../src/lib/carriers/canadapost.js');
     localStorage.setItem('lm-sheets-url', 'https://script.google.com/macros/s/real/exec');
     const priceJson = JSON.stringify({ priceQuotes: { priceQuote: { serviceCode: 'DOM.EP' } } });
 
@@ -1501,7 +1501,7 @@ describe('A Google Sheet relay that answers with a web page is reported, not hid
   });
 
   it('describes each way an Apps Script deployment goes wrong', async () => {
-    const { describeAppsScriptProxyFailure } = await import('../src/lib/canadapost.js');
+    const { describeAppsScriptProxyFailure } = await import('../src/lib/carriers/canadapost.js');
     expect(describeAppsScriptProxyFailure({ kind: 'not-json', body: signInPage })).toMatch(/Who has access/i);
     expect(describeAppsScriptProxyFailure({ kind: 'not-json', body: '<html>TypeError: x is not a function</html>' }))
       .toMatch(/older version|redeploy/i);
@@ -1539,7 +1539,7 @@ describe('Commercial rates that come back empty fall back to retail', () => {
   };
 
   it('asks for commercial first when a customer number is set', async () => {
-    const { getCanadaPostRates } = await import('../src/lib/canadapost.js');
+    const { getCanadaPostRates } = await import('../src/lib/carriers/canadapost.js');
     const sent = [];
     global.fetch = vi.fn(async (url, opts) => {
       if (String(url).startsWith('/api/')) {
@@ -1557,7 +1557,7 @@ describe('Commercial rates that come back empty fall back to retail', () => {
   });
 
   it('retries as a counter quote when the commercial one returns nothing', async () => {
-    const { getCanadaPostRates } = await import('../src/lib/canadapost.js');
+    const { getCanadaPostRates } = await import('../src/lib/carriers/canadapost.js');
     // This is the reported symptom: a US route on an account with no US
     // contract answers 200 with an empty list, which used to surface as
     // "no services found" and nothing else.
@@ -1575,7 +1575,7 @@ describe('Commercial rates that come back empty fall back to retail', () => {
   });
 
   it('does not make a second request when commercial already worked', async () => {
-    const { getCanadaPostRates } = await import('../src/lib/canadapost.js');
+    const { getCanadaPostRates } = await import('../src/lib/carriers/canadapost.js');
     let gatewayCalls = 0;
     global.fetch = vi.fn(async (url) => {
       if (String(url).startsWith('/api/')) throw new Error('Failed to fetch');
@@ -1591,7 +1591,7 @@ describe('Commercial rates that come back empty fall back to retail', () => {
   });
 
   it('returns an honest empty list when neither quote type has services', async () => {
-    const { getCanadaPostRates } = await import('../src/lib/canadapost.js');
+    const { getCanadaPostRates } = await import('../src/lib/carriers/canadapost.js');
     global.fetch = relay([noQuotes, noQuotes]);
 
     const quotes = await getCanadaPostRates({
@@ -1602,7 +1602,7 @@ describe('Commercial rates that come back empty fall back to retail', () => {
   });
 
   it('asks for counter directly when there is no customer number', async () => {
-    const { getCanadaPostRates } = await import('../src/lib/canadapost.js');
+    const { getCanadaPostRates } = await import('../src/lib/carriers/canadapost.js');
     let gatewayCalls = 0;
     global.fetch = vi.fn(async (url) => {
       if (String(url).startsWith('/api/')) throw new Error('Failed to fetch');
@@ -1621,7 +1621,7 @@ describe('Commercial rates that come back empty fall back to retail', () => {
 
 describe('Rate payloads obey the gateway’s strict schema', () => {
   it('sends only camelCase keys, never hyphenated variants', async () => {
-    const { buildRateScenarioJson } = await import('../src/lib/canadapost.js');
+    const { buildRateScenarioJson } = await import('../src/lib/carriers/canadapost.js');
     // The Apigee gateway validates with additionalProperties:false, so a
     // defensive hyphenated key alongside the camelCase one is a 400.
     const payload = buildRateScenarioJson({
@@ -1635,7 +1635,7 @@ describe('Rate payloads obey the gateway’s strict schema', () => {
   });
 
   it('omits the customer and contract entirely on a counter quote', async () => {
-    const { buildRateScenarioJson } = await import('../src/lib/canadapost.js');
+    const { buildRateScenarioJson } = await import('../src/lib/carriers/canadapost.js');
     // Rule 9114: counter rates are refused if either is present.
     const parsed = JSON.parse(buildRateScenarioJson({
       destCountry: 'US', destPostalOrZip: '10009',
@@ -1647,7 +1647,7 @@ describe('Rate payloads obey the gateway’s strict schema', () => {
   });
 
   it('never sends a contract id without its customer number', async () => {
-    const { buildRateScenarioJson } = await import('../src/lib/canadapost.js');
+    const { buildRateScenarioJson } = await import('../src/lib/carriers/canadapost.js');
     const parsed = JSON.parse(buildRateScenarioJson({
       destCountry: 'CA', destPostalOrZip: 'V6B2W9', customerNumber: '', contractId: '4299100'
     }));
@@ -1657,7 +1657,7 @@ describe('Rate payloads obey the gateway’s strict schema', () => {
 
 describe('Developer Portal error documents are read, not skipped', () => {
   it('reads the documented flat messages array', async () => {
-    const { parseCanadaPostPriceQuotes } = await import('../src/lib/canadapost.js');
+    const { parseCanadaPostPriceQuotes } = await import('../src/lib/carriers/canadapost.js');
     // The Portal shape is {"messages":[{code,description}]}. Only the legacy
     // nested messages.message was checked, so this fell through every branch
     // and surfaced as an empty service list instead of the actual reason.
@@ -1669,7 +1669,7 @@ describe('Developer Portal error documents are read, not skipped', () => {
   });
 
   it('still reads the legacy nested shape', async () => {
-    const { parseCanadaPostPriceQuotes } = await import('../src/lib/canadapost.js');
+    const { parseCanadaPostPriceQuotes } = await import('../src/lib/carriers/canadapost.js');
     const body = JSON.stringify({
       messages: { message: { code: 'E002', description: 'AAA Authentication Failure' } }
     });
@@ -1677,7 +1677,7 @@ describe('Developer Portal error documents are read, not skipped', () => {
   });
 
   it('keeps every message when Canada Post sends more than one', async () => {
-    const { parseCanadaPostPriceQuotes } = await import('../src/lib/canadapost.js');
+    const { parseCanadaPostPriceQuotes } = await import('../src/lib/carriers/canadapost.js');
     const body = JSON.stringify({
       messages: [
         { code: '7007', description: 'The weight value is invalid.' },
@@ -1691,7 +1691,7 @@ describe('Developer Portal error documents are read, not skipped', () => {
   });
 
   it('does not mistake a successful quote list for an error', async () => {
-    const { parseCanadaPostPriceQuotes } = await import('../src/lib/canadapost.js');
+    const { parseCanadaPostPriceQuotes } = await import('../src/lib/carriers/canadapost.js');
     const body = JSON.stringify({
       priceQuotes: { priceQuote: [{ serviceCode: 'USA.TP', priceDetails: { base: 12, due: 13.5 } }] }
     });
@@ -1703,7 +1703,7 @@ describe('Developer Portal error documents are read, not skipped', () => {
 
 describe('A gateway timeout is not reported as a confirmed outage', () => {
   it('describes 504 as possibly a refused request', async () => {
-    const { describeCanadaPostFailure } = await import('../src/lib/canadapost.js');
+    const { describeCanadaPostFailure } = await import('../src/lib/carriers/canadapost.js');
     const msg = describeCanadaPostFailure({ status: 504 });
     expect(msg).toMatch(/504/);
     expect(msg).toMatch(/refused|retrying/i);
@@ -1711,7 +1711,7 @@ describe('A gateway timeout is not reported as a confirmed outage', () => {
   });
 
   it('still calls a 503 what it is', async () => {
-    const { describeCanadaPostFailure } = await import('../src/lib/canadapost.js');
+    const { describeCanadaPostFailure } = await import('../src/lib/carriers/canadapost.js');
     expect(describeCanadaPostFailure({ status: 503 })).toMatch(/outage on their side/i);
   });
 });

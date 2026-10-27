@@ -20,7 +20,7 @@ import {
   resolveManifestEndpoint,
   resolveCanadaPostScope,
   resolveCanadaPostProduct,
-} from '../src/lib/canadapost-endpoints.js';
+} from '../src/lib/carriers/canadapost-endpoints.js';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Why this file exists:

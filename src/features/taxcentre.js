@@ -80,7 +80,7 @@ import { receiptOwners, summarizeReceiptStorage, isReceiptExemptExpense, receipt
 import { testZonosConnection } from '../lib/zonos.js';
 import { friendlyOpenRouterError, openRouterAllowanceNote, testOpenRouterConnection } from '../lib/openrouter-chat.js';
 import { _geminiClearRest } from '../lib/gemini-quota.js';
-import { testCanadaPostConnection, validateCanadaPostAccount, isValidCustomerNumber, getSavedSheetsUrl, diagnoseCanadaPostConnection, inspectCanadaPostCredentials, resolveCanadaPostCredentials, migrateCanadaPostCredentials, readCanadaPostCredentialSet, credentialSetIsConfigured, CANADAPOST_CREDENTIAL_FIELDS } from '../lib/canadapost.js';
+import { testCanadaPostConnection, validateCanadaPostAccount, isValidCustomerNumber, getSavedSheetsUrl, diagnoseCanadaPostConnection, inspectCanadaPostCredentials, resolveCanadaPostCredentials, migrateCanadaPostCredentials, readCanadaPostCredentialSet, credentialSetIsConfigured, CANADAPOST_CREDENTIAL_FIELDS } from '../lib/carriers/canadapost.js';
 import {
   RECURRING_FREQUENCIES,
   amountOnDate,
@@ -5063,7 +5063,7 @@ async function testChitChatsConnectionHandler() {
   statusEl.innerHTML = 'Connecting to Chit Chats API…';
 
   try {
-    const { verifyChitChatsConnection } = await import('../lib/chitchats.js');
+    const { verifyChitChatsConnection } = await import('../lib/carriers/chitchats.js');
     const result = await verifyChitChatsConnection({ clientId, token, isTest: !!$('tc-cc-test-mode')?.checked });
     if (result.ok) {
       statusEl.className = 'tc-status-msg tc-status-ok';

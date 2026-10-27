@@ -12,7 +12,7 @@ import {
   parseShipmentPrice,
   fetchCanadaPostLabelArtifact,
   setLastPurchasedShipmentContext,
-} from '../src/lib/canadapost.js';
+} from '../src/lib/carriers/canadapost.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
@@ -455,14 +455,14 @@ describe('a sandbox run completes the whole flow, marked as a test', () => {
 
 describe('label creation refuses to guess a Canada Post endpoint', () => {
   it('sends a purchase to the endpoint registry rather than building a path inline', async () => {
-    const libSrc = fs.readFileSync(path.join(root, 'src/lib/canadapost.js'), 'utf8');
+    const libSrc = fs.readFileSync(path.join(root, 'src/lib/carriers/canadapost.js'), 'utf8');
     expect(libSrc).toMatch(/resolveShipmentEndpoint\(\{/);
     // The retired path shape must not reappear as a live call site.
     expect(libSrc).not.toMatch(/\$\{[^}]*baseUrl\}\/rs\//);
   });
 
   it('addresses Create Shipment at the documented Shipping API path', async () => {
-    const { buyCanadaPostLabel } = await import('../src/lib/canadapost.js');
+    const { buyCanadaPostLabel } = await import('../src/lib/carriers/canadapost.js');
 
     const shipmentJson = JSON.stringify({
       shipmentInfo: {

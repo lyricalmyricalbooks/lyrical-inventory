@@ -6,7 +6,7 @@ import {
   findArchivedLabel,
   pruneLabelArchive,
   listArchivedLabels,
-} from '../src/lib/label-archive.js';
+} from '../src/lib/carriers/label-archive.js';
 
 const ctx = (pin, extra = {}) => ({
   trackingPin: pin,

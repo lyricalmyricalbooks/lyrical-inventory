@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { attachEmailReceipts, parseShippoReceiptEmail } from '../src/lib/shippo-invoices.js';
+import { attachEmailReceipts, parseShippoReceiptEmail } from '../src/lib/carriers/shippo-invoices.js';
 
 // Shape of a real "Your Shippo Invoice Receipt" plain-text body: the invoice
 // link only appears inside a click-tracking payload.

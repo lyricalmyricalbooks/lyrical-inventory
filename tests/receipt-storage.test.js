@@ -491,7 +491,7 @@ describe('cloud fallback wiring', () => {
 
 
 import { isShippingLabelRef, isWebReceiptLink, hasOnlyShippingLabels } from '../src/lib/receipt-storage.js';
-import { attachInvoiceReceipts } from '../src/lib/shippo-invoices.js';
+import { attachInvoiceReceipts } from '../src/lib/carriers/shippo-invoices.js';
 
 describe('shipping labels vs web-link receipts', () => {
   const LABEL = 'https://deliver.goshippo.com/abc.pdf?Expires=1';

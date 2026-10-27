@@ -10,7 +10,7 @@ import {
   describeThrottleWait,
   resetCanadaPostThrottle,
   resetAllCanadaPostThrottles,
-} from '../src/lib/canadapost-throttle.js';
+} from '../src/lib/carriers/canadapost-throttle.js';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Why this file exists:

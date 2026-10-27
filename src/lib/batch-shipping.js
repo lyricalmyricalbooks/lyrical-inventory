@@ -15,7 +15,7 @@ import { escapeHtml } from './html.js';
 import { normalizeShippingOrderNumber } from './shipping-reconciliation.js';
 import { withAutoLocalPickup } from './local-pickup.js';
 import { isWebsiteFulfilled } from './website-link.js';
-import { websiteLabelWords } from './label-duplicate-guard.js';
+import { websiteLabelWords } from './carriers/label-duplicate-guard.js';
 
 /** How far back an unshipped order is still worth offering. */
 export const BATCH_LOOKBACK_DAYS = 60;

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   diagnoseShipmentRejection,
   describeShipmentRejection,
-} from '../src/lib/canadapost-shipment-diagnosis.js';
+} from '../src/lib/carriers/canadapost-shipment-diagnosis.js';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Why this file exists:

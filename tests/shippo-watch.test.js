@@ -5,7 +5,7 @@ import {
   isImportableTransaction,
   newShippoTransactions,
   shippoExpenseRef,
-} from '../src/lib/shippo-watch.js';
+} from '../src/lib/carriers/shippo-watch.js';
 import {
   autoLinkConfidentShippingMatches,
   reconcileShippingExpense,

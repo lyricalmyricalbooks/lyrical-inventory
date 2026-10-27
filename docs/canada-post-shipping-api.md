@@ -13,7 +13,7 @@ portal, same OAuth app, same conventions. Read that one first.
 ## 1. The rules, in one place
 
 1. **Never invent a path, field name, media type or scope.** Paths are recorded
-   in [`src/lib/canadapost-endpoints.js`](../src/lib/canadapost-endpoints.js).
+   in [`src/lib/carriers/canadapost-endpoints.js`](../src/lib/carriers/canadapost-endpoints.js).
    Anything not there comes from the app's OpenAPI spec or the portal guides —
    never from memory, a blog post, or a plausible-looking pattern.
 2. **REST + JSON only, OAuth 2.0 bearer tokens mandatory** since 2026-04-30.
@@ -86,7 +86,7 @@ Returns labels are a **separate API** (Returns 2.0.0), not covered here.
 3. **Check for "manifest required".** Canada Post signals this inconsistently —
    a boolean on some responses, wording on the label on others — so
    `manifestSignal()` in
-   [`canadapost-shipment.js`](../src/lib/canadapost-shipment.js) checks both and
+   [`canadapost-shipment.js`](../src/lib/carriers/canadapost-shipment.js) checks both and
    returns `required` / `not-required` / `unknown`, with **unknown treated as
    required**. A needless manifest costs an extra call; a missed one costs money
    on every parcel it covered.
@@ -264,13 +264,13 @@ rather than trusting hardcoded legacy codes.
 
 ## 9. Where this lives in this repo
 
-- [`src/lib/canadapost-endpoints.js`](../src/lib/canadapost-endpoints.js) — every path, scope and product bucket.
+- [`src/lib/carriers/canadapost-endpoints.js`](../src/lib/carriers/canadapost-endpoints.js) — every path, scope and product bucket.
 - [`docs/shipping-api-openapi.yaml`](shipping-api-openapi.yaml) — the authoritative contract. Every field name comes from here.
-- [`src/lib/canadapost-shipment.js`](../src/lib/canadapost-shipment.js) — reading a Create Shipment response; manifest-required detection.
-- [`src/lib/canadapost-throttle.js`](../src/lib/canadapost-throttle.js) — per-product spacing and the 60s cooldown.
-- [`src/lib/canadapost-errors.js`](../src/lib/canadapost-errors.js) — the `messages[]` classifier.
-- [`src/lib/canadapost-shipment-diagnosis.js`](../src/lib/canadapost-shipment-diagnosis.js) — tells a field the owner can fix apart from a field name this app got wrong, which is the difference between a five-minute fix and a wasted afternoon.
-- [`src/lib/canadapost.js`](../src/lib/canadapost.js) — the client that ties them together.
+- [`src/lib/carriers/canadapost-shipment.js`](../src/lib/carriers/canadapost-shipment.js) — reading a Create Shipment response; manifest-required detection.
+- [`src/lib/carriers/canadapost-throttle.js`](../src/lib/carriers/canadapost-throttle.js) — per-product spacing and the 60s cooldown.
+- [`src/lib/carriers/canadapost-errors.js`](../src/lib/carriers/canadapost-errors.js) — the `messages[]` classifier.
+- [`src/lib/carriers/canadapost-shipment-diagnosis.js`](../src/lib/carriers/canadapost-shipment-diagnosis.js) — tells a field the owner can fix apart from a field name this app got wrong, which is the difference between a five-minute fix and a wasted afternoon.
+- [`src/lib/carriers/canadapost.js`](../src/lib/carriers/canadapost.js) — the client that ties them together.
 - `backend/server.js`, `apps-script/Code.gs` — the two proxies and the token exchange. An Apps Script change means bumping the script version and re-syncing `public/gas-code.txt`.
 
 ## 10. Sources
