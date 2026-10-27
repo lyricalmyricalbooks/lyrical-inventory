@@ -2,6 +2,7 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vitest';
+import { LIB_PATHS } from './helpers/extract-decl.js';
 
 // Resolved via __dirname rather than `new URL(..., import.meta.url)` — jsdom's
 // global URL is not a node file URL and node:fs rejects it. Matches the rest
@@ -43,15 +44,12 @@ function definedTokens() {
   }
   // …or set at runtime from JS, or on an element's own style attribute.
   const jsDir = path.join(root, 'src', 'features');
-  const libDir = path.join(root, 'src', 'lib');
   const jsPaths = [
     'src/main.js',
     ...(existsSync(jsDir)
       ? readdirSync(jsDir).filter(f => f.endsWith('.js')).map(f => `src/features/${f}`)
       : []),
-    ...(existsSync(libDir)
-      ? readdirSync(libDir, { recursive: true }).filter(f => f.endsWith('.js')).map(f => `src/lib/${f.split(path.sep).join('/')}`)
-      : []),
+    ...LIB_PATHS.map(f => path.relative(root, f).split(path.sep).join('/')),
   ];
   for (const f of [...jsPaths, 'index.html']) {
     const src = read(f);

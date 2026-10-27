@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { FEATURE_PATHS, LIB_PATHS, CORE_PATHS } from './helpers/extract-decl.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
@@ -13,27 +14,15 @@ const mainJs = fs.readFileSync(path.join(root, 'src/main.js'), 'utf8');
 // into main.js, and those modules render their own HTML strings containing
 // on*= handlers. Read from disk rather than listed, so a new feature module is
 // covered the moment it exists.
-const featureDir = path.join(root, 'src/features');
-const featureSources = fs.existsSync(featureDir)
-  ? fs.readdirSync(featureDir).filter(f => f.endsWith('.js'))
-      .map(f => fs.readFileSync(path.join(featureDir, f), 'utf8'))
-  : [];
+const featureSources = FEATURE_PATHS.map(f => fs.readFileSync(f, 'utf8'));
 // src/lib counts too, for the same reason: a handler may now be *defined* in a
 // leaf module (confirmDialog and promptDialog moved to lib/modal.js) and merely
 // re-exposed on window by main.js. Where it is declared doesn't change whether
 // the click resolves — being on window does.
-const libDir = path.join(root, 'src/lib');
-const libSources = fs.existsSync(libDir)
-  ? fs.readdirSync(libDir, { recursive: true }).filter(f => f.endsWith('.js'))
-      .map(f => fs.readFileSync(path.join(libDir, f), 'utf8'))
-  : [];
+const libSources = LIB_PATHS.map(f => fs.readFileSync(f, 'utf8'));
 // src/core too: the shared book data and its helpers (getState, getBook, …)
 // are defined in core/store.js and re-exposed on window by main.js.
-const coreDir = path.join(root, 'src/core');
-const coreSources = fs.existsSync(coreDir)
-  ? fs.readdirSync(coreDir).filter(f => f.endsWith('.js'))
-      .map(f => fs.readFileSync(path.join(coreDir, f), 'utf8'))
-  : [];
+const coreSources = CORE_PATHS.map(f => fs.readFileSync(f, 'utf8'));
 const appSources = [mainJs, ...featureSources, ...libSources, ...coreSources];
 const union = (fn) => appSources.reduce((acc, src) => {
   for (const name of fn(src)) acc.add(name);
