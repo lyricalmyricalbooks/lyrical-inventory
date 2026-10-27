@@ -297,6 +297,15 @@
   .fm-tile-add, #tab-pos .fm-undo:not([hidden]) { transition: none; animation: none; }
 }
 @keyframes fm-undo-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+/* Receipt drop-zone: on a phone nothing is dragged in, so the tall pale box with a thin pink dashed
+   hairline read as unfinished beside the 2px ink fields around it. It keeps its tint but takes the
+   ink outline (still dashed, so it reads as "tap to add"), and loses its dead height. */
+@media (max-width: 768px) {
+  .dropzone { border: var(--stroke) dashed var(--rule-ink); min-height: 96px; padding: var(--space-3) var(--space-4); }
+  .dropzone:active { transform: scale(.99); }
+}
+@media (max-width: 768px) and (prefers-reduced-motion: reduce) { .dropzone:active { transform: none; } }
+
 @media (max-width: 768px) { .fm-more-link { display: block; width: 100%; min-height: 44px; margin-bottom: var(--space-4); } }
 @media (max-width: 768px) { #tab-pos .pos-pay-opt[data-pay="Stripe QR"] { grid-column: 1 / -1; } }
 .today-card-wide { grid-column: 1 / -1; }
