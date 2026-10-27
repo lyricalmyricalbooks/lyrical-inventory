@@ -123,3 +123,11 @@ test('upright phone: "Log an expense" steps down to a caps label under the Anton
   expect(rule[1]).toMatch(/color:\s*var\(--content-muted\)/);
   expect(riso).toMatch(/#tab-expenses > \.section-hed::after\s*\{[^}]*flex:\s*1/);
 });
+
+test('upright phone: "Log an order" steps down to a caps label under the Manual Order Entry masthead', () => {
+  const rule = riso.match(/#tab-manual :is\(#man-sale-sect, #man-gift-sect\) > \.section-hed\s*\{([^}]*)\}/);
+  expect(rule).not.toBeNull();
+  expect(rule[1]).toMatch(/font:\s*800 var\(--text-xs\) var\(--font-ui\)/);
+  expect(rule[1]).toMatch(/color:\s*var\(--content-muted\)/);
+  expect(riso).toMatch(/#man-gift-sect\) > \.section-hed::after\s*\{[^}]*flex:\s*1/);
+});
