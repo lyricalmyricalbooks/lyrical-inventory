@@ -269,8 +269,8 @@
   .pub-shell #tab-today .today-card .today-card-sub { grid-area: sub; font: 400 var(--text-sm) var(--font-mono); color: var(--content-muted); opacity: 1; }
   .pub-shell #tab-today .today-card .today-card-count {
     grid-area: count; position: static; display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px;
-    border: var(--stroke-hair) solid var(--gold-text); border-radius: var(--r-pill); background: var(--gold-bg); color: var(--gold-text);
-    font: 800 var(--text-2xs) var(--font-ui); letter-spacing: .08em; text-transform: uppercase;
+    border: var(--stroke) solid var(--gold-text); border-radius: var(--r2); background: var(--gold-bg); color: var(--gold-text);
+    font: 800 var(--text-2xs) var(--font-ui); letter-spacing: var(--tracking-caps); text-transform: uppercase; font-variant-numeric: tabular-nums;
   }
   .pub-shell #tab-today .today-card .today-card-count::before { content: "●"; }
   .pub-shell #tab-today .today-card .today-card-count::after { content: " open"; }
