@@ -24,7 +24,7 @@ const featureSources = fs.existsSync(featureDir)
 // the click resolves — being on window does.
 const libDir = path.join(root, 'src/lib');
 const libSources = fs.existsSync(libDir)
-  ? fs.readdirSync(libDir).filter(f => f.endsWith('.js'))
+  ? fs.readdirSync(libDir, { recursive: true }).filter(f => f.endsWith('.js'))
       .map(f => fs.readFileSync(path.join(libDir, f), 'utf8'))
   : [];
 // src/core too: the shared book data and its helpers (getState, getBook, …)

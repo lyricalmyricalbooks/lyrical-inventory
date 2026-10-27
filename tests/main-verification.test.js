@@ -23,7 +23,7 @@ describe('main.js window binding verification', () => {
   // declared in src/lib/modal.js and imported here purely to be re-exposed on
   // window for the inline on*= handlers in index.html.
   const readDir = (dir) => (fs.existsSync(dir)
-    ? fs.readdirSync(dir).filter(f => f.endsWith('.js'))
+    ? fs.readdirSync(dir, { recursive: true }).filter(f => f.endsWith('.js'))
         .map(f => fs.readFileSync(path.join(dir, f), 'utf8'))
     : []);
   const appSource = [mainContent]
