@@ -340,8 +340,9 @@ import { STARTUP_HISTORY_KEY, recordStartup, describeStartup } from './lib/start
 import { DEVICE_COPY_KEY, describeCopyAge } from './lib/device-copy.js';
 import {
   getLocalStorage, loadSyncQueue, persistSyncQueue, queueKeyFor, getSyncTabId, markTabAlive, markTabGone,
-  readOrphanQueues, releaseOrphanKeys, pickNextSyncItem, SYNC_TAB_HEARTBEAT_MS,
+  readOrphanQueues, releaseOrphanKeys, pickNextSyncItem, SYNC_TAB_HEARTBEAT_MS, isOrphanQueueKey,
 } from './lib/sync-queue-store.js';
+import { createSyncOverflowStore } from './lib/sync-queue-overflow.js';
 import { partHashesOf } from './lib/merge-state.js';
 import { loadFxHistory, saveFxHistory, datesNeedingRates, fillDatedRates, datedRateKey } from './lib/sale-fx.js';
 import { consignmentSaleAmounts, expectedConsignmentPayment, consignmentPaymentRecord, consignmentFxSummary, splitConsignmentPayment, storeSaleCurrency } from './lib/consignment-fx.js';
@@ -3161,6 +3162,19 @@ let fbReady = false, lastSavedHashes = {}, lastSaveTimes = {};
 const SYNC_TAB_ID = getSyncTabId((() => { try { return window.sessionStorage; } catch (_) { return null; } })(), getLocalStorage());
 const SYNC_QUEUE_STORAGE_KEY = queueKeyFor(SYNC_TAB_ID);
 const _syncQueueLoad = loadSyncQueue(getLocalStorage(), SYNC_QUEUE_STORAGE_KEY);
+
+// The queue kept in IndexedDB when localStorage is full (sync-queue-overflow.js).
+// The Test Profile gets its own, as it gets its own localStorage.
+const _syncOverflow = createSyncOverflowStore(
+  typeof indexedDB === 'undefined' ? undefined : indexedDB,
+  TEST_PROFILE_ACTIVE ? 'lm-sync-overflow-test' : 'lm-sync-overflow',
+);
+/** True while this tab's queue lives in IndexedDB rather than localStorage. */
+let _syncQueueInOverflow = false;
+let _syncSaveSeq = 0;
+/** Resolves true once the latest save of the queue has landed somewhere. */
+let _syncOverflowWrite = Promise.resolve(true);
+
 export let syncQueue = _syncQueueLoad.queue;
 markTabAlive(getLocalStorage(), SYNC_TAB_ID);
 /** The queue item being uploaded right now, if any. queueSync never replaces it. */
@@ -3223,24 +3237,109 @@ if (_syncQueueLoad.discarded) {
  * @returns {boolean} whether the write landed
  */
 function saveSyncQueueToDevice() {
+  const seq = ++_syncSaveSeq;
   const res = persistSyncQueue(getLocalStorage(), syncQueue, SYNC_QUEUE_STORAGE_KEY);
   if (res.ok || !syncQueue.length) {
     // Landed, or there is nothing left that could be lost.
     _syncQueueHeldInMemory = false;
+    if (_syncQueueInOverflow) {
+      _syncQueueInOverflow = false;
+      _syncOverflow.remove(SYNC_QUEUE_STORAGE_KEY);
+    }
+    _syncOverflowWrite = Promise.resolve(res.ok);
     return res.ok;
   }
-  console.warn(`Could not store the offline sync queue (${res.reason})`, res.error);
-  if (!_syncQueueHeldInMemory) {
-    _syncQueueHeldInMemory = true;
-    showToast(
-      res.reason === 'quota'
-        ? '⚠ This device is out of storage, so your change couldn\'t be saved on it. Keep the app open until it uploads, or it could be lost.'
-        : '⚠ This device wouldn\'t let the app save your change. Keep the app open until it uploads, or it could be lost.',
-      'err',
-      9000,
-    );
-  }
+  console.warn(`Could not store the offline sync queue (${res.reason}), keeping it in the device's larger storage`, res.error);
+  // localStorage is full (or refused): keep the queue in IndexedDB, which has
+  // far more room. Only if that fails too is the change at risk.
+  _syncOverflowWrite = _syncOverflow.put(SYNC_QUEUE_STORAGE_KEY, syncQueue).then(ok => {
+    // A later save has already decided where the queue lives.
+    if (seq !== _syncSaveSeq) return ok;
+    if (ok) {
+      _syncQueueInOverflow = true;
+      _syncQueueHeldInMemory = false;
+      // Drop the older, smaller copy so a restart doesn't replay it. Removing
+      // can't hit the quota.
+      try { getLocalStorage()?.removeItem(SYNC_QUEUE_STORAGE_KEY); } catch (_) { /* left; qids dedupe it */ }
+      renderSyncChip();
+      return true;
+    }
+    if (!_syncQueueHeldInMemory) {
+      _syncQueueHeldInMemory = true;
+      renderSyncChip();
+      showToast(
+        res.reason === 'quota'
+          ? '⚠ This device is out of storage, so your change couldn\'t be saved on it. Keep the app open until it uploads, or it could be lost.'
+          : '⚠ This device wouldn\'t let the app save your change. Keep the app open until it uploads, or it could be lost.',
+        'err',
+        9000,
+      );
+    }
+    return false;
+  });
   return false;
+}
+
+// Changes kept in IndexedDB by this tab before a reload, or by a tab that is
+// gone, are taken back into this tab's queue: stored here first, and only then
+// removed from where they were. Marked `adopted` so a new edit on this screen,
+// which never showed them, can't supersede them.
+let _ownOverflowRead = false;
+export async function adoptOverflowSyncChanges() {
+  // This tab's own record is read back once, at startup (it is what a reload
+  // left behind). After that this tab writes and clears it itself, and a read
+  // racing that clear must not bring back changes that already uploaded.
+  const readOwn = !_ownOverflowRead;
+  _ownOverflowRead = true;
+  const records = await _syncOverflow.readAll();
+  if (!records.length) return;
+  const storage = getLocalStorage();
+  const now = Date.now();
+  const take = records.filter(r => r.key === SYNC_QUEUE_STORAGE_KEY
+    ? readOwn
+    : isOrphanQueueKey(storage, r.key, SYNC_TAB_ID, now));
+  if (!take.length) return;
+  const have = new Set(syncQueue.map(item => item.qid).filter(Boolean));
+  const fresh = [];
+  take.forEach(r => r.queue.forEach((item, i) => {
+    if (!item || typeof item.bookId !== 'string' || !item.state || typeof item.state !== 'object') return;
+    const qid = item.qid || `${r.key}#${item.ts || 0}#${i}`;
+    if (have.has(qid)) return;
+    have.add(qid);
+    fresh.push({ ...item, qid, adopted: true });
+  }));
+  syncQueue.push(...fresh);
+  saveSyncQueueToDevice();
+  const stored = await _syncOverflowWrite;
+  if (!stored) {
+    syncQueue = syncQueue.filter(item => !fresh.includes(item));
+    return;
+  }
+  // Stored under this tab's key now (in localStorage, or as this tab's own
+  // overflow record): the old records can go.
+  await Promise.all(take.filter(r => r.key !== SYNC_QUEUE_STORAGE_KEY || !_syncQueueInOverflow)
+    .map(r => _syncOverflow.remove(r.key)));
+  if (fresh.length) {
+    console.info(`[sync] took back ${fresh.length} change(s) kept in the device's larger storage`);
+    updatePendingIndicator();
+    processSyncQueue();
+  }
+}
+
+// Ask the browser not to clear this site's storage when the device runs low,
+// once, the first time a change waits to upload. Installed apps are usually
+// granted this without a prompt.
+let _persistStorageAsked = false;
+function askToKeepDeviceStorage() {
+  if (_persistStorageAsked) return;
+  _persistStorageAsked = true;
+  try {
+    const st = typeof navigator !== 'undefined' ? navigator.storage : null;
+    if (!st || typeof st.persist !== 'function') return;
+    Promise.resolve(typeof st.persisted === 'function' ? st.persisted() : false)
+      .then(already => (already ? true : st.persist()))
+      .catch(() => { /* not granted; storage behaves as before */ });
+  } catch (_) { /* unsupported */ }
 }
 
 /** Stamp a confirmed cloud write. Storage failures are never worth throwing on. */
@@ -3355,7 +3454,7 @@ export async function adoptOrphanedSyncChanges() {
  * send those changes a second time.
  */
 function syncQueueTakenByAnotherTab() {
-  if (!syncQueue.some(item => !item.adopted) || _syncQueueHeldInMemory) return false;
+  if (!syncQueue.some(item => !item.adopted) || _syncQueueHeldInMemory || _syncQueueInOverflow) return false;
   const storage = getLocalStorage();
   if (!storage) return false;
   try { return storage.getItem(SYNC_QUEUE_STORAGE_KEY) === null; } catch (_) { return false; }
@@ -3364,6 +3463,7 @@ function syncQueueTakenByAnotherTab() {
 setInterval(() => {
   markTabAlive(getLocalStorage(), SYNC_TAB_ID);
   adoptOrphanedSyncChanges();
+  adoptOverflowSyncChanges();
 }, SYNC_TAB_HEARTBEAT_MS);
 window.addEventListener('pagehide', () => markTabGone(getLocalStorage(), SYNC_TAB_ID));
 window.addEventListener('pageshow', (e) => {
@@ -3372,6 +3472,7 @@ window.addEventListener('pageshow', (e) => {
   processSyncQueue();
 });
 setTimeout(adoptOrphanedSyncChanges, 0);
+setTimeout(adoptOverflowSyncChanges, 0);
 
 // Persist a not-yet-saved book state so an optimistic UI change is never
 // lost. Only the LATEST snapshot per book is kept — a newer edit supersedes
@@ -3406,6 +3507,7 @@ function queueSync(bookId, state, baseOverride) {
   // Must not throw: the upload below is attempted whether or not the device
   // copy landed, so a full storage can't strand the change with no retry.
   saveSyncQueueToDevice();
+  askToKeepDeviceStorage();
   updatePendingIndicator();
   processSyncQueue();
 }
@@ -9881,7 +9983,7 @@ function renderImportPreview() {
   const notes = [];
   if (issues.ambiguous) {
     notes.push(`<label class="import-date-order">${issues.ambiguous} date${issues.ambiguous === 1 ? '' : 's'} like 03/04 could be read two ways. In this file the
-      <select onchange="setImportDateOrder(this.value)" aria-label="How dates like 03/04 are written in this file">
+      <select data-on-change="import.dateOrder" aria-label="How dates like 03/04 are written in this file">
         <option value="mdy"${_importDateOrder === 'mdy' ? ' selected' : ''}>month comes first (March 4)</option>
         <option value="dmy"${_importDateOrder === 'dmy' ? ' selected' : ''}>day comes first (3 April)</option>
       </select></label>`);
@@ -9973,6 +10075,11 @@ function undoImport(importId) {
 // Hidden for this visit only; comes back the next time the app opens.
 let _importNoticeClosed = '';
 function closeImportNotice(importId) { _importNoticeClosed = importId; renderHist(); }
+registerActions({
+  'import.dateOrder': (el) => setImportDateOrder(el.value),
+  'import.undo': (el) => undoImport(el.dataset.import),
+  'import.closeNotice': (el) => closeImportNotice(el.dataset.import),
+});
 
 const IMPORT_NOTICE_DAYS = 14;
 function renderImportNotice(s) {
@@ -9984,8 +10091,8 @@ function renderImportNotice(s) {
   host.hidden = false;
   host.innerHTML = `<div class="stock-alert ok hist-import-notice">
       <span>Imported ${last.count} order${last.count === 1 ? '' : 's'}${last.name ? ` from “${escapeHtml(last.name)}”` : ''} on ${fmtD(last.at.slice(0, 10))}.</span>
-      <button type="button" class="btn sm" onclick="undoImport('${escapeHtml(last.id)}')">Undo this import</button>
-      <button class="card-x" type="button" onclick="closeImportNotice('${escapeHtml(last.id)}')" aria-label="Close this notice" title="Close until you next open the app">✕</button>
+      <button type="button" class="btn sm" data-action="import.undo" data-import="${escapeHtml(last.id)}">Undo this import</button>
+      <button class="card-x" type="button" data-action="import.closeNotice" data-import="${escapeHtml(last.id)}" aria-label="Close this notice" title="Close until you next open the app">✕</button>
     </div>`;
 }
 

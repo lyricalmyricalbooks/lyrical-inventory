@@ -18,6 +18,7 @@ describe('queueSync keeps the base a queued change was made on', () => {
       SYNC_TAB_ID: 'tab-test',
       window: { _fbBaseFor: vi.fn(() => ({ ...baseNow })) },
       saveSyncQueueToDevice: vi.fn(),
+      askToKeepDeviceStorage: vi.fn(),
       updatePendingIndicator: vi.fn(),
       processSyncQueue: vi.fn(),
     };
