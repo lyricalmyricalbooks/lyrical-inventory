@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { FEATURE_PATHS, LIB_PATHS, CORE_PATHS } from './helpers/extract-decl.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,15 +23,12 @@ describe('main.js window binding verification', () => {
   // closeM, confirmDialog, promptDialog and the field-validation helpers) are
   // declared in src/lib/modal.js and imported here purely to be re-exposed on
   // window for the inline on*= handlers in index.html.
-  const readDir = (dir) => (fs.existsSync(dir)
-    ? fs.readdirSync(dir, { recursive: true }).filter(f => f.endsWith('.js'))
-        .map(f => fs.readFileSync(path.join(dir, f), 'utf8'))
-    : []);
+  const readAll = (paths) => paths.map(f => fs.readFileSync(f, 'utf8'));
   const appSource = [mainContent]
-    .concat(readDir(path.resolve(__dirname, '../src/features')))
-    .concat(readDir(path.resolve(__dirname, '../src/lib')))
+    .concat(readAll(FEATURE_PATHS))
+    .concat(readAll(LIB_PATHS))
     // ...and src/core, where getState, defaultState and the shared book data live.
-    .concat(readDir(path.resolve(__dirname, '../src/core')))
+    .concat(readAll(CORE_PATHS))
     .join('\n');
 
   it('declares every variable/function bound to window in exposeLegacyInlineHandlers', () => {
