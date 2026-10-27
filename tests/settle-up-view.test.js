@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { describeArtistSettlement } from '../src/lib/earnings.js';
-import { needsSettleUp, settleUpModel, settleUpHeadline, settleUpHtml, settlementPayoutSummary } from '../src/lib/settle-up-view.js';
+import { needsSettleUp, settleUpModel, settleUpHtml, settlementPayoutSummary } from '../src/lib/settle-up-view.js';
 
 // The figures from the owner's screenshot: the author holds 574.68, keeps their
 // 74.71 share, so owes 499.97; the publisher owes 267.76 → author sends 232.21.
@@ -51,7 +51,6 @@ describe('the two columns', () => {
   it('says nothing changes hands when the sides cancel out', () => {
     const m = settleUpModel(balance({ owedToArtist: 499.97 }));
     expect([m.direction, m.amount, m.result, m.recordLabel]).toEqual(['settled', 0, 'Nothing to send', 'Record offset']);
-    expect(settleUpHeadline(m, 'CA$').sub).toBe('the two sides cancel out');
   });
 
   it('lists other debts and an earlier overpayment only when they exist', () => {
@@ -182,7 +181,6 @@ describe('unpaid expenses on the slip', () => {
     // Every ledger figure appears in the sum under the big number.
     expect(sum(html)).toBe('CA$555.48 − CA$312.55 − CA$28.17');
     expect(html.textContent).toContain('marking the CA$28.17 of expenses as paid back');
-    expect(settleUpHeadline(m, 'CA$').sub).toBe('author sends you · after earnings and CA$28.17 of expenses come off');
   });
 
   it('gives every receipt its own row and Mark received button, because the separate list no longer shows them', () => {
@@ -209,7 +207,6 @@ describe('unpaid expenses on the slip', () => {
     const m = settleUpModel(withExpenses([{ ...shipping, amount: 300 }]));
     expect([m.direction, m.amount, m.result]).toEqual(['to-artist', 57.07, 'You send the author']);
     expect(sum(render(m))).toBe('CA$312.55 + CA$300.00 − CA$555.48');
-    expect(settleUpHeadline(m, 'CA$').sub).toBe('you send the author · includes CA$300.00 of expenses owed back');
   });
 
   it('speaks from the author side', () => {

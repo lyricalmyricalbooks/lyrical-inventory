@@ -27,7 +27,7 @@ import {
   renderHist,
   renderPendingExpenses,
   saveState,
-  settlementLinkFor,
+  settlementPayState,
   sheetsUrl,
   showToast,
   syncQueue,
@@ -76,7 +76,6 @@ import { expensesWithSettlements, isGratuityExpense } from '../lib/receipt-stora
 import {
   needsSettleUp,
   settlementPayoutSummary,
-  settleUpHeadline,
   settleUpHtml,
   settleUpModel,
 } from '../lib/settle-up-view.js';
@@ -456,9 +455,13 @@ function renderExpensesSummaryBlock(s, cur) {
     if (expKpi) { expKpi.style.display = ''; }
     animateCountValue('d-expenses-owed', fmtWhole(expTotal, cur));
     $('d-expenses-owed-sub').textContent = `${unreceivedExp.length} expense${unreceivedExp.length !== 1 ? 's' : ''} outstanding`;
-    // Detail table — dark banner style
-    if (expSect) {
-      expSect.style.display = '';
+    // Detail table — dark banner style. On a profit-sharing book whose money
+    // card lists every one of these, the card says it all.
+    const settle = expensesInSettleUp(BOOKS[activeBook], s);
+    const inSettle = unreceivedExp.filter(e => settle.ids.has(String(e.id))).length;
+    const onMoneyCard = inSettle === unreceivedExp.length && !!BOOKS[activeBook]?.profitTiers?.length;
+    if (expSect) expSect.style.display = onMoneyCard ? 'none' : '';
+    if (expSect && !onMoneyCard) {
       animateCountValue('d-exp-total', fmtWhole(expTotal, cur));
       $('d-exp-count').textContent = `${expenses.length} expense${expenses.length !== 1 ? 's' : ''} logged`;
       $('d-exp-body').innerHTML = unreceivedExp.map(e => `
@@ -477,8 +480,6 @@ function renderExpensesSummaryBlock(s, cur) {
       // A separate payment as well would pay them back twice. The link stays
       // for any still paid on their own, and for the difference when the
       // Settle up has you paying the author.
-      const settle = expensesInSettleUp(BOOKS[activeBook], s);
-      const inSettle = unreceivedExp.filter(e => settle.ids.has(String(e.id))).length;
       const rest = unreceivedExp.length - inSettle;
       const showLink = !!safeLink && (rest > 0 || settle.publisherPays);
       if (payBtn) {
@@ -622,7 +623,7 @@ function getProfitTiersHtml(book, stats, cur) {
   const nextTier = tiers.find(t => effectiveCap(t) !== null && stats.cumulativeRevenue < effectiveCap(t));
 
   const tierHeader = `
-    <div style="display:grid; grid-template-columns: 1fr auto 70px 70px; gap:12px; align-items:center;
+    <div class="ps-tier-row is-head" style="display:grid; grid-template-columns: 1fr auto 70px 70px; gap:12px; align-items:center;
       font-size:9px; text-transform:uppercase; letter-spacing:.08em; color:var(--text3);
       padding:0 8px 6px; border-bottom:var(--stroke-hair) solid rgba(0,0,0,.06); margin-bottom:6px;">
       <span>Tier</span>
@@ -648,7 +649,7 @@ function getProfitTiersHtml(book, stats, cur) {
     const iconColor = isCompleted ? 'var(--green)' : isActive ? 'var(--gold2)' : 'rgba(0,0,0,.25)';
 
     return `
-      <div style="display:grid; grid-template-columns: 1fr auto 70px 70px; gap:12px; align-items:center;
+      <div class="ps-tier-row" style="display:grid; grid-template-columns: 1fr auto 70px 70px; gap:12px; align-items:center;
         font-size:12px; padding:8px; margin-bottom:4px;
         opacity:${isCompleted ? '.6' : '1'}; font-weight:${isActive ? '600' : '400'};
         border-radius:var(--r2);
@@ -656,7 +657,7 @@ function getProfitTiersHtml(book, stats, cur) {
         border-left:var(--stroke) solid ${isCompleted ? 'var(--green)' : isActive ? 'var(--gold2)' : 'transparent'};">
         <span style="display:flex; align-items:center; gap:8px;">
           <span style="color:${iconColor}; font-size:var(--text-xs); width:12px; display:inline-block; text-align:center;">${icon}</span>
-          <span>${t.label}<br><span style="font-size:var(--text-2xs);opacity:.55;font-weight:400;">${threshold}</span></span>
+          <span>${escapeHtml(t.label)}<br><span style="font-size:var(--text-2xs);opacity:.55;font-weight:400;">${threshold}</span></span>
         </span>
         <span style="text-align:right; font-family:var(--font-mono); font-size:var(--text-xs); opacity:.75;" title="Revenue captured in this tier">${tierCapText}</span>
         <span style="text-align:right; font-family:var(--font-mono); color:${earned > 0 ? 'var(--green)' : 'var(--text3)'};" title="Artist payout earned in this tier">${fmt(earned, cur)}</span>
@@ -715,18 +716,9 @@ function owedFromSalesHtml(bookId, owed, cur) {
   return `<div class="ps-stat-detail">${rate} of ${fmt(u.revenue, cur)} · ${copies}</div>`;
 }
 
-function getOwedCardDetails(stats, cur, settle = null) {
+function getOwedCardDetails(stats, cur) {
   const owed = stats.owedToArtist;
   const artistOwesPublisher = owed < -0.01;
-
-  // Money running both ways is one balance, not two alarms: lead with the
-  // single figure that actually changes hands (the Settle up panel below
-  // shows how both sides add up to it).
-  if (settle) {
-    const head = settleUpHeadline(settle, cur);
-    return { owedLabel: head.label, owedVal: head.value, owedSub: head.sub,
-      owedTone: settle.direction === 'settled' ? 'green' : 'gold', owed };
-  }
 
   // The "Owed to artist" card flips to an overpaid state when payouts exceed the
   // artist's net earnings (the publisher's cut held by the artist is tracked
@@ -788,24 +780,84 @@ const artistSettlementBusy = new Set();
 
 // The Settle up panel, built fresh on every render so it can never show a
 // stale figure: when a sale or payment syncs in, the panel redraws with it.
-// Returns '' when the account only runs one way — an ordinary payout covers that.
-function getSettleUpHtml(bookId) {
+// Only for an account running both ways (needsSettleUp) — an ordinary payout
+// covers the rest. `extra` is what the money card adds: { actions, notice, more }.
+function getSettleUpHtml(bookId, plan, extra = {}) {
   const book = BOOKS[bookId];
-  const plan = planArtistSettlement(book, states[bookId]);
-  if (!plan || !needsSettleUp(plan.balance)) return { html: '', model: null };
   artistSettlementPreviews.set(bookId, plan);
   const author = isAuthor();
   const model = settleUpModel(plan.balance, { author });
   const html = settleUpHtml(model, {
     bookId, cur: book.currency, date: today(),
-    payLinkReady: !!settlementLinkFor(states[bookId], { payable: plan.hasWork && plan.balance.direction === 'to-publisher', balance: plan.balance }),
+    payLinkReady: !!settlementPayState(states[bookId], { payable: plan.hasWork && plan.balance.direction === 'to-publisher', balance: plan.balance }).link,
     canRecord: !author && isPublisherSession(),
     hasWork: plan.hasWork, reviewError: !!plan.error,
     pendingSync: syncQueue.filter(q => q.bookId === bookId).length,
     statement: artistSettlementStatement(book, plan.balance, today()),
     transfers: plan.transfers,
+    ...extra,
   });
-  return { html, model };
+  return html;
+}
+
+// The buttons and notes the money card carries, so the banners that used to
+// carry them can step aside: the author's Pay button (or why there isn't one
+// yet), the payment link the publisher pays back through, and the author's
+// payout request.
+function moneyCardActions(bookId, plan, stats, cur) {
+  const s = states[bookId];
+  const b = plan.balance;
+  const author = isAuthor();
+  const money = n => fmt(n, cur);
+  if (author && plan.error) return { notice: 'Your publisher is checking an earlier payment. Nothing to send until they have.' };
+  if (author && plan.hasWork && b.direction === 'to-publisher' && b.amount > 0) {
+    const { link, paid } = settlementPayState(s, { plan, balance: b, payable: true });
+    if (paid) return { notice: "✓ Paid — thank you! It clears once your publisher's app records it." };
+    return link
+      ? { actions: `<a class="btn gold sys-target" href="${escapeHtml(link.url)}" target="_blank" rel="noopener">Pay ${money(b.amount)} →</a>` }
+      : { notice: "Your payment link is on its way. Your publisher's app is preparing it." };
+  }
+  if (b.direction !== 'to-artist') return {};
+  const buttons = [];
+  const payLink = safeHttpUrl((s?.artistPaymentLink || '').trim());
+  if (payLink && !author) {
+    buttons.push(`<a class="btn outline sys-target" href="${escapeHtml(payLink)}" target="_blank" rel="noopener" title="Pay them the ${money(b.amount)} here, then record it">↗ Their payment link</a>`);
+  } else if (!payLink) {
+    buttons.push(author
+      ? '<button type="button" class="btn gold sys-target" data-action="moneyCard.setUpPayLink" title="Add the link your publisher pays you through">Set up your payment link →</button>'
+      : '<button type="button" class="btn outline sys-target" data-action="moneyCard.askPayLink" title="Send the author simple steps to add the link you\'ll pay them through">✉ Ask author to add payment link</button>');
+  }
+  let notice = '';
+  if (author && stats.owedToArtist > 0.01) {
+    const pending = pendingPayoutRequest(s, stats);
+    buttons.push(`<button type="button" class="btn outline sys-target" id="request-payout-btn-${escapeHtml(String(bookId))}" data-action="moneyCard.requestPayout" data-book="${escapeHtml(String(bookId))}">${pending ? 'Send reminder' : 'Request payout'}</button>`);
+    if (pending) notice = `✓ You asked for ${money(pending.amount)} on ${escapeHtml(pending.requestedAt ? pending.requestedAt.slice(0, 10) : '—')}. Your publisher has been told.`;
+  }
+  return { actions: buttons.join(''), notice };
+}
+
+// What sits folded at the foot of the money card: the lifetime figures in one
+// line, how the artist is paid, and the payments already made.
+function moneyCardMore(bookId, stats, cur, parts) {
+  const id = escapeHtml(String(bookId));
+  const n = stats.payouts?.length || 0;
+  const held = stats.heldByArtistGross > 0.01 ? ` · held by ${isAuthor() ? 'you' : 'the artist'} ${fmt(stats.heldByArtistGross, cur)}` : '';
+  return `<p class="ps-money-totals">Earned so far ${fmt(stats.totalArtistEarned, cur)} · ${parts.hasSettlements ? 'settled' : 'paid'} ${fmt(stats.totalPaidToArtist, cur)}${held}</p>
+      <details class="ps-money-more">
+        <summary>${isAuthor() ? 'How you are paid' : 'How the artist is paid'} <span aria-hidden="true">▾</span></summary>
+        <div class="ps-money-more-body">${parts.tiers}</div>
+      </details>
+      <details class="ps-money-more" id="ps-payments-${id}">
+        <summary>${parts.hasSettlements ? 'Payments &amp; settlements' : isAuthor() ? 'Payments to you' : 'Payments to the artist'} (${n}) <span aria-hidden="true">▾</span></summary>
+        <div class="ps-money-more-body">${parts.payments}</div>
+      </details>`;
+}
+
+// The money card leads the dashboard; without one, the breakdown keeps its
+// place further down, after the metrics.
+function placeProfitSharingBlock(block, lead) {
+  const anchor = lead ? $('author-payment-banner') : $('artist-transfers-sect');
+  if (anchor && block.nextElementSibling !== anchor) anchor.before(block);
 }
 
 // Phones get the system share sheet (Messages, Mail, WhatsApp…); everything
@@ -1032,7 +1084,7 @@ function getPayoutHistoryHtml(stats, bookId, cur) {
     return `<div class="ps-payout-empty">
       <span class="ps-payout-empty-icon" aria-hidden="true">💸</span>
       <strong>No payouts recorded yet</strong>
-      <span>Every payment you send the artist belongs here — it is what the balance above is measured against.</span>
+      <span>${isAuthor() ? 'Every payment your publisher sends you lands here' : 'Every payment you send the artist belongs here'} — it is what the balance above is measured against.</span>
     </div>${undone}`;
   }
 
@@ -1128,29 +1180,54 @@ function renderProfitSharingBreakdown(bookId) {
 
   const { tierHeader, tierHtml, tiers, nextTier, effectiveCap } = getProfitTiersHtml(book, stats, cur);
   const progressHtml = getRevenueProgressHtml(stats, tiers, nextTier, effectiveCap, cur);
-  const settle = getSettleUpHtml(bookId);
-  const { owedLabel, owedVal, owedSub, owedTone, owed } = getOwedCardDetails(stats, cur, settle.model);
-  // Money running both ways: keep the earnings owed visible as its own box,
-  // beside the net balance that leads — in a calm colour, since the net is
-  // what gets acted on, and the two shouldn't look like two alarms.
-  const royaltyCard = settle.model ? (() => {
-    const r = getOwedCardDetails(stats, cur, null);
-    const sub = r.owed > 0.01 ? 'comes off the net balance' : r.owedSub;
-    return `<div class="ps-stat-card tone-amber">
-        <div class="ps-stat-label">${r.owedLabel.replace('⚠ ', '')}</div>
-        <div class="ps-stat-val">${r.owedVal}</div>
-        ${r.owed > 0.01 ? owedFromSalesHtml(bookId, r.owed, cur) : ''}
-        <div class="ps-stat-sub">${sub}</div>
-      </div>`;
-  })() : '';
-  const { heldCardHtml, hasHeld } = getArtistHeldHtml(stats, cur);
-  const statCols = `cols-${3 + (hasHeld ? 1 : 0) + (royaltyCard ? 1 : 0)}`;
-  // While the net runs toward the publisher, inviting the author to request a
-  // payout would ask them for money they don't actually have coming.
-  const payoutRequestHtml = settle.model?.direction === 'to-publisher' ? '' : getPayoutRequestHtml(bookId, stats, cur, owed);
   const payoutHistoryHtml = getPayoutHistoryHtml(stats, bookId, cur);
-  const payoutFormHtml = getPayoutFormHtml(bookId, cur, owed);
   const hasSettlements = (states[bookId]?.artistPayouts || []).some(p => p.settlement);
+  const tiersHtml = `
+    <div style="margin-bottom:1rem;">
+       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+         <span class="sect sect-inline">Payout Tiers</span>
+         <span style="font-size:var(--text-xs); color:var(--text3);">Publisher keeps: <strong style="color:var(--text); font-size:var(--text-base);">${fmt(stats.netPublisher, cur)}</strong></span>
+       </div>
+       ${tierHeader}
+       ${tierHtml}
+    </div>
+    ${progressHtml}`;
+  const owedNow = stats.owedToArtist;
+  const payoutFormHtml = getPayoutFormHtml(bookId, cur, owedNow);
+  const paymentsHtml = (head) => `
+    <div class="ps-payout-section">
+      <div class="ps-payout-head">
+        ${head ? `<span class="sect sect-inline">${hasSettlements ? 'Payments & settlements' : 'Artist Payouts'}</span>` : ''}
+        ${payoutFormHtml ? `<button class="btn gold" onclick="toggleArtistPayoutForm('${bookId}')">+ Record payout</button>` : ''}
+      </div>
+      ${payoutFormHtml}
+      <div class="ps-payout-list sys-container">
+        ${payoutHistoryHtml}
+      </div>
+    </div>`;
+
+  // Money running both ways: one card says it all — the amount that changes
+  // hands, the lines behind it, and folded underneath, how the artist is paid
+  // and what has been paid. It leads the dashboard, and the banners that used
+  // to repeat its figures stand aside.
+  const plan = planArtistSettlement(book, states[bookId]);
+  if (plan && needsSettleUp(plan.balance)) {
+    const more = moneyCardMore(bookId, stats, cur, { hasSettlements, tiers: tiersHtml, payments: paymentsHtml(false) });
+    const settleHtml = getSettleUpHtml(bookId, plan, { ...moneyCardActions(bookId, plan, stats, cur), more });
+    block.classList.add('is-money-card');
+    placeProfitSharingBlock(block, true);
+    // Publisher side: the artist's payout request, if they sent one.
+    const requestHtml = isAuthor() ? '' : getPayoutRequestHtml(bookId, stats, cur, owedNow);
+    content.innerHTML = `${settleHtml}${requestHtml}`;
+    return;
+  }
+  block.classList.remove('is-money-card');
+  placeProfitSharingBlock(block, false);
+
+  const { owedLabel, owedVal, owedSub, owedTone, owed } = getOwedCardDetails(stats, cur);
+  const { heldCardHtml, hasHeld } = getArtistHeldHtml(stats, cur);
+  const statCols = `cols-${3 + (hasHeld ? 1 : 0)}`;
+  const payoutRequestHtml = getPayoutRequestHtml(bookId, stats, cur, owed);
 
   content.innerHTML = `
     <div class="ps-stat-grid ${statCols}">
@@ -1165,35 +1242,16 @@ function renderProfitSharingBreakdown(bookId) {
         <div class="ps-stat-sub">${stats.payouts?.length || 0} payout${(stats.payouts?.length || 0) !== 1 ? 's' : ''} recorded</div>
       </div>
       ${heldCardHtml}
-      ${royaltyCard}
       <div class="ps-stat-card is-lead tone-${owedTone}">
         <div class="ps-stat-label">${owedLabel}</div>
         <div class="ps-stat-val">${owedVal}</div>
-        ${!settle.model && owed > 0.01 ? owedFromSalesHtml(bookId, owed, cur) : ''}
+        ${owed > 0.01 ? owedFromSalesHtml(bookId, owed, cur) : ''}
         <div class="ps-stat-sub">${owedSub}</div>
       </div>
     </div>
-    ${settle.html}
     ${payoutRequestHtml}
-    <div style="margin-bottom:1rem;">
-       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
-         <span class="sect sect-inline">Payout Tiers</span>
-         <span style="font-size:var(--text-xs); color:var(--text3);">Publisher keeps: <strong style="color:var(--text); font-size:var(--text-base);">${fmt(stats.netPublisher, cur)}</strong></span>
-       </div>
-       ${tierHeader}
-       ${tierHtml}
-    </div>
-    ${progressHtml}
-    <div class="ps-payout-section">
-      <div class="ps-payout-head">
-        <span class="sect sect-inline">${hasSettlements ? 'Payments & settlements' : 'Artist Payouts'}</span>
-        ${payoutFormHtml ? `<button class="btn gold" onclick="toggleArtistPayoutForm('${bookId}')">+ Record payout</button>` : ''}
-      </div>
-      ${payoutFormHtml}
-      <div class="ps-payout-list sys-container">
-        ${payoutHistoryHtml}
-      </div>
-    </div>
+    ${tiersHtml}
+    ${paymentsHtml(true)}
   `;
 }
 
@@ -1296,6 +1354,9 @@ function resetArtistPayoutForm(bookId) {
 function toggleArtistPayoutForm(bookId) {
   const form = document.getElementById(`artist-payout-form-${bookId}`);
   if (!form) return;
+  // On the money card the form sits in the folded payments list: unfold it.
+  const fold = form.closest('details');
+  if (form.hidden && fold) fold.open = true;
   form.hidden = !form.hidden;
   // Closing it abandons any in-progress edit, so the next open starts clean
   // rather than silently still pointing at the row that was being edited.

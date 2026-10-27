@@ -577,6 +577,12 @@
       <span class="nav-badge notif-unread-badge hdr-notif-badge" aria-label="unread notifications" hidden></span>
     </button>
 
+    <!-- One search box: this app's books and the website's (src/features/app-search.js). -->
+    <button type="button" class="theme-toggle-btn hdr-search-btn" id="app-search-header-btn"
+            data-action="search.open" title="Search books and website orders (Ctrl K or /)" aria-label="Search books and website orders" aria-haspopup="dialog" aria-keyshortcuts="Control+K Meta+K /">
+      <span class="ttb-ico" aria-hidden="true" data-ink="⌕">🔍</span>
+    </button>
+
     <!-- Review inbox stays one tap away from every publisher screen. -->
     <button type="button" class="theme-toggle-btn hdr-review-btn" id="review-inbox-header-btn"
             onclick="openReviewInbox()" title="Review inbox" aria-label="Review inbox">
@@ -799,6 +805,8 @@
       <details class="help-q"><summary>How do website orders get into the books?</summary><div class="help-a"><p>Open <b>Website orders</b>. Orders that match a book are marked ready — apply them and the copies and sales update on their own. Anything that can’t be matched stays listed so nothing is lost.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="website">Open Website orders →</button></p></div></details>
       <details class="help-q"><summary>Why does my To-do list show website jobs?</summary><div class="help-a"><p>Your shop’s website and this app share one to-do list. Under <b>Waiting on your website</b> you see what waits for you in the website’s admin — stock waiting for your OK, new books to match, website orders not sent yet — each with an <b>Open on the website ↗</b> button. It clears by itself once it’s done there. The website shows what waits here in the same way.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="todo">Open To-do →</button></p></div></details>
       <details class="help-q"><summary>Adding a book that’s already on the website</summary><div class="help-a"><p>Books your website sells that this app doesn’t have are listed on the <b>Website orders</b> card under <b>On the website, not in this app yet</b>. Press <b>Add to the app</b>: the Add new book form opens with the title, author, ISBN and price filled in. Add the print run, check the rest and save. The website then links its book to the new one by itself. Nothing is added until you save, and <b>Not a book for the app</b> stops it being offered again.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="website">Open Website orders →</button></p></div></details>
+      <details class="help-q"><summary>A book’s title, author, ISBN or price is different on the website</summary><div class="help-a"><p>The <b>Website orders</b> card lists them under <b>Details that differ from the website</b>, for every book linked to the website. Each line names the book and the detail, and shows <b>Website:</b> and <b>This app:</b> side by side. <b>Use the website’s</b> copies the website’s wording or price into this app’s book (only this app changes — never the website). <b>Leave as is</b> keeps yours; that line comes back only if one side changes again. Prices are only compared for books priced in Canadian dollars, and ISBN and price only when one website edition is linked to the book.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="website">Open Website orders →</button></p></div></details>
+      <details class="help-q"><summary>Finding a book or a website order quickly</summary><div class="help-a"><p>Press the <b>🔍</b> button at the top of the screen (or <b>Ctrl K</b> / <b>⌘ K</b>, or <b>/</b> on a keyboard) and start typing a title, an author, an ISBN or a website order number. It finds the books in this app, the books on your website and the website orders this app holds. Books in this app open here; website books and orders open on the website, in its own tab. The last line, <b>Search the website for “…”</b>, runs the same words through the website admin’s search.</p></div></details>
       <details class="help-q"><summary>An artist made a mistake in a sale.</summary><div class="help-a"><p>Find the original sale in <b>History</b> and correct that one, rather than adding a second sale to cancel it out. That keeps the copy count and what each person is owed correct.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="history">Open History →</button></p></div></details>
       <details class="help-q"><summary>How do I sell at a fair or event?</summary><div class="help-a"><p>Open <b>Event POS</b> on your phone or tablet. It’s built for quick sales at a table, keeps the screen awake, and keeps working without internet — sales send once you’re back online.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="pos">Open Event POS →</button></p></div></details>
       <details class="help-q"><summary>How much should I charge for shipping?</summary><div class="help-a"><p>Open <b>Shipping</b>. Save the size and weight of the packages you usually mail, then compare live postage prices (Canada Post options are highlighted). It also suggests what to charge customers for website shipping, so postage doesn’t eat into each sale.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="shipping">Open Shipping →</button></p></div></details>
@@ -6575,6 +6583,33 @@
     <button class="btn gold" onclick="posConfirmSale()">Confirm sale</button>
   </div>
 </div></div>
+
+<!-- ONE SEARCH BOX (src/features/app-search.js) -->
+<div class="overlay" id="m-app-search" style="display:none;z-index:1150;">
+  <div class="modal as-modal" role="dialog" aria-modal="true" aria-labelledby="as-title">
+    <div class="modal-title">
+      <div class="modal-title-left">
+        <span class="modal-title-badge" aria-hidden="true">🔍</span>
+        <span id="as-title">Search</span>
+      </div>
+      <button type="button" class="btn tx modal-close-btn" data-action="search.close" aria-label="Close search" title="Close (Esc)">✕</button>
+    </div>
+    <div class="as-body" data-autosave>
+      <div class="form-group as-field">
+        <label for="as-input">Books, authors, ISBNs and website orders</label>
+        <input type="search" id="as-input" autocomplete="off" spellcheck="false" maxlength="100" enterkeyhint="search"
+               role="combobox" aria-expanded="true" aria-controls="as-results" aria-autocomplete="list" aria-describedby="as-note"
+               placeholder="Title, author, ISBN or order number">
+      </div>
+      <p class="as-note" id="as-note" role="status" aria-live="polite">Type a title, an author, an ISBN or a website order number.</p>
+      <ul class="as-results" id="as-results" role="listbox" aria-label="Search results" hidden></ul>
+    </div>
+    <div class="modal-footer">
+      <span class="as-keys" aria-hidden="true">↑ ↓ to move · Enter to open · Esc to close</span>
+      <button type="button" class="btn" data-action="search.close">Close</button>
+    </div>
+  </div>
+</div>
 
 <!-- WHATS NEW / CHANGELOG MODAL -->
 <div class="overlay" id="m-whats-new" style="display:none;z-index:1200;">

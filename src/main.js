@@ -689,6 +689,10 @@ registerActions({
     const e = (getState().expenses || []).find(x => String(x.id) === el.dataset.id);
     if (e) markExpenseReceived(e.id);
   },
+  // The money card's own buttons.
+  'moneyCard.askPayLink': () => askAuthorForPayLink(),
+  'moneyCard.setUpPayLink': () => goToPayLinkSetup(),
+  'moneyCard.requestPayout': el => requestArtistPayout(el.dataset.book),
   // On a phone the records under a ledger line start folded.
   'settleUp.toggleItems': el => {
     const list = document.getElementById(el.getAttribute('aria-controls'));
@@ -1056,7 +1060,8 @@ import {
   websiteLinkTodo,
 } from './features/website-link.js';
 import { STRIPE_CHARGE_PI_KEY, isWebsiteFulfilled, promisedPreorders, rememberChargeIntents } from './lib/website-link.js';
-import { appSwitchBooksReady, openWebsiteShopBooks, refreshAppSwitch, startAppSwitch } from './features/app-switch.js';
+import { startAppSearch } from './features/app-search.js';
+import { appSwitchBooksReady, openWebsiteDetailDiffs, openWebsiteShopBooks, refreshAppSwitch, startAppSwitch } from './features/app-switch.js';
 import { WEBSITE_TAB_NAME, openOnWebsiteHtml, websiteOrderUrl } from './lib/app-switch.js';
 import { reviewTaskStillOpen } from './lib/review-queue.js';
 import {
@@ -2595,6 +2600,48 @@ async function saveBookFromModal() {
   // Asked last, once the book modal is out of the way, so the two dialogs
   // don't stack.
   if (currencyResult) await offerSheetsResyncAfterRestate(currencyResult.to);
+}
+
+/**
+ * "Use the website's" on Website orders › Details that differ from the website:
+ * change ONE field of one book (title, author, ISBN or list price) through the
+ * same catalogue save the Edit book form uses — the latest catalogue is read
+ * first, the cloud write is queued while offline, and a new title moves the
+ * book's rows on the Google Sheet with it.
+ *
+ * `stillDiffers(book)` is asked after the latest catalogue is in, so a value
+ * another device changed meanwhile is never overwritten.
+ * Returns { ok: true } or { ok: false, reason, twin? }.
+ */
+export async function applyBookDetailFromWebsite(bookId, patch, stillDiffers = () => true) {
+  if (!window.IS_PUBLISHER || !patch || !Object.keys(patch).length) return { ok: false, reason: 'missing' };
+  await syncCatalog();
+  if (catalogLoadFailed) return { ok: false, reason: 'catalog' };
+  const current = BOOKS[bookId];
+  if (!current) return { ok: false, reason: 'missing' };
+  if (!stillDiffers(current)) return { ok: false, reason: 'changed' };
+  if (patch.title) {
+    // Two books with one title share one tab on the Google Sheet (see saveBookFromModal).
+    const titleKey = sheetTabKey(patch.title);
+    const twin = Object.values(BOOKS).find(b => b && b.id !== bookId && !isTestBook(b) && sheetTabKey(b.title) === titleKey);
+    if (twin) return { ok: false, reason: 'twin', twin: twin.title };
+  }
+  const previousTitle = String(current.title || '').trim();
+  BOOKS[bookId] = { ...current, ...patch };
+  refreshBookList();
+  // As the Edit book form does: a failed cloud write says so itself (toast) and
+  // the change stays on this device.
+  await saveCatalogWithDeletions();
+  const book = BOOKS[bookId];
+  if (patch.title && previousTitle && previousTitle !== book.title && !isTestBook(book)) queueSheetsRename(previousTitle, book.title, book.accent);
+  buildBookSwitcher();
+  renderCatalogList();
+  renderProfitSettings();
+  if (activeBook === bookId) {
+    const lbl = $('book-dropdown-label'); if (lbl) lbl.textContent = book.title;
+  }
+  renderCurrent();
+  return { ok: true };
 }
 
 // One title's row in Settings → Catalogue. Live and test books share it, so
@@ -7189,6 +7236,7 @@ function runTodoAction(name, { bookId = '', num = '' } = {}) {
   if (name === 'shipping-worklist') { openReviewInbox({ filter: 'label' }); return; }
   // The website's books that aren't in this app yet, on the Website orders card.
   if (name === 'website-shop-books') { openWebsiteShopBooks(); return; }
+  if (name === 'website-detail-diffs') { openWebsiteDetailDiffs(); return; }
   if (name === 'reverse-sales') {
     const refunds = readPendingRefundReversals();
     const all = [...refunds, ...readStoredList(STORE_REVERSAL_PENDING_KEY).filter(item => item.full)];
@@ -9625,13 +9673,15 @@ function renderArtistReimburseBanner() {
     }
   }
   if (!owed.length) { banner.style.display = 'none'; return; }
-  banner.style.display = '';
-  $('arb-amount').textContent = fmt(total, cur);
-  $('arb-detail').textContent = `${owed.length} expense${owed.length !== 1 ? 's' : ''} your publisher will pay you back for`;
   // In a Settle up these come off the one net payment instead of being paid
   // to the link on their own.
   const settle = expensesInSettleUp(book, s);
   const inSettle = owed.filter(e => settle.ids.has(String(e.id))).length;
+  // Every one of them is a line on the money card, which says the rest.
+  if (inSettle === owed.length && book.profitTiers?.length) { banner.style.display = 'none'; return; }
+  banner.style.display = '';
+  $('arb-amount').textContent = fmt(total, cur);
+  $('arb-detail').textContent = `${owed.length} expense${owed.length !== 1 ? 's' : ''} your publisher will pay you back for`;
   const linkNote = s.artistPaymentLink ? 'Your publisher pays this to your saved payment link' : 'Add your payment link below so your publisher can pay you';
   const settleNote = n => settle.publisherPays
     ? `${n === 1 ? 'is' : 'are'} counted in Settle up, where your publisher pays you one net amount`
@@ -10240,6 +10290,12 @@ export function settlementLinkFor(s, due) {
   return due?.payable && l && l.url && Number(l.amount) === due.balance.amount && l.v === TRANSFER_LINK_VERSION ? l : null;
 }
 
+// What the author's money card offers for a net payment that is theirs to
+// make: the exact-amount link, and whether they have just paid it.
+export function settlementPayState(s, due) {
+  return { link: settlementLinkFor(s, due), paid: !!due?.payable && unrecordedSettlementPayment(s) };
+}
+
 // Publisher-side: one Stripe link for the net settlement. Re-made whenever the
 // amount changes. Paying it records the settlement automatically (see
 // settleArtistSettlementFromStripe), but only if the amount still matches.
@@ -10599,6 +10655,8 @@ consumeTransferPaidReturn();
 // orders (#website-order=<id>). It drops a leftover ?mode=admin (nothing reads
 // it) and leaves every other part of the address as it is.
 startAppSwitch();
+// One search box (top-bar 🔍, Ctrl/⌘ K, "/"): this app's books and the website's.
+startAppSearch();
 // The return lands in the tab Stripe opened; refresh any other open tab too.
 window.addEventListener('storage', e => { if (e.key === PAID_TAP_KEY) { try { renderArtistTransfers(); } catch (_) { /* still loading */ } } });
 
@@ -10892,6 +10950,11 @@ export function renderArtistTransfers() {
       if (actions) actions.style.display = 'none';
       $('apb-transfers').innerHTML = '';
       $('apb-transfers').style.display = 'none';
+    } else if (isAuthor() && settle && book.profitTiers?.length && !transfers.some(t => t.status === 'pending' || transferAmount(t) == null)) {
+      // The money card at the top of the dashboard says it all, Pay button
+      // included; this banner only returns for a sale still waiting on the
+      // publisher's check or on a price.
+      banner.style.display = 'none';
     } else if (isAuthor() && settle) {
       renderAuthorSettlementBanner(banner, s, settle, transfers, cur);
     } else if (isAuthor() && transfers.length > 0) {
@@ -11049,13 +11112,12 @@ export function renderPendingExpenses() {
   }
   const sect = $('d-pending-expenses-sect'), list = $('d-pending-expenses-list');
   if (!sect) return;
-  // In the Settle up, one net payment covers these. The payment link stays
-  // only when that net runs to the author.
+  // In the Settle up, one net payment covers these.
   const settle = expensesInSettleUp(book, s);
-  // On a profit-sharing book the Settle up ledger lists these receipts with
-  // their own Mark received button; while the author pays the net there is
-  // nothing else to do with them here, so they aren't listed twice.
-  if (book.profitTiers?.length && !settle.publisherPays) {
+  // On a profit-sharing book the money card lists these receipts with their
+  // own Mark received button, and carries the payment-link ask, so they
+  // aren't listed twice.
+  if (book.profitTiers?.length) {
     for (let i = pending.length - 1; i >= 0; i--) if (settle.ids.has(String(pending[i].id))) pending.splice(i, 1);
   }
   if (!pending.length) { sect.style.display = 'none'; return; }
