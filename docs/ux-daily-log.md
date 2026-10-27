@@ -207,6 +207,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-26 | visual | Phone Shipping — readiness tag | Made the "10 still needed" / "Ready to quote" tag above Get rates a square inked caps tag like the other tags on a phone, instead of the one soft rounded pill on the screen | (this PR) |
 | 2026-10-27 | visual | Phone tick-boxes ("Group identical" and other labelled tick-boxes) | Made tick-boxes on a phone square with the bold ink outline, filled with ink and a tick when on, instead of the browser's soft grey rounded box | (this PR) |
 | 2026-10-27 | visual | Phone Order History — figure strip | Lined up the Total printed / Stock on hand / Distributed figures and their captions on one level across the three tiles, instead of the middle figure sitting lower than its neighbours | (this PR) |
+| 2026-10-27 | visual | Phone Dashboard — expenses owed to artist | Made the "Awaiting payment" tag and the category chip on each owed expense square inked tags like the rest of the phone app, instead of two soft rounded lozenges inside a square card | (this PR) |
 
 ---
 
