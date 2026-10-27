@@ -56,3 +56,12 @@ test('the phone history block uses tokens only, with no raw colour values', () =
   expect(historyPhone).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
   expect(historyPhone).not.toMatch(/rgba?\(/);
 });
+
+test('the three figure tiles share rows so the figures line up across them', () => {
+  const riso = read('../src/styles/phone-riso.css');
+  const card = riso.match(/\.pub-shell #tab-history \.hist-kpi-card\s*\{([\s\S]*?)\}/);
+  const content = riso.match(/\.pub-shell #tab-history \.hist-kpi-content\s*\{([\s\S]*?)\}/);
+  expect(card[1]).toMatch(/grid-row:\s*span 3/);
+  expect(card[1]).toMatch(/grid-template-rows:\s*subgrid/);
+  expect(content[1]).toMatch(/display:\s*contents/);
+});
