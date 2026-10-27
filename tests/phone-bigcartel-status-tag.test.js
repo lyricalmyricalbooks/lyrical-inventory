@@ -65,3 +65,12 @@ describe('phone primary buttons', () => {
     expect(m?.[1]).toMatch(/border-color:\s*var\(--rule-ink\)\s*!important/);
   });
 });
+
+describe('phone dashboard "Approval emails" tag', () => {
+  it('is a square inked caps tag, not a rounded lozenge', () => {
+    const r = rule('#d-notify-status');
+    expect(r).toMatch(/border-radius:\s*var\(--r2\)/);
+    expect(r).toMatch(/border:\s*var\(--stroke\)\s+solid\s+currentColor/);
+    expect(r).toMatch(/text-transform:\s*uppercase/);
+  });
+});
