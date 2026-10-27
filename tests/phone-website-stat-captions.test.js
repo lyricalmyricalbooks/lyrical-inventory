@@ -20,3 +20,11 @@ test('phone website status tags are square outlined tags at a readable size', ()
   expect(rule).not.toMatch(/r-pill/);
   expect(rule).toMatch(/font-size:\s*var\(--text-xs\)/);
 });
+
+test('phone Website notes put their opening status tag on its own line with a gap', () => {
+  const rule = phone.match(/#tab-website \.wl-note > \.wl-chip:first-child\s*\{([^}]*)\}/);
+  expect(rule).not.toBeNull();
+  expect(rule[1]).toMatch(/display:\s*flex;/);
+  expect(rule[1]).toMatch(/width:\s*fit-content;/);
+  expect(rule[1]).toMatch(/margin-bottom:\s*var\(--space-2\);/);
+});
