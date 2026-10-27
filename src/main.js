@@ -35,6 +35,7 @@ import { legacyCopy } from './lib/clipboard.js';
 import { needsSettleUp, settleByHandMenu } from './lib/settle-up-view.js';
 import { normalizeLetterhead, renderLetterhead } from './lib/letterhead.js';
 import { bookSizeMessage, bookSizeReport } from './lib/book-size.js';
+import { keepPreviewEdits } from './lib/tax-center-preview.js';
 import { ensureXlsx, loadExternalScript } from './lib/external-scripts.js';
 import { buildActivityFeed } from './lib/activity-feed.js';
 import { buildAttentionSignals, SIGNAL_GROUPS, GROUP_LABELS, GROUP_ICONS, isUrgent } from './lib/attention-signals.js';
@@ -4486,6 +4487,9 @@ window.performFullMigration = async () => {
 
 // ── TAX CENTER STATE (Publisher Only)
 export let TAX_CENTER = { businessExpenses: [], recurring: [], settings: { baseCurrency: 'CAD', geminiKey: '' } };
+// The device's Tax Centre as first shown at startup (JSON), kept so what was
+// added while it showed can be told apart from what the cloud copy changed.
+let _taxCenterPreviewBase = null;
 export let _fxRateCache = { 'CAD_CAD': 1 };
 // Rates for a given date never change once published, so the ones already
 // fetched are kept on the device and a past sale keeps its value offline.
@@ -4503,12 +4507,24 @@ export async function loadTaxCenter({ ratesInBackground = false } = {}) {
   if (isAuthor()) return;
   try {
     const json = await window._fbLoadSettings('taxCenter'); // handles FS → RTDB fallback internally
+    let keptPreviewEdits = false;
     if (json) {
-      TAX_CENTER = { businessExpenses: [], recurring: [], settings: { baseCurrency: 'CAD', geminiKey: '' }, ...json };
+      let loaded = { businessExpenses: [], recurring: [], settings: { baseCurrency: 'CAD', geminiKey: '' }, ...json };
+      // Edits made while the device's copy was showing (their save was refused)
+      // are merged into the cloud copy rather than replaced by it.
+      if (TAX_CENTER._preview) {
+        const res = keepPreviewEdits(_taxCenterPreviewBase, loaded, TAX_CENTER);
+        loaded = res.value;
+        keptPreviewEdits = res.kept;
+        if (res.conflicts.length) console.warn('[TaxCenter] changed on two devices while loading, this device\'s version kept', res.conflicts);
+      }
+      _taxCenterPreviewBase = null;
+      TAX_CENTER = loaded;
       if (TAX_CENTER.settings?.claudeKey && !TAX_CENTER.settings?.geminiKey) {
         TAX_CENTER.settings.geminiKey = TAX_CENTER.settings.claudeKey;
       }
     }
+    if (keptPreviewEdits) saveTaxCenter();
     if (TAX_CENTER.settings?.rates) Object.assign(_fxRateCache, TAX_CENTER.settings.rates);
     if (ratesInBackground) {
       const syncedBefore = TAX_CENTER.settings?.lastRateSync;
@@ -19149,11 +19165,13 @@ async function showStartupPreview(user, publisherAccount) {
     Object.defineProperty(st, '_preview', { value: true, enumerable: false, configurable: true });
     states[id] = st;
   });
-  // The Tax Centre's own load replaces this object, and the mark with it.
+  // The Tax Centre's own load replaces this object, and the mark with it,
+  // merging in anything logged while it showed (keepPreviewEdits).
   if (taxCenter && typeof taxCenter === 'object') {
     TAX_CENTER = { businessExpenses: [], recurring: [], settings: { baseCurrency: 'CAD', geminiKey: '' }, ...taxCenter };
     if (TAX_CENTER.settings?.rates) Object.assign(_fxRateCache, TAX_CENTER.settings.rates);
     Object.defineProperty(TAX_CENTER, '_preview', { value: true, enumerable: false, configurable: true });
+    _taxCenterPreviewBase = JSON.stringify(TAX_CENTER);
   }
   _startupPreviewShown = true;
   if (publisherAccount) {

@@ -837,7 +837,7 @@ window._fbSaveSettings = async (key, data) => {
   // A Tax Centre still showing the device's copy from startup (main.js marks
   // it _preview) is not saved: it may be missing what another device added.
   if (key === 'taxCenter' && data && data._preview) {
-    if (typeof window.showToast === 'function') window.showToast('Still loading the latest Tax Centre — try again in a moment', 'warn', 4000);
+    if (typeof window.showToast === 'function') window.showToast('Kept on this device. It uploads as soon as the latest Tax Centre has loaded.', 'ok', 4000);
     return false;
   }
   try {
