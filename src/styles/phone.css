@@ -2318,3 +2318,14 @@
   #tab-manual .order-preview:has(.pill.red) { border-color: var(--rule-ink); box-shadow: var(--elev-1), inset 4px 0 0 var(--status-critical); }
   #tab-manual .order-preview .pill { border-radius: var(--r2); border: var(--stroke) solid currentColor; text-transform: uppercase; letter-spacing: var(--tracking-caps); font-size: var(--text-3xs); font-weight: 800; }
 }
+
+/* Shipping — "Carrier rates comparison" before any rates exist. Held upright, the card kept a
+   300px floor and the placeholder 2rem of padding on every side with body-size copy, so about
+   150px of empty space sat above and below two lines of hint. It now sizes to its content with
+   a compact padded hint, so the figures and buttons above it stay the lead. (Inline styles in
+   the markup, hence !important.) */
+@media (max-width: 768px) {
+  #tab-shipping .shipping-results-container > .card { min-height: 0 !important; }
+  #tab-shipping #ship-results-placeholder { padding: var(--space-4) var(--space-2) !important; font-size: var(--text-sm); line-height: var(--leading-snug); text-wrap: balance; }
+  #tab-shipping #ship-results-placeholder > div:first-child { font-size: var(--text-2xl) !important; margin-bottom: var(--space-2) !important; }
+}
