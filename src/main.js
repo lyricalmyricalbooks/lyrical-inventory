@@ -36,6 +36,7 @@ import { needsSettleUp, settleByHandMenu } from './lib/settle-up-view.js';
 import { normalizeLetterhead, renderLetterhead } from './lib/letterhead.js';
 import { bookSizeMessage, bookSizeReport } from './lib/book-size.js';
 import { keepPreviewEdits } from './lib/tax-center-preview.js';
+import { importDateIssues, latestImport, newImportId, parseImportDate } from './lib/import-batch.js';
 import { ensureXlsx, loadExternalScript } from './lib/external-scripts.js';
 import { buildActivityFeed } from './lib/activity-feed.js';
 import { buildAttentionSignals, SIGNAL_GROUPS, GROUP_LABELS, GROUP_ICONS, isUrgent } from './lib/attention-signals.js';
@@ -8551,6 +8552,7 @@ export function renderHist() {
   });
 
   renderHistFilterBar(chanFilter, matchCount);
+  renderImportNotice(s);
   renderHistReconciliationPanel(s, book, chanFilter, inScope, bookCode);
 
   const formatChannelBadge = (chanName) => {
@@ -9716,6 +9718,12 @@ function renderArtistReimburseBanner() {
 
 // ── SPREADSHEET IMPORT
 let _importRows = [];
+// The rows as read from the file (date still as written), the file's name, and
+// how a date like 03/04 is read — the preview re-reads the dates when the owner
+// says their file is day-first.
+let _importParsed = [];
+let _importFileName = '';
+let _importDateOrder = 'mdy';
 
 // The confirm button has nothing to import until a file has been read. The
 // hint says what to do instead. The Sheets restore path reuses this pop-up and
@@ -9790,30 +9798,17 @@ async function handleImportFile(event) {
         const qty = importAmount(row[k('qty')] || row[k('quantity')] || 1) || 1;
         const price = importAmount(row[k('unit')] || row[k('price')] || 0) || 0;
         const notes = row[k('note')] || '';
-        // Parse date — handle Excel date objects, strings, etc.
-        let parsedDate = today();
-        if (date instanceof Date) parsedDate = date.toISOString().split('T')[0];
-        else if (typeof date === 'string' && date.trim()) {
-          const d = new Date(date);
-          if (!isNaN(d)) parsedDate = d.toISOString().split('T')[0];
-        } else if (typeof date === 'number' && xlsx) {
-          const d = xlsx.SSF.parse_date_code(date);
-          parsedDate = `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`;
-        }
-        return { num: String(num || ''), date: parsedDate, chan: String(chan), qty: Math.abs(Math.round(qty)), price, notes: String(notes) };
+        return { num: String(num || ''), rawDate: date, chan: String(chan), qty: Math.abs(Math.round(qty)), price, notes: String(notes) };
       };
 
-      _importRows = rows.map(colMap).filter(r => r.qty > 0);
-      // Blank order numbers get a deterministic id (same row content => same id), so
-      // re-importing the same file is caught by the duplicate check. Identical rows within
-      // one file are told apart by an occurrence counter.
-      const seenBlank = {};
-      _importRows.forEach(r => {
-        if (r.num) return;
-        const key = `${r.date}|${r.chan}|${r.qty}|${r.price}|${r.notes}`;
-        seenBlank[key] = (seenBlank[key] || 0) + 1;
-        r.num = `IMP-${r.date}-${r.chan}-${r.qty}-${r.price}-${seenBlank[key]}`.replace(/\s+/g, '');
-      });
+      const excelSerial = xlsx ? (n) => {
+        const d = xlsx.SSF.parse_date_code(n);
+        return d ? `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}` : null;
+      } : null;
+      _importParsed = rows.map(colMap).filter(r => r.qty > 0).map(r => ({ ...r, excelSerial }));
+      _importFileName = String(file.name || sheetName || '');
+      _importDateOrder = 'mdy';
+      readImportDates();
 
       if (!_importRows.length) { showToast('Could not parse any valid rows', 'warn'); return; }
 
@@ -9835,21 +9830,8 @@ async function handleImportFile(event) {
         confirmBtn.innerHTML = 'Import <span id="import-count">0</span> orders';
       }
 
-      // Build preview
-      $('import-summary').innerHTML = `Found <strong>${_importRows.length} orders</strong> in ${isCsv ? 'file' : 'sheet'} <em>"${escapeHtml(sheetName)}"</em> — review below then confirm.`;
-      $('import-count').textContent = _importRows.length;
-      setImportReady(_importRows.length > 0);
-      $('import-preview-body').innerHTML = _importRows.map(r => `
-        <tr>
-          <td class="mono">${escapeHtml(r.num)}</td>
-          <td style="font-size:var(--text-sm);color:var(--text3);">${fmtD(r.date)}</td>
-          <td>${escapeHtml(r.chan)}</td>
-          <td class="r">${r.qty}</td>
-          <td class="r">${book.currency}${r.price.toFixed(2)}</td>
-          <td class="r" style="font-weight:600;">${book.currency}${(r.qty * r.price).toFixed(2)}</td>
-          <td style="font-size:var(--text-xs);color:var(--text3);">${escapeHtml(r.notes) || '—'}</td>
-          <td><span class="pill blue" style="font-size:var(--text-2xs);">New</span></td>
-        </tr>`).join('');
+      _importSource = `${isCsv ? 'file' : 'sheet'} <em>"${escapeHtml(sheetName)}"</em>`;
+      renderImportPreview();
       openM('import');
     } catch (err) {
       showToast('Could not read file: ' + err.message, 'err');
@@ -9859,9 +9841,78 @@ async function handleImportFile(event) {
   else reader.readAsArrayBuffer(file);
 }
 
+let _importSource = '';
+
+// Turns the rows as read into rows to import: each date read (and flagged when
+// it needed a guess), then blank order numbers given their stable id.
+function readImportDates() {
+  const todayStr = today();
+  _importRows = _importParsed.map(({ rawDate, excelSerial, ...r }) => {
+    const { date, issue } = parseImportDate(rawDate, { order: _importDateOrder, todayStr, excelSerial });
+    return { ...r, num: r.num, date, dateIssue: issue, dateWritten: rawDate instanceof Date ? '' : String(rawDate ?? '').trim() };
+  });
+  // Blank order numbers get a deterministic id (same row content => same id), so
+  // re-importing the same file is caught by the duplicate check. Identical rows within
+  // one file are told apart by an occurrence counter.
+  const seenBlank = {};
+  _importRows.forEach(r => {
+    if (r.num) return;
+    const key = `${r.date}|${r.chan}|${r.qty}|${r.price}|${r.notes}`;
+    seenBlank[key] = (seenBlank[key] || 0) + 1;
+    r.num = `IMP-${r.date}-${r.chan}-${r.qty}-${r.price}-${seenBlank[key]}`.replace(/\s+/g, '');
+  });
+}
+
+function setImportDateOrder(order) {
+  _importDateOrder = order === 'dmy' ? 'dmy' : 'mdy';
+  readImportDates();
+  renderImportPreview();
+}
+
+const IMPORT_DATE_NOTE = {
+  ambiguous: 'Could be day-first or month-first. Read as chosen above.',
+  unreadable: 'This date couldn’t be read, so it will go in as today. Fix it in the file and import again.',
+  missing: 'No date in the file, so it will go in as today.',
+};
+
+function renderImportPreview() {
+  const book = getBook();
+  const issues = importDateIssues(_importRows);
+  const notes = [];
+  if (issues.ambiguous) {
+    notes.push(`<label class="import-date-order">${issues.ambiguous} date${issues.ambiguous === 1 ? '' : 's'} like 03/04 could be read two ways. In this file the
+      <select onchange="setImportDateOrder(this.value)" aria-label="How dates like 03/04 are written in this file">
+        <option value="mdy"${_importDateOrder === 'mdy' ? ' selected' : ''}>month comes first (March 4)</option>
+        <option value="dmy"${_importDateOrder === 'dmy' ? ' selected' : ''}>day comes first (3 April)</option>
+      </select></label>`);
+  }
+  const asToday = issues.unreadable + issues.missing;
+  if (asToday) notes.push(`<strong>${asToday} date${asToday === 1 ? '' : 's'}</strong> couldn’t be read and will go in as today (marked <em>Check date</em> below). Fix ${asToday === 1 ? 'it' : 'them'} in the file and import again if that’s wrong.`);
+  $('import-summary').innerHTML = `Found <strong>${_importRows.length} orders</strong> in ${_importSource} — review below then confirm.`
+    + (notes.length ? `<div class="stock-alert warn import-date-notes">${notes.map(n => `<p>${n}</p>`).join('')}</div>` : '');
+  $('import-count').textContent = _importRows.length;
+  setImportReady(_importRows.length > 0);
+  $('import-preview-body').innerHTML = _importRows.map(r => `
+        <tr>
+          <td class="mono">${escapeHtml(r.num)}</td>
+          <td style="font-size:var(--text-sm);color:var(--text3);">${fmtD(r.date)}${r.dateIssue && r.dateWritten ? `<div class="import-date-written">written “${escapeHtml(r.dateWritten)}”</div>` : ''}</td>
+          <td>${escapeHtml(r.chan)}</td>
+          <td class="r">${r.qty}</td>
+          <td class="r">${book.currency}${r.price.toFixed(2)}</td>
+          <td class="r" style="font-weight:600;">${book.currency}${(r.qty * r.price).toFixed(2)}</td>
+          <td style="font-size:var(--text-xs);color:var(--text3);">${escapeHtml(r.notes) || '—'}</td>
+          <td>${r.dateIssue
+            ? `<span class="pill amber" style="font-size:var(--text-2xs);" title="${escapeHtml(IMPORT_DATE_NOTE[r.dateIssue])}">Check date</span>`
+            : '<span class="pill blue" style="font-size:var(--text-2xs);">New</span>'}</td>
+        </tr>`).join('');
+}
+
 function confirmImport() {
   if (!_importRows.length) return;
   const s = getState(), book = getBook();
+  // Every row of this import carries its id, so the whole import can be undone
+  // in one step from History (undoImport).
+  const importExtra = { importId: newImportId(), importedAt: new Date().toISOString(), importName: _importFileName };
   const existingNums = new Set(s.hist.map(h => h.num));
   let imported = 0, skipped = 0;
   const added = [];
@@ -9874,7 +9925,7 @@ function confirmImport() {
     // can be updated or removed later. These used to arrive with none and were
     // never sent: they only reached the sheet through Sync all data, which
     // appended them again on every press.
-    added.push(addSaleToState(s, book, { num: r.num, chan: r.chan, qty: r.qty, price: r.price, notes: r.notes, date: r.date, stamp: false }));
+    added.push(addSaleToState(s, book, { num: r.num, chan: r.chan, qty: r.qty, price: r.price, notes: r.notes, date: r.date, stamp: false, extra: importExtra }));
     imported++;
   });
 
@@ -9892,7 +9943,50 @@ function confirmImport() {
   const msg = skipped > 0
     ? `✓ Imported ${imported} orders (${skipped} duplicates skipped)`
     : `✓ Imported ${imported} orders`;
-  showToast(msg);
+  showToast(imported ? `${msg}. You can undo the whole import from the top of History.` : msg, 'ok', 5000);
+}
+
+// Undo a whole spreadsheet import: every row it added is voided, the same way
+// voiding one sale is (stock and revenue reversed, the Google Sheet row
+// removed), so it can still be brought back row by row. Rows already paid out
+// in an author settlement are left alone and counted.
+function undoImport(importId) {
+  const s = getState(), book = getBook();
+  const rows = (s.hist || []).filter(h => h.importId === importId && !h.voided);
+  if (!rows.length) return;
+  const locked = rows.filter(h => h.artistSettlementId);
+  const undoable = rows.filter(h => !h.artistSettlementId);
+  if (!undoable.length) { showToast('Every row of this import is in an author settlement. Undo the settlement first.', 'warn', 5000); return; }
+  const name = rows[0].importName ? ` from “${rows[0].importName}”` : '';
+  if (!confirm(`Undo this import${name}? ${undoable.length} order${undoable.length === 1 ? '' : 's'} will be voided, and their stock and revenue reversed.`)) return;
+  undoable.forEach(h => {
+    voidHistEntry(s, book, h);
+    h.voidedReason = 'Import undone';
+  });
+  recomputeAfters(s, book);
+  saveState(activeBook);
+  renderHist();
+  updateDash();
+  showToast(`Import undone: ${undoable.length} order${undoable.length === 1 ? '' : 's'} voided${locked.length ? `. ${locked.length} already in an author settlement ${locked.length === 1 ? 'was' : 'were'} kept` : ''}.`, locked.length ? 'warn' : 'ok', 5000);
+}
+
+// Hidden for this visit only; comes back the next time the app opens.
+let _importNoticeClosed = '';
+function closeImportNotice(importId) { _importNoticeClosed = importId; renderHist(); }
+
+const IMPORT_NOTICE_DAYS = 14;
+function renderImportNotice(s) {
+  const host = $('hist-import-notice');
+  if (!host) return;
+  const last = isAuthor() ? null : latestImport(s.hist);
+  const fresh = last && last.at && (Date.now() - Date.parse(last.at)) < IMPORT_NOTICE_DAYS * 864e5;
+  if (!fresh || _importNoticeClosed === last.id) { host.hidden = true; host.innerHTML = ''; return; }
+  host.hidden = false;
+  host.innerHTML = `<div class="stock-alert ok hist-import-notice">
+      <span>Imported ${last.count} order${last.count === 1 ? '' : 's'}${last.name ? ` from “${escapeHtml(last.name)}”` : ''} on ${fmtD(last.at.slice(0, 10))}.</span>
+      <button type="button" class="btn sm" onclick="undoImport('${escapeHtml(last.id)}')">Undo this import</button>
+      <button class="card-x" type="button" onclick="closeImportNotice('${escapeHtml(last.id)}')" aria-label="Close this notice" title="Close until you next open the app">✕</button>
+    </div>`;
 }
 
 function updateManualForm() {
@@ -18767,7 +18861,7 @@ Object.assign(window, {
   openRet, confirmReturn, openEditHist, openEditLedger, saveEntryEdit, convertKeptAllToReceived, voidEntry,
   restoreBookDataFromSheets, resetBookData, connectSheets, disconnectSheets, testSheets, verifyUrl, checkSheetsVersion,
   pushAllToSheets, backfillAndResync, copyGasCode, saveProductionCosts, savePaymentLinks,
-  handleImportFile, confirmImport, openLabelModal, renderLabelCountryHint, printShippingLabel, toggleShipped, backfillShipping,
+  handleImportFile, confirmImport, setImportDateOrder, undoImport, closeImportNotice, openLabelModal, renderLabelCountryHint, printShippingLabel, toggleShipped, backfillShipping,
   saveArtistPaymentLink, markArtistTransferReceived, settleArtistTransferKeepShare, settleArtistTransferKeepAll, markExpenseReceived,
   submitExpense, voidExpense, toggleExpenseReceiptFilter, toggleExpenseReimburseSelect, requestBulkReimbursement, markPaid, markHistoryConsignmentPaid, removeStore, addProfitTier, removeProfitTier,
   saveProfitTiers, renderProfitSettings, updateProfitTierField, renderProfitTierList,

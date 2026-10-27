@@ -2552,6 +2552,16 @@ tr.hist-row:hover {
 .stock-alert.ok{background:var(--green-bg);color:var(--green);border-left-color:var(--green-light);}
 .stock-alert.warn{background:var(--amber-bg);color:var(--amber);border-left-color:var(--amber);}
 .stock-alert.danger{background:var(--red-bg);color:var(--red);border-left-color:var(--red-light);}
+/* History: "Imported N orders … Undo this import" (renderImportNotice). */
+.hist-import-notice{display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-3);}
+.hist-import-notice > span{flex:1;min-width:0;}
+.hist-import-notice .card-x{margin-left:auto;}
+/* Import preview: dates that needed a guess (renderImportPreview). */
+.import-date-notes{margin-top:var(--space-2);}
+.import-date-notes p{margin:0;}
+.import-date-notes p + p{margin-top:var(--space-1);}
+.import-date-order select{margin:0 var(--space-1);}
+.import-date-written{font-size:var(--text-2xs);color:var(--amber);}
 /* .stock-alert's own colours are tuned for a LIGHT parent — dark ink text on a
    pale status tint — which .stock-block now is. The block of scoped overrides
    that used to sit here swapped every one of them for its light-on-ink sibling
