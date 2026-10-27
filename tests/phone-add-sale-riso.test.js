@@ -50,3 +50,7 @@ test('upright phone: Book Catalog Remove button gets a solid red outline, not a 
   expect(rule[1]).toMatch(/border-color:\s*var\(--status-critical\)/);
   expect(rule[1]).toMatch(/color:\s*var\(--status-critical\)/);
 });
+
+test('phone ledger search box and store picker carry the 2px ink outline', () => {
+  expect(phone).toMatch(/@media \(max-width: 768px\) \{\s*\.ledger-filter-input, \.ledger-filter-select \{ border-width: var\(--stroke\); border-color: var\(--border-strong\); \}\s*\}/);
+});
