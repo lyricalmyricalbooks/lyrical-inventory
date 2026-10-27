@@ -57,3 +57,11 @@ describe('phone Shipping readiness tag', () => {
     expect(r).toMatch(/text-transform:\s*uppercase/);
   });
 });
+
+describe('phone primary buttons', () => {
+  it('keep the ink outline instead of taking the book colour as their border', () => {
+    const riso = readFileSync('src/styles/phone-riso.css', 'utf8');
+    const m = riso.match(/@media \(max-width: 768px\) \{\s*\.pub-shell \.tab-panel \.btn\.gold,\s*\.pub-shell \.tab-panel \.btn\.gold:hover\s*\{([^}]*)\}/);
+    expect(m?.[1]).toMatch(/border-color:\s*var\(--rule-ink\)\s*!important/);
+  });
+});

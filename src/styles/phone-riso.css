@@ -559,3 +559,12 @@
   .pub-shell #tab-history .hist-kpi-content { display: contents; }
   .pub-shell #tab-history :is(.hist-kpi-label, .hist-kpi-val) { align-self: end; }
 }
+
+/* Primary buttons wear the ink outline on a phone. A book-coloured button (+ Add store, Set payment
+   link…) took its border from the cover colour, so it was the one button on the screen with no ink
+   edge while Bulk send, Cancel and the rest beside it all had one. Same 2px ink as the buttons next
+   to it; the fill keeps the book's colour. */
+@media (max-width: 768px) {
+  .pub-shell .tab-panel .btn.gold,
+  .pub-shell .tab-panel .btn.gold:hover { border-color: var(--rule-ink) !important; }
+}
