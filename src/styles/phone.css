@@ -1848,6 +1848,10 @@
      type. They are now square outlined tags at a readable size, like the other phone tags. */
   #tab-website .wl-chip { padding: var(--space-1) var(--space-2); border: var(--stroke-hair) solid currentColor; border-radius: var(--r2); font-size: var(--text-xs); }
 
+  /* A tag that opens a note ("Needs a look" / "All good" over the Storage check sentence) sat
+     flush against the first words and let the sentence wrap under it. It now has its own line. */
+  #tab-website .wl-note > .wl-chip:first-child { display: flex; width: fit-content; margin-bottom: var(--space-2); }
+
   /* Web Analytics setup: the dashboard field starts near the top of the screen. */
   #tab-webanalytics .wa-setup-card { margin: var(--space-3) auto; padding: var(--space-4); }
   #tab-webanalytics .wa-setup-hero { margin-bottom: var(--space-3); }
