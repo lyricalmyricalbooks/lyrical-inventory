@@ -22,3 +22,16 @@ test('book overview KPI rails retain one shared width when a value is longer', (
   expect(kpiGrid[1]).toMatch(/grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)/);
   expect(kpiTile[1]).toMatch(/min-width:\s*0;/);
 });
+
+test('upright phone: the combined channel panel is inked like the per-book cards under it', () => {
+  const phone = styles.match(/@media\(max-width:640px\)\{\s*\.ch-book-grid[\s\S]*?\n\}/);
+  expect(phone).not.toBeNull();
+  const panel = phone[0].match(/\.ch-panel\{([^}]*)\}/);
+  expect(panel).not.toBeNull();
+  expect(panel[1]).toMatch(/border:var\(--stroke\) solid var\(--rule-ink\)/);
+  expect(panel[1]).toMatch(/box-shadow:var\(--elev-3\)/);
+  const top = phone[0].match(/\.pill\.ch-top\{([^}]*)\}/);
+  expect(top).not.toBeNull();
+  expect(top[1]).toMatch(/border-radius:var\(--r2\)/);
+  expect(top[1]).not.toMatch(/font-size:\s*8px/);
+});
