@@ -115,3 +115,11 @@ describe('Stripe payments figures on a phone', () => {
     expect(rule[1]).not.toMatch(/column-gap/);
   });
 });
+
+test('upright phone: "Log an expense" steps down to a caps label under the Anton masthead', () => {
+  const rule = riso.match(/\.pub-shell #tab-expenses > \.section-hed\s*\{([^}]*)\}/);
+  expect(rule).not.toBeNull();
+  expect(rule[1]).toMatch(/font:\s*800 var\(--text-xs\) var\(--font-ui\)/);
+  expect(rule[1]).toMatch(/color:\s*var\(--content-muted\)/);
+  expect(riso).toMatch(/#tab-expenses > \.section-hed::after\s*\{[^}]*flex:\s*1/);
+});
