@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { buildNonContractShipmentJson } from '../src/lib/canadapost.js';
+import { buildNonContractShipmentJson } from '../src/lib/carriers/canadapost.js';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Why this file exists:
@@ -92,7 +92,7 @@ afterEach(() => {
 describe('a live purchase, from Buy Label to a printable Canada Post document', () => {
   it('creates the shipment, reads it, and archives a reprintable parcel', async () => {
     const { buyCanadaPostLabel, listArchivedShipments, getArchivedShipmentContext } =
-      await import('../src/lib/canadapost.js');
+      await import('../src/lib/carriers/canadapost.js');
 
     const body = shipmentReply();
     global.fetch = vi.fn().mockResolvedValue({
@@ -145,7 +145,7 @@ describe('a live purchase, from Buy Label to a printable Canada Post document', 
 
   it('fetches the label as the PDF Canada Post returns, not a redrawn copy', async () => {
     const { fetchCanadaPostLabelArtifact, setLastPurchasedShipmentContext } =
-      await import('../src/lib/canadapost.js');
+      await import('../src/lib/carriers/canadapost.js');
 
     setLastPurchasedShipmentContext({
       trackingPin: TRACKING,
@@ -177,7 +177,7 @@ describe('a live purchase, from Buy Label to a printable Canada Post document', 
   });
 
   it('does not clear the manifest step for a shipment Canada Post has not settled', async () => {
-    const { buyCanadaPostLabel } = await import('../src/lib/canadapost.js');
+    const { buyCanadaPostLabel } = await import('../src/lib/carriers/canadapost.js');
 
     // Same parcel, same call — only the label wording differs, in the
     // abbreviated form Canada Post actually prints.
@@ -208,7 +208,7 @@ describe('a live purchase, from Buy Label to a printable Canada Post document', 
   });
 
   it('never books a live parcel it could not actually create', async () => {
-    const { buyCanadaPostLabel, listArchivedShipments } = await import('../src/lib/canadapost.js');
+    const { buyCanadaPostLabel, listArchivedShipments } = await import('../src/lib/carriers/canadapost.js');
 
     // A validation rejection is the likeliest live failure while the request
     // body is still unverified against the spec. Nothing may be archived.

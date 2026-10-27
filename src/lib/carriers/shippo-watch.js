@@ -23,7 +23,7 @@
 // already the authoritative dedupe surface. So a check reads page one and stops
 // the moment every row on it is known — one request, in the steady state.
 
-import { dueForCheck } from './watch-schedule.js';
+import { dueForCheck } from '../watch-schedule.js';
 
 const clean = (value) => String(value ?? '').trim();
 

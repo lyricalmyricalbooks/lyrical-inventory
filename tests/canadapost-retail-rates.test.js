@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   buildRateScenarioJson,
   parseCanadaPostPriceQuotes
-} from '../src/lib/canadapost.js';
+} from '../src/lib/carriers/canadapost.js';
 
 describe('Canada Post Retail (Counter) Rating', () => {
   it('builds a counter rate scenario with no customer number or contract id', () => {

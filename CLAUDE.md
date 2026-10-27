@@ -97,7 +97,7 @@ Purely internal work (tests, refactors, docs, CI) is hidden automatically; leave
 > shipment/void/transmit behind a deliberate human-approved action.
 >
 > Never invent a path, field name, media type or scope — every path lives in
-> [src/lib/canadapost-endpoints.js](src/lib/canadapost-endpoints.js); anything else comes
+> [src/lib/carriers/canadapost-endpoints.js](src/lib/carriers/canadapost-endpoints.js); anything else comes
 > from the portal's guides or the downloaded OpenAPI spec.
 > Full standing rules: [docs/canada-post-rating-api.md](docs/canada-post-rating-api.md)
 > (rates) and [docs/canada-post-shipping-api.md](docs/canada-post-shipping-api.md) (labels).

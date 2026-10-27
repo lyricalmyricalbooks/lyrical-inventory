@@ -50,7 +50,7 @@ function definedTokens() {
       ? readdirSync(jsDir).filter(f => f.endsWith('.js')).map(f => `src/features/${f}`)
       : []),
     ...(existsSync(libDir)
-      ? readdirSync(libDir).filter(f => f.endsWith('.js')).map(f => `src/lib/${f}`)
+      ? readdirSync(libDir, { recursive: true }).filter(f => f.endsWith('.js')).map(f => `src/lib/${f.split(path.sep).join('/')}`)
       : []),
   ];
   for (const f of [...jsPaths, 'index.html']) {

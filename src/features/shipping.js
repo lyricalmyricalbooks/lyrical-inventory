@@ -19,8 +19,8 @@
 import { withAutoLocalPickup } from '../lib/local-pickup.js';
 import { notifyDevice } from '../lib/device-notify.js';
 import { buildChitChatsShipment, getChitChatsRates, buyChitChatsLabel, normalizeChitChatsShipment,
-  listChitChatsShipments, refundChitChatsShipment, fetchChitChatsLabelArtifact, deleteChitChatsDraft, chitChatsCharge } from '../lib/chitchats.js';
-import { readChitChatsState, saveChitChatsState, safeChitChatsRecord } from '../lib/chitchats-state.js';
+  listChitChatsShipments, refundChitChatsShipment, fetchChitChatsLabelArtifact, deleteChitChatsDraft, chitChatsCharge } from '../lib/carriers/chitchats.js';
+import { readChitChatsState, saveChitChatsState, safeChitChatsRecord } from '../lib/carriers/chitchats-state.js';
 import {
   bigCartelShipQueue,
   findOrderInAnyBook,
@@ -58,13 +58,13 @@ import {
 import { BOOKS, BOOK_LIST, states, activeBook, getState, getBook } from '../core/store.js';
 import { renderExpenses, saveReceiptToLocalFile, readShippingFieldsFromReceipt } from './receipts.js';
 import { openReviewInbox } from './review-inbox.js';
-import { findExistingLabel, describeExistingLabel, websiteLabelWords } from '../lib/label-duplicate-guard.js';
+import { findExistingLabel, describeExistingLabel, websiteLabelWords } from '../lib/carriers/label-duplicate-guard.js';
 import { isShippoTestKey, isWebsiteFulfilled } from '../lib/website-link.js';
 import { websiteShipmentNote } from './website-link.js';
 import {
   refundCarrier, refundState, canRequestRefund, shippoTransactionId, refundCredit,
   unshipOrderForRefund, describeRefundRefusal,
-} from '../lib/label-refunds.js';
+} from '../lib/carriers/label-refunds.js';
 import {
   BATCH_LOOKBACK_DAYS, isBatchCandidate, scaledParcel, batchCustomsDeclaration, pickCheapestRate,
   originBlocker, preflightBlocker, addressVerdictBlocker, describeBatchTotal, buildLabelPrintPage,
@@ -141,7 +141,7 @@ import {
 import {
   describeImportedLabels,
   dueForShippoCheck,
-} from '../lib/shippo-watch.js';
+} from '../lib/carriers/shippo-watch.js';
 import { browserWatchState, dueForCheck, effectiveInterval, startWatch } from '../lib/watch-schedule.js';
 import { SYNC_TONES } from '../lib/sync-status.js';
 import {
@@ -179,7 +179,7 @@ import {
   parseShippoReceiptEmail,
   shippoInvoicePageUrl,
   shippoTxIdFromRef,
-} from '../lib/shippo-invoices.js';
+} from '../lib/carriers/shippo-invoices.js';
 import {
   ADDRESS_FIELD_LABELS,
   SHIPPO_ADDRESSES_V1_URL,
@@ -222,13 +222,13 @@ import {
   resolveCanadaPostCredentials,
   refundCanadaPostShipment,
   executeCanadaPostProxy,
-} from '../lib/canadapost.js';
+} from '../lib/carriers/canadapost.js';
 import {
   resolveListShipmentsEndpoint,
   resolveShipmentDetailsEndpoint,
   resolveShipmentPriceEndpoint,
   resolveShipmentReceiptEndpoint,
-} from '../lib/canadapost-endpoints.js';
+} from '../lib/carriers/canadapost-endpoints.js';
 import {
   absorbDuplicatePostage,
   buildPostageExpense,
@@ -1514,7 +1514,7 @@ async function linkConfidentShippingMatchesNow() {
 //
 // Same three triggers as the storefront order watch, for the same reasons, and
 // the same gates on when a request would be wasted. The rules live in
-// lib/shippo-watch.js; this is the timer and the card.
+// lib/carriers/shippo-watch.js; this is the timer and the card.
 
 // ─── Canada Post: asking what was bought, rather than being told ──────────
 //
@@ -7824,7 +7824,7 @@ function openBatchRowInForm(index) {
 
 // ── LABEL REFUNDS ────────────────────────────────────────────────────────
 // Asking for money back on an unused label, and keeping the books and the
-// order in step with it. The rules live in lib/label-refunds.js.
+// order in step with it. The rules live in lib/carriers/label-refunds.js.
 
 /** Records a refund request: marks the expense, frees the order, credits the books if settled. */
 async function recordLabelRefundRequest(expense, { status = 'REQUESTED', refundId = '', tracking = '' } = {}) {

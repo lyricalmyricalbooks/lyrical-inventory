@@ -5,7 +5,7 @@ import {
   parseArtifactHref,
   manifestRequired,
   describeNextStep,
-} from '../src/lib/canadapost-shipment.js';
+} from '../src/lib/carriers/canadapost-shipment.js';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Why this file exists:

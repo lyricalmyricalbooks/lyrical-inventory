@@ -90,7 +90,7 @@ Errors return JSON containing a `messages[]` array; each message carries a `code
 and a `description`, and there can be more than one per response. Parse it in
 **one shared handler** that preserves code + description for logging and for the
 owner-facing message — never ad hoc per endpoint. In this repo that role is played
-by `describeCanadaPostFailure()` in `src/lib/canadapost.js`.
+by `describeCanadaPostFailure()` in `src/lib/carriers/canadapost.js`.
 
 ## 7. Rate limits and resilience
 
@@ -123,14 +123,14 @@ retired Web Services path — against the Developer Portal host, which has no su
 path. Rating had been migrated to the gateway namespace and shipping had not, and
 because a sandbox run silently fell back to a fabricated shipment, nothing ever
 surfaced the 404. Every Canada Post path now lives in one registry:
-[`src/lib/canadapost-endpoints.js`](../src/lib/canadapost-endpoints.js).
+[`src/lib/carriers/canadapost-endpoints.js`](../src/lib/carriers/canadapost-endpoints.js).
 
 **Switching label creation on.** Three values, all read off the Shipping API's
 OpenAPI definition (Developer Portal → APIs → Shipping → download the OpenAPI
 definition) — never guessed:
 
 ```js
-import { configureCanadaPostShippingApi } from './src/lib/canadapost-endpoints.js';
+import { configureCanadaPostShippingApi } from './src/lib/carriers/canadapost-endpoints.js';
 
 configureCanadaPostShippingApi({
   createShipmentPath: '…',  // POST path for Create Shipment; write the customer
@@ -158,8 +158,8 @@ cannot rehearse the reprint path.
 
 ## 10. Where this lives in this repo
 
-- `src/lib/canadapost-endpoints.js` — the endpoint registry. Every Canada Post path, scope and media type is declared here; nothing builds a path inline.
-- `src/lib/canadapost.js` — client, service codes, rate request builder, error text.
+- `src/lib/carriers/canadapost-endpoints.js` — the endpoint registry. Every Canada Post path, scope and media type is declared here; nothing builds a path inline.
+- `src/lib/carriers/canadapost.js` — client, service codes, rate request builder, error text.
 - `backend/server.js` — Node proxy; token exchange + 55-minute cache.
 - `apps-script/Code.gs` — Apps Script proxy; same token exchange, cached in `CacheService`. Any change here must be copied verbatim into `public/gas-code.txt` and the script version bumped (see `CLAUDE.md`).
 

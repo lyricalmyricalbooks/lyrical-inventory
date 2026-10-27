@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findExistingLabel, describeExistingLabel } from '../src/lib/label-duplicate-guard.js';
+import { findExistingLabel, describeExistingLabel } from '../src/lib/carriers/label-duplicate-guard.js';
 
 const postage = (over = {}) => ({
   cat: 'Shipping & Postage', desc: 'Shippo shipping label #123 — Canada Post Expedited',

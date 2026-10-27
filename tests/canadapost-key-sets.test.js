@@ -10,7 +10,7 @@ import {
   migrateCanadaPostCredentials,
   CANADAPOST_CREDENTIAL_FIELDS,
   validateCanadaPostAccount,
-} from '../src/lib/canadapost.js';
+} from '../src/lib/carriers/canadapost.js';
 import { assessLiveShippingReadiness } from '../src/lib/shipping-readiness.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

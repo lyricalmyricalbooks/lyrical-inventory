@@ -37,16 +37,16 @@ import { parseShipmentResponse, describeNextStep, describeDeclarationStep } from
 import { describeShipmentRejection } from './canadapost-shipment-diagnosis.js';
 // Zonos issues the Declaration ID, so zonos.js owns its format rules; re-exported
 // here so label-purchase callers keep one import site.
-import { formatDeclarationId, validateDeclarationId } from './zonos.js';
-import { escapeHtml } from './html.js';
-import { getSavedSheetsUrl } from './sheets-url.js';
+import { formatDeclarationId, validateDeclarationId } from '../zonos.js';
+import { escapeHtml } from '../html.js';
+import { getSavedSheetsUrl } from '../sheets-url.js';
 // Re-exported so the Tax Centre keeps importing it from here.
 export { getSavedSheetsUrl };
 export { formatDeclarationId, validateDeclarationId };
 import {
   missingSenderFields,
   senderAddressIsPlaceholder,
-} from './shipping-readiness.js';
+} from '../shipping-readiness.js';
 
 // The modern Developer Portal serves both environments from ONE host. The old
 // ct.soa-gw / soa-gw split is gone, so which environment a request lands in is

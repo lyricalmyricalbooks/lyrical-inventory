@@ -146,7 +146,7 @@ import {
   receiptFolderPath,
   vendorFrom,
 } from '../lib/receipt-naming.js';
-import { isExpiringLabelUrl, isLabelUrlExpired, shippoTxIdFromRef } from '../lib/shippo-invoices.js';
+import { isExpiringLabelUrl, isLabelUrlExpired, shippoTxIdFromRef } from '../lib/carriers/shippo-invoices.js';
 import { mountReceiptFinder, startReceiptFinder, stopReceiptFinder } from './receipt-finder.js';
 import { receiptTextForAi } from '../lib/receipt-finder-client.js';
 import { RECEIPT_QUERY, RECEIPT_NOISE, receiptWorthReading } from '../lib/receipt-finder.js';

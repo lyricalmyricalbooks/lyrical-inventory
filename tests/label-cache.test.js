@@ -7,7 +7,7 @@ import {
   getCachedLabelPdf,
   deleteCachedLabelPdf,
   clearLabelCache
-} from '../src/lib/label-cache.js';
+} from '../src/lib/carriers/label-cache.js';
 
 describe('Label PDF Cache (IndexedDB)', () => {
   let mockStoreData;

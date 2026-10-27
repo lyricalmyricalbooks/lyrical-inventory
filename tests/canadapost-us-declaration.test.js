@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { parseCanadaPostShipmentResponse } from '../src/lib/canadapost.js';
-import { describeDeclarationStep } from '../src/lib/canadapost-shipment.js';
+import { parseCanadaPostShipmentResponse } from '../src/lib/carriers/canadapost.js';
+import { describeDeclarationStep } from '../src/lib/carriers/canadapost-shipment.js';
 
 /**
  * The U.S. duty declaration is the one field on a label that costs the CUSTOMER

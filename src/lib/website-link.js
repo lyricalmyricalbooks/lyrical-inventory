@@ -27,7 +27,7 @@ import { normalizeShippingOrderNumber } from './shipping-reconciliation.js';
 import { countryName } from './countries.js';
 import { deriveOnHandRaw, deriveStockBreakdown } from './inventory.js';
 import { isPostageExpense, isPostageLinked } from './postage-matching.js';
-import { refundState } from './label-refunds.js';
+import { refundState } from './carriers/label-refunds.js';
 import { stableStringify } from './merge-state.js';
 
 /** The `web` shape this build understands. */

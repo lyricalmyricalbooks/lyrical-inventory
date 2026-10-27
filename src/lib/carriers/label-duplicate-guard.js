@@ -9,10 +9,10 @@
 // Pure — takes the order history and the expense ledger as inputs, returns
 // what it found, and leaves the wording of the warning to the caller.
 
-import { normalizeShippingOrderNumber } from './shipping-reconciliation.js';
-import { isPostageExpense, isPostageLinked } from './postage-matching.js';
+import { normalizeShippingOrderNumber } from '../shipping-reconciliation.js';
+import { isPostageExpense, isPostageLinked } from '../postage-matching.js';
 import { refundState } from './label-refunds.js';
-import { WEBSITE_SHIPPED_STATES } from './website-link.js';
+import { WEBSITE_SHIPPED_STATES } from '../website-link.js';
 
 /**
  * Every sign that `orderNumber` already has a label.

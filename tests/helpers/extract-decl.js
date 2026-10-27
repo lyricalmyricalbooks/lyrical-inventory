@@ -26,7 +26,7 @@ export const FEATURE_PATHS = fs.existsSync(FEATURES_DIR)
 // both, main.js's copy still wins and no existing suite changes meaning.
 const LIB_DIR = path.resolve(__dirname, '../../src/lib');
 export const LIB_PATHS = fs.existsSync(LIB_DIR)
-  ? fs.readdirSync(LIB_DIR).filter(f => f.endsWith('.js'))
+  ? fs.readdirSync(LIB_DIR, { recursive: true }).filter(f => f.endsWith('.js'))
       .map(f => path.join(LIB_DIR, f))
   : [];
 

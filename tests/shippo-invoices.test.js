@@ -15,7 +15,7 @@ import {
   refundExpense,
   shippoInvoicePageUrl,
   attachInvoiceReceipts,
-} from '../src/lib/shippo-invoices.js';
+} from '../src/lib/carriers/shippo-invoices.js';
 
 describe('parsing invoices from a beta API', () => {
   it('reads the documented shape', () => {

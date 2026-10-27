@@ -1,5 +1,5 @@
 // Labels bought on Shippo's own website turning up here on their own. These
-// cover the wiring around lib/shippo-watch.js: the poll gates, the headless
+// cover the wiring around lib/carriers/shippo-watch.js: the poll gates, the headless
 // import path, the automatic linking, and the card that reports it.
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
