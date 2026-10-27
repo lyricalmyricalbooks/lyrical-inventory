@@ -259,7 +259,7 @@ function trackKeyboard(win) {
 }
 
 // The bottom menu scrolls sideways when its tabs don't fit (the author view has
-// more than a phone can show). Mark the strip while tabs remain off to the
+// more than a phone can show), and so does Today's row of book chips. Mark the strip while tabs remain off to the
 // right, so the stylesheet can fade that edge as a "there's more" cue.
 function trackStripMore(strip) {
   const win = strip.ownerDocument.defaultView;
@@ -321,7 +321,7 @@ export function initPhoneLayouts(root, { closeModal = (id) => globalThis.attempt
   const isPhone = () => globalThis.matchMedia?.('(max-width: 600px)').matches ?? false;
   cleanups.push(enableSwipeToClose(root, closeModal, isPhone));
   if (root.ownerDocument?.defaultView) cleanups.push(trackKeyboard(root.ownerDocument.defaultView));
-  root.querySelectorAll('.tab-bar').forEach(strip => cleanups.push(trackStripMore(strip)));
+  root.querySelectorAll('.tab-bar, .today-books').forEach(strip => cleanups.push(trackStripMore(strip)));
   // Renderers replace tbody contents after filtering or syncing. Only revisit
   // affected tables, never rebuild records or duplicate the desktop data model.
   const phoneWidth = globalThis.matchMedia?.('(max-width: 768px)');

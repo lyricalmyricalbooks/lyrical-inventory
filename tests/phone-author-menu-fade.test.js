@@ -42,3 +42,19 @@ test('the fade is phone-only, painted in the menu colour, and lets taps through'
   expect(section).toMatch(/\.tab-bar::after \{[^}]*position: sticky;[^}]*var\(--ink2\)[^}]*pointer-events: none;/);
   expect(section).toMatch(/\.tab-bar\.has-more-right::after \{ opacity: 1; \}/);
 });
+
+// Today's row of book chips scrolls sideways too: same cue while chips remain off-screen.
+test('the book chip row is marked while chips remain to the right, with a page-coloured fade', () => {
+  document.body.innerHTML = '<div id="app"><div class="today-books" id="today-books"><button class="book-chip">All</button></div></div>';
+  const row = document.getElementById('today-books');
+  Object.defineProperty(row, 'scrollWidth', { configurable: true, value: 900 });
+  Object.defineProperty(row, 'clientWidth', { configurable: true, value: 375 });
+  stop = initPhoneLayouts(document.getElementById('app'));
+  expect(row.classList.contains('has-more-right')).toBe(true);
+  row.scrollLeft = 525;
+  row.dispatchEvent(new Event('scroll'));
+  expect(row.classList.contains('has-more-right')).toBe(false);
+  const css = readFileSync(`${process.cwd()}/src/styles/phone-riso.css`, 'utf8');
+  expect(css).toMatch(/\.today-books::after \{[^}]*position: sticky;[^}]*var\(--surface-page\)[^}]*pointer-events: none;/);
+  expect(css).toMatch(/\.today-books\.has-more-right::after \{ opacity: 1; \}/);
+});
