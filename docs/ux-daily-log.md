@@ -213,6 +213,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-27 | visual | Phone All Books — combined sales by channel | Gave the combined revenue card the same bold outline and hard shadow as the per-book cards under it, and made its "TOP" tag a readable square inked tag instead of a tiny pale lozenge | (this PR) |
 
 | 2026-10-27 | visual | Phone Shipping — key box and destination picker | Gave the Shippo key box and the "Load destination from" picker the same bold ink outline as the fields under them, instead of faint beige hairline boxes | (this PR) |
+| 2026-10-27 | visual | Phone on/off switches (Stripe payments, payment methods, Big Cartel automation) | Made the on/off switches square inked slots with a square ink knob and a red fill when on, instead of soft rounded pills with a faint outline | (this PR) |
 ---
 
 ## Considered and rejected
