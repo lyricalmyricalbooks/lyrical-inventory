@@ -95,11 +95,8 @@ describe('the settle up panel', () => {
     expect(result()).toBe('CA$20.00');
     expect(panel().textContent).toContain('CA$100.00');
     expect(panel().textContent).toContain('CA$80.00');
-    // One lead figure: the net, not two alarms.
-    const lead = document.querySelector('#ps-dash-content .ps-stat-card.is-lead');
-    expect(lead.querySelector('.ps-stat-label').textContent).toBe('Net balance');
-    expect(lead.querySelector('.ps-stat-val').textContent).toBe('CA$20.00');
-    expect(document.querySelectorAll('#ps-dash-content .ps-stat-grid .tone-critical')).toHaveLength(0);
+    // One lead figure: the net, not two alarms — the old headline boxes are gone.
+    expect(document.querySelector('#ps-dash-content .ps-stat-grid')).toBeNull();
     expect(JSON.stringify(app.main.states[BOOK])).toBe(before);
     expect(app.cloud.saves.length).toBe(saves);
     expect(JSON.stringify(app.queued())).toBe(queued);
@@ -176,7 +173,6 @@ describe('recording and explaining a combined settlement', () => {
     expect(app.main.states[BOOK].hist[0].artistPending).toBe(true);
     expect(app.main.states[BOOK].artistTransfers).toHaveLength(1);
     // Undo brings the panel back with the same net figure.
-    expect(document.querySelector('#ps-dash-content .is-lead .ps-stat-val').textContent).toBe('CA$20.00');
     expect(el('artist-settlement').querySelector('.ps-settle-result .ps-stat-val').textContent).toBe('CA$20.00');
   });
 
@@ -560,9 +556,8 @@ describe('netting what the artist owes against a payout', () => {
 
   it('leads with the one net figure and spells the sum out in the settle up panel', async () => {
     await withDebt();
-    const lead = document.querySelector('#ps-dash-content .ps-stat-card.is-lead');
-    expect(lead.querySelector('.ps-stat-val').textContent).toBe('CA$50.00');
-    expect(lead.querySelector('.ps-stat-sub').textContent).toMatch(/you send the author/);
+    expect(el('artist-settlement').querySelector('.ps-settle-result .ps-stat-label').textContent).toBe('You send the author');
+    expect(el('artist-settlement').querySelector('.ps-settle-result .ps-stat-val').textContent).toBe('CA$50.00');
     expect(el('artist-settlement').querySelector('.ps-settle-result .ps-stat-sub').textContent).toBe('CA$80.00 − CA$30.00 · one payment clears both sides');
   });
 

@@ -67,20 +67,6 @@ export function settleUpModel(balance, { author = false } = {}) {
   };
 }
 
-// The figure for the headline card. Kept here so the card and the panel can
-// never disagree about direction or wording.
-export function settleUpHeadline(model, cur) {
-  return {
-    label: 'Net balance',
-    value: fmt(model.amount, cur),
-    sub: model.direction === 'settled' ? 'the two sides cancel out'
-      : model.expensesOwed > 0.005 && model.direction === 'to-publisher'
-        ? `${model.result.toLowerCase()} · after ${model.right.rows.some(r => r.key === 'royalties') ? 'earnings and ' : ''}${fmt(model.expensesOwed, cur)} of expenses come off`
-      : model.expensesOwed > 0.005 ? `${model.result.toLowerCase()} · includes ${fmt(model.expensesOwed, cur)} of expenses owed back`
-      : `${model.result.toLowerCase()} · after both sides are offset`,
-  };
-}
-
 // The sale behind a held line ends in one of three ways, and the publisher
 // says which. Shared by the ledger and the pending-transfers list so the two
 // can never offer different choices.
@@ -206,9 +192,13 @@ function ledgerBody(model, cur, ctx) {
 // the amount on the right — grouped by who owes whom with a subtotal each,
 // the records behind a line listed compactly under it, and the total at the
 // foot.
-// opts: { bookId, cur, date, payLinkReady, canRecord, hasWork, reviewError, pendingSync, statement, transfers }
+// opts: { bookId, cur, date, payLinkReady, canRecord, hasWork, reviewError, pendingSync, statement, transfers,
+//         actions, notice, more }
+// actions: extra buttons beside Record / Share (the author's Pay button, a
+// payment-link ask); notice: one line under the figure; more: the folded
+// extras at the foot of the card (how the artist is paid, past payments).
 export function settleUpHtml(model, opts) {
-  const { bookId, cur, date = '', payLinkReady = false, canRecord = false, hasWork = false, reviewError = false, pendingSync = 0, statement = '', transfers = [] } = opts;
+  const { bookId, cur, date = '', payLinkReady = false, canRecord = false, hasWork = false, reviewError = false, pendingSync = 0, statement = '', transfers = [], actions = '', notice = '', more = '' } = opts;
   const id = escapeHtml(String(bookId));
   const tone = model.direction === 'settled' ? 'is-settled' : 'is-due';
   const equation = ledgerEquation(model, cur);
@@ -233,12 +223,14 @@ export function settleUpHtml(model, opts) {
         <div class="ps-stat-label">${escapeHtml(model.result)}</div>
         <div class="ps-stat-val">${fmt(model.amount, cur)}</div>
         <div class="ps-stat-sub">${equation} · ${model.direction === 'settled' ? 'the two sides cancel out' : 'one payment clears both sides'}</div>
+        ${notice ? `<p class="ps-ledger-notice">${notice}</p>` : ''}
       </div>
       <div class="ps-payout-actions ps-receipt-actions">
         ${record ? `<button type="button" class="btn gold sys-target" id="artist-settlement-record-button-${id}"
           aria-expanded="false" aria-controls="artist-settlement-form-${id}"
           onclick="toggleArtistSettlementForm('${id}')">${model.recordLabel}</button>` : ''}
-        <button type="button" class="btn ${record ? 'tx' : ''} sys-target" onclick="shareArtistSettlement('${id}')">${model.author ? 'Copy statement' : 'Share statement'}</button>
+        ${actions}
+        <button type="button" class="btn ${record || actions ? 'tx' : ''} sys-target" onclick="shareArtistSettlement('${id}')">${model.author ? 'Copy statement' : 'Share statement'}</button>
       </div>
     </div>
     ${record ? `<div id="artist-settlement-form-${id}" class="ps-payout-form ps-settle-form" hidden>
@@ -262,6 +254,7 @@ export function settleUpHtml(model, opts) {
       ${leftOutNote}
       ${stripeNote}
       ${reviewError && canRecord ? '<p class="ps-payout-preview is-warn">An earlier settlement needs review. Check the payment history below and undo the wrong one before recording another.</p>' : ''}
+      ${more}
       <details class="ps-settle-preview">
         <summary>Preview the statement <span aria-hidden="true">▾</span></summary>
         <label for="artist-settlement-text-${id}" class="sr-only">Statement for the author</label>

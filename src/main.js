@@ -689,6 +689,10 @@ registerActions({
     const e = (getState().expenses || []).find(x => String(x.id) === el.dataset.id);
     if (e) markExpenseReceived(e.id);
   },
+  // The money card's own buttons.
+  'moneyCard.askPayLink': () => askAuthorForPayLink(),
+  'moneyCard.setUpPayLink': () => goToPayLinkSetup(),
+  'moneyCard.requestPayout': el => requestArtistPayout(el.dataset.book),
   // On a phone the records under a ledger line start folded.
   'settleUp.toggleItems': el => {
     const list = document.getElementById(el.getAttribute('aria-controls'));
@@ -9625,13 +9629,15 @@ function renderArtistReimburseBanner() {
     }
   }
   if (!owed.length) { banner.style.display = 'none'; return; }
-  banner.style.display = '';
-  $('arb-amount').textContent = fmt(total, cur);
-  $('arb-detail').textContent = `${owed.length} expense${owed.length !== 1 ? 's' : ''} your publisher will pay you back for`;
   // In a Settle up these come off the one net payment instead of being paid
   // to the link on their own.
   const settle = expensesInSettleUp(book, s);
   const inSettle = owed.filter(e => settle.ids.has(String(e.id))).length;
+  // Every one of them is a line on the money card, which says the rest.
+  if (inSettle === owed.length && book.profitTiers?.length) { banner.style.display = 'none'; return; }
+  banner.style.display = '';
+  $('arb-amount').textContent = fmt(total, cur);
+  $('arb-detail').textContent = `${owed.length} expense${owed.length !== 1 ? 's' : ''} your publisher will pay you back for`;
   const linkNote = s.artistPaymentLink ? 'Your publisher pays this to your saved payment link' : 'Add your payment link below so your publisher can pay you';
   const settleNote = n => settle.publisherPays
     ? `${n === 1 ? 'is' : 'are'} counted in Settle up, where your publisher pays you one net amount`
@@ -10238,6 +10244,12 @@ const settlementPaidKey = amount => `settle-${Math.round(roundCents(amount) * 10
 export function settlementLinkFor(s, due) {
   const l = s?.settlementLink;
   return due?.payable && l && l.url && Number(l.amount) === due.balance.amount && l.v === TRANSFER_LINK_VERSION ? l : null;
+}
+
+// What the author's money card offers for a net payment that is theirs to
+// make: the exact-amount link, and whether they have just paid it.
+export function settlementPayState(s, due) {
+  return { link: settlementLinkFor(s, due), paid: !!due?.payable && unrecordedSettlementPayment(s) };
 }
 
 // Publisher-side: one Stripe link for the net settlement. Re-made whenever the
@@ -10892,6 +10904,11 @@ export function renderArtistTransfers() {
       if (actions) actions.style.display = 'none';
       $('apb-transfers').innerHTML = '';
       $('apb-transfers').style.display = 'none';
+    } else if (isAuthor() && settle && book.profitTiers?.length && !transfers.some(t => t.status === 'pending' || transferAmount(t) == null)) {
+      // The money card at the top of the dashboard says it all, Pay button
+      // included; this banner only returns for a sale still waiting on the
+      // publisher's check or on a price.
+      banner.style.display = 'none';
     } else if (isAuthor() && settle) {
       renderAuthorSettlementBanner(banner, s, settle, transfers, cur);
     } else if (isAuthor() && transfers.length > 0) {
@@ -11049,13 +11066,12 @@ export function renderPendingExpenses() {
   }
   const sect = $('d-pending-expenses-sect'), list = $('d-pending-expenses-list');
   if (!sect) return;
-  // In the Settle up, one net payment covers these. The payment link stays
-  // only when that net runs to the author.
+  // In the Settle up, one net payment covers these.
   const settle = expensesInSettleUp(book, s);
-  // On a profit-sharing book the Settle up ledger lists these receipts with
-  // their own Mark received button; while the author pays the net there is
-  // nothing else to do with them here, so they aren't listed twice.
-  if (book.profitTiers?.length && !settle.publisherPays) {
+  // On a profit-sharing book the money card lists these receipts with their
+  // own Mark received button, and carries the payment-link ask, so they
+  // aren't listed twice.
+  if (book.profitTiers?.length) {
     for (let i = pending.length - 1; i >= 0; i--) if (settle.ids.has(String(pending[i].id))) pending.splice(i, 1);
   }
   if (!pending.length) { sect.style.display = 'none'; return; }
