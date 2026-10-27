@@ -94,7 +94,10 @@ const MAIN_IMPORT_BUDGET = {
   // validation and its save stay main.js's, so one name crosses the seam
   // instead of the form's dozen fields. (Moving to the Website orders tab
   // lives in app-switch.js, which already reaches the navigation.)
-  'website-link.js': 11,
+  // 11 -> 12: applyBookDetailFromWebsite. "Use the website's" on Details that
+  // differ from the website changes one field of a book through main.js's own
+  // catalogue save (latest catalogue first, Sheets rename), not a second copy.
+  'website-link.js': 12,
   // Set at extraction: the practice book's fake spreadsheet reads which book is
   // open, whether it is the test book, and the real sheet's two URLs (for the
   // cards it hides and shows), plus the usual $ / showToast.
@@ -331,6 +334,9 @@ const MIN_EXPORTS = {
   // Written as a feature module from the start: start it, repaint the
   // switchers, and open a deep link once the books have loaded.
   'app-switch.js': 3,
+  // Written as a feature module from the start: start it (button, shortcuts)
+  // and open it (from a #search= link or the book deep link's fallback).
+  'app-search.js': 2,
 };
 
 describe('feature modules are the only home of what they own', () => {

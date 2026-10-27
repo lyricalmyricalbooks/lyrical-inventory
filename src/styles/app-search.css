@@ -1,0 +1,62 @@
+/* One search box (src/features/app-search.js): a dialog with the field on
+   top and the results grouped under micro-labels. Rows are hairline list rows
+   (calm data), the active one inked in with the inset bar the app uses for
+   "this one". */
+.as-modal { max-width: 560px; width: 100%; display: flex; flex-direction: column; }
+.as-body { display: flex; flex-direction: column; gap: var(--space-2); padding-bottom: var(--space-3); min-height: 0; }
+.as-field { margin: 0; }
+.as-field input { width: 100%; font-size: var(--text-base); }
+.as-note { margin: 0; font-size: var(--text-sm); color: var(--content-secondary); text-wrap: pretty; }
+.as-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: min(56vh, 460px);
+  overflow-y: auto;
+  border: var(--stroke-hair) solid var(--border-default);
+}
+.as-results[hidden] { display: none; }
+.as-group {
+  padding: var(--space-2) var(--space-3) var(--space-1);
+  background: var(--surface-sunken);
+  border-top: var(--stroke-hair) solid var(--border-subtle);
+}
+.as-group:first-child { border-top: 0; }
+.as-group-label {
+  font-family: var(--font-ui);
+  font-size: var(--text-3xs);
+  font-weight: 800;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--content-secondary);
+}
+.as-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--target-min);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-raised);
+  border: 0;
+  border-top: var(--stroke-hair) solid var(--border-subtle);
+  border-radius: 0;
+  color: var(--content-primary);
+  text-align: left;
+  text-decoration: none;
+  font: inherit;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-standard);
+}
+.as-row:hover,
+.as-row.is-active { background: var(--surface-inset); box-shadow: inset 3px 0 0 var(--status-active); }
+.as-row:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: calc(var(--focus-ring-width) * -1); }
+.as-row:active { transform: scale(.99); }
+.as-row-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.as-row-title { font-size: var(--text-sm); font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.as-row-sub { font-size: var(--text-xs); color: var(--content-secondary); overflow-wrap: anywhere; }
+.as-row-go { font-family: var(--font-mono); color: var(--content-muted); }
+.as-keys { margin-right: auto; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--content-muted); }
+@media (pointer: coarse) { .as-keys { display: none; } }

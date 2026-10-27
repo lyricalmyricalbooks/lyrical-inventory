@@ -1060,7 +1060,8 @@ import {
   websiteLinkTodo,
 } from './features/website-link.js';
 import { STRIPE_CHARGE_PI_KEY, isWebsiteFulfilled, promisedPreorders, rememberChargeIntents } from './lib/website-link.js';
-import { appSwitchBooksReady, openWebsiteShopBooks, refreshAppSwitch, startAppSwitch } from './features/app-switch.js';
+import { startAppSearch } from './features/app-search.js';
+import { appSwitchBooksReady, openWebsiteDetailDiffs, openWebsiteShopBooks, refreshAppSwitch, startAppSwitch } from './features/app-switch.js';
 import { WEBSITE_TAB_NAME, openOnWebsiteHtml, websiteOrderUrl } from './lib/app-switch.js';
 import { reviewTaskStillOpen } from './lib/review-queue.js';
 import {
@@ -2599,6 +2600,48 @@ async function saveBookFromModal() {
   // Asked last, once the book modal is out of the way, so the two dialogs
   // don't stack.
   if (currencyResult) await offerSheetsResyncAfterRestate(currencyResult.to);
+}
+
+/**
+ * "Use the website's" on Website orders › Details that differ from the website:
+ * change ONE field of one book (title, author, ISBN or list price) through the
+ * same catalogue save the Edit book form uses — the latest catalogue is read
+ * first, the cloud write is queued while offline, and a new title moves the
+ * book's rows on the Google Sheet with it.
+ *
+ * `stillDiffers(book)` is asked after the latest catalogue is in, so a value
+ * another device changed meanwhile is never overwritten.
+ * Returns { ok: true } or { ok: false, reason, twin? }.
+ */
+export async function applyBookDetailFromWebsite(bookId, patch, stillDiffers = () => true) {
+  if (!window.IS_PUBLISHER || !patch || !Object.keys(patch).length) return { ok: false, reason: 'missing' };
+  await syncCatalog();
+  if (catalogLoadFailed) return { ok: false, reason: 'catalog' };
+  const current = BOOKS[bookId];
+  if (!current) return { ok: false, reason: 'missing' };
+  if (!stillDiffers(current)) return { ok: false, reason: 'changed' };
+  if (patch.title) {
+    // Two books with one title share one tab on the Google Sheet (see saveBookFromModal).
+    const titleKey = sheetTabKey(patch.title);
+    const twin = Object.values(BOOKS).find(b => b && b.id !== bookId && !isTestBook(b) && sheetTabKey(b.title) === titleKey);
+    if (twin) return { ok: false, reason: 'twin', twin: twin.title };
+  }
+  const previousTitle = String(current.title || '').trim();
+  BOOKS[bookId] = { ...current, ...patch };
+  refreshBookList();
+  // As the Edit book form does: a failed cloud write says so itself (toast) and
+  // the change stays on this device.
+  await saveCatalogWithDeletions();
+  const book = BOOKS[bookId];
+  if (patch.title && previousTitle && previousTitle !== book.title && !isTestBook(book)) queueSheetsRename(previousTitle, book.title, book.accent);
+  buildBookSwitcher();
+  renderCatalogList();
+  renderProfitSettings();
+  if (activeBook === bookId) {
+    const lbl = $('book-dropdown-label'); if (lbl) lbl.textContent = book.title;
+  }
+  renderCurrent();
+  return { ok: true };
 }
 
 // One title's row in Settings → Catalogue. Live and test books share it, so
@@ -7193,6 +7236,7 @@ function runTodoAction(name, { bookId = '', num = '' } = {}) {
   if (name === 'shipping-worklist') { openReviewInbox({ filter: 'label' }); return; }
   // The website's books that aren't in this app yet, on the Website orders card.
   if (name === 'website-shop-books') { openWebsiteShopBooks(); return; }
+  if (name === 'website-detail-diffs') { openWebsiteDetailDiffs(); return; }
   if (name === 'reverse-sales') {
     const refunds = readPendingRefundReversals();
     const all = [...refunds, ...readStoredList(STORE_REVERSAL_PENDING_KEY).filter(item => item.full)];
@@ -10611,6 +10655,8 @@ consumeTransferPaidReturn();
 // orders (#website-order=<id>). It drops a leftover ?mode=admin (nothing reads
 // it) and leaves every other part of the address as it is.
 startAppSwitch();
+// One search box (top-bar 🔍, Ctrl/⌘ K, "/"): this app's books and the website's.
+startAppSearch();
 // The return lands in the tab Stripe opened; refresh any other open tab too.
 window.addEventListener('storage', e => { if (e.key === PAID_TAP_KEY) { try { renderArtistTransfers(); } catch (_) { /* still loading */ } } });
 
