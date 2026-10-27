@@ -105,3 +105,13 @@ describe('Stores rows on a phone', () => {
     expect(riso).toMatch(/\.pub-shell \.store-row-tag \{ grid-row: 1 \/ span 2;/);
   });
 });
+
+describe('Stripe payments figures on a phone', () => {
+  test('the second row of figures sits a full ledger gap below the first, without widening the columns', () => {
+    const rule = riso.match(/\.pub-shell #tab-reconcile \.recon-kpis \{([^}]*)\}/);
+    expect(rule).not.toBeNull();
+    expect(rule[1]).toMatch(/row-gap:\s*var\(--space-4\)/);
+    // "RECONCILED" is ~162px wide; a wider column gap pushes the right tile past the page edge.
+    expect(rule[1]).not.toMatch(/column-gap/);
+  });
+});

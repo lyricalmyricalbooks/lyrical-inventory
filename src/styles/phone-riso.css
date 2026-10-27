@@ -540,6 +540,9 @@
   .pub-shell :is(.kpi-grid, #tab-reconcile .recon-kpis) > .kpi.is-lead :is(.kpi-label, .kpi-sub) { color: var(--content-muted); opacity: 1; }
   .pub-shell .tab-panel :is(.kpi-grid, .recon-kpis) > .kpi.is-lead .kpi-value { color: var(--content-primary) !important; font-size: 40px; }
   .pub-shell .kpi-grid > .kpi .kpi-label { min-height: 0; margin-bottom: var(--space-1); }
+  /* Stripe payments: the three figures are the same ruled ledger, so they take the Today ledger's row gap —
+     phone.css gave this strip an 8px gap, which put the second row's rule almost on top of the first row's caption. */
+  .pub-shell #tab-reconcile .recon-kpis { row-gap: var(--space-4); }
 
   .pub-shell .hist-kpi-container { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
   .pub-shell .hist-kpi-card {
