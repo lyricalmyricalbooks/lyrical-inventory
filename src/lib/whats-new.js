@@ -18,6 +18,7 @@
 // Hand-written notes for changes merged before commits carried "For you:".
 // `skip: true` marks behind-the-scenes work that changes nothing on screen.
 export const PLAIN_NOTES = {
+  1363: { skip: true },
   906: { kind: 'fixed', title: 'Spreadsheet imports are more reliable', detail: 'CSV files now import even when you have no internet connection, and prices written like "$1,250.00" are read correctly instead of coming in as zero.' },
   905: { kind: 'improved', title: 'The "Hide menu alerts" switch has moved', detail: 'It now sits in your account menu, next to Appearance, instead of in the middle of the side menu.', tryIt: 'Click your name at the bottom of the side menu, then choose "Hide menu alerts".' },
   904: { kind: 'new', title: 'You can hide the red alert dots in the side menu', detail: 'Handy when you know about something and don\'t want the reminder. Nothing is deleted — your To-do list still has everything.', tryIt: 'Click your name at the bottom of the side menu, then choose "Hide menu alerts". Choose it again to bring them back.' },
