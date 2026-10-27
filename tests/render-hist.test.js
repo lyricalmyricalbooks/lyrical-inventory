@@ -65,6 +65,7 @@ function makeHarness({ state, book = BOOK, isPublisher = true, submissions = {} 
       isWebsiteFulfilled, IN_PERSON_CHANNELS,
       // The website link's parcel line reads every book; none here is from the website.
       websiteShipmentNote: () => null,
+      renderImportNotice: () => {},
     },
     moduleState: `
       let histChanFilter = null;

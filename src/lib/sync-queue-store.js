@@ -246,17 +246,22 @@ function storageKeys(storage) {
  */
 export function findOrphanQueueKeys(storage, myTabId, now = Date.now(), staleMs = SYNC_TAB_STALE_MS) {
   if (!storage) return [];
+  return storageKeys(storage).filter(key => isOrphanQueueKey(storage, key, myTabId, now, staleMs));
+}
+
+/**
+ * Whether one queue key belongs to a tab that is gone (or is the legacy shared
+ * key). Also used for queues kept in IndexedDB when localStorage was full
+ * (sync-queue-overflow.js), whose keys follow the same per-tab naming.
+ */
+export function isOrphanQueueKey(storage, key, myTabId, now = Date.now(), staleMs = SYNC_TAB_STALE_MS) {
+  if (key === SYNC_QUEUE_KEY) return true;
   const prefix = `${SYNC_QUEUE_KEY}:`;
-  const out = [];
-  for (const key of storageKeys(storage)) {
-    if (key === SYNC_QUEUE_KEY) { out.push(key); continue; }
-    if (!key.startsWith(prefix)) continue;
-    const owner = key.slice(prefix.length);
-    if (!owner || owner === myTabId) continue;
-    const seen = readNumber(storage, SYNC_TAB_PREFIX + owner);
-    if (!seen || now - seen >= staleMs) out.push(key);
-  }
-  return out;
+  if (typeof key !== 'string' || !key.startsWith(prefix)) return false;
+  const owner = key.slice(prefix.length);
+  if (!owner || owner === myTabId) return false;
+  const seen = storage ? readNumber(storage, SYNC_TAB_PREFIX + owner) : null;
+  return !seen || now - seen >= staleMs;
 }
 
 /**

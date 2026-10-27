@@ -312,6 +312,10 @@ export function locateConflictTarget(state, entry) {
   } else if (key.startsWith('uid:')) {
     const uid = key.slice(4);
     candidates = rows.map((r, i) => i).filter(i => rows[i] && String(rows[i].uid) === uid);
+  } else if (key.startsWith('sid:')) {
+    // A hist row the merge knew by its sheetsId (merge-state.js mergeKeyFor).
+    const sid = key.slice(4);
+    candidates = rows.map((r, i) => i).filter(i => rows[i] && !rows[i].uid && String(rows[i].sheetsId) === sid);
   } else {
     // Content-keyed rows (hist rows without a uid): match on the merge's own
     // key so "the same row" means exactly what it meant to the merge. keyRows

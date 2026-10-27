@@ -35,6 +35,8 @@ import { legacyCopy } from './lib/clipboard.js';
 import { needsSettleUp, settleByHandMenu } from './lib/settle-up-view.js';
 import { normalizeLetterhead, renderLetterhead } from './lib/letterhead.js';
 import { bookSizeMessage, bookSizeReport } from './lib/book-size.js';
+import { keepPreviewEdits } from './lib/tax-center-preview.js';
+import { importDateIssues, latestImport, newImportId, parseImportDate } from './lib/import-batch.js';
 import { ensureXlsx, loadExternalScript } from './lib/external-scripts.js';
 import { buildActivityFeed } from './lib/activity-feed.js';
 import { buildAttentionSignals, SIGNAL_GROUPS, GROUP_LABELS, GROUP_ICONS, isUrgent } from './lib/attention-signals.js';
@@ -338,8 +340,9 @@ import { STARTUP_HISTORY_KEY, recordStartup, describeStartup } from './lib/start
 import { DEVICE_COPY_KEY, describeCopyAge } from './lib/device-copy.js';
 import {
   getLocalStorage, loadSyncQueue, persistSyncQueue, queueKeyFor, getSyncTabId, markTabAlive, markTabGone,
-  readOrphanQueues, releaseOrphanKeys, pickNextSyncItem, SYNC_TAB_HEARTBEAT_MS,
+  readOrphanQueues, releaseOrphanKeys, pickNextSyncItem, SYNC_TAB_HEARTBEAT_MS, isOrphanQueueKey,
 } from './lib/sync-queue-store.js';
+import { createSyncOverflowStore } from './lib/sync-queue-overflow.js';
 import { partHashesOf } from './lib/merge-state.js';
 import { loadFxHistory, saveFxHistory, datesNeedingRates, fillDatedRates, datedRateKey } from './lib/sale-fx.js';
 import { consignmentSaleAmounts, expectedConsignmentPayment, consignmentPaymentRecord, consignmentFxSummary, splitConsignmentPayment, storeSaleCurrency } from './lib/consignment-fx.js';
@@ -3159,6 +3162,30 @@ let fbReady = false, lastSavedHashes = {}, lastSaveTimes = {};
 const SYNC_TAB_ID = getSyncTabId((() => { try { return window.sessionStorage; } catch (_) { return null; } })(), getLocalStorage());
 const SYNC_QUEUE_STORAGE_KEY = queueKeyFor(SYNC_TAB_ID);
 const _syncQueueLoad = loadSyncQueue(getLocalStorage(), SYNC_QUEUE_STORAGE_KEY);
+
+// The queue kept in IndexedDB when localStorage is full (sync-queue-overflow.js).
+// The Test Profile gets its own, as it gets its own localStorage.
+const _syncOverflow = createSyncOverflowStore(
+  typeof indexedDB === 'undefined' ? undefined : indexedDB,
+  TEST_PROFILE_ACTIVE ? 'lm-sync-overflow-test' : 'lm-sync-overflow',
+);
+/** Where this tab's queue lives in IndexedDB: 'none', 'pending' (a write is on
+ *  its way) or 'stored' (localStorage was full, so it is kept there instead). */
+let _syncOverflowState = 'none';
+/** Whether this tab has ever written to (or read its own) IndexedDB record. */
+let _syncOverflowUsed = false;
+let _syncSaveSeq = 0;
+/** Resolves true once the latest save of the queue has landed somewhere. */
+let _syncOverflowWrite = Promise.resolve(true);
+// Every IndexedDB step runs after the one before it, so a clear made after a
+// write can't land before it, and a later write always has the last word.
+let _syncOverflowChain = Promise.resolve();
+function overflowStep(fn) {
+  const step = _syncOverflowChain.then(fn, fn);
+  _syncOverflowChain = step.catch(() => {});
+  return step;
+}
+
 export let syncQueue = _syncQueueLoad.queue;
 markTabAlive(getLocalStorage(), SYNC_TAB_ID);
 /** The queue item being uploaded right now, if any. queueSync never replaces it. */
@@ -3221,24 +3248,129 @@ if (_syncQueueLoad.discarded) {
  * @returns {boolean} whether the write landed
  */
 function saveSyncQueueToDevice() {
+  const seq = ++_syncSaveSeq;
   const res = persistSyncQueue(getLocalStorage(), syncQueue, SYNC_QUEUE_STORAGE_KEY);
   if (res.ok || !syncQueue.length) {
     // Landed, or there is nothing left that could be lost.
     _syncQueueHeldInMemory = false;
+    _syncOverflowState = 'none';
+    // Clear any IndexedDB copy, after any write to it still on its way, so a
+    // restart can't replay changes that have since uploaded.
+    if (_syncOverflowUsed) overflowStep(() => _syncOverflow.remove(SYNC_QUEUE_STORAGE_KEY));
+    _syncOverflowWrite = Promise.resolve(res.ok);
     return res.ok;
   }
-  console.warn(`Could not store the offline sync queue (${res.reason})`, res.error);
-  if (!_syncQueueHeldInMemory) {
-    _syncQueueHeldInMemory = true;
-    showToast(
-      res.reason === 'quota'
-        ? '⚠ This device is out of storage, so your change couldn\'t be saved on it. Keep the app open until it uploads, or it could be lost.'
-        : '⚠ This device wouldn\'t let the app save your change. Keep the app open until it uploads, or it could be lost.',
-      'err',
-      9000,
-    );
-  }
+  console.warn(`Could not store the offline sync queue (${res.reason}), keeping it in the device's larger storage`, res.error);
+  // localStorage is full (or refused): keep the queue in IndexedDB, which has
+  // far more room. Only if that fails too is the change at risk. Marked
+  // pending straight away, so nothing mistakes the missing localStorage copy
+  // for another tab having taken the queue over.
+  _syncOverflowUsed = true;
+  _syncOverflowState = 'pending';
+  const snapshot = JSON.parse(JSON.stringify(syncQueue));
+  _syncOverflowWrite = overflowStep(() => _syncOverflow.put(SYNC_QUEUE_STORAGE_KEY, snapshot)).then(ok => {
+    // A later save has already decided where the queue lives, and its own
+    // step runs after this one.
+    if (seq !== _syncSaveSeq) return ok;
+    if (ok) {
+      _syncOverflowState = 'stored';
+      _syncQueueHeldInMemory = false;
+      // Drop the older, smaller copy so a restart doesn't replay it. Removing
+      // can't hit the quota.
+      try { getLocalStorage()?.removeItem(SYNC_QUEUE_STORAGE_KEY); } catch (_) { /* left; qids dedupe it */ }
+      renderSyncChip();
+      return true;
+    }
+    _syncOverflowState = 'none';
+    if (!_syncQueueHeldInMemory) {
+      _syncQueueHeldInMemory = true;
+      renderSyncChip();
+      showToast(
+        res.reason === 'quota'
+          ? '⚠ This device is out of storage, so your change couldn\'t be saved on it. Keep the app open until it uploads, or it could be lost.'
+          : '⚠ This device wouldn\'t let the app save your change. Keep the app open until it uploads, or it could be lost.',
+        'err',
+        9000,
+      );
+    }
+    return false;
+  });
   return false;
+}
+
+/**
+ * The IndexedDB version of syncQueueTakenByAnotherTab: while this tab's queue
+ * lives there, a tab that took it over (this one looked closed: frozen in the
+ * background, or its heartbeat couldn't be written on a full device) removed
+ * the record. Uploading the in-memory copy then would send it a second time.
+ */
+async function syncOverflowTakenByAnotherTab() {
+  if (_syncOverflowState !== 'stored' || !syncQueue.some(item => !item.adopted)) return false;
+  const records = await overflowStep(() => _syncOverflow.readAll());
+  return _syncOverflowState === 'stored' && !records.some(r => r.key === SYNC_QUEUE_STORAGE_KEY);
+}
+
+// Changes kept in IndexedDB by this tab before a reload, or by a tab that is
+// gone, are taken back into this tab's queue: stored here first, and only then
+// removed from where they were. Marked `adopted` so a new edit on this screen,
+// which never showed them, can't supersede them.
+let _ownOverflowRead = false;
+export async function adoptOverflowSyncChanges() {
+  // This tab's own record is read back once, at startup (it is what a reload
+  // left behind). After that this tab writes and clears it itself, and a read
+  // racing that clear must not bring back changes that already uploaded.
+  const readOwn = !_ownOverflowRead;
+  _ownOverflowRead = true;
+  const records = await overflowStep(() => _syncOverflow.readAll());
+  if (readOwn && records.some(r => r.key === SYNC_QUEUE_STORAGE_KEY)) _syncOverflowUsed = true;
+  if (!records.length) return;
+  const storage = getLocalStorage();
+  const now = Date.now();
+  const take = records.filter(r => r.key === SYNC_QUEUE_STORAGE_KEY
+    ? readOwn
+    : isOrphanQueueKey(storage, r.key, SYNC_TAB_ID, now));
+  if (!take.length) return;
+  const have = new Set(syncQueue.map(item => item.qid).filter(Boolean));
+  const fresh = [];
+  take.forEach(r => r.queue.forEach((item, i) => {
+    if (!item || typeof item.bookId !== 'string' || !item.state || typeof item.state !== 'object') return;
+    const qid = item.qid || `${r.key}#${item.ts || 0}#${i}`;
+    if (have.has(qid)) return;
+    have.add(qid);
+    fresh.push({ ...item, qid, adopted: true });
+  }));
+  syncQueue.push(...fresh);
+  saveSyncQueueToDevice();
+  const stored = await _syncOverflowWrite;
+  if (!stored) {
+    syncQueue = syncQueue.filter(item => !fresh.includes(item));
+    return;
+  }
+  // Stored under this tab's key now (in localStorage, or as this tab's own
+  // overflow record): the old records can go.
+  await Promise.all(take.filter(r => r.key !== SYNC_QUEUE_STORAGE_KEY || _syncOverflowState === 'none')
+    .map(r => overflowStep(() => _syncOverflow.remove(r.key))));
+  if (fresh.length) {
+    console.info(`[sync] took back ${fresh.length} change(s) kept in the device's larger storage`);
+    updatePendingIndicator();
+    processSyncQueue();
+  }
+}
+
+// Ask the browser not to clear this site's storage when the device runs low,
+// once, the first time a change waits to upload. Installed apps are usually
+// granted this without a prompt.
+let _persistStorageAsked = false;
+function askToKeepDeviceStorage() {
+  if (_persistStorageAsked) return;
+  _persistStorageAsked = true;
+  try {
+    const st = typeof navigator !== 'undefined' ? navigator.storage : null;
+    if (!st || typeof st.persist !== 'function') return;
+    Promise.resolve(typeof st.persisted === 'function' ? st.persisted() : false)
+      .then(already => (already ? true : st.persist()))
+      .catch(() => { /* not granted; storage behaves as before */ });
+  } catch (_) { /* unsupported */ }
 }
 
 /** Stamp a confirmed cloud write. Storage failures are never worth throwing on. */
@@ -3353,7 +3485,7 @@ export async function adoptOrphanedSyncChanges() {
  * send those changes a second time.
  */
 function syncQueueTakenByAnotherTab() {
-  if (!syncQueue.some(item => !item.adopted) || _syncQueueHeldInMemory) return false;
+  if (!syncQueue.some(item => !item.adopted) || _syncQueueHeldInMemory || _syncOverflowState !== 'none') return false;
   const storage = getLocalStorage();
   if (!storage) return false;
   try { return storage.getItem(SYNC_QUEUE_STORAGE_KEY) === null; } catch (_) { return false; }
@@ -3362,6 +3494,7 @@ function syncQueueTakenByAnotherTab() {
 setInterval(() => {
   markTabAlive(getLocalStorage(), SYNC_TAB_ID);
   adoptOrphanedSyncChanges();
+  adoptOverflowSyncChanges();
 }, SYNC_TAB_HEARTBEAT_MS);
 window.addEventListener('pagehide', () => markTabGone(getLocalStorage(), SYNC_TAB_ID));
 window.addEventListener('pageshow', (e) => {
@@ -3370,6 +3503,7 @@ window.addEventListener('pageshow', (e) => {
   processSyncQueue();
 });
 setTimeout(adoptOrphanedSyncChanges, 0);
+setTimeout(adoptOverflowSyncChanges, 0);
 
 // Persist a not-yet-saved book state so an optimistic UI change is never
 // lost. Only the LATEST snapshot per book is kept — a newer edit supersedes
@@ -3404,6 +3538,7 @@ function queueSync(bookId, state, baseOverride) {
   // Must not throw: the upload below is attempted whether or not the device
   // copy landed, so a full storage can't strand the change with no retry.
   saveSyncQueueToDevice();
+  askToKeepDeviceStorage();
   updatePendingIndicator();
   processSyncQueue();
 }
@@ -3422,7 +3557,13 @@ function updatePendingIndicator() {
 async function processSyncQueue() {
   if (_syncFlushing) return;
   if (!navigator.onLine || !fbReady || !syncQueue.length) return;
-  if (syncQueueTakenByAnotherTab()) {
+  let takenFromOverflow = false;
+  if (_syncOverflowState === 'stored') {
+    _syncFlushing = true;
+    try { takenFromOverflow = await syncOverflowTakenByAnotherTab(); } finally { _syncFlushing = false; }
+    if (takenFromOverflow) _syncOverflowState = 'none';
+  }
+  if (takenFromOverflow || syncQueueTakenByAnotherTab()) {
     // Another tab took these over and uploads them; sending them too would
     // record them twice. Keep only what was adopted here.
     syncQueue = syncQueue.filter(item => item.adopted);
@@ -4486,6 +4627,9 @@ window.performFullMigration = async () => {
 
 // ── TAX CENTER STATE (Publisher Only)
 export let TAX_CENTER = { businessExpenses: [], recurring: [], settings: { baseCurrency: 'CAD', geminiKey: '' } };
+// The device's Tax Centre as first shown at startup (JSON), kept so what was
+// added while it showed can be told apart from what the cloud copy changed.
+let _taxCenterPreviewBase = null;
 export let _fxRateCache = { 'CAD_CAD': 1 };
 // Rates for a given date never change once published, so the ones already
 // fetched are kept on the device and a past sale keeps its value offline.
@@ -4503,12 +4647,24 @@ export async function loadTaxCenter({ ratesInBackground = false } = {}) {
   if (isAuthor()) return;
   try {
     const json = await window._fbLoadSettings('taxCenter'); // handles FS → RTDB fallback internally
+    let keptPreviewEdits = false;
     if (json) {
-      TAX_CENTER = { businessExpenses: [], recurring: [], settings: { baseCurrency: 'CAD', geminiKey: '' }, ...json };
+      let loaded = { businessExpenses: [], recurring: [], settings: { baseCurrency: 'CAD', geminiKey: '' }, ...json };
+      // Edits made while the device's copy was showing (their save was refused)
+      // are merged into the cloud copy rather than replaced by it.
+      if (TAX_CENTER._preview) {
+        const res = keepPreviewEdits(_taxCenterPreviewBase, loaded, TAX_CENTER);
+        loaded = res.value;
+        keptPreviewEdits = res.kept;
+        if (res.conflicts.length) console.warn('[TaxCenter] changed on two devices while loading, this device\'s version kept', res.conflicts);
+      }
+      _taxCenterPreviewBase = null;
+      TAX_CENTER = loaded;
       if (TAX_CENTER.settings?.claudeKey && !TAX_CENTER.settings?.geminiKey) {
         TAX_CENTER.settings.geminiKey = TAX_CENTER.settings.claudeKey;
       }
     }
+    if (keptPreviewEdits) saveTaxCenter();
     if (TAX_CENTER.settings?.rates) Object.assign(_fxRateCache, TAX_CENTER.settings.rates);
     if (ratesInBackground) {
       const syncedBefore = TAX_CENTER.settings?.lastRateSync;
@@ -8535,6 +8691,7 @@ export function renderHist() {
   });
 
   renderHistFilterBar(chanFilter, matchCount);
+  renderImportNotice(s);
   renderHistReconciliationPanel(s, book, chanFilter, inScope, bookCode);
 
   const formatChannelBadge = (chanName) => {
@@ -8935,13 +9092,8 @@ function reapplyOne(id) {
   if (!state || !book) { showToast('Cannot find book for this order', 'err'); return; }
   const history = (state.hist || []).find(h => h.num === o.orderNum && h.chan === 'Website');
   if (!history) { showToast('Applied order history not found', 'warn'); return; }
-  const oldRevenue = (Number(history.qty) || 0) * (Number(history.price) || 0);
   const newPrice = Number(o.price) || Number(history.price) || Number(book.listPrice) || 0;
   const newQty = Number(history.qty) || Number(o.qty) || 1;
-  const delta = newQty * newPrice - oldRevenue;
-  state.revenue = (Number(state.revenue) || 0) + delta;
-  if (!state.chStats.Website) state.chStats.Website = { txns: 0, units: 0, revenue: 0 };
-  state.chStats.Website.revenue = (Number(state.chStats.Website.revenue) || 0) + delta;
   Object.assign(history, {
     price: newPrice,
     subtotal: Number(o.subtotal || 0) || 0,
@@ -8954,6 +9106,9 @@ function reapplyOne(id) {
     taxPaid: Number(o.taxPaid || 0) || 0,
     totalPaid: Number(o.totalPaid || 0) || 0
   });
+  // Revenue follows the corrected price, worked out from the history as every
+  // load does, rather than nudged by the difference.
+  recomputeAfters(state, book);
   saveState(targetBook);
   syncToSheets({ type: 'order', book: book.title, date: history.date, num: history.num, chan: 'Website', qty: history.qty, price: history.price, total: history.qty * history.price, stockAfter: history.after, notes: 'Big Cartel', sheetsId: history.sheetsId, currency: getBookCurrencyCode(book) });
   if (history.shippingPaid > 0) syncToSheets(shippingPurchaseRowPayload(book, getBookCurrencyCode(book), history));
@@ -9700,6 +9855,12 @@ function renderArtistReimburseBanner() {
 
 // ── SPREADSHEET IMPORT
 let _importRows = [];
+// The rows as read from the file (date still as written), the file's name, and
+// how a date like 03/04 is read — the preview re-reads the dates when the owner
+// says their file is day-first.
+let _importParsed = [];
+let _importFileName = '';
+let _importDateOrder = 'mdy';
 
 // The confirm button has nothing to import until a file has been read. The
 // hint says what to do instead. The Sheets restore path reuses this pop-up and
@@ -9774,30 +9935,17 @@ async function handleImportFile(event) {
         const qty = importAmount(row[k('qty')] || row[k('quantity')] || 1) || 1;
         const price = importAmount(row[k('unit')] || row[k('price')] || 0) || 0;
         const notes = row[k('note')] || '';
-        // Parse date — handle Excel date objects, strings, etc.
-        let parsedDate = today();
-        if (date instanceof Date) parsedDate = date.toISOString().split('T')[0];
-        else if (typeof date === 'string' && date.trim()) {
-          const d = new Date(date);
-          if (!isNaN(d)) parsedDate = d.toISOString().split('T')[0];
-        } else if (typeof date === 'number' && xlsx) {
-          const d = xlsx.SSF.parse_date_code(date);
-          parsedDate = `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`;
-        }
-        return { num: String(num || ''), date: parsedDate, chan: String(chan), qty: Math.abs(Math.round(qty)), price, notes: String(notes) };
+        return { num: String(num || ''), rawDate: date, chan: String(chan), qty: Math.abs(Math.round(qty)), price, notes: String(notes) };
       };
 
-      _importRows = rows.map(colMap).filter(r => r.qty > 0);
-      // Blank order numbers get a deterministic id (same row content => same id), so
-      // re-importing the same file is caught by the duplicate check. Identical rows within
-      // one file are told apart by an occurrence counter.
-      const seenBlank = {};
-      _importRows.forEach(r => {
-        if (r.num) return;
-        const key = `${r.date}|${r.chan}|${r.qty}|${r.price}|${r.notes}`;
-        seenBlank[key] = (seenBlank[key] || 0) + 1;
-        r.num = `IMP-${r.date}-${r.chan}-${r.qty}-${r.price}-${seenBlank[key]}`.replace(/\s+/g, '');
-      });
+      const excelSerial = xlsx ? (n) => {
+        const d = xlsx.SSF.parse_date_code(n);
+        return d ? `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}` : null;
+      } : null;
+      _importParsed = rows.map(colMap).filter(r => r.qty > 0).map(r => ({ ...r, excelSerial }));
+      _importFileName = String(file.name || sheetName || '');
+      _importDateOrder = 'mdy';
+      readImportDates();
 
       if (!_importRows.length) { showToast('Could not parse any valid rows', 'warn'); return; }
 
@@ -9819,21 +9967,8 @@ async function handleImportFile(event) {
         confirmBtn.innerHTML = 'Import <span id="import-count">0</span> orders';
       }
 
-      // Build preview
-      $('import-summary').innerHTML = `Found <strong>${_importRows.length} orders</strong> in ${isCsv ? 'file' : 'sheet'} <em>"${escapeHtml(sheetName)}"</em> — review below then confirm.`;
-      $('import-count').textContent = _importRows.length;
-      setImportReady(_importRows.length > 0);
-      $('import-preview-body').innerHTML = _importRows.map(r => `
-        <tr>
-          <td class="mono">${escapeHtml(r.num)}</td>
-          <td style="font-size:var(--text-sm);color:var(--text3);">${fmtD(r.date)}</td>
-          <td>${escapeHtml(r.chan)}</td>
-          <td class="r">${r.qty}</td>
-          <td class="r">${book.currency}${r.price.toFixed(2)}</td>
-          <td class="r" style="font-weight:600;">${book.currency}${(r.qty * r.price).toFixed(2)}</td>
-          <td style="font-size:var(--text-xs);color:var(--text3);">${escapeHtml(r.notes) || '—'}</td>
-          <td><span class="pill blue" style="font-size:var(--text-2xs);">New</span></td>
-        </tr>`).join('');
+      _importSource = `${isCsv ? 'file' : 'sheet'} <em>"${escapeHtml(sheetName)}"</em>`;
+      renderImportPreview();
       openM('import');
     } catch (err) {
       showToast('Could not read file: ' + err.message, 'err');
@@ -9843,10 +9978,87 @@ async function handleImportFile(event) {
   else reader.readAsArrayBuffer(file);
 }
 
+let _importSource = '';
+
+// Turns the rows as read into rows to import: each date read (and flagged when
+// it needed a guess), then blank order numbers given their stable id.
+function readImportDates() {
+  const todayStr = today();
+  _importRows = _importParsed.map(({ rawDate, excelSerial, ...r }) => {
+    const { date, issue } = parseImportDate(rawDate, { order: _importDateOrder, todayStr, excelSerial });
+    // The blank-number id below must not depend on the day/month choice, or
+    // the same file imported twice with different choices adds its rows twice.
+    // Month-first is how these were always read, so older imports still match.
+    const idDate = issue === 'ambiguous' ? parseImportDate(rawDate, { order: 'mdy', todayStr, excelSerial }).date : date;
+    return { ...r, num: r.num, date, idDate, dateIssue: issue, dateWritten: rawDate instanceof Date ? '' : String(rawDate ?? '').trim() };
+  });
+  // Blank order numbers get a deterministic id (same row content => same id), so
+  // re-importing the same file is caught by the duplicate check. Identical rows within
+  // one file are told apart by an occurrence counter.
+  const seenBlank = {};
+  _importRows.forEach(r => {
+    if (r.num) return;
+    const key = `${r.idDate}|${r.chan}|${r.qty}|${r.price}|${r.notes}`;
+    seenBlank[key] = (seenBlank[key] || 0) + 1;
+    r.num = `IMP-${r.idDate}-${r.chan}-${r.qty}-${r.price}-${seenBlank[key]}`.replace(/\s+/g, '');
+  });
+}
+
+function setImportDateOrder(order) {
+  _importDateOrder = order === 'dmy' ? 'dmy' : 'mdy';
+  readImportDates();
+  renderImportPreview();
+}
+
+const IMPORT_DATE_NOTE = {
+  ambiguous: 'Could be day-first or month-first. Read as chosen above.',
+  unreadable: 'This date couldn’t be read, so it will go in as today. Fix it in the file and import again.',
+  missing: 'No date in the file, so it will go in as today.',
+  shortYear: 'The year has only two digits, so check the date was read the right way round.',
+};
+
+function renderImportPreview() {
+  const book = getBook();
+  const issues = importDateIssues(_importRows);
+  const notes = [];
+  if (issues.ambiguous) {
+    notes.push(`<label class="import-date-order">${issues.ambiguous} date${issues.ambiguous === 1 ? '' : 's'} like 03/04 could be read two ways. In this file the
+      <select data-on-change="import.dateOrder" aria-label="How dates like 03/04 are written in this file">
+        <option value="mdy"${_importDateOrder === 'mdy' ? ' selected' : ''}>month comes first (March 4)</option>
+        <option value="dmy"${_importDateOrder === 'dmy' ? ' selected' : ''}>day comes first (3 April)</option>
+      </select></label>`);
+  }
+  if (issues.shortYear) notes.push(`<strong>${issues.shortYear} date${issues.shortYear === 1 ? '' : 's'}</strong> ${issues.shortYear === 1 ? 'has' : 'have'} a two-digit year (like 26-10-01). Check ${issues.shortYear === 1 ? 'it was' : 'they were'} read the right way round below.`);
+  const asToday = issues.unreadable + issues.missing;
+  if (asToday) notes.push(`<strong>${asToday} date${asToday === 1 ? '' : 's'}</strong> couldn’t be read and will go in as today (marked <em>Check date</em> below). Fix ${asToday === 1 ? 'it' : 'them'} in the file and import again if that’s wrong.`);
+  $('import-summary').innerHTML = `Found <strong>${_importRows.length} orders</strong> in ${_importSource} — review below then confirm.`
+    + (notes.length ? `<div class="stock-alert warn import-date-notes">${notes.map(n => `<p>${n}</p>`).join('')}</div>` : '');
+  $('import-count').textContent = _importRows.length;
+  setImportReady(_importRows.length > 0);
+  $('import-preview-body').innerHTML = _importRows.map(r => `
+        <tr>
+          <td class="mono">${escapeHtml(r.num)}</td>
+          <td style="font-size:var(--text-sm);color:var(--text3);">${fmtD(r.date)}${r.dateIssue && r.dateWritten ? `<div class="import-date-written">written “${escapeHtml(r.dateWritten)}”</div>` : ''}</td>
+          <td>${escapeHtml(r.chan)}</td>
+          <td class="r">${r.qty}</td>
+          <td class="r">${book.currency}${r.price.toFixed(2)}</td>
+          <td class="r" style="font-weight:600;">${book.currency}${(r.qty * r.price).toFixed(2)}</td>
+          <td style="font-size:var(--text-xs);color:var(--text3);">${escapeHtml(r.notes) || '—'}</td>
+          <td>${r.dateIssue
+            ? `<span class="pill amber" style="font-size:var(--text-2xs);" title="${escapeHtml(IMPORT_DATE_NOTE[r.dateIssue])}">Check date</span>`
+            : '<span class="pill blue" style="font-size:var(--text-2xs);">New</span>'}</td>
+        </tr>`).join('');
+}
+
 function confirmImport() {
   if (!_importRows.length) return;
   const s = getState(), book = getBook();
-  const existingNums = new Set(s.hist.map(h => h.num));
+  // Every row of this import carries its id, so the whole import can be undone
+  // in one step from History (undoImport).
+  const importExtra = { importId: newImportId(), importedAt: new Date().toISOString(), importName: _importFileName };
+  // A voided row doesn't count: after "Undo this import", the corrected file
+  // has to be able to come back in.
+  const existingNums = new Set(s.hist.filter(h => !h.voided).map(h => h.num));
   let imported = 0, skipped = 0;
   const added = [];
 
@@ -9858,7 +10070,7 @@ function confirmImport() {
     // can be updated or removed later. These used to arrive with none and were
     // never sent: they only reached the sheet through Sync all data, which
     // appended them again on every press.
-    added.push(addSaleToState(s, book, { num: r.num, chan: r.chan, qty: r.qty, price: r.price, notes: r.notes, date: r.date, stamp: false }));
+    added.push(addSaleToState(s, book, { num: r.num, chan: r.chan, qty: r.qty, price: r.price, notes: r.notes, date: r.date, stamp: false, extra: importExtra }));
     imported++;
   });
 
@@ -9876,7 +10088,58 @@ function confirmImport() {
   const msg = skipped > 0
     ? `✓ Imported ${imported} orders (${skipped} duplicates skipped)`
     : `✓ Imported ${imported} orders`;
-  showToast(msg);
+  showToast(imported ? `${msg}. You can undo the whole import from the top of History.` : msg, 'ok', 5000);
+}
+
+// Undo a whole spreadsheet import: every row it added is voided, the same way
+// voiding one sale is (stock and revenue reversed, the Google Sheet row
+// removed), so it can still be brought back row by row. Rows already paid out
+// in an author settlement are left alone and counted.
+function undoImport(importId) {
+  const s = getState(), book = getBook();
+  const rows = (s.hist || []).filter(h => h.importId === importId && !h.voided);
+  if (!rows.length) return;
+  // As voiding one sale by hand: a sale paid out in an author settlement, or
+  // matched to a website order, stays.
+  const isLocked = h => h.artistSettlementId || h.webOrderId;
+  const locked = rows.filter(isLocked);
+  const undoable = rows.filter(h => !isLocked(h));
+  if (!undoable.length) { showToast('Every row of this import is in an author settlement or matched to a website order, so it stays.', 'warn', 5000); return; }
+  const name = rows[0].importName ? ` from “${rows[0].importName}”` : '';
+  if (!confirm(`Undo this import${name}? ${undoable.length} order${undoable.length === 1 ? '' : 's'} will be voided, and their stock and revenue reversed.`)) return;
+  undoable.forEach(h => {
+    voidHistEntry(s, book, h, { recompute: false });
+    h.voidedReason = 'Import undone';
+  });
+  recomputeAfters(s, book);
+  saveState(activeBook);
+  renderHist();
+  updateDash();
+  showToast(`Import undone: ${undoable.length} order${undoable.length === 1 ? '' : 's'} voided${locked.length ? `. ${locked.length} in an author settlement or matched to a website order ${locked.length === 1 ? 'was' : 'were'} kept` : ''}.`, locked.length ? 'warn' : 'ok', 5000);
+}
+
+// Hidden for this visit only; comes back the next time the app opens.
+let _importNoticeClosed = '';
+function closeImportNotice(importId) { _importNoticeClosed = importId; renderHist(); }
+registerActions({
+  'import.dateOrder': (el) => setImportDateOrder(el.value),
+  'import.undo': (el) => undoImport(el.dataset.import),
+  'import.closeNotice': (el) => closeImportNotice(el.dataset.import),
+});
+
+const IMPORT_NOTICE_DAYS = 14;
+function renderImportNotice(s) {
+  const host = $('hist-import-notice');
+  if (!host) return;
+  const last = isAuthor() ? null : latestImport(s.hist);
+  const fresh = last && last.at && (Date.now() - Date.parse(last.at)) < IMPORT_NOTICE_DAYS * 864e5;
+  if (!fresh || _importNoticeClosed === last.id) { host.hidden = true; host.innerHTML = ''; return; }
+  host.hidden = false;
+  host.innerHTML = `<div class="stock-alert ok hist-import-notice">
+      <span>Imported ${last.count} order${last.count === 1 ? '' : 's'}${last.name ? ` from “${escapeHtml(last.name)}”` : ''} on ${fmtD(last.at.slice(0, 10))}.</span>
+      <button type="button" class="btn sm" data-action="import.undo" data-import="${escapeHtml(last.id)}">Undo this import</button>
+      <button class="card-x" type="button" data-action="import.closeNotice" data-import="${escapeHtml(last.id)}" aria-label="Close this notice" title="Close until you next open the app">✕</button>
+    </div>`;
 }
 
 function updateManualForm() {
@@ -10376,13 +10639,11 @@ function markArtistTransferReceived(transferId, bookId = activeBook, { chargeId 
     return false;
   }
   t.total = transferAmount(t);
-  // Now credit the revenue
-  s.revenue += t.total;
-  if (!s.chStats[t.chan]) s.chStats[t.chan] = { txns: 0, units: 0, revenue: 0 };
-  s.chStats[t.chan].revenue += t.total;
-  // Mark history entry as resolved
+  // Mark history entry as resolved; the revenue it now counts for is worked
+  // out from the history below, the same way every load does.
   const h = s.hist.find(x => x.num === t.num && x.artistPending);
   if (h) { h.artistPending = false; h.notes = (h.notes ? h.notes + ' · ' : '') + (chargeId ? `Transfer received via Stripe (${chargeId})` : 'Transfer received'); }
+  recomputeAfters(s, book);
   // Remove from pending queue
   s.artistTransfers = s.artistTransfers.filter(x => x.id !== transferId);
   saveState(bookId);
@@ -10517,11 +10778,10 @@ async function settleArtistTransferKeepShare(transferId) {
     { okLabel: 'Settle' }
   ))) return;
 
-  // Credit the sale to revenue and resolve the pending history entry.
-  s.revenue += t.total;
-  if (!s.chStats[t.chan]) s.chStats[t.chan] = { txns: 0, units: 0, revenue: 0 };
-  s.chStats[t.chan].revenue += t.total;
+  // Resolve the pending history entry; it counts as revenue from now on
+  // (worked out from the history, as every load does).
   if (h) { h.artistPending = false; h.notes = (h.notes ? h.notes + ' · ' : '') + 'Artist kept their share'; }
+  recomputeAfters(s, book);
 
   // Record the artist's share as a payout — they already hold that cash.
   if (!s.artistPayouts) s.artistPayouts = [];
@@ -10576,11 +10836,10 @@ async function settleArtistTransferKeepAll(transferId) {
 
   const h = s.hist.find(x => x.num === t.num && x.artistPending);
 
-  // Credit the full gross to revenue and resolve the pending history entry.
-  s.revenue += t.total;
-  if (!s.chStats[t.chan]) s.chStats[t.chan] = { txns: 0, units: 0, revenue: 0 };
-  s.chStats[t.chan].revenue += t.total;
+  // Resolve the pending history entry; it counts as revenue from now on
+  // (worked out from the history, as every load does).
   if (h) { h.artistPending = false; h.notes = (h.notes ? h.notes + ' · ' : '') + 'Artist kept full amount (publisher cut forgiven)'; }
+  recomputeAfters(s, book);
 
   // Record the full gross as a payout — artist held all of it.
   if (!s.artistPayouts) s.artistPayouts = [];
@@ -18751,7 +19010,7 @@ Object.assign(window, {
   openRet, confirmReturn, openEditHist, openEditLedger, saveEntryEdit, convertKeptAllToReceived, voidEntry,
   restoreBookDataFromSheets, resetBookData, connectSheets, disconnectSheets, testSheets, verifyUrl, checkSheetsVersion,
   pushAllToSheets, backfillAndResync, copyGasCode, saveProductionCosts, savePaymentLinks,
-  handleImportFile, confirmImport, openLabelModal, renderLabelCountryHint, printShippingLabel, toggleShipped, backfillShipping,
+  handleImportFile, confirmImport, setImportDateOrder, undoImport, closeImportNotice, openLabelModal, renderLabelCountryHint, printShippingLabel, toggleShipped, backfillShipping,
   saveArtistPaymentLink, markArtistTransferReceived, settleArtistTransferKeepShare, settleArtistTransferKeepAll, markExpenseReceived,
   submitExpense, voidExpense, toggleExpenseReceiptFilter, toggleExpenseReimburseSelect, requestBulkReimbursement, markPaid, markHistoryConsignmentPaid, removeStore, addProfitTier, removeProfitTier,
   saveProfitTiers, renderProfitSettings, updateProfitTierField, renderProfitTierList,
@@ -19149,11 +19408,13 @@ async function showStartupPreview(user, publisherAccount) {
     Object.defineProperty(st, '_preview', { value: true, enumerable: false, configurable: true });
     states[id] = st;
   });
-  // The Tax Centre's own load replaces this object, and the mark with it.
+  // The Tax Centre's own load replaces this object, and the mark with it,
+  // merging in anything logged while it showed (keepPreviewEdits).
   if (taxCenter && typeof taxCenter === 'object') {
     TAX_CENTER = { businessExpenses: [], recurring: [], settings: { baseCurrency: 'CAD', geminiKey: '' }, ...taxCenter };
     if (TAX_CENTER.settings?.rates) Object.assign(_fxRateCache, TAX_CENTER.settings.rates);
     Object.defineProperty(TAX_CENTER, '_preview', { value: true, enumerable: false, configurable: true });
+    _taxCenterPreviewBase = JSON.stringify(TAX_CENTER);
   }
   _startupPreviewShown = true;
   if (publisherAccount) {

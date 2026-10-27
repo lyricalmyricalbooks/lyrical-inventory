@@ -448,11 +448,19 @@ window._fbSave = async (bookId, json, opts = {}) => {
         catch (e) { console.error('[FB] merge normalize failed', e); }
       }
 
+      // A part just read from the server is compared with what the server
+      // holds, not with this device's last-known copy: when the merge happens
+      // to land back on that copy (say the totals came out as they were
+      // before the other device's change), comparing with it skipped the
+      // write and left the server's part out of step with the rest.
+      const serverJson = {};
+      dirty.forEach((p, i) => { serverJson[p] = snaps[i].exists() ? snaps[i].data().data : null; });
       const finalParts = splitState(stitched);
       const pending = [];
       Object.keys(finalParts).forEach(p => {
         const partJson = JSON.stringify(finalParts[p]);
-        if (hashes[p] !== partJson) pending.push({ part: p, partJson });
+        const known = Object.prototype.hasOwnProperty.call(serverJson, p) ? serverJson[p] : hashes[p];
+        if (known !== partJson) pending.push({ part: p, partJson });
       });
 
       // One atomic batch rather than a setDoc per part. These parts are not
@@ -837,7 +845,7 @@ window._fbSaveSettings = async (key, data) => {
   // A Tax Centre still showing the device's copy from startup (main.js marks
   // it _preview) is not saved: it may be missing what another device added.
   if (key === 'taxCenter' && data && data._preview) {
-    if (typeof window.showToast === 'function') window.showToast('Still loading the latest Tax Centre — try again in a moment', 'warn', 4000);
+    if (typeof window.showToast === 'function') window.showToast('Kept on this device. It uploads as soon as the latest Tax Centre has loaded.', 'ok', 4000);
     return false;
   }
   try {
