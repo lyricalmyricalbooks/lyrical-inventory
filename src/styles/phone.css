@@ -866,6 +866,13 @@
   :where(.tab-panel, .modal) label > input[type=checkbox]:not(:is(.tc-toggle-wrap, .email-card-check, .email-select-all) *):disabled { opacity: .35; cursor: not-allowed; }
 }
 
+/* The search box on Order History and the store picker on the ledger were the last text fields
+   still drawn with a faint hairline, next to the 2px ink outline every other form field and card
+   carries. Same outline as the form fields; hover and focus keep their own colours. */
+@media (max-width: 768px) {
+  .ledger-filter-input, .ledger-filter-select { border-width: var(--stroke); border-color: var(--border-strong); }
+}
+
 /* Book dashboard header strip. The wrap rule above targets .dash-context, but
    this strip is .dashboard-context, so its button row never wrapped and pushed
    the whole page wider than the phone — everything slid sideways, the bottom

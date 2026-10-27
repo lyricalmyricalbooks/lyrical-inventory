@@ -258,3 +258,4 @@ looked at, and re-proposing it costs a run.
 | 2026-10-27 | visual | Phone Settings — Book Catalog | Gave the Remove button beside each book a solid red outline like Edit has, instead of a faint pink hairline that looked switched off | (this PR) |
 | 2026-10-27 | visual | Phone Today — "13 open" tag | Made the "13 open" tag on the To-do card a square inked caps tag like the other tags on a phone, instead of the one soft rounded lozenge on the screen | (this PR) |
 | 2026-10-27 | visual | Phone Expenses — "Log an expense" heading | Stepped "Log an expense" down to a small caps label with a rule running to the edge, so "Project expenses" is the one big title instead of two near-equal headlines stacked | (this PR) |
+| 2026-10-27 | visual | Phone Order History — search box | Gave the "Find an order" search box (and the store picker on the ledger) the same bold ink outline as the other form fields instead of a faint grey hairline | (this PR) |
