@@ -18,7 +18,10 @@ describe('parseImportDate', () => {
   it('needs no flag when only one reading is a real date', () => {
     expect(parseImportDate('25/12/2025', { todayStr })).toEqual({ date: '2025-12-25', issue: null });
     expect(parseImportDate('12/25/2025', { todayStr, order: 'dmy' })).toEqual({ date: '2025-12-25', issue: null });
-    expect(parseImportDate('04/04/25', { todayStr })).toEqual({ date: '2025-04-04', issue: null });
+  });
+
+  it('flags a two-digit year, since it could be read as a day', () => {
+    expect(parseImportDate('04/04/25', { todayStr })).toEqual({ date: '2025-04-04', issue: 'shortYear' });
   });
 
   it('reads written-out months', () => {
@@ -38,7 +41,7 @@ describe('parseImportDate', () => {
 
   it('counts what needs a look', () => {
     expect(importDateIssues([{ dateIssue: 'ambiguous' }, { dateIssue: null }, { dateIssue: 'missing' }, { dateIssue: 'unreadable' }]))
-      .toEqual({ ambiguous: 1, unreadable: 1, missing: 1 });
+      .toEqual({ ambiguous: 1, unreadable: 1, missing: 1, shortYear: 0 });
   });
 });
 
@@ -101,5 +104,47 @@ describe('importing a file, then undoing it', () => {
     expect(st().sold).toBe(0);
     expect(st().revenue).toBe(0);
     expect(document.getElementById('hist-import-notice').hidden).toBe(true);
+  });
+  async function importCsv(csv, name = 'again.csv') {
+    document.getElementById('import-summary').textContent = '';
+    await app.window.handleImportFile({ target: { files: [new File([csv], name, { type: 'text/csv' })], value: '' } });
+    await vi.waitFor(() => {
+      expect(document.getElementById('import-summary').textContent).toMatch(/Found \d+ orders/);
+    }, { timeout: 3000, interval: 10 });
+  }
+
+  it('brings the rows back when the same file is imported again after an undo', async () => {
+    const csv = 'Order #,Date,Channel,Qty,Unit price,Notes\nA-1,03/04/2025,Website,2,40,\nA-2,someday,Book Fair,1,40,\nA-3,2025-05-01,Website,1,40,\n';
+    await importCsv(csv, 'old-orders.csv');
+    app.window.confirmImport();
+    expect(st().hist.filter(h => !h.voided && /^A-/.test(h.num))).toHaveLength(3);
+    expect(st().sold).toBe(4);
+  });
+
+  it('gives rows without an order number the same id whichever way dates are read', async () => {
+    const csv = 'Order #,Date,Channel,Qty,Unit price,Notes\n,05/06/2025,Book Fair,1,20,\n';
+    await importCsv(csv, 'blank.csv');
+    app.window.setImportDateOrder('dmy');
+    app.window.confirmImport();
+    const first = st().hist.filter(h => !h.voided && /^IMP-/.test(h.num));
+    expect(first).toHaveLength(1);
+
+    await importCsv(csv, 'blank.csv');
+    app.window.setImportDateOrder('mdy');
+    app.window.confirmImport();
+    expect(st().hist.filter(h => !h.voided && /^IMP-/.test(h.num))).toHaveLength(1);
+  });
+
+  it('keeps rows matched to a website order when undoing', async () => {
+    const csv = 'Order #,Date,Channel,Qty,Unit price,Notes\nW-1,2025-07-01,Website,1,30,\nW-2,2025-07-02,Website,1,30,\n';
+    await importCsv(csv, 'web.csv');
+    app.window.confirmImport();
+    const w1 = st().hist.find(h => h.num === 'W-1');
+    w1.webOrderId = 'order-77';
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    app.window.undoImport(w1.importId);
+    confirmSpy.mockRestore();
+    expect(st().hist.find(h => h.num === 'W-1').voided).toBeFalsy();
+    expect(st().hist.find(h => h.num === 'W-2').voided).toBe(true);
   });
 });

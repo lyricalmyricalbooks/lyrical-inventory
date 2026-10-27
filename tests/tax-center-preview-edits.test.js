@@ -30,6 +30,15 @@ describe('keepPreviewEdits', () => {
     expect(res.value.businessExpenses.map(e => e.id)).toEqual(['e2', 'e1']);
   });
 
+  it('drops the still-loading mark when the cloud copy equals the device copy', () => {
+    const base = tc([paper]);
+    const current = tc([ink, paper]);
+    Object.defineProperty(current, '_preview', { value: true, enumerable: false, configurable: true });
+    const res = keepPreviewEdits(JSON.stringify(base), JSON.parse(JSON.stringify(base)), current);
+    expect(res.kept).toBe(true);
+    expect(res.value._preview).toBeUndefined();
+  });
+
   it('takes the cloud copy when there was no preview', () => {
     const res = keepPreviewEdits(null, tc([stamps]), tc([ink]));
     expect(res.kept).toBe(false);

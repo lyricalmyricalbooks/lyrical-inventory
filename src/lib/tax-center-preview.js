@@ -14,5 +14,7 @@ export function keepPreviewEdits(baseJson, loaded, current) {
   }
   if (JSON.stringify(current) === baseJson) return { value: loaded, kept: false, conflicts: [] };
   const res = mergeSettingDoc(baseJson, JSON.stringify(loaded), current);
-  return { value: res.merged ? res.value : current, kept: true, conflicts: res.conflicts };
+  // A copy even when nothing needed merging: `current` still carries the
+  // preview's mark, and keeping that object would refuse every save after.
+  return { value: res.merged ? res.value : { ...current }, kept: true, conflicts: res.conflicts };
 }

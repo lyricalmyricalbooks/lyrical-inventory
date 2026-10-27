@@ -71,6 +71,24 @@ describe('a full phone', () => {
     expect(app.cloud.lastSave(A).state.hist[0].num).toBe('S-1');
   });
 
+  it('keeps an online save that failed on a full phone, then clears it once it goes through', async () => {
+    fillLocalStorage();
+    const ok = app.cloud.saveImpl;
+    let calls = 0;
+    app.cloud.saveImpl = (...args) => (++calls === 1 ? { ok: false } : ok(...args));
+    app.main.states[A].hist.unshift({ ...SALE, num: 'S-ONLINE' });
+    await app.main.saveState(A);
+    await vi.waitFor(() => expect(overflow().size).toBe(1));
+    expect(app.toast()).not.toMatch(/could be lost/);
+
+    Storage.prototype.setItem = realSetItem;
+    app.setOnline(false);
+    app.setOnline(true);
+    await vi.waitFor(() => expect(overflow().size).toBe(0));
+    expect(app.cloud.lastSave(A).state.hist[0].num).toBe('S-ONLINE');
+    app.cloud.saveImpl = ok;
+  });
+
   it('uploads, once, a sale a closed tab left in IndexedDB', async () => {
     const leftover = { bookId: A, ts: 1, base: {}, qid: 'gone-1', state: { ...app.main.states[A], hist: [{ ...SALE, num: 'FROM-FULL-PHONE' }] } };
     overflow().set('lm-sync-queue:gone', [leftover]);

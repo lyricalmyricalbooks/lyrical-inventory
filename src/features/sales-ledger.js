@@ -184,7 +184,7 @@ function syncHistoryVoidDeletion(h, isVoided, book = getBook()) {
  * Stripe refund alert, so a refunded sale is reversed exactly the way a
  * hand-voided one is.
  */
-function voidHistEntry(s, book, h) {
+function voidHistEntry(s, book, h, { recompute = true } = {}) {
   // A held-cash (direct-to-artist) sale never added revenue; it only sits in
   // the pending-transfer queue. Pull that transfer so the artist is not left
   // owing a cut (and a later "received" can't add revenue) for a voided sale.
@@ -209,7 +209,8 @@ function voidHistEntry(s, book, h) {
   if (h.directToArtist || h.enteredBy === 'Artist') s.authorStock = (Number.isFinite(s.authorStock) ? s.authorStock : 0) + h.qty;
   h.voided = true;
   h.voidedAt = Date.now();
-  recomputeAfters(s, book);
+  // Voiding many at once (undoing an import) recomputes once at the end.
+  if (recompute) recomputeAfters(s, book);
   syncHistoryVoidDeletion(h, true, book);
 }
 

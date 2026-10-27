@@ -16,13 +16,15 @@ function validDay(y, m, d) {
  * `issue` is null when the date is certain, 'ambiguous' when it could be read
  * day-first or month-first (03/04/2025) and was read the way `order` says,
  * 'unreadable' when it could not be read at all and `todayStr` was used, and
- * 'missing' when the cell was empty and `todayStr` was used. It used to be
+ * 'missing' when the cell was empty and `todayStr` was used, and 'shortYear'
+ * when only one reading works but the year has two digits (26-10-01 could be
+ * 2026-10-01 written year-first). It used to be
  * `new Date(text)`, which reads 03/04 as March 4th and turns anything it can't
  * read into today's date, with nothing on screen to say so.
  *
  * @param {unknown} raw
  * @param {{ order?: 'mdy'|'dmy', todayStr: string, excelSerial?: (n: number) => string|null }} opts
- * @returns {{ date: string, issue: null|'ambiguous'|'unreadable'|'missing' }}
+ * @returns {{ date: string, issue: null|'ambiguous'|'unreadable'|'missing'|'shortYear' }}
  */
 export function parseImportDate(raw, { order = 'mdy', todayStr, excelSerial } = {}) {
   if (raw instanceof Date) {
@@ -51,8 +53,9 @@ export function parseImportDate(raw, { order = 'mdy', todayStr, excelSerial } = 
     if (mdy && dmy && a !== b) {
       return order === 'dmy' ? { date: isoOf(y, b, a), issue: 'ambiguous' } : { date: isoOf(y, a, b), issue: 'ambiguous' };
     }
-    if (mdy) return { date: isoOf(y, a, b), issue: null };
-    if (dmy) return { date: isoOf(y, b, a), issue: null };
+    const shortYear = m[3].length === 2 ? 'shortYear' : null;
+    if (mdy) return { date: isoOf(y, a, b), issue: shortYear };
+    if (dmy) return { date: isoOf(y, b, a), issue: shortYear };
     return { date: todayStr, issue: 'unreadable' };
   }
 
@@ -67,7 +70,7 @@ export function parseImportDate(raw, { order = 'mdy', todayStr, excelSerial } = 
 
 /** Counts of rows needing a look, for the preview's summary line. */
 export function importDateIssues(rows) {
-  const out = { ambiguous: 0, unreadable: 0, missing: 0 };
+  const out = { ambiguous: 0, unreadable: 0, missing: 0, shortYear: 0 };
   for (const r of rows || []) if (r && r.dateIssue && out[r.dateIssue] != null) out[r.dateIssue]++;
   return out;
 }

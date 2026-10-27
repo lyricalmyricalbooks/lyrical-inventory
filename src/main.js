@@ -3169,11 +3169,22 @@ const _syncOverflow = createSyncOverflowStore(
   typeof indexedDB === 'undefined' ? undefined : indexedDB,
   TEST_PROFILE_ACTIVE ? 'lm-sync-overflow-test' : 'lm-sync-overflow',
 );
-/** True while this tab's queue lives in IndexedDB rather than localStorage. */
-let _syncQueueInOverflow = false;
+/** Where this tab's queue lives in IndexedDB: 'none', 'pending' (a write is on
+ *  its way) or 'stored' (localStorage was full, so it is kept there instead). */
+let _syncOverflowState = 'none';
+/** Whether this tab has ever written to (or read its own) IndexedDB record. */
+let _syncOverflowUsed = false;
 let _syncSaveSeq = 0;
 /** Resolves true once the latest save of the queue has landed somewhere. */
 let _syncOverflowWrite = Promise.resolve(true);
+// Every IndexedDB step runs after the one before it, so a clear made after a
+// write can't land before it, and a later write always has the last word.
+let _syncOverflowChain = Promise.resolve();
+function overflowStep(fn) {
+  const step = _syncOverflowChain.then(fn, fn);
+  _syncOverflowChain = step.catch(() => {});
+  return step;
+}
 
 export let syncQueue = _syncQueueLoad.queue;
 markTabAlive(getLocalStorage(), SYNC_TAB_ID);
@@ -3242,21 +3253,27 @@ function saveSyncQueueToDevice() {
   if (res.ok || !syncQueue.length) {
     // Landed, or there is nothing left that could be lost.
     _syncQueueHeldInMemory = false;
-    if (_syncQueueInOverflow) {
-      _syncQueueInOverflow = false;
-      _syncOverflow.remove(SYNC_QUEUE_STORAGE_KEY);
-    }
+    _syncOverflowState = 'none';
+    // Clear any IndexedDB copy, after any write to it still on its way, so a
+    // restart can't replay changes that have since uploaded.
+    if (_syncOverflowUsed) overflowStep(() => _syncOverflow.remove(SYNC_QUEUE_STORAGE_KEY));
     _syncOverflowWrite = Promise.resolve(res.ok);
     return res.ok;
   }
   console.warn(`Could not store the offline sync queue (${res.reason}), keeping it in the device's larger storage`, res.error);
   // localStorage is full (or refused): keep the queue in IndexedDB, which has
-  // far more room. Only if that fails too is the change at risk.
-  _syncOverflowWrite = _syncOverflow.put(SYNC_QUEUE_STORAGE_KEY, syncQueue).then(ok => {
-    // A later save has already decided where the queue lives.
+  // far more room. Only if that fails too is the change at risk. Marked
+  // pending straight away, so nothing mistakes the missing localStorage copy
+  // for another tab having taken the queue over.
+  _syncOverflowUsed = true;
+  _syncOverflowState = 'pending';
+  const snapshot = JSON.parse(JSON.stringify(syncQueue));
+  _syncOverflowWrite = overflowStep(() => _syncOverflow.put(SYNC_QUEUE_STORAGE_KEY, snapshot)).then(ok => {
+    // A later save has already decided where the queue lives, and its own
+    // step runs after this one.
     if (seq !== _syncSaveSeq) return ok;
     if (ok) {
-      _syncQueueInOverflow = true;
+      _syncOverflowState = 'stored';
       _syncQueueHeldInMemory = false;
       // Drop the older, smaller copy so a restart doesn't replay it. Removing
       // can't hit the quota.
@@ -3264,6 +3281,7 @@ function saveSyncQueueToDevice() {
       renderSyncChip();
       return true;
     }
+    _syncOverflowState = 'none';
     if (!_syncQueueHeldInMemory) {
       _syncQueueHeldInMemory = true;
       renderSyncChip();
@@ -3280,6 +3298,18 @@ function saveSyncQueueToDevice() {
   return false;
 }
 
+/**
+ * The IndexedDB version of syncQueueTakenByAnotherTab: while this tab's queue
+ * lives there, a tab that took it over (this one looked closed: frozen in the
+ * background, or its heartbeat couldn't be written on a full device) removed
+ * the record. Uploading the in-memory copy then would send it a second time.
+ */
+async function syncOverflowTakenByAnotherTab() {
+  if (_syncOverflowState !== 'stored' || !syncQueue.some(item => !item.adopted)) return false;
+  const records = await overflowStep(() => _syncOverflow.readAll());
+  return _syncOverflowState === 'stored' && !records.some(r => r.key === SYNC_QUEUE_STORAGE_KEY);
+}
+
 // Changes kept in IndexedDB by this tab before a reload, or by a tab that is
 // gone, are taken back into this tab's queue: stored here first, and only then
 // removed from where they were. Marked `adopted` so a new edit on this screen,
@@ -3291,7 +3321,8 @@ export async function adoptOverflowSyncChanges() {
   // racing that clear must not bring back changes that already uploaded.
   const readOwn = !_ownOverflowRead;
   _ownOverflowRead = true;
-  const records = await _syncOverflow.readAll();
+  const records = await overflowStep(() => _syncOverflow.readAll());
+  if (readOwn && records.some(r => r.key === SYNC_QUEUE_STORAGE_KEY)) _syncOverflowUsed = true;
   if (!records.length) return;
   const storage = getLocalStorage();
   const now = Date.now();
@@ -3317,8 +3348,8 @@ export async function adoptOverflowSyncChanges() {
   }
   // Stored under this tab's key now (in localStorage, or as this tab's own
   // overflow record): the old records can go.
-  await Promise.all(take.filter(r => r.key !== SYNC_QUEUE_STORAGE_KEY || !_syncQueueInOverflow)
-    .map(r => _syncOverflow.remove(r.key)));
+  await Promise.all(take.filter(r => r.key !== SYNC_QUEUE_STORAGE_KEY || _syncOverflowState === 'none')
+    .map(r => overflowStep(() => _syncOverflow.remove(r.key))));
   if (fresh.length) {
     console.info(`[sync] took back ${fresh.length} change(s) kept in the device's larger storage`);
     updatePendingIndicator();
@@ -3454,7 +3485,7 @@ export async function adoptOrphanedSyncChanges() {
  * send those changes a second time.
  */
 function syncQueueTakenByAnotherTab() {
-  if (!syncQueue.some(item => !item.adopted) || _syncQueueHeldInMemory || _syncQueueInOverflow) return false;
+  if (!syncQueue.some(item => !item.adopted) || _syncQueueHeldInMemory || _syncOverflowState !== 'none') return false;
   const storage = getLocalStorage();
   if (!storage) return false;
   try { return storage.getItem(SYNC_QUEUE_STORAGE_KEY) === null; } catch (_) { return false; }
@@ -3526,7 +3557,13 @@ function updatePendingIndicator() {
 async function processSyncQueue() {
   if (_syncFlushing) return;
   if (!navigator.onLine || !fbReady || !syncQueue.length) return;
-  if (syncQueueTakenByAnotherTab()) {
+  let takenFromOverflow = false;
+  if (_syncOverflowState === 'stored') {
+    _syncFlushing = true;
+    try { takenFromOverflow = await syncOverflowTakenByAnotherTab(); } finally { _syncFlushing = false; }
+    if (takenFromOverflow) _syncOverflowState = 'none';
+  }
+  if (takenFromOverflow || syncQueueTakenByAnotherTab()) {
     // Another tab took these over and uploads them; sending them too would
     // record them twice. Keep only what was adopted here.
     syncQueue = syncQueue.filter(item => item.adopted);
@@ -9949,7 +9986,11 @@ function readImportDates() {
   const todayStr = today();
   _importRows = _importParsed.map(({ rawDate, excelSerial, ...r }) => {
     const { date, issue } = parseImportDate(rawDate, { order: _importDateOrder, todayStr, excelSerial });
-    return { ...r, num: r.num, date, dateIssue: issue, dateWritten: rawDate instanceof Date ? '' : String(rawDate ?? '').trim() };
+    // The blank-number id below must not depend on the day/month choice, or
+    // the same file imported twice with different choices adds its rows twice.
+    // Month-first is how these were always read, so older imports still match.
+    const idDate = issue === 'ambiguous' ? parseImportDate(rawDate, { order: 'mdy', todayStr, excelSerial }).date : date;
+    return { ...r, num: r.num, date, idDate, dateIssue: issue, dateWritten: rawDate instanceof Date ? '' : String(rawDate ?? '').trim() };
   });
   // Blank order numbers get a deterministic id (same row content => same id), so
   // re-importing the same file is caught by the duplicate check. Identical rows within
@@ -9957,9 +9998,9 @@ function readImportDates() {
   const seenBlank = {};
   _importRows.forEach(r => {
     if (r.num) return;
-    const key = `${r.date}|${r.chan}|${r.qty}|${r.price}|${r.notes}`;
+    const key = `${r.idDate}|${r.chan}|${r.qty}|${r.price}|${r.notes}`;
     seenBlank[key] = (seenBlank[key] || 0) + 1;
-    r.num = `IMP-${r.date}-${r.chan}-${r.qty}-${r.price}-${seenBlank[key]}`.replace(/\s+/g, '');
+    r.num = `IMP-${r.idDate}-${r.chan}-${r.qty}-${r.price}-${seenBlank[key]}`.replace(/\s+/g, '');
   });
 }
 
@@ -9973,6 +10014,7 @@ const IMPORT_DATE_NOTE = {
   ambiguous: 'Could be day-first or month-first. Read as chosen above.',
   unreadable: 'This date couldn’t be read, so it will go in as today. Fix it in the file and import again.',
   missing: 'No date in the file, so it will go in as today.',
+  shortYear: 'The year has only two digits, so check the date was read the right way round.',
 };
 
 function renderImportPreview() {
@@ -9986,6 +10028,7 @@ function renderImportPreview() {
         <option value="dmy"${_importDateOrder === 'dmy' ? ' selected' : ''}>day comes first (3 April)</option>
       </select></label>`);
   }
+  if (issues.shortYear) notes.push(`<strong>${issues.shortYear} date${issues.shortYear === 1 ? '' : 's'}</strong> ${issues.shortYear === 1 ? 'has' : 'have'} a two-digit year (like 26-10-01). Check ${issues.shortYear === 1 ? 'it was' : 'they were'} read the right way round below.`);
   const asToday = issues.unreadable + issues.missing;
   if (asToday) notes.push(`<strong>${asToday} date${asToday === 1 ? '' : 's'}</strong> couldn’t be read and will go in as today (marked <em>Check date</em> below). Fix ${asToday === 1 ? 'it' : 'them'} in the file and import again if that’s wrong.`);
   $('import-summary').innerHTML = `Found <strong>${_importRows.length} orders</strong> in ${_importSource} — review below then confirm.`
@@ -10013,7 +10056,9 @@ function confirmImport() {
   // Every row of this import carries its id, so the whole import can be undone
   // in one step from History (undoImport).
   const importExtra = { importId: newImportId(), importedAt: new Date().toISOString(), importName: _importFileName };
-  const existingNums = new Set(s.hist.map(h => h.num));
+  // A voided row doesn't count: after "Undo this import", the corrected file
+  // has to be able to come back in.
+  const existingNums = new Set(s.hist.filter(h => !h.voided).map(h => h.num));
   let imported = 0, skipped = 0;
   const added = [];
 
@@ -10054,20 +10099,23 @@ function undoImport(importId) {
   const s = getState(), book = getBook();
   const rows = (s.hist || []).filter(h => h.importId === importId && !h.voided);
   if (!rows.length) return;
-  const locked = rows.filter(h => h.artistSettlementId);
-  const undoable = rows.filter(h => !h.artistSettlementId);
-  if (!undoable.length) { showToast('Every row of this import is in an author settlement. Undo the settlement first.', 'warn', 5000); return; }
+  // As voiding one sale by hand: a sale paid out in an author settlement, or
+  // matched to a website order, stays.
+  const isLocked = h => h.artistSettlementId || h.webOrderId;
+  const locked = rows.filter(isLocked);
+  const undoable = rows.filter(h => !isLocked(h));
+  if (!undoable.length) { showToast('Every row of this import is in an author settlement or matched to a website order, so it stays.', 'warn', 5000); return; }
   const name = rows[0].importName ? ` from “${rows[0].importName}”` : '';
   if (!confirm(`Undo this import${name}? ${undoable.length} order${undoable.length === 1 ? '' : 's'} will be voided, and their stock and revenue reversed.`)) return;
   undoable.forEach(h => {
-    voidHistEntry(s, book, h);
+    voidHistEntry(s, book, h, { recompute: false });
     h.voidedReason = 'Import undone';
   });
   recomputeAfters(s, book);
   saveState(activeBook);
   renderHist();
   updateDash();
-  showToast(`Import undone: ${undoable.length} order${undoable.length === 1 ? '' : 's'} voided${locked.length ? `. ${locked.length} already in an author settlement ${locked.length === 1 ? 'was' : 'were'} kept` : ''}.`, locked.length ? 'warn' : 'ok', 5000);
+  showToast(`Import undone: ${undoable.length} order${undoable.length === 1 ? '' : 's'} voided${locked.length ? `. ${locked.length} in an author settlement or matched to a website order ${locked.length === 1 ? 'was' : 'were'} kept` : ''}.`, locked.length ? 'warn' : 'ok', 5000);
 }
 
 // Hidden for this visit only; comes back the next time the app opens.
