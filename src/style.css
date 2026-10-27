@@ -5221,7 +5221,11 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   .ch-book-card{border:var(--stroke) solid var(--rule-ink);box-shadow:var(--elev-3);}
   .ch-book-head{align-items:center;padding-bottom:var(--space-2);border-bottom:var(--stroke-hair) solid var(--border2);}
   .ch-book-title{font-family:var(--font-display);font-size:var(--text-xl);font-weight:400;letter-spacing:.01em;text-transform:uppercase;line-height:1.1;min-width:0;overflow-wrap:anywhere;}
-  .ch-panel{padding:14px;}
+  /* The combined panel heading the section was the one card here still on the soft hairline and
+     grey shadow; it now carries the same inked outline and hard shadow as the per-book cards
+     under it. The "TOP" tag is a square inked tag at a readable size like the other phone tags. */
+  .ch-panel{padding:14px;border:var(--stroke) solid var(--rule-ink);box-shadow:var(--elev-3);}
+  .pill.ch-top{font-size:var(--text-3xs);font-weight:800;padding:1px 6px;border-radius:var(--r2);border:var(--stroke-hair) solid currentColor;letter-spacing:var(--tracking-caps);}
   .ch-summary{gap:14px;}
   .ch-summary-stats{gap:18px;}
 }

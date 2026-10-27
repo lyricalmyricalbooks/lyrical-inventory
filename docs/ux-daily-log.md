@@ -210,6 +210,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-27 | visual | Phone Dashboard — expenses owed to artist | Made the "Awaiting payment" tag and the category chip on each owed expense square inked tags like the rest of the phone app, instead of two soft rounded lozenges inside a square card | (this PR) |
 | 2026-10-27 | visual | Phone Today — book picker row | Faded the right edge of the row of book buttons while more books sit off-screen, so a half-cut-off book reads as "swipe for more" | (this PR) |
 | 2026-10-27 | visual | Phone Website — Storage check tag | Put the "Needs a look" / "All good" tag on its own line above the Storage check sentence with a gap, instead of the tag butting against the first words and the sentence wrapping under it | (this PR) |
+| 2026-10-27 | visual | Phone All Books — combined sales by channel | Gave the combined revenue card the same bold outline and hard shadow as the per-book cards under it, and made its "TOP" tag a readable square inked tag instead of a tiny pale lozenge | (this PR) |
 
 ---
 
