@@ -627,6 +627,10 @@
 .theme-dark .ri-filter:hover .ri-count,
 .theme-dark .ri-filter.is-active .ri-count { color: var(--text2); }
 
+/* Phone tick-boxes: the ink fill would vanish into the dark card, so a ticked box steps up to the raised grey. */
+.theme-dark label > input[type=checkbox]:checked { background: var(--cream4); }
+.theme-dark label > input[type=checkbox]:checked::after { border-color: var(--text); }
+
 /* Tables: a quiet header row instead of the light theme's ink bar. */
 .theme-dark .tbl-wrap { border-color: var(--border); }
 .theme-dark .tbl thead { background: var(--cream2); }
