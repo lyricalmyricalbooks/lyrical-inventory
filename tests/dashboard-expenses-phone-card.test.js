@@ -16,3 +16,12 @@ describe('Dashboard expenses-owed list on a phone', () => {
     expect(layout).toMatch(/'d-exp-body': \{[^}]*card: true/);
   });
 });
+
+describe('phone receipt drop-zone', () => {
+  it('takes the ink outline and drops its dead height', () => {
+    const block = css.match(/@media \(max-width: 768px\) \{\s*\.dropzone \{([^}]*)\}/);
+    expect(block).not.toBeNull();
+    expect(block[1]).toMatch(/border:\s*var\(--stroke\) dashed var\(--rule-ink\)/);
+    expect(block[1]).toMatch(/min-height:\s*96px/);
+  });
+});
