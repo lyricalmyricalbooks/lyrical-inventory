@@ -102,3 +102,13 @@ describe('shipping pricing options fold', () => {
     expect(html).toContain('id="sp-customs-hs"');
   });
 });
+
+describe('upright phone: rates comparison before any rates exist', () => {
+  const rule = (sel) => phone.match(new RegExp(sel.replace(/[.*+?^${}()|[\]\\>#]/g, '\\$&') + '\\s*\\{([^}]*)\\}'))?.[1] ?? '';
+  it('drops the 300px card floor and the 2rem placeholder padding so the hint sizes to its content', () => {
+    expect(rule('#tab-shipping .shipping-results-container > .card')).toMatch(/min-height:\s*0\s*!important/);
+    const r = rule('#tab-shipping #ship-results-placeholder');
+    expect(r).toMatch(/padding:\s*var\(--space-4\)\s+var\(--space-2\)\s*!important/);
+    expect(r).toMatch(/font-size:\s*var\(--text-sm\)/);
+  });
+});
