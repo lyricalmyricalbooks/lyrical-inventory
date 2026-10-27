@@ -847,6 +847,23 @@
   input[type=color] { min-width: 44px; min-height: 44px; }
   /* Some checkboxes carried an inline width:auto that undid the 22px size. */
   input[type=checkbox], input[type=radio] { width: 22px !important; height: 22px !important; flex-shrink: 0; }
+
+  /* Tick-boxes inside a labelled row ("Group identical", "Remember me" and the like) were the
+     browser's own soft grey rounded box, the one control left without the bold ink outline the
+     text boxes and buttons around them carry. They are now a square with the 2px outline that
+     fills with ink and shows a tick when on. Table-cell select boxes, the on/off switches and the
+     email list ticks keep their own looks. */
+  :where(.tab-panel, .modal) label > input[type=checkbox]:not(:is(.tc-toggle-wrap, .email-card-check, .email-select-all) *) {
+    appearance: none; -webkit-appearance: none; position: relative; margin: 0; cursor: pointer;
+    background: var(--surface-card); border: var(--stroke) solid var(--rule-ink); border-radius: 0;
+  }
+  :where(.tab-panel, .modal) label > input[type=checkbox]:not(:is(.tc-toggle-wrap, .email-card-check, .email-select-all) *):checked { background: var(--surface-inverse); }
+  :where(.tab-panel, .modal) label > input[type=checkbox]:not(:is(.tc-toggle-wrap, .email-card-check, .email-select-all) *):checked::after {
+    content: ''; position: absolute; left: 6px; top: 1px; width: 6px; height: 12px;
+    border: solid var(--content-on-inverse); border-width: 0 3px 3px 0; transform: rotate(45deg);
+  }
+  :where(.tab-panel, .modal) label > input[type=checkbox]:not(:is(.tc-toggle-wrap, .email-card-check, .email-select-all) *):focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  :where(.tab-panel, .modal) label > input[type=checkbox]:not(:is(.tc-toggle-wrap, .email-card-check, .email-select-all) *):disabled { opacity: .35; cursor: not-allowed; }
 }
 
 /* Book dashboard header strip. The wrap rule above targets .dash-context, but

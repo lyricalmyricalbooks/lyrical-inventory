@@ -25,3 +25,13 @@ test('phone form fields carry the same 2px ink outline as cards and buttons', ()
   expect(rule).not.toBeNull();
   expect(styles.indexOf(rule[0])).toBeGreaterThan(styles.indexOf('@media (max-width: 768px){'));
 });
+
+test('phone tick-boxes are square with the 2px ink outline, ink-filled when on', () => {
+  const dark = readFileSync(path.join(__dirname, '../src/styles/theme-dark.css'), 'utf8');
+  const base = phone.slice(phone.indexOf('label > input[type=checkbox]:not('));
+  expect(base).toMatch(/appearance: none/);
+  expect(base).toMatch(/border: var\(--stroke\) solid var\(--rule-ink\); border-radius: 0/);
+  expect(base).toContain('.tc-toggle-wrap');
+  expect(phone).toMatch(/:checked \{ background: var\(--surface-inverse\)/);
+  expect(dark).toMatch(/\.theme-dark label > input\[type=checkbox\]:checked \{ background: var\(--cream4\)/);
+});
