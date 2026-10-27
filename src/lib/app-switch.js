@@ -125,6 +125,58 @@ export function parseWebsiteOrderHash(hash) {
   return id;
 }
 
+/** The hashes that open one of this app's books, or its search: `#book=<id>`, `#search=<text>`. */
+export const BOOK_HASH_KEY = 'book';
+export const SEARCH_HASH_KEY = 'search';
+/** The longest search text a link may carry. */
+export const SEARCH_TEXT_MAX = 100;
+
+// One of this app's book ids (a slug the catalog uses as a database key).
+const BOOK_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,119}$/;
+
+function hashValue(hash, key) {
+  const raw = clean(hash).replace(/^#/, '');
+  const prefix = `${key}=`;
+  if (!raw.startsWith(prefix)) return null;
+  try { return decodeURIComponent(raw.slice(prefix.length)); } catch (_) { return null; }
+}
+
+/**
+ * The book a `#book=<inventoryBookId>` link names, or null. Anything that
+ * isn't exactly that (another hash, a malformed id) is null.
+ */
+export function parseBookHash(hash) {
+  const value = hashValue(hash, BOOK_HASH_KEY);
+  if (value === null) return null;
+  const id = clean(value);
+  return BOOK_ID.test(id) ? id : null;
+}
+
+/**
+ * The text a `#search=<text>` link fills the search with, or null: decoded,
+ * one line, at most SEARCH_TEXT_MAX characters. Empty text is null.
+ */
+export function parseSearchHash(hash) {
+  const value = hashValue(hash, SEARCH_HASH_KEY);
+  if (value === null) return null;
+  const text = String(value).replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, SEARCH_TEXT_MAX).trim();
+  return text || null;
+}
+
+/** The website admin opened on one website book, in its book editor. */
+export function websiteBookUrl(bookId, base = _admin) {
+  const id = clean(bookId);
+  if (!id) return base;
+  return `${base}#catalog/book/${encodeURIComponent(id)}`;
+}
+
+/** The website admin's search, with `text` filled in. */
+export function websiteSearchUrl(text, base = _admin) {
+  const t = clean(text).slice(0, SEARCH_TEXT_MAX);
+  if (!t) return base;
+  return `${base}#search=${encodeURIComponent(t)}`;
+}
+
 /** The origin of an address ('' when it has none, like an Android app referrer). */
 export function originOf(url) {
   try {

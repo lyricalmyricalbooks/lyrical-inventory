@@ -720,9 +720,11 @@ tr.hist-row:hover {
 .theme-toggle-btn:active .ttb-ico{transform:scale(.9);}
 /* Notifications and review inbox share the theme chip's look; publisher eyes only. */
 #pw-app:not(.pub-shell) .hdr-notif-btn,
-#pw-app:not(.pub-shell) .hdr-review-btn{display:none;}
+#pw-app:not(.pub-shell) .hdr-review-btn,
+#pw-app:not(.pub-shell) .hdr-search-btn{display:none;}
 .hdr-notif-btn:hover .ttb-ico,
-.hdr-review-btn:hover .ttb-ico{transform:none;}
+.hdr-review-btn:hover .ttb-ico,
+.hdr-search-btn:hover .ttb-ico{transform:none;}
 .hdr-notif-badge{position:absolute;top:-6px;right:-8px;margin:0;pointer-events:none;}
 .hdr-notif-badge[hidden]{display:none;}
 .hdr-review-badge{position:absolute;top:-6px;right:-8px;margin:0;pointer-events:none;}

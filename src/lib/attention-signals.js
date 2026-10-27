@@ -634,6 +634,15 @@ function automationSignals(ctx, out) {
       fix: openAction('website-shop-books', 'See them'),
     });
   }
+  const detailDiffs = Number(site.detailDiffs) || 0;
+  if (detailDiffs > 0) {
+    out.push({
+      id: 'website-detail-diffs', group: 'website', status: 'info', icon: '✎',
+      label: `${detailDiffs} book ${plural(detailDiffs, 'detail differs', 'details differ')} from the website`,
+      detail: 'A title, author, ISBN or price says something different on your website. Copy the website’s into this app, or leave yours as it is.',
+      fix: openAction('website-detail-diffs', 'See them'),
+    });
+  }
   for (const book of (site.storageMissing || [])) {
     const n = Number(book && book.count) || 0;
     if (!n) continue;
