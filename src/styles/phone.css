@@ -1117,6 +1117,10 @@
   #tab-consignment .store-actions .phone-more-panel > .danger-btn { background: transparent; border-color: var(--status-critical); color: var(--status-critical); box-shadow: none; }
   #tab-consignment .store-actions .phone-more-panel > .danger-btn:hover { background: var(--status-critical-bg); }
 
+  /* Settings → Book Catalog: Remove keeps its red ink but gets the bold outline Edit has,
+     so it no longer reads as a faded, switched-off button beside it. */
+  .catalog-card .catalog-actions .btn.danger-btn { border-color: var(--status-critical); color: var(--status-critical); }
+
   /* Invoices: status, then a full-width action row; Remind/Chase leads. */
   #invoices-list .invoice-card .inv-c-actions { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-2); }
   #invoices-list .invoice-card .inv-status { align-self: flex-start; }

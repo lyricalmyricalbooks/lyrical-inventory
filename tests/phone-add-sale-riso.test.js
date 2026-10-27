@@ -43,3 +43,10 @@ test('phone tick-boxes are square with the 2px ink outline, ink-filled when on',
   expect(phone).toMatch(/:checked \{ background: var\(--surface-inverse\)/);
   expect(dark).toMatch(/\.theme-dark label > input\[type=checkbox\]:checked \{ background: var\(--cream4\)/);
 });
+
+test('upright phone: Book Catalog Remove button gets a solid red outline, not a faint hairline', () => {
+  const rule = phone.match(/\.catalog-card \.catalog-actions \.btn\.danger-btn\s*\{([^}]*)\}/);
+  expect(rule).not.toBeNull();
+  expect(rule[1]).toMatch(/border-color:\s*var\(--status-critical\)/);
+  expect(rule[1]).toMatch(/color:\s*var\(--status-critical\)/);
+});
