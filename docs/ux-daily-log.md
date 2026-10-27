@@ -212,6 +212,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-27 | visual | Phone Website — Storage check tag | Put the "Needs a look" / "All good" tag on its own line above the Storage check sentence with a gap, instead of the tag butting against the first words and the sentence wrapping under it | (this PR) |
 | 2026-10-27 | visual | Phone All Books — combined sales by channel | Gave the combined revenue card the same bold outline and hard shadow as the per-book cards under it, and made its "TOP" tag a readable square inked tag instead of a tiny pale lozenge | (this PR) |
 
+| 2026-10-27 | visual | Phone Shipping — key box and destination picker | Gave the Shippo key box and the "Load destination from" picker the same bold ink outline as the fields under them, instead of faint beige hairline boxes | (this PR) |
 ---
 
 ## Considered and rejected

@@ -26,6 +26,14 @@ test('phone form fields carry the same 2px ink outline as cards and buttons', ()
   expect(styles.indexOf(rule[0])).toBeGreaterThan(styles.indexOf('@media (max-width: 768px){'));
 });
 
+test('phone Shipping key box and destination picker take the ink outline too', () => {
+  const styles = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
+  expect(styles).toMatch(/\.ship-key-setup input\{border:var\(--stroke\) solid var\(--border-strong\) !important;\}/);
+  expect(styles).toMatch(/\.ship-key-setup input:focus\{border-color:var\(--gold\) !important;\}/);
+  expect(styles).toMatch(/\.custom-dest-wrapper \.custom-dest-trigger\{border-width:var\(--stroke\);\}/);
+  expect(styles).toMatch(/\.custom-dest-trigger:not\(:hover\):not\(:focus\):not\(\.active\)\{border-color:var\(--border-strong\);\}/);
+});
+
 test('phone tick-boxes are square with the 2px ink outline, ink-filled when on', () => {
   const dark = readFileSync(path.join(__dirname, '../src/styles/theme-dark.css'), 'utf8');
   const base = phone.slice(phone.indexOf('label > input[type=checkbox]:not('));

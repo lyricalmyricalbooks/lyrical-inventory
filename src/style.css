@@ -4804,6 +4804,13 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   .row-between{flex-wrap:wrap;gap:var(--space-2);}
   .ship-key-setup{flex-wrap:wrap;width:100%;}
   .ship-key-setup input{flex:1 1 180px;width:auto !important;}
+  /* The Shippo key box and the destination picker sit outside .form-group, so they kept the faint
+     hairline while the fields right under them took the 2px ink outline. Same outline here; the
+     key box's hairline is an inline style (hence !important), the picker keeps its gold hover/focus. */
+  .ship-key-setup input{border:var(--stroke) solid var(--border-strong) !important;}
+  .ship-key-setup input:focus{border-color:var(--gold) !important;}
+  .custom-dest-wrapper .custom-dest-trigger{border-width:var(--stroke);}
+  .custom-dest-wrapper .custom-dest-trigger:not(:hover):not(:focus):not(.active){border-color:var(--border-strong);}
   .tc-ledger-actions{flex-wrap:wrap;}
   .ship-duo{grid-template-columns:1fr !important;}
 
