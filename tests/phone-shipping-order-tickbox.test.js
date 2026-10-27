@@ -18,3 +18,20 @@ test('both the row boxes and select-all are wrapped in the tap label', () => {
   expect(shipping).toMatch(/<label class="ship-check-hit"><input type="checkbox" class="ship-order-checkbox"/);
   expect(shipping).toMatch(/<label class="ship-check-hit"><input type="checkbox" id="selectAllShipOrders"/);
 });
+test('on/off switches are square inked slots with a square knob on a phone', () => {
+  const track = phone.match(/:is\(\.switch \.track, \.pm-switch \.pm-track\) \{([^}]*)\}/);
+  expect(track).not.toBeNull();
+  expect(track[1]).toMatch(/border: var\(--stroke\) solid var\(--rule-ink\)/);
+  expect(track[1]).toMatch(/border-radius: 0/);
+  const knob = phone.match(/:is\(\.switch \.track, \.pm-switch \.pm-track\)::before \{([^}]*)\}/);
+  expect(knob).not.toBeNull();
+  expect(knob[1]).toMatch(/border-radius: 0/);
+  expect(knob[1]).toMatch(/background: var\(--rule-ink\)/);
+  // The dark-mode rim is a more specific rule, so only !important removes it.
+  expect(knob[1]).toMatch(/box-shadow: none !important/);
+});
+
+test('the knob still travels the full slot when on, and has a focus ring', () => {
+  expect(phone).toMatch(/input:checked \+ :is\(\.track, \.pm-track\)::before \{ transform: translateX\(18px\)/);
+  expect(phone).toMatch(/input:focus-visible \+ :is\(\.track, \.pm-track\) \{ outline: 2px solid var\(--gold-text\)/);
+});

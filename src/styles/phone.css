@@ -2277,3 +2277,16 @@
 @media (max-width: 768px) {
   #tab-taxcenter .rec-card-title { font-family: 'Anton', sans-serif; font-weight: 400; font-size: var(--text-xl); text-transform: uppercase; letter-spacing: var(--tracking-caps); line-height: 1.1; color: var(--content-primary); }
 }
+
+/* On/off switches (Stripe auto-record, payment-method lists, Big Cartel automation…) were a soft
+   rounded pill with a round white knob and a faint beige outline, the one round control left among
+   square inked tick-boxes, buttons and cards. They are now a square slot with the 2px ink outline
+   and a square ink knob that slides across; on = the accent fill. Same size as before, so no row
+   changes height. The knob's dark-mode rim is dropped because an ink knob needs none. */
+@media (max-width: 768px) {
+  :is(.switch .track, .pm-switch .pm-track) { border: var(--stroke) solid var(--rule-ink); border-radius: 0; background: var(--surface-card); }
+  :is(.switch .track, .pm-switch .pm-track)::before { left: 4px; top: 4px; width: 14px; height: 14px; border-radius: 0; background: var(--rule-ink); box-shadow: none !important; }
+  :is(.switch, .pm-switch) input:checked + :is(.track, .pm-track) { background: var(--gold); border-color: var(--rule-ink); }
+  :is(.switch, .pm-switch) input:checked + :is(.track, .pm-track)::before { transform: translateX(18px); }
+  :is(.switch, .pm-switch) input:focus-visible + :is(.track, .pm-track) { outline: 2px solid var(--gold-text); outline-offset: 2px; }
+}
