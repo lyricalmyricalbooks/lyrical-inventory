@@ -2103,6 +2103,9 @@
   /* Shipping: the "10 still needed" / "Ready to quote" tag above Get rates was a soft pill, the one
      rounded shape on a screen of square inked cards. Square inked caps tag, like the others. */
   #tab-shipping .ship-readiness > .pill { border-radius: var(--r2); border: var(--stroke) solid currentColor; text-transform: uppercase; letter-spacing: var(--tracking-caps); font-variant-numeric: tabular-nums; }
+  /* Dashboard: the "Approval emails on/off" tag under the book name was a soft rounded lozenge, the
+     one rounded shape in the book header. Square inked caps tag, like the others. */
+  #d-notify-status { border-radius: var(--r2); border: var(--stroke) solid currentColor; font-weight: 800; text-transform: uppercase; letter-spacing: var(--tracking-caps); }
   /* Column widths follow the captions: Sent and Sold are short, "On shelf" is the
      widest caption and used to touch the Owed divider, Owed carries a money figure. */
   #tab-consignment .store-kpis {
