@@ -206,6 +206,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-26 | visual | Phone Consignment — store rows | Moved the "Payment due" tag under each store's name and city so the city line no longer folds onto two lines, and the amount now sits level with the store name | (this PR) |
 | 2026-10-26 | visual | Phone Shipping — readiness tag | Made the "10 still needed" / "Ready to quote" tag above Get rates a square inked caps tag like the other tags on a phone, instead of the one soft rounded pill on the screen | (this PR) |
 | 2026-10-27 | visual | Phone tick-boxes ("Group identical" and other labelled tick-boxes) | Made tick-boxes on a phone square with the bold ink outline, filled with ink and a tick when on, instead of the browser's soft grey rounded box | (this PR) |
+| 2026-10-27 | visual | Phone Order History — figure strip | Lined up the Total printed / Stock on hand / Distributed figures and their captions on one level across the three tiles, instead of the middle figure sitting lower than its neighbours | (this PR) |
 
 ---
 

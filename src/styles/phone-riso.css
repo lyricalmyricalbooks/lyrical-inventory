@@ -538,4 +538,15 @@
   }
   .pub-shell .hist-kpi-card::after, .pub-shell .hist-kpi-icon { display: none; }
   .pub-shell .hist-kpi-card.is-lead { border-top: 4px solid var(--book-accent, var(--gold)); }
+  /* The three figures share one set of rows (label / figure / caption), so a label that wraps to two
+     lines pushes every figure down together instead of leaving the middle one lower than its
+     neighbours. The lead tile's thicker rule is made up in the others' top padding. */
+  .pub-shell #tab-history .hist-kpi-container { grid-template-rows: auto; }
+  .pub-shell #tab-history .hist-kpi-card {
+    display: grid; grid-row: span 3; grid-template-rows: subgrid; row-gap: var(--space-1); align-content: start;
+    padding: calc(var(--space-2) + 4px - var(--stroke)) var(--space-1) 0;
+  }
+  .pub-shell #tab-history .hist-kpi-card.is-lead { padding-top: var(--space-2); }
+  .pub-shell #tab-history .hist-kpi-content { display: contents; }
+  .pub-shell #tab-history :is(.hist-kpi-label, .hist-kpi-val) { align-self: end; }
 }
