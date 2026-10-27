@@ -32,6 +32,15 @@ describe('escapeHtml', () => {
     expect(escapeHtml(evil)).toBe('&quot; onmouseover=&quot;alert(1)');
   });
 
+  it('returns text with nothing to escape unchanged, call after call', () => {
+    // The fast path must not carry regex state between calls.
+    for (let i = 0; i < 3; i++) {
+      expect(escapeHtml('Plain Book Title')).toBe('Plain Book Title');
+      expect(escapeHtml("Tom's & Co")).toBe('Tom&#39;s &amp; Co');
+      expect(escapeHtml('a<b')).toBe('a&lt;b');
+    }
+  });
+
   it('returns empty string for null/undefined', () => {
     expect(escapeHtml(null)).toBe('');
     expect(escapeHtml(undefined)).toBe('');
