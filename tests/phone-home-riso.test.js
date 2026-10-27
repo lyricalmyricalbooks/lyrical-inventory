@@ -32,3 +32,12 @@ test('"Today so far" is an inked slip over the shared upload pill', () => {
   // Only on phones: the strip is hidden everywhere else.
   expect(phone).toMatch(/\.phone-eyebrow, \.today-sofar \{ display: none; \}/);
 });
+
+test('the "open" tag on the To-do card stays square and inked in the later phone sheet too', () => {
+  const riso = readFileSync(path.join(__dirname, '../src/styles/phone-riso.css'), 'utf8');
+  const block = riso.match(/\.pub-shell #tab-today \.today-card \.today-card-count \{([^}]*)\}/)[1];
+  expect(block).toMatch(/border: var\(--stroke\) solid var\(--gold-text\)/);
+  expect(block).toMatch(/border-radius: var\(--r2\)/);
+  expect(block).not.toMatch(/--r-pill/);
+  expect(block).toMatch(/letter-spacing: var\(--tracking-caps\)/);
+});

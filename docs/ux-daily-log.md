@@ -254,3 +254,4 @@ looked at, and re-proposing it costs a run.
 | 2026-10-26 | visual | Phone Customers — buyer card buttons | Gave the + List, Unsubscribe and Details buttons on each buyer card room for their own words, so "Unsubscribe" no longer touches its border | (this PR) |
 | 2026-10-26 | visual | Phone ledger lists — record cards | Squared the corners on the cards that make up every phone list (expenses, orders, consignment, owed-to-artist), so they match the square inked cards around them instead of being the one slightly rounded shape | (this PR) |
 | 2026-10-27 | visual | Phone Settings — Book Catalog | Gave the Remove button beside each book a solid red outline like Edit has, instead of a faint pink hairline that looked switched off | (this PR) |
+| 2026-10-27 | visual | Phone Today — "13 open" tag | Made the "13 open" tag on the To-do card a square inked caps tag like the other tags on a phone, instead of the one soft rounded lozenge on the screen | (this PR) |
