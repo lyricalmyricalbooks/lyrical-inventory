@@ -33,6 +33,7 @@ import {
 } from '../main.js';
 import { BOOKS, BOOK_LIST, states, defaultState } from '../core/store.js';
 import { ensurePdfJs } from './invoices.js';
+import { dropFilesIntoInput, setDropzoneDrag } from '../lib/dropzone.js';
 import { TC_CATEGORIES, _tcOpenTripName, openArtistPayoutEditor } from './tax-entries.js';
 import {
   _localReceiptCell,
@@ -5032,16 +5033,10 @@ function tcExpFileClear(ev) {
   setPendingWebcamReceipt(null);
   tcExpFileChosen();
 }
-function tcExpFileDragOver(ev) { ev.preventDefault(); const dz = $('tc-exp-dropzone'); if (dz) dz.classList.add('drag'); }
-function tcExpFileDragLeave(ev) { ev.preventDefault(); const dz = $('tc-exp-dropzone'); if (dz) dz.classList.remove('drag'); }
+function tcExpFileDragOver(ev) { setDropzoneDrag(ev, 'tc-exp-dropzone', true); }
+function tcExpFileDragLeave(ev) { setDropzoneDrag(ev, 'tc-exp-dropzone', false); }
 function tcExpFileDrop(ev) {
-  ev.preventDefault();
-  const dz = $('tc-exp-dropzone'); if (dz) dz.classList.remove('drag');
-  const input = $('tc-exp-file');
-  if (input && ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files.length > 0) {
-    try { input.files = ev.dataTransfer.files; } catch (e) { /* older browsers: ignore */ }
-    tcExpFileChosen();
-  }
+  if (dropFilesIntoInput(ev, 'tc-exp-dropzone', 'tc-exp-file')) tcExpFileChosen();
 }
 
 async function testChitChatsConnectionHandler() {
