@@ -229,6 +229,15 @@
   }
   .pub-shell #tab-today .today-date::before { content: ""; width: 8px; height: 8px; flex: none; background: var(--gold); }
   .pub-shell #tab-today .today-books { display: flex; gap: 6px; margin: 14px calc(-1 * var(--phone-gutter)) 0; padding: 0 var(--phone-gutter) var(--space-1); overflow-x: auto; scrollbar-width: none; }
+  /* A fourth book runs off the screen edge with nothing to say the row scrolls. While chips
+     remain to the right, the edge fades into the page, like the bottom menu's. */
+  .pub-shell #tab-today .today-books::after {
+    content: ""; position: sticky; right: calc(-1 * var(--phone-gutter));
+    flex: 0 0 48px; margin: 0 calc(-1 * var(--phone-gutter)) 0 -48px; align-self: stretch;
+    background: linear-gradient(to right, transparent, var(--surface-page) 85%);
+    pointer-events: none; opacity: 0; transition: opacity .15s ease;
+  }
+  .pub-shell #tab-today .today-books.has-more-right::after { opacity: 1; }
   .pub-shell #tab-today .today-ledger { display: grid; margin-top: 18px; }
   /* The ledger carries the day now; the old slip keeps only its upload line. */
   .pub-shell #tab-today .today-sofar { display: flex; margin: var(--space-3) 0 0; border: 0; background: none; box-shadow: none; }

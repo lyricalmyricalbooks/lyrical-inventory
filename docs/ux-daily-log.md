@@ -208,6 +208,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-27 | visual | Phone tick-boxes ("Group identical" and other labelled tick-boxes) | Made tick-boxes on a phone square with the bold ink outline, filled with ink and a tick when on, instead of the browser's soft grey rounded box | (this PR) |
 | 2026-10-27 | visual | Phone Order History — figure strip | Lined up the Total printed / Stock on hand / Distributed figures and their captions on one level across the three tiles, instead of the middle figure sitting lower than its neighbours | (this PR) |
 | 2026-10-27 | visual | Phone Dashboard — expenses owed to artist | Made the "Awaiting payment" tag and the category chip on each owed expense square inked tags like the rest of the phone app, instead of two soft rounded lozenges inside a square card | (this PR) |
+| 2026-10-27 | visual | Phone Today — book picker row | Faded the right edge of the row of book buttons while more books sit off-screen, so a half-cut-off book reads as "swipe for more" | (this PR) |
 
 ---
 
