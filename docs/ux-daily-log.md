@@ -216,6 +216,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-27 | visual | Phone on/off switches (Stripe payments, payment methods, Big Cartel automation) | Made the on/off switches square inked slots with a square ink knob and a red fill when on, instead of soft rounded pills with a faint outline | (this PR) |
 | 2026-10-27 | visual | Phone Manual entry — Required tag and order total | Made the "Required" tag a square inked caps tag and the order-total box an inked slab with the offset shadow (and a square "In stock" tag), instead of a pink lozenge and a pale hairline box that were the only soft shapes in the form | (this PR) |
 ---
+| 2026-10-27 | visual | Phone primary buttons (+ Add store, Set payment link and others) | Gave the book-coloured buttons the same bold ink outline as the buttons beside them, instead of being the only button on the screen with no dark edge | (this PR) |
 
 ## Considered and rejected
 
