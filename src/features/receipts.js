@@ -39,6 +39,7 @@ import { updateDash } from './dashboard.js';
 import { TAX_CATEGORIES, TC_CATEGORIES, _editingExpense } from './tax-entries.js';
 import { fetchSheetsCapabilities, notifyPublisherSubmission } from './sheets-bridge.js';
 import { escapeHtml } from '../lib/html.js';
+import { dropFilesIntoInput, setDropzoneDrag } from '../lib/dropzone.js';
 import { runOpenRouterRead, friendlyOpenRouterError } from '../lib/openrouter-chat.js';
 import {
   _friendlyScanError,
@@ -2267,16 +2268,10 @@ function expFileClear(ev, index) {
   renderExpFileList();
   _expReceiptsChanged(before);
 }
-function expFileDragOver(ev) { ev.preventDefault(); const dz = $('exp-dropzone'); if (dz) dz.classList.add('drag'); }
-function expFileDragLeave(ev) { ev.preventDefault(); const dz = $('exp-dropzone'); if (dz) dz.classList.remove('drag'); }
+function expFileDragOver(ev) { setDropzoneDrag(ev, 'exp-dropzone', true); }
+function expFileDragLeave(ev) { setDropzoneDrag(ev, 'exp-dropzone', false); }
 function expFileDrop(ev) {
-  ev.preventDefault();
-  const dz = $('exp-dropzone'); if (dz) dz.classList.remove('drag');
-  const input = $('exp-file');
-  if (input && ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files.length > 0) {
-    try { input.files = ev.dataTransfer.files; } catch (e) { /* older browsers: ignore */ }
-    expFileChosen();
-  }
+  if (dropFilesIntoInput(ev, 'exp-dropzone', 'exp-file')) expFileChosen();
 }
 
 // Project-ledger receipt scan. The shared runner also fills category and ref,
@@ -5101,11 +5096,10 @@ function batchExpenseFilesChosen() {
   // the File objects now, the input is only a doorway.
   input.value = '';
 }
-function batchExpenseDragOver(ev) { ev.preventDefault(); const dz = $('bx-dropzone'); if (dz) dz.classList.add('drag'); }
-function batchExpenseDragLeave(ev) { ev.preventDefault(); const dz = $('bx-dropzone'); if (dz) dz.classList.remove('drag'); }
+function batchExpenseDragOver(ev) { setDropzoneDrag(ev, 'bx-dropzone', true); }
+function batchExpenseDragLeave(ev) { setDropzoneDrag(ev, 'bx-dropzone', false); }
 function batchExpenseDrop(ev) {
-  ev.preventDefault();
-  const dz = $('bx-dropzone'); if (dz) dz.classList.remove('drag');
+  setDropzoneDrag(ev, 'bx-dropzone', false);
   if (ev.dataTransfer && ev.dataTransfer.files) _batchExpenseAddFiles(ev.dataTransfer.files);
 }
 
