@@ -305,3 +305,72 @@ suggestion and that the owner hasn't marked **Not for the shop** (`systemStatus/
 { at, items: [{ id, title, author, isbn, price, currency }] }`, ≤ 100; `ignoredAppBooks { id: ISO }`). Inventory ›
 Inventory app link lists them with **Add to the shop**: a new *draft* book filled with title, author, ISBN and price (when
 the app's currency is CA$), matched to that app book once saved (op `linkNewBook`). Nothing is published by itself.
+
+## Book details in step, and one search (27 October 2026)
+
+Two more ways the apps help each other. Neither ever changes the other app's data: each app only offers to change its
+own books, and only after the owner presses a button.
+
+### Book details that differ
+
+`websiteLink/catalog` (see above) gains the website's **linked** editions, written with the same hourly check:
+
+```js
+linked: [ {                               // ≤ 500: every printed website edition matched to an app book
+  key: "<bookId>|<variantId or ''>", bookId, variantId: null | "…", inventoryBookId,
+  title,                                  // the website book's own title (no edition name)
+  edition: "" | "Signed", author: "",     // author = the website's Author / contributors box
+  isbn: "",                               // the edition's own ISBN, else the book's
+  price: 40 | null,                       // CAD regular price: the edition's own (an edition without one has none),
+                                          // the book's for a book without editions; null when none
+  sharedWith: 1,                          // how many website editions are matched to this same app book
+} ]
+```
+
+Both apps work out the differences with the same rule (`detailDifferences(linked, appBooks)`; the website's copy is in
+`functions/inventoryLink.js`, and `docs/link-details-fixture.json` is the same file in both repos, tested by both):
+
+- Group the linked editions by `inventoryBookId`. Skip a group whose editions belong to more than one website book.
+- **Title** and **Author** are compared for every group (website book's title / author vs the app book's).
+- **ISBN** and **Price** only when `sharedWith` is 1 (one website edition for that app book), and price only when the
+  app book's currency is Canadian dollars: empty, or `CAD`, `CA$`, `C$` or `$` (any case).
+- Values are compared after tidying: text trimmed with runs of spaces made one; ISBN with spaces and hyphens removed,
+  upper case, and a lone `—` treated as empty; price as two decimals (`"40.00"`), empty when not above 0.
+- Equal values, or both empty, are not a difference.
+- Each difference is `{ id: "<inventoryBookId>|<field>", inventoryBookId, bookId, variantId, field: "title" | "author" |
+  "isbn" | "price", title, shop, app }`. `variantId` is the edition's (null for a group of several), `title` is the website
+  title for display, and `shop`/`app` are the tidied values. Sorted by title, then title, author, isbn, price. At most 100.
+- A difference's **signature** is `JSON.stringify([shop, app])`. A "Leave as is" choice is remembered with it, so the
+  difference comes back only when either value changes. Kept differences are left out *before* the list is cut to 100
+  (`detailDifferences(linked, appBooks, kept)`), so they never hide later ones.
+- An app only offers to copy a value that isn't empty: the website offers **Use the app's** when `app` isn't empty, the
+  app offers **Use the website's** when `shop` isn't empty. Nothing ever blanks a field.
+
+Where they show:
+- **Website:** Inventory › Inventory app link › **Details that differ from the app** (and an admin alert). **Use the
+  app's** writes that one field of the website book (title → title, author → Author / contributors, ISBN → the edition's
+  ISBN when it has its own, else the book's, price → the edition's price, or the regular price of a book without
+  editions) after the server re-reads both sides and finds the same signature (op `applyDetail`); a book-level price is
+  refused while the book is on sale (shoppers pay the sale price), with a pointer to the book editor; **Leave as is** (op `keepDetail`) stores
+  `systemStatus/inventoryLink.keptDetails { id: signature }`. Opening the page re-checks against the app (op `checkDetails`).
+- **App:** its own list, **Details that differ from the website**, worked out from `catalog.linked` and the app's own books,
+  with **Use the website's** (changes the app book through its normal save) and **Leave as is** (kept in the app's own
+  storage, by id and signature).
+- Neither app puts this list in the to-do list it sends to the other one: each shows its own.
+
+### One search box
+
+Each app's search also finds the other app's things and opens them in the other app (through the app switch):
+
+| Typed in | Also finds | Opens |
+|---|---|---|
+| Website admin search | the app's books (title, author, ISBN) from `systemStatus/inventoryLink.appBookIndex { at, items: [{ id, title, author, isbn }] }` (≤ 1000, hourly) | `INVENTORY_APP_URL#book=<inventoryBookId>` |
+| Website admin search | always a last row **Search the inventory app for “…”** (when the link is connected) | `INVENTORY_APP_URL#search=<text>` |
+| Inventory app search | website books (`catalog.books` and `catalog.linked`, title/author/ISBN) | `<website admin>#catalog/book/<bookId>` |
+| Inventory app search | website orders it holds (`websiteOrders`, by order number) | `<website admin>#orders/<orderId>` |
+| Inventory app search | always a last row **Search the website for “…”** | `<website admin>#search=<text>` |
+
+New deep links (text is URI-encoded, at most 100 characters; anything else in a hash is ignored):
+- App: `#book=<inventoryBookId>` opens that book, `#search=<text>` opens the app's search with the text filled in.
+- Website: `#catalog/book/<bookId>` opens that book in the book editor, `#search=<text>` opens the admin search with the
+  text filled in. After opening, each app puts its own address back, so a reload doesn't open it again.

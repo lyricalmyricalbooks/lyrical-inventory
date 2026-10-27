@@ -39,44 +39,64 @@ beforeEach(async () => {
 
 afterEach(() => { win.sessionStorage.removeItem('lm-unlocked'); });
 
+// The author's side lives on the money card at the top of the dashboard; the
+// "Money to send to your publisher" banner steps aside for it.
+const card = () => document.getElementById(`artist-settlement-${BOOK}`);
+const cardPay = () => card()?.querySelector('.ps-receipt-actions a.btn');
+const cardNotice = () => card()?.querySelector('.ps-ledger-notice')?.textContent || '';
+function showAuthor() {
+  asAuthor();
+  app.main.renderArtistTransfers();
+  win.renderProfitSharingBreakdown(BOOK);
+}
+
 describe("the author's card", () => {
   it('asks for the one net payment, not the full sale amounts', () => {
     app.main.states[BOOK].settlementLink = { url: 'https://buy.stripe.com/net', amount: 232.21, key: 'settle-23221', v: 2 };
-    asAuthor();
-    app.main.renderArtistTransfers();
-    expect($('apb-amount').textContent).toBe('CA$232.21');
-    expect($('apb-detail').textContent).toContain('keep your CA$74.71 share');
-    expect($('apb-detail').textContent).toContain('the CA$267.76 your publisher owes you comes off');
-    const pay = $('apb-pay-btn');
-    expect(pay.getAttribute('href')).toBe('https://buy.stripe.com/net');
-    expect(pay.textContent).toBe('Pay CA$232.21 →');
+    showAuthor();
+    expect($('author-payment-banner').style.display).toBe('none');
+    expect(card().querySelector('.ps-settle-result .ps-stat-val').textContent).toBe('CA$232.21');
+    expect(card().textContent).toContain('keep your CA$74.71 share');
+    expect(card().textContent).toContain('CA$267.76');
+    expect(cardPay().getAttribute('href')).toBe('https://buy.stripe.com/net');
+    expect(cardPay().textContent).toBe('Pay CA$232.21 →');
     // The old full-amount sale link is no longer offered anywhere.
-    expect($('author-payment-banner').innerHTML).not.toContain('old-full-amount');
-    expect($('apb-transfers').textContent).toContain('Included in the payment above');
+    expect(card().innerHTML).not.toContain('old-full-amount');
   });
 
   it('says the link is on its way rather than offering a wrong amount', () => {
-    asAuthor();
-    app.main.renderArtistTransfers();
-    expect($('apb-amount').textContent).toBe('CA$232.21');
-    expect($('apb-detail').textContent).toMatch(/link is on its way/);
-    expect(document.querySelector('#author-payment-banner .metric-banner-actions').style.display).toBe('none');
+    showAuthor();
+    expect(card().querySelector('.ps-settle-result .ps-stat-val').textContent).toBe('CA$232.21');
+    expect(cardNotice()).toMatch(/link is on its way/);
+    expect(cardPay()).toBeNull();
   });
 
   it('ignores a link made for a different amount', () => {
     app.main.states[BOOK].settlementLink = { url: 'https://buy.stripe.com/stale', amount: 200, key: 'settle-20000', v: 2 };
-    asAuthor();
-    app.main.renderArtistTransfers();
-    expect(document.querySelector('#author-payment-banner .metric-banner-actions').style.display).toBe('none');
+    showAuthor();
+    expect(cardPay()).toBeNull();
   });
 
   it('has nothing to send when the publisher owes more', () => {
     app.main.states[BOOK].artistPayouts = [];
-    asAuthor();
-    app.main.renderArtistTransfers();
-    expect($('apb-amount').textContent).toBe('Nothing to send');
-    expect($('apb-detail').textContent).toMatch(/Your publisher owes you CA\$42\.50/);
-    expect($('apb-transfers').textContent).toContain('Settled when your publisher pays you');
+    showAuthor();
+    expect(card().querySelector('.ps-settle-result .ps-stat-label').textContent).toBe('The publisher sends you');
+    expect(card().querySelector('.ps-settle-result .ps-stat-val').textContent).toBe('CA$42.50');
+    expect(cardPay()).toBeNull();
+    // No payment link saved yet: the card asks for one, and offers the payout request.
+    expect(card().querySelector('[data-action="moneyCard.setUpPayLink"]')).not.toBeNull();
+    expect(card().querySelector('[data-action="moneyCard.requestPayout"]').dataset.book).toBe(BOOK);
+  });
+
+  it('brings the banner back for a sale still waiting on the publisher', () => {
+    win.authorSubmissions[BOOK] = { sales: { s1: { data: JSON.stringify({ num: 'ART-1', chan: 'Direct', qty: 1, price: 24, date: '2026-10-09', directToArtist: true }) } } };
+    try {
+      showAuthor();
+      expect($('author-payment-banner').style.display).toBe('');
+      expect($('apb-transfers').textContent).toContain('Waiting for your publisher');
+    } finally {
+      delete win.authorSubmissions[BOOK];
+    }
   });
 });
 
@@ -143,13 +163,11 @@ describe('new sales coming in', () => {
     await sellAtRegister(2);
     expect(win.calculateArtistEarnings(BOOK).owedToArtist).toBe(278.16);
     expect(panelNet()).toBe('CA$221.81');
-    expect(document.querySelector('#ps-dash-content .is-lead .ps-stat-val').textContent).toBe('CA$221.81');
     // The author's card follows, and the old link for CA$232.21 is not offered.
     app.main.states[BOOK].settlementLink = { url: 'https://buy.stripe.com/old', amount: 232.21, key: 'settle-23221', v: 2 };
-    asAuthor();
-    app.main.renderArtistTransfers();
-    expect($('apb-amount').textContent).toBe('CA$221.81');
-    expect(document.querySelector('#author-payment-banner .metric-banner-actions').style.display).toBe('none');
+    showAuthor();
+    expect(panelNet()).toBe('CA$221.81');
+    expect(cardPay()).toBeNull();
   });
 
   it('settles correctly when the author pays the older amount after a new sale', async () => {
@@ -173,10 +191,9 @@ describe('new sales coming in', () => {
       // … then a sale lowered the amount before the publisher's app recorded it.
       await sellAtRegister(2);
       app.main.states[BOOK].settlementLink = { url: 'https://buy.stripe.com/new', amount: 221.81, key: 'settle-22181', v: 2 };
-      asAuthor();
-      app.main.renderArtistTransfers();
-      expect($('apb-detail').textContent).toMatch(/Paid — thank you/);
-      expect(document.querySelector('#author-payment-banner .metric-banner-actions').style.display).toBe('none');
+      showAuthor();
+      expect(cardNotice()).toMatch(/Paid — thank you/);
+      expect(cardPay()).toBeNull();
     } finally {
       win.localStorage.removeItem('lm-author-paid-v2');
     }
@@ -199,18 +216,31 @@ describe('the settlement in the payouts list', () => {
   });
 });
 
-describe('the headline boxes when money runs both ways', () => {
-  it('shows the earnings owed beside the net balance, which leads', () => {
+describe('the money card when money runs both ways', () => {
+  it('leads with the net balance, and folds the lifetime figures and tiers under it', () => {
     win.renderProfitSharingBreakdown(BOOK);
-    const cards = [...document.querySelectorAll('#ps-dash-content .ps-stat-grid .ps-stat-card')];
-    const owed = cards.find(c => c.querySelector('.ps-stat-label').textContent === 'Owed to artist');
-    expect(owed.classList.contains('tone-amber')).toBe(true);
-    expect(owed.querySelector('.ps-stat-val').textContent).toBe('CA$267.76');
-    expect(owed.querySelector('.ps-stat-sub').textContent).toBe('comes off the net balance');
-    // Says which sales that figure comes from, not just the bare amount.
-    expect(owed.querySelector('.ps-stat-detail').textContent).toMatch(/^\d+(–\d+)?% of CA\$[\d,.]+ · \d+ cop(y|ies) sold since last payout$/);
-    const lead = document.querySelector('#ps-dash-content .ps-stat-card.is-lead');
-    expect(lead.querySelector('.ps-stat-label').textContent).toBe('Net balance');
-    expect(lead.querySelector('.ps-stat-val').textContent).toBe('CA$232.21');
+    const block = $('d-profit-sharing-block');
+    expect(block.classList.contains('is-money-card')).toBe(true);
+    // It sits at the top of the dashboard, ahead of the banners and the metrics.
+    expect(block.nextElementSibling.id).toBe('author-payment-banner');
+    // One figure leads; the old headline boxes are gone.
+    expect(document.querySelector('#ps-dash-content .ps-stat-grid')).toBeNull();
+    expect(document.querySelector('#ps-dash-content .ps-settle-result .ps-stat-val').textContent).toBe('CA$232.21');
+    expect(document.querySelector('#ps-dash-content .ps-money-totals').textContent).toBe('Earned so far CA$617.18 · paid CA$274.71 · held by the artist CA$574.68');
+    const folds = [...document.querySelectorAll('#ps-dash-content .ps-money-more > summary')].map(x => x.textContent.replace(/\s+/g, ' ').trim());
+    expect(folds).toEqual(['How the artist is paid ▾', 'Payments to the artist (1) ▾']);
+    // Recording a payout unfolds the payments it lives in.
+    win.toggleArtistPayoutForm(BOOK);
+    expect(document.getElementById(`ps-payments-${BOOK}`).open).toBe(true);
+  });
+
+  it('goes back below the metrics, with its boxes, once money runs one way', () => {
+    app.main.states[BOOK].artistTransfers = [];
+    app.main.states[BOOK].hist[0].artistPending = false;
+    win.renderProfitSharingBreakdown(BOOK);
+    const block = $('d-profit-sharing-block');
+    expect(block.classList.contains('is-money-card')).toBe(false);
+    expect(block.nextElementSibling.id).toBe('artist-transfers-sect');
+    expect(document.querySelector('#ps-dash-content .ps-stat-grid')).not.toBeNull();
   });
 });

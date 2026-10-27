@@ -56,6 +56,7 @@ import {
 import {
   $,
   TAX_CENTER,
+  applyBookDetailFromWebsite,
   openAddBookFromWebsite,
   _fxRateCache,
   fetchHistoricalRate,
@@ -66,7 +67,17 @@ import {
   showToast,
   syncHistRowToSheets,
 } from '../main.js';
-import { BOOKS, states, onBookEvent } from '../core/store.js';
+import { BOOKS, BOOK_LIST, states, onBookEvent } from '../core/store.js';
+import {
+  DETAIL_FIELD_WORDS,
+  appBooksForDetails,
+  detailCompareWords,
+  detailDifferences,
+  detailPatchForApp,
+  detailSignature,
+  detailValue,
+  pruneKept,
+} from '../lib/link-details.js';
 import { unvoidHistEntry, voidHistEntry, writeOrderToLedger } from './sales-ledger.js';
 
 const SENT_KEY = 'lm-website-shipments-sent';
@@ -84,6 +95,12 @@ const LINK_ASKS_KEY = 'lm-website-link-requests';
 // (or a write still waiting offline) never brings the book back on this device.
 const SHOP_DISMISSED_KEY = 'lm-website-shop-dismissed';
 const SHOP_LIST_SHOWN = 6;
+// "Leave as is" on Details that differ from the website: { id: signature },
+// on this device and in the app's own settings (settings/websiteKeptDetails),
+// so the other devices follow. docs/website-link.md › Book details that differ.
+const KEPT_DETAILS_KEY = 'lm-website-kept-details';
+const KEPT_DETAILS_SETTING = 'websiteKeptDetails';
+const DETAIL_LIST_SHOWN = 6;
 
 let _started = false;
 let _wired = false;
@@ -124,6 +141,9 @@ let _appTodoRefused = false;    // the rules refused it: stop until the app relo
 let _asking = new Set();        // link requests being sent right now
 let _setAside = [];             // books set aside this session, for Undo: [{ key, name }]
 let _shopOpen = false;          // the long list of website books is unfolded
+let _detailsOpen = false;       // the long list of differing details is unfolded
+let _keptCloud = {};            // "Leave as is" choices read from the app's settings
+let _applying = new Set();      // differences being copied right now
 
 // ── Small helpers ──────────────────────────────────────────────────────────
 
@@ -284,6 +304,7 @@ function startWebsiteLink() {
   onBookEvent('book-saved', ({ bookId }) => scheduleWebsiteFeedPublish(bookId));
   onBookEvent('book-changed', ({ bookId, source }) => { if (source === 'remote') scheduleWebsiteFeedPublish(bookId); });
   scheduleWebsiteFeedPublish('all');
+  loadKeptDetails();
   renderWebsiteLinkCard();
   runStorageCheck();
   // A link that goes quiet only shows as time passes: look again every few minutes.
@@ -810,6 +831,8 @@ function websiteLinkTodo() {
     notSent: shopHere() ? websiteNotSentCount() : null,
     notSentHref: `${websiteAdmin()}#orders`,
     shopBooks: shopHere() ? offeredShopBooks().length : 0,
+    // Shown on this app's To-do list only: never sent to the website (publishAppTodo).
+    detailDiffs: shopHere() ? detailDiffsToShow().length : 0,
   };
 }
 
@@ -886,6 +909,9 @@ function wireCard() {
     else if (action === 'shop-dismiss') dismissShopBook(key, btn);
     else if (action === 'shop-undo') undoDismissShopBook(key);
     else if (action === 'shop-more') { _shopOpen = !_shopOpen; renderWebsiteLinkCard(); }
+    else if (action === 'detail-use') useWebsiteDetail(btn.dataset.id, btn);
+    else if (action === 'detail-keep') keepDetail(btn.dataset.id);
+    else if (action === 'detail-more') { _detailsOpen = !_detailsOpen; renderWebsiteLinkCard(); }
   });
 }
 
@@ -1142,7 +1168,7 @@ function renderWebsiteLinkCard() {
   const statusEl = $('wl-status');
   if (statusEl && statusEl.textContent !== s.text) statusEl.textContent = s.text;
   const body = $('wl-body');
-  if (body) body.innerHTML = [factsHtml(), reviewHtml(), shopBooksHtml(), promisedHtml(), blockedHtml(), unlinkedHtml(), storageHtml(), testsHtml()].join('');
+  if (body) body.innerHTML = [factsHtml(), reviewHtml(), shopBooksHtml(), detailDiffsHtml(), promisedHtml(), blockedHtml(), unlinkedHtml(), storageHtml(), testsHtml()].join('');
   // The app switcher's "not sent yet" count follows the same orders.
   try { window.dispatchEvent(new Event('website-link-changed')); } catch (_) { /* old browser */ }
 }
@@ -1399,6 +1425,174 @@ function shopBooksHtml() {
     </div>`;
 }
 
+// ── Book details that differ from the website ───────────────────────────────
+// docs/website-link.md › "Book details in step, and one search". Worked out
+// here from websiteLink/catalog.linked and this app's own books; only this
+// app's book is ever changed, and only when the owner presses the button.
+
+function keptDetails() {
+  return { ..._keptCloud, ...readJson(KEPT_DETAILS_KEY, {}) };
+}
+
+function loadKeptDetails() {
+  if (isTestProfileActive() || typeof window._fbLoadSettings !== 'function') return;
+  Promise.resolve()
+    .then(() => window._fbLoadSettings(KEPT_DETAILS_SETTING))
+    .then((stored) => {
+      _keptCloud = stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {};
+      renderWebsiteLinkCard();
+      noteTodo();
+    })
+    .catch(() => { /* the device's own copy still applies */ });
+}
+
+/** This app's books as the comparison reads them (the test book never takes part). */
+function appBooksForCompare() {
+  return appBooksForDetails(BOOK_LIST.filter(b => b && !isTestBook(b)));
+}
+
+/** Every difference, before the owner's "Leave as is" choices. */
+function allDetailDiffs() {
+  const linked = _link.catalog && Array.isArray(_link.catalog.linked) ? _link.catalog.linked : null;
+  if (!linked) return [];
+  return detailDifferences(linked, appBooksForCompare());
+}
+
+/** The differences to list: publisher only, those left as they are taken out before the cut to 100. */
+function detailDiffsToShow() {
+  if (!shopHere()) return [];
+  const linked = _link.catalog && Array.isArray(_link.catalog.linked) ? _link.catalog.linked : null;
+  if (!linked) return [];
+  return detailDifferences(linked, appBooksForCompare(), keptDetails());
+}
+
+const DETAIL_BOOK_FIELD = { title: 'title', author: 'author', isbn: 'isbn', price: 'listPrice' };
+
+async function useWebsiteDetail(id, button) {
+  if (!shopHere() || !id || _applying.has(id)) return;
+  const diff = detailDiffsToShow().find(d => d.id === id);
+  if (!diff) { renderWebsiteLinkCard(); return; }
+  const patch = detailPatchForApp(diff);
+  if (!patch) return;
+  _applying.add(id);
+  if (button) button.disabled = true;
+  const field = DETAIL_FIELD_WORDS[diff.field] || 'Detail';
+  // Re-checked once the latest catalogue is in: another device may have changed it.
+  const stillDiffers = (book) => detailValue(diff.field, book[DETAIL_BOOK_FIELD[diff.field]]) === diff.app;
+  let res;
+  try {
+    res = await applyBookDetailFromWebsite(diff.inventoryBookId, patch, stillDiffers);
+  } catch (e) {
+    console.error('[website link] could not copy the website’s detail', e);
+    res = { ok: false, reason: 'error' };
+  } finally {
+    _applying.delete(id);
+  }
+  if (res && res.ok) {
+    showToast(`✓ ${field} of ${titleOf(diff.inventoryBookId)} now matches the website`, 'ok', 3600);
+  } else if (res && res.reason === 'changed') {
+    showToast(`${field} of that book changed meanwhile, so nothing was copied. Check the list again.`, 'warn', 5000);
+  } else if (res && res.reason === 'twin') {
+    showToast(`“${res.twin}” already has that title. Change one of them in Edit book — your Google Sheet keeps one tab per title.`, 'warn', 6500);
+  } else if (res && res.reason === 'catalog') {
+    showToast('Couldn’t reach your book list, so nothing was changed. Try again once you’re back online.', 'err', 5000);
+  } else {
+    showToast('Couldn’t change that book just now. Try again in a moment.', 'err', 4000);
+  }
+  renderWebsiteLinkCard();
+  noteTodo();
+}
+
+function keepDetail(id) {
+  if (!shopHere() || !id) return;
+  const diff = allDetailDiffs().find(d => d.id === id);
+  if (!diff) { renderWebsiteLinkCard(); return; }
+  const sig = detailSignature(diff);
+  const local = readJson(KEPT_DETAILS_KEY, {});
+  delete local[id];
+  local[id] = sig;
+  writeJson(KEPT_DETAILS_KEY, pruneKept(local));
+  renderWebsiteLinkCard();
+  noteTodo();
+  showToast(`Left as is. It comes back here only if the website or this app changes that ${(DETAIL_FIELD_WORDS[diff.field] || 'detail').toLowerCase()}.`, 'ok', 4000);
+  if (typeof window._fbSaveSettings !== 'function' || isTestProfileActive()) return;
+  // Merged with what the other devices saved, so no device's choice is lost.
+  Promise.resolve()
+    .then(() => (typeof window._fbLoadSettings === 'function' ? window._fbLoadSettings(KEPT_DETAILS_SETTING) : null))
+    .then((stored) => {
+      const merged = { ...(stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {}) };
+      delete merged[id];
+      merged[id] = sig;
+      _keptCloud = pruneKept(merged);
+      return window._fbSaveSettings(KEPT_DETAILS_SETTING, _keptCloud);
+    })
+    .catch((e) => console.warn('[website link] “Leave as is” kept on this device only for now', e));
+}
+
+function detailItemHtml(d) {
+  const id = escapeHtml(d.id);
+  const field = DETAIL_FIELD_WORDS[d.field] || d.field;
+  const book = (BOOKS[d.inventoryBookId] && BOOKS[d.inventoryBookId].title) || d.title;
+  const busy = _applying.has(d.id);
+  const use = d.shop
+    ? `<button class="btn gold sm" type="button" data-wl-action="detail-use" data-id="${id}"${busy ? ' disabled' : ''} aria-label="Use the website’s ${escapeHtml(field.toLowerCase())} for ${escapeHtml(book)}">Use the website’s</button>`
+    : '';
+  return `<li class="wl-item wl-detail-item">
+      <div class="wl-detail-copy">
+        <div class="wl-item-head"><strong class="wl-shop-title">${escapeHtml(book)}</strong><span class="wl-detail-field">${escapeHtml(field)}</span></div>
+        <span class="wl-sub wl-detail-values">${escapeHtml(detailCompareWords(d))}</span>
+        ${d.shop ? '' : '<span class="wl-sub">The website has nothing here, so there is nothing to copy. Fill it in on the website, or leave it.</span>'}
+      </div>
+      <div class="wl-actions wl-shop-actions">
+        ${use}
+        <button class="btn sm" type="button" data-wl-action="detail-keep" data-id="${id}" aria-label="Leave the ${escapeHtml(field.toLowerCase())} of ${escapeHtml(book)} as is">Leave as is</button>
+      </div>
+    </li>`;
+}
+
+function detailDiffsHtml() {
+  if (!shopHere()) return '';
+  const diffs = detailDiffsToShow();
+  if (!diffs.length) return '';
+  const shown = _detailsOpen ? diffs : diffs.slice(0, DETAIL_LIST_SHOWN);
+  const more = diffs.length - shown.length;
+  return `<div class="wl-section" id="wl-detail-diffs" tabindex="-1">
+      <h4 class="wl-subhead">Details that differ from the website <span class="wl-count wl-mono">${diffs.length}</span></h4>
+      <p class="wl-note">Books linked to the website whose title, author, ISBN or price say something different there. Use the website’s changes the book in this app only; the website is never changed from here. Leave as is keeps yours, until either side changes.</p>
+      <ul class="wl-list">${shown.map(detailItemHtml).join('')}</ul>
+      ${more > 0 || (_detailsOpen && diffs.length > DETAIL_LIST_SHOWN)
+        ? `<div class="wl-actions"><button class="btn sm" type="button" data-wl-action="detail-more" aria-expanded="${_detailsOpen}">${_detailsOpen ? 'Show fewer' : `Show ${more} more`}</button></div>` : ''}
+    </div>`;
+}
+
+// ── For the search box ─────────────────────────────────────────────────────
+
+/**
+ * What the app knows about the website, for the one search box
+ * (lib/app-search.js): its books (catalog.books and catalog.linked) and the
+ * website orders held here — waiting ones and the sales they became.
+ */
+function websiteSearchSources() {
+  if (!shopHere()) return { shopBooks: [], orders: [] };
+  const cat = _link.catalog || {};
+  const shopBooks = [
+    ...(Array.isArray(cat.books) ? cat.books : []),
+    ...(Array.isArray(cat.linked) ? cat.linked : []),
+  ];
+  const orders = [];
+  _docs.forEach((d, id) => {
+    if (d && d.web && d.web.test === true) return;
+    orders.push({ orderId: id, number: (d && d.web && d.web.number) || '' });
+  });
+  Object.keys(states).forEach((bookId) => {
+    if (!BOOKS[bookId] || isTestBook(BOOKS[bookId])) return;
+    ((states[bookId] && states[bookId].hist) || []).forEach((h) => {
+      if (h && h.webOrderId) orders.push({ orderId: h.webOrderId, number: h.num || '' });
+    });
+  });
+  return { shopBooks, orders };
+}
+
 // ── For the app switcher ───────────────────────────────────────────────────
 
 /**
@@ -1450,5 +1644,6 @@ export {
   websiteLinkTodo,
   websiteNotSentCount,
   websiteOrderDoc,
+  websiteSearchSources,
   websiteShipmentNote,
 };

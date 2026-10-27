@@ -1,0 +1,30 @@
+{
+  "about": "Shared test case for detailDifferences (docs/INVENTORY_LINK.md › Book details that differ). The same file is in both repos; both test suites check it.",
+  "input": {
+    "linked": [
+      { "key": "bk1|", "bookId": "bk1", "variantId": null, "inventoryBookId": "inv-a", "title": "The Garden", "edition": "", "author": "Ana Lee", "isbn": "978-1-23456-789-7", "price": 30, "sharedWith": 1 },
+      { "key": "bk2|v1", "bookId": "bk2", "variantId": "v1", "inventoryBookId": "inv-b", "title": "Night Songs", "edition": "Signed", "author": "Mo Kai", "isbn": "1111111111", "price": 45, "sharedWith": 2 },
+      { "key": "bk2|v2", "bookId": "bk2", "variantId": "v2", "inventoryBookId": "inv-b", "title": "Night Songs", "edition": "Unsigned", "author": "Mo Kai", "isbn": "2222222222", "price": 35, "sharedWith": 2 },
+      { "key": "bk3|v1", "bookId": "bk3", "variantId": "v1", "inventoryBookId": "inv-c", "title": "Pressings", "edition": "Paperback", "author": "", "isbn": "1234567890", "price": 25, "sharedWith": 1 },
+      { "key": "bk4|", "bookId": "bk4", "variantId": null, "inventoryBookId": "inv-d", "title": "Twin One", "edition": "", "author": "", "isbn": "", "price": 10, "sharedWith": 2 },
+      { "key": "bk5|", "bookId": "bk5", "variantId": null, "inventoryBookId": "inv-d", "title": "Twin Two", "edition": "", "author": "", "isbn": "", "price": 12, "sharedWith": 2 },
+      { "key": "bk6|", "bookId": "bk6", "variantId": null, "inventoryBookId": "inv-e", "title": "Quiet", "edition": "", "author": "", "isbn": "", "price": null, "sharedWith": 1 },
+      { "key": "bk7|", "bookId": "bk7", "variantId": null, "inventoryBookId": "inv-f", "title": "Gone From The App", "edition": "", "author": "X", "isbn": "", "price": 5, "sharedWith": 1 },
+      { "key": "bk8|", "bookId": "bk8", "variantId": null, "inventoryBookId": "inv-g", "title": "Zine", "edition": "", "author": "", "isbn": "", "price": 0, "sharedWith": 1 }
+    ],
+    "appBooks": [
+      { "id": "inv-a", "title": " The  Garden ", "author": "Ana Lee, ill. Bo", "isbn": "9781234567897", "price": 32, "currency": "CAD" },
+      { "id": "inv-b", "title": "Night Songs (2nd ed.)", "author": "Mo Kai", "isbn": "—", "price": 99, "currency": "" },
+      { "id": "inv-c", "title": "Pressings", "author": "", "isbn": "", "price": 20, "currency": "EUR" },
+      { "id": "inv-d", "title": "Twins", "author": "", "isbn": "", "price": 10, "currency": "CAD" },
+      { "id": "inv-e", "title": "Quiet", "author": "", "isbn": "", "price": null, "currency": "CAD" },
+      { "id": "inv-g", "title": "Zine", "author": "", "isbn": "—", "price": null, "currency": "cad" }
+    ]
+  },
+  "expected": [
+    { "id": "inv-b|title", "inventoryBookId": "inv-b", "bookId": "bk2", "variantId": null, "field": "title", "title": "Night Songs", "shop": "Night Songs", "app": "Night Songs (2nd ed.)" },
+    { "id": "inv-c|isbn", "inventoryBookId": "inv-c", "bookId": "bk3", "variantId": "v1", "field": "isbn", "title": "Pressings", "shop": "1234567890", "app": "" },
+    { "id": "inv-a|author", "inventoryBookId": "inv-a", "bookId": "bk1", "variantId": null, "field": "author", "title": "The Garden", "shop": "Ana Lee", "app": "Ana Lee, ill. Bo" },
+    { "id": "inv-a|price", "inventoryBookId": "inv-a", "bookId": "bk1", "variantId": null, "field": "price", "title": "The Garden", "shop": "30.00", "app": "32.00" }
+  ]
+}

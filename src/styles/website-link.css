@@ -207,6 +207,33 @@
   .wl-shop-item { grid-template-columns: 40px minmax(0, 1fr); grid-template-areas: "cover copy" "actions actions"; align-items: start; }
   .wl-shop-actions { justify-content: flex-start; }
 }
+/* "Details that differ from the website": the book and the detail, the two
+   values, then its two choices — the same layout as the books above, no cover. */
+.wl-detail-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "copy actions";
+  align-items: center;
+  column-gap: var(--space-3);
+  row-gap: var(--space-2);
+}
+.wl-detail-copy { grid-area: copy; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.wl-detail-field {
+  font-family: var(--font-ui);
+  font-size: var(--text-3xs);
+  font-weight: 800;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--content-secondary);
+  border: var(--stroke-hair) solid var(--border-default);
+  padding: 1px var(--space-2);
+  border-radius: var(--r2);
+}
+.wl-detail-values { font-family: var(--font-mono); color: var(--content-primary); overflow-wrap: anywhere; }
+.wl-detail-item .wl-shop-actions { grid-area: actions; }
+@container wl (max-width: 620px) {
+  .wl-detail-item { grid-template-columns: minmax(0, 1fr); grid-template-areas: "copy" "actions"; align-items: start; }
+}
 .wl-shop-undo { flex-direction: row; align-items: center; justify-content: space-between; flex-wrap: wrap; }
 .wl-section:focus { outline: none; }
 .wl-section:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: var(--focus-ring-offset); }

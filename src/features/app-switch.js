@@ -16,6 +16,8 @@ import {
   isStandalone,
   notSentWords,
   openOtherApp,
+  parseBookHash,
+  parseSearchHash,
   parseWebsiteOrderHash,
   searchWithoutAdminMode,
   useWebsiteFrom,
@@ -34,6 +36,7 @@ import {
 } from '../main.js';
 import { BOOKS, BOOK_LIST, states, activeBook } from '../core/store.js';
 import { renderWebsiteLinkCard, websiteNotSentCount, websiteOrderDoc } from './website-link.js';
+import { openAppSearch } from './app-search.js';
 
 const TWA_KEY = 'lm-in-android-app';
 const OFFLINE_WORDS = 'You’re offline. The website opens once you’re back online.';
@@ -46,6 +49,8 @@ let _started = false;
 let _booksReady = false;
 let _pending = null;      // the website order a link asked for, until it is opened
 let _route = null;        // 'todo' | 'website-orders': a screen a link from the website asked for
+let _book = null;         // the book a `#book=<id>` link asked for
+let _search = null;       // the text a `#search=<text>` link asked the search to open with
 let _finding = 0;         // a search for a just-arrived order is running
 
 function online() {
@@ -107,7 +112,7 @@ function refreshAppSwitch() {
   } catch (_) { /* some embedded browsers refuse */ }
 
   // A link from the website meant for the publisher opens nothing for an artist.
-  if ((_pending || _route) && !isPublisherSession() && isAuthor()) { _pending = null; _route = null; tidyHash(); }
+  if ((_pending || _route || _book || _search) && !isPublisherSession() && isAuthor()) { _pending = null; _route = null; _book = null; _search = null; tidyHash(); }
 
   const off = !online();
   let count = null;
@@ -188,16 +193,17 @@ function bookForWebsiteTab() {
  * to the website's books not in this app yet when `shopBooks` is set.
  * Publisher only, in their own view.
  */
-function openWebsiteOrdersTab({ shopBooks = false } = {}) {
+function openWebsiteOrdersTab({ shopBooks = false, section = '' } = {}) {
   if (!publisherHere()) return;
   const bookId = bookForWebsiteTab();
   if (bookId) switchBook(bookId);
   switchTab('website');
   renderWebsiteLinkCard();
-  const target = (shopBooks && document.getElementById('wl-shop-books')) || document.getElementById('web-link-card');
+  const want = section || (shopBooks ? 'wl-shop-books' : '');
+  const target = (want && document.getElementById(want)) || document.getElementById('web-link-card');
   if (!target || target.hidden) return;
   try { target.scrollIntoView({ block: 'start' }); } catch (_) { /* old browser */ }
-  if (target.id === 'wl-shop-books') { try { target.focus({ preventScroll: true }); } catch (_) { /* fine */ } }
+  if (target.id !== 'web-link-card') { try { target.focus({ preventScroll: true }); } catch (_) { /* fine */ } }
 }
 
 /** The To-do list's "See them": the website's books not in this app yet. */
@@ -205,11 +211,17 @@ function openWebsiteShopBooks() {
   openWebsiteOrdersTab({ shopBooks: true });
 }
 
+/** The To-do list's "See them": book details that differ from the website. */
+function openWebsiteDetailDiffs() {
+  openWebsiteOrdersTab({ section: 'wl-detail-diffs' });
+}
+
 // ── Deep link from the website: #website-order=<orderId> ──────────────────
 
 function tidyHash() {
   if (typeof location === 'undefined') return;
-  if (!parseWebsiteOrderHash(location.hash) && !parseAppRouteHash(location.hash)) return;
+  if (!parseWebsiteOrderHash(location.hash) && !parseAppRouteHash(location.hash)
+    && !parseBookHash(location.hash) && !parseSearchHash(location.hash)) return;
   try { history.replaceState(history.state, '', `${location.pathname}${location.search}`); } catch (_) { /* old browser */ }
 }
 
@@ -232,7 +244,33 @@ function takeHash() {
   // `#todo` and `#website-orders`: the website's alerts open these screens here.
   const route = parseAppRouteHash(hash);
   if (route) _route = route;
-  return id || route;
+  // `#book=<id>` and `#search=<text>`: the website admin's search opens these here.
+  const book = parseBookHash(hash);
+  if (book) _book = book;
+  const search = parseSearchHash(hash);
+  if (search) _search = search;
+  return id || route || book || search;
+}
+
+/** Open the book or the search a `#book=` / `#search=` link asked for, once the books are in. */
+function openBookOrSearch() {
+  if ((!_book && !_search) || !_booksReady || !isPublisherSession()) return;
+  const book = _book;
+  const search = _search;
+  _book = null;
+  _search = null;
+  tidyHash();
+  if (isAuthor()) return;
+  if (book) {
+    if (BOOKS[book]) {
+      switchBook(book);
+      showToast(`Opened ${titleOf(book)}`, 'ok', 2400);
+    } else {
+      showToast('That book isn’t in this app (it may have been removed). Search for it instead.', 'warn', 5000);
+      openAppSearch('');
+    }
+  }
+  if (search) openAppSearch(search);
 }
 
 /** Open the screen a `#todo` / `#website-orders` link asked for, once the books are in. */
@@ -334,7 +372,7 @@ function openPending() {
 }
 
 function onHashChange() {
-  if (takeHash()) { openPending(); openRoute(); }
+  if (takeHash()) { openPending(); openRoute(); openBookOrSearch(); }
 }
 
 /** Every book has loaded: a deep link that arrived meanwhile can open now. */
@@ -342,6 +380,7 @@ function appSwitchBooksReady() {
   _booksReady = true;
   openPending();
   openRoute();
+  openBookOrSearch();
   refreshAppSwitch();
 }
 
@@ -363,6 +402,7 @@ function startAppSwitch() {
 
 export {
   appSwitchBooksReady,
+  openWebsiteDetailDiffs,
   openWebsiteShopBooks,
   refreshAppSwitch,
   startAppSwitch,
