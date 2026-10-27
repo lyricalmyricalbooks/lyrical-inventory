@@ -17,3 +17,28 @@ test('phone header Website button matches the book picker: offset shadow, caps, 
   expect(press[1]).toMatch(/translate\(3px,\s*3px\)/);
   expect(press[1]).toMatch(/box-shadow:\s*none/);
 });
+
+// Manual entry — Required tag and order total (phone)
+const block = sel => {
+  const m = phone.match(new RegExp(`\\n  ${sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`));
+  expect(m, sel).not.toBeNull();
+  return m[1];
+};
+
+test('phone "Required" tag is a square outlined caps tag, not a soft lozenge', () => {
+  const rule = block('.req-badge');
+  expect(rule).toMatch(/border-radius:\s*var\(--r2\)/);
+  expect(rule).toMatch(/border:\s*var\(--stroke\) solid currentColor/);
+});
+
+test('phone Manual entry order total is an inked slab with the offset shadow', () => {
+  const rule = block('#tab-manual .order-preview');
+  expect(rule).toMatch(/border:\s*var\(--stroke\) solid var\(--rule-ink\)/);
+  expect(rule).toMatch(/box-shadow:\s*var\(--elev-1\)/);
+});
+
+test('warning tints keep an edge stripe on the inked slab and the tag inside is square', () => {
+  expect(block('#tab-manual .order-preview:has(.pill.amber)')).toMatch(/inset 4px 0 0 var\(--status-active\)/);
+  expect(block('#tab-manual .order-preview:has(.pill.red)')).toMatch(/inset 4px 0 0 var\(--status-critical\)/);
+  expect(block('#tab-manual .order-preview .pill')).toMatch(/border-radius:\s*var\(--r2\)/);
+});
