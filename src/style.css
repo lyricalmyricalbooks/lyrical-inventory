@@ -20549,7 +20549,8 @@ a.notif-action:hover { text-decoration: underline; }
   #tab-dashboard #artist-transfers-sect,
   #tab-dashboard #d-pending-expenses-sect{
     background:var(--red-bg);border:var(--stroke-hair) solid var(--gold-line);
-    border-radius:var(--r3);padding:var(--space-3) var(--space-3) var(--space-2);
+    border-top:calc(var(--stroke) * 2) solid var(--status-active);
+    border-radius:var(--r2);padding:var(--space-3) var(--space-3) var(--space-2);
   }
   [data-phone-fold] > .sec-head{display:flex;align-items:center;gap:var(--space-2);}
   [data-phone-fold] > .sec-head > .sec-head-titles{flex:1;min-width:0;}

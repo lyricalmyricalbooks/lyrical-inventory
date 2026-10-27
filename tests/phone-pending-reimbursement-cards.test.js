@@ -20,3 +20,11 @@ test('phone pending reimbursement tags are square inked tags, not rounded lozeng
   expect(tag[1]).toMatch(/border:\s*var\(--stroke\)\s+solid\s+currentColor/);
   expect(tag[1]).toMatch(/text-transform:\s*uppercase/);
 });
+
+test('phone pending-payment panels are square with a bold amber top rule, not a rounded hairline box', () => {
+  const style = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
+  const m = style.match(/#tab-dashboard #d-pending-expenses-sect\{([^}]*)\}/);
+  expect(m).not.toBeNull();
+  expect(m[1]).toMatch(/border-radius:var\(--r2\)/);
+  expect(m[1]).toMatch(/border-top:calc\(var\(--stroke\) \* 2\) solid var\(--status-active\)/);
+});
