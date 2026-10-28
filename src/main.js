@@ -11145,23 +11145,27 @@ function renderAuthorSettlementBanner(banner, s, settle, transfers, cur) {
 
   const list = $('apb-transfers');
   list.style.display = transfers.length ? '' : 'none';
+  list.innerHTML = transferRowsHtml(transfers, (t, amt) => {
+    const suffix = amt ? ` · ${money(amt)} collected` : '';
+    if (t.status === 'pending') return { suffix, action: '<span class="apb-status">Waiting for your publisher</span>' };
+    if (amt == null) return { suffix, action: '<span class="apb-status is-warn">Tell your publisher the price</span>' };
+    return { suffix, action: `<span class="apb-status">${settle.payable ? 'Included in the payment above' : 'Settled when your publisher pays you'}</span>` };
+  });
+}
+
+// The sale rows under the author's banner: priced sales first, then ones still
+// missing a price, then those waiting on the publisher's check. `describe(t, amt)`
+// gives each row its status chip (`action`) and any words after the date (`suffix`).
+function transferRowsHtml(transfers, describe) {
   const order = t => (t.status === 'pending' ? 2 : transferAmount(t) == null ? 1 : 0);
-  list.innerHTML = [...transfers].sort((x, y) => order(x) - order(y)).map(t => {
+  return [...transfers].sort((x, y) => order(x) - order(y)).map(t => {
     const amt = transferAmount(t);
-    const copies = Number(t.qty) > 0 ? `${Number(t.qty)} ${Number(t.qty) === 1 ? 'copy' : 'copies'}` : 'A sale';
-    const what = `${copies}${Number(t.qty) > 0 ? ' sold' : ''}${t.date ? ` on ${fmtD(t.date)}` : ''}${amt ? ` · ${money(amt)} collected` : ''}`;
-    let action, state = '';
-    if (t.status === 'pending') {
-      state = ' is-pending';
-      action = '<span class="apb-status">Waiting for your publisher</span>';
-    } else if (amt == null) {
-      action = '<span class="apb-status is-warn">Tell your publisher the price</span>';
-    } else {
-      action = `<span class="apb-status">${settle.payable ? 'Included in the payment above' : 'Settled when your publisher pays you'}</span>`;
-    }
-    const stamp = Number(t.qty) > 0 ? `${Number(t.qty)}×` : '?';
-    return `<div class="mbi-row apb-row${state}">
-      <div class="apb-stamp" aria-hidden="true">${stamp}</div>
+    const qty = Number(t.qty);
+    const { action, suffix = '' } = describe(t, amt);
+    const copies = qty > 0 ? `${qty} ${qty === 1 ? 'copy' : 'copies'} sold` : 'A sale';
+    const what = `${copies}${t.date ? ` on ${fmtD(t.date)}` : ''}${suffix}`;
+    return `<div class="mbi-row apb-row${t.status === 'pending' ? ' is-pending' : ''}">
+      <div class="apb-stamp" aria-hidden="true">${qty > 0 ? `${qty}×` : '?'}</div>
       <div class="apb-what">${escapeHtml(what)}</div>
       ${action}
     </div>`;
@@ -11255,35 +11259,24 @@ export function renderArtistTransfers() {
           (waitingCount ? ` ${waitingCount} more ${waitingCount === 1 ? 'sale' : 'sales'} waiting for your publisher to check — nothing to do yet.` : '');
       }
 
-      const order = t => (t.status === 'pending' ? 2 : transferAmount(t) == null ? 1 : 0);
-      $('apb-transfers').innerHTML = [...transfers].sort((x, y) => order(x) - order(y)).map(t => {
-        const amt = transferAmount(t);
-        const copies = Number(t.qty) > 0 ? `${Number(t.qty)} ${Number(t.qty) === 1 ? 'copy' : 'copies'}` : 'A sale';
-        const what = `${copies}${Number(t.qty) > 0 ? ' sold' : ''}${t.date ? ` on ${fmtD(t.date)}` : ''}`;
-        let action, state = '';
+      $('apb-transfers').innerHTML = transferRowsHtml(transfers, (t, amt) => {
         if (t.status === 'pending') {
-          state = ' is-pending';
-          action = `<span class="apb-status">Waiting for your publisher${amt ? ` · ${escapeHtml(fmt(amt, cur))}` : ''}</span>`;
-        } else if (amt == null) {
-          action = `<span class="apb-status is-warn">Tell your publisher the price</span>`;
-        } else if (recentlyPaidTransfer(t.id)) {
-          // Stripe confirmed this payment by sending them back to the app.
-          action = `<span class="apb-status is-done">✓ Paid — thank you! It clears from this list once your publisher's app records it</span>`;
-        } else {
-          // Stripe only: the exact-amount link the publisher's app made. Never
-          // the book's general link (which may be PayPal and asks them to type).
-          const url = transferPayUrl(t);
-          action = url
-            ? `<a class="btn gold apb-pay" href="${escapeHtml(url)}" target="_blank" rel="noopener">Pay ${escapeHtml(fmt(amt, cur))} →</a>`
-            : `<span class="apb-status">Payment link on its way — your publisher's app is preparing it. Check back soon.</span>`;
+          return { action: `<span class="apb-status">Waiting for your publisher${amt ? ` · ${escapeHtml(fmt(amt, cur))}` : ''}</span>` };
         }
-        const stamp = Number(t.qty) > 0 ? `${Number(t.qty)}×` : '?';
-        return `<div class="mbi-row apb-row${state}">
-          <div class="apb-stamp" aria-hidden="true">${stamp}</div>
-          <div class="apb-what">${escapeHtml(what)}</div>
-          ${action}
-        </div>`;
-      }).join('');
+        if (amt == null) return { action: `<span class="apb-status is-warn">Tell your publisher the price</span>` };
+        if (recentlyPaidTransfer(t.id)) {
+          // Stripe confirmed this payment by sending them back to the app.
+          return { action: `<span class="apb-status is-done">✓ Paid — thank you! It clears from this list once your publisher's app records it</span>` };
+        }
+        // Stripe only: the exact-amount link the publisher's app made. Never
+        // the book's general link (which may be PayPal and asks them to type).
+        const url = transferPayUrl(t);
+        return {
+          action: url
+            ? `<a class="btn gold apb-pay" href="${escapeHtml(url)}" target="_blank" rel="noopener">Pay ${escapeHtml(fmt(amt, cur))} →</a>`
+            : `<span class="apb-status">Payment link on its way — your publisher's app is preparing it. Check back soon.</span>`,
+        };
+      });
     } else {
       banner.style.display = 'none';
     }
