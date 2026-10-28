@@ -37,12 +37,12 @@ function mountDom() {
   `;
 }
 
-function makeHarness({ state, book = BOOK, isPublisher = true, submissions = {} } = {}) {
+function makeHarness({ state, book = BOOK, isPublisher = true, submissions = {}, taxCenter = { businessExpenses: [] } } = {}) {
   return buildHarness({
     names: [
       'CHANNEL_COLORS', 'CHAN_OTHER', 'HIST_PAGE', 'HIST_SEARCH_MIN',
       'channelColor', 'chanLabel', 'visibleTabName',
-      'renderConsignHistRow', 'deliveryPhrase', 'renderOrderShippingSummary',
+      'renderConsignHistRow', 'deliveryPhrase', 'linkablePostageExpenses', 'renderOrderShippingSummary',
       'renderHistSearchBar', 'histNoSearchMatchHtml',
       'histEmptyStateHtml', 'renderHistFilterBar',
       'renderHistReconciliationPanel', 'scheduleHistVoidSweep',
@@ -55,7 +55,7 @@ function makeHarness({ state, book = BOOK, isPublisher = true, submissions = {} 
       activeBook: book.id,
       $: (id) => document.getElementById(id),
       window: { authorSubmissions: submissions, IS_PUBLISHER: isPublisher },
-      TAX_CENTER: { businessExpenses: [] },
+      TAX_CENTER: taxCenter,
       // The real implementations — this is the logic worth exercising.
       escapeHtml, fmt, fmtD, getSym, normalizeCurrencyCode, paymentSummary,
       bookCurrencyCode, detectCurrencyMismatch,
@@ -849,5 +849,41 @@ describe('renderHist — search', () => {
     const status = document.getElementById('hist-search-status');
     expect(status.querySelector('img')).toBeNull();
     expect(status.textContent).toContain('<img src=x onerror=alert(1)>');
+  });
+});
+
+describe('renderHist — linked postage', () => {
+  it('reads the expense list once per render, however many website sales it shows', () => {
+    // Re-filtering every business expense for each website row made a long
+    // history cost rows × expenses per render.
+    const businessExpenses = [
+      { ref: 'shippo:abc', shippingMatchStatus: 'matched', shippingOrderNumber: 'LM-1001' },
+      { ref: 'office:paper' },
+    ];
+    let filters = 0;
+    const realFilter = businessExpenses.filter.bind(businessExpenses);
+    businessExpenses.filter = (fn) => { filters++; return realFilter(fn); };
+    const hist = Array.from({ length: 6 }, (_, i) => ({
+      num: `LM-${1001 + i}`, chan: 'Website', qty: 1, price: 20, date: `2026-07-${10 + i}`, notes: '',
+    }));
+    const h = makeHarness({ state: { stock: 94, hist, ledger: [], stores: [] }, taxCenter: { businessExpenses } });
+    h.renderHist();
+
+    expect(filters).toBe(1);
+    const text = (num) => rows().find(tr => cells(tr)[0].startsWith(num)).textContent;
+    expect(text('LM-1001')).toContain('Postage linked');
+    expect(text('LM-1002')).toContain('Postage not linked');
+  });
+
+  it('never reads it when no website sale is on screen', () => {
+    const businessExpenses = [];
+    let filters = 0;
+    businessExpenses.filter = () => { filters++; return []; };
+    const h = makeHarness({
+      state: { stock: 99, hist: [{ num: '9', chan: 'Direct', qty: 1, price: 5, date: '2026-07-01', notes: '' }], ledger: [], stores: [] },
+      taxCenter: { businessExpenses },
+    });
+    h.renderHist();
+    expect(filters).toBe(0);
   });
 });
