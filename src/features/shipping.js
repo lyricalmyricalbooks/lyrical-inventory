@@ -305,11 +305,17 @@ function deliveryPhrase(order) {
   return '';
 }
 
-function renderOrderShippingSummary(order) {
-  // Every kind of postage that can be linked to an order — Shippo, Canada Post,
-  // counter receipts / carrier emails ('postage:'), and Chit Chats — matches
-  // what the shipping worklist and monthly report count.
-  const expenses = (TAX_CENTER.businessExpenses || []).filter(expense => /^(shippo:|canadapost:|postage[:-]|chitchats:)/.test(String(expense?.ref || '')));
+// Every kind of postage that can be linked to an order — Shippo, Canada Post,
+// counter receipts / carrier emails ('postage:'), and Chit Chats — matches
+// what the shipping worklist and monthly report count.
+function linkablePostageExpenses() {
+  return (TAX_CENTER.businessExpenses || []).filter(expense => /^(shippo:|canadapost:|postage[:-]|chitchats:)/.test(String(expense?.ref || '')));
+}
+
+// A table passes the list it built once for all its rows: filtering every
+// business expense again for each website sale made a long Order History
+// cost (rows × expenses) regex tests per render.
+function renderOrderShippingSummary(order, expenses = linkablePostageExpenses()) {
   const summary = linkedShippingSummary(order, expenses, 1);
   const customerPaidVal = summary.customerPaid ?? Number(order.shippingPaid || order.shipping_total || 0);
   const parts = [];
@@ -11684,6 +11690,7 @@ export {
   findShippoReceipts,
   _shippoDestMasterList,
   getShippingReconciliationOrders,
+  linkablePostageExpenses,
   renderOrderShippingSummary,
   backfillShipping,
   _toggleShippingPanel,
