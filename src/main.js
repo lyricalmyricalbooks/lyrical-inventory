@@ -495,6 +495,7 @@ import {
 } from './features/intel.js';
 import {
   getShippingReconciliationOrders,
+  linkablePostageExpenses,
   renderOrderShippingSummary,
   backfillShipping,
   _toggleShippingPanel,
@@ -8577,7 +8578,7 @@ function scheduleHistVoidSweep(fullTimeline) {
 // that function reads as "gather rows, then render them" instead of burying
 // this row-by-row branching (pending vs. gratuity vs. foreign-currency vs.
 // shipped-website-order) inside the .map() call.
-function renderHistRowHtml(row, { cur, bookCode, book, formatChannelBadge }) {
+function renderHistRowHtml(row, { cur, bookCode, book, formatChannelBadge, postage }) {
   if (row.type === 'consign') return renderConsignHistRow(row.e, row._after ?? row.after ?? '—');
   const h = row.h, i = row.i;
   if (h.pendingAuth) {
@@ -8616,7 +8617,7 @@ function renderHistRowHtml(row, { cur, bookCode, book, formatChannelBadge }) {
     : '';
 
   const paymentInfo = paymentSummary(h.payment, book, h);
-  const shippingInfo = isWebsite ? renderOrderShippingSummary(h) : '';
+  const shippingInfo = isWebsite ? renderOrderShippingSummary(h, postage()) : '';
   const notesText = escapeHtml(h.notes) || '—';
   // The publisher can open a website sale's order on the website itself.
   const websiteLink = h.webOrderId && window.IS_PUBLISHER && !isAuthor() ? openOnWebsiteHtml(h.webOrderId) : '';
@@ -8706,6 +8707,10 @@ export function renderHist() {
 
   // The query is part of the signature so a new search opens at the first page
   // rather than inheriting "showing 200 of 200" from the last one.
+  // Built on the first website row that needs it, then shared by the rest.
+  let postageList = null;
+  const postage = () => (postageList ??= linkablePostageExpenses());
+
   const pageSig = `${activeBook}|${chanFilter ?? ''}|${searchQuery}`;
   if (_histPageSig !== pageSig) { _histLimit = HIST_PAGE; _histPageSig = pageSig; }
   const shownRows = combined.slice(0, _histLimit);
@@ -8715,7 +8720,7 @@ export function renderHist() {
     : '';
 
   $('hist-body').innerHTML = combined.length
-    ? shownRows.map((row) => renderHistRowHtml(row, { cur, bookCode, book, formatChannelBadge })).join('') + moreRow
+    ? shownRows.map((row) => renderHistRowHtml(row, { cur, bookCode, book, formatChannelBadge, postage })).join('') + moreRow
     : searchOn
       ? `<tr class="hist-empty-row"><td colspan="10">${histNoSearchMatchHtml(describedSearch)}</td></tr>`
       // Counted off the unfiltered timeline, not the stale-void-hidden one — a
@@ -8929,6 +8934,7 @@ export function renderOrders() {
   }
 
   const expanded = new Set([...list.querySelectorAll('.phone-order-details[open]')].map(el => el.dataset.order));
+  const postage = linkablePostageExpenses();
   list.innerHTML = visible.map(o => {
     const done = isApplied(o);
     const cancelled = isCancelled(o);
@@ -8942,7 +8948,7 @@ export function renderOrders() {
     const priceWarn = priceMismatch
       ? `<span style="font-size:var(--text-2xs);color:var(--amber);margin-left:6px;">⚠ paid ${listCur}${o.price} (list ${listCur}${listPrice})</span>`
       : '';
-    const shippingBadge = renderOrderShippingSummary(o);
+    const shippingBadge = renderOrderShippingSummary(o, postage);
     const bookLabel = o.bookId && BOOKS[o.bookId]
       ? `<span style="font-size:var(--text-2xs);background:${BOOKS[o.bookId].accent}22;color:${BOOKS[o.bookId].accent};border-radius:var(--r-pill);padding:2px 8px;margin-right:6px;">${escapeHtml(BOOKS[o.bookId].title)}</span>`
       : '';
