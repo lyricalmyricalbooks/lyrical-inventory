@@ -220,6 +220,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-27 | visual | Phone Manual Order Entry — "Log an order" heading | Stepped "Log an order" (and "Log a gratuity") down to a small caps label with a rule to the edge, so "Manual order entry" is the one big title instead of two near-equal headlines | (this PR) |
 | 2026-10-27 | visual | Phone Stripe payments — figures | Gave the second row of figures (Reconciled, Total) room under the Need review row so its rule no longer sits on top of the caption above | (this PR) |
 | 2026-10-27 | none | Phone, all screens (375 wide, light and night) | Considered, nothing shipped: a third survey of all 76 screens found no sideways scroll or errors; the flagged small taps (notification links, tick-boxes, edit pencils) already carry an enlarged invisible tap area, and the clipped fair-kit label and hidden screen-reader lines are intentional | — |
+| 2026-10-29 | none | Phone, all screens | Considered, nothing shipped: main has gained only log entries since the last phone survey (7d7019d), and the open pull requests touch only the computer-width Today screen, an email send log and a test fix, so no phone screen has changed to re-check | — |
 
 ## Considered and rejected
 
