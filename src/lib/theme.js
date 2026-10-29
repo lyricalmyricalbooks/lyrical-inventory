@@ -26,9 +26,6 @@ export const THEME_STORAGE_KEY = 'lm-theme';
 /** Preferences the app will accept. Anything else falls back to 'system'. */
 export const THEME_PREFERENCES = ['system', 'light', 'dark'];
 
-/** Rendered themes. */
-export const RESOLVED_THEMES = ['light', 'dark'];
-
 /** The <meta name="theme-color"> value per resolved theme — this paints the
  *  browser/PWA chrome, so it has to match the app header's --ink, not the
  *  page background, or the status bar and the header disagree. */
