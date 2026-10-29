@@ -20480,6 +20480,37 @@ a.notif-action:hover { text-decoration: underline; }
 .today-row-sub{font-size:var(--text-xs);color:var(--content-secondary);}
 .today-row-chev{font-size:var(--text-xl);color:var(--content-secondary);}
 @media (prefers-reduced-motion: reduce){.today-card{transition:none;}.today-card:active{transform:none;}}
+/* Today on a computer, Riso Press: the phone got its inked cards (styles/phone.css), but the
+   wide screen kept the pre-repaint look: faint grey hairlines, soft corners, no shadow, and
+   the job letters (WO, RC, BK) floating loose like stray text. The four job cards are now
+   inked slabs with the hard offset shadow that lift on hover and press on click; each job's
+   letters sit in a square ink stamp; and the workspace list is one inked sheet, so the
+   screen reads as cards on a page instead of outlines on a page. */
+@media (min-width: 769px) {
+  #tab-today .today-card {
+    border: var(--stroke) solid var(--rule-ink); border-radius: var(--r2); box-shadow: var(--elev-2);
+    transition: transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast) var(--ease-spring);
+  }
+  #tab-today .today-card-ink { border-color: var(--rule-ink); }
+  #tab-today .today-card:hover { transform: translate(-1px, -1px); box-shadow: var(--elev-hover); }
+  #tab-today .today-card:active { transform: translate(2px, 2px); box-shadow: none; }
+  #tab-today .today-card-ic,
+  #tab-today .today-row-ic {
+    display: grid; place-items: center; flex: none; box-sizing: border-box;
+    border: var(--stroke) solid currentColor; font: 500 var(--text-sm) / 1 var(--font-mono);
+  }
+  #tab-today .today-card-ic { width: 40px; height: 40px; }
+  #tab-today .today-card-name { text-transform: uppercase; letter-spacing: var(--tracking-caps); }
+  #tab-today .today-card-count { border: var(--stroke) solid var(--rule-ink); border-radius: var(--r2); padding: 1px 8px; }
+  #tab-today .today-rows { border: var(--stroke) solid var(--rule-ink); background: var(--surface-card); box-shadow: var(--elev-2); }
+  #tab-today .today-row { padding: var(--space-2) var(--space-4); }
+  #tab-today .today-row:last-child { border-bottom: 0; }
+  #tab-today .today-row:hover { background: var(--surface-inset); }
+  #tab-today .today-row-ic { width: 32px; height: 32px; font-size: var(--text-xs); }
+}
+@media (min-width: 769px) and (prefers-reduced-motion: reduce) {
+  #tab-today .today-card:hover, #tab-today .today-card:active { transform: none; }
+}
 
 /* Book codes for card-reader descriptions, under the Stripe auto-record switch.
    Styled as a sibling of the toggle rows around it so it reads as part of the
