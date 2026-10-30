@@ -448,6 +448,10 @@ the figures beside it. The buyer table (`#cust-body`) settles it:
   keeps its order numbers and dates `nowrap`, gives the notes a `min-width` so they don't fall to a
   word per line, and lets the one header that sits over a tiny figure ("Stock after") wrap to two
   lines. That is what keeps Approve / ✕ in view at a laptop width without a sideways scroll.
+- A header you let wrap must also say `overflow-wrap:normal`. `<html>` sets
+  `overflow-wrap:break-word` app-wide, and a squeezed table will use it to split the label *inside*
+  a word ("STOC / K / AFTER"). Opting the `th` out makes its longest word the column's floor, so it
+  breaks only at the space.
 
 ---
 

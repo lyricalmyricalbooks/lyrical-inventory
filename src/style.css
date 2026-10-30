@@ -2282,8 +2282,11 @@ tr.hist-row:hover {
   .tbl.hist-ledger tr.hist-row > td:nth-child(9){white-space:nowrap;font-variant-numeric:tabular-nums;}
   .tbl.hist-ledger tr.hist-row > td:nth-child(7){min-width:12ch;text-wrap:pretty;}
   /* "Stock after" sits over a two-digit figure; letting its label take two
-     lines gives that width back to the row instead of to the header. */
-  .tbl.hist-ledger th:nth-child(6){white-space:normal;}
+     lines gives that width back to the row instead of to the header. It
+     breaks between the words only: the page-wide break-word let a squeezed
+     table split the label inside "STOCK" ("STOC / K / AFTER"), so the header
+     opts out and the column keeps the width of its longest word. */
+  .tbl.hist-ledger th:nth-child(6){white-space:normal;overflow-wrap:normal;}
 }
 
 /* Customer & Mailing List action geometry, tabular alignment & spring kinetics */
