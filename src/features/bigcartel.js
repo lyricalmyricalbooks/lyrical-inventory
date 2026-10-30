@@ -797,16 +797,28 @@ function extractBigCartelOrderItems(order, included = [], customBooks = null) {
   return '—';
 }
 
+// Each catalogue title once, lowercased for matching. The orders table builds
+// this a single time per render and hands it to every row, instead of every
+// row lowercasing the whole catalogue (twice) for itself.
+function bigCartelCatalogTitles(booksMap) {
+  const catalog = [];
+  for (const b of Object.values(booksMap || {})) {
+    const lower = (b.title || '').toLowerCase().trim();
+    if (lower) catalog.push({ title: b.title, lower });
+  }
+  return catalog;
+}
+
 // `itemsText` lets a caller that already ran extractBigCartelOrderItems() for
 // the same order and catalogue pass the result in. That extraction re-indexes
 // the whole `included` payload on every call, so the orders table would
-// otherwise do it twice per row.
-function matchBigCartelOrderToCatalog(order, included = [], customBooks = null, itemsText = null) {
+// otherwise do it twice per row. `catalog` is the same idea for
+// bigCartelCatalogTitles().
+function matchBigCartelOrderToCatalog(order, included = [], customBooks = null, itemsText = null, catalog = null) {
   const booksMap = customBooks || (typeof BOOKS !== 'undefined' ? BOOKS : {});
-  const catalogBooks = Object.values(booksMap);
-  const catalogTitles = catalogBooks.map(b => (b.title || '').toLowerCase().trim()).filter(Boolean);
-  
-  if (catalogTitles.length === 0) {
+  if (!catalog) catalog = bigCartelCatalogTitles(booksMap);
+
+  if (catalog.length === 0) {
     return { matched: false, matchedBooks: [] };
   }
 
@@ -815,12 +827,13 @@ function matchBigCartelOrderToCatalog(order, included = [], customBooks = null, 
   if (itemsText == null) itemsText = extractBigCartelOrderItems(order, included, booksMap);
   if (itemsText && itemsText !== '—') {
     const itemsLower = itemsText.toLowerCase();
-    catalogBooks.forEach(b => {
-      const titleLower = (b.title || '').toLowerCase().trim();
-      if (titleLower && itemsLower.includes(titleLower)) {
-        if (!matchedBooks.includes(b.title)) matchedBooks.push(b.title);
+    const seen = new Set();
+    for (const { title, lower } of catalog) {
+      if (itemsLower.includes(lower) && !seen.has(title)) {
+        seen.add(title);
+        matchedBooks.push(title);
       }
-    });
+    }
   }
 
   return {
@@ -1035,6 +1048,7 @@ function renderBigCartelOrders(orders, included = []) {
   }
 
   const missingNums = missingLedgerNumbers();
+  const catalog = bigCartelCatalogTitles(BOOKS);
   const rows = document.createDocumentFragment();
   orders.forEach(o => {
     const attr = o.attributes || {};
@@ -1048,7 +1062,7 @@ function renderBigCartelOrders(orders, included = []) {
     if (attr.status === 'cancelled') statusPill = 'pill red';
 
     const itemsText = extractBigCartelOrderItems(o, included);
-    const matchInfo = matchBigCartelOrderToCatalog(o, included, null, itemsText);
+    const matchInfo = matchBigCartelOrderToCatalog(o, included, null, itemsText, catalog);
     let matchPillHtml = '';
     if (matchInfo.matched) {
       matchPillHtml = `<br><span class="bc-match-pill matched" title="Matches catalog inventory">✓ Matched: ${escapeHtml(matchInfo.matchedBooks.join(', '))}</span>`;
