@@ -34,9 +34,25 @@ const COLOUR = /^(#[0-9a-f]{3,8}|rgba?\([\d\s.,%]+\))$/i;
  */
 export function phoneBooksHtml(books, filter = 'all') {
   const active = PHONE_BOOK_FILTERS.some((f) => f.key === filter) ? filter : 'all';
-  const onHand = books.reduce((n, b) => n + Math.max(0, b.onHand || 0), 0);
-  const low = books.filter((b) => ['low', 'out'].includes(phoneBookStatus(b).key)).length;
-  const shown = books.filter((b) => phoneBookMatches(b, active));
+
+  // ⚡ Bolt Optimization: Replace multiple array passes (.reduce, .filter) with single loop
+  let onHand = 0;
+  let low = 0;
+  const shown = [];
+
+  for (const b of books) {
+    onHand += Math.max(0, b.onHand || 0);
+
+    const statusKey = phoneBookStatus(b).key;
+    if (statusKey === 'low' || statusKey === 'out') {
+      low++;
+    }
+
+    if (phoneBookMatches(b, active)) {
+      shown.push(b);
+    }
+  }
+
   const fig = (label, value, tone = '') => `<div class="ledger-fig${tone ? ` is-${tone}` : ''}"><span class="ledger-label">${label}</span><span class="ledger-value tnum">${value}</span></div>`;
   const chips = PHONE_BOOK_FILTERS.map((f) => {
     const on = f.key === active;
