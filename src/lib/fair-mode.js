@@ -168,10 +168,13 @@ export function eventTime(id) {
 }
 
 /** Which way of paying a register row's note records ("Card · …" → "Card"). */
+// Longest first, so "Stripe QR (printed …)" is not read as something shorter.
+// Sorted once here: saleMethod runs for every checkout in the day's register.
+const METHODS_LONGEST_FIRST = [...FAIR_METHODS].sort((a, b) => b.value.length - a.value.length);
+
 export function saleMethod(notes) {
   const text = String(notes || '');
-  // Longest first, so "Stripe QR (printed …)" is not read as something shorter.
-  const hit = [...FAIR_METHODS].sort((a, b) => b.value.length - a.value.length).find((m) => text.startsWith(m.value));
+  const hit = METHODS_LONGEST_FIRST.find((m) => text.startsWith(m.value));
   return hit ? hit.value : 'Other';
 }
 
