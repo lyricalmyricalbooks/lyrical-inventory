@@ -104,21 +104,10 @@ function event({ book, date, recordedAt, tie, kind, icon, text, amount = null, t
   };
 }
 
-/**
- * Every event from one book, unsorted.
- *
- * Consignment sales are read from the LEDGER, not from history: the app writes
- * a mirror row into `hist` for each one (tagged `consignmentLink`) so the
- * History tab can show it, and reporting both would show every store sale
- * twice. The ledger row is the canonical one — the same call the on-hand math
- * makes in deriveOnHand().
- */
-function eventsForBook(book, state) {
-  const s = state || {};
+/** Sales, gifts and reversals from `hist`, plus each order's shipped and delivered steps. */
+function histEvents(book, rows) {
   const out = [];
-  const bookCur = getBookCurrencyCode(book);
-
-  (s.hist || []).forEach((h, i) => {
+  (rows || []).forEach((h, i) => {
     if (!h || h.artistPending || h.consignmentLink) return;
     // hist has no id, so the key is built from whatever identity the row does
     // carry — the sheets event id, the order number, else its position.
@@ -185,8 +174,13 @@ function eventsForBook(book, state) {
       out.push(got);
     }
   });
+  return out;
+}
 
-  (s.ledger || []).forEach((e) => {
+/** Consignment shipments, store sales and returns, from the ledger. */
+function ledgerEvents(book, rows) {
+  const out = [];
+  (rows || []).forEach((e) => {
     if (!e || e.voided) return;
     const cur = entryNativeCode(e, book);
     const qty = qtyOf(e.qty);
@@ -221,8 +215,14 @@ function eventsForBook(book, state) {
       out.push(ev);
     }
   });
+  return out;
+}
 
-  (s.expenses || []).forEach((e) => {
+/** Expenses logged against the book. */
+function expenseEvents(book, rows) {
+  const out = [];
+  const bookCur = getBookCurrencyCode(book);
+  (rows || []).forEach((e) => {
     if (!e) return;
     const cur = e.currency || bookCur;
     const ev = event({
@@ -234,8 +234,14 @@ function eventsForBook(book, state) {
     ev.key = `expense:${book?.id || '?'}:${e.id}`;
     out.push(ev);
   });
+  return out;
+}
 
-  (s.invoices || []).forEach((inv) => {
+/** Invoices raised, and every payment or reminder that followed. */
+function invoiceEvents(book, rows) {
+  const out = [];
+  const bookCur = getBookCurrencyCode(book);
+  (rows || []).forEach((inv) => {
     if (!inv) return;
     const cur = inv.currencyCode || inv.currency || bookCur;
     const invKey = `${book?.id || '?'}:${inv.id || inv.num}`;
@@ -286,8 +292,13 @@ function eventsForBook(book, state) {
       out.push(sent);
     });
   });
+  return out;
+}
 
-  (s.artistPayouts || []).forEach((p) => {
+/** Payouts and settlements with the artist. */
+function payoutEvents(book, rows) {
+  const out = [];
+  (rows || []).forEach((p) => {
     if (!p) return;
     if (p.settlement) {
       const balance = p.settlement.balance;
@@ -317,8 +328,14 @@ function eventsForBook(book, state) {
     ev.key = `payout:${book?.id || '?'}:${p.id}`;
     out.push(ev);
   });
+  return out;
+}
 
-  (s.payoutRequests || []).forEach((r) => {
+/** Payout requests the artist sent that are still open. */
+function payoutRequestEvents(book, rows) {
+  const out = [];
+  const bookCur = getBookCurrencyCode(book);
+  (rows || []).forEach((r) => {
     if (!r || r.settled) return;
     const ev = event({
       book, date: r.requestedAt, tie: r.id, kind: 'payout-request', icon: '🙋',
@@ -328,8 +345,13 @@ function eventsForBook(book, state) {
     ev.key = `payout-request:${book?.id || '?'}:${r.id}`;
     out.push(ev);
   });
+  return out;
+}
 
-  (s.stockTransfers || []).forEach((t) => {
+/** Copies handed to the author, or back from them. */
+function stockTransferEvents(book, rows) {
+  const out = [];
+  (rows || []).forEach((t) => {
     if (!t) return;
     const qty = qtyOf(t.qty);
     const toAuthor = t.direction === 'to_author';
@@ -342,8 +364,29 @@ function eventsForBook(book, state) {
     ev.key = `stock-transfer:${book?.id || '?'}:${t.id}`;
     out.push(ev);
   });
-
   return out;
+}
+
+/**
+ * Every event from one book, unsorted.
+ *
+ * Consignment sales are read from the LEDGER, not from history: the app writes
+ * a mirror row into `hist` for each one (tagged `consignmentLink`) so the
+ * History tab can show it, and reporting both would show every store sale
+ * twice. The ledger row is the canonical one — the same call the on-hand math
+ * makes in deriveOnHand().
+ */
+function eventsForBook(book, state) {
+  const s = state || {};
+  return [
+    ...histEvents(book, s.hist),
+    ...ledgerEvents(book, s.ledger),
+    ...expenseEvents(book, s.expenses),
+    ...invoiceEvents(book, s.invoices),
+    ...payoutEvents(book, s.artistPayouts),
+    ...payoutRequestEvents(book, s.payoutRequests),
+    ...stockTransferEvents(book, s.stockTransfers),
+  ];
 }
 
 /**
