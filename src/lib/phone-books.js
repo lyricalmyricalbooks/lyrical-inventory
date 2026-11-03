@@ -34,9 +34,25 @@ const COLOUR = /^(#[0-9a-f]{3,8}|rgba?\([\d\s.,%]+\))$/i;
  */
 export function phoneBooksHtml(books, filter = 'all') {
   const active = PHONE_BOOK_FILTERS.some((f) => f.key === filter) ? filter : 'all';
-  const onHand = books.reduce((n, b) => n + Math.max(0, b.onHand || 0), 0);
-  const low = books.filter((b) => ['low', 'out'].includes(phoneBookStatus(b).key)).length;
-  const shown = books.filter((b) => phoneBookMatches(b, active));
+  // ⚡ Bolt Optimization: Loop Fusion - Combined multiple array passes into a single imperative loop to eliminate intermediate allocations and multiple O(N) traversals.
+  let onHand = 0;
+  let low = 0;
+  const shown = [];
+  for (const b of books) {
+    onHand += Math.max(0, b.onHand || 0);
+    const statusKey = phoneBookStatus(b).key;
+    if (statusKey === 'low' || statusKey === 'out') {
+      low++;
+    }
+
+    // Inline phoneBookMatches logic to avoid recomputing phoneBookStatus
+    let matches = true;
+    if (active === 'low') matches = statusKey === 'low';
+    else if (active === 'out') matches = statusKey === 'out';
+    else if (active === 'stores') matches = (b.atStores || 0) > 0;
+
+    if (matches) shown.push(b);
+  }
   const fig = (label, value, tone = '') => `<div class="ledger-fig${tone ? ` is-${tone}` : ''}"><span class="ledger-label">${label}</span><span class="ledger-value tnum">${value}</span></div>`;
   const chips = PHONE_BOOK_FILTERS.map((f) => {
     const on = f.key === active;
