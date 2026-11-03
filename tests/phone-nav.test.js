@@ -270,3 +270,33 @@ test('Today ledger: a sale made offline says it is waiting to upload, until the 
   expect(fig.classList.contains('is-waiting')).toBe(false);
   expect(fig.querySelector('.ledger-sub').textContent).toBe('2 sales');
 });
+
+// The computer-width Today screen: job cards and the workspace list are inked
+// slabs like every other card, not faint hairline outlines.
+const todayDesk = styles.match(/@media \(min-width: 769px\) \{\s*#tab-today \.today-card \{[\s\S]*?\n\}/);
+const todayDeskRule = (sel) => {
+  const esc = sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const m = todayDesk[0].match(new RegExp(`${esc}\\s*\\{([^}]*)\\}`));
+  return m ? m[1] : null;
+};
+
+test('Today on a computer: the job cards carry the ink outline and offset shadow', () => {
+  expect(todayDesk).not.toBeNull();
+  const card = todayDeskRule('#tab-today .today-card');
+  expect(card).toMatch(/border:\s*var\(--stroke\) solid var\(--rule-ink\)/);
+  expect(card).toMatch(/box-shadow:\s*var\(--elev-2\)/);
+  expect(card).toMatch(/border-radius:\s*var\(--r2\)/);
+  expect(todayDeskRule('#tab-today .today-card:active')).toMatch(/box-shadow:\s*none/);
+});
+
+test('Today on a computer: job letters sit in square ink stamps', () => {
+  expect(todayDesk[0]).toMatch(/#tab-today \.today-card-ic,\s*#tab-today \.today-row-ic \{[^}]*border:\s*var\(--stroke\) solid currentColor/);
+  expect(todayDeskRule('#tab-today .today-card-ic')).toMatch(/width:\s*40px/);
+});
+
+test('Today on a computer: the workspace list is one inked sheet', () => {
+  const rows = todayDeskRule('#tab-today .today-rows');
+  expect(rows).toMatch(/border:\s*var\(--stroke\) solid var\(--rule-ink\)/);
+  expect(rows).toMatch(/background:\s*var\(--surface-card\)/);
+  expect(rows).toMatch(/box-shadow:\s*var\(--elev-2\)/);
+});
