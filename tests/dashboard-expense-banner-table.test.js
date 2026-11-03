@@ -52,3 +52,24 @@ test('the category tag reuses one themed pill class instead of a hand-rolled inl
   expect(rowTemplate[1]).toContain('class="metric-banner-cat"');
   expect(rowTemplate[1]).not.toMatch(/style="font-size:10px;background:rgba/);
 });
+
+// Dashboard "Expenses owed to artist": words read in Archivo, figures in DM Mono.
+test('the expense banner table sets its words in the UI face, not the figures face', () => {
+  const table = styles.match(/\.metric-banner-table\{([^}]*)\}/);
+  expect(table).not.toBeNull();
+  expect(table[1]).toMatch(/font-family:var\(--font-ui\)/);
+  expect(table[1]).not.toMatch(/--font-mono/);
+});
+
+test('date, reference and amount columns stay in DM Mono with tabular digits', () => {
+  const figures = styles.match(/\.metric-banner-table tbody td:first-child,\.metric-banner-table tbody td:nth-child\(4\),\.metric-banner-table \.mb-amt\{([^}]*)\}/);
+  expect(figures).not.toBeNull();
+  expect(figures[1]).toMatch(/font-family:var\(--font-mono\)/);
+  expect(figures[1]).toMatch(/font-variant-numeric:tabular-nums/);
+});
+
+test('the category tag is set in the UI face rather than inheriting the table font', () => {
+  const cat = styles.match(/\.metric-banner-cat\{([^}]*)\}/);
+  expect(cat).not.toBeNull();
+  expect(cat[1]).toMatch(/font-family:var\(--font-ui\)/);
+});

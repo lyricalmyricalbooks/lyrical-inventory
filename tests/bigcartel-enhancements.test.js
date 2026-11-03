@@ -21,11 +21,13 @@ describe('Big Cartel Orders Enhancements (#2, #3, #4, #6)', () => {
     const formatFunc = mainContent.match(/function formatBigCartelOrderAddress\([^)]*\)\s*\{([\s\S]+?)\n\}/);
     const extractItemsFunc = mainContent.match(/function extractBigCartelOrderItems\([^)]*\)\s*\{([\s\S]+?)\n\}/);
 
+    const catalogFunc = mainContent.match(/function bigCartelCatalogTitles\([^)]*\)\s*\{([\s\S]+?)\n\}/);
     expect(matchFunc).not.toBeNull();
+    expect(catalogFunc).not.toBeNull();
     expect(formatFunc).not.toBeNull();
     expect(extractItemsFunc).not.toBeNull();
 
-    matchBigCartelOrderToCatalog = new Function('order', 'included', 'BOOKS', 'function escapeHtml(s){return String(s||"");}\n' + extractItemsFunc[0] + '\n' + matchFunc[0] + '\nreturn matchBigCartelOrderToCatalog(order, included, BOOKS);');
+    matchBigCartelOrderToCatalog = new Function('order', 'included', 'BOOKS', 'function escapeHtml(s){return String(s||"");}\n' + extractItemsFunc[0] + '\n' + catalogFunc[0] + '\n' + matchFunc[0] + '\nreturn matchBigCartelOrderToCatalog(order, included, BOOKS);');
     const extractAddrFunc = mainContent.match(/function extractBigCartelAddress\([^)]*\)\s*\{([\s\S]+?)\n\}/);
 
     formatBigCartelOrderAddress = new Function('resolveCountryCode', 'order', extractAddrFunc[0] + '\n' + formatFunc[0] + '\nreturn formatBigCartelOrderAddress(order);').bind(null, resolveCountryCode);
