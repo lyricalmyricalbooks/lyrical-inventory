@@ -264,6 +264,15 @@ export function planCurrencyChange({ state, book, from, to, rateFor, skip }) {
   const byKey = rowsByKey('hist', state?.hist || []);
   const settlementLinks = (state?.artistPayouts || []).flatMap(p =>
     !p.voided && p.settlement ? p.settlement.heldSales.map(link => ({ link, row: byKey.get(link.key) })) : []);
+
+  // ⚡ Bolt Optimization: Replace .reduce() with imperative loop to avoid function allocation
+  let sumBefore = 0;
+  let sumAfter = 0;
+  for (let i = 0; i < changes.length; i++) {
+    sumBefore += changes[i].before;
+    sumAfter += changes[i].after;
+  }
+
   return {
     state, settlementLinks,
     from: fromCode,
@@ -273,8 +282,8 @@ export function planCurrencyChange({ state, book, from, to, rateFor, skip }) {
     missingRate,
     // Sums are indicative (they mix scopes) but give the dialog a headline the
     // publisher can sanity-check against what they expect to see.
-    totalBefore: roundCents(changes.reduce((a, c) => a + c.before, 0)),
-    totalAfter: roundCents(changes.reduce((a, c) => a + c.after, 0)),
+    totalBefore: roundCents(sumBefore),
+    totalAfter: roundCents(sumAfter),
   };
 }
 
