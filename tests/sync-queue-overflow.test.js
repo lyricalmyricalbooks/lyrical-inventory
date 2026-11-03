@@ -74,14 +74,18 @@ describe('a full phone', () => {
   it('keeps an online save that failed on a full phone, then clears it once it goes through', async () => {
     fillLocalStorage();
     const ok = app.cloud.saveImpl;
-    let calls = 0;
-    app.cloud.saveImpl = (...args) => (++calls === 1 ? { ok: false } : ok(...args));
+    // The cloud keeps refusing until the test lets it through: a failed save is
+    // queued and retried straight away, and a retry that succeeded at once used
+    // to clear the IndexedDB copy before the check below could see it.
+    let refusing = true;
+    app.cloud.saveImpl = (...args) => (refusing ? { ok: false } : ok(...args));
     app.main.states[A].hist.unshift({ ...SALE, num: 'S-ONLINE' });
     await app.main.saveState(A);
     await vi.waitFor(() => expect(overflow().size).toBe(1));
     expect(app.toast()).not.toMatch(/could be lost/);
 
     Storage.prototype.setItem = realSetItem;
+    refusing = false;
     app.setOnline(false);
     app.setOnline(true);
     await vi.waitFor(() => expect(overflow().size).toBe(0));

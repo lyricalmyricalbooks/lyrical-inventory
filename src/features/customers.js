@@ -1171,6 +1171,9 @@ async function sendTestEmailCampaign() {
   }
 }
 
+// The send log grows one line per recipient. `innerHTML +=` re-read and rebuilt
+// the whole log on every line (slower with each email sent), and swapped out the
+// Retry line a retry in progress was about to update; insertAdjacentHTML appends.
 let _campaignSendingActive = false;
 let _campaignSendingIndex = 0;
 let _campaignSendingRecipients = [];
@@ -1179,7 +1182,7 @@ let _campaignFailCount = 0;
 
 function cancelCampaignSending() {
   _campaignSendingActive = false;
-  $('c-send-log-console').innerHTML += '<div style="color:var(--red);">[CANCELLED] Sending process aborted by user.</div>';
+  $('c-send-log-console').insertAdjacentHTML('beforeend', '<div style="color:var(--red);">[CANCELLED] Sending process aborted by user.</div>');
   $('c-send-cancel-btn').disabled = true;
 }
 
@@ -1258,10 +1261,10 @@ async function sendNextCampaignEmail(subject, body, replyTo, draftId) {
     const out = withCampaignFooter(personalizedBody, replyTo, parseMarkdownToHtml);
     await sendSingleEmailViaBackend(to, subject, out.body, replyTo, out.htmlBody);
     _campaignSuccessCount++;
-    $('c-send-log-console').innerHTML += `<div style="color:#a9ffaf;">✓ Sent to ${escapeHtml(to)} (${escapeHtml(name)})</div>`;
+    $('c-send-log-console').insertAdjacentHTML('beforeend', `<div style="color:#a9ffaf;">✓ Sent to ${escapeHtml(to)} (${escapeHtml(name)})</div>`);
   } catch (e) {
     _campaignFailCount++;
-    $('c-send-log-console').innerHTML += `<div style="color:#f87171;" class="campaign-log-fail" data-index="${_campaignSendingIndex}">✕ Failed for ${escapeHtml(to)}: ${escapeHtml(e.message)} <button class="btn sm" onclick="retryCampaignEmail(${_campaignSendingIndex})" style="padding:2px 6px;font-size:10px;margin-left:8px;line-height:1.2;height:auto;width:auto;display:inline-block;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:white;cursor:pointer;">Retry</button></div>`;
+    $('c-send-log-console').insertAdjacentHTML('beforeend', `<div style="color:#f87171;" class="campaign-log-fail" data-index="${_campaignSendingIndex}">✕ Failed for ${escapeHtml(to)}: ${escapeHtml(e.message)} <button class="btn sm" onclick="retryCampaignEmail(${_campaignSendingIndex})" style="padding:2px 6px;font-size:10px;margin-left:8px;line-height:1.2;height:auto;width:auto;display:inline-block;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:white;cursor:pointer;">Retry</button></div>`);
   }
 
   const consoleEl = $('c-send-log-console');
@@ -1276,9 +1279,9 @@ async function finishCampaignSend(subject, body, replyTo, draftId, wasAborted) {
   $('c-send-progress-fill').style.width = '100%';
   $('c-send-progress-text').textContent = wasAborted ? 'Sending Aborted' : 'Campaign Completed!';
 
-  $('c-send-log-console').innerHTML += `
+  $('c-send-log-console').insertAdjacentHTML('beforeend', `
     <div style="font-weight:bold;margin-top:8px;" id="c-send-finished-summary">[FINISHED] Success: ${_campaignSuccessCount} · Failed: ${_campaignFailCount}</div>
-  `;
+  `);
 
   const btn = $('c-send-cancel-btn');
   btn.textContent = '✕ Close Window';

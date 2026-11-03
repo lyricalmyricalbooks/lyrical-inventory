@@ -28,7 +28,6 @@ export const LINK_REQUEST_KEEP_DAYS = 60;
 
 /** Where the app's own to-do items take the website's owner: always the Website orders tab. */
 export const WEBSITE_ORDERS_HASH = '#website-orders';
-export const TODO_HASH = '#todo';
 
 const DAY = 24 * 60 * 60 * 1000;
 const clean = (v) => String(v ?? '').replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim();
