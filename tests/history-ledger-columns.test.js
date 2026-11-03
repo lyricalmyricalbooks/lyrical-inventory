@@ -29,7 +29,14 @@ test('tight gutters keep the approve buttons in view, outer edges keep 16px', ()
   expect(block).toMatch(/:is\(th, td\):first-child\{padding-left:16px;\}/);
   expect(block).toMatch(/:is\(th, td\):last-child\{padding-right:16px;\}/);
   // The short figure under "Stock after" should not hold the column open for its label.
-  expect(block).toMatch(/th:nth-child\(6\)\{white-space:normal;\}/);
+  expect(block).toMatch(/th:nth-child\(6\)\{white-space:normal;/);
+});
+
+test('"Stock after" wraps between its words, never inside "STOCK"', () => {
+  // <html> carries overflow-wrap:break-word, which let a squeezed table split
+  // the label as "STOC / K / AFTER". The header opts out so the column keeps
+  // the width of its longest word.
+  expect(block).toMatch(/th:nth-child\(6\)\{white-space:normal;overflow-wrap:normal;\}/);
 });
 
 test('notes keep a readable minimum instead of a word per line', () => {
