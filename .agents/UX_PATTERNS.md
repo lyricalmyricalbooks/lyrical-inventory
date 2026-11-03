@@ -275,6 +275,11 @@ rules now hold it together:
   banner's own established tone family (`rgba(255,255,255,.08)` fill, `--on-inverse-3` text —
   already used for this banner's other muted text) instead of pulling in a themed component that
   wasn't designed for a permanently-dark plate.
+- **Words in Archivo, figures in DM Mono — per column, not per table.** The table is set in
+  `--font-ui`; only the date, reference and amount columns switch to `--font-mono` with
+  `tabular-nums`. It used to inherit DM Mono wholesale, so the description and category read like a
+  typewriter receipt and the amounts had nothing to stand apart from. Any banner table that adopts
+  this markup gets the same split for free.
 
 The sibling author-facing banners (`#arb-items` in `renderArtistReimburseBanner`, `#apb-transfers`
 in the publisher-owed transfer summary) show the same kind of data as a flex list of rows rather

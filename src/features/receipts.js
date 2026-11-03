@@ -39,6 +39,7 @@ import { updateDash } from './dashboard.js';
 import { TAX_CATEGORIES, TC_CATEGORIES, _editingExpense } from './tax-entries.js';
 import { fetchSheetsCapabilities, notifyPublisherSubmission } from './sheets-bridge.js';
 import { escapeHtml } from '../lib/html.js';
+import { localDay } from '../lib/calendar-day.js';
 import { dropFilesIntoInput, setDropzoneDrag } from '../lib/dropzone.js';
 import { runOpenRouterRead, friendlyOpenRouterError } from '../lib/openrouter-chat.js';
 import {
@@ -2420,18 +2421,12 @@ function inferReceiptCategory(vendor, description) {
 // Best-effort date normalization to YYYY-MM-DD
 function normalizeReceiptDate(s) {
   if (!s) return '';
-  const t = String(s).trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
-  const d = new Date(t);
   // Format in LOCAL time. toISOString() converts to UTC, so any evening
   // timestamp ("2026-03-05 20:14") rolled forward a day west of Greenwich —
   // which then broke _findDuplicateExpense's exact date-string match and let
-  // the same purchase import twice.
-  if (!isNaN(d.getTime())) {
-    const p = n => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-  }
-  return '';
+  // the same purchase import twice. localDay keeps a bare YYYY-MM-DD as-is and
+  // gives '' for anything unreadable.
+  return localDay(String(s).trim());
 }
 
 // Decode quoted-printable + strip MIME headers + collapse HTML to text
