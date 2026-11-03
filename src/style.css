@@ -2153,7 +2153,13 @@ tr.hist-row:hover {
 .metric-banner-items .mbi-amt{font-family:var(--font-mono);font-size:var(--text-base);font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap;}
 .metric-banner-green .mbi-amt{color:var(--green);}
 .metric-banner-gold .mbi-amt{color:var(--gold-text);}
-.metric-banner-table{width:100%;border-collapse:collapse;font-size:var(--text-sm);font-family:var(--font-mono);}
+.metric-banner-table{width:100%;border-collapse:collapse;font-size:var(--text-sm);font-family:var(--font-ui);}
+/* Type split, same as every other ledger: words in Archivo, figures in DM Mono.
+   The whole table used to inherit DM Mono, so the description (the cell the
+   eye reads first) and the category tag set like a typewriter receipt while
+   the amounts had nothing to stand apart from. Only the date, reference and
+   amount columns are figures now, and they line up digit for digit. */
+.metric-banner-table tbody td:first-child,.metric-banner-table tbody td:nth-child(4),.metric-banner-table .mb-amt{font-family:var(--font-mono);font-variant-numeric:tabular-nums;}
 /* Column labels + a real row rhythm — this table used to have every cell's
    padding hand-picked in JS (flush edges on date/amount, 8px elsewhere), no
    header, and no row divider, so a multi-row expense list ran together into
@@ -2170,7 +2176,7 @@ tr.hist-row:hover {
 .metric-banner-table .mb-amt{color:var(--red);font-weight:500;white-space:nowrap;}
 /* A themed sibling of .chip-status, tuned for this banner's permanently-dark
    fill rather than the light/dark surface pair .chip-status themes against. */
-.metric-banner-cat{display:inline-flex;align-items:center;font-size:var(--text-2xs);font-weight:600;background:var(--cream3);color:var(--text2);padding:2px 8px;border-radius:var(--r-pill);white-space:nowrap;}
+.metric-banner-cat{display:inline-flex;align-items:center;font-family:var(--font-ui);font-size:var(--text-2xs);font-weight:600;background:var(--cream3);color:var(--text2);padding:2px 8px;border-radius:var(--r-pill);white-space:nowrap;}
 /* Tone. The outline stays ink in every variant — it is the banner's shape, not
    its status — and the status reads as a flat wash of the matching ink instead
    of the soft corner glow these used to carry. */
