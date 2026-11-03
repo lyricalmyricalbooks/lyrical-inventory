@@ -222,6 +222,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-10-27 | none | Phone, all screens (375 wide, light and night) | Considered, nothing shipped: a third survey of all 76 screens found no sideways scroll or errors; the flagged small taps (notification links, tick-boxes, edit pencils) already carry an enlarged invisible tap area, and the clipped fair-kit label and hidden screen-reader lines are intentional | — |
 | 2026-10-29 | none | Phone, all screens | Considered, nothing shipped: main has gained only log entries since the last phone survey (7d7019d), and the open pull requests touch only the computer-width Today screen, an email send log and a test fix, so no phone screen has changed to re-check | — |
 | 2026-10-30 | none | Phone, all screens | Considered, nothing shipped: main has gained only log entries since the last phone survey (7d7019d), and the open pull requests touch only the computer-width Today and History screens, an email send log, a test fix and internal tidy-ups, so no phone screen has moved to re-check | — |
+| 2026-11-03 | none | Phone, all screens | Considered, nothing shipped: re-captured all 76 phone screens and pop-ups at 375 wide, light and night, after the recent computer-width and lettering changes; no sideways scroll, page errors, small taps, tiny text or unlabelled rows, and Today and Sell read cleanly with one clear lead on each, so there is no phone gap to fix | (this PR) |
 
 ## Considered and rejected
 
