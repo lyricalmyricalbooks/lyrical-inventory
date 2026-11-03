@@ -521,6 +521,8 @@ async function sendOcBulkEmails(_retryFailedOnly = false) {
     ? `<div style="color:#fbbf24;margin-bottom:4px;">[SIMULATION] Starting dry run · ${selectedRecs.length} recipient${selectedRecs.length !== 1 ? 's' : ''}</div>`
     : `<div style="color:#6b8cff;margin-bottom:4px;">Starting bulk send · ${selectedRecs.length} recipient${selectedRecs.length !== 1 ? 's' : ''} · ${delayMs > 0 ? delayMs / 1000 + 's delay' : 'no delay'}${replyTo ? ' · reply-to: ' + escapeHtml(replyTo) : ''}</div>`;
 
+  // Append each line (insertAdjacentHTML) rather than `innerHTML +=`, which
+  // re-read and rebuilt the whole log once per recipient.
   _ocBulkSendingActive = true;
   _ocBulkFailedIds = [];
   let successCount = 0;
@@ -528,7 +530,7 @@ async function sendOcBulkEmails(_retryFailedOnly = false) {
 
   for (let i = 0; i < selectedRecs.length; i++) {
     if (!_ocBulkSendingActive) {
-      consoleEl.innerHTML += `<div style="color:#fbbf24;">[CANCELLED] Stopped after ${i} of ${selectedRecs.length}.</div>`;
+      consoleEl.insertAdjacentHTML('beforeend', `<div style="color:#fbbf24;">[CANCELLED] Stopped after ${i} of ${selectedRecs.length}.</div>`);
       break;
     }
 
@@ -543,11 +545,11 @@ async function sendOcBulkEmails(_retryFailedOnly = false) {
 
     try {
       if (simulate) {
-        consoleEl.innerHTML += `<div style="color:#a9ffaf;border-left:2px solid #a9ffaf;padding-left:8px;margin:8px 0 12px 0;text-align:left;line-height:1.5;background:rgba(255,255,255,0.02);padding:8px;border-radius:4px;">
+        consoleEl.insertAdjacentHTML('beforeend', `<div style="color:#a9ffaf;border-left:2px solid #a9ffaf;padding-left:8px;margin:8px 0 12px 0;text-align:left;line-height:1.5;background:rgba(255,255,255,0.02);padding:8px;border-radius:4px;">
           <strong>[SIMULATION] To:</strong> ${escapeHtml(c.email)} (${escapeHtml(c.name || 'Artist')})<br>
           <strong>Subject:</strong> ${escapeHtml(subject)}<br>
           <div style="color:var(--text3);margin-top:4px;white-space:pre-wrap;font-family:monospace;font-size:11px;background:rgba(0,0,0,0.2);padding:6px;border-radius:3px;">${escapeHtml(body.substring(0, 150))}${body.length > 150 ? '...' : ''}</div>
-        </div>`;
+        </div>`);
         successCount++;
       } else {
         const threadId = ocThreadForStage(c, stage);
@@ -559,12 +561,12 @@ async function sendOcBulkEmails(_retryFailedOnly = false) {
         const usedThreadId = (resp && resp.threadId) ? resp.threadId : threadId;
         if (usedThreadId) c.gmailThreadId = usedThreadId;
         successCount++;
-        consoleEl.innerHTML += `<div style="color:#a9ffaf;">✓ [${i + 1}/${selectedRecs.length}] ${escapeHtml(c.email)} (${escapeHtml(c.name || 'Artist')})</div>`;
+        consoleEl.insertAdjacentHTML('beforeend', `<div style="color:#a9ffaf;">✓ [${i + 1}/${selectedRecs.length}] ${escapeHtml(c.email)} (${escapeHtml(c.name || 'Artist')})</div>`);
       }
     } catch (err) {
       failCount++;
       _ocBulkFailedIds.push(c.id);
-      consoleEl.innerHTML += `<div style="color:#f87171;">✕ [${i + 1}/${selectedRecs.length}] ${escapeHtml(c.email)}: ${escapeHtml(err.message)}</div>`;
+      consoleEl.insertAdjacentHTML('beforeend', `<div style="color:#f87171;">✕ [${i + 1}/${selectedRecs.length}] ${escapeHtml(c.email)}: ${escapeHtml(err.message)}</div>`);
     }
 
     // Update progress bar
@@ -588,9 +590,9 @@ async function sendOcBulkEmails(_retryFailedOnly = false) {
     : `Done · ✓ ${successCount} sent · ${failCount > 0 ? '✕ ' + failCount + ' failed' : '0 failed'}`;
 
   if (simulate) {
-    consoleEl.innerHTML += `<div style="color:#fbbf24;border-top:1px solid #2a2a2a;margin-top:6px;padding-top:6px;">Simulation Finished · ${successCount} emails simulated. No emails were sent.</div>`;
+    consoleEl.insertAdjacentHTML('beforeend', `<div style="color:#fbbf24;border-top:1px solid #2a2a2a;margin-top:6px;padding-top:6px;">Simulation Finished · ${successCount} emails simulated. No emails were sent.</div>`);
   } else {
-    consoleEl.innerHTML += `<div style="color:#6b8cff;border-top:1px solid #2a2a2a;margin-top:6px;padding-top:6px;">Finished · ${successCount} succeeded · ${failCount} failed</div>`;
+    consoleEl.insertAdjacentHTML('beforeend', `<div style="color:#6b8cff;border-top:1px solid #2a2a2a;margin-top:6px;padding-top:6px;">Finished · ${successCount} succeeded · ${failCount} failed</div>`);
   }
   consoleEl.scrollTop = consoleEl.scrollHeight;
 

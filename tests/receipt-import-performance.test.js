@@ -5,6 +5,7 @@ import fs from 'fs';
 import { appSource } from './helpers/extract-decl.js';
 import { needsReceiptAmount, receiptDraftRef } from '../src/lib/receipt-drafts.js';
 import { parseScannedAmount } from '../src/lib/receipt-scan-checks.js';
+import { localDay } from '../src/lib/calendar-day.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -49,7 +50,7 @@ describe('Receipt import performance & correctness fixes', () => {
 
   describe('normalizeReceiptDate — local time, not UTC', () => {
     const fnSrc = extractFn('normalizeReceiptDate');
-    const normalizeReceiptDate = new Function(`${fnSrc}\nreturn normalizeReceiptDate;`)();
+    const normalizeReceiptDate = new Function('localDay', `${fnSrc}\nreturn normalizeReceiptDate;`)(localDay);
 
     it('does not roll an evening timestamp forward a day', () => {
       // toISOString() would shift this to the next UTC day in any zone west
@@ -117,9 +118,9 @@ describe('Receipt import performance & correctness fixes', () => {
   describe('_draftsFromReceiptRows — keeps and flags instead of silently discarding', () => {
     // Depends on EXPENSE_CATEGORIES, inferReceiptCategory, normalizeReceiptDate,
     // today, _parseReceiptAmount, _selectedFileParts, _emailContentCache, plus
-    // needsReceiptAmount/receiptDraftRef from lib/receipt-drafts.js — a real ES
-    // module, so those two are injected as function params rather than spliced
-    // in as source text.
+    // needsReceiptAmount/receiptDraftRef from lib/receipt-drafts.js and localDay
+    // from lib/calendar-day.js — real ES modules, so those are injected as
+    // function params rather than spliced in as source text.
     const catMatch = mainContent.match(/const EXPENSE_CATEGORIES = \[[\s\S]+?\];/);
     const inferMatch = mainContent.match(/function inferReceiptCategory\([^)]*\)\s*\{[\s\S]+?\n\}/);
     const normDateSrc = extractFn('normalizeReceiptDate');
@@ -141,8 +142,8 @@ describe('Receipt import performance & correctness fixes', () => {
       ${fnSrc}
       return _draftsFromReceiptRows;
     `;
-    const _draftsFromReceiptRows = new Function('needsReceiptAmount', 'receiptDraftRef', 'parseScannedAmount', harness)(
-      needsReceiptAmount, receiptDraftRef, parseScannedAmount
+    const _draftsFromReceiptRows = new Function('needsReceiptAmount', 'receiptDraftRef', 'parseScannedAmount', 'localDay', harness)(
+      needsReceiptAmount, receiptDraftRef, parseScannedAmount, localDay
     );
 
     it('keeps a well-formed row, priced and unflagged', () => {
