@@ -22,6 +22,13 @@ export const FAIR_SEARCH_OVER = 15;
 
 const METHOD_KEY = 'lm-fair-last-method';
 
+/** Is this way of "paying" a giveaway? A comp is recorded as a gratuity: the
+ *  copies leave stock but nothing is earned. The note may carry the fair's
+ *  name after it ("Comp/Gift · Toronto Art Book Fair"). */
+export function isCompMethod(method) {
+  return String(method || '').startsWith('Comp/Gift');
+}
+
 export function readLastMethod(storage = globalThis.localStorage) {
   try {
     const v = storage?.getItem(METHOD_KEY);
