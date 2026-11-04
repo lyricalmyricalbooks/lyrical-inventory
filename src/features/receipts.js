@@ -36,7 +36,8 @@ import {
 } from '../main.js';
 import { BOOKS, states, activeBook, getState, getBook } from '../core/store.js';
 import { updateDash } from './dashboard.js';
-import { TAX_CATEGORIES, TC_CATEGORIES, _editingExpense } from './tax-entries.js';
+import { TAX_CATEGORIES, TC_CATEGORIES, _editingExpense, resetCategoryAutofill } from './tax-entries.js';
+import { findExpenseRule } from '../lib/expense-rules.js';
 import { fetchSheetsCapabilities, notifyPublisherSubmission } from './sheets-bridge.js';
 import { escapeHtml } from '../lib/html.js';
 import { localDay } from '../lib/calendar-day.js';
@@ -165,6 +166,7 @@ function receiptFinderDependencies() {
     hasAppAi: () => !!(TAX_CENTER.settings?.geminiKey || TAX_CENTER.settings?.openRouterKey?.trim()),
     readAi: (parts, opts) => _callAiForReceipts(TAX_CENTER.settings?.geminiKey, parts, opts),
     categories: EXPENSE_CATEGORIES, inferCategory: inferReceiptCategory,
+    ruleCategory: (vendor, description) => findExpenseRule(TAX_CENTER.expenseRules, { vendor, description }, { allowed: EXPENSE_CATEGORIES })?.category || '',
     habitCategory: vendor => vendorFilingHabit(vendor, _receiptHabitIndex(), { allowed: EXPENSE_CATEGORIES })?.category || '',
     toast: showToast, confirm: confirmDialog,
     upload: (file, path) => window._fbUploadReceipt(file, path),
@@ -4695,7 +4697,10 @@ async function _runReceiptScan(cfg) {
     // keeps it. Only categories this form offers can be a habit here.
     const catEl = $(cfg.catId);
     const offered = Array.from(catEl?.options || []).map(o => (o.value || o.textContent || '').trim());
-    const habit = vendor ? vendorFilingHabit(vendor, _receiptHabitIndex(), { allowed: offered }) : null;
+    // The owner's own sorting rules outrank even the habit: a rule is
+    // something they said, a habit only something they did.
+    const rule = findExpenseRule(TAX_CENTER.expenseRules, { vendor, description }, { allowed: offered });
+    const habit = !rule && vendor ? vendorFilingHabit(vendor, _receiptHabitIndex(), { allowed: offered }) : null;
     const aiCategory = EXPENSE_CATEGORIES.includes(parsed.category) ? parsed.category : '';
 
     // Only when there is something to categorise. inferReceiptCategory falls
@@ -4703,7 +4708,7 @@ async function _runReceiptScan(cfg) {
     // and make a scan that read nothing at all report partial success.
     const haveSubject = vendor || description || EXPENSE_CATEGORIES.includes(parsed.category);
     let chosenCategory = '';
-    if (haveSubject && _applyScanCategory(catEl, habit?.category || parsed.category, vendor, description)) {
+    if (haveSubject && _applyScanCategory(catEl, rule?.category || habit?.category || parsed.category, vendor, description)) {
       applied.push('category');
       chosenCategory = catEl.value;
     }
@@ -4752,6 +4757,7 @@ async function _runReceiptScan(cfg) {
       dateConcern,
       date,
       duplicate: _scanLedgerDuplicate(cfg.dest, { date, amount, currency }),
+      rule: rule && chosenCategory === rule.category ? rule.rule : null,
       habit,
       habitOverrode: !!habit && habit.category !== aiCategory,
       vendor,
@@ -5372,8 +5378,9 @@ function _applyBatchScanResult(row, parsed, habits = null) {
   // How this shop has been filed before outranks the reader's guess, the same
   // as on the single-receipt form.
   const cats = _batchExpenseCategories();
-  const habit = vendor && habits ? vendorFilingHabit(vendor, habits, { allowed: cats }) : null;
-  const cat = habit ? habit.category
+  const rule = findExpenseRule(TAX_CENTER.expenseRules, { vendor, description }, { allowed: cats });
+  const habit = !rule && vendor && habits ? vendorFilingHabit(vendor, habits, { allowed: cats }) : null;
+  const cat = rule ? rule.category : habit ? habit.category
     : (cats.includes(parsed.category) ? parsed.category : inferReceiptCategory(vendor, description));
   if (cat && cats.includes(cat)) row.category = cat;
 
@@ -5417,6 +5424,7 @@ function _applyBatchScanResult(row, parsed, habits = null) {
   } else if (dateConcern?.kind === 'old') {
     row.scanFlags.push({ field: 'date', text: 'date is over two years ago' });
   }
+  if (rule && row.category === rule.category) row.scanFlags.push({ field: 'category', tone: 'note', text: `sorted by your rule for "${rule.rule.match}"` });
   if (habit) row.scanFlags.push({ field: 'category', tone: 'note', text: `filed like your other ${vendor} receipts` });
   row.error = warn.length ? `check ${warn.join(', ')}` : '';
 }
@@ -7576,6 +7584,7 @@ async function submitExpense() {
   renderExpenses();
   updateDash();
   $('exp-desc').value = ''; $('exp-amount').value = ''; $('exp-ref').value = ''; $('exp-date').value = today();
+  resetCategoryAutofill('exp-cat', 'exp-cat-hint');
   expFileClear();
   $('exp-desc').focus();
 }
