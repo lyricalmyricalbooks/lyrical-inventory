@@ -105,9 +105,14 @@ export function hasOwnChannel(s, chan) {
   return !!s.chStats && !isUnsafeKey(String(chan)) && Object.prototype.hasOwnProperty.call(s.chStats, chan);
 }
 export function channelStats(s, chan) {
-  if (!s.chStats || typeof s.chStats !== 'object') s.chStats = {};
   const key = String(chan);
+  // A book state looked up by a bad id could be Object.prototype itself; never
+  // write onto that either.
+  if (!s || typeof s !== 'object' || s === Object.prototype) return { txns: 0, units: 0, revenue: 0 };
   if (key === '__proto__' || key === 'constructor' || key === 'prototype') return { txns: 0, units: 0, revenue: 0 };
+  if (!s.chStats || typeof s.chStats !== 'object') {
+    Object.defineProperty(s, 'chStats', { value: {}, enumerable: true, writable: true, configurable: true });
+  }
   if (!Object.prototype.hasOwnProperty.call(s.chStats, key)) {
     Object.defineProperty(s.chStats, key, { value: { txns: 0, units: 0, revenue: 0 }, enumerable: true, writable: true, configurable: true });
   }

@@ -159,4 +159,13 @@ describe('channelStats', () => {
     expect(Object.keys(s.chStats)).toEqual(['Website']);
     expect(s.chStats.Website).toMatchObject({ txns: 1, units: 2, revenue: 20 });
   });
+
+  it('starts the totals for a state that has none, and never writes onto Object.prototype', async () => {
+    const { channelStats } = await import('../src/lib/channel-mix.js');
+    const s = {};
+    channelStats(s, 'Website').txns++;
+    expect(s.chStats.Website.txns).toBe(1);
+    channelStats(Object.prototype, 'Website').txns++;
+    expect({}.chStats).toBeUndefined();
+  });
 });
