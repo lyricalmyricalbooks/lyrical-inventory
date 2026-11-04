@@ -17,10 +17,9 @@
 import {
   TAX_CENTER,
   _fxRateCache,
-  fetchHistoricalRate,
-  fetchLiveRate,
   getReconStripeKey,
   isAuthor,
+  resolveExpenseRate,
   showToast,
   today,
 } from '../main.js';
@@ -33,6 +32,8 @@ import { browserWatchState, effectiveInterval, startWatch } from '../lib/watch-s
 import { isZeroDecimalCurrency } from '../lib/invoice-payments.js';
 import { STRIPE_FEE_INTERVAL_MS, describeFeeSweep, dueForFeeSweep, feeSweepFromYear, startOfYear } from '../lib/stripe-fee-schedule.js';
 import { toCsv } from '../lib/csv.js';
+import { getBookCurrencyCode, roundCents } from '../lib/money.js';
+import { saleCadAmounts } from '../lib/sale-fx.js';
 import { downloadCsv } from '../lib/download.js';
 import { escapeHtml } from '../lib/html.js';
 import {
@@ -565,15 +566,17 @@ async function fetchStripeFeesByYear() {
 async function planStripeFeeRows(rows, { now = Date.now() } = {}) {
   const currentYear = new Date(now).getFullYear();
 
+  // 0 when no rate can be found: the row is filed flagged `fxMissing` with no
+  // CAD value, and healExpenseRates fills it in at the row's own date once
+  // online — never booked 1:1, and a closed year never at today's rate.
   const rateFor = async (cur, year) => {
     if (cur === 'CAD') return 1;
     const fxDate = year < currentYear ? `${year}-12-31` : today();
-    let rate = 0;
-    try { const h = await fetchHistoricalRate(cur, 'CAD', fxDate); rate = h?.rate || 0; } catch (_) { /* fall through */ }
-    if (!rate) { try { const lr = await fetchLiveRate(cur, 'CAD'); rate = lr?.rate || 0; } catch (_) { /* fall through */ } }
-    if (!rate) rate = _fxRateCache[`${cur}_CAD`] || 0;
-    return rate || 1;
+    try { return (await resolveExpenseRate(cur, fxDate)) || 0; } catch (_) { return 0; }
   };
+  const converted = (amount, fxRate) => (fxRate
+    ? { fxRate, baseAmount: amount * fxRate, fxMissing: false }
+    : { fxRate: null, baseAmount: null, fxMissing: true });
 
   const planned = [];
   const fxRates = await Promise.all(rows.map(r => rateFor(r.cur.toUpperCase(), r.year)));
@@ -591,7 +594,7 @@ async function planStripeFeeRows(rows, { now = Date.now() } = {}) {
         desc: `Stripe processing fees on sales ${r.year}${r.salesCount ? ` (${r.salesCount} payment${r.salesCount === 1 ? '' : 's'})` : ''}`,
         cat: 'Sales Processing Fees',
         currency: cur, amount: salesFee, origCurrency: cur, origAmount: salesFee,
-        fxRate, baseAmount: salesFee * fxRate, date: entryDate,
+        ...converted(salesFee, fxRate), date: entryDate,
       });
     }
 
@@ -603,7 +606,7 @@ async function planStripeFeeRows(rows, { now = Date.now() } = {}) {
         desc: `Stripe billing & service fees ${r.year}`,
         cat: 'Software & Subscriptions',
         currency: cur, amount: billing, origCurrency: cur, origAmount: billing,
-        fxRate, baseAmount: billing * fxRate, date: entryDate,
+        ...converted(billing, fxRate), date: entryDate,
       });
     }
   }
@@ -627,13 +630,21 @@ function writeStripeFeeRows(planned) {
     .map(e => [e.ref, e]));
 
   let inserted = 0, updated = 0;
-  for (const p of planned) {
+  for (let p of planned) {
     const existing = byRef.get(p.ref);
+    // No rate this run, but the row already holds one for the same currency
+    // and date (healed earlier): keep that rate rather than blanking the CAD
+    // value until the next heal.
+    if (p.fxMissing && existing && Number(existing.fxRate) > 0 && !existing.fxMissing
+        && existing.currency === p.currency && existing.date === p.date) {
+      p = { ...p, fxRate: existing.fxRate, baseAmount: p.amount * existing.fxRate, fxMissing: false };
+    }
     if (existing) {
       Object.assign(existing, {
         desc: p.desc, cat: p.cat, currency: p.currency, amount: p.amount,
         origCurrency: p.origCurrency, origAmount: p.origAmount,
         fxRate: p.fxRate, baseAmount: p.baseAmount, date: p.date,
+        fxMissing: p.fxMissing === true,
       });
       updated++;
     } else {
@@ -666,13 +677,17 @@ async function insertStripeFeesIntoLedger() {
   const totalCad = planned.reduce((s, p) => s + (p.baseAmount || 0), 0);
   // ⚡ Bolt Optimization: Use string comparison instead of localeCompare for sorting ref strings
   const lines = planned.sort((a, b) => a.ref > b.ref ? 1 : (a.ref < b.ref ? -1 : 0))
-    .map(p => `  • ${p.year} ${p.cat === 'Software & Subscriptions' ? 'billing' : 'sales fees'}: ${p.amount.toFixed(2)} ${p.currency} → ${p.baseAmount.toFixed(2)} CAD`).join('\n');
+    .map(p => `  • ${p.year} ${p.cat === 'Software & Subscriptions' ? 'billing' : 'sales fees'}: ${p.amount.toFixed(2)} ${p.currency} → ${p.baseAmount == null ? 'CAD value pending (no exchange rate yet)' : `${p.baseAmount.toFixed(2)} CAD`}`).join('\n');
 
   const scope = yearFilter != null ? `${yearFilter}` : 'all years';
+  const pending = planned.filter(p => p.fxMissing).length;
+  const pendingNote = pending
+    ? `${pending} line${pending === 1 ? '' : 's'} couldn't be converted to CAD yet (no exchange rate available). ${pending === 1 ? 'It is' : 'They are'} filed without a CAD value and filled in automatically next time the Tax Centre opens online.\n\n`
+    : '';
   const accept = await confirmDialog(
     `File Stripe fees (${scope}) in your master ledger as business expenses?\n\n` +
     `${newCount} new${updateCount ? `, ${updateCount} updated in place` : ''}\n` +
-    `Total: ${totalCad.toFixed(2)} CAD\n\n${lines}\n\n` +
+    `Total: ${totalCad.toFixed(2)} CAD${pending ? ' (so far)' : ''}\n\n${lines}\n\n${pendingNote}` +
     `Nothing is written until you confirm.`,
     { title: 'File Stripe fees', okLabel: 'File fees' }
   );
@@ -824,8 +839,10 @@ async function reconcileStripeAgainstSales() {
   if (wrap) { wrap.style.display = ''; wrap.innerHTML = '<p class="sf-note" role="status">Comparing Stripe with your recorded sales…</p>'; }
   const currentYear = new Date().getFullYear();
 
-  // Stripe gross customer payments per year, converted to CAD.
+  // Stripe gross customer payments per year, converted to CAD. A currency
+  // with no rate to be had is left out and named below, not counted 1:1.
   const stripeByYear = {};
+  const unconverted = [];
   for (const r of rows) {
     const cur = r.cur.toUpperCase();
     const grossMajor = _stripeMinorToMajor(r.salesGrossMinor, r.cur);
@@ -833,22 +850,25 @@ async function reconcileStripeAgainstSales() {
     let rate = 1;
     if (cur !== 'CAD') {
       const fxDate = r.year < currentYear ? `${r.year}-12-31` : today();
-      try { const h = await fetchHistoricalRate(cur, 'CAD', fxDate); rate = h?.rate || 0; } catch (_) { /* fall through */ }
-      if (!rate) { try { const lr = await fetchLiveRate(cur, 'CAD'); rate = lr?.rate || 0; } catch (_) { /* fall through */ } }
-      if (!rate) rate = _fxRateCache[`${cur}_CAD`] || 1;
+      try { rate = (await resolveExpenseRate(cur, fxDate)) || 0; } catch (_) { rate = 0; }
     }
+    if (!rate) { unconverted.push(`${r.year} ${cur}`); continue; }
     stripeByYear[r.year] = (stripeByYear[r.year] || 0) + grossMajor * rate;
   }
 
-  // Recorded sales per year from the app's per-book history.
+  // Recorded sales per year from the app's per-book history, each converted
+  // to CAD at its own date's rate exactly as the Tax Centre's gross sales are
+  // (lib/sale-fx.js) — not added up in each book's own currency.
   const salesByYear = {};
   for (const book of BOOK_LIST) {
+    if (String(book.id || '').toLowerCase().includes('test') || String(book.title || '').toLowerCase().includes('test')) continue;
     const s = states[book.id] || defaultState(book);
+    const cur = getBookCurrencyCode(book);
     for (const h of (s.hist || [])) {
-      if (h.voided || h.gratuity || !h.date) continue;
+      if (h.voided || h.gratuity || h.artistPending || !h.date) continue;
       const y = Number(String(h.date).slice(0, 4));
       if (!y) continue;
-      salesByYear[y] = (salesByYear[y] || 0) + (h.qty || 0) * (h.price || 0);
+      salesByYear[y] = roundCents((salesByYear[y] || 0) + saleCadAmounts(h, cur, _fxRateCache).merchandiseCad);
     }
   }
 
@@ -882,7 +902,8 @@ async function reconcileStripeAgainstSales() {
           <tbody>${bodyRows}</tbody>
         </table>
       </div>
-      <p class="sf-foot"><strong>Stripe collected</strong> is what customers paid through Stripe, converted to CAD at the year-end rate. <strong>Recorded sales</strong> is quantity × price from your book history. A gap isn't always a mistake: cash and PayPal sales, refunds, and Stripe payments not yet logged as sales all show up here. Treat it as a pointer, not an exact tie-out.</p>
+      <p class="sf-foot"><strong>Stripe collected</strong> is what customers paid through Stripe, converted to CAD at the year-end rate. <strong>Recorded sales</strong> is quantity × price from your book history, converted to CAD at each sale's own date's rate as in the Tax Centre. A gap isn't always a mistake: cash and PayPal sales, refunds, and Stripe payments not yet logged as sales all show up here. Treat it as a pointer, not an exact tie-out.</p>
+      ${unconverted.length ? `<p class="sf-foot sf-warn">Left out of Stripe collected because no exchange rate to CAD could be found yet: ${escapeHtml(unconverted.join(', '))}. Try again when you're online.</p>` : ''}
     </section>`;
 }
 
