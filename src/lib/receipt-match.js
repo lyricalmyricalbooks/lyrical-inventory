@@ -214,8 +214,12 @@ export function categoryFromName(name, keywordMap) {
   let best = '';
   let bestLen = 0;
   Object.keys(keywordMap || {}).forEach(keyword => {
-    // Longest keyword wins: "post office" should beat "post".
-    if (hay.includes(keyword) && keyword.length > bestLen) {
+    // Longest keyword wins: "post office" should beat "post". A keyword counts
+    // only as a whole word (a plural 's'/'es' allowed), so "ink" doesn't fire
+    // inside "Drinks" and file a bar receipt as Office Supplies.
+    if (keyword.length <= bestLen) return;
+    const word = String(keyword).toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp(`(?:^|[^a-z0-9])${word}(?:e?s)?(?![a-z0-9])`).test(hay)) {
       best = keywordMap[keyword];
       bestLen = keyword.length;
     }
