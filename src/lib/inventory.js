@@ -437,11 +437,48 @@ export function transferAuthorStock(s, book, delta, note = '', isoDate = '') {
  * @param {boolean} isAuthorSale - True if this transaction was submitted/fulfilled by the author
  */
 export function deductSaleFromStockBreakdown(s, qty, isAuthorSale) {
-  if (!s || !isAuthorSale) return;
+  if (!s || !isAuthorSale) return 0;
   const units = Number.isFinite(qty) && qty > 0 ? Math.floor(qty) : 0;
-  if (units <= 0) return;
+  if (units <= 0) return 0;
 
   const currentAuthorStock = Number.isFinite(s.authorStock) ? s.authorStock : 0;
   s.authorStock = Math.max(0, currentAuthorStock - units);
+  // How many copies actually came out of the author's pile (never more than
+  // they held), so a void can give back exactly that.
+  return Math.min(units, Math.max(0, currentAuthorStock));
+}
+
+/**
+ * Take a sale's copies off the publisher's shelf. Stock never goes below
+ * zero, so a sale for more copies than are on hand only takes what was
+ * there; the row then records that smaller number as `stockTaken`, and
+ * `stockToReturn` gives back exactly that on a void. (A book with a print
+ * run re-derives its stock from the records afterwards anyway.)
+ * @returns {number} copies taken
+ */
+export function takeSaleStock(s, h, qty) {
+  const units = num(qty);
+  const onHand = num(s.stock);
+  const taken = Math.max(0, Math.min(units, onHand));
+  s.stock = Math.max(0, onHand - units);
+  if (taken < units) h.stockTaken = taken; else delete h.stockTaken;
+  return taken;
+}
+
+/** Copies a voided sale puts back on the shelf. Rows from before
+ *  `stockTaken` existed give back their full quantity, as they always did. */
+export function stockToReturn(h) {
+  return Number.isFinite(h?.stockTaken) ? h.stockTaken : num(h?.qty);
+}
+
+/** Record on a sale row how many copies came out of the author's pile, when
+ *  that is fewer than the row's quantity. */
+export function noteAuthorTaken(h, taken) {
+  if (taken < num(h.qty)) h.authorTaken = taken; else delete h.authorTaken;
+}
+
+/** Copies a voided author-fulfilled sale gives back to the author's pile. */
+export function authorStockToReturn(h) {
+  return Number.isFinite(h?.authorTaken) ? h.authorTaken : num(h?.qty);
 }
 

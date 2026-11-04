@@ -1112,7 +1112,7 @@ import { csvToObjects, toCsv } from './lib/csv.js';
 import { plainChanges, kindLabel, parseBuildDate, relativeWhen, dayHeading } from './lib/whats-new.js';
 import { downloadText, downloadCsv } from './lib/download.js';
 import { OC_STAGES } from './lib/opencall.js';
-import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, orderStockPreview, orderStockPreviewCopy, deriveStockBreakdown, transferAuthorStock, isVoidStale } from './lib/inventory.js';
+import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, orderStockPreview, orderStockPreviewCopy, deriveStockBreakdown, transferAuthorStock, isVoidStale, stockToReturn, takeSaleStock } from './lib/inventory.js';
 import { fairSyncPill } from './lib/fair-mode.js';
 import { histMirrorForLedger, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores, consignmentLedgerTotals, storeBalanceSlug, storeBalanceComparison } from './lib/consignment.js';
 import { reminderSettings, reminderBlockReason, invoiceReminderState, dueForReminder, dueForReminderTomorrow, buildReminderEmail, canSendNow, daysLate, describeReminderSweep, describeReminderNotice, sampleReminderInvoice } from './lib/payment-reminders.js';
@@ -9089,7 +9089,7 @@ function unapplyOne(id) {
   if (h.webOrderId) { showToast(WEBSITE_SALE_LOCKED, 'warn', 5000); return; }
 
   if (!h.voided) {
-    state.stock += h.qty;
+    state.stock += stockToReturn(h);
     state.sold = Math.max(0, state.sold - h.qty);
     state.revenue = Math.max(0, state.revenue - h.qty * h.price);
     if (state.chStats['Website']) {
@@ -13088,8 +13088,8 @@ function saveHistEntryEdit(s, book) {
   const newNotes = $('edit-notes').value.trim();
 
   if (!h.voided) {
-    // Reverse old effect
-    s.stock += old.qty;
+    // Reverse old effect (only the copies it actually took off the shelf)
+    s.stock += stockToReturn(old);
     s.sold -= old.qty;
     s.revenue -= old.qty * old.price;
     if (s.chStats[old.chan]) {
@@ -13099,7 +13099,7 @@ function saveHistEntryEdit(s, book) {
       if (s.chStats[old.chan].txns <= 0) delete s.chStats[old.chan];
     }
     // Apply new effect
-    s.stock = Math.max(0, s.stock - newQty);
+    takeSaleStock(s, h, newQty);
     s.sold += newQty;
     s.revenue += newQty * newPrice;
     if (!s.chStats[newChan]) s.chStats[newChan] = { txns: 0, units: 0, revenue: 0 };

@@ -34,7 +34,7 @@ import {
 import { BOOKS, states, activeBook, getState, getBook } from '../core/store.js';
 import { notesWithInvoiceDiscount } from '../lib/consignment.js';
 import { bookCurrencyCode } from '../lib/currency-migration.js';
-import { deductSaleFromStockBreakdown } from '../lib/inventory.js';
+import { authorStockToReturn, deductSaleFromStockBreakdown, noteAuthorTaken, stockToReturn, takeSaleStock } from '../lib/inventory.js';
 import { cadEquivalentForSale, getBookCurrencyCode, normalizeCurrencyCode } from '../lib/money.js';
 import { updateDash } from './dashboard.js';
 import { makeEventId, syncToSheets } from './sheets-bridge.js';
@@ -93,10 +93,11 @@ function writeOrderToLedger(bookId, opts = {}) {
  * Returns the new row.
  */
 function addSaleToState(s, book, { num = '', chan, qty, price, notes = '', payment = null, enteredBy = 'Publisher', date, sheetsId, extra = {}, stamp = true } = {}) {
-  if (enteredBy === 'Artist') {
-    deductSaleFromStockBreakdown(s, qty, true);
-  }
-  s.stock = Math.max(0, s.stock - qty);
+  // Copies actually taken (fewer than qty when the sale oversold), recorded
+  // on the row so a void gives back exactly those.
+  const authorTaken = enteredBy === 'Artist' ? deductSaleFromStockBreakdown(s, qty, true) : null;
+  const taken = {};
+  takeSaleStock(s, taken, qty);
   s.sold += qty; s.revenue += qty * price;
   if (!s.chStats[chan]) s.chStats[chan] = { txns: 0, units: 0, revenue: 0 };
   s.chStats[chan].txns++; s.chStats[chan].units += qty; s.chStats[chan].revenue += qty * price;
@@ -105,7 +106,9 @@ function addSaleToState(s, book, { num = '', chan, qty, price, notes = '', payme
     ...extra,
     num, chan, qty, price, after: s.stock, notes: notesWithInvoiceDiscount(s.invoices, num, notes),
     date: date || today(), payment, enteredBy, sheetsId: sheetsId || makeEventId(), cur: bookCurrencyCode(book),
+    ...taken,
   };
+  if (authorTaken !== null) noteAuthorTaken(row, authorTaken);
   s.hist.unshift(row);
   // Its order number now counts as applied (the Orders tab hides applied ones).
   invalidateAppliedIds();
@@ -115,9 +118,10 @@ function addSaleToState(s, book, { num = '', chan, qty, price, notes = '', payme
 function recordOrderPendingTransfer(num, chan, qty, price, notes, payment = null, date = null, fromSubmission = null) {
   const s = getState(), book = getBook();
   const when = date || today();
-  deductSaleFromStockBreakdown(s, qty, true);
+  const authorTaken = deductSaleFromStockBreakdown(s, qty, true);
   // Reduce stock and count as sold, but do NOT add to revenue yet
-  s.stock = Math.max(0, s.stock - qty);
+  const taken = {};
+  takeSaleStock(s, taken, qty);
   s.sold += qty;
   if (!s.chStats[chan]) s.chStats[chan] = { txns: 0, units: 0, revenue: 0 };
   s.chStats[chan].txns++; s.chStats[chan].units += qty;
@@ -126,7 +130,9 @@ function recordOrderPendingTransfer(num, chan, qty, price, notes, payment = null
   // Add to history with pending flag. directToArtist marks this as cash the
   // artist collected directly (these only ever come from direct-to-artist sales).
   const sheetsId = makeEventId();
-  s.hist.unshift({ ...(fromSubmission ? { fromSubmission } : {}), num, chan, qty, price, after: s.stock, notes: updatedNotes, date: when, artistPending: true, directToArtist: true, payment, sheetsId, cur: bookCurrencyCode(book) });
+  const row = { ...(fromSubmission ? { fromSubmission } : {}), num, chan, qty, price, after: s.stock, notes: updatedNotes, date: when, artistPending: true, directToArtist: true, payment, sheetsId, cur: bookCurrencyCode(book), ...taken };
+  noteAuthorTaken(row, authorTaken);
+  s.hist.unshift(row);
   // Add to artistTransfers queue (share sheetsId so receipt updates the same sheet row)
   s.artistTransfers.push({ id: Date.now(), num, chan, qty, price, total: qty * price, notes: updatedNotes, date: when, payment, sheetsId, cur: bookCurrencyCode(book) });
   recomputeAfters(s, book);
@@ -194,7 +200,9 @@ function voidHistEntry(s, book, h, { recompute = true } = {}) {
     const ti = (s.artistTransfers || []).findIndex(x => (h.sheetsId && x.sheetsId === h.sheetsId) || (x.num === h.num && x.qty === h.qty));
     if (ti !== -1) h.voidedTransfer = s.artistTransfers.splice(ti, 1)[0];
   }
-  s.stock += h.qty;
+  // Only the copies the sale actually took go back (an oversold sale took
+  // fewer than its quantity); older rows give back the full quantity.
+  s.stock += stockToReturn(h);
   if (!h.gratuity) {
     s.sold = Math.max(0, s.sold - h.qty);
     if (!pendingRev) s.revenue = Math.max(0, s.revenue - h.qty * h.price);
@@ -206,7 +214,7 @@ function voidHistEntry(s, book, h, { recompute = true } = {}) {
     if (s.chStats[h.chan].txns <= 0) delete s.chStats[h.chan];
   }
   // Author-fulfilled sales took copies from the author's held stock; give them back.
-  if (h.directToArtist || h.enteredBy === 'Artist') s.authorStock = (Number.isFinite(s.authorStock) ? s.authorStock : 0) + h.qty;
+  if (h.directToArtist || h.enteredBy === 'Artist') s.authorStock = (Number.isFinite(s.authorStock) ? s.authorStock : 0) + authorStockToReturn(h);
   h.voided = true;
   h.voidedAt = Date.now();
   // Voiding many at once (undoing an import) recomputes once at the end.
@@ -216,7 +224,9 @@ function voidHistEntry(s, book, h, { recompute = true } = {}) {
 
 /** The exact reverse of voidHistEntry: the sale counts again. */
 function unvoidHistEntry(s, book, h) {
-  s.stock = Math.max(0, s.stock - h.qty);
+  // Re-take the copies against today's shelf, recording afresh how many
+  // were actually there.
+  takeSaleStock(s, h, h.qty);
   if (!h.gratuity) {
     s.sold += h.qty;
     if (!h.artistPending) s.revenue += h.qty * h.price;
@@ -230,7 +240,7 @@ function unvoidHistEntry(s, book, h) {
     s.artistTransfers.push(h.voidedTransfer);
     delete h.voidedTransfer;
   }
-  if (h.directToArtist || h.enteredBy === 'Artist') deductSaleFromStockBreakdown(s, h.qty, true);
+  if (h.directToArtist || h.enteredBy === 'Artist') noteAuthorTaken(h, deductSaleFromStockBreakdown(s, h.qty, true));
   h.voided = false;
   delete h.voidedAt;
   delete h.voidedReason;
