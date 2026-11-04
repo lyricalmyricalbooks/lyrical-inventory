@@ -72,12 +72,8 @@ describe('lazy Excel support', () => {
     expect(body).toContain('csvToObjects(e.target.result)');
   });
 
-  it('reads formatted CSV amounts instead of importing them as zero', () => {
-    const mainContent = fs.readFileSync(path.join(__dirname, '..', 'src', 'main.js'), 'utf8');
-    const src = mainContent.match(/function importAmount\(value\) \{[\s\S]*?\n\}/)?.[0];
-    expect(src).toBeTruthy();
-    const importAmount = new Function(`${src}; return importAmount;`)();
-
+  it('reads formatted CSV amounts instead of importing them as zero', async () => {
+    const { importAmount } = await import('../src/lib/import-columns.js');
     expect(importAmount(12.5)).toBe(12.5);
     expect(importAmount('$25.00')).toBe(25);
     expect(importAmount('1,250.00')).toBe(1250);

@@ -191,7 +191,9 @@ export function autoRecordBlocker(order = {}, plan = {}, {
   now = Date.now(),
   maxAgeDays = AUTO_RECORD_MAX_AGE_DAYS,
 } = {}) {
-  if (normalizeStatus(order) === 'refunded') return 'refunded';
+  // A store can mark a refund on the payment alone ("paid" order, "refunded" payment).
+  const payment = clean(order?.attributes?.payment_status).toLowerCase();
+  if (normalizeStatus(order) === 'refunded' || payment === 'refunded') return 'refunded';
   const created = Date.parse(order?.attributes?.created_at || order?.attributes?.placed_at || '');
   if (Number.isFinite(created) && now - created > maxAgeDays * 86400000) return 'too-old';
   if (plan?.autoSafe) return '';

@@ -18202,7 +18202,9 @@ function recordReaderSplitSale(payment, lines) {
     bookCurrency: (book) => normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD'),
   });
   if (plan.action !== 'record') return raise(plan.reason);
-  if (plan.lines.some(line => !states[line.bookId])) return null;
+  // Every book must be writable before the first line is: a half-written
+  // split sale marks the charge recorded, and the rest could never be added.
+  if (plan.lines.some(line => !states[line.bookId] || !BOOKS[line.bookId])) return null;
 
   try {
     plan.lines.forEach((line, i) => {
