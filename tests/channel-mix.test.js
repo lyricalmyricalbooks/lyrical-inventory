@@ -132,3 +132,19 @@ describe('IN_PERSON_CHANNELS', () => {
     expect([...MARKET_DAY_CHANNELS].sort()).toEqual(['Book Fair', ...IN_PERSON_CHANNELS].sort());
   });
 });
+
+describe('channelStats', () => {
+  it('never lets a channel named __proto__ reach Object.prototype', async () => {
+    const { channelStats, hasOwnChannel } = await import('../src/lib/channel-mix.js');
+    const s = { chStats: {} };
+    channelStats(s, '__proto__').txns++;
+    channelStats(s, 'constructor').units += 2;
+    expect({}.txns).toBeUndefined();
+    expect(Object.keys(s.chStats)).toEqual([]);
+    expect(hasOwnChannel(s, '__proto__')).toBe(false);
+    channelStats(s, 'Website').txns++;
+    channelStats(s, 'Website').txns++;
+    expect(s.chStats.Website.txns).toBe(2);
+    expect(hasOwnChannel(s, 'Website')).toBe(true);
+  });
+});
