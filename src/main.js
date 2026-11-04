@@ -5633,7 +5633,7 @@ const SHELL_TAB_LABELS = {
 function renderTodaySoFar() {
   const sum = $('today-sold-sum');
   if (!sum) return;
-  const books = Object.keys(BOOKS).map((id) => ({ id, currency: getBookCurrencyCode(BOOKS[id]), hist: states[id]?.hist }));
+  const books = Object.keys(BOOKS).filter((id) => !isTestBook(BOOKS[id])).map((id) => ({ id, currency: getBookCurrencyCode(BOOKS[id]), hist: states[id]?.hist }));
   const day = salesForDay(books, today());
   // Three figures on the slip (sales, books, money taken), zeros included, so
   // the day's numbers fill in where you expect them. The sentence is kept as
@@ -5671,7 +5671,7 @@ function todayUnsentBooks(books) {
 function renderTodayLedger() {
   const el = $('today-ledger');
   if (!el) return;
-  const books = Object.keys(BOOKS).map((id) => ({ id, currency: getBookCurrencyCode(BOOKS[id]), hist: states[id]?.hist }));
+  const books = Object.keys(BOOKS).filter((id) => !isTestBook(BOOKS[id])).map((id) => ({ id, currency: getBookCurrencyCode(BOOKS[id]), hist: states[id]?.hist }));
   const day = salesForDay(books, today());
   let stock = 0, storesOwing = 0;
   const owedByCur = new Map();
@@ -6191,6 +6191,8 @@ export function updateHeader() {
     let totalStock = 0, totalCon = 0;
     const revByCur = new Map(); // revenue is only summed within one currency
     Object.entries(states).forEach(([bid, s]) => {
+      // The sandbox test book is not stock or money (the book strips below skip it too).
+      if (isTestBookId(bid)) return;
       totalStock += (s.stock || 0);
       const curSym = (BOOKS[bid] && BOOKS[bid].currency) || '';
       revByCur.set(curSym, (revByCur.get(curSym) || 0) + recognizedRevenueOf(s));
@@ -6955,6 +6957,9 @@ function renderChannelAnalytics() {
   for (let i = 0; i < chans.length; i++) {
     const x = chans[i];
     grandRev += x.revenue || 0;
+    // Free copies keep their own row but are not sales: counting them here
+    // halved "Per transaction" and "Per unit" for a shop that gives books away.
+    if (x.chan === 'Gratuity') continue;
     grandTxn += x.txns || 0;
     grandU += x.units || 0;
   }

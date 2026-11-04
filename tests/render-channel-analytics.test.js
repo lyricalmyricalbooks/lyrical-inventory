@@ -235,3 +235,19 @@ describe('renderChannelAnalytics — currency and escaping', () => {
     expect(host.textContent).toContain('No sales yet');
   });
 });
+
+describe('renderChannelAnalytics — free copies are not sales', () => {
+  it('leaves gratuities out of the transaction count and the per-transaction average', () => {
+    const h = makeHarness({
+      data: data({
+        Website: { txns: 10, units: 10, revenue: 400, books: new Set(['b1']) },
+        Gratuity: { txns: 10, units: 10, revenue: 0, books: new Set(['b1']) },
+      }),
+    });
+    mount();
+    h.renderChannelAnalytics();
+    const stats = Object.fromEntries([...document.querySelectorAll('.ch-stat')].map(el => [el.querySelector('span').textContent, el.querySelector('strong').textContent]));
+    expect(stats.Transactions).toBe('10');
+    expect(stats.Units).toBe('10');
+  });
+});

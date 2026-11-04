@@ -113,7 +113,10 @@ function stockSignals(book, s, out) {
   const threshold = intOf(book.threshold);
   const printed = intOf(book.maxPrint);
 
-  if (threshold > 0 && onHand <= threshold) {
+  // A level set to 0 on purpose means "tell me when it's gone", as the book's
+  // own dashboard reads it; a blank level asks for no alert at all.
+  const setToZero = threshold === 0 && book.threshold !== '' && book.threshold != null && Number(book.threshold) === 0;
+  if ((threshold > 0 || setToZero) && onHand <= threshold) {
     out.push({
       id: `stock-low:${book.id}`,
       group: 'stock',
