@@ -47,7 +47,7 @@ import { escapeHtml } from '../lib/html.js';
 import { closeM, confirmDialog, openM, promptDialog } from '../lib/modal.js';
 import { buildPaymentMeta, getBookCurrencyCode, getSym, normalizeCurrencyCode } from '../lib/money.js';
 import { posOversellSummary, posStockView } from '../lib/pos-stock.js';
-import { FAIR_SEARCH_OVER, FAIR_UNDO_MS, compExpense, countLabel, isCompMethod, fairDaySummary, fairSyncPill, fairTileHtml, keepScreenAwake, readCurrentFair, readLastMethod, registerSalesForDay, rememberMethod, saveCurrentFair, soldLabel, undoOpen } from '../lib/fair-mode.js';
+import { FAIR_SEARCH_OVER, FAIR_UNDO_MS, appendRegisterLog, compExpense, registerLogAsHist, removeRegisterSale, countLabel, isCompMethod, fairDaySummary, fairSyncPill, fairTileHtml, keepScreenAwake, readCurrentFair, readLastMethod, registerSalesForDay, rememberMethod, saveCurrentFair, soldLabel, undoOpen } from '../lib/fair-mode.js';
 
 // ── EVENT POS ──
 let posCart = {};
@@ -589,6 +589,12 @@ function fairShowPrintedQr() {
 // ── Today at the register ────────────────────────────────────────────────
 function fairTodaySales() {
   const books = Object.keys(BOOKS).map((id) => ({ id, title: BOOKS[id]?.title, currency: getBookCurrencyCode(BOOKS[id]), hist: states[id]?.hist }));
+  // Guest and consignment titles keep their own register log (see posConfirmSale).
+  for (const id of Object.keys(posExtraBooks)) {
+    if (!isPosOnlyBook(id)) continue;
+    const pb = posExtraBooks[id];
+    books.push({ id, title: pb?.title, currency: getBookCurrencyCode(pb), hist: registerLogAsHist(pb?.registerLog) });
+  }
   return registerSalesForDay(books, today());
 }
 
@@ -633,7 +639,19 @@ async function fairVoidSale(saleNum) {
   const ok = await confirmDialog(`Void this sale? ${what} goes back into stock and ${fairTotalsText(sale.totals)} comes out of your takings. Do this if it was refunded or rung up by mistake.`, { okLabel: 'Void sale', cancelLabel: 'Keep it', danger: true, title: 'Void sale' });
   if (!ok) return;
   if (_posLastSale?.saleNum === saleNum) { _posLastSale = null; const bar = $('fm-undo'); if (bar) bar.hidden = true; }
-  const undone = voidRegisterSale(saleNum, [...new Set(sale.lines.map((l) => l.bookId))], 'Voided at the register');
+  const ids = [...new Set(sale.lines.map((l) => l.bookId))];
+  let undone = voidRegisterSale(saleNum, ids.filter((id) => !isPosOnlyBook(id)), 'Voided at the register');
+  const guestIds = ids.filter((id) => isPosOnlyBook(id));
+  if (guestIds.length) {
+    // Fetch the shared copy first (as a sale does), so another device's count isn't overwritten.
+    try { await Promise.race([syncCatalog(), new Promise(resolve => setTimeout(resolve, 6000))]); } catch (_) { /* offline */ }
+    let took = 0;
+    for (const id of guestIds) took += removeRegisterSale(posExtraBooks[id], saleNum);
+    if (took) {
+      undone = true;
+      try { await saveCatalogWithDeletions(); } catch (e) { console.warn('POS-only void save failed', e); }
+    }
+  }
   renderPOS();
   renderHist();
   updateDash();
@@ -800,8 +818,12 @@ async function fairUndoLastSale() {
       for (const line of sale.posOnly) {
         const pb = posExtraBooks[line.id];
         if (!pb) continue;
-        pb.sold = Math.max(0, (pb.sold || 0) - line.qty);
-        pb.revenue = Math.max(0, (pb.revenue || 0) - line.qty * line.unit);
+        // A sale logged for Today comes out with its log entry; one tallied
+        // before the log existed is taken back from the counts alone.
+        if (!removeRegisterSale(pb, sale.saleNum)) {
+          pb.sold = Math.max(0, (pb.sold || 0) - line.qty);
+          pb.revenue = Math.max(0, (pb.revenue || 0) - line.qty * line.unit);
+        }
       }
       try { await saveCatalogWithDeletions(); } catch (e) { console.warn('POS-only undo save failed', e); }
     }
@@ -1404,6 +1426,19 @@ async function posConfirmSale() {
       pb.sold = (pb.sold || 0) + row.qty;
       pb.revenue = (pb.revenue || 0) + row.qty * row.sourceUnit;
       pb.lastSold = today();
+      // What the customer handed over, in the currency they paid, so Today's
+      // totals match the card reader for guest titles too.
+      const paidInSale = row.convertedLine !== null && row.convertedLine !== undefined;
+      pb.registerLog = appendRegisterLog(pb.registerLog, {
+        num: saleNum,
+        date: today(),
+        at: lastSale.at,
+        qty: row.qty,
+        unit: row.sourceUnit,
+        amount: paidInSale ? row.convertedLine : row.sourceLine,
+        cur: paidInSale ? sale.currency : row.sourceCode,
+        method: sale.method || '',
+      });
     }
     lastSale.tallied = true;
     try { await saveCatalogWithDeletions(); } catch (e) { console.warn('POS-only tally save failed', e); }
