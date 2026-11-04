@@ -2,6 +2,8 @@
 // row's date without guessing quietly, and telling one import's rows apart so
 // the whole import can be undone in one step.
 
+import { localDay } from './calendar-day.js';
+
 const pad = n => String(n).padStart(2, '0');
 const isoOf = (y, m, d) => `${y}-${pad(m)}-${pad(d)}`;
 
@@ -29,7 +31,11 @@ function validDay(y, m, d) {
 export function parseImportDate(raw, { order = 'mdy', todayStr, excelSerial } = {}) {
   if (raw instanceof Date) {
     if (isNaN(raw)) return { date: todayStr, issue: 'unreadable' };
-    return { date: raw.toISOString().split('T')[0], issue: null };
+    // SheetJS (0.18, cellDates) builds a date cell as LOCAL midnight, so read
+    // it on the local clock; toISOString() shifted it to the previous day east
+    // of UTC. Rounded to the minute first: SheetJS can land a few seconds
+    // before midnight in zones whose 1899 offset had seconds in it.
+    return { date: localDay(new Date(Math.round(raw.getTime() / 60000) * 60000)), issue: null };
   }
   if (typeof raw === 'number') {
     const d = excelSerial ? excelSerial(raw) : null;
