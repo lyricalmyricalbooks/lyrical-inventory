@@ -2712,6 +2712,12 @@ async function deleteBook(id) {
   delete BOOKS[id];
   refreshBookList();
   delete states[id];
+  // Its changes still waiting to upload would write the deleted book back.
+  if (syncQueue.some(item => item.bookId === id)) {
+    syncQueue = syncQueue.filter(item => item.bookId !== id);
+    saveSyncQueueToDevice();
+    updatePendingIndicator();
+  }
   if (DEFAULT_BOOKS[id] && !deletedDefaultIds.includes(id)) {
     deletedDefaultIds.push(id);
   }
@@ -3572,7 +3578,9 @@ async function processSyncQueue() {
     updatePendingIndicator();
     if (!syncQueue.length) return;
   }
-  const item = pickNextSyncItem(syncQueue);
+  // A change for a book that isn't in the catalogue (deleted on another device,
+  // say) is held, not sent: uploading it would bring the book's data back.
+  const item = pickNextSyncItem(syncQueue.filter(i => BOOKS[i.bookId]));
   if (!item) {
     // Everything left is backing off after a failure (or waiting behind a
     // change that is); wake for the soonest retry.
