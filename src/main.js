@@ -301,6 +301,7 @@ import {
   hexToRgba,
   isDirectToArtistSale,
   transferAmount,
+  heldSaleForTransfer,
   transferQtyLabel,
   lightenColor,
   normalizeCurrencyCode,
@@ -1111,7 +1112,7 @@ import { csvToObjects, toCsv } from './lib/csv.js';
 import { plainChanges, kindLabel, parseBuildDate, relativeWhen, dayHeading } from './lib/whats-new.js';
 import { downloadText, downloadCsv } from './lib/download.js';
 import { OC_STAGES } from './lib/opencall.js';
-import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, orderStockPreview, orderStockPreviewCopy, deriveStockBreakdown, transferAuthorStock, isVoidStale } from './lib/inventory.js';
+import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, orderStockPreview, orderStockPreviewCopy, deriveStockBreakdown, transferAuthorStock, isVoidStale, stockToReturn, takeSaleStock } from './lib/inventory.js';
 import { fairSyncPill } from './lib/fair-mode.js';
 import { histMirrorForLedger, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores, consignmentLedgerTotals, storeBalanceSlug, storeBalanceComparison } from './lib/consignment.js';
 import { reminderSettings, reminderBlockReason, invoiceReminderState, dueForReminder, dueForReminderTomorrow, buildReminderEmail, canSendNow, daysLate, describeReminderSweep, describeReminderNotice, sampleReminderInvoice } from './lib/payment-reminders.js';
@@ -1121,6 +1122,7 @@ import { resolveCountryCode } from './lib/countries.js';
 import { PUBLISHER_ONLY_TABS, AUTHOR_ONLY_TABS, helpTabOpenFor, helpQueryWords, helpMatches } from './lib/help-guide.js';
 import { readStoredList } from './lib/stored-list.js';
 import { STORE_REVERSAL_PENDING_KEY } from './lib/store-reversals.js';
+import { isTestBook } from './lib/test-book.js';
 
 
 // Tells the boot watchdog in index.html that the bundle and every import it
@@ -1338,15 +1340,7 @@ let deletedDefaultIds = [];
 // under `_posExtra` so it syncs across devices and survives offline.
 export let posExtraBooks = {};
 
-export function isTestBook(b) {
-  if (!b) return false;
-  const idLower = String(b.id || '').toLowerCase().trim();
-  const titleLower = String(b.title || '').toLowerCase().trim();
-  // Preserve the original TEST PAGE sandbox aliases without hiding real
-  // books such as "Greatest Hits" or "Contest" through substring matches.
-  const testNames = ['test', 'test1', 'testpage', 'test-page', 'test page'];
-  return b.isTest === true || testNames.includes(idLower) || testNames.includes(titleLower);
-}
+export { isTestBook };
 
 export function isTestBookId(bid) {
   if (!bid) return false;
@@ -2718,6 +2712,12 @@ async function deleteBook(id) {
   delete BOOKS[id];
   refreshBookList();
   delete states[id];
+  // Its changes still waiting to upload would write the deleted book back.
+  if (syncQueue.some(item => item.bookId === id)) {
+    syncQueue = syncQueue.filter(item => item.bookId !== id);
+    saveSyncQueueToDevice();
+    updatePendingIndicator();
+  }
   if (DEFAULT_BOOKS[id] && !deletedDefaultIds.includes(id)) {
     deletedDefaultIds.push(id);
   }
@@ -3145,6 +3145,20 @@ export const formatDateTime = (isoString) => {
 window.authorSubmissions = {}; // Tracks pending expenses/sales by Authors
 export let orders = [], activeId = null;
 let fbReady = false, lastSavedHashes = {}, lastSaveTimes = {};
+// The cloud copy (per part, as _fbSave stores it) that each book's screen was
+// last built on. It is the merge base for the next save of that screen. The
+// live base in firebase.js (window._fsHashes) moves on whenever the cloud does,
+// including when a change this screen never showed uploads (one queued in an
+// earlier session, say); merging against it then made that change look like
+// part of our own starting point, and the next sale wrote over it.
+const screenBases = {};
+function noteScreenBase(bookId, base) {
+  if (base && typeof base === 'object' && Object.keys(base).length) screenBases[bookId] = { ...base };
+  else delete screenBases[bookId];
+}
+function screenBaseFor(bookId) {
+  return screenBases[bookId] ? { ...screenBases[bookId] } : undefined;
+}
 // Loaded through a guard: an unreadable stored queue (or storage that throws on
 // access) used to throw right here, at module load, and the app never started.
 // Anything unreadable is copied aside to 'lm-sync-queue-corrupt' first.
@@ -3564,7 +3578,9 @@ async function processSyncQueue() {
     updatePendingIndicator();
     if (!syncQueue.length) return;
   }
-  const item = pickNextSyncItem(syncQueue);
+  // A change for a book that isn't in the catalogue (deleted on another device,
+  // say) is held, not sent: uploading it would bring the book's data back.
+  const item = pickNextSyncItem(syncQueue.filter(i => BOOKS[i.bookId]));
   if (!item) {
     // Everything left is backing off after a failure (or waiting behind a
     // change that is); wake for the soonest retry.
@@ -3613,9 +3629,28 @@ async function processSyncQueue() {
     } else {
       // Mark this exact snapshot as saved so saveState won't re-send it.
       const json = JSON.stringify(item.state);
-      if (states[item.bookId] && JSON.stringify(states[item.bookId]) === json) {
+      const screen = states[item.bookId];
+      const screenJson = screen ? JSON.stringify(screen) : null;
+      if (screen && screenJson === json) {
         lastSavedHashes[item.bookId] = json;
         lastSaveTimes[item.bookId] = Date.now();
+        noteScreenBase(item.bookId, partHashesOf(item.state));
+      } else if (screen && !newerPending) {
+        // A change this screen never showed (queued in an earlier session or by
+        // another tab) is now the cloud copy. Untouched since it was loaded:
+        // show that copy. Otherwise merge the two, against the copy the screen
+        // was built on, so the sale appears and nothing on screen is lost.
+        if (screenJson === lastSavedHashes[item.bookId]) {
+          const book = BOOKS[item.bookId];
+          states[item.bookId] = book ? { ...defaultState(book), ...JSON.parse(json) } : JSON.parse(json);
+          if (book) recomputeAfters(states[item.bookId], book);
+          lastSavedHashes[item.bookId] = json;
+          noteScreenBase(item.bookId, partHashesOf(item.state));
+          if (activeBook === item.bookId || activeBook === 'all') renderCurrent();
+        } else {
+          Promise.resolve().then(() => saveState(item.bookId))
+            .catch(e => console.warn('[sync] could not merge an uploaded change into the screen', e));
+        }
       }
     }
     // Cannot throw. This item IS uploaded; a storage error here used to land in
@@ -3701,7 +3736,7 @@ export let notifyUrl = localStorage.getItem('lm-notify-url') || '';
 // The Apps Script `scriptVersion` the client expects. Bump this (and the value
 // in apps-script/Code.gs) whenever Code.gs gains behaviour that needs a fresh
 // deploy — the connection card flags any older deployed version as outdated.
-export const EXPECTED_SCRIPT_VERSION = 'v57';
+export const EXPECTED_SCRIPT_VERSION = 'v58';
 // What the connected spreadsheet last told us it was running. Null until a
 // version check has actually answered — an unknown version is not a mismatch,
 // so the To-do list stays quiet rather than inventing a problem.
@@ -4076,20 +4111,23 @@ async function saveStateNow(bookId, rebase) {
   if (json === lastSavedHashes[bookId]) return;
   const size = checkBookSize(bookId, state, json);
   setSyncState('syncing', '<b>Firestore</b> · saving…');
+  // Merged against the cloud copy this screen was built on (see screenBases),
+  // not whatever the cloud holds by now.
+  const base = rebase || screenBaseFor(bookId);
   try {
     // A change for this book is already waiting in the queue: this edit was
     // made on top of it, so it must go out after it and merge against the
     // same base, not race it with a direct write.
     if (!fbReady || !navigator.onLine || syncQueue.some(item => item.bookId === bookId)) {
-      queueSync(bookId, state, rebase);
+      queueSync(bookId, state, base);
       setSyncState('ok', '<b>Firestore</b> · changes queued (offline)');
       return;
     }
-    const res = await window._fbSave(bookId, json, rebase ? { base: rebase } : undefined);
+    const res = await window._fbSave(bookId, json, base ? { base } : undefined);
     // Couldn't read the server copy, so _fbSave declined to overwrite it rather
     // than risk erasing a change made on another device. Queue and retry.
     if (res && res.ok === false) {
-      queueSync(bookId, JSON.parse(json), rebase);
+      queueSync(bookId, JSON.parse(json), base);
       setSyncState('error', '<b>Firestore</b> · could not verify cloud copy · retrying…');
       return;
     }
@@ -4115,6 +4153,8 @@ async function saveStateNow(bookId, rebase) {
       adoptMergedState(bookId, res);
     } else {
       lastSavedHashes[bookId] = json;
+      // The cloud now holds exactly what was sent.
+      noteScreenBase(bookId, partHashesOf(JSON.parse(json)));
     }
     lastSaveTimes[bookId] = Date.now();
     // A confirmed cloud write — this is what "Last upload …" on the sync chip
@@ -4130,7 +4170,7 @@ async function saveStateNow(bookId, rebase) {
     // The optimistic UI already shows this change, but the cloud write
     // failed. Queue it (with backoff retry) so the change is never lost
     // and reconciles automatically instead of silently diverging.
-    queueSync(bookId, states[bookId] || state, rebase);
+    queueSync(bookId, states[bookId] || state, base);
     // Too big for one cloud record: say that, not a generic retry, since
     // retrying alone won't get it through.
     if (size.level === 'over') setSyncState('error', '<b>Firestore</b> · book too big to save · kept on this device');
@@ -4180,6 +4220,7 @@ function adoptMergedState(bookId, res) {
   // Track the server's version, not the defaults-filled local one — if they
   // differ, the next saveState writes the difference instead of skipping it.
   lastSavedHashes[bookId] = JSON.stringify(res.state);
+  noteScreenBase(bookId, partHashesOf(res.state));
   if (activeBook === bookId || activeBook === 'all') renderCurrent();
   reportMergeOutcome(bookId, res.conflicts);
 }
@@ -4404,6 +4445,8 @@ export async function loadBook(bookId) {
       } catch (e) { console.warn('Could not move book to the new storage', bookId, e); }
     }
     const json = await window._fbLoad(bookId);
+    // What the screen is about to be built on: the copy just read.
+    noteScreenBase(bookId, typeof window._fbBaseFor === 'function' ? window._fbBaseFor(bookId) : undefined);
     const book = BOOKS[bookId];
     if (json) {
       const loaded = JSON.parse(json);
@@ -4455,6 +4498,7 @@ export async function loadBook(bookId) {
       if (!states[bookId].artistPayouts) states[bookId].artistPayouts = [];
       recomputeAfters(states[bookId], BOOKS[bookId]);
       lastSavedHashes[bookId] = json2;
+      noteScreenBase(bookId, typeof window._fbBaseFor === 'function' ? window._fbBaseFor(bookId) : undefined);
       // Another device saved this book. Its expense rows reach the sheet even if
       // that device has no sheet connected, and the website's stock follows the
       // cloud copy (wireBookEvents, startWebsiteLink).
@@ -9045,7 +9089,7 @@ function unapplyOne(id) {
   if (h.webOrderId) { showToast(WEBSITE_SALE_LOCKED, 'warn', 5000); return; }
 
   if (!h.voided) {
-    state.stock += h.qty;
+    state.stock += stockToReturn(h);
     state.sold = Math.max(0, state.sold - h.qty);
     state.revenue = Math.max(0, state.revenue - h.qty * h.price);
     if (state.chStats['Website']) {
@@ -9607,9 +9651,12 @@ export function warmSaleFxHistory() {
 
 /**
  * The rate to convert an expense into `target` (CAD unless the books say
- * otherwise): the rate published for its date, else today's, else 0 when none
- * can be found — never a silent 1:1. A caller getting 0 records the expense with
- * `fxMissing` so the Tax Centre says so and fills it in once online.
+ * otherwise): the rate published for its date, else 0 when none can be found —
+ * never a silent 1:1. Today's rate stands in only for an expense dated today
+ * (or undated): a back-dated one valued at today's rate would be wrong for
+ * good, since the healer only revisits expenses flagged as missing a rate. A
+ * caller getting 0 records the expense with `fxMissing` so the Tax Centre says
+ * so and fills it in at the right date's rate once online.
  */
 export async function resolveExpenseRate(currency, date, target = 'CAD') {
   const cur = String(currency || target).toUpperCase();
@@ -9619,6 +9666,7 @@ export async function resolveExpenseRate(currency, date, target = 'CAD') {
     const h = await fetchHistoricalRate(cur, to, date);
     if (h && h.rate) return h.rate;
   } catch (_) { /* try today's */ }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date || '') && date < today()) return 0;
   try {
     const l = await fetchLiveRate(cur, to);
     if (l && l.rate) return l.rate;
@@ -10639,7 +10687,7 @@ function markArtistTransferReceived(transferId, bookId = activeBook, { chargeId 
   t.total = transferAmount(t);
   // Mark history entry as resolved; the revenue it now counts for is worked
   // out from the history below, the same way every load does.
-  const h = s.hist.find(x => x.num === t.num && x.artistPending);
+  const h = heldSaleForTransfer(s.hist, t);
   if (h) { h.artistPending = false; h.notes = (h.notes ? h.notes + ' · ' : '') + (chargeId ? `Transfer received via Stripe (${chargeId})` : 'Transfer received'); }
   recomputeAfters(s, book);
   // Remove from pending queue
@@ -10746,8 +10794,8 @@ export function settleArtistTransfersFromStripe(payment) {
 // Settle a held transfer where the artist KEEPS their share and only forwards
 // the publisher's cut (the common real-world case). Unlike "mark received" — which
 // assumes the artist forwards the full gross — this credits the sale to revenue,
-// records the artist's share as already-paid (they kept the cash), and leaves only
-// the publisher cut as the amount the artist still owes you.
+// records the artist's share as already-paid (they kept the cash), and treats the
+// publisher cut as already received — nothing is left owing on this sale.
 async function settleArtistTransferKeepShare(transferId) {
   const s = getState(), book = getBook();
   const t = s.artistTransfers.find(x => x.id === transferId);
@@ -10760,7 +10808,7 @@ async function settleArtistTransferKeepShare(transferId) {
 
   // The held sale already counts toward earnings, so its marginal share is the
   // drop in lifetime earnings if it were removed (this respects tier placement).
-  const h = s.hist.find(x => x.num === t.num && x.artistPending);
+  const h = heldSaleForTransfer(s.hist, t);
   const full = calculateArtistEarnings(activeBook);
   const without = calcArtistEarnings(book, { ...s, hist: s.hist.filter(x => x !== h) });
   const share = (full && without)
@@ -10771,8 +10819,8 @@ async function settleArtistTransferKeepShare(transferId) {
   if (!(await confirmDialog(
     `Settle ${escapeHtml(t.num)} — artist keeps their ${fmt(share, book.currency)} share?\n\n` +
     `The full ${fmt(t.total, book.currency)} sale is booked to revenue. The artist's ` +
-    `${fmt(share, book.currency)} share is recorded as paid (they kept the cash), leaving ` +
-    `${fmt(publisherCut, book.currency)} — your cut — for them to forward.`,
+    `${fmt(share, book.currency)} share is recorded as paid (they kept the cash), and your ` +
+    `${fmt(publisherCut, book.currency)} cut is recorded as received from them. Nothing is left owing on this sale.`,
     { okLabel: 'Settle' }
   ))) return;
 
@@ -10809,7 +10857,7 @@ async function settleArtistTransferKeepShare(transferId) {
     paymentRate: t.payment?.rate ?? '',
     convertedTotal: cadEquivS
   });
-  showToast(`✓ Settled — artist keeps ${fmt(share, book.currency)}; ${fmt(publisherCut, book.currency)} still to forward`);
+  showToast(`✓ Settled — artist kept ${fmt(share, book.currency)}; your ${fmt(publisherCut, book.currency)} cut received`);
 }
 
 // Settle a held transfer where the artist keeps the FULL gross — the publisher
@@ -10832,7 +10880,7 @@ async function settleArtistTransferKeepAll(transferId) {
     { okLabel: 'Settle — forgive publisher cut' }
   ))) return;
 
-  const h = s.hist.find(x => x.num === t.num && x.artistPending);
+  const h = heldSaleForTransfer(s.hist, t);
 
   // Resolve the pending history entry; it counts as revenue from now on
   // (worked out from the history, as every load does).
@@ -13040,8 +13088,8 @@ function saveHistEntryEdit(s, book) {
   const newNotes = $('edit-notes').value.trim();
 
   if (!h.voided) {
-    // Reverse old effect
-    s.stock += old.qty;
+    // Reverse old effect (only the copies it actually took off the shelf)
+    s.stock += stockToReturn(old);
     s.sold -= old.qty;
     s.revenue -= old.qty * old.price;
     if (s.chStats[old.chan]) {
@@ -13051,7 +13099,7 @@ function saveHistEntryEdit(s, book) {
       if (s.chStats[old.chan].txns <= 0) delete s.chStats[old.chan];
     }
     // Apply new effect
-    s.stock = Math.max(0, s.stock - newQty);
+    takeSaleStock(s, h, newQty);
     s.sold += newQty;
     s.revenue += newQty * newPrice;
     if (!s.chStats[newChan]) s.chStats[newChan] = { txns: 0, units: 0, revenue: 0 };
@@ -13511,6 +13559,8 @@ function voidEntry() {
       if (e.type === 'Shipment' && st) { st.sent = Math.max(0, st.sent - e.qty); st.outstanding = Math.max(0, st.outstanding - e.qty); s.stock += e.qty; }
       if (e.type === 'Sale' && st) { st.sold = Math.max(0, st.sold - e.qty); st.outstanding += e.qty; s.sold = Math.max(0, s.sold - e.qty); s.revenue = Math.max(0, s.revenue - e.amountDue); if (e.paid === 'pending') st.amountOwed = roundCents(Math.max(0, st.amountOwed - e.amountDue)); if (s.chStats['Consignment']) { s.chStats['Consignment'].txns = Math.max(0, s.chStats['Consignment'].txns - 1); s.chStats['Consignment'].units = Math.max(0, s.chStats['Consignment'].units - e.qty); s.chStats['Consignment'].revenue = Math.max(0, s.chStats['Consignment'].revenue - e.amountDue); } }
       if (e.type === 'Return' && st) { st.returned = Math.max(0, st.returned - e.qty); st.outstanding += e.qty; if (e.status === 'restocked') s.stock = Math.max(0, s.stock - e.qty); }
+      // Written-off copies come back (a book with a print run re-derives this anyway).
+      if (e.type === 'Inventory Disposal') s.stock += e.qty;
       e.voided = true;
       e.voidedAt = Date.now();
       // Decision #4: keep invoiceId/invoiceNum across the void (so unvoid restores
@@ -13524,6 +13574,7 @@ function voidEntry() {
       if (e.type === 'Shipment' && st) { st.sent += e.qty; st.outstanding += e.qty; s.stock = Math.max(0, s.stock - e.qty); }
       if (e.type === 'Sale' && st) { st.sold += e.qty; st.outstanding = Math.max(0, st.outstanding - e.qty); s.sold += e.qty; s.revenue += e.amountDue; if (e.paid === 'pending') st.amountOwed = roundCents(st.amountOwed + e.amountDue); if (!s.chStats['Consignment']) s.chStats['Consignment'] = { txns: 0, units: 0, revenue: 0 }; s.chStats['Consignment'].txns++; s.chStats['Consignment'].units += e.qty; s.chStats['Consignment'].revenue += e.amountDue; }
       if (e.type === 'Return' && st) { st.returned += e.qty; st.outstanding = Math.max(0, st.outstanding - e.qty); if (e.status === 'restocked') s.stock += e.qty; }
+      if (e.type === 'Inventory Disposal') s.stock = Math.max(0, s.stock - e.qty);
       e.voided = false;
       delete e.voidedAt;
       syncLedgerVoid(e, false);

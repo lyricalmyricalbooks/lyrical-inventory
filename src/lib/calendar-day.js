@@ -22,6 +22,8 @@ const pad2 = (n) => String(n).padStart(2, '0');
  * returned as-is; anything unreadable gives ''. Unlike
  * `toISOString().slice(0, 10)` this does not roll over at UTC midnight (which
  * is the evening, in Canada).
+ * @param {string | number | Date} [value]
+ * @returns {string}
  */
 export function localDay(value = Date.now()) {
   if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) return value.trim();
@@ -30,7 +32,12 @@ export function localDay(value = Date.now()) {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
-/** The local calendar day `days` days from `from` (default now). */
+/**
+ * The local calendar day `days` days from `from` (default now).
+ * @param {number} days
+ * @param {string | number | Date} [from]
+ * @returns {string}
+ */
 export function localDayPlus(days, from = new Date()) {
   const d = new Date(from);
   d.setDate(d.getDate() + days);

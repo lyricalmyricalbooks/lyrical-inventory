@@ -838,7 +838,7 @@ async function saveReceiptToLocalFile(file, subfolderName = '', meta = null) {
 
     const desiredName = meta
       ? receiptFileName({ ...meta, originalName: file.name, mimeType: file.type })
-      : `${new Date().toISOString().split('T')[0]}_${file.name.replace(/[^a-zA-Z0-9.\-_]/g, '')}`;
+      : `${localDay()}_${file.name.replace(/[^a-zA-Z0-9.\-_]/g, '')}`;
 
     // Two receipts saved the same day from files with the same name would land
     // on the same path, and `create: true` + createWritable() truncates rather

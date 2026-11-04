@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   bigCartelOrderShipments,
   bigCartelTrackingByOrder,
@@ -57,5 +57,22 @@ describe('searching email for a specific tracking number', () => {
     expect(trackingEmailQuery(['7023 2104 5566 7788', 'LX123456789CA'], { since: '2026-08-01' }))
       .toBe('{"7023210455667788" OR "7023 2104 5566 7788" OR "LX123456789CA"} after:2026/08/01');
     expect(trackingEmailQuery([])).toBe('');
+  });
+});
+
+describe('the shipped date is the owner’s own calendar day', () => {
+  it('does not roll a Canadian evening over to the next UTC day', () => {
+    // 10:30 pm in Toronto on Sept 2 is already Sept 3 in UTC. The test runner's
+    // clock is UTC, so the device's local calendar is stood in for here.
+    const spies = [
+      vi.spyOn(Date.prototype, 'getFullYear').mockReturnValue(2026),
+      vi.spyOn(Date.prototype, 'getMonth').mockReturnValue(8),
+      vi.spyOn(Date.prototype, 'getDate').mockReturnValue(2),
+    ];
+    try {
+      expect(shipmentDate({ shippedAt: '2026-09-03T02:30:00Z' })).toBe('2026-09-02');
+    } finally {
+      spies.forEach(spy => spy.mockRestore());
+    }
   });
 });

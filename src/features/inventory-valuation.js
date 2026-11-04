@@ -31,7 +31,7 @@ import { escapeHtml } from '../lib/html.js';
 import { csvCell } from '../lib/csv.js';
 import { downloadCsv } from '../lib/download.js';
 import { getBookCurrencyCode, getSym, roundCents } from '../lib/money.js';
-import { deriveOnHand, deriveStockBreakdown, recordInventoryDisposal } from '../lib/inventory.js';
+import { deriveStockBreakdown, recordInventoryDisposal, stockAfterDisposal } from '../lib/inventory.js';
 import { createInventoryDisposalExpense, createSection10Adjustment, inventoryAdjustmentCsvRows } from '../lib/inventory-adjustment.js';
 import { consignmentSyncPayload } from '../lib/consignment.js';
 
@@ -352,7 +352,7 @@ async function submitInventoryWriteOff() {
       notes: input.notes,
       sheetsId: makeEventId(),
     });
-    s.stock = deriveOnHand(s, BOOKS[item.id]);
+    if (disposal) s.stock = stockAfterDisposal(s, BOOKS[item.id], quantity);
     await saveState(item.id);
     // Copies written off leave the book's stock, so the sheet shows them too.
     if (disposal) syncToSheets(consignmentSyncPayload(BOOKS[item.id], disposal));

@@ -167,3 +167,29 @@ describe('receipt embedding wiring', () => {
     expect(fn).toContain('file could not be read');
   });
 });
+
+// The expense form's category guess (features/tax-entries.js): whole words
+// only, longest keyword wins.
+// eslint-disable-next-line no-new-func
+const guess = new Function(`${extractDecl('TAX_CATEGORIES')}\n${extractDecl('_tcGuessCategory')}\nreturn _tcGuessCategory;`)();
+
+describe('_tcGuessCategory', () => {
+  it('does not match a keyword hiding inside another word', () => {
+    // "ink" inside "Drinks" used to file this as Office Supplies.
+    expect(guess('Drinks with bookseller')).toBe('');
+  });
+
+  it('prefers the longest matching keyword over the first one listed', () => {
+    // "uber" is listed before "lunch" and used to win.
+    expect(guess('Uber Eats lunch')).toBe('Meals & Entertainment');
+    expect(guess('Lunch at the post office')).toBe('Shipping & Postage');
+  });
+
+  it('still matches whole words, plurals and phrases', () => {
+    expect(guess('Uber to the airport')).toBe('Travel');
+    expect(guess('Printer ink cartridge')).toBe('Printing & Production');
+    expect(guess('Two flights to Montreal')).toBe('Travel');
+    expect(guess('Bubble wrap, 2 rolls')).toBe('Packaging Materials');
+    expect(guess('')).toBe('');
+  });
+});

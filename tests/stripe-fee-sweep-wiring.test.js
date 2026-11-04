@@ -5,6 +5,9 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { appSource, buildHarness } from './helpers/extract-decl.js';
+import { getBookCurrencyCode, roundCents } from '../src/lib/money.js';
+import { saleCadAmounts } from '../src/lib/sale-fx.js';
+import { escapeHtml } from '../src/lib/html.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const indexContent = fs.readFileSync(path.resolve(__dirname, '../index.html'), 'utf8');
@@ -199,5 +202,107 @@ describe('the fortnightly sweep and the ledger', () => {
   it('marks the Tax Centre when Stripe stops answering', () => {
     expect(indexContent.match(/data-health-badge="shippo,canadapost,shipping-email,stripe-fees,receipt-scan"/g))
       .toHaveLength(1);
+  });
+});
+
+describe('a fee with no exchange rate to be had', () => {
+  /** The real planner, with the rate lookup answering from a table. */
+  function plannerHarness(rates = {}) {
+    const asked = [];
+    const { planStripeFeeRows } = buildHarness({
+      names: ['_stripeMinorToMajor', 'planStripeFeeRows'],
+      deps: {
+        isZeroDecimalCurrency: () => false,
+        today: () => '2026-11-04',
+        resolveExpenseRate: async (cur, date) => { asked.push(`${cur}@${date}`); return rates[`${cur}@${date}`] || 0; },
+      },
+      returns: '{ planStripeFeeRows }',
+    });
+    return { planStripeFeeRows, asked };
+  }
+  const now = new Date('2026-11-04T12:00:00').getTime();
+  const usd2025 = { year: 2025, cur: 'usd', salesFeeMinor: 5000, stripeBillingMinor: 0, salesCount: 3 };
+
+  it('is filed flagged missing with no CAD value, not 1:1', async () => {
+    const { planStripeFeeRows, asked } = plannerHarness();
+    const [p] = await planStripeFeeRows([usd2025], { now });
+    expect(asked).toEqual(['USD@2025-12-31']);
+    expect(p).toMatchObject({ amount: 50, currency: 'USD', fxRate: null, baseAmount: null, fxMissing: true, date: '2025-12-31' });
+  });
+
+  it('is converted at the year-end rate when there is one', async () => {
+    const { planStripeFeeRows } = plannerHarness({ 'USD@2025-12-31': 1.4 });
+    const [p] = await planStripeFeeRows([usd2025], { now });
+    expect(p).toMatchObject({ fxRate: 1.4, baseAmount: 70, fxMissing: false });
+  });
+
+  it('keeps a rate the row was already healed with, rather than blanking it', () => {
+    const healed = { id: 9, ref: 'stripe-fees:2025:USD', currency: 'USD', amount: 50, fxRate: 1.4, baseAmount: 70, date: '2025-12-31', fxMissing: false };
+    const { writeStripeFeeRows, TAX_CENTER } = writerHarness([healed]);
+    writeStripeFeeRows([row({ year: 2025, ref: 'stripe-fees:2025:USD', currency: 'USD', amount: 50, fxRate: null, baseAmount: null, fxMissing: true, date: '2025-12-31' })]);
+    expect(TAX_CENTER.businessExpenses[0]).toMatchObject({ fxRate: 1.4, baseAmount: 70, fxMissing: false });
+  });
+
+  it('marks a refiled row missing when it never had a rate', () => {
+    const { writeStripeFeeRows, TAX_CENTER } = writerHarness();
+    writeStripeFeeRows([row({ ref: 'stripe-fees:2025:USD', currency: 'USD', fxRate: null, baseAmount: null, fxMissing: true })]);
+    expect(TAX_CENTER.businessExpenses[0]).toMatchObject({ fxRate: null, baseAmount: null, fxMissing: true });
+  });
+});
+
+describe('Stripe vs your recorded sales', () => {
+  // The cross-check against the real conversion helpers, with a fake page.
+  async function runRecon({ books, states, stripeRows, rates = {}, cache = {} }) {
+    const wrap = { style: {}, innerHTML: '' };
+    const { reconcileStripeAgainstSales } = buildHarness({
+      names: ['_stripeMinorToMajor', 'reconcileStripeAgainstSales'],
+      deps: {
+        window: { _stripeFeesLedgerData: stripeRows },
+        document: { getElementById: () => wrap },
+        showToast: () => {},
+        isZeroDecimalCurrency: () => false,
+        today: () => '2026-11-04',
+        resolveExpenseRate: async (cur, date) => rates[`${cur}@${date}`] || 0,
+        BOOK_LIST: books,
+        states,
+        defaultState: () => ({ hist: [] }),
+        getBookCurrencyCode,
+        saleCadAmounts,
+        _fxRateCache: cache,
+        roundCents,
+        escapeHtml,
+      },
+      returns: '{ reconcileStripeAgainstSales }',
+    });
+    await reconcileStripeAgainstSales();
+    return wrap.innerHTML;
+  }
+
+  it('converts a foreign book\'s sales to CAD at each sale\'s date, as the Tax Centre does', async () => {
+    const html = await runRecon({
+      books: [{ id: 'altrove', title: 'Altrove', currency: '€' }, { id: 'home', title: 'Home', currency: 'CAD' }],
+      states: {
+        altrove: { hist: [
+          { date: '2025-03-10', qty: 2, price: 20 },
+          { date: '2025-04-01', qty: 1, price: 10, artistPending: true },
+        ] },
+        home: { hist: [{ date: '2025-05-05', qty: 1, price: 15 }] },
+      },
+      stripeRows: [{ year: 2025, cur: 'cad', salesGrossMinor: 1000 }],
+      cache: { 'EUR_CAD@2025-03-10': 1.5 },
+    });
+    // 2 × €20 at 1.5 = 60, plus CA$15 — not 40 + 15 in mixed currencies.
+    expect(html).toContain('75.00');
+    expect(html).not.toContain('55.00');
+  });
+
+  it('leaves out, and names, Stripe money it has no rate for instead of counting it 1:1', async () => {
+    const html = await runRecon({
+      books: [{ id: 'home', title: 'Home', currency: 'CAD' }],
+      states: { home: { hist: [{ date: '2025-05-05', qty: 1, price: 15 }] } },
+      stripeRows: [{ year: 2025, cur: 'usd', salesGrossMinor: 10000 }],
+    });
+    expect(html).toContain('2025 USD');
+    expect(html).not.toContain('100.00');
   });
 });

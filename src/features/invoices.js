@@ -36,7 +36,7 @@ import {
   today,
 } from '../main.js';
 import { BOOKS, BOOK_LIST, states, activeBook, getState, getBook } from '../core/store.js';
-import { localDayPlus } from '../lib/calendar-day.js';
+import { localDay, localDayPlus } from '../lib/calendar-day.js';
 import { consignmentSyncPayload, stampLedgerInvoiceLink } from '../lib/consignment.js';
 import { downloadText } from '../lib/download.js';
 import { loadExternalScript } from '../lib/external-scripts.js';
@@ -362,7 +362,10 @@ function renderInvoices() {
     } else if (!isSettled && remState.lastStatus === 'failed') {
       chaseChip = `<span class="chip-status red sm" title="The reminder email did not go out — open the invoice to try again">\u{23F0} Reminder failed</span>`;
     } else if (remState.count) {
-      const when = remState.lastAt ? fmtD(new Date(remState.lastAt).toISOString().slice(0, 10)) : '';
+      // The day on the publisher's own clock: an evening reminder in Canada
+      // is already tomorrow in UTC.
+      const lastDay = remState.lastAt ? localDay(remState.lastAt) : '';
+      const when = lastDay ? fmtD(lastDay) : '';
       chaseChip = `<span class="chip-status gray sm" title="A payment reminder was emailed to this customer">\u{23F0} Chased${when ? ' ' + escapeHtml(when) : ''}</span>`;
     }
     // Chasing from the list, where the unpaid bills already are. The invoice
@@ -1511,7 +1514,8 @@ function renderInvoicePaperHTML(inv, { showChase = false } = {}) {
       return `<div class="inv-meta-sub no-print" style="margin-top:4px;">⏰ The last reminder could not be sent</div>`;
     }
     if (!chase.count) return '';
-    const when = chase.lastAt ? fmtD(new Date(chase.lastAt).toISOString().slice(0, 10)) : '';
+    const lastDay = chase.lastAt ? localDay(chase.lastAt) : '';
+    const when = lastDay ? fmtD(lastDay) : '';
     return `<div class="inv-meta-sub no-print" style="margin-top:4px;">⏰ Reminded ${chase.count === 1 ? 'once' : `${chase.count} times`}${when ? `, last on ${escapeHtml(when)}` : ''}</div>`;
   })();
   const divergedNote = inv.ledgerDivergedAt

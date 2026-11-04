@@ -129,6 +129,20 @@ describe("today's register sales", () => {
     ] }];
     expect(registerSalesForDay(wrapped, 'd').sales[0].num).toBe('POS-000010');
   });
+  test('totals what the customer paid, in the currency they paid in', () => {
+    const paidInEuros = [{ id: 'a', title: 'Harbour', currency: 'CAD', hist: [
+      // A CAD 40 book rung up in euros at a discount: €25 changed hands.
+      { num: 'POS-1', chan: 'Book Fair', date: 'd', qty: 1, price: 40, cur: 'CAD', payment: { currency: 'EUR', amount: 25, rate: 1.6 }, sheetsId: t(1) },
+      // A comp: nothing changed hands.
+      { num: 'POS-2', chan: 'Book Fair', date: 'd', qty: 1, price: 0, cur: 'CAD', gratuity: true, payment: { currency: 'CAD', amount: 0 }, sheetsId: t(2) },
+      // An older row with no payment record keeps the list price.
+      { num: 'POS-3', chan: 'Book Fair', date: 'd', qty: 2, price: 40, cur: 'CAD', sheetsId: t(3) },
+    ] }];
+    const day = registerSalesForDay(paidInEuros, 'd');
+    expect(day.totals).toEqual({ EUR: 25, CAD: 80 });
+    expect(day.sales.find((s) => s.num === 'POS-1').lines[0]).toMatchObject({ amount: 25, cur: 'EUR' });
+    expect(fairDaySummary(day).titles[0].totals).toEqual({ EUR: 25, CAD: 80 });
+  });
   test('event ids decode to their time, anything else to 0', () => {
     expect(eventTime(t(123456789))).toBe(123456789);
     expect(eventTime('')).toBe(0);

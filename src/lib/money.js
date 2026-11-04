@@ -236,6 +236,31 @@ export function transferAmount(t) {
   return null;
 }
 
+// The held (artistPending) sale a transfer stands for. A transfer shares its
+// sale's sheetsId, so match on that; an order number can repeat (two held
+// sales under one number), and matching on it alone settled the wrong row.
+// Falls back to the number only for a legacy transfer with no id.
+export function heldSaleForTransfer(hist, t) {
+  if (!Array.isArray(hist) || !t) return undefined;
+  if (t.sheetsId) return hist.find(x => x.artistPending && x.sheetsId === t.sheetsId);
+  return hist.find(x => x.artistPending && x.num === t.num);
+}
+
+// The other direction: which queued transfer belongs to this held sale, as an
+// index into `transfers` (-1 when none). The sale's own sheet id wins; the
+// number-and-copies match is only a fallback for a transfer saved without an
+// id, so an older transfer that happens to share the order number and count
+// is never pulled in place of the sale's own.
+export function heldTransferIndexForSale(transfers, h) {
+  if (!Array.isArray(transfers) || !h) return -1;
+  if (h.sheetsId) {
+    const exact = transfers.findIndex(x => x && x.sheetsId === h.sheetsId);
+    if (exact !== -1) return exact;
+    return transfers.findIndex(x => x && !x.sheetsId && x.num === h.num && x.qty === h.qty);
+  }
+  return transfers.findIndex(x => x && x.num === h.num && x.qty === h.qty);
+}
+
 // Copies line for a transfer: "3×", or '' when the count wasn't recorded.
 export function transferQtyLabel(t) {
   const qty = Number(t && t.qty);

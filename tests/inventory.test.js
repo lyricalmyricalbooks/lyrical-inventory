@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, recordInventoryDisposal, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, isVoidStale, VOID_HIDE_AFTER_MS } from '../src/lib/inventory.js';
+import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, recordInventoryDisposal, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, isVoidStale, stockAfterDisposal, VOID_HIDE_AFTER_MS } from '../src/lib/inventory.js';
 
 const book = (maxPrint = 100) => ({ maxPrint });
 const sale = (qty, extra = {}) => ({ qty, ...extra });
@@ -82,6 +82,24 @@ describe('deriveOnHand', () => {
 const dsale = (qty, date, extra = {}) => ({ qty, date, ...extra });
 const dship = (qty, date, extra = {}) => ({ type: 'Shipment', qty, date, ...extra });
 const dret = (qty, date, status, extra = {}) => ({ type: 'Return', qty, date, status, ...extra });
+
+describe('stockAfterDisposal', () => {
+  it('takes written-off copies off a book with no print run on record', () => {
+    // deriveOnHand has no baseline here and just echoes the stored count, so
+    // the disposal used to leave stock unchanged while the toast said otherwise.
+    const s = { stock: 10, hist: [], ledger: [] };
+    recordInventoryDisposal(s, { id: 'd1', date: '2026-01-01', qty: 3 });
+    expect(stockAfterDisposal(s, { maxPrint: undefined }, 3)).toBe(7);
+  });
+  it('never goes below zero', () => {
+    expect(stockAfterDisposal({ stock: 2 }, {}, 5)).toBe(0);
+  });
+  it('re-derives from the records when the book has a print run', () => {
+    const s = { stock: 999, hist: [], ledger: [] };
+    recordInventoryDisposal(s, { id: 'd1', date: '2026-01-01', qty: 3 });
+    expect(stockAfterDisposal(s, { maxPrint: 50 }, 3)).toBe(47);
+  });
+});
 
 describe('buildOrderTimeline with write-offs', () => {
   it('ends at the records-true on-hand once a disposal exists', () => {

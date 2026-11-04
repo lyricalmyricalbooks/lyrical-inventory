@@ -55,6 +55,7 @@ import { escapeHtml } from '../lib/html.js';
 import { closeM, confirmDialog, openM, promptDialog } from '../lib/modal.js';
 import { fmt, getBookCurrencyCode, getSym, roundCents, setSelectCurrency } from '../lib/money.js';
 import { followableUrl } from '../lib/receipt-links.js';
+import { datedCadRate, saleCadAmounts } from '../lib/sale-fx.js';
 import {
   _localReceiptCell,
   _runReceiptScan,
@@ -962,19 +963,35 @@ const TAX_CATEGORIES = {
   'fair': 'Events & Exhibitions',
 };
 
+/**
+ * The category an expense description suggests, or '' for none. A keyword
+ * counts only as a whole word (a plural 's'/'es' allowed), so "ink" doesn't
+ * fire inside "Drinks"; and the longest matching keyword wins, so "Uber Eats
+ * lunch" is a meal, not travel — the rule categoryFromName uses.
+ */
+function _tcGuessCategory(text) {
+  const hay = String(text || '').toLowerCase();
+  let best = '';
+  let bestLen = 0;
+  for (const keyword in TAX_CATEGORIES) {
+    if (keyword.length <= bestLen) continue;
+    const word = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp(`(?:^|[^a-z0-9])${word}(?:e?s)?(?![a-z0-9])`).test(hay)) {
+      best = TAX_CATEGORIES[keyword];
+      bestLen = keyword.length;
+    }
+  }
+  return best;
+}
+
 function _tcWireSmartCategory() {
   const descInput = document.getElementById('tc-exp-desc');
   if (descInput) {
     descInput.addEventListener('input', (e) => {
-      const val = e.target.value.toLowerCase();
       const catSelect = document.getElementById('tc-exp-cat');
       if (!catSelect) return;
-      for (const keyword in TAX_CATEGORIES) {
-        if (val.includes(keyword)) {
-          catSelect.value = TAX_CATEGORIES[keyword];
-          break;
-        }
-      }
+      const cat = _tcGuessCategory(e.target.value);
+      if (cat) catSelect.value = cat;
     });
   }
 }
@@ -1025,32 +1042,39 @@ function downloadFullTaxSeasonExport() {
     if (isExpenseAwaitingRate(e)) { waitingExpenses.add(e); return 0; }
     return parseFloat(e.baseAmount || e.amountCAD || e.amount || 0);
   };
-  const flagRateIfMissing = (book, cur, rawRate, hasAmount) => {
-    if (hasAmount && cur && cur !== 'CAD' && !rawRate) rateWarnings.set(book.id, { title: book.title, cur });
+  const flagRateIfMissing = (book, cur, rateMissing, hasAmount) => {
+    if (hasAmount && cur && cur !== 'CAD' && rateMissing) rateWarnings.set(book.id, { title: book.title, cur });
   };
 
   // Section 1: Revenue by Book
   csv += '--- REVENUE BY BOOK ---\n';
-  csv += 'Book Title,Gross Revenue,Net Revenue (after COGS & Royalty),Total Units Sold\n';
+  csv += 'Book Title,Gross Revenue (CAD; incl. customer shipping),Net Revenue (after COGS & Royalty),Total Units Sold\n';
 
   BOOK_LIST.forEach(book => {
     if (isTestBook(book) || isTestBookId(book.id)) return;
     const s = states[book.id] || defaultState(book);
-    // Sales + royalty are recorded in the book's native currency; convert to the
-    // export's base (CAD) so they're comparable with the CAD expense figures.
+    // Sales are recorded in the book's native currency. Each is converted to
+    // CAD at its own date's rate, and customer shipping (already CAD, never
+    // converted) is added, exactly as the Tax Centre's gross sales are
+    // (lib/sale-fx.js), so the two figures agree for the same year.
     const cur = getBookCurrencyCode(book);
-    const rawRate = _fxRateCache[`${cur}_CAD`];
+    // Royalty is a running total with no single date, so it stays at today's rate.
+    const rawRate = cur === 'CAD' ? 1 : _fxRateCache[`${cur}_CAD`];
     const hRate = rawRate || 1;
 
     // ⚡ Bolt Optimization: Loop Fusion - Compute sold and revenue in a single pass without intermediate array allocation
     let sold = 0;
-    let revenue = 0;
+    let revenueCAD = 0;
+    let saleRateMissing = false;
     for (let i = 0; i < s.hist.length; i++) {
       const h = s.hist[i];
-      if (h.voided || h.gratuity) continue;
+      if (h.voided) continue;
+      if (h.artistPending) continue; // not in the Tax Centre's gross sales either
       if (!isAllTime && (!h.date || !h.date.startsWith(year))) continue;
-      sold += (h.qty || 0);
-      revenue += ((h.qty || 0) * (h.price || 0));
+      const fx = saleCadAmounts(h, cur, _fxRateCache);
+      revenueCAD = roundCents(revenueCAD + fx.merchandiseCad + fx.shippingCad);
+      if (fx.missing && fx.merchandise > 0) saleRateMissing = true;
+      if (!h.gratuity) sold += (h.qty || 0);
     }
 
     // ⚡ Bolt Optimization: Loop Fusion - Compute expTotal in a single pass without intermediate array allocation
@@ -1073,11 +1097,11 @@ function downloadFullTaxSeasonExport() {
     }
 
     // expTotal is already CAD (uses each expense's stored baseAmount); convert
-    // the native-currency revenue + royalty before subtracting so net is all-CAD.
-    const revenueCAD = revenue * hRate;
+    // the native-currency royalty before subtracting so net is all-CAD.
     const sharesCAD = shares * hRate;
     const net = revenueCAD - expTotal - sharesCAD;
-    flagRateIfMissing(book, cur, rawRate, revenue > 0 || shares > 0);
+    flagRateIfMissing(book, cur, saleRateMissing, true);
+    flagRateIfMissing(book, cur, !rawRate, shares > 0);
     csv += `${esc(book.title)},${revenueCAD.toFixed(2)},${net.toFixed(2)},${sold}\n`;
   });
 
@@ -1090,8 +1114,6 @@ function downloadFullTaxSeasonExport() {
     if (isTestBook(book) || isTestBookId(book.id)) return;
     const s = states[book.id] || defaultState(book);
     const cur = getBookCurrencyCode(book);
-    const rawRate = _fxRateCache[`${cur}_CAD`];
-    const hRate = rawRate || 1;
 
     // Book Expenses
     (s.expenses || []).filter(e => {
@@ -1114,10 +1136,12 @@ function downloadFullTaxSeasonExport() {
       return p.date && p.date.startsWith(year);
     }).forEach(p => {
       // `amount` is in the book's native currency — convert to CAD to match the
-      // column header.
+      // column header, at the payout's own date's rate as the Tax Centre does.
       const payoutRaw = parseFloat(p.amount || 0);
-      flagRateIfMissing(book, cur, rawRate, payoutRaw > 0);
-      const payoutCAD = payoutRaw * hRate;
+      const pFx = datedCadRate(cur, p.date, _fxRateCache);
+      const hRate = pFx.rate;
+      flagRateIfMissing(book, cur, pFx.missing, payoutRaw > 0);
+      const payoutCAD = roundCents(payoutRaw * hRate);
       if (p.settlement) {
         csv += `${p.date},${esc(book.title)},"Earnings settled",${esc('Royalty credit including earnings retained from held sales; see settlement cash section for the actual payment')},${payoutCAD.toFixed(2)},""\n`;
         return;

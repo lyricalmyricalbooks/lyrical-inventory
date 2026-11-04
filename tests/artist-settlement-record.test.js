@@ -5,9 +5,10 @@ import { calcArtistEarnings, describeArtistSettlement } from '../src/lib/earning
 import { mergeRows } from '../src/lib/merge-state.js';
 import { computeCashFlowMetrics } from '../src/lib/cashflow.js';
 import { planCurrencyChange, applyCurrencyChange } from '../src/lib/currency-migration.js';
-import { appSource } from './helpers/extract-decl.js';
+import { appSource, extractDecl } from './helpers/extract-decl.js';
 import { csvCell } from '../src/lib/csv.js';
-import { getBookCurrencyCode } from '../src/lib/money.js';
+import { getBookCurrencyCode, roundCents } from '../src/lib/money.js';
+import { datedCadRate, saleCadAmounts } from '../src/lib/sale-fx.js';
 import { payoutNetted } from '../src/lib/earnings.js';
 
 const book = { title: 'Harbour', currency: 'CA$', profitTiers: [{ artistPct: 13 }] };
@@ -164,7 +165,7 @@ describe('a linked author settlement', () => {
     let csv = '';
     const deps = { document: { getElementById: () => ({ value: '2026' }) }, today: () => '2026-10-08',
       csvCell, BOOK_LIST: [{ ...book, id: 'harbour' }], states: { harbour: s }, defaultState: () => ({}),
-      getBookCurrencyCode, _fxRateCache: {}, isTestBook: () => false, isTestBookId: () => false,
+      getBookCurrencyCode, roundCents, datedCadRate, saleCadAmounts, _fxRateCache: {}, isTestBook: () => false, isTestBookId: () => false,
       filterArtistEarningsByYear: () => 0, payoutNetted, TAX_CENTER: { businessExpenses: [] },
       downloadCsv: content => { csv = content; }, showToast: () => {} };
     new Function(...Object.keys(deps), source)(...Object.values(deps));
@@ -430,5 +431,22 @@ describe('a repaid expense edited afterwards', () => {
     expect(artistSettlementIssues(s).size).toBe(0);
     s.expenses[0].amount = 38.17;
     expect(artistSettlementIssues(s).size).toBe(1);
+  });
+});
+
+describe('settling a held transfer by hand', () => {
+  // heldSaleForTransfer's matching is unit-tested in transfer-amount.test.js.
+  for (const name of ['markArtistTransferReceived', 'settleArtistTransferKeepShare', 'settleArtistTransferKeepAll']) {
+    it(`${name} resolves the sale by its sheet id, not the first row with its number`, () => {
+      const src = extractDecl(name);
+      expect(src).toContain('heldSaleForTransfer(s.hist, t)');
+      expect(src).not.toContain('x.num === t.num && x.artistPending');
+    });
+  }
+  it('"artist keeps their share" says the cut was received, not still owed', () => {
+    // Nothing tracks a remaining debt: the whole sale is booked to revenue.
+    const src = extractDecl('settleArtistTransferKeepShare');
+    expect(src).not.toMatch(/still to forward|for them to forward/);
+    expect(src).toContain('cut received');
   });
 });

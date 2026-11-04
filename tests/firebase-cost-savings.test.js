@@ -75,7 +75,7 @@ describe('writes skipped when nothing changed', () => {
   it('a merged setting unchanged since it was loaded or saved is not re-sent', () => {
     const start = src.indexOf('async function writeMergedSetting(');
     const body = src.slice(start, src.indexOf('\n}', start));
-    const skip = body.indexOf("if (_settingsBase[key] === localJson) return data;");
+    const skip = body.indexOf("if (_settingsBase[key] === localJson) { dropPendingSetting(key); return data; }");
     expect(skip).toBeGreaterThan(-1);
     expect(skip).toBeLessThan(body.indexOf('getDocFromServer'));
   });

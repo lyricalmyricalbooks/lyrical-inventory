@@ -268,3 +268,20 @@ describe('shipping reconciliation', () => {
   });
 });
 
+
+describe('US ZIP+4 postal codes', () => {
+  // Two orders for the same name: only the postal code can tell them apart, so
+  // a ZIP+4 that failed to equal its five-digit ZIP left the label ambiguous.
+  const twoPats = [
+    { num: '#ABCD-111111', date: '2026-07-10', shipName: 'Pat Doe', shipPostal: '98101-1234' },
+    { num: '#ABCD-222222', date: '2026-07-10', shipName: 'Pat Doe', shipPostal: '10001' },
+  ];
+  it('matches a five-digit ZIP on the label to a ZIP+4 on the order', () => {
+    expect(reconcileShippingExpense({ recipientName: 'Pat Doe', recipientPostal: '98101', date: '2026-07-12' }, twoPats))
+      .toMatchObject({ shippingSuggestedOrderNumber: '#ABCD-111111', shippingMatchTier: 'name-postal', shippingMatchStatus: 'suggested' });
+  });
+  it('matches a ZIP+4 on the label to a five-digit ZIP on the order', () => {
+    expect(reconcileShippingExpense({ recipientName: 'Pat Doe', recipientPostal: '10001-0042', date: '2026-07-12' }, twoPats))
+      .toMatchObject({ shippingSuggestedOrderNumber: '#ABCD-222222', shippingMatchTier: 'name-postal' });
+  });
+});

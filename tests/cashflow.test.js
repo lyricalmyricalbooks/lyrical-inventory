@@ -194,6 +194,39 @@ describe('computeCashFlowMetrics', () => {
     };
     expect(computeCashFlowMetrics(custom, '2025').operatingExpenses).toBe(25);
   });
+
+  it('keeps real books whose title merely contains "test" and drops only the sandbox', () => {
+    const st = { hist: [{ date: '2026-03-01', price: 25, qty: 2 }] };
+    const custom = {
+      greatest: { id: 'greatest', title: 'The Greatest Hits', currency: 'CA$' },
+      protest: { id: 'protest', title: 'Protest Songs', currency: 'CA$' },
+      testament: { id: 'testament', title: 'Testament', currency: 'CA$' },
+      test1: { id: 'test1', title: 'Test 1', currency: 'CA$' },
+      legacy: { id: 'legacy', title: 'TEST PAGE', currency: 'CA$' },
+    };
+    const st5 = Object.fromEntries(Object.keys(custom).map(k => [k, st]));
+    const m = computeCashFlowMetrics({ books: custom, states: st5, taxCenter: {}, fxRateCache: {} }, '2026');
+    expect(m.grossSales).toBe(150); // three real books x 50; both sandboxes skipped
+    expect(m.txnCount).toBe(3);
+  });
+
+  it("converts a foreign-currency settlement's cash at its own date's rate, not today's", () => {
+    const mk = (todayRate) => ({
+      books: { b1: { id: 'b1', title: 'Libro', currency: 'EUR' } },
+      states: { b1: {
+        hist: [{ num: 'S1', qty: 1, price: 100, date: '2025-03-01', artistSettlementId: 'set1', cadRate: 1.5 }],
+        artistPayouts: [{ id: 'set1', date: '2025-06-01', amount: 60,
+          settlement: { cur: 'EUR', balance: { direction: 'to-publisher', amount: 40, expensesOwed: 0 } } }],
+      } },
+      taxCenter: {},
+      fxRateCache: { 'EUR_CAD@2025-06-01': 1.5, ...(todayRate ? { EUR_CAD: todayRate } : {}) },
+    });
+    // 150 CAD of sales settled by 60 EUR royalty + 40 EUR cash, all at the
+    // settlement day's 1.5: the cash adjustment nets to zero whatever today's rate is.
+    for (const r of [1.5, 1.6, undefined]) {
+      expect(computeCashFlowMetrics(mk(r), '2025').artistSettlementCashAdjustment || 0, String(r)).toBe(0);
+    }
+  });
 });
 
 describe('cashFlowDelta', () => {
