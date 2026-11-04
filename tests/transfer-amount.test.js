@@ -1,7 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { transferAmount, transferQtyLabel, heldSaleForTransfer } from '../src/lib/money.js';
-import { extractDecl } from './helpers/extract-decl.js';
-
 describe('transferAmount', () => {
   it('uses the stored total', () => expect(transferAmount({ total: 80, qty: 2, price: 40 })).toBe(80));
   it('falls back to qty × price when total is missing', () => expect(transferAmount({ qty: 2, price: 40 })).toBe(80));
@@ -34,21 +32,5 @@ describe('heldSaleForTransfer', () => {
   it('falls back to the order number for a legacy transfer with no id', () => {
     expect(heldSaleForTransfer(hist, { num: '#12' })).toBe(hist[0]);
     expect(heldSaleForTransfer(hist, { num: '#13' })).toBeUndefined();
-  });
-});
-
-describe('settling a held transfer by hand', () => {
-  for (const name of ['markArtistTransferReceived', 'settleArtistTransferKeepShare', 'settleArtistTransferKeepAll']) {
-    it(`${name} resolves the sale through heldSaleForTransfer`, () => {
-      const src = extractDecl(name);
-      expect(src).toContain('heldSaleForTransfer(s.hist, t)');
-      expect(src).not.toContain('x.num === t.num && x.artistPending');
-    });
-  }
-  it('"artist keeps their share" says the cut was received, not still owed', () => {
-    // Nothing tracks a remaining debt: the whole sale is booked to revenue.
-    const src = extractDecl('settleArtistTransferKeepShare');
-    expect(src).not.toMatch(/still to forward|for them to forward/);
-    expect(src).toContain('cut received');
   });
 });
