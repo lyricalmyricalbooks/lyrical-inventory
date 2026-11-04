@@ -1121,6 +1121,7 @@ import { resolveCountryCode } from './lib/countries.js';
 import { PUBLISHER_ONLY_TABS, AUTHOR_ONLY_TABS, helpTabOpenFor, helpQueryWords, helpMatches } from './lib/help-guide.js';
 import { readStoredList } from './lib/stored-list.js';
 import { STORE_REVERSAL_PENDING_KEY } from './lib/store-reversals.js';
+import { isTestBook } from './lib/test-book.js';
 
 
 // Tells the boot watchdog in index.html that the bundle and every import it
@@ -1338,15 +1339,7 @@ let deletedDefaultIds = [];
 // under `_posExtra` so it syncs across devices and survives offline.
 export let posExtraBooks = {};
 
-export function isTestBook(b) {
-  if (!b) return false;
-  const idLower = String(b.id || '').toLowerCase().trim();
-  const titleLower = String(b.title || '').toLowerCase().trim();
-  // Preserve the original TEST PAGE sandbox aliases without hiding real
-  // books such as "Greatest Hits" or "Contest" through substring matches.
-  const testNames = ['test', 'test1', 'testpage', 'test-page', 'test page'];
-  return b.isTest === true || testNames.includes(idLower) || testNames.includes(titleLower);
-}
+export { isTestBook };
 
 export function isTestBookId(bid) {
   if (!bid) return false;
