@@ -110,7 +110,7 @@ const COUNTRY_ALIASES = {
   'czech republic': 'CZ', czechia: 'CZ',
   'republic of serbia': 'RS', srbija: 'RS', 'serbia and montenegro': 'RS',
   turkey: 'TR', turkiye: 'TR',
-  'south korea': 'KR', 'republic of korea': 'KR', korea: 'KR',
+  'south korea': 'KR', 'republic of korea': 'KR', 'korea, republic of': 'KR', korea: 'KR',
   'north korea': 'KP',
   russia: 'RU', 'russian federation': 'RU',
   vietnam: 'VN', 'viet nam': 'VN',

@@ -175,3 +175,9 @@ describe('nothing classifies an order with the US-defaulting resolver', () => {
     expect(shipping).toMatch(/shipmentRegion\(o\.shipCountry\)/);
   });
 });
+
+describe('ISO-style "Name, Republic of" spellings', () => {
+  it('reads "Korea, Republic of" as South Korea', () => {
+    expect(resolveCountryCode('Korea, Republic of')).toBe('KR');
+  });
+});
