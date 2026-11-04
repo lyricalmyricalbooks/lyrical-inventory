@@ -243,8 +243,9 @@ function unvoidHistEntry(s, book, h) {
   cs.txns++;
   cs.units += h.qty;
   if (!h.artistPending) cs.revenue += h.qty * h.price;
-  if (h.voidedExpense) {
-    if (!Array.isArray(s.expenses)) s.expenses = [];
+  // The expense was spliced out of this state's expenses list, so the list
+  // exists; if it somehow doesn't, the expense stays parked on the row.
+  if (h.voidedExpense && Array.isArray(s.expenses)) {
     s.expenses.unshift(h.voidedExpense);
     delete h.voidedExpense;
   }
