@@ -147,4 +147,16 @@ describe('channelStats', () => {
     expect(s.chStats.Website.txns).toBe(2);
     expect(hasOwnChannel(s, 'Website')).toBe(true);
   });
+
+  it('keeps a recount from history safe from a __proto__ channel too', async () => {
+    const { recalculateBookStatsFromHistory } = await import('../src/lib/inventory.js');
+    const s = { stock: 5, hist: [
+      { chan: '__proto__', qty: 1, price: 10 },
+      { chan: 'Website', qty: 2, price: 10 },
+    ] };
+    recalculateBookStatsFromHistory(s);
+    expect({}.txns).toBeUndefined();
+    expect(Object.keys(s.chStats)).toEqual(['Website']);
+    expect(s.chStats.Website).toMatchObject({ txns: 1, units: 2, revenue: 20 });
+  });
 });

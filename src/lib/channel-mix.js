@@ -98,14 +98,18 @@ export function channelMixRows(chStats) {
 // would reach Object.prototype instead of a bucket of its own, so those names
 // are never used as keys: their totals go to a throwaway bucket (the history
 // rows themselves are untouched, and a recompute re-derives the totals).
-const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+function isUnsafeKey(key) {
+  return key === '__proto__' || key === 'constructor' || key === 'prototype';
+}
 export function hasOwnChannel(s, chan) {
-  return !!s.chStats && !UNSAFE_KEYS.has(String(chan)) && Object.prototype.hasOwnProperty.call(s.chStats, chan);
+  return !!s.chStats && !isUnsafeKey(String(chan)) && Object.prototype.hasOwnProperty.call(s.chStats, chan);
 }
 export function channelStats(s, chan) {
   if (!s.chStats || typeof s.chStats !== 'object') s.chStats = {};
   const key = String(chan);
-  if (UNSAFE_KEYS.has(key)) return { txns: 0, units: 0, revenue: 0 };
-  if (!Object.prototype.hasOwnProperty.call(s.chStats, key)) s.chStats[key] = { txns: 0, units: 0, revenue: 0 };
+  if (key === '__proto__' || key === 'constructor' || key === 'prototype') return { txns: 0, units: 0, revenue: 0 };
+  if (!Object.prototype.hasOwnProperty.call(s.chStats, key)) {
+    Object.defineProperty(s.chStats, key, { value: { txns: 0, units: 0, revenue: 0 }, enumerable: true, writable: true, configurable: true });
+  }
   return s.chStats[key];
 }
