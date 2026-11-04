@@ -93,6 +93,16 @@ describe('the register holds up at a busy fair', () => {
 });
 
 describe('register-only books', () => {
+  // A guest title's sales stay in its register log; clear it so the next
+  // test's "today" starts empty.
+  afterEach(async () => {
+    await app.settle();
+    for (const pb of Object.values(app.main.posExtraBooks || {})) pb.registerLog = [];
+    // The shared catalogue holds the log too, and the next sale re-reads it.
+    await app.main.saveCatalogWithDeletions();
+    await app.settle();
+  });
+
   it('counts a register-only book without touching the catalogue ledger', async () => {
     win.openPosBookModal();
     document.getElementById('pb-title').value = 'Fair Zine';
@@ -111,6 +121,44 @@ describe('register-only books', () => {
     expect(extras()[id]).toMatchObject({ sold: 2, revenue: 20 });
     // The catalogue book in the same cart is recorded normally.
     expect(state(HARBOUR).hist).toHaveLength(1);
+  });
+
+  async function addZine(title) {
+    win.openPosBookModal();
+    document.getElementById('pb-title').value = title;
+    document.getElementById('pb-price').value = '10';
+    await win.savePosBook();
+    await app.settle();
+    const extras = app.cloud.catalog?._posExtra || {};
+    return Object.keys(extras).find(k => extras[k].title === title);
+  }
+
+  it("shows in Fair Mode's Today totals, so the day matches the card reader", async () => {
+    const id = await addZine('Today Zine');
+    fillCart({ [id]: 2, [HARBOUR]: 1 });
+    await win.posConfirmSale();
+    await app.settle();
+    win.fairOpenToday();
+    const total = document.getElementById('fm-today-total').textContent;
+    // 2 zines at 10 plus the catalogue book, in one sale.
+    expect(total).toMatch(/3 books in 1 sale/);
+    expect(document.getElementById('fm-today-list').textContent).toContain('Today Zine');
+  });
+
+  it('voids from the Today list, taking the guest title back out', async () => {
+    const id = await addZine('Void Zine');
+    fillCart({ [id]: 1 });
+    await win.posConfirmSale();
+    await app.settle();
+    const extras = () => app.cloud.catalog?._posExtra || {};
+    expect(extras()[id]).toMatchObject({ sold: 1, revenue: 10 });
+    const num = extras()[id].registerLog[0].num;
+    const p = win.fairVoidSale(num);
+    await app.settle();
+    app.answerConfirm(true);
+    await p;
+    await app.settle();
+    expect(extras()[id]).toMatchObject({ sold: 0, revenue: 0, registerLog: [] });
   });
 });
 

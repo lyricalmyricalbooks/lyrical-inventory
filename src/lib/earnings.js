@@ -278,14 +278,43 @@ export function describeArtistSettlement(stats = {}, { expenses = [], expensesLe
 // Legacy requests written before that stamp existed have nothing to subtract
 // from, so they fall back to the conservative reading: covered once the artist
 // is owed nothing at all.
+//
+// Not every payout row is new money. Settling a held sale "artist keeps their
+// share" records the share as a payout, and a settle-up record counts the
+// held share inside its amount; both only stand in for cash the artist already
+// had, and leave what they are owed unchanged. Those credits are taken out of
+// "paid since", so they can't close a request that is still owed.
+export function nonCashPayoutCredit(p) {
+  if (!p || p.voided) return 0;
+  if (/^Kept from direct sale/.test(String(p.method || ''))) return Number(p.amount) || 0;
+  return Number(p.settlement?.balance?.heldShare) || 0;
+}
+
+/** The non-cash credit across a state's payouts, optionally only those before `beforeDay`. */
+export function sumNonCashCredit(payouts, beforeDay = null) {
+  let sum = 0;
+  for (const p of payouts || []) {
+    if (beforeDay && !(String(p?.date || '') < beforeDay)) continue;
+    sum = roundCents(sum + nonCashPayoutCredit(p));
+  }
+  return sum;
+}
+
 export function payoutRequestCovered(req, stats) {
   if (!req || !stats) return false;
   const asked = Number(req.amount) || 0;
   const paidBefore = Number(req.paidAtRequest);
   if (!Number.isFinite(paidBefore)) return (stats.owedToArtist ?? 0) <= 0.01;
+  // Credits that are not new money, now and when the request was made. A
+  // request stamped before keptAtRequest existed counts those dated before
+  // its day (a same-day one is treated as after, which can only keep the
+  // request open, never close it early).
+  const keptNow = sumNonCashCredit(stats.payouts);
+  const keptStamp = Number(req.keptAtRequest);
+  const keptBefore = Number.isFinite(keptStamp) ? keptStamp : sumNonCashCredit(stats.payouts, String(req.requestedAt || '').slice(0, 10) || null);
   // Money netted against what the artist owes settles a request just as cash
   // does, and `paidAtRequest` is stamped on the same combined basis.
-  const paidSince = roundCents((stats.totalPaidToArtist || 0) + (stats.totalOffset || 0) - paidBefore);
+  const paidSince = roundCents((stats.totalPaidToArtist || 0) + (stats.totalOffset || 0) - paidBefore - (keptNow - keptBefore));
   // Same half-cent deadband describePayout uses, so a request is not left open
   // by a rounding crumb.
   return paidSince >= asked - 0.005;

@@ -6,6 +6,7 @@ import { extractDecl } from './helpers/extract-decl.js';
 import { getBookCurrencyCode, normalizeCurrencyCode, roundCents } from '../src/lib/money.js';
 import { deriveOnHand, recalculateBookStatsFromHistory } from '../src/lib/inventory.js';
 import { reconcileConsignmentMirrors } from '../src/lib/consignment.js';
+import { sheetDay } from '../src/lib/calendar-day.js';
 
 const book = { id: 'zine', title: 'Night Zine', currency: 'CA$', maxPrint: 100 };
 
@@ -15,6 +16,7 @@ function restore(rows, state = { stores: [], invoices: [] }) {
     showToast: () => {},
     getBookCurrencyCode, normalizeCurrencyCode, roundCents,
     recalculateBookStatsFromHistory, deriveOnHand, reconcileConsignmentMirrors,
+    sheetDay,
     recomputeAfters: () => {},
     saveState: async () => {},
     renderAll: () => {}, updateDash: () => {}, closeM: () => {},

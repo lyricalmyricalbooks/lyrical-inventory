@@ -209,6 +209,58 @@ export function registerSalesForDay(books, day) {
   return { sales, totals, units };
 }
 
+// Guest and consignment titles (register-only books) never enter the ledger,
+// so the register keeps its own short log of their sales, saved with the book
+// in the shared catalogue. Today's totals, Void and the end-of-day summary
+// read it; the newest REGISTER_LOG_LIMIT entries are kept.
+export const REGISTER_LOG_LIMIT = 100;
+
+/** Add one register-only sale line to a book's log, keeping it bounded. */
+export function appendRegisterLog(log, entry) {
+  const list = Array.isArray(log) ? log.slice() : [];
+  list.push(entry);
+  return list.slice(-REGISTER_LOG_LIMIT);
+}
+
+/** The log as the ledger-shaped rows registerSalesForDay() reads. */
+export function registerLogAsHist(log) {
+  return (Array.isArray(log) ? log : []).filter(Boolean).map((e) => {
+    const qty = Number(e.qty) || 0;
+    const amount = Number(e.amount) || 0;
+    return {
+      num: e.num,
+      chan: 'Book Fair',
+      date: e.date,
+      qty,
+      price: qty ? amount / qty : 0,
+      cur: e.cur,
+      notes: e.method || '',
+      payment: { currency: e.cur, amount },
+      sheetsId: `evt-${Math.max(0, Number(e.at) || 0).toString(36)}-reg`,
+    };
+  });
+}
+
+/**
+ * Take one sale's lines out of a register-only book: drops them from its log
+ * and lowers its sold count and takings by what they added. Returns the
+ * number of copies taken back (0 when the sale isn't in the log).
+ */
+export function removeRegisterSale(pb, saleNum) {
+  if (!pb || !Array.isArray(pb.registerLog)) return 0;
+  const hits = pb.registerLog.filter((e) => e && e.num === saleNum);
+  if (!hits.length) return 0;
+  pb.registerLog = pb.registerLog.filter((e) => !(e && e.num === saleNum));
+  let qty = 0;
+  for (const e of hits) {
+    const q = Number(e.qty) || 0;
+    qty += q;
+    pb.sold = Math.max(0, (Number(pb.sold) || 0) - q);
+    pb.revenue = Math.max(0, (Number(pb.revenue) || 0) - q * (Number(e.unit) || 0));
+  }
+  return qty;
+}
+
 /** Epoch ms from an `evt-<base36 time>-<random>` id; 0 when absent. */
 export function eventTime(id) {
   const m = /^evt-([0-9a-z]+)-/.exec(String(id || ''));

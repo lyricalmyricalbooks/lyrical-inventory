@@ -128,3 +128,31 @@ describe('a change this screen never showed', () => {
     expect(app.main.states[BOOK].authorStock).toBe(2);
   });
 });
+
+describe('a change for a book no longer in the catalogue', () => {
+  it('is set aside once the catalogue has loaded, so "changes pending" clears', async () => {
+    const s = JSON.parse(JSON.stringify(state()));
+    app.setOnline(false);
+    app.main.syncQueue.push({ bookId: 'gone-book', state: s, base: null, ts: Date.now(), qid: 'gone#1' });
+    expect(app.main.syncQueue.some(i => i.bookId === 'gone-book')).toBe(true);
+    expect(app.main.parkSyncItemsForMissingBooks()).toBe(1);
+    expect(app.main.syncQueue.some(i => i.bookId === 'gone-book')).toBe(false);
+    expect(app.queued().some(i => i.bookId === 'gone-book')).toBe(false);
+    const parked = JSON.parse(localStorage.getItem('lyrical_parked_sync_v1'));
+    expect(parked.map(i => i.bookId)).toContain('gone-book');
+    app.setOnline(true);
+    await app.settle(20);
+    // Nothing brings the deleted book back to the cloud.
+    expect(store.read('books/gone-book/data/hist')).toBeFalsy();
+  });
+
+  it('leaves changes for books still in the catalogue alone', async () => {
+    app.setOnline(false);
+    queueUnseenSale('S-kept');
+    expect(app.main.parkSyncItemsForMissingBooks()).toBe(0);
+    expect(app.main.syncQueue.some(i => i.bookId === BOOK)).toBe(true);
+    app.setOnline(true);
+    await app.settle(20);
+    expect(cloudHist()).toContain('S-kept');
+  });
+});

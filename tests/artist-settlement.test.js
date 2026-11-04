@@ -67,3 +67,27 @@ describe('author payment after both balances are offset', () => {
       .toMatchObject({ amount: 0.1 });
   });
 });
+
+describe('undoing a settlement with two held sales under one order number', () => {
+  it('gives each transfer back its own total', async () => {
+    const { planArtistSettlement, applyArtistSettlement, undoArtistSettlement } = await import('../src/lib/artist-settlement.js');
+    const book = { title: 'B', currency: '$', profitTiers: [{ artistPct: 30 }] };
+    const s = {
+      hist: [
+        { num: 'FAIR', chan: 'Book Fair', qty: 3, price: 20, date: '2026-10-02', artistPending: true, directToArtist: true, sheetsId: 'b' },
+        { num: 'FAIR', chan: 'Book Fair', qty: 1, price: 20, date: '2026-10-01', artistPending: true, directToArtist: true, sheetsId: 'a' },
+      ],
+      artistTransfers: [
+        { id: 1, num: 'FAIR', qty: 1, price: 20, total: 20, sheetsId: 'a' },
+        { id: 2, num: 'FAIR', qty: 3, price: 20, total: 60, sheetsId: 'b' },
+      ],
+      artistPayouts: [], artistReceivables: [], expenses: [],
+    };
+    const plan = planArtistSettlement(book, s);
+    expect(applyArtistSettlement(book, s, plan, { date: '2026-11-01' }).ok).toBe(true);
+    expect(s.artistTransfers).toHaveLength(0);
+    expect(undoArtistSettlement(s, plan.id).ok).toBe(true);
+    const totals = Object.fromEntries(s.artistTransfers.map(t => [t.id, t.total]));
+    expect(totals).toEqual({ 1: 20, 2: 60 });
+  });
+});

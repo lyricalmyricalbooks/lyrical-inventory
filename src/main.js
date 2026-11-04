@@ -312,7 +312,7 @@ import {
   PICKER_CURRENCIES,
 } from './lib/money.js';
 import { sumMoney } from './lib/cents.js';
-import { localDay, localDayPlus } from './lib/calendar-day.js';
+import { localDay, localDayPlus, sheetDay } from './lib/calendar-day.js';
 import {
   buildPartPaymentNote,
   describeInvoicePaymentReversal,
@@ -1108,6 +1108,7 @@ import {
 } from './features/sheets-bridge.js';
 import { sheetTabKey } from './lib/sheet-sync.js';
 import { IN_PERSON_CHANNELS, channelStats, hasOwnChannel } from './lib/channel-mix.js';
+import { mapImportRow } from './lib/import-columns.js';
 import { csvToObjects, toCsv } from './lib/csv.js';
 import { plainChanges, kindLabel, parseBuildDate, relativeWhen, dayHeading } from './lib/whats-new.js';
 import { downloadText, downloadCsv } from './lib/download.js';
@@ -1463,6 +1464,9 @@ async function loadCatalog(early = null) {
       posExtraBooks = {};
       await saveCatalogWithDeletions();
     }
+    // The catalogue just read is the cloud's: a queued change for a book it
+    // lacks is waiting on something that will never come back.
+    parkSyncItemsForMissingBooks();
   } catch (e) {
     console.error('Critical error loading catalog', e);
     _startupPreviewOpen = false;
@@ -3566,6 +3570,31 @@ function updatePendingIndicator() {
   renderSyncChip();
 }
 
+// Changes held because their book left the catalogue (deleted on another
+// device, or its id renamed). Once the cloud's catalogue has loaded and still
+// lacks the book, they can never be sent, so they move out of the queue and
+// the "changes pending" note can clear. They are kept on this device rather
+// than thrown away, in case one is ever needed again.
+const PARKED_SYNC_STORAGE_KEY = 'lyrical_parked_sync_v1';
+const PARKED_SYNC_LIMIT = 20;
+export function parkSyncItemsForMissingBooks() {
+  const held = syncQueue.filter(item => !BOOKS[item.bookId]);
+  if (!held.length) return 0;
+  const ls = getLocalStorage();
+  try {
+    const prev = JSON.parse((ls && ls.getItem(PARKED_SYNC_STORAGE_KEY)) || '[]');
+    const parked = (Array.isArray(prev) ? prev : []).concat(held.map(item => ({ ...item, parkedAt: Date.now() })));
+    if (ls) ls.setItem(PARKED_SYNC_STORAGE_KEY, JSON.stringify(parked.slice(-PARKED_SYNC_LIMIT)));
+  } catch (e) {
+    console.warn('Could not keep the parked changes on this device', e);
+  }
+  console.warn(`[sync] ${held.length} change(s) for books no longer in the catalogue were set aside: ${[...new Set(held.map(i => i.bookId))].join(', ')}`);
+  syncQueue = syncQueue.filter(item => BOOKS[item.bookId]);
+  saveSyncQueueToDevice();
+  updatePendingIndicator();
+  return held.length;
+}
+
 async function processSyncQueue() {
   if (_syncFlushing) return;
   if (!navigator.onLine || !fbReady || !syncQueue.length) return;
@@ -5604,7 +5633,7 @@ const SHELL_TAB_LABELS = {
 function renderTodaySoFar() {
   const sum = $('today-sold-sum');
   if (!sum) return;
-  const books = Object.keys(BOOKS).map((id) => ({ id, currency: getBookCurrencyCode(BOOKS[id]), hist: states[id]?.hist }));
+  const books = Object.keys(BOOKS).filter((id) => !isTestBook(BOOKS[id])).map((id) => ({ id, currency: getBookCurrencyCode(BOOKS[id]), hist: states[id]?.hist }));
   const day = salesForDay(books, today());
   // Three figures on the slip (sales, books, money taken), zeros included, so
   // the day's numbers fill in where you expect them. The sentence is kept as
@@ -5642,7 +5671,7 @@ function todayUnsentBooks(books) {
 function renderTodayLedger() {
   const el = $('today-ledger');
   if (!el) return;
-  const books = Object.keys(BOOKS).map((id) => ({ id, currency: getBookCurrencyCode(BOOKS[id]), hist: states[id]?.hist }));
+  const books = Object.keys(BOOKS).filter((id) => !isTestBook(BOOKS[id])).map((id) => ({ id, currency: getBookCurrencyCode(BOOKS[id]), hist: states[id]?.hist }));
   const day = salesForDay(books, today());
   let stock = 0, storesOwing = 0;
   const owedByCur = new Map();
@@ -6162,6 +6191,8 @@ export function updateHeader() {
     let totalStock = 0, totalCon = 0;
     const revByCur = new Map(); // revenue is only summed within one currency
     Object.entries(states).forEach(([bid, s]) => {
+      // The sandbox test book is not stock or money (the book strips below skip it too).
+      if (isTestBookId(bid)) return;
       totalStock += (s.stock || 0);
       const curSym = (BOOKS[bid] && BOOKS[bid].currency) || '';
       revByCur.set(curSym, (revByCur.get(curSym) || 0) + recognizedRevenueOf(s));
@@ -6926,6 +6957,9 @@ function renderChannelAnalytics() {
   for (let i = 0; i < chans.length; i++) {
     const x = chans[i];
     grandRev += x.revenue || 0;
+    // Free copies keep their own row but are not sales: counting them here
+    // halved "Per transaction" and "Per unit" for a shop that gives books away.
+    if (x.chan === 'Gratuity') continue;
     grandTxn += x.txns || 0;
     grandU += x.units || 0;
   }
@@ -9923,15 +9957,6 @@ function setImportReady(ready) {
   if (hint) hint.hidden = ready;
 }
 
-// A spreadsheet cell as a number. Excel cells usually arrive as numbers
-// already; CSV cells are always text, so drop the currency symbols and
-// thousands separators a formatted export carries ("$1,250.00") rather than
-// letting parseFloat() read that as NaN and import the sale at 0.
-function importAmount(value) {
-  if (typeof value === 'number') return value;
-  return parseFloat(String(value).replace(/[^\d.-]/g, ''));
-}
-
 async function handleImportFile(event) {
   const file = event.target.files[0];
   if (!file) return;
@@ -9975,25 +10000,18 @@ async function handleImportFile(event) {
       if (!rows.length) { showToast('No data found in spreadsheet', 'warn'); return; }
 
       // Flexible column mapping — handles variations in header names
-      const colMap = (row) => {
-        const k = (name) => {
-          const keys = Object.keys(row);
-          return keys.find(k => k.toLowerCase().replace(/[\s_#]/g, '').includes(name)) || '';
-        };
-        const num = row[k('order')] || row[k('num')] || '';
-        const date = row[k('date')] || '';
-        const chan = row[k('channel')] || row[k('chan')] || 'Website';
-        const qty = importAmount(row[k('qty')] || row[k('quantity')] || 1) || 1;
-        const price = importAmount(row[k('unit')] || row[k('price')] || 0) || 0;
-        const notes = row[k('note')] || '';
-        return { num: String(num || ''), rawDate: date, chan: String(chan), qty: Math.abs(Math.round(qty)), price, notes: String(notes) };
-      };
+      // (src/lib/import-columns.js).
+      const colMap = mapImportRow;
 
       const excelSerial = xlsx ? (n) => {
         const d = xlsx.SSF.parse_date_code(n);
         return d ? `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}` : null;
       } : null;
-      _importParsed = rows.map(colMap).filter(r => r.qty > 0).map(r => ({ ...r, excelSerial }));
+      const mapped = rows.map(colMap);
+      // A quantity of 0 or less is a cancelled line or a refund: never a sale.
+      const skippedNonSales = mapped.filter(r => !(r.qty > 0)).length;
+      _importParsed = mapped.filter(r => r.qty > 0).map(r => ({ ...r, excelSerial }));
+      if (skippedNonSales) showToast(`${skippedNonSales} row${skippedNonSales === 1 ? '' : 's'} with a quantity of 0 or less (cancelled or refunded) left out`, 'warn', 6000);
       _importFileName = String(file.name || sheetName || '');
       _importDateOrder = 'mdy';
       readImportDates();
@@ -11259,7 +11277,7 @@ export function renderArtistTransfers() {
       banner.querySelector('.metric-banner-label').textContent = 'Money to send to your publisher';
       $('apb-amount').textContent = 'All paid — thank you!';
       $('apb-amount').classList.add('is-quiet');
-      $('apb-detail').textContent = `Your publisher received ${fmt(receipt.amount, cur)} on ${fmtD(new Date(receipt.at).toISOString().slice(0, 10))}. Nothing more to send.`;
+      $('apb-detail').textContent = `Your publisher received ${fmt(receipt.amount, cur)} on ${fmtD(localDay(receipt.at))}. Nothing more to send.`;
       const actions = banner.querySelector('.metric-banner-actions');
       if (actions) actions.style.display = 'none';
       $('apb-transfers').innerHTML = '';
@@ -12299,6 +12317,8 @@ function maybeAutoPayInvoiceForLedger(s, e) {
 
   if (!hasLinked || !allPaid) return;
   inv.status = 'paid'; inv.paidAt = Date.now(); inv.paidMethod = 'Ledger';
+  // Paid now, so its Stripe link must stop taking money (as applyInvoicePaid does).
+  if (inv.stripe?.paymentLinkId) deactivateStripePaymentLink(inv.stripe.paymentLinkId);
 }
 
 // A small clickable badge linking a ledger/history row back to its invoice; '' when
@@ -12898,12 +12918,13 @@ let editCtx = null; // { kind:'hist'|'ledger', idx, snapshot }
 // s.artistPayouts, or -1 if none matches this order number.
 function findKeptAllPayout(s, num) {
   if (!s.artistPayouts || !num) return -1;
-  return s.artistPayouts.findIndex(p =>
-    !p.voided &&
-    p.method === 'Kept from direct sale (full)' &&
-    typeof p.notes === 'string' &&
-    p.notes.includes(num)
-  );
+  const kept = p => !p.voided && p.method === 'Kept from direct sale (full)';
+  // The payout names its sale; an older one without that is found by its note,
+  // which starts "<num> — ". A plain substring match let sale #1 find #12's.
+  const exact = s.artistPayouts.findIndex(p => kept(p) && p.sourceNum !== undefined && String(p.sourceNum) === String(num));
+  if (exact !== -1) return exact;
+  return s.artistPayouts.findIndex(p => kept(p) && p.sourceNum === undefined &&
+    typeof p.notes === 'string' && p.notes.startsWith(`${num} — `));
 }
 
 // Reverse an "artist keeps all" settlement after the fact: the artist had kept
@@ -13613,21 +13634,9 @@ const SHEET_RESTORE_TYPES = new Set(['order', 'consignment', 'shipping']);
 
 function parseAndValidateDate(rawDate) {
   if (!rawDate) return today();
-  if (rawDate instanceof Date) {
-    return !isNaN(rawDate.getTime()) ? rawDate.toISOString().split('T')[0] : today();
-  }
-  let dStr = String(rawDate).trim();
-  if (!dStr) return today();
-
-  if (dStr.includes('T')) {
-    dStr = dStr.split('T')[0];
-  }
-
-  const d = new Date(dStr);
-  if (!isNaN(d.getTime())) {
-    return d.toISOString().split('T')[0];
-  }
-  return today();
+  // A Sheet date cell is midnight in the sheet's time zone, sent as UTC text;
+  // sheetDay reads the day it names (cutting at "T" lost a day east of UTC).
+  return sheetDay(rawDate instanceof Date ? rawDate : String(rawDate).trim()) || today();
 }
 
 async function restoreBookDataFromSheets() {
@@ -18201,7 +18210,9 @@ function recordReaderSplitSale(payment, lines) {
     bookCurrency: (book) => normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD'),
   });
   if (plan.action !== 'record') return raise(plan.reason);
-  if (plan.lines.some(line => !states[line.bookId])) return null;
+  // Every book must be writable before the first line is: a half-written
+  // split sale marks the charge recorded, and the rest could never be added.
+  if (plan.lines.some(line => !states[line.bookId] || !BOOKS[line.bookId])) return null;
 
   try {
     plan.lines.forEach((line, i) => {

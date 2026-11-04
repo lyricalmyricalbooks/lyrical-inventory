@@ -196,6 +196,20 @@ test('Today so far totals the day across every book and refreshes the upload pil
   expect(sync).toHaveLength(1);
 });
 
+test('Today so far leaves the sandbox test book out', () => {
+  const day = '2026-10-08';
+  const { renderTodaySoFar } = todayApi({
+    activeBook: 'all',
+    books: { a: {}, t: { isTest: true } },
+    states: {
+      a: { hist: [{ num: 'S1', chan: 'In Person', qty: 1, price: 20, date: day }] },
+      t: { hist: [{ num: 'T1', chan: 'In Person', qty: 1, price: 40, date: day }] },
+    },
+  });
+  renderTodaySoFar();
+  expect(document.getElementById('today-sold-sum').getAttribute('aria-label')).toBe('1 sale · 1 book · CAD 20.00');
+});
+
 test('Today so far says so when nothing has sold yet', () => {
   const { renderTodaySoFar } = todayApi({ activeBook: 'all', books: { a: {} }, states: { a: { hist: [] } } });
   renderTodaySoFar();

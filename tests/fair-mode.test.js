@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, test, vi } from 'vitest';
-import { saleMethod, fairDaySummary, readCurrentFair, saveCurrentFair, fairSyncPill, registerSalesForDay, eventTime, FAIR_METHODS, FAIR_UNDO_MS, readLastMethod, rememberMethod, undoOpen, soldLabel, countLabel, fairTileHtml, keepScreenAwake } from '../src/lib/fair-mode.js';
+import { saleMethod, fairDaySummary, readCurrentFair, saveCurrentFair, fairSyncPill, registerSalesForDay, eventTime, FAIR_METHODS, FAIR_UNDO_MS, readLastMethod, rememberMethod, undoOpen, soldLabel, countLabel, fairTileHtml, keepScreenAwake, appendRegisterLog, registerLogAsHist, removeRegisterSale, REGISTER_LOG_LIMIT } from '../src/lib/fair-mode.js';
 
 const memStore = () => { const m = new Map(); return { getItem: k => m.get(k) ?? null, setItem: (k, v) => m.set(k, String(v)) }; };
 
@@ -196,5 +196,30 @@ describe('compExpense', () => {
     // Nothing to value it by.
     expect(compExpense({ currency: 'CA$', productionCost: 0, maxPrint: 100 }, { qty: 1 })).toBeNull();
     expect(compExpense({ currency: 'CA$', productionCost: 100 }, { qty: 1 })).toBeNull();
+  });
+});
+
+describe('register log for guest titles', () => {
+  test('keeps only the newest entries', () => {
+    let log = [];
+    for (let i = 0; i < REGISTER_LOG_LIMIT + 5; i++) log = appendRegisterLog(log, { num: `P-${i}` });
+    expect(log).toHaveLength(REGISTER_LOG_LIMIT);
+    expect(log[0].num).toBe('P-5');
+  });
+
+  test("counts in the day's totals in the currency paid", () => {
+    const log = [{ num: 'POS-1', date: '2026-11-04', at: 1, qty: 2, unit: 10, amount: 14, cur: 'EUR', method: 'Card' }];
+    const day = registerSalesForDay([{ id: 'zine', title: 'Zine', currency: 'CAD', hist: registerLogAsHist(log) }], '2026-11-04');
+    expect(day.totals).toEqual({ EUR: 14 });
+    expect(day.units).toBe(2);
+    expect(day.sales[0].method).toBe('Card');
+  });
+
+  test('takes a sale back out, counts and all', () => {
+    const pb = { sold: 3, revenue: 30, registerLog: [{ num: 'A', qty: 2, unit: 10 }, { num: 'B', qty: 1, unit: 10 }] };
+    expect(removeRegisterSale(pb, 'A')).toBe(2);
+    expect(pb).toMatchObject({ sold: 1, revenue: 10 });
+    expect(pb.registerLog.map(e => e.num)).toEqual(['B']);
+    expect(removeRegisterSale(pb, 'A')).toBe(0);
   });
 });

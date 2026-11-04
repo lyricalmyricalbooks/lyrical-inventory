@@ -24,6 +24,7 @@
 // a deliberate one — flagging those would nag about books that are perfectly
 // fine, which is how a to-do list teaches people to ignore it.
 
+import { localDay } from './calendar-day.js';
 import { deriveOnHand } from './inventory.js';
 import { calcArtistEarnings } from './earnings.js';
 import { expenseMissingReceipt, expensesWithSettlements } from './receipt-storage.js';
@@ -63,7 +64,9 @@ export function isUrgent(signal) {
 
 const num = (v) => Number(v) || 0;
 const intOf = (v) => parseInt(v, 10) || 0;
-const isoToday = () => new Date().toISOString().slice(0, 10);
+// This device's calendar day: the UTC day had an invoice due today read as
+// overdue from the evening on, west of UTC.
+const isoToday = () => localDay();
 
 // ── Where a signal gets fixed ──────────────────────────────────────────────
 //
@@ -110,7 +113,10 @@ function stockSignals(book, s, out) {
   const threshold = intOf(book.threshold);
   const printed = intOf(book.maxPrint);
 
-  if (threshold > 0 && onHand <= threshold) {
+  // A level set to 0 on purpose means "tell me when it's gone", as the book's
+  // own dashboard reads it; a blank level asks for no alert at all.
+  const setToZero = threshold === 0 && book.threshold !== '' && book.threshold != null && Number(book.threshold) === 0;
+  if ((threshold > 0 || setToZero) && onHand <= threshold) {
     out.push({
       id: `stock-low:${book.id}`,
       group: 'stock',

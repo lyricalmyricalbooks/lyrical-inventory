@@ -20,3 +20,22 @@ describe('dayMs', () => {
     expect(dayMs('2026-04-11') - dayMs('2026-04-10')).toBe(DAY);
   });
 });
+
+describe('sheetDay: the day a Google Sheet date cell names', () => {
+  it('reads a Rome sheet midnight as that day, not the day before', async () => {
+    const { sheetDay } = await import('../src/lib/calendar-day.js');
+    expect(sheetDay('2026-03-14T23:00:00.000Z')).toBe('2026-03-15');
+    expect(sheetDay('2026-07-14T22:00:00.000Z')).toBe('2026-07-15');
+  });
+  it('reads a Toronto or Vancouver sheet midnight as that day', async () => {
+    const { sheetDay } = await import('../src/lib/calendar-day.js');
+    expect(sheetDay('2026-03-15T04:00:00.000Z')).toBe('2026-03-15');
+    expect(sheetDay('2026-03-15T07:00:00.000Z')).toBe('2026-03-15');
+    expect(sheetDay('2026-03-15T05:30:00.000Z')).toBe('2026-03-15');
+  });
+  it('passes a plain date through and refuses junk', async () => {
+    const { sheetDay } = await import('../src/lib/calendar-day.js');
+    expect(sheetDay('2026-03-15')).toBe('2026-03-15');
+    expect(sheetDay('not a date')).toBe('');
+  });
+});
