@@ -13,6 +13,7 @@
 // eslint's no-undef (an error, checked in CI) is what keeps the import list
 // honest: an identifier that isn't imported fails the build rather than
 // throwing at click time.
+import { localDay } from '../lib/calendar-day.js';
 import {
   $,
   animateCountValue,
@@ -51,6 +52,7 @@ import {
   payoutNetted,
   payoutRequestCovered,
   planNetPayout,
+  sumNonCashCredit,
   unpaidSalesSummary,
 } from '../lib/earnings.js';
 import { escapeHtml, safeHttpUrl } from '../lib/html.js';
@@ -831,7 +833,7 @@ function moneyCardActions(bookId, plan, stats, cur) {
   if (author && stats.owedToArtist > 0.01) {
     const pending = pendingPayoutRequest(s, stats);
     buttons.push(`<button type="button" class="btn outline sys-target" id="request-payout-btn-${escapeHtml(String(bookId))}" data-action="moneyCard.requestPayout" data-book="${escapeHtml(String(bookId))}">${pending ? 'Send reminder' : 'Request payout'}</button>`);
-    if (pending) notice = `✓ You asked for ${money(pending.amount)} on ${escapeHtml(pending.requestedAt ? pending.requestedAt.slice(0, 10) : '—')}. Your publisher has been told.`;
+    if (pending) notice = `✓ You asked for ${money(pending.amount)} on ${escapeHtml(pending.requestedAt ? localDay(pending.requestedAt) : '—')}. Your publisher has been told.`;
   }
   return { actions: buttons.join(''), notice };
 }
@@ -1038,7 +1040,7 @@ function getPayoutRequestHtml(bookId, stats, cur, owed) {
         border-radius:var(--r2); padding:12px 14px; margin-bottom:1.25rem;">
         <div>
           <div style="font-weight:600; color:var(--text2); font-size:var(--text-base);">The artist requested a payout of ${fmt(pending.amount, cur)}</div>
-          <div style="font-size:var(--text-xs); color:var(--text3); margin-top:2px;">Requested ${escapeHtml(pending.requestedAt ? pending.requestedAt.slice(0, 10) : '—')} · ${fmt(owed, cur)} currently owed</div>
+          <div style="font-size:var(--text-xs); color:var(--text3); margin-top:2px;">Requested ${escapeHtml(pending.requestedAt ? localDay(pending.requestedAt) : '—')} · ${fmt(owed, cur)} currently owed</div>
         </div>
         <button class="btn gold" onclick="toggleArtistPayoutForm('${bookId}')">Record payout</button>
       </div>`;
@@ -1046,7 +1048,7 @@ function getPayoutRequestHtml(bookId, stats, cur, owed) {
 
   const pendingHtml = pending ? `
         <div style="font-size:var(--text-xs); color:var(--text3); margin-top:6px;">
-          ✓ You requested ${fmt(pending.amount, cur)} on ${escapeHtml(pending.requestedAt ? pending.requestedAt.slice(0, 10) : '—')} — the publisher has been notified.
+          ✓ You requested ${fmt(pending.amount, cur)} on ${escapeHtml(pending.requestedAt ? localDay(pending.requestedAt) : '—')} — the publisher has been notified.
         </div>` : '';
 
   return `
@@ -1708,6 +1710,9 @@ async function requestArtistPayout(bookId) {
     // beyond this counts toward covering this request, which is what lets the
     // request close itself without depending on payout dates.
     paidAtRequest: roundCents((stats.totalPaidToArtist || 0) + (stats.totalOffset || 0)),
+    // The part of that which only stands in for cash the artist already held
+    // (see payoutRequestCovered), so later such credits can be told apart.
+    keptAtRequest: sumNonCashCredit(stats.payouts),
   };
   try {
     if (!s.payoutRequests) s.payoutRequests = [];

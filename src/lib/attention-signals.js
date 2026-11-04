@@ -24,6 +24,7 @@
 // a deliberate one — flagging those would nag about books that are perfectly
 // fine, which is how a to-do list teaches people to ignore it.
 
+import { localDay } from './calendar-day.js';
 import { deriveOnHand } from './inventory.js';
 import { calcArtistEarnings } from './earnings.js';
 import { expenseMissingReceipt, expensesWithSettlements } from './receipt-storage.js';
@@ -63,7 +64,9 @@ export function isUrgent(signal) {
 
 const num = (v) => Number(v) || 0;
 const intOf = (v) => parseInt(v, 10) || 0;
-const isoToday = () => new Date().toISOString().slice(0, 10);
+// This device's calendar day: the UTC day had an invoice due today read as
+// overdue from the evening on, west of UTC.
+const isoToday = () => localDay();
 
 // ── Where a signal gets fixed ──────────────────────────────────────────────
 //

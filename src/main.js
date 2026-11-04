@@ -11272,7 +11272,7 @@ export function renderArtistTransfers() {
       banner.querySelector('.metric-banner-label').textContent = 'Money to send to your publisher';
       $('apb-amount').textContent = 'All paid — thank you!';
       $('apb-amount').classList.add('is-quiet');
-      $('apb-detail').textContent = `Your publisher received ${fmt(receipt.amount, cur)} on ${fmtD(new Date(receipt.at).toISOString().slice(0, 10))}. Nothing more to send.`;
+      $('apb-detail').textContent = `Your publisher received ${fmt(receipt.amount, cur)} on ${fmtD(localDay(receipt.at))}. Nothing more to send.`;
       const actions = banner.querySelector('.metric-banner-actions');
       if (actions) actions.style.display = 'none';
       $('apb-transfers').innerHTML = '';
@@ -12312,6 +12312,8 @@ function maybeAutoPayInvoiceForLedger(s, e) {
 
   if (!hasLinked || !allPaid) return;
   inv.status = 'paid'; inv.paidAt = Date.now(); inv.paidMethod = 'Ledger';
+  // Paid now, so its Stripe link must stop taking money (as applyInvoicePaid does).
+  if (inv.stripe?.paymentLinkId) deactivateStripePaymentLink(inv.stripe.paymentLinkId);
 }
 
 // A small clickable badge linking a ledger/history row back to its invoice; '' when
@@ -12911,12 +12913,13 @@ let editCtx = null; // { kind:'hist'|'ledger', idx, snapshot }
 // s.artistPayouts, or -1 if none matches this order number.
 function findKeptAllPayout(s, num) {
   if (!s.artistPayouts || !num) return -1;
-  return s.artistPayouts.findIndex(p =>
-    !p.voided &&
-    p.method === 'Kept from direct sale (full)' &&
-    typeof p.notes === 'string' &&
-    p.notes.includes(num)
-  );
+  const kept = p => !p.voided && p.method === 'Kept from direct sale (full)';
+  // The payout names its sale; an older one without that is found by its note,
+  // which starts "<num> — ". A plain substring match let sale #1 find #12's.
+  const exact = s.artistPayouts.findIndex(p => kept(p) && p.sourceNum !== undefined && String(p.sourceNum) === String(num));
+  if (exact !== -1) return exact;
+  return s.artistPayouts.findIndex(p => kept(p) && p.sourceNum === undefined &&
+    typeof p.notes === 'string' && p.notes.startsWith(`${num} — `));
 }
 
 // Reverse an "artist keeps all" settlement after the fact: the artist had kept

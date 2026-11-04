@@ -20,6 +20,7 @@
 // Kept DOM- and Firestore-free so the money math can be unit-tested without a
 // browser. main.js owns the dialog, the rate fetching and the persistence.
 
+import { localDay } from './calendar-day.js';
 import { roundCents, normalizeCurrencyCode, CODE_TO_SYMBOL } from './money.js';
 import { keyRows, rowsByKey } from './merge-state.js';
 
@@ -198,7 +199,7 @@ export function collectNativeAmounts(state, book) {
   // same reason legacy expenses do.
   for (const r of (s.payoutRequests || [])) {
     if (r.settled) continue;
-    const rDate = (r.requestedAt || '').slice(0, 10);
+    const rDate = r.requestedAt ? localDay(r.requestedAt) : '';
     push('request', `Payout request ${rDate}`, r, 'amount', rDate, null, 'currency');
     // The paid-to-date baseline this request is measured against. Restated with
     // it, or "paid since the request" would subtract the old currency's total
