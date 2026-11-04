@@ -269,13 +269,16 @@ export function htmlToPlainText(value) {
   return raw
     .replace(/<\s*br\s*\/?\s*>/gi, '\n')
     .replace(/<\s*\/\s*(p|div|li|tr|h[1-6])\s*>/gi, '\n')
-    .replace(/<[^>]*>/g, '')
+    // Only real tags: "Jane <jane@example.com>" or "I <3 it" is text, and
+    // stripping it hid who a can't-be-unsent email was going to.
+    .replace(/<\/?[a-z][a-z0-9]*(\s[^<>]*)?\/?>/gi, '')
     .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
     .replace(/&lt;/gi, '<')
     .replace(/&gt;/gi, '>')
     .replace(/&quot;/gi, '"')
     .replace(/&#0*39;|&apos;/gi, "'")
+    // Last, so "&amp;lt;" stays the literal text "&lt;".
+    .replace(/&amp;/gi, '&')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }

@@ -34,7 +34,7 @@ import {
   switchCustomersSubTab,
 } from './customers.js';
 import { confirmDialog } from '../lib/modal.js';
-import { escapeHtml } from '../lib/html.js';
+import { escapeHtml, hasHtmlTag } from '../lib/html.js';
 import { parseMarkdownToHtml } from '../lib/markdown.js';
 import { legacyCopy } from '../lib/clipboard.js';
 import { toCsv } from '../lib/csv.js';
@@ -835,7 +835,7 @@ function ocEnsureTemplates_(proj) {
 // are plain text — give those line breaks so they don't arrive as one paragraph.
 function ocTemplateBodyHtml_(body) {
   const raw = String(body || '');
-  return (raw.includes('<') || !raw) ? raw : parseMarkdownToHtml(raw);
+  return (hasHtmlTag(raw) || !raw) ? raw : parseMarkdownToHtml(raw);
 }
 
 function ocActiveProject_() {
