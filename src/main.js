@@ -1463,6 +1463,9 @@ async function loadCatalog(early = null) {
       posExtraBooks = {};
       await saveCatalogWithDeletions();
     }
+    // The catalogue just read is the cloud's: a queued change for a book it
+    // lacks is waiting on something that will never come back.
+    parkSyncItemsForMissingBooks();
   } catch (e) {
     console.error('Critical error loading catalog', e);
     _startupPreviewOpen = false;
@@ -3564,6 +3567,31 @@ function updatePendingIndicator() {
     setSyncState('syncing', `<b>Firestore</b> · ${n} change${n === 1 ? '' : 's'} pending…`);
   }
   renderSyncChip();
+}
+
+// Changes held because their book left the catalogue (deleted on another
+// device, or its id renamed). Once the cloud's catalogue has loaded and still
+// lacks the book, they can never be sent, so they move out of the queue and
+// the "changes pending" note can clear. They are kept on this device rather
+// than thrown away, in case one is ever needed again.
+const PARKED_SYNC_STORAGE_KEY = 'lyrical_parked_sync_v1';
+const PARKED_SYNC_LIMIT = 20;
+export function parkSyncItemsForMissingBooks() {
+  const held = syncQueue.filter(item => !BOOKS[item.bookId]);
+  if (!held.length) return 0;
+  const ls = getLocalStorage();
+  try {
+    const prev = JSON.parse((ls && ls.getItem(PARKED_SYNC_STORAGE_KEY)) || '[]');
+    const parked = (Array.isArray(prev) ? prev : []).concat(held.map(item => ({ ...item, parkedAt: Date.now() })));
+    if (ls) ls.setItem(PARKED_SYNC_STORAGE_KEY, JSON.stringify(parked.slice(-PARKED_SYNC_LIMIT)));
+  } catch (e) {
+    console.warn('Could not keep the parked changes on this device', e);
+  }
+  console.warn(`[sync] ${held.length} change(s) for books no longer in the catalogue were set aside: ${[...new Set(held.map(i => i.bookId))].join(', ')}`);
+  syncQueue = syncQueue.filter(item => BOOKS[item.bookId]);
+  saveSyncQueueToDevice();
+  updatePendingIndicator();
+  return held.length;
 }
 
 async function processSyncQueue() {
