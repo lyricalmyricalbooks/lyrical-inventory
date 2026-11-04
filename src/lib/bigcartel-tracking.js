@@ -8,6 +8,7 @@
 
 import { bigCartelOrderNumber } from './bigcartel-ledger-gap.js';
 import { normalizeTrackingNumber } from './postage-matching.js';
+import { localDay } from './calendar-day.js';
 
 const text = value => String(value ?? '').trim();
 const asList = value => (Array.isArray(value) ? value : value ? [value] : []);
@@ -79,5 +80,5 @@ export function trackingToStamp(rows = [], byOrder = new Map(), normalize = v =>
 /** The date a shipment went out, as `YYYY-MM-DD`, or '' when unknown. */
 export function shipmentDate(shipment) {
   const at = Date.parse(shipment?.shippedAt || '');
-  return Number.isFinite(at) ? new Date(at).toISOString().slice(0, 10) : '';
+  return Number.isFinite(at) ? localDay(at) : '';
 }
