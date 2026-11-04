@@ -78,15 +78,25 @@ function reviewQueueSnapshot({ refresh = false } = {}) {
   const entries = labelReviewEntries();
   const doubles = subscriptionDoubleEntries();
   const items = buildReviewQueue({ receiptDrafts: drafts, isDuplicate, subscriptionMatch, labels: entries, doubles });
+  // One pass per list into key → first match (what `.find` returned), instead
+  // of rescanning every list for every item: the snapshot runs on each landing
+  // page count and after every action, and a Gmail scan can bring hundreds of drafts.
+  const firstBy = (list, keyOf) => {
+    const map = new Map();
+    list.forEach((value, i) => { const k = keyOf(value, i); if (!map.has(k)) map.set(k, value); });
+    return map;
+  };
+  const draftByKey = firstBy(drafts, (d, i) => receiptKey(d, i));
+  const pairByKey = firstBy(doubles, p => doubleKey(p.expense));
+  const entryByRef = firstBy(entries, e => e.expense.ref);
   const rows = new Map();
   items.forEach(item => {
     if (item.kind === 'receipt') {
-      const draft = drafts.find((d, i) => receiptKey(d, i) === item.key);
-      rows.set(item.key, { item, draft });
+      rows.set(item.key, { item, draft: draftByKey.get(item.key) });
     } else if (item.kind === 'double') {
-      rows.set(item.key, { item, pair: doubles.find(p => doubleKey(p.expense) === item.key) });
+      rows.set(item.key, { item, pair: pairByKey.get(item.key) });
     } else {
-      rows.set(item.key, { item, entry: entries.find(e => e.expense.ref === item.ref) });
+      rows.set(item.key, { item, entry: entryByRef.get(item.ref) });
     }
   });
   return { items, rows, summary: summarizeReviewQueue(items) };
