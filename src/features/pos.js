@@ -111,6 +111,17 @@ function loadPosExchangeRates() {
   }
 }
 
+/**
+ * How many CAD one unit of `code` is worth from the register's rates (the
+ * saved ones, else the offline seed values), or 0 when it has none. For
+ * screens that must convert before a live rate has been fetched.
+ */
+function posCadRate(code) {
+  const rates = Object.keys(posExchangeRates).length ? posExchangeRates : loadPosExchangeRates();
+  const r = Number(rates[String(code || '').toUpperCase()]);
+  return Number.isFinite(r) && r > 0 ? r : 0;
+}
+
 function savePosExchangeRates() {
   localStorage.setItem(POS_FX_STORAGE_KEY, JSON.stringify(posExchangeRates));
 }
@@ -1482,6 +1493,7 @@ function initPos() {
 }
 
 export {
+  posCadRate,
   posCart,
   posBooksMap,
   posResolveBook,

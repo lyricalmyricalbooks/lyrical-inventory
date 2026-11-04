@@ -25,6 +25,7 @@ import {
 } from '../main.js';
 import { BOOKS, BOOK_LIST, states, activeBook, defaultState } from '../core/store.js';
 import { renderTaxCenter } from './taxcentre.js';
+import { posCadRate } from './pos.js';
 import { makeEventId, syncToSheets } from './sheets-bridge.js';
 import { closeM, openM } from '../lib/modal.js';
 import { escapeHtml } from '../lib/html.js';
@@ -100,7 +101,12 @@ function calculateInventoryValuationData() {
 
     const cur = getBookCurrencyCode(book);
     const isCAD = cur === 'CAD';
-    const fxRate = isCAD ? 1 : (_fxRateCache[`${cur}_CAD`] || 1);
+    // A live rate when one has been fetched, else the register's saved (or
+    // seed) rate. Counting euros as dollars one-for-one overstated nothing
+    // visibly and booked write-offs at 1.0000. A currency with no rate at all
+    // is left out of the CAD totals and can't be written off until it has one.
+    const fxRate = isCAD ? 1 : (_fxRateCache[`${cur}_CAD`] || posCadRate(cur) || 0);
+    const fxMissing = !isCAD && !fxRate;
 
     const listPrice = parseFloat(book.listPrice || 0);
     const rawCost = parseFloat(book.productionCost || 0);
@@ -150,6 +156,7 @@ function calculateInventoryValuationData() {
       compsDamaged,
       currency: cur,
       fxRate,
+      fxMissing,
       listPrice,
       unitCost,
       unitMargin,
@@ -261,7 +268,9 @@ function onWriteOffBookChange() {
   qty.max = String(available);
   qty.value = String(Math.min(Math.max(1, Number(qty.value) || 1), available));
   if ($('wo-unit-cost')) {
-    $('wo-unit-cost').textContent = `${item.unitCost.toFixed(2)} ${item.currency} · ${item.fxRate.toFixed(4)} CAD FX`;
+    $('wo-unit-cost').textContent = item.fxMissing
+      ? `${item.unitCost.toFixed(2)} ${item.currency} · no exchange rate to CAD yet`
+      : `${item.unitCost.toFixed(2)} ${item.currency} · ${item.fxRate.toFixed(4)} CAD FX`;
   }
   recalcWriteOffValue();
 }
@@ -290,6 +299,7 @@ async function submitInventoryWriteOff() {
   if (!window.IS_PUBLISHER || isAuthor()) return;
   const item = _selectedInventoryValuationItem();
   if (!item) return showToast('Choose an inventory title', 'err');
+  if (item.fxMissing) return showToast(`No exchange rate from ${item.currency} to CAD yet. Tap "↻ FX Rates" on the register while online, then try again.`, 'err', 7000);
   const quantity = Number($('wo-qty')?.value);
   const available = _inventoryAdjustmentMode === 'disposal' ? item.publisherStockOnHand : item.totalUnsold;
   if (!Number.isInteger(quantity) || quantity < 1 || quantity > available) {
@@ -413,6 +423,11 @@ function openInventoryValuationModal() {
   if (subUnitsEl) subUnitsEl.textContent = `${totals.totalStockOnHand.toLocaleString()} Warehouse · ${totals.totalStockConsigned.toLocaleString()} Consigned`;
   if (marginEl) marginEl.textContent = `${totals.weightedAvgMarginPct.toFixed(1)}%`;
   if (subMarginEl) subMarginEl.textContent = `$${totals.totalPotentialGrossProfitCAD.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} CAD Total Profit`;
+  // A title in a currency with no rate to CAD is left out of those totals; say so.
+  const unconverted = items.filter(item => item.fxMissing && item.totalUnsold > 0);
+  if (subUnitsEl && unconverted.length) {
+    subUnitsEl.textContent += ` · ${unconverted.map(item => item.title).join(', ')} not in the CAD totals (no exchange rate yet)`;
+  }
 
   if (historyEl) {
     const records = (TAX_CENTER.businessExpenses || [])
