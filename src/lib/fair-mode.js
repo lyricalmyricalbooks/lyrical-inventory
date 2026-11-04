@@ -148,8 +148,13 @@ export function registerSalesForDay(books, day) {
       if (!sale) { sale = { num: h.num, at: 0, method: saleMethod(h.notes), lines: [], totals: {}, units: 0 }; byNum.set(h.num, sale); }
       sale.at = Math.max(sale.at, eventTime(h.sheetsId));
       const qty = Number(h.qty) || 0;
-      const amount = qty * (Number(h.price) || 0);
-      const cur = h.cur || book.currency || 'CAD';
+      // What the customer actually handed over: a sale rung up in another
+      // currency (euros for a CAD book) records it on the payment. Rows
+      // without one fall back to the list price in the book's currency.
+      const pay = h.payment;
+      const paid = !!pay?.currency && pay.amount != null && pay.amount !== '' && Number.isFinite(Number(pay.amount));
+      const amount = paid ? Number(pay.amount) : qty * (Number(h.price) || 0);
+      const cur = paid ? pay.currency : (h.cur || book.currency || 'CAD');
       sale.lines.push({ bookId: book.id, title: book.title || 'Untitled', qty, amount, cur });
       sale.totals[cur] = (sale.totals[cur] || 0) + amount;
       sale.units += qty;
