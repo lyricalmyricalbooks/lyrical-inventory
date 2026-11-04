@@ -6,6 +6,7 @@ import { buildHarness, mainJs } from './helpers/extract-decl.js';
 import * as scanChecks from '../src/lib/receipt-scan-checks.js';
 import { setSelectCurrency } from '../src/lib/money.js';
 import { allCanonicalExpenses } from '../src/lib/expense-categories.js';
+import { findExpenseRule } from '../src/lib/expense-rules.js';
 
 // Covers the "✨ AI Scan" rework: the upload downscale that dominated scan
 // latency, the response schema that replaced prose-only JSON instructions, and
@@ -49,7 +50,7 @@ function mountForm({ prefix = 'exp', currencies = ['CAD', 'USD', 'EUR', 'GBP'] }
 
 // Harness for the full scan runner with the network and the image pipeline
 // stubbed, so the assertions are about what reaches the form.
-function scanHarness({ reply, prepare, apiKey = 'k-test', businessExpenses = [], bookExpenses = [] } = {}) {
+function scanHarness({ reply, prepare, apiKey = 'k-test', businessExpenses = [], bookExpenses = [], expenseRules = [] } = {}) {
   const toasts = [];
   const calls = [];
   return {
@@ -67,7 +68,7 @@ function scanHarness({ reply, prepare, apiKey = 'k-test', businessExpenses = [],
       deps: {
         $: id => document.getElementById(id),
         showToast: (msg, type) => toasts.push({ msg, type }),
-        TAX_CENTER: { settings: { geminiKey: apiKey }, businessExpenses },
+        TAX_CENTER: { settings: { geminiKey: apiKey }, businessExpenses, expenseRules },
         states: { bk1: { expenses: bookExpenses } },
         getState: () => ({ expenses: bookExpenses }),
         getBook: () => ({ currency: 'CAD' }),
@@ -75,6 +76,7 @@ function scanHarness({ reply, prepare, apiKey = 'k-test', businessExpenses = [],
         today: () => '2026-10-10',
         fmtD: d => d,
         allCanonicalExpenses,
+        findExpenseRule,
         setSelectCurrency,
         ...scanChecks,
         EXPENSE_CATEGORIES: CATS,
@@ -340,6 +342,23 @@ describe('AI receipt scan — the summary left on the form', () => {
 
     expect(form.el('cat').value).toBe('Office Supplies');
     expect(form.checks().some(c => /the way you filed your last 2 Staples receipts/.test(c.text))).toBe(true);
+  });
+
+  it("files by the owner's sorting rule ahead of the shop's habit and the AI's guess", async () => {
+    const form = mountFormWithSummary();
+    const h = scanHarness({
+      reply: okReply({ vendor: 'Staples', description: 'Poster prints', date: '2026-10-01', amount: 25, currency: 'CAD', category: 'Other' }),
+      businessExpenses: [
+        { desc: 'Staples — paper', cat: 'Office Supplies' },
+        { desc: 'Staples — toner', cat: 'Office Supplies' },
+      ],
+      expenseRules: [{ id: 'r1', match: 'poster', cat: 'Shipping & Postage' }],
+    });
+    await h.run(form.cfg);
+
+    expect(form.el('cat').value).toBe('Shipping & Postage');
+    expect(form.checks().some(c => /by your sorting rule for "poster"/.test(c.text))).toBe(true);
+    expect(form.checks().some(c => /the way you filed/.test(c.text))).toBe(false);
   });
 
   it("outlines the fields the reader wasn't sure of until the owner edits them", async () => {

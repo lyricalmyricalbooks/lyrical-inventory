@@ -470,6 +470,10 @@ export const demoSettings = {
     ],
     // One monthly subscription, active, so the recurring list and its rows are populated.
     recurring: [{ id: 'rec_demo_sync', desc: 'Inventory sync add-on', cat: 'Software & Subscriptions', amount: 19.99, currency: 'CAD', frequency: 'monthly', startDate: '2026-09-01', endDate: '', paused: false, vendor: 'Stockwise', notes: 'Keeps the web shop in step with the shelf count', lastInjected: '2026-10', rateChanges: [] }],
+    expenseRules: [
+      { id: 'rule_demo_canva', match: 'Canva', cat: 'Software & Subscriptions', createdAt: '2026-10-02T12:00:00Z' },
+      { id: 'rule_demo_post', match: 'Canada Post', cat: 'Shipping & Postage', createdAt: '2026-10-03T12:00:00Z' },
+    ],
     pendingExpenses: [],
   },
 };

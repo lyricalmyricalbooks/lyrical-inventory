@@ -275,6 +275,7 @@ export function scanMoney(n, cur) {
  * @param {ReturnType<typeof checkReceiptMath>} [f.math]
  * @param {ReturnType<typeof scanDateConcern>} [f.dateConcern]
  * @param {{desc?: string, date?: string}|null} [f.duplicate]  an expense already logged
+ * @param {{match: string, cat: string}|null} [f.rule]  the owner's sorting rule that chose the category
  * @param {ReturnType<typeof vendorFilingHabit>} [f.habit]
  * @param {boolean} [f.habitOverrode]  the habit replaced a different AI guess
  * @param {string} [f.vendor]
@@ -361,7 +362,9 @@ export function scanReadChecks(f = {}) {
     });
   }
 
-  if (f.habit) {
+  if (f.rule) {
+    checks.push({ tone: 'ok', text: `Filed under ${f.rule.cat} by your sorting rule for "${f.rule.match}". You can still pick another.` });
+  } else if (f.habit) {
     const name = str(f.vendor) || 'this shop';
     checks.push({
       tone: 'ok',

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildHarness } from './helpers/extract-decl.js';
+import { findExpenseRule } from '../src/lib/expense-rules.js';
 import { PICKER_CURRENCIES, roundCents, setSelectCurrency } from '../src/lib/money.js';
 import * as scanChecks from '../src/lib/receipt-scan-checks.js';
 
@@ -81,6 +82,7 @@ function harness({
 
       // ── app state
       TAX_CENTER: taxCenter,
+      findExpenseRule,
       TC_CATEGORIES: TC_CATS,
       EXPENSE_CATEGORIES: EXP_CATS,
       _fxRateCache: rates,

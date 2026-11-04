@@ -34,7 +34,7 @@ import {
 import { BOOKS, BOOK_LIST, states, defaultState } from '../core/store.js';
 import { ensurePdfJs } from './invoices.js';
 import { dropFilesIntoInput, setDropzoneDrag } from '../lib/dropzone.js';
-import { TC_CATEGORIES, _tcOpenTripName, openArtistPayoutEditor } from './tax-entries.js';
+import { TC_CATEGORIES, _tcOpenTripName, openArtistPayoutEditor, renderExpenseRules } from './tax-entries.js';
 import {
   _localReceiptCell,
   clearReceiptScanReview,
@@ -3747,6 +3747,7 @@ function renderTaxCenter() {
   _tcRenderLedgerPagination(filteredLedger, pageStart, totalPages);
 
   _tcRenderRecurringSubscriptions();
+  renderExpenseRules();
 
   // Keep BOTH year selects in agreement with the period that was just rendered,
   // regardless of which control triggered the change (or a restored pref).
