@@ -35,7 +35,7 @@ import { BOOKS, states, activeBook, getState, getBook } from '../core/store.js';
 import { notesWithInvoiceDiscount } from '../lib/consignment.js';
 import { bookCurrencyCode } from '../lib/currency-migration.js';
 import { authorStockToReturn, deductSaleFromStockBreakdown, noteAuthorTaken, stockToReturn, takeSaleStock } from '../lib/inventory.js';
-import { cadEquivalentForSale, getBookCurrencyCode, normalizeCurrencyCode } from '../lib/money.js';
+import { cadEquivalentForSale, getBookCurrencyCode, heldTransferIndexForSale, normalizeCurrencyCode } from '../lib/money.js';
 import { updateDash } from './dashboard.js';
 import { makeEventId, syncToSheets } from './sheets-bridge.js';
 
@@ -197,7 +197,7 @@ function voidHistEntry(s, book, h, { recompute = true } = {}) {
   let pendingRev = false;
   if (h.artistPending) {
     pendingRev = true;
-    const ti = (s.artistTransfers || []).findIndex(x => (h.sheetsId && x.sheetsId === h.sheetsId) || (x.num === h.num && x.qty === h.qty));
+    const ti = heldTransferIndexForSale(s.artistTransfers, h);
     if (ti !== -1) h.voidedTransfer = s.artistTransfers.splice(ti, 1)[0];
   }
   // Only the copies the sale actually took go back (an oversold sale took
