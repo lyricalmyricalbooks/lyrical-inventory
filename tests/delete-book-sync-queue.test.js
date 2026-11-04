@@ -49,4 +49,5 @@ describe('deleting a book with changes still queued', () => {
     // Leave the next test an empty queue.
     app.main.syncQueue.splice(0);
   });
+
 });

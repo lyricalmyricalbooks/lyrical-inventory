@@ -2712,6 +2712,11 @@ async function deleteBook(id) {
   delete BOOKS[id];
   refreshBookList();
   delete states[id];
+  // The cloud copy this screen was built on is about to be deleted: a book
+  // re-added under the same id must not merge against it, or its first save
+  // would treat everything the old book also had as deleted.
+  delete screenBases[id];
+  delete lastSavedHashes[id];
   // Its changes still waiting to upload would write the deleted book back.
   if (syncQueue.some(item => item.bookId === id)) {
     syncQueue = syncQueue.filter(item => item.bookId !== id);

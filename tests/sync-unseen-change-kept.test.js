@@ -24,7 +24,7 @@ beforeAll(async () => {
   // The real Firebase-backed functions, kept before the harness swaps them for fakes.
   await import('../src/firebase.js');
   const real = {};
-  for (const k of ['_fbSave', '_fbLoad', '_fbWatch', '_fbBaseFor']) real[k] = window[k];
+  for (const k of ['_fbSave', '_fbLoad', '_fbWatch', '_fbBaseFor', '_fbDeleteBook']) real[k] = window[k];
   app = await loadApp({ books: [makeBook({ id: BOOK })], overrides: real });
 }, 30000);
 
@@ -103,5 +103,28 @@ describe('a change this screen never showed', () => {
     await app.settle(20);
     expect(app.queued()).toHaveLength(0);
     expect(cloudHist()).toEqual(['S-earlier', 'T-now']);
+  });
+
+  // Last: it deletes the book.
+  it('a book deleted and re-added under the same id keeps what is entered on its first save', async () => {
+    state().authorStock = 4;
+    await app.main.saveState(BOOK);
+    await app.settle(20);
+    expect(store.read(`books/${BOOK}/data/metadata`)?.authorStock).toBe(4);
+
+    const done = app.window.deleteBook(BOOK);
+    await app.answerConfirm(true);
+    await done;
+    await app.settle(20);
+    expect(store.docs.has(`books/${BOOK}/data/metadata`)).toBe(false);
+
+    // Added again with the same id, in the same session.
+    app.main.BOOKS[BOOK] = makeBook({ id: BOOK });
+    app.main.states[BOOK] = app.main.defaultState(app.main.BOOKS[BOOK]);
+    app.main.states[BOOK].authorStock = 2;
+    await app.main.saveState(BOOK);
+    await app.settle(20);
+    expect(store.read(`books/${BOOK}/data/metadata`)?.authorStock).toBe(2);
+    expect(app.main.states[BOOK].authorStock).toBe(2);
   });
 });

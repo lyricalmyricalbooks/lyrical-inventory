@@ -13,6 +13,8 @@ const PATH = 'settings/taxCenter';
 let online = true;
 
 const cloud = () => store.read(PATH);
+// The kept copy is stored per signed-in account (anon in this harness).
+const kept = () => Object.keys(localStorage).find(k => k.startsWith('lm-pending-setting:') && k.endsWith(':taxCenter')) || null;
 const ids = tc => (tc.businessExpenses || []).map(e => e.id).sort();
 const putCloud = tc => store.docs.set(PATH, { data: JSON.stringify(tc), ts: 1 });
 const settle = async (n = 10) => { for (let i = 0; i < n; i++) await new Promise(r => setTimeout(r, 0)); };
@@ -64,16 +66,20 @@ describe('saving the Tax Centre with no connection', () => {
     goOffline();
     phone.businessExpenses.push({ id: 3, amount: 9 });
     await window._fbSaveSettings('taxCenter', phone);
-    expect(localStorage.getItem('lm-pending-setting:taxCenter')).toBeTruthy();
+    expect(kept()).toBeTruthy();
 
-    // The desktop adds one; this device loads again (a reload, back online).
+    // The desktop adds one; the app reloads (a fresh copy of firebase.js, so
+    // nothing kept in memory) and loads again, back online.
     putCloud({ ...T0, businessExpenses: [...T0.businessExpenses, { id: 2, amount: 40 }] });
-    goOnline();
+    online = true; store.setOffline(false); // no 'online' event: the old page is gone
+    vi.resetModules();
+    await import('../src/firebase.js');
+    window._useFirestoreGlobal = () => true;
     const loaded = await window._fbLoadSettings('taxCenter');
     expect(ids(loaded)).toEqual([1, 2, 3]);
     await settle(20);
     expect(ids(cloud())).toEqual([1, 2, 3]);
-    expect(localStorage.getItem('lm-pending-setting:taxCenter')).toBeNull();
+    expect(kept()).toBeNull();
   });
 
   it('saves straight through when the cloud copy can be read', async () => {
@@ -82,6 +88,45 @@ describe('saving the Tax Centre with no connection', () => {
     tc.businessExpenses.push({ id: 4, amount: 1 });
     expect(await window._fbSaveSettings('taxCenter', tc)).toBe(true);
     expect(ids(cloud())).toEqual([1, 4]);
-    expect(localStorage.getItem('lm-pending-setting:taxCenter')).toBeNull();
+    expect(kept()).toBeNull();
+  });
+
+  it('stops retrying, and says so, when the cloud refuses the kept change for good', async () => {
+    putCloud(T0);
+    const tc = await window._fbLoadSettings('taxCenter');
+    goOffline();
+    tc.businessExpenses.push({ id: 5, amount: 2 });
+    await window._fbSaveSettings('taxCenter', tc);
+    expect(kept()).toBeTruthy();
+
+    const realSetDoc = store.api.setDoc;
+    let attempts = 0;
+    store.api.setDoc = () => { attempts++; return Promise.reject(Object.assign(new Error('denied'), { code: 'permission-denied' })); };
+    window.showToast.mockClear();
+    try {
+      goOnline();
+      await settle(20);
+    } finally {
+      store.api.setDoc = realSetDoc;
+    }
+    expect(attempts).toBe(1);
+    expect(kept()).toBeNull();
+    expect(window.showToast.mock.calls.some(([msg, kind]) => kind === 'err' && /Could not save the Tax Centre/.test(msg))).toBe(true);
+  });
+
+  it('sends the newest copy when a save and a reconnect retry overlap', async () => {
+    putCloud(T0);
+    const tc = await window._fbLoadSettings('taxCenter');
+    goOffline();
+    tc.businessExpenses.push({ id: 6, amount: 3 });
+    await window._fbSaveSettings('taxCenter', tc);
+
+    // Back online: the retry of the kept copy and a fresh save start together.
+    goOnline();
+    const newer = { ...tc, businessExpenses: [...tc.businessExpenses, { id: 7, amount: 4 }] };
+    await window._fbSaveSettings('taxCenter', newer);
+    await settle(20);
+    expect(ids(cloud())).toEqual([1, 6, 7]);
+    expect(kept()).toBeNull();
   });
 });
