@@ -13559,6 +13559,8 @@ function voidEntry() {
       if (e.type === 'Shipment' && st) { st.sent = Math.max(0, st.sent - e.qty); st.outstanding = Math.max(0, st.outstanding - e.qty); s.stock += e.qty; }
       if (e.type === 'Sale' && st) { st.sold = Math.max(0, st.sold - e.qty); st.outstanding += e.qty; s.sold = Math.max(0, s.sold - e.qty); s.revenue = Math.max(0, s.revenue - e.amountDue); if (e.paid === 'pending') st.amountOwed = roundCents(Math.max(0, st.amountOwed - e.amountDue)); if (s.chStats['Consignment']) { s.chStats['Consignment'].txns = Math.max(0, s.chStats['Consignment'].txns - 1); s.chStats['Consignment'].units = Math.max(0, s.chStats['Consignment'].units - e.qty); s.chStats['Consignment'].revenue = Math.max(0, s.chStats['Consignment'].revenue - e.amountDue); } }
       if (e.type === 'Return' && st) { st.returned = Math.max(0, st.returned - e.qty); st.outstanding += e.qty; if (e.status === 'restocked') s.stock = Math.max(0, s.stock - e.qty); }
+      // Written-off copies come back (a book with a print run re-derives this anyway).
+      if (e.type === 'Inventory Disposal') s.stock += e.qty;
       e.voided = true;
       e.voidedAt = Date.now();
       // Decision #4: keep invoiceId/invoiceNum across the void (so unvoid restores
@@ -13572,6 +13574,7 @@ function voidEntry() {
       if (e.type === 'Shipment' && st) { st.sent += e.qty; st.outstanding += e.qty; s.stock = Math.max(0, s.stock - e.qty); }
       if (e.type === 'Sale' && st) { st.sold += e.qty; st.outstanding = Math.max(0, st.outstanding - e.qty); s.sold += e.qty; s.revenue += e.amountDue; if (e.paid === 'pending') st.amountOwed = roundCents(st.amountOwed + e.amountDue); if (!s.chStats['Consignment']) s.chStats['Consignment'] = { txns: 0, units: 0, revenue: 0 }; s.chStats['Consignment'].txns++; s.chStats['Consignment'].units += e.qty; s.chStats['Consignment'].revenue += e.amountDue; }
       if (e.type === 'Return' && st) { st.returned += e.qty; st.outstanding = Math.max(0, st.outstanding - e.qty); if (e.status === 'restocked') s.stock += e.qty; }
+      if (e.type === 'Inventory Disposal') s.stock = Math.max(0, s.stock - e.qty);
       e.voided = false;
       delete e.voidedAt;
       syncLedgerVoid(e, false);

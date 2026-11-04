@@ -108,6 +108,16 @@ export function recordInventoryDisposal(s, disposal) {
   return entry;
 }
 
+// On-hand after copies are written off. A book with a print run re-derives
+// its count from the records (which now include the disposal); one without
+// has no baseline to derive from, so the copies come straight off the stored
+// count, never below zero.
+/** @param {BookState} s @param {Book} book @param {number} qty @returns {number} */
+export function stockAfterDisposal(s, book, qty) {
+  if (book && Number.isFinite(book.maxPrint)) return deriveOnHand(s, book);
+  return Math.max(0, num(s && s.stock) - num(qty));
+}
+
 // Stock change a single timeline row applies to on-hand. Negative = books left
 // (a direct sale or a consignment shipment); positive = a good return came back.
 // Voided rows and consignment SALES are no-ops: the latter's copies already left
