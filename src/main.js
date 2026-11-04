@@ -312,7 +312,7 @@ import {
   PICKER_CURRENCIES,
 } from './lib/money.js';
 import { sumMoney } from './lib/cents.js';
-import { localDay, localDayPlus } from './lib/calendar-day.js';
+import { localDay, localDayPlus, sheetDay } from './lib/calendar-day.js';
 import {
   buildPartPaymentNote,
   describeInvoicePaymentReversal,
@@ -1108,6 +1108,7 @@ import {
 } from './features/sheets-bridge.js';
 import { sheetTabKey } from './lib/sheet-sync.js';
 import { IN_PERSON_CHANNELS, channelStats, hasOwnChannel } from './lib/channel-mix.js';
+import { mapImportRow } from './lib/import-columns.js';
 import { csvToObjects, toCsv } from './lib/csv.js';
 import { plainChanges, kindLabel, parseBuildDate, relativeWhen, dayHeading } from './lib/whats-new.js';
 import { downloadText, downloadCsv } from './lib/download.js';
@@ -9951,15 +9952,6 @@ function setImportReady(ready) {
   if (hint) hint.hidden = ready;
 }
 
-// A spreadsheet cell as a number. Excel cells usually arrive as numbers
-// already; CSV cells are always text, so drop the currency symbols and
-// thousands separators a formatted export carries ("$1,250.00") rather than
-// letting parseFloat() read that as NaN and import the sale at 0.
-function importAmount(value) {
-  if (typeof value === 'number') return value;
-  return parseFloat(String(value).replace(/[^\d.-]/g, ''));
-}
-
 async function handleImportFile(event) {
   const file = event.target.files[0];
   if (!file) return;
@@ -10003,25 +9995,18 @@ async function handleImportFile(event) {
       if (!rows.length) { showToast('No data found in spreadsheet', 'warn'); return; }
 
       // Flexible column mapping — handles variations in header names
-      const colMap = (row) => {
-        const k = (name) => {
-          const keys = Object.keys(row);
-          return keys.find(k => k.toLowerCase().replace(/[\s_#]/g, '').includes(name)) || '';
-        };
-        const num = row[k('order')] || row[k('num')] || '';
-        const date = row[k('date')] || '';
-        const chan = row[k('channel')] || row[k('chan')] || 'Website';
-        const qty = importAmount(row[k('qty')] || row[k('quantity')] || 1) || 1;
-        const price = importAmount(row[k('unit')] || row[k('price')] || 0) || 0;
-        const notes = row[k('note')] || '';
-        return { num: String(num || ''), rawDate: date, chan: String(chan), qty: Math.abs(Math.round(qty)), price, notes: String(notes) };
-      };
+      // (src/lib/import-columns.js).
+      const colMap = mapImportRow;
 
       const excelSerial = xlsx ? (n) => {
         const d = xlsx.SSF.parse_date_code(n);
         return d ? `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}` : null;
       } : null;
-      _importParsed = rows.map(colMap).filter(r => r.qty > 0).map(r => ({ ...r, excelSerial }));
+      const mapped = rows.map(colMap);
+      // A quantity of 0 or less is a cancelled line or a refund: never a sale.
+      const skippedNonSales = mapped.filter(r => !(r.qty > 0)).length;
+      _importParsed = mapped.filter(r => r.qty > 0).map(r => ({ ...r, excelSerial }));
+      if (skippedNonSales) showToast(`${skippedNonSales} row${skippedNonSales === 1 ? '' : 's'} with a quantity of 0 or less (cancelled or refunded) left out`, 'warn', 6000);
       _importFileName = String(file.name || sheetName || '');
       _importDateOrder = 'mdy';
       readImportDates();
@@ -13641,21 +13626,9 @@ const SHEET_RESTORE_TYPES = new Set(['order', 'consignment', 'shipping']);
 
 function parseAndValidateDate(rawDate) {
   if (!rawDate) return today();
-  if (rawDate instanceof Date) {
-    return !isNaN(rawDate.getTime()) ? rawDate.toISOString().split('T')[0] : today();
-  }
-  let dStr = String(rawDate).trim();
-  if (!dStr) return today();
-
-  if (dStr.includes('T')) {
-    dStr = dStr.split('T')[0];
-  }
-
-  const d = new Date(dStr);
-  if (!isNaN(d.getTime())) {
-    return d.toISOString().split('T')[0];
-  }
-  return today();
+  // A Sheet date cell is midnight in the sheet's time zone, sent as UTC text;
+  // sheetDay reads the day it names (cutting at "T" lost a day east of UTC).
+  return sheetDay(rawDate instanceof Date ? rawDate : String(rawDate).trim()) || today();
 }
 
 async function restoreBookDataFromSheets() {
