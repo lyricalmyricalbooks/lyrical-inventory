@@ -2,6 +2,7 @@
 // screen wake lock; the sale itself still goes through posConfirmSale().
 
 import { escapeHtml as esc } from './html.js';
+import { getBookCurrencyCode, roundCents } from './money.js';
 
 /** Payment choices on the charge sheet, in thumb order. `value` is what the
  *  sale records, and must match the register's payment <select>. */
@@ -27,6 +28,42 @@ const METHOD_KEY = 'lm-fair-last-method';
  *  name after it ("Comp/Gift · Toronto Art Book Fair"). */
 export function isCompMethod(method) {
   return String(method || '').startsWith('Comp/Gift');
+}
+
+/**
+ * The marketing expense a comp books (Julian, 2026-11-04: "comp sales shall be
+ * counted as a marketing expense"). Valued at what the copies cost to print —
+ * production cost over the print run, the same unit cost the gratuity backfill
+ * uses — in the book's own currency, filed under Marketing & Advertising and
+ * tied to the register sale by its number, so voiding the comp takes it back.
+ * A CAD book has its CAD value now; another currency is left flagged for the
+ * rate healer, never booked 1:1. Null when the book has no cost to go on.
+ */
+export function compExpense(book, { qty, date, num, fair = '' } = {}) {
+  const cost = Number(book && book.productionCost);
+  const run = Number(book && book.maxPrint);
+  const copies = Number(qty);
+  if (!(cost > 0) || !(run > 0) || !(copies > 0)) return null;
+  const amount = roundCents((cost / run) * copies);
+  if (!(amount > 0)) return null;
+  const currency = getBookCurrencyCode(book);
+  const isCad = String(currency).toUpperCase() === 'CAD';
+  return {
+    id: Date.now() + Math.floor(Math.random() * 1000),
+    desc: `Comp: ${copies} ${copies === 1 ? 'copy' : 'copies'} given away${fair ? ` at ${fair}` : ''}`,
+    cat: 'Marketing & Advertising',
+    amount,
+    currency,
+    origAmount: amount,
+    origCurrency: currency,
+    baseAmount: isCad ? amount : null,
+    ...(isCad ? {} : { fxMissing: true }),
+    date,
+    ref: num,
+    received: false,
+    gratuity: true,
+    comp: true,
+  };
 }
 
 export function readLastMethod(storage = globalThis.localStorage) {

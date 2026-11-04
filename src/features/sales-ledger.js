@@ -213,6 +213,12 @@ function voidHistEntry(s, book, h, { recompute = true } = {}) {
     if (!pendingRev) s.chStats[h.chan].revenue = Math.max(0, s.chStats[h.chan].revenue - h.qty * h.price);
     if (s.chStats[h.chan].txns <= 0) delete s.chStats[h.chan];
   }
+  // A gratuity's (or comp's) marketing expense comes off with it, kept on the
+  // row so an un-void puts the same expense back.
+  if (h.gratuity) {
+    const ei = (s.expenses || []).findIndex(e => e && e.gratuity === true && e.ref === h.num);
+    if (ei !== -1) h.voidedExpense = s.expenses.splice(ei, 1)[0];
+  }
   // Author-fulfilled sales took copies from the author's held stock; give them back.
   if (h.directToArtist || h.enteredBy === 'Artist') s.authorStock = (Number.isFinite(s.authorStock) ? s.authorStock : 0) + authorStockToReturn(h);
   h.voided = true;
@@ -235,6 +241,11 @@ function unvoidHistEntry(s, book, h) {
   s.chStats[h.chan].txns++;
   s.chStats[h.chan].units += h.qty;
   if (!h.artistPending) s.chStats[h.chan].revenue += h.qty * h.price;
+  if (h.voidedExpense) {
+    if (!Array.isArray(s.expenses)) s.expenses = [];
+    s.expenses.unshift(h.voidedExpense);
+    delete h.voidedExpense;
+  }
   if (h.voidedTransfer) {
     s.artistTransfers = s.artistTransfers || [];
     s.artistTransfers.push(h.voidedTransfer);
