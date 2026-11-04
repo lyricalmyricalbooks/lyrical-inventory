@@ -12,6 +12,7 @@
 // already holds (the drafted receipts, the postage expenses) and a duplicate
 // check, so nothing here can change a figure in the books.
 
+import { plural } from './plural.js';
 import { isReadyToFile, READY_CONFIDENCE } from './receipt-ready.js';
 import { frequencyLabel } from './recurring.js';
 import { chargePeriodName } from './subscription-receipts.js';
@@ -25,10 +26,6 @@ function money(amount, currency) {
   const n = Number(amount);
   if (!Number.isFinite(n)) return '';
   return `${String(currency || 'CAD').toUpperCase()} ${n.toFixed(2)}`;
-}
-
-function plural(n, one, many) {
-  return n === 1 ? one : many;
 }
 
 /** A receipt's identity across reloads: its stable ref, else its email, else its position. */

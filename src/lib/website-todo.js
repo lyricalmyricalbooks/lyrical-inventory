@@ -17,6 +17,7 @@
 // — reading and writing the documents, the card section, the To-do rows — is
 // src/features/website-link.js.
 import { WEBSITE_ORIGINS, originOf } from './app-switch.js';
+import { plural } from './plural.js';
 
 export const TODO_MAX_ITEMS = 10;
 export const TODO_TITLE_MAX = 200;
@@ -227,7 +228,6 @@ export function prunableKeys(map = {}, { now = Date.now(), keepDays = LINK_REQUE
  */
 export function buildAppTodo({ needYou = 0, storageMissing = [], oldStorageBooks = 0, problem = '' } = {}, now = new Date().toISOString()) {
   const items = [];
-  const plural = (n, one, many) => (n === 1 ? one : many);
   const n = Math.floor(Number(needYou)) || 0;
   if (n > 0) {
     items.push({ id: 'needs-you', count: n, title: `${n} website ${plural(n, 'order needs', 'orders need')} your decision`, hash: WEBSITE_ORDERS_HASH });
