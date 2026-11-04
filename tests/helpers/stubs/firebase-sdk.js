@@ -63,16 +63,23 @@ export const doc = (...parts) => handle('doc:' + parts.slice(1).join('/'));
 export const collection = (...parts) => handle('col:' + parts.slice(1).join('/'));
 export const query = (ref) => ref;
 export const where = () => handle('where');
-export const setDoc = async () => {};
-export const getDoc = async () => emptySnap();
-export const getDocs = async () => emptySnap();
-export const getDocFromServer = async () => emptySnap();
+// A suite that needs the real src/firebase.js read/write paths can set
+// globalThis.__firebaseStub.firestore = { getDocs, getDocFromServer, ... } to
+// answer them from its own in-memory store (see tests/helpers/fake-firestore.js).
+const fsHook = (name, fallback) => (...args) => {
+  const impl = globalThis.__firebaseStub.firestore && globalThis.__firebaseStub.firestore[name];
+  return impl ? impl(...args) : fallback(...args);
+};
+export const setDoc = fsHook('setDoc', async () => {});
+export const getDoc = fsHook('getDoc', async () => emptySnap());
+export const getDocs = fsHook('getDocs', async () => emptySnap());
+export const getDocFromServer = fsHook('getDocFromServer', async () => emptySnap());
 export const getDocsFromServer = async () => emptySnap();
 export const getDocFromCache = async () => emptySnap();
 export const getDocsFromCache = async () => emptySnap();
 export const deleteDoc = async () => {};
-export const onSnapshot = () => noop;
-export const writeBatch = () => ({ set: noop, update: noop, delete: noop, commit: async () => {} });
+export const onSnapshot = fsHook('onSnapshot', () => noop);
+export const writeBatch = fsHook('writeBatch', () => ({ set: noop, update: noop, delete: noop, commit: async () => {} }));
 export const runTransaction = async (_fs, fn) =>
   fn({ get: async () => emptySnap(), set: noop, update: noop, delete: noop });
 export const deleteField = () => ({ __deleteField: true });

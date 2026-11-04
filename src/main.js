@@ -3139,6 +3139,20 @@ export const formatDateTime = (isoString) => {
 window.authorSubmissions = {}; // Tracks pending expenses/sales by Authors
 export let orders = [], activeId = null;
 let fbReady = false, lastSavedHashes = {}, lastSaveTimes = {};
+// The cloud copy (per part, as _fbSave stores it) that each book's screen was
+// last built on. It is the merge base for the next save of that screen. The
+// live base in firebase.js (window._fsHashes) moves on whenever the cloud does,
+// including when a change this screen never showed uploads (one queued in an
+// earlier session, say); merging against it then made that change look like
+// part of our own starting point, and the next sale wrote over it.
+const screenBases = {};
+function noteScreenBase(bookId, base) {
+  if (base && typeof base === 'object' && Object.keys(base).length) screenBases[bookId] = { ...base };
+  else delete screenBases[bookId];
+}
+function screenBaseFor(bookId) {
+  return screenBases[bookId] ? { ...screenBases[bookId] } : undefined;
+}
 // Loaded through a guard: an unreadable stored queue (or storage that throws on
 // access) used to throw right here, at module load, and the app never started.
 // Anything unreadable is copied aside to 'lm-sync-queue-corrupt' first.
@@ -3607,9 +3621,28 @@ async function processSyncQueue() {
     } else {
       // Mark this exact snapshot as saved so saveState won't re-send it.
       const json = JSON.stringify(item.state);
-      if (states[item.bookId] && JSON.stringify(states[item.bookId]) === json) {
+      const screen = states[item.bookId];
+      const screenJson = screen ? JSON.stringify(screen) : null;
+      if (screen && screenJson === json) {
         lastSavedHashes[item.bookId] = json;
         lastSaveTimes[item.bookId] = Date.now();
+        noteScreenBase(item.bookId, partHashesOf(item.state));
+      } else if (screen && !newerPending) {
+        // A change this screen never showed (queued in an earlier session or by
+        // another tab) is now the cloud copy. Untouched since it was loaded:
+        // show that copy. Otherwise merge the two, against the copy the screen
+        // was built on, so the sale appears and nothing on screen is lost.
+        if (screenJson === lastSavedHashes[item.bookId]) {
+          const book = BOOKS[item.bookId];
+          states[item.bookId] = book ? { ...defaultState(book), ...JSON.parse(json) } : JSON.parse(json);
+          if (book) recomputeAfters(states[item.bookId], book);
+          lastSavedHashes[item.bookId] = json;
+          noteScreenBase(item.bookId, partHashesOf(item.state));
+          if (activeBook === item.bookId || activeBook === 'all') renderCurrent();
+        } else {
+          Promise.resolve().then(() => saveState(item.bookId))
+            .catch(e => console.warn('[sync] could not merge an uploaded change into the screen', e));
+        }
       }
     }
     // Cannot throw. This item IS uploaded; a storage error here used to land in
@@ -4070,20 +4103,23 @@ async function saveStateNow(bookId, rebase) {
   if (json === lastSavedHashes[bookId]) return;
   const size = checkBookSize(bookId, state, json);
   setSyncState('syncing', '<b>Firestore</b> · saving…');
+  // Merged against the cloud copy this screen was built on (see screenBases),
+  // not whatever the cloud holds by now.
+  const base = rebase || screenBaseFor(bookId);
   try {
     // A change for this book is already waiting in the queue: this edit was
     // made on top of it, so it must go out after it and merge against the
     // same base, not race it with a direct write.
     if (!fbReady || !navigator.onLine || syncQueue.some(item => item.bookId === bookId)) {
-      queueSync(bookId, state, rebase);
+      queueSync(bookId, state, base);
       setSyncState('ok', '<b>Firestore</b> · changes queued (offline)');
       return;
     }
-    const res = await window._fbSave(bookId, json, rebase ? { base: rebase } : undefined);
+    const res = await window._fbSave(bookId, json, base ? { base } : undefined);
     // Couldn't read the server copy, so _fbSave declined to overwrite it rather
     // than risk erasing a change made on another device. Queue and retry.
     if (res && res.ok === false) {
-      queueSync(bookId, JSON.parse(json), rebase);
+      queueSync(bookId, JSON.parse(json), base);
       setSyncState('error', '<b>Firestore</b> · could not verify cloud copy · retrying…');
       return;
     }
@@ -4109,6 +4145,8 @@ async function saveStateNow(bookId, rebase) {
       adoptMergedState(bookId, res);
     } else {
       lastSavedHashes[bookId] = json;
+      // The cloud now holds exactly what was sent.
+      noteScreenBase(bookId, partHashesOf(JSON.parse(json)));
     }
     lastSaveTimes[bookId] = Date.now();
     // A confirmed cloud write — this is what "Last upload …" on the sync chip
@@ -4124,7 +4162,7 @@ async function saveStateNow(bookId, rebase) {
     // The optimistic UI already shows this change, but the cloud write
     // failed. Queue it (with backoff retry) so the change is never lost
     // and reconciles automatically instead of silently diverging.
-    queueSync(bookId, states[bookId] || state, rebase);
+    queueSync(bookId, states[bookId] || state, base);
     // Too big for one cloud record: say that, not a generic retry, since
     // retrying alone won't get it through.
     if (size.level === 'over') setSyncState('error', '<b>Firestore</b> · book too big to save · kept on this device');
@@ -4174,6 +4212,7 @@ function adoptMergedState(bookId, res) {
   // Track the server's version, not the defaults-filled local one — if they
   // differ, the next saveState writes the difference instead of skipping it.
   lastSavedHashes[bookId] = JSON.stringify(res.state);
+  noteScreenBase(bookId, partHashesOf(res.state));
   if (activeBook === bookId || activeBook === 'all') renderCurrent();
   reportMergeOutcome(bookId, res.conflicts);
 }
@@ -4398,6 +4437,8 @@ export async function loadBook(bookId) {
       } catch (e) { console.warn('Could not move book to the new storage', bookId, e); }
     }
     const json = await window._fbLoad(bookId);
+    // What the screen is about to be built on: the copy just read.
+    noteScreenBase(bookId, typeof window._fbBaseFor === 'function' ? window._fbBaseFor(bookId) : undefined);
     const book = BOOKS[bookId];
     if (json) {
       const loaded = JSON.parse(json);
@@ -4449,6 +4490,7 @@ export async function loadBook(bookId) {
       if (!states[bookId].artistPayouts) states[bookId].artistPayouts = [];
       recomputeAfters(states[bookId], BOOKS[bookId]);
       lastSavedHashes[bookId] = json2;
+      noteScreenBase(bookId, typeof window._fbBaseFor === 'function' ? window._fbBaseFor(bookId) : undefined);
       // Another device saved this book. Its expense rows reach the sheet even if
       // that device has no sheet connected, and the website's stock follows the
       // cloud copy (wireBookEvents, startWebsiteLink).
