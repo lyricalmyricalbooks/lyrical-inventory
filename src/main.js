@@ -9607,9 +9607,12 @@ export function warmSaleFxHistory() {
 
 /**
  * The rate to convert an expense into `target` (CAD unless the books say
- * otherwise): the rate published for its date, else today's, else 0 when none
- * can be found — never a silent 1:1. A caller getting 0 records the expense with
- * `fxMissing` so the Tax Centre says so and fills it in once online.
+ * otherwise): the rate published for its date, else 0 when none can be found —
+ * never a silent 1:1. Today's rate stands in only for an expense dated today
+ * (or undated): a back-dated one valued at today's rate would be wrong for
+ * good, since the healer only revisits expenses flagged as missing a rate. A
+ * caller getting 0 records the expense with `fxMissing` so the Tax Centre says
+ * so and fills it in at the right date's rate once online.
  */
 export async function resolveExpenseRate(currency, date, target = 'CAD') {
   const cur = String(currency || target).toUpperCase();
@@ -9619,6 +9622,7 @@ export async function resolveExpenseRate(currency, date, target = 'CAD') {
     const h = await fetchHistoricalRate(cur, to, date);
     if (h && h.rate) return h.rate;
   } catch (_) { /* try today's */ }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date || '') && date < today()) return 0;
   try {
     const l = await fetchLiveRate(cur, to);
     if (l && l.rate) return l.rate;

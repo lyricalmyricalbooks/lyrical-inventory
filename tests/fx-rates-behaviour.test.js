@@ -73,6 +73,16 @@ describe('resolveExpenseRate', () => {
     expect(await app.main.resolveExpenseRate('JPY', '2025-02-04')).toBe(0);
   });
 
+  it('does not value a back-dated expense at today\'s rate when its own date\'s rate is unavailable', async () => {
+    fakeRates({ live: { USD: { CAD: 1.5 } } });
+    expect(await app.main.resolveExpenseRate('USD', '2024-06-10')).toBe(0);
+  });
+
+  it('still uses today\'s rate for an expense dated today', async () => {
+    fakeRates({ live: { CHF: { CAD: 1.6 } } });
+    expect(await app.main.resolveExpenseRate('CHF', app.main.today())).toBe(1.6);
+  });
+
   it('is 1 for CAD without asking anyone', async () => {
     const calls = fakeRates();
     expect(await app.main.resolveExpenseRate('CAD', '2025-02-03')).toBe(1);
