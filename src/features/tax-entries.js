@@ -963,19 +963,35 @@ const TAX_CATEGORIES = {
   'fair': 'Events & Exhibitions',
 };
 
+/**
+ * The category an expense description suggests, or '' for none. A keyword
+ * counts only as a whole word (a plural 's'/'es' allowed), so "ink" doesn't
+ * fire inside "Drinks"; and the longest matching keyword wins, so "Uber Eats
+ * lunch" is a meal, not travel — the rule categoryFromName uses.
+ */
+function _tcGuessCategory(text) {
+  const hay = String(text || '').toLowerCase();
+  let best = '';
+  let bestLen = 0;
+  for (const keyword in TAX_CATEGORIES) {
+    if (keyword.length <= bestLen) continue;
+    const word = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp(`(?:^|[^a-z0-9])${word}(?:e?s)?(?![a-z0-9])`).test(hay)) {
+      best = TAX_CATEGORIES[keyword];
+      bestLen = keyword.length;
+    }
+  }
+  return best;
+}
+
 function _tcWireSmartCategory() {
   const descInput = document.getElementById('tc-exp-desc');
   if (descInput) {
     descInput.addEventListener('input', (e) => {
-      const val = e.target.value.toLowerCase();
       const catSelect = document.getElementById('tc-exp-cat');
       if (!catSelect) return;
-      for (const keyword in TAX_CATEGORIES) {
-        if (val.includes(keyword)) {
-          catSelect.value = TAX_CATEGORIES[keyword];
-          break;
-        }
-      }
+      const cat = _tcGuessCategory(e.target.value);
+      if (cat) catSelect.value = cat;
     });
   }
 }
