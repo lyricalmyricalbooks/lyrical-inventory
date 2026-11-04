@@ -236,6 +236,16 @@ export function transferAmount(t) {
   return null;
 }
 
+// The held (artistPending) sale a transfer stands for. A transfer shares its
+// sale's sheetsId, so match on that; an order number can repeat (two held
+// sales under one number), and matching on it alone settled the wrong row.
+// Falls back to the number only for a legacy transfer with no id.
+export function heldSaleForTransfer(hist, t) {
+  if (!Array.isArray(hist) || !t) return undefined;
+  if (t.sheetsId) return hist.find(x => x.artistPending && x.sheetsId === t.sheetsId);
+  return hist.find(x => x.artistPending && x.num === t.num);
+}
+
 // Copies line for a transfer: "3×", or '' when the count wasn't recorded.
 export function transferQtyLabel(t) {
   const qty = Number(t && t.qty);

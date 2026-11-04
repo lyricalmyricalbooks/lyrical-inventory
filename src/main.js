@@ -301,6 +301,7 @@ import {
   hexToRgba,
   isDirectToArtistSale,
   transferAmount,
+  heldSaleForTransfer,
   transferQtyLabel,
   lightenColor,
   normalizeCurrencyCode,
@@ -10636,7 +10637,7 @@ function markArtistTransferReceived(transferId, bookId = activeBook, { chargeId 
   t.total = transferAmount(t);
   // Mark history entry as resolved; the revenue it now counts for is worked
   // out from the history below, the same way every load does.
-  const h = s.hist.find(x => x.num === t.num && x.artistPending);
+  const h = heldSaleForTransfer(s.hist, t);
   if (h) { h.artistPending = false; h.notes = (h.notes ? h.notes + ' · ' : '') + (chargeId ? `Transfer received via Stripe (${chargeId})` : 'Transfer received'); }
   recomputeAfters(s, book);
   // Remove from pending queue
@@ -10743,8 +10744,8 @@ export function settleArtistTransfersFromStripe(payment) {
 // Settle a held transfer where the artist KEEPS their share and only forwards
 // the publisher's cut (the common real-world case). Unlike "mark received" — which
 // assumes the artist forwards the full gross — this credits the sale to revenue,
-// records the artist's share as already-paid (they kept the cash), and leaves only
-// the publisher cut as the amount the artist still owes you.
+// records the artist's share as already-paid (they kept the cash), and treats the
+// publisher cut as already received — nothing is left owing on this sale.
 async function settleArtistTransferKeepShare(transferId) {
   const s = getState(), book = getBook();
   const t = s.artistTransfers.find(x => x.id === transferId);
@@ -10757,7 +10758,7 @@ async function settleArtistTransferKeepShare(transferId) {
 
   // The held sale already counts toward earnings, so its marginal share is the
   // drop in lifetime earnings if it were removed (this respects tier placement).
-  const h = s.hist.find(x => x.num === t.num && x.artistPending);
+  const h = heldSaleForTransfer(s.hist, t);
   const full = calculateArtistEarnings(activeBook);
   const without = calcArtistEarnings(book, { ...s, hist: s.hist.filter(x => x !== h) });
   const share = (full && without)
@@ -10768,8 +10769,8 @@ async function settleArtistTransferKeepShare(transferId) {
   if (!(await confirmDialog(
     `Settle ${escapeHtml(t.num)} — artist keeps their ${fmt(share, book.currency)} share?\n\n` +
     `The full ${fmt(t.total, book.currency)} sale is booked to revenue. The artist's ` +
-    `${fmt(share, book.currency)} share is recorded as paid (they kept the cash), leaving ` +
-    `${fmt(publisherCut, book.currency)} — your cut — for them to forward.`,
+    `${fmt(share, book.currency)} share is recorded as paid (they kept the cash), and your ` +
+    `${fmt(publisherCut, book.currency)} cut is recorded as received from them. Nothing is left owing on this sale.`,
     { okLabel: 'Settle' }
   ))) return;
 
@@ -10806,7 +10807,7 @@ async function settleArtistTransferKeepShare(transferId) {
     paymentRate: t.payment?.rate ?? '',
     convertedTotal: cadEquivS
   });
-  showToast(`✓ Settled — artist keeps ${fmt(share, book.currency)}; ${fmt(publisherCut, book.currency)} still to forward`);
+  showToast(`✓ Settled — artist kept ${fmt(share, book.currency)}; your ${fmt(publisherCut, book.currency)} cut received`);
 }
 
 // Settle a held transfer where the artist keeps the FULL gross — the publisher
@@ -10829,7 +10830,7 @@ async function settleArtistTransferKeepAll(transferId) {
     { okLabel: 'Settle — forgive publisher cut' }
   ))) return;
 
-  const h = s.hist.find(x => x.num === t.num && x.artistPending);
+  const h = heldSaleForTransfer(s.hist, t);
 
   // Resolve the pending history entry; it counts as revenue from now on
   // (worked out from the history, as every load does).
