@@ -92,3 +92,29 @@ export function channelMixRows(chStats) {
     },
   };
 }
+
+// A sale's channel is typed text (or comes from an import), and it keys the
+// per-channel totals object. A channel named "__proto__" or "constructor"
+// would reach Object.prototype instead of a bucket of its own, so those names
+// are never used as keys: their totals go to a throwaway bucket (the history
+// rows themselves are untouched, and a recompute re-derives the totals).
+function isUnsafeKey(key) {
+  return key === '__proto__' || key === 'constructor' || key === 'prototype';
+}
+export function hasOwnChannel(s, chan) {
+  return !!s.chStats && !isUnsafeKey(String(chan)) && Object.prototype.hasOwnProperty.call(s.chStats, chan);
+}
+export function channelStats(s, chan) {
+  const key = String(chan);
+  // A book state looked up by a bad id could be Object.prototype itself; never
+  // write onto that either.
+  if (!s || typeof s !== 'object' || s === Object.prototype) return { txns: 0, units: 0, revenue: 0 };
+  if (key === '__proto__' || key === 'constructor' || key === 'prototype') return { txns: 0, units: 0, revenue: 0 };
+  if (!s.chStats || typeof s.chStats !== 'object') {
+    Object.defineProperty(s, 'chStats', { value: {}, enumerable: true, writable: true, configurable: true });
+  }
+  if (!Object.prototype.hasOwnProperty.call(s.chStats, key)) {
+    Object.defineProperty(s.chStats, key, { value: { txns: 0, units: 0, revenue: 0 }, enumerable: true, writable: true, configurable: true });
+  }
+  return s.chStats[key];
+}

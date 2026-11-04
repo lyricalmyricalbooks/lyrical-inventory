@@ -5,6 +5,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { buildHarness } from './helpers/extract-decl.js';
 import { noteAuthorTaken, takeSaleStock } from '../src/lib/inventory.js';
+import { channelStats } from '../src/lib/channel-mix.js';
 
 function harness({ currency = 'CAD', invoices = [] } = {}) {
   const BOOKS = { b1: { id: 'b1', title: 'Night Garden', currency, listPrice: 20 } };
@@ -16,6 +17,7 @@ function harness({ currency = 'CAD', invoices = [] } = {}) {
     isAuthor: () => false,
     deductSaleFromStockBreakdown: vi.fn(),
     takeSaleStock,
+    channelStats,
     noteAuthorTaken,
     notesWithInvoiceDiscount: vi.fn((_inv, num, notes) => (num === 'INV-1' ? `${notes} · invoice discount` : notes)),
     makeEventId: () => 'evt-1',

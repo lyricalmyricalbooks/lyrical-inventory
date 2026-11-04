@@ -183,3 +183,18 @@ describe('phase 3', () => {
     expect(html).toContain('aria-label="None left: A');
   });
 });
+
+describe('compExpense', () => {
+  test('values a comp at print cost in the book currency', async () => {
+    const { compExpense } = await import('../src/lib/fair-mode.js');
+    const cad = compExpense({ currency: 'CA$', productionCost: 300, maxPrint: 200 }, { qty: 3, date: '2026-11-04', num: 'POS-1', fair: 'Art Fair' });
+    expect(cad).toMatchObject({ amount: 4.5, baseAmount: 4.5, currency: 'CAD', cat: 'Marketing & Advertising', ref: 'POS-1', date: '2026-11-04', gratuity: true, comp: true });
+    expect(cad.desc).toBe('Comp: 3 copies given away at Art Fair');
+    // Another currency waits for its dated rate rather than booking 1:1.
+    const eur = compExpense({ currency: '€', productionCost: 300, maxPrint: 200 }, { qty: 1, date: '2026-11-04', num: 'POS-2' });
+    expect(eur).toMatchObject({ amount: 1.5, currency: 'EUR', baseAmount: null, fxMissing: true });
+    // Nothing to value it by.
+    expect(compExpense({ currency: 'CA$', productionCost: 0, maxPrint: 100 }, { qty: 1 })).toBeNull();
+    expect(compExpense({ currency: 'CA$', productionCost: 100 }, { qty: 1 })).toBeNull();
+  });
+});

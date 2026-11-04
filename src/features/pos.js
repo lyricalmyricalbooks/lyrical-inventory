@@ -47,7 +47,7 @@ import { escapeHtml } from '../lib/html.js';
 import { closeM, confirmDialog, openM, promptDialog } from '../lib/modal.js';
 import { buildPaymentMeta, getBookCurrencyCode, getSym, normalizeCurrencyCode } from '../lib/money.js';
 import { posOversellSummary, posStockView } from '../lib/pos-stock.js';
-import { FAIR_SEARCH_OVER, FAIR_UNDO_MS, countLabel, isCompMethod, fairDaySummary, fairSyncPill, fairTileHtml, keepScreenAwake, readCurrentFair, readLastMethod, registerSalesForDay, rememberMethod, saveCurrentFair, soldLabel, undoOpen } from '../lib/fair-mode.js';
+import { FAIR_SEARCH_OVER, FAIR_UNDO_MS, compExpense, countLabel, isCompMethod, fairDaySummary, fairSyncPill, fairTileHtml, keepScreenAwake, readCurrentFair, readLastMethod, registerSalesForDay, rememberMethod, saveCurrentFair, soldLabel, undoOpen } from '../lib/fair-mode.js';
 
 // ── EVENT POS ──
 let posCart = {};
@@ -1267,6 +1267,8 @@ async function posConfirmSale() {
   const recordedBooks = [];
   let recorded = 0;
   const failed = [];
+  let compExpensed = 0;
+  const compUncosted = [];
 
   try {
     // Catalogue books first, and before anything touches the network: the sale
@@ -1330,6 +1332,19 @@ async function posConfirmSale() {
         // never counted as a sale or as income.
         const extra = comp ? { gratuity: true, gratSource: isAuthor() ? 'author' : 'publisher' } : undefined;
         withActiveBook(book.id, () => recordOrder(num, chan, qty, basePrice, notes, payment, { extra }));
+        // A comp is a marketing expense, at what the copies cost to print.
+        if (comp) {
+          const expense = compExpense(book, { qty, date: today(), num, fair: readCurrentFair(today())?.name || '' });
+          const st = states[book.id];
+          if (expense && st) {
+            if (!Array.isArray(st.expenses)) st.expenses = [];
+            st.expenses.unshift(expense);
+            saveState(book.id);
+            compExpensed++;
+          } else {
+            compUncosted.push(book.title);
+          }
+        }
         recordedBooks.push(book.id);
         recorded++;
       } catch (error) {
@@ -1367,7 +1382,10 @@ async function posConfirmSale() {
   if (failed.length) {
     showToast(`⚠ Sale recorded, but ${failed.join(', ')} could not be saved — add ${failed.length === 1 ? 'it' : 'them'} by hand`, 'err', 8000);
   } else {
-    showToast('✓ Sale complete', 'ok');
+    showToast(!comp ? '✓ Sale complete'
+      : compUncosted.length
+        ? `✓ Comp recorded. No marketing expense for ${compUncosted.join(', ')}: add its print cost and print run to value it`
+        : (compExpensed ? '✓ Comp recorded as a marketing expense' : '✓ Comp recorded'), 'ok', compUncosted.length ? 6000 : undefined);
   }
 
   // POS-only books: their running tally lives in the shared catalogue, so the

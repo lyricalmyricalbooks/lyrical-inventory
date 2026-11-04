@@ -132,3 +132,40 @@ describe('IN_PERSON_CHANNELS', () => {
     expect([...MARKET_DAY_CHANNELS].sort()).toEqual(['Book Fair', ...IN_PERSON_CHANNELS].sort());
   });
 });
+
+describe('channelStats', () => {
+  it('never lets a channel named __proto__ reach Object.prototype', async () => {
+    const { channelStats, hasOwnChannel } = await import('../src/lib/channel-mix.js');
+    const s = { chStats: {} };
+    channelStats(s, '__proto__').txns++;
+    channelStats(s, 'constructor').units += 2;
+    expect({}.txns).toBeUndefined();
+    expect(Object.keys(s.chStats)).toEqual([]);
+    expect(hasOwnChannel(s, '__proto__')).toBe(false);
+    channelStats(s, 'Website').txns++;
+    channelStats(s, 'Website').txns++;
+    expect(s.chStats.Website.txns).toBe(2);
+    expect(hasOwnChannel(s, 'Website')).toBe(true);
+  });
+
+  it('keeps a recount from history safe from a __proto__ channel too', async () => {
+    const { recalculateBookStatsFromHistory } = await import('../src/lib/inventory.js');
+    const s = { stock: 5, hist: [
+      { chan: '__proto__', qty: 1, price: 10 },
+      { chan: 'Website', qty: 2, price: 10 },
+    ] };
+    recalculateBookStatsFromHistory(s);
+    expect({}.txns).toBeUndefined();
+    expect(Object.keys(s.chStats)).toEqual(['Website']);
+    expect(s.chStats.Website).toMatchObject({ txns: 1, units: 2, revenue: 20 });
+  });
+
+  it('starts the totals for a state that has none, and never writes onto Object.prototype', async () => {
+    const { channelStats } = await import('../src/lib/channel-mix.js');
+    const s = {};
+    channelStats(s, 'Website').txns++;
+    expect(s.chStats.Website.txns).toBe(1);
+    channelStats(Object.prototype, 'Website').txns++;
+    expect({}.chStats).toBeUndefined();
+  });
+});

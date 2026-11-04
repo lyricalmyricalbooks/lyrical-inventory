@@ -35,6 +35,7 @@ import { BOOKS, states, activeBook, getState, getBook } from '../core/store.js';
 import { notesWithInvoiceDiscount } from '../lib/consignment.js';
 import { bookCurrencyCode } from '../lib/currency-migration.js';
 import { authorStockToReturn, deductSaleFromStockBreakdown, noteAuthorTaken, stockToReturn, takeSaleStock } from '../lib/inventory.js';
+import { channelStats, hasOwnChannel } from '../lib/channel-mix.js';
 import { cadEquivalentForSale, getBookCurrencyCode, heldTransferIndexForSale, normalizeCurrencyCode } from '../lib/money.js';
 import { updateDash } from './dashboard.js';
 import { makeEventId, syncToSheets } from './sheets-bridge.js';
@@ -99,8 +100,8 @@ function addSaleToState(s, book, { num = '', chan, qty, price, notes = '', payme
   const taken = {};
   takeSaleStock(s, taken, qty);
   s.sold += qty; s.revenue += qty * price;
-  if (!s.chStats[chan]) s.chStats[chan] = { txns: 0, units: 0, revenue: 0 };
-  s.chStats[chan].txns++; s.chStats[chan].units += qty; s.chStats[chan].revenue += qty * price;
+  const cs = channelStats(s, chan);
+  cs.txns++; cs.units += qty; cs.revenue += qty * price;
   const row = {
     ...(stamp ? { recordedAt: new Date().toISOString() } : {}),
     ...extra,
@@ -123,8 +124,8 @@ function recordOrderPendingTransfer(num, chan, qty, price, notes, payment = null
   const taken = {};
   takeSaleStock(s, taken, qty);
   s.sold += qty;
-  if (!s.chStats[chan]) s.chStats[chan] = { txns: 0, units: 0, revenue: 0 };
-  s.chStats[chan].txns++; s.chStats[chan].units += qty;
+  const cs = channelStats(s, chan);
+  cs.txns++; cs.units += qty;
   const updatedNotes = notesWithInvoiceDiscount(s.invoices, num, notes);
 
   // Add to history with pending flag. directToArtist marks this as cash the
@@ -207,11 +208,18 @@ function voidHistEntry(s, book, h, { recompute = true } = {}) {
     s.sold = Math.max(0, s.sold - h.qty);
     if (!pendingRev) s.revenue = Math.max(0, s.revenue - h.qty * h.price);
   }
-  if (s.chStats[h.chan]) {
-    s.chStats[h.chan].txns = Math.max(0, s.chStats[h.chan].txns - 1);
-    s.chStats[h.chan].units = Math.max(0, s.chStats[h.chan].units - h.qty);
-    if (!pendingRev) s.chStats[h.chan].revenue = Math.max(0, s.chStats[h.chan].revenue - h.qty * h.price);
-    if (s.chStats[h.chan].txns <= 0) delete s.chStats[h.chan];
+  const cs = hasOwnChannel(s, h.chan) ? s.chStats[h.chan] : null;
+  if (cs) {
+    cs.txns = Math.max(0, cs.txns - 1);
+    cs.units = Math.max(0, cs.units - h.qty);
+    if (!pendingRev) cs.revenue = Math.max(0, cs.revenue - h.qty * h.price);
+    if (cs.txns <= 0) delete s.chStats[h.chan];
+  }
+  // A gratuity's (or comp's) marketing expense comes off with it, kept on the
+  // row so an un-void puts the same expense back.
+  if (h.gratuity) {
+    const ei = (s.expenses || []).findIndex(e => e && e.gratuity === true && e.ref === h.num);
+    if (ei !== -1) h.voidedExpense = s.expenses.splice(ei, 1)[0];
   }
   // Author-fulfilled sales took copies from the author's held stock; give them back.
   if (h.directToArtist || h.enteredBy === 'Artist') s.authorStock = (Number.isFinite(s.authorStock) ? s.authorStock : 0) + authorStockToReturn(h);
@@ -231,10 +239,16 @@ function unvoidHistEntry(s, book, h) {
     s.sold += h.qty;
     if (!h.artistPending) s.revenue += h.qty * h.price;
   }
-  if (!s.chStats[h.chan]) s.chStats[h.chan] = { txns: 0, units: 0, revenue: 0 };
-  s.chStats[h.chan].txns++;
-  s.chStats[h.chan].units += h.qty;
-  if (!h.artistPending) s.chStats[h.chan].revenue += h.qty * h.price;
+  const cs = channelStats(s, h.chan);
+  cs.txns++;
+  cs.units += h.qty;
+  if (!h.artistPending) cs.revenue += h.qty * h.price;
+  // The expense was spliced out of this state's expenses list, so the list
+  // exists; if it somehow doesn't, the expense stays parked on the row.
+  if (h.voidedExpense && Array.isArray(s.expenses)) {
+    s.expenses.unshift(h.voidedExpense);
+    delete h.voidedExpense;
+  }
   if (h.voidedTransfer) {
     s.artistTransfers = s.artistTransfers || [];
     s.artistTransfers.push(h.voidedTransfer);

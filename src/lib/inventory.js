@@ -2,6 +2,7 @@
 // imported anywhere and unit-tested in isolation.
 
 import { roundCents } from './money.js';
+import { channelStats } from './channel-mix.js';
 import { localDay } from './calendar-day.js';
 
 /** @typedef {import('../types/ledger').BookState} BookState */
@@ -297,10 +298,10 @@ export function recalculateBookStatsFromHistory(s) {
     if (h.voided) return;
     
     const chan = h.chan || 'Manual';
-    if (!s.chStats[chan]) s.chStats[chan] = { txns: 0, units: 0, revenue: 0 };
-    s.chStats[chan].txns++;
-    s.chStats[chan].units += num(h.qty);
-    if (!h.artistPending) s.chStats[chan].revenue = roundCents(s.chStats[chan].revenue + num(h.qty) * num(h.price));
+    const cs = channelStats(s, chan);
+    cs.txns++;
+    cs.units += num(h.qty);
+    if (!h.artistPending) cs.revenue = roundCents(cs.revenue + num(h.qty) * num(h.price));
 
     if (h.gratuity) return;
     s.sold += num(h.qty);

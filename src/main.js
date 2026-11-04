@@ -1107,7 +1107,7 @@ import {
   verifyUrl,
 } from './features/sheets-bridge.js';
 import { sheetTabKey } from './lib/sheet-sync.js';
-import { IN_PERSON_CHANNELS } from './lib/channel-mix.js';
+import { IN_PERSON_CHANNELS, channelStats, hasOwnChannel } from './lib/channel-mix.js';
 import { csvToObjects, toCsv } from './lib/csv.js';
 import { plainChanges, kindLabel, parseBuildDate, relativeWhen, dayHeading } from './lib/whats-new.js';
 import { downloadText, downloadCsv } from './lib/download.js';
@@ -2712,6 +2712,11 @@ async function deleteBook(id) {
   delete BOOKS[id];
   refreshBookList();
   delete states[id];
+  // The cloud copy this screen was built on is about to be deleted: a book
+  // re-added under the same id must not merge against it, or its first save
+  // would treat everything the old book also had as deleted.
+  delete screenBases[id];
+  delete lastSavedHashes[id];
   // Its changes still waiting to upload would write the deleted book back.
   if (syncQueue.some(item => item.bookId === id)) {
     syncQueue = syncQueue.filter(item => item.bookId !== id);
@@ -13092,20 +13097,21 @@ function saveHistEntryEdit(s, book) {
     s.stock += stockToReturn(old);
     s.sold -= old.qty;
     s.revenue -= old.qty * old.price;
-    if (s.chStats[old.chan]) {
-      s.chStats[old.chan].txns--;
-      s.chStats[old.chan].units -= old.qty;
-      s.chStats[old.chan].revenue -= old.qty * old.price;
-      if (s.chStats[old.chan].txns <= 0) delete s.chStats[old.chan];
+    if (hasOwnChannel(s, old.chan)) {
+      const oldCs = s.chStats[old.chan];
+      oldCs.txns--;
+      oldCs.units -= old.qty;
+      oldCs.revenue -= old.qty * old.price;
+      if (oldCs.txns <= 0) delete s.chStats[old.chan];
     }
     // Apply new effect
     takeSaleStock(s, h, newQty);
     s.sold += newQty;
     s.revenue += newQty * newPrice;
-    if (!s.chStats[newChan]) s.chStats[newChan] = { txns: 0, units: 0, revenue: 0 };
-    s.chStats[newChan].txns++;
-    s.chStats[newChan].units += newQty;
-    s.chStats[newChan].revenue += newQty * newPrice;
+    const newCs = channelStats(s, newChan);
+    newCs.txns++;
+    newCs.units += newQty;
+    newCs.revenue += newQty * newPrice;
   }
 
   // Update the record
