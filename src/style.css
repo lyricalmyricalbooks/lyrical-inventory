@@ -21573,3 +21573,27 @@ a.notif-action:hover { text-decoration: underline; }
 .author-subs-card { background: var(--surface-card); border: var(--stroke-hair) solid var(--border); border-left: var(--stroke) solid var(--amber); border-radius: var(--r2); padding: 1.25rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
 .author-subs-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .author-subs-title { font-weight: 600; color: var(--text2); margin-bottom: var(--space-1); display: flex; align-items: center; gap: var(--space-2); }
+
+/* Sorting rules — Tax Centre. The add row sits on one line on a wide screen
+   and stacks on a phone; the button keeps its full tap target either way. */
+.tc-rule-add{
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;
+  gap:var(--space-3);align-items:end;margin-bottom:var(--space-4);
+}
+.tc-rule-add .form-group{margin-bottom:0;}
+.tc-rules{list-style:none;margin:0;padding:0;border-top:var(--stroke-hair) solid var(--border-subtle);}
+.tc-rule-row{
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) auto;
+  gap:var(--space-3);align-items:center;
+  padding:var(--space-2) 0;border-bottom:var(--stroke-hair) solid var(--border-subtle);
+}
+.tc-rule-name{font-weight:600;color:var(--content-primary);overflow-wrap:anywhere;}
+.tc-rule-row-cat{width:100%;min-width:0;}
+@media (max-width:768px){
+  .tc-rule-add{grid-template-columns:1fr;}
+  .tc-rule-add .btn{width:100%;justify-content:center;min-height:44px;}
+  /* Name and Remove share the top line; the category gets the full width. */
+  .tc-rule-row{grid-template-columns:minmax(0,1fr) auto;}
+  .tc-rule-row-cat{grid-column:1 / -1;grid-row:2;min-height:44px;}
+  .tc-rule-row .btn{min-height:44px;}
+}
