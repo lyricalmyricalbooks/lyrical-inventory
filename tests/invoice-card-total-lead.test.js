@@ -101,3 +101,22 @@ test('the invoice actions column is styled by class, not by inline style', () =>
   expect(card[1]).toContain('<div class="inv-c-btns">');
   expect(card[1]).not.toMatch(/class="inv-c-actions"\s+style=/);
 });
+
+
+// The block that lets every invoice card share one set of columns.
+const block = html.match(/@media \(min-width:781px\)\{\s*@supports \(grid-template-columns:subgrid\)\{([\s\S]*?)\n\s*\}\s*\n\s*\}/);
+
+test('the invoice list owns the column tracks, so Issued, Due and Total line up card to card', () => {
+  expect(block, 'no wide-screen subgrid block for the invoice list').not.toBeNull();
+  const css = block[1];
+  // Gated on having cards, so the empty state keeps its plain block layout.
+  expect(css).toMatch(/#invoices-list:has\(> \.invoice-card\)\{display:grid;/);
+  // Same template as the per-card fallback, and the same column gap.
+  expect(css).toMatch(/grid-template-columns:auto minmax\(0,1\.6fr\) 1fr 1fr minmax\(124px,1fr\) auto;column-gap:var\(--space-4\);/);
+  // Each card spans the list and borrows its tracks instead of sizing its own.
+  expect(css).toMatch(/#invoices-list > \.invoice-card\{grid-column:1 \/ -1;grid-template-columns:subgrid;\}/);
+});
+
+test('the per-card template stays as the fallback for engines without subgrid', () => {
+  expect(html).toMatch(/\.invoice-card\{[^}]*grid-template-columns:auto minmax\(0,1\.6fr\) 1fr 1fr minmax\(124px,1fr\) auto;/);
+});

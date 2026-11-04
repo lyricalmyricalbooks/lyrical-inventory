@@ -436,6 +436,17 @@ inset) and republishes on resize. It falls back to `0px` everywhere it can't mea
 wrap falls back to `overflow:hidden` on engines without `overflow: clip`, so both degrade to
 today's plain header rather than to a broken one.
 
+### A stack of grid cards that should read as columns — let the list own the tracks
+When each card in a list is its own grid with `auto` tracks (an id column, an action
+column), any card with a wider id or one extra button resizes its own tracks and shoves its
+figures sideways, so nothing lines up down the stack. Give the *list* the
+`grid-template-columns`, gate it on `:has(> .card)` so an empty state keeps its block layout,
+and make each card `grid-column:1 / -1; grid-template-columns:subgrid` inside
+`@supports (grid-template-columns:subgrid)`, keeping the per-card template as the fallback.
+Match the list's `column-gap` to the card's. Same pattern as the channel legend
+(`.ch-legend`/`.ch-leg-row`); the consignment invoice list (`#invoices-list`) uses it, pinned
+by `tests/invoice-card-total-lead.test.js`.
+
 ### Several action buttons in a table row — one line, stacked only when it must
 
 Two full-target buttons in an Action cell that are left to `flex-wrap` fold into a stack the

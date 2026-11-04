@@ -233,6 +233,18 @@
   .invoice-card .inv-status.paid{background:var(--status-positive-bg);color:var(--status-positive);}
   .invoice-card .inv-status.overdue{background:var(--status-critical-bg);color:var(--status-critical);}
   .invoice-card .inv-status.cancelled{background:var(--status-neutral-bg);color:var(--status-neutral);text-decoration:line-through;}
+  /* One set of columns for the whole stack. Each card used to size its own
+     `auto` tracks, so a card with a Remind button (a wider action column) or a
+     longer invoice number pushed its Issued, Due and Total columns sideways and
+     no two rows lined up. The list now owns the tracks and every card borrows
+     them as a subgrid; the per-card template above stays as the fallback.
+     Gated on :has(> .invoice-card) so the empty state keeps its block layout. */
+  @media (min-width:781px){
+    @supports (grid-template-columns:subgrid){
+      #invoices-list:has(> .invoice-card){display:grid;grid-template-columns:auto minmax(0,1.6fr) 1fr 1fr minmax(124px,1fr) auto;column-gap:var(--space-4);}
+      #invoices-list > .invoice-card{grid-column:1 / -1;grid-template-columns:subgrid;}
+    }
+  }
   @media (max-width:780px){
     /* Stacked, every cell is full width — a right-aligned total would float
        away from the column of left-aligned labels above it. */
