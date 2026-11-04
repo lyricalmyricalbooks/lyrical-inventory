@@ -7,7 +7,8 @@ import { computeCashFlowMetrics } from '../src/lib/cashflow.js';
 import { planCurrencyChange, applyCurrencyChange } from '../src/lib/currency-migration.js';
 import { appSource } from './helpers/extract-decl.js';
 import { csvCell } from '../src/lib/csv.js';
-import { getBookCurrencyCode } from '../src/lib/money.js';
+import { getBookCurrencyCode, roundCents } from '../src/lib/money.js';
+import { datedCadRate, saleCadAmounts } from '../src/lib/sale-fx.js';
 import { payoutNetted } from '../src/lib/earnings.js';
 
 const book = { title: 'Harbour', currency: 'CA$', profitTiers: [{ artistPct: 13 }] };
@@ -164,7 +165,7 @@ describe('a linked author settlement', () => {
     let csv = '';
     const deps = { document: { getElementById: () => ({ value: '2026' }) }, today: () => '2026-10-08',
       csvCell, BOOK_LIST: [{ ...book, id: 'harbour' }], states: { harbour: s }, defaultState: () => ({}),
-      getBookCurrencyCode, _fxRateCache: {}, isTestBook: () => false, isTestBookId: () => false,
+      getBookCurrencyCode, roundCents, datedCadRate, saleCadAmounts, _fxRateCache: {}, isTestBook: () => false, isTestBookId: () => false,
       filterArtistEarningsByYear: () => 0, payoutNetted, TAX_CENTER: { businessExpenses: [] },
       downloadCsv: content => { csv = content; }, showToast: () => {} };
     new Function(...Object.keys(deps), source)(...Object.values(deps));
