@@ -50,11 +50,14 @@ import { csvCell, toCsv } from '../lib/csv.js';
 import { downloadCsv } from '../lib/download.js';
 import { payoutNetted } from '../lib/earnings.js';
 import { canonicalExpenseCategory } from '../lib/expense-categories.js';
+import { addExpenseRule, cleanExpenseRules, findExpenseRule, removeExpenseRule } from '../lib/expense-rules.js';
+import { registerActions } from '../lib/actions.js';
 import { expensesRepaidBySettlement } from '../lib/receipt-storage.js';
 import { escapeHtml } from '../lib/html.js';
 import { closeM, confirmDialog, openM, promptDialog } from '../lib/modal.js';
 import { fmt, getBookCurrencyCode, getSym, roundCents, setSelectCurrency } from '../lib/money.js';
 import { followableUrl } from '../lib/receipt-links.js';
+import { datedCadRate, saleCadAmounts } from '../lib/sale-fx.js';
 import {
   _localReceiptCell,
   _runReceiptScan,
@@ -890,6 +893,7 @@ async function submitTaxExpense() {
       : (trip ? `✓ Logged to trip: ${trip}` : '✓ Business Expense logged'));
   }
   $('tc-exp-desc').value = ''; $('tc-exp-amount').value = ''; $('tc-exp-date').value = today();
+  resetCategoryAutofill('tc-exp-cat', 'tc-exp-cat-hint');
   if ($('tc-exp-trip')) $('tc-exp-trip').value = '';
   if (fileInput) fileInput.value = '';
   if (typeof window.tcExpFileChosen === 'function') window.tcExpFileChosen();
@@ -962,21 +966,193 @@ const TAX_CATEGORIES = {
   'fair': 'Events & Exhibitions',
 };
 
-function _tcWireSmartCategory() {
-  const descInput = document.getElementById('tc-exp-desc');
-  if (descInput) {
-    descInput.addEventListener('input', (e) => {
-      const val = e.target.value.toLowerCase();
-      const catSelect = document.getElementById('tc-exp-cat');
-      if (!catSelect) return;
-      for (const keyword in TAX_CATEGORIES) {
-        if (val.includes(keyword)) {
-          catSelect.value = TAX_CATEGORIES[keyword];
-          break;
-        }
-      }
-    });
+/**
+ * The category an expense description suggests, or '' for none. A keyword
+ * counts only as a whole word (a plural 's'/'es' allowed), so "ink" doesn't
+ * fire inside "Drinks"; and the longest matching keyword wins, so "Uber Eats
+ * lunch" is a meal, not travel — the rule categoryFromName uses.
+ */
+function _tcGuessCategory(text) {
+  const hay = String(text || '').toLowerCase();
+  let best = '';
+  let bestLen = 0;
+  for (const keyword in TAX_CATEGORIES) {
+    if (keyword.length <= bestLen) continue;
+    const word = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp(`(?:^|[^a-z0-9])${word}(?:e?s)?(?![a-z0-9])`).test(hay)) {
+      best = TAX_CATEGORIES[keyword];
+      bestLen = keyword.length;
+    }
   }
+  return best;
+}
+
+/** The categories a <select> offers, as their visible names. */
+function _offeredCategories(sel) {
+  return Array.from(sel?.options || []).map(o => (o.value || o.textContent || '').trim());
+}
+
+/**
+ * Pre-fill an expense form's category as its description is typed: the
+ * owner's own sorting rules first, then (on the Tax Centre form only) the
+ * built-in keyword list.
+ *
+ * The owner always has the last word. Once the picker is changed by anything
+ * other than this listener (a tap, or a receipt scan's choice), typing stops
+ * moving it until the expense is logged and the form is reset.
+ */
+function _wireCategoryAutofill(descId, catId, hintId, { keywords = false } = {}) {
+  const descInput = document.getElementById(descId);
+  const catSelect = document.getElementById(catId);
+  if (!descInput || !catSelect || descInput.dataset.categoryAutofill) return;
+  descInput.dataset.categoryAutofill = '1';
+  const hint = document.getElementById(hintId);
+  const say = text => { if (hint) { hint.textContent = text; hint.hidden = !text; } };
+
+  catSelect.addEventListener('change', () => {
+    if (catSelect.value === catSelect.dataset.autoValue) return;
+    catSelect.dataset.handPicked = '1';
+    say('');
+  });
+  descInput.addEventListener('input', (e) => {
+    if (catSelect.dataset.handPicked) return;
+    const text = e.target.value;
+    const set = cat => { catSelect.value = cat; catSelect.dataset.autoValue = catSelect.value; };
+    const hit = findExpenseRule(TAX_CENTER.expenseRules, { description: text }, { allowed: _offeredCategories(catSelect) });
+    if (hit) {
+      set(hit.category);
+      say(`Sorted by your rule for "${hit.rule.match}". You can still pick another.`);
+      return;
+    }
+    say('');
+    if (keywords) {
+      const cat = _tcGuessCategory(text);
+      if (cat) set(cat);
+    }
+  });
+}
+
+/** After an expense is logged: typing may pre-fill the category again. */
+function resetCategoryAutofill(catId, hintId) {
+  const catSelect = document.getElementById(catId);
+  if (catSelect) { delete catSelect.dataset.handPicked; delete catSelect.dataset.autoValue; }
+  const hint = document.getElementById(hintId);
+  if (hint) { hint.textContent = ''; hint.hidden = true; }
+}
+
+function _tcWireSmartCategory() {
+  _wireCategoryAutofill('tc-exp-desc', 'tc-exp-cat', 'tc-exp-cat-hint', { keywords: true });
+  _wireCategoryAutofill('exp-desc', 'exp-cat', 'exp-cat-hint');
+}
+
+
+// ── Sorting rules card ─────────────────────────────────────────────────
+// Where the owner says which category a shop's expenses go under. The
+// matching itself is pure and lives in src/lib/expense-rules.js; this only
+// draws the list and saves changes. Handlers are registered on the first
+// render, so nothing here runs at import time.
+let _rulesWired = false;
+
+/** Every category an expense form offers, "Other" last. */
+function ruleCategories() {
+  const all = [...new Set([..._offeredCategories($('tc-exp-cat')), ...TC_CATEGORIES])].filter(c => c && c !== 'Other');
+  return [...all, 'Other'];
+}
+
+function categoryOptions(selected) {
+  const cats = ruleCategories();
+  // A rule saved under a category that has since been renamed keeps showing it.
+  if (selected && !cats.includes(selected)) cats.unshift(selected);
+  return cats.map(c => `<option${c === selected ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('');
+}
+
+// Saved the way every other Tax Centre change is: the rule shows at once, and
+// the save reports its own trouble (offline it waits on the device and
+// uploads later), so a failed upload never takes a rule off the screen.
+function commitRules(rules, message) {
+  TAX_CENTER.expenseRules = rules;
+  renderExpenseRules();
+  saveTaxCenter();
+  if (message) showToast(message);
+}
+
+function addRuleFromForm() {
+  const input = document.getElementById('tc-rule-match');
+  const select = document.getElementById('tc-rule-cat');
+  if (!input || !select) return;
+  const result = addExpenseRule(TAX_CENTER.expenseRules, { match: input.value, cat: select.value });
+  if (result.error) {
+    showToast(`⚠ ${result.error}`, 'warn');
+    input.focus();
+    return;
+  }
+  const { rule, replaced } = result;
+  commitRules(result.rules, replaced
+    ? `✓ "${rule.match}" now goes under ${rule.cat} (was ${replaced})`
+    : `✓ New expenses mentioning "${rule.match}" will go under ${rule.cat}`);
+  input.value = '';
+  input.focus();
+}
+
+async function removeRule(id) {
+  const rule = cleanExpenseRules(TAX_CENTER.expenseRules).find(r => String(r.id) === String(id));
+  if (!rule) return;
+  const ok = await confirmDialog(
+    `Stop sorting "${rule.match}" under ${rule.cat}?\n\nExpenses already logged keep their category.`,
+    { title: 'Remove this rule?', okLabel: 'Remove rule', cancelLabel: 'Keep it' },
+  );
+  if (!ok) return;
+  commitRules(removeExpenseRule(TAX_CENTER.expenseRules, id), `✓ Rule for "${rule.match}" removed`);
+}
+
+function recategorizeRule(id, cat) {
+  const rules = cleanExpenseRules(TAX_CENTER.expenseRules);
+  const rule = rules.find(r => String(r.id) === String(id));
+  if (!rule || !cat || rule.cat === cat) return;
+  const next = rules.map(r => (r === rule ? { ...r, cat, updatedAt: new Date().toISOString() } : r));
+  commitRules(next, `✓ "${rule.match}" now goes under ${cat}`);
+}
+
+function _wireRulesCard() {
+  if (_rulesWired) return;
+  _rulesWired = true;
+  registerActions({
+    'rules.add': () => addRuleFromForm(),
+    'rules.remove': el => removeRule(el.dataset.id),
+    'rules.recat': el => recategorizeRule(el.dataset.id, el.value),
+  });
+  // Enter in the text box adds the rule, the same as the button.
+  document.getElementById('tc-rule-match')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); addRuleFromForm(); }
+  });
+}
+
+/** Draw the card's add form options and its list of rules. */
+function renderExpenseRules() {
+  const list = document.getElementById('tc-rules-list');
+  if (!list) return;
+  _wireRulesCard();
+
+  const select = document.getElementById('tc-rule-cat');
+  if (select && !select.options.length) select.innerHTML = categoryOptions('Software & Subscriptions');
+
+  const rules = cleanExpenseRules(TAX_CENTER.expenseRules);
+  if (!rules.length) {
+    list.innerHTML = '<div class="empty-state" style="padding:1rem;">No rules yet. Try one for a shop you buy from often, like "Canva" under Software &amp; Subscriptions.</div>';
+    return;
+  }
+  const rows = [...rules]
+    .sort((a, b) => a.match.localeCompare(b.match, undefined, { sensitivity: 'base' }))
+    .map(r => {
+      const id = escapeHtml(String(r.id));
+      const name = escapeHtml(r.match);
+      return `<li class="tc-rule-row">
+        <span class="tc-rule-name">${name}</span>
+        <select class="tc-rule-row-cat" aria-label="Category for ${name}" data-on-change="rules.recat" data-id="${id}">${categoryOptions(r.cat)}</select>
+        <button type="button" class="btn danger-btn sm" data-action="rules.remove" data-id="${id}" aria-label="Remove the rule for ${name}">Remove</button>
+      </li>`;
+    }).join('');
+  list.innerHTML = `<ul class="tc-rules" aria-label="Your sorting rules">${rows}</ul>`;
 }
 
 // ── Tax Centre keyboard shortcuts ──────────────────────────────────────
@@ -1025,32 +1201,39 @@ function downloadFullTaxSeasonExport() {
     if (isExpenseAwaitingRate(e)) { waitingExpenses.add(e); return 0; }
     return parseFloat(e.baseAmount || e.amountCAD || e.amount || 0);
   };
-  const flagRateIfMissing = (book, cur, rawRate, hasAmount) => {
-    if (hasAmount && cur && cur !== 'CAD' && !rawRate) rateWarnings.set(book.id, { title: book.title, cur });
+  const flagRateIfMissing = (book, cur, rateMissing, hasAmount) => {
+    if (hasAmount && cur && cur !== 'CAD' && rateMissing) rateWarnings.set(book.id, { title: book.title, cur });
   };
 
   // Section 1: Revenue by Book
   csv += '--- REVENUE BY BOOK ---\n';
-  csv += 'Book Title,Gross Revenue,Net Revenue (after COGS & Royalty),Total Units Sold\n';
+  csv += 'Book Title,Gross Revenue (CAD; incl. customer shipping),Net Revenue (after COGS & Royalty),Total Units Sold\n';
 
   BOOK_LIST.forEach(book => {
     if (isTestBook(book) || isTestBookId(book.id)) return;
     const s = states[book.id] || defaultState(book);
-    // Sales + royalty are recorded in the book's native currency; convert to the
-    // export's base (CAD) so they're comparable with the CAD expense figures.
+    // Sales are recorded in the book's native currency. Each is converted to
+    // CAD at its own date's rate, and customer shipping (already CAD, never
+    // converted) is added, exactly as the Tax Centre's gross sales are
+    // (lib/sale-fx.js), so the two figures agree for the same year.
     const cur = getBookCurrencyCode(book);
-    const rawRate = _fxRateCache[`${cur}_CAD`];
+    // Royalty is a running total with no single date, so it stays at today's rate.
+    const rawRate = cur === 'CAD' ? 1 : _fxRateCache[`${cur}_CAD`];
     const hRate = rawRate || 1;
 
     // ⚡ Bolt Optimization: Loop Fusion - Compute sold and revenue in a single pass without intermediate array allocation
     let sold = 0;
-    let revenue = 0;
+    let revenueCAD = 0;
+    let saleRateMissing = false;
     for (let i = 0; i < s.hist.length; i++) {
       const h = s.hist[i];
-      if (h.voided || h.gratuity) continue;
+      if (h.voided) continue;
+      if (h.artistPending) continue; // not in the Tax Centre's gross sales either
       if (!isAllTime && (!h.date || !h.date.startsWith(year))) continue;
-      sold += (h.qty || 0);
-      revenue += ((h.qty || 0) * (h.price || 0));
+      const fx = saleCadAmounts(h, cur, _fxRateCache);
+      revenueCAD = roundCents(revenueCAD + fx.merchandiseCad + fx.shippingCad);
+      if (fx.missing && fx.merchandise > 0) saleRateMissing = true;
+      if (!h.gratuity) sold += (h.qty || 0);
     }
 
     // ⚡ Bolt Optimization: Loop Fusion - Compute expTotal in a single pass without intermediate array allocation
@@ -1073,11 +1256,11 @@ function downloadFullTaxSeasonExport() {
     }
 
     // expTotal is already CAD (uses each expense's stored baseAmount); convert
-    // the native-currency revenue + royalty before subtracting so net is all-CAD.
-    const revenueCAD = revenue * hRate;
+    // the native-currency royalty before subtracting so net is all-CAD.
     const sharesCAD = shares * hRate;
     const net = revenueCAD - expTotal - sharesCAD;
-    flagRateIfMissing(book, cur, rawRate, revenue > 0 || shares > 0);
+    flagRateIfMissing(book, cur, saleRateMissing, true);
+    flagRateIfMissing(book, cur, !rawRate, shares > 0);
     csv += `${esc(book.title)},${revenueCAD.toFixed(2)},${net.toFixed(2)},${sold}\n`;
   });
 
@@ -1090,8 +1273,6 @@ function downloadFullTaxSeasonExport() {
     if (isTestBook(book) || isTestBookId(book.id)) return;
     const s = states[book.id] || defaultState(book);
     const cur = getBookCurrencyCode(book);
-    const rawRate = _fxRateCache[`${cur}_CAD`];
-    const hRate = rawRate || 1;
 
     // Book Expenses
     (s.expenses || []).filter(e => {
@@ -1114,10 +1295,12 @@ function downloadFullTaxSeasonExport() {
       return p.date && p.date.startsWith(year);
     }).forEach(p => {
       // `amount` is in the book's native currency — convert to CAD to match the
-      // column header.
+      // column header, at the payout's own date's rate as the Tax Centre does.
       const payoutRaw = parseFloat(p.amount || 0);
-      flagRateIfMissing(book, cur, rawRate, payoutRaw > 0);
-      const payoutCAD = payoutRaw * hRate;
+      const pFx = datedCadRate(cur, p.date, _fxRateCache);
+      const hRate = pFx.rate;
+      flagRateIfMissing(book, cur, pFx.missing, payoutRaw > 0);
+      const payoutCAD = roundCents(payoutRaw * hRate);
       if (p.settlement) {
         csv += `${p.date},${esc(book.title)},"Earnings settled",${esc('Royalty credit including earnings retained from held sales; see settlement cash section for the actual payment')},${payoutCAD.toFixed(2)},""\n`;
         return;
@@ -1208,6 +1391,8 @@ export {
   showCategoryDetail,
   TAX_CATEGORIES,
   initTaxEntries,
+  renderExpenseRules,
+  resetCategoryAutofill,
   snapReceipt,
   snapReceiptChosen,
   downloadFullTaxSeasonExport,

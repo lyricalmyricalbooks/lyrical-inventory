@@ -12,7 +12,7 @@
 // Canada Post's answer, and what to tell the publisher. Pure — no network, no
 // DOM, no ledger — so the rules can be tested directly. shipping.js asks.
 
-import { DAY, dayMs } from './calendar-day.js';
+import { DAY, dayMs, localDay } from './calendar-day.js';
 import { looksLikeCanadaPostPin, normalizeTrackingPin } from './tracking-audit.js';
 
 /** Parcels older than this are history: delivered, lost, or settled some other way. */
@@ -61,7 +61,9 @@ export function shipmentsToFollow(rows = [], { now = Date.now(), batch = DELIVER
   return picked.slice(0, Math.max(0, batch));
 }
 
-const DELIVERED = /\bdelivered\b|\bitem (was )?delivered\b|\blivr[ée]\b/i;
+// The French ending is checked with a lookahead: \b treats "é" as a
+// non-word character, so "livré" at the end of a line never matched.
+const DELIVERED = /\bdelivered\b|\bitem (was )?delivered\b|\blivr[ée]e?(?![a-z0-9_à-ÿ])/i;
 const NOT_DELIVERED = /\bnot delivered\b|\bundeliver|\bcould not be delivered\b|\bunable to deliver\b/i;
 const RETURNING = /return(ed|ing)? to (sender|shipper)|\bundeliverable\b|\brefused\b/i;
 const PICKUP = /notice card|ready for pick ?up|available for pick ?up|attempted|held at|pick ?up at/i;
@@ -88,7 +90,7 @@ export function readDelivery(result, { now = Date.now(), shippedDate = '' } = {}
 
   const actual = String(result.actualDeliveryDate || '').slice(0, 10);
   if (actual || (DELIVERED.test(status) && !NOT_DELIVERED.test(status))) {
-    return { ...base, state: 'delivered', deliveredDate: actual || eventDate || new Date(now).toISOString().slice(0, 10) };
+    return { ...base, state: 'delivered', deliveredDate: actual || eventDate || localDay(now) };
   }
   if (RETURNING.test(status)) return { ...base, state: 'returning' };
   if (PICKUP.test(status) || result.attemptedDate) return { ...base, state: 'pickup' };

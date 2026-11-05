@@ -29,6 +29,10 @@ describe('which orders may be recorded unattended', () => {
     expect(autoRecordBlocker(order({ status: 'refunded' }), exact, { now: NOW })).toBe('refunded');
   });
 
+  it('treats a refund marked only on the payment as a refund too', () => {
+    expect(autoRecordBlocker(order({ status: 'completed', payment_status: 'refunded' }), exact, { now: NOW })).toBe('refunded');
+  });
+
   it('holds an order more than a month old — likely entered by hand already', () => {
     expect(autoRecordBlocker(order({ created_at: '2026-08-01T10:00:00Z' }), exact, { now: NOW })).toBe('too-old');
   });

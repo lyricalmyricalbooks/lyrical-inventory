@@ -9,6 +9,7 @@
 import { getBookCurrencyCode, roundCents } from './money.js';
 import { saleCadAmounts, datedCadRate } from './sale-fx.js';
 import { payoutDebtCollected } from './earnings.js';
+import { isTestBookEntry } from './test-book.js';
 
 const yearOf = (d) => (d ? String(d).substring(0, 4) : '');
 const monthOf = (d) => (d ? String(d).substring(0, 7) : '');
@@ -37,7 +38,7 @@ export function computeCashFlowMetrics(sources, yearFilter) {
   let unitsSold = 0;
 
   Object.keys(books).forEach((bid) => {
-    if (bid.toLowerCase().includes('test') || books[bid]?.title?.toLowerCase()?.includes('test')) return;
+    if (isTestBookEntry(bid, books[bid])) return;
     const s = states[bid] || {};
     const b = books[bid] || {};
     const cur = getBookCurrencyCode(b);
@@ -90,7 +91,9 @@ export function computeCashFlowMetrics(sources, yearFilter) {
       artistDebtRecovered = roundCents(artistDebtRecovered + payoutDebtCollected(p) * hRate);
       if (p.settlement) {
         const receipt = p.settlement;
-        const cashRate = fxRateCache[`${receipt.cur}_CAD`] || 1;
+        // The settlement's cash at its own date's rate, like the payout line
+        // above — not today's, which would move a closed year's totals.
+        const cashRate = datedCadRate(receipt.cur || cur, p.date, fxRateCache).rate;
         const cash = receipt.balance.direction === 'to-publisher' ? receipt.balance.amount
           : receipt.balance.direction === 'to-artist' ? -receipt.balance.amount : 0;
         // Expenses it paid back are already operating expenses on their own

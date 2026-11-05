@@ -534,3 +534,14 @@ describe('Apps Script attachment support (v43)', () => {
     expect(published).toBe(gas);
   });
 });
+
+describe('the "Chased" / "Reminded" date on an invoice', () => {
+  // toISOString() is the UTC day: a reminder sent at 8pm in Toronto read as
+  // tomorrow. The day shown must be the publisher's own calendar day.
+  const src = readFileSync(path.join(__dirname, '../src/features/invoices.js'), 'utf8');
+  it('uses the local calendar day, never the UTC one', () => {
+    expect(src).not.toMatch(/lastAt\)\.toISOString\(\)/);
+    expect(src).toContain('localDay(remState.lastAt)');
+    expect(src).toContain('localDay(chase.lastAt)');
+  });
+});

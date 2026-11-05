@@ -5,6 +5,7 @@ import { payoutNetted, payoutDebtCollected } from '../src/lib/earnings.js';
 import { saleCadAmounts, datedCadRate } from '../src/lib/sale-fx.js';
 import { reconcileConsignmentMirrors } from '../src/lib/consignment.js';
 import { canonicalExpenseCategory } from '../src/lib/expense-categories.js';
+import { isTestBookEntry } from '../src/lib/test-book.js';
 
 // The Tax Centre had no behavioural coverage at all — before the extraction or
 // after it. Everything guarding it was structural: that its functions exist,
@@ -57,11 +58,11 @@ const TAX_CENTER = {
 // EUR sells at 1.50 CAD so the conversion is visible in the totals.
 const _fxRateCache = { EUR_CAD: 1.5, CAD_CAD: 1 };
 
-function buildLedger(year, extraState = {}, { fxCache = _fxRateCache, statesOverride } = {}) {
+function buildLedger(year, extraState = {}, { fxCache = _fxRateCache, statesOverride, booksOverride } = {}) {
   const fn = buildHarness({
     names: ['_tcBuildLedger'],
     deps: {
-      BOOKS,
+      BOOKS: booksOverride || BOOKS,
       states: JSON.parse(JSON.stringify({ ...(statesOverride || states), ...extraState })),
       TAX_CENTER: JSON.parse(JSON.stringify(TAX_CENTER)),
       _fxRateCache: fxCache,
@@ -71,7 +72,7 @@ function buildLedger(year, extraState = {}, { fxCache = _fxRateCache, statesOver
       getBookCurrencyCode,
       fmt, roundCents, payoutNetted, payoutDebtCollected,
       reconcileConsignmentMirrors,
-      canonicalExpenseCategory,
+      canonicalExpenseCategory, isTestBookEntry,
       today: () => '2026-07-27',
     },
     returns: '_tcBuildLedger',
@@ -125,6 +126,21 @@ describe('Tax Centre ledger', () => {
     expect(allLedger.some(r => /Test Profile/.test(r.desc || ''))).toBe(false);
     expect(totalGrossSales).toBeLessThan(1000);
     expect(totalOperatingExpenses).toBeLessThan(1000);
+  });
+
+  it('keeps real books whose title merely contains "test"', () => {
+    // "The Greatest Hits", "Protest Songs", "Testament" used to vanish from
+    // every tax figure and export because of a substring match on "test".
+    const sale = { hist: [{ date: '2026-03-04', num: 'G1', qty: 1, price: 20, chan: 'Direct' }], expenses: [], stores: [], ledger: [] };
+    const booksOverride = {
+      greatest: { id: 'greatest', title: 'The Greatest Hits', currency: 'CA$' },
+      protest: { id: 'protest', title: 'Protest Songs', currency: 'CA$' },
+      testament: { id: 'testament', title: 'Testament', currency: 'CA$' },
+      test1: BOOKS.test1,
+    };
+    const statesOverride = { greatest: sale, protest: sale, testament: sale, test1: states.test1 };
+    const { totalGrossSales } = buildLedger('2026', {}, { booksOverride, statesOverride });
+    expect(totalGrossSales).toBe(60); // three real books x 20; the sandbox's 99 x 999 stays out
   });
 
   it('includes per-book expenses and tax-centre business expenses', () => {

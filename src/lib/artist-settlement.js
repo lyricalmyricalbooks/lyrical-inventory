@@ -122,8 +122,12 @@ export function planArtistSettlement(book, state) {
     !h.voided && !h.gratuity && h.artistPending && h.qty > 0 && h.price > 0
       ? [{ key: keys[i] }] : []);
   const heldKeys = new Set(heldSales.map(r => r.key));
-  const heldNums = new Set((state.hist || []).filter((h, i) => heldKeys.has(keys[i])).map(h => h.num));
-  const transfers = (state.artistTransfers || []).filter(t => heldNums.has(t.num));
+  const heldRows = (state.hist || []).filter((h, i) => heldKeys.has(keys[i]));
+  const heldIds = new Set(heldRows.map(h => h.sheetsId).filter(Boolean));
+  const heldNums = new Set(heldRows.map(h => h.num));
+  // A transfer names its own sale by sheet id; the order number is only the
+  // fallback for one saved without it (two held sales can share a number).
+  const transfers = (state.artistTransfers || []).filter(t => (t.sheetsId ? heldIds.has(t.sheetsId) : heldNums.has(t.num)));
   const offsets = appliedOffsets(state.artistPayouts, state.artistReceivables);
   const payments = appliedReceivablePayments(state.artistPayouts, state.artistReceivables);
   const receivablePayments = (state.artistReceivables || []).flatMap(r => {
@@ -307,8 +311,13 @@ export function undoArtistSettlement(state, id) {
   const transfers = (state.artistTransfers ||= []);
   for (const original of record.settlement.transfers) {
     if (transfers.some(t => String(t.id) === String(original.id))) continue;
-    const h = rows.find(h => h.num === original.num);
-    if (!h.artistPending) continue; // another reviewed settlement still covers it
+    // The transfer's own sale: by sheet id, else by number and copies, else by
+    // number. Two held sales under one order number must each get their own
+    // total back, not both the first one's.
+    const h = (original.sheetsId && rows.find(r => r.sheetsId === original.sheetsId))
+      || rows.find(r => r.num === original.num && Number(r.qty) === Number(original.qty))
+      || rows.find(r => r.num === original.num);
+    if (!h || !h.artistPending) continue; // another reviewed settlement still covers it
     const restored = { ...structuredClone(original), price: h.price, total: roundCents(h.qty * h.price) };
     if (h.payment) restored.payment = structuredClone(h.payment);
     if (h.cur) restored.cur = h.cur;

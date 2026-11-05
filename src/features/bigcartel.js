@@ -1531,6 +1531,13 @@ function bigCartelLedgerNumbers() {
     const num = normalizeShippingOrderNumber(order.num || order.orderNum);
     if (num) nums.add(num);
   });
+  // A website sale recorded and then voided (refunded, say) was still seen:
+  // offering it again would record the reversed sale a second time.
+  Object.values(states).forEach(state => (state?.hist || []).forEach(h => {
+    if (!h || !h.voided || h.chan !== 'Website') return;
+    const num = normalizeShippingOrderNumber(h.num);
+    if (num) nums.add(num);
+  }));
   const mem = getScanMemory();
   (mem.appliedNums || []).forEach(value => {
     const num = normalizeShippingOrderNumber(value);

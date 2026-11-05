@@ -18,6 +18,8 @@
 // plus the Windows device names, and lengths are bounded well under the 255-byte
 // limit every common filesystem shares.
 
+import { localDay } from './calendar-day.js';
+
 /** Longest a single path segment may be, leaving room for a `-2` suffix. */
 export const MAX_SEGMENT_LENGTH = 120;
 
@@ -117,8 +119,10 @@ export function datePart(date, now = new Date()) {
   const iso = raw.match(/^(\d{4}-\d{2}-\d{2})/);
   if (iso) return iso[1];
   const parsed = raw ? new Date(raw) : null;
-  if (parsed && !isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
-  return now.toISOString().slice(0, 10);
+  // The day on the owner's own clock: a UTC day rolls over in the evening
+  // in Canada, filing a receipt under tomorrow.
+  if (parsed && !isNaN(parsed.getTime())) return localDay(parsed);
+  return localDay(now);
 }
 
 /** The year a receipt files under — the tax year, so the expense date wins. */

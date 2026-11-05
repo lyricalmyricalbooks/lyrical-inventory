@@ -169,6 +169,15 @@ describe('category from the filename', () => {
     expect(categoryFromName('receipt from the post office.pdf', KEYWORDS)).toBe('Shipping & Postage');
   });
 
+  it('matches whole words only, so a bar tab is not filed as Office Supplies', () => {
+    const map = { ...KEYWORDS, ink: 'Office Supplies', drinks: 'Travel & Meals' };
+    expect(categoryFromName('2026-10-02_Drinks_with_bookseller.pdf', map)).toBe('Travel & Meals');
+    expect(categoryFromName('Pinkerton receipt.pdf', map)).toBe('');
+    expect(categoryFromName('compost order.pdf', KEYWORDS)).toBe('');
+    expect(categoryFromName('2026-10-02_Ink_cartridges.pdf', map)).toBe('Office Supplies');
+    expect(categoryFromName('2 hotels in Montreal.pdf', KEYWORDS)).toBe('Travel & Meals');
+  });
+
   it('returns nothing rather than guessing', () => {
     expect(categoryFromName('receipt_c917c7a6.pdf', KEYWORDS)).toBe('');
   });

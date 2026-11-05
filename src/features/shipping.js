@@ -4128,10 +4128,15 @@ async function onShippoPreFillDestChange() {
     $('st-city').value = addr.city || '';
     $('st-state').value = addr.state || '';
     $('st-zip').value = addr.zip || '';
-    $('st-country').value = addr.country || 'US';
+    // An order whose country is missing or unreadable stays blank, so the
+    // readiness line asks for it — defaulting to the US quoted and bought a US
+    // label for a parcel bound somewhere else.
+    $('st-country').value = resolveCountryCode(addr.country) || '';
     onShippoDestCountryChange();
     // A verdict belongs to one address; loading a different one retires it.
     dismissAddressVerification();
+    // Canada Post prices on screen were quoted for the previous destination.
+    hideCanadaPostRatesCard();
     // Fields written in code fire no input event, so the readiness line has to
     // be told the destination just filled itself in.
     renderShippoRateReadiness();
@@ -4828,7 +4833,16 @@ function saveShippoIncotermPreference(destCountryCode) {
 function onShippoDestCountryChange() {
   loadShippoIncotermPreference($('st-country')?.value || '');
   const sfCountryCode = $('sf-country')?.value || 'CA';
-  const stCountryCode = normalizeCountryCode($('st-country')?.value || 'US');
+  const stCountryCode = resolveCountryCode($('st-country')?.value || '');
+
+  // No country chosen yet: nothing to prepay or estimate duties for.
+  if (!stCountryCode) {
+    for (const id of ['us-zonos-duty-card', 'zonos-duty-card']) {
+      const el = $(id);
+      if (el) el.style.display = 'none';
+    }
+    return;
+  }
 
   // Toggle US Zonos Duty Prepayment Card
   const usCard = $('us-zonos-duty-card');
@@ -5615,7 +5629,8 @@ function chitChatsFormPayload() {
   if (!Number.isInteger(quantity) || quantity < 1 || !Number.isFinite(unitValue) || unitValue <= 0) throw new Error('Check the number of copies and the declared value per copy.');
   const weight = Number(value('sp-weight'));
   const weightUnit = value('sp-weight-unit');
-  const country = normalizeCountryCode(value('st-country'));
+  const country = resolveCountryCode(value('st-country'));
+  if (!country) throw new Error('Choose the recipient’s country before requesting rates.');
   const description = value('sp-customs-description');
   const { first, last } = chitChatsShipDateRange();
   const shipDate = value('cc-ship-date') || first;
@@ -5895,8 +5910,14 @@ async function calculateCanadaPostRatesHandler() {
   if (!card) return;
 
   const sfZip = $('sf-zip')?.value || 'M4B 1B3';
-  const stCountryCode = normalizeCountryCode($('st-country')?.value) || 'CA';
+  const stCountryCode = resolveCountryCode($('st-country')?.value);
   const stZip = $('st-zip')?.value || '';
+  if (!stCountryCode) {
+    hideCanadaPostRatesCard();
+    showToast('⚠ Choose the recipient’s country before getting Canada Post rates', 'warn');
+    $('st-country')?.focus();
+    return;
+  }
 
   const length = Math.max(0.1, parseFloat($('sp-length')?.value) || 20);
   const width = Math.max(0.1, parseFloat($('sp-width')?.value) || 15);
@@ -5923,6 +5944,7 @@ async function calculateCanadaPostRatesHandler() {
   const isTest = !!TAX_CENTER.settings?.cpTestMode;
   const isEnabled = TAX_CENTER.settings?.cpEnabled !== false;
   const quotedFor = shippingFormFingerprint();
+  const cpQuotedFor = canadaPostQuoteFingerprint();
 
   card.style.display = 'block';
   card.innerHTML = `
@@ -5978,7 +6000,8 @@ async function calculateCanadaPostRatesHandler() {
       stCountryCode,
       isOffline: !apiKey || !apiSecret || !isEnabled || !navigator.onLine,
       isDisabled: !isEnabled,
-      isTest
+      isTest,
+      quotedFor: cpQuotedFor,
     });
   } catch (err) {
     console.warn('Canada Post direct rates fallback:', err);
@@ -5988,14 +6011,38 @@ async function calculateCanadaPostRatesHandler() {
       isCommercial: !!customerNumber
     });
     setCarrierTilePrice('canadapost', (offlineQuotes || []).map(q => q.totalPrice), { estimate: true, fingerprint: quotedFor });
-    renderCanadaPostRatesCard(offlineQuotes, { stCountryCode, isOffline: true, isDisabled: !isEnabled, errorNote: err.message, isTest });
+    renderCanadaPostRatesCard(offlineQuotes, { stCountryCode, isOffline: true, isDisabled: !isEnabled, errorNote: err.message, isTest, quotedFor: cpQuotedFor });
   }
 }
 
-function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, isDisabled, errorNote, isTest } = {}) {
+// The form as it was when the Canada Post prices on screen were quoted. A Buy
+// button is only honoured while the form still matches, so a price quoted for
+// one parcel or address can never be bought for another.
+let _cpRatesQuotedFor = null;
+
+/**
+ * The shipping form minus what cannot change a Canada Post price or label:
+ * the Chit Chats fields, and the U.S. Declaration ID — the buy flow asks for
+ * that one to be pasted in after the rates are on screen.
+ */
+function canadaPostQuoteFingerprint() {
+  return JSON.stringify(JSON.parse(shippingFormFingerprint())
+    .filter(([id]) => !id.startsWith('cc-') && id !== 'sp-zonos-declaration-id'));
+}
+
+function hideCanadaPostRatesCard() {
+  _cpRatesQuotedFor = null;
+  const card = $('canadapost-rates-card');
+  if (!card) return;
+  card.style.display = 'none';
+  card.innerHTML = '';
+}
+
+function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, isDisabled, errorNote, isTest, quotedFor } = {}) {
   const card = $('canadapost-rates-card');
   if (!card) return;
   card.style.display = 'block';
+  _cpRatesQuotedFor = quotedFor ?? canadaPostQuoteFingerprint();
 
   const {
     apiKey: cpApiKey,
@@ -6498,14 +6545,25 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
     showToast('A label purchase is already running — give it a moment', 'warn');
     return;
   }
-  const sfName = $('sf-name')?.value?.trim() || 'Lyricalmyrical Books';
-  const sfCompany = $('sf-company')?.value?.trim() || 'Lyricalmyrical Books';
-  const sfPhone = $('sf-phone')?.value?.trim() || '4165550199';
-  const sfAddr = ($('sf-street1')?.value || $('sf-street')?.value || '').trim();
-  const sfAddr2 = ($('sf-street2')?.value || '').trim();
-  const sfCity = $('sf-city')?.value?.trim() || 'Toronto';
-  const sfProv = $('sf-state')?.value?.trim() || 'ON';
-  const sfZip = $('sf-zip')?.value?.trim() || 'M4B 1B3';
+  if (!_cpRatesQuotedFor || _cpRatesQuotedFor !== canadaPostQuoteFingerprint()) {
+    hideCanadaPostRatesCard();
+    showToast('⚠ The parcel changed. Get fresh Canada Post rates before buying.', 'warn');
+    return;
+  }
+  const isTest = !!TAX_CENTER.settings?.cpTestMode;
+  // The same form-then-saved sender the go-live check reads, so what it
+  // approved is what gets printed. Stand-in details are for sandbox labels
+  // only; a live label never carries an invented return address.
+  const saved = savedShippingOrigin();
+  const sender = (id, savedValue, standIn) => $(id)?.value?.trim() || savedValue || (isTest ? standIn : '');
+  const sfName = sender('sf-name', saved.name, 'Lyricalmyrical Books');
+  const sfCompany = sender('sf-company', saved.company, 'Lyricalmyrical Books');
+  const sfPhone = sender('sf-phone', saved.phone, '4165550199');
+  const sfAddr = ($('sf-street1')?.value || $('sf-street')?.value || '').trim() || saved.street1;
+  const sfAddr2 = ($('sf-street2')?.value || '').trim() || saved.street2;
+  const sfCity = sender('sf-city', saved.city, 'Toronto');
+  const sfProv = sender('sf-state', saved.state, 'ON');
+  const sfZip = sender('sf-zip', saved.zip, 'M4B 1B3');
 
   const stName = $('st-name')?.value?.trim() || '';
   const stCompany = $('st-company')?.value?.trim() || '';
@@ -6515,8 +6573,13 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
   const stCity = $('st-city')?.value?.trim() || '';
   const stState = $('st-state')?.value?.trim() || '';
   const stZip = $('st-zip')?.value?.trim() || '';
-  const stCountryCode = normalizeCountryCode($('st-country')?.value) || 'CA';
+  const stCountryCode = resolveCountryCode($('st-country')?.value);
 
+  if (!stCountryCode) {
+    showToast('⚠ Choose the recipient’s country before buying a label', 'warn');
+    $('st-country')?.focus();
+    return;
+  }
   if (!stAddr || !stCity || !stZip) {
     showToast('⚠ Please fill in recipient street address, city, and postal/zip code before buying a label', 'warn');
     if (!stAddr) $('st-street1')?.focus();
@@ -6545,7 +6608,6 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
   weightKg = Math.max(0.1, weightKg);
 
   const { apiKey, apiSecret, customerNumber, contractId } = resolveCanadaPostCredentials(TAX_CENTER.settings || {});
-  const isTest = !!TAX_CENTER.settings?.cpTestMode;
   const isEnabled = TAX_CENTER.settings?.cpEnabled !== false;
 
   // Pre-flight, before any dialog: the same audit the rates card runs, so what
@@ -6700,6 +6762,12 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
   });
 
   if (!confirmed) return;
+  // Recheck after the dialog: the form can change while it is open.
+  if (_cpRatesQuotedFor !== canadaPostQuoteFingerprint()) {
+    hideCanadaPostRatesCard();
+    showToast('⚠ The parcel changed while confirming. Get fresh Canada Post rates.', 'warn');
+    return;
+  }
 
   showToast('⏳ Creating shipment and generating Canada Post label...', 'ok');
 
@@ -7339,6 +7407,10 @@ async function buyShippoLabelOnce(rateId, provider, serviceName, amount, currenc
 function findOrderAcrossBooks(orderNumber) {
   const wanted = normalizeShippingOrderNumber(orderNumber);
   if (!wanted) return null;
+  // A live copy of the order wins over a voided one, so a label, refund or
+  // void lands on the sale that still counts. A voided copy is the fallback.
+  const live = findOrderInAnyBook(states, wanted, normalizeShippingOrderNumber);
+  if (live) return live;
   for (const [bookId, state] of Object.entries(states)) {
     const entry = (state?.hist || []).find(h => normalizeShippingOrderNumber(h?.num) === wanted);
     if (entry) return { bookId, entry };
@@ -11829,6 +11901,7 @@ export {
   recoverChitChatsRecords,
   renderCanadaPostRatesCard,
   buyCanadaPostLabelHandler,
+  findOrderAcrossBooks,
   openCanadaPostPurchasedLabel,
   showCanadaPostLabelModal,
   retryFetchCanadaPostLabelArtifact,

@@ -34,7 +34,7 @@ import {
 import { BOOKS, BOOK_LIST, states, defaultState } from '../core/store.js';
 import { ensurePdfJs } from './invoices.js';
 import { dropFilesIntoInput, setDropzoneDrag } from '../lib/dropzone.js';
-import { TC_CATEGORIES, _tcOpenTripName, openArtistPayoutEditor } from './tax-entries.js';
+import { TC_CATEGORIES, _tcOpenTripName, openArtistPayoutEditor, renderExpenseRules } from './tax-entries.js';
 import {
   _localReceiptCell,
   clearReceiptScanReview,
@@ -65,6 +65,7 @@ import { downloadCsv } from '../lib/download.js';
 import { fmt, getSym, getBookCurrencyCode, roundCents, setSelectCurrency } from '../lib/money.js';
 import { sumMoney } from '../lib/cents.js';
 import { payoutNetted, payoutDebtCollected } from '../lib/earnings.js';
+import { isTestBookEntry } from '../lib/test-book.js';
 import { reconcileConsignmentMirrors } from '../lib/consignment.js';
 import { buildCashFlowBuckets, cashFlowDelta, computeCashFlowMetrics } from '../lib/cashflow.js';
 import { saleCadAmounts, datedCadRate } from '../lib/sale-fx.js';
@@ -2385,7 +2386,7 @@ function _tcBuildLedger(selectedYear) {
   let allLedger = [];
 
   Object.keys(BOOKS).forEach(bid => {
-    if (bid.toLowerCase().includes('test') || BOOKS[bid]?.title?.toLowerCase()?.includes('test')) return;
+    if (isTestBookEntry(bid, BOOKS[bid])) return;
     const s = states[bid] || defaultState(BOOKS[bid]);
     const b = BOOKS[bid];
     const cur = getBookCurrencyCode(b);
@@ -3746,6 +3747,7 @@ function renderTaxCenter() {
   _tcRenderLedgerPagination(filteredLedger, pageStart, totalPages);
 
   _tcRenderRecurringSubscriptions();
+  renderExpenseRules();
 
   // Keep BOTH year selects in agreement with the period that was just rendered,
   // regardless of which control triggered the change (or a restored pref).

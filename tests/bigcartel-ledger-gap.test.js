@@ -463,3 +463,24 @@ describe('discounted storefront orders count at what the customer paid', () => {
     expect(byBook.hound).toBeCloseTo(32.14, 2);
   });
 });
+
+describe('orders this app already saw, for the gap check', () => {
+  it('counts a website sale that was recorded and then voided as known', async () => {
+    const { buildHarness } = await import('./helpers/extract-decl.js');
+    const { normalizeShippingOrderNumber } = await import('../src/lib/shipping-reconciliation.js');
+    const states = {
+      b1: { hist: [
+        { num: '#AAA-1', chan: 'Website', voided: true },
+        { num: '#BBB-2', chan: 'Book Fair', voided: true },
+      ] },
+    };
+    const { bigCartelLedgerNumbers } = buildHarness({
+      names: ['bigCartelLedgerNumbers'],
+      deps: { states, normalizeShippingOrderNumber, getShippingReconciliationOrders: () => [], getScanMemory: () => ({}) },
+      returns: '{ bigCartelLedgerNumbers }',
+    });
+    const known = bigCartelLedgerNumbers();
+    expect(known).toContain(normalizeShippingOrderNumber('#AAA-1'));
+    expect(known).not.toContain(normalizeShippingOrderNumber('#BBB-2'));
+  });
+});

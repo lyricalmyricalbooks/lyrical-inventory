@@ -60,3 +60,14 @@ describe('build-date wording', () => {
     expect(dayHeading(new Date(2026, 8, 22, 1), now)).toBe('Yesterday');
   });
 });
+
+describe('internal commits behind an emoji', () => {
+  it('hides "⚡ Bolt:" passes and survey logs, which name code, not changes', () => {
+    expect(plainChange({ message: '⚡ Bolt: Combine array passes in phoneBooksHtml (#1401)' })).toBeNull();
+    expect(plainChange({ message: 'Log: phone survey 2026-11-04 (scheduled), nothing to ship' })).toBeNull();
+    expect(plainChange({ message: '🐛 test: cover payouts' })).toBeNull();
+  });
+  it('still shows one when its author wrote a note for the owner', () => {
+    expect(plainChange({ message: '⚡ Bolt: faster history\n\nFor you: The history list opens faster.' })).toMatchObject({ detail: 'The history list opens faster.' });
+  });
+});

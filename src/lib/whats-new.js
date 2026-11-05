@@ -40,7 +40,9 @@ const KIND_LABEL = { new: 'New', fixed: 'Fixed', faster: 'Faster', improved: 'Im
 export function kindLabel(kind) { return KIND_LABEL[kind] || KIND_LABEL.improved; }
 
 // Conventional-commit types that never change anything the owner sees.
-const INTERNAL_TYPES = /^(test|tests|refactor|chore|ci|build|docs|style)(\(|!|:)/i;
+// "bolt" (automated code passes) and "log" (scheduled survey notes)
+// name internals too; they reach the list only with a "For you:" line.
+const INTERNAL_TYPES = /^(test|tests|refactor|chore|ci|build|docs|style|bolt|log)(\(|!|:)/i;
 const TRAILER = /^(co-authored-by|signed-off-by|claude-session|reviewed-by|generated with|🤖)\b/i;
 
 function prNumber(title) {
@@ -92,7 +94,8 @@ export function plainChange(commit) {
   const forYou = pickLine(body, 'for you');
   const tryIt = pickLine(body, 'try it');
   // Internal work stays out of the list unless its author says it matters.
-  if (!forYou && INTERNAL_TYPES.test(rawTitle)) return null;
+  // Checked past any leading emoji: "⚡ Bolt: …" is a "bolt:" commit.
+  if (!forYou && INTERNAL_TYPES.test(rawTitle.replace(/^[^\p{L}\p{N}]+/u, ''))) return null;
 
   const title = cleanTitle(rawTitle);
   if (!title) return null;

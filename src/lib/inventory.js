@@ -2,6 +2,8 @@
 // imported anywhere and unit-tested in isolation.
 
 import { roundCents } from './money.js';
+import { channelStats } from './channel-mix.js';
+import { localDay } from './calendar-day.js';
 
 /** @typedef {import('../types/ledger').BookState} BookState */
 /** @typedef {import('../types/ledger').Book} Book */
@@ -106,6 +108,16 @@ export function recordInventoryDisposal(s, disposal) {
   if (disposal.sheetsId) entry.sheetsId = String(disposal.sheetsId);
   s.ledger.unshift(entry);
   return entry;
+}
+
+// On-hand after copies are written off. A book with a print run re-derives
+// its count from the records (which now include the disposal); one without
+// has no baseline to derive from, so the copies come straight off the stored
+// count, never below zero.
+/** @param {BookState} s @param {Book} book @param {number} qty @returns {number} */
+export function stockAfterDisposal(s, book, qty) {
+  if (book && Number.isFinite(book.maxPrint)) return deriveOnHand(s, book);
+  return Math.max(0, num(s && s.stock) - num(qty));
 }
 
 // Stock change a single timeline row applies to on-hand. Negative = books left
@@ -286,10 +298,10 @@ export function recalculateBookStatsFromHistory(s) {
     if (h.voided) return;
     
     const chan = h.chan || 'Manual';
-    if (!s.chStats[chan]) s.chStats[chan] = { txns: 0, units: 0, revenue: 0 };
-    s.chStats[chan].txns++;
-    s.chStats[chan].units += num(h.qty);
-    if (!h.artistPending) s.chStats[chan].revenue = roundCents(s.chStats[chan].revenue + num(h.qty) * num(h.price));
+    const cs = channelStats(s, chan);
+    cs.txns++;
+    cs.units += num(h.qty);
+    if (!h.artistPending) cs.revenue = roundCents(cs.revenue + num(h.qty) * num(h.price));
 
     if (h.gratuity) return;
     s.sold += num(h.qty);
@@ -412,7 +424,7 @@ export function transferAuthorStock(s, book, delta, note = '', isoDate = '') {
   /** @type {StockTransfer} */
   const transfer = {
     id: 'st_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
-    date: (isoDate && isoDate.slice(0, 10)) || new Date().toISOString().slice(0, 10),
+    date: (isoDate && isoDate.slice(0, 10)) || localDay(),
     delta: d,
     direction: d > 0 ? 'to_author' : 'from_author',
     qty: Math.abs(d),
@@ -437,11 +449,48 @@ export function transferAuthorStock(s, book, delta, note = '', isoDate = '') {
  * @param {boolean} isAuthorSale - True if this transaction was submitted/fulfilled by the author
  */
 export function deductSaleFromStockBreakdown(s, qty, isAuthorSale) {
-  if (!s || !isAuthorSale) return;
+  if (!s || !isAuthorSale) return 0;
   const units = Number.isFinite(qty) && qty > 0 ? Math.floor(qty) : 0;
-  if (units <= 0) return;
+  if (units <= 0) return 0;
 
   const currentAuthorStock = Number.isFinite(s.authorStock) ? s.authorStock : 0;
   s.authorStock = Math.max(0, currentAuthorStock - units);
+  // How many copies actually came out of the author's pile (never more than
+  // they held), so a void can give back exactly that.
+  return Math.min(units, Math.max(0, currentAuthorStock));
+}
+
+/**
+ * Take a sale's copies off the publisher's shelf. Stock never goes below
+ * zero, so a sale for more copies than are on hand only takes what was
+ * there; the row then records that smaller number as `stockTaken`, and
+ * `stockToReturn` gives back exactly that on a void. (A book with a print
+ * run re-derives its stock from the records afterwards anyway.)
+ * @returns {number} copies taken
+ */
+export function takeSaleStock(s, h, qty) {
+  const units = num(qty);
+  const onHand = num(s.stock);
+  const taken = Math.max(0, Math.min(units, onHand));
+  s.stock = Math.max(0, onHand - units);
+  if (taken < units) h.stockTaken = taken; else delete h.stockTaken;
+  return taken;
+}
+
+/** Copies a voided sale puts back on the shelf. Rows from before
+ *  `stockTaken` existed give back their full quantity, as they always did. */
+export function stockToReturn(h) {
+  return Number.isFinite(h?.stockTaken) ? h.stockTaken : num(h?.qty);
+}
+
+/** Record on a sale row how many copies came out of the author's pile, when
+ *  that is fewer than the row's quantity. */
+export function noteAuthorTaken(h, taken) {
+  if (taken < num(h.qty)) h.authorTaken = taken; else delete h.authorTaken;
+}
+
+/** Copies a voided author-fulfilled sale gives back to the author's pile. */
+export function authorStockToReturn(h) {
+  return Number.isFinite(h?.authorTaken) ? h.authorTaken : num(h?.qty);
 }
 

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, test, vi } from 'vitest';
-import { saleMethod, fairDaySummary, readCurrentFair, saveCurrentFair, fairSyncPill, registerSalesForDay, eventTime, FAIR_METHODS, FAIR_UNDO_MS, readLastMethod, rememberMethod, undoOpen, soldLabel, countLabel, fairTileHtml, keepScreenAwake } from '../src/lib/fair-mode.js';
+import { saleMethod, fairDaySummary, readCurrentFair, saveCurrentFair, fairSyncPill, registerSalesForDay, eventTime, FAIR_METHODS, FAIR_UNDO_MS, readLastMethod, rememberMethod, undoOpen, soldLabel, countLabel, fairTileHtml, keepScreenAwake, appendRegisterLog, registerLogAsHist, removeRegisterSale, REGISTER_LOG_LIMIT } from '../src/lib/fair-mode.js';
 
 const memStore = () => { const m = new Map(); return { getItem: k => m.get(k) ?? null, setItem: (k, v) => m.set(k, String(v)) }; };
 
@@ -129,6 +129,20 @@ describe("today's register sales", () => {
     ] }];
     expect(registerSalesForDay(wrapped, 'd').sales[0].num).toBe('POS-000010');
   });
+  test('totals what the customer paid, in the currency they paid in', () => {
+    const paidInEuros = [{ id: 'a', title: 'Harbour', currency: 'CAD', hist: [
+      // A CAD 40 book rung up in euros at a discount: €25 changed hands.
+      { num: 'POS-1', chan: 'Book Fair', date: 'd', qty: 1, price: 40, cur: 'CAD', payment: { currency: 'EUR', amount: 25, rate: 1.6 }, sheetsId: t(1) },
+      // A comp: nothing changed hands.
+      { num: 'POS-2', chan: 'Book Fair', date: 'd', qty: 1, price: 0, cur: 'CAD', gratuity: true, payment: { currency: 'CAD', amount: 0 }, sheetsId: t(2) },
+      // An older row with no payment record keeps the list price.
+      { num: 'POS-3', chan: 'Book Fair', date: 'd', qty: 2, price: 40, cur: 'CAD', sheetsId: t(3) },
+    ] }];
+    const day = registerSalesForDay(paidInEuros, 'd');
+    expect(day.totals).toEqual({ EUR: 25, CAD: 80 });
+    expect(day.sales.find((s) => s.num === 'POS-1').lines[0]).toMatchObject({ amount: 25, cur: 'EUR' });
+    expect(fairDaySummary(day).titles[0].totals).toEqual({ EUR: 25, CAD: 80 });
+  });
   test('event ids decode to their time, anything else to 0', () => {
     expect(eventTime(t(123456789))).toBe(123456789);
     expect(eventTime('')).toBe(0);
@@ -167,5 +181,45 @@ describe('phase 3', () => {
     const html = fairTileHtml({ id: 'a', title: 'A', priceText: '1', qty: 1, stock: { tracked: true, onHand: 1, remaining: 0, level: 'ok' } });
     expect(html).toContain('fairTileNoneLeft(&quot;a&quot;)');
     expect(html).toContain('aria-label="None left: A');
+  });
+});
+
+describe('compExpense', () => {
+  test('values a comp at print cost in the book currency', async () => {
+    const { compExpense } = await import('../src/lib/fair-mode.js');
+    const cad = compExpense({ currency: 'CA$', productionCost: 300, maxPrint: 200 }, { qty: 3, date: '2026-11-04', num: 'POS-1', fair: 'Art Fair' });
+    expect(cad).toMatchObject({ amount: 4.5, baseAmount: 4.5, currency: 'CAD', cat: 'Marketing & Advertising', ref: 'POS-1', date: '2026-11-04', gratuity: true, comp: true });
+    expect(cad.desc).toBe('Comp: 3 copies given away at Art Fair');
+    // Another currency waits for its dated rate rather than booking 1:1.
+    const eur = compExpense({ currency: '€', productionCost: 300, maxPrint: 200 }, { qty: 1, date: '2026-11-04', num: 'POS-2' });
+    expect(eur).toMatchObject({ amount: 1.5, currency: 'EUR', baseAmount: null, fxMissing: true });
+    // Nothing to value it by.
+    expect(compExpense({ currency: 'CA$', productionCost: 0, maxPrint: 100 }, { qty: 1 })).toBeNull();
+    expect(compExpense({ currency: 'CA$', productionCost: 100 }, { qty: 1 })).toBeNull();
+  });
+});
+
+describe('register log for guest titles', () => {
+  test('keeps only the newest entries', () => {
+    let log = [];
+    for (let i = 0; i < REGISTER_LOG_LIMIT + 5; i++) log = appendRegisterLog(log, { num: `P-${i}` });
+    expect(log).toHaveLength(REGISTER_LOG_LIMIT);
+    expect(log[0].num).toBe('P-5');
+  });
+
+  test("counts in the day's totals in the currency paid", () => {
+    const log = [{ num: 'POS-1', date: '2026-11-04', at: 1, qty: 2, unit: 10, amount: 14, cur: 'EUR', method: 'Card' }];
+    const day = registerSalesForDay([{ id: 'zine', title: 'Zine', currency: 'CAD', hist: registerLogAsHist(log) }], '2026-11-04');
+    expect(day.totals).toEqual({ EUR: 14 });
+    expect(day.units).toBe(2);
+    expect(day.sales[0].method).toBe('Card');
+  });
+
+  test('takes a sale back out, counts and all', () => {
+    const pb = { sold: 3, revenue: 30, registerLog: [{ num: 'A', qty: 2, unit: 10 }, { num: 'B', qty: 1, unit: 10 }] };
+    expect(removeRegisterSale(pb, 'A')).toBe(2);
+    expect(pb).toMatchObject({ sold: 1, revenue: 10 });
+    expect(pb.registerLog.map(e => e.num)).toEqual(['B']);
+    expect(removeRegisterSale(pb, 'A')).toBe(0);
   });
 });

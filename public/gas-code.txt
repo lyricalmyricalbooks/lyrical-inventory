@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v57)
+/* Lyricalmyrical Inventory — Unified Backend (v58)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:
@@ -287,6 +287,11 @@
  *      write sent with deferSummary:true (more queued behind it) skips the
  *      refresh entirely. Bump flags v56-and-older as outdated so the
  *      publisher redeploys.
+ *  56. v58: A scanned website order whose email has no readable order date
+ *      falls back to the day the email arrived in the script's own time zone,
+ *      not in UTC — an order emailed at 9pm in Toronto was dated the next day
+ *      (and, at month end, the next month). Bump flags v57-and-older as
+ *      outdated so the publisher redeploys.
  */
 
 const HEADERS = [
@@ -350,8 +355,8 @@ function doGet(e) {
   const receiptModel = receiptProps.getProperty('GEMINI_MODEL') || 'gemini-2.5-flash';
   const receiptModelValid = /^[a-zA-Z0-9.-]+$/.test(receiptModel);
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v57',
-    scriptVersion: 'v57',
+    service: 'lyrical-sheets-webhook-v58',
+    scriptVersion: 'v58',
     capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyChitChats: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, canadaPostRefund: true, graphicalEmails: true, authorPaymentEmails: true, dateOrderedRows: true, receiptExtraction: true, receiptSelfTest: true, receiptDailySweep: true, receiptBackupAi: true, pruneOrphans: true, expenseRows: true, pruneDuplicates: true, renameBook: true, deferSummary: true },
     receiptAi: {
       geminiApiKey: !!receiptProps.getProperty('GEMINI_API_KEY'),
@@ -442,7 +447,7 @@ function scanGmail_(e) {
         orders.push({
           id: msg.getId(),
           orderNum: orderNumMatch[1].trim(),
-          date: dateMatch ? dateMatch[1].trim() : msg.getDate().toISOString().split('T')[0],
+          date: dateMatch ? dateMatch[1].trim() : receiptDayString_(msg.getDate()),
           ...financials,
           qty,
           customer: shipName,

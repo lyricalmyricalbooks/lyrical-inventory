@@ -2,6 +2,7 @@
 // screen wake lock; the sale itself still goes through posConfirmSale().
 
 import { escapeHtml as esc } from './html.js';
+import { getBookCurrencyCode, roundCents } from './money.js';
 
 /** Payment choices on the charge sheet, in thumb order. `value` is what the
  *  sale records, and must match the register's payment <select>. */
@@ -21,6 +22,49 @@ export const FAIR_UNDO_MS = 8000;
 export const FAIR_SEARCH_OVER = 15;
 
 const METHOD_KEY = 'lm-fair-last-method';
+
+/** Is this way of "paying" a giveaway? A comp is recorded as a gratuity: the
+ *  copies leave stock but nothing is earned. The note may carry the fair's
+ *  name after it ("Comp/Gift · Toronto Art Book Fair"). */
+export function isCompMethod(method) {
+  return String(method || '').startsWith('Comp/Gift');
+}
+
+/**
+ * The marketing expense a comp books (Julian, 2026-11-04: "comp sales shall be
+ * counted as a marketing expense"). Valued at what the copies cost to print —
+ * production cost over the print run, the same unit cost the gratuity backfill
+ * uses — in the book's own currency, filed under Marketing & Advertising and
+ * tied to the register sale by its number, so voiding the comp takes it back.
+ * A CAD book has its CAD value now; another currency is left flagged for the
+ * rate healer, never booked 1:1. Null when the book has no cost to go on.
+ */
+export function compExpense(book, { qty, date, num, fair = '' } = {}) {
+  const cost = Number(book && book.productionCost);
+  const run = Number(book && book.maxPrint);
+  const copies = Number(qty);
+  if (!(cost > 0) || !(run > 0) || !(copies > 0)) return null;
+  const amount = roundCents((cost / run) * copies);
+  if (!(amount > 0)) return null;
+  const currency = getBookCurrencyCode(book);
+  const isCad = String(currency).toUpperCase() === 'CAD';
+  return {
+    id: Date.now() + Math.floor(Math.random() * 1000),
+    desc: `Comp: ${copies} ${copies === 1 ? 'copy' : 'copies'} given away${fair ? ` at ${fair}` : ''}`,
+    cat: 'Marketing & Advertising',
+    amount,
+    currency,
+    origAmount: amount,
+    origCurrency: currency,
+    baseAmount: isCad ? amount : null,
+    ...(isCad ? {} : { fxMissing: true }),
+    date,
+    ref: num,
+    received: false,
+    gratuity: true,
+    comp: true,
+  };
+}
 
 export function readLastMethod(storage = globalThis.localStorage) {
   try {
@@ -141,8 +185,13 @@ export function registerSalesForDay(books, day) {
       if (!sale) { sale = { num: h.num, at: 0, method: saleMethod(h.notes), lines: [], totals: {}, units: 0 }; byNum.set(h.num, sale); }
       sale.at = Math.max(sale.at, eventTime(h.sheetsId));
       const qty = Number(h.qty) || 0;
-      const amount = qty * (Number(h.price) || 0);
-      const cur = h.cur || book.currency || 'CAD';
+      // What the customer actually handed over: a sale rung up in another
+      // currency (euros for a CAD book) records it on the payment. Rows
+      // without one fall back to the list price in the book's currency.
+      const pay = h.payment;
+      const paid = !!pay?.currency && pay.amount != null && pay.amount !== '' && Number.isFinite(Number(pay.amount));
+      const amount = paid ? Number(pay.amount) : qty * (Number(h.price) || 0);
+      const cur = paid ? pay.currency : (h.cur || book.currency || 'CAD');
       sale.lines.push({ bookId: book.id, title: book.title || 'Untitled', qty, amount, cur });
       sale.totals[cur] = (sale.totals[cur] || 0) + amount;
       sale.units += qty;
@@ -158,6 +207,58 @@ export function registerSalesForDay(books, day) {
     for (const [cur, amt] of Object.entries(s.totals)) totals[cur] = (totals[cur] || 0) + amt;
   }
   return { sales, totals, units };
+}
+
+// Guest and consignment titles (register-only books) never enter the ledger,
+// so the register keeps its own short log of their sales, saved with the book
+// in the shared catalogue. Today's totals, Void and the end-of-day summary
+// read it; the newest REGISTER_LOG_LIMIT entries are kept.
+export const REGISTER_LOG_LIMIT = 100;
+
+/** Add one register-only sale line to a book's log, keeping it bounded. */
+export function appendRegisterLog(log, entry) {
+  const list = Array.isArray(log) ? log.slice() : [];
+  list.push(entry);
+  return list.slice(-REGISTER_LOG_LIMIT);
+}
+
+/** The log as the ledger-shaped rows registerSalesForDay() reads. */
+export function registerLogAsHist(log) {
+  return (Array.isArray(log) ? log : []).filter(Boolean).map((e) => {
+    const qty = Number(e.qty) || 0;
+    const amount = Number(e.amount) || 0;
+    return {
+      num: e.num,
+      chan: 'Book Fair',
+      date: e.date,
+      qty,
+      price: qty ? amount / qty : 0,
+      cur: e.cur,
+      notes: e.method || '',
+      payment: { currency: e.cur, amount },
+      sheetsId: `evt-${Math.max(0, Number(e.at) || 0).toString(36)}-reg`,
+    };
+  });
+}
+
+/**
+ * Take one sale's lines out of a register-only book: drops them from its log
+ * and lowers its sold count and takings by what they added. Returns the
+ * number of copies taken back (0 when the sale isn't in the log).
+ */
+export function removeRegisterSale(pb, saleNum) {
+  if (!pb || !Array.isArray(pb.registerLog)) return 0;
+  const hits = pb.registerLog.filter((e) => e && e.num === saleNum);
+  if (!hits.length) return 0;
+  pb.registerLog = pb.registerLog.filter((e) => !(e && e.num === saleNum));
+  let qty = 0;
+  for (const e of hits) {
+    const q = Number(e.qty) || 0;
+    qty += q;
+    pb.sold = Math.max(0, (Number(pb.sold) || 0) - q);
+    pb.revenue = Math.max(0, (Number(pb.revenue) || 0) - q * (Number(e.unit) || 0));
+  }
+  return qty;
 }
 
 /** Epoch ms from an `evt-<base36 time>-<random>` id; 0 when absent. */

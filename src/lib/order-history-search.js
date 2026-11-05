@@ -98,9 +98,11 @@ export function historyRowSearchWords(row) {
  * Multi-term queries are AND-ed, which is what makes a two-word search useful:
  * "massy return" narrows, where an OR would widen to every return anywhere.
  */
+// Lower case with accents folded, so "montreal" finds "Montréal".
+const fold = (text) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
 export function historySearchTerms(query) {
-  return String(query ?? '')
-    .toLowerCase()
+  return fold(String(query ?? ''))
     .split(/\s+/)
     .map((t) => t.trim())
     .filter(Boolean);
@@ -114,7 +116,7 @@ export function historySearchIsActive(query) {
 /** Does this row carry every term? Substring matching, case-insensitive. */
 export function historyRowMatches(row, terms) {
   if (!terms || !terms.length) return true;
-  const haystack = historyRowSearchWords(row).join(' \u0000 ').toLowerCase();
+  const haystack = fold(historyRowSearchWords(row).join(' \u0000 '));
   return terms.every((t) => haystack.includes(t));
 }
 

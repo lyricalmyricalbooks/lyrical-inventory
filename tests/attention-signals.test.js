@@ -93,6 +93,15 @@ describe('stock signals', () => {
     expect(ids(result)).not.toContain('stock-low:hound');
   });
 
+  it('a reorder level set to 0 alerts once the book is sold out, as its dashboard does', () => {
+    const out = scan({ book: { threshold: 0, maxPrint: 100 }, state: { stock: 0, hist: [{ qty: 100, price: 25, date: '2026-01-01' }] } });
+    expect(ids(out)).toContain('stock-low:hound');
+    const blank = scan({ book: { threshold: '', maxPrint: 100 }, state: { stock: 0, hist: [{ qty: 100, price: 25, date: '2026-01-01' }] } });
+    expect(ids(blank)).not.toContain('stock-low:hound');
+    const someLeft = scan({ book: { threshold: 0, maxPrint: 100 }, state: { stock: 3, hist: [{ qty: 97, price: 25, date: '2026-01-01' }] } });
+    expect(ids(someLeft)).not.toContain('stock-low:hound');
+  });
+
   it('says nothing about a healthy shelf', () => {
     expect(ids(scan())).not.toContain('stock-low:hound');
     expect(ids(scan())).not.toContain('stock-getting-low:hound');

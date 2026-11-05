@@ -15,6 +15,8 @@
 //
 // DOM- and Firestore-free so the matching rules can be unit-tested directly.
 
+import { toCents, fromCents } from './cents.js';
+
 // Titles a line item's free-text description names. Descriptions are typed by
 // hand ("The Hound ( Production cost wholesale discount =$52 per book)"), so
 // this is a containment test against the known titles rather than a parse.
@@ -152,7 +154,9 @@ export function otherBookTitles(inv, ownerBookId, bookId, books) {
 // know what each title earned — that is what each author's share is worked out
 // from. Splitting by hand off the line items is the step this removes.
 
-const cents = n => Math.round((Number(n) || 0) * 100);
+// The shared cent rounding (with roundCents' epsilon nudge), so a tax of
+// exactly half a cent — 31.50 at 15% is 4.725 — rounds up like every other figure.
+const cents = toCents;
 
 // Split `amount` across `weights` so the parts are whole cents that add back up
 // to `amount` exactly. Plain per-share rounding leaves the parts a cent or two
@@ -245,7 +249,7 @@ export function invoiceBookSplit(inv, ownerBookId, books) {
     res[i] = {
       bookId: bid,
       title: (byId.get(bid) || {}).title || bid,
-      subtotal: Math.round(subtotals.get(bid) * 100) / 100,
+      subtotal: fromCents(toCents(subtotals.get(bid))),
       share: weightSum > 0 ? weights[i] / weightSum : (i === 0 ? 1 : 0),
       total: totals[i],
     };
@@ -403,7 +407,14 @@ export function billToPersonFrom(inv) {
 // printed page, the emailed copy and the per-title split can never disagree
 // about a figure the customer is being asked to pay.
 
-const round2 = n => Math.round((Number(n) || 0) * 100) / 100;
+const round2 = n => fromCents(toCents(n));
+
+// `pct` percent of a non-negative money amount, rounded half-up to the cent.
+// Worked in cents: 31.50 × 0.15 is 4.7249999… in floating point, so rounding
+// the decimal product billed 4.72 where the tax is exactly 4.725 → 4.73. In
+// cents it is 3150 × 15 / 100 = 472.5. The tiny nudge (a millionth of a cent)
+// keeps a true half from landing just below it for a fractional rate.
+const percentOf = (amount, pct) => fromCents(Math.round(toCents(amount) * (Number(pct) || 0) / 100 + 1e-6));
 const nonNeg = n => Math.max(0, Number(n) || 0);
 
 // A number as people actually type it: "12,5" and "12.5" are both twelve and
@@ -474,7 +485,7 @@ export function computeInvoiceTotals({ items, discountType, discountValue, taxRa
   let discountRate = 0;
   if (type === 'percent') {
     discountRate = clampPercent(discountValue);
-    discount = round2((subtotal * discountRate) / 100);
+    discount = percentOf(subtotal, discountRate);
   } else {
     const flat = typeof discountValue === 'number' ? discountValue : parseLooseNumber(discountValue);
     discount = round2(Math.min(subtotal, nonNeg(flat)));
@@ -482,7 +493,7 @@ export function computeInvoiceTotals({ items, discountType, discountValue, taxRa
 
   const rate = clampPercent(taxRate);
   const taxable = round2(Math.max(0, subtotal - discount));
-  const tax = round2(taxable * (rate / 100));
+  const tax = percentOf(taxable, rate);
   const total = round2(taxable + tax);
   return { subtotal, discount, discountType: type, discountRate, taxRate: rate, tax, total };
 }

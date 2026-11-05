@@ -40,3 +40,12 @@ export function safeHttpUrl(raw) {
     return '';
   }
 }
+
+// True when text holds at least one real HTML tag (<p>, </div>, <br/>,
+// <a href="...">). A stray '<' in prose ("under <$20", "I <3 this",
+// "Jane <jane@example.com>") is not a tag, so a plain or markdown email
+// body that happens to contain one is still treated as plain text.
+const HTML_TAG = /<\/?[a-z][a-z0-9]*(\s[^<>]*)?\/?>/i;
+export function hasHtmlTag(text) {
+  return HTML_TAG.test(String(text == null ? '' : text));
+}

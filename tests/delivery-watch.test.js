@@ -123,3 +123,12 @@ describe('what is worth saying', () => {
     expect(describeDeliveryNews([]).count).toBe(0);
   });
 });
+
+describe('French delivery wording', () => {
+  it('reads "Livré" (accent at the end) and "livrée" as delivered', () => {
+    for (const status of ['Livré', 'Livré au destinataire', 'Colis livrée']) {
+      expect(readDelivery({ found: true, status, eventDateTime: '2026-09-21T14:00:00' }, { now: NOW }).state).toBe('delivered');
+    }
+    expect(readDelivery({ found: true, status: 'Livraison prévue', eventDateTime: '2026-09-22' }, { now: NOW }).state).not.toBe('delivered');
+  });
+});

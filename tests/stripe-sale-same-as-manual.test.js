@@ -4,6 +4,8 @@
 // writeOrderToLedger; these tests hold that line.
 import { describe, expect, it, vi } from 'vitest';
 import { buildHarness } from './helpers/extract-decl.js';
+import { noteAuthorTaken, takeSaleStock } from '../src/lib/inventory.js';
+import { channelStats } from '../src/lib/channel-mix.js';
 
 function harness({ currency = 'CAD', invoices = [] } = {}) {
   const BOOKS = { b1: { id: 'b1', title: 'Night Garden', currency, listPrice: 20 } };
@@ -14,6 +16,9 @@ function harness({ currency = 'CAD', invoices = [] } = {}) {
     activeBook: 'b1',
     isAuthor: () => false,
     deductSaleFromStockBreakdown: vi.fn(),
+    takeSaleStock,
+    channelStats,
+    noteAuthorTaken,
     notesWithInvoiceDiscount: vi.fn((_inv, num, notes) => (num === 'INV-1' ? `${notes} · invoice discount` : notes)),
     makeEventId: () => 'evt-1',
     today: () => '2026-10-05',
@@ -125,5 +130,37 @@ describe('the worklist Record button cannot record a charge twice', () => {
     reconcileRecordSale('ch_9');
     expect(deps._reconApplyPaymentToBook).not.toHaveBeenCalled();
     expect(deps.renderReconcile).toHaveBeenCalled();
+  });
+});
+
+describe('finding the "artist kept all" payout for a sale', () => {
+  const { findKeptAllPayout } = buildHarness({ names: ['findKeptAllPayout'], deps: {}, returns: '{ findKeptAllPayout }' });
+  const kept = (over) => ({ method: 'Kept from direct sale (full)', amount: 10, ...over });
+
+  it('never picks sale #12 for sale #1', () => {
+    const s = { artistPayouts: [kept({ sourceNum: '12', notes: '12 — artist retained full gross' }), kept({ sourceNum: '1', notes: '1 — artist retained full gross' })] };
+    expect(findKeptAllPayout(s, '1')).toBe(1);
+    expect(findKeptAllPayout(s, '12')).toBe(0);
+  });
+
+  it('reads an older payout by the start of its note', () => {
+    const s = { artistPayouts: [kept({ notes: '12 — artist retained full gross' }), kept({ notes: '1 — artist retained full gross' })] };
+    expect(findKeptAllPayout(s, '1')).toBe(1);
+    expect(findKeptAllPayout(s, '3')).toBe(-1);
+  });
+});
+
+describe('an invoice paid off from the ledger', () => {
+  it('turns off its Stripe pay link so the store cannot pay twice', () => {
+    const deactivateStripePaymentLink = vi.fn();
+    const s = { invoices: [{ id: 'i1', status: 'sent', stripe: { paymentLinkId: 'plink_1' }, items: [{ _ledgerId: 'L1' }] }], ledger: [{ id: 'L1', status: 'paid' }] };
+    const { maybeAutoPayInvoiceForLedger } = buildHarness({
+      names: ['maybeAutoPayInvoiceForLedger'],
+      deps: { deactivateStripePaymentLink, ledgerById: (st) => new Map(st.ledger.map(e => [e.id, e])) },
+      returns: '{ maybeAutoPayInvoiceForLedger }',
+    });
+    maybeAutoPayInvoiceForLedger(s, { invoiceId: 'i1' });
+    expect(s.invoices[0].status).toBe('paid');
+    expect(deactivateStripePaymentLink).toHaveBeenCalledWith('plink_1');
   });
 });

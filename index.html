@@ -1689,7 +1689,7 @@
 
       <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding-top:10px;border-top:var(--stroke-hair) dashed var(--border);">
         <button class="btn ink" onclick="addAllBuyersToMailingList()" title="Add every buyer we found to your mailing list">↓ Add all buyers</button>
-        <button class="btn outline cust-export-btn" onclick="exportMailingListCsv()" title="Export current segment to CSV"><span class="lead-emoji" aria-hidden="true">📥 </span>Export CSV</button>
+        <button class="btn outline cust-export-btn" onclick="exportMailingListCsv()" title="Export your mailing list to CSV"><span class="lead-emoji" aria-hidden="true">📥 </span>Export CSV</button>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;font-size:var(--text-sm);color:var(--text2);">
           <input type="checkbox" id="ml-autoadd" onchange="toggleMailingAutoAdd(this)" style="width:16px;height:16px;accent-color:var(--gold);">
           Auto-add new buyers as they appear
@@ -2083,6 +2083,7 @@
         <div class="g2">
           <div class="form-group"><label for="exp-cat">Category</label>
             <select id="exp-cat"></select>
+            <div class="tc-field-hint" id="exp-cat-hint" aria-live="polite" hidden></div>
           </div>
           <div class="form-group"><label for="exp-date">Date</label><input type="date" id="exp-date"></div>
         </div>
@@ -2962,6 +2963,7 @@
               <option>Events & Exhibitions</option>
               <option>Other</option>
             </select>
+            <div class="tc-field-hint" id="tc-exp-cat-hint" aria-live="polite" hidden></div>
           </div>
           <div class="form-group"><label for="tc-exp-date">Date</label><input type="date" id="tc-exp-date"></div>
         </div>
@@ -3054,6 +3056,21 @@
       </tr></thead>
       <tbody id="tc-recurring-body"></tbody>
     </table></div>
+  </div>
+
+  <div class="card rec-card" id="tc-rules-card" style="margin-bottom:1.5rem;">
+    <div class="rec-head">
+      <div>
+        <div class="rec-card-title">Sorting Rules</div>
+        <div class="rec-card-sub">Say where a shop's expenses go, once. New expenses that mention it, whether typed, scanned or found in your email, start in that category. You can always pick a different one, and expenses already logged stay as they are.</div>
+      </div>
+    </div>
+    <div class="tc-rule-add">
+      <div class="form-group"><label for="tc-rule-match">When it mentions</label><input type="text" id="tc-rule-match" placeholder="e.g. Canva" autocomplete="off" maxlength="60"></div>
+      <div class="form-group"><label for="tc-rule-cat">File under</label><select id="tc-rule-cat"></select></div>
+      <button type="button" class="btn gold" data-action="rules.add">+ Add rule</button>
+    </div>
+    <div id="tc-rules-list"></div>
   </div>
 
   <div class="tc-trips-header sec-head is-muted">

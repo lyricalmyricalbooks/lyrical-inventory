@@ -82,6 +82,21 @@ describe('computeInvoiceTotals', () => {
     expect(t.total).toBe(0);
   });
 
+  it('rounds an exact half-cent of tax or discount up, not down', () => {
+    // 3 × 10.50 = 31.50; 15% is exactly 4.725, which floating point holds as
+    // 4.72499… — the decimal product used to bill 4.72.
+    const t = computeInvoiceTotals({ items: [{ qty: 3, unitPrice: 10.5 }], taxRate: 15 });
+    expect(t.tax).toBe(4.73);
+    expect(t.total).toBe(36.23);
+    expect(computeInvoiceTotals({ items: [{ qty: 1, unitPrice: 0.5 }], taxRate: 15 }).tax).toBe(0.08);
+    expect(computeInvoiceTotals({ items: [{ qty: 1, unitPrice: 31.5 }], discountType: 'percent', discountValue: 15 }).discount).toBe(4.73);
+    // Every whole-cent price up to 30.00 at the common Canadian rates.
+    for (let p = 1; p <= 3000; p++) for (const rate of [5, 13, 15]) {
+      const tax = computeInvoiceTotals({ items: [{ qty: 1, unitPrice: p / 100 }], taxRate: rate }).tax;
+      expect(Math.round(tax * 100), `${p / 100} at ${rate}%`).toBe(Math.floor((p * rate + 50) / 100));
+    }
+  });
+
   it('caps a percentage at 100 and treats an unknown type as flat', () => {
     expect(computeInvoiceTotals({ items, discountType: 'percent', discountValue: 250 }).discount).toBe(150);
     expect(computeInvoiceTotals({ items, discountType: 'weird', discountValue: 5 }).discountType).toBe('flat');

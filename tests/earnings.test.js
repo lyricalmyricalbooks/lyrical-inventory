@@ -297,3 +297,33 @@ describe('artist receivables and net payout', () => {
     expect(payoutNetted(null)).toBe(0);
   });
 });
+
+describe('a payout request is not closed by a credit that is not new money', () => {
+  const book = { profitTiers: [{ artistPct: 50 }] };
+  const fresh = () => ({ hist: [{ num: 'H1', qty: 1, price: 100, artistPending: true }, { num: 'S1', qty: 1, price: 40 }], artistPayouts: [] });
+
+  it('stays open when a held sale is settled "artist keeps their share"', async () => {
+    const { calcArtistEarnings, payoutRequestCovered, sumNonCashCredit } = await import('../src/lib/earnings.js');
+    const s = fresh();
+    const st0 = calcArtistEarnings(book, s);
+    const req = { amount: st0.owedToArtist, paidAtRequest: st0.totalPaidToArtist + st0.totalOffset, keptAtRequest: sumNonCashCredit(st0.payouts), requestedAt: '2026-11-04T12:00:00Z' };
+    s.hist[0].artistPending = false;
+    s.artistPayouts.push({ date: '2026-11-04', amount: 50, method: 'Kept from direct sale', sourceNum: 'H1' });
+    const st1 = calcArtistEarnings(book, s);
+    expect(st1.owedToArtist).toBe(20);
+    expect(payoutRequestCovered(req, st1)).toBe(false);
+    // The real payment closes it.
+    s.artistPayouts.push({ date: '2026-11-05', amount: 20, method: 'e-Transfer' });
+    expect(payoutRequestCovered(req, calcArtistEarnings(book, s))).toBe(true);
+  });
+
+  it('works the same for a request made before the stamp existed', async () => {
+    const { calcArtistEarnings, payoutRequestCovered } = await import('../src/lib/earnings.js');
+    const s = fresh();
+    const st0 = calcArtistEarnings(book, s);
+    const req = { amount: st0.owedToArtist, paidAtRequest: st0.totalPaidToArtist + st0.totalOffset, requestedAt: '2026-11-04T12:00:00Z' };
+    s.hist[0].artistPending = false;
+    s.artistPayouts.push({ date: '2026-11-04', amount: 50, method: 'Kept from direct sale' });
+    expect(payoutRequestCovered(req, calcArtistEarnings(book, s))).toBe(false);
+  });
+});

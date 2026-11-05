@@ -47,7 +47,7 @@ import { escapeHtml } from '../lib/html.js';
 import { closeM, confirmDialog, openM, promptDialog } from '../lib/modal.js';
 import { buildPaymentMeta, getBookCurrencyCode, getSym, normalizeCurrencyCode } from '../lib/money.js';
 import { posOversellSummary, posStockView } from '../lib/pos-stock.js';
-import { FAIR_SEARCH_OVER, FAIR_UNDO_MS, countLabel, fairDaySummary, fairSyncPill, fairTileHtml, keepScreenAwake, readCurrentFair, readLastMethod, registerSalesForDay, rememberMethod, saveCurrentFair, soldLabel, undoOpen } from '../lib/fair-mode.js';
+import { FAIR_SEARCH_OVER, FAIR_UNDO_MS, appendRegisterLog, compExpense, registerLogAsHist, removeRegisterSale, countLabel, isCompMethod, fairDaySummary, fairSyncPill, fairTileHtml, keepScreenAwake, readCurrentFair, readLastMethod, registerSalesForDay, rememberMethod, saveCurrentFair, soldLabel, undoOpen } from '../lib/fair-mode.js';
 
 // ── EVENT POS ──
 let posCart = {};
@@ -109,6 +109,17 @@ function loadPosExchangeRates() {
   } catch {
     return { ...POS_DEFAULT_CAD_RATES };
   }
+}
+
+/**
+ * How many CAD one unit of `code` is worth from the register's rates (the
+ * saved ones, else the offline seed values), or 0 when it has none. For
+ * screens that must convert before a live rate has been fetched.
+ */
+function posCadRate(code) {
+  const rates = Object.keys(posExchangeRates).length ? posExchangeRates : loadPosExchangeRates();
+  const r = Number(rates[String(code || '').toUpperCase()]);
+  return Number.isFinite(r) && r > 0 ? r : 0;
 }
 
 function savePosExchangeRates() {
@@ -589,6 +600,12 @@ function fairShowPrintedQr() {
 // ── Today at the register ────────────────────────────────────────────────
 function fairTodaySales() {
   const books = Object.keys(BOOKS).map((id) => ({ id, title: BOOKS[id]?.title, currency: getBookCurrencyCode(BOOKS[id]), hist: states[id]?.hist }));
+  // Guest and consignment titles keep their own register log (see posConfirmSale).
+  for (const id of Object.keys(posExtraBooks)) {
+    if (!isPosOnlyBook(id)) continue;
+    const pb = posExtraBooks[id];
+    books.push({ id, title: pb?.title, currency: getBookCurrencyCode(pb), hist: registerLogAsHist(pb?.registerLog) });
+  }
   return registerSalesForDay(books, today());
 }
 
@@ -633,7 +650,19 @@ async function fairVoidSale(saleNum) {
   const ok = await confirmDialog(`Void this sale? ${what} goes back into stock and ${fairTotalsText(sale.totals)} comes out of your takings. Do this if it was refunded or rung up by mistake.`, { okLabel: 'Void sale', cancelLabel: 'Keep it', danger: true, title: 'Void sale' });
   if (!ok) return;
   if (_posLastSale?.saleNum === saleNum) { _posLastSale = null; const bar = $('fm-undo'); if (bar) bar.hidden = true; }
-  const undone = voidRegisterSale(saleNum, [...new Set(sale.lines.map((l) => l.bookId))], 'Voided at the register');
+  const ids = [...new Set(sale.lines.map((l) => l.bookId))];
+  let undone = voidRegisterSale(saleNum, ids.filter((id) => !isPosOnlyBook(id)), 'Voided at the register');
+  const guestIds = ids.filter((id) => isPosOnlyBook(id));
+  if (guestIds.length) {
+    // Fetch the shared copy first (as a sale does), so another device's count isn't overwritten.
+    try { await Promise.race([syncCatalog(), new Promise(resolve => setTimeout(resolve, 6000))]); } catch (_) { /* offline */ }
+    let took = 0;
+    for (const id of guestIds) took += removeRegisterSale(posExtraBooks[id], saleNum);
+    if (took) {
+      undone = true;
+      try { await saveCatalogWithDeletions(); } catch (e) { console.warn('POS-only void save failed', e); }
+    }
+  }
   renderPOS();
   renderHist();
   updateDash();
@@ -734,7 +763,7 @@ async function fairCharge(method, { printedQr = false } = {}) {
     // Name the fair on every sale row, so History and the sheet say where.
     const fair = readCurrentFair(today());
     if (fair) posPendingSale.method = `${posPendingSale.method} · ${fair.name}`;
-    const totalText = posPendingSale.totalCharged;
+    const totalText = posPendingSale.comp ? 'no charge' : posPendingSale.totalCharged;
     const count = posPendingSale.rows.reduce((n, row) => n + row.qty, 0);
     closeM('fair-charge');
     if ($('m-pos-qr')?.style.display === 'flex') closeM('pos-qr');
@@ -800,8 +829,12 @@ async function fairUndoLastSale() {
       for (const line of sale.posOnly) {
         const pb = posExtraBooks[line.id];
         if (!pb) continue;
-        pb.sold = Math.max(0, (pb.sold || 0) - line.qty);
-        pb.revenue = Math.max(0, (pb.revenue || 0) - line.qty * line.unit);
+        // A sale logged for Today comes out with its log entry; one tallied
+        // before the log existed is taken back from the counts alone.
+        if (!removeRegisterSale(pb, sale.saleNum)) {
+          pb.sold = Math.max(0, (pb.sold || 0) - line.qty);
+          pb.revenue = Math.max(0, (pb.revenue || 0) - line.qty * line.unit);
+        }
       }
       try { await saveCatalogWithDeletions(); } catch (e) { console.warn('POS-only undo save failed', e); }
     }
@@ -1202,14 +1235,20 @@ function posPreparePendingSale() {
     convertedSum += rows[i].convertedLine || 0;
   }
 
-  const totalCharged = hasMissingFx
-    ? rows.map((row) => `${row.sourceCode} ${row.sourceLine.toFixed(2)}`).join(' + ')
-    : posFormat(convertedSum, posTransactionCurrency);
+  // A comp is a giveaway: the customer is charged nothing, and the sale is
+  // recorded as a gratuity (copies out, no takings) in posConfirmSale.
+  const comp = isCompMethod(method);
+  const totalCharged = comp
+    ? posFormat(0, posTransactionCurrency)
+    : hasMissingFx
+      ? rows.map((row) => `${row.sourceCode} ${row.sourceLine.toFixed(2)}`).join(' + ')
+      : posFormat(convertedSum, posTransactionCurrency);
 
   const timestamp = new Date();
   const localeTs = timestamp.toLocaleString('en-CA');
   posPendingSale = {
     method,
+    comp,
     rows,
     hasMissingFx,
     totalCharged,
@@ -1254,10 +1293,15 @@ async function posConfirmSale() {
   const sale = posPendingSale;
   posPendingSale = null;
   const saleNum = `POS-${Date.now().toString().slice(-6)}`;
+  // A comp (giveaway) is a gratuity, not a sale: stock goes down, nothing is
+  // earned. Read from the method too, for a sale frozen before `comp` existed.
+  const comp = !!sale.comp || isCompMethod(sale.method);
   const posOnlyRows = [];
   const recordedBooks = [];
   let recorded = 0;
   const failed = [];
+  let compExpensed = 0;
+  const compUncosted = [];
 
   try {
     // Catalogue books first, and before anything touches the network: the sale
@@ -1278,13 +1322,13 @@ async function posConfirmSale() {
 
       try {
         // basePrice = native-currency unit price (what flows into revenue, ledger, and Sheets)
-        const basePrice = row.sourceUnit;
+        const basePrice = comp ? 0 : row.sourceUnit;
         const nativeCurCode = getBookCurrencyCode(book);
         // txnCurCode = the currency the customer actually paid in
         const txnCurCode = (row.convertedUnit === null) ? row.sourceCode : sale.currency;
         const isFx = txnCurCode !== nativeCurCode;
         // convertedUnitInTxnCur = unit price expressed in the txn currency
-        const convertedUnitInTxnCur = (row.convertedUnit === null) ? row.sourceUnit : row.convertedUnit;
+        const convertedUnitInTxnCur = comp ? 0 : (row.convertedUnit === null) ? row.sourceUnit : row.convertedUnit;
 
         // nativePerTxnRate: how many native units = 1 txn-currency unit.
         // Must match the direction fetchLiveRate(txnCur, nativeCur) returns,
@@ -1316,7 +1360,24 @@ async function posConfirmSale() {
 
         // recordOrder is the single shared sale-writing function used by manual
         // entry. It reads the active book, so point it at this row's book.
-        withActiveBook(book.id, () => recordOrder(num, chan, qty, basePrice, notes, payment));
+        // A comp keeps the Book Fair channel so the register's Today list,
+        // Void and Undo still find it, but is flagged a gratuity so it is
+        // never counted as a sale or as income.
+        const extra = comp ? { gratuity: true, gratSource: isAuthor() ? 'author' : 'publisher' } : undefined;
+        withActiveBook(book.id, () => recordOrder(num, chan, qty, basePrice, notes, payment, { extra }));
+        // A comp is a marketing expense, at what the copies cost to print.
+        if (comp) {
+          const expense = compExpense(book, { qty, date: today(), num, fair: readCurrentFair(today())?.name || '' });
+          const st = states[book.id];
+          if (expense && st) {
+            if (!Array.isArray(st.expenses)) st.expenses = [];
+            st.expenses.unshift(expense);
+            saveState(book.id);
+            compExpensed++;
+          } else {
+            compUncosted.push(book.title);
+          }
+        }
         recordedBooks.push(book.id);
         recorded++;
       } catch (error) {
@@ -1334,7 +1395,9 @@ async function posConfirmSale() {
   const lastSale = {
     saleNum,
     bookIds: recordedBooks,
-    posOnly: posOnlyRows.map((row) => ({ id: row.book.id, qty: row.qty, unit: row.sourceUnit })),
+    // A comp adds nothing to a POS-only book's sold count or takings, so
+    // there is nothing for Undo to take back either.
+    posOnly: comp ? [] : posOnlyRows.map((row) => ({ id: row.book.id, qty: row.qty, unit: row.sourceUnit })),
     at: Date.now(),
     tail: null,
     tallied: false,
@@ -1352,14 +1415,17 @@ async function posConfirmSale() {
   if (failed.length) {
     showToast(`⚠ Sale recorded, but ${failed.join(', ')} could not be saved — add ${failed.length === 1 ? 'it' : 'them'} by hand`, 'err', 8000);
   } else {
-    showToast('✓ Sale complete', 'ok');
+    showToast(!comp ? '✓ Sale complete'
+      : compUncosted.length
+        ? `✓ Comp recorded. No marketing expense for ${compUncosted.join(', ')}: add its print cost and print run to value it`
+        : (compExpensed ? '✓ Comp recorded as a marketing expense' : '✓ Comp recorded'), 'ok', compUncosted.length ? 6000 : undefined);
   }
 
   // POS-only books: their running tally lives in the shared catalogue, so the
   // latest copy is fetched first to avoid overwriting another device's count —
   // but only for as long as the signal allows. Their sale is not in the ledger
   // either way, so nothing above ever waits on this.
-  if (posOnlyRows.length) {
+  if (posOnlyRows.length && !comp) {
     let doneTail;
     lastSale.tail = new Promise((resolve) => { doneTail = resolve; });
     try {
@@ -1371,6 +1437,19 @@ async function posConfirmSale() {
       pb.sold = (pb.sold || 0) + row.qty;
       pb.revenue = (pb.revenue || 0) + row.qty * row.sourceUnit;
       pb.lastSold = today();
+      // What the customer handed over, in the currency they paid, so Today's
+      // totals match the card reader for guest titles too.
+      const paidInSale = row.convertedLine !== null && row.convertedLine !== undefined;
+      pb.registerLog = appendRegisterLog(pb.registerLog, {
+        num: saleNum,
+        date: today(),
+        at: lastSale.at,
+        qty: row.qty,
+        unit: row.sourceUnit,
+        amount: paidInSale ? row.convertedLine : row.sourceLine,
+        cur: paidInSale ? sale.currency : row.sourceCode,
+        method: sale.method || '',
+      });
     }
     lastSale.tallied = true;
     try { await saveCatalogWithDeletions(); } catch (e) { console.warn('POS-only tally save failed', e); }
@@ -1414,6 +1493,7 @@ function initPos() {
 }
 
 export {
+  posCadRate,
   posCart,
   posBooksMap,
   posResolveBook,

@@ -793,8 +793,10 @@ window._fbDeleteSubmission = async (bookId, type, subId) => {
 // ─────────────────────────────────────────────
 // GLOBAL SETTINGS
 // ─────────────────────────────────────────────
-// Returns true when the write landed, false when it didn't, and toasts on
-// failure — the same contract _fbSave has had all along.
+// Returns true when the write landed (or, for the merged settings, was kept on
+// this device to merge and send once the cloud can be read — see
+// writeMergedSetting), false when it didn't, and toasts on failure — the same
+// contract _fbSave has had all along.
 //
 // This is where production costs, payment links, the mailing list, campaigns,
 // open calls, customer suppression and the notify endpoint are persisted. A
@@ -811,6 +813,95 @@ function noteSettingsBase(key, json) {
   if (MERGED_SETTINGS.has(key) && typeof json === 'string') _settingsBase[key] = json;
 }
 
+// A merged setting whose cloud copy couldn't be read (offline, mostly) is not
+// written blind: Firestore would queue the whole copy and send it on reconnect
+// unmerged, wiping what other devices added meanwhile (their Tax Centre
+// expenses, say), and the save would hang until then. It is kept here instead,
+// with the base it was edited on, and merged and sent once the cloud can be
+// read. A copy goes to localStorage too, so a reload offline doesn't lose it:
+// the next load of that setting merges it back in (withPendingSetting).
+const PENDING_SETTING_PREFIX = 'lm-pending-setting:';
+const _pendingSettings = {};
+let _settingsRetryTimer = null;
+// Tied to the signed-in account, so another account signing in on this
+// device never merges in (or sends with its own rights) a change it didn't make.
+function pendingSettingKey(key) {
+  const uid = (auth && auth.currentUser && auth.currentUser.uid) || 'anon';
+  return `${PENDING_SETTING_PREFIX}${uid}:${key}`;
+}
+function keepPendingSetting(key, base, json) {
+  _pendingSettings[key] = { base, json };
+  try { localStorage.setItem(pendingSettingKey(key), JSON.stringify({ base, json })); } catch (_) { /* kept in memory */ }
+}
+function dropPendingSetting(key) {
+  delete _pendingSettings[key];
+  try { localStorage.removeItem(pendingSettingKey(key)); } catch (_) { /* nothing stored */ }
+}
+function scheduleSettingsRetry(ms = 30000) {
+  clearTimeout(_settingsRetryTimer);
+  _settingsRetryTimer = setTimeout(retryPendingSettings, ms);
+}
+// Writes to one merged setting run one after another, so a retry of a kept
+// change and a fresh save can't both merge against the same base and land in
+// the wrong order (the older copy overwriting the newer one in the cloud).
+const _settingWrites = {};
+function serialSettingWrite(key, fn) {
+  const run = (_settingWrites[key] || Promise.resolve()).catch(() => {}).then(fn);
+  _settingWrites[key] = run;
+  return run;
+}
+// The cloud refused the write for good (no permission, too big): retrying
+// every 30 seconds would never land and bills a read each time.
+const PERMANENT_WRITE_ERRORS = new Set(['permission-denied', 'invalid-argument', 'resource-exhausted', 'failed-precondition']);
+async function retryPendingSettings() {
+  clearTimeout(_settingsRetryTimer);
+  _settingsRetryTimer = null;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+  for (const key of Object.keys(_pendingSettings)) {
+    try {
+      await serialSettingWrite(key, () => {
+        // Whatever is kept by the time this runs: a save queued ahead of it
+        // may already have sent (and dropped) it.
+        const kept = _pendingSettings[key];
+        const local = kept && safeParse(kept.json);
+        if (!kept) return null;
+        if (!local) { dropPendingSetting(key); return null; }
+        return writeMergedSetting(key, local);
+      });
+    } catch (e) {
+      if (e && PERMANENT_WRITE_ERRORS.has(e.code)) {
+        console.error(`[FB] settings/${key}: the cloud refused the kept change`, e);
+        dropPendingSetting(key);
+        if (typeof window.showToast === 'function') {
+          window.showToast(`⚠ Could not save ${key === 'catalog' ? 'the book list' : 'the Tax Centre'} to the cloud (${e.code}). Your last change was not uploaded.`, 'err', 8000);
+        }
+        continue;
+      }
+      console.warn(`[FB] settings/${key}: retry failed`, e);
+      scheduleSettingsRetry();
+    }
+  }
+}
+if (typeof window !== 'undefined' && window.addEventListener) window.addEventListener('online', () => { retryPendingSettings(); });
+
+// The value to show for a merged setting just read as `cloudJson`: the cloud
+// copy, with any change this device kept from an earlier session merged in.
+function withPendingSetting(key, cloudJson) {
+  let stored = null;
+  try { stored = safeParse(localStorage.getItem(pendingSettingKey(key))); } catch (_) { /* none */ }
+  const pending = _pendingSettings[key] || stored;
+  if (!pending || typeof pending.json !== 'string') return safeParse(cloudJson);
+  const local = safeParse(pending.json);
+  if (!local) { dropPendingSetting(key); return safeParse(cloudJson); }
+  const res = mergeSettingDoc(pending.base, cloudJson, local);
+  const value = res.merged ? res.value : local;
+  // Now made on top of the copy just read, and still to be sent.
+  keepPendingSetting(key, cloudJson, JSON.stringify(value));
+  scheduleSettingsRetry(0);
+  return value;
+}
+
+// Returns 'pending' when the change was kept on this device to send later.
 async function writeMergedSetting(key, data) {
   const target = doc(fs, 'settings', key);
   const localJson = JSON.stringify(data);
@@ -818,7 +909,7 @@ async function writeMergedSetting(key, data) {
   // would keep whatever the cloud holds now and write it straight back, so
   // skip the read and the write. Several background checks (postage sweeps,
   // start-up repairs) save the Tax Centre whether or not they changed it.
-  if (_settingsBase[key] === localJson) return data;
+  if (_settingsBase[key] === localJson) { dropPendingSetting(key); return data; }
   let value = data;
   if (Object.prototype.hasOwnProperty.call(_settingsBase, key)) {
     try {
@@ -829,8 +920,15 @@ async function writeMergedSetting(key, data) {
         if (res.conflicts.length) console.warn(`[FB] settings/${key}: changed on two devices, this device's version kept`, res.conflicts);
       }
     } catch (e) {
-      // Offline or unreadable: write what we have, as before, rather than not at all.
-      console.warn(`[FB] settings/${key}: could not read the cloud copy to merge`, e);
+      // Offline or unreadable: keep it to merge and send later (see above).
+      console.warn(`[FB] settings/${key}: could not read the cloud copy to merge, kept to send later`, e);
+      const already = Object.prototype.hasOwnProperty.call(_pendingSettings, key);
+      keepPendingSetting(key, _settingsBase[key], localJson);
+      if (typeof navigator === 'undefined' || navigator.onLine !== false) scheduleSettingsRetry();
+      if (!already && typeof window.showToast === 'function') {
+        window.showToast('Saved on this device. It uploads when the connection is back.', 'ok', 4000);
+      }
+      return 'pending';
     }
   }
   await setDoc(target, { data: JSON.stringify(value), ts: Date.now() });
@@ -838,6 +936,9 @@ async function writeMergedSetting(key, data) {
   // this copy, so the next save must treat whatever the other device added as
   // theirs to keep, not as something this device deleted.
   _settingsBase[key] = localJson;
+  // Sent. Anything kept from an earlier failed save is in it: each save sends
+  // the whole setting as this device holds it.
+  dropPendingSetting(key);
   return value;
 }
 
@@ -852,7 +953,7 @@ window._fbSaveSettings = async (key, data) => {
     await modeFlagsSettled();
     if (window._useFirestoreGlobal()) {
       if (MERGED_SETTINGS.has(key)) {
-        await writeMergedSetting(key, data);
+        await serialSettingWrite(key, () => writeMergedSetting(key, data));
         return true;
       }
       await setDoc(doc(fs, 'settings', key), { data: JSON.stringify(data), ts: Date.now() });
@@ -877,7 +978,10 @@ window._fbLoadSettings = async (key, opts) => {
   try {
     if (useGlobalStore(opts)) {
       const s = await getDoc(doc(fs, 'settings', key));
-      if (s.exists()) { noteSettingsBase(key, s.data().data); return safeParse(s.data().data); }
+      if (s.exists()) {
+        noteSettingsBase(key, s.data().data);
+        return MERGED_SETTINGS.has(key) ? withPendingSetting(key, s.data().data) : safeParse(s.data().data);
+      }
       // Transparent fallback: Firestore doc missing — read from RTDB
       console.warn(`[FB] settings/${key} not in Firestore, reading from RTDB`);
       const rtSnap = await get(ref(db, `lyrical/settings/${key}`));
@@ -1082,7 +1186,7 @@ window._fbSaveCatalog = async (catalog) => {
   try {
     await modeFlagsSettled();
     if (window._useFirestoreGlobal()) {
-      await writeMergedSetting('catalog', catalog);
+      await serialSettingWrite('catalog', () => writeMergedSetting('catalog', catalog));
       return true;
     }
     await set(ref(db, `lyrical/settings/catalog`), { data: JSON.stringify(catalog), ts: Date.now() });
@@ -1170,7 +1274,7 @@ window._fbLoadCatalog = async (opts) => {
   try {
     if (useGlobalStore(opts)) {
       const s = await getDoc(doc(fs, 'settings', 'catalog'));
-      if (s.exists()) { noteSettingsBase('catalog', s.data().data); return safeParse(s.data().data); }
+      if (s.exists()) { noteSettingsBase('catalog', s.data().data); return withPendingSetting('catalog', s.data().data); }
       // Transparent fallback: Firestore doc missing — read from RTDB
       console.warn('[FB] catalog not in Firestore, reading from RTDB');
       const rtSnap = await get(ref(db, `lyrical/settings/catalog`));

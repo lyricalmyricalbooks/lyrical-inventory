@@ -34,7 +34,8 @@ import { codeToSymbol } from './pos.js';
 import { parseMarkdownToHtml } from '../lib/markdown.js';
 import { withCampaignFooter, campaignFooterHtml } from '../lib/campaign-footer.js';
 import { confirmDialog } from '../lib/modal.js';
-import { escapeHtml } from '../lib/html.js';
+import { escapeHtml, hasHtmlTag } from '../lib/html.js';
+import { foldText } from '../lib/app-search.js';
 import { legacyCopy } from '../lib/clipboard.js';
 import { toCsv } from '../lib/csv.js';
 import { downloadCsv } from '../lib/download.js';
@@ -185,21 +186,11 @@ async function addAllBuyersToMailingList() {
   showToast(added ? `✓ Added ${added} buyer${added === 1 ? '' : 's'} to your mailing list` : 'All buyers are already on your list');
 }
 
+// The mailing-list card's button. It used to read a list field that doesn't
+// exist, so it always said "Mailing list is empty"; it now runs the same
+// export as the mailing-list toolbar (mailable subscribers only).
 function exportMailingListCsv() {
-  const subscribers = (MAILING_LIST && MAILING_LIST.subscribers) || [];
-  if (!subscribers.length) {
-    showToast('Mailing list is empty', 'warn');
-    return;
-  }
-  const rows = subscribers.map(sub => [
-    sub.name || '',
-    sub.email || '',
-    sub.source || 'Manual',
-    sub.addedAt || ''
-  ]);
-  const csv = toCsv([['Name', 'Email', 'Source', 'Added'], ...rows], { eol: '\r\n' });
-  downloadCsv(csv, `mailing-list-${new Date().toISOString().slice(0, 10)}.csv`);
-  showToast(`✓ Exported ${subscribers.length} subscribers to CSV`);
+  exportMailingListCSV();
 }
 
 async function toggleMailingAutoAdd(cb) {
@@ -371,6 +362,18 @@ function _custTouchDate(rec, date) {
   if (!rec.last || d > rec.last) rec.last = d;
 }
 
+// A checkout of several books writes one history row per book, all sharing
+// the order number, so "orders" counts distinct order numbers — otherwise a
+// one-time buyer of two titles passed the "Repeat buyers" filter and got the
+// repeat-customer campaign. A row with no order number counts on its own.
+function _custCountOrder(rec, key) {
+  if (key == null) { rec.orders++; return; }
+  if (!rec.orderKeys) rec.orderKeys = new Set();
+  if (rec.orderKeys.has(key)) return;
+  rec.orderKeys.add(key);
+  rec.orders++;
+}
+
 // Build the de-duplicated buyer list from every available source.
 function buildCustomerList() {
   const map = new Map();
@@ -386,7 +389,7 @@ function buildCustomerList() {
       const email = h.shipEmail || h.email || '';
       if (!_custEmailKey(email)) { noEmail++; return; }
       const rec = _custUpsert(map, email, h.shipName || h.customer || '');
-      rec.orders++;
+      _custCountOrder(rec, h.num ? `${h.chan || ''}|${h.num}` : null);
       rec.units += Number(h.qty) || 0;
       rec.books.add(bookTitle);
       rec.bookIds.add(bid);
@@ -407,7 +410,7 @@ function buildCustomerList() {
     if (!_custEmailKey(o.email)) return;
     if (applied.has(o.orderNum) || applied.has(o.id)) return;
     const rec = _custUpsert(map, o.email, o.customer || o.shipName || '');
-    rec.orders++;
+    _custCountOrder(rec, o.orderNum ? `Website|${o.orderNum}` : null);
     rec.units += Number(o.qty) || 0;
     const bk = o.bookId && BOOKS[o.bookId] ? BOOKS[o.bookId] : null;
     if (bk) {
@@ -482,8 +485,9 @@ function _custApplyFilter(list) {
   } else if (_customerOrdersFilter === 'single') {
     out = out.filter(r => r.orders === 1);
   }
-  const q = _customerFilter.trim().toLowerCase();
-  if (q) out = out.filter(r => (r.name || '').toLowerCase().includes(q) || (r.email || '').toLowerCase().includes(q));
+  // Accents folded both sides, like the app-wide search: "helene" finds Hélène.
+  const q = foldText(_customerFilter);
+  if (q) out = out.filter(r => foldText(r.name).includes(q) || foldText(r.email).includes(q));
   return out;
 }
 
@@ -1070,7 +1074,9 @@ async function sendSingleEmailViaBackend(to, subject, body, replyTo, htmlBody = 
   let finalHtmlBody = htmlBody;
   let finalPlainBody = body;
 
-  if (body.includes('<') && !htmlBody) {
+  // Only a body with a real tag is HTML: a plain note saying "under <$20"
+  // must keep its line breaks and every word after the '<'.
+  if (hasHtmlTag(body) && !htmlBody) {
     finalHtmlBody = body;
     // Strip tags repeatedly: one pass can leave a tag behind when tags are
     // nested inside each other (e.g. "<scr<b>ipt>").

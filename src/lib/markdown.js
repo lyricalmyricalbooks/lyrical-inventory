@@ -25,15 +25,30 @@ export function parseMarkdownToHtml(text) {
   html = html.replace(/&lt;em&gt;/gi, '<em>').replace(/&lt;\/em&gt;/gi, '</em>');
   html = html.replace(/&lt;br&gt;/gi, '<br>');
 
-  // bold **text** or __text__
-  html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-  html = html.replace(/__(.*?)__/g, '<strong>$1</strong>');
-  // italic *text* or _text_
-  html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
-  html = html.replace(/_(.*?)_/g, '<em>$1</em>');
-  // links [label](url)
-  html = html.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" style="color:var(--gold2);text-decoration:underline;">$1</a>');
+  // Links first, parked behind placeholders: the bold/italic rules below
+  // must not rewrite the web address ("open_call_form" would otherwise turn
+  // into "open<em>call</em>form" and send a dead link).
+  const links = [];
+  html = html.replace(/\[(.*?)\]\((.*?)\)/g, (_, label, url) => {
+    links.push({ label, url });
+    return `\u0000${links.length - 1}\u0000`;
+  });
+  html = applyEmphasis(html);
+  html = html.replace(/\u0000(\d+)\u0000/g, (_, i) => {
+    const { label, url } = links[Number(i)];
+    return `<a href="${url}" target="_blank" style="color:var(--gold2);text-decoration:underline;">${applyEmphasis(label)}</a>`;
+  });
   // line breaks
   html = html.replace(/\n/g, '<br>');
   return html;
+}
+
+// **bold** / __bold__ / *italic* / _italic_. The underscore forms only count
+// at word edges, so snake_case_names and file_names_2027 stay as typed.
+function applyEmphasis(html) {
+  return html
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[^\w])__(\S(?:.*?\S)?)__(?![\w])/g, '$1<strong>$2</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/(^|[^\w])_(\S(?:.*?\S)?)_(?![\w])/g, '$1<em>$2</em>');
 }

@@ -3,7 +3,12 @@ import { normalizeTrackingNumber } from './postage-matching.js';
 
 const ORDER_PATTERN = /#?([A-Z0-9]+-[A-Z0-9-]+)/i;
 const normalizeText = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
-const normalizePostal = (value) => String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+// A US ZIP+4 ("98101-1234") is the same delivery area as its five-digit ZIP,
+// so it is compared on those five digits.
+const normalizePostal = (value) => {
+  const postal = String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return /^\d{9}$/.test(postal) ? postal.slice(0, 5) : postal;
+};
 
 function levenshteinDistance(a, b) {
   if (!a || !b) return (a || b || '').length;

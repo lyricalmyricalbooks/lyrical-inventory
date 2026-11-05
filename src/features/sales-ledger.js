@@ -34,8 +34,9 @@ import {
 import { BOOKS, states, activeBook, getState, getBook } from '../core/store.js';
 import { notesWithInvoiceDiscount } from '../lib/consignment.js';
 import { bookCurrencyCode } from '../lib/currency-migration.js';
-import { deductSaleFromStockBreakdown } from '../lib/inventory.js';
-import { cadEquivalentForSale, getBookCurrencyCode, normalizeCurrencyCode } from '../lib/money.js';
+import { authorStockToReturn, deductSaleFromStockBreakdown, noteAuthorTaken, stockToReturn, takeSaleStock } from '../lib/inventory.js';
+import { channelStats, hasOwnChannel } from '../lib/channel-mix.js';
+import { cadEquivalentForSale, getBookCurrencyCode, heldTransferIndexForSale, normalizeCurrencyCode } from '../lib/money.js';
 import { updateDash } from './dashboard.js';
 import { makeEventId, syncToSheets } from './sheets-bridge.js';
 
@@ -93,19 +94,22 @@ function writeOrderToLedger(bookId, opts = {}) {
  * Returns the new row.
  */
 function addSaleToState(s, book, { num = '', chan, qty, price, notes = '', payment = null, enteredBy = 'Publisher', date, sheetsId, extra = {}, stamp = true } = {}) {
-  if (enteredBy === 'Artist') {
-    deductSaleFromStockBreakdown(s, qty, true);
-  }
-  s.stock = Math.max(0, s.stock - qty);
+  // Copies actually taken (fewer than qty when the sale oversold), recorded
+  // on the row so a void gives back exactly those.
+  const authorTaken = enteredBy === 'Artist' ? deductSaleFromStockBreakdown(s, qty, true) : null;
+  const taken = {};
+  takeSaleStock(s, taken, qty);
   s.sold += qty; s.revenue += qty * price;
-  if (!s.chStats[chan]) s.chStats[chan] = { txns: 0, units: 0, revenue: 0 };
-  s.chStats[chan].txns++; s.chStats[chan].units += qty; s.chStats[chan].revenue += qty * price;
+  const cs = channelStats(s, chan);
+  cs.txns++; cs.units += qty; cs.revenue += qty * price;
   const row = {
     ...(stamp ? { recordedAt: new Date().toISOString() } : {}),
     ...extra,
     num, chan, qty, price, after: s.stock, notes: notesWithInvoiceDiscount(s.invoices, num, notes),
     date: date || today(), payment, enteredBy, sheetsId: sheetsId || makeEventId(), cur: bookCurrencyCode(book),
+    ...taken,
   };
+  if (authorTaken !== null) noteAuthorTaken(row, authorTaken);
   s.hist.unshift(row);
   // Its order number now counts as applied (the Orders tab hides applied ones).
   invalidateAppliedIds();
@@ -115,18 +119,21 @@ function addSaleToState(s, book, { num = '', chan, qty, price, notes = '', payme
 function recordOrderPendingTransfer(num, chan, qty, price, notes, payment = null, date = null, fromSubmission = null) {
   const s = getState(), book = getBook();
   const when = date || today();
-  deductSaleFromStockBreakdown(s, qty, true);
+  const authorTaken = deductSaleFromStockBreakdown(s, qty, true);
   // Reduce stock and count as sold, but do NOT add to revenue yet
-  s.stock = Math.max(0, s.stock - qty);
+  const taken = {};
+  takeSaleStock(s, taken, qty);
   s.sold += qty;
-  if (!s.chStats[chan]) s.chStats[chan] = { txns: 0, units: 0, revenue: 0 };
-  s.chStats[chan].txns++; s.chStats[chan].units += qty;
+  const cs = channelStats(s, chan);
+  cs.txns++; cs.units += qty;
   const updatedNotes = notesWithInvoiceDiscount(s.invoices, num, notes);
 
   // Add to history with pending flag. directToArtist marks this as cash the
   // artist collected directly (these only ever come from direct-to-artist sales).
   const sheetsId = makeEventId();
-  s.hist.unshift({ ...(fromSubmission ? { fromSubmission } : {}), num, chan, qty, price, after: s.stock, notes: updatedNotes, date: when, artistPending: true, directToArtist: true, payment, sheetsId, cur: bookCurrencyCode(book) });
+  const row = { ...(fromSubmission ? { fromSubmission } : {}), num, chan, qty, price, after: s.stock, notes: updatedNotes, date: when, artistPending: true, directToArtist: true, payment, sheetsId, cur: bookCurrencyCode(book), ...taken };
+  noteAuthorTaken(row, authorTaken);
+  s.hist.unshift(row);
   // Add to artistTransfers queue (share sheetsId so receipt updates the same sheet row)
   s.artistTransfers.push({ id: Date.now(), num, chan, qty, price, total: qty * price, notes: updatedNotes, date: when, payment, sheetsId, cur: bookCurrencyCode(book) });
   recomputeAfters(s, book);
@@ -191,22 +198,31 @@ function voidHistEntry(s, book, h, { recompute = true } = {}) {
   let pendingRev = false;
   if (h.artistPending) {
     pendingRev = true;
-    const ti = (s.artistTransfers || []).findIndex(x => (h.sheetsId && x.sheetsId === h.sheetsId) || (x.num === h.num && x.qty === h.qty));
+    const ti = heldTransferIndexForSale(s.artistTransfers, h);
     if (ti !== -1) h.voidedTransfer = s.artistTransfers.splice(ti, 1)[0];
   }
-  s.stock += h.qty;
+  // Only the copies the sale actually took go back (an oversold sale took
+  // fewer than its quantity); older rows give back the full quantity.
+  s.stock += stockToReturn(h);
   if (!h.gratuity) {
     s.sold = Math.max(0, s.sold - h.qty);
     if (!pendingRev) s.revenue = Math.max(0, s.revenue - h.qty * h.price);
   }
-  if (s.chStats[h.chan]) {
-    s.chStats[h.chan].txns = Math.max(0, s.chStats[h.chan].txns - 1);
-    s.chStats[h.chan].units = Math.max(0, s.chStats[h.chan].units - h.qty);
-    if (!pendingRev) s.chStats[h.chan].revenue = Math.max(0, s.chStats[h.chan].revenue - h.qty * h.price);
-    if (s.chStats[h.chan].txns <= 0) delete s.chStats[h.chan];
+  const cs = hasOwnChannel(s, h.chan) ? s.chStats[h.chan] : null;
+  if (cs) {
+    cs.txns = Math.max(0, cs.txns - 1);
+    cs.units = Math.max(0, cs.units - h.qty);
+    if (!pendingRev) cs.revenue = Math.max(0, cs.revenue - h.qty * h.price);
+    if (cs.txns <= 0) delete s.chStats[h.chan];
+  }
+  // A gratuity's (or comp's) marketing expense comes off with it, kept on the
+  // row so an un-void puts the same expense back.
+  if (h.gratuity) {
+    const ei = (s.expenses || []).findIndex(e => e && e.gratuity === true && e.ref === h.num);
+    if (ei !== -1) h.voidedExpense = s.expenses.splice(ei, 1)[0];
   }
   // Author-fulfilled sales took copies from the author's held stock; give them back.
-  if (h.directToArtist || h.enteredBy === 'Artist') s.authorStock = (Number.isFinite(s.authorStock) ? s.authorStock : 0) + h.qty;
+  if (h.directToArtist || h.enteredBy === 'Artist') s.authorStock = (Number.isFinite(s.authorStock) ? s.authorStock : 0) + authorStockToReturn(h);
   h.voided = true;
   h.voidedAt = Date.now();
   // Voiding many at once (undoing an import) recomputes once at the end.
@@ -216,21 +232,29 @@ function voidHistEntry(s, book, h, { recompute = true } = {}) {
 
 /** The exact reverse of voidHistEntry: the sale counts again. */
 function unvoidHistEntry(s, book, h) {
-  s.stock = Math.max(0, s.stock - h.qty);
+  // Re-take the copies against today's shelf, recording afresh how many
+  // were actually there.
+  takeSaleStock(s, h, h.qty);
   if (!h.gratuity) {
     s.sold += h.qty;
     if (!h.artistPending) s.revenue += h.qty * h.price;
   }
-  if (!s.chStats[h.chan]) s.chStats[h.chan] = { txns: 0, units: 0, revenue: 0 };
-  s.chStats[h.chan].txns++;
-  s.chStats[h.chan].units += h.qty;
-  if (!h.artistPending) s.chStats[h.chan].revenue += h.qty * h.price;
+  const cs = channelStats(s, h.chan);
+  cs.txns++;
+  cs.units += h.qty;
+  if (!h.artistPending) cs.revenue += h.qty * h.price;
+  // The expense was spliced out of this state's expenses list, so the list
+  // exists; if it somehow doesn't, the expense stays parked on the row.
+  if (h.voidedExpense && Array.isArray(s.expenses)) {
+    s.expenses.unshift(h.voidedExpense);
+    delete h.voidedExpense;
+  }
   if (h.voidedTransfer) {
     s.artistTransfers = s.artistTransfers || [];
     s.artistTransfers.push(h.voidedTransfer);
     delete h.voidedTransfer;
   }
-  if (h.directToArtist || h.enteredBy === 'Artist') deductSaleFromStockBreakdown(s, h.qty, true);
+  if (h.directToArtist || h.enteredBy === 'Artist') noteAuthorTaken(h, deductSaleFromStockBreakdown(s, h.qty, true));
   h.voided = false;
   delete h.voidedAt;
   delete h.voidedReason;
