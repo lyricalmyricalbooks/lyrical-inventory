@@ -9,3 +9,7 @@
 ## 2026-10-30 - Hoist per-row catalogue normalisation out of the Big Cartel orders table
 **Learning:** `matchBigCartelOrderToCatalog` lowercased every catalogue title twice for every order row, so the orders table did O(orders × books) string work that never changes within a render.
 **Action:** Build the lowercased title list once per render (`bigCartelCatalogTitles`) and pass it to each row; keep the per-row loop to a plain `includes` check with a `Set` for de-duplication. ~5× faster on 100 orders × 300 books.
+
+## 2026-11-05 - Optimize unbounded list processing with early returns
+**Learning:** Chaining `.filter().slice(0, LIMIT).map()` on unbounded lists like notification logs forces a full `O(N)` pass to build an intermediate filtered array before truncating it. This wastes CPU and allocates unnecessary memory when the limit is small.
+**Action:** Replace these chains with an imperative `for...of` loop (or standard `for` loop) that maintains a counter and explicitly `break`s once the limit is reached, transforming an `O(N)` operation into an `O(1)` fast-path.
