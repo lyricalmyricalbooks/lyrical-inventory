@@ -17,10 +17,10 @@
 // register's question is narrower — "can I still hand one over?" — so the low
 // warning fires against a small fair-scale count instead.
 
+import { plural } from './plural.js';
+
 /** Copies left before "only a couple left" is worth saying out loud. */
 export const POS_LOW_STOCK_AT = 3;
-
-const plural = (n, one, many) => (n === 1 ? one : many);
 
 /**
  * What one POS card should say about its own stock, given what the cart already

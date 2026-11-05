@@ -32,6 +32,7 @@ import { fmt, getBookCurrencyCode } from './money.js';
 import { findDeductionGaps } from './deduction-gaps.js';
 import { recurringStatus } from './recurring.js';
 import { unshippedOrders } from './order-followups.js';
+import { plural } from './plural.js';
 
 /** The four buckets the To-do tab groups by, in display order. */
 export const SIGNAL_GROUPS = ['orders', 'website', 'stock', 'money', 'catalogue', 'setup'];
@@ -563,8 +564,6 @@ function openAction(name, label) {
 
 function automationSignals(ctx, out) {
   const a = ctx.automation || {};
-  const plural = (n, one, many) => (n === 1 ? one : many);
-
   const rows = [];
   for (const [bookId, s] of Object.entries(ctx.states || {})) {
     for (const entry of (s?.hist || [])) {
