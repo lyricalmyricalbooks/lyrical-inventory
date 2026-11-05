@@ -7846,8 +7846,27 @@ function renderRailLatestNotifications() {
   const signals = openSignalsById(result);
   // A to-do item already listed under "Needs you now" is not repeated here:
   // the same words twice in one card read as two different problems.
-  const shownAbove = new Set(result.signals.filter(isUrgent).slice(0, RAIL_NOTIFICATION_LIMIT).map(sig => `todo:${sig.id}`));
-  const latest = readNotificationLog().filter(item => !shownAbove.has(item.kind)).slice(0, RAIL_LATEST_LIMIT);
+
+  // ⚡ Bolt Optimization: Replace full array allocations (.filter().slice().map()) with O(1) early-return imperative loops
+  const shownAbove = new Set();
+  let urgentCount = 0;
+  for (const sig of result.signals) {
+    if (isUrgent(sig)) {
+      shownAbove.add(`todo:${sig.id}`);
+      if (++urgentCount >= RAIL_NOTIFICATION_LIMIT) break;
+    }
+  }
+
+  const latest = [];
+  const rawLog = readNotificationLog();
+  for (let i = 0; i < rawLog.length; i++) {
+    const item = rawLog[i];
+    if (!shownAbove.has(item.kind)) {
+      latest.push(item);
+      if (latest.length >= RAIL_LATEST_LIMIT) break;
+    }
+  }
+
   wrap.hidden = !latest.length;
   const review = reviewQueueSnapshot().summary;
   host.innerHTML = latest.map(item => notificationLogItemHtml(item, review, signals)).join('');
