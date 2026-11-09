@@ -674,6 +674,9 @@ import { lazyFeature } from './lib/lazy-feature.js';
 import { registerActions } from './lib/actions.js';
 import { OPEN_CALL_EXPORTS } from './lib/opencall-handlers.js';
 import { parseMarkdownToHtml } from './lib/markdown.js';
+import { readableSubmissions } from './lib/submissions.js';
+import { makeScreenGuard, SCREEN_FAILED_MSG } from './lib/screen-guard.js';
+import { storageGet, storageSet } from './lib/safe-storage.js';
 
 // Open Call is a publisher-only screen and a sixth of the app's code, so it is
 // its own file, fetched after the first paint rather than inside the first
@@ -1236,6 +1239,16 @@ document.addEventListener('firebase-ready', _flushClientErrors);
 window.addEventListener('online', _flushClientErrors);
 
 let updateSWFunc = null;
+
+// Runs one screen-drawing step so that, if it throws, the user hears about it
+// once and the steps after it still run (see lib/screen-guard.js).
+const guardScreen = makeScreenGuard({
+  report: (label, err) => {
+    console.error(`[screen] ${label} failed`, err);
+    reportClientError('render', `${label}: ${(err && err.message) || err}`, { stack: err && err.stack });
+  },
+  notify: () => showToast(SCREEN_FAILED_MSG, 'warn', 7000),
+});
 
 function revealUpdatingScreen() {
   const upScreen = document.getElementById('updating-screen');
@@ -2571,7 +2584,8 @@ async function saveBookFromModal() {
   const payLinks = {};
   BOOK_LIST.forEach(b => { payLinks[b.id] = b.paymentLink || ''; });
   await window._fbSaveSettings('paymentLinks', payLinks);
-  localStorage.setItem('lm-payment-links', JSON.stringify(payLinks));
+  // The device copy is a convenience; a full device must not stop the save.
+  storageSet('lm-payment-links', JSON.stringify(payLinks));
 
   await saveCatalogWithDeletions();
   // The book's rows on the Google Sheet follow the new title.
@@ -3758,15 +3772,15 @@ window.addEventListener('offline', () => {
   renderSyncChip();
 });
 
-export let sheetsUrl = localStorage.getItem('lm-sheets-url') || '';
-export let sheetsSpreadsheetUrl = localStorage.getItem('lm-sheets-spreadsheet-url') || '';
+export let sheetsUrl = storageGet('lm-sheets-url');
+export let sheetsSpreadsheetUrl = storageGet('lm-sheets-spreadsheet-url');
 // Apps Script Web App endpoint used ONLY to fire the "needs approval"
 // notification email. The publisher connects the Sheet on their own device, but
 // the approval-needed email has to be sent from the ARTIST's browser at submit
 // time — and that device never ran the Sheet setup. So we mirror the endpoint
 // into shared cloud settings (settings/notifyEndpoint) on connect and load it
 // here on every device, giving artist sessions a URL to POST the email to.
-export let notifyUrl = localStorage.getItem('lm-notify-url') || '';
+export let notifyUrl = storageGet('lm-notify-url');
 // The Apps Script `scriptVersion` the client expects. Bump this (and the value
 // in apps-script/Code.gs) whenever Code.gs gains behaviour that needs a fresh
 // deploy — the connection card flags any older deployed version as outdated.
@@ -3779,7 +3793,7 @@ if (sheetsUrl) {
   const normalizedSavedUrl = normalizeAppsScriptUrl(sheetsUrl);
   if (normalizedSavedUrl && normalizedSavedUrl !== sheetsUrl) {
     sheetsUrl = normalizedSavedUrl;
-    localStorage.setItem('lm-sheets-url', normalizedSavedUrl);
+    storageSet('lm-sheets-url', normalizedSavedUrl);
   }
 }
 
@@ -4511,7 +4525,11 @@ export async function loadBook(bookId) {
     }
     // Watch for live updates
     window._fbWatchSubmissions(bookId, data => {
-      window.authorSubmissions[bookId] = data || {};
+      // Cleaned once here so no screen that lists them can trip over one
+      // unreadable document (see lib/submissions.js).
+      const { clean, dropped } = readableSubmissions(data);
+      if (dropped.length) reportClientError('submission-unreadable', `${bookId}: ${dropped.slice(0, 5).join(', ')}`);
+      window.authorSubmissions[bookId] = clean;
       if (activeBook === bookId || activeBook === 'all') scheduleRender();
       else { try { updatePublisherActionBanner(); } catch (_) { } }
     });
@@ -4525,7 +4543,10 @@ export async function loadBook(bookId) {
       // may be that save's own echo, older than an edit made since, and the
       // save already reads and merges the server copy.
       if (syncQueue.some(item => item.bookId === bookId) || saveInFlight(bookId)) return;
-      const loaded = JSON.parse(json2);
+      // A copy that can't be read is skipped, not applied: the screen keeps
+      // what it has and the next good copy replaces it.
+      let loaded;
+      try { loaded = JSON.parse(json2); } catch (e) { reportClientError('watch-unreadable', `${bookId}: ${e && e.message}`); return; }
       states[bookId] = { ...defaultState(book), ...loaded };
       if (!states[bookId].doneIds) states[bookId].doneIds = [];
       if (!states[bookId].artistTransfers) states[bookId].artistTransfers = [];
@@ -5549,30 +5570,10 @@ export function switchBook(bookId) {
     el.setAttribute('aria-selected', String(isActive));
   });
 
-  if (bookId === 'all') {
-    // Show combined overview, hide per-book tabs
-    document.querySelectorAll('.tab-panel').forEach(p => { p.classList.remove('active'); p.style.display = 'none'; });
-    const overview = $('tab-all-overview');
-    if (overview) { overview.classList.add('active'); overview.style.display = 'block'; }
-    $('tab-bar').style.display = 'none';
-    // All-books overview isn't a sidebar destination; clear active nav + title.
-    document.querySelectorAll('.snav.active').forEach(b => b.classList.remove('active'));
-    const shellTitle = $('shell-page-title');
-    if (shellTitle) shellTitle.textContent = 'All books';
-    applyBookAccentTokens('all');
-    applyBodyTint('all');
-    updateAllOverview();
-    updateHeader();
-  } else {
-    $('tab-bar').style.display = '';
-    // Set CSS accent (reads BOOKS[bookId] itself, and re-derives the text
-    // colour from the current theme).
-    applyBookAccentTokens(bookId);
-    applyBodyTint(bookId);
-    switchTab('dashboard');
-    updateHeader();
-  }
-  // Sync the Active Book / Test Profile tabs
+  // Point the Sheets address at the mock or the real sheet FIRST, before any
+  // screen is drawn: if drawing failed after this point, sales recorded next
+  // must still go to the right sheet (test sales never to the real one).
+  // Also syncs the Active Book / Test Profile tabs.
   const testBook = BOOK_LIST.find(isTestBook);
   if (testBook && bookId === testBook.id) {
     updateProfileTabs('test');
@@ -5595,6 +5596,30 @@ export function switchBook(bookId) {
       notifyUrl = window._realNotifyUrl || '';
       window._realSheetsUrlSaved = false;
     }
+  }
+
+  if (bookId === 'all') {
+    // Show combined overview, hide per-book tabs
+    document.querySelectorAll('.tab-panel').forEach(p => { p.classList.remove('active'); p.style.display = 'none'; });
+    const overview = $('tab-all-overview');
+    if (overview) { overview.classList.add('active'); overview.style.display = 'block'; }
+    $('tab-bar').style.display = 'none';
+    // All-books overview isn't a sidebar destination; clear active nav + title.
+    document.querySelectorAll('.snav.active').forEach(b => b.classList.remove('active'));
+    const shellTitle = $('shell-page-title');
+    if (shellTitle) shellTitle.textContent = 'All books';
+    applyBookAccentTokens('all');
+    applyBodyTint('all');
+    guardScreen('all-overview', updateAllOverview);
+    guardScreen('header', updateHeader);
+  } else {
+    $('tab-bar').style.display = '';
+    // Set CSS accent (reads BOOKS[bookId] itself, and re-derives the text
+    // colour from the current theme).
+    applyBookAccentTokens(bookId);
+    applyBodyTint(bookId);
+    switchTab('dashboard');
+    guardScreen('header', updateHeader);
   }
   updateSheetsTabUI();
 
@@ -5982,36 +6007,40 @@ export function switchTab(name) {
     return;
   }
 
-  if (name === 'dashboard') { updateDash(); renderArtistReimburseBanner(); renderPendingExpenses(); }
-  if (name === 'today') renderTodayHub();
-  if (name === 'manual') refreshPhoneSegs();
-  if (name === 'history') renderHist();
-  // Website orders was the one panel that rendered nothing on arrival, so the
-  // queue and its counts showed whatever the last visit left behind — orders
-  // applied since then still sat there as "new".
-  if (name === 'website') renderOrders();
-  if (name === 'manual') updateManualForm();
-  if (name === 'consignment') { renderStores(); renderLedger(); renderInvoices(); }
-  // renderArtistReimburseBanner writes into this panel too, and used to arrive
-  // via renderAll()'s unconditional sweep. Now that the sweep is tab-aware,
-  // entering the tab has to render it.
-  if (name === 'expenses') { renderExpenses(); renderArtistReimburseBanner(); updateExpenseForm(); }
-  if (name === 'opencall') openCallScreen.call('renderOpenCall');
-  if (name === 'reconcile') renderReconcile();
-  if (name === 'customers') renderCustomers();
-  if (name === 'taxcenter') { renderTaxCenter(); refreshTaxCentreRates(); }
-  if (name === 'sheets') { loadGasCode(); renderSheetsLog(); renderProfitSettings(); switchSettingsSubTab(activeSettingsSubTab); updateSheetsTabUI(); }
-  if (name === 'qrcodes') renderAllQRCodes();
-  if (name === 'myqr') renderAuthorQRPage();
-  if (name === 'pos') { renderPOS(); renderPOSFxStatus(); switchPOSSubTab(activePOSSubTab); }
+  // The panel is already showing; draw it. A failure here must not leave the
+  // rest of the switch undone (Fair Mode's keep-awake, below) or fail silently.
+  guardScreen('tab:' + name, () => {
+    if (name === 'dashboard') { updateDash(); renderArtistReimburseBanner(); renderPendingExpenses(); }
+    if (name === 'today') renderTodayHub();
+    if (name === 'manual') refreshPhoneSegs();
+    if (name === 'history') renderHist();
+    // Website orders was the one panel that rendered nothing on arrival, so the
+    // queue and its counts showed whatever the last visit left behind — orders
+    // applied since then still sat there as "new".
+    if (name === 'website') renderOrders();
+    if (name === 'manual') updateManualForm();
+    if (name === 'consignment') { renderStores(); renderLedger(); renderInvoices(); }
+    // renderArtistReimburseBanner writes into this panel too, and used to arrive
+    // via renderAll()'s unconditional sweep. Now that the sweep is tab-aware,
+    // entering the tab has to render it.
+    if (name === 'expenses') { renderExpenses(); renderArtistReimburseBanner(); updateExpenseForm(); }
+    if (name === 'opencall') openCallScreen.call('renderOpenCall');
+    if (name === 'reconcile') renderReconcile();
+    if (name === 'customers') renderCustomers();
+    if (name === 'taxcenter') { renderTaxCenter(); refreshTaxCentreRates(); }
+    if (name === 'sheets') { loadGasCode(); renderSheetsLog(); renderProfitSettings(); switchSettingsSubTab(activeSettingsSubTab); updateSheetsTabUI(); }
+    if (name === 'qrcodes') renderAllQRCodes();
+    if (name === 'myqr') renderAuthorQRPage();
+    if (name === 'pos') { renderPOS(); renderPOSFxStatus(); switchPOSSubTab(activePOSSubTab); }
+    if (name === 'webanalytics') renderWebAnalytics();
+    if (name === 'shipping') { initShippingTab(); }
+    if (name === 'bigcartel') { renderBigCartelTab(); }
+    if (name === 'todo') renderTodoTab();
+    if (name === 'intel') renderIntel();
+    if (name === 'backups') refreshSyncConflictUi();
+    if (name === 'help') initHelpAudience();
+  });
   fairSetAwake(name === 'pos');
-  if (name === 'webanalytics') renderWebAnalytics();
-  if (name === 'shipping') { initShippingTab(); }
-  if (name === 'bigcartel') { renderBigCartelTab(); }
-  if (name === 'todo') renderTodoTab();
-  if (name === 'intel') renderIntel();
-  if (name === 'backups') refreshSyncConflictUi();
-  if (name === 'help') initHelpAudience();
 }
 
 // Help tab: two guides (artist / publisher) on one page, plus a word search.
@@ -8185,15 +8214,17 @@ function visibleTabName() {
 
 function renderAll() {
   _revMemo.clear();
-  if (visibleTabName() === 'today') renderTodaySoFar();
+  // Each step is guarded so one broken panel can't stop the header, the To-do
+  // badge and the action banner from updating on every sync after it.
+  if (visibleTabName() === 'today') guardScreen('today-so-far', renderTodaySoFar);
   if (activeBook === 'all') {
     // The To-do tab is reached from the all-books screen, so it sits inside this
     // branch rather than in TAB_RENDERERS below — which never runs while
     // activeBook is 'all'. Without this it would go stale the moment a sale or a
     // restock changed the very thing it is reporting on.
-    if (visibleTabName() === 'todo') renderTodoTab();
-    else updateAllOverview();
-    updateHeader();
+    if (visibleTabName() === 'todo') guardScreen('tab:todo', renderTodoTab);
+    else guardScreen('all-overview', updateAllOverview);
+    guardScreen('header', updateHeader);
     return;
   }
   // Only the visible tab. This used to rebuild all eight panels on every state
@@ -8203,7 +8234,7 @@ function renderAll() {
   // pure waste. switchTab() already renders a tab when you arrive at it, so
   // the hidden ones lose nothing by being left alone.
   const render = TAB_RENDERERS[visibleTabName()];
-  if (render) render();
+  if (render) guardScreen('tab:' + visibleTabName(), render);
   scheduleTodoBadgeRefresh();
 }
 
@@ -8221,7 +8252,7 @@ function scheduleTodoBadgeRefresh() {
 }
 
 function renderCurrent() {
-  if (activeBook === 'all') { updateAllOverview(); updateHeader(); }
+  if (activeBook === 'all') { guardScreen('all-overview', updateAllOverview); guardScreen('header', updateHeader); }
   else renderAll();
   try { updatePublisherActionBanner(); } catch (_) { }
   // A sale the website shipped (or a new one) changes the switcher's count.
@@ -14038,6 +14069,12 @@ async function withButtonLoading(ev, busyLabel, fn) {
   let original;
   if (btn) { original = btn.innerHTML; btn.disabled = true; btn.innerHTML = `<span class="spinner"></span>${busyLabel}`; }
   try { return await fn(); }
+  catch (err) {
+    // The work failed without saying so itself. The button coming back with
+    // no word left people pressing it again, unsure whether anything saved.
+    showToast('⚠ That did not work. Check your connection and try again.', 'err');
+    throw err; // still reaches the error log
+  }
   finally { if (btn) { btn.disabled = false; btn.innerHTML = original; } }
 }
 window.withButtonLoading = withButtonLoading;
@@ -14411,33 +14448,39 @@ async function exportToJSON(ev) {
       downloadText(JSON.stringify(data, null, 2), filename, 'application/json');
     }
 
-    localStorage.setItem('lm-last-backup-ts', Date.now().toString());
+    storageSet('lm-last-backup-ts', Date.now().toString());
     updateLastBackupDisplay();
     if ($('backup-reminder')) $('backup-reminder').style.display = 'none';
     showToast(savedToFolder ? '✓ JSON backup saved to your selected folder' : '✓ JSON backup downloaded');
   });
 }
 
+let _autoBackupDay = '';
 function maybeAutoDownloadDailyBackup() {
   // A backup of sample data dropped in the real backup folder is a trap.
   if (TEST_PROFILE_ACTIVE) return;
   // Auto-download once per calendar day (local time) when app is opened.
   // This still requires the app to be open on that day.
   const todayKey = new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD
-  const lastAutoDay = localStorage.getItem('lm-last-auto-backup-day');
+  // Also kept in memory: on a full device the stored day can't be written,
+  // and without this every return to the app downloaded another backup.
+  if (_autoBackupDay === todayKey) return;
+  const lastAutoDay = storageGet('lm-last-auto-backup-day');
   if (lastAutoDay === todayKey) return;
 
-  const lastManualOrAutoTs = parseInt(localStorage.getItem('lm-last-backup-ts') || '0', 10);
+  const lastManualOrAutoTs = parseInt(storageGet('lm-last-backup-ts', '0'), 10);
   if (Number.isFinite(lastManualOrAutoTs) && lastManualOrAutoTs > 0) {
     const lastDate = new Date(lastManualOrAutoTs).toLocaleDateString('sv-SE');
     if (lastDate === todayKey) {
-      localStorage.setItem('lm-last-auto-backup-day', todayKey);
+      _autoBackupDay = todayKey;
+      storageSet('lm-last-auto-backup-day', todayKey);
       return;
     }
   }
 
+  _autoBackupDay = todayKey;
+  storageSet('lm-last-auto-backup-day', todayKey);
   exportToJSON();
-  localStorage.setItem('lm-last-auto-backup-day', todayKey);
 }
 
 function updateLastBackupDisplay() {
@@ -14711,11 +14754,11 @@ async function applyBackupData(data) {
   // 4. Metadata
   if (data.productionCosts) {
     await window._fbSaveSettings('productionCosts', data.productionCosts);
-    localStorage.setItem('lm-production-costs', JSON.stringify(data.productionCosts));
+    storageSet('lm-production-costs', JSON.stringify(data.productionCosts));
   }
   if (data.paymentLinks) {
     await window._fbSaveSettings('paymentLinks', data.paymentLinks);
-    localStorage.setItem('lm-payment-links', JSON.stringify(data.paymentLinks));
+    storageSet('lm-payment-links', JSON.stringify(data.paymentLinks));
   }
 
   // 5. Customer/marketing data (v2.6+). Each is guarded so older snapshots
@@ -14920,13 +14963,13 @@ async function applyBookRestore(bid) {
     if (snapshot.productionCosts && bid in snapshot.productionCosts) {
       const pc = JSON.parse(localStorage.getItem('lm-production-costs') || '{}');
       pc[bid] = snapshot.productionCosts[bid];
-      localStorage.setItem('lm-production-costs', JSON.stringify(pc));
+      storageSet('lm-production-costs', JSON.stringify(pc));
       await window._fbSaveSettings('productionCosts', pc);
     }
     if (snapshot.paymentLinks && bid in snapshot.paymentLinks) {
       const pl = JSON.parse(localStorage.getItem('lm-payment-links') || '{}');
       pl[bid] = snapshot.paymentLinks[bid];
-      localStorage.setItem('lm-payment-links', JSON.stringify(pl));
+      storageSet('lm-payment-links', JSON.stringify(pl));
       await window._fbSaveSettings('paymentLinks', pl);
     }
 
@@ -15137,7 +15180,7 @@ async function persistProductionCosts() {
   const stored = {};
   BOOK_LIST.forEach(b => { stored[b.id] = b.productionCost || 0; });
   await window._fbSaveSettings('productionCosts', stored);
-  localStorage.setItem('lm-production-costs', JSON.stringify(stored));
+  storageSet('lm-production-costs', JSON.stringify(stored));
 }
 
 function confirmProductionCostsCleared(titles) {
@@ -15243,7 +15286,7 @@ async function savePaymentLinks() {
   BOOK_LIST.forEach(b => stored[b.id] = b.paymentLink || '');
   // Save to Firebase (syncs across all devices) + localStorage as fallback
   await window._fbSaveSettings('paymentLinks', stored);
-  localStorage.setItem('lm-payment-links', JSON.stringify(stored));
+  storageSet('lm-payment-links', JSON.stringify(stored));
   showToast('✓ Payment links saved');
   if (activeBook && activeBook !== 'all') renderArtistTransfers();
 }
@@ -16279,7 +16322,8 @@ async function boot(forcedBook) {
       Promise.all([loadBook(forcedBook), settingsLoaded]).then(() => {
         setSyncState('ok', '<b>Firestore</b> · connected');
         updateSubheader(new Date().toLocaleTimeString());
-        renderAll(); updateHeader(); updateRoleToggleButton(); syncRoleUI();
+        renderAll();
+        guardScreen('header', () => { updateHeader(); updateRoleToggleButton(); syncRoleUI(); });
         noteStartupFinished();
         noteDeviceCopyFresh();
         // Send anything queued before the app was last closed. The call before
@@ -16402,7 +16446,7 @@ function applyIntegrationSectionState(key, collapsed) {
 function toggleIntegrationSection(key) {
   const collapsed = localStorage.getItem(`lm-integrations-collapsed-${key}`) === '1';
   const next = !collapsed;
-  localStorage.setItem(`lm-integrations-collapsed-${key}`, next ? '1' : '0');
+  storageSet(`lm-integrations-collapsed-${key}`, next ? '1' : '0');
   applyIntegrationSectionState(key, next);
 }
 
@@ -16574,7 +16618,7 @@ export function getReconMemory() {
     return m;
   } catch (_) { return { recorded: {}, dismissed: {} }; }
 }
-export function saveReconMemory(m) { localStorage.setItem(RECON_MEMORY_KEY, JSON.stringify(m || {})); }
+export function saveReconMemory(m) { storageSet(RECON_MEMORY_KEY, JSON.stringify(m || {})); }
 
 // Resolve a usable Stripe key: prefer the Tax Center key (where the fees tool
 // stores it), then the Invoice Settings key, then whatever is in the field.

@@ -70,8 +70,12 @@ async function loadModeFlags() {
     const snap = await getDoc(doc(fs, 'settings', 'modeFlags'));
     if (snap.exists()) {
       _modeFlags = snap.data() || {};
-      // Write back to localStorage so the cache is warm for next startup
-      Object.keys(_modeFlags).forEach(k => localStorage.setItem(k, String(_modeFlags[k])));
+      // Write back to localStorage so the cache is warm for next startup. A
+      // full device must not drop into the catch below, which would lay this
+      // device's older flags over the ones just read from the server.
+      try {
+        Object.keys(_modeFlags).forEach(k => localStorage.setItem(k, String(_modeFlags[k])));
+      } catch (e) { console.warn('[FB] Could not cache mode flags on this device', e); }
     } else {
       // First ever load — seed from whatever localStorage has (migration path)
       const keys = Object.keys(localStorage).filter(k => k.startsWith('fs_mode_'));
@@ -956,7 +960,16 @@ window._fbSaveSettings = async (key, data) => {
         await serialSettingWrite(key, () => writeMergedSetting(key, data));
         return true;
       }
-      await setDoc(doc(fs, 'settings', key), { data: JSON.stringify(data), ts: Date.now() });
+      const write = setDoc(doc(fs, 'settings', key), { data: JSON.stringify(data), ts: Date.now() });
+      // Offline, Firestore keeps the write on this device and sends it when
+      // the connection returns, but its promise only settles once the server
+      // answers. Awaiting it left Save buttons and the book form stuck until
+      // then, so offline the write is left to finish in the background.
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        write.catch(e => console.error('fbSaveSettings (sent after reconnect) failed', e));
+        return true;
+      }
+      await write;
       return true;
     }
     await set(ref(db, `lyrical/settings/${key}`), { data: JSON.stringify(data), ts: Date.now() });
