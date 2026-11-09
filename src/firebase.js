@@ -966,7 +966,12 @@ window._fbSaveSettings = async (key, data) => {
       // answers. Awaiting it left Save buttons and the book form stuck until
       // then, so offline the write is left to finish in the background.
       if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-        write.catch(e => console.error('fbSaveSettings (sent after reconnect) failed', e));
+        write.catch(e => {
+          console.error('fbSaveSettings (sent after reconnect) failed', e);
+          if (typeof window.showToast === 'function') {
+            window.showToast(`⚠ Could not save ${key} to the cloud — your change may be lost on reload`, 'err', 5000);
+          }
+        });
         return true;
       }
       await write;

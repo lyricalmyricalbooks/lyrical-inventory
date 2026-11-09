@@ -43,7 +43,10 @@ import { makeEventId, syncToSheets } from './sheets-bridge.js';
 function recordOrder(num, chan, qty, price, notes, payment = null, { date, enteredBy: enteredByOverride, extra } = {}) {
   const enteredBy = enteredByOverride || (isAuthor() ? 'Artist' : 'Publisher');
   writeOrderToLedger(activeBook, { num, chan, qty, price, notes, payment, enteredBy, date, extra });
-  renderHist(); updateDash();
+  // The sale is saved by now. A repaint that fails must not turn into an
+  // error on the form, which invites saving the same sale a second time.
+  // Rethrown on its own so the error log still gets it.
+  try { renderHist(); updateDash(); } catch (err) { setTimeout(() => { throw err; }, 0); }
 }
 
 /**

@@ -100,11 +100,36 @@ describe('the app with a broken submission or screen', () => {
         good: { data: JSON.stringify({ num: 'A-1', qty: 2, price: 20, date: '2026-11-01', chan: 'Direct' }), ts: 2 },
       },
     });
+    // Hidden, but the publisher is told so the artist's entry isn't lost silently.
+    expect(app.toast()).toMatch(/One pending artist entry for Harbour Lights could not be read/);
     expect(() => app.main.switchTab('history')).not.toThrow();
     await app.settle();
     const body = app.window.document.getElementById('hist-body') || app.window.document.getElementById('tab-history');
     expect(body.textContent).toContain('A-1');
     expect(app.cloud.errorReports.some(r => r.kind === 'submission-unreadable')).toBe(true);
+  });
+
+  it('saves a manual sale even if the screen fails to repaint afterwards, with no "try again" message', async () => {
+    app.main.switchBook('harbour');
+    subWatchers.harbour(null);
+    const doc = app.window.document;
+    const spy = vi.spyOn(doc, 'getElementById');
+    spy.mockImplementation(function (id) {
+      if (id === 'hist-body') throw new Error('drawing failed');
+      return Document.prototype.getElementById.call(this, id);
+    });
+    try {
+      const set = (id, v) => { doc.getElementById(id).value = v; };
+      set('m-num', 'R-9'); set('m-qty', '1'); set('m-price', '20'); set('m-chan', 'In Person');
+      set('m-notes', ''); set('m-payment-type', 'Payment directly to publisher'); set('m-price-cur', 'BOOK');
+      await app.window.submitManual();
+      await app.settle();
+    } finally {
+      spy.mockRestore();
+    }
+    const rows = app.main.states.harbour.hist.filter(h => h.num === 'R-9');
+    expect(rows).toHaveLength(1);
+    expect(app.toast()).not.toMatch(/try again/i);
   });
 
   it('tells the user when a screen fails, and the rest of the switch still runs', async () => {

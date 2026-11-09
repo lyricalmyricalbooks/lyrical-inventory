@@ -1242,7 +1242,7 @@ let updateSWFunc = null;
 
 // Runs one screen-drawing step so that, if it throws, the user hears about it
 // once and the steps after it still run (see lib/screen-guard.js).
-const guardScreen = makeScreenGuard({
+export const guardScreen = makeScreenGuard({
   report: (label, err) => {
     console.error(`[screen] ${label} failed`, err);
     reportClientError('render', `${label}: ${(err && err.message) || err}`, { stack: err && err.stack });
@@ -3166,6 +3166,7 @@ export const formatDateTime = (isoString) => {
 // ── PER-BOOK STATE
 // states[bookId] = { stock, sold, revenue, chStats, hist, stores, ledger, doneIds }
 window.authorSubmissions = {}; // Tracks pending expenses/sales by Authors
+const _unreadableSubsTold = new Set(); // books whose unreadable submissions were already mentioned
 export let orders = [], activeId = null;
 let fbReady = false, lastSavedHashes = {}, lastSaveTimes = {};
 // The cloud copy (per part, as _fbSave stores it) that each book's screen was
@@ -4528,7 +4529,15 @@ export async function loadBook(bookId) {
       // Cleaned once here so no screen that lists them can trip over one
       // unreadable document (see lib/submissions.js).
       const { clean, dropped } = readableSubmissions(data);
-      if (dropped.length) reportClientError('submission-unreadable', `${bookId}: ${dropped.slice(0, 5).join(', ')}`);
+      if (dropped.length) {
+        reportClientError('submission-unreadable', `${bookId}: ${dropped.slice(0, 5).join(', ')}`);
+        // Hidden, so say so once: otherwise the artist thinks it is waiting
+        // for approval and nobody ever sees it.
+        if (!_unreadableSubsTold.has(bookId)) {
+          _unreadableSubsTold.add(bookId);
+          showToast(`⚠ ${dropped.length === 1 ? 'One pending artist entry' : `${dropped.length} pending artist entries`} for ${(BOOKS[bookId] && BOOKS[bookId].title) || 'a book'} could not be read and ${dropped.length === 1 ? 'is' : 'are'} hidden. Ask for ${dropped.length === 1 ? 'it' : 'them'} to be sent again.`, 'warn', 9000);
+        }
+      }
       window.authorSubmissions[bookId] = clean;
       if (activeBook === bookId || activeBook === 'all') scheduleRender();
       else { try { updatePublisherActionBanner(); } catch (_) { } }
@@ -11593,9 +11602,14 @@ async function submitGratuity(ev) {
     }
 
     recomputeAfters(s, book);
-    renderHist();
-    if (expenseIt) renderExpenses();
-    updateDash(); saveState(activeBook);
+    // Save first, then repaint: a screen failing to draw must never stop the
+    // gift being saved (and a retry would then take the stock off twice).
+    saveState(activeBook);
+    guardScreen('after-gratuity', () => {
+      renderHist();
+      if (expenseIt) renderExpenses();
+      updateDash();
+    });
     syncToSheets({ type: 'order', book: book.title, date, num, chan: 'Gratuity', qty, price: 0, total: 0, stockAfter: s.stock, notes: (ref ? ref + ' · ' : '') + notes + (notes || ref ? ' · ' : '') + gratSource + ' pile', sheetsId, currency: getBookCurrencyCode(book) });
     addLog('log-gratuity', `${num}: ${qty} gifted → ${s.stock} remaining`, 'ok');
     if (s.stock <= book.threshold) addLog('log-gratuity', '⚠ Below threshold!', 'warn');
@@ -14069,12 +14083,6 @@ async function withButtonLoading(ev, busyLabel, fn) {
   let original;
   if (btn) { original = btn.innerHTML; btn.disabled = true; btn.innerHTML = `<span class="spinner"></span>${busyLabel}`; }
   try { return await fn(); }
-  catch (err) {
-    // The work failed without saying so itself. The button coming back with
-    // no word left people pressing it again, unsure whether anything saved.
-    showToast('⚠ That did not work. Check your connection and try again.', 'err');
-    throw err; // still reaches the error log
-  }
   finally { if (btn) { btn.disabled = false; btn.innerHTML = original; } }
 }
 window.withButtonLoading = withButtonLoading;
