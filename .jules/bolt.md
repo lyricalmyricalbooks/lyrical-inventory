@@ -9,3 +9,7 @@
 ## 2026-10-30 - Hoist per-row catalogue normalisation out of the Big Cartel orders table
 **Learning:** `matchBigCartelOrderToCatalog` lowercased every catalogue title twice for every order row, so the orders table did O(orders × books) string work that never changes within a render.
 **Action:** Build the lowercased title list once per render (`bigCartelCatalogTitles`) and pass it to each row; keep the per-row loop to a plain `includes` check with a `Set` for de-duplication. ~5× faster on 100 orders × 300 books.
+
+## 2026-11-09 - Loop Fusion in Unlinked Copy Processing
+**Learning:** Chaining array methods like .reduce(), .map(), and .filter() creates intermediate arrays and causes multiple passes over the data. In hot paths, this increases GC pressure.
+**Action:** Replaced chained declarative array methods with a single imperative loop (loop fusion) in website link data processing to prevent unnecessary allocations.

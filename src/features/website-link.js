@@ -379,8 +379,19 @@ function noteUnlinked(docs) {
   docs.forEach(d => {
     if (d.web && d.web.test === true) return; // a rehearsal sells nothing
     const list = Array.isArray(d.web && d.web.unlinked) ? d.web.unlinked : [];
-    const qty = list.reduce((n, u) => n + (Math.floor(Number(u && u.qty)) || 0), 0);
-    if (qty > 0) map[d.id] = { qty, titles: list.map(u => String((u && u.title) || '')).filter(Boolean).slice(0, 3) };
+    // ⚡ Bolt Optimization: Replace chained .reduce().map().filter().slice() passes with a single imperative loop
+    let qty = 0;
+    const titles = [];
+    for (let i = 0; i < list.length; i++) {
+      const u = list[i];
+      const itemQty = Math.floor(Number(u && u.qty)) || 0;
+      qty += itemQty;
+      if (titles.length < 3) {
+        const title = String((u && u.title) || '');
+        if (title) titles.push(title);
+      }
+    }
+    if (qty > 0) map[d.id] = { qty, titles };
     else delete map[d.id];
   });
   writeJson(UNLINKED_KEY, map);
@@ -1096,9 +1107,26 @@ function blockedHtml() {
 function unlinkedHtml() {
   const map = readJson(UNLINKED_KEY, {});
   const entries = Object.values(map);
-  const qty = entries.reduce((n, e) => n + (Number(e && e.qty) || 0), 0);
+  // ⚡ Bolt Optimization: Replace multiple passes (.reduce(), .flatMap(), Set, .slice()) with a single imperative loop
+  let qty = 0;
+  const titleSet = new Set();
+  const titles = [];
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    const itemQty = Number(e && e.qty) || 0;
+    qty += itemQty;
+    if (titles.length < 3 && e && e.titles) {
+      for (let j = 0; j < e.titles.length; j++) {
+        const title = e.titles[j];
+        if (title && !titleSet.has(title)) {
+          titleSet.add(title);
+          titles.push(title);
+          if (titles.length === 3) break;
+        }
+      }
+    }
+  }
   if (!qty) return '';
-  const titles = [...new Set(entries.flatMap(e => (e && e.titles) || []))].slice(0, 3);
   return `<div class="wl-section wl-unlinked">
       <p class="wl-note">${chip('active', '●', 'Not linked')} ${escapeHtml(`${copies(qty)} sold on the website ${qty === 1 ? 'isn’t' : 'aren’t'} linked to a book here${titles.length ? ` (${titles.join(', ')})` : ''}. Link them in the website’s admin under Inventory › Inventory app link.`)}</p>
       <button class="card-x" type="button" data-wl-action="hide-unlinked" aria-label="Close the note about copies that aren’t linked" title="Comes back when another order has copies that aren’t linked">✕</button>
