@@ -18,6 +18,7 @@
 //
 // What moves is the screen: rendering, filtering, paging, the trips panel and
 // the exports. That is the part nothing else in the app reaches into.
+import { storageGet } from '../lib/safe-storage.js';
 import {
   $,
   TAX_CENTER,
@@ -1152,7 +1153,8 @@ function _tcRenderCategoryPanel(allLedger, baseCurrency) {
   }
 }
 
-let _tcTripsViewMode = localStorage.getItem('tc_trips_view_mode') || 'cards';
+// Read at load: a throw here (site data blocked) would stop the app starting.
+let _tcTripsViewMode = storageGet('tc_trips_view_mode', 'cards');
 
 function tcSetTripsView(mode) {
   _tcTripsViewMode = mode === 'table' ? 'table' : 'cards';
