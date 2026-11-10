@@ -20235,7 +20235,7 @@ a.notif-action:hover { text-decoration: underline; }
   .pub-shell .tab-bar{display:none;}
   .pub-shell .tab-panel{padding-bottom:calc(var(--mnav-h) + 30px + env(safe-area-inset-bottom));}
   .pub-shell .mnav{
-    display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-items:end;
+    display:grid;grid-template-columns:repeat(5,minmax(0,1fr));align-items:end;
     position:fixed;left:0;right:0;bottom:0;z-index:calc(var(--z-sticky) + 60);
     height:calc(var(--mnav-h) + env(safe-area-inset-bottom));
     padding:6px max(6px,env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(6px,env(safe-area-inset-left));
@@ -20456,6 +20456,11 @@ a.notif-action:hover { text-decoration: underline; }
 .today-title{margin:0;font-family:var(--font-ui);font-size:var(--text-2xl);font-weight:900;color:var(--content-primary);}
 .today-date{font-family:var(--font-mono);font-size:var(--text-xs);color:var(--content-secondary);}
 .today-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-3);}
+/* Line icons (index.html's #ic-* sprite): sized by the text around them, drawn in its colour. */
+.ic-sprite{position:absolute;width:0;height:0;overflow:hidden;}
+.ic{width:1em;height:1em;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:square;stroke-linejoin:miter;vertical-align:-.125em;}
+/* Phone only: Log an order, which the phone's bottom bar no longer carries. */
+.today-card-phone{display:none;}
 .today-card{
   position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:4px;
   min-height:124px;padding:var(--space-4);text-align:left;cursor:pointer;touch-action:manipulation;

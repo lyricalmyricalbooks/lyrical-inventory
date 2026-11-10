@@ -106,7 +106,10 @@ try {
   check(!!second && Number(second.qty) === 1, 'History has the one-copy sale', JSON.stringify(second));
   await page.evaluate((id) => { window.switchBook(id); window.switchTab('history'); }, BOOK);
   const idx = await page.evaluate(({ id, num }) => window.__shotsMain.states[id].hist.findIndex(h => h.num === num), { id: BOOK, num: second.num });
-  await page.locator(`button[onclick="openEditHist(${idx})"]`).first().tap();
+  // On a phone the Edit button sits inside the folded row: open the row first.
+  const edit = page.locator(`button[onclick="openEditHist(${idx})"]`).first();
+  await page.locator('#hist-body tr.hist-row', { has: edit }).locator('.hist-num, td').first().tap();
+  await edit.tap();
   await page.locator('#edit-void-btn').tap();
   await page.waitForFunction(({ id, num }) => window.__shotsMain.states[id].hist.find(h => h.num === num)?.voided, { id: BOOK, num: second.num });
   const afterVoid = await book();

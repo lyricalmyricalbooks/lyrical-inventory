@@ -19,7 +19,7 @@ test('the order card summary is order #, channel, total, date and the action; qt
   expect(start).toBeGreaterThan(-1);
   // Indices into the Order History header: 0 order #, 1 channel (lead), 2 qty,
   // 3 unit price, 4 total, 5 stock after, 6 notes, 7 entered by, 8 date, 9 actions.
-  expect(layout).toMatch(/'hist-body': \{ lead: 1, summary: \[0, 4, 8, 9\], card: true \}/);
+  expect(layout).toMatch(/'hist-body': \{ lead: 1, summary: \[0, 2, 4, 8, 9\], card: true \}/);
 });
 
 test('amounts sit in one fixed-width right column on the card', () => {
@@ -33,7 +33,7 @@ test('the Details button stays a real toggle, and a tap on the card opens it', (
   expect(historyPhone).toMatch(/#hist-body \.phone-record-toggle\{[^}]*min-height:44px;/);
   expect(historyPhone).not.toMatch(/phone-record-toggle\{[^}]*width:\s*100%/);
   // hist-body alone opts into the card-wide tap, inside phone-layout's records enhancer.
-  expect(layout).toMatch(/'hist-body': \{ lead: 1, summary: \[0, 4, 8, 9\], card: true \}/);
+  expect(layout).toMatch(/'hist-body': \{ lead: 1, summary: \[0, 2, 4, 8, 9\], card: true \}/);
   expect(layout).toMatch(/if \(config\.card\) \{\s*row\.addEventListener\('click'/);
   expect(layout).toMatch(/if \(event\.target\.closest\('button, a, input, select, textarea, label'\)\) return;/);
   expect(layout).toMatch(/matchMedia\?\.\('\(max-width: 768px\)'\)/);

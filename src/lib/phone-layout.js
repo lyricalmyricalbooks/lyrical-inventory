@@ -17,10 +17,10 @@ const RECORDS = {
   // used to be cut off inside the banner on a phone.
   'd-exp-body': { lead: 1, summary: [0, 4], card: true },
   'ledger-body': { lead: 1, summary: [0, 2, 5, 7] },
-  // Order History: the summary is order #, channel, total, date and the action.
-  // Qty moves behind the disclosure with the unit price and stock after. `card`
-  // makes a tap anywhere on the order's card open it, not just the small button.
-  'hist-body': { lead: 1, summary: [0, 4, 8, 9], card: true },
+  // Order History: the summary is order #, channel, copies, total, date and the
+  // action. Unit price and stock after fold behind the disclosure. `card` makes a
+  // tap anywhere on the order's row open it, not just the small button.
+  'hist-body': { lead: 1, summary: [0, 2, 4, 8, 9], card: true },
   // Expenses: description leads, with the amount on the top line and date and receipt
   // beneath. Category, reference, CAD value and reimbursement fold behind Details.
   // '' is the bulk-select box (author view) and the actions cell; the CSS keeps the

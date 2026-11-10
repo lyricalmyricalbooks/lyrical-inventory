@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from 'vitest';
-import { phoneBooksHtml, phoneBookStatus, phoneBookMatches } from '../src/lib/phone-books.js';
+import { phoneBooksHtml, phoneBookStatus, sortPhoneBooks, nextPhoneBooksSort } from '../src/lib/phone-books.js';
 import { fairTileHtml } from '../src/lib/fair-mode.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -24,25 +24,40 @@ describe('All Books on a phone', () => {
     expect(phoneBookStatus({ onHand: 30, threshold: 5, brokeEven: true }).key).toBe('paid');
     expect(phoneBookStatus({ onHand: 30, threshold: 5 }).key).toBe('selling');
   });
-  test('filters', () => {
-    expect(books.filter((b) => phoneBookMatches(b, 'low')).map((b) => b.id)).toEqual(['b']);
-    expect(books.filter((b) => phoneBookMatches(b, 'out')).map((b) => b.id)).toEqual(['c']);
-    expect(books.filter((b) => phoneBookMatches(b, 'stores')).map((b) => b.id)).toEqual(['a', 'c']);
+  test('sorts by revenue, sold or title, ties falling back to the title', () => {
+    const rows = [{ title: 'B', revenue: 5, sold: 9 }, { title: 'A', revenue: 5, sold: 1 }, { title: 'C', revenue: 9, sold: 2 }];
+    expect(sortPhoneBooks(rows, 'revenue').map((b) => b.title)).toEqual(['C', 'A', 'B']);
+    expect(sortPhoneBooks(rows, 'sold').map((b) => b.title)).toEqual(['B', 'C', 'A']);
+    expect(sortPhoneBooks(rows, 'title').map((b) => b.title)).toEqual(['A', 'B', 'C']);
+    expect(sortPhoneBooks(rows, 'nonsense').map((b) => b.title)).toEqual(['C', 'A', 'B']);
+    expect(['revenue', 'sold', 'title'].map(nextPhoneBooksSort)).toEqual(['sold', 'title', 'revenue']);
   });
-  test('figures, chips and escaped rows', () => {
-    document.body.innerHTML = phoneBooksHtml(books, 'all');
-    const figs = [...document.querySelectorAll('.ledger-value')].map((n) => n.textContent);
-    expect(figs).toEqual(['58', '3', '2']);
-    expect(document.querySelectorAll('.phone-book-row')).toHaveLength(3);
-    expect(document.querySelector('.phone-book-title').textContent).toBe('Harbour <Lights>');
-    // Only a plain colour reaches the style attribute.
-    const covers = [...document.querySelectorAll('.phone-book-cover')].map((n) => n.getAttribute('style'));
-    expect(covers).toEqual(['background:#2E6DA4', null, null]);
-    expect(document.querySelector('.book-chip.is-on').textContent).toBe('All');
+  test('figures, channel bar and escaped ranked rows', () => {
+    const ranked = [
+      { id: 'a', title: 'Harbour <Lights>', revenue: 900, revenueText: 'CA$900', sold: 40, onHand: 51, threshold: 10 },
+      { id: 'b"x', title: 'Ember', revenue: 300, revenueText: 'CA$300', sold: 20, onHand: 7, threshold: 10 },
+      { id: 'c', title: 'Gone', revenue: 0, sold: 0, onHand: 0 },
+    ];
+    const mix = [{ name: 'Fairs', pct: 60, color: '#2E6DA4' }, { name: 'Web', pct: 40, color: 'red;background:url(x)' }, { name: 'None', pct: 0 }];
+    document.body.innerHTML = phoneBooksHtml({ books: ranked, totals: { revenueText: 'CA$1,200', sold: 60, owedText: 'CA$80' }, mix });
+    expect([...document.querySelectorAll('.phone-kpi-value')].map((n) => n.textContent)).toEqual(['CA$1,200', '60', 'CA$80']);
+    const rows = [...document.querySelectorAll('.phone-rank-row')];
+    expect(rows.map((r) => r.querySelector('.phone-rank-title').textContent)).toEqual(['Harbour <Lights>', 'Ember', 'Gone']);
+    expect(rows[1].dataset.book).toBe('b"x');
+    expect(rows.every((r) => r.dataset.action === 'nav.book')).toBe(true);
+    expect([...document.querySelectorAll('.phone-rank-stock')].map((n) => n.textContent)).toEqual(['51 left', '7 left', 'Sold out']);
+    expect(rows[0].querySelector('.phone-rank-track span').getAttribute('style')).toBe('width:100%');
+    // Only a plain colour reaches the style attribute; empty shares drop out.
+    const segs = [...document.querySelectorAll('.phone-mix-bar span')].map((n) => n.getAttribute('style'));
+    expect(segs).toEqual(['flex:60;background:#2E6DA4', 'flex:40']);
+    expect(document.querySelector('.phone-sort-btn').textContent).toContain('Revenue');
+    expect(document.querySelector('.phone-mix-more').getAttribute('aria-expanded')).toBe('false');
   });
-  test('an empty filter says so', () => {
-    document.body.innerHTML = phoneBooksHtml([books[0]], 'out');
-    expect(document.querySelector('.phone-sheet-empty').textContent).toContain('Sold out');
+  test('no books says so, and no sales hides the channel bar', () => {
+    document.body.innerHTML = phoneBooksHtml({ books: [] });
+    expect(document.querySelector('.phone-sheet-empty').textContent).toContain('No books yet');
+    expect(document.querySelector('.phone-mix')).toBeNull();
+    expect(document.querySelector('.phone-mix-more')).toBeNull();
   });
   test('wired into the overview', () => {
     expect(html).toMatch(/id="all-books-phone"/);
@@ -62,8 +77,9 @@ describe('Sell rows', () => {
     expect(document.querySelector('.fm-tile-qty').textContent).toBe('2');
     expect(document.querySelector('.fm-tile-cover').hasAttribute('style')).toBe(false);
   });
-  test('the pinned total replaces the Sell / Manual entry bar while a sale is open', () => {
-    expect(riso).toMatch(/\.pub-shell:has\(#tab-pos\.active [^)]*\.fm-bar:not\(\[hidden\]\)\) \.mnav \{ display: none; \}/);
+  test('the Charge bar floats above the bottom bar, which stays put while a sale is open', () => {
+    expect(riso).not.toMatch(/\.fm-bar:not\(\[hidden\]\)\) \.mnav \{ display: none; \}/);
+    expect(riso).toMatch(/bottom: calc\(var\(--mnav-h\) \+ 30px/);
   });
 });
 

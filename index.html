@@ -337,6 +337,25 @@
 
 </head>
 <body>
+<!-- Line icons: one 2px stroke set in currentColor, so they take the ink, paper or
+     flare of whatever they sit on and follow night mode without their own colours. -->
+<svg class="ic-sprite" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter">
+  <symbol id="ic-today" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16"/><path d="M3 10h18M8 2.5v5M16 2.5v5"/></symbol>
+  <symbol id="ic-history" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 3.5"/></symbol>
+  <symbol id="ic-books" viewBox="0 0 24 24"><path d="M3 4.5h7l2 2 2-2h7v14h-7l-2 2-2-2H3z"/><path d="M12 6.5v14"/></symbol>
+  <symbol id="ic-more" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="ic-sell" viewBox="0 0 24 24"><path d="M3 3h9l9 9-9 9-9-9z"/><path d="M7.5 7.5h.01" stroke-width="3"/></symbol>
+  <symbol id="ic-order" viewBox="0 0 24 24"><path d="M5 3h10l4 4v14H5z"/><path d="M14 3v5h5M9 12h6M9 16h6"/></symbol>
+  <symbol id="ic-orders" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c-3 3.2-3 14.8 0 18M12 3c3 3.2 3 14.8 0 18"/></symbol>
+  <symbol id="ic-todo" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18"/><path d="M7.5 12l3 3 6-6.5"/></symbol>
+  <symbol id="ic-receipt" viewBox="0 0 24 24"><path d="M3 7h4l2-3h6l2 3h4v13H3z"/><circle cx="12" cy="13" r="3.5"/></symbol>
+  <symbol id="ic-payments" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14"/><path d="M2 10h20M6 15h4"/></symbol>
+  <symbol id="ic-customers" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 21v-2.5a4.5 4.5 0 0 1 4.5-4.5h4a4.5 4.5 0 0 1 4.5 4.5V21"/><path d="M15.5 4.6a3.5 3.5 0 0 1 0 6.8M18.5 14.3a4.5 4.5 0 0 1 3 4.2V21"/></symbol>
+  <symbol id="ic-shipping" viewBox="0 0 24 24"><path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10"/></symbol>
+  <symbol id="ic-tax" viewBox="0 0 24 24"><path d="M5 19L19 5"/><circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="17" r="2.5"/></symbol>
+  <symbol id="ic-opencall" viewBox="0 0 24 24"><path d="M3 9.5v5h4l8 5v-15l-8 5z"/><path d="M18.5 9a4 4 0 0 1 0 6"/></symbol>
+  <symbol id="ic-backups" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5"/><path d="M5 9v11h14V9M10 13h4"/></symbol>
+</svg>
 
 <!-- APP LAUNCH SPLASH SCREEN (Covers the split-second auth connection flash) -->
 <div id="splash-screen" style="position: fixed; inset: 0; background: var(--ink); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity 0.4s ease;">
@@ -667,14 +686,16 @@
 </div>
 
 <!-- TABS (per-book) -->
-<!-- PHONE BOTTOM NAV (publisher, ≤768px). Four everyday destinations plus
-     "More", which opens #more-sheet holding every other tool (cloned from the
-     sidebar so badges and grouping stay in one place). -->
+<!-- PHONE BOTTOM NAV (publisher, ≤860px). Today · History · Sell · Books · More.
+     Sell sits raised in the middle, in the thumb's reach. "More" opens
+     #more-sheet holding every other tool (cloned from the sidebar so badges and
+     grouping stay in one place). -->
 <nav class="mnav" id="mnav" aria-label="Main">
-  <button type="button" class="mnav-btn" onclick="switchTab('today')"><span class="mnav-ic" aria-hidden="true">▦</span><span class="mnav-label">Home</span></button>
-  <button type="button" class="mnav-btn" onclick="switchTab('pos')"><span class="mnav-ic" aria-hidden="true" data-ink="$">🛒</span><span class="mnav-label">Sell</span></button>
-  <button type="button" class="mnav-btn" onclick="switchTab('manual')"><span class="mnav-ic" aria-hidden="true">✎</span><span class="mnav-label">Manual entry</span></button>
-  <button type="button" class="mnav-btn" id="mnav-more" onclick="openMoreSheet()" aria-haspopup="dialog" aria-controls="more-sheet" aria-expanded="false"><span class="mnav-ic" aria-hidden="true">☰</span><span class="mnav-label">More</span><span class="mnav-dot" id="mnav-more-dot" hidden></span></button>
+  <button type="button" class="mnav-btn" data-tab="today" data-action="nav.tab" data-go="today"><span class="mnav-ic" aria-hidden="true"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-today"/></svg></span><span class="mnav-label">Today</span></button>
+  <button type="button" class="mnav-btn" data-tab="history" data-action="nav.tab" data-go="history"><span class="mnav-ic" aria-hidden="true"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-history"/></svg></span><span class="mnav-label">History</span></button>
+  <button type="button" class="mnav-btn mnav-sell" data-tab="pos" data-action="nav.tab" data-go="pos"><span class="mnav-label">Sell</span></button>
+  <button type="button" class="mnav-btn" data-tab="all-overview" data-action="nav.book" data-book="all"><span class="mnav-ic" aria-hidden="true"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-books"/></svg></span><span class="mnav-label">Books</span></button>
+  <button type="button" class="mnav-btn" id="mnav-more" data-action="nav.more" aria-haspopup="dialog" aria-controls="more-sheet" aria-expanded="false"><span class="mnav-ic" aria-hidden="true"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-more"/></svg></span><span class="mnav-label">More</span><span class="mnav-dot" id="mnav-more-dot" hidden></span></button>
 </nav>
 <dialog class="more-sheet" id="more-sheet" aria-labelledby="more-sheet-title">
   <div class="more-sheet-head">
@@ -1412,18 +1433,24 @@
   <h2 class="today-next-head">Next up</h2>
   <div class="today-grid">
     <button type="button" class="today-card today-card-ink" onclick="switchTab('pos')">
-      <span class="today-card-ic" aria-hidden="true">$</span>
+      <span class="today-card-ic" aria-hidden="true"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-sell"/></svg></span>
       <span class="today-card-name">Sell</span>
       <span class="today-card-sub">Open your register</span>
     </button>
+    <!-- Phone only: the bottom bar no longer carries Manual entry, so it is a tile here. -->
+    <button type="button" class="today-card today-card-phone" data-action="nav.tab" data-go="manual">
+      <span class="today-card-ic" aria-hidden="true"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-order"/></svg></span>
+      <span class="today-card-name">Log an order</span>
+      <span class="today-card-sub">Record a sale by hand</span>
+    </button>
     <button type="button" class="today-card" onclick="switchTab('website')">
-      <span class="today-card-ic" aria-hidden="true">WO</span>
+      <span class="today-card-ic" aria-hidden="true"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-orders"/></svg></span>
       <span class="today-card-count" id="today-orders-count" hidden></span>
       <span class="today-card-name">Orders</span>
       <span class="today-card-sub" id="today-orders-sub">Website orders</span>
     </button>
     <button type="button" class="today-card" onclick="switchTab('todo')">
-      <span class="today-card-ic" aria-hidden="true">!</span>
+      <span class="today-card-ic" aria-hidden="true"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-todo"/></svg></span>
       <span class="today-card-count todo-nav-badge" hidden></span>
       <span class="today-card-name">To-do</span>
       <span class="today-card-sub">What needs you</span>
@@ -1431,7 +1458,7 @@
     <!-- Opens the phone's own camera; the photo is scanned and lands in a
          filled-in expense form to check and save. -->
     <button type="button" class="today-card today-receipt-card" onclick="snapReceipt()">
-      <span class="today-card-ic" aria-hidden="true">RC</span>
+      <span class="today-card-ic" aria-hidden="true"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-receipt"/></svg></span>
       <span class="today-card-name">Snap a receipt</span>
       <span class="today-card-sub">Take a photo, check it, save</span>
     </button>
@@ -1439,10 +1466,12 @@
   </div>
   <div class="today-label">Your workspace</div>
   <div class="today-rows">
-    <button type="button" class="today-row" onclick="switchTab('dashboard')"><span class="today-row-ic" aria-hidden="true">BK</span><span class="today-row-txt"><span class="today-row-name">Books &amp; stock</span><span class="today-row-sub">Dashboard, catalogue, figures</span></span><span class="today-row-chev" aria-hidden="true">›</span></button>
-    <button type="button" class="today-row" onclick="switchTab('reconcile')"><span class="today-row-ic" aria-hidden="true">$</span><span class="today-row-txt"><span class="today-row-name">Money</span><span class="today-row-sub">Payments, expenses, tax</span></span><span class="today-row-chev" aria-hidden="true">›</span></button>
-    <button type="button" class="today-row" onclick="switchTab('customers')"><span class="today-row-ic" aria-hidden="true">CU</span><span class="today-row-txt"><span class="today-row-name">Audience</span><span class="today-row-sub">Customers, open call</span></span><span class="today-row-chev" aria-hidden="true">›</span></button>
-    <button type="button" class="today-row" onclick="openMoreSheet()"><span class="today-row-ic" aria-hidden="true">≡</span><span class="today-row-txt"><span class="today-row-name">All tools</span><span class="today-row-sub">Shipping, sheets, backups and more</span></span><span class="today-row-chev" aria-hidden="true">›</span></button>
+    <button type="button" class="today-row" data-action="nav.tab" data-go="reconcile"><span class="today-row-ic" aria-hidden="true"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-payments"/></svg></span><span class="today-row-txt"><span class="today-row-name">Payments</span><span class="today-row-sub">Match Stripe payments to sales</span></span><span class="today-row-chev" aria-hidden="true">›</span></button>
+    <button type="button" class="today-row" data-action="nav.tab" data-go="customers"><span class="today-row-ic" aria-hidden="true"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-customers"/></svg></span><span class="today-row-txt"><span class="today-row-name">Customers</span><span class="today-row-sub">Buyers and mailing list</span></span><span class="today-row-chev" aria-hidden="true">›</span></button>
+    <button type="button" class="today-row" data-action="nav.tab" data-go="shipping"><span class="today-row-ic" aria-hidden="true"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-shipping"/></svg></span><span class="today-row-txt"><span class="today-row-name">Shipping</span><span class="today-row-sub">Labels and parcels</span></span><span class="today-row-chev" aria-hidden="true">›</span></button>
+    <button type="button" class="today-row" data-action="nav.tab" data-go="taxcenter"><span class="today-row-ic" aria-hidden="true"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-tax"/></svg></span><span class="today-row-txt"><span class="today-row-name">Tax Centre</span><span class="today-row-sub">Receipts, trips, tax time</span></span><span class="today-row-chev" aria-hidden="true">›</span></button>
+    <button type="button" class="today-row" data-action="nav.tab" data-go="opencall"><span class="today-row-ic" aria-hidden="true"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-opencall"/></svg></span><span class="today-row-txt"><span class="today-row-name">Open call</span><span class="today-row-sub">Contributor pipeline</span></span><span class="today-row-chev" aria-hidden="true">›</span></button>
+    <button type="button" class="today-row" data-action="nav.tab" data-go="backups"><span class="today-row-ic" aria-hidden="true"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-backups"/></svg></span><span class="today-row-txt"><span class="today-row-name">Backups</span><span class="today-row-sub">Save and restore your data</span></span><span class="today-row-chev" aria-hidden="true">›</span></button>
   </div>
 </div>
 
