@@ -10,7 +10,8 @@ import './styles/theme-dark.css';
 import './styles/phone.css';
 // The Riso phone redesign sits on top of the phone layer above.
 import './styles/phone-riso.css';
-import { phoneBooksHtml } from './lib/phone-books.js';
+import { plural } from './lib/plural.js';
+import { phoneBooksHtml, nextPhoneBooksSort } from './lib/phone-books.js';
 import { foldFooterActions, initPhoneLayouts } from './lib/phone-layout.js';
 import { createPhonePageMemory, initPhoneWorkspace, observeSidebarBadges } from './lib/phone-workspace.js';
 const phonePages = createPhonePageMemory(window);
@@ -691,6 +692,12 @@ export { BOOKS, BOOK_LIST, states, activeBook, defaultState, getState, getBook, 
 // see lib/actions.js. Screens move onto this one at a time.
 registerActions({
   ...intelActions, ...bigCartelActions,
+  // Phone navigation: the bottom bar, the Today tiles and rows, the All Books list.
+  'nav.tab': el => switchTab(el.dataset.go),
+  'nav.book': el => switchBook(el.dataset.book),
+  'nav.more': () => openMoreSheet(),
+  'phoneBooks.sort': () => cyclePhoneBooksSort(),
+  'phoneBooks.channels': () => togglePhoneChannels(),
   // The Settle up ledger's per-receipt button. Ids come back as strings from
   // the data attribute, so the expense is found by its string form.
   'settleUp.markExpenseReceived': el => {
@@ -5621,6 +5628,7 @@ export function switchBook(bookId) {
     applyBodyTint('all');
     guardScreen('all-overview', updateAllOverview);
     guardScreen('header', updateHeader);
+    syncMoreNavState('all-overview');
   } else {
     $('tab-bar').style.display = '';
     // Set CSS accent (reads BOOKS[bookId] itself, and re-derives the text
@@ -5702,16 +5710,14 @@ function todayUnsentBooks(books) {
 
 // The phone Today's ledger: four figures across every book, each a way in to
 // the screen that explains it. Money is summed per currency, never across.
-function renderTodayLedger() {
-  const el = $('today-ledger');
-  if (!el) return;
-  const books = Object.keys(BOOKS).filter((id) => !isTestBook(BOOKS[id])).map((id) => ({ id, currency: getBookCurrencyCode(BOOKS[id]), hist: states[id]?.hist }));
-  const day = salesForDay(books, today());
-  let stock = 0, storesOwing = 0;
+// What the stores owe across every real book, per currency ("CA$366 + €40"),
+// and how many store accounts that is. Today's ledger and the phone's All
+// Books strip both show it.
+function storesOwedSummary() {
+  let storesOwing = 0;
   const owedByCur = new Map();
   for (const [bid, s] of Object.entries(states)) {
     if (isTestBook(BOOKS[bid])) continue;
-    stock += s.stock || 0;
     const cur = BOOKS[bid]?.currency || '';
     let owed = 0;
     for (let i = 0; i < (s.stores || []).length; i++) {
@@ -5720,8 +5726,20 @@ function renderTodayLedger() {
     }
     if (owed > 0) owedByCur.set(cur, (owedByCur.get(cur) || 0) + owed);
   }
+  return { text: [...owedByCur].map(([c, v]) => fmtWhole(v, c)).join(' + '), storesOwing };
+}
+
+function renderTodayLedger() {
+  const el = $('today-ledger');
+  if (!el) return;
+  const books = Object.keys(BOOKS).filter((id) => !isTestBook(BOOKS[id])).map((id) => ({ id, currency: getBookCurrencyCode(BOOKS[id]), hist: states[id]?.hist }));
+  const day = salesForDay(books, today());
+  let stock = 0;
+  for (const [bid, s] of Object.entries(states)) {
+    if (!isTestBook(BOOKS[bid])) stock += s.stock || 0;
+  }
   const titles = Object.values(BOOKS).filter((b) => !isTestBook(b)).length;
-  const owed = [...owedByCur].map(([c, v]) => fmtWhole(v, c)).join(' + ');
+  const { text: owed, storesOwing } = storesOwedSummary();
   const unsent = unsentSalesForDay(todayUnsentBooks(books), today()).sales;
   const soldSub = unsent
     ? `${unsent} ${unsent === 1 ? 'sale' : 'sales'} waiting to upload`
@@ -5753,10 +5771,11 @@ export function renderTodayHub() {
 }
 
 // ── Phone "More" sheet ───────────────────────────────────────────────
-// The phone bottom nav holds three everyday destinations; everything else
-// lives in this sheet. Its contents are cloned from the sidebar each time
-// it opens so grouping, visibility and live badges never drift apart.
-const MNAV_TABS = ['today', 'pos', 'manual'];
+// The phone bottom nav holds four everyday destinations (Sell raised in the
+// middle); everything else lives in this sheet. Its contents are cloned from
+// the sidebar each time it opens so grouping, visibility and live badges never
+// drift apart.
+const MNAV_TABS = ['today', 'history', 'pos', 'all-overview'];
 
 function syncMoreNavState(name) {
   const more = document.getElementById('mnav-more');
@@ -5764,7 +5783,7 @@ function syncMoreNavState(name) {
   const destination = name;
   more.classList.toggle('active', !MNAV_TABS.includes(destination));
   document.querySelectorAll('#mnav .mnav-btn').forEach(button => {
-    const selected = button === more ? more.classList.contains('active') : button.getAttribute('onclick')?.includes(`'${destination}'`);
+    const selected = button === more ? more.classList.contains('active') : button.dataset.tab === destination;
     button.classList.toggle('active', !!selected);
     if (selected) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current');
   });
@@ -5799,7 +5818,7 @@ export function openMoreSheet() {
   first.className = 'o3-grouplabel';
   first.textContent = 'Inventory';
   body.appendChild(first);
-  // The phone side menu replaces the bottom bar's Home button, so Today leads it.
+  // The phone side menu opens from the header as well as from More, so Today leads it.
   const home = document.createElement('button');
   home.type = 'button';
   home.className = 'snav more-sheet-home';
@@ -5812,7 +5831,7 @@ export function openMoreSheet() {
     body.appendChild(copy);
   });
   // Hide the destinations already on the bottom bar. A phone's side menu keeps
-  // them all, since its bar holds only the two pinned actions.
+  // them all, since it also opens from the header menu button.
   const phone = window.matchMedia?.('(max-width: 768px)').matches;
   body.querySelectorAll('.snav').forEach((b) => {
     if (b.classList.contains('more-sheet-home')) b.hidden = !phone;
@@ -6334,38 +6353,79 @@ function updateAllOverview() {
   const allBooksVisible = BOOK_LIST.filter(b => !isTestBook(b));
   renderAllBooksStrips(allBooksVisible);
   renderCombinedChannelAnalytics(allBooksVisible);
+  // After the channel figures: the phone list ranks books by their revenue.
+  renderPhoneBooks(allBooksVisible);
   renderCombinedConsignmentSummary(allBooksVisible);
   renderOverviewRail();
 }
 
-// The phone's All Books: one row per title (lib/phone-books.js). The chip
-// choice lasts for the visit; the desktop strips below are untouched.
-let phoneBooksFilter = 'all';
+// The phone's All Books (lib/phone-books.js): revenue, sold and owed in one
+// strip, where the catalogue sells as one bar, then the books ranked. The sort
+// is remembered on this device; the full channel table folds under the list.
+const PHONE_BOOKS_SORT_KEY = 'lm-phone-books-sort';
+let phoneChannelsOpen = false;
 function renderPhoneBooks(allBooksVisible) {
   const el = $('all-books-phone');
   if (!el) return;
-  el.innerHTML = phoneBooksHtml(allBooksVisible.map((book) => {
+  const byCur = window._allChData || {};
+  const revenueById = new Map();
+  const revenueByCur = new Map();
+  for (const [cur, cd] of Object.entries(byCur)) {
+    for (const b of cd.books || []) {
+      revenueById.set(b.id, b.total || 0);
+      revenueByCur.set(cur, (revenueByCur.get(cur) || 0) + (b.total || 0));
+    }
+  }
+  let sold = 0;
+  const books = allBooksVisible.map((book) => {
     const s = states[book.id] || defaultState(book);
-    let atStores = 0;
-    for (let i = 0; i < s.stores.length; i++) atStores += s.stores[i].outstanding || 0;
     const cost = book.productionCost || 0;
     const brokeEven = cost > 0 && calculateBreakEven({ cost, recognizedRev: recognizedRevenueOf(s), listPrice: book.listPrice, sold: s.sold, stock: s.stock, currency: book.currency }).broken;
+    const revenue = revenueById.get(book.id) || 0;
+    sold += s.sold || 0;
     return {
-      id: book.id, title: book.title, author: book.author, accent: book.accent,
-      priceText: book.listPrice ? fmtWhole(book.listPrice, book.currency) : '',
-      printed: book.maxPrint, onHand: s.stock || 0, threshold: book.threshold || 0, brokeEven, atStores,
+      id: book.id, title: book.title, revenue, revenueText: revenue > 0 ? fmtWhole(revenue, book.currency) : '—',
+      sold: s.sold || 0, onHand: s.stock || 0, threshold: book.threshold || 0, brokeEven,
     };
-  }), phoneBooksFilter);
+  });
+  // Shares are only comparable within one currency: the bar follows the
+  // currency the channel table below is showing.
+  const cd = byCur[window._allChCur];
+  let mix = [];
+  if (cd) {
+    let grand = 0;
+    for (const t of Object.values(cd.channelTotals)) grand += t.revenue || 0;
+    mix = Object.entries(cd.channelTotals)
+      .map(([chan, t]) => ({ name: chanLabel(chan), pct: grand > 0 ? Math.round((t.revenue || 0) / grand * 100) : 0, color: channelColor(chan), rev: t.revenue || 0 }))
+      .sort((x, y) => y.rev - x.rev);
+  }
+  el.innerHTML = phoneBooksHtml({
+    books,
+    totals: {
+      revenueText: [...revenueByCur].filter(([, v]) => v > 0).map(([c, v]) => fmtWhole(v, c)).join(' + '),
+      sold,
+      owedText: storesOwedSummary().text,
+    },
+    mix,
+    sort: storageGet(PHONE_BOOKS_SORT_KEY, 'revenue'),
+    channelsOpen: phoneChannelsOpen,
+  });
 }
-export function setPhoneBooksFilter(key) {
-  phoneBooksFilter = key;
+export function cyclePhoneBooksSort() {
+  storageSet(PHONE_BOOKS_SORT_KEY, nextPhoneBooksSort(storageGet(PHONE_BOOKS_SORT_KEY, 'revenue')));
   renderPhoneBooks(BOOK_LIST.filter(b => !isTestBook(b)));
+  $('all-books-phone')?.querySelector('.phone-sort-btn')?.focus();
 }
-window.setPhoneBooksFilter = setPhoneBooksFilter;
+export function togglePhoneChannels() {
+  phoneChannelsOpen = !phoneChannelsOpen;
+  $('tab-all-overview')?.classList.toggle('show-channels', phoneChannelsOpen);
+  renderPhoneBooks(BOOK_LIST.filter(b => !isTestBook(b)));
+  $('all-books-phone')?.querySelector('.phone-mix-more')?.focus();
+}
+Object.assign(window, { cyclePhoneBooksSort, togglePhoneChannels });
 
 // Book strips on the combined "All Books" overview.
 function renderAllBooksStrips(allBooksVisible) {
-  renderPhoneBooks(allBooksVisible);
   const list = $('all-books-list');
   // Stamped so showCatalogueSkeleton() can never paint over real content if a
   // later boot step calls it again.
@@ -6935,6 +6995,7 @@ export const chanLabel = (chan) => (chan && chan.trim()) ? chan : 'Direct';
 function selectAllChCurrency(c) {
   window._allChCur = c;
   renderChannelAnalytics();
+  renderPhoneBooks(BOOK_LIST.filter(b => !isTestBook(b)));
 }
 
 function setChChannelFilter(chan) {
@@ -8510,24 +8571,29 @@ Object.assign(window, { histSearchInput, clearHistSearch });
 function renderConsignHistRow(e, after) {
   const store = escapeHtml(e.storeName || 'store');
   const restocked = e.type === 'Return' && e.status === 'restocked';
-  let badge, qtyCell, label;
+  // phoneQty / phoneSub: the phone row shows the copies where a sale shows its
+  // amount ("+3 copies" over "to stock"), so returns line up with sales.
+  let badge, qtyCell, label, phoneQty, phoneSub, kind;
   if (e.type === 'Shipment') {
-    badge = `<span class="ch-badge ch-store" style="font-size:var(--text-2xs);"><span class="ch-icon">📦</span> Consignment</span> → ${store}`;
+    badge = `<span class="ch-badge ch-store" style="font-size:var(--text-2xs);" data-phone-label="Sent"><span class="ch-icon">📦</span> Consignment</span> <span class="hist-who">→ ${store}</span>`;
     qtyCell = `-${e.qty}`;            // left your on-hand for the store
     label = 'SENT';
+    phoneQty = `−${copiesLabel(e.qty)}`; phoneSub = 'to the store'; kind = 'is-sent';
   } else if (restocked) {
-    badge = `<span class="ch-badge ch-pos" style="font-size:var(--text-2xs);"><span class="ch-icon">↩</span> Consignment return</span> ← ${store}`;
+    badge = `<span class="ch-badge ch-pos ch-return" style="font-size:var(--text-2xs);" data-phone-label="Return"><span class="ch-icon">↩</span> Consignment return</span> <span class="hist-who">← ${store}</span>`;
     qtyCell = `+${e.qty}`;            // came back into on-hand
     label = 'RETURN';
+    phoneQty = `+${copiesLabel(e.qty)}`; phoneSub = 'to stock'; kind = 'is-return';
   } else {
-    badge = `<span class="chip-status amber" style="font-size:var(--text-2xs);">↩ Return · written off</span> ← ${store}`;
+    badge = `<span class="chip-status amber" style="font-size:var(--text-2xs);" data-phone-label="Written off">↩ Return · written off</span> <span class="hist-who">← ${store}</span>`;
     qtyCell = '0';                    // off the store's books, not back on your shelf
     label = 'RETURN';
+    phoneQty = copiesLabel(e.qty); phoneSub = 'written off'; kind = 'is-return';
   }
   const voided = e.voided ? ' voided' : '';
   const voidPill = e.voided ? '<span class="void-badge">Void</span>' : '';
   const manageBtn = `<button class="edit-btn" onclick="switchTab('consignment')" title="Manage in the Consignment tab" aria-label="Manage in Consignment">→</button>`;
-  return `<tr class="hist-row ${voided}"><td class="mono mono-num" style="color:var(--text3);">${label}</td><td>${badge}</td><td class="r mono-num">${e.voided ? '' : qtyCell}</td><td class="r mono-num"><span style="color:var(--text4);font-size:var(--text-xs);/* faint-ok: em-dash placeholder */">—</span></td><td class="r mono-num"><span style="color:var(--text4);font-size:var(--text-xs);/* faint-ok: em-dash placeholder */">—</span></td><td class="r mono-num">${after}</td><td style="font-size:var(--text-sm);color:var(--text3);">${escapeHtml(e.notes) || '—'}</td><td style="font-size:var(--text-sm);color:var(--text3);"><span class="chip-status gray">Consignment</span></td><td style="font-size:var(--text-sm);color:var(--text3);">${fmtD(e.date)} ${voidPill}</td><td>${manageBtn}</td></tr>`;
+  return `<tr class="hist-row hist-consign ${kind}${voided}"><td class="mono mono-num" style="color:var(--text3);">${label}</td><td>${badge}</td><td class="r mono-num" data-phone-qty="${escapeHtml(phoneQty)}" data-phone-sub="${phoneSub}">${e.voided ? '' : qtyCell}</td><td class="r mono-num"><span style="color:var(--text4);font-size:var(--text-xs);/* faint-ok: em-dash placeholder */">—</span></td><td class="r mono-num"><span style="color:var(--text4);font-size:var(--text-xs);/* faint-ok: em-dash placeholder */">—</span></td><td class="r mono-num">${after}</td><td style="font-size:var(--text-sm);color:var(--text3);">${escapeHtml(e.notes) || '—'}</td><td style="font-size:var(--text-sm);color:var(--text3);"><span class="chip-status gray">Consignment</span></td><td style="font-size:var(--text-sm);color:var(--text3);">${fmtD(e.date)} ${voidPill}</td><td>${manageBtn}</td></tr>`;
 }
 
 // Order History is a whole tab, not a nested list, so an empty one gets the
@@ -8693,6 +8759,11 @@ function scheduleHistVoidSweep(fullTimeline) {
 // that function reads as "gather rows, then render them" instead of burying
 // this row-by-row branching (pending vs. gratuity vs. foreign-currency vs.
 // shipped-website-order) inside the .map() call.
+// "1 copy" / "4 copies": the count a phone's order row shows under its amount.
+function copiesLabel(n) {
+  return `${n} ${plural(Number(n), 'copy', 'copies')}`;
+}
+
 function renderHistRowHtml(row, { cur, bookCode, book, formatChannelBadge, postage }) {
   if (row.type === 'consign') return renderConsignHistRow(row.e, row._after ?? row.after ?? '—');
   const h = row.h, i = row.i;
@@ -8700,7 +8771,7 @@ function renderHistRowHtml(row, { cur, bookCode, book, formatChannelBadge, posta
     const actionCell = window.IS_PUBLISHER
       ? `<div class="approval-actions"><button class="appr-btn approve" onclick="approveSubmission('sales', '${h._subKey}')" aria-label="Approve submission"><span class="ico">✓</span>Approve</button><button class="appr-btn reject" onclick="rejectSubmission('sales', '${h._subKey}')" title="Reject submission" aria-label="Reject submission">✕</button></div>`
       : `<span class="chip-status amber">Awaiting Publisher</span>`;
-    return `<tr class="hist-row is-awaiting"><td class="mono mono-num">${escapeHtml(h.num)}</td><td>${formatChannelBadge(h.chan)} <span class="chip-status amber">Submitted</span></td><td class="r mono-num">-${h.qty}</td><td class="r mono-num">${fmt(h.price, cur)}</td><td class="r mono-num money-cell">${fmt(h.qty * h.price, cur)}</td><td class="r mono-num">?</td><td style="font-size:var(--text-sm);color:var(--text3);">${escapeHtml(h.notes) || '—'}</td><td style="font-size:var(--text-sm);color:var(--text3);"><span class="chip-status gray">Artist</span></td><td style="font-size:var(--text-sm);color:var(--text3);">${fmtD(h.date)}</td><td>${actionCell}</td></tr>`;
+    return `<tr class="hist-row is-awaiting"><td class="mono mono-num">${escapeHtml(h.num)}</td><td>${formatChannelBadge(h.chan)} <span class="chip-status amber">Submitted</span></td><td class="r mono-num" data-phone-qty="${escapeHtml(copiesLabel(h.qty))}">-${h.qty}</td><td class="r mono-num">${fmt(h.price, cur)}</td><td class="r mono-num money-cell">${fmt(h.qty * h.price, cur)}</td><td class="r mono-num">?</td><td style="font-size:var(--text-sm);color:var(--text3);">${escapeHtml(h.notes) || '—'}</td><td style="font-size:var(--text-sm);color:var(--text3);"><span class="chip-status gray">Artist</span></td><td style="font-size:var(--text-sm);color:var(--text3);">${fmtD(h.date)}</td><td>${actionCell}</td></tr>`;
   }
   const voided = h.voided ? ' voided' : '';
   const voidPill = h.voided ? '<span class="void-badge">Void</span>' : '';
@@ -8745,7 +8816,7 @@ function renderHistRowHtml(row, { cur, bookCode, book, formatChannelBadge, posta
   const enteredBy = h.enteredBy || (h.artistPending ? 'Artist' : 'Publisher');
   const enteredByPill = `<span class="chip-status gray">${escapeHtml(enteredBy)}</span>`;
   const stockAfterVal = row._after ?? row.after ?? '—';
-  return `<tr class="hist-row ${voided}"${rowStyle}><td class="mono mono-num">${escapeHtml(h.num)}${editBtn}</td><td>${chanCell}</td><td class="r mono-num">${h.voided ? '' : '-'}${h.qty}</td><td class="r mono-num">${priceCell}</td><td class="r mono-num money-cell">${totalCell}</td><td class="r mono-num">${stockAfterVal}</td><td style="font-size:var(--text-sm);color:var(--text3);">${notesCell || '—'}</td><td style="font-size:var(--text-sm);color:var(--text3);">${enteredByPill}</td><td style="font-size:var(--text-sm);color:var(--text3);">${fmtD(h.date)} ${voidPill}</td><td>${labelBtn}</td></tr>`;
+  return `<tr class="hist-row ${voided}"${rowStyle}><td class="mono mono-num">${escapeHtml(h.num)}${editBtn}</td><td>${chanCell}</td><td class="r mono-num" data-phone-qty="${escapeHtml(copiesLabel(h.qty))}">${h.voided ? '' : '-'}${h.qty}</td><td class="r mono-num">${priceCell}</td><td class="r mono-num money-cell">${totalCell}</td><td class="r mono-num">${stockAfterVal}</td><td style="font-size:var(--text-sm);color:var(--text3);">${notesCell || '—'}</td><td style="font-size:var(--text-sm);color:var(--text3);">${enteredByPill}</td><td style="font-size:var(--text-sm);color:var(--text3);">${fmtD(h.date)} ${voidPill}</td><td>${labelBtn}</td></tr>`;
 }
 
 export function renderHist() {

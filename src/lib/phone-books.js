@@ -1,12 +1,12 @@
-// The phone's All Books screen: a masthead, three figures, filter chips and
-// one row per title. Pure — the caller passes plain book facts and gets HTML.
+// The phone's All Books screen: a masthead, one strip of figures (revenue, sold,
+// owed), one bar of where the catalogue sells, then the books ranked in one
+// sheet. Pure — the caller passes plain book facts and gets HTML.
 import { escapeHtml as esc } from './html.js';
 
-export const PHONE_BOOK_FILTERS = [
-  { key: 'all', label: 'All' },
-  { key: 'low', label: 'Low' },
-  { key: 'out', label: 'Sold out' },
-  { key: 'stores', label: 'At stores' },
+export const PHONE_BOOK_SORTS = [
+  { key: 'revenue', label: 'Revenue' },
+  { key: 'sold', label: 'Sold' },
+  { key: 'title', label: 'Title' },
 ];
 
 // One status per book, worst first: nothing left, running low, then whether
@@ -18,61 +18,88 @@ export function phoneBookStatus({ onHand = 0, threshold = 0, brokeEven = false }
   return { key: 'selling', text: '● Selling', tone: 'plain' };
 }
 
-export function phoneBookMatches(book, filter) {
-  const status = phoneBookStatus(book).key;
-  if (filter === 'low') return status === 'low';
-  if (filter === 'out') return status === 'out';
-  if (filter === 'stores') return (book.atStores || 0) > 0;
-  return true;
+export function phoneBooksSortKey(key) {
+  return PHONE_BOOK_SORTS.some((s) => s.key === key) ? key : 'revenue';
+}
+
+/** The next sort in the cycle Revenue → Sold → Title → Revenue. */
+export function nextPhoneBooksSort(key) {
+  const i = PHONE_BOOK_SORTS.findIndex((s) => s.key === phoneBooksSortKey(key));
+  return PHONE_BOOK_SORTS[(i + 1) % PHONE_BOOK_SORTS.length].key;
+}
+
+/** A sorted copy. Ties fall back to the title, so the order never jumps between renders. */
+export function sortPhoneBooks(books, key) {
+  const byTitle = (a, b) => String(a.title || '').localeCompare(String(b.title || ''));
+  const sort = phoneBooksSortKey(key);
+  const num = (field) => (a, b) => ((b[field] || 0) - (a[field] || 0)) || byTitle(a, b);
+  return [...books].sort(sort === 'title' ? byTitle : num(sort));
 }
 
 const COLOUR = /^(#[0-9a-f]{3,8}|rgba?\([\d\s.,%]+\))$/i;
+const colour = (value) => (COLOUR.test(String(value || '').trim()) ? String(value).trim() : '');
+
+function stockLine(book) {
+  const status = phoneBookStatus(book);
+  if (status.key === 'out') return { text: 'Sold out', tone: 'red' };
+  return { text: `${Math.max(0, book.onHand || 0)} left`, tone: status.key === 'low' ? 'amber' : '' };
+}
 
 /**
- * books: [{ id, title, author, priceText, printed, onHand, threshold,
- *           brokeEven, atStores, accent }]
+ * books:  [{ id, title, revenue, revenueText, sold, onHand, threshold, brokeEven }]
+ * totals: { revenueText, sold, owedText }
+ * mix:    [{ name, pct, color }] — channel shares of revenue, biggest first
+ * sort:   'revenue' | 'sold' | 'title'
+ * channelsOpen: whether the full channel table under the list is showing
  */
-export function phoneBooksHtml(books, filter = 'all') {
-  const active = PHONE_BOOK_FILTERS.some((f) => f.key === filter) ? filter : 'all';
-  // ⚡ Bolt Optimization: Loop Fusion - Combined multiple array passes into a single imperative loop to eliminate intermediate allocations and multiple O(N) traversals.
-  let onHand = 0;
-  let low = 0;
-  const shown = [];
-  for (const b of books) {
-    onHand += Math.max(0, b.onHand || 0);
-    const statusKey = phoneBookStatus(b).key;
-    if (statusKey === 'low' || statusKey === 'out') {
-      low++;
-    }
+export function phoneBooksHtml({ books = [], totals = {}, mix = [], sort = 'revenue', channelsOpen = false } = {}) {
+  const sortKey = phoneBooksSortKey(sort);
+  const sortLabel = PHONE_BOOK_SORTS.find((s) => s.key === sortKey).label;
+  const nextLabel = PHONE_BOOK_SORTS.find((s) => s.key === nextPhoneBooksSort(sortKey)).label;
+  const ranked = sortPhoneBooks(books, sortKey);
+  let maxSold = 0;
+  for (const b of books) maxSold = Math.max(maxSold, b.sold || 0);
 
-    // Inline phoneBookMatches logic to avoid recomputing phoneBookStatus
-    let matches = true;
-    if (active === 'low') matches = statusKey === 'low';
-    else if (active === 'out') matches = statusKey === 'out';
-    else if (active === 'stores') matches = (b.atStores || 0) > 0;
+  const kpi = (label, value, cls = '') => `<div class="phone-kpi${cls}"><span class="phone-kpi-label">${label}</span><span class="phone-kpi-value tnum">${esc(value)}</span></div>`;
+  const kpis = `<div class="phone-kpis">${kpi('Revenue', totals.revenueText || '—', ' is-lead')}${kpi('Sold', String(totals.sold ?? 0))}${kpi('Owed', totals.owedText || '—', totals.owedText ? ' is-owed' : '')}</div>`;
 
-    if (matches) shown.push(b);
-  }
-  const fig = (label, value, tone = '') => `<div class="ledger-fig${tone ? ` is-${tone}` : ''}"><span class="ledger-label">${label}</span><span class="ledger-value tnum">${value}</span></div>`;
-  const chips = PHONE_BOOK_FILTERS.map((f) => {
-    const on = f.key === active;
-    return `<button type="button" class="book-chip${on ? ' is-on' : ''}" aria-pressed="${on}" onclick="setPhoneBooksFilter('${f.key}')">${f.label}</button>`;
-  }).join('');
-  const rows = shown.map((b) => {
-    const status = phoneBookStatus(b);
-    const meta = [b.author, b.priceText, b.printed ? `${b.printed} printed` : ''].filter(Boolean).map(esc).join(' · ');
-    const cover = COLOUR.test(String(b.accent || '').trim()) ? ` style="background:${String(b.accent).trim()}"` : '';
-    const idJs = esc(JSON.stringify(String(b.id)));
-    return `<button type="button" class="phone-book-row" onclick="switchBook(${idJs})" aria-label="${esc(b.title)}: ${esc(b.onHand)} on hand, ${esc(status.text.slice(2))}">
-      <span class="phone-book-cover" aria-hidden="true"${cover}></span>
-      <span class="phone-book-txt"><span class="phone-book-title">${esc(b.title)}</span><span class="phone-book-meta">${meta}</span><span class="phone-pill is-${status.tone}">${status.text}</span></span>
-      <span class="phone-book-end"><span class="phone-book-count tnum">${esc(b.onHand)}</span><span class="phone-book-unit">on hand</span></span>
+  const shares = mix.filter((m) => m.pct > 0);
+  const bar = shares.length
+    ? `<div class="phone-mix">
+      <div class="phone-mix-bar" role="img" aria-label="Sales by channel: ${esc(shares.map((m) => `${m.name} ${m.pct}%`).join(', '))}">${shares.map((m) => {
+        const c = colour(m.color);
+        return `<span style="flex:${Number(m.pct) || 0}${c ? `;background:${c}` : ''}"></span>`;
+      }).join('')}</div>
+      <div class="phone-mix-legend" aria-hidden="true">${shares.map((m) => {
+        const c = colour(m.color);
+        return `<span><i${c ? ` style="background:${c}"` : ''}></i>${esc(m.name)} ${esc(m.pct)}%</span>`;
+      }).join('')}</div>
+    </div>`
+    : '';
+
+  const rows = ranked.map((b, i) => {
+    const stock = stockLine(b);
+    const width = maxSold > 0 ? Math.round((b.sold || 0) / maxSold * 100) : 0;
+        const revenue = b.revenueText || '—';
+    return `<button type="button" class="phone-rank-row" data-action="nav.book" data-book="${esc(String(b.id))}" aria-label="${esc(b.title)}: ${esc(revenue)} revenue, ${esc(b.sold || 0)} sold, ${esc(stock.text)}">
+      <span class="phone-rank-n tnum" aria-hidden="true">${i + 1}</span>
+      <span class="phone-rank-txt"><span class="phone-rank-title">${esc(b.title)}</span><span class="phone-rank-track" aria-hidden="true"><span style="width:${width}%"></span></span></span>
+      <span class="phone-rank-end"><span class="phone-rank-rev tnum">${esc(revenue)}</span><span class="phone-rank-stock${stock.tone ? ` is-${stock.tone}` : ''}">${esc(stock.text)}</span></span>
+      <span class="phone-rank-chev" aria-hidden="true">›</span>
     </button>`;
   }).join('');
-  const empty = `<p class="phone-sheet-empty">No books match “${esc(PHONE_BOOK_FILTERS.find((f) => f.key === active).label)}”.</p>`;
+  const empty = '<p class="phone-sheet-empty">No books yet.</p>';
+  // The full channel table (revenue, units, per sale) opens right under the list.
+  const more = shares.length
+    ? `<button type="button" class="phone-mix-more" data-action="phoneBooks.channels" aria-expanded="${channelsOpen}" aria-controls="all-ch-analytics">${channelsOpen ? 'Hide sales by channel ▴' : 'Sales by channel ▾'}</button>`
+    : '';
+  const count = `${books.length} ${books.length === 1 ? 'book' : 'books'}`;
+
   return `<div class="phone-kicker">Catalogue · ${books.length} ${books.length === 1 ? 'title' : 'titles'}</div>
     <h1 class="phone-masthead">Books</h1>
-    <div class="phone-ledger is-three">${fig('On hand', onHand)}${fig('Titles', books.length)}${fig('Running low', low, low ? 'low' : '')}</div>
-    <div class="phone-chips" role="group" aria-label="Show books">${chips}</div>
-    <div class="phone-sheet">${rows || empty}</div>`;
+    ${kpis}
+    ${bar}
+    <div class="phone-books-head"><h2 class="phone-books-count">${count}</h2><button type="button" class="phone-sort-btn" data-action="phoneBooks.sort" aria-label="Sorted by ${sortLabel.toLowerCase()}. Sort by ${nextLabel.toLowerCase()} instead">Sort: ${sortLabel} ▾</button></div>
+    <div class="phone-sheet phone-rank">${rows || empty}</div>
+    ${more}`;
 }

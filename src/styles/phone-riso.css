@@ -68,27 +68,40 @@
   .pub-shell .publisher-action-banner .pab-btn:hover { background: none; }
   .pub-shell .publisher-action-banner .pab-dismiss { min-width: 40px; min-height: 40px; }
 
-  /* ── Pinned actions: the bottom bar is Sell and Manual entry ─────────── */
+  /* ── Bottom bar: Today · History · Sell · Books · More ──────────────── */
+  /* Ink chrome in both themes. Each tab is a line icon over a caps label with a short bar
+     under it that lights up flare for the screen you are on. Sell is a raised flare square
+     in the middle, in the thumb's reach; More opens the side menu with every other tool. */
   .pub-shell .mnav {
-    grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-3);
-    padding: var(--space-3) max(var(--phone-gutter), env(safe-area-inset-right)) calc(var(--space-3) + env(safe-area-inset-bottom)) max(var(--phone-gutter), env(safe-area-inset-left));
-    background: var(--surface-page); border-top: var(--stroke) solid var(--rule-ink);
+    grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: stretch; gap: 0;
+    padding: 0 max(4px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(4px, env(safe-area-inset-left));
+    background: var(--ink); border-top: var(--stroke) solid var(--ink);
   }
-  .pub-shell .mnav-btn:first-child, .pub-shell #mnav-more { display: none; }
   .pub-shell .mnav .mnav-btn {
-    flex-direction: row; min-height: 48px; height: 48px; padding: 0 var(--space-4); gap: var(--space-2);
-    border: var(--stroke) solid var(--rule-ink); border-radius: 0;
-    background: var(--surface-card); color: var(--content-primary); box-shadow: var(--riso-off-sm);
+    flex-direction: column; justify-content: center; gap: 5px; min-height: var(--mnav-h); height: auto; padding: 0 2px;
+    border: 0; border-radius: 0; background: none; box-shadow: none; color: var(--on-inverse-2);
   }
-  .pub-shell .mnav .mnav-btn:nth-child(2) { background: var(--gold); color: var(--ink); box-shadow: var(--riso-off); }
   .pub-shell .mnav .mnav-btn::before { display: none; }
-  .pub-shell .mnav .mnav-ic { display: none; }
-  .pub-shell .mnav .mnav-label { font: 800 var(--text-sm) var(--font-ui); letter-spacing: var(--tracking-caps); text-transform: uppercase; color: inherit; }
-  .pub-shell .mnav .mnav-btn:nth-child(2) .mnav-label { font-size: var(--text-base); }
-  .pub-shell .mnav .mnav-btn.active { background: var(--surface-card); }
-  .pub-shell .mnav .mnav-btn:nth-child(2).active { background: var(--gold); }
-  .pub-shell .mnav .mnav-btn:active { transform: translate(2px, 2px); box-shadow: none; }
-  .pub-shell .mnav .mnav-btn:focus-visible { outline: 2px solid var(--gold-text); outline-offset: 2px; }
+  .pub-shell .mnav .mnav-btn::after { content: ""; width: 20px; height: 3px; background: transparent; }
+  .pub-shell .mnav .mnav-ic { display: grid; place-items: center; width: 16px; height: 16px; min-width: 0; font-size: 16px; }
+  .pub-shell .mnav .mnav-label { font: 700 var(--text-2xs) var(--font-ui); letter-spacing: .08em; text-transform: uppercase; color: inherit; }
+  .pub-shell .mnav .mnav-btn.active { color: var(--gold2); background: none; }
+  .pub-shell .mnav .mnav-btn.active::after { background: var(--gold2); }
+  .pub-shell .mnav .mnav-btn:active { background: rgba(255, 255, 255, .08); }
+  .pub-shell .mnav .mnav-btn:focus-visible { outline: 2px solid var(--gold2); outline-offset: -2px; }
+  .pub-shell .mnav .mnav-dot { top: 12px; right: calc(50% - 14px); }
+  .pub-shell .mnav .mnav-sell {
+    align-self: start; justify-self: center; width: 62px; height: 62px; min-height: 0; margin-top: -30px; padding: 0;
+    border: var(--stroke) solid var(--ink); background: var(--gold); color: var(--ink); box-shadow: 3px 3px 0 var(--on-inverse);
+  }
+  .pub-shell .mnav .mnav-sell::after { content: none; }
+  .pub-shell .mnav .mnav-sell .mnav-label { font: 400 18px / 1 var(--font-display); letter-spacing: .04em; }
+  .pub-shell .mnav .mnav-sell.active { border-color: var(--on-inverse); background: var(--gold); color: var(--ink); }
+  .pub-shell .mnav .mnav-sell:active { transform: translate(3px, 3px); box-shadow: none; background: var(--gold); }
+  .pub-shell .mnav .mnav-sell:focus-visible { outline-offset: 3px; }
+  @media (prefers-reduced-motion: reduce) {
+    .pub-shell .mnav .mnav-sell:active { transform: none; }
+  }
 
   /* ── Side menu: the old More sheet, now an ink drawer from the left ─── */
   .pub-shell .more-sheet[open] {
@@ -244,49 +257,58 @@
   .pub-shell #tab-today .today-sold { display: none; }
   .pub-shell #tab-today .today-sync { padding: 0; border: 0; }
 
-  /* Next up: one outlined sheet of rows. Sell is the pinned bar's job now. */
-  .pub-shell #tab-today .today-next-head {
-    display: block; position: relative; margin: 22px 0 0; padding: 10px 14px;
-    border: var(--stroke) solid var(--rule-ink); border-bottom: 0; background: var(--surface-card); box-shadow: var(--riso-off);
-    font: 400 var(--text-lg) var(--font-display); letter-spacing: .02em; text-transform: uppercase; color: var(--content-primary);
-  }
-  .pub-shell #tab-today .today-grid {
-    position: relative; display: block; border: var(--stroke) solid var(--rule-ink); background: var(--surface-card); box-shadow: var(--riso-off);
-  }
+  /* Jobs: the Sell card across the top, then four tiles two by two. Every icon is a line
+     icon in the text colour, so the set reads as one family in both themes. */
+  .pub-shell #tab-today .today-next-head { display: none; }
+  .pub-shell #tab-today .today-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 22px; }
   .pub-shell #tab-today .today-grid > .today-card {
-    display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; grid-template-areas: "ic name count" "ic sub count";
-    align-items: center; column-gap: var(--space-3); row-gap: 0; width: 100%; min-height: 56px; padding: var(--space-2) 14px;
-    border: 0; border-radius: 0; border-top: var(--stroke-hair) solid var(--border2); box-shadow: none; background: transparent; color: var(--content-primary); text-align: left;
+    position: relative; display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 10px;
+    min-height: 80px; padding: 12px; margin: 0;
+    border: var(--stroke) solid var(--rule-ink); border-radius: 0; background: var(--surface-card); color: var(--content-primary);
+    box-shadow: var(--riso-off); text-align: left;
   }
-  .pub-shell #tab-today .today-grid > .today-card-ink { display: none; }
-  .pub-shell #tab-today .today-grid > .today-card-ink + .today-card { border-top: 0; }
-  .pub-shell #tab-today .today-grid > .today-card:active { transform: none; background: var(--surface-inset); }
+  .pub-shell #tab-today .today-grid > .today-card-phone { display: flex; }
+  .pub-shell #tab-today .today-grid > .today-receipt-card { grid-column: auto; }
+  .pub-shell #tab-today .today-grid > .today-card:active { transform: translate(3px, 3px); box-shadow: none; }
   .pub-shell #tab-today .today-card .today-card-ic {
-    grid-area: ic; display: grid; place-items: center; width: 26px; height: 26px; margin: 0;
-    border: var(--stroke) solid currentColor; font: 500 var(--text-xs) / 1 var(--font-mono);
+    display: grid; place-items: center; width: 22px; height: 22px; margin: 0; border: 0; font-size: 22px;
   }
-  .pub-shell #tab-today .today-card .today-card-name { grid-area: name; font: 600 var(--text-md) / 1.25 var(--font-ui); text-transform: none; letter-spacing: 0; }
-  .pub-shell #tab-today .today-card .today-card-sub { grid-area: sub; font: 400 var(--text-sm) var(--font-mono); color: var(--content-muted); opacity: 1; }
+  .pub-shell #tab-today .today-card .today-card-name { font: 700 var(--text-base) / 1.25 var(--font-ui); text-transform: none; letter-spacing: 0; }
+  .pub-shell #tab-today .today-grid > .today-card:not(.today-card-ink) .today-card-sub { display: none; }
   .pub-shell #tab-today .today-card .today-card-count {
-    grid-area: count; position: static; display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px;
+    position: absolute; top: 10px; right: 10px; display: inline-flex; align-items: center; gap: 4px; min-width: 0; padding: 2px 8px;
     border: var(--stroke) solid var(--gold-text); border-radius: var(--r2); background: var(--gold-bg); color: var(--gold-text);
     font: 800 var(--text-2xs) var(--font-ui); letter-spacing: var(--tracking-caps); text-transform: uppercase; font-variant-numeric: tabular-nums;
   }
-  .pub-shell #tab-today .today-card .today-card-count::before { content: "●"; }
-  .pub-shell #tab-today .today-card .today-card-count::after { content: " open"; }
   .pub-shell #tab-today .today-card .today-card-count[hidden] { display: none; }
 
-  /* Your workspace: the same sheet, quieter. */
+  /* Sell: the flare card, ink type on the fill (night mode keeps its deeper fill and light type). */
+  .pub-shell #tab-today .today-grid > .today-card-ink {
+    grid-column: 1 / -1; display: grid; grid-template-columns: 40px minmax(0, 1fr); grid-template-areas: "ic name" "ic sub";
+    align-items: center; column-gap: 14px; row-gap: 2px; min-height: 0; padding: 16px;
+    background: var(--gold); color: var(--ink); box-shadow: 4px 4px 0 var(--rule-ink);
+  }
+  .theme-dark .pub-shell #tab-today .today-grid > .today-card-ink { background: color-mix(in srgb, var(--gold) 55%, var(--ink)); color: var(--on-accent); }
+  .pub-shell #tab-today .today-card-ink .today-card-ic { grid-area: ic; width: 40px; height: 40px; box-sizing: border-box; border: var(--stroke) solid currentColor; font-size: 22px; }
+  .pub-shell #tab-today .today-card-ink .today-card-name { grid-area: name; font: 400 30px / 1 var(--font-display); letter-spacing: .03em; text-transform: uppercase; }
+  .pub-shell #tab-today .today-card-ink .today-card-sub { grid-area: sub; font: 600 var(--text-base) var(--font-ui); color: inherit; opacity: 1; }
+
+  /* Workspace: one inked sheet, a short row per tool. */
   .pub-shell #tab-today .today-label {
     margin: 26px 0 var(--space-2); padding: 0; border: 0;
-    font: 700 var(--text-3xs) var(--font-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--content-muted);
+    font: 800 var(--text-2xs) var(--font-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--content-muted);
   }
   .pub-shell #tab-today .today-rows { border: var(--stroke) solid var(--rule-ink); background: var(--surface-card); box-shadow: var(--riso-off); }
-  .pub-shell #tab-today .today-row { min-height: 56px; padding: var(--space-2) 14px; border: 0; border-top: var(--stroke-hair) solid var(--border2); }
+  .pub-shell #tab-today .today-row {
+    display: grid; grid-template-columns: 20px minmax(0, 1fr) 12px; gap: 12px; align-items: center;
+    min-height: 46px; padding: 0 14px; border: 0; border-top: var(--stroke-hair) solid var(--border2);
+  }
   .pub-shell #tab-today .today-row:first-child { border-top: 0; }
-  .pub-shell #tab-today .today-row-ic { width: 26px; height: 26px; border: var(--stroke) solid currentColor; display: grid; place-items: center; font: 500 var(--text-xs) / 1 var(--font-mono); }
-  .pub-shell #tab-today .today-row-name { font: 600 var(--text-md) / 1.25 var(--font-ui); }
-  .pub-shell #tab-today .today-row-sub { font: 400 var(--text-sm) var(--font-mono); color: var(--content-muted); }
+  .pub-shell #tab-today .today-row:active { background: var(--surface-inset); }
+  .pub-shell #tab-today .today-row-ic { display: grid; place-items: center; width: 20px; height: 20px; flex: none; border: 0; font-size: 16px; }
+  .pub-shell #tab-today .today-row-name { font: 600 14px / 1.25 var(--font-ui); }
+  .pub-shell #tab-today .today-row-sub { display: none; }
+  .pub-shell #tab-today .today-row-chev { font: 500 var(--text-md) var(--font-mono); color: var(--content-muted); }
 }
 
 /* ── Sell: the register as one flat list with − / + ─────────────────── */
@@ -317,68 +339,109 @@
   .pub-shell #tab-pos .pos-subtab-btn.active { color: var(--content-primary); box-shadow: inset 0 -4px 0 var(--gold); }
   .pub-shell #tab-pos .pos-subtab-btn:active { transform: none; }
 
-  /* The list: one outlined sheet, a row per book. */
-  .pub-shell #tab-pos .pos-layout[data-mobile-view="books"] .fm-tiles {
-    display: block; border: var(--stroke) solid var(--rule-ink); background: var(--surface-card); box-shadow: var(--riso-off);
+  /* One status strip above the books: upload dot · fair · currency · today's total.
+     The fair name and currency are their own buttons (rename, pick a currency) and the
+     total opens today's register sales, as the two rows they replace did. The upload
+     state is a dot while all is well; with no signal or a failed upload its words take
+     a second line in the strip, so a stall never misses it. */
+  .pub-shell #tab-pos .pos-layout[data-mobile-view="books"] .fm-top {
+    display: grid; grid-template-columns: auto minmax(0, max-content) auto minmax(0, 1fr) auto; align-items: center;
+    column-gap: 6px; min-height: 44px; padding: 0 12px;
+    border: var(--stroke) solid var(--rule-ink); background: var(--surface-card); color: var(--content-primary);
   }
-  .pub-shell #tab-pos .fm-tile {
-    display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
-    border-top: var(--stroke-hair) solid var(--border2);
+  .pub-shell #tab-pos .fm-top .fm-row { display: contents; }
+  .pub-shell #tab-pos .fm-top .fm-sync {
+    grid-column: 1; grid-row: 1; min-height: 0; padding: 0; gap: var(--space-2); border: 0; border-radius: 0; background: none;
+    font-size: 0; white-space: nowrap;
   }
-  .pub-shell #tab-pos .fm-tile:first-child { border-top: 0; }
-  .pub-shell #tab-pos .fm-tile .fm-tile-add, .pub-shell #tab-pos .fm-tile.is-in-cart .fm-tile-add {
-    display: grid; grid-template-columns: 36px minmax(0, 1fr); grid-template-areas: "cover title" "cover meta";
-    column-gap: var(--space-3); row-gap: 0; align-items: center; justify-items: start;
-    height: auto; min-height: 68px; padding: 10px 0 10px var(--space-3);
-    border: 0; border-radius: 0; box-shadow: none; background: transparent; transform: none;
+  .pub-shell #tab-pos .fm-top .fm-sync::before { width: 8px; height: 8px; border-radius: 50%; background: var(--green-light); }
+  .pub-shell #tab-pos .fm-top .fm-sync[data-tone="pending"]::before { background: var(--amber); }
+  .pub-shell #tab-pos .fm-top .fm-sync[data-tone="offline"]::before { background: var(--amber); }
+  .pub-shell #tab-pos .fm-top .fm-sync[data-tone="failed"]::before { background: var(--red); }
+  .pub-shell #tab-pos .fm-top .fm-sync:is([data-tone="offline"], [data-tone="failed"]) {
+    grid-column: 1 / -1; grid-row: 2; min-height: 36px; margin: 0 -12px; padding: 0 12px;
+    border-top: var(--stroke-hair) solid var(--border2); background: var(--amber-bg);
+    font: 600 var(--text-xs) var(--font-ui); white-space: normal;
   }
-  .pub-shell #tab-pos .fm-tile .fm-tile-add:active { background: var(--surface-inset); }
-  .pub-shell #tab-pos .fm-tile-cover {
-    grid-area: cover; display: block; width: 36px; height: 48px; box-sizing: border-box;
-    border: var(--stroke) solid var(--rule-ink); background: var(--surface-inset); box-shadow: var(--riso-off-sm);
+  .pub-shell #tab-pos .fm-top .fm-sync[data-tone="failed"] { background: var(--red-bg); }
+  .pub-shell #tab-pos .fm-top .fm-fair-btn {
+    grid-column: 2; grid-row: 1; min-width: 0; min-height: 44px; padding: 0; border: 0;
+    color: var(--content-primary); font: 600 var(--text-sm) var(--font-ui); text-decoration: none; white-space: nowrap;
   }
-  .pub-shell #tab-pos .fm-tile-title { grid-area: title; font: 700 var(--text-md) / 1.25 var(--font-ui); -webkit-line-clamp: 2; line-clamp: 2; }
-  /* Price and copies left share one mono line under the title. */
-  .pub-shell #tab-pos .fm-tile-meta { grid-area: meta; display: flex; flex-wrap: wrap; column-gap: 0; font: 400 var(--text-sm) var(--font-mono); color: var(--content-muted); }
-  .pub-shell #tab-pos .fm-tile-meta .fm-tile-price, .pub-shell #tab-pos .fm-tile-meta .fm-tile-stock { margin: 0; font: inherit; color: inherit; }
-  .pub-shell #tab-pos .fm-tile-stock::before { content: "\00a0·\00a0"; color: var(--content-muted); }
-  .pub-shell #tab-pos .fm-tile.is-low .fm-tile-stock { color: var(--amber); }
-  .pub-shell #tab-pos .fm-tile.is-low .fm-tile-stock::after { content: none; }
-  .pub-shell #tab-pos .fm-tile.is-short .fm-tile-stock { color: var(--red); }
-  .pub-shell #tab-pos .fm-tile.is-out .fm-tile-add { opacity: .55; }
-
-  /* − count + : 44px targets, the count box turns yellow once in the sale. */
-  .pub-shell #tab-pos .fm-tile-step { display: flex; align-items: center; gap: 2px; padding-right: 6px; }
-  .pub-shell #tab-pos .fm-tile .fm-tile-minus, .pub-shell #tab-pos .fm-step-off, .pub-shell #tab-pos .fm-tile-plus {
-    position: static; display: grid; place-items: center; width: 40px; height: 44px; padding: 0;
+  .pub-shell #tab-pos .fm-top .fm-fair-btn > [aria-hidden="true"] { display: none; }
+  .pub-shell #tab-pos .fm-top #fm-fair-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pub-shell #tab-pos .fm-top .fm-fair-btn:not(.is-set) #fm-fair-name { color: var(--content-muted); text-decoration: underline dotted; text-underline-offset: 3px; }
+  .pub-shell #tab-pos .fm-top .fm-ccy { grid-column: 3; grid-row: 1; display: flex; align-items: center; flex-wrap: nowrap; gap: 0; }
+  .pub-shell #tab-pos .fm-top .fm-ccy::before { content: "·"; padding-right: 2px; font: 600 var(--text-sm) var(--font-ui); color: var(--content-muted); }
+  .pub-shell #tab-pos .fm-top .fm-ccy-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .pub-shell #tab-pos .fm-top .fm-ccy-select {
+    min-height: 44px; min-width: 0; width: auto; padding: 0 2px; border: 0; border-radius: 0; background: none; box-shadow: none;
+    color: var(--content-primary); font-weight: 600; font-family: var(--font-ui); appearance: none; -webkit-appearance: none; cursor: pointer;
+  }
+  .pub-shell #tab-pos .fm-top .fm-ccy-rates { grid-column: 1 / -1; grid-row: 3; margin-bottom: var(--space-2); }
+  .pub-shell #tab-pos .fm-top .fm-today-btn {
+    grid-column: 5; grid-row: 1; display: flex; align-items: center; gap: var(--space-2); min-height: 44px; padding: 0;
     border: 0; border-radius: 0; background: none; box-shadow: none; color: var(--content-primary);
-    font: 800 20px / 1 var(--font-ui); cursor: pointer; touch-action: manipulation;
   }
-  .pub-shell #tab-pos .fm-step-off { color: var(--content-faint); cursor: default; }
-  .pub-shell #tab-pos .fm-tile .fm-tile-qty {
-    position: static; display: grid; place-items: center; width: 30px; min-width: 0; height: 30px; padding: 0; box-sizing: border-box;
-    border: var(--stroke) solid var(--rule-ink); border-radius: 0; background: var(--surface-card); color: var(--content-primary);
-    font: 500 var(--text-md) var(--font-mono);
-  }
-  .pub-shell #tab-pos .fm-tile.is-in-cart .fm-tile-qty { background: #FFC93C; color: var(--ink); }
-  .pub-shell #tab-pos .fm-tile :is(.fm-tile-minus, .fm-tile-plus):active { background: var(--surface-inset); transform: none; }
-  .pub-shell #tab-pos .fm-tile :is(.fm-tile-minus, .fm-tile-plus):focus-visible { outline: 2px solid var(--gold-text); outline-offset: -2px; }
+  .pub-shell #tab-pos .fm-top .fm-today-btn > [aria-hidden="true"] { display: none; }
+  .pub-shell #tab-pos .fm-top .fm-today-label { font: 800 var(--text-2xs) var(--font-ui); letter-spacing: .08em; color: var(--content-muted); }
+  .pub-shell #tab-pos .fm-top .fm-today-sum { font: 500 var(--text-base) var(--font-mono); white-space: nowrap; }
+  .pub-shell #tab-pos .fm-top :is(.fm-fair-btn, .fm-ccy-select, .fm-today-btn):focus-visible { outline: 2px solid var(--gold-text); outline-offset: -2px; }
+  .pub-shell #tab-pos .fm-top .fm-today-btn:active { transform: none; background: var(--surface-inset); }
 
-  /* The total, pinned to the bottom in place of the Sell / Manual entry bar. */
-  .pub-shell:has(#tab-pos.active .pos-layout[data-mobile-view="books"] .fm-bar:not([hidden])) .mnav { display: none; }
-  .pub-shell #tab-pos .pos-layout[data-mobile-view="books"] .fm-bar:not([hidden]) {
-    left: 0; right: 0; bottom: 0; gap: var(--space-3);
-    padding: var(--space-3) max(var(--phone-gutter), env(safe-area-inset-right)) calc(var(--space-3) + env(safe-area-inset-bottom)) max(var(--phone-gutter), env(safe-area-inset-left));
-    border: 0; border-top: var(--stroke) solid var(--rule-ink); border-radius: 0; background: var(--surface-page); box-shadow: none;
+  /* Books: two tiles to a row. One tap on a tile adds a copy; the − below takes one back. */
+  .pub-shell #tab-pos .pos-layout[data-mobile-view="books"] .fm-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .pub-shell #tab-pos .fm-tile { position: relative; min-width: 0; }
+  .pub-shell #tab-pos .fm-tile .fm-tile-add, .pub-shell #tab-pos .fm-tile.is-in-cart .fm-tile-add {
+    display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1); width: 100%; height: 100%; min-height: 104px; padding: 12px;
+    border: var(--stroke) solid var(--rule-ink); border-radius: 0; background: var(--surface-card); color: var(--content-primary); box-shadow: var(--riso-off);
   }
-  .pub-shell #tab-pos .fm-bar-sum { flex: 1 1 auto; }
-  .pub-shell #tab-pos .fm-bar-count { font: 700 var(--text-3xs) var(--font-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--content-muted); }
-  .pub-shell #tab-pos .fm-bar-total { font: 500 24px / 1.1 var(--font-mono); letter-spacing: -.02em; }
+  .pub-shell #tab-pos .fm-tile.is-in-cart .fm-tile-add { background: var(--gold-bg); border-color: var(--gold-text); }
+  .pub-shell #tab-pos .fm-tile .fm-tile-add:active { transform: translate(3px, 3px); box-shadow: none; }
+  .pub-shell #tab-pos .fm-tile.is-out .fm-tile-add { opacity: .55; box-shadow: none; }
+  .pub-shell #tab-pos .fm-tile-cover { display: none; }
+  .pub-shell #tab-pos .fm-tile-title { order: 1; padding-right: 22px; font: 700 var(--text-base) / 1.25 var(--font-ui); -webkit-line-clamp: 3; line-clamp: 3; }
+  .pub-shell #tab-pos .fm-tile-meta { display: contents; }
+  .pub-shell #tab-pos .fm-tile-meta .fm-tile-stock { order: 2; margin: 0; font: 500 var(--text-xs) var(--font-mono); color: var(--content-muted); }
+  .pub-shell #tab-pos .fm-tile-meta .fm-tile-price { order: 3; margin: auto 0 0; padding-top: var(--space-2); font: 500 var(--text-md) / 1.2 var(--font-mono); color: var(--content-primary); white-space: nowrap; }
+  /* Room for the − beside the price once the book is in the sale. */
+  .pub-shell #tab-pos .fm-tile.is-in-cart .fm-tile-add { padding-bottom: 64px; }
+  .pub-shell #tab-pos .fm-tile.is-low .fm-tile-stock { color: var(--amber); }
+  .pub-shell #tab-pos .fm-tile:is(.is-short, .is-out) .fm-tile-stock { color: var(--red); }
+  /* In the sale: a square ink count in the corner and the − to take one back. */
+  .pub-shell #tab-pos .fm-tile-step { display: contents; }
+  .pub-shell #tab-pos :is(.fm-step-off, .fm-tile-plus) { display: none; }
+  .pub-shell #tab-pos .fm-tile .fm-tile-qty { display: none; }
+  .pub-shell #tab-pos .fm-tile.is-in-cart .fm-tile-qty {
+    position: absolute; top: -2px; right: -2px; display: flex; align-items: center; justify-content: center; min-width: 26px; height: 26px; padding: 0 4px; box-sizing: border-box;
+    border: 0; border-radius: 0; background: var(--ink); color: var(--on-inverse); font: 500 var(--text-sm) var(--font-mono);
+  }
+  .pub-shell #tab-pos .fm-tile.is-in-cart .fm-tile-qty::before { content: "×"; }
+  .pub-shell #tab-pos .fm-tile .fm-tile-minus {
+    position: absolute; right: 8px; bottom: 8px; display: grid; place-items: center; width: 48px; height: 48px; padding: 0;
+    border: var(--stroke) solid var(--rule-ink); border-radius: 0; background: var(--surface-card); color: var(--content-primary);
+    box-shadow: var(--riso-off-sm); font: 800 20px / 1 var(--font-ui); cursor: pointer; touch-action: manipulation;
+  }
+  .pub-shell #tab-pos .fm-tile .fm-tile-minus:active { transform: translate(2px, 2px); box-shadow: none; }
+  .pub-shell #tab-pos .fm-tile .fm-tile-minus:focus-visible { outline: 2px solid var(--gold-text); outline-offset: 2px; }
+
+  /* Charge bar: pinned above the bottom bar, clear of the raised Sell button. */
+  .pub-shell #tab-pos .pos-layout[data-mobile-view="books"] #pos-mobile-books { padding-bottom: calc(var(--mnav-h) + 30px + 56px + 24px + env(safe-area-inset-bottom)); }
+  .pub-shell #tab-pos .pos-layout[data-mobile-view="books"] .fm-bar:not([hidden]),
+  .pub-shell #tab-pos .fm-undo:not([hidden]) {
+    left: 12px; right: 12px; bottom: calc(var(--mnav-h) + 30px + env(safe-area-inset-bottom));
+    min-height: 56px; gap: 12px; padding: 0 8px 0 16px;
+    border: var(--stroke) solid var(--rule-ink); border-radius: 0; background: var(--surface-card); box-shadow: 4px 4px 0 var(--rule-ink);
+  }
+  .pub-shell #tab-pos .fm-bar-sum { flex: 1 1 auto; display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+  .pub-shell #tab-pos .fm-bar-count { font: 600 var(--text-sm) var(--font-ui); letter-spacing: 0; text-transform: none; color: var(--content-secondary); white-space: nowrap; }
+  .pub-shell #tab-pos .fm-bar-total { font: 500 var(--text-lg) / 1.1 var(--font-mono); overflow-wrap: anywhere; }
   .pub-shell #tab-pos .fm-charge-btn {
-    flex: none; min-height: 48px !important; height: 48px; padding: 0 var(--space-5);
-    border: var(--stroke) solid var(--rule-ink); background: var(--gold); color: var(--ink); box-shadow: var(--riso-off);
-    font: 800 var(--text-base) var(--font-ui) !important; letter-spacing: var(--tracking-caps); text-transform: uppercase;
+    flex: none; min-height: 42px !important; height: 42px; padding: 0 18px;
+    border: var(--stroke) solid var(--rule-ink) !important; border-radius: 0; box-shadow: none;
+    font: 400 18px / 1 var(--font-display) !important; letter-spacing: .04em; text-transform: uppercase;
   }
+  .pub-shell #tab-pos .fm-charge-btn:active { transform: translate(2px, 2px); }
 }
 
 /* ── Flat sheet, chips and pills (All Books, Stores) ─────────────────── */
@@ -397,28 +460,58 @@
   .pub-shell .phone-pill.is-amber { color: var(--amber); background: var(--amber-bg); }
   .pub-shell .phone-pill.is-red { color: var(--red); background: var(--red-bg); }
 
-  /* All Books */
+  /* All Books: one strip of figures, where it sells as one bar, the books ranked in one sheet.
+     The full channel table folds under the list; each book's own breakdown lives on its page. */
   .pub-shell #tab-all-overview { padding-inline: var(--phone-gutter); }
   .pub-shell .phone-books { display: block; margin-bottom: var(--space-6); }
   .pub-shell #tab-all-overview .overview-section:first-child > .sec-head, .pub-shell #all-books-list { display: none; }
-  .pub-shell .phone-books .phone-ledger { margin-top: 18px; }
-  .pub-shell .phone-book-row {
-    display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; column-gap: var(--space-3); align-items: center;
-    width: 100%; min-height: 68px; padding: 10px 14px 10px var(--space-3); margin: 0;
+  .pub-shell #tab-all-overview:not(.show-channels) .overview-section:has(#all-ch-analytics) { display: none; }
+  .pub-shell .phone-kpis {
+    display: grid; grid-template-columns: 1.3fr 1fr 1fr; margin-top: 18px;
+    border: var(--stroke) solid var(--rule-ink); background: var(--surface-card); box-shadow: var(--riso-off);
+  }
+  .pub-shell .phone-kpi { display: grid; align-content: start; gap: var(--space-1); min-width: 0; padding: 10px 12px; color: var(--content-primary); }
+  .pub-shell .phone-kpi + .phone-kpi { border-left: var(--stroke) solid var(--rule-ink); }
+  .pub-shell .phone-kpi.is-lead { background: var(--book-accent-fill, var(--gold)); color: var(--book-accent-contrast, var(--ink)); }
+  .pub-shell .phone-kpi-label { font: 800 var(--text-3xs) var(--font-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--content-muted); }
+  .pub-shell .phone-kpi.is-lead .phone-kpi-label { color: inherit; }
+  .pub-shell .phone-kpi-value { font: 400 24px / 1.05 var(--font-display); overflow-wrap: anywhere; }
+  .pub-shell .phone-kpi.is-owed .phone-kpi-value { color: var(--gold-text); }
+  .pub-shell .phone-mix { display: grid; gap: 6px; margin-top: 14px; }
+  .pub-shell .phone-mix-bar { display: flex; height: 14px; border: var(--stroke) solid var(--rule-ink); background: var(--surface-card); }
+  .pub-shell .phone-mix-bar > span { min-width: 2px; }
+  .pub-shell .phone-mix-legend { display: flex; flex-wrap: wrap; gap: var(--space-1) 12px; font: 500 var(--text-xs) var(--font-mono); color: var(--content-secondary); }
+  .pub-shell .phone-mix-legend > span { display: inline-flex; align-items: center; gap: 5px; }
+  .pub-shell .phone-mix-legend i { width: 8px; height: 8px; flex: none; }
+  .pub-shell .phone-books-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); margin-top: 22px; }
+  .pub-shell .phone-books-count { margin: 0; font: 400 22px / 1 var(--font-display); text-transform: uppercase; color: var(--content-primary); }
+  .pub-shell .phone-sort-btn, .pub-shell .phone-mix-more {
+    min-height: 44px; padding: 0; border: 0; background: none; box-shadow: none; cursor: pointer;
+    font: 700 var(--text-xs) var(--font-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--gold-text);
+  }
+  .pub-shell .phone-mix-more { display: block; margin-top: var(--space-2); }
+  .pub-shell :is(.phone-sort-btn, .phone-mix-more):focus-visible { outline: 2px solid var(--gold-text); outline-offset: 2px; }
+  .pub-shell .phone-books-head + .phone-sheet { margin-top: var(--space-1); }
+  .pub-shell .phone-rank-row {
+    display: grid; grid-template-columns: 20px minmax(0, 1fr) 72px 12px; gap: var(--space-2); align-items: center;
+    width: 100%; min-height: 46px; padding: var(--space-2) 12px; margin: 0;
     border: 0; border-top: var(--stroke-hair) solid var(--border2); border-radius: 0; background: none; box-shadow: none;
     color: var(--content-primary); font: inherit; text-align: left; cursor: pointer;
   }
-  .pub-shell .phone-book-row:first-child { border-top: 0; }
-  .pub-shell .phone-book-row:active { background: var(--surface-inset); }
-  .pub-shell .phone-book-row:focus-visible { outline: 2px solid var(--gold-text); outline-offset: -2px; }
-  .pub-shell .phone-book-cover { width: 36px; height: 48px; box-sizing: border-box; border: var(--stroke) solid var(--rule-ink); background: var(--surface-inset); box-shadow: var(--riso-off-sm); }
-  .pub-shell .phone-book-txt { display: grid; justify-items: start; gap: 2px; min-width: 0; }
-  .pub-shell .phone-book-txt .phone-pill { margin-top: 2px; }
-  .pub-shell .phone-book-title { font: 700 var(--text-md) / 1.25 var(--font-ui); overflow-wrap: anywhere; }
-  .pub-shell .phone-book-meta { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 var(--text-sm) var(--font-mono); color: var(--content-muted); }
-  .pub-shell .phone-book-end { display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-1); }
-  .pub-shell .phone-book-unit { font: 700 var(--text-3xs) var(--font-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--content-muted); }
-  .pub-shell .phone-book-count { font: 500 20px / 1 var(--font-mono); letter-spacing: -.02em; }
+  .pub-shell .phone-rank-row:first-child { border-top: 0; }
+  .pub-shell .phone-rank-row:active { background: var(--surface-inset); }
+  .pub-shell .phone-rank-row:focus-visible { outline: 2px solid var(--gold-text); outline-offset: -2px; }
+  .pub-shell .phone-rank-n { font: 500 var(--text-xs) var(--font-mono); color: var(--content-muted); }
+  .pub-shell .phone-rank-txt { display: grid; gap: var(--space-1); min-width: 0; }
+  .pub-shell .phone-rank-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 var(--text-base) / 1.25 var(--font-ui); }
+  .pub-shell .phone-rank-track { display: block; height: 4px; background: var(--track-bg, var(--border2)); }
+  .pub-shell .phone-rank-track > span { display: block; height: 100%; background: var(--content-primary); }
+  .pub-shell .phone-rank-end { display: grid; justify-items: end; gap: 2px; min-width: 0; }
+  .pub-shell .phone-rank-rev { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 var(--text-base) var(--font-mono); }
+  .pub-shell .phone-rank-stock { font: 500 var(--text-2xs) var(--font-mono); color: var(--content-muted); white-space: nowrap; }
+  .pub-shell .phone-rank-stock.is-amber { color: var(--amber); }
+  .pub-shell .phone-rank-stock.is-red { color: var(--red); }
+  .pub-shell .phone-rank-chev { font: 500 var(--text-md) var(--font-mono); color: var(--content-muted); }
 }
 
 /* ── Stores: a work queue, each store opening in place ──────────────── */
@@ -585,4 +678,75 @@
 @media (max-width: 768px) {
   .pub-shell .tab-panel .btn.gold,
   .pub-shell .tab-panel .btn.gold:hover { border-color: var(--rule-ink) !important; }
+}
+
+/* ── Order history: one sheet, one short row per order ───────────────────
+   Every order, return and consignment shipment shares one grid: the channel tag over
+   the order number and date on the left, and a fixed right column with the amount over
+   the copies, so the figures line up down the list. A return shows its copies where a
+   sale shows money ("+3 copies" over "to stock") on a sunken row. A tap on the row opens
+   its details (unit price, stock after, notes, who entered it) and the edit pencil; the
+   Details button stays for keyboards and screen readers but is not drawn. */
+@media (max-width: 768px) {
+  .pub-shell #tab-history #hist-body { border: var(--stroke) solid var(--rule-ink); background: var(--surface-card); box-shadow: var(--riso-off); }
+  .pub-shell #tab-history #hist-body tr.hist-row {
+    grid-template-columns: auto minmax(0, 1fr) 92px; column-gap: 6px; row-gap: var(--space-1); align-items: center;
+    min-height: 44px; margin: 0; padding: 11px 14px;
+    border: 0; border-bottom: var(--stroke-hair) solid var(--border2); border-radius: 0; background: transparent; box-shadow: none;
+  }
+  .pub-shell #tab-history #hist-body tr.hist-row:last-child { border-bottom: 0; }
+  .pub-shell #tab-history #hist-body tr.hist-row:not(.is-awaiting):is(:hover, :active) { background: var(--surface-inset) !important; transform: none; box-shadow: none; }
+  .pub-shell #tab-history #hist-body tr.hist-row.is-awaiting { background: linear-gradient(var(--amber-bg), var(--amber-bg)), var(--surface-card); box-shadow: inset 4px 0 0 var(--status-active); }
+  .pub-shell #tab-history #hist-body tr.hist-row.is-return { background: var(--surface-sunken); }
+  .pub-shell #tab-history #hist-body tr.hist-row:has(.phone-record-toggle:focus-visible) { outline: 2px solid var(--gold-text); outline-offset: -2px; }
+
+  /* Left: the channel tag (and a store's name) over the order number · date. */
+  .pub-shell #tab-history #hist-body tr.hist-row > td:nth-child(2) {
+    grid-area: 1 / 1 / 2 / 3 !important; display: flex !important; flex-wrap: nowrap; align-items: center; gap: 6px; min-width: 0;
+    overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+    font: 600 var(--text-base) var(--font-ui); letter-spacing: 0; text-transform: none; color: var(--content-primary);
+  }
+  .pub-shell #tab-history #hist-body tr.hist-row > td:nth-child(1) { grid-area: 2 / 1 / 3 / 2 !important; font: 500 var(--text-xs) var(--font-mono); color: var(--content-muted); }
+  .pub-shell #tab-history #hist-body tr.hist-row > td:nth-child(9) {
+    grid-area: 2 / 2 / 3 / 3 !important; display: block; min-height: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+    font: 500 var(--text-xs) var(--font-mono) !important; color: var(--content-muted);
+  }
+  .pub-shell #tab-history #hist-body tr.hist-row > td:nth-child(9)::before { content: "· "; display: inline; margin: 0; font: inherit; letter-spacing: 0; text-transform: none; }
+  /* Right: the amount over the copies. */
+  .pub-shell #tab-history #hist-body tr.hist-row > td:nth-child(5) { grid-area: 1 / 3 / 2 / 4 !important; text-align: right !important; font: 500 var(--text-md) var(--font-mono); }
+  .pub-shell #tab-history #hist-body tr.hist-row > td:nth-child(3) {
+    grid-area: 2 / 3 / 3 / 4 !important; display: block !important; text-align: right !important; font-size: 0 !important; color: var(--content-muted);
+  }
+  .pub-shell #tab-history #hist-body tr.hist-row > td:nth-child(3)::after { content: attr(data-phone-qty); font: 500 var(--text-2xs) var(--font-mono); }
+  /* A consignment shipment or return carries copies, not money: they take the amount's place. */
+  .pub-shell #tab-history #hist-body tr.hist-consign > td:nth-child(5) { display: none !important; }
+  .pub-shell #tab-history #hist-body tr.hist-consign > td:nth-child(3) {
+    grid-area: 1 / 3 / 3 / 4 !important; display: flex !important; flex-direction: column; align-items: flex-end; gap: 2px;
+  }
+  .pub-shell #tab-history #hist-body tr.hist-consign > td:nth-child(3)::before {
+    content: attr(data-phone-qty); display: block; margin: 0; font: 500 var(--text-md) var(--font-mono); letter-spacing: 0; text-transform: none; color: var(--content-primary);
+  }
+  .pub-shell #tab-history #hist-body tr.hist-consign > td:nth-child(3)::after { content: attr(data-phone-sub); }
+  /* Approve / Ship stay on the row; an empty action cell takes no room. The way to the
+     Consignment tab and the pencil wait in the opened row. */
+  .pub-shell #tab-history #hist-body tr.hist-row > td:nth-child(10) { grid-area: 3 / 1 / 4 / -1 !important; text-align: left !important; }
+  .pub-shell #tab-history #hist-body tr.hist-row > td:nth-child(10):empty,
+  .pub-shell #tab-history #hist-body tr.hist-consign:not(.phone-record-open) > td:nth-child(10),
+  .pub-shell #tab-history #hist-body tr.hist-row:not(.phone-record-open) .edit-btn { display: none !important; }
+  .pub-shell #tab-history #hist-body tr.hist-row.phone-record-open { padding-bottom: 56px; }
+
+  .pub-shell #tab-history #hist-body .phone-record-toggle {
+    position: absolute; width: 1px; height: 1px; min-height: 0; padding: 0; margin: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+  /* Channel tags: short caps pills. A return is the one inked tag. */
+  .pub-shell #tab-history #hist-body .ch-badge {
+    flex: none; height: auto; padding: 2px 8px; border: 0; border-radius: var(--r-pill);
+    font: 700 var(--text-2xs) / 1.3 var(--font-ui); letter-spacing: .06em; text-transform: uppercase;
+  }
+  .pub-shell #tab-history #hist-body .ch-badge.ch-return { background: var(--ink); color: var(--on-inverse); }
+  .pub-shell #tab-history #hist-body tr.hist-row .chip-status { flex: none; height: auto; min-height: 0; padding: 2px 8px; font-size: var(--text-2xs); }
+  /* Consignment rows: a one-word tag (Sent, Return, Written off) and the store's name, cut short with … when long. */
+  .pub-shell #tab-history #hist-body [data-phone-label] { font-size: 0 !important; gap: 0; }
+  .pub-shell #tab-history #hist-body [data-phone-label]::after { content: attr(data-phone-label); font-size: var(--text-2xs); }
+  .pub-shell #tab-history #hist-body .hist-who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }

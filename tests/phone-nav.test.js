@@ -31,19 +31,20 @@ beforeEach(() => {
 
 const moreLabels = () => [...document.querySelectorAll('#more-sheet-body .snav:not([hidden]) .snav-label')].map((n) => n.textContent);
 
-test('bottom bar has three everyday destinations plus More', () => {
+test('bottom bar has four everyday destinations plus More, with Sell raised in the middle', () => {
   const buttons = [...document.querySelectorAll('#mnav .mnav-btn')];
-  expect(buttons.map((b) => b.querySelector('.mnav-label').textContent)).toEqual(['Home', 'Sell', 'Manual entry', 'More']);
+  expect(buttons.map((b) => b.querySelector('.mnav-label').textContent)).toEqual(['Today', 'History', 'Sell', 'Books', 'More']);
+  expect(buttons[2].classList.contains('mnav-sell')).toBe(true);
 });
 
 test('More sheet lists every sidebar tool not already on the bottom bar', () => {
   nav.openMoreSheet();
   expect(document.getElementById('more-sheet').hasAttribute('open')).toBe(true);
   const labels = moreLabels();
-  for (const tool of ['Dashboard', 'To-do', 'Tax Centre', 'Payments', 'Customers', 'Shipping', 'Backups', 'History', 'Expenses', 'Website orders']) {
+  for (const tool of ['Dashboard', 'To-do', 'Tax Centre', 'Payments', 'Customers', 'Shipping', 'Backups', 'Manual entry', 'Expenses', 'Website orders']) {
     expect(labels).toContain(tool);
   }
-  for (const onBar of ['Event POS', 'Manual entry']) {
+  for (const onBar of ['Event POS', 'History']) {
     expect(labels).not.toContain(onBar);
   }
   // Cloned ids would duplicate the sidebar's (badges are looked up by id).
@@ -76,19 +77,20 @@ test('phone nav only replaces the pill strip for publishers', () => {
   expect(styles).toMatch(/\.mnav\{display:none;\}/);
 });
 
-test('Home on the bottom bar opens the Today page', () => {
+test('Today on the bottom bar opens the Today page', () => {
   const home = document.querySelector('#mnav .mnav-btn');
-  expect(home.getAttribute('onclick')).toBe("switchTab('today')");
+  expect(home.dataset.action).toBe('nav.tab');
+  expect(home.dataset.go).toBe('today');
   expect(document.getElementById('tab-today')).not.toBeNull();
   expect(mainJs).toMatch(/if \(name === 'today'\) renderTodayHub\(\);/);
 });
 
 test('Today gives selling, orders, tasks and receipt capture a real button', () => {
   const cards = [...document.querySelectorAll('#tab-today .today-card')];
-  expect(cards.map((c) => c.querySelector('.today-card-name').textContent)).toEqual(['Sell', 'Orders', 'To-do', 'Snap a receipt']);
+  expect(cards.map((c) => c.querySelector('.today-card-name').textContent)).toEqual(['Sell', 'Log an order', 'Orders', 'To-do', 'Snap a receipt']);
   expect(cards.every((c) => c.tagName === 'BUTTON')).toBe(true);
   // The To-do count rides the same badge class the sidebar uses, so it stays live.
-  expect(cards[2].querySelector('.todo-nav-badge')).not.toBeNull();
+  expect(cards[3].querySelector('.todo-nav-badge')).not.toBeNull();
 });
 
 // Run the Today renderers from main.js against the real markup, with the app's
@@ -124,12 +126,14 @@ test('authors never land on the publisher-only Today page', () => {
   expect(PUBLISHER_ONLY_TABS.has('today')).toBe(true);
 });
 
-test('manual entry has its own destination and only one destination is announced', () => {
+test('manual entry lives under More and only one destination is announced', () => {
   nav.syncMoreNavState('manual');
   const selected = document.querySelectorAll('#mnav [aria-current="page"]');
   expect(selected).toHaveLength(1);
-  expect(selected[0].textContent).toContain('Manual entry');
+  expect(selected[0].textContent).toContain('More');
+  // Still one tap away from Sell and from Today.
   expect(document.querySelector('#tab-pos .phone-sell-head [onclick="switchTab(\'manual\')"]')).not.toBeNull();
+  expect(document.querySelector('#tab-today [data-action="nav.tab"][data-go="manual"]')).not.toBeNull();
 });
 
 test('Home in All books does not reuse another book’s order count', () => {
@@ -230,7 +234,7 @@ test('phone side menu: the top bar menu button opens it, with book chips and Tod
   expect(chipCalls[0].container.id).toBe('more-sheet-books');
   const labels = moreLabels();
   expect(labels[0]).toBe('Today');
-  // The phone bar holds only Sell and Manual entry, so the menu keeps every screen.
+  // On a computer there is no phone bar, so the menu keeps every screen.
   expect(labels).toContain('Event POS');
   expect(labels).toContain('Manual entry');
   nav.closeMoreSheet();

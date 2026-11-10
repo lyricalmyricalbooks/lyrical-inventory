@@ -55,7 +55,7 @@ test('publishers from 769px to 860px get the bottom nav, not the old tab bar', (
   expect(start).toBeGreaterThan(-1);
   const block = style.slice(start, start + 1500);
   expect(block).toMatch(/\.pub-shell \.tab-bar\{display:none;\}/);
-  expect(block).toMatch(/\.pub-shell \.mnav\{\s*display:grid;grid-template-columns:repeat\(4,minmax\(0,1fr\)\);/);
+  expect(block).toMatch(/\.pub-shell \.mnav\{\s*display:grid;grid-template-columns:repeat\(5,minmax\(0,1fr\)\);/);
   expect(block).toMatch(/\.pub-shell \.tab-panel\{padding-bottom:calc\(var\(--mnav-h\) \+ 30px \+ env\(safe-area-inset-bottom\)\);\}/);
   // The slimmer header stays phone-only: it moved into its own 768px block.
   expect(style).toMatch(/\/\* Phone-only header[^*]*\*\/\s*@media \(max-width: 768px\)\{/);

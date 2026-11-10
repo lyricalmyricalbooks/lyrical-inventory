@@ -10,6 +10,7 @@ import { linkedShippingSummary } from '../src/lib/shipping-reconciliation.js';
 import { filterHistoryRows, historySearchIsActive, describeHistorySearch } from '../src/lib/order-history-search.js';
 import { isWebsiteFulfilled } from '../src/lib/website-link.js';
 import { IN_PERSON_CHANNELS } from '../src/lib/channel-mix.js';
+import { plural } from '../src/lib/plural.js';
 
 // Order History is where a mis-rendered row reads as a sale that didn't happen
 // or stock the publisher doesn't have, so this covers what it actually puts on
@@ -42,7 +43,7 @@ function makeHarness({ state, book = BOOK, isPublisher = true, submissions = {},
     names: [
       'CHANNEL_COLORS', 'CHAN_OTHER', 'HIST_PAGE', 'HIST_SEARCH_MIN',
       'channelColor', 'chanLabel', 'visibleTabName',
-      'renderConsignHistRow', 'deliveryPhrase', 'linkablePostageExpenses', 'renderOrderShippingSummary',
+      'copiesLabel', 'renderConsignHistRow', 'deliveryPhrase', 'linkablePostageExpenses', 'renderOrderShippingSummary',
       'renderHistSearchBar', 'histNoSearchMatchHtml',
       'histEmptyStateHtml', 'renderHistFilterBar',
       'renderHistReconciliationPanel', 'scheduleHistVoidSweep',
@@ -57,7 +58,7 @@ function makeHarness({ state, book = BOOK, isPublisher = true, submissions = {},
       window: { authorSubmissions: submissions, IS_PUBLISHER: isPublisher },
       TAX_CENTER: taxCenter,
       // The real implementations — this is the logic worth exercising.
-      escapeHtml, fmt, fmtD, getSym, normalizeCurrencyCode, paymentSummary,
+      escapeHtml, fmt, fmtD, getSym, normalizeCurrencyCode, paymentSummary, plural,
       bookCurrencyCode, detectCurrencyMismatch,
       buildOrderTimeline, inventoryBreakdown, isVoidStale,
       reconcileConsignmentMirrors, linkedShippingSummary,
