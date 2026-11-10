@@ -25,7 +25,8 @@ const RECORDS = {
   // beneath. Category, reference, CAD value and reimbursement fold behind Details.
   // '' is the bulk-select box (author view) and the actions cell; the CSS keeps the
   // actions behind Details unless the row awaits approval.
-  'exp-body': { lead: 'Description', summary: ['Date', 'Receipt', 'Amount', ''] },
+  // `card` makes a tap anywhere on the row open it; the Details button is read aloud but not drawn.
+  'exp-body': { lead: 'Description', summary: ['Date', 'Receipt', 'Amount', ''], card: true },
   'tc-ledger-body': { lead: 2, summary: [0, 4, 6, 7] },
   'tc-recurring-body': { lead: 0, summary: [2, 4, 5, 6] },
   'bc-orders-list': { lead: 0, summary: [1, 2, 6, 7, 8] },

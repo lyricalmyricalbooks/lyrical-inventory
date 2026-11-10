@@ -11,6 +11,7 @@ import './styles/phone.css';
 // The Riso phone redesign sits on top of the phone layer above.
 import './styles/phone-riso.css';
 import { plural } from './lib/plural.js';
+import { moreIconFor, moreIconHtml } from './lib/more-icons.js';
 import { phoneBooksHtml, nextPhoneBooksSort } from './lib/phone-books.js';
 import { foldFooterActions, initPhoneLayouts } from './lib/phone-layout.js';
 import { createPhonePageMemory, initPhoneWorkspace, observeSidebarBadges } from './lib/phone-workspace.js';
@@ -5807,6 +5808,14 @@ function refreshMoreDot() {
 }
 
 
+function iconiseMoreTile(button) {
+  const name = moreIconFor(button.getAttribute('onclick'));
+  const stamp = button.querySelector('.snav-ic');
+  if (!name || !stamp) return;
+  stamp.removeAttribute('data-ink');
+  stamp.innerHTML = moreIconHtml(name);
+}
+
 export function openMoreSheet() {
   const sheet = document.getElementById('more-sheet');
   const body = document.getElementById('more-sheet-body');
@@ -5823,11 +5832,13 @@ export function openMoreSheet() {
   home.type = 'button';
   home.className = 'snav more-sheet-home';
   home.setAttribute('onclick', "switchTab('today')");
-  home.innerHTML = '<span class="snav-ic" data-ink="TD" aria-hidden="true">▦</span><span class="snav-label">Today</span>';
+  home.innerHTML = `<span class="snav-ic" aria-hidden="true">${moreIconHtml('today')}</span><span class="snav-label">Today</span>`;
   body.appendChild(home);
   sidebar.querySelectorAll(':scope > .pub-nav, :scope > .o3-grouplabel').forEach((node) => {
     const copy = node.cloneNode(true);
     copy.querySelectorAll('[id]').forEach((el) => el.removeAttribute('id'));
+    // Line icons in place of the sidebar's emoji and letter stamps.
+    copy.querySelectorAll('.snav').forEach((b) => iconiseMoreTile(b));
     body.appendChild(copy);
   });
   // Hide the destinations already on the bottom bar. A phone's side menu keeps

@@ -103,30 +103,24 @@
     .pub-shell .mnav .mnav-sell:active { transform: none; }
   }
 
-  /* ── Side menu: the old More sheet, now an ink drawer from the left ─── */
+  /* ── More: every destination as a tile, grouped, on a full page ───────── */
   .pub-shell .more-sheet[open] {
-    inset: 0 auto 0 0; width: min(320px, 86vw); height: 100dvh; max-height: none;
+    inset: 0; width: 100%; height: 100dvh; max-height: none; max-width: none;
     padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
-    background: var(--ink); color: var(--on-inverse);
-    border: 0; border-right: var(--stroke) solid var(--ink); box-shadow: 6px 0 0 var(--gold);
+    background: var(--surface-page); color: var(--content-primary);
+    border: 0; box-shadow: none;
     overflow-y: auto; overscroll-behavior: contain; animation: phone-drawer-in .2s var(--ease-standard);
   }
   .pub-shell .more-sheet::backdrop { background: rgba(16, 15, 13, .4); }
-  @keyframes phone-drawer-in { from { transform: translateX(-100%); } }
+  @keyframes phone-drawer-in { from { transform: translateY(24px); opacity: 0; } }
   .pub-shell .more-sheet-head { padding: 18px var(--space-2) var(--space-2) var(--phone-gutter); border: 0; background: none; }
   .pub-shell .more-sheet-grip { display: none; }
-  .pub-shell .more-sheet-title { flex: 1; display: grid; font: 400 24px/1.05 var(--font-display); letter-spacing: .03em; text-transform: uppercase; color: var(--on-inverse); }
-  .pub-shell .more-sheet-title .more-sheet-title-sub { display: block; margin-top: var(--space-1); font: 500 var(--text-xs) var(--font-mono); letter-spacing: .12em; color: var(--gold3); }
-  .pub-shell .more-sheet-close { width: 44px; height: 44px; border: 0; background: none; box-shadow: none; color: var(--on-inverse); }
+  .pub-shell .more-sheet-title { flex: 1; display: grid; font: 400 var(--text-xl) / 1.05 var(--font-display); letter-spacing: .03em; text-transform: uppercase; color: var(--content-primary); }
+  .pub-shell .more-sheet-title .more-sheet-title-sub { display: block; margin-top: var(--space-1); font: 500 var(--text-xs) var(--font-mono); letter-spacing: .12em; color: var(--gold-text); }
+  .pub-shell .more-sheet-close { width: 44px; height: 44px; border: 0; background: none; box-shadow: none; color: var(--content-primary); }
   .pub-shell .more-sheet[open] > * { flex: none; }
   .pub-shell .more-sheet[open] .more-sheet-body { overflow: visible; max-height: none; }
-  /* Website · Inventory switch: inked for the drawer, like the desktop sidebar's. */
-  .pub-shell .more-sheet[open] .app-switch { order: 9; margin: var(--space-3) var(--phone-gutter) 0; border: var(--stroke-hair) solid var(--on-inverse-3); }
-  .pub-shell .more-sheet[open] .app-switch-seg + .app-switch-seg { border-left: var(--stroke-hair) solid var(--on-inverse-3); }
-  .pub-shell .more-sheet[open] .app-switch-seg.is-current { background: var(--on-inverse); color: var(--ink); }
-  .pub-shell .more-sheet[open] a.app-switch-seg { color: var(--on-inverse); }
-  .pub-shell .more-sheet[open] a.app-switch-seg:is(:hover, :active) { background: rgba(255, 255, 255, .08); }
-  .pub-shell .more-sheet[open] .app-switch-seg.is-offline { color: var(--on-inverse-3); }
+  .pub-shell .more-sheet[open] .app-switch { order: 9; margin: var(--space-3) var(--phone-gutter) 0; }
   .pub-shell .more-sheet[open] .more-sheet-foot { order: 10; }
 
   .more-sheet-books { gap: 6px; padding: var(--space-2) var(--phone-gutter) var(--space-3); overflow-x: auto; scrollbar-width: none; }
@@ -139,59 +133,73 @@
   .book-chip.is-on { background: var(--surface-inverse); color: var(--content-on-inverse); }
   .book-chip-sw { width: 8px; height: 8px; flex: none; }
   .book-chip:focus-visible { outline: 2px solid var(--gold-text); outline-offset: 2px; }
-  /* On the ink drawer the chips invert: paper is "on", outlined ink is off. */
-  .more-sheet-books .book-chip { min-height: 36px; border-color: var(--on-inverse-3); background: transparent; color: var(--on-inverse); }
-  .more-sheet-books .book-chip.is-on { border-color: var(--on-inverse); background: var(--on-inverse); color: var(--ink); }
-  .more-sheet-books .book-chip:focus-visible { outline-color: var(--gold2); }
+  .more-sheet-books .book-chip { min-height: 36px; }
 
-  .pub-shell .more-sheet-body { padding: 0 var(--space-2); }
-  .pub-shell .more-sheet-body .pub-nav { display: flex; flex-direction: column; gap: 2px; grid-template-columns: none; }
+  /* Each group is a label over a two-column grid of tiles. */
+  .pub-shell .more-sheet-body {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: stretch;
+    padding: 0 var(--phone-gutter) var(--space-4);
+  }
+  .pub-shell .more-sheet-body .pub-nav { display: contents; }
   .pub-shell .more-sheet-body :is(.o3-grouplabel, .o3-subgrouplabel) {
-    padding: var(--space-4) var(--space-3) 6px; margin: 0; border: 0;
-    font: 700 var(--text-3xs) var(--font-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--on-inverse-3);
+    grid-column: 1 / -1; padding: var(--space-3) 0 0; margin: 0; border: 0;
+    font: 800 var(--text-2xs) var(--font-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--content-secondary);
   }
-  .pub-shell .more-sheet-body .o3-grouplabel:first-child { padding-top: var(--space-1); }
-  .pub-shell .more-sheet-body .snav, .pub-shell .more-sheet-foot .more-sheet-row {
-    display: flex; flex-direction: row; align-items: center; justify-content: flex-start; gap: var(--space-3);
-    width: 100%; min-height: 44px; padding: 0 10px; border: 0; border-radius: 0; box-shadow: none;
-    background: transparent; color: var(--on-inverse); font: 700 var(--text-md) var(--font-ui); text-align: left; text-transform: none; letter-spacing: 0; cursor: pointer;
+  .pub-shell .more-sheet-body .snav {
+    position: relative; display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 10px;
+    width: 100%; min-height: 80px; padding: 12px; margin: 0;
+    border: var(--stroke) solid var(--rule-ink); border-radius: 0; box-shadow: var(--riso-off);
+    background: var(--surface-card); color: var(--content-primary);
+    font: 700 var(--text-base) / 1.25 var(--font-ui); text-align: left; text-transform: none; letter-spacing: 0; cursor: pointer;
   }
-  .pub-shell .more-sheet-body .snav:active, .pub-shell .more-sheet-foot .more-sheet-row:active { transform: none; background: rgba(255, 255, 255, .08); }
-  .pub-shell .more-sheet-body .snav:focus-visible, .pub-shell .more-sheet-foot :is(.more-sheet-row, .more-sheet-link):focus-visible { outline: 2px solid var(--gold2); outline-offset: -2px; }
-  .pub-shell .more-sheet-body .snav[aria-current="page"], .pub-shell .more-sheet-body .snav.active { background: var(--on-inverse); color: var(--ink); box-shadow: none; border: 0; }
-  .pub-shell :is(.more-sheet-body .snav, .more-sheet-foot .more-sheet-row) .snav-ic {
-    position: relative; width: 26px; height: 26px; flex: none; display: grid; place-items: center; overflow: hidden;
-    border: var(--stroke) solid currentColor; font-size: 0 !important; line-height: 0; color: inherit;
+  .pub-shell .more-sheet-body .snav:active { transform: translate(3px, 3px); box-shadow: none; }
+  .pub-shell .more-sheet-body .snav:focus-visible { outline: 2px solid var(--gold-text); outline-offset: 2px; }
+  .pub-shell .more-sheet-body .snav[aria-current="page"], .pub-shell .more-sheet-body .snav.active {
+    background: var(--ink); color: var(--on-inverse); box-shadow: none;
   }
-  .pub-shell :is(.more-sheet-body .snav, .more-sheet-foot .more-sheet-row) .snav-ic[data-ink]::before {
-    content: attr(data-ink); position: absolute; inset: 0; display: grid; place-items: center; width: auto; height: auto;
-    border: 0; font: 500 10px/1 var(--font-mono); letter-spacing: 0;
+  .pub-shell .more-sheet-body .snav .snav-ic {
+    width: 22px; height: 22px; flex: none; display: grid; place-items: center; border: 0; font-size: 22px; line-height: 1; color: inherit;
   }
-  .pub-shell :is(.more-sheet-body .snav, .more-sheet-foot .more-sheet-row) .snav-label { flex: 1; min-width: 0; font-size: var(--text-md); line-height: 1.2; }
+  .pub-shell .more-sheet-body .snav .snav-label { flex: none; min-width: 0; font-size: var(--text-base); line-height: 1.25; }
   .pub-shell :is(.more-sheet-body, .more-sheet-foot) :is(.nav-badge, .bc-gap-badge) {
-    min-width: 24px; height: 22px; padding: 0 6px; margin: 0; border: 0; border-radius: 0;
+    position: absolute; top: -2px; right: -2px; min-width: 24px; height: 22px; padding: 0 6px; margin: 0; border: 0; border-radius: 0;
     background: var(--gold); color: var(--ink); font: 500 var(--text-sm)/22px var(--font-mono); text-align: center;
   }
   .pub-shell :is(.more-sheet-body, .more-sheet-foot) :is(.nav-badge, .bc-gap-badge)[hidden] { display: none; }
+  .pub-shell .more-sheet-body .snav .health-badge { position: absolute; top: 8px; right: 8px; margin: 0; }
 
   .pub-shell .more-sheet-foot {
-    display: grid; gap: var(--space-1); margin-top: var(--space-4); padding: var(--space-2) var(--space-2) var(--space-5);
-    border-top: var(--stroke-hair) solid rgba(250, 246, 236, .16);
+    display: grid; gap: var(--space-1); margin-top: var(--space-4); padding: var(--space-2) var(--phone-gutter) var(--space-5);
+    border-top: var(--stroke-hair) solid var(--border2);
   }
-  .more-sheet-acct { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-2) 0 var(--space-3); }
+  .pub-shell .more-sheet-foot .more-sheet-row {
+    display: flex; align-items: center; gap: var(--space-3); width: 100%; min-height: 44px; padding: 0; border: 0; border-radius: 0; box-shadow: none;
+    background: none; color: var(--content-primary); font: 700 var(--text-md) var(--font-ui); text-align: left; cursor: pointer;
+  }
+  .pub-shell .more-sheet-foot .more-sheet-row .snav-ic {
+    position: relative; width: 26px; height: 26px; flex: none; display: grid; place-items: center; overflow: hidden;
+    border: var(--stroke) solid currentColor; font-size: 0; line-height: 0; color: inherit;
+  }
+  .pub-shell .more-sheet-foot .more-sheet-row .snav-ic[data-ink]::before {
+    content: attr(data-ink); position: absolute; inset: 0; display: grid; place-items: center; width: auto; height: auto;
+    border: 0; font: 500 var(--text-2xs)/1 var(--font-mono); letter-spacing: 0;
+  }
+  .pub-shell .more-sheet-foot .more-sheet-row .snav-label { flex: 1; min-width: 0; font-size: var(--text-md); line-height: 1.2; }
+  .pub-shell .more-sheet-foot :is(.more-sheet-row, .more-sheet-link):focus-visible { outline: 2px solid var(--gold-text); outline-offset: 2px; }
+  .more-sheet-acct { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) 0 0; }
   .more-sheet-avatar {
     width: 36px; height: 36px; flex: none; display: grid; place-items: center;
-    border: var(--stroke) solid var(--on-inverse); background: var(--gold); color: var(--ink); font: 500 var(--text-base) var(--font-mono);
+    border: var(--stroke) solid var(--rule-ink); background: var(--gold); color: var(--ink); font: 500 var(--text-base) var(--font-mono);
   }
   .more-sheet-who { flex: 1; min-width: 0; display: grid; font-size: var(--text-md); line-height: 1.25; }
-  .more-sheet-who > span { font: 500 var(--text-xs) var(--font-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--on-inverse-2); }
-  .more-sheet-acct-actions { display: flex; gap: var(--space-4); padding: 0 var(--space-3); }
+  .more-sheet-who > span { font: 500 var(--text-xs) var(--font-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--content-secondary); }
+  .more-sheet-acct-actions { display: flex; gap: var(--space-4); padding: 0; }
   .more-sheet-link {
-    min-height: 44px; padding: 0; border: 0; background: none; color: var(--on-inverse); cursor: pointer;
+    min-height: 44px; padding: 0; border: 0; background: none; color: var(--content-primary); cursor: pointer;
     font: 800 var(--text-xs) var(--font-ui); letter-spacing: var(--tracking-caps); text-transform: uppercase;
     text-decoration: underline; text-underline-offset: 3px;
   }
-  .more-sheet-acct-actions .more-sheet-link { color: var(--on-inverse-2); }
+  .more-sheet-acct-actions .more-sheet-link { color: var(--content-secondary); }
 
   @media (prefers-reduced-motion: reduce) {
     .pub-shell .more-sheet[open] { animation: none; }
@@ -749,4 +757,30 @@
   .pub-shell #tab-history #hist-body [data-phone-label] { font-size: 0 !important; gap: 0; }
   .pub-shell #tab-history #hist-body [data-phone-label]::after { content: attr(data-phone-label); font-size: var(--text-2xs); }
   .pub-shell #tab-history #hist-body .hist-who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* ── To-do: the count leads, the explainer stays to two lines ─────────── */
+  .pub-shell #tab-todo .section-subcopy { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+  .pub-shell #tab-todo .sec-head-badges { display: block; margin-top: var(--space-3); }
+  .pub-shell #tab-todo #todo-total-chip {
+    display: block; width: 100%; padding: 12px 14px; border: var(--stroke) solid var(--rule-ink); border-radius: 0;
+    background: var(--gold) !important; color: var(--ink) !important; border-color: var(--rule-ink) !important; box-shadow: var(--riso-off);
+    font: 400 var(--text-lg) / 1.1 var(--font-display); letter-spacing: .04em; text-transform: uppercase; text-align: left;
+  }
+  /* ── Expenses (and the artist's expense list): a tap on the row opens it ── */
+  .pub-shell :is(#exp-body, #d-exp-body) > tr.phone-record > td.phone-record-lead > .phone-record-toggle {
+    position: absolute; width: 1px; height: 1px; min-height: 0 !important; padding: 0; margin: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+  .pub-shell :is(#exp-body, #d-exp-body) > tr.phone-record { position: relative; cursor: pointer; }
+  .pub-shell :is(#exp-body, #d-exp-body) > tr.phone-record:has(.phone-record-toggle:focus-visible) { outline: 2px solid var(--gold-text); outline-offset: -2px; }
+  /* Expenses: the log form is one fold; the list is what you land on. */
+  .pub-shell #tab-expenses .exp-log-fold > summary {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: 48px; padding: 0 var(--space-4);
+    border: var(--stroke) solid var(--rule-ink); border-radius: 0; background: var(--surface-card); box-shadow: var(--riso-off-sm);
+    color: var(--content-primary); font: 700 var(--text-base) var(--font-ui); cursor: pointer; list-style: none;
+  }
+  .pub-shell #tab-expenses .exp-log-fold > summary::-webkit-details-marker { display: none; }
+  .pub-shell #tab-expenses .exp-log-fold > summary::after { content: '+'; font: 500 var(--text-lg) / 1 var(--font-mono); }
+  .pub-shell #tab-expenses .exp-log-fold[open] > summary::after { content: '−'; }
+  .pub-shell #tab-expenses .exp-log-fold > summary:focus-visible { outline: 2px solid var(--gold-text); outline-offset: 3px; }
+  .pub-shell #tab-expenses .exp-log-fold > .section-hed { display: none; }
+  .pub-shell #tab-expenses .exp-log-fold[open] > .card { margin-top: var(--space-3); }
 }

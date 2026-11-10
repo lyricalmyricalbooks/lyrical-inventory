@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { beforeEach, expect, test } from 'vitest';
 import { salesForDay as salesForDayFn, unsentSalesForDay as unsentSalesForDayFn } from '../src/lib/today-summary.js';
 import { PUBLISHER_ONLY_TABS } from '../src/lib/help-guide.js';
+import { moreIconFor, moreIconHtml } from '../src/lib/more-icons.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(path.join(__dirname, '../index.html'), 'utf8');
@@ -17,7 +18,7 @@ const start = mainJs.indexOf('const MNAV_TABS');
 const end = mainJs.indexOf('Object.assign(window, { openMoreSheet, closeMoreSheet });');
 const block = mainJs.slice(start, end).replace(/export function/g, 'function');
 // renderBookChips lives with the book switcher; the side menu only calls it.
-const api = new Function('renderBookChips', `${block}; return { openMoreSheet, closeMoreSheet, syncMoreNavState, refreshMoreDot };`);
+const api = new Function('renderBookChips', 'moreIconFor', 'moreIconHtml', `${block}; return { openMoreSheet, closeMoreSheet, syncMoreNavState, refreshMoreDot };`);
 let chipCalls = [];
 const renderBookChips = (container, opts) => chipCalls.push({ container, opts });
 
@@ -26,7 +27,7 @@ beforeEach(() => {
   document.body.innerHTML = html.slice(html.indexOf('<body'), html.lastIndexOf('</body>')).replace(/^<body[^>]*>/, '');
   chipCalls = [];
   window.matchMedia = (q) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {} });
-  nav = api(renderBookChips);
+  nav = api(renderBookChips, moreIconFor, moreIconHtml);
 });
 
 const moreLabels = () => [...document.querySelectorAll('#more-sheet-body .snav:not([hidden]) .snav-label')].map((n) => n.textContent);
@@ -49,6 +50,19 @@ test('More sheet lists every sidebar tool not already on the bottom bar', () => 
   }
   // Cloned ids would duplicate the sidebar's (badges are looked up by id).
   expect(document.querySelectorAll('#more-sheet-body [id]').length).toBe(0);
+});
+
+test('every More tile draws a line icon from the sprite, not a letter stamp', () => {
+  nav.openMoreSheet();
+  const tiles = [...document.querySelectorAll('#more-sheet-body .snav')];
+  expect(tiles.length).toBeGreaterThan(10);
+  for (const tile of tiles) {
+    const label = tile.querySelector('.snav-label').textContent;
+    const href = tile.querySelector('.snav-ic use')?.getAttribute('href');
+    expect(href, label).toMatch(/^#ic-[a-z]+$/);
+    expect(document.querySelector(href), `${label} icon is in the sprite`).not.toBeNull();
+    expect(tile.querySelector('.snav-ic').hasAttribute('data-ink'), label).toBe(false);
+  }
 });
 
 test('reopening the sheet does not duplicate its contents', () => {
