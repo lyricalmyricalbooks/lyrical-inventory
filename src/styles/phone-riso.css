@@ -765,4 +765,22 @@
     background: var(--gold) !important; color: var(--ink) !important; border-color: var(--rule-ink) !important; box-shadow: var(--riso-off);
     font: 400 var(--text-lg) / 1.1 var(--font-display); letter-spacing: .04em; text-transform: uppercase; text-align: left;
   }
+  /* ── Expenses (and the artist's expense list): a tap on the row opens it ── */
+  .pub-shell :is(#exp-body, #d-exp-body) > tr.phone-record > td.phone-record-lead > .phone-record-toggle {
+    position: absolute; width: 1px; height: 1px; min-height: 0 !important; padding: 0; margin: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+  .pub-shell :is(#exp-body, #d-exp-body) > tr.phone-record { position: relative; cursor: pointer; }
+  .pub-shell :is(#exp-body, #d-exp-body) > tr.phone-record:has(.phone-record-toggle:focus-visible) { outline: 2px solid var(--gold-text); outline-offset: -2px; }
+  /* Expenses: the log form is one fold; the list is what you land on. */
+  .pub-shell #tab-expenses .exp-log-fold > summary {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: 48px; padding: 0 var(--space-4);
+    border: var(--stroke) solid var(--rule-ink); border-radius: 0; background: var(--surface-card); box-shadow: var(--riso-off-sm);
+    color: var(--content-primary); font: 700 var(--text-base) var(--font-ui); cursor: pointer; list-style: none;
+  }
+  .pub-shell #tab-expenses .exp-log-fold > summary::-webkit-details-marker { display: none; }
+  .pub-shell #tab-expenses .exp-log-fold > summary::after { content: '+'; font: 500 var(--text-lg) / 1 var(--font-mono); }
+  .pub-shell #tab-expenses .exp-log-fold[open] > summary::after { content: '−'; }
+  .pub-shell #tab-expenses .exp-log-fold > summary:focus-visible { outline: 2px solid var(--gold-text); outline-offset: 3px; }
+  .pub-shell #tab-expenses .exp-log-fold > .section-hed { display: none; }
+  .pub-shell #tab-expenses .exp-log-fold[open] > .card { margin-top: var(--space-3); }
 }

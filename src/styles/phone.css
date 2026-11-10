@@ -2332,3 +2332,9 @@
   #tab-shipping #ship-results-placeholder { padding: var(--space-4) var(--space-2) !important; font-size: var(--text-sm); line-height: var(--leading-snug); text-wrap: balance; }
   #tab-shipping #ship-results-placeholder > div:first-child { font-size: var(--text-2xl) !important; margin-bottom: var(--space-2) !important; }
 }
+
+/* Expenses: on a computer the log form is always showing, so the fold's own bar is hidden. */
+@media (min-width: 769px) {
+  .exp-log-fold > summary { display: none; }
+  .exp-log-fold::details-content { content-visibility: visible; display: block; }
+}

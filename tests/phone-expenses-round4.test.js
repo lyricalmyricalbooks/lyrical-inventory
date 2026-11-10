@@ -19,7 +19,7 @@ const section = () => phoneCss.slice(phoneCss.indexOf(MARK));
 
 describe('expense card config', () => {
   it('summary shows only the date, receipt, amount and the select/actions cells', () => {
-    expect(phoneLayout).toContain("'exp-body': { lead: 'Description', summary: ['Date', 'Receipt', 'Amount', ''] },");
+    expect(phoneLayout).toContain("'exp-body': { lead: 'Description', summary: ['Date', 'Receipt', 'Amount', ''], card: true },");
   });
 
   it('Reimbursement and Amount (CAD) are no longer in the summary', () => {
