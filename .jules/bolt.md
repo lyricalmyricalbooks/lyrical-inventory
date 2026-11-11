@@ -9,3 +9,7 @@
 ## 2026-10-30 - Hoist per-row catalogue normalisation out of the Big Cartel orders table
 **Learning:** `matchBigCartelOrderToCatalog` lowercased every catalogue title twice for every order row, so the orders table did O(orders × books) string work that never changes within a render.
 **Action:** Build the lowercased title list once per render (`bigCartelCatalogTitles`) and pass it to each row; keep the per-row loop to a plain `includes` check with a `Set` for de-duplication. ~5× faster on 100 orders × 300 books.
+
+## 2026-11-11 - Use imperative loops with early breaks instead of chained array methods with slice
+**Learning:** Chained array methods like `.filter(condition).slice(0, LIMIT).map(...)` force a full O(N) traversal of the original array and allocate intermediate arrays before truncation. In paths with large or unbounded datasets, this introduces severe performance bottlenecks.
+**Action:** Replace these chains with an imperative `for...of` loop, a counter, and an early `break` once the limit is reached to create an O(LIMIT) fast-path and eliminate intermediate allocations.
