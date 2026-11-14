@@ -5,6 +5,12 @@ import { fileURLToPath } from 'node:url';
 import { buildHarness } from './helpers/extract-decl.js';
 import { escapeHtml } from '../src/lib/html.js';
 import {
+  SUGGEST_DELAY_MS,
+  buildSuggestUrl,
+  parseSuggestions,
+  shouldSuggest,
+} from '../src/lib/address-suggest.js';
+import {
   ADDRESS_FIELD_LABELS,
   AUTO_VERIFY_DELAY_MS,
   SHIPPO_ADDRESSES_V1_URL,
@@ -988,5 +994,179 @@ describe('verifier wiring', () => {
     ['.addr-verify.ok', '.addr-verify.warn', '.addr-verify.err', '.addr-verify.stale'].forEach(selector => {
       expect(styleCss).toContain(selector);
     });
+  });
+});
+
+// ─── Street-address suggestions ───────────────────────────────────────────
+// Photon answers GeoJSON; only `properties` matters here.
+const photon = (...props) => ({ features: props.map(properties => ({ type: 'Feature', properties })) });
+const MONTROSE = {
+  osm_key: 'place', housenumber: '456', street: 'Montrose Avenue', city: 'Toronto',
+  state: 'Ontario', postcode: 'M6G 3H1', countrycode: 'CA', country: 'Canada',
+};
+const MARKET = {
+  osm_key: 'building', housenumber: '731', street: 'Market Street', city: 'San Francisco',
+  state: 'California', postcode: '94103', countrycode: 'US',
+};
+// Lifted out of the feature module (which can't be imported in a test) and run
+// against a real jsdom form, the way the Shippo verifier tests do it.
+
+function mountSuggestForm() {
+  document.body.innerHTML = `
+    <div class="addr-suggest-wrap">
+      <input id="st-street1">
+      <div id="st-street1-suggest" class="addr-suggest" role="listbox" hidden></div>
+    </div>
+    <input id="st-street2" value="#200"><input id="st-city"><input id="st-state"><input id="st-zip">
+    <select id="st-country"><option value="US">US</option><option value="CA">CA</option></select>
+  `;
+}
+
+function buildBox(fetchImpl) {
+  const calls = { edited: 0, country: 0, readiness: 0 };
+  const harness = buildHarness({
+    names: [
+      'addressSuggestBox',
+      'closeAddressSuggestions',
+      'renderAddressSuggestions',
+      'fetchAddressSuggestions',
+      'onStreetInputForSuggestions',
+      'onStreetKeydownForSuggestions',
+      'pickAddressSuggestion',
+      'bindAddressSuggestions',
+    ],
+    deps: {
+      $: (id) => document.getElementById(id),
+      fetch: fetchImpl,
+      escapeHtml,
+      // The app's action registry is one per page; each test box gets its own
+      // stand-in so a handler from an earlier test can't answer the click.
+      registerActions: (handlers) => {
+        box().addEventListener('click', (event) => {
+          const el = event.target.closest('[data-action]');
+          if (el && handlers[el.dataset.action]) handlers[el.dataset.action](el, event);
+        });
+      },
+      registeredActions: () => [],
+      buildSuggestUrl,
+      parseSuggestions,
+      shouldSuggest,
+      SUGGEST_DELAY_MS,
+      onShippoDestCountryChange: () => { calls.country++; },
+      onDestinationFieldEdited: () => { calls.edited++; },
+      renderShippoRateReadiness: () => { calls.readiness++; },
+      console: { warn: () => {}, error: () => {} },
+    },
+    moduleState: 'let _suggestTimer = null; let _suggestAbort = null; let _suggestions = []; let _suggestActive = -1;',
+    returns: '{ bindAddressSuggestions, pickAddressSuggestion, closeAddressSuggestions }',
+  });
+  return { ...harness, calls };
+}
+
+const box = () => document.getElementById('st-street1-suggest');
+const input = () => document.getElementById('st-street1');
+function type(value) {
+  input().value = value;
+  input().dispatchEvent(new window.Event('input'));
+}
+function key(name) {
+  input().dispatchEvent(new window.KeyboardEvent('keydown', { key: name, bubbles: true }));
+}
+
+describe('address suggestions — the street box', () => {
+  beforeEach(() => { vi.useFakeTimers(); mountSuggestForm(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('asks once per pause and lists what comes back', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(photon(MONTROSE, MARKET)));
+    const ui = buildBox(fetchImpl);
+    ui.bindAddressSuggestions();
+
+    type('456 M'); type('456 Mo'); type('456 Montrose');
+    await vi.advanceTimersByTimeAsync(SUGGEST_DELAY_MS);
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(box().hidden).toBe(false);
+    expect(box().querySelectorAll('[role="option"]')).toHaveLength(2);
+    expect(input().getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('fills every line from a pick, keeps the unit, and hands over to the Shippo check', async () => {
+    const ui = buildBox(vi.fn(async () => jsonResponse(photon(MONTROSE))));
+    ui.bindAddressSuggestions();
+    type('456 Montrose');
+    await vi.advanceTimersByTimeAsync(SUGGEST_DELAY_MS);
+
+    box().querySelector('[role="option"]').click();
+
+    const val = (id) => document.getElementById(id).value;
+    expect(val('st-street1')).toBe('456 Montrose Avenue');
+    expect(val('st-street2')).toBe('#200');
+    expect([val('st-city'), val('st-state'), val('st-zip'), val('st-country')]).toEqual(['Toronto', 'ON', 'M6G 3H1', 'CA']);
+    expect(ui.calls).toEqual({ edited: 1, country: 1, readiness: 1 });
+    expect(box().hidden).toBe(true);
+  });
+
+  it('can be driven from the keyboard', async () => {
+    const ui = buildBox(vi.fn(async () => jsonResponse(photon(MONTROSE, MARKET))));
+    ui.bindAddressSuggestions();
+    type('731 Market');
+    await vi.advanceTimersByTimeAsync(SUGGEST_DELAY_MS);
+
+    key('ArrowDown'); key('ArrowDown');
+    expect(box().querySelector('.is-active').textContent).toContain('731 Market Street');
+    key('Enter');
+    expect(input().value).toBe('731 Market Street');
+
+    type('731 Market');
+    await vi.advanceTimersByTimeAsync(SUGGEST_DELAY_MS);
+    key('Escape');
+    expect(box().hidden).toBe(true);
+  });
+
+  it('drops an answer for text the publisher has already changed', async () => {
+    let release;
+    const fetchImpl = vi.fn(() => new Promise(resolve => { release = () => resolve(jsonResponse(photon(MONTROSE))); }));
+    const ui = buildBox(fetchImpl);
+    ui.bindAddressSuggestions();
+    type('456 Montrose');
+    await vi.advanceTimersByTimeAsync(SUGGEST_DELAY_MS);
+
+    input().value = '9 Somewhere Else'; // changed, but no pause yet
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(box().hidden).toBe(true);
+  });
+
+  it('sends nothing for a house number alone, and stays quiet when the service is down', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({}, 503));
+    const ui = buildBox(fetchImpl);
+    ui.bindAddressSuggestions();
+
+    type('4567');
+    await vi.advanceTimersByTimeAsync(SUGGEST_DELAY_MS * 2);
+    expect(fetchImpl).not.toHaveBeenCalled();
+
+    type('4567 Main');
+    await vi.advanceTimersByTimeAsync(SUGGEST_DELAY_MS);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(box().hidden).toBe(true);
+  });
+
+  it('escapes what comes back rather than injecting it', async () => {
+    const evil = { ...MONTROSE, street: '<img src=x onerror=alert(1)>' };
+    const ui = buildBox(vi.fn(async () => jsonResponse(photon(evil))));
+    ui.bindAddressSuggestions();
+    type('456 Montrose');
+    await vi.advanceTimersByTimeAsync(SUGGEST_DELAY_MS);
+    expect(box().querySelector('img')).toBeNull();
+  });
+
+  it('binds once across repeated tab visits', () => {
+    const ui = buildBox(vi.fn());
+    const spy = vi.spyOn(input(), 'addEventListener');
+    ui.bindAddressSuggestions();
+    ui.bindAddressSuggestions();
+    expect(spy).toHaveBeenCalledTimes(3); // input, keydown, blur — once
   });
 });

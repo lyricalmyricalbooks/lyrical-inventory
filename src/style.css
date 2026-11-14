@@ -12600,6 +12600,69 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   #ship-analysis-hub .ship-verify-cell .ship-verify-pill.checking { animation: none; }
 }
 
+/* ─── Street-address suggestions ──────────────────────────────────────── */
+/* The list under the Street Address box on the Shipping tab. Same shell as the
+   destination picker's menu (.custom-dest-menu): opaque card, hairline border,
+   one elevation step. Rows are at least 44px tall so they are easy to tap. */
+.addr-suggest-wrap { position: relative; }
+.addr-suggest {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: var(--z-dropdown);
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  background: var(--surface-card);
+  border: var(--stroke-hair) solid var(--border);
+  border-radius: var(--r2);
+  box-shadow: var(--elev-1);
+}
+.addr-suggest[hidden] { display: none; }
+.addr-suggest-item {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-height: 44px;
+  padding: 6px 10px;
+  border: var(--stroke-hair) solid transparent;
+  border-radius: var(--r);
+  cursor: pointer;
+  transition: background var(--dur-base) var(--ease-standard),
+    border-color var(--dur-base) var(--ease-standard);
+}
+.addr-suggest-item:hover,
+.addr-suggest-item.is-active {
+  background: var(--gold-bg);
+  border-color: var(--gold-line);
+}
+.addr-suggest-line {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.addr-suggest-hint {
+  margin-left: 4px;
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--amber);
+}
+.addr-suggest-detail {
+  font-size: var(--text-xs);
+  color: var(--text3);
+  overflow-wrap: anywhere;
+}
+.addr-suggest-credit {
+  padding: 6px 10px 2px;
+  font-size: var(--text-2xs);
+  color: var(--text3);
+}
+
 /* ─── Shippo destination address verifier ─────────────────────────────── */
 /* The verdict panel under the Destination card. Tone lives on the panel itself
    (.ok / .warn / .err) and reaches the children through the --verify-* pair, so

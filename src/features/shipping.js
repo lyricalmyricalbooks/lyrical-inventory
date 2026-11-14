@@ -200,6 +200,13 @@ import {
   storedVerificationIsCurrent,
   verificationVerdict,
 } from '../lib/address-verification.js';
+import { registerActions, registeredActions } from '../lib/actions.js';
+import {
+  SUGGEST_DELAY_MS,
+  buildSuggestUrl,
+  parseSuggestions,
+  shouldSuggest,
+} from '../lib/address-suggest.js';
 import {
   calculateZonosLandedCost,
   estimateOfflineLandedCost,
@@ -3319,6 +3326,7 @@ function initShippingTab() {
     .catch(() => {});
   bindDestinationVerificationWatchers();
   renderDestinationVerification();
+  bindAddressSuggestions();
   bindRateReadinessWatchers();
   renderShippoRateReadiness();
   setShippoAutoQuote(autoQuoteEnabled());
@@ -4580,6 +4588,167 @@ function applyVerifiedAddressCorrections() {
   renderDestinationVerification();
   renderShippoRateReadiness();
   showToast(`✓ Applied Shippo's standardized ${applied.length === 1 ? 'field' : 'fields'}: ${applied.join(', ')}`);
+}
+
+// ─── Street-address suggestions ───────────────────────────────────────────
+//
+// Shippo checks an address but cannot suggest one, so the street box asks
+// Photon, a free OpenStreetMap search with no key (see lib/address-suggest.js).
+// Picking a suggestion fills street, city, state, postcode and country in one
+// go, then hands over to the Shippo check above, which runs on the filled
+// address. Offline, nothing is sent and the box is a plain text field.
+
+let _suggestTimer = null;
+let _suggestAbort = null;
+let _suggestions = [];
+let _suggestActive = -1;
+
+function addressSuggestBox() {
+  return $('st-street1-suggest');
+}
+
+function closeAddressSuggestions() {
+  clearTimeout(_suggestTimer);
+  _suggestTimer = null;
+  _suggestAbort?.abort();
+  _suggestAbort = null;
+  _suggestions = [];
+  _suggestActive = -1;
+  const box = addressSuggestBox();
+  if (box) { box.hidden = true; box.innerHTML = ''; }
+  const input = $('st-street1');
+  if (input) {
+    input.setAttribute('aria-expanded', 'false');
+    input.removeAttribute('aria-activedescendant');
+  }
+}
+
+function renderAddressSuggestions() {
+  const box = addressSuggestBox();
+  const input = $('st-street1');
+  if (!box || !input) return;
+  if (!_suggestions.length) { closeAddressSuggestions(); return; }
+  box.innerHTML = `${_suggestions.map((item, index) => `
+    <div class="addr-suggest-item${index === _suggestActive ? ' is-active' : ''}" role="option" id="st-street1-opt-${index}"
+      aria-selected="${index === _suggestActive}" data-action="ship.pickSuggestion" data-index="${index}">
+      <span class="addr-suggest-line">${escapeHtml(item.label)}${item.hasNumber ? '' : ' <span class="addr-suggest-hint">add the house number</span>'}</span>
+      <span class="addr-suggest-detail">${escapeHtml(item.detail)}</span>
+    </div>`).join('')}
+    <div class="addr-suggest-credit" aria-hidden="true">Suggestions from OpenStreetMap — check the house number</div>`;
+  box.hidden = false;
+  input.setAttribute('aria-expanded', 'true');
+  if (_suggestActive >= 0) input.setAttribute('aria-activedescendant', `st-street1-opt-${_suggestActive}`);
+  else input.removeAttribute('aria-activedescendant');
+}
+
+async function fetchAddressSuggestions(text) {
+  _suggestAbort?.abort();
+  const controller = new AbortController();
+  _suggestAbort = controller;
+  let resp;
+  try {
+    resp = await fetch(buildSuggestUrl({ text }), { signal: controller.signal });
+  } catch (error) {
+    if (error?.name !== 'AbortError') console.warn('Address suggestions unreachable', error);
+    return;
+  }
+  if (controller !== _suggestAbort) return; // a newer keystroke owns the box now
+  if (!resp.ok) {
+    // Quiet on purpose: suggestions are a convenience, and typing the address
+    // by hand still works (and is still checked by Shippo).
+    console.warn('Address suggestions unavailable', resp.status);
+    closeAddressSuggestions();
+    return;
+  }
+  const payload = await resp.json().catch(() => null);
+  if (controller !== _suggestAbort) return;
+  // The box may have changed while the answer was on its way.
+  if (($('st-street1')?.value || '').trim() !== String(text).trim()) return;
+  _suggestions = parseSuggestions(payload);
+  _suggestActive = -1;
+  renderAddressSuggestions();
+}
+
+function onStreetInputForSuggestions() {
+  clearTimeout(_suggestTimer);
+  const text = $('st-street1')?.value || '';
+  const online = typeof navigator === 'undefined' || navigator.onLine !== false;
+  if (!online || !shouldSuggest(text)) {
+    closeAddressSuggestions();
+    return;
+  }
+  _suggestTimer = setTimeout(() => {
+    _suggestTimer = null;
+    fetchAddressSuggestions(text).catch(() => {});
+  }, SUGGEST_DELAY_MS);
+}
+
+function onStreetKeydownForSuggestions(event) {
+  if (!_suggestions.length) return;
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault();
+    const step = event.key === 'ArrowDown' ? 1 : -1;
+    _suggestActive = (_suggestActive + step + _suggestions.length + 1) % (_suggestions.length + 1);
+    if (_suggestActive === _suggestions.length) _suggestActive = -1;
+    renderAddressSuggestions();
+  } else if (event.key === 'Enter' && _suggestActive >= 0) {
+    event.preventDefault();
+    pickAddressSuggestion(_suggestActive);
+  } else if (event.key === 'Escape') {
+    event.preventDefault();
+    closeAddressSuggestions();
+  }
+}
+
+/**
+ * Fills the destination from one suggestion. Apt/Suite is left alone (the
+ * lookup never knows it), and so is the recipient. The country is only set
+ * when the dropdown has it, so an odd code never blanks the select.
+ */
+function pickAddressSuggestion(index) {
+  const item = _suggestions[index];
+  if (!item) return;
+  const { address } = item;
+  $('st-street1').value = address.street1;
+  if ($('st-city')) $('st-city').value = address.city;
+  if ($('st-state')) $('st-state').value = address.state;
+  if ($('st-zip')) $('st-zip').value = address.zip;
+  const countrySelect = $('st-country');
+  if (countrySelect && address.country
+    && Array.from(countrySelect.options).some(opt => opt.value === address.country)) {
+    countrySelect.value = address.country;
+    onShippoDestCountryChange();
+  }
+  closeAddressSuggestions();
+  // Written in code, so no input event: tell the Shippo check and the rates
+  // form directly.
+  onDestinationFieldEdited();
+  renderShippoRateReadiness();
+  const input = $('st-street1');
+  input?.focus();
+  // A street with no house number is a street, not an address: put the caret
+  // at the start so the number can go straight in.
+  if (input && !item.hasNumber) input.setSelectionRange(0, 0);
+}
+
+/** Wires the street box once; initShippingTab runs on every tab visit. */
+function bindAddressSuggestions() {
+  const input = $('st-street1');
+  if (!input || input.dataset.suggestWatch === 'true') return;
+  input.dataset.suggestWatch = 'true';
+  input.setAttribute('role', 'combobox');
+  input.setAttribute('aria-autocomplete', 'list');
+  input.setAttribute('aria-controls', 'st-street1-suggest');
+  input.setAttribute('aria-expanded', 'false');
+  input.addEventListener('input', onStreetInputForSuggestions);
+  input.addEventListener('keydown', onStreetKeydownForSuggestions);
+  input.addEventListener('blur', () => setTimeout(closeAddressSuggestions, 120));
+  // Pressing a row would blur the box (and close the list) before the click
+  // lands; keeping focus in the box is what lets the click through.
+  addressSuggestBox()?.addEventListener('mousedown', event => event.preventDefault());
+  if (!registeredActions().includes('ship.pickSuggestion')) {
+    registerActions({ 'ship.pickSuggestion': el => pickAddressSuggestion(Number(el.dataset.index)) });
+  }
 }
 
 /**

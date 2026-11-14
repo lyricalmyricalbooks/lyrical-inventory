@@ -4077,7 +4077,14 @@
           <div class="form-group" style="margin-bottom:8px;"><label>Recipient Name</label><input type="text" id="st-name" placeholder="John Doe"></div>
           <div class="form-group" style="margin-bottom:8px;"><label>Company</label><input type="text" id="st-company" placeholder="Optional"></div>
           <div class="form-group" style="margin-bottom:8px;"><label>Phone <span style="font-size:var(--text-2xs);color:var(--text3);text-transform:none;letter-spacing:0;">required for international</span></label><input type="tel" id="st-phone" placeholder="+1 604 555 0123"></div>
-          <div class="form-group" style="margin-bottom:8px;"><label>Street Address</label><input type="text" id="st-street1" placeholder="456 Reading Ave"></div>
+          <div class="form-group addr-suggest-wrap" style="margin-bottom:8px;">
+            <label for="st-street1">Street Address</label>
+            <!-- autocomplete off: the browser would offer the publisher's own
+                 address, not the buyer's, on top of the suggestions below. -->
+            <input type="text" id="st-street1" placeholder="Start typing — e.g. 456 Reading Ave" autocomplete="off">
+            <!-- Street suggestions; rendered by renderAddressSuggestions() in src/features/shipping.js. -->
+            <div id="st-street1-suggest" class="addr-suggest" role="listbox" aria-label="Address suggestions" hidden></div>
+          </div>
           <div class="form-group" style="margin-bottom:8px;"><label>Apt/Suite</label><input type="text" id="st-street2" placeholder="Optional"></div>
           <div class="phone-address-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
             <div class="form-group" style="margin-bottom:8px;"><label>City</label><input type="text" id="st-city" placeholder="New York"></div>
