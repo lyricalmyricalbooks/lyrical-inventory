@@ -349,6 +349,29 @@ export function addressSignature(address = {}) {
     .join('|');
 }
 
+/**
+ * How long the Shipping tab waits after the last keystroke before checking an
+ * address on its own. Long enough that a pause mid-word does not spend a Shippo
+ * call on half a street name, short enough that the verdict is on screen by
+ * the time the publisher looks up from the keyboard.
+ */
+export const AUTO_VERIFY_DELAY_MS = 1200;
+
+/**
+ * Whether the destination form should be checked automatically right now.
+ *
+ * Only a complete address is worth a call (the same rule the manual button
+ * enforces), and only one that has not already been checked or is not being
+ * checked — `lastSignature` is the signature of the verdict or in-flight check
+ * the form already has. Offline, nothing is sent: the check comes back round
+ * when the label is bought.
+ */
+export function shouldAutoVerify({ address = {}, hasKey = false, online = true, lastSignature = '' } = {}) {
+  if (!hasKey || !online) return false;
+  if (addressValidationBlocker(address)) return false;
+  return addressSignature(address) !== lastSignature;
+}
+
 // ─── Order records ────────────────────────────────────────────────────────
 //
 // The Shipping tab's form, the shipments payload and the verifier all speak

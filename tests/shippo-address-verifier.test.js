@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -6,6 +6,7 @@ import { buildHarness } from './helpers/extract-decl.js';
 import { escapeHtml } from '../src/lib/html.js';
 import {
   ADDRESS_FIELD_LABELS,
+  AUTO_VERIFY_DELAY_MS,
   SHIPPO_ADDRESSES_V1_URL,
   SHIPPO_VALIDATE_V2_URL,
   addressFromOrder,
@@ -19,6 +20,7 @@ import {
   normalizeAddressVerification,
   orderAddressPatch,
   persistableVerification,
+  shouldAutoVerify,
   storedVerificationIsCurrent,
   verificationVerdict,
 } from '../src/lib/address-verification.js';
@@ -113,9 +115,15 @@ function buildVerifier({ fetchImpl, taxCenter = { settings: { shippoKey: 'shippo
       'renderVerificationCorrections',
       'renderDestinationVerification',
       'markDestinationVerificationStale',
+      'autoVerifyCanRun',
+      'scheduleAutoVerify',
+      'onDestinationFieldEdited',
       'bindDestinationVerificationWatchers',
+      'destinationFilledInCode',
       'dismissAddressVerification',
+      'runDestinationVerification',
       'verifyDestinationAddress',
+      'ensureDestinationVerified',
       'applyVerifiedAddressCorrections',
     ],
     deps: {
@@ -142,9 +150,11 @@ function buildVerifier({ fetchImpl, taxCenter = { settings: { shippoKey: 'shippo
       describeShippoError,
       isDeliverable,
       normalizeAddressVerification,
+      shouldAutoVerify,
+      AUTO_VERIFY_DELAY_MS,
       verificationVerdict,
     },
-    moduleState: 'let _destVerification = null;',
+    moduleState: 'let _destVerification = null; let _autoVerifyTimer = null; let _verifyRun = 0;',
     returns: `{
       readShippoDestinationAddress,
       currentDestinationVerification,
@@ -153,6 +163,8 @@ function buildVerifier({ fetchImpl, taxCenter = { settings: { shippoKey: 'shippo
       dismissAddressVerification,
       bindDestinationVerificationWatchers,
       renderDestinationVerification,
+      destinationFilledInCode,
+      ensureDestinationVerified,
     }`,
   });
   return { ...harness, toasts, panel: () => document.getElementById('ship-dest-verify-panel') };
@@ -337,7 +349,8 @@ describe('destination address verifier — staleness', () => {
     city.dispatchEvent(new window.Event('input'));
 
     expect(verifier.panel().className).toContain('stale');
-    expect(verifier.panel().innerHTML).toContain('verify again');
+    // With a key and a connection the edit is re-checked on its own.
+    expect(verifier.panel().innerHTML).toContain('checking it again');
     // A stale verdict must not still be offering to rewrite the form.
     expect(verifier.panel().innerHTML).not.toContain('applyVerifiedAddressCorrections()');
   });
@@ -364,6 +377,154 @@ describe('destination address verifier — staleness', () => {
     verifier.bindDestinationVerificationWatchers();
 
     expect(addSpy).toHaveBeenCalledTimes(2); // input + change, once
+  });
+});
+
+describe('destination address verifier — checks on its own', () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  const type = (field, value) => {
+    const el = document.getElementById(`st-${field}`);
+    el.value = value;
+    el.dispatchEvent(new window.Event('input'));
+  };
+
+  it('checks a complete address once the typing stops, without a toast', async () => {
+    mountDestinationForm({ ...MARKET_ST, zip: '' });
+    const fetchImpl = vi.fn(async () => jsonResponse(V2_PARTIALLY_VALID));
+    const verifier = buildVerifier({ fetchImpl });
+    verifier.bindDestinationVerificationWatchers();
+
+    type('zip', '9');
+    type('zip', '94');
+    type('zip', '94103');
+    await vi.advanceTimersByTimeAsync(AUTO_VERIFY_DELAY_MS - 1);
+    expect(fetchImpl).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(verifier.panel().hidden).toBe(false);
+    expect(verifier.panel().innerHTML).toContain('Needs corrections');
+    expect(verifier.toasts).toHaveLength(0);
+  });
+
+  it('sends nothing for an address that is not complete yet', async () => {
+    mountDestinationForm({ name: 'Wilson', country: 'US' });
+    const fetchImpl = vi.fn(async () => jsonResponse(V2_PARTIALLY_VALID));
+    const verifier = buildVerifier({ fetchImpl });
+    verifier.bindDestinationVerificationWatchers();
+
+    type('street1', '731 Market');
+    await vi.advanceTimersByTimeAsync(AUTO_VERIFY_DELAY_MS * 2);
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(verifier.panel().hidden).toBe(true);
+  });
+
+  it('does not check the same address twice', async () => {
+    mountDestinationForm(MARKET_ST);
+    const fetchImpl = vi.fn(async () => jsonResponse(V2_PARTIALLY_VALID));
+    const verifier = buildVerifier({ fetchImpl });
+    verifier.bindDestinationVerificationWatchers();
+
+    type('city', 'San Francisco');
+    await vi.advanceTimersByTimeAsync(AUTO_VERIFY_DELAY_MS);
+    type('city', 'San Francisco');
+    await vi.advanceTimersByTimeAsync(AUTO_VERIFY_DELAY_MS);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('says it is re-checking, not "verify again", while an edit waits for its check', async () => {
+    mountDestinationForm(MARKET_ST);
+    const verifier = buildVerifier({ fetchImpl: vi.fn(async () => jsonResponse(V2_PARTIALLY_VALID)) });
+    verifier.bindDestinationVerificationWatchers();
+    await verifier.verifyDestinationAddress();
+
+    type('city', 'Oakland');
+    expect(verifier.panel().innerHTML).toContain('checking it again');
+  });
+
+  it('checks an address an order filled in, and drops the old verdict', async () => {
+    mountDestinationForm(MARKET_ST);
+    const fetchImpl = vi.fn(async () => jsonResponse(V2_INVALID));
+    const verifier = buildVerifier({ fetchImpl });
+    await verifier.verifyDestinationAddress();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+    Object.entries(TORONTO).forEach(([f, v]) => { document.getElementById(`st-${f}`).value = v; });
+    verifier.destinationFilledInCode();
+    expect(verifier.panel().hidden).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(AUTO_VERIFY_DELAY_MS);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(String(fetchImpl.mock.calls[1][0])).toContain('Toronto');
+  });
+
+  it('drops an answer that arrives after the address was cleared', async () => {
+    mountDestinationForm(MARKET_ST);
+    let release;
+    const fetchImpl = vi.fn(() => new Promise(resolve => { release = () => resolve(jsonResponse(V2_INVALID)); }));
+    const verifier = buildVerifier({ fetchImpl });
+
+    const pending = verifier.verifyDestinationAddress();
+    verifier.dismissAddressVerification();
+    release();
+    await pending;
+    expect(verifier.currentDestinationVerification()).toBeNull();
+    expect(verifier.panel().hidden).toBe(true);
+  });
+});
+
+describe('destination address verifier — before a label is bought', () => {
+  it('checks an address nobody checked yet', async () => {
+    mountDestinationForm(MARKET_ST);
+    const fetchImpl = vi.fn(async () => jsonResponse(V2_INVALID));
+    const verifier = buildVerifier({ fetchImpl });
+
+    const { record, error } = await verifier.ensureDestinationVerified();
+    expect(error).toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(isDeliverable(record.result)).toBe(false);
+  });
+
+  it('reuses a verdict that still matches the form', async () => {
+    mountDestinationForm(MARKET_ST);
+    const fetchImpl = vi.fn(async () => jsonResponse(V2_PARTIALLY_VALID));
+    const verifier = buildVerifier({ fetchImpl });
+    await verifier.verifyDestinationAddress();
+
+    const { record } = await verifier.ensureDestinationVerified();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(record.result.status).toBe('partially_valid');
+  });
+
+  it('reports a failed check so the purchase can ask instead of buying blind', async () => {
+    mountDestinationForm(MARKET_ST);
+    const verifier = buildVerifier({ fetchImpl: vi.fn(async () => jsonResponse({ detail: 'down' }, 503)) });
+
+    const { record, error } = await verifier.ensureDestinationVerified();
+    expect(record).toBeUndefined();
+    expect(error.message).toContain('503');
+  });
+
+  it('does not call Shippo for an incomplete address', async () => {
+    mountDestinationForm({ name: 'Wilson', country: 'US' });
+    const fetchImpl = vi.fn();
+    const verifier = buildVerifier({ fetchImpl });
+
+    expect(await verifier.ensureDestinationVerified()).toEqual({});
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+});
+
+describe('shouldAutoVerify', () => {
+  it('needs a key, a connection, a complete address and a new one', () => {
+    const sig = addressSignature(MARKET_ST);
+    expect(shouldAutoVerify({ address: MARKET_ST, hasKey: true, online: true })).toBe(true);
+    expect(shouldAutoVerify({ address: MARKET_ST, hasKey: false, online: true })).toBe(false);
+    expect(shouldAutoVerify({ address: MARKET_ST, hasKey: true, online: false })).toBe(false);
+    expect(shouldAutoVerify({ address: { ...MARKET_ST, street1: '' }, hasKey: true })).toBe(false);
+    expect(shouldAutoVerify({ address: MARKET_ST, hasKey: true, lastSignature: sig })).toBe(false);
   });
 });
 

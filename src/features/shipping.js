@@ -182,6 +182,7 @@ import {
 } from '../lib/carriers/shippo-invoices.js';
 import {
   ADDRESS_FIELD_LABELS,
+  AUTO_VERIFY_DELAY_MS,
   SHIPPO_ADDRESSES_V1_URL,
   SHIPPO_VALIDATE_V2_URL,
   addressFromOrder,
@@ -195,6 +196,7 @@ import {
   normalizeAddressVerification,
   orderAddressPatch,
   persistableVerification,
+  shouldAutoVerify,
   storedVerificationIsCurrent,
   verificationVerdict,
 } from '../lib/address-verification.js';
@@ -4133,8 +4135,10 @@ async function onShippoPreFillDestChange() {
     // label for a parcel bound somewhere else.
     $('st-country').value = resolveCountryCode(addr.country) || '';
     onShippoDestCountryChange();
-    // A verdict belongs to one address; loading a different one retires it.
-    dismissAddressVerification();
+    // A verdict belongs to one address; loading a different one retires it,
+    // and the new one is checked straight away (code-filled fields fire no
+    // input event, so the watchers would never notice it).
+    destinationFilledInCode();
     // Canada Post prices on screen were quoted for the previous destination.
     hideCanadaPostRatesCard();
     // Fields written in code fire no input event, so the readiness line has to
@@ -4186,6 +4190,12 @@ async function onShippoPreFillDestChange() {
 // publisher has since edited is worse than no verdict, because it vouches for
 // text Shippo never saw.
 let _destVerification = null;
+
+// The pending auto-check (see scheduleAutoVerify) and a counter that tags each
+// check, so an answer that comes back after a newer check started — or after
+// the address was cleared — is dropped instead of overwriting the newer state.
+let _autoVerifyTimer = null;
+let _verifyRun = 0;
 
 /** Reads the destination form into the field names the verifier speaks. */
 function readShippoDestinationAddress() {
@@ -4343,7 +4353,9 @@ function renderDestinationVerification() {
       <span class="addr-verify-meta">${escapeHtml(meta)}</span>
       <button type="button" class="addr-verify-dismiss" onclick="dismissAddressVerification()" aria-label="Dismiss address check">×</button>
     </div>
-    ${stale ? '<div class="addr-verify-stale-note">You have edited the address since this check — verify again before buying a label.</div>' : ''}
+    ${stale ? `<div class="addr-verify-stale-note">${autoVerifyCanRun(readShippoDestinationAddress())
+    ? 'Address changed — checking it again in a moment.'
+    : 'You have edited the address since this check — verify again before buying a label.'}</div>` : ''}
     <p class="addr-verify-summary">${escapeHtml(verdict.summary)}</p>
     ${renderVerificationReasons(result.reasons)}
     ${stale ? '' : renderVerificationCorrections(result.corrections)}
@@ -4353,6 +4365,39 @@ function renderDestinationVerification() {
 /** Re-renders so an edit flips the panel to its stale state as it is typed. */
 function markDestinationVerificationStale() {
   if (_destVerification) renderDestinationVerification();
+}
+
+/** Whether the form's current address would be checked on its own right now. */
+function autoVerifyCanRun(address) {
+  return shouldAutoVerify({
+    address,
+    hasKey: Boolean(TAX_CENTER.settings?.shippoKey),
+    online: typeof navigator === 'undefined' || navigator.onLine !== false,
+    lastSignature: _destVerification?.signature || '',
+  });
+}
+
+/**
+ * Checks the address a moment after the publisher stops typing, so a verdict
+ * is waiting by the time they reach the rates — no button to remember. Each
+ * edit restarts the wait; an incomplete or already-checked address sends
+ * nothing.
+ */
+function scheduleAutoVerify() {
+  clearTimeout(_autoVerifyTimer);
+  _autoVerifyTimer = setTimeout(() => {
+    _autoVerifyTimer = null;
+    const address = readShippoDestinationAddress();
+    if (autoVerifyCanRun(address)) {
+      runDestinationVerification(address, { quiet: true }).catch(() => {});
+    }
+  }, AUTO_VERIFY_DELAY_MS);
+}
+
+/** An edit to any destination field: retire the old verdict, queue a new one. */
+function onDestinationFieldEdited() {
+  markDestinationVerificationStale();
+  scheduleAutoVerify();
 }
 
 /**
@@ -4365,15 +4410,73 @@ function bindDestinationVerificationWatchers() {
     const input = $(`st-${field}`);
     if (!input || input.dataset.verifyWatch === 'true') return;
     input.dataset.verifyWatch = 'true';
-    input.addEventListener('input', markDestinationVerificationStale);
-    input.addEventListener('change', markDestinationVerificationStale);
+    input.addEventListener('input', onDestinationFieldEdited);
+    input.addEventListener('change', onDestinationFieldEdited);
   });
+}
+
+/**
+ * For code that writes a whole new address into the form (an order prefill):
+ * those writes fire no input event, so the watchers never see them. Retires the
+ * old verdict and checks the new address.
+ */
+function destinationFilledInCode() {
+  dismissAddressVerification();
+  scheduleAutoVerify();
 }
 
 /** Clears the panel — used by the dismiss button and by destination changes. */
 function dismissAddressVerification() {
+  clearTimeout(_autoVerifyTimer);
+  _autoVerifyTimer = null;
+  _verifyRun += 1; // an answer still on its way belongs to the old address
   _destVerification = null;
   renderDestinationVerification();
+}
+
+/**
+ * Asks Shippo about one address and pins the verdict to it.
+ *
+ * Shared by the button, the automatic check and the pre-purchase check.
+ * `quiet` is for the two the publisher did not click: the panel is the answer,
+ * so no toast, and a failure clears the panel instead of shouting. Resolves to
+ * the new verdict record, or null when a newer check overtook this one.
+ * Rejects when Shippo could not be asked.
+ */
+async function runDestinationVerification(address, { quiet = false } = {}) {
+  const shippoKey = TAX_CENTER.settings?.shippoKey || '';
+  const run = ++_verifyRun;
+  const signature = addressSignature(address);
+  _destVerification = { signature, pending: true, result: null };
+  renderDestinationVerification();
+
+  let result;
+  try {
+    result = await fetchShippoAddressVerification(shippoKey, address);
+  } catch (error) {
+    if (run === _verifyRun) {
+      _destVerification = null;
+      renderDestinationVerification();
+    }
+    throw error;
+  }
+  if (run !== _verifyRun) return null;
+
+  _destVerification = { signature, pending: false, result, address, at: new Date().toISOString() };
+  renderDestinationVerification();
+
+  if (!quiet) {
+    const verdict = verificationVerdict(result.status);
+    const correctionNote = result.corrections.length
+      ? ` — ${result.corrections.length} suggested correction${result.corrections.length === 1 ? '' : 's'}`
+      : '';
+    showToast(
+      `${verdict.icon} ${verdict.label}${correctionNote}`,
+      verdict.tone,
+      result.status === 'valid' ? 4000 : 7000,
+    );
+  }
+  return _destVerification;
 }
 
 async function verifyDestinationAddress() {
@@ -4390,40 +4493,47 @@ async function verifyDestinationAddress() {
     return;
   }
 
+  clearTimeout(_autoVerifyTimer);
+  _autoVerifyTimer = null;
   const button = $('ship-verify-btn');
   const priorLabel = button?.innerHTML;
   if (button) { button.disabled = true; button.innerHTML = 'Checking…'; }
 
-  _destVerification = { signature: addressSignature(address), pending: true, result: null };
-  renderDestinationVerification();
-
   try {
-    const result = await fetchShippoAddressVerification(shippoKey, address);
-    _destVerification = {
-      signature: addressSignature(address),
-      pending: false,
-      result,
-      address,
-      at: new Date().toISOString(),
-    };
-    renderDestinationVerification();
-
-    const verdict = verificationVerdict(result.status);
-    const correctionNote = result.corrections.length
-      ? ` — ${result.corrections.length} suggested correction${result.corrections.length === 1 ? '' : 's'}`
-      : '';
-    showToast(
-      `${verdict.icon} ${verdict.label}${correctionNote}`,
-      verdict.tone,
-      result.status === 'valid' ? 4000 : 7000,
-    );
+    await runDestinationVerification(address);
   } catch (error) {
     console.error('Shippo address verification failed', error);
-    _destVerification = null;
-    renderDestinationVerification();
     showToast(`❌ Could not verify the address: ${error.message}`, 'err', 7000);
   } finally {
     if (button) { button.disabled = false; button.innerHTML = priorLabel ?? '🔍 Verify Address'; }
+  }
+}
+
+/**
+ * The verdict for the address in the form, checking it first if nothing has.
+ *
+ * Called just before a label is bought, so a label never goes out against an
+ * address nobody checked — even if the publisher clicked Buy within a second of
+ * typing. Answers `{ record }` with the verdict, `{ error }` when Shippo could
+ * not be asked, or `{}` when the address cannot be checked at all (incomplete,
+ * or offline — the purchase itself needs the network and will say so).
+ */
+async function ensureDestinationVerified() {
+  const current = currentDestinationVerification();
+  if (current?.result) return { record: current };
+
+  const address = readShippoDestinationAddress();
+  if (addressValidationBlocker(address)) return {};
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return {};
+
+  clearTimeout(_autoVerifyTimer);
+  _autoVerifyTimer = null;
+  try {
+    const record = await runDestinationVerification(address, { quiet: true });
+    return record ? { record } : {};
+  } catch (error) {
+    console.warn('Pre-purchase address check failed', error);
+    return { error };
   }
 }
 
@@ -7363,12 +7473,19 @@ async function buyShippoLabelOnce(rateId, provider, serviceName, amount, currenc
     return;
   }
 
-  // A label bought for an address Shippo has already called undeliverable is
-  // money spent on a parcel that comes back. The check only fires when the
-  // publisher actually verified *this* address and Shippo rejected it — an
-  // unverified destination buys as it always did, so the verifier adds a guard
-  // rather than a gate.
-  const verification = currentDestinationVerification();
+  // A label bought for an address Shippo calls undeliverable is money spent on
+  // a parcel that comes back. If nothing has checked this exact address yet, it
+  // is checked now. Every outcome stays the publisher's call: Shippo's postal
+  // data is not perfect (new builds, rural routes), so a bad verdict or a failed
+  // check asks rather than blocks.
+  const { record: verification, error: verifyError } = await ensureDestinationVerified();
+  if (verifyError) {
+    const proceed = await confirmDialog(
+      `Shippo could not check this address, so it has not been confirmed as real.\n\n${verifyError.message}\n\nBuy the label anyway?`,
+      { title: 'Address not checked', okLabel: 'Buy anyway', cancelLabel: 'Go back' },
+    );
+    if (!proceed) return;
+  }
   if (verification?.result && !isDeliverable(verification.result)) {
     const reason = verification.result.reasons[0]?.description || 'Shippo could not find this address.';
     const overridden = await confirmDialog(
@@ -11755,6 +11872,7 @@ function onShippoQuantityChange() {
   showToast(`✓ Scaled specs for ${qty} ${qty === 1 ? 'copy' : 'copies'}`);
 }
 export {
+  destinationFilledInCode,
   setAsideLabelFromReview,
   labelReviewEntries,
   postageOrderChoices,

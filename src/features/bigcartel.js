@@ -42,6 +42,7 @@ import {
   applyBigCartelTracking,
   applyOrderPrefill,
   autoLinkPostageForOrder,
+  destinationFilledInCode,
   getFallbackShippingPhone,
   getShippingReconciliationOrders,
   renderShippingAnalysisHub,
@@ -1246,6 +1247,9 @@ async function prefillShippingFromBigCartelOrder(orderId) {
       showToast(`“${addr.countryRaw}” isn’t a country we recognize — pick the destination country before buying a label.`, 'warn');
     }
   }
+
+  // The old verdict described a different address; check this one instead.
+  destinationFilledInCode();
 
   // Link the order number to the shipping prefill dataset so reconciliation can trace it
   const select = $('ship-prefill-dest');
