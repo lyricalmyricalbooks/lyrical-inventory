@@ -35,7 +35,8 @@ describe('the "Pay this invoice" box', () => {
     expect(app.window.invoiceEmailPlainText(inv)).not.toContain('Pay securely online');
     expect(app.window.buildInvoiceEmailHTML(inv)).not.toContain('Pay this invoice');
     // The link itself is kept, so switching it back on needs nothing re-typed.
-    expect(app.window.effectivePaymentLink(inv)).toContain('https://buy.stripe.com/test_abc');
+    const kept = new URL(app.window.effectivePaymentLink(inv));
+    expect(kept.host + kept.pathname).toBe('buy.stripe.com/test_abc');
     expect(app.window.invoiceShownPayLink(inv)).toBe('');
   });
 
