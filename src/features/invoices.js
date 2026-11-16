@@ -2199,13 +2199,24 @@ function invoicePdfLinkRects(paperEl) {
   return out;
 }
 
+// One A4 page's printable area, in the CSS pixels of the 780px-wide paper the
+// PDF photographs: (842pt - 2×24pt margin) × 780px / (595pt - 2×24pt).
+// Less a few pixels, so rounding in the photograph never spills a sliver onto
+// a second page.
+const INVOICE_PDF_PAGE_PX = Math.floor((842 - 48) * 780 / (595 - 48)) - 12;
+
 async function buildInvoiceJsPdf(bodyInner) {
   await ensurePdfLibs();
 
   const holder = document.createElement('div');
   holder.setAttribute('aria-hidden', 'true');
   holder.style.cssText = 'position:fixed;left:-9999px;top:0;width:780px;background:#fff;'; /* token-ok: rasterised into a printed PDF — must not follow the theme */
-  holder.innerHTML = `<div class="invoice-paper" style="box-shadow:none;border-radius:0;max-width:none;">${bodyInner}</div>`;
+  // A short invoice (no pay box, one line) used to end halfway down the page,
+  // its outline stopping mid-sheet. The paper is stretched to one full A4 page
+  // (the PDF's printable area, at this 780px width) with the thank-you line
+  // pinned to the bottom, so every invoice reads as a whole page.
+  // The paper comes first: it is the holder's first element, the one photographed.
+  holder.innerHTML = `<div class="invoice-paper pdf-page-fill" style="box-shadow:none;border-radius:0;max-width:none;">${bodyInner}</div><style>.pdf-page-fill{box-sizing:border-box;display:flex;flex-direction:column;min-height:${INVOICE_PDF_PAGE_PX}px;}.pdf-page-fill>div{flex:1 0 auto;display:flex;flex-direction:column;}.pdf-page-fill .inv-foot{margin-top:auto;padding-top:24px;}</style>`;
   document.body.appendChild(holder);
   try {
     try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (e) { }
