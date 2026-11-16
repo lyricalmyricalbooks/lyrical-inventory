@@ -39,6 +39,7 @@ import { BOOKS, BOOK_LIST, states, activeBook, getState, getBook } from '../core
 import { localDay, localDayPlus } from '../lib/calendar-day.js';
 import { consignmentSyncPayload, stampLedgerInvoiceLink } from '../lib/consignment.js';
 import { downloadText } from '../lib/download.js';
+import { registerActions, registeredActions } from '../lib/actions.js';
 import { loadExternalScript } from '../lib/external-scripts.js';
 import { escapeHtml } from '../lib/html.js';
 import { isZeroDecimalCurrency } from '../lib/invoice-payments.js';
@@ -100,6 +101,7 @@ function openInvoiceTemplateSettings() {
   const s = getInvoiceSettings();
   $('ivs-name').value = s.name || 'Lyricalmyrical Books';
   $('ivs-email').value = s.email || '';
+  if ($('ivs-phone')) $('ivs-phone').value = s.phone || '';
   $('ivs-addr').value = s.addr || '';
   $('ivs-vat').value = s.vat || '';
   $('ivs-web').value = s.web || '';
@@ -141,6 +143,7 @@ async function saveInvoiceSettings() {
   saveInvoiceSettingsObj({
     name: $('ivs-name').value.trim(),
     email: $('ivs-email').value.trim(),
+    phone: $('ivs-phone') ? $('ivs-phone').value.trim() : '',
     addr: $('ivs-addr').value.trim(),
     vat: $('ivs-vat').value.trim(),
     web: $('ivs-web').value.trim(),
@@ -156,11 +159,67 @@ async function saveInvoiceSettings() {
   });
   closeM('invoice-settings');
   showToast('✓ Invoice settings saved');
+  // The New invoice form may be open underneath, showing these details.
+  renderInvoiceFromCard();
   // Don't make the publisher wait an hour to see the thing they just switched
   // on do something. Nothing is sent outside the weekday daytime window either
   // way — the sweep decides that, not this call.
   if (next.auto && !prev.auto) sweepPaymentReminders();
 }
+
+// ── "FROM" CARD + PAY-BOX SWITCH on the New invoice form ─────────────────
+// The business details printed under the name at the top of every invoice,
+// shown where the invoice is written so a missing address is noticed before
+// the invoice goes out rather than after.
+function invoiceFromLines(settings) {
+  const s = settings || {};
+  const vat = s.vat ? `VAT/Tax ID: ${s.vat}` : '';
+  return [s.addr, s.email, s.phone, s.web, vat]
+    .flatMap(v => String(v || '').split('\n'))
+    .map(v => v.trim())
+    .filter(Boolean);
+}
+
+// Registered the first time the form opens, not on import: this module runs
+// nothing at load.
+function ensureInvoiceFormActions() {
+  if (registeredActions().includes('invoice.editBusinessDetails')) return;
+  registerActions({
+    'invoice.editBusinessDetails': () => openInvoiceTemplateSettings(),
+    'invoice.togglePayBox': () => onInvoiceShowPayChange(),
+  });
+}
+
+function renderInvoiceFromCard() {
+  ensureInvoiceFormActions();
+  const el = $('inv-from');
+  if (!el) return;
+  const settings = getInvoiceSettings();
+  const name = settings.name || 'Lyricalmyrical Books';
+  const lines = invoiceFromLines(settings);
+  const details = lines.length
+    ? `<div class="inv-from-lines">${lines.map(escapeHtml).join('<br>')}</div>`
+    : `<div class="inv-from-empty">No address or contact details yet — only the name prints at the top of your invoices.</div>`;
+  el.innerHTML = `<div class="inv-from-body">
+      <div class="inv-from-label">From</div>
+      <div class="inv-from-name">${escapeHtml(name)}</div>
+      ${details}
+    </div>
+    <button type="button" class="btn sm" data-action="invoice.editBusinessDetails">${lines.length ? 'Edit details' : 'Add your details'}</button>`;
+}
+
+function setInvoiceShowPay(on) {
+  const box = $('inv-show-pay');
+  if (box) box.checked = !!on;
+  onInvoiceShowPayChange();
+}
+
+function onInvoiceShowPayChange() {
+  const on = !$('inv-show-pay') || $('inv-show-pay').checked;
+  const group = $('inv-paylink-group');
+  if (group) group.hidden = !on;
+}
+
 
 // ── STRIPE DYNAMIC PAYMENT LINK (exact-amount Checkout per invoice) ─────
 // The zero-decimal currency list lives in lib/invoice-payments.js — this file
@@ -447,6 +506,7 @@ function openCreateInvoice(storeId, editingId, { copyFrom = null } = {}) {
     else setInvoiceDiscountUI('flat', inv.discount || 0);
     $('inv-tax').value = inv.taxRate ? String(inv.taxRate) : '';
     $('inv-paylink').value = inv.paymentLink || '';
+    setInvoiceShowPay(!inv.hidePayLink);
     $('inv-notes').value = inv.notes || '';
     $('inv-terms').value = inv.terms || '';
     $('inv-delete-btn').style.display = '';
@@ -478,6 +538,7 @@ function openCreateInvoice(storeId, editingId, { copyFrom = null } = {}) {
     setInvoiceDiscountUI('percent', 0);
     $('inv-tax').value = '';
     $('inv-paylink').value = '';
+    setInvoiceShowPay(true);
     const settings = getInvoiceSettings();
     $('inv-notes').value = '';
     $('inv-terms').value = settings.terms || 'Net 30. Payment via Stripe, PayPal, or bank transfer.';
@@ -488,6 +549,7 @@ function openCreateInvoice(storeId, editingId, { copyFrom = null } = {}) {
     else addInvoiceItem();
   }
   syncInvoiceDueChips();
+  renderInvoiceFromCard();
   renderInvoiceItems();
   recalcInvoiceTotals();
   openM('invoice-edit');
@@ -515,6 +577,7 @@ function fillInvoiceEditorFromCopy(srcInv, sel) {
   $('inv-tax').value = copy.taxRate ? String(copy.taxRate) : '';
   $('inv-notes').value = copy.notes;
   if (copy.terms) $('inv-terms').value = copy.terms;
+  setInvoiceShowPay(!srcInv.hidePayLink);
   if (copy.currencyCode && $('inv-currency')) {
     setSelectCurrency($('inv-currency'), copy.currencyCode);
     $('inv-discount-sym').textContent = getSym(getInvoiceCurrency());
@@ -1138,6 +1201,10 @@ function saveInvoice(status) {
     currency: invoiceCurSym,  // stored as symbol (€, CA$, US$…) consistent with book.currency
     currencyCode: invoiceCurCode, // ISO code stored alongside for Stripe
     paymentLink: $('inv-paylink').value.trim() || '',
+    // Off for the invoices that shouldn't ask to be paid online (settled in
+    // person, a pro-forma, a bank-transfer-only customer). Absent on older
+    // invoices, which all showed the box.
+    hidePayLink: !!($('inv-show-pay') && !$('inv-show-pay').checked),
     notes: $('inv-notes').value.trim(),
     terms: $('inv-terms').value.trim(),
     status,
@@ -1244,7 +1311,7 @@ function saveInvoice(status) {
   // Stripe Payment Link: auto-create on finalize (or regenerate after edit).
   // Never for a draft, and never for an invoice that is already paid or cancelled.
   const settings = getInvoiceSettings();
-  const shouldAutoStripe = payload.status === 'sent' && settings.stripeAuto !== false && !!settings.stripeKey && !payload.stripe;
+  const shouldAutoStripe = payload.status === 'sent' && settings.stripeAuto !== false && !!settings.stripeKey && !payload.stripe && !payload.hidePayLink;
   if (oldStripeLinkId) deactivateStripePaymentLink(oldStripeLinkId);
 
   if (shouldAutoStripe) {
@@ -1410,7 +1477,7 @@ function viewInvoice(id) {
   // Render QR if QRCode library is available
   setTimeout(() => {
     const qrEl = document.querySelector('#invoice-print-area .inv-qr');
-    const url = effectivePaymentLink(inv);
+    const url = invoiceShownPayLink(inv);
     if (qrEl && url && typeof QRCode !== 'undefined') {
       qrEl.innerHTML = '';
       new QRCode(qrEl, { text: url, width: 104, height: 104, colorDark: '#0e0c0a', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
@@ -1461,6 +1528,18 @@ function effectivePaymentLink(inv) {
 
 function isDynamicStripeLink(inv) { return !!(inv && inv.stripe && inv.stripe.url); }
 
+/**
+ * The payment link the customer actually sees on this invoice — on the paper,
+ * its QR, the email and any reminder — or '' when the publisher switched the
+ * "Pay this invoice" box off for it. The link itself is kept either way
+ * (Copy pay link still works), so switching the box back on needs nothing
+ * re-typed.
+ */
+function invoiceShownPayLink(inv) {
+  if (!inv || inv.hidePayLink) return '';
+  return effectivePaymentLink(inv);
+}
+
 // `showChase` is the publisher's own view of the invoice. The same paper is
 // also what gets downloaded, printed and emailed to the customer, and how many
 // times you have chased them is not something to hand them a note about — so it
@@ -1471,7 +1550,7 @@ function renderInvoicePaperHTML(inv, { showChase = false } = {}) {
   // title it was opened from rather than picking up the viewer's accent.
   const book = invoiceOwnerBook(inv);
   const cur = inv.currency || book.currency;
-  const payUrl = effectivePaymentLink(inv);
+  const payUrl = invoiceShownPayLink(inv);
   const todayStr = today();
   const overdue = inv.status === 'sent' && inv.dueDate && inv.dueDate < todayStr;
   const statusLabel = overdue ? 'OVERDUE' : (inv.status || 'draft').toUpperCase();
@@ -1566,7 +1645,7 @@ function renderInvoicePaperHTML(inv, { showChase = false } = {}) {
     <header class="inv-head">
       <div class="inv-brand">
         <h1>${escapeHtml(settings.name || 'Lyricalmyrical Books')}</h1>
-        <div class="inv-addr">${escapeHtml(settings.addr || '')}${settings.email ? '\n' + escapeHtml(settings.email) : ''}${settings.web ? '\n' + escapeHtml(settings.web) : ''}${settings.vat ? '\nVAT/Tax ID: ' + escapeHtml(settings.vat) : ''}</div>
+        <div class="inv-addr">${escapeHtml(settings.addr || '')}${settings.email ? '\n' + escapeHtml(settings.email) : ''}${settings.phone ? '\n' + escapeHtml(settings.phone) : ''}${settings.web ? '\n' + escapeHtml(settings.web) : ''}${settings.vat ? '\nVAT/Tax ID: ' + escapeHtml(settings.vat) : ''}</div>
       </div>
       <div class="inv-id">
         <div class="inv-word">Invoice</div>
@@ -1759,7 +1838,7 @@ function copyInvoicePayLink() {
 function invoiceEmailPlainText(inv) {
   const settings = getInvoiceSettings();
   const cur = inv.currency || getBook().currency;
-  const payUrl = effectivePaymentLink(inv);
+  const payUrl = invoiceShownPayLink(inv);
   return [
     `Hi ${inv.storeContact || inv.storeName || 'there'},`,
     ``,
@@ -1781,7 +1860,7 @@ function invoiceEmailPlainText(inv) {
 function buildInvoiceEmailHTML(inv) {
   const settings = getInvoiceSettings();
   const cur = inv.currency || getBook().currency;
-  const payUrl = effectivePaymentLink(inv);
+  const payUrl = invoiceShownPayLink(inv);
   const accent = (BOOKS[activeBook] || getBook()).accent || '#c8913a';
   const contact = escapeHtml(inv.storeContact || inv.storeName || 'there');
   const lineDisc = invoiceHasLineDiscounts(inv.items);
@@ -1811,7 +1890,7 @@ function buildInvoiceEmailHTML(inv) {
           <tr>
             <td style="vertical-align:top;">
               <div style="font-family:Georgia,'Times New Roman',serif;font-size:28px;font-weight:700;color:#0e0c0a;line-height:1.1;">${escapeHtml(settings.name || 'Lyricalmyrical Books')}</div>
-              <div style="font-size:12px;line-height:1.55;color:#756e64;margin-top:10px;white-space:pre-wrap;">${escapeHtml(settings.addr || '')}${settings.email ? '<br>' + escapeHtml(settings.email) : ''}${settings.web ? '<br>' + escapeHtml(settings.web) : ''}</div>
+              <div style="font-size:12px;line-height:1.55;color:#756e64;margin-top:10px;white-space:pre-wrap;">${escapeHtml(settings.addr || '')}${settings.email ? '<br>' + escapeHtml(settings.email) : ''}${settings.phone ? '<br>' + escapeHtml(settings.phone) : ''}${settings.web ? '<br>' + escapeHtml(settings.web) : ''}${settings.vat ? '<br>VAT/Tax ID: ' + escapeHtml(settings.vat) : ''}</div>
             </td>
             <td align="right" style="vertical-align:top;white-space:nowrap;">
               <div style="font-family:Georgia,'Times New Roman',serif;font-size:22px;color:${escapeHtml(accent)};letter-spacing:.16em;text-transform:uppercase;font-weight:700;">Invoice</div>
@@ -1933,7 +2012,7 @@ function collectInvoicePaperCss() {
  * your banking app, not somewhere to be sent on tapping.
  */
 function qrLinkAttr(inv) {
-  const url = pdfSafeLinkUrl(followableUrl(effectivePaymentLink(inv)));
+  const url = pdfSafeLinkUrl(followableUrl(invoiceShownPayLink(inv)));
   return url ? ` data-pdf-link="${escapeHtml(url)}"` : '';
 }
 
@@ -1963,7 +2042,7 @@ function invoicePaperBodyWithQR(inv) {
 // library, not a live view) into a detached node instead.
 function invoicePaperBodyWithHeadlessQR(inv) {
   let bodyInner = renderInvoicePaperHTML(inv);
-  const payUrl = effectivePaymentLink(inv);
+  const payUrl = invoiceShownPayLink(inv);
   if (!payUrl || typeof QRCode === 'undefined') return bodyInner;
   let qrHolder;
   try {
@@ -2046,7 +2125,7 @@ function downloadInvoiceHTML(opts) {
   const html = buildStandaloneInvoiceHTML(inv);
   downloadText(html, `${inv.num}.html`, 'text/html');
   if (!(opts && opts.silent)) {
-    showToast(effectivePaymentLink(inv)
+    showToast(invoiceShownPayLink(inv)
       ? '✓ Invoice downloaded with the Stripe pay link embedded — attach it or print to PDF.'
       : '✓ Invoice downloaded (open & print to PDF).');
   }
@@ -2263,6 +2342,8 @@ export {
   duplicateInvoiceFromView,
   editInvoiceFromView,
   effectivePaymentLink,
+  invoiceShownPayLink,
+  invoiceFromLines,
   emailInvoice,
   ensurePdfLibs,
   focusLastInvoiceLine,

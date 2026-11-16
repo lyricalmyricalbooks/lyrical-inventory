@@ -984,6 +984,7 @@ import {
   duplicateInvoiceFromView,
   editInvoiceFromView,
   effectivePaymentLink,
+  invoiceShownPayLink,
   emailInvoice,
   ensurePdfJs,
   ensurePdfLibs,
@@ -18605,7 +18606,7 @@ async function sendInvoiceReminder(inv, bookId, { kind = 'auto' } = {}) {
   const attachment = await buildInvoicePdfAttachment(inv);
   const mail = buildReminderEmail(inv, {
     settings: reminderSettings(settings),
-    payLink: effectivePaymentLink(inv) || '',
+    payLink: invoiceShownPayLink(inv) || '',
     publisher: settings.name || 'Lyricalmyrical Books',
     amountLabel: invoiceAmountLabel(inv),
     attached: !!attachment,
@@ -18870,7 +18871,7 @@ async function sendTestReminderEmail() {
   // example link pasted into a real bill's email is precisely the thing this
   // test exists to catch. If it comes back empty, the test still goes out and
   // says so, because that missing link is the finding.
-  const livePayLink = real ? (effectivePaymentLink(inv) || '') : 'https://buy.stripe.com/example';
+  const livePayLink = real ? (invoiceShownPayLink(inv) || '') : 'https://buy.stripe.com/example';
   const mail = buildReminderEmail(inv, {
     settings: cfg,
     payLink: livePayLink,
@@ -20150,7 +20151,7 @@ function exposeLegacyInlineHandlers() {
     onInvoiceIssueDateChange,
     onInvoiceDueDateChange,
     duplicateInvoiceFromView,
-    regenerateStripeLinkFromView, deleteInvoice, viewInvoice, effectivePaymentLink,
+    regenerateStripeLinkFromView, deleteInvoice, viewInvoice, effectivePaymentLink, invoiceShownPayLink,
     isDynamicStripeLink, renderInvoicePaperHTML, editInvoiceFromView, markInvoicePaidFromView,
     printInvoice, printInvoiceViaPopup, copyInvoicePayLink, invoiceEmailPlainText,
     buildInvoiceEmailHTML, copyInvoiceEmailToClipboard, emailInvoice, collectInvoicePaperCss,
