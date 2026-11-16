@@ -402,7 +402,7 @@ describe('the test reminder', () => {
 
   it('never dresses a real invoice in the example payment link', () => {
     const body = fn();
-    expect(body).toContain("const livePayLink = real ? (effectivePaymentLink(inv) || '') : 'https://buy.stripe.com/example';");
+    expect(body).toContain("const livePayLink = real ? (invoiceShownPayLink(inv) || '') : 'https://buy.stripe.com/example';");
     expect(body).toContain('payLink: livePayLink,');
     // And says so when the real bill turns out to have no link at all.
     expect(body).toContain('has no payment link');

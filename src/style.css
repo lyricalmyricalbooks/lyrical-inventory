@@ -19007,6 +19007,55 @@ button[onclick="refreshUmamiStats()"]:active {
   min-width: 0;
 }
 
+/* "From" card: the business details printed at the top of every invoice. */
+.inv-from {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-sunken);
+  border: var(--stroke-hair) solid var(--border-default);
+  border-radius: var(--r2);
+}
+.inv-from:empty { display: none; }
+.inv-from-body { min-width: 0; }
+.inv-from-label {
+  font-size: var(--text-3xs);
+  font-weight: 800;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--content-muted);
+}
+.inv-from-name { font-weight: 700; font-size: var(--text-sm); margin-top: 2px; }
+.inv-from-lines,
+.inv-from-empty {
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--content-muted);
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+.inv-from .btn { flex-shrink: 0; min-height: 36px; }
+
+/* Per-invoice switch for the "Pay this invoice" box. */
+.inv-pay-switch {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--content-muted);
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+  cursor: pointer;
+}
+.inv-pay-switch strong { color: var(--text); font-size: var(--text-sm); }
+.inv-pay-switch input { margin: 3px 0 0; width: 18px; height: 18px; flex-shrink: 0; }
+
 /* ═══════════════════════════════════════════════════════════════════════════
    INVOICE MODAL — discount box, quick chips and line discounts
    A percentage discount used to hide behind a dropdown, and its box started

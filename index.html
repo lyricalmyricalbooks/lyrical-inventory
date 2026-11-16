@@ -5636,6 +5636,9 @@
 <div class="overlay no-print" id="m-invoice-edit" style="display:none;"><div class="modal modal-max-92" role="dialog" aria-modal="true" style="max-width:780px;overflow-y:auto;">
   <div class="modal-title" role="dialog" aria-modal="true" id="inv-edit-title">New invoice</div>
 
+  <!-- Your business details, as they print under the name at the top. -->
+  <div class="inv-from" id="inv-from"></div>
+
   <!-- Who the bill is addressed to: a consignment store from the shop list, or
        a person typed in by hand (a reader, a school, a festival). -->
   <div class="inv-billto-switch">
@@ -5762,7 +5765,12 @@
     <div style="display:flex;justify-content:space-between;font-size:14px;color:var(--text);border-top:var(--stroke-hair) solid var(--border);padding-top:6px;margin-top:4px;font-weight:700;"><span>TOTAL</span><span id="inv-total-val" style="font-family:var(--font-mono);color:var(--gold-text);font-size:var(--text-lg);">—</span></div>
   </div>
 
-  <div class="form-group" style="margin-bottom:12px;">
+  <label class="inv-pay-switch" for="inv-show-pay">
+    <input id="inv-show-pay" type="checkbox" checked data-on-change="invoice.togglePayBox">
+    <span><strong>Include the “Pay this invoice” box</strong><br>The pay button and QR code. Turn off when this customer pays another way.</span>
+  </label>
+
+  <div class="form-group" id="inv-paylink-group" style="margin-bottom:12px;">
     <label for="inv-paylink">Payment link (Stripe Payment Link, PayPal.me, Interac…)</label>
     <input id="inv-paylink" type="url" placeholder="https://buy.stripe.com/… (defaults to this book's link)">
     <div style="font-size:var(--text-xs);color:var(--text3);margin-top:5px;line-height:1.5;">
@@ -5825,12 +5833,13 @@
     </div>
     <button type="button" class="btn tx modal-close-btn" onclick="attemptCloseModal('invoice-settings')" aria-label="Close dialog" title="Close (Esc)">✕</button>
   </div>
-  <div style="font-size:var(--text-sm);color:var(--text3);margin-bottom:1.25rem;line-height:1.6;">These details appear on every invoice you generate. Stored locally per browser.</div>
+  <div style="font-size:var(--text-sm);color:var(--text3);margin-bottom:1.25rem;line-height:1.6;">Your business details print under your name at the top of every invoice. Saved on this device.</div>
 
   <div class="g2" style="margin-bottom:12px;">
-    <div class="form-group"><label for="ivs-name">Publisher name</label><input id="ivs-name" type="text" placeholder="Lyricalmyrical Books"></div>
+    <div class="form-group"><label for="ivs-name">Business name</label><input id="ivs-name" type="text" placeholder="Lyricalmyrical Books"></div>
     <div class="form-group"><label for="ivs-email">Contact email</label><input id="ivs-email" type="email" placeholder="hello@…"></div>
   </div>
+  <div class="form-group" style="margin-bottom:12px;"><label for="ivs-phone">Phone</label><input id="ivs-phone" type="tel" placeholder="optional"></div>
   <div class="form-group" style="margin-bottom:12px;"><label for="ivs-addr">Address (one block, supports line breaks)</label>
     <textarea id="ivs-addr" rows="3" placeholder="Via Roma 1&#10;20121 Milan, Italy"></textarea>
   </div>

@@ -219,7 +219,7 @@ describe('the QR code in an emailed invoice', () => {
     // An Interac e-Transfer "link" is an email address to send money to, not
     // somewhere a customer should be sent on tapping.
     const fn = extractDecl('qrLinkAttr', mainJs);
-    expect(fn).toContain('pdfSafeLinkUrl(followableUrl(effectivePaymentLink(inv)))');
+    expect(fn).toContain('pdfSafeLinkUrl(followableUrl(invoiceShownPayLink(inv)))');
     expect(fn).toContain('escapeHtml(url)');
   });
 
