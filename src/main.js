@@ -276,6 +276,7 @@ import {
   suggestedBook,
 } from './lib/stripe-sale-autorecord.js';
 import { STRIPE_DISMISSALS_KEY, mergeDismissedMap, withDismissals } from './lib/stripe-dismissals.js';
+import { STRIPE_BOOK_PICKS_KEY, rememberedBook, withPick } from './lib/stripe-book-picks.js';
 import {
   integrationBackoffMs,
   noteIntegrationFailure,
@@ -17189,12 +17190,35 @@ function _reconSuggestion(p, c) {
   if (c.kind !== 'direct') return { pick: null, fits: [] };
   const fits = booksFittingAmount(p, BOOKS, book => normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD'));
   const named = p.cardPresent ? booksInDescription(p.description, BOOKS) : [];
-  return { pick: suggestedBook({ named, fits }), fits };
+  const pick = suggestedBook({ named, fits });
+  if (pick?.why === 'named') return { pick, fits };
+  // The book she picked last time for a payment like this one beats a guess
+  // from the price alone.
+  const remembered = rememberedBook(TAX_CENTER?.[STRIPE_BOOK_PICKS_KEY], p);
+  if (remembered && BOOKS[remembered]) return { pick: { bookId: remembered, why: 'remembered' }, fits };
+  return { pick, fits };
+}
+
+// After she records payments by hand, remember the book for each payment the
+// app could not place by its link, so the next one like it is filled in.
+// Kept in the Tax Centre document, so every device she uses learns it.
+function _reconRememberPicks(pairs) {
+  if (!TAX_CENTER || isAuthor()) return;
+  const before = Array.isArray(TAX_CENTER[STRIPE_BOOK_PICKS_KEY]) ? TAX_CENTER[STRIPE_BOOK_PICKS_KEY] : [];
+  let list = before;
+  pairs.forEach(({ p, bookId }) => {
+    if (p?.metadata?.book_id || !BOOKS[bookId]) return;
+    list = withPick(list, p, bookId);
+  });
+  if (list === before) return;
+  TAX_CENTER[STRIPE_BOOK_PICKS_KEY] = list;
+  saveTaxCenter();
 }
 
 const _RECON_SUGGEST_WHY = {
   tag: 'paid through its own link',
   named: 'its title was typed on the card reader',
+  remembered: 'you picked it for a payment like this before',
   price: 'it is the only book at this price',
 };
 function _reconSuggestPill(pick) {
@@ -17601,6 +17625,7 @@ function reconcileRecordSale(idSafe) {
   const mem = getReconMemory();
   _reconMarkRecorded(mem, p.id, bookId, saleInputs.num);
   saveReconMemory(mem);
+  _reconRememberPicks([{ p, bookId }]);
   _reconSession.logged++;
   if (bookId === activeBook) updateDash();
   showToast(`✓ Logged ${qty}× ${BOOKS[bookId].title}${saleInputs.num ? ` · ${saleInputs.num}` : ''} → stock ${states[bookId].stock}`);
@@ -19228,6 +19253,7 @@ async function reconConfirmReady() {
   let n = 0;
   let noRate = 0;
   const touched = new Set();
+  const learned = [];
   for (const row of picks) {
     const { p, bookId, qty } = row;
     if (_reconAlreadyRecorded(p.id)) continue;
@@ -19247,11 +19273,13 @@ async function reconConfirmReady() {
         ...(p.cardPresent ? { chan: 'Book Fair', notes: 'Card reader' } : {}),
       });
       _reconMarkRecorded(mem, p.id, bookId, num);
+      learned.push({ p, bookId });
       _reconSession.logged++; n++;
       touched.add(bookId);
     } catch (e) { console.warn('Recording a Stripe sale from the list failed', e); }
   }
   saveReconMemory(mem);
+  _reconRememberPicks(learned);
   if (touched.has(activeBook)) updateDash();
   if (typeof window.renderAllOverview === 'function') window.renderAllOverview();
   const rateNote = noRate ? ` ${noRate} in another currency wait${noRate === 1 ? 's' : ''} for the day’s exchange rate. Try again shortly.` : '';

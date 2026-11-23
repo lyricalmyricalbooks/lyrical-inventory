@@ -4,6 +4,7 @@ import { stripeOrderNumber } from '../src/lib/stripe-sale-defaults.js';
 import { roundCents } from '../src/lib/money.js';
 import { stripeSalePlan, paidUnitPrice, wholeCopies } from '../src/lib/stripe-sale-autorecord.js';
 import { DATED_RATE_SOURCES } from '../src/lib/fx-sources.js';
+import { rememberedBook, withPick } from '../src/lib/stripe-book-picks.js';
 
 const payment = { id: 'ch_Test42', currency: 'EUR', amount: 40, date: '2026-10-08' };
 const BOOKS = { b1: { id: 'b1', currency: 'CAD' }, b2: { id: 'b2', currency: 'USD' } };
@@ -214,12 +215,42 @@ it('never records by itself a payment she undid from the Payments list', async (
   expect(api.writes).toHaveLength(0);
 });
 
+describe('the Payments list uses the books she picked before', () => {
+  const books = { meadow: { id: 'meadow' }, harbour: { id: 'harbour' } };
+  function suggest({ picks = [], named = [], fits = ['meadow', 'harbour'] } = {}) {
+    return buildHarness({ names: ['_reconSuggestion'], deps: {
+      BOOKS: books, TAX_CENTER: { stripeBookPicks: picks }, STRIPE_BOOK_PICKS_KEY: 'stripeBookPicks', rememberedBook,
+      booksFittingAmount: () => fits, booksInDescription: () => named,
+      suggestedBook: ({ named: n, fits: f }) => (n.length === 1 ? { bookId: n[0].bookId, why: 'named' } : f.length === 1 ? { bookId: f[0], why: 'price' } : null),
+      normalizeCurrencyCode: (v) => v, getBookCurrencyCode: () => 'CAD',
+    }, returns: '{ _reconSuggestion }' })._reconSuggestion;
+  }
+  const tap = { amount: 22, currency: 'CAD', description: '', cardPresent: true };
+
+  it('fills in the book picked last time when two books share the price', () => {
+    const picks = withPick([], tap, 'harbour', 1000);
+    expect(suggest({ picks })(tap, { kind: 'direct' }).pick).toEqual({ bookId: 'harbour', why: 'remembered' });
+    expect(suggest()(tap, { kind: 'direct' }).pick).toBe(null);
+  });
+
+  it('lets a title typed on the reader win over what it learned', () => {
+    const picks = withPick([], tap, 'harbour', 1000);
+    expect(suggest({ picks, named: [{ bookId: 'meadow' }] })(tap, { kind: 'direct' }).pick.why).toBe('named');
+  });
+
+  it('beats a guess from the price alone', () => {
+    const picks = withPick([], tap, 'harbour', 1000);
+    expect(suggest({ picks, fits: ['meadow'] })(tap, { kind: 'direct' }).pick).toEqual({ bookId: 'harbour', why: 'remembered' });
+  });
+});
+
 describe('Confirm all in the Ready section', () => {
   function confirmAll({ fields, recorded = [], confirm = true, rate } = {}) {
     const payments = [payment, { ...payment, id: 'ch_Second42' }, { ...payment, id: 'ch_Already42' }];
     const mem = { recorded: {}, dismissed: {}, reopened: { ch_Second42: true } };
     const rows = [];
     const asked = [];
+    const learned = [];
     const api = buildHarness({ names: ['reconConfirmReady', '_reconRowPick', '_reconApplyPaymentToBook', '_reconMarkRecorded'], deps: {
       ...currencyDeps, window: { _reconPayments: payments, _reconReadyIds: payments.map(p => p.id) },
       document: { getElementById: id => fields[id] == null ? null : { value: fields[id], dataset: { source: 'Frankfurter' } } },
@@ -229,9 +260,9 @@ describe('Confirm all in the Ready section', () => {
       resolveStripeRate: async () => rate || {}, _stripeFmtMoney: (a, c) => `${c} ${a}`,
       getReconMemory: () => mem, saveReconMemory: () => {}, _reconSession: { logged: 0 },
       _reconApplySaleToBook: (...args) => rows.push(args), showToast: () => {}, renderReconcile: () => {}, activeBook: 'other',
-      updateDash: () => {},
+      updateDash: () => {}, _reconRememberPicks: (pairs) => { learned.push(...pairs); },
     }, returns: '{ reconConfirmReady }' });
-    return { ...api, rows, mem, asked };
+    return { ...api, rows, mem, asked, learned };
   }
 
   it('records each row with the book, copies and order number it shows, and skips one already recorded', async () => {
@@ -248,6 +279,8 @@ describe('Confirm all in the Ready section', () => {
     // Recorded again after an Undo: no longer waiting to be recorded.
     expect(all.mem.reopened.ch_Second42).toBeUndefined();
     expect(all.mem.recorded.ch_Already42).toBeUndefined();
+    // Each book she confirmed is remembered for the next payment like it.
+    expect(all.learned.map(({ p, bookId }) => [p.id, bookId])).toEqual([['ch_Test42', 'b1'], ['ch_Second42', 'b1']]);
   });
 
   it('records nothing when she cancels the confirm', async () => {

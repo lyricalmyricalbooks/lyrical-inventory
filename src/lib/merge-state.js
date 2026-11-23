@@ -40,7 +40,7 @@ export function emptyPart(name) {
 
 // Parts whose rows carry a stable `id` (minted as Date.now() at creation).
 /** Metadata string lists merged as a union (see mergeMetadata). */
-export const UNION_METADATA_KEYS = new Set(['discardedPostageRefs', 'stripeDismissals']);
+export const UNION_METADATA_KEYS = new Set(['discardedPostageRefs', 'stripeDismissals', 'stripeBookPicks']);
 
 export const ID_KEYED_PARTS = new Set([
   'ledger', 'expenses', 'stores', 'artistTransfers', 'artistPayouts', 'artistReceivables',
